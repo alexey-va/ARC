@@ -8,7 +8,18 @@ class OpsLuckPermsHandlers(
     private val gateway: LuckPermsSubjectGateway,
     private val applyService: LuckPermsApplyService,
     private val migrations: LuckPermsMigrationService,
+    private val retirements: LuckPermsRetirementService,
 ) {
+    fun references(body: String): Map<String, Any?> =
+        OpsLuckPermsJson.referenceMap(retirements.references(OpsLuckPermsJson.parseReferences(body)).join())
+
+    fun retirementPreview(body: String): Map<String, Any?> =
+        OpsLuckPermsJson.retirementReviewMap(retirements.preview(OpsLuckPermsJson.parseRetirement(body)).join())
+
+    fun retirementApply(body: String): Map<String, Any?> {
+        val (token, key) = OpsLuckPermsJson.parseApply(body)
+        return OpsLuckPermsJson.retirementResultMap(retirements.apply(token, key).join())
+    }
     fun groups(): Map<String, Any?> {
         val groups = gateway.listGroups().join()
         return mapOf(
@@ -84,7 +95,12 @@ class OpsLuckPermsHandlers(
                                 LuckPermsMigrationStore(
                                     ARC.instance.dataPath.resolve("data/permission-migrations"),
                                 )
-                            OpsLuckPermsHandlers(gateway, apply, LuckPermsMigrationService(apply, store)).also {
+                            OpsLuckPermsHandlers(
+                                gateway,
+                                apply,
+                                LuckPermsMigrationService(apply, store),
+                                LuckPermsRetirementService(gateway, { ARC.serverName }, LuckPermsRetirementStore(ARC.instance.dataPath.resolve("data/permission-retirements"))),
+                            ).also {
                                 runtime = it
                             }
                         }

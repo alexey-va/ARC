@@ -7,6 +7,10 @@ import net.luckperms.api.context.ImmutableContextSet
 import net.luckperms.api.model.PermissionHolder
 import net.luckperms.api.model.user.User
 import net.luckperms.api.node.types.PermissionNode
+import net.luckperms.api.node.types.InheritanceNode
+import net.luckperms.api.node.NodeType
+import net.luckperms.api.node.matcher.NodeMatcher
+import net.luckperms.api.track.Track
 import net.luckperms.api.query.QueryOptions
 import net.luckperms.api.util.Tristate
 import java.util.UUID
@@ -15,6 +19,9 @@ import java.util.concurrent.CompletableFuture
 class NativeLuckPermsSubjectGateway(
     private val luckPerms: LuckPerms = LuckPermsProvider.get(),
 ) : LuckPermsSubjectGateway {
+    companion object {
+        const val MAX_STORED_USERS = 5_000
+    }
     override fun listGroups(): CompletableFuture<List<LpSubjectSnapshot>> =
         luckPerms.groupManager.loadAllGroups().thenApply {
             luckPerms.groupManager.loadedGroups
@@ -125,6 +132,104 @@ class NativeLuckPermsSubjectGateway(
             }
         }
     }
+
+    override fun discoverGroupReferences(groups: Set<String>): CompletableFuture<LpGroupReferenceReport> {
+        require(groups.isNotEmpty() && groups.size <= 32) { "LuckPerms reference discovery accepts 1..32 groups" }
+        val targets = groups.toSet()
+        val groupParents =
+            luckPerms.groupManager.searchAll(NodeMatcher.type(NodeType.INHERITANCE)).thenApply { found ->
+                found.entries.flatMap { (name, nodes) ->
+                    nodes.mapNotNull { node ->
+                        val inheritance = node as InheritanceNode
+                        if (inheritance.groupName in targets) {
+                            LpGroupParentReference(
+                                LpSubjectRef(LpSubjectType.GROUP, name),
+                                LuckPermsNodeCodec.toSpec(inheritance) as InheritanceNodeSpec,
+                            )
+                        } else null
+                    }
+                }.sortedWith(compareBy({ it.subject.identifier }, { it.node.canonicalKey() }))
+            }
+        val userParents =
+            luckPerms.userManager.searchAll(NodeMatcher.type(NodeType.INHERITANCE)).thenApply { found ->
+                found.entries.flatMap { (uuid, nodes) ->
+                    nodes.mapNotNull { node ->
+                        val inheritance = node as InheritanceNode
+                        if (inheritance.groupName in targets) {
+                            LpUserParentReference(
+                                LpSubjectRef(LpSubjectType.USER, uuid.toString()),
+                                LuckPermsNodeCodec.toSpec(inheritance) as InheritanceNodeSpec,
+                            )
+                        } else null
+                    }
+                }.sortedWith(compareBy({ it.subject.identifier }, { it.node.canonicalKey() }))
+            }
+        val users =
+            luckPerms.userManager.getUniqueUsers().thenCompose { ids ->
+                require(ids.size <= MAX_STORED_USERS) {
+                    "LuckPerms stored user count ${ids.size} exceeds safe discovery cap $MAX_STORED_USERS"
+                }
+                ids.fold(CompletableFuture.completedFuture(emptyList<User>())) { loaded, id ->
+                    loaded.thenCompose { current ->
+                        luckPerms.userManager.loadUser(id).thenApply { user -> current + user }
+                    }
+                }
+            }
+        val tracks =
+            luckPerms.trackManager.loadAllTracks().thenApply {
+                luckPerms.trackManager.loadedTracks.flatMap { track ->
+                    track.groups.mapIndexedNotNull { index, group ->
+                        if (group in targets) LpTrackReference(track.name, index) else null
+                    }
+                }.sortedWith(compareBy({ it.track }, { it.index }))
+            }
+        return groupParents.thenCombine(userParents) { groupsFound, usersFound -> groupsFound to usersFound }
+            .thenCombine(users) { (groupsFound, usersFound), loadedUsers ->
+                Triple(groupsFound, usersFound, loadedUsers)
+            }.thenCombine(tracks) { (groupsFound, usersFound, loadedUsers), tracksFound ->
+                val storedPrimaryResult =
+                    runCatching {
+                        loadedUsers.mapNotNull { user ->
+                            storedPrimaryGroup(user).takeIf { it in targets }?.let {
+                                LpPrimaryGroupReference(LpSubjectRef(LpSubjectType.USER, user.uniqueId.toString()), it)
+                            }
+                        }.sortedBy { it.subject.identifier }
+                    }
+                LpGroupReferenceReport(
+                    groups = targets.sorted(),
+                    groupParents = groupsFound,
+                    userParents = usersFound,
+                    primaryGroups = storedPrimaryResult.getOrDefault(emptyList()),
+                    tracks = tracksFound,
+                    primaryGroupsComplete = storedPrimaryResult.isSuccess,
+                    primaryGroupsSource = if (storedPrimaryResult.isSuccess) "stored-native" else "unavailable-external-audit-required",
+                )
+            }
+    }
+
+    /** Reads LuckPerms' persisted primary value through its exact implementation bridge. */
+    private fun storedPrimaryGroup(user: User): String? {
+        val loader = user.javaClass.classLoader
+        val apiUser = Class.forName("me.lucko.luckperms.common.api.implementation.ApiUser", true, loader)
+        val handle = apiUser.getMethod("cast", net.luckperms.api.model.user.User::class.java).invoke(null, user)
+        val holder = handle.javaClass.getMethod("getPrimaryGroup").invoke(handle)
+        val holderType = Class.forName("me.lucko.luckperms.common.model.PrimaryGroupHolder", true, loader)
+        val stored = holderType.getMethod("getStoredValue").invoke(holder)
+        val value = stored as? java.util.Optional<*>
+            ?: throw IllegalStateException("LuckPerms stored primary-group accessor returned an invalid value")
+        return value.orElse(null) as? String
+    }
+
+    override fun deleteGroup(group: String): CompletableFuture<Boolean> =
+        luckPerms.groupManager.loadGroup(group).thenCompose { loaded ->
+            loaded.map { value ->
+                luckPerms.groupManager.deleteGroup(value).thenCompose {
+                    luckPerms.groupManager.loadGroup(group).thenApply { remaining -> remaining.isEmpty }
+                }
+            }
+                .orElseGet { CompletableFuture.completedFuture(false) }
+        }
+
 
     private fun reloadedSnapshot(ref: LpSubjectRef): CompletableFuture<LpSubjectSnapshot> =
         get(ref).thenApply { snapshot -> requireNotNull(snapshot) { "LuckPerms subject disappeared after mutation: ${ref.identifier}" } }

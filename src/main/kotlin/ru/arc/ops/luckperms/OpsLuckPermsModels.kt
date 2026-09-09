@@ -194,6 +194,50 @@ data class LpSubjectSnapshot(
     val inheritedGroups: List<LpSubjectRef> = emptyList(),
 )
 
+data class LpGroupReferenceReport(
+    val groups: List<String>,
+    val groupParents: List<LpGroupParentReference>,
+    val userParents: List<LpUserParentReference>,
+    val primaryGroups: List<LpPrimaryGroupReference>,
+    val tracks: List<LpTrackReference>,
+    val primaryGroupsComplete: Boolean = true,
+    val primaryGroupsSource: String = "stored-native",
+)
+
+data class LpRetirementRequest(val groups: List<String>, val reason: String) {
+    init {
+        require(groups.isNotEmpty() && groups.size <= 32) { "LuckPerms retirement accepts 1..32 groups" }
+        require(groups.distinct().size == groups.size) { "LuckPerms retirement groups must be unique" }
+        groups.forEach(::requireSafeGroupName)
+        require(groups.none { it in PROTECTED_GROUPS }) { "LuckPerms protected group cannot be retired" }
+        require(reason.isNotBlank()) { "LuckPerms retirement reason must not be blank" }
+    }
+
+    companion object { private val PROTECTED_GROUPS = setOf("default", "staff") }
+}
+
+data class LpRetirementReview(
+    val reviewToken: String,
+    val request: LpRetirementRequest,
+    val groupDigests: Map<String, String>,
+    val references: LpGroupReferenceReport,
+)
+
+enum class LpRetirementState { BEFORE_DELETE, VERIFIED, FAILED }
+
+data class LpRetirementResult(
+    val groups: List<String>,
+    val state: LpRetirementState,
+    val beforeDigests: Map<String, String>,
+    val deleted: List<String>,
+    val message: String? = null,
+)
+
+data class LpGroupParentReference(val subject: LpSubjectRef, val node: InheritanceNodeSpec)
+data class LpUserParentReference(val subject: LpSubjectRef, val node: InheritanceNodeSpec)
+data class LpPrimaryGroupReference(val subject: LpSubjectRef, val primaryGroup: String)
+data class LpTrackReference(val track: String, val index: Int)
+
 data class LpPlan(
     val subject: LpSubjectRef,
     val operations: List<LpOperation>,

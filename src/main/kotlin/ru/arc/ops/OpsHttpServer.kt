@@ -256,6 +256,17 @@ class OpsHttpServer(
                     OpsLuckPermsHandlers.current().check(readRequestBody(exchange))
                 }
 
+            method == "POST" && segments == listOf("luckperms", "references") ->
+                handleLuckPermsRead(exchange, cfg.luckpermsGroupsReadEnabled) {
+                    OpsLuckPermsHandlers.current().references(readRequestBody(exchange))
+                }
+
+            method == "POST" && segments == listOf("luckperms", "groups", "retire", "preview") ->
+                handleLuckPermsRetirement(exchange, cfg, preview = true)
+
+            method == "POST" && segments == listOf("luckperms", "groups", "retire", "apply") ->
+                handleLuckPermsRetirement(exchange, cfg, preview = false)
+
             method == "POST" &&
                 segments.size == 5 &&
                 segments[0] == "luckperms" &&
@@ -1937,6 +1948,17 @@ class OpsHttpServer(
         }
     }
 
+    private fun handleLuckPermsRetirement(exchange: HttpExchange, cfg: OpsHttpConfig, preview: Boolean) {
+        if (!cfg.luckpermsGroupsWriteEnabled || ARC.serverName != "spawn") {
+            respondError(exchange, 403, "LuckPerms group retirement is enabled only on spawn")
+            return
+        }
+        handleLuckPermsErrors(exchange) {
+            if (preview) OpsLuckPermsHandlers.current().retirementPreview(readRequestBody(exchange))
+            else OpsLuckPermsHandlers.current().retirementApply(readRequestBody(exchange))
+        }
+    }
+
     private fun handleLuckPermsMigrationApply(
         exchange: HttpExchange,
         cfg: OpsHttpConfig,
@@ -2164,6 +2186,11 @@ class OpsHttpServer(
             routes += "GET /ops/luckperms/users/{uuid}"
             routes += "GET /ops/luckperms/users/lookup?name="
             routes += "POST /ops/luckperms/check"
+        }
+        if (cfg.luckpermsGroupsReadEnabled) routes += "POST /ops/luckperms/references"
+        if (cfg.luckpermsGroupsWriteEnabled) {
+            routes += "POST /ops/luckperms/groups/retire/preview"
+            routes += "POST /ops/luckperms/groups/retire/apply"
         }
         if (cfg.luckpermsGroupsWriteEnabled || cfg.luckpermsUsersWriteEnabled) {
             routes += "POST /ops/luckperms/subjects/{group|user}/{id}/preview"

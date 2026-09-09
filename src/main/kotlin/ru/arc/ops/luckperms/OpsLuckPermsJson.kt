@@ -8,6 +8,79 @@ import java.time.Instant
 import java.util.UUID
 
 object OpsLuckPermsJson {
+    fun parseRetirement(body: String): LpRetirementRequest {
+        val root = parseObject(body, "LuckPerms retirement")
+        root.requireOnly("version", "groups", "reason")
+        require(root.requiredInt("version") == 1) { "Unsupported LuckPerms retirement version" }
+        val groups = root.requiredArray("groups").map { element ->
+            require(element.isJsonPrimitive && element.asJsonPrimitive.isString) { "LuckPerms retirement group must be a string" }
+            element.asString
+        }
+        return LpRetirementRequest(groups, root.requiredString("reason"))
+    }
+
+    fun parseReferences(body: String): List<String> {
+        val root = parseObject(body, "LuckPerms references")
+        root.requireOnly("version", "groups", "maxUsers")
+        require(root.requiredInt("version") == 1) { "Unsupported LuckPerms references version" }
+        root.get("maxUsers")?.let {
+            require(it.isJsonPrimitive && it.asJsonPrimitive.isNumber && it.asInt == NativeLuckPermsSubjectGateway.MAX_STORED_USERS) {
+                "LuckPerms references maxUsers must equal ${NativeLuckPermsSubjectGateway.MAX_STORED_USERS}"
+            }
+        }
+        return root.requiredArray("groups").map { element ->
+            require(element.isJsonPrimitive && element.asJsonPrimitive.isString) { "LuckPerms reference group must be a string" }
+            element.asString
+        }
+    }
+
+    fun retirementReviewMap(review: LpRetirementReview): Map<String, Any?> =
+        mapOf(
+            "version" to 1,
+            "reviewToken" to review.reviewToken,
+            "groups" to review.request.groups,
+            "reason" to review.request.reason,
+            "groupDigests" to review.groupDigests,
+            "references" to referenceMap(review.references),
+        )
+
+    fun retirementResultMap(result: LpRetirementResult): Map<String, Any?> =
+        mapOf(
+            "version" to 1,
+            "groups" to result.groups,
+            "state" to result.state.name,
+            "beforeDigests" to result.beforeDigests,
+            "deleted" to result.deleted,
+            "message" to result.message,
+        )
+
+    fun referenceMap(report: LpGroupReferenceReport): Map<String, Any?> =
+        mapOf(
+            "version" to 1,
+            "groups" to report.groups,
+            "digest" to referenceDigest(report),
+            "primaryGroupsComplete" to report.primaryGroupsComplete,
+            "primaryGroupsSource" to report.primaryGroupsSource,
+            "groupParents" to report.groupParents.map { mapOf("subject" to subjectMap(it.subject), "node" to nodeMap(it.node)) },
+            "userParents" to report.userParents.map { mapOf("subject" to subjectMap(it.subject), "node" to nodeMap(it.node)) },
+            "primaryGroups" to report.primaryGroups.map { mapOf("subject" to subjectMap(it.subject), "primaryGroup" to it.primaryGroup) },
+            "tracks" to report.tracks.map { mapOf("track" to it.track, "index" to it.index) },
+        )
+
+    private fun referenceDigest(report: LpGroupReferenceReport): String =
+        "sha256:" + java.security.MessageDigest.getInstance("SHA-256")
+            .digest(referenceMapWithoutDigest(report).toString().toByteArray(java.nio.charset.StandardCharsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+
+    private fun referenceMapWithoutDigest(report: LpGroupReferenceReport): Map<String, Any?> =
+        mapOf(
+            "groups" to report.groups,
+            "groupParents" to report.groupParents.map { mapOf("subject" to subjectMap(it.subject), "node" to nodeMap(it.node)) },
+            "userParents" to report.userParents.map { mapOf("subject" to subjectMap(it.subject), "node" to nodeMap(it.node)) },
+            "primaryGroups" to report.primaryGroups.map { mapOf("subject" to subjectMap(it.subject), "primaryGroup" to it.primaryGroup) },
+            "tracks" to report.tracks.map { mapOf("track" to it.track, "index" to it.index) },
+        )
+
     fun parseMutation(
         subject: LpSubjectRef,
         body: String,

@@ -18,6 +18,13 @@ interface LuckPermsSubjectGateway {
         additions: Set<LpNodeSpec>,
         removals: Set<LpNodeSpec>,
     ): CompletableFuture<LpSubjectSnapshot>
+
+    fun discoverGroupReferences(groups: Set<String>): CompletableFuture<LpGroupReferenceReport> =
+        CompletableFuture.failedFuture(UnsupportedOperationException("LuckPerms reference discovery is unavailable"))
+
+    fun deleteGroup(group: String): CompletableFuture<Boolean> =
+        CompletableFuture.failedFuture(UnsupportedOperationException("LuckPerms group deletion is unavailable"))
+
 }
 
 data class LpUserIdentity(

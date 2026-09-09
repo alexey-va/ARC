@@ -17,8 +17,9 @@ HTTP ops API и ItemSpec для RusCrafting MCP. **Runtime configs:** `mcserver/
 - Citizens marker publication into BlueMap through BlueMap API 2.7.7
 - Fixed ARC-owned flat QA world with bounded fixtures and allowlisted player teleport
 - One read-only health overview across every managed content catalog
-- Native LuckPerms group/user reads, effective checks, reviewed point changes,
-  and journaled migrations without console commands or direct storage writes
+- Native LuckPerms group/user reads, bounded reference discovery, reviewed point
+  changes, and journaled group retirement without console commands or direct
+  storage writes
 
 ## Key classes
 
@@ -45,18 +46,32 @@ HTTP ops API и ItemSpec для RusCrafting MCP. **Runtime configs:** `mcserver/
 | `OpsItemSpec` | JSON → ItemStack (MiniMessage, NBT, customData) |
 | `ItemPresets` | Native runtime and atomic persistence for `item-presets.yml` |
 | `OpsItemPresetHandlers` | Strict catalog/preview/upsert/delete/give boundary |
-| `OpsLuckPermsHandlers` | Typed native LuckPerms read/check/preview/apply/migration boundary |
+| `OpsLuckPermsHandlers` | Typed native LuckPerms read/check/preview/apply/migration/retirement boundary |
 
 ## LuckPerms control plane
 
 Reads use normalized persisted direct nodes; effective checks report exact
 unexpired direct/inherited matches separately. Point writes require a one-time
 review token, idempotency key, fresh digest, save/reload verification, and
-spawn leadership. Migrations journal under `plugins/ARC/data/permission-migrations/`;
+spawn leadership. Group retirement discovers bounded parent, primary-group, and
+track references (including offline users through native `searchAll`), then
+journals a before-image under `plugins/ARC/data/permission-retirements/` before
+native deletion. Migrations journal under `plugins/ARC/data/permission-migrations/`;
 that runtime state is never tracked or deployed.
 
-Never add raw commands, Bukkit offline UUID generation, `clear`, group/user
-delete, direct SQL, unbounded user listing, or a generic raw HTTP route.
+LuckPerms' public `User#getPrimaryGroup` is computed and is never treated as a
+stored census. If the exact implementation accessor is unavailable, the report
+marks primary coverage incomplete and retirement refuses deletion; an external
+read-only stored-primary audit must establish zero legacy rows before any
+retirement run. Even successful native primary coverage is limited to
+permission-bearing users returned by `getUniqueUsers()`; stored-only player rows
+require that separate bounded audit. The retirement route does not accept an
+operator override for a failed implementation accessor.
+
+Never add raw commands, Bukkit offline UUID generation, `clear`, user delete,
+direct SQL, unbounded user listing, or a generic raw HTTP route. Group delete is
+available only through the bounded retirement preview/apply routes after every
+reference and exact digest check succeeds.
 
 ## Item presets (canonical)
 
