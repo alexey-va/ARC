@@ -1,12 +1,13 @@
 # Таблицы с рамками RusCrafting
 
-Готовый конструктор — [`DialogTables`](../src/main/kotlin/ru/arc/gui/DialogTables.kt).
+Готовый конструктор принадлежит модулю `arc-core-paper-menu`:
+[`DialogTables`](../../arc-core/arc-core-paper-menu/src/main/kotlin/ru/arc/paper/menu/DialogTables.kt).
 Он использует те же рамки и отступы, что `/arc dialogdemo tables-5` и `tables-6`.
 Для новой таблицы достаточно выбрать стиль и передать пары «подпись — значение»:
 
 ```kotlin
 import net.kyori.adventure.text.Component
-import ru.arc.gui.DialogTables
+import ru.arc.paper.menu.DialogTables
 
 val summary = DialogTables.body(
     rows = listOf(
@@ -71,9 +72,9 @@ val summary = DialogTables.body(
 
 Измерение и переносы выполняет `arc-core/ComponentTextLayout` с проверенным
 снимком шрифтов `DialogTextLayout`. Глифы рамок принадлежат этому адаптеру
-ресурспака ARC; копировать конструктор в другой плагин не нужно. Для внедрения
-в соседний плагин сначала определите общего владельца адаптера, а не дублируйте
-метрики и код.
+ресурспака ARC; копировать конструктор в другой плагин не нужно. Соседний плагин
+подключает `arc-core-paper-menu` и использует типизированный API напрямую — без
+поиска классов ARC и рефлексивных мостов.
 
 Требуется загруженный ресурспак RusCrafting с `arc:table_tooltip_*` и spacer-глифами
 U+F0F01..U+F0F0A / U+F0F11. Это не автоматическое определение клиентского пака.

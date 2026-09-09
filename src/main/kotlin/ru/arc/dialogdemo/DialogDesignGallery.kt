@@ -3,8 +3,8 @@ package ru.arc.dialogdemo
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.format.TextDecoration
-import ru.arc.gui.DialogTextLayout
-import ru.arc.gui.DialogTables
+import ru.arc.paper.menu.DialogTextLayout
+import ru.arc.paper.menu.DialogTables
 import ru.arc.text.TextAlignment
 import ru.arc.text.TextLayoutResult
 

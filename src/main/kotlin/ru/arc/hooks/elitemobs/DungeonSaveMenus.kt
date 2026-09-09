@@ -6,7 +6,7 @@ import org.bukkit.Location
 import org.bukkit.entity.Player
 import ru.arc.util.TextUtil
 import ru.arc.gui.ArcMenus
-import ru.arc.gui.DialogTables
+import ru.arc.paper.menu.DialogTables
 import ru.arc.gui.MenuEscapeBehavior
 import ru.arc.helpcenter.HelpCenterModule
 import ru.arc.paper.menu.PaperDialogActionId

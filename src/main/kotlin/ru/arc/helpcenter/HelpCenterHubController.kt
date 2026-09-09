@@ -7,7 +7,7 @@ import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import org.bukkit.entity.Player
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.whenCompleteSync
-import ru.arc.gui.DialogTables
+import ru.arc.paper.menu.DialogTables
 import java.util.concurrent.TimeUnit
 import ru.arc.onboarding.OnboardingService
 import ru.arc.paper.menu.PaperDialogActionId

@@ -33,7 +33,7 @@ import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import ru.arc.core.PluginModule
 import ru.arc.util.TextUtil
-import ru.arc.gui.DialogTextLayout
+import ru.arc.paper.menu.DialogTextLayout
 import ru.arc.text.TextAlignment
 
 /**

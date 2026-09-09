@@ -50,7 +50,7 @@ existing transitive JAR contents are unchanged.
   `setCentered(true)`. The earlier claim that item descriptions are left-aligned
   was incorrect: the superclass default is overridden by this constructor.
   Changing width does not change alignment. The alignment page now compares
-  three measured layouts through `ru.arc.gui.DialogTextLayout`, backed by
+  three measured layouts through `ru.arc.paper.menu.DialogTextLayout`, backed by
   `ru.arc.text.ComponentTextLayout` in arc-core. It subtracts the widget's 8px
   padding, wraps styled text and pads each line with the existing ItemsAdder
   U+F0F01..U+F0F0A space glyphs in `minecraft:default`. Resource-pack installation and native visual checks remain

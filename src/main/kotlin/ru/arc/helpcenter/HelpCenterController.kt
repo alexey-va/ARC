@@ -9,7 +9,7 @@ import org.bukkit.entity.Player
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.whenCompleteSync
 import ru.arc.gui.ArcMenus
-import ru.arc.gui.DialogTables
+import ru.arc.paper.menu.DialogTables
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogBody
 import ru.arc.paper.menu.PaperDialogButton

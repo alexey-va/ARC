@@ -9,7 +9,7 @@ import org.bukkit.entity.Player
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.gui.ArcMenus
 import ru.arc.onboarding.ClaimBlockIdentity
-import ru.arc.gui.DialogTables
+import ru.arc.paper.menu.DialogTables
 import ru.arc.gui.MenuEscapeBehavior
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogBody
