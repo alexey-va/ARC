@@ -93,14 +93,14 @@ class DialogTablesTest : FreeSpec({
         lineWidths(result.component).forEach { it shouldBe 312 }
     }
 
-    "header separator is emitted once and short tables stay compact" {
+    "header and short logical rows each receive one separator" {
         val shortRows = listOf(
             Component.text("Имя") to Component.text("Значение"),
             Component.text("Ещё") to Component.text("Данные"),
         )
         val short = DialogTables.render(shortRows, frame = DialogTables.Frame.EPIC, width = 320)
         require(short is DialogTables.Result.Framed)
-        countCodePoint(short.component, DialogTables.Frame.EPIC.base + 7) shouldBe 0
+        countCodePoint(short.component, DialogTables.Frame.EPIC.base + 7) shouldBe 1
 
         val wrapped = DialogTables.render(
             listOf(
