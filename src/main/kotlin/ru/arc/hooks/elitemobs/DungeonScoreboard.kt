@@ -23,16 +23,16 @@ internal class DungeonScoreboard(private val dungeon: EMDungeonQol, private val 
                 add("§0 ")
                 add(line(if (visit.instanced) "instanced" else "open", if (visit.instanced) "<#aaa49a>Отдельное прохождение" else "<#aaa49a>Открытый данж"))
                 add(when {
-                    visit.waiting -> line("waiting", "<#f4bd6a>Сбор группы · /начать")
+                    visit.waiting -> line("waiting", "<#f4bd6a>Сбор группы")
                     visit.canResume -> line("ongoing", "<#9bd48d>Прохождение идёт")
-                    else -> line("finished", "<#aaa49a>Поход окончен · /данж выйти")
+                    else -> line("finished", "<#aaa49a>Поход окончен")
                 })
                 visit.stats?.level?.takeIf { it > 0 }?.let { add(line("level", "<#f4bd6a>| <#e8dfd2>Уровень: <#f4bd6a><value>", Component.text(it))) }
                 visit.stats?.difficulty?.let { add(line("difficulty", "<#f4bd6a>| <#e8dfd2>Сложность: <#f4bd6a><value>", dungeonDifficulty(dungeon, it))) }
                 visit.stats?.playerCount?.let { add(line("party", "<#f4bd6a>| <#e8dfd2>Участников: <#9bd48d><value>", Component.text(it))) }
                 crystals(player)?.let { add(line("crystals", "<#f4bd6a>| <#e8dfd2>Кристаллы: <#c7a0e8>💎 <value>", Component.text(it))) }
                 add("§1 ")
-                add(line("menu", "<#f4bd6a>/данж <#e8dfd2>— меню данжа"))
+                add(line("menu", "<#f4bd6a>Shift + F <#e8dfd2>— меню данжа"))
             }
             snapshots[player.uniqueId] = buildMap {
                 put("active", "true")

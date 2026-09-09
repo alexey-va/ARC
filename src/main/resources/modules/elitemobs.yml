@@ -64,31 +64,31 @@ dungeon-qol:
   resume-hours: 72
   titles-enabled: true
   messages:
-    help: <gold>/данж</gold> <gray>— панель похода.</gray> <white>/начать</white> · <white>/сохраниться [название]</white> · <white>/сохранения</white> · <white>/данж вход</white> ·
-      <white>/данж выйти</white>
+    help: '<gold>Shift + F</gold> <gray>— меню данжа: старт, сохранения и выход.</gray>'
     unavailable: <red>Данжи сейчас недоступны.</red>
+    leave-first: '<#d7b486>Сначала выйдите из текущего данжа: Shift + F → «Выйти из данжа».'
     player-only: <red>Эта команда доступна только игроку.</red>
     complete: <gold>Данж</gold> <gray>·</gray> <white>Заберите добычу.</white> <click:run_command:'/dungeon quit'><green>[Выйти из данжа]</green></click>
-    already-started: <gray>Этот данж уже идёт или не требует запуска. <white>/сохранения</white> — ваши места.
-    outside: <gray>Эта команда работает в данже. После входа откройте <white>/данж</white> — меню похода.
-    teleport-blocked: <gold>Вы внутри данжа.</gold> <gray>Для выхода:</gray> <click:run_command:'/dungeon quit'><green>[/данж выйти]</green></click><gray>. Начало данжа и сохранения:</gray>
-      <click:run_command:'/данж'><white>[/данж — меню]</white></click>
+    already-started: <gray>Этот данж уже идёт или не требует запуска. <white>Shift + F</white> → «Сохранения» — ваши места.
+    outside: <gray>Это действие доступно в данже. После входа нажмите <white>Shift + F</white> — откроется меню данжа.
+    teleport-blocked: <gold>Вы внутри данжа.</gold> <gray>Для выхода:</gray> <click:run_command:'/dungeon quit'><green>[Выйти из данжа]</green></click><gray>. Начало данжа и сохранения:</gray>
+      <click:run_command:'/данж'><white>[Shift + F — меню]</white></click>
   titles:
     entry:
       title: <gold>Готовы к данжу?
-      subtitle: <white>/данж <gray>— меню похода · /начать — старт
+      subtitle: <white>Shift + F <gray>— меню данжа
     resumed:
       title: <green>Продолжаем
-      subtitle: <white>/данж <gray>— меню данжа
+      subtitle: <white>Shift + F <gray>— меню данжа
     open-entry:
       title: <gold>Вы в данже
-      subtitle: <white>/данж <gray>— меню данжа
+      subtitle: <white>Shift + F <gray>— меню данжа
     started:
       title: <gold>Данж начался
-      subtitle: <white>/данж <gray>— меню данжа
+      subtitle: <white>Shift + F <gray>— меню данжа
     complete:
       title: <green>Данж пройден
-      subtitle: <white>Заберите добычу <gray>·</gray> <white>/данж выйти
+      subtitle: <white>Заберите добычу <gray>·</gray> <white>Shift + F <gray>— меню
   saves:
     settings:
       label: '<#c4a7e7>Автосохранение ›'
@@ -104,19 +104,19 @@ dungeon-qol:
       seconds: <value> с
       unavailable: <#aaa49a>Настройка автосохранения сейчас недоступна.
     messages:
-      changed: <red>Данж или сохранение изменились. Откройте /сохранения заново.
-      combat: '<red>Во время боя сохраняться и перемещаться нельзя. Подождите 15 секунд без боя. <gray>Для выхода: /данж выйти.'
+      changed: <red>Данж или сохранение изменились. Нажмите Shift + F и откройте «Сохранения» заново.
+      combat: '<red>Во время боя сохраняться и перемещаться нельзя. Подождите 15 секунд без боя. <gray>Для выхода: Shift + F → «Выйти из данжа».'
       cooldown: <gray>Подождите 5 секунд между сохранениями.
       unsafe: <red>Встаньте на безопасную твёрдую поверхность, вдали от огня, воды и обрыва.
       invalid-name: <red>Название должно содержать от 1 до 32 символов.
-      full: <red>Уже есть 5 ручных мест. Удалите ненужное в /сохранения или сохранитесь с тем же названием, чтобы заменить его.
-      saved: <green>Место «<name>» сохранено. <white>/сохранения</white> — открыть список.
+      full: <red>Уже есть 5 ручных мест. Удалите ненужное в меню «Сохранения» (Shift + F) или сохранитесь с тем же названием, чтобы заменить его.
+      saved: <green>Место «<name>» сохранено. <white>Shift + F</white> → «Сохранения» — открыть список.
       write-failed: <red>Не удалось записать сохранение на диск. Повторите попытку позже.
       removed: <gray>Сохранение удалено.
       pending: <gray>Сначала войдите в открытый портал или дождитесь его закрытия.
-      unavailable-point: <red>Эта точка больше не подходит для безопасного перехода. Выберите другую или /данж выйти.
-      blocked: <red>Перемещение отменено защитой. Для выхода используйте /данж выйти.
-      auto-saved: <gray>Место сохранено автоматически · /сохранения
+      unavailable-point: '<red>Эта точка больше не подходит для безопасного перехода. Выберите другую или выйдите через меню: Shift + F → «Выйти из данжа».'
+      blocked: <red>Перемещение отменено защитой. Для выхода нажмите Shift + F → «Выйти из данжа».
+      auto-saved: <gray>Место сохранено автоматически · Shift + F
       vehicle: <#aaa49a>Чтобы сохраниться, выйдите из транспорта или слезьте с ездового животного.
       flying: <#aaa49a>Чтобы сохраниться, приземлитесь и выключите полёт.
     dialog:
@@ -188,7 +188,7 @@ dungeon-qol:
     title: '<#ffb277>Панель данжа'
     entry-unavailable: <#aaa49a>Безопасный переход ко входу сейчас недоступен. Для выхода используйте кнопку выше.
     entry-disabled: '<#aaa49a>[Недоступно] К началу данжа'
-    outside: <#e8dfd2>Подготовка к походу<newline><#aaa49a>Почитайте гайд или выберите данж. После входа здесь появится панель прохождения.<newline><#d7b486>/данж тп <#aaa49a>— к порталам · <#d7b486>/данж список <#aaa49a>— выбор данжа
+    outside: <#e8dfd2>Подготовка к походу<newline><#aaa49a>Почитайте гайд или выберите данж. После входа здесь появится панель прохождения.<newline><#aaa49a>Используйте кнопки «К порталам» и «Выбрать данж». В данже меню открывается через <#d7b486>Shift + F<#aaa49a>.
     start-label: <#9bd48d>Начать поход
     start-tooltip: Запустить прохождение для собранной группы
     quit-label: <#d7b486>Выйти из данжа
@@ -220,14 +220,14 @@ dungeon-qol:
     manage-tooltip: Открыть меню группы EliteMobs
   scoreboard:
     heading: <#f4bd6a>Поход в данж
-    waiting: <#f4bd6a>Сбор группы · /начать
+    waiting: <#f4bd6a>Сбор группы
     ongoing: <#9bd48d>Прохождение идёт
-    finished: <#aaa49a>Поход окончен · /данж выйти
+    finished: <#aaa49a>Поход окончен
     level: '<#f4bd6a>| <#e8dfd2>Уровень: <#f4bd6a><value>'
     difficulty: '<#f4bd6a>| <#e8dfd2>Сложность: <#f4bd6a><value>'
     party: '<#f4bd6a>| <#e8dfd2>Участников: <#9bd48d><value>'
     crystals: '<#f4bd6a>| <#e8dfd2>Кристаллы: <#c7a0e8>💎 <value>'
-    menu: <#f4bd6a>/данж <#e8dfd2>— меню данжа
+    menu: <#f4bd6a>Shift + F <#e8dfd2>— меню данжа
     title: <#b22222><bold>Rus<white>Crafting
     instanced: <#aaa49a>Отдельное прохождение
     open: <#aaa49a>Открытый данж
@@ -240,7 +240,7 @@ dungeon-qol:
     confirm-title: '<#f4d87a>Подтвердить покупку?'
     bought: '<#9bd48d>✔ Покупка завершена. Предмет добавлен в инвентарь.'
     changed: <#d7b486>Товар изменился. Вернитесь в магазин и выберите его заново.
-    outside: <#d7b486>Данж изменился. Откройте /данж заново; покупка не выполнена.
+    outside: <#d7b486>Данж изменился. Откройте меню данжа заново (в данже — Shift + F); покупка не выполнена.
     no-space: <#d7b486>Освободите место в инвентаре. Кристаллы не списаны.
     no-money: <#d7b486>Не хватает кристаллов. Покупка не выполнена.
     payment-failed: <#d7b486>Не удалось завершить оплату. Покупка не выполнена.

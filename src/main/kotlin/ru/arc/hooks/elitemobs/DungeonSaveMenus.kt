@@ -118,7 +118,7 @@ internal class DungeonSaveMenus(
         val destination = dungeon.lastReturn(player)
         show(player, PaperDialogScreen(
         id = "dungeon.panel.unavailable", title = text("panel.title", "<#ffb277>Панель данжа"),
-        body = listOf(PaperDialogBody(text("panel.outside", "<#e8dfd2>Подготовка к походу<newline><#aaa49a>Почитайте гайд или выберите данж. После входа здесь появится панель прохождения.<newline><#d7b486>/данж тп <#aaa49a>— к порталам · <#d7b486>/данж список <#aaa49a>— выбор данжа"), 468), crystalBalance(player)),
+        body = listOf(PaperDialogBody(text("panel.outside", "<#e8dfd2>Подготовка к походу<newline><#aaa49a>Почитайте гайд или выберите данж. После входа здесь появится панель прохождения.<newline><#aaa49a>Используйте кнопки «К порталам» и «Выбрать данж». В данже меню открывается через <#d7b486>Shift + F<#aaa49a>."), 468), crystalBalance(player)),
         buttons = listOf(
             action("return", "panel.return-label", "<#92bed8>Вернуться в данж ›", "panel.return-tooltip", "Вернуться в последний обычный данж на место выхода", close = destination != null) {
                 if (destination != null) dungeon.returnToLast(player, destination)
@@ -270,7 +270,7 @@ internal class DungeonSaveMenus(
     private fun supplyResult(result: SupplyResult): Component = when (result) {
         SupplyResult.BOUGHT -> text("shop.bought", "<#9bd48d>✔ Покупка завершена. Предмет добавлен в инвентарь.")
         SupplyResult.CHANGED -> text("shop.changed", "<#d7b486>Товар изменился. Вернитесь в магазин и выберите его заново.")
-        SupplyResult.OUTSIDE -> text("shop.outside", "<#d7b486>Данж изменился. Откройте /данж заново; покупка не выполнена.")
+        SupplyResult.OUTSIDE -> text("shop.outside", "<#d7b486>Данж изменился. Откройте меню данжа заново (в данже — Shift + F); покупка не выполнена.")
         SupplyResult.NO_SPACE -> text("shop.no-space", "<#d7b486>Освободите место в инвентаре. Кристаллы не списаны.")
         SupplyResult.NO_MONEY -> text("shop.no-money", "<#d7b486>Не хватает кристаллов. Покупка не выполнена.")
         SupplyResult.ITEM_UNAVAILABLE -> text("shop.item-unavailable", "<#aaa49a>Этот предмет сейчас недоступен. Кристаллы не списываются.")

@@ -124,8 +124,8 @@ internal class EMDungeonQol(
             if (!enabled || !player.isOnline || player.world.uid != world.uid) return@runLater
             val visit = resolve(world) ?: return@runLater
             if (!member(player, visit)) return@runLater
-            if (visit.waiting) show(player, "entry", "<gold>Готовы к данжу?", "<white>/начать <gray>— начать прохождение")
-            else show(player, "open-entry", "<gold>Вы в данже", "<white>/данж <gray>— меню данжа")
+            if (visit.waiting) show(player, "entry", "<gold>Готовы к данжу?", "<white>Shift + F <gray>— меню данжа")
+            else show(player, "open-entry", "<gold>Вы в данже", "<white>Shift + F <gray>— меню данжа")
         }
     }
 
@@ -133,7 +133,7 @@ internal class EMDungeonQol(
     fun started(event: DungeonStartEvent) {
         if (!enabled) return
         event.dungeonInstance.players.forEach {
-            show(it, "started", "<gold>Данж начался", "<white>/данж <gray>— меню данжа")
+            show(it, "started", "<gold>Данж начался", "<white>Shift + F <gray>— меню данжа")
         }
     }
 
@@ -145,7 +145,7 @@ internal class EMDungeonQol(
         if (!enabled) return
         tasks.runLater(60L) {
             players.filter { it.isOnline && it.world == instance.world }.forEach { player ->
-                show(player, "complete", "<green>Данж пройден", "<white>Заберите добычу <gray>·</gray> <white>/данж выйти")
+                show(player, "complete", "<green>Данж пройден", "<white>Заберите добычу <gray>·</gray> <white>Shift + F <gray>— меню")
                 audience.sendMessage(player, config.component("dungeon-qol.messages.complete",
                     "<gold>Данж</gold> <gray>·</gray> <white>Заберите добычу.</white> <click:run_command:'/dungeon quit'><green>[Выйти из данжа]</green></click>"))
             }
@@ -271,13 +271,13 @@ internal class EMDungeonQol(
                 audience.sendMessage(player, text("saves.messages.travel-ground", "<gray>Войдите в портал пешком, без транспорта и полёта.")); return@portal
             }
             if (!safe(expected.location)) {
-                audience.sendMessage(player, text("saves.messages.unavailable-point", "<red>Эта точка больше не подходит для безопасного перехода. Выберите другую или /данж выйти.")); return@portal
+                audience.sendMessage(player, text("saves.messages.unavailable-point", "<red>Эта точка больше не подходит для безопасного перехода. Выберите другую или выйдите через меню: Shift + F → «Выйти из данжа».")); return@portal
             }
             returnMove(player, expected.location.clone())
         } }.onFailure {
             pending.remove(player.uniqueId, token)
             Logging.error("Unable to return to last dungeon", it)
-            audience.sendMessage(player, text("saves.messages.blocked", "<red>Перемещение отменено защитой. Для выхода используйте /данж выйти."))
+            audience.sendMessage(player, text("saves.messages.blocked", "<red>Перемещение отменено защитой. Для выхода нажмите Shift + F → «Выйти из данжа»."))
         }
     }
 
@@ -289,18 +289,18 @@ internal class EMDungeonQol(
             "party" -> if (partiesAvailable()) player.performCommand("elitemobs:em party menu")
                 else audience.sendMessage(player, text("party.unavailable", "<#aaa49a>Группы EliteMobs на этом сервере пока недоступны."))
             "shops", "магазины" -> {
-                if (resolve(player.world)?.instanced == true) audience.sendMessage(player, text("messages.leave-first", "<#d7b486>Сначала выйдите из текущего данжа: /данж выйти."))
+                if (resolve(player.world)?.instanced == true) audience.sendMessage(player, text("messages.leave-first", "<#d7b486>Сначала выйдите из текущего данжа: Shift + F → «Выйти из данжа»."))
                 else player.performCommand(config.string("dungeon-qol.shops-command", "pw aguild"))
             }
             "tp", "тп", "порталы", "list", "список" -> {
-                if (current(player)?.instanced == true) audience.sendMessage(player, text("messages.leave-first", "<#d7b486>Сначала выйдите из текущего данжа: /данж выйти."))
+                if (current(player)?.instanced == true) audience.sendMessage(player, text("messages.leave-first", "<#d7b486>Сначала выйдите из текущего данжа: Shift + F → «Выйти из данжа»."))
                 else player.performCommand(if (action in setOf("list", "список")) "elitemobs:em" else "pw aguild")
             }
             "start", "начать" -> {
                 val visit = current(player)
                 when {
                     visit == null -> audience.sendMessage(player, outside())
-                    !visit.waiting -> audience.sendMessage(player, text("messages.already-started", "<gray>Этот данж уже идёт или не требует запуска. <white>/сохранения</white> — ваши места."))
+                    !visit.waiting -> audience.sendMessage(player, text("messages.already-started", "<gray>Этот данж уже идёт или не требует запуска. <white>Shift + F</white> → «Сохранения» — ваши места."))
                     else -> player.performCommand("elitemobs:elitemobs start")
                 }
             }
@@ -316,7 +316,7 @@ internal class EMDungeonQol(
                 if (expected == null) audience.sendMessage(player, outside()) else travel(player, expected, "entry")
             }
             "saves", "сохранения" -> menus.open(player)
-            else -> audience.sendMessage(player, text("messages.help", "<gold>Данжи:</gold> <white>/начать</white> · <white>/сохраниться [название]</white> · <white>/сохранения</white> · <white>/данж вход</white> · <white>/данж выйти</white>"))
+            else -> audience.sendMessage(player, text("messages.help", "<gold>Shift + F</gold> <gray>— меню данжа: старт, сохранения и выход.</gray>"))
         }
     }
 
@@ -328,12 +328,12 @@ internal class EMDungeonQol(
         player.performCommand(if (visit.instanced) "elitemobs:elitemobs quit" else config.string("dungeon-qol.open-exit-command", "spawn"))
     }
 
-    private fun outside() = text("messages.outside", "<gray>Сохранения доступны во время прохождения данжа. В его лобби: <white>/начать</white>. Для выхода: <white>/данж выйти</white>.")
-    private fun changed() = DungeonSaveEdit(false, text("saves.messages.changed", "<red>Данж или сохранение изменились. Откройте /сохранения заново."))
+    private fun outside() = text("messages.outside", "<gray>Сохранения доступны во время прохождения данжа. Нажмите <white>Shift + F</white> — в меню есть старт, сохранения и выход.")
+    private fun changed() = DungeonSaveEdit(false, text("saves.messages.changed", "<red>Данж или сохранение изменились. Нажмите Shift + F и откройте «Сохранения» заново."))
     private fun matches(player: Player, expected: DungeonSaveView): Boolean =
         player.world.uid == expected.worldId && current(player)?.let { it.run == expected.run && it.canResume } == true
     private fun inCombat(player: Player): Boolean = clock() < (combatUntil[player.uniqueId] ?: 0L)
-    private fun combatMessage() = text("saves.messages.combat", "<red>Во время боя сохраняться и перемещаться нельзя. Подождите 15 секунд без боя. <gray>Для выхода: /данж выйти.")
+    private fun combatMessage() = text("saves.messages.combat", "<red>Во время боя сохраняться и перемещаться нельзя. Подождите 15 секунд без боя. <gray>Для выхода: Shift + F → «Выйти из данжа».")
 
     /** Shared, non-mutating preflight for the panel, form, and authoritative save action. */
     internal fun saveBlockReason(player: Player, expected: DungeonSaveView?): Component? {
@@ -359,13 +359,13 @@ internal class EMDungeonQol(
         if (label.isNotEmpty() && (label.length > 32 || label.any(Char::isISOControl))) return DungeonSaveEdit(false, text("saves.messages.invalid-name", "<red>Название должно содержать от 1 до 32 символов."))
         val snapshot = checkpoints.snapshotSaves(player.persistentDataContainer)
         val saved = checkpoints.save(player.persistentDataContainer, player.location, expected.run, label, DungeonSaveKind.MANUAL, now, ttl)
-            ?: return DungeonSaveEdit(false, text("saves.messages.full", "<red>Уже есть 5 ручных мест. Удалите ненужное в /сохранения или сохранитесь с тем же названием, чтобы заменить его."))
+            ?: return DungeonSaveEdit(false, text("saves.messages.full", "<red>Уже есть 5 ручных мест. Удалите ненужное в меню «Сохранения» (Shift + F) или сохранитесь с тем же названием, чтобы заменить его."))
         if (!persist(player)) {
             checkpoints.restoreSaves(player.persistentDataContainer, snapshot)
             return DungeonSaveEdit(false, text("saves.messages.write-failed", "<red>Не удалось записать сохранение на диск. Повторите попытку позже."))
         }
         lastSave[player.uniqueId] = now
-        return DungeonSaveEdit(true, text("saves.messages.saved", "<green>Место «<name>» сохранено. <white>/сохранения</white> — открыть список.", "name" to Component.text(saved.name)))
+        return DungeonSaveEdit(true, text("saves.messages.saved", "<green>Место «<name>» сохранено. <white>Shift + F</white> → «Сохранения» — открыть список.", "name" to Component.text(saved.name)))
     }
 
     internal fun remove(player: Player, point: DungeonSavePoint, expected: DungeonSaveView): DungeonSaveEdit {
@@ -402,16 +402,16 @@ internal class EMDungeonQol(
                     .firstOrNull { it.id == id && it == expected.points.firstOrNull { point -> point.id == id } }?.location
             }
             if (destination == null || destination.world.uid != player.world.uid || !safe(destination)) {
-                audience.sendMessage(player, text("saves.messages.unavailable-point", "<red>Эта точка больше не подходит для безопасного перехода. Выберите другую или /данж выйти.")); return@portal
+                audience.sendMessage(player, text("saves.messages.unavailable-point", "<red>Эта точка больше не подходит для безопасного перехода. Выберите другую или выйдите через меню: Shift + F → «Выйти из данжа».")); return@portal
             }
             val moved = runCatching { move(player, destination.clone(), visit.instanced) }.getOrElse {
                 Logging.error("Dungeon checkpoint teleport failed", it); false
             }
-            if (!moved) audience.sendMessage(player, text("saves.messages.blocked", "<red>Перемещение отменено защитой. Для выхода используйте /данж выйти."))
+            if (!moved) audience.sendMessage(player, text("saves.messages.blocked", "<red>Перемещение отменено защитой. Для выхода нажмите Shift + F → «Выйти из данжа»."))
         } }.onFailure {
             pending.remove(player.uniqueId, token)
             Logging.error("Unable to open dungeon checkpoint portal", it)
-            audience.sendMessage(player, text("saves.messages.blocked", "<red>Перемещение отменено защитой. Для выхода используйте /данж выйти."))
+            audience.sendMessage(player, text("saves.messages.blocked", "<red>Перемещение отменено защитой. Для выхода нажмите Shift + F → «Выйти из данжа»."))
         }
     }
 
@@ -423,7 +423,7 @@ internal class EMDungeonQol(
         val now = clock()
         if (lastHint[event.player.uniqueId]?.let { now - it < 3_000 } == true) return
         lastHint[event.player.uniqueId] = now
-        audience.sendMessage(event.player, text("messages.teleport-blocked", "<gold>Вы внутри данжа.</gold> <gray>Для выхода:</gray> <click:run_command:'/dungeon quit'><green>[/данж выйти]</green></click><gray>. Начало данжа и сохранения:</gray> <click:run_command:'/данж'><white>[/данж — меню]</white></click>"))
+        audience.sendMessage(event.player, text("messages.teleport-blocked", "<gold>Вы внутри данжа.</gold> <gray>Для выхода:</gray> <click:run_command:'/dungeon quit'><green>[Выйти из данжа]</green></click><gray>. Начало данжа и сохранения:</gray> <click:run_command:'/данж'><white>[Shift + F — меню]</white></click>"))
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -460,7 +460,7 @@ internal class EMDungeonQol(
         if (!stable(player)) return
         val snapshot = checkpoints.snapshotSaves(player.persistentDataContainer)
         checkpoints.save(player.persistentDataContainer, player.location, visit.run, "Автосохранение", DungeonSaveKind.AUTO, now, ttl) ?: return
-        if (persist(player)) audience.sendActionBar(player, text("saves.messages.auto-saved", "<gray>Место сохранено автоматически · /сохранения"))
+        if (persist(player)) audience.sendActionBar(player, text("saves.messages.auto-saved", "<gray>Место сохранено автоматически · Shift + F"))
         else checkpoints.restoreSaves(player.persistentDataContainer, snapshot)
     }
 
