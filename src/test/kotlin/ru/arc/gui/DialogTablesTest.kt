@@ -9,7 +9,10 @@ import net.kyori.adventure.text.TextComponent
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.Style
 import net.kyori.adventure.text.format.TextDecoration
+import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+import java.nio.file.Files
+import java.nio.file.Path
 
 class DialogTablesTest : FreeSpec({
     val fonts = javaClass.getResourceAsStream("/fonts/dialog-font-metrics.json")!!.bufferedReader()
@@ -45,6 +48,11 @@ class DialogTablesTest : FreeSpec({
         visit(component, Style.empty())
         return lines
     }
+    fun countCodePoint(component: Component, codePoint: Int): Int {
+        fun count(node: Component): Int =
+            node.children().sumOf(::count) + node.let { (it as TextComponent).content().codePoints().filter { point -> point == codePoint }.count().toInt() }
+        return count(component)
+    }
 
     "all frame joins remain aligned with wrapped values, blank cells and different dialog widths" {
         val rows = listOf(
@@ -71,6 +79,64 @@ class DialogTablesTest : FreeSpec({
             DialogTables.render(rows, width = body.width, columns = DialogTables.Columns.BALANCED) as DialogTables.Result.Framed
         }
         tables[0].columnWidths shouldBe tables[1].columnWidths
+    }
+
+    "wrapped tables separate logical rows once, with no trailing or per-wrap separators" {
+        val rows = listOf(
+            Component.text("Короткая") to Component.text("Первая строка\nВторая строка\nТретья строка"),
+            Component.text("Ещё одна") to Component.text("Короткое значение"),
+            Component.text("Финальная") to Component.text("Последнее значение"),
+        )
+        val result = DialogTables.render(rows, frame = DialogTables.Frame.EPIC, width = 320)
+        require(result is DialogTables.Result.Framed)
+        countCodePoint(result.component, DialogTables.Frame.EPIC.base + 7) shouldBe 2
+        lineWidths(result.component).forEach { it shouldBe 312 }
+    }
+
+    "header separator is emitted once and short tables stay compact" {
+        val shortRows = listOf(
+            Component.text("Имя") to Component.text("Значение"),
+            Component.text("Ещё") to Component.text("Данные"),
+        )
+        val short = DialogTables.render(shortRows, frame = DialogTables.Frame.EPIC, width = 320)
+        require(short is DialogTables.Result.Framed)
+        countCodePoint(short.component, DialogTables.Frame.EPIC.base + 7) shouldBe 0
+
+        val wrapped = DialogTables.render(
+            listOf(
+                Component.text("Имя") to Component.text("Значение\nПродолжение"),
+                Component.text("Ещё") to Component.text("Данные"),
+            ),
+            headers = Component.text("Поле") to Component.text("Значение"),
+            frame = DialogTables.Frame.EPIC,
+            width = 320,
+        )
+        require(wrapped is DialogTables.Result.Framed)
+        countCodePoint(wrapped.component, DialogTables.Frame.EPIC.base + 7) shouldBe 2
+        lineWidths(wrapped.component).forEach { it shouldBe 312 }
+    }
+
+    "export the six path rows for visual renderer review" {
+        val rows = listOf(
+            Component.text("Земледелие") to Component.text("716 / 50000\nСтупень: Без ступени"),
+            Component.text("Промышленность") to Component.text("11 / 25000\nСтупень: Без ступени"),
+            Component.text("Торговля") to Component.text("100014280 / 4000000\nСтупень: III"),
+            Component.text("Исследование") to Component.text("2260 / 400000"),
+            Component.text("Строительство") to Component.text("12 / 80000"),
+            Component.text("Сообщество") to Component.text("93 / 4000"),
+        )
+        val result = DialogTables.render(
+            rows,
+            width = 320,
+            columns = DialogTables.Columns.BALANCED,
+            frame = DialogTables.Frame.EPIC,
+        )
+        require(result is DialogTables.Result.Framed)
+        lineWidths(result.component).forEach { it shouldBe 312 }
+
+        val report = Path.of("build/reports/dialog-tables/path-screenshot.txt")
+        Files.createDirectories(report.parent)
+        Files.writeString(report, MiniMessage.miniMessage().serialize(result.component))
     }
 
     "the approved demo keeps its exact geometry" {

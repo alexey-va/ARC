@@ -125,11 +125,13 @@ object DialogTables {
             glyph(frame.base + 6), gap(10 - frame.rightAdvance),
         )))
         val output = mutableListOf(border(0, 1, 2, 3))
+        val hasWrappedCell = chosen.cells.any { (a, b) -> maxOf(a.size, b.size) > 1 }
         chosen.cells.forEachIndexed { index, (a, b) ->
             repeat(maxOf(a.size, b.size)) { row ->
                 output += content(a.getOrElse(row) { gap(leftWidth) }, b.getOrElse(row) { gap(rightWidth) })
             }
             if (heading != null && index == 0) output += border(7, 8, 9, 10)
+            else if (hasWrappedCell && index < chosen.cells.lastIndex) output += border(7, 8, 9, 10)
         }
         output += border(11, 12, 13, 14)
         return Result.Framed(lines(output), leftWidth to rightWidth)
