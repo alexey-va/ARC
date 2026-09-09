@@ -90,6 +90,80 @@ class DungeonSupplyShopTest : FreeSpec({
         economy.withdraws shouldBe 2
     }
 
+    "case odds are exclusive and levels never exceed combat or the case cap" {
+        (0..99).groupingBy(::caseBook).eachCount() shouldBe mapOf(
+            "critical_strikes" to 40, "ice_breaker" to 30, "lightning" to 20, "flamethrower" to 10)
+        (0..99).groupingBy { caseLevel(100, 20, it) }.eachCount() shouldBe mapOf(16 to 60, 18 to 30, 20 to 10)
+        (0..99).groupingBy { caseLevel(100, 40, it) }.eachCount() shouldBe mapOf(32 to 60, 36 to 30, 40 to 10)
+        (0..99).map { caseLevel(1, 40, it) }.distinct() shouldBe listOf(1)
+        (0..99).all { caseLevel(13, 40, it) in 1..13 } shouldBe true
+    }
+
+    "case is rolled only at purchase and the same confirmation cannot buy twice" {
+        val player = paper.addPlayer("case-buyer")
+        val expected = DungeonPanelView(paper.addSimpleWorld("dungeon").uid, DungeonVisit("run"), null)
+        val economy = FakeSupplyEconomy(400.0)
+        val offer = SupplyOffer("loot_case", Material.CHEST, 1, 200.0)
+        var rolls = 0
+        val shop = DungeonSupplyShop({ listOf(offer) }, { expected }, economy,
+            createItem = { _, _ -> ItemStack(Material.CHEST) },
+            createReward = { _, _ -> rolls++; ItemStack(Material.IRON_SWORD) })
+        val quote = shop.quote(player, offer)!!
+        rolls shouldBe 0
+        shop.buy(player, quote, expected) shouldBe SupplyResult.BOUGHT
+        shop.buy(player, quote, expected) shouldBe SupplyResult.CHANGED
+        rolls shouldBe 1
+        economy.withdraws shouldBe 1
+        player.inventory.storageContents.filterNotNull().single { !it.type.isAir }.type shouldBe Material.IRON_SWORD
+    }
+
+    "foreign quote and unavailable reward never charge or deliver the case icon" {
+        val player = paper.addPlayer("case-owner")
+        val other = paper.addPlayer("other-buyer")
+        val expected = DungeonPanelView(paper.addSimpleWorld("dungeon").uid, DungeonVisit("run"), null)
+        val economy = FakeSupplyEconomy(400.0)
+        val offer = SupplyOffer("loot_case", Material.CHEST, 1, 200.0)
+        var rolls = 0
+        val shop = DungeonSupplyShop({ listOf(offer) }, { expected }, economy,
+            createItem = { _, _ -> ItemStack(Material.CHEST) }, createReward = { _, _ -> rolls++; null })
+        val quote = shop.quote(player, offer)!!
+        shop.buy(other, quote, expected) shouldBe SupplyResult.CHANGED
+        rolls shouldBe 0
+        shop.buy(player, quote, expected) shouldBe SupplyResult.ITEM_UNAVAILABLE
+        economy.withdraws shouldBe 0
+        player.inventory.storageContents.filterNotNull().count { !it.type.isAir } shouldBe 0
+    }
+
+    "case cannot roll without space or funds" {
+        val player = paper.addPlayer("case-full")
+        val expected = DungeonPanelView(paper.addSimpleWorld("dungeon").uid, DungeonVisit("run"), null)
+        val economy = FakeSupplyEconomy(100.0)
+        val offer = SupplyOffer("loot_case", Material.CHEST, 1, 200.0)
+        var rolls = 0
+        val shop = DungeonSupplyShop({ listOf(offer) }, { expected }, economy,
+            createItem = { _, _ -> ItemStack(Material.CHEST) }, createReward = { _, _ -> rolls++; ItemStack(Material.IRON_SWORD) })
+        val quote = shop.quote(player, offer)!!
+        shop.buy(player, quote, expected) shouldBe SupplyResult.NO_MONEY
+        repeat(36) { player.inventory.setItem(it, ItemStack(Material.STONE, 64)) }
+        shop.buy(player, quote, expected) shouldBe SupplyResult.NO_SPACE
+        rolls shouldBe 0
+        economy.withdraws shouldBe 0
+    }
+
+    "case book ownership follows native soulbind including legitimate unbinding" {
+        val owner = paper.addPlayer("book-owner")
+        val other = paper.addPlayer("book-other")
+        val book = ItemStack(Material.BOOK)
+        book.editMeta {
+            it.persistentDataContainer.set(NamespacedKey("arc", "dungeon_case_reward"), PersistentDataType.BYTE, 1)
+            it.persistentDataContainer.set(NamespacedKey("elitemobs", "soulbind"), PersistentDataType.STRING, owner.uniqueId.toString())
+        }
+        DungeonCaseRewards.foreign(book, owner) shouldBe false
+        DungeonCaseRewards.foreign(book, other) shouldBe true
+        book.editMeta { it.persistentDataContainer.remove(NamespacedKey("elitemobs", "soulbind")) }
+        DungeonCaseRewards.foreign(book, other) shouldBe false
+    }
+
     "invalid catalog values are disabled" {
         val shop = DungeonSupplyShop(offers = { listOf(
             SupplyOffer("zero", Material.BREAD, 0, 20.0),

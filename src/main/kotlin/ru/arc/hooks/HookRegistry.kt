@@ -303,6 +303,7 @@ class HookRegistry(
                 if (dungeonQol == null) {
                     val qol = EMDungeonQol()
                     registerListener(qol.teleporter)
+                    registerListener(ru.arc.hooks.elitemobs.DungeonCaseRewards)
                     dungeonQol = registerListener(qol)
                     qol.startAutosaves()
                 }

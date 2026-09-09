@@ -68,7 +68,7 @@ internal class DungeonSaveMenus(
                 action("entry", "panel.entry-label", "<#92bed8>К началу данжа ›", "panel.entry-tooltip", "Обычный портал к началу данжа", close = view.saves?.entry != null) {
                     if (view.saves?.entry != null) dungeon.travel(player, view.saves, "entry") else panel(player, text("panel.entry-unavailable", "<#aaa49a>Безопасный переход ко входу сейчас недоступен. Для выхода используйте кнопку выше."))
                 }.let { if (view.saves?.entry != null) it else it.copy(label = text("panel.entry-disabled", "<#aaa49a>[Недоступно] К началу данжа")) },
-                action("shop", "panel.shop-label", "<#f4d87a>Припасы ›", "panel.shop-tooltip", "Еда, стрелы и полезные предметы за кристаллы") { shop(player) },
+                action("shop", "panel.shop-label", "<#f4d87a>Припасы ›", "panel.shop-tooltip", "Припасы и кейсы EliteMobs за кристаллы") { shop(player) },
                 shops(player),
                 partyButton(player),
                 action("guide", "panel.guide-label", "<#86dcf1>Гайд ›", "panel.guide-tooltip", "Читальная справка о данжах") {
@@ -233,11 +233,11 @@ internal class DungeonSaveMenus(
     private fun shop(player: Player, feedback: Component? = null) {
         val view = dungeon.panelView(player) ?: run { unavailable(player); return }
         val body = mutableListOf(
-            PaperDialogBody(text("shop.body", "<#e8dfd2>Пополните запасы для похода. Оплата кристаллами EliteMobs; перед покупкой будет подтверждение."), 468),
+            PaperDialogBody(text("shop.body", "<#e8dfd2>Припасы и кейсы за кристаллы EliteMobs. Кейс сразу открывается после подтверждения: одна награда, привязанная к вам."), 468),
             PaperDialogBody(balance(player), 468),
         )
         feedback?.let { body += PaperDialogBody(it, 468) }
-        show(player, PaperDialogScreen(id = "dungeon.shop", title = text("shop.title", "<#f4d87a>Припасы"), body = body,
+        show(player, PaperDialogScreen(id = "dungeon.shop", title = text("shop.title", "<#f4d87a>Припасы и кейсы"), body = body,
             buttons = dungeon.supplies.list().map { offer ->
                 val quote = dungeon.supplies.quote(player, offer)
                 pointButton("supply_${offer.id}", text("shop.offer-label", "<#f4d87a><name> ×<amount> <#aaa49a>· 💎 <price> <#f4d87a>›",
@@ -258,8 +258,8 @@ internal class DungeonSaveMenus(
             PaperDialogBody(supplyDescription(offer), 468), PaperDialogBody(balance(player), 468),
         )
         feedback?.let { body += PaperDialogBody(it, 468) }
-        show(player, PaperDialogScreen(id = "dungeon.shop.confirm", title = text("shop.confirm-title", "<#f4d87a>Купить припасы?"), body = body,
-            buttons = listOf(action("buy", "shop.buy-label", "<#9bd48d>Купить", "shop.buy-tooltip", "Купить ровно показанный набор за указанную цену") {
+        show(player, PaperDialogScreen(id = "dungeon.shop.confirm", title = text("shop.confirm-title", "<#f4d87a>Подтвердить покупку?"), body = body,
+            buttons = listOf(action("buy", "shop.buy-label", "<#9bd48d>Купить", "shop.buy-tooltip", "Оплатить товар. Кейс откроется сразу и выдаст одну случайную награду") {
                 val result = dungeon.supplies.buy(player, quote, expected)
                 val message = supplyResult(result)
                 if (result.success) shop(player, message) else confirmPurchase(player, quote, expected, message)
@@ -268,7 +268,7 @@ internal class DungeonSaveMenus(
     }
 
     private fun supplyResult(result: SupplyResult): Component = when (result) {
-        SupplyResult.BOUGHT -> text("shop.bought", "<#9bd48d>✔ Припасы куплены и добавлены в инвентарь.")
+        SupplyResult.BOUGHT -> text("shop.bought", "<#9bd48d>✔ Покупка завершена. Предмет добавлен в инвентарь.")
         SupplyResult.CHANGED -> text("shop.changed", "<#d7b486>Товар изменился. Вернитесь в магазин и выберите его заново.")
         SupplyResult.OUTSIDE -> text("shop.outside", "<#d7b486>Данж изменился. Откройте /данж заново; покупка не выполнена.")
         SupplyResult.NO_SPACE -> text("shop.no-space", "<#d7b486>Освободите место в инвентаре. Кристаллы не списаны.")
@@ -278,7 +278,7 @@ internal class DungeonSaveMenus(
     }
 
     private fun supplyName(offer: SupplyOffer): Component = text("shop.stock.${offer.id}.name", when (offer.id) {
-        "beef" -> "Стейки"; "bread" -> "Хлеб"; "arrows" -> "Стрелы"; "healing" -> "Зелье лечения"; "merchant" -> "Свиток торговца"; else -> offer.id
+        "beef" -> "Стейки"; "bread" -> "Хлеб"; "arrows" -> "Стрелы"; "healing" -> "Зелье лечения"; "merchant" -> "Свиток торговца"; "enchant_case" -> "Кейс чар EliteMobs"; "loot_case" -> "Кейс снаряжения"; "loot_case_large" -> "Кейс опытного бойца"; else -> offer.id
     })
     private fun supplyDescription(offer: SupplyOffer): Component = text("shop.stock.${offer.id}.description", when (offer.id) {
         "beef" -> "<#e8dfd2>Обычные стейки для восстановления сытости."
@@ -286,6 +286,8 @@ internal class DungeonSaveMenus(
         "arrows" -> "<#e8dfd2>Обычные стрелы для лука и арбалета."
         "healing" -> "<#e8dfd2>Восстанавливает 2 сердца после питья.<newline><#aaa49a>Зажмите ПКМ, чтобы выпить. После использования останется пустая бутылочка."
         "merchant" -> "<#e8dfd2>Настоящий свиток EliteMobs. ПКМ вызывает странствующего торговца и расходует свиток.<newline><#aaa49a>Между вызовами — 60 секунд."
+        "enchant_case" -> "<#b8b8b8>Одна книга EliteMobs с чарами I уровня.<newline>Критические удары — 40%; Ледокол — 30%;<newline>Молния — 20%; Огнемёт — 10%.<newline><newline>Открывается сразу. Книга привязана к вам.<newline>Применяется у зачарователя EliteMobs; его цена и шанс успеха оплачиваются отдельно."
+        "loot_case", "loot_case_large" -> "<#b8b8b8>Один случайный предмет снаряжения EliteMobs.<newline>Предел: ваш боевой уровень, максимум ${if (offer.id == "loot_case_large") 40 else 20}.<newline>Уровень награды: 80% предела — шанс 60%;<newline>90% — шанс 30%; 100% — шанс 10%.<newline>Округление вниз, минимум 1. Тип предмета случаен.<newline><newline>Открывается сразу. Награда привязана к вам.<newline>Уникальные награды боссов не выпадают."
         else -> ""
     })
     private fun balance(player: Player): Component = text("shop.balance", "<#aaa49a>Ваши кристаллы: <#c7a0e8>💎 <value>",
