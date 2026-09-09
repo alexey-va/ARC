@@ -18,6 +18,7 @@ import org.bukkit.event.inventory.InventoryDragEvent
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
 import java.util.concurrent.ThreadLocalRandom
+import ru.arc.eliteloot.EliteLootManager
 import ru.arc.ARC
 import ru.arc.config.ConfigManager
 import net.kyori.adventure.text.format.TextDecoration
@@ -73,7 +74,8 @@ internal object DungeonCaseRewards : Listener {
                 ?.takeIf { ItemTagger.getStoredItemLevel(it) == level }
         } ?: return null
         if (item.type.isAir || item.amount != 1 || !EliteItemManager.isEliteMobsItem(item)) return null
-        val bound = SoulbindEnchantment.addEnchantment(item, player) ?: return null
+        val skinned = EliteLootManager.eliteLootProcessor?.processEliteLoot(item) ?: item
+        val bound = SoulbindEnchantment.addEnchantment(skinned, player) ?: return null
         if (bound.itemMeta.persistentDataContainer.get(soulbindKey, PersistentDataType.STRING) != player.uniqueId.toString()) return null
         val resale = ItemWorthCalculator.determineResaleWorth(bound, player)
         if (!resale.isFinite() || resale < 0 || resale > offer.price / 2) return null
