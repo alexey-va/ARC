@@ -171,15 +171,17 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         corners.forEach { corner -> session.posts.getOrPut(corner) { drawPost(player, corner) } }
         val landsById = nearby.values.filterNotNull().associateBy { it.ulid.toString() }
         for (border in plan) {
+            val land = border.landId?.let(landsById::get)
+                ?: nearby[GuideChunk(border.edge.x shr 4, border.edge.z shr 4)]
             val material = when {
-                border.landId == null -> Material.LIGHT_GRAY_CONCRETE
-                landsById[border.landId]?.ownerUID == player.uniqueId -> Material.LIGHT_BLUE_CONCRETE
+                land == null -> Material.LIGHT_GRAY_CONCRETE
+                land.ownerUID == player.uniqueId || player.uniqueId in land.trustedPlayers -> Material.LIME_CONCRETE
                 else -> Material.RED_CONCRETE
             }
             val display = session.borders.getOrPut(border) { drawBorder(player, border, material) }
             if (display.block.material != material) {
                 display.block = material.createBlockData()
-                display.glowColorOverride = if (material == Material.RED_CONCRETE) Color.RED else Color.AQUA
+                display.glowColorOverride = claimGuideBorderColor(material)
             }
         }
         val eye = session.anchor ?: player.eyeLocation
@@ -240,12 +242,14 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
                 (edge.z - origin.z).toFloat() - if (edge.alongX) width / 2 else 0f,
             ).scale(if (edge.alongX) 16f else width, height, if (edge.alongX) width else 16f))
             it.isGlowing = true
-            it.glowColorOverride = when (material) {
-                Material.RED_CONCRETE -> Color.RED
-                Material.LIGHT_BLUE_CONCRETE -> Color.AQUA
-                else -> Color.fromRGB(165, 190, 205)
-            }
+            it.glowColorOverride = claimGuideBorderColor(material)
         }.also { player.showEntity(ARC.instance, it) }
+    }
+
+    private fun claimGuideBorderColor(material: Material): Color = when (material) {
+        Material.RED_CONCRETE -> Color.RED
+        Material.LIME_CONCRETE -> Color.LIME
+        else -> Color.fromRGB(165, 190, 205)
     }
 
     private fun drawPost(player: Player, corner: GuideChunk): BlockDisplay {
@@ -255,7 +259,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
             it.block = Material.LIGHT_GRAY_CONCRETE.createBlockData()
             it.teleportDuration = 0
             it.setTransformationMatrix(Matrix4f().translation(
-                (corner.x * 16 - origin.x).toFloat() - 0.025f, -0.20f,
+                (corner.x * 16 - origin.x).toFloat() - 0.025f, 0f,
                 (corner.z * 16 - origin.z).toFloat() - 0.025f,
             ).scale(0.05f, 8.0f, 0.05f))
             it.isGlowing = true
