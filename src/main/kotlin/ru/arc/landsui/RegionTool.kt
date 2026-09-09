@@ -228,7 +228,7 @@ internal class RegionTool(private val settings: LandsUiSettings, private val gat
             session.label?.text(text("region-outside", "land" to short(land.name)))
             return
         }
-        if (!land.defaultArea.hasRoleFlag(player, Flags.AREA_ASSIGN, Material.STONE, false)) {
+        if (!land.defaultArea.hasRoleFlag(lands.getLandPlayer(player.uniqueId) ?: return, Flags.AREA_ASSIGN, Material.STONE, false)) {
             player.sendMessage(text("region-no-permission")); return
         }
         if (!right || session.first == null) {
@@ -270,7 +270,7 @@ internal class RegionTool(private val settings: LandsUiSettings, private val gat
             player.sendMessage(text("region-stale")); return
         }
         if (land.getArea(name) != null) { player.sendMessage(text("region-name-used")); return }
-        if (!land.defaultArea.hasRoleFlag(player, Flags.AREA_ASSIGN, Material.STONE, false)) {
+        if (!land.defaultArea.hasRoleFlag(lands.getLandPlayer(player.uniqueId) ?: return, Flags.AREA_ASSIGN, Material.STONE, false)) {
             player.sendMessage(text("region-no-permission")); return
         }
         if (!player.hasPermission("lands.command.area.assign") || !player.hasPermission("lands.command.area.create")) {

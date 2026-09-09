@@ -102,7 +102,7 @@ class BukkitLandsUiGatewayTest : StringSpec({
         every { land.maxChunks } returns 64
         every { land.maxMembers } returns 8
         every { land.balance } returns 0.0
-        every { land.trustedPlayers } returns emptySet()
+        every { land.trustedPlayers } returns emptySet<java.util.UUID>()
         every { landPlayer.setEditLand(land) } just runs
 
         val gateway = BukkitLandsUiGateway(integration)

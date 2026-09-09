@@ -1,6 +1,7 @@
 package ru.arc.onboarding
 
 import org.bukkit.Location
+import org.bukkit.entity.Display
 import org.bukkit.entity.TextDisplay
 
 /** Keep the complete anchor until Shift is released; teleport/world events reset the session. */
@@ -21,7 +22,7 @@ internal fun claimGuideBorderOrigin(eye: Location): Location =
 internal fun claimGuideTeleportDuration(from: Location, to: Location): Int =
     if (from.world != to.world || from.distanceSquared(to) > 1.0) 0 else 2
 
-internal fun followClaimGuideDisplay(display: TextDisplay?, to: Location) {
+internal fun followClaimGuideDisplay(display: Display?, to: Location) {
     if (display == null || !display.isValid || display.world != to.world) return
     val from = display.location
     if (from.distanceSquared(to) > 0.0001) {

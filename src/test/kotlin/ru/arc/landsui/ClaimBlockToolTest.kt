@@ -47,7 +47,7 @@ class ClaimBlockToolTest {
             every { landPlayer.selection } returns null
             every { landPlayer.getEditLand(false) } returns selected
             every { selected.exists() } returns true
-            every { selected.defaultArea.hasRoleFlag(player, any(), Material.GRASS_BLOCK, false) } returns true
+            every { selected.defaultArea.hasRoleFlag(landPlayer, any(), Material.GRASS_BLOCK, false) } returns true
             every { lands.getLandByUnloadedChunk(target.world, target.blockX shr 4, target.blockZ shr 4) } returns null
 
             val firstClaim = CompletableFuture<ClaimResult>()
@@ -60,8 +60,16 @@ class ClaimBlockToolTest {
                 every { firstSelection.claim(selected, false, true) } returns firstClaim
                 every { secondSelection.claim(selected, false, true) } returns secondClaim
 
+                // Reproduce the runtime's broken Bukkit Player overload; only LandPlayer is valid.
+                every { selected.defaultArea.hasRoleFlag(player, any(), any(), any()) } throws ClassCastException("Player is not LandPlayer")
                 val tool = ClaimBlockTool(settings(), lands)
                 try {
+                    // A failed preflight must release pending state so the next click can retry.
+                    every { selected.defaultArea.hasRoleFlag(landPlayer, any(), Material.GRASS_BLOCK, false) } throws IllegalStateException("preflight failed")
+                    tool.place(player, target, radius = 1)
+                    paper.performTicks(3)
+                    verify(exactly = 0) { firstSelection.claim(selected, false, true) }
+                    every { selected.defaultArea.hasRoleFlag(landPlayer, any(), Material.GRASS_BLOCK, false) } returns true
                     tool.place(player, target, radius = 1)
                     paper.performTicks(3)
                     verify(exactly = 1) { firstSelection.claim(selected, false, true) }

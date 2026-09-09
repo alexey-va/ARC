@@ -97,55 +97,54 @@ internal class ClaimBlockTool(
 
             val request = Pending(player.uniqueId, snapshot, radius)
             pending[player.uniqueId] = request
-            val occupied = lands.getLandByUnloadedChunk(
-                snapshot.world,
-                snapshot.blockX shr 4,
-                snapshot.blockZ shr 4,
-            )
-            val selected = lp.getEditLand(false)?.takeIf { it.exists() }
-            if (occupied != null && (selected == null || occupied.ulid != selected.ulid)) {
-                finish(request, player, "claim-place-occupied")
-                return@runSync
-            }
+            try {
+                val occupied = lands.getLandByUnloadedChunk(
+                    snapshot.world,
+                    snapshot.blockX shr 4,
+                    snapshot.blockZ shr 4,
+                )
+                val selected = lp.getEditLand(false)?.takeIf { it.exists() }
+                if (occupied != null && (selected == null || occupied.ulid != selected.ulid)) {
+                    finish(request, player, "claim-place-occupied")
+                    return@runSync
+                }
 
-            if (selected != null && !selected.defaultArea.hasRoleFlag(player, Flags.LAND_CLAIM, Material.GRASS_BLOCK, false)) {
-                finish(request, player, "claim-place-no-permission")
-                return@runSync
-            }
-            val landFuture = try {
-                if (selected != null) CompletableFuture.completedFuture<Land?>(selected)
-                else createLand(player, snapshot, lp)
+                if (selected != null && !selected.defaultArea.hasRoleFlag(lp, Flags.LAND_CLAIM, Material.GRASS_BLOCK, false)) {
+                    finish(request, player, "claim-place-no-permission")
+                    return@runSync
+                }
+                val landFuture = if (selected != null) CompletableFuture.completedFuture<Land?>(selected)
+                    else createLand(player, snapshot, lp)
+                val token = tasks.token()
+                landFuture.whenCompleteSync(tasks, token) { land, failure ->
+                    try {
+                        if (failure != null || land == null || !land.exists()) {
+                            finish(request, player, "claim-place-failed", failure)
+                            return@whenCompleteSync
+                        }
+                        if (!player.isOnline || player.world != snapshot.world || lp.selection != null) {
+                            finish(request, player, "claim-place-failed")
+                            return@whenCompleteSync
+                        }
+                        if (selected == null && lp.getEditLand(false) == null) lp.setEditLand(land)
+                        val selection = Selection.of(lp, false, false, true)
+                        request.selection = selection
+                        val edge = selectionEdge(snapshot, radius)
+                        selection.setPos1(edge.first)
+                        selection.setPos2(edge.second)
+                        selection.claim(land, false, true).whenCompleteSync(tasks, token) { result, claimFailure ->
+                            if (claimFailure != null || result == null || result != ClaimResult.SUCCESS && result != ClaimResult.IGNOREABLE) {
+                                finish(request, player, "claim-place-failed", claimFailure)
+                            } else {
+                                finish(request, player, "claim-place-done")
+                            }
+                        }
+                    } catch (failure: Exception) {
+                        finish(request, player, "claim-place-failed", failure)
+                    }
+                }
             } catch (failure: Exception) {
                 finish(request, player, "claim-place-failed", failure)
-                return@runSync
-            }
-            val token = tasks.token()
-            landFuture.whenCompleteSync(tasks, token) { land, failure ->
-                if (failure != null || land == null || !land.exists()) {
-                    finish(request, player, "claim-place-failed", failure)
-                    return@whenCompleteSync
-                }
-                if (!player.isOnline || player.world != snapshot.world || lp.selection != null) {
-                    finish(request, player, "claim-place-failed")
-                    return@whenCompleteSync
-                }
-                if (selected == null && lp.getEditLand(false) == null) lp.setEditLand(land)
-                try {
-                    val selection = Selection.of(lp, false, false, true)
-                    request.selection = selection
-                    val edge = selectionEdge(snapshot, radius)
-                    selection.setPos1(edge.first)
-                    selection.setPos2(edge.second)
-                    selection.claim(land, false, true).whenCompleteSync(tasks, token) { result, claimFailure ->
-                        if (claimFailure != null || result == null || result != ClaimResult.SUCCESS && result != ClaimResult.IGNOREABLE) {
-                            finish(request, player, "claim-place-failed", claimFailure)
-                        } else {
-                            finish(request, player, "claim-place-done")
-                        }
-                    }
-                } catch (failure: Exception) {
-                    finish(request, player, "claim-place-failed", failure)
-                }
             }
         }
     }

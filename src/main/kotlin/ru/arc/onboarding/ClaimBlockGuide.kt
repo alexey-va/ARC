@@ -67,7 +67,10 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
                         followClaimGuideDisplay(session.label, claimGuideLabelLocation(eye))
                         val y = claimGuideBorderY(player.eyeLocation.y)
                         if (session.borderY != y) {
-                            (session.borders.values + session.posts.values).forEach { it.teleport(it.location.apply { this.y = y }) }
+                            // Interpolate height only; the fixed X/Z origins keep every chunk edge aligned.
+                            (session.borders.values + session.posts.values).forEach {
+                                followClaimGuideDisplay(it, it.location.apply { this.y = y })
+                            }
                             session.borderY = y
                         }
                     }
