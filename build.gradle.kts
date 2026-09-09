@@ -47,7 +47,7 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.29"
+version = "1.4.30"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.5"
@@ -283,6 +283,9 @@ tasks {
     }
     withType<Javadoc> { options.encoding = "UTF-8" }
     test {
+        // Third-party plugin JARs (HuskHomes) bundle older unrelocated Adventure classes.
+        // Prefer the resolved Paper/MockBukkit modules, as the real Paper classloader does.
+        classpath = files(classpath.filter { it.name.startsWith("adventure-") }, classpath)
         useJUnitPlatform()
         systemProperty("arc.test.unit", "true")
         // MockK/ByteBuddy must self-attach inside the Java 25 test worker. Without

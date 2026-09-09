@@ -116,6 +116,9 @@ class LandsUiController(
                 }.closing(),
                 button("members", text("members-label"), text("members-tooltip")) { openMembers(player, land.id) },
                 button("territory", text("territory-label"), text("territory-tooltip")) { openTerritory(player, land.id) },
+                button("region-tool", text("region-tool-label"), text("region-tool-tooltip")) {
+                    LandsUiModule.giveRegionTool(player, land.id)
+                }.closing(),
             )
             if (land.ownerId == player.uniqueId) {
                 buttons += button("rename", text("rename-label"), text("rename-tooltip")) { openRename(player, land.id) }

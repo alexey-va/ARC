@@ -14,12 +14,18 @@ object LandsUiModule : PluginModule {
 
     @Volatile private var settings: LandsUiSettings? = null
     @Volatile private var controller: LandsUiController? = null
+    @Volatile private var regionTool: RegionTool? = null
+    private var regionAreaLimits: AutoCloseable? = null
 
     override fun init() = start(LandsUiConfig.load(ARC.instance.dataPath).snapshot())
 
     override fun reload() = start(LandsUiConfig.load(ARC.instance.dataPath).snapshot())
 
     override fun shutdown() {
+        regionTool?.close()
+        regionTool = null
+        regionAreaLimits?.close()
+        regionAreaLimits = null
         controller?.close()
         controller = null
         settings = null
@@ -41,6 +47,10 @@ object LandsUiModule : PluginModule {
         active.openAddMember(player, landId)
     }
 
+    fun giveRegionTool(player: Player, landId: String) {
+        regionTool?.give(player, landId) ?: open(player)
+    }
+
     fun openInvite(player: Player, targetId: java.util.UUID, targetName: String) {
         val active = controller
         if (active == null) {
@@ -53,6 +63,10 @@ object LandsUiModule : PluginModule {
     private fun start(loaded: LandsUiSettings) {
         controller?.close()
         controller = null
+        regionTool?.close()
+        regionTool = null
+        regionAreaLimits?.close()
+        regionAreaLimits = null
         settings = loaded
         if (!loaded.enabled) {
             info("Lands UI module disabled by configuration")
@@ -63,7 +77,10 @@ object LandsUiModule : PluginModule {
             warn("Lands UI module disabled because Lands is unavailable")
             return
         }
-        controller = LandsUiController(loaded, BukkitLandsUiGateway())
+        regionAreaLimits = RegionAreaLimits.install()
+        val gateway = BukkitLandsUiGateway()
+        controller = LandsUiController(loaded, gateway)
+        regionTool = RegionTool(loaded, gateway).also { it.start() }
         info("Lands UI module initialized")
     }
 }

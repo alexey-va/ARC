@@ -25,6 +25,7 @@ import org.joml.Matrix4f
 import ru.arc.ARC
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.landsui.LandsUiModule
+import ru.arc.landsui.RegionToolItem
 import ru.arc.paper.audience.NativePaperAudienceEffects as effects
 import ru.arc.util.Logging.error
 import java.time.Duration
@@ -81,6 +82,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
 
     private fun update(player: Player) {
         if (titleAfter[player.uniqueId] == Long.MAX_VALUE) return
+        if (RegionToolItem.matches(player.inventory.itemInMainHand)) { clear(player); return }
         if (!config.allowsWorld(player.world.name) || player.isDead || player.gameMode == GameMode.SPECTATOR ||
             integration.getWorld(player.world) == null
         ) {
@@ -200,7 +202,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
             it.billboard = Display.Billboard.CENTER
             it.isSeeThrough = true
             it.isShadowed = true
-            it.backgroundColor = Color.fromARGB(190, 15, 23, 30)
+            it.backgroundColor = Color.fromARGB(255, 15, 23, 30)
             it.lineWidth = 230
             it.teleportDuration = 2
             it.setTransformationMatrix(Matrix4f().scaling(1.30f))
@@ -214,7 +216,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
                     it.billboard = Display.Billboard.CENTER
                     it.isSeeThrough = true
                     it.isShadowed = true
-                    it.backgroundColor = Color.fromARGB(220, 15, 40, 50)
+                    it.backgroundColor = Color.fromARGB(255, 15, 40, 50)
                     it.lineWidth = 160
                     it.teleportDuration = 2
                     it.setTransformationMatrix(Matrix4f().scaling(1.10f))
@@ -248,6 +250,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
     fun clickButton(event: PlayerInteractEvent) {
         val player = event.player
         // Displays have no physical hitbox. Never intercept placement, including Shift + RMB.
+        if (RegionToolItem.matches(player.inventory.itemInMainHand)) return
         if (!claimGuideButtonGesture(event.action, event.hand, player.isSneaking)) return
         if (!ClaimBlockIdentity.matches(player.inventory.itemInMainHand) &&
             !ClaimBlockIdentity.matches(player.inventory.itemInOffHand)) return
