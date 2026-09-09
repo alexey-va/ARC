@@ -51,6 +51,8 @@ object OnboardingService {
 
     fun isEnabled(): Boolean = runtime != null
 
+    internal fun guideConfig(): OnboardingConfig? = runtime?.config
+
     /** Read-only hint for the main player hub; it does not consume or reschedule the hint. */
     fun nextPendingHintId(playerId: UUID): String? = runtime?.store?.nextHint(playerId)?.id
 

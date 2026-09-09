@@ -13,11 +13,18 @@ object OnboardingModule : PluginModule {
     override val priority = 89
 
     private val listeners = mutableListOf<Listener>()
+    internal var claimGuide: ClaimBlockGuide? = null
+        private set
 
     override fun init() {
         OnboardingService.init()
         register(OnboardingPlayerListener())
         registerOptional("Lands") { OnboardingLandsListener() }
+        if (Bukkit.getPluginManager().isPluginEnabled("Lands")) {
+            OnboardingService.guideConfig()?.takeIf { it.claimGuideEnabled }?.let { config ->
+                claimGuide = ClaimBlockGuide(config).also { register(it); it.start() }
+            }
+        }
         if (OnboardingService.isEnabled()) {
             Bukkit.getOnlinePlayers().forEach(OnboardingService::resume)
         }
@@ -34,6 +41,8 @@ object OnboardingModule : PluginModule {
     }
 
     override fun shutdown() {
+        claimGuide?.close()
+        claimGuide = null
         listeners.forEach(HandlerList::unregisterAll)
         listeners.clear()
         OnboardingService.shutdown()

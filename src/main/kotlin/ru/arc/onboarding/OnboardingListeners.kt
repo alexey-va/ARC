@@ -32,6 +32,7 @@ internal class OnboardingLandsListener : Listener {
             Runnable {
                 val player = Bukkit.getPlayer(playerId)?.takeIf { it.isOnline } ?: return@Runnable
                 OnboardingService.recordLandClaimed(player, worldName, chunkX, chunkZ)
+                OnboardingModule.claimGuide?.claimed(player, worldName, chunkX, chunkZ)
             }
         if (Bukkit.isPrimaryThread()) action.run() else Tasks.scheduler.runSync(action)
     }

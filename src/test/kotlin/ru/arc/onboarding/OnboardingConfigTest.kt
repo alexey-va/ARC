@@ -74,6 +74,11 @@ class OnboardingConfigTest : FreeSpec({
             "Начало • Место найдено. Сохраните точку возвращения: /sethome."
         plainText.serialize(config.message(OnboardingHint.HOME_CREATED)) shouldBe
             "Начало • Дом сохранён. Возврат: /home. Блоки привата: /kit start."
+        OnboardingConfig.CLAIM_TEXT.keys.forEach { key ->
+            plainText.serialize(config.claimText(key)).contains("<") shouldBe false
+        }
+        plainText.serialize(config.claimText("subtitle")) shouldBe "Снять защиту здесь: /unclaim"
+        config.claimGuideEnabled shouldBe true
         config.validate()
     }
 })

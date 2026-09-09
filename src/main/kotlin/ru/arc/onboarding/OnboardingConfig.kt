@@ -14,6 +14,10 @@ internal class OnboardingConfig private constructor(
     val resumeDelayTicks: Long,
     val betweenMessagesTicks: Long,
 ) {
+    val claimGuideEnabled: Boolean get() = source.bool("claim-guide.enabled", true)
+
+    fun claimText(key: String): Component = source.component("claim-guide.text.$key", CLAIM_TEXT.getValue(key))
+
     fun allowsWorld(worldName: String): Boolean = worldName.trim().lowercase(Locale.ROOT) in worlds
 
     fun hintEnabled(hint: OnboardingHint): Boolean = source.bool("steps.${hint.id}.enabled", true)
@@ -22,6 +26,7 @@ internal class OnboardingConfig private constructor(
         source.component("steps.${hint.id}.message", DEFAULT_MESSAGES.getValue(hint))
 
     fun validate() {
+        if (claimGuideEnabled) CLAIM_TEXT.keys.forEach(::claimText)
         OnboardingHint.entries.filter(::hintEnabled).forEach { hint ->
             require(source.string("steps.${hint.id}.message", DEFAULT_MESSAGES.getValue(hint)).isNotBlank()) {
                 "onboarding step ${hint.id} has a blank message"
@@ -31,6 +36,23 @@ internal class OnboardingConfig private constructor(
     }
 
     companion object {
+        internal val CLAIM_TEXT = linkedMapOf(
+            "title" to "<#92bed8>Поставь блок на землю",
+            "subtitle" to "<white>Снять защиту здесь: <#ff9f0f>/unclaim",
+            "aim" to "<white>Посмотри на землю рядом — покажу участок",
+            "free" to "<#80e89b>Здесь нет привата<newline><white>Поставь блок сюда",
+            "expand" to "<#80e89b>Здесь нет привата<newline><white>Поставь блок — расширь участок",
+            "own" to "<#92bed8>Твой участок уже защищён<newline><white>Для расширения поставь блок за границей",
+            "occupied" to "<#ff8178>Здесь уже занято<newline><white>Выбери другое место",
+            "success-title" to "<#80e89b>Участок защищён",
+            "success-subtitle" to "<white>Здесь твои постройки под защитой",
+            "success" to "<#92bed8>Готово! Этот участок защищён",
+            "action-free" to "<white>Поставь блок в зелёном контуре — защити эту землю",
+            "action-own" to "<white>Расширить — поставь блок за голубой границей",
+            "action-occupied" to "<#ff8178>Место занято • <white>Найди свободный участок",
+            "remove" to "<white>Встань внутри своего участка → <#ff9f0f>/unclaim <white>— снять защиту здесь",
+        )
+
         fun load(source: Config = ConfigManager.ofModule(ARC.instance.dataPath, "onboarding.yml")): OnboardingConfig {
             val enabled = source.bool("enabled", false)
             val worlds =
