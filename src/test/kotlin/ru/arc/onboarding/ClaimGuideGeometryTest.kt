@@ -21,11 +21,12 @@ class ClaimGuideGeometryTest : FreeSpec({
         val eye = Location(null, 10.0, 70.0, 20.0, 0f, 0f)
         val button = claimGuideButtonLocation(eye)
         claimGuideButtonHit(eye, button) shouldBe false
-        val aimed = eye.clone().setDirection(button.toVector().add(org.bukkit.util.Vector(0.0, 0.22, 0.0)).subtract(eye.toVector()))
+        claimGuideButtonHit(eye.clone().subtract(0.0, 0.35, 0.0), button) shouldBe false
+        val aimed = eye.clone().setDirection(button.toVector().add(org.bukkit.util.Vector(0.0, 0.44, 0.0)).subtract(eye.toVector()))
         claimGuideButtonHit(aimed, button) shouldBe true
         claimGuideButtonHit(aimed.clone().setDirection(aimed.direction.multiply(-1)), button) shouldBe false
         claimGuideButtonHit(aimed.clone().subtract(aimed.direction.multiply(10)), button) shouldBe false
-        claimGuideButtonHit(eye.clone().setDirection(button.toVector().add(org.bukkit.util.Vector(0.0, 1.5, 0.0)).subtract(eye.toVector())), button) shouldBe false
+        claimGuideButtonHit(eye.clone().setDirection(button.toVector().add(org.bukkit.util.Vector(0.0, 3.0, 0.0)).subtract(eye.toVector())), button) shouldBe false
         eye shouldBe Location(null, 10.0, 70.0, 20.0, 0f, 0f)
     }
 
@@ -69,5 +70,24 @@ class ClaimGuideGeometryTest : FreeSpec({
         edges.toSet().size shouldBe 16
         edges.containsAll(claimGuideEdges(setOf(GuideChunk(0, 0)))) shouldBe true
         claimGuideEdges(emptySet()) shouldBe emptyList()
+    }
+    "outside-neighbor lookup follows every real side across negative chunk boundaries" {
+        val interior = setOf(GuideChunk(-1, -1), GuideChunk(0, -1))
+        val outside = claimGuideEdges(interior).map { claimGuideEdgeOutside(it, interior) }.toSet()
+        outside shouldBe setOf(GuideChunk(-1, -2), GuideChunk(-1, 0), GuideChunk(-2, -1),
+            GuideChunk(0, -2), GuideChunk(0, 0), GuideChunk(1, -1))
+    }
+    "wilderness grid keeps internal separators and deduplicates negative coordinates" {
+        val chunks = claimGuideChunks(GuideChunk(-1, -1), 1)
+        val edges = claimGuideWildernessEdges(chunks, emptySet())
+        edges.size shouldBe 24
+        edges.toSet().size shouldBe 24
+    }
+    "wilderness grid omits edges against occupied chunks" {
+        val chunks = claimGuideChunks(GuideChunk(0, 0), 1)
+        val edges = claimGuideWildernessEdges(chunks, setOf(GuideChunk(0, 0)))
+        edges.size shouldBe 20
+        edges.none { it == GuideEdge(0, 0, true) } shouldBe true
+        edges.none { it == GuideEdge(0, 0, false) } shouldBe true
     }
 })

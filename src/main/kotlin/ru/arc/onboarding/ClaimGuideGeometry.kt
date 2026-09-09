@@ -16,6 +16,12 @@ internal fun claimGuideEdges(chunks: Set<GuideChunk>): List<GuideEdge> = buildLi
     }
 }
 
+internal fun claimGuideEdgeOutside(edge: GuideEdge, interior: Set<GuideChunk>): GuideChunk {
+    val base = GuideChunk(edge.x shr 4, edge.z shr 4)
+    val negative = if (edge.alongX) GuideChunk(base.x, base.z - 1) else GuideChunk(base.x - 1, base.z)
+    return if (negative in interior) base else negative
+}
+
 internal fun claimGuideChunks(center: GuideChunk, radius: Int): Set<GuideChunk> {
     require(radius in 0..4)
     return buildSet {
@@ -23,6 +29,24 @@ internal fun claimGuideChunks(center: GuideChunk, radius: Int): Set<GuideChunk> 
             for (z in center.z - radius..center.z + radius) add(GuideChunk(x, z))
     }
 }
+
+/** Thin grid edges for free chunks; internal free separators are retained once. */
+internal fun claimGuideWildernessEdges(
+    chunks: Set<GuideChunk>,
+    occupied: Set<GuideChunk>,
+): List<GuideEdge> = buildList {
+    val free = chunks - occupied
+    free.forEach { chunk ->
+        val north = GuideChunk(chunk.x, chunk.z - 1)
+        val south = GuideChunk(chunk.x, chunk.z + 1)
+        val west = GuideChunk(chunk.x - 1, chunk.z)
+        val east = GuideChunk(chunk.x + 1, chunk.z)
+        if (north !in occupied) add(GuideEdge(chunk.x * 16, chunk.z * 16, true))
+        if (south !in free && south !in occupied) add(GuideEdge(chunk.x * 16, chunk.z * 16 + 16, true))
+        if (west !in occupied) add(GuideEdge(chunk.x * 16, chunk.z * 16, false))
+        if (east !in free && east !in occupied) add(GuideEdge(chunk.x * 16 + 16, chunk.z * 16, false))
+    }
+}.distinct()
 
 /** Looking into the sky must not turn off the held-item preview. */
 internal fun claimGuideTarget(placementX: Int?, placementZ: Int?, playerX: Int, playerZ: Int): GuideChunk =
@@ -40,7 +64,7 @@ internal fun claimGuideLandText(template: Component, landName: String?): Compone
 internal fun claimGuideButtonLocation(eye: Location): Location {
     val yaw = Math.toRadians(eye.yaw.toDouble())
     return eye.clone().add(eye.direction.multiply(4.0))
-        .add(kotlin.math.cos(yaw) * 1.9, -0.65, kotlin.math.sin(yaw) * 1.9)
+        .add(kotlin.math.cos(yaw) * 1.9, -1.60, kotlin.math.sin(yaw) * 1.9)
 }
 
 internal fun claimGuideButtonGesture(action: org.bukkit.event.block.Action, hand: org.bukkit.inventory.EquipmentSlot?, sneaking: Boolean): Boolean =
@@ -51,7 +75,7 @@ internal fun claimGuideButtonGesture(action: org.bukkit.event.block.Action, hand
 internal fun claimGuideButtonHit(eye: Location, button: Location): Boolean {
     if (eye.world != button.world) return false
     // TextDisplay grows upward from its anchor; target the middle of its three short lines.
-    val center = button.toVector().add(org.bukkit.util.Vector(0.0, 0.22, 0.0))
+    val center = button.toVector().add(org.bukkit.util.Vector(0.0, 0.44, 0.0))
     val offset = center.clone().subtract(eye.toVector())
     if (offset.lengthSquared() < 0.01 || offset.lengthSquared() > 36.0) return false
     val normal = offset.clone().normalize()
@@ -65,5 +89,5 @@ internal fun claimGuideButtonHit(eye: Location, button: Location): Boolean {
     val horizontal = org.bukkit.util.Vector(kotlin.math.cos(yaw), 0.0, kotlin.math.sin(yaw))
     val up = normal.clone().crossProduct(horizontal).normalize()
     val right = up.clone().crossProduct(normal).normalize()
-    return kotlin.math.abs(point.dot(right)) <= 1.15 && kotlin.math.abs(point.dot(up)) <= 0.34
+    return kotlin.math.abs(point.dot(right)) <= 2.30 && kotlin.math.abs(point.dot(up)) <= 0.68
 }

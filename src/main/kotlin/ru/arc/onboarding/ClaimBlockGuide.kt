@@ -152,7 +152,17 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
                 ownChunks += GuideChunk(x, z)
             }
         }
-        val geometry = listOf(footprint, state, ownChunks, claims)
+        val currentChunk = GuideChunk(player.location.blockX shr 4, player.location.blockZ shr 4)
+        val gridChunks = claimGuideChunks(currentChunk, 1)
+        val gridClaims = buildMap {
+            for (x in currentChunk.x - 2..currentChunk.x + 2)
+                for (z in currentChunk.z - 2..currentChunk.z + 2) {
+                    val chunk = GuideChunk(x, z)
+                    put(chunk, integration.getLandByUnloadedChunk(world, x, z))
+                }
+        }
+        val gridEdges = claimGuideWildernessEdges(gridChunks, gridClaims.filterValues { it != null }.keys)
+        val geometry = listOf(footprint, state, ownChunks, claims, gridEdges)
         if (session.geometry != geometry || session.borders.any { !it.isValid }) {
             session.borders.forEach(Entity::remove)
             session.borders.clear()
@@ -161,26 +171,23 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
             // Remove artificial edges at the local view's cutoff using real adjacent Lands claims.
             if (selected != null) {
                 claimGuideEdges(ownChunks).filter { edge ->
-                    val outside = if (edge.alongX) {
-                        val north = GuideChunk(edge.x shr 4, (edge.z shr 4) - 1)
-                        if (north in ownChunks) GuideChunk(north.x, north.z + 1) else north
-                    } else {
-                        val west = GuideChunk((edge.x shr 4) - 1, edge.z shr 4)
-                        if (west in ownChunks) GuideChunk(west.x + 1, west.z) else west
-                    }
+                    val outside = claimGuideEdgeOutside(edge, ownChunks)
                     integration.getLandByUnloadedChunk(world, outside.x, outside.z) != selected
                 }.forEach { drawEdge(player, session, it, y, Material.LIGHT_BLUE_CONCRETE, ownChunks) }
             }
-            claims.entries.groupBy { (_, land) ->
-                when {
-                    land == null -> Material.LIME_CONCRETE
-                    land.ownerUID == player.uniqueId -> Material.LIGHT_BLUE_CONCRETE
-                    else -> Material.RED_CONCRETE
+            claims.entries.groupBy { (_, land) -> land?.ulid?.toString() }.forEach { (_, entries) ->
+                val land = entries.first().value
+                val color = when (land) {
+                    null -> Material.LIME_CONCRETE
+                    else -> if (land.ownerUID == player.uniqueId) Material.LIGHT_BLUE_CONCRETE else Material.RED_CONCRETE
                 }
-            }.forEach { (color, entries) ->
                 val interior = entries.mapTo(linkedSetOf()) { it.key }
-                claimGuideEdges(interior).forEach { drawEdge(player, session, it, y, color, interior) }
+                claimGuideEdges(interior).filter { edge ->
+                    val outside = claimGuideEdgeOutside(edge, interior)
+                    land == null || integration.getLandByUnloadedChunk(world, outside.x, outside.z)?.ulid != land.ulid
+                }.forEach { drawEdge(player, session, it, y, color, interior) }
             }
+            gridEdges.forEach { drawGridEdge(player, session, it, y, gridChunks) }
         }
         if (session.borderY != y) {
             session.borders.forEach { border -> border.teleport(border.location.apply { this.y = y }) }
@@ -196,7 +203,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
             it.backgroundColor = Color.fromARGB(190, 15, 23, 30)
             it.lineWidth = 230
             it.teleportDuration = 2
-            it.setTransformationMatrix(Matrix4f().scaling(0.65f))
+            it.setTransformationMatrix(Matrix4f().scaling(1.30f))
         }.also { session.label = it; player.showEntity(ARC.instance, it) }
         if (label.location.distanceSquared(labelLocation) > 0.01) label.teleport(labelLocation)
         label.text(claimGuideLandText(text.getValue(state), selected?.name))
@@ -210,7 +217,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
                     it.backgroundColor = Color.fromARGB(220, 15, 40, 50)
                     it.lineWidth = 160
                     it.teleportDuration = 2
-                    it.setTransformationMatrix(Matrix4f().scaling(0.55f))
+                    it.setTransformationMatrix(Matrix4f().scaling(1.10f))
                 }.also { session.button = it; player.showEntity(ARC.instance, it) }
             session.buttonLand = selected.ulid.toString()
             button.text(claimGuideLandText(text.getValue("add-friend"), selected.name.let { if (it.length > 24) it.take(23) + "…" else it }))
@@ -222,6 +229,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         if (tick % 20L == 0L) {
             val action = when {
                 success || tick % 160L >= 100L -> "remove"
+                gridEdges.isNotEmpty() && tick % 160L in 60L..99L -> "grid-legend"
                 state == "own" -> "action-own"
                 state == "occupied" -> "action-occupied"
                 state == "expand" -> "action-expand"
@@ -285,6 +293,22 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
             session.borders += display
             player.showEntity(ARC.instance, display)
         }
+    }
+
+    private fun drawGridEdge(player: Player, session: Session, edge: GuideEdge, y: Double, interior: Set<GuideChunk>) {
+        val positiveSide = GuideChunk(edge.x shr 4, edge.z shr 4) in interior
+        val inset = if (positiveSide) 0.02 else -0.02
+        val world = player.world
+        val location = Location(world, edge.x + if (edge.alongX) 0.0 else inset, y,
+            edge.z + if (edge.alongX) inset else 0.0)
+        if (!world.isChunkLoaded(location.blockX shr 4, location.blockZ shr 4)) return
+        val display = world.spawn(location, BlockDisplay::class.java) {
+            configure(it)
+            it.block = Material.LIGHT_GRAY_CONCRETE.createBlockData()
+            it.setTransformationMatrix(Matrix4f().scaling(if (edge.alongX) 16f else 0.05f, 0.045f, if (edge.alongX) 0.05f else 16f))
+        }
+        session.borders += display
+        player.showEntity(ARC.instance, display)
     }
 
     private fun configure(display: Display) {

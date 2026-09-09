@@ -40,7 +40,7 @@ internal class OnboardingConfig private constructor(
             "title" to "<#92bed8>Поставь блок на землю",
             "subtitle" to "<white>Снять защиту здесь: <#ff9f0f>/unclaim",
             "aim" to "<white>Посмотри на землю рядом — покажу участок",
-            "free" to "<#80e89b>Здесь нет привата<newline><white>Поставь блок сюда",
+            "free" to "<#80e89b>Зелёный — будущий приват<newline><white>Поставь блок сюда",
             "expand" to "<#80e89b>Расширить «{land}»<newline><white>Поставь блок в зелёном контуре",
             "action-expand" to "<white>Расширить «{land}» — поставь блок в зелёном контуре",
             "own" to "<#92bed8>Твой участок уже защищён<newline><white>Для расширения поставь блок за границей",
@@ -54,6 +54,7 @@ internal class OnboardingConfig private constructor(
             "add-friend" to "<#92bed8>Добавить друга<newline><white>«{land}»<newline><gray>Shift → наведи → ЛКМ",
             "boundary-enter" to "<#92bed8>Участок «{land}» <gray>• <white>Земля под защитой",
             "boundary-leave" to "<#ff9f0f>Ты вышел из «{land}» <gray>• <white>Здесь нет привата",
+            "grid-legend" to "<gray>Тонкие линии — чанки 16×16 <dark_gray>• <#80e89b>Зелёный — будущий приват",
             "remove" to "<white>Встань внутри своего участка → <#ff9f0f>/unclaim <white>— снять защиту здесь",
         )
 
