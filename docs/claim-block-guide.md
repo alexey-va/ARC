@@ -49,7 +49,8 @@ nonpersistent, full-bright, and bounded to loaded terrain.
 ## Deliberate bounds and verification
 
 Item radii 0–4 are recognized (at most 81 queried chunks). The additional
-selected-land view is a 3 × 3 neighborhood. Each border edge is a single straight segment at the player's exact eye height.
+selected-land view is a 3 × 3 neighborhood. Each border edge is a bright ribbon 0.60 blocks high and 0.35 blocks thick,
+centered at the player's eye height, with 2.40-block end posts for visibility.
 Height changes move existing displays instead of respawning them; entity origins
 stay inside the represented chunks. Terrain height is never sampled. Existing region data is rechecked every five ticks while
 holding the item; unchanged geometry is reused.

@@ -197,24 +197,34 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
     private fun drawEdge(player: Player, session: Session, edge: GuideEdge, y: Double, material: Material, interior: Set<GuideChunk>) {
         // One straight edge at eye height; keep its origin inside the represented chunk.
         val positiveSide = GuideChunk(edge.x shr 4, edge.z shr 4) in interior
-        val inset = if (positiveSide) 0.0 else -0.10
+        val inset = if (positiveSide) 0.0 else -0.45
         val world = player.world
         val location = Location(world, edge.x + if (edge.alongX) 0.0 else inset,
             y, edge.z + if (edge.alongX) inset else 0.0)
         if (!world.isChunkLoaded(location.blockX shr 4, location.blockZ shr 4)) return
-        val display = world.spawn(location, BlockDisplay::class.java) {
-            configure(it)
-            it.block = material.createBlockData()
-            it.setTransformationMatrix(Matrix4f().scaling(if (edge.alongX) 16f else 0.10f, 0.10f, if (edge.alongX) 0.10f else 16f))
-            it.isGlowing = true
-            it.glowColorOverride = when (material) {
-                Material.LIME_CONCRETE -> Color.LIME
-                Material.RED_CONCRETE -> Color.RED
-                else -> Color.AQUA
+        // A broad ribbon and tall end posts stay centered on eye height, even after teleporting.
+        val shapes = listOf(
+            Matrix4f().translation(0f, -0.30f, 0f)
+                .scale(if (edge.alongX) 16f else 0.35f, 0.60f, if (edge.alongX) 0.35f else 16f),
+            Matrix4f().translation(0f, -1.20f, 0f).scale(0.45f, 2.40f, 0.45f),
+            Matrix4f().translation(if (edge.alongX) 15.55f else 0f, -1.20f, if (edge.alongX) 0f else 15.55f)
+                .scale(0.45f, 2.40f, 0.45f),
+        )
+        shapes.forEach { shape ->
+            val display = world.spawn(location, BlockDisplay::class.java) {
+                configure(it)
+                it.block = material.createBlockData()
+                it.setTransformationMatrix(shape)
+                it.isGlowing = true
+                it.glowColorOverride = when (material) {
+                    Material.LIME_CONCRETE -> Color.LIME
+                    Material.RED_CONCRETE -> Color.RED
+                    else -> Color.AQUA
+                }
             }
+            session.borders += display
+            player.showEntity(ARC.instance, display)
         }
-        session.borders += display
-        player.showEntity(ARC.instance, display)
     }
 
     private fun configure(display: Display) {
