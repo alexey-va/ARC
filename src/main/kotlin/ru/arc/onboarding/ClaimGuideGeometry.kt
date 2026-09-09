@@ -20,3 +20,8 @@ internal fun claimGuideChunks(center: GuideChunk, radius: Int): Set<GuideChunk> 
             for (z in center.z - radius..center.z + radius) add(GuideChunk(x, z))
     }
 }
+
+/** Looking into the sky must not turn off the held-item preview. */
+internal fun claimGuideTarget(placementX: Int?, placementZ: Int?, playerX: Int, playerZ: Int): GuideChunk =
+    if (placementX != null && placementZ != null) GuideChunk(placementX shr 4, placementZ shr 4)
+    else GuideChunk(playerX shr 4, playerZ shr 4)

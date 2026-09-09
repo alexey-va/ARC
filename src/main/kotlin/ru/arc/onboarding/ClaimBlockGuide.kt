@@ -40,6 +40,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         val borders = mutableListOf<Entity>()
         var label: TextDisplay? = null
         var geometry: Any? = null
+        var borderY = Double.NaN
         var successUntil = 0L
         val confirmed = linkedSetOf<GuideChunk>()
         var aimed: GuideChunk? = null
@@ -103,13 +104,8 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         }?.takeIf { it.y in player.world.minHeight until player.world.maxHeight }
         val success = tick < session.successUntil && (!holding || placement == null ||
             GuideChunk(placement.x shr 4, placement.z shr 4) in session.confirmed)
-        if (placement == null && !success) {
-            clearVisuals(session)
-            effects.sendActionBar(player, text.getValue("aim"))
-            return
-        }
         val target = if (success) session.aimed?.takeIf { it in session.confirmed } ?: session.confirmed.first()
-            else GuideChunk(placement!!.x shr 4, placement.z shr 4)
+            else claimGuideTarget(placement?.x, placement?.z, player.location.blockX, player.location.blockZ)
         if (!success && session.aimed != target) {
             session.aimed = target
             session.confirmed.clear()
@@ -132,7 +128,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
             selected != null -> "expand"
             else -> "free"
         }
-        val y = (placement?.y ?: player.location.blockY).coerceIn(world.minHeight, world.maxHeight - 1)
+        val y = player.eyeLocation.y
         val ownChunks = linkedSetOf<GuideChunk>()
         // Bounded local view of the selected region; never load terrain to draw a guide.
         if (selected != null) for (x in target.x - 1..target.x + 1) for (z in target.z - 1..target.z + 1) {
@@ -140,11 +136,12 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
                 ownChunks += GuideChunk(x, z)
             }
         }
-        val geometry = listOf(footprint, y, state, ownChunks, claims)
+        val geometry = listOf(footprint, state, ownChunks, claims)
         if (session.geometry != geometry || session.borders.any { !it.isValid }) {
             session.borders.forEach(Entity::remove)
             session.borders.clear()
             session.geometry = geometry
+            session.borderY = y
             // Remove artificial edges at the local view's cutoff using real adjacent Lands claims.
             if (selected != null) {
                 claimGuideEdges(ownChunks).filter { edge ->
@@ -169,9 +166,13 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
                 claimGuideEdges(interior).forEach { drawEdge(player, session, it, y, color, interior) }
             }
         }
-        val labelLocation = if (success) {
-            Location(world, target.x * 16 + 8.0, y + 1.7, target.z * 16 + 8.0)
-        } else placement!!.location.add(0.5, 1.6, 0.5)
+        if (session.borderY != y) {
+            session.borders.forEach { border -> border.teleport(border.location.apply { this.y = y }) }
+            session.borderY = y
+        }
+        val labelLocation = if (success || placement == null) {
+            Location(world, target.x * 16 + 8.0, y + 0.5, target.z * 16 + 8.0)
+        } else placement.location.add(0.5, 1.6, 0.5)
         val label = session.label?.takeIf { it.isValid } ?: world.spawn(labelLocation, TextDisplay::class.java) {
             configure(it)
             it.billboard = Display.Billboard.CENTER
@@ -193,40 +194,27 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         }
     }
 
-    private fun drawEdge(player: Player, session: Session, edge: GuideEdge, baseY: Int, material: Material, interior: Set<GuideChunk>) {
-        // Four short segments follow nearby terrain and remain visible over small slopes.
-        for (offset in 0 until 16 step 4) {
-            val x = edge.x + if (edge.alongX) offset else 0
-            val z = edge.z + if (edge.alongX) 0 else offset
-            // Both the terrain sample and entity origin stay on the interior side of this edge.
-            val positiveSide = GuideChunk(edge.x shr 4, edge.z shr 4) in interior
-            val sampleX = x + if (edge.alongX) 2 else if (positiveSide) 0 else -1
-            val sampleZ = z + if (edge.alongX) { if (positiveSide) 0 else -1 } else 2
-            val world = player.world
-            if (!world.isChunkLoaded(sampleX shr 4, sampleZ shr 4)) continue
-            val top = (baseY + 8).coerceAtMost(world.maxHeight - 1)
-            val bottom = (baseY - 12).coerceAtLeast(world.minHeight)
-            val y = (top downTo bottom).firstOrNull { !world.getBlockAt(sampleX, it, sampleZ).isPassable }
-                ?.plus(1)?.toDouble() ?: baseY.toDouble()
-            val inset = if (positiveSide) 0.03 else -0.13
-            val location = Location(world, x + if (edge.alongX) 0.03 else inset,
-                y + 0.06, z + if (edge.alongX) inset else 0.03)
-            // The entity's origin must also remain in an already loaded chunk.
-            if (!world.isChunkLoaded(location.blockX shr 4, location.blockZ shr 4)) continue
-            val display = world.spawn(location, BlockDisplay::class.java) {
-                configure(it)
-                it.block = material.createBlockData()
-                it.setTransformationMatrix(Matrix4f().scaling(if (edge.alongX) 3.94f else 0.10f, 0.10f, if (edge.alongX) 0.10f else 3.94f))
-                it.isGlowing = true
-                it.glowColorOverride = when (material) {
-                    Material.LIME_CONCRETE -> Color.LIME
-                    Material.RED_CONCRETE -> Color.RED
-                    else -> Color.AQUA
-                }
+    private fun drawEdge(player: Player, session: Session, edge: GuideEdge, y: Double, material: Material, interior: Set<GuideChunk>) {
+        // One straight edge at eye height; keep its origin inside the represented chunk.
+        val positiveSide = GuideChunk(edge.x shr 4, edge.z shr 4) in interior
+        val inset = if (positiveSide) 0.0 else -0.10
+        val world = player.world
+        val location = Location(world, edge.x + if (edge.alongX) 0.0 else inset,
+            y, edge.z + if (edge.alongX) inset else 0.0)
+        if (!world.isChunkLoaded(location.blockX shr 4, location.blockZ shr 4)) return
+        val display = world.spawn(location, BlockDisplay::class.java) {
+            configure(it)
+            it.block = material.createBlockData()
+            it.setTransformationMatrix(Matrix4f().scaling(if (edge.alongX) 16f else 0.10f, 0.10f, if (edge.alongX) 0.10f else 16f))
+            it.isGlowing = true
+            it.glowColorOverride = when (material) {
+                Material.LIME_CONCRETE -> Color.LIME
+                Material.RED_CONCRETE -> Color.RED
+                else -> Color.AQUA
             }
-            session.borders += display
-            player.showEntity(ARC.instance, display)
         }
+        session.borders += display
+        player.showEntity(ARC.instance, display)
     }
 
     private fun configure(display: Display) {

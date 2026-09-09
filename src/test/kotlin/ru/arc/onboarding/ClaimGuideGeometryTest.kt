@@ -4,6 +4,10 @@ import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 
 class ClaimGuideGeometryTest : FreeSpec({
+    "held preview uses the player chunk without a ground hit and the placement chunk across a border" {
+        claimGuideTarget(null, null, -1, 32) shouldBe GuideChunk(-1, 2)
+        claimGuideTarget(16, 32, 15, 32) shouldBe GuideChunk(1, 2)
+    }
     "native radius one covers nine chunks with a 48 by 48 outer border" {
         val chunks = claimGuideChunks(GuideChunk(-1, 0), 1)
         chunks.size shouldBe 9

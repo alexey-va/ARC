@@ -10,7 +10,7 @@ Holding a native Lands claim block in either hand starts a personal guide:
 - A short title explains placement; its subtitle and a retained chat line give
   `/unclaim` for removing protection from the chunk the player stands in.
 - The ray-traced placement block (including the clicked face and replaceable
-  blocks) determines the target, not the chunk under the player's feet.
+  blocks) determines the target when available; otherwise the player's current chunk is previewed immediately.
 - Green outlines mean unclaimed land, cyan means the player's claimed land,
   and red means another owner's land. Wording accompanies each state.
 - The item's radius determines the complete target footprint. The selected
@@ -49,9 +49,9 @@ nonpersistent, full-bright, and bounded to loaded terrain.
 ## Deliberate bounds and verification
 
 Item radii 0–4 are recognized (at most 81 queried chunks). The additional
-selected-land view is a 3 × 3 neighborhood. Each border edge uses four short
-terrain-following segments; samples and entity origins stay inside the
-represented chunks. Existing region data is rechecked every five ticks while
+selected-land view is a 3 × 3 neighborhood. Each border edge is a single straight segment at the player's exact eye height.
+Height changes move existing displays instead of respawning them; entity origins
+stay inside the represented chunks. Terrain height is never sampled. Existing region data is rechecked every five ticks while
 holding the item; unchanged geometry is reused.
 
 Legacy material-only claim items and special radii above four do not activate
