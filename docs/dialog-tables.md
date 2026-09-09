@@ -14,6 +14,7 @@ val summary = DialogTables.body(
         text("members-label") to Component.text("$members / $limit"),
         text("location-label") to Component.text("$x, $y, $z"),
     ),
+    spec = DialogTables.Spec(rowSeparators = true),
     headers = text("label-heading") to text("value-heading"),
     frame = DialogTables.Frame.EPIC,
 )
@@ -51,7 +52,9 @@ val summary = DialogTables.body(
 - `BALANCED` фиксирует примерно равные колонки; `VALUE_WIDE` оставляет больше места
   значениям. `LABEL_WIDE` повторяет пропорции T13–T18 из демо.
 - `headers = null` убирает шапку и её горизонтальный разделитель.
-- Когда в таблице несколько строк, конструктор добавляет
+- Разделители строк включаются явно: `spec = DialogTables.Spec(rowSeparators = true)`.
+  По умолчанию они выключены; старые вызовы сохраняют исходную JVM-сигнатуру.
+  Разделитель шапки независим от этой опции. При включении конструктор добавляет
   между логическими строками тонкий горизонтальный разделитель из уже имеющихся
   glyphs `left_joint`, `top`, `middle`, `right_joint`. Разделитель добавляется
   один раз на строку данных, а не между строками переноса; после последней строки

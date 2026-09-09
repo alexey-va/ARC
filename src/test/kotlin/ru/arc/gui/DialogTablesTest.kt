@@ -81,13 +81,27 @@ class DialogTablesTest : FreeSpec({
         tables[0].columnWidths shouldBe tables[1].columnWidths
     }
 
+    "row separators are opt-in and the header separator stays independent" {
+        val rows = listOf(Component.text("A") to Component.text("one\ntwo"), Component.text("B") to Component.text("three"))
+        DialogTables.Frame.entries.forEach { frame ->
+            val plain = DialogTables.render(rows, frame = frame)
+            countCodePoint(plain.component, frame.base + 7) shouldBe 0
+            val explicit = DialogTables.render(rows, frame = frame, spec = DialogTables.Spec())
+            explicit.component shouldBe plain.component
+            val header = DialogTables.render(rows, headers = Component.text("Key") to Component.text("Value"), frame = frame)
+            countCodePoint(header.component, frame.base + 7) shouldBe 1
+            val divided = DialogTables.body(rows, DialogTables.Spec(rowSeparators = true), frame = frame)
+            countCodePoint(divided.text, frame.base + 7) shouldBe 1
+        }
+    }
+
     "wrapped tables separate logical rows once, with no trailing or per-wrap separators" {
         val rows = listOf(
             Component.text("Короткая") to Component.text("Первая строка\nВторая строка\nТретья строка"),
             Component.text("Ещё одна") to Component.text("Короткое значение"),
             Component.text("Финальная") to Component.text("Последнее значение"),
         )
-        val result = DialogTables.render(rows, frame = DialogTables.Frame.EPIC, width = 320)
+        val result = DialogTables.render(rows, frame = DialogTables.Frame.EPIC, width = 320, spec = DialogTables.Spec(rowSeparators = true))
         require(result is DialogTables.Result.Framed)
         countCodePoint(result.component, DialogTables.Frame.EPIC.base + 7) shouldBe 2
         lineWidths(result.component).forEach { it shouldBe 312 }
@@ -98,7 +112,7 @@ class DialogTablesTest : FreeSpec({
             Component.text("Имя") to Component.text("Значение"),
             Component.text("Ещё") to Component.text("Данные"),
         )
-        val short = DialogTables.render(shortRows, frame = DialogTables.Frame.EPIC, width = 320)
+        val short = DialogTables.render(shortRows, frame = DialogTables.Frame.EPIC, width = 320, spec = DialogTables.Spec(rowSeparators = true))
         require(short is DialogTables.Result.Framed)
         countCodePoint(short.component, DialogTables.Frame.EPIC.base + 7) shouldBe 1
 
@@ -110,6 +124,7 @@ class DialogTablesTest : FreeSpec({
             headers = Component.text("Поле") to Component.text("Значение"),
             frame = DialogTables.Frame.EPIC,
             width = 320,
+            spec = DialogTables.Spec(rowSeparators = true),
         )
         require(wrapped is DialogTables.Result.Framed)
         countCodePoint(wrapped.component, DialogTables.Frame.EPIC.base + 7) shouldBe 2
@@ -128,6 +143,7 @@ class DialogTablesTest : FreeSpec({
         val result = DialogTables.render(
             rows,
             width = 320,
+            spec = DialogTables.Spec(rowSeparators = true),
             columns = DialogTables.Columns.BALANCED,
             frame = DialogTables.Frame.EPIC,
         )

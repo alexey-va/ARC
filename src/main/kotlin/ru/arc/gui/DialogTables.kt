@@ -38,6 +38,8 @@ object DialogTables {
     /** AUTO minimizes wrapped row height; LABEL_WIDE preserves the T13–T18 demo. */
     enum class Columns { AUTO, BALANCED, LABEL_WIDE, VALUE_WIDE }
 
+    data class Spec(val rowSeparators: Boolean = false)
+
     sealed interface Result {
         val component: Component
         data class Framed(override val component: Component, val columnWidths: Pair<Int, Int>) : Result
@@ -61,6 +63,15 @@ object DialogTables {
         columns: Columns = Columns.AUTO,
     ): PaperDialogBody = PaperDialogBody(render(rows, headers, frame, width, columns).component, width)
 
+    fun body(
+        rows: List<Pair<Component, Component>>,
+        spec: Spec,
+        headers: Pair<Component, Component>? = null,
+        frame: Frame = Frame.EPIC,
+        width: Int = 320,
+        columns: Columns = Columns.AUTO,
+    ): PaperDialogBody = PaperDialogBody(render(rows, headers, frame, width, columns, spec).component, width)
+
     /** Width includes the native widget's 4px padding on both sides. */
     fun render(
         rows: List<Pair<Component, Component>>,
@@ -68,6 +79,15 @@ object DialogTables {
         frame: Frame = Frame.EPIC,
         width: Int = 400,
         columns: Columns = Columns.AUTO,
+    ): Result = render(rows, headers, frame, width, columns, Spec())
+
+    fun render(
+        rows: List<Pair<Component, Component>>,
+        headers: Pair<Component, Component>? = null,
+        frame: Frame = Frame.EPIC,
+        width: Int = 400,
+        columns: Columns = Columns.AUTO,
+        spec: Spec,
     ): Result {
         require(width in 9..1024) { "Dialog table width must be in 9..1024 GUI pixels" }
         val values = rows.map { (label, value) ->
@@ -129,7 +149,9 @@ object DialogTables {
             repeat(maxOf(a.size, b.size)) { row ->
                 output += content(a.getOrElse(row) { gap(leftWidth) }, b.getOrElse(row) { gap(rightWidth) })
             }
-            if (index < chosen.cells.lastIndex) output += border(7, 8, 9, 10)
+            if (index < chosen.cells.lastIndex && (spec.rowSeparators || (heading != null && index == 0))) {
+                output += border(7, 8, 9, 10)
+            }
         }
         output += border(11, 12, 13, 14)
         return Result.Framed(lines(output), leftWidth to rightWidth)
