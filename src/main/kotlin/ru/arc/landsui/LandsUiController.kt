@@ -466,7 +466,7 @@ class LandsUiController(
         ),
         headers = text("table-label-heading") to text("table-value-heading"),
         frame = DialogTables.Frame.LEGENDARY,
-        width = 468,
+        width = 320,
     )
 
     private fun openDanger(player: Player, landId: String) {

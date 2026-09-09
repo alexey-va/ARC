@@ -57,7 +57,7 @@ object DialogTables {
         rows: List<Pair<Component, Component>>,
         headers: Pair<Component, Component>? = null,
         frame: Frame = Frame.EPIC,
-        width: Int = 400,
+        width: Int = 320,
         columns: Columns = Columns.AUTO,
     ): PaperDialogBody = PaperDialogBody(render(rows, headers, frame, width, columns).component, width)
 

@@ -53,11 +53,24 @@ class DialogTablesTest : FreeSpec({
             Component.text("Описание") to Component.text("Первая строка\nВторая строка", NamedTextColor.GREEN),
             Component.empty() to Component.text("Пустая подпись"),
         )
-        for (frame in DialogTables.Frame.entries) for (width in listOf(220, 400, 468, 600)) {
+        for (frame in DialogTables.Frame.entries) for (width in listOf(220, 280, 320, 400, 468, 600)) {
             val result = DialogTables.render(rows, Component.text("Параметр") to Component.text("Значение"), frame, width)
             require(result is DialogTables.Result.Framed)
             lineWidths(result.component).forEach { it shouldBe width - 8 }
         }
+    }
+
+    "compact sibling tables keep the same edges and column divider" {
+        val summary = listOf(Component.text("Прогресс") to Component.text("120 / 500"))
+        val perks = listOf(Component.text("Опыт специализации") to Component.text(
+            "Длинное описание бонуса переносится внутри колонки без потери текста"))
+        val tables = listOf(summary, perks).map { rows ->
+            val body = DialogTables.body(rows, columns = DialogTables.Columns.BALANCED)
+            body.width shouldBe 320
+            lineWidths(body.text).forEach { it shouldBe 312 }
+            DialogTables.render(rows, width = body.width, columns = DialogTables.Columns.BALANCED) as DialogTables.Result.Framed
+        }
+        tables[0].columnWidths shouldBe tables[1].columnWidths
     }
 
     "the approved demo keeps its exact geometry" {

@@ -225,7 +225,7 @@ internal class HelpCenterController(
                 title = text("now-title"),
                 body = listOf(DialogTables.body(rows,
                     headers = text("table-label-heading") to text("table-value-heading"),
-                    frame = DialogTables.Frame.EPIC, width = 420)),
+                    frame = DialogTables.Frame.EPIC, width = 320)),
                 buttons = recommendationButtons(player, profile) + listOf(
                     button("now_homes", text("my-homes-label"), text("my-homes-tooltip")) { openTravel(player) },
                     button("now_lands", text("my-lands-label"), text("my-lands-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
@@ -406,7 +406,7 @@ internal class HelpCenterController(
                         ),
                         headers = text("table-label-heading") to text("table-value-heading"),
                         frame = DialogTables.Frame.EPIC,
-                        width = 500,
+                        width = 320,
                     ),
                     PaperDialogBody(text("table-player-help"), width = 500),
                 ),

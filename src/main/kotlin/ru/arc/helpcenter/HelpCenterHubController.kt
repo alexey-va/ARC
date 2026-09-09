@@ -121,7 +121,7 @@ internal class HelpCenterHubController(
                     ),
                     headers = text("table-label-heading") to text("table-value-heading"),
                     frame = DialogTables.Frame.COMMON,
-                    width = 500,
+                    width = 320,
                 ),
             )
         }
@@ -175,7 +175,7 @@ internal class HelpCenterHubController(
                         ),
                         headers = text("table-label-heading") to text("table-value-heading"),
                         frame = DialogTables.Frame.UNCOMMON,
-                        width = 500,
+                        width = 320,
                     ),
                 ),
                 buttons = listOf(

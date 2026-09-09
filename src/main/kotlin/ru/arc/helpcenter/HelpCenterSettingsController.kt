@@ -182,7 +182,7 @@ internal class HelpCenterSettingsController(
                 ),
                 headers = text("table-label-heading") to text("table-value-heading"),
                 frame = DialogTables.Frame.RARE,
-                width = 468,
+                width = 320,
             )
         }
         showDialog(player, PaperDialogScreen(

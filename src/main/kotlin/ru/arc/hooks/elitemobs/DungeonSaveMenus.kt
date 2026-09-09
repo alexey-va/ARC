@@ -196,7 +196,7 @@ internal class DungeonSaveMenus(
 
     private fun table(rows: List<Pair<Component, Component>>, frame: DialogTables.Frame) = DialogTables.body(
         rows, headers = tableLabel("label-heading", "Параметр") to tableLabel("value-heading", "Значение"),
-        frame = frame, width = 468,
+        frame = frame, width = 320,
     )
 
     private fun saveRows(view: DungeonSaveView) = listOf(
