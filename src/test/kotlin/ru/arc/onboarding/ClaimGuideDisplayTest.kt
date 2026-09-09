@@ -16,13 +16,14 @@ class ClaimGuideDisplayTest : StringSpec({
             eye.pitch shouldBe pitch
         }
     }
-    "sneaking locks direction but follows the walking player and releases after a teleport" {
+    "sneaking freezes the complete pose through walking crouching and turning until released" {
         val previous = Location(world, 0.0, 70.0, 0.0, 25f, 10f)
         val walking = Location(world, 1.0, 70.0, 0.0, 70f, 30f)
-        claimGuideAnchor(previous, walking, true) shouldBe Location(world, 1.0, 70.0, 0.0, 25f, 10f)
+        claimGuideAnchor(previous, walking, true) shouldBe previous
+        claimGuideAnchor(previous, walking.clone().subtract(0.0, 0.35, 0.0), true) shouldBe previous
         claimGuideAnchor(previous, walking, false) shouldBe walking
         val teleported = walking.clone().add(100.0, 0.0, 0.0)
-        claimGuideAnchor(previous, teleported, true) shouldBe teleported
+        claimGuideAnchor(previous, teleported, true) shouldBe previous
         claimGuideAnchor(null, teleported, true) shouldBe teleported
         val otherWorld = teleported.clone().apply { this.world = mockk<World>() }
         claimGuideAnchor(previous, otherWorld, true) shouldBe otherWorld

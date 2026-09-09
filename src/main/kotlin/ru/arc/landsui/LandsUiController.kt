@@ -8,6 +8,7 @@ import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import org.bukkit.entity.Player
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.gui.ArcMenus
+import ru.arc.onboarding.ClaimBlockIdentity
 import ru.arc.gui.DialogTables
 import ru.arc.gui.MenuEscapeBehavior
 import ru.arc.paper.menu.PaperDialogActionId
@@ -58,7 +59,7 @@ class LandsUiController(
         } + listOf(
             button("create", text("create-label"), text("create-tooltip")) { openCreate(player) },
             button("guide", text("guide-label"), text("guide-tooltip")) { openGuide(player) },
-        )
+        ) + listOfNotNull(claimRadiusButton(player))
         show(
             player,
             PaperDialogScreen(
@@ -122,6 +123,7 @@ class LandsUiController(
                     LandsUiModule.giveRegionTool(player, land.id)
                 }.closing(),
             )
+            claimRadiusButton(player)?.let(buttons::add)
             if (land.ownerId == player.uniqueId) {
                 buttons += button("rename", text("rename-label"), text("rename-tooltip")) { openRename(player, land.id) }
                 buttons += button("delete", text("delete-label"), text("delete-tooltip")) { openDanger(player, land.id) }
@@ -150,6 +152,35 @@ class LandsUiController(
                 reopen = { openDetails(player, landId) },
             )
         }
+    }
+
+    private fun claimRadiusButton(player: Player): PaperDialogButton? =
+        ClaimBlockIdentity.heldRadius(player)?.let { radius ->
+            button("claim_radius", text("claim-radius-label", "size" to (radius * 2 + 1).toString()),
+                text("claim-radius-tooltip")) { openClaimRadius(player) }
+        }
+
+    private fun openClaimRadius(player: Player) {
+        val current = ClaimBlockIdentity.heldRadius(player) ?: return openRoot(player)
+        show(player, PaperDialogScreen(
+            id = "lands.claim-radius",
+            title = text("claim-radius-title"),
+            body = listOf(PaperDialogBody(text("claim-radius-body"))),
+            buttons = (0..4).map { radius ->
+                val size = (radius * 2 + 1).toString()
+                val chunks = ((radius * 2 + 1) * (radius * 2 + 1)).toString()
+                button("radius_$radius", text(if (radius == current) "claim-radius-selected" else "claim-radius-option",
+                    "size" to size, "chunks" to chunks)) {
+                    val lore = listOf(Component.empty(),
+                        text("claim-block-size", "size" to size, "chunks" to chunks),
+                        text("claim-block-reusable"), Component.empty(), text("claim-block-shortcut"))
+                        .map { it.decoration(TextDecoration.ITALIC, false) }
+                    if (!ClaimBlockIdentity.setHeldRadius(player, radius, lore)) player.sendMessage(text("claim-block-missing"))
+                }.closing()
+            },
+            exitButton = back("back") { openRoot(player) },
+            columns = 2,
+        ))
     }
 
     private fun openCreate(player: Player) {

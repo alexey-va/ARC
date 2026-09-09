@@ -60,7 +60,7 @@ claim-guide:
     free: '<#b3d3df>Ничейная земля<newline><white>Поставь блок — создай приват'
     expand: '<#92bed8>Расширить «{land}»<newline><white>Поставь блок на ничейной земле'
     action-expand: '<white>Расширить «{land}» — поставь блок на ничейной земле'
-    own: '<#92bed8>Твой участок уже защищён<newline><white>Для расширения поставь блок за границей'
+    own: '<#80e89b>Этот чанк уже защищен<newline><white>Для расширения поставь блок за границей'
     occupied: '<#ff8178>Здесь уже занято<newline><white>Выбери другое место'
     success-title: '<#80e89b>Участок защищён'
     success-subtitle: '<white>Здесь твои постройки под защитой'
@@ -68,9 +68,8 @@ claim-guide:
     action-free: '<white>Поставь блок — защити эту землю'
     action-own: '<white>Расширить — поставь блок за голубой границей'
     action-occupied: '<#ff8178>Место занято • <white>Найди свободный участок'
-    add-friend: '<#92bed8>Добавить друга<newline><white>«{land}»<newline><gray>Shift + нажми'
     boundary-enter: "<#92bed8>Участок «{land}» <gray>• <white>Земля под защитой"
     boundary-leave: "<#ff9f0f>Ты вышел из «{land}» <gray>• <white>Здесь нет привата"
     grid-legend: '<gray>Тонкие линии — чанки 16×16 <dark_gray>• <#92bed8>Толстые — приваты'
     remove: '<white>Встань внутри своего участка → <#ff9f0f>/unclaim <white>— снять защиту здесь'
-    menu: '<gray>Shift + нажми: меню'
+    menu: '<gray>Shift + F - меню'

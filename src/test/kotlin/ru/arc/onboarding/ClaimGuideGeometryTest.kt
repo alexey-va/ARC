@@ -83,10 +83,10 @@ class ClaimGuideGeometryTest : FreeSpec({
 
     "hologram stays in front of the eyes without a target block and leaves the player location unchanged" {
         val eye = Location(null, 10.0, 70.0, 20.0, 0f, 0f)
-        claimGuideLabelLocation(eye) shouldBe Location(null, 10.0, 70.35, 24.0, 0f, 0f)
+        claimGuideLabelLocation(eye) shouldBe Location(null, 10.0, 70.65, 24.0, 0f, 0f)
         eye shouldBe Location(null, 10.0, 70.0, 20.0, 0f, 0f)
         val lookingUp = Location(null, 10.0, 70.0, 20.0, 0f, -90f)
-        claimGuideLabelLocation(lookingUp).y shouldBe 74.35
+        claimGuideLabelLocation(lookingUp).y shouldBe 74.65
     }
     "expansion names remain literal even when the land name contains markup" {
         val result = claimGuideLandText(Component.text("Расширить «{land}»"), "<red>Дом")

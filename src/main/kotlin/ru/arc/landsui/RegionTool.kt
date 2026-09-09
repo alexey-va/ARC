@@ -37,6 +37,7 @@ import ru.arc.gui.ArcMenus
 import ru.arc.lands.currentLands
 import ru.arc.onboarding.claimGuideButtonHit
 import ru.arc.onboarding.claimGuideAnchor
+import ru.arc.onboarding.freezeClaimGuideDisplay
 import ru.arc.onboarding.followClaimGuideDisplay
 import org.bukkit.event.player.PlayerTeleportEvent
 import ru.arc.onboarding.claimGuideButtonLocation
@@ -186,6 +187,14 @@ internal class RegionTool(private val settings: LandsUiSettings, private val gat
             lands.getLandByUnloadedChunk(player.world, x, z)?.ulid == land.ulid
         }
 
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun sneak(event: org.bukkit.event.player.PlayerToggleSneakEvent) {
+        if (event.isSneaking) sessions[event.player.uniqueId]?.let {
+            freezeClaimGuideDisplay(it.label)
+            freezeClaimGuideDisplay(it.button)
+        }
+    }
+
     @EventHandler(priority = EventPriority.HIGHEST)
     fun interact(event: PlayerInteractEvent) {
         val player = event.player
@@ -203,6 +212,7 @@ internal class RegionTool(private val settings: LandsUiSettings, private val gat
             if (hitButton) {
                 if (tick >= session.clickAfter) {
                     session.clickAfter = tick + 10
+                    ArcMenus.beginDialogFlow(player)
                     val box = session.box()
                     if (box != null && insideLand(land, player, box)) openCreate(player, session, land, box)
                     else openRegions(player, land.ulid.toString())

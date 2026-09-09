@@ -33,6 +33,7 @@ import java.util.UUID
 internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener, AutoCloseable {
     private val integration = LandsIntegration.of(ARC.instance)
     private val tasks = LifecycleTaskScope()
+    private val particles = ClaimGuideParticles.create()
     private val sessions = mutableMapOf<UUID, Session>()
     private val failedViewers = mutableSetOf<UUID>()
     private val text = OnboardingConfig.CLAIM_TEXT.keys.associateWith(config::claimText)
@@ -42,8 +43,6 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         val borders = mutableMapOf<GuideBorder, BlockDisplay>()
         val posts = mutableMapOf<GuideChunk, BlockDisplay>()
         var label: TextDisplay? = null
-        var button: TextDisplay? = null
-        var buttonLand: String? = null
         var menuLand: String? = null
         var anchor: Location? = null
         var clickAfter = 0L
@@ -66,7 +65,6 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
                     sessions[player.uniqueId]?.let { session ->
                         val eye = session.anchor ?: player.eyeLocation
                         followClaimGuideDisplay(session.label, claimGuideLabelLocation(eye))
-                        followClaimGuideDisplay(session.button, claimGuideButtonLocation(eye))
                         val y = claimGuideBorderY(player.eyeLocation.y)
                         if (session.borderY != y) {
                             (session.borders.values + session.posts.values).forEach { it.teleport(it.location.apply { this.y = y }) }
@@ -95,6 +93,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         val heldRadius = ClaimBlockIdentity.radius(player.inventory.itemInMainHand)
             ?: ClaimBlockIdentity.radius(player.inventory.itemInOffHand)
         val holding = heldRadius != null
+        particles?.holding(player.uniqueId, holding)
         var session = sessions[player.uniqueId]
         if (session != null && session.world != player.world.uid) {
             clear(player)
@@ -146,10 +145,11 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
             else -> "free"
         }
         val currentChunk = GuideChunk(player.location.blockX shr 4, player.location.blockZ shr 4)
-        val visible = claimGuideChunks(currentChunk, 1)
+        val visibleRadius = maxOf(1, session.radius)
+        val visible = claimGuideChunks(currentChunk, visibleRadius)
         val nearby = buildMap {
-            for (x in currentChunk.x - 2..currentChunk.x + 2)
-                for (z in currentChunk.z - 2..currentChunk.z + 2) {
+            for (x in currentChunk.x - visibleRadius - 1..currentChunk.x + visibleRadius + 1)
+                for (z in currentChunk.z - visibleRadius - 1..currentChunk.z + visibleRadius + 1) {
                     put(GuideChunk(x, z), integration.getLandByUnloadedChunk(world, x, z))
                 }
         }
@@ -195,26 +195,11 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         session.menuLand = selected?.ulid?.toString()
         val message = claimGuideLandText(text.getValue(state), selected?.name?.take(24))
         label.text(if (LandsUiModule.isAvailable()) message.append(Component.newline()).append(text.getValue("menu")) else message)
-        if (holding && selected != null && LandsUiModule.isAvailable()) {
-            val button = session.button?.takeIf { it.isValid }
-                ?: world.spawn(claimGuideButtonLocation(eye), TextDisplay::class.java) {
-                    configure(it)
-                    it.billboard = Display.Billboard.CENTER
-                    it.isSeeThrough = true
-                    it.isShadowed = true
-                    it.backgroundColor = Color.fromARGB(255, 15, 40, 50)
-                    it.lineWidth = 160
-                    it.teleportDuration = 2
-                    it.setTransformationMatrix(Matrix4f().scaling(1.10f))
-                }.also { session.button = it; player.showEntity(ARC.instance, it) }
-            session.buttonLand = selected.ulid.toString()
-            button.text(claimGuideLandText(text.getValue("add-friend"), selected.name.let { if (it.length > 24) it.take(23) + "…" else it }))
-        } else {
-            session.button?.remove()
-            session.button = null
-            session.buttonLand = null
-        }
     }
+
+    fun isMenuTarget(player: Player): Boolean = player.isSneaking &&
+        sessions[player.uniqueId]?.label?.takeIf { it.isValid }
+            ?.let { claimGuideButtonHit(player.eyeLocation, it.location, halfWidth = 3.8, height = 1.3) } == true
 
     @EventHandler(priority = EventPriority.HIGHEST)
     fun clickButton(event: PlayerInteractEvent) {
@@ -226,18 +211,13 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
             !ClaimBlockIdentity.matches(player.inventory.itemInOffHand)) return
         val session = sessions[player.uniqueId] ?: return
         if (tick < session.clickAfter || !LandsUiModule.isAvailable()) return
-        val friend = session.button?.takeIf { it.isValid }
-            ?.let { claimGuideButtonHit(player.eyeLocation, it.location) } == true
-        val menu = session.label?.takeIf { it.isValid }
-            ?.let { claimGuideButtonHit(player.eyeLocation, it.location, halfWidth = 3.8, height = 1.0) } == true
-        if (!friend && !menu) return
-        val shownLand = if (friend) session.buttonLand else session.menuLand
+        if (!isMenuTarget(player)) return
+        val shownLand = session.menuLand
         val selected = integration.getLandPlayer(player.uniqueId)?.getEditLand(false)
         if (shownLand != selected?.ulid?.toString()) { update(player); return }
         event.isCancelled = true
         session.clickAfter = tick + 10
-        if (friend && shownLand != null) LandsUiModule.openAddMember(player, shownLand)
-        else if (shownLand != null) LandsUiModule.openDetails(player, shownLand)
+        if (shownLand != null) LandsUiModule.openDetails(player, shownLand)
         else LandsUiModule.open(player)
     }
 
@@ -274,7 +254,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
             it.setTransformationMatrix(Matrix4f().translation(
                 (corner.x * 16 - origin.x).toFloat() - 0.025f, -0.20f,
                 (corner.z * 16 - origin.z).toFloat() - 0.025f,
-            ).scale(0.05f, 1.10f, 0.05f))
+            ).scale(0.05f, 8.0f, 0.05f))
             it.isGlowing = true
             it.glowColorOverride = Color.fromRGB(165, 190, 205)
         }.also { player.showEntity(ARC.instance, it) }
@@ -309,17 +289,20 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         session.label?.remove()
         session.label = null
         session.menuLand = null
-        session.button?.remove()
-        session.button = null
-        session.buttonLand = null
     }
 
     fun hasHologram(player: Player): Boolean = sessions[player.uniqueId]?.label?.isValid == true
 
     private fun clear(player: Player) {
+        particles?.holding(player.uniqueId, false)
         sessions.remove(player.uniqueId)?.let {
             clearVisuals(it)
         }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun sneak(event: org.bukkit.event.player.PlayerToggleSneakEvent) {
+        if (event.isSneaking) sessions[event.player.uniqueId]?.let { freezeClaimGuideDisplay(it.label) }
     }
 
     @EventHandler fun quit(event: PlayerQuitEvent) { clear(event.player); failedViewers.remove(event.player.uniqueId) }
@@ -333,6 +316,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
 
     override fun close() {
         tasks.close()
+        particles?.close()
         sessions.values.forEach(::clearVisuals)
         sessions.clear()
         failedViewers.clear()

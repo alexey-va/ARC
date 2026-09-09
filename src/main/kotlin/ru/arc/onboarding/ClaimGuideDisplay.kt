@@ -3,14 +3,16 @@ package ru.arc.onboarding
 import org.bukkit.Location
 import org.bukkit.entity.TextDisplay
 
-/** Freeze aiming direction, not the player's world position. Large moves release the aim lock. */
+/** Keep the complete anchor until Shift is released; teleport/world events reset the session. */
 internal fun claimGuideAnchor(previous: Location?, eye: Location, sneaking: Boolean): Location =
-    eye.clone().apply {
-        if (sneaking && previous != null && previous.world == eye.world && previous.distanceSquared(eye) <= 4.0) {
-            yaw = previous.yaw
-            pitch = previous.pitch
-        }
-    }
+    if (sneaking && previous != null && previous.world == eye.world) previous.clone() else eye.clone()
+
+/** Stop the client interpolation too, not just server-side movement. */
+internal fun freezeClaimGuideDisplay(display: TextDisplay?) {
+    if (display == null || !display.isValid) return
+    display.teleportDuration = 0
+    display.teleport(display.location)
+}
 
 /** FIXED displays must never inherit the viewer's yaw or pitch. */
 internal fun claimGuideBorderOrigin(eye: Location): Location =
@@ -22,6 +24,8 @@ internal fun claimGuideTeleportDuration(from: Location, to: Location): Int =
 internal fun followClaimGuideDisplay(display: TextDisplay?, to: Location) {
     if (display == null || !display.isValid || display.world != to.world) return
     val from = display.location
-    display.teleportDuration = claimGuideTeleportDuration(from, to)
-    if (from.distanceSquared(to) > 0.0001) display.teleport(to)
+    if (from.distanceSquared(to) > 0.0001) {
+        display.teleportDuration = claimGuideTeleportDuration(from, to)
+        display.teleport(to)
+    }
 }

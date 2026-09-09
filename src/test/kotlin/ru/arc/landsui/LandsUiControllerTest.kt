@@ -7,6 +7,11 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
+import net.kyori.adventure.text.Component
+import org.bukkit.Material
+import org.bukkit.NamespacedKey
+import org.bukkit.inventory.ItemStack
+import org.bukkit.persistence.PersistentDataType
 import org.bukkit.entity.Player
 import ru.arc.config.ConfigManager
 import ru.arc.gui.ArcMenus
@@ -75,6 +80,64 @@ class LandsUiControllerTest : StringSpec({
                     // Reopen once more through the public entry point to catch stale-screen cycles.
                     controller.openDetails(player, land.id)
                     checkNotNull(screen).id shouldBe "lands.details"
+                } finally {
+                    controller.close()
+                }
+            } finally {
+                Tasks.reset()
+                unmockkObject(ArcMenus)
+                dataPath.toFile().deleteRecursively()
+                ConfigManager.clear()
+            }
+        }
+    }
+
+    "details radius flow updates the held claim block and preserves its amount" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val dataPath = Files.createTempDirectory("lands-ui-radius")
+            val player = paper.addPlayer("RadiusViewer")
+            val playerId = player.uniqueId
+            val item = ItemStack(Material.GOLD_BLOCK, 6).apply {
+                editMeta { meta ->
+                    meta.displayName(Component.text("Claim block"))
+                    meta.persistentDataContainer.set(NamespacedKey("lands", "type"), PersistentDataType.STRING, "CLAIM_BLOCK")
+                    meta.persistentDataContainer.set(NamespacedKey("lands", "radius"), PersistentDataType.INTEGER, 0)
+                }
+            }
+            player.inventory.setItemInMainHand(item)
+            val land = LandsUiLand("land-radius", "Дом", playerId, 1, 64, setOf(playerId), 12, 0.0, true)
+            val gateway = mockk<LandsUiGateway>(relaxed = true)
+            every { gateway.land(player, land.id) } returns land
+            val settings = try {
+                ConfigManager.clear()
+                LandsUiConfig.load(dataPath).snapshot()
+            } finally {
+                ConfigManager.clear()
+            }
+
+            Tasks.install(mockk<TaskScheduler>(relaxed = true))
+            var screen: PaperDialogScreen? = null
+            mockkObject(ArcMenus)
+            try {
+                every { ArcMenus.openDialog(player, any(), any(), any(), any()) } answers { screen = secondArg() }
+                val controller = LandsUiController(settings, gateway)
+                try {
+                    controller.openDetails(player, land.id)
+                    val details = checkNotNull(screen)
+                    details.buttons.map { it.id.value } shouldContain "claim_radius"
+                    val context = mockk<PaperDialogClickContext>(relaxed = true)
+                    every { context.player } returns player
+                    details.buttons.single { it.id.value == "claim_radius" }.onClick.handle(context)
+
+                    val radius = checkNotNull(screen)
+                    radius.id shouldBe "lands.claim-radius"
+                    radius.buttons.size shouldBe 5
+                    radius.buttons.single { it.id.value == "radius_2" }.onClick.handle(context)
+
+                    player.inventory.itemInMainHand.amount shouldBe 6
+                    player.inventory.itemInMainHand.itemMeta.persistentDataContainer.get(
+                        NamespacedKey("lands", "radius"), PersistentDataType.INTEGER,
+                    ) shouldBe 2
                 } finally {
                     controller.close()
                 }

@@ -7,6 +7,8 @@ import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
 import org.bukkit.event.player.PlayerSwapHandItemsEvent
 import org.bukkit.plugin.Plugin
+import ru.arc.onboarding.ClaimBlockIdentity
+import ru.arc.landsui.LandsUiModule
 import ru.arc.helpcenter.HelpCenterModule
 import ru.arc.helpcenter.HelpCenterPage
 import ru.arc.hooks.HookRegistry
@@ -47,6 +49,12 @@ class MenuShortcutController(
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun onSwapHands(event: PlayerSwapHandItemsEvent) {
         if (event.isCancelled || !event.player.isSneaking) return
+        if (ClaimBlockIdentity.matches(event.player.inventory.itemInMainHand) ||
+            ClaimBlockIdentity.matches(event.player.inventory.itemInOffHand)) {
+            event.isCancelled = true
+            LandsUiModule.open(event.player)
+            return
+        }
         if (inDungeon(event.player)) {
             event.isCancelled = true
             ArcMenus.beginDialogFlow(event.player)

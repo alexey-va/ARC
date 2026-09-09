@@ -6,6 +6,23 @@ limits:
   max-listed-players: 12
 
 text:
+  claim-place-no-permission: '<#ff8178>Нет права расширять этот приват.'
+  claim-place-working: '<#aaa49a>Подожди, захват ещё выполняется.'
+  claim-place-selection-active: '<#ff8178>Сначала заверши выделение региона.'
+  claim-place-occupied: '<#ff8178>Этот чанк занят другим приватом.'
+  claim-place-failed: '<#ff8178>Не всё удалось защитить. Проверь свободное место, лимит и баланс привата.'
+  claim-place-done: '<#80e89b>Готово. Блок остался в руке.'
+  claim-place-owner: '<#ff8178>Этот блок привата принадлежит другому игроку.'
+  claim-radius-label: '<#c4a7e7>Захват <size>×<size> ›'
+  claim-radius-tooltip: '<#e8dfd2>Выбрать размер следующего захвата этим блоком.'
+  claim-radius-title: '<#9bd48d>Размер захвата'
+  claim-radius-body: '<#e8dfd2>Выбери квадрат чанков вокруг места установки.<newline><#aaa49a>После бесплатной квоты действует обычная плата Lands. Лимиты привата сохраняются.'
+  claim-radius-selected: '<#9bd48d>✔ <size>×<size> · чанков: <chunks>'
+  claim-radius-option: '<white>○ <size>×<size> · чанков: <chunks>'
+  claim-block-size: '<#b8b8b8>Захват: <size>×<size> · чанков: <chunks>'
+  claim-block-reusable: '<#aaa49a>Многоразовый — поставь на свободной земле.'
+  claim-block-shortcut: '<#92bed8>[▶] Shift + F <#aaa49a>— меню приватов'
+  claim-block-missing: '<#ff8178>Возьми блок привата в руку.'
   table-land-label: "Поселение"
   created-table-help: "<#e8dfd2>Ваш первый чанк уже защищён. Это поселение выбрано текущим.<newline><newline>Для расширения встаньте в соседний чанк и нажмите кнопку ниже."
   close-label: '<#aaa49a>Закрыть'

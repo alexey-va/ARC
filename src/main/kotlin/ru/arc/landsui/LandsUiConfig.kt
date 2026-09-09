@@ -38,6 +38,23 @@ class LandsUiConfig(private val config: Config) {
         }
 
         private val DEFAULT_TEXT = linkedMapOf(
+            "claim-place-no-permission" to "<#ff8178>Нет права расширять этот приват.",
+            "claim-place-working" to "<#aaa49a>Подожди, захват ещё выполняется.",
+            "claim-place-selection-active" to "<#ff8178>Сначала заверши выделение региона.",
+            "claim-place-occupied" to "<#ff8178>Этот чанк занят другим приватом.",
+            "claim-place-failed" to "<#ff8178>Не всё удалось защитить. Проверь свободное место, лимит и баланс привата.",
+            "claim-place-done" to "<#80e89b>Готово. Блок остался в руке.",
+            "claim-place-owner" to "<#ff8178>Этот блок привата принадлежит другому игроку.",
+            "claim-radius-label" to "<#c4a7e7>Захват <size>×<size> ›",
+            "claim-radius-tooltip" to "<#e8dfd2>Выбрать размер следующего захвата этим блоком.",
+            "claim-radius-title" to "<#9bd48d>Размер захвата",
+            "claim-radius-body" to "<#e8dfd2>Выбери квадрат чанков вокруг места установки.<newline><#aaa49a>После бесплатной квоты действует обычная плата Lands. Лимиты привата сохраняются.",
+            "claim-radius-selected" to "<#9bd48d>✔ <size>×<size> · чанков: <chunks>",
+            "claim-radius-option" to "<white>○ <size>×<size> · чанков: <chunks>",
+            "claim-block-size" to "<#b8b8b8>Захват: <size>×<size> · чанков: <chunks>",
+            "claim-block-reusable" to "<#aaa49a>Многоразовый — поставь на свободной земле.",
+            "claim-block-shortcut" to "<#92bed8>[▶] Shift + F <#aaa49a>— меню приватов",
+            "claim-block-missing" to "<#ff8178>Возьми блок привата в руку.",
             "close-label" to "<#aaa49a>Закрыть",
             "create-submit-label" to "<#9bd48d>Создать поселение",
             "rename-submit-label" to "<#9bd48d>Сохранить название",
