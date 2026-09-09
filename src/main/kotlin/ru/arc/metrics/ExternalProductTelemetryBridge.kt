@@ -4,8 +4,8 @@ import ru.arc.redis.safety.MessageClaimResult
 import ru.arc.redis.safety.RecentMessageDeduplicator
 import java.util.UUID
 
-/** Narrow optional entry point for Paper plugins with a soft dependency on ARC. */
-object ExternalProductTelemetryBridge {
+/** ARC-owned validation and persistence boundary behind ArcTelemetryProvider. */
+internal object ExternalProductTelemetryBridge {
     private const val MAX_OPERATION_ID = 80
     private const val DEDUPE_TTL_MILLIS = 24 * 60 * 60 * 1_000L
     private val acceptedSources = setOf("arcecojobs", "arcfarms", "arcvotes", "arcranks", "arcbuilder", "arcduels", "arcevents", "arcgiveaways", "trails")
@@ -15,11 +15,16 @@ object ExternalProductTelemetryBridge {
     @Volatile private var replayGuard = RecentMessageDeduplicator(DEDUPE_TTL_MILLIS, 4_096)
     @Volatile private var eventReplayGuard = RecentMessageDeduplicator(DEDUPE_TTL_MILLIS, 4_096)
 
-    @JvmStatic
-    fun record(playerId: UUID, source: String, feature: String? = null, outcome: String? = null, action: String? = null, operationId: String): Boolean =
+    fun record(
+        playerId: UUID,
+        source: String,
+        feature: String? = null,
+        outcome: String? = null,
+        action: String? = null,
+        operationId: String,
+    ): Boolean =
         validateAndRecord(playerId, source, feature, outcome, action, operationId) { id, f, o, a -> MetricsModule.recordExternalProduct(id, f, o, a) }
 
-    @JvmStatic
     fun recordEvent(playerId: UUID, source: String, event: String, operationId: String): Boolean {
         val parsedSource = ExternalProductSource.entries.firstOrNull { it.label == source.trim().lowercase() } ?: return false
         val parsedEvent = ExternalProductEvent.entries.firstOrNull { it.label == event.trim().lowercase() } ?: return false
@@ -31,14 +36,12 @@ object ExternalProductTelemetryBridge {
     }
 
     /** Called for accepted EcoJobs XP events; native work counters qualify, placeholders do not. */
-    @JvmStatic
     fun recordJobWork(playerId: UUID, job: String): Boolean {
         if (job !in JobWorkObservation.JOBS) return false
         return runCatching { MetricsModule.recordJobWork(playerId, job) }.getOrDefault(false)
     }
 
     /** AFK entry, blocked work or consumer shutdown breaks the observation chain without adding time. */
-    @JvmStatic
     fun breakJobWork(playerId: UUID) {
         runCatching { MetricsModule.breakJobWork(playerId) }
     }

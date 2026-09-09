@@ -1,18 +1,17 @@
 # Optional external product telemetry
 
 ARC owns collection, network transport, retention, reports and session timing.
-Most Paper consumers declare `softdepend: [ARC]` (alongside existing dependencies)
-and call the public static bridges through reflection. They remain independently
-usable when ARC is absent. ArcEvents is the load-order exception: its arena
-generators require it before My_Worlds, while ARC loads after My_Worlds. It
-resolves the enabled ARC plugin's own classloader at event completion and has
-no ARC ordering edge. This preserves optional telemetry without a Paper cycle.
+Paper consumers declare `softdepend: [ARC]` (alongside existing dependencies),
+compile against the dependency-free `arc-core-paper-api`, and resolve one
+`ArcTelemetryProvider` from Bukkit's service registry. ARC registers the provider
+after its modules initialize and unregisters it before shutdown. Consumers remain
+independently usable when ARC is absent: a missing provider simply skips the signal.
 A telemetry failure must never retry a payout, roll
 back gameplay, or prevent a reward from being delivered.
 
 ## Product API
 
-`ru.arc.metrics.ExternalProductTelemetryBridge.record(UUID, source, feature,
+`ArcTelemetryProvider.record(UUID, source, feature,
 outcome, action, operationId)` accepts existing closed product labels. An
 outcome may name its feature; actions cannot be mixed with either. Final
 operation IDs, including all prefixes, must match `[A-Za-z0-9_.:-]{1,80}`.
@@ -57,7 +56,7 @@ existing `ProductInterestTelemetry`; consumers introduce no timers or sessions.
 
 ## Profession work observations
 
-`ExternalProductTelemetryBridge.recordJobWork(UUID, job)` observes an accepted
+`ArcTelemetryProvider.recordJobWork(UUID, job)` observes an accepted
 EcoJobs XP event. `breakJobWork(UUID)` ends continuity without adding duration.
 These are optional, failure-isolated APIs; neither method changes XP or money.
 `JobWorkObservation`/`JobWorkClock` own interval semantics in ARC, while the
@@ -107,10 +106,10 @@ paired Paper suite with `-Pe2eArcJar=/absolute/path/to/ARC.jar`.
 
 ## Economy attribution
 
-`ru.arc.audit.ExternalEconomyAuditBridge.markExternalReward` marks an expected
+`ArcTelemetryProvider.markExternalReward` marks an expected
 provider operation immediately before a reward. Supported source/action pairs
 are `voting/vote_reward`, `ranks/contract_reward`, and `farms/farm_reward`.
-Pass the real currency and durable component identity. Cancel the marker only
+Pass the real currency and durable component identity. Call `cancelAudit` only
 on explicit failure or an exception; never repeat an ambiguous payment.
 The existing provider listener records actual mint/burn and matches player,
 source, amount and currency. Unknown callers cannot consume these markers.
@@ -119,12 +118,8 @@ remain separate units.
 
 ## Packaging checks
 
-Do not shade ARC itself. If a consumer relocates its bundled `ru.arc` core,
-Shadow also rewrites fully qualified string constants. Build the optional
-external API name at runtime (as Trails does) and verify the packaged JAR,
-not just unshaded unit tests. Default plugin classloader visibility requires the soft
-dependency even when no compile-time API dependency is added. A plugin with a
-conflicting early world-generator requirement must resolve ARC through ARC's
-explicit classloader instead. Check loadbefore edges and provider aliases as
-well as softdepend: the 2026-09-07 ArcEvents → My_Worlds → ARC cycle was only
-visible with the full server plugin graph, not the isolated ARC Paper fixture.
+Do not shade ARC itself or the shared API into consumers. Keep
+`arc-core-paper-api` compile-only and declare ARC as a soft dependency so every
+plugin resolves the provider interface from ARC's classloader when available.
+Verify the packaged JAR, not just unshaded unit tests. Check load-order edges as
+well as the soft dependency against the full server plugin graph.

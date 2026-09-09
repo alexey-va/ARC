@@ -47,7 +47,7 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.36"
+version = "1.4.37"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.6"
@@ -105,6 +105,7 @@ dependencies {
     implementation("ru.ruscrafting.arc:arc-core-redis:$arcCoreVersion")
     implementation("ru.ruscrafting.arc:arc-core-sql:$arcCoreVersion")
     implementation("ru.ruscrafting.arc:arc-core-paper:$arcCoreVersion")
+    implementation("ru.ruscrafting.arc:arc-core-paper-api:$arcCoreVersion")
     implementation("ru.ruscrafting.arc:arc-core-menu:$arcCoreVersion")
     implementation("ru.ruscrafting.arc:arc-core-paper-menu:$arcCoreVersion")
     implementation("ru.ruscrafting.arc:arc-core-ai:$arcCoreVersion")

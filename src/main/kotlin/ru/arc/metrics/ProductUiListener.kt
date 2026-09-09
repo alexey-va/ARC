@@ -1,7 +1,6 @@
 package ru.arc.metrics
 
 import org.bukkit.entity.Player
-import org.bukkit.event.Event
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.HandlerList
@@ -11,13 +10,10 @@ import org.bukkit.event.inventory.InventoryCloseEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.server.PluginEnableEvent
 import org.bukkit.inventory.Inventory
-import org.bukkit.plugin.EventExecutor
 import org.bukkit.plugin.Plugin
 import ru.arc.metrics.core.MetricPoint
 import java.util.Locale
 import java.util.UUID
-import java.util.jar.JarFile
-import java.io.File
 
 interface ProductUiObservation {
     fun open(player: Player, inventory: Inventory, view: ProductUiView)
@@ -26,11 +22,13 @@ interface ProductUiObservation {
     fun close(player: Player, inventory: Inventory)
 }
 
-/** One ARC sink for each actual shared event class (plugins shade independent copies of arc-core). */
-internal class ProductUiListener(private val plugin: Plugin, private val product: ProductInterestTelemetry) : Listener, AutoCloseable, ProductUiObservation {
+/** ARC-owned sink for bounded UI observations received through ArcTelemetryProvider. */
+internal class ProductUiListener(private val plugin: Plugin, private val product: ProductInterestTelemetry) :
+    Listener,
+    AutoCloseable,
+    ProductUiObservation {
     private data class NativeView(val id: String, val inventory: Inventory, val view: ProductUiView)
     private val nativeViews = mutableMapOf<UUID, NativeView>()
-    private val classes = mutableSetOf<Class<out Event>>()
     private val coverage = linkedMapOf<String, Boolean>()
     private val tracker = ProductUiTracker { player, kind, view, button, duration, at ->
         product.ui(player, kind, view, button, duration, at)
@@ -39,34 +37,11 @@ internal class ProductUiListener(private val plugin: Plugin, private val product
 
     fun start() {
         plugin.server.pluginManager.registerEvents(this, plugin)
-        plugin.server.pluginManager.plugins.forEach(::attach)
+        plugin.server.pluginManager.plugins.filter { CORE_PRODUCER.matches(it.name) && it.isEnabled }
+            .forEach { coverage[it.name.lowercase(Locale.ROOT)] = false }
         if (plugin.server.pluginManager.getPlugin("zMenu") != null) {
             coverage["zmenu"] = runCatching { zMenu.register() }.getOrDefault(false)
         }
-    }
-
-    private fun attach(producer: Plugin) {
-        if (!CORE_PRODUCER.matches(producer.name) || !producer.isEnabled) return
-        val owns = runCatching {
-            val artifact = File(producer.javaClass.protectionDomain.codeSource.location.toURI())
-            JarFile(artifact).use {
-                (it.getJarEntry("ru/arc/paper/menu/PaperMenuService.class") != null) to
-                    (it.getJarEntry("ru/arc/paper/menu/PaperMenuObservationEvent.class") != null)
-            }
-        }.getOrDefault(false to false)
-        if (!owns.first) return // A core-only plugin has no menu producer to instrument.
-        val type = runCatching {
-            Class.forName("ru.arc.paper.menu.PaperMenuObservationEvent", false, producer.javaClass.classLoader).asSubclass(Event::class.java)
-        }.getOrNull()
-        coverage[producer.name.lowercase(Locale.ROOT)] = type != null && owns.second
-        if (type == null || !classes.add(type)) return
-        val payload = type.getMethod("getPayload")
-        plugin.server.pluginManager.registerEvent(type, this, EventPriority.MONITOR,
-            EventExecutor { _, event ->
-                @Suppress("UNCHECKED_CAST")
-                val data = payload.invoke(event) as? Map<String, Any> ?: return@EventExecutor
-                receive(data)
-            }, plugin)
     }
 
     internal fun receive(data: Map<String, Any>, now: Long = System.currentTimeMillis()) {
@@ -101,7 +76,7 @@ internal class ProductUiListener(private val plugin: Plugin, private val product
     }
 
     @EventHandler fun onPluginEnable(event: PluginEnableEvent) {
-        attach(event.plugin)
+        if (CORE_PRODUCER.matches(event.plugin.name)) coverage[event.plugin.name.lowercase(Locale.ROOT)] = false
         if (event.plugin.name == "zMenu") coverage["zmenu"] = runCatching { zMenu.register() }.getOrDefault(false)
     }
     @EventHandler(priority = EventPriority.LOWEST)

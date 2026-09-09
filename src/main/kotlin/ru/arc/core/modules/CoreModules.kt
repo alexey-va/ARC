@@ -126,6 +126,7 @@ object HooksModule : PluginModule {
         try {
             registry.setupHooks()
             ARC.hookRegistry = registry
+            Tasks.scheduler.runLater(1L, Runnable { if (!registry.isClosed) registry.setupHooks() })
         } catch (failure: Throwable) {
             runCatching { registry.close() }
                 .exceptionOrNull()

@@ -5,6 +5,9 @@ import org.bukkit.command.CommandExecutor
 import org.bukkit.command.TabCompleter
 import org.bukkit.event.server.ServerCommandEvent
 import org.bukkit.plugin.java.JavaPlugin
+import org.bukkit.plugin.ServicePriority
+import ru.arc.paper.api.ArcTelemetryProvider
+import ru.arc.metrics.ArcTelemetryProviderBridge
 import ru.arc.audit.autosell.AutoSellAuditModule
 import ru.arc.audit.bank.BankAuditModule
 import ru.arc.commands.XCommand
@@ -129,6 +132,7 @@ open class ARC : JavaPlugin() {
             logError = { msg, t -> error(msg, t) },
         )
         ModuleRegistry.initAll()
+        server.servicesManager.register(ArcTelemetryProvider::class.java, ArcTelemetryProviderBridge, this, ServicePriority.Normal)
         // Start the single Redis subscription after ALL modules have registered their channels.
         // Calling init() multiple times (once per module) caused the subscription to be
         // constantly restarted and never complete its 1s startup delay.
@@ -155,6 +159,7 @@ open class ARC : JavaPlugin() {
 
     override fun onDisable() {
         info("Stopping ARC plugin")
+        server.servicesManager.unregisterAll(this)
         Portal.removeAll()
         ModuleRegistry.shutdownAll()
         ArcMenus.close()

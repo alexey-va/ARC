@@ -86,7 +86,7 @@ MIT — see [LICENSE](LICENSE).
 ## Product UI telemetry
 
 `MetricsModule` owns `ProductUiListener` and the persisted `ProductInterestStore`.
-The listener consumes `PaperMenuObservationEvent` from the shared renderer in
+The listener consumes UI observations through the typed `ArcTelemetryProvider` service contract from the shared renderer in
 ARC and sibling Arc plugins discovered at runtime. Dialog screens declare stable `id` values.
 `ProductZMenuAdapter` observes the native public `ruscrafting_test` catalog;
 its physical presses remain attempts because zMenu's callback precedes requirements.
@@ -110,11 +110,11 @@ contract commit. It exposes `submissionId`, `playerId`, `contractId`, and
 `quantity`; committed retries expose the same receipt ID and are safe for
 consumer-side durable deduplication.
 
-ARC is the sole owner of economy audit persistence. Optional Paper plugins may
-call `ru.arc.audit.ExternalEconomyAuditBridge.markExternalReward` immediately
-before a known Vault or RedisEconomy reward, using only the bounded source/action
+ARC is the sole owner of economy audit persistence. Optional Paper plugins resolve
+`ru.arc.paper.api.ArcTelemetryProvider` through Bukkit's service registry and call
+`markExternalReward` immediately before a known Vault or RedisEconomy reward, using only the bounded source/action
 pairs `voting/vote_reward`, `ranks/contract_reward`, and `farms/farm_reward`, the actual currency name,
 and their durable reward identity. Keep the returned marker until the provider
-event arrives; call `cancel` only when the provider rejects or throws. ARC
+event arrives; call `cancelAudit` only when the provider rejects or throws. ARC
 matches player, amount, source, and currency. Unknown provider events never
 consume a marker, and historical records remain unchanged.

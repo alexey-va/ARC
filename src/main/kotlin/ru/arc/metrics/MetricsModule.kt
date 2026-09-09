@@ -181,6 +181,10 @@ object MetricsModule : PluginModule {
         productInterest?.breakJobWork(ExternalProductEnvelopeCodec.player(playerId))
     }
 
+    internal fun observeExternalUi(payload: Map<String, Any>) {
+        productUi?.receive(payload)
+    }
+
     fun productInterestReport(
         days: Int,
         limit: Int,

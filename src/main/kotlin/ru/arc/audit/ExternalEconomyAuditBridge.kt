@@ -3,11 +3,10 @@ package ru.arc.audit
 import java.util.UUID
 
 /**
- * Small optional bridge for RusCrafting plugins that produce Vault changes.
- * Callers use reflection plus soft-depend, so ARC remains the sole owner of
- * audit persistence and metrics.
+ * Service implementation for RusCrafting plugins that produce Vault changes.
+ * ARC remains the sole owner of audit persistence and metrics.
  */
-object ExternalEconomyAuditBridge {
+internal object ExternalEconomyAuditBridge {
     private val externalSources = mapOf(
         "voting" to EconomySource.VOTING,
         "arcvotes" to EconomySource.VOTING,
@@ -17,7 +16,6 @@ object ExternalEconomyAuditBridge {
         "arcfarms" to EconomySource.FARMS,
     )
 
-    @JvmStatic
     fun markJobReward(
         playerId: UUID,
         job: String,
@@ -49,7 +47,6 @@ object ExternalEconomyAuditBridge {
         )
     }
 
-    @JvmStatic
     fun markExternalReward(
         playerId: UUID,
         source: String,
@@ -82,7 +79,6 @@ object ExternalEconomyAuditBridge {
         )
     }
 
-    @JvmStatic
     fun cancel(playerId: UUID, token: String?) {
         token?.takeIf(String::isNotBlank)?.let { EconomyPendingContextTracker.cancel(playerId, it) }
     }
