@@ -1115,3 +1115,9 @@ replace-skins: true
 replace-chance: 0.9
 clear-lore: false
 append-attributes: false
+
+# Configure an ItemsAdder POTION model with tintindex 0 to enable the visual.
+drop-effect:
+  enabled: true
+  model: ""
+  minimum-drop-level: 40

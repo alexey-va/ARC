@@ -287,10 +287,11 @@ internal class DungeonSaveMenus(
         )
         feedback?.let { body += PaperDialogBody(it, 468) }
         show(player, PaperDialogScreen(id = "dungeon.shop.confirm", title = text("shop.confirm-title", "<#f4d87a>Подтвердить покупку?"), body = body,
-            buttons = listOf(action("buy", "shop.buy-label", "<#9bd48d>Купить", "shop.buy-tooltip", "Оплатить товар. Кейс откроется сразу и выдаст одну случайную награду") {
+            buttons = listOf(action("buy", "shop.buy-label", "<#9bd48d>Купить", "shop.buy-tooltip", "Оплатить товар. Кейс откроется сразу и выдаст одну случайную награду", close = quote.offer.isCase) {
                 val result = dungeon.supplies.buy(player, quote, expected)
                 val message = supplyResult(result)
-                if (result.success) shop(player, message) else confirmPurchase(player, quote, expected, message)
+                if (result.success && quote.offer.isCase) player.sendMessage(message)
+                else if (result.success) shop(player, message) else confirmPurchase(player, quote, expected, message)
             }), exitButton = back { shop(player) },
         )) { confirmPurchase(player, quote, expected) }
     }

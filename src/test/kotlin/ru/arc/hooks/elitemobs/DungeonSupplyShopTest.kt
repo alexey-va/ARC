@@ -105,14 +105,17 @@ class DungeonSupplyShopTest : FreeSpec({
         val economy = FakeSupplyEconomy(400.0)
         val offer = SupplyOffer("loot_case", Material.CHEST, 1, 200.0)
         var rolls = 0
+        var celebrations = 0
         val shop = DungeonSupplyShop({ listOf(offer) }, { expected }, economy,
             createItem = { _, _ -> ItemStack(Material.CHEST) },
-            createReward = { _, _ -> rolls++; ItemStack(Material.IRON_SWORD) })
+            createReward = { _, _ -> rolls++; ItemStack(Material.IRON_SWORD) },
+            celebrate = { _, _ -> celebrations++; error("Simulated cosmetic failure") })
         val quote = shop.quote(player, offer)!!
         rolls shouldBe 0
         shop.buy(player, quote, expected) shouldBe SupplyResult.BOUGHT
         shop.buy(player, quote, expected) shouldBe SupplyResult.CHANGED
         rolls shouldBe 1
+        celebrations shouldBe 1
         economy.withdraws shouldBe 1
         player.inventory.storageContents.filterNotNull().single { !it.type.isAir }.type shouldBe Material.IRON_SWORD
     }

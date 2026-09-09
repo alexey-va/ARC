@@ -16,6 +16,12 @@ import ru.arc.hooks.HookRegistry
 
 class PickupListener : Listener {
 
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun onLootSpawn(event: org.bukkit.event.entity.ItemSpawnEvent) {
+        if (HookRegistry.emHook != null) ru.arc.eliteloot.EliteLootEffects.drop(event.entity)
+    }
+
+
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onItemPickup(event: PlayerAttemptPickupItemEvent) {
         if (HookRegistry.emHook == null) return

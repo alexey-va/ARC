@@ -45,6 +45,7 @@ object EliteLootManager {
     @JvmStatic
     @Synchronized
     fun shutdown() {
+        EliteLootEffects.shutdown()
         state = null
     }
 
