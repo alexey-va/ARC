@@ -107,7 +107,7 @@ class LandsUiController(
         openDetails(player, landId)
     }
 
-    private fun openDetails(player: Player, landId: String) {
+    fun openDetails(player: Player, landId: String) {
         withLand(player, landId) { land ->
             val role = settings.text(if (land.ownerId == player.uniqueId) "role-owner" else "role-member")
             val buttons = mutableListOf(
@@ -115,7 +115,9 @@ class LandsUiController(
                     executeForLand(player, land.id, LandsUiCommands::menu)
                 }.closing(),
                 button("members", text("members-label"), text("members-tooltip")) { openMembers(player, land.id) },
+                button("add-member", text("add-member-label"), text("members-tooltip")) { openAddMember(player, land.id) },
                 button("territory", text("territory-label"), text("territory-tooltip")) { openTerritory(player, land.id) },
+                button("unclaim", text("unclaim-label"), text("unclaim-tooltip")) { openUnclaimConfirm(player, land.id) },
                 button("region-tool", text("region-tool-label"), text("region-tool-tooltip")) {
                     LandsUiModule.giveRegionTool(player, land.id)
                 }.closing(),
@@ -314,7 +316,7 @@ class LandsUiController(
                     ),
                     buttons = listOf(
                         commandButton("claim", "claim-label", "claim-tooltip", player, landId, "claim"),
-                        commandButton("unclaim", "unclaim-label", "unclaim-tooltip", player, landId, "unclaim"),
+                        button("unclaim", text("unclaim-label"), text("unclaim-tooltip")) { openUnclaimConfirm(player, landId) },
                         commandButton("setspawn", "setspawn-label", "setspawn-tooltip", player, landId, "spawn", "set"),
                         commandButton("spawn", "spawn-label", "spawn-tooltip", player, landId, "spawn"),
                         commandButton("areas", "areas-label", "areas-tooltip", player, landId, "area", "menu"),
@@ -347,6 +349,44 @@ class LandsUiController(
                 ),
             )
         }
+    }
+
+    private fun openUnclaimConfirm(player: Player, landId: String) {
+        val claim = gateway.currentClaim(player)
+        val land = gateway.land(player, landId)
+        if (claim == null || land == null || claim.landId != landId) {
+            player.sendMessage(text("unclaim-no-claim"))
+            openDetails(player, landId)
+            return
+        }
+        show(
+            player,
+            PaperDialogScreen(
+                id = "lands.unclaim",
+                title = text("unclaim-title", "land" to land.name),
+                body = listOf(PaperDialogBody(text("unclaim-body", "land" to land.name,
+                    "chunk_x" to claim.chunkX.toString(), "chunk_z" to claim.chunkZ.toString()), width = 500)),
+                buttons = listOf(
+                    button("unclaim_confirm", text("unclaim-confirm-label")) {
+                        val fresh = gateway.currentClaim(player)
+                        if (!canConfirmUnclaim(claim, fresh, gateway.land(player, landId)?.id)) {
+                            player.sendMessage(text("unclaim-stale"))
+                            openDetails(player, landId)
+                        } else {
+                            when (gateway.unclaimCurrent(player, landId)) {
+                                LandsUiCommandResult.EXECUTED -> Unit
+                                LandsUiCommandResult.LAND_UNAVAILABLE -> {
+                                    player.sendMessage(text("land-gone")); openRoot(player)
+                                }
+                                LandsUiCommandResult.COMMAND_REJECTED -> player.sendMessage(text("action-failed"))
+                                LandsUiCommandResult.ACTIVE_SELECTION -> player.sendMessage(text("unclaim-selection-active"))
+                            }
+                        }
+                    }.closing(),
+                ),
+                exitButton = back("back") { openDetails(player, landId) },
+            ),
+        )
     }
 
     private fun openGuide(player: Player) {
@@ -517,6 +557,7 @@ class LandsUiController(
                 openRoot(player)
             }
             LandsUiCommandResult.COMMAND_REJECTED -> player.sendMessage(text("action-failed"))
+            LandsUiCommandResult.ACTIVE_SELECTION -> player.sendMessage(text("unclaim-selection-active"))
         }
     }
 

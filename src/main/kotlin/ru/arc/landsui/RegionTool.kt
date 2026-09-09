@@ -175,7 +175,6 @@ internal class RegionTool(private val settings: LandsUiSettings, private val gat
             "width" to (preview?.width ?: 0).toString(), "depth" to (preview?.depth ?: 0).toString()))
         val button = session.button ?: display(player, claimGuideButtonLocation(eye), 1.10f, 160).also { session.button = it }
         button.text(text(if (session.box() != null && valid) "region-create-button" else "region-list-button"))
-        if (tick % 20 == 0L) player.sendActionBar(text("region-controls"))
     }
 
     private fun insideLand(land: Land, player: Player, box: RegionBox): Boolean =
@@ -198,7 +197,6 @@ internal class RegionTool(private val settings: LandsUiSettings, private val gat
         if (player.isSneaking) {
             if (right) {
                 session.first = null; session.second = null; session.revision++
-                player.sendActionBar(text("region-reset"))
                 update(player)
             } else if (tick >= session.clickAfter && session.button?.let { claimGuideButtonHit(player.eyeLocation, it.location) } == true) {
                 session.clickAfter = tick + 10
@@ -210,7 +208,7 @@ internal class RegionTool(private val settings: LandsUiSettings, private val gat
         }
         val block = event.clickedBlock ?: return
         if (lands.getLandByUnloadedChunk(player.world, block.x shr 4, block.z shr 4)?.ulid != land.ulid) {
-            player.sendActionBar(text("region-outside", "land" to short(land.name)))
+            session.label?.text(text("region-outside", "land" to short(land.name)))
             return
         }
         if (!land.defaultArea.hasRoleFlag(player, Flags.AREA_ASSIGN, Material.STONE, false)) {

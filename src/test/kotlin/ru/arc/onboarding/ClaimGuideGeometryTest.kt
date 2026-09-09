@@ -30,6 +30,47 @@ class ClaimGuideGeometryTest : FreeSpec({
         eye shouldBe Location(null, 10.0, 70.0, 20.0, 0f, 0f)
     }
 
+    "frozen central hologram opens only after aiming at the visible panel" {
+        val eye = Location(null, 10.0, 70.0, 20.0, 0f, 0f)
+        val label = claimGuideLabelLocation(eye)
+        claimGuideButtonHit(eye, label, 3.8, 1.0) shouldBe false
+        val aimed = eye.clone().setDirection(label.toVector().add(org.bukkit.util.Vector(0.0, 0.5, 0.0)).subtract(eye.toVector()))
+        claimGuideButtonHit(aimed, label, 3.8, 1.0) shouldBe true
+    }
+
+    "billboard click follows the camera rather than the frozen spawn yaw" {
+        for (yaw in listOf(-170f, -90f, 0f, 90f, 170f)) {
+            for (pitch in listOf(-70f, 0f, 70f)) {
+                val eye = Location(null, 10.0, 70.0, 20.0, yaw, pitch)
+                val right = org.bukkit.util.Vector(kotlin.math.cos(Math.toRadians(yaw.toDouble())), 0.0,
+                    kotlin.math.sin(Math.toRadians(yaw.toDouble())))
+                val up = eye.direction.crossProduct(right).normalize()
+                val anchor = eye.clone().add(eye.direction.multiply(4.0)).subtract(up.clone().multiply(0.44))
+                anchor.yaw = yaw + 130f
+                claimGuideButtonHit(eye, anchor) shouldBe true
+                claimGuideButtonHit(eye, anchor.clone().add(right.clone().multiply(2.6))) shouldBe false
+                claimGuideButtonHit(eye, anchor.clone().subtract(up.clone().multiply(1.0))) shouldBe false
+                claimGuideButtonHit(eye, anchor.clone().add(up.clone().multiply(1.0))) shouldBe false
+            }
+        }
+    }
+    "free grid never gets a thick perimeter while real land has no internal dividers" {
+        val visible = claimGuideChunks(GuideChunk(0, 0), 1)
+        val free = claimGuideBorders(visible, emptyMap())
+        free.size shouldBe 24
+        free.all { it.landId == null } shouldBe true
+        val occupied = mapOf(GuideChunk(0, 0) to "home", GuideChunk(1, 0) to "home")
+        val borders = claimGuideBorders(visible, occupied)
+        borders.filter { it.landId == "home" }.size shouldBe 6
+        borders.none { it.edge == GuideEdge(16, 0, false) } shouldBe true
+        borders.map { it.edge }.distinct().size shouldBe borders.size
+        claimGuideBorderY(70.62) shouldBe 69.62
+    }
+    "moving the visible window does not invent a border through a larger land" {
+        val claims = claimGuideChunks(GuideChunk(0, 0), 2).associateWith { "home" }
+        claimGuideBorders(claimGuideChunks(GuideChunk(0, 0), 1), claims) shouldBe emptyList()
+    }
+
     "hologram stays in front of the eyes without a target block and leaves the player location unchanged" {
         val eye = Location(null, 10.0, 70.0, 20.0, 0f, 0f)
         claimGuideLabelLocation(eye) shouldBe Location(null, 10.0, 70.35, 24.0, 0f, 0f)

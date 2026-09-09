@@ -65,6 +65,8 @@ internal class ClaimBoundaryListener(
     }
 
     private fun observe(player: Player, from: Location, to: Location) {
+        if (OnboardingModule.claimGuide?.hasHologram(player) == true ||
+            ru.arc.landsui.RegionToolItem.matches(player.inventory.itemInMainHand)) return
         val world = to.world ?: return
         if (!config.allowsWorld(world.name) || integration.getWorld(world) == null) return
         val previous = snapshot(player, from)

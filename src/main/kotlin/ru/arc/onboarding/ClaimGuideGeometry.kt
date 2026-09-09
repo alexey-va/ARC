@@ -48,6 +48,25 @@ internal fun claimGuideWildernessEdges(
     }
 }.distinct()
 
+/** A free separator stays thin; only a real land perimeter gets a thicker stroke. */
+internal data class GuideBorder(val edge: GuideEdge, val landId: String?)
+
+internal fun claimGuideBorders(visible: Set<GuideChunk>, claims: Map<GuideChunk, String?>): List<GuideBorder> {
+    val borders = linkedMapOf<GuideEdge, GuideBorder>()
+    claimGuideWildernessEdges(visible, claims.filterValues { it != null }.keys).forEach {
+        borders[it] = GuideBorder(it, null)
+    }
+    visible.filter { claims[it] != null }.groupBy { claims.getValue(it)!! }.forEach { (land, chunks) ->
+        val interior = chunks.toSet()
+        claimGuideEdges(interior).filter { claims[claimGuideEdgeOutside(it, interior)] != land }.forEach {
+            borders.putIfAbsent(it, GuideBorder(it, land))
+        }
+    }
+    return borders.values.toList()
+}
+
+internal fun claimGuideBorderY(eyeY: Double): Double = eyeY - 1.0
+
 /** Looking into the sky must not turn off the held-item preview. */
 internal fun claimGuideTarget(placementX: Int?, placementZ: Int?, playerX: Int, playerZ: Int): GuideChunk =
     if (placementX != null && placementZ != null) GuideChunk(placementX shr 4, placementZ shr 4)
@@ -71,23 +90,23 @@ internal fun claimGuideButtonGesture(action: org.bukkit.event.block.Action, hand
     sneaking && hand == org.bukkit.inventory.EquipmentSlot.HAND &&
         (action == org.bukkit.event.block.Action.LEFT_CLICK_AIR || action == org.bukkit.event.block.Action.LEFT_CLICK_BLOCK)
 
-/** Ray against the personal billboard, rather than an entity that could steal right clicks. */
-internal fun claimGuideButtonHit(eye: Location, button: Location): Boolean {
+/** CENTER billboards face the current camera, even while their world anchor is frozen. */
+internal fun claimGuideButtonHit(
+    eye: Location,
+    button: Location,
+    halfWidth: Double = 2.30,
+    height: Double = 0.90,
+): Boolean {
     if (eye.world != button.world) return false
-    // TextDisplay grows upward from its anchor; target the middle of its three short lines.
-    val center = button.toVector().add(org.bukkit.util.Vector(0.0, 0.44, 0.0))
-    val offset = center.clone().subtract(eye.toVector())
-    if (offset.lengthSquared() < 0.01 || offset.lengthSquared() > 36.0) return false
-    val normal = offset.clone().normalize()
     val direction = eye.direction
-    val denominator = direction.dot(normal)
-    if (denominator <= 0.001) return false
-    val distance = offset.dot(normal) / denominator
-    if (distance > 6.0) return false
-    val point = eye.toVector().add(direction.multiply(distance)).subtract(center)
-    val yaw = Math.toRadians(button.yaw.toDouble())
-    val horizontal = org.bukkit.util.Vector(kotlin.math.cos(yaw), 0.0, kotlin.math.sin(yaw))
-    val up = normal.clone().crossProduct(horizontal).normalize()
-    val right = up.clone().crossProduct(normal).normalize()
-    return kotlin.math.abs(point.dot(right)) <= 2.30 && kotlin.math.abs(point.dot(up)) <= 0.68
+    val offset = button.toVector().subtract(eye.toVector())
+    val depth = offset.dot(direction)
+    if (depth <= 0.0 || depth > 6.0) return false
+    val yaw = Math.toRadians(eye.yaw.toDouble())
+    val right = org.bukkit.util.Vector(kotlin.math.cos(yaw), 0.0, kotlin.math.sin(yaw))
+    val up = direction.clone().crossProduct(right).normalize()
+    // Vanilla TextDisplay uses 0.025 blocks/pixel and grows upward from its bottom anchor.
+    // A small margin covers background padding and client teleport interpolation.
+    return kotlin.math.abs(offset.dot(right)) <= halfWidth + 0.10 &&
+        offset.dot(up) in (-height - 0.10)..0.10
 }

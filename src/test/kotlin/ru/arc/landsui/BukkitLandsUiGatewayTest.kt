@@ -12,6 +12,7 @@ import me.angeschossen.lands.api.LandsIntegration
 import me.angeschossen.lands.api.applicationframework.util.ULID
 import me.angeschossen.lands.api.land.Land
 import me.angeschossen.lands.api.player.LandPlayer
+import me.angeschossen.lands.api.player.Selection
 import org.bukkit.entity.Player
 import java.util.UUID
 
@@ -31,16 +32,38 @@ class BukkitLandsUiGatewayTest : StringSpec({
         every { landUlid.toString() } returns landId
         every { land.exists() } returns true
         every { landPlayer.setEditLand(land) } just runs
-        every { player.performCommand("lands land delete") } returns true
+        every { landPlayer.selection } returns null
+        every { player.performCommand("lands unclaim") } returns true
 
         val result = BukkitLandsUiGateway(integration)
-            .selectAndExecute(player, landId, "lands land delete")
+            .unclaimCurrent(player, landId)
 
         result shouldBe LandsUiCommandResult.EXECUTED
         verifyOrder {
             landPlayer.setEditLand(land)
-            player.performCommand("lands land delete")
+            player.performCommand("lands unclaim")
         }
+    }
+
+    "does not dispatch native unclaim while a selection is active" {
+        val id = UUID.randomUUID()
+        val integration = mockk<LandsIntegration>()
+        val landPlayer = mockk<LandPlayer>()
+        val land = mockk<Land>()
+        val landUlid = mockk<ULID>()
+        val selection = mockk<Selection>()
+        val player = mockk<Player>()
+        every { player.uniqueId } returns id
+        every { integration.getLandPlayer(id) } returns landPlayer
+        every { landPlayer.lands } returns setOf(land)
+        every { land.ulid } returns landUlid
+        every { landUlid.toString() } returns "01KLAND"
+        every { land.exists() } returns true
+        every { landPlayer.selection } returns selection
+        every { player.performCommand(any()) } returns true
+
+        BukkitLandsUiGateway(integration).unclaimCurrent(player, "01KLAND") shouldBe LandsUiCommandResult.ACTIVE_SELECTION
+        verify(exactly = 0) { player.performCommand(any()) }
     }
 
     "does not dispatch when the rendered land is no longer available" {

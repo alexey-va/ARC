@@ -2,7 +2,6 @@ package ru.arc.onboarding
 
 import me.angeschossen.lands.api.LandsIntegration
 import net.kyori.adventure.text.Component
-import net.kyori.adventure.title.Title
 import org.bukkit.Bukkit
 import org.bukkit.Color
 import org.bukkit.FluidCollisionMode
@@ -26,9 +25,7 @@ import ru.arc.ARC
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.landsui.LandsUiModule
 import ru.arc.landsui.RegionToolItem
-import ru.arc.paper.audience.NativePaperAudienceEffects as effects
 import ru.arc.util.Logging.error
-import java.time.Duration
 import java.util.UUID
 
 /** Read-only Lands guidance. All entities are transient and visible to just their owner. */
@@ -36,18 +33,18 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
     private val integration = LandsIntegration.of(ARC.instance)
     private val tasks = LifecycleTaskScope()
     private val sessions = mutableMapOf<UUID, Session>()
-    private val titleAfter = mutableMapOf<UUID, Long>()
+    private val failedViewers = mutableSetOf<UUID>()
     private val text = OnboardingConfig.CLAIM_TEXT.keys.associateWith(config::claimText)
     private var tick = 0L
 
     private class Session(val world: UUID) {
-        val borders = mutableListOf<Entity>()
+        val borders = mutableMapOf<GuideBorder, BlockDisplay>()
         var label: TextDisplay? = null
         var button: TextDisplay? = null
         var buttonLand: String? = null
+        var menuLand: String? = null
         var anchor: Location? = null
         var clickAfter = 0L
-        var geometry: Any? = null
         var borderY = Double.NaN
         var successUntil = 0L
         val confirmed = linkedSetOf<GuideChunk>()
@@ -69,11 +66,16 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
                         val eye = session.anchor ?: player.eyeLocation
                         follow(session.label, claimGuideLabelLocation(eye))
                         follow(session.button, claimGuideButtonLocation(eye))
+                        val y = claimGuideBorderY(player.eyeLocation.y)
+                        if (session.borderY != y) {
+                            session.borders.values.forEach { it.teleport(it.location.apply { this.y = y }) }
+                            session.borderY = y
+                        }
                     }
                 } catch (failure: Exception) {
                     // Stop this viewer until reconnect, avoiding a 4 Hz error loop.
                     clear(player)
-                    titleAfter[player.uniqueId] = Long.MAX_VALUE
+                    failedViewers += player.uniqueId
                     error("Claim guide failed for {} in {}; disabled until reconnect", player.name, player.world.name, failure)
                 }
             }
@@ -81,7 +83,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
     }
 
     private fun update(player: Player) {
-        if (titleAfter[player.uniqueId] == Long.MAX_VALUE) return
+        if (player.uniqueId in failedViewers) return
         if (RegionToolItem.matches(player.inventory.itemInMainHand)) { clear(player); return }
         if (!config.allowsWorld(player.world.name) || player.isDead || player.gameMode == GameMode.SPECTATOR ||
             integration.getWorld(player.world) == null
@@ -104,11 +106,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         if (session == null) {
             session = Session(player.world.uid).also { it.anchor = player.eyeLocation }
             sessions[player.uniqueId] = session
-            if (tick >= (titleAfter[player.uniqueId] ?: 0L)) {
-                showTitle(player, "title", "subtitle")
-                effects.sendMessage(player, text.getValue("remove"))
-                titleAfter[player.uniqueId] = tick + 600
-            }
+
         }
         if (heldRadius != null && heldRadius != session.radius) {
             session.radius = heldRadius
@@ -146,54 +144,32 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
             selected != null -> "expand"
             else -> "free"
         }
-        val y = player.eyeLocation.y
-        val ownChunks = linkedSetOf<GuideChunk>()
-        // Bounded local view of the selected region; never load terrain to draw a guide.
-        if (selected != null) for (x in target.x - 1..target.x + 1) for (z in target.z - 1..target.z + 1) {
-            if (world.isChunkLoaded(x, z) && integration.getLandByUnloadedChunk(world, x, z) == selected) {
-                ownChunks += GuideChunk(x, z)
-            }
-        }
         val currentChunk = GuideChunk(player.location.blockX shr 4, player.location.blockZ shr 4)
-        val gridChunks = claimGuideChunks(currentChunk, 1)
-        val gridClaims = buildMap {
+        val visible = claimGuideChunks(currentChunk, 1)
+        val nearby = buildMap {
             for (x in currentChunk.x - 2..currentChunk.x + 2)
                 for (z in currentChunk.z - 2..currentChunk.z + 2) {
-                    val chunk = GuideChunk(x, z)
-                    put(chunk, integration.getLandByUnloadedChunk(world, x, z))
+                    put(GuideChunk(x, z), integration.getLandByUnloadedChunk(world, x, z))
                 }
         }
-        val gridEdges = claimGuideWildernessEdges(gridChunks, gridClaims.filterValues { it != null }.keys)
-        val geometry = listOf(footprint, state, ownChunks, claims, gridEdges)
-        if (session.geometry != geometry || session.borders.any { !it.isValid }) {
-            session.borders.forEach(Entity::remove)
-            session.borders.clear()
-            session.geometry = geometry
-            session.borderY = y
-            // Remove artificial edges at the local view's cutoff using real adjacent Lands claims.
-            if (selected != null) {
-                claimGuideEdges(ownChunks).filter { edge ->
-                    val outside = claimGuideEdgeOutside(edge, ownChunks)
-                    integration.getLandByUnloadedChunk(world, outside.x, outside.z) != selected
-                }.forEach { drawEdge(player, session, it, y, Material.LIGHT_BLUE_CONCRETE, ownChunks) }
-            }
-            claims.entries.groupBy { (_, land) -> land?.ulid?.toString() }.forEach { (_, entries) ->
-                val land = entries.first().value
-                val color = when (land) {
-                    null -> Material.LIME_CONCRETE
-                    else -> if (land.ownerUID == player.uniqueId) Material.LIGHT_BLUE_CONCRETE else Material.RED_CONCRETE
-                }
-                val interior = entries.mapTo(linkedSetOf()) { it.key }
-                claimGuideEdges(interior).filter { edge ->
-                    val outside = claimGuideEdgeOutside(edge, interior)
-                    land == null || integration.getLandByUnloadedChunk(world, outside.x, outside.z)?.ulid != land.ulid
-                }.forEach { drawEdge(player, session, it, y, color, interior) }
-            }
-            gridEdges.forEach { drawGridEdge(player, session, it, y, gridChunks) }
+        val plan = claimGuideBorders(visible, nearby.mapValues { it.value?.ulid?.toString() }).toSet()
+        val iterator = session.borders.iterator()
+        while (iterator.hasNext()) {
+            val (key, display) = iterator.next()
+            if (key !in plan || !display.isValid) { display.remove(); iterator.remove() }
         }
-        if (session.borderY != y) {
-            session.borders.forEach { border -> border.teleport(border.location.apply { this.y = y }) }
-            session.borderY = y
+        val landsById = nearby.values.filterNotNull().associateBy { it.ulid.toString() }
+        for (border in plan) {
+            val material = when {
+                border.landId == null -> Material.LIGHT_GRAY_CONCRETE
+                landsById[border.landId]?.ownerUID == player.uniqueId -> Material.LIGHT_BLUE_CONCRETE
+                else -> Material.RED_CONCRETE
+            }
+            val display = session.borders.getOrPut(border) { drawBorder(player, border, material) }
+            if (display.block.material != material) {
+                display.block = material.createBlockData()
+                display.glowColorOverride = if (material == Material.RED_CONCRETE) Color.RED else Color.AQUA
+            }
         }
         val eye = session.anchor ?: player.eyeLocation
         val labelLocation = claimGuideLabelLocation(eye)
@@ -208,7 +184,9 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
             it.setTransformationMatrix(Matrix4f().scaling(1.30f))
         }.also { session.label = it; player.showEntity(ARC.instance, it) }
         if (label.location.distanceSquared(labelLocation) > 0.01) label.teleport(labelLocation)
-        label.text(claimGuideLandText(text.getValue(state), selected?.name))
+        session.menuLand = selected?.ulid?.toString()
+        val message = claimGuideLandText(text.getValue(state), selected?.name?.take(24))
+        label.text(if (LandsUiModule.isAvailable()) message.append(Component.newline()).append(text.getValue("menu")) else message)
         if (holding && selected != null && LandsUiModule.isAvailable()) {
             val button = session.button?.takeIf { it.isValid }
                 ?: world.spawn(claimGuideButtonLocation(eye), TextDisplay::class.java) {
@@ -228,17 +206,6 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
             session.button = null
             session.buttonLand = null
         }
-        if (tick % 20L == 0L) {
-            val action = when {
-                success || tick % 160L >= 100L -> "remove"
-                gridEdges.isNotEmpty() && tick % 160L in 60L..99L -> "grid-legend"
-                state == "own" -> "action-own"
-                state == "occupied" -> "action-occupied"
-                state == "expand" -> "action-expand"
-                else -> "action-free"
-            }
-            effects.sendActionBar(player, claimGuideLandText(text.getValue(action), selected?.name))
-        }
     }
 
     private fun follow(display: TextDisplay?, position: Location) {
@@ -255,63 +222,44 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         if (!ClaimBlockIdentity.matches(player.inventory.itemInMainHand) &&
             !ClaimBlockIdentity.matches(player.inventory.itemInOffHand)) return
         val session = sessions[player.uniqueId] ?: return
-        val button = session.button?.takeIf { it.isValid } ?: return
-        if (tick < session.clickAfter || !claimGuideButtonHit(player.eyeLocation, button.location)) return
-        val landId = session.buttonLand ?: return
-        val selected = integration.getLandPlayer(player.uniqueId)?.getEditLand(false) ?: return
-        if (selected.ulid.toString() != landId || !LandsUiModule.isAvailable()) return
+        if (tick < session.clickAfter || !LandsUiModule.isAvailable()) return
+        val friend = session.button?.takeIf { it.isValid }
+            ?.let { claimGuideButtonHit(player.eyeLocation, it.location) } == true
+        val menu = session.label?.takeIf { it.isValid }
+            ?.let { claimGuideButtonHit(player.eyeLocation, it.location, halfWidth = 3.8, height = 1.0) } == true
+        if (!friend && !menu) return
+        val shownLand = if (friend) session.buttonLand else session.menuLand
+        val selected = integration.getLandPlayer(player.uniqueId)?.getEditLand(false)
+        if (shownLand != selected?.ulid?.toString()) { update(player); return }
         event.isCancelled = true
         session.clickAfter = tick + 10
-        LandsUiModule.openAddMember(player, landId)
+        if (friend && shownLand != null) LandsUiModule.openAddMember(player, shownLand)
+        else if (shownLand != null) LandsUiModule.openDetails(player, shownLand)
+        else LandsUiModule.open(player)
     }
 
-    private fun drawEdge(player: Player, session: Session, edge: GuideEdge, y: Double, material: Material, interior: Set<GuideChunk>) {
-        // One straight edge at eye height; keep its origin inside the represented chunk.
-        val positiveSide = GuideChunk(edge.x shr 4, edge.z shr 4) in interior
-        val inset = if (positiveSide) 0.0 else -0.45
-        val world = player.world
-        val location = Location(world, edge.x + if (edge.alongX) 0.0 else inset,
-            y, edge.z + if (edge.alongX) inset else 0.0)
-        if (!world.isChunkLoaded(location.blockX shr 4, location.blockZ shr 4)) return
-        // A broad ribbon and tall end posts stay centered on eye height, even after teleporting.
-        val shapes = listOf(
-            Matrix4f().translation(0f, -0.30f, 0f)
-                .scale(if (edge.alongX) 16f else 0.35f, 0.60f, if (edge.alongX) 0.35f else 16f),
-            Matrix4f().translation(0f, -1.20f, 0f).scale(0.45f, 2.40f, 0.45f),
-            Matrix4f().translation(if (edge.alongX) 15.55f else 0f, -1.20f, if (edge.alongX) 0f else 15.55f)
-                .scale(0.45f, 2.40f, 0.45f),
-        )
-        shapes.forEach { shape ->
-            val display = world.spawn(location, BlockDisplay::class.java) {
-                configure(it)
-                it.block = material.createBlockData()
-                it.setTransformationMatrix(shape)
-                it.isGlowing = true
-                it.glowColorOverride = when (material) {
-                    Material.LIME_CONCRETE -> Color.LIME
-                    Material.RED_CONCRETE -> Color.RED
-                    else -> Color.AQUA
-                }
-            }
-            session.borders += display
-            player.showEntity(ARC.instance, display)
-        }
-    }
-
-    private fun drawGridEdge(player: Player, session: Session, edge: GuideEdge, y: Double, interior: Set<GuideChunk>) {
-        val positiveSide = GuideChunk(edge.x shr 4, edge.z shr 4) in interior
-        val inset = if (positiveSide) 0.02 else -0.02
-        val world = player.world
-        val location = Location(world, edge.x + if (edge.alongX) 0.0 else inset, y,
-            edge.z + if (edge.alongX) inset else 0.0)
-        if (!world.isChunkLoaded(location.blockX shr 4, location.blockZ shr 4)) return
-        val display = world.spawn(location, BlockDisplay::class.java) {
+    private fun drawBorder(player: Player, border: GuideBorder, material: Material): BlockDisplay {
+        // Reuse stable edge entities as the local window moves; never load a boundary chunk.
+        val edge = border.edge
+        val width = if (border.landId == null) 0.05f else 0.14f
+        val height = if (border.landId == null) 0.045f else 0.20f
+        val origin = player.location.apply { y = claimGuideBorderY(player.eyeLocation.y) }
+        return player.world.spawn(origin, BlockDisplay::class.java) {
             configure(it)
-            it.block = Material.LIGHT_GRAY_CONCRETE.createBlockData()
-            it.setTransformationMatrix(Matrix4f().scaling(if (edge.alongX) 16f else 0.05f, 0.045f, if (edge.alongX) 0.05f else 16f))
-        }
-        session.borders += display
-        player.showEntity(ARC.instance, display)
+            it.block = material.createBlockData()
+            it.teleportDuration = 3
+            it.setTransformationMatrix(Matrix4f().translation(
+                (edge.x - origin.x).toFloat() - if (edge.alongX) 0f else width / 2,
+                -height / 2,
+                (edge.z - origin.z).toFloat() - if (edge.alongX) width / 2 else 0f,
+            ).scale(if (edge.alongX) 16f else width, height, if (edge.alongX) width else 16f))
+            it.isGlowing = true
+            it.glowColorOverride = when (material) {
+                Material.RED_CONCRETE -> Color.RED
+                Material.LIGHT_BLUE_CONCRETE -> Color.AQUA
+                else -> Color.fromRGB(165, 190, 205)
+            }
+        }.also { player.showEntity(ARC.instance, it) }
     }
 
     private fun configure(display: Display) {
@@ -330,36 +278,31 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         if (chunk !in claimGuideChunks(aimed, session.radius)) return
         if (tick >= session.successUntil) {
             session.confirmed.clear()
-            showTitle(player, "success-title", "success-subtitle")
         }
         session.confirmed += chunk
         session.successUntil = tick + 100
     }
 
-    private fun showTitle(player: Player, title: String, subtitle: String) {
-        effects.showTitle(player, Title.title(text.getValue(title), text.getValue(subtitle),
-            Title.Times.times(Duration.ofMillis(200), Duration.ofSeconds(4), Duration.ofMillis(400))))
-    }
-
     private fun clearVisuals(session: Session) {
-        session.borders.forEach(Entity::remove)
+        session.borders.values.forEach(Entity::remove)
         session.borders.clear()
         session.label?.remove()
         session.label = null
+        session.menuLand = null
         session.button?.remove()
         session.button = null
         session.buttonLand = null
-        session.geometry = null
     }
+
+    fun hasHologram(player: Player): Boolean = sessions[player.uniqueId]?.label?.isValid == true
 
     private fun clear(player: Player) {
         sessions.remove(player.uniqueId)?.let {
             clearVisuals(it)
-            effects.sendActionBar(player, Component.empty())
         }
     }
 
-    @EventHandler fun quit(event: PlayerQuitEvent) { clear(event.player); titleAfter.remove(event.player.uniqueId) }
+    @EventHandler fun quit(event: PlayerQuitEvent) { clear(event.player); failedViewers.remove(event.player.uniqueId) }
     @EventHandler fun worldChanged(event: PlayerChangedWorldEvent) = clear(event.player)
     @EventHandler fun died(event: PlayerDeathEvent) = clear(event.entity)
 
@@ -367,6 +310,6 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         tasks.close()
         sessions.values.forEach(::clearVisuals)
         sessions.clear()
-        titleAfter.clear()
+        failedViewers.clear()
     }
 }

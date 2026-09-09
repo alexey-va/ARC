@@ -47,6 +47,11 @@ object LandsUiModule : PluginModule {
         active.openAddMember(player, landId)
     }
 
+    fun openDetails(player: Player, landId: String) {
+        val active = controller ?: return open(player)
+        active.openDetails(player, landId)
+    }
+
     fun giveRegionTool(player: Player, landId: String) {
         regionTool?.give(player, landId) ?: open(player)
     }
