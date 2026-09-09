@@ -317,9 +317,9 @@ class LandsUiController(
                     buttons = listOf(
                         commandButton("claim", "claim-label", "claim-tooltip", player, landId, "claim"),
                         button("unclaim", text("unclaim-label"), text("unclaim-tooltip")) { openUnclaimConfirm(player, landId) },
-                        commandButton("setspawn", "setspawn-label", "setspawn-tooltip", player, landId, "spawn", "set"),
+                        commandButton("setspawn", "setspawn-label", "setspawn-tooltip", player, landId, "setspawn"),
                         commandButton("spawn", "spawn-label", "spawn-tooltip", player, landId, "spawn"),
-                        commandButton("areas", "areas-label", "areas-tooltip", player, landId, "area", "menu"),
+                        commandButton("areas", "areas-label", "areas-tooltip", player, landId, "menu", "areas"),
                         button("mainblock", text("mainblock-label"), text("mainblock-tooltip")) {
                             openMainblockGuide(player, landId)
                         },
@@ -523,7 +523,7 @@ class LandsUiController(
                     body = listOf(PaperDialogBody(text("danger-body", "land" to land.name))),
                     buttons = listOf(
                         button("delete_confirm", text("delete-confirm-label")) {
-                            executeForLand(player, landId) { LandsUiCommands.land("delete") }
+                            executeForLand(player, landId) { LandsUiCommands.flat("delete") }
                         }.closing(),
                     ),
                     exitButton = back("back") { openDetails(player, landId) },
@@ -540,7 +540,7 @@ class LandsUiController(
         landId: String,
         vararg arguments: String,
     ): PaperDialogButton = button(id, text(label), text(tooltip)) {
-        executeForLand(player, landId) { LandsUiCommands.land(*arguments) }
+        executeForLand(player, landId) { LandsUiCommands.flat(*arguments) }
     }.closing()
 
     private fun executeForLand(player: Player, landId: String, command: () -> String) {

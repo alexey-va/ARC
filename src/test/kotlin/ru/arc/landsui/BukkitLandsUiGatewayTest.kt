@@ -76,7 +76,7 @@ class BukkitLandsUiGatewayTest : StringSpec({
         every { landPlayer.lands } returns emptySet<Land>()
 
         val result = BukkitLandsUiGateway(integration)
-            .selectAndExecute(player, "01KLAND", "lands land delete")
+            .selectAndExecute(player, "01KLAND", "lands delete")
 
         result shouldBe LandsUiCommandResult.LAND_UNAVAILABLE
         verify(exactly = 0) { player.performCommand(any()) }

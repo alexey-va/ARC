@@ -48,14 +48,18 @@ class LandsUiPlannerTest : StringSpec({
     }
 
     "builds safe Lands 8 selected-settlement commands" {
-        LandsUiCommands.addMember("Alex_23") shouldBe "lands land member add Alex_23"
+        LandsUiCommands.addMember("Alex_23") shouldBe "lands trust Alex_23"
         LandsUiCommands.create("Новый_дом") shouldBe "lands create Новый_дом"
-        LandsUiCommands.rename("Новый_Берег") shouldBe "lands land rename Новый_Берег"
+        LandsUiCommands.rename("Новый_Берег") shouldBe "lands rename Новый_Берег"
+        LandsUiCommands.removeMember("Alex_23") shouldBe "lands untrust Alex_23"
+        LandsUiCommands.flat("setspawn") shouldBe "lands setspawn"
+        LandsUiCommands.flat("spawn") shouldBe "lands spawn"
+        LandsUiCommands.flat("menu", "areas") shouldBe "lands menu areas"
         LandsUiCommands.menu() shouldBe "lands menu"
 
         runCatching { LandsUiCommands.create("Дом") }.isFailure shouldBe true
         runCatching { LandsUiCommands.create("Слишком_длинное_название_поселения") }.isFailure shouldBe true
-        runCatching { LandsUiCommands.land("bad argument") }.isFailure shouldBe true
+        runCatching { LandsUiCommands.flat("bad argument") }.isFailure shouldBe true
         runCatching { LandsUiCommands.member("bad-name!") }.isFailure shouldBe true
     }
 })

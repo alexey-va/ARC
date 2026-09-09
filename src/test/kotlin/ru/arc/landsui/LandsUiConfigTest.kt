@@ -19,7 +19,7 @@ class LandsUiConfigTest : StringSpec({
             settings.enabled shouldBe true
             settings.maxListedPlayers shouldBe 12
             settings.text("guide-commands-body").contains("/lands edit НАЗВАНИЕ") shouldBe true
-            settings.text("guide-commands-body").contains("/lands land delete") shouldBe true
+            settings.text("guide-commands-body").contains("/lands delete") shouldBe true
             settings.text("guide-body").contains("текущее поселение", ignoreCase = true) shouldBe true
             settings.text("created-body").contains("первый чанк") shouldBe true
             listOf(

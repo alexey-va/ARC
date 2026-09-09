@@ -45,21 +45,22 @@ object LandsUiCommands {
 
     fun create(name: String): String = "lands create ${landName(name)}"
 
-    fun rename(newName: String): String = "lands land rename ${landName(newName)}"
+    fun rename(newName: String): String = "lands rename ${landName(newName)}"
 
-    fun addMember(playerName: String): String = "lands land member add ${member(playerName)}"
+    fun addMember(playerName: String): String = "lands trust ${member(playerName)}"
 
-    fun removeMember(playerName: String): String = "lands land member remove ${member(playerName)}"
+    fun removeMember(playerName: String): String = "lands untrust ${member(playerName)}"
 
     fun menu(): String = "lands menu"
 
-    fun land(vararg arguments: String): String {
+    fun flat(vararg arguments: String): String {
         require(arguments.isNotEmpty()) { "Lands command action cannot be empty" }
         arguments.forEach { argument ->
-            val valid = fixedArgument.matches(argument) && argument == argument.lowercase()
-            require(valid) { "Unsafe Lands command argument: '$argument'" }
+            require(fixedArgument.matches(argument) && argument == argument.lowercase()) {
+                "Unsafe Lands command argument: '$argument'"
+            }
         }
-        return "lands land ${arguments.joinToString(" ")}"
+        return "lands ${arguments.joinToString(" ")}"
     }
 
     fun member(name: String): String {
