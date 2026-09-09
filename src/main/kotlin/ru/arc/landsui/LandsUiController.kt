@@ -115,10 +115,10 @@ class LandsUiController(
                     executeForLand(player, land.id, LandsUiCommands::menu)
                 }.closing(),
                 button("members", text("members-label"), text("members-tooltip")) { openMembers(player, land.id) },
-                button("add-member", text("add-member-label"), text("members-tooltip")) { openAddMember(player, land.id) },
+                button("add_member", text("add-member-label"), text("members-tooltip")) { openAddMember(player, land.id) },
                 button("territory", text("territory-label"), text("territory-tooltip")) { openTerritory(player, land.id) },
                 button("unclaim", text("unclaim-label"), text("unclaim-tooltip")) { openUnclaimConfirm(player, land.id) },
-                button("region-tool", text("region-tool-label"), text("region-tool-tooltip")) {
+                button("region_tool", text("region-tool-label"), text("region-tool-tooltip")) {
                     LandsUiModule.giveRegionTool(player, land.id)
                 }.closing(),
             )

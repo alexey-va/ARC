@@ -68,9 +68,9 @@ claim-guide:
     action-free: '<white>Поставь блок — защити эту землю'
     action-own: '<white>Расширить — поставь блок за голубой границей'
     action-occupied: '<#ff8178>Место занято • <white>Найди свободный участок'
-    add-friend: '<#92bed8>Добавить друга<newline><white>«{land}»<newline><gray>Shift → наведи → ЛКМ'
+    add-friend: '<#92bed8>Добавить друга<newline><white>«{land}»<newline><gray>Shift + нажми'
     boundary-enter: "<#92bed8>Участок «{land}» <gray>• <white>Земля под защитой"
     boundary-leave: "<#ff9f0f>Ты вышел из «{land}» <gray>• <white>Здесь нет привата"
     grid-legend: '<gray>Тонкие линии — чанки 16×16 <dark_gray>• <#92bed8>Толстые — приваты'
     remove: '<white>Встань внутри своего участка → <#ff9f0f>/unclaim <white>— снять защиту здесь'
-    menu: '<gray>Shift → наведи → ЛКМ: меню'
+    menu: '<gray>Shift + нажми: меню'

@@ -16,6 +16,26 @@ internal fun claimGuideEdges(chunks: Set<GuideChunk>): List<GuideEdge> = buildLi
     }
 }
 
+/** Every chunk separator in the visible window, including claimed chunks. */
+internal fun claimGuideGridEdges(chunks: Set<GuideChunk>): List<GuideEdge> = buildSet {
+    chunks.forEach { (x, z) ->
+        add(GuideEdge(x * 16, z * 16, true))
+        add(GuideEdge(x * 16, z * 16 + 16, true))
+        add(GuideEdge(x * 16, z * 16, false))
+        add(GuideEdge(x * 16 + 16, z * 16, false))
+    }
+}.toList()
+
+/** Unique chunk-corner nodes; a 3x3 window has exactly 16 nodes. */
+internal fun claimGuideIntersections(chunks: Set<GuideChunk>): Set<GuideChunk> = buildSet {
+    chunks.forEach { (x, z) ->
+        add(GuideChunk(x, z))
+        add(GuideChunk(x + 1, z))
+        add(GuideChunk(x, z + 1))
+        add(GuideChunk(x + 1, z + 1))
+    }
+}
+
 internal fun claimGuideEdgeOutside(edge: GuideEdge, interior: Set<GuideChunk>): GuideChunk {
     val base = GuideChunk(edge.x shr 4, edge.z shr 4)
     val negative = if (edge.alongX) GuideChunk(base.x, base.z - 1) else GuideChunk(base.x - 1, base.z)
@@ -53,13 +73,14 @@ internal data class GuideBorder(val edge: GuideEdge, val landId: String?)
 
 internal fun claimGuideBorders(visible: Set<GuideChunk>, claims: Map<GuideChunk, String?>): List<GuideBorder> {
     val borders = linkedMapOf<GuideEdge, GuideBorder>()
-    claimGuideWildernessEdges(visible, claims.filterValues { it != null }.keys).forEach {
+    claimGuideGridEdges(visible).forEach {
         borders[it] = GuideBorder(it, null)
     }
     visible.filter { claims[it] != null }.groupBy { claims.getValue(it)!! }.forEach { (land, chunks) ->
         val interior = chunks.toSet()
         claimGuideEdges(interior).filter { claims[claimGuideEdgeOutside(it, interior)] != land }.forEach {
-            borders.putIfAbsent(it, GuideBorder(it, land))
+            // A real perimeter is the thick stroke and must replace the thin grid edge.
+            borders[it] = GuideBorder(it, land)
         }
     }
     return borders.values.toList()
@@ -88,7 +109,8 @@ internal fun claimGuideButtonLocation(eye: Location): Location {
 
 internal fun claimGuideButtonGesture(action: org.bukkit.event.block.Action, hand: org.bukkit.inventory.EquipmentSlot?, sneaking: Boolean): Boolean =
     sneaking && hand == org.bukkit.inventory.EquipmentSlot.HAND &&
-        (action == org.bukkit.event.block.Action.LEFT_CLICK_AIR || action == org.bukkit.event.block.Action.LEFT_CLICK_BLOCK)
+        (action == org.bukkit.event.block.Action.LEFT_CLICK_AIR || action == org.bukkit.event.block.Action.LEFT_CLICK_BLOCK ||
+            action == org.bukkit.event.block.Action.RIGHT_CLICK_AIR || action == org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK)
 
 /** CENTER billboards face the current camera, even while their world anchor is frozen. */
 internal fun claimGuideButtonHit(

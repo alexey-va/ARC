@@ -7,13 +7,13 @@ import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 
 class ClaimGuideGeometryTest : FreeSpec({
-    "button gesture never consumes placement or ordinary left clicks" {
+    "button gesture accepts either mouse button only while sneaking with the main hand" {
         for (action in org.bukkit.event.block.Action.entries) {
             claimGuideButtonGesture(action, org.bukkit.inventory.EquipmentSlot.HAND, false) shouldBe false
             claimGuideButtonGesture(action, org.bukkit.inventory.EquipmentSlot.OFF_HAND, true) shouldBe false
         }
-        claimGuideButtonGesture(org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK, org.bukkit.inventory.EquipmentSlot.HAND, true) shouldBe false
-        claimGuideButtonGesture(org.bukkit.event.block.Action.RIGHT_CLICK_AIR, org.bukkit.inventory.EquipmentSlot.HAND, true) shouldBe false
+        claimGuideButtonGesture(org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK, org.bukkit.inventory.EquipmentSlot.HAND, true) shouldBe true
+        claimGuideButtonGesture(org.bukkit.event.block.Action.RIGHT_CLICK_AIR, org.bukkit.inventory.EquipmentSlot.HAND, true) shouldBe true
         claimGuideButtonGesture(org.bukkit.event.block.Action.LEFT_CLICK_AIR, org.bukkit.inventory.EquipmentSlot.HAND, true) shouldBe true
         claimGuideButtonGesture(org.bukkit.event.block.Action.LEFT_CLICK_BLOCK, org.bukkit.inventory.EquipmentSlot.HAND, true) shouldBe true
     }
@@ -62,13 +62,23 @@ class ClaimGuideGeometryTest : FreeSpec({
         val occupied = mapOf(GuideChunk(0, 0) to "home", GuideChunk(1, 0) to "home")
         val borders = claimGuideBorders(visible, occupied)
         borders.filter { it.landId == "home" }.size shouldBe 6
-        borders.none { it.edge == GuideEdge(16, 0, false) } shouldBe true
+        borders.single { it.edge == GuideEdge(16, 0, false) }.landId shouldBe null
         borders.map { it.edge }.distinct().size shouldBe borders.size
         claimGuideBorderY(70.62) shouldBe 69.62
     }
+    "all visible chunks get thin grid and intersections are unique" {
+        val chunks = claimGuideChunks(GuideChunk(-1, -1), 1)
+        claimGuideGridEdges(chunks).size shouldBe 24
+        claimGuideGridEdges(chunks).distinct().size shouldBe 24
+        claimGuideIntersections(chunks).size shouldBe 16
+        claimGuideIntersections(chunks).contains(GuideChunk(-1, -1)) shouldBe true
+        claimGuideIntersections(chunks).contains(GuideChunk(1, 1)) shouldBe true
+    }
     "moving the visible window does not invent a border through a larger land" {
         val claims = claimGuideChunks(GuideChunk(0, 0), 2).associateWith { "home" }
-        claimGuideBorders(claimGuideChunks(GuideChunk(0, 0), 1), claims) shouldBe emptyList()
+        val borders = claimGuideBorders(claimGuideChunks(GuideChunk(0, 0), 1), claims)
+        borders.size shouldBe 24
+        borders.all { it.landId == null } shouldBe true
     }
 
     "hologram stays in front of the eyes without a target block and leaves the player location unchanged" {

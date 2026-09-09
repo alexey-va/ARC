@@ -36,6 +36,9 @@ import ru.arc.core.LifecycleTaskScope
 import ru.arc.gui.ArcMenus
 import ru.arc.lands.currentLands
 import ru.arc.onboarding.claimGuideButtonHit
+import ru.arc.onboarding.claimGuideAnchor
+import ru.arc.onboarding.followClaimGuideDisplay
+import org.bukkit.event.player.PlayerTeleportEvent
 import ru.arc.onboarding.claimGuideButtonLocation
 import ru.arc.onboarding.claimGuideLabelLocation
 import ru.arc.paper.menu.PaperDialogActionId
@@ -80,10 +83,10 @@ internal class RegionTool(private val settings: LandsUiSettings, private val gat
                     if (player.uniqueId in failedViewers) return@forEach
                     if (tick % 5 == 0L) update(player)
                     sessions[player.uniqueId]?.let { session ->
-                        if (!player.isSneaking || session.anchor == null) session.anchor = player.eyeLocation
+                        session.anchor = claimGuideAnchor(session.anchor, player.eyeLocation, player.isSneaking)
                         val eye = session.anchor!!
-                        move(session.label, claimGuideLabelLocation(eye))
-                        move(session.button, claimGuideButtonLocation(eye))
+                        followClaimGuideDisplay(session.label, claimGuideLabelLocation(eye))
+                        followClaimGuideDisplay(session.button, claimGuideButtonLocation(eye))
                     }
                 } catch (failure: Exception) {
                     clear(player)
@@ -170,10 +173,10 @@ internal class RegionTool(private val settings: LandsUiSettings, private val gat
             area != null -> "region-current"
             else -> "region-first"
         }
-        val label = session.label ?: display(player, claimGuideLabelLocation(eye), 1.30f, 230).also { session.label = it }
+        val label = session.label?.takeIf { it.isValid } ?: display(player, claimGuideLabelLocation(eye), 1.30f, 230).also { session.label = it }
         label.text(text(key, "land" to short(land.name), "area" to short(area?.name.orEmpty()),
             "width" to (preview?.width ?: 0).toString(), "depth" to (preview?.depth ?: 0).toString()))
-        val button = session.button ?: display(player, claimGuideButtonLocation(eye), 1.10f, 160).also { session.button = it }
+        val button = session.button?.takeIf { it.isValid } ?: display(player, claimGuideButtonLocation(eye), 1.10f, 160).also { session.button = it }
         button.text(text(if (session.box() != null && valid) "region-create-button" else "region-list-button"))
     }
 
@@ -195,14 +198,18 @@ internal class RegionTool(private val settings: LandsUiSettings, private val gat
         if (session.submitting || session.world != player.world.uid || session.landId != land.ulid.toString()) return
         val right = event.action == Action.RIGHT_CLICK_AIR || event.action == Action.RIGHT_CLICK_BLOCK
         if (player.isSneaking) {
-            if (right) {
+            val hitButton = session.button?.takeIf { it.isValid }
+                ?.let { claimGuideButtonHit(player.eyeLocation, it.location) } == true
+            if (hitButton) {
+                if (tick >= session.clickAfter) {
+                    session.clickAfter = tick + 10
+                    val box = session.box()
+                    if (box != null && insideLand(land, player, box)) openCreate(player, session, land, box)
+                    else openRegions(player, land.ulid.toString())
+                }
+            } else if (right) {
                 session.first = null; session.second = null; session.revision++
                 update(player)
-            } else if (tick >= session.clickAfter && session.button?.let { claimGuideButtonHit(player.eyeLocation, it.location) } == true) {
-                session.clickAfter = tick + 10
-                val box = session.box()
-                if (box != null && insideLand(land, player, box)) openCreate(player, session, land, box)
-                else openRegions(player, land.ulid.toString())
             }
             return
         }
@@ -346,7 +353,7 @@ internal class RegionTool(private val settings: LandsUiSettings, private val gat
 
     private fun draw(player: Player, session: Session, line: RegionFrameEdge, material: Material, thickness: Float) {
         // Keep the entity in the viewer's already-loaded chunk; translate just its display geometry.
-        val origin = player.location.apply { y = player.eyeLocation.y }
+        val origin = player.location.apply { y = player.eyeLocation.y; yaw = 0f; pitch = 0f }
         session.lines += player.world.spawn(origin, BlockDisplay::class.java) {
             configure(it)
             it.block = material.createBlockData()
@@ -368,9 +375,6 @@ internal class RegionTool(private val settings: LandsUiSettings, private val gat
         display.isPersistent = false; display.isVisibleByDefault = false; display.setGravity(false)
         display.brightness = Display.Brightness(15, 15); display.viewRange = 1.5f
     }
-    private fun move(display: TextDisplay?, to: Location) {
-        if (display != null && display.isValid && display.world == to.world && display.location.distanceSquared(to) > 0.0001) display.teleport(to)
-    }
     private fun text(key: String, vararg values: Pair<String, String>): Component =
         mini.deserialize(settings.text(key), *values.map { Placeholder.component(it.first, Component.text(it.second)) }.toTypedArray())
             .decoration(TextDecoration.ITALIC, false)
@@ -387,6 +391,11 @@ internal class RegionTool(private val settings: LandsUiSettings, private val gat
     }
     private fun clear(player: Player) { sessions.remove(player.uniqueId)?.let(::hide) }
     @EventHandler fun quit(event: PlayerQuitEvent) { clear(event.player); failedViewers.remove(event.player.uniqueId) }
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun teleported(event: PlayerTeleportEvent) {
+        sessions[event.player.uniqueId]?.let(::hide)
+        tasks.runLater(1L) { if (event.player.isOnline) update(event.player) }
+    }
     @EventHandler fun world(event: PlayerChangedWorldEvent) = clear(event.player)
     @EventHandler fun death(event: PlayerDeathEvent) = clear(event.entity)
     override fun close() {

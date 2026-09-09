@@ -20,6 +20,7 @@ import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerQuitEvent
+import org.bukkit.event.player.PlayerTeleportEvent
 import org.joml.Matrix4f
 import ru.arc.ARC
 import ru.arc.core.LifecycleTaskScope
@@ -39,6 +40,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
 
     private class Session(val world: UUID) {
         val borders = mutableMapOf<GuideBorder, BlockDisplay>()
+        val posts = mutableMapOf<GuideChunk, BlockDisplay>()
         var label: TextDisplay? = null
         var button: TextDisplay? = null
         var buttonLand: String? = null
@@ -58,17 +60,16 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
             Bukkit.getOnlinePlayers().forEach { player ->
                 try {
                     sessions[player.uniqueId]?.let { session ->
-                        // Freeze while sneaking so a side button can actually be aimed at.
-                        if (!player.isSneaking) session.anchor = player.eyeLocation
+                        session.anchor = claimGuideAnchor(session.anchor, player.eyeLocation, player.isSneaking)
                     }
                     if (tick == 1L || tick % 5L == 0L) update(player)
                     sessions[player.uniqueId]?.let { session ->
                         val eye = session.anchor ?: player.eyeLocation
-                        follow(session.label, claimGuideLabelLocation(eye))
-                        follow(session.button, claimGuideButtonLocation(eye))
+                        followClaimGuideDisplay(session.label, claimGuideLabelLocation(eye))
+                        followClaimGuideDisplay(session.button, claimGuideButtonLocation(eye))
                         val y = claimGuideBorderY(player.eyeLocation.y)
                         if (session.borderY != y) {
-                            session.borders.values.forEach { it.teleport(it.location.apply { this.y = y }) }
+                            (session.borders.values + session.posts.values).forEach { it.teleport(it.location.apply { this.y = y }) }
                             session.borderY = y
                         }
                     }
@@ -158,6 +159,13 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
             val (key, display) = iterator.next()
             if (key !in plan || !display.isValid) { display.remove(); iterator.remove() }
         }
+        val corners = claimGuideIntersections(visible)
+        val postIterator = session.posts.iterator()
+        while (postIterator.hasNext()) {
+            val (corner, display) = postIterator.next()
+            if (corner !in corners || !display.isValid) { display.remove(); postIterator.remove() }
+        }
+        corners.forEach { corner -> session.posts.getOrPut(corner) { drawPost(player, corner) } }
         val landsById = nearby.values.filterNotNull().associateBy { it.ulid.toString() }
         for (border in plan) {
             val material = when {
@@ -183,7 +191,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
             it.teleportDuration = 2
             it.setTransformationMatrix(Matrix4f().scaling(1.30f))
         }.also { session.label = it; player.showEntity(ARC.instance, it) }
-        if (label.location.distanceSquared(labelLocation) > 0.01) label.teleport(labelLocation)
+        followClaimGuideDisplay(label, labelLocation)
         session.menuLand = selected?.ulid?.toString()
         val message = claimGuideLandText(text.getValue(state), selected?.name?.take(24))
         label.text(if (LandsUiModule.isAvailable()) message.append(Component.newline()).append(text.getValue("menu")) else message)
@@ -208,15 +216,10 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         }
     }
 
-    private fun follow(display: TextDisplay?, position: Location) {
-        if (display != null && display.isValid && display.world == position.world &&
-            display.location.distanceSquared(position) > 0.0001) display.teleport(position)
-    }
-
     @EventHandler(priority = EventPriority.HIGHEST)
     fun clickButton(event: PlayerInteractEvent) {
         val player = event.player
-        // Displays have no physical hitbox. Never intercept placement, including Shift + RMB.
+        // Only a Shift-click on a panel consumes placement; other right clicks still place blocks.
         if (RegionToolItem.matches(player.inventory.itemInMainHand)) return
         if (!claimGuideButtonGesture(event.action, event.hand, player.isSneaking)) return
         if (!ClaimBlockIdentity.matches(player.inventory.itemInMainHand) &&
@@ -243,11 +246,11 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         val edge = border.edge
         val width = if (border.landId == null) 0.05f else 0.14f
         val height = if (border.landId == null) 0.045f else 0.20f
-        val origin = player.location.apply { y = claimGuideBorderY(player.eyeLocation.y) }
+        val origin = claimGuideBorderOrigin(player.eyeLocation)
         return player.world.spawn(origin, BlockDisplay::class.java) {
             configure(it)
             it.block = material.createBlockData()
-            it.teleportDuration = 3
+            it.teleportDuration = 0
             it.setTransformationMatrix(Matrix4f().translation(
                 (edge.x - origin.x).toFloat() - if (edge.alongX) 0f else width / 2,
                 -height / 2,
@@ -259,6 +262,21 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
                 Material.LIGHT_BLUE_CONCRETE -> Color.AQUA
                 else -> Color.fromRGB(165, 190, 205)
             }
+        }.also { player.showEntity(ARC.instance, it) }
+    }
+
+    private fun drawPost(player: Player, corner: GuideChunk): BlockDisplay {
+        val origin = claimGuideBorderOrigin(player.eyeLocation)
+        return player.world.spawn(origin, BlockDisplay::class.java) {
+            configure(it)
+            it.block = Material.LIGHT_GRAY_CONCRETE.createBlockData()
+            it.teleportDuration = 0
+            it.setTransformationMatrix(Matrix4f().translation(
+                (corner.x * 16 - origin.x).toFloat() - 0.025f, -0.20f,
+                (corner.z * 16 - origin.z).toFloat() - 0.025f,
+            ).scale(0.05f, 1.10f, 0.05f))
+            it.isGlowing = true
+            it.glowColorOverride = Color.fromRGB(165, 190, 205)
         }.also { player.showEntity(ARC.instance, it) }
     }
 
@@ -286,6 +304,8 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
     private fun clearVisuals(session: Session) {
         session.borders.values.forEach(Entity::remove)
         session.borders.clear()
+        session.posts.values.forEach(Entity::remove)
+        session.posts.clear()
         session.label?.remove()
         session.label = null
         session.menuLand = null
@@ -303,6 +323,11 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
     }
 
     @EventHandler fun quit(event: PlayerQuitEvent) { clear(event.player); failedViewers.remove(event.player.uniqueId) }
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun teleported(event: PlayerTeleportEvent) {
+        clear(event.player)
+        tasks.runLater(1L) { if (event.player.isOnline) update(event.player) }
+    }
     @EventHandler fun worldChanged(event: PlayerChangedWorldEvent) = clear(event.player)
     @EventHandler fun died(event: PlayerDeathEvent) = clear(event.entity)
 

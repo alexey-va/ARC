@@ -26,8 +26,8 @@ class RegionToolItemTest : FreeSpec({
                 item.itemMeta.lore()?.map(PlainTextComponentSerializer.plainText()::serialize) shouldBe listOf(
                     "ЛКМ по земле — первый угол",
                     "ПКМ по земле — второй угол",
-                    "Shift + ЛКМ по кнопке — создать",
-                    "Shift + ПКМ — сбросить выделение",
+                    "Shift + нажми на кнопку — создать",
+                    "Shift + ПКМ мимо кнопки — сбросить",
                 )
                 checkNotNull(item.itemMeta.displayName()).decoration(TextDecoration.ITALIC) shouldBe TextDecoration.State.FALSE
             } finally {
