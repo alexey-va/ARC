@@ -1120,4 +1120,4 @@ append-attributes: false
 drop-effect:
   enabled: true
   model: ""
-  minimum-drop-level: 40
+  minimum-drop-level: 0

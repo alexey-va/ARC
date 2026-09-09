@@ -17,6 +17,9 @@ import ru.arc.ARC
 import ru.arc.config.ConfigManager
 import ru.arc.util.Logging
 
+internal fun eliteEffectFinished(displayValid: Boolean, groundItemValid: Boolean?, age: Int): Boolean =
+    !displayValid || if (groundItemValid != null) !groundItemValid else age >= 40
+
 internal fun eliteLootColor(level: Int): Color = Color.fromRGB(when (eliteTooltipTier(level)) {
     "artifact" -> 0xFF7066
     "legendary" -> 0xFFC14D
@@ -26,7 +29,7 @@ internal fun eliteLootColor(level: Int): Color = Color.fromRGB(when (eliteToolti
     else -> 0xE5F2FF
 })
 
-/** Short-lived visual entities only; the reward itself never leaves the inventory. */
+/** Ground visuals follow their item; case celebrations expire without creating a dropped reward. */
 internal object EliteLootEffects {
     private val active = mutableMapOf<ItemDisplay, BukkitTask>()
     private val missing = mutableSetOf<String>()
@@ -37,7 +40,7 @@ internal object EliteLootEffects {
         Bukkit.getScheduler().runTask(ARC.instance, Runnable {
             // Player throws are assigned after ItemSpawnEvent; wait before checking them.
             if (item.isValid && item.thrower == null) safely {
-                show(item.itemStack, item.location, null, false)
+                show(item.itemStack, item.location, null, false, item)
             }
         })
     }
@@ -59,13 +62,13 @@ internal object EliteLootEffects {
         })
     }
 
-    private fun show(reward: ItemStack, origin: Location, viewer: Player?, fromCase: Boolean): Boolean {
+    private fun show(reward: ItemStack, origin: Location, viewer: Player?, fromCase: Boolean, groundItem: Item? = null): Boolean {
         if (EliteLootManager.eliteLootProcessor == null || !EliteItemManager.isEliteMobsItem(reward)) return false
         val config = ConfigManager.ofModule(ARC.instance.dataFolder.toPath(), "elite-loot.yml")
         val id = config.string("drop-effect.model", "")
         if (id.isBlank() || !config.bool("drop-effect.enabled", true) || active.size >= 64) return false
         val level = EliteItemManager.getRoundedItemLevel(reward)
-        if (!fromCase && level < config.integer("drop-effect.minimum-drop-level", 40)) return false
+        if (!fromCase && level < config.integer("drop-effect.minimum-drop-level", 0)) return false
         val visual = CustomStack.getInstance(id)?.itemStack?.clone()
         if (visual == null || visual.itemMeta !is PotionMeta) {
             if (missing.add(id)) Logging.warn("EliteLoot effect model {} is missing or not a potion; effect skipped", id)
@@ -84,10 +87,17 @@ internal object EliteLootEffects {
         }
         try {
             viewer?.showEntity(ARC.instance, display)
-            active[display] = Bukkit.getScheduler().runTaskLater(ARC.instance, Runnable {
-                active.remove(display)
-                display.remove()
-            }, 40L)
+            var age = 0
+            active[display] = Bukkit.getScheduler().runTaskTimer(ARC.instance, Runnable {
+                age += 2
+                if (eliteEffectFinished(display.isValid, groundItem?.isValid, age)) {
+                    active.remove(display)?.cancel()
+                    display.remove()
+                } else if (groundItem != null) {
+                    val position = groundItem.location.add(0.0, 0.5, 0.0).apply { yaw = 0f; pitch = 0f }
+                    display.teleport(position)
+                }
+            }, 2L, 2L)
         } catch (failure: Exception) {
             display.remove()
             throw failure

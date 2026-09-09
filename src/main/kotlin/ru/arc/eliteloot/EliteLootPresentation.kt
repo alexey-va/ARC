@@ -49,3 +49,14 @@ internal fun presentEliteItem(item: ItemStack, viewer: Player): ItemStack {
     item.itemMeta = meta
     return item
 }
+
+/** Prepare the entity stack before its first client update; preserve the native generated lore and owner. */
+internal fun prepareEliteDrop(item: ItemStack, processor: EliteLootProcessor? = EliteLootManager.eliteLootProcessor): ItemStack {
+    if (!EliteItemManager.isEliteMobsItem(item)) return item
+    val prepared = item.clone()
+    processor?.processEliteLoot(prepared)
+    prepared.editMeta { meta -> meta.lore(compactEliteLore(meta.lore().orEmpty())) }
+    prepared.setData(io.papermc.paper.datacomponent.DataComponentTypes.TOOLTIP_STYLE,
+        net.kyori.adventure.key.Key.key("lzblocks", "tooltip/${eliteTooltipTier(EliteItemManager.getRoundedItemLevel(prepared))}"))
+    return prepared
+}

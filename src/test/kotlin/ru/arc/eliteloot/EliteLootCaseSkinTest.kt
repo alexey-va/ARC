@@ -18,6 +18,30 @@ import ru.arc.config.Config
 import ru.arc.paper.testing.MockBukkitTestRuntime
 
 class EliteLootCaseSkinTest : FreeSpec({
+    "spawn preparation applies an in-place skin before pickup without changing the source reward" {
+        MockBukkitTestRuntime.open().use {
+            mockkStatic(EliteItemManager::class)
+            try {
+                every { EliteItemManager.isEliteMobsItem(any()) } returns true
+                every { EliteItemManager.getRoundedItemLevel(any()) } returns 43
+                val original = ItemStack(Material.DIAMOND_CHESTPLATE)
+                val key = NamespacedKey("elitemobs", "soulbind")
+                original.editMeta { it.persistentDataContainer.set(key, PersistentDataType.STRING, "owner") }
+                val processor = mockk<EliteLootProcessor>()
+                every { processor.processEliteLoot(any(), false) } answers {
+                    firstArg<ItemStack>().also { it.editMeta { meta -> meta.setCustomModelData(123) } }
+                }
+                val prepared = prepareEliteDrop(original, processor)
+                prepared.itemMeta.customModelData shouldBe 123
+                prepared.getData(io.papermc.paper.datacomponent.DataComponentTypes.TOOLTIP_STYLE) shouldBe net.kyori.adventure.key.Key.key("lzblocks", "tooltip/rare")
+                prepared.itemMeta.persistentDataContainer.get(key, PersistentDataType.STRING) shouldBe "owner"
+                original.itemMeta.hasCustomModelData() shouldBe false
+                prepared.type shouldBe Material.DIAMOND_CHESTPLATE
+                verify(exactly = 1) { processor.processEliteLoot(any(), false) }
+            } finally { unmockkStatic(EliteItemManager::class) }
+        }
+    }
+
     "case armor bypasses pickup disable and zero chance while preserving player metadata and protection" {
         MockBukkitTestRuntime.open().use {
             mockkStatic(EliteItemManager::class)

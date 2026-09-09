@@ -3,7 +3,6 @@ package ru.arc.listeners
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
-import org.bukkit.event.player.PlayerAttemptPickupItemEvent
 import ru.arc.eliteloot.EliteLootManager
 import ru.arc.eliteloot.presentEliteItem
 import ru.arc.ARC
@@ -16,20 +15,20 @@ import ru.arc.hooks.HookRegistry
 
 class PickupListener : Listener {
 
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    fun prepareLootSpawn(event: org.bukkit.event.entity.ItemSpawnEvent) {
+        if (HookRegistry.emHook == null) return
+        try {
+            // Assign the prepared stack even when the processor changes metadata in place.
+            event.entity.itemStack = ru.arc.eliteloot.prepareEliteDrop(event.entity.itemStack)
+        } catch (failure: Exception) {
+            ru.arc.util.Logging.warn("EliteLoot drop preparation failed; native reward retained", failure)
+        }
+    }
+
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun onLootSpawn(event: org.bukkit.event.entity.ItemSpawnEvent) {
         if (HookRegistry.emHook != null) ru.arc.eliteloot.EliteLootEffects.drop(event.entity)
-    }
-
-
-    @EventHandler(priority = EventPriority.HIGHEST)
-    fun onItemPickup(event: PlayerAttemptPickupItemEvent) {
-        if (HookRegistry.emHook == null) return
-        val stack = event.item.itemStack
-        val stack1 = EliteLootManager.eliteLootProcessor?.processEliteLoot(stack)
-        if (stack1 != null && stack1 !== stack) {
-            event.item.itemStack = stack1
-        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
