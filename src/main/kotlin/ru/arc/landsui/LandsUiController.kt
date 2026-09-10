@@ -9,6 +9,8 @@ import org.bukkit.entity.Player
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.gui.ArcMenus
 import ru.arc.onboarding.ClaimBlockIdentity
+import ru.arc.onboarding.ClaimGuideGridColor
+import ru.arc.onboarding.ClaimGuideView
 import ru.arc.onboarding.OnboardingModule
 import ru.arc.paper.menu.DialogTables
 import ru.arc.gui.MenuEscapeBehavior
@@ -182,7 +184,12 @@ class LandsUiController(
             id = "lands.claim-display",
             title = text("claim-display-title"),
             body = listOf(PaperDialogBody(text("claim-display-body",
-                "grid" to offsetText(view.gridOffset), "label" to offsetText(view.labelOffset)))),
+                "grid" to offsetText(view.gridOffset),
+                "label" to offsetText(view.labelOffset),
+                "snap" to snapText(view),
+                "radius" to gridRadiusText(view.gridRadius),
+                "color" to colorText(view.gridColor),
+            ))),
             buttons = listOf(
                 button("grid_down", text("claim-display-grid-down")) {
                     OnboardingModule.adjustClaimGuideView(player, gridSteps = -1)
@@ -200,6 +207,22 @@ class LandsUiController(
                     OnboardingModule.adjustClaimGuideView(player, labelSteps = 1)
                     openClaimDisplay(player, returnLandId)
                 },
+                button("snap", text("claim-display-snap", "snap" to snapText(view))) {
+                    OnboardingModule.adjustClaimGuideView(player, cycleSnap = true)
+                    openClaimDisplay(player, returnLandId)
+                },
+                button("radius_down", text("claim-display-radius-down")) {
+                    OnboardingModule.adjustClaimGuideView(player, radiusSteps = -1)
+                    openClaimDisplay(player, returnLandId)
+                },
+                button("radius_up", text("claim-display-radius-up")) {
+                    OnboardingModule.adjustClaimGuideView(player, radiusSteps = 1)
+                    openClaimDisplay(player, returnLandId)
+                },
+                button("color", text("claim-display-color", "color" to colorText(view.gridColor))) {
+                    OnboardingModule.adjustClaimGuideView(player, cycleColor = true)
+                    openClaimDisplay(player, returnLandId)
+                },
                 button("reset", text("claim-display-reset")) {
                     OnboardingModule.adjustClaimGuideView(player, reset = true)
                     openClaimDisplay(player, returnLandId)
@@ -215,6 +238,22 @@ class LandsUiController(
     private fun offsetText(value: Double): String =
         if (value == 0.0) settings.text("claim-display-default")
         else (if (value > 0) "+" else "") + amountFormat.format(value) + " " + settings.text("claim-display-blocks")
+
+    private fun snapText(view: ClaimGuideView): String =
+        if (view.snapBlocks == 0) settings.text("claim-display-snap-smooth")
+        else settings.text("claim-display-snap-blocks").replace("<blocks>", view.snapBlocks.toString())
+
+    private fun gridRadiusText(radius: Int): String = "${radius * 2 + 1}×${radius * 2 + 1}"
+
+    private fun colorText(color: ClaimGuideGridColor): String = settings.text(
+        when (color) {
+            ClaimGuideGridColor.ICE -> "claim-display-color-ice"
+            ClaimGuideGridColor.WHITE -> "claim-display-color-white"
+            ClaimGuideGridColor.PURPLE -> "claim-display-color-purple"
+            ClaimGuideGridColor.GOLD -> "claim-display-color-gold"
+            ClaimGuideGridColor.GRAY -> "claim-display-color-gray"
+        },
+    )
 
     private fun openClaimRadius(player: Player) {
         val current = ClaimBlockIdentity.heldRadius(player) ?: return openRoot(player)

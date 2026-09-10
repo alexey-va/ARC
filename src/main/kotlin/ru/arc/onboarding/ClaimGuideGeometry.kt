@@ -43,7 +43,7 @@ internal fun claimGuideEdgeOutside(edge: GuideEdge, interior: Set<GuideChunk>): 
 }
 
 internal fun claimGuideChunks(center: GuideChunk, radius: Int): Set<GuideChunk> {
-    require(radius in 0..4)
+    require(radius in 0..5)
     return buildSet {
         for (x in center.x - radius..center.x + radius)
             for (z in center.z - radius..center.z + radius) add(GuideChunk(x, z))
@@ -86,7 +86,11 @@ internal fun claimGuideBorders(visible: Set<GuideChunk>, claims: Map<GuideChunk,
     return borders.values.toList()
 }
 
-internal fun claimGuideBorderY(eyeY: Double): Double = eyeY - 1.0
+internal fun claimGuideBorderY(eyeY: Double, snapBlocks: Int = 0, offset: Double = 0.0): Double {
+    val desired = eyeY - 1.0
+    if (snapBlocks <= 0) return desired + offset
+    return kotlin.math.floor(desired / snapBlocks) * snapBlocks + offset
+}
 
 /** Looking into the sky must not turn off the held-item preview. */
 internal fun claimGuideTarget(placementX: Int?, placementZ: Int?, playerX: Int, playerZ: Int): GuideChunk =

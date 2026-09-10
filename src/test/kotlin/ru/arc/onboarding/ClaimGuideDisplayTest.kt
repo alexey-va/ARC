@@ -44,9 +44,16 @@ class ClaimGuideDisplayTest : StringSpec({
         claimGuideNeedsReanchor(anchor, anchor.clone().add(24.1, 0.0, 0.0)) shouldBe true
         claimGuideNeedsReanchor(anchor, anchor.clone().apply { this.world = mockk<World>() }) shouldBe true
     }
-    "view controls use half-block steps and bounded offsets" {
-        ClaimGuideView().gridOffset shouldBe -0.5
-        ClaimGuideView().adjust(-100, 100) shouldBe ClaimGuideView(-6, 4)
-        ClaimGuideView(-6, 4).adjust(1, -1) shouldBe ClaimGuideView(-5, 3)
+    "view controls expose stable snapping radius colors and wide bounded offsets" {
+        ClaimGuideView().gridOffset shouldBe 0.0
+        ClaimGuideView().snapBlocks shouldBe 2
+        ClaimGuideView().gridRadius shouldBe 2
+        ClaimGuideView().adjust(-100, 100) shouldBe ClaimGuideView(gridSteps = -12, labelSteps = 20)
+        ClaimGuideView(gridSteps = -12, labelSteps = 20).adjust(1, -1) shouldBe
+            ClaimGuideView(gridSteps = -11, labelSteps = 19)
+        ClaimGuideView().adjust(0, 0, radius = 100).gridRadius shouldBe 5
+        ClaimGuideView().adjust(0, 0, cycleSnap = true).snapBlocks shouldBe 3
+        ClaimGuideView(snapBlocks = 3).adjust(0, 0, cycleSnap = true).snapBlocks shouldBe 0
+        ClaimGuideView().adjust(0, 0, cycleColor = true).gridColor shouldBe ClaimGuideGridColor.WHITE
     }
 })

@@ -67,11 +67,16 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
                         val eye = session.anchor ?: player.eyeLocation
                         val view = view(player)
                         followClaimGuideDisplay(session.label, claimGuideLabelLocation(eye, view.labelOffset))
-                        val y = claimGuideBorderY(player.eyeLocation.y) + view.gridOffset
+                        val y = claimGuideBorderY(player.eyeLocation.y, view.snapBlocks, view.gridOffset)
                         if (session.borderY != y) {
-                            // Interpolate height only; the fixed X/Z origins keep every chunk edge aligned.
                             (session.borders.values + session.posts.values).forEach {
-                                followClaimGuideDisplay(it, it.location.apply { this.y = y })
+                                val destination = it.location.apply { this.y = y }
+                                if (view.snapBlocks > 0) {
+                                    it.teleportDuration = 0
+                                    it.teleport(destination)
+                                } else {
+                                    followClaimGuideDisplay(it, destination)
+                                }
                             }
                             session.gridAnchor?.y = y
                             session.borderY = y
@@ -153,13 +158,13 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         val currentChunk = GuideChunk(player.location.blockX shr 4, player.location.blockZ shr 4)
         val view = view(player)
         if (claimGuideNeedsReanchor(session.gridAnchor, player.eyeLocation)) {
-            val origin = claimGuideBorderOrigin(player.eyeLocation, view.gridOffset)
+            val origin = claimGuideBorderOrigin(player.eyeLocation, view.gridOffset, view.snapBlocks)
             session.borders.forEach { (border, display) -> positionBorder(display, border, origin) }
             session.posts.forEach { (corner, display) -> positionPost(display, corner, origin) }
             session.gridAnchor = origin.clone()
             session.borderY = origin.y
         }
-        val visibleRadius = maxOf(1, session.radius)
+        val visibleRadius = maxOf(session.radius, view.gridRadius)
         val visible = claimGuideChunks(currentChunk, visibleRadius)
         val nearby = buildMap {
             for (x in currentChunk.x - visibleRadius - 1..currentChunk.x + visibleRadius + 1)
@@ -189,10 +194,14 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
                 land.ownerUID == player.uniqueId || player.uniqueId in land.trustedPlayers -> Material.LIME_CONCRETE
                 else -> Material.RED_CONCRETE
             }
-            val display = session.borders.getOrPut(border) { drawBorder(player, border, material, session.gridAnchor!!) }
-            if (display.block.material != material) {
-                display.block = material.createBlockData()
-                display.glowColorOverride = claimGuideBorderColor(material)
+            val appearance = if (land == null) view.gridColor.appearance else ClaimGuideGridAppearance(
+                material,
+                claimGuideBorderColor(material),
+            )
+            val display = session.borders.getOrPut(border) { drawBorder(player, border, appearance, session.gridAnchor!!) }
+            if (display.block.material != appearance.material || display.glowColorOverride != appearance.glow) {
+                display.block = appearance.material.createBlockData()
+                display.glowColorOverride = appearance.glow
             }
         }
         val eye = session.anchor ?: player.eyeLocation
@@ -232,15 +241,20 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         LandsUiModule.openCurrent(player)
     }
 
-    private fun drawBorder(player: Player, border: GuideBorder, material: Material, origin: Location): BlockDisplay {
+    private fun drawBorder(
+        player: Player,
+        border: GuideBorder,
+        appearance: ClaimGuideGridAppearance,
+        origin: Location,
+    ): BlockDisplay {
         // Reuse stable edge entities as the local window moves; never load a boundary chunk.
         return player.world.spawn(origin, BlockDisplay::class.java) {
             configure(it)
-            it.block = material.createBlockData()
+            it.block = appearance.material.createBlockData()
             it.teleportDuration = 0
             positionBorder(it, border, origin)
             it.isGlowing = true
-            it.glowColorOverride = claimGuideBorderColor(material)
+            it.glowColorOverride = appearance.glow
         }.also { player.showEntity(ARC.instance, it) }
     }
 
@@ -266,11 +280,11 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
     private fun drawPost(player: Player, corner: GuideChunk, origin: Location): BlockDisplay {
         return player.world.spawn(origin, BlockDisplay::class.java) {
             configure(it)
-            it.block = Material.LIGHT_GRAY_CONCRETE.createBlockData()
+            it.block = view(player).gridColor.appearance.material.createBlockData()
             it.teleportDuration = 0
             positionPost(it, corner, origin)
             it.isGlowing = true
-            it.glowColorOverride = Color.fromRGB(165, 190, 205)
+            it.glowColorOverride = view(player).gridColor.appearance.glow
         }.also { player.showEntity(ARC.instance, it) }
     }
 
@@ -293,11 +307,28 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
 
     fun view(player: Player): ClaimGuideView = views[player.uniqueId] ?: ClaimGuideView()
 
-    fun adjustView(player: Player, gridSteps: Int, labelSteps: Int, reset: Boolean) {
-        views[player.uniqueId] = if (reset) ClaimGuideView() else view(player).adjust(gridSteps, labelSteps)
-        sessions[player.uniqueId]?.let {
-            it.gridAnchor = null
-            it.borderY = Double.NaN
+    fun adjustView(
+        player: Player,
+        gridSteps: Int,
+        labelSteps: Int,
+        radiusSteps: Int,
+        cycleSnap: Boolean,
+        cycleColor: Boolean,
+        reset: Boolean,
+    ) {
+        val before = view(player)
+        val after = if (reset) ClaimGuideView() else before.adjust(
+            grid = gridSteps,
+            label = labelSteps,
+            radius = radiusSteps,
+            cycleSnap = cycleSnap,
+            cycleColor = cycleColor,
+        )
+        views[player.uniqueId] = after
+        sessions[player.uniqueId]?.let { session ->
+            session.gridAnchor = null
+            session.borderY = Double.NaN
+            if (before.gridColor != after.gridColor) clearGrid(session)
         }
         update(player)
     }
@@ -316,12 +347,16 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
     }
 
     private fun clearVisuals(session: Session) {
+        clearGrid(session)
+        session.label?.remove()
+        session.label = null
+    }
+
+    private fun clearGrid(session: Session) {
         session.borders.values.forEach(Entity::remove)
         session.borders.clear()
         session.posts.values.forEach(Entity::remove)
         session.posts.clear()
-        session.label?.remove()
-        session.label = null
     }
 
     fun hasHologram(player: Player): Boolean = sessions[player.uniqueId]?.label?.isValid == true
@@ -361,12 +396,34 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
     }
 }
 
-data class ClaimGuideView(val gridSteps: Int = -1, val labelSteps: Int = 0) {
-    val gridOffset: Double get() = gridSteps * 0.5
+data class ClaimGuideGridAppearance(val material: Material, val glow: Color)
+
+enum class ClaimGuideGridColor(val appearance: ClaimGuideGridAppearance) {
+    ICE(ClaimGuideGridAppearance(Material.LIGHT_BLUE_CONCRETE, Color.fromRGB(120, 210, 255))),
+    WHITE(ClaimGuideGridAppearance(Material.WHITE_CONCRETE, Color.WHITE)),
+    PURPLE(ClaimGuideGridAppearance(Material.PURPLE_CONCRETE, Color.fromRGB(205, 135, 255))),
+    GOLD(ClaimGuideGridAppearance(Material.YELLOW_CONCRETE, Color.fromRGB(255, 205, 75))),
+    GRAY(ClaimGuideGridAppearance(Material.LIGHT_GRAY_CONCRETE, Color.fromRGB(165, 190, 205)));
+
+    fun next(): ClaimGuideGridColor = entries[(ordinal + 1) % entries.size]
+}
+
+data class ClaimGuideView(
+    val gridSteps: Int = 0,
+    val labelSteps: Int = 0,
+    val gridRadius: Int = 2,
+    val snapBlocks: Int = 2,
+    val gridColor: ClaimGuideGridColor = ClaimGuideGridColor.ICE,
+) {
+    val gridOffset: Double get() = gridSteps.toDouble()
     val labelOffset: Double get() = labelSteps * 0.5
 
-    fun adjust(grid: Int, label: Int): ClaimGuideView = copy(
-        gridSteps = (gridSteps + grid).coerceIn(-6, 4),
-        labelSteps = (labelSteps + label).coerceIn(-4, 4),
-    )
+    fun adjust(grid: Int, label: Int, radius: Int = 0, cycleSnap: Boolean = false, cycleColor: Boolean = false): ClaimGuideView =
+        copy(
+            gridSteps = (gridSteps + grid).coerceIn(-12, 12),
+            labelSteps = (labelSteps + label).coerceIn(-20, 20),
+            gridRadius = (gridRadius + radius).coerceIn(1, 5),
+            snapBlocks = if (cycleSnap) when (snapBlocks) { 0 -> 1; 1 -> 2; 2 -> 3; else -> 0 } else snapBlocks,
+            gridColor = if (cycleColor) gridColor.next() else gridColor,
+        )
 }

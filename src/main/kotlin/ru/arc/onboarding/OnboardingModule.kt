@@ -19,8 +19,16 @@ object OnboardingModule : PluginModule {
     fun claimGuideView(player: org.bukkit.entity.Player): ClaimGuideView =
         claimGuide?.view(player) ?: ClaimGuideView()
 
-    fun adjustClaimGuideView(player: org.bukkit.entity.Player, gridSteps: Int = 0, labelSteps: Int = 0, reset: Boolean = false) {
-        claimGuide?.adjustView(player, gridSteps, labelSteps, reset)
+    fun adjustClaimGuideView(
+        player: org.bukkit.entity.Player,
+        gridSteps: Int = 0,
+        labelSteps: Int = 0,
+        radiusSteps: Int = 0,
+        cycleSnap: Boolean = false,
+        cycleColor: Boolean = false,
+        reset: Boolean = false,
+    ) {
+        claimGuide?.adjustView(player, gridSteps, labelSteps, radiusSteps, cycleSnap, cycleColor, reset)
     }
 
     override fun init() {

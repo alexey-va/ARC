@@ -146,7 +146,10 @@ class LandsUiControllerTest : StringSpec({
                     val display = checkNotNull(screen)
                     display.id shouldBe "lands.claim-display"
                     display.buttons.map { it.id.value } shouldBe
-                        listOf("grid_down", "grid_up", "label_down", "label_up", "reset")
+                        listOf(
+                            "grid_down", "grid_up", "label_down", "label_up", "snap",
+                            "radius_down", "radius_up", "color", "reset",
+                        )
 
                     controller.openDetails(player, land.id)
                     details.buttons.single { it.id.value == "claim_radius" }.onClick.handle(context)

@@ -65,6 +65,10 @@ class ClaimGuideGeometryTest : FreeSpec({
         borders.single { it.edge == GuideEdge(16, 0, false) }.landId shouldBe null
         borders.map { it.edge }.distinct().size shouldBe borders.size
         claimGuideBorderY(70.62) shouldBe 69.62
+        claimGuideBorderY(70.62, snapBlocks = 1) shouldBe 69.0
+        claimGuideBorderY(70.62, snapBlocks = 2) shouldBe 68.0
+        claimGuideBorderY(70.62, snapBlocks = 3) shouldBe 69.0
+        claimGuideBorderY(70.62, snapBlocks = 2, offset = -1.0) shouldBe 67.0
     }
     "all visible chunks get thin grid and intersections are unique" {
         val chunks = claimGuideChunks(GuideChunk(-1, -1), 1)
