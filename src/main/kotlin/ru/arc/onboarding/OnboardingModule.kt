@@ -16,6 +16,13 @@ object OnboardingModule : PluginModule {
     internal var claimGuide: ClaimBlockGuide? = null
         private set
 
+    fun claimGuideView(player: org.bukkit.entity.Player): ClaimGuideView =
+        claimGuide?.view(player) ?: ClaimGuideView()
+
+    fun adjustClaimGuideView(player: org.bukkit.entity.Player, gridSteps: Int = 0, labelSteps: Int = 0, reset: Boolean = false) {
+        claimGuide?.adjustView(player, gridSteps, labelSteps, reset)
+    }
+
     override fun init() {
         OnboardingService.init()
         register(OnboardingPlayerListener())

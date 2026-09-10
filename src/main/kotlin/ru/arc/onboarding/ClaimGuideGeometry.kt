@@ -94,8 +94,8 @@ internal fun claimGuideTarget(placementX: Int?, placementZ: Int?, playerX: Int, 
     else GuideChunk(playerX shr 4, playerZ shr 4)
 
 /** A personal HUD anchor independent of blocks and terrain; never mutates the eye location. */
-internal fun claimGuideLabelLocation(eye: Location): Location =
-    eye.clone().add(eye.direction.multiply(4.0)).add(0.0, 0.65, 0.0)
+internal fun claimGuideLabelLocation(eye: Location, offset: Double = 0.0): Location =
+    eye.clone().add(eye.direction.multiply(4.0)).add(0.0, 0.65 + offset, 0.0)
 
 internal fun claimGuideLandText(template: Component, landName: String?): Component =
     template.replaceText { it.matchLiteral("{land}").replacement(Component.text(landName.orEmpty())) }

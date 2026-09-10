@@ -9,6 +9,7 @@ import org.bukkit.entity.Player
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.gui.ArcMenus
 import ru.arc.onboarding.ClaimBlockIdentity
+import ru.arc.onboarding.OnboardingModule
 import ru.arc.paper.menu.DialogTables
 import ru.arc.gui.MenuEscapeBehavior
 import ru.arc.paper.menu.PaperDialogActionId
@@ -65,7 +66,7 @@ class LandsUiController(
         } + listOf(
             button("create", text("create-label"), text("create-tooltip")) { openCreate(player) },
             button("guide", text("guide-label"), text("guide-tooltip")) { openGuide(player) },
-        ) + listOfNotNull(claimRadiusButton(player))
+        ) + listOfNotNull(claimRadiusButton(player)) + listOfNotNull(claimDisplayButton(player, null))
         show(
             player,
             PaperDialogScreen(
@@ -130,6 +131,7 @@ class LandsUiController(
                 }.closing(),
             )
             claimRadiusButton(player)?.let(buttons::add)
+            claimDisplayButton(player, land.id)?.let(buttons::add)
             if (land.ownerId == player.uniqueId) {
                 buttons += button("rename", text("rename-label"), text("rename-tooltip")) { openRename(player, land.id) }
                 buttons += button("delete", text("delete-label"), text("delete-tooltip")) { openDanger(player, land.id) }
@@ -165,6 +167,54 @@ class LandsUiController(
             button("claim_radius", text("claim-radius-label", "size" to (radius * 2 + 1).toString()),
                 text("claim-radius-tooltip")) { openClaimRadius(player) }
         }
+
+    private fun claimDisplayButton(player: Player, returnLandId: String?): PaperDialogButton? =
+        ClaimBlockIdentity.heldRadius(player)?.let {
+            button("claim_display", text("claim-display-label"), text("claim-display-tooltip")) {
+                openClaimDisplay(player, returnLandId)
+            }
+        }
+
+    private fun openClaimDisplay(player: Player, returnLandId: String?) {
+        if (ClaimBlockIdentity.heldRadius(player) == null) return openRoot(player)
+        val view = OnboardingModule.claimGuideView(player)
+        show(player, PaperDialogScreen(
+            id = "lands.claim-display",
+            title = text("claim-display-title"),
+            body = listOf(PaperDialogBody(text("claim-display-body",
+                "grid" to offsetText(view.gridOffset), "label" to offsetText(view.labelOffset)))),
+            buttons = listOf(
+                button("grid_down", text("claim-display-grid-down")) {
+                    OnboardingModule.adjustClaimGuideView(player, gridSteps = -1)
+                    openClaimDisplay(player, returnLandId)
+                },
+                button("grid_up", text("claim-display-grid-up")) {
+                    OnboardingModule.adjustClaimGuideView(player, gridSteps = 1)
+                    openClaimDisplay(player, returnLandId)
+                },
+                button("label_down", text("claim-display-label-down")) {
+                    OnboardingModule.adjustClaimGuideView(player, labelSteps = -1)
+                    openClaimDisplay(player, returnLandId)
+                },
+                button("label_up", text("claim-display-label-up")) {
+                    OnboardingModule.adjustClaimGuideView(player, labelSteps = 1)
+                    openClaimDisplay(player, returnLandId)
+                },
+                button("reset", text("claim-display-reset")) {
+                    OnboardingModule.adjustClaimGuideView(player, reset = true)
+                    openClaimDisplay(player, returnLandId)
+                },
+            ),
+            exitButton = back("back") {
+                if (returnLandId == null) openRoot(player) else openDetails(player, returnLandId)
+            },
+            columns = 2,
+        ), reopen = { openClaimDisplay(player, returnLandId) })
+    }
+
+    private fun offsetText(value: Double): String =
+        if (value == 0.0) settings.text("claim-display-default")
+        else (if (value > 0) "+" else "") + amountFormat.format(value) + " " + settings.text("claim-display-blocks")
 
     private fun openClaimRadius(player: Player) {
         val current = ClaimBlockIdentity.heldRadius(player) ?: return openRoot(player)

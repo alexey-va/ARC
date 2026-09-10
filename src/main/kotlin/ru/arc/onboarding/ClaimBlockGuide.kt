@@ -35,6 +35,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
     private val tasks = LifecycleTaskScope()
     private val particles = ClaimGuideParticles.create()
     private val sessions = mutableMapOf<UUID, Session>()
+    private val views = mutableMapOf<UUID, ClaimGuideView>()
     private val failedViewers = mutableSetOf<UUID>()
     private val text = OnboardingConfig.CLAIM_TEXT.keys.associateWith(config::claimText)
     private var tick = 0L
@@ -46,6 +47,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         var anchor: Location? = null
         var clickAfter = 0L
         var borderY = Double.NaN
+        var gridAnchor: Location? = null
         var successUntil = 0L
         val confirmed = linkedSetOf<GuideChunk>()
         var aimed: GuideChunk? = null
@@ -63,13 +65,15 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
                     if (tick == 1L || tick % 5L == 0L) update(player)
                     sessions[player.uniqueId]?.let { session ->
                         val eye = session.anchor ?: player.eyeLocation
-                        followClaimGuideDisplay(session.label, claimGuideLabelLocation(eye))
-                        val y = claimGuideBorderY(player.eyeLocation.y)
+                        val view = view(player)
+                        followClaimGuideDisplay(session.label, claimGuideLabelLocation(eye, view.labelOffset))
+                        val y = claimGuideBorderY(player.eyeLocation.y) + view.gridOffset
                         if (session.borderY != y) {
                             // Interpolate height only; the fixed X/Z origins keep every chunk edge aligned.
                             (session.borders.values + session.posts.values).forEach {
                                 followClaimGuideDisplay(it, it.location.apply { this.y = y })
                             }
+                            session.gridAnchor?.y = y
                             session.borderY = y
                         }
                     }
@@ -147,6 +151,14 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
             else -> "free"
         }
         val currentChunk = GuideChunk(player.location.blockX shr 4, player.location.blockZ shr 4)
+        val view = view(player)
+        if (claimGuideNeedsReanchor(session.gridAnchor, player.eyeLocation)) {
+            val origin = claimGuideBorderOrigin(player.eyeLocation, view.gridOffset)
+            session.borders.forEach { (border, display) -> positionBorder(display, border, origin) }
+            session.posts.forEach { (corner, display) -> positionPost(display, corner, origin) }
+            session.gridAnchor = origin.clone()
+            session.borderY = origin.y
+        }
         val visibleRadius = maxOf(1, session.radius)
         val visible = claimGuideChunks(currentChunk, visibleRadius)
         val nearby = buildMap {
@@ -167,7 +179,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
             val (corner, display) = postIterator.next()
             if (corner !in corners || !display.isValid) { display.remove(); postIterator.remove() }
         }
-        corners.forEach { corner -> session.posts.getOrPut(corner) { drawPost(player, corner) } }
+        corners.forEach { corner -> session.posts.getOrPut(corner) { drawPost(player, corner, session.gridAnchor!!) } }
         val landsById = nearby.values.filterNotNull().associateBy { it.ulid.toString() }
         for (border in plan) {
             val land = border.landId?.let(landsById::get)
@@ -177,14 +189,14 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
                 land.ownerUID == player.uniqueId || player.uniqueId in land.trustedPlayers -> Material.LIME_CONCRETE
                 else -> Material.RED_CONCRETE
             }
-            val display = session.borders.getOrPut(border) { drawBorder(player, border, material) }
+            val display = session.borders.getOrPut(border) { drawBorder(player, border, material, session.gridAnchor!!) }
             if (display.block.material != material) {
                 display.block = material.createBlockData()
                 display.glowColorOverride = claimGuideBorderColor(material)
             }
         }
         val eye = session.anchor ?: player.eyeLocation
-        val labelLocation = claimGuideLabelLocation(eye)
+        val labelLocation = claimGuideLabelLocation(eye, view.labelOffset)
         val label = session.label?.takeIf { it.isValid } ?: world.spawn(labelLocation, TextDisplay::class.java) {
             configure(it)
             it.billboard = Display.Billboard.CENTER
@@ -220,24 +232,29 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         LandsUiModule.openCurrent(player)
     }
 
-    private fun drawBorder(player: Player, border: GuideBorder, material: Material): BlockDisplay {
+    private fun drawBorder(player: Player, border: GuideBorder, material: Material, origin: Location): BlockDisplay {
         // Reuse stable edge entities as the local window moves; never load a boundary chunk.
-        val edge = border.edge
-        val width = if (border.landId == null) 0.05f else 0.14f
-        val height = if (border.landId == null) 0.045f else 0.20f
-        val origin = claimGuideBorderOrigin(player.eyeLocation)
         return player.world.spawn(origin, BlockDisplay::class.java) {
             configure(it)
             it.block = material.createBlockData()
             it.teleportDuration = 0
-            it.setTransformationMatrix(Matrix4f().translation(
-                (edge.x - origin.x).toFloat() - if (edge.alongX) 0f else width / 2,
-                -height / 2,
-                (edge.z - origin.z).toFloat() - if (edge.alongX) width / 2 else 0f,
-            ).scale(if (edge.alongX) 16f else width, height, if (edge.alongX) width else 16f))
+            positionBorder(it, border, origin)
             it.isGlowing = true
             it.glowColorOverride = claimGuideBorderColor(material)
         }.also { player.showEntity(ARC.instance, it) }
+    }
+
+    private fun positionBorder(display: BlockDisplay, border: GuideBorder, origin: Location) {
+        val edge = border.edge
+        val width = if (border.landId == null) 0.05f else 0.14f
+        val height = if (border.landId == null) 0.045f else 0.20f
+        display.teleportDuration = 0
+        display.teleport(origin)
+        display.setTransformationMatrix(Matrix4f().translation(
+            (edge.x - origin.x).toFloat() - if (edge.alongX) 0f else width / 2,
+            -height / 2,
+            (edge.z - origin.z).toFloat() - if (edge.alongX) width / 2 else 0f,
+        ).scale(if (edge.alongX) 16f else width, height, if (edge.alongX) width else 16f))
     }
 
     private fun claimGuideBorderColor(material: Material): Color = when (material) {
@@ -246,19 +263,24 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         else -> Color.fromRGB(165, 190, 205)
     }
 
-    private fun drawPost(player: Player, corner: GuideChunk): BlockDisplay {
-        val origin = claimGuideBorderOrigin(player.eyeLocation)
+    private fun drawPost(player: Player, corner: GuideChunk, origin: Location): BlockDisplay {
         return player.world.spawn(origin, BlockDisplay::class.java) {
             configure(it)
             it.block = Material.LIGHT_GRAY_CONCRETE.createBlockData()
             it.teleportDuration = 0
-            it.setTransformationMatrix(Matrix4f().translation(
-                (corner.x * 16 - origin.x).toFloat() - 0.025f, 0f,
-                (corner.z * 16 - origin.z).toFloat() - 0.025f,
-            ).scale(0.05f, 8.0f, 0.05f))
+            positionPost(it, corner, origin)
             it.isGlowing = true
             it.glowColorOverride = Color.fromRGB(165, 190, 205)
         }.also { player.showEntity(ARC.instance, it) }
+    }
+
+    private fun positionPost(display: BlockDisplay, corner: GuideChunk, origin: Location) {
+        display.teleportDuration = 0
+        display.teleport(origin)
+        display.setTransformationMatrix(Matrix4f().translation(
+            (corner.x * 16 - origin.x).toFloat() - 0.025f, 0f,
+            (corner.z * 16 - origin.z).toFloat() - 0.025f,
+        ).scale(0.05f, 8.0f, 0.05f))
     }
 
     private fun configure(display: Display) {
@@ -266,7 +288,18 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         display.isVisibleByDefault = false
         display.setGravity(false)
         display.brightness = Display.Brightness(15, 15)
-        display.viewRange = 1.5f
+        display.viewRange = 2.5f
+    }
+
+    fun view(player: Player): ClaimGuideView = views[player.uniqueId] ?: ClaimGuideView()
+
+    fun adjustView(player: Player, gridSteps: Int, labelSteps: Int, reset: Boolean) {
+        views[player.uniqueId] = if (reset) ClaimGuideView() else view(player).adjust(gridSteps, labelSteps)
+        sessions[player.uniqueId]?.let {
+            it.gridAnchor = null
+            it.borderY = Double.NaN
+        }
+        update(player)
     }
 
     fun claimed(player: Player, worldName: String, x: Int, z: Int) {
@@ -305,7 +338,11 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         if (event.isSneaking) sessions[event.player.uniqueId]?.let { freezeClaimGuideDisplay(it.label) }
     }
 
-    @EventHandler fun quit(event: PlayerQuitEvent) { clear(event.player); failedViewers.remove(event.player.uniqueId) }
+    @EventHandler fun quit(event: PlayerQuitEvent) {
+        clear(event.player)
+        views.remove(event.player.uniqueId)
+        failedViewers.remove(event.player.uniqueId)
+    }
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun teleported(event: PlayerTeleportEvent) {
         clear(event.player)
@@ -319,6 +356,17 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         particles?.close()
         sessions.values.forEach(::clearVisuals)
         sessions.clear()
+        views.clear()
         failedViewers.clear()
     }
+}
+
+data class ClaimGuideView(val gridSteps: Int = -1, val labelSteps: Int = 0) {
+    val gridOffset: Double get() = gridSteps * 0.5
+    val labelOffset: Double get() = labelSteps * 0.5
+
+    fun adjust(grid: Int, label: Int): ClaimGuideView = copy(
+        gridSteps = (gridSteps + grid).coerceIn(-6, 4),
+        labelSteps = (labelSteps + label).coerceIn(-4, 4),
+    )
 }

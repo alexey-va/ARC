@@ -16,8 +16,12 @@ internal fun freezeClaimGuideDisplay(display: TextDisplay?) {
 }
 
 /** FIXED displays must never inherit the viewer's yaw or pitch. */
-internal fun claimGuideBorderOrigin(eye: Location): Location =
-    eye.clone().apply { y = claimGuideBorderY(eye.y); yaw = 0f; pitch = 0f }
+internal fun claimGuideBorderOrigin(eye: Location, offset: Double = 0.0): Location =
+    eye.clone().apply { y = claimGuideBorderY(eye.y) + offset; yaw = 0f; pitch = 0f }
+
+internal fun claimGuideNeedsReanchor(anchor: Location?, eye: Location): Boolean =
+    anchor == null || anchor.world != eye.world ||
+        kotlin.math.abs(anchor.x - eye.x) > 24.0 || kotlin.math.abs(anchor.z - eye.z) > 24.0
 
 internal fun claimGuideTeleportDuration(from: Location, to: Location): Int =
     if (from.world != to.world || from.distanceSquared(to) > 64.0) 0 else 2

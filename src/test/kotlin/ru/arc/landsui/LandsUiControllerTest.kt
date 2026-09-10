@@ -139,8 +139,16 @@ class LandsUiControllerTest : StringSpec({
                     controller.openDetails(player, land.id)
                     val details = checkNotNull(screen)
                     details.buttons.map { it.id.value } shouldContain "claim_radius"
+                    details.buttons.map { it.id.value } shouldContain "claim_display"
                     val context = mockk<PaperDialogClickContext>(relaxed = true)
                     every { context.player } returns player
+                    details.buttons.single { it.id.value == "claim_display" }.onClick.handle(context)
+                    val display = checkNotNull(screen)
+                    display.id shouldBe "lands.claim-display"
+                    display.buttons.map { it.id.value } shouldBe
+                        listOf("grid_down", "grid_up", "label_down", "label_up", "reset")
+
+                    controller.openDetails(player, land.id)
                     details.buttons.single { it.id.value == "claim_radius" }.onClick.handle(context)
 
                     val radius = checkNotNull(screen)

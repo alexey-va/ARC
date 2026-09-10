@@ -37,4 +37,16 @@ class ClaimGuideDisplayTest : StringSpec({
         claimGuideTeleportDuration(from, from.clone().add(8.1, 0.0, 0.0)) shouldBe 0
         claimGuideTeleportDuration(from, from.clone().add(0.0, 100.0, 0.0)) shouldBe 0
     }
+    "grid anchor follows only after meaningful horizontal travel" {
+        val anchor = Location(world, 0.0, 70.0, 0.0)
+        claimGuideNeedsReanchor(null, anchor) shouldBe true
+        claimGuideNeedsReanchor(anchor, anchor.clone().add(24.0, 50.0, 24.0)) shouldBe false
+        claimGuideNeedsReanchor(anchor, anchor.clone().add(24.1, 0.0, 0.0)) shouldBe true
+        claimGuideNeedsReanchor(anchor, anchor.clone().apply { this.world = mockk<World>() }) shouldBe true
+    }
+    "view controls use half-block steps and bounded offsets" {
+        ClaimGuideView().gridOffset shouldBe -0.5
+        ClaimGuideView().adjust(-100, 100) shouldBe ClaimGuideView(-6, 4)
+        ClaimGuideView(-6, 4).adjust(1, -1) shouldBe ClaimGuideView(-5, 3)
+    }
 })
