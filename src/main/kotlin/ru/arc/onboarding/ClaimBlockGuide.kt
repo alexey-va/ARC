@@ -462,7 +462,7 @@ data class ClaimGuideView(
     val gridSteps: Int = 0,
     val labelSteps: Int = 0,
     val gridRadius: Int = 2,
-    val snapBlocks: Int = 2,
+    val snapBlocks: Int = 1,
     val gridColor: ClaimGuideGridColor = ClaimGuideGridColor.ICE,
     val showPosts: Boolean = false,
 ) {
