@@ -16,6 +16,7 @@ interface LandsUiGateway {
     fun select(player: Player, landId: String): Boolean
     fun selectAndExecute(player: Player, landId: String, command: String): LandsUiCommandResult
     fun unclaimCurrent(player: Player, landId: String): LandsUiCommandResult
+    fun currentLandId(player: Player): String?
     fun currentClaim(player: Player): LandsUiClaim?
 }
 
@@ -80,6 +81,12 @@ class BukkitLandsUiGateway internal constructor(
         } else {
             LandsUiCommandResult.COMMAND_REJECTED
         }
+    }
+
+    override fun currentLandId(player: Player): String? {
+        val location = player.location
+        return integration.getLandByUnloadedChunk(location.world, location.blockX shr 4, location.blockZ shr 4)
+            ?.ulid?.toString()
     }
 
     override fun currentClaim(player: Player): LandsUiClaim? {

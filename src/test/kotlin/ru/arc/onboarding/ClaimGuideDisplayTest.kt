@@ -32,7 +32,9 @@ class ClaimGuideDisplayTest : StringSpec({
     "lagging holograms snap while nearby movement keeps short interpolation" {
         val from = Location(world, 0.0, 70.0, 0.0)
         claimGuideTeleportDuration(from, from.clone().add(0.2, 0.0, 0.0)) shouldBe 2
-        claimGuideTeleportDuration(from, from.clone().add(2.0, 0.0, 0.0)) shouldBe 0
+        claimGuideTeleportDuration(from, from.clone().add(2.0, 0.0, 0.0)) shouldBe 2
+        claimGuideTeleportDuration(from, from.clone().add(8.0, 0.0, 0.0)) shouldBe 2
+        claimGuideTeleportDuration(from, from.clone().add(8.1, 0.0, 0.0)) shouldBe 0
         claimGuideTeleportDuration(from, from.clone().add(0.0, 100.0, 0.0)) shouldBe 0
     }
 })

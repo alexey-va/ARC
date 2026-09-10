@@ -43,7 +43,6 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         val borders = mutableMapOf<GuideBorder, BlockDisplay>()
         val posts = mutableMapOf<GuideChunk, BlockDisplay>()
         var label: TextDisplay? = null
-        var menuLand: String? = null
         var anchor: Location? = null
         var clickAfter = 0L
         var borderY = Double.NaN
@@ -197,7 +196,6 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
             it.setTransformationMatrix(Matrix4f().scaling(1.30f))
         }.also { session.label = it; player.showEntity(ARC.instance, it) }
         followClaimGuideDisplay(label, labelLocation)
-        session.menuLand = selected?.ulid?.toString()
         val message = claimGuideLandText(text.getValue(state), selected?.name?.take(24))
         label.text(if (LandsUiModule.isAvailable()) message.append(Component.newline()).append(text.getValue("menu")) else message)
     }
@@ -217,13 +215,9 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         val session = sessions[player.uniqueId] ?: return
         if (tick < session.clickAfter || !LandsUiModule.isAvailable()) return
         if (!isMenuTarget(player)) return
-        val shownLand = session.menuLand
-        val selected = integration.getLandPlayer(player.uniqueId)?.getEditLand(false)
-        if (shownLand != selected?.ulid?.toString()) { update(player); return }
         event.isCancelled = true
         session.clickAfter = tick + 10
-        if (shownLand != null) LandsUiModule.openDetails(player, shownLand)
-        else LandsUiModule.open(player)
+        LandsUiModule.openCurrent(player)
     }
 
     private fun drawBorder(player: Player, border: GuideBorder, material: Material): BlockDisplay {
@@ -295,7 +289,6 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         session.posts.clear()
         session.label?.remove()
         session.label = null
-        session.menuLand = null
     }
 
     fun hasHologram(player: Player): Boolean = sessions[player.uniqueId]?.label?.isValid == true

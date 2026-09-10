@@ -20,7 +20,7 @@ internal fun claimGuideBorderOrigin(eye: Location): Location =
     eye.clone().apply { y = claimGuideBorderY(eye.y); yaw = 0f; pitch = 0f }
 
 internal fun claimGuideTeleportDuration(from: Location, to: Location): Int =
-    if (from.world != to.world || from.distanceSquared(to) > 1.0) 0 else 2
+    if (from.world != to.world || from.distanceSquared(to) > 64.0) 0 else 2
 
 internal fun followClaimGuideDisplay(display: Display?, to: Location) {
     if (display == null || !display.isValid || display.world != to.world) return

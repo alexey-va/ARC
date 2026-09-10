@@ -52,7 +52,7 @@ class MenuShortcutController(
         if (ClaimBlockIdentity.matches(event.player.inventory.itemInMainHand) ||
             ClaimBlockIdentity.matches(event.player.inventory.itemInOffHand)) {
             event.isCancelled = true
-            LandsUiModule.open(event.player)
+            LandsUiModule.openCurrent(event.player)
             return
         }
         if (inDungeon(event.player)) {

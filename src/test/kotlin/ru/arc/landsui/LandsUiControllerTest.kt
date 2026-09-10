@@ -77,6 +77,20 @@ class LandsUiControllerTest : StringSpec({
                     checkNotNull(screen).exitButton!!.onClick.handle(context)
                     checkNotNull(screen).id shouldBe "lands.details"
 
+                    every { gateway.currentLandId(player) } returns land.id
+                    every { gateway.select(player, land.id) } returns true
+                    controller.openCurrent(player)
+                    checkNotNull(screen).id shouldBe "lands.details"
+                    checkNotNull(screen).exitButton!!.onClick.handle(context)
+                    checkNotNull(screen).id shouldBe "lands.home"
+                    every { gateway.currentLandId(player) } returns null
+                    controller.openCurrent(player)
+                    checkNotNull(screen).id shouldBe "lands.home"
+                    every { gateway.currentLandId(player) } returns "foreign-land"
+                    every { gateway.land(player, "foreign-land") } returns null
+                    controller.openCurrent(player)
+                    checkNotNull(screen).id shouldBe "lands.home"
+
                     // Reopen once more through the public entry point to catch stale-screen cycles.
                     controller.openDetails(player, land.id)
                     checkNotNull(screen).id shouldBe "lands.details"

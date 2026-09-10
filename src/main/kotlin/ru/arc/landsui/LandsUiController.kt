@@ -29,6 +29,12 @@ class LandsUiController(
 
     fun close() = tasks.close()
 
+    fun openCurrent(player: Player) {
+        val landId = gateway.currentLandId(player)
+        if (landId != null && gateway.land(player, landId) != null) selectAndOpenDetails(player, landId)
+        else openRoot(player)
+    }
+
     fun openRoot(player: Player) {
         val lands = gateway.lands(player)
         val selected = lands.firstOrNull { it.selected }

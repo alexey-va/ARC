@@ -47,6 +47,12 @@ object LandsUiModule : PluginModule {
         active.openRoot(player)
     }
 
+    fun openCurrent(player: Player) {
+        ArcMenus.beginDialogFlow(player)
+        val active = controller ?: return open(player)
+        active.openCurrent(player)
+    }
+
     fun openAddMember(player: Player, landId: String) {
         ArcMenus.beginDialogFlow(player)
         val active = controller ?: return open(player)
