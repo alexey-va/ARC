@@ -16,6 +16,7 @@ import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerTeleportEvent
 import ru.arc.config.Config
+import ru.arc.common.ServerLocation
 import ru.arc.core.Tasks
 import ru.arc.core.TestTaskScheduler
 import ru.arc.paper.audience.PaperAudienceEffects
@@ -25,6 +26,25 @@ class EMDungeonQolTest : FreeSpec({
     lateinit var paper: MockBukkitTestRuntime
     beforeEach { paper = MockBukkitTestRuntime.open() }
     afterEach { paper.close() }
+
+    "shops action sends the configured adventure guild destination through HuskHomes" {
+        withScheduler {
+        val settings = config()
+        every { settings.string("dungeon-qol.shops-location.server", "spawn") } returns "spawn"
+        every { settings.string("dungeon-qol.shops-location.world", "em_adventurers_guild") } returns "em_adventurers_guild"
+        every { settings.double("dungeon-qol.shops-location.x", 292.5) } returns 292.5
+        every { settings.double("dungeon-qol.shops-location.y", 78.0) } returns 78.0
+        every { settings.double("dungeon-qol.shops-location.z", 267.5) } returns 267.5
+        val player = paper.addPlayer("shops")
+        val destinations = mutableListOf<ServerLocation>()
+        val qol = EMDungeonQol(settings, resolve = { null }, travelToShops = { _, destination -> destinations += destination; true })
+
+        qol.action(player, "shops")
+
+        destinations shouldBe listOf(ServerLocation("spawn", "em_adventurers_guild", 292.5, 78.0, 267.5))
+        qol.close()
+        }
+    }
 
     "only completed exits from open dungeons release the native wormhole arrival lock" {
         withScheduler {

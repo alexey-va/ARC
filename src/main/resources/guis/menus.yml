@@ -75,6 +75,17 @@ menus:
         refresh: { slot: 49, template: scheduled-refresh }
       regions:
         entries: { slots: ['0-44'] }
+    lost-elite-loot:
+      schema-version: 1
+      rows: 6
+      elements:
+        back: { slot: 45, template: lost-loot-back }
+        previous: { slot: 48, template: menu-previous }
+        info: { slot: 49, template: lost-loot-info, kind: decoration }
+        next: { slot: 50, template: menu-next }
+      regions:
+        lost-items: { slots: ['0-44'] }
+      pagination: { region: lost-items, previous: previous, next: next }
     elite-loot:
       schema-version: 1
       rows: 6
@@ -385,6 +396,22 @@ menus:
         store-items: { slots: ['0-44'] }
 
   templates:
+    lost-loot-back:
+      material: ARROW
+      name: '<#92bed8>‹ В меню данжей'
+    lost-loot-info:
+      material: ENDER_CHEST
+      name: '<#c4a7e7>Потерянная добыча'
+      lore:
+        - '<#f2eee8>Лут EliteMobs с этого сервера,'
+        - '<#f2eee8>который вы не успели подобрать.'
+        - ''
+        - '<#9bd48d>ЛКМ — забрать предмет целиком'
+        - '<#f4d87a>Нужен один свободный слот'
+        - ''
+        - '<#92bed8>Сохраняется до получения.'
+        - '<#f2eee8>Выброшенные вещи и кейсы'
+        - '<#f2eee8>сюда не возвращаются.'
     personal-loot-cobblestone:
       material: COBBLESTONE
       name: '<italic:false><gray>Булыжник'

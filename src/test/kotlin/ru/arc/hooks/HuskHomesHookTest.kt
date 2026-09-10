@@ -14,6 +14,7 @@ import net.william278.huskhomes.teleport.TimedTeleport
 import net.william278.huskhomes.user.BukkitUser
 import org.bukkit.entity.Player
 import ru.arc.KotestTestBase
+import ru.arc.common.ServerLocation
 import java.util.UUID
 
 class HuskHomesHookTest :
@@ -101,6 +102,17 @@ class HuskHomesHookRegistrationTest :
                 event.isCancelled shouldBe true
                 opened.single().second.teleport shouldBe fixture.teleport
             }
+        }
+    })
+
+class HuskHomesHookDestinationTest :
+    FreeSpec({
+        "rejects an invalid configured destination before touching HuskHomes" {
+            val hook = HuskHomesHook { _, _ -> }
+            val player = mockk<Player>()
+
+            hook.teleport(player, ServerLocation(server = "", world = "em_adventurers_guild", x = 292.5, y = 78.0, z = 267.5)) shouldBe false
+            hook.teleport(player, ServerLocation(server = "spawn", world = "em_adventurers_guild", x = Double.NaN, y = 78.0, z = 267.5)) shouldBe false
         }
     })
 

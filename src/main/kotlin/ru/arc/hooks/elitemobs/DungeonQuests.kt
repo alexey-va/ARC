@@ -29,3 +29,15 @@ internal fun dungeonQuestInfo(quests: List<Quest>, owner: UUID, tracked: UUID?):
             } else objectives.objectives.orEmpty().filterNotNull().map { QuestsConfig.getQuestScoreboardProgressionLine(it) }
             DungeonQuestInfo(quest.questName.orEmpty(), quest.questID == tracked, complete, lines)
         }
+
+/** Quest prose stays readable on dialogue backgrounds; meaningful color accents are retained. */
+internal fun readableQuestText(value: net.kyori.adventure.text.Component): net.kyori.adventure.text.Component {
+    val light = net.kyori.adventure.text.format.TextColor.color(0xF2EEE8)
+    fun brighten(node: net.kyori.adventure.text.Component): net.kyori.adventure.text.Component {
+        val color = node.color()
+        val channels = color?.let { listOf(it.red(), it.green(), it.blue()) }
+        val gray = channels != null && channels.max() - channels.min() <= 24 && channels.max() < 220
+        return (if (gray) node.color(light) else node).children(node.children().map(::brighten))
+    }
+    return brighten(value).colorIfAbsent(light)
+}

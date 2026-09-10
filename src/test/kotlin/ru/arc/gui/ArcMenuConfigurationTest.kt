@@ -31,6 +31,11 @@ class ArcMenuConfigurationTest : StringSpec({
         configuration.catalog.require(ArcMenuSchema.INVESTIGATION_HUB).slot("start").index shouldBe 13
         configuration.catalog.require(ArcMenuSchema.INVESTIGATION_CASE).region("witnesses")
             .map { it.index } shouldContainExactly listOf(18, 20, 22, 24, 26)
+        configuration.catalog.require(ArcMenuSchema.LOST_LOOT).apply {
+            rows shouldBe 6
+            region(ArcMenuSchema.LOST_LOOT_ITEMS).size shouldBe 45
+            slot("info").index shouldBe 49
+        }
         ArcMenuSchema.PERSONAL_LOOT.forEach { (rows, menu) ->
             configuration.catalog.require(menu).apply {
                 this.rows shouldBe rows

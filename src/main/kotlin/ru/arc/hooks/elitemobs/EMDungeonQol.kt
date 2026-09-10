@@ -28,9 +28,11 @@ import org.bukkit.event.player.PlayerTeleportEvent
 import ru.arc.Portal
 import ru.arc.PortalData
 import ru.arc.ARC
+import ru.arc.common.ServerLocation
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import ru.arc.helpcenter.HelpCenterModule
+import ru.arc.hooks.HookRegistry
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.paper.audience.NativePaperAudienceEffects
 import ru.arc.paper.audience.PaperAudienceEffects
@@ -55,6 +57,9 @@ internal class EMDungeonQol(
     },
     private val returnMove: (Player, Location) -> Unit = { player, destination ->
         com.magmaguy.elitemobs.api.PlayerTeleportEvent.teleportPlayer(player, destination)
+    },
+    private val travelToShops: (Player, ServerLocation) -> Boolean = { player, destination ->
+        HookRegistry.huskHomesHook?.teleport(player, destination) == true
     },
     private val leaveWormholeWorld: (Player, World) -> Unit = NativeWormholeCooldowns()::leftWorld,
 ) : Listener, AutoCloseable {
@@ -290,7 +295,7 @@ internal class EMDungeonQol(
                 else audience.sendMessage(player, text("party.unavailable", "<#aaa49a>Группы EliteMobs на этом сервере пока недоступны."))
             "shops", "магазины" -> {
                 if (resolve(player.world)?.instanced == true) audience.sendMessage(player, text("messages.leave-first", "<#d7b486>Сначала выйдите из текущего данжа: Shift + F → «Выйти из данжа»."))
-                else player.performCommand(config.string("dungeon-qol.shops-command", "pw aguild"))
+                else if (!travelToShops(player, shopsLocation())) audience.sendMessage(player, text("messages.shops-unavailable", "<#aaa49a>Магазины сейчас недоступны. Попробуйте позже."))
             }
             "tp", "тп", "порталы", "list", "список" -> {
                 if (current(player)?.instanced == true) audience.sendMessage(player, text("messages.leave-first", "<#d7b486>Сначала выйдите из текущего данжа: Shift + F → «Выйти из данжа»."))
@@ -319,6 +324,14 @@ internal class EMDungeonQol(
             else -> audience.sendMessage(player, text("messages.help", "<gold>Shift + F</gold> <gray>— меню данжа: старт, сохранения и выход.</gray>"))
         }
     }
+
+    private fun shopsLocation(): ServerLocation = ServerLocation(
+        server = config.string("dungeon-qol.shops-location.server", "spawn"),
+        world = config.string("dungeon-qol.shops-location.world", "em_adventurers_guild"),
+        x = config.double("dungeon-qol.shops-location.x", 292.5),
+        y = config.double("dungeon-qol.shops-location.y", 78.0),
+        z = config.double("dungeon-qol.shops-location.z", 267.5),
+    )
 
     internal fun quit(player: Player) {
         pending.remove(player.uniqueId)

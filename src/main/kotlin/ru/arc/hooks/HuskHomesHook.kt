@@ -7,6 +7,7 @@ import net.william278.huskhomes.event.TeleportBackEvent
 import net.william278.huskhomes.event.TeleportEvent
 import net.william278.huskhomes.event.TeleportWarmupEvent
 import net.william278.huskhomes.position.Position
+import net.william278.huskhomes.position.World as HuskWorld
 import net.william278.huskhomes.teleport.Teleport
 import net.william278.huskhomes.teleport.TimedTeleport
 import net.william278.huskhomes.user.BukkitUser
@@ -22,6 +23,7 @@ import org.bukkit.event.Listener
 import ru.arc.Portal
 import ru.arc.PortalData
 import ru.arc.PortalData.ActionType.HUSK
+import ru.arc.common.ServerLocation
 import ru.arc.core.Tasks
 import ru.arc.core.delayed
 import ru.arc.onboarding.OnboardingService
@@ -129,6 +131,33 @@ class HuskHomesHook internal constructor(
         val onlineUser = HuskHomesAPI.getInstance().adaptUser(player)
         HuskHomesAPI.getInstance().teleportBuilder(onlineUser)
             .target(teleport.teleport.target).toTeleport().execute()
+    }
+
+    /** Starts HuskHomes' normal teleport flow, including its cross-server portal handoff. */
+    fun teleport(player: Player, destination: ServerLocation): Boolean {
+        val serverName = destination.server?.takeIf { it.isNotBlank() } ?: return false
+        val worldName = destination.world?.takeIf { it.isNotBlank() } ?: return false
+        if (listOf(destination.x, destination.y, destination.z, destination.yaw.toDouble(), destination.pitch.toDouble()).any { !it.isFinite() }) return false
+        return runCatching {
+            val api = HuskHomesAPI.getInstance()
+            val user = api.adaptUser(player)
+            val target = Bukkit.getWorld(worldName)?.let { world ->
+                val location = Location(world, destination.x, destination.y, destination.z, destination.yaw, destination.pitch)
+                api.adaptPosition(location, serverName)
+            } ?: Position.at(
+                destination.x,
+                destination.y,
+                destination.z,
+                destination.yaw,
+                destination.pitch,
+                HuskWorld.from(worldName),
+                serverName,
+            )
+            api.teleportBuilder(user).target(target).toTimedTeleport().execute()
+            true
+        }.onFailure { failure ->
+            error("Could not start HuskHomes teleport for {} to {}", player.name, destination, failure)
+        }.getOrDefault(false)
     }
 
     fun hasHome(player: Player): CompletableFuture<Boolean> {

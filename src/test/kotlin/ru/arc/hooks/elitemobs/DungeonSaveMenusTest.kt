@@ -18,6 +18,33 @@ class DungeonSaveMenusTest : FreeSpec({
     beforeEach { paper = MockBukkitTestRuntime.open() }
     afterEach { paper.close() }
 
+    "supply button buys directly and only successful purchases play a sound" {
+        for (outcome in listOf(SupplyResult.BOUGHT, SupplyResult.NO_MONEY)) {
+            val player = mockk<org.bukkit.entity.Player>(relaxed = true)
+            every { player.uniqueId } returns UUID.randomUUID()
+            val dungeon = mockk<EMDungeonQol>(relaxed = true)
+            val view = DungeonPanelView(UUID.randomUUID(), DungeonVisit("run"), null)
+            every { dungeon.panelView(player) } returns view
+            every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(firstArg<String>()) }
+            val offer = SupplyOffer("food", org.bukkit.Material.BREAD, 1, 1.0)
+            val quote = SupplyQuote(offer, org.bukkit.inventory.ItemStack(org.bukkit.Material.BREAD), player.uniqueId)
+            val supplies = mockk<DungeonSupplyShop>()
+            every { dungeon.supplies } returns supplies
+            every { supplies.list() } returns listOf(offer)
+            every { supplies.quote(player, offer) } returns quote
+            every { supplies.buy(player, quote, view) } returns outcome
+            val shown = mutableListOf<PaperDialogScreen>()
+            val menus = DungeonSaveMenus(dungeon) { _, screen, _ -> shown += screen }
+            menus.shop(player)
+            shown.last().buttons.single().onClick.handle(mockk())
+            verify(exactly = 1) { supplies.buy(player, quote, view) }
+            shown.map { it.id }.distinct().size shouldBe 1
+            verify(exactly = if (outcome.success) 1 else 0) {
+                player.playSound(any<org.bukkit.Location>(), org.bukkit.Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 0.65f, 1.2f)
+            }
+        }
+    }
+
     "quest pages reread progression on refresh and handle quests disappearing" {
         val player = paper.addPlayer("quest-viewer")
         val dungeon = mockk<EMDungeonQol>(relaxed = true)
@@ -30,7 +57,7 @@ class DungeonSaveMenusTest : FreeSpec({
         val menus = DungeonSaveMenus(dungeon, readQuests = { entries }) { _, screen, _ -> shown += screen }
         menus.quests(player)
         shown.last().buttons.first { it.id.value == "next" }.onClick.handle(mockk())
-        shown.last().body.any { it.text == Component.text("Вернитесь к кузнецу").decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false) } shouldBe true
+        shown.last().body.any { net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(it.text) == "Вернитесь к кузнецу" } shouldBe true
         entries = emptyList()
         shown.last().buttons.first { it.id.value == "refresh" }.onClick.handle(mockk())
         shown.last().buttons.map { it.id.value } shouldBe listOf("refresh")
@@ -49,7 +76,7 @@ class DungeonSaveMenusTest : FreeSpec({
         val shown = mutableListOf<PaperDialogScreen>()
         DungeonSaveMenus(dungeon) { _, screen, _ -> shown += screen }.open(player)
         shown.single().id shouldBe "dungeon.panel.unavailable"
-        shown.single().buttons.map { it.id.value } shouldBe listOf("return", "shops", "guide", "portals", "list", "party")
+        shown.single().buttons.map { it.id.value } shouldBe listOf("return", "shops", "lost_loot", "guide", "portals", "list", "party")
         shown.single().exitButton!!.id.value shouldBe "back"
         shown.single().exitButton!!.closeDialogBeforeAction shouldBe false
         shown.single().body.map { it.text } shouldBe listOf(

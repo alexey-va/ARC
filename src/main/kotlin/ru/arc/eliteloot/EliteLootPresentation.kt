@@ -30,7 +30,6 @@ internal fun compactEliteLore(lines: List<Component>): List<Component> {
         result += line.decoration(TextDecoration.ITALIC, false)
     }
     while (result.isNotEmpty() && plain.serialize(result.last()).isBlank()) result.removeLast()
-    if (result.isNotEmpty()) result.add(0, Component.empty())
     return result
 }
 
@@ -46,6 +45,7 @@ internal fun presentEliteItem(item: ItemStack, viewer: Player): ItemStack {
         meta.lore(compactEliteLore(rendered.itemMeta.lore().orEmpty()))
         meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_ENCHANTS)
     }
+    meta.lore(compactEliteLore(meta.lore().orEmpty()))
     item.itemMeta = meta
     return item
 }

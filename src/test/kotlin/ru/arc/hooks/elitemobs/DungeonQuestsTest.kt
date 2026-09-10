@@ -10,6 +10,17 @@ import io.mockk.*
 import java.util.UUID
 
 class DungeonQuestsTest : FreeSpec({
+    "dialogue brightens gray quest prose without changing green progress or content" {
+        val gray = net.kyori.adventure.text.format.NamedTextColor.DARK_GRAY
+        val green = net.kyori.adventure.text.format.NamedTextColor.GREEN
+        val source = net.kyori.adventure.text.Component.text("Скелеты ", gray)
+            .append(net.kyori.adventure.text.Component.text("3 / 10", green))
+        val result = readableQuestText(source)
+        result.color()!!.value() shouldBe 0xF2EEE8
+        result.children().single().color() shouldBe green
+        net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(result) shouldBe "Скелеты 3 / 10"
+    }
+
     "only own unredeemed quests appear, tracked first with live native progression" {
         mockkStatic(QuestsConfig::class)
         try {

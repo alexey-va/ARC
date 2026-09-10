@@ -72,6 +72,7 @@ internal class DungeonSaveMenus(
                 }.let { if (view.saves?.entry != null) it else it.copy(label = text("panel.entry-disabled", "<#aaa49a>[Недоступно] К началу данжа")) },
                 action("shop", "panel.shop-label", "<#f4d87a>Припасы ›", "panel.shop-tooltip", "Припасы и кейсы EliteMobs за кристаллы") { shop(player) },
                 shops(player),
+                lostLoot(player),
                 partyButton(player),
                 action("quests", "quests.label", "<#c4a7e7>Задания ›", "quests.tooltip", "Принятые задания EliteMobs и их текущий прогресс") { quests(player) },
                 action("guide", "panel.guide-label", "<#86dcf1>Гайд ›", "panel.guide-tooltip", "Читальная справка о данжах") {
@@ -89,16 +90,16 @@ internal class DungeonSaveMenus(
         val entries = readQuests(player)
         val page = requestedPage.coerceIn(0, (entries.orEmpty().size - 1).coerceAtLeast(0))
         val quest = entries?.getOrNull(page)
-        val body = mutableListOf(PaperDialogBody(text("quests.intro", "<#aaa49a>Ваши принятые задания EliteMobs. Отслеживаемое показано первым; задания могут относиться к другим локациям."), 468))
+        val body = mutableListOf(PaperDialogBody(text("quests.intro", "<#f2eee8>Ваши принятые задания EliteMobs. Отслеживаемое показано первым; задания могут относиться к другим локациям."), 468))
         if (quest == null) {
             body += PaperDialogBody(if (entries == null) text("quests.unavailable", "<#d7b486>Данные заданий ещё загружаются. Попробуйте обновить страницу.")
-                else text("quests.empty", "<#e8dfd2>Принятых заданий пока нет. Поговорите с персонажами, которые предлагают задания."), 468)
+                else text("quests.empty", "<#f2eee8>Принятых заданий пока нет. Поговорите с персонажами, которые предлагают задания."), 468)
         } else {
-            body += PaperDialogBody(plain(TextUtil.legacy(quest.name)), 468)
-            body += PaperDialogBody(if (quest.tracked) text("quests.tracked", "<#9bd48d>Отслеживается") else text("quests.accepted", "<#aaa49a>Принято"), 468)
+            body += PaperDialogBody(plain(readableQuestText(TextUtil.legacy(quest.name))), 468)
+            body += PaperDialogBody(if (quest.tracked) text("quests.tracked", "<#9bd48d>Отслеживается") else text("quests.accepted", "<#f2eee8>Принято"), 468)
             if (quest.complete) body += PaperDialogBody(text("quests.complete", "<#9bd48d>Цели выполнены — задание готово к сдаче."), 468)
-            quest.lines.forEach { body += PaperDialogBody(plain(TextUtil.legacy(it)), 468) }
-            body += PaperDialogBody(text("quests.page", "<#aaa49a>Задание <current> из <total>", "current" to Component.text(page + 1), "total" to Component.text(entries.size)), 468)
+            quest.lines.forEach { body += PaperDialogBody(plain(readableQuestText(TextUtil.legacy(it))), 468) }
+            body += PaperDialogBody(text("quests.page", "<#f2eee8>Задание <current> из <total>", "current" to Component.text(page + 1), "total" to Component.text(entries.size)), 468)
         }
         show(player, PaperDialogScreen(
             id = "dungeon.quests", title = text("quests.title", "<#c4a7e7>Мои задания"), body = body,
@@ -154,6 +155,7 @@ internal class DungeonSaveMenus(
             }.let { if (destination != null) it else it.copy(label = text("panel.return-disabled", "<#aaa49a>[Недоступно] Вернуться в данж"),
                 tooltip = text("panel.return-unavailable", "<#aaa49a>Нет доступного места выхода из обычного данжа. Сначала посетите данж и выйдите из него.")) },
             shops(player),
+            lostLoot(player),
             guide(player) { unavailable(player) },
             action("portals", "panel.portals-label", "<#92bed8>К порталам ›", "panel.portals-tooltip", "Перейти к порталам данжей в гильдии", close = true) { dungeon.action(player, "tp") },
             action("list", "panel.list-label", "<#ffb277>Выбрать данж ›", "panel.list-tooltip", "Открыть список данжей EliteMobs", close = true) { dungeon.action(player, "list") },
@@ -165,6 +167,12 @@ internal class DungeonSaveMenus(
     private fun crystalBalance(player: Player) = PaperDialogBody(crystals(player)?.let {
         text("panel.crystals", "<#aaa49a>Ваши кристаллы: <#c7a0e8>💎 <value>", "value" to Component.text(it))
     } ?: text("panel.crystals-unavailable", "<#aaa49a>Кристаллы: баланс сейчас недоступен"), 468)
+
+    private fun lostLoot(player: Player) = action("lost_loot", "lost-loot.label", "<#c4a7e7>Потерянная добыча ›", "lost-loot.tooltip", "Забрать не подобранный вовремя привязанный лут EliteMobs с этого сервера", close = true) {
+        val loot = ru.arc.ARC.hookRegistry?.lostEliteLoot
+        if (loot != null) loot.open(player)
+        else player.sendMessage(text("lost-loot.unavailable", "<#f4d87a>Хранилище добычи сейчас недоступно. Попробуйте позже."))
+    }
 
     private fun shops(player: Player) = action("shops", "panel.shops-label", "<#92bed8>К магазинам ›", "panel.shops-tooltip", "Перейти к торговцам данжей", close = true) { dungeon.action(player, "shops") }
 
@@ -258,10 +266,10 @@ internal class DungeonSaveMenus(
         )) { about(player) }
     }
 
-    private fun shop(player: Player, feedback: Component? = null) {
+    internal fun shop(player: Player, feedback: Component? = null) {
         val view = dungeon.panelView(player) ?: run { unavailable(player); return }
         val body = mutableListOf(
-            PaperDialogBody(text("shop.body", "<#e8dfd2>Припасы и кейсы за кристаллы EliteMobs. Кейс сразу открывается после подтверждения: одна награда, привязанная к вам."), 468),
+            PaperDialogBody(text("shop.body", "<#e8dfd2>Нажмите на товар, чтобы сразу купить его за кристаллы EliteMobs. Кейс откроется и выдаст одну награду, привязанную к вам."), 468),
             PaperDialogBody(balance(player), 468),
         )
         feedback?.let { body += PaperDialogBody(it, 468) }
@@ -272,28 +280,14 @@ internal class DungeonSaveMenus(
                     "name" to supplyName(offer), "amount" to Component.text(offer.amount), "price" to price(offer.price)),
                     if (quote == null) text("shop.item-unavailable", "<#aaa49a>Этот предмет сейчас недоступен. Кристаллы не списываются.") else supplyDescription(offer)) {
                     if (quote == null) shop(player, text("shop.item-unavailable", "<#aaa49a>Этот предмет сейчас недоступен. Кристаллы не списываются."))
-                    else confirmPurchase(player, quote, view)
+                    else {
+                        val result = dungeon.supplies.buy(player, quote, view)
+                        if (result.success) player.playSound(player.location, org.bukkit.Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 0.65f, 1.2f)
+                        shop(player, supplyResult(result))
+                    }
                 }
             }.ifEmpty { listOf(guide(player) { shop(player) }) }, exitButton = back { panel(player) }, columns = 2,
         )) { shop(player) }
-    }
-
-    private fun confirmPurchase(player: Player, quote: SupplyQuote, expected: DungeonPanelView, feedback: Component? = null) {
-        val offer = quote.offer
-        val body = mutableListOf(
-            PaperDialogBody(text("shop.confirm-body", "<#e8dfd2><name> ×<amount><newline><#aaa49a>Стоимость: <#c7a0e8>💎 <price>", "name" to supplyName(offer),
-                "amount" to Component.text(offer.amount), "price" to price(offer.price)), 468),
-            PaperDialogBody(supplyDescription(offer), 468), PaperDialogBody(balance(player), 468),
-        )
-        feedback?.let { body += PaperDialogBody(it, 468) }
-        show(player, PaperDialogScreen(id = "dungeon.shop.confirm", title = text("shop.confirm-title", "<#f4d87a>Подтвердить покупку?"), body = body,
-            buttons = listOf(action("buy", "shop.buy-label", "<#9bd48d>Купить", "shop.buy-tooltip", "Оплатить товар. Кейс откроется сразу и выдаст одну случайную награду", close = quote.offer.isCase) {
-                val result = dungeon.supplies.buy(player, quote, expected)
-                val message = supplyResult(result)
-                if (result.success && quote.offer.isCase) player.sendMessage(message)
-                else if (result.success) shop(player, message) else confirmPurchase(player, quote, expected, message)
-            }), exitButton = back { shop(player) },
-        )) { confirmPurchase(player, quote, expected) }
     }
 
     private fun supplyResult(result: SupplyResult): Component = when (result) {

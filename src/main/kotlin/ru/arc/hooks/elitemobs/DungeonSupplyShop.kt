@@ -45,7 +45,6 @@ internal class DungeonSupplyShop(
     private val economy: DungeonSupplyEconomy = NativeDungeonSupplyEconomy,
     private val createItem: (Player, SupplyOffer) -> ItemStack? = ::nativeSupplyItem,
     private val createReward: (Player, SupplyOffer) -> ItemStack? = DungeonCaseRewards::create,
-    private val celebrate: (Player, ItemStack) -> Unit = ru.arc.eliteloot.EliteLootEffects::received,
 ) {
     fun list(): List<SupplyOffer> = offers().filter(::valid).distinctBy { it.id }
 
@@ -82,9 +81,6 @@ internal class DungeonSupplyShop(
         }) {
             player.inventory.storageContents = snapshot
             return SupplyResult.PAYMENT_FAILED
-        }
-        if (quote.offer.isCase) runCatching { celebrate(player, reward.clone()) }.onFailure {
-            Logging.warn("Dungeon case visual failed for {}; purchase completed", player.uniqueId, it)
         }
         return SupplyResult.BOUGHT
     }

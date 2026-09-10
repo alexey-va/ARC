@@ -5,20 +5,21 @@ import dev.lone.itemsadder.api.CustomStack
 import org.bukkit.Bukkit
 import org.bukkit.Color
 import org.bukkit.Location
-import org.bukkit.Sound
 import org.bukkit.entity.Display
 import org.bukkit.entity.Item
 import org.bukkit.entity.ItemDisplay
-import org.bukkit.entity.Player
-import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.meta.PotionMeta
 import org.bukkit.scheduler.BukkitTask
 import ru.arc.ARC
 import ru.arc.config.ConfigManager
 import ru.arc.util.Logging
 
-internal fun eliteEffectFinished(displayValid: Boolean, groundItemValid: Boolean?, age: Int): Boolean =
-    !displayValid || if (groundItemValid != null) !groundItemValid else age >= 40
+internal fun eliteEffectFinished(displayValid: Boolean, groundItemValid: Boolean): Boolean =
+    !displayValid || !groundItemValid
+
+// The model floor is one block below its origin; compensate after the 1.25x scale.
+internal fun eliteEffectPosition(origin: Location): Location =
+    origin.clone().add(0.0, 1.35, 0.0).apply { yaw = 0f; pitch = 0f }
 
 internal fun eliteLootColor(level: Int): Color = Color.fromRGB(when (eliteTooltipTier(level)) {
     "artifact" -> 0xFF7066
@@ -29,7 +30,7 @@ internal fun eliteLootColor(level: Int): Color = Color.fromRGB(when (eliteToolti
     else -> 0xE5F2FF
 })
 
-/** Ground visuals follow their item; case celebrations expire without creating a dropped reward. */
+/** Ground-only visuals follow their item until pickup, removal or unload. */
 internal object EliteLootEffects {
     private val active = mutableMapOf<ItemDisplay, BukkitTask>()
     private val missing = mutableSetOf<String>()
@@ -38,64 +39,43 @@ internal object EliteLootEffects {
         if (!Bukkit.getPluginManager().isPluginEnabled("ItemsAdder")) return
         if (!EliteItemManager.isEliteMobsItem(item.itemStack)) return
         Bukkit.getScheduler().runTask(ARC.instance, Runnable {
-            // Player throws are assigned after ItemSpawnEvent; wait before checking them.
-            if (item.isValid && item.thrower == null) safely {
-                show(item.itemStack, item.location, null, false, item)
-            }
+            if (item.isValid) safely { show(item) }
         })
     }
 
-    fun received(player: Player, item: ItemStack) {
-        if (!Bukkit.getPluginManager().isPluginEnabled("ItemsAdder")) return
-        val copy = item.clone()
-        Bukkit.getScheduler().runTask(ARC.instance, Runnable {
-            if (!player.isOnline) return@Runnable
-            safely {
-                val origin = player.location
-                val forward = origin.direction.setY(0)
-                if (forward.lengthSquared() > 0.01) origin.add(forward.normalize().multiply(1.2))
-                if (!origin.block.isPassable) origin.set(player.location.x, player.location.y, player.location.z)
-                if (show(copy, origin, player, true)) {
-                    player.playSound(player.location, Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.6f, 1.2f)
-                }
-            }
-        })
-    }
-
-    private fun show(reward: ItemStack, origin: Location, viewer: Player?, fromCase: Boolean, groundItem: Item? = null): Boolean {
+    private fun show(groundItem: Item): Boolean {
+        val reward = groundItem.itemStack
         if (EliteLootManager.eliteLootProcessor == null || !EliteItemManager.isEliteMobsItem(reward)) return false
         val config = ConfigManager.ofModule(ARC.instance.dataFolder.toPath(), "elite-loot.yml")
         val id = config.string("drop-effect.model", "")
         if (id.isBlank() || !config.bool("drop-effect.enabled", true) || active.size >= 64) return false
         val level = EliteItemManager.getRoundedItemLevel(reward)
-        if (!fromCase && level < config.integer("drop-effect.minimum-drop-level", 0)) return false
+        if (level < config.integer("drop-effect.minimum-drop-level", 0)) return false
         val visual = CustomStack.getInstance(id)?.itemStack?.clone()
         if (visual == null || visual.itemMeta !is PotionMeta) {
             if (missing.add(id)) Logging.warn("EliteLoot effect model {} is missing or not a potion; effect skipped", id)
             return false
         }
         visual.editMeta(PotionMeta::class.java) { it.color = eliteLootColor(level) }
-        val location = origin.clone().add(0.0, 0.5, 0.0).apply { yaw = 0f; pitch = 0f }
+        val location = eliteEffectPosition(groundItem.location)
         val display = location.world.spawn(location, ItemDisplay::class.java) {
             it.isPersistent = false
-            it.isVisibleByDefault = viewer == null
+            it.isVisibleByDefault = true
             it.setGravity(false)
             it.setItemStack(visual)
             it.itemDisplayTransform = ItemDisplay.ItemDisplayTransform.FIXED
             it.brightness = Display.Brightness(15, 15)
             it.viewRange = 0.5f
+            it.transformation = org.bukkit.util.Transformation(
+                org.joml.Vector3f(), org.joml.Quaternionf(), org.joml.Vector3f(1.25f), org.joml.Quaternionf())
         }
         try {
-            viewer?.showEntity(ARC.instance, display)
-            var age = 0
             active[display] = Bukkit.getScheduler().runTaskTimer(ARC.instance, Runnable {
-                age += 2
-                if (eliteEffectFinished(display.isValid, groundItem?.isValid, age)) {
+                if (eliteEffectFinished(display.isValid, groundItem.isValid)) {
                     active.remove(display)?.cancel()
                     display.remove()
-                } else if (groundItem != null) {
-                    val position = groundItem.location.add(0.0, 0.5, 0.0).apply { yaw = 0f; pitch = 0f }
-                    display.teleport(position)
+                } else {
+                    display.teleport(eliteEffectPosition(groundItem.location))
                 }
             }, 2L, 2L)
         } catch (failure: Exception) {

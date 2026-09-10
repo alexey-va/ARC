@@ -21,6 +21,7 @@ object ArcMenuSchema {
     val CONTRACTS_DETAIL = MenuId.of("contracts-detail")
     val SCHEDULED_LIST = MenuId.of("scheduled-list")
     val ELITE_LOOT = MenuId.of("elite-loot")
+    val LOST_LOOT = MenuId.of("lost-elite-loot")
     val PERSONAL_LOOT = (1..6).associateWith { MenuId.of("personal-loot-$it") }
     val PARKOUR_ROOT = MenuId.of("parkour-root")
     val PARKOUR_CATEGORY = MenuId.of("parkour-category")
@@ -50,6 +51,7 @@ object ArcMenuSchema {
     val CONTRACT_ORDERS = MenuRegionId.of("orders")
     val SCHEDULED_ENTRIES = MenuRegionId.of("entries")
     val ELITE_LOOT_ITEMS = MenuRegionId.of("items")
+    val LOST_LOOT_ITEMS = MenuRegionId.of("lost-items")
     val PERSONAL_LOOT_ITEMS = MenuRegionId.of("loot")
     val PARKOUR_CATEGORIES = MenuRegionId.of("categories")
     val PARKOUR_COURSES = MenuRegionId.of("courses")
@@ -99,6 +101,10 @@ object ArcMenuSchema {
         SCHEDULED_LIST to MenuContract(
             requiredElements = elements("refresh"),
             requiredRegions = setOf(SCHEDULED_ENTRIES),
+        ),
+        LOST_LOOT to MenuContract(
+            requiredElements = elements("back", "info", "previous", "next"),
+            requiredRegions = setOf(LOST_LOOT_ITEMS),
         ),
         ELITE_LOOT to MenuContract(
             requiredElements = elements("previous", "next", "back"),
