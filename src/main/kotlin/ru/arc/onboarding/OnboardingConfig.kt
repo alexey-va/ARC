@@ -15,6 +15,7 @@ internal class OnboardingConfig private constructor(
     val betweenMessagesTicks: Long,
 ) {
     val claimGuideEnabled: Boolean get() = source.bool("claim-guide.enabled", true)
+    val claimGuideLandWallsEnabled: Boolean get() = source.bool("claim-guide.land-walls-enabled", true)
 
     fun claimText(key: String): Component = source.component("claim-guide.text.$key", CLAIM_TEXT.getValue(key))
 

@@ -37,13 +37,6 @@ class ClaimGuideDisplayTest : StringSpec({
         claimGuideTeleportDuration(from, from.clone().add(8.1, 0.0, 0.0)) shouldBe 0
         claimGuideTeleportDuration(from, from.clone().add(0.0, 100.0, 0.0)) shouldBe 0
     }
-    "grid anchor follows only after meaningful horizontal travel" {
-        val anchor = Location(world, 0.0, 70.0, 0.0)
-        claimGuideNeedsReanchor(null, anchor) shouldBe true
-        claimGuideNeedsReanchor(anchor, anchor.clone().add(24.0, 50.0, 24.0)) shouldBe false
-        claimGuideNeedsReanchor(anchor, anchor.clone().add(24.1, 0.0, 0.0)) shouldBe true
-        claimGuideNeedsReanchor(anchor, anchor.clone().apply { this.world = mockk<World>() }) shouldBe true
-    }
     "view controls expose stable snapping radius colors and wide bounded offsets" {
         ClaimGuideView().gridOffset shouldBe 0.0
         ClaimGuideView().snapBlocks shouldBe 2
@@ -55,5 +48,6 @@ class ClaimGuideDisplayTest : StringSpec({
         ClaimGuideView().adjust(0, 0, cycleSnap = true).snapBlocks shouldBe 3
         ClaimGuideView(snapBlocks = 3).adjust(0, 0, cycleSnap = true).snapBlocks shouldBe 0
         ClaimGuideView().adjust(0, 0, cycleColor = true).gridColor shouldBe ClaimGuideGridColor.WHITE
+        ClaimGuideView().adjust(0, 0, togglePosts = true).showPosts shouldBe false
     }
 })

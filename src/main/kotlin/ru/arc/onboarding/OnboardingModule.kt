@@ -26,9 +26,10 @@ object OnboardingModule : PluginModule {
         radiusSteps: Int = 0,
         cycleSnap: Boolean = false,
         cycleColor: Boolean = false,
+        togglePosts: Boolean = false,
         reset: Boolean = false,
     ) {
-        claimGuide?.adjustView(player, gridSteps, labelSteps, radiusSteps, cycleSnap, cycleColor, reset)
+        claimGuide?.adjustView(player, gridSteps, labelSteps, radiusSteps, cycleSnap, cycleColor, togglePosts, reset)
     }
 
     override fun init() {

@@ -21,6 +21,8 @@ class OnboardingConfigTest : FreeSpec({
               first-delay-ticks: 0
               resume-delay-ticks: 5000
               between-messages-ticks: 1
+            claim-guide:
+              land-walls-enabled: false
             steps:
               first-rtp:
                 enabled: false
@@ -36,6 +38,7 @@ class OnboardingConfigTest : FreeSpec({
         config.resumeDelayTicks shouldBe 1_200L
         config.betweenMessagesTicks shouldBe 20L
         config.hintEnabled(OnboardingHint.FIRST_RTP) shouldBe false
+        config.claimGuideLandWallsEnabled shouldBe false
     }
 
     "fails closed when an enabled config has no target worlds" {
@@ -79,6 +82,7 @@ class OnboardingConfigTest : FreeSpec({
         }
         plainText.serialize(config.claimText("subtitle")) shouldBe "Снять защиту здесь: /unclaim"
         config.claimGuideEnabled shouldBe true
+        config.claimGuideLandWallsEnabled shouldBe true
         config.validate()
     }
 })

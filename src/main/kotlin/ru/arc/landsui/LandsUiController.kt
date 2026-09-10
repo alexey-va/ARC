@@ -189,6 +189,7 @@ class LandsUiController(
                 "snap" to snapText(view),
                 "radius" to gridRadiusText(view.gridRadius),
                 "color" to colorText(view.gridColor),
+                "posts" to settings.text(if (view.showPosts) "claim-display-enabled" else "claim-display-disabled"),
             ))),
             buttons = listOf(
                 button("grid_down", text("claim-display-grid-down")) {
@@ -221,6 +222,11 @@ class LandsUiController(
                 },
                 button("color", text("claim-display-color", "color" to colorText(view.gridColor))) {
                     OnboardingModule.adjustClaimGuideView(player, cycleColor = true)
+                    openClaimDisplay(player, returnLandId)
+                },
+                button("posts", text("claim-display-posts",
+                    "state" to settings.text(if (view.showPosts) "claim-display-enabled" else "claim-display-disabled"))) {
+                    OnboardingModule.adjustClaimGuideView(player, togglePosts = true)
                     openClaimDisplay(player, returnLandId)
                 },
                 button("reset", text("claim-display-reset")) {

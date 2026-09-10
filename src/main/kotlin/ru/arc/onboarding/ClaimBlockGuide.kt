@@ -43,11 +43,11 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
     private class Session(val world: UUID) {
         val borders = mutableMapOf<GuideBorder, BlockDisplay>()
         val posts = mutableMapOf<GuideChunk, BlockDisplay>()
+        val walls = mutableMapOf<GuideBorder, BlockDisplay>()
         var label: TextDisplay? = null
         var anchor: Location? = null
         var clickAfter = 0L
         var borderY = Double.NaN
-        var gridAnchor: Location? = null
         var successUntil = 0L
         val confirmed = linkedSetOf<GuideChunk>()
         var aimed: GuideChunk? = null
@@ -69,7 +69,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
                         followClaimGuideDisplay(session.label, claimGuideLabelLocation(eye, view.labelOffset))
                         val y = claimGuideBorderY(player.eyeLocation.y, view.snapBlocks, view.gridOffset)
                         if (session.borderY != y) {
-                            (session.borders.values + session.posts.values).forEach {
+                            (session.borders.values + session.posts.values + session.walls.values).forEach {
                                 val destination = it.location.apply { this.y = y }
                                 if (view.snapBlocks > 0) {
                                     it.teleportDuration = 0
@@ -78,7 +78,6 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
                                     followClaimGuideDisplay(it, destination)
                                 }
                             }
-                            session.gridAnchor?.y = y
                             session.borderY = y
                         }
                     }
@@ -157,13 +156,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         }
         val currentChunk = GuideChunk(player.location.blockX shr 4, player.location.blockZ shr 4)
         val view = view(player)
-        if (claimGuideNeedsReanchor(session.gridAnchor, player.eyeLocation)) {
-            val origin = claimGuideBorderOrigin(player.eyeLocation, view.gridOffset, view.snapBlocks)
-            session.borders.forEach { (border, display) -> positionBorder(display, border, origin) }
-            session.posts.forEach { (corner, display) -> positionPost(display, corner, origin) }
-            session.gridAnchor = origin.clone()
-            session.borderY = origin.y
-        }
+        val gridY = claimGuideBorderY(player.eyeLocation.y, view.snapBlocks, view.gridOffset)
         val visibleRadius = maxOf(session.radius, view.gridRadius)
         val visible = claimGuideChunks(currentChunk, visibleRadius)
         val nearby = buildMap {
@@ -178,13 +171,23 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
             val (key, display) = iterator.next()
             if (key !in plan || !display.isValid) { display.remove(); iterator.remove() }
         }
+        val wallIterator = session.walls.iterator()
+        while (wallIterator.hasNext()) {
+            val (border, display) = wallIterator.next()
+            if (!config.claimGuideLandWallsEnabled || border !in plan || border.landId == null || !display.isValid) {
+                display.remove()
+                wallIterator.remove()
+            }
+        }
         val corners = claimGuideIntersections(visible)
         val postIterator = session.posts.iterator()
         while (postIterator.hasNext()) {
             val (corner, display) = postIterator.next()
-            if (corner !in corners || !display.isValid) { display.remove(); postIterator.remove() }
+            if (!view.showPosts || corner !in corners || !display.isValid) { display.remove(); postIterator.remove() }
         }
-        corners.forEach { corner -> session.posts.getOrPut(corner) { drawPost(player, corner, session.gridAnchor!!) } }
+        if (view.showPosts) corners.forEach { corner ->
+            session.posts.getOrPut(corner) { drawPost(player, corner, gridY) }
+        }
         val landsById = nearby.values.filterNotNull().associateBy { it.ulid.toString() }
         for (border in plan) {
             val land = border.landId?.let(landsById::get)
@@ -198,10 +201,18 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
                 material,
                 claimGuideBorderColor(material),
             )
-            val display = session.borders.getOrPut(border) { drawBorder(player, border, appearance, session.gridAnchor!!) }
+            val display = session.borders.getOrPut(border) { drawBorder(player, border, appearance, gridY) }
             if (display.block.material != appearance.material || display.glowColorOverride != appearance.glow) {
                 display.block = appearance.material.createBlockData()
                 display.glowColorOverride = appearance.glow
+            }
+            if (config.claimGuideLandWallsEnabled && border.landId != null) {
+                val wallAppearance = claimGuideWallAppearance(material)
+                val wall = session.walls.getOrPut(border) { drawWall(player, border, wallAppearance, gridY) }
+                if (wall.block.material != wallAppearance.material || wall.glowColorOverride != wallAppearance.glow) {
+                    wall.block = wallAppearance.material.createBlockData()
+                    wall.glowColorOverride = wallAppearance.glow
+                }
             }
         }
         val eye = session.anchor ?: player.eyeLocation
@@ -245,31 +256,34 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         player: Player,
         border: GuideBorder,
         appearance: ClaimGuideGridAppearance,
-        origin: Location,
+        y: Double,
     ): BlockDisplay {
-        // Reuse stable edge entities as the local window moves; never load a boundary chunk.
-        return player.world.spawn(origin, BlockDisplay::class.java) {
+        // Each entity lives on its world edge. Sliding the visible window never moves retained lines.
+        return player.world.spawn(borderLocation(player.world, border.edge, y), BlockDisplay::class.java) {
             configure(it)
             it.block = appearance.material.createBlockData()
             it.teleportDuration = 0
-            positionBorder(it, border, origin)
+            positionBorder(it, border, y)
             it.isGlowing = true
             it.glowColorOverride = appearance.glow
         }.also { player.showEntity(ARC.instance, it) }
     }
 
-    private fun positionBorder(display: BlockDisplay, border: GuideBorder, origin: Location) {
+    private fun positionBorder(display: BlockDisplay, border: GuideBorder, y: Double) {
         val edge = border.edge
         val width = if (border.landId == null) 0.05f else 0.14f
         val height = if (border.landId == null) 0.045f else 0.20f
         display.teleportDuration = 0
-        display.teleport(origin)
+        display.teleport(borderLocation(display.world, edge, y))
         display.setTransformationMatrix(Matrix4f().translation(
-            (edge.x - origin.x).toFloat() - if (edge.alongX) 0f else width / 2,
+            -if (edge.alongX) 0f else width / 2,
             -height / 2,
-            (edge.z - origin.z).toFloat() - if (edge.alongX) width / 2 else 0f,
+            -if (edge.alongX) width / 2 else 0f,
         ).scale(if (edge.alongX) 16f else width, height, if (edge.alongX) width else 16f))
     }
+
+    private fun borderLocation(world: org.bukkit.World, edge: GuideEdge, y: Double): Location =
+        Location(world, edge.x.toDouble(), y, edge.z.toDouble())
 
     private fun claimGuideBorderColor(material: Material): Color = when (material) {
         Material.RED_CONCRETE -> Color.RED
@@ -277,25 +291,58 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         else -> Color.fromRGB(165, 190, 205)
     }
 
-    private fun drawPost(player: Player, corner: GuideChunk, origin: Location): BlockDisplay {
-        return player.world.spawn(origin, BlockDisplay::class.java) {
+    private fun claimGuideWallAppearance(material: Material): ClaimGuideGridAppearance = when (material) {
+        Material.RED_CONCRETE -> ClaimGuideGridAppearance(Material.RED_STAINED_GLASS, Color.RED)
+        else -> ClaimGuideGridAppearance(Material.LIME_STAINED_GLASS, Color.LIME)
+    }
+
+    private fun drawWall(
+        player: Player,
+        border: GuideBorder,
+        appearance: ClaimGuideGridAppearance,
+        y: Double,
+    ): BlockDisplay = player.world.spawn(borderLocation(player.world, border.edge, y), BlockDisplay::class.java) {
+        configure(it)
+        it.block = appearance.material.createBlockData()
+        it.teleportDuration = 0
+        positionWall(it, border, y)
+        it.isGlowing = true
+        it.glowColorOverride = appearance.glow
+    }.also { player.showEntity(ARC.instance, it) }
+
+    private fun positionWall(display: BlockDisplay, border: GuideBorder, y: Double) {
+        val edge = border.edge
+        val thickness = 0.04f
+        display.teleportDuration = 0
+        display.teleport(borderLocation(display.world, edge, y))
+        display.setTransformationMatrix(Matrix4f().translation(
+            -if (edge.alongX) 0f else thickness / 2,
+            0f,
+            -if (edge.alongX) thickness / 2 else 0f,
+        ).scale(if (edge.alongX) 16f else thickness, 3.0f, if (edge.alongX) thickness else 16f))
+    }
+
+    private fun drawPost(player: Player, corner: GuideChunk, y: Double): BlockDisplay {
+        return player.world.spawn(postLocation(player.world, corner, y), BlockDisplay::class.java) {
             configure(it)
             it.block = view(player).gridColor.appearance.material.createBlockData()
             it.teleportDuration = 0
-            positionPost(it, corner, origin)
+            positionPost(it, corner, y)
             it.isGlowing = true
             it.glowColorOverride = view(player).gridColor.appearance.glow
         }.also { player.showEntity(ARC.instance, it) }
     }
 
-    private fun positionPost(display: BlockDisplay, corner: GuideChunk, origin: Location) {
+    private fun positionPost(display: BlockDisplay, corner: GuideChunk, y: Double) {
         display.teleportDuration = 0
-        display.teleport(origin)
+        display.teleport(postLocation(display.world, corner, y))
         display.setTransformationMatrix(Matrix4f().translation(
-            (corner.x * 16 - origin.x).toFloat() - 0.025f, 0f,
-            (corner.z * 16 - origin.z).toFloat() - 0.025f,
+            -0.025f, 0f, -0.025f,
         ).scale(0.05f, 8.0f, 0.05f))
     }
+
+    private fun postLocation(world: org.bukkit.World, corner: GuideChunk, y: Double): Location =
+        Location(world, corner.x * 16.0, y, corner.z * 16.0)
 
     private fun configure(display: Display) {
         display.isPersistent = false
@@ -314,6 +361,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         radiusSteps: Int,
         cycleSnap: Boolean,
         cycleColor: Boolean,
+        togglePosts: Boolean,
         reset: Boolean,
     ) {
         val before = view(player)
@@ -323,12 +371,12 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
             radius = radiusSteps,
             cycleSnap = cycleSnap,
             cycleColor = cycleColor,
+            togglePosts = togglePosts,
         )
         views[player.uniqueId] = after
         sessions[player.uniqueId]?.let { session ->
-            session.gridAnchor = null
             session.borderY = Double.NaN
-            if (before.gridColor != after.gridColor) clearGrid(session)
+            if (before.gridColor != after.gridColor || before.showPosts != after.showPosts) clearGrid(session)
         }
         update(player)
     }
@@ -357,6 +405,8 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         session.borders.clear()
         session.posts.values.forEach(Entity::remove)
         session.posts.clear()
+        session.walls.values.forEach(Entity::remove)
+        session.walls.clear()
     }
 
     fun hasHologram(player: Player): Boolean = sessions[player.uniqueId]?.label?.isValid == true
@@ -414,16 +464,25 @@ data class ClaimGuideView(
     val gridRadius: Int = 2,
     val snapBlocks: Int = 2,
     val gridColor: ClaimGuideGridColor = ClaimGuideGridColor.ICE,
+    val showPosts: Boolean = true,
 ) {
     val gridOffset: Double get() = gridSteps.toDouble()
     val labelOffset: Double get() = labelSteps * 0.5
 
-    fun adjust(grid: Int, label: Int, radius: Int = 0, cycleSnap: Boolean = false, cycleColor: Boolean = false): ClaimGuideView =
+    fun adjust(
+        grid: Int,
+        label: Int,
+        radius: Int = 0,
+        cycleSnap: Boolean = false,
+        cycleColor: Boolean = false,
+        togglePosts: Boolean = false,
+    ): ClaimGuideView =
         copy(
             gridSteps = (gridSteps + grid).coerceIn(-12, 12),
             labelSteps = (labelSteps + label).coerceIn(-20, 20),
             gridRadius = (gridRadius + radius).coerceIn(1, 5),
             snapBlocks = if (cycleSnap) when (snapBlocks) { 0 -> 1; 1 -> 2; 2 -> 3; else -> 0 } else snapBlocks,
             gridColor = if (cycleColor) gridColor.next() else gridColor,
+            showPosts = if (togglePosts) !showPosts else showPosts,
         )
 }

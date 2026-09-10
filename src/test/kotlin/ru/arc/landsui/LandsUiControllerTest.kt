@@ -148,7 +148,7 @@ class LandsUiControllerTest : StringSpec({
                     display.buttons.map { it.id.value } shouldBe
                         listOf(
                             "grid_down", "grid_up", "label_down", "label_up", "snap",
-                            "radius_down", "radius_up", "color", "reset",
+                            "radius_down", "radius_up", "color", "posts", "reset",
                         )
 
                     controller.openDetails(player, land.id)
