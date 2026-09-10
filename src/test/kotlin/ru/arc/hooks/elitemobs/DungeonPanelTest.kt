@@ -54,7 +54,7 @@ class DungeonPanelTest : FreeSpec({
         shown.last().id shouldBe "dungeon.panel"
     }
 
-    "root footer closes only while child footer goes back" {
+    "root and child footers follow the default back preference" {
         val player = paper.addPlayer("footer")
         val world = paper.addSimpleWorld("dungeon")
         val dungeon = mockk<EMDungeonQol>(relaxed = true)
@@ -64,7 +64,7 @@ class DungeonPanelTest : FreeSpec({
         every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(secondArg<String>()) }
         val shown = mutableListOf<PaperDialogScreen>()
         DungeonSaveMenus(dungeon) { _, screen, _ -> shown += screen }.panel(player)
-        shown.last().exitButton!!.id.value shouldBe "close"
+        shown.last().exitButton!!.id.value shouldBe "back"
         shown.last().buttons.single { it.id.value == "saves" }.onClick.handle(mockk())
         shown.last().exitButton!!.id.value shouldBe "back"
     }

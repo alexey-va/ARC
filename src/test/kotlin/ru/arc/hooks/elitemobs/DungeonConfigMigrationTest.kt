@@ -30,7 +30,8 @@ class DungeonConfigMigrationTest :
                 config.integer("shop.reset-ticks", 6000) shouldBe 1234
                 config.bool("dungeon-qol.resume-enabled", true) shouldBe false
                 config.string("dungeon-qol.messages.entry") shouldBe "operator-message"
-                config.string("dungeon-qol.titles.complete.subtitle").contains("/данж выйти") shouldBe true
+                config.string("dungeon-qol.titles.complete.subtitle").contains("Shift + F") shouldBe true
+                config.string("dungeon-qol.titles.complete.subtitle").contains("/данж") shouldBe false
 
                 val afterFirstMerge = Files.readString(directory.resolve("elitemobs.yml"))
                 config.mergeMissingFromBundled("modules/elitemobs.yml") shouldBe false
