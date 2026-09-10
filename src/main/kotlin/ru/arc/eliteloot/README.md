@@ -22,12 +22,20 @@ marker. ARC case rewards and any entity with a player thrower or persistent
 
 ## Physical capture and SQL ownership
 
-Natural despawn is cancelled and the entity is frozen against pickup, aging,
-damage and movement. One queued entity per tick crosses a synchronous durable
-local journal barrier before removal. World unload captures remaining eligible
-items before instance deletion; failed capture cancels unload and keeps the item
-for retry. Lava/void destruction, consumption and administrator deletion are not
-undone. Chunk unload keeps the physical item in its chunk.
+Collection starts when the owner disconnects, changes worlds or moves more than
+64 blocks from the item. Distance is checked once per second against tracked
+spawned/loaded items, not by scanning every world. Natural despawn is also
+cancelled. The entity is frozen against pickup, aging, damage and movement; one
+queued entity per tick crosses a synchronous durable local journal barrier before
+removal. Entity chunk unload captures synchronously before entity serialization.
+World unload captures remaining eligible items before instance deletion; a failed
+capture cancels world unload. Chunk unload is not cancellable: a failed capture
+retains the frozen item and its persistent capture marker for retry on load.
+Lava/void destruction, consumption and administrator deletion are not undone.
+
+Capture moves an already generated stack: direct mint/burn is zero in vault,
+tokens, EliteMobs crystals and XP. Drop rolls, quantities and resale prices are
+unchanged; subsequent sale remains the existing native crystal credit flow.
 
 `plugins/ARC/data/lost-elite-loot/` is a capture outbox over arc-core's
 `DurableRecordJournal`, not a separate server mailbox. `STORED` payloads publish
@@ -82,6 +90,21 @@ Do not compensate or reset pending states before comparing native inventory,
 receipt, currency snapshot and SQL state. Terminal records retain operation IDs.
 
 ## Verification boundary
+
+Purpur 1.21.11 (server JAR SHA-256
+`34ad0d95aa1210df89def3b344bd57d09a2fe497156876772103baea96d8df21`,
+inspected 2026-09-11) calls `EntitiesUnloadEvent` from `LevelChunk.unloadCallback`
+before entity NBT serialization in `NewChunkHolder.unloadStage2`. The entity
+section is already inaccessible at the event; `isValid` can be false for a
+living item. Use `isDead` to reject removed items and consume the
+[event's entity list](https://jd.papermc.io/paper/1.21.11/org/bukkit/event/world/EntitiesUnloadEvent.html)
+without loading a chunk or waiting for another tick.
+
+`./gradlew test --tests ru.arc.eliteloot.LostEliteLootTest` covers event
+registration, exact-stack durability, failed writes/reload, ownership filters,
+distance, disconnect, world change and stale-copy suppression. The tests model
+Paper entity state using API mocks; the unload ordering above was established
+separately against the actual server artifact.
 
 Focused tests cover capture provenance, exact stack metadata, disk failure and
 publish retries, world unload, competing claim/sale service instances, foreign

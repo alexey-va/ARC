@@ -9,9 +9,12 @@ import org.bukkit.event.Listener
 import org.bukkit.event.entity.EntityPickupItemEvent
 import org.bukkit.event.entity.ItemDespawnEvent
 import org.bukkit.event.entity.ItemMergeEvent
+import org.bukkit.event.entity.ItemSpawnEvent
 import org.bukkit.event.inventory.InventoryPickupItemEvent
 import org.bukkit.event.player.PlayerDropItemEvent
+import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.world.EntitiesLoadEvent
+import org.bukkit.event.world.EntitiesUnloadEvent
 import org.bukkit.event.world.WorldUnloadEvent
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
@@ -41,6 +44,7 @@ internal class LostEliteLoot(
     internal val store = LostLootStore(root)
     private val tasks = LifecycleTaskScope()
     private val queued = linkedMapOf<UUID, Item>()
+    private val tracked = linkedMapOf<UUID, Item>()
     private val incidents = mutableSetOf<String>()
     private val publishing = mutableSetOf<String>()
     private val acknowledgements = mutableMapOf<String, LostLootRecord>()
@@ -53,7 +57,7 @@ internal class LostEliteLoot(
 
     fun start() {
         Bukkit.getWorlds().forEach { world -> world.getEntitiesByClass(Item::class.java).forEach(::reconcileEntity) }
-        tasks.runTimer(20, 20) { publishPending() }
+        tasks.runTimer(20, 20) { collectAbandoned(); publishPending() }
         tasks.runTimer(1, 1) {
             val next = queued.entries.firstOrNull() ?: return@runTimer
             queued.remove(next.key)
@@ -75,6 +79,32 @@ internal class LostEliteLoot(
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun manuallyDropped(event: PlayerDropItemEvent) {
         event.itemDrop.persistentDataContainer.set(manualKey, PersistentDataType.BYTE, 1)
+        tracked.remove(event.itemDrop.uniqueId)
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun spawned(event: ItemSpawnEvent) {
+        // EliteMobs finishes the native source/soulbind metadata after spawning the entity.
+        if (!closed) tracked[event.entity.uniqueId] = event.entity
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    fun ownerLeft(event: PlayerQuitEvent) {
+        if (closed) return
+        tracked.values.toList().filter { !it.isDead && owner(it) == event.player.uniqueId }.forEach(::enqueue)
+    }
+
+    private fun collectAbandoned() {
+        tracked.values.toList().forEach { item ->
+            val owner = if (item.isDead) null else owner(item)
+            if (owner == null) {
+                tracked.remove(item.uniqueId)
+                return@forEach
+            }
+            val player = Bukkit.getPlayer(owner)
+            if (player == null || !player.isOnline || player.world != item.world ||
+                player.location.distanceSquared(item.location) > 64.0 * 64.0) enqueue(item)
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -86,6 +116,7 @@ internal class LostEliteLoot(
     }
 
     private fun enqueue(item: Item) {
+        tracked.remove(item.uniqueId)
         item.persistentDataContainer.set(captureKey, PersistentDataType.BYTE, 1)
         item.setCanPlayerPickup(false)
         item.setCanMobPickup(false)
@@ -97,7 +128,10 @@ internal class LostEliteLoot(
     }
 
     internal fun capture(item: Item) {
-        if (closed || !item.isValid) return
+        queued.remove(item.uniqueId)
+        tracked.remove(item.uniqueId)
+        // Unloading entities are already untracked (isValid=false), but still alive and serializable.
+        if (closed || item.isDead) return
         val id = item.uniqueId.toString()
         val existing = store.get(id)
         if (store.certain(id)) { item.remove(); return }
@@ -117,22 +151,35 @@ internal class LostEliteLoot(
     @EventHandler(priority = EventPriority.LOWEST)
     fun loaded(event: EntitiesLoadEvent) = event.entities.filterIsInstance<Item>().forEach(::reconcileEntity)
 
+    @EventHandler(priority = EventPriority.HIGHEST)
+    fun entitiesUnloading(event: EntitiesUnloadEvent) {
+        if (closed) return
+        // The supplied entities are captured synchronously before Paper serializes this chunk.
+        event.entities.filterIsInstance<Item>().forEach { captureBeforeUnload(it) }
+    }
+
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun worldUnloading(event: WorldUnloadEvent) {
         if (closed) return
         // Instance deletion may precede vanilla despawn. Commit while entities still exist;
         // reject unload on a storage failure rather than leaving the only copy in a deleted world.
-        event.world.getEntitiesByClass(Item::class.java).filter { owner(it) != null || locked(it) }.forEach { item ->
-            enqueue(item)
-            queued.remove(item.uniqueId)
-            capture(item)
-            if (item.isValid) event.isCancelled = true
+        event.world.getEntitiesByClass(Item::class.java).forEach { item ->
+            if (!captureBeforeUnload(item)) event.isCancelled = true
         }
     }
 
+    private fun captureBeforeUnload(item: Item): Boolean {
+        if (item.isDead || (owner(item) == null && !locked(item))) return true
+        enqueue(item)
+        capture(item)
+        return item.isDead
+    }
+
     private fun reconcileEntity(item: Item) {
+        if (closed) return
         if (store.certain(item.uniqueId.toString())) item.remove()
         else if (item.persistentDataContainer.has(captureKey)) enqueue(item)
+        else tracked[item.uniqueId] = item
     }
 
     private fun locked(item: Item) = item.persistentDataContainer.has(captureKey) || store.get(item.uniqueId.toString()) != null
@@ -174,7 +221,7 @@ internal class LostEliteLoot(
     }
     private fun recovered(key: String) { if (incidents.remove(key)) Logging.info("LostEliteLoot recovered operation={}", key) }
 
-    override fun close() { closed = true; tasks.close(); queued.clear() }
+    override fun close() { closed = true; tasks.close(); queued.clear(); tracked.clear() }
 
     private fun encode(item: ItemStack) = Base64.getEncoder().encodeToString(item.serializeAsBytes())
 }
