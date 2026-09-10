@@ -168,10 +168,8 @@ internal class DungeonSaveMenus(
         text("panel.crystals", "<#aaa49a>Ваши кристаллы: <#c7a0e8>💎 <value>", "value" to Component.text(it))
     } ?: text("panel.crystals-unavailable", "<#aaa49a>Кристаллы: баланс сейчас недоступен"), 468)
 
-    private fun lostLoot(player: Player) = action("lost_loot", "lost-loot.label", "<#c4a7e7>Потерянная добыча ›", "lost-loot.tooltip", "Забрать не подобранный вовремя привязанный лут EliteMobs с этого сервера", close = true) {
-        val loot = ru.arc.ARC.hookRegistry?.lostEliteLoot
-        if (loot != null) loot.open(player)
-        else player.sendMessage(text("lost-loot.unavailable", "<#f4d87a>Хранилище добычи сейчас недоступно. Попробуйте позже."))
+    private fun lostLoot(player: Player) = action("lost_loot", "lost-loot.label", "<#c4a7e7>Потерянная добыча ›", "lost-loot.tooltip", "Забрать или продать сохранённый лут со всех данжей", close = true) {
+        ru.arc.eliteloot.LostLootModule.open(player)
     }
 
     private fun shops(player: Player) = action("shops", "panel.shops-label", "<#92bed8>К магазинам ›", "panel.shops-tooltip", "Перейти к торговцам данжей", close = true) { dungeon.action(player, "shops") }

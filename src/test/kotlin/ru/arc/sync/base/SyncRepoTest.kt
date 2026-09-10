@@ -51,6 +51,22 @@ class SyncRepoTest : FreeSpec({
         failure.cause?.message shouldBe "producer failed"
     }
 
+    "save with a predecessor waits before writing" {
+        val redis = InMemoryRedis()
+        val id = UUID.randomUUID()
+        val gate = CompletableFuture<Void>()
+        val data = TestSyncData(id)
+        val repo = testRepo(redis, data)
+
+        val future = repo.saveAndPersistData(Context(), gate)
+        future.isDone shouldBe false
+        redis.getHash("test:sync").containsKey(id.toString()) shouldBe false
+
+        gate.complete(null)
+        future.join()
+        redis.getHash("test:sync").containsKey(id.toString()) shouldBe true
+    }
+
     "sync load future completes only after data is applied on the main scheduler" {
         val redis = InMemoryRedis()
         val id = UUID.randomUUID()
@@ -98,6 +114,58 @@ class SyncRepoTest : FreeSpec({
 
         Tasks.withScheduler(scheduler) {
             val future = repo.loadAndApplyData(id)
+            executeUntilDone(future, scheduler)
+        }
+
+        applied shouldBe false
+    }
+
+    "load applies current-server data when the predicate opts in" {
+        val redis = InMemoryRedis()
+        val id = UUID.randomUUID()
+        val data = TestSyncData(id, sourceServer = "spawn")
+        redis.saveMapEntries("test:sync", id.toString(), Common.gson.toJson(data)).join()
+        var applied = false
+        val repo =
+            SyncRepo(
+                clazz = TestSyncData::class.java,
+                key = "test:sync",
+                redisManager = redis,
+                dataApplier = { applied = true },
+                dataProducer = { data },
+                applySameServer = { true },
+            )
+        val scheduler = TestTaskScheduler()
+        ARC.serverName = "spawn"
+
+        Tasks.withScheduler(scheduler) {
+            val future = repo.loadAndApplyData(id)
+            executeUntilDone(future, scheduler)
+        }
+
+        applied shouldBe true
+    }
+
+    "load skips applying when its session guard is stale" {
+        val redis = InMemoryRedis()
+        val id = UUID.randomUUID()
+        val data = TestSyncData(id, sourceServer = "survival")
+        redis.saveMapEntries("test:sync", id.toString(), Common.gson.toJson(data)).join()
+        var applied = false
+        val repo =
+            SyncRepo(
+                clazz = TestSyncData::class.java,
+                key = "test:sync",
+                redisManager = redis,
+                dataApplier = { applied = true },
+                dataProducer = { data },
+            )
+        val scheduler = TestTaskScheduler()
+        var current = true
+
+        Tasks.withScheduler(scheduler) {
+            val future = repo.loadAndApplyData(id) { current }
+            current = false
             executeUntilDone(future, scheduler)
         }
 

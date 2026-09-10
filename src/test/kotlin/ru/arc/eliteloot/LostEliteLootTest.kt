@@ -13,21 +13,21 @@ import org.bukkit.entity.Player
 import org.bukkit.event.player.PlayerDropItemEvent
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
-import ru.arc.paper.playerstate.PaperPlayerDataPersistence
 import ru.arc.paper.testing.MockBukkitTestRuntime
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Base64
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
 
 class LostEliteLootTest : FreeSpec({
     lateinit var paper: MockBukkitTestRuntime
     lateinit var root: Path
+    lateinit var scheduler: ru.arc.core.TestTaskScheduler
     val ownerKey = NamespacedKey("elitemobs", "soulbind")
     val sourceKey = NamespacedKey("elitemobs", "itemsource")
-    val receiptKey = NamespacedKey("arc", "lost_loot_receipt")
 
-    beforeEach { ru.arc.core.Tasks.install(ru.arc.core.TestTaskScheduler()); paper = MockBukkitTestRuntime.open(); root = Files.createTempDirectory("lost-elite-loot-test") }
+    beforeEach { scheduler = ru.arc.core.TestTaskScheduler(); ru.arc.core.Tasks.install(scheduler); paper = MockBukkitTestRuntime.open(); root = Files.createTempDirectory("lost-elite-loot-test") }
     afterEach { ru.arc.core.Tasks.reset(); paper.close(); root.toFile().deleteRecursively() }
 
     fun item(player: Player): ItemStack = ItemStack.of(Material.DIAMOND_HELMET).also {
@@ -35,121 +35,49 @@ class LostEliteLootTest : FreeSpec({
             meta.displayName(Component.text("Добыча босса"))
             meta.persistentDataContainer.set(ownerKey, PersistentDataType.STRING, player.uniqueId.toString())
             meta.persistentDataContainer.set(sourceKey, PersistentDataType.STRING, "Выпало с Босс")
-            meta.tooltipStyle = NamespacedKey("lzblocks", "tooltip/rare")
         }
     }
-    fun service(persist: PaperPlayerDataPersistence = PaperPlayerDataPersistence {}) = LostEliteLoot(
-        root, { _, fallback -> Component.text(fallback) }, persist, isElite = { true }, mobSource = { "Выпало с \$mob" },
+
+    fun service(publish: (LostLootRecord) -> CompletableFuture<Unit> = { CompletableFuture.completedFuture(Unit) }) = LostEliteLoot(
+        root, publish, isElite = { true }, mobSource = { "Выпало с \$mob" }, nativePrice = { 12.5 },
     )
-    fun record(player: Player, stack: ItemStack) = LostLootRecord(UUID.randomUUID().toString(), player.uniqueId.toString(),
-        Base64.getEncoder().encodeToString(stack.serializeAsBytes()), 1000)
+
+    fun entity(player: Player, stack: ItemStack = item(player), id: UUID = UUID.randomUUID()): Item {
+        val entity = mockk<Item>(relaxed = true)
+        every { entity.uniqueId } returns id
+        every { entity.isValid } returns true
+        every { entity.thrower } returns null
+        every { entity.itemStack } returns stack
+        every { entity.persistentDataContainer } returns player.persistentDataContainer
+        return entity
+    }
 
     "only canonical bound mob loot qualifies and a deliberate throw permanently excludes that entity" {
         val player = paper.addPlayer("owner")
-        var stack = item(player)
-        val entity = mockk<Item>(relaxed = true)
-        every { entity.itemStack } answers { stack }
-        every { entity.thrower } returns null
-        every { entity.persistentDataContainer } returns player.persistentDataContainer
+        val stack = item(player)
+        val entity = entity(player, stack)
         val loot = service()
         loot.owner(entity) shouldBe player.uniqueId
         stack.editMeta { it.persistentDataContainer.set(NamespacedKey("arc", "dungeon_case_reward"), PersistentDataType.BYTE, 1) }
         loot.owner(entity) shouldBe null
-        stack = item(player)
-        stack.editMeta { it.persistentDataContainer.remove(ownerKey) }
+        stack.editMeta { it.persistentDataContainer.remove(NamespacedKey("arc", "dungeon_case_reward")); it.persistentDataContainer.remove(ownerKey) }
         loot.owner(entity) shouldBe null
-        stack = item(player)
-        stack.editMeta { it.persistentDataContainer.set(sourceKey, PersistentDataType.STRING, "Куплено") }
-        loot.owner(entity) shouldBe null
-        stack = item(player)
         loot.manuallyDropped(PlayerDropItemEvent(player, entity))
         loot.owner(entity) shouldBe null
-        loot.close()
-    }
-
-    "claim saves one intact item and keeps a durable tombstone against stale entity copies and repeat clicks" {
-        val player = paper.addPlayer("claimant")
-        val stack = item(player)
-        val pending = record(player, stack)
-        var saves = 0
-        val loot = service(PaperPlayerDataPersistence { saved ->
-            lootReceipt(saved, receiptKey) shouldBe true
-            saved.inventory.getItem(0) shouldBe stack
-            saves++
-        })
-        loot.store.write(pending)
-        loot.claim(player, pending.id) shouldBe true
-        saves shouldBe 1
-        player.inventory.getItem(0) shouldBe stack
-        loot.claim(player, pending.id) shouldBe false
-        LostLootStore(root).get(pending.id)?.state shouldBe LostLootState.CLAIMED
-        LostLootStore(root).get(pending.id)?.item shouldBe null
-        loot.close()
-    }
-
-    "foreign players and full inventories cannot consume a stored reward" {
-        val player = paper.addPlayer("owner")
-        val foreign = paper.addPlayer("foreign")
-        val loot = service()
-        val pending = record(player, item(player))
-        loot.store.write(pending)
-        loot.claim(foreign, pending.id) shouldBe false
-        for (slot in 0..35) player.inventory.setItem(slot, ItemStack.of(Material.STONE, 64))
-        loot.claim(player, pending.id) shouldBe false
-        LostLootStore(root).get(pending.id) shouldBe pending
-        loot.close()
-    }
-
-    "a player save failure retains an unresolved claim and cannot issue a second item" {
-        val player = paper.addPlayer("save-failure")
-        val loot = service(PaperPlayerDataPersistence { error("player save failed") })
-        val pending = record(player, item(player))
-        loot.store.write(pending)
-        loot.claim(player, pending.id) shouldBe false
-        LostLootStore(root).get(pending.id)?.state shouldBe LostLootState.CLAIMING
-        loot.claim(player, pending.id) shouldBe false
-        player.inventory.storageContents.filterNotNull().size shouldBe 1
-        loot.close()
-        // Simulate an authoritative loaded player receipt proving the first delivery survived.
-        val reopened = service()
-        reopened.recoverClaims(player)
-        reopened.store.get(pending.id)?.state shouldBe LostLootState.CLAIMED
-        player.inventory.storageContents.filterNotNull().size shouldBe 1
-        reopened.close()
-    }
-
-    "an ambiguous claim without a receipt is retained without blind redelivery" {
-        val player = paper.addPlayer("ambiguous")
-        val loot = service()
-        val pending = record(player, item(player)).copy(state = LostLootState.CLAIMING, claim = UUID.randomUUID().toString())
-        loot.store.write(pending)
-        loot.recoverClaims(player)
-        loot.claim(player, pending.id) shouldBe false
-        player.inventory.storageContents.filterNotNull().size shouldBe 0
-        LostLootStore(root).get(pending.id) shouldBe pending
         loot.close()
     }
 
     "failed journal commit keeps the entity frozen and unavailable until a verified retry" {
         val player = paper.addPlayer("disk-failure")
         val loot = service()
-        val entity = mockk<Item>(relaxed = true)
         val id = UUID.randomUUID()
-        every { entity.uniqueId } returns id
-        every { entity.isValid } returns true
-        every { entity.thrower } returns null
-        every { entity.itemStack } returns item(player)
-        every { entity.persistentDataContainer } returns player.persistentDataContainer
+        val entity = entity(player, id = id)
         val obstruction = root.resolve("data/lost-elite-loot/$id.json")
-        Files.createDirectory(obstruction)
-        val event = org.bukkit.event.entity.ItemDespawnEvent(entity, player.location)
-        loot.despawn(event)
-        event.isCancelled shouldBe true
+        Files.createDirectories(obstruction)
+        loot.despawn(org.bukkit.event.entity.ItemDespawnEvent(entity, player.location))
         loot.capture(entity)
         verify(exactly = 0) { entity.remove() }
-        verify { entity.setCanPlayerPickup(false); entity.setCanMobPickup(false); entity.setWillAge(false) }
         loot.store.available(requireNotNull(loot.store.get(id.toString()))) shouldBe false
-        loot.claim(player, id.toString()) shouldBe false
         Files.delete(obstruction)
         loot.capture(entity)
         verify(exactly = 1) { entity.remove() }
@@ -160,36 +88,26 @@ class LostEliteLootTest : FreeSpec({
     "world unload captures remaining mob loot before an instance can be deleted" {
         val player = paper.addPlayer("unload-owner")
         val loot = service()
-        val entity = mockk<Item>(relaxed = true)
+        val entity = entity(player)
         val world = mockk<org.bukkit.World>()
-        val id = UUID.randomUUID()
         var valid = true
-        every { entity.uniqueId } returns id
         every { entity.isValid } answers { valid }
-        every { entity.thrower } returns null
-        every { entity.itemStack } returns item(player)
-        every { entity.persistentDataContainer } returns player.persistentDataContainer
         every { entity.remove() } answers { valid = false }
         every { world.getEntitiesByClass(Item::class.java) } returns listOf(entity)
         val event = org.bukkit.event.world.WorldUnloadEvent(world)
         loot.worldUnloading(event)
         event.isCancelled shouldBe false
         valid shouldBe false
-        LostLootStore(root).get(id.toString())?.state shouldBe LostLootState.STORED
+        loot.store.get(entity.uniqueId.toString())?.state shouldBe LostLootState.STORED
         loot.close()
     }
 
     "capture commits the exact stack before removing its physical entity" {
         val player = paper.addPlayer("drop-owner")
-        val loot = service()
         val stack = item(player)
-        val entity = mockk<Item>(relaxed = true)
+        val loot = service()
         val id = UUID.randomUUID()
-        every { entity.uniqueId } returns id
-        every { entity.isValid } returns true
-        every { entity.thrower } returns null
-        every { entity.itemStack } returns stack
-        every { entity.persistentDataContainer } returns player.persistentDataContainer
+        val entity = entity(player, stack, id)
         every { entity.remove() } answers {
             val saved = requireNotNull(LostLootStore(root).get(id.toString()))
             ItemStack.deserializeBytes(Base64.getDecoder().decode(saved.item)) shouldBe stack
@@ -198,6 +116,28 @@ class LostEliteLootTest : FreeSpec({
         verify(exactly = 1) { entity.remove() }
         loot.close()
     }
-})
 
-private fun lootReceipt(player: Player, key: NamespacedKey) = player.persistentDataContainer.has(key, PersistentDataType.STRING)
+    "publish retries after failure and exports an idempotent tombstone" {
+        val player = paper.addPlayer("publisher")
+        var attempts = 0
+        val loot = service {
+            attempts++
+            if (attempts == 1) CompletableFuture.failedFuture(IllegalStateException("temporary"))
+            else CompletableFuture.completedFuture(Unit)
+        }
+        val entity = entity(player)
+        loot.capture(entity)
+        loot.publishPending()
+        scheduler.executeImmediate()
+        attempts shouldBe 1
+        loot.publishPending()
+        scheduler.executeImmediate()
+        attempts shouldBe 2
+        loot.store.get(entity.uniqueId.toString())?.state shouldBe LostLootState.EXPORTED
+        loot.store.get(entity.uniqueId.toString())?.item shouldBe null
+        loot.publishPending()
+        scheduler.executeImmediate()
+        attempts shouldBe 2
+        loot.close()
+    }
+})

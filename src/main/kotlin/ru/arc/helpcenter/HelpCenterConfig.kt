@@ -685,6 +685,7 @@ class HelpCenterConfig(private val config: Config) {
             "dungeons" to HelpCenterCommandText("Данжи", "Порталы, подробный гайд и журнал EliteMobs", "данж подземелье боссы элитные мобы"),
             "farms" to HelpCenterCommandText("Фермы", "Управление игровыми фермами", "ферма урожай животные"),
             "shops" to HelpCenterCommandText("Магазины", "Магазины игроков и сервера", "рынок купить продать"),
+            "loot" to HelpCenterCommandText("Потерянная добыча", "Забрать сохранённые вещи и продать ненужное", "добыча лут потерял сундук продать"),
             "sell" to HelpCenterCommandText("Быстрая продажа", "Продать подходящие предметы", "деньги рынок"),
             "auction" to HelpCenterCommandText("Аукцион", "Торговля предметами между игроками", "ah рынок купить продать"),
             "bank" to HelpCenterCommandText("Банк", "Открыть личный банковский счёт", "деньги счет вклад"),

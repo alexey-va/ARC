@@ -15,6 +15,7 @@ class SyncRepo<T : SyncData>(
     private val redisManager: RedisOperations,
     private val dataApplier: (T) -> Unit,
     private val dataProducer: (Context) -> T?,
+    private val applySameServer: (T) -> Boolean = { false },
 ) {
     init {
         require(key.isNotBlank()) { "Sync repository key must not be blank" }
@@ -42,15 +43,15 @@ class SyncRepo<T : SyncData>(
             debug("No data found in database {} (first visit or not yet saved)", key)
             return
         }
-        if (data.server() == ARC.serverName) return
+        if (data.server() == ARC.serverName && !applySameServer(data)) return
         dataApplier(data)
     }
 
-    private fun applyOnMainThread(data: T?): CompletableFuture<Void> {
+    private fun applyOnMainThread(data: T?, canApply: () -> Boolean): CompletableFuture<Void> {
         val result = CompletableFuture<Void>()
         sync {
             try {
-                applyData(data)
+                if (canApply()) applyData(data)
                 result.complete(null)
             } catch (e: Exception) {
                 result.completeExceptionally(e)
@@ -59,14 +60,14 @@ class SyncRepo<T : SyncData>(
         return result
     }
 
-    fun loadAndApplyData(uuid: UUID): CompletableFuture<Void> =
-        loadData(uuid).thenCompose(::applyOnMainThread).whenComplete { _, failure ->
+    fun loadAndApplyData(uuid: UUID, canApply: () -> Boolean = { true }): CompletableFuture<Void> =
+        loadData(uuid).thenCompose { data -> applyOnMainThread(data, canApply) }.whenComplete { _, failure ->
             if (failure != null) {
                 error("Failed to load sync data from {} for {}", key, uuid, failure)
             }
         }
 
-    fun saveAndPersistData(context: Context): CompletableFuture<Void> {
+    fun saveAndPersistData(context: Context, after: CompletableFuture<*>? = null): CompletableFuture<Void> {
         val data =
             try {
                 dataProducer(context)
@@ -77,7 +78,9 @@ class SyncRepo<T : SyncData>(
             if (data == null || data.trash()) {
                 CompletableFuture.completedFuture(null)
             } else {
-                saveDataPersistently(data)
+                // Capture on the caller thread, but keep this player's writes in their requested order.
+                if (after == null) saveDataPersistently(data)
+                else after.handle { _, _ -> Unit }.thenCompose { saveDataPersistently(data) }
             }
         return future.logSaveFailure()
     }

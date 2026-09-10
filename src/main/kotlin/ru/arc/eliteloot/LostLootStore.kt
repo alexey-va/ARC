@@ -5,7 +5,7 @@ import ru.arc.persistence.DurableRecordJournal
 import java.nio.file.Path
 import java.util.UUID
 
-internal enum class LostLootState { STORED, CLAIMING, CLAIMED }
+internal enum class LostLootState { STORED, EXPORTED, CLAIMING, CLAIMED }
 
 /** Entity UUID is also the immutable recovery ID; claimed tombstones suppress stale chunk copies. */
 internal data class LostLootRecord(
@@ -15,14 +15,16 @@ internal data class LostLootRecord(
     val capturedAt: Long,
     val state: LostLootState = LostLootState.STORED,
     val claim: String? = null,
+    val nativePrice: Double? = null,
 ) {
     fun validate() {
         require(UUID.fromString(id).toString() == id)
         require(UUID.fromString(owner).toString() == owner)
         require(capturedAt > 0)
         require(state in LostLootState.entries)
-        require(state == LostLootState.CLAIMED || !item.isNullOrEmpty())
+        require(state in setOf(LostLootState.CLAIMED, LostLootState.EXPORTED) || !item.isNullOrEmpty())
         require(item == null || item.length <= 262_144)
+        require(nativePrice == null || (nativePrice.isFinite() && nativePrice > 0))
         require((state == LostLootState.CLAIMING) == (claim != null))
         claim?.let { require(UUID.fromString(it).toString() == it) }
     }
@@ -42,6 +44,8 @@ internal class LostLootStore(root: Path) {
         stored.recordId to stored.value
     }.toMutableMap()
     private val uncertain = mutableSetOf<String>()
+    private val pendingIds = records.values.filter { it.state == LostLootState.STORED }.mapTo(linkedSetOf()) { it.id }
+    fun pending(limit: Int): List<LostLootRecord> = pendingIds.asSequence().filter { it !in uncertain }.take(limit).map { records.getValue(it) }.toList()
 
     fun get(id: String): LostLootRecord? = records[id]
     fun certain(id: String): Boolean = id in records && id !in uncertain
@@ -62,6 +66,7 @@ internal class LostLootStore(root: Path) {
         check(stored == record)
         records[record.id] = stored
         uncertain.remove(record.id)
+        if (stored.state == LostLootState.STORED) pendingIds.add(record.id) else pendingIds.remove(record.id)
         return stored
     }
 }

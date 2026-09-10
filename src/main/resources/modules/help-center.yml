@@ -617,6 +617,7 @@ commands:
   dungeons: { label: 'Данжи', description: 'Порталы, подробный гайд и журнал EliteMobs', keywords: 'данж подземелье боссы элитные мобы' }
   farms: { label: 'Фермы', description: 'Управление игровыми фермами', keywords: 'ферма урожай животные' }
   shops: { label: 'Магазины', description: 'Магазины игроков и сервера', keywords: 'рынок купить продать' }
+  loot: { label: 'Потерянная добыча', description: 'Забрать сохранённые вещи и продать ненужное', keywords: 'добыча лут потерял сундук продать' }
   sell: { label: 'Быстрая продажа', description: 'Продать подходящие предметы', keywords: 'деньги рынок' }
   auction: { label: 'Аукцион', description: 'Торговля предметами между игроками', keywords: 'ah рынок купить продать' }
   bank: { label: 'Банк', description: 'Открыть личный банковский счёт', keywords: 'деньги счет вклад' }

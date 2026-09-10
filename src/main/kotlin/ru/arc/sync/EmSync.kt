@@ -16,6 +16,7 @@ import ru.arc.sync.base.SyncRepo
 import ru.arc.util.Logging
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicInteger
 
 class EmSync : Sync {
@@ -34,12 +35,18 @@ class EmSync : Sync {
             redisManager = checkNotNull(ARC.redisManager) { "Redis manager is not initialized" },
             dataApplier = ::deserializeAndSavePlayerData,
             dataProducer = ::serializePlayerData,
+            applySameServer = { it.lostLootCreditReceipt != null },
         )
 
+    private val saveTails = ConcurrentHashMap<UUID, CompletableFuture<Void>>()
+    private val lootCreditReceipts = ConcurrentHashMap<UUID, String>()
+
     private val loaded: MutableMap<UUID, Boolean> = ConcurrentHashMap()
+    private val joinGenerations: MutableMap<UUID, Long> = ConcurrentHashMap()
     private val joinTasks = ConcurrentHashMap<UUID, ScheduledTask>()
 
     override fun playerJoin(uuid: UUID) {
+        val generation = joinGenerations.merge(uuid, 1L, Long::plus) ?: 1L
         val counter = AtomicInteger(0)
         val task =
             repeating(
@@ -64,11 +71,11 @@ class EmSync : Sync {
                     return@repeating
                 }
                 repo
-                    .loadAndApplyData(uuid)
+                    .loadAndApplyData(uuid) { isCurrentJoin(uuid, generation) }
                     .whenComplete { _, failure ->
-                        if (failure == null && Bukkit.getPlayer(uuid) != null) {
+                        if (failure == null && isCurrentJoin(uuid, generation)) {
                             loaded[uuid] = true
-                        } else {
+                        } else if (isCurrentJoin(uuid, generation)) {
                             loaded.remove(uuid)
                         }
                     }
@@ -78,27 +85,51 @@ class EmSync : Sync {
     }
 
     override fun playerQuit(uuid: UUID) {
+        joinGenerations.compute(uuid) { _, current -> (current ?: 0L) + 1L }
         forceSave(uuid)
+        // Periodic saves retain this receipt; only the quit snapshot has captured the final
+        // in-memory value before this server forgets the player.
+        lootCreditReceipts.remove(uuid)
         loaded.remove(uuid)
         cancelJoinTask(uuid)
     }
 
+    internal fun isReady(uuid: UUID): Boolean = loaded[uuid] == true && PlayerData.getPlayerData(uuid) != null
+    internal fun lootCreditReceipt(uuid: UUID): String? = if (isReady(uuid)) lootCreditReceipts[uuid] else null
+    internal fun markLootCredit(uuid: UUID, token: String) { check(isReady(uuid)); lootCreditReceipts[uuid] = token }
+
     override fun forceSave(uuid: UUID) {
-        if (loaded[uuid] != true) return
-        val context = Context()
-        context.put("uuid", uuid)
-        repo.saveAndPersistData(context)
+        if (isReady(uuid)) {
+            // The producer snapshots the receipt synchronously before the async Redis write.
+            persistConfirmed(uuid)
+        }
+    }
+
+    /** Snapshot currency and its delivery receipt together, behind earlier saves for this player. */
+    internal fun persistConfirmed(uuid: UUID): CompletableFuture<Void> {
+        if (!isReady(uuid)) return CompletableFuture.failedFuture(IllegalStateException("EliteMobs synchronization is not ready"))
+        val context = Context().apply { put("uuid", uuid) }
+        val next = repo.saveAndPersistData(context, saveTails[uuid])
+        saveTails[uuid] = next
+        next.whenComplete { _, _ -> saveTails.remove(uuid, next) }
+        return next
     }
 
     override fun shutdown() {
         joinTasks.values.forEach(ScheduledTask::cancel)
         joinTasks.clear()
+        joinGenerations.clear()
         loaded.clear()
+        lootCreditReceipts.clear()
+        saveTails.clear()
     }
 
     private fun cancelJoinTask(uuid: UUID) {
         joinTasks.remove(uuid)?.cancel()
     }
+
+    private fun isCurrentJoin(uuid: UUID, generation: Long): Boolean =
+        joinGenerations[uuid] == generation && Bukkit.getPlayer(uuid) != null
 
     private fun deserializeAndSavePlayerData(data: EmDataDTO) {
         val uuid = data.id ?: return
@@ -157,6 +188,8 @@ class EmSync : Sync {
                 }
             }
         }
+        if (data.lostLootCreditReceipt == null) lootCreditReceipts.remove(uuid)
+        else lootCreditReceipts[uuid] = data.lostLootCreditReceipt
     }
 
     private fun serializePlayerData(context: Context): EmDataDTO? {
@@ -183,6 +216,7 @@ class EmSync : Sync {
             skillBonusSelections = PlayerData.getSkillBonusSelections(uuid),
             gamblingDebt = PlayerData.getGamblingDebt(uuid),
             questsCompleted = PlayerData.getQuestsCompleted(uuid),
+            lostLootCreditReceipt = lootCreditReceipts[uuid],
         )
     }
 
@@ -206,6 +240,7 @@ class EmSync : Sync {
         @SerializedName("sb") val skillBonusSelections: String? = null,
         @SerializedName("gd") val gamblingDebt: Double = 0.0,
         @SerializedName("qc") val questsCompleted: Int = 0,
+        @SerializedName("lr") val lostLootCreditReceipt: String? = null,
     ) : SyncData {
         override fun timestamp(): Long = ts
 

@@ -987,6 +987,7 @@ internal class HelpCenterController(
             ),
             CommandDefinition("vote", HelpCenterCategory.ACTIVITIES, "vote", HelpCenterFeature.VOTES),
             CommandDefinition("shops", HelpCenterCategory.TRADE, "shops", opensInventory = true),
+            CommandDefinition("loot", HelpCenterCategory.TRADE, "loot", opensInventory = true),
             CommandDefinition("sell", HelpCenterCategory.TRADE, "sell", opensInventory = true),
             CommandDefinition("auction", HelpCenterCategory.TRADE, "ah", opensInventory = true),
             CommandDefinition(

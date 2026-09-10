@@ -1,56 +1,92 @@
-# EliteLoot presentation and lost loot
+# EliteLoot presentation and shared lost loot
 
-`PickupListener` prepares native EM stacks at spawn and refreshes inventory lore.
-`EliteLootProcessor` copies visual components without changing gameplay material,
-attributes, durability or native PDC. `EliteLootEffects` follows only physical
-items, including manual throws; cases never invoke an acquisition effect.
+`PickupListener` transforms native EM stacks when they appear in the world and
+refreshes inventory lore. `EliteLootProcessor` copies visual components without
+changing gameplay material, attributes, durability or native PDC. Ground effects
+follow physical items, including manual throws; cases never invoke this effect.
 
-`LostEliteLoot` is a separate backend-local mailbox, opened from the dungeon panel
-inside or outside a dungeon. The configured `lost-elite-loot` chest menu pages
-through 45 complete items. One click delivers one original stack into an empty
-storage slot; no deposits, cursor transfer, partial extraction or new loot rolls.
-The menu explicitly says that each server has its own mailbox.
+## Player flow
 
-Eligibility reads native EliteMobs 10.1.1 PDC: valid `elitemobs:soulbind`, a mob
-`elitemobs:itemsource` matching the native configured template, and the EM item
+`LostLootModule` runs on every Paper backend, including parkour without EliteMobs.
+The dungeon panel, global help center and `/loot` (`/добыча`) open the same SQL
+mailbox. The configured `lost-elite-loot` chest menu pages through 45 items.
+Left click delivers the original complete stack into one empty storage slot;
+right click sells it for the displayed native EM resale price. The preview adds
+click instructions to a clone; original lore, models, attributes and PDC survive.
+No deposits, new rolls, partial extraction or additional price multiplier.
+
+Eligibility uses native EliteMobs 10.1.1 PDC: canonical `elitemobs:soulbind`, a mob
+`elitemobs:itemsource` matching the configured native template, and the EM item
 marker. ARC case rewards and any entity with a player thrower or persistent
-`arc:lost_loot_manual` marker are excluded. A manual drop still gets the visual
-effect. Source text is not inferred from rendered lore or item price.
+`arc:lost_loot_manual` marker are excluded. Manual throws still get the effect.
 
-On natural `ItemDespawnEvent`, cancel despawn and freeze pickup, aging and damage.
-One queued entity per tick passes a synchronous durability barrier before removal.
-World unload also captures remaining eligible items before an instance is deleted;
-a failed capture cancels unload and retains the frozen physical copy for retry.
-This does not undo consumption, lava/void destruction, administrator deletion,
-or intentionally discarded items. Chunk unload merely persists the physical item.
+## Physical capture and SQL ownership
 
-The shared `DurableRecordJournal` owns bounded atomic files and readback in
-`plugins/ARC/data/lost-elite-loot/`. The feature owns `STORED -> CLAIMING -> CLAIMED`.
-A native `Player.saveData()` persists the delivered item and a unique receipt in
-the same player data before the durable `CLAIMED` tombstone. That tombstone is kept
-to suppress old copies of the item entity when a saved chunk is loaded again.
-Claims never replay after an unknown result. A matching loaded receipt completes
-an interrupted claim; no receipt means retained `CLAIMING` and operator review.
-The record keeps the original serialized item, owner and claim UUID for diagnosis.
-Do not delete or change a pending record or issue compensation until inventory,
-receipt and server persistence have been reconciled: that would bypass the guard.
-Receipt cleanup after a committed tombstone is intentionally lazy; a stale receipt
-cannot grant another item and is overwritten by the next successful claim.
+Natural despawn is cancelled and the entity is frozen against pickup, aging,
+damage and movement. One queued entity per tick crosses a synchronous durable
+local journal barrier before removal. World unload captures remaining eligible
+items before instance deletion; failed capture cancels unload and keeps the item
+for retry. Lava/void destruction, consumption and administrator deletion are not
+undone. Chunk unload keeps the physical item in its chunk.
 
-`capture` failures retain a frozen entity and retry after 30 seconds. Logs identify
-operation, player and record, retain the first exception, and emit recovery once
-healthy. Tombstones retain no item payload and are not pruned: deleting them without
-proving absence of old entity copies would reintroduce duplication. Bootstrap reads
-the local journal before registering the listener. Failed initialization disables
-only this recovery feature, retains all records, and logs the exception.
+`plugins/ARC/data/lost-elite-loot/` is a capture outbox over arc-core's
+`DurableRecordJournal`, not a separate server mailbox. `STORED` payloads publish
+idempotently to SQL by entity UUID, owner and SHA-256 payload hash. Verified shared
+publication changes the local record to `EXPORTED`, retaining a payload-free
+entity tombstone against stale chunk copies. Network/SQL failures retain local
+records and retry; failed local acknowledgement retries too. Do not prune these
+tombstones without proving absence of old entity copies. Old local `CLAIMING`
+records are quarantined, never automatically republished.
 
-Focused checks:
+SQL reuses the existing network ARC connection in `modules/audit.yml` (the current
+profile uses schema `common` and the existing shared account named `arcduels` on
+all three backends). No account or credentials are created/copied. Independent
+InnoDB tables are `arc_shared_lost_loot`, `arc_shared_lost_loot_owner_gate` and the
+arc-core migration ledger. Async SQL owns these transitions:
 
-```sh
-./gradlew test --tests 'ru.arc.eliteloot.*' --tests 'ru.arc.gui.ArcMenuConfigurationTest'
-```
+- `AVAILABLE -> CLAIMING -> CLAIMED`: claim reservation then native delivery.
+- `AVAILABLE -> SOLD`: mutually exclusive sale, immutable crystal receivable.
+- `SOLD -> CREDITING -> PAID`: reservation then native crystal delivery.
 
-The persistence tests cover original metadata, owner/full-inventory guards, repeat
-clicks, disk failure and retry, interrupted native save with/without a receipt,
-and world unload. In-client appearance and cross-server routing still require
-runtime activation and a player pass; a unit test is not that evidence.
+An owner gate serializes native item and currency operations across servers.
+Exact owner, record, state and random operation token guard every transition.
+Known failures before native mutation can release their reservation. Unknown
+outcomes retain the operation and gate; no timeout may blindly reissue/recredit.
+
+## Native delivery receipts
+
+Claims put one intact item and `arc:lost_loot_receipt` into native player data,
+call `Player.saveData()`, then acknowledge SQL. A matching loaded receipt can
+finish an interrupted claim without granting another item. Missing receipt means
+operator reconciliation. The original payload remains in a pending claim.
+
+Sale price is captured with pinned EM `determineResaleWorth(stack, null)` times
+stack amount; that method already applies the configured resale percentage
+(currently 80%). Sale removes the SQL item and creates an equal crystal liability;
+this is not a second reward or Vault/token flow. On parkour, sale is recorded
+immediately and payout waits for a backend with native EM and ready `EmSync`.
+
+Native `EconomyHandler.addCurrency` owns rounding and gambling-debt repayment.
+Vault mode is rejected. `EmSync` snapshots currency plus a unique receipt together
+into Redis, ordered behind earlier local snapshots. Only a confirmed snapshot
+allows SQL `PAID`. The latest receipt remains with future snapshots; receipt-backed
+snapshots are reapplied even on the same backend after restart, so EM's separate
+asynchronous SQLite queue is not the only recovery source. A matching receipt
+reconciles `CREDITING` without a second increment. Failure/missing proof retains
+the immutable amount and token for operator review.
+
+This is not a transaction spanning SQL, Redis and native EM storage. Existing
+cross-backend EmSync snapshots still have no distributed CAS; overlapping/stale
+sessions and loss of authoritative Redis data require operator reconciliation.
+Do not compensate or reset pending states before comparing native inventory,
+receipt, currency snapshot and SQL state. Terminal records retain operation IDs.
+
+## Verification boundary
+
+Focused tests cover capture provenance, exact stack metadata, disk failure and
+publish retries, world unload, competing claim/sale service instances, foreign
+owners/full inventory, interrupted native item/currency persistence, receipt
+recovery, lifecycle cancellation, menu configuration and ordered sync snapshots.
+The repository uses arc-core SQL primitives; local unit tests do not prove real
+multi-node MySQL/Redis transactions or in-client visuals. Runtime activation and
+player acceptance remain separate from source checks and deferred disk delivery.

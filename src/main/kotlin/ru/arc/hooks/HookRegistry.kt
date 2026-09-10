@@ -58,8 +58,6 @@ class HookRegistry(
     var emListener: EMListener? = null
     internal var dungeonQol: EMDungeonQol? = null
         private set
-    internal var lostEliteLoot: ru.arc.eliteloot.LostEliteLoot? = null
-        private set
     var seasonTrophyProtectionListener: SeasonTrophyProtectionListener? = null
 
     private val registeredHooks = HashSet<String>()
@@ -168,8 +166,6 @@ class HookRegistry(
         cleanup(failures) { emHook?.close() }
         cleanup(failures) { dungeonQol?.close() }
         dungeonQol = null
-        cleanup(failures) { lostEliteLoot?.close() }
-        lostEliteLoot = null
         cleanup(failures) { auctionHook?.close() }
         cleanup(failures) { citizensHook?.close() }
         cleanup(failures) { papiHook?.clearPlaceholderCache() }
@@ -310,12 +306,6 @@ class HookRegistry(
                     registerListener(ru.arc.hooks.elitemobs.DungeonCaseRewards)
                     dungeonQol = registerListener(qol)
                     qol.startAutosaves()
-                    runCatching {
-                        val loot = ru.arc.eliteloot.LostEliteLoot(ARC.instance.dataPath,
-                            { key, fallback -> qol.text("lost-loot.$key", fallback) })
-                        lostEliteLoot = registerListener(loot)
-                        loot.start()
-                    }.onFailure { error("LostEliteLoot initialization failed; recovery disabled, journal retained", it) }
                 }
             } catch (failure: Throwable) {
                 if (existingHook == null) hook.close()

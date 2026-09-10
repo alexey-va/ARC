@@ -230,6 +230,7 @@ open class ARC : JavaPlugin() {
             InvestigationModule,
             TreasureModule,
             EliteLootModule,
+            ru.arc.eliteloot.LostLootModule,
             LeafDecayModule,
             PersonalLootModule,
             MobSpawnModule,
