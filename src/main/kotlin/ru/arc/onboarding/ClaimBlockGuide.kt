@@ -464,7 +464,7 @@ data class ClaimGuideView(
     val gridRadius: Int = 2,
     val snapBlocks: Int = 2,
     val gridColor: ClaimGuideGridColor = ClaimGuideGridColor.ICE,
-    val showPosts: Boolean = true,
+    val showPosts: Boolean = false,
 ) {
     val gridOffset: Double get() = gridSteps.toDouble()
     val labelOffset: Double get() = labelSteps * 0.5

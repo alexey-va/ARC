@@ -41,6 +41,7 @@ class ClaimGuideDisplayTest : StringSpec({
         ClaimGuideView().gridOffset shouldBe 0.0
         ClaimGuideView().snapBlocks shouldBe 2
         ClaimGuideView().gridRadius shouldBe 2
+        ClaimGuideView().showPosts shouldBe false
         ClaimGuideView().adjust(-100, 100) shouldBe ClaimGuideView(gridSteps = -12, labelSteps = 20)
         ClaimGuideView(gridSteps = -12, labelSteps = 20).adjust(1, -1) shouldBe
             ClaimGuideView(gridSteps = -11, labelSteps = 19)
@@ -48,6 +49,6 @@ class ClaimGuideDisplayTest : StringSpec({
         ClaimGuideView().adjust(0, 0, cycleSnap = true).snapBlocks shouldBe 3
         ClaimGuideView(snapBlocks = 3).adjust(0, 0, cycleSnap = true).snapBlocks shouldBe 0
         ClaimGuideView().adjust(0, 0, cycleColor = true).gridColor shouldBe ClaimGuideGridColor.WHITE
-        ClaimGuideView().adjust(0, 0, togglePosts = true).showPosts shouldBe false
+        ClaimGuideView().adjust(0, 0, togglePosts = true).showPosts shouldBe true
     }
 })
