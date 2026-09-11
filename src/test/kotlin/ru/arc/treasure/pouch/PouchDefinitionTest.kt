@@ -10,6 +10,19 @@ import ru.arc.KotestTestBase
 class PouchDefinitionTest :
     KotestTestBase({
         describe("PouchDefinitionParser") {
+            it("validates the optional inventory reservation without changing legacy pouches") {
+                val raw = mapOf(
+                    "item" to mapOf("material" to "CHEST"),
+                    "rewards" to listOf(mapOf("pool" to "a", "rolls" to 1)),
+                )
+                PouchDefinitionParser.parse("legacy", raw).requiredFreeSlots shouldBe 0
+                PouchDefinitionParser.parse("guarded", raw + ("required-free-slots" to 3)).requiredFreeSlots shouldBe 3
+                for (invalid in listOf(-1, 37, 1.5, "three")) {
+                    shouldThrow<IllegalArgumentException> {
+                        PouchDefinitionParser.parse("invalid", raw + ("required-free-slots" to invalid))
+                    }
+                }
+            }
             it("parses multiple pools, ranges, percentages and presentation") {
                 val definition =
                     PouchDefinitionParser.parse(

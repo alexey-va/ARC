@@ -1,0 +1,14 @@
+# Portable reward catalogue. Keep disabled in the bundled source default.
+enabled: false
+title: "<dark_gray><bold>Награды лутбоксов"
+
+# Categories are operator-owned and keyed by stable lowercase IDs.
+# Each entry has exactly one source: treasure {pool, id}, preset, or pouch.
+categories: {}
+
+messages:
+  unavailable: "<gray>Эта награда сейчас недоступна."
+  inventory-full: "<red>В инвентаре нет места для награды."
+  given: "<#92bed8>Награда добавлена в инвентарь."
+  accepted: "<#92bed8>Награда принята к выполнению."
+  action-failed: "<red>Награда сейчас недоступна."

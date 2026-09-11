@@ -40,6 +40,7 @@ data class PouchDefinition(
     val item: JsonObject,
     val rewards: List<PouchRewardSource>,
     val open: PouchOpenPresentation,
+    val requiredFreeSlots: Int = 0,
 ) {
     init {
         require(POUCH_ID_PATTERN.matches(id)) { "pouch ID must match ${POUCH_ID_PATTERN.pattern}: $id" }
@@ -47,6 +48,7 @@ data class PouchDefinition(
         require(rewards.isNotEmpty()) { "pouch '$id' must contain rewards" }
         require(rewards.any { it.chance == 1.0 }) { "pouch '$id' must contain at least one guaranteed reward source" }
         require(rewards.sumOf { it.rolls.max } <= 64) { "pouch '$id' must not exceed 64 total rolls" }
+        require(requiredFreeSlots in 0..36) { "pouch '$id' required-free-slots must be from 0 to 36" }
     }
 
     fun itemSpec(amount: Int = 1): JsonObject =
@@ -58,7 +60,7 @@ data class PouchDefinition(
 }
 
 object PouchDefinitionParser {
-    private val definitionFields = setOf("description", "item", "rewards", "open")
+    private val definitionFields = setOf("description", "item", "rewards", "open", "required-free-slots")
     private val rewardFields = setOf("pool", "rolls", "chance")
     private val openFields = setOf("message", "sound", "volume", "pitch")
 
@@ -103,7 +105,11 @@ object PouchDefinitionParser {
         }
 
         val open = parseOpen(id, raw["open"])
-        return PouchDefinition(id, raw["description"]?.toString()?.trim()?.takeIf { it.isNotEmpty() }, item, rewards, open)
+        val requiredFreeSlots = raw["required-free-slots"]?.let {
+            it.toString().toIntOrNull()
+                ?: throw IllegalArgumentException("pouches.$id.required-free-slots must be an integer")
+        } ?: 0
+        return PouchDefinition(id, raw["description"]?.toString()?.trim()?.takeIf { it.isNotEmpty() }, item, rewards, open, requiredFreeSlots)
     }
 
     private fun parseRolls(raw: Any?, path: String): PouchRolls =

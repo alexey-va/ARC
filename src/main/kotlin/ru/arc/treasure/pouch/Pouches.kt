@@ -60,6 +60,14 @@ object Pouches {
         OpsItemSpec.build(definition.itemSpec(amount))
     }
 
+    fun failureMessage(result: PouchOpenResult): String =
+        if (result.missingSlots > 0) {
+            config.string("messages.inventory-full", "<red>Освободите ещё <white>%slots%<red> ячейки в инвентаре, чтобы открыть сундук.")
+                .replace("%slots%", result.missingSlots.toString())
+        } else {
+            config.string("messages.unavailable", "<red>Мешочек сейчас не открывается. Сообщите администрации.")
+        }
+
     fun open(rawId: String, player: Player): PouchOpenResult {
         val definition = get(rawId)
             ?: return PouchOpenResult(0, 0, listOf("Unknown pouch: $rawId"))

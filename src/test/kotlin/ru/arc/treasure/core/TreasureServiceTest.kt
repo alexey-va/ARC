@@ -170,6 +170,46 @@ class TreasureServiceTest :
 
         describe("TreasureService executing commands") {
 
+            it("should reject an empty command reward without consuming a container") {
+                service.give(Treasure.Command(emptyList()), mockPlayer, GiveConfig.SILENT)
+                    .shouldBeInstanceOf<GiveResult.Failure>()
+            }
+
+            it("should reject a missing command instead of reporting a reward") {
+                mockkStatic(Bukkit::class)
+                try {
+                    val mockServer = mockk<org.bukkit.Server>(relaxed = true)
+                    every { Bukkit.getServer() } returns mockServer
+                    every { Bukkit.dispatchCommand(any(), any()) } returns false
+                    val treasure = Treasure.Command(listOf("missingplugin give %player%"))
+
+                    service.give(treasure, mockPlayer, GiveConfig.SILENT)
+                        .shouldBeInstanceOf<GiveResult.Failure>()
+                } finally {
+                    unmockkStatic(Bukkit::class)
+                }
+            }
+
+            it("should not replay accepted rewards when a later command is missing") {
+                mockkStatic(Bukkit::class)
+                try {
+                    val mockServer = mockk<org.bukkit.Server>(relaxed = true)
+                    every { Bukkit.getServer() } returns mockServer
+                    every { Bukkit.dispatchCommand(any(), "give TestPlayer diamond 1") } returns true
+                    every { Bukkit.dispatchCommand(any(), "missingplugin give TestPlayer") } returns false
+                    every { Bukkit.dispatchCommand(any(), "give TestPlayer emerald 1") } returns true
+                    val treasure = Treasure.Command(listOf(
+                        "give %player% diamond 1", "missingplugin give %player%", "give %player% emerald 1",
+                    ))
+
+                    service.give(treasure, mockPlayer, GiveConfig.SILENT)
+                        .shouldBeInstanceOf<GiveResult.Success>()
+                    verify(exactly = 0) { Bukkit.dispatchCommand(any(), "give TestPlayer emerald 1") }
+                } finally {
+                    unmockkStatic(Bukkit::class)
+                }
+            }
+
             it("should execute commands via console") {
                 mockkStatic(Bukkit::class)
                 val mockServer = mockk<org.bukkit.Server>(relaxed = true)

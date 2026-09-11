@@ -11,6 +11,7 @@ data class PouchOpenResult(
     val attempted: Int,
     val awarded: Int,
     val failures: List<String>,
+    val missingSlots: Int = 0,
 ) {
     val shouldConsume: Boolean get() = awarded > 0
 }
@@ -24,6 +25,11 @@ class PouchService(
     },
 ) {
     fun open(definition: PouchDefinition, player: Player): PouchOpenResult {
+        if (definition.requiredFreeSlots > 0) {
+            val freeSlots = player.inventory.storageContents.count { it == null || it.type.isAir }
+            val missingSlots = definition.requiredFreeSlots - freeSlots
+            if (missingSlots > 0) return PouchOpenResult(0, 0, emptyList(), missingSlots)
+        }
         val pools = definition.rewards.associate { source ->
             source.poolId to poolProvider(source.poolId)
         }

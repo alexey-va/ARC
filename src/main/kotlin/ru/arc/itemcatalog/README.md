@@ -2,6 +2,9 @@
 
 `ItemsCatalogModule` owns the interactive `/arc items` catalog on Paper nodes
 that enable `plugins/ARC/modules/items-catalog.yml` and run ItemsAdder.
+When `modules/reward-catalog.yml` is enabled, the same command exposes a
+`Награды лутбоксов` root tab and `/arc items rewards` direct shortcut. The
+reward route stays available while the ItemsAdder index is loading.
 
 ## Contract
 
@@ -26,6 +29,47 @@ that enable `plugins/ARC/modules/items-catalog.yml` and run ItemsAdder.
   catalog action as console.
 - Category names from third-party YAML are normalized and inserted as literal
   Adventure text. MiniMessage is used only for ARC-owned configuration.
+
+## Lootbox reward catalogue
+
+`RewardCatalogModuleConfig` reads the separate portable
+`modules/reward-catalog.yml`. Its bundled default is disabled and has no
+operator entries. The schema is intentionally narrow:
+
+```yaml
+enabled: false
+title: '<dark_gray><bold>Награды лутбоксов'
+categories:
+  common:
+    name: 'Обычные награды'
+    description: ['Предметы из лутбоксов.']
+    icon: CHEST
+    entries:
+      voucher:
+        name: '<white>Ваучер'
+        description: ['Описание награды.']
+        rarity: 'Обычная'
+        requires: [ItemsAdder]
+        treasure: { pool: common, id: voucher }
+        icon: PAPER
+```
+
+Each entry has exactly one source: `treasure` (`pool` + `id`), `preset`, or
+`pouch`. Categories are capped at 32, entries at 300 per category and 2,000
+in total; names, descriptions, IDs, plugin requirements, materials and unknown
+keys are validated before publication. `name` may be omitted for native item
+sources (treasure item/Slimefun, preset or pouch), in which case the actual
+preview name or vanilla translation is retained; opaque command treasures must
+have a configured name.
+
+Browsing requires `arc.items.catalog.use`, while giving rechecks the existing
+`clicks.give-permission` setting (`arc.items.catalog.give` by default) at the
+final click. `requires` may be omitted when no provider is needed. Providers
+and references are reread on every click. Presets and
+pouches are fresh factories; treasure rewards use native `TreasureService`.
+Inventory capacity is preflighted and simulated, with no catalog-configured
+commands and no overflow drops. Command and other opaque treasure success is
+reported as accepted by the native service, not as proof of final item arrival.
 
 The curated hierarchy, per-category overrides, click actions, titles, messages, and portable
 vanilla icon fallbacks live in `modules/items-catalog.yml`. A category can be

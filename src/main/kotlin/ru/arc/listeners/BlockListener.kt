@@ -92,7 +92,7 @@ class BlockListener : Listener {
                     TREASURE_USE_COOLDOWN[playerId] = now
                 } else {
                     debug("[pouch] {} could not be opened for player {}: {}", pouchId, event.player.name, result.failures)
-                    event.player.sendMessage(TextUtil.mm("<red>Мешочек сейчас не открывается. Сообщите администрации."))
+                    event.player.sendMessage(TextUtil.mm(Pouches.failureMessage(result)))
                 }
                 return@get
             }

@@ -1,5 +1,9 @@
 # Большие мешочки ARC. chance принимает 0..1 или проценты.
 # custom_data `arc:pouch_id` добавляется автоматически.
+# New fixed-size chests may set required-free-slots to reserve room before any draw.
+messages:
+  inventory-full: '<red>Недостаточно места. Освободите ячеек: <white>%slots%<red>.'
+  unavailable: '<red>Мешочек сейчас не открывается. Сообщите администрации.'
 pouches:
   supplies:
     description: Еда, материалы и небольшой денежный бонус

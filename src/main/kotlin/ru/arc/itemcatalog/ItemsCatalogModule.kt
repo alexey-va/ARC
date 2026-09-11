@@ -15,15 +15,20 @@ object ItemsCatalogModule : PluginModule {
     @Volatile private var settings: ItemsCatalogSettings? = null
     @Volatile private var service: ItemsCatalogService? = null
     @Volatile private var controller: ItemsCatalogGuiController? = null
+    @Volatile private var rewardController: RewardCatalogGuiController? = null
 
     override fun init() {
-        start(ItemsCatalogModuleConfig.load(ARC.instance.dataPath).snapshot())
+        start(
+            ItemsCatalogModuleConfig.load(ARC.instance.dataPath).snapshot(),
+            RewardCatalogModuleConfig.load(ARC.instance.dataPath).snapshot(),
+        )
     }
 
     override fun reload() {
         val loaded = ItemsCatalogModuleConfig.load(ARC.instance.dataPath).snapshot()
+        val rewards = RewardCatalogModuleConfig.load(ARC.instance.dataPath).snapshot()
         shutdownRuntime()
-        start(loaded)
+        start(loaded, rewards)
     }
 
     override fun shutdown() {
@@ -31,22 +36,34 @@ object ItemsCatalogModule : PluginModule {
         settings = null
     }
 
-    fun isAvailable(): Boolean = controller != null
+    fun isAvailable(): Boolean = controller != null || rewardController?.isAvailable() == true
 
     fun open(player: Player) {
         val activeController = controller
-        if (activeController == null) {
-            val message = settings?.unavailableMessage ?: "<red>Каталог предметов сейчас недоступен."
-            player.sendMessage(TextUtil.mm(message, true))
+        if (activeController != null) {
+            activeController.openRoot(player)
             return
         }
-        activeController.openRoot(player)
+        rewardController?.takeIf(RewardCatalogGuiController::isAvailable)?.openRoot(player)
+            ?: player.sendMessage(TextUtil.mm(settings?.unavailableMessage ?: "<red>Каталог предметов сейчас недоступен.", true))
+    }
+
+    fun openRewards(player: Player) {
+        rewardController?.takeIf(RewardCatalogGuiController::isAvailable)?.openRoot(player)
+            ?: player.sendMessage(TextUtil.mm(settings?.unavailableMessage ?: "<red>Каталог наград сейчас недоступен.", true))
     }
 
     internal fun currentSnapshot(): ItemsCatalogSnapshot? = service?.currentSnapshot()
 
-    private fun start(loaded: ItemsCatalogSettings) {
+    private fun start(loaded: ItemsCatalogSettings, rewards: RewardCatalogSettings) {
         settings = loaded
+        rewardController = RewardCatalogGuiController(rewards, loaded.givePermission).takeIf { it.isAvailable() }
+        info(
+            "Reward catalogue loaded: enabled={} categories={} entries={}",
+            rewards.enabled,
+            rewards.categories.size,
+            rewards.entryCount,
+        )
         if (!loaded.enabled) {
             info("Items catalog module disabled by configuration")
             return
@@ -59,7 +76,7 @@ object ItemsCatalogModule : PluginModule {
         val gateway = BukkitItemsAdderCatalogGateway(itemsAdder)
         val activeService = ItemsCatalogService(ARC.instance, loaded, gateway)
         service = activeService
-        controller = ItemsCatalogGuiController(loaded, activeService)
+        controller = ItemsCatalogGuiController(loaded, activeService, rewardController)
         activeService.start()
         info("Items catalog module initialized and is waiting for the ItemsAdder index")
     }
@@ -67,6 +84,8 @@ object ItemsCatalogModule : PluginModule {
     private fun shutdownRuntime() {
         controller?.shutdown()
         controller = null
+        rewardController?.shutdown()
+        rewardController = null
         service?.shutdown()
         service = null
     }

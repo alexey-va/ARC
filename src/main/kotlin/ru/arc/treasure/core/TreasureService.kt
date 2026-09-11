@@ -3,6 +3,7 @@ package ru.arc.treasure.core
 import net.milkbowl.vault.economy.Economy
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
+import ru.arc.util.Logging.warn
 
 /**
  * Result of giving a treasure to a player.
@@ -149,11 +150,22 @@ class TreasureService(
         treasure: Treasure.Command,
         player: Player,
     ): GiveResult {
+        if (treasure.commands.isEmpty()) return GiveResult.Failure("Reward has no commands")
         val console = Bukkit.getServer().consoleSender
-
+        var accepted = 0
         treasure.commands.forEach { command ->
             val processed = command.replace("%player%", player.name)
-            Bukkit.dispatchCommand(console, processed)
+            if (!Bukkit.dispatchCommand(console, processed)) {
+                if (accepted == 0) return GiveResult.Failure("Reward command is unavailable")
+                // Earlier commands may already have issued rewards. Consuming the original
+                // container prevents replaying those effects; dispatch is not a payout receipt.
+                warn(
+                    "Treasure command batch stopped after partial dispatch: treasure={} player={} accepted={} total={}; do not retry",
+                    treasure.id, player.uniqueId, accepted, treasure.commands.size,
+                )
+                return GiveResult.Success(treasure)
+            }
+            accepted++
         }
 
         return GiveResult.Success(treasure)
