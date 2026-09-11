@@ -1,6 +1,7 @@
 package ru.arc.itemcatalog
 
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.TextReplacementConfig
 import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
@@ -270,7 +271,11 @@ class RewardCatalogGuiController(
         preview: ItemStack,
     ): List<Component> =
         buildList {
-            addAll(trimBlankEdges(preview.itemMeta?.lore().orEmpty().take(MAX_INTRINSIC_LORE).map(::nonItalic)))
+            addAll(
+                trimBlankEdges(
+                    preview.itemMeta?.lore().orEmpty().take(MAX_INTRINSIC_LORE).map(::nonItalic).map(::contextualizeRewardCatalogNativeLore),
+                ),
+            )
             appendSection(entry.description.map(::descriptionComponent))
             appendSection(
                 buildList {
@@ -489,3 +494,24 @@ class RewardCatalogGuiController(
         private val UNAVAILABLE = TextColor.color(0xF2C66D)
     }
 }
+
+/**
+ * Makes a native right-click hint read as item information inside a reward preview.
+ * The source item is never mutated: callers pass the preview lore from a cloned stack.
+ */
+internal fun contextualizeRewardCatalogNativeLore(line: Component): Component {
+    val plain = PlainTextComponentSerializer.plainText().serialize(line)
+    if (!plain.trimStart().startsWith("[▶]") || !plain.substringAfter("[▶]").trimStart().startsWith("ПКМ")) return line
+    return replaceFirstLiteral(line, "▶", Component.empty())
+        .let { replaceFirstLiteral(it, "[", Component.text("После получения:")) }
+        .let { replaceFirstLiteral(it, "]", Component.empty()) }
+}
+
+private fun replaceFirstLiteral(component: Component, search: String, replacement: Component): Component =
+    component.replaceText(
+        TextReplacementConfig.builder()
+            .matchLiteral(search)
+            .once()
+            .replacement(replacement)
+            .build(),
+    )
