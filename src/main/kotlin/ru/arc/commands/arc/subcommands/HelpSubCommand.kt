@@ -31,7 +31,7 @@ object HelpSubCommand : SubCommand {
         val player = sender.player
         if (player != null && HelpCenterModule.isAvailable()) {
             if (args.isEmpty()) {
-                if (HelpCenterModule.open(player)) return true
+                if (HelpCenterModule.open(player, HelpCenterPage.HELP)) return true
             } else {
                 HelpCenterPage.from(args[0])?.let { page ->
                     if (HelpCenterModule.open(player, page)) return true

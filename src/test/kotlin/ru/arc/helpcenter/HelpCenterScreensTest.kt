@@ -29,7 +29,6 @@ class HelpCenterScreensTest {
     private lateinit var screen: PaperDialogScreen
     private var screenCount = 0
     private lateinit var legacy: HelpCenterLegacySettings
-    private lateinit var preferences: HelpCenterPreferenceStore
     private val directory = Files.createTempDirectory("help-screens")
     private var chatMode = HelpCenterChatMode.LOCAL
     private val executed = mutableListOf<String>()
@@ -50,10 +49,6 @@ class HelpCenterScreensTest {
             it.setPermission("arcvotes.use", true)
         }
         gateway = mockk()
-        preferences = mockk()
-        every { preferences.load(any()) } returns CompletableFuture.completedFuture(HelpCenterPreferences())
-        every { preferences.recordRecent(any(), any()) } returns CompletableFuture.completedFuture(HelpCenterPreferences())
-        every { preferences.close() } returns Unit
         every { gateway.features() } returns HelpCenterFeature.entries.toSet()
         every { gateway.pendingRequests(player) } returns HelpCenterPendingRequests()
         every { gateway.onlinePlayers() } returns (1..27).map {
@@ -69,6 +64,7 @@ class HelpCenterScreensTest {
         }
         every { gateway.settings(player) } answers { HelpCenterSettingSnapshot(chatMode, false, true) }
         every { gateway.loadHomes(player, any()) } returns CompletableFuture.completedFuture(HelpCenterHomes(emptyList(), 0, 3))
+        every { gateway.loadPublicHomes(player, any()) } returns CompletableFuture.completedFuture(emptyList())
         every { gateway.loadProfile(player, any()) } returns CompletableFuture.completedFuture(
             HelpCenterProfile("Viewer", "survival", "vanilla", 1, 65, 2, "100", "Игрок", HelpCenterHomes(emptyList(), 0, 3), 0),
         )
@@ -86,7 +82,7 @@ class HelpCenterScreensTest {
         every { legacy.flightSnapshot(any()) } returns HelpCenterFlightSnapshot(50_000.0, 100_000, false)
         controller = HelpCenterController(
             HelpCenterConfig.load(directory).snapshot(), gateway, {}, inventoryReturn,
-            { _, _ -> }, preferences, HelpCenterNavigation(plugin, inventoryReturn::cancel), { _, value -> screen = value; screenCount++ }, legacy,
+            { _, _ -> }, HelpCenterNavigation(plugin, inventoryReturn::cancel), { _, value -> screen = value; screenCount++ }, legacy,
         )
     }
 
@@ -241,18 +237,26 @@ class HelpCenterScreensTest {
     }
 
     @Test
-    fun `root keeps utilities in the last row and activities have one dungeon entry`() {
+    fun `root is a compact server router and help is a separate support hub`() {
         open(HelpCenterPage.ROOT)
         player.addAttachment(paper.createSimplePlugin("TeamsPermission"), "arcjustteams.use", true)
         open(HelpCenterPage.ROOT)
-        assertEquals(3, screen.columns)
-        assertTrue(screen.buttons.all { it.width == 166 })
-        assertEquals(listOf("now", "players", "teams", "travel", "privat", "root_activities",
-            "root_trade", "root_progress", "root_technology", "guide", "goals", "recovery",
-            "favorites", "search", "settings"), screen.buttons.map { it.id.value })
+        assertEquals(2, screen.columns)
+        assertTrue(screen.buttons.all { it.width == 246 })
+        assertEquals(listOf("now", "teams", "travel", "privat", "root_activities",
+            "root_progress", "root_trade", "root_technology", "search", "settings"), screen.buttons.map { it.id.value })
+        assertTrue(body().contains("Viewer"))
         click("root_activities")
         assertEquals(1, screen.buttons.count { it.id.value == "command_dungeons" })
         assertFalse(screen.buttons.any { it.id.value.contains("dungeon_portals") })
+        open(HelpCenterPage.HELP)
+        assertEquals("help.help", screen.id)
+        assertEquals(listOf("help_guide", "help_goals", "help_recovery", "help_commands", "help_now",
+            "help_context", "help_players", "help_requests", "help_menu"), screen.buttons.map { it.id.value })
+        click("help_guide")
+        assertFalse(screen.buttons.any { it.id.value in setOf("vanilla", "mining", "biomes") })
+        click("back")
+        assertEquals("help.help", screen.id)
     }
 
     @Test
@@ -269,8 +273,7 @@ class HelpCenterScreensTest {
         every { gateway.features() } returns HelpCenterFeature.entries.toSet() - HelpCenterFeature.TEAMS
         open(HelpCenterPage.ROOT)
         assertFalse(screen.buttons.any { it.id.value == "teams" })
-        assertTrue(screen.buttons.any { it.id.value == "requests" })
-        assertEquals(15, screen.buttons.size)
+        assertEquals(9, screen.buttons.size)
         open(HelpCenterPage.PLAYERS)
         assertFalse(screen.buttons.any { it.id.value == "command_teams" })
     }
@@ -279,6 +282,7 @@ class HelpCenterScreensTest {
     fun `progression hides absent plugins and daily quests open the current native provider`() {
         open(HelpCenterPage.ROOT)
         click("root_progress")
+        assertFalse(screen.buttons.any { it.id.value == "command_rankup" })
         assertFalse(screen.buttons.single { it.id.value == "command_quests" }.closeDialogBeforeAction)
         click("command_quests")
         assertEquals(listOf("rank quests"), executed)
@@ -289,6 +293,9 @@ class HelpCenterScreensTest {
         assertFalse(screen.buttons.any { it.id.value in setOf("command_rank", "command_rankup", "command_jobs", "command_quests", "command_skills") })
         open(HelpCenterPage.ACTIVITIES)
         assertFalse(screen.buttons.any { it.id.value == "command_battle_pass" })
+        assertFalse(screen.buttons.any { it.id.value == "activity_goals" })
+        open(HelpCenterPage.TECHNOLOGY)
+        assertFalse(screen.buttons.any { it.id.value == "command_items" })
     }
 
     @Test
@@ -328,7 +335,9 @@ class HelpCenterScreensTest {
             open(HelpCenterPage.ROOT)
             click("root_technology")
             click("command_builder")
-            assertEquals("builder", executed.last())
+            assertEquals("help.builder", screen.id)
+            click("builder_wand")
+            assertEquals("builder wand", executed.last())
             executed.clear()
             open(HelpCenterPage.ROOT)
             click("root_technology")
@@ -342,19 +351,15 @@ class HelpCenterScreensTest {
     }
 
     @Test
-    fun `mine lift entry requires registered feature and permission`() {
-        val access = player.addAttachment(paper.createSimplePlugin("MineLiftAccess"), "arcfarms.mine", true)
+    fun `travel keeps only routed destinations and random teleport selects one of three worlds`() {
         open(HelpCenterPage.TRAVEL)
-        assertTrue(screen.buttons.any { it.id.value == "command_minelift" })
-        click("command_minelift")
-        assertEquals(listOf("arcfarms:minelift"), executed)
-        access.setPermission("arcfarms.mine", false)
-        open(HelpCenterPage.TRAVEL)
-        assertFalse(screen.buttons.any { it.id.value == "command_minelift" })
-        access.setPermission("arcfarms.mine", true)
-        every { gateway.features() } returns HelpCenterFeature.entries.toSet() - HelpCenterFeature.MINE_LIFT
-        open(HelpCenterPage.TRAVEL)
-        assertFalse(screen.buttons.any { it.id.value == "command_minelift" })
+        assertEquals(listOf("create_home", "warps", "public_homes", "spawn", "rtp", "back_command"),
+            screen.buttons.map { it.id.value })
+        assertTrue(body().contains("Личные варпы"))
+        click("rtp")
+        assertEquals(listOf("rtp_vanilla", "rtp_mining", "rtp_biomes"), screen.buttons.map { it.id.value })
+        click("rtp_biomes")
+        assertEquals(listOf("rtp region:survival"), executed)
     }
 
     @Test
@@ -594,29 +599,19 @@ class HelpCenterScreensTest {
     }
 
     @Test
-    fun `async favorites cannot replace a newer menu`() {
-        val pending = CompletableFuture<HelpCenterPreferences>()
-        every { preferences.load(any()) } returns pending
-        open(HelpCenterPage.FAVORITES)
-        open(HelpCenterPage.ROOT)
-        pending.complete(HelpCenterPreferences(listOf("jobs")))
-        paper.performTicks(2)
-        assertEquals("Главное меню", plain(screen.title))
-    }
-
-    @Test
-    fun `favorites picker reaches action cards and full list has no destructive add`() {
-        every { preferences.load(any()) } returns CompletableFuture.completedFuture(
-            HelpCenterPreferences(listOf("jobs", "skills", "auction", "rtp")),
-        )
-        open(HelpCenterPage.FAVORITES)
-        click("find_action")
-        click("pick_activities")
-        click("pick_dungeons")
-        assertTrue(body().contains("четыре места"))
-        assertFalse(screen.buttons.any { it.id.value == "toggle_favorite" })
-        click("back")
-        assertTrue(screen.buttons.any { it.id.value == "pick_dungeons" })
+    fun `public homes are browsed and confirmed inside native dialogs`() {
+        every { gateway.loadPublicHomes(player, any()) } returns CompletableFuture.completedFuture(listOf(
+            HelpCenterPublicHome("Foll:base", "База", "Foll", "survival", "world", 10, 70, -20, "Магазин и сад"),
+        ))
+        open(HelpCenterPage.TRAVEL)
+        click("public_homes")
+        assertEquals("help.travel.public-homes", screen.id)
+        click("public_home_0")
+        assertEquals("help.travel.public-home", screen.id)
+        assertTrue(body().contains("Foll"))
+        assertTrue(body().contains("Магазин и сад"))
+        click("teleport")
+        assertEquals("huskhomes:phome Foll:base", executed.last())
     }
 
     @Test
@@ -658,7 +653,7 @@ class HelpCenterScreensTest {
     fun `all major screens construct actual published core dialog models`() {
         listOf(HelpCenterPage.ROOT, HelpCenterPage.NOW, HelpCenterPage.COMMANDS, HelpCenterPage.TRAVEL,
             HelpCenterPage.ACTIVITIES, HelpCenterPage.TECHNOLOGY, HelpCenterPage.SETTINGS, HelpCenterPage.RECOVERY,
-            HelpCenterPage.FAVORITES, HelpCenterPage.GOALS, HelpCenterPage.ITEM, HelpCenterPage.CONTEXT).forEach {
+            HelpCenterPage.HELP, HelpCenterPage.GOALS, HelpCenterPage.ITEM, HelpCenterPage.CONTEXT).forEach {
             open(it)
             assertTrue(screen.buttons.isNotEmpty(), it.name)
             assertFalse(body().contains("<newline>"), it.name)

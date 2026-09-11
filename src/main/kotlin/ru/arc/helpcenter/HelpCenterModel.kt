@@ -7,7 +7,8 @@ import java.util.UUID
 import ru.arc.network.NetworkPlayerName
 
 enum class HelpCenterPage(vararg val aliases: String) {
-    ROOT("root", "главная"),
+    ROOT("root", "главная", "menu", "меню"),
+    HELP("help", "помощь", "справка"),
     NOW("now", "сейчас"),
     MY("my", "мое", "моё", "про меня"),
     GUIDE("guide", "гайд", "start", "начало"),
@@ -20,7 +21,6 @@ enum class HelpCenterPage(vararg val aliases: String) {
     TECHNOLOGY("technology", "технологии", "предметы"),
     SETTINGS("settings", "настройки"),
     RECOVERY("recovery", "проблема", "что случилось"),
-    FAVORITES("favorites", "избранное", "недавнее"),
     GOALS("goals", "заняться", "цели"),
     ITEM("item", "предмет", "в руке"),
     CONTEXT("context", "рядом", "контекст"),
@@ -149,6 +149,20 @@ data class HelpCenterHomes(
     val homes: List<HelpCenterHome>,
     val usedSlots: Int,
     val maxSlots: Int,
+    val usedWarps: Long? = null,
+    val maxWarps: Long? = null,
+)
+
+data class HelpCenterPublicHome(
+    val identifier: String,
+    val name: String,
+    val owner: String,
+    val server: String,
+    val world: String,
+    val x: Int,
+    val y: Int,
+    val z: Int,
+    val description: String?,
 )
 
 data class HelpCenterProfile(
@@ -428,6 +442,11 @@ object HelpCenterCommands {
 
     fun relocateHome(name: String): String = "edithome ${safeHome(name)} relocate"
 
+    fun publicHome(identifier: String): String {
+        require(PUBLIC_HOME_ID.matches(identifier)) { "Unsafe public home identifier" }
+        return "huskhomes:phome $identifier"
+    }
+
     fun teleportRequest(playerName: String): String = "tpa ${safePlayer(playerName)}"
 
     fun teleportHere(playerName: String): String = "tpahere ${safePlayer(playerName)}"
@@ -462,6 +481,7 @@ object HelpCenterCommands {
     private fun safePlayer(name: String): String = NetworkPlayerName.of(name).value
 
     private val WHITESPACE = Regex("\\s+")
+    private val PUBLIC_HOME_ID = Regex("[\\p{L}\\p{N}_.:-]{1,96}")
     private val AMOUNT = Regex("[0-9]{1,12}(?:\\.[0-9]{1,2})?")
     private val MAX_PAYMENT = BigDecimal("999999999999.99")
 }

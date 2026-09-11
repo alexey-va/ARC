@@ -42,12 +42,20 @@ class LandsUiController(
         val lands = gateway.lands(player)
         val selected = lands.firstOrNull { it.selected }
         val body = mutableListOf(
-            PaperDialogBody(
-                text(
-                    "root-body",
-                    "count" to lands.size.toString(),
-                    "selected" to (selected?.name ?: settings.text("selected-none")),
+            DialogTables.body(
+                rows = listOf(
+                    text("table-settlements-label") to Component.text(lands.size),
+                    text("table-selected-label") to Component.text(selected?.name ?: settings.text("selected-none")),
+                    text("table-protected-label") to text(
+                        "table-protected-value",
+                        "chunks" to lands.sumOf { it.chunks }.toString(),
+                    ),
                 ),
+                frame = DialogTables.Frame.LEGENDARY,
+                width = 320,
+            ),
+            PaperDialogBody(
+                text("root-body"),
                 width = 500,
             ),
         )
@@ -121,21 +129,21 @@ class LandsUiController(
         withLand(player, landId) { land ->
             val role = settings.text(if (land.ownerId == player.uniqueId) "role-owner" else "role-member")
             val buttons = mutableListOf(
-                button("lands_menu", text("open-lands-label"), text("open-lands-tooltip")) {
-                    executeForLand(player, land.id, LandsUiCommands::menu)
-                }.closing(),
-                button("members", text("members-label"), text("members-tooltip")) { openMembers(player, land.id) },
-                button("add_member", text("add-member-label"), text("members-tooltip")) { openAddMember(player, land.id) },
-                button("territory", text("territory-label"), text("territory-tooltip")) { openTerritory(player, land.id) },
+                commandButton("claim", "claim-label", "claim-tooltip", player, land.id, "claim"),
                 button("unclaim", text("unclaim-label"), text("unclaim-tooltip")) { openUnclaimConfirm(player, land.id) },
-                button("region_tool", text("region-tool-label"), text("region-tool-tooltip")) {
-                    LandsUiModule.giveRegionTool(player, land.id)
-                }.closing(),
+                button("add_member", text("add-member-label"), text("members-tooltip")) { openAddMember(player, land.id) },
             )
-            claimRadiusButton(player)?.let(buttons::add)
-            claimDisplayButton(player, land.id)?.let(buttons::add)
             if (land.ownerId == player.uniqueId) {
                 buttons += button("rename", text("rename-label"), text("rename-tooltip")) { openRename(player, land.id) }
+            }
+            buttons += button("members", text("members-label"), text("members-tooltip")) { openMembers(player, land.id) }
+            buttons += button("territory", text("territory-label"), text("territory-tooltip")) { openTerritory(player, land.id) }
+            claimRadiusButton(player)?.let(buttons::add)
+            claimDisplayButton(player, land.id)?.let(buttons::add)
+            buttons += button("lands_menu", text("open-lands-label"), text("open-lands-tooltip")) {
+                executeForLand(player, land.id, LandsUiCommands::menu)
+            }.closing()
+            if (land.ownerId == player.uniqueId) {
                 buttons += button("delete", text("delete-label"), text("delete-tooltip")) { openDanger(player, land.id) }
             }
             show(
@@ -152,7 +160,6 @@ class LandsUiController(
                                 "used" to land.memberIds.size.toString(), "maximum" to land.maxMembers.toString()),
                             text("table-balance-label") to text("table-coins-value", "value" to amountFormat.format(land.balance)),
                         ),
-                        headers = text("table-label-heading") to text("table-value-heading"),
                         frame = DialogTables.Frame.LEGENDARY,
                     )),
                     buttons = buttons,
@@ -373,7 +380,7 @@ class LandsUiController(
                             ),
                         ),
                     ),
-                    buttons = listOf(button("add_member", text("add-member-label")) { openAddMember(player, landId) }) + memberButtons,
+                    buttons = memberButtons + button("add_member", text("add-member-label")) { openAddMember(player, landId) },
                     exitButton = back("back") { openDetails(player, landId) },
                     columns = 2,
                 ),
@@ -639,7 +646,6 @@ class LandsUiController(
             text("table-territory-label") to text("table-territory-value",
                 "used" to land.chunks.toString(), "maximum" to land.maxChunks.toString()),
         ),
-        headers = text("table-label-heading") to text("table-value-heading"),
         frame = DialogTables.Frame.LEGENDARY,
         width = 320,
     )

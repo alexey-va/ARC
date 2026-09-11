@@ -20,6 +20,11 @@ text:
   table-label-heading: 'Параметр'
   table-value-heading: 'Значение'
   table-player-label: 'Игрок'
+  table-online-label: 'В сети'
+  table-warps-label: 'Личные варпы'
+  table-owner-label: 'Владелец'
+  table-location-label: 'Сейчас'
+  table-location-value: '<#86dcf1><server> <#e8dfd2>· <#e6fff3><world>'
   table-rank-label: 'Ранг'
   table-balance-label: 'Баланс'
   table-tokens-label: 'Жетоны'
@@ -223,27 +228,39 @@ text:
   diagnostic-lost-item-help: '<#e6fff3>Возьмите предмет в основную руку и откройте его карточку.<newline>Для дополнительных предметов доступен рецепт, если его предоставляет каталог.<newline><#e8dfd2>Переход в магазин или на аукцион сам по себе ничего не продаёт.'
   diagnostic-command-failed-help: '<#e6fff3>Найдите действие через поиск — там есть описание и точная команда.<newline>Проверьте последнее сообщение чата: в нём может быть причина отказа.<newline><#e8dfd2>Недоступный на этом сервере раздел может отсутствовать в каталоге.'
   root-title: "<italic:false><#86dcf1>Главное меню"
-  root-body: "<italic:false><#e8dfd2>Всё для игры — в одном месте.<newline><#e8dfd2>Выберите раздел; наведите на кнопку для подробностей."
-  teams-label: "<#f3a2c9>Команда игроков ›"
-  now-label: "<italic:false><#86dcf1>Мой профиль ›"
+  root-body: "<italic:false><#86dcf1>RusCrafting <#e8dfd2>— спокойное выживание, строительство и приключения в одной сети.<newline><#e8dfd2>Ниже — ваша короткая сводка; кнопки ведут к игровым разделам без запоминания команд."
+  root-state-loading: '<#e8dfd2>Обновляю состояние игрока…'
+  teams-label: '<#f3a2c9>⚑ Кланы ›'
+  now-label: "<italic:false><#86dcf1>◆ Мой профиль ›"
   now-tooltip: '<#e6fff3>Ваше состояние и полезные следующие шаги.'
   players-label: "<italic:false><#f3a2c9>Игроки ›"
   players-tooltip: '<#e6fff3>Телепорт, сообщение, перевод, дуэль или приглашение.'
   my-label: '<#d7b486>Про меня'
   my-tooltip: '<#e6fff3>Ваш профиль, дома, поселения и прогресс.'
-  guide-label: '<#f4bd6a>С чего начать ›'
+  guide-label: '<#f4bd6a>Первые шаги ›'
   guide-tooltip: '<#e6fff3>Первые шаги без лишних команд.'
-  commands-label: "<italic:false><#ffffff>Поиск ›"
+  commands-label: "<italic:false><#ffffff>⌕ Поиск ›"
   commands-tooltip: '<#e6fff3>Найти действие обычной фразой.'
-  travel-label: "<italic:false><#91c4ff>Телепортация ›"
+  travel-label: "<italic:false><#91c4ff>◇ Телепортация ›"
   travel-tooltip: '<#e6fff3>Дома, миры, варпы и возврат.'
-  privat-label: "<italic:false><#a3de92>Приват ›"
+  privat-label: "<italic:false><#a3de92>⌂ Приваты ›"
   privat-tooltip: '<#e6fff3>Создание, территория, участники и подробный гайд.'
   main-menu-label: '<#ffffff>Главное меню'
   main-menu-tooltip: '<#e6fff3>Открыть остальные игровые разделы сервера.'
   back-label: "<#ffffff>‹ Назад"
   root-label: "<#ffffff>‹ Назад"
   not-available: '—'
+  help-title: '<#f4bd6a>Помощь по серверу'
+  help-body: '<#e8dfd2>Здесь собраны объяснения и выходы из частых ситуаций.<newline><#86dcf1>Новичку <#e8dfd2>— первые шаги; <#ffb277>если хочется игры <#e8dfd2>— подбор занятия; <#ff8b82>если что-то не работает <#e8dfd2>— диагностика.'
+  help-guide-label: '<#f4bd6a>✦ Первые шаги ›'
+  help-goals-label: '<#ffb277>⚡ Подобрать занятие ›'
+  help-recovery-label: '<#ff8b82>◆ Решить проблему ›'
+  help-commands-label: '<#ffffff>⌕ Найти действие ›'
+  help-now-label: '<#86dcf1>◇ Моё состояние ›'
+  help-context-label: '<#85dfc4>⌖ Что вокруг меня ›'
+  help-players-label: '<#f3a2c9>☻ Игроки онлайн ›'
+  help-requests-label: '<#c4abff>✉ Входящие запросы ›'
+  help-menu-label: '<#9bd48d>⌂ Главное меню ›'
   now-title: "<#86dcf1>Мой профиль"
   world-alias-vanilla: 'Ванильный мир'
   world-alias-biomes: 'Мир с новыми биомами'
@@ -368,8 +385,8 @@ text:
   my-skills-label: '<#85dfc4>Мои навыки ›'
   my-skills-tooltip: '<#e6fff3>Открыть навыки и их развитие.'
 
-  guide-title: '<#f4bd6a>С чего начать'
-  guide-body: '<#f4bd6a>1 · Стартовый набор<newline><#e6fff3>Получите первые инструменты и припасы.<newline><newline><#f4bd6a>2 · Выберите мир<newline><#e6fff3>Обычный мир, мир добычи или мир новых биомов.<newline><newline><#f4bd6a>3 · Начните зарабатывать<newline><#e6fff3>Выберите работу и получайте деньги за привычные действия.<newline><newline><#f4bd6a>4 · Дом и поселение<newline><#e6fff3>Сохраните точку дома и защитите территорию поселением.'
+  guide-title: '<#f4bd6a>Первые шаги'
+  guide-body: '<#f4bd6a>1 · Подготовьтесь<newline><#e8dfd2>Заберите стартовый набор: инструменты и припасы помогут спокойно освоиться.<newline><newline><#86dcf1>2 · Найдите место<newline><#e8dfd2>Выберите подходящий мир, осмотритесь и не спешите строить постоянную базу в первом попавшемся месте.<newline><newline><#ffb277>3 · Освойте заработок<newline><#e8dfd2>Работы платят за обычные игровые действия. Выберите профессию под то, чем уже занимаетесь.<newline><newline><#9bd48d>4 · Закрепитесь<newline><#e8dfd2>Сохраните дом, затем создайте поселение и защитите чанки. Дом отвечает за возвращение, приват — за безопасность территории.<newline><newline><#c4abff>5 · Выберите свой путь<newline><#e8dfd2>Стройте, исследуйте, торгуйте, проходите данжи или играйте вместе — обязательной линейки здесь нет.'
   kit-label: '<#d7b486>Получить набор'
   vanilla-label: '<#d7b486>Обычный мир'
   mining-label: '<#d7b486>Мир добычи'
@@ -389,14 +406,14 @@ text:
   category-start-label: '<#d7b486>Начало игры'
   category-travel-label: '<#d7b486>Телепортация'
   category-protection-label: '<#d7b486>Защита'
-  category-trade-label: "<italic:false><#f4d87a>Торговля ›"
-  category-progress-label: "<italic:false><#c4abff>Развитие ›"
+  category-trade-label: "<italic:false><#f4d87a>◎ Торговля ›"
+  category-progress-label: "<italic:false><#c4abff>✦ Развитие ›"
   category-social-label: '<#d7b486>Общение и сервер'
-  category-activities-label: "<italic:false><#ffb277>Активности ›"
-  category-technology-label: "<italic:false><#85dfc4>Технологии ›"
-  category-settings-label: "<#ffffff>Настройки ›"
+  category-activities-label: "<italic:false><#ffb277>⚡ Активности ›"
+  category-technology-label: "<italic:false><#85dfc4>⚒ Технологии ›"
+  category-settings-label: "<#ffffff>⚙ Настройки ›"
   category-activities-tooltip: '<#e6fff3>События, дуэли, данжи и фермы.'
-  category-technology-tooltip: '<#e6fff3>Предметы, зачарования, механизмы и транспорт.'
+  category-technology-tooltip: '<#e6fff3>Механизмы, зачарования, инструменты строителя и маунты.'
   category-settings-tooltip: '<#e6fff3>Личные настройки игры и интерфейса.<newline><#e8dfd2>Чат, тропинки, полёт, порталы и управление.<newline>В названии кнопки — текущий режим,<newline>в подсказке — его назначение.'
   category-trade-tooltip: '<#e6fff3>Магазины, быстрая продажа и аукцион.'
   category-progress-tooltip: '<#e6fff3>Ранг, работы, задания и навыки.'
@@ -409,6 +426,20 @@ text:
   category-social-title: '<#f4bd6a>Общение и сервер'
   category-activities-title: '<#f4bd6a>Активности'
   category-technology-title: '<#f4bd6a>Технологии'
+  category-progress-body: '<#c4abff>Развивайте персонажа в удобном темпе.<newline><#e8dfd2>Ранг показывает общий путь, задания дают короткие цели, работы и навыки растут от привычных действий.'
+  category-activities-body: '<#ffb277>Выберите формат под настроение.<newline><#e8dfd2>Для короткой сессии подойдут события, дуэли или паркур; для долгого похода — данжи и фермы.<newline><#f4d87a>Розыгрыши и голосование <#e8dfd2>можно проверить между делом.'
+  category-technology-body: '<#85dfc4>Технологии расширяют возможности базы и персонажа.<newline><#e8dfd2>Изучайте механизмы в книге, улучшайте снаряжение, стройте быстрее специальными инструментами и открывайте маунтов.'
+  command-events-label: '<#ffb277>⚡ События ›'
+  command-duels-label: '<#ff8b82>⚔ Дуэли ›'
+  command-giveaways-label: '<#f4d87a>☆ Розыгрыши ›'
+  command-dungeons-label: '<#c4abff>◆ Данжи ›'
+  command-farms-label: '<#9bd48d>⌂ Фермы ›'
+  command-parkour-label: '<#85dfc4>◇ Паркур ›'
+  command-slimefun-label: '<#85dfc4>⚙ Книга технологий ›'
+  command-enchants-label: '<#c4abff>✦ Зачарования ›'
+  command-enchanter-label: '<#f4d87a>◇ Зачарователь ›'
+  command-builder-label: '<#9bd48d>⚒ Инструменты строителя ›'
+  command-mounts-label: '<#86dcf1>♞ Маунты ›'
   category-settings-title: "<italic:false><#f4bd6a>Настройки"
   setting-chat-current: "<#d7b486>Канал чата: <state>"
   setting-particles-current: "<#d7b486>Частицы: <state>"
@@ -547,7 +578,7 @@ text:
   recovery-body: '<#e6fff3>Выберите самое похожее действие.<newline><#e8dfd2>Если не помогло — откройте поиск и опишите проблему своими словами.'
   category-body: '<#e6fff3>Выберите действие. Подробности — при наведении.<newline><#e8dfd2>После закрытия игрового инвентаря вы вернётесь сюда.'
   command-label: '<#d7b486><label>'
-  command-vote-label: '<#d7b486>Голосование'
+  command-vote-label: '<#86dcf1>☀ Голосование ›'
   command-chat-global-label: '<#d7b486>Глобальный чат'
   command-chat-local-label: '<#d7b486>Локальный чат'
   command-lands-borders-label: '<#d7b486>Границы привата'
@@ -559,13 +590,13 @@ text:
 
   travel-title: '<#f4bd6a>Телепортация'
   travel-loading: '<#e6fff3>Загружаю ваши дома…'
-  travel-body: '<#e8dfd2>Дома  <#e6fff3><homes>/<max_homes><newline><#e6fff3>Выберите дом или другое направление.'
+  travel-body: '<#91c4ff>Дома <#e8dfd2>возвращают в ваши личные точки, <#86dcf1>варпы <#e8dfd2>ведут к местам игроков, а случайная телепортация помогает начать исследование выбранного мира.<newline><#e8dfd2>Телепортация может иметь короткую задержку — не двигайтесь до её завершения.'
   travel-empty: '<#e6fff3>У вас пока нет домов. Создайте первый в текущей точке.'
   travel-limit: '<#e8dfd2>Свободных слотов нет. Удалите или перенесите существующий дом.'
   travel-error: '<#e6fff3>Дома сейчас не загрузились, но остальные способы телепортации доступны.'
-  home-label: '<#d7b486><home>'
+  home-label: '<#91c4ff>⌂ <home> ›'
   home-tooltip: '<#e6fff3><server> · <world><newline><#e8dfd2><x>, <y>, <z>'
-  create-home-label: '<#d7b486>Новый дом'
+  create-home-label: '<#c4abff>＋ Новый дом ›'
   create-home-tooltip: '<#e6fff3>Сохранить текущую точку.'
   home-create-title: '<#f4bd6a>Новый дом'
   home-create-body: '<#e6fff3>Введите короткое имя без пробелов.<newline><#e8dfd2>Дом будет создан в вашей текущей точке.'
@@ -585,19 +616,46 @@ text:
   home-delete-title: '<#ff6b61>Удаление · <home>'
   home-delete-body: '<#ff6b61><bold>Это необратимое действие.<newline><#e6fff3>Дом <#e6fff3><home> <#e6fff3>будет удалён.'
   home-delete-confirm: '<#ff6b61><bold>Удалить навсегда'
-  warps-label: '<#d7b486>Варпы игроков'
-  spawn-label: '<#d7b486>Спавн'
-  rtp-label: '<#d7b486>Случайное место'
-  back-command-label: '<#d7b486>На прежнее место'
+  warps-label: '<#86dcf1>◇ Варпы игроков ›'
+  spawn-label: '<#f4d87a>⌂ Спавн'
+  rtp-label: '<#9bd48d>⌖ Случайное место ›'
+  rtp-tooltip: '<#e8dfd2>Выбрать один из трёх миров и найти безопасную случайную точку.'
+  back-command-label: '<#c4abff>↶ На прежнее место'
   stuck-label: '<#d7b486>Выбраться на спавн'
-  public-homes-label: '<#d7b486>Публичные дома'
+  public-homes-label: '<#f3a2c9>⌂ Публичные дома ›'
   public-homes-tooltip: '<#e6fff3>Посмотреть открытые дома игроков.'
+  public-homes-title: '<#f3a2c9>Публичные дома'
+  public-homes-loading: '<#e8dfd2>Загружаю открытые дома игроков…'
+  public-homes-body: '<#f3a2c9>Открытых точек: <#ffffff><count><#e8dfd2> · страница <page>/<pages><newline><#e8dfd2>Выберите дом, чтобы увидеть владельца, мир и координаты до телепортации.'
+  public-homes-empty: '<#e8dfd2>Сейчас нет публичных домов.'
+  public-homes-error: '<#ff8b82>Не удалось загрузить публичные дома.<newline><#e8dfd2>Остальные способы телепортации продолжают работать.'
+  public-home-label: '<#f3a2c9>⌂ <home> ›'
+  public-home-tooltip: '<#e8dfd2>Владелец: <#ffffff><owner><newline><#e8dfd2>Мир: <#ffffff><world>'
+  public-home-title: '<#f3a2c9><home>'
+  public-home-description: '<#f3a2c9>Описание<newline><#e8dfd2><description>'
+  public-home-no-description: '<#e8dfd2>Владелец не добавил описание этой точки.'
+  public-home-teleport-label: '<#9bd48d>Телепортироваться'
+  public-home-teleport-tooltip: '<#e8dfd2>Начать телепортацию в этот публичный дом.'
+  rtp-title: '<#9bd48d>Случайное место'
+  rtp-body: '<#e8dfd2>Выберите мир. Сервер найдёт безопасную случайную точку именно в нём.<newline><#9bd48d>Обычный мир <#e8dfd2>— постоянное выживание; <#f4d87a>мир добычи <#e8dfd2>— ресурсы; <#86dcf1>новые биомы <#e8dfd2>— необычные ландшафты.'
+  rtp-vanilla-label: '<#9bd48d>⌂ Обычный мир'
+  rtp-vanilla-tooltip: '<#e8dfd2>Случайная безопасная точка в постоянном мире выживания.'
+  rtp-mining-label: '<#f4d87a>⛏ Мир добычи'
+  rtp-mining-tooltip: '<#e8dfd2>Случайная точка в обновляемом ресурсном мире.'
+  rtp-biomes-label: '<#86dcf1>✦ Мир новых биомов'
+  rtp-biomes-tooltip: '<#e8dfd2>Случайная точка среди необычных биомов.'
+  builder-title: '<#9bd48d>Инструменты строителя'
+  builder-body: '<#9bd48d>Селектор <#e8dfd2>отмечает две точки будущей области: сначала левый угол, затем противоположный.<newline><#e8dfd2>После выбора используйте команды ArcBuilder для заполнения, замены, копирования или разборки. Всегда проверяйте размер выделения перед крупной операцией.<newline><#86dcf1>Кнопка ниже <#e8dfd2>выдаст новый селектор, если старый потерян.'
+  builder-wand-label: '<#9bd48d>⚒ Получить селектор'
+  builder-wand-tooltip: '<#e8dfd2>Выдать инструмент выбора области командой /builder wand.'
+  builder-help-label: '<#86dcf1>◇ Справка ArcBuilder'
+  builder-help-tooltip: '<#e8dfd2>Показать доступные команды ArcBuilder в чате.'
   invalid-home: '<#ff6b61>Имя дома: до 32 букв, цифр, _ или - без пробелов.'
   action-failed: '<#ff6b61>Команда не выполнилась. Попробуйте ещё раз или сообщите администрации.'
 
 commands:
   parkour: { label: 'Паркур', description: 'Выбрать трассу и начать прохождение', keywords: 'прыжки трассы карты parkour pa pkr' }
-  teams: { label: 'Команда игроков', description: 'Создать команду, пригласить друзей и открыть управление', keywords: 'команда клан гильдия друзья party teams team clans arcjustteams' }
+  teams: { label: 'Кланы', description: 'Создать клан, пригласить друзей и открыть управление', keywords: 'команда клан гильдия друзья party teams team clans arcjustteams' }
   menu: { label: 'Главное меню', description: 'Все игровые разделы', keywords: 'разделы сервер mm' }
   kit: { label: 'Набор новичка', description: 'Получить стартовые предметы', keywords: 'старт начало вещи' }
   rules: { label: 'Правила', description: 'Правила игрового сервера', keywords: 'запрещено можно' }
@@ -632,7 +690,7 @@ commands:
   enchants: { label: 'Зачарования', description: 'Список особых зачарований', keywords: 'энчанты чары магия' }
   enchanter: { label: 'Зачарователь', description: 'Магазин особых зачарований', keywords: 'купить чары энчанты' }
   builder: { label: 'Инструменты строителя', description: 'Справка по инструментам и строительным книгам', keywords: 'стройка билдер блоки' }
-  mounts: { label: 'Транспорт', description: 'Коллекция ездовых существ', keywords: 'маунты транспорт питомцы' }
+  mounts: { label: 'Маунты', description: 'Коллекция ездовых существ', keywords: 'маунты транспорт питомцы' }
   lands-borders: { label: 'Границы поселения', description: 'Показать границы участка', keywords: 'чанки границы приват' }
   trails-on: { label: 'Протаптывать тропинки', description: 'Создавать тропинки частой ходьбой по земле', keywords: 'trails тропа тропинки дорожки земля ходьба' }
   trails-off: { label: 'Не протаптывать тропинки', description: 'Отключить создание тропинок от своих шагов', keywords: 'trails тропа тропинки дорожки земля ходьба' }

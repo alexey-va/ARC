@@ -21,7 +21,6 @@ enum class MenuShortcutAction(val id: String, val page: HelpCenterPage? = null) 
     MAIN("main", HelpCenterPage.ROOT),
     MOUNT("mount"),
     TRAVEL("travel", HelpCenterPage.TRAVEL),
-    FAVORITES("favorites", HelpCenterPage.FAVORITES),
     SETTINGS("settings", HelpCenterPage.SETTINGS),
     DISABLED("disabled"),
     ;

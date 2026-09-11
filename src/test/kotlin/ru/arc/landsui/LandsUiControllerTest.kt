@@ -64,7 +64,10 @@ class LandsUiControllerTest : StringSpec({
                     val details = checkNotNull(screen)
                     val detailsIds = details.buttons.map { it.id.value }
                     detailsIds shouldContain "add_member"
-                    detailsIds shouldContain "region_tool"
+                    detailsIds shouldBe listOf(
+                        "claim", "unclaim", "add_member", "rename", "members", "territory", "lands_menu", "delete",
+                    )
+                    ("region_tool" in detailsIds) shouldBe false
                     detailsIds.all { '-' !in it } shouldBe true
 
                     val context = mockk<PaperDialogClickContext>(relaxed = true)

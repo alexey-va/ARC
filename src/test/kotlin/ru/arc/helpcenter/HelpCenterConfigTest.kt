@@ -85,7 +85,7 @@ class HelpCenterConfigTest : StringSpec({
             ).forEach { key ->
                 MiniMessage.miniMessage().deserialize(settings.text(key)).containsBold() shouldBe false
             }
-            settings.text("travel-body").contains("<homes>") shouldBe true
+            settings.text("travel-body").contains("случайная телепортация", ignoreCase = true) shouldBe true
             settings.text("travel-title").contains("Телепортация") shouldBe true
             settings.text("guide-body").contains("Мир строительства") shouldBe false
             settings.command("privat").label.contains("Приват") shouldBe true
@@ -150,7 +150,6 @@ class HelpCenterConfigTest : StringSpec({
             MiniMessage.miniMessage().deserialize(settings.text("setting-chat-current")).color()?.value() shouldBe 0xd7b486
             settings.text("back-command-label").contains("прежнее место", ignoreCase = true) shouldBe true
             listOf(
-                "favorites-short-label",
                 "requests-short-label",
                 "context-short-label",
                 "goals-short-label",
@@ -161,7 +160,7 @@ class HelpCenterConfigTest : StringSpec({
             }
             settings.text("requests-body") shouldNot contain("Iris")
             settings.text("context-body") shouldNot contain("Iris")
-            settings.text("favorites-body").contains("<favorites>") shouldBe true
+            settings.text("help-body").contains("первые шаги", ignoreCase = true) shouldBe true
             settings.text("diagnostic-body").contains("<facts>") shouldBe true
         } finally {
             ConfigManager.clear()
