@@ -4,12 +4,15 @@ import org.bukkit.entity.Player
 import org.bukkit.Bukkit
 import ru.arc.ARC
 import ru.arc.core.PluginModule
-import ru.arc.core.Tasks
-import ru.arc.mounts.MountModule
-import ru.arc.mounts.MountRewardResult
+import ru.arc.onetime.OneTimeUseLedger
+import ru.arc.onetime.UnavailableOneTimeUseLedger
+import ru.arc.sql.onetime.MySqlOneTimeUseLedger
+import ru.arc.sql.onetime.MySqlOneTimeUsePartition
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import ru.arc.util.TextUtil
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
 
 object ItemsCatalogModule : PluginModule {
     override val name = "ItemsCatalog"
@@ -20,6 +23,8 @@ object ItemsCatalogModule : PluginModule {
     @Volatile private var controller: ItemsCatalogGuiController? = null
     @Volatile private var rewardController: RewardCatalogGuiController? = null
     @Volatile private var collectionSeals: CollectionSealController? = null
+    @Volatile private var physicalRewards: PhysicalRewardController? = null
+    private var rewardLedger: OneTimeUseLedger? = null
 
     override fun init() {
         start(
@@ -60,7 +65,8 @@ object ItemsCatalogModule : PluginModule {
     internal fun currentSnapshot(): ItemsCatalogSnapshot? = service?.currentSnapshot()
 
     fun rewardHealthSnapshot(): Map<String, Any?> =
-        rewardController?.healthSnapshot() ?: mapOf("enabled" to false)
+        (rewardController?.healthSnapshot() ?: mapOf("enabled" to false)) +
+            ("physicalRedemptionAvailable" to (physicalRewards?.available == true))
 
     private fun start(loaded: ItemsCatalogSettings, rewards: RewardCatalogSettings) {
         settings = loaded
@@ -69,25 +75,33 @@ object ItemsCatalogModule : PluginModule {
             seals.register()
             collectionSeals = seals
         }
+        val nativeRewards = CatalogPhysicalRewards(rewards)
+        val storage = PhysicalRewardStorageConfig.load(ARC.instance.dataPath)
+        val ledger = if (rewards.enabled && storage.enabled) runCatching {
+            MySqlOneTimeUseLedger.open(
+                storage.sql(),
+                "ARC-catalog-rewards", "arc_catalog_rewards",
+                listOf(MySqlOneTimeUseLedger.createTableMigration(1)),
+                MySqlOneTimeUsePartition("arc.catalog-reward"),
+            )
+        }.getOrElse {
+            warn("Physical reward storage unavailable: {}", it.javaClass.simpleName)
+            UnavailableOneTimeUseLedger
+        } else UnavailableOneTimeUseLedger
+        rewardLedger = ledger
+        val physical = PhysicalRewardController(
+            ARC.instance, ledger, nativeRewards::resolve, nativeRewards::canRedeem,
+            nativeRewards::redeem, ARC.serverName ?: "arc",
+        )
+        if (rewards.enabled) {
+            physical.register()
+            physicalRewards = physical
+        }
         rewardController = RewardCatalogGuiController(
-            rewards,
-            loaded.givePermission,
-            seals::createStack,
-            MountModule::rewardPreview,
-        ) { player, mountId ->
-            MountModule.grantReward(player, mountId).whenComplete { result, failure ->
-                Tasks.scheduler.runLater(1) {
-                    if (collectionSeals !== seals || !player.isOnline) return@runLater
-                    val message = when {
-                        failure != null -> rewards.messages.actionFailed
-                        result is MountRewardResult.Granted -> "<#a6ffce>Маунт открыт в вашей коллекции."
-                        result is MountRewardResult.AlreadyOwned -> "<#ffd567>Этот маунт уже есть в вашей коллекции."
-                        else -> rewards.messages.actionFailed
-                    }
-                    player.sendMessage(TextUtil.mm(message, true))
-                }
-            }
-        }.takeIf { it.isAvailable() }
+            rewards, loaded.givePermission, seals::createStack,
+            { entry -> physical.previewStack(nativeRewards.key(entry)) },
+            { entry -> physical.createStack(nativeRewards.key(entry)) },
+        ).takeIf { it.isAvailable() }
         info(
             "Reward catalogue loaded: enabled={} categories={} entries={}",
             rewards.enabled,
@@ -116,6 +130,15 @@ object ItemsCatalogModule : PluginModule {
         controller = null
         rewardController?.shutdown()
         rewardController = null
+        val closingRewards = physicalRewards
+        val closingLedger = rewardLedger
+        physicalRewards = null
+        rewardLedger = null
+        val drained = closingRewards?.closeAndDrain() ?: CompletableFuture.completedFuture(null)
+        drained.orTimeout(5, TimeUnit.SECONDS).whenCompleteAsync { _, failure ->
+            if (failure != null) warn("Physical reward shutdown retained unfinished claims for recovery")
+            closingLedger?.close()
+        }
         collectionSeals?.close()
         collectionSeals = null
         service?.shutdown()

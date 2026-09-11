@@ -1,0 +1,9 @@
+# Each backend must use the same private database for network-wide one-time redemption.
+enabled: false
+mysql:
+  host: localhost
+  port: 3306
+  database: arc
+  username: arc
+  password: ''
+  ssl-mode: VERIFY_IDENTITY

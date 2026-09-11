@@ -159,7 +159,7 @@ class RedisEconomyMountWallet(
 
     companion object {
         private const val HISTORY_LIMIT = 512
-        private val REASON_PATTERN = Regex("arc-mount(?:-refund)?:[0-9a-f-]{36}")
+        private val REASON_PATTERN = Regex("arc-(?:mount(?:-refund)?|reward):[0-9a-f-]{36}")
     }
 }
 

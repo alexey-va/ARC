@@ -53,7 +53,9 @@ class CollectionSealController(
             sessions.remove(event.player.uniqueId)?.cancel()
         }
 
-        @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
+        // RIGHT_CLICK_AIR is commonly pre-cancelled when vanilla has no action;
+        // the physical seal must still consume that event and open its menu.
+        @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
         fun onPlayerInteract(event: PlayerInteractEvent) {
             if (!active.get() || event.hand != org.bukkit.inventory.EquipmentSlot.HAND) return
             if (event.action !in RIGHT_CLICK_ACTIONS) return
@@ -266,7 +268,8 @@ class CollectionSealController(
             } ?: return null
         if (base.type.isAir) return null
         val enriched = RewardItemEnhancer.enrich(base, entry.enchantments) ?: return null
-        return CurrentChoice(entry, enriched.also { it.amount = 1 })
+        val presented = RewardItemPresentation.apply(enriched, entry)
+        return CurrentChoice(entry, presented.also { it.amount = 1 })
     }
 
     private fun providersEnabled(entry: RewardCatalogEntry): Boolean =
@@ -287,10 +290,6 @@ class CollectionSealController(
             val lore = buildList {
                 add(Component.empty())
                 addAll(nativeLore)
-                if (entry.description.isNotEmpty()) {
-                    if (nativeLore.isNotEmpty()) add(Component.empty())
-                    addAll(entry.description.map(::body))
-                }
                 add(Component.empty())
                 add(action(actionText))
             }

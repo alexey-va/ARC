@@ -19,7 +19,11 @@ sealed interface RewardCatalogSource {
     data class Planned(val id: String) : RewardCatalogSource
 
     data class Mount(val id: String) : RewardCatalogSource
+
+    data class FurniturePackage(val id: String) : RewardCatalogSource
 }
+
+data class RewardFurniturePackage(val name: String, val items: List<String>)
 
 data class RewardCatalogEntry(
     val id: String,
@@ -77,10 +81,21 @@ data class RewardCatalogSettings(
     val categories: List<RewardCatalogCategory>,
     val messages: RewardCatalogMessages,
     val rootIcon: CatalogIconStyle = CatalogIconStyle("CHEST"),
+    val packages: Map<String, RewardFurniturePackage> = emptyMap(),
+    val requireCaseCoverage: Boolean = false,
 ) {
     val entryCount: Int = categories.sumOf { it.entries.size }
 
     fun children(parentId: String?): List<RewardCatalogCategory> = categories.filter { it.parentId == parentId }
+
+    fun uncoveredRewards(): List<String> {
+        val included = categories.filter { it.rolls != null }.flatMap { it.entries }
+            .map { it.source to it.enchantments }.toSet()
+        return categories.filter { it.rolls == null }.flatMap { category ->
+            category.entries.filter { it.source !is RewardCatalogSource.Planned && (it.source to it.enchantments) !in included }
+                .map { "${category.id}/${it.id}" }
+        }
+    }
 }
 
 /** Resolves current reward state only after current access and provider checks pass. */

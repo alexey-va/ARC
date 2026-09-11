@@ -16,12 +16,10 @@ import ru.arc.hooks.HookRegistry
 import ru.arc.ops.ItemPresets
 import ru.arc.paper.menu.PaperMenuEntry
 import ru.arc.paper.menu.PaperMenuItemRenderContext
-import ru.arc.treasure.core.GiveResult
 import ru.arc.treasure.core.Treasure
 import ru.arc.treasure.core.Treasures
 import ru.arc.treasure.pouch.Pouches
 import ru.arc.util.ItemStackFactory
-import ru.arc.util.Logging.warn
 import ru.arc.util.TextUtil
 import ru.arc.util.withCustomModelData
 import java.util.concurrent.atomic.AtomicBoolean
@@ -31,8 +29,8 @@ class RewardCatalogGuiController(
     private val settings: RewardCatalogSettings,
     private val givePermission: String,
     private val sealStack: (String, CatalogIconStyle?) -> ItemStack? = { _, _ -> null },
-    private val mountPreview: (String) -> ItemStack? = { null },
-    private val mountGrant: (Player, String) -> Unit = { _, _ -> },
+    private val physicalPreview: (RewardCatalogEntry) -> ItemStack? = { null },
+    private val physicalCreate: (RewardCatalogEntry) -> ItemStack? = { null },
 ) {
     private val active = AtomicBoolean(true)
 
@@ -46,6 +44,7 @@ class RewardCatalogGuiController(
     fun healthSnapshot(): Map<String, Any?> = mapOf(
         "enabled" to isAvailable(),
         "entries" to settings.entryCount,
+        "uncoveredRewards" to settings.uncoveredRewards(),
         "categories" to settings.categories.map { category ->
             val planned = category.entries.filter { it.source is RewardCatalogSource.Planned }.map { it.id }
             val unavailable = category.entries.filter { entry ->
@@ -220,117 +219,60 @@ class RewardCatalogGuiController(
             active = active.get(),
             hasPermission = { player.hasPermission(givePermission) },
             providersEnabled = { providersEnabled(entry) },
-            resolve = { resolve(entry) },
+            resolve = { resolve(entry, grant = true) },
         )
         if (resolved == null) {
             if (!active.get()) player.closeInventory()
             sendConfigured(player, settings.messages.unavailable)
             return
         }
-        when (resolved) {
-            is ResolvedReward.TreasureValue -> giveTreasure(player, entry, resolved.value)
-            is ResolvedReward.MountValue -> mountGrant(player, resolved.id)
-            is ResolvedReward.Stacks ->
-                if (addStacks(player, resolved.values)) {
-                    sendConfigured(player, settings.messages.given)
-                } else {
-                    sendConfigured(player, settings.messages.inventoryFull)
-                }
-        }
-    }
-
-    private fun giveTreasure(player: Player, entry: RewardCatalogEntry, treasure: Treasure) {
-        if (!hasTreasureCapacity(player, treasure)) {
+        if (addStacks(player, resolved.values)) {
+            sendConfigured(player, settings.messages.given)
+        } else {
             sendConfigured(player, settings.messages.inventoryFull)
-            return
-        }
-        val result =
-            runCatching { Treasures.service.give(treasure, player) }
-                .getOrElse {
-                    warn(
-                        "Reward catalog treasure grant failed: player={} entry={} source={}",
-                        player.uniqueId,
-                        entry.id,
-                        sourceLabel(entry.source),
-                        it,
-                    )
-                    sendConfigured(player, settings.messages.unavailable)
-                    return
-                }
-        when (result) {
-            is GiveResult.Success -> sendConfigured(player, settings.messages.accepted)
-            is GiveResult.Failure -> {
-                warn("Reward catalog treasure grant rejected: player={} entry={} reason={}", player.uniqueId, entry.id, result.reason)
-                sendConfigured(player, settings.messages.unavailable)
-            }
         }
     }
 
-    private fun resolve(entry: RewardCatalogEntry): ResolvedReward? =
-        runCatching {
-            when (val source = entry.source) {
-                is RewardCatalogSource.Treasure ->
-                    Treasures.getPool(source.pool)
-                        ?.findById(source.id)
-                        ?.takeIf { treasure ->
-                            treasure !is Treasure.Slimefun ||
-                                HookRegistry.sfHook?.getSlimefunItemStack(treasure.itemId) != null
-                        }
-                        ?.let { treasure ->
-                            if (treasure is Treasure.Item) {
-                                RewardItemEnhancer.enrich(treasure.stack, entry.enchantments)
-                                    ?.let { treasure.copy(stack = it) }
-                            } else treasure.takeIf { entry.enchantments.isEmpty() }
-                        }?.let(ResolvedReward::TreasureValue)
-                is RewardCatalogSource.Preset ->
-                    ItemPresets.resolveStacks(source.id, 1).getOrNull()?.takeIf { it.isNotEmpty() && it.size <= MAX_STACKS }
-                        ?.let(ResolvedReward::Stacks)
-                is RewardCatalogSource.Pouch ->
-                    Pouches.createStack(source.id).getOrNull()?.let { ResolvedReward.Stacks(listOf(it)) }
-                is RewardCatalogSource.Seal ->
-                    sealStack(source.categoryId, entry.icon)?.let { ResolvedReward.Stacks(listOf(it)) }
-                is RewardCatalogSource.ItemsAdder ->
-                    CustomStack.getInstance(source.id)?.itemStack?.let { RewardItemEnhancer.enrich(it, entry.enchantments) }
-                        ?.let { ResolvedReward.Stacks(listOf(it)) }
-                is RewardCatalogSource.Planned -> null
-                is RewardCatalogSource.Mount ->
-                    mountPreview(source.id)?.let { ResolvedReward.MountValue(source.id, it) }
+    /** Rendering never mints a redeemable identity; only the guarded final click does. */
+    private fun resolve(entry: RewardCatalogEntry, grant: Boolean = false): ResolvedReward? = runCatching {
+        val values = when (val source = entry.source) {
+            is RewardCatalogSource.Treasure -> {
+                val treasure = Treasures.getPool(source.pool)?.findById(source.id) ?: return@runCatching null
+                when (treasure) {
+                    is Treasure.Item -> RewardItemEnhancer.enrich(treasure.stack, entry.enchantments)
+                        ?.let { capacityStacks(RewardItemPresentation.apply(it, entry), if (grant) treasure.amount else treasure.max) }
+                    is Treasure.Slimefun -> HookRegistry.sfHook?.getSlimefunItemStack(treasure.itemId)
+                        ?.let { capacityStacks(it, if (grant) treasure.rolledAmount else treasure.max) }
+                    is Treasure.Enchant -> if (grant) List(treasure.amount) { treasure.randomBook() }
+                        else List(treasure.max) { ItemStack(Material.ENCHANTED_BOOK) }
+                    is Treasure.Potion -> if (grant) List(treasure.amount) { Treasure.Potion.randomPotion() }
+                        else List(treasure.max) { ItemStack(Material.POTION) }
+                    else -> physical(entry, grant)?.let(::listOf)
+                }
             }
-        }.getOrNull()
+            is RewardCatalogSource.Preset -> ItemPresets.resolveStacks(source.id, 1).getOrNull()
+            is RewardCatalogSource.Pouch -> Pouches.createStack(source.id).getOrNull()?.let(::listOf)
+            is RewardCatalogSource.Seal -> sealStack(source.categoryId, entry.icon)?.let(::listOf)
+            is RewardCatalogSource.ItemsAdder -> CustomStack.getInstance(source.id)?.itemStack
+                ?.let { RewardItemEnhancer.enrich(it, entry.enchantments) }?.let { listOf(RewardItemPresentation.apply(it, entry)) }
+            is RewardCatalogSource.Mount, is RewardCatalogSource.FurniturePackage -> physical(entry, grant)?.let(::listOf)
+            is RewardCatalogSource.Planned -> null
+        }
+        values?.takeIf { it.isNotEmpty() && it.size <= MAX_STACKS }?.let(::ResolvedReward)
+    }.getOrNull()
+
+    private fun physical(entry: RewardCatalogEntry, grant: Boolean): ItemStack? =
+        if (grant) physicalCreate(entry) else physicalPreview(entry)
 
     private fun previewStack(entry: RewardCatalogEntry, resolved: ResolvedReward?): ItemStack =
-        when (resolved) {
-            is ResolvedReward.TreasureValue ->
-                when (val treasure = resolved.value) {
-                    is Treasure.Item -> treasure.stack.clone().also { it.amount = 1 }
-                    is Treasure.Slimefun -> HookRegistry.sfHook?.getSlimefunItemStack(treasure.itemId)?.clone()?.also { it.amount = 1 }
-                    else -> null
-                }
-            is ResolvedReward.Stacks -> resolved.values.firstOrNull()?.clone()
-            is ResolvedReward.MountValue -> resolved.preview.clone()
-            null -> null
-        } ?: styledStack(entry.icon ?: CatalogIconStyle(Material.PAPER.name))
+        resolved?.values?.firstOrNull()?.clone() ?: styledStack(entry.icon ?: CatalogIconStyle(Material.PAPER.name))
 
     private fun displayName(entry: RewardCatalogEntry, resolved: ResolvedReward?, preview: ItemStack): Component =
         entry.name?.let { authoredComponent(it, NAME_DEFAULT) }
             ?: nativeDisplayName(resolved, preview)
 
     private fun nativeDisplayName(resolved: ResolvedReward?, preview: ItemStack): Component =
-        when (resolved) {
-            is ResolvedReward.Stacks -> preview.itemMeta?.displayName() ?: Component.translatable(preview.type.translationKey())
-            is ResolvedReward.MountValue -> preview.itemMeta?.displayName() ?: Component.text("Маунт", NAME_DEFAULT)
-            is ResolvedReward.TreasureValue ->
-                when (val treasure = resolved.value) {
-                    is Treasure.Item -> preview.itemMeta?.displayName() ?: Component.translatable(preview.type.translationKey())
-                    is Treasure.Slimefun ->
-                        HookRegistry.sfHook?.getSlimefunItemStack(treasure.itemId)?.itemMeta?.displayName()
-                            ?: Component.translatable(preview.type.translationKey())
-                    else -> Component.text("Награда", NAME_DEFAULT)
-                }
-            null -> Component.text("Награда", NAME_DEFAULT)
-        }.let { component ->
-            authoredComponent(component, NAME_DEFAULT)
-        }
+        authoredComponent(preview.itemMeta?.displayName() ?: Component.translatable(preview.type.translationKey()), NAME_DEFAULT)
 
     private fun tooltipLines(
         entry: RewardCatalogEntry,
@@ -343,7 +285,7 @@ class RewardCatalogGuiController(
                     preview.itemMeta?.lore().orEmpty().take(MAX_INTRINSIC_LORE).map(::nonItalic).map(::contextualizeRewardCatalogNativeLore),
                 ),
             )
-            appendSection(entry.description.map(::descriptionComponent))
+            appendSection(entry.description.map(::descriptionComponent).filter { it !in preview.itemMeta?.lore().orEmpty() })
             appendSection(
                 buildList {
                     entry.rarity?.let { add(metadata("Редкость", authoredComponent(it, RARITY_DEFAULT))) }
@@ -365,46 +307,14 @@ class RewardCatalogGuiController(
     private fun isBlank(component: Component): Boolean =
         PlainTextComponentSerializer.plainText().serialize(component).isBlank()
 
-    private fun rewardAmount(resolved: ResolvedReward?): String? =
-        when (resolved) {
-            is ResolvedReward.Stacks -> resolved.values.sumOf { it.amount }.toString()
-            is ResolvedReward.MountValue -> "1 маунт · I уровень"
-            is ResolvedReward.TreasureValue -> resolved.value.let { treasure ->
-            when (treasure) {
-                is Treasure.Item -> if (treasure.min == treasure.max) treasure.min.toString() else "${treasure.min}–${treasure.max}"
-                is Treasure.Enchant -> if (treasure.min == treasure.max) treasure.min.toString() else "${treasure.min}–${treasure.max}"
-                is Treasure.Potion -> if (treasure.min == treasure.max) treasure.min.toString() else "${treasure.min}–${treasure.max}"
-                else -> null
-            }
-            }
-            null -> null
-        }
+    private fun rewardAmount(resolved: ResolvedReward?): String? = resolved?.values?.sumOf { it.amount }?.toString()
 
     private fun providersEnabled(entry: RewardCatalogEntry): Boolean =
         (entry.requires + if (entry.source is RewardCatalogSource.ItemsAdder) listOf("ItemsAdder") else emptyList()).all { required ->
             Bukkit.getPluginManager().plugins.any { plugin -> plugin.name.equals(required, ignoreCase = true) && plugin.isEnabled }
         }
 
-    private fun hasTreasureCapacity(player: Player, treasure: Treasure): Boolean =
-        when (treasure) {
-            is Treasure.Money -> true
-            is Treasure.Item -> hasCapacity(player, capacityStacks(treasure.stack, treasure.max))
-            is Treasure.Enchant -> emptyStorageSlots(player) >= treasure.max.coerceAtLeast(1)
-            is Treasure.Potion -> emptyStorageSlots(player) >= treasure.max.coerceAtLeast(1)
-            is Treasure.Ae -> emptyStorageSlots(player) >= treasure.amount.coerceAtLeast(1)
-            is Treasure.Slimefun ->
-                HookRegistry.sfHook?.getSlimefunItemStack(treasure.itemId)?.let { native ->
-                    hasCapacity(player, capacityStacks(native, treasure.max))
-                } == true
-            else -> emptyStorageSlots(player) >= 1
-        }
-
-    private fun hasCapacity(player: Player, resolved: ResolvedReward): Boolean =
-        when (resolved) {
-            is ResolvedReward.TreasureValue -> hasTreasureCapacity(player, resolved.value)
-            is ResolvedReward.Stacks -> hasCapacity(player, resolved.values)
-            is ResolvedReward.MountValue -> true
-        }
+    private fun hasCapacity(player: Player, resolved: ResolvedReward): Boolean = hasCapacity(player, resolved.values)
 
     private fun capacityStacks(template: ItemStack, quantity: Int): List<ItemStack> {
         var remaining = quantity.coerceAtLeast(1)
@@ -437,20 +347,6 @@ class RewardCatalogGuiController(
         simulation.contents = player.inventory.storageContents.map { it?.clone() }.toTypedArray()
         return values.all { simulation.addItem(it.clone()).isEmpty() }
     }
-
-    private fun emptyStorageSlots(player: Player): Int =
-        player.inventory.storageContents.count { it == null || it.type.isAir }
-
-    private fun sourceLabel(source: RewardCatalogSource): String =
-        when (source) {
-            is RewardCatalogSource.Treasure -> "${source.pool}:${source.id}"
-            is RewardCatalogSource.Preset -> "preset:${source.id}"
-            is RewardCatalogSource.Pouch -> "pouch:${source.id}"
-            is RewardCatalogSource.Seal -> "seal:${source.categoryId}"
-            is RewardCatalogSource.ItemsAdder -> "itemsadder:${source.id}"
-            is RewardCatalogSource.Planned -> "planned:${source.id}"
-            is RewardCatalogSource.Mount -> "mount:${source.id}"
-        }
 
     private fun styledStack(style: CatalogIconStyle): ItemStack =
         ItemStackFactory.create(Material.valueOf(style.material), 1).also { stack ->
@@ -551,13 +447,7 @@ class RewardCatalogGuiController(
 
     private fun nonItalic(component: Component): Component = component.decoration(TextDecoration.ITALIC, false)
 
-    private sealed interface ResolvedReward {
-        data class TreasureValue(val value: Treasure) : ResolvedReward
-
-        data class Stacks(val values: List<ItemStack>) : ResolvedReward
-
-        data class MountValue(val id: String, val preview: ItemStack) : ResolvedReward
-    }
+    private data class ResolvedReward(val values: List<ItemStack>)
 
     companion object {
         private const val PAGE_SIZE = 45

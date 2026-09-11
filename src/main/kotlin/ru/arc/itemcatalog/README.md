@@ -38,7 +38,7 @@ operator entries. The schema is intentionally narrow:
 
 ```yaml
 enabled: false
-title: '<dark_gray><bold>Награды лутбоксов'
+title: '<gold><bold>Сокровищница наград'
 root-icon: { material: CHEST, custom-model-data: 0 }
 categories:
   common:
@@ -55,25 +55,50 @@ categories:
         icon: { material: PAPER, custom-model-data: 0 }
 ```
 
-Each entry has exactly one source: `treasure` (`pool` + `id`), `preset`, or
-`pouch`. Categories are capped at 64, entries at 300 per category and 2,000
-in total; names, descriptions, IDs, plugin requirements, materials and unknown
-keys are validated before publication. `name` may be omitted for native item
-sources (treasure item/Slimefun, preset or pouch), in which case the actual
-preview name or vanilla translation is retained; opaque command treasures must
-have a configured name. Names, descriptions and rarity retain MiniMessage
-colors from the catalogue config.
+Each entry has exactly one source: `treasure` (`pool` + `id`), `preset`,
+`pouch`, `seal`, `itemsadder`, `mount`, `package`, or inert `planned`.
+Categories are capped at 64, entries at 512 per category and 2,000 in total.
+Names, descriptions and rarity retain authored MiniMessage colors. Stories and
+native equipment metadata are preserved on actual prizes, including seal choices.
 
-Browsing requires `arc.items.catalog.use`, while giving rechecks the existing
-`clicks.give-permission` setting (`arc.items.catalog.give` by default) at the
-final click. `requires` may be omitted when no provider is needed. Icons accept
-the legacy material scalar (`PAPER`) or a strict `{material, custom-model-data}`
-map. Provider checks stay functional but their technical names are not shown in
-player reward lore. Providers and references are reread on every click. Presets and
-pouches are fresh factories; treasure rewards use native `TreasureService`.
-Inventory capacity is preflighted and simulated, with no catalog-configured
-commands and no overflow drops. Command and other opaque treasure success is
-reported as accepted by the native service, not as proof of final item arrival.
+`parent` forms folders up to four levels deep. A case has `rolls: 1` and positive
+entry `weight`; displayed odds come from the same normalized weights. These
+are future case compositions, not automatic daily/rank acquisition. With
+`require-case-coverage: true`, every non-planned base reward (source plus
+explicit enchantments) must occur in a case or the configuration is rejected.
+
+Furniture uses root `packages: {id: {name: '...', items: ['namespace:item']}}`
+and entry `package: id`. A package contains 1–216 distinct native IDs, one copy
+of each. Redemption delivers the whole pack in numbered shulker boxes with 27
+items each. Missing native items or insufficient space preserves the voucher.
+
+Browsing requires `arc.items.catalog.use`; the final click rechecks
+`clicks.give-permission` (`arc.items.catalog.give` by default). Every click
+produces only physical inventory items. Equipment, potions, books, Slimefun,
+presets and pouches retain native factories; currency, mount, package and
+opaque native item sources become unique physical vouchers. Rendering never
+mints a redeemable voucher. Right click in the main hand redeems it without an
+operator permission. Currency names and nominal amounts remain explicit.
+
+`PhysicalRewardController` uses the shared `OneTimeUseLedger`, SQL partition
+`arc.catalog-reward`, with private `reward-redemption.yml` SQL settings. Enable
+it on each catalog backend with the same database; the portable default is
+disabled and contains no credentials. It claims before any effect, commits proven success, and releases
+only a proven refusal without a value mutation. Unknown outcomes retain the
+item and durable recovery ownership; they never automatically retry. The
+source key and immutable source fingerprint are bound to the voucher UUID.
+Changing a source definition makes old vouchers unavailable for manual
+reconciliation, rather than silently changing their reward.
+On reload/shutdown, the module lets started claims settle before closing their
+SQL pool. A bounded drain timeout preserves unresolved ownership for recovery.
+
+The finite command adapter accepts only native ArcBuilder books, ArcEcoJobs
+booster items, EliteMobs item issuers and the existing AE treasure type. It
+checks actual inventory arrival. RedisEconomy token commands are interpreted
+as typed currency deposits after claim; they are never dispatched as console
+commands. Providers are rechecked at click and redemption. Capacity checks do
+not drop overflow items. Collection seal and voucher listeners handle vanilla
+pre-cancelled right-click-air events and ignore off-hand duplicates.
 
 The curated hierarchy, per-category overrides, click actions, titles, messages, and portable
 vanilla icon fallbacks live in `modules/items-catalog.yml`. A category can be
@@ -87,8 +112,8 @@ curated group appears automatically as a root category.
 ## Verification
 
 ```bash
-./gradlew test --tests 'ru.arc.itemcatalog.*'
-./gradlew test shadowJar
+./gradlew test --tests 'ru.arc.itemcatalog.RewardCatalogModuleConfigTest' --tests 'ru.arc.itemcatalog.PhysicalRewardControllerTest' --tests 'ru.arc.itemcatalog.CollectionSealControllerTest'
+./gradlew shadowJar -x test
 ```
 
 Official integration contracts:

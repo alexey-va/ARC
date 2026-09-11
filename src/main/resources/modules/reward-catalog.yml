@@ -1,15 +1,19 @@
 # Portable reward catalogue. Keep disabled in the bundled source default.
 enabled: false
-title: "<dark_gray><bold>Награды лутбоксов"
+title: "<gold><bold>Сокровищница наград"
 root-icon: { material: CHEST, custom-model-data: 0 }
 
 # Categories are operator-owned and keyed by stable lowercase IDs.
-# Each entry has exactly one source: treasure {pool, id}, preset, or pouch.
+# Each entry has one source: treasure {pool, id}, preset, pouch, itemsadder,
+# mount, seal, or package. A case has positive integer weights and rolls: 1.
+# Enable coverage once every ready source is represented in at least one case.
+require-case-coverage: false
+packages: {}
 categories: {}
 
 messages:
   unavailable: "<gray>Эта награда сейчас недоступна."
   inventory-full: "<red>В инвентаре нет места для награды."
-  given: "<#92bed8>Награда добавлена в инвентарь."
-  accepted: "<#92bed8>Награда принята к выполнению."
+  given: "<green>Награда добавлена в инвентарь."
+  accepted: "<gold>Награда принята к выполнению."
   action-failed: "<red>Награда сейчас недоступна."

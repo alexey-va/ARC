@@ -27,7 +27,36 @@ class RewardCatalogModuleConfig(private val config: Config) {
             "Reward catalog supports at most $MAX_ENTRIES entries"
         }
         validateHierarchy(categories)
-        return RewardCatalogSettings(enabled, title, categories, messages, rootIcon)
+        val packages = parsePackages()
+        categories.flatMap { it.entries }.forEach { entry ->
+            val source = entry.source as? RewardCatalogSource.FurniturePackage
+            require(source == null || source.id in packages) { "Unknown furniture package in reward ${entry.id}" }
+        }
+        val coverage = config.booleanOrNull("require-case-coverage")
+            ?: if (!config.exists("require-case-coverage")) false else throw invalid("require-case-coverage", "expected boolean")
+        return RewardCatalogSettings(enabled, title, categories, messages, rootIcon, packages, coverage).also {
+            require(!coverage || it.uncoveredRewards().isEmpty()) {
+                "Grantable rewards missing from cases: ${it.uncoveredRewards().joinToString()}"
+            }
+        }
+    }
+
+    private fun parsePackages(): Map<String, RewardFurniturePackage> {
+        if (!config.exists("packages")) return emptyMap()
+        val values = mapAt("packages")
+        require(values.size <= 96) { "Reward catalog supports at most 96 furniture packages" }
+        return values.map { (rawId, raw) ->
+            val id = normalizedId(rawId, "package")
+            val path = "packages.$id"
+            val map = strictMap(raw, path)
+            rejectUnknown(map, setOf("name", "items"), path)
+            val name = requiredString(map.required("name", path), "$path.name", NAME_LIMIT)
+            val rawItems = map["items"] as? List<*> ?: throw invalid("$path.items", "expected list")
+            require(rawItems.size in 1..216) { "$path must contain 1..216 furniture items" }
+            val items = rawItems.map { requiredId(it, "$path.items", ITEMSADDER_ID) }
+            require(items.distinct().size == items.size) { "$path contains duplicate furniture items" }
+            id to RewardFurniturePackage(name, items)
+        }.toMap()
     }
 
     private fun parseCategory(rawId: String, rawValue: Any?): RewardCatalogCategory {
@@ -81,6 +110,7 @@ class RewardCatalogModuleConfig(private val config: Config) {
                 "itemsadder" -> RewardCatalogSource.ItemsAdder(requiredId(map.getValue(key), "$path.itemsadder", ITEMSADDER_ID))
                 "planned" -> RewardCatalogSource.Planned(requiredId(map.getValue(key), "$path.planned", ID))
                 "mount" -> RewardCatalogSource.Mount(requiredId(map.getValue(key), "$path.mount", ID))
+                "package" -> RewardCatalogSource.FurniturePackage(requiredId(map.getValue(key), "$path.package", ID))
                 else -> error("unreachable source key")
             }
         val icon = if ("icon" in map) material(map["icon"], "$path.icon") else null
@@ -265,7 +295,7 @@ class RewardCatalogModuleConfig(private val config: Config) {
 
     companion object {
         const val MAX_CATEGORIES = 64
-        const val MAX_ENTRIES_PER_CATEGORY = 300
+        const val MAX_ENTRIES_PER_CATEGORY = 512
         const val MAX_ENTRIES = 2_000
         private const val TITLE_LIMIT = 160
         private const val NAME_LIMIT = 120
@@ -284,9 +314,9 @@ class RewardCatalogModuleConfig(private val config: Config) {
         private val ENCHANTMENT_ID = Regex("(?:minecraft:)?[a-z_]+")
         private val PLUGIN_ID = Regex("[A-Za-z0-9._-]{1,64}")
         private val CATEGORY_KEYS = setOf("name", "description", "icon", "entries", "parent", "rolls")
-        private val ENTRY_KEYS = setOf("name", "description", "rarity", "requires", "treasure", "preset", "pouch", "seal", "itemsadder", "planned", "mount", "icon", "weight", "enchantments")
+        private val ENTRY_KEYS = setOf("name", "description", "rarity", "requires", "treasure", "preset", "pouch", "seal", "itemsadder", "planned", "mount", "package", "icon", "weight", "enchantments")
         private val ICON_KEYS = setOf("material", "custom-model-data")
-        private val SOURCE_KEYS = setOf("treasure", "preset", "pouch", "seal", "itemsadder", "planned", "mount")
+        private val SOURCE_KEYS = setOf("treasure", "preset", "pouch", "seal", "itemsadder", "planned", "mount", "package")
         private val MESSAGE_KEYS = setOf("unavailable", "inventory-full", "given", "accepted", "action-failed")
 
         fun load(dataPath: Path): RewardCatalogModuleConfig =

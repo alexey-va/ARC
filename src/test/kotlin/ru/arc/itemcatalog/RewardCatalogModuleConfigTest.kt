@@ -10,7 +10,7 @@ class RewardCatalogModuleConfigTest : StringSpec({
         try {
             val settings = RewardCatalogModuleConfig.load(root).snapshot()
             settings.enabled shouldBe false
-            settings.title shouldBe "<dark_gray><bold>Награды лутбоксов"
+            settings.title shouldBe "<gold><bold>Сокровищница наград"
             settings.categories.size shouldBe settings.categories.distinctBy { it.id }.size
         } finally {
             root.toFile().deleteRecursively()
@@ -115,11 +115,11 @@ class RewardCatalogModuleConfigTest : StringSpec({
         }
     }
 
-    "rejects more than 300 entries in a category" {
+    "rejects more than the bounded category entry limit" {
         val root = Files.createTempDirectory("arc-reward-catalog-bound")
         try {
             val entries = buildString {
-                repeat(301) { index ->
+                repeat(RewardCatalogModuleConfig.MAX_ENTRIES_PER_CATEGORY + 1) { index ->
                     appendLine("      e$index:")
                     appendLine("        name: 'Награда $index'")
                     appendLine("        description: []")
@@ -154,6 +154,54 @@ class RewardCatalogModuleConfigTest : StringSpec({
             case.rolls shouldBe 1
             case.entries.map(case::chance) shouldBe listOf("87,5%", "12,5%")
             case.entries.last().source shouldBe RewardCatalogSource.Seal("set_sun")
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    "full furniture packages are bounded and every grantable reward needs a case" {
+        val root = Files.createTempDirectory("arc-reward-packages")
+        try {
+            val valid = """
+                enabled: true
+                title: 'Награды'
+                require-case-coverage: true
+                packages:
+                  forge:
+                    name: '<gold>Кузница'
+                    items: ['forge:anvil', 'forge:table']
+                categories:
+                  furniture:
+                    name: 'Мебель'
+                    description: []
+                    icon: CHEST
+                    entries:
+                      forge:
+                        description: []
+                        package: forge
+                  case_furniture:
+                    name: 'Кейс мебели'
+                    description: []
+                    icon: CHEST
+                    rolls: 1
+                    entries:
+                      forge:
+                        description: []
+                        package: forge
+                        weight: 10000
+            """.trimIndent()
+            writeConfig(root, valid)
+            val loaded = RewardCatalogModuleConfig.load(root).snapshot()
+            loaded.packages.getValue("forge").items shouldBe listOf("forge:anvil", "forge:table")
+            loaded.uncoveredRewards() shouldBe emptyList()
+            for (invalid in listOf(
+                valid.replace("package: forge", "package: absent"),
+                valid.replace("'forge:table'", "'forge:anvil'"),
+                valid.substringBefore("  case_furniture:"),
+            )) {
+                writeConfig(root, invalid)
+                runCatching { RewardCatalogModuleConfig.load(root).snapshot() }.isFailure shouldBe true
+            }
         } finally {
             root.toFile().deleteRecursively()
         }
@@ -220,6 +268,7 @@ class RewardCatalogModuleConfigTest : StringSpec({
         private fun writeConfig(root: java.nio.file.Path, contents: String) {
             val modules = Files.createDirectories(root.resolve("modules"))
             Files.writeString(modules.resolve("reward-catalog.yml"), contents)
+            ru.arc.config.ConfigManager.ofModule(root, "reward-catalog.yml").load()
         }
     }
 }
