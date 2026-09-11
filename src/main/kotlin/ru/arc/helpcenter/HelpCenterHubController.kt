@@ -199,7 +199,7 @@ internal class HelpCenterHubController(
 
     private fun showRequests(player: Player, pending: HelpCenterPendingRequests, notice: String? = null) {
         val entries = availableCatalog(player).associateBy { it.id }
-        val ids = listOf("quests", "battle-pass", "vote", "events", "duels", "privat")
+        val ids = listOf("quests", "vote", "events", "duels", "privat")
         val responseButtons = buildList {
             if (pending.teleport) {
                 add(button("tpa_accept", text("request-tpa-accept-label")) { respondToRequest(player, "huskhomes:tpaccept") { it.teleport } })
@@ -399,7 +399,7 @@ internal class HelpCenterHubController(
     }
 
     private fun requestLabel(id: String, fallback: String): Component = when (id) {
-        "quests", "battle-pass", "vote", "events", "duels", "privat" -> text("check-$id-label")
+        "quests", "vote", "events", "duels", "privat" -> text("check-$id-label")
         else -> text("check-command-label", "label" to fallback)
     }
 

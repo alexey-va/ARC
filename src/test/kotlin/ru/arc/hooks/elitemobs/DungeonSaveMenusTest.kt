@@ -194,7 +194,7 @@ class DungeonSaveMenusTest : FreeSpec({
         every { dungeon.partiesAvailable() } returns false
         screens.last().buttons.single { it.id.value == "party" }.onClick.handle(mockk())
         screens.last().buttons.map { it.id.value } shouldBe listOf("guide")
-        screens.last().body.last().text shouldBe Component.text("<#aaa49a>Группы EliteMobs на этом сервере пока недоступны.")
+        screens.last().body.last().text shouldBe Component.text("<#e8dfd2>Группы EliteMobs на этом сервере пока недоступны.")
             .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)
     }
 

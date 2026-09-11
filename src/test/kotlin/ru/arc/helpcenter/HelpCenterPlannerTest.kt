@@ -162,7 +162,6 @@ class HelpCenterPlannerTest : StringSpec({
             setOf(
                 HelpCenterFeature.LANDS,
                 HelpCenterFeature.RANKS,
-                HelpCenterFeature.BATTLE_PASS,
                 HelpCenterFeature.EVENTS,
             ),
             limit = 4,
@@ -170,7 +169,7 @@ class HelpCenterPlannerTest : StringSpec({
             HelpCenterRecommendationId.CREATE_HOME,
             HelpCenterRecommendationId.CREATE_LAND,
             HelpCenterRecommendationId.RANK_GOAL,
-            HelpCenterRecommendationId.BATTLE_PASS,
+            HelpCenterRecommendationId.EVENTS,
         )
     }
 

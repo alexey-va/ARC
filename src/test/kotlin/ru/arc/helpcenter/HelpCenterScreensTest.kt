@@ -40,6 +40,11 @@ class HelpCenterScreensTest {
         val plugin = paper.createSimplePlugin("HelpScreens")
         Tasks.install(BukkitTaskScheduler(plugin))
         player = paper.addPlayer("Viewer")
+        player.addAttachment(plugin).also {
+            it.setPermission("arcranks.use", true)
+            it.setPermission("arcranks.rankup", true)
+            it.setPermission("arcecojobs.use", true)
+        }
         gateway = mockk()
         preferences = mockk()
         every { preferences.load(any()) } returns CompletableFuture.completedFuture(HelpCenterPreferences())
@@ -234,11 +239,63 @@ class HelpCenterScreensTest {
     @Test
     fun `root keeps utilities in the last row and activities have one dungeon entry`() {
         open(HelpCenterPage.ROOT)
-        assertEquals(listOf("now", "players", "travel", "privat", "root_activities", "root_progress",
-            "root_trade", "root_technology", "search", "settings"), screen.buttons.map { it.id.value })
+        player.addAttachment(paper.createSimplePlugin("TeamsPermission"), "arcjustteams.use", true)
+        open(HelpCenterPage.ROOT)
+        assertEquals(3, screen.columns)
+        assertTrue(screen.buttons.all { it.width == 166 })
+        assertEquals(listOf("now", "players", "teams", "travel", "privat", "root_activities",
+            "root_trade", "root_progress", "root_technology", "guide", "goals", "recovery",
+            "favorites", "search", "settings"), screen.buttons.map { it.id.value })
         click("root_activities")
         assertEquals(1, screen.buttons.count { it.id.value == "command_dungeons" })
         assertFalse(screen.buttons.any { it.id.value.contains("dungeon_portals") })
+    }
+
+    @Test
+    fun `teams are discoverable and keep native navigation without inventory return`() {
+        player.addAttachment(paper.createSimplePlugin("TeamsAllowed"), "arcjustteams.use", true)
+        open(HelpCenterPage.ROOT)
+        assertFalse(screen.buttons.single { it.id.value == "teams" }.closeDialogBeforeAction)
+        click("teams")
+        assertEquals(listOf("clans"), executed)
+        open(HelpCenterPage.PLAYERS)
+        assertFalse(screen.buttons.single { it.id.value == "command_teams" }.closeDialogBeforeAction)
+        click("command_teams")
+        assertEquals(listOf("clans", "clans"), executed)
+        every { gateway.features() } returns HelpCenterFeature.entries.toSet() - HelpCenterFeature.TEAMS
+        open(HelpCenterPage.ROOT)
+        assertFalse(screen.buttons.any { it.id.value == "teams" })
+        assertTrue(screen.buttons.any { it.id.value == "requests" })
+        assertEquals(15, screen.buttons.size)
+        open(HelpCenterPage.PLAYERS)
+        assertFalse(screen.buttons.any { it.id.value == "command_teams" })
+    }
+
+    @Test
+    fun `progression hides absent plugins and daily quests open the current native provider`() {
+        open(HelpCenterPage.ROOT)
+        click("root_progress")
+        assertFalse(screen.buttons.single { it.id.value == "command_quests" }.closeDialogBeforeAction)
+        click("command_quests")
+        assertEquals(listOf("rank quests"), executed)
+        every { gateway.features() } returns HelpCenterFeature.entries.toSet() -
+            setOf(HelpCenterFeature.RANKS, HelpCenterFeature.JOBS, HelpCenterFeature.SKILLS)
+        open(HelpCenterPage.ROOT)
+        click("root_progress")
+        assertFalse(screen.buttons.any { it.id.value in setOf("command_rank", "command_rankup", "command_jobs", "command_quests", "command_skills") })
+        open(HelpCenterPage.ACTIVITIES)
+        assertFalse(screen.buttons.any { it.id.value == "command_battle_pass" })
+    }
+
+    @Test
+    fun `teams button rechecks permission before executing`() {
+        val attachment = player.addAttachment(paper.createSimplePlugin("TeamsAccess"), "arcjustteams.use", true)
+        open(HelpCenterPage.ROOT)
+        attachment.setPermission("arcjustteams.use", false)
+        click("teams")
+        assertTrue(executed.isEmpty())
+        open(HelpCenterPage.ROOT)
+        assertFalse(screen.buttons.any { it.id.value == "teams" })
     }
 
     @Test
@@ -436,6 +493,7 @@ class HelpCenterScreensTest {
             Triple("root_activities", "giveaways", "giveaway"),
             Triple("root_progress", "jobs", "arcjobs dialog"),
             Triple("root_progress", "rank", "rank dialog"),
+            Triple("root_progress", "quests", "rank quests"),
         )
         for ((entry, id, command) in destinations) {
             open(HelpCenterPage.ROOT)
@@ -495,11 +553,11 @@ class HelpCenterScreensTest {
         open(HelpCenterPage.FAVORITES)
         click("find_action")
         click("pick_activities")
-        click("pick_battle_pass")
+        click("pick_dungeons")
         assertTrue(body().contains("четыре места"))
         assertFalse(screen.buttons.any { it.id.value == "toggle_favorite" })
         click("back")
-        assertTrue(screen.buttons.any { it.id.value == "pick_battle_pass" })
+        assertTrue(screen.buttons.any { it.id.value == "pick_dungeons" })
     }
 
     @Test

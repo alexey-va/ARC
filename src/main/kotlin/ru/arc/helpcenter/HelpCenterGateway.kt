@@ -133,7 +133,8 @@ class BukkitHelpCenterGateway : HelpCenterGateway {
 
     override fun features(): Set<HelpCenterFeature> = HelpCenterFeature.entries
         .filterTo(linkedSetOf()) { feature ->
-            feature.pluginName == null || Bukkit.getPluginManager().isPluginEnabled(feature.pluginName)
+            (feature.pluginName == null || Bukkit.getPluginManager().isPluginEnabled(feature.pluginName)) &&
+                (feature != HelpCenterFeature.PARKOUR || ru.arc.parkour.ArcParkourModule.isAvailable())
         }
 
     override fun onlinePlayers(): List<HelpCenterPlayer> {

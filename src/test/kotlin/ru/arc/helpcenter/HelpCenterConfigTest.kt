@@ -134,8 +134,8 @@ class HelpCenterConfigTest : StringSpec({
                 "category-progress-label" to 0xc4abff,
                 "category-trade-label" to 0xf4d87a,
                 "category-technology-label" to 0x85dfc4,
-                "commands-label" to 0xaaa49a,
-                "category-settings-label" to 0xaaa49a,
+                "commands-label" to 0xffffff,
+                "category-settings-label" to 0xffffff,
             ).forEach { (key, color) ->
                 withClue(key) {
                     val component = MiniMessage.miniMessage().deserialize(settings.text(key))
@@ -146,7 +146,7 @@ class HelpCenterConfigTest : StringSpec({
             MiniMessage.miniMessage().deserialize(settings.text("root-title")).color()?.value() shouldBe 0x86dcf1
             MiniMessage.miniMessage().deserialize(settings.text("pay-confirm-label")).color()?.value() shouldBe 0x2bba43
             MiniMessage.miniMessage().deserialize(settings.text("home-delete-confirm")).color()?.value() shouldBe 0xff6b61
-            MiniMessage.miniMessage().deserialize(settings.text("back-label")).color()?.value() shouldBe 0xaaa49a
+            MiniMessage.miniMessage().deserialize(settings.text("back-label")).color()?.value() shouldBe 0xffffff
             MiniMessage.miniMessage().deserialize(settings.text("setting-chat-current")).color()?.value() shouldBe 0xd7b486
             settings.text("back-command-label").contains("прежнее место", ignoreCase = true) shouldBe true
             listOf(

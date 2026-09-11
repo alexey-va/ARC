@@ -39,7 +39,7 @@ class HelpCenterPreferencesTest {
         assertThrows(IllegalArgumentException::class.java) {
             HelpCenterPreferences(List(5) { "action$it" }, emptyList()).validated()
         }
-        assertTrue(HelpCenterPreferences(listOf("battle-pass"), listOf("chat-global")).validated().favorites.isNotEmpty())
+        assertTrue(HelpCenterPreferences(listOf("dungeons"), listOf("chat-global")).validated().favorites.isNotEmpty())
     }
 
     @Test

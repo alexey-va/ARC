@@ -25,7 +25,7 @@ internal class DungeonSaveMenus(
     private val crystals: (Player) -> String? = ::readDungeonCrystals,
     private val readQuests: (Player) -> List<DungeonQuestInfo>? = ::readDungeonQuests,
     private val show: (Player, PaperDialogScreen, (() -> Unit)?) -> Unit = { player, screen, reopen ->
-        val close = PaperDialogButton(PaperDialogActionId.of("close"), dungeon.text("saves.dialog.close-label", "<#aaa49a>Закрыть"), width = 200, closeDialogBeforeAction = true) { }
+        val close = PaperDialogButton(PaperDialogActionId.of("close"), dungeon.text("saves.dialog.close-label", "<#e8dfd2>Закрыть"), width = 200, closeDialogBeforeAction = true) { }
         // A root Close is already the footer, so never move a second Close into the grid.
         val prepared = if (screen.exitButton?.id?.value == "close" && !MenuEscapeBehavior.goesBack(player)) screen.copy(exitButton = null) else screen
         ArcMenus.openDialog(player, prepared, close, reopen = reopen)
@@ -41,7 +41,7 @@ internal class DungeonSaveMenus(
         val state = when {
             visit.waiting -> text("panel.waiting", "<#d7b486>Сбор группы · готовьтесь к старту")
             visit.canResume -> text("panel.ongoing", "<#9bd48d>Прохождение идёт")
-            else -> text("panel.finished", "<#aaa49a>Прохождение остановлено · можно выйти")
+            else -> text("panel.finished", "<#e8dfd2>Прохождение остановлено · можно выйти")
         }
         val body = mutableListOf(
             PaperDialogBody(text("panel.intro", "<#ffb277><name>", "name" to dungeonDisplayName(visit)), 468),
@@ -68,8 +68,8 @@ internal class DungeonSaveMenus(
                 action("quit", "panel.quit-label", "<#d7b486>Выйти из данжа", "panel.quit-tooltip", "Покинуть данж штатным способом", close = true) { dungeon.panelAction(player, view, "quit") }.let { if (visit.instanced) it else it.copy(tooltip = text("panel.quit-open-tooltip", "Вызвать выход ко спавну. Если появился портал, войдите в него.")) },
                 action("saves", "panel.saves-label", "<#c4a7e7>Сохранения ›", "panel.saves-tooltip", "Ваши ручные точки, автосохранения и место прошлого выхода") { open(player) },
                 action("entry", "panel.entry-label", "<#92bed8>К началу данжа ›", "panel.entry-tooltip", "Обычный портал к началу данжа", close = view.saves?.entry != null) {
-                    if (view.saves?.entry != null) dungeon.travel(player, view.saves, "entry") else panel(player, text("panel.entry-unavailable", "<#aaa49a>Безопасный переход ко входу сейчас недоступен. Для выхода используйте кнопку выше."))
-                }.let { if (view.saves?.entry != null) it else it.copy(label = text("panel.entry-disabled", "<#aaa49a>[Недоступно] К началу данжа")) },
+                    if (view.saves?.entry != null) dungeon.travel(player, view.saves, "entry") else panel(player, text("panel.entry-unavailable", "<#e8dfd2>Безопасный переход ко входу сейчас недоступен. Для выхода используйте кнопку выше."))
+                }.let { if (view.saves?.entry != null) it else it.copy(label = text("panel.entry-disabled", "<#e8dfd2>[Недоступно] К началу данжа")) },
                 action("shop", "panel.shop-label", "<#f4d87a>Припасы ›", "panel.shop-tooltip", "Припасы и кейсы EliteMobs за кристаллы") { shop(player) },
                 shops(player),
                 lostLoot(player),
@@ -128,14 +128,14 @@ internal class DungeonSaveMenus(
             table(saveRows(view), DialogTables.Frame.ARTIFACT),
             PaperDialogBody(availability(blocked), 468),
         )
-        if (view.points.none { it.kind == DungeonSaveKind.MANUAL }) body += PaperDialogBody(text("saves.dialog.empty", "<#aaa49a>Ручных точек пока нет. Сохраните удобное место для возвращения."), 468)
+        if (view.points.none { it.kind == DungeonSaveKind.MANUAL }) body += PaperDialogBody(text("saves.dialog.empty", "<#e8dfd2>Ручных точек пока нет. Сохраните удобное место для возвращения."), 468)
         feedback?.let { body += PaperDialogBody(plain(it), 468) }
         show(player, PaperDialogScreen(
             id = "dungeon.saves", title = text("saves.dialog.title", "<#c4a7e7>Сохранения"), body = body,
             buttons = listOf(
                 action("save", "saves.dialog.save-label", "<#c4a7e7>Сохранить здесь ›", "saves.dialog.save-tooltip", "Запомнить текущую позицию") {
                     if (blocked == null) saveForm(player, view) else open(player)
-                }.let { if (blocked == null) it else it.copy(label = text("saves.dialog.save-disabled", "<#aaa49a>[Недоступно] Сохранить здесь"), tooltip = blocked) },
+                }.let { if (blocked == null) it else it.copy(label = text("saves.dialog.save-disabled", "<#e8dfd2>[Недоступно] Сохранить здесь"), tooltip = blocked) },
                 autosaveSettingsButton(player),
             ) + listOfNotNull(view.exit?.let { locationButton(player, "exit", "saves.dialog.exit-label", "<#92bed8>Место прошлого выхода ›", "saves.dialog.exit-tooltip", it, view) }) +
                 view.points.mapIndexed { index, point -> pointButton("point_$index", pointLabel(point), pointTooltip(point)) { detail(player, point, view) } },
@@ -147,13 +147,13 @@ internal class DungeonSaveMenus(
         val destination = dungeon.lastReturn(player)
         show(player, PaperDialogScreen(
         id = "dungeon.panel.unavailable", title = text("panel.title", "<#ffb277>Панель данжа"),
-        body = listOf(PaperDialogBody(text("panel.outside", "<#e8dfd2>Подготовка к походу<newline><#aaa49a>Почитайте гайд или выберите данж. После входа здесь появится панель прохождения.<newline><#aaa49a>Используйте кнопки «К порталам» и «Выбрать данж». В данже меню открывается через <#d7b486>Shift + F<#aaa49a>."), 468), crystalBalance(player)),
+        body = listOf(PaperDialogBody(text("panel.outside", "<#e8dfd2>Подготовка к походу<newline><#e8dfd2>Почитайте гайд или выберите данж. После входа здесь появится панель прохождения.<newline><#e8dfd2>Используйте кнопки «К порталам» и «Выбрать данж». В данже меню открывается через <#d7b486>Shift + F<#e8dfd2>."), 468), crystalBalance(player)),
         buttons = listOf(
             action("return", "panel.return-label", "<#92bed8>Вернуться в данж ›", "panel.return-tooltip", "Вернуться в последний обычный данж на место выхода", close = destination != null) {
                 if (destination != null) dungeon.returnToLast(player, destination)
                 else panel(player)
-            }.let { if (destination != null) it else it.copy(label = text("panel.return-disabled", "<#aaa49a>[Недоступно] Вернуться в данж"),
-                tooltip = text("panel.return-unavailable", "<#aaa49a>Нет доступного места выхода из обычного данжа. Сначала посетите данж и выйдите из него.")) },
+            }.let { if (destination != null) it else it.copy(label = text("panel.return-disabled", "<#e8dfd2>[Недоступно] Вернуться в данж"),
+                tooltip = text("panel.return-unavailable", "<#e8dfd2>Нет доступного места выхода из обычного данжа. Сначала посетите данж и выйдите из него.")) },
             shops(player),
             lostLoot(player),
             guide(player) { unavailable(player) },
@@ -165,8 +165,8 @@ internal class DungeonSaveMenus(
     }
 
     private fun crystalBalance(player: Player) = PaperDialogBody(crystals(player)?.let {
-        text("panel.crystals", "<#aaa49a>Ваши кристаллы: <#c7a0e8>💎 <value>", "value" to Component.text(it))
-    } ?: text("panel.crystals-unavailable", "<#aaa49a>Кристаллы: баланс сейчас недоступен"), 468)
+        text("panel.crystals", "<#e8dfd2>Ваши кристаллы: <#c7a0e8>💎 <value>", "value" to Component.text(it))
+    } ?: text("panel.crystals-unavailable", "<#e8dfd2>Кристаллы: баланс сейчас недоступен"), 468)
 
     private fun lostLoot(player: Player) = action("lost_loot", "lost-loot.label", "<#c4a7e7>Потерянная добыча ›", "lost-loot.tooltip", "Забрать или продать сохранённый лут со всех данжей", close = true) {
         ru.arc.eliteloot.LostLootModule.open(player)
@@ -179,11 +179,11 @@ internal class DungeonSaveMenus(
     private fun autosaveSettings(player: Player, feedback: Component? = null) {
         val seconds = dungeon.autosaveSeconds(player)
         val body = mutableListOf(
-            PaperDialogBody(text("saves.settings.body", "<#e8dfd2>Выберите интервал между автоматическими точками.<newline><#aaa49a>Личная настройка сохраняется после выхода и действует во всех данжах этого сервера. Ручные точки и возврат к месту выхода не меняются."), 468),
-            PaperDialogBody(text("saves.settings.current", "<#aaa49a>Сейчас: <value>", "value" to autosaveIntervalLabel(seconds)), 468),
+            PaperDialogBody(text("saves.settings.body", "<#e8dfd2>Выберите интервал между автоматическими точками.<newline><#e8dfd2>Личная настройка сохраняется после выхода и действует во всех данжах этого сервера. Ручные точки и возврат к месту выхода не меняются."), 468),
+            PaperDialogBody(text("saves.settings.current", "<#e8dfd2>Сейчас: <value>", "value" to autosaveIntervalLabel(seconds)), 468),
             PaperDialogBody(dungeon.autosaveDescription(player), 468),
         )
-        if (!dungeon.canConfigureAutosaves()) body += PaperDialogBody(text("saves.settings.unavailable", "<#aaa49a>Настройка автосохранения сейчас недоступна."), 468)
+        if (!dungeon.canConfigureAutosaves()) body += PaperDialogBody(text("saves.settings.unavailable", "<#e8dfd2>Настройка автосохранения сейчас недоступна."), 468)
         feedback?.let { body += PaperDialogBody(it, 468) }
         show(player, PaperDialogScreen(
             id = "dungeon.autosaves", title = text("saves.settings.title", "<#c4a7e7>Автосохранение"), body = body,
@@ -216,9 +216,9 @@ internal class DungeonSaveMenus(
         show(player, PaperDialogScreen(
             id = "dungeon.party", title = text("party.title", "<#e5ba73>Группа"),
             body = listOf(
-                PaperDialogBody(text("party.body", "<#e8dfd2>Соберите пати перед входом в данж.<newline><#aaa49a>В управлении группой можно создать пати, пригласить игроков и посмотреть участников. Приглашённый игрок должен принять приглашение."), 468),
-                PaperDialogBody(text("party.tips", "<#e8dfd2>Группа помогает проходить данжи вместе: рядом засчитывается общий прогресс заданий, а за групповую добычу можно голосовать.<newline><#aaa49a>Перед входом договоритесь о данже и сложности. Сохранения позиций остаются личными."), 468),
-            ) + if (available) emptyList() else listOf(PaperDialogBody(text("party.unavailable", "<#aaa49a>Группы EliteMobs на этом сервере пока недоступны."), 468)),
+                PaperDialogBody(text("party.body", "<#e8dfd2>Соберите пати перед входом в данж.<newline><#e8dfd2>В управлении группой можно создать пати, пригласить игроков и посмотреть участников. Приглашённый игрок должен принять приглашение."), 468),
+                PaperDialogBody(text("party.tips", "<#e8dfd2>Группа помогает проходить данжи вместе: рядом засчитывается общий прогресс заданий, а за групповую добычу можно голосовать.<newline><#e8dfd2>Перед входом договоритесь о данже и сложности. Сохранения позиций остаются личными."), 468),
+            ) + if (available) emptyList() else listOf(PaperDialogBody(text("party.unavailable", "<#e8dfd2>Группы EliteMobs на этом сервере пока недоступны."), 468)),
             buttons = listOfNotNull(
                 if (available) action("manage_party", "party.manage-label", "<#c4a7e7>Управление группой ›", "party.manage-tooltip", "Открыть меню группы EliteMobs", close = true) { dungeon.action(player, "party") } else null,
                 guide(player) { party(player) },
@@ -248,7 +248,7 @@ internal class DungeonSaveMenus(
         if (!HelpCenterModule.openDungeonsGuide(player, returnTo)) player.sendMessage(text("panel.guide-unavailable", "<#d7b486>Гайд сейчас недоступен. Попробуйте позже."))
     }
 
-    private fun close() = action("close", "saves.dialog.close-label", "<#aaa49a>Закрыть", "saves.dialog.close-tooltip", "Вернуться в игру", close = true) { }.copy(width = 200)
+    private fun close() = action("close", "saves.dialog.close-label", "<#e8dfd2>Закрыть", "saves.dialog.close-tooltip", "Вернуться в игру", close = true) { }.copy(width = 200)
 
     private fun about(player: Player) {
         val visit = dungeon.panelView(player)?.visit ?: run { unavailable(player); return }
@@ -274,10 +274,10 @@ internal class DungeonSaveMenus(
         show(player, PaperDialogScreen(id = "dungeon.shop", title = text("shop.title", "<#f4d87a>Припасы и кейсы"), body = body,
             buttons = dungeon.supplies.list().map { offer ->
                 val quote = dungeon.supplies.quote(player, offer)
-                pointButton("supply_${offer.id}", text("shop.offer-label", "<#f4d87a><name> ×<amount> <#aaa49a>· 💎 <price> <#f4d87a>›",
+                pointButton("supply_${offer.id}", text("shop.offer-label", "<#f4d87a><name> ×<amount> <#e8dfd2>· 💎 <price> <#f4d87a>›",
                     "name" to supplyName(offer), "amount" to Component.text(offer.amount), "price" to price(offer.price)),
-                    if (quote == null) text("shop.item-unavailable", "<#aaa49a>Этот предмет сейчас недоступен. Кристаллы не списываются.") else supplyDescription(offer)) {
-                    if (quote == null) shop(player, text("shop.item-unavailable", "<#aaa49a>Этот предмет сейчас недоступен. Кристаллы не списываются."))
+                    if (quote == null) text("shop.item-unavailable", "<#e8dfd2>Этот предмет сейчас недоступен. Кристаллы не списываются.") else supplyDescription(offer)) {
+                    if (quote == null) shop(player, text("shop.item-unavailable", "<#e8dfd2>Этот предмет сейчас недоступен. Кристаллы не списываются."))
                     else {
                         val result = dungeon.supplies.buy(player, quote, view)
                         if (result.success) player.playSound(player.location, org.bukkit.Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 0.65f, 1.2f)
@@ -294,7 +294,7 @@ internal class DungeonSaveMenus(
         SupplyResult.OUTSIDE -> text("shop.outside", "<#d7b486>Данж изменился. Откройте меню данжа заново (в данже — Shift + F); покупка не выполнена.")
         SupplyResult.NO_SPACE -> text("shop.no-space", "<#d7b486>Освободите место в инвентаре. Кристаллы не списаны.")
         SupplyResult.NO_MONEY -> text("shop.no-money", "<#d7b486>Не хватает кристаллов. Покупка не выполнена.")
-        SupplyResult.ITEM_UNAVAILABLE -> text("shop.item-unavailable", "<#aaa49a>Этот предмет сейчас недоступен. Кристаллы не списываются.")
+        SupplyResult.ITEM_UNAVAILABLE -> text("shop.item-unavailable", "<#e8dfd2>Этот предмет сейчас недоступен. Кристаллы не списываются.")
         SupplyResult.PAYMENT_FAILED -> text("shop.payment-failed", "<#d7b486>Не удалось завершить оплату. Покупка не выполнена.")
     }
 
@@ -305,13 +305,13 @@ internal class DungeonSaveMenus(
         "beef" -> "<#e8dfd2>Обычные стейки для восстановления сытости."
         "bread" -> "<#e8dfd2>Обычный хлеб для восстановления сытости."
         "arrows" -> "<#e8dfd2>Обычные стрелы для лука и арбалета."
-        "healing" -> "<#e8dfd2>Восстанавливает 2 сердца после питья.<newline><#aaa49a>Зажмите ПКМ, чтобы выпить. После использования останется пустая бутылочка."
-        "merchant" -> "<#e8dfd2>Настоящий свиток EliteMobs. ПКМ вызывает странствующего торговца и расходует свиток.<newline><#aaa49a>Между вызовами — 60 секунд."
-        "enchant_case" -> "<#b8b8b8>Одна книга EliteMobs с чарами I уровня.<newline>Критические удары — 40%; Ледокол — 30%;<newline>Молния — 20%; Огнемёт — 10%.<newline><newline>Открывается сразу. Книга привязана к вам.<newline>Применяется у зачарователя EliteMobs; его цена и шанс успеха оплачиваются отдельно."
-        "loot_case", "loot_case_large" -> "<#b8b8b8>Один случайный предмет снаряжения EliteMobs.<newline>Предел: ваш боевой уровень, максимум ${if (offer.id == "loot_case_large") 40 else 20}.<newline>Уровень награды: 80% предела — шанс 60%;<newline>90% — шанс 30%; 100% — шанс 10%.<newline>Округление вниз, минимум 1. Тип предмета случаен.<newline><newline>Открывается сразу. Награда привязана к вам.<newline>Уникальные награды боссов не выпадают."
+        "healing" -> "<#e8dfd2>Восстанавливает 2 сердца после питья.<newline><#e8dfd2>Зажмите ПКМ, чтобы выпить. После использования останется пустая бутылочка."
+        "merchant" -> "<#e8dfd2>Настоящий свиток EliteMobs. ПКМ вызывает странствующего торговца и расходует свиток.<newline><#e8dfd2>Между вызовами — 60 секунд."
+        "enchant_case" -> "<#e8dfd2>Одна книга EliteMobs с чарами I уровня.<newline>Критические удары — 40%; Ледокол — 30%;<newline>Молния — 20%; Огнемёт — 10%.<newline><newline>Открывается сразу. Книга привязана к вам.<newline>Применяется у зачарователя EliteMobs; его цена и шанс успеха оплачиваются отдельно."
+        "loot_case", "loot_case_large" -> "<#e8dfd2>Один случайный предмет снаряжения EliteMobs.<newline>Предел: ваш боевой уровень, максимум ${if (offer.id == "loot_case_large") 40 else 20}.<newline>Уровень награды: 80% предела — шанс 60%;<newline>90% — шанс 30%; 100% — шанс 10%.<newline>Округление вниз, минимум 1. Тип предмета случаен.<newline><newline>Открывается сразу. Награда привязана к вам.<newline>Уникальные награды боссов не выпадают."
         else -> ""
     })
-    private fun balance(player: Player): Component = text("shop.balance", "<#aaa49a>Ваши кристаллы: <#c7a0e8>💎 <value>",
+    private fun balance(player: Player): Component = text("shop.balance", "<#e8dfd2>Ваши кристаллы: <#c7a0e8>💎 <value>",
         "value" to Component.text(readDungeonCrystals(player) ?: "—"))
     private fun price(value: Double): Component = Component.text(value.toBigDecimal().stripTrailingZeros().toPlainString())
 
@@ -325,7 +325,7 @@ internal class DungeonSaveMenus(
             id = "dungeon.saves.save",
             title = text("saves.dialog.save-title", "<#c4a7e7>Сохранить точку"),
             body = body,
-            inputs = listOf(PaperDialogTextInput(nameInput, text("saves.dialog.name", "<#aaa49a>Имя точки"), initial = name.take(32), maxLength = 32, width = 300)),
+            inputs = listOf(PaperDialogTextInput(nameInput, text("saves.dialog.name", "<#e8dfd2>Имя точки"), initial = name.take(32), maxLength = 32, width = 300)),
             buttons = listOf(
                 action("save", "saves.dialog.confirm-save-label", "<#9bd48d>Сохранить", "saves.dialog.confirm-save-tooltip", "<#e8dfd2>Сохранить точку") { context ->
                     val entered = context.text(nameInput)?.trim().orEmpty()
@@ -333,7 +333,7 @@ internal class DungeonSaveMenus(
                         val result = dungeon.save(player, entered, expected)
                         if (result.success) open(player, result.message) else saveForm(player, expected, result.message, entered)
                     }
-                }.let { if (blocked == null) it else it.copy(label = text("saves.dialog.save-disabled", "<#aaa49a>[Недоступно] Сохранить здесь"), tooltip = blocked) },
+                }.let { if (blocked == null) it else it.copy(label = text("saves.dialog.save-disabled", "<#e8dfd2>[Недоступно] Сохранить здесь"), tooltip = blocked) },
             ),
             exitButton = back { open(player) },
             columns = 1,
@@ -391,7 +391,7 @@ internal class DungeonSaveMenus(
         else text("saves.dialog.manual-label", "<#c4a7e7><name> ›", "name" to plain(Component.text(point.name)))
 
     private fun pointTooltip(point: DungeonSavePoint): Component =
-        text("saves.dialog.point-tooltip", "<#e8dfd2><kind> · <time><newline><#aaa49a>Координаты: <coords>",
+        text("saves.dialog.point-tooltip", "<#e8dfd2><kind> · <time><newline><#e8dfd2>Координаты: <coords>",
             "kind" to text(if (point.kind == DungeonSaveKind.MANUAL) "saves.dialog.manual" else "saves.dialog.auto", if (point.kind == DungeonSaveKind.MANUAL) "ручная" else "авто"),
             "time" to plain(Component.text(timeFormat.format(Instant.ofEpochMilli(point.savedAt)))),
             "coords" to locationText(point.location),
@@ -404,5 +404,5 @@ internal class DungeonSaveMenus(
         PaperDialogButton(PaperDialogActionId.of(id), text(labelKey, labelFallback), text(tooltipKey, tooltipFallback), width = 230, closeDialogBeforeAction = close, onClick = onClick)
     private fun pointButton(id: String, label: Component, tooltip: Component, onClick: () -> Unit) =
         PaperDialogButton(PaperDialogActionId.of(id), label, tooltip, width = 230, onClick = { onClick() })
-    private fun back(action: () -> Unit) = PaperDialogButton(PaperDialogActionId.of("back"), text("saves.dialog.back-label", "<#aaa49a>‹ Назад"), width = 200, onClick = { action() })
+    private fun back(action: () -> Unit) = PaperDialogButton(PaperDialogActionId.of("back"), text("saves.dialog.back-label", "<#e8dfd2>‹ Назад"), width = 200, onClick = { action() })
 }

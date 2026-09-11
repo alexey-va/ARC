@@ -53,9 +53,12 @@ enum class HelpCenterCategory(val configId: String) {
 
 enum class HelpCenterFeature(val pluginName: String?) {
     RANKS("ArcRanks"),
+    TEAMS("ArcJustTeams"),
+    JOBS("ArcEcoJobs"),
+    SKILLS("AuraSkills"),
+    PARKOUR("Parkour"),
     EVENTS("ArcEvents"),
     DUELS("ArcDuels"),
-    BATTLE_PASS("BattlePass"),
     GIVEAWAYS("ArcGiveaways"),
     DUNGEONS("EliteMobs"),
     FARMS("ArcFarms"),
@@ -76,7 +79,6 @@ enum class HelpCenterRecommendationId {
     CREATE_HOME,
     CREATE_LAND,
     RANK_GOAL,
-    BATTLE_PASS,
     EVENTS,
 }
 
@@ -179,9 +181,6 @@ object HelpCenterPlanner {
             }
             if (profile.rank != null && HelpCenterFeature.RANKS in features) {
                 add(HelpCenterRecommendation(HelpCenterRecommendationId.RANK_GOAL))
-            }
-            if (HelpCenterFeature.BATTLE_PASS in features) {
-                add(HelpCenterRecommendation(HelpCenterRecommendationId.BATTLE_PASS))
             }
             if (HelpCenterFeature.EVENTS in features) add(HelpCenterRecommendation(HelpCenterRecommendationId.EVENTS))
         }.take(limit)

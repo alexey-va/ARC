@@ -150,20 +150,27 @@ internal class HelpCenterController(
             PaperDialogScreen(
                 id = "help.root",
                 title = text("root-title"),
-                body = listOf(PaperDialogBody(text("root-body"), width = 468)),
+                body = listOf(PaperDialogBody(text("root-body"), width = 506)),
                 buttons = listOf(
                     button("now", text("now-label"), text("now-tooltip")) { openNow(player) },
                     button("players", text("players-label"), text("players-tooltip")) { openPlayers(player) },
+                    availableCatalog(player).firstOrNull { it.id == "teams" }?.let { teams ->
+                        button("teams", text("teams-label"), commandTooltip(teams.id)) { executeCatalog(player, teams.id) }
+                    } ?: button("requests", text("requests-short-label"), text("requests-tooltip")) { hub.openRequests(player) },
                     button("travel", text("travel-label"), text("travel-tooltip")) { openTravel(player) },
                     button("privat", text("privat-label"), text("privat-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
                     rootCategoryButton(player, HelpCenterCategory.ACTIVITIES),
-                    rootCategoryButton(player, HelpCenterCategory.PROGRESS),
                     rootCategoryButton(player, HelpCenterCategory.TRADE),
+                    rootCategoryButton(player, HelpCenterCategory.PROGRESS),
                     rootCategoryButton(player, HelpCenterCategory.TECHNOLOGY),
+                    button("guide", text("guide-label"), text("guide-tooltip")) { openGuide(player) },
+                    button("goals", text("goals-short-label"), text("goals-tooltip")) { hub.openGoals(player) },
+                    button("recovery", text("recovery-label"), text("recovery-tooltip")) { openRecovery(player) },
+                    button("favorites", text("favorites-short-label"), text("favorites-tooltip")) { hub.openFavorites(player) },
                     button("search", text("commands-label"), text("commands-tooltip")) { openCommands(player) },
                     button("settings", text("category-settings-label"), text("category-settings-tooltip")) { openSettings(player) },
-                ).map { it.copy(width = 230) },
-                columns = 2,
+                ).map { it.copy(width = 166) },
+                columns = 3,
             ),
         )
     }
@@ -249,7 +256,6 @@ internal class HelpCenterController(
                 HelpCenterRecommendationId.CREATE_HOME -> button("rec_home", text("rec-home-label")) { openCreateHome(player) }
                 HelpCenterRecommendationId.CREATE_LAND -> button("rec_land", text("rec-land-label")) { open(player, HelpCenterPage.PRIVAT) }
                 HelpCenterRecommendationId.RANK_GOAL -> button("rec_rank", text("rec-rank-label")) { executeCatalog(player, "rank") }
-                HelpCenterRecommendationId.BATTLE_PASS -> button("rec_bp", text("rec-bp-label")) { executeCatalog(player, "battle-pass") }
                 HelpCenterRecommendationId.EVENTS -> button("rec_events", text("rec-events-label")) { executeCatalog(player, "events") }
             }
         }
@@ -358,6 +364,7 @@ internal class HelpCenterController(
                     openPlayer(player, target, returnToList)
                 }
             } + buildList {
+                availableCatalog(player).firstOrNull { it.id == "teams" }?.let { add(commandButton(player, it)) }
                 add(contextButton("find_player", text("players-search-label"), text("players-search-tooltip")) {
                     openPlayers(player, it.text(PLAYER_SEARCH_INPUT).orEmpty(), localOnly = localOnly)
                 })
@@ -930,7 +937,7 @@ internal class HelpCenterController(
 
     companion object {
         // These commands join Core's shared history while this callback is active.
-        private val NATIVE_DIALOG_COMMANDS = setOf("events", "farms", "giveaways", "jobs", "rank")
+        private val NATIVE_DIALOG_COMMANDS = setOf("events", "farms", "giveaways", "jobs", "rank", "teams", "quests")
         private val SEARCH_INPUT = PaperDialogInputId.of("search")
         private val HOME_INPUT = PaperDialogInputId.of("home_name")
         private val PLAYER_SEARCH_INPUT = PaperDialogInputId.of("player_search")
@@ -964,13 +971,6 @@ internal class HelpCenterController(
                 HelpCenterFeature.DUELS,
                 opensInventory = true,
             ),
-            CommandDefinition(
-                "battle-pass",
-                HelpCenterCategory.ACTIVITIES,
-                "bp",
-                HelpCenterFeature.BATTLE_PASS,
-                opensInventory = true,
-            ),
             CommandDefinition("giveaways", HelpCenterCategory.ACTIVITIES, "giveaway", HelpCenterFeature.GIVEAWAYS),
             CommandDefinition(
                 "dungeons",
@@ -986,6 +986,9 @@ internal class HelpCenterController(
                 HelpCenterFeature.FARMS,
             ),
             CommandDefinition("vote", HelpCenterCategory.ACTIVITIES, "vote", HelpCenterFeature.VOTES),
+            CommandDefinition("parkour", HelpCenterCategory.ACTIVITIES, "pa joinall", HelpCenterFeature.PARKOUR,
+                "parkour.basic.joinall", opensInventory = true),
+            CommandDefinition("teams", HelpCenterCategory.SOCIAL, "clans", HelpCenterFeature.TEAMS, "arcjustteams.use"),
             CommandDefinition("shops", HelpCenterCategory.TRADE, "shops", opensInventory = true),
             CommandDefinition("loot", HelpCenterCategory.TRADE, "loot", opensInventory = true),
             CommandDefinition("sell", HelpCenterCategory.TRADE, "sell", opensInventory = true),
@@ -998,11 +1001,11 @@ internal class HelpCenterController(
                 "bank.open.command",
                 opensInventory = true,
             ),
-            CommandDefinition("rank", HelpCenterCategory.PROGRESS, "rank dialog"),
-            CommandDefinition("rankup", HelpCenterCategory.PROGRESS, "rankup"),
-            CommandDefinition("jobs", HelpCenterCategory.PROGRESS, "arcjobs dialog"),
-            CommandDefinition("quests", HelpCenterCategory.PROGRESS, "quests", opensInventory = true),
-            CommandDefinition("skills", HelpCenterCategory.PROGRESS, "skills", opensInventory = true),
+            CommandDefinition("rank", HelpCenterCategory.PROGRESS, "rank dialog", HelpCenterFeature.RANKS, "arcranks.use"),
+            CommandDefinition("rankup", HelpCenterCategory.PROGRESS, "rankup", HelpCenterFeature.RANKS, "arcranks.rankup"),
+            CommandDefinition("jobs", HelpCenterCategory.PROGRESS, "arcjobs dialog", HelpCenterFeature.JOBS, "arcecojobs.use"),
+            CommandDefinition("quests", HelpCenterCategory.PROGRESS, "rank quests", HelpCenterFeature.RANKS, "arcranks.use"),
+            CommandDefinition("skills", HelpCenterCategory.PROGRESS, "skills", HelpCenterFeature.SKILLS, opensInventory = true),
             CommandDefinition(
                 "slimefun",
                 HelpCenterCategory.TECHNOLOGY,

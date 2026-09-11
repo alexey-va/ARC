@@ -198,7 +198,7 @@ internal class EMDungeonQol(
 
     internal fun setAutosaveSeconds(player: Player, seconds: Int): DungeonSaveEdit {
         if (seconds !in DUNGEON_AUTOSAVE_INTERVALS || !canConfigureAutosaves())
-            return DungeonSaveEdit(false, text("saves.settings.unavailable", "<#aaa49a>Настройка автосохранения сейчас недоступна."))
+            return DungeonSaveEdit(false, text("saves.settings.unavailable", "<#e8dfd2>Настройка автосохранения сейчас недоступна."))
         val data = player.persistentDataContainer
         val previous = data.get(autosaveIntervalKey, PersistentDataType.INTEGER)
         if (previous == seconds) return DungeonSaveEdit(true, Component.empty())
@@ -209,8 +209,8 @@ internal class EMDungeonQol(
     }
 
     internal fun autosaveDescription(player: Player): Component {
-        if (autosaveSeconds(player) == 0) return text("saves.dialog.autosaves-disabled", "<#aaa49a>Автосохранения отключены. Ручные точки доступны через «Сохранить здесь».")
-        return text("saves.dialog.autosaves", "<#e8dfd2>Автосохранение запоминает вашу позицию, а не добычу или состояние монстров.<newline><#aaa49a>Проверка каждые 20 секунд: первая безопасная точка, затем не чаще раза в <seconds> секунд и после перемещения хотя бы на 8 блоков. Нужно стоять на безопасной поверхности, без полёта и транспорта, не гореть и 15 секунд не участвовать в бою.<newline>Хранятся 3 последние автоточки и до 5 ручных. Смерть их не удаляет. Точки действуют <hours> ч.; в новом инстансе места прошлого прохождения недоступны.",
+        if (autosaveSeconds(player) == 0) return text("saves.dialog.autosaves-disabled", "<#e8dfd2>Автосохранения отключены. Ручные точки доступны через «Сохранить здесь».")
+        return text("saves.dialog.autosaves", "<#e8dfd2>Автосохранение запоминает вашу позицию, а не добычу или состояние монстров.<newline><#e8dfd2>Проверка каждые 20 секунд: первая безопасная точка, затем не чаще раза в <seconds> секунд и после перемещения хотя бы на 8 блоков. Нужно стоять на безопасной поверхности, без полёта и транспорта, не гореть и 15 секунд не участвовать в бою.<newline>Хранятся 3 последние автоточки и до 5 ручных. Смерть их не удаляет. Точки действуют <hours> ч.; в новом инстансе места прошлого прохождения недоступны.",
             "seconds" to Component.text(autosaveSeconds(player)),
             "hours" to Component.text(ttl / 3_600_000))
     }
@@ -256,13 +256,13 @@ internal class EMDungeonQol(
     }
 
     internal fun returnToLast(player: Player, expected: DungeonDeparture? = lastReturn(player)) {
-        val unavailable = text("panel.return-unavailable", "<#aaa49a>Нет доступного места выхода из обычного данжа. Сначала посетите данж и выйдите из него.")
+        val unavailable = text("panel.return-unavailable", "<#e8dfd2>Нет доступного места выхода из обычного данжа. Сначала посетите данж и выйдите из него.")
         if (expected == null || lastReturn(player) != expected) { audience.sendMessage(player, unavailable); return }
         if (inCombat(player)) { audience.sendMessage(player, combatMessage()); return }
         val origin = player.world.uid
         val token = UUID.randomUUID()
         if (pending.putIfAbsent(player.uniqueId, token) != null) {
-            audience.sendMessage(player, text("saves.messages.pending", "<gray>Сначала войдите в открытый портал или дождитесь его закрытия.")); return
+            audience.sendMessage(player, text("saves.messages.pending", "<#e8dfd2>Сначала войдите в открытый портал или дождитесь его закрытия.")); return
         }
         tasks.runLater(420) { pending.remove(player.uniqueId, token) }
         runCatching { openPortal(player) portal@{
@@ -273,7 +273,7 @@ internal class EMDungeonQol(
             }
             if (inCombat(player)) { audience.sendMessage(player, combatMessage()); return@portal }
             if (player.isInsideVehicle || player.isFlying || player.isGliding) {
-                audience.sendMessage(player, text("saves.messages.travel-ground", "<gray>Войдите в портал пешком, без транспорта и полёта.")); return@portal
+                audience.sendMessage(player, text("saves.messages.travel-ground", "<#e8dfd2>Войдите в портал пешком, без транспорта и полёта.")); return@portal
             }
             if (!safe(expected.location)) {
                 audience.sendMessage(player, text("saves.messages.unavailable-point", "<red>Эта точка больше не подходит для безопасного перехода. Выберите другую или выйдите через меню: Shift + F → «Выйти из данжа».")); return@portal
@@ -292,7 +292,7 @@ internal class EMDungeonQol(
             "return", "вернуться" -> returnToLast(player)
             "main" -> if (!HelpCenterModule.open(player)) audience.sendMessage(player, text("panel.main-unavailable", "<#d7b486>Главное меню сейчас недоступно. Попробуйте позже."))
             "party" -> if (partiesAvailable()) player.performCommand("elitemobs:em party menu")
-                else audience.sendMessage(player, text("party.unavailable", "<#aaa49a>Группы EliteMobs на этом сервере пока недоступны."))
+                else audience.sendMessage(player, text("party.unavailable", "<#e8dfd2>Группы EliteMobs на этом сервере пока недоступны."))
             "shops", "магазины" -> {
                 if (resolve(player.world)?.instanced == true) audience.sendMessage(player, text("messages.leave-first", "<#d7b486>Сначала выйдите из текущего данжа: Shift + F → «Выйти из данжа»."))
                 else if (!travelToShops(player, shopsLocation())) audience.sendMessage(player, text("messages.shops-unavailable", "<#aaa49a>Магазины сейчас недоступны. Попробуйте позже."))
@@ -346,18 +346,18 @@ internal class EMDungeonQol(
     private fun matches(player: Player, expected: DungeonSaveView): Boolean =
         player.world.uid == expected.worldId && current(player)?.let { it.run == expected.run && it.canResume } == true
     private fun inCombat(player: Player): Boolean = clock() < (combatUntil[player.uniqueId] ?: 0L)
-    private fun combatMessage() = text("saves.messages.combat", "<red>Во время боя сохраняться и перемещаться нельзя. Подождите 15 секунд без боя. <gray>Для выхода: Shift + F → «Выйти из данжа».")
+    private fun combatMessage() = text("saves.messages.combat", "<red>Во время боя сохраняться и перемещаться нельзя. Подождите 15 секунд без боя. <#e8dfd2>Для выхода: Shift + F → «Выйти из данжа».")
 
     /** Shared, non-mutating preflight for the panel, form, and authoritative save action. */
     internal fun saveBlockReason(player: Player, expected: DungeonSaveView?): Component? {
-        if (expected == null) return text("panel.save-inactive", "<#aaa49a>Сохранения доступны только во время прохождения.")
+        if (expected == null) return text("panel.save-inactive", "<#e8dfd2>Сохранения доступны только во время прохождения.")
         if (!matches(player, expected)) return changed().message
         if (inCombat(player)) return combatMessage()
-        if (pending.containsKey(player.uniqueId)) return text("saves.messages.pending", "<gray>Сначала войдите в открытый портал или дождитесь его закрытия.")
+        if (pending.containsKey(player.uniqueId)) return text("saves.messages.pending", "<#e8dfd2>Сначала войдите в открытый портал или дождитесь его закрытия.")
         if (lastSave[player.uniqueId]?.let { clock() - it < 5_000 } == true)
-            return text("saves.messages.cooldown", "<gray>Подождите 5 секунд между сохранениями.")
-        if (player.isInsideVehicle) return text("saves.messages.vehicle", "<#aaa49a>Чтобы сохраниться, выйдите из транспорта или слезьте с ездового животного.")
-        if (player.isFlying || player.isGliding) return text("saves.messages.flying", "<#aaa49a>Чтобы сохраниться, приземлитесь и выключите полёт.")
+            return text("saves.messages.cooldown", "<#e8dfd2>Подождите 5 секунд между сохранениями.")
+        if (player.isInsideVehicle) return text("saves.messages.vehicle", "<#e8dfd2>Чтобы сохраниться, выйдите из транспорта или слезьте с ездового животного.")
+        if (player.isFlying || player.isGliding) return text("saves.messages.flying", "<#e8dfd2>Чтобы сохраниться, приземлитесь и выключите полёт.")
         if (!stable(player)) return text("saves.messages.unsafe", "<red>Встаньте на безопасную твёрдую поверхность, вдали от огня, воды и обрыва.")
         return null
     }
@@ -390,14 +390,14 @@ internal class EMDungeonQol(
             checkpoints.restoreSaves(player.persistentDataContainer, snapshot)
             return DungeonSaveEdit(false, text("saves.messages.write-failed", "<red>Не удалось записать сохранение на диск. Повторите попытку позже."))
         }
-        return DungeonSaveEdit(true, text("saves.messages.removed", "<gray>Сохранение удалено."))
+        return DungeonSaveEdit(true, text("saves.messages.removed", "<#e8dfd2>Сохранение удалено."))
     }
 
     internal fun travel(player: Player, expected: DungeonSaveView, id: String) {
         if (!matches(player, expected)) { audience.sendMessage(player, changed().message); return }
         if (inCombat(player)) { audience.sendMessage(player, combatMessage()); return }
         val token = UUID.randomUUID()
-        if (pending.putIfAbsent(player.uniqueId, token) != null) { audience.sendMessage(player, text("saves.messages.pending", "<gray>Сначала войдите в открытый портал или дождитесь его закрытия.")); return }
+        if (pending.putIfAbsent(player.uniqueId, token) != null) { audience.sendMessage(player, text("saves.messages.pending", "<#e8dfd2>Сначала войдите в открытый портал или дождитесь его закрытия.")); return }
         // Expire only this request; an old portal must not consume a later one.
         tasks.runLater(420) { pending.remove(player.uniqueId, token) }
         runCatching { openPortal(player) portal@{
@@ -405,7 +405,7 @@ internal class EMDungeonQol(
             if (!matches(player, expected)) { if (player.isOnline) audience.sendMessage(player, changed().message); return@portal }
             if (inCombat(player)) { audience.sendMessage(player, combatMessage()); return@portal }
             if (player.isInsideVehicle || player.isFlying || player.isGliding) {
-                audience.sendMessage(player, text("saves.messages.travel-ground", "<gray>Войдите в портал пешком, без транспорта и полёта.")); return@portal
+                audience.sendMessage(player, text("saves.messages.travel-ground", "<#e8dfd2>Войдите в портал пешком, без транспорта и полёта.")); return@portal
             }
             val visit = current(player) ?: return@portal
             val destination = when (id) {
@@ -473,7 +473,7 @@ internal class EMDungeonQol(
         if (!stable(player)) return
         val snapshot = checkpoints.snapshotSaves(player.persistentDataContainer)
         checkpoints.save(player.persistentDataContainer, player.location, visit.run, "Автосохранение", DungeonSaveKind.AUTO, now, ttl) ?: return
-        if (persist(player)) audience.sendActionBar(player, text("saves.messages.auto-saved", "<gray>Место сохранено автоматически · Shift + F"))
+        if (persist(player)) audience.sendActionBar(player, text("saves.messages.auto-saved", "<#e8dfd2>Место сохранено автоматически · Shift + F"))
         else checkpoints.restoreSaves(player.persistentDataContainer, snapshot)
     }
 

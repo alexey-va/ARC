@@ -47,7 +47,7 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.47"
+version = "1.4.48"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.6"
@@ -181,6 +181,7 @@ dependencies {
     compileOnly("commons-lang:commons-lang:2.6")
 
     // tests
+    testImplementation(platform("org.junit:junit-bom:6.0.3"))
     testImplementation(libs.org.junit.jupiter.junit.jupiter.api)
     testImplementation(libs.org.junit.jupiter.junit.jupiter.engine)
     testImplementation(libs.org.junit.jupiter.junit.jupiter.params)

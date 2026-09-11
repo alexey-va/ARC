@@ -16,6 +16,8 @@ object ArcParkourModule : PluginModule {
     private val listeners = mutableListOf<Listener>()
     private var tasks: LifecycleTaskScope? = null
 
+    fun isAvailable(): Boolean = tasks != null && listeners.isNotEmpty()
+
     override fun init() {
         val settings =
             runCatching { ArcParkourConfig.load(ARC.instance.dataPath).snapshot() }

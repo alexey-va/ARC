@@ -9,7 +9,7 @@ class HelpCenterHubPlannerTest {
     @Test
     fun `goal routes are small ordered catalog selections`() {
         assertEquals(listOf("jobs", "sell", "shops", "auction", "bank"), HelpCenterHubPlanner.goalActions(HelpCenterGoal.EARN))
-        assertEquals(listOf("events", "duels", "dungeons", "battle-pass"), HelpCenterHubPlanner.goalActions(HelpCenterGoal.FIGHT))
+        assertEquals(listOf("events", "duels", "dungeons"), HelpCenterHubPlanner.goalActions(HelpCenterGoal.FIGHT))
         assertTrue(HelpCenterHubPlanner.goalActions(HelpCenterGoal.EXPLORE).size <= 5)
     }
 
