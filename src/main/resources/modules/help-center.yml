@@ -5,6 +5,11 @@ limits:
   max-search-results: 8
   load-timeout-seconds: 3
 
+actions:
+  rtp-vanilla: 'rtp region=vanilla'
+  rtp-mining: 'rtp region=mining'
+  rtp-biomes: 'rtp region=survival'
+
 # All player-visible copy is configurable. ARC merges new defaults on reload.
 text:
   table-item-label: "Предмет"

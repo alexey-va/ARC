@@ -89,6 +89,9 @@ class HelpCenterConfigTest : StringSpec({
             settings.text("commands-label").contains("✧") shouldBe true
             settings.text("category-settings-label").contains("☷") shouldBe true
             settings.text("category-trade-body").contains("итоговую сумму") shouldBe true
+            settings.action("rtp-vanilla") shouldBe "rtp region=vanilla"
+            settings.action("rtp-mining") shouldBe "rtp region=mining"
+            settings.action("rtp-biomes") shouldBe "rtp region=survival"
             settings.text("travel-title").contains("Телепортация") shouldBe true
             settings.text("guide-body").contains("Мир строительства") shouldBe false
             settings.command("privat").label.contains("Приват") shouldBe true

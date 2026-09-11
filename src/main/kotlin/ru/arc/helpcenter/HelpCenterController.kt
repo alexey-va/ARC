@@ -873,13 +873,13 @@ internal class HelpCenterController(
                 body = listOf(PaperDialogBody(text("rtp-body"), width = 500)),
                 buttons = listOf(
                     button("rtp_vanilla", text("rtp-vanilla-label"), text("rtp-vanilla-tooltip")) {
-                        execute(player, "rtp region=vanilla")
+                        execute(player, settings.action("rtp-vanilla"))
                     }.closing(),
                     button("rtp_mining", text("rtp-mining-label"), text("rtp-mining-tooltip")) {
-                        execute(player, "rtp region=mining")
+                        execute(player, settings.action("rtp-mining"))
                     }.closing(),
                     button("rtp_biomes", text("rtp-biomes-label"), text("rtp-biomes-tooltip")) {
-                        execute(player, "rtp region=survival")
+                        execute(player, settings.action("rtp-biomes"))
                     }.closing(),
                 ),
                 exitButton = backButton("back", player, ::openTravel),

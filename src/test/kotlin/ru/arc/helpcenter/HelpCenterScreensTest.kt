@@ -77,6 +77,16 @@ class HelpCenterScreensTest {
             true
         }
         ConfigManager.clear()
+        Files.createDirectories(directory)
+        Files.writeString(
+            directory.resolve("help-center.yml"),
+            """
+            actions:
+              rtp-vanilla: 'arc rtp vanilla --only-if-first'
+              rtp-mining: 'arc rtp mining --only-if-first'
+              rtp-biomes: 'arc rtp survival --only-if-first'
+            """.trimIndent(),
+        )
         val inventoryReturn = HelpCenterInventoryReturnRuntime(plugin, returnOnClose = { true })
         legacy = spyk(HelpCenterLegacySettings())
         every { legacy.flightSnapshot(any()) } returns HelpCenterFlightSnapshot(50_000.0, 100_000, false)
@@ -364,7 +374,7 @@ class HelpCenterScreensTest {
     }
 
     @Test
-    fun `travel keeps only routed destinations and random teleport selects one of three worlds`() {
+    fun `travel keeps only routed destinations and uses configured random teleport routes`() {
         open(HelpCenterPage.TRAVEL)
         assertEquals(listOf("create_home", "warps", "public_homes", "spawn", "rtp", "back_command"),
             screen.buttons.map { it.id.value })
@@ -372,9 +382,9 @@ class HelpCenterScreensTest {
         click("rtp")
         assertEquals(listOf("rtp_vanilla", "rtp_mining", "rtp_biomes"), screen.buttons.map { it.id.value })
         for ((button, command) in listOf(
-            "rtp_vanilla" to "rtp region=vanilla",
-            "rtp_mining" to "rtp region=mining",
-            "rtp_biomes" to "rtp region=survival",
+            "rtp_vanilla" to "arc rtp vanilla --only-if-first",
+            "rtp_mining" to "arc rtp mining --only-if-first",
+            "rtp_biomes" to "arc rtp survival --only-if-first",
         )) {
             click(button)
             assertEquals(command, executed.last())

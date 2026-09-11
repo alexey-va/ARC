@@ -22,10 +22,13 @@ data class HelpCenterSettings(
     val maxSearchResults: Int,
     val loadTimeoutSeconds: Long,
     private val text: Map<String, String>,
+    private val actions: Map<String, String>,
     private val commands: Map<String, HelpCenterCommandText>,
     private val intents: Map<String, HelpCenterIntentText>,
 ) {
     fun text(key: String): String = text.getValue(key)
+
+    fun action(id: String): String = actions.getValue(id)
 
     fun command(id: String): HelpCenterCommandText = commands.getValue(id)
 
@@ -46,6 +49,7 @@ class HelpCenterConfig(private val config: Config) {
             maxSearchResults = maxSearchResults,
             loadTimeoutSeconds = loadTimeoutSeconds,
             text = DEFAULT_TEXT.mapValues { (key, fallback) -> required("text.$key", fallback) },
+            actions = DEFAULT_ACTIONS.mapValues { (id, fallback) -> required("actions.$id", fallback) },
             commands = COMMANDS.mapValues { (id, fallback) ->
                 HelpCenterCommandText(
                     label = required("commands.$id.label", fallback.label),
@@ -70,6 +74,12 @@ class HelpCenterConfig(private val config: Config) {
 
     companion object {
         private const val RESOURCE = "help-center.yml"
+
+        private val DEFAULT_ACTIONS = linkedMapOf(
+            "rtp-vanilla" to "rtp region=vanilla",
+            "rtp-mining" to "rtp region=mining",
+            "rtp-biomes" to "rtp region=survival",
+        )
 
         fun load(dataPath: Path): HelpCenterConfig {
             val source = ConfigManager.ofModule(dataPath, RESOURCE)
