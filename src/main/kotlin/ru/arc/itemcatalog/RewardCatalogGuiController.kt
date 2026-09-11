@@ -40,6 +40,27 @@ class RewardCatalogGuiController(
 
     fun isAvailable(): Boolean = active.get() && settings.enabled && settings.categories.any { it.entries.isNotEmpty() }
 
+    /**
+     * Materializes one exact case outcome selected by the crate engine.
+     *
+     * Redeemable vouchers are minted only here, after every current provider check. A full
+     * inventory falls back to player-owned ground items so a consumed crate key cannot lose
+     * the selected reward.
+     */
+    fun issueCaseReward(player: Player, categoryId: String, entryId: String): CaseRewardIssueResult {
+        if (!active.get() || !settings.enabled) return CaseRewardIssueResult.UNAVAILABLE
+        val (_, entry) = settings.caseEntry(categoryId, entryId) ?: return CaseRewardIssueResult.UNKNOWN_ENTRY
+        if (!providersEnabled(entry)) return CaseRewardIssueResult.PROVIDER_UNAVAILABLE
+        val resolved = resolve(entry, grant = true) ?: return CaseRewardIssueResult.PROVIDER_UNAVAILABLE
+        if (addStacks(player, resolved.values)) {
+            sendConfigured(player, settings.messages.given)
+            return CaseRewardIssueResult.INVENTORY
+        }
+        dropOwned(player, resolved.values)
+        player.sendMessage(TextUtil.mm("<#ffd166>Инвентарь заполнен — награда лежит у ваших ног и доступна только вам.", true))
+        return CaseRewardIssueResult.OWNED_DROP
+    }
+
     /** Native resolution without grants, for the existing operator content-health endpoint. */
     fun healthSnapshot(): Map<String, Any?> = mapOf(
         "enabled" to isAvailable(),
@@ -348,6 +369,16 @@ class RewardCatalogGuiController(
         return values.all { simulation.addItem(it.clone()).isEmpty() }
     }
 
+    private fun dropOwned(player: Player, values: List<ItemStack>) {
+        values.forEach { stack ->
+            player.world.dropItem(player.location, stack.clone()).apply {
+                owner = player.uniqueId
+                pickupDelay = 0
+                isUnlimitedLifetime = true
+            }
+        }
+    }
+
     private fun styledStack(style: CatalogIconStyle): ItemStack =
         ItemStackFactory.create(Material.valueOf(style.material), 1).also { stack ->
             if (style.customModelData != 0) stack.withCustomModelData(style.customModelData)
@@ -462,6 +493,14 @@ class RewardCatalogGuiController(
         private val ACTION = TextColor.color(0x5FE18B)
         private val UNAVAILABLE = TextColor.color(0xF2C66D)
     }
+}
+
+enum class CaseRewardIssueResult {
+    INVENTORY,
+    OWNED_DROP,
+    UNKNOWN_ENTRY,
+    PROVIDER_UNAVAILABLE,
+    UNAVAILABLE,
 }
 
 /**

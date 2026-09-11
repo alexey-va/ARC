@@ -68,6 +68,9 @@ object ItemsCatalogModule : PluginModule {
         (rewardController?.healthSnapshot() ?: mapOf("enabled" to false)) +
             ("physicalRedemptionAvailable" to (physicalRewards?.available == true))
 
+    fun issueCaseReward(player: Player, categoryId: String, entryId: String): CaseRewardIssueResult =
+        rewardController?.issueCaseReward(player, categoryId, entryId) ?: CaseRewardIssueResult.UNAVAILABLE
+
     private fun start(loaded: ItemsCatalogSettings, rewards: RewardCatalogSettings) {
         settings = loaded
         val seals = CollectionSealController(ARC.instance, rewards)

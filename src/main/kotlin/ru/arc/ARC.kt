@@ -65,6 +65,7 @@ import ru.arc.gui.ArcMenus
 import ru.arc.dialogdemo.DialogDemoModule
 import ru.arc.helpcenter.HelpCenterModule
 import ru.arc.itemcatalog.ItemsCatalogModule
+import ru.arc.itemcatalog.CaseRewardIssueCommand
 import ru.arc.landsui.LandsUiModule
 import ru.arc.network.NetworkRegistry
 import ru.arc.redis.RedisManager
@@ -262,6 +263,7 @@ open class ARC : JavaPlugin() {
         registerCommand("g", ChatModeAliasCommand, null)
         registerCommand("l", ChatModeAliasCommand, null)
         registerCommand("menu", MainMenuCommand, null)
+        registerCommand("arc-reward-issue", CaseRewardIssueCommand(), null)
         val dungeonCommand = ru.arc.hooks.elitemobs.EMDungeonCommand(
             ru.arc.config.ConfigManager.of(dataPath, "modules/elitemobs.yml"),
         )

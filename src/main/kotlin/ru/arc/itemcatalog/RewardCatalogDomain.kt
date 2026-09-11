@@ -88,6 +88,13 @@ data class RewardCatalogSettings(
 
     fun children(parentId: String?): List<RewardCatalogCategory> = categories.filter { it.parentId == parentId }
 
+    /** Finds one concrete outcome in a one-roll case. Non-case catalogue groups are never issuable here. */
+    fun caseEntry(categoryId: String, entryId: String): Pair<RewardCatalogCategory, RewardCatalogEntry>? {
+        val category = categories.firstOrNull { it.id == categoryId && it.rolls == 1 } ?: return null
+        val entry = category.entries.firstOrNull { it.id == entryId } ?: return null
+        return category to entry
+    }
+
     fun uncoveredRewards(): List<String> {
         val included = categories.filter { it.rolls != null }.flatMap { it.entries }
             .map { it.source to it.enchantments }.toSet()

@@ -104,6 +104,9 @@ commands:
     description: Open the lost loot mailbox
     usage: /loot
     aliases: [добыча]
+  arc-reward-issue:
+    description: Materialize one exact physical ARC case reward
+    usage: /arc-reward-issue <player> <case> <entry>
 permissions:
   arc.admin:
     description: Administer ARC
