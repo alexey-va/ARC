@@ -22,10 +22,12 @@ class MountTransferFlow(
 ) {
     private val executing = mutableSetOf<UUID>()
 
-    fun isBusy(playerId: UUID): Boolean = playerId in executing || store.records().any {
+    internal fun isBusyWithoutOther(playerId: UUID): Boolean = playerId in executing || store.records().any {
         it.issuer == playerId && it.stage in setOf(MountTransferStage.PACKING, MountTransferStage.DELIVERING) ||
             it.recipient == playerId && it.stage in setOf(MountTransferStage.CLAIMING, MountTransferStage.APPLIED)
     }
+
+    fun isBusy(playerId: UUID): Boolean = isBusyWithoutOther(playerId) || otherBusy(playerId)
 
     fun pack(playerId: UUID, mount: MountDefinition, done: (Result<MountTransferRecord>) -> Unit) {
         if (!ledger.available || isBusy(playerId) || otherBusy(playerId)) {

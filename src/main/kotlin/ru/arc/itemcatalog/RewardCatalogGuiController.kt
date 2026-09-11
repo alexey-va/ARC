@@ -1,5 +1,6 @@
 package ru.arc.itemcatalog
 
+import dev.lone.itemsadder.api.CustomStack
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.TextReplacementConfig
 import net.kyori.adventure.text.format.TextColor
@@ -29,6 +30,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 class RewardCatalogGuiController(
     private val settings: RewardCatalogSettings,
     private val givePermission: String,
+    private val sealStack: (String, CatalogIconStyle?) -> ItemStack? = { _, _ -> null },
+    private val mountPreview: (String) -> ItemStack? = { null },
+    private val mountGrant: (Player, String) -> Unit = { _, _ -> },
 ) {
     private val active = AtomicBoolean(true)
 
@@ -37,6 +41,27 @@ class RewardCatalogGuiController(
     }
 
     fun isAvailable(): Boolean = active.get() && settings.enabled && settings.categories.any { it.entries.isNotEmpty() }
+
+    /** Native resolution without grants, for the existing operator content-health endpoint. */
+    fun healthSnapshot(): Map<String, Any?> = mapOf(
+        "enabled" to isAvailable(),
+        "entries" to settings.entryCount,
+        "categories" to settings.categories.map { category ->
+            val planned = category.entries.filter { it.source is RewardCatalogSource.Planned }.map { it.id }
+            val unavailable = category.entries.filter { entry ->
+                entry.source !is RewardCatalogSource.Planned && (!providersEnabled(entry) || resolve(entry) == null)
+            }.map { it.id }
+            mapOf(
+                "id" to category.id,
+                "parent" to category.parentId,
+                "entries" to category.entries.size,
+                "rolls" to category.rolls,
+                "totalWeight" to category.entries.sumOf { it.weight?.toLong() ?: 0L },
+                "planned" to planned,
+                "unavailable" to unavailable,
+            )
+        },
+    )
 
     fun openRoot(player: Player, back: () -> Unit = player::closeInventory) {
         if (!active.get()) {
@@ -50,7 +75,7 @@ class RewardCatalogGuiController(
         pagedMenu(
             player = player,
             title = titleStrip(settings.title),
-            entries = settings.categories,
+            entries = settings.children(null),
             requestedPage = 0,
             back = back,
             reopen = { nextPage -> openRootPage(player, nextPage, back) },
@@ -67,7 +92,7 @@ class RewardCatalogGuiController(
         pagedMenu(
             player = player,
             title = titleStrip(settings.title),
-            entries = settings.categories,
+            entries = settings.children(null),
             requestedPage = page,
             back = back,
             reopen = { nextPage -> openRootPage(player, nextPage, back) },
@@ -85,7 +110,7 @@ class RewardCatalogGuiController(
                     buildList {
                         add(body("Предметы и сюрпризы из лутбоксов."))
                         add(Component.empty())
-                        add(metadata("Категорий", settings.categories.size.toString()))
+                        add(metadata("Разделов", settings.children(null).size.toString()))
                         add(metadata("Наград", settings.entryCount.toString()))
                     },
                 action = "[▶] ЛКМ — открыть награды",
@@ -99,10 +124,13 @@ class RewardCatalogGuiController(
         back: () -> Unit,
     ): PaperMenuEntry {
         val base = styledStack(category.icon)
+        val children = settings.children(category.id)
         val details = buildList {
             addAll(category.description.map(::body))
             add(Component.empty())
-            add(metadata("Наград", category.entries.size.toString()))
+            if (children.isNotEmpty()) add(metadata("Разделов", children.size.toString()))
+            else add(metadata("Наград", category.entries.size.toString()))
+            category.rolls?.let { add(metadata("За открытие", "$it награда")) }
         }
         return ArcMenus.entry(
             rewardPresentation(
@@ -110,10 +138,10 @@ class RewardCatalogGuiController(
                 name = authoredComponent(category.name, NAME_DEFAULT),
                 details = details,
                 action =
-                    if (category.id.startsWith("set_")) {
-                        "[▶] ЛКМ — открыть пак"
-                    } else {
-                        "[▶] ЛКМ — открыть категорию"
+                    when {
+                        category.rolls != null -> "[▶] ЛКМ — посмотреть состав"
+                        category.id.startsWith("set_") -> "[▶] ЛКМ — открыть пак"
+                        else -> "[▶] ЛКМ — открыть раздел"
                     },
             ),
         ) {
@@ -127,18 +155,34 @@ class RewardCatalogGuiController(
             return
         }
         val category = settings.categories.firstOrNull { it.id == categoryId } ?: return rootBack()
+        val back = {
+            category.parentId?.let { openCategory(player, it, 0, rootBack) } ?: openRoot(player, rootBack)
+        }
+        val children = settings.children(category.id)
+        if (children.isNotEmpty()) {
+            pagedMenu(
+                player = player,
+                title = titleStrip(category.name),
+                entries = children,
+                requestedPage = page,
+                back = back,
+                reopen = { nextPage -> openCategory(player, categoryId, nextPage, rootBack) },
+                render = { child, _ -> categoryItem(player, child, rootBack) },
+            )
+            return
+        }
         pagedMenu(
             player = player,
             title = titleStrip(category.name),
             entries = category.entries,
             requestedPage = page,
-            back = { openRoot(player, rootBack) },
+            back = back,
             reopen = { nextPage -> openCategory(player, categoryId, nextPage, rootBack) },
-            render = { entry, _ -> rewardItem(player, entry) },
+            render = { entry, _ -> rewardItem(player, entry, category.chance(entry)) },
         )
     }
 
-    private fun rewardItem(player: Player, entry: RewardCatalogEntry): PaperMenuEntry {
+    private fun rewardItem(player: Player, entry: RewardCatalogEntry, chance: String? = null): PaperMenuEntry {
         val providerReady = providersEnabled(entry)
         val resolved = if (providerReady) resolve(entry) else null
         val preview = previewStack(entry, resolved)
@@ -147,6 +191,7 @@ class RewardCatalogGuiController(
             active.get() && player.hasPermission(givePermission) && providerReady && resolved != null && capacityReady
         val action =
             when {
+                entry.source is RewardCatalogSource.Planned -> "Награда будущих кейсов"
                 canGive -> "[▶] ЛКМ — получить"
                 !providerReady -> "Сейчас недоступно"
                 !player.hasPermission(givePermission) -> "Получение недоступно"
@@ -154,7 +199,13 @@ class RewardCatalogGuiController(
                 !capacityReady -> "Нет места в инвентаре"
                 else -> "Сейчас недоступно"
             }
-        val original = tooltipLines(entry, resolved, preview)
+        val original = buildList {
+            addAll(tooltipLines(entry, resolved, preview))
+            if (chance != null) {
+                if (isNotEmpty()) add(Component.empty())
+                add(metadata("Шанс выпадения", chance))
+            }
+        }
         val stack = rewardPresentation(preview, displayName(entry, resolved, preview), original, action)
         return if (canGive) {
             ArcMenus.entry(stack) { handleClick(player, entry) }
@@ -178,6 +229,7 @@ class RewardCatalogGuiController(
         }
         when (resolved) {
             is ResolvedReward.TreasureValue -> giveTreasure(player, entry, resolved.value)
+            is ResolvedReward.MountValue -> mountGrant(player, resolved.id)
             is ResolvedReward.Stacks ->
                 if (addStacks(player, resolved.values)) {
                     sendConfigured(player, settings.messages.given)
@@ -224,12 +276,25 @@ class RewardCatalogGuiController(
                             treasure !is Treasure.Slimefun ||
                                 HookRegistry.sfHook?.getSlimefunItemStack(treasure.itemId) != null
                         }
-                        ?.let(ResolvedReward::TreasureValue)
+                        ?.let { treasure ->
+                            if (treasure is Treasure.Item) {
+                                RewardItemEnhancer.enrich(treasure.stack, entry.enchantments)
+                                    ?.let { treasure.copy(stack = it) }
+                            } else treasure.takeIf { entry.enchantments.isEmpty() }
+                        }?.let(ResolvedReward::TreasureValue)
                 is RewardCatalogSource.Preset ->
                     ItemPresets.resolveStacks(source.id, 1).getOrNull()?.takeIf { it.isNotEmpty() && it.size <= MAX_STACKS }
                         ?.let(ResolvedReward::Stacks)
                 is RewardCatalogSource.Pouch ->
                     Pouches.createStack(source.id).getOrNull()?.let { ResolvedReward.Stacks(listOf(it)) }
+                is RewardCatalogSource.Seal ->
+                    sealStack(source.categoryId, entry.icon)?.let { ResolvedReward.Stacks(listOf(it)) }
+                is RewardCatalogSource.ItemsAdder ->
+                    CustomStack.getInstance(source.id)?.itemStack?.let { RewardItemEnhancer.enrich(it, entry.enchantments) }
+                        ?.let { ResolvedReward.Stacks(listOf(it)) }
+                is RewardCatalogSource.Planned -> null
+                is RewardCatalogSource.Mount ->
+                    mountPreview(source.id)?.let { ResolvedReward.MountValue(source.id, it) }
             }
         }.getOrNull()
 
@@ -242,6 +307,7 @@ class RewardCatalogGuiController(
                     else -> null
                 }
             is ResolvedReward.Stacks -> resolved.values.firstOrNull()?.clone()
+            is ResolvedReward.MountValue -> resolved.preview.clone()
             null -> null
         } ?: styledStack(entry.icon ?: CatalogIconStyle(Material.PAPER.name))
 
@@ -252,6 +318,7 @@ class RewardCatalogGuiController(
     private fun nativeDisplayName(resolved: ResolvedReward?, preview: ItemStack): Component =
         when (resolved) {
             is ResolvedReward.Stacks -> preview.itemMeta?.displayName() ?: Component.translatable(preview.type.translationKey())
+            is ResolvedReward.MountValue -> preview.itemMeta?.displayName() ?: Component.text("Маунт", NAME_DEFAULT)
             is ResolvedReward.TreasureValue ->
                 when (val treasure = resolved.value) {
                     is Treasure.Item -> preview.itemMeta?.displayName() ?: Component.translatable(preview.type.translationKey())
@@ -299,17 +366,22 @@ class RewardCatalogGuiController(
         PlainTextComponentSerializer.plainText().serialize(component).isBlank()
 
     private fun rewardAmount(resolved: ResolvedReward?): String? =
-        (resolved as? ResolvedReward.TreasureValue)?.value?.let { treasure ->
+        when (resolved) {
+            is ResolvedReward.Stacks -> resolved.values.sumOf { it.amount }.toString()
+            is ResolvedReward.MountValue -> "1 маунт · I уровень"
+            is ResolvedReward.TreasureValue -> resolved.value.let { treasure ->
             when (treasure) {
                 is Treasure.Item -> if (treasure.min == treasure.max) treasure.min.toString() else "${treasure.min}–${treasure.max}"
                 is Treasure.Enchant -> if (treasure.min == treasure.max) treasure.min.toString() else "${treasure.min}–${treasure.max}"
                 is Treasure.Potion -> if (treasure.min == treasure.max) treasure.min.toString() else "${treasure.min}–${treasure.max}"
                 else -> null
             }
+            }
+            null -> null
         }
 
     private fun providersEnabled(entry: RewardCatalogEntry): Boolean =
-        entry.requires.all { required ->
+        (entry.requires + if (entry.source is RewardCatalogSource.ItemsAdder) listOf("ItemsAdder") else emptyList()).all { required ->
             Bukkit.getPluginManager().plugins.any { plugin -> plugin.name.equals(required, ignoreCase = true) && plugin.isEnabled }
         }
 
@@ -331,6 +403,7 @@ class RewardCatalogGuiController(
         when (resolved) {
             is ResolvedReward.TreasureValue -> hasTreasureCapacity(player, resolved.value)
             is ResolvedReward.Stacks -> hasCapacity(player, resolved.values)
+            is ResolvedReward.MountValue -> true
         }
 
     private fun capacityStacks(template: ItemStack, quantity: Int): List<ItemStack> {
@@ -373,6 +446,10 @@ class RewardCatalogGuiController(
             is RewardCatalogSource.Treasure -> "${source.pool}:${source.id}"
             is RewardCatalogSource.Preset -> "preset:${source.id}"
             is RewardCatalogSource.Pouch -> "pouch:${source.id}"
+            is RewardCatalogSource.Seal -> "seal:${source.categoryId}"
+            is RewardCatalogSource.ItemsAdder -> "itemsadder:${source.id}"
+            is RewardCatalogSource.Planned -> "planned:${source.id}"
+            is RewardCatalogSource.Mount -> "mount:${source.id}"
         }
 
     private fun styledStack(style: CatalogIconStyle): ItemStack =
@@ -478,6 +555,8 @@ class RewardCatalogGuiController(
         data class TreasureValue(val value: Treasure) : ResolvedReward
 
         data class Stacks(val values: List<ItemStack>) : ResolvedReward
+
+        data class MountValue(val id: String, val preview: ItemStack) : ResolvedReward
     }
 
     companion object {

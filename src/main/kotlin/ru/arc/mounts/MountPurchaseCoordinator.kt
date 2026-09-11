@@ -33,6 +33,7 @@ class MountPurchaseCoordinator(
     private val onStateChanged: () -> Unit = {},
     private val externalBusy: (UUID) -> Boolean = { false },
     private val purchaseAllowed: (UUID) -> Boolean = { true },
+    private val sharedBusy: (UUID) -> Boolean = { false },
 ) {
     private val activePurchases = ConcurrentHashMap.newKeySet<UUID>()
 
@@ -246,7 +247,9 @@ class MountPurchaseCoordinator(
         activePurchases.clear()
     }
 
-    fun isBusy(playerId: UUID): Boolean = playerId in activePurchases || journal.hasOpenPurchase(playerId)
+    fun isBusy(playerId: UUID): Boolean = isPurchaseBusy(playerId) || sharedBusy(playerId)
+
+    internal fun isPurchaseBusy(playerId: UUID): Boolean = playerId in activePurchases || journal.hasOpenPurchase(playerId)
 
     private fun purchase(
         playerId: UUID,

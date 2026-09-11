@@ -4,6 +4,9 @@ import org.bukkit.entity.Player
 import org.bukkit.Bukkit
 import ru.arc.ARC
 import ru.arc.core.PluginModule
+import ru.arc.core.Tasks
+import ru.arc.mounts.MountModule
+import ru.arc.mounts.MountRewardResult
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import ru.arc.util.TextUtil
@@ -16,6 +19,7 @@ object ItemsCatalogModule : PluginModule {
     @Volatile private var service: ItemsCatalogService? = null
     @Volatile private var controller: ItemsCatalogGuiController? = null
     @Volatile private var rewardController: RewardCatalogGuiController? = null
+    @Volatile private var collectionSeals: CollectionSealController? = null
 
     override fun init() {
         start(
@@ -55,9 +59,35 @@ object ItemsCatalogModule : PluginModule {
 
     internal fun currentSnapshot(): ItemsCatalogSnapshot? = service?.currentSnapshot()
 
+    fun rewardHealthSnapshot(): Map<String, Any?> =
+        rewardController?.healthSnapshot() ?: mapOf("enabled" to false)
+
     private fun start(loaded: ItemsCatalogSettings, rewards: RewardCatalogSettings) {
         settings = loaded
-        rewardController = RewardCatalogGuiController(rewards, loaded.givePermission).takeIf { it.isAvailable() }
+        val seals = CollectionSealController(ARC.instance, rewards)
+        if (rewards.enabled) {
+            seals.register()
+            collectionSeals = seals
+        }
+        rewardController = RewardCatalogGuiController(
+            rewards,
+            loaded.givePermission,
+            seals::createStack,
+            MountModule::rewardPreview,
+        ) { player, mountId ->
+            MountModule.grantReward(player, mountId).whenComplete { result, failure ->
+                Tasks.scheduler.runLater(1) {
+                    if (collectionSeals !== seals || !player.isOnline) return@runLater
+                    val message = when {
+                        failure != null -> rewards.messages.actionFailed
+                        result is MountRewardResult.Granted -> "<#a6ffce>Маунт открыт в вашей коллекции."
+                        result is MountRewardResult.AlreadyOwned -> "<#ffd567>Этот маунт уже есть в вашей коллекции."
+                        else -> rewards.messages.actionFailed
+                    }
+                    player.sendMessage(TextUtil.mm(message, true))
+                }
+            }
+        }.takeIf { it.isAvailable() }
         info(
             "Reward catalogue loaded: enabled={} categories={} entries={}",
             rewards.enabled,
@@ -86,6 +116,8 @@ object ItemsCatalogModule : PluginModule {
         controller = null
         rewardController?.shutdown()
         rewardController = null
+        collectionSeals?.close()
+        collectionSeals = null
         service?.shutdown()
         service = null
     }

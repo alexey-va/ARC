@@ -7,6 +7,8 @@ import org.bukkit.command.Command
 import org.bukkit.command.CommandSender
 import org.bukkit.command.TabExecutor
 import org.bukkit.entity.EntityType
+import org.bukkit.entity.Player
+import org.bukkit.inventory.ItemStack
 import ru.arc.ARC
 import ru.arc.core.PluginModule
 import ru.arc.core.Tasks
@@ -17,6 +19,7 @@ import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import ru.arc.util.TextUtil
 import java.util.Locale
+import java.util.concurrent.CompletableFuture
 
 object MountModule : PluginModule {
     override val name = "Mounts"
@@ -31,6 +34,7 @@ object MountModule : PluginModule {
     private var quickSummons: MountQuickSummonController? = null
     private var gui: MountGuiController? = null
     private var transfers: MountTransferController? = null
+    private val rewardGrant = MountRewardGrant()
 
     internal fun currentBackgroundStyle(): MountGuiItemStyle? = config?.guiStyle(MountGuiItemRole.BACKGROUND)
 
@@ -51,6 +55,11 @@ object MountModule : PluginModule {
     }
 
     fun summonFavorite(player: org.bukkit.entity.Player): Boolean = quickSummons?.summonFavorite(player) ?: false
+
+    fun rewardPreview(id: String): ItemStack? = rewardGrant.preview(id)
+
+    fun grantReward(player: Player, id: String): CompletableFuture<MountRewardResult> =
+        rewardGrant.grant(player, id)
 
     internal fun activeMountSnapshot(player: org.bukkit.entity.Player): ActiveMountSnapshot? =
         sessions?.activeMountSnapshot(player)
@@ -99,10 +108,11 @@ object MountModule : PluginModule {
                 wallet = wallet,
                 journal = journal,
                 purchasesEnabled = { requiredConfig().purchasesEnabled },
-                externalBusy = { transfers?.isBusy(it) == true },
+                externalBusy = { transfers?.isBusyWithoutOther(it) == true || rewardGrant.isBusy(it) },
                 runSync = { task -> Tasks.scheduler.runSync(Runnable(task)) },
                 onStateChanged = ::publishMetrics,
                 purchaseAllowed = { playerId -> Bukkit.getPlayer(playerId)?.let(MountMerchantGate::isAtMerchant) == true },
+                sharedBusy = rewardGrant::isBusy,
             )
         val summonService =
             MountSummonService(
@@ -157,6 +167,13 @@ object MountModule : PluginModule {
         catalog = loadedCatalog
         ownership = loadedOwnership
         purchases = coordinator
+        rewardGrant.activate(
+            loadedCatalog,
+            loadedOwnership,
+            busy = { playerId ->
+                purchases?.isPurchaseBusy(playerId) == true || transfers?.isBusyWithoutOther(playerId) == true
+            },
+        )
         sessions = controller
         quickSummons = quickSummonController
         gui = guiController
@@ -175,6 +192,7 @@ object MountModule : PluginModule {
     }
 
     private fun shutdownRuntime() {
+        rewardGrant.close()
         bindUnavailableCommands()
         transfers?.close()
         transfers = null

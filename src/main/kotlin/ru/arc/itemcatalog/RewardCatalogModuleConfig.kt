@@ -26,6 +26,7 @@ class RewardCatalogModuleConfig(private val config: Config) {
         require(categories.sumOf { it.entries.size } <= MAX_ENTRIES) {
             "Reward catalog supports at most $MAX_ENTRIES entries"
         }
+        validateHierarchy(categories)
         return RewardCatalogSettings(enabled, title, categories, messages, rootIcon)
     }
 
@@ -44,7 +45,17 @@ class RewardCatalogModuleConfig(private val config: Config) {
             entriesMap
                 .entries
                 .map { (entryId, value) -> parseEntry(id, entryId, value) }
-        return RewardCatalogCategory(id, name, description, icon, entries)
+        val parent = if ("parent" in map) requiredId(map["parent"], "categories.$id.parent", ID) else null
+        val rolls = if ("rolls" in map) integer(map["rolls"], "categories.$id.rolls") else null
+        if (rolls != null) {
+            require(rolls == 1) { "categories.$id.rolls must be 1 for a single-outcome case" }
+            require(entries.isNotEmpty() && entries.all { it.weight != null }) {
+                "categories.$id case entries must all have a positive weight"
+            }
+        } else {
+            require(entries.none { it.weight != null }) { "categories.$id weights require rolls: 1" }
+        }
+        return RewardCatalogCategory(id, name, description, icon, entries, parent, rolls)
     }
 
     private fun parseEntry(categoryId: String, rawId: String, rawValue: Any?): RewardCatalogEntry {
@@ -59,17 +70,62 @@ class RewardCatalogModuleConfig(private val config: Config) {
             if ("requires" in map) pluginList(map["requires"], "$path.requires") else emptyList()
         val sourceKeys = SOURCE_KEYS.filter(map::containsKey)
         require(sourceKeys.size == 1) {
-            "$path must contain exactly one of treasure, preset or pouch"
+            "$path must contain exactly one reward source"
         }
         val source =
             when (val key = sourceKeys.single()) {
                 "treasure" -> parseTreasure(map.getValue(key), "$path.treasure")
                 "preset" -> RewardCatalogSource.Preset(requiredId(map.getValue(key), "$path.preset", PRESET_ID))
                 "pouch" -> RewardCatalogSource.Pouch(requiredId(map.getValue(key), "$path.pouch", POUCH_ID))
+                "seal" -> RewardCatalogSource.Seal(requiredId(map.getValue(key), "$path.seal", ID))
+                "itemsadder" -> RewardCatalogSource.ItemsAdder(requiredId(map.getValue(key), "$path.itemsadder", ITEMSADDER_ID))
+                "planned" -> RewardCatalogSource.Planned(requiredId(map.getValue(key), "$path.planned", ID))
+                "mount" -> RewardCatalogSource.Mount(requiredId(map.getValue(key), "$path.mount", ID))
                 else -> error("unreachable source key")
             }
         val icon = if ("icon" in map) material(map["icon"], "$path.icon") else null
-        return RewardCatalogEntry(id, name, description, rarity, requires, source, icon)
+        val weight = if ("weight" in map) integer(map["weight"], "$path.weight") else null
+        require(weight == null || weight in 1..1_000_000) { "$path.weight must be in 1..1000000" }
+        val enchantments = if ("enchantments" in map) {
+            require(source is RewardCatalogSource.Treasure || source is RewardCatalogSource.ItemsAdder) {
+                "$path.enchantments requires an equipment source"
+            }
+            val values = strictMap(map["enchantments"], "$path.enchantments")
+            require(values.size <= 8) { "$path.enchantments supports at most 8 enchantments" }
+            values.mapValues { (key, value) ->
+                require(ENCHANTMENT_ID.matches(key)) { "$path.enchantments has invalid id '$key'" }
+                integer(value, "$path.enchantments.$key").also {
+                    require(it in 1..5) { "$path.enchantments.$key must be in 1..5" }
+                }
+            }
+        } else emptyMap()
+        return RewardCatalogEntry(id, name, description, rarity, requires, source, icon, weight, enchantments)
+    }
+
+    private fun validateHierarchy(categories: List<RewardCatalogCategory>) {
+        val byId = categories.associateBy { it.id }
+        categories.forEach { category ->
+            val visited = mutableSetOf(category.id)
+            var parent = category.parentId
+            while (parent != null) {
+                require(visited.add(parent)) { "Reward catalog category cycle at ${category.id}" }
+                require(visited.size <= 4) { "Reward catalog hierarchy supports at most 4 levels" }
+                parent = (byId[parent] ?: throw invalid("categories.${category.id}.parent", "unknown parent '$parent'")).parentId
+            }
+            if (categories.any { it.parentId == category.id }) {
+                require(category.entries.isEmpty() && category.rolls == null) {
+                    "categories.${category.id} is a folder and cannot also contain rewards or rolls"
+                }
+            }
+            category.entries.forEach entryLoop@{ entry ->
+                val seal = entry.source as? RewardCatalogSource.Seal ?: return@entryLoop
+                val target = byId[seal.categoryId]
+                require(target != null && target.id.startsWith("set_") && target.entries.isNotEmpty() &&
+                    target.entries.all { it.source is RewardCatalogSource.Treasure || it.source is RewardCatalogSource.ItemsAdder }) {
+                    "categories.${category.id}.entries.${entry.id}.seal must reference an equipment collection"
+                }
+            }
+        }
     }
 
     private fun parseTreasure(raw: Any?, path: String): RewardCatalogSource.Treasure {
@@ -224,11 +280,13 @@ class RewardCatalogModuleConfig(private val config: Config) {
         private val TREASURE_ID = Regex("[a-z0-9][a-z0-9_-]{0,63}")
         private val PRESET_ID = Regex("[a-z][a-z0-9_]{0,63}")
         private val POUCH_ID = PRESET_ID
+        private val ITEMSADDER_ID = Regex("[a-z0-9_]+:[a-z0-9_/.-]+")
+        private val ENCHANTMENT_ID = Regex("(?:minecraft:)?[a-z_]+")
         private val PLUGIN_ID = Regex("[A-Za-z0-9._-]{1,64}")
-        private val CATEGORY_KEYS = setOf("name", "description", "icon", "entries")
-        private val ENTRY_KEYS = setOf("name", "description", "rarity", "requires", "treasure", "preset", "pouch", "icon")
+        private val CATEGORY_KEYS = setOf("name", "description", "icon", "entries", "parent", "rolls")
+        private val ENTRY_KEYS = setOf("name", "description", "rarity", "requires", "treasure", "preset", "pouch", "seal", "itemsadder", "planned", "mount", "icon", "weight", "enchantments")
         private val ICON_KEYS = setOf("material", "custom-model-data")
-        private val SOURCE_KEYS = setOf("treasure", "preset", "pouch")
+        private val SOURCE_KEYS = setOf("treasure", "preset", "pouch", "seal", "itemsadder", "planned", "mount")
         private val MESSAGE_KEYS = setOf("unavailable", "inventory-full", "given", "accepted", "action-failed")
 
         fun load(dataPath: Path): RewardCatalogModuleConfig =

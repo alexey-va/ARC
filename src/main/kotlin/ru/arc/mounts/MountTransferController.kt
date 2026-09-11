@@ -62,6 +62,8 @@ class MountTransferController(
 
     fun isBusy(playerId: UUID): Boolean = flow.isBusy(playerId)
 
+    internal fun isBusyWithoutOther(playerId: UUID): Boolean = flow.isBusyWithoutOther(playerId)
+
     fun button(unlocked: Boolean): ItemStack = item(
         if (unlocked) Material.NAME_TAG else Material.GRAY_DYE,
         text("pack-name", "<#92bed8>Передать или продать маунта"),

@@ -1,6 +1,7 @@
 package ru.arc.ops
 
 import ru.arc.ARC
+import ru.arc.itemcatalog.ItemsCatalogModule
 
 /**
  * Read-only overview for the content catalogs managed through ops HTTP.
@@ -12,7 +13,8 @@ import ru.arc.ARC
 object OpsContentHealthHandlers {
     fun health(cfg: OpsHttpConfig): Map<String, Any?> =
         OpsBukkitSync.call {
-            collect(cfg, ContentCatalogReaders())
+            collect(cfg, ContentCatalogReaders()) +
+                if (cfg.treasurePoolsReadEnabled) mapOf("rewardCatalog" to ItemsCatalogModule.rewardHealthSnapshot()) else emptyMap()
         }
 
     internal fun collect(

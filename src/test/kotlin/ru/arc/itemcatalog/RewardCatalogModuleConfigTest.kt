@@ -143,8 +143,80 @@ class RewardCatalogModuleConfigTest : StringSpec({
             root.toFile().deleteRecursively()
         }
     }
+
+    "nested case weights describe one outcome and seals reference an equipment collection" {
+        val root = Files.createTempDirectory("arc-reward-cases")
+        try {
+            writeConfig(root, caseConfig())
+            val settings = RewardCatalogModuleConfig.load(root).snapshot()
+            settings.children(null).map { it.id } shouldBe listOf("cases", "set_sun")
+            val case = settings.children("cases").single()
+            case.rolls shouldBe 1
+            case.entries.map(case::chance) shouldBe listOf("87,5%", "12,5%")
+            case.entries.last().source shouldBe RewardCatalogSource.Seal("set_sun")
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    "rejects broken case hierarchy and ambiguous odds before replacing the active catalogue" {
+        val root = Files.createTempDirectory("arc-reward-case-invalid")
+        try {
+            val valid = caseConfig()
+            listOf(
+                valid.replace("parent: cases", "parent: missing"),
+                valid.replace("parent: cases", "parent: summer"),
+                valid.replace("rolls: 1", "rolls: 2"),
+                valid.replace("weight: 7", "weight: 0"),
+                valid.replace("weight: 7", "unused: 7"),
+                valid.replace("rolls: 1", ""),
+                valid.replace("seal: set_sun", "seal: missing"),
+                valid.replace("treasure: {pool: sun, id: sword}", "preset: sword"),
+                valid.replace("name: 'Кейсы'", "name: 'Кейсы'\n    rolls: 1"),
+            ).forEach { invalid ->
+                writeConfig(root, invalid)
+                runCatching { RewardCatalogModuleConfig.load(root).snapshot() }.isFailure shouldBe true
+            }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
 }) {
     companion object {
+        private fun caseConfig() = """
+            enabled: true
+            title: 'Награды'
+            categories:
+              cases:
+                name: 'Кейсы'
+                description: []
+                icon: CHEST
+                entries: {}
+              summer:
+                parent: cases
+                rolls: 1
+                name: 'Летний кейс'
+                description: ['Одна награда из списка.']
+                icon: CHEST
+                entries:
+                  supply:
+                    description: []
+                    preset: summer_supply
+                    weight: 7
+                  seal:
+                    description: []
+                    seal: set_sun
+                    weight: 1
+              set_sun:
+                name: 'Солнечный сет'
+                description: []
+                icon: DIAMOND_SWORD
+                entries:
+                  sword:
+                    description: []
+                    treasure: {pool: sun, id: sword}
+        """.trimIndent()
+
         private fun writeConfig(root: java.nio.file.Path, contents: String) {
             val modules = Files.createDirectories(root.resolve("modules"))
             Files.writeString(modules.resolve("reward-catalog.yml"), contents)
