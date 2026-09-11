@@ -60,7 +60,6 @@ object HelpCenterSmartQuery {
 
     private fun directPage(query: String): HelpCenterResolvedQuery.Page? = when {
         query.hasAny("данжи", "данж", "подземель") -> HelpCenterResolvedQuery.Page(HelpCenterPage.ACTIVITIES, "dungeons")
-        query.hasAny("избранное", "любимые команды") -> HelpCenterResolvedQuery.Page(HelpCenterPage.FAVORITES)
         query.hasAny("что делать", "чем заняться", "занятие") -> HelpCenterResolvedQuery.Page(HelpCenterPage.GOALS)
         query.hasAny("предмет в руке", "этот предмет", "рецепт предмета") -> HelpCenterResolvedQuery.Page(HelpCenterPage.ITEM)
         else -> null

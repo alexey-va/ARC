@@ -1,6 +1,7 @@
 package ru.arc.helpcenter
 
 import com.Zrips.CMI.CMI
+import com.olziedev.playerwarps.api.PlayerWarpsAPI
 import dev.lone.itemsadder.api.CustomStack
 import me.angeschossen.lands.api.LandsIntegration
 import net.william278.huskhomes.BukkitHuskHomes
@@ -22,6 +23,8 @@ import kotlin.math.floor
 
 interface HelpCenterGateway {
     fun loadHomes(player: Player, timeoutSeconds: Long): CompletableFuture<HelpCenterHomes>
+
+    fun loadPublicHomes(player: Player, timeoutSeconds: Long): CompletableFuture<List<HelpCenterPublicHome>>
 
     fun loadProfile(player: Player, timeoutSeconds: Long): CompletableFuture<HelpCenterProfile>
 
@@ -62,9 +65,49 @@ class BukkitHelpCenterGateway : HelpCenterGateway {
                             z = floor(home.z).toInt(),
                         )
                     }
-                    HelpCenterHomes(snapshots, snapshots.size, maxOf(maxSlots, snapshots.size))
+                    val warpSlots = runCatching {
+                        if (!Bukkit.getPluginManager().isPluginEnabled("PlayerWarps")) return@runCatching null
+                        val warpPlayer = PlayerWarpsAPI.getInstance().getWarpPlayer(player.uniqueId)
+                        warpPlayer.getUsedWarps(player) to warpPlayer.maximumWarps
+                    }.getOrNull()
+                    HelpCenterHomes(
+                        snapshots,
+                        snapshots.size,
+                        maxOf(maxSlots, snapshots.size),
+                        warpSlots?.first,
+                        warpSlots?.second,
+                    )
                 }
         }.getOrElse(CompletableFuture<HelpCenterHomes>::failedFuture)
+    }
+
+    override fun loadPublicHomes(player: Player, timeoutSeconds: Long): CompletableFuture<List<HelpCenterPublicHome>> {
+        if (!Bukkit.getPluginManager().isPluginEnabled("HuskHomes")) {
+            return CompletableFuture.failedFuture(IllegalStateException("HuskHomes is unavailable"))
+        }
+        return runCatching {
+            HuskHomesAPI.getInstance().publicHomes
+                .orTimeout(timeoutSeconds, TimeUnit.SECONDS)
+                .thenApply { homes ->
+                    homes.asSequence()
+                        .filter { it.isPublic }
+                        .map { home ->
+                            HelpCenterPublicHome(
+                                identifier = home.safeIdentifier,
+                                name = home.name,
+                                owner = home.owner.name,
+                                server = home.server,
+                                world = home.world.name,
+                                x = floor(home.x).toInt(),
+                                y = floor(home.y).toInt(),
+                                z = floor(home.z).toInt(),
+                                description = home.meta.description.trim().takeIf(String::isNotEmpty),
+                            )
+                        }
+                        .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+                        .toList()
+                }
+        }.getOrElse(CompletableFuture<List<HelpCenterPublicHome>>::failedFuture)
     }
 
     override fun loadProfile(player: Player, timeoutSeconds: Long): CompletableFuture<HelpCenterProfile> {

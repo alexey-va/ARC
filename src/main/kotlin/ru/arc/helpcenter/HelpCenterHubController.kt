@@ -8,7 +8,6 @@ import org.bukkit.entity.Player
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.whenCompleteSync
 import ru.arc.paper.menu.DialogTables
-import java.util.concurrent.TimeUnit
 import ru.arc.onboarding.OnboardingService
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogBody
@@ -19,7 +18,6 @@ import ru.arc.paper.menu.PaperDialogScreen
 internal class HelpCenterHubController(
     private val settings: HelpCenterSettings,
     private val gateway: HelpCenterGateway,
-    private val preferences: HelpCenterPreferenceStore,
     private val availableCatalog: (Player) -> List<HelpCenterCommand>,
     private val executeCatalog: (Player, String) -> Unit,
     private val executeRaw: (Player, String) -> Unit,
@@ -31,65 +29,33 @@ internal class HelpCenterHubController(
     private val miniMessage = MiniMessage.miniMessage()
     private val tasks = LifecycleTaskScope()
 
-    fun openFavorites(player: Player) {
-        val token = navigation.visit(player) { openFavorites(player) }
+    fun openCatalogAction(player: Player, command: HelpCenterCommand, returnTo: () -> Unit = { openPage(player, HelpCenterPage.COMMANDS) }) {
+        navigation.visit(player) { openCatalogAction(player, command, returnTo) }
         showDialog(
             player,
             PaperDialogScreen(
-                id = "help.favorites",
-                title = text("favorites-title"),
-                body = listOf(PaperDialogBody(text("personalization-loading"))),
-                buttons = listOf(backTo(player, HelpCenterPage.MY)),
+                id = "help.action",
+                title = text("action-title", "action" to command.label),
+                body = listOf(
+                    PaperDialogBody(
+                        text(
+                            "action-body",
+                            "description" to command.description,
+                            "command" to command.command,
+                        ),
+                    ),
+                ),
+                buttons = listOf(
+                    button("run_action", text("action-run-label")) { executeCatalog(player, command.id) }
+                        .let { if (command.opensInventory) it else it.closing() },
+                ),
+                exitButton = button("back", text("back-label"), action = returnTo),
             ),
         )
-        preferences.load(player.uniqueId).orTimeout(settings.loadTimeoutSeconds, TimeUnit.SECONDS).whenCompleteSync(tasks) { value, failure ->
-            if (!player.isOnline || !navigation.isCurrent(player, token)) return@whenCompleteSync
-            if (failure != null || value == null) showPersonalizationUnavailable(player)
-            else showFavorites(player, value)
-        }
     }
 
-    fun openCatalogAction(player: Player, command: HelpCenterCommand, returnTo: () -> Unit = { openPage(player, HelpCenterPage.COMMANDS) }) {
-        val token = navigation.visit(player) { openCatalogAction(player, command, returnTo) }
-        preferences.load(player.uniqueId).orTimeout(settings.loadTimeoutSeconds, TimeUnit.SECONDS).whenCompleteSync(tasks) { value, _ ->
-            if (!player.isOnline || !navigation.isCurrent(player, token)) return@whenCompleteSync
-            val favorite = value?.favorites?.contains(command.id) == true
-            val full = value != null && !favorite && value.favorites.size >= HelpCenterPreferences.MAX_FAVORITES
-            showDialog(
-                player,
-                PaperDialogScreen(
-                    id = "help.favorite.action",
-                    title = text("action-title", "action" to command.label),
-                    body = listOf(
-                        PaperDialogBody(
-                            text(
-                                "action-body",
-                                "description" to command.description,
-                                "command" to command.command,
-                            ),
-                        ),
-                    ) + if (full) listOf(PaperDialogBody(text("favorites-full"))) else emptyList(),
-                    buttons = listOf(
-                        button("run_action", text("action-run-label")) { executeCatalog(player, command.id) }.let { if (command.opensInventory) it else it.closing() },
-                    ) + if (value == null || full) emptyList() else listOf(
-                        button(
-                            "toggle_favorite",
-                            text(if (favorite) "favorite-remove-label" else "favorite-add-label"),
-                        ) { toggleFavorite(player, command.id) },
-                    ),
-                    exitButton = button("back", text("back-label"), action = returnTo),
-                    columns = 2,
-                ),
-            )
-        }
-    }
-
-    fun recordRecent(player: Player, actionId: String) {
-        preferences.recordRecent(player.uniqueId, actionId).exceptionally { null }
-    }
-
-    fun openGoals(player: Player) {
-        navigation.visit(player) { openGoals(player) }
+    fun openGoals(player: Player, returnTo: HelpCenterPage = HelpCenterPage.ACTIVITIES) {
+        navigation.visit(player) { openGoals(player, returnTo) }
         showDialog(
             player,
             PaperDialogScreen(
@@ -97,9 +63,11 @@ internal class HelpCenterHubController(
                 title = text("goals-title"),
                 body = listOf(PaperDialogBody(text("goals-body"), width = 500)),
                 buttons = HelpCenterGoal.entries.map { goal ->
-                    button("goal_${goal.name.lowercase()}", text("goal-${goal.name.lowercase()}-label")) { openGoal(player, goal) }
+                    button("goal_${goal.name.lowercase()}", text("goal-${goal.name.lowercase()}-label")) {
+                        openGoal(player, goal, returnTo)
+                    }
                 },
-                exitButton = backTo(player, HelpCenterPage.ACTIVITIES),
+                exitButton = backTo(player, returnTo),
                 columns = 2,
             ),
         )
@@ -149,8 +117,8 @@ internal class HelpCenterHubController(
         )
     }
 
-    fun openContext(player: Player) {
-        navigation.visit(player) { openContext(player) }
+    fun openContext(player: Player, returnTo: HelpCenterPage = HelpCenterPage.MY) {
+        navigation.visit(player) { openContext(player, returnTo) }
         val snapshot = gateway.context(player)
         val world = when (snapshot.worldKind) {
             HelpCenterWorldKind.VANILLA -> plain("world-kind-vanilla")
@@ -184,30 +152,43 @@ internal class HelpCenterHubController(
                     button("context_privat", text("privat-label")) { openPage(player, HelpCenterPage.PRIVAT) },
                     button("context_goals", text("goals-short-label")) { openGoals(player) },
                 ),
-                exitButton = backTo(player, HelpCenterPage.MY),
+                exitButton = backTo(player, returnTo),
                 columns = 2,
             ),
         )
     }
 
-    fun openRequests(player: Player) {
-        navigation.visit(player) { openRequests(player) }
+    fun openRequests(player: Player, returnTo: HelpCenterPage = HelpCenterPage.MY) {
+        navigation.visit(player) { openRequests(player, returnTo) }
         runCatching { gateway.pendingRequests(player) }
-            .onSuccess { showRequests(player, it) }
-            .onFailure { showRequests(player, HelpCenterPendingRequests(), "requests-unavailable") }
+            .onSuccess { showRequests(player, it, returnTo = returnTo) }
+            .onFailure { showRequests(player, HelpCenterPendingRequests(), "requests-unavailable", returnTo) }
     }
 
-    private fun showRequests(player: Player, pending: HelpCenterPendingRequests, notice: String? = null) {
+    private fun showRequests(
+        player: Player,
+        pending: HelpCenterPendingRequests,
+        notice: String? = null,
+        returnTo: HelpCenterPage = HelpCenterPage.MY,
+    ) {
         val entries = availableCatalog(player).associateBy { it.id }
         val ids = listOf("quests", "vote", "events", "duels", "privat")
         val responseButtons = buildList {
             if (pending.teleport) {
-                add(button("tpa_accept", text("request-tpa-accept-label")) { respondToRequest(player, "huskhomes:tpaccept") { it.teleport } })
-                add(button("tpa_deny", text("request-tpa-deny-label")) { respondToRequest(player, "huskhomes:tpdeny") { it.teleport } })
+                add(button("tpa_accept", text("request-tpa-accept-label")) {
+                    respondToRequest(player, "huskhomes:tpaccept", returnTo) { it.teleport }
+                })
+                add(button("tpa_deny", text("request-tpa-deny-label")) {
+                    respondToRequest(player, "huskhomes:tpdeny", returnTo) { it.teleport }
+                })
             }
             if (pending.duel) {
-                add(button("duel_accept", text("request-duel-accept-label")) { respondToRequest(player, "duel accept") { it.duel } })
-                add(button("duel_deny", text("request-duel-deny-label")) { respondToRequest(player, "duel deny") { it.duel } })
+                add(button("duel_accept", text("request-duel-accept-label")) {
+                    respondToRequest(player, "duel accept", returnTo) { it.duel }
+                })
+                add(button("duel_deny", text("request-duel-deny-label")) {
+                    respondToRequest(player, "duel deny", returnTo) { it.duel }
+                })
             }
         }
         showDialog(
@@ -230,25 +211,34 @@ internal class HelpCenterHubController(
                         if (id == "privat") openPage(player, HelpCenterPage.PRIVAT) else executeCatalog(player, id)
                     }.let { if (id == "privat" || command.opensInventory) it else it.closing() }
                 } },
-                exitButton = backTo(player, HelpCenterPage.MY),
+                exitButton = backTo(player, returnTo),
                 columns = 2,
             ),
         )
     }
 
-    private fun respondToRequest(player: Player, command: String, isPending: (HelpCenterPendingRequests) -> Boolean) {
+    private fun respondToRequest(
+        player: Player,
+        command: String,
+        returnTo: HelpCenterPage,
+        isPending: (HelpCenterPendingRequests) -> Boolean,
+    ) {
         val pending = runCatching { gateway.pendingRequests(player) }.getOrNull()
-        if (pending == null) showRequests(player, HelpCenterPendingRequests(), "requests-unavailable")
+        if (pending == null) showRequests(player, HelpCenterPendingRequests(), "requests-unavailable", returnTo)
         else if (isPending(pending)) {
             navigation.visit(player)
             // ARC still compiles against pre-dialog Paper; the installed native runtime provides this public method.
             player.javaClass.getMethod("closeDialog").invoke(player)
             executeRaw(player, command)
-        } else showRequests(player, pending)
+        } else showRequests(player, pending, returnTo = returnTo)
     }
 
-    fun openDiagnostics(player: Player, problem: HelpCenterProblem) {
-        navigation.visit(player) { openDiagnostics(player, problem) }
+    fun openDiagnostics(
+        player: Player,
+        problem: HelpCenterProblem,
+        returnToRecovery: () -> Unit = { openPage(player, HelpCenterPage.RECOVERY) },
+    ) {
+        navigation.visit(player) { openDiagnostics(player, problem, returnToRecovery) }
         val context = gateway.context(player)
         val label = plain("problem-${problem.name.lowercase().replace('_', '-')}-label")
         val facts = HelpCenterHubPlanner.diagnosticFacts(problem, context, homesLoaded = null)
@@ -275,14 +265,14 @@ internal class HelpCenterHubController(
                 buttons = actions.mapIndexed { index, page ->
                     button("diagnostic_$index", pageLabel(page)) { openPage(player, page) }
                 },
-                exitButton = backTo(player, HelpCenterPage.RECOVERY),
+                exitButton = button("back", text("back-label"), action = returnToRecovery),
                 columns = 2,
             ),
         )
     }
 
-    private fun openGoal(player: Player, goal: HelpCenterGoal) {
-        navigation.visit(player) { openGoal(player, goal) }
+    private fun openGoal(player: Player, goal: HelpCenterGoal, returnTo: HelpCenterPage) {
+        navigation.visit(player) { openGoal(player, goal, returnTo) }
         val catalog = availableCatalog(player).associateBy { it.id }
         val commands = HelpCenterHubPlanner.goalActions(goal).mapNotNull(catalog::get)
         showDialog(
@@ -299,93 +289,10 @@ internal class HelpCenterHubController(
                         if (command.id == "privat") openPage(player, HelpCenterPage.PRIVAT) else executeCatalog(player, command.id)
                     }.let { if (command.id == "privat" || command.opensInventory) it else it.closing() }
                 }).ifEmpty { listOf(button("empty_search", text("commands-label")) { openPage(player, HelpCenterPage.COMMANDS) }) },
-                exitButton = button("back", text("back-label")) { openGoals(player) },
+                exitButton = button("back", text("back-label")) { openGoals(player, returnTo) },
                 columns = 2,
             ),
         )
-    }
-
-    private fun showFavorites(player: Player, value: HelpCenterPreferences) {
-        val catalog = availableCatalog(player).associateBy { it.id }
-        val favorites = value.favorites.mapNotNull(catalog::get)
-        val recent = value.recent.filterNot(value.favorites::contains).mapNotNull(catalog::get)
-        val body = listOf(
-            PaperDialogBody(
-                text("favorites-body", "favorites" to favorites.size.toString(), "recent" to recent.size.toString()),
-                width = 500,
-            ),
-        )
-        val buttons = favorites.map { command ->
-            button("favorite_${command.id}", text("favorite-command-label", "label" to command.label)) {
-                openCatalogAction(player, command) { openFavorites(player) }
-            }
-        } + recent.map { command ->
-            button("recent_${command.id}", text("recent-command-label", "label" to command.label)) {
-                openCatalogAction(player, command) { openFavorites(player) }
-            }
-        } + button("find_action", text("favorite-find-label")) { openFavoritePicker(player) }
-        showDialog(
-            player,
-            PaperDialogScreen(
-                id = "help.favorites",
-                title = text("favorites-title"),
-                body = body,
-                buttons = buttons,
-                exitButton = backTo(player, HelpCenterPage.MY),
-                columns = 2,
-            ),
-        )
-    }
-
-    private fun openFavoritePicker(player: Player, category: HelpCenterCategory? = null) {
-        navigation.visit(player) { openFavoritePicker(player, category) }
-        val catalog = availableCatalog(player)
-        val buttons = if (category == null) {
-            HelpCenterCategory.entries.filter { candidate -> catalog.any { it.category == candidate } }.map { candidate ->
-                button("pick_${candidate.configId}", text("category-${candidate.configId}-label")) {
-                    openFavoritePicker(player, candidate)
-                }
-            }
-        } else {
-            catalog.filter { it.category == category }.map { command ->
-                button("pick_${command.id}", text("command-label", "label" to command.label),
-                    text("command-tooltip", "description" to command.description, "command" to command.command)) {
-                    openCatalogAction(player, command) { openFavoritePicker(player, category) }
-                }
-            }
-        }
-        showDialog(player, PaperDialogScreen(
-            id = "help.favorites.picker",
-            title = text("favorites-picker-title"),
-            body = listOf(PaperDialogBody(text("favorites-picker-body"), width = 420)),
-            buttons = buttons.ifEmpty { listOf(backTo(player, HelpCenterPage.COMMANDS)) },
-            exitButton = button("picker_back", text("back-label")) {
-                if (category == null) openFavorites(player) else openFavoritePicker(player)
-            },
-            columns = 2,
-        ))
-    }
-
-    private fun showPersonalizationUnavailable(player: Player) {
-        showDialog(
-            player,
-            PaperDialogScreen(
-                id = "help.favorites.unavailable",
-                title = text("favorites-title"),
-                body = listOf(PaperDialogBody(text("personalization-unavailable"), width = 500)),
-                buttons = listOf(button("find_action", text("commands-label")) { openPage(player, HelpCenterPage.COMMANDS) }),
-                exitButton = backTo(player, HelpCenterPage.MY),
-            ),
-        )
-    }
-
-    private fun toggleFavorite(player: Player, id: String) {
-        val token = navigation.visit(player) { openFavorites(player) }
-        preferences.toggleFavorite(player.uniqueId, id).whenCompleteSync(tasks) { _, failure ->
-            if (!player.isOnline || !navigation.isCurrent(player, token)) return@whenCompleteSync
-            if (failure != null) player.sendMessage(text("personalization-unavailable"))
-            openFavorites(player)
-        }
     }
 
     private fun pageLabel(page: HelpCenterPage): Component = when (page) {
@@ -423,6 +330,5 @@ internal class HelpCenterHubController(
 
     override fun close() {
         tasks.close()
-        preferences.close()
     }
 }

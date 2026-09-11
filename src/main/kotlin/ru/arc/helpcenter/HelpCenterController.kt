@@ -24,7 +24,6 @@ internal class HelpCenterController(
     private val openLands: (Player) -> Unit,
     private val inventoryReturn: HelpCenterInventoryReturnRuntime,
     private val inviteToLand: (Player, HelpCenterPlayer) -> Unit,
-    private val preferences: HelpCenterPreferenceStore,
     private val navigation: HelpCenterNavigation = HelpCenterNavigation(ru.arc.ARC.instance, inventoryReturn::cancel),
     private val showDialog: (Player, PaperDialogScreen) -> Unit = { player, screen ->
         ArcMenus.openDialog(player, screen, PaperDialogButton(
@@ -89,7 +88,6 @@ internal class HelpCenterController(
         HelpCenterHubController(
             settings = settings,
             gateway = gateway,
-            preferences = preferences,
             availableCatalog = ::availableCatalog,
             executeCatalog = ::executeCatalog,
             executeRaw = ::execute,
@@ -122,6 +120,7 @@ internal class HelpCenterController(
         ArcMenus.beginDialogFlow(player)
         when (page) {
             HelpCenterPage.ROOT -> openRoot(player)
+            HelpCenterPage.HELP -> openHelp(player)
             HelpCenterPage.NOW, HelpCenterPage.MY -> openNow(player)
             HelpCenterPage.GUIDE -> openGuide(player)
             HelpCenterPage.DUNGEONS_GUIDE -> openDungeonsGuide(player)
@@ -136,7 +135,6 @@ internal class HelpCenterController(
             HelpCenterPage.TECHNOLOGY -> openCategory(player, HelpCenterCategory.TECHNOLOGY, returnToRoot = true)
             HelpCenterPage.SETTINGS -> openSettings(player)
             HelpCenterPage.RECOVERY -> openRecovery(player)
-            HelpCenterPage.FAVORITES -> hub.openFavorites(player)
             HelpCenterPage.GOALS -> hub.openGoals(player)
             HelpCenterPage.ITEM -> hub.openItem(player)
             HelpCenterPage.CONTEXT -> hub.openContext(player)
@@ -145,33 +143,103 @@ internal class HelpCenterController(
     }
 
     private fun openRoot(player: Player) {
-        markNavigation(player) { openRoot(player) }
+        val token = markNavigation(player) { openRoot(player) }
+        showRoot(player)
+        gateway.loadProfile(player, settings.loadTimeoutSeconds).whenCompleteSync(tasks) { profile, failure ->
+            if (!active || !player.isOnline || !navigation.isCurrent(player, token)) return@whenCompleteSync
+            showRoot(player, profile.takeIf { failure == null })
+        }
+    }
+
+    private fun showRoot(player: Player, profile: HelpCenterProfile? = null) {
+        val body = mutableListOf(PaperDialogBody(text("root-body"), width = 506))
+        if (profile == null) {
+            body += PaperDialogBody(text("root-state-loading"), width = 506)
+        } else {
+            val unavailable = settings.text("not-available")
+            body += DialogTables.body(
+                rows = listOf(
+                    text("table-player-label") to Component.text(profile.playerName),
+                    text("table-online-label") to Component.text(profile.onlinePlayers),
+                    text("table-rank-label") to text("table-rank-value", "value" to (profile.rank ?: unavailable)),
+                    text("table-balance-label") to text("table-coins-value", "value" to (profile.balance ?: unavailable)),
+                    text("table-homes-label") to text(
+                        "table-slots-value",
+                        "used" to (profile.homes?.usedSlots?.toString() ?: unavailable),
+                        "maximum" to (profile.homes?.maxSlots?.toString() ?: unavailable),
+                    ),
+                    text("table-lands-label") to text(
+                        "table-lands-value",
+                        "count" to (profile.lands?.toString() ?: unavailable),
+                        "chunks" to (profile.claimedChunks?.toString() ?: unavailable),
+                    ),
+                    text("table-location-label") to text(
+                        "table-location-value",
+                        "server" to profile.server,
+                        "world" to worldLabel(profile.worldKind, profile.world),
+                    ),
+                ),
+                frame = DialogTables.Frame.EPIC,
+                width = 320,
+            )
+        }
         showDialog(
             player,
             PaperDialogScreen(
                 id = "help.root",
                 title = text("root-title"),
-                body = listOf(PaperDialogBody(text("root-body"), width = 506)),
-                buttons = listOf(
-                    button("now", text("now-label"), text("now-tooltip")) { openNow(player) },
-                    button("players", text("players-label"), text("players-tooltip")) { openPlayers(player) },
+                body = body,
+                buttons = buildList {
+                    add(button("now", text("now-label"), text("now-tooltip")) { openNow(player) })
                     availableCatalog(player).firstOrNull { it.id == "teams" }?.let { teams ->
-                        button("teams", text("teams-label"), commandTooltip(teams.id)) { executeCatalog(player, teams.id) }
-                    } ?: button("requests", text("requests-short-label"), text("requests-tooltip")) { hub.openRequests(player) },
+                        add(button("teams", text("teams-label"), commandTooltip(teams.id)) { executeCatalog(player, teams.id) })
+                    }
+                    addAll(listOf(
                     button("travel", text("travel-label"), text("travel-tooltip")) { openTravel(player) },
                     button("privat", text("privat-label"), text("privat-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
                     rootCategoryButton(player, HelpCenterCategory.ACTIVITIES),
-                    rootCategoryButton(player, HelpCenterCategory.TRADE),
                     rootCategoryButton(player, HelpCenterCategory.PROGRESS),
+                    rootCategoryButton(player, HelpCenterCategory.TRADE),
                     rootCategoryButton(player, HelpCenterCategory.TECHNOLOGY),
-                    button("guide", text("guide-label"), text("guide-tooltip")) { openGuide(player) },
-                    button("goals", text("goals-short-label"), text("goals-tooltip")) { hub.openGoals(player) },
-                    button("recovery", text("recovery-label"), text("recovery-tooltip")) { openRecovery(player) },
-                    button("favorites", text("favorites-short-label"), text("favorites-tooltip")) { hub.openFavorites(player) },
                     button("search", text("commands-label"), text("commands-tooltip")) { openCommands(player) },
                     button("settings", text("category-settings-label"), text("category-settings-tooltip")) { openSettings(player) },
-                ).map { it.copy(width = 166) },
-                columns = 3,
+                    ))
+                }.map { it.copy(width = 246) },
+                columns = 2,
+            ),
+        )
+    }
+
+    private fun openHelp(player: Player) {
+        markNavigation(player) { openHelp(player) }
+        showDialog(
+            player,
+            PaperDialogScreen(
+                id = "help.help",
+                title = text("help-title"),
+                body = listOf(PaperDialogBody(text("help-body"), width = 506)),
+                buttons = listOf(
+                    button("help_guide", text("help-guide-label"), text("guide-tooltip")) {
+                        openGuide(player) { openHelp(player) }
+                    },
+                    button("help_goals", text("help-goals-label"), text("goals-tooltip")) {
+                        hub.openGoals(player, HelpCenterPage.HELP)
+                    },
+                    button("help_recovery", text("help-recovery-label"), text("recovery-tooltip")) {
+                        openRecovery(player, HelpCenterPage.HELP)
+                    },
+                    button("help_commands", text("help-commands-label"), text("commands-tooltip")) { openCommands(player) },
+                    button("help_now", text("help-now-label"), text("now-tooltip")) { openNow(player) },
+                    button("help_context", text("help-context-label"), text("context-tooltip")) {
+                        hub.openContext(player, HelpCenterPage.HELP)
+                    },
+                    button("help_players", text("help-players-label"), text("players-tooltip")) { openPlayers(player) },
+                    button("help_requests", text("help-requests-label"), text("requests-tooltip")) {
+                        hub.openRequests(player, HelpCenterPage.HELP)
+                    },
+                    button("help_menu", text("help-menu-label"), text("main-menu-tooltip")) { openRoot(player) },
+                ),
+                columns = 2,
             ),
         )
     }
@@ -237,7 +305,6 @@ internal class HelpCenterController(
                 buttons = recommendationButtons(player, profile) + listOf(
                     button("now_homes", text("my-homes-label"), text("my-homes-tooltip")) { openTravel(player) },
                     button("now_lands", text("my-lands-label"), text("my-lands-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
-                    button("now_favorites", text("favorites-short-label"), text("favorites-tooltip")) { hub.openFavorites(player) },
                     button("now_requests", text("requests-short-label"), text("requests-tooltip")) { hub.openRequests(player) },
                     button("now_context", text("context-short-label"), text("context-tooltip")) { hub.openContext(player) },
                     button("now_guide", text("guide-label"), text("guide-tooltip")) { openGuide(player) },
@@ -278,7 +345,6 @@ internal class HelpCenterController(
     private fun myButtons(player: Player): List<PaperDialogButton> = listOf(
         button("my_homes", text("my-homes-label"), text("my-homes-tooltip")) { openTravel(player) },
         button("my_lands", text("my-lands-label"), text("my-lands-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
-        button("my_favorites", text("favorites-short-label"), text("favorites-tooltip")) { hub.openFavorites(player) },
         button("my_requests", text("requests-short-label"), text("requests-tooltip")) { hub.openRequests(player) },
         button("my_context", text("context-short-label"), text("context-tooltip")) { hub.openContext(player) },
         button("my_rank", text("my-rank-label"), text("my-rank-tooltip")) { executeCatalog(player, "rank") },
@@ -287,8 +353,8 @@ internal class HelpCenterController(
         button("my_skills", text("my-skills-label"), text("my-skills-tooltip")) { executeCatalog(player, "skills") },
     )
 
-    private fun openGuide(player: Player) {
-        markNavigation(player) { openGuide(player) }
+    private fun openGuide(player: Player, returnTo: () -> Unit = { openRoot(player) }) {
+        markNavigation(player) { openGuide(player, returnTo) }
         showDialog(
             player,
             PaperDialogScreen(
@@ -297,15 +363,12 @@ internal class HelpCenterController(
                 body = listOf(PaperDialogBody(text("guide-body"), width = 500)),
                 buttons = listOf(
                     button("kit", text("kit-label"), commandTooltip("kit")) { executeCatalog(player, "kit") }.closing(),
-                    button("vanilla", text("vanilla-label"), commandTooltip("vanilla")) { executeCatalog(player, "vanilla") }.closing(),
-                    button("mining", text("mining-label"), commandTooltip("mining")) { executeCatalog(player, "mining") }.closing(),
-                    button("biomes", text("biomes-label"), commandTooltip("biomes")) { executeCatalog(player, "biomes") }.closing(),
                     button("jobs", text("jobs-label"), commandTooltip("jobs")) { executeCatalog(player, "jobs") },
                     button("home", text("travel-label"), text("travel-tooltip")) { openTravel(player) },
                     button("privat", text("privat-label"), text("privat-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
                     button("rules", text("rules-label"), commandTooltip("rules")) { executeCatalog(player, "rules") }.closing(),
                 ),
-                exitButton = rootButton(player),
+                exitButton = backButton("back", player, action = { returnTo() }),
                 columns = 2,
             ),
         )
@@ -484,8 +547,8 @@ internal class HelpCenterController(
 
     private fun openSettings(player: Player) = personalSettings.open(player)
 
-    private fun openRecovery(player: Player) {
-        markNavigation(player) { openRecovery(player) }
+    private fun openRecovery(player: Player, returnTo: HelpCenterPage = HelpCenterPage.COMMANDS) {
+        markNavigation(player) { openRecovery(player, returnTo) }
         showDialog(
             player,
             PaperDialogScreen(
@@ -496,9 +559,9 @@ internal class HelpCenterController(
                     button(
                         "problem_${problem.name.lowercase()}",
                         text("problem-${problem.name.lowercase().replace('_', '-')}-label"),
-                    ) { hub.openDiagnostics(player, problem) }
+                    ) { hub.openDiagnostics(player, problem) { openRecovery(player, returnTo) } }
                 } + button("stuck", text("stuck-label"), commandTooltip("stuck")) { execute(player, "stuck") }.closing(),
-                exitButton = backButton("back", player, ::openCommands),
+                exitButton = backButton("back", player, action = { open(player, returnTo) }),
                 columns = 2,
             ),
         )
@@ -577,17 +640,24 @@ internal class HelpCenterController(
 
     private fun openCategory(player: Player, category: HelpCenterCategory, returnToRoot: Boolean = false) {
         markNavigation(player) { openCategory(player, category, returnToRoot) }
-        val entries = availableCatalog(player).filter { it.category == category }
+        val hidden = when (category) {
+            HelpCenterCategory.PROGRESS -> setOf("rankup")
+            HelpCenterCategory.TECHNOLOGY -> setOf("items")
+            else -> emptySet()
+        }
+        val entries = availableCatalog(player).filter { it.category == category && it.id !in hidden }
+        val bodyKey = when (category) {
+            HelpCenterCategory.ACTIVITIES, HelpCenterCategory.PROGRESS, HelpCenterCategory.TECHNOLOGY ->
+                "category-${category.configId}-body"
+            else -> "category-body"
+        }
         showDialog(
             player,
             PaperDialogScreen(
                 id = "help.category.${category.configId}",
                 title = text("category-${category.configId}-title"),
-                body = listOf(PaperDialogBody(text(if (entries.isEmpty()) "category-empty" else "category-body"))),
+                body = listOf(PaperDialogBody(text(if (entries.isEmpty()) "category-empty" else bodyKey), width = 500)),
                 buttons = buildList {
-                    if (category == HelpCenterCategory.ACTIVITIES) {
-                        add(button("activity_goals", text("goals-short-label"), text("goals-tooltip")) { hub.openGoals(player) })
-                    }
                     if (category == HelpCenterCategory.TECHNOLOGY) {
                         add(button("held_item", text("context-item-label"), text("item-tooltip")) { hub.openItem(player) })
                     }
@@ -620,14 +690,25 @@ internal class HelpCenterController(
         val homes = snapshot.homes
             .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
             .take(settings.maxHomes)
+        val unavailable = settings.text("not-available")
         val body = mutableListOf(
-            PaperDialogBody(
-                text(
-                    "travel-body",
-                    "homes" to snapshot.usedSlots.toString(),
-                    "max_homes" to snapshot.maxSlots.toString(),
+            DialogTables.body(
+                rows = listOf(
+                    text("table-homes-label") to text(
+                        "table-slots-value",
+                        "used" to snapshot.usedSlots.toString(),
+                        "maximum" to snapshot.maxSlots.toString(),
+                    ),
+                    text("table-warps-label") to text(
+                        "table-slots-value",
+                        "used" to (snapshot.usedWarps?.toString() ?: unavailable),
+                        "maximum" to (snapshot.maxWarps?.toString() ?: unavailable),
+                    ),
                 ),
+                frame = DialogTables.Frame.RARE,
+                width = 320,
             ),
+            PaperDialogBody(text("travel-body"), width = 500),
         )
         if (homes.isEmpty()) body += PaperDialogBody(text("travel-empty"))
         if (snapshot.maxSlots > 0 && snapshot.usedSlots >= snapshot.maxSlots) body += PaperDialogBody(text("travel-limit"))
@@ -672,6 +753,157 @@ internal class HelpCenterController(
                 body = listOf(PaperDialogBody(text("travel-error"))),
                 buttons = travelButtons(player),
                 exitButton = rootButton(player),
+                columns = 2,
+            ),
+        )
+    }
+
+    private fun openPublicHomes(player: Player, page: Int = 0) {
+        val token = markNavigation(player) { openPublicHomes(player, page) }
+        showDialog(
+            player,
+            PaperDialogScreen(
+                id = "help.travel.public-homes",
+                title = text("public-homes-title"),
+                body = listOf(PaperDialogBody(text("public-homes-loading"), width = 500)),
+                buttons = emptyList(),
+                exitButton = backButton("back", player, ::openTravel),
+            ),
+        )
+        gateway.loadPublicHomes(player, settings.loadTimeoutSeconds).whenCompleteSync(tasks) { homes, failure ->
+            if (!active || !player.isOnline || !navigation.isCurrent(player, token)) return@whenCompleteSync
+            if (failure == null && homes != null) showPublicHomes(player, homes, page) else showPublicHomesFailure(player)
+        }
+    }
+
+    private fun showPublicHomes(player: Player, homes: List<HelpCenterPublicHome>, requestedPage: Int) {
+        val pages = maxOf(1, (homes.size + PUBLIC_HOMES_PAGE_SIZE - 1) / PUBLIC_HOMES_PAGE_SIZE)
+        val page = requestedPage.coerceIn(0, pages - 1)
+        val visible = homes.drop(page * PUBLIC_HOMES_PAGE_SIZE).take(PUBLIC_HOMES_PAGE_SIZE)
+        val buttons = visible.mapIndexed { index, home ->
+            button(
+                "public_home_$index",
+                text("public-home-label", "home" to home.name),
+                text("public-home-tooltip", "owner" to home.owner, "world" to home.world),
+            ) { openPublicHome(player, home, page) }
+        } + buildList {
+            if (page > 0) add(button("previous", text("page-previous-label")) { openPublicHomes(player, page - 1) })
+            if (page + 1 < pages) add(button("next", text("page-next-label")) { openPublicHomes(player, page + 1) })
+        }
+        val body = mutableListOf(
+            PaperDialogBody(
+                text(
+                    "public-homes-body",
+                    "count" to homes.size.toString(),
+                    "page" to (page + 1).toString(),
+                    "pages" to pages.toString(),
+                ),
+                width = 500,
+            ),
+        )
+        if (visible.isEmpty()) body += PaperDialogBody(text("public-homes-empty"), width = 500)
+        showDialog(
+            player,
+            PaperDialogScreen(
+                id = "help.travel.public-homes",
+                title = text("public-homes-title"),
+                body = body,
+                buttons = buttons,
+                exitButton = backButton("back", player, ::openTravel),
+                columns = 2,
+            ),
+        )
+    }
+
+    private fun openPublicHome(player: Player, home: HelpCenterPublicHome, page: Int) {
+        markNavigation(player) { openPublicHome(player, home, page) }
+        showDialog(
+            player,
+            PaperDialogScreen(
+                id = "help.travel.public-home",
+                title = text("public-home-title", "home" to home.name),
+                body = listOf(
+                    DialogTables.body(
+                        rows = listOf(
+                            text("table-owner-label") to Component.text(home.owner),
+                            text("table-server-label") to Component.text(home.server),
+                            text("table-world-label") to Component.text(home.world),
+                            text("table-coordinates-label") to Component.text("${home.x}, ${home.y}, ${home.z}"),
+                        ),
+                        frame = DialogTables.Frame.RARE,
+                        width = 320,
+                    ),
+                    PaperDialogBody(
+                        if (home.description == null) text("public-home-no-description")
+                        else text("public-home-description", "description" to home.description),
+                        width = 500,
+                    ),
+                ),
+                buttons = listOf(
+                    button("teleport", text("public-home-teleport-label"), text("public-home-teleport-tooltip")) {
+                        execute(player, HelpCenterCommands.publicHome(home.identifier))
+                    }.closing(),
+                ),
+                exitButton = backButton("back", player, action = { openPublicHomes(it, page) }),
+            ),
+        )
+    }
+
+    private fun showPublicHomesFailure(player: Player) {
+        showDialog(
+            player,
+            PaperDialogScreen(
+                id = "help.travel.public-homes.failure",
+                title = text("public-homes-title"),
+                body = listOf(PaperDialogBody(text("public-homes-error"), width = 500)),
+                buttons = emptyList(),
+                exitButton = backButton("back", player, ::openTravel),
+            ),
+        )
+    }
+
+    private fun openRtp(player: Player) {
+        markNavigation(player) { openRtp(player) }
+        showDialog(
+            player,
+            PaperDialogScreen(
+                id = "help.travel.rtp",
+                title = text("rtp-title"),
+                body = listOf(PaperDialogBody(text("rtp-body"), width = 500)),
+                buttons = listOf(
+                    button("rtp_vanilla", text("rtp-vanilla-label"), text("rtp-vanilla-tooltip")) {
+                        execute(player, "rtp region:vanilla")
+                    }.closing(),
+                    button("rtp_mining", text("rtp-mining-label"), text("rtp-mining-tooltip")) {
+                        execute(player, "rtp region:mining")
+                    }.closing(),
+                    button("rtp_biomes", text("rtp-biomes-label"), text("rtp-biomes-tooltip")) {
+                        execute(player, "rtp region:survival")
+                    }.closing(),
+                ),
+                exitButton = backButton("back", player, ::openTravel),
+                columns = 2,
+            ),
+        )
+    }
+
+    private fun openBuilder(player: Player) {
+        markNavigation(player) { openBuilder(player) }
+        showDialog(
+            player,
+            PaperDialogScreen(
+                id = "help.builder",
+                title = text("builder-title"),
+                body = listOf(PaperDialogBody(text("builder-body"), width = 500)),
+                buttons = listOf(
+                    button("builder_wand", text("builder-wand-label"), text("builder-wand-tooltip")) {
+                        execute(player, "builder wand")
+                    }.closing(),
+                    button("builder_help", text("builder-help-label"), text("builder-help-tooltip")) {
+                        execute(player, "builder")
+                    }.closing(),
+                ),
+                exitButton = backButton("back", player, action = { openCategory(it, HelpCenterCategory.TECHNOLOGY, true) }),
                 columns = 2,
             ),
         )
@@ -771,15 +1003,11 @@ internal class HelpCenterController(
 
     private fun travelButtons(player: Player): List<PaperDialogButton> = listOf(
         button("warps", text("warps-label"), commandTooltip("warps")) { executeCatalog(player, "warps") },
-        button("public_homes", text("public-homes-label"), text("public-homes-tooltip")) { executeInventory(player, "phome") }.closing(),
+        button("public_homes", text("public-homes-label"), text("public-homes-tooltip")) { openPublicHomes(player) },
         button("spawn", text("spawn-label"), commandTooltip("spawn")) { executeCatalog(player, "spawn") }.closing(),
-        button("rtp", text("rtp-label"), commandTooltip("rtp")) { executeCatalog(player, "rtp") }.closing(),
+        button("rtp", text("rtp-label"), text("rtp-tooltip")) { openRtp(player) },
         button("back_command", text("back-command-label"), commandTooltip("back")) { executeCatalog(player, "back") }.closing(),
-        button("stuck", text("stuck-label"), commandTooltip("stuck")) { executeCatalog(player, "stuck") }.closing(),
-        button("vanilla", text("vanilla-label"), commandTooltip("vanilla")) { executeCatalog(player, "vanilla") }.closing(),
-        button("mining", text("mining-label"), commandTooltip("mining")) { executeCatalog(player, "mining") }.closing(),
-        button("biomes", text("biomes-label"), commandTooltip("biomes")) { executeCatalog(player, "biomes") }.closing(),
-    ) + listOfNotNull(availableCatalog(player).firstOrNull { it.id == "minelift" }?.let { commandButton(player, it) })
+    )
 
     private fun categoryButton(player: Player, category: HelpCenterCategory): PaperDialogButton =
         button("category_${category.configId}", text("category-${category.configId}-label"), text("category-body")) {
@@ -797,8 +1025,10 @@ internal class HelpCenterController(
 
     private fun commandButton(player: Player, command: HelpCenterCommand): PaperDialogButton {
         val label = when (command.id) {
-            "vote", "chat-global", "chat-local", "lands-borders", "trails-on", "trails-off",
-            "particles", "tpa-ignore" -> text("command-${command.id}-label")
+            "events", "duels", "giveaways", "dungeons", "farms", "vote", "parkour",
+            "slimefun", "enchants", "enchanter", "builder", "mounts",
+            "chat-global", "chat-local", "lands-borders", "trails-on", "trails-off", "particles", "tpa-ignore" ->
+                text("command-${command.id}-label")
             else -> text("command-label", "label" to command.label)
         }
         val result = button(
@@ -847,11 +1077,12 @@ internal class HelpCenterController(
             player.sendMessage(text("action-unavailable"))
             return
         }
-        if (id == "dungeons") {
+        if (id == "builder") {
+            openBuilder(player)
+        } else if (id == "dungeons") {
             val returnTo = navigation.returnTarget(player) ?: { open(player, HelpCenterPage.ACTIVITIES) }
             dungeons.open(player, returnTo)
-            hub.recordRecent(player, id)
-        } else if (executeCommand(player, command)) hub.recordRecent(player, id)
+        } else executeCommand(player, command)
     }
 
     private fun executeInventory(player: Player, command: String): Boolean {
@@ -940,7 +1171,8 @@ internal class HelpCenterController(
 
     companion object {
         // These commands join Core's shared history while this callback is active.
-        private val NATIVE_DIALOG_COMMANDS = setOf("events", "farms", "giveaways", "jobs", "rank", "teams", "quests", "minelift")
+        private val NATIVE_DIALOG_COMMANDS = setOf("events", "farms", "giveaways", "jobs", "rank", "teams", "quests", "builder")
+        private const val PUBLIC_HOMES_PAGE_SIZE = 10
         private val SEARCH_INPUT = PaperDialogInputId.of("search")
         private val HOME_INPUT = PaperDialogInputId.of("home_name")
         private val PLAYER_SEARCH_INPUT = PaperDialogInputId.of("player_search")
@@ -957,10 +1189,6 @@ internal class HelpCenterController(
             CommandDefinition("rtp", HelpCenterCategory.TRAVEL, "rtp"),
             CommandDefinition("back", HelpCenterCategory.TRAVEL, "back"),
             CommandDefinition("stuck", HelpCenterCategory.TRAVEL, "stuck"),
-            CommandDefinition("vanilla", HelpCenterCategory.TRAVEL, "pw vanilla"),
-            CommandDefinition("mining", HelpCenterCategory.TRAVEL, "mining"),
-            CommandDefinition("minelift", HelpCenterCategory.TRAVEL, "arcfarms:minelift", HelpCenterFeature.MINE_LIFT, "arcfarms.mine"),
-            CommandDefinition("biomes", HelpCenterCategory.TRAVEL, "pw survival"),
             CommandDefinition("privat", HelpCenterCategory.PROTECTION, "privat"),
             CommandDefinition(
                 "events",
@@ -1067,7 +1295,6 @@ internal class HelpCenterController(
         )
 
         private val INTENT_DEFINITIONS = listOf(
-            IntentDefinition("favorites", HelpCenterSearchAction.OpenPage(HelpCenterPage.FAVORITES)),
             IntentDefinition("goals", HelpCenterSearchAction.OpenPage(HelpCenterPage.GOALS)),
             IntentDefinition("held-item", HelpCenterSearchAction.OpenPage(HelpCenterPage.ITEM)),
             IntentDefinition("requests", HelpCenterSearchAction.OpenPage(HelpCenterPage.REQUESTS)),

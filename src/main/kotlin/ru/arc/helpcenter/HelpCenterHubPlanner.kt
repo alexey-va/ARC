@@ -31,10 +31,10 @@ data class HelpCenterDiagnosticFact(val id: String, val positive: Boolean)
 object HelpCenterHubPlanner {
     fun goalActions(goal: HelpCenterGoal): List<String> = when (goal) {
         HelpCenterGoal.EARN -> listOf("jobs", "sell", "shops", "auction", "bank")
-        HelpCenterGoal.BUILD -> listOf("builder", "items", "slimefun", "enchants", "privat")
-        HelpCenterGoal.EXPLORE -> listOf("rtp", "biomes", "mining", "warps", "dungeons")
+        HelpCenterGoal.BUILD -> listOf("builder", "slimefun", "enchants", "privat")
+        HelpCenterGoal.EXPLORE -> listOf("rtp", "warps", "dungeons")
         HelpCenterGoal.FIGHT -> listOf("events", "duels", "dungeons")
-        HelpCenterGoal.DEVELOP -> listOf("rank", "rankup", "quests", "skills", "jobs")
+        HelpCenterGoal.DEVELOP -> listOf("rank", "quests", "skills", "jobs")
         HelpCenterGoal.TOGETHER -> listOf("players", "duels", "privat", "events", "vote")
     }
 
@@ -45,7 +45,6 @@ object HelpCenterHubPlanner {
 
     fun itemActions(item: HelpCenterHeldItem?, features: Set<HelpCenterFeature>): List<String> = buildList {
         if (item?.itemsAdderId != null && HelpCenterFeature.ITEMS in features) add("item-recipe")
-        if (HelpCenterFeature.ITEMS in features) add("items")
         add("auction")
         add("sell")
         if (HelpCenterFeature.ENCHANTMENTS in features) add("enchants")
