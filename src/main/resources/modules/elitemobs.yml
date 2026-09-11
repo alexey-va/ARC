@@ -230,6 +230,9 @@ dungeon-qol:
     quit-open-tooltip: Вызвать выход ко спавну. Если появился портал, войдите в него.
     shop-label: '<#f4d87a>Припасы ›'
     shop-tooltip: Припасы и кейсы EliteMobs за кристаллы
+    scoreboard-on-label: '<#9bd48d>✔ Табло включено'
+    scoreboard-off-label: '<#f2eee8>○ Табло выключено'
+    scoreboard-tooltip: Показать или скрыть сведения о текущем походе справа на экране
     portals-label: '<#92bed8>К порталам ›'
     list-label: '<#ffb277>Выбрать данж ›'
     about-title: '<#86dcf1>О данже'

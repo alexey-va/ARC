@@ -63,7 +63,8 @@ internal class EMDungeonQol(
     },
     private val leaveWormholeWorld: (Player, World) -> Unit = NativeWormholeCooldowns()::leftWorld,
 ) : Listener, AutoCloseable {
-    internal val scoreboard = DungeonScoreboard(this)
+    private val scoreboardPreferenceKey = NamespacedKey("arc", "dungeon_scoreboard_enabled")
+    internal val scoreboard = DungeonScoreboard(this, enabled = ::scoreboardEnabled)
     private val checkpoints = DungeonCheckpointStore()
     private val tasks = LifecycleTaskScope()
     private val combatUntil = mutableMapOf<UUID, Long>()
@@ -205,6 +206,23 @@ internal class EMDungeonQol(
         data.set(autosaveIntervalKey, PersistentDataType.INTEGER, seconds)
         if (persist(player)) return DungeonSaveEdit(true, Component.empty())
         if (previous == null) data.remove(autosaveIntervalKey) else data.set(autosaveIntervalKey, PersistentDataType.INTEGER, previous)
+        return DungeonSaveEdit(false, text("saves.messages.write-failed", "<red>Не удалось сохранить настройку. Повторите попытку позже."))
+    }
+
+    internal fun scoreboardEnabled(player: Player): Boolean =
+        player.persistentDataContainer.get(scoreboardPreferenceKey, PersistentDataType.BYTE)?.toInt() != 0
+
+    internal fun setScoreboardEnabled(player: Player, enabled: Boolean): DungeonSaveEdit {
+        val data = player.persistentDataContainer
+        val previous = data.get(scoreboardPreferenceKey, PersistentDataType.BYTE)
+        val value = if (enabled) 1.toByte() else 0.toByte()
+        if (previous == value || (previous == null && enabled)) return DungeonSaveEdit(true, Component.empty())
+        data.set(scoreboardPreferenceKey, PersistentDataType.BYTE, value)
+        if (persist(player)) {
+            if (enabled) scoreboard.refresh(listOf(player)) else scoreboard.remove(player.uniqueId)
+            return DungeonSaveEdit(true, Component.empty())
+        }
+        if (previous == null) data.remove(scoreboardPreferenceKey) else data.set(scoreboardPreferenceKey, PersistentDataType.BYTE, previous)
         return DungeonSaveEdit(false, text("saves.messages.write-failed", "<red>Не удалось сохранить настройку. Повторите попытку позже."))
     }
 
@@ -481,7 +499,7 @@ internal class EMDungeonQol(
         player.fallDistance <= 0f && player.fireTicks <= 0 && safe(player.location)
 
     private fun persist(player: Player): Boolean = runCatching { persistence.persist(player) }.fold({ true }, {
-        Logging.error("Unable to persist dungeon checkpoints for {}", player.uniqueId, it); false
+        Logging.error("Unable to persist dungeon player data for {}", player.uniqueId, it); false
     })
 
     override fun close() {

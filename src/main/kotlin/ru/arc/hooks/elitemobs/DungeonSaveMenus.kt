@@ -71,6 +71,7 @@ internal class DungeonSaveMenus(
                     if (view.saves?.entry != null) dungeon.travel(player, view.saves, "entry") else panel(player, text("panel.entry-unavailable", "<#e8dfd2>Безопасный переход ко входу сейчас недоступен. Для выхода используйте кнопку выше."))
                 }.let { if (view.saves?.entry != null) it else it.copy(label = text("panel.entry-disabled", "<#e8dfd2>[Недоступно] К началу данжа")) },
                 action("shop", "panel.shop-label", "<#f4d87a>Припасы ›", "panel.shop-tooltip", "Припасы и кейсы EliteMobs за кристаллы") { shop(player) },
+                scoreboardButton(player),
                 shops(player),
                 lostLoot(player),
                 partyButton(player),
@@ -143,17 +144,23 @@ internal class DungeonSaveMenus(
         )) { open(player) }
     }
 
-    private fun unavailable(player: Player) {
+    private fun unavailable(player: Player, feedback: Component? = null) {
         val destination = dungeon.lastReturn(player)
+        val body = mutableListOf(
+            PaperDialogBody(text("panel.outside", "<#e8dfd2>Подготовка к походу<newline><#e8dfd2>Почитайте гайд или выберите данж. После входа здесь появится панель прохождения.<newline><#e8dfd2>Используйте кнопки «К порталам» и «Выбрать данж». В данже меню открывается через <#d7b486>Shift + F<#e8dfd2>."), 468),
+            crystalBalance(player),
+        )
+        feedback?.let { body += PaperDialogBody(plain(it), 468) }
         show(player, PaperDialogScreen(
         id = "dungeon.panel.unavailable", title = text("panel.title", "<#ffb277>Панель данжа"),
-        body = listOf(PaperDialogBody(text("panel.outside", "<#e8dfd2>Подготовка к походу<newline><#e8dfd2>Почитайте гайд или выберите данж. После входа здесь появится панель прохождения.<newline><#e8dfd2>Используйте кнопки «К порталам» и «Выбрать данж». В данже меню открывается через <#d7b486>Shift + F<#e8dfd2>."), 468), crystalBalance(player)),
+        body = body,
         buttons = listOf(
             action("return", "panel.return-label", "<#92bed8>Вернуться в данж ›", "panel.return-tooltip", "Вернуться в последний обычный данж на место выхода", close = destination != null) {
                 if (destination != null) dungeon.returnToLast(player, destination)
                 else panel(player)
             }.let { if (destination != null) it else it.copy(label = text("panel.return-disabled", "<#e8dfd2>[Недоступно] Вернуться в данж"),
                 tooltip = text("panel.return-unavailable", "<#e8dfd2>Нет доступного места выхода из обычного данжа. Сначала посетите данж и выйдите из него.")) },
+            scoreboardButton(player),
             shops(player),
             lostLoot(player),
             guide(player) { unavailable(player) },
@@ -175,6 +182,21 @@ internal class DungeonSaveMenus(
     private fun shops(player: Player) = action("shops", "panel.shops-label", "<#92bed8>К магазинам ›", "panel.shops-tooltip", "Перейти к торговцам данжей", close = true) { dungeon.action(player, "shops") }
 
     private fun autosaveSettingsButton(player: Player) = action("autosaves", "saves.settings.label", "<#c4a7e7>Автосохранение ›", "saves.settings.tooltip", "Выбрать интервал или отключить автоматические точки") { autosaveSettings(player) }
+
+    private fun scoreboardButton(player: Player): PaperDialogButton {
+        val enabled = dungeon.scoreboardEnabled(player)
+        return action(
+            "scoreboard",
+            if (enabled) "panel.scoreboard-on-label" else "panel.scoreboard-off-label",
+            if (enabled) "<#9bd48d>✔ Табло включено" else "<#f2eee8>○ Табло выключено",
+            "panel.scoreboard-tooltip",
+            "Показать или скрыть сведения о текущем походе справа на экране",
+        ) {
+            val result = dungeon.setScoreboardEnabled(player, !enabled)
+            val feedback = result.message.takeUnless { result.success }
+            if (dungeon.panelView(player) == null) unavailable(player, feedback) else panel(player, feedback)
+        }
+    }
 
     private fun autosaveSettings(player: Player, feedback: Component? = null) {
         val seconds = dungeon.autosaveSeconds(player)
