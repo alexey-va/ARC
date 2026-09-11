@@ -86,6 +86,9 @@ class HelpCenterConfigTest : StringSpec({
                 MiniMessage.miniMessage().deserialize(settings.text(key)).containsBold() shouldBe false
             }
             settings.text("travel-body").contains("случайная телепортация", ignoreCase = true) shouldBe true
+            settings.text("commands-label").contains("✧") shouldBe true
+            settings.text("category-settings-label").contains("☷") shouldBe true
+            settings.text("category-trade-body").contains("итоговую сумму") shouldBe true
             settings.text("travel-title").contains("Телепортация") shouldBe true
             settings.text("guide-body").contains("Мир строительства") shouldBe false
             settings.command("privat").label.contains("Приват") shouldBe true
@@ -134,8 +137,8 @@ class HelpCenterConfigTest : StringSpec({
                 "category-progress-label" to 0xc4abff,
                 "category-trade-label" to 0xf4d87a,
                 "category-technology-label" to 0x85dfc4,
-                "commands-label" to 0xffffff,
-                "category-settings-label" to 0xffffff,
+                "commands-label" to 0xf3a2c9,
+                "category-settings-label" to 0x86dcf1,
             ).forEach { (key, color) ->
                 withClue(key) {
                     val component = MiniMessage.miniMessage().deserialize(settings.text(key))

@@ -62,6 +62,15 @@ class LandsUiConfigTest : StringSpec({
             withClue(settings.text("land-selected-label")) {
                 settings.text("land-selected-label").contains("#9bd48d>✔") shouldBe true
             }
+            mapOf(
+                "table-role-label" to "#9bd48d",
+                "table-territory-label" to "#86dcf1",
+                "table-members-label" to "#f3a2c9",
+                "table-balance-label" to "#f4d87a",
+                "table-coins-value" to "#f4bd6a",
+            ).forEach { (key, color) ->
+                withClue(key) { settings.text(key).contains(color) shouldBe true }
+            }
         } finally {
             ConfigManager.clear()
             root.toFile().deleteRecursively()

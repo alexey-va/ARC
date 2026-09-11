@@ -299,6 +299,19 @@ class HelpCenterScreensTest {
     }
 
     @Test
+    fun `trade uses a dedicated guide and varied action accents`() {
+        player.addAttachment(paper.createSimplePlugin("BankAccess"), "bank.open.command", true)
+        open(HelpCenterPage.ROOT)
+        click("root_trade")
+        assertTrue(body().contains("итоговую сумму"))
+        assertEquals(
+            listOf("command_shops", "command_loot", "command_sell", "command_auction", "command_bank"),
+            screen.buttons.map { it.id.value },
+        )
+        assertEquals(5, screen.buttons.map { it.label.color() }.distinct().size)
+    }
+
+    @Test
     fun `teams button rechecks permission before executing`() {
         val attachment = player.addAttachment(paper.createSimplePlugin("TeamsAccess"), "arcjustteams.use", true)
         open(HelpCenterPage.ROOT)
@@ -358,8 +371,16 @@ class HelpCenterScreensTest {
         assertTrue(body().contains("Личные варпы"))
         click("rtp")
         assertEquals(listOf("rtp_vanilla", "rtp_mining", "rtp_biomes"), screen.buttons.map { it.id.value })
-        click("rtp_biomes")
-        assertEquals(listOf("rtp region:survival"), executed)
+        for ((button, command) in listOf(
+            "rtp_vanilla" to "rtp region=vanilla",
+            "rtp_mining" to "rtp region=mining",
+            "rtp_biomes" to "rtp region=survival",
+        )) {
+            click(button)
+            assertEquals(command, executed.last())
+            open(HelpCenterPage.TRAVEL)
+            click("rtp")
+        }
     }
 
     @Test

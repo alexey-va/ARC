@@ -44,8 +44,11 @@ class LandsUiController(
         val body = mutableListOf(
             DialogTables.body(
                 rows = listOf(
-                    text("table-settlements-label") to Component.text(lands.size),
-                    text("table-selected-label") to Component.text(selected?.name ?: settings.text("selected-none")),
+                    text("table-settlements-label") to text("table-count-value", "count" to lands.size.toString()),
+                    text("table-selected-label") to text(
+                        "table-selected-value",
+                        "land" to (selected?.name ?: settings.text("selected-none")),
+                    ),
                     text("table-protected-label") to text(
                         "table-protected-value",
                         "chunks" to lands.sumOf { it.chunks }.toString(),

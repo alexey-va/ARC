@@ -647,7 +647,8 @@ internal class HelpCenterController(
         }
         val entries = availableCatalog(player).filter { it.category == category && it.id !in hidden }
         val bodyKey = when (category) {
-            HelpCenterCategory.ACTIVITIES, HelpCenterCategory.PROGRESS, HelpCenterCategory.TECHNOLOGY ->
+            HelpCenterCategory.ACTIVITIES, HelpCenterCategory.TRADE, HelpCenterCategory.PROGRESS,
+            HelpCenterCategory.TECHNOLOGY ->
                 "category-${category.configId}-body"
             else -> "category-body"
         }
@@ -872,13 +873,13 @@ internal class HelpCenterController(
                 body = listOf(PaperDialogBody(text("rtp-body"), width = 500)),
                 buttons = listOf(
                     button("rtp_vanilla", text("rtp-vanilla-label"), text("rtp-vanilla-tooltip")) {
-                        execute(player, "rtp region:vanilla")
+                        execute(player, "rtp region=vanilla")
                     }.closing(),
                     button("rtp_mining", text("rtp-mining-label"), text("rtp-mining-tooltip")) {
-                        execute(player, "rtp region:mining")
+                        execute(player, "rtp region=mining")
                     }.closing(),
                     button("rtp_biomes", text("rtp-biomes-label"), text("rtp-biomes-tooltip")) {
-                        execute(player, "rtp region:survival")
+                        execute(player, "rtp region=survival")
                     }.closing(),
                 ),
                 exitButton = backButton("back", player, ::openTravel),
@@ -1026,6 +1027,7 @@ internal class HelpCenterController(
     private fun commandButton(player: Player, command: HelpCenterCommand): PaperDialogButton {
         val label = when (command.id) {
             "events", "duels", "giveaways", "dungeons", "farms", "vote", "parkour",
+            "shops", "loot", "sell", "auction", "bank",
             "slimefun", "enchants", "enchanter", "builder", "mounts",
             "chat-global", "chat-local", "lands-borders", "trails-on", "trails-off", "particles", "tpa-ignore" ->
                 text("command-${command.id}-label")

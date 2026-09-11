@@ -239,7 +239,7 @@ text:
   my-tooltip: '<#e6fff3>Ваш профиль, дома, поселения и прогресс.'
   guide-label: '<#f4bd6a>Первые шаги ›'
   guide-tooltip: '<#e6fff3>Первые шаги без лишних команд.'
-  commands-label: "<italic:false><#ffffff>⌕ Поиск ›"
+  commands-label: "<italic:false><#f3a2c9>✧ Поиск ›"
   commands-tooltip: '<#e6fff3>Найти действие обычной фразой.'
   travel-label: "<italic:false><#91c4ff>◇ Телепортация ›"
   travel-tooltip: '<#e6fff3>Дома, миры, варпы и возврат.'
@@ -255,7 +255,7 @@ text:
   help-guide-label: '<#f4bd6a>✦ Первые шаги ›'
   help-goals-label: '<#ffb277>⚡ Подобрать занятие ›'
   help-recovery-label: '<#ff8b82>◆ Решить проблему ›'
-  help-commands-label: '<#ffffff>⌕ Найти действие ›'
+  help-commands-label: '<#f3a2c9>✧ Найти действие ›'
   help-now-label: '<#86dcf1>◇ Моё состояние ›'
   help-context-label: '<#85dfc4>⌖ Что вокруг меня ›'
   help-players-label: '<#f3a2c9>☻ Игроки онлайн ›'
@@ -411,7 +411,7 @@ text:
   category-social-label: '<#d7b486>Общение и сервер'
   category-activities-label: "<italic:false><#ffb277>⚡ Активности ›"
   category-technology-label: "<italic:false><#85dfc4>⚒ Технологии ›"
-  category-settings-label: "<#ffffff>⚙ Настройки ›"
+  category-settings-label: "<#86dcf1>☷ Настройки ›"
   category-activities-tooltip: '<#e6fff3>События, дуэли, данжи и фермы.'
   category-technology-tooltip: '<#e6fff3>Механизмы, зачарования, инструменты строителя и маунты.'
   category-settings-tooltip: '<#e6fff3>Личные настройки игры и интерфейса.<newline><#e8dfd2>Чат, тропинки, полёт, порталы и управление.<newline>В названии кнопки — текущий режим,<newline>в подсказке — его назначение.'
@@ -426,6 +426,7 @@ text:
   category-social-title: '<#f4bd6a>Общение и сервер'
   category-activities-title: '<#f4bd6a>Активности'
   category-technology-title: '<#f4bd6a>Технологии'
+  category-trade-body: '<#f4d87a>Выберите удобный способ торговли.<newline><#e8dfd2>Магазины дают понятные маршруты покупки, быстрая продажа освобождает инвентарь, а аукцион связывает вас с другими игроками.<newline><#86dcf1>Перед подтверждением <#e8dfd2>проверьте предмет, количество и итоговую сумму.'
   category-progress-body: '<#c4abff>Развивайте персонажа в удобном темпе.<newline><#e8dfd2>Ранг показывает общий путь, задания дают короткие цели, работы и навыки растут от привычных действий.'
   category-activities-body: '<#ffb277>Выберите формат под настроение.<newline><#e8dfd2>Для короткой сессии подойдут события, дуэли или паркур; для долгого похода — данжи и фермы.<newline><#f4d87a>Розыгрыши и голосование <#e8dfd2>можно проверить между делом.'
   category-technology-body: '<#85dfc4>Технологии расширяют возможности базы и персонажа.<newline><#e8dfd2>Изучайте механизмы в книге, улучшайте снаряжение, стройте быстрее специальными инструментами и открывайте маунтов.'
@@ -435,6 +436,11 @@ text:
   command-dungeons-label: '<#c4abff>◆ Данжи ›'
   command-farms-label: '<#9bd48d>⌂ Фермы ›'
   command-parkour-label: '<#85dfc4>◇ Паркур ›'
+  command-shops-label: '<#9bd48d>⌂ Магазины ›'
+  command-loot-label: '<#f4d87a>◆ Потерянная добыча ›'
+  command-sell-label: '<#ff9f70>↑ Быстрая продажа ›'
+  command-auction-label: '<#c4abff>◇ Аукцион ›'
+  command-bank-label: '<#86dcf1>▣ Банк ›'
   command-slimefun-label: '<#85dfc4>⚙ Книга технологий ›'
   command-enchants-label: '<#c4abff>✦ Зачарования ›'
   command-enchanter-label: '<#f4d87a>◇ Зачарователь ›'
