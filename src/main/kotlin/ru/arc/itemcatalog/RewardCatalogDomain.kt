@@ -50,6 +50,7 @@ data class RewardCatalogSettings(
     val title: String,
     val categories: List<RewardCatalogCategory>,
     val messages: RewardCatalogMessages,
+    val rootIcon: CatalogIconStyle = CatalogIconStyle("CHEST"),
 ) {
     val entryCount: Int = categories.sumOf { it.entries.size }
 }

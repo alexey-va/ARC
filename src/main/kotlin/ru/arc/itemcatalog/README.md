@@ -39,11 +39,12 @@ operator entries. The schema is intentionally narrow:
 ```yaml
 enabled: false
 title: '<dark_gray><bold>Награды лутбоксов'
+root-icon: { material: CHEST, custom-model-data: 0 }
 categories:
   common:
     name: 'Обычные награды'
     description: ['Предметы из лутбоксов.']
-    icon: CHEST
+    icon: { material: CHEST, custom-model-data: 0 }
     entries:
       voucher:
         name: '<white>Ваучер'
@@ -51,21 +52,24 @@ categories:
         rarity: 'Обычная'
         requires: [ItemsAdder]
         treasure: { pool: common, id: voucher }
-        icon: PAPER
+        icon: { material: PAPER, custom-model-data: 0 }
 ```
 
 Each entry has exactly one source: `treasure` (`pool` + `id`), `preset`, or
-`pouch`. Categories are capped at 32, entries at 300 per category and 2,000
+`pouch`. Categories are capped at 64, entries at 300 per category and 2,000
 in total; names, descriptions, IDs, plugin requirements, materials and unknown
 keys are validated before publication. `name` may be omitted for native item
 sources (treasure item/Slimefun, preset or pouch), in which case the actual
 preview name or vanilla translation is retained; opaque command treasures must
-have a configured name.
+have a configured name. Names, descriptions and rarity retain MiniMessage
+colors from the catalogue config.
 
 Browsing requires `arc.items.catalog.use`, while giving rechecks the existing
 `clicks.give-permission` setting (`arc.items.catalog.give` by default) at the
-final click. `requires` may be omitted when no provider is needed. Providers
-and references are reread on every click. Presets and
+final click. `requires` may be omitted when no provider is needed. Icons accept
+the legacy material scalar (`PAPER`) or a strict `{material, custom-model-data}`
+map. Provider checks stay functional but their technical names are not shown in
+player reward lore. Providers and references are reread on every click. Presets and
 pouches are fresh factories; treasure rewards use native `TreasureService`.
 Inventory capacity is preflighted and simulated, with no catalog-configured
 commands and no overflow drops. Command and other opaque treasure success is

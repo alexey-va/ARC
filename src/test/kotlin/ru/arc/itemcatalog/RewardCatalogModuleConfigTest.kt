@@ -23,17 +23,19 @@ class RewardCatalogModuleConfigTest : StringSpec({
             writeConfig(root, """
                 enabled: true
                 title: '<dark_gray><bold>Награды'
+                root-icon: {material: CHEST, custom-model-data: 99}
                 categories:
                   common:
                     name: 'Обычные'
                     description: ['Предметы из лутбоксов.']
-                    icon: CHEST
+                    icon: {material: CHEST, custom-model-data: 11}
                     entries:
                       command:
                         name: '<white>Команда'
                         description: ['Описание.']
                         requires: []
                         treasure: {pool: common, id: command}
+                        icon: PAPER
                       native:
                         description: []
                         requires: [Slimefun]
@@ -49,8 +51,12 @@ class RewardCatalogModuleConfigTest : StringSpec({
                         pouch: reward_pouch
             """.trimIndent())
 
-            val category = RewardCatalogModuleConfig.load(root).snapshot().categories.single()
+            val settings = RewardCatalogModuleConfig.load(root).snapshot()
+            val category = settings.categories.single()
             category.entries.map { it.id } shouldBe listOf("command", "native", "preset", "pouch")
+            settings.rootIcon shouldBe CatalogIconStyle("CHEST", 99)
+            category.icon shouldBe CatalogIconStyle("CHEST", 11)
+            category.entries.single { it.id == "command" }.icon shouldBe CatalogIconStyle("PAPER")
             category.entries.single { it.id == "native" }.name shouldBe null
             category.entries.single { it.id == "native" }.requires shouldBe listOf("Slimefun")
             category.entries.single { it.id == "preset" }.requires shouldBe emptyList()
@@ -81,6 +87,26 @@ class RewardCatalogModuleConfigTest : StringSpec({
                         treasure: {pool: common, id: bad}
                         preset: bad
                         extra: true
+            """.trimIndent())
+
+            runCatching { RewardCatalogModuleConfig.load(root).snapshot() }.isFailure shouldBe true
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    "rejects non-canonical custom model map keys" {
+        val root = Files.createTempDirectory("arc-reward-catalog-icon-invalid")
+        try {
+            writeConfig(root, """
+                enabled: true
+                title: 'Награды'
+                categories:
+                  common:
+                    name: 'Обычные'
+                    description: []
+                    icon: {material: CHEST, customModelData: 1}
+                    entries: {}
             """.trimIndent())
 
             runCatching { RewardCatalogModuleConfig.load(root).snapshot() }.isFailure shouldBe true

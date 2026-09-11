@@ -3,6 +3,7 @@ package ru.arc.itemcatalog
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.format.TextDecoration
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.entity.Player
@@ -20,6 +21,7 @@ import ru.arc.treasure.pouch.Pouches
 import ru.arc.util.ItemStackFactory
 import ru.arc.util.Logging.warn
 import ru.arc.util.TextUtil
+import ru.arc.util.withCustomModelData
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** GUI and final-click guard for the operator-selected reward catalogue. */
@@ -46,7 +48,7 @@ class RewardCatalogGuiController(
         }
         pagedMenu(
             player = player,
-            title = settings.title,
+            title = titleStrip(settings.title),
             entries = settings.categories,
             requestedPage = 0,
             back = back,
@@ -63,7 +65,7 @@ class RewardCatalogGuiController(
         if (!isAvailable()) return back()
         pagedMenu(
             player = player,
-            title = settings.title,
+            title = titleStrip(settings.title),
             entries = settings.categories,
             requestedPage = page,
             back = back,
@@ -75,24 +77,18 @@ class RewardCatalogGuiController(
     /** Item shown as the root tab in the existing `/arc items` catalogue. */
     fun rootEntry(player: Player, open: () -> Unit): PaperMenuEntry {
         val stack =
-            ArcMenus.item(
-                "catalog-root-entry",
-                PaperMenuItemRenderContext(
-                    values = mapOf(
-                        "name" to TextUtil.mm("Награды лутбоксов", true),
-                        "categories" to Component.text(settings.categories.size),
-                        "items" to Component.text(settings.entryCount),
-                        "action" to Component.text("Нажмите — открыть награды"),
-                    ),
-                    repeats =
-                        mapOf(
-                            "description" to
-                                listOf(
-                                    mapOf("line" to TextUtil.mm("Награды и предметы из лутбоксов.", true)),
-                                ),
-                        ),
-                ),
-            ).withType(Material.CHEST)
+            rewardPresentation(
+                base = styledStack(settings.rootIcon),
+                name = authoredComponent("<gold><bold>Награды лутбоксов", NAME_DEFAULT),
+                details =
+                    buildList {
+                        add(body("Предметы и сюрпризы из лутбоксов."))
+                        add(Component.empty())
+                        add(metadata("Категорий", settings.categories.size.toString()))
+                        add(metadata("Наград", settings.entryCount.toString()))
+                    },
+                action = "[▶] ЛКМ — открыть награды",
+            )
         return ArcMenus.entry(stack) { open() }
     }
 
@@ -102,22 +98,24 @@ class RewardCatalogGuiController(
         back: () -> Unit,
     ): PaperMenuEntry {
         val base = styledStack(category.icon)
-        val rendered =
-            ArcMenus.item(
-                "catalog-root-entry",
-                PaperMenuItemRenderContext(
-                    values = mapOf(
-                        "name" to TextUtil.mm(category.name, true),
-                        "categories" to Component.text(0),
-                        "items" to Component.text(category.entries.size),
-                        "action" to Component.text("Нажмите — открыть награды"),
-                    ),
-                    repeats = mapOf(
-                        "description" to category.description.map { line -> mapOf("line" to descriptionComponent(line)) },
-                    ),
-                ),
-            )
-        return ArcMenus.entry(applyPresentation(base, rendered)) {
+        val details = buildList {
+            addAll(category.description.map(::body))
+            add(Component.empty())
+            add(metadata("Наград", category.entries.size.toString()))
+        }
+        return ArcMenus.entry(
+            rewardPresentation(
+                base = base,
+                name = authoredComponent(category.name, NAME_DEFAULT),
+                details = details,
+                action =
+                    if (category.id.startsWith("set_")) {
+                        "[▶] ЛКМ — открыть пак"
+                    } else {
+                        "[▶] ЛКМ — открыть категорию"
+                    },
+            ),
+        ) {
             openCategory(player, category.id, 0, back)
         }
     }
@@ -130,7 +128,7 @@ class RewardCatalogGuiController(
         val category = settings.categories.firstOrNull { it.id == categoryId } ?: return rootBack()
         pagedMenu(
             player = player,
-            title = category.name,
+            title = titleStrip(category.name),
             entries = category.entries,
             requestedPage = page,
             back = { openRoot(player, rootBack) },
@@ -247,7 +245,7 @@ class RewardCatalogGuiController(
         } ?: styledStack(entry.icon ?: CatalogIconStyle(Material.PAPER.name))
 
     private fun displayName(entry: RewardCatalogEntry, resolved: ResolvedReward?, preview: ItemStack): Component =
-        entry.name?.let { TextUtil.mm(it, true) }
+        entry.name?.let { authoredComponent(it, NAME_DEFAULT) }
             ?: nativeDisplayName(resolved, preview)
 
     private fun nativeDisplayName(resolved: ResolvedReward?, preview: ItemStack): Component =
@@ -259,10 +257,12 @@ class RewardCatalogGuiController(
                     is Treasure.Slimefun ->
                         HookRegistry.sfHook?.getSlimefunItemStack(treasure.itemId)?.itemMeta?.displayName()
                             ?: Component.translatable(preview.type.translationKey())
-                    else -> Component.text("Награда", MUTED)
+                    else -> Component.text("Награда", NAME_DEFAULT)
                 }
-            null -> Component.text("Награда", MUTED)
-        }.decoration(TextDecoration.ITALIC, false)
+            null -> Component.text("Награда", NAME_DEFAULT)
+        }.let { component ->
+            authoredComponent(component, NAME_DEFAULT)
+        }
 
     private fun tooltipLines(
         entry: RewardCatalogEntry,
@@ -270,19 +270,28 @@ class RewardCatalogGuiController(
         preview: ItemStack,
     ): List<Component> =
         buildList {
-            add(Component.empty())
-            addAll(preview.itemMeta?.lore().orEmpty().take(MAX_INTRINSIC_LORE).map(::nonItalic))
-            if (entry.description.isNotEmpty()) {
-                add(Component.empty())
-                addAll(entry.description.map(::descriptionComponent))
-            }
-            entry.rarity?.let {
-                add(Component.empty())
-                add(labelValue("Редкость", it))
-            }
-            rewardAmount(resolved)?.let { add(labelValue("Количество", it)) }
-            if (entry.requires.isNotEmpty()) add(labelValue("Требуется", entry.requires.joinToString(", ")))
+            addAll(trimBlankEdges(preview.itemMeta?.lore().orEmpty().take(MAX_INTRINSIC_LORE).map(::nonItalic)))
+            appendSection(entry.description.map(::descriptionComponent))
+            appendSection(
+                buildList {
+                    entry.rarity?.let { add(metadata("Редкость", authoredComponent(it, RARITY_DEFAULT))) }
+                    rewardAmount(resolved)?.let { add(metadata("Количество", authoredComponent(it, VALUE_DEFAULT))) }
+                },
+            )
         }
+
+    private fun MutableList<Component>.appendSection(lines: List<Component>) {
+        val cleaned = trimBlankEdges(lines)
+        if (cleaned.isEmpty()) return
+        if (isNotEmpty() && !isBlank(last())) add(Component.empty())
+        addAll(cleaned)
+    }
+
+    private fun trimBlankEdges(lines: List<Component>): List<Component> =
+        lines.dropWhile(::isBlank).dropLastWhile(::isBlank)
+
+    private fun isBlank(component: Component): Boolean =
+        PlainTextComponentSerializer.plainText().serialize(component).isBlank()
 
     private fun rewardAmount(resolved: ResolvedReward?): String? =
         (resolved as? ResolvedReward.TreasureValue)?.value?.let { treasure ->
@@ -361,7 +370,10 @@ class RewardCatalogGuiController(
             is RewardCatalogSource.Pouch -> "pouch:${source.id}"
         }
 
-    private fun styledStack(style: CatalogIconStyle): ItemStack = ItemStackFactory.create(Material.valueOf(style.material), 1)
+    private fun styledStack(style: CatalogIconStyle): ItemStack =
+        ItemStackFactory.create(Material.valueOf(style.material), 1).also { stack ->
+            if (style.customModelData != 0) stack.withCustomModelData(style.customModelData)
+        }
 
     private fun rewardPresentation(
         base: ItemStack,
@@ -372,36 +384,30 @@ class RewardCatalogGuiController(
         base.clone().also { target ->
             target.editMeta { meta ->
                 meta.displayName(name)
-                meta.lore(details + Component.empty() + actionComponent(action))
+                val content = trimBlankEdges(details)
+                meta.lore(buildList {
+                    add(Component.empty())
+                    addAll(content)
+                    if (content.isNotEmpty()) add(Component.empty())
+                    add(actionComponent(action))
+                })
                 meta.isHideTooltip = false
             }
         }
 
     private fun actionComponent(action: String): Component =
-        if (action.startsWith("[▶]")) accent(action, false) else muted(action)
-
-    private fun applyPresentation(base: ItemStack, presentation: ItemStack): ItemStack =
-        base.clone().also { target ->
-            val source = presentation.itemMeta
-            target.editMeta { meta ->
-                meta.displayName(source.displayName())
-                meta.lore(source.lore())
-                meta.isHideTooltip = source.isHideTooltip
-                meta.setEnchantmentGlintOverride(
-                    if (source.hasEnchantmentGlintOverride()) source.enchantmentGlintOverride else null,
-                )
-            }
-        }
+        if (action.startsWith("[▶]")) Component.text(action, ACTION).decoration(TextDecoration.ITALIC, false)
+        else Component.text(action, UNAVAILABLE).decoration(TextDecoration.ITALIC, false)
 
     private fun sendConfigured(player: Player, template: String) {
         player.sendMessage(TextUtil.mm(template, true))
     }
 
-    private fun descriptionComponent(line: String): Component = TextUtil.mm("<gray>$line", true)
+    private fun descriptionComponent(line: String): Component = authoredComponent(line, BODY)
 
     private fun <T> pagedMenu(
         player: Player,
-        title: String,
+        title: Component,
         entries: List<T>,
         requestedPage: Int,
         back: () -> Unit,
@@ -436,19 +442,30 @@ class RewardCatalogGuiController(
         ArcMenus.open(
             player,
             ArcMenuSchema.ITEM_CATALOG,
-            TextUtil.mm(title, true),
+            title,
             elements = controls,
             regions = mapOf(ArcMenuSchema.CATALOG_ITEMS to model.entries.map { render(it, page) }),
         )
     }
 
-    private fun labelValue(label: String, value: String): Component = muted("$label: ").append(accent(value, false))
+    private fun titleStrip(raw: String): Component {
+        val plain = PlainTextComponentSerializer.plainText().serialize(TextUtil.mm(raw, true))
+        return Component.text(plain, TITLE).decoration(TextDecoration.BOLD, true).decoration(TextDecoration.ITALIC, false)
+    }
 
-    private fun accent(text: String, bold: Boolean): Component =
-        Component.text(text, ACCENT).decoration(TextDecoration.BOLD, bold).decoration(TextDecoration.ITALIC, false)
+    private fun metadata(label: String, value: String): Component = metadata(label, authoredComponent(value, VALUE_DEFAULT))
 
-    private fun muted(text: String): Component =
-        Component.text(text, MUTED).decoration(TextDecoration.ITALIC, false)
+    private fun metadata(label: String, value: Component): Component =
+        Component.text("$label: ", LABEL).decoration(TextDecoration.ITALIC, false).append(nonItalic(value))
+
+    private fun body(text: String): Component = authoredComponent(text, BODY)
+
+    private fun authoredComponent(text: String, fallback: TextColor): Component =
+        authoredComponent(TextUtil.mm(text, true), fallback)
+
+    private fun authoredComponent(component: Component, fallback: TextColor): Component =
+        (if (component.color() == null) component.color(fallback) else component)
+            .decoration(TextDecoration.ITALIC, false)
 
     private fun nonItalic(component: Component): Component = component.decoration(TextDecoration.ITALIC, false)
 
@@ -462,7 +479,13 @@ class RewardCatalogGuiController(
         private const val PAGE_SIZE = 45
         private const val MAX_INTRINSIC_LORE = 24
         private const val MAX_STACKS = 64
-        private val ACCENT = TextColor.color(0x92BED8)
-        private val MUTED = TextColor.color(0x8C8C8C)
+        private val TITLE = TextColor.color(0x20252B)
+        private val NAME_DEFAULT = TextColor.color(0xF4BD6A)
+        private val BODY = TextColor.color(0xF3EEE6)
+        private val LABEL = TextColor.color(0xEAD5B5)
+        private val VALUE_DEFAULT = TextColor.color(0xF8F0DC)
+        private val RARITY_DEFAULT = TextColor.color(0xFFD166)
+        private val ACTION = TextColor.color(0x5FE18B)
+        private val UNAVAILABLE = TextColor.color(0xF2C66D)
     }
 }

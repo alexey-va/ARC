@@ -22,10 +22,11 @@ class RewardCatalogModuleConfig(private val config: Config) {
                 .entries
                 .map { (rawId, rawValue) -> parseCategory(rawId, rawValue) }
         val messages = parseMessages()
+        val rootIcon = optionalIcon("root-icon", CatalogIconStyle("CHEST"))
         require(categories.sumOf { it.entries.size } <= MAX_ENTRIES) {
             "Reward catalog supports at most $MAX_ENTRIES entries"
         }
-        return RewardCatalogSettings(enabled, title, categories, messages)
+        return RewardCatalogSettings(enabled, title, categories, messages, rootIcon)
     }
 
     private fun parseCategory(rawId: String, rawValue: Any?): RewardCatalogCategory {
@@ -120,12 +121,48 @@ class RewardCatalogModuleConfig(private val config: Config) {
         }.distinct()
     }
 
-    private fun material(raw: Any?, path: String): CatalogIconStyle {
+    private fun material(raw: Any?, path: String): CatalogIconStyle =
+        when (raw) {
+            is String -> materialStyle(raw, path)
+            is Map<*, *> -> {
+                val map = strictMap(raw, path)
+                rejectUnknown(map, ICON_KEYS, path)
+                val material = materialStyle(requiredString(map.required("material", path), "$path.material", 64), "$path.material")
+                val customModelData =
+                    if ("custom-model-data" in map) {
+                        integer(map["custom-model-data"], "$path.custom-model-data")
+                    } else {
+                        0
+                    }
+                CatalogIconStyle(material.material, customModelData)
+            }
+            else -> throw invalid(path, "expected material string or icon map")
+        }
+
+    private fun materialStyle(raw: String, path: String): CatalogIconStyle {
         val rawMaterial = requiredString(raw, path, 64).uppercase(Locale.ROOT).removePrefix("MINECRAFT:")
         val material = Material.matchMaterial(rawMaterial)
             ?: throw invalid(path, "unknown material '$rawMaterial'")
         require(!material.isAir) { "$path cannot use AIR" }
         return CatalogIconStyle(material.name)
+    }
+
+    private fun integer(raw: Any?, path: String): Int {
+        val value = raw as? Number ?: throw invalid(path, "expected integer")
+        val long = value.toLong()
+        require(value.toDouble() == long.toDouble() && long in 0..Int.MAX_VALUE) {
+            "$path must be a non-negative integer"
+        }
+        return long.toInt()
+    }
+
+    private fun optionalIcon(path: String, fallback: CatalogIconStyle): CatalogIconStyle {
+        if (!config.exists(path)) return fallback
+        return try {
+            material(config.map<Any?>(path), path)
+        } catch (_: ClassCastException) {
+            material(config.stringOrNull(path), path)
+        }
     }
 
     private fun requiredId(raw: Any?, path: String, pattern: Regex): String {
@@ -171,7 +208,7 @@ class RewardCatalogModuleConfig(private val config: Config) {
         this[key] ?: throw invalid("$path.$key", "is required")
 
     companion object {
-        const val MAX_CATEGORIES = 32
+        const val MAX_CATEGORIES = 64
         const val MAX_ENTRIES_PER_CATEGORY = 300
         const val MAX_ENTRIES = 2_000
         private const val TITLE_LIMIT = 160
@@ -190,6 +227,7 @@ class RewardCatalogModuleConfig(private val config: Config) {
         private val PLUGIN_ID = Regex("[A-Za-z0-9._-]{1,64}")
         private val CATEGORY_KEYS = setOf("name", "description", "icon", "entries")
         private val ENTRY_KEYS = setOf("name", "description", "rarity", "requires", "treasure", "preset", "pouch", "icon")
+        private val ICON_KEYS = setOf("material", "custom-model-data")
         private val SOURCE_KEYS = setOf("treasure", "preset", "pouch")
         private val MESSAGE_KEYS = setOf("unavailable", "inventory-full", "given", "accepted", "action-failed")
 

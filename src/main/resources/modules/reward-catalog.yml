@@ -1,6 +1,7 @@
 # Portable reward catalogue. Keep disabled in the bundled source default.
 enabled: false
 title: "<dark_gray><bold>Награды лутбоксов"
+root-icon: { material: CHEST, custom-model-data: 0 }
 
 # Categories are operator-owned and keyed by stable lowercase IDs.
 # Each entry has exactly one source: treasure {pool, id}, preset, or pouch.
