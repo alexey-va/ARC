@@ -134,7 +134,13 @@ class BukkitHelpCenterGateway : HelpCenterGateway {
     override fun features(): Set<HelpCenterFeature> = HelpCenterFeature.entries
         .filterTo(linkedSetOf()) { feature ->
             (feature.pluginName == null || Bukkit.getPluginManager().isPluginEnabled(feature.pluginName)) &&
-                (feature != HelpCenterFeature.PARKOUR || ru.arc.parkour.ArcParkourModule.isAvailable())
+                when (feature) {
+                    HelpCenterFeature.PARKOUR -> ru.arc.parkour.ArcParkourModule.isAvailable()
+                    HelpCenterFeature.MINE_LIFT -> Bukkit.getPluginCommand("arcfarms:minelift")?.let { command ->
+                        command.executor !== command.plugin
+                    } == true
+                    else -> true
+                }
         }
 
     override fun onlinePlayers(): List<HelpCenterPlayer> {

@@ -51,6 +51,7 @@ internal class HelpCenterController(
             definition.requiredFeature,
             definition.permission,
             definition.opensInventory,
+            definition.anyPermissions,
         )
     }
     private val catalogById = catalog.associateBy { it.id }
@@ -778,7 +779,7 @@ internal class HelpCenterController(
         button("vanilla", text("vanilla-label"), commandTooltip("vanilla")) { executeCatalog(player, "vanilla") }.closing(),
         button("mining", text("mining-label"), commandTooltip("mining")) { executeCatalog(player, "mining") }.closing(),
         button("biomes", text("biomes-label"), commandTooltip("biomes")) { executeCatalog(player, "biomes") }.closing(),
-    )
+    ) + listOfNotNull(availableCatalog(player).firstOrNull { it.id == "minelift" }?.let { commandButton(player, it) })
 
     private fun categoryButton(player: Player, category: HelpCenterCategory): PaperDialogButton =
         button("category_${category.configId}", text("category-${category.configId}-label"), text("category-body")) {
@@ -881,7 +882,8 @@ internal class HelpCenterController(
         val features = gateway.features()
         return catalog.filter { command ->
             (command.requiredFeature == null || command.requiredFeature in features) &&
-                (command.permission == null || player.hasPermission(command.permission))
+                (command.permission == null || player.hasPermission(command.permission)) &&
+                (command.anyPermissions.isEmpty() || command.anyPermissions.any(player::hasPermission))
         }
     }
 
@@ -931,13 +933,14 @@ internal class HelpCenterController(
         val requiredFeature: HelpCenterFeature? = null,
         val permission: String? = null,
         val opensInventory: Boolean = false,
+        val anyPermissions: Set<String> = emptySet(),
     )
 
     private data class IntentDefinition(val id: String, val action: HelpCenterSearchAction)
 
     companion object {
         // These commands join Core's shared history while this callback is active.
-        private val NATIVE_DIALOG_COMMANDS = setOf("events", "farms", "giveaways", "jobs", "rank", "teams", "quests")
+        private val NATIVE_DIALOG_COMMANDS = setOf("events", "farms", "giveaways", "jobs", "rank", "teams", "quests", "minelift")
         private val SEARCH_INPUT = PaperDialogInputId.of("search")
         private val HOME_INPUT = PaperDialogInputId.of("home_name")
         private val PLAYER_SEARCH_INPUT = PaperDialogInputId.of("player_search")
@@ -956,6 +959,7 @@ internal class HelpCenterController(
             CommandDefinition("stuck", HelpCenterCategory.TRAVEL, "stuck"),
             CommandDefinition("vanilla", HelpCenterCategory.TRAVEL, "pw vanilla"),
             CommandDefinition("mining", HelpCenterCategory.TRAVEL, "mining"),
+            CommandDefinition("minelift", HelpCenterCategory.TRAVEL, "arcfarms:minelift", HelpCenterFeature.MINE_LIFT, "arcfarms.mine"),
             CommandDefinition("biomes", HelpCenterCategory.TRAVEL, "pw survival"),
             CommandDefinition("privat", HelpCenterCategory.PROTECTION, "privat"),
             CommandDefinition(
@@ -963,15 +967,17 @@ internal class HelpCenterController(
                 HelpCenterCategory.ACTIVITIES,
                 "arcevents",
                 HelpCenterFeature.EVENTS,
+                "arcevents.play",
             ),
             CommandDefinition(
                 "duels",
                 HelpCenterCategory.ACTIVITIES,
                 "duel",
                 HelpCenterFeature.DUELS,
+                "arcduels.use",
                 opensInventory = true,
             ),
-            CommandDefinition("giveaways", HelpCenterCategory.ACTIVITIES, "giveaway", HelpCenterFeature.GIVEAWAYS),
+            CommandDefinition("giveaways", HelpCenterCategory.ACTIVITIES, "giveaway", HelpCenterFeature.GIVEAWAYS, "arcgiveaways.use"),
             CommandDefinition(
                 "dungeons",
                 HelpCenterCategory.ACTIVITIES,
@@ -985,7 +991,7 @@ internal class HelpCenterController(
                 "arcfarms",
                 HelpCenterFeature.FARMS,
             ),
-            CommandDefinition("vote", HelpCenterCategory.ACTIVITIES, "vote", HelpCenterFeature.VOTES),
+            CommandDefinition("vote", HelpCenterCategory.ACTIVITIES, "vote", HelpCenterFeature.VOTES, "arcvotes.use"),
             CommandDefinition("parkour", HelpCenterCategory.ACTIVITIES, "pa joinall", HelpCenterFeature.PARKOUR,
                 "parkour.basic.joinall", opensInventory = true),
             CommandDefinition("teams", HelpCenterCategory.SOCIAL, "clans", HelpCenterFeature.TEAMS, "arcjustteams.use"),
@@ -1035,7 +1041,14 @@ internal class HelpCenterController(
                 HelpCenterFeature.ENCHANTMENTS,
                 opensInventory = true,
             ),
-            CommandDefinition("builder", HelpCenterCategory.TECHNOLOGY, "builder book", HelpCenterFeature.BUILDER),
+            CommandDefinition(
+                "builder", HelpCenterCategory.TECHNOLOGY, "builder", HelpCenterFeature.BUILDER,
+                anyPermissions = setOf(
+                    "arcbuild.use", "arcbuild.fill", "arcbuild.replace", "arcbuild.disconnect",
+                    "arcbuild.copy", "arcbuild.paste", "arcbuild.deconstruct", "arcbuild.crown",
+                    "arcbuild.book.create", "arcbuild.book.sell", "arcbuild.book.use",
+                ),
+            ),
             CommandDefinition(
                 "mounts",
                 HelpCenterCategory.TECHNOLOGY,

@@ -44,6 +44,10 @@ class HelpCenterScreensTest {
             it.setPermission("arcranks.use", true)
             it.setPermission("arcranks.rankup", true)
             it.setPermission("arcecojobs.use", true)
+            it.setPermission("arcevents.play", true)
+            it.setPermission("arcduels.use", true)
+            it.setPermission("arcgiveaways.use", true)
+            it.setPermission("arcvotes.use", true)
         }
         gateway = mockk()
         preferences = mockk()
@@ -296,6 +300,61 @@ class HelpCenterScreensTest {
         assertTrue(executed.isEmpty())
         open(HelpCenterPage.ROOT)
         assertFalse(screen.buttons.any { it.id.value == "teams" })
+    }
+
+    @Test
+    fun `activity entries recheck revoked permissions before executing`() {
+        val access = player.addAttachment(paper.createSimplePlugin("ActivityAccess"))
+        for ((id, permission) in mapOf(
+            "events" to "arcevents.play", "duels" to "arcduels.use",
+            "giveaways" to "arcgiveaways.use", "vote" to "arcvotes.use",
+        )) {
+            access.setPermission(permission, true)
+            open(HelpCenterPage.ACTIVITIES)
+            assertTrue(screen.buttons.any { it.id.value == "command_$id" }, id)
+            access.setPermission(permission, false)
+            click("command_$id")
+            assertTrue(executed.isEmpty(), id)
+            open(HelpCenterPage.ACTIVITIES)
+            assertFalse(screen.buttons.any { it.id.value == "command_$id" }, id)
+        }
+    }
+
+    @Test
+    fun `builder entry accepts individual tool and book rights then rechecks revocation`() {
+        val access = player.addAttachment(paper.createSimplePlugin("BuilderAccess"))
+        for (permission in listOf("arcbuild.use", "arcbuild.copy", "arcbuild.book.create")) {
+            access.setPermission(permission, true)
+            open(HelpCenterPage.ROOT)
+            click("root_technology")
+            click("command_builder")
+            assertEquals("builder", executed.last())
+            executed.clear()
+            open(HelpCenterPage.ROOT)
+            click("root_technology")
+            access.setPermission(permission, false)
+            click("command_builder")
+            assertTrue(executed.isEmpty())
+            open(HelpCenterPage.ROOT)
+            click("root_technology")
+            assertFalse(screen.buttons.any { it.id.value == "command_builder" })
+        }
+    }
+
+    @Test
+    fun `mine lift entry requires registered feature and permission`() {
+        val access = player.addAttachment(paper.createSimplePlugin("MineLiftAccess"), "arcfarms.mine", true)
+        open(HelpCenterPage.TRAVEL)
+        assertTrue(screen.buttons.any { it.id.value == "command_minelift" })
+        click("command_minelift")
+        assertEquals(listOf("arcfarms:minelift"), executed)
+        access.setPermission("arcfarms.mine", false)
+        open(HelpCenterPage.TRAVEL)
+        assertFalse(screen.buttons.any { it.id.value == "command_minelift" })
+        access.setPermission("arcfarms.mine", true)
+        every { gateway.features() } returns HelpCenterFeature.entries.toSet() - HelpCenterFeature.MINE_LIFT
+        open(HelpCenterPage.TRAVEL)
+        assertFalse(screen.buttons.any { it.id.value == "command_minelift" })
     }
 
     @Test

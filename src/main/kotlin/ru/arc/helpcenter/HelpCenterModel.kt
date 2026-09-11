@@ -62,6 +62,7 @@ enum class HelpCenterFeature(val pluginName: String?) {
     GIVEAWAYS("ArcGiveaways"),
     DUNGEONS("EliteMobs"),
     FARMS("ArcFarms"),
+    MINE_LIFT("ArcFarms"),
     SLIMEFUN("Slimefun"),
     ITEMS("ItemsAdder"),
     ENCHANTMENTS("AdvancedEnchantments"),
@@ -115,6 +116,7 @@ data class HelpCenterCommand(
     val requiredFeature: HelpCenterFeature? = null,
     val permission: String? = null,
     val opensInventory: Boolean = false,
+    val anyPermissions: Set<String> = emptySet(),
 )
 
 sealed interface HelpCenterSearchAction {
