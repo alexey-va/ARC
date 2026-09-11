@@ -2,6 +2,7 @@ package ru.arc.hooks.elitemobs
 
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -230,6 +231,44 @@ class EMDungeonSavesTest : FreeSpec({
             recreated.setAutosaveSeconds(player, -1).success shouldBe false
             recreated.setAutosaveSeconds(player, 1).success shouldBe false
             recreated.autosaveSeconds(player) shouldBe 300
+            recreated.close()
+        }
+    }
+
+    "dungeon panel toggles the personal scoreboard preference and applies it immediately" {
+        withScheduler {
+            val player = paper.addPlayer("scoreboard-setting")
+            val world = paper.addSimpleWorld("scoreboard-setting-world")
+            var persisted = 0
+            val service = qol(world, player, persistence = { persisted++ })
+            val screens = mutableListOf<ru.arc.paper.menu.PaperDialogScreen>()
+            val menus = DungeonSaveMenus(
+                service,
+                crystals = { null },
+                readQuests = { emptyList() },
+                show = { _, screen, _ -> screens += screen },
+            )
+
+            service.scoreboard.refresh(listOf(player))
+            service.scoreboard.value(player.uniqueId, "active") shouldBe "true"
+            menus.panel(player)
+            val enabledButton = screens.last().buttons.single { it.id.value == "scoreboard" }
+            net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+                .serialize(enabledButton.label) shouldContain "включено"
+
+            enabledButton.onClick.handle(mockk(relaxed = true))
+
+            persisted shouldBe 1
+            service.scoreboard.refresh(listOf(player))
+            service.scoreboard.value(player.uniqueId, "active") shouldBe "false"
+            val disabledButton = screens.last().buttons.single { it.id.value == "scoreboard" }
+            net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+                .serialize(disabledButton.label) shouldContain "выключено"
+
+            service.close()
+            val recreated = qol(world, player)
+            recreated.scoreboard.refresh(listOf(player))
+            recreated.scoreboard.value(player.uniqueId, "active") shouldBe "false"
             recreated.close()
         }
     }
