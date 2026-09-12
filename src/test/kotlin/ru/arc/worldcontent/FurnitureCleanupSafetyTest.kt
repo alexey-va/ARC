@@ -4,6 +4,10 @@ import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import org.bukkit.command.ConsoleCommandSender
+import org.bukkit.command.RemoteConsoleCommandSender
+import io.mockk.mockk
+import ru.arc.commands.arc.subcommands.FurnitureSubCommand
 import java.time.Instant
 import java.util.UUID
 
@@ -41,6 +45,37 @@ class FurnitureCleanupSafetyTest :
                         complexId = null,
                     ),
                 ) shouldBe null
+            }
+        }
+
+        describe("console cleanup-at parser") {
+            it("accepts finite coordinates and the radius boundaries") {
+                FurnitureCleanupAtInput.parse(arrayOf("cleanup-at", "spawn", "0.5", "70", "-0.5", "1")) shouldBe
+                    FurnitureCleanupAtInput.Preview("spawn", 0.5, 70.0, -0.5, 1)
+                FurnitureCleanupAtInput.parse(arrayOf("cleanup-at", "spawn", "0", "70", "0", "24", "confirm", "ab12cd")) shouldBe
+                    FurnitureCleanupAtInput.Confirm("spawn", 0.0, 70.0, 0.0, 24, "AB12CD")
+            }
+
+            it("rejects non-finite coordinates and out-of-range radius") {
+                listOf("NaN", "Infinity", "-Infinity").forEach { value ->
+                    runCatching {
+                        FurnitureCleanupAtInput.parse(arrayOf("cleanup-at", "spawn", value, "70", "0", "4"))
+                    }.isFailure shouldBe true
+                }
+                listOf("0", "25").forEach { radius ->
+                    runCatching {
+                        FurnitureCleanupAtInput.parse(arrayOf("cleanup-at", "spawn", "0", "70", "0", radius))
+                    }.isFailure shouldBe true
+                }
+            }
+        }
+
+        describe("console sender guard") {
+            it("accepts only local console and routes cleanup-at syntax") {
+                FurnitureSubCommand.allowsConsole(arrayOf("cleanup-at", "spawn", "0", "70", "0", "4")) shouldBe true
+                FurnitureSubCommand.allowsConsole(arrayOf("cleanup", "4")) shouldBe false
+                FurnitureSubCommand.isLocalConsoleSender(mockk<ConsoleCommandSender>()) shouldBe true
+                FurnitureSubCommand.isLocalConsoleSender(mockk<RemoteConsoleCommandSender>()) shouldBe false
             }
         }
 

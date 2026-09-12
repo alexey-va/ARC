@@ -140,14 +140,19 @@ class ArcCommand :
             return true
         }
 
+        // Furniture keeps its player-only metadata for the existing radius command;
+        // its explicit cleanup-at action performs a stricter local-console check.
+        val subArgs = args.drop(1).toTypedArray()
         // Check player-only
-        if (subCommand.playerOnly && sender.player == null) {
+        if (
+            subCommand.playerOnly && sender.player == null &&
+            !(subCommand === FurnitureSubCommand && FurnitureSubCommand.allowsConsole(subArgs))
+        ) {
             sender.sendMessage(CommandConfig.playerOnly())
             return true
         }
 
         // Execute subcommand with remaining args
-        val subArgs = args.drop(1).toTypedArray()
         return subCommand.execute(sender, subArgs)
     }
 

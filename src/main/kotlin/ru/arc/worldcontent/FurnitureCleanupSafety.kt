@@ -226,3 +226,63 @@ sealed interface FurnitureCleanupInput {
         }
     }
 }
+
+sealed interface FurnitureCleanupAtInput {
+    val worldName: String
+    val x: Double
+    val y: Double
+    val z: Double
+    val radius: Int
+
+    data class Preview(
+        override val worldName: String,
+        override val x: Double,
+        override val y: Double,
+        override val z: Double,
+        override val radius: Int,
+    ) : FurnitureCleanupAtInput
+
+    data class Confirm(
+        override val worldName: String,
+        override val x: Double,
+        override val y: Double,
+        override val z: Double,
+        override val radius: Int,
+        val token: String,
+    ) : FurnitureCleanupAtInput
+
+    companion object {
+        fun parse(args: Array<String>): FurnitureCleanupAtInput {
+            require(args.firstOrNull()?.equals("cleanup-at", ignoreCase = true) == true) {
+                "expected cleanup-at action"
+            }
+            val worldName = args.getOrNull(1)?.trim()?.takeIf(String::isNotEmpty)
+                ?: throw IllegalArgumentException("world must not be blank")
+            val x = finiteCoordinate(args.getOrNull(2), "x")
+            val y = finiteCoordinate(args.getOrNull(3), "y")
+            val z = finiteCoordinate(args.getOrNull(4), "z")
+            val radius = args.getOrNull(5)?.toIntOrNull()
+                ?: throw IllegalArgumentException("radius must be an integer")
+            require(radius in 1..FurnitureCleanupPlan.MAX_RADIUS) {
+                "radius must be in 1-${FurnitureCleanupPlan.MAX_RADIUS}"
+            }
+            return when {
+                args.size == 6 -> Preview(worldName, x, y, z, radius)
+                args.size == 8 && args[6].equals("confirm", ignoreCase = true) -> {
+                    val token = args[7].trim()
+                    require(token.matches(Regex("[A-Za-z0-9]{6}"))) {
+                        "confirmation token must contain 6 characters"
+                    }
+                    Confirm(worldName, x, y, z, radius, token.uppercase())
+                }
+                else -> throw IllegalArgumentException(
+                    "expected cleanup-at <world> <x> <y> <z> <radius> [confirm <token>]",
+                )
+            }
+        }
+
+        private fun finiteCoordinate(value: String?, label: String): Double =
+            value?.toDoubleOrNull()?.takeIf(Double::isFinite)
+                ?: throw IllegalArgumentException("$label must be a finite number")
+    }
+}
