@@ -162,6 +162,7 @@ internal data class PortalOriginGateSettings(
             suctionTurns: Double,
             suctionParticleSize: Float,
             suctionCoreCount: Int,
+            maxHeight: Float = 12.0f,
         ): PortalOriginGateSettings? {
             val normalizedDefaultStyle = PortalVisualStyle.parse(defaultStyle) ?: return null
             val normalizedItemIds =
@@ -175,7 +176,8 @@ internal data class PortalOriginGateSettings(
             if (openingDurationTicks !in 1..200 || closingDurationTicks !in 1..60) return null
             if (openingSoundDelayTicks !in 0..openingDurationTicks) return null
             if (!width.isFinite() || width !in 0.1f..12.0f) return null
-            if (!height.isFinite() || height !in 0.1f..12.0f) return null
+            if (!maxHeight.isFinite() || maxHeight !in 0.1f..20.0f) return null
+            if (!height.isFinite() || height !in 0.1f..maxHeight) return null
             if (!verticalOffset.isFinite() || verticalOffset !in 0.5..12.0) return null
             if (!yawOffsetDegrees.isFinite() || yawOffsetDegrees !in -360f..360f) return null
             if (!viewRange.isFinite() || viewRange !in 0.1f..4.0f) return null
@@ -287,6 +289,11 @@ internal class PortalOriginGateController(
         closingTicks++
         handle?.updateScale(originGateClosingScale(closingTicks, settings.closingDurationTicks))
         return true
+    }
+
+    /** Applies a bounded feature-owned idle pulse without exposing the display entity. */
+    fun updateScale(multiplier: Float) {
+        if (!removed) handle?.updateScale(multiplier)
     }
 
     fun remove() {
@@ -411,30 +418,50 @@ internal object BukkitPortalOriginGate {
         settings: PortalOriginGateSettings,
         style: PortalVisualStyle,
         viewerLocation: Location,
+    ): PortalOriginGateHandle? =
+        spawn(
+            base.location.clone().add(0.5, settings.verticalOffset, 0.5),
+            settings,
+            style,
+            viewerLocation,
+        )
+
+    /** Spawns a gate at an already resolved visual center, preserving its configured yaw. */
+    fun spawn(
+        center: Location,
+        settings: PortalOriginGateSettings,
+        style: PortalVisualStyle,
+    ): PortalOriginGateHandle? {
+        return spawn(center, settings, style, viewerLocation = null)
+    }
+
+    private fun spawn(
+        center: Location,
+        settings: PortalOriginGateSettings,
+        style: PortalVisualStyle,
+        viewerLocation: Location?,
     ): PortalOriginGateHandle? {
         if (!Bukkit.getPluginManager().isPluginEnabled("ItemsAdder")) return null
 
         val itemId = settings.itemIds[style] ?: return null
         val portalItem = item(itemId) ?: return missing(itemId)
-        val location =
-            base.location.clone().add(
-                0.5,
-                settings.verticalOffset,
-                0.5,
-            )
-        location.yaw =
-            originGateDisplayYaw(
-                location.x,
-                location.z,
-                viewerLocation.x,
-                viewerLocation.z,
-                settings.yawOffsetDegrees,
-            )
+        val location = center.clone()
+        if (viewerLocation != null) {
+            location.yaw =
+                originGateDisplayYaw(
+                    location.x,
+                    location.z,
+                    viewerLocation.x,
+                    viewerLocation.z,
+                    settings.yawOffsetDegrees,
+                )
+        }
         location.pitch = 0f
 
         var display: ItemDisplay? = null
         return try {
-            val created = base.world.spawn(location, ItemDisplay::class.java)
+            val world = location.world ?: return null
+            val created = world.spawn(location, ItemDisplay::class.java)
             display = created
             configure(created, portalItem, settings)
             BukkitPortalOriginGateHandle(created, location, settings)

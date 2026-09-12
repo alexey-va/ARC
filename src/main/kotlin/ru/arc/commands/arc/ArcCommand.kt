@@ -29,6 +29,7 @@ import ru.arc.commands.arc.subcommands.LocationPoolSubCommand
 import ru.arc.commands.arc.subcommands.LandsSubCommand
 import ru.arc.commands.arc.subcommands.NpcChatSubCommand
 import ru.arc.commands.arc.subcommands.OnboardingSubCommand
+import ru.arc.commands.arc.subcommands.OriginPortalsSubCommand
 import ru.arc.commands.arc.subcommands.LoggerSubCommand
 import ru.arc.commands.arc.subcommands.PouchSubCommand
 import ru.arc.commands.arc.subcommands.ProductPathSubCommand
@@ -78,6 +79,7 @@ class ArcCommand :
             RespawnOnRtpSubCommand,
             FirstRtpSubCommand,
             OnboardingSubCommand,
+            OriginPortalsSubCommand,
             RtpSubCommand,
             LocationPoolSubCommand,
             FurnitureSubCommand,

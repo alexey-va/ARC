@@ -24,7 +24,7 @@ class BreweryCommandAccessTest : TestBase() {
     override fun setUpBase() {
         super.setUpBase()
         mockkObject(BreweryTableDialogs)
-        every { BreweryTableDialogs.openOrder(any()) } just runs
+        every { BreweryTableDialogs.openOrder(any(), any()) } just runs
         arcCommand = ArcCommand()
         command = mock(BukkitCommand::class.java)
     }
@@ -41,7 +41,7 @@ class BreweryCommandAccessTest : TestBase() {
         visitor.isOp shouldBe false
         arcCommand.onCommand(visitor, command, "arc", arrayOf("brewery", "order")) shouldBe true
 
-        verify(exactly = 1) { BreweryTableDialogs.openOrder(visitor) }
+        verify(exactly = 1) { BreweryTableDialogs.openOrder(visitor, BreweryTableDialogs.Menu.FOOD) }
     }
 
     @Test
@@ -50,6 +50,13 @@ class BreweryCommandAccessTest : TestBase() {
 
         arcCommand.onCommand(visitor, command, "arc", arrayOf("brewery", "order", "extra")) shouldBe true
 
-        verify(exactly = 0) { BreweryTableDialogs.openOrder(any()) }
+        verify(exactly = 0) { BreweryTableDialogs.openOrder(any(), any()) }
+    }
+
+    @Test
+    fun `restaurant menu is an explicit public native dialog route`() {
+        val visitor = server.addPlayer("RestaurantVisitor")
+        arcCommand.onCommand(visitor, command, "arc", arrayOf("brewery", "order", "restaurant")) shouldBe true
+        verify(exactly = 1) { BreweryTableDialogs.openOrder(visitor, BreweryTableDialogs.Menu.RESTAURANT) }
     }
 }

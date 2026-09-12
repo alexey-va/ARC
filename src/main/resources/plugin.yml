@@ -203,6 +203,12 @@ permissions:
   arc.furniture.admin:
     description: Preview and confirm ItemsAdder furniture cleanup
     default: op
+  arc.origin.portals.admin:
+    description: Move ARC Origin portals
+    default: op
+  arc.origin.portals.bypass:
+    description: Bypass central ARC Origin portal teleport
+    default: false
   arc.product.path:
     description: Choose a recommended RusCrafting starter path
     default: true

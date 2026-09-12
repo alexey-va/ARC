@@ -19,14 +19,14 @@ class BreweryTableDialogsTest : FreeSpec({
     val context = mockk<PaperDialogClickContext>()
     val location = mockk<Location>(relaxed = true)
     val world = mockk<World>(relaxed = true)
-    var x = BreweryTableDialogs.TABLE_X
-    var y = BreweryTableDialogs.TABLE_Y
-    var z = BreweryTableDialogs.TABLE_Z
+    var x = BreweryTableDialogs.BREWERY_X
+    var y = BreweryTableDialogs.BREWERY_Y
+    var z = BreweryTableDialogs.BREWERY_Z
 
     beforeEach {
-        x = BreweryTableDialogs.TABLE_X
-        y = BreweryTableDialogs.TABLE_Y
-        z = BreweryTableDialogs.TABLE_Z
+        x = BreweryTableDialogs.BREWERY_X
+        y = BreweryTableDialogs.BREWERY_Y
+        z = BreweryTableDialogs.BREWERY_Z
         clearMocks(player, context, location, world)
         every { player.isOnline } returns true
         every { player.location } returns location
@@ -39,37 +39,54 @@ class BreweryTableDialogsTest : FreeSpec({
         every { context.player } returns player
     }
 
-    "order screen presents three fixed native choices" {
-        val screen = BreweryTableDialogs.orderScreen(player)
-        val text = screen.body.joinToString("\n") {
-            PlainTextComponentSerializer.plainText().serialize(it.text)
-        }
-
-        screen.id shouldBe BreweryTableDialogs.SCREEN_ID
-        text shouldContain "Луи"
-        text shouldContain "ПКМ по стулу"
-        screen.buttons.map { it.id.value } shouldContainExactly listOf("brewery_egg", "brewery_fish", "brewery_steak")
-        screen.buttons.map {
-            PlainTextComponentSerializer.plainText().serialize(it.label)
-        } shouldContainExactly listOf("Яичница с травами", "Запечённая рыба", "Стейк с перцем")
+    "food screen is native, priced, and has no close button" {
+        val screen = BreweryTableDialogs.orderScreen(player, BreweryTableDialogs.Menu.FOOD)
+        val body = screen.body.joinToString("\n") { PlainTextComponentSerializer.plainText().serialize(it.text) }
+        screen.id shouldBe "dining.food.order"
+        body shouldContain "блюдо"
+        screen.buttons.map { it.id.value } shouldContainExactly listOf("food_egg", "food_fish", "food_steak")
+        screen.buttons.map { PlainTextComponentSerializer.plainText().serialize(it.label) } shouldContainExactly
+            listOf("Яичница с травами · 300 ⛂", "Запечённая рыба · 450 ⛂", "Стейк с перцем · 650 ⛂")
         screen.buttons.all { it.closeDialogBeforeAction } shouldBe true
-        screen.buttons.all {
-            PlainTextComponentSerializer.plainText().serialize(it.tooltip).isNotBlank()
-        } shouldBe true
     }
 
-    "dish buttons issue only their fixed player command" {
-        BreweryTableDialogs.orderScreen(player).buttons.forEach { it.onClick.handle(context) }
+    "campfire screen offers three drinks" {
+        val screen = BreweryTableDialogs.orderScreen(player, BreweryTableDialogs.Menu.DRINKS)
+        screen.id shouldBe "dining.drinks.order"
+        screen.buttons.map { it.id.value } shouldContainExactly
+            listOf("drinks_herbal_tea", "drinks_berry_kvass", "drinks_spiced_mead")
+    }
 
+    "restaurant includes meals and one drink" {
+        x = BreweryTableDialogs.RESTAURANT_X
+        y = BreweryTableDialogs.RESTAURANT_Y
+        z = BreweryTableDialogs.RESTAURANT_Z
+        val screen = BreweryTableDialogs.orderScreen(player, BreweryTableDialogs.Menu.RESTAURANT)
+        screen.buttons.map { it.id.value } shouldContainExactly
+            listOf("restaurant_egg", "restaurant_fish", "restaurant_steak", "restaurant_herbal_tea")
+    }
+
+    "courtyard combines all fixed food and drink choices" {
+        val screen = BreweryTableDialogs.orderScreen(player, BreweryTableDialogs.Menu.COURTYARD)
+        screen.id shouldBe "dining.courtyard.order"
+        screen.buttons.map { it.id.value } shouldContainExactly
+            listOf(
+                "courtyard_egg",
+                "courtyard_fish",
+                "courtyard_steak",
+                "courtyard_herbal_tea",
+                "courtyard_berry_kvass",
+                "courtyard_spiced_mead",
+            )
+    }
+
+    "callbacks use fixed commands and recheck the venue" {
+        BreweryTableDialogs.orderScreen(player, BreweryTableDialogs.Menu.FOOD).buttons.forEach { it.onClick.handle(context) }
         verify(exactly = 1) { player.performCommand("rcbreweryorder egg") }
         verify(exactly = 1) { player.performCommand("rcbreweryorder fish") }
         verify(exactly = 1) { player.performCommand("rcbreweryorder steak") }
-    }
-
-    "order callback rechecks the table boundary" {
-        x = BreweryTableDialogs.TABLE_X + BreweryTableDialogs.TABLE_RADIUS + 0.01
-        BreweryTableDialogs.orderScreen(player).buttons.first().onClick.handle(context)
-
-        verify(exactly = 0) { player.performCommand(any()) }
+        x = BreweryTableDialogs.BREWERY_X + BreweryTableDialogs.BREWERY_RADIUS + 0.01
+        BreweryTableDialogs.orderScreen(player, BreweryTableDialogs.Menu.FOOD).buttons.first().onClick.handle(context)
+        verify(exactly = 3) { player.performCommand(any()) }
     }
 })

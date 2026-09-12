@@ -74,6 +74,7 @@ import ru.arc.redis.RedisManager
 import ru.arc.ops.OpsHttpModule
 import ru.arc.onboarding.OnboardingModule
 import ru.arc.origin.OriginSpawnModule
+import ru.arc.origin.OriginPortalsModule
 import ru.arc.paper.chunk.PaperChunkTicketRegistry
 import ru.arc.restart.RestartModule
 import ru.arc.rtp.RtpPlayerRegistry
@@ -209,6 +210,7 @@ open class ARC : JavaPlugin() {
             HooksModule,
             NpcChunkTicketModule,
             OriginSpawnModule,
+            OriginPortalsModule,
             AiModule,
             EconomyModule,
             // Configuration (priority 30-49)

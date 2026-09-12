@@ -113,6 +113,12 @@ commands:
     aliases: [ ]
     permission: arc.admin
     usage: /arc onboarding reset <player|uuid>
+  originportals:
+    name: originportals
+    aliases: [origin-portals]
+    permission: arc.origin.portals.admin
+    player-only: true
+    usage: /arc originportals move <survival|mining|vanilla|gallery_exit>
   locpool:
     name: locationpool
     aliases: [ ]

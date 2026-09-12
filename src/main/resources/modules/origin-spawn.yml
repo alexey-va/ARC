@@ -3,6 +3,80 @@
 enabled: false
 world: rc_origin_spawn
 
+# ARC-owned Origin gates. The defaults are the visual centers; move them in-game
+# with `/arc originportals move <survival|mining|vanilla|gallery_exit>`.
+origin-portals:
+  enabled: true
+  vertical-offset: 5.5
+  entry-depth: 2.0
+  items:
+    origin: origin_gate_portals:origin_portal
+    astral: origin_gate_portals:astral_portal
+    chaos: origin_gate_portals:chaos_portal
+    solar: origin_gate_portals:solar_portal
+    void: origin_gate_portals:void_portal
+  pulse:
+    amplitude: 0.035
+    period-ticks: 36
+  particles:
+    enabled: true
+    streams: 4
+    reduced-streams: 2
+    points-per-stream: 2
+    reduced-points-per-stream: 1
+    radius: 5.5
+    height: 8.4
+    turns: 1.75
+    size: 0.6
+    core-count: 4
+    full-distance: 24.0
+    reduced-distance: 40.0
+  anchors:
+    survival:
+      world: rc_origin_spawn
+      x: 9.5
+      y: 70.0
+      z: 0.5
+      yaw: 270.0
+      width: 12.0
+      height: 16.8
+      style: origin
+      label: Выживание
+      command: arc rtp survival --only-if-first
+    mining:
+      world: rc_origin_spawn
+      x: 6.914214
+      y: 70.0
+      z: -5.914214
+      yaw: 225.0
+      width: 12.0
+      height: 16.8
+      style: astral
+      label: Ресурсы
+      command: arc rtp mining --only-if-first
+    vanilla:
+      world: rc_origin_spawn
+      x: 6.914214
+      y: 70.0
+      z: 6.914214
+      yaw: 315.0
+      width: 12.0
+      height: 16.8
+      style: void
+      label: Ваниль
+      command: arc rtp vanilla --only-if-first
+    gallery_exit:
+      world: rc_atelier_furniture_gallery
+      x: 36.5
+      y: 67.0
+      z: 60.5
+      yaw: 90.0
+      width: 4.5
+      height: 6.3
+      style: origin
+      label: Вернуться в Origin
+      command: rcfurniturereturn
+
 # BlueMap Origin mask: X -256..256, Z -192..160. Chunk bounds are inclusive.
 chunks:
   min-x: -16

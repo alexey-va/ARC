@@ -42,12 +42,12 @@ class FurnitureDialogsTest : FreeSpec({
         screen.buttons.single().closeDialogBeforeAction shouldBe false
     }
 
-    "gallery keeps nine readable native actions and closes before travel" {
+    "gallery keeps one readable native action and closes before travel" {
         val screen = FurnitureDialogs.galleryScreen(player)
 
         screen.id shouldBe "furniture.gallery"
         screen.columns shouldBe 1
-        PlainTextComponentSerializer.plainText().serialize(screen.body.first().text) shouldContain "774"
+        PlainTextComponentSerializer.plainText().serialize(screen.body.first().text) shouldContain "без выставленных предметов"
         screen.body.joinToString("\n") { PlainTextComponentSerializer.plainText().serialize(it.text) } shouldNotContain "manifest"
         screen.buttons.map { it.id.value }.shouldContainExactly(FurnitureDialogs.rooms.map { it.id })
         screen.buttons.all { it.closeDialogBeforeAction } shouldBe true
@@ -58,16 +58,16 @@ class FurnitureDialogsTest : FreeSpec({
     }
 
     "gallery callback uses only the fixed reviewed room command" {
-        val button = FurnitureDialogs.galleryScreen(player).buttons.single { it.id.value == "room_03" }
+        val button = FurnitureDialogs.galleryScreen(player).buttons.single { it.id.value == "room_01" }
 
         button.onClick.handle(context)
 
-        verify(exactly = 1) { player.performCommand("rcfurniturevisit room_03") }
+        verify(exactly = 1) { player.performCommand("rcfurniturevisit room_01") }
     }
 
     "gallery callback refuses a player who left the supported entry worlds" {
         every { player.world.name } returns "survival"
-        val button = FurnitureDialogs.galleryScreen(player).buttons.single { it.id.value == "room_03" }
+        val button = FurnitureDialogs.galleryScreen(player).buttons.single { it.id.value == "room_01" }
 
         button.onClick.handle(context)
 

@@ -42,7 +42,7 @@ class FurnitureCommandAccessTest : TestBase() {
     @Test
     fun `only exact public furniture actions bypass admin permission`() {
         val visitor = server.addPlayer("FurnitureVisitor")
-        listOf("guide", "gallery", "shop").forEach { action ->
+        listOf("guide", "gallery").forEach { action ->
             arcCommand.onCommand(visitor, command, "arc", arrayOf("furniture", action)) shouldBe true
         }
         val cleanup = arcCommand.onCommand(visitor, command, "arc", arrayOf("furniture", "cleanup", "4"))
@@ -50,7 +50,7 @@ class FurnitureCommandAccessTest : TestBase() {
 
         cleanup shouldBe true
         guideWithExtraArg shouldBe true
-        verify(exactly = 3) { FurnitureSubCommand.execute(any<CommandSender>(), any<Array<String>>()) }
+        verify(exactly = 2) { FurnitureSubCommand.execute(any<CommandSender>(), any<Array<String>>()) }
     }
 
 }

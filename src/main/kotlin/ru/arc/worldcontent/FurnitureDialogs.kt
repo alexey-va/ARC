@@ -11,7 +11,7 @@ import ru.arc.paper.menu.PaperDialogBody
 import ru.arc.paper.menu.PaperDialogButton
 import ru.arc.paper.menu.PaperDialogScreen
 
-/** Native read-only furniture guide and fixed-room gallery entry points. */
+/** Native read-only furniture guide and exhibition-hall entry point. */
 object FurnitureDialogs {
     internal const val ORIGIN_WORLD = "rc_origin_spawn"
     internal const val GALLERY_WORLD = "rc_atelier_furniture_gallery"
@@ -23,21 +23,12 @@ object FurnitureDialogs {
     internal data class GalleryRoom(
         val id: String,
         val label: String,
-        val count: Int,
     )
 
     // Reviewed against origin_furniture_gallery.dsc; commands stay fixed so
     // no dialog value can become a player-command argument.
     internal val rooms = listOf(
-        GalleryRoom("room_01", "FurniturePlus · студия", 86),
-        GalleryRoom("room_02", "Королевский салон · школа", 86),
-        GalleryRoom("room_03", "Пути · реликвии", 86),
-        GalleryRoom("room_04", "Сад · ресторан · зверята", 86),
-        GalleryRoom("room_05", "Itemshop · подземелье", 86),
-        GalleryRoom("room_06", "Япония · Китай · алхимия", 86),
-        GalleryRoom("room_07", "Парк · сезоны · зелья", 86),
-        GalleryRoom("room_08", "Япония · Египет · подземелья", 86),
-        GalleryRoom("room_09", "Рынок · ферма · кузница", 86),
+        GalleryRoom("room_01", "Главный выставочный зал"),
     )
 
     private val visitCommands = rooms.associate { it.id to "rcfurniturevisit ${it.id}" }
@@ -76,7 +67,7 @@ object FurnitureDialogs {
             PaperDialogButton(
                 id = PaperDialogActionId.of("gallery"),
                 label = styled("Выставка мебели ›", actionColor),
-                tooltip = component("Открыть девять залов с мебелью."),
+                tooltip = component("Открыть главный выставочный зал."),
                 onClick = { showGallery(player) },
             ),
         ),
@@ -87,14 +78,14 @@ object FurnitureDialogs {
         id = "furniture.gallery",
         title = styled("Выставка мебели", titleColor),
         body = listOf(
-            prose("Выберите зал для перехода. На выставке собраны 774 модели мебели."),
-            prose("Портал в конце зала вернёт вас в Origin."),
+            prose("Главный зал подготовлен для будущей мебельной экспозиции. Сейчас он открыт без выставленных предметов."),
+            prose("Осмотрите пространство и вернитесь в Origin через портал в конце зала."),
         ),
         buttons = rooms.map { room ->
             PaperDialogButton(
                 id = PaperDialogActionId.of(room.id.replace('-', '_')),
                 label = styled("${room.label} ›", actionColor),
-                tooltip = component("Перейти в зал · ${room.count} моделей."),
+                tooltip = component("Перейти в оформленный выставочный зал."),
                 width = 320,
                 closeDialogBeforeAction = true,
                 onClick = { context -> visitIfCurrent(context.player, room.id) },
