@@ -17,7 +17,33 @@ class RewardCatalogModuleConfigTest : StringSpec({
         }
     }
 
-    "parses treasure preset and pouch sources with an optional native name" {
+    "missing presentation keys use defaults without disabling the catalogue" {
+        val root = Files.createTempDirectory("arc-reward-catalog-defaults")
+        try {
+            writeConfig(root, """
+                enabled: true
+                categories:
+                  common:
+                    entries:
+                      reward:
+                        preset: reward_preset
+            """.trimIndent())
+
+            val settings = RewardCatalogModuleConfig.load(root).snapshot()
+            settings.enabled shouldBe true
+            settings.title shouldBe "<gold><bold>Сокровищница наград"
+            settings.categories.single().apply {
+                name shouldBe "common"
+                description shouldBe emptyList()
+                icon shouldBe CatalogIconStyle("CHEST")
+                entries.single().description shouldBe emptyList()
+            }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    "parses reward sources with optional presentation fields and tolerant defaults" {
         val root = Files.createTempDirectory("arc-reward-catalog-sources")
         try {
             writeConfig(root, """
@@ -44,9 +70,10 @@ class RewardCatalogModuleConfigTest : StringSpec({
                         name: '<white>Пресет'
                         description: []
                         preset: reward_preset
+                        preview-itemsadder: iageneric:coin
+                        future-presentation-field: ignored
                       pouch:
                         name: '<white>Мешочек'
-                        description: []
                         requires: []
                         pouch: reward_pouch
             """.trimIndent())
@@ -61,7 +88,10 @@ class RewardCatalogModuleConfigTest : StringSpec({
             category.entries.single { it.id == "native" }.requires shouldBe listOf("Slimefun")
             category.entries.single { it.id == "preset" }.requires shouldBe emptyList()
             category.entries.single { it.id == "preset" }.source shouldBe RewardCatalogSource.Preset("reward_preset")
+            category.entries.single { it.id == "preset" }.previewItemsAdder shouldBe "iageneric:coin"
             category.entries.single { it.id == "pouch" }.source shouldBe RewardCatalogSource.Pouch("reward_pouch")
+            category.entries.single { it.id == "pouch" }.description shouldBe emptyList()
+            category.entries.single { it.id == "pouch" }.previewItemsAdder shouldBe null
             category.entries.single { it.id == "command" }.source shouldBe RewardCatalogSource.Treasure("common", "command")
         } finally {
             root.toFile().deleteRecursively()
@@ -94,7 +124,7 @@ class RewardCatalogModuleConfigTest : StringSpec({
         }
     }
 
-    "rejects an unnamespaced ItemsAdder preview id" {
+    "ignores an invalid optional ItemsAdder preview id" {
         val root = Files.createTempDirectory("arc-reward-catalog-preview-invalid")
         try {
             writeConfig(root, """
@@ -112,13 +142,13 @@ class RewardCatalogModuleConfigTest : StringSpec({
                         preview-itemsadder: coin
             """.trimIndent())
 
-            runCatching { RewardCatalogModuleConfig.load(root).snapshot() }.isFailure shouldBe true
+            RewardCatalogModuleConfig.load(root).snapshot().categories.single().entries.single().previewItemsAdder shouldBe null
         } finally {
             root.toFile().deleteRecursively()
         }
     }
 
-    "rejects unknown keys and multiple reward providers" {
+    "ignores extension fields but rejects multiple reward providers" {
         val root = Files.createTempDirectory("arc-reward-catalog-invalid")
         try {
             writeConfig(root, """
@@ -136,7 +166,7 @@ class RewardCatalogModuleConfigTest : StringSpec({
                         requires: []
                         treasure: {pool: common, id: bad}
                         preset: bad
-                        extra: true
+                        future-presentation-field: ignored
             """.trimIndent())
 
             runCatching { RewardCatalogModuleConfig.load(root).snapshot() }.isFailure shouldBe true
@@ -145,7 +175,7 @@ class RewardCatalogModuleConfigTest : StringSpec({
         }
     }
 
-    "rejects non-canonical custom model map keys" {
+    "uses the default model when an unknown presentation key is present" {
         val root = Files.createTempDirectory("arc-reward-catalog-icon-invalid")
         try {
             writeConfig(root, """
@@ -159,7 +189,7 @@ class RewardCatalogModuleConfigTest : StringSpec({
                     entries: {}
             """.trimIndent())
 
-            runCatching { RewardCatalogModuleConfig.load(root).snapshot() }.isFailure shouldBe true
+            RewardCatalogModuleConfig.load(root).snapshot().categories.single().icon.customModelData shouldBe 0
         } finally {
             root.toFile().deleteRecursively()
         }

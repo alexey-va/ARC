@@ -32,13 +32,13 @@ object ItemsCatalogModule : PluginModule {
     override fun init() {
         start(
             ItemsCatalogModuleConfig.load(ARC.instance.dataPath).snapshot(),
-            RewardCatalogModuleConfig.load(ARC.instance.dataPath).snapshot(),
+            loadRewardCatalogOrDefault(),
         )
     }
 
     override fun reload() {
         val loaded = ItemsCatalogModuleConfig.load(ARC.instance.dataPath).snapshot()
-        val rewards = RewardCatalogModuleConfig.load(ARC.instance.dataPath).snapshot()
+        val rewards = loadRewardCatalogOrDefault()
         shutdownRuntime()
         start(loaded, rewards)
     }
@@ -83,6 +83,17 @@ object ItemsCatalogModule : PluginModule {
 
     internal fun materializeItem(reference: ArcItemMaterializationReference): List<org.bukkit.inventory.ItemStack>? =
         rewardController?.materializeCaseReward(reference)
+
+    private fun loadRewardCatalogOrDefault(): RewardCatalogSettings =
+        rewardCatalogOrDefault(
+            load = { RewardCatalogModuleConfig.load(ARC.instance.dataPath).snapshot() },
+            onFailure = { failure ->
+                warn(
+                    "Reward catalogue configuration is invalid; reward tab disabled while the item catalogue stays available: {}",
+                    failure.message ?: failure.javaClass.simpleName,
+                )
+            },
+        )
 
     private fun start(loaded: ItemsCatalogSettings, rewards: RewardCatalogSettings) {
         settings = loaded
@@ -175,3 +186,17 @@ object ItemsCatalogModule : PluginModule {
         service = null
     }
 }
+
+internal fun rewardCatalogOrDefault(
+    load: () -> RewardCatalogSettings,
+    onFailure: (Throwable) -> Unit = {},
+): RewardCatalogSettings =
+    runCatching(load).getOrElse { failure ->
+        onFailure(failure)
+        RewardCatalogSettings(
+            enabled = false,
+            title = "<gold><bold>Сокровищница наград",
+            categories = emptyList(),
+            messages = RewardCatalogMessages.DEFAULT,
+        )
+    }

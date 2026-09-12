@@ -101,6 +101,24 @@ class WorldSceneManagerTest :
                 block.type shouldBe Material.STONE
                 manager.get("rollback_scene")!!.objects.single().blockData shouldBe "stone"
             }
+
+            it("allows an empty vanilla chest interaction anchor") {
+                val world = server.addSimpleWorld("scene-chest-world")
+                world.getChunkAt(0, 0).load()
+                val block = world.getBlockAt(5, 64, 5)
+                val spec =
+                    WorldSceneSpec(
+                        "chest_scene",
+                        listOf(SceneObjectSpec.block("crate", world.name, 5, 64, 5, "minecraft:chest[facing=north,type=single,waterlogged=false]")),
+                    )
+
+                manager.apply(spec, manager.preview(spec).reviewDigest)
+                block.type shouldBe Material.CHEST
+
+                val deletion = manager.previewDelete("chest_scene")
+                manager.delete("chest_scene", deletion.reviewDigest)
+                block.type shouldBe Material.AIR
+            }
         }
 
         describe("ItemsAdder furniture ownership") {

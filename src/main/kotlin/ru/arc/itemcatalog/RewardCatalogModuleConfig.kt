@@ -12,7 +12,7 @@ class RewardCatalogModuleConfig(private val config: Config) {
         val enabled =
             config.booleanOrNull("enabled")
                 ?: if (!config.exists("enabled")) false else throw invalid("enabled", "expected boolean")
-        val title = requiredString(config.stringOrNull("title"), "title", TITLE_LIMIT)
+        val title = config.stringOrNull("title")?.let { requiredString(it, "title", TITLE_LIMIT) } ?: DEFAULT_TITLE
         val categoriesMap = mapAt("categories")
         require(categoriesMap.size <= MAX_CATEGORIES) {
             "Reward catalog supports at most $MAX_CATEGORIES categories"
@@ -49,8 +49,7 @@ class RewardCatalogModuleConfig(private val config: Config) {
             val id = normalizedId(rawId, "package")
             val path = "packages.$id"
             val map = strictMap(raw, path)
-            rejectUnknown(map, setOf("name", "items"), path)
-            val name = requiredString(map.required("name", path), "$path.name", NAME_LIMIT)
+            val name = if ("name" in map) requiredString(map["name"], "$path.name", NAME_LIMIT) else id
             val rawItems = map["items"] as? List<*> ?: throw invalid("$path.items", "expected list")
             require(rawItems.size in 1..216) { "$path must contain 1..216 furniture items" }
             val items = rawItems.map { requiredId(it, "$path.items", ITEMSADDER_ID) }
@@ -62,11 +61,10 @@ class RewardCatalogModuleConfig(private val config: Config) {
     private fun parseCategory(rawId: String, rawValue: Any?): RewardCatalogCategory {
         val id = normalizedId(rawId, "category")
         val map = strictMap(rawValue, "categories.$id")
-        rejectUnknown(map, CATEGORY_KEYS, "categories.$id")
-        val name = requiredString(map.required("name", "categories.$id"), "categories.$id.name", NAME_LIMIT)
-        val description = stringList(map.required("description", "categories.$id"), "categories.$id.description")
-        val icon = material(map.required("icon", "categories.$id"), "categories.$id.icon")
-        val entriesMap = strictMap(map.required("entries", "categories.$id"), "categories.$id.entries")
+        val name = if ("name" in map) requiredString(map["name"], "categories.$id.name", NAME_LIMIT) else id
+        val description = if ("description" in map) stringList(map["description"], "categories.$id.description") else emptyList()
+        val icon = if ("icon" in map) material(map["icon"], "categories.$id.icon") else CatalogIconStyle("CHEST")
+        val entriesMap = if ("entries" in map) strictMap(map["entries"], "categories.$id.entries") else emptyMap()
         require(entriesMap.size <= MAX_ENTRIES_PER_CATEGORY) {
             "Reward catalog category '$id' supports at most $MAX_ENTRIES_PER_CATEGORY entries"
         }
@@ -91,9 +89,8 @@ class RewardCatalogModuleConfig(private val config: Config) {
         val id = normalizedId(rawId, "entry in category '$categoryId'")
         val path = "categories.$categoryId.entries.$id"
         val map = strictMap(rawValue, path)
-        rejectUnknown(map, ENTRY_KEYS, path)
         val name = if ("name" in map) requiredString(map["name"], "$path.name", NAME_LIMIT) else null
-        val description = stringList(map.required("description", path), "$path.description")
+        val description = if ("description" in map) stringList(map["description"], "$path.description") else emptyList()
         val rarity = if ("rarity" in map) requiredString(map["rarity"], "$path.rarity", RARITY_LIMIT) else null
         val requires =
             if ("requires" in map) pluginList(map["requires"], "$path.requires") else emptyList()
@@ -129,9 +126,10 @@ class RewardCatalogModuleConfig(private val config: Config) {
                 }
             }
         } else emptyMap()
-        val previewItemsAdder = if ("preview-itemsadder" in map) {
-            requiredId(map["preview-itemsadder"], "$path.preview-itemsadder", ITEMSADDER_ID)
-        } else null
+        val previewItemsAdder =
+            (map["preview-itemsadder"] as? String)
+                ?.trim()
+                ?.takeIf { ITEMSADDER_ID.matches(it) }
         return RewardCatalogEntry(id, name, description, rarity, requires, source, icon, weight, enchantments, previewItemsAdder)
     }
 
@@ -173,7 +171,6 @@ class RewardCatalogModuleConfig(private val config: Config) {
         val path = "messages"
         if (!config.exists(path)) return RewardCatalogMessages.DEFAULT
         val map = mapAt(path)
-        rejectUnknown(map, MESSAGE_KEYS, path)
         fun message(key: String, fallback: String) =
             if (key in map) requiredString(map[key], "$path.$key", MESSAGE_LIMIT)
             else bounded(fallback, "$path.$key", MESSAGE_LIMIT)
@@ -215,7 +212,6 @@ class RewardCatalogModuleConfig(private val config: Config) {
             is String -> materialStyle(raw, path)
             is Map<*, *> -> {
                 val map = strictMap(raw, path)
-                rejectUnknown(map, ICON_KEYS, path)
                 val material = materialStyle(requiredString(map.required("material", path), "$path.material", 64), "$path.material")
                 val customModelData =
                     if ("custom-model-data" in map) {
@@ -301,6 +297,7 @@ class RewardCatalogModuleConfig(private val config: Config) {
         const val MAX_ENTRIES_PER_CATEGORY = 512
         const val MAX_ENTRIES = 2_000
         private const val TITLE_LIMIT = 160
+        private const val DEFAULT_TITLE = "<gold><bold>Сокровищница наград"
         private const val NAME_LIMIT = 120
         private const val DESCRIPTION_LIMIT = 180
         private const val RARITY_LIMIT = 48
@@ -316,11 +313,7 @@ class RewardCatalogModuleConfig(private val config: Config) {
         private val ITEMSADDER_ID = Regex("[a-z0-9_]+:[a-z0-9_/.-]+")
         private val ENCHANTMENT_ID = Regex("(?:minecraft:)?[a-z_]+")
         private val PLUGIN_ID = Regex("[A-Za-z0-9._-]{1,64}")
-        private val CATEGORY_KEYS = setOf("name", "description", "icon", "entries", "parent", "rolls")
-        private val ENTRY_KEYS = setOf("name", "description", "rarity", "requires", "treasure", "preset", "pouch", "seal", "itemsadder", "preview-itemsadder", "planned", "mount", "package", "icon", "weight", "enchantments")
-        private val ICON_KEYS = setOf("material", "custom-model-data")
         private val SOURCE_KEYS = setOf("treasure", "preset", "pouch", "seal", "itemsadder", "planned", "mount", "package")
-        private val MESSAGE_KEYS = setOf("unavailable", "inventory-full", "given", "accepted", "action-failed")
 
         fun load(dataPath: Path): RewardCatalogModuleConfig =
             RewardCatalogModuleConfig(ConfigManager.ofModule(dataPath, "reward-catalog.yml"))

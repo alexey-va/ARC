@@ -9,6 +9,7 @@ import org.bukkit.block.data.type.Bed
 import org.bukkit.block.data.type.Door
 import org.bukkit.block.data.type.Sign
 import org.bukkit.block.data.type.WallSign
+import org.bukkit.inventory.InventoryHolder
 import ru.arc.common.chests.FurnitureBarrierTracker
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -357,6 +358,7 @@ class WorldSceneManager(
                 if (block.blockData.asString != state.appliedBlockData) {
                     throw SceneReviewConflictException("managed block changed: ${state.spec.id}")
                 }
+                requireEmptyInventory(state.spec.id, block.state as? InventoryHolder)
                 block.setBlockData(Bukkit.createBlockData(requireNotNull(state.priorBlockData)), false)
             }
 
@@ -447,7 +449,19 @@ class WorldSceneManager(
                 "JUKEBOX", "TNT", "FIRE", "PORTAL", "REDSTONE", "REPEATER", "COMPARATOR", "PISTON",
                 "_SIGN", "_HEAD", "_SKULL",
             )
-        require(forbidden.none(name::contains)) { "Unsafe managed block material: $material" }
+        // An ordinary chest is a useful non-custom interaction anchor. It is
+        // safe here because scene reconciliation refuses to replace or remove
+        // it after anybody has placed an item inside.
+        require(material == Material.CHEST || forbidden.none(name::contains)) { "Unsafe managed block material: $material" }
+    }
+
+    private fun requireEmptyInventory(
+        objectId: String,
+        holder: InventoryHolder?,
+    ) {
+        if (holder != null && holder.inventory.any { it != null && !it.type.isAir }) {
+            throw SceneReviewConflictException("managed container is not empty: $objectId")
+        }
     }
 
     private fun saveInterim(

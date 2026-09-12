@@ -34,7 +34,11 @@ reward route stays available while the ItemsAdder index is loading.
 
 `RewardCatalogModuleConfig` reads the separate portable
 `modules/reward-catalog.yml`. Its bundled default is disabled and has no
-operator entries. The schema is intentionally narrow:
+operator entries. Missing presentation settings use bounded code defaults without
+rewriting operator-owned categories or packages. Unknown presentation
+extensions are ignored, while reward-source, probability, hierarchy and delivery
+invariants remain strict. If the reward catalogue is invalid, only its tab is
+disabled: the main ItemsAdder catalogue still starts.
 
 ```yaml
 enabled: false
@@ -53,6 +57,7 @@ categories:
         requires: [ItemsAdder]
         treasure: { pool: common, id: voucher }
         icon: { material: PAPER, custom-model-data: 0 }
+        preview-itemsadder: iageneric:coin # optional display model; icon/source is the fallback
 ```
 
 Each entry has exactly one source: `treasure` (`pool` + `id`), `preset`,
@@ -111,6 +116,10 @@ profile on spawn and survival. `categories.<id>.item-action` overrides a group
 fallback, while `groups.<id>.item-action` configures the default for every item
 in that group. A new ItemsAdder category that does not match a
 curated group appears automatically as a root category.
+
+The ARC deployment helper runs `RewardCatalogDeploymentCompatibilityTest` against
+every selected tracked runtime `reward-catalog.yml` before building the candidate
+JAR. This keeps the parser and deployed operator catalogue in one compatibility gate.
 
 ## Verification
 
