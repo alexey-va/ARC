@@ -76,7 +76,7 @@ class DungeonSaveMenusTest : FreeSpec({
         val shown = mutableListOf<PaperDialogScreen>()
         DungeonSaveMenus(dungeon) { _, screen, _ -> shown += screen }.open(player)
         shown.single().id shouldBe "dungeon.panel.unavailable"
-        shown.single().buttons.map { it.id.value } shouldBe listOf("return", "shops", "lost_loot", "guide", "portals", "list", "party")
+        shown.single().buttons.map { it.id.value } shouldBe listOf("return", "scoreboard", "shops", "lost_loot", "guide", "portals", "list", "party")
         shown.single().exitButton!!.id.value shouldBe "back"
         shown.single().exitButton!!.closeDialogBeforeAction shouldBe false
         shown.single().body.map { it.text } shouldBe listOf(
