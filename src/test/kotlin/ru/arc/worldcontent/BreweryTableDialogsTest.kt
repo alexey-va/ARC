@@ -46,7 +46,7 @@ class BreweryTableDialogsTest : FreeSpec({
         body shouldContain "блюдо"
         screen.buttons.map { it.id.value } shouldContainExactly listOf("food_egg", "food_fish", "food_steak")
         screen.buttons.map { PlainTextComponentSerializer.plainText().serialize(it.label) } shouldContainExactly
-            listOf("Яичница с травами · 300 ⛂", "Запечённая рыба · 450 ⛂", "Стейк с перцем · 650 ⛂")
+            listOf("Яичница с травами · 300 💰", "Запечённая рыба · 450 💰", "Стейк с перцем · 650 💰")
         screen.buttons.all { it.closeDialogBeforeAction } shouldBe true
     }
 

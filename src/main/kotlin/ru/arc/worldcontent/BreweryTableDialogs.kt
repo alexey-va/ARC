@@ -101,7 +101,7 @@ object BreweryTableDialogs {
                 choices.map { dish ->
                     PaperDialogButton(
                         id = PaperDialogActionId.of("${menu.id}_${dish.id}"),
-                        label = styled("${dish.label} · ${dish.price} ⛂", dish.color),
+                        label = styled("${dish.label} · ${dish.price} 💰", dish.color),
                         tooltip = component(dish.tooltip),
                         width = 320,
                         closeDialogBeforeAction = true,
