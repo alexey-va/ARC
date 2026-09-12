@@ -17,4 +17,8 @@ class BankHookTest :
             hook.account(playerId, "CachedName") shouldBe BankHook.Account(balance = 125.5, pendingInterest = 4.25)
             identifiers shouldBe listOf(playerId)
         }
+
+        "recovers stale SQL locks only after Bank's force-load safety window" {
+            BankHook.STALE_LOCK_RECOVERY_TICKS shouldBe 620L
+        }
     })

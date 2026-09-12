@@ -336,7 +336,7 @@ class HookRegistry(
             "zAuctionHouse",
             "zAuctionHouseV3",
         )
-        register("Bank", true) { bankHook = BankHook() }
+        register("Bank", true) { bankHook = registerListener(BankHook()) }
         register("Parties", true) { partiesHook = PartiesHook() }
         register("RedisEconomy", true) {
             val hook = RedisEcoHook()
