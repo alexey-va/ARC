@@ -96,7 +96,7 @@ internal class FurnitureShopDialogController(
         }
         val screen = PaperDialogScreen(
             id = "furniture.shop.category.$categoryIndex.page.${page.page}",
-            title = light(category.name, TRADE_COLOR).decorate(TextDecoration.BOLD),
+            title = light(categoryTitle(category.name), TRADE_COLOR).decorate(TextDecoration.BOLD),
             body = listOf(
                 PaperDialogBody(
                     light("Выберите предмет. Показана актуальная цена из магазина · страница ${page.page + 1}/${page.pages}."),
@@ -222,8 +222,8 @@ internal class FurnitureShopDialogController(
 
     private fun categoryLabel(category: Category): Component =
         light("○ ", WHITE)
-            .append(light(category.name, WHITE))
-            .append(light(" · ${category.offers.size} поз. ›", TRADE_COLOR))
+            .append(light(categoryTitle(category.name), PAGE_COLOR))
+            .append(light(" · ${category.offers.size} поз. ›", PAGE_COLOR))
 
     private fun categoriesOf(offers: List<FurnitureShopOffer>): List<Category> =
         offers.groupBy { it.category }
@@ -244,6 +244,27 @@ internal class FurnitureShopDialogController(
     private fun action(value: String): PaperDialogActionId = PaperDialogActionId.of("furniture_$value")
 
     companion object {
+        // Player labels from the existing Furniture section's category links.
+        // Stable EconomyShopGUI section keys continue to own all purchases.
+        internal fun categoryTitle(section: String): String = when (section.lowercase()) {
+            "fountains" -> "Фонтаны"
+            "casino" -> "Казино"
+            "market" -> "Рынок"
+            "smith" -> "Кузня"
+            "farm" -> "Ферма"
+            "halloween" -> "Хэллоуин"
+            "royal" -> "Королевская мебель"
+            "forest" -> "Лес"
+            "park" -> "Парк"
+            "school" -> "Школа"
+            "china" -> "Китайская мебель"
+            "summon" -> "Призыв"
+            "egypt" -> "Египет"
+            "dungeon" -> "Подземелья"
+            "restaraunt", "restaurant" -> "Ресторан"
+            else -> section
+        }
+
         private const val AMOUNT = 1
         private const val PAGE_SIZE = 12
         private const val BODY_WIDTH = 320

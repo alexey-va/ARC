@@ -8,6 +8,7 @@ import ru.arc.commands.arc.subcommands.DialogDemoSubCommand
 import ru.arc.commands.arc.subcommands.AuditSubCommand
 import ru.arc.commands.arc.subcommands.BaltopSubCommand
 import ru.arc.commands.arc.subcommands.BoardSubCommand
+import ru.arc.commands.arc.subcommands.BrewerySubCommand
 import ru.arc.commands.arc.subcommands.BuySubCommand
 import ru.arc.commands.arc.subcommands.ChatSubCommand
 import ru.arc.commands.arc.subcommands.CommandHideSubCommand
@@ -80,6 +81,7 @@ class ArcCommand :
             RtpSubCommand,
             LocationPoolSubCommand,
             FurnitureSubCommand,
+            BrewerySubCommand,
             HuntSubCommand,
             TreasuresSubCommand,
             ProductPathSubCommand,
