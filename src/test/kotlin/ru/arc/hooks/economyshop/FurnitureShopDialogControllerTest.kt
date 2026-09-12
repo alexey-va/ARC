@@ -24,6 +24,23 @@ class FurnitureShopDialogControllerTest :
             FurnitureShopDialogController.sameQuote(quoted, offer("Furniture.pages.page1.items.3", 10_000.0)) shouldBe false
         }
 
+        "renders a native readable price instead of provider legacy formatting" {
+            val quoted = FurnitureShopOffer(
+                itemPath = "Furniture.pages.page1.items.2",
+                furnitureId = "elitecreatures:furniture_table",
+                category = "Мебель",
+                displayName = "Мебель",
+                amount = 1,
+                totalPrice = 12_345.67,
+                formattedPrice = "12 345,67§f������",
+            )
+            val rendered = FurnitureShopDialogController.formatPrice(quoted.totalPrice)
+
+            rendered shouldBe "12345.67 монет"
+            rendered.contains('§') shouldBe false
+            rendered.contains('�') shouldBe false
+        }
+
         "furniture detection is scoped to the exact item in a shared config" {
             val config = YamlConfiguration()
             config.loadFromString(

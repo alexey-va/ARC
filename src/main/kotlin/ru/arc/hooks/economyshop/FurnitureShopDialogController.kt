@@ -13,6 +13,7 @@ import ru.arc.paper.menu.PaperDialogBody
 import ru.arc.paper.menu.PaperDialogButton
 import ru.arc.paper.menu.PaperDialogScreen
 import ru.arc.hooks.HookRegistry
+import java.math.BigDecimal
 
 /** Native, feature-specific furniture catalogue backed by EconomyShopGUI. */
 internal class FurnitureShopDialogController(
@@ -123,7 +124,7 @@ internal class FurnitureShopDialogController(
                 DialogTables.body(
                     rows = listOf(
                         light("Предмет") to display(current.displayName),
-                        light("Цена за 1 шт.") to light(current.formattedPrice, TRADE_COLOR),
+                        light("Цена за 1 шт.") to price(current.totalPrice),
                     ),
                     frame = DialogTables.Frame.EPIC,
                     width = BODY_WIDTH,
@@ -157,7 +158,7 @@ internal class FurnitureShopDialogController(
         val outcome = runCatching { shop.purchase(player, current.itemPath, AMOUNT) }.getOrElse {
             return openMessage(player, "Покупка не выполнена", "Внутренняя ошибка магазина. Попробуйте ещё раз.")
         }
-        openOutcome(player, outcome, categoryName, page, categoryIndex, current.displayName)
+        openOutcome(player, outcome, categoryName, page, categoryIndex, current.displayName, current.totalPrice)
     }
 
     private fun openOutcome(
@@ -167,13 +168,12 @@ internal class FurnitureShopDialogController(
         page: Int,
         categoryIndex: Int,
         displayName: String,
+        totalPrice: Double,
     ) {
         val success = outcome.status == ShopPurchaseStatus.SUCCESS
         val item = plain(displayName.takeIf(String::isNotBlank) ?: outcome.itemName ?: outcome.itemPath)
-        val price = outcome.formattedPrice
         val message = when {
-            success && price != null -> "Куплено: $item · $price"
-            success -> "Куплено: $item"
+            success -> "Куплено: $item · ${formatPrice(totalPrice)}"
             outcome.status == ShopPurchaseStatus.INSUFFICIENT_FUNDS -> "Недостаточно средств для покупки $item."
             outcome.status == ShopPurchaseStatus.NO_INVENTORY_SPACE -> "В инвентаре недостаточно места."
             outcome.status == ShopPurchaseStatus.NO_PERMISSIONS -> "У вас нет доступа к этому предмету."
@@ -199,7 +199,7 @@ internal class FurnitureShopDialogController(
             ),
             columns = 1,
         )
-        open(player, screen) { openOutcome(player, outcome, categoryName, page, categoryIndex, displayName) }
+        open(player, screen) { openOutcome(player, outcome, categoryName, page, categoryIndex, displayName, totalPrice) }
     }
 
     private fun openMessage(player: Player, title: String, message: String) {
@@ -217,8 +217,10 @@ internal class FurnitureShopDialogController(
         light("○ ", WHITE)
             .append(display(offer.displayName))
             .append(light(" · ", WARM_COLOR))
-            .append(light(offer.formattedPrice, TRADE_COLOR))
+            .append(price(offer.totalPrice))
             .append(light(" ›", TRADE_COLOR))
+
+    private fun price(amount: Double): Component = light(formatPrice(amount), TRADE_COLOR)
 
     private fun categoryLabel(category: Category): Component =
         light("○ ", WHITE)
@@ -264,6 +266,9 @@ internal class FurnitureShopDialogController(
             "restaraunt", "restaurant" -> "Ресторан"
             else -> section
         }
+
+        internal fun formatPrice(amount: Double): String =
+            "${BigDecimal.valueOf(amount).stripTrailingZeros().toPlainString()} монет"
 
         private const val AMOUNT = 1
         private const val PAGE_SIZE = 12
