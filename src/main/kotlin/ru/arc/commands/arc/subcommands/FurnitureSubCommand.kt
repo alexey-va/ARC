@@ -17,16 +17,19 @@ import ru.arc.worldcontent.CleanupTarget
 import ru.arc.worldcontent.FurnitureCleanupInput
 import ru.arc.worldcontent.FurnitureCleanupAtInput
 import ru.arc.worldcontent.FurnitureCleanupService
+import ru.arc.hooks.economyshop.FurnitureShopDialogController
 import java.util.UUID
+import ru.arc.worldcontent.FurnitureDialogs
 
 object FurnitureSubCommand : SubCommand {
     override val configKey = "furniture"
     override val defaultPermission = "arc.furniture.admin"
-    override val defaultDescription = "Безопасная очистка ItemsAdder-мебели и оставшихся barrier hitbox"
-    override val defaultUsage = "/arc furniture cleanup <1-24> [confirm <token>]"
+    override val defaultDescription = "Памятка, выставка, магазин и безопасная очистка ItemsAdder-мебели"
+    override val defaultUsage = "/arc furniture <guide|gallery|shop|cleanup <1-24> [confirm <token>]>"
     override val defaultPlayerOnly = true
 
     private val confirmations = CleanupConfirmationRegistry()
+    private val shopDialogs = FurnitureShopDialogController()
     private val consoleOwner = UUID.fromString("00000000-0000-0000-0000-00000000c0de")
     private const val MAX_CONSOLE_ROOTS = 16
 
@@ -38,6 +41,20 @@ object FurnitureSubCommand : SubCommand {
     ): Boolean {
         if (allowsConsole(args)) return executeConsole(sender, args)
         val player = requirePlayer(sender) ?: return true
+        when (args.firstOrNull()?.lowercase()) {
+            "guide" -> {
+                if (args.size == 1) FurnitureDialogs.openGuide(player) else sendUsage(player)
+                return true
+            }
+            "gallery" -> {
+                if (args.size == 1) FurnitureDialogs.openGallery(player) else sendUsage(player)
+                return true
+            }
+            "shop" -> {
+                if (args.size == 1) shopDialogs.open(player) else sendUsage(player)
+                return true
+            }
+        }
         val input =
             try {
                 FurnitureCleanupInput.parse(args)
@@ -73,6 +90,10 @@ object FurnitureSubCommand : SubCommand {
     /** Only the explicit coordinate action may pass ArcCommand's player-only gate. */
     internal fun allowsConsole(args: Array<String>): Boolean =
         args.firstOrNull()?.equals("cleanup-at", ignoreCase = true) == true
+
+    /** Public read-only entry points bypass the administrative cleanup permission only at exact arity. */
+    internal fun isPublicAction(args: Array<String>): Boolean =
+        args.size == 1 && args[0].lowercase() in setOf("guide", "gallery", "shop")
 
     internal fun isLocalConsoleSender(sender: CommandSender): Boolean =
         sender is ConsoleCommandSender && sender !is RemoteConsoleCommandSender
@@ -287,7 +308,7 @@ object FurnitureSubCommand : SubCommand {
         args: Array<String>,
     ): List<String>? =
         when (args.size) {
-            1 -> listOf("cleanup", "cleanup-at").tabComplete(args[0])
+            1 -> listOf("guide", "gallery", "shop", "cleanup", "cleanup-at").tabComplete(args[0])
             2 -> when {
                 args[0].equals("cleanup", true) -> listOf("4", "8", "12", "16", "24").tabComplete(args[1])
                 args[0].equals("cleanup-at", true) -> Bukkit.getWorlds().map { it.name }.tabComplete(args[1])

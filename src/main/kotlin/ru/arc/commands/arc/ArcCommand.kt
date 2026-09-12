@@ -134,15 +134,17 @@ class ArcCommand :
             return true
         }
 
-        // Check permission
-        if (!sender.checkPermission(subCommand.permission)) {
+        val subArgs = args.drop(1).toTypedArray()
+        val publicFurnitureAction =
+            subCommand === FurnitureSubCommand && FurnitureSubCommand.isPublicAction(subArgs)
+        // Guide/gallery/shop are read-only player entry points; cleanup remains permission-gated.
+        if (!publicFurnitureAction && !sender.checkPermission(subCommand.permission)) {
             sender.sendMessage(CommandConfig.noPermission())
             return true
         }
 
         // Furniture keeps its player-only metadata for the existing radius command;
         // its explicit cleanup-at action performs a stricter local-console check.
-        val subArgs = args.drop(1).toTypedArray()
         // Check player-only
         if (
             subCommand.playerOnly && sender.player == null &&

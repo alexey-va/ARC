@@ -17,6 +17,16 @@ internal interface ShopPurchaseService {
     ): ShopPurchaseOutcome
 
     /**
+     * Returns currently accessible, native IA furniture offers for the small
+     * dialog catalogue. Implementations must resolve prices from the live shop
+     * objects; an empty default keeps optional integrations source-compatible.
+     */
+    fun furnitureOffers(player: Player, amount: Int = 1): List<FurnitureShopOffer> = emptyList()
+
+    /** Re-reads one live offer before a dialog confirmation is committed. */
+    fun furnitureOffer(player: Player, itemPath: String, amount: Int = 1): FurnitureShopOffer? = null
+
+    /**
      * Returns the cheapest currently accessible Vault offer that gives exactly
      * [amount] plain vanilla [material] items. Command products, custom item
      * variants and composite prices are deliberately excluded.
@@ -56,6 +66,26 @@ internal data class ShopMaterialOffer(
     val itemPath: String,
     val totalPrice: Double,
 )
+
+internal data class FurnitureShopOffer(
+    val itemPath: String,
+    val furnitureId: String,
+    val category: String,
+    val displayName: String,
+    val amount: Int,
+    val totalPrice: Double,
+    val formattedPrice: String,
+) {
+    init {
+        require(itemPath.length in 1..512) { "Furniture shop offer path is outside its size bound" }
+        require(furnitureId.length in 1..256) { "Furniture shop offer id is outside its size bound" }
+        require(category.length in 1..128) { "Furniture shop offer category is outside its size bound" }
+        require(displayName.length in 1..256) { "Furniture shop offer display name is outside its size bound" }
+        require(amount > 0) { "Furniture shop offer amount must be positive" }
+        require(totalPrice.isFinite() && totalPrice > 0.0) { "Furniture shop offer price must be finite and positive" }
+        require(formattedPrice.length in 1..256) { "Furniture shop offer formatted price is outside its size bound" }
+    }
+}
 
 /** Deterministic pure selector shared by the live adapter and unit tests. */
 internal object ShopMaterialOfferSelector {

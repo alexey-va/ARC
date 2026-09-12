@@ -1,5 +1,6 @@
 package ru.arc.hooks.economyshop
 
+import dev.lone.itemsadder.api.CustomStack
 import me.gypopo.economyshopgui.api.EconomyShopGUIHook
 import me.gypopo.economyshopgui.objects.ShopItem
 import me.gypopo.economyshopgui.util.EcoType
@@ -8,6 +9,7 @@ import me.gypopo.economyshopgui.util.Transaction
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
+import java.util.Locale
 
 /** EconomyShopGUI Premium 6.3.0 implementation, loaded only while that plugin is present. */
 internal class EconomyShopGuiPurchaseService(
@@ -52,6 +54,24 @@ internal class EconomyShopGuiPurchaseService(
             formattedPrice = formatPrices(result.prices),
             itemName = itemName,
         )
+    }
+
+    override fun furnitureOffers(player: Player, amount: Int): List<FurnitureShopOffer> {
+        if (amount <= 0) return emptyList()
+        return allItems()
+            .asSequence()
+            .mapNotNull { item -> runCatching { furnitureOffer(player, item, amount) }.getOrNull() }
+            .sortedWith(
+                compareBy<FurnitureShopOffer> { it.category.lowercase(Locale.ROOT) }
+                    .thenBy { it.displayName.lowercase(Locale.ROOT) }
+                    .thenBy { it.itemPath },
+            )
+            .toList()
+    }
+
+    override fun furnitureOffer(player: Player, itemPath: String, amount: Int): FurnitureShopOffer? {
+        if (amount <= 0) return null
+        return resolveItem(itemPath)?.let { item -> furnitureOffer(player, item, amount) }
     }
 
     override fun quotePlainMaterial(
@@ -114,6 +134,53 @@ internal class EconomyShopGuiPurchaseService(
         val offer = ShopMaterialOffer(item.itemPath, total)
         return offer to ShopMaterialQuote(material, item.itemPath, amount, total, formatted)
     }
+
+    private fun furnitureOffer(
+        player: Player,
+        item: ShopItem,
+        amount: Int,
+    ): FurnitureShopOffer? {
+        if (
+            item.hasItemError() || item.isHidden || item.isDisplayItem || !item.isBuyAble ||
+            item.isBuyCommand || item.ecoType.type != EconomyType.VAULT ||
+            item.isMinBuy(amount) || item.isMaxBuy(amount)
+        ) {
+            return null
+        }
+        if (!EconomyShopGUIHook.hasPermissions(item, player)) return null
+        if (!runCatching { item.meetsRequirements(player, true) }.getOrDefault(false)) return null
+        if (item.limitedStockMode > 0) {
+            val stock = runCatching { EconomyShopGUIHook.getItemStock(item, player.uniqueId) }.getOrNull() ?: return null
+            if (stock < amount) return null
+        }
+
+        val custom = runCatching { CustomStack.byItemStack(item.itemToGive) }.getOrNull() ?: return null
+        val furnitureId = runCatching { custom.namespacedID }.getOrNull()?.trim().orEmpty()
+        if (furnitureId.isBlank() || !hasFurnitureBehaviour(custom)) return null
+
+        val total = runCatching { item.getBuyPrice(player, amount) }.getOrNull()
+            ?.takeIf { it.isFinite() && it > 0.0 }
+            ?: return null
+        val formatted = runCatching {
+            EconomyShopGUIHook.getEcon(item.ecoType)?.formatPrice(total)
+        }.getOrNull()?.takeIf(String::isNotBlank) ?: return null
+        val displayName =
+            runCatching { item.displayname }.getOrNull()?.trim()?.takeIf(String::isNotBlank)
+                ?: runCatching { custom.displayName }.getOrNull()?.trim()?.takeIf(String::isNotBlank)
+                ?: furnitureId
+        return FurnitureShopOffer(
+            item.itemPath,
+            furnitureId,
+            item.section().trim(),
+            displayName.replace('\n', ' ').replace('\r', ' ').take(256),
+            amount,
+            total,
+            formatted,
+        )
+    }
+
+    private fun hasFurnitureBehaviour(custom: CustomStack): Boolean =
+        runCatching { hasFurnitureBehaviour(custom.config, custom.id) }.getOrDefault(false)
 
     private fun vaultProvider() =
         allItems()
@@ -179,6 +246,13 @@ internal class EconomyShopGuiPurchaseService(
             Transaction.Result.CANT_STORE_PAYMENT,
             -> ShopPurchaseStatus.FAILED
         }
+}
+
+/** Checks only the exact ItemsAdder item entry; sibling items in one file are ignored. */
+internal fun hasFurnitureBehaviour(config: org.bukkit.configuration.ConfigurationSection, itemId: String): Boolean {
+    val id = itemId.trim()
+    if (id.isEmpty() || id.contains('.')) return false
+    return config.isConfigurationSection("items.$id.behaviours.furniture")
 }
 
 internal data class ShopItemDescriptor(
