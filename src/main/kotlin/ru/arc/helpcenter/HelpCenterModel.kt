@@ -15,6 +15,7 @@ enum class HelpCenterPage(vararg val aliases: String) {
     DUNGEONS_GUIDE("dungeons-guide", "dungeon-guide", "данжи-гайд"),
     COMMANDS("commands", "команды"),
     TRAVEL("travel", "перемещения", "телепортация", "телепорт", "homes", "дома"),
+    WARPS("warps", "варпы"),
     PRIVAT("privat", "приват", "lands", "земли"),
     ACTIVITIES("activities", "активности", "играть"),
     PLAYERS("players", "игроки", "друзья"),
@@ -74,6 +75,7 @@ enum class HelpCenterFeature(val pluginName: String?) {
     BANK("Bank"),
     PLAYER_PARTICLES("PlayerParticles"),
     HUSK_HOMES("HuskHomes"),
+    PLAYER_WARPS("PlayerWarps"),
 }
 
 enum class HelpCenterRecommendationId {
@@ -117,6 +119,7 @@ data class HelpCenterCommand(
     val permission: String? = null,
     val opensInventory: Boolean = false,
     val anyPermissions: Set<String> = emptySet(),
+    val opensDialog: Boolean = false,
 )
 
 sealed interface HelpCenterSearchAction {
@@ -163,6 +166,21 @@ data class HelpCenterPublicHome(
     val y: Int,
     val z: Int,
     val description: String?,
+)
+
+data class HelpCenterWarp(
+    val id: Long,
+    val name: String,
+    val owner: String,
+    val server: String,
+    val world: String,
+    val x: Double,
+    val y: Double,
+    val z: Double,
+    val description: String?,
+    val price: Double,
+    val currencies: Map<String, String>,
+    val priceLabel: String,
 )
 
 data class HelpCenterProfile(

@@ -19,7 +19,7 @@ com-github-zrips-jobs = "5.2.4.2"
 com-google-code-gson-gson = "2.11.0"
 com-jeff-media-custom-block-data = "2.2.4"
 com-magmaguy-betterstructures = "1.7.1"
-com-olziedev-playerwarps = "6.29.0"
+com-olziedev-playerwarps = "7.11.1"
 com-sk89q-worldedit-worldedit-bukkit = "7.3.0-SNAPSHOT"
 com-sk89q-worldguard-worldguard-bukkit = "7.0.9"
 com-thedeanda-lorem = "2.2"
@@ -65,7 +65,7 @@ com-github-zrips-jobs = { module = "com.github.Zrips:Jobs", version.ref = "com-g
 com-google-code-gson-gson = { module = "com.google.code.gson:gson", version.ref = "com-google-code-gson-gson" }
 com-jeff-media-custom-block-data = { module = "com.jeff-media:custom-block-data", version.ref = "com-jeff-media-custom-block-data" }
 com-magmaguy-betterstructures = { module = "com.magmaguy:BetterStructures", version.ref = "com-magmaguy-betterstructures" }
-com-olziedev-playerwarps = { module = "com.olziedev:PlayerWarps", version.ref = "com-olziedev-playerwarps" }
+com-olziedev-playerwarps = { module = "com.olziedev:playerwarps-api", version.ref = "com-olziedev-playerwarps" }
 com-sk89q-worldedit-worldedit-bukkit = { module = "com.sk89q.worldedit:worldedit-bukkit", version.ref = "com-sk89q-worldedit-worldedit-bukkit" }
 com-sk89q-worldguard-worldguard-bukkit = { module = "com.sk89q.worldguard:worldguard-bukkit", version.ref = "com-sk89q-worldguard-worldguard-bukkit" }
 com-thedeanda-lorem = { module = "com.thedeanda:lorem", version.ref = "com-thedeanda-lorem" }

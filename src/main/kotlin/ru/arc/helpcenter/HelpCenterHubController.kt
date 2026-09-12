@@ -47,7 +47,7 @@ internal class HelpCenterHubController(
                 ),
                 buttons = listOf(
                     button("run_action", text("action-run-label")) { executeCatalog(player, command.id) }
-                        .let { if (command.opensInventory) it else it.closing() },
+                        .let { if (command.opensInventory || command.opensDialog) it else it.closing() },
                 ),
                 exitButton = button("back", text("back-label"), action = returnTo),
             ),
@@ -100,7 +100,7 @@ internal class HelpCenterHubController(
                     button("item_recipe", text("item-recipe-label")) { executeInventory(player, command) }
                 }
                 else -> catalog[actionId]?.let { command ->
-                    button("item_$actionId", text("command-label", "label" to command.label)) { executeCatalog(player, actionId) }.let { if (command.opensInventory) it else it.closing() }
+                    button("item_$actionId", text("command-label", "label" to command.label)) { executeCatalog(player, actionId) }.let { if (command.opensInventory || command.opensDialog) it else it.closing() }
                 }
             }
         }
@@ -209,7 +209,7 @@ internal class HelpCenterHubController(
                 buttons = responseButtons + ids.mapNotNull { id -> entries[id]?.let { command ->
                     button("request_$id", requestLabel(id, command.label)) {
                         if (id == "privat") openPage(player, HelpCenterPage.PRIVAT) else executeCatalog(player, id)
-                    }.let { if (id == "privat" || command.opensInventory) it else it.closing() }
+                    }.let { if (id == "privat" || command.opensInventory || command.opensDialog) it else it.closing() }
                 } },
                 exitButton = backTo(player, returnTo),
                 columns = 2,
@@ -287,7 +287,7 @@ internal class HelpCenterHubController(
                 ) else emptyList()) + commands.map { command ->
                     button("goal_action_${command.id}", text("command-label", "label" to command.label)) {
                         if (command.id == "privat") openPage(player, HelpCenterPage.PRIVAT) else executeCatalog(player, command.id)
-                    }.let { if (command.id == "privat" || command.opensInventory) it else it.closing() }
+                    }.let { if (command.id == "privat" || command.opensInventory || command.opensDialog) it else it.closing() }
                 }).ifEmpty { listOf(button("empty_search", text("commands-label")) { openPage(player, HelpCenterPage.COMMANDS) }) },
                 exitButton = button("back", text("back-label")) { openGoals(player, returnTo) },
                 columns = 2,

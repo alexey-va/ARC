@@ -51,6 +51,7 @@ internal class HelpCenterController(
             definition.permission,
             definition.opensInventory,
             definition.anyPermissions,
+            opensDialog = definition.id in NATIVE_DIALOG_COMMANDS,
         )
     }
     private val catalogById = catalog.associateBy { it.id }
@@ -126,6 +127,7 @@ internal class HelpCenterController(
             HelpCenterPage.DUNGEONS_GUIDE -> openDungeonsGuide(player)
             HelpCenterPage.COMMANDS -> openCommands(player)
             HelpCenterPage.TRAVEL -> openTravel(player)
+            HelpCenterPage.WARPS -> openWarps(player)
             HelpCenterPage.PRIVAT -> {
                 markNavigation(player)
                 openLands(player)
@@ -759,6 +761,72 @@ internal class HelpCenterController(
         )
     }
 
+    private fun openWarps(player: Player, requestedPage: Int = 0) {
+        markNavigation(player) { openWarps(player, requestedPage) }
+        val warps = runCatching { gateway.loadWarps(player) }.getOrElse { failure ->
+            ru.arc.util.Logging.error("Could not load native warp catalog for {}", player.name, failure)
+            showDialog(player, PaperDialogScreen(
+                id = "help.travel.warps",
+                title = text("warps-title"),
+                body = listOf(PaperDialogBody(text("warps-error"), width = 500)),
+                buttons = listOf(button("retry", text("warps-retry-label")) { openWarps(player, requestedPage) }),
+                exitButton = backButton("back", player, ::openTravel),
+            ))
+            return
+        }
+        val pages = maxOf(1, (warps.size + PUBLIC_HOMES_PAGE_SIZE - 1) / PUBLIC_HOMES_PAGE_SIZE)
+        val page = requestedPage.coerceIn(0, pages - 1)
+        val visible = warps.drop(page * PUBLIC_HOMES_PAGE_SIZE).take(PUBLIC_HOMES_PAGE_SIZE)
+        showDialog(player, PaperDialogScreen(
+            id = "help.travel.warps",
+            title = text("warps-title"),
+            body = listOf(PaperDialogBody(text(
+                if (warps.isEmpty()) "warps-empty" else "warps-body",
+                "count" to warps.size.toString(), "page" to (page + 1).toString(), "pages" to pages.toString(),
+            ), width = 500)),
+            buttons = visible.mapIndexed { index, warp ->
+                button("warp_$index", text("warp-label", "warp" to warp.name),
+                    text("warp-tooltip", "owner" to warp.owner, "world" to warp.world)) {
+                    openWarp(player, warp, page)
+                }
+            } + buildList {
+                if (page > 0) add(button("previous", text("page-previous-label")) { openWarps(player, page - 1) })
+                if (page + 1 < pages) add(button("next", text("page-next-label")) { openWarps(player, page + 1) })
+            },
+            exitButton = backButton("back", player, ::openTravel),
+            columns = 2,
+        ))
+    }
+
+    private fun openWarp(player: Player, warp: HelpCenterWarp, page: Int, changed: Boolean = false) {
+        markNavigation(player) { openWarps(player, page) }
+        val body = mutableListOf(
+            DialogTables.body(rows = listOf(
+                text("warp-owner-label") to text("warp-value", "value" to warp.owner),
+                text("warp-server-label") to text("warp-value", "value" to warp.server),
+                text("warp-world-label") to text("warp-value", "value" to warp.world),
+                text("warp-price-label") to text("warp-value", "value" to warp.priceLabel),
+            ), frame = DialogTables.Frame.RARE, width = 320),
+            PaperDialogBody(text("warp-description", "description" to (warp.description ?: settings.text("warp-no-description"))), width = 500),
+            PaperDialogBody(text("warp-conditions"), width = 500),
+        )
+        if (changed) body += PaperDialogBody(text("warp-changed"), width = 500)
+        showDialog(player, PaperDialogScreen(
+            id = "help.travel.warp",
+            title = text("warp-title", "warp" to warp.name),
+            body = body,
+            buttons = if (changed) listOf(button("refresh", text("warps-refresh-label")) { openWarps(player, page) }) else listOf(
+                button("teleport", text("warp-teleport-label"), text("warp-teleport-tooltip")) {
+                    val sent = runCatching { gateway.teleportWarp(player, warp) }.onFailure { failure ->
+                        ru.arc.util.Logging.error("Could not request warp {} for {}", warp.id, player.name, failure)
+                    }.getOrDefault(false)
+                    if (!sent) openWarp(player, warp, page, changed = true)
+                }.closing(),
+            ),
+            exitButton = backButton("back", player, action = { openWarps(it, page) }),
+        ))
+    }
+
     private fun openPublicHomes(player: Player, page: Int = 0) {
         val token = markNavigation(player) { openPublicHomes(player, page) }
         showDialog(
@@ -1040,7 +1108,7 @@ internal class HelpCenterController(
         ) {
             if (command.id == "privat") open(player, HelpCenterPage.PRIVAT) else executeCatalog(player, command.id)
         }
-        return if (command.id == "privat" || command.id in NATIVE_DIALOG_COMMANDS || command.opensInventory) {
+        return if (command.id == "privat" || command.opensDialog || command.opensInventory) {
             result
         } else result.closing()
     }
@@ -1079,7 +1147,9 @@ internal class HelpCenterController(
             player.sendMessage(text("action-unavailable"))
             return
         }
-        if (id == "builder") {
+        if (id == "warps") {
+            openWarps(player)
+        } else if (id == "builder") {
             openBuilder(player)
         } else if (id == "dungeons") {
             val returnTo = navigation.returnTarget(player) ?: { open(player, HelpCenterPage.ACTIVITIES) }
@@ -1173,7 +1243,7 @@ internal class HelpCenterController(
 
     companion object {
         // These commands join Core's shared history while this callback is active.
-        private val NATIVE_DIALOG_COMMANDS = setOf("events", "farms", "giveaways", "jobs", "rank", "teams", "quests", "builder")
+        private val NATIVE_DIALOG_COMMANDS = setOf("events", "farms", "giveaways", "jobs", "rank", "teams", "quests", "builder", "warps")
         private const val PUBLIC_HOMES_PAGE_SIZE = 10
         private val SEARCH_INPUT = PaperDialogInputId.of("search")
         private val HOME_INPUT = PaperDialogInputId.of("home_name")
@@ -1186,7 +1256,7 @@ internal class HelpCenterController(
             CommandDefinition("kit", HelpCenterCategory.START, "kit start"),
             CommandDefinition("rules", HelpCenterCategory.START, "rules"),
             CommandDefinition("tutorial", HelpCenterCategory.START, "tutorial"),
-            CommandDefinition("warps", HelpCenterCategory.TRAVEL, "warps", opensInventory = true),
+            CommandDefinition("warps", HelpCenterCategory.TRAVEL, "warps", HelpCenterFeature.PLAYER_WARPS),
             CommandDefinition("spawn", HelpCenterCategory.TRAVEL, "spawn"),
             CommandDefinition("rtp", HelpCenterCategory.TRAVEL, "rtp"),
             CommandDefinition("back", HelpCenterCategory.TRAVEL, "back"),

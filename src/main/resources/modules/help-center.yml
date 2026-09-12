@@ -12,6 +12,26 @@ actions:
 
 # All player-visible copy is configurable. ARC merges new defaults on reload.
 text:
+  warps-title: '<#92bed8>Варпы игроков'
+  warps-body: '<#92bed8>Места игроков <#e8dfd2>— магазины, фермы и постройки, куда можно заглянуть.<newline><#e8dfd2>Доступно: <#ffffff><count><#e8dfd2> · страница <page>/<pages><newline><#e8dfd2>Откройте карточку места и проверьте стоимость перед переходом.'
+  warps-empty: '<#e8dfd2>Сейчас нет доступных вам варпов. Закрытые точки в этом списке не показываются.'
+  warps-error: '<#ff6b61>Не удалось загрузить варпы.<newline><#e8dfd2>Попробуйте ещё раз или вернитесь к другим телепортациям.'
+  warps-retry-label: '<#92bed8>Обновить список'
+  warps-refresh-label: '<#92bed8>Вернуться к списку ›'
+  warp-label: '<#92bed8><warp> ›'
+  warp-tooltip: '<#e8dfd2>Владелец: <#ffffff><owner><newline><#e8dfd2>Мир: <#ffffff><world>'
+  warp-title: '<#92bed8><warp>'
+  warp-owner-label: '<#c4a7e7>Владелец'
+  warp-server-label: '<#86dcf1>Сервер'
+  warp-world-label: '<#9bd48d>Мир'
+  warp-price-label: '<#f4d87a>Стоимость'
+  warp-value: '<#ffffff><value>'
+  warp-description: '<#e8dfd2><description>'
+  warp-no-description: 'Владелец ещё не добавил описание этого места.'
+  warp-conditions: '<#e8dfd2>Доступ, стоимость и безопасность проверяются перед переходом.<newline><#e8dfd2>После нажатия не двигайтесь, пока не закончится отсчёт телепортации.'
+  warp-changed: '<#ff6b61>Варп или условия доступа изменились. Обновите список и выберите точку заново.'
+  warp-teleport-label: '<#92bed8>Телепортироваться'
+  warp-teleport-tooltip: '<#e8dfd2>Перейти к этому варпу с обычными условиями сервера.'
   table-item-label: "Предмет"
   table-amount-label: "Количество"
   table-item-kind-label: "Тип"

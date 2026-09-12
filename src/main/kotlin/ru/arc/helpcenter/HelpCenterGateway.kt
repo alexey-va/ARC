@@ -2,6 +2,7 @@ package ru.arc.helpcenter
 
 import com.Zrips.CMI.CMI
 import com.olziedev.playerwarps.api.PlayerWarpsAPI
+import com.olziedev.playerwarps.api.events.warp.PlayerWarpTeleportEvent
 import dev.lone.itemsadder.api.CustomStack
 import me.angeschossen.lands.api.LandsIntegration
 import net.william278.huskhomes.BukkitHuskHomes
@@ -26,6 +27,10 @@ interface HelpCenterGateway {
 
     fun loadPublicHomes(player: Player, timeoutSeconds: Long): CompletableFuture<List<HelpCenterPublicHome>>
 
+    fun loadWarps(player: Player): List<HelpCenterWarp>
+
+    fun teleportWarp(player: Player, expected: HelpCenterWarp): Boolean
+
     fun loadProfile(player: Player, timeoutSeconds: Long): CompletableFuture<HelpCenterProfile>
 
     fun pendingRequests(player: Player): HelpCenterPendingRequests
@@ -44,6 +49,41 @@ interface HelpCenterGateway {
 }
 
 class BukkitHelpCenterGateway : HelpCenterGateway {
+    override fun loadWarps(player: Player): List<HelpCenterWarp> {
+        check(Bukkit.getPluginManager().isPluginEnabled("PlayerWarps")) { "PlayerWarps is unavailable" }
+        val api = checkNotNull(PlayerWarpsAPI.getInstance()) { "PlayerWarps is not ready" }
+        val viewer = api.getWarpPlayer(player.uniqueId)
+        return api.getPlayerWarps(false, player).map { warp ->
+            val location = warp.warpLocation
+            val price = warp.getTeleportPrice(viewer, java.util.function.Function.identity())
+            HelpCenterWarp(
+                id = warp.id,
+                name = warp.warpName,
+                owner = warp.warpPlayer?.name ?: api.consoleName,
+                server = location.warpServer,
+                world = location.world,
+                x = location.x, y = location.y, z = location.z,
+                description = warp.getWarpDescription(false).trim().takeIf(String::isNotEmpty),
+                price = price.price,
+                currencies = price.currencyNames.toMap(),
+                priceLabel = org.bukkit.ChatColor.stripColor(org.bukkit.ChatColor.translateAlternateColorCodes(
+                    '&', price.getPrefix(TextUtil.formatAmount(price.price)),
+                )).orEmpty(),
+            )
+        }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+    }
+
+    override fun teleportWarp(player: Player, expected: HelpCenterWarp): Boolean {
+        // Keep the confirmed destination and quote; PlayerWarps owns the normal
+        // access, cooldown, safety, payment and network-transfer checks.
+        val current = loadWarps(player).firstOrNull { it.id == expected.id } ?: return false
+        if (current != expected || !player.hasPermission("pw.warp")) return false
+        val warp = PlayerWarpsAPI.getInstance().getPlayerWarp(current.name, player) ?: return false
+        if (warp.id != expected.id) return false
+        warp.warpLocation.teleportWarp(player, PlayerWarpTeleportEvent.Cause.TELEPORT_COMMAND)
+        return true
+    }
+
     override fun loadHomes(player: Player, timeoutSeconds: Long): CompletableFuture<HelpCenterHomes> {
         if (!Bukkit.getPluginManager().isPluginEnabled("HuskHomes")) {
             return CompletableFuture.failedFuture(IllegalStateException("HuskHomes is unavailable"))

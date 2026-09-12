@@ -47,7 +47,7 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.60"
+version = "1.4.61"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.7"
@@ -68,6 +68,9 @@ kotlin.target.compilations.getByName("integrationTest")
 
 repositories {
     mavenLocal()
+    maven("https://repo.olziedev.com/") {
+        content { includeModule("com.olziedev", "playerwarps-api") }
+    }
     maven("https://repo.rus-crafting.ru/grocermc/")
     maven("https://repo.papermc.io/repository/maven-public/")
     maven("https://oss.sonatype.org/content/groups/public/")

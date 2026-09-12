@@ -65,6 +65,8 @@ class HelpCenterScreensTest {
         every { gateway.settings(player) } answers { HelpCenterSettingSnapshot(chatMode, false, true) }
         every { gateway.loadHomes(player, any()) } returns CompletableFuture.completedFuture(HelpCenterHomes(emptyList(), 0, 3))
         every { gateway.loadPublicHomes(player, any()) } returns CompletableFuture.completedFuture(emptyList())
+        every { gateway.loadWarps(player) } returns emptyList()
+        every { gateway.teleportWarp(player, any()) } returns true
         every { gateway.loadProfile(player, any()) } returns CompletableFuture.completedFuture(
             HelpCenterProfile("Viewer", "survival", "vanilla", 1, 65, 2, "100", "Игрок", HelpCenterHomes(emptyList(), 0, 3), 0),
         )
@@ -286,6 +288,22 @@ class HelpCenterScreensTest {
         assertEquals(9, screen.buttons.size)
         open(HelpCenterPage.PLAYERS)
         assertFalse(screen.buttons.any { it.id.value == "command_teams" })
+    }
+
+    @Test
+    fun `native catalog actions preserve dialog flow through search and goals`() {
+        player.addAttachment(paper.createSimplePlugin("NativeTeamsAllowed"), "arcjustteams.use", true)
+        open(HelpCenterPage.COMMANDS)
+        click("search", "clans")
+        click("result_teams")
+        assertFalse(screen.buttons.single { it.id.value == "run_action" }.closeDialogBeforeAction)
+        click("run_action")
+        assertEquals("clans", executed.last())
+        open(HelpCenterPage.GOALS)
+        click("goal_explore")
+        assertFalse(screen.buttons.single { it.id.value == "goal_action_warps" }.closeDialogBeforeAction)
+        click("goal_action_warps")
+        assertEquals("help.travel.warps", screen.id)
     }
 
     @Test
@@ -643,6 +661,44 @@ class HelpCenterScreensTest {
         assertTrue(body().contains("Магазин и сад"))
         click("teleport")
         assertEquals("huskhomes:phome Foll:base", executed.last())
+    }
+
+    @Test
+    fun `warps use paginated native cards without opening inventory`() {
+        every { gateway.loadWarps(player) } returns (1..11).map { index ->
+            HelpCenterWarp(index.toLong(), "Место $index", "Foll", "survival", "vanilla",
+                1.0, 70.0, 3.0, "<red>Буквальное описание", 25.0, mapOf("vault" to "coins"), "25 монет")
+        }
+        open(HelpCenterPage.TRAVEL)
+        click("warps")
+        assertEquals("help.travel.warps", screen.id)
+        assertFalse(screen.buttons.first().closeDialogBeforeAction)
+        click("next")
+        assertTrue(body().contains("2/2"))
+        click("warp_0")
+        assertEquals("help.travel.warp", screen.id)
+        assertTrue(body().contains("Foll"))
+        assertTrue(body().contains("25 монет"))
+        assertTrue(body().contains("<red>Буквальное описание"))
+        click("back")
+        assertTrue(body().contains("2/2"))
+        assertTrue(executed.isEmpty())
+    }
+
+    @Test
+    fun `changed warp does not dispatch a stale teleport and remains a native error`() {
+        every { gateway.loadWarps(player) } returns listOf(
+            HelpCenterWarp(1, "Farm", "Foll", "survival", "vanilla", 1.0, 70.0, 3.0,
+                null, 0.0, emptyMap(), "0 монет"),
+        )
+        every { gateway.teleportWarp(player, any()) } returns false
+        open(HelpCenterPage.WARPS)
+        click("warp_0")
+        click("teleport")
+        assertEquals("help.travel.warp", screen.id)
+        assertTrue(body().contains("изменились"))
+        assertEquals(listOf("refresh"), screen.buttons.map { it.id.value })
+        assertTrue(executed.isEmpty())
     }
 
     @Test
