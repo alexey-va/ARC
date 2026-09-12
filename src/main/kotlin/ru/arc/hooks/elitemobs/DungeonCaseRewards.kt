@@ -47,6 +47,20 @@ internal object DungeonCaseRewards : Listener {
     fun ceiling(player: Player, offer: SupplyOffer): Int =
         CombatLevelCalculator.calculateCombatLevel(player.uniqueId).coerceIn(1, if (offer.id == "loot_case_large") 40 else 20)
 
+    /** Stable recipe identity archived by transferable reward vouchers. */
+    fun definition(caseId: String): String? = DEFAULT_SUPPLY_OFFERS.singleOrNull { it.id == caseId && it.isCase }
+        ?.let { offer ->
+            when (offer.id) {
+                "enchant_case" -> "dungeon-case-v1:enchant_case:critical_strikes=40:ice_breaker=30:lightning=20:flamethrower=10"
+                "loot_case" -> "dungeon-case-v1:loot_case:combat-cap=20:levels=80/60,90/30,100/10:type=random:boss-unique=false"
+                "loot_case_large" -> "dungeon-case-v1:loot_case_large:combat-cap=40:levels=80/60,90/30,100/10:type=random:boss-unique=false"
+                else -> null
+            }
+        }
+
+    fun create(player: Player, caseId: String): ItemStack? =
+        DEFAULT_SUPPLY_OFFERS.singleOrNull { it.id == caseId && it.isCase }?.let { create(player, it) }
+
     fun preview(player: Player, offer: SupplyOffer): ItemStack? {
         if (offer.id == "enchant_case" && (0..99).map(::caseBook).distinct().any {
                 CustomItem.getCustomItem("enchanted_book_$it.yml") == null

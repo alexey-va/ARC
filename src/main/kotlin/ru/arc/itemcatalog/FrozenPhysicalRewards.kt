@@ -230,8 +230,15 @@ internal data class FrozenPhysicalRecipe(
     val sealName: String? = null,
     val sealDescription: List<String>? = null,
     val treasure: FrozenTreasureNode? = null,
+    val dungeonCaseId: String? = null,
+    val dungeonCaseDefinition: String? = null,
 ) {
     fun validate() {
+        if (type != "dungeon-case") {
+            require(dungeonCaseId == null && dungeonCaseDefinition == null) {
+                "Dungeon case fields require a dungeon-case recipe"
+            }
+        }
         when (type) {
             "money" -> validateAmount(currency, minAmount, maxAmount, expectedCurrency = "vault")
             "tokens" -> {
@@ -299,6 +306,17 @@ internal data class FrozenPhysicalRecipe(
                 require(currency == null && minAmount == null && maxAmount == null && tokenAmount == null)
                 require(commandKind == null && commandValue == null && mountId == null && furnitureBoxes == null && sealItems == null && sealName == null && sealDescription == null)
             }
+            "dungeon-case" -> {
+                require(dungeonCaseId != null && DUNGEON_CASE_ID_PATTERN.matches(dungeonCaseId)) {
+                    "Frozen dungeon case id is invalid"
+                }
+                require(dungeonCaseDefinition != null && dungeonCaseDefinition.length in 1..512) {
+                    "Frozen dungeon case definition is invalid"
+                }
+                require(currency == null && minAmount == null && maxAmount == null && tokenAmount == null)
+                require(commandKind == null && commandValue == null && mountId == null && furnitureBoxes == null)
+                require(sealItems == null && sealName == null && sealDescription == null && treasure == null)
+            }
             else -> error("Unknown frozen physical recipe type: $type")
         }
     }
@@ -312,6 +330,7 @@ internal data class FrozenPhysicalRecipe(
 
     private companion object {
         val ID_PATTERN = Regex("[A-Za-z0-9_.:/-]{1,256}")
+        val DUNGEON_CASE_ID_PATTERN = Regex("[a-z0-9_-]{1,64}")
         val ALLOWED_COMMAND_KINDS = setOf("arcbuilder", "arcecojobs", "elitemobs")
         val ALLOWED_COMMANDS = mapOf(
             "arcbuilder" to Regex("arcbuilder:builder systembook %player% [a-z0-9_-]+\\.schem"),

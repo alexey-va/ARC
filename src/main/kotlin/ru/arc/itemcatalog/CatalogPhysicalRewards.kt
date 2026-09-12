@@ -8,6 +8,7 @@ import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.meta.BlockStateMeta
 import ru.arc.hooks.HookRegistry
+import ru.arc.hooks.elitemobs.DungeonCaseRewards
 import ru.arc.mounts.MountModule
 import ru.arc.mounts.MountRewardRejection
 import ru.arc.mounts.MountRewardResult
@@ -45,6 +46,7 @@ internal class CatalogPhysicalRewards(
         is RewardCatalogSource.Mount -> "mount:${source.id}"
         is RewardCatalogSource.FurniturePackage -> "package:${source.id}"
         is RewardCatalogSource.Seal -> "seal:${source.categoryId}"
+        is RewardCatalogSource.DungeonCase -> "dungeon-case:${source.id}"
         else -> "native:${source}"
     }
 
@@ -55,6 +57,7 @@ internal class CatalogPhysicalRewards(
     fun isVoucherSource(entry: RewardCatalogEntry): Boolean = when (val source = entry.source) {
         is RewardCatalogSource.Mount,
         is RewardCatalogSource.FurniturePackage,
+        is RewardCatalogSource.DungeonCase,
         -> true
         is RewardCatalogSource.Treasure -> when (treasure(source)) {
             is Treasure.Item,
@@ -145,6 +148,7 @@ internal class CatalogPhysicalRewards(
                 definition(treasure, emptySet()) ?: return@runCatching null
             }
             is RewardCatalogSource.Seal -> sealSnapshot(source.categoryId)?.definition ?: return@runCatching null
+            is RewardCatalogSource.DungeonCase -> DungeonCaseRewards.definition(source.id) ?: return@runCatching null
             else -> return@runCatching null
         }
         val fingerprint = OneTimeUseFingerprint.sha256(("catalog-v1\n$key\n$definition").toByteArray())
@@ -165,6 +169,7 @@ internal class CatalogPhysicalRewards(
         val requiredSlots = when (val source = entry.source) {
             is RewardCatalogSource.FurniturePackage -> (settings.packages[source.id]?.items?.size ?: return UNAVAILABLE).let { (it + 26) / 27 }
             is RewardCatalogSource.Mount -> 0
+            is RewardCatalogSource.DungeonCase -> 1
             is RewardCatalogSource.Treasure -> requiredSlots(treasure(source) ?: return UNAVAILABLE, emptySet()) ?: return UNAVAILABLE
             else -> return UNAVAILABLE
         }
@@ -184,6 +189,9 @@ internal class CatalogPhysicalRewards(
             is RewardCatalogSource.Mount -> MountModule.grantReward(player, source.id).thenApply(::mountOutcome)
             is RewardCatalogSource.FurniturePackage -> completed(giveStacks(player, furnitureBoxes(source.id) ?: return completed(rejected())))
             is RewardCatalogSource.Treasure -> completed(redeemTreasure(player, treasure(source) ?: return completed(rejected()), operationId, emptySet()))
+            is RewardCatalogSource.DungeonCase -> completed(
+                giveStacks(player, listOf(DungeonCaseRewards.create(player, source.id) ?: return completed(rejected()))),
+            )
             else -> completed(rejected())
         }
     }
@@ -213,6 +221,11 @@ internal class CatalogPhysicalRewards(
                     sealDescription = category.description,
                 )
             }
+            is RewardCatalogSource.DungeonCase -> FrozenPhysicalRecipe(
+                type = "dungeon-case",
+                dungeonCaseId = source.id,
+                dungeonCaseDefinition = DungeonCaseRewards.definition(source.id) ?: return@runCatching null,
+            )
             else -> null
         }
     }.getOrNull()
@@ -324,6 +337,8 @@ internal class CatalogPhysicalRewards(
             decodeStack(encoded)?.let { !requiresItemsAdder(it) || Bukkit.getPluginManager().isPluginEnabled("ItemsAdder") } == true
         }
         "treasure" -> frozenTreasureProvidersReady(requireNotNull(recipe.treasure))
+        "dungeon-case" -> Bukkit.getPluginManager().isPluginEnabled("EliteMobs") &&
+            DungeonCaseRewards.definition(requireNotNull(recipe.dungeonCaseId)) == recipe.dungeonCaseDefinition
         else -> false
     }
 
@@ -355,6 +370,7 @@ internal class CatalogPhysicalRewards(
         "furniture" -> recipe.furnitureBoxes?.size
         "seal" -> null
         "treasure" -> frozenTreasureRequiredSlots(requireNotNull(recipe.treasure), emptySet())
+        "dungeon-case" -> 1
         else -> null
     }
 
@@ -395,6 +411,9 @@ internal class CatalogPhysicalRewards(
         }
         "seal" -> PhysicalRewardOutcome.Rejected(UNAVAILABLE)
         "treasure" -> redeemFrozenTreasure(player, requireNotNull(recipe.treasure), operationId, emptySet())
+        "dungeon-case" -> DungeonCaseRewards.create(player, requireNotNull(recipe.dungeonCaseId))
+            ?.let { giveStacks(player, listOf(it)) }
+            ?: PhysicalRewardOutcome.Rejected(UNAVAILABLE)
         "ae" -> PhysicalRewardOutcome.Rejected(UNAVAILABLE)
         else -> PhysicalRewardOutcome.Rejected(UNAVAILABLE)
     }
@@ -509,6 +528,7 @@ internal class CatalogPhysicalRewards(
                         listOf("<gold>Полный набор: <yellow>$count предметов", "<gold>Упаковка: <yellow>${(count + 26) / 27} шалкер(а)")
                     }
                     is RewardCatalogSource.Mount -> listOf("<light_purple>Контракт открывает маунта I уровня.")
+                    is RewardCatalogSource.DungeonCase -> listOf("<#d6c2ff>При использовании создаёт один предмет EliteMobs вашего уровня.")
                     else -> emptyList()
                 } + listOf("<green>ПКМ с предметом в руке — получить награду.", "<yellow>Можно хранить и передавать до использования.")).map { TextUtil.mm(it, true) })
             }
@@ -678,7 +698,9 @@ internal class CatalogPhysicalRewards(
     }
 
     private fun treasure(source: RewardCatalogSource.Treasure): Treasure? = Treasures.getPool(source.pool)?.findById(source.id)
-    private fun providersReady(entry: RewardCatalogEntry): Boolean = entry.requires.all { Bukkit.getPluginManager().isPluginEnabled(it) }
+    private fun providersReady(entry: RewardCatalogEntry): Boolean =
+        entry.requires.all { Bukkit.getPluginManager().isPluginEnabled(it) } &&
+            (entry.source !is RewardCatalogSource.DungeonCase || Bukkit.getPluginManager().isPluginEnabled("EliteMobs"))
     private fun split(stack: ItemStack, amount: Int): List<ItemStack> = (0 until amount step stack.maxStackSize).map { offset ->
         stack.clone().also { it.amount = minOf(stack.maxStackSize, amount - offset) }
     }

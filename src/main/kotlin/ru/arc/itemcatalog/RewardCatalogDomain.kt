@@ -21,6 +21,9 @@ sealed interface RewardCatalogSource {
     data class Mount(val id: String) : RewardCatalogSource
 
     data class FurniturePackage(val id: String) : RewardCatalogSource
+
+    /** A transferable voucher that rolls the named EliteMobs dungeon case when redeemed. */
+    data class DungeonCase(val id: String) : RewardCatalogSource
 }
 
 data class RewardFurniturePackage(val name: String, val items: List<String>)

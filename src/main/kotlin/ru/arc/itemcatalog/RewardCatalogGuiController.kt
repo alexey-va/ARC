@@ -355,7 +355,10 @@ class RewardCatalogGuiController internal constructor(
             is RewardCatalogSource.Seal -> sealStack(source.categoryId, entry.icon)?.let(::listOf)
             is RewardCatalogSource.ItemsAdder -> CustomStack.getInstance(source.id)?.itemStack
                 ?.let { RewardItemEnhancer.enrich(it, entry.enchantments) }?.let { listOf(RewardItemPresentation.apply(it, entry)) }
-            is RewardCatalogSource.Mount, is RewardCatalogSource.FurniturePackage -> physical(entry, grant)?.let(::listOf)
+            is RewardCatalogSource.Mount,
+            is RewardCatalogSource.FurniturePackage,
+            is RewardCatalogSource.DungeonCase,
+            -> physical(entry, grant)?.let(::listOf)
             is RewardCatalogSource.Planned -> null
         }
         values?.takeIf { it.isNotEmpty() && it.size <= MAX_STACKS }?.let(::ResolvedReward)

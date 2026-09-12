@@ -1,0 +1,9 @@
+id: ae_master
+treasures:
+  - type: ae
+    id: ae_master_books
+    weight: 1
+    kind: random_book
+    amount: 3
+    args:
+      - tier: random

@@ -1,0 +1,9 @@
+id: ae_enchanted
+treasures:
+  - type: ae
+    id: ae_enchanted_book
+    weight: 1
+    kind: random_book
+    amount: 1
+    args:
+      - tier: random

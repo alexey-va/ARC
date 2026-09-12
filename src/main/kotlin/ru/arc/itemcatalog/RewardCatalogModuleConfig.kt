@@ -108,6 +108,7 @@ class RewardCatalogModuleConfig(private val config: Config) {
                 "planned" -> RewardCatalogSource.Planned(requiredId(map.getValue(key), "$path.planned", ID))
                 "mount" -> RewardCatalogSource.Mount(requiredId(map.getValue(key), "$path.mount", ID))
                 "package" -> RewardCatalogSource.FurniturePackage(requiredId(map.getValue(key), "$path.package", ID))
+                "dungeon-case" -> RewardCatalogSource.DungeonCase(requiredId(map.getValue(key), "$path.dungeon-case", ID))
                 else -> error("unreachable source key")
             }
         val icon = if ("icon" in map) material(map["icon"], "$path.icon") else null
@@ -313,7 +314,9 @@ class RewardCatalogModuleConfig(private val config: Config) {
         private val ITEMSADDER_ID = Regex("[a-z0-9_]+:[a-z0-9_/.-]+")
         private val ENCHANTMENT_ID = Regex("(?:minecraft:)?[a-z_]+")
         private val PLUGIN_ID = Regex("[A-Za-z0-9._-]{1,64}")
-        private val SOURCE_KEYS = setOf("treasure", "preset", "pouch", "seal", "itemsadder", "planned", "mount", "package")
+        private val SOURCE_KEYS = setOf(
+            "treasure", "preset", "pouch", "seal", "itemsadder", "planned", "mount", "package", "dungeon-case",
+        )
 
         fun load(dataPath: Path): RewardCatalogModuleConfig =
             RewardCatalogModuleConfig(ConfigManager.ofModule(dataPath, "reward-catalog.yml"))

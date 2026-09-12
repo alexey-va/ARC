@@ -16,6 +16,30 @@ import java.util.Comparator
 import java.util.concurrent.CompletableFuture
 
 class FrozenPhysicalRewardsTest : StringSpec({
+    "dungeon case recipes bind a bounded case id and exact generator definition" {
+        FrozenPhysicalRecipe(
+            type = "dungeon-case",
+            dungeonCaseId = "loot_case",
+            dungeonCaseDefinition = "dungeon-case-v1:test",
+        ).validate()
+        runCatching {
+            FrozenPhysicalRecipe(
+                type = "dungeon-case",
+                dungeonCaseId = "bad:id",
+                dungeonCaseDefinition = "dungeon-case-v1:test",
+            ).validate()
+        }.isFailure shouldBe true
+        runCatching {
+            FrozenPhysicalRecipe(
+                type = "money",
+                currency = "vault",
+                minAmount = 1.0,
+                maxAmount = 1.0,
+                dungeonCaseId = "loot_case",
+            ).validate()
+        }.isFailure shouldBe true
+    }
+
     "money furniture and weighted treasure recipes survive archive reload and catalogue removal" {
         MockBukkitTestRuntime.open().use {
             val root = Files.createTempDirectory("arc-frozen-rewards")

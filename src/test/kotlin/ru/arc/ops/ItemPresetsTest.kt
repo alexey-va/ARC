@@ -28,11 +28,12 @@ class ItemPresetsTest :
         describe("ItemPresets") {
 
             it("should resolve sf lootbox preset amount") {
-                val specs = ItemPresets.resolveSpecs("sf_lootbox", 2).getOrThrow()
+                val stacks = ItemPresets.resolveStacks("sf_lootbox", 2).getOrThrow()
 
-                specs shouldHaveSize 1
-                specs.first().get("amount").asInt shouldBe 2
-                specs.first().get("material").asString shouldBe "IRON_INGOT"
+                stacks shouldHaveSize 1
+                stacks.first().amount shouldBe 2
+                stacks.first().type.name shouldBe "IRON_INGOT"
+                stacks.first().itemMeta.customModelData shouldBe 73026
             }
 
             it("should resolve lootbox bundle preset") {
@@ -41,11 +42,31 @@ class ItemPresetsTest :
                 specs shouldHaveSize 5
             }
 
-            it("should scale sf count in large bundle") {
-                val specs = ItemPresets.resolveSpecs("lootbox_bundle_large", 4).getOrThrow()
+            it("should resolve every tiered case model through the ItemsAdder fallback map") {
+                val expected = mapOf(
+                    "ae_lootbox" to 73023,
+                    "ae_lootbox_enchanted" to 73024,
+                    "ae_lootbox_master" to 73025,
+                    "sf_lootbox" to 73026,
+                    "sf_lootbox_advanced" to 73027,
+                    "sf_lootbox_master" to 73029,
+                    "money_handful" to 11135,
+                    "money_pile" to 11136,
+                    "money_heap" to 11137,
+                    "money_bag" to 11138,
+                )
 
-                specs shouldHaveSize 5
-                specs.count { it.get("material")?.asString == "IRON_INGOT" && it.get("amount")?.asInt == 4 } shouldBe 1
+                expected.forEach { (preset, model) ->
+                    val stack = ItemPresets.resolveStacks(preset, 1).getOrThrow().single()
+                    stack.itemMeta.customModelData shouldBe model
+                }
+            }
+
+            it("should scale sf count in large bundle") {
+                val stacks = ItemPresets.resolveStacks("lootbox_bundle_large", 4).getOrThrow()
+
+                stacks shouldHaveSize 5
+                stacks.count { it.type.name == "IRON_INGOT" && it.amount == 4 } shouldBe 1
             }
 
             it("should fail for unknown preset") {

@@ -17,6 +17,12 @@ class DungeonSupplyShopTest : FreeSpec({
     beforeEach { paper = MockBukkitTestRuntime.open() }
     afterEach { paper.close() }
 
+    "dungeon case generator exposes stable voucher definitions" {
+        DungeonCaseRewards.definition("loot_case") shouldBe
+            "dungeon-case-v1:loot_case:combat-cap=20:levels=80/60,90/30,100/10:type=random:boss-unique=false"
+        DungeonCaseRewards.definition("unknown") shouldBe null
+    }
+
     "defaults include supplies and the merchant scroll" {
         DungeonSupplyShop().list() shouldBe DEFAULT_SUPPLY_OFFERS
     }

@@ -64,7 +64,7 @@ object GiveSubCommand : SubCommand {
                 sender.sendMessage(
                     CommandConfig.get(
                         "give.hint",
-                        "<gray>Примеры: sf_lootbox, ae_lootbox, enchant_token, money_bag, lootbox_bundle",
+                        "<gray>Примеры: sf_lootbox_advanced, ae_lootbox_enchanted, enchant_tokens_3, money_bag",
                     ),
                 )
                 return true

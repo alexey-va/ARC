@@ -76,11 +76,15 @@ class RewardCatalogModuleConfigTest : StringSpec({
                         name: '<white>Мешочек'
                         requires: []
                         pouch: reward_pouch
+                      dungeon:
+                        name: '<white>Кейс подземелий'
+                        requires: [EliteMobs]
+                        dungeon-case: loot_case
             """.trimIndent())
 
             val settings = RewardCatalogModuleConfig.load(root).snapshot()
             val category = settings.categories.single()
-            category.entries.map { it.id } shouldBe listOf("command", "native", "preset", "pouch")
+            category.entries.map { it.id } shouldBe listOf("command", "native", "preset", "pouch", "dungeon")
             settings.rootIcon shouldBe CatalogIconStyle("CHEST", 99)
             category.icon shouldBe CatalogIconStyle("CHEST", 11)
             category.entries.single { it.id == "command" }.icon shouldBe CatalogIconStyle("PAPER")
@@ -92,6 +96,7 @@ class RewardCatalogModuleConfigTest : StringSpec({
             category.entries.single { it.id == "pouch" }.source shouldBe RewardCatalogSource.Pouch("reward_pouch")
             category.entries.single { it.id == "pouch" }.description shouldBe emptyList()
             category.entries.single { it.id == "pouch" }.previewItemsAdder shouldBe null
+            category.entries.single { it.id == "dungeon" }.source shouldBe RewardCatalogSource.DungeonCase("loot_case")
             category.entries.single { it.id == "command" }.source shouldBe RewardCatalogSource.Treasure("common", "command")
         } finally {
             root.toFile().deleteRecursively()
