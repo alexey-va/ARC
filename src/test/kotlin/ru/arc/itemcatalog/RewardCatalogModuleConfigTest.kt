@@ -68,6 +68,56 @@ class RewardCatalogModuleConfigTest : StringSpec({
         }
     }
 
+    "parses a namespaced ItemsAdder preview without making it a reward source" {
+        val root = Files.createTempDirectory("arc-reward-catalog-preview")
+        try {
+            writeConfig(root, """
+                enabled: true
+                title: 'Награды'
+                categories:
+                  common:
+                    name: 'Обычные'
+                    description: []
+                    icon: PAPER
+                    entries:
+                      coin:
+                        description: []
+                        treasure: {pool: common, id: coin}
+                        preview-itemsadder: iageneric:coin
+            """.trimIndent())
+
+            val entry = RewardCatalogModuleConfig.load(root).snapshot().categories.single().entries.single()
+            entry.source shouldBe RewardCatalogSource.Treasure("common", "coin")
+            entry.previewItemsAdder shouldBe "iageneric:coin"
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    "rejects an unnamespaced ItemsAdder preview id" {
+        val root = Files.createTempDirectory("arc-reward-catalog-preview-invalid")
+        try {
+            writeConfig(root, """
+                enabled: true
+                title: 'Награды'
+                categories:
+                  common:
+                    name: 'Обычные'
+                    description: []
+                    icon: PAPER
+                    entries:
+                      coin:
+                        description: []
+                        treasure: {pool: common, id: coin}
+                        preview-itemsadder: coin
+            """.trimIndent())
+
+            runCatching { RewardCatalogModuleConfig.load(root).snapshot() }.isFailure shouldBe true
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
     "rejects unknown keys and multiple reward providers" {
         val root = Files.createTempDirectory("arc-reward-catalog-invalid")
         try {

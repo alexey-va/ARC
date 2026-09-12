@@ -129,7 +129,10 @@ class RewardCatalogModuleConfig(private val config: Config) {
                 }
             }
         } else emptyMap()
-        return RewardCatalogEntry(id, name, description, rarity, requires, source, icon, weight, enchantments)
+        val previewItemsAdder = if ("preview-itemsadder" in map) {
+            requiredId(map["preview-itemsadder"], "$path.preview-itemsadder", ITEMSADDER_ID)
+        } else null
+        return RewardCatalogEntry(id, name, description, rarity, requires, source, icon, weight, enchantments, previewItemsAdder)
     }
 
     private fun validateHierarchy(categories: List<RewardCatalogCategory>) {
@@ -314,7 +317,7 @@ class RewardCatalogModuleConfig(private val config: Config) {
         private val ENCHANTMENT_ID = Regex("(?:minecraft:)?[a-z_]+")
         private val PLUGIN_ID = Regex("[A-Za-z0-9._-]{1,64}")
         private val CATEGORY_KEYS = setOf("name", "description", "icon", "entries", "parent", "rolls")
-        private val ENTRY_KEYS = setOf("name", "description", "rarity", "requires", "treasure", "preset", "pouch", "seal", "itemsadder", "planned", "mount", "package", "icon", "weight", "enchantments")
+        private val ENTRY_KEYS = setOf("name", "description", "rarity", "requires", "treasure", "preset", "pouch", "seal", "itemsadder", "preview-itemsadder", "planned", "mount", "package", "icon", "weight", "enchantments")
         private val ICON_KEYS = setOf("material", "custom-model-data")
         private val SOURCE_KEYS = setOf("treasure", "preset", "pouch", "seal", "itemsadder", "planned", "mount", "package")
         private val MESSAGE_KEYS = setOf("unavailable", "inventory-full", "given", "accepted", "action-failed")

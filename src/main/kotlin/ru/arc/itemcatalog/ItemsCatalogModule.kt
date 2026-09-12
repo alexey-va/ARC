@@ -122,7 +122,10 @@ object ItemsCatalogModule : PluginModule {
         }
         rewardController = RewardCatalogGuiController(
             rewards, loaded.givePermission, seals::createStack,
-            { entry -> physical.previewStack(nativeRewards.key(entry)) },
+            { entry ->
+                if (entry.previewItemsAdder != null) nativeRewards.visualPreview(entry)
+                else physical.previewStack(nativeRewards.key(entry))
+            },
             { entry -> nativeRewards.materialization(entry)
                 ?.let { createPhysical(it.sourceKey) } },
             nativeRewards::isVoucherSource,

@@ -60,6 +60,9 @@ Each entry has exactly one source: `treasure` (`pool` + `id`), `preset`,
 Categories are capped at 64, entries at 512 per category and 2,000 in total.
 Names, descriptions and rarity retain authored MiniMessage colors. Stories and
 native equipment metadata are preserved on actual prizes, including seal choices.
+An optional `preview-itemsadder: namespace:item` selects a catalogue-only model;
+missing models use the authored icon. It never changes the reward source or the
+inert icon embedded in a physical voucher or its archived materialization.
 
 `parent` forms folders up to four levels deep. A case has `rolls: 1` and positive
 entry `weight`; displayed odds come from the same normalized weights. These

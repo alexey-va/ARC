@@ -90,6 +90,14 @@ internal class CatalogPhysicalRewards(
             ?: (archivedSeal(key) != null)
     }.getOrDefault(false)
 
+    /**
+     * Renders the configured catalogue-only presentation. Callers displaying a
+     * menu may use the optional ItemsAdder model; physical reward resolution
+     * deliberately keeps using [preview] so that this visual stack cannot be
+     * embedded in a voucher or archive.
+     */
+    internal fun visualPreview(entry: RewardCatalogEntry): ItemStack = renderPreview(entry, allowItemsAdder = true)
+
     /** Mints an archived collection seal marker; it has no bearer UUID. */
     fun createSealStack(categoryId: String): ItemStack? = runCatching {
         val archive = frozen ?: return@runCatching null
@@ -482,11 +490,18 @@ internal class CatalogPhysicalRewards(
 
     private fun isAllowedCommand(command: String): Boolean = tokenAmount(command) != null || NATIVE_ITEM_COMMANDS.any { it.second.matches(command) }
 
-    private fun preview(entry: RewardCatalogEntry): ItemStack {
+    private fun preview(entry: RewardCatalogEntry): ItemStack = renderPreview(entry, allowItemsAdder = false)
+
+    private fun renderPreview(entry: RewardCatalogEntry, allowItemsAdder: Boolean): ItemStack {
         val style = entry.icon ?: CatalogIconStyle("PAPER")
-        return ItemStack(Material.valueOf(style.material)).also { stack ->
-            if (style.customModelData != 0) stack.withCustomModelData(style.customModelData)
-            stack.editMeta { meta ->
+        val stack = entry.previewItemsAdder
+            ?.takeIf { allowItemsAdder }
+            ?.let { id -> runCatching { CustomStack.getInstance(id)?.itemStack?.clone() }.getOrNull() }
+            ?: ItemStack(Material.valueOf(style.material)).also {
+                if (style.customModelData != 0) it.withCustomModelData(style.customModelData)
+            }
+        return stack.also {
+            it.editMeta { meta ->
                 meta.displayName(TextUtil.mm(entry.name ?: "<gold>Запечатанная награда", true))
                 meta.lore((entry.description + when (val source = entry.source) {
                     is RewardCatalogSource.FurniturePackage -> {

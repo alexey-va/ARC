@@ -35,6 +35,8 @@ data class RewardCatalogEntry(
     val icon: CatalogIconStyle?,
     val weight: Int? = null,
     val enchantments: Map<String, Int> = emptyMap(),
+    /** Optional ItemsAdder stack used only for catalogue presentation. */
+    val previewItemsAdder: String? = null,
 )
 
 data class RewardCatalogCategory(

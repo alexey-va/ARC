@@ -1,12 +1,15 @@
 package ru.arc.itemcatalog
 
+import dev.lone.itemsadder.api.CustomStack
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import io.mockk.mockkObject
+import io.mockk.mockkStatic
 import io.mockk.unmockkObject
+import io.mockk.unmockkStatic
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
@@ -48,6 +51,76 @@ class CatalogPhysicalRewardsTest : StringSpec({
 
         every { tokens.deposit(playerId, 300L, "arc-reward:$operationId", 700L) } returns MountMoneyEvidence(false, false, 700L, "provider_unavailable")
         (service.deposit(player, "tokens", 3.0, operationId) is PhysicalRewardOutcome.Rejected) shouldBe true
+    }
+
+    "uses the optional ItemsAdder stack only for visual preview and falls back to the icon" {
+        MockBukkitTestRuntime.open().use {
+            val poolId = "catalog-preview-${UUID.randomUUID()}"
+            val pool = TreasurePool(
+                poolId,
+                treasures = listOf(
+                    Treasure.Item(ItemStack(Material.DIAMOND), id = "custom"),
+                    Treasure.Item(ItemStack(Material.EMERALD), id = "fallback"),
+                ),
+            )
+            val customEntry = RewardCatalogEntry(
+                id = "custom",
+                name = "Монета",
+                description = emptyList(),
+                rarity = null,
+                requires = emptyList(),
+                source = RewardCatalogSource.Treasure(poolId, "custom"),
+                icon = CatalogIconStyle(Material.PAPER.name, 777),
+                previewItemsAdder = "iageneric:coin",
+            )
+            val fallbackEntry = customEntry.copy(
+                id = "fallback",
+                name = "Камень",
+                source = RewardCatalogSource.Treasure(poolId, "fallback"),
+                previewItemsAdder = "missing:item",
+            )
+            val settings = RewardCatalogSettings(
+                enabled = true,
+                title = "Каталог",
+                categories = listOf(
+                    RewardCatalogCategory(
+                        id = "common",
+                        name = "Обычные",
+                        description = emptyList(),
+                        icon = CatalogIconStyle(Material.CHEST.name),
+                        entries = listOf(customEntry, fallbackEntry),
+                    ),
+                ),
+                messages = RewardCatalogMessages.DEFAULT,
+            )
+            val customStack = ItemStack(Material.GOLD_NUGGET)
+            val handle = mockk<CustomStack>(relaxed = true)
+            every { handle.itemStack } returns customStack
+            mockkObject(Treasures)
+            mockkStatic(CustomStack::class)
+            every { Treasures.getPool(poolId) } returns pool
+            every { CustomStack.getInstance(any()) } answers {
+                if (firstArg<String>() == "iageneric:coin") handle else null
+            }
+            try {
+                val service = CatalogPhysicalRewards(settings)
+                val customPreview = service.visualPreview(customEntry)
+                customPreview.type shouldBe Material.GOLD_NUGGET
+
+                val fallbackPreview = service.visualPreview(fallbackEntry)
+                fallbackPreview.type shouldBe Material.PAPER
+                fallbackPreview.itemMeta?.customModelData shouldBe 777
+
+                // The physical resolver retains the inert icon preview; the
+                // ItemsAdder stack is available only through visualPreview.
+                val physicalPreview = requireNotNull(service.resolve(service.key(customEntry))).preview
+                physicalPreview.type shouldBe Material.PAPER
+                physicalPreview.itemMeta?.customModelData shouldBe 777
+            } finally {
+                unmockkStatic(CustomStack::class)
+                unmockkObject(Treasures)
+            }
+        }
     }
 
     "collection seals archive all choices with an inert preview and reject partial snapshots" {
