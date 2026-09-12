@@ -2,20 +2,23 @@ package ru.arc.contracts
 
 import java.time.DayOfWeek
 import java.time.Instant
-import java.time.ZoneOffset
+import java.time.ZoneId
 import java.time.temporal.TemporalAdjusters
 
-/** UTC weeks are also the durable budget boundary; viewing a menu never resets a quota. */
+/** Moscow weeks are also the durable budget boundary; viewing a menu never resets a quota. */
 object ContractRotation {
     const val WEEK_MILLIS = 7 * 86_400_000L
+    private val WEEK_ZONE = ZoneId.of("Europe/Moscow")
 
-    fun weekStart(now: Long): Long = Instant.ofEpochMilli(now).atZone(ZoneOffset.UTC)
+    fun weekStart(now: Long): Long = Instant.ofEpochMilli(now).atZone(WEEK_ZONE)
         .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-        .toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+        .toLocalDate().atStartOfDay(WEEK_ZONE).toInstant().toEpochMilli()
 
     fun at(definition: ResourceContractDefinition, now: Long): ResourceContractDefinition {
         if (!definition.weeklyRecurring || now < definition.windowStartsAt) return definition
-        require(definition.windowStartsAt == weekStart(definition.windowStartsAt)) { "Recurring contracts start Monday 00:00 UTC" }
+        require(definition.windowStartsAt == weekStart(definition.windowStartsAt)) {
+            "Recurring contracts start Monday 00:00 Europe/Moscow"
+        }
         require(definition.windowEndsAt - definition.windowStartsAt == WEEK_MILLIS) { "Recurring contracts have a seven-day window" }
         val startsAt = weekStart(now)
         return definition.copy(windowStartsAt = startsAt, windowEndsAt = Math.addExact(startsAt, WEEK_MILLIS))

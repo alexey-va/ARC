@@ -79,6 +79,11 @@ object NpcContractsGui {
             .replace("{target}", status.targetQuantity.toString()),
     )
 
+    fun openSources(player: Player) {
+        ArcMenus.beginDialogFlow(player)
+        showSources(player)
+    }
+
     /** Browsing never grants permission to hand in items at an NPC desk. */
     fun openList(player: Player, group: String = "all") {
         if (!groupPattern.matches(group)) {
@@ -105,58 +110,51 @@ object NpcContractsGui {
         val availability: ContractBookAvailability,
     )
 
+    private fun showSources(player: Player) {
+        val entries = catalogEntries(player, "all", System.currentTimeMillis())
+        val counts = entries.groupingBy { it.view.contract.group }.eachCount()
+        val buttons = SOURCES.map { group ->
+            val count = if (group == "all") entries.size else counts[group] ?: 0
+            PaperDialogButton(
+                action("source_$group"),
+                light("${groupName(group)} ›", sourceColor(group)),
+                tooltip(dialogText(
+                    group,
+                    "source.tooltip",
+                    "<#e8dfd2>Открыть заказы этого источника · открыто: <orders>.",
+                    "orders" to light(count.toString(), sourceColor(group)),
+                )),
+                width = HALF_BUTTON_WIDTH,
+            ) { showList(player, group, 0) }
+        }
+        val screen = PaperDialogScreen(
+            id = "contracts.sources",
+            title = dialogText("all", "source.title", "<#f4d87a><bold>Источники заказов"),
+            body = listOf(PaperDialogBody(dialogText(
+                "all",
+                "source.intro",
+                "<#e8dfd2>Выберите, чьи заказы открыть. Общий список вынесен в отдельный пункт.",
+            ), BODY_WIDTH)),
+            buttons = buttons,
+            columns = 2,
+        )
+        showDialog(player, screen) { showSources(player) }
+    }
+
     private fun showList(player: Player, group: String, requestedPage: Int) {
         val now = System.currentTimeMillis()
-        val originAllowed = mutableMapOf<String, Boolean>()
-        val entries = ContractsManager.currentPlayerViews(
-            player.uniqueId,
-            group.takeUnless { it == "all" },
-            policy = ContractRankPolicyResolver.resolve(player),
-        ).asSequence()
-            .filter { it.contract.status != ContractStatus.EXPIRED.label }
-            .map { view ->
-                val available = PaperContractItems.countPlain(player, view.contract.itemKey)
-                val selection = ContractQuantitySelector.select(view, available)
-                CatalogEntry(
-                    view,
-                    available,
-                    selection,
-                    ContractBookAvailability.resolve(
-                        view,
-                        available,
-                        originAllowed.getOrPut(view.contract.group) {
-                            ContractOriginGate.canSubmit(player, view.contract.group)
-                        },
-                        now = now,
-                    ),
-                )
-            }
-            .sortedBy { entry -> when (entry.availability) {
-                ContractBookAvailability.READY -> 0
-                ContractBookAvailability.ORIGIN_REQUIRED -> 1
-                else -> 2
-            } }
-            .toList()
+        val entries = catalogEntries(player, group, now)
         val pages = ((entries.size + PAGE_SIZE - 1) / PAGE_SIZE).coerceAtLeast(1)
         val page = requestedPage.coerceIn(0, pages - 1)
         val pageEntries = entries.drop(page * PAGE_SIZE).take(PAGE_SIZE)
         val ready = entries.count { it.availability == ContractBookAvailability.READY }
         val withItems = entries.count { it.available >= it.view.minSubmissionQuantity }
         val buttons = mutableListOf<PaperDialogButton>()
-        GROUPS.forEach { (key, target) ->
-            val selected = group == target
-            buttons += PaperDialogButton(
-                action("filter_$key"),
-                light("${if (selected) "✔" else "○"} ${groupName(target)}", if (selected) SUCCESS_COLOR else WHITE),
-                tooltip(dialogText(target, "catalog.filter-tooltip", "<#e8dfd2>Показать заказы этой категории.")),
-                width = HALF_BUTTON_WIDTH,
-            ) { showList(player, target, 0) }
-        }
         pageEntries.forEachIndexed { index, entry ->
             buttons += PaperDialogButton(
                 action("order_$index"),
                 light("○ ${plainName(entry.view)} ›", WHITE),
-                orderTooltip(entry, now),
+                orderTooltip(entry),
                 width = HALF_BUTTON_WIDTH,
             ) { showDetail(player, group, entry.view.contract.id, null) }
         }
@@ -194,20 +192,61 @@ object NpcContractsGui {
         showDialog(player, screen) { showList(player, group, page) }
     }
 
-    private fun orderTooltip(entry: CatalogEntry, now: Long): Component {
+    private fun catalogEntries(player: Player, group: String, now: Long): List<CatalogEntry> {
+        val originAllowed = mutableMapOf<String, Boolean>()
+        return ContractsManager.currentPlayerViews(
+            player.uniqueId,
+            group.takeUnless { it == "all" },
+            now = now,
+            policy = ContractRankPolicyResolver.resolve(player),
+        ).asSequence()
+            .filter { it.contract.status != ContractStatus.EXPIRED.label }
+            .map { view ->
+                val available = PaperContractItems.countPlain(player, view.contract.itemKey)
+                val selection = ContractQuantitySelector.select(view, available)
+                CatalogEntry(
+                    view,
+                    available,
+                    selection,
+                    ContractBookAvailability.resolve(
+                        view,
+                        available,
+                        originAllowed.getOrPut(view.contract.group) {
+                            ContractOriginGate.canSubmit(player, view.contract.group)
+                        },
+                        now = now,
+                    ),
+                )
+            }
+            .filter { it.availability.isCatalogVisible() }
+            .sortedBy { entry -> when (entry.availability) {
+                ContractBookAvailability.READY -> 0
+                ContractBookAvailability.ORIGIN_REQUIRED -> 1
+                else -> 2
+            } }
+            .toList()
+    }
+
+    private fun orderTooltip(entry: CatalogEntry): Component {
         val selection = entry.selection
-        val lines = mutableListOf(
+        val status = if (entry.availability == ContractBookAvailability.ITEMS_MISSING) {
+            dialogText(
+                entry.view.contract.group,
+                "catalog.items-missing",
+                "<#ff6b61>Не хватает: <missing> шт.",
+                "missing" to light((selection.minimum - entry.available).coerceAtLeast(0).toString(), ERROR_COLOR),
+            )
+        } else availabilityComponent(entry.view.contract.group, entry.availability)
+        return tooltip(
             light("В инвентаре: ${entry.available} шт.", BODY_COLOR),
-            if (selection.canSubmit) light("Доступная партия: ${selection.minimum}–${selection.maximum} шт.", WHITE)
-            else light("Минимальная партия: ${selection.minimum} шт.", WARM_COLOR),
-            light("Цена за 1 шт.: ${formatContractMoney(entry.view.playerPayoutMinorPerUnit)} 💰", TRADE_COLOR),
-            availabilityComponent(entry.view.contract.group, entry.availability),
-            light("До ${formatTime(entry.view.contract.windowEndsAt)}", BODY_COLOR),
+            if (selection.canSubmit) light("Можно сдать: ${selection.minimum}–${selection.maximum} шт.", SUCCESS_COLOR)
+            else light("Минимум: ${selection.minimum} шт.", WARM_COLOR),
+            null,
+            light("Цена: ", BODY_COLOR).append(price(entry.view.playerPayoutMinorPerUnit)),
+            null,
+            status,
+            light("Приём до: ${formatDeadline(entry.view.contract.windowEndsAt)}", PAGE_COLOR),
         )
-        ContractBookAvailability.nextOpeningAt(entry.view, now)?.let { opening ->
-            lines += light("Следующее открытие: ${formatTime(opening)}", PAGE_COLOR)
-        }
-        return tooltip(*lines.toTypedArray())
     }
 
     private fun showDetail(
@@ -228,15 +267,18 @@ object NpcContractsGui {
         val canTrack = tracking != null && trackingTarget != null
         var selectedForReopen = selection.selected.takeIf { selection.canSubmit } ?: requestedQuantity
         val rows = listOf(
-            dialogText(group, "labels.category", "<#e8dfd2>Категория") to light(groupName(group), WHITE),
+            dialogText(group, "labels.resource", "<#e8dfd2>Ресурс") to light(plainName(view), WHITE),
             dialogText(group, "labels.inventory", "<#e8dfd2>В инвентаре") to light("$available шт.", WHITE),
-            dialogText(group, "labels.batch", "<#e8dfd2>Доступная партия") to if (selection.canSubmit) {
+            dialogText(
+                group,
+                if (selection.canSubmit) "labels.batch" else "labels.minimum",
+                if (selection.canSubmit) "<#e8dfd2>Можно сдать" else "<#e8dfd2>Минимум для сдачи",
+            ) to if (selection.canSubmit) {
                 light("${selection.minimum}–${selection.maximum} шт.", SUCCESS_COLOR)
-            } else light("минимум ${selection.minimum} шт.", ERROR_COLOR),
-            dialogText(group, "labels.personal-left", "<#e8dfd2>Ваш остаток") to light("${view.playerRemainingQuantity} шт.", WHITE),
-            dialogText(group, "labels.order-left", "<#e8dfd2>Осталось в заказе") to light("${view.contract.remainingQuantity} шт.", WHITE),
-            dialogText(group, "labels.price", "<#e8dfd2>Цена за 1 шт.") to light("${formatContractMoney(view.playerPayoutMinorPerUnit)} 💰", TRADE_COLOR),
-            dialogText(group, "labels.deadline", "<#e8dfd2>Приём до") to light(formatTime(view.contract.windowEndsAt), PAGE_COLOR),
+            } else light("${selection.minimum} шт.", ERROR_COLOR),
+            dialogText(group, "labels.personal-left", "<#e8dfd2>Личный лимит") to light("${view.playerRemainingQuantity} шт.", WHITE),
+            dialogText(group, "labels.price", "<#e8dfd2>Цена за штуку") to price(view.playerPayoutMinorPerUnit),
+            dialogText(group, "labels.deadline", "<#e8dfd2>Приём до") to light(formatDeadline(view.contract.windowEndsAt), PAGE_COLOR),
         )
         val body = mutableListOf(
             PaperDialogBody(dialogText(
@@ -245,8 +287,8 @@ object NpcContractsGui {
                 "<#e8dfd2>Выберите количество ползунком. Точная выплата появится после проверки условий.",
             ), BODY_WIDTH),
             PaperDialogBody(dialogText(group, "detail.purpose", "<#e8dfd2>Ресурсы для поселения."), BODY_WIDTH),
-            DialogTables.body(rows, frame = DialogTables.Frame.LEGENDARY, width = BODY_WIDTH,
-                columns = DialogTables.Columns.LABEL_WIDE),
+            DialogTables.body(rows, frame = DialogTables.Frame.LEGENDARY, width = TABLE_WIDTH,
+                columns = DialogTables.Columns.BALANCED),
         )
         notice?.let { body += PaperDialogBody(it, BODY_WIDTH) }
         if (availability != ContractBookAvailability.READY) {
@@ -297,7 +339,7 @@ object NpcContractsGui {
         }
         val screen = PaperDialogScreen(
             id = "contracts.detail",
-            title = light(plainName(view), TRADE_COLOR).decorate(TextDecoration.BOLD),
+            title = light(plainName(view), sourceColor(group)).decorate(TextDecoration.BOLD),
             body = body,
             numberInputs = if (selection.canSubmit) listOf(PaperDialogNumberRangeInput(
                 id = QUANTITY_INPUT,
@@ -349,26 +391,24 @@ object NpcContractsGui {
             dialogText(group, "labels.resource", "<#e8dfd2>Ресурс") to light(plainName(view), WHITE),
             dialogText(group, "labels.selected", "<#e8dfd2>Сдать") to light("${quote.quantity} шт.", WHITE),
             dialogText(group, "labels.inventory-after", "<#e8dfd2>В инвентаре после") to light("${available - quote.quantity} шт.", WHITE),
-            dialogText(group, "labels.payout", "<#e8dfd2>Выплата") to light("${formatContractMoney(quote.payoutMinor)} 💰", TRADE_COLOR),
+            dialogText(group, "labels.payout", "<#e8dfd2>Выплата") to price(quote.payoutMinor),
             dialogText(group, "labels.personal-after", "<#e8dfd2>Ваш остаток лимита") to
                 light("${(view.playerRemainingQuantity - quote.quantity).coerceAtLeast(0)} шт.", WHITE),
-            dialogText(group, "labels.order-after", "<#e8dfd2>Останется в заказе") to
-                light("${(view.contract.remainingQuantity - quote.quantity).coerceAtLeast(0)} шт.", WHITE),
         )
         val screen = PaperDialogScreen(
             id = "contracts.confirm",
             title = dialogText(group, "confirm.title", "<#f4d87a><bold>Подтверждение сдачи"),
             body = listOf(
                 PaperDialogBody(dialogText(group, "confirm.intro", "<#e8dfd2>Проверьте точное количество и выплату. Перед сдачей условия будут сверены ещё раз."), BODY_WIDTH),
-                DialogTables.body(rows, frame = DialogTables.Frame.LEGENDARY, width = BODY_WIDTH,
-                    columns = DialogTables.Columns.LABEL_WIDE),
+                DialogTables.body(rows, frame = DialogTables.Frame.LEGENDARY, width = TABLE_WIDTH,
+                    columns = DialogTables.Columns.BALANCED),
             ),
             buttons = listOf(PaperDialogButton(
                 action("submit"),
                 dialogText(
                     group,
                     "buttons.submit",
-                    "<#9bd48d>Сдать <quantity> шт. · <payout> 💰",
+                    "<#9bd48d>Сдать <quantity> шт. · <payout> <#ffffff>💰",
                     "quantity" to light(quote.quantity.toString(), SUCCESS_COLOR),
                     "payout" to light(formatContractMoney(quote.payoutMinor), TRADE_COLOR),
                 ),
@@ -621,10 +661,11 @@ object NpcContractsGui {
         return PlainTextComponentSerializer.plainText().serialize(TextUtil.mm(boardString(group, configPath, fallback))).trim()
     }
 
-    private fun tooltip(vararg lines: Component): Component {
+    private fun tooltip(vararg lines: Component?): Component {
         var result = Component.newline()
         lines.forEach { line ->
-            result = result.append(light("  ", BODY_COLOR)).append(line).append(Component.newline())
+            if (line != null) result = result.append(light("  ", BODY_COLOR)).append(line)
+            result = result.append(Component.newline())
         }
         return result
     }
@@ -635,6 +676,17 @@ object NpcContractsGui {
     private fun light(value: String, color: TextColor = BODY_COLOR): Component =
         Component.text(value, color).decoration(TextDecoration.ITALIC, false)
 
+    private fun price(amountMinor: Long): Component =
+        light(formatContractMoney(amountMinor), TRADE_COLOR).append(light(" 💰", WHITE))
+
+    private fun sourceColor(group: String): TextColor = when (group) {
+        "bank_orders" -> TRADE_COLOR
+        "forge_orders" -> ACTIVITY_COLOR
+        "guild_orders" -> PROGRESSION_COLOR
+        "all" -> WHITE
+        else -> WARM_COLOR
+    }
+
     private fun action(value: String): PaperDialogActionId = PaperDialogActionId.of("contracts_$value")
 
     private fun message(group: String, path: String, fallback: String): Component =
@@ -643,31 +695,33 @@ object NpcContractsGui {
     private fun boardString(group: String, path: String, fallback: String): String =
         contractGuiConfig.string("boards.$group.$path", contractGuiConfig.string("defaults.$path", fallback))
 
-    private fun formatTime(timestamp: Long): String = TIME_FORMAT.format(Instant.ofEpochMilli(timestamp))
-
-    private val TIME_FORMAT =
-        DateTimeFormatter.ofPattern("dd.MM HH:mm 'МСК'", java.util.Locale.forLanguageTag("ru-RU"))
-            .withZone(ZoneId.of("Europe/Moscow"))
+    private fun formatDeadline(timestamp: Long): String = formatContractDeadline(timestamp)
 
     private val QUANTITY_INPUT = PaperDialogInputId.of("quantity")
     private const val PAGE_SIZE = 6
     private const val BODY_WIDTH = 320
+    private const val TABLE_WIDTH = 380
     private const val BUTTON_WIDTH = 320
     private const val HALF_BUTTON_WIDTH = 158
-    private val GROUPS = listOf(
-        "all" to "all",
-        "forge" to "forge_orders",
-        "bank" to "bank_orders",
-        "guild" to "guild_orders",
-    )
+    private val SOURCES = listOf("bank_orders", "forge_orders", "guild_orders", "all")
     private val WHITE = TextColor.color(0xFFFFFF)
     private val BODY_COLOR = TextColor.color(0xE8DFD2)
     private val WARM_COLOR = TextColor.color(0xD7B486)
     private val TRADE_COLOR = TextColor.color(0xF4D87A)
+    private val ACTIVITY_COLOR = TextColor.color(0xFFB277)
+    private val PROGRESSION_COLOR = TextColor.color(0xC4ABFF)
     private val PAGE_COLOR = TextColor.color(0x92BED8)
     private val SUCCESS_COLOR = TextColor.color(0x9BD48D)
     private val ERROR_COLOR = TextColor.color(0xFF6B61)
 }
+
+private val CONTRACT_DEADLINE_FORMAT =
+    DateTimeFormatter.ofPattern("EEEE, HH:mm", java.util.Locale.forLanguageTag("ru-RU"))
+        .withZone(ZoneId.of("Europe/Moscow"))
+
+/** Contract windows are end-exclusive, so present the final accepting minute. */
+internal fun formatContractDeadline(windowEndsAt: Long): String =
+    CONTRACT_DEADLINE_FORMAT.format(Instant.ofEpochMilli(windowEndsAt).minusMillis(1))
 
 internal object ContractDialogRules {
     fun quantity(value: Float?, selection: ContractQuantitySelection): Int? {

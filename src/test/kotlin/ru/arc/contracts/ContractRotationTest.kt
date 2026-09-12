@@ -7,7 +7,7 @@ import io.kotest.matchers.shouldBe
 import java.time.Instant
 
 class ContractRotationTest : StringSpec({
-    val start = Instant.parse("2026-09-07T00:00:00Z").toEpochMilli()
+    val start = Instant.parse("2026-09-06T21:00:00Z").toEpochMilli()
     val definition = ResourceContractDefinition(
         "weekly_coal", "Уголь", "minecraft:coal", ContractFunding.SERVER_ENVELOPE,
         start, start + ContractRotation.WEEK_MILLIS, 125, 100_000, 1_000, 500,
@@ -20,7 +20,7 @@ class ContractRotationTest : StringSpec({
         definition, plan(), listOf(EscrowedItemPayload.capture("minecraft:coal", 8, byteArrayOf(1))), start + 2_000,
     )
 
-    "weekly rotation is stable on reopen and changes exactly at Monday UTC" {
+    "weekly rotation is stable on reopen and changes at Monday midnight in Moscow" {
         ContractRotation.at(definition, start - 1) shouldBe definition
         ContractRotation.at(definition, start + ContractRotation.WEEK_MILLIS - 1) shouldBe definition
         val next = ContractRotation.at(definition, start + ContractRotation.WEEK_MILLIS)
@@ -28,6 +28,12 @@ class ContractRotationTest : StringSpec({
         next.windowEndsAt shouldBe start + 2 * ContractRotation.WEEK_MILLIS
         ContractRotation.at(definition, start + 20 * ContractRotation.WEEK_MILLIS + 123).windowStartsAt shouldBe
             start + 20 * ContractRotation.WEEK_MILLIS
+    }
+
+    "Moscow week starts after the final Sunday minute" {
+        ContractRotation.weekStart(Instant.parse("2026-09-13T20:59:59.999Z").toEpochMilli()) shouldBe start
+        ContractRotation.weekStart(Instant.parse("2026-09-13T21:00:00Z").toEpochMilli()) shouldBe
+            start + ContractRotation.WEEK_MILLIS
     }
 
     "quote binds player quantity total revision age and week" {

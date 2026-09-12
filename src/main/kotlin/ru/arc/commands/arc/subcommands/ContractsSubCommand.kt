@@ -16,15 +16,13 @@ import ru.arc.contracts.SeasonMoneyActionRequest
 import ru.arc.contracts.SeasonMoneyRejection
 import ru.arc.contracts.SeasonTrophyContributionOutcome
 import ru.arc.contracts.SeasonTrophyContributionRejection
+import ru.arc.contracts.formatContractDeadline
 import ru.arc.contracts.formatContractMoney
 import ru.arc.core.Tasks
 import ru.arc.hooks.HookRegistry
 import ru.arc.util.TextUtil
 import java.math.BigDecimal
 import java.math.RoundingMode
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 /** Public contract status plus NPC-owned grouped resource menus. */
 object ContractsSubCommand : SubCommand {
@@ -69,8 +67,8 @@ object ContractsSubCommand : SubCommand {
             sender.sendMessage(TextUtil.mm("<red>Открыть книгу заказов может только игрок."))
             return
         }
-        val group = args.getOrNull(1)?.trim()?.lowercase() ?: "all"
-        NpcContractsGui.openList(player, group)
+        val group = args.getOrNull(1)?.trim()?.lowercase()
+        if (group == null) NpcContractsGui.openSources(player) else NpcContractsGui.openList(player, group)
     }
 
     private fun showBoard(sender: CommandSender) {
@@ -95,7 +93,7 @@ object ContractsSubCommand : SubCommand {
                     "<yellow>${escape(view.displayName)} <dark_gray>[${status(view.status)}]\n" +
                         "<gray>  ${view.itemKey}: <white>${view.remainingQuantity}/${view.targetQuantity}" +
                         " <gray>· <green>${formatContractMoney(view.payoutMinorPerUnit)} <white>💰</white><gray>/шт." +
-                        " <gray>· до <white>${formatTime(view.windowEndsAt)}",
+                        " <gray>· до <white>${formatContractDeadline(view.windowEndsAt)}",
                 ),
             )
         }
@@ -267,8 +265,6 @@ object ContractsSubCommand : SubCommand {
                 .movePointRight(2).longValueExact().takeIf { it > 0L }
         }.getOrNull()
 
-    private fun formatTime(timestamp: Long): String = TIME_FORMAT.format(Instant.ofEpochMilli(timestamp))
-
     private fun escape(value: String): String = value.replace("<", "‹").replace(">", "›")
 
     private fun status(value: String): String =
@@ -280,7 +276,4 @@ object ContractsSubCommand : SubCommand {
             else -> "неизвестно"
         }
 
-    private val TIME_FORMAT =
-        DateTimeFormatter.ofPattern("dd.MM HH:mm 'МСК'", java.util.Locale.forLanguageTag("ru-RU"))
-            .withZone(ZoneId.of("Europe/Moscow"))
 }

@@ -7,11 +7,13 @@ enum class ContractBookAvailability(val messageKey: String, val fallback: String
     CLOSED("closed", "<yellow>Приём сейчас закрыт"),
     COMPLETED("completed", "<green>Нужный объём уже собран"),
     PLAYER_CAP("player-cap", "<yellow>Ваш лимит по заказу исчерпан"),
-    ITEMS_MISSING("not-enough-items", "<yellow>Не хватает минимальной партии обычных предметов"),
+    ITEMS_MISSING("not-enough-items", "<#ff6b61>Не хватает предметов для партии"),
     BUDGET_EXHAUSTED("budget-exhausted", "<yellow>Бюджета не хватает на минимальную партию"),
     ORIGIN_REQUIRED("origin-required", "<yellow>Сдача у конторщика на спавне"),
     UNAVAILABLE("unavailable", "<yellow>Сдача сейчас недоступна. Обновите книгу заказов"),
     ;
+
+    fun isCatalogVisible(): Boolean = this == READY || this == ITEMS_MISSING || this == ORIGIN_REQUIRED
 
     companion object {
         fun resolve(

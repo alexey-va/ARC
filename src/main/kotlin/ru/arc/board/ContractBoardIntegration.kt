@@ -5,12 +5,10 @@ import org.bukkit.Material
 import ru.arc.contracts.ContractsManager
 import ru.arc.contracts.ContractsMode
 import ru.arc.contracts.ResourceContractView
+import ru.arc.contracts.formatContractDeadline
 import ru.arc.metrics.MetricsModule
 import ru.arc.metrics.core.MetricPoint
 import ru.arc.util.TextUtil
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -66,7 +64,7 @@ internal sealed interface ContractBoardCard {
             )
 
         val endsAt: String
-            get() = TIME_FORMAT.format(Instant.ofEpochMilli(view.windowEndsAt))
+            get() = formatContractDeadline(view.windowEndsAt)
 
         val progressPercent: String
             get() =
@@ -117,7 +115,7 @@ internal object ContractBoardCards {
         val orders =
             views
                 .asSequence()
-                .filterNot { it.status == "expired" }
+                .filter { it.status == "open" }
                 .sortedWith(compareBy<ResourceContractView>({ statusRank(it.status) }, { it.windowEndsAt }, { it.id }))
                 .map { ContractBoardCard.Order(it, submissionsEnabled) }
                 .toList()
@@ -196,7 +194,3 @@ internal fun materialFor(itemKey: String): Material {
 }
 
 internal fun money(minor: Long): String = "${minor / 100}.${(minor % 100).toString().padStart(2, '0')}"
-
-private val TIME_FORMAT =
-    DateTimeFormatter.ofPattern("dd.MM HH:mm 'МСК'", java.util.Locale.forLanguageTag("ru-RU"))
-        .withZone(ZoneId.of("Europe/Moscow"))

@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "title": "ARC contracts: move the weekly boundary from UTC to Europe/Moscow",
+  "assumptions": [
+    "Before: recurring orders close Monday 00:00 UTC (03:00 Europe/Moscow). After: they close Monday 00:00 Europe/Moscow, so the last accepting minute is Sunday 23:59 MSK.",
+    "Both policies keep an exact seven-day window. Contract prices, targets, player limits, order budgets and the 250000.00 Vault network weekly cap are unchanged.",
+    "The live classic audit at 2026-09-12T21:30:08+03:00 reported zero accepted quantity, zero spent/held Vault and the full 250000.00 weekly budget across the current resource orders; there were no pending or manual-review submissions.",
+    "Dynamic pricing uses elapsed window time. Moving the current window start three hours earlier can add at most four Vault cents to a 7.50 base unit quote at migration time; the representative after value 7.54 deliberately rounds that bound upward.",
+    "Low/base/high model one weekly coal batch of 32/128/512 items per participant as 4.5714285714/18.2857142857/73.1428571429 daily events. The forge coal envelope remains capped at 25000.00 Vault per week.",
+    "The quote-time delta is a conservative one-time migration comparison, not a permanent price increase: subsequent weeks use the same seven-day pricing curve relative to the new local boundary.",
+    "Premium tokens, item quantities, EconomyShopGUI SELL retirement and all non-contract income sources are unaffected."
+  ],
+  "participants": [1, 5, 10],
+  "currencies": {
+    "vault": {
+      "minor_per_unit": 100,
+      "disposable_per_player_day": {
+        "before": ["0", "0", "0"],
+        "after": ["0", "0", "0"]
+      },
+      "flows": [
+        {
+          "id": "forge_coal_boundary_migration",
+          "kind": "mint",
+          "source": "classic/plugins/ARC/modules/contracts.yml:forge_coal and arc_ops_server contractsAudit 2026-09-12",
+          "basis": "Representative upper-bound quote delta caused only by moving the current seven-day window three hours earlier; the 25000.00 order envelope remains unchanged.",
+          "before": {
+            "enabled": true,
+            "amount_per_event": {"value": "7.50", "unit": "major"},
+            "events_per_player_day": ["4.5714285714", "18.2857142857", "73.1428571429"],
+            "network_weekly_cap": {"value": "25000.00", "unit": "major"}
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {"value": "7.54", "unit": "major"},
+            "events_per_player_day": ["4.5714285714", "18.2857142857", "73.1428571429"],
+            "network_weekly_cap": {"value": "25000.00", "unit": "major"}
+          }
+        }
+      ]
+    },
+    "tokens": {
+      "minor_per_unit": 1,
+      "disposable_per_player_day": {
+        "before": ["0", "0", "0"],
+        "after": ["0", "0", "0"]
+      },
+      "flows": []
+    }
+  },
+  "prices": []
+}

@@ -10,7 +10,7 @@ import ru.arc.contracts.ResourceContractView
 import ru.arc.util.TextUtil
 
 class ContractBoardIntegrationTest : StringSpec({
-    "projects active contracts before player announcements and excludes expired windows" {
+    "projects only open contracts and hides future completed and expired windows" {
         val cards =
             ContractBoardCards.build(
                 views =
@@ -26,7 +26,7 @@ class ContractBoardIntegrationTest : StringSpec({
             )
 
         cards.filterIsInstance<ContractBoardCard.Order>().map { it.view.id } shouldContainExactly
-            listOf("open", "later", "done")
+            listOf("open")
     }
 
     "shows one honest calibration card when no resource orders exist" {
