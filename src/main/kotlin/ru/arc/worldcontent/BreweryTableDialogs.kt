@@ -44,6 +44,7 @@ object BreweryTableDialogs {
     private val fishColor = TextColor.color(0x92BED8)
     private val steakColor = TextColor.color(0xD98A75)
     private val drinkColor = TextColor.color(0xBCA8E8)
+    private val coinColor = TextColor.color(0xFFFFFF)
 
     internal data class Dish(
         val id: String,
@@ -101,7 +102,7 @@ object BreweryTableDialogs {
                 choices.map { dish ->
                     PaperDialogButton(
                         id = PaperDialogActionId.of("${menu.id}_${dish.id}"),
-                        label = styled("${dish.label} · ${dish.price} 💰", dish.color),
+                        label = priceLabel(dish),
                         tooltip = component(dish.tooltip),
                         width = 320,
                         closeDialogBeforeAction = true,
@@ -142,6 +143,14 @@ object BreweryTableDialogs {
 
     private fun styled(text: String, color: TextColor): Component =
         Component.text(text, color).decoration(TextDecoration.ITALIC, false)
+
+    private fun priceLabel(dish: Dish): Component =
+        styled("${dish.label} · ${dish.price} ", dish.color)
+            .append(
+                Component.text("💰", coinColor)
+                    .decoration(TextDecoration.BOLD, false)
+                    .decoration(TextDecoration.ITALIC, false),
+            )
 
     private fun component(text: String): Component =
         Component.text(text, bodyColor).decoration(TextDecoration.ITALIC, false)

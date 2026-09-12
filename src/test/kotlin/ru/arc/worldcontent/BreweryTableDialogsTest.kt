@@ -8,6 +8,7 @@ import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Location
 import org.bukkit.World
@@ -47,6 +48,7 @@ class BreweryTableDialogsTest : FreeSpec({
         screen.buttons.map { it.id.value } shouldContainExactly listOf("food_egg", "food_fish", "food_steak")
         screen.buttons.map { PlainTextComponentSerializer.plainText().serialize(it.label) } shouldContainExactly
             listOf("Яичница с травами · 300 💰", "Запечённая рыба · 450 💰", "Стейк с перцем · 650 💰")
+        screen.buttons.map { it.label.children().single().color() }.all { it == TextColor.color(0xFFFFFF) } shouldBe true
         screen.buttons.all { it.closeDialogBeforeAction } shouldBe true
     }
 

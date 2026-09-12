@@ -555,7 +555,7 @@ object NpcContractsGui {
                     dialogText(
                         group,
                         "result.committed",
-                        "<#9bd48d>Сдано <quantity> шт. · получено <payout> 💰",
+                        "<#9bd48d>Сдано <quantity> шт. · получено <payout> <#ffffff>💰",
                         "quantity" to light(outcome.receipt.quantity.toString(), SUCCESS_COLOR),
                         "payout" to light(formatContractMoney(outcome.receipt.payoutMinor), TRADE_COLOR),
                     ),
