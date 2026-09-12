@@ -4,8 +4,10 @@ import org.bukkit.Bukkit
 import org.bukkit.Color
 import org.bukkit.Location
 import org.bukkit.event.EventHandler
+import org.bukkit.event.EventPriority
 import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
+import org.bukkit.event.player.PlayerCommandPreprocessEvent
 import org.bukkit.event.player.PlayerMoveEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.entity.Player
@@ -383,15 +385,30 @@ object OriginPortalsModule : PluginModule, Listener {
     @EventHandler(ignoreCancelled = true)
     fun onMove(event: PlayerMoveEvent) {
         val current = config?.takeIf { it.enabled }?.anchors?.nearestContaining(event.to)
-        val previous = config?.anchors?.nearestContaining(event.from)
         if (current == null) {
             inside.remove(event.player.uniqueId)
             return
         }
+        if (shouldBypassOriginPortal(current.id, event.player.hasPermission(BYPASS_PERMISSION))) {
+            inside.remove(event.player.uniqueId)
+            return
+        }
+        val previous = config?.anchors?.nearestContaining(event.from)
         if (previous?.id == current.id || inside[event.player.uniqueId] == current.id) return
         inside[event.player.uniqueId] = current.id
-        if (current.id.central && event.player.hasPermission(BYPASS_PERMISSION)) return
         event.player.performCommand(current.command)
+    }
+
+    /**
+     * CMI and other command-based portal integrations can dispatch the same route independently
+     * of [onMove]. Keep the administrator bypass authoritative at the command boundary as well.
+     */
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    fun onPortalCommand(event: PlayerCommandPreprocessEvent) {
+        if (!event.player.hasPermission(BYPASS_PERMISSION)) return
+        val current = config?.takeIf { it.enabled }?.anchors?.nearestContaining(event.player.location) ?: return
+        if (!shouldBypassOriginPortal(current.id, hasBypassPermission = true)) return
+        if (matchesPortalCommand(event.message, current.command)) event.isCancelled = true
     }
 
     @EventHandler
@@ -441,3 +458,9 @@ object OriginPortalsModule : PluginModule, Listener {
 
     private const val BYPASS_PERMISSION = "arc.origin.portals.bypass"
 }
+
+internal fun shouldBypassOriginPortal(id: OriginPortalId, hasBypassPermission: Boolean): Boolean =
+    id.central && hasBypassPermission
+
+internal fun matchesPortalCommand(message: String, configuredCommand: String): Boolean =
+    message.trim().removePrefix("/").equals(configuredCommand.trim().removePrefix("/"), ignoreCase = true)

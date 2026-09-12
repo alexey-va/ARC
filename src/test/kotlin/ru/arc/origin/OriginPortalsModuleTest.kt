@@ -94,6 +94,23 @@ class OriginPortalsModuleTest : FreeSpec({
             directory.toFile().deleteRecursively()
         }
     }
+
+    "administrator bypass covers central portals and their configured commands" {
+        shouldBypassOriginPortal(OriginPortalId.SURVIVAL, hasBypassPermission = true).shouldBeTrue()
+        shouldBypassOriginPortal(OriginPortalId.MINING, hasBypassPermission = true).shouldBeTrue()
+        shouldBypassOriginPortal(OriginPortalId.VANILLA, hasBypassPermission = true).shouldBeTrue()
+        shouldBypassOriginPortal(OriginPortalId.GALLERY_EXIT, hasBypassPermission = true).shouldBeFalse()
+        shouldBypassOriginPortal(OriginPortalId.SURVIVAL, hasBypassPermission = false).shouldBeFalse()
+
+        matchesPortalCommand(
+            "/ARC RTP survival --only-if-first",
+            "arc rtp survival --only-if-first",
+        ).shouldBeTrue()
+        matchesPortalCommand(
+            "/arc rtp mining --only-if-first",
+            "arc rtp survival --only-if-first",
+        ).shouldBeFalse()
+    }
 })
 
 private fun everyWorldName(world: World, name: String) {
