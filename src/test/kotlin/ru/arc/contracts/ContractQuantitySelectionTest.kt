@@ -84,7 +84,41 @@ class ContractQuantitySelectionTest : StringSpec({
         selection.payoutMinor shouldBe 0L
         selection.canSubmit shouldBe false
     }
+
+    "dialog accepts only an exact integer inside the current slider range" {
+        val selection = ContractQuantitySelector.select(view(maxSubmission = 100), availableItems = 100, requested = 64)
+
+        ContractDialogRules.quantity(32f, selection) shouldBe 32
+        ContractDialogRules.quantity(100f, selection) shouldBe 100
+        ContractDialogRules.quantity(31f, selection) shouldBe null
+        ContractDialogRules.quantity(101f, selection) shouldBe null
+        ContractDialogRules.quantity(64.5f, selection) shouldBe null
+        ContractDialogRules.quantity(Float.NaN, selection) shouldBe null
+        ContractDialogRules.quantity(null, selection) shouldBe null
+    }
+
+    "dialog confirmation rejects any changed quote term but ignores quote age" {
+        val original = quote()
+
+        ContractDialogRules.sameQuote(original, original.copy(quotedAt = original.quotedAt + 1_000)) shouldBe true
+        ContractDialogRules.sameQuote(original, original.copy(quantity = original.quantity + 1)) shouldBe false
+        ContractDialogRules.sameQuote(original, original.copy(payoutMinor = original.payoutMinor + 1)) shouldBe false
+        ContractDialogRules.sameQuote(original, original.copy(expectedRevision = original.expectedRevision + 1)) shouldBe false
+        ContractDialogRules.sameQuote(original, original.copy(windowStartsAt = original.windowStartsAt + 1)) shouldBe false
+        ContractDialogRules.sameQuote(original, original.copy(contractId = "bank_test")) shouldBe false
+        ContractDialogRules.sameQuote(original, original.copy(playerId = "00000000-0000-0000-0000-000000000002")) shouldBe false
+    }
 })
+
+private fun quote() = ContractSubmissionQuote(
+    contractId = "forge_test",
+    windowStartsAt = 1L,
+    playerId = "00000000-0000-0000-0000-000000000001",
+    quantity = 64,
+    payoutMinor = 6_400L,
+    expectedRevision = 7L,
+    quotedAt = 10L,
+)
 
 private fun view(
     remaining: Long = 1_000,

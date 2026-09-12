@@ -1,29 +1,35 @@
 package ru.arc.contracts
 
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.TextColor
+import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.minimessage.tag.Tag
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
-import org.bukkit.Material
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.entity.Player
-import org.bukkit.event.inventory.InventoryType
 import ru.arc.ARC
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.whenCompleteSync
 import ru.arc.util.Common
-import ru.arc.gui.ArcMenuSchema
 import ru.arc.gui.ArcMenus
-import ru.arc.menu.MenuElementId
-import ru.arc.paper.menu.PaperMenuEntry
-import ru.arc.paper.menu.PaperMenuItemRenderContext
+import ru.arc.paper.menu.DialogTables
+import ru.arc.paper.menu.PaperDialogActionId
+import ru.arc.paper.menu.PaperDialogBody
+import ru.arc.paper.menu.PaperDialogButton
+import ru.arc.paper.menu.PaperDialogInputId
+import ru.arc.paper.menu.PaperDialogNumberRangeInput
+import ru.arc.paper.menu.PaperDialogScreen
 import ru.arc.util.TextUtil
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.UUID
 
 object NpcContractsGui {
     private val groupPattern = Regex("[a-z0-9][a-z0-9_-]{2,47}")
+    private val asyncGenerations = mutableMapOf<UUID, UUID>()
 
     private val contractGuiConfig: Config by lazy {
         ConfigManager.of(ARC.instance.dataFolder.toPath(), "guis/contracts.yml")
@@ -62,6 +68,7 @@ object NpcContractsGui {
         tasks = null
         tracking?.close()
         tracking = null
+        asyncGenerations.clear()
     }
 
     private fun trackingText(key: String, name: String, status: ContractTrackingStatus): Component = TextUtil.mm(
@@ -72,214 +79,385 @@ object NpcContractsGui {
             .replace("{target}", status.targetQuantity.toString()),
     )
 
-    private fun trackingEntry(player: Player, view: ResourceContractPlayerView, selection: ContractQuantitySelection,
-                              browseGroup: String): PaperMenuEntry {
-        val runtime = tracking
-        val status = runtime?.status(player, view)
-        val target = runCatching { ContractTrackingLogic.targetQuantity(view,
-            if (selection.canSubmit) selection.selected.toLong() else (PaperContractItems.material(view.contract.itemKey)?.maxStackSize ?: 64).toLong(),
-        ) }.getOrNull()
-        val now = System.currentTimeMillis()
-        val canTrack = runtime != null && target != null && now in view.contract.windowStartsAt until view.contract.windowEndsAt &&
-            view.contract.status == ContractStatus.OPEN.label
-        val textKey = if (status != null) "stop" else if (canTrack) "start" else "unavailable"
-        return ArcMenus.entry(ArcMenus.item(ArcMenuSchema.CONTRACTS_DETAIL, "track", PaperMenuItemRenderContext(
-            values = mapOf(
-                "target" to Component.text(status?.targetQuantity ?: target ?: 0),
-                "status" to TextUtil.mm(boardString("all", "tracking.${if (status != null) "selected" else "hint"}",
-                    if (status != null) "Показываем количество в инвентаре" else "Одна цель сбора; место и цена не резервируются")),
-                "action" to TextUtil.mm(boardString("all", "tracking.$textKey", when (textKey) {
-                    "stop" -> "<yellow>[▶] ЛКМ — перестать отслеживать"
-                    "start" -> "<green>[▶] ЛКМ — отслеживать"
-                    else -> "<gray>Отслеживание сейчас недоступно"
-                })),
-            ), flags = if (status != null) setOf("tracked") else emptySet(),
-        )), enabled = status != null || canTrack) { clicker ->
-            val active = tasks ?: return@entry
-            if (runtime == null) return@entry
-            val change = if (runtime.status(clicker, view) != null) runtime.clear(clicker)
-                else if (target != null) runCatching { runtime.toggle(clicker, view, target) }.getOrElse {
-                    clicker.sendActionBar(message("all", "tracking.failure", "<yellow>Не удалось сохранить цель. Попробуйте ещё раз."))
-                    return@entry
-                } else return@entry
-            val inventory = clicker.openInventory.topInventory
-            change.whenCompleteSync(active) { _, failure ->
-                if (!clicker.isOnline) return@whenCompleteSync
-                if (failure != null) clicker.sendActionBar(message("all", "tracking.failure", "<yellow>Не удалось сохранить цель. Попробуйте ещё раз."))
-                else if (clicker.openInventory.topInventory === inventory) openDetail(clicker, browseGroup, view.contract.id, selection.selected)
-            }
-        }
-    }
-
     /** Browsing never grants permission to hand in items at an NPC desk. */
     fun openList(player: Player, group: String = "all") {
         if (!groupPattern.matches(group)) {
             player.sendActionBar(message("all", "messages.invalid-group", "<red>Эта книга заказов настроена неверно."))
             return
         }
-        openList(player, group, ContractRankPolicyResolver.resolve(player))
+        ArcMenus.beginDialogFlow(player)
+        showList(player, group, 0)
     }
 
     fun openDetail(player: Player, group: String, contractId: String, requestedQuantity: Int? = null) {
-        openDetail(player, group, contractId, requestedQuantity, ContractRankPolicyResolver.resolve(player))
-    }
-
-    private fun openList(player: Player, group: String, policy: ContractRankPolicy, requestedPage: Int = 0) {
-        val views = ContractsManager.currentPlayerViews(player.uniqueId, group.takeUnless { it == "all" }, policy = policy)
-            .filter { it.contract.status != ContractStatus.EXPIRED.label }
-        val menu = ArcMenus.current().catalog.require(ArcMenuSchema.CONTRACTS_LIST)
-        val capacity = menu.region(ArcMenuSchema.CONTRACT_ORDERS).size
-        val now = System.currentTimeMillis()
-        val sorted = views.map { view ->
-            val available = PaperContractItems.countPlain(player, view.contract.itemKey)
-            val selection = ContractQuantitySelector.select(view, available)
-            val originAllowed = ContractOriginGate.canSubmit(player, view.contract.group)
-            val availability = ContractBookAvailability.resolve(
-                view, available, originAllowed,
-                quoteAvailable = selection.canSubmit && (!originAllowed || ContractsManager.quote(player, view.contract.id, selection.selected) != null),
-                now = now,
-            )
-            Triple(view, available, availability)
-        }.sortedBy { (_, _, availability) -> when (availability) {
-            ContractBookAvailability.READY -> 0
-            ContractBookAvailability.ORIGIN_REQUIRED -> 1
-            else -> 2
-        } }
-        val pages = ((sorted.size + capacity - 1) / capacity).coerceAtLeast(1)
-        val page = requestedPage.coerceIn(0, pages - 1)
-        val orders = sorted.drop(page * capacity).take(capacity)
-            .map { (view, available, availability) -> orderEntry(group, view, available, availability, now) }
-        val elements = buildMap {
-            put("info", ArcMenus.entry(ArcMenus.item(ArcMenuSchema.CONTRACTS_LIST, "info", render(
-                "heading" to boardString(group, "list.heading", "<gold><bold>Книга заказов"),
-                "description-one" to boardString(group, "list.description-1", "<gray>Выберите, что хотите собрать и сдать."),
-                "description-two" to boardString(group, "list.description-2", "<gray>Условия доступны в карточке заказа."),
-            ))))
-            if (orders.isEmpty() && menu.elements.containsKey(MenuElementId.of("empty"))) put("empty", ArcMenus.entry(ArcMenus.item(ArcMenuSchema.CONTRACTS_LIST, "empty",
-                render("empty" to boardString(group, "list.empty-lore", "<gray>Новые заказы появятся позже.")))))
-            listOf("all" to "all", "forge" to "forge_orders", "bank" to "bank_orders", "guild" to "guild_orders").forEach { (tab, target) ->
-                val element = "tab-$tab"
-                if (menu.elements.containsKey(MenuElementId.of(element))) put(element, ArcMenus.entry(
-                    ArcMenus.item(ArcMenuSchema.CONTRACTS_LIST, element, PaperMenuItemRenderContext(
-                        values = mapOf("label" to Component.text(groupName(target))),
-                        flags = if (group == target) setOf("selected") else emptySet(),
-                    )), enabled = group != target,
-                ) { openList(it, target) })
-            }
-            if (menu.elements.containsKey(MenuElementId.of("refresh"))) put("refresh", ArcMenus.entry(
-                ArcMenus.item(ArcMenuSchema.CONTRACTS_LIST, "refresh"),
-            ) { openList(it, group, ContractRankPolicyResolver.resolve(it), page) })
-            listOf("previous" to page - 1, "next" to page + 1).forEach { (element, destination) ->
-                if (menu.elements.containsKey(MenuElementId.of(element))) put(element, ArcMenus.entry(
-                    ArcMenus.item(ArcMenuSchema.CONTRACTS_LIST, element, PaperMenuItemRenderContext(
-                        values = mapOf("page" to Component.text(page + 1), "pages" to Component.text(pages),
-                            "label" to TextUtil.mm(boardString("all", "pagination.$element", if (element == "previous") "Назад" else "Дальше"))),
-                        flags = if (destination in 0 until pages) setOf("available") else emptySet(),
-                    )), enabled = destination in 0 until pages,
-                ) { openList(it, group, ContractRankPolicyResolver.resolve(it), destination) })
-            }
+        if (!groupPattern.matches(group) || !groupPattern.matches(contractId)) {
+            player.sendActionBar(message("all", "messages.invalid-group", "<red>Эта книга заказов настроена неверно."))
+            return
         }
-        ArcMenus.open(player, ArcMenuSchema.CONTRACTS_LIST,
-            TextUtil.mm(boardString(group, "list.title", "<dark_gray>Книга заказов"), true),
-            elements = elements, regions = mapOf(ArcMenuSchema.CONTRACT_ORDERS to orders))
+        ArcMenus.beginDialogFlow(player)
+        showDetail(player, group, contractId, requestedQuantity)
     }
 
-    private fun orderEntry(group: String, view: ResourceContractPlayerView, available: Int,
-                           availability: ContractBookAvailability, now: Long): PaperMenuEntry {
-        val selection = ContractQuantitySelector.select(view, available)
-        val item = ArcMenus.item("contracts-order", render(
-            "contract-name" to view.contract.displayName,
-            "available" to available.toString(), "remaining" to view.contract.remainingQuantity.toString(),
-            "target" to view.contract.targetQuantity.toString(), "player-remaining" to view.playerRemainingQuantity.toString(),
-            "payout" to formatContractMoney(view.playerPayoutMinorPerUnit),
-            "cap-bonus" to ((view.capBasisPoints / 100) - 100).toString(),
-            "payout-bonus" to ((view.payoutBasisPoints / 100) - 100).toString(),
-            "ends-at" to formatTime(view.contract.windowEndsAt),
-            "action" to orderStatus(view.contract.group, view, availability, now),
-            "can-submit-quantity" to selection.selected.toString(),
-            "batch-payout" to if (selection.canSubmit) formatContractMoney(selection.payoutMinor) else "—",
-            "personal-accepted" to view.playerAcceptedQuantity.toString(),
-            "group-name" to groupName(view.contract.group),
-        )).withType(PaperContractItems.material(view.contract.itemKey) ?: Material.PAPER)
-        return ArcMenus.entry(item) { openDetail(it, group, view.contract.id) }
+    private data class CatalogEntry(
+        val view: ResourceContractPlayerView,
+        val available: Int,
+        val selection: ContractQuantitySelection,
+        val availability: ContractBookAvailability,
+    )
+
+    private fun showList(player: Player, group: String, requestedPage: Int) {
+        val now = System.currentTimeMillis()
+        val originAllowed = mutableMapOf<String, Boolean>()
+        val entries = ContractsManager.currentPlayerViews(
+            player.uniqueId,
+            group.takeUnless { it == "all" },
+            policy = ContractRankPolicyResolver.resolve(player),
+        ).asSequence()
+            .filter { it.contract.status != ContractStatus.EXPIRED.label }
+            .map { view ->
+                val available = PaperContractItems.countPlain(player, view.contract.itemKey)
+                val selection = ContractQuantitySelector.select(view, available)
+                CatalogEntry(
+                    view,
+                    available,
+                    selection,
+                    ContractBookAvailability.resolve(
+                        view,
+                        available,
+                        originAllowed.getOrPut(view.contract.group) {
+                            ContractOriginGate.canSubmit(player, view.contract.group)
+                        },
+                        now = now,
+                    ),
+                )
+            }
+            .sortedBy { entry -> when (entry.availability) {
+                ContractBookAvailability.READY -> 0
+                ContractBookAvailability.ORIGIN_REQUIRED -> 1
+                else -> 2
+            } }
+            .toList()
+        val pages = ((entries.size + PAGE_SIZE - 1) / PAGE_SIZE).coerceAtLeast(1)
+        val page = requestedPage.coerceIn(0, pages - 1)
+        val pageEntries = entries.drop(page * PAGE_SIZE).take(PAGE_SIZE)
+        val ready = entries.count { it.availability == ContractBookAvailability.READY }
+        val withItems = entries.count { it.available >= it.view.minSubmissionQuantity }
+        val buttons = mutableListOf<PaperDialogButton>()
+        GROUPS.forEach { (key, target) ->
+            val selected = group == target
+            buttons += PaperDialogButton(
+                action("filter_$key"),
+                light("${if (selected) "✔" else "○"} ${groupName(target)}", if (selected) SUCCESS_COLOR else WHITE),
+                tooltip(dialogText(target, "catalog.filter-tooltip", "<#e8dfd2>Показать заказы этой категории.")),
+                width = HALF_BUTTON_WIDTH,
+            ) { showList(player, target, 0) }
+        }
+        pageEntries.forEachIndexed { index, entry ->
+            buttons += PaperDialogButton(
+                action("order_$index"),
+                light("○ ${plainName(entry.view)} ›", WHITE),
+                orderTooltip(entry, now),
+                width = HALF_BUTTON_WIDTH,
+            ) { showDetail(player, group, entry.view.contract.id, null) }
+        }
+        if (page > 0) buttons += PaperDialogButton(
+            action("previous"), light("‹ ${dialogPlain("all", "pagination.previous", "Предыдущая страница")}", PAGE_COLOR),
+            tooltip(dialogText("all", "catalog.page-tooltip", "<#e8dfd2>Перейти к другой странице заказов.")),
+            width = HALF_BUTTON_WIDTH,
+        ) { showList(player, group, page - 1) }
+        if (page + 1 < pages) buttons += PaperDialogButton(
+            action("next"), light("${dialogPlain("all", "pagination.next", "Следующая страница")} ›", PAGE_COLOR),
+            tooltip(dialogText("all", "catalog.page-tooltip", "<#e8dfd2>Перейти к другой странице заказов.")),
+            width = HALF_BUTTON_WIDTH,
+        ) { showList(player, group, page + 1) }
+        if (pageEntries.isEmpty()) buttons += PaperDialogButton(
+            action("refresh"), dialogText(group, "buttons.refresh", "<#f4d87a>Обновить заказы"),
+            tooltip(dialogText(group, "catalog.refresh-tooltip", "<#e8dfd2>Проверить, появились ли новые заказы.")),
+            width = HALF_BUTTON_WIDTH,
+        ) { showList(player, group, page) }
+
+        val screen = PaperDialogScreen(
+            id = "contracts.catalog",
+            title = dialogText(group, "catalog.title", "<#f4d87a><bold>Книга заказов"),
+            body = listOf(PaperDialogBody(dialogText(
+                group,
+                if (entries.isEmpty()) "catalog.empty" else "catalog.summary",
+                if (entries.isEmpty()) "<#e8dfd2>Сейчас открытых заказов нет. Обновите книгу немного позже."
+                else "<#e8dfd2>Открыто <orders> заказов · можно сдать сейчас: <ready> · нужная партия уже в инвентаре: <with_items>.\nВыберите заказ — карточка покажет точные условия.",
+                "orders" to light(entries.size.toString(), WHITE),
+                "ready" to light(ready.toString(), SUCCESS_COLOR),
+                "with_items" to light(withItems.toString(), TRADE_COLOR),
+            ), BODY_WIDTH)),
+            buttons = buttons,
+            columns = 2,
+        )
+        showDialog(player, screen) { showList(player, group, page) }
     }
 
-    private fun openDetail(player: Player, browseGroup: String, contractId: String, requestedQuantity: Int?,
-                           policy: ContractRankPolicy, result: Component = Component.empty()) {
-        val views = ContractsManager.currentPlayerViews(player.uniqueId, policy = policy)
-        val view = views.firstOrNull { it.contract.id == contractId } ?: return openList(player, browseGroup, policy)
+    private fun orderTooltip(entry: CatalogEntry, now: Long): Component {
+        val selection = entry.selection
+        val lines = mutableListOf(
+            light("В инвентаре: ${entry.available} шт.", BODY_COLOR),
+            if (selection.canSubmit) light("Доступная партия: ${selection.minimum}–${selection.maximum} шт.", WHITE)
+            else light("Минимальная партия: ${selection.minimum} шт.", WARM_COLOR),
+            light("Цена за 1 шт.: ${formatContractMoney(entry.view.playerPayoutMinorPerUnit)} 💰", TRADE_COLOR),
+            availabilityComponent(entry.view.contract.group, entry.availability),
+            light("До ${formatTime(entry.view.contract.windowEndsAt)}", BODY_COLOR),
+        )
+        ContractBookAvailability.nextOpeningAt(entry.view, now)?.let { opening ->
+            lines += light("Следующее открытие: ${formatTime(opening)}", PAGE_COLOR)
+        }
+        return tooltip(*lines.toTypedArray())
+    }
+
+    private fun showDetail(
+        player: Player,
+        browseGroup: String,
+        contractId: String,
+        requestedQuantity: Int?,
+        notice: Component? = null,
+    ) {
+        val view = currentView(player, contractId) ?: return showList(player, browseGroup, 0)
         val group = view.contract.group
         val available = PaperContractItems.countPlain(player, view.contract.itemKey)
         val selection = ContractQuantitySelector.select(view, available, requestedQuantity)
-        val material = PaperContractItems.material(view.contract.itemKey) ?: Material.PAPER
-        val quote = ContractsManager.quote(player, contractId, selection.selected)
         val originAllowed = ContractOriginGate.canSubmit(player, group)
-        val availability = ContractBookAvailability.resolve(view, available, originAllowed, quote != null)
-        val canSubmit = availability == ContractBookAvailability.READY
-        val menu = ArcMenus.current().catalog.require(ArcMenuSchema.CONTRACTS_DETAIL)
-        val nextOrder = views.filter { it.contract.id != contractId }.sortedBy { it.contract.group != group }.firstOrNull {
-            val count = PaperContractItems.countPlain(player, it.contract.itemKey)
-            ContractBookAvailability.resolve(it, count, true) == ContractBookAvailability.READY
+        val availability = ContractBookAvailability.resolve(view, available, originAllowed)
+        val status = tracking?.status(player, view)
+        val trackingTarget = trackingTarget(view, selection)
+        val canTrack = tracking != null && trackingTarget != null
+        var selectedForReopen = selection.selected.takeIf { selection.canSubmit } ?: requestedQuantity
+        val rows = listOf(
+            dialogText(group, "labels.category", "<#e8dfd2>Категория") to light(groupName(group), WHITE),
+            dialogText(group, "labels.inventory", "<#e8dfd2>В инвентаре") to light("$available шт.", WHITE),
+            dialogText(group, "labels.batch", "<#e8dfd2>Доступная партия") to if (selection.canSubmit) {
+                light("${selection.minimum}–${selection.maximum} шт.", SUCCESS_COLOR)
+            } else light("минимум ${selection.minimum} шт.", ERROR_COLOR),
+            dialogText(group, "labels.personal-left", "<#e8dfd2>Ваш остаток") to light("${view.playerRemainingQuantity} шт.", WHITE),
+            dialogText(group, "labels.order-left", "<#e8dfd2>Осталось в заказе") to light("${view.contract.remainingQuantity} шт.", WHITE),
+            dialogText(group, "labels.price", "<#e8dfd2>Цена за 1 шт.") to light("${formatContractMoney(view.playerPayoutMinorPerUnit)} 💰", TRADE_COLOR),
+            dialogText(group, "labels.deadline", "<#e8dfd2>Приём до") to light(formatTime(view.contract.windowEndsAt), PAGE_COLOR),
+        )
+        val body = mutableListOf(
+            PaperDialogBody(dialogText(
+                group,
+                "detail.intro",
+                "<#e8dfd2>Выберите количество ползунком. Точная выплата появится после проверки условий.",
+            ), BODY_WIDTH),
+            PaperDialogBody(dialogText(group, "detail.purpose", "<#e8dfd2>Ресурсы для поселения."), BODY_WIDTH),
+            DialogTables.body(rows, frame = DialogTables.Frame.LEGENDARY, width = BODY_WIDTH,
+                columns = DialogTables.Columns.LABEL_WIDE),
+        )
+        notice?.let { body += PaperDialogBody(it, BODY_WIDTH) }
+        if (availability != ContractBookAvailability.READY) {
+            body += PaperDialogBody(availabilityComponent(group, availability), BODY_WIDTH)
         }
-        val elements = buildMap {
-            put("resource", ArcMenus.entry(ArcMenus.item(ArcMenuSchema.CONTRACTS_DETAIL, "resource", render(
-                "contract-name" to view.contract.displayName, "available" to available.toString(),
-                "remaining" to view.contract.remainingQuantity.toString(), "player-remaining" to view.playerRemainingQuantity.toString(),
-                "cap-bonus" to ((view.capBasisPoints / 100) - 100).toString(),
-            )).withType(material)))
-            put("info", ArcMenus.entry(ArcMenus.item(ArcMenuSchema.CONTRACTS_DETAIL, "info", PaperMenuItemRenderContext(
-                values = mapOf(
-                    "heading" to TextUtil.mm(boardString(group, "detail.info-heading", "<gold><bold>Общий заказ")),
-                    "accepted" to Component.text(view.contract.acceptedQuantity), "target" to Component.text(view.contract.targetQuantity),
-                    "contributors" to Component.text(view.contract.contributors),
-                    "personal-accepted" to Component.text(view.playerAcceptedQuantity),
-                    "purpose" to TextUtil.mm(boardString(group, "detail.purpose", "<gray>Ресурсы для поселения.")),
-                    "result" to result, "can-submit-quantity" to Component.text(selection.selected),
-                ), flags = if (result != Component.empty()) setOf("has-result") else emptySet(),
-            ))))
-            put("payout", ArcMenus.entry(ArcMenus.item(ArcMenuSchema.CONTRACTS_DETAIL, "payout", render(
-                "payout" to (quote?.payoutMinor ?: selection.payoutMinor).let { if (selection.canSubmit) formatContractMoney(it) else "—" },
-                "per-unit" to formatContractMoney(view.playerPayoutMinorPerUnit),
-                "payout-bonus" to ((view.payoutBasisPoints / 100) - 100).toString(),
-            ))))
-            put("quantity", ArcMenus.entryWithContext(ArcMenus.item(ArcMenuSchema.CONTRACTS_DETAIL, "quantity", render(
-                "selected" to selection.selected.toString(), "minimum" to selection.minimum.toString(), "maximum" to selection.maximum.toString(),
-            )).withType(material)) { context ->
-                val event = context.event
-                if ((event.isLeftClick || event.isRightClick) && selection.canSubmit) openDetail(
-                    context.player, browseGroup, contractId,
-                    ContractQuantitySelector.adjust(selection, event.isRightClick, event.isShiftClick),
+        val buttons = mutableListOf<PaperDialogButton>()
+        buttons += PaperDialogButton(
+            action("continue"),
+            if (availability == ContractBookAvailability.READY) {
+                dialogText(group, "buttons.continue", "<#f4d87a>Проверить сдачу ›")
+            } else dialogText(group, "buttons.unavailable", "<#ffffff>[Недоступно] Сдать ресурсы"),
+            if (availability == ContractBookAvailability.READY) {
+                tooltip(dialogText(group, "detail.continue-tooltip", "<#e8dfd2>Проверить выбранное количество и точную выплату."))
+            } else tooltip(availabilityComponent(group, availability)),
+            width = BUTTON_WIDTH,
+        ) { context ->
+            if (availability == ContractBookAvailability.READY) {
+                val value = context.number(QUANTITY_INPUT)
+                ContractDialogRules.quantity(value, selection)?.let { selectedForReopen = it }
+                prepareConfirmation(context.player, browseGroup, contractId, value)
+            } else showDetail(context.player, browseGroup, contractId, requestedQuantity, availabilityComponent(group, availability))
+        }
+        buttons += PaperDialogButton(
+            action("tracking"),
+            when {
+                status != null -> dialogText(group, "buttons.tracked", "<#9bd48d>✔ Отслеживается")
+                canTrack -> dialogText(group, "buttons.track", "<#ffffff>○ Отслеживать")
+                else -> dialogText(group, "buttons.track-unavailable", "<#ffffff>[Недоступно] Отслеживать")
+            },
+            when {
+                status != null -> tooltip(
+                    light("Цель: ${status.currentQuantity}/${status.targetQuantity} шт.", SUCCESS_COLOR),
+                    dialogText(group, "tracking.stop-tooltip", "<#e8dfd2>Нажмите, чтобы перестать отслеживать."),
                 )
-            })
-            listOf("min" to selection.minimum, "stack" to material.maxStackSize, "max" to selection.maximum).forEach { (preset, requested) ->
-                val element = "quantity-$preset"
-                if (menu.elements.containsKey(MenuElementId.of(element))) {
-                    val presetAvailable = selection.canSubmit && (preset != "stack" || material.maxStackSize >= selection.minimum)
-                    val quantity = if (presetAvailable) requested.coerceIn(selection.minimum, selection.maximum) else 0
-                    put(element, ArcMenus.entry(ArcMenus.item(ArcMenuSchema.CONTRACTS_DETAIL, element, PaperMenuItemRenderContext(
-                        values = mapOf("label" to TextUtil.mm(boardString("all", "quantity.$preset", preset)), "quantity" to Component.text(quantity)),
-                        flags = if (presetAvailable) setOf("available") else emptySet(),
-                    )), enabled = presetAvailable) { openDetail(it, browseGroup, contractId, quantity) })
-                }
-            }
-            if (menu.elements.containsKey(MenuElementId.of("track"))) put("track", trackingEntry(player, view, selection, browseGroup))
-            if (menu.elements.containsKey(MenuElementId.of("next-order"))) put("next-order", ArcMenus.entry(
-                ArcMenus.item(ArcMenuSchema.CONTRACTS_DETAIL, "next-order", PaperMenuItemRenderContext(
-                    values = mapOf("contract-name" to Component.text(nextOrder?.contract?.displayName ?: "—")),
-                    flags = if (nextOrder != null) setOf("available") else emptySet(),
-                )), enabled = nextOrder != null,
-            ) { if (nextOrder != null) openDetail(it, browseGroup, nextOrder.contract.id) })
-            put("back", ArcMenus.entry(ArcMenus.item(ArcMenuSchema.CONTRACTS_DETAIL, "back")) { openList(it, browseGroup) })
-            put("confirm", ArcMenus.entry(ArcMenus.item(ArcMenuSchema.CONTRACTS_DETAIL, "confirm", PaperMenuItemRenderContext(
-                values = mapOf("selected" to Component.text(selection.selected),
-                    "payout" to Component.text(quote?.payoutMinor?.let(::formatContractMoney) ?: "—"),
-                    "unavailable-reason" to TextUtil.mm(availabilityText(group, availability))),
-                flags = buildSet { if (canSubmit) add("can-submit"); if (originAllowed) add("origin-allowed"); if (quote != null) add("quote-available") },
-            )), enabled = canSubmit) { submit(it, group, quote, browseGroup) })
+                canTrack -> tooltip(
+                    light("Цель: $trackingTarget шт.", WHITE),
+                    dialogText(group, "tracking.start-tooltip", "<#e8dfd2>Показывать прогресс сбора в HUD."),
+                )
+                else -> tooltip(dialogText(group, "tracking.unavailable-tooltip", "<#ff6b61>Для этого заказа нельзя поставить цель."))
+            },
+            width = BUTTON_WIDTH,
+        ) { context ->
+            if (status != null || canTrack) {
+                val value = context.number(QUANTITY_INPUT)
+                ContractDialogRules.quantity(value, selection)?.let { selectedForReopen = it }
+                toggleTracking(context.player, browseGroup, contractId, value)
+            } else showDetail(context.player, browseGroup, contractId, requestedQuantity)
         }
-        ArcMenus.open(player, ArcMenuSchema.CONTRACTS_DETAIL,
-            TextUtil.mm(boardString(group, "detail.title", "<dark_gray>Сдать ресурсы"), true), elements = elements)
+        val screen = PaperDialogScreen(
+            id = "contracts.detail",
+            title = light(plainName(view), TRADE_COLOR).decorate(TextDecoration.BOLD),
+            body = body,
+            numberInputs = if (selection.canSubmit) listOf(PaperDialogNumberRangeInput(
+                id = QUANTITY_INPUT,
+                label = dialogText(group, "detail.quantity-label", "<#ffffff>Количество"),
+                start = selection.minimum.toFloat(),
+                end = selection.maximum.toFloat(),
+                initial = selection.selected.toFloat(),
+                step = 1f,
+                width = BODY_WIDTH,
+                labelFormat = "%s: %s",
+            )) else emptyList(),
+            buttons = buttons,
+            columns = 1,
+        )
+        showDialog(player, screen) { showDetail(player, browseGroup, contractId, selectedForReopen) }
     }
+
+    private fun prepareConfirmation(player: Player, browseGroup: String, contractId: String, rawQuantity: Float?) {
+        val view = currentView(player, contractId) ?: return showList(player, browseGroup, 0)
+        val available = PaperContractItems.countPlain(player, view.contract.itemKey)
+        val selection = ContractQuantitySelector.select(view, available)
+        val quantity = ContractDialogRules.quantity(rawQuantity, selection)
+            ?: return showDetail(player, browseGroup, contractId, null,
+                dialogText(view.contract.group, "detail.changed", "<#ff6b61>Инвентарь или условия изменились. Выберите количество ещё раз."))
+        val exactSelection = ContractQuantitySelector.select(view, available, quantity)
+        val availability = ContractBookAvailability.resolve(
+            view,
+            available,
+            ContractOriginGate.canSubmit(player, view.contract.group),
+        )
+        if (!exactSelection.canSubmit || exactSelection.selected != quantity || availability != ContractBookAvailability.READY) {
+            return showDetail(player, browseGroup, contractId, null, availabilityComponent(view.contract.group, availability))
+        }
+        val quote = ContractsManager.quote(player, contractId, quantity)
+            ?: return showDetail(player, browseGroup, contractId, quantity,
+                dialogText(view.contract.group, "detail.changed", "<#ff6b61>Инвентарь или условия изменились. Выберите количество ещё раз."))
+        showConfirmation(player, browseGroup, view, available, quote)
+    }
+
+    private fun showConfirmation(
+        player: Player,
+        browseGroup: String,
+        view: ResourceContractPlayerView,
+        available: Int,
+        quote: ContractSubmissionQuote,
+    ) {
+        val group = view.contract.group
+        val rows = listOf(
+            dialogText(group, "labels.resource", "<#e8dfd2>Ресурс") to light(plainName(view), WHITE),
+            dialogText(group, "labels.selected", "<#e8dfd2>Сдать") to light("${quote.quantity} шт.", WHITE),
+            dialogText(group, "labels.inventory-after", "<#e8dfd2>В инвентаре после") to light("${available - quote.quantity} шт.", WHITE),
+            dialogText(group, "labels.payout", "<#e8dfd2>Выплата") to light("${formatContractMoney(quote.payoutMinor)} 💰", TRADE_COLOR),
+            dialogText(group, "labels.personal-after", "<#e8dfd2>Ваш остаток лимита") to
+                light("${(view.playerRemainingQuantity - quote.quantity).coerceAtLeast(0)} шт.", WHITE),
+            dialogText(group, "labels.order-after", "<#e8dfd2>Останется в заказе") to
+                light("${(view.contract.remainingQuantity - quote.quantity).coerceAtLeast(0)} шт.", WHITE),
+        )
+        val screen = PaperDialogScreen(
+            id = "contracts.confirm",
+            title = dialogText(group, "confirm.title", "<#f4d87a><bold>Подтверждение сдачи"),
+            body = listOf(
+                PaperDialogBody(dialogText(group, "confirm.intro", "<#e8dfd2>Проверьте точное количество и выплату. Перед сдачей условия будут сверены ещё раз."), BODY_WIDTH),
+                DialogTables.body(rows, frame = DialogTables.Frame.LEGENDARY, width = BODY_WIDTH,
+                    columns = DialogTables.Columns.LABEL_WIDE),
+            ),
+            buttons = listOf(PaperDialogButton(
+                action("submit"),
+                dialogText(
+                    group,
+                    "buttons.submit",
+                    "<#9bd48d>Сдать <quantity> шт. · <payout> 💰",
+                    "quantity" to light(quote.quantity.toString(), SUCCESS_COLOR),
+                    "payout" to light(formatContractMoney(quote.payoutMinor), TRADE_COLOR),
+                ),
+                tooltip(dialogText(group, "confirm.submit-tooltip", "<#e8dfd2>Предметы и выплата будут обработаны одной защищённой операцией.")),
+                width = BUTTON_WIDTH,
+            ) { submitConfirmed(it.player, browseGroup, quote) }),
+            columns = 1,
+        )
+        showDialog(player, screen) {
+            prepareConfirmation(player, browseGroup, quote.contractId, quote.quantity.toFloat())
+        }
+    }
+
+    private fun submitConfirmed(player: Player, browseGroup: String, shown: ContractSubmissionQuote) {
+        val view = currentView(player, shown.contractId)
+            ?: return showList(player, browseGroup, 0)
+        val group = view.contract.group
+        val available = PaperContractItems.countPlain(player, view.contract.itemKey)
+        val current = if (available >= shown.quantity && ContractOriginGate.canSubmit(player, group)) {
+            ContractsManager.quote(player, shown.contractId, shown.quantity)
+        } else null
+        if (current == null || !ContractDialogRules.sameQuote(shown, current)) {
+            return showDetail(player, browseGroup, shown.contractId, null,
+                dialogText(group, "detail.changed", "<#ff6b61>Инвентарь или условия изменились. Выберите количество ещё раз."))
+        }
+        submit(player, group, current, browseGroup)
+    }
+
+    private fun toggleTracking(
+        player: Player,
+        browseGroup: String,
+        contractId: String,
+        rawQuantity: Float?,
+    ) {
+        val active = tasks ?: return
+        val runtime = tracking ?: return showDetail(player, browseGroup, contractId, null)
+        val view = currentView(player, contractId) ?: return showList(player, browseGroup, 0)
+        val selection = ContractQuantitySelector.select(view, PaperContractItems.countPlain(player, view.contract.itemKey))
+        val currentStatus = runtime.status(player, view)
+        val quantity = ContractDialogRules.quantity(rawQuantity, selection)
+        val target = trackingTarget(view, selection, quantity)
+        if (currentStatus == null && target == null) return showDetail(player, browseGroup, contractId, null)
+        val change = runCatching {
+            if (currentStatus != null) runtime.clear(player) else runtime.toggle(player, view, requireNotNull(target))
+        }.getOrElse {
+            player.sendActionBar(message("all", "tracking.failure", "<yellow>Не удалось сохранить цель. Попробуйте ещё раз."))
+            return showDetail(player, browseGroup, contractId, selection.selected)
+        }
+        val generation = beginAsync(player)
+        showProcessing(player, "tracking")
+        change.whenCompleteSync(active) { _, failure ->
+            if (!player.isOnline) {
+                finishAsync(player, generation)
+                return@whenCompleteSync
+            }
+            if (!finishAsync(player, generation)) return@whenCompleteSync
+            if (failure != null) {
+                player.sendActionBar(message("all", "tracking.failure", "<yellow>Не удалось сохранить цель. Попробуйте ещё раз."))
+            }
+            showDetail(
+                player,
+                browseGroup,
+                contractId,
+                selection.selected,
+                dialogText(view.contract.group, if (failure == null) "tracking.saved" else "tracking.failed",
+                    if (failure == null) "<#9bd48d>Цель отслеживания обновлена." else "<#ff6b61>Не удалось сохранить цель. Попробуйте ещё раз."),
+            )
+        }
+    }
+
+    private fun trackingTarget(
+        view: ResourceContractPlayerView,
+        selection: ContractQuantitySelection,
+        requested: Int? = null,
+    ): Long? {
+        val preferred = requested?.toLong()
+            ?: selection.selected.takeIf { selection.canSubmit }?.toLong()
+            ?: (PaperContractItems.material(view.contract.itemKey)?.maxStackSize ?: 64).toLong()
+        val now = System.currentTimeMillis()
+        if (tracking == null || now !in view.contract.windowStartsAt until view.contract.windowEndsAt ||
+            view.contract.status != ContractStatus.OPEN.label) return null
+        return runCatching { ContractTrackingLogic.targetQuantity(view, preferred) }.getOrNull()
+    }
+
+    private fun currentView(player: Player, contractId: String): ResourceContractPlayerView? =
+        ContractsManager.currentPlayerViews(
+            player.uniqueId,
+            policy = ContractRankPolicyResolver.resolve(player),
+        ).firstOrNull { it.contract.id == contractId }
 
     private fun groupName(group: String): String = boardString(group, "name", when (group) {
         "all" -> "Все заказы"
@@ -289,29 +467,25 @@ object NpcContractsGui {
         else -> "Заказы"
     })
 
-    private fun render(vararg values: Pair<String, String>) = PaperMenuItemRenderContext(
-        values = values.associate { (key, value) -> key to TextUtil.mm(value, true) },
-    )
-
     private fun submit(
         player: Player,
         group: String,
-        quote: ContractSubmissionQuote?,
+        quote: ContractSubmissionQuote,
         browseGroup: String = group,
     ) {
         if (!ContractOriginGate.canSubmit(player, group)) {
-            player.sendActionBar(message(group, "messages.origin-required", "<yellow>Сдать заказ можно только у конторщика на спавне."))
-            return
-        }
-        if (quote == null) {
-            player.sendActionBar(message(group, "messages.unavailable", "<yellow>Этот заказ больше недоступен. Обновите книгу заказов."))
-            return
+            return showDetail(player, browseGroup, quote.contractId, null,
+                availabilityComponent(group, ContractBookAvailability.ORIGIN_REQUIRED))
         }
         val active = tasks ?: return
-        player.closeInventory()
         player.sendActionBar(message(group, "messages.processing", "<gray>Проверяем ресурсы и запись в книге…"))
+        val generation = beginAsync(player)
+        showProcessing(player, "submission")
         ContractsManager.submit(player, quote).whenCompleteSync(active) { outcome, failure ->
-            if (!player.isOnline) return@whenCompleteSync
+            if (!player.isOnline) {
+                finishAsync(player, generation)
+                return@whenCompleteSync
+            }
             if (failure != null || outcome == null) {
                 player.sendMessage(
                     message(
@@ -320,42 +494,148 @@ object NpcContractsGui {
                         "<red>Заказ остановлен для проверки. <gray>Предметы повторно не сдавайте.",
                     ),
                 )
+                if (finishAsync(player, generation)) showResult(
+                    player,
+                    group,
+                    "result.review-title",
+                    "<#ff6b61><bold>Операция на проверке",
+                    "result.review-body",
+                    "<#ff6b61>Не повторяйте сдачу. Администратор должен проверить состояние операции.",
+                )
                 return@whenCompleteSync
             }
             player.sendMessage(ContractPlayerMessages.render(outcome, contractGuiConfig, group))
-            // A delayed payment result must not replace a different menu the player opened.
-            if (player.openInventory.topInventory.type != InventoryType.CRAFTING) return@whenCompleteSync
-            if (outcome is ContractSubmissionOutcome.Committed) {
-                openDetail(player, browseGroup, quote.contractId, null, ContractRankPolicyResolver.resolve(player),
-                    TextUtil.mm(boardString(group, "messages.receipt", "<green>Сдано {quantity} · Получено {payout} <white>💰</white>")
-                        .replace("{quantity}", outcome.receipt.quantity.toString())
-                        .replace("{payout}", formatContractMoney(outcome.receipt.payoutMinor))))
-            } else if (outcome !is ContractSubmissionOutcome.ManualReview) openList(player, browseGroup)
+            if (!finishAsync(player, generation)) return@whenCompleteSync
+            when (outcome) {
+                is ContractSubmissionOutcome.Committed -> showDetail(
+                    player,
+                    browseGroup,
+                    quote.contractId,
+                    null,
+                    dialogText(
+                        group,
+                        "result.committed",
+                        "<#9bd48d>Сдано <quantity> шт. · получено <payout> 💰",
+                        "quantity" to light(outcome.receipt.quantity.toString(), SUCCESS_COLOR),
+                        "payout" to light(formatContractMoney(outcome.receipt.payoutMinor), TRADE_COLOR),
+                    ),
+                )
+                is ContractSubmissionOutcome.ManualReview -> showResult(
+                    player,
+                    group,
+                    "result.review-title",
+                    "<#ff6b61><bold>Операция на проверке",
+                    "result.review-body",
+                    "<#ff6b61>Не повторяйте сдачу. Администратор должен проверить состояние операции.",
+                )
+                else -> showDetail(
+                    player,
+                    browseGroup,
+                    quote.contractId,
+                    null,
+                    dialogText(group, "result.not-committed", "<#ff6b61>Заказ не принят. Условия и инвентарь обновлены."),
+                )
+            }
         }
     }
 
-    private fun orderStatus(
+    private fun showProcessing(player: Player, operation: String) {
+        val screen = PaperDialogScreen(
+            id = "contracts.processing",
+            title = dialogText("all", "processing.title", "<#f4d87a><bold>Проверяем условия"),
+            body = listOf(PaperDialogBody(dialogText(
+                "all",
+                "processing.$operation",
+                if (operation == "tracking") "<#e8dfd2>Сохраняем цель отслеживания…"
+                else "<#e8dfd2>Проверяем предметы и записываем операцию. Не повторяйте сдачу.",
+            ), BODY_WIDTH)),
+            buttons = emptyList(),
+        )
+        showDialog(player, screen) { showProcessing(player, operation) }
+    }
+
+    private fun showResult(
+        player: Player,
         group: String,
-        view: ResourceContractPlayerView,
-        availability: ContractBookAvailability,
-        now: Long,
-    ): String {
-        val status = availabilityText(group, availability)
-        val next = ContractBookAvailability.nextOpeningAt(view, now)
-        val schedule = next?.let {
-            val key = if (now < view.contract.windowStartsAt) "opens-at" else "renews-at"
-            val fallback = if (key == "opens-at") "<gray>Начало приёма: <white>{time}" else "<gray>Книга обновится: <white>{time}"
-            boardString(group, "availability.$key", fallback).replace("{time}", formatTime(it))
-        }
-        return listOfNotNull(schedule, status).joinToString(if (availability == ContractBookAvailability.READY) "\n\n" else "\n")
+        titlePath: String,
+        titleFallback: String,
+        bodyPath: String,
+        bodyFallback: String,
+    ) {
+        ArcMenus.beginDialogFlow(player)
+        val screen = PaperDialogScreen(
+            id = "contracts.result",
+            title = dialogText(group, titlePath, titleFallback),
+            body = listOf(PaperDialogBody(dialogText(group, bodyPath, bodyFallback), BODY_WIDTH)),
+            buttons = emptyList(),
+        )
+        showDialog(player, screen) { showResult(player, group, titlePath, titleFallback, bodyPath, bodyFallback) }
     }
 
-    private fun availabilityText(group: String, availability: ContractBookAvailability): String =
-        boardString(
+    private fun showDialog(player: Player, screen: PaperDialogScreen, reopen: () -> Unit) =
+        ArcMenus.openDialog(player, screen, reopen = reopen, onDismiss = { invalidateGeneration(player) })
+
+    private fun beginAsync(player: Player): UUID =
+        UUID.randomUUID().also { asyncGenerations[player.uniqueId] = it }
+
+    private fun finishAsync(player: Player, generation: UUID): Boolean {
+        if (asyncGenerations[player.uniqueId] != generation) return false
+        asyncGenerations.remove(player.uniqueId)
+        return true
+    }
+
+    private fun invalidateGeneration(player: Player) {
+        asyncGenerations.remove(player.uniqueId)
+    }
+
+    private fun availabilityComponent(group: String, availability: ContractBookAvailability): Component {
+        val value = dialogPlain(
             group,
             "availability.${availability.messageKey}",
-            boardString(group, "messages.${availability.messageKey}", availability.fallback),
+            availability.fallback,
+            legacyPath = true,
         )
+        val color = when (availability) {
+            ContractBookAvailability.READY, ContractBookAvailability.COMPLETED -> SUCCESS_COLOR
+            ContractBookAvailability.ORIGIN_REQUIRED, ContractBookAvailability.NOT_STARTED,
+            ContractBookAvailability.CLOSED -> WARM_COLOR
+            else -> ERROR_COLOR
+        }
+        return light(value, color)
+    }
+
+    private fun dialogText(
+        group: String,
+        path: String,
+        fallback: String,
+        vararg tags: Pair<String, Component>,
+    ): Component {
+        val resolver = TagResolver.builder()
+        tags.forEach { (name, value) -> resolver.resolver(TagResolver.resolver(name, Tag.inserting(value))) }
+        return TextUtil.mm(boardString(group, "dialog.$path", fallback), resolver.build())
+            .decoration(TextDecoration.ITALIC, false)
+    }
+
+    private fun dialogPlain(group: String, path: String, fallback: String, legacyPath: Boolean = false): String {
+        val configPath = if (legacyPath) path else "dialog.$path"
+        return PlainTextComponentSerializer.plainText().serialize(TextUtil.mm(boardString(group, configPath, fallback))).trim()
+    }
+
+    private fun tooltip(vararg lines: Component): Component {
+        var result = Component.newline()
+        lines.forEach { line ->
+            result = result.append(light("  ", BODY_COLOR)).append(line).append(Component.newline())
+        }
+        return result
+    }
+
+    private fun plainName(view: ResourceContractPlayerView): String =
+        PlainTextComponentSerializer.plainText().serialize(TextUtil.mm(view.contract.displayName, true)).trim().ifBlank { "Заказ" }
+
+    private fun light(value: String, color: TextColor = BODY_COLOR): Component =
+        Component.text(value, color).decoration(TextDecoration.ITALIC, false)
+
+    private fun action(value: String): PaperDialogActionId = PaperDialogActionId.of("contracts_$value")
 
     private fun message(group: String, path: String, fallback: String): Component =
         TextUtil.mm(boardString(group, path, fallback))
@@ -368,6 +648,41 @@ object NpcContractsGui {
     private val TIME_FORMAT =
         DateTimeFormatter.ofPattern("dd.MM HH:mm 'МСК'", java.util.Locale.forLanguageTag("ru-RU"))
             .withZone(ZoneId.of("Europe/Moscow"))
+
+    private val QUANTITY_INPUT = PaperDialogInputId.of("quantity")
+    private const val PAGE_SIZE = 6
+    private const val BODY_WIDTH = 320
+    private const val BUTTON_WIDTH = 320
+    private const val HALF_BUTTON_WIDTH = 158
+    private val GROUPS = listOf(
+        "all" to "all",
+        "forge" to "forge_orders",
+        "bank" to "bank_orders",
+        "guild" to "guild_orders",
+    )
+    private val WHITE = TextColor.color(0xFFFFFF)
+    private val BODY_COLOR = TextColor.color(0xE8DFD2)
+    private val WARM_COLOR = TextColor.color(0xD7B486)
+    private val TRADE_COLOR = TextColor.color(0xF4D87A)
+    private val PAGE_COLOR = TextColor.color(0x92BED8)
+    private val SUCCESS_COLOR = TextColor.color(0x9BD48D)
+    private val ERROR_COLOR = TextColor.color(0xFF6B61)
+}
+
+internal object ContractDialogRules {
+    fun quantity(value: Float?, selection: ContractQuantitySelection): Int? {
+        if (value == null || !value.isFinite() || !selection.canSubmit) return null
+        val quantity = value.toInt()
+        return quantity.takeIf { value == quantity.toFloat() && quantity in selection.minimum..selection.maximum }
+    }
+
+    fun sameQuote(expected: ContractSubmissionQuote, current: ContractSubmissionQuote): Boolean =
+        expected.contractId == current.contractId &&
+            expected.windowStartsAt == current.windowStartsAt &&
+            expected.playerId == current.playerId &&
+            expected.quantity == current.quantity &&
+            expected.payoutMinor == current.payoutMinor &&
+            expected.expectedRevision == current.expectedRevision
 }
 
 object ContractPlayerMessages {
