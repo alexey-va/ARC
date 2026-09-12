@@ -16,7 +16,7 @@ currency-names:
 
 # Boost type display names
 type-names:
-  money: "💰 Деньги"
+  money: "<white>💰</white> Деньги"
   exp: "✨ Опыт"
   points: "⭐ Очки"
   all: "🌟 Все"
@@ -181,5 +181,4 @@ boosts:
       id: "points_boost_small"
       jobs: ["all"]
       types: ["POINTS"]
-
 
