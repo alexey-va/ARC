@@ -23,6 +23,8 @@ interface FurnitureRuntime {
 
     fun inspect(entity: Entity): RuntimeFurnitureHandle?
 
+    fun inspect(block: Block): RuntimeFurnitureHandle? = null
+
     fun remove(
         entity: Entity,
         family: FurnitureFamily,
@@ -52,6 +54,15 @@ object ItemsAdderFurnitureRuntime : FurnitureRuntime {
         inspectSimple(entity)?.let { return it }
         inspectComplex(entity)?.let { return it }
         return inspectMarker(entity)
+    }
+
+    override fun inspect(block: Block): RuntimeFurnitureHandle? {
+        if (!available) return null
+        return runCatching {
+            val furniture = CustomFurniture.byAlreadySpawned(block) ?: return@runCatching null
+            val root = furniture.entity ?: return@runCatching null
+            RuntimeFurnitureHandle(root, FurnitureFamily.SIMPLE, furniture.namespacedID)
+        }.getOrNull()
     }
 
     override fun remove(

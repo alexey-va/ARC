@@ -122,6 +122,84 @@ class WorldSceneManagerTest :
         }
 
         describe("ItemsAdder furniture ownership") {
+            it("replaces only the exact declared legacy furniture with a vanilla chest") {
+                val world = server.addSimpleWorld("scene-legacy-furniture-world")
+                world.getChunkAt(0, 0).load()
+                val runtime = FakeFurnitureRuntime()
+                manager =
+                    WorldSceneManager(
+                        WorldSceneRepository(dataPath.resolve("data/world-scenes-legacy-furniture-test.json")),
+                        runtime,
+                    )
+                val block = world.getBlockAt(7, 64, 7)
+                runtime.spawnBlock("ia:old_crate", block)
+                val spec =
+                    WorldSceneSpec(
+                        "legacy_furniture_scene",
+                        listOf(
+                            SceneObjectSpec.block(
+                                "crate",
+                                world.name,
+                                7,
+                                64,
+                                7,
+                                "minecraft:chest[facing=east,type=single,waterlogged=false]",
+                                "ia:old_crate",
+                            ),
+                        ),
+                    )
+
+                val preview = manager.preview(spec)
+                manager.apply(spec, preview.reviewDigest)
+
+                block.type shouldBe Material.CHEST
+                runtime.removed shouldBe 1
+                manager.preview(spec).unchangedCount shouldBe 1
+
+                val updated =
+                    spec.copy(
+                        objects =
+                            listOf(
+                                spec.objects.single().copy(
+                                    blockData = "minecraft:chest[facing=north,type=single,waterlogged=false]",
+                                ),
+                            ),
+                    )
+                manager.apply(updated, manager.preview(updated).reviewDigest)
+                runtime.removed shouldBe 1
+
+                val deletion = manager.previewDelete("legacy_furniture_scene")
+                manager.delete("legacy_furniture_scene", deletion.reviewDigest)
+                block.type shouldBe Material.AIR
+            }
+
+            it("refuses to replace a different legacy furniture id") {
+                val world = server.addSimpleWorld("scene-wrong-legacy-furniture-world")
+                world.getChunkAt(0, 0).load()
+                val runtime = FakeFurnitureRuntime()
+                manager =
+                    WorldSceneManager(
+                        WorldSceneRepository(dataPath.resolve("data/world-scenes-wrong-legacy-test.json")),
+                        runtime,
+                    )
+                val block = world.getBlockAt(8, 64, 8)
+                runtime.spawnBlock("ia:foreign", block)
+                val spec =
+                    WorldSceneSpec(
+                        "wrong_legacy_scene",
+                        listOf(
+                            SceneObjectSpec.block("crate", world.name, 8, 64, 8, "minecraft:chest", "ia:expected"),
+                        ),
+                    )
+
+                runCatching { manager.preview(spec) }
+                    .exceptionOrNull()
+                    .shouldBeInstanceOf<IllegalArgumentException>()
+                    .message shouldContain "expected ia:expected, found ia:foreign"
+                block.type shouldBe Material.BARRIER
+                runtime.removed shouldBe 0
+            }
+
             it("records exact generated barriers and clears them through native removal") {
                 val world = server.addSimpleWorld("scene-furniture-world")
                 world.getChunkAt(0, 0).load()
@@ -185,17 +263,22 @@ private object UnavailableFurnitureRuntime : FurnitureRuntime {
 private class FakeFurnitureRuntime : FurnitureRuntime {
     override val available = true
     private val owned = mutableMapOf<java.util.UUID, String>()
+    private val anchors = mutableMapOf<String, Entity>()
     var removed: Int = 0
         private set
 
     override fun inspect(entity: Entity): RuntimeFurnitureHandle? =
         owned[entity.uniqueId]?.let { RuntimeFurnitureHandle(entity, FurnitureFamily.SIMPLE, it) }
 
+    override fun inspect(block: Block): RuntimeFurnitureHandle? =
+        anchors[blockKey(block)]?.let(::inspect)
+
     override fun remove(
         entity: Entity,
         family: FurnitureFamily,
     ): Boolean {
         owned.remove(entity.uniqueId)
+        anchors.entries.removeIf { it.value.uniqueId == entity.uniqueId }
         entity.remove()
         removed++
         return !entity.isValid
@@ -208,6 +291,7 @@ private class FakeFurnitureRuntime : FurnitureRuntime {
         block.type = Material.BARRIER
         return block.world.spawn(block.location.add(0.5, 0.0, 0.5), ArmorStand::class.java).also {
             owned[it.uniqueId] = namespacedId
+            anchors[blockKey(block)] = it
         }
     }
 
@@ -215,4 +299,6 @@ private class FakeFurnitureRuntime : FurnitureRuntime {
         namespacedId: String,
         location: Location,
     ): Entity = location.world.spawn(location, ArmorStand::class.java).also { owned[it.uniqueId] = namespacedId }
+
+    private fun blockKey(block: Block): String = "${block.world.name}:${block.x}:${block.y}:${block.z}"
 }

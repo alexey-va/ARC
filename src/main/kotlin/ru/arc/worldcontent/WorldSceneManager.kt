@@ -176,7 +176,9 @@ class WorldSceneManager(
         }
         val desired = spec.objects.associateBy { it.id }
         (preview.createIds + preview.updateIds).distinct().forEach { objectId ->
-            states[objectId] = placeManagedObject(desired.getValue(objectId))
+            val objectSpec = desired.getValue(objectId)
+            val old = current?.objects?.firstOrNull { it.spec.id == objectId }
+            states[objectId] = placeManagedObject(objectSpec, requiresLegacyMigration(objectSpec, old))
             saveInterim(store, current, spec.id, states)
         }
 
@@ -273,7 +275,11 @@ class WorldSceneManager(
                 if (world == null || !world.isChunkLoaded(objectSpec.x.toInt() shr 4, objectSpec.z.toInt() shr 4)) {
                     append("unloaded")
                 } else {
-                    append(world.getBlockAt(objectSpec.x.toInt(), objectSpec.y.toInt(), objectSpec.z.toInt()).blockData.asString)
+                    val block = world.getBlockAt(objectSpec.x.toInt(), objectSpec.y.toInt(), objectSpec.z.toInt())
+                    append(block.blockData.asString)
+                    objectSpec.legacyFurnitureId?.let {
+                        append(":legacy=").append(furnitureRuntime.inspect(block)?.namespacedId ?: "missing")
+                    }
                 }
                 append('\n')
             }
@@ -308,12 +314,28 @@ class WorldSceneManager(
             }
         }
 
-    private fun placeManagedObject(spec: SceneObjectSpec): ManagedSceneObjectState {
+    private fun placeManagedObject(
+        spec: SceneObjectSpec,
+        migrateLegacyFurniture: Boolean,
+    ): ManagedSceneObjectState {
         val world = Bukkit.getWorld(spec.world) ?: throw IllegalStateException("World is not loaded: ${spec.world}")
         return when (spec.kind) {
             SceneObjectKind.MINECRAFT_BLOCK -> {
                 val block = world.getBlockAt(spec.x.toInt(), spec.y.toInt(), spec.z.toInt())
                 val desired = Bukkit.createBlockData(requireNotNull(spec.blockData))
+                spec.legacyFurnitureId?.takeIf { migrateLegacyFurniture }?.let { expectedId ->
+                    val handle = furnitureRuntime.inspect(block)
+                        ?: throw SceneReviewConflictException("legacy furniture is missing: ${spec.id}")
+                    if (handle.namespacedId != expectedId) {
+                        throw SceneReviewConflictException(
+                            "legacy furniture identity changed: ${spec.id} (${handle.namespacedId ?: "unknown"})",
+                        )
+                    }
+                    if (!furnitureRuntime.remove(handle.root, handle.family)) {
+                        throw IllegalStateException("ItemsAdder failed to remove legacy furniture: ${spec.id}")
+                    }
+                    if (block.type == Material.BARRIER) block.setType(Material.AIR, false)
+                }
                 val prior = block.blockData.asString
                 block.setBlockData(desired, false)
                 ManagedSceneObjectState(
@@ -408,7 +430,20 @@ class WorldSceneManager(
                 "coordinate is already managed by another scene object ${foreignPositions[position]}: $position"
             }
             when (objectSpec.kind) {
-                SceneObjectKind.MINECRAFT_BLOCK -> validateSafeBlock(objectSpec)
+                SceneObjectKind.MINECRAFT_BLOCK -> {
+                    validateSafeBlock(objectSpec)
+                    objectSpec.legacyFurnitureId?.let { expectedId ->
+                        check(furnitureRuntime.available) { "ItemsAdder is not enabled" }
+                        val old = current?.objects?.firstOrNull { it.spec.id == objectSpec.id }
+                        if (requiresLegacyMigration(objectSpec, old)) {
+                            val block = world.getBlockAt(objectSpec.x.toInt(), objectSpec.y.toInt(), objectSpec.z.toInt())
+                            val actualId = furnitureRuntime.inspect(block)?.namespacedId
+                            require(actualId == expectedId) {
+                                "legacy furniture does not match ${objectSpec.id}: expected $expectedId, found ${actualId ?: "none"}"
+                            }
+                        }
+                    }
+                }
                 SceneObjectKind.ITEMSADDER_FURNITURE -> {
                     check(furnitureRuntime.available) { "ItemsAdder is not enabled" }
                     if (objectSpec.placement == FurniturePlacement.BLOCK) {
@@ -454,6 +489,19 @@ class WorldSceneManager(
         // it after anybody has placed an item inside.
         require(material == Material.CHEST || forbidden.none(name::contains)) { "Unsafe managed block material: $material" }
     }
+
+    private fun requiresLegacyMigration(
+        desired: SceneObjectSpec,
+        old: ManagedSceneObjectState?,
+    ): Boolean =
+        desired.legacyFurnitureId != null &&
+            (
+                old == null ||
+                    old.spec.world != desired.world ||
+                    old.spec.x != desired.x ||
+                    old.spec.y != desired.y ||
+                    old.spec.z != desired.z
+            )
 
     private fun requireEmptyInventory(
         objectId: String,

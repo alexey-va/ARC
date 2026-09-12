@@ -24,7 +24,8 @@ class WorldSceneSpecTest :
                                   "kind":"minecraft_block",
                                   "world":"spawn",
                                   "x":10,"y":65,"z":10,
-                                  "blockData":"minecraft:polished_andesite"
+                                  "blockData":"minecraft:polished_andesite",
+                                  "legacyFurnitureId":"iasurvival:old_forge"
                                 },
                                 {
                                   "id":"forge_bench",
@@ -42,6 +43,7 @@ class WorldSceneSpecTest :
 
                 spec.id shouldBe "spawn_market"
                 spec.objects.map { it.id }.shouldContainExactly("forge_floor", "forge_bench")
+                spec.objects[0].legacyFurnitureId shouldBe "iasurvival:old_forge"
                 spec.objects[1].kind shouldBe SceneObjectKind.ITEMSADDER_FURNITURE
                 spec.objects[1].placement shouldBe FurniturePlacement.BLOCK
             }

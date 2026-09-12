@@ -23,6 +23,7 @@ data class SceneObjectSpec(
     val y: Double,
     val z: Double,
     val blockData: String? = null,
+    val legacyFurnitureId: String? = null,
     val namespacedId: String? = null,
     val placement: FurniturePlacement? = null,
     val yaw: Float = 0f,
@@ -37,6 +38,7 @@ data class SceneObjectSpec(
             y.toString(),
             z.toString(),
             blockData.orEmpty(),
+            legacyFurnitureId.orEmpty(),
             namespacedId.orEmpty(),
             placement?.wireName.orEmpty(),
             yaw.toString(),
@@ -51,6 +53,7 @@ data class SceneObjectSpec(
             y: Int,
             z: Int,
             blockData: String,
+            legacyFurnitureId: String? = null,
         ): SceneObjectSpec =
             SceneObjectSpec(
                 id = id,
@@ -60,6 +63,7 @@ data class SceneObjectSpec(
                 y = y.toDouble(),
                 z = z.toDouble(),
                 blockData = blockData,
+                legacyFurnitureId = legacyFurnitureId,
             )
     }
 }
@@ -81,7 +85,7 @@ object WorldSceneSpecParser {
     private val namespacedPattern = Regex("[a-z0-9_.-]+:[a-z0-9_./-]+")
     private val topFields = setOf("id", "objects", "reviewDigest")
     private val commonFields = setOf("id", "kind", "world", "x", "y", "z")
-    private val blockFields = commonFields + "blockData"
+    private val blockFields = commonFields + setOf("blockData", "legacyFurnitureId")
     private val furnitureFields = commonFields + setOf("namespacedId", "placement", "yaw", "pitch")
 
     fun parse(
@@ -135,7 +139,20 @@ object WorldSceneSpecParser {
                 }
                 val blockData = string(body, "blockData", "objects[$index]").trim()
                 require(blockData.length in 1..512) { "objects[$index].blockData is invalid" }
-                SceneObjectSpec.block(id, world, x.toInt(), y.toInt(), z.toInt(), blockData)
+                val legacyFurnitureId =
+                    body.get("legacyFurnitureId")
+                        ?.takeUnless(JsonElement::isJsonNull)
+                        ?.let {
+                            require(it.isJsonPrimitive && it.asJsonPrimitive.isString) {
+                                "objects[$index].legacyFurnitureId must be a string"
+                            }
+                            it.asString.trim().lowercase().also { value ->
+                                require(namespacedPattern.matches(value)) {
+                                    "objects[$index].legacyFurnitureId is invalid"
+                                }
+                            }
+                        }
+                SceneObjectSpec.block(id, world, x.toInt(), y.toInt(), z.toInt(), blockData, legacyFurnitureId)
             }
 
             SceneObjectKind.ITEMSADDER_FURNITURE -> {
