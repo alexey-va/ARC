@@ -68,7 +68,7 @@ class HuskHomesHook internal constructor(
         if (teleporter.player.hasPermission(PORTAL_BYPASS_PERMISSION)) return
 
         event.isCancelled = true
-        portalLauncher(teleporter.uuid, HuskTeleport(timedTeleport))
+        portalLauncher(teleporter.uuid, HuskTeleport(timedTeleport, teleporter.position))
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -128,9 +128,27 @@ class HuskHomesHook internal constructor(
     }
 
     fun teleport(teleport: HuskTeleport, player: Player) {
-        val onlineUser = HuskHomesAPI.getInstance().adaptUser(player)
-        HuskHomesAPI.getInstance().teleportBuilder(onlineUser)
-            .target(teleport.teleport.target).toTeleport().execute()
+        val api = HuskHomesAPI.getInstance()
+        val onlineUser = api.adaptUser(player)
+        val original = teleport.teleport
+        val lastPosition =
+            if ((original.teleporter as? OnlineUser)?.uuid == player.uniqueId) {
+                teleport.departure
+            } else {
+                onlineUser.position
+            }
+
+        api.teleportBuilder(onlineUser)
+            .target(original.target)
+            .type(original.type)
+            .actions(*original.actions.toTypedArray())
+            .updateLastPosition(false)
+            .toTeleport()
+            .execute()
+
+        if (original.isUpdateLastPosition) {
+            api.setUserLastPosition(onlineUser, lastPosition)
+        }
     }
 
     /** Starts HuskHomes' normal teleport flow, including its cross-server portal handoff. */
@@ -177,7 +195,10 @@ class HuskHomesHook internal constructor(
         }
     }
 
-    class HuskTeleport(val teleport: TimedTeleport) {
+    class HuskTeleport(
+        val teleport: TimedTeleport,
+        internal val departure: Position,
+    ) {
         fun getPlayer(): OfflinePlayer =
             Bukkit.getOfflinePlayer((teleport.teleporter as OnlineUser).uuid)
     }
