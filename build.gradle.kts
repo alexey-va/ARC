@@ -47,7 +47,7 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.62"
+version = "1.4.63"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.7"
@@ -203,6 +203,7 @@ dependencies {
 
     // MockK
     testImplementation("io.mockk:mockk:1.14.7")
+    testImplementation(libs.com.olziedev.playerwarps)
 
     // Testcontainers — integration tests source set
     "integrationTestImplementation"("ru.ruscrafting.arc:arc-core-integration-testing:$arcCoreVersion")

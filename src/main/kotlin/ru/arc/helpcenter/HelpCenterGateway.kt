@@ -63,7 +63,7 @@ class BukkitHelpCenterGateway : HelpCenterGateway {
                 server = location.warpServer,
                 world = location.world,
                 x = location.x, y = location.y, z = location.z,
-                description = warp.getWarpDescription(false).trim().takeIf(String::isNotEmpty),
+                description = warp.getWarpDescription(false)?.trim()?.takeIf(String::isNotEmpty),
                 price = price.price,
                 currencies = price.currencyNames.toMap(),
                 priceLabel = org.bukkit.ChatColor.stripColor(org.bukkit.ChatColor.translateAlternateColorCodes(
