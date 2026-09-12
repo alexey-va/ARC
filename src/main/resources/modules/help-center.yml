@@ -12,6 +12,16 @@ actions:
 
 # All player-visible copy is configurable. ARC merges new defaults on reload.
 text:
+  main-now-label: '<#86dcf1>Мой профиль'
+  main-teams-label: '<#f3a2c9>Кланы'
+  main-travel-label: '<#91c4ff>Телепортация'
+  main-privat-label: '<#a3de92>Приваты'
+  main-activities-label: '<#ffb277>Активности'
+  main-progress-label: '<#c4abff>Развитие'
+  main-trade-label: '<#f4d87a>Торговля'
+  main-technology-label: '<#85dfc4>Технологии'
+  main-search-label: '<#f3a2c9>Поиск'
+  main-settings-label: '<#86dcf1>Настройки'
   warps-title: '<#92bed8>Варпы игроков'
   warps-body: '<#92bed8>Места игроков <#e8dfd2>— магазины, фермы и постройки, куда можно заглянуть.<newline><#e8dfd2>Доступно: <#ffffff><count><#e8dfd2> · страница <page>/<pages><newline><#e8dfd2>Откройте карточку места и проверьте стоимость перед переходом.'
   warps-empty: '<#e8dfd2>Сейчас нет доступных вам варпов. Закрытые точки в этом списке не показываются.'

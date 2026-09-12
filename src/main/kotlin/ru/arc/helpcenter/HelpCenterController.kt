@@ -32,6 +32,7 @@ internal class HelpCenterController(
         ), reopen = navigation.returnTarget(player), onDismiss = { navigation.visit(player) })
     },
     private val legacySettings: HelpCenterLegacySettings = HelpCenterLegacySettings(),
+    private val closeDialog: (Player) -> Unit = ArcMenus::closeDialog,
 ) {
     private val miniMessage = MiniMessage.miniMessage()
     private val plainText = PlainTextComponentSerializer.plainText()
@@ -206,7 +207,7 @@ internal class HelpCenterController(
                     button("search", text("commands-label"), text("commands-tooltip")) { openCommands(player) },
                     button("settings", text("category-settings-label"), text("category-settings-tooltip")) { openSettings(player) },
                     ))
-                }.map { it.copy(width = 246) },
+                }.map { it.copy(width = 246, label = text("main-${it.id.value.removePrefix("root_")}-label")) },
                 columns = 2,
             ),
         )
@@ -763,6 +764,16 @@ internal class HelpCenterController(
 
     private fun openWarps(player: Player, requestedPage: Int = 0) {
         markNavigation(player) { openWarps(player, requestedPage) }
+        if (availableCatalog(player).none { it.id == "warps" }) {
+            showDialog(player, PaperDialogScreen(
+                id = "help.travel.warps",
+                title = text("warps-title"),
+                body = listOf(PaperDialogBody(text("action-unavailable"), width = 500)),
+                buttons = emptyList(),
+                exitButton = backButton("back", player, ::openTravel),
+            ))
+            return
+        }
         val warps = runCatching { gateway.loadWarps(player) }.getOrElse { failure ->
             ru.arc.util.Logging.error("Could not load native warp catalog for {}", player.name, failure)
             showDialog(player, PaperDialogScreen(
@@ -820,8 +831,8 @@ internal class HelpCenterController(
                     val sent = runCatching { gateway.teleportWarp(player, warp) }.onFailure { failure ->
                         ru.arc.util.Logging.error("Could not request warp {} for {}", warp.id, player.name, failure)
                     }.getOrDefault(false)
-                    if (!sent) openWarp(player, warp, page, changed = true)
-                }.closing(),
+                    if (sent) closeDialog(player) else openWarp(player, warp, page, changed = true)
+                },
             ),
             exitButton = backButton("back", player, action = { openWarps(it, page) }),
         ))
@@ -1076,7 +1087,7 @@ internal class HelpCenterController(
         button("spawn", text("spawn-label"), commandTooltip("spawn")) { executeCatalog(player, "spawn") }.closing(),
         button("rtp", text("rtp-label"), text("rtp-tooltip")) { openRtp(player) },
         button("back_command", text("back-command-label"), commandTooltip("back")) { executeCatalog(player, "back") }.closing(),
-    )
+    ).filter { it.id.value != "warps" || availableCatalog(player).any { command -> command.id == "warps" } }
 
     private fun categoryButton(player: Player, category: HelpCenterCategory): PaperDialogButton =
         button("category_${category.configId}", text("category-${category.configId}-label"), text("category-body")) {
@@ -1256,7 +1267,7 @@ internal class HelpCenterController(
             CommandDefinition("kit", HelpCenterCategory.START, "kit start"),
             CommandDefinition("rules", HelpCenterCategory.START, "rules"),
             CommandDefinition("tutorial", HelpCenterCategory.START, "tutorial"),
-            CommandDefinition("warps", HelpCenterCategory.TRAVEL, "warps", HelpCenterFeature.PLAYER_WARPS),
+            CommandDefinition("warps", HelpCenterCategory.TRAVEL, "warps", HelpCenterFeature.PLAYER_WARPS, "pw.warp"),
             CommandDefinition("spawn", HelpCenterCategory.TRAVEL, "spawn"),
             CommandDefinition("rtp", HelpCenterCategory.TRAVEL, "rtp"),
             CommandDefinition("back", HelpCenterCategory.TRAVEL, "back"),

@@ -3,6 +3,7 @@ package ru.arc.helpcenter
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.spyk
+import io.mockk.verify
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Bukkit
@@ -28,6 +29,7 @@ class HelpCenterScreensTest {
     private lateinit var gateway: HelpCenterGateway
     private lateinit var screen: PaperDialogScreen
     private var screenCount = 0
+    private var dialogCloses = 0
     private lateinit var legacy: HelpCenterLegacySettings
     private val directory = Files.createTempDirectory("help-screens")
     private var chatMode = HelpCenterChatMode.LOCAL
@@ -47,6 +49,7 @@ class HelpCenterScreensTest {
             it.setPermission("arcduels.use", true)
             it.setPermission("arcgiveaways.use", true)
             it.setPermission("arcvotes.use", true)
+            it.setPermission("pw.warp", true)
         }
         gateway = mockk()
         every { gateway.features() } returns HelpCenterFeature.entries.toSet()
@@ -95,6 +98,7 @@ class HelpCenterScreensTest {
         controller = HelpCenterController(
             HelpCenterConfig.load(directory).snapshot(), gateway, {}, inventoryReturn,
             { _, _ -> }, HelpCenterNavigation(plugin, inventoryReturn::cancel), { _, value -> screen = value; screenCount++ }, legacy,
+            closeDialog = { dialogCloses++ },
         )
     }
 
@@ -694,11 +698,47 @@ class HelpCenterScreensTest {
         every { gateway.teleportWarp(player, any()) } returns false
         open(HelpCenterPage.WARPS)
         click("warp_0")
+        assertFalse(screen.buttons.single { it.id.value == "teleport" }.closeDialogBeforeAction)
         click("teleport")
         assertEquals("help.travel.warp", screen.id)
         assertTrue(body().contains("изменились"))
+        assertEquals(0, dialogCloses)
         assertEquals(listOf("refresh"), screen.buttons.map { it.id.value })
         assertTrue(executed.isEmpty())
+    }
+
+    @Test
+    fun `warp catalog requires the provider teleport permission including direct page entry`() {
+        player.addAttachment(paper.createSimplePlugin("WarpDenied")).setPermission("pw.warp", false)
+        open(HelpCenterPage.TRAVEL)
+        assertFalse(screen.buttons.any { it.id.value == "warps" })
+        open(HelpCenterPage.WARPS)
+        assertTrue(screen.buttons.isEmpty())
+        assertTrue(body().contains("недоступно"))
+        verify(exactly = 0) { gateway.loadWarps(player) }
+    }
+
+    @Test
+    fun `main menu labels have no decorative icons while child labels retain their styling`() {
+        player.addAttachment(paper.createSimplePlugin("MainLabels"), "arcjustteams.use", true)
+        open(HelpCenterPage.ROOT)
+        assertEquals(listOf("Мой профиль", "Кланы", "Телепортация", "Приваты", "Активности",
+            "Развитие", "Торговля", "Технологии", "Поиск", "Настройки"), screen.buttons.map { plain(it.label) })
+        click("search")
+        assertTrue(screen.buttons.any { plain(it.label).startsWith("⚡") })
+    }
+
+    @Test
+    fun `warp dispatch closes the dialog only after accepting the current destination`() {
+        every { gateway.loadWarps(player) } returns listOf(
+            HelpCenterWarp(1, "Farm", "Foll", "survival", "vanilla", 1.0, 70.0, 3.0,
+                null, 0.0, emptyMap(), "0 монет"),
+        )
+        every { gateway.teleportWarp(player, any()) } answers { assertEquals(0, dialogCloses); true }
+        open(HelpCenterPage.WARPS)
+        click("warp_0")
+        click("teleport")
+        assertEquals(1, dialogCloses)
     }
 
     @Test

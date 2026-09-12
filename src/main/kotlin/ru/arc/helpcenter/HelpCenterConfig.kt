@@ -88,6 +88,16 @@ class HelpCenterConfig(private val config: Config) {
         }
 
         private val DEFAULT_TEXT = linkedMapOf(
+            "main-now-label" to "<#86dcf1>Мой профиль",
+            "main-teams-label" to "<#f3a2c9>Кланы",
+            "main-travel-label" to "<#91c4ff>Телепортация",
+            "main-privat-label" to "<#a3de92>Приваты",
+            "main-activities-label" to "<#ffb277>Активности",
+            "main-progress-label" to "<#c4abff>Развитие",
+            "main-trade-label" to "<#f4d87a>Торговля",
+            "main-technology-label" to "<#85dfc4>Технологии",
+            "main-search-label" to "<#f3a2c9>Поиск",
+            "main-settings-label" to "<#86dcf1>Настройки",
             "warps-title" to "<#92bed8>Варпы игроков",
             "warps-body" to "<#92bed8>Места игроков <#e8dfd2>— магазины, фермы и постройки, куда можно заглянуть.<newline><#e8dfd2>Доступно: <#ffffff><count><#e8dfd2> · страница <page>/<pages><newline><#e8dfd2>Откройте карточку места и проверьте стоимость перед переходом.",
             "warps-empty" to "<#e8dfd2>Сейчас нет доступных вам варпов. Закрытые точки в этом списке не показываются.",

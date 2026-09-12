@@ -70,6 +70,8 @@ object ArcMenus {
 
     fun beginDialogFlow(player: Player) { dialogRuntime?.beginFlow(player) }
 
+    fun closeDialog(player: Player) { dialogRuntime?.close(player) }
+
     fun openDialog(player: Player, screen: PaperDialogScreen, closeButton: ru.arc.paper.menu.PaperDialogButton? = null, reopen: (() -> Unit)? = null, onDismiss: () -> Unit = {}) {
         val close = closeButton ?: ru.arc.paper.menu.PaperDialogButton(
             ru.arc.paper.menu.PaperDialogActionId.of("close_menu"), Component.translatable("gui.back"),
