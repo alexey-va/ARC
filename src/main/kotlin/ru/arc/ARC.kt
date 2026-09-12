@@ -6,7 +6,9 @@ import org.bukkit.command.TabCompleter
 import org.bukkit.event.server.ServerCommandEvent
 import org.bukkit.plugin.java.JavaPlugin
 import org.bukkit.plugin.ServicePriority
+import ru.arc.itemcatalog.ArcItemMaterializerBridge
 import ru.arc.paper.api.ArcTelemetryProvider
+import ru.arc.paper.api.ArcItemMaterializer
 import ru.arc.metrics.ArcTelemetryProviderBridge
 import ru.arc.audit.autosell.AutoSellAuditModule
 import ru.arc.audit.bank.BankAuditModule
@@ -134,6 +136,7 @@ open class ARC : JavaPlugin() {
         )
         ModuleRegistry.initAll()
         server.servicesManager.register(ArcTelemetryProvider::class.java, ArcTelemetryProviderBridge, this, ServicePriority.Normal)
+        server.servicesManager.register(ArcItemMaterializer::class.java, ArcItemMaterializerBridge, this, ServicePriority.Normal)
         // Start the single Redis subscription after ALL modules have registered their channels.
         // Calling init() multiple times (once per module) caused the subscription to be
         // constantly restarted and never complete its 1s startup delay.

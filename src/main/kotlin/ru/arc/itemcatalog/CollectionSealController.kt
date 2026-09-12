@@ -41,6 +41,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 class CollectionSealController(
     private val plugin: Plugin,
     private val settings: RewardCatalogSettings,
+    /** Resolves durable set snapshots whose marker is no longer in live config. */
+    private val archivedSeal: (String) -> ArchivedCollectionSeal? = { null },
 ) {
     private val active = AtomicBoolean(true)
     private val registered = AtomicBoolean(false)
@@ -245,8 +247,32 @@ class CollectionSealController(
     }
 
     private fun currentCategory(categoryId: String): RewardCatalogCategory? =
-        settings.categories.firstOrNull { it.id == categoryId }
+        if (categoryId.startsWith("set_frozen_")) archivedCategory(categoryId)
+        else settings.categories.firstOrNull { it.id == categoryId }
             ?.takeIf { settings.enabled && CollectionSealIdentity.isValidCategoryId(it.id) }
+
+    private fun archivedCategory(categoryId: String): RewardCatalogCategory? {
+        if (!settings.enabled) return null
+        val snapshot = runCatching { archivedSeal(categoryId) }.getOrNull() ?: return null
+        if (snapshot.categoryId != categoryId || snapshot.choices.isEmpty()) return null
+        return RewardCatalogCategory(
+            id = snapshot.categoryId,
+            name = snapshot.name,
+            description = snapshot.description,
+            icon = CatalogIconStyle(Material.PAPER.name),
+            entries = snapshot.choices.mapIndexed { index, _ ->
+                RewardCatalogEntry(
+                    id = index.toString(),
+                    name = null,
+                    description = emptyList(),
+                    rarity = null,
+                    requires = emptyList(),
+                    source = RewardCatalogSource.Seal(snapshot.categoryId),
+                    icon = null,
+                )
+            },
+        )
+    }
 
     private fun currentChoices(category: RewardCatalogCategory): List<CurrentChoice> =
         category.entries.mapNotNull { entry -> currentChoice(entry) }
@@ -263,6 +289,10 @@ class CollectionSealController(
                 is RewardCatalogSource.ItemsAdder -> {
                     if (!Bukkit.getPluginManager().isPluginEnabled("ItemsAdder")) return null
                     runCatching { CustomStack.getInstance(source.id)?.itemStack?.clone() }.getOrNull()
+                }
+                is RewardCatalogSource.Seal -> {
+                    val index = entry.id.toIntOrNull() ?: return null
+                    runCatching { archivedSeal(source.categoryId)?.choices?.getOrNull(index)?.clone() }.getOrNull()
                 }
                 else -> null
             } ?: return null

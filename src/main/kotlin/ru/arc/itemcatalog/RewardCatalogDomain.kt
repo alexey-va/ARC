@@ -105,6 +105,12 @@ data class RewardCatalogSettings(
     }
 }
 
+/** Provider identity captured before a voucher is minted for a delivery. */
+internal data class PhysicalRewardMaterialization(
+    val sourceKey: String,
+    val providerFingerprint: String,
+)
+
 /** Resolves current reward state only after current access and provider checks pass. */
 internal object RewardCatalogClickGuard {
     fun <T> resolveForGrant(

@@ -8,6 +8,9 @@ import ru.arc.onetime.OneTimeUseLedger
 import ru.arc.onetime.UnavailableOneTimeUseLedger
 import ru.arc.sql.onetime.MySqlOneTimeUseLedger
 import ru.arc.sql.onetime.MySqlOneTimeUsePartition
+import ru.arc.paper.api.ArcItemMaterializationReference
+import ru.arc.paper.api.ArcItemMaterializationRequest
+import ru.arc.paper.api.ArcItemMaterializerCapabilitySnapshot
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import ru.arc.util.TextUtil
@@ -71,14 +74,26 @@ object ItemsCatalogModule : PluginModule {
     fun issueCaseReward(player: Player, categoryId: String, entryId: String): CaseRewardIssueResult =
         rewardController?.issueCaseReward(player, categoryId, entryId) ?: CaseRewardIssueResult.UNAVAILABLE
 
+    internal fun itemMaterializerCapability(): ArcItemMaterializerCapabilitySnapshot =
+        rewardController?.materializerCapability()
+            ?: ArcItemMaterializerCapabilitySnapshot(available = false, catalogFingerprint = null)
+
+    internal fun prepareItemMaterialization(request: ArcItemMaterializationRequest): ArcItemMaterializationReference? =
+        rewardController?.prepareCaseReward(request.categoryId, request.entryId)
+
+    internal fun materializeItem(reference: ArcItemMaterializationReference): List<org.bukkit.inventory.ItemStack>? =
+        rewardController?.materializeCaseReward(reference)
+
     private fun start(loaded: ItemsCatalogSettings, rewards: RewardCatalogSettings) {
         settings = loaded
-        val seals = CollectionSealController(ARC.instance, rewards)
+        val frozenRewards = FrozenPhysicalRewards(ARC.instance.dataPath)
+        lateinit var nativeRewards: CatalogPhysicalRewards
+        val seals = CollectionSealController(ARC.instance, rewards) { categoryId -> nativeRewards.archivedSeal(categoryId) }
+        nativeRewards = CatalogPhysicalRewards(rewards, frozen = frozenRewards, sealStack = seals::createStack)
         if (rewards.enabled) {
             seals.register()
             collectionSeals = seals
         }
-        val nativeRewards = CatalogPhysicalRewards(rewards)
         val storage = PhysicalRewardStorageConfig.load(ARC.instance.dataPath)
         val ledger = if (rewards.enabled && storage.enabled) runCatching {
             MySqlOneTimeUseLedger.open(
@@ -100,11 +115,20 @@ object ItemsCatalogModule : PluginModule {
             physical.register()
             physicalRewards = physical
         }
+        val createPhysical: (String) -> org.bukkit.inventory.ItemStack? = { key ->
+            if (!nativeRewards.canMaterialize(key)) null
+            else if (key.startsWith("set_frozen_")) nativeRewards.createSealStack(key)
+            else physical.createStack(key)
+        }
         rewardController = RewardCatalogGuiController(
             rewards, loaded.givePermission, seals::createStack,
             { entry -> physical.previewStack(nativeRewards.key(entry)) },
-            { entry -> physical.createStack(nativeRewards.key(entry)) },
-        ).takeIf { it.isAvailable() }
+            { entry -> nativeRewards.materialization(entry)
+                ?.let { createPhysical(it.sourceKey) } },
+            nativeRewards::isVoucherSource,
+            nativeRewards::materialization,
+            createPhysical,
+        ).takeIf { rewards.enabled }
         info(
             "Reward catalogue loaded: enabled={} categories={} entries={}",
             rewards.enabled,

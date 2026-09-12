@@ -14,6 +14,10 @@ import ru.arc.gui.ArcMenuSchema
 import ru.arc.gui.ArcMenus
 import ru.arc.hooks.HookRegistry
 import ru.arc.ops.ItemPresets
+import ru.arc.onetime.OneTimeUseFingerprint
+import ru.arc.paper.api.ArcItemMaterializationReference
+import ru.arc.paper.api.ArcItemMaterializationRequest
+import ru.arc.paper.api.ArcItemMaterializerCapabilitySnapshot
 import ru.arc.paper.menu.PaperMenuEntry
 import ru.arc.paper.menu.PaperMenuItemRenderContext
 import ru.arc.treasure.core.Treasure
@@ -25,12 +29,15 @@ import ru.arc.util.withCustomModelData
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** GUI and final-click guard for the operator-selected reward catalogue. */
-class RewardCatalogGuiController(
+class RewardCatalogGuiController internal constructor(
     private val settings: RewardCatalogSettings,
     private val givePermission: String,
     private val sealStack: (String, CatalogIconStyle?) -> ItemStack? = { _, _ -> null },
     private val physicalPreview: (RewardCatalogEntry) -> ItemStack? = { null },
     private val physicalCreate: (RewardCatalogEntry) -> ItemStack? = { null },
+    private val physicalSource: (RewardCatalogEntry) -> Boolean = { false },
+    private val physicalMaterialization: (RewardCatalogEntry) -> PhysicalRewardMaterialization? = { null },
+    private val physicalCreateKey: (String) -> ItemStack? = { null },
 ) {
     private val active = AtomicBoolean(true)
 
@@ -39,6 +46,68 @@ class RewardCatalogGuiController(
     }
 
     fun isAvailable(): Boolean = active.get() && settings.enabled && settings.categories.any { it.entries.isNotEmpty() }
+
+    /**
+     * Returns the current catalogue capability. The configuration fingerprint
+     * is a snapshot marker; voucher references additionally bind the provider
+     * definition that must still match when a fresh bearer is minted.
+     */
+    fun materializerCapability(): ArcItemMaterializerCapabilitySnapshot =
+        ArcItemMaterializerCapabilitySnapshot(
+            available = isAvailable(),
+            catalogFingerprint = if (isAvailable()) catalogFingerprint() else null,
+        )
+
+    /**
+     * Freezes one exact one-roll case outcome without touching a player.
+     * Random native item outcomes are stored as detached templates. Voucher
+     * sources are archived by CatalogPhysicalRewards; the returned reference
+     * carries the content address so every delivery receives a fresh UUID.
+     */
+    fun prepareCaseReward(categoryId: String, entryId: String): ArcItemMaterializationReference? {
+        if (!active.get() || !settings.enabled) return null
+        val request = runCatching { ArcItemMaterializationRequest(categoryId, entryId) }.getOrNull() ?: return null
+        val (_, entry) = settings.caseEntry(categoryId, entryId) ?: return null
+        if (!providersEnabled(entry)) return null
+        if (physicalSource(entry)) {
+            val physical = physicalMaterialization(entry) ?: return null
+            return ArcItemMaterializationReference.FreshVoucher(request, physical.providerFingerprint, physical.sourceKey)
+        }
+        val resolved = resolve(entry, grant = true) ?: return null
+        val templates = resolved.values.map(ItemStack::clone)
+        if (templates.any(::containsOneTimeIdentity)) return null
+        return ArcItemMaterializationReference.FrozenItems(request, frozenFingerprint(request, templates), templates)
+    }
+
+    /**
+     * Materializes a previously prepared reference. Frozen stacks are cloned;
+     * archived voucher references resolve their content address before minting
+     * a new physical identity. Legacy live references still require the source
+     * fingerprint to match. A reload never remaps a reference to another entry.
+     */
+    fun materializeCaseReward(reference: ArcItemMaterializationReference): List<ItemStack>? {
+        return when (reference) {
+        is ArcItemMaterializationReference.FrozenItems -> {
+            val templates = reference.templates.map(ItemStack::clone)
+            if (frozenFingerprint(reference.request, templates) != reference.providerFingerprint || templates.any(::containsOneTimeIdentity)) null else templates
+        }
+        is ArcItemMaterializationReference.FreshVoucher -> {
+            if (reference.sourceKey.startsWith("frozen:") || reference.sourceKey.startsWith("set_frozen_")) {
+                if (!active.get()) return null
+                val fingerprint = reference.sourceKey.removePrefix("frozen:").removePrefix("set_frozen_")
+                if (fingerprint != reference.providerFingerprint) return null
+                physicalCreateKey(reference.sourceKey)?.let { listOf(it.clone()) }
+            } else {
+                if (!active.get() || !settings.enabled) return null
+                val (_, entry) = settings.caseEntry(reference.request.categoryId, reference.request.entryId) ?: return null
+                if (!providersEnabled(entry) || !physicalSource(entry)) return null
+                val current = physicalMaterialization(entry) ?: return null
+                if (current.sourceKey != reference.sourceKey || current.providerFingerprint != reference.providerFingerprint) return null
+                physicalCreate(entry)?.let { listOf(it.clone()) }
+            }
+        }
+        }
+    }
 
     /**
      * Materializes one exact case outcome selected by the crate engine.
@@ -51,6 +120,16 @@ class RewardCatalogGuiController(
         if (!active.get() || !settings.enabled) return CaseRewardIssueResult.UNAVAILABLE
         val (_, entry) = settings.caseEntry(categoryId, entryId) ?: return CaseRewardIssueResult.UNKNOWN_ENTRY
         if (!providersEnabled(entry)) return CaseRewardIssueResult.PROVIDER_UNAVAILABLE
+        if (entry.source is RewardCatalogSource.Seal) {
+            val seal = physicalCreate(entry) ?: return CaseRewardIssueResult.PROVIDER_UNAVAILABLE
+            if (addStacks(player, listOf(seal))) {
+                sendConfigured(player, settings.messages.given)
+                return CaseRewardIssueResult.INVENTORY
+            }
+            dropOwned(player, listOf(seal))
+            player.sendMessage(TextUtil.mm("<#ffd166>Инвентарь заполнен — награда лежит у ваших ног и доступна только вам.", true))
+            return CaseRewardIssueResult.OWNED_DROP
+        }
         val resolved = resolve(entry, grant = true) ?: return CaseRewardIssueResult.PROVIDER_UNAVAILABLE
         if (addStacks(player, resolved.values)) {
             sendConfigured(player, settings.messages.given)
@@ -284,6 +363,36 @@ class RewardCatalogGuiController(
 
     private fun physical(entry: RewardCatalogEntry, grant: Boolean): ItemStack? =
         if (grant) physicalCreate(entry) else physicalPreview(entry)
+
+    /** Never bury an existing ARC bearer identity inside a frozen item template. */
+    private fun containsOneTimeIdentity(stack: ItemStack): Boolean =
+        PhysicalRewardVoucher.identity(stack) != null || CollectionSealIdentity.categoryId(stack) != null
+
+    private fun frozenFingerprint(request: ArcItemMaterializationRequest, stacks: List<ItemStack>): String =
+        OneTimeUseFingerprint.sha256(
+            buildString {
+                append("arc-item-materialization-v1\n")
+                append(request.categoryId).append('\n').append(request.entryId).append('\n')
+                stacks.forEach { stack ->
+                    append(OneTimeUseFingerprint.sha256(stack.serializeAsBytes()).sha256).append('\n')
+                }
+            }.toByteArray(),
+        ).sha256
+
+    private fun catalogFingerprint(): String =
+        OneTimeUseFingerprint.sha256(
+            buildString {
+                append("arc-reward-catalog-v1\n")
+                settings.categories.sortedBy { it.id }.forEach { category ->
+                    append(category.id).append('|').append(category.rolls).append('\n')
+                    category.entries.sortedBy { it.id }.forEach { entry ->
+                        append(entry.id).append('|').append(entry.source).append('|')
+                        entry.enchantments.toSortedMap().forEach { (id, level) -> append(id).append('=').append(level).append(',') }
+                        append('\n')
+                    }
+                }
+            }.toByteArray(),
+        ).sha256
 
     private fun previewStack(entry: RewardCatalogEntry, resolved: ResolvedReward?): ItemStack =
         resolved?.values?.firstOrNull()?.clone() ?: styledStack(entry.icon ?: CatalogIconStyle(Material.PAPER.name))
