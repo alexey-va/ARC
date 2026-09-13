@@ -101,7 +101,6 @@ timing:
   waiter-max-polls: 20
   delivery-route-max-polls: 30
   ambient-route-max-polls: 36
-  dismount-grace-ticks: 30
   waiter-return-release-ticks: 120
   progress-log-every-polls: 4
   theft-cooldown-seconds: 90
@@ -117,7 +116,6 @@ navigation:
   session-radius: 8.0
 
 seating:
-  player-marker-lift: 1.18
   guest-marker-lift: 0.6
   guest-entity-lift: 0.4
 

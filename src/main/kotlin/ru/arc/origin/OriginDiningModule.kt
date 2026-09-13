@@ -26,7 +26,6 @@ import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
-import org.bukkit.event.entity.EntityDismountEvent
 import org.bukkit.event.block.Action
 import org.bukkit.block.Block
 import org.bukkit.block.BlockFace
@@ -130,11 +129,9 @@ object OriginDiningModule : PluginModule, Listener {
         if (event.hand != EquipmentSlot.HAND || event.action != Action.RIGHT_CLICK_BLOCK) return
         val block = event.clickedBlock ?: return
         service?.interactBlock(event.player, block)?.let { handled ->
-            if (handled) {
-                event.isCancelled = true
-                event.setUseInteractedBlock(org.bukkit.event.Event.Result.DENY)
-                event.setUseItemInHand(org.bukkit.event.Event.Result.DENY)
-            }
+            // The server's chair handler owns the actual mount. ARC only
+            // registers restaurant service and must not cancel or replace it.
+            if (handled) event.setUseItemInHand(org.bukkit.event.Event.Result.DENY)
         }
     }
 
@@ -143,11 +140,6 @@ object OriginDiningModule : PluginModule, Listener {
         service?.quit(event.player)
     }
 
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    fun onDismount(event: EntityDismountEvent) {
-        val player = event.entity as? Player ?: return
-        service?.dismounted(player, event.dismounted)
-    }
 }
 
 private class OriginDiningCitizensListener(
@@ -244,8 +236,6 @@ internal object OriginDiningLayout {
         private set
     var ambientRouteMaxPolls = 0
         private set
-    var waiterDismountGraceTicks = 0L
-        private set
     var waiterReturnReleaseTicks = 0L
         private set
     var waiterProgressEveryPolls = 0
@@ -253,8 +243,6 @@ internal object OriginDiningLayout {
     var waiterReadyMargin = 0.0
         private set
     var waiterPlayerRange = 0.0
-        private set
-    var seatMarkerLift = 0.0
         private set
     var guestMarkerLift = 0.0
         private set
@@ -306,7 +294,6 @@ internal object OriginDiningLayout {
         waiterMaxPolls = source.integer("timing.waiter-max-polls").coerceIn(2, 200)
         deliveryRouteMaxPolls = source.integer("timing.delivery-route-max-polls").coerceIn(2, 300)
         ambientRouteMaxPolls = source.integer("timing.ambient-route-max-polls").coerceIn(2, 300)
-        waiterDismountGraceTicks = source.integer("timing.dismount-grace-ticks").toLong().coerceIn(0L, 400L)
         waiterReturnReleaseTicks = source.integer("timing.waiter-return-release-ticks").toLong().coerceIn(1L, 1_200L)
         waiterProgressEveryPolls = source.integer("timing.progress-log-every-polls").coerceIn(1, 100)
         theftCooldownMillis = source.integer("timing.theft-cooldown-seconds").toLong().coerceIn(0L, 3_600L) * 1_000L
@@ -318,7 +305,6 @@ internal object OriginDiningLayout {
         waiterReadyMargin = source.real("navigation.waiter-ready-margin").coerceIn(0.5, 4.0)
         waiterPlayerRange = source.real("navigation.waiter-player-range").coerceIn(1.0, 6.0)
         sessionRadius = source.real("navigation.session-radius").coerceIn(2.0, 24.0)
-        seatMarkerLift = source.real("seating.player-marker-lift").coerceIn(0.0, 2.0)
         guestMarkerLift = source.real("seating.guest-marker-lift").coerceIn(0.0, 2.0)
         guestEntityLift = source.real("seating.guest-entity-lift").coerceIn(-1.0, 2.0)
         seats = buildSeats(source, forward, vertical)
@@ -458,7 +444,6 @@ private data class OriginDiningSession(
     val id: UUID,
     val playerId: UUID,
     val seat: OriginDiningSeat,
-    val marker: ArmorStand,
     var phase: OriginDiningPhase,
     var touchedAt: Long,
 )
@@ -925,27 +910,6 @@ private class OriginDiningService : AutoCloseable {
         return true
     }
 
-    fun dismounted(player: Player, dismounted: Entity) {
-        val session = sessions[player.uniqueId] ?: return
-        if (dismounted.uniqueId != session.marker.uniqueId) return
-        tasks.runLater(1L) {
-            if (!player.isOnline || sessions[player.uniqueId]?.id != session.id) return@runLater
-            log(
-                "DISMOUNTED",
-                session,
-                player,
-                meals[session.seat.id]?.dish,
-                session.seat.seat,
-                "marker=${short(dismounted.uniqueId)} retained=true near_venue=${nearVenue(player, session.seat)} meal_present=${session.seat.id in meals}",
-            )
-        }
-        tasks.runLater(OriginDiningLayout.waiterDismountGraceTicks) {
-            val current = sessions[player.uniqueId]?.takeIf { it.id == session.id } ?: return@runLater
-            if (player.isOnline && player.vehicle?.uniqueId == current.marker.uniqueId) return@runLater
-            if (current.phase != OriginDiningPhase.ORDERED) returnWaiterHome(current, "player-dismounted")
-        }
-    }
-
     fun quit(player: Player) {
         releaseSession(player.uniqueId, "player-quit")
     }
@@ -983,9 +947,8 @@ private class OriginDiningService : AutoCloseable {
         }
         val existing = sessions[player.uniqueId]
         if (existing?.seat?.id == seat.id) {
-            if (player.vehicle?.uniqueId != existing.marker.uniqueId) mount(player, existing)
             existing.touchedAt = System.currentTimeMillis()
-            log("RESEATED", existing, player, null, seat.dish, "source=$source")
+            log("RESEATED", existing, player, null, seat.dish, "source=$source seat_owner=server-chair-handler")
             if (existing.phase == OriginDiningPhase.SEATED && seat.id !in meals) summonWaiter(existing, player)
             return
         }
@@ -1000,21 +963,10 @@ private class OriginDiningService : AutoCloseable {
         }
         existing?.let { releaseSession(player.uniqueId, "seat-switched") }
 
-        val marker = spawnMarker(seat)
-        val session = OriginDiningSession(UUID.randomUUID(), player.uniqueId, seat, marker, OriginDiningPhase.SEATED, System.currentTimeMillis())
+        val session = OriginDiningSession(UUID.randomUUID(), player.uniqueId, seat, OriginDiningPhase.SEATED, System.currentTimeMillis())
         sessions[player.uniqueId] = session
         occupants[seat.id] = player.uniqueId
-        mount(player, session)
-        // A second chair handler may replace the vehicle later in this same
-        // block-interaction tick. Reassert ARC's marker once, then leave all
-        // later player dismounts alone.
-        tasks.runLater(2L) {
-            val current = sessions[player.uniqueId]?.takeIf { it.id == session.id } ?: return@runLater
-            if (!player.isOnline || player.vehicle?.uniqueId == current.marker.uniqueId) return@runLater
-            log("MOUNT_REASSERT", current, player, null, current.seat.seat, "reason=post-interact-vehicle-conflict")
-            mount(player, current)
-        }
-        log("SEATED", session, player, null, seat.dish, "source=$source mounted=${player.vehicle?.uniqueId == marker.uniqueId}")
+        log("SEATED", session, player, null, seat.dish, "source=$source seat_owner=server-chair-handler")
         player.sendActionBar(Component.text("Официант сейчас подойдёт. Нажмите по нему, чтобы открыть меню.", NamedTextColor.GOLD))
         summonWaiter(session, player)
     }
@@ -1024,52 +976,6 @@ private class OriginDiningService : AutoCloseable {
         runCatching { BreweryTableDialogs.openOrder(player, session.seat.menu) }
             .onSuccess { log("DIALOG_DISPATCHED", session, player, null, session.seat.seat, "source=$source menu=${session.seat.menu.id}") }
             .onFailure { failure -> logWarn("DIALOG_FAILED", session, player, null, failure.message ?: failure.javaClass.simpleName) }
-    }
-
-    private fun spawnMarker(seat: OriginDiningSeat): ArmorStand {
-        val world = requireNotNull(Bukkit.getWorld(OriginDiningLayout.WORLD))
-        // Marker armor stands render their player passenger 0.6 blocks below
-        // the vehicle location. Lift the vehicle so the seated player's feet
-        // remain 0.58 blocks above the chair instead of inside its stair block.
-        return world.spawn(seat.seat.inWorld(world).add(0.0, OriginDiningLayout.seatMarkerLift, 0.0), ArmorStand::class.java).apply {
-            isVisible = false
-            isMarker = true
-            setGravity(false)
-            isInvulnerable = true
-            isSilent = true
-            isPersistent = false
-            addScoreboardTag(MARKER_TAG)
-        }
-    }
-
-    private fun mount(player: Player, session: OriginDiningSession) {
-        if (player.vehicle?.uniqueId == session.marker.uniqueId) return
-        log(
-            "MOUNT_BEGIN",
-            session,
-            player,
-            null,
-            session.seat.seat,
-            "marker=${short(session.marker.uniqueId)} marker_actual=${location(session.marker.location)} previous_vehicle=${player.vehicle?.uniqueId?.let(::short) ?: "none"}",
-        )
-        if (player.isInsideVehicle) player.leaveVehicle()
-        if (!session.marker.addPassenger(player)) {
-            tasks.runLater(1L) {
-                if (player.isOnline && sessions[player.uniqueId]?.id == session.id) {
-                    session.marker.addPassenger(player)
-                    log("MOUNT_RETRY", session, player, null, session.seat.seat, "mounted=${player.vehicle?.uniqueId == session.marker.uniqueId}")
-                }
-            }
-        } else {
-            log(
-                "MOUNTED",
-                session,
-                player,
-                null,
-                session.seat.seat,
-                "marker=${short(session.marker.uniqueId)} mounted=${player.vehicle?.uniqueId == session.marker.uniqueId}",
-            )
-        }
     }
 
     private fun queueDelivery(session: OriginDiningSession, dish: BreweryTableDialogs.Dish) {
@@ -1702,9 +1608,9 @@ private class OriginDiningService : AutoCloseable {
                 returnWaiterHome(waiterId, sessionId, session, "approach-session-gone")
                 return@runLater
             }
-            if (player.vehicle?.uniqueId != session.marker.uniqueId) {
+            if (!nearVenue(player, session.seat)) {
                 waiterApproaches.remove(waiterId, approachId)
-                returnWaiterHome(waiterId, sessionId, session, "approach-player-not-seated")
+                returnWaiterHome(waiterId, sessionId, session, "approach-player-left-table")
                 return@runLater
             }
             val npc = runCatching { CitizensAPI.getNPCRegistry().getById(waiterId) }.getOrNull()
@@ -2098,14 +2004,12 @@ private class OriginDiningService : AutoCloseable {
                 releaseSession(session.playerId, "left-table")
                 return@forEach
             }
-            val mounted = player.vehicle?.uniqueId == session.marker.uniqueId
-            if (mounted) session.touchedAt = now
+            if (player.isInsideVehicle) session.touchedAt = now
             if (session.seat.dynamic && player.world.getBlockAt(session.seat.clickedBlock.first, session.seat.clickedBlock.second, session.seat.clickedBlock.third).blockData !is Stairs) {
                 releaseSession(session.playerId, "dynamic-seat-removed")
                 return@forEach
             }
             if (
-                mounted &&
                 session.phase == OriginDiningPhase.SEATED &&
                 session.seat.id !in meals &&
                 waiterReadyFor[session.seat.waiterId] != session.id &&
@@ -2206,7 +2110,6 @@ private class OriginDiningService : AutoCloseable {
         if (!sessions.remove(playerId, session)) return
         dialogAuthorizations.remove(playerId)
         occupants.remove(session.seat.id, playerId)
-        if (session.marker.isValid) session.marker.remove()
         val player = Bukkit.getPlayer(playerId)
         returnWaiterHome(session, "session-$reason")
         log("SEAT_RELEASED", session, player, null, session.seat.seat, "reason=$reason")
@@ -2278,7 +2181,6 @@ private class OriginDiningService : AutoCloseable {
 
     private fun removeRuntimeEntities() {
         ambientRoutes.keys.toList().forEach { cancelAmbientRoute(it, "service-stop") }
-        sessions.values.forEach { if (it.marker.isValid) it.marker.remove() }
         meals.values.forEach { removeMeal(it, "service-stop") }
         guestMeals.values.forEach(::removeGuestMeal)
         guestMarkers.values.forEach { if (it.isValid) it.remove() }
@@ -2434,7 +2336,6 @@ private class OriginDiningService : AutoCloseable {
 
     private companion object {
         const val SEAT_TAG = "arc_origin_dining_seat"
-        const val MARKER_TAG = "arc_origin_dining_marker"
         const val MEAL_TAG = "arc_origin_dining_meal"
         const val GUEST_MEAL_TAG = "arc_origin_dining_guest_meal"
         const val GUEST_MARKER_TAG = "arc_origin_dining_guest_marker"
