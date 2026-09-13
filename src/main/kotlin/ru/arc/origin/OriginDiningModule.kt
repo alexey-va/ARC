@@ -25,6 +25,7 @@ import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
 import org.bukkit.event.block.Action
 import org.bukkit.event.player.PlayerInteractEntityEvent
+import org.bukkit.event.player.PlayerInteractAtEntityEvent
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.inventory.EquipmentSlot
@@ -93,8 +94,19 @@ object OriginDiningModule : PluginModule, Listener {
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
     fun onEntityInteract(event: PlayerInteractEntityEvent) {
+        // INTERACT_AT has its own Bukkit handler list. Leave it to the dedicated
+        // listener below so one client packet can never seat the player twice.
+        if (event is PlayerInteractAtEntityEvent) return
         if (event.hand != EquipmentSlot.HAND) return
-        service?.interact(event.player, event.rightClicked)?.let { handled ->
+        service?.interact(event.player, event.rightClicked, "entity")?.let { handled ->
+            if (handled) event.isCancelled = true
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
+    fun onEntityInteractAt(event: PlayerInteractAtEntityEvent) {
+        if (event.hand != EquipmentSlot.HAND) return
+        service?.interact(event.player, event.rightClicked, "entity-at")?.let { handled ->
             if (handled) event.isCancelled = true
         }
     }
@@ -293,21 +305,50 @@ private class OriginDiningService : AutoCloseable {
         return true
     }
 
-    fun interact(player: Player, entity: Entity): Boolean {
+    fun interact(player: Player, entity: Entity, source: String): Boolean {
+        if (entity is Interaction && entity.world.name == OriginDiningLayout.WORLD) {
+            info(
+                "ORIGIN_DINING phase=INPUT_ENTITY player={} source={} entity={} entity_id={} actual={}",
+                player.name,
+                source,
+                short(entity.uniqueId),
+                entity.entityId,
+                location(entity.location),
+            )
+        }
         seatEntity[entity.uniqueId]?.let { seat ->
-            sit(player, seat, "arc-seat:${short(entity.uniqueId)}@${location(entity.location)}")
+            sit(player, seat, "$source:arc-seat:${short(entity.uniqueId)}@${location(entity.location)}")
             return true
         }
         mealEntity[entity.uniqueId]?.let { meal ->
+            info(
+                "ORIGIN_DINING phase=MEAL_INPUT player={} source={} table={} dish={} hitbox={} actual={}",
+                player.name,
+                source,
+                meal.seat.id,
+                meal.dish.id,
+                short(entity.uniqueId),
+                location(entity.location),
+            )
             consume(player, meal)
             return true
         }
         // During migration, capture clicks on exact Denizen seat/meal hitboxes too.
         nearestSeat(entity.location, 0.8)?.let { seat ->
             if (entity is Interaction) {
-                sit(player, seat, "legacy-seat:${short(entity.uniqueId)}@${location(entity.location)}")
+                sit(player, seat, "$source:legacy-seat:${short(entity.uniqueId)}@${location(entity.location)}")
                 return true
             }
+        }
+        if (entity is Interaction && entity.world.name == OriginDiningLayout.WORLD) {
+            warn(
+                "ORIGIN_DINING phase=INPUT_UNMAPPED player={} source={} entity={} entity_id={} actual={}",
+                player.name,
+                source,
+                short(entity.uniqueId),
+                entity.entityId,
+                location(entity.location),
+            )
         }
         return false
     }
