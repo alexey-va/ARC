@@ -35,7 +35,12 @@ class EliteLootPresentationTest : FreeSpec({
     }
     "gear requirement is owned by ARC and sits directly below the item level" {
         val plain = PlainTextComponentSerializer.plainText()
-        val lore = listOf("Уровень: 16 · Престиж: 0", "Базовая элитная защита: 4.25", " старая строка")
+        val lore = listOf(
+            "Уровень: 16 · Престиж: 0",
+            "\$ifSkillRequirement\$skillRequirement",
+            "Базовая элитная защита: 4.25",
+            " старая строка",
+        )
 
         replaceEliteGearRequirement(lore.map(Component::text), "Броня", 16)
             .map(plain::serialize) shouldBe listOf(
@@ -45,5 +50,21 @@ class EliteLootPresentationTest : FreeSpec({
             )
 
         plain.serialize(eliteGearRequirementLine("Мечи", 43)) shouldBe " Требуется: Мечи · ур. 43"
+    }
+    "legacy procedural item text is localized without changing component styling" {
+        val plain = PlainTextComponentSerializer.plainText()
+
+        plain.serialize(localizeLegacyEliteText(Component.text("Traveling Mallet"))) shouldBe "Походный молот"
+        listOf(
+            "Too heavy for a sensible pack.",
+            "A very sensible thing to have in a fight.",
+            "Light straps leave room for a full stride.",
+            "The scouts always leave before breakfast.",
+        ).map { plain.serialize(localizeLegacyEliteText(Component.text(it))) } shouldBe listOf(
+            "Слишком тяжёл для обычного рюкзака.",
+            "Зато в бою без него никуда.",
+            "Лёгкие ремни не стесняют шага.",
+            "Разведчики всегда выходят до завтрака.",
+        )
     }
 })

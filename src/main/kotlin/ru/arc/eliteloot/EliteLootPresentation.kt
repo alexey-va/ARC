@@ -37,6 +37,33 @@ internal fun compactEliteLore(lines: List<Component>): List<Component> {
     return result
 }
 
+private val legacyEliteTextTranslations = mapOf(
+    "Traveling Mallet" to "Походный молот",
+    "Forward Scout Coat" to "Куртка передового разведчика",
+    "Too heavy for a sensible pack." to "Слишком тяжёл для обычного рюкзака.",
+    "A very sensible thing to have in a fight." to "Зато в бою без него никуда.",
+    "Light straps leave room for a full stride." to "Лёгкие ремни не стесняют шага.",
+    "The scouts always leave before breakfast." to "Разведчики всегда выходят до завтрака.",
+)
+
+internal fun localizeLegacyEliteText(component: Component): Component {
+    val source = PlainTextComponentSerializer.plainText().serialize(component).trim()
+    val translation = legacyEliteTextTranslations[source] ?: return component
+    return Component.text(translation)
+        .style(component.style())
+        .decoration(TextDecoration.ITALIC, false)
+}
+
+private fun sanitizeEliteLore(lines: List<Component>): List<Component> {
+    val plain = PlainTextComponentSerializer.plainText()
+    return compactEliteLore(
+        lines.asSequence()
+            .filterNot { plain.serialize(it).contains("skillRequirement", ignoreCase = true) }
+            .map(::localizeLegacyEliteText)
+            .toList(),
+    )
+}
+
 internal fun eliteGearRequirementLine(skillName: String, level: Int): Component =
     Component.text(" ", TextColor.color(0xFFFFFF))
         .append(
@@ -57,14 +84,14 @@ internal fun replaceEliteGearRequirement(
     level: Int,
 ): List<Component> {
     val plain = PlainTextComponentSerializer.plainText()
-    val result = compactEliteLore(lines).filterNot { plain.serialize(it).trimStart().startsWith("") }.toMutableList()
+    val result = sanitizeEliteLore(lines).filterNot { plain.serialize(it).trimStart().startsWith("") }.toMutableList()
     result.add(if (result.isEmpty()) 0 else 1, eliteGearRequirementLine(skillName, level))
     return result
 }
 
 private fun withEliteGearRequirement(item: ItemStack, lines: List<Component>): List<Component> {
-    if (!AdventurersGuildConfig.isSkillBasedGearRestriction()) return compactEliteLore(lines)
-    val skill = WeaponIdentityResolver.progressionSkillIncludingArmor(item) ?: return compactEliteLore(lines)
+    if (!AdventurersGuildConfig.isSkillBasedGearRestriction()) return sanitizeEliteLore(lines)
+    val skill = WeaponIdentityResolver.progressionSkillIncludingArmor(item) ?: return sanitizeEliteLore(lines)
     return replaceEliteGearRequirement(
         lines,
         SkillBonusMenuConfig.getSkillTypeDisplayName(skill),
@@ -76,6 +103,7 @@ private fun withEliteGearRequirement(item: ItemStack, lines: List<Component>): L
 internal fun presentEliteItem(item: ItemStack, viewer: Player): ItemStack {
     if (!EliteItemManager.isEliteMobsItem(item)) return item
     val meta = item.itemMeta
+    meta.displayName()?.let { meta.displayName(localizeLegacyEliteText(it)) }
     meta.tooltipStyle = NamespacedKey("lzblocks", "tooltip/${eliteTooltipTier(EliteItemManager.getRoundedItemLevel(item))}")
     val owner = meta.persistentDataContainer.get(NamespacedKey("elitemobs", "soulbind"), PersistentDataType.STRING)
     if ((owner == null || owner == viewer.uniqueId.toString()) && !EliteEnchantmentItems.isEliteEnchantmentBook(item)) {
@@ -84,7 +112,7 @@ internal fun presentEliteItem(item: ItemStack, viewer: Player): ItemStack {
         meta.lore(withEliteGearRequirement(rendered, rendered.itemMeta.lore().orEmpty()))
         meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_ENCHANTS)
     }
-    meta.lore(compactEliteLore(meta.lore().orEmpty()))
+    meta.lore(sanitizeEliteLore(meta.lore().orEmpty()))
     item.itemMeta = meta
     return item
 }
@@ -94,7 +122,10 @@ internal fun prepareEliteDrop(item: ItemStack, processor: EliteLootProcessor? = 
     if (!EliteItemManager.isEliteMobsItem(item)) return item
     val prepared = item.clone()
     processor?.processEliteLoot(prepared)
-    prepared.editMeta { meta -> meta.lore(withEliteGearRequirement(prepared, meta.lore().orEmpty())) }
+    prepared.editMeta { meta ->
+        meta.displayName()?.let { meta.displayName(localizeLegacyEliteText(it)) }
+        meta.lore(withEliteGearRequirement(prepared, meta.lore().orEmpty()))
+    }
     prepared.setData(io.papermc.paper.datacomponent.DataComponentTypes.TOOLTIP_STYLE,
         net.kyori.adventure.key.Key.key("lzblocks", "tooltip/${eliteTooltipTier(EliteItemManager.getRoundedItemLevel(prepared))}"))
     return prepared
