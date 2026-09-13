@@ -240,6 +240,7 @@ private class OriginDiningService : AutoCloseable {
     private val mealEntity = mutableMapOf<UUID, OriginDiningMeal>()
     private val clickAt = mutableMapOf<UUID, Long>()
     private val theftCooldownUntil = mutableMapOf<UUID, Long>()
+    private val waiterApproaches = mutableMapOf<Int, UUID>()
 
     fun start() {
         info(
@@ -769,25 +770,103 @@ private class OriginDiningService : AutoCloseable {
         runCatching {
             val npc = CitizensAPI.getNPCRegistry().getById(session.seat.waiterId) ?: return
             if (!npc.isSpawned || npc.entity.world.name != OriginDiningLayout.WORLD) return
+            val approachId = UUID.randomUUID()
+            waiterApproaches[session.seat.waiterId] = approachId
             npc.entity.addScoreboardTag(WAITER_BUSY_TAG)
             val stop = session.seat.waiterStop.inWorld(npc.entity.world)
             val navigator = npc.navigator
             navigator.cancelNavigation()
             navigator.setTarget(stop)
             navigator.localParameters.distanceMargin(0.7).pathDistanceMargin(1.0).speedModifier(0.72f)
-            log("WAITER_APPROACH", session, player, null, session.seat.waiterStop, "npc=${session.seat.waiterId}")
-            tasks.runLater(80L) {
-                if (sessions[player.uniqueId]?.id == session.id && npc.isSpawned) {
-                    if (npc.navigator.isNavigating) npc.navigator.cancelNavigation()
-                    npc.faceLocation(player.eyeLocation)
-                    log("WAITER_READY", session, player, null, session.seat.waiterStop, "npc=${session.seat.waiterId} actual=${location(npc.entity.location)}")
-                }
-            }
+            log(
+                "WAITER_APPROACH",
+                session,
+                player,
+                null,
+                session.seat.waiterStop,
+                "npc=${session.seat.waiterId} approach=${short(approachId)} actual=${location(npc.entity.location)} target_distance=${fmt(npc.entity.location.distance(stop))}",
+            )
+            monitorWaiterApproach(session.id, player.uniqueId, session.seat.waiterId, stop, approachId, 0)
         }.onFailure { failure ->
             warn(
                 "ORIGIN_DINING phase=WAITER_FAILED session={} player={} table={} npc={} reason={}",
                 short(session.id), player.name, session.seat.id, session.seat.waiterId, failure.message ?: failure.javaClass.simpleName,
             )
+        }
+    }
+
+    private fun monitorWaiterApproach(
+        sessionId: UUID,
+        playerId: UUID,
+        waiterId: Int,
+        stop: Location,
+        approachId: UUID,
+        poll: Int,
+    ) {
+        tasks.runLater(WAITER_POLL_TICKS) {
+            if (waiterApproaches[waiterId] != approachId) return@runLater
+            val session = sessions[playerId]?.takeIf { it.id == sessionId }
+            val player = Bukkit.getPlayer(playerId)?.takeIf(Player::isOnline)
+            if (session == null || player == null) {
+                waiterApproaches.remove(waiterId, approachId)
+                return@runLater
+            }
+            val npc = runCatching { CitizensAPI.getNPCRegistry().getById(waiterId) }.getOrNull()
+            if (npc == null || !npc.isSpawned || npc.entity.world != stop.world) {
+                waiterApproaches.remove(waiterId, approachId)
+                logWarn("WAITER_FAILED", session, player, null, "npc=$waiterId approach=${short(approachId)} reason=despawned")
+                return@runLater
+            }
+            val actual = npc.entity.location
+            val targetDistance = actual.distance(stop)
+            val playerDistance = actual.distance(player.location)
+            if (targetDistance <= WAITER_READY_MARGIN || playerDistance <= WAITER_PLAYER_RANGE) {
+                waiterApproaches.remove(waiterId, approachId)
+                if (npc.navigator.isNavigating) npc.navigator.cancelNavigation()
+                npc.faceLocation(player.eyeLocation)
+                log(
+                    "WAITER_READY",
+                    session,
+                    player,
+                    null,
+                    session.seat.waiterStop,
+                    "npc=$waiterId approach=${short(approachId)} actual=${location(actual)} target_distance=${fmt(targetDistance)} player_distance=${fmt(playerDistance)} poll=$poll",
+                )
+                return@runLater
+            }
+            if (poll >= WAITER_MAX_POLLS) {
+                waiterApproaches.remove(waiterId, approachId)
+                logWarn(
+                    "WAITER_STALLED",
+                    session,
+                    player,
+                    null,
+                    "npc=$waiterId approach=${short(approachId)} actual=${location(actual)} target=${location(stop)} target_distance=${fmt(targetDistance)} player_distance=${fmt(playerDistance)} navigating=${npc.navigator.isNavigating}",
+                )
+                return@runLater
+            }
+            if (!npc.navigator.isNavigating) {
+                npc.navigator.setTarget(stop)
+                npc.navigator.localParameters.distanceMargin(0.7).pathDistanceMargin(1.0).speedModifier(0.72f)
+                log(
+                    "WAITER_RETRY",
+                    session,
+                    player,
+                    null,
+                    session.seat.waiterStop,
+                    "npc=$waiterId approach=${short(approachId)} actual=${location(actual)} target_distance=${fmt(targetDistance)} poll=$poll",
+                )
+            } else if (poll % WAITER_PROGRESS_EVERY_POLLS == 0) {
+                log(
+                    "WAITER_PROGRESS",
+                    session,
+                    player,
+                    null,
+                    session.seat.waiterStop,
+                    "npc=$waiterId approach=${short(approachId)} actual=${location(actual)} target_distance=${fmt(targetDistance)} player_distance=${fmt(playerDistance)} poll=$poll",
+                )
+            }
+            monitorWaiterApproach(sessionId, playerId, waiterId, stop, approachId, poll + 1)
         }
     }
 
@@ -841,6 +920,7 @@ private class OriginDiningService : AutoCloseable {
 
     private fun releaseWaiter(waiterId: Int, force: Boolean = false) {
         if (!force && sessions.values.any { it.seat.waiterId == waiterId }) return
+        waiterApproaches.remove(waiterId)
         if (!Bukkit.getPluginManager().isPluginEnabled("Citizens")) return
         runCatching { CitizensAPI.getNPCRegistry().getById(waiterId) }.getOrNull()?.takeIf { it.isSpawned }?.let { npc ->
             if (force && npc.navigator.isNavigating) npc.navigator.cancelNavigation()
@@ -1020,6 +1100,11 @@ private class OriginDiningService : AutoCloseable {
         const val MEAL_TAG = "arc_origin_dining_meal"
         const val WAITER_BUSY_TAG = "arc_origin_dining_waiter_busy"
         const val DELIVERY_TICKS = 100L
+        const val WAITER_POLL_TICKS = 10L
+        const val WAITER_MAX_POLLS = 20
+        const val WAITER_PROGRESS_EVERY_POLLS = 4
+        const val WAITER_READY_MARGIN = 0.8
+        const val WAITER_PLAYER_RANGE = 2.8
         const val THEFT_COOLDOWN_MILLIS = 90_000L
         const val SESSION_TTL_MILLIS = 300_000L
         const val SESSION_RADIUS = 8.0
