@@ -257,11 +257,14 @@ class HelpCenterScreensTest {
         open(HelpCenterPage.ROOT)
         player.addAttachment(paper.createSimplePlugin("TeamsPermission"), "arcjustteams.use", true)
         open(HelpCenterPage.ROOT)
-        assertEquals(2, screen.columns)
-        assertTrue(screen.buttons.all { it.width == 246 })
+        assertEquals(3, screen.columns)
+        assertTrue(screen.buttons.all { it.width == 166 })
         assertEquals(listOf("now", "teams", "travel", "privat", "root_activities",
-            "root_progress", "root_trade", "root_technology", "search", "settings"), screen.buttons.map { it.id.value })
+            "root_progress", "quests", "root_trade", "root_technology", "search", "settings"), screen.buttons.map { it.id.value })
         assertTrue(body().contains("Viewer"))
+        assertFalse(screen.buttons.single { it.id.value == "quests" }.closeDialogBeforeAction)
+        click("quests")
+        assertEquals(listOf("rank quests"), executed)
         click("root_activities")
         assertEquals(1, screen.buttons.count { it.id.value == "command_dungeons" })
         assertFalse(screen.buttons.any { it.id.value.contains("dungeon_portals") })
@@ -289,7 +292,7 @@ class HelpCenterScreensTest {
         every { gateway.features() } returns HelpCenterFeature.entries.toSet() - HelpCenterFeature.TEAMS
         open(HelpCenterPage.ROOT)
         assertFalse(screen.buttons.any { it.id.value == "teams" })
-        assertEquals(9, screen.buttons.size)
+        assertEquals(10, screen.buttons.size)
         open(HelpCenterPage.PLAYERS)
         assertFalse(screen.buttons.any { it.id.value == "command_teams" })
     }
@@ -723,7 +726,7 @@ class HelpCenterScreensTest {
         player.addAttachment(paper.createSimplePlugin("MainLabels"), "arcjustteams.use", true)
         open(HelpCenterPage.ROOT)
         assertEquals(listOf("Мой профиль", "Кланы", "Телепортация", "Приваты", "Активности",
-            "Развитие", "Торговля", "Технологии", "Поиск", "Настройки"), screen.buttons.map { plain(it.label) })
+            "Развитие", "Квесты", "Торговля", "Технологии", "Поиск", "Настройки"), screen.buttons.map { plain(it.label) })
         click("search")
         assertTrue(screen.buttons.any { plain(it.label).startsWith("⚡") })
     }

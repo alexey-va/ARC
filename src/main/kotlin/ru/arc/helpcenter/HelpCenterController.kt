@@ -202,13 +202,18 @@ internal class HelpCenterController(
                     button("privat", text("privat-label"), text("privat-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
                     rootCategoryButton(player, HelpCenterCategory.ACTIVITIES),
                     rootCategoryButton(player, HelpCenterCategory.PROGRESS),
+                    availableCatalog(player).firstOrNull { it.id == "quests" }?.let { quests ->
+                        button("quests", text("main-quests-label"), commandTooltip(quests.id)) {
+                            executeCatalog(player, quests.id)
+                        }
+                    },
                     rootCategoryButton(player, HelpCenterCategory.TRADE),
                     rootCategoryButton(player, HelpCenterCategory.TECHNOLOGY),
                     button("search", text("commands-label"), text("commands-tooltip")) { openCommands(player) },
                     button("settings", text("category-settings-label"), text("category-settings-tooltip")) { openSettings(player) },
-                    ))
-                }.map { it.copy(width = 246, label = text("main-${it.id.value.removePrefix("root_")}-label")) },
-                columns = 2,
+                    ).filterNotNull())
+                }.map { it.copy(width = 166, label = text("main-${it.id.value.removePrefix("root_")}-label")) },
+                columns = 3,
             ),
         )
     }

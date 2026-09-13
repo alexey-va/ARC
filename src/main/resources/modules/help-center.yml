@@ -18,6 +18,7 @@ text:
   main-privat-label: '<#a3de92>Приваты'
   main-activities-label: '<#ffb277>Активности'
   main-progress-label: '<#c4abff>Развитие'
+  main-quests-label: '<#c4abff>Квесты'
   main-trade-label: '<#f4d87a>Торговля'
   main-technology-label: '<#85dfc4>Технологии'
   main-search-label: '<#f3a2c9>Поиск'

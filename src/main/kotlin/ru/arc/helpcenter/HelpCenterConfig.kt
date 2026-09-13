@@ -94,6 +94,7 @@ class HelpCenterConfig(private val config: Config) {
             "main-privat-label" to "<#a3de92>Приваты",
             "main-activities-label" to "<#ffb277>Активности",
             "main-progress-label" to "<#c4abff>Развитие",
+            "main-quests-label" to "<#c4abff>Квесты",
             "main-trade-label" to "<#f4d87a>Торговля",
             "main-technology-label" to "<#85dfc4>Технологии",
             "main-search-label" to "<#f3a2c9>Поиск",
