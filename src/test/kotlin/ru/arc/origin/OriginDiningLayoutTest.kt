@@ -3,6 +3,7 @@ package ru.arc.origin
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import ru.arc.worldcontent.BreweryTableDialogs
+import kotlin.math.abs
 
 class OriginDiningLayoutTest : FreeSpec({
     "every authored chair has a unique block and table anchor" {
@@ -23,13 +24,24 @@ class OriginDiningLayoutTest : FreeSpec({
         OriginDiningLayout.waiterIds shouldBe setOf(410, 411, 431, 432)
     }
 
-    "meal displays and their hitboxes are served exactly one block above authored anchors" {
-        OriginDiningLayout.servingAnchorY(71.1) shouldBe 72.1
-        OriginDiningLayout.servingAnchorY(73.1) shouldBe 74.1
+    "every dish is centered one block in front of its chair" {
+        val expected =
+            mapOf(
+                "brewery_south_west" to Triple(-6.5, 71.1, 37.5),
+                "brewery_south_east" to Triple(-4.5, 71.1, 37.5),
+                "brewery_fire" to Triple(-8.5, 70.75, 47.5),
+                "brewery_rina" to Triple(-14.5, 71.1, 47.5),
+                "brewery_west" to Triple(-14.5, 71.1, 53.5),
+                "brewery_east" to Triple(-3.5, 71.1, 53.5),
+                "restaurant_a" to Triple(-54.5, 73.1, 47.5),
+                "restaurant_b" to Triple(-47.5, 73.1, 51.5),
+            )
 
-        listOf("egg", "fish", "steak", "herbal_tea").forEach { dish ->
-            val visualY = OriginDiningLayout.visibleModelY(OriginDiningLayout.servingAnchorY(71.1), dish)
-            (visualY in 72.13..72.15) shouldBe true
+        OriginDiningLayout.seats.forEach { seat ->
+            val target = expected.getValue(seat.id)
+            (abs(seat.dish.x - target.first) < 0.000_001) shouldBe true
+            (abs(seat.dish.y - target.second) < 0.000_001) shouldBe true
+            (abs(seat.dish.z - target.third) < 0.000_001) shouldBe true
         }
     }
 
@@ -42,12 +54,15 @@ class OriginDiningLayoutTest : FreeSpec({
         }
     }
 
-    "small authored models and meal targeting are enlarged" {
-        OriginDiningLayout.displayScale("steak") shouldBe 2.6f
-        OriginDiningLayout.displayScale("egg") shouldBe 1.3f
-        OriginDiningLayout.displayScale("herbal_tea") shouldBe 1.3f
+    "model bounds define the scale and table-surface lift" {
+        OriginDiningLayout.displayScale("steak") shouldBe 1.3f
+        OriginDiningLayout.displayScale("egg") shouldBe 0.65f
+        OriginDiningLayout.displayScale("herbal_tea") shouldBe 0.65f
         OriginDiningLayout.displayScale("fish") shouldBe 0.65f
-        OriginDiningLayout.MEAL_HITBOX_SIZE shouldBe 1.8f
+        OriginDiningLayout.displayLift("steak") shouldBe 0.2025f
+        OriginDiningLayout.displayLift("egg") shouldBe 0.12125f
+        OriginDiningLayout.displayLift("herbal_tea") shouldBe 0.0205f
+        OriginDiningLayout.mealHitboxSize shouldBe 1.8f
     }
 
     "chair block fallback resolves the real clicked stair" {

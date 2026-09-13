@@ -1,0 +1,82 @@
+# ARC owns the interactive meals in both Origin restaurants.
+# Run /arc reload after editing this file; no server restart is required.
+
+placement:
+  # Every dish starts exactly at the center of the block directly in front of
+  # the seated player. These values only provide intentional fine tuning.
+  forward-blocks: 1.0
+  vertical-offset-blocks: 0.0
+  tables:
+    brewery_south_west:
+      height-above-seat: 1.1
+      offset-x: 0.0
+      offset-y: 0.0
+      offset-z: 0.0
+    brewery_south_east:
+      height-above-seat: 1.1
+      offset-x: 0.0
+      offset-y: 0.0
+      offset-z: 0.0
+    brewery_fire:
+      height-above-seat: 0.75
+      offset-x: 0.0
+      offset-y: 0.0
+      offset-z: 0.0
+    brewery_rina:
+      height-above-seat: 1.1
+      offset-x: 0.0
+      offset-y: 0.0
+      offset-z: 0.0
+    brewery_west:
+      height-above-seat: 1.1
+      offset-x: 0.0
+      offset-y: 0.0
+      offset-z: 0.0
+    brewery_east:
+      height-above-seat: 1.1
+      offset-x: 0.0
+      offset-y: 0.0
+      offset-z: 0.0
+    restaurant_a:
+      height-above-seat: 1.1
+      offset-x: 0.0
+      offset-y: 0.0
+      offset-z: 0.0
+    restaurant_b:
+      height-above-seat: 1.1
+      offset-x: 0.0
+      offset-y: 0.0
+      offset-z: 0.0
+
+display:
+  # Culling bounds only affect visibility, not the model's physical size.
+  view-range: 2.0
+  culling-width: 4.0
+  culling-height: 4.0
+  # surface-lift values come from the actual ItemsAdder model bounds with the
+  # GROUND transform and leave a 0.04 block clearance above the table.
+  dishes:
+    egg:
+      scale: 0.65
+      surface-lift: 0.12125
+    fish:
+      scale: 0.65
+      surface-lift: 0.12125
+    steak:
+      scale: 1.3
+      surface-lift: 0.2025
+    herbal_tea:
+      scale: 0.65
+      surface-lift: 0.0205
+    berry_kvass:
+      scale: 0.65
+      surface-lift: 0.0205
+    spiced_mead:
+      scale: 0.65
+      surface-lift: 0.0205
+
+interaction:
+  meal-hitbox-size: 1.8
+  meal-hitbox-y-offset: -0.15
+  seat-hitbox-width: 1.45
+  seat-hitbox-height: 1.8

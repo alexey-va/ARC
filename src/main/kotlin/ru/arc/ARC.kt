@@ -361,6 +361,7 @@ open class ARC : JavaPlugin() {
                 "modules/ops-http.yml",
                 "modules/citizens-chunk-tickets.yml",
                 "modules/origin-spawn.yml",
+                "modules/origin-dining.yml",
                 "modules/announce.yml",
                 "modules/scheduled-commands.yml",
                 "modules/restart.yml",
