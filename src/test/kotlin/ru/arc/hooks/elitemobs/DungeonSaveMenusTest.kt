@@ -36,13 +36,30 @@ class DungeonSaveMenusTest : FreeSpec({
             val shown = mutableListOf<PaperDialogScreen>()
             val menus = DungeonSaveMenus(dungeon) { _, screen, _ -> shown += screen }
             menus.shop(player)
-            shown.last().buttons.single().onClick.handle(mockk())
+            shown.last().buttons.map { it.id.value }.take(2) shouldBe listOf("skill_boosts", "supply_food")
+            shown.last().buttons.single { it.id.value == "supply_food" }.onClick.handle(mockk())
             verify(exactly = 1) { supplies.buy(player, quote, view) }
             shown.map { it.id }.distinct().size shouldBe 1
             verify(exactly = if (outcome.success) 1 else 0) {
                 player.playSound(any<org.bukkit.Location>(), org.bukkit.Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 0.65f, 1.2f)
             }
         }
+    }
+
+    "dungeon panel keeps primary actions first and utility actions last" {
+        val player = paper.addPlayer("panel-order")
+        val dungeon = mockk<EMDungeonQol>(relaxed = true)
+        val world = paper.addSimpleWorld("panel-order-world")
+        every { dungeon.panelView(player) } returns DungeonPanelView(world.uid, DungeonVisit("run"), null)
+        every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(secondArg<String>()) }
+        val shown = mutableListOf<PaperDialogScreen>()
+
+        DungeonSaveMenus(dungeon) { _, screen, _ -> shown += screen }.panel(player)
+
+        shown.single().buttons.map { it.id.value } shouldBe listOf(
+            "quests", "party", "shop", "lost_loot", "saves", "entry", "guide", "about", "scoreboard", "quit",
+        )
+        shown.single().buttons.none { it.id.value == "shops" || it.id.value == "skill_boosts" } shouldBe true
     }
 
     "quest pages reread progression on refresh and handle quests disappearing" {
@@ -76,7 +93,7 @@ class DungeonSaveMenusTest : FreeSpec({
         val shown = mutableListOf<PaperDialogScreen>()
         DungeonSaveMenus(dungeon) { _, screen, _ -> shown += screen }.open(player)
         shown.single().id shouldBe "dungeon.panel.unavailable"
-        shown.single().buttons.map { it.id.value } shouldBe listOf("return", "scoreboard", "shops", "lost_loot", "guide", "portals", "list", "party", "skill_boosts")
+        shown.single().buttons.map { it.id.value } shouldBe listOf("return", "lost_loot", "guide", "portals", "list", "party", "scoreboard")
         shown.single().exitButton!!.id.value shouldBe "back"
         shown.single().exitButton!!.closeDialogBeforeAction shouldBe false
         shown.single().body.map { it.text } shouldBe listOf(
@@ -113,7 +130,7 @@ class DungeonSaveMenusTest : FreeSpec({
         }
     }
 
-    "unavailable return refreshes the panel so shops remain clickable" {
+    "unavailable return refreshes the panel and keeps useful actions clickable" {
         val player = paper.addPlayer("outside-actions")
         val dungeon = mockk<EMDungeonQol>(relaxed = true)
         every { dungeon.view(player) } returns null
@@ -131,11 +148,11 @@ class DungeonSaveMenusTest : FreeSpec({
         verify(exactly = 0) { dungeon.returnToLast(any(), any()) }
         shown.size shouldBe 2
         shown.last().id shouldBe "dungeon.panel.unavailable"
-        shown.last().buttons.single { it.id.value == "shops" }.also {
+        shown.last().buttons.single { it.id.value == "list" }.also {
             it.closeDialogBeforeAction shouldBe true
             it.onClick.handle(mockk())
         }
-        verify { dungeon.action(player, "shops") }
+        verify { dungeon.action(player, "list") }
     }
 
     "outside menu enables return and passes the captured departure to the callback" {

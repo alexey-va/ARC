@@ -66,24 +66,22 @@ internal class DungeonSaveMenus(
                 if (visit.waiting) action("start", "panel.start-label", "<#9bd48d>Начать поход", "panel.start-tooltip", "Запустить прохождение для собранной группы", close = true) {
                     dungeon.panelAction(player, view, "start")
                 } else null,
-                action("quit", "panel.quit-label", "<#d7b486>Выйти из данжа", "panel.quit-tooltip", "Покинуть данж штатным способом", close = true) { dungeon.panelAction(player, view, "quit") }.let { if (visit.instanced) it else it.copy(tooltip = text("panel.quit-open-tooltip", "Вызвать выход ко спавну. Если появился портал, войдите в него.")) },
+                action("quests", "quests.label", "<#c4a7e7>Задания ›", "quests.tooltip", "Принятые задания EliteMobs и их текущий прогресс") { quests(player) },
+                partyButton(player),
+                action("shop", "panel.shop-label", "<#f4d87a>Припасы ›", "panel.shop-tooltip", "Припасы, кейсы и бусты опыта за кристаллы") { shop(player) },
+                lostLoot(player),
                 action("saves", "panel.saves-label", "<#c4a7e7>Сохранения ›", "panel.saves-tooltip", "Ваши ручные точки, автосохранения и место прошлого выхода") { open(player) },
                 action("entry", "panel.entry-label", "<#92bed8>К началу данжа ›", "panel.entry-tooltip", "Обычный портал к началу данжа", close = view.saves?.entry != null) {
-                    if (view.saves?.entry != null) dungeon.travel(player, view.saves, "entry") else panel(player, text("panel.entry-unavailable", "<#e8dfd2>Безопасный переход ко входу сейчас недоступен. Для выхода используйте кнопку выше."))
+                    if (view.saves?.entry != null) dungeon.travel(player, view.saves, "entry") else panel(player, text("panel.entry-unavailable", "<#e8dfd2>Безопасный переход ко входу сейчас недоступен. Для выхода используйте кнопку внизу."))
                 }.let { if (view.saves?.entry != null) it else it.copy(label = text("panel.entry-disabled", "<#e8dfd2>[Недоступно] К началу данжа")) },
-                action("shop", "panel.shop-label", "<#f4d87a>Припасы ›", "panel.shop-tooltip", "Припасы и кейсы EliteMobs за кристаллы") { shop(player) },
-                skillBoostButton(player),
-                scoreboardButton(player),
-                shops(player),
-                lostLoot(player),
-                partyButton(player),
-                action("quests", "quests.label", "<#c4a7e7>Задания ›", "quests.tooltip", "Принятые задания EliteMobs и их текущий прогресс") { quests(player) },
                 action("guide", "panel.guide-label", "<#86dcf1>Гайд ›", "panel.guide-tooltip", "Читальная справка о данжах") {
                     if (!HelpCenterModule.openDungeonsGuide(player) { panel(player) }) {
                         panel(player, text("panel.guide-unavailable", "<#d7b486>Гайд сейчас недоступен. Закройте панель и попробуйте позже."))
                     }
                 },
                 action("about", "panel.about-label", "<#86dcf1>О данже ›", "panel.about-tooltip", "Описание и подсказка этого данжа") { about(player) },
+                scoreboardButton(player),
+                action("quit", "panel.quit-label", "<#d7b486>Выйти из данжа", "panel.quit-tooltip", "Покинуть данж штатным способом", close = true) { dungeon.panelAction(player, view, "quit") }.let { if (visit.instanced) it else it.copy(tooltip = text("panel.quit-open-tooltip", "Вызвать выход ко спавну. Если появился портал, войдите в него.")) },
             ),
             exitButton = if (MenuEscapeBehavior.goesBack(player)) back {} else close(), columns = 2,
         )) { panel(player) }
@@ -162,14 +160,12 @@ internal class DungeonSaveMenus(
                 else panel(player)
             }.let { if (destination != null) it else it.copy(label = text("panel.return-disabled", "<#e8dfd2>[Недоступно] Вернуться в данж"),
                 tooltip = text("panel.return-unavailable", "<#e8dfd2>Нет доступного места выхода из обычного данжа. Сначала посетите данж и выйдите из него.")) },
-            scoreboardButton(player),
-            shops(player),
             lostLoot(player),
             guide(player) { unavailable(player) },
             action("portals", "panel.portals-label", "<#92bed8>К порталам ›", "panel.portals-tooltip", "Перейти к порталам данжей в гильдии", close = true) { dungeon.action(player, "tp") },
             action("list", "panel.list-label", "<#ffb277>Выбрать данж ›", "panel.list-tooltip", "Открыть список данжей EliteMobs", close = true) { dungeon.action(player, "list") },
             partyButton(player),
-            skillBoostButton(player),
+            scoreboardButton(player),
         ), exitButton = if (MenuEscapeBehavior.goesBack(player)) back {} else close(), columns = 2,
         )) { unavailable(player) }
     }
@@ -181,8 +177,6 @@ internal class DungeonSaveMenus(
     private fun lostLoot(player: Player) = action("lost_loot", "lost-loot.label", "<#c4a7e7>Потерянная добыча ›", "lost-loot.tooltip", "Забрать или продать сохранённый лут со всех данжей", close = true) {
         ru.arc.eliteloot.LostLootModule.open(player)
     }
-
-    private fun shops(player: Player) = action("shops", "panel.shops-label", "<#92bed8>К магазинам ›", "panel.shops-tooltip", "Перейти к торговцам данжей", close = true) { dungeon.action(player, "shops") }
 
     private fun autosaveSettingsButton(player: Player) = action("autosaves", "saves.settings.label", "<#c4a7e7>Автосохранение ›", "saves.settings.tooltip", "Выбрать интервал или отключить автоматические точки") { autosaveSettings(player) }
 
@@ -236,7 +230,7 @@ internal class DungeonSaveMenus(
 
     private fun partyButton(player: Player) = action("party", "panel.party-label", "<#e5ba73>Группа ›", "panel.party-tooltip", "Как собрать пати и управлять группой EliteMobs") { party(player) }
 
-    private fun skillBoostButton(player: Player) = action("skill_boosts", "boosts.label", "<#9bd48d>Опыт навыков ›", "boosts.tooltip", "Временный бонус к опыту боевых навыков EliteMobs") { skillBoosts(player) }
+    private fun skillBoostButton(player: Player) = action("skill_boosts", "boosts.label", "<#9bd48d>Бусты опыта ›", "boosts.tooltip", "Временный бонус к опыту боевых навыков EliteMobs") { skillBoosts(player) }
 
     private fun skillBoosts(player: Player, feedback: Component? = null) {
         val expiry = dungeon.skillBoosts.currentExpiry(player)
@@ -250,7 +244,7 @@ internal class DungeonSaveMenus(
         )
         feedback?.let { body += PaperDialogBody(plain(it), 468) }
         show(player, PaperDialogScreen(
-            id = "dungeon.skill-boosts", title = text("boosts.title", "<#9bd48d>Опыт навыков"), body = body,
+            id = "dungeon.skill-boosts", title = text("boosts.title", "<#9bd48d>Бусты опыта"), body = body,
             buttons = dungeon.skillBoosts.list().map { offer ->
                 action("boost_${offer.id}", "boosts.${offer.id}.label", "<#9bd48d>+25% · <time> <#e8dfd2>· 💎 <price>",
                     "boosts.${offer.id}.tooltip", "Продлить бонус на <time>") {
@@ -263,7 +257,7 @@ internal class DungeonSaveMenus(
                         "time" to Component.text(boostDuration(offer.duration)), "price" to price(offer.price)),
                     tooltip = text("boosts.${offer.id}.tooltip", "Продлить бонус на <time>", "time" to Component.text(boostDuration(offer.duration))),
                 )
-            }, exitButton = back { if (dungeon.panelView(player) == null) unavailable(player) else panel(player) }, columns = 1,
+            }, exitButton = back { shop(player) }, columns = 1,
         )) { skillBoosts(player) }
     }
 
@@ -387,7 +381,7 @@ internal class DungeonSaveMenus(
         )
         feedback?.let { body += PaperDialogBody(it, 468) }
         show(player, PaperDialogScreen(id = "dungeon.shop", title = text("shop.title", "<#f4d87a>Припасы и кейсы"), body = body,
-            buttons = dungeon.supplies.list().map { offer ->
+            buttons = listOf(skillBoostButton(player)) + dungeon.supplies.list().map { offer ->
                 val quote = dungeon.supplies.quote(player, offer)
                 pointButton("supply_${offer.id}", text("shop.offer-label", "<#f4d87a><name> ×<amount> <#e8dfd2>· 💎 <price> <#f4d87a>›",
                     "name" to supplyName(offer), "amount" to Component.text(offer.amount), "price" to price(offer.price)),
@@ -399,7 +393,7 @@ internal class DungeonSaveMenus(
                         shop(player, supplyResult(result))
                     }
                 }
-            }.ifEmpty { listOf(guide(player) { shop(player) }) }, exitButton = back { panel(player) }, columns = 2,
+            }, exitButton = back { panel(player) }, columns = 2,
         )) { shop(player) }
     }
 
