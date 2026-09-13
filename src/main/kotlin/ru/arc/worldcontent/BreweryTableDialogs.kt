@@ -65,9 +65,9 @@ object BreweryTableDialogs {
 
     internal val drinks =
         listOf(
-            Dish("herbal_tea", "Травяной настой", "herbal_tea", 250, drinkColor, "Тёплый напиток: 2 сытости и 1 насыщения."),
-            Dish("berry_kvass", "Ягодный квас", "berry_kvass", 400, fishColor, "Прохладный напиток: 3 сытости и 2 насыщения."),
-            Dish("spiced_mead", "Пряный мёд", "spiced_mead", 600, eggColor, "Плотный напиток: 4 сытости и 3 насыщения."),
+            Dish("herbal_tea", "Пиво BreweryX", "herbal_tea", 250, drinkColor, "Настоящая бутылка BreweryX качества 5/10."),
+            Dish("berry_kvass", "Красное вино BreweryX", "berry_kvass", 400, fishColor, "Настоящая бутылка BreweryX качества 7/10."),
+            Dish("spiced_mead", "Медовуха BreweryX", "spiced_mead", 600, eggColor, "Настоящая бутылка BreweryX качества 9/10."),
         )
 
     internal fun openOrder(player: Player, menu: Menu = Menu.FOOD) {
@@ -91,7 +91,7 @@ object BreweryTableDialogs {
         val body =
             when (menu) {
                 Menu.FOOD -> listOf("Луи подаст блюдо к вашему столику.", "После подачи нажмите на блюдо, чтобы съесть его.")
-                Menu.DRINKS -> listOf("Закажите напиток, не вставая от костра.", "Официант принесёт его к вашему месту.")
+                Menu.DRINKS -> listOf("Перед вами нет стола — здесь подают напитки BreweryX.", "После оплаты официант положит бутылку в свободный слот инвентаря.")
                 Menu.COURTYARD -> listOf("Выберите блюдо или напиток.", "Официант принесёт заказ к вашему столику.")
                 Menu.RESTAURANT -> listOf("Официант примет заказ и принесёт его к столу.", "Стоимость списывается, когда блюдо поставлено на стол.")
             }

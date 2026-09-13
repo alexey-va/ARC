@@ -22,17 +22,7 @@ placement:
       offset-x: 0.0
       offset-y: 0.0
       offset-z: 0.0
-    brewery_rina:
-      height-above-seat: 1.1
-      offset-x: 0.0
-      offset-y: 0.0
-      offset-z: 0.0
     brewery_west:
-      height-above-seat: 1.1
-      offset-x: 0.0
-      offset-y: 0.0
-      offset-z: 0.0
-    brewery_east:
       height-above-seat: 1.1
       offset-x: 0.0
       offset-y: 0.0
@@ -80,3 +70,13 @@ interaction:
   meal-hitbox-y-offset: -0.15
   seat-hitbox-width: 1.45
   seat-hitbox-height: 1.8
+
+dynamic-seats:
+  # Любая нижняя ступенька внутри территории пивоварни или ресторана становится
+  # местом для игрока. Если перед ней нет блока/стола, открывается меню BreweryX,
+  # а купленная бутылка выдаётся в инвентарь.
+  table-height-above-seat: 1.1
+  dish-offset-x: 0.0
+  dish-offset-y: 0.0
+  dish-offset-z: 0.0
+  waiter-side-offset: 1.5

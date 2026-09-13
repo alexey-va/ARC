@@ -7,15 +7,15 @@ import kotlin.math.abs
 
 class OriginDiningLayoutTest : FreeSpec({
     "every authored chair has a unique block and table anchor" {
-        OriginDiningLayout.seats.size shouldBe 8
-        OriginDiningLayout.seats.map { it.clickedBlock }.distinct().size shouldBe 8
-        OriginDiningLayout.seats.map { it.id }.distinct().size shouldBe 8
+        OriginDiningLayout.seats.size shouldBe 6
+        OriginDiningLayout.seats.map { it.clickedBlock }.distinct().size shouldBe 6
+        OriginDiningLayout.seats.map { it.id }.distinct().size shouldBe 6
     }
 
     "brewery exposes several tables and only the fire seat opens drinks" {
-        OriginDiningLayout.seats.count { it.id.startsWith("brewery_") } shouldBe 6
+        OriginDiningLayout.seats.count { it.id.startsWith("brewery_") } shouldBe 4
         OriginDiningLayout.seats.single { it.id == "brewery_fire" }.menu shouldBe BreweryTableDialogs.Menu.DRINKS
-        OriginDiningLayout.seats.single { it.id == "brewery_rina" }.menu shouldBe BreweryTableDialogs.Menu.COURTYARD
+        OriginDiningLayout.seats.single { it.id == "brewery_west" }.menu shouldBe BreweryTableDialogs.Menu.COURTYARD
         OriginDiningLayout.seats.count { it.menu == BreweryTableDialogs.Menu.RESTAURANT } shouldBe 2
         OriginDiningLayout.waiterIds shouldBe setOf(410, 411, 431, 432)
     }
@@ -30,9 +30,7 @@ class OriginDiningLayoutTest : FreeSpec({
                 "brewery_south_west" to Triple(-6.5, 71.1, 37.5),
                 "brewery_south_east" to Triple(-4.5, 71.1, 37.5),
                 "brewery_fire" to Triple(-8.5, 70.75, 47.5),
-                "brewery_rina" to Triple(-14.5, 71.1, 47.5),
                 "brewery_west" to Triple(-14.5, 71.1, 53.5),
-                "brewery_east" to Triple(-3.5, 71.1, 53.5),
                 "restaurant_a" to Triple(-54.5, 73.1, 47.5),
                 "restaurant_b" to Triple(-47.5, 73.1, 51.5),
             )
@@ -67,8 +65,30 @@ class OriginDiningLayoutTest : FreeSpec({
 
     "chair block fallback resolves the real clicked stair" {
         OriginDiningLayout.seatForBlock(-8, 70, 37)?.id shouldBe "brewery_south_west"
-        OriginDiningLayout.seatForBlock(-14, 70, 47)?.id shouldBe "brewery_rina"
+        OriginDiningLayout.seatForBlock(-14, 70, 53)?.id shouldBe "brewery_west"
         OriginDiningLayout.seatForBlock(-55, 72, 48)?.id shouldBe "restaurant_a"
         OriginDiningLayout.seatForBlock(-55, 72, 47) shouldBe null
+    }
+
+    "dynamic seats are limited to the two restaurant territories" {
+        val brewery = io.mockk.mockk<org.bukkit.Location>(relaxed = true)
+        val restaurant = io.mockk.mockk<org.bukkit.Location>(relaxed = true)
+        val outside = io.mockk.mockk<org.bukkit.Location>(relaxed = true)
+        val world = io.mockk.mockk<org.bukkit.World>(relaxed = true)
+        io.mockk.every { world.name } returns OriginDiningLayout.WORLD
+        listOf(brewery, restaurant, outside).forEach { io.mockk.every { it.world } returns world }
+        io.mockk.every { brewery.x } returns BreweryTableDialogs.BREWERY_X
+        io.mockk.every { brewery.y } returns BreweryTableDialogs.BREWERY_Y
+        io.mockk.every { brewery.z } returns BreweryTableDialogs.BREWERY_Z
+        io.mockk.every { restaurant.x } returns BreweryTableDialogs.RESTAURANT_X
+        io.mockk.every { restaurant.y } returns BreweryTableDialogs.RESTAURANT_Y
+        io.mockk.every { restaurant.z } returns BreweryTableDialogs.RESTAURANT_Z
+        io.mockk.every { outside.x } returns 200.0
+        io.mockk.every { outside.y } returns 70.0
+        io.mockk.every { outside.z } returns 200.0
+
+        OriginDiningLayout.dynamicMenu(brewery) shouldBe BreweryTableDialogs.Menu.COURTYARD
+        OriginDiningLayout.dynamicMenu(restaurant) shouldBe BreweryTableDialogs.Menu.RESTAURANT
+        OriginDiningLayout.dynamicMenu(outside) shouldBe null
     }
 })
