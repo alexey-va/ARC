@@ -15,7 +15,17 @@ visual:
   proxy-distance: 48.0
   minimum-scale: 1.04
   maximum-scale: 3.0
-  update-ticks: 4
+  update-ticks: 1
+
+naming:
+  default-name: 'Путевой якорь'
+  dialog:
+    title: '<#92bed8><bold>Название якоря'
+    body: '<#e8dfd2>Это название будет видно при наведении на якорь.'
+    input: '<#e8dfd2>Название'
+    invalid: '<#ff6b61>Введите название длиной от 1 до %limit% символов.'
+    save: '<#9bd48d>Сохранить изменения'
+    close: '<#ffffff>Закрыть'
 
 items:
   anchor:
@@ -26,6 +36,7 @@ items:
       - ''
       - '<#b8b8b8>Поставьте его, чтобы связать две точки.'
       - '<#b8b8b8>С соседнего якоря он виден сквозь стены.'
+      - '<#b8b8b8>После установки нажмите ПКМ, чтобы дать имя.'
       - ''
       - '<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ПКМ<#b8b8b8> — установить'
   staff:
@@ -41,6 +52,7 @@ items:
 messages:
   placed: '<#92bed8>Путевой якорь установлен.'
   removed: '<#92bed8>Путевой якорь снят.'
+  renamed: '<#92bed8>Название якоря сохранено.'
   target-anchor: '<#ffd166>Shift<#b8b8b8> — перейти · <#ffffff>%distance% м'
   target-staff: '<#d7a8ff>ПКМ<#b8b8b8> — перейти · <#ffffff>%distance% м'
   no-target: '<#b8b8b8>Наведитесь на подсвеченный якорь.'

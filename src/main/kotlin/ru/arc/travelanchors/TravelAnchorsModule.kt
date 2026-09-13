@@ -2,6 +2,8 @@ package ru.arc.travelanchors
 
 import com.jeff_media.customblockdata.CustomBlockData
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.TextColor
+import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.Bukkit
 import org.bukkit.Color
 import org.bukkit.GameMode
@@ -13,7 +15,9 @@ import org.bukkit.Sound
 import org.bukkit.SoundCategory
 import org.bukkit.block.Block
 import org.bukkit.entity.BlockDisplay
+import org.bukkit.entity.Display
 import org.bukkit.entity.Player
+import org.bukkit.entity.TextDisplay
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.HandlerList
@@ -34,6 +38,7 @@ import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
 import org.bukkit.util.Transformation
 import org.joml.AxisAngle4f
+import org.joml.Matrix4f
 import org.joml.Vector3f
 import ru.arc.ARC
 import ru.arc.commands.arc.SubCommand
@@ -45,13 +50,22 @@ import ru.arc.core.PluginModule
 import ru.arc.core.ScheduledTask
 import ru.arc.core.repeating
 import ru.arc.core.ticks
+import ru.arc.gui.ArcMenus
 import ru.arc.ops.OpsItemHandlers
+import ru.arc.paper.menu.PaperDialogActionId
+import ru.arc.paper.menu.PaperDialogBody
+import ru.arc.paper.menu.PaperDialogButton
+import ru.arc.paper.menu.PaperDialogInputId
+import ru.arc.paper.menu.PaperDialogScreen
+import ru.arc.paper.menu.PaperDialogTextInput
 import ru.arc.util.ItemStackDslBuilder
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import ru.arc.util.TextUtil
 import ru.arc.util.itemStack
 import java.nio.file.Path
+import java.nio.charset.StandardCharsets
+import java.util.Base64
 import java.util.Locale
 import java.util.UUID
 import kotlin.math.cos
@@ -60,12 +74,17 @@ import kotlin.math.roundToInt
 
 private val ANCHOR_BLOCK_KEY = NamespacedKey("arc", "travel_anchor")
 private val ANCHOR_INDEX_KEY = NamespacedKey("arc", "travel_anchor_index")
+private val ANCHOR_NAMES_KEY = NamespacedKey("arc", "travel_anchor_names")
+private val ANCHOR_NAME_KEY = NamespacedKey("arc", "travel_anchor_name")
 private val ANCHOR_ITEM_KEY = NamespacedKey("arc", "travel_anchor_item")
 private val STAFF_ITEM_KEY = NamespacedKey("arc", "travel_anchor_staff")
+private val NAME_INPUT = PaperDialogInputId.of("anchor_name")
 private const val USE_PERMISSION = "arc.travel-anchors.use"
 private const val PLACE_PERMISSION = "arc.travel-anchors.place"
 private const val BREAK_PERMISSION = "arc.travel-anchors.break"
 private const val TELEPORT_COOLDOWN_MILLIS = 500L
+private const val MAX_ANCHOR_NAME_LENGTH = 32
+private const val PROXY_DEPTH = 0.03f
 private val RIGHT_CLICK_ACTIONS = setOf(Action.RIGHT_CLICK_AIR, Action.RIGHT_CLICK_BLOCK)
 
 internal data class AimCandidate<T>(val target: T, val distanceSquared: Double, val dot: Double)
@@ -99,6 +118,63 @@ internal fun travelAnchorTargetMessage(hasAnchorBelow: Boolean, staffHeld: Boole
 
 internal fun travelAnchorDisplayDistance(actualDistance: Double, proxyDistance: Double): Double =
     min(actualDistance, proxyDistance)
+
+internal fun travelAnchorDisplayCenter(eye: Location, target: Location, distance: Double): Location =
+    eye.clone().add(target.toVector().subtract(eye.toVector()).normalize().multiply(distance)).apply {
+        yaw = 0f
+        pitch = 0f
+    }
+
+internal data class TravelAnchorDisplayShape(val cameraFacing: Boolean, val depth: Float)
+
+internal fun travelAnchorDisplayShape(
+    actualDistance: Double,
+    proxyDistance: Double,
+    scale: Float,
+): TravelAnchorDisplayShape =
+    if (actualDistance > proxyDistance) TravelAnchorDisplayShape(cameraFacing = true, depth = PROXY_DEPTH)
+    else TravelAnchorDisplayShape(cameraFacing = false, depth = scale)
+
+internal enum class TravelAnchorInteraction { IGNORE, RENAME, TELEPORT }
+
+internal fun travelAnchorInteraction(clickedAnchor: Boolean, staffHeld: Boolean): TravelAnchorInteraction =
+    when {
+        staffHeld -> TravelAnchorInteraction.TELEPORT
+        clickedAnchor -> TravelAnchorInteraction.RENAME
+        else -> TravelAnchorInteraction.IGNORE
+    }
+
+internal fun normalizeTravelAnchorName(raw: String): String? {
+    val name = raw.trim()
+    return name.takeIf {
+        it.isNotEmpty() &&
+            it.codePointCount(0, it.length) <= MAX_ANCHOR_NAME_LENGTH &&
+            it.none(Character::isISOControl)
+    }
+}
+
+internal data class TravelAnchorNameEntry(val x: Int, val y: Int, val z: Int, val name: String)
+
+internal fun encodeTravelAnchorNames(entries: Iterable<TravelAnchorNameEntry>): String =
+    entries
+        .sortedWith(compareBy(TravelAnchorNameEntry::x, TravelAnchorNameEntry::y, TravelAnchorNameEntry::z))
+        .joinToString("\n") { entry ->
+            val name = Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(entry.name.toByteArray(StandardCharsets.UTF_8))
+            "${entry.x},${entry.y},${entry.z}|$name"
+        }
+
+internal fun decodeTravelAnchorNames(encoded: String): List<TravelAnchorNameEntry> =
+    encoded.lineSequence().mapNotNull { line ->
+        runCatching {
+            val (coordinates, encodedName) = line.split('|', limit = 2).takeIf { it.size == 2 } ?: return@runCatching null
+            val parts = coordinates.split(',').takeIf { it.size == 3 } ?: return@runCatching null
+            val name = normalizeTravelAnchorName(
+                String(Base64.getUrlDecoder().decode(encodedName), StandardCharsets.UTF_8),
+            ) ?: return@runCatching null
+            TravelAnchorNameEntry(parts[0].toInt(), parts[1].toInt(), parts[2].toInt(), name)
+        }.getOrNull()
+    }.toList()
 
 private data class TravelAnchorPosition(val worldId: UUID, val x: Int, val y: Int, val z: Int) {
     val chunkX: Int get() = x shr 4
@@ -156,6 +232,14 @@ private data class TravelAnchorSettings(
         return TextUtil.mm(text, true)
     }
 
+    fun namingText(key: String, vararg replacements: Pair<String, String>): Component {
+        var text = source.string("naming.dialog.$key", "")
+        replacements.forEach { (placeholder, value) -> text = text.replace(placeholder, value) }
+        return TextUtil.mm(text, true).decoration(TextDecoration.ITALIC, false)
+    }
+
+    fun defaultAnchorName(): String = source.string("naming.default-name", "Путевой якорь")
+
     private fun ItemStackDslBuilder.configuredItem(key: String, modelData: Int) {
         display(source.string("items.$key.name", ""))
         lore(source.stringList("items.$key.lore"))
@@ -188,7 +272,7 @@ private object TravelAnchorConfig {
             minimumScale = source.real("visual.minimum-scale", 1.04).toFloat().coerceIn(1.01f, 6.0f),
             maximumScale = source.real("visual.maximum-scale", 3.0).toFloat().coerceIn(1.01f, 6.0f),
             proxyDistance = source.real("visual.proxy-distance", 48.0).coerceIn(16.0, 96.0),
-            updateTicks = source.long("visual.update-ticks", 4L).coerceIn(1L, 20L),
+            updateTicks = source.long("visual.update-ticks", 1L).coerceIn(1L, 20L),
             anchorMaterial = source.material("items.anchor.material", Material.LODESTONE, requireBlock = true),
             displayMaterial = source.material("visual.block-material", Material.LODESTONE, requireBlock = true),
             staffMaterial = source.material("items.staff.material", Material.BLAZE_ROD, requireBlock = false),
@@ -218,6 +302,8 @@ object TravelAnchorsModule : PluginModule, Listener {
     private var renderTask: ScheduledTask? = null
     private val anchors = linkedSetOf<TravelAnchorPosition>()
     private val displays = mutableMapOf<UUID, MutableMap<TravelAnchorPosition, BlockDisplay>>()
+    private val labels = mutableMapOf<UUID, TextDisplay>()
+    private val anchorNames = mutableMapOf<TravelAnchorPosition, String>()
     private val selectedTargets = mutableMapOf<UUID, TravelAnchorPosition>()
     private val cooldowns = mutableMapOf<UUID, Long>()
     private val pendingTeleports = mutableSetOf<UUID>()
@@ -247,6 +333,9 @@ object TravelAnchorsModule : PluginModule, Listener {
         renderTask = null
         displays.values.flatMap { it.values }.forEach { if (it.isValid) it.remove() }
         displays.clear()
+        labels.values.forEach { if (it.isValid) it.remove() }
+        labels.clear()
+        anchorNames.clear()
         selectedTargets.clear()
         anchors.clear()
         cooldowns.clear()
@@ -299,7 +388,22 @@ object TravelAnchorsModule : PluginModule, Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     fun onInteract(event: PlayerInteractEvent) {
         if (event.hand != EquipmentSlot.HAND || event.action !in RIGHT_CLICK_ACTIONS) return
-        if (!(event.item ?: event.player.inventory.itemInMainHand).hasMarker(STAFF_ITEM_KEY)) return
+        val held = event.item ?: event.player.inventory.itemInMainHand
+        val clickedAnchor = event.clickedBlock?.takeIf(::isAnchor)
+        when (travelAnchorInteraction(clickedAnchor != null, held.hasMarker(STAFF_ITEM_KEY))) {
+            TravelAnchorInteraction.IGNORE -> return
+            TravelAnchorInteraction.RENAME -> {
+                event.isCancelled = true
+                if (!canUse(event.player)) {
+                    event.player.sendActionBar(settings?.message("no-permission") ?: Component.empty())
+                    return
+                }
+                ArcMenus.beginDialogFlow(event.player)
+                openNameDialog(event.player, checkNotNull(clickedAnchor))
+                return
+            }
+            TravelAnchorInteraction.TELEPORT -> Unit
+        }
         event.isCancelled = true
         val player = event.player
         if (!canUse(player)) {
@@ -383,6 +487,7 @@ object TravelAnchorsModule : PluginModule, Listener {
                 player.sendActionBar(current.message(message, "%distance%" to distance))
             } else {
                 selectedTargets.remove(player.uniqueId)
+                clearLabel(player.uniqueId)
             }
         }
     }
@@ -427,22 +532,33 @@ object TravelAnchorsModule : PluginModule, Listener {
         playerDisplays.keys.filterNot { it in desired }.toList().forEach { position ->
             playerDisplays.remove(position)?.remove()
         }
+        var selectedLocation: Location? = null
+        var selectedScale = 1f
         candidates.forEach { candidate ->
+            val actualDistance = Math.sqrt(candidate.distanceSquared)
             val location = displayLocation(player, candidate)
             val display = playerDisplays[candidate.target]?.takeIf { it.isValid } ?: spawnDisplay(player, location).also {
                 playerDisplays[candidate.target] = it
             }
             display.teleport(location)
             val scale = travelAnchorScale(candidate.dot, current.visibleDot, current.minimumScale, current.maximumScale)
-            val offset = (1f - scale) / 2f
+            val shape = travelAnchorDisplayShape(actualDistance, current.proxyDistance, scale)
+            display.billboard = if (shape.cameraFacing) Display.Billboard.CENTER else Display.Billboard.FIXED
             display.transformation = Transformation(
-                Vector3f(offset, offset, offset),
+                Vector3f(-scale / 2f, -scale / 2f, -shape.depth / 2f),
                 AxisAngle4f(),
-                Vector3f(scale, scale, scale),
+                Vector3f(scale, scale, shape.depth),
                 AxisAngle4f(),
             )
             display.glowColorOverride = if (candidate.target == selected) SELECTED_COLOR else VISIBLE_COLOR
+            if (candidate.target == selected) {
+                selectedLocation = location
+                selectedScale = scale
+            }
         }
+        if (selected != null && selectedLocation != null) {
+            renderLabel(player, selected, checkNotNull(selectedLocation), selectedScale)
+        } else clearLabel(player.uniqueId)
         if (playerDisplays.isEmpty()) displays.remove(player.uniqueId)
     }
 
@@ -450,8 +566,7 @@ object TravelAnchorsModule : PluginModule, Listener {
         val eye = player.eyeLocation
         val target = Location(player.world, candidate.target.x + 0.5, candidate.target.y + 0.5, candidate.target.z + 0.5)
         val distance = travelAnchorDisplayDistance(Math.sqrt(candidate.distanceSquared), checkNotNull(settings).proxyDistance)
-        val center = eye.clone().add(target.toVector().subtract(eye.toVector()).normalize().multiply(distance))
-        return center.subtract(0.5, 0.5, 0.5)
+        return travelAnchorDisplayCenter(eye, target, distance)
     }
 
     private fun spawnDisplay(player: Player, location: Location): BlockDisplay {
@@ -465,7 +580,8 @@ object TravelAnchorsModule : PluginModule, Listener {
             it.isGlowing = true
             it.glowColorOverride = VISIBLE_COLOR
             it.interpolationDelay = 0
-            it.interpolationDuration = current.updateTicks.toInt()
+            it.interpolationDuration = 1
+            it.teleportDuration = 1
             it.viewRange = 2f
             it.displayWidth = current.maximumScale + 0.5f
             it.displayHeight = current.maximumScale + 0.5f
@@ -473,6 +589,93 @@ object TravelAnchorsModule : PluginModule, Listener {
         }
         player.showEntity(ARC.instance, display)
         return display
+    }
+
+    private fun renderLabel(player: Player, position: TravelAnchorPosition, marker: Location, scale: Float) {
+        val location = marker.clone().add(0.0, scale / 2.0 + 0.55, 0.0)
+        val label = labels[player.uniqueId]?.takeIf { it.isValid } ?: player.world.spawn(location, TextDisplay::class.java) {
+            it.isPersistent = false
+            it.isVisibleByDefault = false
+            it.isInvulnerable = true
+            it.setGravity(false)
+            it.billboard = Display.Billboard.CENTER
+            it.isSeeThrough = true
+            it.isShadowed = true
+            it.backgroundColor = Color.fromARGB(0, 0, 0, 0)
+            it.brightness = Display.Brightness(15, 15)
+            it.alignment = TextDisplay.TextAlignment.CENTER
+            it.lineWidth = 220
+            it.teleportDuration = 1
+            it.viewRange = 2f
+            it.addScoreboardTag("arc_travel_anchor_label")
+        }.also {
+            labels[player.uniqueId] = it
+            player.showEntity(ARC.instance, it)
+        }
+        label.teleport(location)
+        val labelScale = (marker.distance(player.eyeLocation) / 24.0).toFloat().coerceIn(0.8f, 2.0f)
+        label.setTransformationMatrix(Matrix4f().scaling(labelScale))
+        val text = Component.text(anchorNames[position] ?: checkNotNull(settings).defaultAnchorName())
+            .color(TextColor.color(0xFFD166))
+            .decoration(TextDecoration.ITALIC, false)
+        if (label.text() != text) label.text(text)
+    }
+
+    private fun clearLabel(playerId: UUID) {
+        labels.remove(playerId)?.let { if (it.isValid) it.remove() }
+    }
+
+    private fun openNameDialog(player: Player, block: Block, invalid: Boolean = false, initial: String? = null) {
+        val current = settings ?: return
+        val position = TravelAnchorPosition.of(block)
+        val value = initial ?: anchorNames[position].orEmpty()
+        ArcMenus.openDialog(
+            player,
+            PaperDialogScreen(
+                id = "travel-anchors.rename",
+                title = current.namingText("title"),
+                body = listOf(PaperDialogBody(current.namingText("body"), width = 360)) +
+                    if (invalid) listOf(PaperDialogBody(current.namingText("invalid", "%limit%" to MAX_ANCHOR_NAME_LENGTH.toString()), width = 360))
+                    else emptyList(),
+                inputs = listOf(PaperDialogTextInput(NAME_INPUT, current.namingText("input"), value, 360, MAX_ANCHOR_NAME_LENGTH)),
+                buttons = listOf(PaperDialogButton(
+                    id = PaperDialogActionId.of("save_anchor_name"),
+                    label = current.namingText("save"),
+                    width = 240,
+                    closeDialogBeforeAction = false,
+                    onClick = { context ->
+                        val name = normalizeTravelAnchorName(context.text(NAME_INPUT).orEmpty())
+                        if (name == null) {
+                            openNameDialog(context.player, block, invalid = true, initial = context.text(NAME_INPUT).orEmpty())
+                            return@PaperDialogButton
+                        }
+                        val liveBlock = position.block()?.takeIf(::isAnchor)
+                        if (!canUse(context.player) || liveBlock == null) {
+                            ArcMenus.closeDialog(context.player)
+                            context.player.sendActionBar(current.message("unavailable"))
+                            return@PaperDialogButton
+                        }
+                        setAnchorName(liveBlock, name)
+                        ArcMenus.closeDialog(context.player)
+                        context.player.sendActionBar(current.message("renamed"))
+                    },
+                )),
+                columns = 1,
+            ),
+            closeButton = PaperDialogButton(
+                id = PaperDialogActionId.of("close_anchor_name"),
+                label = current.namingText("close"),
+                width = 200,
+                closeDialogBeforeAction = true,
+                onClick = {},
+            ),
+        )
+    }
+
+    private fun setAnchorName(block: Block, name: String) {
+        CustomBlockData(block, ARC.instance).set(ANCHOR_NAME_KEY, PersistentDataType.STRING, name)
+        anchorNames[TravelAnchorPosition.of(block)] = name
+        persistAnchorNames(block.world.uid)
     }
 
     private fun teleport(player: Player, position: TravelAnchorPosition) {
@@ -554,10 +757,18 @@ object TravelAnchorsModule : PluginModule, Listener {
 
     private fun loadAnchors(chunk: org.bukkit.Chunk) {
         if (settings?.allowsWorld(chunk.world.name) != true) return
-        val discovered = CustomBlockData.getBlocksWithCustomData(ARC.instance, chunk)
-            .filter(::isAnchor)
-            .map(TravelAnchorPosition::of)
-        if (anchors.addAll(discovered)) persistAnchorIndex(chunk.world.uid)
+        var changed = false
+        CustomBlockData.getBlocksWithCustomData(ARC.instance, chunk).filter(::isAnchor).forEach { block ->
+            val position = TravelAnchorPosition.of(block)
+            changed = anchors.add(position) || changed
+            val name = CustomBlockData(block, ARC.instance).get(ANCHOR_NAME_KEY, PersistentDataType.STRING)
+                ?.let(::normalizeTravelAnchorName)
+            if (name != null && anchorNames.put(position, name) != name) changed = true
+        }
+        if (changed) {
+            persistAnchorIndex(chunk.world.uid)
+            persistAnchorNames(chunk.world.uid)
+        }
     }
 
     private fun loadAnchorIndex(world: org.bukkit.World) {
@@ -569,6 +780,12 @@ object TravelAnchorsModule : PluginModule, Listener {
         }
         for (index in 0 until coordinates.size - 2 step 3) {
             anchors += TravelAnchorPosition.of(world.uid, coordinates[index], coordinates[index + 1], coordinates[index + 2])
+        }
+        decodeTravelAnchorNames(
+            world.persistentDataContainer.get(ANCHOR_NAMES_KEY, PersistentDataType.STRING).orEmpty(),
+        ).forEach { entry ->
+            val position = TravelAnchorPosition.of(world.uid, entry.x, entry.y, entry.z)
+            if (position in anchors) anchorNames[position] = entry.name
         }
     }
 
@@ -584,6 +801,15 @@ object TravelAnchorsModule : PluginModule, Listener {
         world.persistentDataContainer.set(ANCHOR_INDEX_KEY, PersistentDataType.INTEGER_ARRAY, coordinates)
     }
 
+    private fun persistAnchorNames(worldId: UUID) {
+        val world = Bukkit.getWorld(worldId) ?: return
+        val encoded = encodeTravelAnchorNames(anchorNames.mapNotNull { (position, name) ->
+            position.takeIf { it.worldId == worldId }?.let { TravelAnchorNameEntry(it.x, it.y, it.z, name) }
+        })
+        if (encoded.isEmpty()) world.persistentDataContainer.remove(ANCHOR_NAMES_KEY)
+        else world.persistentDataContainer.set(ANCHOR_NAMES_KEY, PersistentDataType.STRING, encoded)
+    }
+
     private fun removeAnchor(block: Block) {
         CustomBlockData(block, ARC.instance).remove(ANCHOR_BLOCK_KEY)
         removeAnchor(TravelAnchorPosition.of(block))
@@ -591,14 +817,17 @@ object TravelAnchorsModule : PluginModule, Listener {
 
     private fun removeAnchor(position: TravelAnchorPosition) {
         if (!anchors.remove(position)) return
+        anchorNames.remove(position)
         displays.values.forEach { it.remove(position)?.remove() }
         displays.entries.removeIf { it.value.isEmpty() }
         selectedTargets.entries.removeIf { it.value == position }
         persistAnchorIndex(position.worldId)
+        persistAnchorNames(position.worldId)
     }
 
     private fun clearDisplays(playerId: UUID) {
         displays.remove(playerId)?.values?.forEach { if (it.isValid) it.remove() }
+        clearLabel(playerId)
         selectedTargets.remove(playerId)
     }
 

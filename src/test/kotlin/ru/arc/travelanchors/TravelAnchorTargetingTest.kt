@@ -2,6 +2,7 @@ package ru.arc.travelanchors
 
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
+import org.bukkit.Location
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.player.PlayerInteractEvent
@@ -46,6 +47,45 @@ class TravelAnchorTargetingTest : FunSpec({
     test("far anchors use a nearby proxy while near anchors keep their real distance") {
         travelAnchorDisplayDistance(actualDistance = 32.0, proxyDistance = 48.0) shouldBe 32.0
         travelAnchorDisplayDistance(actualDistance = 900.0, proxyDistance = 48.0) shouldBe 48.0
+    }
+
+    test("only distant proxies are flattened into camera-facing squares") {
+        travelAnchorDisplayShape(actualDistance = 32.0, proxyDistance = 48.0, scale = 3.0f) shouldBe
+            TravelAnchorDisplayShape(cameraFacing = false, depth = 3.0f)
+        travelAnchorDisplayShape(actualDistance = 900.0, proxyDistance = 48.0, scale = 3.0f) shouldBe
+            TravelAnchorDisplayShape(cameraFacing = true, depth = 0.03f)
+    }
+
+    test("proxy coordinates never inherit camera rotation") {
+        val center = travelAnchorDisplayCenter(
+            eye = Location(null, 0.0, 64.0, 0.0, 90f, 45f),
+            target = Location(null, 100.0, 64.0, 0.0),
+            distance = 48.0,
+        )
+
+        center.x shouldBe 48.0
+        center.yaw shouldBe 0f
+        center.pitch shouldBe 0f
+    }
+
+    test("clicking an anchor without the staff opens naming") {
+        travelAnchorInteraction(clickedAnchor = true, staffHeld = false) shouldBe TravelAnchorInteraction.RENAME
+        travelAnchorInteraction(clickedAnchor = true, staffHeld = true) shouldBe TravelAnchorInteraction.TELEPORT
+        travelAnchorInteraction(clickedAnchor = false, staffHeld = true) shouldBe TravelAnchorInteraction.TELEPORT
+        travelAnchorInteraction(clickedAnchor = false, staffHeld = false) shouldBe TravelAnchorInteraction.IGNORE
+    }
+
+    test("anchor names validate and survive the world index codec") {
+        normalizeTravelAnchorName("  Дом у шахты  ") shouldBe "Дом у шахты"
+        normalizeTravelAnchorName("   ") shouldBe null
+        normalizeTravelAnchorName("строка\nдва") shouldBe null
+        normalizeTravelAnchorName("я".repeat(33)) shouldBe null
+
+        val names = listOf(
+            TravelAnchorNameEntry(-12, 64, 7, "Дом у шахты"),
+            TravelAnchorNameEntry(240, -20, -99, "Северный портал"),
+        )
+        decodeTravelAnchorNames(encodeTravelAnchorNames(names)) shouldBe names
     }
 
     test("the staff receives right-click-air events that Bukkit pre-cancels") {
