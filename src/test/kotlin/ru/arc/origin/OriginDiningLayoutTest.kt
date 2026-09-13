@@ -6,14 +6,15 @@ import ru.arc.worldcontent.BreweryTableDialogs
 
 class OriginDiningLayoutTest : FreeSpec({
     "every authored chair has a unique block and table anchor" {
-        OriginDiningLayout.seats.size shouldBe 7
-        OriginDiningLayout.seats.map { it.clickedBlock }.distinct().size shouldBe 7
-        OriginDiningLayout.seats.map { it.id }.distinct().size shouldBe 7
+        OriginDiningLayout.seats.size shouldBe 8
+        OriginDiningLayout.seats.map { it.clickedBlock }.distinct().size shouldBe 8
+        OriginDiningLayout.seats.map { it.id }.distinct().size shouldBe 8
     }
 
     "brewery exposes several tables and only the fire seat opens drinks" {
-        OriginDiningLayout.seats.count { it.id.startsWith("brewery_") } shouldBe 5
+        OriginDiningLayout.seats.count { it.id.startsWith("brewery_") } shouldBe 6
         OriginDiningLayout.seats.single { it.id == "brewery_fire" }.menu shouldBe BreweryTableDialogs.Menu.DRINKS
+        OriginDiningLayout.seats.single { it.id == "brewery_rina" }.menu shouldBe BreweryTableDialogs.Menu.COURTYARD
         OriginDiningLayout.seats.count { it.menu == BreweryTableDialogs.Menu.RESTAURANT } shouldBe 2
         OriginDiningLayout.waiterIds shouldBe setOf(410, 411, 431, 432)
     }
@@ -22,9 +23,11 @@ class OriginDiningLayoutTest : FreeSpec({
         OriginDiningLayout.waiterIds shouldBe setOf(410, 411, 431, 432)
     }
 
-    "head-authored food is lifted onto the exact table surface" {
-        val visualY = OriginDiningLayout.visibleModelY(71.1)
-        (visualY in 71.1..71.2) shouldBe true
+    "every scaled head-authored model is lifted onto the exact table surface" {
+        listOf("egg", "fish", "steak", "herbal_tea").forEach { dish ->
+            val visualY = OriginDiningLayout.visibleModelY(71.1, dish)
+            (visualY in 71.13..71.15) shouldBe true
+        }
     }
 
     "every menu dish resolves to the production ItemsAdder item" {
@@ -46,6 +49,7 @@ class OriginDiningLayoutTest : FreeSpec({
 
     "chair block fallback resolves the real clicked stair" {
         OriginDiningLayout.seatForBlock(-8, 70, 37)?.id shouldBe "brewery_south_west"
+        OriginDiningLayout.seatForBlock(-14, 70, 47)?.id shouldBe "brewery_rina"
         OriginDiningLayout.seatForBlock(-55, 72, 48)?.id shouldBe "restaurant_a"
         OriginDiningLayout.seatForBlock(-55, 72, 47) shouldBe null
     }
