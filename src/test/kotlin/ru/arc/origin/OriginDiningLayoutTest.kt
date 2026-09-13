@@ -15,6 +15,11 @@ class OriginDiningLayoutTest : FreeSpec({
         OriginDiningLayout.seats.count { it.id.startsWith("brewery_") } shouldBe 5
         OriginDiningLayout.seats.single { it.id == "brewery_fire" }.menu shouldBe BreweryTableDialogs.Menu.DRINKS
         OriginDiningLayout.seats.count { it.menu == BreweryTableDialogs.Menu.RESTAURANT } shouldBe 2
+        OriginDiningLayout.waiterIds shouldBe setOf(410, 411, 431, 432)
+    }
+
+    "only the four restaurant service NPCs are managed as waiters" {
+        OriginDiningLayout.waiterIds shouldBe setOf(410, 411, 431, 432)
     }
 
     "head-authored food is lifted onto the exact table surface" {

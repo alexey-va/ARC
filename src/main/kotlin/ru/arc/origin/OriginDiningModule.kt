@@ -23,6 +23,7 @@ import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
+import org.bukkit.event.entity.EntityDismountEvent
 import org.bukkit.event.block.Action
 import org.bukkit.event.player.PlayerInteractEntityEvent
 import org.bukkit.event.player.PlayerInteractAtEntityEvent
@@ -124,6 +125,12 @@ object OriginDiningModule : PluginModule, Listener {
     fun onQuit(event: PlayerQuitEvent) {
         service?.quit(event.player)
     }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun onDismount(event: EntityDismountEvent) {
+        val player = event.entity as? Player ?: return
+        service?.dismounted(player, event.dismounted)
+    }
 }
 
 private class OriginDiningCitizensListener(
@@ -188,6 +195,8 @@ internal object OriginDiningLayout {
             else -> null
         }
 
+    val waiterIds: Set<Int> = seats.map(OriginDiningSeat::waiterId).toSet()
+
     fun displayScale(dishId: String): Float =
         when (dishId) {
             "steak" -> 2.6f
@@ -233,6 +242,14 @@ private class OriginDiningService : AutoCloseable {
     private val theftCooldownUntil = mutableMapOf<UUID, Long>()
 
     fun start() {
+        info(
+            "ORIGIN_DINING phase=STARTING world={} seats={} waiter_ids={} delivery_ticks={} session_ttl_ms={}",
+            OriginDiningLayout.WORLD,
+            seatsById.size,
+            OriginDiningLayout.waiterIds.sorted().joinToString(","),
+            DELIVERY_TICKS,
+            SESSION_TTL_MILLIS,
+        )
         spawnSeats()
         tasks.runTimer(20L, 20L, ::reconcile)
         info("ORIGIN_DINING phase=READY world={} seats={} placement=arc-fixed", OriginDiningLayout.WORLD, seatsById.size)
@@ -306,7 +323,11 @@ private class OriginDiningService : AutoCloseable {
     }
 
     fun interact(player: Player, entity: Entity, source: String): Boolean {
-        if (entity is Interaction && entity.world.name == OriginDiningLayout.WORLD) {
+        val managedInteraction =
+            entity is Interaction &&
+                entity.world.name == OriginDiningLayout.WORLD &&
+                (entity.uniqueId in seatEntity || entity.uniqueId in mealEntity || nearestSeat(entity.location, 0.8) != null)
+        if (managedInteraction) {
             info(
                 "ORIGIN_DINING phase=INPUT_ENTITY player={} source={} entity={} entity_id={} actual={}",
                 player.name,
@@ -335,7 +356,7 @@ private class OriginDiningService : AutoCloseable {
         }
         if (Bukkit.getPluginManager().isPluginEnabled("Citizens")) {
             runCatching { CitizensAPI.getNPCRegistry().getNPC(entity) }.getOrNull()?.let { npc ->
-                if (interactWaiter(player, npc.id, "$source:citizens-entity")) return true
+                if (npc.id in OriginDiningLayout.waiterIds && interactWaiter(player, npc.id, "$source:citizens-entity")) return true
             }
         }
         // During migration, capture clicks on exact Denizen seat/meal hitboxes too.
@@ -345,7 +366,7 @@ private class OriginDiningService : AutoCloseable {
                 return true
             }
         }
-        if (entity is Interaction && entity.world.name == OriginDiningLayout.WORLD) {
+        if (managedInteraction) {
             warn(
                 "ORIGIN_DINING phase=INPUT_UNMAPPED player={} source={} entity={} entity_id={} actual={}",
                 player.name,
@@ -366,6 +387,7 @@ private class OriginDiningService : AutoCloseable {
     }
 
     fun interactWaiter(player: Player, npcId: Int, source: String = "citizens-event"): Boolean {
+        if (npcId !in OriginDiningLayout.waiterIds) return false
         val session = sessions[player.uniqueId]
         info(
             "ORIGIN_DINING phase=INPUT_WAITER player={} source={} npc={} session={} table={} actual_player={}",
@@ -400,6 +422,22 @@ private class OriginDiningService : AutoCloseable {
         return true
     }
 
+    fun dismounted(player: Player, dismounted: Entity) {
+        val session = sessions[player.uniqueId] ?: return
+        if (dismounted.uniqueId != session.marker.uniqueId) return
+        tasks.runLater(1L) {
+            if (!player.isOnline || sessions[player.uniqueId]?.id != session.id) return@runLater
+            log(
+                "DISMOUNTED",
+                session,
+                player,
+                meals[session.seat.id]?.dish,
+                session.seat.seat,
+                "marker=${short(dismounted.uniqueId)} retained=true near_venue=${nearVenue(player, session.seat)} meal_present=${session.seat.id in meals}",
+            )
+        }
+    }
+
     fun quit(player: Player) {
         releaseSession(player.uniqueId, "player-quit")
     }
@@ -421,7 +459,19 @@ private class OriginDiningService : AutoCloseable {
             hitbox.addScoreboardTag(SEAT_TAG)
             seatHitboxes[seat.id] = hitbox
             seatEntity[hitbox.uniqueId] = seat
-            info("ORIGIN_DINING phase=SEAT_SPAWNED table={} hitbox={} actual={}", seat.id, short(hitbox.uniqueId), location(hitbox.location))
+            info(
+                "ORIGIN_DINING phase=SEAT_SPAWNED table={} menu={} waiter={} hitbox={} entity_id={} actual={} dish_target={} waiter_stop={} width={} height={}",
+                seat.id,
+                seat.menu.id,
+                seat.waiterId,
+                short(hitbox.uniqueId),
+                hitbox.entityId,
+                location(hitbox.location),
+                point(seat.dish),
+                point(seat.waiterStop),
+                fmt(hitbox.interactionWidth.toDouble()),
+                fmt(hitbox.interactionHeight.toDouble()),
+            )
         }
     }
 
@@ -484,6 +534,14 @@ private class OriginDiningService : AutoCloseable {
 
     private fun mount(player: Player, session: OriginDiningSession) {
         if (player.vehicle?.uniqueId == session.marker.uniqueId) return
+        log(
+            "MOUNT_BEGIN",
+            session,
+            player,
+            null,
+            session.seat.seat,
+            "marker=${short(session.marker.uniqueId)} marker_actual=${location(session.marker.location)} previous_vehicle=${player.vehicle?.uniqueId?.let(::short) ?: "none"}",
+        )
         if (player.isInsideVehicle) player.leaveVehicle()
         if (!session.marker.addPassenger(player)) {
             tasks.runLater(1L) {
@@ -492,6 +550,15 @@ private class OriginDiningService : AutoCloseable {
                     log("MOUNT_RETRY", session, player, null, session.seat.seat, "mounted=${player.vehicle?.uniqueId == session.marker.uniqueId}")
                 }
             }
+        } else {
+            log(
+                "MOUNTED",
+                session,
+                player,
+                null,
+                session.seat.seat,
+                "marker=${short(session.marker.uniqueId)} mounted=${player.vehicle?.uniqueId == session.marker.uniqueId}",
+            )
         }
     }
 
@@ -536,20 +603,19 @@ private class OriginDiningService : AutoCloseable {
             player,
             dish,
             session.seat.dish,
-            "display=${short(created.display.uniqueId)}@${location(created.display.location)} hitbox=${short(created.hitbox.uniqueId)}@${location(created.hitbox.location)}",
+            "item_id=${OriginDiningLayout.itemId(dish.id)} scale=${OriginDiningLayout.displayScale(dish.id)} display=${short(created.display.uniqueId)}#${created.display.entityId}@${location(created.display.location)} hitbox=${short(created.hitbox.uniqueId)}#${created.hitbox.entityId}@${location(created.hitbox.location)}",
         )
         val economy = EconomyModule.getEconomy()
         val payment = economy?.withdrawPlayer(player, dish.price.toDouble())
         if (payment?.transactionSuccess() != true) {
-            created.display.remove()
-            created.hitbox.remove()
+            removeMeal(created, "payment-rejected")
             session.phase = OriginDiningPhase.SEATED
             logWarn("DELIVERY_FAILED", session, player, dish, "payment-rejected-no-charge")
             player.sendActionBar(Component.text("Оплата не прошла. Заказ не списан.", NamedTextColor.RED))
             return
         }
         log("PAYMENT_CAPTURED", session, player, dish, session.seat.dish, "amount=${dish.price}")
-        meals.remove(session.seat.id)?.let(::removeMeal)
+        meals.remove(session.seat.id)?.let { removeMeal(it, "replaced-by-new-order") }
         meals[session.seat.id] = created
         mealEntity[created.hitbox.uniqueId] = created
         showOwnerGlow(created)
@@ -561,7 +627,7 @@ private class OriginDiningService : AutoCloseable {
             player,
             dish,
             session.seat.dish,
-            "display=${short(created.display.uniqueId)}@${location(created.display.location)} hitbox=${short(created.hitbox.uniqueId)}@${location(created.hitbox.location)} visibleY=${fmt(OriginDiningLayout.visibleModelY(created.display.location.y))} scale=${OriginDiningLayout.displayScale(dish.id)} price=${dish.price}",
+            "item_id=${OriginDiningLayout.itemId(dish.id)} display=${short(created.display.uniqueId)}#${created.display.entityId}@${location(created.display.location)} hitbox=${short(created.hitbox.uniqueId)}#${created.hitbox.entityId}@${location(created.hitbox.location)} visibleY=${fmt(OriginDiningLayout.visibleModelY(created.display.location.y))} scale=${OriginDiningLayout.displayScale(dish.id)} hitbox_size=${OriginDiningLayout.MEAL_HITBOX_SIZE} price=${dish.price}",
         )
         player.sendActionBar(Component.text("Блюдо на столе. Нажмите ПКМ, чтобы съесть.", NamedTextColor.GOLD))
         player.playSound(session.seat.dish.inWorld(world), Sound.ENTITY_ITEM_PICKUP, SoundCategory.PLAYERS, 0.6f, 1.15f)
@@ -575,6 +641,7 @@ private class OriginDiningService : AutoCloseable {
         val world = requireNotNull(Bukkit.getWorld(OriginDiningLayout.WORLD))
         val anchor = session.seat.dish.inWorld(world)
         val display = world.spawn(anchor, ItemDisplay::class.java)
+        var hitbox: Interaction? = null
         try {
             display.setItemStack(stack)
             display.itemDisplayTransform = ItemDisplay.ItemDisplayTransform.HEAD
@@ -599,7 +666,7 @@ private class OriginDiningService : AutoCloseable {
                 )
             display.addScoreboardTag(MEAL_TAG)
 
-            val hitbox = world.spawn(anchor.clone().add(0.0, -0.15, 0.0), Interaction::class.java)
+            hitbox = world.spawn(anchor.clone().add(0.0, -0.15, 0.0), Interaction::class.java)
             hitbox.interactionWidth = OriginDiningLayout.MEAL_HITBOX_SIZE
             hitbox.interactionHeight = OriginDiningLayout.MEAL_HITBOX_SIZE
             hitbox.isResponsive = true
@@ -608,6 +675,7 @@ private class OriginDiningService : AutoCloseable {
             hitbox.addScoreboardTag(MEAL_TAG)
             return OriginDiningMeal(session.id, session.playerId, session.seat, dish, display, hitbox)
         } catch (failure: Throwable) {
+            hitbox?.remove()
             display.remove()
             throw failure
         }
@@ -619,7 +687,7 @@ private class OriginDiningService : AutoCloseable {
                 "ORIGIN_DINING phase=CONSUME_REJECTED player={} table={} dish={} display_valid={} hitbox_valid={}",
                 player.name, meal.seat.id, meal.dish.id, meal.display.isValid, meal.hitbox.isValid,
             )
-            removeMeal(meal)
+            removeMeal(meal, "invalid-before-consume")
             return
         }
         val stolen = player.uniqueId != meal.ownerId
@@ -646,7 +714,7 @@ private class OriginDiningService : AutoCloseable {
         tasks.runLater(8L) {
             if (player.isOnline) player.playSound(player.location, Sound.ENTITY_PLAYER_BURP, SoundCategory.PLAYERS, 0.45f, 1.2f)
         }
-        removeMeal(meal)
+        removeMeal(meal, if (stolen) "consumed-by-stranger" else "consumed-by-owner")
         meals.remove(meal.seat.id, meal)
         val ownerSession = sessions[meal.ownerId]?.takeIf { it.id == meal.sessionId }
         ownerSession?.let { session ->
@@ -664,7 +732,21 @@ private class OriginDiningService : AutoCloseable {
         else player.sendActionBar(Component.text("Приятного аппетита.", NamedTextColor.GREEN))
     }
 
-    private fun removeMeal(meal: OriginDiningMeal) {
+    private fun removeMeal(meal: OriginDiningMeal, reason: String) {
+        info(
+            "ORIGIN_DINING phase=MEAL_REMOVED session={} owner={} table={} dish={} display={}#{}@{} hitbox={}#{}@{} reason={}",
+            short(meal.sessionId),
+            meal.ownerId,
+            meal.seat.id,
+            meal.dish.id,
+            short(meal.display.uniqueId),
+            meal.display.entityId,
+            location(meal.display.location),
+            short(meal.hitbox.uniqueId),
+            meal.hitbox.entityId,
+            location(meal.hitbox.location),
+            reason,
+        )
         mealEntity.remove(meal.hitbox.uniqueId)
         if (meal.hitbox.isValid) meal.hitbox.remove()
         if (meal.display.isValid) meal.display.remove()
@@ -730,7 +812,7 @@ private class OriginDiningService : AutoCloseable {
                     "ORIGIN_DINING phase=MEAL_LOST session={} player={} table={} dish={} expected={} display_valid={} hitbox_valid={}",
                     short(meal.sessionId), meal.ownerId, meal.seat.id, meal.dish.id, point(meal.seat.dish), meal.display.isValid, meal.hitbox.isValid,
                 )
-                removeMeal(meal)
+                removeMeal(meal, "entity-invalid")
                 meals.remove(meal.seat.id, meal)
             } else {
                 showOwnerGlow(meal)
@@ -797,7 +879,7 @@ private class OriginDiningService : AutoCloseable {
     private fun removeRuntimeEntities() {
         seatHitboxes.values.forEach { if (it.isValid) it.remove() }
         sessions.values.forEach { if (it.marker.isValid) it.marker.remove() }
-        meals.values.forEach(::removeMeal)
+        meals.values.forEach { removeMeal(it, "service-stop") }
         OriginDiningLayout.seats.map(OriginDiningSeat::waiterId).distinct().forEach { releaseWaiter(it, force = true) }
     }
 
@@ -880,8 +962,9 @@ private class OriginDiningService : AutoCloseable {
         detail: String?,
     ) {
         info(
-            "ORIGIN_DINING phase={} session={} player={} table={} dish={} target={} actual_player={} detail={}",
+            "ORIGIN_DINING phase={} state={} session={} player={} table={} dish={} target={} actual_player={} detail={}",
             phase,
+            session.phase,
             short(session.id),
             player?.name ?: session.playerId,
             session.seat.id,
