@@ -23,10 +23,13 @@ class OriginDiningLayoutTest : FreeSpec({
         OriginDiningLayout.waiterIds shouldBe setOf(410, 411, 431, 432)
     }
 
-    "every scaled head-authored model is lifted onto the exact table surface" {
+    "meal displays and their hitboxes are served exactly one block above authored anchors" {
+        OriginDiningLayout.servingAnchorY(71.1) shouldBe 72.1
+        OriginDiningLayout.servingAnchorY(73.1) shouldBe 74.1
+
         listOf("egg", "fish", "steak", "herbal_tea").forEach { dish ->
-            val visualY = OriginDiningLayout.visibleModelY(71.1, dish)
-            (visualY in 71.13..71.15) shouldBe true
+            val visualY = OriginDiningLayout.visibleModelY(OriginDiningLayout.servingAnchorY(71.1), dish)
+            (visualY in 72.13..72.15) shouldBe true
         }
     }
 

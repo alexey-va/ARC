@@ -168,6 +168,7 @@ internal data class OriginDiningSeat(
 
 internal object OriginDiningLayout {
     const val WORLD = "rc_origin_spawn"
+    const val MEAL_VERTICAL_OFFSET_BLOCKS = 1.0
     const val MODEL_HEAD_TRANSLATION_PIXELS = -35.25
     const val MODEL_HEAD_TRANSLATION_BLOCKS = MODEL_HEAD_TRANSLATION_PIXELS / 16.0
     const val MODEL_SURFACE_LIFT_BLOCKS = 0.04
@@ -187,6 +188,8 @@ internal object OriginDiningLayout {
 
     fun displayLift(dishId: String): Float =
         (-MODEL_HEAD_TRANSLATION_BLOCKS * displayScale(dishId) + MODEL_SURFACE_LIFT_BLOCKS).toFloat()
+
+    fun servingAnchorY(authoredY: Double): Double = authoredY + MEAL_VERTICAL_OFFSET_BLOCKS
 
     fun visibleModelY(anchorY: Double, dishId: String): Double =
         anchorY + displayLift(dishId) + MODEL_HEAD_TRANSLATION_BLOCKS * displayScale(dishId)
@@ -975,7 +978,9 @@ private class OriginDiningService : AutoCloseable {
         stack: ItemStack,
     ): OriginDiningMeal {
         val world = requireNotNull(Bukkit.getWorld(OriginDiningLayout.WORLD))
-        val anchor = session.seat.dish.inWorld(world)
+        val anchor = session.seat.dish.inWorld(world).apply {
+            y = OriginDiningLayout.servingAnchorY(y)
+        }
         val display = world.spawn(anchor, ItemDisplay::class.java)
         var hitbox: Interaction? = null
         try {
