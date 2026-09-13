@@ -1106,7 +1106,10 @@ private class OriginDiningService : AutoCloseable {
         const val WAITER_POLL_TICKS = 10L
         const val WAITER_MAX_POLLS = 20
         const val WAITER_PROGRESS_EVERY_POLLS = 4
-        const val WAITER_READY_MARGIN = 0.8
+        // Citizens may finish beside furniture within roughly 1.3 blocks of
+        // the requested path target. Treat that normal navigator tolerance as
+        // arrival while retaining the separate player-distance check.
+        const val WAITER_READY_MARGIN = 1.5
         const val WAITER_PLAYER_RANGE = 2.8
         const val SEAT_MARKER_LIFT = 1.18
         const val THEFT_COOLDOWN_MILLIS = 90_000L
