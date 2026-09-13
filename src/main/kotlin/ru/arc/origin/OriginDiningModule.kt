@@ -525,7 +525,10 @@ private class OriginDiningService : AutoCloseable {
 
     private fun spawnMarker(seat: OriginDiningSeat): ArmorStand {
         val world = requireNotNull(Bukkit.getWorld(OriginDiningLayout.WORLD))
-        return world.spawn(seat.seat.inWorld(world).add(0.0, 0.58, 0.0), ArmorStand::class.java).apply {
+        // Marker armor stands render their player passenger 0.6 blocks below
+        // the vehicle location. Lift the vehicle so the seated player's feet
+        // remain 0.58 blocks above the chair instead of inside its stair block.
+        return world.spawn(seat.seat.inWorld(world).add(0.0, SEAT_MARKER_LIFT, 0.0), ArmorStand::class.java).apply {
             isVisible = false
             isMarker = true
             setGravity(false)
@@ -1105,6 +1108,7 @@ private class OriginDiningService : AutoCloseable {
         const val WAITER_PROGRESS_EVERY_POLLS = 4
         const val WAITER_READY_MARGIN = 0.8
         const val WAITER_PLAYER_RANGE = 2.8
+        const val SEAT_MARKER_LIFT = 1.18
         const val THEFT_COOLDOWN_MILLIS = 90_000L
         const val SESSION_TTL_MILLIS = 300_000L
         const val SESSION_RADIUS = 8.0
