@@ -94,17 +94,20 @@ class TravelAnchorTargetingTest : FunSpec({
         decodeTravelAnchorNames(encodeTravelAnchorNames(names)) shouldBe names
     }
 
-    test("anchor ownership replaces permission gates and survives the world index codec") {
+    test("anchor ownership follows player names and migrates legacy UUID identities") {
         val grocer = UUID.fromString("c63d7480-5db5-4d1d-9ac6-9abeb8ee3a40")
         val other = UUID.fromString("b2d896e9-e2f3-4389-a28a-07ef05f7a694")
 
-        travelAnchorOwnerAllows(null, grocer) shouldBe true
-        travelAnchorOwnerAllows(grocer, grocer) shouldBe true
-        travelAnchorOwnerAllows(other, grocer) shouldBe false
+        travelAnchorIdentityAllows(null, "GrocerMC", grocer) shouldBe true
+        travelAnchorIdentityAllows("grocermc", "GrocerMC", other) shouldBe true
+        travelAnchorIdentityAllows(grocer.toString(), "GrocerMC", other) { legacy ->
+            if (legacy == grocer) "GrocerMC" else null
+        } shouldBe true
+        travelAnchorIdentityAllows(other.toString(), "GrocerMC", grocer) shouldBe false
 
         val owners = listOf(
-            TravelAnchorOwnerEntry(-12, 64, 7, grocer),
-            TravelAnchorOwnerEntry(240, -20, -99, other),
+            TravelAnchorOwnerEntry(-12, 64, 7, "GrocerMC"),
+            TravelAnchorOwnerEntry(240, -20, -99, other.toString()),
         )
         decodeTravelAnchorOwners(encodeTravelAnchorOwners(owners)) shouldBe owners
     }
@@ -114,11 +117,11 @@ class TravelAnchorTargetingTest : FunSpec({
         val friend = UUID.fromString("b2d896e9-e2f3-4389-a28a-07ef05f7a694")
         val stranger = UUID.fromString("0ba1653d-4d64-4ca4-8388-94b3381dc090")
 
-        travelAnchorAccessAllows(owner, owner, setOf(friend)) shouldBe true
-        travelAnchorAccessAllows(owner, friend, setOf(friend)) shouldBe true
-        travelAnchorAccessAllows(owner, stranger, setOf(friend)) shouldBe false
+        travelAnchorAccessAllows("GrocerMC", "GrocerMC", owner, setOf("Friend")) shouldBe true
+        travelAnchorAccessAllows("GrocerMC", "Friend", friend, setOf("friend")) shouldBe true
+        travelAnchorAccessAllows("GrocerMC", "Stranger", stranger, setOf("friend")) shouldBe false
 
-        val access = listOf(TravelAnchorAccessEntry(owner, setOf(friend, stranger)))
+        val access = listOf(TravelAnchorAccessEntry("GrocerMC", setOf("Friend", stranger.toString())))
         decodeTravelAnchorAccess(encodeTravelAnchorAccess(access)) shouldBe access
         normalizeTravelAnchorAccessNames("alterra, foll alterra") shouldBe listOf("alterra", "foll")
         normalizeTravelAnchorAccessNames("") shouldBe emptyList()
