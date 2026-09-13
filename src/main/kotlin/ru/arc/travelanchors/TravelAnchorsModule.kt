@@ -120,6 +120,13 @@ internal fun travelAnchorTargetMessage(hasAnchorBelow: Boolean, staffHeld: Boole
         else -> null
     }
 
+internal fun travelAnchorDenialMessage(featureAvailable: Boolean, ownerAllowed: Boolean): String? =
+    when {
+        !featureAvailable -> "wrong-world"
+        !ownerAllowed -> "no-permission"
+        else -> null
+    }
+
 internal fun travelAnchorDisplayDistance(actualDistance: Double, proxyDistance: Double): Double =
     min(actualDistance, proxyDistance)
 
@@ -444,14 +451,18 @@ object TravelAnchorsModule : PluginModule, Listener {
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun guardPlace(event: BlockPlaceEvent) {
         if (!event.itemInHand.hasMarker(ANCHOR_ITEM_KEY)) return
-        if (isFeatureAvailable(event.player) && itemOwnerAllows(event.itemInHand, event.player)) {
-            if (!event.itemInHand.owner().equals(event.player.name, ignoreCase = true)) {
-                event.itemInHand.withOwner(event.player.name)
-            }
+        val denial = travelAnchorDenialMessage(
+            isFeatureAvailable(event.player),
+            itemOwnerAllows(event.itemInHand, event.player),
+        )
+        if (denial != null) {
+            event.isCancelled = true
+            sendDenial(event.player, denial)
             return
         }
-        event.isCancelled = true
-        event.player.sendActionBar(settings?.message("no-permission") ?: Component.empty())
+        if (!event.itemInHand.owner().equals(event.player.name, ignoreCase = true)) {
+            event.itemInHand.withOwner(event.player.name)
+        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -505,8 +516,12 @@ object TravelAnchorsModule : PluginModule, Listener {
             TravelAnchorInteraction.RENAME -> {
                 event.isCancelled = true
                 val position = TravelAnchorPosition.of(checkNotNull(clickedAnchor))
-                if (!isFeatureAvailable(event.player) || !ownsAnchor(event.player, position)) {
-                    event.player.sendActionBar(settings?.message("no-permission") ?: Component.empty())
+                val denial = travelAnchorDenialMessage(
+                    isFeatureAvailable(event.player),
+                    ownsAnchor(event.player, position),
+                )
+                if (denial != null) {
+                    sendDenial(event.player, denial)
                     return
                 }
                 claimAnchor(checkNotNull(clickedAnchor), event.player)
@@ -518,8 +533,9 @@ object TravelAnchorsModule : PluginModule, Listener {
         }
         event.isCancelled = true
         val player = event.player
-        if (!isFeatureAvailable(player) || !itemOwnerAllows(held, player)) {
-            player.sendActionBar(settings?.message("no-permission") ?: Component.empty())
+        val denial = travelAnchorDenialMessage(isFeatureAvailable(player), itemOwnerAllows(held, player))
+        if (denial != null) {
+            sendDenial(player, denial)
             return
         }
         val source = anchorBelow(player)
@@ -818,9 +834,19 @@ object TravelAnchorsModule : PluginModule, Listener {
                             return@PaperDialogButton
                         }
                         val liveBlock = position.block()?.takeIf(::isAnchor)
-                        if (!isFeatureAvailable(context.player) || liveBlock == null || !ownsAnchor(context.player, position)) {
+                        if (!isFeatureAvailable(context.player)) {
+                            ArcMenus.closeDialog(context.player)
+                            sendDenial(context.player, "wrong-world")
+                            return@PaperDialogButton
+                        }
+                        if (liveBlock == null) {
                             ArcMenus.closeDialog(context.player)
                             context.player.sendActionBar(current.message("unavailable"))
+                            return@PaperDialogButton
+                        }
+                        if (!ownsAnchor(context.player, position)) {
+                            ArcMenus.closeDialog(context.player)
+                            sendDenial(context.player, "no-permission")
                             return@PaperDialogButton
                         }
                         claimAnchor(liveBlock, context.player)
@@ -1068,6 +1094,10 @@ object TravelAnchorsModule : PluginModule, Listener {
 
     private fun isFeatureAvailable(player: Player): Boolean =
         settings?.let { it.enabled && it.allowsWorld(player.world.name) } == true
+
+    private fun sendDenial(player: Player, messageKey: String) {
+        player.sendActionBar(settings?.message(messageKey, "%world%" to player.world.name) ?: Component.empty())
+    }
 
     private fun itemOwnerAllows(item: ItemStack?, player: Player): Boolean =
         identityAllows(item.owner(), player)

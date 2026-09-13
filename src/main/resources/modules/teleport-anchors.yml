@@ -58,6 +58,7 @@ messages:
   target-anchor: '<#ffd166>%name% <#8c8c8c>· <#ffd166>Shift<#b8b8b8> — перейти · <#ffffff>%distance% м'
   target-staff: '<#ffd166>%name% <#8c8c8c>· <#d7a8ff>ПКМ<#b8b8b8> — перейти · <#ffffff>%distance% м'
   no-target: '<#b8b8b8>Наведитесь на подсвеченный якорь.'
+  wrong-world: '<#c42323>Путевые якоря недоступны в мире <#ffffff>%world%<#c42323>.'
   unsafe: '<#c42323>Над якорем нет места для перехода.'
   blocked: '<#c42323>Переход отменён защитой сервера.'
   unavailable: '<#c42323>Этот якорь уже недоступен.'

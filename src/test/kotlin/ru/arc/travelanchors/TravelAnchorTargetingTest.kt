@@ -45,6 +45,12 @@ class TravelAnchorTargetingTest : FunSpec({
         travelAnchorTargetMessage(hasAnchorBelow = false, staffHeld = false) shouldBe null
     }
 
+    test("denial messages identify the predicate that actually failed") {
+        travelAnchorDenialMessage(featureAvailable = false, ownerAllowed = true) shouldBe "wrong-world"
+        travelAnchorDenialMessage(featureAvailable = true, ownerAllowed = false) shouldBe "no-permission"
+        travelAnchorDenialMessage(featureAvailable = true, ownerAllowed = true) shouldBe null
+    }
+
     test("far anchors use a nearby proxy while near anchors keep their real distance") {
         travelAnchorDisplayDistance(actualDistance = 32.0, proxyDistance = 48.0) shouldBe 32.0
         travelAnchorDisplayDistance(actualDistance = 900.0, proxyDistance = 48.0) shouldBe 48.0
