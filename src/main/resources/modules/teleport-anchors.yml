@@ -5,15 +5,16 @@ worlds: []
 allowed-players: []
 
 targeting:
-  range: 64.0
+  range: 1024.0
   maximum-targets: 24
   visible-angle-degrees: 70.0
   selection-angle-degrees: 10.0
 
 visual:
   block-material: LODESTONE
+  proxy-distance: 48.0
   minimum-scale: 1.04
-  maximum-scale: 1.85
+  maximum-scale: 3.0
   update-ticks: 4
 
 items:

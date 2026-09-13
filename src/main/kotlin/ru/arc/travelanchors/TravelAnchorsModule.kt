@@ -5,6 +5,7 @@ import net.kyori.adventure.text.Component
 import org.bukkit.Bukkit
 import org.bukkit.Color
 import org.bukkit.GameMode
+import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.Particle
@@ -17,6 +18,7 @@ import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
+import org.bukkit.event.block.Action
 import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.event.block.BlockExplodeEvent
 import org.bukkit.event.block.BlockPistonExtendEvent
@@ -27,7 +29,6 @@ import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.player.PlayerToggleSneakEvent
 import org.bukkit.event.world.ChunkLoadEvent
-import org.bukkit.event.world.ChunkUnloadEvent
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
@@ -54,15 +55,18 @@ import java.nio.file.Path
 import java.util.Locale
 import java.util.UUID
 import kotlin.math.cos
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 private val ANCHOR_BLOCK_KEY = NamespacedKey("arc", "travel_anchor")
+private val ANCHOR_INDEX_KEY = NamespacedKey("arc", "travel_anchor_index")
 private val ANCHOR_ITEM_KEY = NamespacedKey("arc", "travel_anchor_item")
 private val STAFF_ITEM_KEY = NamespacedKey("arc", "travel_anchor_staff")
 private const val USE_PERMISSION = "arc.travel-anchors.use"
 private const val PLACE_PERMISSION = "arc.travel-anchors.place"
 private const val BREAK_PERMISSION = "arc.travel-anchors.break"
 private const val TELEPORT_COOLDOWN_MILLIS = 500L
+private val RIGHT_CLICK_ACTIONS = setOf(Action.RIGHT_CLICK_AIR, Action.RIGHT_CLICK_BLOCK)
 
 internal data class AimCandidate<T>(val target: T, val distanceSquared: Double, val dot: Double)
 
@@ -93,6 +97,9 @@ internal fun travelAnchorTargetMessage(hasAnchorBelow: Boolean, staffHeld: Boole
         else -> null
     }
 
+internal fun travelAnchorDisplayDistance(actualDistance: Double, proxyDistance: Double): Double =
+    min(actualDistance, proxyDistance)
+
 private data class TravelAnchorPosition(val worldId: UUID, val x: Int, val y: Int, val z: Int) {
     val chunkX: Int get() = x shr 4
     val chunkZ: Int get() = z shr 4
@@ -101,6 +108,8 @@ private data class TravelAnchorPosition(val worldId: UUID, val x: Int, val y: In
 
     companion object {
         fun of(block: Block) = TravelAnchorPosition(block.world.uid, block.x, block.y, block.z)
+
+        fun of(worldId: UUID, x: Int, y: Int, z: Int) = TravelAnchorPosition(worldId, x, y, z)
     }
 }
 
@@ -114,6 +123,7 @@ private data class TravelAnchorSettings(
     val selectionDot: Double,
     val minimumScale: Float,
     val maximumScale: Float,
+    val proxyDistance: Double,
     val updateTicks: Long,
     val anchorMaterial: Material,
     val displayMaterial: Material,
@@ -171,12 +181,13 @@ private object TravelAnchorConfig {
             enabled = source.bool("enabled", false),
             worlds = source.stringList("worlds").toSet(),
             allowedPlayers = source.stringList("allowed-players").mapTo(linkedSetOf()) { it.lowercase(Locale.ROOT) },
-            range = source.real("targeting.range", 64.0).coerceIn(8.0, 128.0),
+            range = source.real("targeting.range", 1024.0).coerceIn(8.0, 4096.0),
             maximumTargets = source.integer("targeting.maximum-targets", 24).coerceIn(1, 64),
             visibleDot = cos(Math.toRadians(visibleAngle)),
             selectionDot = cos(Math.toRadians(selectionAngle)),
-            minimumScale = source.real("visual.minimum-scale", 1.04).toFloat().coerceIn(1.01f, 2.0f),
-            maximumScale = source.real("visual.maximum-scale", 1.85).toFloat().coerceIn(1.01f, 2.0f),
+            minimumScale = source.real("visual.minimum-scale", 1.04).toFloat().coerceIn(1.01f, 6.0f),
+            maximumScale = source.real("visual.maximum-scale", 3.0).toFloat().coerceIn(1.01f, 6.0f),
+            proxyDistance = source.real("visual.proxy-distance", 48.0).coerceIn(16.0, 96.0),
             updateTicks = source.long("visual.update-ticks", 4L).coerceIn(1L, 20L),
             anchorMaterial = source.material("items.anchor.material", Material.LODESTONE, requireBlock = true),
             displayMaterial = source.material("visual.block-material", Material.LODESTONE, requireBlock = true),
@@ -209,6 +220,7 @@ object TravelAnchorsModule : PluginModule, Listener {
     private val displays = mutableMapOf<UUID, MutableMap<TravelAnchorPosition, BlockDisplay>>()
     private val selectedTargets = mutableMapOf<UUID, TravelAnchorPosition>()
     private val cooldowns = mutableMapOf<UUID, Long>()
+    private val pendingTeleports = mutableSetOf<UUID>()
 
     val isEnabled: Boolean get() = settings?.enabled == true
 
@@ -221,6 +233,7 @@ object TravelAnchorsModule : PluginModule, Listener {
             return
         }
         Bukkit.getPluginManager().registerEvents(this, ARC.instance)
+        Bukkit.getWorlds().filter { next.allowsWorld(it.name) }.forEach(::loadAnchorIndex)
         Bukkit.getWorlds().flatMap { it.loadedChunks.toList() }.forEach(::loadAnchors)
         renderTask = repeating(next.updateTicks.ticks, delay = 1.ticks) { refreshPlayers() }
         info("Travel anchors enabled: anchors={}, range={}, maximum-targets={}", anchors.size, next.range, next.maximumTargets)
@@ -237,6 +250,7 @@ object TravelAnchorsModule : PluginModule, Listener {
         selectedTargets.clear()
         anchors.clear()
         cooldowns.clear()
+        pendingTeleports.clear()
         settings = null
     }
 
@@ -260,7 +274,7 @@ object TravelAnchorsModule : PluginModule, Listener {
     fun onPlace(event: BlockPlaceEvent) {
         if (!event.itemInHand.hasMarker(ANCHOR_ITEM_KEY)) return
         CustomBlockData(event.blockPlaced, ARC.instance).set(ANCHOR_BLOCK_KEY, PersistentDataType.BYTE, 1.toByte())
-        anchors += TravelAnchorPosition.of(event.blockPlaced)
+        if (anchors.add(TravelAnchorPosition.of(event.blockPlaced))) persistAnchorIndex(event.blockPlaced.world.uid)
         event.player.sendActionBar(settings?.message("placed") ?: Component.empty())
     }
 
@@ -282,9 +296,10 @@ object TravelAnchorsModule : PluginModule, Listener {
         event.player.sendActionBar(settings?.message("removed") ?: Component.empty())
     }
 
-    @EventHandler(ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     fun onInteract(event: PlayerInteractEvent) {
-        if (event.hand != EquipmentSlot.HAND || !event.item.hasMarker(STAFF_ITEM_KEY)) return
+        if (event.hand != EquipmentSlot.HAND || event.action !in RIGHT_CLICK_ACTIONS) return
+        if (!(event.item ?: event.player.inventory.itemInMainHand).hasMarker(STAFF_ITEM_KEY)) return
         event.isCancelled = true
         val player = event.player
         if (!canUse(player)) {
@@ -319,16 +334,11 @@ object TravelAnchorsModule : PluginModule, Listener {
     fun onQuit(event: PlayerQuitEvent) {
         clearDisplays(event.player.uniqueId)
         cooldowns.remove(event.player.uniqueId)
+        pendingTeleports.remove(event.player.uniqueId)
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun onChunkLoad(event: ChunkLoadEvent) = loadAnchors(event.chunk)
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    fun onChunkUnload(event: ChunkUnloadEvent) {
-        val worldId = event.world.uid
-        anchors.filter { it.worldId == worldId && it.chunkX == event.chunk.x && it.chunkZ == event.chunk.z }.forEach(::removeAnchor)
-    }
 
     @EventHandler(ignoreCancelled = true)
     fun onBlockExplode(event: BlockExplodeEvent) {
@@ -384,14 +394,13 @@ object TravelAnchorsModule : PluginModule, Listener {
         return anchors
             .asSequence()
             .filter { it != source && it.worldId == player.world.uid }
-            .mapNotNull { position ->
-                val block = position.block()?.takeIf(::isAnchor) ?: return@mapNotNull null
-                if (!player.isChunkSent(block.chunk)) return@mapNotNull null
-                val delta = block.location.add(0.5, 0.5, 0.5).toVector().subtract(eye.toVector())
+            .map { position ->
+                val delta = org.bukkit.util.Vector(position.x + 0.5, position.y + 0.5, position.z + 0.5)
+                    .subtract(eye.toVector())
                 val distanceSquared = delta.lengthSquared()
-                if (distanceSquared <= 0.01 || distanceSquared > current.range * current.range) return@mapNotNull null
                 AimCandidate(position, distanceSquared, direction.dot(delta.normalize()))
             }
+            .filter { it.distanceSquared > 0.01 && it.distanceSquared <= current.range * current.range }
             .filter { it.dot >= current.visibleDot }
             .sortedBy(AimCandidate<TravelAnchorPosition>::distanceSquared)
             .take(current.maximumTargets)
@@ -419,10 +428,11 @@ object TravelAnchorsModule : PluginModule, Listener {
             playerDisplays.remove(position)?.remove()
         }
         candidates.forEach { candidate ->
-            val block = candidate.target.block() ?: return@forEach
-            val display = playerDisplays[candidate.target]?.takeIf { it.isValid } ?: spawnDisplay(player, block).also {
+            val location = displayLocation(player, candidate)
+            val display = playerDisplays[candidate.target]?.takeIf { it.isValid } ?: spawnDisplay(player, location).also {
                 playerDisplays[candidate.target] = it
             }
+            display.teleport(location)
             val scale = travelAnchorScale(candidate.dot, current.visibleDot, current.minimumScale, current.maximumScale)
             val offset = (1f - scale) / 2f
             display.transformation = Transformation(
@@ -436,9 +446,17 @@ object TravelAnchorsModule : PluginModule, Listener {
         if (playerDisplays.isEmpty()) displays.remove(player.uniqueId)
     }
 
-    private fun spawnDisplay(player: Player, block: Block): BlockDisplay {
+    private fun displayLocation(player: Player, candidate: AimCandidate<TravelAnchorPosition>): Location {
+        val eye = player.eyeLocation
+        val target = Location(player.world, candidate.target.x + 0.5, candidate.target.y + 0.5, candidate.target.z + 0.5)
+        val distance = travelAnchorDisplayDistance(Math.sqrt(candidate.distanceSquared), checkNotNull(settings).proxyDistance)
+        val center = eye.clone().add(target.toVector().subtract(eye.toVector()).normalize().multiply(distance))
+        return center.subtract(0.5, 0.5, 0.5)
+    }
+
+    private fun spawnDisplay(player: Player, location: Location): BlockDisplay {
         val current = checkNotNull(settings)
-        val display = block.world.spawn(block.location, BlockDisplay::class.java) {
+        val display = location.world.spawn(location, BlockDisplay::class.java) {
             it.block = current.displayMaterial.createBlockData()
             it.isPersistent = false
             it.isVisibleByDefault = false
@@ -460,9 +478,38 @@ object TravelAnchorsModule : PluginModule, Listener {
     private fun teleport(player: Player, position: TravelAnchorPosition) {
         val current = settings ?: return
         val now = System.currentTimeMillis()
-        if (now < cooldowns.getOrDefault(player.uniqueId, 0L)) return
+        if (now < cooldowns.getOrDefault(player.uniqueId, 0L) || player.uniqueId in pendingTeleports) return
         if (player.isInsideVehicle) {
             player.sendActionBar(current.message("leave-vehicle"))
+            return
+        }
+        val world = Bukkit.getWorld(position.worldId)
+        if (world == null) {
+            player.sendActionBar(current.message("unavailable"))
+            return
+        }
+        if (!world.isChunkLoaded(position.chunkX, position.chunkZ)) {
+            pendingTeleports += player.uniqueId
+            world.getChunkAtAsync(position.chunkX, position.chunkZ, false).whenComplete { chunk, failure ->
+                if (!ARC.instance.isEnabled || settings !== current) return@whenComplete
+                Bukkit.getScheduler().runTask(ARC.instance, Runnable {
+                    pendingTeleports.remove(player.uniqueId)
+                    if (!player.isOnline || !ARC.instance.isEnabled) return@Runnable
+                    if (failure != null || chunk == null) {
+                        warn(
+                            "TRAVEL_ANCHORS phase=TELEPORT reason=chunk-load-failed player={} world={} chunk={},{}",
+                            player.name,
+                            world.name,
+                            position.chunkX,
+                            position.chunkZ,
+                            failure,
+                        )
+                        player.sendActionBar(current.message("unavailable"))
+                        return@Runnable
+                    }
+                    teleport(player, position)
+                })
+            }
             return
         }
         val block = position.block()?.takeIf(::isAnchor) ?: run {
@@ -507,9 +554,34 @@ object TravelAnchorsModule : PluginModule, Listener {
 
     private fun loadAnchors(chunk: org.bukkit.Chunk) {
         if (settings?.allowsWorld(chunk.world.name) != true) return
-        CustomBlockData.getBlocksWithCustomData(ARC.instance, chunk)
+        val discovered = CustomBlockData.getBlocksWithCustomData(ARC.instance, chunk)
             .filter(::isAnchor)
-            .mapTo(anchors, TravelAnchorPosition::of)
+            .map(TravelAnchorPosition::of)
+        if (anchors.addAll(discovered)) persistAnchorIndex(chunk.world.uid)
+    }
+
+    private fun loadAnchorIndex(world: org.bukkit.World) {
+        val coordinates = world.persistentDataContainer
+            .get(ANCHOR_INDEX_KEY, PersistentDataType.INTEGER_ARRAY)
+            ?: return
+        if (coordinates.size % 3 != 0) {
+            warn("TRAVEL_ANCHORS phase=INDEX reason=invalid-coordinate-count world={} count={}", world.name, coordinates.size)
+        }
+        for (index in 0 until coordinates.size - 2 step 3) {
+            anchors += TravelAnchorPosition.of(world.uid, coordinates[index], coordinates[index + 1], coordinates[index + 2])
+        }
+    }
+
+    private fun persistAnchorIndex(worldId: UUID) {
+        val world = Bukkit.getWorld(worldId) ?: return
+        val positions = anchors.filter { it.worldId == worldId }
+        val coordinates = IntArray(positions.size * 3)
+        positions.forEachIndexed { index, position ->
+            coordinates[index * 3] = position.x
+            coordinates[index * 3 + 1] = position.y
+            coordinates[index * 3 + 2] = position.z
+        }
+        world.persistentDataContainer.set(ANCHOR_INDEX_KEY, PersistentDataType.INTEGER_ARRAY, coordinates)
     }
 
     private fun removeAnchor(block: Block) {
@@ -518,10 +590,11 @@ object TravelAnchorsModule : PluginModule, Listener {
     }
 
     private fun removeAnchor(position: TravelAnchorPosition) {
-        anchors.remove(position)
+        if (!anchors.remove(position)) return
         displays.values.forEach { it.remove(position)?.remove() }
         displays.entries.removeIf { it.value.isEmpty() }
         selectedTargets.entries.removeIf { it.value == position }
+        persistAnchorIndex(position.worldId)
     }
 
     private fun clearDisplays(playerId: UUID) {
