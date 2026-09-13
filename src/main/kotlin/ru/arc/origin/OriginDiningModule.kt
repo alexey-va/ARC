@@ -448,7 +448,7 @@ private class OriginDiningService : AutoCloseable {
             warn("ORIGIN_DINING phase=START_FAILED world={} reason=world-unavailable", OriginDiningLayout.WORLD)
             return
         }
-        cleanupLegacy(world)
+        cleanupLegacy(world, "before-seat-spawn")
         for (seat in seatsById.values) {
             val hitbox = world.spawn(seat.seat.inWorld(world), Interaction::class.java)
             hitbox.interactionWidth = 1.45f
@@ -473,6 +473,9 @@ private class OriginDiningService : AutoCloseable {
                 fmt(hitbox.interactionHeight.toDouble()),
             )
         }
+        // Spawning the seats loads their chunks. Persisted Denizen entities can
+        // therefore become visible only after the first cleanup pass.
+        cleanupLegacy(world, "after-seat-spawn")
     }
 
     private fun sit(player: Player, seat: OriginDiningSeat, source: String) {
@@ -845,27 +848,36 @@ private class OriginDiningService : AutoCloseable {
         }
     }
 
-    private fun cleanupLegacy(world: org.bukkit.World) {
+    private fun cleanupLegacy(world: org.bukkit.World, pass: String) {
         // The two-seat legacy controller is fully retired and cannot clean up
-        // its own persisted entities. The other Denizen scenes keep their
-        // flag-aware cleanup tasks, so ARC deliberately does not scan their
-        // furniture areas or remove unrelated Interaction entities there.
-        val anchors =
-            OriginDiningLayout.seats.take(2).map { it.seat } +
-                listOf(OriginDiningPoint(-5.5, 70.95, 37.9))
+        // its own persisted entities. Every retired service anchor is exact so
+        // unrelated scene entities outside these points remain untouched.
+        val seatAnchors = OriginDiningLayout.seats.map { it.seat }
         var removed = 0
-        for (anchor in anchors) {
+        for (anchor in seatAnchors) {
             val point = anchor.inWorld(world)
-            for (entity in world.getNearbyEntities(point, 0.35, 0.45, 0.35)) {
+            for (entity in world.getNearbyEntities(point, 0.35, 0.8, 0.35)) {
                 if (entity.scoreboardTags.contains(SEAT_TAG) || entity.scoreboardTags.contains(MEAL_TAG)) continue
-                val legacyInteraction =
-                    entity is Interaction &&
-                        ((entity.interactionWidth <= 0.95f && entity.interactionHeight == 1.4f) ||
-                            (entity.interactionWidth == 1.8f && entity.interactionHeight == 1.8f))
-                if (legacyInteraction || entity is ArmorStand && entity.isMarker && !entity.isVisible) {
+                if (entity is Interaction || entity is ArmorStand && entity.isMarker && !entity.isVisible) {
                     entity.remove()
                     removed++
                 }
+            }
+        }
+        val oldMealHitbox = OriginDiningPoint(-5.5, 70.95, 37.9).inWorld(world)
+        for (entity in world.getNearbyEntities(oldMealHitbox, 0.35, 0.45, 0.35)) {
+            if (entity.scoreboardTags.contains(MEAL_TAG)) continue
+            if (entity is Interaction) {
+                entity.remove()
+                removed++
+            }
+        }
+        val oldMealDisplay = OriginDiningPoint(-5.5, 71.1, 37.9).inWorld(world)
+        for (entity in world.getNearbyEntities(oldMealDisplay, 0.35, 0.35, 0.35)) {
+            if (entity.scoreboardTags.contains(MEAL_TAG)) continue
+            if (entity is ItemDisplay) {
+                entity.remove()
+                removed++
             }
         }
         val oldLabel = Location(world, -5.5, 72.35, 37.5)
@@ -873,7 +885,7 @@ private class OriginDiningService : AutoCloseable {
             it.remove()
             removed++
         }
-        info("ORIGIN_DINING phase=LEGACY_CLEANUP removed={}", removed)
+        info("ORIGIN_DINING phase=LEGACY_CLEANUP pass={} removed={}", pass, removed)
     }
 
     private fun removeRuntimeEntities() {
