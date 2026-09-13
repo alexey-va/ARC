@@ -32,6 +32,7 @@ internal class DungeonSaveMenus(
     },
 ) {
     private val nameInput = PaperDialogInputId.of("name")
+    private val partyPlayerInput = PaperDialogInputId.of("party_player")
     private val timeFormat = DateTimeFormatter.ofPattern("dd.MM HH:mm").withZone(ZoneId.systemDefault())
 
     internal fun panel(player: Player, feedback: Component? = null) {
@@ -71,6 +72,7 @@ internal class DungeonSaveMenus(
                     if (view.saves?.entry != null) dungeon.travel(player, view.saves, "entry") else panel(player, text("panel.entry-unavailable", "<#e8dfd2>Безопасный переход ко входу сейчас недоступен. Для выхода используйте кнопку выше."))
                 }.let { if (view.saves?.entry != null) it else it.copy(label = text("panel.entry-disabled", "<#e8dfd2>[Недоступно] К началу данжа")) },
                 action("shop", "panel.shop-label", "<#f4d87a>Припасы ›", "panel.shop-tooltip", "Припасы и кейсы EliteMobs за кристаллы") { shop(player) },
+                skillBoostButton(player),
                 scoreboardButton(player),
                 shops(player),
                 lostLoot(player),
@@ -167,6 +169,7 @@ internal class DungeonSaveMenus(
             action("portals", "panel.portals-label", "<#92bed8>К порталам ›", "panel.portals-tooltip", "Перейти к порталам данжей в гильдии", close = true) { dungeon.action(player, "tp") },
             action("list", "panel.list-label", "<#ffb277>Выбрать данж ›", "panel.list-tooltip", "Открыть список данжей EliteMobs", close = true) { dungeon.action(player, "list") },
             partyButton(player),
+            skillBoostButton(player),
         ), exitButton = if (MenuEscapeBehavior.goesBack(player)) back {} else close(), columns = 2,
         )) { unavailable(player) }
     }
@@ -233,19 +236,109 @@ internal class DungeonSaveMenus(
 
     private fun partyButton(player: Player) = action("party", "panel.party-label", "<#e5ba73>Группа ›", "panel.party-tooltip", "Как собрать пати и управлять группой EliteMobs") { party(player) }
 
-    private fun party(player: Player) {
-        val available = dungeon.partiesAvailable()
+    private fun skillBoostButton(player: Player) = action("skill_boosts", "boosts.label", "<#9bd48d>Опыт навыков ›", "boosts.tooltip", "Временный бонус к опыту боевых навыков EliteMobs") { skillBoosts(player) }
+
+    private fun skillBoosts(player: Player, feedback: Component? = null) {
+        val expiry = dungeon.skillBoosts.currentExpiry(player)
+        val remaining = expiry?.let { java.time.Duration.between(Instant.now(), it) }
+            ?.takeUnless { it.isNegative }
+        val body = mutableListOf(
+            PaperDialogBody(text("boosts.body", "<#e8dfd2>Бонус <#9bd48d>+25%<#e8dfd2> действует на опыт всех боевых навыков EliteMobs. Новая покупка продлевает оставшееся время."), 468),
+            crystalBalance(player),
+            PaperDialogBody(if (remaining == null || remaining.isZero) text("boosts.inactive", "<#e8dfd2>Сейчас бонус не активен.")
+                else text("boosts.active", "<#9bd48d>✔ Бонус активен ещё <time>", "time" to Component.text(boostDuration(remaining))), 468),
+        )
+        feedback?.let { body += PaperDialogBody(plain(it), 468) }
+        show(player, PaperDialogScreen(
+            id = "dungeon.skill-boosts", title = text("boosts.title", "<#9bd48d>Опыт навыков"), body = body,
+            buttons = dungeon.skillBoosts.list().map { offer ->
+                action("boost_${offer.id}", "boosts.${offer.id}.label", "<#9bd48d>+25% · <time> <#e8dfd2>· 💎 <price>",
+                    "boosts.${offer.id}.tooltip", "Продлить бонус на <time>") {
+                    dungeon.skillBoosts.buy(player, offer) { result ->
+                        if (result.success) player.playSound(player.location, org.bukkit.Sound.ENTITY_PLAYER_LEVELUP, 0.55f, 1.35f)
+                        skillBoosts(player, skillBoostResult(result))
+                    }
+                }.copy(
+                    label = text("boosts.${offer.id}.label", "<#9bd48d>+25% · <time> <#e8dfd2>· 💎 <price>",
+                        "time" to Component.text(boostDuration(offer.duration)), "price" to price(offer.price)),
+                    tooltip = text("boosts.${offer.id}.tooltip", "Продлить бонус на <time>", "time" to Component.text(boostDuration(offer.duration))),
+                )
+            }, exitButton = back { if (dungeon.panelView(player) == null) unavailable(player) else panel(player) }, columns = 1,
+        )) { skillBoosts(player) }
+    }
+
+    private fun boostDuration(duration: java.time.Duration): String {
+        val minutes = duration.toMinutes().coerceAtLeast(0)
+        return if (minutes % 60L == 0L) "${minutes / 60} ч" else "${minutes} мин"
+    }
+
+    private fun skillBoostResult(result: SkillXpBoostResult): Component = when (result) {
+        SkillXpBoostResult.BOUGHT -> text("boosts.result.bought", "<#9bd48d>✔ Бонус активирован и время добавлено.")
+        SkillXpBoostResult.NO_MONEY -> text("boosts.result.no-money", "<#d7b486>Не хватает кристаллов.")
+        SkillXpBoostResult.PENDING -> text("boosts.result.pending", "<#d7b486>Предыдущая покупка ещё выполняется.")
+        SkillXpBoostResult.CHANGED -> text("boosts.result.changed", "<#d7b486>Предложение изменилось. Выберите его заново.")
+        SkillXpBoostResult.PAYMENT_FAILED -> text("boosts.result.payment-failed", "<#d7b486>Не удалось списать кристаллы. Покупка отменена.")
+        SkillXpBoostResult.GRANT_FAILED -> text("boosts.result.grant-failed", "<#d7b486>Не удалось включить бонус. Кристаллы возвращены.")
+    }
+
+    internal fun party(player: Player, feedback: Component? = null) {
+        val view = dungeon.parties.view(player)
+        val body = mutableListOf(
+            PaperDialogBody(text("party.body", "<#e8dfd2>Соберите группу до входа в данж. Приглашённый игрок принимает приглашение здесь же."), 468),
+        )
+        if (!view.available) body += PaperDialogBody(text("party.unavailable", "<#d7b486>Группы EliteMobs на этом сервере недоступны или у вас нет доступа."), 468)
+        else if (view.inParty) {
+            body += table(view.members.map { member ->
+                text(if (member.leader) "party.leader" else "party.member",
+                    if (member.leader) "<#f4d87a>Лидер" else "<#e8dfd2>Участник") to
+                    text("party.member-value", if (member.online) "<#9bd48d><name>" else "<#aaa49a><name> · не в сети", "name" to Component.text(member.name))
+            }, DialogTables.Frame.ARTIFACT)
+            if (view.invitableNames.isNotEmpty()) body += PaperDialogBody(text("party.invitable", "<#e8dfd2>Можно пригласить: <#92bed8><players>",
+                "players" to Component.text(view.invitableNames.joinToString(", "))), 468)
+        } else body += PaperDialogBody(text("party.empty", "<#e8dfd2>Вы пока без группы. Можно создать её самому или принять последнее приглашение."), 468)
+        feedback?.let { body += PaperDialogBody(plain(it), 468) }
+        val inputs = if (view.available && view.inParty && view.invitableNames.isNotEmpty())
+            listOf(PaperDialogTextInput(partyPlayerInput, text("party.player-input", "<#e8dfd2>Ник игрока"), maxLength = 16)) else emptyList()
+        val buttons = if (!view.available) listOf(guide(player) { party(player) }) else buildList {
+            if (!view.inParty) {
+                add(action("create_party", "party.create-label", "<#9bd48d>Создать группу", "party.create-tooltip", "Создать новую группу EliteMobs") {
+                    party(player, partyResult(dungeon.parties.create(player)))
+                })
+                add(action("accept_party", "party.accept-label", "<#92bed8>Принять приглашение", "party.accept-tooltip", "Принять последнее действующее приглашение") {
+                    party(player, partyResult(dungeon.parties.accept(player)))
+                })
+            } else {
+                if (view.invitableNames.isNotEmpty()) add(PaperDialogButton(
+                    PaperDialogActionId.of("invite_party"), text("party.invite-label", "<#92bed8>Пригласить"),
+                    tooltip = text("party.invite-tooltip", "Отправить приглашение указанному игроку"), width = 230,
+                    onClick = { context -> party(player, partyResult(dungeon.parties.invite(player, context.text(partyPlayerInput).orEmpty()))) },
+                ))
+                add(action("leave_party", "party.leave-label", "<#d7b486>Покинуть группу", "party.leave-tooltip", "Выйти из текущей группы") {
+                    party(player, partyResult(dungeon.parties.leave(player)))
+                })
+            }
+        }
         show(player, PaperDialogScreen(
             id = "dungeon.party", title = text("party.title", "<#e5ba73>Группа"),
-            body = listOf(
-                PaperDialogBody(text("party.body", "<#e8dfd2>Соберите пати перед входом в данж.<newline><#e8dfd2>В управлении группой можно создать пати, пригласить игроков и посмотреть участников. Приглашённый игрок должен принять приглашение."), 468),
-                PaperDialogBody(text("party.tips", "<#e8dfd2>Группа помогает проходить данжи вместе: рядом засчитывается общий прогресс заданий, а за групповую добычу можно голосовать.<newline><#e8dfd2>Перед входом договоритесь о данже и сложности. Сохранения позиций остаются личными."), 468),
-            ) + if (available) emptyList() else listOf(PaperDialogBody(text("party.unavailable", "<#e8dfd2>Группы EliteMobs на этом сервере пока недоступны."), 468)),
-            buttons = listOfNotNull(
-                if (available) action("manage_party", "party.manage-label", "<#c4a7e7>Управление группой ›", "party.manage-tooltip", "Открыть меню группы EliteMobs", close = true) { dungeon.action(player, "party") } else null,
-                guide(player) { party(player) },
-            ), exitButton = back { panel(player) }, columns = 2,
+            body = body, inputs = inputs, buttons = buttons,
+            exitButton = back { if (dungeon.panelView(player) == null) unavailable(player) else panel(player) }, columns = 2,
         )) { party(player) }
+    }
+
+    private fun partyResult(result: com.magmaguy.elitemobs.parties.PartyOperationResult): Component = when (result) {
+        com.magmaguy.elitemobs.parties.PartyOperationResult.SUCCESS -> text("party.result.success", "<#9bd48d>✔ Группа обновлена.")
+        com.magmaguy.elitemobs.parties.PartyOperationResult.PLAYER_UNAVAILABLE -> text("party.result.player-unavailable", "<#d7b486>Игрок не найден или не в сети.")
+        com.magmaguy.elitemobs.parties.PartyOperationResult.ALREADY_IN_PARTY -> text("party.result.already", "<#d7b486>Вы уже состоите в группе.")
+        com.magmaguy.elitemobs.parties.PartyOperationResult.SELF_INVITE -> text("party.result.self", "<#d7b486>Себя приглашать не нужно.")
+        com.magmaguy.elitemobs.parties.PartyOperationResult.TARGET_ALREADY_IN_PARTY -> text("party.result.target-party", "<#d7b486>Этот игрок уже состоит в группе.")
+        com.magmaguy.elitemobs.parties.PartyOperationResult.TARGET_NO_PERMISSION -> text("party.result.target-access", "<#d7b486>Этому игроку недоступны группы EliteMobs.")
+        com.magmaguy.elitemobs.parties.PartyOperationResult.INVITE_ALREADY_PENDING -> text("party.result.pending", "<#d7b486>У игрока уже есть действующее приглашение.")
+        com.magmaguy.elitemobs.parties.PartyOperationResult.PARTY_FULL -> text("party.result.full", "<#d7b486>В группе уже пять участников.")
+        com.magmaguy.elitemobs.parties.PartyOperationResult.NO_PENDING_INVITE -> text("party.result.no-invite", "<#d7b486>Действующего приглашения нет.")
+        com.magmaguy.elitemobs.parties.PartyOperationResult.INVITE_EXPIRED -> text("party.result.expired", "<#d7b486>Приглашение устарело. Попросите отправить новое.")
+        com.magmaguy.elitemobs.parties.PartyOperationResult.NOT_IN_PARTY -> text("party.result.not-in-party", "<#d7b486>Вы не состоите в группе.")
+        com.magmaguy.elitemobs.parties.PartyOperationResult.DISABLED,
+        com.magmaguy.elitemobs.parties.PartyOperationResult.NO_PERMISSION -> text("party.result.unavailable", "<#d7b486>Группы сейчас недоступны.")
     }
 
     private fun tableLabel(key: String, fallback: String) = text("table.$key", fallback)

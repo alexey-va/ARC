@@ -76,7 +76,7 @@ class DungeonSaveMenusTest : FreeSpec({
         val shown = mutableListOf<PaperDialogScreen>()
         DungeonSaveMenus(dungeon) { _, screen, _ -> shown += screen }.open(player)
         shown.single().id shouldBe "dungeon.panel.unavailable"
-        shown.single().buttons.map { it.id.value } shouldBe listOf("return", "scoreboard", "shops", "lost_loot", "guide", "portals", "list", "party")
+        shown.single().buttons.map { it.id.value } shouldBe listOf("return", "scoreboard", "shops", "lost_loot", "guide", "portals", "list", "party", "skill_boosts")
         shown.single().exitButton!!.id.value shouldBe "back"
         shown.single().exitButton!!.closeDialogBeforeAction shouldBe false
         shown.single().body.map { it.text } shouldBe listOf(
@@ -174,27 +174,30 @@ class DungeonSaveMenusTest : FreeSpec({
         screens.last().id shouldBe "dungeon.panel"
     }
 
-    "party section routes to native management without a redundant main-menu link" {
+    "party section manages the native party directly without a command hop" {
         val player = paper.addPlayer("party")
         val dungeon = mockk<EMDungeonQol>(relaxed = true)
         val world = paper.addSimpleWorld("party-world")
         every { dungeon.panelView(player) } returns DungeonPanelView(world.uid, DungeonVisit("run"), null)
         every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(secondArg<String>()) }
-        every { dungeon.partiesAvailable() } returns true
+        val parties = mockk<DungeonParties>()
+        every { dungeon.parties } returns parties
+        every { parties.view(player) } returns DungeonPartyView(available = true)
+        every { parties.create(player) } returns com.magmaguy.elitemobs.parties.PartyOperationResult.SUCCESS
         val screens = mutableListOf<PaperDialogScreen>()
         val menus = DungeonSaveMenus(dungeon) { _, screen, _ -> screens += screen }
         menus.panel(player)
         screens.last().buttons.any { it.id.value == "main" } shouldBe false
         screens.last().buttons.single { it.id.value == "party" }.onClick.handle(mockk())
         screens.last().id shouldBe "dungeon.party"
-        screens.last().buttons.single { it.id.value == "manage_party" }.onClick.handle(mockk())
-        verify { dungeon.action(player, "party") }
+        screens.last().buttons.single { it.id.value == "create_party" }.onClick.handle(mockk())
+        verify { parties.create(player) }
         screens.last().exitButton!!.onClick.handle(mockk())
         screens.last().id shouldBe "dungeon.panel"
-        every { dungeon.partiesAvailable() } returns false
+        every { parties.view(player) } returns DungeonPartyView(available = false)
         screens.last().buttons.single { it.id.value == "party" }.onClick.handle(mockk())
         screens.last().buttons.map { it.id.value } shouldBe listOf("guide")
-        screens.last().body.last().text shouldBe Component.text("<#e8dfd2>Группы EliteMobs на этом сервере пока недоступны.")
+        screens.last().body.last().text shouldBe Component.text("<#d7b486>Группы EliteMobs на этом сервере недоступны или у вас нет доступа.")
             .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)
     }
 

@@ -77,6 +77,15 @@ internal class EMDungeonQol(
                 price = config.double("dungeon-qol.shop.stock.${it.id}.price", it.price))
         } }, current = ::panelView,
     ) }
+    internal val parties = DungeonParties()
+    internal val skillBoosts by lazy { DungeonSkillXpBoosts(offers = {
+        DEFAULT_SKILL_XP_BOOSTS.filter { config.bool("dungeon-qol.skill-xp-boosts.${it.id}.enabled", true) }.map {
+            it.copy(
+                duration = Duration.ofMinutes(config.integer("dungeon-qol.skill-xp-boosts.${it.id}.minutes", it.duration.toMinutes().toInt()).toLong()),
+                price = config.double("dungeon-qol.skill-xp-boosts.${it.id}.price", it.price),
+            )
+        }
+    }) }
     private val menus by lazy { DungeonSaveMenus(this) }
     private var closed = false
     private var autosavesStarted = false
@@ -244,7 +253,7 @@ internal class EMDungeonQol(
         DungeonPanelView(player.world.uid, it, view(player))
     }
 
-    internal fun partiesAvailable(): Boolean = nativeDungeonPartiesAvailable()
+    internal fun partiesAvailable(): Boolean = com.magmaguy.elitemobs.config.PartyConfig.isEnabled()
 
     /** Dialog callbacks must still belong to the exact world and native run shown. */
     internal fun panelAction(player: Player, expected: DungeonPanelView, action: String) {
@@ -309,8 +318,7 @@ internal class EMDungeonQol(
             "menu", "меню" -> menus.panel(player)
             "return", "вернуться" -> returnToLast(player)
             "main" -> if (!HelpCenterModule.open(player)) audience.sendMessage(player, text("panel.main-unavailable", "<#d7b486>Главное меню сейчас недоступно. Попробуйте позже."))
-            "party" -> if (partiesAvailable()) player.performCommand("elitemobs:em party menu")
-                else audience.sendMessage(player, text("party.unavailable", "<#e8dfd2>Группы EliteMobs на этом сервере пока недоступны."))
+            "party" -> menus.party(player)
             "shops", "магазины" -> {
                 if (resolve(player.world)?.instanced == true) audience.sendMessage(player, text("messages.leave-first", "<#d7b486>Сначала выйдите из текущего данжа: Shift + F → «Выйти из данжа»."))
                 else if (!travelToShops(player, shopsLocation())) audience.sendMessage(player, text("messages.shops-unavailable", "<#aaa49a>Магазины сейчас недоступны. Попробуйте позже."))

@@ -13,7 +13,7 @@ internal data class DungeonQuestInfo(val name: String, val tracked: Boolean, val
 internal fun readDungeonQuests(player: Player): List<DungeonQuestInfo>? {
     // Avoid a synchronous database lookup while the player's EliteMobs data is loading.
     if (!PlayerData.isInMemory(player.uniqueId)) return null
-    val tracked = QuestTracking.getPlayerTrackingQuests()[player.uniqueId]?.customQuest?.questID
+    val tracked = QuestTracking.getPlayerTrackingQuests()[player.uniqueId]?.quest?.questID
     return dungeonQuestInfo(PlayerData.getQuests(player.uniqueId).orEmpty(), player.uniqueId, tracked)
 }
 
