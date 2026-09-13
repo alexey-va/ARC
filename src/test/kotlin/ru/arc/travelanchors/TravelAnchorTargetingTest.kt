@@ -33,4 +33,10 @@ class TravelAnchorTargetingTest : FunSpec({
         travelAnchorScale(1.0, 0.4, 1.0f, 1.4f) shouldBe 1.4f
         (travelAnchorScale(0.8, 0.4, 1.0f, 1.4f) > travelAnchorScale(0.6, 0.4, 1.0f, 1.4f)) shouldBe true
     }
+
+    test("standing on an anchor gives Shift priority over the staff hint") {
+        travelAnchorTargetMessage(hasAnchorBelow = true, staffHeld = true) shouldBe "target-anchor"
+        travelAnchorTargetMessage(hasAnchorBelow = false, staffHeld = true) shouldBe "target-staff"
+        travelAnchorTargetMessage(hasAnchorBelow = false, staffHeld = false) shouldBe null
+    }
 })

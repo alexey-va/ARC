@@ -86,6 +86,13 @@ internal fun travelAnchorScale(
     return minimumScale + (maximumScale - minimumScale) * progress.toFloat()
 }
 
+internal fun travelAnchorTargetMessage(hasAnchorBelow: Boolean, staffHeld: Boolean): String? =
+    when {
+        hasAnchorBelow -> "target-anchor"
+        staffHeld -> "target-staff"
+        else -> null
+    }
+
 private data class TravelAnchorPosition(val worldId: UUID, val x: Int, val y: Int, val z: Int) {
     val chunkX: Int get() = x shr 4
     val chunkZ: Int get() = z shr 4
@@ -200,6 +207,7 @@ object TravelAnchorsModule : PluginModule, Listener {
     private var renderTask: ScheduledTask? = null
     private val anchors = linkedSetOf<TravelAnchorPosition>()
     private val displays = mutableMapOf<UUID, MutableMap<TravelAnchorPosition, BlockDisplay>>()
+    private val selectedTargets = mutableMapOf<UUID, TravelAnchorPosition>()
     private val cooldowns = mutableMapOf<UUID, Long>()
 
     val isEnabled: Boolean get() = settings?.enabled == true
@@ -226,6 +234,7 @@ object TravelAnchorsModule : PluginModule, Listener {
         renderTask = null
         displays.values.flatMap { it.values }.forEach { if (it.isValid) it.remove() }
         displays.clear()
+        selectedTargets.clear()
         anchors.clear()
         cooldowns.clear()
         settings = null
@@ -282,7 +291,10 @@ object TravelAnchorsModule : PluginModule, Listener {
             player.sendActionBar(settings?.message("no-permission") ?: Component.empty())
             return
         }
-        val target = selectTarget(player, anchorBelow(player))
+        val source = anchorBelow(player)
+        val target = selectedTargets[player.uniqueId]
+            ?.takeIf { it != source && it.worldId == player.world.uid }
+            ?: selectTarget(player, source)
         if (target == null) {
             player.sendActionBar(settings?.message("no-target") ?: Component.empty())
             return
@@ -290,14 +302,16 @@ object TravelAnchorsModule : PluginModule, Listener {
         teleport(player, target)
     }
 
-    @EventHandler(ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     fun onSneak(event: PlayerToggleSneakEvent) {
         if (!event.isSneaking) return
         val player = event.player
         if (!canUse(player)) return
         val source = anchorBelow(player) ?: return
-        val target = selectTarget(player, source) ?: return
-        event.isCancelled = true
+        val target = selectedTargets[player.uniqueId]
+            ?.takeIf { it != source && it.worldId == player.world.uid }
+            ?: selectTarget(player, source)
+            ?: return
         teleport(player, target)
     }
 
@@ -353,9 +367,12 @@ object TravelAnchorsModule : PluginModule, Listener {
             val selected = chooseTravelAnchorTarget(candidates, current.range * current.range, current.selectionDot)?.target
             render(player, candidates, selected)
             if (selected != null) {
+                selectedTargets[player.uniqueId] = selected
                 val distance = candidates.first { it.target == selected }.distanceSquared.let(Math::sqrt).roundToInt().toString()
-                val message = if (staffHeld) "target-staff" else "target-anchor"
+                val message = travelAnchorTargetMessage(source != null, staffHeld) ?: return@forEach
                 player.sendActionBar(current.message(message, "%distance%" to distance))
+            } else {
+                selectedTargets.remove(player.uniqueId)
             }
         }
     }
@@ -475,8 +492,10 @@ object TravelAnchorsModule : PluginModule, Listener {
     }
 
     private fun anchorBelow(player: Player, location: org.bukkit.Location = player.location): TravelAnchorPosition? {
-        val block = location.clone().subtract(0.0, 0.08, 0.0).block
-        return TravelAnchorPosition.of(block).takeIf { it in anchors && isAnchor(block) }
+        return listOf(0.08, 0.4).firstNotNullOfOrNull { offset ->
+            val block = location.clone().subtract(0.0, offset, 0.0).block
+            TravelAnchorPosition.of(block).takeIf { it in anchors && isAnchor(block) }
+        }
     }
 
     private fun isSafeDestination(anchor: Block): Boolean =
@@ -502,10 +521,12 @@ object TravelAnchorsModule : PluginModule, Listener {
         anchors.remove(position)
         displays.values.forEach { it.remove(position)?.remove() }
         displays.entries.removeIf { it.value.isEmpty() }
+        selectedTargets.entries.removeIf { it.value == position }
     }
 
     private fun clearDisplays(playerId: UUID) {
         displays.remove(playerId)?.values?.forEach { if (it.isValid) it.remove() }
+        selectedTargets.remove(playerId)
     }
 
     private fun canUse(player: Player): Boolean =
