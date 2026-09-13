@@ -111,8 +111,8 @@ timing:
   guest-reconcile-seconds: 5
 
 navigation:
-  waiter-ready-margin: 1.5
-  waiter-player-range: 2.8
+  waiter-ready-margin: 2.25
+  waiter-player-range: 3.6
   session-radius: 8.0
 
 seating:
