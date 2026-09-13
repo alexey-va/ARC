@@ -22,6 +22,9 @@ import ru.arc.common.locationpools.LocationPoolManager
 import ru.arc.config.ConfigManager
 import ru.arc.leafdecay.LeafDecayManager
 import ru.arc.treasure.core.Treasures
+import ru.arc.treasure.core.GiveConfig
+import ru.arc.treasure.core.TreasureConfig
+import ru.arc.treasure.core.TreasureRollRange
 import ru.arc.treasure.pouch.Pouches
 import ru.arc.treasurechests.TreasureHuntManager
 import ru.arc.util.Logging.debug
@@ -114,11 +117,31 @@ class BlockListener : Listener {
             if (handItem.type == Material.AIR || handItem.amount < 1) return@get
 
             event.isCancelled = true
-            val treasure = pool.random()
-            if (treasure != null && Treasures.service.give(treasure, event.player).isSuccess) {
+            val rolls = TreasureRollRange.resolve(
+                data.getInteger("arc:treasure_rolls_min").takeIf { data.hasTag("arc:treasure_rolls_min") },
+                data.getInteger("arc:treasure_rolls_max").takeIf { data.hasTag("arc:treasure_rolls_max") },
+            ).roll()
+            var delivered = 0
+            repeat(rolls) {
+                val treasure = pool.random() ?: return@repeat
+                if (Treasures.service.give(treasure, event.player, GiveConfig.SILENT).isSuccess) delivered++
+            }
+            if (delivered > 0) {
                 consumeOneFromMainHand(event.player)
                 TREASURE_USE_COOLDOWN[playerId] = now
                 event.player.playSound(event.player.location, "ui.loom.take_result", 1f, 1f)
+                event.player.sendActionBar(
+                    TextUtil.mm(TreasureConfig.DefaultMessages.containerOpened.replace("%amount%", delivered.toString())),
+                )
+                if (delivered != rolls) {
+                    error(
+                        "Treasure container {} delivered only {}/{} rewards to {}",
+                        treasureKey,
+                        delivered,
+                        rolls,
+                        event.player.name,
+                    )
+                }
             }
         }
     }

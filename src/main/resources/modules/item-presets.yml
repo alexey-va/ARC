@@ -43,121 +43,141 @@ presets:
     material: ENDER_PEARL
     amount: 16
   sf_lootbox:
-    description: Базовый физический тайник Slimefun — случайный предмет из полного пула sf
+    description: Базовый физический тайник Slimefun — 4–5 наград из полного пула sf
     itemsadder: arc:scifichest_7
     display: <#68f7cf>Тайник инженера Slimefun
     lore:
       - ''
-      - <#ffe29a>Базовая инженерная шкатулка.
-      - '<#fff2df>Даёт один случайный предмет Slimefun:'
-      - <#fff2df>материалы, компоненты, припасы или механизм.
+      - <#b8b8b8>Набор случайных находок Slimefun.
+      - '<#8c8c8c>Внутри: <#fff2df>4–5 наград'
+      - <#8c8c8c>Материалы, компоненты, припасы
+      - <#8c8c8c>и базовые механизмы.
       - ''
-      - <#ffd166>ПКМ <#fff2df>— вскрыть контейнер
-      - ''
+      - '<#8c8c8c>[<#68f7cf>▶<#8c8c8c>] <#68f7cf>ПКМ<#b8b8b8> — вскрыть'
     customData:
       slimefun_token: 1
       "arc:treasure_key": sf
+      "arc:treasure_rolls_min": 4
+      "arc:treasure_rolls_max": 5
   sf_lootbox_advanced:
-    description: Продвинутый тайник Slimefun — один предмет из пула sf_advanced
+    description: Продвинутый тайник Slimefun — 5–6 наград из пула sf_advanced
     itemsadder: arc:scifichest_8
     display: <#5fffd2>Усиленный тайник Slimefun
     lore:
       - ''
-      - <#ffe29a>Шкатулка для опытного инженера.
-      - <#fff2df>Даёт продвинутый механизм, генератор
-      - <#fff2df>или 2–4 усиленных сплава.
+      - <#b8b8b8>Комплект для опытного инженера.
+      - '<#8c8c8c>Внутри: <#fff2df>5–6 наград'
+      - <#8c8c8c>Усиленные сплавы, генераторы
+      - <#8c8c8c>и продвинутые механизмы.
       - ''
-      - <#ffd166>ПКМ <#fff2df>— вскрыть контейнер
-      - ''
+      - '<#8c8c8c>[<#5fffd2>▶<#8c8c8c>] <#5fffd2>ПКМ<#b8b8b8> — вскрыть'
     customData:
       slimefun_token: 1
       "arc:treasure_key": sf_advanced
+      "arc:treasure_rolls_min": 5
+      "arc:treasure_rolls_max": 6
   sf_lootbox_master:
-    description: Мастерский тайник Slimefun — один редкий предмет из пула sf_jackpot
+    description: Мастерский тайник Slimefun — 6–7 наград из пула sf_jackpot
     itemsadder: arc:scifichest_10
     display: <#b8ff78>Мастерский тайник Slimefun
     lore:
       - ''
-      - <#ffe29a>Редкая шкатулка Гильдии механиков.
-      - <#fff2df>Даёт реактор, Cargo Manager, крупный
-      - <#fff2df>конденсатор или ценные материалы Slimefun.
+      - <#b8b8b8>Редкий запас Гильдии механиков.
+      - '<#8c8c8c>Внутри: <#fff2df>6–7 наград'
+      - <#8c8c8c>Реакторы, Cargo Manager, крупные
+      - <#8c8c8c>конденсаторы и ценные материалы.
       - ''
-      - <#ffd166>ПКМ <#fff2df>— вскрыть контейнер
-      - ''
+      - '<#8c8c8c>[<#b8ff78>▶<#8c8c8c>] <#b8ff78>ПКМ<#b8b8b8> — вскрыть'
     customData:
       slimefun_token: 1
       "arc:treasure_key": sf_jackpot
+      "arc:treasure_rolls_min": 6
+      "arc:treasure_rolls_max": 7
   ae_lootbox:
-    description: Базовая шкатулка AdvancedEnchantments — один случайный расходник из пула ae
+    description: Базовая шкатулка AdvancedEnchantments — 4–5 случайных наград из пула ae
     itemsadder: arc:scifichest_4
     display: <#df91ff>Таинственная шкатулка чар
     lore:
       - ''
-      - <#fff2df>Даёт один случайный предмет AE.
-      - <#fff2df>Может попасться пыль, свиток, сфера,
-      - <#fff2df>самоцвет или книга элитных чар.
+      - <#b8b8b8>Смешанный набор AdvancedEnchantments.
+      - '<#8c8c8c>Внутри: <#fff2df>4–5 наград'
+      - <#8c8c8c>Пыль, свитки, сферы, самоцветы
+      - <#8c8c8c>и книги элитных зачарований.
       - ''
-      - <#ffd166>ПКМ <#fff2df>— вскрыть шкатулку
-      - ''
+      - '<#8c8c8c>[<#df91ff>▶<#8c8c8c>] <#df91ff>ПКМ<#b8b8b8> — вскрыть'
     customData:
       ae_token: "true"
       "arc:treasure_key": ae
+      "arc:treasure_rolls_min": 4
+      "arc:treasure_rolls_max": 5
   ae_lootbox_enchanted:
-    description: Зачарованная шкатулка AE — гарантирует одну случайную книгу элитных чар
+    description: Зачарованная шкатулка AE — гарантирует 5–6 случайных книг элитных чар
     itemsadder: arc:scifichest_5
     display: <#e9a8ff>Зачарованная шкатулка AE
     lore:
       - ''
-      - <#fff2df>Внутри нет пыли и служебных расходников.
-      - <#a6ffce>Гарантирует одну случайную книгу
-      - <#a6ffce>AdvancedEnchantments случайного уровня.
+      - <#b8b8b8>Чистый набор без пыли и расходников.
+      - '<#8c8c8c>Внутри: <#fff2df>5–6 книг'
+      - <#8c8c8c>Каждая книга содержит случайное
+      - <#8c8c8c>элитное зачарование и уровень.
       - ''
-      - <#ffd166>ПКМ <#fff2df>— вскрыть шкатулку
-      - ''
+      - '<#8c8c8c>[<#e9a8ff>▶<#8c8c8c>] <#e9a8ff>ПКМ<#b8b8b8> — вскрыть'
     customData:
       ae_token: "true"
       "arc:treasure_key": ae_enchanted
+      "arc:treasure_rolls_min": 5
+      "arc:treasure_rolls_max": 6
   ae_lootbox_master:
-    description: Мастерская шкатулка AE — гарантирует три случайные книги элитных чар
+    description: Мастерская шкатулка AE — гарантирует 6–7 случайных книг элитных чар
     itemsadder: arc:scifichest_6
     display: <#ff8edb>Мастерская шкатулка AE
     lore:
       - ''
-      - <#fff2df>Высший уровень шкатулки без пыли.
-      - <#a6ffce>Гарантирует три случайные книги
-      - <#a6ffce>AdvancedEnchantments случайного уровня.
+      - <#b8b8b8>Высший набор без пыли и расходников.
+      - '<#8c8c8c>Внутри: <#fff2df>6–7 книг'
+      - <#8c8c8c>Каждая книга содержит случайное
+      - <#8c8c8c>элитное зачарование и уровень.
       - ''
-      - <#ffd166>ПКМ <#fff2df>— вскрыть шкатулку
-      - ''
+      - '<#8c8c8c>[<#ff8edb>▶<#8c8c8c>] <#ff8edb>ПКМ<#b8b8b8> — вскрыть'
     customData:
       ae_token: "true"
       "arc:treasure_key": ae_master
+      "arc:treasure_rolls_min": 6
+      "arc:treasure_rolls_max": 7
   enchant_token:
-    description: Токен зачарования (vanilla book pool)
+    description: Токен зачарования — 4–5 случайных ванильных книг
     material: IRON_INGOT
     customModelData: 12013
     display: <yellow>Токен зачарования
     lore:
       - ''
-      - <#fff2df>Даёт одну случайную ванильную книгу чар.
-      - <#ffd166>ПКМ <#fff2df>— использовать токен
+      - <#b8b8b8>Набор ванильных зачарований.
+      - '<#8c8c8c>Внутри: <#fff2df>4–5 книг'
+      - <#8c8c8c>Чары и уровни выбираются случайно.
       - ''
+      - '<#8c8c8c>[<#ffd567>▶<#8c8c8c>] <#ffd567>ПКМ<#b8b8b8> — использовать'
     customData:
       enchant_token: "true"
-      "arc:treasure_key": vanillaenchant
+      "arc:treasure_key": vanillaenchant_token
+      "arc:treasure_rolls_min": 4
+      "arc:treasure_rolls_max": 5
   potion_token:
-    description: Токен зелья
+    description: Токен зелья — 4–5 случайных ванильных зелий
     material: IRON_INGOT
     customModelData: 12032
     display: <yellow>Токен зелья
     lore:
       - ''
-      - <#fff2df>Даёт одно случайное ванильное зелье.
-      - <#ffd166>ПКМ <#fff2df>— использовать токен
+      - <#b8b8b8>Набор ванильной алхимии.
+      - '<#8c8c8c>Внутри: <#fff2df>4–5 зелий'
+      - <#8c8c8c>Эффекты и сила выбираются случайно.
       - ''
+      - '<#8c8c8c>[<#ffd567>▶<#8c8c8c>] <#ffd567>ПКМ<#b8b8b8> — использовать'
     customData:
       potion_token: "true"
-      "arc:treasure_key": vanillapotion
+      "arc:treasure_key": vanillapotion_token
+      "arc:treasure_rolls_min": 4
+      "arc:treasure_rolls_max": 5
   money_handful:
     description: Горсть монет (tier 1)
     itemsadder: iageneric:bronze_coin

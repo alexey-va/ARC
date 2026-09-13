@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "title": "ARC right-click container bundle expansion",
+  "assumptions": [
+    "The assessed unit is one heterogeneous reward outcome from the named treasure pool; no Vault money or premium tokens are granted directly by this change.",
+    "The low/base/high frequency assumption is 0, one seventh, or one physical container opened per player-day for every listed tier; this is a conservative test estimate, not telemetry.",
+    "ExcellentCrates remain one selected reward per key and are outside these ARC right-click container flows.",
+    "Slimefun outcome units are not treated as redeemable money; advanced and master outcomes can still accelerate progression and require playtest observation.",
+    "AE master previously granted three books in one outcome; after the change it grants six to seven separately rolled books, averaging 6.5.",
+    "Vanilla enchant and potion tokens previously rolled a 1-3 amount once, averaging two items; after the change they roll four to five single-item outcomes, averaging 4.5."
+  ],
+  "participants": [1, 25, 50],
+  "currencies": {
+    "sf_pool_outcomes": {
+      "minor_per_unit": 1,
+      "disposable_per_player_day": {
+        "before": ["0", "0", "0"],
+        "after": ["0", "0", "0"]
+      },
+      "flows": [
+        {
+          "id": "sf_basic_container",
+          "kind": "item",
+          "source": "src/main/resources/modules/item-presets.yml:sf_lootbox",
+          "basis": "One physical basic SF container is the event; source frequency is an explicit test assumption.",
+          "before": {"enabled": true, "amount_per_event": {"value": "1", "unit": "major"}, "events_per_player_day": ["0", "0.142857", "1"], "expected_rolls": "1"},
+          "after": {"enabled": true, "amount_per_event": {"value": "1", "unit": "major"}, "events_per_player_day": ["0", "0.142857", "1"], "expected_rolls": "4.5"}
+        },
+        {
+          "id": "sf_advanced_container",
+          "kind": "item",
+          "source": "src/main/resources/modules/item-presets.yml:sf_lootbox_advanced",
+          "basis": "One physical advanced SF container is the event; source frequency is an explicit test assumption.",
+          "before": {"enabled": true, "amount_per_event": {"value": "1", "unit": "major"}, "events_per_player_day": ["0", "0.142857", "1"], "expected_rolls": "1"},
+          "after": {"enabled": true, "amount_per_event": {"value": "1", "unit": "major"}, "events_per_player_day": ["0", "0.142857", "1"], "expected_rolls": "5.5"}
+        },
+        {
+          "id": "sf_master_container",
+          "kind": "item",
+          "source": "src/main/resources/modules/item-presets.yml:sf_lootbox_master",
+          "basis": "One physical master SF container is the event; source frequency is an explicit test assumption.",
+          "before": {"enabled": true, "amount_per_event": {"value": "1", "unit": "major"}, "events_per_player_day": ["0", "0.142857", "1"], "expected_rolls": "1"},
+          "after": {"enabled": true, "amount_per_event": {"value": "1", "unit": "major"}, "events_per_player_day": ["0", "0.142857", "1"], "expected_rolls": "6.5"}
+        }
+      ]
+    },
+    "ae_books": {
+      "minor_per_unit": 1,
+      "disposable_per_player_day": {
+        "before": ["0", "0", "0"],
+        "after": ["0", "0", "0"]
+      },
+      "flows": [
+        {
+          "id": "ae_basic_container",
+          "kind": "item",
+          "source": "src/main/resources/modules/item-presets.yml:ae_lootbox",
+          "basis": "Each AE pool outcome is one random book; source frequency is an explicit test assumption.",
+          "before": {"enabled": true, "amount_per_event": {"value": "1", "unit": "major"}, "events_per_player_day": ["0", "0.142857", "1"], "expected_rolls": "1"},
+          "after": {"enabled": true, "amount_per_event": {"value": "1", "unit": "major"}, "events_per_player_day": ["0", "0.142857", "1"], "expected_rolls": "4.5"}
+        },
+        {
+          "id": "ae_enchanted_container",
+          "kind": "item",
+          "source": "src/main/resources/modules/item-presets.yml:ae_lootbox_enchanted",
+          "basis": "Each enhanced AE pool outcome is one guaranteed enchanted book; source frequency is an explicit test assumption.",
+          "before": {"enabled": true, "amount_per_event": {"value": "1", "unit": "major"}, "events_per_player_day": ["0", "0.142857", "1"], "expected_rolls": "1"},
+          "after": {"enabled": true, "amount_per_event": {"value": "1", "unit": "major"}, "events_per_player_day": ["0", "0.142857", "1"], "expected_rolls": "5.5"}
+        },
+        {
+          "id": "ae_master_container",
+          "kind": "item",
+          "source": "src/main/resources/modules/item-presets.yml:ae_lootbox_master",
+          "basis": "The old master pool outcome had amount three; the new pool uses one book per roll and six to seven rolls.",
+          "before": {"enabled": true, "amount_per_event": {"value": "1", "unit": "major"}, "events_per_player_day": ["0", "0.142857", "1"], "expected_rolls": "3"},
+          "after": {"enabled": true, "amount_per_event": {"value": "1", "unit": "major"}, "events_per_player_day": ["0", "0.142857", "1"], "expected_rolls": "6.5"}
+        }
+      ]
+    },
+    "vanilla_enchant_books": {
+      "minor_per_unit": 1,
+      "disposable_per_player_day": {
+        "before": ["0", "0", "0"],
+        "after": ["0", "0", "0"]
+      },
+      "flows": [
+        {
+          "id": "enchant_token",
+          "kind": "item",
+          "source": "src/main/resources/modules/item-presets.yml:enchant_token",
+          "basis": "The original pool amount was uniformly 1-3; the replacement token pool rolls one book four to five times.",
+          "before": {"enabled": true, "amount_per_event": {"value": "1", "unit": "major"}, "events_per_player_day": ["0", "0.142857", "1"], "expected_rolls": "2"},
+          "after": {"enabled": true, "amount_per_event": {"value": "1", "unit": "major"}, "events_per_player_day": ["0", "0.142857", "1"], "expected_rolls": "4.5"}
+        }
+      ]
+    },
+    "vanilla_potions": {
+      "minor_per_unit": 1,
+      "disposable_per_player_day": {
+        "before": ["0", "0", "0"],
+        "after": ["0", "0", "0"]
+      },
+      "flows": [
+        {
+          "id": "potion_token",
+          "kind": "item",
+          "source": "src/main/resources/modules/item-presets.yml:potion_token",
+          "basis": "The original pool amount was uniformly 1-3; the replacement token pool rolls one potion four to five times.",
+          "before": {"enabled": true, "amount_per_event": {"value": "1", "unit": "major"}, "events_per_player_day": ["0", "0.142857", "1"], "expected_rolls": "2"},
+          "after": {"enabled": true, "amount_per_event": {"value": "1", "unit": "major"}, "events_per_player_day": ["0", "0.142857", "1"], "expected_rolls": "4.5"}
+        }
+      ]
+    }
+  },
+  "prices": []
+}

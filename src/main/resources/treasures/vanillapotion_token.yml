@@ -1,0 +1,6 @@
+id: vanillapotion_token
+treasures:
+  - type: potion
+    id: vanillapotion_token_potion
+    weight: 1
+    amount: 1

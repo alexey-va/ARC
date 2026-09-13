@@ -1,0 +1,6 @@
+id: vanillaenchant_token
+treasures:
+  - type: enchant
+    id: vanillaenchant_token_book
+    weight: 1
+    amount: 1

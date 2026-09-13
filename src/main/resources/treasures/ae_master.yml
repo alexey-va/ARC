@@ -4,6 +4,6 @@ treasures:
     id: ae_master_books
     weight: 1
     kind: random_book
-    amount: 3
+    amount: 1
     args:
       - tier: random

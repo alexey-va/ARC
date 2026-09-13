@@ -92,6 +92,7 @@ defaults:
   money-received: <dark_green>Вы получили <yellow>%amount%<dark_green> монет
   enchant-received: <light_purple>Вы получили зачарованную книгу!
   potion-received: <dark_purple>Вы получили зелье!
+  container-opened: '<#79ffb8>Контейнер открыт <#8c8c8c>· <#fff2df>%amount% наград'
   global-announce: <gold>%player% <yellow>получил награду!
 
 messages:

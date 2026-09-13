@@ -143,6 +143,11 @@ object TreasureConfig {
                     "<light_purple>Вы получили зачарованную книгу!",
                 )
         val potionReceived: String get() = config.string("defaults.potion-received", "<dark_purple>Вы получили зелье!")
+        val containerOpened: String
+            get() = config.string(
+                "defaults.container-opened",
+                "<#79ffb8>Контейнер открыт <#8c8c8c>· <#fff2df>%amount% наград",
+            )
 
         val globalAnnounce: String
             get() =
