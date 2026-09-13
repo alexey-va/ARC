@@ -29,6 +29,7 @@ class TravelAnchorTargetingTest : FunSpec({
 
     test("the outline grows as the crosshair approaches the anchor") {
         travelAnchorScale(0.4, 0.4, 1.0f, 1.4f) shouldBe 1.0f
+        travelAnchorScale(0.7, 0.4, 1.0f, 1.4f) shouldBe 1.2f
         travelAnchorScale(1.0, 0.4, 1.0f, 1.4f) shouldBe 1.4f
         (travelAnchorScale(0.8, 0.4, 1.0f, 1.4f) > travelAnchorScale(0.6, 0.4, 1.0f, 1.4f)) shouldBe true
     }

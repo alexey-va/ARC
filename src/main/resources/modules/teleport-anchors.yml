@@ -13,7 +13,7 @@ targeting:
 visual:
   block-material: LODESTONE
   minimum-scale: 1.04
-  maximum-scale: 1.32
+  maximum-scale: 1.85
   update-ticks: 4
 
 items:
@@ -40,7 +40,7 @@ items:
 messages:
   placed: '<#92bed8>Путевой якорь установлен.'
   removed: '<#92bed8>Путевой якорь снят.'
-  target-anchor: '<#ffd166>Прыжок<#b8b8b8> — перейти · <#ffffff>%distance% м'
+  target-anchor: '<#ffd166>Shift<#b8b8b8> — перейти · <#ffffff>%distance% м'
   target-staff: '<#d7a8ff>ПКМ<#b8b8b8> — перейти · <#ffffff>%distance% м'
   no-target: '<#b8b8b8>Наведитесь на подсвеченный якорь.'
   unsafe: '<#c42323>Над якорем нет места для перехода.'

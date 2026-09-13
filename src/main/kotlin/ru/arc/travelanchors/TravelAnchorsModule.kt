@@ -1,6 +1,5 @@
 package ru.arc.travelanchors
 
-import com.destroystokyo.paper.event.player.PlayerJumpEvent
 import com.jeff_media.customblockdata.CustomBlockData
 import net.kyori.adventure.text.Component
 import org.bukkit.Bukkit
@@ -26,6 +25,7 @@ import org.bukkit.event.block.BlockPlaceEvent
 import org.bukkit.event.entity.EntityExplodeEvent
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerQuitEvent
+import org.bukkit.event.player.PlayerToggleSneakEvent
 import org.bukkit.event.world.ChunkLoadEvent
 import org.bukkit.event.world.ChunkUnloadEvent
 import org.bukkit.inventory.EquipmentSlot
@@ -83,7 +83,7 @@ internal fun travelAnchorScale(
     maximumScale: Float,
 ): Float {
     val progress = ((dot - minimumVisibleDot) / (1.0 - minimumVisibleDot)).coerceIn(0.0, 1.0)
-    return minimumScale + (maximumScale - minimumScale) * (progress * progress).toFloat()
+    return minimumScale + (maximumScale - minimumScale) * progress.toFloat()
 }
 
 private data class TravelAnchorPosition(val worldId: UUID, val x: Int, val y: Int, val z: Int) {
@@ -169,7 +169,7 @@ private object TravelAnchorConfig {
             visibleDot = cos(Math.toRadians(visibleAngle)),
             selectionDot = cos(Math.toRadians(selectionAngle)),
             minimumScale = source.real("visual.minimum-scale", 1.04).toFloat().coerceIn(1.01f, 2.0f),
-            maximumScale = source.real("visual.maximum-scale", 1.32).toFloat().coerceIn(1.01f, 2.0f),
+            maximumScale = source.real("visual.maximum-scale", 1.85).toFloat().coerceIn(1.01f, 2.0f),
             updateTicks = source.long("visual.update-ticks", 4L).coerceIn(1L, 20L),
             anchorMaterial = source.material("items.anchor.material", Material.LODESTONE, requireBlock = true),
             displayMaterial = source.material("visual.block-material", Material.LODESTONE, requireBlock = true),
@@ -291,10 +291,11 @@ object TravelAnchorsModule : PluginModule, Listener {
     }
 
     @EventHandler(ignoreCancelled = true)
-    fun onJump(event: PlayerJumpEvent) {
+    fun onSneak(event: PlayerToggleSneakEvent) {
+        if (!event.isSneaking) return
         val player = event.player
         if (!canUse(player)) return
-        val source = anchorBelow(player, event.from) ?: return
+        val source = anchorBelow(player) ?: return
         val target = selectTarget(player, source) ?: return
         event.isCancelled = true
         teleport(player, target)
