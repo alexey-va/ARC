@@ -4,6 +4,7 @@ import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.entity.Player
+import ru.arc.origin.OriginDiningModule
 import ru.arc.gui.ArcMenus
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogBody
@@ -72,7 +73,7 @@ object BreweryTableDialogs {
     internal fun openOrder(player: Player, menu: Menu = Menu.FOOD) {
         if (!canOpen(player, menu)) return
         ArcMenus.beginDialogFlow(player)
-        showOrder(player, menu)
+        ArcMenus.openDialog(player, orderScreen(player, menu), reopen = { showOrder(player, menu) })
     }
 
     private fun showOrder(player: Player, menu: Menu) {
@@ -92,7 +93,7 @@ object BreweryTableDialogs {
                 Menu.FOOD -> listOf("Луи подаст блюдо к вашему столику.", "После подачи нажмите на блюдо, чтобы съесть его.")
                 Menu.DRINKS -> listOf("Закажите напиток, не вставая от костра.", "Официант принесёт его к вашему месту.")
                 Menu.COURTYARD -> listOf("Выберите блюдо или напиток.", "Официант принесёт заказ к вашему столику.")
-                Menu.RESTAURANT -> listOf("Официант примет заказ и принесёт его к столу.", "Стоимость списывается после подтверждения заказа.")
+                Menu.RESTAURANT -> listOf("Официант примет заказ и принесёт его к столу.", "Стоимость списывается, когда блюдо поставлено на стол.")
             }
         return PaperDialogScreen(
             id = "dining.${menu.id}.order",
@@ -114,10 +115,15 @@ object BreweryTableDialogs {
     }
 
     private fun orderIfCurrent(player: Player, menu: Menu, dish: Dish) {
-        if (canOpen(player, menu)) player.performCommand("${menu.command} ${dish.choice}")
+        if (!canOpen(player, menu)) return
+        if (!OriginDiningModule.order(player, menu, dish)) {
+            // Tests and non-Origin development servers retain the old command bridge.
+            player.performCommand("${menu.command} ${dish.choice}")
+        }
     }
 
     private fun canOpen(player: Player, menu: Menu): Boolean {
+        OriginDiningModule.canOpen(player, menu)?.let { return it }
         if (!player.isOnline) return false
         val location = player.location
         val allowed =

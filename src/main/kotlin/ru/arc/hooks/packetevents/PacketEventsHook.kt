@@ -10,6 +10,7 @@ import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSp
 import io.github.retrooper.packetevents.util.SpigotConversionUtil
 import net.kyori.adventure.util.TriState
 import org.bukkit.Bukkit
+import org.bukkit.entity.Display
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Player
 import ru.arc.core.sync
@@ -41,6 +42,20 @@ class PacketEventsHook {
                 WrapperPlayServerEntityMetadata(
                     entity.entityId,
                     listOf(EntityData(0, EntityDataTypes.BYTE, commonEntityFlags(entity, glowingForViewer = glowing))),
+                )
+            PacketEvents.getAPI().playerManager.sendPacket(player, metadata)
+        }
+    }
+
+    /** Sends a viewer-only glow outline for a display entity. */
+    fun setDisplayGlowingFor(entity: Display, player: Player, glowing: Boolean) {
+        runOnMainThread {
+            if (!player.isOnline || !entity.isValid) return@runOnMainThread
+            val flags = if (glowing) 0x40.toByte() else 0
+            val metadata =
+                WrapperPlayServerEntityMetadata(
+                    entity.entityId,
+                    listOf(EntityData(0, EntityDataTypes.BYTE, flags)),
                 )
             PacketEvents.getAPI().playerManager.sendPacket(player, metadata)
         }

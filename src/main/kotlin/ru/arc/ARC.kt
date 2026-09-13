@@ -75,6 +75,7 @@ import ru.arc.ops.OpsHttpModule
 import ru.arc.onboarding.OnboardingModule
 import ru.arc.origin.OriginSpawnModule
 import ru.arc.origin.OriginPortalsModule
+import ru.arc.origin.OriginDiningModule
 import ru.arc.paper.chunk.PaperChunkTicketRegistry
 import ru.arc.restart.RestartModule
 import ru.arc.rtp.RtpPlayerRegistry
@@ -213,6 +214,7 @@ open class ARC : JavaPlugin() {
             OriginPortalsModule,
             AiModule,
             EconomyModule,
+            OriginDiningModule,
             // Configuration (priority 30-49)
             ConfigModule,
             MetricsModule,
