@@ -333,6 +333,11 @@ private class OriginDiningService : AutoCloseable {
             consume(player, meal)
             return true
         }
+        if (Bukkit.getPluginManager().isPluginEnabled("Citizens")) {
+            runCatching { CitizensAPI.getNPCRegistry().getNPC(entity) }.getOrNull()?.let { npc ->
+                if (interactWaiter(player, npc.id, "$source:citizens-entity")) return true
+            }
+        }
         // During migration, capture clicks on exact Denizen seat/meal hitboxes too.
         nearestSeat(entity.location, 0.8)?.let { seat ->
             if (entity is Interaction) {
@@ -360,9 +365,36 @@ private class OriginDiningService : AutoCloseable {
         return true
     }
 
-    fun interactWaiter(player: Player, npcId: Int): Boolean {
-        val session = sessions[player.uniqueId] ?: return false
-        if (npcId != session.seat.waiterId || !nearVenue(player, session.seat)) return false
+    fun interactWaiter(player: Player, npcId: Int, source: String = "citizens-event"): Boolean {
+        val session = sessions[player.uniqueId]
+        info(
+            "ORIGIN_DINING phase=INPUT_WAITER player={} source={} npc={} session={} table={} actual_player={}",
+            player.name,
+            source,
+            npcId,
+            session?.id?.let(::short) ?: "none",
+            session?.seat?.id ?: "none",
+            location(player.location),
+        )
+        if (session == null) {
+            warn("ORIGIN_DINING phase=WAITER_INPUT_REJECTED player={} source={} npc={} reason=no-active-seat", player.name, source, npcId)
+            return false
+        }
+        if (npcId != session.seat.waiterId || !nearVenue(player, session.seat)) {
+            warn(
+                "ORIGIN_DINING phase=WAITER_INPUT_REJECTED player={} source={} npc={} table={} expected_npc={} reason=waiter-or-venue-mismatch",
+                player.name,
+                source,
+                npcId,
+                session.seat.id,
+                session.seat.waiterId,
+            )
+            return false
+        }
+        if (debounce(player)) {
+            info("ORIGIN_DINING phase=INPUT_DEBOUNCED player={} table={} source={}", player.name, session.seat.id, source)
+            return true
+        }
         session.touchedAt = System.currentTimeMillis()
         openDialog(player, session, "waiter:$npcId")
         return true
