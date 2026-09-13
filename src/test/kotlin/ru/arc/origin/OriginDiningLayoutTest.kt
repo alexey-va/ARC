@@ -78,6 +78,9 @@ class OriginDiningLayoutTest : FreeSpec({
         OriginDiningLayout.ambientRetryMillis shouldBe 5_000L
         OriginDiningLayout.guestReconcileMillis shouldBe 5_000L
         OriginDiningLayout.theftCooldownMillis shouldBe 90_000L
+        OriginDiningLayout.waiterPlayerRange shouldBe 2.8
+        OriginDiningLayout.navigatorDistanceMargin shouldBe 0.35
+        OriginDiningLayout.navigatorPathDistanceMargin shouldBe 0.35
     }
 
     "dynamic seats are limited to the two restaurant territories" {

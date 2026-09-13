@@ -244,6 +244,10 @@ internal object OriginDiningLayout {
         private set
     var waiterPlayerRange = 0.0
         private set
+    var navigatorDistanceMargin = 0.0
+        private set
+    var navigatorPathDistanceMargin = 0.0
+        private set
     var guestMarkerLift = 0.0
         private set
     var guestEntityLift = 0.0
@@ -304,6 +308,8 @@ internal object OriginDiningLayout {
         guestReconcileMillis = source.integer("timing.guest-reconcile-seconds").toLong().coerceIn(1L, 120L) * 1_000L
         waiterReadyMargin = source.real("navigation.waiter-ready-margin").coerceIn(0.5, 4.0)
         waiterPlayerRange = source.real("navigation.waiter-player-range").coerceIn(1.0, 6.0)
+        navigatorDistanceMargin = source.real("navigation.distance-margin", 0.35).coerceIn(0.1, 2.0)
+        navigatorPathDistanceMargin = source.real("navigation.path-distance-margin", 0.35).coerceIn(0.1, 2.0)
         sessionRadius = source.real("navigation.session-radius").coerceIn(2.0, 24.0)
         guestMarkerLift = source.real("seating.guest-marker-lift").coerceIn(0.0, 2.0)
         guestEntityLift = source.real("seating.guest-entity-lift").coerceIn(-1.0, 2.0)
@@ -1170,8 +1176,8 @@ private class OriginDiningService : AutoCloseable {
         val navigator = npc.navigator
         navigator.cancelNavigation()
         navigator.localParameters
-            .distanceMargin(0.7)
-            .pathDistanceMargin(1.0)
+            .distanceMargin(OriginDiningLayout.navigatorDistanceMargin)
+            .pathDistanceMargin(OriginDiningLayout.navigatorPathDistanceMargin)
             .speedModifier(0.72f)
             .stationaryTicks(30)
             .lookAtFunction { current ->
@@ -1623,7 +1629,10 @@ private class OriginDiningService : AutoCloseable {
             val actual = npc.entity.location
             val targetDistance = actual.distance(stop)
             val playerDistance = actual.distance(player.location)
-            if (targetDistance <= OriginDiningLayout.waiterReadyMargin || playerDistance <= OriginDiningLayout.waiterPlayerRange) {
+            // Ready means the player can actually right-click the waiter in
+            // survival. Reaching only the configured stop can leave a table
+            // between them and silently discard the interaction packet.
+            if (playerDistance <= OriginDiningLayout.waiterPlayerRange) {
                 waiterApproaches.remove(waiterId, approachId)
                 if (npc.navigator.isNavigating) npc.navigator.cancelNavigation()
                 npc.faceLocation(player.eyeLocation)

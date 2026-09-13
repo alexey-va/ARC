@@ -112,7 +112,10 @@ timing:
 
 navigation:
   waiter-ready-margin: 2.25
-  waiter-player-range: 3.6
+  # Must stay within normal survival entity-interaction reach.
+  waiter-player-range: 2.8
+  distance-margin: 0.35
+  path-distance-margin: 0.35
   session-radius: 8.0
 
 seating:
