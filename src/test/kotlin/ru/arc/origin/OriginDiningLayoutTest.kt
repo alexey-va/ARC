@@ -3,9 +3,13 @@ package ru.arc.origin
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import ru.arc.worldcontent.BreweryTableDialogs
+import java.nio.file.Files
 import kotlin.math.abs
 
 class OriginDiningLayoutTest : FreeSpec({
+    beforeSpec {
+        OriginDiningLayout.load(Files.createTempDirectory("origin-dining-layout-test"))
+    }
     "every authored chair has a unique block and table anchor" {
         OriginDiningLayout.seats.size shouldBe 6
         OriginDiningLayout.seats.map { it.clickedBlock }.distinct().size shouldBe 6
@@ -63,11 +67,17 @@ class OriginDiningLayoutTest : FreeSpec({
         OriginDiningLayout.mealHitboxSize shouldBe 1.8f
     }
 
-    "chair block fallback resolves the real clicked stair" {
-        OriginDiningLayout.seatForBlock(-8, 70, 37)?.id shouldBe "brewery_south_west"
-        OriginDiningLayout.seatForBlock(-14, 70, 53)?.id shouldBe "brewery_west"
-        OriginDiningLayout.seatForBlock(-55, 72, 48)?.id shouldBe "restaurant_a"
-        OriginDiningLayout.seatForBlock(-55, 72, 47) shouldBe null
+    "authored coordinates are loaded from the reloadable module config" {
+        OriginDiningLayout.seats.single { it.id == "brewery_south_west" }.clickedBlock shouldBe Triple(-8, 70, 37)
+        OriginDiningLayout.seats.single { it.id == "restaurant_a" }.clickedBlock shouldBe Triple(-55, 72, 48)
+        OriginDiningLayout.waiterHome(410) shouldBe OriginDiningPoint(1.5, 70.0, 57.5, 180f)
+    }
+
+    "ambient intervals and theft cooldown are loaded from the reloadable module config" {
+        OriginDiningLayout.ambientDialogueMillis shouldBe 42_000L
+        OriginDiningLayout.ambientRetryMillis shouldBe 5_000L
+        OriginDiningLayout.guestReconcileMillis shouldBe 5_000L
+        OriginDiningLayout.theftCooldownMillis shouldBe 90_000L
     }
 
     "dynamic seats are limited to the two restaurant territories" {

@@ -57,6 +57,8 @@ class BreweryTableDialogsTest : FreeSpec({
         screen.id shouldBe "dining.drinks.order"
         screen.buttons.map { it.id.value } shouldContainExactly
             listOf("drinks_herbal_tea", "drinks_berry_kvass", "drinks_spiced_mead")
+        screen.buttons.map { PlainTextComponentSerializer.plainText().serialize(it.label) } shouldContainExactly
+            listOf("Пиво · 250 💰", "Красное вино · 400 💰", "Медовуха · 600 💰")
     }
 
     "restaurant includes meals and one drink" {

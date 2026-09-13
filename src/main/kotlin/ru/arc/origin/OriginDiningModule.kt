@@ -59,8 +59,8 @@ import kotlin.math.sin
 /**
  * Owns the reliable player-facing restaurant path in Origin.
  *
- * Denizen still owns ambient NPC scenes. ARC owns seat capture, native dialogs,
- * payment, fixed table anchors, edible displays and every recovery transition.
+ * ARC is the single owner of both restaurant scenes: guest seating and dialogue,
+ * waiter motion, native dialogs, payment, edible displays and recovery.
  */
 object OriginDiningModule : PluginModule, Listener {
     override val name = "OriginDining"
@@ -125,12 +125,16 @@ object OriginDiningModule : PluginModule, Listener {
         }
     }
 
-    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     fun onBlockInteract(event: PlayerInteractEvent) {
         if (event.hand != EquipmentSlot.HAND || event.action != Action.RIGHT_CLICK_BLOCK) return
         val block = event.clickedBlock ?: return
         service?.interactBlock(event.player, block)?.let { handled ->
-            if (handled) event.isCancelled = true
+            if (handled) {
+                event.isCancelled = true
+                event.setUseInteractedBlock(org.bukkit.event.Event.Result.DENY)
+                event.setUseItemInHand(org.bukkit.event.Event.Result.DENY)
+            }
         }
     }
 
@@ -192,32 +196,23 @@ internal object OriginDiningLayout {
     private data class SeatTemplate(
         val id: String,
         val menu: BreweryTableDialogs.Menu,
-        val seat: OriginDiningPoint,
-        val surfaceHeight: Double,
-        val waiterStop: OriginDiningPoint,
-        val waiterId: Int,
-        val clickedBlock: Triple<Int, Int, Int>,
     )
 
     private val templates =
         listOf(
-            SeatTemplate("brewery_south_west", BreweryTableDialogs.Menu.FOOD, OriginDiningPoint(-7.5, 70.0, 37.5, -90f), 1.1, OriginDiningPoint(-7.5, 70.0, 38.5), 410, Triple(-8, 70, 37)),
-            SeatTemplate("brewery_south_east", BreweryTableDialogs.Menu.FOOD, OriginDiningPoint(-3.5, 70.0, 37.5, 90f), 1.1, OriginDiningPoint(-3.5, 70.0, 38.5), 410, Triple(-4, 70, 37)),
-            SeatTemplate("brewery_fire", BreweryTableDialogs.Menu.DRINKS, OriginDiningPoint(-8.5, 70.0, 48.5, 180f), 0.75, OriginDiningPoint(-6.5, 70.0, 48.5), 411, Triple(-9, 70, 48)),
-            SeatTemplate("brewery_west", BreweryTableDialogs.Menu.COURTYARD, OriginDiningPoint(-13.5, 70.0, 53.5, 90f), 1.1, OriginDiningPoint(-13.5, 70.0, 55.5), 411, Triple(-14, 70, 53)),
-            SeatTemplate("restaurant_a", BreweryTableDialogs.Menu.RESTAURANT, OriginDiningPoint(-54.5, 72.0, 48.5, 180f), 1.1, OriginDiningPoint(-52.5, 72.0, 46.5), 431, Triple(-55, 72, 48)),
-            SeatTemplate("restaurant_b", BreweryTableDialogs.Menu.RESTAURANT, OriginDiningPoint(-47.5, 72.0, 52.5, 180f), 1.1, OriginDiningPoint(-50.5, 72.0, 50.5), 432, Triple(-48, 72, 52)),
+            SeatTemplate("brewery_south_west", BreweryTableDialogs.Menu.FOOD),
+            SeatTemplate("brewery_south_east", BreweryTableDialogs.Menu.FOOD),
+            SeatTemplate("brewery_fire", BreweryTableDialogs.Menu.DRINKS),
+            SeatTemplate("brewery_west", BreweryTableDialogs.Menu.COURTYARD),
+            SeatTemplate("restaurant_a", BreweryTableDialogs.Menu.RESTAURANT),
+            SeatTemplate("restaurant_b", BreweryTableDialogs.Menu.RESTAURANT),
         )
 
-    var seats: List<OriginDiningSeat> = buildSeats()
+    var seats: List<OriginDiningSeat> = emptyList()
         private set
     var mealHitboxSize = 1.8f
         private set
     var mealHitboxYOffset = -0.15
-        private set
-    var seatHitboxWidth = 1.45f
-        private set
-    var seatHitboxHeight = 1.8f
         private set
     var displayViewRange = 2f
         private set
@@ -235,8 +230,53 @@ internal object OriginDiningLayout {
         private set
     var dynamicDishOffsetZ = 0.0
         private set
+    var deliveryFallbackTicks = 0L
+        private set
+    var servicePauseTicks = 0L
+        private set
+    var nextDeliveryTicks = 0L
+        private set
+    var waiterPollTicks = 0L
+        private set
+    var waiterMaxPolls = 0
+        private set
+    var deliveryRouteMaxPolls = 0
+        private set
+    var ambientRouteMaxPolls = 0
+        private set
+    var waiterDismountGraceTicks = 0L
+        private set
+    var waiterReturnReleaseTicks = 0L
+        private set
+    var waiterProgressEveryPolls = 0
+        private set
+    var waiterReadyMargin = 0.0
+        private set
+    var waiterPlayerRange = 0.0
+        private set
+    var seatMarkerLift = 0.0
+        private set
+    var guestMarkerLift = 0.0
+        private set
+    var guestEntityLift = 0.0
+        private set
+    var theftCooldownMillis = 0L
+        private set
+    var sessionTtlMillis = 0L
+        private set
+    var dialogAuthorizationMillis = 0L
+        private set
+    var sessionRadius = 0.0
+        private set
+    var ambientDialogueMillis = 0L
+        private set
+    var ambientRetryMillis = 0L
+        private set
+    var guestReconcileMillis = 0L
+        private set
     private var scales = defaultScales()
     private var surfaceLifts = defaultSurfaceLifts()
+    private var waiterHomes = emptyMap<Int, OriginDiningPoint>()
 
     fun load(dataPath: java.nio.file.Path) {
         val source = ConfigManager.ofModule(dataPath, "origin-dining.yml")
@@ -251,8 +291,6 @@ internal object OriginDiningLayout {
         }
         mealHitboxSize = source.real("interaction.meal-hitbox-size", 1.8).toFloat().coerceIn(0.5f, 3f)
         mealHitboxYOffset = source.real("interaction.meal-hitbox-y-offset", -0.15).coerceIn(-1.0, 1.0)
-        seatHitboxWidth = source.real("interaction.seat-hitbox-width", 1.45).toFloat().coerceIn(0.5f, 2.5f)
-        seatHitboxHeight = source.real("interaction.seat-hitbox-height", 1.8).toFloat().coerceIn(0.5f, 3f)
         displayViewRange = source.real("display.view-range", 2.0).toFloat().coerceIn(0.5f, 16f)
         displayWidth = source.real("display.culling-width", 4.0).toFloat().coerceIn(0.5f, 16f)
         displayHeight = source.real("display.culling-height", 4.0).toFloat().coerceIn(0.5f, 16f)
@@ -261,7 +299,31 @@ internal object OriginDiningLayout {
         dynamicDishOffsetX = source.real("dynamic-seats.dish-offset-x", 0.0).coerceIn(-2.0, 2.0)
         dynamicDishOffsetY = source.real("dynamic-seats.dish-offset-y", 0.0).coerceIn(-2.0, 2.0)
         dynamicDishOffsetZ = source.real("dynamic-seats.dish-offset-z", 0.0).coerceIn(-2.0, 2.0)
+        deliveryFallbackTicks = source.integer("timing.delivery-fallback-ticks").toLong().coerceIn(1L, 400L)
+        servicePauseTicks = source.integer("timing.service-pause-ticks").toLong().coerceIn(1L, 200L)
+        nextDeliveryTicks = source.integer("timing.next-delivery-ticks").toLong().coerceIn(1L, 200L)
+        waiterPollTicks = source.integer("timing.waiter-poll-ticks").toLong().coerceIn(1L, 100L)
+        waiterMaxPolls = source.integer("timing.waiter-max-polls").coerceIn(2, 200)
+        deliveryRouteMaxPolls = source.integer("timing.delivery-route-max-polls").coerceIn(2, 300)
+        ambientRouteMaxPolls = source.integer("timing.ambient-route-max-polls").coerceIn(2, 300)
+        waiterDismountGraceTicks = source.integer("timing.dismount-grace-ticks").toLong().coerceIn(0L, 400L)
+        waiterReturnReleaseTicks = source.integer("timing.waiter-return-release-ticks").toLong().coerceIn(1L, 1_200L)
+        waiterProgressEveryPolls = source.integer("timing.progress-log-every-polls").coerceIn(1, 100)
+        theftCooldownMillis = source.integer("timing.theft-cooldown-seconds").toLong().coerceIn(0L, 3_600L) * 1_000L
+        sessionTtlMillis = source.integer("timing.session-ttl-seconds").toLong().coerceIn(30L, 3_600L) * 1_000L
+        dialogAuthorizationMillis = source.integer("timing.dialog-authorization-seconds").toLong().coerceIn(5L, 600L) * 1_000L
+        ambientDialogueMillis = source.integer("timing.ambient-dialogue-seconds").toLong().coerceIn(5L, 600L) * 1_000L
+        ambientRetryMillis = source.integer("timing.ambient-retry-seconds").toLong().coerceIn(1L, 120L) * 1_000L
+        guestReconcileMillis = source.integer("timing.guest-reconcile-seconds").toLong().coerceIn(1L, 120L) * 1_000L
+        waiterReadyMargin = source.real("navigation.waiter-ready-margin").coerceIn(0.5, 4.0)
+        waiterPlayerRange = source.real("navigation.waiter-player-range").coerceIn(1.0, 6.0)
+        sessionRadius = source.real("navigation.session-radius").coerceIn(2.0, 24.0)
+        seatMarkerLift = source.real("seating.player-marker-lift").coerceIn(0.0, 2.0)
+        guestMarkerLift = source.real("seating.guest-marker-lift").coerceIn(0.0, 2.0)
+        guestEntityLift = source.real("seating.guest-entity-lift").coerceIn(-1.0, 2.0)
         seats = buildSeats(source, forward, vertical)
+        waiterHomes = waiterIds.associateWith { id -> configPoint(source, "scene.waiters.$id.home") }
+        OriginDiningAmbientLayout.load(source)
         info(
             "ORIGIN_DINING phase=CONFIG_LOADED forward_blocks={} vertical_offset={} transform=GROUND meal_hitbox={} seats={}",
             forward,
@@ -272,26 +334,45 @@ internal object OriginDiningLayout {
     }
 
     private fun buildSeats(
-        source: ru.arc.config.Config? = null,
+        source: ru.arc.config.Config,
         forward: Double = DEFAULT_FORWARD_BLOCKS,
         vertical: Double = DEFAULT_VERTICAL_OFFSET_BLOCKS,
     ): List<OriginDiningSeat> =
         templates.map { template ->
             val prefix = "placement.tables.${template.id}"
-            val height = source?.real("$prefix.height-above-seat", template.surfaceHeight) ?: template.surfaceHeight
-            val offsetX = source?.real("$prefix.offset-x", 0.0) ?: 0.0
-            val offsetY = source?.real("$prefix.offset-y", 0.0) ?: 0.0
-            val offsetZ = source?.real("$prefix.offset-z", 0.0) ?: 0.0
+            val seat = configPoint(source, "$prefix.seat")
+            val height = source.real("$prefix.height-above-seat", 1.1)
+            val offsetX = source.real("$prefix.offset-x", 0.0)
+            val offsetY = source.real("$prefix.offset-y", 0.0)
+            val offsetZ = source.real("$prefix.offset-z", 0.0)
+            val block = configBlock(source.string("$prefix.clicked-block"))
             OriginDiningSeat(
                 template.id,
                 template.menu,
-                template.seat,
-                centeredDishPoint(template.seat, forward, height + vertical + offsetY, offsetX, offsetZ),
-                template.waiterStop,
-                template.waiterId,
-                template.clickedBlock,
+                seat,
+                centeredDishPoint(seat, forward, height + vertical + offsetY, offsetX, offsetZ),
+                configPoint(source, "$prefix.waiter-stop"),
+                source.integer("$prefix.waiter-id"),
+                block,
             )
         }
+
+    internal fun configPoint(source: ru.arc.config.Config, path: String): OriginDiningPoint {
+        val values = source.string(path).split(',').map(String::trim)
+        require(values.size in 3..4) { "$path must be x,y,z[,yaw]" }
+        return OriginDiningPoint(
+            values[0].toDouble(),
+            values[1].toDouble(),
+            values[2].toDouble(),
+            values.getOrNull(3)?.toFloat() ?: 0f,
+        )
+    }
+
+    private fun configBlock(raw: String): Triple<Int, Int, Int> {
+        val values = raw.split(',').map(String::trim)
+        require(values.size == 3) { "clicked-block must be x,y,z" }
+        return Triple(values[0].toInt(), values[1].toInt(), values[2].toInt())
+    }
 
     internal fun centeredDishPoint(
         seat: OriginDiningPoint,
@@ -309,8 +390,6 @@ internal object OriginDiningLayout {
     }
 
     fun displayLift(dishId: String): Float = surfaceLifts[dishId] ?: 0.12125f
-
-    fun seatForBlock(x: Int, y: Int, z: Int): OriginDiningSeat? = seats.firstOrNull { it.clickedBlock == Triple(x, y, z) }
 
     internal fun dynamicMenu(location: Location): BreweryTableDialogs.Menu? {
         if (location.world?.name != WORLD) return null
@@ -340,14 +419,7 @@ internal object OriginDiningLayout {
 
     val waiterIds: Set<Int> get() = seats.map(OriginDiningSeat::waiterId).toSet()
 
-    fun waiterHome(waiterId: Int): OriginDiningPoint? =
-        when (waiterId) {
-            410 -> OriginDiningPoint(1.5, 70.0, 57.5, 180f)
-            411 -> OriginDiningPoint(-1.5, 70.0, 60.5, 180f)
-            431 -> OriginDiningPoint(-51.0, 72.0, 54.0, 180f)
-            432 -> OriginDiningPoint(-47.0, 72.0, 54.0, 180f)
-            else -> null
-        }
+    fun waiterHome(waiterId: Int): OriginDiningPoint? = waiterHomes[waiterId]
 
     fun waiterServes(seat: OriginDiningSeat, waiterId: Int): Boolean =
         if (seat.id.startsWith("brewery_")) waiterId == 410 || waiterId == 411
@@ -405,11 +477,106 @@ private data class OriginDiningDelivery(
     val dish: BreweryTableDialogs.Dish,
 )
 
+private data class OriginDiningGuestSeat(
+    val npcId: Int,
+    val seat: OriginDiningPoint,
+)
+
+private data class OriginDiningGuestTable(
+    val id: String,
+    val npcId: Int,
+    val waiterId: Int,
+    val meal: OriginDiningPoint,
+    val waiterStop: OriginDiningPoint,
+    val transit: OriginDiningPoint? = null,
+)
+
+private data class OriginDiningGuestMeal(
+    val table: OriginDiningGuestTable,
+    val dish: BreweryTableDialogs.Dish,
+    val display: ItemDisplay,
+    val hitbox: Interaction,
+)
+
+private data class OriginDiningAmbientRoute(
+    val token: UUID,
+    val table: OriginDiningGuestTable,
+    val dish: BreweryTableDialogs.Dish,
+    val waypoints: List<Location>,
+    var waypoint: Int = 0,
+)
+
+private data class OriginDiningDialogue(
+    val firstNpcId: Int,
+    val secondNpcId: Int,
+    val firstLine: String,
+    val secondLine: String,
+)
+
+private object OriginDiningAmbientLayout {
+    var guestSeats: List<OriginDiningGuestSeat> = emptyList()
+        private set
+    var guestTables: List<OriginDiningGuestTable> = emptyList()
+        private set
+    var dialogue: List<OriginDiningDialogue> = emptyList()
+        private set
+    var cleanupPoints: List<OriginDiningPoint> = emptyList()
+        private set
+    lateinit var legacyMealHitbox: OriginDiningPoint
+        private set
+    lateinit var legacyMealDisplay: OriginDiningPoint
+        private set
+    lateinit var legacyOrderLabel: OriginDiningPoint
+        private set
+    var cycleSeconds = 0
+        private set
+
+    fun load(source: ru.arc.config.Config) {
+        guestSeats =
+            source.stringList("scene.guest-ids").map { rawId ->
+                val id = rawId.toInt()
+                OriginDiningGuestSeat(id, OriginDiningLayout.configPoint(source, "scene.guests.$id.seat"))
+            }
+        guestTables =
+            source.stringList("scene.ambient-table-ids").map { id ->
+                val root = "scene.ambient-tables.$id"
+                val transit = source.string("$root.transit", "").trim()
+                OriginDiningGuestTable(
+                    id = id,
+                    npcId = source.integer("$root.guest-id"),
+                    waiterId = source.integer("$root.waiter-id"),
+                    meal = OriginDiningLayout.configPoint(source, "$root.meal"),
+                    waiterStop = OriginDiningLayout.configPoint(source, "$root.waiter-stop"),
+                    transit = transit.takeIf(String::isNotEmpty)?.let { parsePoint(it, "$root.transit") },
+                )
+            }
+        dialogue =
+            source.stringList("scene.dialogue-ids").map { id ->
+                val root = "scene.dialogues.$id"
+                OriginDiningDialogue(
+                    source.integer("$root.first-npc-id"),
+                    source.integer("$root.second-npc-id"),
+                    source.string("$root.first-line"),
+                    source.string("$root.second-line"),
+                )
+            }
+        cleanupPoints = source.stringList("scene.cleanup-points").mapIndexed { index, raw -> parsePoint(raw, "scene.cleanup-points[$index]") }
+        legacyMealHitbox = OriginDiningLayout.configPoint(source, "scene.legacy-player-table.meal-hitbox")
+        legacyMealDisplay = OriginDiningLayout.configPoint(source, "scene.legacy-player-table.meal-display")
+        legacyOrderLabel = OriginDiningLayout.configPoint(source, "scene.legacy-player-table.order-label")
+        cycleSeconds = source.integer("scene.ambient-cycle-seconds").coerceIn(8, 120)
+    }
+
+    private fun parsePoint(raw: String, path: String): OriginDiningPoint {
+        val values = raw.split(',').map(String::trim)
+        require(values.size in 3..4) { "$path must be x,y,z[,yaw]" }
+        return OriginDiningPoint(values[0].toDouble(), values[1].toDouble(), values[2].toDouble(), values.getOrNull(3)?.toFloat() ?: 0f)
+    }
+}
+
 private class OriginDiningService : AutoCloseable {
     private val tasks = LifecycleTaskScope()
     private val seatsById = OriginDiningLayout.seats.associateBy(OriginDiningSeat::id)
-    private val seatEntity = mutableMapOf<UUID, OriginDiningSeat>()
-    private val seatHitboxes = mutableMapOf<String, Interaction>()
     private val sessions = mutableMapOf<UUID, OriginDiningSession>()
     private val occupants = mutableMapOf<String, UUID>()
     private val meals = mutableMapOf<String, OriginDiningMeal>()
@@ -424,6 +591,17 @@ private class OriginDiningService : AutoCloseable {
     private val activeDeliveries = mutableMapOf<Int, UUID>()
     private val waiterHeldItems = mutableMapOf<Int, ItemStack?>()
     private val waiterGlowingFor = mutableMapOf<Int, UUID>()
+    private val guestMarkers = mutableMapOf<Int, ArmorStand>()
+    private val guestMeals = mutableMapOf<String, OriginDiningGuestMeal>()
+    private val guestMealEntity = mutableMapOf<UUID, OriginDiningGuestMeal>()
+    private val ambientRoutes = mutableMapOf<Int, OriginDiningAmbientRoute>()
+    private val ambientTableDueAt = mutableMapOf<String, Long>()
+    private val speechDisplays = mutableSetOf<TextDisplay>()
+    private var ambientCursor = 0
+    private var dialogueCursor = 0
+    private var nextAmbientAt = 0L
+    private var nextDialogueAt = 0L
+    private var nextGuestSeatReconcileAt = 0L
 
     fun start() {
         info(
@@ -431,13 +609,23 @@ private class OriginDiningService : AutoCloseable {
             OriginDiningLayout.WORLD,
             seatsById.size,
             OriginDiningLayout.waiterIds.sorted().joinToString(","),
-            DELIVERY_ROUTE_MAX_POLLS * WAITER_POLL_TICKS,
-            SESSION_TTL_MILLIS,
+            OriginDiningLayout.deliveryRouteMaxPolls * OriginDiningLayout.waiterPollTicks,
+            OriginDiningLayout.sessionTtlMillis,
         )
-        spawnSeats()
-        tasks.runLater(20L) { resetIdleWaiters("service-start") }
+        cleanupWorldSeats()
+        cleanupAmbientLegacy()
+        tasks.runLater(20L) {
+            reconcileGuestSeats()
+            seedGuestMeals()
+            resetIdleWaiters("service-start")
+        }
         tasks.runTimer(20L, 20L, ::reconcile)
-        info("ORIGIN_DINING phase=READY world={} seats={} placement=arc-fixed", OriginDiningLayout.WORLD, seatsById.size)
+        info(
+            "ORIGIN_DINING phase=READY world={} placement=world-stairs ambient_owner=arc guest_seats={} guest_tables={}",
+            OriginDiningLayout.WORLD,
+            OriginDiningAmbientLayout.guestSeats.size,
+            OriginDiningAmbientLayout.guestTables.size,
+        )
     }
 
     fun canOpen(player: Player, menu: BreweryTableDialogs.Menu): Boolean {
@@ -531,10 +719,7 @@ private class OriginDiningService : AutoCloseable {
     }
 
     fun interact(player: Player, entity: Entity, source: String): Boolean {
-        val managedInteraction =
-            entity is Interaction &&
-                entity.world.name == OriginDiningLayout.WORLD &&
-                (entity.uniqueId in seatEntity || entity.uniqueId in mealEntity || nearestSeat(entity.location, 0.8) != null)
+        val managedInteraction = entity is Interaction && (entity.uniqueId in mealEntity || entity.uniqueId in guestMealEntity)
         if (managedInteraction) {
             info(
                 "ORIGIN_DINING phase=INPUT_ENTITY player={} source={} entity={} entity_id={} actual={}",
@@ -558,20 +743,22 @@ private class OriginDiningService : AutoCloseable {
             consume(player, meal)
             return true
         }
-        seatEntity[entity.uniqueId]?.let { seat ->
-            sit(player, seat, "$source:arc-seat:${short(entity.uniqueId)}@${location(entity.location)}")
+        guestMealEntity[entity.uniqueId]?.let { meal ->
+            info(
+                "ORIGIN_DINING phase=GUEST_MEAL_INPUT player={} source={} table={} dish={} hitbox={} actual={}",
+                player.name,
+                source,
+                meal.table.id,
+                meal.dish.id,
+                short(entity.uniqueId),
+                location(entity.location),
+            )
+            consumeGuestMeal(player, meal)
             return true
         }
         if (Bukkit.getPluginManager().isPluginEnabled("Citizens")) {
             runCatching { CitizensAPI.getNPCRegistry().getNPC(entity) }.getOrNull()?.let { npc ->
                 if (npc.id in OriginDiningLayout.waiterIds && interactWaiter(player, npc.id, "$source:citizens-entity")) return true
-            }
-        }
-        // During migration, capture clicks on exact Denizen seat/meal hitboxes too.
-        nearestSeat(entity.location, 0.8)?.let { seat ->
-            if (entity is Interaction) {
-                sit(player, seat, "$source:legacy-seat:${short(entity.uniqueId)}@${location(entity.location)}")
-                return true
             }
         }
         if (managedInteraction) {
@@ -589,9 +776,8 @@ private class OriginDiningService : AutoCloseable {
 
     fun interactBlock(player: Player, block: Block): Boolean {
         if (block.world.name != OriginDiningLayout.WORLD) return false
-        val fixed = OriginDiningLayout.seatForBlock(block.x, block.y, block.z)
-        val seat = fixed ?: dynamicSeat(block) ?: return false
-        sit(player, seat, "block:${block.x},${block.y},${block.z}:${if (fixed == null) "dynamic" else "fixed"}")
+        val seat = dynamicSeat(block) ?: return false
+        sit(player, seat, "block:${block.x},${block.y},${block.z}:world-stair")
         return true
     }
 
@@ -692,7 +878,7 @@ private class OriginDiningService : AutoCloseable {
         val candidates = if (menu == BreweryTableDialogs.Menu.RESTAURANT) listOf(431, 432) else listOf(410, 411)
         val world = Bukkit.getWorld(OriginDiningLayout.WORLD)
         return candidates.minWithOrNull(
-            compareBy<Int> { if (it in waiterAssignments || it in activeDeliveries || it in waiterApproaches) 1 else 0 }
+            compareBy<Int> { if (it in waiterAssignments || it in activeDeliveries || it in waiterApproaches || it in ambientRoutes) 1 else 0 }
                 .thenBy { id -> waiter(id)?.takeIf { it.isSpawned && world != null }?.entity?.location?.distanceSquared(seat.inWorld(world!!)) ?: Double.MAX_VALUE },
         ) ?: candidates.first()
     }
@@ -734,7 +920,7 @@ private class OriginDiningService : AutoCloseable {
             return true
         }
         session.touchedAt = System.currentTimeMillis()
-        dialogAuthorizations[player.uniqueId] = session.id to (System.currentTimeMillis() + DIALOG_AUTHORIZATION_MILLIS)
+        dialogAuthorizations[player.uniqueId] = session.id to (System.currentTimeMillis() + OriginDiningLayout.dialogAuthorizationMillis)
         openDialog(player, session, "waiter:$npcId")
         return true
     }
@@ -753,7 +939,7 @@ private class OriginDiningService : AutoCloseable {
                 "marker=${short(dismounted.uniqueId)} retained=true near_venue=${nearVenue(player, session.seat)} meal_present=${session.seat.id in meals}",
             )
         }
-        tasks.runLater(WAITER_DISMOUNT_GRACE_TICKS) {
+        tasks.runLater(OriginDiningLayout.waiterDismountGraceTicks) {
             val current = sessions[player.uniqueId]?.takeIf { it.id == session.id } ?: return@runLater
             if (player.isOnline && player.vehicle?.uniqueId == current.marker.uniqueId) return@runLater
             if (current.phase != OriginDiningPhase.ORDERED) returnWaiterHome(current, "player-dismounted")
@@ -764,40 +950,29 @@ private class OriginDiningService : AutoCloseable {
         releaseSession(player.uniqueId, "player-quit")
     }
 
-    private fun spawnSeats() {
+    private fun cleanupWorldSeats() {
         val world = Bukkit.getWorld(OriginDiningLayout.WORLD)
         if (world == null) {
             warn("ORIGIN_DINING phase=START_FAILED world={} reason=world-unavailable", OriginDiningLayout.WORLD)
             return
         }
-        cleanupLegacy(world, "before-seat-spawn")
-        for (seat in seatsById.values) {
-            val hitbox = world.spawn(seat.seat.inWorld(world), Interaction::class.java)
-            hitbox.interactionWidth = OriginDiningLayout.seatHitboxWidth
-            hitbox.interactionHeight = OriginDiningLayout.seatHitboxHeight
-            hitbox.isResponsive = true
-            hitbox.isPersistent = false
-            hitbox.isInvulnerable = true
-            hitbox.addScoreboardTag(SEAT_TAG)
-            seatHitboxes[seat.id] = hitbox
-            seatEntity[hitbox.uniqueId] = seat
-            info(
-                "ORIGIN_DINING phase=SEAT_SPAWNED table={} menu={} waiter={} hitbox={} entity_id={} actual={} dish_target={} waiter_stop={} width={} height={}",
-                seat.id,
-                seat.menu.id,
-                seat.waiterId,
-                short(hitbox.uniqueId),
-                hitbox.entityId,
-                location(hitbox.location),
-                point(seat.dish),
-                point(seat.waiterStop),
-                fmt(hitbox.interactionWidth.toDouble()),
-                fmt(hitbox.interactionHeight.toDouble()),
+        cleanupLegacy(world, "world-stairs-only")
+        val centers =
+            listOf(
+                Location(world, BreweryTableDialogs.BREWERY_X, BreweryTableDialogs.BREWERY_Y, BreweryTableDialogs.BREWERY_Z),
+                Location(world, BreweryTableDialogs.RESTAURANT_X, BreweryTableDialogs.RESTAURANT_Y, BreweryTableDialogs.RESTAURANT_Z),
             )
+        var removed = 0
+        centers.forEach { center ->
+            world.getNearbyEntities(center, 24.0, 8.0, 24.0)
+                .filterIsInstance<Interaction>()
+                .filter { it.scoreboardTags.contains(SEAT_TAG) }
+                .forEach {
+                    it.remove()
+                    removed++
+                }
         }
-        // Spawning the seats loads their chunks. Persisted Denizen entities can
-        // therefore become visible only after the first cleanup pass.
-        cleanupLegacy(world, "after-seat-spawn")
+        info("ORIGIN_DINING phase=LEGACY_SEAT_HITBOX_CLEANUP removed={}", removed)
     }
 
     private fun sit(player: Player, seat: OriginDiningSeat, source: String) {
@@ -830,6 +1005,15 @@ private class OriginDiningService : AutoCloseable {
         sessions[player.uniqueId] = session
         occupants[seat.id] = player.uniqueId
         mount(player, session)
+        // A second chair handler may replace the vehicle later in this same
+        // block-interaction tick. Reassert ARC's marker once, then leave all
+        // later player dismounts alone.
+        tasks.runLater(2L) {
+            val current = sessions[player.uniqueId]?.takeIf { it.id == session.id } ?: return@runLater
+            if (!player.isOnline || player.vehicle?.uniqueId == current.marker.uniqueId) return@runLater
+            log("MOUNT_REASSERT", current, player, null, current.seat.seat, "reason=post-interact-vehicle-conflict")
+            mount(player, current)
+        }
         log("SEATED", session, player, null, seat.dish, "source=$source mounted=${player.vehicle?.uniqueId == marker.uniqueId}")
         player.sendActionBar(Component.text("Официант сейчас подойдёт. Нажмите по нему, чтобы открыть меню.", NamedTextColor.GOLD))
         summonWaiter(session, player)
@@ -847,7 +1031,7 @@ private class OriginDiningService : AutoCloseable {
         // Marker armor stands render their player passenger 0.6 blocks below
         // the vehicle location. Lift the vehicle so the seated player's feet
         // remain 0.58 blocks above the chair instead of inside its stair block.
-        return world.spawn(seat.seat.inWorld(world).add(0.0, SEAT_MARKER_LIFT, 0.0), ArmorStand::class.java).apply {
+        return world.spawn(seat.seat.inWorld(world).add(0.0, OriginDiningLayout.seatMarkerLift, 0.0), ArmorStand::class.java).apply {
             isVisible = false
             isMarker = true
             setGravity(false)
@@ -904,6 +1088,7 @@ private class OriginDiningService : AutoCloseable {
 
     private fun startNextDelivery(waiterId: Int) {
         if (waiterId in activeDeliveries) return
+        cancelAmbientRoute(waiterId, "player-delivery")
         val queue = deliveryQueues[waiterId] ?: return
         var delivery: OriginDiningDelivery? = null
         var session: OriginDiningSession? = null
@@ -926,7 +1111,7 @@ private class OriginDiningService : AutoCloseable {
         val npc = waiter(waiterId)
         if (npc == null || !npc.isSpawned || npc.entity.world.name != OriginDiningLayout.WORLD) {
             logWarn("DELIVERY_ROUTE_FALLBACK", currentSession, player, currentDelivery.dish, "npc=$waiterId unavailable")
-            tasks.runLater(DELIVERY_FALLBACK_TICKS) {
+            tasks.runLater(OriginDiningLayout.deliveryFallbackTicks) {
                 if (activeDeliveries[waiterId] != token) return@runLater
                 deliver(currentSession.id, currentDelivery.dish)
                 finishDelivery(waiterId, token, currentSession.id, "npc-unavailable")
@@ -970,7 +1155,7 @@ private class OriginDiningService : AutoCloseable {
         navigateDelivery(session, dish, waiterId, token, npc, stop, "TABLE") {
             if (activeDeliveries[waiterId] != token) return@navigateDelivery
             Bukkit.getPlayer(session.playerId)?.takeIf(Player::isOnline)?.let { npc.faceLocation(it.eyeLocation) }
-            tasks.runLater(SERVICE_PAUSE_TICKS) {
+            tasks.runLater(OriginDiningLayout.servicePauseTicks) {
                 if (activeDeliveries[waiterId] != token) return@runLater
                 deliver(session.id, dish)
                 finishDelivery(waiterId, token, session.id, "served")
@@ -1010,7 +1195,7 @@ private class OriginDiningService : AutoCloseable {
         poll: Int,
         ready: () -> Unit,
     ) {
-        tasks.runLater(WAITER_POLL_TICKS) {
+        tasks.runLater(OriginDiningLayout.waiterPollTicks) {
             if (activeDeliveries[waiterId] != token) return@runLater
             val session = sessions.values.firstOrNull { it.id == sessionId && it.phase == OriginDiningPhase.ORDERED }
             if (session == null) {
@@ -1024,10 +1209,10 @@ private class OriginDiningService : AutoCloseable {
                 return@runLater
             }
             val distance = npc.entity.location.distance(destination)
-            if (distance <= WAITER_READY_MARGIN || poll >= DELIVERY_ROUTE_MAX_POLLS) {
+            if (distance <= OriginDiningLayout.waiterReadyMargin || poll >= OriginDiningLayout.deliveryRouteMaxPolls) {
                 if (npc.navigator.isNavigating) npc.navigator.cancelNavigation()
                 log(
-                    if (poll >= DELIVERY_ROUTE_MAX_POLLS) "DELIVERY_ROUTE_TIMEOUT" else "DELIVERY_ROUTE_READY",
+                    if (poll >= OriginDiningLayout.deliveryRouteMaxPolls) "DELIVERY_ROUTE_TIMEOUT" else "DELIVERY_ROUTE_READY",
                     session,
                     Bukkit.getPlayer(session.playerId),
                     dish,
@@ -1040,7 +1225,7 @@ private class OriginDiningService : AutoCloseable {
             if (!npc.navigator.isNavigating) {
                 navigateLevel(npc, destination)
             }
-            if (poll % WAITER_PROGRESS_EVERY_POLLS == 0) {
+            if (poll % OriginDiningLayout.waiterProgressEveryPolls == 0) {
                 log(
                     "DELIVERY_ROUTE_PROGRESS",
                     session,
@@ -1060,7 +1245,7 @@ private class OriginDiningService : AutoCloseable {
         val session = sessions.values.firstOrNull { it.id == sessionId }
         val nextQueued = deliveryQueues[waiterId]?.isNotEmpty() == true
         if (nextQueued) {
-            tasks.runLater(NEXT_DELIVERY_TICKS) { startNextDelivery(waiterId) }
+            tasks.runLater(OriginDiningLayout.nextDeliveryTicks) { startNextDelivery(waiterId) }
         } else if (session != null) {
             returnWaiterHome(session, "delivery-$reason")
         } else {
@@ -1085,15 +1270,20 @@ private class OriginDiningService : AutoCloseable {
             .stationaryTicks(30)
             .lookAtFunction { current ->
                 val entity = current.npc.entity
-                val eyeY = (entity as? LivingEntity)?.eyeLocation?.y ?: entity.location.y + 1.6
-                Location(entity.world, destination.x, eyeY, destination.z)
+                val eye = (entity as? LivingEntity)?.eyeLocation ?: entity.location.clone().add(0.0, 1.6, 0.0)
+                val horizontalVelocity = entity.velocity.clone().setY(0)
+                if (horizontalVelocity.lengthSquared() > 0.0025) {
+                    eye.clone().add(horizontalVelocity.normalize().multiply(3.0))
+                } else {
+                    Location(entity.world, destination.x, eye.y, destination.z)
+                }
             }
         navigator.setTarget(destination)
     }
 
     private fun resetIdleWaiters(reason: String) {
         OriginDiningLayout.waiterIds.forEach { waiterId ->
-            if (waiterId in activeDeliveries || waiterId in waiterAssignments) return@forEach
+            if (waiterId in activeDeliveries || waiterId in waiterAssignments || waiterId in ambientRoutes) return@forEach
             val npc = waiter(waiterId)?.takeIf { it.isSpawned && it.entity.world.name == OriginDiningLayout.WORLD } ?: return@forEach
             val home = OriginDiningLayout.waiterHome(waiterId)?.inWorld(npc.entity.world) ?: return@forEach
             clearWaiterReady(waiterId, "reset-$reason")
@@ -1107,8 +1297,8 @@ private class OriginDiningService : AutoCloseable {
                 location(npc.entity.location),
                 location(home),
             )
-            tasks.runLater(WAITER_RETURN_RELEASE_TICKS) {
-                if (waiterId in activeDeliveries || waiterId in waiterAssignments) return@runLater
+            tasks.runLater(OriginDiningLayout.waiterReturnReleaseTicks) {
+                if (waiterId in activeDeliveries || waiterId in waiterAssignments || waiterId in ambientRoutes) return@runLater
                 waiter(waiterId)?.takeIf { it.isSpawned }?.entity?.removeScoreboardTag(WAITER_BUSY_TAG)
             }
         }
@@ -1184,8 +1374,8 @@ private class OriginDiningService : AutoCloseable {
                 location(home),
             )
         }
-        tasks.runLater(WAITER_RETURN_RELEASE_TICKS) {
-            if (waiterId in activeDeliveries || waiterId in waiterAssignments) return@runLater
+        tasks.runLater(OriginDiningLayout.waiterReturnReleaseTicks) {
+            if (waiterId in activeDeliveries || waiterId in waiterAssignments || waiterId in ambientRoutes) return@runLater
             waiter(waiterId)?.takeIf { it.isSpawned }?.entity?.removeScoreboardTag(WAITER_BUSY_TAG)
             info("ORIGIN_DINING phase=WAITER_RELEASED npc={} reason={} target={}", waiterId, reason, location(home))
         }
@@ -1292,7 +1482,7 @@ private class OriginDiningService : AutoCloseable {
             if (issued != null && isBreweryDrink) player.inventory.setItem(slot, null)
             session.phase = OriginDiningPhase.SEATED
             logWarn("DELIVERY_FAILED", session, player, dish, "brewery-issue-failed-no-charge command=$commandAccepted slot=$slot material=${issued?.type}")
-            player.sendActionBar(Component.text("BreweryX не выдал бутылку. Деньги не списаны.", NamedTextColor.RED))
+            player.sendActionBar(Component.text("Пивоварня не выдала бутылку. Деньги не списаны.", NamedTextColor.RED))
             return
         }
         val orderId = UUID.randomUUID()
@@ -1388,7 +1578,7 @@ private class OriginDiningService : AutoCloseable {
             warn("ORIGIN_DINING phase=THEFT_REJECTED player={} table={} dish={} reason=cooldown", player.name, meal.seat.id, meal.dish.id)
             return
         }
-        if (stolen) theftCooldownUntil[player.uniqueId] = now + THEFT_COOLDOWN_MILLIS
+        if (stolen) theftCooldownUntil[player.uniqueId] = now + OriginDiningLayout.theftCooldownMillis
 
         val bite = meal.display.location.clone().add(0.0, 0.22, 0.0)
         val food = hunger(meal.dish.id)
@@ -1456,6 +1646,7 @@ private class OriginDiningService : AutoCloseable {
         if (!Bukkit.getPluginManager().isPluginEnabled("Citizens")) return
         val waiterId = session.seat.waiterId
         if (waiterReadyFor[waiterId] == session.id) return
+        cancelAmbientRoute(waiterId, "player-approach")
         val busyReason =
             when {
                 waiterId in activeDeliveries -> "active-delivery"
@@ -1502,7 +1693,7 @@ private class OriginDiningService : AutoCloseable {
         approachId: UUID,
         poll: Int,
     ) {
-        tasks.runLater(WAITER_POLL_TICKS) {
+        tasks.runLater(OriginDiningLayout.waiterPollTicks) {
             if (waiterApproaches[waiterId] != approachId) return@runLater
             val session = sessions[playerId]?.takeIf { it.id == sessionId }
             val player = Bukkit.getPlayer(playerId)?.takeIf(Player::isOnline)
@@ -1526,7 +1717,7 @@ private class OriginDiningService : AutoCloseable {
             val actual = npc.entity.location
             val targetDistance = actual.distance(stop)
             val playerDistance = actual.distance(player.location)
-            if (targetDistance <= WAITER_READY_MARGIN || playerDistance <= WAITER_PLAYER_RANGE) {
+            if (targetDistance <= OriginDiningLayout.waiterReadyMargin || playerDistance <= OriginDiningLayout.waiterPlayerRange) {
                 waiterApproaches.remove(waiterId, approachId)
                 if (npc.navigator.isNavigating) npc.navigator.cancelNavigation()
                 npc.faceLocation(player.eyeLocation)
@@ -1543,7 +1734,7 @@ private class OriginDiningService : AutoCloseable {
                 )
                 return@runLater
             }
-            if (poll >= WAITER_MAX_POLLS) {
+            if (poll >= OriginDiningLayout.waiterMaxPolls) {
                 waiterApproaches.remove(waiterId, approachId)
                 logWarn(
                     "WAITER_STALLED",
@@ -1565,7 +1756,7 @@ private class OriginDiningService : AutoCloseable {
                     session.seat.waiterStop,
                     "npc=$waiterId approach=${short(approachId)} actual=${location(actual)} target_distance=${fmt(targetDistance)} poll=$poll",
                 )
-            } else if (poll % WAITER_PROGRESS_EVERY_POLLS == 0) {
+            } else if (poll % OriginDiningLayout.waiterProgressEveryPolls == 0) {
                 log(
                     "WAITER_PROGRESS",
                     session,
@@ -1583,15 +1774,327 @@ private class OriginDiningService : AutoCloseable {
         if (!Bukkit.getPluginManager().isPluginEnabled("Citizens")) null
         else runCatching { CitizensAPI.getNPCRegistry().getById(id)?.name }.getOrNull()
 
+    private fun cleanupAmbientLegacy() {
+        val world = Bukkit.getWorld(OriginDiningLayout.WORLD) ?: return
+        var removed = 0
+        OriginDiningAmbientLayout.guestSeats.forEach { guest ->
+            val seat = guest.seat.inWorld(world)
+            world.getNearbyEntities(seat.clone().add(0.0, 0.6, 0.0), 0.8, 0.8, 0.8)
+                .filterIsInstance<ArmorStand>()
+                .filter { it.isMarker && !it.isVisible }
+                .forEach { it.remove(); removed++ }
+            world.getNearbyEntities(seat.clone().add(0.0, 2.4, 0.0), 0.9, 0.8, 0.9)
+                .filterIsInstance<TextDisplay>()
+                .forEach { it.remove(); removed++ }
+        }
+        OriginDiningAmbientLayout.guestTables.forEach { table ->
+            val meal = table.meal.inWorld(world)
+            world.getNearbyEntities(meal, 0.18, 0.18, 0.18)
+                .filterIsInstance<ItemDisplay>()
+                .filter(::isLegacyDishDisplay)
+                .forEach { it.remove(); removed++ }
+            world.getNearbyEntities(meal.clone().add(0.0, OriginDiningLayout.mealHitboxYOffset, 0.0), 0.18, 0.18, 0.18)
+                .filterIsInstance<Interaction>()
+                .forEach { it.remove(); removed++ }
+        }
+        OriginDiningAmbientLayout.cleanupPoints.forEach { point ->
+            world.getNearbyEntities(point.inWorld(world), 1.0, 1.0, 1.0)
+                .filterIsInstance<TextDisplay>()
+                .forEach { it.remove(); removed++ }
+        }
+        info("ORIGIN_DINING phase=AMBIENT_LEGACY_CLEANUP removed={}", removed)
+    }
+
+    private fun reconcileGuestSeats() {
+        if (!Bukkit.getPluginManager().isPluginEnabled("Citizens")) return
+        val world = Bukkit.getWorld(OriginDiningLayout.WORLD) ?: return
+        OriginDiningAmbientLayout.guestSeats.forEach { guest ->
+            val npc = runCatching { CitizensAPI.getNPCRegistry().getById(guest.npcId) }.getOrNull()
+                ?.takeIf { it.isSpawned && it.entity.world == world } ?: return@forEach
+            val current = guestMarkers[guest.npcId]
+            if (current?.isValid == true && npc.entity.vehicle?.uniqueId == current.uniqueId) {
+                return@forEach
+            }
+            current?.takeIf { it.isValid }?.remove()
+            if (npc.entity.isInsideVehicle) npc.entity.leaveVehicle()
+            val seated = guest.seat.inWorld(world).add(0.0, OriginDiningLayout.guestEntityLift, 0.0)
+            npc.entity.teleport(seated)
+            val marker = world.spawn(guest.seat.inWorld(world).add(0.0, OriginDiningLayout.guestMarkerLift, 0.0), ArmorStand::class.java).apply {
+                isVisible = false
+                isMarker = true
+                setGravity(false)
+                isInvulnerable = true
+                isSilent = true
+                isPersistent = false
+                addScoreboardTag(GUEST_MARKER_TAG)
+            }
+            marker.addPassenger(npc.entity)
+            npc.entity.setRotation(guest.seat.yaw, 0f)
+            guestMarkers[guest.npcId] = marker
+            info("ORIGIN_DINING phase=GUEST_SEATED npc={} target={} marker={}", guest.npcId, point(guest.seat), short(marker.uniqueId))
+        }
+    }
+
+    private fun seedGuestMeals() {
+        OriginDiningAmbientLayout.guestTables.forEachIndexed { index, table ->
+            if (table.id !in guestMeals) replaceGuestMeal(table, BreweryTableDialogs.food[index % BreweryTableDialogs.food.size], "scene-start")
+        }
+    }
+
+    private fun spawnGuestMeal(table: OriginDiningGuestTable, dish: BreweryTableDialogs.Dish): OriginDiningGuestMeal? {
+        val world = Bukkit.getWorld(OriginDiningLayout.WORLD) ?: return null
+        val stack = dishItem(dish) ?: return null
+        val anchor = table.meal.inWorld(world)
+        val display = world.spawn(anchor, ItemDisplay::class.java)
+        var hitbox: Interaction? = null
+        return try {
+            display.setItemStack(stack)
+            display.itemDisplayTransform = ItemDisplay.ItemDisplayTransform.GROUND
+            display.billboard = Display.Billboard.FIXED
+            display.brightness = Display.Brightness(15, 15)
+            display.shadowRadius = 0f
+            display.shadowStrength = 0f
+            display.viewRange = OriginDiningLayout.displayViewRange
+            display.displayWidth = OriginDiningLayout.displayWidth
+            display.displayHeight = OriginDiningLayout.displayHeight
+            display.isPersistent = false
+            display.setGravity(false)
+            display.isInvulnerable = true
+            display.transformation = Transformation(
+                Vector3f(0f, OriginDiningLayout.displayLift(dish.id), 0f),
+                AxisAngle4f(),
+                Vector3f(OriginDiningLayout.displayScale(dish.id), OriginDiningLayout.displayScale(dish.id), OriginDiningLayout.displayScale(dish.id)),
+                AxisAngle4f(),
+            )
+            display.addScoreboardTag(GUEST_MEAL_TAG)
+            hitbox = world.spawn(anchor.clone().add(0.0, OriginDiningLayout.mealHitboxYOffset, 0.0), Interaction::class.java)
+            hitbox.interactionWidth = OriginDiningLayout.mealHitboxSize
+            hitbox.interactionHeight = OriginDiningLayout.mealHitboxSize
+            hitbox.isResponsive = true
+            hitbox.isPersistent = false
+            hitbox.isInvulnerable = true
+            hitbox.addScoreboardTag(GUEST_MEAL_TAG)
+            OriginDiningGuestMeal(table, dish, display, hitbox)
+        } catch (failure: Throwable) {
+            hitbox?.remove()
+            display.remove()
+            warn("ORIGIN_DINING phase=AMBIENT_MEAL_FAILED table={} dish={} reason={}", table.id, dish.id, failure.message ?: failure.javaClass.simpleName)
+            null
+        }
+    }
+
+    private fun replaceGuestMeal(table: OriginDiningGuestTable, dish: BreweryTableDialogs.Dish, reason: String) {
+        guestMeals.remove(table.id)?.let(::removeGuestMeal)
+        val meal = spawnGuestMeal(table, dish) ?: return
+        guestMeals[table.id] = meal
+        guestMealEntity[meal.hitbox.uniqueId] = meal
+        ambientTableDueAt.remove(table.id)
+        info(
+            "ORIGIN_DINING phase=AMBIENT_MEAL_SERVED table={} guest={} npc={} dish={} target={} display={} hitbox={} reason={}",
+            table.id, table.npcId, table.waiterId, dish.id, point(table.meal), short(meal.display.uniqueId), short(meal.hitbox.uniqueId), reason,
+        )
+    }
+
+    private fun removeGuestMeal(meal: OriginDiningGuestMeal) {
+        guestMealEntity.remove(meal.hitbox.uniqueId)
+        if (meal.hitbox.isValid) meal.hitbox.remove()
+        if (meal.display.isValid) meal.display.remove()
+    }
+
+    private fun consumeGuestMeal(player: Player, meal: OriginDiningGuestMeal) {
+        if (!meal.display.isValid || !meal.hitbox.isValid || guestMeals[meal.table.id] !== meal) return
+        val now = System.currentTimeMillis()
+        if (theftCooldownUntil.getOrDefault(player.uniqueId, 0L) > now) {
+            player.sendActionBar(Component.text("Хватит таскать чужое. Следующее блюдо закажи себе.", NamedTextColor.GRAY))
+            return
+        }
+        theftCooldownUntil[player.uniqueId] = now + OriginDiningLayout.theftCooldownMillis
+        val bite = meal.display.location.clone().add(0.0, 0.22, 0.0)
+        player.foodLevel = min(20, player.foodLevel + hunger(meal.dish.id))
+        player.saturation = min(20f, player.saturation + saturation(meal.dish.id))
+        player.spawnParticle(Particle.ITEM, bite, 18, 0.28, 0.13, 0.28, 0.02, particleItem(meal.dish.id))
+        player.playSound(bite, Sound.ENTITY_GENERIC_EAT, SoundCategory.PLAYERS, 0.75f, 0.96f)
+        guestMeals.remove(meal.table.id, meal)
+        removeGuestMeal(meal)
+        ambientTableDueAt[meal.table.id] = now
+        scoldGuest(player, meal.table)
+        info("ORIGIN_DINING phase=AMBIENT_MEAL_STOLEN player={} table={} guest={} dish={} refill=queued", player.name, meal.table.id, meal.table.npcId, meal.dish.id)
+        tasks.runLater(2L) { startAmbientRoute(meal.table, "stolen-refill") }
+    }
+
+    private fun scoldGuest(player: Player, table: OriginDiningGuestTable) {
+        val npc = runCatching { CitizensAPI.getNPCRegistry().getById(table.npcId) }.getOrNull()?.takeIf { it.isSpawned } ?: return
+        npc.faceLocation(player.eyeLocation)
+        (npc.entity as? LivingEntity)?.swingMainHand()
+        val lines = listOf("Эй, это мой обед!", "Руки от моей тарелки!", "Закажи себе, воришка.")
+        showSpeech(npc.id, lines.random(), NamedTextColor.RED)
+        tasks.runLater(55L) { restoreGuestLook(table.npcId) }
+    }
+
+    private fun restoreGuestLook(npcId: Int) {
+        val guest = OriginDiningAmbientLayout.guestSeats.firstOrNull { it.npcId == npcId } ?: return
+        waiter(npcId)?.takeIf { it.isSpawned }?.entity?.setRotation(guest.seat.yaw, 0f)
+    }
+
+    private fun showSpeech(npcId: Int, line: String, color: NamedTextColor = NamedTextColor.GOLD) {
+        val npc = runCatching { CitizensAPI.getNPCRegistry().getById(npcId) }.getOrNull()?.takeIf { it.isSpawned } ?: return
+        val display = npc.entity.world.spawn(npc.entity.location.clone().add(0.0, 2.45, 0.0), TextDisplay::class.java).apply {
+            text(Component.text(line, color))
+            billboard = Display.Billboard.CENTER
+            isShadowed = true
+            lineWidth = 170
+            viewRange = 0.5f
+            isPersistent = false
+            addScoreboardTag(SPEECH_TAG)
+        }
+        speechDisplays += display
+        tasks.runLater(45L) {
+            speechDisplays.remove(display)
+            if (display.isValid) display.remove()
+        }
+    }
+
+    private fun startAmbientRoute(table: OriginDiningGuestTable, reason: String): Boolean {
+        val waiterId = table.waiterId
+        if (waiterId in ambientRoutes || waiterId in activeDeliveries || waiterId in waiterApproaches || waiterId in waiterAssignments) return false
+        val npc = waiter(waiterId)?.takeIf { it.isSpawned && it.entity.world.name == OriginDiningLayout.WORLD } ?: return false
+        val currentDish = guestMeals[table.id]?.dish
+        val choices = BreweryTableDialogs.food.filter { it.id != currentDish?.id }
+        val dish = choices[Math.floorMod(ambientCursor + table.id.hashCode(), choices.size)]
+        val world = npc.entity.world
+        val waypoints = buildList {
+            table.transit?.let { add(it.inWorld(world)) }
+            add(table.waiterStop.inWorld(world))
+        }
+        val route = OriginDiningAmbientRoute(UUID.randomUUID(), table, dish, waypoints)
+        ambientRoutes[waiterId] = route
+        setWaiterCarry(waiterId, dish)
+        npc.entity.addScoreboardTag(WAITER_BUSY_TAG)
+        navigateLevel(npc, waypoints.first())
+        info("ORIGIN_DINING phase=AMBIENT_ROUTE_STARTED npc={} table={} guest={} dish={} reason={} target={}", waiterId, table.id, table.npcId, dish.id, reason, location(waypoints.last()))
+        monitorAmbientRoute(waiterId, route.token, 0)
+        return true
+    }
+
+    private fun monitorAmbientRoute(waiterId: Int, token: UUID, poll: Int) {
+        tasks.runLater(OriginDiningLayout.waiterPollTicks) {
+            val route = ambientRoutes[waiterId]?.takeIf { it.token == token } ?: return@runLater
+            val npc = waiter(waiterId)?.takeIf { it.isSpawned } ?: run {
+                cancelAmbientRoute(waiterId, "npc-unavailable")
+                return@runLater
+            }
+            val destination = route.waypoints[route.waypoint]
+            val distance = npc.entity.location.distance(destination)
+            if (distance <= OriginDiningLayout.waiterReadyMargin) {
+                if (route.waypoint + 1 < route.waypoints.size) {
+                    route.waypoint++
+                    navigateLevel(npc, route.waypoints[route.waypoint])
+                    monitorAmbientRoute(waiterId, token, 0)
+                    return@runLater
+                }
+                if (npc.navigator.isNavigating) npc.navigator.cancelNavigation()
+                replaceGuestMeal(route.table, route.dish, "waiter-cycle")
+                val guest = runCatching { CitizensAPI.getNPCRegistry().getById(route.table.npcId) }.getOrNull()?.takeIf { it.isSpawned }
+                if (guest != null) npc.faceLocation(guest.entity.location.clone().add(0.0, 1.4, 0.0))
+                (npc.entity as? LivingEntity)?.swingMainHand()
+                npc.entity.world.playSound(route.table.meal.inWorld(npc.entity.world), Sound.ENTITY_ITEM_PICKUP, SoundCategory.PLAYERS, 0.5f, 1.1f)
+                showSpeech(waiterId, "Новое блюдо. Приятного аппетита.")
+                tasks.runLater(24L) {
+                    showSpeech(route.table.npcId, "Спасибо. Как раз вовремя.")
+                    finishAmbientRoute(waiterId, token, "served")
+                }
+                return@runLater
+            }
+            if (poll >= OriginDiningLayout.ambientRouteMaxPolls) {
+                cancelAmbientRoute(waiterId, "stalled")
+                return@runLater
+            }
+            if (!npc.navigator.isNavigating) navigateLevel(npc, destination)
+            monitorAmbientRoute(waiterId, token, poll + 1)
+        }
+    }
+
+    private fun finishAmbientRoute(waiterId: Int, token: UUID, reason: String) {
+        val route = ambientRoutes[waiterId]?.takeIf { it.token == token } ?: return
+        ambientRoutes.remove(waiterId, route)
+        clearWaiterCarry(waiterId)
+        val npc = waiter(waiterId)?.takeIf { it.isSpawned } ?: return
+        val home = OriginDiningLayout.waiterHome(waiterId)?.inWorld(npc.entity.world)
+        if (home != null) navigateLevel(npc, home)
+        tasks.runLater(OriginDiningLayout.waiterReturnReleaseTicks) {
+            if (waiterId !in ambientRoutes && waiterId !in activeDeliveries && waiterId !in waiterAssignments && waiterId !in waiterApproaches) {
+                waiter(waiterId)?.takeIf { it.isSpawned }?.entity?.removeScoreboardTag(WAITER_BUSY_TAG)
+            }
+        }
+        info("ORIGIN_DINING phase=AMBIENT_ROUTE_FINISHED npc={} table={} reason={}", waiterId, route.table.id, reason)
+    }
+
+    private fun cancelAmbientRoute(waiterId: Int, reason: String) {
+        val route = ambientRoutes.remove(waiterId) ?: return
+        waiter(waiterId)?.takeIf { it.isSpawned }?.let { npc ->
+            if (npc.navigator.isNavigating) npc.navigator.cancelNavigation()
+            npc.entity.removeScoreboardTag(WAITER_BUSY_TAG)
+        }
+        clearWaiterCarry(waiterId)
+        ambientTableDueAt[route.table.id] = System.currentTimeMillis() + OriginDiningLayout.ambientRetryMillis
+        info("ORIGIN_DINING phase=AMBIENT_ROUTE_CANCELLED npc={} table={} reason={}", waiterId, route.table.id, reason)
+    }
+
+    private fun tickAmbient(now: Long) {
+        val tables = OriginDiningAmbientLayout.guestTables
+        var routeStarted = false
+        val urgentTables = tables.filter { (ambientTableDueAt[it.id] ?: Long.MAX_VALUE) <= now }
+        for (table in urgentTables) {
+            if (startAmbientRoute(table, "queued-refill")) {
+                routeStarted = true
+                break
+            }
+        }
+        if (!routeStarted && urgentTables.isEmpty() && now >= nextAmbientAt && tables.isNotEmpty()) {
+            for (attempt in tables.indices) {
+                val table = tables[ambientCursor++ % tables.size]
+                if (table.id !in ambientTableDueAt && startAmbientRoute(table, "rotation")) {
+                    routeStarted = true
+                    break
+                }
+            }
+        }
+        if (routeStarted) nextAmbientAt = now + OriginDiningAmbientLayout.cycleSeconds * 1_000L
+        if (now >= nextDialogueAt && OriginDiningAmbientLayout.dialogue.isNotEmpty()) {
+            val dialogue = OriginDiningAmbientLayout.dialogue[dialogueCursor++ % OriginDiningAmbientLayout.dialogue.size]
+            val first = waiter(dialogue.firstNpcId)?.takeIf { it.isSpawned }
+            val second = waiter(dialogue.secondNpcId)?.takeIf { it.isSpawned }
+            if (first != null && second != null && first.entity.location.distanceSquared(second.entity.location) <= 64.0) {
+                first.faceLocation(second.entity.location.clone().add(0.0, 1.4, 0.0))
+                showSpeech(first.id, dialogue.firstLine)
+                tasks.runLater(24L) {
+                    val currentSecond = waiter(dialogue.secondNpcId)?.takeIf { it.isSpawned } ?: return@runLater
+                    currentSecond.faceLocation(first.entity.location.clone().add(0.0, 1.4, 0.0))
+                    showSpeech(currentSecond.id, dialogue.secondLine)
+                    tasks.runLater(45L) {
+                        restoreGuestLook(dialogue.firstNpcId)
+                        restoreGuestLook(dialogue.secondNpcId)
+                    }
+                }
+            }
+            nextDialogueAt = now + OriginDiningLayout.ambientDialogueMillis
+        }
+    }
+
     private fun reconcile() {
         val now = System.currentTimeMillis()
+        if (now >= nextGuestSeatReconcileAt) {
+            reconcileGuestSeats()
+            nextGuestSeatReconcileAt = now + OriginDiningLayout.guestReconcileMillis
+        }
+        tickAmbient(now)
         sessions.values.toList().forEach { session ->
             val player = Bukkit.getPlayer(session.playerId)
             if (player == null || !player.isOnline) {
                 releaseSession(session.playerId, "offline")
                 return@forEach
             }
-            if (!nearVenue(player, session.seat) || now - session.touchedAt > SESSION_TTL_MILLIS) {
+            if (!nearVenue(player, session.seat) || now - session.touchedAt > OriginDiningLayout.sessionTtlMillis) {
                 releaseSession(session.playerId, "left-table")
                 return@forEach
             }
@@ -1743,23 +2246,23 @@ private class OriginDiningService : AutoCloseable {
                 }
             }
         }
-        val oldMealHitbox = OriginDiningPoint(-5.5, 70.95, 37.9).inWorld(world)
-        for (entity in world.getNearbyEntities(oldMealHitbox, 0.35, 0.45, 0.35)) {
+        val oldMealHitbox = OriginDiningAmbientLayout.legacyMealHitbox.inWorld(world)
+        for (entity in world.getNearbyEntities(oldMealHitbox, 0.18, 0.18, 0.18)) {
             if (entity.scoreboardTags.contains(MEAL_TAG)) continue
             if (entity is Interaction) {
                 entity.remove()
                 removed++
             }
         }
-        val oldMealDisplay = OriginDiningPoint(-5.5, 71.1, 37.9).inWorld(world)
-        for (entity in world.getNearbyEntities(oldMealDisplay, 0.35, 0.35, 0.35)) {
+        val oldMealDisplay = OriginDiningAmbientLayout.legacyMealDisplay.inWorld(world)
+        for (entity in world.getNearbyEntities(oldMealDisplay, 0.18, 0.18, 0.18)) {
             if (entity.scoreboardTags.contains(MEAL_TAG)) continue
-            if (entity is ItemDisplay) {
+            if (entity is ItemDisplay && isLegacyDishDisplay(entity)) {
                 entity.remove()
                 removed++
             }
         }
-        val oldLabel = Location(world, -5.5, 72.35, 37.5)
+        val oldLabel = OriginDiningAmbientLayout.legacyOrderLabel.inWorld(world)
         world.getNearbyEntities(oldLabel, 0.6, 0.6, 0.6).filterIsInstance<TextDisplay>().forEach {
             it.remove()
             removed++
@@ -1767,10 +2270,19 @@ private class OriginDiningService : AutoCloseable {
         info("ORIGIN_DINING phase=LEGACY_CLEANUP pass={} removed={}", pass, removed)
     }
 
+    @Suppress("DEPRECATION")
+    private fun isLegacyDishDisplay(display: ItemDisplay): Boolean {
+        val meta = display.itemStack.itemMeta ?: return false
+        return meta.hasCustomModelData() && meta.customModelData in LEGACY_DISH_MODEL_DATA
+    }
+
     private fun removeRuntimeEntities() {
-        seatHitboxes.values.forEach { if (it.isValid) it.remove() }
+        ambientRoutes.keys.toList().forEach { cancelAmbientRoute(it, "service-stop") }
         sessions.values.forEach { if (it.marker.isValid) it.marker.remove() }
         meals.values.forEach { removeMeal(it, "service-stop") }
+        guestMeals.values.forEach(::removeGuestMeal)
+        guestMarkers.values.forEach { if (it.isValid) it.remove() }
+        speechDisplays.forEach { if (it.isValid) it.remove() }
         OriginDiningLayout.seats.map(OriginDiningSeat::waiterId).distinct().forEach { releaseWaiter(it, force = true) }
     }
 
@@ -1781,8 +2293,6 @@ private class OriginDiningService : AutoCloseable {
         occupants.clear()
         meals.clear()
         mealEntity.clear()
-        seatEntity.clear()
-        seatHitboxes.clear()
         clickAt.clear()
         dialogAuthorizations.clear()
         theftCooldownUntil.clear()
@@ -1792,6 +2302,12 @@ private class OriginDiningService : AutoCloseable {
         waiterHeldItems.clear()
         waiterReadyFor.clear()
         waiterGlowingFor.clear()
+        guestMeals.clear()
+        guestMealEntity.clear()
+        guestMarkers.clear()
+        ambientRoutes.clear()
+        ambientTableDueAt.clear()
+        speechDisplays.clear()
         info("ORIGIN_DINING phase=STOPPED")
     }
 
@@ -1858,7 +2374,7 @@ private class OriginDiningService : AutoCloseable {
 
     private fun nearVenue(player: Player, seat: OriginDiningSeat): Boolean {
         if (!player.isOnline || player.world.name != OriginDiningLayout.WORLD) return false
-        return player.location.distanceSquared(seat.seat.inWorld(player.world)) <= SESSION_RADIUS * SESSION_RADIUS
+        return player.location.distanceSquared(seat.seat.inWorld(player.world)) <= OriginDiningLayout.sessionRadius * OriginDiningLayout.sessionRadius
     }
 
     private fun nearestSeat(location: Location, radius: Double): OriginDiningSeat? {
@@ -1920,25 +2436,10 @@ private class OriginDiningService : AutoCloseable {
         const val SEAT_TAG = "arc_origin_dining_seat"
         const val MARKER_TAG = "arc_origin_dining_marker"
         const val MEAL_TAG = "arc_origin_dining_meal"
+        const val GUEST_MEAL_TAG = "arc_origin_dining_guest_meal"
+        const val GUEST_MARKER_TAG = "arc_origin_dining_guest_marker"
+        const val SPEECH_TAG = "arc_origin_dining_speech"
         const val WAITER_BUSY_TAG = "arc_origin_dining_waiter_busy"
-        const val DELIVERY_FALLBACK_TICKS = 20L
-        const val SERVICE_PAUSE_TICKS = 12L
-        const val NEXT_DELIVERY_TICKS = 10L
-        const val WAITER_POLL_TICKS = 10L
-        const val WAITER_MAX_POLLS = 20
-        const val DELIVERY_ROUTE_MAX_POLLS = 30
-        const val WAITER_DISMOUNT_GRACE_TICKS = 30L
-        const val WAITER_RETURN_RELEASE_TICKS = 120L
-        const val WAITER_PROGRESS_EVERY_POLLS = 4
-        // Citizens may finish beside furniture within roughly 1.3 blocks of
-        // the requested path target. Treat that normal navigator tolerance as
-        // arrival while retaining the separate player-distance check.
-        const val WAITER_READY_MARGIN = 1.5
-        const val WAITER_PLAYER_RANGE = 2.8
-        const val SEAT_MARKER_LIFT = 1.18
-        const val THEFT_COOLDOWN_MILLIS = 90_000L
-        const val SESSION_TTL_MILLIS = 300_000L
-        const val DIALOG_AUTHORIZATION_MILLIS = 60_000L
-        const val SESSION_RADIUS = 8.0
+        val LEGACY_DISH_MODEL_DATA = setOf(11890, 11891, 11893)
     }
 }

@@ -8,31 +8,55 @@ placement:
   vertical-offset-blocks: 0.0
   tables:
     brewery_south_west:
+      seat: "-7.5,70.0,37.5,-90"
+      clicked-block: "-8,70,37"
+      waiter-stop: "-7.5,70.0,38.5,0"
+      waiter-id: 410
       height-above-seat: 1.1
       offset-x: 0.0
       offset-y: 0.0
       offset-z: 0.0
     brewery_south_east:
+      seat: "-3.5,70.0,37.5,90"
+      clicked-block: "-4,70,37"
+      waiter-stop: "-3.5,70.0,38.5,180"
+      waiter-id: 410
       height-above-seat: 1.1
       offset-x: 0.0
       offset-y: 0.0
       offset-z: 0.0
     brewery_fire:
+      seat: "-8.5,70.0,48.5,180"
+      clicked-block: "-9,70,48"
+      waiter-stop: "-6.5,70.0,48.5,90"
+      waiter-id: 411
       height-above-seat: 0.75
       offset-x: 0.0
       offset-y: 0.0
       offset-z: 0.0
     brewery_west:
+      seat: "-13.5,70.0,53.5,90"
+      clicked-block: "-14,70,53"
+      waiter-stop: "-13.5,70.0,55.5,180"
+      waiter-id: 411
       height-above-seat: 1.1
       offset-x: 0.0
       offset-y: 0.0
       offset-z: 0.0
     restaurant_a:
+      seat: "-54.5,72.0,48.5,180"
+      clicked-block: "-55,72,48"
+      waiter-stop: "-52.5,72.0,46.5,180"
+      waiter-id: 431
       height-above-seat: 1.1
       offset-x: 0.0
       offset-y: 0.0
       offset-z: 0.0
     restaurant_b:
+      seat: "-47.5,72.0,52.5,180"
+      clicked-block: "-48,72,52"
+      waiter-stop: "-50.5,72.0,50.5,180"
+      waiter-id: 432
       height-above-seat: 1.1
       offset-x: 0.0
       offset-y: 0.0
@@ -68,15 +92,140 @@ display:
 interaction:
   meal-hitbox-size: 1.8
   meal-hitbox-y-offset: -0.15
-  seat-hitbox-width: 1.45
-  seat-hitbox-height: 1.8
+
+timing:
+  delivery-fallback-ticks: 20
+  service-pause-ticks: 12
+  next-delivery-ticks: 10
+  waiter-poll-ticks: 10
+  waiter-max-polls: 20
+  delivery-route-max-polls: 30
+  ambient-route-max-polls: 36
+  dismount-grace-ticks: 30
+  waiter-return-release-ticks: 120
+  progress-log-every-polls: 4
+  theft-cooldown-seconds: 90
+  session-ttl-seconds: 300
+  dialog-authorization-seconds: 60
+  ambient-dialogue-seconds: 42
+  ambient-retry-seconds: 5
+  guest-reconcile-seconds: 5
+
+navigation:
+  waiter-ready-margin: 1.5
+  waiter-player-range: 2.8
+  session-radius: 8.0
+
+seating:
+  player-marker-lift: 1.18
+  guest-marker-lift: 0.6
+  guest-entity-lift: 0.4
 
 dynamic-seats:
   # Любая нижняя ступенька внутри территории пивоварни или ресторана становится
-  # местом для игрока. Если перед ней нет блока/стола, открывается меню BreweryX,
+  # местом для игрока. Если перед ней нет блока/стола, открывается меню напитков,
   # а купленная бутылка выдаётся в инвентарь.
   table-height-above-seat: 1.1
   dish-offset-x: 0.0
   dish-offset-y: 0.0
   dish-offset-z: 0.0
   waiter-side-offset: 1.5
+
+# Все координаты двух ресторанных сцен находятся здесь и перечитываются через
+# /arc reload. Формат точки: x,y,z,yaw. Формат блока: x,y,z.
+scene:
+  ambient-cycle-seconds: 16
+  cleanup-points:
+    - "-0.5,72.4,53.5,0" # бывшая реплика удалённой Тэссы
+  legacy-player-table:
+    meal-hitbox: "-5.5,70.95,37.9,0"
+    meal-display: "-5.5,71.1,37.9,0"
+    order-label: "-5.5,72.35,37.5,0"
+  guest-ids: ["407", "408", "416", "417", "418", "419", "420", "433", "434", "435", "436"]
+  guests:
+    407: {seat: "-10.5,70.0,45.5,-90"}
+    408: {seat: "-6.5,70.0,45.5,90"}
+    416: {seat: "-17.5,70.0,40.5,-90"}
+    417: {seat: "-13.5,70.0,40.5,90"}
+    418: {seat: "-17.5,70.0,47.5,-90"}
+    419: {seat: "-2.5,70.0,48.5,180"}
+    420: {seat: "-2.5,70.0,44.5,0"}
+    433: {seat: "-56.5,72.0,46.5,-90"}
+    434: {seat: "-54.5,72.0,44.5,0"}
+    435: {seat: "-45.5,72.0,50.5,90"}
+    436: {seat: "-47.5,72.0,48.5,0"}
+  waiters:
+    410: {home: "1.5,70.0,57.5,180"}
+    411: {home: "-1.5,70.0,60.5,180"}
+    431: {home: "-51.0,72.0,54.0,180"}
+    432: {home: "-47.0,72.0,54.0,180"}
+  ambient-table-ids:
+    - brewery_north
+    - brewery_south
+    - brewery_east
+    - restaurant_a_west
+    - restaurant_a_north
+    - restaurant_b_east
+    - restaurant_b_north
+  ambient-tables:
+    brewery_north:
+      guest-id: 416
+      waiter-id: 410
+      meal: "-15.5,71.1,40.5,0"
+      waiter-stop: "-15.5,70.0,42.5,0"
+    brewery_south:
+      guest-id: 418
+      waiter-id: 410
+      meal: "-15.5,71.1,47.5,0"
+      waiter-stop: "-15.5,70.0,45.5,180"
+    brewery_east:
+      guest-id: 419
+      waiter-id: 411
+      meal: "-2.5,71.1,46.5,0"
+      waiter-stop: "-4.5,70.0,48.5,90"
+    restaurant_a_west:
+      guest-id: 433
+      waiter-id: 431
+      meal: "-55.2,73.1,46.5,0"
+      waiter-stop: "-52.5,72.0,46.5,180"
+      transit: "-50.5,72.0,49.5,180"
+    restaurant_a_north:
+      guest-id: 434
+      waiter-id: 431
+      meal: "-54.5,73.1,45.8,0"
+      waiter-stop: "-52.5,72.0,46.5,180"
+      transit: "-50.5,72.0,49.5,180"
+    restaurant_b_east:
+      guest-id: 435
+      waiter-id: 432
+      meal: "-46.8,73.1,50.5,0"
+      waiter-stop: "-50.5,72.0,50.5,180"
+      transit: "-50.5,72.0,53.5,180"
+    restaurant_b_north:
+      guest-id: 436
+      waiter-id: 432
+      meal: "-47.5,73.1,49.8,0"
+      waiter-stop: "-50.5,72.0,50.5,180"
+      transit: "-50.5,72.0,53.5,180"
+  dialogue-ids: [brewery_north, brewery_fire, restaurant_a, restaurant_b]
+  dialogues:
+    brewery_north:
+      first-npc-id: 416
+      second-npc-id: 417
+      first-line: "Пена сегодня держится."
+      second-line: "Значит, бочка не зря стояла всю ночь."
+    brewery_fire:
+      first-npc-id: 407
+      second-npc-id: 408
+      first-line: "А к рыбе что посоветуешь?"
+      second-line: "Светлое. И хлеб не забудь."
+    restaurant_a:
+      first-npc-id: 433
+      second-npc-id: 434
+      first-line: "Тихо сегодня. Слышно, как кипит кухня."
+      second-line: "Значит, повар не спорит с огнём."
+    restaurant_b:
+      first-npc-id: 435
+      second-npc-id: 436
+      first-line: "После обеда выйдем к фонтану?"
+      second-line: "Если официант не найдёт ещё одну работу."
