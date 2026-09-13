@@ -1,0 +1,51 @@
+# Путевые якоря в стиле Ender IO. Включаются на нужном сервере runtime-конфигом.
+enabled: false
+worlds: []
+# Пустой список никого не допускает; '*' включает механику для всех игроков.
+allowed-players: []
+
+targeting:
+  range: 64.0
+  maximum-targets: 24
+  visible-angle-degrees: 70.0
+  selection-angle-degrees: 10.0
+
+visual:
+  block-material: LODESTONE
+  minimum-scale: 1.04
+  maximum-scale: 1.32
+  update-ticks: 4
+
+items:
+  anchor:
+    material: LODESTONE
+    custom-model-data: 0
+    name: '<#92bed8><bold>Путевой якорь'
+    lore:
+      - ''
+      - '<#b8b8b8>Поставьте его, чтобы связать две точки.'
+      - '<#b8b8b8>С соседнего якоря он виден сквозь стены.'
+      - ''
+      - '<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ПКМ<#b8b8b8> — установить'
+  staff:
+    material: BLAZE_ROD
+    custom-model-data: 0
+    name: '<#d7a8ff><bold>Жезл перехода'
+    lore:
+      - ''
+      - '<#b8b8b8>Показывает путевые якоря из любой точки.'
+      - ''
+      - '<#8c8c8c>[<#d7a8ff>▶<#8c8c8c>] <#d7a8ff>ПКМ<#b8b8b8> — перейти'
+
+messages:
+  placed: '<#92bed8>Путевой якорь установлен.'
+  removed: '<#92bed8>Путевой якорь снят.'
+  target-anchor: '<#ffd166>Прыжок<#b8b8b8> — перейти · <#ffffff>%distance% м'
+  target-staff: '<#d7a8ff>ПКМ<#b8b8b8> — перейти · <#ffffff>%distance% м'
+  no-target: '<#b8b8b8>Наведитесь на подсвеченный якорь.'
+  unsafe: '<#c42323>Над якорем нет места для перехода.'
+  blocked: '<#c42323>Переход отменён защитой сервера.'
+  unavailable: '<#c42323>Этот якорь уже недоступен.'
+  leave-vehicle: '<#b8b8b8>Сначала слезьте с транспорта.'
+  no-permission: '<#c42323>Этот путевой якорь вам недоступен.'
+  kit-given: '<#92bed8>Набор путевых якорей выдан игроку <#ffffff>%player%<#92bed8>.'

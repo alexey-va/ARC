@@ -78,6 +78,7 @@ import ru.arc.origin.OriginPortalsModule
 import ru.arc.origin.OriginDiningModule
 import ru.arc.paper.chunk.PaperChunkTicketRegistry
 import ru.arc.restart.RestartModule
+import ru.arc.travelanchors.TravelAnchorsModule
 import ru.arc.rtp.RtpPlayerRegistry
 import ru.arc.scheduled.ScheduledCommandsModule
 import ru.arc.spy.CrossServerSpyModule
@@ -243,6 +244,7 @@ open class ARC : JavaPlugin() {
             PersonalLootModule,
             MobSpawnModule,
             EntityCleanupModule,
+            TravelAnchorsModule,
             JoinMessagesModule,
             ChatModeModule,
             CrossServerSpyModule,
@@ -372,6 +374,7 @@ open class ARC : JavaPlugin() {
                 "modules/auction.yml",
                 "modules/treasure-hunt.yml",
                 "modules/mobspawn.yml",
+                "modules/teleport-anchors.yml",
                 "modules/mounts.yml",
                 "modules/parkour.yml",
                 "modules/location-pools.yml",

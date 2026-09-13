@@ -44,6 +44,7 @@ import ru.arc.commands.arc.subcommands.SoundFollowSubCommand
 import ru.arc.commands.arc.subcommands.StoreSubCommand
 import ru.arc.commands.arc.subcommands.TestSubCommand
 import ru.arc.commands.arc.subcommands.TreasuresSubCommand
+import ru.arc.travelanchors.TravelAnchorsSubCommand
 
 /**
  * Main /arc command that routes to subcommands.
@@ -96,6 +97,7 @@ class ArcCommand :
             LandsSubCommand,
             GiveBoostSubCommand,
             GiveSubCommand,
+            TravelAnchorsSubCommand,
             PouchSubCommand,
             SoundFollowSubCommand,
             SchedulesSubCommand,

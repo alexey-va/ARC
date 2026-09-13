@@ -173,6 +173,12 @@ commands:
     permission: arc.item.give
     player-only: false
     usage: /arc give <player|list> <preset> [amount]
+  anchors:
+    name: anchors
+    aliases: [якоря]
+    permission: arc.travel-anchors.admin
+    player-only: false
+    usage: /arc anchors give [игрок]
   pouch:
     name: pouch
     aliases: [мешочек]
