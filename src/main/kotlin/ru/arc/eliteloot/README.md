@@ -5,6 +5,10 @@ refreshes inventory lore. `EliteLootProcessor` copies visual components without
 changing gameplay material, attributes, durability or native PDC. Ground effects
 follow physical items, including manual throws; cases never invoke this effect.
 
+ARC is the sole owner of RusCrafting's final EliteLoot lore and presentation.
+Apply presentation changes here after the native EM renderer; keep the EliteMobs
+fork limited to persistence and database work.
+
 ## Player flow
 
 `LostLootModule` runs on every Paper backend, including parkour without EliteMobs.

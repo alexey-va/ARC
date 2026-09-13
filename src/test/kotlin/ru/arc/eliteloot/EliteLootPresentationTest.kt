@@ -33,4 +33,17 @@ class EliteLootPresentationTest : FreeSpec({
         result.map(PlainTextComponentSerializer.plainText()::serialize) shouldBe listOf("Уровень: 43", "", "Описание")
         compactEliteLore(result) shouldBe result
     }
+    "gear requirement is owned by ARC and sits directly below the item level" {
+        val plain = PlainTextComponentSerializer.plainText()
+        val lore = listOf("Уровень: 16 · Престиж: 0", "Базовая элитная защита: 4.25", " старая строка")
+
+        replaceEliteGearRequirement(lore.map(Component::text), "Броня", 16)
+            .map(plain::serialize) shouldBe listOf(
+                "Уровень: 16 · Престиж: 0",
+                " Навык не требуется",
+                "Базовая элитная защита: 4.25",
+            )
+
+        plain.serialize(eliteGearRequirementLine("Мечи", 43)) shouldBe " Требуется: Мечи · ур. 43"
+    }
 })
