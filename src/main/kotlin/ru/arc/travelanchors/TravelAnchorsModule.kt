@@ -30,6 +30,7 @@ import org.bukkit.event.block.BlockPistonRetractEvent
 import org.bukkit.event.block.BlockPlaceEvent
 import org.bukkit.event.entity.EntityExplodeEvent
 import org.bukkit.event.player.PlayerInteractEvent
+import org.bukkit.event.player.PlayerItemHeldEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.player.PlayerToggleSneakEvent
 import org.bukkit.event.world.ChunkLoadEvent
@@ -66,7 +67,6 @@ import ru.arc.util.itemStack
 import java.nio.file.Path
 import java.nio.charset.StandardCharsets
 import java.util.Base64
-import java.util.Locale
 import java.util.UUID
 import kotlin.math.cos
 import kotlin.math.min
@@ -75,15 +75,19 @@ import kotlin.math.roundToInt
 private val ANCHOR_BLOCK_KEY = NamespacedKey("arc", "travel_anchor")
 private val ANCHOR_INDEX_KEY = NamespacedKey("arc", "travel_anchor_index")
 private val ANCHOR_NAMES_KEY = NamespacedKey("arc", "travel_anchor_names")
+private val ANCHOR_OWNERS_KEY = NamespacedKey("arc", "travel_anchor_owners")
+private val ANCHOR_ACCESS_KEY = NamespacedKey("arc", "travel_anchor_access")
 private val ANCHOR_NAME_KEY = NamespacedKey("arc", "travel_anchor_name")
+private val ANCHOR_OWNER_KEY = NamespacedKey("arc", "travel_anchor_owner")
 private val ANCHOR_ITEM_KEY = NamespacedKey("arc", "travel_anchor_item")
 private val STAFF_ITEM_KEY = NamespacedKey("arc", "travel_anchor_staff")
+private val ITEM_OWNER_KEY = NamespacedKey("arc", "travel_anchor_item_owner")
 private val NAME_INPUT = PaperDialogInputId.of("anchor_name")
-private const val USE_PERMISSION = "arc.travel-anchors.use"
-private const val PLACE_PERMISSION = "arc.travel-anchors.place"
-private const val BREAK_PERMISSION = "arc.travel-anchors.break"
+private val ACCESS_INPUT = PaperDialogInputId.of("anchor_access")
 private const val TELEPORT_COOLDOWN_MILLIS = 500L
 private const val MAX_ANCHOR_NAME_LENGTH = 32
+private const val MAX_ACCESS_INPUT_LENGTH = 256
+private const val MAX_SHARED_PLAYERS = 16
 private const val PROXY_DEPTH = 0.03f
 private val RIGHT_CLICK_ACTIONS = setOf(Action.RIGHT_CLICK_AIR, Action.RIGHT_CLICK_BLOCK)
 
@@ -119,6 +123,9 @@ internal fun travelAnchorTargetMessage(hasAnchorBelow: Boolean, staffHeld: Boole
 internal fun travelAnchorDisplayDistance(actualDistance: Double, proxyDistance: Double): Double =
     min(actualDistance, proxyDistance)
 
+internal fun travelAnchorLabelScale(distance: Double, minimumScale: Float, maximumScale: Float): Float =
+    (distance / 8.0).toFloat().coerceIn(minimumScale, maximumScale)
+
 internal fun travelAnchorDisplayCenter(eye: Location, target: Location, distance: Double): Location =
     eye.clone().add(target.toVector().subtract(eye.toVector()).normalize().multiply(distance)).apply {
         yaw = 0f
@@ -153,7 +160,22 @@ internal fun normalizeTravelAnchorName(raw: String): String? {
     }
 }
 
+internal fun normalizeTravelAnchorAccessNames(raw: String): List<String>? {
+    if (raw.isBlank()) return emptyList()
+    val names = raw.split(',', '\n', ' ', '\t').filter(String::isNotBlank).distinctBy { it.lowercase() }
+    return names.takeIf { it.size <= MAX_SHARED_PLAYERS && it.all { name -> name.matches(Regex("[A-Za-z0-9_]{3,16}")) } }
+}
+
 internal data class TravelAnchorNameEntry(val x: Int, val y: Int, val z: Int, val name: String)
+
+internal data class TravelAnchorOwnerEntry(val x: Int, val y: Int, val z: Int, val ownerId: UUID)
+
+internal data class TravelAnchorAccessEntry(val ownerId: UUID, val playerIds: Set<UUID>)
+
+internal fun travelAnchorOwnerAllows(ownerId: UUID?, playerId: UUID): Boolean = ownerId == null || ownerId == playerId
+
+internal fun travelAnchorAccessAllows(ownerId: UUID?, playerId: UUID, sharedPlayerIds: Set<UUID>): Boolean =
+    ownerId == null || ownerId == playerId || playerId in sharedPlayerIds
 
 internal fun encodeTravelAnchorNames(entries: Iterable<TravelAnchorNameEntry>): String =
     entries
@@ -176,6 +198,39 @@ internal fun decodeTravelAnchorNames(encoded: String): List<TravelAnchorNameEntr
         }.getOrNull()
     }.toList()
 
+internal fun encodeTravelAnchorOwners(entries: Iterable<TravelAnchorOwnerEntry>): String =
+    entries
+        .sortedWith(compareBy(TravelAnchorOwnerEntry::x, TravelAnchorOwnerEntry::y, TravelAnchorOwnerEntry::z))
+        .joinToString("\n") { entry -> "${entry.x},${entry.y},${entry.z}|${entry.ownerId}" }
+
+internal fun decodeTravelAnchorOwners(encoded: String): List<TravelAnchorOwnerEntry> =
+    encoded.lineSequence().mapNotNull { line ->
+        runCatching {
+            val (coordinates, ownerId) = line.split('|', limit = 2).takeIf { it.size == 2 } ?: return@runCatching null
+            val parts = coordinates.split(',').takeIf { it.size == 3 } ?: return@runCatching null
+            TravelAnchorOwnerEntry(parts[0].toInt(), parts[1].toInt(), parts[2].toInt(), UUID.fromString(ownerId))
+        }.getOrNull()
+    }.toList()
+
+internal fun encodeTravelAnchorAccess(entries: Iterable<TravelAnchorAccessEntry>): String =
+    entries
+        .filter { it.playerIds.isNotEmpty() }
+        .sortedBy { it.ownerId.toString() }
+        .joinToString("\n") { entry ->
+            "${entry.ownerId}|${entry.playerIds.sortedBy { it.toString() }.joinToString(",")}"
+        }
+
+internal fun decodeTravelAnchorAccess(encoded: String): List<TravelAnchorAccessEntry> =
+    encoded.lineSequence().mapNotNull { line ->
+        runCatching {
+            val (ownerId, players) = line.split('|', limit = 2).takeIf { it.size == 2 } ?: return@runCatching null
+            TravelAnchorAccessEntry(
+                UUID.fromString(ownerId),
+                players.split(',').filter(String::isNotBlank).mapTo(linkedSetOf(), UUID::fromString),
+            )
+        }.getOrNull()
+    }.toList()
+
 private data class TravelAnchorPosition(val worldId: UUID, val x: Int, val y: Int, val z: Int) {
     val chunkX: Int get() = x shr 4
     val chunkZ: Int get() = z shr 4
@@ -192,13 +247,14 @@ private data class TravelAnchorPosition(val worldId: UUID, val x: Int, val y: In
 private data class TravelAnchorSettings(
     val enabled: Boolean,
     val worlds: Set<String>,
-    val allowedPlayers: Set<String>,
     val range: Double,
     val maximumTargets: Int,
     val visibleDot: Double,
     val selectionDot: Double,
     val minimumScale: Float,
     val maximumScale: Float,
+    val labelMinimumScale: Float,
+    val labelMaximumScale: Float,
     val proxyDistance: Double,
     val updateTicks: Long,
     val anchorMaterial: Material,
@@ -210,27 +266,26 @@ private data class TravelAnchorSettings(
 ) {
     fun allowsWorld(name: String): Boolean = worlds.isEmpty() || name in worlds
 
-    fun allowsPlayer(player: Player): Boolean =
-        "*" in allowedPlayers ||
-            player.name.lowercase(Locale.ROOT) in allowedPlayers ||
-            player.uniqueId.toString().lowercase(Locale.ROOT) in allowedPlayers
-
-    fun anchorItem(): ItemStack =
+    fun anchorItem(ownerId: UUID): ItemStack =
         itemStack(anchorMaterial) {
             configuredItem("anchor", anchorModelData)
-        }.withMarker(ANCHOR_ITEM_KEY)
+        }.withMarker(ANCHOR_ITEM_KEY).withOwner(ownerId)
 
-    fun staffItem(): ItemStack =
+    fun staffItem(ownerId: UUID): ItemStack =
         itemStack(staffMaterial) {
             configuredItem("staff", staffModelData)
             glowing()
-        }.withMarker(STAFF_ITEM_KEY)
+        }.withMarker(STAFF_ITEM_KEY).withOwner(ownerId)
 
     fun message(key: String, vararg replacements: Pair<String, String>): Component {
         var text = source.string("messages.$key", "")
         replacements.forEach { (placeholder, value) -> text = text.replace(placeholder, value) }
         return TextUtil.mm(text, true)
     }
+
+    fun targetMessage(key: String, name: String, distance: String): Component =
+        TextUtil.mm(source.string("messages.$key", "").replace("%distance%", distance), true)
+            .replaceText { it.matchLiteral("%name%").replacement(Component.text(name)) }
 
     fun namingText(key: String, vararg replacements: Pair<String, String>): Component {
         var text = source.string("naming.dialog.$key", "")
@@ -252,8 +307,16 @@ private fun ItemStack.withMarker(key: NamespacedKey): ItemStack = apply {
     editMeta { it.persistentDataContainer.set(key, PersistentDataType.BYTE, 1.toByte()) }
 }
 
+private fun ItemStack.withOwner(ownerId: UUID): ItemStack = apply {
+    editMeta { it.persistentDataContainer.set(ITEM_OWNER_KEY, PersistentDataType.STRING, ownerId.toString()) }
+}
+
 private fun ItemStack?.hasMarker(key: NamespacedKey): Boolean =
     this?.itemMeta?.persistentDataContainer?.has(key, PersistentDataType.BYTE) == true
+
+private fun ItemStack?.ownerId(): UUID? =
+    this?.itemMeta?.persistentDataContainer?.get(ITEM_OWNER_KEY, PersistentDataType.STRING)
+        ?.let { runCatching { UUID.fromString(it) }.getOrNull() }
 
 private object TravelAnchorConfig {
     fun load(dataPath: Path): TravelAnchorSettings {
@@ -264,13 +327,14 @@ private object TravelAnchorConfig {
         return TravelAnchorSettings(
             enabled = source.bool("enabled", false),
             worlds = source.stringList("worlds").toSet(),
-            allowedPlayers = source.stringList("allowed-players").mapTo(linkedSetOf()) { it.lowercase(Locale.ROOT) },
             range = source.real("targeting.range", 1024.0).coerceIn(8.0, 4096.0),
             maximumTargets = source.integer("targeting.maximum-targets", 24).coerceIn(1, 64),
             visibleDot = cos(Math.toRadians(visibleAngle)),
             selectionDot = cos(Math.toRadians(selectionAngle)),
             minimumScale = source.real("visual.minimum-scale", 1.04).toFloat().coerceIn(1.01f, 6.0f),
             maximumScale = source.real("visual.maximum-scale", 3.0).toFloat().coerceIn(1.01f, 6.0f),
+            labelMinimumScale = source.real("visual.label-minimum-scale", 1.8).toFloat().coerceIn(0.5f, 8.0f),
+            labelMaximumScale = source.real("visual.label-maximum-scale", 6.0).toFloat().coerceIn(0.5f, 12.0f),
             proxyDistance = source.real("visual.proxy-distance", 48.0).coerceIn(16.0, 96.0),
             updateTicks = source.long("visual.update-ticks", 1L).coerceIn(1L, 20L),
             anchorMaterial = source.material("items.anchor.material", Material.LODESTONE, requireBlock = true),
@@ -280,8 +344,10 @@ private object TravelAnchorConfig {
             staffModelData = source.integer("items.staff.custom-model-data", 0).coerceAtLeast(0),
             source = source,
         ).let { settings ->
-            if (settings.maximumScale >= settings.minimumScale) settings
-            else settings.copy(maximumScale = settings.minimumScale)
+            settings.copy(
+                maximumScale = settings.maximumScale.coerceAtLeast(settings.minimumScale),
+                labelMaximumScale = settings.labelMaximumScale.coerceAtLeast(settings.labelMinimumScale),
+            )
         }
     }
 
@@ -304,6 +370,8 @@ object TravelAnchorsModule : PluginModule, Listener {
     private val displays = mutableMapOf<UUID, MutableMap<TravelAnchorPosition, BlockDisplay>>()
     private val labels = mutableMapOf<UUID, TextDisplay>()
     private val anchorNames = mutableMapOf<TravelAnchorPosition, String>()
+    private val anchorOwners = mutableMapOf<TravelAnchorPosition, UUID>()
+    private val sharedAccess = mutableMapOf<UUID, MutableSet<UUID>>()
     private val selectedTargets = mutableMapOf<UUID, TravelAnchorPosition>()
     private val cooldowns = mutableMapOf<UUID, Long>()
     private val pendingTeleports = mutableSetOf<UUID>()
@@ -319,6 +387,7 @@ object TravelAnchorsModule : PluginModule, Listener {
             return
         }
         Bukkit.getPluginManager().registerEvents(this, ARC.instance)
+        removeOrphanDisplays()
         Bukkit.getWorlds().filter { next.allowsWorld(it.name) }.forEach(::loadAnchorIndex)
         Bukkit.getWorlds().flatMap { it.loadedChunks.toList() }.forEach(::loadAnchors)
         renderTask = repeating(next.updateTicks.ticks, delay = 1.ticks) { refreshPlayers() }
@@ -336,6 +405,8 @@ object TravelAnchorsModule : PluginModule, Listener {
         labels.values.forEach { if (it.isValid) it.remove() }
         labels.clear()
         anchorNames.clear()
+        anchorOwners.clear()
+        sharedAccess.clear()
         selectedTargets.clear()
         anchors.clear()
         cooldowns.clear()
@@ -345,7 +416,11 @@ object TravelAnchorsModule : PluginModule, Listener {
 
     fun giveKit(player: Player): Int {
         val current = settings ?: return 0
-        return OpsItemHandlers.giveStacks(player, listOf(current.anchorItem(), current.staffItem()), dropOverflow = true)
+        return OpsItemHandlers.giveStacks(
+            player,
+            listOf(current.anchorItem(player.uniqueId), current.staffItem(player.uniqueId)),
+            dropOverflow = true,
+        )
     }
 
     fun message(key: String, vararg replacements: Pair<String, String>): Component =
@@ -354,7 +429,10 @@ object TravelAnchorsModule : PluginModule, Listener {
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun guardPlace(event: BlockPlaceEvent) {
         if (!event.itemInHand.hasMarker(ANCHOR_ITEM_KEY)) return
-        if (event.player.hasPermission(PLACE_PERMISSION) && canUse(event.player)) return
+        if (isFeatureAvailable(event.player) && itemOwnerAllows(event.itemInHand, event.player)) {
+            if (event.itemInHand.ownerId() == null) event.itemInHand.withOwner(event.player.uniqueId)
+            return
+        }
         event.isCancelled = true
         event.player.sendActionBar(settings?.message("no-permission") ?: Component.empty())
     }
@@ -362,14 +440,20 @@ object TravelAnchorsModule : PluginModule, Listener {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun onPlace(event: BlockPlaceEvent) {
         if (!event.itemInHand.hasMarker(ANCHOR_ITEM_KEY)) return
-        CustomBlockData(event.blockPlaced, ARC.instance).set(ANCHOR_BLOCK_KEY, PersistentDataType.BYTE, 1.toByte())
-        if (anchors.add(TravelAnchorPosition.of(event.blockPlaced))) persistAnchorIndex(event.blockPlaced.world.uid)
+        val blockData = CustomBlockData(event.blockPlaced, ARC.instance)
+        val ownerId = event.itemInHand.ownerId() ?: event.player.uniqueId
+        blockData.set(ANCHOR_BLOCK_KEY, PersistentDataType.BYTE, 1.toByte())
+        blockData.set(ANCHOR_OWNER_KEY, PersistentDataType.STRING, ownerId.toString())
+        val position = TravelAnchorPosition.of(event.blockPlaced)
+        anchorOwners[position] = ownerId
+        if (anchors.add(position)) persistAnchorIndex(event.blockPlaced.world.uid)
+        persistAnchorOwners(event.blockPlaced.world.uid)
         event.player.sendActionBar(settings?.message("placed") ?: Component.empty())
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun guardBreak(event: BlockBreakEvent) {
-        if (!isAnchor(event.block) || event.player.hasPermission(BREAK_PERMISSION)) return
+        if (!isAnchor(event.block) || ownsAnchor(event.player, TravelAnchorPosition.of(event.block))) return
         event.isCancelled = true
         event.player.sendActionBar(settings?.message("no-permission") ?: Component.empty())
     }
@@ -377,10 +461,11 @@ object TravelAnchorsModule : PluginModule, Listener {
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     fun onBreak(event: BlockBreakEvent) {
         if (!isAnchor(event.block)) return
+        val ownerId = anchorOwners[TravelAnchorPosition.of(event.block)] ?: event.player.uniqueId
         event.isDropItems = false
         removeAnchor(event.block)
         if (event.player.gameMode != GameMode.CREATIVE) {
-            settings?.anchorItem()?.let { event.block.world.dropItemNaturally(event.block.location.add(0.5, 0.5, 0.5), it) }
+            settings?.anchorItem(ownerId)?.let { event.block.world.dropItemNaturally(event.block.location.add(0.5, 0.5, 0.5), it) }
         }
         event.player.sendActionBar(settings?.message("removed") ?: Component.empty())
     }
@@ -390,14 +475,18 @@ object TravelAnchorsModule : PluginModule, Listener {
         if (event.hand != EquipmentSlot.HAND || event.action !in RIGHT_CLICK_ACTIONS) return
         val held = event.item ?: event.player.inventory.itemInMainHand
         val clickedAnchor = event.clickedBlock?.takeIf(::isAnchor)
-        when (travelAnchorInteraction(clickedAnchor != null, held.hasMarker(STAFF_ITEM_KEY))) {
+        val staffHeld = held.hasMarker(STAFF_ITEM_KEY)
+        if (staffHeld && held.ownerId() == null) held.withOwner(event.player.uniqueId)
+        when (travelAnchorInteraction(clickedAnchor != null, staffHeld)) {
             TravelAnchorInteraction.IGNORE -> return
             TravelAnchorInteraction.RENAME -> {
                 event.isCancelled = true
-                if (!canUse(event.player)) {
+                val position = TravelAnchorPosition.of(checkNotNull(clickedAnchor))
+                if (!isFeatureAvailable(event.player) || !ownsAnchor(event.player, position)) {
                     event.player.sendActionBar(settings?.message("no-permission") ?: Component.empty())
                     return
                 }
+                claimLegacyAnchor(checkNotNull(clickedAnchor), event.player.uniqueId)
                 ArcMenus.beginDialogFlow(event.player)
                 openNameDialog(event.player, checkNotNull(clickedAnchor))
                 return
@@ -406,7 +495,7 @@ object TravelAnchorsModule : PluginModule, Listener {
         }
         event.isCancelled = true
         val player = event.player
-        if (!canUse(player)) {
+        if (!isFeatureAvailable(player) || !itemOwnerAllows(held, player)) {
             player.sendActionBar(settings?.message("no-permission") ?: Component.empty())
             return
         }
@@ -425,7 +514,7 @@ object TravelAnchorsModule : PluginModule, Listener {
     fun onSneak(event: PlayerToggleSneakEvent) {
         if (!event.isSneaking) return
         val player = event.player
-        if (!canUse(player)) return
+        if (!isFeatureAvailable(player)) return
         val source = anchorBelow(player) ?: return
         val target = selectedTargets[player.uniqueId]
             ?.takeIf { it != source && it.worldId == player.world.uid }
@@ -439,6 +528,15 @@ object TravelAnchorsModule : PluginModule, Listener {
         clearDisplays(event.player.uniqueId)
         cooldowns.remove(event.player.uniqueId)
         pendingTeleports.remove(event.player.uniqueId)
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun onHeldItemChange(event: PlayerItemHeldEvent) {
+        val player = event.player
+        val next = player.inventory.getItem(event.newSlot)
+        if (anchorBelow(player) == null && (!next.hasMarker(STAFF_ITEM_KEY) || !itemOwnerAllows(next, player))) {
+            clearDisplays(player)
+        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -467,14 +565,15 @@ object TravelAnchorsModule : PluginModule, Listener {
     private fun refreshPlayers() {
         val current = settings ?: return
         Bukkit.getOnlinePlayers().forEach { player ->
-            if (!canUse(player)) {
-                clearDisplays(player.uniqueId)
+            if (!isFeatureAvailable(player)) {
+                clearDisplays(player)
                 return@forEach
             }
             val source = anchorBelow(player)
-            val staffHeld = player.inventory.itemInMainHand.hasMarker(STAFF_ITEM_KEY)
+            val staff = player.inventory.itemInMainHand
+            val staffHeld = staff.hasMarker(STAFF_ITEM_KEY) && itemOwnerAllows(staff, player)
             if (source == null && !staffHeld) {
-                clearDisplays(player.uniqueId)
+                clearDisplays(player)
                 return@forEach
             }
             val candidates = visibleCandidates(player, source)
@@ -484,10 +583,11 @@ object TravelAnchorsModule : PluginModule, Listener {
                 selectedTargets[player.uniqueId] = selected
                 val distance = candidates.first { it.target == selected }.distanceSquared.let(Math::sqrt).roundToInt().toString()
                 val message = travelAnchorTargetMessage(source != null, staffHeld) ?: return@forEach
-                player.sendActionBar(current.message(message, "%distance%" to distance))
+                val targetName = anchorNames[selected] ?: current.defaultAnchorName()
+                player.sendActionBar(current.targetMessage(message, targetName, distance))
             } else {
                 selectedTargets.remove(player.uniqueId)
-                clearLabel(player.uniqueId)
+                clearLabel(player)
             }
         }
     }
@@ -499,6 +599,7 @@ object TravelAnchorsModule : PluginModule, Listener {
         return anchors
             .asSequence()
             .filter { it != source && it.worldId == player.world.uid }
+            .filter { canAccess(player, it) }
             .map { position ->
                 val delta = org.bukkit.util.Vector(position.x + 0.5, position.y + 0.5, position.z + 0.5)
                     .subtract(eye.toVector())
@@ -530,7 +631,10 @@ object TravelAnchorsModule : PluginModule, Listener {
         val playerDisplays = displays.getOrPut(player.uniqueId, ::linkedMapOf)
         val desired = candidates.mapTo(hashSetOf(), AimCandidate<TravelAnchorPosition>::target)
         playerDisplays.keys.filterNot { it in desired }.toList().forEach { position ->
-            playerDisplays.remove(position)?.remove()
+            playerDisplays.remove(position)?.let {
+                player.hideEntity(ARC.instance, it)
+                it.remove()
+            }
         }
         var selectedLocation: Location? = null
         var selectedScale = 1f
@@ -558,7 +662,7 @@ object TravelAnchorsModule : PluginModule, Listener {
         }
         if (selected != null && selectedLocation != null) {
             renderLabel(player, selected, checkNotNull(selectedLocation), selectedScale)
-        } else clearLabel(player.uniqueId)
+        } else clearLabel(player)
         if (playerDisplays.isEmpty()) displays.remove(player.uniqueId)
     }
 
@@ -592,6 +696,7 @@ object TravelAnchorsModule : PluginModule, Listener {
     }
 
     private fun renderLabel(player: Player, position: TravelAnchorPosition, marker: Location, scale: Float) {
+        val current = checkNotNull(settings)
         val location = marker.clone().add(0.0, scale / 2.0 + 0.55, 0.0)
         val label = labels[player.uniqueId]?.takeIf { it.isValid } ?: player.world.spawn(location, TextDisplay::class.java) {
             it.isPersistent = false
@@ -613,9 +718,9 @@ object TravelAnchorsModule : PluginModule, Listener {
             player.showEntity(ARC.instance, it)
         }
         label.teleport(location)
-        val labelScale = (marker.distance(player.eyeLocation) / 24.0).toFloat().coerceIn(0.8f, 2.0f)
+        val labelScale = travelAnchorLabelScale(marker.distance(player.eyeLocation), current.labelMinimumScale, current.labelMaximumScale)
         label.setTransformationMatrix(Matrix4f().scaling(labelScale))
-        val text = Component.text(anchorNames[position] ?: checkNotNull(settings).defaultAnchorName())
+        val text = Component.text(anchorNames[position] ?: current.defaultAnchorName())
             .color(TextColor.color(0xFFD166))
             .decoration(TextDecoration.ITALIC, false)
         if (label.text() != text) label.text(text)
@@ -625,36 +730,85 @@ object TravelAnchorsModule : PluginModule, Listener {
         labels.remove(playerId)?.let { if (it.isValid) it.remove() }
     }
 
-    private fun openNameDialog(player: Player, block: Block, invalid: Boolean = false, initial: String? = null) {
+    private fun clearLabel(player: Player) {
+        labels.remove(player.uniqueId)?.let {
+            player.hideEntity(ARC.instance, it)
+            if (it.isValid) it.remove()
+        }
+    }
+
+    private fun openNameDialog(
+        player: Player,
+        block: Block,
+        invalidName: Boolean = false,
+        invalidPlayers: List<String> = emptyList(),
+        initialName: String? = null,
+        initialAccess: String? = null,
+    ) {
         val current = settings ?: return
         val position = TravelAnchorPosition.of(block)
-        val value = initial ?: anchorNames[position].orEmpty()
+        val nameValue = initialName ?: anchorNames[position].orEmpty()
+        val accessValue = initialAccess ?: sharedAccess[player.uniqueId].orEmpty().mapNotNull { Bukkit.getOfflinePlayer(it).name }
+            .sortedWith(String.CASE_INSENSITIVE_ORDER)
+            .joinToString(", ")
         ArcMenus.openDialog(
             player,
             PaperDialogScreen(
                 id = "travel-anchors.rename",
                 title = current.namingText("title"),
                 body = listOf(PaperDialogBody(current.namingText("body"), width = 360)) +
-                    if (invalid) listOf(PaperDialogBody(current.namingText("invalid", "%limit%" to MAX_ANCHOR_NAME_LENGTH.toString()), width = 360))
-                    else emptyList(),
-                inputs = listOf(PaperDialogTextInput(NAME_INPUT, current.namingText("input"), value, 360, MAX_ANCHOR_NAME_LENGTH)),
+                    (if (invalidName) listOf(PaperDialogBody(current.namingText("invalid", "%limit%" to MAX_ANCHOR_NAME_LENGTH.toString()), width = 360)) else emptyList()) +
+                    (if (invalidPlayers.isNotEmpty()) listOf(PaperDialogBody(current.namingText("access-invalid", "%players%" to invalidPlayers.joinToString(", ")), width = 360)) else emptyList()),
+                inputs = listOf(
+                    PaperDialogTextInput(NAME_INPUT, current.namingText("input"), nameValue, 360, MAX_ANCHOR_NAME_LENGTH),
+                    PaperDialogTextInput(ACCESS_INPUT, current.namingText("access"), accessValue, 360, MAX_ACCESS_INPUT_LENGTH),
+                ),
                 buttons = listOf(PaperDialogButton(
-                    id = PaperDialogActionId.of("save_anchor_name"),
+                    id = PaperDialogActionId.of("save_anchor_settings"),
                     label = current.namingText("save"),
                     width = 240,
                     closeDialogBeforeAction = false,
                     onClick = { context ->
                         val name = normalizeTravelAnchorName(context.text(NAME_INPUT).orEmpty())
                         if (name == null) {
-                            openNameDialog(context.player, block, invalid = true, initial = context.text(NAME_INPUT).orEmpty())
+                            openNameDialog(
+                                context.player,
+                                block,
+                                invalidName = true,
+                                initialName = context.text(NAME_INPUT).orEmpty(),
+                                initialAccess = context.text(ACCESS_INPUT).orEmpty(),
+                            )
+                            return@PaperDialogButton
+                        }
+                        val accessText = context.text(ACCESS_INPUT).orEmpty()
+                        val accessNames = normalizeTravelAnchorAccessNames(accessText)
+                        val resolved = accessNames?.associateWith { requested ->
+                            Bukkit.getPlayerExact(requested) ?: Bukkit.getOfflinePlayerIfCached(requested)
+                        }
+                        val invalidAccess = when {
+                            accessNames == null -> listOf(accessText)
+                            else -> resolved.orEmpty().filterValues { it == null }.keys.toList()
+                        }
+                        if (invalidAccess.isNotEmpty()) {
+                            openNameDialog(
+                                context.player,
+                                block,
+                                invalidPlayers = invalidAccess,
+                                initialName = context.text(NAME_INPUT).orEmpty(),
+                                initialAccess = accessText,
+                            )
                             return@PaperDialogButton
                         }
                         val liveBlock = position.block()?.takeIf(::isAnchor)
-                        if (!canUse(context.player) || liveBlock == null) {
+                        if (!isFeatureAvailable(context.player) || liveBlock == null || !ownsAnchor(context.player, position)) {
                             ArcMenus.closeDialog(context.player)
                             context.player.sendActionBar(current.message("unavailable"))
                             return@PaperDialogButton
                         }
+                        claimLegacyAnchor(liveBlock, context.player.uniqueId)
+                        sharedAccess[context.player.uniqueId] = resolved.orEmpty().values.mapNotNull { it?.uniqueId }.toMutableSet()
+                        if (sharedAccess[context.player.uniqueId].isNullOrEmpty()) sharedAccess.remove(context.player.uniqueId)
+                        persistSharedAccess()
                         setAnchorName(liveBlock, name)
                         ArcMenus.closeDialog(context.player)
                         context.player.sendActionBar(current.message("renamed"))
@@ -680,6 +834,10 @@ object TravelAnchorsModule : PluginModule, Listener {
 
     private fun teleport(player: Player, position: TravelAnchorPosition) {
         val current = settings ?: return
+        if (!canAccess(player, position)) {
+            player.sendActionBar(current.message("no-permission"))
+            return
+        }
         val now = System.currentTimeMillis()
         if (now < cooldowns.getOrDefault(player.uniqueId, 0L) || player.uniqueId in pendingTeleports) return
         if (player.isInsideVehicle) {
@@ -720,6 +878,7 @@ object TravelAnchorsModule : PluginModule, Listener {
             player.sendActionBar(current.message("unavailable"))
             return
         }
+        claimLegacyAnchor(block, player.uniqueId)
         if (!isSafeDestination(block)) {
             player.sendActionBar(current.message("unsafe"))
             return
@@ -735,7 +894,7 @@ object TravelAnchorsModule : PluginModule, Listener {
             player.sendActionBar(current.message("blocked"))
             return
         }
-        clearDisplays(player.uniqueId)
+        clearDisplays(player)
         from.world.spawnParticle(Particle.PORTAL, from.clone().add(0.0, 1.0, 0.0), 24, 0.3, 0.6, 0.3, 0.1)
         block.world.spawnParticle(Particle.PORTAL, destination.clone().add(0.0, 0.8, 0.0), 32, 0.35, 0.6, 0.35, 0.1)
         player.playSound(destination, Sound.ENTITY_ENDERMAN_TELEPORT, SoundCategory.PLAYERS, 0.8f, 1.15f)
@@ -744,7 +903,7 @@ object TravelAnchorsModule : PluginModule, Listener {
     private fun anchorBelow(player: Player, location: org.bukkit.Location = player.location): TravelAnchorPosition? {
         return listOf(0.08, 0.4).firstNotNullOfOrNull { offset ->
             val block = location.clone().subtract(0.0, offset, 0.0).block
-            TravelAnchorPosition.of(block).takeIf { it in anchors && isAnchor(block) }
+            TravelAnchorPosition.of(block).takeIf { it in anchors && isAnchor(block) && canAccess(player, it) }
         }
     }
 
@@ -764,10 +923,14 @@ object TravelAnchorsModule : PluginModule, Listener {
             val name = CustomBlockData(block, ARC.instance).get(ANCHOR_NAME_KEY, PersistentDataType.STRING)
                 ?.let(::normalizeTravelAnchorName)
             if (name != null && anchorNames.put(position, name) != name) changed = true
+            val ownerId = CustomBlockData(block, ARC.instance).get(ANCHOR_OWNER_KEY, PersistentDataType.STRING)
+                ?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+            if (ownerId != null && anchorOwners.put(position, ownerId) != ownerId) changed = true
         }
         if (changed) {
             persistAnchorIndex(chunk.world.uid)
             persistAnchorNames(chunk.world.uid)
+            persistAnchorOwners(chunk.world.uid)
         }
     }
 
@@ -787,6 +950,15 @@ object TravelAnchorsModule : PluginModule, Listener {
             val position = TravelAnchorPosition.of(world.uid, entry.x, entry.y, entry.z)
             if (position in anchors) anchorNames[position] = entry.name
         }
+        decodeTravelAnchorOwners(
+            world.persistentDataContainer.get(ANCHOR_OWNERS_KEY, PersistentDataType.STRING).orEmpty(),
+        ).forEach { entry ->
+            val position = TravelAnchorPosition.of(world.uid, entry.x, entry.y, entry.z)
+            if (position in anchors) anchorOwners[position] = entry.ownerId
+        }
+        decodeTravelAnchorAccess(
+            world.persistentDataContainer.get(ANCHOR_ACCESS_KEY, PersistentDataType.STRING).orEmpty(),
+        ).forEach { entry -> sharedAccess.getOrPut(entry.ownerId, ::linkedSetOf).addAll(entry.playerIds) }
     }
 
     private fun persistAnchorIndex(worldId: UUID) {
@@ -810,19 +982,44 @@ object TravelAnchorsModule : PluginModule, Listener {
         else world.persistentDataContainer.set(ANCHOR_NAMES_KEY, PersistentDataType.STRING, encoded)
     }
 
+    private fun persistAnchorOwners(worldId: UUID) {
+        val world = Bukkit.getWorld(worldId) ?: return
+        val encoded = encodeTravelAnchorOwners(anchorOwners.mapNotNull { (position, ownerId) ->
+            position.takeIf { it.worldId == worldId }?.let { TravelAnchorOwnerEntry(it.x, it.y, it.z, ownerId) }
+        })
+        if (encoded.isEmpty()) world.persistentDataContainer.remove(ANCHOR_OWNERS_KEY)
+        else world.persistentDataContainer.set(ANCHOR_OWNERS_KEY, PersistentDataType.STRING, encoded)
+    }
+
+    private fun persistSharedAccess() {
+        val encoded = encodeTravelAnchorAccess(sharedAccess.map { (ownerId, playerIds) ->
+            TravelAnchorAccessEntry(ownerId, playerIds)
+        })
+        Bukkit.getWorlds().filter { settings?.allowsWorld(it.name) == true }.forEach { world ->
+            if (encoded.isEmpty()) world.persistentDataContainer.remove(ANCHOR_ACCESS_KEY)
+            else world.persistentDataContainer.set(ANCHOR_ACCESS_KEY, PersistentDataType.STRING, encoded)
+        }
+    }
+
     private fun removeAnchor(block: Block) {
-        CustomBlockData(block, ARC.instance).remove(ANCHOR_BLOCK_KEY)
+        CustomBlockData(block, ARC.instance).apply {
+            remove(ANCHOR_BLOCK_KEY)
+            remove(ANCHOR_NAME_KEY)
+            remove(ANCHOR_OWNER_KEY)
+        }
         removeAnchor(TravelAnchorPosition.of(block))
     }
 
     private fun removeAnchor(position: TravelAnchorPosition) {
         if (!anchors.remove(position)) return
         anchorNames.remove(position)
+        anchorOwners.remove(position)
         displays.values.forEach { it.remove(position)?.remove() }
         displays.entries.removeIf { it.value.isEmpty() }
         selectedTargets.entries.removeIf { it.value == position }
         persistAnchorIndex(position.worldId)
         persistAnchorNames(position.worldId)
+        persistAnchorOwners(position.worldId)
     }
 
     private fun clearDisplays(playerId: UUID) {
@@ -831,9 +1028,47 @@ object TravelAnchorsModule : PluginModule, Listener {
         selectedTargets.remove(playerId)
     }
 
-    private fun canUse(player: Player): Boolean =
-        settings?.let { it.enabled && it.allowsPlayer(player) && it.allowsWorld(player.world.name) } == true &&
-            player.hasPermission(USE_PERMISSION)
+    private fun clearDisplays(player: Player) {
+        displays.remove(player.uniqueId)?.values?.forEach {
+            player.hideEntity(ARC.instance, it)
+            if (it.isValid) it.remove()
+        }
+        clearLabel(player)
+        selectedTargets.remove(player.uniqueId)
+    }
+
+    private fun removeOrphanDisplays() {
+        Bukkit.getWorlds().forEach { world ->
+            world.getEntitiesByClass(BlockDisplay::class.java)
+                .filter { "arc_travel_anchor_preview" in it.scoreboardTags }
+                .forEach(BlockDisplay::remove)
+            world.getEntitiesByClass(TextDisplay::class.java)
+                .filter { "arc_travel_anchor_label" in it.scoreboardTags }
+                .forEach(TextDisplay::remove)
+        }
+    }
+
+    private fun isFeatureAvailable(player: Player): Boolean =
+        settings?.let { it.enabled && it.allowsWorld(player.world.name) } == true
+
+    private fun itemOwnerAllows(item: ItemStack?, player: Player): Boolean =
+        travelAnchorOwnerAllows(item.ownerId(), player.uniqueId)
+
+    private fun canAccess(player: Player, position: TravelAnchorPosition): Boolean =
+        anchorOwners[position].let { ownerId ->
+            travelAnchorAccessAllows(ownerId, player.uniqueId, ownerId?.let(sharedAccess::get).orEmpty())
+        }
+
+    private fun ownsAnchor(player: Player, position: TravelAnchorPosition): Boolean =
+        travelAnchorOwnerAllows(anchorOwners[position], player.uniqueId)
+
+    private fun claimLegacyAnchor(block: Block, ownerId: UUID) {
+        val position = TravelAnchorPosition.of(block)
+        if (position in anchorOwners) return
+        CustomBlockData(block, ARC.instance).set(ANCHOR_OWNER_KEY, PersistentDataType.STRING, ownerId.toString())
+        anchorOwners[position] = ownerId
+        persistAnchorOwners(block.world.uid)
+    }
 
     private val VISIBLE_COLOR = Color.fromRGB(0x92, 0xBE, 0xD8)
     private val SELECTED_COLOR = Color.fromRGB(0xFF, 0xD1, 0x66)
