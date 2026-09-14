@@ -38,7 +38,9 @@ class MenuShortcutControllerTest {
                 opened shouldBe 0
 
                 player.isSneaking = true
-                swap().isCancelled shouldBe true
+                val shifted = swap()
+                shifted.isCancelled shouldBe true
+                shortcuts.onSwapHands(shifted)
                 opened shouldBe 1
             }
         }
