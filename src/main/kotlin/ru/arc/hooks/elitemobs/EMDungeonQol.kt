@@ -65,6 +65,7 @@ internal class EMDungeonQol(
 ) : Listener, AutoCloseable {
     private val scoreboardPreferenceKey = NamespacedKey("arc", "dungeon_scoreboard_enabled")
     internal val scoreboard = DungeonScoreboard(this, enabled = ::scoreboardEnabled)
+    private val actionBarLocalization = EliteMobsActionBarPackets.create()
     private val checkpoints = DungeonCheckpointStore()
     private val tasks = LifecycleTaskScope()
     private val combatUntil = mutableMapOf<UUID, Long>()
@@ -520,6 +521,7 @@ internal class EMDungeonQol(
 
     override fun close() {
         closed = true
+        actionBarLocalization?.close()
         scoreboard.clear()
         pending.clear()
         combatUntil.clear()

@@ -5,6 +5,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.mockk.every
 import io.mockk.mockk
+import com.magmaguy.elitemobs.advancedcombat.classes.ClassResourceType
 import org.bukkit.entity.Player
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
@@ -20,10 +21,16 @@ class DungeonScoreboardTest : FreeSpec({
         every { qol.text(any(), any(), *anyVararg()) } answers {
             val values = thirdArg<Array<out Pair<String, net.kyori.adventure.text.Component>>>().toMap()
             val plain = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
-            val body = secondArg<String>().replace("<value>", values["value"]?.let(plain::serialize).orEmpty())
+            val body = values.entries.fold(secondArg<String>()) { text, (key, value) ->
+                text.replace("<$key>", plain.serialize(value))
+            }
             net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize(body)
         }
-        val board = DungeonScoreboard(qol, party = { null }) { "42" }
+        val board = DungeonScoreboard(
+            qol,
+            party = { null },
+            resource = { DungeonCombatResource(ClassResourceType.FURY, 37, 100) },
+        ) { "42" }
         board.refresh(listOf(player))
         CompletableFuture.supplyAsync { board.value(id, "line_1") }.get() shouldBe "Крипта"
         board.value(id, "active") shouldBe "true"
@@ -33,12 +40,13 @@ class DungeonScoreboardTest : FreeSpec({
             "Крипта",
             "Открытый данж",
             "Прохождение идёт",
-            "",
+            " ",
             "| Уровень: 12",
             "| Сложность: Обычная",
             "| Участников: 3",
+            "| Ярость: 37/100",
             "| Кристаллы: 💎 42",
-            "",
+            " ",
             "Shift + F — меню данжа",
         )
     }
@@ -139,15 +147,24 @@ class DungeonScoreboardTest : FreeSpec({
         lines.joinToString("\n") shouldContain "Группа · 2"
         lines.joinToString("\n") shouldContain "★ Лидер"
         lines.joinToString("\n") shouldContain "● Друг"
-        lines.count { it.isNotEmpty() } shouldBe 11
-        lines.count { it.isEmpty() } shouldBe 3
+        lines.count { it.isNotBlank() } shouldBe 11
+        lines.count { it.isBlank() } shouldBe 3
         lines.first() shouldBe "Крипта"
         lines.last() shouldBe "Shift + F — меню данжа"
     }
 
     "section spacing has no leading trailing or duplicate blank rows" {
-        joinDungeonScoreboardSections(emptyList(), listOf("Поход"), emptyList(), listOf("Группа"), listOf("Меню")) shouldBe
-            listOf("Поход", "", "Группа", "", "Меню")
+        val rows = joinDungeonScoreboardSections(
+            emptyList(),
+            listOf("Поход"),
+            emptyList(),
+            listOf("Группа"),
+            listOf("Меню"),
+        )
+
+        rows.map(::visibleText) shouldBe listOf("Поход", " ", "Группа", " ", "Меню")
+        rows.filter { visibleText(it).isBlank() }.all(String::isNotEmpty) shouldBe true
+        rows.filter { visibleText(it).isBlank() }.distinct().size shouldBe 2
     }
 })
 

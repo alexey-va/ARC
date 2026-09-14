@@ -1,16 +1,26 @@
 package ru.arc.hooks.elitemobs
 
+import com.magmaguy.elitemobs.advancedcombat.AdvancedCombatModule
+import com.magmaguy.elitemobs.advancedcombat.classes.ClassResourceType
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import org.bukkit.entity.Player
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.roundToLong
+
+internal data class DungeonCombatResource(
+    val type: ClassResourceType,
+    val amount: Long,
+    val maximum: Long,
+)
 
 /** Main-thread rendering; TAB/PAPI threads read immutable strings only. TAB owns the sidebar. */
 internal class DungeonScoreboard(
     private val dungeon: EMDungeonQol,
     private val enabled: (Player) -> Boolean = { true },
     private val party: (Player) -> DungeonPartyView? = { dungeon.parties.current(it) },
+    private val resource: (Player) -> DungeonCombatResource? = ::readDungeonCombatResource,
     private val crystals: (Player) -> String? = ::readDungeonCrystals,
 ) {
     /** Keep one of Minecraft's 15 sidebar rows available for the compact quest tracker in TAB. */
@@ -40,6 +50,15 @@ internal class DungeonScoreboard(
                 visit.stats?.level?.takeIf { it > 0 }?.let { add(line("level", "<#f4bd6a>| <#e8dfd2>Уровень: <#f4bd6a><value>", "value" to Component.text(it))) }
                 visit.stats?.difficulty?.let { add(line("difficulty", "<#f4bd6a>| <#e8dfd2>Сложность: <#f4bd6a><value>", "value" to dungeonDifficulty(dungeon, it))) }
                 visit.stats?.playerCount?.let { add(line("party", "<#f4bd6a>| <#e8dfd2>Участников: <#9bd48d><value>", "value" to Component.text(it))) }
+                resource(player)?.let {
+                    add(line(
+                        "resource",
+                        "<#f4bd6a>| <#e8dfd2><resource>: <#92bed8><amount><#aaa49a>/<#92bed8><maximum>",
+                        "resource" to Component.text(dungeonResourceName(it.type)),
+                        "amount" to Component.text(it.amount),
+                        "maximum" to Component.text(it.maximum),
+                    ))
+                }
                 if (view.participant) crystals(player)?.let { add(line("crystals", "<#f4bd6a>| <#e8dfd2>Кристаллы: <#c7a0e8>💎 <value>", "value" to Component.text(it))) }
             }
             val footer = listOf(line(if (view.participant) "menu" else "observer-menu",
@@ -91,11 +110,28 @@ internal class DungeonScoreboard(
 }
 
 internal fun joinDungeonScoreboardSections(vararg sections: List<String>): List<String> = buildList {
+    var separator = 0
     sections.filter { it.isNotEmpty() }.forEach { section ->
-        if (isNotEmpty()) add("")
+        if (isNotEmpty()) {
+            check(separator < LEGACY_SCOREBOARD_SPACER_COLORS.length) {
+                "A Minecraft sidebar cannot contain this many independent sections"
+            }
+            // TAB drops an actually empty placeholder value and de-duplicates equal rows.
+            // A unique legacy colour followed by one space is visually blank but survives both rules.
+            add("§${LEGACY_SCOREBOARD_SPACER_COLORS[separator++]} ")
+        }
         addAll(section)
     }
 }
+
+private const val LEGACY_SCOREBOARD_SPACER_COLORS = "0123456789abcdef"
+
+private fun readDungeonCombatResource(player: Player): DungeonCombatResource? = runCatching {
+    if (!AdvancedCombatModule.isInitialized()) return@runCatching null
+    AdvancedCombatModule.resourceSnapshot(player.uniqueId).orElse(null)?.let {
+        DungeonCombatResource(it.type(), it.amount().roundToLong(), it.maximum().roundToLong())
+    }
+}.getOrNull()
 
 private data class LegacyGlyph(val value: String, val format: String, val whitespace: Boolean)
 

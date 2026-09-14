@@ -122,7 +122,7 @@ internal object NativeDungeonClassService : DungeonClassService {
                 xp = xpSummary(definition.band().effectiveStart(), progress),
                 foundations = foundations,
                 blockers = blockers,
-                resource = resourceName(lineage.resourceType()),
+                resource = dungeonResourceName(lineage.resourceType()),
                 resourceDescription = resourceDescription(lineage.resourceType()),
                 weapons = definition.weaponAffinities().map(::dungeonSkillName),
                 mobility = localization.ability(
@@ -195,15 +195,6 @@ internal object NativeDungeonClassService : DungeonClassService {
     private fun effectiveLevel(band: com.magmaguy.elitemobs.advancedcombat.classes.ClassBand, localLevel: Int): Int =
         if (localLevel == 0) 0 else band.toEffectiveLevel(localLevel)
 
-    private fun resourceName(resource: ClassResourceType): String = when (resource) {
-        ClassResourceType.STAMINA -> "Выносливость"
-        ClassResourceType.RESOLVE -> "Решимость"
-        ClassResourceType.FURY -> "Ярость"
-        ClassResourceType.FOCUS -> "Концентрация"
-        ClassResourceType.GRACE -> "Благодать"
-        ClassResourceType.MANA -> "Мана"
-    }
-
     private fun resourceDescription(resource: ClassResourceType): String = when (resource) {
         ClassResourceType.STAMINA -> "Равномерно восстанавливается в бою и вне боя."
         ClassResourceType.RESOLVE -> "Быстрее восстанавливается рядом с элитами и растёт в ближнем бою."
@@ -212,6 +203,15 @@ internal object NativeDungeonClassService : DungeonClassService {
         ClassResourceType.GRACE -> "Растёт от эффективного лечения и быстрее восстанавливается рядом с другими игроками."
         ClassResourceType.MANA -> "Равномерно восстанавливается в бою и вне боя."
     }
+}
+
+internal fun dungeonResourceName(resource: ClassResourceType): String = when (resource) {
+    ClassResourceType.STAMINA -> "Выносливость"
+    ClassResourceType.RESOLVE -> "Решимость"
+    ClassResourceType.FURY -> "Ярость"
+    ClassResourceType.FOCUS -> "Концентрация"
+    ClassResourceType.GRACE -> "Благодать"
+    ClassResourceType.MANA -> "Мана"
 }
 
 internal fun dungeonSkillName(skill: SkillType): String = when (skill) {

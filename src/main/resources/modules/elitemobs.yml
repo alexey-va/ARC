@@ -785,6 +785,7 @@ dungeon-qol:
     level: '<#f4bd6a>| <#e8dfd2>Уровень: <#f4bd6a><value>'
     difficulty: '<#f4bd6a>| <#e8dfd2>Сложность: <#f4bd6a><value>'
     party: '<#f4bd6a>| <#e8dfd2>Участников: <#9bd48d><value>'
+    resource: '<#f4bd6a>| <#e8dfd2><resource>: <#92bed8><amount><#aaa49a>/<#92bed8><maximum>'
     crystals: '<#f4bd6a>| <#e8dfd2>Кристаллы: <#c7a0e8>💎 <value>'
     menu: <#f4bd6a>Shift + F <#e8dfd2>— меню данжа
     observer-menu: '<#aaa49a>Меню похода — для участников'
