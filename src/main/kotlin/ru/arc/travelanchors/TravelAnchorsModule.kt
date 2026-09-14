@@ -166,6 +166,8 @@ internal fun travelAnchorAccessDecision(shared: Boolean, isAdmin: Boolean, ordin
 internal fun travelAnchorEditDecision(shared: Boolean, isAdmin: Boolean, ownerMatches: Boolean): Boolean =
     if (shared) isAdmin else travelAnchorAdminAllows(isAdmin, ownerMatches)
 
+internal fun travelAnchorBreakAllowed(ownsAnchor: Boolean, ownsLand: Boolean): Boolean = ownsAnchor || ownsLand
+
 internal fun parseTravelAnchorGiveAmount(raw: String?): Int? =
     (raw ?: "1").toIntOrNull()?.takeIf { it in 1..MAX_GIVE_AMOUNT }
 
@@ -655,12 +657,15 @@ object TravelAnchorsModule : PluginModule, Listener {
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun guardBreak(event: BlockBreakEvent) {
         if (!isAnchor(event.block)) return
-        if (ownsAnchor(event.player, TravelAnchorPosition.of(event.block))) {
-            claimAnchor(event.block, event.player)
+        val position = TravelAnchorPosition.of(event.block)
+        val ownsAnchor = ownsAnchor(event.player, position)
+        val ownsLand = HookRegistry.landsHook?.isLandOwner(event.player, event.block.location) == true
+        if (travelAnchorBreakAllowed(ownsAnchor, ownsLand)) {
+            if (ownsAnchor) claimAnchor(event.block, event.player)
             return
         }
         event.isCancelled = true
-        sendDenial(event.player, "no-permission", "%owner%" to displayName(anchorOwners[TravelAnchorPosition.of(event.block)] ?: "не указан"))
+        sendDenial(event.player, "no-permission", "%owner%" to displayName(anchorOwners[position] ?: "не указан"))
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)

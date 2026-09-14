@@ -33,6 +33,9 @@ class LandsHook {
         return landWorld.getArea(location) != null
     }
 
+    fun isLandOwner(player: Player, location: Location): Boolean =
+        integration.getArea(location)?.land?.ownerUID == player.uniqueId
+
     /** True only when the exact location is inside claimed land where this player can build. */
     fun isProtectedFor(
         player: Player,

@@ -89,6 +89,12 @@ class TravelAnchorTargetingTest : FunSpec({
         travelAnchorEditDecision(shared = true, isAdmin = true, ownerMatches = false) shouldBe true
     }
 
+    test("a Lands owner may remove a foreign anchor only on their land") {
+        travelAnchorBreakAllowed(ownsAnchor = true, ownsLand = false) shouldBe true
+        travelAnchorBreakAllowed(ownsAnchor = false, ownsLand = true) shouldBe true
+        travelAnchorBreakAllowed(ownsAnchor = false, ownsLand = false) shouldBe false
+    }
+
     test("give commands accept an optional bounded amount") {
         parseTravelAnchorGiveAmount(null) shouldBe 1
         parseTravelAnchorGiveAmount("64") shouldBe 64
