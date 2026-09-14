@@ -4,6 +4,17 @@ import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 
 class NpcRouteControllerTest : FreeSpec({
+    "heading turns through the shortest wrapped angle" {
+        turnNpcYawToward(170f, -170f, 5f) shouldBe 175f
+        turnNpcYawToward(-170f, 170f, 5f) shouldBe -175f
+        turnNpcYawToward(10f, 14f, 5f) shouldBe 14f
+    }
+
+    "route yaw is horizontal and follows Minecraft axes" {
+        npcRouteYaw(0.0, 0.0, 0.0, 1.0) shouldBe 0f
+        npcRouteYaw(0.0, 0.0, 1.0, 0.0) shouldBe -90f
+    }
+
     "hard no-go areas are never crossed" {
         val forbidden = NpcRouteBounds(1, 2, 1, 1)
         val profile = NpcRouteProfile(

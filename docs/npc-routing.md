@@ -11,6 +11,12 @@ Create one `NpcRouteProfile` for each navigable area:
 - `floorY` prevents climbing onto furniture or changing floors;
 - `speedModifier`, margins and stall settings tune movement per scene.
 
+The heading controller follows cells ahead of the NPC instead of instantaneous
+Citizens velocity. It keeps pitch at zero while moving and limits yaw change per
+tick, so short velocity drops and right-angle grid corners do not jerk the head.
+Tune `heading-look-ahead-cells`, `heading-update-ticks` and
+`heading-max-turn-degrees-per-tick` per profile.
+
 Pass ordered `via` locations to `navigate` when the route must cross particular
 gates. Pass `extraBlocked` for obstacles known only to the current action. A
 scene may inject an `NpcRouteObstacleSource` to translate furniture, doors or

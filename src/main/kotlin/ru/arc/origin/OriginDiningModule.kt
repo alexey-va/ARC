@@ -453,6 +453,9 @@ internal object OriginDiningLayout {
                 speedModifier = source.real("$root.speed-modifier", 0.72).toFloat().coerceIn(0.1f, 2f),
                 entityObstaclePadding = source.real("$root.entity-obstacle-padding", 0.25).coerceIn(0.0, 1.0),
                 obstacleRefreshPolls = source.integer("$root.obstacle-refresh-polls", 10).coerceIn(1, 100),
+                headingLookAheadCells = source.integer("$root.heading-look-ahead-cells", 2).coerceIn(1, 8),
+                headingUpdateTicks = source.integer("$root.heading-update-ticks", 1).toLong().coerceIn(1L, 10L),
+                headingMaxTurnDegreesPerTick = source.real("$root.heading-max-turn-degrees-per-tick", 18.0).toFloat().coerceIn(1f, 90f),
             )
         }
         sessionRadius = source.real("navigation.session-radius").coerceIn(2.0, 24.0)

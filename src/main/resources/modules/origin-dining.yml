@@ -143,6 +143,9 @@ navigation:
       # Extra clearance around ItemsAdder furniture converted to blocked cells.
       entity-obstacle-padding: 0.25
       obstacle-refresh-polls: 10
+      heading-look-ahead-cells: 2
+      heading-update-ticks: 1
+      heading-max-turn-degrees-per-tick: 18.0
       speed-modifier: 0.72
     restaurant:
       floor-y: 72
@@ -152,6 +155,9 @@ navigation:
       preferred-areas: []
       entity-obstacle-padding: 0.25
       obstacle-refresh-polls: 10
+      heading-look-ahead-cells: 2
+      heading-update-ticks: 1
+      heading-max-turn-degrees-per-tick: 18.0
       speed-modifier: 0.72
   session-radius: 8.0
 

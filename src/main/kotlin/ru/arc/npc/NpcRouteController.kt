@@ -11,7 +11,9 @@ import ru.arc.core.LifecycleTaskScope
 import java.util.PriorityQueue
 import java.util.UUID
 import kotlin.math.abs
+import kotlin.math.atan2
 import kotlin.math.hypot
+import kotlin.math.sign
 
 internal data class NpcRouteCell(val x: Int, val z: Int)
 
@@ -50,10 +52,24 @@ internal data class NpcRouteProfile(
     val speedModifier: Float = 0.72f,
     val entityObstaclePadding: Double = 0.25,
     val obstacleRefreshPolls: Int = 10,
+    val headingLookAheadCells: Int = 2,
+    val headingUpdateTicks: Long = 1L,
+    val headingMaxTurnDegreesPerTick: Float = 18f,
 ) {
     fun allows(cell: NpcRouteCell): Boolean = cell in bounds && forbidden.none { cell in it }
 
     fun stepCost(cell: NpcRouteCell): Int = if (preferred.any { cell in it }) 1 else 10
+}
+
+internal fun normalizedNpcYaw(yaw: Float): Float = ((yaw % 360f) + 540f) % 360f - 180f
+
+internal fun npcRouteYaw(fromX: Double, fromZ: Double, toX: Double, toZ: Double): Float =
+    normalizedNpcYaw(Math.toDegrees(atan2(-(toX - fromX), toZ - fromZ)).toFloat())
+
+internal fun turnNpcYawToward(current: Float, target: Float, maximumDegrees: Float): Float {
+    val delta = normalizedNpcYaw(target - current)
+    if (abs(delta) <= maximumDegrees) return normalizedNpcYaw(target)
+    return normalizedNpcYaw(current + delta.sign * maximumDegrees)
 }
 
 /** Supplies scene-specific occupied cells without coupling the router to a furniture plugin. */
@@ -127,6 +143,8 @@ private data class ActiveNpcRoute(
     var stalledPolls: Int = 0,
     var previousX: Double,
     var previousZ: Double,
+    var headingIndex: Int,
+    var headingYaw: Float,
     val recoveries: Int = 0,
 )
 
@@ -205,8 +223,12 @@ internal class CitizensNpcRouteController(
             npc.entity.teleport(recovered)
             event("RECOVERED", profile, npc, destination, path.size, "off-floor-start", actual)
         }
-        configure(npc, destination, profile)
+        configure(npc, profile)
         val vectors = path.map { Vector(it.x + 0.5, profile.floorY.toDouble(), it.z + 0.5) }
+        val initialHeadingYaw = path.drop(1).firstOrNull()?.let { cell ->
+            npcRouteYaw(actual.x, actual.z, cell.x + 0.5, cell.z + 0.5)
+        } ?: actual.yaw
+        npc.entity.setRotation(initialHeadingYaw, 0f)
         npc.navigator.setTarget(vectors)
         val route = ActiveNpcRoute(
             UUID.randomUUID(),
@@ -218,11 +240,14 @@ internal class CitizensNpcRouteController(
             path,
             previousX = npc.entity.location.x,
             previousZ = npc.entity.location.z,
+            headingIndex = 0,
+            headingYaw = initialHeadingYaw,
             recoveries = recoveries,
         )
         active[npc.id] = route
         event("STARTED", profile, npc, destination, path.size)
         monitor(npc.id, route.token)
+        monitorHeading(npc.id, route.token)
         return true
     }
 
@@ -249,7 +274,7 @@ internal class CitizensNpcRouteController(
         }
     }
 
-    private fun configure(npc: NPC, destination: Location, profile: NpcRouteProfile) {
+    private fun configure(npc: NPC, profile: NpcRouteProfile) {
         npc.navigator.localParameters
             .distanceMargin(profile.distanceMargin)
             .pathDistanceMargin(profile.pathDistanceMargin)
@@ -260,13 +285,39 @@ internal class CitizensNpcRouteController(
             .lookAtFunction { current ->
                 val entity = current.npc.entity
                 val eye = (entity as? LivingEntity)?.eyeLocation ?: entity.location.clone().add(0.0, 1.6, 0.0)
-                val horizontalVelocity = entity.velocity.clone().setY(0)
-                if (horizontalVelocity.lengthSquared() > 0.0025) {
-                    eye.clone().add(horizontalVelocity.normalize().multiply(3.0))
-                } else {
-                    Location(entity.world, destination.x, eye.y, destination.z)
-                }
+                val heading = active[current.npc.id]?.headingYaw ?: entity.yaw
+                val radians = Math.toRadians(heading.toDouble())
+                eye.clone().add(-kotlin.math.sin(radians) * 3.0, 0.0, kotlin.math.cos(radians) * 3.0)
             }
+    }
+
+    private fun monitorHeading(npcId: Int, token: UUID) {
+        val route = active[npcId]?.takeIf { it.token == token } ?: return
+        val npc = runCatching { CitizensAPI.getNPCRegistry().getById(npcId) }.getOrNull()?.takeIf { it.isSpawned } ?: return
+        if (!npc.navigator.isNavigating || npc.entity.world != route.destination.world) return
+        val actual = npc.entity.location
+        val searchEnd = (route.headingIndex + route.profile.headingLookAheadCells + 2).coerceAtMost(route.cells.lastIndex)
+        route.headingIndex =
+            (route.headingIndex..searchEnd).minBy { index ->
+                val cell = route.cells[index]
+                val dx = actual.x - (cell.x + 0.5)
+                val dz = actual.z - (cell.z + 0.5)
+                dx * dx + dz * dz
+            }
+        val targetIndex = (route.headingIndex + route.profile.headingLookAheadCells).coerceAtMost(route.cells.lastIndex)
+        val target = route.cells[targetIndex]
+        val dx = target.x + 0.5 - actual.x
+        val dz = target.z + 0.5 - actual.z
+        if (dx * dx + dz * dz > 0.0025) {
+            val desiredYaw = npcRouteYaw(actual.x, actual.z, target.x + 0.5, target.z + 0.5)
+            route.headingYaw = turnNpcYawToward(
+                route.headingYaw,
+                desiredYaw,
+                route.profile.headingMaxTurnDegreesPerTick * route.profile.headingUpdateTicks,
+            )
+        }
+        npc.entity.setRotation(route.headingYaw, 0f)
+        tasks.runLater(route.profile.headingUpdateTicks) { monitorHeading(npcId, token) }
     }
 
     private fun monitor(npcId: Int, token: UUID) {
