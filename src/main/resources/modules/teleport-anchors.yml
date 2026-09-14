@@ -19,6 +19,17 @@ visual:
   label-minimum-scale: 1.8
   label-maximum-scale: 6.0
   update-ticks: 1
+  teleport-portal:
+    enabled: true
+    item: 'origin_gate_portals:origin_portal'
+    opening-ticks: 4
+    hold-ticks: 1
+    closing-ticks: 4
+    width: 2.4
+    height: 3.4
+    vertical-offset: 1.5
+    forward-offset: 0.55
+    view-range: 2.0
 
 naming:
   default-name: 'Путевой якорь'

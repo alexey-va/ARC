@@ -39,10 +39,16 @@ import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
 import org.bukkit.util.Transformation
+import org.bukkit.util.Vector
 import org.joml.AxisAngle4f
 import org.joml.Matrix4f
 import org.joml.Vector3f
 import ru.arc.ARC
+import ru.arc.BukkitPortalOriginGate
+import ru.arc.OriginGateOpeningCurve
+import ru.arc.PortalOriginGateHandle
+import ru.arc.PortalOriginGateSettings
+import ru.arc.PortalVisualStyle
 import ru.arc.commands.arc.SubCommand
 import ru.arc.commands.arc.tabComplete
 import ru.arc.commands.arc.tabCompletePlayers
@@ -69,6 +75,9 @@ import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import ru.arc.util.TextUtil
 import ru.arc.util.itemStack
+import ru.arc.originGateClosingScale
+import ru.arc.originGateDisplayYaw
+import ru.arc.originGateOpeningScale
 import java.nio.file.Path
 import java.nio.charset.StandardCharsets
 import java.util.Base64
@@ -108,6 +117,7 @@ private const val ADMIN_PERMISSION = "arc.travelanchors.admin"
 private const val PROXY_DEPTH = 0.03f
 private const val PLAYER_HALF_WIDTH = 0.3
 private const val DISPLAY_VIEW_RANGE = 16f
+private const val DEFAULT_TELEPORT_PORTAL_ITEM = "origin_gate_portals:origin_portal"
 private val RIGHT_CLICK_ACTIONS = setOf(Action.RIGHT_CLICK_AIR, Action.RIGHT_CLICK_BLOCK)
 
 internal data class AimCandidate<T>(
@@ -145,6 +155,20 @@ internal fun travelAnchorScale(
     }
     val effectiveMaximum = nearbyMaximumScale + (maximumScale - nearbyMaximumScale) * distanceProgress.toFloat()
     return minimumScale + (effectiveMaximum - minimumScale) * aimProgress.toFloat()
+}
+
+internal fun travelAnchorTeleportPortalScale(
+    tick: Int,
+    openingTicks: Int,
+    holdTicks: Int,
+    closingTicks: Int,
+): Float? = when {
+    tick < 0 -> null
+    tick <= openingTicks -> originGateOpeningScale(tick, openingTicks, OriginGateOpeningCurve.SMOOTH)
+    tick <= openingTicks + holdTicks -> 1f
+    tick <= openingTicks + holdTicks + closingTicks ->
+        originGateClosingScale(tick - openingTicks - holdTicks, closingTicks)
+    else -> null
 }
 
 internal fun travelAnchorExpandedSelectionDot(
@@ -351,6 +375,12 @@ private data class TravelAnchorPosition(val worldId: UUID, val x: Int, val y: In
     }
 }
 
+private data class TravelAnchorTeleportPortalSettings(
+    val gate: PortalOriginGateSettings,
+    val holdTicks: Int,
+    val forwardOffset: Double,
+)
+
 private data class TravelAnchorSettings(
     val worlds: Set<String>,
     val range: Double,
@@ -366,6 +396,7 @@ private data class TravelAnchorSettings(
     val labelMaximumScale: Float,
     val proxyDistance: Double,
     val updateTicks: Long,
+    val teleportPortal: TravelAnchorTeleportPortalSettings?,
     val anchorMaterial: Material,
     val displayMaterial: Material,
     val staffMaterial: Material,
@@ -468,6 +499,7 @@ private object TravelAnchorConfig {
             labelMaximumScale = source.real("visual.label-maximum-scale", 6.0).toFloat().coerceIn(0.5f, 12.0f),
             proxyDistance = source.real("visual.proxy-distance", 48.0).coerceIn(16.0, 96.0),
             updateTicks = source.long("visual.update-ticks", 1L).coerceIn(1L, 20L),
+            teleportPortal = source.teleportPortal(),
             anchorMaterial = source.material("items.anchor.material", Material.LODESTONE, requireBlock = true),
             displayMaterial = source.material("visual.block-material", Material.LODESTONE, requireBlock = true),
             staffMaterial = source.material("items.staff.material", Material.BLAZE_ROD, requireBlock = false),
@@ -491,6 +523,54 @@ private object TravelAnchorConfig {
         warn("TRAVEL_ANCHORS phase=CONFIG reason=invalid-material path={} value={} fallback={}", path, raw, fallback)
         return fallback
     }
+
+    private fun Config.teleportPortal(): TravelAnchorTeleportPortalSettings? {
+        val path = "visual.teleport-portal"
+        if (!bool("$path.enabled", true)) return null
+
+        val itemId = string("$path.item", DEFAULT_TELEPORT_PORTAL_ITEM).trim().lowercase()
+        if (NamespacedKey.fromString(itemId) == null) {
+            warn("TRAVEL_ANCHORS phase=CONFIG reason=invalid-teleport-portal-item path={}.item value={}", path, itemId)
+            return null
+        }
+        val openingTicks = integer("$path.opening-ticks", 4).coerceIn(1, 20)
+        val holdTicks = integer("$path.hold-ticks", 1).coerceIn(0, 20)
+        val closingTicks = integer("$path.closing-ticks", 4).coerceIn(1, 20)
+        val width = real("$path.width", 2.4).toFloat().coerceIn(0.1f, 12.0f)
+        val height = real("$path.height", 3.4).toFloat().coerceIn(0.1f, 12.0f)
+        val verticalOffset = real("$path.vertical-offset", 1.5).coerceIn(0.5, 12.0)
+        val forwardOffset = real("$path.forward-offset", 0.55).coerceIn(0.0, 4.0)
+        val viewRange = real("$path.view-range", 2.0).toFloat().coerceIn(0.1f, 4.0f)
+        val gate = PortalOriginGateSettings(
+            defaultStyle = PortalVisualStyle.ORIGIN,
+            itemIds = mapOf(PortalVisualStyle.ORIGIN to itemId),
+            openingStartTick = 0,
+            openingDurationTicks = openingTicks,
+            openingCurve = OriginGateOpeningCurve.SMOOTH,
+            closingDurationTicks = closingTicks,
+            width = width,
+            height = height,
+            verticalOffset = verticalOffset,
+            yawOffsetDegrees = 180f,
+            viewRange = viewRange,
+            openingSoundEnabled = false,
+            openingSoundDelayTicks = 0,
+            openingSoundId = "minecraft:block.end_portal.spawn",
+            openingSoundVolume = 1f,
+            openingSoundPitch = 1f,
+            suctionEnabled = false,
+            suctionStreams = 1,
+            reducedSuctionStreams = 1,
+            suctionPointsPerStream = 1,
+            reducedSuctionPointsPerStream = 1,
+            suctionRadius = 1.0,
+            suctionHeight = 1.0,
+            suctionTurns = 1.0,
+            suctionParticleSize = 0.5f,
+            suctionCoreCount = 0,
+        )
+        return TravelAnchorTeleportPortalSettings(gate, holdTicks, forwardOffset)
+    }
 }
 
 object TravelAnchorsModule : PluginModule, Listener {
@@ -499,6 +579,8 @@ object TravelAnchorsModule : PluginModule, Listener {
 
     private var settings: TravelAnchorSettings? = null
     private var renderTask: ScheduledTask? = null
+    private val teleportPortalTasks = mutableSetOf<ScheduledTask>()
+    private val teleportPortalHandles = mutableSetOf<PortalOriginGateHandle>()
     private var networkStore: TravelAnchorNetworkStore? = null
     private val anchors = linkedSetOf<TravelAnchorPosition>()
     private val displays = mutableMapOf<UUID, MutableMap<TravelAnchorPosition, BlockDisplay>>()
@@ -561,6 +643,10 @@ object TravelAnchorsModule : PluginModule, Listener {
         HandlerList.unregisterAll(this)
         renderTask?.cancel()
         renderTask = null
+        teleportPortalTasks.forEach(ScheduledTask::cancel)
+        teleportPortalTasks.clear()
+        teleportPortalHandles.forEach(PortalOriginGateHandle::remove)
+        teleportPortalHandles.clear()
         networkStore?.close()
         networkStore = null
         displays.values.flatMap { it.values }.forEach { if (it.isValid) it.remove() }
@@ -1370,6 +1456,9 @@ object TravelAnchorsModule : PluginModule, Listener {
             return
         }
         if (!enforceCooldown) player.velocity = player.velocity.setY(0.0)
+        current.teleportPortal?.let { portal ->
+            playEffectsSafely("teleport-portals") { playTeleportPortals(from, destination, portal) }
+        }
         refreshAfterTeleport(player)
         playEffectsSafely("arrival") { playArrivalEffects(player, destination) }
     }
@@ -1385,6 +1474,87 @@ object TravelAnchorsModule : PluginModule, Listener {
         runCatching(effects).onFailure {
             warn("TRAVEL_ANCHORS phase=EFFECTS reason=render-failed stage={}", phase, it)
         }
+    }
+
+    private fun playTeleportPortals(
+        departure: Location,
+        arrival: Location,
+        portal: TravelAnchorTeleportPortalSettings,
+    ) {
+        val departureHandle = BukkitPortalOriginGate.spawn(
+            teleportPortalCenter(departure, portal),
+            portal.gate,
+            PortalVisualStyle.ORIGIN,
+        ) ?: return
+        val arrivalHandle = BukkitPortalOriginGate.spawn(
+            teleportPortalCenter(arrival, portal),
+            portal.gate,
+            PortalVisualStyle.ORIGIN,
+        ) ?: run {
+            departureHandle.remove()
+            return
+        }
+        val handles = listOf(departureHandle, arrivalHandle)
+        teleportPortalHandles += handles
+        var task: ScheduledTask? = null
+        fun removeEffect() {
+            task?.let {
+                it.cancel()
+                teleportPortalTasks.remove(it)
+            }
+            handles.forEach {
+                it.remove()
+                teleportPortalHandles.remove(it)
+            }
+        }
+
+        var tick = 0
+        val initialScale = checkNotNull(
+            travelAnchorTeleportPortalScale(
+                tick,
+                portal.gate.openingDurationTicks,
+                portal.holdTicks,
+                portal.gate.closingDurationTicks,
+            ),
+        )
+        try {
+            handles.forEach { it.updateScale(initialScale) }
+        } catch (failure: Exception) {
+            removeEffect()
+            throw failure
+        }
+        task = repeating(1.ticks, delay = 1.ticks) {
+            tick++
+            val scale = travelAnchorTeleportPortalScale(
+                tick,
+                portal.gate.openingDurationTicks,
+                portal.holdTicks,
+                portal.gate.closingDurationTicks,
+            )
+            if (scale == null) {
+                removeEffect()
+            } else {
+                runCatching { handles.forEach { it.updateScale(scale) } }.onFailure {
+                    removeEffect()
+                    warn("TRAVEL_ANCHORS phase=EFFECTS reason=portal-animation-failed", it)
+                }
+            }
+        }
+        teleportPortalTasks += checkNotNull(task)
+    }
+
+    private fun teleportPortalCenter(location: Location, portal: TravelAnchorTeleportPortalSettings): Location {
+        val horizontal = location.direction.setY(0.0)
+        if (horizontal.lengthSquared() < 1.0e-6) {
+            val radians = Math.toRadians(location.yaw.toDouble())
+            horizontal.copy(Vector(-kotlin.math.sin(radians), 0.0, kotlin.math.cos(radians)))
+        } else {
+            horizontal.normalize()
+        }
+        val center = location.clone().add(horizontal.multiply(portal.forwardOffset)).add(0.0, portal.gate.verticalOffset, 0.0)
+        center.yaw = originGateDisplayYaw(center.x, center.z, location.x, location.z, portal.gate.yawOffsetDegrees)
+        center.pitch = 0f
+        return center
     }
 
     private fun playDepartureEffects(location: Location) {

@@ -60,6 +60,19 @@ class TravelAnchorTargetingTest : FunSpec({
         travelAnchorScale(1.0, 0.4, 1.0f, 3.0f, 12.0, 1.5f, 6.0, 12.0) shouldBe 3.0f
     }
 
+    test("teleport portals open fully, hold briefly and collapse") {
+        val scales = (0..10).map { travelAnchorTeleportPortalScale(it, 4, 1, 4) }
+
+        scales[0] shouldBe 0.02f
+        (scales[1]!! < scales[2]!!) shouldBe true
+        (scales[2]!! < scales[3]!!) shouldBe true
+        scales[4] shouldBe 1f
+        scales[5] shouldBe 1f
+        (scales[6]!! > scales[7]!!) shouldBe true
+        scales[9] shouldBe 0.02f
+        scales[10] shouldBe null
+    }
+
     test("standing on an anchor gives Shift priority over the staff hint") {
         travelAnchorTargetMessage(hasAnchorBelow = true, staffHeld = true) shouldBe "target-anchor"
         travelAnchorTargetMessage(hasAnchorBelow = false, staffHeld = true) shouldBe "target-staff"
