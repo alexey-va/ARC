@@ -57,7 +57,7 @@ class DungeonSaveMenusTest : FreeSpec({
         DungeonSaveMenus(dungeon) { _, screen, _ -> shown += screen }.panel(player)
 
         shown.single().buttons.map { it.id.value } shouldBe listOf(
-            "quests", "party", "shop", "lost_loot", "saves", "entry", "guide", "about", "scoreboard", "quit",
+            "quests", "classes", "party", "shop", "lost_loot", "saves", "entry", "guide", "about", "scoreboard", "quit",
         )
         shown.single().buttons.none { it.id.value == "shops" || it.id.value == "skill_boosts" } shouldBe true
     }
@@ -93,7 +93,7 @@ class DungeonSaveMenusTest : FreeSpec({
         val shown = mutableListOf<PaperDialogScreen>()
         DungeonSaveMenus(dungeon) { _, screen, _ -> shown += screen }.open(player)
         shown.single().id shouldBe "dungeon.panel.unavailable"
-        shown.single().buttons.map { it.id.value } shouldBe listOf("return", "lost_loot", "guide", "portals", "list", "party", "scoreboard")
+        shown.single().buttons.map { it.id.value } shouldBe listOf("return", "lost_loot", "guide", "portals", "list", "classes", "party", "scoreboard")
         shown.single().exitButton!!.id.value shouldBe "back"
         shown.single().exitButton!!.closeDialogBeforeAction shouldBe false
         shown.single().body.map { it.text } shouldBe listOf(
@@ -216,6 +216,55 @@ class DungeonSaveMenusTest : FreeSpec({
         screens.last().buttons.map { it.id.value } shouldBe listOf("guide")
         screens.last().body.last().text shouldBe Component.text("<#d7b486>Группы EliteMobs на этом сервере недоступны или у вас нет доступа.")
             .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)
+    }
+
+    "class section shows a native progression page and selects an unlocked form" {
+        val player = paper.addPlayer("classes")
+        val dungeon = mockk<EMDungeonQol>(relaxed = true)
+        every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(secondArg<String>()) }
+        val classes = mockk<DungeonClassService>()
+        val form = dungeonClassForm("warrior", "Воин")
+        every { classes.view(player) } returns DungeonClassesView(
+            availability = DungeonClassAvailability.READY,
+            roots = listOf(form.id),
+            forms = mapOf(form.id to form),
+        )
+        every { classes.select(player, form.id) } returns DungeonClassChange.APPLIED
+        val screens = mutableListOf<PaperDialogScreen>()
+        val menus = DungeonSaveMenus(dungeon, classService = classes) { _, screen, _ -> screens += screen }
+
+        menus.classes(player)
+        screens.last().id shouldBe "dungeon.classes"
+        screens.last().buttons.single { it.id.value == "class_warrior" }.onClick.handle(mockk())
+        screens.last().id shouldBe "dungeon.classes.warrior"
+        screens.last().buttons.single { it.id.value == "class_select_warrior" }.onClick.handle(mockk())
+
+        verify(exactly = 1) { classes.select(player, "warrior") }
+        screens.last().id shouldBe "dungeon.classes.warrior"
+        screens.last().body.first().text shouldBe Component.text("<#9bd48d>✔ Активирован класс <name>.")
+            .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)
+    }
+
+    "class selection is muted while EliteMobs locks the run" {
+        val player = paper.addPlayer("class-locked")
+        val dungeon = mockk<EMDungeonQol>(relaxed = true)
+        every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(secondArg<String>()) }
+        val classes = mockk<DungeonClassService>(relaxed = true)
+        val form = dungeonClassForm("warrior", "Воин")
+        every { classes.view(player) } returns DungeonClassesView(
+            availability = DungeonClassAvailability.READY,
+            runLocked = true,
+            roots = listOf(form.id),
+            forms = mapOf(form.id to form),
+        )
+        val screens = mutableListOf<PaperDialogScreen>()
+        val menus = DungeonSaveMenus(dungeon, classService = classes) { _, screen, _ -> screens += screen }
+
+        menus.classes(player)
+        screens.last().buttons.single { it.id.value == "class_warrior" }.onClick.handle(mockk())
+        screens.last().buttons.single { it.id.value == "class_select_warrior" }.onClick.handle(mockk())
+
+        verify(exactly = 0) { classes.select(any(), any()) }
     }
 
     "root close is separate from the quit action" {
@@ -356,3 +405,27 @@ class DungeonSaveMenusTest : FreeSpec({
         verify { dungeon.remove(player, point, expected) }
     }
 })
+
+private fun dungeonClassForm(id: String, name: String) = DungeonClassForm(
+    id = id,
+    name = name,
+    rootId = id,
+    parentId = null,
+    children = emptyList(),
+    path = listOf(name),
+    unlocked = true,
+    selected = false,
+    active = false,
+    level = 1,
+    cap = 20,
+    xp = "0 / 100",
+    foundations = listOf(DungeonClassRequirement("Мечи", "10 / 10")),
+    blockers = emptyList(),
+    resource = "Выносливость",
+    resourceDescription = "Восстанавливается со временем.",
+    weapons = listOf("Мечи"),
+    mobility = DungeonClassAbility("Рывок", "Быстрое перемещение"),
+    signature = DungeonClassAbility("Удар", "Сильная атака"),
+    utility = DungeonClassAbility("Стойка", "Защитный эффект"),
+    passives = listOf(DungeonClassPassive(name, "Повышает стойкость")),
+)

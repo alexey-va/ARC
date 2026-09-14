@@ -24,6 +24,7 @@ internal class DungeonSaveMenus(
     private val dungeon: EMDungeonQol,
     private val crystals: (Player) -> String? = ::readDungeonCrystals,
     private val readQuests: (Player) -> List<DungeonQuestInfo>? = ::readDungeonQuests,
+    private val classService: DungeonClassService = NativeDungeonClassService,
     private val show: (Player, PaperDialogScreen, (() -> Unit)?) -> Unit = { player, screen, reopen ->
         val close = PaperDialogButton(PaperDialogActionId.of("close"), dungeon.text("saves.dialog.close-label", "<#e8dfd2>Закрыть"), width = 200, closeDialogBeforeAction = true) { }
         // A root Close is already the footer, so never move a second Close into the grid.
@@ -37,6 +38,7 @@ internal class DungeonSaveMenus(
 
     internal fun panel(player: Player, feedback: Component? = null) {
         val view = dungeon.panelView(player) ?: run { unavailable(player); return }
+        val classView = classService.view(player)
         val visit = view.visit
         val blocked = dungeon.saveBlockReason(player, view.saves)
         val state = when {
@@ -52,6 +54,9 @@ internal class DungeonSaveMenus(
             visit.stats?.level?.takeIf { it > 0 }?.let { add(tableLabel("level", "Уровень") to Component.text(it)) }
             visit.stats?.difficulty?.let { add(tableLabel("difficulty", "Сложность") to dungeonDifficulty(dungeon, it)) }
             visit.stats?.playerCount?.let { add(tableLabel("party", "Участники") to Component.text(it)) }
+            if (classView.availability != DungeonClassAvailability.DISABLED) {
+                add(tableLabel("class", "Класс") to classSummary(classView))
+            }
             add(tableLabel("crystals", "Ваши кристаллы") to (crystals(player)?.let {
                 text("table.crystals-value", "<white>💎</white> <#c7a0e8><value>", "value" to Component.text(it))
             } ?: text("table.unavailable-value", "Сейчас недоступно")))
@@ -67,6 +72,7 @@ internal class DungeonSaveMenus(
                     dungeon.panelAction(player, view, "start")
                 } else null,
                 action("quests", "quests.label", "<#c4a7e7>Задания ›", "quests.tooltip", "Принятые задания EliteMobs и их текущий прогресс") { quests(player) },
+                classButton(player),
                 partyButton(player),
                 action("shop", "panel.shop-label", "<#f4d87a>Припасы ›", "panel.shop-tooltip", "Припасы, кейсы и бусты опыта за кристаллы") { shop(player) },
                 lostLoot(player),
@@ -164,6 +170,7 @@ internal class DungeonSaveMenus(
             guide(player) { unavailable(player) },
             action("portals", "panel.portals-label", "<#92bed8>К порталам ›", "panel.portals-tooltip", "Перейти к порталам данжей в гильдии", close = true) { dungeon.action(player, "tp") },
             action("list", "panel.list-label", "<#ffb277>Выбрать данж ›", "panel.list-tooltip", "Открыть список данжей EliteMobs", close = true) { dungeon.action(player, "list") },
+            classButton(player),
             partyButton(player),
             scoreboardButton(player),
         ), exitButton = if (MenuEscapeBehavior.goesBack(player)) back {} else close(), columns = 2,
@@ -177,6 +184,209 @@ internal class DungeonSaveMenus(
     private fun lostLoot(player: Player) = action("lost_loot", "lost-loot.label", "<#c4a7e7>Потерянная добыча ›", "lost-loot.tooltip", "Забрать или продать сохранённый лут со всех данжей", close = true) {
         ru.arc.eliteloot.LostLootModule.open(player)
     }
+
+    private fun classButton(player: Player) = action(
+        "classes", "classes.label", "<#c4abff>Классы ›",
+        "classes.tooltip", "Класс, прогресс, способности и ветки развития",
+    ) { classes(player) }
+
+    internal fun classes(player: Player, feedback: Component? = null) {
+        val view = classService.view(player)
+        val body = mutableListOf(PaperDialogBody(text(
+            "classes.body",
+            "<#e8dfd2>Выберите ветку, чтобы посмотреть формы класса, требования и способности.",
+        ), 468))
+        feedback?.let { body += PaperDialogBody(plain(it), 468) }
+        when (view.availability) {
+            DungeonClassAvailability.DISABLED -> body += PaperDialogBody(text(
+                "classes.disabled", "<#ffffff>[Недоступно] Система классов EliteMobs выключена на этом сервере.",
+            ), 468)
+            DungeonClassAvailability.LOADING -> body += PaperDialogBody(text(
+                "classes.loading", "<#e8dfd2>Профиль класса загружается. Откройте страницу ещё раз через несколько секунд.",
+            ), 468)
+            DungeonClassAvailability.READY -> {
+                val active = view.activeForm
+                val rows = mutableListOf(
+                    text("classes.current-label", "<#e8dfd2>Активный класс") to (active?.let {
+                        text("classes.current-value", "<#ffffff><name>", "name" to Component.text(it.name))
+                    } ?: text("classes.none", "<#ffffff>Не выбран")),
+                    text("classes.change-label", "<#e8dfd2>Смена класса") to classChangeState(view),
+                )
+                active?.let {
+                    rows.add(1, text("classes.level-label", "<#e8dfd2>Уровень") to Component.text("${it.level} / ${it.cap}"))
+                    rows.add(2, text("classes.path-label", "<#e8dfd2>Ветка") to Component.text(it.path.joinToString(" › ")))
+                }
+                body += classTable(rows, DialogTables.Frame.ARTIFACT)
+                if (active != null) body += abilitiesTable(active)
+            }
+        }
+        val buttons = if (view.availability != DungeonClassAvailability.READY) emptyList() else buildList {
+            for (rootId in view.roots) view.forms[rootId]?.let { root ->
+                val activeTree = view.activeForm?.rootId == root.id
+                add(PaperDialogButton(
+                    PaperDialogActionId.of("class_${root.id}"),
+                    text(
+                        if (activeTree) "classes.root-active" else "classes.root",
+                        if (activeTree) "<#9bd48d>✔ <name> ›" else "<#ffffff><name> ›",
+                        "name" to Component.text(root.name),
+                    ),
+                    tooltip = text(
+                        if (root.unlocked) "classes.root-tooltip" else "classes.root-locked-tooltip",
+                        if (root.unlocked) "Открыть формы, способности и прогресс этой ветки"
+                        else "Посмотреть способности и условия открытия этой ветки",
+                    ),
+                    width = 230,
+                    onClick = { classDetail(player, root.id) },
+                ))
+            }
+            view.activeForm?.let {
+                if (view.canChange) add(action(
+                    "class_clear", "classes.clear-label", "<#ff6b61>Отключить класс",
+                    "classes.clear-tooltip", "Играть без класса; накопленный прогресс сохранится",
+                ) { classes(player, classChangeMessage(classService.clear(player), null, clear = true)) })
+                else add(disabledClassAction(
+                    "class_clear", "classes.clear-disabled", "<#ffffff>[Недоступно] Отключить класс", classLockReason(view),
+                ) { classes(player) })
+            }
+        }
+        show(player, PaperDialogScreen(
+            id = "dungeon.classes", title = text("classes.title", "<#c4abff>Классы"),
+            body = body, buttons = buttons,
+            exitButton = back { if (dungeon.panelView(player) == null) unavailable(player) else panel(player) }, columns = 2,
+        )) { classes(player) }
+    }
+
+    private fun classDetail(player: Player, formId: String, feedback: Component? = null) {
+        val view = classService.view(player)
+        val form = view.forms[formId]
+        if (view.availability != DungeonClassAvailability.READY || form == null) {
+            classes(player, text("classes.changed", "<#ffffff>Список классов изменился. Страница обновлена."))
+            return
+        }
+        val state = when {
+            form.active && view.runLocked -> text("classes.state-run", "<#9bd48d>Активен · до конца похода")
+            form.active -> text("classes.state-active", "<#9bd48d>Активен")
+            form.unlocked -> text("classes.state-unlocked", "<#ffffff>Открыт")
+            else -> text("classes.state-locked", "<#ffffff>Заблокирован")
+        }
+        val body = mutableListOf(
+            classTable(listOf(
+                text("classes.state-label", "<#e8dfd2>Состояние") to state,
+                text("classes.level-label", "<#e8dfd2>Уровень") to if (form.unlocked) Component.text("${form.level} / ${form.cap}") else Component.text("—"),
+                text("classes.xp-label", "<#e8dfd2>Опыт") to Component.text(form.xp),
+                text("classes.path-label", "<#e8dfd2>Ветка") to Component.text(form.path.joinToString(" › ")),
+                text("classes.resource-label", "<#e8dfd2>Ресурс") to Component.text("${form.resource} — ${form.resourceDescription}"),
+                text("classes.weapons-label", "<#e8dfd2>Оружие") to Component.text(form.weapons.joinToString(", ")),
+            ), DialogTables.Frame.ARTIFACT),
+            abilitiesTable(form),
+            classTable(
+                form.passives.map { Component.text(it.source) to Component.text(it.description) },
+                DialogTables.Frame.EPIC,
+                text("classes.passive-source", "<#e8dfd2>Источник") to text("classes.passive-effect", "<#e8dfd2>Пассивный эффект"),
+            ),
+        )
+        val requirements = if (form.blockers.isEmpty()) form.foundations else form.blockers
+        body.add(1, classTable(
+            requirements.map { Component.text(it.name) to Component.text(it.progress) },
+            DialogTables.Frame.LEGENDARY,
+            text("classes.requirement", "<#e8dfd2>Условие") to text("classes.progress", "<#e8dfd2>Прогресс"),
+        ))
+        feedback?.let { body.add(0, PaperDialogBody(plain(it), 468)) }
+
+        val buttons = buildList {
+            form.parentId?.let(view.forms::get)?.let { parent -> add(classDestination(player, parent)) }
+            form.children.mapNotNull(view.forms::get).forEach { add(classDestination(player, it)) }
+            if (!form.active) {
+                if (form.unlocked && view.canChange) add(action(
+                    "class_select_${form.id}", "classes.select-label", "<#9bd48d>Выбрать <name>",
+                    "classes.select-tooltip", "Сделать этот класс активным",
+                ) {
+                    classDetail(player, form.id, classChangeMessage(classService.select(player, form.id), form.name))
+                }.copy(label = text("classes.select-label", "<#9bd48d>Выбрать <name>", "name" to Component.text(form.name))))
+                else add(disabledClassAction(
+                    "class_select_${form.id}", "classes.select-disabled", "<#ffffff>[Недоступно] Выбрать <name>",
+                    if (!form.unlocked) text("classes.select-locked-tooltip", "Сначала выполните условия открытия класса") else classLockReason(view),
+                    "name" to Component.text(form.name),
+                ) { classDetail(player, form.id) })
+            }
+        }
+        show(player, PaperDialogScreen(
+            id = "dungeon.classes.${form.id}",
+            title = text("classes.detail-title", "<#c4abff><name>", "name" to Component.text(form.name)),
+            body = body, buttons = buttons, exitButton = back { classes(player) }, columns = 2,
+        )) { classDetail(player, form.id) }
+    }
+
+    private fun classDestination(player: Player, form: DungeonClassForm) = PaperDialogButton(
+        PaperDialogActionId.of("class_${form.id}"),
+        text(
+            if (form.active) "classes.form-active" else "classes.form-label",
+            if (form.active) "<#9bd48d>✔ <name> ›" else "<#ffffff><name> ›",
+            "name" to Component.text(form.name),
+        ),
+        tooltip = text(
+            if (form.unlocked) "classes.form-tooltip" else "classes.form-locked-tooltip",
+            if (form.unlocked) "Открыть сведения об этой форме класса" else "Посмотреть способности и условия открытия",
+        ),
+        width = 230,
+        onClick = { classDetail(player, form.id) },
+    )
+
+    private fun disabledClassAction(
+        id: String,
+        key: String,
+        fallback: String,
+        tooltip: Component,
+        vararg values: Pair<String, Component>,
+        refresh: () -> Unit,
+    ) = PaperDialogButton(
+        PaperDialogActionId.of(id), text(key, fallback, *values), tooltip = tooltip,
+        width = 230, onClick = { refresh() },
+    )
+
+    private fun classSummary(view: DungeonClassesView): Component = when (view.availability) {
+        DungeonClassAvailability.DISABLED -> text("classes.disabled-short", "<#ffffff>Недоступны")
+        DungeonClassAvailability.LOADING -> text("classes.loading-short", "<#e8dfd2>Загрузка…")
+        DungeonClassAvailability.READY -> view.activeForm?.let {
+            text("classes.summary", "<#ffffff><name> · <level> ур.",
+                "name" to Component.text(it.name), "level" to Component.text(it.level))
+        } ?: text("classes.none", "<#ffffff>Не выбран")
+    }
+
+    private fun classChangeState(view: DungeonClassesView): Component = when {
+        view.runLocked -> text("classes.change-run", "<#ffffff>После завершения похода")
+        view.combatLocked -> text("classes.change-combat", "<#ffffff>После выхода из боя")
+        else -> text("classes.change-ready", "<#9bd48d>Доступна")
+    }
+
+    private fun classLockReason(view: DungeonClassesView): Component = when {
+        view.runLocked -> text("classes.lock-run", "<#ffffff>Класс зафиксирован до завершения текущего похода")
+        view.combatLocked -> text("classes.lock-combat", "<#ffffff>Сменить класс можно после выхода из боя")
+        else -> text("classes.locked", "<#ffffff>Класс сейчас изменить нельзя")
+    }
+
+    private fun classChangeMessage(result: DungeonClassChange, name: String?, clear: Boolean = false): Component = when (result) {
+        DungeonClassChange.APPLIED -> if (clear) text("classes.result.cleared", "<#9bd48d>✔ Класс отключён. Прогресс сохранён.")
+            else text("classes.result.selected", "<#9bd48d>✔ Активирован класс <name>.", "name" to Component.text(name.orEmpty()))
+        DungeonClassChange.UNCHANGED -> text("classes.result.unchanged", "<#e8dfd2>Этот класс уже выбран.")
+        DungeonClassChange.NOT_READY -> text("classes.result.loading", "<#e8dfd2>Профиль ещё загружается. Попробуйте снова через несколько секунд.")
+        DungeonClassChange.LOCKED -> text("classes.result.locked", "<#ffffff>Сейчас класс изменить нельзя.")
+        DungeonClassChange.UNKNOWN -> text("classes.result.unknown", "<#ffffff>Эта форма класса больше недоступна. Список обновлён.")
+    }
+
+    private fun abilitiesTable(form: DungeonClassForm) = classTable(listOf(
+        text("classes.mobility", "<#92bed8>F, F") to abilityValue(form.mobility),
+        text("classes.signature", "<#ffb277>F + ЛКМ") to abilityValue(form.signature),
+        text("classes.utility", "<#9bd48d>F + ПКМ") to abilityValue(form.utility),
+    ), DialogTables.Frame.EPIC, text("classes.control", "<#e8dfd2>Управление") to text("classes.ability", "<#e8dfd2>Способность"))
+
+    private fun abilityValue(ability: DungeonClassAbility) = Component.text("${ability.name} — ${ability.description}")
+
+    private fun classTable(
+        rows: List<Pair<Component, Component>>,
+        frame: DialogTables.Frame,
+        headers: Pair<Component, Component>? = null,
+    ) = DialogTables.body(rows, headers = headers, frame = frame, width = 420, columns = DialogTables.Columns.VALUE_WIDE)
 
     private fun autosaveSettingsButton(player: Player) = action("autosaves", "saves.settings.label", "<#c4a7e7>Автосохранение ›", "saves.settings.tooltip", "Выбрать интервал или отключить автоматические точки") { autosaveSettings(player) }
 
