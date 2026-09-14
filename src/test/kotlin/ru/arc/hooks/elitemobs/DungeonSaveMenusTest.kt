@@ -235,7 +235,12 @@ class DungeonSaveMenusTest : FreeSpec({
 
         menus.classes(player)
         screens.last().id shouldBe "dungeon.classes"
-        screens.last().buttons.single { it.id.value == "class_warrior" }.onClick.handle(mockk())
+        val rootButton = screens.last().buttons.single { it.id.value == "class_warrior" }
+        rootButton.label shouldBe Component.text("<#c4abff><name> ›")
+            .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)
+        rootButton.tooltip shouldBe Component.text("<#e8dfd2><role><newline><newline><#e8dfd2>Открыть ветку класса")
+            .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)
+        rootButton.onClick.handle(mockk())
         screens.last().id shouldBe "dungeon.classes.warrior"
         screens.last().buttons.single { it.id.value == "class_select_warrior" }.onClick.handle(mockk())
 
@@ -292,7 +297,46 @@ class DungeonSaveMenusTest : FreeSpec({
         screens.last().buttons.single().onClick.handle(mockk())
 
         screens.last().buttons.map { it.id.value } shouldBe listOf("class_select_paladin", "class_guardian")
-        screens.last().buttons.last().label shouldBe Component.text("<#ffffff>[Закрыто до <level> ур.] <name> ›")
+        screens.last().buttons.last().label shouldBe Component.text("<#ffffff>[Недоступно] <name> ›")
+            .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)
+        screens.last().buttons.last().tooltip shouldBe Component.text("<#e8dfd2>Откроется на <level> уровне<newline><newline><#e8dfd2>Показать требования и способности")
+            .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)
+    }
+
+    "class admin can open a locked form from its detail" {
+        val player = paper.addPlayer("class-admin")
+        val dungeon = mockk<EMDungeonQol>(relaxed = true)
+        every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(secondArg<String>()) }
+        val classes = mockk<DungeonClassService>()
+        val grants = mockk<DungeonClassGrantService>()
+        val form = dungeonClassForm("guardian", "Страж").copy(unlocked = false)
+        every { classes.view(player) } returns DungeonClassesView(
+            availability = DungeonClassAvailability.READY,
+            roots = listOf(form.id),
+            forms = mapOf(form.id to form),
+        )
+        every { grants.grant(player, form.id) } returns DungeonClassGrantResult(
+            DungeonClassGrantResult.Status.APPLIED,
+            form.id,
+            form.name,
+        )
+        val screens = mutableListOf<PaperDialogScreen>()
+        val menus = DungeonSaveMenus(
+            dungeon,
+            classService = classes,
+            classGrants = grants,
+            canGrantClasses = { true },
+        ) { _, screen, _ -> screens += screen }
+
+        menus.classes(player)
+        screens.last().buttons.single().onClick.handle(mockk())
+        val adminButton = screens.last().buttons.single { it.id.value == "class_admin_grant_guardian" }
+        adminButton.label shouldBe Component.text("<#c4a7e7>Открыть класс")
+            .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)
+        adminButton.onClick.handle(mockk())
+
+        verify(exactly = 1) { grants.grant(player, form.id) }
+        screens.last().body.first().text shouldBe Component.text("<#9bd48d>✔ Класс <name> открыт.")
             .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)
     }
 

@@ -25,6 +25,8 @@ internal class DungeonSaveMenus(
     private val crystals: (Player) -> String? = ::readDungeonCrystals,
     private val readQuests: (Player) -> List<DungeonQuestInfo>? = ::readDungeonQuests,
     private val classService: DungeonClassService = NativeDungeonClassService,
+    private val classGrants: DungeonClassGrantService = NativeDungeonClassGrantService,
+    private val canGrantClasses: (Player) -> Boolean = { it.hasPermission("arc.dungeon.admin.classgrant") },
     private val show: (Player, PaperDialogScreen, (() -> Unit)?) -> Unit = { player, screen, reopen ->
         val close = PaperDialogButton(PaperDialogActionId.of("close"), dungeon.text("saves.dialog.close-label", "<#e8dfd2>Закрыть"), width = 200, closeDialogBeforeAction = true) { }
         // A root Close is already the footer, so never move a second Close into the grid.
@@ -227,16 +229,16 @@ internal class DungeonSaveMenus(
                     PaperDialogActionId.of("class_${root.id}"),
                     text(
                         if (activeTree) "classes.root-active" else if (root.unlocked) "classes.root" else "classes.root-locked",
-                        if (activeTree) "<#9bd48d>✔ <name> · <role> ›"
-                        else if (root.unlocked) "<#ffffff><name> · <role> ›"
-                        else "<#ffffff>[Закрыт] <name> · <role> ›",
+                        if (activeTree) "<#9bd48d>✔ <name> ›"
+                        else if (root.unlocked) "<#c4abff><name> ›"
+                        else "<#ffffff>[Недоступно] <name> ›",
                         "name" to Component.text(root.name),
-                        "role" to text("classes.catalog.${root.id}.role", root.weapons.joinToString(" / ")),
                     ),
                     tooltip = text(
                         if (root.unlocked) "classes.root-tooltip" else "classes.root-locked-tooltip",
-                        if (root.unlocked) "Открыть формы, способности и прогресс этой ветки"
-                        else "Посмотреть способности и условия открытия этой ветки",
+                        if (root.unlocked) "<#e8dfd2><role><newline><newline><#e8dfd2>Открыть ветку класса"
+                        else "<#e8dfd2><role><newline><newline><#e8dfd2>Показать требования и способности",
+                        "role" to text("classes.catalog.${root.id}.role", root.weapons.joinToString(" / ")),
                     ),
                     width = 230,
                     onClick = { classDetail(player, root.id) },
@@ -309,16 +311,26 @@ internal class DungeonSaveMenus(
 
         val buttons = buildList {
             if (!form.active) {
-                if (form.unlocked && view.canChange) add(action(
-                    "class_select_${form.id}", "classes.select-label", "<#9bd48d>Выбрать <name>",
-                    "classes.select-tooltip", "Сделать этот класс активным",
+                if (!form.unlocked && canGrantClasses(player)) {
+                    if (view.runLocked) add(disabledClassAction(
+                        "class_admin_grant_${form.id}", "classes.admin-disabled", "<#ffffff>[Недоступно] Открыть класс",
+                        classLockReason(view),
+                    ) { classDetail(player, form.id) })
+                    else add(action(
+                        "class_admin_grant_${form.id}", "classes.admin-label", "<#c4a7e7>Открыть класс",
+                        "classes.admin-tooltip", "Открыть и выбрать класс, повысив только необходимые боевые навыки",
+                    ) {
+                        classDetail(player, form.id, classAdminGrantMessage(classGrants.grant(player, form.id)))
+                    })
+                } else if (form.unlocked && view.canChange) add(action(
+                    "class_select_${form.id}", "classes.select-label", "<#9bd48d>Выбрать класс",
+                    "classes.select-tooltip", "Сделать <name> активным классом",
                 ) {
                     classDetail(player, form.id, classChangeMessage(classService.select(player, form.id), form.name))
-                }.copy(label = text("classes.select-label", "<#9bd48d>Выбрать <name>", "name" to Component.text(form.name))))
+                }.copy(tooltip = text("classes.select-tooltip", "Сделать <name> активным классом", "name" to Component.text(form.name))))
                 else add(disabledClassAction(
-                    "class_select_${form.id}", "classes.select-disabled", "<#ffffff>[Недоступно] Выбрать <name>",
+                    "class_select_${form.id}", "classes.select-disabled", "<#ffffff>[Недоступно] Выбрать класс",
                     if (!form.unlocked) text("classes.select-locked-tooltip", "Сначала выполните условия открытия класса") else classLockReason(view),
-                    "name" to Component.text(form.name),
                 ) { classDetail(player, form.id) })
             }
             if (form.unlocked) form.children.mapNotNull(view.forms::get).forEach { add(classNextDestination(player, it)) }
@@ -335,15 +347,16 @@ internal class DungeonSaveMenus(
         PaperDialogActionId.of("class_${form.id}"),
         text(
             if (form.active) "classes.next-active" else if (form.unlocked) "classes.next" else "classes.next-locked",
-            if (form.active) "<#9bd48d>✔ <name> · <level> ур. ›"
-            else if (form.unlocked) "<#ffffff>Развитие: <name> · <level> ур. ›"
-            else "<#ffffff>[Закрыто до <level> ур.] <name> ›",
+            if (form.active) "<#9bd48d>✔ <name> ›"
+            else if (form.unlocked) "<#c4abff><name> ›"
+            else "<#ffffff>[Недоступно] <name> ›",
             "name" to Component.text(form.name),
-            "level" to Component.text(form.requiredLevel),
         ),
         tooltip = text(
             if (form.unlocked) "classes.form-tooltip" else "classes.form-locked-tooltip",
-            if (form.unlocked) "Открыть сведения об этой форме класса" else "Посмотреть способности и условия открытия",
+            if (form.unlocked) "<#e8dfd2>Открыть ступень класса<newline><newline><#e8dfd2>Уровень ветки: <level>"
+            else "<#e8dfd2>Откроется на <level> уровне<newline><newline><#e8dfd2>Показать требования и способности",
+            "level" to Component.text(form.requiredLevel),
         ),
         width = 230,
         onClick = { classDetail(player, form.id) },
@@ -353,7 +366,7 @@ internal class DungeonSaveMenus(
         PaperDialogActionId.of("class_${form.id}"),
         text(
             "classes.previous",
-            "<#e8dfd2>← Предыдущая ступень: <name>",
+            "<#c4abff>‹ <name>",
             "name" to Component.text(form.name),
         ),
         tooltip = text("classes.previous-tooltip", "Вернуться на предыдущую ступень этой ветки"),
@@ -380,6 +393,26 @@ internal class DungeonSaveMenus(
             text("classes.summary", "<#ffffff><name> · <level> ур.",
                 "name" to Component.text(it.name), "level" to Component.text(it.level))
         } ?: text("classes.none", "<#ffffff>Не выбран")
+    }
+
+    private fun classAdminGrantMessage(result: DungeonClassGrantResult): Component = when (result.status) {
+        DungeonClassGrantResult.Status.APPLIED -> if (result.skillIncreases.isEmpty()) {
+            text("classes.admin-applied", "<#9bd48d>✔ Класс <name> открыт.", "name" to Component.text(result.formName))
+        } else {
+            text(
+                "classes.admin-applied-with-skills",
+                "<#9bd48d>✔ Класс <name> открыт. Повышены навыки: <skills>.",
+                "name" to Component.text(result.formName),
+                "skills" to Component.text(result.skillIncreases.joinToString(", ") { "${it.name} ${it.previousLevel} → ${it.newLevel}" }),
+            )
+        }
+        DungeonClassGrantResult.Status.ALREADY_GRANTED ->
+            text("classes.admin-already", "<#e8dfd2>Класс <name> уже открыт.", "name" to Component.text(result.formName))
+        DungeonClassGrantResult.Status.DISABLED -> text("classes.admin-disabled-system", "<#d7b486>Система классов сейчас выключена.")
+        DungeonClassGrantResult.Status.NOT_READY -> text("classes.admin-loading", "<#d7b486>Профиль класса ещё загружается.")
+        DungeonClassGrantResult.Status.UNKNOWN_FORM -> text("classes.admin-unknown", "<#d7b486>Эта форма класса больше не существует.")
+        DungeonClassGrantResult.Status.RUN_LOCKED -> text("classes.admin-run-locked", "<#d7b486>Класс зафиксирован до завершения текущего похода.")
+        DungeonClassGrantResult.Status.FAILED -> text("classes.admin-failed", "<#d7b486>Не удалось открыть класс. Изменения отменены.")
     }
 
     private fun classChangeState(view: DungeonClassesView): Component = when {
