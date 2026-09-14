@@ -83,6 +83,7 @@ import java.nio.charset.StandardCharsets
 import java.util.Base64
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.acos
 import kotlin.math.atan2
@@ -362,7 +363,7 @@ internal fun decodeTravelAnchorAccess(encoded: String): List<TravelAnchorAccessE
         }.getOrNull()
     }.toList()
 
-private data class TravelAnchorPosition(val worldId: UUID, val x: Int, val y: Int, val z: Int) {
+internal data class TravelAnchorPosition(val worldId: UUID, val x: Int, val y: Int, val z: Int) {
     val chunkX: Int get() = x shr 4
     val chunkZ: Int get() = z shr 4
 
@@ -374,6 +375,44 @@ private data class TravelAnchorPosition(val worldId: UUID, val x: Int, val y: In
         fun of(worldId: UUID, x: Int, y: Int, z: Int) = TravelAnchorPosition(worldId, x, y, z)
     }
 }
+
+internal fun clusterTravelAnchorPositions(
+    positions: Iterable<TravelAnchorPosition>,
+): List<List<TravelAnchorPosition>> {
+    val remaining = positions.toMutableSet()
+    val order = compareBy<TravelAnchorPosition>({ it.worldId.toString() }, { it.y }, { it.x }, { it.z })
+    return buildList {
+        while (remaining.isNotEmpty()) {
+            val seed = checkNotNull(remaining.minWithOrNull(order))
+            remaining.remove(seed)
+            val group = mutableListOf(seed)
+            val queue = ArrayDeque<TravelAnchorPosition>().apply { add(seed) }
+            while (queue.isNotEmpty()) {
+                val current = queue.removeFirst()
+                // ponytail: at most 64 visible targets; the simple scan keeps this grouping obvious.
+                val neighbours = remaining.filter { candidate ->
+                    candidate.worldId == current.worldId &&
+                        candidate.y == current.y &&
+                        abs(candidate.x - current.x) <= 1 &&
+                        abs(candidate.z - current.z) <= 1
+                }
+                remaining.removeAll(neighbours.toSet())
+                group += neighbours
+                queue.addAll(neighbours)
+            }
+            add(group.sortedWith(order))
+        }
+    }
+}
+
+private data class TravelAnchorRenderCandidate(
+    val key: TravelAnchorPosition,
+    val destination: TravelAnchorPosition,
+    val center: Location,
+    val distanceSquared: Double,
+    val dot: Double,
+    val minimumSelectionDot: Double,
+)
 
 private data class TravelAnchorTeleportPortalSettings(
     val gate: PortalOriginGateSettings,
@@ -433,6 +472,16 @@ private data class TravelAnchorSettings(
     fun targetMessage(key: String, name: String, distance: String): Component =
         TextUtil.mm(source.string("messages.$key", "").replace("%distance%", distance), true)
             .replaceText { it.matchLiteral("%name%").replacement(Component.text(name)) }
+
+    fun markerLabel(name: String, foreignOwner: String?): Component {
+        val title = Component.text(name).color(TextColor.color(0xFFD166))
+        val ownerLine = foreignOwner?.let { owner ->
+            TextUtil.mm(source.string("visual.foreign-owner-line", "<#e8dfd2>Владелец: <#ffffff>%owner%"), true)
+                .replaceText { it.matchLiteral("%owner%").replacement(Component.text(owner)) }
+        }
+        return (ownerLine?.let { title.append(Component.newline()).append(it) } ?: title)
+            .decoration(TextDecoration.ITALIC, false)
+    }
 
     fun namingText(key: String, vararg replacements: Pair<String, String>): Component {
         var text = TextUtil.mm(source.string("naming.dialog.$key", ""), true)
@@ -926,13 +975,20 @@ object TravelAnchorsModule : PluginModule, Listener {
             return
         }
         val candidates = visibleCandidates(player, source)
-        val selected = chooseTravelAnchorTarget(candidates, current.range * current.range, current.selectionDot)?.target
-        render(player, candidates, selected)
+        val renderCandidates = clusterCandidates(player, candidates)
+        val selected = chooseTravelAnchorTarget(
+            renderCandidates.map { candidate ->
+                AimCandidate(candidate, candidate.distanceSquared, candidate.dot, candidate.minimumSelectionDot)
+            },
+            current.range * current.range,
+            current.selectionDot,
+        )?.target
+        render(player, renderCandidates, selected)
         if (selected != null) {
-            selectedTargets[player.uniqueId] = selected
-            val distance = candidates.first { it.target == selected }.distanceSquared.let(Math::sqrt).roundToInt().toString()
+            selectedTargets[player.uniqueId] = selected.destination
+            val distance = sqrt(selected.distanceSquared).roundToInt().toString()
             val message = travelAnchorTargetMessage(source != null, staffHeld) ?: return
-            val targetName = anchorNames[selected] ?: current.defaultAnchorName()
+            val targetName = anchorNames[selected.destination] ?: current.defaultAnchorName()
             player.sendActionBar(current.targetMessage(message, targetName, distance))
         } else {
             selectedTargets.remove(player.uniqueId)
@@ -982,20 +1038,67 @@ object TravelAnchorsModule : PluginModule, Listener {
     private fun selectTarget(player: Player, source: TravelAnchorPosition?): TravelAnchorPosition? {
         val current = settings ?: return null
         return chooseTravelAnchorTarget(
-            visibleCandidates(player, source),
+            clusterCandidates(player, visibleCandidates(player, source)).map { candidate ->
+                AimCandidate(candidate, candidate.distanceSquared, candidate.dot, candidate.minimumSelectionDot)
+            },
             current.range * current.range,
             current.selectionDot,
-        )?.target
+        )?.target?.destination
+    }
+
+    private fun clusterCandidates(
+        player: Player,
+        candidates: List<AimCandidate<TravelAnchorPosition>>,
+    ): List<TravelAnchorRenderCandidate> {
+        val current = settings ?: return emptyList()
+        val byPosition = candidates.associateBy(AimCandidate<TravelAnchorPosition>::target)
+        val eye = player.eyeLocation
+        val direction = eye.direction.normalize()
+        return clusterTravelAnchorPositions(byPosition.keys).map { positions ->
+            val members = positions.mapNotNull(byPosition::get)
+            val center = Location(
+                player.world,
+                positions.sumOf { it.x + 0.5 } / positions.size,
+                positions.sumOf { it.y + 0.5 } / positions.size,
+                positions.sumOf { it.z + 0.5 } / positions.size,
+            )
+            val delta = center.toVector().subtract(eye.toVector())
+            val distanceSquared = delta.lengthSquared()
+            val dot = direction.dot(delta.normalize())
+            val actualDistance = sqrt(distanceSquared)
+            val scale = travelAnchorScale(
+                dot,
+                current.visibleDot,
+                current.minimumScale,
+                current.maximumScale,
+                actualDistance,
+                current.nearbyMaximumScale,
+                current.nearbyDistance,
+                current.fullScaleDistance,
+            )
+            TravelAnchorRenderCandidate(
+                key = positions.first(),
+                destination = members.minBy(AimCandidate<TravelAnchorPosition>::distanceSquared).target,
+                center = center,
+                distanceSquared = distanceSquared,
+                dot = dot,
+                minimumSelectionDot = travelAnchorExpandedSelectionDot(
+                    current.selectionDot,
+                    travelAnchorDisplayDistance(actualDistance, current.proxyDistance),
+                    scale,
+                ),
+            )
+        }
     }
 
     private fun render(
         player: Player,
-        candidates: List<AimCandidate<TravelAnchorPosition>>,
-        selected: TravelAnchorPosition?,
+        candidates: List<TravelAnchorRenderCandidate>,
+        selected: TravelAnchorRenderCandidate?,
     ) {
         val current = settings ?: return
         val playerDisplays = displays.getOrPut(player.uniqueId, ::linkedMapOf)
-        val desired = candidates.mapTo(hashSetOf(), AimCandidate<TravelAnchorPosition>::target)
+        val desired = candidates.mapTo(hashSetOf(), TravelAnchorRenderCandidate::key)
         playerDisplays.keys.filterNot { it in desired }.toList().forEach { position ->
             playerDisplays.remove(position)?.let {
                 player.hideEntity(ARC.instance, it)
@@ -1007,8 +1110,8 @@ object TravelAnchorsModule : PluginModule, Listener {
         candidates.forEach { candidate ->
             val actualDistance = Math.sqrt(candidate.distanceSquared)
             val location = displayLocation(player, candidate)
-            val display = playerDisplays[candidate.target]?.takeIf { it.isValid } ?: spawnDisplay(player, location).also {
-                playerDisplays[candidate.target] = it
+            val display = playerDisplays[candidate.key]?.takeIf { it.isValid } ?: spawnDisplay(player, location).also {
+                playerDisplays[candidate.key] = it
             }
             display.teleport(location)
             val scale = travelAnchorScale(
@@ -1029,23 +1132,22 @@ object TravelAnchorsModule : PluginModule, Listener {
                 Vector3f(scale, scale, shape.depth),
                 AxisAngle4f(),
             )
-            display.glowColorOverride = if (candidate.target == selected) SELECTED_COLOR else VISIBLE_COLOR
-            if (candidate.target == selected) {
+            display.glowColorOverride = if (candidate == selected) SELECTED_COLOR else VISIBLE_COLOR
+            if (candidate == selected) {
                 selectedLocation = location
                 selectedScale = scale
             }
         }
         if (selected != null && selectedLocation != null) {
-            renderLabel(player, selected, checkNotNull(selectedLocation), selectedScale)
+            renderLabel(player, selected.destination, checkNotNull(selectedLocation), selectedScale)
         } else clearLabel(player)
         if (playerDisplays.isEmpty()) displays.remove(player.uniqueId)
     }
 
-    private fun displayLocation(player: Player, candidate: AimCandidate<TravelAnchorPosition>): Location {
+    private fun displayLocation(player: Player, candidate: TravelAnchorRenderCandidate): Location {
         val eye = player.eyeLocation
-        val target = Location(player.world, candidate.target.x + 0.5, candidate.target.y + 0.5, candidate.target.z + 0.5)
         val distance = travelAnchorDisplayDistance(Math.sqrt(candidate.distanceSquared), checkNotNull(settings).proxyDistance)
-        return travelAnchorDisplayCenter(eye, target, distance)
+        return travelAnchorDisplayCenter(eye, candidate.center, distance)
     }
 
     private fun spawnDisplay(player: Player, location: Location): BlockDisplay {
@@ -1095,9 +1197,10 @@ object TravelAnchorsModule : PluginModule, Listener {
         label.teleport(location)
         val labelScale = travelAnchorLabelScale(marker.distance(player.eyeLocation), current.labelMinimumScale, current.labelMaximumScale)
         label.setTransformationMatrix(Matrix4f().scaling(labelScale))
-        val text = Component.text(anchorNames[position] ?: current.defaultAnchorName())
-            .color(TextColor.color(0xFFD166))
-            .decoration(TextDecoration.ITALIC, false)
+        val owner = anchorOwners[position]
+            ?.takeUnless { identityAllows(it, player) }
+            ?.let(::displayName)
+        val text = current.markerLabel(anchorNames[position] ?: current.defaultAnchorName(), owner)
         if (label.text() != text) label.text(text)
     }
 

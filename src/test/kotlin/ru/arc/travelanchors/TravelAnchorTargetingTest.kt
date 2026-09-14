@@ -73,6 +73,23 @@ class TravelAnchorTargetingTest : FunSpec({
         scales[10] shouldBe null
     }
 
+    test("touching horizontal anchors form one display blob without merging elevator floors") {
+        val world = UUID.fromString("c63d7480-5db5-4d1d-9ac6-9abeb8ee3a40")
+        val adjacent = listOf(
+            TravelAnchorPosition(world, 0, 64, 0),
+            TravelAnchorPosition(world, 1, 64, 1),
+            TravelAnchorPosition(world, 2, 64, 1),
+        )
+        val upperFloor = TravelAnchorPosition(world, 1, 65, 1)
+        val isolated = TravelAnchorPosition(world, 8, 64, 8)
+
+        clusterTravelAnchorPositions(adjacent + upperFloor + isolated).map { it.toSet() }.toSet() shouldBe setOf(
+            adjacent.toSet(),
+            setOf(upperFloor),
+            setOf(isolated),
+        )
+    }
+
     test("standing on an anchor gives Shift priority over the staff hint") {
         travelAnchorTargetMessage(hasAnchorBelow = true, staffHeld = true) shouldBe "target-anchor"
         travelAnchorTargetMessage(hasAnchorBelow = false, staffHeld = true) shouldBe "target-staff"
