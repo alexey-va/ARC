@@ -565,6 +565,9 @@ internal object OriginDiningLayout {
 
     fun waiterHome(waiterId: Int): OriginDiningPoint? = waiterHomes[waiterId]
 
+    internal fun ambientWaiterAssignments(): Map<String, Int> =
+        OriginDiningAmbientLayout.guestTables.associate { it.id to it.waiterId }
+
     fun waiterServes(seat: OriginDiningSeat, waiterId: Int): Boolean =
         if (seat.id.startsWith("brewery_")) waiterId == 410 || waiterId == 411
         else waiterId == 431 || waiterId == 432
@@ -1054,9 +1057,7 @@ private class OriginDiningService : AutoCloseable {
                 val original = OriginDiningAmbientLayout.guestTables.firstOrNull { it.npcId == npcId }
                 if (original != null && candidates.isNotEmpty()) {
                     val block = world.getBlockAt(floor(seat.x).toInt(), seat.y.toInt(), floor(seat.z).toInt())
-                    val menu = OriginDiningLayout.dynamicMenu(block.location) ?: BreweryTableDialogs.Menu.COURTYARD
                     tables[npcId] = original.copy(
-                        waiterId = chooseWaiter(menu, seat),
                         meal = OriginDiningLayout.centeredDishPoint(seat, 1.0, OriginDiningLayout.dynamicTableHeight),
                         waiterStop = dynamicWaiterStop(block, seat),
                     )

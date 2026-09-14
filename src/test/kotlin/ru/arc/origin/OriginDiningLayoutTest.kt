@@ -28,6 +28,19 @@ class OriginDiningLayoutTest : FreeSpec({
         OriginDiningLayout.waiterIds shouldBe setOf(410, 411, 431, 432)
     }
 
+    "ambient tables keep both waiters active in each scene" {
+        OriginDiningLayout.ambientWaiterAssignments() shouldBe
+            mapOf(
+                "brewery_north" to 410,
+                "brewery_south" to 410,
+                "brewery_east" to 411,
+                "restaurant_a_west" to 431,
+                "restaurant_a_north" to 431,
+                "restaurant_b_east" to 432,
+                "restaurant_b_north" to 432,
+            )
+    }
+
     "every dish is centered one block in front of its chair" {
         val expected =
             mapOf(
