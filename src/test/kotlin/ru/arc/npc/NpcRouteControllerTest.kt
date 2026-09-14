@@ -81,6 +81,22 @@ class NpcRouteControllerTest : FreeSpec({
         findNpcGridPath(NpcRouteCell(0, 0), listOf(NpcRouteCell(2, 0)), profile) { true } shouldBe null
     }
 
+    "snapped endpoint cannot report the current cell as progress" {
+        val profile = NpcRouteProfile(
+            id = "hall",
+            floorY = 72,
+            bounds = NpcRouteBounds(0, 4, 0, 1),
+        )
+        val start = NpcRouteCell(0, 0)
+        val orderedGoals = listOf(NpcRouteCell(4, 0), NpcRouteCell(1, 0), start)
+
+        val path = findNpcGridPathToNearestCandidate(start, orderedGoals, profile) { cell ->
+            cell.x < 2
+        }
+
+        path shouldBe listOf(start, NpcRouteCell(1, 0))
+    }
+
     "scene obstacle cells are treated as hard walls" {
         val profile = NpcRouteProfile(
             id = "hall",

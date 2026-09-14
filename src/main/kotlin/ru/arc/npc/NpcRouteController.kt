@@ -186,6 +186,23 @@ internal fun findNpcGridPath(
     return null
 }
 
+/**
+ * Tries snapped endpoints in their caller-provided order instead of treating
+ * every endpoint as an equivalent A* goal. This keeps an obstructed target
+ * close to its requested position and prevents the start cell from becoming a
+ * false one-cell success merely because it lies inside the snap radius.
+ */
+internal fun findNpcGridPathToNearestCandidate(
+    start: NpcRouteCell,
+    goals: List<NpcRouteCell>,
+    profile: NpcRouteProfile,
+    isWalkable: (NpcRouteCell) -> Boolean,
+): List<NpcRouteCell>? =
+    goals.asSequence()
+        .filter { it != start }
+        .mapNotNull { goal -> findNpcGridPath(start, listOf(goal), profile, isWalkable) }
+        .firstOrNull()
+
 private data class ActiveNpcRoute(
     val token: UUID,
     val profile: NpcRouteProfile,
@@ -346,9 +363,10 @@ internal class CitizensNpcRouteController(
             val goals = candidates(world, anchor.blockX, anchor.blockZ, profile, blocked)
             val exact = NpcRouteCell(anchor.blockX, anchor.blockZ)
             val walkable: (NpcRouteCell) -> Boolean = { it !in blocked && isWalkable(world, profile, it) }
-            val segment =
-                exact.takeIf { it in goals }?.let { findNpcGridPath(path.last(), listOf(it), profile, walkable) }
-                    ?: findNpcGridPath(path.last(), goals, profile, walkable)
+            val orderedGoals = exact.takeIf { it in goals }?.let { listOf(it) + goals.filterNot { goal -> goal == it } } ?: goals
+            val segment = if (path.last() == exact) listOf(exact) else {
+                findNpcGridPathToNearestCandidate(path.last(), orderedGoals, profile, walkable)
+            }
             if (segment == null) {
                 event("PATH_UNAVAILABLE", profile, npc, destination, reason = "no-level-route")
                 return false
