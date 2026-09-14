@@ -18,6 +18,7 @@ import org.bukkit.Bukkit
 import org.bukkit.Color
 import org.bukkit.Location
 import org.bukkit.Material
+import org.bukkit.NamespacedKey
 import org.bukkit.Particle
 import org.bukkit.Sound
 import org.bukkit.SoundCategory
@@ -45,7 +46,9 @@ import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
+import org.bukkit.persistence.PersistentDataType
 import org.bukkit.util.Transformation
+import org.bukkit.util.BoundingBox
 import org.joml.AxisAngle4f
 import org.joml.Vector3f
 import ru.arc.ARC
@@ -57,9 +60,11 @@ import ru.arc.hooks.HookRegistry
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import ru.arc.worldcontent.BreweryTableDialogs
+import ru.arc.worldcontent.ItemsAdderFurnitureRuntime
 import java.util.ArrayDeque
 import java.util.UUID
 import kotlin.math.cos
+import kotlin.math.floor
 import kotlin.math.min
 import kotlin.math.sin
 
@@ -197,6 +202,32 @@ internal data class OriginDiningPoint(
     fun inWorld(world: org.bukkit.World): Location = Location(world, x, y, z, yaw, 0f)
 }
 
+private data class OriginDiningBlockBounds(
+    val minX: Int,
+    val minY: Int,
+    val minZ: Int,
+    val maxX: Int,
+    val maxY: Int,
+    val maxZ: Int,
+)
+
+private data class OriginDiningAutoSeatingZone(
+    val id: String,
+    val guestIds: List<Int>,
+    val minimumFreeSeats: Int,
+    val bounds: OriginDiningBlockBounds,
+    val excludedBlocks: Set<Triple<Int, Int, Int>>,
+)
+
+internal data class OriginDiningFurnitureSeatProfile(
+    val namespacedIds: Set<String>,
+    val yawOffset: Float,
+    val offsetX: Double,
+    val offsetY: Double,
+    val offsetZ: Double,
+    val requireTable: Boolean,
+)
+
 internal data class OriginDiningSeat(
     val id: String,
     val menu: BreweryTableDialogs.Menu,
@@ -313,6 +344,7 @@ internal object OriginDiningLayout {
     private var scales = defaultScales()
     private var surfaceLifts = defaultSurfaceLifts()
     private var waiterHomes = emptyMap<Int, OriginDiningPoint>()
+    private var furnitureSeatProfiles: List<OriginDiningFurnitureSeatProfile> = emptyList()
 
     fun load(dataPath: java.nio.file.Path) {
         val source = ConfigManager.ofModule(dataPath, "origin-dining.yml")
@@ -337,6 +369,17 @@ internal object OriginDiningLayout {
         dynamicDishOffsetX = source.real("dynamic-seats.dish-offset-x", 0.0).coerceIn(-2.0, 2.0)
         dynamicDishOffsetY = source.real("dynamic-seats.dish-offset-y", 0.0).coerceIn(-2.0, 2.0)
         dynamicDishOffsetZ = source.real("dynamic-seats.dish-offset-z", 0.0).coerceIn(-2.0, 2.0)
+        furnitureSeatProfiles = source.stringList("dynamic-seats.furniture-profile-ids").map { profileId ->
+            val root = "dynamic-seats.furniture-profiles.$profileId"
+            OriginDiningFurnitureSeatProfile(
+                namespacedIds = source.stringList("$root.ids").toSet(),
+                yawOffset = source.real("$root.yaw-offset", 180.0).toFloat(),
+                offsetX = source.real("$root.offset-x", 0.0).coerceIn(-2.0, 2.0),
+                offsetY = source.real("$root.offset-y", 0.0).coerceIn(-2.0, 2.0),
+                offsetZ = source.real("$root.offset-z", 0.0).coerceIn(-2.0, 2.0),
+                requireTable = source.boolean("$root.require-table", true),
+            )
+        }
         deliveryFallbackTicks = source.integer("timing.delivery-fallback-ticks").toLong().coerceIn(1L, 400L)
         servicePauseTicks = source.integer("timing.service-pause-ticks").toLong().coerceIn(1L, 200L)
         nextDeliveryTicks = source.integer("timing.next-delivery-ticks").toLong().coerceIn(1L, 200L)
@@ -468,11 +511,23 @@ internal object OriginDiningLayout {
 
     fun displayScale(dishId: String): Float = scales[dishId] ?: 0.65f
 
+    fun furnitureSeatProfile(namespacedId: String?): OriginDiningFurnitureSeatProfile? =
+        namespacedId?.let { id -> furnitureSeatProfiles.firstOrNull { id in it.namespacedIds } }
+
+    internal fun yawToward(face: BlockFace): Float? =
+        when (face) {
+            BlockFace.NORTH -> 180f
+            BlockFace.EAST -> -90f
+            BlockFace.SOUTH -> 0f
+            BlockFace.WEST -> 90f
+            else -> null
+        }
+
     private fun defaultScales() =
         mapOf(
             "egg" to 0.65f,
             "fish" to 0.65f,
-            "steak" to 1.3f,
+            "steak" to 0.65f,
             "herbal_tea" to 0.65f,
             "berry_kvass" to 0.65f,
             "spiced_mead" to 0.65f,
@@ -480,13 +535,55 @@ internal object OriginDiningLayout {
 
     private fun defaultSurfaceLifts() =
         mapOf(
-            "egg" to 0.12125f,
+            "egg" to 0.28375f,
             "fish" to 0.12125f,
-            "steak" to 0.2025f,
-            "herbal_tea" to 0.0205f,
-            "berry_kvass" to 0.0205f,
-            "spiced_mead" to 0.0205f,
+            "steak" to 0.28375f,
+            "herbal_tea" to 0.24475f,
+            "berry_kvass" to 0.24475f,
+            "spiced_mead" to 0.24475f,
         )
+
+    internal fun stairFacing(yaw: Float): BlockFace {
+        val normalized = ((yaw % 360f) + 360f) % 360f
+        return when {
+            normalized < 45f || normalized >= 315f -> BlockFace.NORTH
+            normalized < 135f -> BlockFace.EAST
+            normalized < 225f -> BlockFace.SOUTH
+            else -> BlockFace.WEST
+        }
+    }
+
+    internal fun stairYaw(facing: BlockFace): Float? =
+        when (facing) {
+            BlockFace.NORTH -> 0f
+            BlockFace.EAST -> 90f
+            BlockFace.SOUTH -> 180f
+            BlockFace.WEST -> -90f
+            else -> null
+        }
+
+    internal fun selectGuestSeats(
+        guests: List<Pair<Int, OriginDiningPoint>>,
+        candidates: List<OriginDiningPoint>,
+        minimumFreeSeats: Int,
+    ): Map<Int, OriginDiningPoint> {
+        val remaining = candidates.sortedWith(compareBy(OriginDiningPoint::x, OriginDiningPoint::y, OriginDiningPoint::z)).toMutableList()
+        val assignmentCount = minOf(guests.size, (remaining.size - minimumFreeSeats).coerceAtLeast(0))
+        return buildMap {
+            guests.take(assignmentCount).forEach { (npcId, fallback) ->
+                val selected = remaining.minWithOrNull(
+                    compareBy<OriginDiningPoint> { candidate ->
+                        val dx = candidate.x - fallback.x
+                        val dy = candidate.y - fallback.y
+                        val dz = candidate.z - fallback.z
+                        dx * dx + dy * dy + dz * dz
+                    }.thenBy(OriginDiningPoint::x).thenBy(OriginDiningPoint::y).thenBy(OriginDiningPoint::z),
+                ) ?: return@forEach
+                put(npcId, selected)
+                remaining.remove(selected)
+            }
+        }
+    }
 }
 
 private enum class OriginDiningPhase {
@@ -562,6 +659,8 @@ private data class OriginDiningDialogue(
 )
 
 private object OriginDiningAmbientLayout {
+    private var configuredGuestSeats: List<OriginDiningGuestSeat> = emptyList()
+    private var configuredGuestTables: List<OriginDiningGuestTable> = emptyList()
     var guestSeats: List<OriginDiningGuestSeat> = emptyList()
         private set
     var guestTables: List<OriginDiningGuestTable> = emptyList()
@@ -569,6 +668,14 @@ private object OriginDiningAmbientLayout {
     var dialogue: List<OriginDiningDialogue> = emptyList()
         private set
     var cleanupPoints: List<OriginDiningPoint> = emptyList()
+        private set
+    var authoredSeatIds: Set<Int> = emptySet()
+        private set
+    var seatLayoutVersion = 0
+        private set
+    var retiredSeatBlocks: List<Triple<Int, Int, Int>> = emptyList()
+        private set
+    var autoSeatingZones: List<OriginDiningAutoSeatingZone> = emptyList()
         private set
     lateinit var legacyMealHitbox: OriginDiningPoint
         private set
@@ -580,12 +687,13 @@ private object OriginDiningAmbientLayout {
         private set
 
     fun load(source: ru.arc.config.Config) {
-        guestSeats =
+        configuredGuestSeats =
             source.stringList("scene.guest-ids").map { rawId ->
                 val id = rawId.toInt()
                 OriginDiningGuestSeat(id, OriginDiningLayout.configPoint(source, "scene.guests.$id.seat"))
             }
-        guestTables =
+        guestSeats = configuredGuestSeats
+        configuredGuestTables =
             source.stringList("scene.ambient-table-ids").map { id ->
                 val root = "scene.ambient-tables.$id"
                 val transit = source.string("$root.transit", "").trim()
@@ -598,6 +706,7 @@ private object OriginDiningAmbientLayout {
                     transit = transit.takeIf(String::isNotEmpty)?.let { parsePoint(it, "$root.transit") },
                 )
             }
+        guestTables = configuredGuestTables
         dialogue =
             source.stringList("scene.dialogue-ids").map { id ->
                 val root = "scene.dialogues.$id"
@@ -609,16 +718,59 @@ private object OriginDiningAmbientLayout {
                 )
             }
         cleanupPoints = source.stringList("scene.cleanup-points").mapIndexed { index, raw -> parsePoint(raw, "scene.cleanup-points[$index]") }
+        authoredSeatIds = source.stringList("scene.authored-seat-ids").map(String::toInt).toSet()
+        seatLayoutVersion = source.integer("scene.seat-layout-version").coerceAtLeast(0)
+        retiredSeatBlocks = source.stringList("scene.retired-seat-blocks").map(::parseBlock)
+        autoSeatingZones = source.stringList("scene.auto-seating.zone-ids").map { id ->
+            val root = "scene.auto-seating.zones.$id"
+            val autoMin = parseBlock(source.string("$root.min-block"))
+            val autoMax = parseBlock(source.string("$root.max-block"))
+            OriginDiningAutoSeatingZone(
+                id = id,
+                guestIds = source.stringList("$root.guest-ids").map(String::toInt),
+                minimumFreeSeats = source.integer("$root.minimum-free-seats", 1).coerceIn(0, 64),
+                bounds = OriginDiningBlockBounds(
+                    minOf(autoMin.first, autoMax.first),
+                    minOf(autoMin.second, autoMax.second),
+                    minOf(autoMin.third, autoMax.third),
+                    maxOf(autoMin.first, autoMax.first),
+                    maxOf(autoMin.second, autoMax.second),
+                    maxOf(autoMin.third, autoMax.third),
+                ),
+                excludedBlocks = source.stringList("$root.excluded-blocks").map(::parseBlock).toSet(),
+            )
+        }
         legacyMealHitbox = OriginDiningLayout.configPoint(source, "scene.legacy-player-table.meal-hitbox")
         legacyMealDisplay = OriginDiningLayout.configPoint(source, "scene.legacy-player-table.meal-display")
         legacyOrderLabel = OriginDiningLayout.configPoint(source, "scene.legacy-player-table.order-label")
         cycleSeconds = source.integer("scene.ambient-cycle-seconds").coerceIn(8, 120)
     }
 
+    fun applyAutoSeating(
+        assignments: Map<Int, OriginDiningPoint>,
+        tables: Map<Int, OriginDiningGuestTable>,
+    ) {
+        val dynamicIds = autoSeatingZones.flatMap(OriginDiningAutoSeatingZone::guestIds).toSet()
+        guestSeats = configuredGuestSeats.filterNot { it.npcId in dynamicIds } + assignments.map { (npcId, seat) -> OriginDiningGuestSeat(npcId, seat) }
+        guestTables = configuredGuestTables.mapNotNull { table ->
+            when {
+                table.npcId !in dynamicIds -> table
+                table.npcId in assignments -> tables[table.npcId] ?: table
+                else -> null
+            }
+        }
+    }
+
     private fun parsePoint(raw: String, path: String): OriginDiningPoint {
         val values = raw.split(',').map(String::trim)
         require(values.size in 3..4) { "$path must be x,y,z[,yaw]" }
         return OriginDiningPoint(values[0].toDouble(), values[1].toDouble(), values[2].toDouble(), values.getOrNull(3)?.toFloat() ?: 0f)
+    }
+
+    private fun parseBlock(raw: String): Triple<Int, Int, Int> {
+        val values = raw.split(',').map(String::trim)
+        require(values.size == 3) { "scene.retired-seat-blocks entries must be x,y,z" }
+        return Triple(values[0].toInt(), values[1].toInt(), values[2].toInt())
     }
 }
 
@@ -663,6 +815,8 @@ private class OriginDiningService : AutoCloseable {
             OriginDiningLayout.deliveryRouteMaxPolls * OriginDiningLayout.waiterPollTicks,
             OriginDiningLayout.sessionTtlMillis,
         )
+        reconcileAuthoredSeatBlocks()
+        resolveAutoGuestSeats()
         cleanupWorldSeats()
         cleanupAmbientLegacy()
         tasks.runLater(20L) {
@@ -677,6 +831,157 @@ private class OriginDiningService : AutoCloseable {
             OriginDiningAmbientLayout.guestSeats.size,
             OriginDiningAmbientLayout.guestTables.size,
         )
+    }
+
+    private fun reconcileAuthoredSeatBlocks() {
+        val world = Bukkit.getWorld(OriginDiningLayout.WORLD) ?: return
+        val authoredSeats = OriginDiningAmbientLayout.guestSeats.filter { it.npcId in OriginDiningAmbientLayout.authoredSeatIds }
+        val targetBlocks = authoredSeats.associateWith { guest ->
+            world.getBlockAt(floor(guest.seat.x).toInt(), guest.seat.y.toInt(), floor(guest.seat.z).toInt())
+        }
+        val blockedTargets = targetBlocks.filterValues { !it.type.isAir && it.type != Material.OAK_STAIRS }
+        if (blockedTargets.isNotEmpty()) {
+            blockedTargets.forEach { (guest, block) ->
+                warn("ORIGIN_DINING phase=SEAT_BLOCK_SKIPPED npc={} reason=target-occupied target={} material={}", guest.npcId, point(guest.seat), block.type)
+            }
+            warn("ORIGIN_DINING phase=SEAT_BLOCKS_RECONCILED status=blocked targets={}", blockedTargets.size)
+            return
+        }
+
+        val migrationKey = NamespacedKey(ARC.instance, "origin_dining_seat_layout_version")
+        val storedVersion = world.persistentDataContainer.get(migrationKey, PersistentDataType.INTEGER) ?: 0
+        val migrate = storedVersion < OriginDiningAmbientLayout.seatLayoutVersion
+        if (!migrate) {
+            info(
+                "ORIGIN_DINING phase=SEAT_BLOCKS_RECONCILED placed=0 cleared=0 skipped=0 migrated=false version={}",
+                OriginDiningAmbientLayout.seatLayoutVersion,
+            )
+            return
+        }
+        var cleared = 0
+        var placed = 0
+        var skipped = 0
+        OriginDiningAmbientLayout.retiredSeatBlocks.forEach { (x, y, z) ->
+            val block = world.getBlockAt(x, y, z)
+            if (block.type == Material.OAK_STAIRS && block.blockData is Stairs) {
+                block.setType(Material.AIR, false)
+                cleared++
+            } else if (!block.type.isAir) {
+                skipped++
+                warn("ORIGIN_DINING phase=SEAT_BLOCK_SKIPPED reason=retired-block-changed target={},{},{} material={}", x, y, z, block.type)
+            }
+        }
+        targetBlocks.forEach { (guest, block) ->
+                val desired = Material.OAK_STAIRS.createBlockData() as Stairs
+                desired.facing = OriginDiningLayout.stairFacing(guest.seat.yaw)
+                desired.half = Bisected.Half.BOTTOM
+                desired.shape = Stairs.Shape.STRAIGHT
+                desired.isWaterlogged = false
+                if (block.blockData.asString != desired.asString) {
+                    block.setBlockData(desired, false)
+                    placed++
+                }
+        }
+        world.persistentDataContainer.set(migrationKey, PersistentDataType.INTEGER, OriginDiningAmbientLayout.seatLayoutVersion)
+        info(
+            "ORIGIN_DINING phase=SEAT_BLOCKS_RECONCILED placed={} cleared={} skipped={} migrated={} version={}",
+            placed,
+            cleared,
+            skipped,
+            migrate,
+            OriginDiningAmbientLayout.seatLayoutVersion,
+        )
+    }
+
+    private fun resolveAutoGuestSeats() {
+        if (OriginDiningAmbientLayout.autoSeatingZones.isEmpty()) return
+        val world = Bukkit.getWorld(OriginDiningLayout.WORLD) ?: return
+        val configured = OriginDiningAmbientLayout.guestSeats.associateBy(OriginDiningGuestSeat::npcId)
+        val assignments = linkedMapOf<Int, OriginDiningPoint>()
+        val tables = linkedMapOf<Int, OriginDiningGuestTable>()
+        OriginDiningAmbientLayout.autoSeatingZones.forEach { zone ->
+            val bounds = zone.bounds
+            val candidates = buildList {
+                for (x in bounds.minX..bounds.maxX) {
+                    for (z in bounds.minZ..bounds.maxZ) {
+                        if (!world.isChunkLoaded(x shr 4, z shr 4)) continue
+                        for (y in bounds.minY..bounds.maxY) {
+                            val block = world.getBlockAt(x, y, z)
+                            if (Triple(x, y, z) in zone.excludedBlocks) continue
+                            val stairs = block.blockData as? Stairs ?: continue
+                            if (stairs.half != Bisected.Half.BOTTOM) continue
+                            val yaw = OriginDiningLayout.stairYaw(stairs.facing) ?: continue
+                            val front = block.getRelative(stairs.facing.oppositeFace)
+                            if (front.type.isAir && !hasFurnitureAt(front)) continue
+                            add(OriginDiningPoint(x + 0.5, y.toDouble(), z + 0.5, yaw))
+                        }
+                    }
+                }
+            }.toMutableList()
+            val furnitureRoots = linkedMapOf<UUID, Pair<Entity, OriginDiningFurnitureSeatProfile>>()
+            world.getNearbyEntities(
+                BoundingBox(
+                    bounds.minX.toDouble(),
+                    bounds.minY.toDouble(),
+                    bounds.minZ.toDouble(),
+                    bounds.maxX + 1.0,
+                    bounds.maxY + 2.0,
+                    bounds.maxZ + 1.0,
+                ),
+            ).forEach { entity ->
+                val handle = ItemsAdderFurnitureRuntime.inspect(entity) ?: return@forEach
+                val profile = OriginDiningLayout.furnitureSeatProfile(handle.namespacedId) ?: return@forEach
+                furnitureRoots.putIfAbsent(handle.root.uniqueId, handle.root to profile)
+            }
+            furnitureRoots.values.forEach { (root, profile) ->
+                val seat = furnitureSeatPoint(root, profile) ?: return@forEach
+                val block = Triple(floor(seat.x).toInt(), floor(seat.y).toInt(), floor(seat.z).toInt())
+                if (block in zone.excludedBlocks) return@forEach
+                candidates += seat
+            }
+            val guests = zone.guestIds.mapNotNull { npcId -> configured[npcId]?.let { npcId to it.seat } }
+            val zoneAssignments =
+                if (candidates.isEmpty()) {
+                    warn(
+                        "ORIGIN_DINING phase=AUTO_GUEST_SEATING zone={} status=fallback reason=no-loaded-candidates bounds={},{},{}:{},{},{}",
+                        zone.id,
+                        bounds.minX,
+                        bounds.minY,
+                        bounds.minZ,
+                        bounds.maxX,
+                        bounds.maxY,
+                        bounds.maxZ,
+                    )
+                    guests.toMap()
+                } else {
+                    OriginDiningLayout.selectGuestSeats(guests, candidates, zone.minimumFreeSeats)
+                }
+            assignments.putAll(zoneAssignments)
+            zoneAssignments.forEach { (npcId, seat) ->
+                val original = OriginDiningAmbientLayout.guestTables.firstOrNull { it.npcId == npcId }
+                if (original != null && candidates.isNotEmpty()) {
+                    val block = world.getBlockAt(floor(seat.x).toInt(), seat.y.toInt(), floor(seat.z).toInt())
+                    val menu = OriginDiningLayout.dynamicMenu(block.location) ?: BreweryTableDialogs.Menu.COURTYARD
+                    tables[npcId] = original.copy(
+                        waiterId = chooseWaiter(menu, seat),
+                        meal = OriginDiningLayout.centeredDishPoint(seat, 1.0, OriginDiningLayout.dynamicTableHeight),
+                        waiterStop = dynamicWaiterStop(block, seat),
+                    )
+                } else if (original != null) {
+                    tables[npcId] = original
+                }
+            }
+            info(
+                "ORIGIN_DINING phase=AUTO_GUEST_SEATING zone={} status=ready candidates={} assigned={} free={} minimum_free={} assignments={}",
+                zone.id,
+                candidates.size,
+                zoneAssignments.size,
+                (candidates.size - zoneAssignments.size).coerceAtLeast(0),
+                zone.minimumFreeSeats,
+                zoneAssignments.entries.joinToString(",") { (npcId, seat) -> "$npcId@${point(seat)}" },
+            )
+        }
+        OriginDiningAmbientLayout.applyAutoSeating(assignments, tables)
     }
 
     fun canOpen(player: Player, menu: BreweryTableDialogs.Menu): Boolean {
@@ -824,6 +1129,11 @@ private class OriginDiningService : AutoCloseable {
                 if (npc.id in OriginDiningLayout.waiterIds && interactWaiter(player, npc.id, "$source:citizens-entity")) return true
             }
         }
+        dynamicFurnitureSeat(entity)?.let { seat ->
+            requestSeatConfirmation(player, seat, "$source:itemsadder-furniture")
+            // ItemsAdder owns the actual mount, so its interaction must continue.
+            return false
+        }
         if (managedInteraction) {
             warn(
                 "ORIGIN_DINING phase=INPUT_UNMAPPED player={} source={} entity={} entity_id={} actual={}",
@@ -915,14 +1225,7 @@ private class OriginDiningService : AutoCloseable {
             info("ORIGIN_DINING phase=DYNAMIC_SEAT_IGNORED block={},{},{} reason=npc-occupied", block.x, block.y, block.z)
             return null
         }
-        val yaw =
-            when (stairs.facing) {
-                BlockFace.NORTH -> 0f
-                BlockFace.EAST -> 90f
-                BlockFace.SOUTH -> 180f
-                BlockFace.WEST -> -90f
-                else -> return null
-            }
+        val yaw = OriginDiningLayout.stairYaw(stairs.facing) ?: return null
         val seat = OriginDiningPoint(block.x + 0.5, block.y.toDouble(), block.z + 0.5, yaw)
         val front = block.getRelative(stairs.facing.oppositeFace)
         val hasTable = !front.type.isAir || hasFurnitureAt(front)
@@ -970,10 +1273,99 @@ private class OriginDiningService : AutoCloseable {
         }
     }
 
+    private fun dynamicFurnitureSeat(entity: Entity): OriginDiningSeat? {
+        val handle = ItemsAdderFurnitureRuntime.inspect(entity) ?: return null
+        val profile = OriginDiningLayout.furnitureSeatProfile(handle.namespacedId) ?: return null
+        val root = handle.root
+        val venueMenu = OriginDiningLayout.dynamicMenu(root.location) ?: return null
+        val seat = furnitureSeatPoint(root, profile) ?: return null
+        if (occupiedByNpcAt(seat.inWorld(root.world))) {
+            info("ORIGIN_DINING phase=DYNAMIC_SEAT_IGNORED furniture={} reason=npc-occupied", handle.namespacedId)
+            return null
+        }
+        val tableFace = furnitureTableFace(root, profile)
+        val hasTable = tableFace != null
+        val menu = if (hasTable) venueMenu else BreweryTableDialogs.Menu.DRINKS
+        val target = if (hasTable) OriginDiningDeliveryTarget.TABLE else OriginDiningDeliveryTarget.INVENTORY
+        val baseDish =
+            if (hasTable) OriginDiningLayout.centeredDishPoint(seat, 1.0, OriginDiningLayout.dynamicTableHeight)
+            else seat.copy(y = seat.y + 1.0)
+        val dish = baseDish.copy(
+            x = baseDish.x + OriginDiningLayout.dynamicDishOffsetX,
+            y = baseDish.y + OriginDiningLayout.dynamicDishOffsetY,
+            z = baseDish.z + OriginDiningLayout.dynamicDishOffsetZ,
+        )
+        val anchorBlock = root.world.getBlockAt(floor(seat.x).toInt(), floor(seat.y).toInt(), floor(seat.z).toInt())
+        val waiterStop = dynamicWaiterStop(anchorBlock, seat)
+        val waiterId = chooseWaiter(venueMenu, seat)
+        val venueId = if (venueMenu == BreweryTableDialogs.Menu.RESTAURANT) "restaurant" else "brewery"
+        return OriginDiningSeat(
+            id = "${venueId}_furniture_${root.uniqueId}",
+            menu = menu,
+            seat = seat,
+            dish = dish,
+            waiterStop = waiterStop,
+            waiterId = waiterId,
+            clickedBlock = Triple(anchorBlock.x, anchorBlock.y, anchorBlock.z),
+            deliveryTarget = target,
+            dynamic = true,
+        ).also {
+            info(
+                "ORIGIN_DINING phase=DYNAMIC_FURNITURE_SEAT_RESOLVED table={} furniture={} yaw={} delivery={} dish_target={} npc={}",
+                it.id,
+                handle.namespacedId,
+                fmt(seat.yaw.toDouble()),
+                target,
+                point(dish),
+                waiterId,
+            )
+        }
+    }
+
+    private fun furnitureSeatPoint(root: Entity, profile: OriginDiningFurnitureSeatProfile): OriginDiningPoint? {
+        val tableFace = furnitureTableFace(root, profile)
+        if (profile.requireTable && tableFace == null) return null
+        val radians = Math.toRadians(root.location.yaw.toDouble())
+        val offsetX = profile.offsetX * cos(radians) - profile.offsetZ * sin(radians)
+        val offsetZ = profile.offsetX * sin(radians) + profile.offsetZ * cos(radians)
+        val yaw = OriginDiningLayout.yawToward(tableFace ?: BlockFace.SELF)
+            ?: normalizeYaw(root.location.yaw + profile.yawOffset)
+        return OriginDiningPoint(
+            root.location.x + offsetX,
+            root.location.y + profile.offsetY,
+            root.location.z + offsetZ,
+            yaw,
+        )
+    }
+
+    private fun furnitureTableFace(root: Entity, profile: OriginDiningFurnitureSeatProfile): BlockFace? {
+        val anchor = root.location.block
+        val preferredYaw = normalizeYaw(root.location.yaw + profile.yawOffset)
+        return listOf(BlockFace.NORTH, BlockFace.EAST, BlockFace.SOUTH, BlockFace.WEST)
+            .filter { face -> hasTableAt(anchor.getRelative(face), root.uniqueId) }
+            .minByOrNull { face -> yawDistance(OriginDiningLayout.yawToward(face) ?: 0f, preferredYaw) }
+    }
+
+    private fun hasTableAt(block: Block, ignoredRoot: UUID): Boolean {
+        if (!block.type.isAir) return true
+        val center = block.location.add(0.5, 0.8, 0.5)
+        return block.world.getNearbyEntities(center, 0.7, 1.2, 0.7).any { entity ->
+            val handle = ItemsAdderFurnitureRuntime.inspect(entity)
+            handle != null && handle.root.uniqueId != ignoredRoot && OriginDiningLayout.furnitureSeatProfile(handle.namespacedId) == null
+        }
+    }
+
+    private fun normalizeYaw(yaw: Float): Float = ((yaw % 360f) + 540f) % 360f - 180f
+
+    private fun yawDistance(first: Float, second: Float): Float = kotlin.math.abs(normalizeYaw(first - second))
+
     private fun occupiedByNpc(block: Block): Boolean {
+        return occupiedByNpcAt(block.location.add(0.5, 0.7, 0.5))
+    }
+
+    private fun occupiedByNpcAt(center: Location): Boolean {
         if (!Bukkit.getPluginManager().isPluginEnabled("Citizens")) return false
-        val center = block.location.add(0.5, 0.7, 0.5)
-        return block.world.getNearbyEntities(center, 0.72, 1.4, 0.72).any { entity ->
+        return center.world.getNearbyEntities(center, 0.72, 1.4, 0.72).any { entity ->
             val npc = runCatching { CitizensAPI.getNPCRegistry().getNPC(entity) }.getOrNull()
             npc != null && entity.vehicle != null
         }

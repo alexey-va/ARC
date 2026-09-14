@@ -57,14 +57,53 @@ class OriginDiningLayoutTest : FreeSpec({
     }
 
     "model bounds define the scale and table-surface lift" {
-        OriginDiningLayout.displayScale("steak") shouldBe 1.3f
+        OriginDiningLayout.displayScale("steak") shouldBe 0.65f
         OriginDiningLayout.displayScale("egg") shouldBe 0.65f
         OriginDiningLayout.displayScale("herbal_tea") shouldBe 0.65f
         OriginDiningLayout.displayScale("fish") shouldBe 0.65f
-        OriginDiningLayout.displayLift("steak") shouldBe 0.2025f
-        OriginDiningLayout.displayLift("egg") shouldBe 0.12125f
-        OriginDiningLayout.displayLift("herbal_tea") shouldBe 0.0205f
+        OriginDiningLayout.displayLift("steak") shouldBe 0.28375f
+        OriginDiningLayout.displayLift("egg") shouldBe 0.28375f
+        OriginDiningLayout.displayLift("herbal_tea") shouldBe 0.24475f
         OriginDiningLayout.mealHitboxSize shouldBe 1.8f
+    }
+
+    "authored guest chairs face their tables" {
+        OriginDiningLayout.stairFacing(-90f) shouldBe org.bukkit.block.BlockFace.WEST
+        OriginDiningLayout.stairFacing(90f) shouldBe org.bukkit.block.BlockFace.EAST
+        OriginDiningLayout.stairFacing(180f) shouldBe org.bukkit.block.BlockFace.SOUTH
+        OriginDiningLayout.stairFacing(0f) shouldBe org.bukkit.block.BlockFace.NORTH
+        OriginDiningLayout.stairYaw(org.bukkit.block.BlockFace.WEST) shouldBe -90f
+        OriginDiningLayout.stairYaw(org.bukkit.block.BlockFace.EAST) shouldBe 90f
+        OriginDiningLayout.yawToward(org.bukkit.block.BlockFace.NORTH) shouldBe 180f
+        OriginDiningLayout.yawToward(org.bukkit.block.BlockFace.WEST) shouldBe 90f
+    }
+
+    "ItemsAdder seating is restricted to configured chair models" {
+        OriginDiningLayout.furnitureSeatProfile("furnituresplus:white_wooden_chair")?.requireTable shouldBe true
+        OriginDiningLayout.furnitureSeatProfile("furnituresplus:white_wooden_diningtable") shouldBe null
+    }
+
+    "automatic guest seating preserves free chairs and favors configured neighborhoods" {
+        val assignments = OriginDiningLayout.selectGuestSeats(
+            guests = listOf(
+                416 to OriginDiningPoint(-17.5, 70.0, 40.5),
+                417 to OriginDiningPoint(-13.5, 70.0, 40.5),
+                418 to OriginDiningPoint(-17.5, 70.0, 47.5),
+            ),
+            candidates = listOf(
+                OriginDiningPoint(-16.5, 70.0, 40.5),
+                OriginDiningPoint(-14.5, 70.0, 40.5),
+                OriginDiningPoint(-16.5, 70.0, 47.5),
+                OriginDiningPoint(-8.5, 70.0, 37.5),
+                OriginDiningPoint(-6.5, 70.0, 37.5),
+            ),
+            minimumFreeSeats = 2,
+        )
+
+        assignments.size shouldBe 3
+        assignments.getValue(416) shouldBe OriginDiningPoint(-16.5, 70.0, 40.5)
+        assignments.getValue(417) shouldBe OriginDiningPoint(-14.5, 70.0, 40.5)
+        assignments.getValue(418) shouldBe OriginDiningPoint(-16.5, 70.0, 47.5)
     }
 
     "authored coordinates are loaded from the reloadable module config" {

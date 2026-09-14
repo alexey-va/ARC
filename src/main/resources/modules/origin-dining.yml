@@ -72,22 +72,22 @@ display:
   dishes:
     egg:
       scale: 0.65
-      surface-lift: 0.12125
+      surface-lift: 0.28375
     fish:
       scale: 0.65
       surface-lift: 0.12125
     steak:
-      scale: 1.3
-      surface-lift: 0.2025
+      scale: 0.65
+      surface-lift: 0.28375
     herbal_tea:
       scale: 0.65
-      surface-lift: 0.0205
+      surface-lift: 0.24475
     berry_kvass:
       scale: 0.65
-      surface-lift: 0.0205
+      surface-lift: 0.24475
     spiced_mead:
       scale: 0.65
-      surface-lift: 0.0205
+      surface-lift: 0.24475
 
 interaction:
   meal-hitbox-size: 1.8
@@ -137,11 +137,55 @@ dynamic-seats:
   dish-offset-y: 0.0
   dish-offset-z: 0.0
   waiter-side-offset: 0.0
+  # Для ItemsAdder-мебели направление сначала определяется по соседнему столу.
+  # yaw-offset используется как резерв, а смещения задаются в локальных осях модели.
+  furniture-profile-ids: [wooden_chairs]
+  furniture-profiles:
+    wooden_chairs:
+      ids:
+        - "furnituresplus:red_wooden_chair"
+        - "furnituresplus:white_wooden_chair"
+        - "furnituresplus:cyan_wooden_chair"
+        - "furnituresplus:gray_wooden_chair"
+        - "furnituresplus:iron_chair"
+        - "furnituresplus:amethyst_chair"
+      yaw-offset: 180.0
+      offset-x: 0.0
+      offset-y: 0.0
+      offset-z: 0.0
+      require-table: true
 
 # Все координаты двух ресторанных сцен находятся здесь и перечитываются через
 # /arc reload. Формат точки: x,y,z,yaw. Формат блока: x,y,z.
 scene:
   ambient-cycle-seconds: 16
+  # ARC ищет обычные нижние ступеньки со столом в соседнем блоке, рассаживает
+  # этих посетителей ближе к их резервным точкам и сохраняет места для игроков.
+  auto-seating:
+    zone-ids: [brewery, restaurant]
+    zones:
+      brewery:
+        guest-ids: ["416", "417", "418", "419", "420"]
+        min-block: "-19,70,39"
+        max-block: "-1,70,54"
+        minimum-free-seats: 3
+        excluded-blocks: []
+      restaurant:
+        guest-ids: ["433", "434", "435", "436"]
+        min-block: "-58,72,43"
+        max-block: "-43,72,53"
+        minimum-free-seats: 2
+        excluded-blocks: []
+  # Одноразово заменяет старую раскладку с воздушным блоком между стулом и столом.
+  seat-layout-version: 2
+  authored-seat-ids: ["407", "408", "416", "417", "418", "419", "420"]
+  retired-seat-blocks:
+    - "-18,70,40"
+    - "-14,70,40"
+    - "-18,70,47"
+    - "-14,70,47"
+    - "-3,70,48"
+    - "-3,70,44"
   cleanup-points:
     - "-0.5,72.4,53.5,0" # бывшая реплика удалённой Тэссы
   legacy-player-table:
@@ -152,11 +196,11 @@ scene:
   guests:
     407: {seat: "-10.5,70.0,45.5,-90"}
     408: {seat: "-6.5,70.0,45.5,90"}
-    416: {seat: "-17.5,70.0,40.5,-90"}
-    417: {seat: "-13.5,70.0,40.5,90"}
-    418: {seat: "-17.5,70.0,47.5,-90"}
-    419: {seat: "-2.5,70.0,48.5,180"}
-    420: {seat: "-2.5,70.0,44.5,0"}
+    416: {seat: "-16.5,70.0,40.5,-90"}
+    417: {seat: "-14.5,70.0,40.5,90"}
+    418: {seat: "-16.5,70.0,47.5,-90"}
+    419: {seat: "-2.5,70.0,47.5,180"}
+    420: {seat: "-2.5,70.0,45.5,0"}
     433: {seat: "-56.5,72.0,46.5,-90"}
     434: {seat: "-54.5,72.0,44.5,0"}
     435: {seat: "-45.5,72.0,50.5,90"}
