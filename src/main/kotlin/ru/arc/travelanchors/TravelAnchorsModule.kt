@@ -88,6 +88,7 @@ import kotlin.math.atan2
 import kotlin.math.floor
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.sin
 import kotlin.math.sqrt
 
 private val ANCHOR_BLOCK_KEY = NamespacedKey("arc", "travel_anchor")
@@ -264,6 +265,36 @@ internal fun travelAnchorDisplayCenter(eye: Location, target: Location, distance
         yaw = 0f
         pitch = 0f
     }
+
+internal fun travelAnchorTeleportPortalCenter(
+    location: Location,
+    verticalOffset: Double,
+    behindPlayerOffset: Double,
+    yawOffsetDegrees: Float,
+): Location {
+    val yawRadians = Math.toRadians(location.yaw.toDouble())
+    return location.clone().apply {
+        x += sin(yawRadians) * behindPlayerOffset
+        y += verticalOffset
+        z -= cos(yawRadians) * behindPlayerOffset
+        yaw = ((location.yaw + yawOffsetDegrees + 540f) % 360f) - 180f
+        pitch = 0f
+    }
+}
+
+internal data class TravelAnchorTeleportPortalOffsets(
+    val vertical: Double,
+    val behindPlayer: Double,
+    val yawDegrees: Float,
+)
+
+internal fun Config.travelAnchorTeleportPortalOffsets(
+    path: String = "visual.teleport-portal",
+): TravelAnchorTeleportPortalOffsets = TravelAnchorTeleportPortalOffsets(
+    vertical = real("$path.vertical-offset", 2.15).coerceIn(-6.0, 12.0),
+    behindPlayer = real("$path.behind-player-offset", 0.35).coerceIn(0.0, 4.0),
+    yawDegrees = real("$path.yaw-offset-degrees", 180.0).toFloat().coerceIn(-360f, 360f),
+)
 
 internal data class TravelAnchorDisplayShape(val cameraFacing: Boolean, val depth: Float)
 
@@ -461,6 +492,7 @@ private data class TravelAnchorRenderCandidate(
 private data class TravelAnchorTeleportPortalSettings(
     val gate: PortalOriginGateSettings,
     val holdTicks: Int,
+    val behindPlayerOffset: Double,
 )
 
 private class ActiveTravelAnchorTeleportPortal(
@@ -657,7 +689,7 @@ private object TravelAnchorConfig {
         val closingTicks = integer("$path.closing-ticks", 4).coerceIn(1, 20)
         val width = real("$path.width", 3.6).toFloat().coerceIn(0.1f, 12.0f)
         val height = real("$path.height", 5.0).toFloat().coerceIn(0.1f, 12.0f)
-        val verticalOffset = real("$path.vertical-offset", 2.5).coerceIn(0.5, 12.0)
+        val offsets = travelAnchorTeleportPortalOffsets(path)
         val viewRange = real("$path.view-range", 2.0).toFloat().coerceIn(0.1f, 4.0f)
         val gate = PortalOriginGateSettings(
             defaultStyle = PortalVisualStyle.ORIGIN,
@@ -668,8 +700,8 @@ private object TravelAnchorConfig {
             closingDurationTicks = closingTicks,
             width = width,
             height = height,
-            verticalOffset = verticalOffset,
-            yawOffsetDegrees = 180f,
+            verticalOffset = offsets.vertical,
+            yawOffsetDegrees = offsets.yawDegrees,
             viewRange = viewRange,
             openingSoundEnabled = false,
             openingSoundDelayTicks = 0,
@@ -687,7 +719,7 @@ private object TravelAnchorConfig {
             suctionParticleSize = 0.55f,
             suctionCoreCount = 6,
         )
-        return TravelAnchorTeleportPortalSettings(gate, holdTicks)
+        return TravelAnchorTeleportPortalSettings(gate, holdTicks, offsets.behindPlayer)
     }
 }
 
@@ -1229,6 +1261,7 @@ object TravelAnchorsModule : PluginModule, Listener {
             it.setGravity(false)
             it.isGlowing = true
             it.glowColorOverride = VISIBLE_COLOR
+            it.brightness = Display.Brightness(15, 15)
             it.interpolationDelay = 0
             it.interpolationDuration = 1
             it.teleportDuration = 1
@@ -1533,14 +1566,11 @@ object TravelAnchorsModule : PluginModule, Listener {
         val current = settings ?: return
         if (material !in current.displayMaterials) return
         val position = TravelAnchorPosition.of(block)
+        if (block.type != material) block.setType(material, false)
         val data = CustomBlockData(block, ARC.instance)
-        if (material == current.displayMaterial) {
-            data.remove(ANCHOR_MATERIAL_KEY)
-            anchorMaterials.remove(position)
-        } else {
-            data.set(ANCHOR_MATERIAL_KEY, PersistentDataType.STRING, material.name)
-            anchorMaterials[position] = material
-        }
+        data.set(ANCHOR_BLOCK_KEY, PersistentDataType.BYTE, 1.toByte())
+        data.set(ANCHOR_MATERIAL_KEY, PersistentDataType.STRING, material.name)
+        anchorMaterials[position] = material
         persistAnchorMaterials(block.world.uid)
     }
 
@@ -1764,13 +1794,12 @@ object TravelAnchorsModule : PluginModule, Listener {
     }
 
     private fun teleportPortalCenter(location: Location, portal: TravelAnchorTeleportPortalSettings): Location {
-        val center = location.clone()
-        center.x = floor(location.x) + 0.5
-        center.y = location.y + portal.gate.verticalOffset
-        center.z = floor(location.z) + 0.5
-        center.yaw = ((location.yaw + portal.gate.yawOffsetDegrees + 540f) % 360f) - 180f
-        center.pitch = 0f
-        return center
+        return travelAnchorTeleportPortalCenter(
+            location = location,
+            verticalOffset = portal.gate.verticalOffset,
+            behindPlayerOffset = portal.behindPlayerOffset,
+            yawOffsetDegrees = portal.gate.yawOffsetDegrees,
+        )
     }
 
     private fun removeTeleportPortalsNear(centers: List<Location>) {

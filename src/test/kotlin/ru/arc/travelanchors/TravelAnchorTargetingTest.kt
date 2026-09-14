@@ -1,12 +1,15 @@
 package ru.arc.travelanchors
 
 import io.kotest.core.spec.style.FunSpec
+import io.kotest.matchers.doubles.plusOrMinus
 import io.kotest.matchers.shouldBe
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.player.PlayerInteractEvent
+import ru.arc.config.ConfigManager
+import java.nio.file.Files
 import java.util.UUID
 
 class TravelAnchorTargetingTest : FunSpec({
@@ -193,6 +196,69 @@ class TravelAnchorTargetingTest : FunSpec({
         center.x shouldBe 48.0
         center.yaw shouldBe 0f
         center.pitch shouldBe 0f
+    }
+
+    test("teleport portal stays behind the exact player position") {
+        val southFacing = travelAnchorTeleportPortalCenter(
+            Location(null, 10.18, 65.0, -3.82, 0f, 27f),
+            verticalOffset = 2.15,
+            behindPlayerOffset = 0.35,
+            yawOffsetDegrees = 180f,
+        )
+        southFacing.x shouldBe (10.18 plusOrMinus 1.0e-9)
+        southFacing.y shouldBe (67.15 plusOrMinus 1.0e-9)
+        southFacing.z shouldBe (-4.17 plusOrMinus 1.0e-9)
+        southFacing.yaw shouldBe -180f
+        southFacing.pitch shouldBe 0f
+
+        val westFacing = travelAnchorTeleportPortalCenter(
+            Location(null, 10.18, 65.0, -3.82, 90f, 0f),
+            verticalOffset = 2.15,
+            behindPlayerOffset = 0.35,
+            yawOffsetDegrees = 180f,
+        )
+        westFacing.x shouldBe (10.53 plusOrMinus 1.0e-9)
+        westFacing.z shouldBe (-3.82 plusOrMinus 1.0e-9)
+    }
+
+    test("teleport portal offsets are reread through the ARC reload config path") {
+        val directory = Files.createTempDirectory("arc-travel-anchor-reload")
+        val configFile = ConfigManager.moduleYamlPath(directory, "teleport-anchors.yml").toFile()
+        try {
+            configFile.parentFile.mkdirs()
+            configFile.writeText(
+                """
+                visual:
+                  teleport-portal:
+                    vertical-offset: 2.15
+                    behind-player-offset: 0.35
+                    yaw-offset-degrees: 180.0
+                """.trimIndent(),
+            )
+            val config = ConfigManager.ofModule(directory, "teleport-anchors.yml")
+            val initial = config.travelAnchorTeleportPortalOffsets()
+            initial.vertical shouldBe (2.15 plusOrMinus 1.0e-9)
+            initial.behindPlayer shouldBe (0.35 plusOrMinus 1.0e-9)
+            initial.yawDegrees shouldBe 180f
+
+            configFile.writeText(
+                """
+                visual:
+                  teleport-portal:
+                    vertical-offset: 1.8
+                    behind-player-offset: 0.6
+                    yaw-offset-degrees: 165.0
+                """.trimIndent(),
+            )
+            ConfigManager.reloadAll()
+            val reloaded = config.travelAnchorTeleportPortalOffsets()
+            reloaded.vertical shouldBe (1.8 plusOrMinus 1.0e-9)
+            reloaded.behindPlayer shouldBe (0.6 plusOrMinus 1.0e-9)
+            reloaded.yawDegrees shouldBe 165f
+        } finally {
+            ConfigManager.clear()
+            directory.toFile().deleteRecursively()
+        }
     }
 
     test("clicking an anchor without the staff opens naming") {

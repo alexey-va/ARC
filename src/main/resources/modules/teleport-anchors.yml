@@ -41,7 +41,10 @@ visual:
     closing-ticks: 4
     width: 3.6
     height: 5.0
-    vertical-offset: 2.5
+    # Все смещения перечитываются через /arc reload.
+    vertical-offset: 2.15
+    behind-player-offset: 0.35
+    yaw-offset-degrees: 180.0
     view-range: 2.0
 
 naming:
