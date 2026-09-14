@@ -133,8 +133,8 @@ class OriginDiningLayoutTest : FreeSpec({
         OriginDiningLayout.waiterPlayerRange shouldBe 1.8
         OriginDiningLayout.navigatorDistanceMargin shouldBe 0.35
         OriginDiningLayout.navigatorPathDistanceMargin shouldBe 0.35
-        OriginDiningLayout.navigatorLevelChangeCost shouldBe 12f
-        OriginDiningLayout.navigatorObstacleStepCost shouldBe 8f
+        OriginDiningLayout.navigatorLevelChangeCost shouldBe 100f
+        OriginDiningLayout.navigatorObstacleStepCost shouldBe 100f
         OriginDiningLayout.dynamicWaiterSideOffset shouldBe 1.0
         OriginDiningLayout.waiterHome(431) shouldBe OriginDiningPoint(-54.5, 72.0, 56.5, 180f)
         OriginDiningLayout.waiterHome(432) shouldBe OriginDiningPoint(-54.5, 72.0, 58.5, 180f)
