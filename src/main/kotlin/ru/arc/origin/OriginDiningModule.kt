@@ -33,6 +33,7 @@ import org.bukkit.event.EventPriority
 import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
 import org.bukkit.event.block.Action
+import org.bukkit.event.entity.EntityDismountEvent
 import org.bukkit.block.Block
 import org.bukkit.block.BlockFace
 import org.bukkit.block.data.Bisected
@@ -152,6 +153,12 @@ object OriginDiningModule : PluginModule, Listener {
     @EventHandler
     fun onQuit(event: PlayerQuitEvent) {
         service?.quit(event.player)
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun onDismount(event: EntityDismountEvent) {
+        val player = event.entity as? Player ?: return
+        service?.dismounted(player, event.dismounted)
     }
 
 }
@@ -278,6 +285,12 @@ internal object OriginDiningLayout {
         private set
     var guestEntityLift = 0.0
         private set
+    var seatConfirmDelayTicks = 0L
+        private set
+    var seatConfirmMaxPolls = 0
+        private set
+    var seatConfirmHorizontalRadius = 0.0
+        private set
     var theftCooldownMillis = 0L
         private set
     var sessionTtlMillis = 0L
@@ -339,6 +352,9 @@ internal object OriginDiningLayout {
         sessionRadius = source.real("navigation.session-radius").coerceIn(2.0, 24.0)
         guestMarkerLift = source.real("seating.guest-marker-lift").coerceIn(0.0, 2.0)
         guestEntityLift = source.real("seating.guest-entity-lift").coerceIn(-1.0, 2.0)
+        seatConfirmDelayTicks = source.integer("seating.confirm-delay-ticks", 2).toLong().coerceIn(1L, 20L)
+        seatConfirmMaxPolls = source.integer("seating.confirm-max-polls", 3).coerceIn(1, 10)
+        seatConfirmHorizontalRadius = source.real("seating.confirm-horizontal-radius", 1.0).coerceIn(0.25, 2.0)
         seats = buildSeats(source, forward, vertical)
         waiterHomes = waiterIds.associateWith { id -> configPoint(source, "scene.waiters.$id.home") }
         OriginDiningAmbientLayout.load(source)
@@ -476,6 +492,8 @@ private data class OriginDiningSession(
     val id: UUID,
     val playerId: UUID,
     val seat: OriginDiningSeat,
+    var chairVehicleId: UUID,
+    var mounted: Boolean,
     var phase: OriginDiningPhase,
     var touchedAt: Long,
 )
@@ -608,6 +626,7 @@ private class OriginDiningService : AutoCloseable {
     private val activeDeliveries = mutableMapOf<Int, UUID>()
     private val waiterHeldItems = mutableMapOf<Int, ItemStack?>()
     private val waiterGlowingFor = mutableMapOf<Int, UUID>()
+    private val pendingSeatAttempts = mutableMapOf<UUID, UUID>()
     private val guestMarkers = mutableMapOf<Int, ArmorStand>()
     private val guestMeals = mutableMapOf<String, OriginDiningGuestMeal>()
     private val guestMealEntity = mutableMapOf<UUID, OriginDiningGuestMeal>()
@@ -647,7 +666,7 @@ private class OriginDiningService : AutoCloseable {
 
     fun canOpen(player: Player, menu: BreweryTableDialogs.Menu): Boolean {
         val session = sessions[player.uniqueId]
-        val allowed = session != null && session.seat.menu == menu && nearVenue(player, session.seat)
+        val allowed = session != null && session.mounted && session.seat.menu == menu && nearVenue(player, session.seat)
         if (!allowed) {
             player.sendActionBar(Component.text("Сначала сядьте за свободное место.", NamedTextColor.GRAY))
             logWarn("DIALOG_REJECTED", session, player, null, "no-active-seat")
@@ -680,7 +699,7 @@ private class OriginDiningService : AutoCloseable {
         dish: BreweryTableDialogs.Dish,
     ): Boolean {
         val session = sessions[player.uniqueId] ?: return false
-        if (session.seat.menu != menu || !nearVenue(player, session.seat)) {
+        if (!session.mounted || session.seat.menu != menu || !nearVenue(player, session.seat)) {
             logWarn("ORDER_REJECTED", session, player, dish, "seat-or-menu-mismatch")
             return true
         }
@@ -794,8 +813,70 @@ private class OriginDiningService : AutoCloseable {
     fun interactBlock(player: Player, block: Block): Boolean {
         if (block.world.name != OriginDiningLayout.WORLD) return false
         val seat = dynamicSeat(block) ?: return false
-        sit(player, seat, "block:${block.x},${block.y},${block.z}:world-stair")
+        requestSeatConfirmation(player, seat, "block:${block.x},${block.y},${block.z}:world-stair")
         return true
+    }
+
+    private fun requestSeatConfirmation(player: Player, seat: OriginDiningSeat, source: String) {
+        if (debounce(player)) {
+            info("ORIGIN_DINING phase=INPUT_DEBOUNCED player={} table={} source={}", player.name, seat.id, source)
+            return
+        }
+        val token = UUID.randomUUID()
+        pendingSeatAttempts[player.uniqueId] = token
+        info(
+            "ORIGIN_DINING phase=SEAT_CONFIRM_PENDING player={} table={} attempt={} source={} actual_player={}",
+            player.name,
+            seat.id,
+            short(token),
+            source,
+            location(player.location),
+        )
+        confirmSeat(player.uniqueId, seat, source, token, 0)
+    }
+
+    private fun confirmSeat(playerId: UUID, seat: OriginDiningSeat, source: String, token: UUID, poll: Int) {
+        tasks.runLater(OriginDiningLayout.seatConfirmDelayTicks) {
+            if (pendingSeatAttempts[playerId] != token) return@runLater
+            val player = Bukkit.getPlayer(playerId)?.takeIf(Player::isOnline)
+            if (player == null) {
+                pendingSeatAttempts.remove(playerId, token)
+                return@runLater
+            }
+            val vehicle = restaurantChairVehicle(player, seat)
+            if (vehicle != null) {
+                pendingSeatAttempts.remove(playerId, token)
+                sit(player, seat, source, vehicle.uniqueId)
+                return@runLater
+            }
+            if (poll + 1 < OriginDiningLayout.seatConfirmMaxPolls) {
+                confirmSeat(playerId, seat, source, token, poll + 1)
+                return@runLater
+            }
+            pendingSeatAttempts.remove(playerId, token)
+            warn(
+                "ORIGIN_DINING phase=SEAT_CONFIRM_FAILED player={} table={} attempt={} source={} polls={} vehicle={} actual_player={}",
+                player.name,
+                seat.id,
+                short(token),
+                source,
+                poll + 1,
+                player.vehicle?.let { "${it.type}#${it.entityId}" } ?: "none",
+                location(player.location),
+            )
+        }
+    }
+
+    private fun restaurantChairVehicle(player: Player, seat: OriginDiningSeat): Entity? {
+        val vehicle = player.vehicle ?: return null
+        if (vehicle !is ArmorStand) return null
+        if (vehicle.world.name != OriginDiningLayout.WORLD) return null
+        val target = seat.seat.inWorld(vehicle.world)
+        val dx = vehicle.location.x - target.x
+        val dz = vehicle.location.z - target.z
+        return vehicle.takeIf {
+            dx * dx + dz * dz <= OriginDiningLayout.seatConfirmHorizontalRadius * OriginDiningLayout.seatConfirmHorizontalRadius
+        }
     }
 
     private fun dynamicSeat(block: Block): OriginDiningSeat? {
@@ -916,6 +997,11 @@ private class OriginDiningService : AutoCloseable {
             warn("ORIGIN_DINING phase=WAITER_INPUT_REJECTED player={} source={} npc={} reason=no-active-seat", player.name, source, npcId)
             return false
         }
+        if (!session.mounted) {
+            player.sendActionBar(Component.text("Сначала снова сядьте за стол.", NamedTextColor.GRAY))
+            logWarn("WAITER_INPUT_REJECTED", session, player, null, "npc=$npcId player-not-seated")
+            return true
+        }
         if (!OriginDiningLayout.waiterServes(session.seat, npcId) || !nearVenue(player, session.seat)) {
             warn(
                 "ORIGIN_DINING phase=WAITER_INPUT_REJECTED player={} source={} npc={} table={} expected_npc={} reason=waiter-or-venue-mismatch",
@@ -979,16 +1065,14 @@ private class OriginDiningService : AutoCloseable {
         info("ORIGIN_DINING phase=LEGACY_SEAT_HITBOX_CLEANUP removed={}", removed)
     }
 
-    private fun sit(player: Player, seat: OriginDiningSeat, source: String) {
+    private fun sit(player: Player, seat: OriginDiningSeat, source: String, chairVehicleId: UUID) {
         if (player.world.name != OriginDiningLayout.WORLD) return
-        if (debounce(player)) {
-            info("ORIGIN_DINING phase=INPUT_DEBOUNCED player={} table={} source={}", player.name, seat.id, source)
-            return
-        }
         val existing = sessions[player.uniqueId]
         if (existing?.seat?.id == seat.id) {
+            existing.chairVehicleId = chairVehicleId
+            existing.mounted = true
             existing.touchedAt = System.currentTimeMillis()
-            log("RESEATED", existing, player, null, seat.dish, "source=$source seat_owner=server-chair-handler")
+            log("RESEATED", existing, player, null, seat.dish, "source=$source chair=${short(chairVehicleId)} seat_owner=server-chair-handler")
             if (existing.phase == OriginDiningPhase.SEATED && seat.id !in meals) summonWaiter(existing, player)
             return
         }
@@ -1003,12 +1087,39 @@ private class OriginDiningService : AutoCloseable {
         }
         existing?.let { releaseSession(player.uniqueId, "seat-switched") }
 
-        val session = OriginDiningSession(UUID.randomUUID(), player.uniqueId, seat, OriginDiningPhase.SEATED, System.currentTimeMillis())
+        val session = OriginDiningSession(UUID.randomUUID(), player.uniqueId, seat, chairVehicleId, true, OriginDiningPhase.SEATED, System.currentTimeMillis())
         sessions[player.uniqueId] = session
         occupants[seat.id] = player.uniqueId
-        log("SEATED", session, player, null, seat.dish, "source=$source seat_owner=server-chair-handler")
+        log("SEATED", session, player, null, seat.dish, "source=$source chair=${short(chairVehicleId)} seat_owner=server-chair-handler")
         player.sendActionBar(Component.text("Официант сейчас подойдёт. Нажмите по нему, чтобы открыть меню.", NamedTextColor.GOLD))
         summonWaiter(session, player)
+    }
+
+    fun dismounted(player: Player, dismounted: Entity) {
+        val session = sessions[player.uniqueId] ?: return
+        if (session.chairVehicleId != dismounted.uniqueId) return
+        tasks.runLater(1L) {
+            val current = sessions[player.uniqueId]?.takeIf { it.id == session.id } ?: return@runLater
+            val replacement = restaurantChairVehicle(player, current.seat)
+            if (replacement != null) {
+                current.chairVehicleId = replacement.uniqueId
+                current.mounted = true
+                log("SEAT_VEHICLE_REPLACED", current, player, meals[current.seat.id]?.dish, current.seat.seat, "chair=${short(replacement.uniqueId)}")
+                return@runLater
+            }
+            current.mounted = false
+            pendingSeatAttempts.remove(player.uniqueId)
+            dialogAuthorizations.remove(player.uniqueId)
+            if (current.phase != OriginDiningPhase.ORDERED) returnWaiterHome(current, "player-dismounted")
+            log(
+                "DISMOUNTED",
+                current,
+                player,
+                meals[current.seat.id]?.dish,
+                current.seat.seat,
+                "chair=${short(dismounted.uniqueId)} order_continues=${current.phase == OriginDiningPhase.ORDERED}",
+            )
+        }
     }
 
     private fun openDialog(player: Player, session: OriginDiningSession, source: String) {
@@ -1648,9 +1759,9 @@ private class OriginDiningService : AutoCloseable {
                 returnWaiterHome(waiterId, sessionId, session, "approach-session-gone")
                 return@runLater
             }
-            if (!nearVenue(player, session.seat)) {
+            if (!session.mounted || !nearVenue(player, session.seat)) {
                 waiterApproaches.remove(waiterId, approachId)
-                returnWaiterHome(waiterId, sessionId, session, "approach-player-left-table")
+                returnWaiterHome(waiterId, sessionId, session, "approach-player-not-seated")
                 return@runLater
             }
             val npc = runCatching { CitizensAPI.getNPCRegistry().getById(waiterId) }.getOrNull()
@@ -1730,7 +1841,7 @@ private class OriginDiningService : AutoCloseable {
             val seat = guest.seat.inWorld(world)
             world.getNearbyEntities(seat.clone().add(0.0, 0.6, 0.0), 0.8, 0.8, 0.8)
                 .filterIsInstance<ArmorStand>()
-                .filter { it.isMarker && !it.isVisible }
+                .filter { it.isMarker && !it.isVisible && it.passengers.isEmpty() }
                 .forEach { it.remove(); removed++ }
             world.getNearbyEntities(seat.clone().add(0.0, 2.4, 0.0), 0.9, 0.8, 0.9)
                 .filterIsInstance<TextDisplay>()
@@ -2047,12 +2158,20 @@ private class OriginDiningService : AutoCloseable {
                 releaseSession(session.playerId, "left-table")
                 return@forEach
             }
-            if (player.isInsideVehicle) session.touchedAt = now
+            if (session.mounted && restaurantChairVehicle(player, session.seat) == null) {
+                session.mounted = false
+                dialogAuthorizations.remove(session.playerId)
+                if (session.phase != OriginDiningPhase.ORDERED) returnWaiterHome(session, "chair-state-lost")
+                logWarn("CHAIR_STATE_LOST", session, player, meals[session.seat.id]?.dish, "vehicle=${player.vehicle?.entityId ?: "none"}")
+            } else if (session.mounted) {
+                session.touchedAt = now
+            }
             if (session.seat.dynamic && player.world.getBlockAt(session.seat.clickedBlock.first, session.seat.clickedBlock.second, session.seat.clickedBlock.third).blockData !is Stairs) {
                 releaseSession(session.playerId, "dynamic-seat-removed")
                 return@forEach
             }
             if (
+                session.mounted &&
                 session.phase == OriginDiningPhase.SEATED &&
                 session.seat.id !in meals &&
                 waiterReadyFor[session.seat.waiterId] != session.id &&
@@ -2147,6 +2266,7 @@ private class OriginDiningService : AutoCloseable {
     }
 
     private fun releaseSession(playerId: UUID, reason: String) {
+        pendingSeatAttempts.remove(playerId)
         val session = sessions[playerId] ?: return
         clearWaiterReady(session.seat.waiterId, "session-$reason", session.id)
         clearWaiterGlow(session.seat.waiterId, "session-$reason", session.id)
@@ -2186,7 +2306,7 @@ private class OriginDiningService : AutoCloseable {
             val point = anchor.inWorld(world)
             for (entity in world.getNearbyEntities(point, 0.35, 0.8, 0.35)) {
                 if (entity.scoreboardTags.contains(SEAT_TAG) || entity.scoreboardTags.contains(MEAL_TAG)) continue
-                if (entity is Interaction || entity is ArmorStand && entity.isMarker && !entity.isVisible) {
+                if (entity is Interaction || entity is ArmorStand && entity.isMarker && !entity.isVisible && entity.passengers.isEmpty()) {
                     entity.remove()
                     removed++
                 }
@@ -2247,6 +2367,7 @@ private class OriginDiningService : AutoCloseable {
         waiterHeldItems.clear()
         waiterReadyFor.clear()
         waiterGlowingFor.clear()
+        pendingSeatAttempts.clear()
         guestMeals.clear()
         guestMealEntity.clear()
         guestMarkers.clear()

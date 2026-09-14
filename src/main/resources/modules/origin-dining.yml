@@ -121,6 +121,10 @@ navigation:
 seating:
   guest-marker-lift: 0.6
   guest-entity-lift: 0.4
+  # ARC starts service only after the chair plugin has actually mounted the player.
+  confirm-delay-ticks: 2
+  confirm-max-polls: 3
+  confirm-horizontal-radius: 1.0
 
 dynamic-seats:
   # Любая нижняя ступенька внутри территории пивоварни или ресторана становится
