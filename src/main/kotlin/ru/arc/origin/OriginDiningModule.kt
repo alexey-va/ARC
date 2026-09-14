@@ -944,7 +944,7 @@ private class OriginDiningService : AutoCloseable {
 
     fun interactMountedWaiter(player: Player, entityId: Int) {
         tasks.runLater(0L) {
-            if (!player.isOnline || !player.isInsideVehicle) return@runLater
+            if (!player.isOnline) return@runLater
             val waiterId = OriginDiningLayout.waiterIds.firstOrNull { waiter(it)?.takeIf { npc -> npc.isSpawned }?.entity?.entityId == entityId } ?: return@runLater
             interactWaiter(player, waiterId, "packet-events:mounted")
         }
