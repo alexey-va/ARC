@@ -2,6 +2,10 @@ package ru.arc.origin
 
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
+import ru.arc.npc.NpcRouteBounds
+import ru.arc.npc.NpcRouteCell
+import ru.arc.npc.NpcRouteProfile
+import ru.arc.npc.findNpcGridPath
 import ru.arc.worldcontent.BreweryTableDialogs
 import java.nio.file.Files
 import kotlin.math.abs
@@ -134,25 +138,41 @@ class OriginDiningLayoutTest : FreeSpec({
         OriginDiningLayout.waiterPlayerRange shouldBe 1.8
         OriginDiningLayout.navigatorDistanceMargin shouldBe 0.35
         OriginDiningLayout.navigatorPathDistanceMargin shouldBe 0.35
-        OriginDiningLayout.navigatorLevelChangeCost shouldBe 100f
-        OriginDiningLayout.navigatorObstacleStepCost shouldBe 100f
-        OriginDiningLayout.navigatorFlatFallbackTicks shouldBe 40L
+        OriginDiningLayout.navigatorGridMaxVisited shouldBe 1_024
+        OriginDiningLayout.navigatorGridPollTicks shouldBe 2L
+        OriginDiningLayout.navigatorGridStallPolls shouldBe 20
+        OriginDiningLayout.navigatorGridSnapRadius shouldBe 3
+        OriginDiningLayout.navigatorGridOffFloorTolerance shouldBe 0.45
+        OriginDiningLayout.routeProfile(org.bukkit.Location(null, -54.5, 72.0, 56.5))?.id shouldBe "restaurant"
+        OriginDiningLayout.routeProfile(org.bukkit.Location(null, 1.5, 70.0, 57.5))?.id shouldBe "brewery"
+        OriginDiningLayout.routeProfile(org.bukkit.Location(null, 100.0, 72.0, 100.0)) shouldBe null
         OriginDiningLayout.dynamicWaiterSideOffset shouldBe 1.0
         OriginDiningLayout.waiterHome(431) shouldBe OriginDiningPoint(-54.5, 72.0, 56.5, 180f)
         OriginDiningLayout.waiterHome(432) shouldBe OriginDiningPoint(-54.5, 72.0, 58.5, 180f)
     }
 
-    "route cost favors flat floor without making alternate paths impassable" {
-        originDiningRouteCost(72, 72, org.bukkit.Material.AIR, org.bukkit.Material.TERRACOTTA, 12f, 8f) shouldBe 0f
-        originDiningRouteCost(72, 73, org.bukkit.Material.AIR, org.bukkit.Material.TERRACOTTA, 12f, 8f) shouldBe 12f
-        originDiningRouteCost(72, 72, org.bukkit.Material.AIR, org.bukkit.Material.OAK_STAIRS, 12f, 8f) shouldBe 8f
-        originDiningRouteCost(72, 73, org.bukkit.Material.OAK_TRAPDOOR, org.bukkit.Material.TERRACOTTA, 12f, 8f) shouldBe 20f
+    "grid pathfinder walks around blocked table cells" {
+        val blocked = setOf(NpcRouteCell(1, 0), NpcRouteCell(2, 0))
+        val profile = NpcRouteProfile("test", 72, NpcRouteBounds(-2, 5, -2, 2), maxVisited = 64)
+        val path = findNpcGridPath(NpcRouteCell(0, 0), listOf(NpcRouteCell(3, 0)), profile) { it !in blocked }
+
+        path?.first() shouldBe NpcRouteCell(0, 0)
+        path?.last() shouldBe NpcRouteCell(3, 0)
+        path?.any { it in blocked } shouldBe false
+        path?.zipWithNext()?.all { (first, second) ->
+            kotlin.math.abs(first.x - second.x) + kotlin.math.abs(first.z - second.z) == 1
+        } shouldBe true
     }
 
-    "strict waiter routing rejects table height but accepts the restaurant floor" {
-        originDiningFlatRoutePassable(72, 72, org.bukkit.Material.AIR, org.bukkit.Material.TERRACOTTA) shouldBe true
-        originDiningFlatRoutePassable(72, 73, org.bukkit.Material.AIR, org.bukkit.Material.ACACIA_WOOD) shouldBe false
-        originDiningFlatRoutePassable(72, 72, org.bukkit.Material.WAXED_OXIDIZED_CUT_COPPER_SLAB, org.bukkit.Material.TERRACOTTA) shouldBe false
+    "grid pathfinder refuses a sealed destination" {
+        val blocked = setOf(
+            NpcRouteCell(1, 0),
+            NpcRouteCell(-1, 0),
+            NpcRouteCell(0, 1),
+            NpcRouteCell(0, -1),
+        )
+        val profile = NpcRouteProfile("test", 72, NpcRouteBounds(-3, 3, -3, 3), maxVisited = 64)
+        findNpcGridPath(NpcRouteCell(0, 0), listOf(NpcRouteCell(2, 0)), profile) { it !in blocked } shouldBe null
     }
 
     "legacy restaurant furniture cleanup is restricted to exact ids and points" {

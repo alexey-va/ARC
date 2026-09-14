@@ -9,10 +9,7 @@ import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientIn
 import dev.lone.itemsadder.api.CustomStack
 import de.tr7zw.changeme.nbtapi.NBT
 import net.citizensnpcs.api.CitizensAPI
-import net.citizensnpcs.api.astar.pathfinder.BlockExaminer
-import net.citizensnpcs.api.astar.pathfinder.BlockSource
 import net.citizensnpcs.api.astar.pathfinder.MinecraftBlockExaminer
-import net.citizensnpcs.api.astar.pathfinder.PathPoint
 import net.citizensnpcs.api.event.NPCRightClickEvent
 import net.citizensnpcs.api.trait.trait.Equipment as CitizensEquipment
 import net.kyori.adventure.text.Component
@@ -61,6 +58,11 @@ import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.PluginModule
 import ru.arc.core.modules.EconomyModule
 import ru.arc.hooks.HookRegistry
+import ru.arc.npc.CitizensNpcRouteController
+import ru.arc.npc.NpcRouteCell
+import ru.arc.npc.NpcRouteBounds
+import ru.arc.npc.NpcRouteEvent
+import ru.arc.npc.NpcRouteProfile
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import ru.arc.worldcontent.BreweryTableDialogs
@@ -207,69 +209,6 @@ internal data class OriginDiningPoint(
     fun inWorld(world: org.bukkit.World): Location = Location(world, x, y, z, yaw, 0f)
 }
 
-internal class OriginDiningLevelRouteExaminer(
-    targetFloorY: Int,
-    levelChangeCost: Float,
-    obstacleStepCost: Float,
-    strictFloor: Boolean,
-) : BlockExaminer {
-    private var targetFloorY = targetFloorY
-    private var levelChangeCost = levelChangeCost
-    private var obstacleStepCost = obstacleStepCost
-    private var strictFloor = strictFloor
-
-    fun configure(targetFloorY: Int, levelChangeCost: Float, obstacleStepCost: Float, strictFloor: Boolean) {
-        this.targetFloorY = targetFloorY
-        this.levelChangeCost = levelChangeCost
-        this.obstacleStepCost = obstacleStepCost
-        this.strictFloor = strictFloor
-    }
-
-    override fun getCost(source: BlockSource, point: PathPoint): Float =
-        originDiningRouteCost(
-            targetFloorY = targetFloorY,
-            pointY = point.vector.blockY,
-            feet = source.getMaterialAt(point.vector),
-            support = source.getMaterialAt(point.vector.clone().subtract(org.bukkit.util.Vector(0, 1, 0))),
-            levelChangeCost = levelChangeCost,
-            obstacleStepCost = obstacleStepCost,
-        )
-
-    override fun isPassable(source: BlockSource, point: PathPoint): BlockExaminer.PassableState {
-        if (!strictFloor) return BlockExaminer.PassableState.IGNORE
-        val passable = originDiningFlatRoutePassable(
-            targetFloorY = targetFloorY,
-            pointY = point.vector.blockY,
-            feet = source.getMaterialAt(point.vector),
-            support = source.getMaterialAt(point.vector.clone().subtract(org.bukkit.util.Vector(0, 1, 0))),
-        )
-        return if (passable) BlockExaminer.PassableState.IGNORE else BlockExaminer.PassableState.IMPASSABLE
-    }
-}
-
-internal fun originDiningFlatRoutePassable(
-    targetFloorY: Int,
-    pointY: Int,
-    feet: Material,
-    support: Material,
-): Boolean = pointY == targetFloorY && sequenceOf(feet, support).none(::isOriginDiningRouteObstacle)
-
-private fun isOriginDiningRouteObstacle(material: Material): Boolean =
-    material.name.endsWith("_STAIRS") || material.name.endsWith("_SLAB") || material.name.endsWith("_TRAPDOOR")
-
-internal fun originDiningRouteCost(
-    targetFloorY: Int,
-    pointY: Int,
-    feet: Material,
-    support: Material,
-    levelChangeCost: Float,
-    obstacleStepCost: Float,
-): Float {
-    val verticalCost = abs(pointY - targetFloorY) * levelChangeCost
-    val touchesObstacle = sequenceOf(feet, support).any(::isOriginDiningRouteObstacle)
-    return verticalCost + if (touchesObstacle) obstacleStepCost else 0f
-}
-
 private data class OriginDiningBlockBounds(
     val minX: Int,
     val minY: Int,
@@ -386,11 +325,15 @@ internal object OriginDiningLayout {
         private set
     var navigatorPathDistanceMargin = 0.0
         private set
-    var navigatorLevelChangeCost = 0f
+    var navigatorGridMaxVisited = 0
         private set
-    var navigatorObstacleStepCost = 0f
+    var navigatorGridPollTicks = 0L
         private set
-    var navigatorFlatFallbackTicks = 0L
+    var navigatorGridStallPolls = 0
+        private set
+    var navigatorGridSnapRadius = 0
+        private set
+    var navigatorGridOffFloorTolerance = 0.0
         private set
     var guestMarkerLift = 0.0
         private set
@@ -422,6 +365,7 @@ internal object OriginDiningLayout {
     private var surfaceLifts = defaultSurfaceLifts()
     private var waiterHomes = emptyMap<Int, OriginDiningPoint>()
     private var furnitureSeatProfiles: List<OriginDiningFurnitureSeatProfile> = emptyList()
+    private var npcRouteProfiles: List<NpcRouteProfile> = emptyList()
 
     fun load(dataPath: java.nio.file.Path) {
         val source = ConfigManager.ofModule(dataPath, "origin-dining.yml")
@@ -477,9 +421,36 @@ internal object OriginDiningLayout {
         waiterPlayerRange = source.real("navigation.waiter-player-range").coerceIn(1.0, 6.0)
         navigatorDistanceMargin = source.real("navigation.distance-margin", 0.35).coerceIn(0.1, 2.0)
         navigatorPathDistanceMargin = source.real("navigation.path-distance-margin", 0.35).coerceIn(0.1, 2.0)
-        navigatorLevelChangeCost = source.real("navigation.level-change-cost", 12.0).toFloat().coerceIn(0f, 100f)
-        navigatorObstacleStepCost = source.real("navigation.obstacle-step-cost", 8.0).toFloat().coerceIn(0f, 100f)
-        navigatorFlatFallbackTicks = source.integer("navigation.flat-route-fallback-ticks", 40).toLong().coerceIn(10L, 200L)
+        navigatorGridMaxVisited = source.integer("navigation.grid-max-visited", 1_024).coerceIn(64, 4_096)
+        navigatorGridPollTicks = source.integer("navigation.grid-poll-ticks", 2).toLong().coerceIn(1L, 10L)
+        navigatorGridStallPolls = source.integer("navigation.grid-stall-polls", 20).coerceIn(5, 100)
+        navigatorGridSnapRadius = source.integer("navigation.grid-snap-radius", 3).coerceIn(1, 6)
+        navigatorGridOffFloorTolerance = source.real("navigation.grid-off-floor-tolerance", 0.45).coerceIn(0.1, 1.0)
+        npcRouteProfiles = source.stringList("navigation.route-profile-ids").map { profileId ->
+            val root = "navigation.route-profiles.$profileId"
+            val minimum = configBlock(source.string("$root.min-block"))
+            val maximum = configBlock(source.string("$root.max-block"))
+            NpcRouteProfile(
+                id = profileId,
+                floorY = source.integer("$root.floor-y"),
+                bounds = NpcRouteBounds(
+                    minOf(minimum.first, maximum.first),
+                    maxOf(minimum.first, maximum.first),
+                    minOf(minimum.third, maximum.third),
+                    maxOf(minimum.third, maximum.third),
+                ),
+                forbidden = source.stringList("$root.forbidden-areas").map(::parseRouteBounds),
+                preferred = source.stringList("$root.preferred-areas").map(::parseRouteBounds),
+                maxVisited = source.integer("$root.max-visited", navigatorGridMaxVisited).coerceIn(64, 4_096),
+                snapRadius = source.integer("$root.snap-radius", navigatorGridSnapRadius).coerceIn(1, 6),
+                pollTicks = source.integer("$root.poll-ticks", navigatorGridPollTicks.toInt()).toLong().coerceIn(1L, 10L),
+                stallPolls = source.integer("$root.stall-polls", navigatorGridStallPolls).coerceIn(5, 100),
+                offFloorTolerance = source.real("$root.off-floor-tolerance", navigatorGridOffFloorTolerance).coerceIn(0.1, 1.0),
+                distanceMargin = navigatorDistanceMargin,
+                pathDistanceMargin = navigatorPathDistanceMargin,
+                speedModifier = source.real("$root.speed-modifier", 0.72).toFloat().coerceIn(0.1f, 2f),
+            )
+        }
         sessionRadius = source.real("navigation.session-radius").coerceIn(2.0, 24.0)
         guestMarkerLift = source.real("seating.guest-marker-lift").coerceIn(0.0, 2.0)
         guestEntityLift = source.real("seating.guest-entity-lift").coerceIn(-1.0, 2.0)
@@ -537,6 +508,21 @@ internal object OriginDiningLayout {
         val values = raw.split(',').map(String::trim)
         require(values.size == 3) { "clicked-block must be x,y,z" }
         return Triple(values[0].toInt(), values[1].toInt(), values[2].toInt())
+    }
+
+    private fun parseRouteBounds(raw: String): NpcRouteBounds {
+        val values = raw.split(',').map(String::trim)
+        require(values.size == 4) { "route area must be min-x,min-z,max-x,max-z" }
+        val firstX = values[0].toInt()
+        val firstZ = values[1].toInt()
+        val secondX = values[2].toInt()
+        val secondZ = values[3].toInt()
+        return NpcRouteBounds(minOf(firstX, secondX), maxOf(firstX, secondX), minOf(firstZ, secondZ), maxOf(firstZ, secondZ))
+    }
+
+    fun routeProfile(destination: Location): NpcRouteProfile? {
+        val cell = NpcRouteCell(destination.blockX, destination.blockZ)
+        return npcRouteProfiles.firstOrNull { it.floorY == destination.blockY && cell in it.bounds }
     }
 
     internal fun centeredDishPoint(
@@ -881,6 +867,7 @@ private object OriginDiningAmbientLayout {
 
 private class OriginDiningService : AutoCloseable {
     private val tasks = LifecycleTaskScope()
+    private val routeController = CitizensNpcRouteController(::logRouteEvent)
     private val seatsById = OriginDiningLayout.seats.associateBy(OriginDiningSeat::id)
     private val sessions = mutableMapOf<UUID, OriginDiningSession>()
     private val occupants = mutableMapOf<String, UUID>()
@@ -904,7 +891,6 @@ private class OriginDiningService : AutoCloseable {
     private val guestMealEntity = mutableMapOf<UUID, OriginDiningGuestMeal>()
     private val ambientRoutes = mutableMapOf<Int, OriginDiningAmbientRoute>()
     private val ambientWaiterAvailableAt = mutableMapOf<Int, Long>()
-    private val navigationAttempts = mutableMapOf<Int, UUID>()
     private val ambientTableDueAt = mutableMapOf<String, Long>()
     private val speechDisplays = mutableSetOf<TextDisplay>()
     private var ambientCursor = 0
@@ -1838,7 +1824,7 @@ private class OriginDiningService : AutoCloseable {
             }
             val distance = npc.entity.location.distance(destination)
             if (distance <= OriginDiningLayout.waiterReadyMargin || poll >= OriginDiningLayout.deliveryRouteMaxPolls) {
-                if (npc.navigator.isNavigating) npc.navigator.cancelNavigation()
+                stopWaiterNavigation(npc)
                 log(
                     if (poll >= OriginDiningLayout.deliveryRouteMaxPolls) "DELIVERY_ROUTE_TIMEOUT" else "DELIVERY_ROUTE_READY",
                     session,
@@ -1850,8 +1836,8 @@ private class OriginDiningService : AutoCloseable {
                 ready()
                 return@runLater
             }
-            if (!npc.navigator.isNavigating) {
-                navigateLevel(npc, destination, strictFloor = false)
+            if (!isWaiterNavigating(npc)) {
+                navigateLevel(npc, destination)
             }
             if (poll % OriginDiningLayout.waiterProgressEveryPolls == 0) {
                 log(
@@ -1888,57 +1874,38 @@ private class OriginDiningService : AutoCloseable {
     private fun navigateLevel(
         npc: net.citizensnpcs.api.npc.NPC,
         destination: Location,
-        strictFloor: Boolean = true,
-    ) {
-        val navigator = npc.navigator
-        navigator.cancelNavigation()
-        val parameters = navigator.localParameters
-        val levelExaminer =
-            parameters.examiners().filterIsInstance<OriginDiningLevelRouteExaminer>().firstOrNull()
-                ?: OriginDiningLevelRouteExaminer(
-                    destination.blockY,
-                    OriginDiningLayout.navigatorLevelChangeCost,
-                    OriginDiningLayout.navigatorObstacleStepCost,
-                    strictFloor,
-                ).also(parameters::examiner)
-        levelExaminer.configure(
-            destination.blockY,
-            OriginDiningLayout.navigatorLevelChangeCost,
-            OriginDiningLayout.navigatorObstacleStepCost,
-            strictFloor,
-        )
-        parameters
-            .distanceMargin(OriginDiningLayout.navigatorDistanceMargin)
-            .pathDistanceMargin(OriginDiningLayout.navigatorPathDistanceMargin)
-            .speedModifier(0.72f)
-            .stationaryTicks(30)
-            .lookAtFunction { current ->
-                val entity = current.npc.entity
-                val eye = (entity as? LivingEntity)?.eyeLocation ?: entity.location.clone().add(0.0, 1.6, 0.0)
-                val horizontalVelocity = entity.velocity.clone().setY(0)
-                if (horizontalVelocity.lengthSquared() > 0.0025) {
-                    eye.clone().add(horizontalVelocity.normalize().multiply(3.0))
-                } else {
-                    Location(entity.world, destination.x, eye.y, destination.z)
-                }
-            }
-        navigator.setTarget(destination)
-        val attempt = UUID.randomUUID()
-        navigationAttempts[npc.id] = attempt
-        if (!strictFloor) {
+    ): Boolean {
+        val profile = OriginDiningLayout.routeProfile(destination)
+        if (profile == null) {
             info(
-                "ORIGIN_DINING phase=WAITER_ROUTE_FALLBACK npc={} actual={} target={} reason=flat-route-unavailable",
+                "ORIGIN_DINING phase=WAITER_GRID_PATH_UNAVAILABLE npc={} actual={} target={} reason=no-route-profile",
                 npc.id,
                 location(npc.entity.location),
                 location(destination),
             )
-            return
+            return false
         }
-        tasks.runLater(OriginDiningLayout.navigatorFlatFallbackTicks) {
-            if (navigationAttempts[npc.id] != attempt || !npc.isSpawned || npc.entity.world != destination.world) return@runLater
-            if (npc.entity.location.distance(destination) <= OriginDiningLayout.waiterReadyMargin || npc.navigator.isNavigating) return@runLater
-            navigateLevel(npc, destination, strictFloor = false)
-        }
+        return routeController.navigate(npc, destination, profile)
+    }
+
+    private fun logRouteEvent(event: NpcRouteEvent) {
+        info(
+            "ORIGIN_DINING phase=WAITER_GRID_{} profile={} npc={} cells={} actual={} target={} reason={}",
+            event.phase,
+            event.profileId,
+            event.npcId,
+            event.cells,
+            location(event.actual),
+            location(event.target),
+            event.reason ?: "none",
+        )
+    }
+
+    private fun isWaiterNavigating(npc: net.citizensnpcs.api.npc.NPC): Boolean =
+        routeController.isNavigating(npc)
+
+    private fun stopWaiterNavigation(npc: net.citizensnpcs.api.npc.NPC) {
+        routeController.stop(npc)
     }
 
     private fun resetIdleWaiters(reason: String) {
@@ -2382,7 +2349,7 @@ private class OriginDiningService : AutoCloseable {
             // between them and silently discard the interaction packet.
             if (playerDistance <= OriginDiningLayout.waiterPlayerRange) {
                 waiterApproaches.remove(waiterId, approachId)
-                if (npc.navigator.isNavigating) npc.navigator.cancelNavigation()
+                stopWaiterNavigation(npc)
                 npc.faceLocation(player.eyeLocation)
                 waiterReadyFor[waiterId] = session.id
                 showWaiterHitbox(waiterId, session, npc)
@@ -2410,8 +2377,8 @@ private class OriginDiningService : AutoCloseable {
                 returnWaiterHome(session, "approach-stalled")
                 return@runLater
             }
-            if (!npc.navigator.isNavigating) {
-                navigateLevel(npc, stop, strictFloor = false)
+            if (!isWaiterNavigating(npc)) {
+                navigateLevel(npc, stop)
                 log(
                     "WAITER_RETRY",
                     session,
@@ -2681,7 +2648,7 @@ private class OriginDiningService : AutoCloseable {
                     monitorAmbientRoute(waiterId, token, 0)
                     return@runLater
                 }
-                if (npc.navigator.isNavigating) npc.navigator.cancelNavigation()
+                stopWaiterNavigation(npc)
                 replaceGuestMeal(route.table, route.dish, "waiter-cycle")
                 val guest = runCatching { CitizensAPI.getNPCRegistry().getById(route.table.npcId) }.getOrNull()?.takeIf { it.isSpawned }
                 if (guest != null) npc.faceLocation(guest.entity.location.clone().add(0.0, 1.4, 0.0))
@@ -2698,7 +2665,7 @@ private class OriginDiningService : AutoCloseable {
                 cancelAmbientRoute(waiterId, "stalled")
                 return@runLater
             }
-            if (!npc.navigator.isNavigating) navigateLevel(npc, destination, strictFloor = false)
+            if (!isWaiterNavigating(npc)) navigateLevel(npc, destination)
             monitorAmbientRoute(waiterId, token, poll + 1)
         }
     }
@@ -2706,23 +2673,38 @@ private class OriginDiningService : AutoCloseable {
     private fun finishAmbientRoute(waiterId: Int, token: UUID, reason: String) {
         val route = ambientRoutes[waiterId]?.takeIf { it.token == token } ?: return
         ambientRoutes.remove(waiterId, route)
-        ambientWaiterAvailableAt[waiterId] = System.currentTimeMillis() + OriginDiningLayout.ambientWaiterRestMillis
+        val restMillis = OriginDiningLayout.ambientWaiterRestMillis
+        val restTicks = (restMillis / 50L).coerceAtLeast(1L)
+        ambientWaiterAvailableAt[waiterId] = System.currentTimeMillis() + restMillis
         clearWaiterCarry(waiterId)
         val npc = waiter(waiterId)?.takeIf { it.isSpawned } ?: return
         val home = OriginDiningLayout.waiterHome(waiterId)?.inWorld(npc.entity.world)
-        if (home != null) navigateLevel(npc, home)
-        tasks.runLater(OriginDiningLayout.waiterReturnReleaseTicks) {
+        stopWaiterNavigation(npc)
+        tasks.runLater(restTicks) {
+            if (waiterId !in ambientRoutes && waiterId !in activeDeliveries && waiterId !in waiterAssignments && waiterId !in waiterApproaches) {
+                waiter(waiterId)?.takeIf { it.isSpawned }?.let { current ->
+                    if (home != null) navigateLevel(current, home)
+                }
+            }
+        }
+        tasks.runLater(restTicks + OriginDiningLayout.waiterReturnReleaseTicks) {
             if (waiterId !in ambientRoutes && waiterId !in activeDeliveries && waiterId !in waiterAssignments && waiterId !in waiterApproaches) {
                 waiter(waiterId)?.takeIf { it.isSpawned }?.entity?.removeScoreboardTag(WAITER_BUSY_TAG)
             }
         }
-        info("ORIGIN_DINING phase=AMBIENT_ROUTE_FINISHED npc={} table={} reason={}", waiterId, route.table.id, reason)
+        info(
+            "ORIGIN_DINING phase=AMBIENT_ROUTE_FINISHED npc={} table={} reason={} rest_ms={}",
+            waiterId,
+            route.table.id,
+            reason,
+            restMillis,
+        )
     }
 
     private fun cancelAmbientRoute(waiterId: Int, reason: String) {
         val route = ambientRoutes.remove(waiterId) ?: return
         waiter(waiterId)?.takeIf { it.isSpawned }?.let { npc ->
-            if (npc.navigator.isNavigating) npc.navigator.cancelNavigation()
+            stopWaiterNavigation(npc)
             npc.entity.removeScoreboardTag(WAITER_BUSY_TAG)
         }
         clearWaiterCarry(waiterId)
@@ -2954,7 +2936,7 @@ private class OriginDiningService : AutoCloseable {
         clearWaiterCarry(waiterId)
         if (!Bukkit.getPluginManager().isPluginEnabled("Citizens")) return
         runCatching { CitizensAPI.getNPCRegistry().getById(waiterId) }.getOrNull()?.takeIf { it.isSpawned }?.let { npc ->
-            if (force && npc.navigator.isNavigating) npc.navigator.cancelNavigation()
+            if (force) stopWaiterNavigation(npc)
             npc.entity.removeScoreboardTag(WAITER_BUSY_TAG)
         }
     }
@@ -3016,6 +2998,7 @@ private class OriginDiningService : AutoCloseable {
 
     override fun close() {
         tasks.close()
+        routeController.close()
         removeRuntimeEntities()
         sessions.clear()
         occupants.clear()
@@ -3039,7 +3022,6 @@ private class OriginDiningService : AutoCloseable {
         guestMarkers.clear()
         ambientRoutes.clear()
         ambientWaiterAvailableAt.clear()
-        navigationAttempts.clear()
         ambientTableDueAt.clear()
         speechDisplays.clear()
         info("ORIGIN_DINING phase=STOPPED")

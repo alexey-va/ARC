@@ -120,12 +120,33 @@ navigation:
   waiter-player-range: 1.8
   distance-margin: 0.35
   path-distance-margin: 0.35
-  # These are soft path costs: a flat floor wins, but a waiter can still climb
-  # when the room has no usable level route.
-  level-change-cost: 100.0
-  obstacle-step-cost: 100.0
-  # If a completely level path cannot be built, retry with the soft costs.
-  flat-route-fallback-ticks: 40
+  # ARC builds a bounded four-way path only through safe cells on this floor,
+  # then gives Citizens the complete prepared route. Tables and chairs can
+  # therefore never become route shortcuts.
+  grid-max-visited: 1024
+  grid-poll-ticks: 2
+  grid-stall-polls: 20
+  grid-snap-radius: 3
+  grid-off-floor-tolerance: 0.45
+  # Profiles bound every route to its venue. Add hard no-go rectangles to
+  # forbidden-areas and cheap preferred corridors to preferred-areas.
+  # Rectangle format: min-x,min-z,max-x,max-z.
+  route-profile-ids: [brewery, restaurant]
+  route-profiles:
+    brewery:
+      floor-y: 70
+      min-block: "-22,70,35"
+      max-block: "4,70,64"
+      forbidden-areas: []
+      preferred-areas: []
+      speed-modifier: 0.72
+    restaurant:
+      floor-y: 72
+      min-block: "-61,72,40"
+      max-block: "-40,72,62"
+      forbidden-areas: []
+      preferred-areas: []
+      speed-modifier: 0.72
   session-radius: 8.0
 
 seating:
