@@ -130,16 +130,18 @@ internal fun travelAnchorScale(
     minimumScale: Float,
     maximumScale: Float,
     distance: Double = Double.POSITIVE_INFINITY,
-    distanceScalingStart: Double = 0.0,
-    distanceScalingEnd: Double = 0.0,
+    nearbyMaximumScale: Float = maximumScale,
+    nearbyDistance: Double = 0.0,
+    fullScaleDistance: Double = 0.0,
 ): Float {
     val aimProgress = ((dot - minimumVisibleDot) / (1.0 - minimumVisibleDot)).coerceIn(0.0, 1.0)
-    val distanceProgress = if (distanceScalingEnd > distanceScalingStart) {
-        ((distance - distanceScalingStart) / (distanceScalingEnd - distanceScalingStart)).coerceIn(0.0, 1.0)
+    val distanceProgress = if (fullScaleDistance > nearbyDistance) {
+        ((distance - nearbyDistance) / (fullScaleDistance - nearbyDistance)).coerceIn(0.0, 1.0)
     } else {
         1.0
     }
-    return minimumScale + (maximumScale - minimumScale) * (aimProgress * distanceProgress).toFloat()
+    val effectiveMaximum = nearbyMaximumScale + (maximumScale - nearbyMaximumScale) * distanceProgress.toFloat()
+    return minimumScale + (effectiveMaximum - minimumScale) * aimProgress.toFloat()
 }
 
 internal fun travelAnchorExpandedSelectionDot(
@@ -338,8 +340,9 @@ private data class TravelAnchorSettings(
     val selectionDot: Double,
     val minimumScale: Float,
     val maximumScale: Float,
-    val distanceScalingStart: Double,
-    val distanceScalingEnd: Double,
+    val nearbyMaximumScale: Float,
+    val nearbyDistance: Double,
+    val fullScaleDistance: Double,
     val labelMinimumScale: Float,
     val labelMaximumScale: Float,
     val proxyDistance: Double,
@@ -439,8 +442,9 @@ private object TravelAnchorConfig {
             selectionDot = cos(Math.toRadians(selectionAngle)),
             minimumScale = source.real("visual.minimum-scale", 1.04).toFloat().coerceIn(1.01f, 6.0f),
             maximumScale = source.real("visual.maximum-scale", 3.0).toFloat().coerceIn(1.01f, 6.0f),
-            distanceScalingStart = source.real("visual.distance-scaling-start", 8.0).coerceIn(0.0, 4096.0),
-            distanceScalingEnd = source.real("visual.distance-scaling-end", 64.0).coerceIn(1.0, 4096.0),
+            nearbyMaximumScale = source.real("visual.nearby-maximum-scale", 1.5).toFloat().coerceIn(1.01f, 6.0f),
+            nearbyDistance = source.real("visual.nearby-distance", 6.0).coerceIn(0.0, 4096.0),
+            fullScaleDistance = source.real("visual.full-scale-distance", 12.0).coerceIn(1.0, 4096.0),
             labelMinimumScale = source.real("visual.label-minimum-scale", 1.8).toFloat().coerceIn(0.5f, 8.0f),
             labelMaximumScale = source.real("visual.label-maximum-scale", 6.0).toFloat().coerceIn(0.5f, 12.0f),
             proxyDistance = source.real("visual.proxy-distance", 48.0).coerceIn(16.0, 96.0),
@@ -454,7 +458,8 @@ private object TravelAnchorConfig {
         ).let { settings ->
             settings.copy(
                 maximumScale = settings.maximumScale.coerceAtLeast(settings.minimumScale),
-                distanceScalingEnd = settings.distanceScalingEnd.coerceAtLeast(settings.distanceScalingStart + 1.0),
+                nearbyMaximumScale = settings.nearbyMaximumScale.coerceIn(settings.minimumScale, settings.maximumScale),
+                fullScaleDistance = settings.fullScaleDistance.coerceAtLeast(settings.nearbyDistance + 1.0),
                 labelMaximumScale = settings.labelMaximumScale.coerceAtLeast(settings.labelMinimumScale),
             )
         }
@@ -787,33 +792,35 @@ object TravelAnchorsModule : PluginModule, Listener {
     }
 
     private fun refreshPlayers() {
+        Bukkit.getOnlinePlayers().forEach(::refreshPlayer)
+    }
+
+    private fun refreshPlayer(player: Player) {
         val current = settings ?: return
-        Bukkit.getOnlinePlayers().forEach { player ->
-            if (!isFeatureAvailable(player)) {
-                clearDisplays(player)
-                return@forEach
-            }
-            grantPublicAccessAtFeet(player)
-            val source = anchorBelow(player)
-            val staff = player.inventory.itemInMainHand
-            val staffHeld = staff.hasMarker(STAFF_ITEM_KEY) && itemOwnerAllows(staff, player)
-            if (source == null && !staffHeld) {
-                clearDisplays(player)
-                return@forEach
-            }
-            val candidates = visibleCandidates(player, source)
-            val selected = chooseTravelAnchorTarget(candidates, current.range * current.range, current.selectionDot)?.target
-            render(player, candidates, selected)
-            if (selected != null) {
-                selectedTargets[player.uniqueId] = selected
-                val distance = candidates.first { it.target == selected }.distanceSquared.let(Math::sqrt).roundToInt().toString()
-                val message = travelAnchorTargetMessage(source != null, staffHeld) ?: return@forEach
-                val targetName = anchorNames[selected] ?: current.defaultAnchorName()
-                player.sendActionBar(current.targetMessage(message, targetName, distance))
-            } else {
-                selectedTargets.remove(player.uniqueId)
-                clearLabel(player)
-            }
+        if (!isFeatureAvailable(player)) {
+            clearDisplays(player)
+            return
+        }
+        grantPublicAccessAtFeet(player)
+        val source = anchorBelow(player)
+        val staff = player.inventory.itemInMainHand
+        val staffHeld = staff.hasMarker(STAFF_ITEM_KEY) && itemOwnerAllows(staff, player)
+        if (source == null && !staffHeld) {
+            clearDisplays(player)
+            return
+        }
+        val candidates = visibleCandidates(player, source)
+        val selected = chooseTravelAnchorTarget(candidates, current.range * current.range, current.selectionDot)?.target
+        render(player, candidates, selected)
+        if (selected != null) {
+            selectedTargets[player.uniqueId] = selected
+            val distance = candidates.first { it.target == selected }.distanceSquared.let(Math::sqrt).roundToInt().toString()
+            val message = travelAnchorTargetMessage(source != null, staffHeld) ?: return
+            val targetName = anchorNames[selected] ?: current.defaultAnchorName()
+            player.sendActionBar(current.targetMessage(message, targetName, distance))
+        } else {
+            selectedTargets.remove(player.uniqueId)
+            clearLabel(player)
         }
     }
 
@@ -837,8 +844,9 @@ object TravelAnchorsModule : PluginModule, Listener {
                     current.minimumScale,
                     current.maximumScale,
                     actualDistance,
-                    current.distanceScalingStart,
-                    current.distanceScalingEnd,
+                    current.nearbyMaximumScale,
+                    current.nearbyDistance,
+                    current.fullScaleDistance,
                 )
                 val displayDistance = travelAnchorDisplayDistance(actualDistance, current.proxyDistance)
                 AimCandidate(
@@ -893,8 +901,9 @@ object TravelAnchorsModule : PluginModule, Listener {
                 current.minimumScale,
                 current.maximumScale,
                 actualDistance,
-                current.distanceScalingStart,
-                current.distanceScalingEnd,
+                current.nearbyMaximumScale,
+                current.nearbyDistance,
+                current.fullScaleDistance,
             )
             val shape = travelAnchorDisplayShape(actualDistance, current.proxyDistance, scale)
             display.billboard = if (shape.cameraFacing) Display.Billboard.CENTER else Display.Billboard.FIXED
@@ -1330,8 +1339,15 @@ object TravelAnchorsModule : PluginModule, Listener {
             player.sendActionBar(current.message("blocked"))
             return
         }
-        clearDisplays(player)
+        refreshAfterTeleport(player)
         playEffectsSafely("arrival") { playArrivalEffects(player, destination) }
+    }
+
+    private fun refreshAfterTeleport(player: Player) {
+        refreshPlayer(player)
+        Tasks.scheduler.runLater(2, Runnable {
+            if (player.isOnline && settings != null) refreshPlayer(player)
+        })
     }
 
     private inline fun playEffectsSafely(phase: String, effects: () -> Unit) {

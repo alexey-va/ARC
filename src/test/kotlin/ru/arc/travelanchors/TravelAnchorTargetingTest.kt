@@ -52,10 +52,12 @@ class TravelAnchorTargetingTest : FunSpec({
         (travelAnchorScale(0.8, 0.4, 1.0f, 3.0f) > travelAnchorScale(0.6, 0.4, 1.0f, 3.0f)) shouldBe true
     }
 
-    test("near anchors stay compact while distant aimed anchors grow") {
-        travelAnchorScale(1.0, 0.4, 1.0f, 3.0f, distance = 4.0, distanceScalingStart = 8.0, distanceScalingEnd = 64.0) shouldBe 1.0f
-        travelAnchorScale(1.0, 0.4, 1.0f, 3.0f, distance = 36.0, distanceScalingStart = 8.0, distanceScalingEnd = 64.0) shouldBe 2.0f
-        travelAnchorScale(1.0, 0.4, 1.0f, 3.0f, distance = 64.0, distanceScalingStart = 8.0, distanceScalingEnd = 64.0) shouldBe 3.0f
+    test("near anchors keep aim scaling with a smaller maximum") {
+        travelAnchorScale(0.4, 0.4, 1.0f, 3.0f, 4.0, 1.5f, 6.0, 12.0) shouldBe 1.0f
+        travelAnchorScale(0.7, 0.4, 1.0f, 3.0f, 4.0, 1.5f, 6.0, 12.0) shouldBe 1.25f
+        travelAnchorScale(1.0, 0.4, 1.0f, 3.0f, 4.0, 1.5f, 6.0, 12.0) shouldBe 1.5f
+        travelAnchorScale(1.0, 0.4, 1.0f, 3.0f, 9.0, 1.5f, 6.0, 12.0) shouldBe 2.25f
+        travelAnchorScale(1.0, 0.4, 1.0f, 3.0f, 12.0, 1.5f, 6.0, 12.0) shouldBe 3.0f
     }
 
     test("standing on an anchor gives Shift priority over the staff hint") {

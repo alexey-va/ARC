@@ -12,9 +12,10 @@ visual:
   proxy-distance: 48.0
   minimum-scale: 1.04
   maximum-scale: 3.0
-  # Вблизи увеличение почти не применяется; полная сила достигается вдали.
-  distance-scaling-start: 8.0
-  distance-scaling-end: 64.0
+  # У близкой цели сохраняется реакция на прицел, но максимум ограничен.
+  nearby-maximum-scale: 1.5
+  nearby-distance: 6.0
+  full-scale-distance: 12.0
   label-minimum-scale: 1.8
   label-maximum-scale: 6.0
   update-ticks: 1
