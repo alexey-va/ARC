@@ -60,17 +60,16 @@ class TravelAnchorTargetingTest : FunSpec({
         travelAnchorScale(1.0, 0.4, 1.0f, 3.0f, 12.0, 1.5f, 6.0, 12.0) shouldBe 3.0f
     }
 
-    test("teleport portals open fully, hold briefly and collapse") {
-        val scales = (0..10).map { travelAnchorTeleportPortalScale(it, 4, 1, 4) }
+    test("teleport portals snap open smoothly, hold for a second and collapse") {
+        val scales = (0..30).map { travelAnchorTeleportPortalScale(it, 5, 20, 4) }
 
         scales[0] shouldBe 0.02f
-        (scales[1]!! < scales[2]!!) shouldBe true
-        (scales[2]!! < scales[3]!!) shouldBe true
-        scales[4] shouldBe 1f
-        scales[5] shouldBe 1f
-        (scales[6]!! > scales[7]!!) shouldBe true
-        scales[9] shouldBe 0.02f
-        scales[10] shouldBe null
+        (scales[1]!! > 0.45f) shouldBe true
+        (0 until 5).all { scales[it]!! < scales[it + 1]!! } shouldBe true
+        (5..25).all { scales[it] == 1f } shouldBe true
+        (scales[26]!! > scales[27]!!) shouldBe true
+        scales[29] shouldBe 0.02f
+        scales[30] shouldBe null
     }
 
     test("touching horizontal anchors form one display blob without merging elevator floors") {
