@@ -5,6 +5,8 @@ import com.magmaguy.elitemobs.advancedcombat.classes.ClassResourceType
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import org.bukkit.entity.Player
+import ru.arc.paper.api.ArcSidebarFrame
+import ru.arc.paper.api.ArcSidebarHandle
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.roundToLong
@@ -15,24 +17,31 @@ internal data class DungeonCombatResource(
     val maximum: Long,
 )
 
-/** Main-thread rendering; TAB/PAPI threads read immutable strings only. TAB owns the sidebar. */
+/** Main-thread dungeon source for ARC Core's shared native sidebar. */
 internal class DungeonScoreboard(
     private val dungeon: EMDungeonQol,
+    private val sidebar: ArcSidebarHandle? = null,
     private val enabled: (Player) -> Boolean = { true },
     private val party: (Player) -> DungeonPartyView? = { dungeon.parties.current(it) },
     private val resource: (Player) -> DungeonCombatResource? = ::readDungeonCombatResource,
     private val crystals: (Player) -> String? = ::readDungeonCrystals,
 ) {
-    /** Keep one of Minecraft's 15 sidebar rows available for the compact quest tracker in TAB. */
-    private companion object { const val MAX_LINES = 14 }
+    private companion object { const val MAX_LINES = ArcSidebarFrame.MAX_ROWS }
     private val snapshots = ConcurrentHashMap<UUID, Map<String, String>>()
     private val legacy = LegacyComponentSerializer.builder().character('§').hexColors().build()
 
     internal fun refresh(players: Collection<Player>) {
         val present = mutableSetOf<UUID>()
         for (player in players) {
-            if (!enabled(player)) continue
-            val view = dungeon.scoreboardView(player) ?: continue
+            if (!enabled(player)) {
+                sidebar?.hide(player)
+                continue
+            }
+            val view = dungeon.scoreboardView(player)
+            if (view == null) {
+                sidebar?.hide(player)
+                continue
+            }
             present += player.uniqueId
             val visit = view.visit
             val name = wrapLegacyScoreboardText(legacy.serialize(dungeonDisplayName(visit)), 32, 2)
@@ -92,39 +101,32 @@ internal class DungeonScoreboard(
                 }
             }.orEmpty()
             val rows = joinDungeonScoreboardSections(overview, stats, partyRows, footer)
+            val title = line("title", "<#b22222><bold>Rus<white>Crafting")
             snapshots[player.uniqueId] = buildMap {
                 put("active", "true")
-                put("title", line("title", "<#b22222><bold>Rus<white>Crafting"))
+                put("title", title)
                 rows.forEachIndexed { index, row -> put("line_${index + 1}", row) }
             }
+            sidebar?.show(player, ArcSidebarFrame(legacy.deserialize(title), rows.map(legacy::deserialize)))
         }
+        (snapshots.keys - present).forEach { sidebar?.hide(it) }
         snapshots.keys.retainAll(present)
     }
 
     internal fun value(playerId: UUID?, key: String): String =
         playerId?.let { snapshots[it]?.get(key) } ?: if (key == "active") "false" else ""
-    internal fun remove(playerId: UUID) { snapshots.remove(playerId) }
-    internal fun clear() { snapshots.clear() }
+    internal fun remove(playerId: UUID) { snapshots.remove(playerId); sidebar?.hide(playerId) }
+    internal fun clear() { snapshots.clear(); sidebar?.close() }
     private fun line(key: String, fallback: String, vararg values: Pair<String, Component>): String =
         legacy.serialize(dungeon.text("scoreboard.$key", fallback, *values))
 }
 
 internal fun joinDungeonScoreboardSections(vararg sections: List<String>): List<String> = buildList {
-    var separator = 0
     sections.filter { it.isNotEmpty() }.forEach { section ->
-        if (isNotEmpty()) {
-            check(separator < LEGACY_SCOREBOARD_SPACER_COLORS.length) {
-                "A Minecraft sidebar cannot contain this many independent sections"
-            }
-            // TAB drops an actually empty placeholder value and de-duplicates equal rows.
-            // A unique legacy colour followed by one space is visually blank but survives both rules.
-            add("§${LEGACY_SCOREBOARD_SPACER_COLORS[separator++]} ")
-        }
+        if (isNotEmpty()) add("")
         addAll(section)
     }
 }
-
-private const val LEGACY_SCOREBOARD_SPACER_COLORS = "0123456789abcdef"
 
 private fun readDungeonCombatResource(player: Player): DungeonCombatResource? = runCatching {
     if (!AdvancedCombatModule.isInitialized()) return@runCatching null

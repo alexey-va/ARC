@@ -40,13 +40,13 @@ class DungeonScoreboardTest : FreeSpec({
             "Крипта",
             "Открытый данж",
             "Прохождение идёт",
-            " ",
+            "",
             "| Уровень: 12",
             "| Сложность: Обычная",
             "| Участников: 3",
             "| Ярость: 37/100",
             "| Кристаллы: 💎 42",
-            " ",
+            "",
             "Shift + F — меню данжа",
         )
     }
@@ -95,8 +95,8 @@ class DungeonScoreboardTest : FreeSpec({
         }
         val board = DungeonScoreboard(qol, party = { null }) { null }
         board.refresh(listOf(player)); board.value(id, "active") shouldBe "true"
-        (1..14).map { board.value(id, "line_$it") }.joinToString("\n") shouldContain "вы вне состава"
-        (1..14).map { board.value(id, "line_$it") }.joinToString("\n") shouldContain "Меню похода — для участников"
+        (1..15).map { board.value(id, "line_$it") }.joinToString("\n") shouldContain "вы вне состава"
+        (1..15).map { board.value(id, "line_$it") }.joinToString("\n") shouldContain "Меню похода — для участников"
         view = null
         board.refresh(listOf(player)); board.value(id, "active") shouldBe "false"
     }
@@ -113,7 +113,7 @@ class DungeonScoreboardTest : FreeSpec({
         val board = DungeonScoreboard(qol, party = { null }) { null }
         board.refresh(listOf(player))
         board.value(id, "active") shouldBe "true"
-        (1..14).map { board.value(id, "line_$it") }.joinToString("\n") shouldContain "Поход окончен"
+        (1..15).map { board.value(id, "line_$it") }.joinToString("\n") shouldContain "Поход окончен"
         board.clear()
         board.value(id, "active") shouldBe "false"
     }
@@ -153,7 +153,7 @@ class DungeonScoreboardTest : FreeSpec({
         lines.last() shouldBe "Shift + F — меню данжа"
     }
 
-    "section spacing has no leading trailing or duplicate blank rows" {
+    "section spacing has no leading or trailing rows and keeps every blank separator" {
         val rows = joinDungeonScoreboardSections(
             emptyList(),
             listOf("Поход"),
@@ -162,14 +162,13 @@ class DungeonScoreboardTest : FreeSpec({
             listOf("Меню"),
         )
 
-        rows.map(::visibleText) shouldBe listOf("Поход", " ", "Группа", " ", "Меню")
-        rows.filter { visibleText(it).isBlank() }.all(String::isNotEmpty) shouldBe true
-        rows.filter { visibleText(it).isBlank() }.distinct().size shouldBe 2
+        rows.map(::visibleText) shouldBe listOf("Поход", "", "Группа", "", "Меню")
+        rows.filter(String::isEmpty).size shouldBe 2
     }
 })
 
 private fun scoreboardLines(board: DungeonScoreboard, playerId: UUID): List<String> =
-    (1..14).map { visibleText(board.value(playerId, "line_$it")) }.dropLastWhile(String::isEmpty)
+    (1..15).map { visibleText(board.value(playerId, "line_$it")) }.dropLastWhile(String::isEmpty)
 
 private fun visibleText(value: String): String =
     net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(

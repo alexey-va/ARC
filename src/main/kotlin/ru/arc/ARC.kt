@@ -9,6 +9,8 @@ import org.bukkit.plugin.ServicePriority
 import ru.arc.itemcatalog.ArcItemMaterializerBridge
 import ru.arc.paper.api.ArcTelemetryProvider
 import ru.arc.paper.api.ArcItemMaterializer
+import ru.arc.paper.api.ArcSidebarService
+import ru.arc.paper.sidebar.PaperArcSidebarService
 import ru.arc.metrics.ArcTelemetryProviderBridge
 import ru.arc.audit.autosell.AutoSellAuditModule
 import ru.arc.audit.bank.BankAuditModule
@@ -82,6 +84,7 @@ import ru.arc.travelanchors.TravelAnchorsModule
 import ru.arc.rtp.RtpPlayerRegistry
 import ru.arc.scheduled.ScheduledCommandsModule
 import ru.arc.spy.CrossServerSpyModule
+import ru.arc.sidebar.ArcBaseSidebar
 import ru.arc.util.HeadTextureCache
 import ru.arc.util.Logging
 import ru.arc.util.Logging.consoleLog
@@ -112,6 +115,11 @@ open class ARC : JavaPlugin() {
     internal lateinit var chunkTicketRegistry: PaperChunkTicketRegistry
         private set
 
+    internal lateinit var sidebarService: PaperArcSidebarService
+        private set
+
+    private var baseSidebar: ArcBaseSidebar? = null
+
     // ==================== Lifecycle ====================
 
     override fun onLoad() {
@@ -131,6 +139,8 @@ open class ARC : JavaPlugin() {
         PaperArcRuntime.installScheduling(this)
         ArcMenus.initialize(this, dataPath)
         chunkTicketRegistry = PaperChunkTicketRegistry(this)
+        sidebarService = PaperArcSidebarService(this)
+        server.servicesManager.register(ArcSidebarService::class.java, sidebarService, this, ServicePriority.Normal)
         RtpPlayerRegistry.initialize(dataPath)
         registerModules()
         PaperArcRuntime.installModuleLifecycleReporting(
@@ -140,6 +150,7 @@ open class ARC : JavaPlugin() {
         ModuleRegistry.initAll()
         server.servicesManager.register(ArcTelemetryProvider::class.java, ArcTelemetryProviderBridge, this, ServicePriority.Normal)
         server.servicesManager.register(ArcItemMaterializer::class.java, ArcItemMaterializerBridge, this, ServicePriority.Normal)
+        baseSidebar = ArcBaseSidebar(this, sidebarService).also(ArcBaseSidebar::start)
         // Start the single Redis subscription after ALL modules have registered their channels.
         // Calling init() multiple times (once per module) caused the subscription to be
         // constantly restarted and never complete its 1s startup delay.
@@ -169,6 +180,12 @@ open class ARC : JavaPlugin() {
         server.servicesManager.unregisterAll(this)
         Portal.removeAll()
         ModuleRegistry.shutdownAll()
+        baseSidebar?.close()
+        baseSidebar = null
+        if (::sidebarService.isInitialized) {
+            runCatching(sidebarService::close)
+                .onFailure { error("Failed to close ARC sidebar service", it) }
+        }
         ArcMenus.close()
         if (::chunkTicketRegistry.isInitialized) {
             runCatching(chunkTicketRegistry::close)
@@ -191,6 +208,7 @@ open class ARC : JavaPlugin() {
         ConfigManager.reloadAll()
         ArcMenus.reload()
         ModuleRegistry.reloadAll()
+        baseSidebar?.refresh()
         // Modules may replace channel listeners during reload; restart the subscription once
         // after every module has refreshed its registrations.
         redisManager?.let {
@@ -393,6 +411,7 @@ open class ARC : JavaPlugin() {
                 "modules/elitemobs.yml",
                 "modules/text.yml",
                 "modules/misc.yml",
+                "modules/scoreboard.yml",
                 "modules/join-message-dialog.yml",
                 "config/commands.yml",
                 "guis/defaults.yml",

@@ -36,6 +36,7 @@ import ru.arc.hooks.HookRegistry
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.paper.audience.NativePaperAudienceEffects
 import ru.arc.paper.audience.PaperAudienceEffects
+import ru.arc.paper.api.ArcSidebarHandle
 import java.time.Duration
 import java.util.UUID
 
@@ -62,9 +63,10 @@ internal class EMDungeonQol(
         HookRegistry.huskHomesHook?.teleport(player, destination) == true
     },
     private val leaveWormholeWorld: (Player, World) -> Unit = NativeWormholeCooldowns()::leftWorld,
+    sidebar: ArcSidebarHandle? = null,
 ) : Listener, AutoCloseable {
     private val scoreboardPreferenceKey = NamespacedKey("arc", "dungeon_scoreboard_enabled")
-    internal val scoreboard = DungeonScoreboard(this, enabled = ::scoreboardEnabled)
+    internal val scoreboard = DungeonScoreboard(this, sidebar, enabled = ::scoreboardEnabled)
     private val actionBarLocalization = EliteMobsActionBarPackets.create()
     private val checkpoints = DungeonCheckpointStore()
     private val tasks = LifecycleTaskScope()

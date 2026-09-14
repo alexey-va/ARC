@@ -9,7 +9,7 @@ import kotlin.io.path.readLines
 
 class CoinGlyphColorTest : StringSpec({
     "every coin glyph in ARC resource text is explicitly white" {
-        val colorTag = Regex("<(?:color:)?(#[0-9a-fA-F]{3,6}|[a-zA-Z_]+)(?:>|\\s[^>]*>)")
+        val colorToken = Regex("<(?:color:)?(#[0-9a-fA-F]{3,6}|[a-zA-Z_]+)(?:>|\\s[^>]*>)|&([0-9a-fA-F])")
         val violations = mutableListOf<String>()
         val resources = Path.of("src/main/resources")
 
@@ -18,8 +18,9 @@ class CoinGlyphColorTest : StringSpec({
                 .forEach { path ->
                     path.readLines().forEachIndexed { index, line ->
                         line.indices.filter { line.startsWith("💰", it) }.forEach { coinIndex ->
-                            val nearestColor = colorTag.findAll(line.substring(0, coinIndex)).lastOrNull()?.groupValues?.get(1)
-                            if (nearestColor?.lowercase() !in setOf("white", "#fff", "#ffffff")) {
+                            val match = colorToken.findAll(line.substring(0, coinIndex)).lastOrNull()
+                            val nearestColor = match?.groupValues?.let { it[1].ifEmpty { it[2] } }
+                            if (nearestColor?.lowercase() !in setOf("white", "#fff", "#ffffff", "f")) {
                                 violations += "${path}:${index + 1}: ${line.trim()}"
                             }
                         }

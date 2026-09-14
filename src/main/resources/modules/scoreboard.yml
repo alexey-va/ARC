@@ -1,0 +1,227 @@
+# ARC owns the native Paper sidebar. Other plugins publish higher-priority
+# frames through ArcSidebarService; these layouts are the lowest-priority base.
+enabled: true
+enabled-servers: [spawn, survival]
+title: '&#B22222&lRus&f&lCrafting'
+
+# Existing tab.scoreboard[2..20] permissions are intentionally preserved so the
+# current player settings menu keeps selecting the same layout.
+styles:
+  style01:
+    lines:
+      - '&6| &f%player%'
+      - '&6| &f%cmi_user_rank_displayname%'
+      - '&6| &f💰 &6%rediseco_bal_short_vault%  &f &d%rediseco_bal_short_tokens%'
+      - '&6| &fНаиграно: &e%cmi_user_playtime_hoursf% ч'
+      - ''
+      - '&6Место'
+      - '&6| &f%arc_worldname%'
+      - '&6| &f%lands_land_name_plain_here%'
+      - ''
+      - '&6Сервер'
+      - '&6| &fОнлайн: &a%online% &8• &fПинг: &e%player_ping% мс'
+  style02:
+    lines:
+      - '&6| &f%player%'
+      - '&6| &f💰 &6%rediseco_bal_short_vault%  &f &d%rediseco_bal_short_tokens%'
+      - '&6| &f%arc_worldname%'
+      - '&6| &fОнлайн: &a%online%'
+  style03:
+    lines:
+      - '&6Кошелёк'
+      - '&6| &fМонеты: &6%rediseco_bal_short_vault%'
+      - '&6| &fЖетоны: &d%rediseco_bal_short_tokens%'
+      - '&6| &fБанк: &6%bank_money%'
+      - '&6| &fОпыт в банке: &b%bank_exp%'
+      - ''
+      - '&6Накопления'
+      - '&6| &fОчки профессий: &e%jobsr_user_points%'
+      - '&6| &fНаиграно: &e%cmi_user_playtime_hoursf% ч'
+  style04:
+    lines:
+      - '&6Профиль'
+      - '&6| &fИгрок: &e%player%'
+      - '&6| &fРанг: &e%cmi_user_rank_name%'
+      - ''
+      - '&6Рост'
+      - '&6| &fСледующий: &e%cmi_user_nextranks%'
+      - '&6| &fПрогресс: &a%cmi_user_nextrankpercent% %'
+      - '&6| &fНаиграно: &e%cmi_user_playtime_hoursf% ч'
+      - ''
+      - '&6Навыки'
+      - '&6| &fСила: &b%auraskills_power%'
+      - '&6| &fРейтинг: &e%auraskills_rank%'
+      - '&6| &fМакс. здоровье: &c%auraskills_hp_max%'
+  style05:
+    lines:
+      - '&6Земли'
+      - '&6| &fМир: %arc_worldname%'
+      - '&6| &fЗемля: &a%lands_land_name_plain_here%'
+      - '&6| &fСервер: &e%server%'
+      - ''
+      - '&6Координаты'
+      - '&6| &fX: &e%player_x% &fY: &e%player_y% &fZ: &e%player_z%'
+  style06:
+    lines:
+      - '&6Координаты'
+      - '&6| &fМир: %arc_worldname%'
+      - '&6| &fX: &e%player_x%'
+      - '&6| &fY: &e%player_y%'
+      - '&6| &fZ: &e%player_z%'
+      - '&6| &fСервер: &e%server%'
+      - '&6| &fВремя: &e%time%'
+  style07:
+    lines:
+      - '&6Онлайн'
+      - '&6| &fВся сеть: &a%online%'
+      - '&6| &fТвой сервер: &a%serveronline%'
+      - ''
+      - '&6Серверы'
+      - '&6| &fСпавн: &a%online_spawn%'
+      - '&6| &fВыживание: &a%online_survival%'
+      - '&6| &fПаркур: &a%online_parkour%'
+  style08:
+    lines:
+      - '&6Сервер'
+      - '&6| &fУзел: &e%server%'
+      - '&6| &fВерсия: &e%server_version%'
+      - '&6| &fТикрейт: &a%server_tps_5_colored%'
+      - '&6| &fАптайм: &e%server_uptime%'
+      - ''
+      - '&6Соединение'
+      - '&6| &fПинг: &e%player_ping% мс'
+      - '&6| &fПамять: &e%server_ram_used%&7/&e%server_ram_total% мб'
+  style09:
+    lines:
+      - '&6Время'
+      - '&6| &fДата: &e%date%'
+      - '&6| &fЧасы: &e%time%'
+      - ''
+      - '&6Сессия'
+      - '&6| &fНаиграно: &e%cmi_user_playtime_hoursf% ч'
+      - '&6| &fВ профессиях: &e%jobsr_user_seen%'
+      - '&6| &fАптайм: &e%server_uptime%'
+  style10:
+    lines:
+      - '&6Профессии'
+      - '&6| &fОбщий уровень: &e%jobsr_user_totallevels%'
+      - '&6| &fОчки: &e%jobsr_user_points%'
+      - '&6| &fВыбрано: &e%jobsr_user_joinedjobcount%&7/&e%jobsr_maxjobs%'
+      - ''
+      - '&6Специализации'
+      - '&6| &fШахтёр: &e%jobsr_user_jlevel_Miner%'
+      - '&6| &fФермер: &e%jobsr_user_jlevel_Farmer%'
+      - '&6| &fСтроитель: &e%jobsr_user_jlevel_Builder%'
+  style11:
+    lines:
+      - '&6Навыки'
+      - '&6| &fСила: &b%auraskills_power%'
+      - '&6| &fРейтинг: &e%auraskills_rank%'
+      - '&6| &fМакс. здоровье: &c%auraskills_hp_max%'
+      - ''
+      - '&6Опыт'
+      - '&6| &fПрофессии: &e%jobsr_user_totallevels% ур.'
+  style12:
+    lines:
+      - '&6Добыча'
+      - '&6| &fДобыто блоков: &e%cmi_user_stats_BlocksMined%'
+      - '&6| &fСоздано предметов: &e%cmi_user_stats_ItemCrafts%'
+      - '&6| &fПоймано рыбы: &e%cmi_user_stats_FishCaught%'
+      - ''
+      - '&6Шахтёр'
+      - '&6| &fУровень работы: &e%jobsr_user_jlevel_Miner%'
+      - '&6| &fМир: %arc_worldname%'
+  style13:
+    lines:
+      - '&6Строитель'
+      - '&6| &fПоставлено: &e%cmi_user_stats_BlocksPlaced%'
+      - '&6| &fДобыто: &e%cmi_user_stats_BlocksMined%'
+      - '&6| &fСоздано: &e%cmi_user_stats_ItemCrafts%'
+      - '&6| &fОткрыто сундуков: &e%cmi_user_stats_ChestOpen%'
+      - ''
+      - '&6Работа'
+      - '&6| &fСтроитель: &e%jobsr_user_jlevel_Builder% ур.'
+      - '&6| &fЗемля: &a%lands_land_name_plain_here%'
+  style14:
+    lines:
+      - '&6Исследователь'
+      - '&6| &fПешком: &e%cmi_user_stats_Walk%'
+      - '&6| &fБегом: &e%cmi_user_stats_Sprint%'
+      - '&6| &fВплавь: &e%cmi_user_stats_Swim%'
+      - '&6| &fНа элитрах: &e%cmi_user_stats_ElytraTravel%'
+      - '&6| &fВерхом: &e%cmi_user_stats_HorseTravel%'
+      - ''
+      - '&6Сейчас'
+      - '&6| &f%arc_worldname%'
+      - '&6| &fX: &e%player_x% &fZ: &e%player_z%'
+  style15:
+    lines:
+      - '&6Охотник'
+      - '&6| &fМобов: &e%cmi_user_stats_MobKills%'
+      - '&6| &fИгроков: &e%cmi_user_stats_PlayerKills%'
+      - '&6| &fУрон нанесён: &e%cmi_user_stats_DamageDealt%'
+      - '&6| &fУрон получен: &e%cmi_user_stats_DamageTaken%'
+      - '&6| &fСмертей: &c%cmi_user_stats_Deaths%'
+      - ''
+      - '&6Статус'
+      - '&6| &fМакс. здоровье: &c%auraskills_hp_max%'
+      - '&6| &fПинг: &e%player_ping% мс'
+  style16:
+    lines:
+      - '&6Быт'
+      - '&6| &fПрыжков: &e%cmi_user_stats_Jump%'
+      - '&6| &fНочей в кровати: &e%cmi_user_stats_SleptInBed%'
+      - '&6| &fОткрыто шалкеров: &e%cmi_user_stats_ShulkerBoxOpened%'
+      - '&6| &fПосажено цветов: &e%cmi_user_stats_FlowerPotted%'
+      - '&6| &fСделок: &e%cmi_user_stats_TradedWithVillager%'
+      - ''
+      - '&6Дом'
+      - '&6| &fЗемля: &a%lands_land_name_plain_here%'
+  style17:
+    lines:
+      - '&6Баланс'
+      - '&6| &fМонеты: &6%rediseco_bal_short_vault%'
+      - '&6| &fЖетоны: &d%rediseco_bal_short_tokens%'
+      - '&6| &fБанк: &6%bank_money%'
+      - '&6| &fОпыт: &b%bank_exp%'
+      - '&6| &fОчки работ: &e%jobsr_user_points%'
+      - ''
+      - '&6Время'
+      - '&6| &fНаиграно: &e%cmi_user_playtime_hoursf% ч'
+  style18:
+    lines:
+      - '&6Сводка'
+      - '&6| &f%player%'
+      - '&6| &f%cmi_user_rank_displayname%'
+      - '&6| &f%arc_worldname%'
+      - '&6| &f%lands_land_name_plain_here%'
+      - ''
+      - '&6Ресурсы'
+      - '&6| &f💰 &6%rediseco_bal_short_vault%  &f &d%rediseco_bal_short_tokens%'
+      - '&6| &fНаиграно: &e%cmi_user_playtime_hoursf% ч'
+      - ''
+      - '&6Сеть'
+      - '&6| &fОнлайн: &a%online%'
+      - '&6| &fТикрейт: &a%server_tps_5_colored%'
+      - '&6| &fПинг: &e%player_ping% мс'
+  style19:
+    lines:
+      - '&6| &f%date% &8• &e%time%'
+      - '&6| &f%arc_worldname%'
+      - '&6| &fПинг: &e%player_ping% мс'
+  style20:
+    lines:
+      - '&6Игрок'
+      - '&6| &fИмя: &e%player%'
+      - '&6| &fРанг: &e%cmi_user_rank_name%'
+      - '&6| &fСервер: &e%server% &8• &f%arc_worldname%'
+      - '&6| &fX: &e%player_x% &fY: &e%player_y% &fZ: &e%player_z%'
+      - '&6| &fЗемля: &a%lands_land_name_plain_here%'
+      - ''
+      - '&6Сеть'
+      - '&6| &fОнлайн: &a%serveronline%&7/&a%online%'
+      - '&6| &fТикрейт: &a%server_tps_5_colored% &8• &fПинг: &e%player_ping%'
+      - '&6| &fАптайм: &e%server_uptime%'
+      - ''
+      - '&6Система'
+      - '&6| &fПамять: &e%server_ram_used%&7/&e%server_ram_total% мб'

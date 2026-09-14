@@ -37,6 +37,7 @@ import ru.arc.listeners.JoinListener
 import ru.arc.listeners.PickupListener
 import ru.arc.listeners.RespawnListener
 import ru.arc.listeners.SpawnerListener
+import ru.arc.paper.api.ArcSidebarPriorities
 import ru.arc.contracts.ContractNpcAccessListener
 import ru.arc.contracts.SeasonTrophyProtectionListener
 import ru.arc.util.Logging.debug
@@ -302,7 +303,17 @@ class HookRegistry(
                 emHook = hook
                 emListener = listener
                 if (dungeonQol == null) {
-                    val qol = EMDungeonQol()
+                    val sidebar = ARC.instance.sidebarService.register(
+                        ARC.instance,
+                        "dungeon",
+                        ArcSidebarPriorities.DUNGEON,
+                    )
+                    val qol = try {
+                        EMDungeonQol(sidebar = sidebar)
+                    } catch (failure: Throwable) {
+                        sidebar.close()
+                        throw failure
+                    }
                     registerListener(qol.teleporter)
                     registerListener(ru.arc.hooks.elitemobs.DungeonCaseRewards)
                     dungeonQol = registerListener(qol)

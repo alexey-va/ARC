@@ -66,7 +66,7 @@ class PAPIHook internal constructor(
         "%arc_worldname%",
         "%arc_dungeon_active%",
         "%arc_dungeon_title%",
-        "%arc_dungeon_line_<1-14>%",
+        "%arc_dungeon_line_<1-15>%",
         "%arc_mount_active%",
         "%arc_mount_id%",
         "%arc_mount_name%",
