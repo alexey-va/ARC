@@ -13,6 +13,7 @@ import net.citizensnpcs.api.event.NPCRightClickEvent
 import net.citizensnpcs.api.trait.trait.Equipment as CitizensEquipment
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Bukkit
 import org.bukkit.Color
 import org.bukkit.Location
@@ -813,6 +814,7 @@ private class OriginDiningService : AutoCloseable {
     fun interactBlock(player: Player, block: Block): Boolean {
         if (block.world.name != OriginDiningLayout.WORLD) return false
         val seat = dynamicSeat(block) ?: return false
+        cleanupOrphanCmiChairs(block.location.add(0.5, -1.4, 0.5), 1.0, "seat-attempt")
         requestSeatConfirmation(player, seat, "block:${block.x},${block.y},${block.z}:world-stair")
         return true
     }
@@ -1061,8 +1063,30 @@ private class OriginDiningService : AutoCloseable {
                     it.remove()
                     removed++
                 }
+            removed += cleanupOrphanCmiChairs(center, 24.0, "service-start")
         }
         info("ORIGIN_DINING phase=LEGACY_SEAT_HITBOX_CLEANUP removed={}", removed)
+    }
+
+    private fun cleanupOrphanCmiChairs(center: Location, radius: Double, reason: String): Int {
+        val chairs = center.world?.getNearbyEntities(center, radius, if (radius > 1.0) 8.0 else 0.75, radius)
+            ?.filterIsInstance<ArmorStand>()
+            ?.filter { stand ->
+                stand.passengers.isEmpty() &&
+                    PlainTextComponentSerializer.plainText().serialize(stand.customName() ?: Component.empty()) == CMI_CHAIR_NAME
+            }
+            .orEmpty()
+        chairs.forEach(Entity::remove)
+        if (chairs.isNotEmpty()) {
+            info(
+                "ORIGIN_DINING phase=ORPHAN_CHAIR_CLEANUP removed={} reason={} center={} radius={}",
+                chairs.size,
+                reason,
+                location(center),
+                fmt(radius),
+            )
+        }
+        return chairs.size
     }
 
     private fun sit(player: Player, seat: OriginDiningSeat, source: String, chairVehicleId: UUID) {
@@ -2499,6 +2523,7 @@ private class OriginDiningService : AutoCloseable {
     private fun short(uuid: UUID): String = uuid.toString().take(8)
 
     private companion object {
+        const val CMI_CHAIR_NAME = "CMIArmorStandForSit"
         const val SEAT_TAG = "arc_origin_dining_seat"
         const val MEAL_TAG = "arc_origin_dining_meal"
         const val GUEST_MEAL_TAG = "arc_origin_dining_guest_meal"
