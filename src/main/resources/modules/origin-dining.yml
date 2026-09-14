@@ -130,7 +130,7 @@ dynamic-seats:
   dish-offset-x: 0.0
   dish-offset-y: 0.0
   dish-offset-z: 0.0
-  waiter-side-offset: 1.5
+  waiter-side-offset: 0.8
 
 # Все координаты двух ресторанных сцен находятся здесь и перечитываются через
 # /arc reload. Формат точки: x,y,z,yaw. Формат блока: x,y,z.
