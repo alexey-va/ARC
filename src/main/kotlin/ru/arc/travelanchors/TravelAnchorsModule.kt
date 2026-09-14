@@ -31,6 +31,7 @@ import org.bukkit.event.block.BlockPlaceEvent
 import org.bukkit.event.entity.EntityExplodeEvent
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerItemHeldEvent
+import org.bukkit.event.player.PlayerMoveEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.player.PlayerToggleSneakEvent
 import org.bukkit.event.world.ChunkLoadEvent
@@ -47,11 +48,15 @@ import ru.arc.commands.arc.tabComplete
 import ru.arc.commands.arc.tabCompletePlayers
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
+import ru.arc.common.ServerLocation
 import ru.arc.core.PluginModule
 import ru.arc.core.ScheduledTask
+import ru.arc.core.Tasks
 import ru.arc.core.repeating
 import ru.arc.core.ticks
 import ru.arc.gui.ArcMenus
+import ru.arc.hooks.HookRegistry
+import ru.arc.network.NetworkPlayerName
 import ru.arc.ops.OpsItemHandlers
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogBody
@@ -68,17 +73,23 @@ import java.nio.file.Path
 import java.nio.charset.StandardCharsets
 import java.util.Base64
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
 import kotlin.math.cos
+import kotlin.math.acos
+import kotlin.math.atan2
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 private val ANCHOR_BLOCK_KEY = NamespacedKey("arc", "travel_anchor")
 private val ANCHOR_INDEX_KEY = NamespacedKey("arc", "travel_anchor_index")
 private val ANCHOR_NAMES_KEY = NamespacedKey("arc", "travel_anchor_names")
 private val ANCHOR_OWNERS_KEY = NamespacedKey("arc", "travel_anchor_owners")
 private val ANCHOR_ACCESS_KEY = NamespacedKey("arc", "travel_anchor_access")
+private val ANCHOR_PUBLICS_KEY = NamespacedKey("arc", "travel_anchor_publics")
 private val ANCHOR_NAME_KEY = NamespacedKey("arc", "travel_anchor_name")
 private val ANCHOR_OWNER_KEY = NamespacedKey("arc", "travel_anchor_owner")
+private val ANCHOR_PUBLIC_KEY = NamespacedKey("arc", "travel_anchor_public")
 private val ANCHOR_ITEM_KEY = NamespacedKey("arc", "travel_anchor_item")
 private val STAFF_ITEM_KEY = NamespacedKey("arc", "travel_anchor_staff")
 private val ITEM_OWNER_KEY = NamespacedKey("arc", "travel_anchor_item_owner")
@@ -86,12 +97,19 @@ private val NAME_INPUT = PaperDialogInputId.of("anchor_name")
 private val ACCESS_INPUT = PaperDialogInputId.of("anchor_access")
 private const val TELEPORT_COOLDOWN_MILLIS = 500L
 private const val MAX_ANCHOR_NAME_LENGTH = 32
-private const val MAX_ACCESS_INPUT_LENGTH = 256
-private const val MAX_SHARED_PLAYERS = 16
+private const val MAX_ACCESS_INPUT_LENGTH = 1024
+private const val MAX_GIVE_AMOUNT = 4096
+private const val NETWORK_PAGE_SIZE = 10
+private const val ADMIN_PERMISSION = "arc.travelanchors.admin"
 private const val PROXY_DEPTH = 0.03f
 private val RIGHT_CLICK_ACTIONS = setOf(Action.RIGHT_CLICK_AIR, Action.RIGHT_CLICK_BLOCK)
 
-internal data class AimCandidate<T>(val target: T, val distanceSquared: Double, val dot: Double)
+internal data class AimCandidate<T>(
+    val target: T,
+    val distanceSquared: Double,
+    val dot: Double,
+    val minimumSelectionDot: Double? = null,
+)
 
 internal fun <T> chooseTravelAnchorTarget(
     candidates: Iterable<AimCandidate<T>>,
@@ -100,7 +118,7 @@ internal fun <T> chooseTravelAnchorTarget(
 ): AimCandidate<T>? =
     candidates
         .asSequence()
-        .filter { it.distanceSquared <= maxDistanceSquared && it.dot >= minimumDot }
+        .filter { it.distanceSquared <= maxDistanceSquared && it.dot >= (it.minimumSelectionDot ?: minimumDot) }
         .maxWithOrNull(compareBy<AimCandidate<T>> { it.dot }.thenBy { -it.distanceSquared })
 
 internal fun travelAnchorScale(
@@ -112,6 +130,27 @@ internal fun travelAnchorScale(
     val progress = ((dot - minimumVisibleDot) / (1.0 - minimumVisibleDot)).coerceIn(0.0, 1.0)
     return minimumScale + (maximumScale - minimumScale) * progress.toFloat()
 }
+
+internal fun travelAnchorExpandedSelectionDot(
+    baseMinimumDot: Double,
+    displayDistance: Double,
+    scale: Float,
+): Double {
+    val baseAngle = acos(baseMinimumDot.coerceIn(-1.0, 1.0))
+    val halfDiagonal = scale.toDouble() / sqrt(2.0)
+    val apparentRadius = atan2(halfDiagonal, displayDistance.coerceAtLeast(0.01))
+    return cos((baseAngle + apparentRadius).coerceAtMost(Math.PI))
+}
+
+internal fun travelAnchorAdminAllows(isAdmin: Boolean, ordinaryAccess: Boolean): Boolean = isAdmin || ordinaryAccess
+
+internal fun parseTravelAnchorGiveAmount(raw: String?): Int? =
+    (raw ?: "1").toIntOrNull()?.takeIf { it in 1..MAX_GIVE_AMOUNT }
+
+internal fun travelAnchorElevatorTargetY(sourceY: Int, candidateYs: Iterable<Int>, upward: Boolean): Int? =
+    candidateYs
+        .filter { if (upward) it > sourceY else it < sourceY }
+        .minByOrNull { kotlin.math.abs(it - sourceY) }
 
 internal fun travelAnchorTargetMessage(hasAnchorBelow: Boolean, staffHeld: Boolean): String? =
     when {
@@ -170,7 +209,7 @@ internal fun normalizeTravelAnchorName(raw: String): String? {
 internal fun normalizeTravelAnchorAccessNames(raw: String): List<String>? {
     if (raw.isBlank()) return emptyList()
     val names = raw.split(',', '\n', ' ', '\t').filter(String::isNotBlank).distinctBy { it.lowercase() }
-    return names.takeIf { it.size <= MAX_SHARED_PLAYERS && it.all { name -> name.matches(Regex("[A-Za-z0-9_]{3,16}")) } }
+    return names.takeIf { it.all { name -> name.matches(Regex("[A-Za-z0-9_]{3,16}")) } }
 }
 
 internal data class TravelAnchorNameEntry(val x: Int, val y: Int, val z: Int, val name: String)
@@ -188,6 +227,11 @@ internal fun travelAnchorIdentityAllows(
     if (owner == null || owner.equals(playerName, ignoreCase = true)) return true
     val legacyId = runCatching { UUID.fromString(owner) }.getOrNull() ?: return false
     return legacyId == playerId || legacyName(legacyId)?.equals(playerName, ignoreCase = true) == true
+}
+
+internal fun normalizeTravelAnchorOwner(owner: String, legacyName: (UUID) -> String?): String {
+    val legacyId = runCatching { UUID.fromString(owner) }.getOrNull() ?: return owner
+    return legacyName(legacyId)?.takeIf(String::isNotBlank) ?: owner
 }
 
 internal fun travelAnchorAccessAllows(
@@ -268,7 +312,6 @@ private data class TravelAnchorPosition(val worldId: UUID, val x: Int, val y: In
 }
 
 private data class TravelAnchorSettings(
-    val enabled: Boolean,
     val worlds: Set<String>,
     val range: Double,
     val maximumTargets: Int,
@@ -291,7 +334,7 @@ private data class TravelAnchorSettings(
 
     fun anchorItem(ownerName: String): ItemStack =
         itemStack(anchorMaterial) {
-            configuredItem("anchor", anchorModelData)
+            configuredItem("anchor", anchorModelData, ownerName)
         }.withMarker(ANCHOR_ITEM_KEY).withOwner(ownerName)
 
     fun staffItem(ownerName: String): ItemStack =
@@ -301,9 +344,11 @@ private data class TravelAnchorSettings(
         }.withMarker(STAFF_ITEM_KEY).withOwner(ownerName)
 
     fun message(key: String, vararg replacements: Pair<String, String>): Component {
-        var text = source.string("messages.$key", "")
-        replacements.forEach { (placeholder, value) -> text = text.replace(placeholder, value) }
-        return TextUtil.mm(text, true)
+        var text = TextUtil.mm(source.string("messages.$key", ""), true)
+        replacements.forEach { (placeholder, value) ->
+            text = text.replaceText { it.matchLiteral(placeholder).replacement(Component.text(value)) }
+        }
+        return text
     }
 
     fun targetMessage(key: String, name: String, distance: String): Component =
@@ -311,16 +356,30 @@ private data class TravelAnchorSettings(
             .replaceText { it.matchLiteral("%name%").replacement(Component.text(name)) }
 
     fun namingText(key: String, vararg replacements: Pair<String, String>): Component {
-        var text = source.string("naming.dialog.$key", "")
-        replacements.forEach { (placeholder, value) -> text = text.replace(placeholder, value) }
-        return TextUtil.mm(text, true).decoration(TextDecoration.ITALIC, false)
+        var text = TextUtil.mm(source.string("naming.dialog.$key", ""), true)
+        replacements.forEach { (placeholder, value) ->
+            text = text.replaceText { it.matchLiteral(placeholder).replacement(Component.text(value)) }
+        }
+        return text.decoration(TextDecoration.ITALIC, false)
+    }
+
+    fun namingTextSafe(key: String, vararg replacements: Pair<String, Component>): Component {
+        var text = TextUtil.mm(source.string("naming.dialog.$key", ""), true)
+        replacements.forEach { (placeholder, value) ->
+            text = text.replaceText { it.matchLiteral(placeholder).replacement(value) }
+        }
+        return text.decoration(TextDecoration.ITALIC, false)
     }
 
     fun defaultAnchorName(): String = source.string("naming.default-name", "Путевой якорь")
 
-    private fun ItemStackDslBuilder.configuredItem(key: String, modelData: Int) {
+    private fun ItemStackDslBuilder.configuredItem(key: String, modelData: Int, ownerName: String? = null) {
         display(source.string("items.$key.name", ""))
-        lore(source.stringList("items.$key.lore"))
+        loreComponents(source.stringList("items.$key.lore").map { line ->
+            TextUtil.mm(line, true).replaceText {
+                it.matchLiteral("%owner%").replacement(Component.text(ownerName.orEmpty()))
+            }
+        })
         if (modelData > 0) modelData(modelData)
         hideAll()
     }
@@ -347,7 +406,6 @@ private object TravelAnchorConfig {
         val visibleAngle = source.real("targeting.visible-angle-degrees", 70.0).coerceIn(10.0, 89.0)
         val selectionAngle = source.real("targeting.selection-angle-degrees", 10.0).coerceIn(1.0, visibleAngle)
         return TravelAnchorSettings(
-            enabled = source.bool("enabled", false),
             worlds = source.stringList("worlds").toSet(),
             range = source.real("targeting.range", 1024.0).coerceIn(8.0, 4096.0),
             maximumTargets = source.integer("targeting.maximum-targets", 24).coerceIn(1, 64),
@@ -388,30 +446,57 @@ object TravelAnchorsModule : PluginModule, Listener {
 
     private var settings: TravelAnchorSettings? = null
     private var renderTask: ScheduledTask? = null
+    private var networkStore: TravelAnchorNetworkStore? = null
     private val anchors = linkedSetOf<TravelAnchorPosition>()
     private val displays = mutableMapOf<UUID, MutableMap<TravelAnchorPosition, BlockDisplay>>()
     private val labels = mutableMapOf<UUID, TextDisplay>()
     private val anchorNames = mutableMapOf<TravelAnchorPosition, String>()
     private val anchorOwners = mutableMapOf<TravelAnchorPosition, String>()
+    private val publicAnchors = mutableSetOf<TravelAnchorPosition>()
     private val sharedAccess = mutableMapOf<String, MutableSet<String>>()
+    private val networkSnapshots = mutableMapOf<String, TravelAnchorNetworkSnapshot>()
+    private val pendingAccessGrants = mutableSetOf<Pair<String, String>>()
     private val selectedTargets = mutableMapOf<UUID, TravelAnchorPosition>()
     private val cooldowns = mutableMapOf<UUID, Long>()
     private val pendingTeleports = mutableSetOf<UUID>()
 
-    val isEnabled: Boolean get() = settings?.enabled == true
+    val isEnabled: Boolean get() = settings != null
 
     override fun init() {
         shutdown()
         val next = TravelAnchorConfig.load(ARC.instance.dataPath)
         settings = next
-        if (!next.enabled) {
-            info("Travel anchors disabled by configuration")
-            return
-        }
         Bukkit.getPluginManager().registerEvents(this, ARC.instance)
         removeOrphanDisplays()
         Bukkit.getWorlds().filter { next.allowsWorld(it.name) }.forEach(::loadAnchorIndex)
         Bukkit.getWorlds().flatMap { it.loadedChunks.toList() }.forEach(::loadAnchors)
+        ARC.redisManager?.let { redis ->
+            val localServer = ARC.serverName?.takeIf(String::isNotBlank) ?: run {
+                warn("TRAVEL_ANCHORS phase=REDIS reason=missing-local-server-id network catalog is local-only")
+                return@let
+            }
+            networkStore = TravelAnchorNetworkStore(
+                redis = redis,
+                localServer = localServer,
+                runMain = { task ->
+                    if (Bukkit.isPrimaryThread()) task.run() else Tasks.scheduler.runSync(task)
+                },
+                onSnapshot = { snapshot -> networkSnapshots[snapshot.server.lowercase()] = snapshot },
+                onAccess = { owner, players ->
+                    val key = owner.lowercase()
+                    if (players.isEmpty()) sharedAccess.remove(key)
+                    else sharedAccess[key] = players.toMutableSet()
+                    persistSharedAccess()
+                },
+            ).also { store ->
+                store.start()
+                sharedAccess.forEach { (owner, players) ->
+                    val networkOwner = networkPlayerName(owner) ?: return@forEach
+                    players.mapNotNull(::networkPlayerName).forEach { player -> store.grantAccess(networkOwner, player) }
+                }
+            }
+            publishNetworkSnapshot()
+        } ?: warn("TRAVEL_ANCHORS phase=REDIS reason=unavailable network catalog is local-only")
         renderTask = repeating(next.updateTicks.ticks, delay = 1.ticks) { refreshPlayers() }
         info("Travel anchors enabled: anchors={}, range={}, maximum-targets={}", anchors.size, next.range, next.maximumTargets)
     }
@@ -422,13 +507,18 @@ object TravelAnchorsModule : PluginModule, Listener {
         HandlerList.unregisterAll(this)
         renderTask?.cancel()
         renderTask = null
+        networkStore?.close()
+        networkStore = null
         displays.values.flatMap { it.values }.forEach { if (it.isValid) it.remove() }
         displays.clear()
         labels.values.forEach { if (it.isValid) it.remove() }
         labels.clear()
         anchorNames.clear()
         anchorOwners.clear()
+        publicAnchors.clear()
         sharedAccess.clear()
+        networkSnapshots.clear()
+        pendingAccessGrants.clear()
         selectedTargets.clear()
         anchors.clear()
         cooldowns.clear()
@@ -436,13 +526,27 @@ object TravelAnchorsModule : PluginModule, Listener {
         settings = null
     }
 
-    fun giveKit(player: Player): Int {
+    fun giveAnchors(player: Player, amount: Int): Int {
         val current = settings ?: return 0
-        return OpsItemHandlers.giveStacks(
-            player,
-            listOf(current.anchorItem(player.name), current.staffItem(player.name)),
-            dropOverflow = true,
-        )
+        return giveBoundItems(player, amount) { current.anchorItem(player.name) }
+    }
+
+    fun giveStaffs(player: Player, amount: Int): Int {
+        val current = settings ?: return 0
+        return giveBoundItems(player, amount) { current.staffItem(player.name) }
+    }
+
+    private fun giveBoundItems(player: Player, amount: Int, factory: () -> ItemStack): Int {
+        var remaining = amount
+        val stacks = buildList {
+            while (remaining > 0) {
+                val stack = factory()
+                stack.amount = min(remaining, stack.maxStackSize)
+                add(stack)
+                remaining -= stack.amount
+            }
+        }
+        return OpsItemHandlers.giveStacks(player, stacks, dropOverflow = true)
     }
 
     fun message(key: String, vararg replacements: Pair<String, String>): Component =
@@ -457,7 +561,7 @@ object TravelAnchorsModule : PluginModule, Listener {
         )
         if (denial != null) {
             event.isCancelled = true
-            sendDenial(event.player, denial)
+            sendDenial(event.player, denial, "%owner%" to displayName(event.itemInHand.owner() ?: "не указан"))
             return
         }
         if (!event.itemInHand.owner().equals(event.player.name, ignoreCase = true)) {
@@ -476,6 +580,7 @@ object TravelAnchorsModule : PluginModule, Listener {
         anchorOwners[position] = owner
         if (anchors.add(position)) persistAnchorIndex(event.blockPlaced.world.uid)
         persistAnchorOwners(event.blockPlaced.world.uid)
+        publishNetworkSnapshot()
         event.player.sendActionBar(settings?.message("placed") ?: Component.empty())
     }
 
@@ -487,7 +592,7 @@ object TravelAnchorsModule : PluginModule, Listener {
             return
         }
         event.isCancelled = true
-        event.player.sendActionBar(settings?.message("no-permission") ?: Component.empty())
+        sendDenial(event.player, "no-permission", "%owner%" to displayName(anchorOwners[TravelAnchorPosition.of(event.block)] ?: "не указан"))
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -504,9 +609,18 @@ object TravelAnchorsModule : PluginModule, Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     fun onInteract(event: PlayerInteractEvent) {
-        if (event.hand != EquipmentSlot.HAND || event.action !in RIGHT_CLICK_ACTIONS) return
-        val held = event.item ?: event.player.inventory.itemInMainHand
+        if (event.hand != EquipmentSlot.HAND) return
         val clickedAnchor = event.clickedBlock?.takeIf(::isAnchor)
+        if (clickedAnchor != null) {
+            val clickedPosition = TravelAnchorPosition.of(clickedAnchor)
+            if (clickedPosition in publicAnchors && !canAccess(event.player, clickedPosition)) {
+                event.isCancelled = true
+                grantPublicAccess(event.player, clickedPosition)
+                return
+            }
+        }
+        if (event.action !in RIGHT_CLICK_ACTIONS) return
+        val held = event.item ?: event.player.inventory.itemInMainHand
         val staffHeld = held.hasMarker(STAFF_ITEM_KEY)
         if (staffHeld && itemOwnerAllows(held, event.player) && !held.owner().equals(event.player.name, ignoreCase = true)) {
             held.withOwner(event.player.name)
@@ -518,15 +632,27 @@ object TravelAnchorsModule : PluginModule, Listener {
                 val position = TravelAnchorPosition.of(checkNotNull(clickedAnchor))
                 val denial = travelAnchorDenialMessage(
                     isFeatureAvailable(event.player),
-                    ownsAnchor(event.player, position),
+                    canAccess(event.player, position),
                 )
                 if (denial != null) {
-                    sendDenial(event.player, denial)
+                    sendDenial(
+                        event.player,
+                        denial,
+                        "%owner%" to displayName(anchorOwners[position] ?: "не указан"),
+                    )
                     return
                 }
-                claimAnchor(checkNotNull(clickedAnchor), event.player)
                 ArcMenus.beginDialogFlow(event.player)
-                openNameDialog(event.player, checkNotNull(clickedAnchor))
+                if (ownsAnchor(event.player, position)) {
+                    claimAnchor(checkNotNull(clickedAnchor), event.player)
+                    openAnchorMenu(event.player, position)
+                } else {
+                    openNetworkDialog(
+                        event.player,
+                        anchorOwners[position] ?: event.player.name,
+                        returnTo = null,
+                    )
+                }
                 return
             }
             TravelAnchorInteraction.TELEPORT -> Unit
@@ -535,7 +661,7 @@ object TravelAnchorsModule : PluginModule, Listener {
         val player = event.player
         val denial = travelAnchorDenialMessage(isFeatureAvailable(player), itemOwnerAllows(held, player))
         if (denial != null) {
-            sendDenial(player, denial)
+            sendDenial(player, denial, "%owner%" to displayName(held.owner() ?: "не указан"))
             return
         }
         val source = anchorBelow(player)
@@ -555,11 +681,25 @@ object TravelAnchorsModule : PluginModule, Listener {
         val player = event.player
         if (!isFeatureAvailable(player)) return
         val source = anchorBelow(player) ?: return
+        findVerticalTarget(player, source, upward = false)?.let {
+            teleport(player, it)
+            return
+        }
         val target = selectedTargets[player.uniqueId]
             ?.takeIf { it != source && it.worldId == player.world.uid }
             ?: selectTarget(player, source)
             ?: return
         teleport(player, target)
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    fun onMove(event: PlayerMoveEvent) {
+        val to = event.to
+        if (to.y <= event.from.y + 0.01 || event.player.velocity.y <= 0.0) return
+        val player = event.player
+        if (!isFeatureAvailable(player)) return
+        val source = anchorBelow(player, event.from) ?: return
+        findVerticalTarget(player, source, upward = true)?.let { teleport(player, it) }
     }
 
     @EventHandler
@@ -608,6 +748,7 @@ object TravelAnchorsModule : PluginModule, Listener {
                 clearDisplays(player)
                 return@forEach
             }
+            grantPublicAccessAtFeet(player)
             val source = anchorBelow(player)
             val staff = player.inventory.itemInMainHand
             val staffHeld = staff.hasMarker(STAFF_ITEM_KEY) && itemOwnerAllows(staff, player)
@@ -643,7 +784,15 @@ object TravelAnchorsModule : PluginModule, Listener {
                 val delta = org.bukkit.util.Vector(position.x + 0.5, position.y + 0.5, position.z + 0.5)
                     .subtract(eye.toVector())
                 val distanceSquared = delta.lengthSquared()
-                AimCandidate(position, distanceSquared, direction.dot(delta.normalize()))
+                val dot = direction.dot(delta.normalize())
+                val scale = travelAnchorScale(dot, current.visibleDot, current.minimumScale, current.maximumScale)
+                val displayDistance = travelAnchorDisplayDistance(sqrt(distanceSquared), current.proxyDistance)
+                AimCandidate(
+                    position,
+                    distanceSquared,
+                    dot,
+                    travelAnchorExpandedSelectionDot(current.selectionDot, displayDistance, scale),
+                )
             }
             .filter { it.distanceSquared > 0.01 && it.distanceSquared <= current.range * current.range }
             .filter { it.dot >= current.visibleDot }
@@ -776,111 +925,281 @@ object TravelAnchorsModule : PluginModule, Listener {
         }
     }
 
-    private fun openNameDialog(
-        player: Player,
-        block: Block,
-        invalidName: Boolean = false,
-        invalidPlayers: List<String> = emptyList(),
-        initialName: String? = null,
-        initialAccess: String? = null,
-    ) {
+    private fun openAnchorMenu(player: Player, position: TravelAnchorPosition) {
         val current = settings ?: return
-        val position = TravelAnchorPosition.of(block)
-        val nameValue = initialName ?: anchorNames[position].orEmpty()
+        val block = editableAnchor(player, position) ?: return
         val owner = anchorOwners[position] ?: player.name
-        val accessValue = initialAccess ?: sharedAccess[owner].orEmpty().map(::displayName)
-            .sortedWith(String.CASE_INSENSITIVE_ORDER)
-            .joinToString(", ")
+        val world = block.world.name
+        val state = current.namingText(if (position in publicAnchors) "public-state" else "private-state")
         ArcMenus.openDialog(
             player,
             PaperDialogScreen(
-                id = "travel-anchors.rename",
+                id = "travel-anchors.settings",
                 title = current.namingText("title"),
-                body = listOf(PaperDialogBody(current.namingText("body"), width = 360)) +
-                    (if (invalidName) listOf(PaperDialogBody(current.namingText("invalid", "%limit%" to MAX_ANCHOR_NAME_LENGTH.toString()), width = 360)) else emptyList()) +
-                    (if (invalidPlayers.isNotEmpty()) listOf(PaperDialogBody(current.namingText("access-invalid", "%players%" to invalidPlayers.joinToString(", ")), width = 360)) else emptyList()),
-                inputs = listOf(
-                    PaperDialogTextInput(NAME_INPUT, current.namingText("input"), nameValue, 360, MAX_ANCHOR_NAME_LENGTH),
-                    PaperDialogTextInput(ACCESS_INPUT, current.namingText("access"), accessValue, 360, MAX_ACCESS_INPUT_LENGTH),
+                body = listOf(PaperDialogBody(current.namingTextSafe(
+                    "overview",
+                    "%name%" to Component.text(anchorNames[position] ?: current.defaultAnchorName()),
+                    "%owner%" to Component.text(displayName(owner)),
+                    "%server%" to Component.text(ARC.serverName.orEmpty()),
+                    "%world%" to Component.text(world),
+                    "%coords%" to Component.text("${position.x}, ${position.y}, ${position.z}"),
+                    "%state%" to state,
+                ), width = 420)),
+                buttons = listOf(
+                    anchorDialogButton("edit_name", current.namingText("name-button")) { openNameDialog(it.player, position) },
+                    anchorDialogButton("edit_access", current.namingText("access-button")) { openAccessDialog(it.player, position) },
+                    anchorDialogButton("edit_public", current.namingText("public-button")) { openPublicDialog(it.player, position) },
+                    anchorDialogButton("view_network", current.namingText("network-button")) { openNetworkDialog(it.player, owner, position) },
                 ),
-                buttons = listOf(PaperDialogButton(
-                    id = PaperDialogActionId.of("save_anchor_settings"),
-                    label = current.namingText("save"),
-                    width = 240,
-                    closeDialogBeforeAction = false,
-                    onClick = { context ->
-                        val name = normalizeTravelAnchorName(context.text(NAME_INPUT).orEmpty())
-                        if (name == null) {
-                            openNameDialog(
-                                context.player,
-                                block,
-                                invalidName = true,
-                                initialName = context.text(NAME_INPUT).orEmpty(),
-                                initialAccess = context.text(ACCESS_INPUT).orEmpty(),
-                            )
-                            return@PaperDialogButton
-                        }
-                        val accessText = context.text(ACCESS_INPUT).orEmpty()
-                        val accessNames = normalizeTravelAnchorAccessNames(accessText)
-                        val invalidAccess = if (accessNames == null) listOf(accessText) else emptyList()
-                        if (invalidAccess.isNotEmpty()) {
-                            openNameDialog(
-                                context.player,
-                                block,
-                                invalidPlayers = invalidAccess,
-                                initialName = context.text(NAME_INPUT).orEmpty(),
-                                initialAccess = accessText,
-                            )
-                            return@PaperDialogButton
-                        }
-                        val liveBlock = position.block()?.takeIf(::isAnchor)
-                        if (!isFeatureAvailable(context.player)) {
-                            ArcMenus.closeDialog(context.player)
-                            sendDenial(context.player, "wrong-world")
-                            return@PaperDialogButton
-                        }
-                        if (liveBlock == null) {
-                            ArcMenus.closeDialog(context.player)
-                            context.player.sendActionBar(current.message("unavailable"))
-                            return@PaperDialogButton
-                        }
-                        if (!ownsAnchor(context.player, position)) {
-                            ArcMenus.closeDialog(context.player)
-                            sendDenial(context.player, "no-permission")
-                            return@PaperDialogButton
-                        }
-                        claimAnchor(liveBlock, context.player)
-                        val ownerName = context.player.name
-                        sharedAccess[ownerName] = accessNames.orEmpty().mapTo(linkedSetOf()) { it.lowercase() }
-                        if (sharedAccess[ownerName].isNullOrEmpty()) sharedAccess.remove(ownerName)
-                        persistSharedAccess()
-                        setAnchorName(liveBlock, name)
-                        ArcMenus.closeDialog(context.player)
-                        context.player.sendActionBar(current.message("renamed"))
-                    },
-                )),
-                columns = 1,
-            ),
-            closeButton = PaperDialogButton(
-                id = PaperDialogActionId.of("close_anchor_name"),
-                label = current.namingText("close"),
-                width = 200,
-                closeDialogBeforeAction = true,
-                onClick = {},
+                exitButton = anchorDialogButton("close_anchor_menu", current.namingText("close"), close = true) {},
+                columns = 2,
             ),
         )
+    }
+
+    private fun openNameDialog(player: Player, position: TravelAnchorPosition, invalid: Boolean = false, initial: String? = null) {
+        val current = settings ?: return
+        if (editableAnchor(player, position) == null) return
+        val value = initial ?: anchorNames[position].orEmpty()
+        ArcMenus.openDialog(player, PaperDialogScreen(
+            id = "travel-anchors.name",
+            title = current.namingText("name-title"),
+            body = listOf(PaperDialogBody(current.namingText("name-body"), 380)) +
+                if (invalid) listOf(PaperDialogBody(current.namingText("invalid", "%limit%" to MAX_ANCHOR_NAME_LENGTH.toString()), 380)) else emptyList(),
+            inputs = listOf(PaperDialogTextInput(NAME_INPUT, current.namingText("input"), value, 380, MAX_ANCHOR_NAME_LENGTH)),
+            buttons = listOf(anchorDialogButton("save_anchor_name", current.namingText("save")) { context ->
+                val name = normalizeTravelAnchorName(context.text(NAME_INPUT).orEmpty())
+                if (name == null) {
+                    openNameDialog(context.player, position, invalid = true, initial = context.text(NAME_INPUT).orEmpty())
+                    return@anchorDialogButton
+                }
+                val block = editableAnchor(context.player, position) ?: return@anchorDialogButton
+                setAnchorName(block, name)
+                context.player.sendActionBar(current.message("renamed"))
+                openAnchorMenu(context.player, position)
+            }),
+            exitButton = anchorDialogButton("back_from_anchor_name", current.namingText("back")) { openAnchorMenu(it.player, position) },
+        ))
+    }
+
+    private fun openAccessDialog(player: Player, position: TravelAnchorPosition, invalid: Boolean = false, initial: String? = null) {
+        val current = settings ?: return
+        if (editableAnchor(player, position) == null) return
+        val owner = anchorOwners[position] ?: player.name
+        val value = initial ?: accessFor(owner).map(::displayName).sortedWith(String.CASE_INSENSITIVE_ORDER).joinToString(", ")
+        ArcMenus.openDialog(player, PaperDialogScreen(
+            id = "travel-anchors.access",
+            title = current.namingText("access-title"),
+            body = listOf(PaperDialogBody(current.namingText("access-body"), 420)) +
+                if (invalid) {
+                    listOf(PaperDialogBody(current.namingTextSafe(
+                        "access-invalid",
+                        "%players%" to Component.text(value.take(128)),
+                    ), 420))
+                } else {
+                    emptyList()
+                },
+            inputs = listOf(PaperDialogTextInput(ACCESS_INPUT, current.namingText("access"), value, 420, MAX_ACCESS_INPUT_LENGTH)),
+            buttons = listOf(anchorDialogButton("save_anchor_access", current.namingText("save")) { context ->
+                val raw = context.text(ACCESS_INPUT).orEmpty()
+                val players = normalizeTravelAnchorAccessNames(raw)
+                if (players == null) {
+                    openAccessDialog(context.player, position, invalid = true, initial = raw)
+                    return@anchorDialogButton
+                }
+                if (editableAnchor(context.player, position) == null) return@anchorDialogButton
+                val editor = context.player
+                setSharedAccess(owner, players.mapTo(linkedSetOf()) { it.lowercase() }).whenComplete { synced, failure ->
+                    if (!ARC.instance.isEnabled || settings !== current) return@whenComplete
+                    Tasks.scheduler.runSync(Runnable {
+                        if (!ARC.instance.isEnabled || settings !== current || !editor.isOnline) return@Runnable
+                        if (failure != null) {
+                            warn(
+                                "TRAVEL_ANCHORS phase=REDIS reason=access-save-failed owner={} editor={}",
+                                owner,
+                                editor.name,
+                                failure,
+                            )
+                            editor.sendActionBar(current.message("network-unavailable"))
+                        } else {
+                            editor.sendActionBar(current.message(if (synced) "access-saved" else "access-saved-local"))
+                        }
+                        openAnchorMenu(editor, position)
+                    })
+                }
+            }),
+            exitButton = anchorDialogButton("back_from_anchor_access", current.namingText("back")) { openAnchorMenu(it.player, position) },
+        ))
+    }
+
+    private fun openPublicDialog(player: Player, position: TravelAnchorPosition) {
+        val current = settings ?: return
+        if (editableAnchor(player, position) == null) return
+        val isPublic = position in publicAnchors
+        ArcMenus.openDialog(player, PaperDialogScreen(
+            id = "travel-anchors.public",
+            title = current.namingText("public-title"),
+            body = listOf(PaperDialogBody(current.namingText(if (isPublic) "public-body-on" else "public-body-off"), 420)),
+            buttons = listOf(anchorDialogButton(
+                "toggle_anchor_public",
+                current.namingText(if (isPublic) "make-private" else "make-public"),
+            ) { context ->
+                val block = editableAnchor(context.player, position) ?: return@anchorDialogButton
+                setAnchorPublic(block, !isPublic)
+                context.player.sendActionBar(current.message(if (isPublic) "made-private" else "made-public"))
+                openPublicDialog(context.player, position)
+            }),
+            exitButton = anchorDialogButton("back_from_anchor_public", current.namingText("back")) { openAnchorMenu(it.player, position) },
+        ))
+    }
+
+    private fun openNetworkDialog(player: Player, owner: String, returnTo: TravelAnchorPosition?, page: Int = 0) {
+        val current = settings ?: return
+        val entries = networkEntriesFor(owner)
+        val pageCount = maxOf(1, (entries.size + NETWORK_PAGE_SIZE - 1) / NETWORK_PAGE_SIZE)
+        val currentPage = page.coerceIn(0, pageCount - 1)
+        val pageEntries = entries.drop(currentPage * NETWORK_PAGE_SIZE).take(NETWORK_PAGE_SIZE)
+        val buttons = pageEntries.mapIndexed { index, entry ->
+            val label = Component.text(entry.name.ifBlank(current::defaultAnchorName))
+                .color(TextColor.color(0xFFD166))
+                .append(Component.text(" · ${entry.server}/${entry.world}").color(TextColor.color(0xE8DFD2)))
+            anchorDialogButton("network_anchor_${currentPage}_$index", label, close = true) { teleportNetwork(it.player, entry) }
+        } + buildList {
+            if (currentPage > 0) {
+                add(anchorDialogButton("network_previous", current.namingText("previous-page")) {
+                    openNetworkDialog(it.player, owner, returnTo, currentPage - 1)
+                })
+            }
+            if (currentPage + 1 < pageCount) {
+                add(anchorDialogButton("network_next", current.namingText("next-page")) {
+                    openNetworkDialog(it.player, owner, returnTo, currentPage + 1)
+                })
+            }
+        }
+        ArcMenus.openDialog(player, PaperDialogScreen(
+            id = "travel-anchors.network",
+            title = current.namingText("network-title"),
+            body = listOf(PaperDialogBody(current.namingText(
+                if (entries.isEmpty()) "network-empty" else "network-body",
+                "%owner%" to displayName(owner),
+                "%count%" to entries.size.toString(),
+                "%page%" to (currentPage + 1).toString(),
+                "%pages%" to pageCount.toString(),
+            ), 500)),
+            buttons = buttons,
+            exitButton = returnTo?.let { position ->
+                anchorDialogButton("back_from_anchor_network", current.namingText("back")) { openAnchorMenu(it.player, position) }
+            } ?: anchorDialogButton("close_anchor_network", current.namingText("close"), close = true) {},
+            columns = 2,
+        ))
+    }
+
+    private fun anchorDialogButton(
+        id: String,
+        label: Component,
+        close: Boolean = false,
+        action: (ru.arc.paper.menu.PaperDialogClickContext) -> Unit,
+    ) = PaperDialogButton(PaperDialogActionId.of(id), label, width = 210, closeDialogBeforeAction = close, onClick = action)
+
+    private fun editableAnchor(player: Player, position: TravelAnchorPosition): Block? {
+        val current = settings ?: return null
+        if (!isFeatureAvailable(player)) {
+            ArcMenus.closeDialog(player)
+            sendDenial(player, "wrong-world")
+            return null
+        }
+        val block = position.block()?.takeIf(::isAnchor)
+        if (block == null) {
+            ArcMenus.closeDialog(player)
+            player.sendActionBar(current.message("unavailable"))
+            return null
+        }
+        if (!ownsAnchor(player, position)) {
+            ArcMenus.closeDialog(player)
+            sendDenial(player, "no-permission", "%owner%" to displayName(anchorOwners[position] ?: "не указан"))
+            return null
+        }
+        claimAnchor(block, player)
+        return block
     }
 
     private fun setAnchorName(block: Block, name: String) {
         CustomBlockData(block, ARC.instance).set(ANCHOR_NAME_KEY, PersistentDataType.STRING, name)
         anchorNames[TravelAnchorPosition.of(block)] = name
         persistAnchorNames(block.world.uid)
+        publishNetworkSnapshot()
+    }
+
+    private fun setAnchorPublic(block: Block, enabled: Boolean) {
+        val position = TravelAnchorPosition.of(block)
+        val data = CustomBlockData(block, ARC.instance)
+        if (enabled) {
+            data.set(ANCHOR_PUBLIC_KEY, PersistentDataType.BYTE, 1.toByte())
+            publicAnchors += position
+        } else {
+            data.remove(ANCHOR_PUBLIC_KEY)
+            publicAnchors -= position
+        }
+        persistAnchorPublics(block.world.uid)
+        publishNetworkSnapshot()
+    }
+
+    private fun networkEntriesFor(owner: String): List<TravelAnchorNetworkEntry> {
+        val server = ARC.serverName.orEmpty()
+        val snapshots = networkSnapshots.toMutableMap().apply {
+            put(server.lowercase(), localNetworkSnapshot())
+        }
+        return snapshots.values.asSequence()
+            .flatMap { it.anchors.asSequence() }
+            .filter { it.owner.equals(owner, ignoreCase = true) }
+            .sortedWith(compareBy(TravelAnchorNetworkEntry::server, TravelAnchorNetworkEntry::world, TravelAnchorNetworkEntry::name))
+            .toList()
+    }
+
+    private fun teleportNetwork(player: Player, entry: TravelAnchorNetworkEntry) {
+        val current = settings ?: return
+        if (!networkEntryAllows(player, entry)) {
+            sendDenial(player, "no-permission", "%owner%" to displayName(entry.owner))
+            return
+        }
+        if (entry.server.equals(ARC.serverName, ignoreCase = true)) {
+            val world = Bukkit.getWorld(entry.world)
+            val position = world?.let { TravelAnchorPosition.of(it.uid, entry.x, entry.y, entry.z) }
+            if (position == null || position !in anchors) {
+                player.sendActionBar(current.message("unavailable"))
+                return
+            }
+            teleport(player, position)
+            return
+        }
+        if (player.isInsideVehicle) {
+            player.sendActionBar(current.message("leave-vehicle"))
+            return
+        }
+        val now = System.currentTimeMillis()
+        if (now < cooldowns.getOrDefault(player.uniqueId, 0L)) return
+        val destination = ServerLocation(
+            server = entry.server,
+            world = entry.world,
+            x = entry.x + 0.5,
+            y = entry.y + 1.0,
+            z = entry.z + 0.5,
+            yaw = player.location.yaw,
+            pitch = player.location.pitch,
+        )
+        if (HookRegistry.huskHomesHook?.teleport(player, destination) != true) {
+            player.sendActionBar(current.message("cross-server-unavailable"))
+            return
+        }
+        cooldowns[player.uniqueId] = now + TELEPORT_COOLDOWN_MILLIS
+        playDepartureEffects(player.location)
+        player.sendActionBar(current.message("cross-server-started", "%server%" to entry.server))
     }
 
     private fun teleport(player: Player, position: TravelAnchorPosition) {
         val current = settings ?: return
         if (!canAccess(player, position)) {
-            player.sendActionBar(current.message("no-permission"))
+            sendDenial(player, "no-permission", "%owner%" to displayName(anchorOwners[position] ?: "не указан"))
             return
         }
         val now = System.currentTimeMillis()
@@ -934,21 +1253,100 @@ object TravelAnchorsModule : PluginModule, Listener {
             yaw = from.yaw
             pitch = from.pitch
         }
+        playDepartureEffects(from)
         if (!player.teleport(destination, org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.PLUGIN)) {
             cooldowns.remove(player.uniqueId)
             player.sendActionBar(current.message("blocked"))
             return
         }
         clearDisplays(player)
-        from.world.spawnParticle(Particle.PORTAL, from.clone().add(0.0, 1.0, 0.0), 24, 0.3, 0.6, 0.3, 0.1)
-        block.world.spawnParticle(Particle.PORTAL, destination.clone().add(0.0, 0.8, 0.0), 32, 0.35, 0.6, 0.35, 0.1)
-        player.playSound(destination, Sound.ENTITY_ENDERMAN_TELEPORT, SoundCategory.PLAYERS, 0.8f, 1.15f)
+        playArrivalEffects(player, destination)
     }
 
-    private fun anchorBelow(player: Player, location: org.bukkit.Location = player.location): TravelAnchorPosition? {
-        return listOf(0.08, 0.4).firstNotNullOfOrNull { offset ->
+    private fun playDepartureEffects(location: Location) {
+        val center = location.clone().add(0.0, 1.0, 0.0)
+        location.world.spawnParticle(Particle.PORTAL, center, 48, 0.35, 0.75, 0.35, 0.22)
+        location.world.spawnParticle(Particle.REVERSE_PORTAL, center, 24, 0.25, 0.55, 0.25, 0.08)
+        location.world.spawnParticle(Particle.END_ROD, center, 12, 0.22, 0.6, 0.22, 0.04)
+        location.world.playSound(location, Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, SoundCategory.PLAYERS, 0.7f, 1.35f)
+    }
+
+    private fun playArrivalEffects(player: Player, location: Location) {
+        val center = location.clone().add(0.0, 0.8, 0.0)
+        location.world.spawnParticle(Particle.PORTAL, center, 64, 0.4, 0.7, 0.4, 0.16)
+        location.world.spawnParticle(Particle.END_ROD, center, 18, 0.28, 0.65, 0.28, 0.035)
+        location.world.spawnParticle(Particle.FLASH, center, 1)
+        player.playSound(location, Sound.ENTITY_ENDERMAN_TELEPORT, SoundCategory.PLAYERS, 0.9f, 1.15f)
+        player.playSound(location, Sound.BLOCK_AMETHYST_BLOCK_CHIME, SoundCategory.PLAYERS, 0.55f, 1.8f)
+    }
+
+    private fun anchorBelow(player: Player, location: Location = player.location): TravelAnchorPosition? =
+        rawAnchorBelow(location)?.takeIf { canAccess(player, it) }
+
+    private fun rawAnchorBelow(location: Location): TravelAnchorPosition? =
+        listOf(0.08, 0.4).firstNotNullOfOrNull { offset ->
             val block = location.clone().subtract(0.0, offset, 0.0).block
-            TravelAnchorPosition.of(block).takeIf { it in anchors && isAnchor(block) && canAccess(player, it) }
+            TravelAnchorPosition.of(block).takeIf { it in anchors && isAnchor(block) }
+        }
+
+    private fun findVerticalTarget(player: Player, source: TravelAnchorPosition, upward: Boolean): TravelAnchorPosition? =
+        anchors.asSequence()
+            .filter { it.worldId == source.worldId && it.x == source.x && it.z == source.z }
+            .filter { canAccess(player, it) }
+            .toList()
+            .let { candidates ->
+                val targetY = travelAnchorElevatorTargetY(source.y, candidates.map(TravelAnchorPosition::y), upward)
+                    ?: return@let null
+                candidates.firstOrNull { it.y == targetY }
+            }
+
+    private fun grantPublicAccessAtFeet(player: Player) {
+        val position = rawAnchorBelow(player.location) ?: return
+        if (position in publicAnchors && !canAccess(player, position)) grantPublicAccess(player, position)
+    }
+
+    private fun grantPublicAccess(player: Player, position: TravelAnchorPosition) {
+        val current = settings ?: return
+        val owner = anchorOwners[position] ?: return
+        if (identityAllows(owner, player) || player.hasPermission(ADMIN_PERMISSION)) return
+        val pendingKey = owner.lowercase() to player.name.lowercase()
+        if (!pendingAccessGrants.add(pendingKey)) return
+        val store = networkStore
+        if (store == null) {
+            accessForMutable(owner).add(player.name.lowercase())
+            pendingAccessGrants.remove(pendingKey)
+            persistSharedAccess()
+            player.sendActionBar(current.message("public-access-local", "%owner%" to displayName(owner)))
+            return
+        }
+        val networkOwner = networkPlayerName(owner)
+        if (networkOwner == null) {
+            pendingAccessGrants.remove(pendingKey)
+            warn(
+                "TRAVEL_ANCHORS phase=REDIS reason=invalid-anchor-owner owner={} player={} world={} x={} y={} z={}",
+                owner,
+                player.name,
+                player.world.name,
+                position.x,
+                position.y,
+                position.z,
+            )
+            player.sendActionBar(current.message("network-unavailable"))
+            return
+        }
+        store.grantAccess(networkOwner, player.name).whenComplete { players, failure ->
+            if (!ARC.instance.isEnabled || settings !== current) return@whenComplete
+            Tasks.scheduler.runSync(Runnable {
+                pendingAccessGrants.remove(pendingKey)
+                if (!ARC.instance.isEnabled || settings !== current) return@Runnable
+                if (failure != null) {
+                    warn("TRAVEL_ANCHORS phase=REDIS reason=public-access-grant-failed owner={} player={}", owner, player.name, failure)
+                    if (player.isOnline) player.sendActionBar(current.message("network-unavailable"))
+                    return@Runnable
+                }
+                setSharedAccessLocal(owner, players)
+                if (player.isOnline) player.sendActionBar(current.message("public-access-granted", "%owner%" to displayName(owner)))
+            })
         }
     }
 
@@ -968,13 +1366,24 @@ object TravelAnchorsModule : PluginModule, Listener {
             val name = CustomBlockData(block, ARC.instance).get(ANCHOR_NAME_KEY, PersistentDataType.STRING)
                 ?.let(::normalizeTravelAnchorName)
             if (name != null && anchorNames.put(position, name) != name) changed = true
-            val owner = CustomBlockData(block, ARC.instance).get(ANCHOR_OWNER_KEY, PersistentDataType.STRING)
-            if (!owner.isNullOrBlank() && anchorOwners.put(position, owner) != owner) changed = true
+            val data = CustomBlockData(block, ARC.instance)
+            val storedOwner = data.get(ANCHOR_OWNER_KEY, PersistentDataType.STRING)
+            val owner = storedOwner?.takeIf(String::isNotBlank)?.let(::normalizeOwnerIdentity)
+            if (owner != null && anchorOwners.put(position, owner) != owner) changed = true
+            if (owner != null && owner != storedOwner) {
+                data.set(ANCHOR_OWNER_KEY, PersistentDataType.STRING, owner)
+                changed = true
+            }
+            if (CustomBlockData(block, ARC.instance).has(ANCHOR_PUBLIC_KEY, PersistentDataType.BYTE)) {
+                changed = publicAnchors.add(position) || changed
+            }
         }
         if (changed) {
             persistAnchorIndex(chunk.world.uid)
             persistAnchorNames(chunk.world.uid)
             persistAnchorOwners(chunk.world.uid)
+            persistAnchorPublics(chunk.world.uid)
+            publishNetworkSnapshot()
         }
     }
 
@@ -994,15 +1403,36 @@ object TravelAnchorsModule : PluginModule, Listener {
             val position = TravelAnchorPosition.of(world.uid, entry.x, entry.y, entry.z)
             if (position in anchors) anchorNames[position] = entry.name
         }
+        var ownersChanged = false
         decodeTravelAnchorOwners(
             world.persistentDataContainer.get(ANCHOR_OWNERS_KEY, PersistentDataType.STRING).orEmpty(),
         ).forEach { entry ->
             val position = TravelAnchorPosition.of(world.uid, entry.x, entry.y, entry.z)
-            if (position in anchors) anchorOwners[position] = entry.owner
+            if (position in anchors) {
+                val owner = normalizeOwnerIdentity(entry.owner)
+                anchorOwners[position] = owner
+                ownersChanged = ownersChanged || owner != entry.owner
+            }
         }
         decodeTravelAnchorAccess(
             world.persistentDataContainer.get(ANCHOR_ACCESS_KEY, PersistentDataType.STRING).orEmpty(),
-        ).forEach { entry -> sharedAccess.getOrPut(entry.owner, ::linkedSetOf).addAll(entry.players) }
+        ).forEach { entry ->
+            val owner = normalizeOwnerIdentity(entry.owner)
+            accessForMutable(owner).addAll(entry.players.map(::normalizeOwnerIdentity).map(String::lowercase))
+        }
+        val publicCoordinates = world.persistentDataContainer
+            .get(ANCHOR_PUBLICS_KEY, PersistentDataType.INTEGER_ARRAY)
+            ?: IntArray(0)
+        for (index in 0 until publicCoordinates.size - 2 step 3) {
+            val position = TravelAnchorPosition.of(
+                world.uid,
+                publicCoordinates[index],
+                publicCoordinates[index + 1],
+                publicCoordinates[index + 2],
+            )
+            if (position in anchors) publicAnchors += position
+        }
+        if (ownersChanged) persistAnchorOwners(world.uid)
     }
 
     private fun persistAnchorIndex(worldId: UUID) {
@@ -1035,6 +1465,19 @@ object TravelAnchorsModule : PluginModule, Listener {
         else world.persistentDataContainer.set(ANCHOR_OWNERS_KEY, PersistentDataType.STRING, encoded)
     }
 
+    private fun persistAnchorPublics(worldId: UUID) {
+        val world = Bukkit.getWorld(worldId) ?: return
+        val positions = publicAnchors.filter { it.worldId == worldId }
+        val coordinates = IntArray(positions.size * 3)
+        positions.forEachIndexed { index, position ->
+            coordinates[index * 3] = position.x
+            coordinates[index * 3 + 1] = position.y
+            coordinates[index * 3 + 2] = position.z
+        }
+        if (coordinates.isEmpty()) world.persistentDataContainer.remove(ANCHOR_PUBLICS_KEY)
+        else world.persistentDataContainer.set(ANCHOR_PUBLICS_KEY, PersistentDataType.INTEGER_ARRAY, coordinates)
+    }
+
     private fun persistSharedAccess() {
         val encoded = encodeTravelAnchorAccess(sharedAccess.map { (owner, players) ->
             TravelAnchorAccessEntry(owner, players)
@@ -1045,11 +1488,65 @@ object TravelAnchorsModule : PluginModule, Listener {
         }
     }
 
+    private fun setSharedAccess(owner: String, players: Set<String>): CompletableFuture<Boolean> {
+        setSharedAccessLocal(owner, players)
+        val store = networkStore ?: return CompletableFuture.completedFuture(false)
+        val networkOwner = networkPlayerName(owner)
+            ?: return CompletableFuture.failedFuture(IllegalArgumentException("Anchor owner is not a valid player name: $owner"))
+        val networkPlayers = players.mapNotNullTo(linkedSetOf(), ::networkPlayerName)
+        if (networkPlayers.size != players.size) {
+            return CompletableFuture.failedFuture(IllegalArgumentException("Anchor access list contains an invalid player name"))
+        }
+        return store.replaceAccess(networkOwner, networkPlayers).thenApply { true }
+    }
+
+    private fun setSharedAccessLocal(owner: String, players: Set<String>) {
+        val key = owner.lowercase()
+        if (players.isEmpty()) sharedAccess.remove(key)
+        else sharedAccess[key] = players.mapTo(linkedSetOf()) { it.lowercase() }
+        persistSharedAccess()
+    }
+
+    private fun accessFor(owner: String): Set<String> = sharedAccess[owner.lowercase()].orEmpty()
+
+    private fun accessForMutable(owner: String): MutableSet<String> =
+        sharedAccess.getOrPut(owner.lowercase(), ::linkedSetOf)
+
+    private fun localNetworkSnapshot(): TravelAnchorNetworkSnapshot {
+        val server = ARC.serverName.orEmpty().lowercase()
+        val current = settings
+        return TravelAnchorNetworkSnapshot(
+            server = server,
+            anchors = anchors.mapNotNull { position ->
+                val world = Bukkit.getWorld(position.worldId) ?: return@mapNotNull null
+                val owner = anchorOwners[position]?.let(::networkPlayerName) ?: return@mapNotNull null
+                TravelAnchorNetworkEntry(
+                    server = server,
+                    world = world.name,
+                    x = position.x,
+                    y = position.y,
+                    z = position.z,
+                    owner = owner,
+                    name = anchorNames[position] ?: current?.defaultAnchorName().orEmpty(),
+                    public = position in publicAnchors,
+                )
+            },
+        )
+    }
+
+    private fun publishNetworkSnapshot() {
+        val store = networkStore ?: return
+        val snapshot = localNetworkSnapshot()
+        networkSnapshots[snapshot.server.lowercase()] = snapshot
+        store.publish(snapshot)
+    }
+
     private fun removeAnchor(block: Block) {
         CustomBlockData(block, ARC.instance).apply {
             remove(ANCHOR_BLOCK_KEY)
             remove(ANCHOR_NAME_KEY)
             remove(ANCHOR_OWNER_KEY)
+            remove(ANCHOR_PUBLIC_KEY)
         }
         removeAnchor(TravelAnchorPosition.of(block))
     }
@@ -1058,12 +1555,15 @@ object TravelAnchorsModule : PluginModule, Listener {
         if (!anchors.remove(position)) return
         anchorNames.remove(position)
         anchorOwners.remove(position)
+        publicAnchors.remove(position)
         displays.values.forEach { it.remove(position)?.remove() }
         displays.entries.removeIf { it.value.isEmpty() }
         selectedTargets.entries.removeIf { it.value == position }
         persistAnchorIndex(position.worldId)
         persistAnchorNames(position.worldId)
         persistAnchorOwners(position.worldId)
+        persistAnchorPublics(position.worldId)
+        publishNetworkSnapshot()
     }
 
     private fun clearDisplays(playerId: UUID) {
@@ -1093,28 +1593,34 @@ object TravelAnchorsModule : PluginModule, Listener {
     }
 
     private fun isFeatureAvailable(player: Player): Boolean =
-        settings?.let { it.enabled && it.allowsWorld(player.world.name) } == true
+        settings?.allowsWorld(player.world.name) == true
 
-    private fun sendDenial(player: Player, messageKey: String) {
-        player.sendActionBar(settings?.message(messageKey, "%world%" to player.world.name) ?: Component.empty())
+    private fun sendDenial(player: Player, messageKey: String, vararg replacements: Pair<String, String>) {
+        player.sendActionBar(
+            settings?.message(messageKey, "%world%" to player.world.name, *replacements) ?: Component.empty(),
+        )
     }
 
     private fun itemOwnerAllows(item: ItemStack?, player: Player): Boolean =
         identityAllows(item.owner(), player)
 
     private fun canAccess(player: Player, position: TravelAnchorPosition): Boolean =
-        anchorOwners[position].let { owner ->
-            travelAnchorAccessAllows(
-                owner,
-                player.name,
-                player.uniqueId,
-                owner?.let(sharedAccess::get).orEmpty(),
-                ::legacyPlayerName,
-            )
-        }
+        travelAnchorAdminAllows(player.hasPermission(ADMIN_PERMISSION), ordinaryAccess(player, anchorOwners[position]))
 
     private fun ownsAnchor(player: Player, position: TravelAnchorPosition): Boolean =
-        identityAllows(anchorOwners[position], player)
+        travelAnchorAdminAllows(player.hasPermission(ADMIN_PERMISSION), identityAllows(anchorOwners[position], player))
+
+    private fun networkEntryAllows(player: Player, entry: TravelAnchorNetworkEntry): Boolean =
+        travelAnchorAdminAllows(player.hasPermission(ADMIN_PERMISSION), ordinaryAccess(player, entry.owner))
+
+    private fun ordinaryAccess(player: Player, owner: String?): Boolean =
+        travelAnchorAccessAllows(
+            owner,
+            player.name,
+            player.uniqueId,
+            owner?.let(::accessFor).orEmpty(),
+            ::legacyPlayerName,
+        )
 
     private fun identityAllows(owner: String?, player: Player): Boolean =
         travelAnchorIdentityAllows(owner, player.name, player.uniqueId, ::legacyPlayerName)
@@ -1124,6 +1630,12 @@ object TravelAnchorsModule : PluginModule, Listener {
     private fun displayName(identity: String): String =
         runCatching { UUID.fromString(identity) }.getOrNull()?.let(::legacyPlayerName) ?: identity
 
+    private fun normalizeOwnerIdentity(identity: String): String =
+        normalizeTravelAnchorOwner(identity, ::legacyPlayerName)
+
+    private fun networkPlayerName(identity: String): String? =
+        NetworkPlayerName.parseOrNull(normalizeOwnerIdentity(identity))?.value
+
     private fun claimAnchor(block: Block, player: Player) {
         val position = TravelAnchorPosition.of(block)
         val previous = anchorOwners[position]
@@ -1131,45 +1643,74 @@ object TravelAnchorsModule : PluginModule, Listener {
         if (previous.equals(player.name, ignoreCase = true)) return
         CustomBlockData(block, ARC.instance).set(ANCHOR_OWNER_KEY, PersistentDataType.STRING, player.name)
         anchorOwners[position] = player.name
-        previous?.let(sharedAccess::remove)?.let { inherited ->
-            sharedAccess.getOrPut(player.name, ::linkedSetOf).addAll(inherited)
+        previous?.let { sharedAccess.remove(it.lowercase()) }?.let { inherited ->
+            accessForMutable(player.name).addAll(inherited)
         }
         persistAnchorOwners(block.world.uid)
         persistSharedAccess()
+        publishNetworkSnapshot()
     }
 
     private val VISIBLE_COLOR = Color.fromRGB(0x92, 0xBE, 0xD8)
     private val SELECTED_COLOR = Color.fromRGB(0xFF, 0xD1, 0x66)
 }
 
-object TravelAnchorsSubCommand : SubCommand {
-    override val configKey = "anchors"
-    override val defaultName = "anchors"
-    override val defaultPermission = "arc.travel-anchors.admin"
-    override val defaultDescription = "Выдать набор путевых якорей"
-    override val defaultUsage = "/arc anchors give [игрок]"
+object GiveTravelAnchorSubCommand : SubCommand {
+    override val configKey = "giveanchor"
+    override val defaultName = "giveanchor"
+    override val defaultPermission = ADMIN_PERMISSION
+    override val defaultDescription = "Выдать путевые якоря"
+    override val defaultUsage = "/arc giveanchor <игрок> [количество]"
 
     override fun isAvailable(): Boolean = TravelAnchorsModule.isEnabled
 
     override fun execute(sender: org.bukkit.command.CommandSender, args: Array<String>): Boolean {
-        if (args.firstOrNull()?.equals("give", ignoreCase = true) != true) {
+        val player = args.firstOrNull()?.let { getOnlinePlayer(sender, it) }
+        val amount = parseTravelAnchorGiveAmount(args.getOrNull(1))
+        if (player == null || amount == null || args.size > 2) {
+            if (args.getOrNull(1) != null && amount == null) sender.sendMessage(TravelAnchorsModule.message("invalid-amount"))
             sendUsage(sender)
             return true
         }
-        val player = if (args.size >= 2) getOnlinePlayer(sender, args[1]) else sender as? Player
-        if (player == null) {
-            sendUsage(sender)
-            return true
-        }
-        TravelAnchorsModule.giveKit(player)
-        sender.sendMessage(TravelAnchorsModule.message("kit-given", "%player%" to player.name))
+        TravelAnchorsModule.giveAnchors(player, amount)
+        sender.sendMessage(TravelAnchorsModule.message("anchor-given", "%player%" to player.name, "%amount%" to amount.toString()))
         return true
     }
 
     override fun tabComplete(sender: org.bukkit.command.CommandSender, args: Array<String>): List<String>? =
         when (args.size) {
-            1 -> listOf("give").tabComplete(args[0])
-            2 -> tabCompletePlayers(args[1])
+            1 -> tabCompletePlayers(args[0])
+            2 -> listOf("1", "8", "16", "64").tabComplete(args[1])
+            else -> null
+        }
+}
+
+object GiveTravelStaffSubCommand : SubCommand {
+    override val configKey = "givestaff"
+    override val defaultName = "givestaff"
+    override val defaultPermission = ADMIN_PERMISSION
+    override val defaultDescription = "Выдать жезлы перехода"
+    override val defaultUsage = "/arc givestaff <игрок> [количество]"
+
+    override fun isAvailable(): Boolean = TravelAnchorsModule.isEnabled
+
+    override fun execute(sender: org.bukkit.command.CommandSender, args: Array<String>): Boolean {
+        val player = args.firstOrNull()?.let { getOnlinePlayer(sender, it) }
+        val amount = parseTravelAnchorGiveAmount(args.getOrNull(1))
+        if (player == null || amount == null || args.size > 2) {
+            if (args.getOrNull(1) != null && amount == null) sender.sendMessage(TravelAnchorsModule.message("invalid-amount"))
+            sendUsage(sender)
+            return true
+        }
+        TravelAnchorsModule.giveStaffs(player, amount)
+        sender.sendMessage(TravelAnchorsModule.message("staff-given", "%player%" to player.name, "%amount%" to amount.toString()))
+        return true
+    }
+
+    override fun tabComplete(sender: org.bukkit.command.CommandSender, args: Array<String>): List<String>? =
+        when (args.size) {
+            1 -> tabCompletePlayers(args[0])
+            2 -> listOf("1", "8", "16", "64").tabComplete(args[1])
             else -> null
         }
 }

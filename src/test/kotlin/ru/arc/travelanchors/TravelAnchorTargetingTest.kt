@@ -32,6 +32,19 @@ class TravelAnchorTargetingTest : FunSpec({
         ) shouldBe null
     }
 
+    test("the scaled display edge expands the selectable angle") {
+        val base = kotlin.math.cos(Math.toRadians(10.0))
+        val expanded = travelAnchorExpandedSelectionDot(base, displayDistance = 5.0, scale = 3.0f)
+        val edgeDot = kotlin.math.cos(Math.toRadians(20.0))
+
+        (expanded < edgeDot) shouldBe true
+        chooseTravelAnchorTarget(
+            listOf(AimCandidate("scaled-edge", 25.0, edgeDot, expanded)),
+            maxDistanceSquared = 64.0,
+            minimumDot = base,
+        )?.target shouldBe "scaled-edge"
+    }
+
     test("the outline grows as the crosshair approaches the anchor") {
         travelAnchorScale(0.4, 0.4, 1.0f, 3.0f) shouldBe 1.0f
         travelAnchorScale(0.7, 0.4, 1.0f, 3.0f) shouldBe 2.0f
@@ -49,6 +62,26 @@ class TravelAnchorTargetingTest : FunSpec({
         travelAnchorDenialMessage(featureAvailable = false, ownerAllowed = true) shouldBe "wrong-world"
         travelAnchorDenialMessage(featureAvailable = true, ownerAllowed = false) shouldBe "no-permission"
         travelAnchorDenialMessage(featureAvailable = true, ownerAllowed = true) shouldBe null
+    }
+
+    test("admins bypass anchor ownership without changing ordinary access") {
+        travelAnchorAdminAllows(isAdmin = true, ordinaryAccess = false) shouldBe true
+        travelAnchorAdminAllows(isAdmin = false, ordinaryAccess = true) shouldBe true
+        travelAnchorAdminAllows(isAdmin = false, ordinaryAccess = false) shouldBe false
+    }
+
+    test("give commands accept an optional bounded amount") {
+        parseTravelAnchorGiveAmount(null) shouldBe 1
+        parseTravelAnchorGiveAmount("64") shouldBe 64
+        parseTravelAnchorGiveAmount("0") shouldBe null
+        parseTravelAnchorGiveAmount("4097") shouldBe null
+        parseTravelAnchorGiveAmount("many") shouldBe null
+    }
+
+    test("vertical anchors behave like an OpenBlocks elevator") {
+        travelAnchorElevatorTargetY(64, listOf(12, 80, 96), upward = true) shouldBe 80
+        travelAnchorElevatorTargetY(64, listOf(12, 48, 80), upward = false) shouldBe 48
+        travelAnchorElevatorTargetY(64, listOf(64), upward = true) shouldBe null
     }
 
     test("far anchors use a nearby proxy while near anchors keep their real distance") {
@@ -110,6 +143,9 @@ class TravelAnchorTargetingTest : FunSpec({
             if (legacy == grocer) "GrocerMC" else null
         } shouldBe true
         travelAnchorIdentityAllows(other.toString(), "GrocerMC", grocer) shouldBe false
+        normalizeTravelAnchorOwner(grocer.toString()) { legacy ->
+            if (legacy == grocer) "GrocerMC" else null
+        } shouldBe "GrocerMC"
 
         val owners = listOf(
             TravelAnchorOwnerEntry(-12, 64, 7, "GrocerMC"),

@@ -209,17 +209,8 @@ permissions:
   arc.origin.portals.bypass:
     description: Bypass central ARC Origin portal teleport
     default: false
-  arc.travel-anchors.use:
-    description: Reveal and travel through ARC travel anchors
-    default: true
-  arc.travel-anchors.place:
-    description: Place ARC travel anchors
-    default: true
-  arc.travel-anchors.break:
-    description: Break ARC travel anchors
-    default: true
-  arc.travel-anchors.admin:
-    description: Give ARC travel anchor prototype items
+  arc.travelanchors.admin:
+    description: Give, edit and use every ARC travel anchor
     default: op
   arc.product.path:
     description: Choose a recommended RusCrafting starter path

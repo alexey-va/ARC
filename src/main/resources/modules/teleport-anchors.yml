@@ -1,5 +1,4 @@
-# Путевые якоря в стиле Ender IO. Включаются на нужном сервере runtime-конфигом.
-enabled: false
+# Путевые якоря в стиле Ender IO. Доступны на всех мирах, пока worlds не ограничен явно.
 worlds: []
 
 targeting:
@@ -21,12 +20,33 @@ naming:
   default-name: 'Путевой якорь'
   dialog:
     title: '<#92bed8><bold>Настройка якоря'
-    body: '<#e8dfd2>Название видно при наведении. Ниже можно открыть все свои якоря друзьям.'
+    overview: '<#ffd166>%name%<newline><#e8dfd2>Владелец: <#ffffff>%owner%<newline><#e8dfd2>Точка: <#ffffff>%server% / %world% · %coords%<newline><#e8dfd2>Режим: %state%'
+    name-button: '<#92bed8>Изменить название'
+    access-button: '<#9bd48d>Доступ игроков'
+    public-button: '<#ffd166>Общий якорь'
+    network-button: '<#d7a8ff>Вся сеть'
+    name-title: '<#92bed8><bold>Название якоря'
+    name-body: '<#e8dfd2>Название видно над якорем и в списке сети.'
+    access-title: '<#9bd48d><bold>Доступ к сети'
+    access-body: '<#e8dfd2>Эти игроки смогут использовать все якоря владельца на всех серверах.'
+    public-title: '<#ffd166><bold>Общий якорь'
+    public-body-on: '<#e8dfd2>Любой игрок, вставший на этот якорь или нажавший на него, получит доступ ко всей сети владельца.'
+    public-body-off: '<#e8dfd2>Сейчас этот якорь не выдаёт доступ другим игрокам.'
+    public-state: '<#9bd48d>общий'
+    private-state: '<#e8dfd2>личный'
+    make-public: '<#9bd48d>Сделать общим'
+    make-private: '<#ff9a8f>Сделать личным'
+    network-title: '<#d7a8ff><bold>Сеть путевых якорей'
+    network-body: '<#e8dfd2>Владелец: <#ffffff>%owner% · <#e8dfd2>точек: <#ffffff>%count% · <#e8dfd2>страница: <#ffffff>%page%/%pages%<newline><#e8dfd2>Нажмите на точку, чтобы перейти.'
+    network-empty: '<#e8dfd2>В сети игрока %owner% пока нет доступных точек.'
+    previous-page: '<#ffffff>Предыдущая страница'
+    next-page: '<#ffffff>Следующая страница'
     input: '<#e8dfd2>Название'
-    access: '<#e8dfd2>Доступ игрокам <#8c8c8c>(ники через запятую)'
+    access: '<#e8dfd2>Доступ игрокам <#ffffff>(ники через запятую)'
     invalid: '<#ff6b61>Введите название длиной от 1 до %limit% символов.'
     access-invalid: '<#ff6b61>Не найдены игроки: <#ffffff>%players%'
     save: '<#9bd48d>Сохранить изменения'
+    back: '<#ffffff>Назад'
     close: '<#ffffff>Закрыть'
 
 items:
@@ -39,6 +59,8 @@ items:
       - '<#b8b8b8>Поставьте его, чтобы связать две точки.'
       - '<#b8b8b8>С соседнего якоря он виден сквозь стены.'
       - '<#b8b8b8>После установки нажмите ПКМ, чтобы дать имя.'
+      - ''
+      - '<#b8b8b8>Владелец: <#92bed8>%owner%'
       - ''
       - '<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ПКМ<#b8b8b8> — установить'
   staff:
@@ -55,6 +77,12 @@ messages:
   placed: '<#92bed8>Путевой якорь установлен.'
   removed: '<#92bed8>Путевой якорь снят.'
   renamed: '<#92bed8>Настройки якорей сохранены.'
+  access-saved: '<#9bd48d>Доступ к сети сохранён.'
+  access-saved-local: '<#ffd166>Доступ сохранён только на этом сервере: Redis недоступен.'
+  made-public: '<#9bd48d>Якорь стал общим. Он будет выдавать доступ к сети.'
+  made-private: '<#b8b8b8>Якорь снова личный.'
+  public-access-granted: '<#9bd48d>Получен доступ к сети игрока <#ffffff>%owner%<#9bd48d>.'
+  public-access-local: '<#ffd166>Доступ к сети игрока <#ffffff>%owner%<#ffd166> получен только на этом сервере: Redis недоступен.'
   target-anchor: '<#ffd166>%name% <#8c8c8c>· <#ffd166>Shift<#b8b8b8> — перейти · <#ffffff>%distance% м'
   target-staff: '<#ffd166>%name% <#8c8c8c>· <#d7a8ff>ПКМ<#b8b8b8> — перейти · <#ffffff>%distance% м'
   no-target: '<#b8b8b8>Наведитесь на подсвеченный якорь.'
@@ -63,5 +91,10 @@ messages:
   blocked: '<#c42323>Переход отменён защитой сервера.'
   unavailable: '<#c42323>Этот якорь уже недоступен.'
   leave-vehicle: '<#b8b8b8>Сначала слезьте с транспорта.'
-  no-permission: '<#c42323>Этот путевой якорь привязан к другому игроку.'
-  kit-given: '<#92bed8>Набор путевых якорей выдан игроку <#ffffff>%player%<#92bed8>.'
+  no-permission: '<#c42323>Нет доступа к якорю. Владелец: <#ffffff>%owner%<#c42323>.'
+  cross-server-started: '<#d7a8ff>Переход на сервер <#ffffff>%server%<#d7a8ff>…'
+  cross-server-unavailable: '<#c42323>Межсерверный переход недоступен: HuskHomes не ответил.'
+  network-unavailable: '<#c42323>Не удалось сохранить сетевой доступ в Redis. Попробуйте ещё раз.'
+  invalid-amount: '<#c42323>Количество должно быть числом от 1 до 4096.'
+  anchor-given: '<#92bed8>Выдано якорей: <#ffffff>%amount% <#8c8c8c>· <#92bed8>владелец <#ffffff>%player%<#92bed8>.'
+  staff-given: '<#d7a8ff>Выдано жезлов: <#ffffff>%amount% <#8c8c8c>· <#d7a8ff>владелец <#ffffff>%player%<#d7a8ff>.'
