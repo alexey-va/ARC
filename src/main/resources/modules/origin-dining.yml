@@ -113,7 +113,7 @@ timing:
 navigation:
   waiter-ready-margin: 2.25
   # Must stay within normal survival entity-interaction reach.
-  waiter-player-range: 2.8
+  waiter-player-range: 1.8
   distance-margin: 0.35
   path-distance-margin: 0.35
   session-radius: 8.0
@@ -130,7 +130,7 @@ dynamic-seats:
   dish-offset-x: 0.0
   dish-offset-y: 0.0
   dish-offset-z: 0.0
-  waiter-side-offset: 0.8
+  waiter-side-offset: 0.0
 
 # Все координаты двух ресторанных сцен находятся здесь и перечитываются через
 # /arc reload. Формат точки: x,y,z,yaw. Формат блока: x,y,z.

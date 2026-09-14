@@ -287,7 +287,7 @@ internal object OriginDiningLayout {
         displayWidth = source.real("display.culling-width", 4.0).toFloat().coerceIn(0.5f, 16f)
         displayHeight = source.real("display.culling-height", 4.0).toFloat().coerceIn(0.5f, 16f)
         dynamicTableHeight = source.real("dynamic-seats.table-height-above-seat", 1.1).coerceIn(0.4, 2.0)
-        dynamicWaiterSideOffset = source.real("dynamic-seats.waiter-side-offset", 1.5).coerceIn(0.8, 3.0)
+        dynamicWaiterSideOffset = source.real("dynamic-seats.waiter-side-offset", 0.0).coerceIn(0.0, 3.0)
         dynamicDishOffsetX = source.real("dynamic-seats.dish-offset-x", 0.0).coerceIn(-2.0, 2.0)
         dynamicDishOffsetY = source.real("dynamic-seats.dish-offset-y", 0.0).coerceIn(-2.0, 2.0)
         dynamicDishOffsetZ = source.real("dynamic-seats.dish-offset-z", 0.0).coerceIn(-2.0, 2.0)
