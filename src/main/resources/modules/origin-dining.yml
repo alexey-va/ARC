@@ -111,6 +111,8 @@ timing:
   ambient-dialogue-seconds: 42
   ambient-retry-seconds: 5
   guest-reconcile-seconds: 5
+  # Each waiter pauses after serving before starting another ambient table route.
+  ambient-waiter-rest-seconds: 7
 
 navigation:
   waiter-ready-margin: 2.25

@@ -129,6 +129,7 @@ class OriginDiningLayoutTest : FreeSpec({
         OriginDiningLayout.ambientDialogueMillis shouldBe 42_000L
         OriginDiningLayout.ambientRetryMillis shouldBe 5_000L
         OriginDiningLayout.guestReconcileMillis shouldBe 5_000L
+        OriginDiningLayout.ambientWaiterRestMillis shouldBe 7_000L
         OriginDiningLayout.theftCooldownMillis shouldBe 90_000L
         OriginDiningLayout.waiterPlayerRange shouldBe 1.8
         OriginDiningLayout.navigatorDistanceMargin shouldBe 0.35

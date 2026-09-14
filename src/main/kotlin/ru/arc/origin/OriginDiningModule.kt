@@ -416,6 +416,8 @@ internal object OriginDiningLayout {
         private set
     var guestReconcileMillis = 0L
         private set
+    var ambientWaiterRestMillis = 0L
+        private set
     private var scales = defaultScales()
     private var surfaceLifts = defaultSurfaceLifts()
     private var waiterHomes = emptyMap<Int, OriginDiningPoint>()
@@ -470,6 +472,7 @@ internal object OriginDiningLayout {
         ambientDialogueMillis = source.integer("timing.ambient-dialogue-seconds").toLong().coerceIn(5L, 600L) * 1_000L
         ambientRetryMillis = source.integer("timing.ambient-retry-seconds").toLong().coerceIn(1L, 120L) * 1_000L
         guestReconcileMillis = source.integer("timing.guest-reconcile-seconds").toLong().coerceIn(1L, 120L) * 1_000L
+        ambientWaiterRestMillis = source.integer("timing.ambient-waiter-rest-seconds", 7).toLong().coerceIn(0L, 60L) * 1_000L
         waiterReadyMargin = source.real("navigation.waiter-ready-margin").coerceIn(0.5, 4.0)
         waiterPlayerRange = source.real("navigation.waiter-player-range").coerceIn(1.0, 6.0)
         navigatorDistanceMargin = source.real("navigation.distance-margin", 0.35).coerceIn(0.1, 2.0)
@@ -900,6 +903,7 @@ private class OriginDiningService : AutoCloseable {
     private val guestMeals = mutableMapOf<String, OriginDiningGuestMeal>()
     private val guestMealEntity = mutableMapOf<UUID, OriginDiningGuestMeal>()
     private val ambientRoutes = mutableMapOf<Int, OriginDiningAmbientRoute>()
+    private val ambientWaiterAvailableAt = mutableMapOf<Int, Long>()
     private val navigationAttempts = mutableMapOf<Int, UUID>()
     private val ambientTableDueAt = mutableMapOf<String, Long>()
     private val speechDisplays = mutableSetOf<TextDisplay>()
@@ -2640,6 +2644,7 @@ private class OriginDiningService : AutoCloseable {
 
     private fun startAmbientRoute(table: OriginDiningGuestTable, reason: String): Boolean {
         val waiterId = table.waiterId
+        if (System.currentTimeMillis() < ambientWaiterAvailableAt.getOrDefault(waiterId, 0L)) return false
         if (waiterId in ambientRoutes || waiterId in activeDeliveries || waiterId in waiterApproaches || waiterId in waiterAssignments) return false
         val npc = waiter(waiterId)?.takeIf { it.isSpawned && it.entity.world.name == OriginDiningLayout.WORLD } ?: return false
         val currentDish = guestMeals[table.id]?.dish
@@ -2701,6 +2706,7 @@ private class OriginDiningService : AutoCloseable {
     private fun finishAmbientRoute(waiterId: Int, token: UUID, reason: String) {
         val route = ambientRoutes[waiterId]?.takeIf { it.token == token } ?: return
         ambientRoutes.remove(waiterId, route)
+        ambientWaiterAvailableAt[waiterId] = System.currentTimeMillis() + OriginDiningLayout.ambientWaiterRestMillis
         clearWaiterCarry(waiterId)
         val npc = waiter(waiterId)?.takeIf { it.isSpawned } ?: return
         val home = OriginDiningLayout.waiterHome(waiterId)?.inWorld(npc.entity.world)
@@ -3032,6 +3038,7 @@ private class OriginDiningService : AutoCloseable {
         guestMealEntity.clear()
         guestMarkers.clear()
         ambientRoutes.clear()
+        ambientWaiterAvailableAt.clear()
         navigationAttempts.clear()
         ambientTableDueAt.clear()
         speechDisplays.clear()
