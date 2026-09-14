@@ -8,9 +8,10 @@ import ru.arc.hooks.auraskills.AuraSkillsHook
 import ru.arc.hooks.bank.BankHook
 import ru.arc.hooks.betterstructures.BSListener
 import ru.arc.hooks.citizens.CitizensHook
+import ru.arc.hooks.elitemobs.DungeonAdminExtractor
+import ru.arc.hooks.elitemobs.EMDungeonQol
 import ru.arc.hooks.elitemobs.EMHook
 import ru.arc.hooks.elitemobs.EMListener
-import ru.arc.hooks.elitemobs.EMDungeonQol
 import ru.arc.hooks.economyshop.EconomyShopGuiPurchaseService
 import ru.arc.hooks.economyshop.EconomyShopGuiAuditListener
 import ru.arc.hooks.economyshop.ShopPurchaseService
@@ -349,6 +350,7 @@ class HookRegistry(
         register("CMI", true) {
             val hook = CMIHook()
             registerListener(CMIListener())
+            if (emHook != null) registerListener(DungeonAdminExtractor())
             cmiHook = hook
         }
         register("ViaVersion", true) { viaVersionHook = ViaVersionHook() }

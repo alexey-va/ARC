@@ -112,6 +112,7 @@ permissions:
     description: Administer ARC
     default: op
     children:
+      arc.dungeon.admin.extract: true
       arc.investigations.cooldown.bypass: true
   arc.audit:
     description: Inspect ARC audit data
@@ -143,6 +144,9 @@ permissions:
   arc.elite.loot.admin:
     description: Administer EliteMobs loot through ARC
     default: op
+  arc.dungeon.admin.extract:
+    description: Pull players out of EliteMobs dungeon instances with CMI TpHere
+    default: false
   arc.item.give:
     description: Give ARC-defined items
     default: op
