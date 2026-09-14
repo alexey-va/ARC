@@ -250,6 +250,7 @@ internal class TravelAnchorNetworkStore(
 
         private val ENTRY_CONTRACT = JsonObjectContract(
             allowedFields = setOf("server", "world", "x", "y", "z", "owner", "name", "public", "shared"),
+            requiredFields = setOf("server", "world", "x", "y", "z", "owner", "name", "public"),
         )
         private val SNAPSHOT_CODEC = BoundedJsonCodec(
             gson = Common.gson,

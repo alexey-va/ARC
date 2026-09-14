@@ -39,6 +39,25 @@ class TravelAnchorNetworkStoreTest : FunSpec({
         ) shouldBe snapshot
     }
 
+    test("legacy snapshots without shared are loaded as personal anchors") {
+        val redis = InMemoryRedis(ServerIdentity { "spawn" })
+        redis.setHash(
+            TravelAnchorNetworkStore.ANCHORS_HASH,
+            mapOf(
+                "survival" to """{"server":"survival","anchors":[{"server":"survival","world":"world","x":1,"y":64,"z":2,"owner":"GrocerMC","name":"Дом","public":true}]}""",
+            ),
+        )
+        val loaded = java.util.concurrent.CompletableFuture<TravelAnchorNetworkSnapshot>()
+        val store = TravelAnchorNetworkStore(redis, "spawn", Runnable::run, loaded::complete, { _, _ -> })
+
+        store.start()
+
+        loaded.get(2, TimeUnit.SECONDS) shouldBe TravelAnchorNetworkSnapshot(
+            server = "survival",
+            anchors = listOf(TravelAnchorNetworkEntry("survival", "world", 1, 64, 2, "GrocerMC", "Дом", true, false)),
+        )
+    }
+
     test("public access grants merge instead of overwriting existing players") {
         val redis = InMemoryRedis(ServerIdentity { "survival" })
         redis.setHash(
