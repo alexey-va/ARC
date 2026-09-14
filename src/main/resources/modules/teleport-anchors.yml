@@ -9,6 +9,19 @@ targeting:
 
 visual:
   block-material: LODESTONE
+  allowed-block-materials:
+    - LODESTONE
+    - RESPAWN_ANCHOR
+    - CRYING_OBSIDIAN
+    - OBSIDIAN
+    - AMETHYST_BLOCK
+    - SEA_LANTERN
+    - END_STONE_BRICKS
+    - PURPUR_BLOCK
+    - PRISMARINE
+    - DEEPSLATE_TILES
+    - NETHER_BRICKS
+    - MOSS_BLOCK
   proxy-distance: 48.0
   minimum-scale: 1.04
   maximum-scale: 3.0
@@ -35,13 +48,31 @@ naming:
   default-name: 'Путевой якорь'
   dialog:
     title: '<#92bed8><bold>Настройка якоря'
-    overview: '<#ffd166>%name%<newline><#e8dfd2>Владелец: <#ffffff>%owner%<newline><#e8dfd2>Точка: <#ffffff>%server% / %world% · %coords%<newline><#e8dfd2>Режим: %state%'
+    overview: '<#ffd166>%name%<newline><#e8dfd2>Владелец: <#ffffff>%owner%<newline><#e8dfd2>Точка: <#ffffff>%server% / %world% · %coords%<newline><#e8dfd2>Режим: %state%<newline><#e8dfd2>Внешний вид: <#ffffff>%material%'
     name-button: '<#92bed8>Изменить название'
+    material-button: '<#c4a7e7>Внешний вид ›'
     access-button: '<#9bd48d>Доступ игроков'
     public-button: '<#ffd166>Общий якорь'
     network-button: '<#d7a8ff>Вся сеть'
     name-title: '<#92bed8><bold>Название якоря'
     name-body: '<#e8dfd2>Название видно над якорем и в списке сети.'
+    material-title: '<#9bd48d><bold>Внешний вид якоря'
+    material-body: '<#e8dfd2>Выберите блок, которым этот якорь будет показан в сети.'
+    material-selected: '<#9bd48d>✔ %material%'
+    material-unselected: '<#ffffff>○ %material%'
+    material-names:
+      LODESTONE: 'Магнетит'
+      RESPAWN_ANCHOR: 'Якорь возрождения'
+      CRYING_OBSIDIAN: 'Плачущий обсидиан'
+      OBSIDIAN: 'Обсидиан'
+      AMETHYST_BLOCK: 'Аметист'
+      SEA_LANTERN: 'Морской фонарь'
+      END_STONE_BRICKS: 'Кирпичи Энда'
+      PURPUR_BLOCK: 'Пурпуровый блок'
+      PRISMARINE: 'Призмарин'
+      DEEPSLATE_TILES: 'Глубинносланцевая плитка'
+      NETHER_BRICKS: 'Незерские кирпичи'
+      MOSS_BLOCK: 'Мох'
     access-title: '<#9bd48d><bold>Доступ к сети'
     access-body: '<#e8dfd2>Эти игроки смогут использовать все якоря владельца на всех серверах.'
     public-title: '<#ffd166><bold>Общий якорь'
@@ -95,6 +126,7 @@ messages:
   placed: '<#92bed8>Путевой якорь установлен.'
   removed: '<#92bed8>Путевой якорь снят.'
   renamed: '<#92bed8>Настройки якорей сохранены.'
+  material-changed: '<#9bd48d>Внешний вид якоря: <#ffffff>%material%<#9bd48d>.'
   access-saved: '<#9bd48d>Доступ к сети сохранён.'
   access-saved-local: '<#ffd166>Доступ сохранён только на этом сервере: Redis недоступен.'
   made-public: '<#9bd48d>Якорь стал общим. Он будет выдавать доступ к сети.'

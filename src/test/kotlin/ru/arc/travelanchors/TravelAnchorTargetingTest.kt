@@ -3,6 +3,7 @@ package ru.arc.travelanchors
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import org.bukkit.Location
+import org.bukkit.Material
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.player.PlayerInteractEvent
@@ -212,6 +213,16 @@ class TravelAnchorTargetingTest : FunSpec({
             TravelAnchorNameEntry(240, -20, -99, "Северный портал"),
         )
         decodeTravelAnchorNames(encodeTravelAnchorNames(names)) shouldBe names
+    }
+
+    test("anchor display materials survive the world index codec and reject non-blocks") {
+        val materials = listOf(
+            TravelAnchorMaterialEntry(-12, 64, 7, Material.AMETHYST_BLOCK),
+            TravelAnchorMaterialEntry(240, -20, -99, Material.RESPAWN_ANCHOR),
+        )
+
+        decodeTravelAnchorMaterials(encodeTravelAnchorMaterials(materials)) shouldBe materials
+        decodeTravelAnchorMaterials("0,64,0|BLAZE_ROD\n1,64,0|NOT_A_MATERIAL") shouldBe emptyList()
     }
 
     test("anchor ownership follows player names and migrates legacy UUID identities") {

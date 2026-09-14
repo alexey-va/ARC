@@ -78,6 +78,7 @@ import ru.arc.originGateClosingScale
 import java.nio.file.Path
 import java.nio.charset.StandardCharsets
 import java.util.Base64
+import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import kotlin.math.abs
@@ -93,12 +94,14 @@ private val ANCHOR_BLOCK_KEY = NamespacedKey("arc", "travel_anchor")
 private val ANCHOR_INDEX_KEY = NamespacedKey("arc", "travel_anchor_index")
 private val ANCHOR_NAMES_KEY = NamespacedKey("arc", "travel_anchor_names")
 private val ANCHOR_OWNERS_KEY = NamespacedKey("arc", "travel_anchor_owners")
+private val ANCHOR_MATERIALS_KEY = NamespacedKey("arc", "travel_anchor_materials")
 private val ANCHOR_ACCESS_KEY = NamespacedKey("arc", "travel_anchor_access")
 private val ANCHOR_PUBLICS_KEY = NamespacedKey("arc", "travel_anchor_publics")
 private val ANCHOR_SHARED_KEY = NamespacedKey("arc", "travel_anchor_shared")
 private val ANCHOR_SHAREDS_KEY = NamespacedKey("arc", "travel_anchor_shared_anchors")
 private val ANCHOR_NAME_KEY = NamespacedKey("arc", "travel_anchor_name")
 private val ANCHOR_OWNER_KEY = NamespacedKey("arc", "travel_anchor_owner")
+private val ANCHOR_MATERIAL_KEY = NamespacedKey("arc", "travel_anchor_material")
 private val ANCHOR_PUBLIC_KEY = NamespacedKey("arc", "travel_anchor_public")
 private val ANCHOR_ITEM_KEY = NamespacedKey("arc", "travel_anchor_item")
 private val SHARED_ANCHOR_ITEM_KEY = NamespacedKey("arc", "travel_anchor_shared_item")
@@ -116,6 +119,20 @@ private const val PROXY_DEPTH = 0.03f
 private const val PLAYER_HALF_WIDTH = 0.3
 private const val DISPLAY_VIEW_RANGE = 16f
 private const val DEFAULT_TELEPORT_PORTAL_ITEM = "origin_gate_portals:origin_portal"
+private val DEFAULT_DISPLAY_MATERIALS = listOf(
+    Material.LODESTONE,
+    Material.RESPAWN_ANCHOR,
+    Material.CRYING_OBSIDIAN,
+    Material.OBSIDIAN,
+    Material.AMETHYST_BLOCK,
+    Material.SEA_LANTERN,
+    Material.END_STONE_BRICKS,
+    Material.PURPUR_BLOCK,
+    Material.PRISMARINE,
+    Material.DEEPSLATE_TILES,
+    Material.NETHER_BRICKS,
+    Material.MOSS_BLOCK,
+)
 private const val TELEPORT_PORTAL_TINY_SCALE = 0.02f
 private const val TELEPORT_PORTAL_REPLACEMENT_DISTANCE_SQUARED = 2.25
 private const val TELEPORT_PORTAL_PARTICLE_RANGE_SQUARED = 48.0 * 48.0
@@ -286,6 +303,8 @@ internal data class TravelAnchorNameEntry(val x: Int, val y: Int, val z: Int, va
 
 internal data class TravelAnchorOwnerEntry(val x: Int, val y: Int, val z: Int, val owner: String)
 
+internal data class TravelAnchorMaterialEntry(val x: Int, val y: Int, val z: Int, val material: Material)
+
 internal data class TravelAnchorAccessEntry(val owner: String, val players: Set<String>)
 
 internal fun travelAnchorIdentityAllows(
@@ -346,6 +365,26 @@ internal fun decodeTravelAnchorOwners(encoded: String): List<TravelAnchorOwnerEn
             val (coordinates, owner) = line.split('|', limit = 2).takeIf { it.size == 2 } ?: return@runCatching null
             val parts = coordinates.split(',').takeIf { it.size == 3 } ?: return@runCatching null
             TravelAnchorOwnerEntry(parts[0].toInt(), parts[1].toInt(), parts[2].toInt(), owner)
+        }.getOrNull()
+    }.toList()
+
+internal fun encodeTravelAnchorMaterials(entries: Iterable<TravelAnchorMaterialEntry>): String =
+    entries
+        .sortedWith(compareBy(TravelAnchorMaterialEntry::x, TravelAnchorMaterialEntry::y, TravelAnchorMaterialEntry::z))
+        .joinToString("\n") { entry -> "${entry.x},${entry.y},${entry.z}|${entry.material.name}" }
+
+internal fun travelAnchorDisplayMaterial(raw: String): Material? =
+    Material.getMaterial(raw.trim().uppercase(Locale.ROOT))
+        ?.takeIf(Material::isBlock)
+
+internal fun decodeTravelAnchorMaterials(encoded: String): List<TravelAnchorMaterialEntry> =
+    encoded.lineSequence().mapNotNull { line ->
+        runCatching {
+            val (coordinates, rawMaterial) = line.split('|', limit = 2).takeIf { it.size == 2 } ?: return@runCatching null
+            val parts = coordinates.split(',').takeIf { it.size == 3 } ?: return@runCatching null
+            val material = travelAnchorDisplayMaterial(rawMaterial)
+                ?: return@runCatching null
+            TravelAnchorMaterialEntry(parts[0].toInt(), parts[1].toInt(), parts[2].toInt(), material)
         }.getOrNull()
     }.toList()
 
@@ -449,6 +488,7 @@ private data class TravelAnchorSettings(
     val teleportPortal: TravelAnchorTeleportPortalSettings?,
     val anchorMaterial: Material,
     val displayMaterial: Material,
+    val displayMaterials: List<Material>,
     val staffMaterial: Material,
     val anchorModelData: Int,
     val staffModelData: Int,
@@ -512,6 +552,14 @@ private data class TravelAnchorSettings(
 
     fun defaultAnchorName(): String = source.string("naming.default-name", "Путевой якорь")
 
+    fun displayMaterialName(material: Material): String =
+        source.string("naming.dialog.material-names.${material.name}", material.name.lowercase().replace('_', ' '))
+
+    fun displayMaterialButton(material: Material, selected: Boolean): Component = namingTextSafe(
+        if (selected) "material-selected" else "material-unselected",
+        "%material%" to Component.text(displayMaterialName(material)),
+    )
+
     private fun ItemStackDslBuilder.configuredItem(key: String, modelData: Int, ownerName: String? = null) {
         display(source.string("items.$key.name", ""))
         loreComponents(source.stringList("items.$key.lore").map { line ->
@@ -544,6 +592,16 @@ private object TravelAnchorConfig {
         source.mergeMissingFromBundled("modules/teleport-anchors.yml")
         val visibleAngle = source.real("targeting.visible-angle-degrees", 70.0).coerceIn(10.0, 89.0)
         val selectionAngle = source.real("targeting.selection-angle-degrees", 10.0).coerceIn(1.0, visibleAngle)
+        val displayMaterial = source.material("visual.block-material", Material.LODESTONE, requireBlock = true)
+        val displayMaterials = source.stringList("visual.allowed-block-materials", DEFAULT_DISPLAY_MATERIALS.map(Material::name))
+            .mapNotNull { raw ->
+                travelAnchorDisplayMaterial(raw) ?: run {
+                    warn("TRAVEL_ANCHORS phase=CONFIG reason=invalid-display-material-whitelist value={}", raw)
+                    null
+                }
+            }
+            .distinct()
+            .let { options -> if (displayMaterial in options) options else listOf(displayMaterial) + options }
         return TravelAnchorSettings(
             worlds = source.stringList("worlds").toSet(),
             range = source.real("targeting.range", 1024.0).coerceIn(8.0, 4096.0),
@@ -561,7 +619,8 @@ private object TravelAnchorConfig {
             updateTicks = source.long("visual.update-ticks", 1L).coerceIn(1L, 20L),
             teleportPortal = source.teleportPortal(),
             anchorMaterial = source.material("items.anchor.material", Material.LODESTONE, requireBlock = true),
-            displayMaterial = source.material("visual.block-material", Material.LODESTONE, requireBlock = true),
+            displayMaterial = displayMaterial,
+            displayMaterials = displayMaterials,
             staffMaterial = source.material("items.staff.material", Material.BLAZE_ROD, requireBlock = false),
             anchorModelData = source.integer("items.anchor.custom-model-data", 0).coerceAtLeast(0),
             staffModelData = source.integer("items.staff.custom-model-data", 0).coerceAtLeast(0),
@@ -645,6 +704,7 @@ object TravelAnchorsModule : PluginModule, Listener {
     private val labels = mutableMapOf<UUID, TextDisplay>()
     private val anchorNames = mutableMapOf<TravelAnchorPosition, String>()
     private val anchorOwners = mutableMapOf<TravelAnchorPosition, String>()
+    private val anchorMaterials = mutableMapOf<TravelAnchorPosition, Material>()
     private val publicAnchors = mutableSetOf<TravelAnchorPosition>()
     private val sharedAnchors = mutableSetOf<TravelAnchorPosition>()
     private val sharedAccess = mutableMapOf<String, MutableSet<String>>()
@@ -710,6 +770,7 @@ object TravelAnchorsModule : PluginModule, Listener {
         labels.clear()
         anchorNames.clear()
         anchorOwners.clear()
+        anchorMaterials.clear()
         publicAnchors.clear()
         sharedAnchors.clear()
         sharedAccess.clear()
@@ -1119,6 +1180,8 @@ object TravelAnchorsModule : PluginModule, Listener {
             val display = playerDisplays[candidate.key]?.takeIf { it.isValid } ?: spawnDisplay(player, location).also {
                 playerDisplays[candidate.key] = it
             }
+            val material = anchorMaterials[candidate.destination] ?: current.displayMaterial
+            if (display.block.material != material) display.block = material.createBlockData()
             display.teleport(location)
             val scale = travelAnchorScale(
                 candidate.dot,
@@ -1247,9 +1310,11 @@ object TravelAnchorsModule : PluginModule, Listener {
                     "%world%" to Component.text(world),
                     "%coords%" to Component.text("${position.x}, ${position.y}, ${position.z}"),
                     "%state%" to state,
+                    "%material%" to Component.text(current.displayMaterialName(anchorMaterials[position] ?: current.displayMaterial)),
                 ), width = 420)),
                 buttons = buildList {
                     add(anchorDialogButton("edit_name", current.namingText("name-button")) { openNameDialog(it.player, position) })
+                    add(anchorDialogButton("edit_material", current.namingText("material-button")) { openMaterialDialog(it.player, position) })
                     if (!shared) {
                         add(anchorDialogButton("edit_access", current.namingText("access-button")) { openAccessDialog(it.player, position) })
                         add(anchorDialogButton("edit_public", current.namingText("public-button")) { openPublicDialog(it.player, position) })
@@ -1284,6 +1349,35 @@ object TravelAnchorsModule : PluginModule, Listener {
                 openAnchorMenu(context.player, position)
             }),
             exitButton = anchorDialogButton("back_from_anchor_name", current.namingText("back")) { openAnchorMenu(it.player, position) },
+        ))
+    }
+
+    private fun openMaterialDialog(player: Player, position: TravelAnchorPosition) {
+        val current = settings ?: return
+        if (editableAnchor(player, position) == null) return
+        val selected = anchorMaterials[position] ?: current.displayMaterial
+        ArcMenus.openDialog(player, PaperDialogScreen(
+            id = "travel-anchors.material",
+            title = current.namingText("material-title"),
+            body = listOf(PaperDialogBody(current.namingText("material-body"), 420)),
+            buttons = current.displayMaterials.map { material ->
+                anchorDialogButton(
+                    "anchor_material_${material.name.lowercase()}",
+                    current.displayMaterialButton(material, material == selected),
+                ) { context ->
+                    val block = editableAnchor(context.player, position) ?: return@anchorDialogButton
+                    setAnchorMaterial(block, material)
+                    context.player.sendActionBar(current.message(
+                        "material-changed",
+                        "%material%" to current.displayMaterialName(material),
+                    ))
+                    openMaterialDialog(context.player, position)
+                }
+            },
+            exitButton = anchorDialogButton("back_from_anchor_material", current.namingText("back")) {
+                openAnchorMenu(it.player, position)
+            },
+            columns = 2,
         ))
     }
 
@@ -1433,6 +1527,21 @@ object TravelAnchorsModule : PluginModule, Listener {
         anchorNames[TravelAnchorPosition.of(block)] = name
         persistAnchorNames(block.world.uid)
         publishNetworkSnapshot()
+    }
+
+    private fun setAnchorMaterial(block: Block, material: Material) {
+        val current = settings ?: return
+        if (material !in current.displayMaterials) return
+        val position = TravelAnchorPosition.of(block)
+        val data = CustomBlockData(block, ARC.instance)
+        if (material == current.displayMaterial) {
+            data.remove(ANCHOR_MATERIAL_KEY)
+            anchorMaterials.remove(position)
+        } else {
+            data.set(ANCHOR_MATERIAL_KEY, PersistentDataType.STRING, material.name)
+            anchorMaterials[position] = material
+        }
+        persistAnchorMaterials(block.world.uid)
     }
 
     private fun setAnchorPublic(block: Block, enabled: Boolean) {
@@ -1842,11 +1951,25 @@ object TravelAnchorsModule : PluginModule, Listener {
                 changed = sharedAnchors.add(position) || changed
                 changed = (anchorOwners.remove(position) != null) || changed
             }
+            val storedMaterial = data.get(ANCHOR_MATERIAL_KEY, PersistentDataType.STRING)
+            val material = storedMaterial
+                ?.let(::travelAnchorDisplayMaterial)
+                ?.takeIf { it in checkNotNull(settings).displayMaterials }
+            if (material != null) {
+                changed = anchorMaterials.put(position, material) != material || changed
+            } else {
+                changed = (anchorMaterials.remove(position) != null) || changed
+                if (storedMaterial != null) {
+                    data.remove(ANCHOR_MATERIAL_KEY)
+                    changed = true
+                }
+            }
         }
         if (changed) {
             persistAnchorIndex(chunk.world.uid)
             persistAnchorNames(chunk.world.uid)
             persistAnchorOwners(chunk.world.uid)
+            persistAnchorMaterials(chunk.world.uid)
             persistAnchorPublics(chunk.world.uid)
             persistAnchorShared(chunk.world.uid)
             publishNetworkSnapshot()
@@ -1878,6 +2001,17 @@ object TravelAnchorsModule : PluginModule, Listener {
                 val owner = normalizeOwnerIdentity(entry.owner)
                 anchorOwners[position] = owner
                 ownersChanged = ownersChanged || owner != entry.owner
+            }
+        }
+        var materialsChanged = false
+        decodeTravelAnchorMaterials(
+            world.persistentDataContainer.get(ANCHOR_MATERIALS_KEY, PersistentDataType.STRING).orEmpty(),
+        ).forEach { entry ->
+            val position = TravelAnchorPosition.of(world.uid, entry.x, entry.y, entry.z)
+            if (position in anchors && entry.material in checkNotNull(settings).displayMaterials) {
+                anchorMaterials[position] = entry.material
+            } else {
+                materialsChanged = true
             }
         }
         decodeTravelAnchorAccess(
@@ -1914,6 +2048,7 @@ object TravelAnchorsModule : PluginModule, Listener {
             }
         }
         if (ownersChanged) persistAnchorOwners(world.uid)
+        if (materialsChanged) persistAnchorMaterials(world.uid)
     }
 
     private fun persistAnchorIndex(worldId: UUID) {
@@ -1944,6 +2079,15 @@ object TravelAnchorsModule : PluginModule, Listener {
         })
         if (encoded.isEmpty()) world.persistentDataContainer.remove(ANCHOR_OWNERS_KEY)
         else world.persistentDataContainer.set(ANCHOR_OWNERS_KEY, PersistentDataType.STRING, encoded)
+    }
+
+    private fun persistAnchorMaterials(worldId: UUID) {
+        val world = Bukkit.getWorld(worldId) ?: return
+        val encoded = encodeTravelAnchorMaterials(anchorMaterials.mapNotNull { (position, material) ->
+            position.takeIf { it.worldId == worldId }?.let { TravelAnchorMaterialEntry(it.x, it.y, it.z, material) }
+        })
+        if (encoded.isEmpty()) world.persistentDataContainer.remove(ANCHOR_MATERIALS_KEY)
+        else world.persistentDataContainer.set(ANCHOR_MATERIALS_KEY, PersistentDataType.STRING, encoded)
     }
 
     private fun persistAnchorPublics(worldId: UUID) {
@@ -2042,6 +2186,7 @@ object TravelAnchorsModule : PluginModule, Listener {
             remove(ANCHOR_BLOCK_KEY)
             remove(ANCHOR_NAME_KEY)
             remove(ANCHOR_OWNER_KEY)
+            remove(ANCHOR_MATERIAL_KEY)
             remove(ANCHOR_PUBLIC_KEY)
             remove(ANCHOR_SHARED_KEY)
         }
@@ -2052,6 +2197,7 @@ object TravelAnchorsModule : PluginModule, Listener {
         if (!anchors.remove(position)) return
         anchorNames.remove(position)
         anchorOwners.remove(position)
+        anchorMaterials.remove(position)
         publicAnchors.remove(position)
         sharedAnchors.remove(position)
         displays.values.forEach { it.remove(position)?.remove() }
@@ -2060,6 +2206,7 @@ object TravelAnchorsModule : PluginModule, Listener {
         persistAnchorIndex(position.worldId)
         persistAnchorNames(position.worldId)
         persistAnchorOwners(position.worldId)
+        persistAnchorMaterials(position.worldId)
         persistAnchorPublics(position.worldId)
         persistAnchorShared(position.worldId)
         publishNetworkSnapshot()
