@@ -1,7 +1,11 @@
 # Controlled NPC routes
 
 `CitizensNpcRouteController` is ARC's shared flat-floor router for scripted NPC
-movement. Citizens executes the prepared vectors; ARC chooses every path cell.
+movement. ARC chooses every path cell and supplies Citizens with a custom
+`PathStrategy` that follows those cells through horizontal velocity. This avoids
+Citizens handing each point back to Minecraft navigation, which may otherwise
+choose a nearby stair or tabletop. Citizens still owns the navigation lifecycle
+and client movement animation.
 
 Create one `NpcRouteProfile` for each navigable area:
 

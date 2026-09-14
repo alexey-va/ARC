@@ -15,6 +15,15 @@ class NpcRouteControllerTest : FreeSpec({
         npcRouteYaw(0.0, 0.0, 1.0, 0.0) shouldBe -90f
     }
 
+    "direct route movement stays horizontal and cannot overshoot a cell" {
+        npcRouteHorizontalVelocity(0.0, 0.0, 1.0, 0.0, 0.2).let { velocity ->
+            velocity.x shouldBe 0.2
+            velocity.y shouldBe 0.0
+            velocity.z shouldBe 0.0
+        }
+        npcRouteHorizontalVelocity(0.0, 0.0, 0.05, 0.0, 0.2).x shouldBe 0.05
+    }
+
     "hard no-go areas are never crossed" {
         val forbidden = NpcRouteBounds(1, 2, 1, 1)
         val profile = NpcRouteProfile(

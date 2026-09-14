@@ -1,7 +1,10 @@
 package ru.arc.npc
 
 import net.citizensnpcs.api.CitizensAPI
+import net.citizensnpcs.api.ai.AbstractPathStrategy
 import net.citizensnpcs.api.ai.PathfinderType
+import net.citizensnpcs.api.ai.TargetType
+import net.citizensnpcs.api.ai.event.CancelReason
 import net.citizensnpcs.api.npc.NPC
 import org.bukkit.Location
 import org.bukkit.World
@@ -70,6 +73,21 @@ internal fun turnNpcYawToward(current: Float, target: Float, maximumDegrees: Flo
     val delta = normalizedNpcYaw(target - current)
     if (abs(delta) <= maximumDegrees) return normalizedNpcYaw(target)
     return normalizedNpcYaw(current + delta.sign * maximumDegrees)
+}
+
+internal fun npcRouteHorizontalVelocity(
+    fromX: Double,
+    fromZ: Double,
+    toX: Double,
+    toZ: Double,
+    maximumStep: Double,
+): Vector {
+    val dx = toX - fromX
+    val dz = toZ - fromZ
+    val distance = hypot(dx, dz)
+    if (distance <= 1.0e-6 || maximumStep <= 0.0) return Vector()
+    val step = minOf(distance, maximumStep)
+    return Vector(dx / distance * step, 0.0, dz / distance * step)
 }
 
 /** Supplies scene-specific occupied cells without coupling the router to a furniture plugin. */
@@ -149,9 +167,71 @@ private data class ActiveNpcRoute(
 )
 
 /**
- * Citizens adapter for precomputed ARC paths. Citizens animates and collides;
- * it never chooses the route because setTarget(Iterable<Vector>) receives the
- * complete path calculated above.
+ * Follows ARC's already validated cells directly. Citizens' built-in iterable
+ * strategy hands every cell back to the Minecraft navigator for living NPCs,
+ * which may choose a nearby stair or tabletop and leave the fixed floor.
+ */
+private class FixedLevelPathStrategy(
+    private val npc: NPC,
+    private val world: World,
+    private val points: List<Vector>,
+    private val pathDistanceMargin: Double,
+    private val destinationMargin: Double,
+    private val speedModifier: Float,
+) : AbstractPathStrategy(TargetType.LOCATION) {
+    private var index = 0
+
+    override fun getCurrentDestination(): Location = points[index.coerceAtMost(points.lastIndex)].toLocation(world)
+
+    override fun getPath(): Iterable<Vector> = points.drop(index)
+
+    override fun getTargetAsLocation(): Location = points.last().toLocation(world)
+
+    override fun stop() {
+        if (!npc.isSpawned) return
+        val velocity = npc.entity.velocity
+        npc.entity.velocity = Vector(0.0, velocity.y, 0.0)
+    }
+
+    override fun update(): Boolean {
+        if (!npc.isSpawned) {
+            setCancelReason(CancelReason.NPC_DESPAWNED)
+            return true
+        }
+        val entity = npc.entity
+        if (entity.world != world) {
+            setCancelReason(CancelReason.TARGET_MOVED_WORLD)
+            return true
+        }
+        val actual = entity.location
+        while (
+            index < points.lastIndex &&
+            horizontalDistanceSquared(actual, points[index]) <= pathDistanceMargin * pathDistanceMargin
+        ) {
+            index++
+        }
+        val target = points[index]
+        val distanceSquared = horizontalDistanceSquared(actual, target)
+        if (index == points.lastIndex && distanceSquared <= destinationMargin * destinationMargin) {
+            stop()
+            return true
+        }
+        val horizontal = npcRouteHorizontalVelocity(actual.x, actual.z, target.x, target.z, 0.2 * speedModifier)
+        horizontal.y = entity.velocity.y.coerceAtMost(0.0)
+        entity.velocity = horizontal
+        return false
+    }
+
+    private fun horizontalDistanceSquared(actual: Location, target: Vector): Double {
+        val dx = actual.x - target.x
+        val dz = actual.z - target.z
+        return dx * dx + dz * dz
+    }
+}
+
+/**
+ * Citizens adapter for precomputed ARC paths. Citizens owns navigation events
+ * and animation, while ARC's strategy owns the exact horizontal movement.
  */
 internal class CitizensNpcRouteController(
     private val onEvent: (NpcRouteEvent) -> Unit = {},
@@ -229,7 +309,16 @@ internal class CitizensNpcRouteController(
             npcRouteYaw(actual.x, actual.z, cell.x + 0.5, cell.z + 0.5)
         } ?: actual.yaw
         npc.entity.setRotation(initialHeadingYaw, 0f)
-        npc.navigator.setTarget(vectors)
+        npc.navigator.setTarget { params ->
+            FixedLevelPathStrategy(
+                npc = npc,
+                world = world,
+                points = vectors,
+                pathDistanceMargin = params.pathDistanceMargin(),
+                destinationMargin = params.distanceMargin(),
+                speedModifier = params.speedModifier(),
+            )
+        }
         val route = ActiveNpcRoute(
             UUID.randomUUID(),
             profile,
