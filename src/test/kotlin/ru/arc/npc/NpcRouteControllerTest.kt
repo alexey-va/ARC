@@ -45,4 +45,18 @@ class NpcRouteControllerTest : FreeSpec({
 
         findNpcGridPath(NpcRouteCell(0, 0), listOf(NpcRouteCell(2, 0)), profile) { true } shouldBe null
     }
+
+    "scene obstacle cells are treated as hard walls" {
+        val profile = NpcRouteProfile(
+            id = "hall",
+            floorY = 72,
+            bounds = NpcRouteBounds(0, 4, 0, 2),
+        )
+        val occupied = setOf(NpcRouteCell(1, 1), NpcRouteCell(2, 1), NpcRouteCell(3, 1))
+
+        val path = findNpcGridPath(NpcRouteCell(0, 1), listOf(NpcRouteCell(4, 1)), profile) { it !in occupied }
+
+        path?.any { it in occupied } shouldBe false
+        path?.any { it.z != 1 } shouldBe true
+    }
 })

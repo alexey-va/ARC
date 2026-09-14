@@ -48,10 +48,17 @@ internal data class NpcRouteProfile(
     val distanceMargin: Double = 0.35,
     val pathDistanceMargin: Double = 0.35,
     val speedModifier: Float = 0.72f,
+    val entityObstaclePadding: Double = 0.25,
+    val obstacleRefreshPolls: Int = 10,
 ) {
     fun allows(cell: NpcRouteCell): Boolean = cell in bounds && forbidden.none { cell in it }
 
     fun stepCost(cell: NpcRouteCell): Int = if (preferred.any { cell in it }) 1 else 10
+}
+
+/** Supplies scene-specific occupied cells without coupling the router to a furniture plugin. */
+internal fun interface NpcRouteObstacleSource {
+    fun blockedCells(world: World, profile: NpcRouteProfile): Set<NpcRouteCell>
 }
 
 internal data class NpcRouteEvent(
@@ -113,7 +120,10 @@ private data class ActiveNpcRoute(
     val profile: NpcRouteProfile,
     val destination: Location,
     val via: List<Location>,
+    val extraBlocked: Set<NpcRouteCell>,
+    var blocked: Set<NpcRouteCell>,
     val cells: List<NpcRouteCell>,
+    var obstaclePolls: Int = 0,
     var stalledPolls: Int = 0,
     var previousX: Double,
     var previousZ: Double,
@@ -127,6 +137,7 @@ private data class ActiveNpcRoute(
  */
 internal class CitizensNpcRouteController(
     private val onEvent: (NpcRouteEvent) -> Unit = {},
+    private val obstacleSource: NpcRouteObstacleSource = NpcRouteObstacleSource { _, _ -> emptySet() },
 ) : AutoCloseable {
     private val tasks = LifecycleTaskScope()
     private val active = mutableMapOf<Int, ActiveNpcRoute>()
@@ -136,7 +147,8 @@ internal class CitizensNpcRouteController(
         destination: Location,
         profile: NpcRouteProfile,
         via: List<Location> = emptyList(),
-    ): Boolean = navigate(npc, destination, profile, via, 0)
+        extraBlocked: Set<NpcRouteCell> = emptySet(),
+    ): Boolean = navigate(npc, destination, profile, via, extraBlocked, 0)
 
     fun isNavigating(npc: NPC): Boolean = npc.id in active || npc.navigator.isNavigating
 
@@ -150,6 +162,7 @@ internal class CitizensNpcRouteController(
         destination: Location,
         profile: NpcRouteProfile,
         via: List<Location>,
+        extraBlocked: Set<NpcRouteCell>,
         recoveries: Int,
     ): Boolean {
         stop(npc)
@@ -160,8 +173,9 @@ internal class CitizensNpcRouteController(
             via.any { it.world != destination.world || it.blockY != profile.floorY }
         ) return false
         val world = destination.world
+        val blocked = obstacleSource.blockedCells(world, profile) + extraBlocked
         val actual = npc.entity.location
-        val starts = candidates(world, actual.blockX, actual.blockZ, profile)
+        val starts = candidates(world, actual.blockX, actual.blockZ, profile, blocked)
         val start = starts.firstOrNull()
         if (start == null) {
             event("PATH_UNAVAILABLE", profile, npc, destination, reason = "no-safe-endpoint")
@@ -169,9 +183,9 @@ internal class CitizensNpcRouteController(
         }
         val path = mutableListOf(start)
         for (anchor in via + destination) {
-            val goals = candidates(world, anchor.blockX, anchor.blockZ, profile)
+            val goals = candidates(world, anchor.blockX, anchor.blockZ, profile, blocked)
             val exact = NpcRouteCell(anchor.blockX, anchor.blockZ)
-            val walkable: (NpcRouteCell) -> Boolean = { isWalkable(world, profile.floorY, it) }
+            val walkable: (NpcRouteCell) -> Boolean = { it !in blocked && isWalkable(world, profile.floorY, it) }
             val segment =
                 exact.takeIf { it in goals }?.let { findNpcGridPath(path.last(), listOf(it), profile, walkable) }
                     ?: findNpcGridPath(path.last(), goals, profile, walkable)
@@ -199,6 +213,8 @@ internal class CitizensNpcRouteController(
             profile,
             destination.clone(),
             via.map(Location::clone),
+            extraBlocked.toSet(),
+            blocked,
             path,
             previousX = npc.entity.location.x,
             previousZ = npc.entity.location.z,
@@ -210,10 +226,16 @@ internal class CitizensNpcRouteController(
         return true
     }
 
-    private fun candidates(world: World, centerX: Int, centerZ: Int, profile: NpcRouteProfile): List<NpcRouteCell> =
+    private fun candidates(
+        world: World,
+        centerX: Int,
+        centerZ: Int,
+        profile: NpcRouteProfile,
+        blocked: Set<NpcRouteCell>,
+    ): List<NpcRouteCell> =
         (-profile.snapRadius..profile.snapRadius)
             .flatMap { dx -> (-profile.snapRadius..profile.snapRadius).map { dz -> NpcRouteCell(centerX + dx, centerZ + dz) } }
-            .filter { profile.allows(it) && isWalkable(world, profile.floorY, it) }
+            .filter { it !in blocked && profile.allows(it) && isWalkable(world, profile.floorY, it) }
             .sortedWith(compareBy({ (it.x - centerX) * (it.x - centerX) + (it.z - centerZ) * (it.z - centerZ) }, { it.x }, { it.z }))
 
     private fun isWalkable(world: World, floorY: Int, cell: NpcRouteCell): Boolean {
@@ -254,25 +276,44 @@ internal class CitizensNpcRouteController(
             return
         }
         val actual = npc.entity.location
+        if (actual.world != route.destination.world) {
+            active.remove(npcId, route)
+            npc.navigator.cancelNavigation()
+            event("ABORTED", route.profile, npc, route.destination, route.cells.size, "world-changed", actual)
+            return
+        }
         val currentCell = NpcRouteCell(actual.blockX, actual.blockZ)
         if (
             abs(actual.y - route.profile.floorY) > route.profile.offFloorTolerance ||
             !route.profile.allows(currentCell) ||
             !isWalkable(actual.world, route.profile.floorY, currentCell)
         ) {
-            active.remove(npcId, route)
             npc.navigator.cancelNavigation()
             event("DEVIATED", route.profile, npc, route.destination, route.cells.size, "left-level-floor", actual)
             if (route.recoveries < 2) {
-                tasks.runLater(1L) { navigate(npc, route.destination, route.profile, route.via, route.recoveries + 1) }
+                tasks.runLater(1L) {
+                    if (active[npcId] === route) {
+                        navigate(npc, route.destination, route.profile, route.via, route.extraBlocked, route.recoveries + 1)
+                    }
+                }
+            } else {
+                active.remove(npcId, route)
             }
             return
         }
-        if (route.cells.any { !route.profile.allows(it) || !isWalkable(actual.world, route.profile.floorY, it) }) {
-            active.remove(npcId, route)
+        route.obstaclePolls++
+        if (route.obstaclePolls >= route.profile.obstacleRefreshPolls) {
+            route.blocked = obstacleSource.blockedCells(actual.world, route.profile) + route.extraBlocked
+            route.obstaclePolls = 0
+        }
+        if (route.cells.any { it in route.blocked || !route.profile.allows(it) || !isWalkable(actual.world, route.profile.floorY, it) }) {
             npc.navigator.cancelNavigation()
             event("REPLANNING", route.profile, npc, route.destination, route.cells.size, "terrain-changed", actual)
-            tasks.runLater(1L) { navigate(npc, route.destination, route.profile, route.via, route.recoveries) }
+            tasks.runLater(1L) {
+                if (active[npcId] === route) {
+                    navigate(npc, route.destination, route.profile, route.via, route.extraBlocked, route.recoveries)
+                }
+            }
             return
         }
         if (!npc.navigator.isNavigating) {

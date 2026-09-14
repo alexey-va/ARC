@@ -62,6 +62,7 @@ import ru.arc.npc.CitizensNpcRouteController
 import ru.arc.npc.NpcRouteCell
 import ru.arc.npc.NpcRouteBounds
 import ru.arc.npc.NpcRouteEvent
+import ru.arc.npc.NpcRouteObstacleSource
 import ru.arc.npc.NpcRouteProfile
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
@@ -70,6 +71,7 @@ import ru.arc.worldcontent.ItemsAdderFurnitureRuntime
 import java.util.ArrayDeque
 import java.util.UUID
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.min
@@ -449,6 +451,8 @@ internal object OriginDiningLayout {
                 distanceMargin = navigatorDistanceMargin,
                 pathDistanceMargin = navigatorPathDistanceMargin,
                 speedModifier = source.real("$root.speed-modifier", 0.72).toFloat().coerceIn(0.1f, 2f),
+                entityObstaclePadding = source.real("$root.entity-obstacle-padding", 0.25).coerceIn(0.0, 1.0),
+                obstacleRefreshPolls = source.integer("$root.obstacle-refresh-polls", 10).coerceIn(1, 100),
             )
         }
         sessionRadius = source.real("navigation.session-radius").coerceIn(2.0, 24.0)
@@ -867,7 +871,7 @@ private object OriginDiningAmbientLayout {
 
 private class OriginDiningService : AutoCloseable {
     private val tasks = LifecycleTaskScope()
-    private val routeController = CitizensNpcRouteController(::logRouteEvent)
+    private val routeController = CitizensNpcRouteController(::logRouteEvent, NpcRouteObstacleSource(::routeObstacleCells))
     private val seatsById = OriginDiningLayout.seats.associateBy(OriginDiningSeat::id)
     private val sessions = mutableMapOf<UUID, OriginDiningSession>()
     private val occupants = mutableMapOf<String, UUID>()
@@ -1702,6 +1706,12 @@ private class OriginDiningService : AutoCloseable {
 
     private fun startNextDelivery(waiterId: Int) {
         if (waiterId in activeDeliveries) return
+        val remainingRest = waiterRestRemainingMillis(waiterId)
+        if (remainingRest > 0L) {
+            info("ORIGIN_DINING phase=DELIVERY_REST_WAIT npc={} remaining_ms={}", waiterId, remainingRest)
+            tasks.runLater(((remainingRest + 49L) / 50L).coerceAtLeast(1L)) { startNextDelivery(waiterId) }
+            return
+        }
         cancelAmbientRoute(waiterId, "player-delivery")
         val queue = deliveryQueues[waiterId] ?: return
         var delivery: OriginDiningDelivery? = null
@@ -1818,8 +1828,14 @@ private class OriginDiningService : AutoCloseable {
             }
             val npc = waiter(waiterId)
             if (npc == null || !npc.isSpawned || npc.entity.world != destination.world) {
-                logWarn("DELIVERY_ROUTE_FALLBACK", session, Bukkit.getPlayer(session.playerId), dish, "npc=$waiterId stage=$stage despawned")
-                ready()
+                npc?.takeIf { it.isSpawned }?.let(::stopWaiterNavigation)
+                val reason = if (npc?.isSpawned == true) "world-changed" else "despawned"
+                logWarn("DELIVERY_ROUTE_FALLBACK", session, Bukkit.getPlayer(session.playerId), dish, "npc=$waiterId stage=$stage reason=$reason")
+                tasks.runLater(OriginDiningLayout.deliveryFallbackTicks) {
+                    if (activeDeliveries[waiterId] != token) return@runLater
+                    deliver(sessionId, dish)
+                    finishDelivery(waiterId, token, sessionId, reason)
+                }
                 return@runLater
             }
             val distance = npc.entity.location.distance(destination)
@@ -1901,6 +1917,41 @@ private class OriginDiningService : AutoCloseable {
         )
     }
 
+    /** Converts scene-owned display furniture into cells for the generic ARC router. */
+    private fun routeObstacleCells(world: org.bukkit.World, profile: NpcRouteProfile): Set<NpcRouteCell> {
+        if (!ItemsAdderFurnitureRuntime.available) return emptySet()
+        val search = BoundingBox(
+            profile.bounds.minX.toDouble(),
+            profile.floorY - 1.0,
+            profile.bounds.minZ.toDouble(),
+            profile.bounds.maxX + 1.0,
+            profile.floorY + 2.5,
+            profile.bounds.maxZ + 1.0,
+        )
+        val cells = linkedSetOf<NpcRouteCell>()
+
+        fun addBox(box: BoundingBox) {
+            val padding = profile.entityObstaclePadding
+            val minX = floor(box.minX - padding).toInt()
+            val maxX = ceil(box.maxX + padding).toInt() - 1
+            val minZ = floor(box.minZ - padding).toInt()
+            val maxZ = ceil(box.maxZ + padding).toInt() - 1
+            for (x in minX..maxX) {
+                for (z in minZ..maxZ) {
+                    NpcRouteCell(x, z).takeIf { it in profile.bounds }?.let(cells::add)
+                }
+            }
+        }
+
+        world.getNearbyEntities(search).forEach { entity ->
+            val furniture = ItemsAdderFurnitureRuntime.inspect(entity) ?: return@forEach
+            addBox(entity.boundingBox)
+            addBox(furniture.root.boundingBox)
+            cells += NpcRouteCell(floor(furniture.root.location.x).toInt(), floor(furniture.root.location.z).toInt())
+        }
+        return cells.filterTo(linkedSetOf()) { it in profile.bounds }
+    }
+
     private fun isWaiterNavigating(npc: net.citizensnpcs.api.npc.NPC): Boolean =
         routeController.isNavigating(npc)
 
@@ -1975,6 +2026,17 @@ private class OriginDiningService : AutoCloseable {
         waiterApproaches.remove(waiterId)
         clearWaiterCarry(waiterId)
         val npc = waiter(waiterId)?.takeIf { it.isSpawned } ?: return
+        if (npc.entity.world.name != OriginDiningLayout.WORLD) {
+            npc.entity.removeScoreboardTag(WAITER_BUSY_TAG)
+            warn(
+                "ORIGIN_DINING phase=WAITER_RETURN_SKIPPED session={} npc={} reason={} actual={} detail=world-mismatch",
+                short(assignmentId),
+                waiterId,
+                reason,
+                location(npc.entity.location),
+            )
+            return
+        }
         val home = OriginDiningLayout.waiterHome(waiterId)?.inWorld(npc.entity.world)
         if (home == null) {
             npc.entity.removeScoreboardTag(WAITER_BUSY_TAG)
@@ -2273,6 +2335,10 @@ private class OriginDiningService : AutoCloseable {
         if (!Bukkit.getPluginManager().isPluginEnabled("Citizens")) return
         val waiterId = session.seat.waiterId
         if (waiterReadyFor[waiterId] == session.id) return
+        if (isWaiterResting(waiterId)) {
+            log("WAITER_APPROACH_QUEUED", session, player, null, session.seat.waiterStop, "npc=$waiterId reason=service-rest")
+            return
+        }
         cancelAmbientRoute(waiterId, "player-approach")
         val busyReason =
             when {
@@ -2611,7 +2677,7 @@ private class OriginDiningService : AutoCloseable {
 
     private fun startAmbientRoute(table: OriginDiningGuestTable, reason: String): Boolean {
         val waiterId = table.waiterId
-        if (System.currentTimeMillis() < ambientWaiterAvailableAt.getOrDefault(waiterId, 0L)) return false
+        if (isWaiterResting(waiterId)) return false
         if (waiterId in ambientRoutes || waiterId in activeDeliveries || waiterId in waiterApproaches || waiterId in waiterAssignments) return false
         val npc = waiter(waiterId)?.takeIf { it.isSpawned && it.entity.world.name == OriginDiningLayout.WORLD } ?: return false
         val currentDish = guestMeals[table.id]?.dish
@@ -2640,6 +2706,10 @@ private class OriginDiningService : AutoCloseable {
                 return@runLater
             }
             val destination = route.waypoints[route.waypoint]
+            if (npc.entity.world != destination.world) {
+                cancelAmbientRoute(waiterId, "world-changed")
+                return@runLater
+            }
             val distance = npc.entity.location.distance(destination)
             if (distance <= OriginDiningLayout.waiterReadyMargin) {
                 if (route.waypoint + 1 < route.waypoints.size) {
@@ -2711,6 +2781,12 @@ private class OriginDiningService : AutoCloseable {
         ambientTableDueAt[route.table.id] = System.currentTimeMillis() + OriginDiningLayout.ambientRetryMillis
         info("ORIGIN_DINING phase=AMBIENT_ROUTE_CANCELLED npc={} table={} reason={}", waiterId, route.table.id, reason)
     }
+
+    private fun isWaiterResting(waiterId: Int, now: Long = System.currentTimeMillis()): Boolean =
+        waiterRestRemainingMillis(waiterId, now) > 0L
+
+    private fun waiterRestRemainingMillis(waiterId: Int, now: Long = System.currentTimeMillis()): Long =
+        (ambientWaiterAvailableAt.getOrDefault(waiterId, 0L) - now).coerceAtLeast(0L)
 
     private fun tickAmbient(now: Long) {
         val tables = OriginDiningAmbientLayout.guestTables
@@ -2789,7 +2865,8 @@ private class OriginDiningService : AutoCloseable {
                 waiterReadyFor[session.seat.waiterId] != session.id &&
                 session.seat.waiterId !in waiterApproaches &&
                 session.seat.waiterId !in activeDeliveries &&
-                session.seat.waiterId !in waiterAssignments
+                session.seat.waiterId !in waiterAssignments &&
+                !isWaiterResting(session.seat.waiterId, now)
             ) {
                 summonWaiter(session, player)
             }

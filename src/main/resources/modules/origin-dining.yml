@@ -129,7 +129,8 @@ navigation:
   grid-snap-radius: 3
   grid-off-floor-tolerance: 0.45
   # Profiles bound every route to its venue. Add hard no-go rectangles to
-  # forbidden-areas and cheap preferred corridors to preferred-areas.
+  # forbidden-areas and cheap preferred corridors to preferred-areas. Code may
+  # also supply ordered via points when an NPC must pass through exact gates.
   # Rectangle format: min-x,min-z,max-x,max-z.
   route-profile-ids: [brewery, restaurant]
   route-profiles:
@@ -139,6 +140,9 @@ navigation:
       max-block: "4,70,64"
       forbidden-areas: []
       preferred-areas: []
+      # Extra clearance around ItemsAdder furniture converted to blocked cells.
+      entity-obstacle-padding: 0.25
+      obstacle-refresh-polls: 10
       speed-modifier: 0.72
     restaurant:
       floor-y: 72
@@ -146,6 +150,8 @@ navigation:
       max-block: "-40,72,62"
       forbidden-areas: []
       preferred-areas: []
+      entity-obstacle-padding: 0.25
+      obstacle-refresh-polls: 10
       speed-modifier: 0.72
   session-radius: 8.0
 
