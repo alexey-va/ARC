@@ -26,7 +26,7 @@ internal class DungeonScoreboard(
             present += player.uniqueId
             val visit = view.visit
             val name = wrapLegacyScoreboardText(legacy.serialize(dungeonDisplayName(visit)), 32, 2)
-            val rows = mutableListOf<String>().apply {
+            val overview = buildList {
                 addAll(name)
                 add(line(if (visit.instanced) "instanced" else "open", if (visit.instanced) "<#aaa49a>Отдельное прохождение" else "<#aaa49a>Открытый данж"))
                 add(when {
@@ -35,34 +35,44 @@ internal class DungeonScoreboard(
                     else -> line("finished", "<#aaa49a>Поход окончен")
                 })
                 if (!view.participant) add(line("observer", "<#ffb277>Наблюдение <#aaa49a>· <#e8dfd2>вы вне состава"))
+            }
+            val stats = buildList {
                 visit.stats?.level?.takeIf { it > 0 }?.let { add(line("level", "<#f4bd6a>| <#e8dfd2>Уровень: <#f4bd6a><value>", "value" to Component.text(it))) }
                 visit.stats?.difficulty?.let { add(line("difficulty", "<#f4bd6a>| <#e8dfd2>Сложность: <#f4bd6a><value>", "value" to dungeonDifficulty(dungeon, it))) }
                 visit.stats?.playerCount?.let { add(line("party", "<#f4bd6a>| <#e8dfd2>Участников: <#9bd48d><value>", "value" to Component.text(it))) }
                 if (view.participant) crystals(player)?.let { add(line("crystals", "<#f4bd6a>| <#e8dfd2>Кристаллы: <#c7a0e8>💎 <value>", "value" to Component.text(it))) }
-                party(player)?.takeIf { it.inParty }?.let { partyView ->
-                    val room = (MAX_LINES - size - 2).coerceAtLeast(0)
-                    if (room > 0) {
-                        add(line("party-heading", "<#f4bd6a>Группа <#aaa49a>· <#e8dfd2><value>", "value" to Component.text(partyView.members.size)))
-                        val visibleMembers = if (partyView.members.size <= room) partyView.members else partyView.members.take((room - 1).coerceAtLeast(0))
-                        visibleMembers.forEach { member ->
-                            add(line(
-                                if (!member.online) "party-offline" else if (member.leader) "party-leader" else "party-member",
-                                when {
-                                    !member.online -> "<#aaa49a>○ <name> · не в сети"
-                                    member.leader -> "<#f4bd6a>★ <#e8dfd2><name>"
-                                    else -> "<#9bd48d>● <#e8dfd2><name>"
-                                },
-                                "name" to Component.text(member.name),
-                            ))
-                        }
-                        if (partyView.members.size > room) {
-                            add(line("party-more", "<#aaa49a>… ещё <value>", "value" to Component.text(partyView.members.size - visibleMembers.size)))
-                        }
+            }
+            val footer = listOf(line(if (view.participant) "menu" else "observer-menu",
+                if (view.participant) "<#f4bd6a>Shift + F <#e8dfd2>— меню данжа" else "<#aaa49a>Меню похода — для участников"))
+            val fixedRows = joinDungeonScoreboardSections(overview, stats, footer)
+            val partyRows = party(player)?.takeIf { it.inParty }?.let { partyView ->
+                val room = (MAX_LINES - fixedRows.size - 1).coerceAtLeast(0)
+                buildList {
+                    if (room == 0) return@buildList
+                    add(line("party-heading", "<#f4bd6a>Группа <#aaa49a>· <#e8dfd2><value>", "value" to Component.text(partyView.members.size)))
+                    val memberRoom = room - 1
+                    val visibleMembers = when {
+                        partyView.members.size <= memberRoom -> partyView.members
+                        memberRoom <= 1 -> partyView.members.take(memberRoom)
+                        else -> partyView.members.take(memberRoom - 1)
+                    }
+                    visibleMembers.forEach { member ->
+                        add(line(
+                            if (!member.online) "party-offline" else if (member.leader) "party-leader" else "party-member",
+                            when {
+                                !member.online -> "<#aaa49a>○ <name> · не в сети"
+                                member.leader -> "<#f4bd6a>★ <#e8dfd2><name>"
+                                else -> "<#9bd48d>● <#e8dfd2><name>"
+                            },
+                            "name" to Component.text(member.name),
+                        ))
+                    }
+                    if (memberRoom > 1 && partyView.members.size > visibleMembers.size) {
+                        add(line("party-more", "<#aaa49a>… ещё <value>", "value" to Component.text(partyView.members.size - visibleMembers.size)))
                     }
                 }
-                add(line(if (view.participant) "menu" else "observer-menu",
-                    if (view.participant) "<#f4bd6a>Shift + F <#e8dfd2>— меню данжа" else "<#aaa49a>Меню похода — для участников"))
-            }
+            }.orEmpty()
+            val rows = joinDungeonScoreboardSections(overview, stats, partyRows, footer)
             snapshots[player.uniqueId] = buildMap {
                 put("active", "true")
                 put("title", line("title", "<#b22222><bold>Rus<white>Crafting"))
@@ -78,6 +88,13 @@ internal class DungeonScoreboard(
     internal fun clear() { snapshots.clear() }
     private fun line(key: String, fallback: String, vararg values: Pair<String, Component>): String =
         legacy.serialize(dungeon.text("scoreboard.$key", fallback, *values))
+}
+
+internal fun joinDungeonScoreboardSections(vararg sections: List<String>): List<String> = buildList {
+    sections.filter { it.isNotEmpty() }.forEach { section ->
+        if (isNotEmpty()) add("")
+        addAll(section)
+    }
 }
 
 private data class LegacyGlyph(val value: String, val format: String, val whitespace: Boolean)

@@ -27,7 +27,20 @@ class DungeonScoreboardTest : FreeSpec({
         board.refresh(listOf(player))
         CompletableFuture.supplyAsync { board.value(id, "line_1") }.get() shouldBe "Крипта"
         board.value(id, "active") shouldBe "true"
-        (1..14).map { board.value(id, "line_$it") }.joinToString("\n") shouldContain "Кристаллы"
+        val lines = scoreboardLines(board, id)
+        lines.joinToString("\n") shouldContain "Кристаллы"
+        lines shouldBe listOf(
+            "Крипта",
+            "Открытый данж",
+            "Прохождение идёт",
+            "",
+            "| Уровень: 12",
+            "| Сложность: Обычная",
+            "| Участников: 3",
+            "| Кристаллы: 💎 42",
+            "",
+            "Shift + F — меню данжа",
+        )
     }
 
     "long dungeon names wrap at word boundaries without widening the sidebar" {
@@ -122,13 +135,24 @@ class DungeonScoreboardTest : FreeSpec({
 
         board.refresh(listOf(player))
 
-        val lines = (1..14).map { visibleText(board.value(id, "line_$it")) }
+        val lines = scoreboardLines(board, id)
         lines.joinToString("\n") shouldContain "Группа · 2"
         lines.joinToString("\n") shouldContain "★ Лидер"
         lines.joinToString("\n") shouldContain "● Друг"
         lines.count { it.isNotEmpty() } shouldBe 11
+        lines.count { it.isEmpty() } shouldBe 3
+        lines.first() shouldBe "Крипта"
+        lines.last() shouldBe "Shift + F — меню данжа"
+    }
+
+    "section spacing has no leading trailing or duplicate blank rows" {
+        joinDungeonScoreboardSections(emptyList(), listOf("Поход"), emptyList(), listOf("Группа"), listOf("Меню")) shouldBe
+            listOf("Поход", "", "Группа", "", "Меню")
     }
 })
+
+private fun scoreboardLines(board: DungeonScoreboard, playerId: UUID): List<String> =
+    (1..14).map { visibleText(board.value(playerId, "line_$it")) }.dropLastWhile(String::isEmpty)
 
 private fun visibleText(value: String): String =
     net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(
