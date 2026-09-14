@@ -46,13 +46,14 @@ class MenuShortcutController(
     }
 
     /**
-     * EliteMobs also consumes swap-hands at LOWEST while dungeon controls are active. ARC is
-     * registered before that delayed listener, so claiming only the sneaking gesture here keeps
-     * Shift+F for the dungeon menu while leaving plain F available to class abilities.
+     * EliteMobs also consumes swap-hands at LOWEST while dungeon controls are active. Because
+     * EliteMobs loads before ARC, it can cancel the event first once the player selects a class.
+     * Claiming the sneaking gesture even when already cancelled keeps Shift+F for the dungeon menu
+     * while leaving plain F available to class abilities.
      */
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
     fun onDungeonSwapHands(event: PlayerSwapHandItemsEvent) {
-        if (event.isCancelled || !event.player.isSneaking) return
+        if (!event.player.isSneaking) return
         if (isClaimBlockShortcut(event.player)) {
             openClaimBlockMenu(event)
             return

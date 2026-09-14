@@ -27,11 +27,14 @@ class MenuShortcutControllerTest {
                 inDungeon = { true },
                 openDungeonMenu = { opened++ },
             ).use { shortcuts ->
-                fun swap() = PlayerSwapHandItemsEvent(
+                fun swap(cancelled: Boolean = false) = PlayerSwapHandItemsEvent(
                     player,
                     player.inventory.itemInMainHand,
                     player.inventory.itemInOffHand,
-                ).also(shortcuts::onDungeonSwapHands)
+                ).also {
+                    it.isCancelled = cancelled
+                    shortcuts.onDungeonSwapHands(it)
+                }
 
                 player.isSneaking = false
                 swap().isCancelled shouldBe false
@@ -42,6 +45,11 @@ class MenuShortcutControllerTest {
                 shifted.isCancelled shouldBe true
                 shortcuts.onSwapHands(shifted)
                 opened shouldBe 1
+
+                // EliteMobs runs at the same priority but is registered first and cancels F once
+                // a class is active. ARC must still own the dedicated dungeon Shift+F gesture.
+                swap(cancelled = true).isCancelled shouldBe true
+                opened shouldBe 2
             }
         }
     }
