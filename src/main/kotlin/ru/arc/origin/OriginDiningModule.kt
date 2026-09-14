@@ -814,7 +814,7 @@ private class OriginDiningService : AutoCloseable {
     fun interactBlock(player: Player, block: Block): Boolean {
         if (block.world.name != OriginDiningLayout.WORLD) return false
         val seat = dynamicSeat(block) ?: return false
-        cleanupOrphanCmiChairs(block.location.add(0.5, -1.4, 0.5), 1.0, "seat-attempt")
+        cleanupOrphanCmiChair(block)
         requestSeatConfirmation(player, seat, "block:${block.x},${block.y},${block.z}:world-stair")
         return true
     }
@@ -1063,27 +1063,26 @@ private class OriginDiningService : AutoCloseable {
                     it.remove()
                     removed++
                 }
-            removed += cleanupOrphanCmiChairs(center, 24.0, "service-start")
         }
         info("ORIGIN_DINING phase=LEGACY_SEAT_HITBOX_CLEANUP removed={}", removed)
     }
 
-    private fun cleanupOrphanCmiChairs(center: Location, radius: Double, reason: String): Int {
-        val chairs = center.world?.getNearbyEntities(center, radius, if (radius > 1.0) 8.0 else 0.75, radius)
-            ?.filterIsInstance<ArmorStand>()
-            ?.filter { stand ->
+    private fun cleanupOrphanCmiChair(block: Block): Int {
+        val center = block.location.add(0.5, -1.4, 0.5)
+        val chairs = block.world.getNearbyEntities(center, 0.65, 0.35, 0.65)
+            .filterIsInstance<ArmorStand>()
+            .filter { stand ->
                 stand.passengers.isEmpty() &&
                     PlainTextComponentSerializer.plainText().serialize(stand.customName() ?: Component.empty()) == CMI_CHAIR_NAME
             }
-            .orEmpty()
         chairs.forEach(Entity::remove)
         if (chairs.isNotEmpty()) {
             info(
                 "ORIGIN_DINING phase=ORPHAN_CHAIR_CLEANUP removed={} reason={} center={} radius={}",
                 chairs.size,
-                reason,
+                "seat-attempt",
                 location(center),
-                fmt(radius),
+                "0.650",
             )
         }
         return chairs.size
