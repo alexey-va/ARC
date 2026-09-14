@@ -215,6 +215,7 @@ private data class OriginDiningAutoSeatingZone(
     val id: String,
     val guestIds: List<Int>,
     val minimumFreeSeats: Int,
+    val loadChunks: Boolean,
     val bounds: OriginDiningBlockBounds,
     val excludedBlocks: Set<Triple<Int, Int, Int>>,
 )
@@ -671,11 +672,17 @@ private object OriginDiningAmbientLayout {
         private set
     var authoredSeatIds: Set<Int> = emptySet()
         private set
+    var authoredSeatPoints: List<OriginDiningPoint> = emptyList()
+        private set
     var seatLayoutVersion = 0
         private set
     var retiredSeatBlocks: List<Triple<Int, Int, Int>> = emptyList()
         private set
     var autoSeatingZones: List<OriginDiningAutoSeatingZone> = emptyList()
+        private set
+    var legacyFurnitureCleanupIds: Set<String> = emptySet()
+        private set
+    var legacyFurnitureCleanupPoints: List<OriginDiningPoint> = emptyList()
         private set
     lateinit var legacyMealHitbox: OriginDiningPoint
         private set
@@ -719,8 +726,15 @@ private object OriginDiningAmbientLayout {
             }
         cleanupPoints = source.stringList("scene.cleanup-points").mapIndexed { index, raw -> parsePoint(raw, "scene.cleanup-points[$index]") }
         authoredSeatIds = source.stringList("scene.authored-seat-ids").map(String::toInt).toSet()
+        authoredSeatPoints = source.stringList("scene.authored-seat-points").mapIndexed { index, raw ->
+            parsePoint(raw, "scene.authored-seat-points[$index]")
+        }
         seatLayoutVersion = source.integer("scene.seat-layout-version").coerceAtLeast(0)
         retiredSeatBlocks = source.stringList("scene.retired-seat-blocks").map(::parseBlock)
+        legacyFurnitureCleanupIds = source.stringList("scene.legacy-furniture-cleanup.ids").toSet()
+        legacyFurnitureCleanupPoints = source.stringList("scene.legacy-furniture-cleanup.points").mapIndexed { index, raw ->
+            parsePoint(raw, "scene.legacy-furniture-cleanup.points[$index]")
+        }
         autoSeatingZones = source.stringList("scene.auto-seating.zone-ids").map { id ->
             val root = "scene.auto-seating.zones.$id"
             val autoMin = parseBlock(source.string("$root.min-block"))
@@ -729,6 +743,7 @@ private object OriginDiningAmbientLayout {
                 id = id,
                 guestIds = source.stringList("$root.guest-ids").map(String::toInt),
                 minimumFreeSeats = source.integer("$root.minimum-free-seats", 1).coerceIn(0, 64),
+                loadChunks = source.boolean("$root.load-chunks", true),
                 bounds = OriginDiningBlockBounds(
                     minOf(autoMin.first, autoMax.first),
                     minOf(autoMin.second, autoMax.second),
@@ -835,19 +850,6 @@ private class OriginDiningService : AutoCloseable {
 
     private fun reconcileAuthoredSeatBlocks() {
         val world = Bukkit.getWorld(OriginDiningLayout.WORLD) ?: return
-        val authoredSeats = OriginDiningAmbientLayout.guestSeats.filter { it.npcId in OriginDiningAmbientLayout.authoredSeatIds }
-        val targetBlocks = authoredSeats.associateWith { guest ->
-            world.getBlockAt(floor(guest.seat.x).toInt(), guest.seat.y.toInt(), floor(guest.seat.z).toInt())
-        }
-        val blockedTargets = targetBlocks.filterValues { !it.type.isAir && it.type != Material.OAK_STAIRS }
-        if (blockedTargets.isNotEmpty()) {
-            blockedTargets.forEach { (guest, block) ->
-                warn("ORIGIN_DINING phase=SEAT_BLOCK_SKIPPED npc={} reason=target-occupied target={} material={}", guest.npcId, point(guest.seat), block.type)
-            }
-            warn("ORIGIN_DINING phase=SEAT_BLOCKS_RECONCILED status=blocked targets={}", blockedTargets.size)
-            return
-        }
-
         val migrationKey = NamespacedKey(ARC.instance, "origin_dining_seat_layout_version")
         val storedVersion = world.persistentDataContainer.get(migrationKey, PersistentDataType.INTEGER) ?: 0
         val migrate = storedVersion < OriginDiningAmbientLayout.seatLayoutVersion
@@ -858,6 +860,25 @@ private class OriginDiningService : AutoCloseable {
             )
             return
         }
+        val authoredSeatPoints = (
+            OriginDiningAmbientLayout.guestSeats
+                .filter { it.npcId in OriginDiningAmbientLayout.authoredSeatIds }
+                .map(OriginDiningGuestSeat::seat) + OriginDiningAmbientLayout.authoredSeatPoints
+            ).distinctBy { Triple(floor(it.x).toInt(), it.y.toInt(), floor(it.z).toInt()) }
+        val targetBlocks = authoredSeatPoints.associateWith { seat ->
+            world.getBlockAt(floor(seat.x).toInt(), seat.y.toInt(), floor(seat.z).toInt())
+        }
+        val blockedTargets = targetBlocks.filterValues {
+            !it.type.isAir && it.type != Material.OAK_STAIRS && it.type != Material.BARRIER
+        }
+        if (blockedTargets.isNotEmpty()) {
+            blockedTargets.forEach { (seat, block) ->
+                warn("ORIGIN_DINING phase=SEAT_BLOCK_SKIPPED reason=target-occupied target={} material={}", point(seat), block.type)
+            }
+            warn("ORIGIN_DINING phase=SEAT_BLOCKS_RECONCILED status=blocked targets={}", blockedTargets.size)
+            return
+        }
+
         var cleared = 0
         var placed = 0
         var skipped = 0
@@ -871,9 +892,9 @@ private class OriginDiningService : AutoCloseable {
                 warn("ORIGIN_DINING phase=SEAT_BLOCK_SKIPPED reason=retired-block-changed target={},{},{} material={}", x, y, z, block.type)
             }
         }
-        targetBlocks.forEach { (guest, block) ->
+        targetBlocks.forEach { (seat, block) ->
                 val desired = Material.OAK_STAIRS.createBlockData() as Stairs
-                desired.facing = OriginDiningLayout.stairFacing(guest.seat.yaw)
+                desired.facing = OriginDiningLayout.stairFacing(seat.yaw)
                 desired.half = Bisected.Half.BOTTOM
                 desired.shape = Stairs.Shape.STRAIGHT
                 desired.isWaterlogged = false
@@ -901,6 +922,15 @@ private class OriginDiningService : AutoCloseable {
         val tables = linkedMapOf<Int, OriginDiningGuestTable>()
         OriginDiningAmbientLayout.autoSeatingZones.forEach { zone ->
             val bounds = zone.bounds
+            var loadedChunks = 0
+            for (chunkX in (bounds.minX shr 4)..(bounds.maxX shr 4)) {
+                for (chunkZ in (bounds.minZ shr 4)..(bounds.maxZ shr 4)) {
+                    if (!world.isChunkLoaded(chunkX, chunkZ) && zone.loadChunks && world.isChunkGenerated(chunkX, chunkZ)) {
+                        world.getChunkAt(chunkX, chunkZ)
+                        loadedChunks++
+                    }
+                }
+            }
             val candidates = buildList {
                 for (x in bounds.minX..bounds.maxX) {
                     for (z in bounds.minZ..bounds.maxZ) {
@@ -943,8 +973,9 @@ private class OriginDiningService : AutoCloseable {
             val zoneAssignments =
                 if (candidates.isEmpty()) {
                     warn(
-                        "ORIGIN_DINING phase=AUTO_GUEST_SEATING zone={} status=fallback reason=no-loaded-candidates bounds={},{},{}:{},{},{}",
+                        "ORIGIN_DINING phase=AUTO_GUEST_SEATING zone={} status=empty reason=no-candidates loaded_chunks={} bounds={},{},{}:{},{},{}",
                         zone.id,
+                        loadedChunks,
                         bounds.minX,
                         bounds.minY,
                         bounds.minZ,
@@ -952,7 +983,7 @@ private class OriginDiningService : AutoCloseable {
                         bounds.maxY,
                         bounds.maxZ,
                     )
-                    guests.toMap()
+                    emptyMap()
                 } else {
                     OriginDiningLayout.selectGuestSeats(guests, candidates, zone.minimumFreeSeats)
                 }
@@ -972,8 +1003,9 @@ private class OriginDiningService : AutoCloseable {
                 }
             }
             info(
-                "ORIGIN_DINING phase=AUTO_GUEST_SEATING zone={} status=ready candidates={} assigned={} free={} minimum_free={} assignments={}",
+                "ORIGIN_DINING phase=AUTO_GUEST_SEATING zone={} status=ready loaded_chunks={} candidates={} assigned={} free={} minimum_free={} assignments={}",
                 zone.id,
+                loadedChunks,
                 candidates.size,
                 zoneAssignments.size,
                 (candidates.size - zoneAssignments.size).coerceAtLeast(0),
@@ -2303,6 +2335,30 @@ private class OriginDiningService : AutoCloseable {
             world.getNearbyEntities(point.inWorld(world), 1.0, 1.0, 1.0)
                 .filterIsInstance<TextDisplay>()
                 .forEach { it.remove(); removed++ }
+        }
+        OriginDiningAmbientLayout.legacyFurnitureCleanupPoints.forEach { cleanupPoint ->
+            val handles = world.getNearbyEntities(cleanupPoint.inWorld(world), 0.45, 0.45, 0.45)
+                .mapNotNull(ItemsAdderFurnitureRuntime::inspect)
+                .distinctBy { it.root.uniqueId }
+                .filter { it.namespacedId in OriginDiningAmbientLayout.legacyFurnitureCleanupIds }
+            handles.forEach { handle ->
+                if (ItemsAdderFurnitureRuntime.remove(handle.root, handle.family)) {
+                    removed++
+                    info(
+                        "ORIGIN_DINING phase=LEGACY_FURNITURE_CLEANUP status=removed id={} entity={} target={}",
+                        handle.namespacedId,
+                        short(handle.root.uniqueId),
+                        point(cleanupPoint),
+                    )
+                } else {
+                    warn(
+                        "ORIGIN_DINING phase=LEGACY_FURNITURE_CLEANUP status=failed id={} entity={} target={}",
+                        handle.namespacedId,
+                        short(handle.root.uniqueId),
+                        point(cleanupPoint),
+                    )
+                }
+            }
         }
         info("ORIGIN_DINING phase=AMBIENT_LEGACY_CLEANUP removed={}", removed)
     }

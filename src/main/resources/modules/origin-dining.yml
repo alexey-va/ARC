@@ -168,17 +168,27 @@ scene:
         guest-ids: ["416", "417", "418", "419", "420"]
         min-block: "-19,70,39"
         max-block: "-1,70,54"
+        load-chunks: true
         minimum-free-seats: 3
         excluded-blocks: []
       restaurant:
         guest-ids: ["433", "434", "435", "436"]
         min-block: "-58,72,43"
         max-block: "-43,72,53"
+        load-chunks: true
         minimum-free-seats: 2
         excluded-blocks: []
-  # Одноразово заменяет старую раскладку с воздушным блоком между стулом и столом.
-  seat-layout-version: 2
-  authored-seat-ids: ["407", "408", "416", "417", "418", "419", "420"]
+  # Одноразово заменяет старую раскладку и barrier-маркеры обычными ступеньками.
+  seat-layout-version: 3
+  authored-seat-ids: []
+  authored-seat-points:
+    - "-16.5,70.0,40.5,-90"
+    - "-14.5,70.0,40.5,90"
+    - "-16.5,70.0,47.5,-90"
+    - "-14.5,70.0,47.5,90"
+    - "-2.5,70.0,47.5,180"
+    - "-2.5,70.0,45.5,0"
+    - "-13.5,70.0,53.5,90"
   retired-seat-blocks:
     - "-18,70,40"
     - "-14,70,40"
@@ -188,6 +198,11 @@ scene:
     - "-3,70,44"
   cleanup-points:
     - "-0.5,72.4,53.5,0" # бывшая реплика удалённой Тэссы
+  legacy-furniture-cleanup:
+    ids:
+      - "elitecreatures:restaurant_food_steak"
+    points:
+      - "-15.5,71.1,47.5,180"
   legacy-player-table:
     meal-hitbox: "-5.5,70.95,37.9,0"
     meal-display: "-5.5,71.1,37.9,0"
