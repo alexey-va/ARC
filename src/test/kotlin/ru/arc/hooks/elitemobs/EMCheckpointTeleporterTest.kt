@@ -39,6 +39,7 @@ class EMCheckpointTeleporterTest : FreeSpec({
         every { match.players } returns linkedSetOf(player)
         mockkStatic(MatchInstance::class)
         every { MatchInstance.getPlayerInstance(player) } returns match
+        every { MatchInstance.getAnyPlayerInstance(player) } returns match
         nativeGuard = MatchInstance.MatchInstanceEvents()
         paper.server.pluginManager.registerEvents(nativeGuard, plugin)
     }
@@ -119,6 +120,45 @@ class EMCheckpointTeleporterTest : FreeSpec({
 
         teleporter.teleport(player, world.location(12.0, 70.0, 12.0), instance = true) shouldBe false
         MatchInstance.MatchInstanceEvents.teleportBypass shouldBe false
+    }
+
+    "EliteMobs admins may command-teleport inside their current instance only" {
+        fun setField(name: String, value: Any) = MatchInstance::class.java.getDeclaredField(name).apply {
+            isAccessible = true
+        }.set(match, value)
+        setField("world", world)
+        setField("players", hashSetOf(player))
+        setField("spectators", hashSetOf<Player>())
+        @Suppress("UNCHECKED_CAST")
+        val instances = MatchInstance::class.java.getDeclaredField("instances").apply {
+            isAccessible = true
+        }.get(null) as MutableSet<MatchInstance>
+        instances.add(match)
+        try {
+            player.addAttachment(plugin, "elitemobs.*", true)
+            installTeleporter()
+
+            val inside = PlayerTeleportEvent(
+                player,
+                player.location,
+                world.location(12.0, 70.0, 12.0),
+                PlayerTeleportEvent.TeleportCause.COMMAND,
+            )
+            paper.callEvent(inside)
+            inside.isCancelled shouldBe false
+            MatchInstance.MatchInstanceEvents.teleportBypass shouldBe false
+
+            val other = paper.addSimpleWorld("outside")
+            val leaving = PlayerTeleportEvent(
+                player,
+                player.location,
+                other.location(12.0, 70.0, 12.0),
+                PlayerTeleportEvent.TeleportCause.COMMAND,
+            )
+            paper.callEvent(leaving)
+            leaving.isCancelled shouldBe true
+            MatchInstance.MatchInstanceEvents.teleportBypass shouldBe false
+        } finally { instances.remove(match) }
     }
 
     "redirect at HIGHEST is preserved as cancellation" {
