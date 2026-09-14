@@ -211,15 +211,18 @@ internal class OriginDiningLevelRouteExaminer(
     targetFloorY: Int,
     levelChangeCost: Float,
     obstacleStepCost: Float,
+    strictFloor: Boolean,
 ) : BlockExaminer {
     private var targetFloorY = targetFloorY
     private var levelChangeCost = levelChangeCost
     private var obstacleStepCost = obstacleStepCost
+    private var strictFloor = strictFloor
 
-    fun configure(targetFloorY: Int, levelChangeCost: Float, obstacleStepCost: Float) {
+    fun configure(targetFloorY: Int, levelChangeCost: Float, obstacleStepCost: Float, strictFloor: Boolean) {
         this.targetFloorY = targetFloorY
         this.levelChangeCost = levelChangeCost
         this.obstacleStepCost = obstacleStepCost
+        this.strictFloor = strictFloor
     }
 
     override fun getCost(source: BlockSource, point: PathPoint): Float =
@@ -232,9 +235,27 @@ internal class OriginDiningLevelRouteExaminer(
             obstacleStepCost = obstacleStepCost,
         )
 
-    override fun isPassable(source: BlockSource, point: PathPoint): BlockExaminer.PassableState =
-        BlockExaminer.PassableState.IGNORE
+    override fun isPassable(source: BlockSource, point: PathPoint): BlockExaminer.PassableState {
+        if (!strictFloor) return BlockExaminer.PassableState.IGNORE
+        val passable = originDiningFlatRoutePassable(
+            targetFloorY = targetFloorY,
+            pointY = point.vector.blockY,
+            feet = source.getMaterialAt(point.vector),
+            support = source.getMaterialAt(point.vector.clone().subtract(org.bukkit.util.Vector(0, 1, 0))),
+        )
+        return if (passable) BlockExaminer.PassableState.IGNORE else BlockExaminer.PassableState.IMPASSABLE
+    }
 }
+
+internal fun originDiningFlatRoutePassable(
+    targetFloorY: Int,
+    pointY: Int,
+    feet: Material,
+    support: Material,
+): Boolean = pointY == targetFloorY && sequenceOf(feet, support).none(::isOriginDiningRouteObstacle)
+
+private fun isOriginDiningRouteObstacle(material: Material): Boolean =
+    material.name.endsWith("_STAIRS") || material.name.endsWith("_SLAB") || material.name.endsWith("_TRAPDOOR")
 
 internal fun originDiningRouteCost(
     targetFloorY: Int,
@@ -245,9 +266,7 @@ internal fun originDiningRouteCost(
     obstacleStepCost: Float,
 ): Float {
     val verticalCost = abs(pointY - targetFloorY) * levelChangeCost
-    val touchesObstacle = sequenceOf(feet, support).any { material ->
-        material.name.endsWith("_STAIRS") || material.name.endsWith("_SLAB") || material.name.endsWith("_TRAPDOOR")
-    }
+    val touchesObstacle = sequenceOf(feet, support).any(::isOriginDiningRouteObstacle)
     return verticalCost + if (touchesObstacle) obstacleStepCost else 0f
 }
 
@@ -371,6 +390,8 @@ internal object OriginDiningLayout {
         private set
     var navigatorObstacleStepCost = 0f
         private set
+    var navigatorFlatFallbackTicks = 0L
+        private set
     var guestMarkerLift = 0.0
         private set
     var guestEntityLift = 0.0
@@ -455,6 +476,7 @@ internal object OriginDiningLayout {
         navigatorPathDistanceMargin = source.real("navigation.path-distance-margin", 0.35).coerceIn(0.1, 2.0)
         navigatorLevelChangeCost = source.real("navigation.level-change-cost", 12.0).toFloat().coerceIn(0f, 100f)
         navigatorObstacleStepCost = source.real("navigation.obstacle-step-cost", 8.0).toFloat().coerceIn(0f, 100f)
+        navigatorFlatFallbackTicks = source.integer("navigation.flat-route-fallback-ticks", 40).toLong().coerceIn(10L, 200L)
         sessionRadius = source.real("navigation.session-radius").coerceIn(2.0, 24.0)
         guestMarkerLift = source.real("seating.guest-marker-lift").coerceIn(0.0, 2.0)
         guestEntityLift = source.real("seating.guest-entity-lift").coerceIn(-1.0, 2.0)
@@ -878,6 +900,7 @@ private class OriginDiningService : AutoCloseable {
     private val guestMeals = mutableMapOf<String, OriginDiningGuestMeal>()
     private val guestMealEntity = mutableMapOf<UUID, OriginDiningGuestMeal>()
     private val ambientRoutes = mutableMapOf<Int, OriginDiningAmbientRoute>()
+    private val navigationAttempts = mutableMapOf<Int, UUID>()
     private val ambientTableDueAt = mutableMapOf<String, Long>()
     private val speechDisplays = mutableSetOf<TextDisplay>()
     private var ambientCursor = 0
@@ -1824,7 +1847,7 @@ private class OriginDiningService : AutoCloseable {
                 return@runLater
             }
             if (!npc.navigator.isNavigating) {
-                navigateLevel(npc, destination)
+                navigateLevel(npc, destination, strictFloor = false)
             }
             if (poll % OriginDiningLayout.waiterProgressEveryPolls == 0) {
                 log(
@@ -1861,6 +1884,7 @@ private class OriginDiningService : AutoCloseable {
     private fun navigateLevel(
         npc: net.citizensnpcs.api.npc.NPC,
         destination: Location,
+        strictFloor: Boolean = true,
     ) {
         val navigator = npc.navigator
         navigator.cancelNavigation()
@@ -1871,11 +1895,13 @@ private class OriginDiningService : AutoCloseable {
                     destination.blockY,
                     OriginDiningLayout.navigatorLevelChangeCost,
                     OriginDiningLayout.navigatorObstacleStepCost,
+                    strictFloor,
                 ).also(parameters::examiner)
         levelExaminer.configure(
             destination.blockY,
             OriginDiningLayout.navigatorLevelChangeCost,
             OriginDiningLayout.navigatorObstacleStepCost,
+            strictFloor,
         )
         parameters
             .distanceMargin(OriginDiningLayout.navigatorDistanceMargin)
@@ -1893,6 +1919,22 @@ private class OriginDiningService : AutoCloseable {
                 }
             }
         navigator.setTarget(destination)
+        val attempt = UUID.randomUUID()
+        navigationAttempts[npc.id] = attempt
+        if (!strictFloor) {
+            info(
+                "ORIGIN_DINING phase=WAITER_ROUTE_FALLBACK npc={} actual={} target={} reason=flat-route-unavailable",
+                npc.id,
+                location(npc.entity.location),
+                location(destination),
+            )
+            return
+        }
+        tasks.runLater(OriginDiningLayout.navigatorFlatFallbackTicks) {
+            if (navigationAttempts[npc.id] != attempt || !npc.isSpawned || npc.entity.world != destination.world) return@runLater
+            if (npc.entity.location.distance(destination) <= OriginDiningLayout.waiterReadyMargin || npc.navigator.isNavigating) return@runLater
+            navigateLevel(npc, destination, strictFloor = false)
+        }
     }
 
     private fun resetIdleWaiters(reason: String) {
@@ -2365,7 +2407,7 @@ private class OriginDiningService : AutoCloseable {
                 return@runLater
             }
             if (!npc.navigator.isNavigating) {
-                navigateLevel(npc, stop)
+                navigateLevel(npc, stop, strictFloor = false)
                 log(
                     "WAITER_RETRY",
                     session,
@@ -2651,7 +2693,7 @@ private class OriginDiningService : AutoCloseable {
                 cancelAmbientRoute(waiterId, "stalled")
                 return@runLater
             }
-            if (!npc.navigator.isNavigating) navigateLevel(npc, destination)
+            if (!npc.navigator.isNavigating) navigateLevel(npc, destination, strictFloor = false)
             monitorAmbientRoute(waiterId, token, poll + 1)
         }
     }
@@ -2990,6 +3032,7 @@ private class OriginDiningService : AutoCloseable {
         guestMealEntity.clear()
         guestMarkers.clear()
         ambientRoutes.clear()
+        navigationAttempts.clear()
         ambientTableDueAt.clear()
         speechDisplays.clear()
         info("ORIGIN_DINING phase=STOPPED")

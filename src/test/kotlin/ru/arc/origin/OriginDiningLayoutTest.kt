@@ -135,6 +135,7 @@ class OriginDiningLayoutTest : FreeSpec({
         OriginDiningLayout.navigatorPathDistanceMargin shouldBe 0.35
         OriginDiningLayout.navigatorLevelChangeCost shouldBe 100f
         OriginDiningLayout.navigatorObstacleStepCost shouldBe 100f
+        OriginDiningLayout.navigatorFlatFallbackTicks shouldBe 40L
         OriginDiningLayout.dynamicWaiterSideOffset shouldBe 1.0
         OriginDiningLayout.waiterHome(431) shouldBe OriginDiningPoint(-54.5, 72.0, 56.5, 180f)
         OriginDiningLayout.waiterHome(432) shouldBe OriginDiningPoint(-54.5, 72.0, 58.5, 180f)
@@ -145,6 +146,12 @@ class OriginDiningLayoutTest : FreeSpec({
         originDiningRouteCost(72, 73, org.bukkit.Material.AIR, org.bukkit.Material.TERRACOTTA, 12f, 8f) shouldBe 12f
         originDiningRouteCost(72, 72, org.bukkit.Material.AIR, org.bukkit.Material.OAK_STAIRS, 12f, 8f) shouldBe 8f
         originDiningRouteCost(72, 73, org.bukkit.Material.OAK_TRAPDOOR, org.bukkit.Material.TERRACOTTA, 12f, 8f) shouldBe 20f
+    }
+
+    "strict waiter routing rejects table height but accepts the restaurant floor" {
+        originDiningFlatRoutePassable(72, 72, org.bukkit.Material.AIR, org.bukkit.Material.TERRACOTTA) shouldBe true
+        originDiningFlatRoutePassable(72, 73, org.bukkit.Material.AIR, org.bukkit.Material.ACACIA_WOOD) shouldBe false
+        originDiningFlatRoutePassable(72, 72, org.bukkit.Material.WAXED_OXIDIZED_CUT_COPPER_SLAB, org.bukkit.Material.TERRACOTTA) shouldBe false
     }
 
     "legacy restaurant furniture cleanup is restricted to exact ids and points" {

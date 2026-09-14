@@ -122,6 +122,8 @@ navigation:
   # when the room has no usable level route.
   level-change-cost: 100.0
   obstacle-step-cost: 100.0
+  # If a completely level path cannot be built, retry with the soft costs.
+  flat-route-fallback-ticks: 40
   session-radius: 8.0
 
 seating:
