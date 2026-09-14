@@ -9,6 +9,9 @@ import io.mockk.unmockkObject
 import io.mockk.verify
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
+import org.bukkit.event.EventHandler
+import org.bukkit.event.EventPriority
+import org.bukkit.event.Listener
 import org.bukkit.event.player.PlayerSwapHandItemsEvent
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
@@ -17,6 +20,43 @@ import ru.arc.landsui.LandsUiModule
 import ru.arc.paper.testing.MockBukkitTestRuntime
 
 class MenuShortcutControllerTest {
+    @Test
+    fun `early dungeon shortcut cancellation prevents EliteMobs ability handling`() {
+        MockBukkitTestRuntime.open().use { paper ->
+            val player = paper.addPlayer("dungeon-priority")
+            var opened = 0
+            var abilityInputs = 0
+            val eliteMobs = object : Listener {
+                @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+                fun onSwapHands(event: PlayerSwapHandItemsEvent) {
+                    abilityInputs++
+                }
+            }
+            paper.server.pluginManager.registerEvents(
+                eliteMobs,
+                paper.createSimplePlugin("elitemobs-priority"),
+            )
+            MenuShortcutController(
+                paper.createSimplePlugin("arc-shortcut-priority"),
+                inDungeon = { true },
+                openDungeonMenu = { opened++ },
+                eliteMobsAbilityListener = { it === eliteMobs },
+            ).use {
+                player.isSneaking = true
+                val event = PlayerSwapHandItemsEvent(
+                    player,
+                    player.inventory.itemInMainHand,
+                    player.inventory.itemInOffHand,
+                )
+                paper.server.pluginManager.callEvent(event)
+
+                event.isCancelled shouldBe true
+                opened shouldBe 1
+                abilityInputs shouldBe 0
+            }
+        }
+    }
+
     @Test
     fun `dungeon shift F is claimed early while plain F remains available to EliteMobs`() {
         MockBukkitTestRuntime.open().use { paper ->

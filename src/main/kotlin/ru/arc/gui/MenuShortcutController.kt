@@ -40,16 +40,20 @@ class MenuShortcutController(
     private val summonMount: (Player) -> Boolean = MountModule::summonFavorite,
     private val inDungeon: (Player) -> Boolean = { ARC.hookRegistry?.dungeonQol?.panelView(it) != null },
     private val openDungeonMenu: (Player) -> Unit = { ARC.hookRegistry?.dungeonQol?.action(it, "menu") },
+    private val eliteMobsAbilityListener: (Listener) -> Boolean = {
+        it.javaClass.name == "com.magmaguy.elitemobs.advancedcombat.input.ClassAbilityInputRouter"
+    },
 ) : Listener, AutoCloseable {
     init {
         plugin.server.pluginManager.registerEvents(this, plugin)
+        moveEliteMobsAbilityListenerAfterShortcut()
     }
 
     /**
-     * EliteMobs also consumes swap-hands at LOWEST while dungeon controls are active. Because
-     * EliteMobs loads before ARC, it can cancel the event first once the player selects a class.
-     * Claiming the sneaking gesture even when already cancelled keeps Shift+F for the dungeon menu
-     * while leaving plain F available to class abilities.
+     * EliteMobs also consumes swap-hands at LOWEST while dungeon controls are active. Its matching
+     * listener is moved after this one when startup timing registered it first, so cancelling
+     * Shift+F here makes EliteMobs' ignoreCancelled listener skip it. Accepting an already-cancelled
+     * event is a fallback for later registration drift; plain F remains untouched.
      */
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
     fun onDungeonSwapHands(event: PlayerSwapHandItemsEvent) {
@@ -98,6 +102,22 @@ class MenuShortcutController(
     private fun openClaimBlockMenu(event: PlayerSwapHandItemsEvent) {
         event.isCancelled = true
         LandsUiModule.openCurrent(event.player)
+    }
+
+    private fun moveEliteMobsAbilityListenerAfterShortcut() {
+        val handlers = PlayerSwapHandItemsEvent.getHandlerList()
+        val registered = handlers.registeredListeners.toList()
+        val shortcutIndex = registered.indexOfFirst {
+            it.listener === this && it.priority == EventPriority.LOWEST
+        }
+        val abilityIndex = registered.indexOfFirst {
+            it.priority == EventPriority.LOWEST && eliteMobsAbilityListener(it.listener)
+        }
+        if (abilityIndex in 0 until shortcutIndex) {
+            val ability = registered[abilityIndex]
+            handlers.unregister(ability)
+            handlers.register(ability)
+        }
     }
 
     override fun close() = HandlerList.unregisterAll(this)
