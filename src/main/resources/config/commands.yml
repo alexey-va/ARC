@@ -83,6 +83,12 @@ commands:
     name: emshop
     aliases: [ ]
     permission: arc.admin
+  classgrant:
+    name: classgrant
+    aliases: [классвыдать]
+    permission: arc.dungeon.admin.classgrant
+    player-only: false
+    usage: /arc classgrant [игрок] <id класса>
   jobsboosts:
     name: jobsboosts
     aliases: [ ]
@@ -197,6 +203,14 @@ commands:
     permission: arc.sound.follow
     usage: /arc soundfollow <player> <namespace:sound>
 messages:
+  classgrant:
+    applied: '<#9bd48d>✔ Игроку <player> выдан класс <class> <#aaa49a>(<id>). <#e8dfd2>Повышены навыки: <skills>.'
+    already: '<#e8dfd2>Игроку <player> уже доступен класс <class> <#aaa49a>(<id>).'
+    disabled: '<#d7b486>Система классов EliteMobs сейчас выключена.'
+    loading: '<#d7b486>Профиль игрока <player> ещё загружается.'
+    unknown: '<#d7b486>Класс с id <id> не найден.'
+    run-locked: '<#d7b486>Класс игрока <player> зафиксирован текущим походом. Повторите после выхода из данжа.'
+    failed: '<#d7b486>Не удалось выдать класс <class> игроку <player>. Изменения отменены.'
   commandhide:
     usage: '<#92bed8>Команды <#666666>· <#92bed8>/arc commandhide [режим] [игрок]'
     player-offline: '<#92bed8>Команды <#666666>· <#92bed8><player> <#c42323>не на этом сервере.'

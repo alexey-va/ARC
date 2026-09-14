@@ -194,7 +194,7 @@ internal class DungeonSaveMenus(
         val view = classService.view(player)
         val body = mutableListOf(PaperDialogBody(text(
             "classes.body",
-            "<#e8dfd2>Выберите ветку, чтобы посмотреть формы класса, требования и способности.",
+            "<#e8dfd2>Сначала выберите базовый класс. Внутри вы увидите кнопку выбора и следующие ступени его развития.",
         ), 468))
         feedback?.let { body += PaperDialogBody(plain(it), 468) }
         when (view.availability) {
@@ -226,9 +226,12 @@ internal class DungeonSaveMenus(
                 add(PaperDialogButton(
                     PaperDialogActionId.of("class_${root.id}"),
                     text(
-                        if (activeTree) "classes.root-active" else "classes.root",
-                        if (activeTree) "<#9bd48d>✔ <name> ›" else "<#ffffff><name> ›",
+                        if (activeTree) "classes.root-active" else if (root.unlocked) "classes.root" else "classes.root-locked",
+                        if (activeTree) "<#9bd48d>✔ <name> · <role> ›"
+                        else if (root.unlocked) "<#ffffff><name> · <role> ›"
+                        else "<#ffffff>[Закрыт] <name> · <role> ›",
                         "name" to Component.text(root.name),
+                        "role" to text("classes.catalog.${root.id}.role", root.weapons.joinToString(" / ")),
                     ),
                     tooltip = text(
                         if (root.unlocked) "classes.root-tooltip" else "classes.root-locked-tooltip",
@@ -269,7 +272,13 @@ internal class DungeonSaveMenus(
             form.unlocked -> text("classes.state-unlocked", "<#ffffff>Открыт")
             else -> text("classes.state-locked", "<#ffffff>Заблокирован")
         }
+        val intro = when {
+            form.active -> text("classes.detail-active", "<#9bd48d>Это ваш активный класс. Ниже — способности и следующее развитие.")
+            form.unlocked -> text("classes.detail-unlocked", "<#e8dfd2>Класс открыт. Нажмите «Выбрать», чтобы сделать его активным.")
+            else -> text("classes.detail-locked", "<#e8dfd2>Эта форма пока закрыта. Ниже показано, чего именно не хватает.")
+        }
         val body = mutableListOf(
+            PaperDialogBody(intro, 468),
             classTable(listOf(
                 text("classes.state-label", "<#e8dfd2>Состояние") to state,
                 text("classes.level-label", "<#e8dfd2>Уровень") to if (form.unlocked) Component.text("${form.level} / ${form.cap}") else Component.text("—"),
@@ -285,17 +294,20 @@ internal class DungeonSaveMenus(
                 text("classes.passive-source", "<#e8dfd2>Источник") to text("classes.passive-effect", "<#e8dfd2>Пассивный эффект"),
             ),
         )
-        val requirements = if (form.blockers.isEmpty()) form.foundations else form.blockers
-        body.add(1, classTable(
-            requirements.map { Component.text(it.name) to Component.text(it.progress) },
-            DialogTables.Frame.LEGENDARY,
-            text("classes.requirement", "<#e8dfd2>Условие") to text("classes.progress", "<#e8dfd2>Прогресс"),
-        ))
+        if (form.blockers.isNotEmpty()) {
+            body.add(2, classTable(
+                form.blockers.map { Component.text(it.name) to Component.text(it.progress) },
+                DialogTables.Frame.LEGENDARY,
+                text("classes.requirement", "<#e8dfd2>Чтобы открыть") to text("classes.progress", "<#e8dfd2>Сейчас"),
+            ))
+        }
+        if (form.unlocked && form.children.isNotEmpty()) body += PaperDialogBody(text(
+            "classes.next-heading",
+            "<#e8dfd2>Следующие ступени — выберите направление развития:",
+        ), 468)
         feedback?.let { body.add(0, PaperDialogBody(plain(it), 468)) }
 
         val buttons = buildList {
-            form.parentId?.let(view.forms::get)?.let { parent -> add(classDestination(player, parent)) }
-            form.children.mapNotNull(view.forms::get).forEach { add(classDestination(player, it)) }
             if (!form.active) {
                 if (form.unlocked && view.canChange) add(action(
                     "class_select_${form.id}", "classes.select-label", "<#9bd48d>Выбрать <name>",
@@ -309,6 +321,8 @@ internal class DungeonSaveMenus(
                     "name" to Component.text(form.name),
                 ) { classDetail(player, form.id) })
             }
+            if (form.unlocked) form.children.mapNotNull(view.forms::get).forEach { add(classNextDestination(player, it)) }
+            form.parentId?.let(view.forms::get)?.let { parent -> add(classPreviousDestination(player, parent)) }
         }
         show(player, PaperDialogScreen(
             id = "dungeon.classes.${form.id}",
@@ -317,17 +331,32 @@ internal class DungeonSaveMenus(
         )) { classDetail(player, form.id) }
     }
 
-    private fun classDestination(player: Player, form: DungeonClassForm) = PaperDialogButton(
+    private fun classNextDestination(player: Player, form: DungeonClassForm) = PaperDialogButton(
         PaperDialogActionId.of("class_${form.id}"),
         text(
-            if (form.active) "classes.form-active" else "classes.form-label",
-            if (form.active) "<#9bd48d>✔ <name> ›" else "<#ffffff><name> ›",
+            if (form.active) "classes.next-active" else if (form.unlocked) "classes.next" else "classes.next-locked",
+            if (form.active) "<#9bd48d>✔ <name> · <level> ур. ›"
+            else if (form.unlocked) "<#ffffff>Развитие: <name> · <level> ур. ›"
+            else "<#ffffff>[Закрыто до <level> ур.] <name> ›",
             "name" to Component.text(form.name),
+            "level" to Component.text(form.requiredLevel),
         ),
         tooltip = text(
             if (form.unlocked) "classes.form-tooltip" else "classes.form-locked-tooltip",
             if (form.unlocked) "Открыть сведения об этой форме класса" else "Посмотреть способности и условия открытия",
         ),
+        width = 230,
+        onClick = { classDetail(player, form.id) },
+    )
+
+    private fun classPreviousDestination(player: Player, form: DungeonClassForm) = PaperDialogButton(
+        PaperDialogActionId.of("class_${form.id}"),
+        text(
+            "classes.previous",
+            "<#e8dfd2>← Предыдущая ступень: <name>",
+            "name" to Component.text(form.name),
+        ),
+        tooltip = text("classes.previous-tooltip", "Вернуться на предыдущую ступень этой ветки"),
         width = 230,
         onClick = { classDetail(player, form.id) },
     )

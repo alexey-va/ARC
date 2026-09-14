@@ -267,6 +267,35 @@ class DungeonSaveMenusTest : FreeSpec({
         verify(exactly = 0) { classes.select(any(), any()) }
     }
 
+    "class detail puts selection before clearly labelled progression choices" {
+        val player = paper.addPlayer("class-path")
+        val dungeon = mockk<EMDungeonQol>(relaxed = true)
+        every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(secondArg<String>()) }
+        val classes = mockk<DungeonClassService>()
+        val root = dungeonClassForm("paladin", "Паладин").copy(children = listOf("guardian"))
+        val child = dungeonClassForm("guardian", "Страж").copy(
+            rootId = root.id,
+            parentId = root.id,
+            requiredLevel = 31,
+            unlocked = false,
+            blockers = listOf(DungeonClassRequirement("Броня", "12 / 30")),
+        )
+        every { classes.view(player) } returns DungeonClassesView(
+            availability = DungeonClassAvailability.READY,
+            roots = listOf(root.id),
+            forms = mapOf(root.id to root, child.id to child),
+        )
+        val screens = mutableListOf<PaperDialogScreen>()
+        val menus = DungeonSaveMenus(dungeon, classService = classes) { _, screen, _ -> screens += screen }
+
+        menus.classes(player)
+        screens.last().buttons.single().onClick.handle(mockk())
+
+        screens.last().buttons.map { it.id.value } shouldBe listOf("class_select_paladin", "class_guardian")
+        screens.last().buttons.last().label shouldBe Component.text("<#ffffff>[Закрыто до <level> ур.] <name> ›")
+            .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)
+    }
+
     "root close is separate from the quit action" {
         val player = paper.addPlayer("viewer")
         val dungeon = mockk<EMDungeonQol>(relaxed = true)
@@ -416,6 +445,7 @@ private fun dungeonClassForm(id: String, name: String) = DungeonClassForm(
     unlocked = true,
     selected = false,
     active = false,
+    requiredLevel = 1,
     level = 1,
     cap = 20,
     xp = "0 / 100",

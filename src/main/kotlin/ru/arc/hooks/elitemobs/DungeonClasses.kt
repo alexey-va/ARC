@@ -26,6 +26,7 @@ internal data class DungeonClassForm(
     val unlocked: Boolean,
     val selected: Boolean,
     val active: Boolean,
+    val requiredLevel: Int,
     val level: Int,
     val cap: Int,
     val xp: String,
@@ -67,6 +68,8 @@ internal interface DungeonClassService {
 }
 
 internal object NativeDungeonClassService : DungeonClassService {
+    private val localization by lazy { DungeonClassLocalization() }
+
     override fun view(player: Player): DungeonClassesView {
         if (!AdvancedCombatModule.isInitialized()) {
             return DungeonClassesView(DungeonClassAvailability.DISABLED)
@@ -82,37 +85,38 @@ internal object NativeDungeonClassService : DungeonClassService {
             val lineage = catalog.lineageOf(definition.id())
             val foundations = definition.foundationSkills().asList().map { skill ->
                 DungeonClassRequirement(
-                    skillName(skill),
+                    dungeonSkillName(skill),
                     "${PlayerData.getSkillLevel(player.uniqueId, skill)} / ${definition.requiredFoundationSkillLevel()}",
                 )
             }
             val blockers = progress.unlockBlockers().map { blocker ->
                 when (blocker.kind()) {
                     com.magmaguy.elitemobs.advancedcombat.progression.UnlockBlocker.Kind.FOUNDATION_SKILL ->
-                        DungeonClassRequirement(skillName(blocker.skillType()), "${blocker.currentLevel()} / ${blocker.requiredLevel()}")
+                        DungeonClassRequirement(dungeonSkillName(blocker.skillType()), "${blocker.currentLevel()} / ${blocker.requiredLevel()}")
                     com.magmaguy.elitemobs.advancedcombat.progression.UnlockBlocker.Kind.PARENT_LOCAL_LEVEL -> {
                         val required = catalog.require(blocker.formId())
                         DungeonClassRequirement(
-                            required.displayName(),
+                            localization.formName(required.id(), required.displayName()),
                             "${effectiveLevel(required.band(), blocker.currentLevel())} / ${required.band().toEffectiveLevel(blocker.requiredLevel())}",
                         )
                     }
                     com.magmaguy.elitemobs.advancedcombat.progression.UnlockBlocker.Kind.CLASS_CHALLENGE ->
                         DungeonClassRequirement("Испытание", "Победить наставника этого класса")
                     com.magmaguy.elitemobs.advancedcombat.progression.UnlockBlocker.Kind.CONTENT_REQUIREMENT ->
-                        DungeonClassRequirement("Условие", blocker.reason())
+                        DungeonClassRequirement("Оснащение", "Требуется доступное оружие этого класса")
                 }
             }
             definition.id() to DungeonClassForm(
                 id = definition.id(),
-                name = definition.displayName(),
+                name = localization.formName(definition.id(), definition.displayName()),
                 rootId = catalog.rootOf(definition.id()).id(),
                 parentId = definition.parentId(),
                 children = catalog.childrenOf(definition.id()).map { it.id() },
-                path = catalog.progressionPathOf(definition.id()).map { it.displayName() },
+                path = catalog.progressionPathOf(definition.id()).map { localization.formName(it.id(), it.displayName()) },
                 unlocked = progress.unlocked(),
                 selected = definition.id() == profile.selectedFormId(),
                 active = definition.id() == activeFormId,
+                requiredLevel = definition.band().effectiveStart(),
                 level = progress.effectiveLevel(),
                 cap = progress.effectiveCap(),
                 xp = xpSummary(definition.band().effectiveStart(), progress),
@@ -120,11 +124,28 @@ internal object NativeDungeonClassService : DungeonClassService {
                 blockers = blockers,
                 resource = resourceName(lineage.resourceType()),
                 resourceDescription = resourceDescription(lineage.resourceType()),
-                weapons = definition.weaponAffinities().map(::skillName),
-                mobility = DungeonClassAbility(lineage.mobility().displayName(), lineage.mobility().description()),
-                signature = DungeonClassAbility(definition.signature().displayName(), definition.signature().description()),
-                utility = DungeonClassAbility(definition.utility().displayName(), definition.utility().description()),
-                passives = lineage.forms().map { DungeonClassPassive(it.displayName(), it.passive().description()) },
+                weapons = definition.weaponAffinities().map(::dungeonSkillName),
+                mobility = localization.ability(
+                    catalog.rootOf(definition.id()).id(),
+                    "mobility",
+                    lineage.mobility().displayName(),
+                    lineage.mobility().description(),
+                ),
+                signature = localization.ability(
+                    definition.id(),
+                    "signature",
+                    definition.signature().displayName(),
+                    definition.signature().description(),
+                ),
+                utility = localization.ability(
+                    definition.id(),
+                    "utility",
+                    definition.utility().displayName(),
+                    definition.utility().description(),
+                ),
+                passives = lineage.forms().map {
+                    localization.passive(it.id(), it.displayName(), it.passive().description())
+                },
             )
         }
         return DungeonClassesView(
@@ -174,20 +195,6 @@ internal object NativeDungeonClassService : DungeonClassService {
     private fun effectiveLevel(band: com.magmaguy.elitemobs.advancedcombat.classes.ClassBand, localLevel: Int): Int =
         if (localLevel == 0) 0 else band.toEffectiveLevel(localLevel)
 
-    private fun skillName(skill: SkillType): String = when (skill) {
-        SkillType.ARMOR -> "Броня"
-        SkillType.SWORDS -> "Мечи"
-        SkillType.AXES -> "Топоры"
-        SkillType.BOWS -> "Луки"
-        SkillType.CROSSBOWS -> "Арбалеты"
-        SkillType.TRIDENTS -> "Трезубцы"
-        SkillType.HOES -> "Косы"
-        SkillType.MACES -> "Булавы"
-        SkillType.SPEARS -> "Копья"
-        SkillType.STAVES -> "Посохи"
-        SkillType.WANDS -> "Жезлы"
-    }
-
     private fun resourceName(resource: ClassResourceType): String = when (resource) {
         ClassResourceType.STAMINA -> "Выносливость"
         ClassResourceType.RESOLVE -> "Решимость"
@@ -205,4 +212,18 @@ internal object NativeDungeonClassService : DungeonClassService {
         ClassResourceType.GRACE -> "Растёт от эффективного лечения и быстрее восстанавливается рядом с другими игроками."
         ClassResourceType.MANA -> "Равномерно восстанавливается в бою и вне боя."
     }
+}
+
+internal fun dungeonSkillName(skill: SkillType): String = when (skill) {
+    SkillType.ARMOR -> "Броня"
+    SkillType.SWORDS -> "Мечи"
+    SkillType.AXES -> "Топоры"
+    SkillType.BOWS -> "Луки"
+    SkillType.CROSSBOWS -> "Арбалеты"
+    SkillType.TRIDENTS -> "Трезубцы"
+    SkillType.HOES -> "Косы"
+    SkillType.MACES -> "Булавы"
+    SkillType.SPEARS -> "Копья"
+    SkillType.STAVES -> "Посохи"
+    SkillType.WANDS -> "Жезлы"
 }
