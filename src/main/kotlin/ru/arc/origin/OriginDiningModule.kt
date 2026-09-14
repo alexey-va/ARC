@@ -240,6 +240,10 @@ internal object OriginDiningLayout {
         private set
     var mealHitboxYOffset = -0.15
         private set
+    var waiterHitboxWidth = 1.4f
+        private set
+    var waiterHitboxHeight = 2.2f
+        private set
     var displayViewRange = 2f
         private set
     var displayWidth = 4f
@@ -323,6 +327,8 @@ internal object OriginDiningLayout {
         }
         mealHitboxSize = source.real("interaction.meal-hitbox-size", 1.8).toFloat().coerceIn(0.5f, 3f)
         mealHitboxYOffset = source.real("interaction.meal-hitbox-y-offset", -0.15).coerceIn(-1.0, 1.0)
+        waiterHitboxWidth = source.real("interaction.waiter-hitbox-width", 1.4).toFloat().coerceIn(0.6f, 2.5f)
+        waiterHitboxHeight = source.real("interaction.waiter-hitbox-height", 2.2).toFloat().coerceIn(1.2f, 3.5f)
         displayViewRange = source.real("display.view-range", 2.0).toFloat().coerceIn(0.5f, 16f)
         displayWidth = source.real("display.culling-width", 4.0).toFloat().coerceIn(0.5f, 16f)
         displayHeight = source.real("display.culling-height", 4.0).toFloat().coerceIn(0.5f, 16f)
@@ -513,6 +519,12 @@ private data class OriginDiningDelivery(
     val dish: BreweryTableDialogs.Dish,
 )
 
+private data class OriginDiningWaiterHitbox(
+    val sessionId: UUID,
+    val waiterId: Int,
+    val entity: Interaction,
+)
+
 private data class OriginDiningGuestSeat(
     val npcId: Int,
     val seat: OriginDiningPoint,
@@ -627,6 +639,8 @@ private class OriginDiningService : AutoCloseable {
     private val activeDeliveries = mutableMapOf<Int, UUID>()
     private val waiterHeldItems = mutableMapOf<Int, ItemStack?>()
     private val waiterGlowingFor = mutableMapOf<Int, UUID>()
+    private val waiterHitboxes = mutableMapOf<Int, OriginDiningWaiterHitbox>()
+    private val waiterHitboxEntity = mutableMapOf<UUID, OriginDiningWaiterHitbox>()
     private val pendingSeatAttempts = mutableMapOf<UUID, UUID>()
     private val guestMarkers = mutableMapOf<Int, ArmorStand>()
     private val guestMeals = mutableMapOf<String, OriginDiningGuestMeal>()
@@ -756,7 +770,7 @@ private class OriginDiningService : AutoCloseable {
     }
 
     fun interact(player: Player, entity: Entity, source: String): Boolean {
-        val managedInteraction = entity is Interaction && (entity.uniqueId in mealEntity || entity.uniqueId in guestMealEntity)
+        val managedInteraction = entity is Interaction && (entity.uniqueId in mealEntity || entity.uniqueId in guestMealEntity || entity.uniqueId in waiterHitboxEntity)
         if (managedInteraction) {
             info(
                 "ORIGIN_DINING phase=INPUT_ENTITY player={} source={} entity={} entity_id={} actual={}",
@@ -792,6 +806,18 @@ private class OriginDiningService : AutoCloseable {
             )
             consumeGuestMeal(player, meal)
             return true
+        }
+        waiterHitboxEntity[entity.uniqueId]?.let { hitbox ->
+            info(
+                "ORIGIN_DINING phase=WAITER_HITBOX_INPUT player={} source={} npc={} session={} hitbox={} actual={}",
+                player.name,
+                source,
+                hitbox.waiterId,
+                short(hitbox.sessionId),
+                short(entity.uniqueId),
+                location(entity.location),
+            )
+            return interactWaiter(player, hitbox.waiterId, "$source:waiter-hitbox")
         }
         if (Bukkit.getPluginManager().isPluginEnabled("Citizens")) {
             runCatching { CitizensAPI.getNPCRegistry().getNPC(entity) }.getOrNull()?.let { npc ->
@@ -1805,6 +1831,7 @@ private class OriginDiningService : AutoCloseable {
                 if (npc.navigator.isNavigating) npc.navigator.cancelNavigation()
                 npc.faceLocation(player.eyeLocation)
                 waiterReadyFor[waiterId] = session.id
+                showWaiterHitbox(waiterId, session, npc)
                 player.sendActionBar(Component.text("Официант подошёл. Нажмите по нему, чтобы открыть меню.", NamedTextColor.GOLD))
                 player.playSound(player.location, Sound.ENTITY_VILLAGER_TRADE, SoundCategory.PLAYERS, 0.45f, 1.2f)
                 log(
@@ -2285,7 +2312,40 @@ private class OriginDiningService : AutoCloseable {
         if (sessionId != null && (expectedSessionId == null || sessionId == expectedSessionId)) {
             waiterReadyFor.remove(waiterId, sessionId)
         }
+        clearWaiterHitbox(waiterId, expectedSessionId)
         clearWaiterGlow(waiterId, reason, expectedSessionId)
+    }
+
+    private fun showWaiterHitbox(waiterId: Int, session: OriginDiningSession, npc: net.citizensnpcs.api.npc.NPC) {
+        clearWaiterHitbox(waiterId)
+        val entity = npc.entity.world.spawn(npc.entity.location, Interaction::class.java).apply {
+            interactionWidth = OriginDiningLayout.waiterHitboxWidth
+            interactionHeight = OriginDiningLayout.waiterHitboxHeight
+            isResponsive = true
+            isPersistent = false
+            isInvulnerable = true
+            addScoreboardTag(WAITER_HITBOX_TAG)
+        }
+        val hitbox = OriginDiningWaiterHitbox(session.id, waiterId, entity)
+        waiterHitboxes[waiterId] = hitbox
+        waiterHitboxEntity[entity.uniqueId] = hitbox
+        info(
+            "ORIGIN_DINING phase=WAITER_HITBOX_READY npc={} session={} hitbox={} actual={} width={} height={}",
+            waiterId,
+            short(session.id),
+            short(entity.uniqueId),
+            location(entity.location),
+            OriginDiningLayout.waiterHitboxWidth,
+            OriginDiningLayout.waiterHitboxHeight,
+        )
+    }
+
+    private fun clearWaiterHitbox(waiterId: Int, expectedSessionId: UUID? = null) {
+        val hitbox = waiterHitboxes[waiterId] ?: return
+        if (expectedSessionId != null && hitbox.sessionId != expectedSessionId) return
+        waiterHitboxes.remove(waiterId, hitbox)
+        waiterHitboxEntity.remove(hitbox.entity.uniqueId, hitbox)
+        if (hitbox.entity.isValid) hitbox.entity.remove()
     }
 
     private fun releaseSession(playerId: UUID, reason: String) {
@@ -2390,6 +2450,9 @@ private class OriginDiningService : AutoCloseable {
         waiterHeldItems.clear()
         waiterReadyFor.clear()
         waiterGlowingFor.clear()
+        waiterHitboxes.values.forEach { if (it.entity.isValid) it.entity.remove() }
+        waiterHitboxes.clear()
+        waiterHitboxEntity.clear()
         pendingSeatAttempts.clear()
         guestMeals.clear()
         guestMealEntity.clear()
@@ -2523,6 +2586,7 @@ private class OriginDiningService : AutoCloseable {
 
     private companion object {
         const val CMI_CHAIR_NAME = "CMIArmorStandForSit"
+        const val WAITER_HITBOX_TAG = "arc_origin_dining_waiter_hitbox"
         const val SEAT_TAG = "arc_origin_dining_seat"
         const val MEAL_TAG = "arc_origin_dining_meal"
         const val GUEST_MEAL_TAG = "arc_origin_dining_guest_meal"
