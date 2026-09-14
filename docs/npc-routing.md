@@ -21,6 +21,11 @@ tick, so short velocity drops and right-angle grid corners do not jerk the head.
 Tune `heading-look-ahead-cells`, `heading-update-ticks` and
 `heading-max-turn-degrees-per-tick` per profile.
 
+`corner-smoothing-distance` starts a small turn blend before a right-angle
+cell, while `corner-smoothing-lead` limits how far the blend reaches into the
+next cell. `maximum-step-height` caps the entity step attribute during a route;
+the default permits thin carpets but prevents climbing stairs and furniture.
+
 Pass ordered `via` locations to `navigate` when the route must cross particular
 gates. Pass `extraBlocked` for obstacles known only to the current action. A
 scene may inject an `NpcRouteObstacleSource` to translate furniture, doors or

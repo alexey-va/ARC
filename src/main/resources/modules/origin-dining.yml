@@ -146,6 +146,9 @@ navigation:
       heading-look-ahead-cells: 2
       heading-update-ticks: 1
       heading-max-turn-degrees-per-tick: 18.0
+      corner-smoothing-distance: 0.75
+      corner-smoothing-lead: 0.30
+      maximum-step-height: 0.125
       speed-modifier: 0.72
     restaurant:
       floor-y: 72
@@ -158,6 +161,9 @@ navigation:
       heading-look-ahead-cells: 2
       heading-update-ticks: 1
       heading-max-turn-degrees-per-tick: 18.0
+      corner-smoothing-distance: 0.75
+      corner-smoothing-lead: 0.30
+      maximum-step-height: 0.125
       speed-modifier: 0.72
   session-radius: 8.0
 

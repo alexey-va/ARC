@@ -2,6 +2,8 @@ package ru.arc.npc
 
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
+import org.bukkit.Material
+import org.bukkit.util.Vector
 
 class NpcRouteControllerTest : FreeSpec({
     "heading turns through the shortest wrapped angle" {
@@ -22,6 +24,19 @@ class NpcRouteControllerTest : FreeSpec({
             velocity.z shouldBe 0.0
         }
         npcRouteHorizontalVelocity(0.0, 0.0, 0.05, 0.0, 0.2).x shouldBe 0.05
+    }
+
+    "corner smoothing starts late and only leads into the next safe cell" {
+        val points = listOf(Vector(0.5, 72.0, 0.5), Vector(1.5, 72.0, 0.5), Vector(1.5, 72.0, 1.5))
+
+        smoothedNpcRouteTarget(points, 1, 0.6, 0.5, 0.35, 0.75, 0.30) shouldBe points[1]
+        smoothedNpcRouteTarget(points, 1, 1.15, 0.5, 0.35, 0.75, 0.30) shouldBe Vector(1.5, 72.0, 0.8)
+    }
+
+    "thin carpets are valid route coverings but taller blocks are not" {
+        isNpcRouteFloorCovering(Material.RED_CARPET, 0.0625, 0.125) shouldBe true
+        isNpcRouteFloorCovering(Material.RED_CARPET, 0.5, 0.125) shouldBe false
+        isNpcRouteFloorCovering(Material.STONE, 0.0, 0.125) shouldBe false
     }
 
     "hard no-go areas are never crossed" {

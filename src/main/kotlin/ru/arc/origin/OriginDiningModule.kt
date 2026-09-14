@@ -456,6 +456,9 @@ internal object OriginDiningLayout {
                 headingLookAheadCells = source.integer("$root.heading-look-ahead-cells", 2).coerceIn(1, 8),
                 headingUpdateTicks = source.integer("$root.heading-update-ticks", 1).toLong().coerceIn(1L, 10L),
                 headingMaxTurnDegreesPerTick = source.real("$root.heading-max-turn-degrees-per-tick", 18.0).toFloat().coerceIn(1f, 90f),
+                cornerSmoothingDistance = source.real("$root.corner-smoothing-distance", 0.75).coerceIn(0.0, 1.5),
+                cornerSmoothingLead = source.real("$root.corner-smoothing-lead", 0.30).coerceIn(0.0, 0.75),
+                maximumStepHeight = source.real("$root.maximum-step-height", 0.125).coerceIn(0.0, 0.5),
             )
         }
         sessionRadius = source.real("navigation.session-radius").coerceIn(2.0, 24.0)
