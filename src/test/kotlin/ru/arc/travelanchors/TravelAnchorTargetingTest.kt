@@ -67,8 +67,8 @@ class TravelAnchorTargetingTest : FunSpec({
     }
 
     test("Shift prefers the aimed anchor over the elevator below") {
-        travelAnchorSneakTarget("aimed", "elevator") shouldBe "aimed"
-        travelAnchorSneakTarget<String>(null, "elevator") shouldBe "elevator"
+        travelAnchorSneakTarget("aimed", "elevator") shouldBe TravelAnchorSneakTarget("aimed", enforceCooldown = true)
+        travelAnchorSneakTarget<String>(null, "elevator") shouldBe TravelAnchorSneakTarget("elevator", enforceCooldown = false)
     }
 
     test("denial messages identify the predicate that actually failed") {
@@ -126,6 +126,13 @@ class TravelAnchorTargetingTest : FunSpec({
     test("far anchors use a nearby proxy while near anchors keep their real distance") {
         travelAnchorDisplayDistance(actualDistance = 32.0, proxyDistance = 48.0) shouldBe 32.0
         travelAnchorDisplayDistance(actualDistance = 900.0, proxyDistance = 48.0) shouldBe 48.0
+    }
+
+    test("standing anywhere over an anchor footprint activates it") {
+        travelAnchorSupportColumns(0.5, 0.5) shouldBe listOf(0 to 0)
+        travelAnchorSupportColumns(1.05, 0.5) shouldBe listOf(1 to 0, 0 to 0)
+        travelAnchorSupportColumns(1.29, 1.29) shouldBe listOf(1 to 1, 0 to 0, 0 to 1, 1 to 0)
+        travelAnchorSupportColumns(1.30, 0.5) shouldBe listOf(1 to 0)
     }
 
     test("only distant proxies are flattened into camera-facing squares") {

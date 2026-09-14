@@ -1,5 +1,6 @@
 package ru.arc.travelanchors
 
+import com.destroystokyo.paper.event.player.PlayerJumpEvent
 import com.jeff_media.customblockdata.CustomBlockData
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextColor
@@ -31,7 +32,6 @@ import org.bukkit.event.block.BlockPlaceEvent
 import org.bukkit.event.entity.EntityExplodeEvent
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerItemHeldEvent
-import org.bukkit.event.player.PlayerMoveEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.player.PlayerToggleSneakEvent
 import org.bukkit.event.world.ChunkLoadEvent
@@ -77,6 +77,7 @@ import java.util.concurrent.CompletableFuture
 import kotlin.math.cos
 import kotlin.math.acos
 import kotlin.math.atan2
+import kotlin.math.floor
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
@@ -105,6 +106,8 @@ private const val MAX_GIVE_AMOUNT = 4096
 private const val NETWORK_PAGE_SIZE = 10
 private const val ADMIN_PERMISSION = "arc.travelanchors.admin"
 private const val PROXY_DEPTH = 0.03f
+private const val PLAYER_HALF_WIDTH = 0.3
+private const val DISPLAY_VIEW_RANGE = 16f
 private val RIGHT_CLICK_ACTIONS = setOf(Action.RIGHT_CLICK_AIR, Action.RIGHT_CLICK_BLOCK)
 
 internal data class AimCandidate<T>(
@@ -178,7 +181,11 @@ internal fun travelAnchorTargetMessage(hasAnchorBelow: Boolean, staffHeld: Boole
         else -> null
     }
 
-internal fun <T> travelAnchorSneakTarget(aimed: T?, elevatorDown: T?): T? = aimed ?: elevatorDown
+internal data class TravelAnchorSneakTarget<T>(val target: T, val enforceCooldown: Boolean)
+
+internal fun <T> travelAnchorSneakTarget(aimed: T?, elevatorDown: T?): TravelAnchorSneakTarget<T>? =
+    aimed?.let { TravelAnchorSneakTarget(it, enforceCooldown = true) }
+        ?: elevatorDown?.let { TravelAnchorSneakTarget(it, enforceCooldown = false) }
 
 internal fun travelAnchorDenialMessage(featureAvailable: Boolean, ownerAllowed: Boolean): String? =
     when {
@@ -189,6 +196,16 @@ internal fun travelAnchorDenialMessage(featureAvailable: Boolean, ownerAllowed: 
 
 internal fun travelAnchorDisplayDistance(actualDistance: Double, proxyDistance: Double): Double =
     min(actualDistance, proxyDistance)
+
+internal fun travelAnchorSupportColumns(x: Double, z: Double): List<Pair<Int, Int>> =
+    buildList {
+        add(floor(x).toInt() to floor(z).toInt())
+        listOf(x - PLAYER_HALF_WIDTH, x + PLAYER_HALF_WIDTH).forEach { sampleX ->
+            listOf(z - PLAYER_HALF_WIDTH, z + PLAYER_HALF_WIDTH).forEach { sampleZ ->
+                add(floor(sampleX).toInt() to floor(sampleZ).toInt())
+            }
+        }
+    }.distinct()
 
 internal fun travelAnchorLabelScale(distance: Double, minimumScale: Float, maximumScale: Float): Float =
     (distance / 8.0).toFloat().coerceIn(minimumScale, maximumScale)
@@ -734,22 +751,30 @@ object TravelAnchorsModule : PluginModule, Listener {
         if (!event.isSneaking) return
         val player = event.player
         if (!isFeatureAvailable(player)) return
-        val source = anchorBelow(player) ?: return
+        val source = anchorBelowOrDeny(player) ?: return
         val aimed = selectedTargets[player.uniqueId]
             ?.takeIf { it != source && it.worldId == player.world.uid }
             ?: selectTarget(player, source)
-        val target = travelAnchorSneakTarget(aimed, findVerticalTarget(player, source, upward = false)) ?: return
-        teleport(player, target)
+        val elevatorTarget = findVerticalTarget(player, source, upward = false)
+        val target = travelAnchorSneakTarget(aimed, elevatorTarget)
+        if (target == null) {
+            denyBlockedVerticalTarget(player, source, upward = false)
+            return
+        }
+        teleport(player, target.target, target.enforceCooldown)
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    fun onMove(event: PlayerMoveEvent) {
-        val to = event.to
-        if (to.y <= event.from.y + 0.01 || event.player.velocity.y <= 0.0) return
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    fun onJump(event: PlayerJumpEvent) {
         val player = event.player
         if (!isFeatureAvailable(player)) return
-        val source = anchorBelow(player, event.from) ?: return
-        findVerticalTarget(player, source, upward = true)?.let { teleport(player, it) }
+        val source = anchorBelowOrDeny(player, event.from) ?: return
+        val target = findVerticalTarget(player, source, upward = true)
+        if (target == null) {
+            denyBlockedVerticalTarget(player, source, upward = true)
+            return
+        }
+        teleport(player, target, enforceCooldown = false)
     }
 
     @EventHandler
@@ -945,7 +970,7 @@ object TravelAnchorsModule : PluginModule, Listener {
             it.interpolationDelay = 0
             it.interpolationDuration = 1
             it.teleportDuration = 1
-            it.viewRange = 2f
+            it.viewRange = DISPLAY_VIEW_RANGE
             it.displayWidth = current.maximumScale + 0.5f
             it.displayHeight = current.maximumScale + 0.5f
             it.addScoreboardTag("arc_travel_anchor_preview")
@@ -970,7 +995,7 @@ object TravelAnchorsModule : PluginModule, Listener {
             it.alignment = TextDisplay.TextAlignment.CENTER
             it.lineWidth = 220
             it.teleportDuration = 1
-            it.viewRange = 2f
+            it.viewRange = DISPLAY_VIEW_RANGE
             it.addScoreboardTag("arc_travel_anchor_label")
         }.also {
             labels[player.uniqueId] = it
@@ -1276,14 +1301,14 @@ object TravelAnchorsModule : PluginModule, Listener {
         player.sendActionBar(current.message("cross-server-started", "%server%" to entry.server))
     }
 
-    private fun teleport(player: Player, position: TravelAnchorPosition) {
+    private fun teleport(player: Player, position: TravelAnchorPosition, enforceCooldown: Boolean = true) {
         val current = settings ?: return
         if (!canAccess(player, position)) {
             sendDenial(player, "no-permission", "%owner%" to displayName(anchorOwners[position] ?: "не указан"))
             return
         }
         val now = System.currentTimeMillis()
-        if (now < cooldowns.getOrDefault(player.uniqueId, 0L) || player.uniqueId in pendingTeleports) return
+        if ((enforceCooldown && now < cooldowns.getOrDefault(player.uniqueId, 0L)) || player.uniqueId in pendingTeleports) return
         if (player.isInsideVehicle) {
             player.sendActionBar(current.message("leave-vehicle"))
             return
@@ -1312,7 +1337,7 @@ object TravelAnchorsModule : PluginModule, Listener {
                         player.sendActionBar(current.message("unavailable"))
                         return@Runnable
                     }
-                    teleport(player, position)
+                    teleport(player, position, enforceCooldown)
                 })
             }
             return
@@ -1327,7 +1352,7 @@ object TravelAnchorsModule : PluginModule, Listener {
             player.sendActionBar(current.message("unsafe"))
             return
         }
-        cooldowns[player.uniqueId] = now + TELEPORT_COOLDOWN_MILLIS
+        if (enforceCooldown) cooldowns[player.uniqueId] = now + TELEPORT_COOLDOWN_MILLIS
         val from = player.location.clone()
         val destination = block.location.add(0.5, 1.0, 0.5).apply {
             yaw = from.yaw
@@ -1335,10 +1360,11 @@ object TravelAnchorsModule : PluginModule, Listener {
         }
         playEffectsSafely("departure") { playDepartureEffects(from) }
         if (!player.teleport(destination, org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.PLUGIN)) {
-            cooldowns.remove(player.uniqueId)
+            if (enforceCooldown) cooldowns.remove(player.uniqueId)
             player.sendActionBar(current.message("blocked"))
             return
         }
+        if (!enforceCooldown) player.velocity = player.velocity.setY(0.0)
         refreshAfterTeleport(player)
         playEffectsSafely("arrival") { playArrivalEffects(player, destination) }
     }
@@ -1376,22 +1402,46 @@ object TravelAnchorsModule : PluginModule, Listener {
     private fun anchorBelow(player: Player, location: Location = player.location): TravelAnchorPosition? =
         rawAnchorBelow(location)?.takeIf { canAccess(player, it) }
 
+    private fun anchorBelowOrDeny(player: Player, location: Location = player.location): TravelAnchorPosition? {
+        val position = rawAnchorBelow(location) ?: return null
+        if (position in publicAnchors && !canAccess(player, position)) grantPublicAccess(player, position)
+        if (canAccess(player, position)) return position
+        sendDenial(player, "no-permission", "%owner%" to displayName(anchorOwners[position] ?: "не указан"))
+        return null
+    }
+
     private fun rawAnchorBelow(location: Location): TravelAnchorPosition? =
         listOf(0.08, 0.4).firstNotNullOfOrNull { offset ->
-            val block = location.clone().subtract(0.0, offset, 0.0).block
-            TravelAnchorPosition.of(block).takeIf { it in anchors && isAnchor(block) }
+            val y = floor(location.y - offset).toInt()
+            travelAnchorSupportColumns(location.x, location.z).firstNotNullOfOrNull { (x, z) ->
+                val block = location.world.getBlockAt(x, y, z)
+                TravelAnchorPosition.of(block).takeIf { it in anchors && isAnchor(block) }
+            }
         }
 
     private fun findVerticalTarget(player: Player, source: TravelAnchorPosition, upward: Boolean): TravelAnchorPosition? =
+        findVerticalTarget(source, upward) { canAccess(player, it) }
+
+    private fun findVerticalTarget(
+        source: TravelAnchorPosition,
+        upward: Boolean,
+        predicate: (TravelAnchorPosition) -> Boolean = { true },
+    ): TravelAnchorPosition? =
         anchors.asSequence()
             .filter { it.worldId == source.worldId && it.x == source.x && it.z == source.z }
-            .filter { canAccess(player, it) }
+            .filter(predicate)
             .toList()
             .let { candidates ->
                 val targetY = travelAnchorElevatorTargetY(source.y, candidates.map(TravelAnchorPosition::y), upward)
                     ?: return@let null
                 candidates.firstOrNull { it.y == targetY }
             }
+
+    private fun denyBlockedVerticalTarget(player: Player, source: TravelAnchorPosition, upward: Boolean) {
+        val blocked = findVerticalTarget(source, upward) ?: return
+        if (canAccess(player, blocked)) return
+        sendDenial(player, "no-permission", "%owner%" to displayName(anchorOwners[blocked] ?: "не указан"))
+    }
 
     private fun grantPublicAccessAtFeet(player: Player) {
         val position = rawAnchorBelow(player.location) ?: return
@@ -1404,11 +1454,11 @@ object TravelAnchorsModule : PluginModule, Listener {
         if (identityAllows(owner, player) || player.hasPermission(ADMIN_PERMISSION)) return
         val pendingKey = owner.lowercase() to player.name.lowercase()
         if (!pendingAccessGrants.add(pendingKey)) return
+        accessForMutable(owner).add(player.name.lowercase())
+        persistSharedAccess()
         val store = networkStore
         if (store == null) {
-            accessForMutable(owner).add(player.name.lowercase())
             pendingAccessGrants.remove(pendingKey)
-            persistSharedAccess()
             player.sendActionBar(current.message("public-access-local", "%owner%" to displayName(owner)))
             return
         }
@@ -1424,7 +1474,7 @@ object TravelAnchorsModule : PluginModule, Listener {
                 position.y,
                 position.z,
             )
-            player.sendActionBar(current.message("network-unavailable"))
+            player.sendActionBar(current.message("public-access-local", "%owner%" to displayName(owner)))
             return
         }
         store.grantAccess(networkOwner, player.name).whenComplete { players, failure ->
@@ -1434,7 +1484,9 @@ object TravelAnchorsModule : PluginModule, Listener {
                 if (!ARC.instance.isEnabled || settings !== current) return@Runnable
                 if (failure != null) {
                     warn("TRAVEL_ANCHORS phase=REDIS reason=public-access-grant-failed owner={} player={}", owner, player.name, failure)
-                    if (player.isOnline) player.sendActionBar(current.message("network-unavailable"))
+                    if (player.isOnline) {
+                        player.sendActionBar(current.message("public-access-local", "%owner%" to displayName(owner)))
+                    }
                     return@Runnable
                 }
                 setSharedAccessLocal(owner, players)
