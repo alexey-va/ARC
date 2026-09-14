@@ -1,5 +1,11 @@
 package ru.arc.origin
 
+import com.github.retrooper.packetevents.PacketEvents
+import com.github.retrooper.packetevents.event.PacketListenerAbstract
+import com.github.retrooper.packetevents.event.PacketListenerPriority
+import com.github.retrooper.packetevents.event.PacketReceiveEvent
+import com.github.retrooper.packetevents.protocol.packettype.PacketType
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientInteractEntity
 import dev.lone.itemsadder.api.CustomStack
 import de.tr7zw.changeme.nbtapi.NBT
 import net.citizensnpcs.api.CitizensAPI
@@ -67,6 +73,7 @@ object OriginDiningModule : PluginModule, Listener {
 
     private var service: OriginDiningService? = null
     private var citizensListener: OriginDiningCitizensListener? = null
+    private var packetListener: OriginDiningPacketListener? = null
 
     override fun init() {
         OriginDiningLayout.load(ARC.instance.dataPath)
@@ -76,6 +83,11 @@ object OriginDiningModule : PluginModule, Listener {
         if (Bukkit.getPluginManager().isPluginEnabled("Citizens")) {
             citizensListener = OriginDiningCitizensListener(current).also {
                 Bukkit.getPluginManager().registerEvents(it, ARC.instance)
+            }
+        }
+        if (Bukkit.getPluginManager().isPluginEnabled("packetevents")) {
+            packetListener = OriginDiningPacketListener(current).also {
+                PacketEvents.getAPI().eventManager.registerListener(it)
             }
         }
         current.start()
@@ -90,6 +102,8 @@ object OriginDiningModule : PluginModule, Listener {
         HandlerList.unregisterAll(this)
         citizensListener?.let(HandlerList::unregisterAll)
         citizensListener = null
+        packetListener?.let { PacketEvents.getAPI().eventManager.unregisterListener(it) }
+        packetListener = null
         service?.close()
         service = null
     }
@@ -140,6 +154,18 @@ object OriginDiningModule : PluginModule, Listener {
         service?.quit(event.player)
     }
 
+}
+
+private class OriginDiningPacketListener(
+    private val service: OriginDiningService,
+) : PacketListenerAbstract(PacketListenerPriority.HIGHEST) {
+    override fun onPacketReceive(event: PacketReceiveEvent) {
+        if (event.packetType != PacketType.Play.Client.INTERACT_ENTITY) return
+        val packet = WrapperPlayClientInteractEntity(event)
+        if (packet.action == WrapperPlayClientInteractEntity.InteractAction.ATTACK) return
+        val player = event.getPlayer<Player>()
+        service.interactMountedWaiter(player, packet.entityId)
+    }
 }
 
 private class OriginDiningCitizensListener(
@@ -914,6 +940,14 @@ private class OriginDiningService : AutoCloseable {
         dialogAuthorizations[player.uniqueId] = session.id to (System.currentTimeMillis() + OriginDiningLayout.dialogAuthorizationMillis)
         openDialog(player, session, "waiter:$npcId")
         return true
+    }
+
+    fun interactMountedWaiter(player: Player, entityId: Int) {
+        tasks.runLater(0L) {
+            if (!player.isOnline || !player.isInsideVehicle) return@runLater
+            val waiterId = OriginDiningLayout.waiterIds.firstOrNull { waiter(it)?.takeIf { npc -> npc.isSpawned }?.entity?.entityId == entityId } ?: return@runLater
+            interactWaiter(player, waiterId, "packet-events:mounted")
+        }
     }
 
     fun quit(player: Player) {
