@@ -123,6 +123,20 @@ class OriginDiningLayoutTest : FreeSpec({
         OriginDiningLayout.dynamicWaiterSideOffset shouldBe 0.0
     }
 
+    "legacy restaurant furniture cleanup is restricted to exact ids and points" {
+        OriginDiningLayout.legacyFurnitureCleanupIds() shouldBe setOf(
+            "elitecreatures:restaurant_food_steak",
+            "elitecreatures:medieval_market_decoration_v2_table_2",
+        )
+        OriginDiningLayout.legacyFurnitureCleanupPoints() shouldBe listOf(
+            OriginDiningPoint(-15.5, 71.1, 47.5, 180f),
+            OriginDiningPoint(-15.5, 70.001, 40.5),
+            OriginDiningPoint(-15.5, 70.001, 47.5),
+            OriginDiningPoint(-2.5, 70.001, 46.5),
+            OriginDiningPoint(-4.5, 70.001, 37.5),
+        )
+    }
+
     "dynamic seats are limited to the two restaurant territories" {
         val brewery = io.mockk.mockk<org.bukkit.Location>(relaxed = true)
         val restaurant = io.mockk.mockk<org.bukkit.Location>(relaxed = true)

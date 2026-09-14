@@ -79,7 +79,11 @@ object ItemsAdderFurnitureRuntime : FurnitureRuntime {
                     } else {
                         CustomFurniture.remove(entity, false)
                     }
-                    !entity.isValid || entity.isDead
+                    // ItemsAdder 4 can leave the visual entity alive when furniture is
+                    // adjacent to blocks. The API call must run first so ItemsAdder can
+                    // clear its own state; then remove only that exact residual root.
+                    if (entity.isValid) entity.remove()
+                    true
                 }.getOrDefault(false)
 
             FurnitureFamily.COMPLEX -> removeComplex(entity)

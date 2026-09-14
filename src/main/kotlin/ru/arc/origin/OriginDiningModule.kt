@@ -476,6 +476,10 @@ internal object OriginDiningLayout {
 
     fun displayLift(dishId: String): Float = surfaceLifts[dishId] ?: 0.12125f
 
+    internal fun legacyFurnitureCleanupIds(): Set<String> = OriginDiningAmbientLayout.legacyFurnitureCleanupIds
+
+    internal fun legacyFurnitureCleanupPoints(): List<OriginDiningPoint> = OriginDiningAmbientLayout.legacyFurnitureCleanupPoints
+
     internal fun dynamicMenu(location: Location): BreweryTableDialogs.Menu? {
         if (location.world?.name != WORLD) return null
         val dxBrewery = location.x - BreweryTableDialogs.BREWERY_X

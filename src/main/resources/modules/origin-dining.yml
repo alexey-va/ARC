@@ -202,8 +202,13 @@ scene:
   legacy-furniture-cleanup:
     ids:
       - "elitecreatures:restaurant_food_steak"
+      - "elitecreatures:medieval_market_decoration_v2_table_2"
     points:
       - "-15.5,71.1,47.5,180"
+      - "-15.5,70.001,40.5,0"
+      - "-15.5,70.001,47.5,0"
+      - "-2.5,70.001,46.5,0"
+      - "-4.5,70.001,37.5,0"
   legacy-player-table:
     meal-hitbox: "-5.5,70.95,37.9,0"
     meal-display: "-5.5,71.1,37.9,0"
