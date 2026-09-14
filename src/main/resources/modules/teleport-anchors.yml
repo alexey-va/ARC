@@ -12,6 +12,9 @@ visual:
   proxy-distance: 48.0
   minimum-scale: 1.04
   maximum-scale: 3.0
+  # Вблизи увеличение почти не применяется; полная сила достигается вдали.
+  distance-scaling-start: 8.0
+  distance-scaling-end: 64.0
   label-minimum-scale: 1.8
   label-maximum-scale: 6.0
   update-ticks: 1
@@ -33,6 +36,7 @@ naming:
     public-body-on: '<#e8dfd2>Любой игрок, вставший на этот якорь или нажавший на него, получит доступ ко всей сети владельца.'
     public-body-off: '<#e8dfd2>Сейчас этот якорь не выдаёт доступ другим игрокам.'
     public-state: '<#9bd48d>общий'
+    shared-state: '<#ffd166>общий без владельца'
     private-state: '<#e8dfd2>личный'
     make-public: '<#9bd48d>Сделать общим'
     make-private: '<#ff9a8f>Сделать личным'
@@ -54,6 +58,7 @@ items:
     material: LODESTONE
     custom-model-data: 0
     name: '<#92bed8><bold>Путевой якорь'
+    shared-owner: 'Общий'
     lore:
       - ''
       - '<#b8b8b8>Поставьте его, чтобы связать две точки.'
@@ -97,4 +102,5 @@ messages:
   network-unavailable: '<#c42323>Не удалось сохранить сетевой доступ в Redis. Попробуйте ещё раз.'
   invalid-amount: '<#c42323>Количество должно быть числом от 1 до 4096.'
   anchor-given: '<#92bed8>Выдано якорей: <#ffffff>%amount% <#8c8c8c>· <#92bed8>владелец <#ffffff>%player%<#92bed8>.'
+  shared-anchor-given: '<#92bed8>Выдано общих якорей: <#ffffff>%amount% <#8c8c8c>· <#92bed8>получатель <#ffffff>%player%<#92bed8>.'
   staff-given: '<#d7a8ff>Выдано жезлов: <#ffffff>%amount% <#8c8c8c>· <#d7a8ff>владелец <#ffffff>%player%<#d7a8ff>.'

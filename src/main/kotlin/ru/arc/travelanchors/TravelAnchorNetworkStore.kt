@@ -28,6 +28,7 @@ internal data class TravelAnchorNetworkEntry(
     val owner: String = "",
     val name: String = "",
     val public: Boolean = false,
+    val shared: Boolean = false,
 )
 
 internal data class TravelAnchorNetworkSnapshot(
@@ -248,7 +249,7 @@ internal class TravelAnchorNetworkStore(
         internal const val CHANNEL = "arc.travel-anchors.update.v1"
 
         private val ENTRY_CONTRACT = JsonObjectContract(
-            allowedFields = setOf("server", "world", "x", "y", "z", "owner", "name", "public"),
+            allowedFields = setOf("server", "world", "x", "y", "z", "owner", "name", "public", "shared"),
         )
         private val SNAPSHOT_CODEC = BoundedJsonCodec(
             gson = Common.gson,
@@ -264,7 +265,8 @@ internal class TravelAnchorNetworkStore(
                 snapshot.anchors.forEach { entry ->
                     require(entry.server == snapshot.server) { "Anchor entry server does not match its snapshot" }
                     require(entry.world.length in 1..64 && entry.world.none(Char::isISOControl)) { "Unsafe anchor world" }
-                    require(NetworkPlayerName.parseOrNull(entry.owner) != null) { "Unsafe anchor owner" }
+                    require(entry.shared || NetworkPlayerName.parseOrNull(entry.owner) != null) { "Unsafe anchor owner" }
+                    require(!entry.shared || entry.owner.isEmpty()) { "Shared anchor must not have an owner" }
                     require(entry.name.length in 1..32 && entry.name.none(Character::isISOControl)) { "Unsafe anchor name" }
                 }
             },

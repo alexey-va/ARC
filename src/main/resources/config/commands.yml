@@ -179,15 +179,21 @@ commands:
     permission: arc.item.give
     player-only: false
     usage: /arc give <player|list> <preset> [amount]
+  anchor:
+    name: anchor
+    aliases: [anchors, якорь, якоря]
+    permission: arc.travelanchors.admin
+    player-only: false
+    usage: /arc anchor <give|public|staff> <игрок> [количество]
   giveanchor:
     name: giveanchor
-    aliases: [якорь]
+    aliases: [ ]
     permission: arc.travelanchors.admin
     player-only: false
     usage: /arc giveanchor <игрок> [количество]
   givestaff:
     name: givestaff
-    aliases: [жезл]
+    aliases: [ ]
     permission: arc.travelanchors.admin
     player-only: false
     usage: /arc givestaff <игрок> [количество]

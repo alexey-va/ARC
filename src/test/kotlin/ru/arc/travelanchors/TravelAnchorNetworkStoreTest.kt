@@ -23,6 +23,22 @@ class TravelAnchorNetworkStoreTest : FunSpec({
         Common.gson.fromJson(stored, TravelAnchorNetworkSnapshot::class.java) shouldBe snapshot
     }
 
+    test("shared anchor snapshots are accepted without an owner") {
+        val redis = InMemoryRedis(ServerIdentity { "survival" })
+        val store = TravelAnchorNetworkStore(redis, "survival", Runnable::run, {}, { _, _ -> })
+        val snapshot = TravelAnchorNetworkSnapshot(
+            server = "survival",
+            anchors = listOf(TravelAnchorNetworkEntry("survival", "world", 4, 70, 9, "", "Общий", false, true)),
+        )
+
+        store.publish(snapshot).get(2, TimeUnit.SECONDS)
+
+        Common.gson.fromJson(
+            redis.getHash(TravelAnchorNetworkStore.ANCHORS_HASH).getValue("survival"),
+            TravelAnchorNetworkSnapshot::class.java,
+        ) shouldBe snapshot
+    }
+
     test("public access grants merge instead of overwriting existing players") {
         val redis = InMemoryRedis(ServerIdentity { "survival" })
         redis.setHash(

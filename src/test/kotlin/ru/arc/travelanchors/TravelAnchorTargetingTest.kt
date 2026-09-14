@@ -52,10 +52,21 @@ class TravelAnchorTargetingTest : FunSpec({
         (travelAnchorScale(0.8, 0.4, 1.0f, 3.0f) > travelAnchorScale(0.6, 0.4, 1.0f, 3.0f)) shouldBe true
     }
 
+    test("near anchors stay compact while distant aimed anchors grow") {
+        travelAnchorScale(1.0, 0.4, 1.0f, 3.0f, distance = 4.0, distanceScalingStart = 8.0, distanceScalingEnd = 64.0) shouldBe 1.0f
+        travelAnchorScale(1.0, 0.4, 1.0f, 3.0f, distance = 36.0, distanceScalingStart = 8.0, distanceScalingEnd = 64.0) shouldBe 2.0f
+        travelAnchorScale(1.0, 0.4, 1.0f, 3.0f, distance = 64.0, distanceScalingStart = 8.0, distanceScalingEnd = 64.0) shouldBe 3.0f
+    }
+
     test("standing on an anchor gives Shift priority over the staff hint") {
         travelAnchorTargetMessage(hasAnchorBelow = true, staffHeld = true) shouldBe "target-anchor"
         travelAnchorTargetMessage(hasAnchorBelow = false, staffHeld = true) shouldBe "target-staff"
         travelAnchorTargetMessage(hasAnchorBelow = false, staffHeld = false) shouldBe null
+    }
+
+    test("Shift prefers the aimed anchor over the elevator below") {
+        travelAnchorSneakTarget("aimed", "elevator") shouldBe "aimed"
+        travelAnchorSneakTarget<String>(null, "elevator") shouldBe "elevator"
     }
 
     test("denial messages identify the predicate that actually failed") {
@@ -70,12 +81,38 @@ class TravelAnchorTargetingTest : FunSpec({
         travelAnchorAdminAllows(isAdmin = false, ordinaryAccess = false) shouldBe false
     }
 
+    test("shared anchors are usable by everyone but editable only by admins") {
+        travelAnchorAccessDecision(shared = true, isAdmin = false, ordinaryAccess = false) shouldBe true
+        travelAnchorEditDecision(shared = true, isAdmin = false, ownerMatches = true) shouldBe false
+        travelAnchorEditDecision(shared = true, isAdmin = true, ownerMatches = false) shouldBe true
+    }
+
     test("give commands accept an optional bounded amount") {
         parseTravelAnchorGiveAmount(null) shouldBe 1
         parseTravelAnchorGiveAmount("64") shouldBe 64
         parseTravelAnchorGiveAmount("0") shouldBe null
         parseTravelAnchorGiveAmount("4097") shouldBe null
         parseTravelAnchorGiveAmount("many") shouldBe null
+    }
+
+    test("legacy give commands default to the player and one item") {
+        resolveTravelAnchorGiveRequest("GrocerMC", emptyList()) shouldBe TravelAnchorGiveRequest("GrocerMC", 1)
+        resolveTravelAnchorGiveRequest(null, emptyList()) shouldBe null
+        resolveTravelAnchorGiveRequest("GrocerMC", listOf("Friend")) shouldBe TravelAnchorGiveRequest("Friend", 1)
+        resolveTravelAnchorGiveRequest("GrocerMC", listOf("Friend", "8")) shouldBe TravelAnchorGiveRequest("Friend", 8)
+        resolveTravelAnchorGiveRequest("GrocerMC", listOf("Friend", "many")) shouldBe null
+    }
+
+
+    test("anchor command parses personal, shared and staff grants") {
+        resolveTravelAnchorCommand("GrocerMC", listOf("give")) shouldBe
+            TravelAnchorCommandRequest(TravelAnchorGiveKind.PERSONAL, "GrocerMC", 1)
+        resolveTravelAnchorCommand("GrocerMC", listOf("public", "Friend", "8")) shouldBe
+            TravelAnchorCommandRequest(TravelAnchorGiveKind.PUBLIC, "Friend", 8)
+        resolveTravelAnchorCommand(null, listOf("staff", "Friend", "2")) shouldBe
+            TravelAnchorCommandRequest(TravelAnchorGiveKind.STAFF, "Friend", 2)
+        resolveTravelAnchorCommand(null, listOf("public")) shouldBe null
+        resolveTravelAnchorCommand("GrocerMC", listOf("unknown")) shouldBe null
     }
 
     test("vertical anchors behave like an OpenBlocks elevator") {

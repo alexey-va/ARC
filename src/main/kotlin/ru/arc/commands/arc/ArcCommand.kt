@@ -47,6 +47,7 @@ import ru.arc.commands.arc.subcommands.TestSubCommand
 import ru.arc.commands.arc.subcommands.TreasuresSubCommand
 import ru.arc.travelanchors.GiveTravelAnchorSubCommand
 import ru.arc.travelanchors.GiveTravelStaffSubCommand
+import ru.arc.travelanchors.TravelAnchorSubCommand
 
 /**
  * Main /arc command that routes to subcommands.
@@ -100,6 +101,7 @@ class ArcCommand :
             LandsSubCommand,
             GiveBoostSubCommand,
             GiveSubCommand,
+            TravelAnchorSubCommand,
             GiveTravelAnchorSubCommand,
             GiveTravelStaffSubCommand,
             PouchSubCommand,
