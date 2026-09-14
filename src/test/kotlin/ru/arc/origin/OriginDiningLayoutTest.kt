@@ -120,7 +120,18 @@ class OriginDiningLayoutTest : FreeSpec({
         OriginDiningLayout.waiterPlayerRange shouldBe 1.8
         OriginDiningLayout.navigatorDistanceMargin shouldBe 0.35
         OriginDiningLayout.navigatorPathDistanceMargin shouldBe 0.35
-        OriginDiningLayout.dynamicWaiterSideOffset shouldBe 0.0
+        OriginDiningLayout.navigatorLevelChangeCost shouldBe 12f
+        OriginDiningLayout.navigatorObstacleStepCost shouldBe 8f
+        OriginDiningLayout.dynamicWaiterSideOffset shouldBe 1.0
+        OriginDiningLayout.waiterHome(431) shouldBe OriginDiningPoint(-54.5, 72.0, 56.5, 180f)
+        OriginDiningLayout.waiterHome(432) shouldBe OriginDiningPoint(-54.5, 72.0, 58.5, 180f)
+    }
+
+    "route cost favors flat floor without making alternate paths impassable" {
+        originDiningRouteCost(72, 72, org.bukkit.Material.AIR, org.bukkit.Material.TERRACOTTA, 12f, 8f) shouldBe 0f
+        originDiningRouteCost(72, 73, org.bukkit.Material.AIR, org.bukkit.Material.TERRACOTTA, 12f, 8f) shouldBe 12f
+        originDiningRouteCost(72, 72, org.bukkit.Material.AIR, org.bukkit.Material.OAK_STAIRS, 12f, 8f) shouldBe 8f
+        originDiningRouteCost(72, 73, org.bukkit.Material.OAK_TRAPDOOR, org.bukkit.Material.TERRACOTTA, 12f, 8f) shouldBe 20f
     }
 
     "legacy restaurant furniture cleanup is restricted to exact ids and points" {

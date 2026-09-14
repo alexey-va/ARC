@@ -9,6 +9,10 @@ import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientIn
 import dev.lone.itemsadder.api.CustomStack
 import de.tr7zw.changeme.nbtapi.NBT
 import net.citizensnpcs.api.CitizensAPI
+import net.citizensnpcs.api.astar.pathfinder.BlockExaminer
+import net.citizensnpcs.api.astar.pathfinder.BlockSource
+import net.citizensnpcs.api.astar.pathfinder.MinecraftBlockExaminer
+import net.citizensnpcs.api.astar.pathfinder.PathPoint
 import net.citizensnpcs.api.event.NPCRightClickEvent
 import net.citizensnpcs.api.trait.trait.Equipment as CitizensEquipment
 import net.kyori.adventure.text.Component
@@ -63,6 +67,7 @@ import ru.arc.worldcontent.BreweryTableDialogs
 import ru.arc.worldcontent.ItemsAdderFurnitureRuntime
 import java.util.ArrayDeque
 import java.util.UUID
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.min
@@ -202,6 +207,50 @@ internal data class OriginDiningPoint(
     fun inWorld(world: org.bukkit.World): Location = Location(world, x, y, z, yaw, 0f)
 }
 
+internal class OriginDiningLevelRouteExaminer(
+    targetFloorY: Int,
+    levelChangeCost: Float,
+    obstacleStepCost: Float,
+) : BlockExaminer {
+    private var targetFloorY = targetFloorY
+    private var levelChangeCost = levelChangeCost
+    private var obstacleStepCost = obstacleStepCost
+
+    fun configure(targetFloorY: Int, levelChangeCost: Float, obstacleStepCost: Float) {
+        this.targetFloorY = targetFloorY
+        this.levelChangeCost = levelChangeCost
+        this.obstacleStepCost = obstacleStepCost
+    }
+
+    override fun getCost(source: BlockSource, point: PathPoint): Float =
+        originDiningRouteCost(
+            targetFloorY = targetFloorY,
+            pointY = point.vector.blockY,
+            feet = source.getMaterialAt(point.vector),
+            support = source.getMaterialAt(point.vector.clone().subtract(org.bukkit.util.Vector(0, 1, 0))),
+            levelChangeCost = levelChangeCost,
+            obstacleStepCost = obstacleStepCost,
+        )
+
+    override fun isPassable(source: BlockSource, point: PathPoint): BlockExaminer.PassableState =
+        BlockExaminer.PassableState.IGNORE
+}
+
+internal fun originDiningRouteCost(
+    targetFloorY: Int,
+    pointY: Int,
+    feet: Material,
+    support: Material,
+    levelChangeCost: Float,
+    obstacleStepCost: Float,
+): Float {
+    val verticalCost = abs(pointY - targetFloorY) * levelChangeCost
+    val touchesObstacle = sequenceOf(feet, support).any { material ->
+        material.name.endsWith("_STAIRS") || material.name.endsWith("_SLAB") || material.name.endsWith("_TRAPDOOR")
+    }
+    return verticalCost + if (touchesObstacle) obstacleStepCost else 0f
+}
+
 private data class OriginDiningBlockBounds(
     val minX: Int,
     val minY: Int,
@@ -318,6 +367,10 @@ internal object OriginDiningLayout {
         private set
     var navigatorPathDistanceMargin = 0.0
         private set
+    var navigatorLevelChangeCost = 0f
+        private set
+    var navigatorObstacleStepCost = 0f
+        private set
     var guestMarkerLift = 0.0
         private set
     var guestEntityLift = 0.0
@@ -400,6 +453,8 @@ internal object OriginDiningLayout {
         waiterPlayerRange = source.real("navigation.waiter-player-range").coerceIn(1.0, 6.0)
         navigatorDistanceMargin = source.real("navigation.distance-margin", 0.35).coerceIn(0.1, 2.0)
         navigatorPathDistanceMargin = source.real("navigation.path-distance-margin", 0.35).coerceIn(0.1, 2.0)
+        navigatorLevelChangeCost = source.real("navigation.level-change-cost", 12.0).toFloat().coerceIn(0f, 100f)
+        navigatorObstacleStepCost = source.real("navigation.obstacle-step-cost", 8.0).toFloat().coerceIn(0f, 100f)
         sessionRadius = source.real("navigation.session-radius").coerceIn(2.0, 24.0)
         guestMarkerLift = source.real("seating.guest-marker-lift").coerceIn(0.0, 2.0)
         guestEntityLift = source.real("seating.guest-entity-lift").coerceIn(-1.0, 2.0)
@@ -696,6 +751,8 @@ private object OriginDiningAmbientLayout {
         private set
     var cycleSeconds = 0
         private set
+    var routesPerCycle = 1
+        private set
 
     fun load(source: ru.arc.config.Config) {
         configuredGuestSeats =
@@ -763,6 +820,7 @@ private object OriginDiningAmbientLayout {
         legacyMealDisplay = OriginDiningLayout.configPoint(source, "scene.legacy-player-table.meal-display")
         legacyOrderLabel = OriginDiningLayout.configPoint(source, "scene.legacy-player-table.order-label")
         cycleSeconds = source.integer("scene.ambient-cycle-seconds").coerceIn(8, 120)
+        routesPerCycle = source.integer("scene.ambient-routes-per-cycle", 4).coerceIn(1, 4)
     }
 
     fun applyAutoSeating(
@@ -1418,14 +1476,22 @@ private class OriginDiningService : AutoCloseable {
         val radians = Math.toRadians(seat.yaw.toDouble())
         val sideX = -cos(radians) * OriginDiningLayout.dynamicWaiterSideOffset
         val sideZ = -sin(radians) * OriginDiningLayout.dynamicWaiterSideOffset
-        val first = OriginDiningPoint(seat.x + sideX, seat.y, seat.z + sideZ)
-        val second = OriginDiningPoint(seat.x - sideX, seat.y, seat.z - sideZ)
-        return if (walkable(block.world, first)) first else second
+        val forwardX = -sin(radians)
+        val forwardZ = cos(radians)
+        val candidates =
+            listOf(
+                OriginDiningPoint(seat.x + sideX, seat.y, seat.z + sideZ),
+                OriginDiningPoint(seat.x - sideX, seat.y, seat.z - sideZ),
+                OriginDiningPoint(seat.x - forwardX, seat.y, seat.z - forwardZ),
+            )
+        return candidates.firstOrNull { walkable(block.world, it) } ?: seat
     }
 
     private fun walkable(world: org.bukkit.World, point: OriginDiningPoint): Boolean {
         val feet = world.getBlockAt(point.inWorld(world))
-        return feet.isPassable && feet.getRelative(BlockFace.UP).isPassable
+        return feet.isPassable &&
+            feet.getRelative(BlockFace.UP).isPassable &&
+            MinecraftBlockExaminer.canStandOn(feet.getRelative(BlockFace.DOWN))
     }
 
     private fun chooseWaiter(menu: BreweryTableDialogs.Menu, seat: OriginDiningPoint): Int {
@@ -1797,7 +1863,20 @@ private class OriginDiningService : AutoCloseable {
     ) {
         val navigator = npc.navigator
         navigator.cancelNavigation()
-        navigator.localParameters
+        val parameters = navigator.localParameters
+        val levelExaminer =
+            parameters.examiners().filterIsInstance<OriginDiningLevelRouteExaminer>().firstOrNull()
+                ?: OriginDiningLevelRouteExaminer(
+                    destination.blockY,
+                    OriginDiningLayout.navigatorLevelChangeCost,
+                    OriginDiningLayout.navigatorObstacleStepCost,
+                ).also(parameters::examiner)
+        levelExaminer.configure(
+            destination.blockY,
+            OriginDiningLayout.navigatorLevelChangeCost,
+            OriginDiningLayout.navigatorObstacleStepCost,
+        )
+        parameters
             .distanceMargin(OriginDiningLayout.navigatorDistanceMargin)
             .pathDistanceMargin(OriginDiningLayout.navigatorPathDistanceMargin)
             .speedModifier(0.72f)
@@ -2604,24 +2683,24 @@ private class OriginDiningService : AutoCloseable {
 
     private fun tickAmbient(now: Long) {
         val tables = OriginDiningAmbientLayout.guestTables
-        var routeStarted = false
+        var routesStarted = 0
         val urgentTables = tables.filter { (ambientTableDueAt[it.id] ?: Long.MAX_VALUE) <= now }
         for (table in urgentTables) {
             if (startAmbientRoute(table, "queued-refill")) {
-                routeStarted = true
-                break
+                routesStarted++
+                if (routesStarted >= OriginDiningAmbientLayout.routesPerCycle) break
             }
         }
-        if (!routeStarted && urgentTables.isEmpty() && now >= nextAmbientAt && tables.isNotEmpty()) {
+        if (routesStarted < OriginDiningAmbientLayout.routesPerCycle && now >= nextAmbientAt && tables.isNotEmpty()) {
             for (attempt in tables.indices) {
                 val table = tables[ambientCursor++ % tables.size]
                 if (table.id !in ambientTableDueAt && startAmbientRoute(table, "rotation")) {
-                    routeStarted = true
-                    break
+                    routesStarted++
+                    if (routesStarted >= OriginDiningAmbientLayout.routesPerCycle) break
                 }
             }
         }
-        if (routeStarted) nextAmbientAt = now + OriginDiningAmbientLayout.cycleSeconds * 1_000L
+        if (routesStarted > 0) nextAmbientAt = now + OriginDiningAmbientLayout.cycleSeconds * 1_000L
         if (now >= nextDialogueAt && OriginDiningAmbientLayout.dialogue.isNotEmpty()) {
             val dialogue = OriginDiningAmbientLayout.dialogue[dialogueCursor++ % OriginDiningAmbientLayout.dialogue.size]
             val first = waiter(dialogue.firstNpcId)?.takeIf { it.isSpawned }

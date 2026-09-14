@@ -118,6 +118,10 @@ navigation:
   waiter-player-range: 1.8
   distance-margin: 0.35
   path-distance-margin: 0.35
+  # These are soft path costs: a flat floor wins, but a waiter can still climb
+  # when the room has no usable level route.
+  level-change-cost: 12.0
+  obstacle-step-cost: 8.0
   session-radius: 8.0
 
 seating:
@@ -136,7 +140,7 @@ dynamic-seats:
   dish-offset-x: 0.0
   dish-offset-y: 0.0
   dish-offset-z: 0.0
-  waiter-side-offset: 0.0
+  waiter-side-offset: 1.0
   # Для ItemsAdder-мебели направление сначала определяется по соседнему столу.
   # yaw-offset используется как резерв, а смещения задаются в локальных осях модели.
   furniture-profile-ids: [wooden_chairs]
@@ -158,7 +162,8 @@ dynamic-seats:
 # Все координаты двух ресторанных сцен находятся здесь и перечитываются через
 # /arc reload. Формат точки: x,y,z,yaw. Формат блока: x,y,z.
 scene:
-  ambient-cycle-seconds: 16
+  ambient-cycle-seconds: 8
+  ambient-routes-per-cycle: 4
   # ARC ищет обычные нижние ступеньки со столом в соседнем блоке, рассаживает
   # этих посетителей ближе к их резервным точкам и сохраняет места для игроков.
   auto-seating:
@@ -229,8 +234,8 @@ scene:
   waiters:
     410: {home: "1.5,70.0,57.5,180"}
     411: {home: "-1.5,70.0,60.5,180"}
-    431: {home: "-51.0,72.0,54.0,180"}
-    432: {home: "-47.0,72.0,54.0,180"}
+    431: {home: "-54.5,72.0,56.5,180"}
+    432: {home: "-54.5,72.0,58.5,180"}
   ambient-table-ids:
     - brewery_north
     - brewery_south
@@ -279,7 +284,7 @@ scene:
       meal: "-47.5,73.1,49.8,0"
       waiter-stop: "-50.5,72.0,50.5,180"
       transit: "-50.5,72.0,53.5,180"
-  dialogue-ids: [brewery_north, brewery_fire, restaurant_a, restaurant_b]
+  dialogue-ids: [brewery_north, brewery_fire, restaurant_a, restaurant_b, restaurant_bar]
   dialogues:
     brewery_north:
       first-npc-id: 416
@@ -301,3 +306,8 @@ scene:
       second-npc-id: 436
       first-line: "После обеда выйдем к фонтану?"
       second-line: "Если официант не найдёт ещё одну работу."
+    restaurant_bar:
+      first-npc-id: 439
+      second-npc-id: 431
+      first-line: "Аня, на второй стол новое блюдо."
+      second-line: "Уже несу. Марек пусть проверит напитки."
