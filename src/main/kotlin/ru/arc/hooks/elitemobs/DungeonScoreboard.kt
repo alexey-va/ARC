@@ -10,8 +10,11 @@ import java.util.concurrent.ConcurrentHashMap
 internal class DungeonScoreboard(
     private val dungeon: EMDungeonQol,
     private val enabled: (Player) -> Boolean = { true },
+    private val party: (Player) -> DungeonPartyView? = { dungeon.parties.current(it) },
     private val crystals: (Player) -> String? = ::readDungeonCrystals,
 ) {
+    /** Keep one of Minecraft's 15 sidebar rows available for the compact quest tracker in TAB. */
+    private companion object { const val MAX_LINES = 14 }
     private val snapshots = ConcurrentHashMap<UUID, Map<String, String>>()
     private val legacy = LegacyComponentSerializer.builder().character('§').hexColors().build()
 
@@ -19,26 +22,46 @@ internal class DungeonScoreboard(
         val present = mutableSetOf<UUID>()
         for (player in players) {
             if (!enabled(player)) continue
-            val view = dungeon.panelView(player) ?: continue
+            val view = dungeon.scoreboardView(player) ?: continue
             present += player.uniqueId
             val visit = view.visit
             val name = wrapLegacyScoreboardText(legacy.serialize(dungeonDisplayName(visit)), 32, 2)
-            val rows = buildList {
-                add(line("heading", "<#f4bd6a>Поход в данж"))
-                add(name.first())
-                add(name.getOrElse(1) { "§0 " })
+            val rows = mutableListOf<String>().apply {
+                addAll(name)
                 add(line(if (visit.instanced) "instanced" else "open", if (visit.instanced) "<#aaa49a>Отдельное прохождение" else "<#aaa49a>Открытый данж"))
                 add(when {
                     visit.waiting -> line("waiting", "<#f4bd6a>Сбор группы")
                     visit.canResume -> line("ongoing", "<#9bd48d>Прохождение идёт")
                     else -> line("finished", "<#aaa49a>Поход окончен")
                 })
-                visit.stats?.level?.takeIf { it > 0 }?.let { add(line("level", "<#f4bd6a>| <#e8dfd2>Уровень: <#f4bd6a><value>", Component.text(it))) }
-                visit.stats?.difficulty?.let { add(line("difficulty", "<#f4bd6a>| <#e8dfd2>Сложность: <#f4bd6a><value>", dungeonDifficulty(dungeon, it))) }
-                visit.stats?.playerCount?.let { add(line("party", "<#f4bd6a>| <#e8dfd2>Участников: <#9bd48d><value>", Component.text(it))) }
-                crystals(player)?.let { add(line("crystals", "<#f4bd6a>| <#e8dfd2>Кристаллы: <#c7a0e8>💎 <value>", Component.text(it))) }
-                add("§1 ")
-                add(line("menu", "<#f4bd6a>Shift + F <#e8dfd2>— меню данжа"))
+                if (!view.participant) add(line("observer", "<#ffb277>Наблюдение <#aaa49a>· <#e8dfd2>вы вне состава"))
+                visit.stats?.level?.takeIf { it > 0 }?.let { add(line("level", "<#f4bd6a>| <#e8dfd2>Уровень: <#f4bd6a><value>", "value" to Component.text(it))) }
+                visit.stats?.difficulty?.let { add(line("difficulty", "<#f4bd6a>| <#e8dfd2>Сложность: <#f4bd6a><value>", "value" to dungeonDifficulty(dungeon, it))) }
+                visit.stats?.playerCount?.let { add(line("party", "<#f4bd6a>| <#e8dfd2>Участников: <#9bd48d><value>", "value" to Component.text(it))) }
+                if (view.participant) crystals(player)?.let { add(line("crystals", "<#f4bd6a>| <#e8dfd2>Кристаллы: <#c7a0e8>💎 <value>", "value" to Component.text(it))) }
+                party(player)?.takeIf { it.inParty }?.let { partyView ->
+                    val room = (MAX_LINES - size - 2).coerceAtLeast(0)
+                    if (room > 0) {
+                        add(line("party-heading", "<#f4bd6a>Группа <#aaa49a>· <#e8dfd2><value>", "value" to Component.text(partyView.members.size)))
+                        val visibleMembers = if (partyView.members.size <= room) partyView.members else partyView.members.take((room - 1).coerceAtLeast(0))
+                        visibleMembers.forEach { member ->
+                            add(line(
+                                if (!member.online) "party-offline" else if (member.leader) "party-leader" else "party-member",
+                                when {
+                                    !member.online -> "<#aaa49a>○ <name> · не в сети"
+                                    member.leader -> "<#f4bd6a>★ <#e8dfd2><name>"
+                                    else -> "<#9bd48d>● <#e8dfd2><name>"
+                                },
+                                "name" to Component.text(member.name),
+                            ))
+                        }
+                        if (partyView.members.size > room) {
+                            add(line("party-more", "<#aaa49a>… ещё <value>", "value" to Component.text(partyView.members.size - visibleMembers.size)))
+                        }
+                    }
+                }
+                add(line(if (view.participant) "menu" else "observer-menu",
+                    if (view.participant) "<#f4bd6a>Shift + F <#e8dfd2>— меню данжа" else "<#aaa49a>Меню похода — для участников"))
             }
             snapshots[player.uniqueId] = buildMap {
                 put("active", "true")
@@ -53,8 +76,8 @@ internal class DungeonScoreboard(
         playerId?.let { snapshots[it]?.get(key) } ?: if (key == "active") "false" else ""
     internal fun remove(playerId: UUID) { snapshots.remove(playerId) }
     internal fun clear() { snapshots.clear() }
-    private fun line(key: String, fallback: String, value: Component = Component.empty()): String =
-        legacy.serialize(dungeon.text("scoreboard.$key", fallback, "value" to value))
+    private fun line(key: String, fallback: String, vararg values: Pair<String, Component>): String =
+        legacy.serialize(dungeon.text("scoreboard.$key", fallback, *values))
 }
 
 private data class LegacyGlyph(val value: String, val format: String, val whitespace: Boolean)

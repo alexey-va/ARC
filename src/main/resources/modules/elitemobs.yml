@@ -300,15 +300,21 @@ dungeon-qol:
       payment-failed: '<#d7b486>Не удалось списать кристаллы. Покупка отменена.'
       grant-failed: '<#d7b486>Не удалось включить бонус. Кристаллы возвращены.'
   scoreboard:
-    heading: <#f4bd6a>Поход в данж
     waiting: <#f4bd6a>Сбор группы
     ongoing: <#9bd48d>Прохождение идёт
     finished: <#aaa49a>Поход окончен
+    observer: '<#ffb277>Наблюдение <#aaa49a>· <#e8dfd2>вы вне состава'
     level: '<#f4bd6a>| <#e8dfd2>Уровень: <#f4bd6a><value>'
     difficulty: '<#f4bd6a>| <#e8dfd2>Сложность: <#f4bd6a><value>'
     party: '<#f4bd6a>| <#e8dfd2>Участников: <#9bd48d><value>'
     crystals: '<#f4bd6a>| <#e8dfd2>Кристаллы: <#c7a0e8>💎 <value>'
     menu: <#f4bd6a>Shift + F <#e8dfd2>— меню данжа
+    observer-menu: '<#aaa49a>Меню похода — для участников'
+    party-heading: '<#f4bd6a>Группа <#aaa49a>· <#e8dfd2><value>'
+    party-leader: '<#f4bd6a>★ <#e8dfd2><name>'
+    party-member: '<#9bd48d>● <#e8dfd2><name>'
+    party-offline: '<#aaa49a>○ <name> · не в сети'
+    party-more: '<#aaa49a>… ещё <value>'
     title: <#b22222><bold>Rus<white>Crafting
     instanced: <#aaa49a>Отдельное прохождение
     open: <#aaa49a>Открытый данж

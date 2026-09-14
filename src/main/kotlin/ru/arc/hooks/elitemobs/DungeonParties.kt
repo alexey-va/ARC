@@ -18,11 +18,17 @@ internal data class DungeonPartyMember(val name: String, val leader: Boolean, va
 internal class DungeonParties {
     fun view(player: Player): DungeonPartyView {
         if (!PartyConfig.isEnabled() || !player.hasPermission("elitemobs.party")) return DungeonPartyView(false)
-        val party = PartyManager.getParty(player.uniqueId)
+        val party = current(player)
         if (party == null) return DungeonPartyView(
             available = true,
             invitableNames = PartyManager.getInvitablePlayers(player).map(Player::getName),
         )
+        return party.copy(invitableNames = PartyManager.getInvitablePlayers(player).map(Player::getName))
+    }
+
+    fun current(player: Player): DungeonPartyView? {
+        if (!PartyConfig.isEnabled()) return null
+        val party = PartyManager.getParty(player.uniqueId) ?: return null
         return DungeonPartyView(
             available = true,
             inParty = true,
@@ -30,7 +36,6 @@ internal class DungeonParties {
                 val online = Bukkit.getPlayer(id)
                 DungeonPartyMember(online?.name ?: id.toString().take(8), id == party.leader, online != null)
             },
-            invitableNames = PartyManager.getInvitablePlayers(player).map(Player::getName),
         )
     }
 

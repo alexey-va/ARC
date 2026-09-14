@@ -253,6 +253,14 @@ internal class EMDungeonQol(
         DungeonPanelView(player.world.uid, it, view(player))
     }
 
+    internal fun scoreboardView(player: Player): DungeonScoreboardView? {
+        if (!enabled || closed || !player.isOnline || player.isDead) return null
+        val visit = resolve(player.world) ?: return null
+        val participant = member(player, visit)
+        if (!participant && !visit.instanced) return null
+        return DungeonScoreboardView(visit, participant)
+    }
+
     internal fun partiesAvailable(): Boolean = com.magmaguy.elitemobs.config.PartyConfig.isEnabled()
 
     /** Dialog callbacks must still belong to the exact world and native run shown. */
@@ -522,6 +530,7 @@ internal class EMDungeonQol(
 }
 
 internal data class DungeonPanelView(val worldId: UUID, val visit: DungeonVisit, val saves: DungeonSaveView?)
+internal data class DungeonScoreboardView(val visit: DungeonVisit, val participant: Boolean)
 internal data class DungeonSaveView(val worldId: UUID, val run: String, val points: List<DungeonSavePoint>, val entry: Location?, val exit: Location?)
 internal data class DungeonSaveEdit(val success: Boolean, val message: Component)
 

@@ -183,6 +183,31 @@ class EMDungeonQolTest : FreeSpec({
         }
     }
 
+    "nonparticipant in an instanced world gets only the observer scoreboard view" {
+        withScheduler {
+            val player = paper.addPlayer("observer")
+            val dungeon = paper.addSimpleWorld("observer-instance")
+            val other = paper.addPlayer("participant")
+            player.teleport(dungeon.spawnLocation)
+            val qol = EMDungeonQol(config(), { world ->
+                if (world == dungeon) DungeonVisit("run", members = setOf(other.uniqueId), instanced = true) else null
+            })
+
+            qol.panelView(player) shouldBe null
+            qol.scoreboardView(player) shouldBe DungeonScoreboardView(
+                DungeonVisit("run", members = setOf(other.uniqueId), instanced = true),
+                participant = false,
+            )
+            qol.close()
+
+            val openDungeon = EMDungeonQol(config(), { world ->
+                if (world == dungeon) DungeonVisit("open", members = setOf(other.uniqueId), instanced = false) else null
+            })
+            openDungeon.scoreboardView(player) shouldBe null
+            openDungeon.close()
+        }
+    }
+
     "does not resume same-world, unsafe, dead, or cancelled teleports" {
         withScheduler {
             val dungeon = paper.addSimpleWorld("dungeon")

@@ -18,6 +18,33 @@ import ru.arc.paper.testing.MockBukkitTestRuntime
 
 class MenuShortcutControllerTest {
     @Test
+    fun `dungeon shift F is claimed early while plain F remains available to EliteMobs`() {
+        MockBukkitTestRuntime.open().use { paper ->
+            val player = paper.addPlayer("dungeon-shortcut")
+            var opened = 0
+            MenuShortcutController(
+                paper.createSimplePlugin("dungeon-shortcut-test"),
+                inDungeon = { true },
+                openDungeonMenu = { opened++ },
+            ).use { shortcuts ->
+                fun swap() = PlayerSwapHandItemsEvent(
+                    player,
+                    player.inventory.itemInMainHand,
+                    player.inventory.itemInOffHand,
+                ).also(shortcuts::onDungeonSwapHands)
+
+                player.isSneaking = false
+                swap().isCancelled shouldBe false
+                opened shouldBe 0
+
+                player.isSneaking = true
+                swap().isCancelled shouldBe true
+                opened shouldBe 1
+            }
+        }
+    }
+
+    @Test
     fun `claim block shift shortcut opens lands menu on every use and never swaps`() {
         MockBukkitTestRuntime.open().use { paper ->
             val player = paper.addPlayer("claim-shortcut")

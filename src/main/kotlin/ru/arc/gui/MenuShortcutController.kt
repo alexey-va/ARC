@@ -45,13 +45,29 @@ class MenuShortcutController(
         plugin.server.pluginManager.registerEvents(this, plugin)
     }
 
+    /**
+     * EliteMobs also consumes swap-hands at LOWEST while dungeon controls are active. ARC is
+     * registered before that delayed listener, so claiming only the sneaking gesture here keeps
+     * Shift+F for the dungeon menu while leaving plain F available to class abilities.
+     */
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
+    fun onDungeonSwapHands(event: PlayerSwapHandItemsEvent) {
+        if (event.isCancelled || !event.player.isSneaking) return
+        if (isClaimBlockShortcut(event.player)) {
+            openClaimBlockMenu(event)
+            return
+        }
+        if (!inDungeon(event.player)) return
+        event.isCancelled = true
+        ArcMenus.beginDialogFlow(event.player)
+        openDungeonMenu(event.player)
+    }
+
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun onSwapHands(event: PlayerSwapHandItemsEvent) {
         if (event.isCancelled || !event.player.isSneaking) return
-        if (ClaimBlockIdentity.matches(event.player.inventory.itemInMainHand) ||
-            ClaimBlockIdentity.matches(event.player.inventory.itemInOffHand)) {
-            event.isCancelled = true
-            LandsUiModule.openCurrent(event.player)
+        if (isClaimBlockShortcut(event.player)) {
+            openClaimBlockMenu(event)
             return
         }
         if (inDungeon(event.player)) {
@@ -72,6 +88,15 @@ class MenuShortcutController(
                 "<red>Назначенное действие сейчас недоступно. Выберите другое в настройках меню.",
             ), true,
         ))
+    }
+
+    private fun isClaimBlockShortcut(player: Player): Boolean =
+        ClaimBlockIdentity.matches(player.inventory.itemInMainHand) ||
+            ClaimBlockIdentity.matches(player.inventory.itemInOffHand)
+
+    private fun openClaimBlockMenu(event: PlayerSwapHandItemsEvent) {
+        event.isCancelled = true
+        LandsUiModule.openCurrent(event.player)
     }
 
     override fun close() = HandlerList.unregisterAll(this)

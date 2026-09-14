@@ -15,18 +15,19 @@ class DungeonScoreboardTest : FreeSpec({
         val id = UUID.randomUUID()
         every { player.uniqueId } returns id
         val qol = mockk<EMDungeonQol>()
-        every { qol.panelView(player) } returns DungeonPanelView(
-            UUID.randomUUID(), DungeonVisit("run", name = "Крипта", stats = DungeonVisitStats(3, "normal", 12)), null)
+        every { qol.scoreboardView(player) } returns DungeonScoreboardView(
+            DungeonVisit("run", name = "Крипта", stats = DungeonVisitStats(3, "normal", 12)), true)
         every { qol.text(any(), any(), *anyVararg()) } answers {
             val values = thirdArg<Array<out Pair<String, net.kyori.adventure.text.Component>>>().toMap()
-            val body = secondArg<String>().replace("<value>", values["value"]?.toString().orEmpty())
+            val plain = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+            val body = secondArg<String>().replace("<value>", values["value"]?.let(plain::serialize).orEmpty())
             net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize(body)
         }
-        val board = DungeonScoreboard(qol) { "42" }
+        val board = DungeonScoreboard(qol, party = { null }) { "42" }
         board.refresh(listOf(player))
-        CompletableFuture.supplyAsync { board.value(id, "line_2") }.get() shouldBe "Крипта"
+        CompletableFuture.supplyAsync { board.value(id, "line_1") }.get() shouldBe "Крипта"
         board.value(id, "active") shouldBe "true"
-        (1..15).map { board.value(id, "line_$it") }.joinToString("\n") shouldContain "Кристаллы"
+        (1..14).map { board.value(id, "line_$it") }.joinToString("\n") shouldContain "Кристаллы"
     }
 
     "long dungeon names wrap at word boundaries without widening the sidebar" {
@@ -34,25 +35,24 @@ class DungeonScoreboardTest : FreeSpec({
         val id = UUID.randomUUID()
         every { player.uniqueId } returns id
         val qol = mockk<EMDungeonQol>()
-        every { qol.panelView(player) } returns DungeonPanelView(
-            UUID.randomUUID(),
+        every { qol.scoreboardView(player) } returns DungeonScoreboardView(
             DungeonVisit(
                 "run",
                 name = "&f⚔ &a[ур. на выбор] &bПодземелье Освящённого призыва",
                 instanced = true,
             ),
-            null,
+            true,
         )
         every { qol.text(any(), any(), *anyVararg()) } answers {
             net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize(secondArg<String>())
         }
 
-        val board = DungeonScoreboard(qol) { null }
+        val board = DungeonScoreboard(qol, party = { null }) { null }
         board.refresh(listOf(player))
 
-        visibleText(board.value(id, "line_2")) shouldBe "⚔ [ур. на выбор] Подземелье"
-        visibleText(board.value(id, "line_3")) shouldBe "Освящённого призыва"
-        visibleText(board.value(id, "line_4")) shouldBe "Отдельное прохождение"
+        visibleText(board.value(id, "line_1")) shouldBe "⚔ [ур. на выбор] Подземелье"
+        visibleText(board.value(id, "line_2")) shouldBe "Освящённого призыва"
+        visibleText(board.value(id, "line_3")) shouldBe "Отдельное прохождение"
     }
 
     "hex colour codes survive wrapping and do not consume visible width" {
@@ -62,19 +62,22 @@ class DungeonScoreboardTest : FreeSpec({
         lines.all { it.startsWith("§#12ab34") } shouldBe true
     }
 
-    "nonmember and absent panel clear the snapshot" {
+    "nonparticipant in an instance gets an observer board and an absent dungeon clears it" {
         val player = mockk<Player>()
         val id = UUID.randomUUID()
         every { player.uniqueId } returns id
         val qol = mockk<EMDungeonQol>()
-        every { qol.panelView(player) } returns DungeonPanelView(UUID.randomUUID(), DungeonVisit("run"), null)
+        var view: DungeonScoreboardView? = DungeonScoreboardView(DungeonVisit("run", instanced = true), false)
+        every { qol.scoreboardView(player) } answers { view }
         every { qol.text(any(), any(), *anyVararg()) } answers {
             net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize(secondArg<String>())
         }
-        val board = DungeonScoreboard(qol)
+        val board = DungeonScoreboard(qol, party = { null }) { null }
         board.refresh(listOf(player)); board.value(id, "active") shouldBe "true"
-        board.remove(id); board.value(id, "active") shouldBe "false"
-        board.refresh(emptyList()); board.value(id, "active") shouldBe "false"
+        (1..14).map { board.value(id, "line_$it") }.joinToString("\n") shouldContain "вы вне состава"
+        (1..14).map { board.value(id, "line_$it") }.joinToString("\n") shouldContain "Меню похода — для участников"
+        view = null
+        board.refresh(listOf(player)); board.value(id, "active") shouldBe "false"
     }
 
     "finished state and open unknown stats stay explicit and truthful" {
@@ -82,16 +85,48 @@ class DungeonScoreboardTest : FreeSpec({
         val id = UUID.randomUUID()
         every { player.uniqueId } returns id
         val qol = mockk<EMDungeonQol>()
-        every { qol.panelView(player) } returns DungeonPanelView(UUID.randomUUID(), DungeonVisit("run", canResume = false), null)
+        every { qol.scoreboardView(player) } returns DungeonScoreboardView(DungeonVisit("run", canResume = false), true)
         every { qol.text(any(), any(), *anyVararg()) } answers {
             net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize(secondArg<String>())
         }
-        val board = DungeonScoreboard(qol) { null }
+        val board = DungeonScoreboard(qol, party = { null }) { null }
         board.refresh(listOf(player))
         board.value(id, "active") shouldBe "true"
-        (1..15).map { board.value(id, "line_$it") }.joinToString("\n") shouldContain "Поход окончен"
+        (1..14).map { board.value(id, "line_$it") }.joinToString("\n") shouldContain "Поход окончен"
         board.clear()
         board.value(id, "active") shouldBe "false"
+    }
+
+    "party section shows the leader and members without exceeding the sidebar limit" {
+        val player = mockk<Player>()
+        val id = UUID.randomUUID()
+        every { player.uniqueId } returns id
+        val qol = mockk<EMDungeonQol>()
+        every { qol.scoreboardView(player) } returns DungeonScoreboardView(
+            DungeonVisit("run", name = "Крипта", instanced = true, stats = DungeonVisitStats(5, "hard", 20)), true)
+        every { qol.text(any(), any(), *anyVararg()) } answers {
+            val values = thirdArg<Array<out Pair<String, net.kyori.adventure.text.Component>>>().toMap()
+            val plain = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+            values.entries.fold(secondArg<String>()) { text, (key, value) -> text.replace("<$key>", plain.serialize(value)) }
+                .let(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()::deserialize)
+        }
+        val party = DungeonPartyView(
+            available = true,
+            inParty = true,
+            members = listOf(
+                DungeonPartyMember("Лидер", leader = true, online = true),
+                DungeonPartyMember("Друг", leader = false, online = true),
+            ),
+        )
+        val board = DungeonScoreboard(qol, party = { party }) { "42" }
+
+        board.refresh(listOf(player))
+
+        val lines = (1..14).map { visibleText(board.value(id, "line_$it")) }
+        lines.joinToString("\n") shouldContain "Группа · 2"
+        lines.joinToString("\n") shouldContain "★ Лидер"
+        lines.joinToString("\n") shouldContain "● Друг"
+        lines.count { it.isNotEmpty() } shouldBe 11
     }
 })
 
