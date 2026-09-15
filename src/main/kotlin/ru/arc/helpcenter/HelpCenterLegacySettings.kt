@@ -13,6 +13,7 @@ import ru.arc.config.ConfigManager
 import ru.arc.hooks.HookRegistry
 import ru.arc.gui.MenuShortcutAction
 import ru.arc.gui.MenuEscapeBehavior
+import ru.arc.iteminfo.ItemInfoMode
 import java.util.concurrent.CompletableFuture
 
 data class HelpCenterLegacySettingEntry(
@@ -62,6 +63,7 @@ class HelpCenterLegacySettings(
         entry("escape", "legacy-settings-escape", if (MenuEscapeBehavior.goesBack(backend.meta(player, MenuEscapeBehavior.META_KEY))) "back" else "close", "legacy-settings-escape-tooltip"),
         entry("scoreboard", "legacy-settings-scoreboard", modeState(player, "tab.scoreboard"), "legacy-settings-scoreboard-tooltip"),
         entry("tablist", "legacy-settings-tablist", modeState(player, "tab.tablist"), "legacy-settings-tablist-tooltip"),
+        entry("item-info", "legacy-settings-item-info", ItemInfoMode.fromStored(backend.meta(player, ItemInfoMode.META_KEY)).id, "legacy-settings-item-info-tooltip"),
         entry("lands", "legacy-settings-lands", null, "legacy-settings-lands-tooltip"),
         entry("portal-by-other", "legacy-settings-portal-by-other", onOff(player, PORTAL_BY_OTHER), "legacy-settings-portal-by-other-tooltip"),
         entry("portal-for-other", "legacy-settings-portal-for-other", onOff(player, PORTAL_FOR_OTHER), "legacy-settings-portal-for-other-tooltip"),
@@ -82,6 +84,9 @@ class HelpCenterLegacySettings(
         "admin" -> if (backend.hasPermission(player, ADMIN)) backend.consoleCommand(player, ConsoleCommand.OPEN_ADMIN_SETTINGS) else falseFuture()
         "scoreboard-off" -> backend.setExclusiveMode(player, "tab.scoreboard", null)
         "tablist-off" -> backend.setExclusiveMode(player, "tab.tablist", null)
+        "item-info-hologram" -> backend.setMeta(player, ItemInfoMode.META_KEY, ItemInfoMode.HOLOGRAM.id)
+        "item-info-bossbar" -> backend.setMeta(player, ItemInfoMode.META_KEY, ItemInfoMode.BOSSBAR.id)
+        "item-info-off" -> backend.setMeta(player, ItemInfoMode.META_KEY, ItemInfoMode.OFF.id)
         "lands-show" -> backend.command(player, PlayerCommand.LANDS_SHOW)
         "lands-hide" -> backend.command(player, PlayerCommand.LANDS_HIDE)
         "portal-by-other" -> togglePermission(player, PORTAL_BY_OTHER)

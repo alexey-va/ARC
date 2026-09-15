@@ -497,7 +497,7 @@ class HelpCenterScreensTest {
     fun `settings retain every legacy control in four groups and options return to their group`() {
         val expected = mapOf(
             "controls" to listOf("legacy_shortcut", "legacy_escape", "legacy_shift_sign_edit", "legacy_stairs_sit"),
-            "interface" to listOf("legacy_scoreboard", "legacy_tablist", "setting_particles", "legacy_totem", "legacy_resource_pack"),
+            "interface" to listOf("legacy_scoreboard", "legacy_tablist", "legacy_item_info", "setting_particles", "legacy_totem", "legacy_resource_pack"),
             "social" to listOf("setting_chat_global", "legacy_notifications", "legacy_tpa"),
             "world" to listOf("setting_trails_on", "legacy_flight", "legacy_lands", "legacy_portal_style", "legacy_portal_by_other", "legacy_portal_for_other"),
         )
@@ -513,6 +513,15 @@ class HelpCenterScreensTest {
         click("legacy_tablist")
         assertEquals(21, screen.buttons.size)
         assertTrue(plain(screen.buttons.last().label).startsWith("✔"))
+        click("back")
+        assertEquals("help.settings.section.interface", screen.id)
+        click("legacy_item_info")
+        assertEquals("help.settings.item-info", screen.id)
+        assertEquals(
+            listOf("legacy_item_info_hologram", "legacy_item_info_bossbar", "legacy_item_info_off"),
+            screen.buttons.map { it.id.value },
+        )
+        assertTrue(plain(screen.buttons.first().label).startsWith("✔"))
         click("back")
         assertEquals("help.settings.section.interface", screen.id)
         click("back")

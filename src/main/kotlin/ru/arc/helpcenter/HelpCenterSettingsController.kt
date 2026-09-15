@@ -31,7 +31,7 @@ internal class HelpCenterSettingsController(
 ) : AutoCloseable {
     private enum class Section(val key: String, val entries: List<String>) {
         CONTROLS("controls", listOf("shortcut", "escape", "shift-sign-edit", "stairs-sit")),
-        INTERFACE("interface", listOf("scoreboard", "tablist", "particles", "totem", "resource-pack")),
+        INTERFACE("interface", listOf("scoreboard", "tablist", "item-info", "particles", "totem", "resource-pack")),
         SOCIAL("social", listOf("chat", "notifications", "tpa")),
         WORLD("world", listOf("trails", "flight", "lands", "portal-style", "portal-by-other", "portal-for-other")),
     }
@@ -119,6 +119,7 @@ internal class HelpCenterSettingsController(
                 "shortcut" -> openOptions(player, entry.id, MenuShortcutAction.entries.map { "shortcut-${it.id}" }, section)
                 "escape" -> openOptions(player, entry.id, listOf("escape-close", "escape-back"), section)
                 "scoreboard", "tablist" -> openOptions(player, entry.id, (1..20).map { "${entry.id}-$it" } + "${entry.id}-off", section)
+                "item-info" -> openOptions(player, entry.id, listOf("item-info-hologram", "item-info-bossbar", "item-info-off"), section)
                 "lands" -> openOptions(player, entry.id, listOf("lands-show", "lands-hide"), section)
                 "portal-style" -> openOptions(player, entry.id, HelpCenterLegacySettings.PORTAL_STYLES.map { "portal-style-$it" }, section)
                 "flight" -> openFlight(player)

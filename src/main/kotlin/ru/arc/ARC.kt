@@ -68,6 +68,7 @@ import ru.arc.gui.GuiDefaults
 import ru.arc.gui.ArcMenus
 import ru.arc.dialogdemo.DialogDemoModule
 import ru.arc.helpcenter.HelpCenterModule
+import ru.arc.iteminfo.ItemInfoModule
 import ru.arc.itemcatalog.ItemsCatalogModule
 import ru.arc.itemcatalog.CaseRewardIssueCommand
 import ru.arc.landsui.LandsUiModule
@@ -274,6 +275,7 @@ open class ARC : JavaPlugin() {
             DialogDemoModule,
             CommandHideModule,
             OnboardingModule,
+            ItemInfoModule,
             // Sync systems (priority 100)
             SyncModule,
         )
@@ -405,6 +407,7 @@ open class ARC : JavaPlugin() {
                 "modules/items-catalog.yml",
                 "modules/lands-ui.yml",
                 "modules/help-center.yml",
+                "modules/item-info.yml",
                 "modules/pouches.yml",
                 "modules/backpacks.yml",
                 "modules/commands.yml",

@@ -6,7 +6,7 @@ sources:
   settings:
     path: src/main/resources/modules/help-center.yml
     root: text
-    include: [category-settings-title, settings-hub-body, settings-controls-label, settings-controls-tooltip, settings-interface-label, settings-interface-tooltip, settings-social-label, settings-social-tooltip, settings-world-label, settings-world-tooltip, settings-join-messages-label, settings-join-messages-tooltip, legacy-settings-admin, legacy-settings-admin-tooltip, root-label]
+    include: [category-settings-title, settings-hub-body, settings-controls-label, settings-controls-tooltip, settings-interface-label, settings-interface-tooltip, settings-social-label, settings-social-tooltip, settings-world-label, settings-world-tooltip, settings-join-messages-label, settings-join-messages-tooltip, legacy-settings-admin, legacy-settings-admin-tooltip, settings-options-item-info-title, settings-options-item-info-body, settings-options-body, legacy-action-item-info-hologram, legacy-action-item-info-bossbar, legacy-action-item-info-off, settings-interface-back-label, root-label]
 placeholders:
   shortcut: главное меню
   escape: назад
@@ -47,5 +47,22 @@ surfaces:
         - {id: join-messages, text-key: settings-join-messages-label, tooltip-key: settings-join-messages-tooltip, width: 230}
         - {id: admin, text-key: legacy-settings-admin, tooltip-key: legacy-settings-admin-tooltip, width: 230}
       exit-button: {id: root, text-key: root-label, tooltip-key: root-label, width: 230}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: settings-item-info
+      source: settings
+      format: reference-multi-action
+      name-key: settings-options-item-info-title
+      external-title-key: settings-options-item-info-title
+      columns: 2
+      body:
+        - {id: current, text-key: settings-options-body, width: 468, placeholders: {state: 'голограмма'}}
+        - {id: help, text-key: settings-options-item-info-body, width: 468}
+      buttons:
+        - {id: hologram, text-key: legacy-action-item-info-hologram, tooltip-key: settings-options-item-info-body, width: 230}
+        - {id: bossbar, text-key: legacy-action-item-info-bossbar, tooltip-key: settings-options-item-info-body, width: 230}
+        - {id: off, text-key: legacy-action-item-info-off, tooltip-key: settings-options-item-info-body, width: 230}
+      exit-button: {id: back, text-key: settings-interface-back-label, tooltip-key: settings-interface-back-label, width: 230}
       viewport: [854, 480]
       variants: [{id: default}]

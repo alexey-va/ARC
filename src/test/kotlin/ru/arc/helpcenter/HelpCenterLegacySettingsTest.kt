@@ -2,6 +2,7 @@ package ru.arc.helpcenter
 
 import io.mockk.every
 import io.mockk.mockk
+import ru.arc.iteminfo.ItemInfoMode
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -17,6 +18,7 @@ class HelpCenterLegacySettingsTest {
         val settings = HelpCenterLegacySettings(backend)
         assertEquals("main", settings.entries(player).first { it.id == "shortcut" }.state)
         assertEquals("back", settings.entries(player).first { it.id == "escape" }.state)
+        assertEquals("hologram", settings.entries(player).first { it.id == "item-info" }.state)
         assertTrue(settings.execute(player, "shortcut-mount").join())
         assertTrue(settings.execute(player, "escape-back").join())
         val reopened = HelpCenterLegacySettings(backend)
@@ -25,8 +27,11 @@ class HelpCenterLegacySettingsTest {
         assertEquals(false, reopened.execute(player, "shortcut-op").join())
         assertTrue(reopened.execute(player, "shortcut-disabled").join())
         assertTrue(reopened.execute(player, "escape-close").join())
+        assertTrue(reopened.execute(player, "item-info-bossbar").join())
         assertEquals("disabled", reopened.entries(player).first { it.id == "shortcut" }.state)
         assertEquals("close", reopened.entries(player).first { it.id == "escape" }.state)
+        assertEquals("bossbar", reopened.entries(player).first { it.id == "item-info" }.state)
+        assertEquals(ItemInfoMode.META_KEY, backend.metadata.keys.single { it == ItemInfoMode.META_KEY })
     }
 
     @Test
