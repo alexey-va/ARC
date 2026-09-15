@@ -355,13 +355,19 @@ internal object OriginDiningLayout {
         private set
     var sessionRadius = 0.0
         private set
-    var ambientDialogueMillis = 0L
+    var ambientDialogueDelayMillis = 0L..0L
         private set
     var ambientRetryMillis = 0L
         private set
     var guestReconcileMillis = 0L
         private set
-    var ambientWaiterRestMillis = 0L
+    var ambientWaiterRestMillis = 0L..0L
+        private set
+    var ambientReplyDelayTicks = 0L..0L
+        private set
+    var ambientLookHoldTicks = 0L..0L
+        private set
+    var ambientDialogueRange = 8.0
         private set
     private var scales = defaultScales()
     private var surfaceLifts = defaultSurfaceLifts()
@@ -415,10 +421,27 @@ internal object OriginDiningLayout {
         theftCooldownMillis = source.integer("timing.theft-cooldown-seconds").toLong().coerceIn(0L, 3_600L) * 1_000L
         sessionTtlMillis = source.integer("timing.session-ttl-seconds").toLong().coerceIn(30L, 3_600L) * 1_000L
         dialogAuthorizationMillis = source.integer("timing.dialog-authorization-seconds").toLong().coerceIn(5L, 600L) * 1_000L
-        ambientDialogueMillis = source.integer("timing.ambient-dialogue-seconds").toLong().coerceIn(5L, 600L) * 1_000L
+        val dialogueFallback = source.integer("timing.ambient-dialogue-seconds", 42).toLong().coerceIn(5L, 600L)
+        ambientDialogueDelayMillis = orderedRange(
+            source.integer("timing.ambient-dialogue-min-seconds", dialogueFallback.toInt()).toLong().coerceIn(5L, 600L) * 1_000L,
+            source.integer("timing.ambient-dialogue-max-seconds", dialogueFallback.toInt()).toLong().coerceIn(5L, 600L) * 1_000L,
+        )
         ambientRetryMillis = source.integer("timing.ambient-retry-seconds").toLong().coerceIn(1L, 120L) * 1_000L
         guestReconcileMillis = source.integer("timing.guest-reconcile-seconds").toLong().coerceIn(1L, 120L) * 1_000L
-        ambientWaiterRestMillis = source.integer("timing.ambient-waiter-rest-seconds", 7).toLong().coerceIn(0L, 60L) * 1_000L
+        val restFallback = source.integer("timing.ambient-waiter-rest-seconds", 7).toLong().coerceIn(0L, 60L)
+        ambientWaiterRestMillis = orderedRange(
+            source.integer("timing.ambient-waiter-rest-min-seconds", restFallback.toInt()).toLong().coerceIn(0L, 60L) * 1_000L,
+            source.integer("timing.ambient-waiter-rest-max-seconds", restFallback.toInt()).toLong().coerceIn(0L, 60L) * 1_000L,
+        )
+        ambientReplyDelayTicks = orderedRange(
+            source.integer("timing.ambient-reply-delay-min-ticks", 20).toLong().coerceIn(1L, 200L),
+            source.integer("timing.ambient-reply-delay-max-ticks", 44).toLong().coerceIn(1L, 200L),
+        )
+        ambientLookHoldTicks = orderedRange(
+            source.integer("timing.ambient-look-hold-min-ticks", 35).toLong().coerceIn(1L, 200L),
+            source.integer("timing.ambient-look-hold-max-ticks", 70).toLong().coerceIn(1L, 200L),
+        )
+        ambientDialogueRange = source.real("interaction.ambient-dialogue-range", 8.0).coerceIn(2.0, 16.0)
         waiterReadyMargin = source.real("navigation.waiter-ready-margin").coerceIn(0.5, 4.0)
         waiterPlayerRange = source.real("navigation.waiter-player-range").coerceIn(1.0, 6.0)
         navigatorDistanceMargin = source.real("navigation.distance-margin", 0.35).coerceIn(0.1, 2.0)
@@ -589,6 +612,12 @@ internal object OriginDiningLayout {
     internal fun ambientWaiterAssignments(): Map<String, Int> =
         OriginDiningAmbientLayout.guestTables.associate { it.id to it.waiterId }
 
+    internal fun ambientDialogueCount(): Int = OriginDiningAmbientLayout.dialogue.size
+
+    internal fun serviceDialogueCount(): Int = OriginDiningAmbientLayout.serviceDialogue.size
+
+    internal fun ambientCycleDelayMillis(): LongRange = OriginDiningAmbientLayout.cycleDelayMillis
+
     fun waiterServes(seat: OriginDiningSeat, waiterId: Int): Boolean =
         if (seat.id.startsWith("brewery_")) waiterId == 410 || waiterId == 411
         else waiterId == 431 || waiterId == 432
@@ -626,6 +655,8 @@ internal object OriginDiningLayout {
             "berry_kvass" to 0.24475f,
             "spiced_mead" to 0.24475f,
         )
+
+    private fun orderedRange(first: Long, second: Long): LongRange = minOf(first, second)..maxOf(first, second)
 
     internal fun stairFacing(yaw: Float): BlockFace {
         val normalized = ((yaw % 360f) + 360f) % 360f
@@ -736,10 +767,17 @@ private data class OriginDiningAmbientRoute(
 )
 
 private data class OriginDiningDialogue(
+    val id: String,
     val firstNpcId: Int,
     val secondNpcId: Int,
     val firstLine: String,
     val secondLine: String,
+)
+
+private data class OriginDiningServiceDialogue(
+    val id: String,
+    val waiterLine: String,
+    val guestLine: String,
 )
 
 private object OriginDiningAmbientLayout {
@@ -750,6 +788,8 @@ private object OriginDiningAmbientLayout {
     var guestTables: List<OriginDiningGuestTable> = emptyList()
         private set
     var dialogue: List<OriginDiningDialogue> = emptyList()
+        private set
+    var serviceDialogue: List<OriginDiningServiceDialogue> = emptyList()
         private set
     var cleanupPoints: List<OriginDiningPoint> = emptyList()
         private set
@@ -773,7 +813,7 @@ private object OriginDiningAmbientLayout {
         private set
     lateinit var legacyOrderLabel: OriginDiningPoint
         private set
-    var cycleSeconds = 0
+    var cycleDelayMillis = 0L..0L
         private set
     var routesPerCycle = 1
         private set
@@ -803,11 +843,17 @@ private object OriginDiningAmbientLayout {
             source.stringList("scene.dialogue-ids").map { id ->
                 val root = "scene.dialogues.$id"
                 OriginDiningDialogue(
+                    id,
                     source.integer("$root.first-npc-id"),
                     source.integer("$root.second-npc-id"),
                     source.string("$root.first-line"),
                     source.string("$root.second-line"),
                 )
+            }
+        serviceDialogue =
+            source.stringList("scene.service-dialogue-ids").map { id ->
+                val root = "scene.service-dialogues.$id"
+                OriginDiningServiceDialogue(id, source.string("$root.waiter-line"), source.string("$root.guest-line"))
             }
         cleanupPoints = source.stringList("scene.cleanup-points").mapIndexed { index, raw -> parsePoint(raw, "scene.cleanup-points[$index]") }
         authoredSeatIds = source.stringList("scene.authored-seat-ids").map(String::toInt).toSet()
@@ -843,7 +889,10 @@ private object OriginDiningAmbientLayout {
         legacyMealHitbox = OriginDiningLayout.configPoint(source, "scene.legacy-player-table.meal-hitbox")
         legacyMealDisplay = OriginDiningLayout.configPoint(source, "scene.legacy-player-table.meal-display")
         legacyOrderLabel = OriginDiningLayout.configPoint(source, "scene.legacy-player-table.order-label")
-        cycleSeconds = source.integer("scene.ambient-cycle-seconds").coerceIn(8, 120)
+        val cycleFallback = source.integer("scene.ambient-cycle-seconds", 8).toLong().coerceIn(4L, 120L)
+        val cycleMinimum = source.integer("scene.ambient-cycle-min-seconds", cycleFallback.toInt()).toLong().coerceIn(4L, 120L)
+        val cycleMaximum = source.integer("scene.ambient-cycle-max-seconds", cycleFallback.toInt()).toLong().coerceIn(4L, 120L)
+        cycleDelayMillis = minOf(cycleMinimum, cycleMaximum) * 1_000L..maxOf(cycleMinimum, cycleMaximum) * 1_000L
         routesPerCycle = source.integer("scene.ambient-routes-per-cycle", 4).coerceIn(1, 4)
     }
 
@@ -902,9 +951,9 @@ private class OriginDiningService : AutoCloseable {
     private val ambientRoutes = mutableMapOf<Int, OriginDiningAmbientRoute>()
     private val ambientWaiterAvailableAt = mutableMapOf<Int, Long>()
     private val ambientTableDueAt = mutableMapOf<String, Long>()
-    private val speechDisplays = mutableSetOf<TextDisplay>()
-    private var ambientCursor = 0
-    private var dialogueCursor = 0
+    private val speechDisplays = mutableMapOf<Int, TextDisplay>()
+    private val lastServiceDialogueByWaiter = mutableMapOf<Int, String>()
+    private var lastDialogueId: String? = null
     private var nextAmbientAt = 0L
     private var nextDialogueAt = 0L
     private var nextGuestSeatReconcileAt = 0L
@@ -922,6 +971,9 @@ private class OriginDiningService : AutoCloseable {
         resolveAutoGuestSeats()
         cleanupWorldSeats()
         cleanupAmbientLegacy()
+        val now = System.currentTimeMillis()
+        nextAmbientAt = now + OriginDiningAmbientLayout.cycleDelayMillis.random()
+        nextDialogueAt = now + OriginDiningLayout.ambientDialogueDelayMillis.random()
         tasks.runLater(20L) {
             reconcileGuestSeats()
             seedGuestMeals()
@@ -2665,6 +2717,7 @@ private class OriginDiningService : AutoCloseable {
 
     private fun showSpeech(npcId: Int, line: String, color: NamedTextColor = NamedTextColor.GOLD) {
         val npc = runCatching { CitizensAPI.getNPCRegistry().getById(npcId) }.getOrNull()?.takeIf { it.isSpawned } ?: return
+        speechDisplays.remove(npcId)?.let { if (it.isValid) it.remove() }
         val display = npc.entity.world.spawn(npc.entity.location.clone().add(0.0, 2.45, 0.0), TextDisplay::class.java).apply {
             text(Component.text(line, color))
             billboard = Display.Billboard.CENTER
@@ -2674,10 +2727,9 @@ private class OriginDiningService : AutoCloseable {
             isPersistent = false
             addScoreboardTag(SPEECH_TAG)
         }
-        speechDisplays += display
+        speechDisplays[npcId] = display
         tasks.runLater(45L) {
-            speechDisplays.remove(display)
-            if (display.isValid) display.remove()
+            if (speechDisplays.remove(npcId, display) && display.isValid) display.remove()
         }
     }
 
@@ -2688,7 +2740,7 @@ private class OriginDiningService : AutoCloseable {
         val npc = waiter(waiterId)?.takeIf { it.isSpawned && it.entity.world.name == OriginDiningLayout.WORLD } ?: return false
         val currentDish = guestMeals[table.id]?.dish
         val choices = BreweryTableDialogs.food.filter { it.id != currentDish?.id }
-        val dish = choices[Math.floorMod(ambientCursor + table.id.hashCode(), choices.size)]
+        val dish = choices.random()
         val world = npc.entity.world
         val waypoints = buildList {
             table.transit?.let { add(it.inWorld(world)) }
@@ -2730,9 +2782,15 @@ private class OriginDiningService : AutoCloseable {
                 if (guest != null) npc.faceLocation(guest.entity.location.clone().add(0.0, 1.4, 0.0))
                 (npc.entity as? LivingEntity)?.swingMainHand()
                 npc.entity.world.playSound(route.table.meal.inWorld(npc.entity.world), Sound.ENTITY_ITEM_PICKUP, SoundCategory.PLAYERS, 0.5f, 1.1f)
-                showSpeech(waiterId, "Новое блюдо. Приятного аппетита.")
-                tasks.runLater(24L) {
-                    showSpeech(route.table.npcId, "Спасибо. Как раз вовремя.")
+                val exchange = nextServiceDialogue(waiterId)
+                showSpeech(waiterId, exchange?.waiterLine ?: "Новое блюдо. Приятного аппетита.")
+                tasks.runLater(OriginDiningLayout.ambientReplyDelayTicks.random()) {
+                    val currentGuest = waiter(route.table.npcId)?.takeIf { it.isSpawned }
+                    if (currentGuest != null) {
+                        currentGuest.faceLocation(npc.entity.location.clone().add(0.0, 1.4, 0.0))
+                        showSpeech(route.table.npcId, exchange?.guestLine ?: "Спасибо. Как раз вовремя.")
+                        tasks.runLater(OriginDiningLayout.ambientLookHoldTicks.random()) { restoreGuestLook(route.table.npcId) }
+                    }
                     finishAmbientRoute(waiterId, token, "served")
                 }
                 return@runLater
@@ -2749,7 +2807,7 @@ private class OriginDiningService : AutoCloseable {
     private fun finishAmbientRoute(waiterId: Int, token: UUID, reason: String) {
         val route = ambientRoutes[waiterId]?.takeIf { it.token == token } ?: return
         ambientRoutes.remove(waiterId, route)
-        val restMillis = OriginDiningLayout.ambientWaiterRestMillis
+        val restMillis = OriginDiningLayout.ambientWaiterRestMillis.random()
         val restTicks = (restMillis / 50L).coerceAtLeast(1L)
         ambientWaiterAvailableAt[waiterId] = System.currentTimeMillis() + restMillis
         clearWaiterCarry(waiterId)
@@ -2794,6 +2852,25 @@ private class OriginDiningService : AutoCloseable {
     private fun waiterRestRemainingMillis(waiterId: Int, now: Long = System.currentTimeMillis()): Long =
         (ambientWaiterAvailableAt.getOrDefault(waiterId, 0L) - now).coerceAtLeast(0L)
 
+    private fun nextServiceDialogue(waiterId: Int): OriginDiningServiceDialogue? {
+        val dialogue = OriginDiningAmbientLayout.serviceDialogue
+        if (dialogue.isEmpty()) return null
+        val choices = dialogue.filterNot { it.id == lastServiceDialogueByWaiter[waiterId] }.ifEmpty { dialogue }
+        return choices.random().also { lastServiceDialogueByWaiter[waiterId] = it.id }
+    }
+
+    private fun ambientActor(npcId: Int, allowSpeaking: Boolean = false): net.citizensnpcs.api.npc.NPC? {
+        val npc = waiter(npcId)?.takeIf { it.isSpawned && it.entity.world.name == OriginDiningLayout.WORLD } ?: return null
+        if (npcId in OriginDiningLayout.waiterIds && npc.entity.scoreboardTags.contains(WAITER_BUSY_TAG)) return null
+        if (!allowSpeaking && npcId in speechDisplays) return null
+        return npc
+    }
+
+    private fun restoreAmbientRotation(npcId: Int, yaw: Float, pitch: Float) {
+        val npc = ambientActor(npcId, allowSpeaking = true) ?: return
+        npc.entity.setRotation(yaw, pitch)
+    }
+
     private fun tickAmbient(now: Long) {
         val tables = OriginDiningAmbientLayout.guestTables
         var routesStarted = 0
@@ -2805,33 +2882,47 @@ private class OriginDiningService : AutoCloseable {
             }
         }
         if (routesStarted < OriginDiningAmbientLayout.routesPerCycle && now >= nextAmbientAt && tables.isNotEmpty()) {
-            for (attempt in tables.indices) {
-                val table = tables[ambientCursor++ % tables.size]
+            val routeLimit = (1..OriginDiningAmbientLayout.routesPerCycle).random()
+            for (table in tables.shuffled()) {
+                if (routesStarted >= routeLimit) break
                 if (table.id !in ambientTableDueAt && startAmbientRoute(table, "rotation")) {
                     routesStarted++
-                    if (routesStarted >= OriginDiningAmbientLayout.routesPerCycle) break
                 }
             }
+            nextAmbientAt = now + OriginDiningAmbientLayout.cycleDelayMillis.random()
         }
-        if (routesStarted > 0) nextAmbientAt = now + OriginDiningAmbientLayout.cycleSeconds * 1_000L
         if (now >= nextDialogueAt && OriginDiningAmbientLayout.dialogue.isNotEmpty()) {
-            val dialogue = OriginDiningAmbientLayout.dialogue[dialogueCursor++ % OriginDiningAmbientLayout.dialogue.size]
-            val first = waiter(dialogue.firstNpcId)?.takeIf { it.isSpawned }
-            val second = waiter(dialogue.secondNpcId)?.takeIf { it.isSpawned }
-            if (first != null && second != null && first.entity.location.distanceSquared(second.entity.location) <= 64.0) {
+            val candidates = OriginDiningAmbientLayout.dialogue.filterNot { it.id == lastDialogueId }.ifEmpty { OriginDiningAmbientLayout.dialogue }.shuffled()
+            val selected = candidates.firstNotNullOfOrNull { dialogue ->
+                val first = ambientActor(dialogue.firstNpcId) ?: return@firstNotNullOfOrNull null
+                val second = ambientActor(dialogue.secondNpcId) ?: return@firstNotNullOfOrNull null
+                if (first.entity.location.distanceSquared(second.entity.location) > OriginDiningLayout.ambientDialogueRange * OriginDiningLayout.ambientDialogueRange) null
+                else Triple(dialogue, first, second)
+            }
+            if (selected != null) {
+                val (dialogue, first, second) = selected
+                val firstYaw = first.entity.location.yaw
+                val firstPitch = first.entity.location.pitch
+                val secondYaw = second.entity.location.yaw
+                val secondPitch = second.entity.location.pitch
                 first.faceLocation(second.entity.location.clone().add(0.0, 1.4, 0.0))
                 showSpeech(first.id, dialogue.firstLine)
-                tasks.runLater(24L) {
-                    val currentSecond = waiter(dialogue.secondNpcId)?.takeIf { it.isSpawned } ?: return@runLater
-                    currentSecond.faceLocation(first.entity.location.clone().add(0.0, 1.4, 0.0))
-                    showSpeech(currentSecond.id, dialogue.secondLine)
-                    tasks.runLater(45L) {
-                        restoreGuestLook(dialogue.firstNpcId)
-                        restoreGuestLook(dialogue.secondNpcId)
-                    }
+                val replyDelay = OriginDiningLayout.ambientReplyDelayTicks.random()
+                tasks.runLater(replyDelay + OriginDiningLayout.ambientLookHoldTicks.random()) {
+                    restoreAmbientRotation(dialogue.firstNpcId, firstYaw, firstPitch)
+                    restoreAmbientRotation(dialogue.secondNpcId, secondYaw, secondPitch)
                 }
+                tasks.runLater(replyDelay) {
+                    val currentFirst = ambientActor(dialogue.firstNpcId, allowSpeaking = true) ?: return@runLater
+                    val currentSecond = ambientActor(dialogue.secondNpcId) ?: return@runLater
+                    currentSecond.faceLocation(currentFirst.entity.location.clone().add(0.0, 1.4, 0.0))
+                    showSpeech(currentSecond.id, dialogue.secondLine)
+                }
+                lastDialogueId = dialogue.id
+                nextDialogueAt = now + OriginDiningLayout.ambientDialogueDelayMillis.random()
+            } else {
+                nextDialogueAt = now + OriginDiningLayout.ambientRetryMillis
             }
-            nextDialogueAt = now + OriginDiningLayout.ambientDialogueMillis
         }
     }
 
@@ -3075,7 +3166,7 @@ private class OriginDiningService : AutoCloseable {
         meals.values.forEach { removeMeal(it, "service-stop") }
         guestMeals.values.forEach(::removeGuestMeal)
         guestMarkers.values.forEach { if (it.isValid) it.remove() }
-        speechDisplays.forEach { if (it.isValid) it.remove() }
+        speechDisplays.values.forEach { if (it.isValid) it.remove() }
         OriginDiningLayout.seats.map(OriginDiningSeat::waiterId).distinct().forEach { releaseWaiter(it, force = true) }
     }
 
@@ -3106,6 +3197,8 @@ private class OriginDiningService : AutoCloseable {
         ambientRoutes.clear()
         ambientWaiterAvailableAt.clear()
         ambientTableDueAt.clear()
+        lastServiceDialogueByWaiter.clear()
+        lastDialogueId = null
         speechDisplays.clear()
         info("ORIGIN_DINING phase=STOPPED")
     }

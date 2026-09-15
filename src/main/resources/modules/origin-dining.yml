@@ -94,6 +94,7 @@ interaction:
   meal-hitbox-y-offset: -0.15
   waiter-hitbox-width: 1.4
   waiter-hitbox-height: 2.2
+  ambient-dialogue-range: 8.0
 
 timing:
   delivery-fallback-ticks: 20
@@ -108,11 +109,18 @@ timing:
   theft-cooldown-seconds: 90
   session-ttl-seconds: 300
   dialog-authorization-seconds: 60
-  ambient-dialogue-seconds: 42
+  # Background life uses ranges so guests and waiters do not act on one clock.
+  ambient-dialogue-min-seconds: 24
+  ambient-dialogue-max-seconds: 52
+  ambient-reply-delay-min-ticks: 18
+  ambient-reply-delay-max-ticks: 42
+  ambient-look-hold-min-ticks: 32
+  ambient-look-hold-max-ticks: 68
   ambient-retry-seconds: 5
   guest-reconcile-seconds: 5
-  # Each waiter pauses after serving before starting another ambient table route.
-  ambient-waiter-rest-seconds: 7
+  # Each waiter pauses for a different plausible interval after serving.
+  ambient-waiter-rest-min-seconds: 6
+  ambient-waiter-rest-max-seconds: 10
 
 navigation:
   waiter-ready-margin: 2.25
@@ -205,8 +213,10 @@ dynamic-seats:
 # Все координаты двух ресторанных сцен находятся здесь и перечитываются через
 # /arc reload. Формат точки: x,y,z,yaw. Формат блока: x,y,z.
 scene:
-  ambient-cycle-seconds: 8
-  ambient-routes-per-cycle: 4
+  ambient-cycle-min-seconds: 8
+  ambient-cycle-max-seconds: 15
+  # The actual count is chosen randomly from one to this limit each cycle.
+  ambient-routes-per-cycle: 2
   # ARC ищет обычные нижние ступеньки со столом в соседнем блоке, рассаживает
   # этих посетителей ближе к их резервным точкам и сохраняет места для игроков.
   auto-seating:
@@ -327,30 +337,121 @@ scene:
       meal: "-47.5,73.1,49.8,0"
       waiter-stop: "-50.5,72.0,50.5,180"
       transit: "-50.5,72.0,53.5,180"
-  dialogue-ids: [brewery_north, brewery_fire, restaurant_a, restaurant_b, restaurant_bar]
+  dialogue-ids:
+    - brewery_north
+    - brewery_north_evening
+    - brewery_fire
+    - brewery_fire_second
+    - brewery_east
+    - brewery_east_second
+    - brewery_waiters_tables
+    - brewery_waiters_kitchen
+    - restaurant_a
+    - restaurant_a_second
+    - restaurant_b
+    - restaurant_b_second
+    - restaurant_waiters_tables
+    - restaurant_waiters_kitchen
+    - restaurant_bar
+    - restaurant_bar_second
   dialogues:
     brewery_north:
       first-npc-id: 416
       second-npc-id: 417
       first-line: "Пена сегодня держится."
       second-line: "Значит, бочка не зря стояла всю ночь."
+    brewery_north_evening:
+      first-npc-id: 416
+      second-npc-id: 417
+      first-line: "После дождя здесь пахнет хмелем."
+      second-line: "Лучше любого городского дыма."
     brewery_fire:
       first-npc-id: 407
       second-npc-id: 408
       first-line: "А к рыбе что посоветуешь?"
       second-line: "Светлое. И хлеб не забудь."
+    brewery_fire_second:
+      first-npc-id: 407
+      second-npc-id: 408
+      first-line: "У огня всё вкуснее."
+      second-line: "Главное — тарелку близко не ставить."
+    brewery_east:
+      first-npc-id: 419
+      second-npc-id: 420
+      first-line: "Здесь сегодня спокойнее, чем у площади."
+      second-line: "И еду приносят вовремя."
+    brewery_east_second:
+      first-npc-id: 419
+      second-npc-id: 420
+      first-line: "Слышал, на кухне пробуют новый соус."
+      second-line: "Тогда задержимся ещё на одно блюдо."
+    brewery_waiters_tables:
+      first-npc-id: 410
+      second-npc-id: 411
+      first-line: "Я возьму дальние столы."
+      second-line: "Хорошо, я останусь у входа."
+    brewery_waiters_kitchen:
+      first-npc-id: 411
+      second-npc-id: 410
+      first-line: "На кухне готова следующая подача."
+      second-line: "Вижу. Заберу через минуту."
     restaurant_a:
       first-npc-id: 433
       second-npc-id: 434
       first-line: "Тихо сегодня. Слышно, как кипит кухня."
       second-line: "Значит, повар не спорит с огнём."
+    restaurant_a_second:
+      first-npc-id: 433
+      second-npc-id: 434
+      first-line: "Этот стол всё-таки самый уютный."
+      second-line: "Особенно когда у окна никого нет."
     restaurant_b:
       first-npc-id: 435
       second-npc-id: 436
       first-line: "После обеда выйдем к фонтану?"
       second-line: "Если официант не найдёт ещё одну работу."
+    restaurant_b_second:
+      first-npc-id: 435
+      second-npc-id: 436
+      first-line: "Рыба сегодня получилась особенно хорошо."
+      second-line: "Тогда следующую тарелку не меняем."
+    restaurant_waiters_tables:
+      first-npc-id: 431
+      second-npc-id: 432
+      first-line: "Ты проверишь столы у окна?"
+      second-line: "Да. Потом поменяемся."
+    restaurant_waiters_kitchen:
+      first-npc-id: 432
+      second-npc-id: 431
+      first-line: "Бар просил не задерживать напитки."
+      second-line: "После этой подачи зайду."
     restaurant_bar:
       first-npc-id: 439
       second-npc-id: 431
       first-line: "Аня, на второй стол новое блюдо."
       second-line: "Уже несу. Марек пусть проверит напитки."
+    restaurant_bar_second:
+      first-npc-id: 439
+      second-npc-id: 432
+      first-line: "Для дальнего стола всё готово."
+      second-line: "Заберу, как только освобожусь."
+  service-dialogue-ids: [hot_plate, kitchen_ready, fresh_serving, new_course, bread_offer, chef_hurry]
+  service-dialogues:
+    hot_plate:
+      waiter-line: "Ваше блюдо. Осторожно, тарелка горячая."
+      guest-line: "Спасибо, поставьте здесь."
+    kitchen_ready:
+      waiter-line: "Кухня закончила ваш заказ."
+      guest-line: "Отлично, как раз вовремя."
+    fresh_serving:
+      waiter-line: "Принёс свежее блюдо."
+      guest-line: "Выглядит хорошо, спасибо."
+    new_course:
+      waiter-line: "Для вас новая подача."
+      guest-line: "Можно оставить передо мной."
+    bread_offer:
+      waiter-line: "Нужен ещё хлеб к блюду?"
+      guest-line: "Пока хватит, благодарю."
+    chef_hurry:
+      waiter-line: "Повар просил подать сразу."
+      guest-line: "Тогда не будем его расстраивать."

@@ -130,10 +130,16 @@ class OriginDiningLayoutTest : FreeSpec({
     }
 
     "ambient intervals and theft cooldown are loaded from the reloadable module config" {
-        OriginDiningLayout.ambientDialogueMillis shouldBe 42_000L
+        OriginDiningLayout.ambientDialogueDelayMillis shouldBe 24_000L..52_000L
         OriginDiningLayout.ambientRetryMillis shouldBe 5_000L
         OriginDiningLayout.guestReconcileMillis shouldBe 5_000L
-        OriginDiningLayout.ambientWaiterRestMillis shouldBe 7_000L
+        OriginDiningLayout.ambientWaiterRestMillis shouldBe 6_000L..10_000L
+        OriginDiningLayout.ambientReplyDelayTicks shouldBe 18L..42L
+        OriginDiningLayout.ambientLookHoldTicks shouldBe 32L..68L
+        OriginDiningLayout.ambientCycleDelayMillis() shouldBe 8_000L..15_000L
+        OriginDiningLayout.ambientDialogueRange shouldBe 8.0
+        OriginDiningLayout.ambientDialogueCount() shouldBe 16
+        OriginDiningLayout.serviceDialogueCount() shouldBe 6
         OriginDiningLayout.theftCooldownMillis shouldBe 90_000L
         OriginDiningLayout.waiterPlayerRange shouldBe 1.8
         OriginDiningLayout.navigatorDistanceMargin shouldBe 0.35
