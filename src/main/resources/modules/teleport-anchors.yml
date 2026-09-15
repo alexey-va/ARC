@@ -23,12 +23,12 @@ visual:
     - NETHER_BRICKS
     - MOSS_BLOCK
   proxy-distance: 48.0
-  minimum-scale: 1.04
+  minimum-scale: 1.0
   maximum-scale: 3.0
-  # У близкой цели сохраняется реакция на прицел, но максимум ограничен.
-  nearby-maximum-scale: 1.5
-  nearby-distance: 6.0
-  full-scale-distance: 12.0
+  # До 15 блоков маркер остаётся размером с обычный блок; затем линейно растёт до maximum-scale.
+  scale-start-distance: 15.0
+  full-scale-distance: 48.0
+  maximum-group-blocks: 10
   label-minimum-scale: 1.8
   label-maximum-scale: 6.0
   foreign-owner-line: '<#e8dfd2>Владелец: <#ffffff>%owner%'

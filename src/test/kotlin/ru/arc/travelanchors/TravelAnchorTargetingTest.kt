@@ -56,12 +56,12 @@ class TravelAnchorTargetingTest : FunSpec({
         (travelAnchorScale(0.8, 0.4, 1.0f, 3.0f) > travelAnchorScale(0.6, 0.4, 1.0f, 3.0f)) shouldBe true
     }
 
-    test("near anchors keep aim scaling with a smaller maximum") {
-        travelAnchorScale(0.4, 0.4, 1.0f, 3.0f, 4.0, 1.5f, 6.0, 12.0) shouldBe 1.0f
-        travelAnchorScale(0.7, 0.4, 1.0f, 3.0f, 4.0, 1.5f, 6.0, 12.0) shouldBe 1.25f
-        travelAnchorScale(1.0, 0.4, 1.0f, 3.0f, 4.0, 1.5f, 6.0, 12.0) shouldBe 1.5f
-        travelAnchorScale(1.0, 0.4, 1.0f, 3.0f, 9.0, 1.5f, 6.0, 12.0) shouldBe 2.25f
-        travelAnchorScale(1.0, 0.4, 1.0f, 3.0f, 12.0, 1.5f, 6.0, 12.0) shouldBe 3.0f
+    test("anchor aim scaling starts at fifteen blocks and grows linearly") {
+        travelAnchorScale(0.4, 0.4, 1.0f, 3.0f, 14.9, 15.0, 48.0) shouldBe 1.0f
+        travelAnchorScale(1.0, 0.4, 1.0f, 3.0f, 15.0, 15.0, 48.0) shouldBe 1.0f
+        travelAnchorScale(1.0, 0.4, 1.0f, 3.0f, 31.5, 15.0, 48.0) shouldBe 2.0f
+        travelAnchorScale(0.7, 0.4, 1.0f, 3.0f, 31.5, 15.0, 48.0) shouldBe 1.5f
+        travelAnchorScale(1.0, 0.4, 1.0f, 3.0f, 48.0, 15.0, 48.0) shouldBe 3.0f
     }
 
     test("teleport portals snap open smoothly, hold for a second and collapse") {
@@ -76,7 +76,7 @@ class TravelAnchorTargetingTest : FunSpec({
         scales[30] shouldBe null
     }
 
-    test("touching horizontal anchors form one display blob without merging elevator floors") {
+    test("touching horizontal anchors form one target group without merging elevator floors") {
         val world = UUID.fromString("c63d7480-5db5-4d1d-9ac6-9abeb8ee3a40")
         val adjacent = listOf(
             TravelAnchorPosition(world, 0, 64, 0),
@@ -91,6 +91,29 @@ class TravelAnchorTargetingTest : FunSpec({
             setOf(upperFloor),
             setOf(isolated),
         )
+    }
+
+    test("a connected anchor shape is capped and the source group is hidden together") {
+        val world = UUID.fromString("c63d7480-5db5-4d1d-9ac6-9abeb8ee3a40")
+        val connected = (0 until 12).map { x -> TravelAnchorPosition(world, x, 64, 0) }
+        val group = clusterTravelAnchorPositions(connected).single()
+
+        travelAnchorDisplayMembers(group, maximumBlocks = 10) shouldBe connected.take(10)
+        travelAnchorGroupContainsSource(group, connected[7]) shouldBe true
+        travelAnchorGroupContainsSource(group, TravelAnchorPosition(world, 40, 64, 0)) shouldBe false
+        travelAnchorGroupRadius(connected.take(2)) shouldBe (0.5 plusOrMinus 1.0e-9)
+    }
+
+    test("connected display blocks scale around one shared center") {
+        val world = UUID.fromString("c63d7480-5db5-4d1d-9ac6-9abeb8ee3a40")
+        val left = TravelAnchorPosition(world, 0, 64, 0)
+        val right = TravelAnchorPosition(world, 1, 64, 0)
+
+        val leftOffset = travelAnchorDisplayOffset(left, centerX = 1.0, centerY = 64.5, centerZ = 0.5, scale = 2.0f)
+        val rightOffset = travelAnchorDisplayOffset(right, centerX = 1.0, centerY = 64.5, centerZ = 0.5, scale = 2.0f)
+
+        leftOffset shouldBe TravelAnchorDisplayOffset(-1.0, 0.0, 0.0)
+        rightOffset shouldBe TravelAnchorDisplayOffset(1.0, 0.0, 0.0)
     }
 
     test("standing on an anchor gives Shift priority over the staff hint") {
@@ -221,7 +244,7 @@ class TravelAnchorTargetingTest : FunSpec({
         westFacing.z shouldBe (-3.82 plusOrMinus 1.0e-9)
     }
 
-    test("teleport portal offsets are reread through the ARC reload config path") {
+    test("display tuning and portal offsets are reread through the ARC reload config path") {
         val directory = Files.createTempDirectory("arc-travel-anchor-reload")
         val configFile = ConfigManager.moduleYamlPath(directory, "teleport-anchors.yml").toFile()
         try {
@@ -229,6 +252,11 @@ class TravelAnchorTargetingTest : FunSpec({
             configFile.writeText(
                 """
                 visual:
+                  minimum-scale: 1.0
+                  maximum-scale: 3.0
+                  scale-start-distance: 15.0
+                  full-scale-distance: 48.0
+                  maximum-group-blocks: 10
                   teleport-portal:
                     vertical-offset: 2.15
                     behind-player-offset: 0.35
@@ -240,10 +268,21 @@ class TravelAnchorTargetingTest : FunSpec({
             initial.vertical shouldBe (2.15 plusOrMinus 1.0e-9)
             initial.behindPlayer shouldBe (0.35 plusOrMinus 1.0e-9)
             initial.yawDegrees shouldBe 180f
+            val initialDisplay = config.travelAnchorDisplayTuning()
+            initialDisplay.minimumScale shouldBe 1.0f
+            initialDisplay.maximumScale shouldBe 3.0f
+            initialDisplay.scaleStartDistance shouldBe (15.0 plusOrMinus 1.0e-9)
+            initialDisplay.fullScaleDistance shouldBe (48.0 plusOrMinus 1.0e-9)
+            initialDisplay.maximumGroupBlocks shouldBe 10
 
             configFile.writeText(
                 """
                 visual:
+                  minimum-scale: 1.2
+                  maximum-scale: 4.0
+                  scale-start-distance: 20.0
+                  full-scale-distance: 60.0
+                  maximum-group-blocks: 7
                   teleport-portal:
                     vertical-offset: 1.8
                     behind-player-offset: 0.6
@@ -255,6 +294,12 @@ class TravelAnchorTargetingTest : FunSpec({
             reloaded.vertical shouldBe (1.8 plusOrMinus 1.0e-9)
             reloaded.behindPlayer shouldBe (0.6 plusOrMinus 1.0e-9)
             reloaded.yawDegrees shouldBe 165f
+            val reloadedDisplay = config.travelAnchorDisplayTuning()
+            reloadedDisplay.minimumScale shouldBe 1.2f
+            reloadedDisplay.maximumScale shouldBe 4.0f
+            reloadedDisplay.scaleStartDistance shouldBe (20.0 plusOrMinus 1.0e-9)
+            reloadedDisplay.fullScaleDistance shouldBe (60.0 plusOrMinus 1.0e-9)
+            reloadedDisplay.maximumGroupBlocks shouldBe 7
         } finally {
             ConfigManager.clear()
             directory.toFile().deleteRecursively()

@@ -81,7 +81,6 @@ import java.util.Base64
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
-import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.acos
 import kotlin.math.atan2
@@ -162,17 +161,16 @@ internal fun travelAnchorScale(
     minimumScale: Float,
     maximumScale: Float,
     distance: Double = Double.POSITIVE_INFINITY,
-    nearbyMaximumScale: Float = maximumScale,
-    nearbyDistance: Double = 0.0,
+    scaleStartDistance: Double = 0.0,
     fullScaleDistance: Double = 0.0,
 ): Float {
     val aimProgress = ((dot - minimumVisibleDot) / (1.0 - minimumVisibleDot)).coerceIn(0.0, 1.0)
-    val distanceProgress = if (fullScaleDistance > nearbyDistance) {
-        ((distance - nearbyDistance) / (fullScaleDistance - nearbyDistance)).coerceIn(0.0, 1.0)
+    val distanceProgress = if (fullScaleDistance > scaleStartDistance) {
+        ((distance - scaleStartDistance) / (fullScaleDistance - scaleStartDistance)).coerceIn(0.0, 1.0)
     } else {
         1.0
     }
-    val effectiveMaximum = nearbyMaximumScale + (maximumScale - nearbyMaximumScale) * distanceProgress.toFloat()
+    val effectiveMaximum = minimumScale + (maximumScale - minimumScale) * distanceProgress.toFloat()
     return minimumScale + (effectiveMaximum - minimumScale) * aimProgress.toFloat()
 }
 
@@ -199,9 +197,10 @@ internal fun travelAnchorExpandedSelectionDot(
     baseMinimumDot: Double,
     displayDistance: Double,
     scale: Float,
+    groupRadius: Double = 0.0,
 ): Double {
     val baseAngle = acos(baseMinimumDot.coerceIn(-1.0, 1.0))
-    val halfDiagonal = scale.toDouble() / sqrt(2.0)
+    val halfDiagonal = (groupRadius + (1.0 / sqrt(2.0))) * scale
     val apparentRadius = atan2(halfDiagonal, displayDistance.coerceAtLeast(0.01))
     return cos((baseAngle + apparentRadius).coerceAtMost(Math.PI))
 }
@@ -295,6 +294,29 @@ internal fun Config.travelAnchorTeleportPortalOffsets(
     behindPlayer = real("$path.behind-player-offset", 0.35).coerceIn(0.0, 4.0),
     yawDegrees = real("$path.yaw-offset-degrees", 180.0).toFloat().coerceIn(-360f, 360f),
 )
+
+internal data class TravelAnchorDisplayTuning(
+    val minimumScale: Float,
+    val maximumScale: Float,
+    val scaleStartDistance: Double,
+    val fullScaleDistance: Double,
+    val maximumGroupBlocks: Int,
+)
+
+internal fun Config.travelAnchorDisplayTuning(): TravelAnchorDisplayTuning {
+    val minimumScale = real("visual.minimum-scale", 1.0).toFloat().coerceIn(1.0f, 6.0f)
+    val maximumScale = real("visual.maximum-scale", 3.0).toFloat().coerceIn(minimumScale, 6.0f)
+    val scaleStartDistance = real("visual.scale-start-distance", 15.0).coerceIn(0.0, 4095.0)
+    return TravelAnchorDisplayTuning(
+        minimumScale = minimumScale,
+        maximumScale = maximumScale,
+        scaleStartDistance = scaleStartDistance,
+        fullScaleDistance = real("visual.full-scale-distance", 48.0)
+            .coerceIn(1.0, 4096.0)
+            .coerceAtLeast(scaleStartDistance + 1.0),
+        maximumGroupBlocks = integer("visual.maximum-group-blocks", 10).coerceIn(1, 32),
+    )
+}
 
 internal data class TravelAnchorDisplayShape(val cameraFacing: Boolean, val depth: Float)
 
@@ -464,25 +486,71 @@ internal fun clusterTravelAnchorPositions(
             val queue = ArrayDeque<TravelAnchorPosition>().apply { add(seed) }
             while (queue.isNotEmpty()) {
                 val current = queue.removeFirst()
-                // ponytail: at most 64 visible targets; the simple scan keeps this grouping obvious.
-                val neighbours = remaining.filter { candidate ->
-                    candidate.worldId == current.worldId &&
-                        candidate.y == current.y &&
-                        abs(candidate.x - current.x) <= 1 &&
-                        abs(candidate.z - current.z) <= 1
+                for (deltaX in -1..1) {
+                    for (deltaZ in -1..1) {
+                        if (deltaX == 0 && deltaZ == 0) continue
+                        val neighbour = TravelAnchorPosition(
+                            current.worldId,
+                            current.x + deltaX,
+                            current.y,
+                            current.z + deltaZ,
+                        )
+                        if (remaining.remove(neighbour)) {
+                            group += neighbour
+                            queue += neighbour
+                        }
+                    }
                 }
-                remaining.removeAll(neighbours.toSet())
-                group += neighbours
-                queue.addAll(neighbours)
             }
             add(group.sortedWith(order))
         }
     }
 }
 
+internal fun travelAnchorDisplayMembers(
+    positions: List<TravelAnchorPosition>,
+    maximumBlocks: Int,
+): List<TravelAnchorPosition> = positions.take(maximumBlocks.coerceAtLeast(1))
+
+internal fun travelAnchorGroupContainsSource(
+    positions: List<TravelAnchorPosition>,
+    source: TravelAnchorPosition?,
+): Boolean = source != null && source in positions
+
+internal fun travelAnchorGroupRadius(positions: List<TravelAnchorPosition>): Double {
+    if (positions.isEmpty()) return 0.0
+    val centerX = positions.sumOf { it.x + 0.5 } / positions.size
+    val centerZ = positions.sumOf { it.z + 0.5 } / positions.size
+    return positions.maxOf { position ->
+        val x = position.x + 0.5 - centerX
+        val z = position.z + 0.5 - centerZ
+        sqrt(x * x + z * z)
+    }
+}
+
+internal data class TravelAnchorDisplayOffset(val x: Double, val y: Double, val z: Double)
+
+internal fun travelAnchorDisplayOffset(
+    position: TravelAnchorPosition,
+    centerX: Double,
+    centerY: Double,
+    centerZ: Double,
+    scale: Float,
+): TravelAnchorDisplayOffset = TravelAnchorDisplayOffset(
+    x = (position.x + 0.5 - centerX) * scale,
+    y = (position.y + 0.5 - centerY) * scale,
+    z = (position.z + 0.5 - centerZ) * scale,
+)
+
+private data class TravelAnchorDisplayKey(
+    val group: TravelAnchorPosition,
+    val member: TravelAnchorPosition,
+)
+
 private data class TravelAnchorRenderCandidate(
     val key: TravelAnchorPosition,
     val destination: TravelAnchorPosition,
+    val members: List<TravelAnchorPosition>,
     val center: Location,
     val distanceSquared: Double,
     val dot: Double,
@@ -510,9 +578,9 @@ private data class TravelAnchorSettings(
     val selectionDot: Double,
     val minimumScale: Float,
     val maximumScale: Float,
-    val nearbyMaximumScale: Float,
-    val nearbyDistance: Double,
+    val scaleStartDistance: Double,
     val fullScaleDistance: Double,
+    val maximumGroupBlocks: Int,
     val labelMinimumScale: Float,
     val labelMaximumScale: Float,
     val proxyDistance: Double,
@@ -634,17 +702,18 @@ private object TravelAnchorConfig {
             }
             .distinct()
             .let { options -> if (displayMaterial in options) options else listOf(displayMaterial) + options }
+        val displayTuning = source.travelAnchorDisplayTuning()
         return TravelAnchorSettings(
             worlds = source.stringList("worlds").toSet(),
             range = source.real("targeting.range", 1024.0).coerceIn(8.0, 4096.0),
             maximumTargets = source.integer("targeting.maximum-targets", 24).coerceIn(1, 64),
             visibleDot = cos(Math.toRadians(visibleAngle)),
             selectionDot = cos(Math.toRadians(selectionAngle)),
-            minimumScale = source.real("visual.minimum-scale", 1.04).toFloat().coerceIn(1.01f, 6.0f),
-            maximumScale = source.real("visual.maximum-scale", 3.0).toFloat().coerceIn(1.01f, 6.0f),
-            nearbyMaximumScale = source.real("visual.nearby-maximum-scale", 1.5).toFloat().coerceIn(1.01f, 6.0f),
-            nearbyDistance = source.real("visual.nearby-distance", 6.0).coerceIn(0.0, 4096.0),
-            fullScaleDistance = source.real("visual.full-scale-distance", 12.0).coerceIn(1.0, 4096.0),
+            minimumScale = displayTuning.minimumScale,
+            maximumScale = displayTuning.maximumScale,
+            scaleStartDistance = displayTuning.scaleStartDistance,
+            fullScaleDistance = displayTuning.fullScaleDistance,
+            maximumGroupBlocks = displayTuning.maximumGroupBlocks,
             labelMinimumScale = source.real("visual.label-minimum-scale", 1.8).toFloat().coerceIn(0.5f, 8.0f),
             labelMaximumScale = source.real("visual.label-maximum-scale", 6.0).toFloat().coerceIn(0.5f, 12.0f),
             proxyDistance = source.real("visual.proxy-distance", 48.0).coerceIn(16.0, 96.0),
@@ -659,9 +728,6 @@ private object TravelAnchorConfig {
             source = source,
         ).let { settings ->
             settings.copy(
-                maximumScale = settings.maximumScale.coerceAtLeast(settings.minimumScale),
-                nearbyMaximumScale = settings.nearbyMaximumScale.coerceIn(settings.minimumScale, settings.maximumScale),
-                fullScaleDistance = settings.fullScaleDistance.coerceAtLeast(settings.nearbyDistance + 1.0),
                 labelMaximumScale = settings.labelMaximumScale.coerceAtLeast(settings.labelMinimumScale),
             )
         }
@@ -732,7 +798,7 @@ object TravelAnchorsModule : PluginModule, Listener {
     private val activeTeleportPortals = mutableSetOf<ActiveTravelAnchorTeleportPortal>()
     private var networkStore: TravelAnchorNetworkStore? = null
     private val anchors = linkedSetOf<TravelAnchorPosition>()
-    private val displays = mutableMapOf<UUID, MutableMap<TravelAnchorPosition, BlockDisplay>>()
+    private val displays = mutableMapOf<UUID, MutableMap<TravelAnchorDisplayKey, BlockDisplay>>()
     private val labels = mutableMapOf<UUID, TextDisplay>()
     private val anchorNames = mutableMapOf<TravelAnchorPosition, String>()
     private val anchorOwners = mutableMapOf<TravelAnchorPosition, String>()
@@ -1073,8 +1139,7 @@ object TravelAnchorsModule : PluginModule, Listener {
             clearDisplays(player)
             return
         }
-        val candidates = visibleCandidates(player, source)
-        val renderCandidates = clusterCandidates(player, candidates)
+        val renderCandidates = visibleCandidates(player, source)
         val selected = chooseTravelAnchorTarget(
             renderCandidates.map { candidate ->
                 AimCandidate(candidate, candidate.distanceSquared, candidate.dot, candidate.minimumSelectionDot)
@@ -1095,19 +1160,30 @@ object TravelAnchorsModule : PluginModule, Listener {
         }
     }
 
-    private fun visibleCandidates(player: Player, source: TravelAnchorPosition?): List<AimCandidate<TravelAnchorPosition>> {
+    private fun visibleCandidates(player: Player, source: TravelAnchorPosition?): List<TravelAnchorRenderCandidate> {
         val current = settings ?: return emptyList()
         val eye = player.eyeLocation
         val direction = eye.direction.normalize()
-        return anchors
-            .asSequence()
-            .filter { it != source && it.worldId == player.world.uid }
-            .filter { canAccess(player, it) }
-            .map { position ->
-                val delta = org.bukkit.util.Vector(position.x + 0.5, position.y + 0.5, position.z + 0.5)
-                    .subtract(eye.toVector())
+        val groups = clusterTravelAnchorPositions(anchors.filter { it.worldId == player.world.uid })
+        return groups.asSequence()
+            .filterNot { travelAnchorGroupContainsSource(it, source) }
+            .mapNotNull { positions ->
+                val members = travelAnchorDisplayMembers(
+                    positions.filter { canAccess(player, it) },
+                    current.maximumGroupBlocks,
+                )
+                if (members.isEmpty()) return@mapNotNull null
+                val center = Location(
+                    player.world,
+                    members.sumOf { it.x + 0.5 } / members.size,
+                    members.sumOf { it.y + 0.5 } / members.size,
+                    members.sumOf { it.z + 0.5 } / members.size,
+                )
+                val delta = center.toVector().subtract(eye.toVector())
                 val distanceSquared = delta.lengthSquared()
+                if (distanceSquared <= 0.01 || distanceSquared > current.range * current.range) return@mapNotNull null
                 val dot = direction.dot(delta.normalize())
+                if (dot < current.visibleDot) return@mapNotNull null
                 val actualDistance = sqrt(distanceSquared)
                 val scale = travelAnchorScale(
                     dot,
@@ -1115,21 +1191,32 @@ object TravelAnchorsModule : PluginModule, Listener {
                     current.minimumScale,
                     current.maximumScale,
                     actualDistance,
-                    current.nearbyMaximumScale,
-                    current.nearbyDistance,
+                    current.scaleStartDistance,
                     current.fullScaleDistance,
                 )
                 val displayDistance = travelAnchorDisplayDistance(actualDistance, current.proxyDistance)
-                AimCandidate(
-                    position,
-                    distanceSquared,
-                    dot,
-                    travelAnchorExpandedSelectionDot(current.selectionDot, displayDistance, scale),
+                val destination = members.minBy { position ->
+                    val x = position.x + 0.5 - eye.x
+                    val y = position.y + 0.5 - eye.y
+                    val z = position.z + 0.5 - eye.z
+                    x * x + y * y + z * z
+                }
+                TravelAnchorRenderCandidate(
+                    key = positions.first(),
+                    destination = destination,
+                    members = members,
+                    center = center,
+                    distanceSquared = distanceSquared,
+                    dot = dot,
+                    minimumSelectionDot = travelAnchorExpandedSelectionDot(
+                        current.selectionDot,
+                        displayDistance,
+                        scale,
+                        travelAnchorGroupRadius(members),
+                    ),
                 )
             }
-            .filter { it.distanceSquared > 0.01 && it.distanceSquared <= current.range * current.range }
-            .filter { it.dot >= current.visibleDot }
-            .sortedBy(AimCandidate<TravelAnchorPosition>::distanceSquared)
+            .sortedBy(TravelAnchorRenderCandidate::distanceSquared)
             .take(current.maximumTargets)
             .toList()
     }
@@ -1137,57 +1224,12 @@ object TravelAnchorsModule : PluginModule, Listener {
     private fun selectTarget(player: Player, source: TravelAnchorPosition?): TravelAnchorPosition? {
         val current = settings ?: return null
         return chooseTravelAnchorTarget(
-            clusterCandidates(player, visibleCandidates(player, source)).map { candidate ->
+            visibleCandidates(player, source).map { candidate ->
                 AimCandidate(candidate, candidate.distanceSquared, candidate.dot, candidate.minimumSelectionDot)
             },
             current.range * current.range,
             current.selectionDot,
         )?.target?.destination
-    }
-
-    private fun clusterCandidates(
-        player: Player,
-        candidates: List<AimCandidate<TravelAnchorPosition>>,
-    ): List<TravelAnchorRenderCandidate> {
-        val current = settings ?: return emptyList()
-        val byPosition = candidates.associateBy(AimCandidate<TravelAnchorPosition>::target)
-        val eye = player.eyeLocation
-        val direction = eye.direction.normalize()
-        return clusterTravelAnchorPositions(byPosition.keys).map { positions ->
-            val members = positions.mapNotNull(byPosition::get)
-            val center = Location(
-                player.world,
-                positions.sumOf { it.x + 0.5 } / positions.size,
-                positions.sumOf { it.y + 0.5 } / positions.size,
-                positions.sumOf { it.z + 0.5 } / positions.size,
-            )
-            val delta = center.toVector().subtract(eye.toVector())
-            val distanceSquared = delta.lengthSquared()
-            val dot = direction.dot(delta.normalize())
-            val actualDistance = sqrt(distanceSquared)
-            val scale = travelAnchorScale(
-                dot,
-                current.visibleDot,
-                current.minimumScale,
-                current.maximumScale,
-                actualDistance,
-                current.nearbyMaximumScale,
-                current.nearbyDistance,
-                current.fullScaleDistance,
-            )
-            TravelAnchorRenderCandidate(
-                key = positions.first(),
-                destination = members.minBy(AimCandidate<TravelAnchorPosition>::distanceSquared).target,
-                center = center,
-                distanceSquared = distanceSquared,
-                dot = dot,
-                minimumSelectionDot = travelAnchorExpandedSelectionDot(
-                    current.selectionDot,
-                    travelAnchorDisplayDistance(actualDistance, current.proxyDistance),
-                    scale,
-                ),
-            )
-        }
     }
 
     private fun render(
@@ -1197,9 +1239,11 @@ object TravelAnchorsModule : PluginModule, Listener {
     ) {
         val current = settings ?: return
         val playerDisplays = displays.getOrPut(player.uniqueId, ::linkedMapOf)
-        val desired = candidates.mapTo(hashSetOf(), TravelAnchorRenderCandidate::key)
-        playerDisplays.keys.filterNot { it in desired }.toList().forEach { position ->
-            playerDisplays.remove(position)?.let {
+        val desired = candidates.flatMapTo(hashSetOf()) { candidate ->
+            candidate.members.map { member -> TravelAnchorDisplayKey(candidate.key, member) }
+        }
+        playerDisplays.keys.filterNot { it in desired }.toList().forEach { key ->
+            playerDisplays.remove(key)?.let {
                 player.hideEntity(ARC.instance, it)
                 it.remove()
             }
@@ -1209,31 +1253,41 @@ object TravelAnchorsModule : PluginModule, Listener {
         candidates.forEach { candidate ->
             val actualDistance = Math.sqrt(candidate.distanceSquared)
             val location = displayLocation(player, candidate)
-            val display = playerDisplays[candidate.key]?.takeIf { it.isValid } ?: spawnDisplay(player, location).also {
-                playerDisplays[candidate.key] = it
-            }
-            val material = anchorMaterials[candidate.destination] ?: current.displayMaterial
-            if (display.block.material != material) display.block = material.createBlockData()
-            display.teleport(location)
             val scale = travelAnchorScale(
                 candidate.dot,
                 current.visibleDot,
                 current.minimumScale,
                 current.maximumScale,
                 actualDistance,
-                current.nearbyMaximumScale,
-                current.nearbyDistance,
+                current.scaleStartDistance,
                 current.fullScaleDistance,
             )
             val shape = travelAnchorDisplayShape(actualDistance, current.proxyDistance, scale)
-            display.billboard = if (shape.cameraFacing) Display.Billboard.CENTER else Display.Billboard.FIXED
-            display.transformation = Transformation(
-                Vector3f(-scale / 2f, -scale / 2f, -shape.depth / 2f),
-                AxisAngle4f(),
-                Vector3f(scale, scale, shape.depth),
-                AxisAngle4f(),
-            )
-            display.glowColorOverride = if (candidate == selected) SELECTED_COLOR else VISIBLE_COLOR
+            candidate.members.forEach { member ->
+                val key = TravelAnchorDisplayKey(candidate.key, member)
+                val offset = travelAnchorDisplayOffset(
+                    member,
+                    candidate.center.x,
+                    candidate.center.y,
+                    candidate.center.z,
+                    scale,
+                )
+                val memberLocation = location.clone().add(offset.x, offset.y, offset.z)
+                val display = playerDisplays[key]?.takeIf { it.isValid } ?: spawnDisplay(player, memberLocation).also {
+                    playerDisplays[key] = it
+                }
+                val material = anchorMaterials[member] ?: current.displayMaterial
+                if (display.block.material != material) display.block = material.createBlockData()
+                display.teleport(memberLocation)
+                display.billboard = if (shape.cameraFacing) Display.Billboard.CENTER else Display.Billboard.FIXED
+                display.transformation = Transformation(
+                    Vector3f(-scale / 2f, -scale / 2f, -shape.depth / 2f),
+                    AxisAngle4f(),
+                    Vector3f(scale, scale, shape.depth),
+                    AxisAngle4f(),
+                )
+                display.glowColorOverride = if (candidate == selected) SELECTED_COLOR else VISIBLE_COLOR
+            }
             if (candidate == selected) {
                 selectedLocation = location
                 selectedScale = scale
@@ -2229,7 +2283,12 @@ object TravelAnchorsModule : PluginModule, Listener {
         anchorMaterials.remove(position)
         publicAnchors.remove(position)
         sharedAnchors.remove(position)
-        displays.values.forEach { it.remove(position)?.remove() }
+        displays.values.forEach { playerDisplays ->
+            playerDisplays.keys
+                .filter { it.group == position || it.member == position }
+                .toList()
+                .forEach { key -> playerDisplays.remove(key)?.remove() }
+        }
         displays.entries.removeIf { it.value.isEmpty() }
         selectedTargets.entries.removeIf { it.value == position }
         persistAnchorIndex(position.worldId)
