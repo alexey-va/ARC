@@ -295,6 +295,10 @@ internal fun Config.travelAnchorTeleportPortalOffsets(
     yawDegrees = real("$path.yaw-offset-degrees", 180.0).toFloat().coerceIn(-360f, 360f),
 )
 
+internal fun Config.travelAnchorDestinationPortalVisibleToTeleportedPlayer(
+    path: String = "visual.teleport-portal",
+): Boolean = bool("$path.destination-visible-to-teleported-player", true)
+
 internal data class TravelAnchorDisplayTuning(
     val minimumScale: Float,
     val maximumScale: Float,
@@ -561,6 +565,7 @@ private data class TravelAnchorTeleportPortalSettings(
     val gate: PortalOriginGateSettings,
     val holdTicks: Int,
     val behindPlayerOffset: Double,
+    val destinationVisibleToTeleportedPlayer: Boolean,
 )
 
 private class ActiveTravelAnchorTeleportPortal(
@@ -785,7 +790,12 @@ private object TravelAnchorConfig {
             suctionParticleSize = 0.55f,
             suctionCoreCount = 6,
         )
-        return TravelAnchorTeleportPortalSettings(gate, holdTicks, offsets.behindPlayer)
+        return TravelAnchorTeleportPortalSettings(
+            gate = gate,
+            holdTicks = holdTicks,
+            behindPlayerOffset = offsets.behindPlayer,
+            destinationVisibleToTeleportedPlayer = travelAnchorDestinationPortalVisibleToTeleportedPlayer(path),
+        )
     }
 }
 
@@ -1759,7 +1769,7 @@ object TravelAnchorsModule : PluginModule, Listener {
         }
         if (!enforceCooldown) player.velocity = player.velocity.setY(0.0)
         current.teleportPortal?.let { portal ->
-            playEffectsSafely("teleport-portals") { playTeleportPortals(from, destination, portal) }
+            playEffectsSafely("teleport-portals") { playTeleportPortals(player, from, destination, portal) }
         }
         refreshAfterTeleport(player)
         playEffectsSafely("arrival") { playArrivalEffects(player, destination) }
@@ -1779,6 +1789,7 @@ object TravelAnchorsModule : PluginModule, Listener {
     }
 
     private fun playTeleportPortals(
+        player: Player,
         departure: Location,
         arrival: Location,
         portal: TravelAnchorTeleportPortalSettings,
@@ -1796,6 +1807,7 @@ object TravelAnchorsModule : PluginModule, Listener {
             arrivalCenter,
             portal.gate,
             PortalVisualStyle.ORIGIN,
+            hiddenViewer = player.takeUnless { portal.destinationVisibleToTeleportedPlayer },
         ) ?: run {
             departureHandle.remove()
             return
@@ -1818,7 +1830,7 @@ object TravelAnchorsModule : PluginModule, Listener {
         )
         try {
             handles.forEach { it.updateScale(initialScale) }
-            renderTeleportPortalParticles(effect, tick, portal)
+            renderTeleportPortalParticles(effect, tick, portal, player.uniqueId)
         } catch (failure: Exception) {
             removeTeleportPortal(effect)
             throw failure
@@ -1836,7 +1848,7 @@ object TravelAnchorsModule : PluginModule, Listener {
             } else {
                 runCatching {
                     handles.forEach { it.updateScale(scale) }
-                    renderTeleportPortalParticles(effect, tick, portal)
+                    renderTeleportPortalParticles(effect, tick, portal, player.uniqueId)
                 }.onFailure {
                     removeTeleportPortal(effect)
                     warn("TRAVEL_ANCHORS phase=EFFECTS reason=portal-animation-failed", it)
@@ -1878,10 +1890,12 @@ object TravelAnchorsModule : PluginModule, Listener {
         effect: ActiveTravelAnchorTeleportPortal,
         tick: Int,
         portal: TravelAnchorTeleportPortalSettings,
+        teleportedPlayerId: UUID,
     ) {
-        effect.centers.forEach { center ->
+        effect.centers.forEachIndexed { index, center ->
             val receivers = center.world?.players.orEmpty().filter { candidate ->
-                candidate.location.distanceSquared(center) <= TELEPORT_PORTAL_PARTICLE_RANGE_SQUARED
+                (portal.destinationVisibleToTeleportedPlayer || index == 0 || candidate.uniqueId != teleportedPlayerId) &&
+                    candidate.location.distanceSquared(center) <= TELEPORT_PORTAL_PARTICLE_RANGE_SQUARED
             }
             BukkitPortalOriginGate.renderSuction(
                 center,

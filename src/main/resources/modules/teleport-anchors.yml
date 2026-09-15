@@ -41,7 +41,8 @@ visual:
     closing-ticks: 4
     width: 3.6
     height: 5.0
-    # Все смещения перечитываются через /arc reload.
+    # Все параметры ниже перечитываются через /arc reload.
+    destination-visible-to-teleported-player: true
     vertical-offset: 1.65
     behind-player-offset: 0.35
     yaw-offset-degrees: 180.0

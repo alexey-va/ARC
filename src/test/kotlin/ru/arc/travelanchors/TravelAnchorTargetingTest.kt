@@ -258,6 +258,7 @@ class TravelAnchorTargetingTest : FunSpec({
                   full-scale-distance: 48.0
                   maximum-group-blocks: 10
                   teleport-portal:
+                    destination-visible-to-teleported-player: true
                     vertical-offset: 1.65
                     behind-player-offset: 0.35
                     yaw-offset-degrees: 180.0
@@ -268,6 +269,7 @@ class TravelAnchorTargetingTest : FunSpec({
             initial.vertical shouldBe (1.65 plusOrMinus 1.0e-9)
             initial.behindPlayer shouldBe (0.35 plusOrMinus 1.0e-9)
             initial.yawDegrees shouldBe 180f
+            config.travelAnchorDestinationPortalVisibleToTeleportedPlayer() shouldBe true
             val initialDisplay = config.travelAnchorDisplayTuning()
             initialDisplay.minimumScale shouldBe 1.0f
             initialDisplay.maximumScale shouldBe 3.0f
@@ -284,6 +286,7 @@ class TravelAnchorTargetingTest : FunSpec({
                   full-scale-distance: 60.0
                   maximum-group-blocks: 7
                   teleport-portal:
+                    destination-visible-to-teleported-player: false
                     vertical-offset: 1.8
                     behind-player-offset: 0.6
                     yaw-offset-degrees: 165.0
@@ -294,6 +297,7 @@ class TravelAnchorTargetingTest : FunSpec({
             reloaded.vertical shouldBe (1.8 plusOrMinus 1.0e-9)
             reloaded.behindPlayer shouldBe (0.6 plusOrMinus 1.0e-9)
             reloaded.yawDegrees shouldBe 165f
+            config.travelAnchorDestinationPortalVisibleToTeleportedPlayer() shouldBe false
             val reloadedDisplay = config.travelAnchorDisplayTuning()
             reloadedDisplay.minimumScale shouldBe 1.2f
             reloadedDisplay.maximumScale shouldBe 4.0f
