@@ -431,9 +431,8 @@ internal object BukkitPortalOriginGate {
         center: Location,
         settings: PortalOriginGateSettings,
         style: PortalVisualStyle,
-        hiddenViewer: Player? = null,
     ): PortalOriginGateHandle? {
-        return spawn(center, settings, style, viewerLocation = null, hiddenViewer = hiddenViewer)
+        return spawn(center, settings, style, viewerLocation = null)
     }
 
     private fun spawn(
@@ -441,7 +440,6 @@ internal object BukkitPortalOriginGate {
         settings: PortalOriginGateSettings,
         style: PortalVisualStyle,
         viewerLocation: Location?,
-        hiddenViewer: Player? = null,
     ): PortalOriginGateHandle? {
         if (!Bukkit.getPluginManager().isPluginEnabled("ItemsAdder")) return null
 
@@ -466,7 +464,6 @@ internal object BukkitPortalOriginGate {
             val created = world.spawn(location, ItemDisplay::class.java)
             display = created
             configure(created, portalItem, settings)
-            hiddenViewer?.hideEntity(ARC.instance, created)
             BukkitPortalOriginGateHandle(created, location, settings)
         } catch (failure: Exception) {
             display?.remove()

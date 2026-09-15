@@ -224,19 +224,19 @@ class TravelAnchorTargetingTest : FunSpec({
     test("teleport portal stays behind the exact player position") {
         val southFacing = travelAnchorTeleportPortalCenter(
             Location(null, 10.18, 65.0, -3.82, 0f, 27f),
-            verticalOffset = 2.15,
+            verticalOffset = 1.65,
             behindPlayerOffset = 0.35,
             yawOffsetDegrees = 180f,
         )
         southFacing.x shouldBe (10.18 plusOrMinus 1.0e-9)
-        southFacing.y shouldBe (67.15 plusOrMinus 1.0e-9)
+        southFacing.y shouldBe (66.65 plusOrMinus 1.0e-9)
         southFacing.z shouldBe (-4.17 plusOrMinus 1.0e-9)
         southFacing.yaw shouldBe -180f
         southFacing.pitch shouldBe 0f
 
         val westFacing = travelAnchorTeleportPortalCenter(
             Location(null, 10.18, 65.0, -3.82, 90f, 0f),
-            verticalOffset = 2.15,
+            verticalOffset = 1.65,
             behindPlayerOffset = 0.35,
             yawOffsetDegrees = 180f,
         )
@@ -258,14 +258,14 @@ class TravelAnchorTargetingTest : FunSpec({
                   full-scale-distance: 48.0
                   maximum-group-blocks: 10
                   teleport-portal:
-                    vertical-offset: 2.15
+                    vertical-offset: 1.65
                     behind-player-offset: 0.35
                     yaw-offset-degrees: 180.0
                 """.trimIndent(),
             )
             val config = ConfigManager.ofModule(directory, "teleport-anchors.yml")
             val initial = config.travelAnchorTeleportPortalOffsets()
-            initial.vertical shouldBe (2.15 plusOrMinus 1.0e-9)
+            initial.vertical shouldBe (1.65 plusOrMinus 1.0e-9)
             initial.behindPlayer shouldBe (0.35 plusOrMinus 1.0e-9)
             initial.yawDegrees shouldBe 180f
             val initialDisplay = config.travelAnchorDisplayTuning()

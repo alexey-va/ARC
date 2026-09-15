@@ -290,7 +290,7 @@ internal data class TravelAnchorTeleportPortalOffsets(
 internal fun Config.travelAnchorTeleportPortalOffsets(
     path: String = "visual.teleport-portal",
 ): TravelAnchorTeleportPortalOffsets = TravelAnchorTeleportPortalOffsets(
-    vertical = real("$path.vertical-offset", 2.15).coerceIn(-6.0, 12.0),
+    vertical = real("$path.vertical-offset", 1.65).coerceIn(-6.0, 12.0),
     behindPlayer = real("$path.behind-player-offset", 0.35).coerceIn(0.0, 4.0),
     yawDegrees = real("$path.yaw-offset-degrees", 180.0).toFloat().coerceIn(-360f, 360f),
 )
@@ -1759,7 +1759,7 @@ object TravelAnchorsModule : PluginModule, Listener {
         }
         if (!enforceCooldown) player.velocity = player.velocity.setY(0.0)
         current.teleportPortal?.let { portal ->
-            playEffectsSafely("teleport-portals") { playTeleportPortals(player, from, destination, portal) }
+            playEffectsSafely("teleport-portals") { playTeleportPortals(from, destination, portal) }
         }
         refreshAfterTeleport(player)
         playEffectsSafely("arrival") { playArrivalEffects(player, destination) }
@@ -1779,7 +1779,6 @@ object TravelAnchorsModule : PluginModule, Listener {
     }
 
     private fun playTeleportPortals(
-        player: Player,
         departure: Location,
         arrival: Location,
         portal: TravelAnchorTeleportPortalSettings,
@@ -1797,7 +1796,6 @@ object TravelAnchorsModule : PluginModule, Listener {
             arrivalCenter,
             portal.gate,
             PortalVisualStyle.ORIGIN,
-            hiddenViewer = player,
         ) ?: run {
             departureHandle.remove()
             return
@@ -1820,7 +1818,7 @@ object TravelAnchorsModule : PluginModule, Listener {
         )
         try {
             handles.forEach { it.updateScale(initialScale) }
-            renderTeleportPortalParticles(effect, tick, portal, player.uniqueId)
+            renderTeleportPortalParticles(effect, tick, portal)
         } catch (failure: Exception) {
             removeTeleportPortal(effect)
             throw failure
@@ -1838,7 +1836,7 @@ object TravelAnchorsModule : PluginModule, Listener {
             } else {
                 runCatching {
                     handles.forEach { it.updateScale(scale) }
-                    renderTeleportPortalParticles(effect, tick, portal, player.uniqueId)
+                    renderTeleportPortalParticles(effect, tick, portal)
                 }.onFailure {
                     removeTeleportPortal(effect)
                     warn("TRAVEL_ANCHORS phase=EFFECTS reason=portal-animation-failed", it)
@@ -1880,12 +1878,10 @@ object TravelAnchorsModule : PluginModule, Listener {
         effect: ActiveTravelAnchorTeleportPortal,
         tick: Int,
         portal: TravelAnchorTeleportPortalSettings,
-        excludedPlayerId: UUID,
     ) {
         effect.centers.forEach { center ->
             val receivers = center.world?.players.orEmpty().filter { candidate ->
-                candidate.uniqueId != excludedPlayerId &&
-                    candidate.location.distanceSquared(center) <= TELEPORT_PORTAL_PARTICLE_RANGE_SQUARED
+                candidate.location.distanceSquared(center) <= TELEPORT_PORTAL_PARTICLE_RANGE_SQUARED
             }
             BukkitPortalOriginGate.renderSuction(
                 center,
