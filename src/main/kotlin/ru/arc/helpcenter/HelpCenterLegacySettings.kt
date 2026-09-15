@@ -14,6 +14,7 @@ import ru.arc.hooks.HookRegistry
 import ru.arc.gui.MenuShortcutAction
 import ru.arc.gui.MenuEscapeBehavior
 import ru.arc.iteminfo.ItemInfoMode
+import ru.arc.iteminfo.ItemInfoPreferences
 import java.util.concurrent.CompletableFuture
 
 data class HelpCenterLegacySettingEntry(
@@ -80,6 +81,21 @@ class HelpCenterLegacySettings(
 
     fun flightSnapshot(player: Player): HelpCenterFlightSnapshot? = backend.flightSnapshot(player)
 
+    fun itemInfoPreferences(player: Player): ItemInfoPreferences =
+        ItemInfoPreferences.fromStored { key -> backend.meta(player, key) }
+
+    fun saveItemInfoHologram(player: Player, scale: Float, vertical: Double, horizontal: Double): CompletableFuture<Boolean> {
+        val current = itemInfoPreferences(player)
+        val selected = ItemInfoPreferences(
+            mode = current.mode,
+            showNamespacedId = current.showNamespacedId,
+            hologramScale = scale.coerceIn(ItemInfoPreferences.MIN_SCALE, ItemInfoPreferences.MAX_SCALE),
+            verticalOffset = vertical.coerceIn(ItemInfoPreferences.MIN_VERTICAL_OFFSET, ItemInfoPreferences.MAX_VERTICAL_OFFSET),
+            horizontalOffset = horizontal.coerceIn(ItemInfoPreferences.MIN_HORIZONTAL_OFFSET, ItemInfoPreferences.MAX_HORIZONTAL_OFFSET),
+        )
+        return backend.setMeta(player, ItemInfoPreferences.LAYOUT_META_KEY, selected.storedLayout())
+    }
+
     fun execute(player: Player, id: String): CompletableFuture<Boolean> = when (id) {
         "admin" -> if (backend.hasPermission(player, ADMIN)) backend.consoleCommand(player, ConsoleCommand.OPEN_ADMIN_SETTINGS) else falseFuture()
         "scoreboard-off" -> backend.setExclusiveMode(player, "tab.scoreboard", null)
@@ -87,6 +103,16 @@ class HelpCenterLegacySettings(
         "item-info-hologram" -> backend.setMeta(player, ItemInfoMode.META_KEY, ItemInfoMode.HOLOGRAM.id)
         "item-info-bossbar" -> backend.setMeta(player, ItemInfoMode.META_KEY, ItemInfoMode.BOSSBAR.id)
         "item-info-off" -> backend.setMeta(player, ItemInfoMode.META_KEY, ItemInfoMode.OFF.id)
+        "item-info-id-toggle" -> backend.setMeta(
+            player,
+            ItemInfoPreferences.SHOW_ID_META_KEY,
+            (!itemInfoPreferences(player).showNamespacedId).toString(),
+        )
+        "item-info-layout-reset" -> backend.setMeta(
+            player,
+            ItemInfoPreferences.LAYOUT_META_KEY,
+            ItemInfoPreferences.DEFAULT.storedLayout(),
+        )
         "lands-show" -> backend.command(player, PlayerCommand.LANDS_SHOW)
         "lands-hide" -> backend.command(player, PlayerCommand.LANDS_HIDE)
         "portal-by-other" -> togglePermission(player, PORTAL_BY_OTHER)

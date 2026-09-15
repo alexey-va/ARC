@@ -14,7 +14,7 @@ class ItemInfoControllerTest : StringSpec({
         val target = ItemInfoTarget(Component.text("Дубовый стол"), "itemsadder:oak_table")
         val renderer = RecordingRenderer()
         val controller = ItemInfoController(
-            mode = { ItemInfoMode.BOSSBAR },
+            preferences = { ItemInfoPreferences(mode = ItemInfoMode.BOSSBAR) },
             target = { target },
             renderer = renderer,
         )
@@ -31,14 +31,14 @@ class ItemInfoControllerTest : StringSpec({
     "disabled mode and lost target clear every stale surface" {
         val player = player()
         val renderer = RecordingRenderer()
-        var mode = ItemInfoMode.HOLOGRAM
+        var preferences = ItemInfoPreferences(mode = ItemInfoMode.HOLOGRAM)
         var target: ItemInfoTarget? = ItemInfoTarget(Component.text("Механизм"), "slimefun:machine")
-        val controller = ItemInfoController({ mode }, { target }, renderer)
+        val controller = ItemInfoController({ preferences }, { target }, renderer)
 
         controller.update(player)
         target = null
         controller.update(player)
-        mode = ItemInfoMode.OFF
+        preferences = ItemInfoPreferences(mode = ItemInfoMode.OFF)
         controller.update(player)
 
         renderer.actions.shouldContainExactly(
@@ -53,7 +53,7 @@ class ItemInfoControllerTest : StringSpec({
         val second = player()
         val renderer = RecordingRenderer()
         val controller = ItemInfoController(
-            mode = { ItemInfoMode.HOLOGRAM },
+            preferences = { ItemInfoPreferences(mode = ItemInfoMode.HOLOGRAM) },
             target = { ItemInfoTarget(Component.text("Механизм"), "slimefun:machine") },
             renderer = renderer,
         )
@@ -75,8 +75,8 @@ class ItemInfoControllerTest : StringSpec({
     private class RecordingRenderer : ItemInfoRenderer {
         val actions = mutableListOf<String>()
 
-        override fun render(player: Player, mode: ItemInfoMode, target: ItemInfoTarget) {
-            actions += "render:${player.uniqueId}:${mode.id}:${target.namespacedId}"
+        override fun render(player: Player, preferences: ItemInfoPreferences, target: ItemInfoTarget) {
+            actions += "render:${player.uniqueId}:${preferences.mode.id}:${target.namespacedId}"
         }
 
         override fun clear(player: Player) {

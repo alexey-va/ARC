@@ -10,14 +10,17 @@ import java.nio.file.Path
 internal data class ItemInfoSettings(
     val enabled: Boolean,
     val targetDistance: Double,
+    val nameOnlyTemplate: String,
     val hologramTemplate: String,
     val bossbarTemplate: String,
 ) {
     private val miniMessage = MiniMessage.miniMessage()
 
-    fun hologramText(target: ItemInfoTarget): Component = render(hologramTemplate, target)
+    fun hologramText(target: ItemInfoTarget, showNamespacedId: Boolean): Component =
+        render(if (showNamespacedId) hologramTemplate else nameOnlyTemplate, target)
 
-    fun bossbarText(target: ItemInfoTarget): Component = render(bossbarTemplate, target)
+    fun bossbarText(target: ItemInfoTarget, showNamespacedId: Boolean): Component =
+        render(if (showNamespacedId) bossbarTemplate else nameOnlyTemplate, target)
 
     private fun render(template: String, target: ItemInfoTarget): Component = miniMessage.deserialize(
         template,
@@ -33,6 +36,7 @@ internal class ItemInfoConfig(private val source: Config) {
         return ItemInfoSettings(
             enabled = source.bool("enabled", true),
             targetDistance = distance,
+            nameOnlyTemplate = required("text.name-only", "<white><name>"),
             hologramTemplate = required("text.hologram", "<white><name><newline><gray><id>"),
             bossbarTemplate = required("text.bossbar", "<white><name> <dark_gray>· <gray><id>"),
         )

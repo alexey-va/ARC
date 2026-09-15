@@ -6,7 +6,7 @@ sources:
   settings:
     path: src/main/resources/modules/help-center.yml
     root: text
-    include: [category-settings-title, settings-hub-body, settings-controls-label, settings-controls-tooltip, settings-interface-label, settings-interface-tooltip, settings-social-label, settings-social-tooltip, settings-world-label, settings-world-tooltip, settings-join-messages-label, settings-join-messages-tooltip, legacy-settings-admin, legacy-settings-admin-tooltip, settings-options-item-info-title, settings-options-item-info-body, settings-options-body, legacy-action-item-info-hologram, legacy-action-item-info-bossbar, legacy-action-item-info-off, settings-interface-back-label, root-label]
+    include: [category-settings-title, settings-hub-body, settings-controls-label, settings-controls-tooltip, settings-interface-label, settings-interface-tooltip, settings-social-label, settings-social-tooltip, settings-world-label, settings-world-tooltip, settings-join-messages-label, settings-join-messages-tooltip, legacy-settings-admin, legacy-settings-admin-tooltip, settings-options-item-info-title, settings-options-item-info-body, settings-options-body, legacy-action-item-info-hologram, legacy-action-item-info-bossbar, legacy-action-item-info-off, settings-item-info-id-label, settings-item-info-id-tooltip, settings-item-info-layout-label, settings-item-info-layout-tooltip, settings-interface-back-label, root-label]
 placeholders:
   shortcut: главное меню
   escape: назад
@@ -63,6 +63,8 @@ surfaces:
         - {id: hologram, text-key: legacy-action-item-info-hologram, tooltip-key: settings-options-item-info-body, width: 230}
         - {id: bossbar, text-key: legacy-action-item-info-bossbar, tooltip-key: settings-options-item-info-body, width: 230}
         - {id: off, text-key: legacy-action-item-info-off, tooltip-key: settings-options-item-info-body, width: 230}
+        - {id: show-id, text-key: settings-item-info-id-label, tooltip-key: settings-item-info-id-tooltip, width: 230, placeholders: {state: '○ выкл.'}}
+        - {id: layout, text-key: settings-item-info-layout-label, tooltip-key: settings-item-info-layout-tooltip, width: 230}
       exit-button: {id: back, text-key: settings-interface-back-label, tooltip-key: settings-interface-back-label, width: 230}
       viewport: [854, 480]
       variants: [{id: default}]

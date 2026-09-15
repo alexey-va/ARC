@@ -161,8 +161,20 @@ text:
   settings-options-tablist-title: "<#86dcf1>Список игроков"
   settings-options-scoreboard-body: "<#e8dfd2>Выберите набор информации справа на экране.<newline>«Выключить» полностью скроет панель."
   settings-options-scoreboard-title: "<#86dcf1>Информационная панель"
-  settings-options-item-info-body: "<#e8dfd2>Показывать название и ID блока ItemsAdder или Slimefun, на который вы смотрите.<newline>Обычные блоки Minecraft не отображаются."
+  settings-options-item-info-body: "<#e8dfd2>Показывать название блока или мебели ItemsAdder либо Slimefun, на которые вы смотрите.<newline>Технический ID можно включить отдельно. Обычные блоки Minecraft не отображаются."
   settings-options-item-info-title: "<#86dcf1>Информация о блоке"
+  settings-item-info-id-label: "<#d7b486>Технический ID: <state>"
+  settings-item-info-id-tooltip: "<#e8dfd2>Добавлять внутренний ID второй строкой.<newline>По умолчанию показывается только название."
+  settings-item-info-layout-label: "<#d7b486>Настроить голограмму ›"
+  settings-item-info-layout-tooltip: "<#e8dfd2>Точно изменить размер и положение подсказки на экране."
+  settings-item-info-layout-title: "<#86dcf1>Положение голограммы"
+  settings-item-info-layout-body: "<#e8dfd2>Настройте размер и смещение относительно удобного положения Lands.<newline>Положительное значение двигает подсказку вверх или вправо, отрицательное — вниз или влево."
+  settings-item-info-scale-label: "<#d7b486>Размер"
+  settings-item-info-vertical-label: "<#d7b486>Смещение вверх"
+  settings-item-info-horizontal-label: "<#d7b486>Смещение вправо"
+  settings-item-info-layout-apply: "<#9bd48d>Применить"
+  settings-item-info-layout-reset: "<#e8dfd2>Вернуть положение Lands"
+  settings-item-info-layout-reset-tooltip: "<#e8dfd2>Размер 1.30, смещения 0.00."
   settings-options-escape-body: "<#e8dfd2>Назад — предыдущий открытый экран; если его не было, выход.<newline>Закрыть — сразу выйти из всех меню."
   settings-options-escape-title: "<#f3a2c9>Поведение Escape"
   settings-options-shortcut-body: "<#e8dfd2>Выберите действие для сочетания Shift + F.<newline>Обычная клавиша F продолжит менять предметы в руках."
@@ -495,7 +507,7 @@ text:
   legacy-settings-tablist: "<#d7b486>Tab: <state><#d7b486> ›"
   legacy-settings-tablist-tooltip: '<#e6fff3>Оформление списка игроков по клавише Tab.<newline><#e8dfd2>Виды отличаются набором дополнительных<newline>данных: профиль, баланс, место и прогресс.<newline><newline><#d7b486>Нажмите, чтобы выбрать один из 20 видов<newline>или выключить дополнительное оформление.'
   legacy-settings-item-info: "<#d7b486>Информация о блоке: <state><#d7b486> ›"
-  legacy-settings-item-info-tooltip: '<#e6fff3>Название и точный ID блока ItemsAdder или Slimefun,<newline><#e8dfd2>на который вы смотрите. Обычные блоки не показываются.<newline><newline><#d7b486>Выберите голограмму, белую полосу босса<newline>или полностью отключите подсказку.'
+  legacy-settings-item-info-tooltip: '<#e6fff3>Название блока или мебели ItemsAdder либо Slimefun,<newline><#e8dfd2>на которые вы смотрите. Обычные блоки не показываются.<newline><newline><#d7b486>Выберите место отображения, показ ID<newline>и точное положение голограммы.'
   legacy-settings-lands: "<#d7b486>Границы земель ›"
   legacy-settings-lands-tooltip: '<#e6fff3>Подсветка границ территории Lands.<newline><#e8dfd2>Помогает понять, где заканчивается участок<newline>и какие блоки входят в поселение.<newline><newline><#d7b486>Нажмите, чтобы показать границы рядом<newline>или убрать их отображение.'
   legacy-settings-portal-by-other: "<#d7b486>Чужие порталы: <state>"
@@ -522,7 +534,7 @@ text:
   legacy-state-on: "<#9bd48d>✔ вкл."
   legacy-state-off: "<#e8dfd2>○ выкл."
   legacy-state-hologram: 'голограмма'
-  legacy-state-bossbar: 'белая полоса'
+  legacy-state-bossbar: 'сверху экрана'
   legacy-state-exp: 'за опыт'
   legacy-state-money: 'за деньги'
   legacy-state-unknown: "<#dfa754>? неизвестно"
@@ -540,7 +552,7 @@ text:
   legacy-action-scoreboard-off: '<#e8dfd2>Выключить панель'
   legacy-action-tablist-off: '<#e8dfd2>Выключить список'
   legacy-action-item-info-hologram: '<#d7b486>Голограмма'
-  legacy-action-item-info-bossbar: '<#d7b486>Белая полоса босса'
+  legacy-action-item-info-bossbar: '<#d7b486>Сверху экрана'
   legacy-action-item-info-off: '<#e8dfd2>Выключить'
   legacy-action-lands-show: '<#d7b486>Показать границы'
   legacy-action-lands-hide: '<#e8dfd2>Скрыть границы'

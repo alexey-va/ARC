@@ -22,7 +22,9 @@ internal class ItemInfoRuntime(
     private val failedViewers = mutableSetOf<java.util.UUID>()
     private val resolver = BukkitItemInfoTargetResolver(settings.targetDistance)
     private val controller = ItemInfoController(
-        mode = { player -> ItemInfoMode.fromStored(HookRegistry.luckPermsHook?.getCachedMeta(player.uniqueId, ItemInfoMode.META_KEY)) },
+        preferences = { player ->
+            ItemInfoPreferences.fromStored { key -> HookRegistry.luckPermsHook?.getCachedMeta(player.uniqueId, key) }
+        },
         target = { player ->
             if (player.isDead || player.gameMode == GameMode.SPECTATOR || OnboardingModule.claimGuide?.hasHologram(player) == true) null
             else resolver.resolve(player)

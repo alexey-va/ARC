@@ -1,8 +1,11 @@
+@file:Suppress("DEPRECATION") // Legacy Slimefun storage is still required for non-tile addon blocks.
+
 package ru.arc.hooks.slimefun
 
 import io.github.thebusybiscuit.slimefun4.api.events.PlayerRightClickEvent
 import io.github.thebusybiscuit.slimefun4.api.items.SlimefunItem
 import io.github.thebusybiscuit.slimefun4.implementation.Slimefun
+import me.mrCookieSlime.Slimefun.api.BlockStorage
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Bukkit
 import org.bukkit.Material
@@ -31,8 +34,10 @@ class SFHook : Listener {
 
     fun isSlimefunBlock(block: Block): Boolean = getSlimefunBlockId(block) != null
 
-    fun getSlimefunBlockId(block: Block): String? =
-        Slimefun.getBlockDataService().getBlockData(block).orElse(null)
+    fun getSlimefunBlockId(block: Block): String? = resolveSlimefunBlockId(
+        primary = { Slimefun.getBlockDataService().getBlockData(block).orElse(null) },
+        legacy = { BlockStorage.checkID(block) },
+    )
 
     internal fun registerOptionalDenizenTags(): Set<String> {
         if (!Bukkit.getPluginManager().isPluginEnabled("Denizen")) return emptySet()
@@ -91,3 +96,11 @@ class SFHook : Listener {
 
     private fun isBackpackDisabled(): Boolean = ArcRedisConfig.get().mainServer
 }
+
+/**
+ * Tile entities expose modern PDC data, while many addon blocks (for example
+ * InfinityExpansion panels) still live in Slimefun's legacy block storage.
+ */
+internal fun resolveSlimefunBlockId(primary: () -> String?, legacy: () -> String?): String? =
+    runCatching(primary).getOrNull()?.trim()?.takeIf(String::isNotEmpty)
+        ?: runCatching(legacy).getOrNull()?.trim()?.takeIf(String::isNotEmpty)

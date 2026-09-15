@@ -518,10 +518,18 @@ class HelpCenterScreensTest {
         click("legacy_item_info")
         assertEquals("help.settings.item-info", screen.id)
         assertEquals(
-            listOf("legacy_item_info_hologram", "legacy_item_info_bossbar", "legacy_item_info_off"),
+            listOf("legacy_item_info_hologram", "legacy_item_info_bossbar", "legacy_item_info_off", "item_info_id_toggle", "item_info_hologram_layout"),
             screen.buttons.map { it.id.value },
         )
         assertTrue(plain(screen.buttons.first().label).startsWith("✔"))
+        assertTrue(plain(screen.buttons[1].label).contains("Сверху экрана"))
+        assertTrue(plain(screen.buttons[3].label).contains("Технический ID"))
+        click("item_info_hologram_layout")
+        assertEquals("help.settings.item-info.hologram", screen.id)
+        assertEquals(3, screen.numberInputs.size)
+        assertEquals(listOf("item_info_scale", "item_info_vertical", "item_info_horizontal"), screen.numberInputs.map { it.id.value })
+        click("back")
+        assertEquals("help.settings.item-info", screen.id)
         click("back")
         assertEquals("help.settings.section.interface", screen.id)
         click("back")

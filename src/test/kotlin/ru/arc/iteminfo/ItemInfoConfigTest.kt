@@ -10,6 +10,7 @@ class ItemInfoConfigTest : StringSpec({
 
         settings.enabled shouldBe true
         settings.targetDistance shouldBe 5.0
+        settings.nameOnlyTemplate shouldBe "<white><name>"
         settings.hologramTemplate shouldBe "<white><name><newline><gray><id>"
         settings.bossbarTemplate shouldBe "<white><name> <dark_gray>· <gray><id>"
     }

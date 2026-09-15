@@ -3,6 +3,7 @@ package ru.arc.helpcenter
 import io.mockk.every
 import io.mockk.mockk
 import ru.arc.iteminfo.ItemInfoMode
+import ru.arc.iteminfo.ItemInfoPreferences
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -19,6 +20,7 @@ class HelpCenterLegacySettingsTest {
         assertEquals("main", settings.entries(player).first { it.id == "shortcut" }.state)
         assertEquals("back", settings.entries(player).first { it.id == "escape" }.state)
         assertEquals("hologram", settings.entries(player).first { it.id == "item-info" }.state)
+        assertEquals(ItemInfoPreferences.DEFAULT, settings.itemInfoPreferences(player))
         assertTrue(settings.execute(player, "shortcut-mount").join())
         assertTrue(settings.execute(player, "escape-back").join())
         val reopened = HelpCenterLegacySettings(backend)
@@ -28,10 +30,18 @@ class HelpCenterLegacySettingsTest {
         assertTrue(reopened.execute(player, "shortcut-disabled").join())
         assertTrue(reopened.execute(player, "escape-close").join())
         assertTrue(reopened.execute(player, "item-info-bossbar").join())
+        assertTrue(reopened.execute(player, "item-info-id-toggle").join())
+        assertTrue(reopened.saveItemInfoHologram(player, 0.85f, 0.35, -0.60).join())
         assertEquals("disabled", reopened.entries(player).first { it.id == "shortcut" }.state)
         assertEquals("close", reopened.entries(player).first { it.id == "escape" }.state)
         assertEquals("bossbar", reopened.entries(player).first { it.id == "item-info" }.state)
-        assertEquals(ItemInfoMode.META_KEY, backend.metadata.keys.single { it == ItemInfoMode.META_KEY })
+        assertEquals(true, reopened.itemInfoPreferences(player).showNamespacedId)
+        assertEquals(0.85f, reopened.itemInfoPreferences(player).hologramScale)
+        assertEquals(0.35, reopened.itemInfoPreferences(player).verticalOffset)
+        assertEquals(-0.60, reopened.itemInfoPreferences(player).horizontalOffset)
+        assertTrue(ItemInfoMode.META_KEY in backend.metadata)
+        assertTrue(ItemInfoPreferences.SHOW_ID_META_KEY in backend.metadata)
+        assertTrue(ItemInfoPreferences.LAYOUT_META_KEY in backend.metadata)
     }
 
     @Test

@@ -14,7 +14,11 @@ import ru.arc.misc.JoinMessageGuiFactory
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogBody
 import ru.arc.paper.menu.PaperDialogButton
+import ru.arc.paper.menu.PaperDialogClickContext
+import ru.arc.paper.menu.PaperDialogInputId
+import ru.arc.paper.menu.PaperDialogNumberRangeInput
 import ru.arc.paper.menu.PaperDialogScreen
+import ru.arc.iteminfo.ItemInfoPreferences
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -39,6 +43,9 @@ internal class HelpCenterSettingsController(
     private val plain = PlainTextComponentSerializer.plainText()
     private val tasks = LifecycleTaskScope()
     private var active = true
+    private val itemInfoScaleInput = PaperDialogInputId.of("item_info_scale")
+    private val itemInfoVerticalInput = PaperDialogInputId.of("item_info_vertical")
+    private val itemInfoHorizontalInput = PaperDialogInputId.of("item_info_horizontal")
 
     fun open(player: Player) {
         navigation.visit(player) { open(player) }
@@ -119,7 +126,7 @@ internal class HelpCenterSettingsController(
                 "shortcut" -> openOptions(player, entry.id, MenuShortcutAction.entries.map { "shortcut-${it.id}" }, section)
                 "escape" -> openOptions(player, entry.id, listOf("escape-close", "escape-back"), section)
                 "scoreboard", "tablist" -> openOptions(player, entry.id, (1..20).map { "${entry.id}-$it" } + "${entry.id}-off", section)
-                "item-info" -> openOptions(player, entry.id, listOf("item-info-hologram", "item-info-bossbar", "item-info-off"), section)
+                "item-info" -> openItemInfo(player, section)
                 "lands" -> openOptions(player, entry.id, listOf("lands-show", "lands-hide"), section)
                 "portal-style" -> openOptions(player, entry.id, HelpCenterLegacySettings.PORTAL_STYLES.map { "portal-style-$it" }, section)
                 "flight" -> openFlight(player)
@@ -160,6 +167,92 @@ internal class HelpCenterSettingsController(
                 if (recharge) openFlight(player) else openSection(player, section)
             }, columns = 2,
         ))
+    }
+
+    private fun openItemInfo(player: Player, section: Section) {
+        navigation.visit(player) { openItemInfo(player, section) }
+        val entry = legacy.entries(player).first { it.id == "item-info" }
+        val preferences = legacy.itemInfoPreferences(player)
+        val modeActions = listOf("item-info-hologram", "item-info-bossbar", "item-info-off")
+        val buttons = modeActions.map { id ->
+            val name = text("legacy-action-$id")
+            val label = if (id == "item-info-${entry.state}") {
+                text("settings-selected-option", "label" to Component.text(plain.serialize(name)))
+            } else name
+            button("legacy_$id", label, text("settings-options-item-info-body")) {
+                apply(player, id) { openItemInfo(player, section) }
+            }
+        } + listOf(
+            button(
+                "item_info_id_toggle",
+                text("settings-item-info-id-label", "state" to text(if (preferences.showNamespacedId) "legacy-state-on" else "legacy-state-off")),
+                text("settings-item-info-id-tooltip"),
+            ) { apply(player, "item-info-id-toggle") { openItemInfo(player, section) } },
+            button("item_info_hologram_layout", text("settings-item-info-layout-label"), text("settings-item-info-layout-tooltip")) {
+                openItemInfoHologram(player, section)
+            },
+        )
+        showDialog(player, PaperDialogScreen(
+            id = "help.settings.item-info",
+            title = text("settings-options-item-info-title"),
+            body = listOf(
+                PaperDialogBody(text("settings-options-body", "state" to state(entry)), 468),
+                PaperDialogBody(text("settings-options-item-info-body"), 468),
+            ),
+            buttons = buttons,
+            exitButton = button("back", text("settings-${section.key}-back-label")) { openSection(player, section) },
+            columns = 2,
+        ))
+    }
+
+    private fun openItemInfoHologram(player: Player, section: Section) {
+        navigation.visit(player) { openItemInfoHologram(player, section) }
+        val preferences = legacy.itemInfoPreferences(player)
+        showDialog(player, PaperDialogScreen(
+            id = "help.settings.item-info.hologram",
+            title = text("settings-item-info-layout-title"),
+            body = listOf(PaperDialogBody(text("settings-item-info-layout-body"), 468)),
+            numberInputs = listOf(
+                PaperDialogNumberRangeInput(itemInfoScaleInput, text("settings-item-info-scale-label"),
+                    ItemInfoPreferences.MIN_SCALE, ItemInfoPreferences.MAX_SCALE, preferences.hologramScale, 0.05f, width = 420),
+                PaperDialogNumberRangeInput(itemInfoVerticalInput, text("settings-item-info-vertical-label"),
+                    ItemInfoPreferences.MIN_VERTICAL_OFFSET.toFloat(), ItemInfoPreferences.MAX_VERTICAL_OFFSET.toFloat(),
+                    preferences.verticalOffset.toFloat(), 0.05f, width = 420),
+                PaperDialogNumberRangeInput(itemInfoHorizontalInput, text("settings-item-info-horizontal-label"),
+                    ItemInfoPreferences.MIN_HORIZONTAL_OFFSET.toFloat(), ItemInfoPreferences.MAX_HORIZONTAL_OFFSET.toFloat(),
+                    preferences.horizontalOffset.toFloat(), 0.05f, width = 420),
+            ),
+            buttons = listOf(
+                contextButton("item_info_layout_apply", text("settings-item-info-layout-apply")) { context ->
+                    saveItemInfoLayout(
+                        player,
+                        context.number(itemInfoScaleInput) ?: preferences.hologramScale,
+                        (context.number(itemInfoVerticalInput) ?: preferences.verticalOffset.toFloat()).toDouble(),
+                        (context.number(itemInfoHorizontalInput) ?: preferences.horizontalOffset.toFloat()).toDouble(),
+                    ) { openItemInfoHologram(player, section) }
+                },
+                button("item_info_layout_reset", text("settings-item-info-layout-reset"), text("settings-item-info-layout-reset-tooltip")) {
+                    apply(player, "item-info-layout-reset") { openItemInfoHologram(player, section) }
+                },
+            ),
+            exitButton = button("back", text("settings-interface-back-label")) { openItemInfo(player, section) },
+            columns = 2,
+        ))
+    }
+
+    private fun saveItemInfoLayout(
+        player: Player,
+        scale: Float,
+        vertical: Double,
+        horizontal: Double,
+        refresh: () -> Unit,
+    ) {
+        val token = navigation.visit(player, refresh)
+        legacy.saveItemInfoHologram(player, scale, vertical, horizontal).whenCompleteSync(tasks) { accepted, failure ->
+            if (!active || !player.isOnline || !navigation.isCurrent(player, token)) return@whenCompleteSync
+            if (failure != null || accepted != true) player.sendMessage(text("action-failed"))
+            refresh()
+        }
     }
 
     private fun openFlight(player: Player) {
@@ -229,6 +322,8 @@ internal class HelpCenterSettingsController(
     })
     private fun button(id: String, label: Component, tooltip: Component = Component.empty(), action: () -> Unit) =
         PaperDialogButton(PaperDialogActionId.of(id.replace('-', '_')), label, tooltip, width = 230, onClick = { action() })
+    private fun contextButton(id: String, label: Component, tooltip: Component = Component.empty(), action: (PaperDialogClickContext) -> Unit) =
+        PaperDialogButton(PaperDialogActionId.of(id.replace('-', '_')), label, tooltip, width = 230, onClick = action)
     private fun text(key: String, vararg values: Pair<String, Component>): Component = miniMessage.deserialize(
         settings.text(key), *values.map { (key, value) -> Placeholder.component(key, value) }.toTypedArray(),
     ).decoration(TextDecoration.ITALIC, false)

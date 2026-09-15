@@ -3,7 +3,7 @@ package ru.arc.iteminfo
 import org.bukkit.entity.Player
 
 internal interface ItemInfoRenderer : AutoCloseable {
-    fun render(player: Player, mode: ItemInfoMode, target: ItemInfoTarget)
+    fun render(player: Player, preferences: ItemInfoPreferences, target: ItemInfoTarget)
 
     fun follow(player: Player)
 
@@ -13,15 +13,15 @@ internal interface ItemInfoRenderer : AutoCloseable {
 }
 
 internal class ItemInfoController(
-    private val mode: (Player) -> ItemInfoMode,
+    private val preferences: (Player) -> ItemInfoPreferences,
     private val target: (Player) -> ItemInfoTarget?,
     private val renderer: ItemInfoRenderer,
 ) : AutoCloseable {
     fun update(player: Player) {
-        val selectedMode = mode(player)
-        val selectedTarget = if (selectedMode == ItemInfoMode.OFF) null else target(player)
+        val selected = preferences(player)
+        val selectedTarget = if (selected.mode == ItemInfoMode.OFF) null else target(player)
         if (selectedTarget == null) renderer.clear(player)
-        else renderer.render(player, selectedMode, selectedTarget)
+        else renderer.render(player, selected, selectedTarget)
     }
 
     fun follow(player: Player) = renderer.follow(player)

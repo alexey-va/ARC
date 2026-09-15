@@ -3,5 +3,6 @@ enabled: true
 target-distance: 5.0
 
 text:
+  name-only: '<white><name>'
   hologram: '<white><name><newline><gray><id>'
   bossbar: '<white><name> <dark_gray>· <gray><id>'

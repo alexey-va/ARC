@@ -1,11 +1,14 @@
 package ru.arc.iteminfo
 
 import dev.lone.itemsadder.api.CustomBlock
+import dev.lone.itemsadder.api.CustomFurniture
+import dev.lone.itemsadder.api.CustomStack
 import net.kyori.adventure.text.Component
 import org.bukkit.Bukkit
 import org.bukkit.FluidCollisionMode
 import org.bukkit.block.Block
 import org.bukkit.entity.Player
+import org.bukkit.entity.Entity
 import org.bukkit.inventory.ItemStack
 import ru.arc.hooks.HookRegistry
 import java.util.Locale
@@ -24,17 +27,44 @@ internal class BukkitItemInfoTargetResolver(
     private val resolver = ItemInfoBlockResolver(::itemsAdder, ::slimefun)
 
     fun resolve(player: Player): ItemInfoTarget? {
-        val block = player.rayTraceBlocks(distance, FluidCollisionMode.NEVER)?.hitBlock ?: return null
-        return resolver.resolve(block)
+        val eye = player.eyeLocation
+        val blockHit = player.rayTraceBlocks(distance, FluidCollisionMode.NEVER)
+        val blockDistance = blockHit?.hitPosition?.distanceSquared(eye.toVector())
+        val blockTarget = blockHit?.hitBlock?.let(resolver::resolve)?.let {
+            LocatedTarget(it, requireNotNull(blockDistance))
+        }
+        var furnitureTarget: ItemInfoTarget? = null
+        val furnitureHit = if (Bukkit.getPluginManager().isPluginEnabled("ItemsAdder")) {
+            player.world.rayTraceEntities(eye, eye.direction, distance, 0.20) { entity ->
+                if (entity.uniqueId == player.uniqueId) return@rayTraceEntities false
+                furniture(entity)?.also { furnitureTarget = it } != null
+            }
+        } else null
+        val entityTarget = furnitureHit?.let { hit ->
+            val distanceSquared = hit.hitPosition.distanceSquared(eye.toVector())
+            furnitureTarget?.takeIf { blockDistance == null || distanceSquared <= blockDistance + 0.01 }
+                ?.let { LocatedTarget(it, distanceSquared) }
+        }
+        return listOfNotNull(blockTarget, entityTarget).minByOrNull(LocatedTarget::distanceSquared)?.target
     }
 
     private fun itemsAdder(block: Block): ItemInfoTarget? {
         if (!Bukkit.getPluginManager().isPluginEnabled("ItemsAdder")) return null
         return runCatching {
-            val custom = CustomBlock.byAlreadyPlaced(block) ?: return null
-            val id = custom.namespacedID?.trim()?.takeIf(String::isNotEmpty) ?: return null
-            ItemInfoTarget(displayName(custom.itemStack, id), id)
+            val custom: CustomStack = CustomBlock.byAlreadyPlaced(block)
+                ?: CustomFurniture.byAlreadySpawned(block)
+                ?: return null
+            customTarget(custom)
         }.getOrNull()
+    }
+
+    private fun furniture(entity: Entity): ItemInfoTarget? = runCatching {
+        CustomFurniture.byAlreadySpawned(entity)?.let(::customTarget)
+    }.getOrNull()
+
+    private fun customTarget(custom: CustomStack): ItemInfoTarget? {
+        val id = custom.namespacedID?.trim()?.takeIf(String::isNotEmpty) ?: return null
+        return ItemInfoTarget(displayName(custom.itemStack, id), id)
     }
 
     private fun slimefun(block: Block): ItemInfoTarget? {
@@ -57,4 +87,6 @@ internal class BukkitItemInfoTargetResolver(
         .filter(String::isNotBlank)
         .joinToString(" ") { part -> part.lowercase(Locale.ROOT).replaceFirstChar { it.titlecase(Locale.ROOT) } }
         .ifBlank { id }
+
+    private data class LocatedTarget(val target: ItemInfoTarget, val distanceSquared: Double)
 }
