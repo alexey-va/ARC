@@ -816,6 +816,7 @@ object TravelAnchorsModule : PluginModule, Listener {
     private val publicAnchors = mutableSetOf<TravelAnchorPosition>()
     private val sharedAnchors = mutableSetOf<TravelAnchorPosition>()
     private val sharedAccess = mutableMapOf<String, MutableSet<String>>()
+    private val portalDisabledOwners = mutableSetOf<String>()
     private val networkSnapshots = mutableMapOf<String, TravelAnchorNetworkSnapshot>()
     private val pendingAccessGrants = mutableSetOf<Pair<String, String>>()
     private val selectedTargets = mutableMapOf<UUID, TravelAnchorPosition>()
@@ -850,6 +851,7 @@ object TravelAnchorsModule : PluginModule, Listener {
                     else sharedAccess[key] = players.toMutableSet()
                     persistSharedAccess()
                 },
+                onPortalsEnabled = ::setPortalsEnabledLocal,
             ).also { store ->
                 store.start()
                 sharedAccess.forEach { (owner, players) ->
@@ -882,6 +884,7 @@ object TravelAnchorsModule : PluginModule, Listener {
         publicAnchors.clear()
         sharedAnchors.clear()
         sharedAccess.clear()
+        portalDisabledOwners.clear()
         networkSnapshots.clear()
         pendingAccessGrants.clear()
         selectedTargets.clear()
@@ -1415,6 +1418,7 @@ object TravelAnchorsModule : PluginModule, Listener {
                     if (!shared) {
                         add(anchorDialogButton("edit_access", current.namingText("access-button")) { openAccessDialog(it.player, position) })
                         add(anchorDialogButton("edit_public", current.namingText("public-button")) { openPublicDialog(it.player, position) })
+                        add(anchorDialogButton("edit_portals", current.namingText("portals-button")) { openPortalsDialog(it.player, position) })
                     }
                     add(anchorDialogButton("view_network", current.namingText("network-button")) { openNetworkDialog(it.player, owner, position) })
                 },
@@ -1546,6 +1550,53 @@ object TravelAnchorsModule : PluginModule, Listener {
                 openPublicDialog(context.player, position)
             }),
             exitButton = anchorDialogButton("back_from_anchor_public", current.namingText("back")) { openAnchorMenu(it.player, position) },
+        ))
+    }
+
+    private fun openPortalsDialog(player: Player, position: TravelAnchorPosition) {
+        val current = settings ?: return
+        if (editableAnchor(player, position) == null || position in sharedAnchors) return
+        val owner = anchorOwners[position] ?: player.name
+        val enabled = portalsEnabled(owner)
+        ArcMenus.openDialog(player, PaperDialogScreen(
+            id = "travel-anchors.portals",
+            title = current.namingText("portals-title"),
+            body = listOf(PaperDialogBody(
+                current.namingText(if (enabled) "portals-body-on" else "portals-body-off"),
+                420,
+            )),
+            buttons = listOf(anchorDialogButton(
+                "toggle_anchor_portals",
+                current.namingText(if (enabled) "portals-enabled" else "portals-disabled"),
+            ) { context ->
+                if (editableAnchor(context.player, position) == null || position in sharedAnchors) return@anchorDialogButton
+                val editor = context.player
+                setNetworkPortalsEnabled(owner, !enabled).whenComplete { savedEnabled, failure ->
+                    if (!ARC.instance.isEnabled || settings !== current) return@whenComplete
+                    Tasks.scheduler.runSync(Runnable {
+                        if (!ARC.instance.isEnabled || settings !== current || !editor.isOnline) return@Runnable
+                        if (failure != null) {
+                            warn(
+                                "TRAVEL_ANCHORS phase=REDIS reason=portal-preference-save-failed owner={} editor={} enabled={}",
+                                owner,
+                                editor.name,
+                                !enabled,
+                                failure,
+                            )
+                            editor.sendActionBar(current.message("portals-save-failed"))
+                        } else {
+                            setPortalsEnabledLocal(owner, savedEnabled)
+                            editor.sendActionBar(current.message(
+                                if (savedEnabled) "portals-turned-on" else "portals-turned-off",
+                            ))
+                        }
+                        openPortalsDialog(editor, position)
+                    })
+                }
+            }),
+            exitButton = anchorDialogButton("back_from_anchor_portals", current.namingText("back")) {
+                openAnchorMenu(it.player, position)
+            },
         ))
     }
 
@@ -1769,7 +1820,10 @@ object TravelAnchorsModule : PluginModule, Listener {
         }
         if (!enforceCooldown) player.velocity = player.velocity.setY(0.0)
         current.teleportPortal?.let { portal ->
-            playEffectsSafely("teleport-portals") { playTeleportPortals(player, from, destination, portal) }
+            val owner = anchorOwners[position]
+            if (owner == null || portalsEnabled(owner)) {
+                playEffectsSafely("teleport-portals") { playTeleportPortals(player, from, destination, portal) }
+            }
         }
         refreshAfterTeleport(player)
         playEffectsSafely("arrival") { playArrivalEffects(player, destination) }
@@ -2237,6 +2291,21 @@ object TravelAnchorsModule : PluginModule, Listener {
         else sharedAccess[key] = players.mapTo(linkedSetOf()) { it.lowercase() }
         persistSharedAccess()
     }
+
+    private fun setNetworkPortalsEnabled(owner: String, enabled: Boolean): CompletableFuture<Boolean> {
+        val store = networkStore
+            ?: return CompletableFuture.failedFuture(IllegalStateException("Travel-anchor Redis network store is unavailable"))
+        val networkOwner = networkPlayerName(owner)
+            ?: return CompletableFuture.failedFuture(IllegalArgumentException("Anchor owner is not a valid player name: $owner"))
+        return store.setPortalsEnabled(networkOwner, enabled)
+    }
+
+    private fun setPortalsEnabledLocal(owner: String, enabled: Boolean) {
+        val key = owner.lowercase()
+        if (enabled) portalDisabledOwners.remove(key) else portalDisabledOwners.add(key)
+    }
+
+    private fun portalsEnabled(owner: String): Boolean = owner.lowercase() !in portalDisabledOwners
 
     private fun accessFor(owner: String): Set<String> = sharedAccess[owner.lowercase()].orEmpty()
 

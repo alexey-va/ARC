@@ -72,4 +72,55 @@ class TravelAnchorNetworkStoreTest : FunSpec({
         result.shouldContainAll("friend", "visitor")
         applied.shouldContainAll("friend", "visitor")
     }
+
+    test("legacy access snapshots keep portals enabled") {
+        val redis = InMemoryRedis(ServerIdentity { "survival" })
+        redis.setHash(
+            TravelAnchorNetworkStore.ACCESS_HASH,
+            mapOf("grocermc" to """{"players":["friend"]}"""),
+        )
+        val portalsEnabled = java.util.concurrent.CompletableFuture<Boolean>()
+        val store = TravelAnchorNetworkStore(
+            redis,
+            "survival",
+            Runnable::run,
+            {},
+            { _, _ -> },
+            { _, enabled -> portalsEnabled.complete(enabled) },
+        )
+
+        store.start()
+
+        portalsEnabled.get(2, TimeUnit.SECONDS) shouldBe true
+    }
+
+    test("portal preference preserves access players") {
+        val redis = InMemoryRedis(ServerIdentity { "survival" })
+        redis.setHash(
+            TravelAnchorNetworkStore.ACCESS_HASH,
+            mapOf("grocermc" to Common.gson.toJson(mapOf("players" to setOf("friend")))),
+        )
+        var appliedPlayers = emptySet<String>()
+        var appliedPortalsEnabled = true
+        val store = TravelAnchorNetworkStore(
+            redis,
+            "survival",
+            Runnable::run,
+            {},
+            { _, players -> appliedPlayers = players },
+            { _, enabled -> appliedPortalsEnabled = enabled },
+        )
+
+        store.setPortalsEnabled("GrocerMC", false).get(2, TimeUnit.SECONDS) shouldBe false
+        store.grantAccess("GrocerMC", "visitor").get(2, TimeUnit.SECONDS)
+        store.replaceAccess("GrocerMC", setOf("builder")).get(2, TimeUnit.SECONDS)
+
+        appliedPlayers shouldBe setOf("builder")
+        appliedPortalsEnabled shouldBe false
+        val stored = Common.gson.fromJson(
+            redis.getHash(TravelAnchorNetworkStore.ACCESS_HASH).getValue("grocermc"),
+            Map::class.java,
+        )
+        stored["portalsDisabled"] shouldBe true
+    }
 })

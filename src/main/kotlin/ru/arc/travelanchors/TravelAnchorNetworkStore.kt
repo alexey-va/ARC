@@ -38,6 +38,7 @@ internal data class TravelAnchorNetworkSnapshot(
 
 private data class TravelAnchorAccessSnapshot(
     val players: Set<String> = emptySet(),
+    val portalsDisabled: Boolean = false,
 )
 
 private data class TravelAnchorNetworkEvent(
@@ -59,6 +60,7 @@ internal class TravelAnchorNetworkStore(
     private val runMain: (Runnable) -> Unit,
     private val onSnapshot: (TravelAnchorNetworkSnapshot) -> Unit,
     private val onAccess: (String, Set<String>) -> Unit,
+    private val onPortalsEnabled: (String, Boolean) -> Unit = { _, _ -> },
 ) : AutoCloseable {
     private val closed = AtomicBoolean(false)
     private val serverId = BackendServerId.of(localServer.trim().lowercase(Locale.ROOT)).value
@@ -111,7 +113,7 @@ internal class TravelAnchorNetworkStore(
                 runCatching { ACCESS_CODEC.decode(raw) }
                     .onFailure { error("TRAVEL_ANCHORS phase=REDIS reason=invalid-access-snapshot owner={}", owner, it) }
                     .getOrNull()
-                    ?.let { applyAccess(owner, it.players) }
+                    ?.let { applyAccess(owner, it) }
             }
         }
     }
@@ -141,11 +143,13 @@ internal class TravelAnchorNetworkStore(
     fun replaceAccess(owner: String, players: Set<String>): CompletableFuture<Set<String>> {
         val field = owner.playerKey()
         val normalized = players.mapTo(sortedSetOf()) { it.playerKey() }
-        return accessUpdater.update(field) { RedisHashDecision.Write(TravelAnchorAccessSnapshot(normalized)) }
+        return accessUpdater.update(field) { current ->
+            RedisHashDecision.Write(TravelAnchorAccessSnapshot(normalized, current?.portalsDisabled ?: false))
+        }
             .thenApply { result ->
-                val saved = when (result) {
-                    is RedisHashUpdateResult.Changed -> requireNotNull(result.after).players
-                    is RedisHashUpdateResult.Unchanged -> result.current.players
+                val snapshot = when (result) {
+                    is RedisHashUpdateResult.Changed -> requireNotNull(result.after)
+                    is RedisHashUpdateResult.Unchanged -> result.current
                     is RedisHashUpdateResult.Rejected -> throw IllegalStateException(
                         "Travel-anchor access replacement was unexpectedly rejected",
                     )
@@ -153,9 +157,9 @@ internal class TravelAnchorNetworkStore(
                         "Travel-anchor access replacement remained contended after ${result.attempts} attempts",
                     )
                 }
-                applyAccess(field, saved)
+                applyAccess(field, snapshot)
                 if (result is RedisHashUpdateResult.Changed<*>) publishEvent("access", field)
-                saved
+                snapshot.players
             }
             .whenComplete { _, failure ->
                 if (failure != null) {
@@ -168,11 +172,14 @@ internal class TravelAnchorNetworkStore(
         val field = owner.playerKey()
         val player = playerName.playerKey()
         return accessUpdater.update(field) { current ->
-            RedisHashDecision.Write(TravelAnchorAccessSnapshot(current?.players.orEmpty() + player))
+            RedisHashDecision.Write(TravelAnchorAccessSnapshot(
+                players = current?.players.orEmpty() + player,
+                portalsDisabled = current?.portalsDisabled ?: false,
+            ))
         }.thenApply { result ->
-            val players = when (result) {
-                is RedisHashUpdateResult.Changed -> requireNotNull(result.after).players
-                is RedisHashUpdateResult.Unchanged -> result.current.players
+            val snapshot = when (result) {
+                is RedisHashUpdateResult.Changed -> requireNotNull(result.after)
+                is RedisHashUpdateResult.Unchanged -> result.current
                 is RedisHashUpdateResult.Rejected -> throw IllegalStateException(
                     "Travel-anchor access update was unexpectedly rejected",
                 )
@@ -180,9 +187,37 @@ internal class TravelAnchorNetworkStore(
                     "Travel-anchor access update remained contended after ${result.attempts} attempts",
                 )
             }
-            applyAccess(field, players)
+            applyAccess(field, snapshot)
             if (result is RedisHashUpdateResult.Changed<*>) publishEvent("access", field)
-            players
+            snapshot.players
+        }
+    }
+
+    fun setPortalsEnabled(owner: String, enabled: Boolean): CompletableFuture<Boolean> {
+        val field = owner.playerKey()
+        return accessUpdater.update(field) { current ->
+            RedisHashDecision.Write(TravelAnchorAccessSnapshot(
+                players = current?.players.orEmpty(),
+                portalsDisabled = !enabled,
+            ))
+        }.thenApply { result ->
+            val snapshot = when (result) {
+                is RedisHashUpdateResult.Changed -> requireNotNull(result.after)
+                is RedisHashUpdateResult.Unchanged -> result.current
+                is RedisHashUpdateResult.Rejected -> throw IllegalStateException(
+                    "Travel-anchor portal preference was unexpectedly rejected",
+                )
+                is RedisHashUpdateResult.Contended -> throw IllegalStateException(
+                    "Travel-anchor portal preference remained contended after ${result.attempts} attempts",
+                )
+            }
+            applyAccess(field, snapshot)
+            if (result is RedisHashUpdateResult.Changed<*>) publishEvent("access", field)
+            !snapshot.portalsDisabled
+        }.whenComplete { _, failure ->
+            if (failure != null) {
+                error("TRAVEL_ANCHORS phase=REDIS reason=portal-preference-save-failed owner={}", owner, failure)
+            }
         }
     }
 
@@ -213,13 +248,13 @@ internal class TravelAnchorNetworkStore(
             }
             val raw = values.singleOrNull()
             if (raw == null) {
-                applyAccess(owner, emptySet())
+                applyAccess(owner, TravelAnchorAccessSnapshot())
                 return@whenComplete
             }
             runCatching { ACCESS_CODEC.decode(raw) }
                 .onFailure { error("TRAVEL_ANCHORS phase=REDIS reason=invalid-access-snapshot owner={}", owner, it) }
                 .getOrNull()
-                ?.let { applyAccess(owner, it.players) }
+                ?.let { applyAccess(owner, it) }
         }
     }
 
@@ -227,8 +262,13 @@ internal class TravelAnchorNetworkStore(
         if (!closed.get()) runMain(Runnable { if (!closed.get()) onSnapshot(snapshot) })
     }
 
-    private fun applyAccess(owner: String, players: Set<String>) {
-        if (!closed.get()) runMain(Runnable { if (!closed.get()) onAccess(owner, players) })
+    private fun applyAccess(owner: String, snapshot: TravelAnchorAccessSnapshot) {
+        if (!closed.get()) runMain(Runnable {
+            if (!closed.get()) {
+                onAccess(owner, snapshot.players)
+                onPortalsEnabled(owner, !snapshot.portalsDisabled)
+            }
+        })
     }
 
     private fun publishEvent(kind: String, key: String) {
@@ -276,7 +316,8 @@ internal class TravelAnchorNetworkStore(
             gson = Common.gson,
             type = TravelAnchorAccessSnapshot::class.java,
             rootContract = JsonObjectContract(
-                allowedFields = setOf("players"),
+                allowedFields = setOf("players", "portalsDisabled"),
+                requiredFields = setOf("players"),
                 fieldContracts = mapOf("players" to JsonArrayContract(maxEntries = 10_000)),
             ),
             bounds = JsonResourceBounds(maxCharacters = 250_000, maxContainerEntries = 10_000),

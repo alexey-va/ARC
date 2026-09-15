@@ -42,7 +42,7 @@ visual:
     width: 3.6
     height: 5.0
     # Все параметры ниже перечитываются через /arc reload.
-    destination-visible-to-teleported-player: true
+    destination-visible-to-teleported-player: false
     vertical-offset: 1.65
     behind-player-offset: 0.35
     yaw-offset-degrees: 180.0
@@ -57,6 +57,7 @@ naming:
     material-button: '<#c4a7e7>Внешний вид ›'
     access-button: '<#9bd48d>Доступ игроков'
     public-button: '<#ffd166>Общий якорь'
+    portals-button: '<#92bed8>Порталы перехода ›'
     network-button: '<#d7a8ff>Вся сеть'
     name-title: '<#92bed8><bold>Название якоря'
     name-body: '<#e8dfd2>Название видно над якорем и в списке сети.'
@@ -87,6 +88,11 @@ naming:
     private-state: '<#e8dfd2>личный'
     make-public: '<#9bd48d>Сделать общим'
     make-private: '<#ff9a8f>Сделать личным'
+    portals-title: '<#92bed8><bold>Порталы перехода'
+    portals-body-on: '<#e8dfd2>Порталы включены во всей сети владельца на всех серверах.'
+    portals-body-off: '<#e8dfd2>Порталы выключены во всей сети владельца на всех серверах.'
+    portals-enabled: '<#9bd48d>✔ Показывать порталы'
+    portals-disabled: '<#ffffff>○ Показывать порталы'
     network-title: '<#d7a8ff><bold>Сеть путевых якорей'
     network-body: '<#e8dfd2>Владелец: <#ffffff>%owner% · <#e8dfd2>точек: <#ffffff>%count% · <#e8dfd2>страница: <#ffffff>%page%/%pages%<newline><#e8dfd2>Нажмите на точку, чтобы перейти.'
     network-empty: '<#e8dfd2>В сети игрока %owner% пока нет доступных точек.'
@@ -135,6 +141,9 @@ messages:
   access-saved-local: '<#ffd166>Доступ сохранён только на этом сервере: Redis недоступен.'
   made-public: '<#9bd48d>Якорь стал общим. Он будет выдавать доступ к сети.'
   made-private: '<#b8b8b8>Якорь снова личный.'
+  portals-turned-on: '<#9bd48d>Порталы включены во всей сети.'
+  portals-turned-off: '<#b8b8b8>Порталы выключены во всей сети.'
+  portals-save-failed: '<#c42323>Не удалось сохранить настройку порталов для всей сети. Попробуйте ещё раз.'
   public-access-granted: '<#9bd48d>Получен доступ к сети игрока <#ffffff>%owner%<#9bd48d>.'
   public-access-local: '<#ffd166>Доступ к сети игрока <#ffffff>%owner%<#ffd166> получен только на этом сервере: Redis недоступен.'
   target-anchor: '<#ffd166>%name% <#8c8c8c>· <#ffd166>Shift<#b8b8b8> — перейти · <#ffffff>%distance% м'
