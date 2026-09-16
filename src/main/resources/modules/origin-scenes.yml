@@ -1,0 +1,366 @@
+# Kotlin-owned ambient NPC choreography for Origin. Denizen must not own these
+# actors' background movement at the same time.
+world: rc_origin_spawn
+tick-ticks: 20
+
+speech:
+  duration-ticks: 100
+  height: 2.65
+  view-range: 1.0
+  scale: 0.95
+
+scene-ids: [forge, mount-yard]
+
+scenes:
+  forge:
+    anchor: "75.5,70.0,72.5"
+    audience-range: 80.0
+    retry-seconds: 6
+    max-concurrent-cycles: 2
+    actor-ids: ["349", "350", "351", "354", "355", "358", "362"]
+    actors:
+      349:
+        home: "76.5,70.0,70.5,0,25"
+        denied-denizen-flags: [rc_origin_forge_service_busy]
+      350:
+        home: "70.8895,70.0,62.2651,60.9,0"
+        denied-denizen-flags: [rc_origin_forge_service_busy]
+      351:
+        home: "70.9392,70.0,74.3837,-78.3,-3.7"
+        denied-denizen-flags: [rc_origin_forge_service_busy]
+      354:
+        home: "79.6839,70.0,66.8583,-126.2,0"
+        denied-denizen-flags: [rc_origin_forge_service_busy]
+      355:
+        home: "66.687,70.0,73.9092,-69.1,0"
+        denied-denizen-flags: [rc_origin_forge_service_busy]
+      358:
+        home: "76.6215,70.0,79.2315,-145.5,-9.1"
+        denied-denizen-flags: [rc_origin_forge_service_busy]
+      362:
+        home: "80.7,70.0,78.4458,65.1,0"
+        denied-denizen-flags: [rc_origin_forge_service_busy]
+
+    anchor-ids: [master-anvil, ledger-desk, stock, apprentice-anvil, dummy-stage, dummy, hammer-anvil, furnace, quench, forge-center]
+    anchors:
+      master-anvil: "76.5,70.65,69.5"
+      ledger-desk: "70.4,70.75,61.6"
+      stock: "80.5,70.0,71.5"
+      apprentice-anvil: "79.1,70.65,67.8"
+      dummy-stage: "69.5,70.0,73.2"
+      dummy: "71.6355,71.1,72.6105"
+      hammer-anvil: "75.7,70.65,78.4"
+      furnace: "80.5,70.0,79.5"
+      quench: "81.5,70.0,75.5"
+      forge-center: "75.5,70.0,73.5"
+
+    route-profile-ids: [floor]
+    route-profiles:
+      floor:
+        floor-y: 70
+        min-block: "64,60"
+        max-block: "84,82"
+        forbidden-areas: []
+        preferred-areas: ["68,70,82,80"]
+        max-visited: 1024
+        snap-radius: 3
+        poll-ticks: 2
+        stall-polls: 24
+        speed-modifier: 0.68
+        distance-margin: 0.35
+        path-distance-margin: 0.35
+        maximum-step-height: 0.125
+
+    cycle-ids: [master-anvil, ledger-orders, apprentice-engraving, ore-inspection, blade-practice, hammer-rhythm, furnace-check]
+    cycles:
+      master-anvil:
+        actor-ids: ["349"]
+        initial-delay-seconds: 5
+        cooldown-min-seconds: 22
+        cooldown-max-seconds: 38
+        step-ids: [face, equip, hammer, ring, remark, rest]
+        steps:
+          face: {type: LOOK_AT_ANCHOR, actor-id: 349, anchor: master-anvil}
+          equip: {type: EQUIP, actor-id: 349, material: MACE}
+          hammer: {type: SWING, actor-id: 349, repetitions: 4, period-ticks: 11}
+          ring: {type: SOUND, anchor: master-anvil, sound: BLOCK_ANVIL_LAND, volume: 0.34, pitch: 1.18}
+          remark: {type: SPEECH, actor-id: 349, text: "Ровный звон. Значит, металл ещё слушается."}
+          rest: {type: WAIT, ticks: 24}
+      ledger-orders:
+        actor-ids: ["350"]
+        initial-delay-seconds: 12
+        cooldown-min-seconds: 40
+        cooldown-max-seconds: 65
+        step-ids: [desk, paper, write, page, line, rest]
+        steps:
+          desk: {type: LOOK_AT_ANCHOR, actor-id: 350, anchor: ledger-desk}
+          paper: {type: EQUIP, actor-id: 350, material: PAPER}
+          write: {type: SWING, actor-id: 350, repetitions: 3, period-ticks: 13}
+          page: {type: SOUND, anchor: ledger-desk, sound: ITEM_BOOK_PAGE_TURN, volume: 0.34, pitch: 1.08}
+          line: {type: SPEECH, actor-id: 350, text: "Заказ записан. Савва, следующую партию — к Яру."}
+          rest: {type: WAIT, ticks: 28}
+      apprentice-engraving:
+        actor-ids: ["354"]
+        initial-delay-seconds: 9
+        cooldown-min-seconds: 24
+        cooldown-max-seconds: 40
+        step-ids: [stock, take, home, face, carve, sparks, line, rest]
+        steps:
+          stock: {type: MOVE, actor-id: 354, anchor: stock, route-profile: floor, timeout-ticks: 220}
+          take: {type: EQUIP, actor-id: 354, material: IRON_INGOT}
+          home: {type: MOVE, actor-id: 354, anchor: apprentice-anvil, route-profile: floor, timeout-ticks: 220}
+          face: {type: LOOK_AT_ANCHOR, actor-id: 354, anchor: apprentice-anvil}
+          carve: {type: SWING, actor-id: 354, repetitions: 8, period-ticks: 9}
+          sparks: {type: PARTICLE, anchor: apprentice-anvil, particle: CRIT, count: 7}
+          line: {type: SPEECH, actor-id: 354, text: "Ещё одна риска — и клеймо готово."}
+          rest: {type: WAIT, ticks: 20}
+      ore-inspection:
+        actor-ids: ["351"]
+        initial-delay-seconds: 14
+        cooldown-min-seconds: 52
+        cooldown-max-seconds: 78
+        step-ids: [stock, face, take, inspect, clink, line, home]
+        steps:
+          stock: {type: MOVE, actor-id: 351, anchor: stock, route-profile: floor, timeout-ticks: 240}
+          face: {type: LOOK_AT_ANCHOR, actor-id: 351, anchor: stock}
+          take: {type: EQUIP, actor-id: 351, material: RAW_IRON}
+          inspect: {type: SWING, actor-id: 351, repetitions: 2, period-ticks: 14}
+          clink: {type: SOUND, anchor: stock, sound: BLOCK_IRON_PLACE, volume: 0.38, pitch: 0.92}
+          line: {type: SPEECH, actor-id: 351, text: "Эта жила чистая. Отправляю к печи."}
+          home: {type: MOVE, actor-id: 351, anchor: forge-center, route-profile: floor, timeout-ticks: 240}
+      blade-practice:
+        actor-ids: ["355"]
+        initial-delay-seconds: 18
+        cooldown-min-seconds: 58
+        cooldown-max-seconds: 86
+        step-ids: [stage, face, blade, strike, hit, sweep, line, home]
+        steps:
+          stage: {type: MOVE, actor-id: 355, anchor: dummy-stage, route-profile: floor, timeout-ticks: 220}
+          face: {type: LOOK_AT_ANCHOR, actor-id: 355, anchor: dummy}
+          blade: {type: EQUIP, actor-id: 355, material: IRON_SWORD}
+          strike: {type: SWING, actor-id: 355, repetitions: 3, period-ticks: 11}
+          hit: {type: SOUND, anchor: dummy, sound: ENTITY_ARMOR_STAND_HIT, volume: 0.38, pitch: 1.06}
+          sweep: {type: PARTICLE, anchor: dummy, particle: SWEEP_ATTACK, count: 2}
+          line: {type: SPEECH, actor-id: 355, text: "Корпус ниже. Клинок сам найдёт линию."}
+          home: {type: MOVE, actor-id: 355, anchor: forge-center, route-profile: floor, timeout-ticks: 220}
+      hammer-rhythm:
+        actor-ids: ["358"]
+        initial-delay-seconds: 7
+        cooldown-min-seconds: 16
+        cooldown-max-seconds: 28
+        step-ids: [face, tool, strike, ring, sparks, pause]
+        steps:
+          face: {type: LOOK_AT_ANCHOR, actor-id: 358, anchor: hammer-anvil}
+          tool: {type: EQUIP, actor-id: 358, material: MACE}
+          strike: {type: SWING, actor-id: 358, repetitions: 3, period-ticks: 12}
+          ring: {type: SOUND, anchor: hammer-anvil, sound: BLOCK_ANVIL_LAND, volume: 0.32, pitch: 0.84}
+          sparks: {type: PARTICLE, anchor: hammer-anvil, particle: ELECTRIC_SPARK, count: 5}
+          pause: {type: WAIT, ticks: 18}
+      furnace-check:
+        actor-ids: ["362"]
+        initial-delay-seconds: 22
+        cooldown-min-seconds: 54
+        cooldown-max-seconds: 82
+        step-ids: [stock, ore, furnace, face-fire, feed, flame, crackle, wait, quench, steam, hiss, line, home]
+        steps:
+          stock: {type: MOVE, actor-id: 362, anchor: stock, route-profile: floor, timeout-ticks: 220}
+          ore: {type: EQUIP, actor-id: 362, material: RAW_IRON}
+          furnace: {type: MOVE, actor-id: 362, anchor: furnace, route-profile: floor, timeout-ticks: 220}
+          face-fire: {type: LOOK_AT_ANCHOR, actor-id: 362, anchor: furnace}
+          feed: {type: SWING, actor-id: 362, repetitions: 2, period-ticks: 12}
+          flame: {type: PARTICLE, anchor: furnace, particle: SMALL_FLAME, count: 8}
+          crackle: {type: SOUND, anchor: furnace, sound: BLOCK_FURNACE_FIRE_CRACKLE, volume: 0.38, pitch: 0.88}
+          wait: {type: WAIT, ticks: 50}
+          quench: {type: MOVE, actor-id: 362, anchor: quench, route-profile: floor, timeout-ticks: 180}
+          steam: {type: PARTICLE, anchor: quench, particle: CLOUD, count: 9}
+          hiss: {type: SOUND, anchor: quench, sound: BLOCK_FIRE_EXTINGUISH, volume: 0.44, pitch: 1.2}
+          line: {type: SPEECH, actor-id: 362, text: "Теперь не трогать. Металл запоминает холод."}
+          home: {type: MOVE, actor-id: 362, anchor: furnace, route-profile: floor, timeout-ticks: 180}
+
+  mount-yard:
+    anchor: "60.0,70.0,-128.0"
+    audience-range: 72.0
+    retry-seconds: 7
+    max-concurrent-cycles: 3
+    actor-ids: ["370", "371", "412", "413", "414", "415", "422", "423"]
+    actors:
+      370:
+        home: "56.0612,70.0,-141.8403,-85.6,0"
+        denied-denizen-flags: []
+      371:
+        home: "63.6,70.0,-119.7132,57.0,-43.4"
+        denied-denizen-flags: []
+      412:
+        home: "54.3085,69.0,-106.8937,-144.9,0"
+        denied-denizen-flags: []
+      413:
+        home: "53.3103,69.0,-107.595,-144.9,0"
+        denied-denizen-flags: []
+      414:
+        home: "56.505,69.0,-116.5049,-134.4,0"
+        denied-denizen-flags: []
+      415:
+        home: "56.505,70.0,-116.5049,-134.4,0"
+        denied-denizen-flags: []
+      422:
+        home: "47.5,70.0,-136.5,-90,0"
+        denied-denizen-flags: []
+      423:
+        home: "72.5,70.0,-134.5,-180,0"
+        denied-denizen-flags: []
+
+    anchor-ids: [tack-table, wind-approach, buran-approach, ryzhik-approach, wind-graze, wind-turn, buran-graze, buran-turn, ryzhik-graze, ryzhik-turn, iney-turn, bay-turn, yard-center]
+    anchors:
+      tack-table: "60.5,70.0,-122.5"
+      wind-approach: "62.5,70.0,-121.5"
+      buran-approach: "49.5,70.0,-136.5"
+      ryzhik-approach: "70.5,70.0,-134.5"
+      wind-graze: "65.5,70.0,-126.5"
+      wind-turn: "61.5,70.0,-132.5"
+      buran-graze: "51.5,70.0,-132.5"
+      buran-turn: "53.5,70.0,-139.5"
+      ryzhik-graze: "69.5,70.0,-128.5"
+      ryzhik-turn: "66.5,70.0,-134.5"
+      iney-turn: "51.5,69.0,-100.5"
+      bay-turn: "60.5,70.0,-123.5"
+      yard-center: "58.5,70.0,-130.5"
+
+    route-profile-ids: [yard, north]
+    route-profiles:
+      yard:
+        floor-y: 70
+        min-block: "43,-147"
+        max-block: "76,-116"
+        forbidden-areas: []
+        preferred-areas: ["47,-141,73,-125"]
+        max-visited: 2048
+        snap-radius: 3
+        poll-ticks: 2
+        stall-polls: 28
+        speed-modifier: 0.58
+        distance-margin: 0.55
+        path-distance-margin: 0.45
+        maximum-step-height: 0.125
+      north:
+        floor-y: 69
+        min-block: "48,-121"
+        max-block: "63,-98"
+        forbidden-areas: []
+        preferred-areas: ["50,-115,58,-100"]
+        max-visited: 1024
+        snap-radius: 3
+        poll-ticks: 2
+        stall-polls: 30
+        speed-modifier: 0.52
+        distance-margin: 0.7
+        path-distance-margin: 0.55
+        maximum-step-height: 0.125
+
+    cycle-ids: [groom-wind, inspect-buran, inspect-ryzhik, wind-paddock, buran-paddock, ryzhik-paddock, iney-patrol, bay-patrol]
+    cycles:
+      groom-wind:
+        actor-ids: ["370", "371"]
+        initial-delay-seconds: 8
+        cooldown-min-seconds: 48
+        cooldown-max-seconds: 70
+        step-ids: [table, brush, horse, face, groom, wool, hearts, line, carrot, feed, home]
+        steps:
+          table: {type: MOVE, actor-id: 370, anchor: tack-table, route-profile: yard, timeout-ticks: 220}
+          brush: {type: EQUIP, actor-id: 370, material: BRUSH}
+          horse: {type: MOVE, actor-id: 370, anchor: wind-approach, route-profile: yard, timeout-ticks: 220}
+          face: {type: LOOK_AT_ACTOR, actor-id: 370, target-actor-id: 371}
+          groom: {type: SWING, actor-id: 370, repetitions: 5, period-ticks: 12}
+          wool: {type: SOUND, actor-id: 371, sound: BLOCK_WOOL_STEP, volume: 0.34, pitch: 1.25}
+          hearts: {type: PARTICLE, actor-id: 371, particle: HEART, count: 3}
+          line: {type: SPEECH, actor-id: 370, text: "Спокойно, Ветер. Гриву расчешем — и гулять."}
+          carrot: {type: EQUIP, actor-id: 370, material: CARROT}
+          feed: {type: SOUND, actor-id: 371, sound: ENTITY_HORSE_EAT, volume: 0.46, pitch: 1.0}
+          home: {type: MOVE, actor-id: 370, anchor: yard-center, route-profile: yard, timeout-ticks: 260}
+      inspect-buran:
+        actor-ids: ["370", "422"]
+        initial-delay-seconds: 20
+        cooldown-min-seconds: 64
+        cooldown-max-seconds: 92
+        step-ids: [approach, wheat, face, inspect, snort, line, home]
+        steps:
+          approach: {type: MOVE, actor-id: 370, anchor: buran-approach, route-profile: yard, timeout-ticks: 260}
+          wheat: {type: EQUIP, actor-id: 370, material: WHEAT}
+          face: {type: LOOK_AT_ACTOR, actor-id: 370, target-actor-id: 422}
+          inspect: {type: SWING, actor-id: 370, repetitions: 3, period-ticks: 14}
+          snort: {type: SOUND, actor-id: 422, sound: ENTITY_HORSE_BREATHE, volume: 0.42, pitch: 0.9}
+          line: {type: SPEECH, actor-id: 370, text: "Копыто чистое. Буран сегодня хоть на дальний тракт."}
+          home: {type: MOVE, actor-id: 370, anchor: yard-center, route-profile: yard, timeout-ticks: 260}
+      inspect-ryzhik:
+        actor-ids: ["370", "423"]
+        initial-delay-seconds: 32
+        cooldown-min-seconds: 70
+        cooldown-max-seconds: 100
+        step-ids: [approach, saddle, face, inspect, hearts, line, home]
+        steps:
+          approach: {type: MOVE, actor-id: 370, anchor: ryzhik-approach, route-profile: yard, timeout-ticks: 260}
+          saddle: {type: EQUIP, actor-id: 370, material: SADDLE}
+          face: {type: LOOK_AT_ACTOR, actor-id: 370, target-actor-id: 423}
+          inspect: {type: SWING, actor-id: 370, repetitions: 3, period-ticks: 14}
+          hearts: {type: PARTICLE, actor-id: 423, particle: HAPPY_VILLAGER, count: 5}
+          line: {type: SPEECH, actor-id: 370, text: "Рыжик, подпруга ровно. Не хитри на повороте."}
+          home: {type: MOVE, actor-id: 370, anchor: yard-center, route-profile: yard, timeout-ticks: 260}
+      wind-paddock:
+        actor-ids: ["371"]
+        initial-delay-seconds: 12
+        cooldown-min-seconds: 42
+        cooldown-max-seconds: 68
+        step-ids: [graze, pause, turn, breathe, home]
+        steps:
+          graze: {type: MOVE, actor-id: 371, anchor: wind-graze, route-profile: yard, timeout-ticks: 260}
+          pause: {type: WAIT, ticks: 34}
+          turn: {type: MOVE, actor-id: 371, anchor: wind-turn, route-profile: yard, timeout-ticks: 220}
+          breathe: {type: SOUND, actor-id: 371, sound: ENTITY_HORSE_BREATHE, volume: 0.3, pitch: 1.08}
+          home: {type: MOVE, actor-id: 371, anchor: wind-approach, route-profile: yard, timeout-ticks: 260}
+      buran-paddock:
+        actor-ids: ["422"]
+        initial-delay-seconds: 24
+        cooldown-min-seconds: 50
+        cooldown-max-seconds: 76
+        step-ids: [graze, pause, turn, step, home]
+        steps:
+          graze: {type: MOVE, actor-id: 422, anchor: buran-graze, route-profile: yard, timeout-ticks: 220}
+          pause: {type: WAIT, ticks: 42}
+          turn: {type: MOVE, actor-id: 422, anchor: buran-turn, route-profile: yard, timeout-ticks: 220}
+          step: {type: SOUND, actor-id: 422, sound: ENTITY_HORSE_STEP, volume: 0.28, pitch: 0.92}
+          home: {type: MOVE, actor-id: 422, anchor: buran-approach, route-profile: yard, timeout-ticks: 220}
+      ryzhik-paddock:
+        actor-ids: ["423"]
+        initial-delay-seconds: 36
+        cooldown-min-seconds: 46
+        cooldown-max-seconds: 72
+        step-ids: [graze, turn, happy, pause, home]
+        steps:
+          graze: {type: MOVE, actor-id: 423, anchor: ryzhik-graze, route-profile: yard, timeout-ticks: 220}
+          turn: {type: MOVE, actor-id: 423, anchor: ryzhik-turn, route-profile: yard, timeout-ticks: 220}
+          happy: {type: PARTICLE, actor-id: 423, particle: HAPPY_VILLAGER, count: 4}
+          pause: {type: WAIT, ticks: 30}
+          home: {type: MOVE, actor-id: 423, anchor: ryzhik-approach, route-profile: yard, timeout-ticks: 220}
+      iney-patrol:
+        actor-ids: ["412", "413"]
+        initial-delay-seconds: 44
+        cooldown-min-seconds: 92
+        cooldown-max-seconds: 128
+        step-ids: [mount, out, check, line, home]
+        steps:
+          mount: {type: MOUNT, rider-id: 412, vehicle-id: 413}
+          out: {type: MOVE, actor-id: 413, anchor: iney-turn, route-profile: north, timeout-ticks: 320}
+          check: {type: WAIT, ticks: 32}
+          line: {type: SPEECH, actor-id: 412, text: "Иней, спокойно. Дорога свободна."}
+          home: {type: MOVE, actor-id: 413, anchor: iney-turn, route-profile: north, timeout-ticks: 320}
+      bay-patrol:
+        actor-ids: ["414", "415"]
+        initial-delay-seconds: 58
+        cooldown-min-seconds: 100
+        cooldown-max-seconds: 140
+        step-ids: [mount, out, check, line, home]
+        steps:
+          mount: {type: MOUNT, rider-id: 414, vehicle-id: 415}
+          out: {type: MOVE, actor-id: 415, anchor: bay-turn, route-profile: yard, timeout-ticks: 260}
+          check: {type: WAIT, ticks: 28}
+          line: {type: SPEECH, actor-id: 414, text: "Гнедой, шаг ровнее. Ворота узкие."}
+          home: {type: MOVE, actor-id: 415, anchor: bay-turn, route-profile: yard, timeout-ticks: 260}

@@ -79,6 +79,7 @@ import ru.arc.onboarding.OnboardingModule
 import ru.arc.origin.OriginSpawnModule
 import ru.arc.origin.OriginPortalsModule
 import ru.arc.origin.OriginDiningModule
+import ru.arc.origin.scene.OriginAmbientScenesModule
 import ru.arc.paper.chunk.PaperChunkTicketRegistry
 import ru.arc.restart.RestartModule
 import ru.arc.travelanchors.TravelAnchorsModule
@@ -235,6 +236,7 @@ open class ARC : JavaPlugin() {
             AiModule,
             EconomyModule,
             OriginDiningModule,
+            OriginAmbientScenesModule,
             // Configuration (priority 30-49)
             ConfigModule,
             MetricsModule,
@@ -382,6 +384,7 @@ open class ARC : JavaPlugin() {
                 "modules/citizens-chunk-tickets.yml",
                 "modules/origin-spawn.yml",
                 "modules/origin-dining.yml",
+                "modules/origin-scenes.yml",
                 "modules/announce.yml",
                 "modules/scheduled-commands.yml",
                 "modules/restart.yml",

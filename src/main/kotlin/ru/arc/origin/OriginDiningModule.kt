@@ -64,6 +64,7 @@ import ru.arc.npc.NpcRouteBounds
 import ru.arc.npc.NpcRouteEvent
 import ru.arc.npc.NpcRouteObstacleSource
 import ru.arc.npc.NpcRouteProfile
+import ru.arc.origin.scene.originFurnitureObstacleCells
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import ru.arc.worldcontent.BreweryTableDialogs
@@ -71,7 +72,6 @@ import ru.arc.worldcontent.ItemsAdderFurnitureRuntime
 import java.util.ArrayDeque
 import java.util.UUID
 import kotlin.math.abs
-import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.min
@@ -999,7 +999,7 @@ private object OriginDiningAmbientLayout {
 
 private class OriginDiningService : AutoCloseable {
     private val tasks = LifecycleTaskScope()
-    private val routeController = CitizensNpcRouteController(::logRouteEvent, NpcRouteObstacleSource(::routeObstacleCells))
+    private val routeController = CitizensNpcRouteController(::logRouteEvent, NpcRouteObstacleSource(::originFurnitureObstacleCells))
     private val seatsById = OriginDiningLayout.seats.associateBy(OriginDiningSeat::id)
     private val sessions = mutableMapOf<UUID, OriginDiningSession>()
     private val occupants = mutableMapOf<String, UUID>()
@@ -2065,41 +2065,6 @@ private class OriginDiningService : AutoCloseable {
             location(event.target),
             event.reason ?: "none",
         )
-    }
-
-    /** Converts scene-owned display furniture into cells for the generic ARC router. */
-    private fun routeObstacleCells(world: org.bukkit.World, profile: NpcRouteProfile): Set<NpcRouteCell> {
-        if (!ItemsAdderFurnitureRuntime.available) return emptySet()
-        val search = BoundingBox(
-            profile.bounds.minX.toDouble(),
-            profile.floorY - 1.0,
-            profile.bounds.minZ.toDouble(),
-            profile.bounds.maxX + 1.0,
-            profile.floorY + 2.5,
-            profile.bounds.maxZ + 1.0,
-        )
-        val cells = linkedSetOf<NpcRouteCell>()
-
-        fun addBox(box: BoundingBox) {
-            val padding = profile.entityObstaclePadding
-            val minX = floor(box.minX - padding).toInt()
-            val maxX = ceil(box.maxX + padding).toInt() - 1
-            val minZ = floor(box.minZ - padding).toInt()
-            val maxZ = ceil(box.maxZ + padding).toInt() - 1
-            for (x in minX..maxX) {
-                for (z in minZ..maxZ) {
-                    NpcRouteCell(x, z).takeIf { it in profile.bounds }?.let(cells::add)
-                }
-            }
-        }
-
-        world.getNearbyEntities(search).forEach { entity ->
-            val furniture = ItemsAdderFurnitureRuntime.inspect(entity) ?: return@forEach
-            addBox(entity.boundingBox)
-            addBox(furniture.root.boundingBox)
-            cells += NpcRouteCell(floor(furniture.root.location.x).toInt(), floor(furniture.root.location.z).toInt())
-        }
-        return cells.filterTo(linkedSetOf()) { it in profile.bounds }
     }
 
     private fun isWaiterNavigating(npc: net.citizensnpcs.api.npc.NPC): Boolean =
