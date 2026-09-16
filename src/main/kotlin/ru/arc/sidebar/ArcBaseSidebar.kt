@@ -44,7 +44,10 @@ internal class ArcBaseSidebar(
                 source.hide(player)
                 return@forEach
             }
-            val rows = config.stringList("styles.$style.lines").map { render(player, it) }
+            val rows = config.stringList("styles.$style.lines").mapNotNull { template ->
+                resolveOptionalSidebarLine(template) { placeholder -> resolvePlaceholder(player, placeholder) }
+                    ?.let { render(player, it) }
+            }
             if (rows.isEmpty()) {
                 source.hide(player)
                 return@forEach
@@ -81,9 +84,7 @@ internal class ArcBaseSidebar(
 
     private fun render(player: Player, template: String): Component {
         var rendered = replaceNativePlaceholders(template, player, ARC.serverName.orEmpty())
-        if (Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI")) {
-            rendered = PlaceholderAPI.setPlaceholders(player, rendered)
-        }
+        rendered = resolvePlaceholder(player, rendered)
         rendered = rendered
             .replace("%lands_land_name_plain_here%", "Серверная")
             .replace("%arc_worldname%", "Сервер")
@@ -91,6 +92,13 @@ internal class ArcBaseSidebar(
             .replace('§', '&')
         return if (rendered.isEmpty()) Component.empty() else legacy.deserialize(rendered)
     }
+
+    private fun resolvePlaceholder(player: Player, template: String): String =
+        if (Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI")) {
+            PlaceholderAPI.setPlaceholders(player, template)
+        } else {
+            template
+        }
 
     companion object {
         private const val RESOURCE = "modules/scoreboard.yml"
@@ -148,3 +156,21 @@ internal class ArcBaseSidebar(
         private const val MEBIBYTE = 1024L * 1024L
     }
 }
+
+internal fun resolveOptionalSidebarLine(
+    template: String,
+    resolvePlaceholder: (String) -> String,
+): String? {
+    if (!template.startsWith(OPTIONAL_LINE_PREFIX)) return template
+    val content = template.drop(OPTIONAL_LINE_PREFIX.length)
+    val placeholders = SIDEBAR_PLACEHOLDER.findAll(content).map(MatchResult::value).toList()
+    if (placeholders.isEmpty()) return content
+    return content.takeIf {
+        placeholders.any { placeholder ->
+            resolvePlaceholder(placeholder).let { resolved -> resolved.isNotBlank() && resolved != placeholder }
+        }
+    }
+}
+
+private const val OPTIONAL_LINE_PREFIX = "?"
+private val SIDEBAR_PLACEHOLDER = Regex("%[^%\\r\\n]+%")
