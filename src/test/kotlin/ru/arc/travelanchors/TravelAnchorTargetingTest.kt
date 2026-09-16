@@ -206,6 +206,13 @@ class TravelAnchorTargetingTest : FunSpec({
             TravelAnchorDisplayShape(cameraFacing = true, depth = 0.03f)
     }
 
+    test("occluded nearby anchors render before the wall without growing on screen") {
+        travelAnchorOccludedProxyDistance(actualDistance = 12.0, hitDistance = 8.0) shouldBe
+            (7.94 plusOrMinus 1.0e-9)
+        travelAnchorOccludedProxyScale(scale = 1.5f, actualDistance = 12.0, displayDistance = 8.0).toDouble() shouldBe
+            (1.0 plusOrMinus 1.0e-6)
+    }
+
     test("selected anchor labels stay readable at near and proxy distances") {
         travelAnchorLabelScale(distance = 6.0, minimumScale = 1.8f, maximumScale = 6.0f) shouldBe 1.8f
         travelAnchorLabelScale(distance = 48.0, minimumScale = 1.8f, maximumScale = 6.0f) shouldBe 6.0f

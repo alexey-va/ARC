@@ -117,6 +117,7 @@ private const val MAX_GIVE_AMOUNT = 4096
 private const val NETWORK_PAGE_SIZE = 10
 private const val ADMIN_PERMISSION = "arc.travelanchors.admin"
 private const val PROXY_DEPTH = 0.03f
+private const val OCCLUDED_PROXY_CLEARANCE = 0.06
 private const val PLAYER_HALF_WIDTH = 0.3
 private const val DISPLAY_VIEW_RANGE = 16f
 private const val DEFAULT_TELEPORT_PORTAL_ITEM = "origin_gate_portals:origin_portal"
@@ -246,6 +247,13 @@ internal fun travelAnchorDenialMessage(featureAvailable: Boolean, ownerAllowed: 
 
 internal fun travelAnchorDisplayDistance(actualDistance: Double, proxyDistance: Double): Double =
     min(actualDistance, proxyDistance)
+
+internal fun travelAnchorOccludedProxyDistance(actualDistance: Double, hitDistance: Double): Double =
+    (hitDistance - OCCLUDED_PROXY_CLEARANCE).coerceIn(OCCLUDED_PROXY_CLEARANCE, actualDistance)
+
+internal fun travelAnchorOccludedProxyScale(scale: Float, actualDistance: Double, displayDistance: Double): Float =
+    if (actualDistance <= 0.0 || displayDistance >= actualDistance) scale
+    else scale * (displayDistance / actualDistance).toFloat()
 
 internal fun travelAnchorSupportColumns(x: Double, z: Double): List<Pair<Int, Int>> =
     buildList {
@@ -561,6 +569,8 @@ private data class TravelAnchorRenderCandidate(
     val distanceSquared: Double,
     val dot: Double,
     val minimumSelectionDot: Double,
+    val displayDistance: Double,
+    val displayScale: Float,
     val occluded: Boolean,
 )
 
@@ -1210,7 +1220,18 @@ object TravelAnchorsModule : PluginModule, Listener {
                     current.scaleStartDistance,
                     current.fullScaleDistance,
                 )
-                val displayDistance = travelAnchorDisplayDistance(actualDistance, current.proxyDistance)
+                val occludedDisplayDistance = if (actualDistance <= current.proxyDistance) {
+                    occludedDisplayDistance(eye, center, positions)
+                } else {
+                    null
+                }
+                val displayDistance = occludedDisplayDistance
+                    ?: travelAnchorDisplayDistance(actualDistance, current.proxyDistance)
+                val displayScale = if (occludedDisplayDistance != null) {
+                    travelAnchorOccludedProxyScale(scale, actualDistance, displayDistance)
+                } else {
+                    scale
+                }
                 val destination = members.minBy { position ->
                     val x = position.x + 0.5 - eye.x
                     val y = position.y + 0.5 - eye.y
@@ -1227,10 +1248,12 @@ object TravelAnchorsModule : PluginModule, Listener {
                     minimumSelectionDot = travelAnchorExpandedSelectionDot(
                         current.selectionDot,
                         displayDistance,
-                        scale,
+                        displayScale,
                         travelAnchorGroupRadius(members),
                     ),
-                    occluded = actualDistance <= current.proxyDistance && isOccluded(eye, center, positions),
+                    displayDistance = displayDistance,
+                    displayScale = displayScale,
+                    occluded = occludedDisplayDistance != null,
                 )
             }
             .sortedBy(TravelAnchorRenderCandidate::distanceSquared)
@@ -1270,15 +1293,7 @@ object TravelAnchorsModule : PluginModule, Listener {
         candidates.forEach { candidate ->
             val actualDistance = Math.sqrt(candidate.distanceSquared)
             val location = displayLocation(player, candidate)
-            val scale = travelAnchorScale(
-                candidate.dot,
-                current.visibleDot,
-                current.minimumScale,
-                current.maximumScale,
-                actualDistance,
-                current.scaleStartDistance,
-                current.fullScaleDistance,
-            )
+            val scale = candidate.displayScale
             val shape = travelAnchorDisplayShape(actualDistance, current.proxyDistance, scale, candidate.occluded)
             candidate.members.forEach { member ->
                 val key = TravelAnchorDisplayKey(candidate.key, member)
@@ -1318,15 +1333,14 @@ object TravelAnchorsModule : PluginModule, Listener {
 
     private fun displayLocation(player: Player, candidate: TravelAnchorRenderCandidate): Location {
         val eye = player.eyeLocation
-        val distance = travelAnchorDisplayDistance(Math.sqrt(candidate.distanceSquared), checkNotNull(settings).proxyDistance)
-        return travelAnchorDisplayCenter(eye, candidate.center, distance)
+        return travelAnchorDisplayCenter(eye, candidate.center, candidate.displayDistance)
     }
 
-    private fun isOccluded(
+    private fun occludedDisplayDistance(
         eye: Location,
         center: Location,
         group: Collection<TravelAnchorPosition>,
-    ): Boolean {
+    ): Double? {
         val delta = center.toVector().subtract(eye.toVector())
         val hit = eye.world?.rayTraceBlocks(
             eye,
@@ -1334,8 +1348,10 @@ object TravelAnchorsModule : PluginModule, Listener {
             delta.length(),
             FluidCollisionMode.NEVER,
             true,
-        )?.hitBlock ?: return false
-        return TravelAnchorPosition.of(hit) !in group
+        ) ?: return null
+        val hitBlock = hit.hitBlock ?: return null
+        if (TravelAnchorPosition.of(hitBlock) in group) return null
+        return travelAnchorOccludedProxyDistance(delta.length(), hit.hitPosition.distance(eye.toVector()))
     }
 
     private fun spawnDisplay(player: Player, location: Location): BlockDisplay {
