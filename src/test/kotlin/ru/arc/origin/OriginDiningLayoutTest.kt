@@ -130,13 +130,18 @@ class OriginDiningLayoutTest : FreeSpec({
     }
 
     "ambient intervals and theft cooldown are loaded from the reloadable module config" {
-        OriginDiningLayout.ambientDialogueDelayMillis shouldBe 24_000L..52_000L
+        OriginDiningLayout.ambientDialogueDelayMillis shouldBe 12_000L..20_000L
         OriginDiningLayout.ambientRetryMillis shouldBe 5_000L
         OriginDiningLayout.guestReconcileMillis shouldBe 5_000L
         OriginDiningLayout.ambientWaiterRestMillis shouldBe 18_000L..30_000L
         OriginDiningLayout.ambientReplyDelayTicks shouldBe 18L..42L
         OriginDiningLayout.ambientLookHoldTicks shouldBe 32L..68L
-        OriginDiningLayout.ambientSpeechDurationTicks shouldBe 80L
+        OriginDiningLayout.ambientSpeechDurationTicks shouldBe 200L
+        OriginDiningLayout.ambientSpeechHeight shouldBe 2.8
+        OriginDiningLayout.ambientSpeechViewRange shouldBe 1.25f
+        OriginDiningLayout.ambientSpeechScale shouldBe 1.1f
+        OriginDiningLayout.playerServiceCooldownMillis shouldBe 120_000L
+        OriginDiningLayout.customerCallDelayTicks shouldBe 20L
         OriginDiningLayout.ambientCycleDelayMillis() shouldBe 18_000L..30_000L
         OriginDiningLayout.ambientDialogueRange shouldBe 8.0
         OriginDiningLayout.ambientAudienceRange shouldBe 24.0
@@ -191,6 +196,19 @@ class OriginDiningLayoutTest : FreeSpec({
             audience = listOf(OriginDiningAudiencePosition(OriginDiningLayout.WORLD, 100.0, 72.0, 100.0)),
             range = 24.0,
         ) shouldBe false
+    }
+
+    "recent service blocks another automatic approach" {
+        OriginDiningServicePolicy.mayApproach(now = 10_000L, serviceCooldownUntil = 9_999L) shouldBe true
+        OriginDiningServicePolicy.mayApproach(now = 10_000L, serviceCooldownUntil = 130_000L) shouldBe false
+    }
+
+    "ambient rest starts after the waiter has had time to return home" {
+        OriginDiningServicePolicy.ambientAvailableAt(
+            now = 10_000L,
+            returnReleaseTicks = 120L,
+            restMillis = 18_000L,
+        ) shouldBe 34_000L
     }
 
     "grid pathfinder walks around blocked table cells" {

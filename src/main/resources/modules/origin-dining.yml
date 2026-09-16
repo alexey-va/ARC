@@ -97,6 +97,11 @@ interaction:
   ambient-dialogue-range: 8.0
   # Speech only starts while at least one player can actually see this table.
   ambient-audience-range: 24.0
+  # Keep temporary speech above the permanent Citizens nameplate and readable
+  # against both the bright windows and the dark interior.
+  ambient-speech-height: 2.8
+  ambient-speech-view-range: 1.25
+  ambient-speech-scale: 1.1
 
 timing:
   delivery-fallback-ticks: 20
@@ -111,17 +116,19 @@ timing:
   theft-cooldown-seconds: 90
   session-ttl-seconds: 300
   dialog-authorization-seconds: 60
+  customer-call-delay-ticks: 20
+  player-service-cooldown-seconds: 120
   # Background life uses ranges so guests and waiters do not act on one clock.
-  ambient-dialogue-min-seconds: 24
-  ambient-dialogue-max-seconds: 52
+  ambient-dialogue-min-seconds: 12
+  ambient-dialogue-max-seconds: 20
   ambient-reply-delay-min-ticks: 18
   ambient-reply-delay-max-ticks: 42
   ambient-look-hold-min-ticks: 32
   ambient-look-hold-max-ticks: 68
-  ambient-speech-duration-ticks: 80
+  ambient-speech-duration-ticks: 200
   ambient-retry-seconds: 5
   guest-reconcile-seconds: 5
-  # Each waiter pauses for a different plausible interval after serving.
+  # Each waiter returns to base first, then pauses there for a different interval.
   ambient-waiter-rest-min-seconds: 18
   ambient-waiter-rest-max-seconds: 30
 
