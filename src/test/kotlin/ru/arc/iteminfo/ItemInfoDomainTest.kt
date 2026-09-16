@@ -32,13 +32,13 @@ class ItemInfoDomainTest : StringSpec({
         }
     }
 
-    "personal presentation defaults to name only and the exact Lands layout" {
+    "personal presentation defaults to GrocerMC's unobtrusive hologram layout" {
         val preferences = ItemInfoPreferences.fromStored { null }
 
         preferences shouldBe ItemInfoPreferences.DEFAULT
         preferences.showNamespacedId shouldBe false
-        preferences.hologramScale shouldBe 1.30f
-        preferences.verticalOffset shouldBe 0.0
+        preferences.hologramScale shouldBe 0.90f
+        preferences.verticalOffset shouldBe 0.50
         preferences.horizontalOffset shouldBe 0.0
     }
 

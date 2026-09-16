@@ -6,6 +6,7 @@ import dev.lone.itemsadder.api.CustomStack
 import net.kyori.adventure.text.Component
 import org.bukkit.Bukkit
 import org.bukkit.FluidCollisionMode
+import org.bukkit.Location
 import org.bukkit.block.Block
 import org.bukkit.entity.Player
 import org.bukkit.entity.Entity
@@ -17,14 +18,25 @@ import java.util.Locale
 internal class ItemInfoBlockResolver(
     private val itemsAdder: (Block) -> ItemInfoTarget?,
     private val slimefun: (Block) -> ItemInfoTarget?,
+    private val excluded: (Block) -> Boolean = { false },
 ) {
-    fun resolve(block: Block): ItemInfoTarget? = itemsAdder(block) ?: slimefun(block)
+    fun resolve(block: Block): ItemInfoTarget? =
+        if (excluded(block)) null else itemsAdder(block) ?: slimefun(block)
+}
+
+internal class ItemInfoTargetPolicy(
+    private val managedCrate: (Location) -> Boolean,
+) {
+    fun filter(location: Location?, target: ItemInfoTarget?): ItemInfoTarget? =
+        if (location != null && managedCrate(location)) null else target
 }
 
 internal class BukkitItemInfoTargetResolver(
     private val distance: Double,
+    private val managedCrate: (Location) -> Boolean = ExcellentCratesItemInfoBridge::contains,
 ) {
-    private val resolver = ItemInfoBlockResolver(::itemsAdder, ::slimefun)
+    private val resolver = ItemInfoBlockResolver(::itemsAdder, ::slimefun) { managedCrate(it.location) }
+    private val policy = ItemInfoTargetPolicy(managedCrate)
 
     fun resolve(player: Player): ItemInfoTarget? {
         val eye = player.eyeLocation
@@ -59,7 +71,8 @@ internal class BukkitItemInfoTargetResolver(
     }
 
     private fun furniture(entity: Entity): ItemInfoTarget? = runCatching {
-        CustomFurniture.byAlreadySpawned(entity)?.let(::customTarget)
+        val custom = CustomFurniture.byAlreadySpawned(entity) ?: return null
+        policy.filter(custom.entity?.location, customTarget(custom))
     }.getOrNull()
 
     private fun customTarget(custom: CustomStack): ItemInfoTarget? {

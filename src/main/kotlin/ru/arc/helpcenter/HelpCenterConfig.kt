@@ -250,7 +250,7 @@ class HelpCenterConfig(private val config: Config) {
             "settings-item-info-horizontal-label" to "<#d7b486>Смещение вправо",
             "settings-item-info-layout-apply" to "<#9bd48d>Применить",
             "settings-item-info-layout-reset" to "<#e8dfd2>Вернуть положение Lands",
-            "settings-item-info-layout-reset-tooltip" to "<#e8dfd2>Размер 1.30, смещения 0.00.",
+            "settings-item-info-layout-reset-tooltip" to "<#e8dfd2>Размер 0.90, высота +0.50, по горизонтали 0.00.",
             "settings-options-escape-body" to "<#e8dfd2>Назад — предыдущий открытый экран; если его не было, выход.<newline>Закрыть — сразу выйти из всех меню.",
             "settings-options-escape-title" to "<#f3a2c9>Поведение Escape",
             "settings-options-shortcut-body" to "<#e8dfd2>Выберите действие для сочетания Shift + F.<newline>Обычная клавиша F продолжит менять предметы в руках.",

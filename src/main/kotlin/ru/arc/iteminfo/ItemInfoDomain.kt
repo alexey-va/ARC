@@ -28,8 +28,8 @@ data class ItemInfoPreferences(
     val mode: ItemInfoMode = ItemInfoMode.HOLOGRAM,
     val showNamespacedId: Boolean = false,
     val hologramScale: Float = DEFAULT_SCALE,
-    val verticalOffset: Double = 0.0,
-    val horizontalOffset: Double = 0.0,
+    val verticalOffset: Double = DEFAULT_VERTICAL_OFFSET,
+    val horizontalOffset: Double = DEFAULT_HORIZONTAL_OFFSET,
 ) {
     fun storedLayout(): String = listOf(hologramScale, verticalOffset, horizontalOffset)
         .joinToString(",") { value -> "%.2f".format(Locale.ROOT, value) }
@@ -37,7 +37,9 @@ data class ItemInfoPreferences(
     companion object {
         const val SHOW_ID_META_KEY = "arc-item-info-show-id"
         const val LAYOUT_META_KEY = "arc-item-info-hologram-layout"
-        const val DEFAULT_SCALE = 1.30f
+        const val DEFAULT_SCALE = 0.90f
+        const val DEFAULT_VERTICAL_OFFSET = 0.50
+        const val DEFAULT_HORIZONTAL_OFFSET = 0.0
         const val MIN_SCALE = 0.50f
         const val MAX_SCALE = 2.00f
         const val MIN_VERTICAL_OFFSET = -1.50
@@ -54,8 +56,10 @@ data class ItemInfoPreferences(
                 ?.takeIf { values -> values.all { it != null && it.isFinite() } }
                 ?.map { requireNotNull(it) }
             val scale = layout?.get(0)?.takeIf { it in MIN_SCALE.toDouble()..MAX_SCALE.toDouble() }?.toFloat() ?: DEFAULT_SCALE
-            val vertical = layout?.get(1)?.takeIf { it in MIN_VERTICAL_OFFSET..MAX_VERTICAL_OFFSET } ?: 0.0
-            val horizontal = layout?.get(2)?.takeIf { it in MIN_HORIZONTAL_OFFSET..MAX_HORIZONTAL_OFFSET } ?: 0.0
+            val vertical = layout?.get(1)?.takeIf { it in MIN_VERTICAL_OFFSET..MAX_VERTICAL_OFFSET }
+                ?: DEFAULT_VERTICAL_OFFSET
+            val horizontal = layout?.get(2)?.takeIf { it in MIN_HORIZONTAL_OFFSET..MAX_HORIZONTAL_OFFSET }
+                ?: DEFAULT_HORIZONTAL_OFFSET
             return ItemInfoPreferences(mode, showId, scale, vertical, horizontal)
         }
     }

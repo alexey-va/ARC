@@ -4,6 +4,7 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.mockk
 import net.kyori.adventure.text.Component
+import org.bukkit.Location
 import org.bukkit.block.Block
 
 class ItemInfoBlockResolverTest : StringSpec({
@@ -38,5 +39,27 @@ class ItemInfoBlockResolverTest : StringSpec({
         )
 
         resolver.resolve(block) shouldBe slimefun
+    }
+
+    "registered lootbox location suppresses every fallback target" {
+        val block = mockk<Block>()
+        val resolver = ItemInfoBlockResolver(
+            itemsAdder = { ItemInfoTarget(Component.text("Кейс"), "itemsadder:daily_case") },
+            slimefun = { ItemInfoTarget(Component.text("Механизм"), "slimefun:machine") },
+            excluded = { it === block },
+        )
+
+        resolver.resolve(block) shouldBe null
+    }
+
+    "registered lootbox furniture entity is suppressed while ordinary furniture remains" {
+        val crate = mockk<Location>()
+        val ordinary = mockk<Location>()
+        val target = ItemInfoTarget(Component.text("Кейс"), "itemsadder:daily_case")
+        val policy = ItemInfoTargetPolicy { it === crate }
+
+        policy.filter(crate, target) shouldBe null
+        policy.filter(ordinary, target) shouldBe target
+        policy.filter(null, target) shouldBe target
     }
 })
