@@ -58,9 +58,11 @@ class CommandHideListener internal constructor(
             Runnable {
                 if (!player.isOnline) return@Runnable
                 // The initial command tree can be built before permission plugins finish
-                // their join lifecycle. Rebuild once afterwards with a fresh policy.
-                policies.invalidate(player.uniqueId)
-                player.updateCommands()
+                // their join lifecycle. Rebuild only if that lifecycle changed the
+                // effective policy; the initial send already cached the current one.
+                val previous = policies.cached(player.uniqueId)
+                val current = policies.refresh(player.uniqueId, player::hasPermission)
+                if (previous == null || previous !== current) player.updateCommands()
             },
         )
     }

@@ -127,6 +127,27 @@ class CommandHideListenerTest :
             verify(exactly = 1) { player.updateCommands() }
         }
 
+        "does not rebuild an unchanged command tree after join" {
+            val player = playerWithPermissions("arc.command.hide.player")
+            val listener = listener("world **")
+            listener.onPlayerCommandSend(PlayerCommandSendEvent(player, linkedSetOf("world", "help")))
+
+            listener.onPlayerJoin(PlayerJoinEvent(player, "joined"))
+
+            verify(exactly = 0) { player.updateCommands() }
+        }
+
+        "rebuilds the command tree after join when permissions changed" {
+            val player = playerWithPermissions("arc.command.hide.player")
+            val listener = listener("world **")
+            listener.onPlayerCommandSend(PlayerCommandSendEvent(player, linkedSetOf("world", "help")))
+            every { player.hasPermission("arc.command.hide.player") } returns false
+
+            listener.onPlayerJoin(PlayerJoinEvent(player, "joined"))
+
+            verify(exactly = 1) { player.updateCommands() }
+        }
+
         "runs visibility filters after other command tree contributors" {
             listOf(
                 "onTabComplete" to arrayOf(TabCompleteEvent::class.java),

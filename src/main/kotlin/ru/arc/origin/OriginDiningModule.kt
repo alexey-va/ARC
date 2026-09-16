@@ -2734,24 +2734,7 @@ private class OriginDiningService : AutoCloseable {
         val display = world.spawn(anchor, ItemDisplay::class.java)
         var hitbox: Interaction? = null
         return try {
-            display.setItemStack(stack)
-            display.itemDisplayTransform = ItemDisplay.ItemDisplayTransform.GROUND
-            display.billboard = Display.Billboard.FIXED
-            display.brightness = Display.Brightness(15, 15)
-            display.shadowRadius = 0f
-            display.shadowStrength = 0f
-            display.viewRange = OriginDiningLayout.displayViewRange
-            display.displayWidth = OriginDiningLayout.displayWidth
-            display.displayHeight = OriginDiningLayout.displayHeight
-            display.isPersistent = false
-            display.setGravity(false)
-            display.isInvulnerable = true
-            display.transformation = Transformation(
-                Vector3f(0f, OriginDiningLayout.displayLift(dish.id), 0f),
-                AxisAngle4f(),
-                Vector3f(OriginDiningLayout.displayScale(dish.id), OriginDiningLayout.displayScale(dish.id), OriginDiningLayout.displayScale(dish.id)),
-                AxisAngle4f(),
-            )
+            configureGuestMealDisplay(display, stack, dish)
             display.addScoreboardTag(GUEST_MEAL_TAG)
             hitbox = world.spawn(anchor.clone().add(0.0, OriginDiningLayout.mealHitboxYOffset, 0.0), Interaction::class.java)
             hitbox.interactionWidth = OriginDiningLayout.mealHitboxSize
@@ -2769,15 +2752,69 @@ private class OriginDiningService : AutoCloseable {
         }
     }
 
+    private fun configureGuestMealDisplay(
+        display: ItemDisplay,
+        stack: ItemStack,
+        dish: BreweryTableDialogs.Dish,
+    ) {
+        display.itemDisplayTransform = ItemDisplay.ItemDisplayTransform.GROUND
+        display.billboard = Display.Billboard.FIXED
+        display.brightness = Display.Brightness(15, 15)
+        display.shadowRadius = 0f
+        display.shadowStrength = 0f
+        display.viewRange = OriginDiningLayout.displayViewRange
+        display.displayWidth = OriginDiningLayout.displayWidth
+        display.displayHeight = OriginDiningLayout.displayHeight
+        display.isPersistent = false
+        display.setGravity(false)
+        display.isInvulnerable = true
+        updateGuestMealDisplay(display, stack, dish)
+    }
+
+    private fun updateGuestMealDisplay(
+        display: ItemDisplay,
+        stack: ItemStack,
+        dish: BreweryTableDialogs.Dish,
+    ) {
+        display.setItemStack(stack)
+        val scale = OriginDiningLayout.displayScale(dish.id)
+        display.transformation = Transformation(
+            Vector3f(0f, OriginDiningLayout.displayLift(dish.id), 0f),
+            AxisAngle4f(),
+            Vector3f(scale, scale, scale),
+            AxisAngle4f(),
+        )
+    }
+
     private fun replaceGuestMeal(table: OriginDiningGuestTable, dish: BreweryTableDialogs.Dish, reason: String) {
-        guestMeals.remove(table.id)?.let(::removeGuestMeal)
-        val meal = spawnGuestMeal(table, dish) ?: return
-        guestMeals[table.id] = meal
-        guestMealEntity[meal.hitbox.uniqueId] = meal
+        val current = guestMeals[table.id]
+        val reusable = current?.takeIf { it.display.isValid && it.hitbox.isValid }
+        val meal = reusable?.let { existing ->
+            if (existing.dish == dish) return@let existing.copy(table = table)
+            val stack = dishItem(dish) ?: return
+            runCatching {
+                updateGuestMealDisplay(existing.display, stack, dish)
+                existing.copy(table = table, dish = dish)
+            }.onFailure { failure ->
+                warn(
+                    "ORIGIN_DINING phase=AMBIENT_MEAL_REFRESH_FAILED table={} dish={} reason={}",
+                    table.id,
+                    dish.id,
+                    failure.message ?: failure.javaClass.simpleName,
+                )
+            }.getOrNull()
+        }
+        val reused = meal != null
+        if (meal == null) {
+            guestMeals.remove(table.id)?.let(::removeGuestMeal)
+        }
+        val served = meal ?: spawnGuestMeal(table, dish) ?: return
+        guestMeals[table.id] = served
+        guestMealEntity[served.hitbox.uniqueId] = served
         ambientTableDueAt.remove(table.id)
         info(
-            "ORIGIN_DINING phase=AMBIENT_MEAL_SERVED table={} guest={} npc={} dish={} target={} display={} hitbox={} reason={}",
-            table.id, table.npcId, table.waiterId, dish.id, point(table.meal), short(meal.display.uniqueId), short(meal.hitbox.uniqueId), reason,
+            "ORIGIN_DINING phase=AMBIENT_MEAL_SERVED table={} guest={} npc={} dish={} target={} display={} hitbox={} entity_reused={} reason={}",
+            table.id, table.npcId, table.waiterId, dish.id, point(table.meal), short(served.display.uniqueId), short(served.hitbox.uniqueId), reused, reason,
         )
     }
 
