@@ -133,12 +133,14 @@ class OriginDiningLayoutTest : FreeSpec({
         OriginDiningLayout.ambientDialogueDelayMillis shouldBe 24_000L..52_000L
         OriginDiningLayout.ambientRetryMillis shouldBe 5_000L
         OriginDiningLayout.guestReconcileMillis shouldBe 5_000L
-        OriginDiningLayout.ambientWaiterRestMillis shouldBe 6_000L..10_000L
+        OriginDiningLayout.ambientWaiterRestMillis shouldBe 18_000L..30_000L
         OriginDiningLayout.ambientReplyDelayTicks shouldBe 18L..42L
         OriginDiningLayout.ambientLookHoldTicks shouldBe 32L..68L
-        OriginDiningLayout.ambientCycleDelayMillis() shouldBe 8_000L..15_000L
+        OriginDiningLayout.ambientSpeechDurationTicks shouldBe 80L
+        OriginDiningLayout.ambientCycleDelayMillis() shouldBe 18_000L..30_000L
         OriginDiningLayout.ambientDialogueRange shouldBe 8.0
-        OriginDiningLayout.ambientDialogueCount() shouldBe 16
+        OriginDiningLayout.ambientAudienceRange shouldBe 24.0
+        OriginDiningLayout.ambientDialogueCount() shouldBe 10
         OriginDiningLayout.serviceDialogueCount() shouldBe 6
         OriginDiningLayout.theftCooldownMillis shouldBe 90_000L
         OriginDiningLayout.waiterPlayerRange shouldBe 1.8
@@ -155,6 +157,40 @@ class OriginDiningLayoutTest : FreeSpec({
         OriginDiningLayout.dynamicWaiterSideOffset shouldBe 1.0
         OriginDiningLayout.waiterHome(431) shouldBe OriginDiningPoint(-54.5, 72.0, 56.5, 180f)
         OriginDiningLayout.waiterHome(432) shouldBe OriginDiningPoint(-54.5, 72.0, 58.5, 180f)
+    }
+
+    "ambient table dialogue waits for a nearby player" {
+        val first = OriginDiningPoint(-56.5, 72.0, 46.5)
+        val second = OriginDiningPoint(-54.5, 72.0, 44.5)
+
+        OriginDiningAudiencePolicy.hasAudience(
+            actorWorld = OriginDiningLayout.WORLD,
+            first = first,
+            second = second,
+            audience = emptyList(),
+            range = 24.0,
+        ) shouldBe false
+        OriginDiningAudiencePolicy.hasAudience(
+            actorWorld = OriginDiningLayout.WORLD,
+            first = first,
+            second = second,
+            audience = listOf(OriginDiningAudiencePosition(OriginDiningLayout.WORLD, -47.5, 72.0, 50.5)),
+            range = 24.0,
+        ) shouldBe true
+        OriginDiningAudiencePolicy.hasAudience(
+            actorWorld = OriginDiningLayout.WORLD,
+            first = first,
+            second = second,
+            audience = listOf(OriginDiningAudiencePosition("survival", -56.5, 72.0, 46.5)),
+            range = 24.0,
+        ) shouldBe false
+        OriginDiningAudiencePolicy.hasAudience(
+            actorWorld = OriginDiningLayout.WORLD,
+            first = first,
+            second = second,
+            audience = listOf(OriginDiningAudiencePosition(OriginDiningLayout.WORLD, 100.0, 72.0, 100.0)),
+            range = 24.0,
+        ) shouldBe false
     }
 
     "grid pathfinder walks around blocked table cells" {

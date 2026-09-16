@@ -211,6 +211,44 @@ internal data class OriginDiningPoint(
     fun inWorld(world: org.bukkit.World): Location = Location(world, x, y, z, yaw, 0f)
 }
 
+internal data class OriginDiningAudiencePosition(
+    val world: String,
+    val x: Double,
+    val y: Double,
+    val z: Double,
+)
+
+internal object OriginDiningAudiencePolicy {
+    fun hasAudience(
+        actorWorld: String,
+        first: OriginDiningPoint,
+        second: OriginDiningPoint,
+        audience: Iterable<OriginDiningAudiencePosition>,
+        range: Double,
+    ): Boolean = countAudience(actorWorld, first, second, audience, range) > 0
+
+    fun countAudience(
+        actorWorld: String,
+        first: OriginDiningPoint,
+        second: OriginDiningPoint,
+        audience: Iterable<OriginDiningAudiencePosition>,
+        range: Double,
+    ): Int {
+        val rangeSquared = range * range
+        return audience.count { viewer ->
+            viewer.world == actorWorld &&
+                (distanceSquared(first, viewer) <= rangeSquared || distanceSquared(second, viewer) <= rangeSquared)
+        }
+    }
+
+    private fun distanceSquared(point: OriginDiningPoint, viewer: OriginDiningAudiencePosition): Double {
+        val dx = point.x - viewer.x
+        val dy = point.y - viewer.y
+        val dz = point.z - viewer.z
+        return dx * dx + dy * dy + dz * dz
+    }
+}
+
 private data class OriginDiningBlockBounds(
     val minX: Int,
     val minY: Int,
@@ -367,7 +405,11 @@ internal object OriginDiningLayout {
         private set
     var ambientLookHoldTicks = 0L..0L
         private set
+    var ambientSpeechDurationTicks = 80L
+        private set
     var ambientDialogueRange = 8.0
+        private set
+    var ambientAudienceRange = 24.0
         private set
     private var scales = defaultScales()
     private var surfaceLifts = defaultSurfaceLifts()
@@ -441,7 +483,9 @@ internal object OriginDiningLayout {
             source.integer("timing.ambient-look-hold-min-ticks", 35).toLong().coerceIn(1L, 200L),
             source.integer("timing.ambient-look-hold-max-ticks", 70).toLong().coerceIn(1L, 200L),
         )
+        ambientSpeechDurationTicks = source.integer("timing.ambient-speech-duration-ticks", 80).toLong().coerceIn(20L, 200L)
         ambientDialogueRange = source.real("interaction.ambient-dialogue-range", 8.0).coerceIn(2.0, 16.0)
+        ambientAudienceRange = source.real("interaction.ambient-audience-range", 24.0).coerceIn(4.0, 64.0)
         waiterReadyMargin = source.real("navigation.waiter-ready-margin").coerceIn(0.5, 4.0)
         waiterPlayerRange = source.real("navigation.waiter-player-range").coerceIn(1.0, 6.0)
         navigatorDistanceMargin = source.real("navigation.distance-margin", 0.35).coerceIn(0.1, 2.0)
@@ -772,6 +816,13 @@ private data class OriginDiningDialogue(
     val secondNpcId: Int,
     val firstLine: String,
     val secondLine: String,
+)
+
+private data class OriginDiningDialogueActors(
+    val dialogue: OriginDiningDialogue,
+    val first: net.citizensnpcs.api.npc.NPC,
+    val second: net.citizensnpcs.api.npc.NPC,
+    val audienceCount: Int,
 )
 
 private data class OriginDiningServiceDialogue(
@@ -2728,7 +2779,7 @@ private class OriginDiningService : AutoCloseable {
             addScoreboardTag(SPEECH_TAG)
         }
         speechDisplays[npcId] = display
-        tasks.runLater(45L) {
+        tasks.runLater(OriginDiningLayout.ambientSpeechDurationTicks) {
             if (speechDisplays.remove(npcId, display) && display.isValid) display.remove()
         }
     }
@@ -2892,15 +2943,30 @@ private class OriginDiningService : AutoCloseable {
             nextAmbientAt = now + OriginDiningAmbientLayout.cycleDelayMillis.random()
         }
         if (now >= nextDialogueAt && OriginDiningAmbientLayout.dialogue.isNotEmpty()) {
+            val audience = Bukkit.getOnlinePlayers().map { player ->
+                val location = player.location
+                OriginDiningAudiencePosition(location.world.name, location.x, location.y, location.z)
+            }
             val candidates = OriginDiningAmbientLayout.dialogue.filterNot { it.id == lastDialogueId }.ifEmpty { OriginDiningAmbientLayout.dialogue }.shuffled()
             val selected = candidates.firstNotNullOfOrNull { dialogue ->
                 val first = ambientActor(dialogue.firstNpcId) ?: return@firstNotNullOfOrNull null
                 val second = ambientActor(dialogue.secondNpcId) ?: return@firstNotNullOfOrNull null
-                if (first.entity.location.distanceSquared(second.entity.location) > OriginDiningLayout.ambientDialogueRange * OriginDiningLayout.ambientDialogueRange) null
-                else Triple(dialogue, first, second)
+                val firstLocation = first.entity.location
+                val secondLocation = second.entity.location
+                if (firstLocation.distanceSquared(secondLocation) > OriginDiningLayout.ambientDialogueRange * OriginDiningLayout.ambientDialogueRange) {
+                    return@firstNotNullOfOrNull null
+                }
+                val audienceCount = OriginDiningAudiencePolicy.countAudience(
+                    actorWorld = firstLocation.world.name,
+                    first = OriginDiningPoint(firstLocation.x, firstLocation.y, firstLocation.z),
+                    second = OriginDiningPoint(secondLocation.x, secondLocation.y, secondLocation.z),
+                    audience = audience,
+                    range = OriginDiningLayout.ambientAudienceRange,
+                )
+                if (audienceCount == 0) null else OriginDiningDialogueActors(dialogue, first, second, audienceCount)
             }
             if (selected != null) {
-                val (dialogue, first, second) = selected
+                val (dialogue, first, second, audienceCount) = selected
                 val firstYaw = first.entity.location.yaw
                 val firstPitch = first.entity.location.pitch
                 val secondYaw = second.entity.location.yaw
@@ -2920,6 +2986,13 @@ private class OriginDiningService : AutoCloseable {
                 }
                 lastDialogueId = dialogue.id
                 nextDialogueAt = now + OriginDiningLayout.ambientDialogueDelayMillis.random()
+                info(
+                    "ORIGIN_DINING phase=AMBIENT_DIALOGUE_STARTED dialogue={} first={} second={} viewers={}",
+                    dialogue.id,
+                    dialogue.firstNpcId,
+                    dialogue.secondNpcId,
+                    audienceCount,
+                )
             } else {
                 nextDialogueAt = now + OriginDiningLayout.ambientRetryMillis
             }
