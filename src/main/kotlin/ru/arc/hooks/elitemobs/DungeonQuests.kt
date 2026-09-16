@@ -1,14 +1,26 @@
 package ru.arc.hooks.elitemobs
 
 import com.magmaguy.elitemobs.config.QuestsConfig
+import com.magmaguy.elitemobs.config.customquests.CustomQuestsConfig
 import com.magmaguy.elitemobs.config.npcs.NPCsConfig
 import com.magmaguy.elitemobs.playerdata.database.PlayerData
+import com.magmaguy.elitemobs.quests.CustomQuest
 import com.magmaguy.elitemobs.quests.Quest
 import com.magmaguy.elitemobs.quests.QuestTracking
 import org.bukkit.entity.Player
 import java.util.UUID
 
-internal data class DungeonQuestInfo(val name: String, val tracked: Boolean, val complete: Boolean, val lines: List<String>)
+internal data class DungeonQuestInfo(
+    val id: UUID,
+    val name: String,
+    val tracked: Boolean,
+    val complete: Boolean,
+    val trackable: Boolean,
+    val lines: List<String>,
+)
+
+internal enum class DungeonQuestTrackingChange { TRACKED, UNTRACKED, LOADING, MISSING, UNTRACKABLE, FAILED }
+internal enum class DungeonQuestAbandonChange { ABANDONED, LOADING, MISSING, FAILED }
 
 internal fun readDungeonQuests(player: Player): List<DungeonQuestInfo>? {
     // Avoid a synchronous database lookup while the player's EliteMobs data is loading.
@@ -27,8 +39,41 @@ internal fun dungeonQuestInfo(quests: List<Quest>, owner: UUID, tracked: UUID?):
                 val npc = NPCsConfig.getNpcEntities()[quest.questTaker]?.name
                 if (npc.isNullOrBlank()) emptyList() else listOf(QuestsConfig.getQuestTurnInObjective().replace("\$npcName", npc))
             } else objectives.objectives.orEmpty().filterNotNull().map { QuestsConfig.getQuestScoreboardProgressionLine(it) }
-            DungeonQuestInfo(quest.questName.orEmpty(), quest.questID == tracked, complete, lines)
+            DungeonQuestInfo(quest.questID, quest.questName.orEmpty(), quest.questID == tracked, complete, quest.isTrackable(), lines)
         }
+
+private fun Quest.isTrackable(): Boolean = this !is CustomQuest ||
+    CustomQuestsConfig.getCustomQuests()[configurationFilename]?.isTrackable == true
+
+internal fun changeDungeonQuestTracking(player: Player, questId: UUID, enabled: Boolean): DungeonQuestTrackingChange {
+    if (!PlayerData.isInMemory(player.uniqueId)) return DungeonQuestTrackingChange.LOADING
+    val quest = PlayerData.getQuest(player.uniqueId, questId) ?: return DungeonQuestTrackingChange.MISSING
+    if (!quest.isTrackable()) return DungeonQuestTrackingChange.UNTRACKABLE
+
+    val current = QuestTracking.getPlayerTrackingQuests()[player.uniqueId]
+    if (!enabled) {
+        if (current?.quest?.questID == questId) current.stop()
+        return DungeonQuestTrackingChange.UNTRACKED
+    }
+    if (current?.quest?.questID == questId) {
+        return DungeonQuestTrackingChange.TRACKED
+    }
+    if (current != null) {
+        current.stop()
+    }
+    QuestTracking.toggleTracking(player, quest)
+    return if (QuestTracking.getPlayerTrackingQuests()[player.uniqueId]?.quest?.questID == questId)
+        DungeonQuestTrackingChange.TRACKED else DungeonQuestTrackingChange.FAILED
+}
+
+internal fun abandonDungeonQuest(player: Player, questId: UUID): DungeonQuestAbandonChange {
+    if (!PlayerData.isInMemory(player.uniqueId)) return DungeonQuestAbandonChange.LOADING
+    if (PlayerData.getQuest(player.uniqueId, questId) == null) return DungeonQuestAbandonChange.MISSING
+
+    Quest.stopPlayerQuest(player, questId.toString())
+    return if (PlayerData.getQuest(player.uniqueId, questId) == null)
+        DungeonQuestAbandonChange.ABANDONED else DungeonQuestAbandonChange.FAILED
+}
 
 /** Quest prose stays readable on dialogue backgrounds; meaningful color accents are retained. */
 internal fun readableQuestText(value: net.kyori.adventure.text.Component): net.kyori.adventure.text.Component {

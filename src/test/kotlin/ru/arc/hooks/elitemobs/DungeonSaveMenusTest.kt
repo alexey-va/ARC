@@ -62,26 +62,38 @@ class DungeonSaveMenusTest : FreeSpec({
         shown.single().buttons.none { it.id.value == "shops" || it.id.value == "skill_boosts" } shouldBe true
     }
 
-    "quest pages reread progression on refresh and handle quests disappearing" {
+    "quest overview marks state and opens a live quest detail" {
         val player = paper.addPlayer("quest-viewer")
         val dungeon = mockk<EMDungeonQol>(relaxed = true)
-        every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(firstArg<String>()) }
+        every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(secondArg<String>()) }
+        val firstId = UUID.randomUUID()
+        val secondId = UUID.randomUUID()
         var entries: List<DungeonQuestInfo>? = listOf(
-            DungeonQuestInfo("Первый", true, false, listOf("Скелеты 3 / 10")),
-            DungeonQuestInfo("Второй", false, true, listOf("Вернитесь к кузнецу")),
+            DungeonQuestInfo(firstId, "Первый", true, false, true, listOf("Скелеты 3 / 10")),
+            DungeonQuestInfo(secondId, "Второй", false, true, true, listOf("Вернитесь к кузнецу")),
         )
         val shown = mutableListOf<PaperDialogScreen>()
         val menus = DungeonSaveMenus(dungeon, readQuests = { entries }) { _, screen, _ -> shown += screen }
         menus.quests(player)
-        shown.last().buttons.first { it.id.value == "next" }.onClick.handle(mockk())
+        shown.last().id shouldBe "dungeon.quests"
+        shown.last().buttons.map { it.id.value } shouldBe listOf("quest_0", "quest_1", "refresh")
+        shown.last().buttons[0].label shouldBe Component.text("<#9bd48d>▶ <name> ›")
+            .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)
+        shown.last().buttons[1].label shouldBe Component.text("<#9bd48d>✔ <name> ›")
+            .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)
+
+        shown.last().buttons.first { it.id.value == "quest_1" }.onClick.handle(mockk())
+        shown.last().id shouldBe "dungeon.quest"
         shown.last().body.any { net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(it.text) == "Вернитесь к кузнецу" } shouldBe true
+
         entries = emptyList()
-        shown.last().buttons.first { it.id.value == "refresh" }.onClick.handle(mockk())
+        shown.last().exitButton!!.onClick.handle(mockk())
         shown.last().buttons.map { it.id.value } shouldBe listOf("refresh")
         shown.last().exitButton!!.id.value shouldBe "back"
         entries = null
         menus.quests(player)
-        shown.last().body.last().text shouldBe Component.text("quests.unavailable").decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)
+        shown.last().body.last().text shouldBe Component.text("<#d7b486>Данные заданий ещё загружаются. Попробуйте обновить страницу.")
+            .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)
     }
 
     "opening saves outside a resumable run returns to the panel explanation" {
@@ -216,6 +228,37 @@ class DungeonSaveMenusTest : FreeSpec({
         screens.last().buttons.map { it.id.value } shouldBe listOf("guide")
         screens.last().body.last().text shouldBe Component.text("<#d7b486>Группы EliteMobs на этом сервере недоступны или у вас нет доступа.")
             .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)
+    }
+
+    "quest detail switches tracking and abandons only after confirmation" {
+        val player = paper.addPlayer("quest-actions")
+        val dungeon = mockk<EMDungeonQol>(relaxed = true)
+        every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(secondArg<String>()) }
+        val questId = UUID.randomUUID()
+        var entries = listOf(DungeonQuestInfo(questId, "Поход", false, false, true, listOf("Зачистить 2 / 5")))
+        val tracked = mutableListOf<Pair<UUID, Boolean>>()
+        val abandoned = mutableListOf<UUID>()
+        val shown = mutableListOf<PaperDialogScreen>()
+        val menus = DungeonSaveMenus(
+            dungeon,
+            readQuests = { entries },
+            changeTracking = { _, id, enabled -> tracked += id to enabled; DungeonQuestTrackingChange.TRACKED },
+            abandonQuest = { _, id -> abandoned += id; entries = emptyList(); DungeonQuestAbandonChange.ABANDONED },
+        ) { _, screen, _ -> shown += screen }
+
+        menus.quests(player)
+        shown.last().buttons.single { it.id.value == "quest_0" }.onClick.handle(mockk())
+        shown.last().buttons.single { it.id.value == "track" }.onClick.handle(mockk())
+        tracked shouldBe listOf(questId to true)
+        shown.last().id shouldBe "dungeon.quest"
+
+        shown.last().buttons.single { it.id.value == "abandon" }.onClick.handle(mockk())
+        shown.last().id shouldBe "dungeon.quest.abandon"
+        abandoned shouldBe emptyList()
+        shown.last().buttons.single { it.id.value == "confirm_abandon" }.onClick.handle(mockk())
+        abandoned shouldBe listOf(questId)
+        shown.last().id shouldBe "dungeon.quests"
+        shown.last().buttons.map { it.id.value } shouldBe listOf("refresh")
     }
 
     "class section shows a native progression page and selects an unlocked form" {

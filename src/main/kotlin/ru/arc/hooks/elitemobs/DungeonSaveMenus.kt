@@ -19,11 +19,14 @@ import ru.arc.paper.menu.PaperDialogTextInput
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.UUID
 
 internal class DungeonSaveMenus(
     private val dungeon: EMDungeonQol,
     private val crystals: (Player) -> String? = ::readDungeonCrystals,
     private val readQuests: (Player) -> List<DungeonQuestInfo>? = ::readDungeonQuests,
+    private val changeTracking: (Player, UUID, Boolean) -> DungeonQuestTrackingChange = ::changeDungeonQuestTracking,
+    private val abandonQuest: (Player, UUID) -> DungeonQuestAbandonChange = ::abandonDungeonQuest,
     private val classService: DungeonClassService = NativeDungeonClassService,
     private val classGrants: DungeonClassGrantService = NativeDungeonClassGrantService,
     private val canGrantClasses: (Player) -> Boolean = { it.hasPermission("arc.dungeon.admin.classgrant") },
@@ -34,6 +37,7 @@ internal class DungeonSaveMenus(
         ArcMenus.openDialog(player, prepared, close, reopen = reopen)
     },
 ) {
+    private val questsPerPage = 6
     private val nameInput = PaperDialogInputId.of("name")
     private val partyPlayerInput = PaperDialogInputId.of("party_player")
     private val timeFormat = DateTimeFormatter.ofPattern("dd.MM HH:mm").withZone(ZoneId.systemDefault())
@@ -95,29 +99,126 @@ internal class DungeonSaveMenus(
         )) { panel(player) }
     }
 
-    internal fun quests(player: Player, requestedPage: Int = 0) {
+    internal fun quests(player: Player, requestedPage: Int = 0, feedback: Component? = null) {
         val entries = readQuests(player)
-        val page = requestedPage.coerceIn(0, (entries.orEmpty().size - 1).coerceAtLeast(0))
-        val quest = entries?.getOrNull(page)
-        val body = mutableListOf(PaperDialogBody(text("quests.intro", "<#f2eee8>Ваши принятые задания EliteMobs. Отслеживаемое показано первым; задания могут относиться к другим локациям."), 468))
-        if (quest == null) {
+        val pageCount = ((entries.orEmpty().size + questsPerPage - 1) / questsPerPage).coerceAtLeast(1)
+        val page = requestedPage.coerceIn(0, pageCount - 1)
+        val listed = entries.orEmpty().drop(page * questsPerPage).take(questsPerPage)
+        val body = mutableListOf(PaperDialogBody(text("quests.intro", "<#f2eee8>Ваши принятые задания EliteMobs. Выполненные отмечены галочкой, отслеживаемое — стрелкой. Задания могут относиться к другим локациям."), 468))
+        if (listed.isEmpty()) {
             body += PaperDialogBody(if (entries == null) text("quests.unavailable", "<#d7b486>Данные заданий ещё загружаются. Попробуйте обновить страницу.")
                 else text("quests.empty", "<#f2eee8>Принятых заданий пока нет. Поговорите с персонажами, которые предлагают задания."), 468)
         } else {
-            body += PaperDialogBody(plain(readableQuestText(TextUtil.legacy(quest.name))), 468)
-            body += PaperDialogBody(if (quest.tracked) text("quests.tracked", "<#9bd48d>Отслеживается") else text("quests.accepted", "<#f2eee8>Принято"), 468)
-            if (quest.complete) body += PaperDialogBody(text("quests.complete", "<#9bd48d>Цели выполнены — задание готово к сдаче."), 468)
-            quest.lines.forEach { body += PaperDialogBody(plain(readableQuestText(TextUtil.legacy(it))), 468) }
-            body += PaperDialogBody(text("quests.page", "<#f2eee8>Задание <current> из <total>", "current" to Component.text(page + 1), "total" to Component.text(entries.size)), 468)
+            body += DialogTables.body(
+                listed.map { quest -> plain(readableQuestText(TextUtil.legacy(quest.name))) to questStatus(quest) },
+                headers = text("quests.list-heading", "Задание") to text("quests.state-heading", "Состояние"),
+                frame = DialogTables.Frame.EPIC,
+                width = 320,
+            )
+            if (pageCount > 1) body += PaperDialogBody(text("quests.page", "<#f2eee8>Страница <current> из <total>",
+                "current" to Component.text(page + 1), "total" to Component.text(pageCount)), 468)
+        }
+        feedback?.let { body += PaperDialogBody(plain(it), 468) }
+        val questButtons = listed.mapIndexed { index, quest ->
+            val label = when {
+                quest.complete -> text("quests.open-complete", "<#9bd48d>✔ <name> ›", "name" to plain(readableQuestText(TextUtil.legacy(quest.name))))
+                quest.tracked -> text("quests.open-tracked", "<#9bd48d>▶ <name> ›", "name" to plain(readableQuestText(TextUtil.legacy(quest.name))))
+                else -> text("quests.open-active", "<#f2eee8>○ <name> ›", "name" to plain(readableQuestText(TextUtil.legacy(quest.name))))
+            }
+            pointButton("quest_$index", label, text("quests.open-tooltip", "Открыть прогресс и управление заданием")) { quest(player, quest.id) }
         }
         show(player, PaperDialogScreen(
             id = "dungeon.quests", title = text("quests.title", "<#c4a7e7>Мои задания"), body = body,
-            buttons = listOfNotNull(
+            buttons = questButtons + listOfNotNull(
                 if (page > 0) action("previous", "quests.previous", "<#92bed8>‹ Предыдущая страница", "quests.previous-tooltip", "Показать предыдущее задание") { quests(player, page - 1) } else null,
-                if (page + 1 < entries.orEmpty().size) action("next", "quests.next", "<#92bed8>Следующая страница ›", "quests.next-tooltip", "Показать следующее задание") { quests(player, page + 1) } else null,
+                if (page + 1 < pageCount) action("next", "quests.next", "<#92bed8>Следующая страница ›", "quests.next-tooltip", "Показать следующие задания") { quests(player, page + 1) } else null,
                 action("refresh", "quests.refresh", "<#92bed8>Обновить", "quests.refresh-tooltip", "Прочитать текущий прогресс из EliteMobs") { quests(player, page) },
             ), exitButton = back { panel(player) }, columns = 2,
         )) { quests(player, page) }
+    }
+
+    private fun quest(player: Player, questId: UUID, feedback: Component? = null) {
+        val entry = readQuests(player)?.firstOrNull { it.id == questId } ?: run {
+            quests(player, feedback = text("quests.changed", "<#d7b486>Задание изменилось или было завершено. Список обновлён."))
+            return
+        }
+        val body = mutableListOf(
+            PaperDialogBody(plain(readableQuestText(TextUtil.legacy(entry.name))), 468),
+            PaperDialogBody(questStatus(entry), 468),
+        )
+        if (entry.complete) body += PaperDialogBody(text("quests.complete", "<#9bd48d>Цели выполнены — задание готово к сдаче."), 468)
+        if (entry.lines.isEmpty()) body += PaperDialogBody(text("quests.no-progress", "<#f2eee8>Текущих целей нет."), 468)
+        else entry.lines.forEach { body += PaperDialogBody(plain(readableQuestText(TextUtil.legacy(it))), 468) }
+        if (!entry.trackable) body += PaperDialogBody(text("quests.not-trackable", "<#d7b486>Это задание нельзя выбрать для отслеживания."), 468)
+        feedback?.let { body += PaperDialogBody(plain(it), 468) }
+        val buttons = buildList {
+            if (entry.trackable) add(action(
+                "track",
+                if (entry.tracked) "quests.untrack" else "quests.track",
+                if (entry.tracked) "<#f2eee8>Перестать отслеживать" else "<#9bd48d>Отслеживать",
+                if (entry.tracked) "quests.untrack-tooltip" else "quests.track-tooltip",
+                if (entry.tracked) "Убрать задание с табло и компаса" else "Переключить табло и компас на это задание",
+            ) {
+                val result = changeTracking(player, questId, !entry.tracked)
+                if (result == DungeonQuestTrackingChange.LOADING || result == DungeonQuestTrackingChange.MISSING) {
+                    quests(player, feedback = trackingMessage(result))
+                } else {
+                    quest(player, questId, trackingMessage(result))
+                }
+            })
+            add(action("abandon", "quests.abandon", "<#ff6b61>Отказаться от задания", "quests.abandon-tooltip", "Открыть подтверждение отказа") {
+                confirmAbandon(player, questId)
+            })
+        }
+        show(player, PaperDialogScreen(
+            id = "dungeon.quest", title = text("quests.detail-title", "<#c4a7e7>Задание"), body = body,
+            buttons = buttons, exitButton = back { quests(player) }, columns = 2,
+        )) { quest(player, questId) }
+    }
+
+    private fun confirmAbandon(player: Player, questId: UUID) {
+        val entry = readQuests(player)?.firstOrNull { it.id == questId } ?: run {
+            quests(player, feedback = text("quests.changed", "<#d7b486>Задание изменилось или было завершено. Список обновлён."))
+            return
+        }
+        show(player, PaperDialogScreen(
+            id = "dungeon.quest.abandon", title = text("quests.abandon-title", "<#ff8b82>Отказаться от задания?"),
+            body = listOf(
+                PaperDialogBody(plain(readableQuestText(TextUtil.legacy(entry.name))), 468),
+                PaperDialogBody(text("quests.abandon-warning", "<#ffb277>Прогресс будет потерян. Повторно взять задание можно будет только когда оно снова доступно по его правилам. Это действие нельзя отменить."), 468),
+            ),
+            buttons = listOf(action("confirm_abandon", "quests.confirm-abandon", "<#ff6b61>Отказаться", "quests.confirm-abandon-tooltip", "Удалить принятое задание и его прогресс") {
+                when (val result = abandonQuest(player, questId)) {
+                    DungeonQuestAbandonChange.ABANDONED -> quests(player, feedback = abandonMessage(result))
+                    DungeonQuestAbandonChange.LOADING, DungeonQuestAbandonChange.MISSING -> quests(player, feedback = abandonMessage(result))
+                    DungeonQuestAbandonChange.FAILED -> quest(player, questId, abandonMessage(result))
+                }
+            }),
+            exitButton = back { quest(player, questId) }, columns = 1,
+        )) { confirmAbandon(player, questId) }
+    }
+
+    private fun questStatus(quest: DungeonQuestInfo): Component = when {
+        quest.complete && quest.tracked -> text("quests.status-complete-tracked", "<#9bd48d>✔ Выполнено · ▶ Отслеживается")
+        quest.complete -> text("quests.status-complete", "<#9bd48d>✔ Выполнено")
+        quest.tracked -> text("quests.status-tracked", "<#9bd48d>▶ Отслеживается")
+        else -> text("quests.status-active", "<#f2eee8>○ В процессе")
+    }
+
+    private fun trackingMessage(result: DungeonQuestTrackingChange): Component = when (result) {
+        DungeonQuestTrackingChange.TRACKED -> text("quests.tracking-changed", "<#9bd48d>✔ Теперь отслеживается это задание.")
+        DungeonQuestTrackingChange.UNTRACKED -> text("quests.tracking-stopped", "<#f2eee8>Отслеживание выключено.")
+        DungeonQuestTrackingChange.LOADING -> text("quests.unavailable", "<#d7b486>Данные заданий ещё загружаются. Попробуйте обновить страницу.")
+        DungeonQuestTrackingChange.MISSING -> text("quests.changed", "<#d7b486>Задание изменилось или было завершено. Список обновлён.")
+        DungeonQuestTrackingChange.UNTRACKABLE -> text("quests.not-trackable", "<#d7b486>Это задание нельзя выбрать для отслеживания.")
+        DungeonQuestTrackingChange.FAILED -> text("quests.tracking-failed", "<#d7b486>Не удалось изменить отслеживание. Попробуйте ещё раз.")
+    }
+
+    private fun abandonMessage(result: DungeonQuestAbandonChange): Component = when (result) {
+        DungeonQuestAbandonChange.ABANDONED -> text("quests.abandon-success", "<#9bd48d>✔ Вы отказались от задания.")
+        DungeonQuestAbandonChange.LOADING -> text("quests.unavailable", "<#d7b486>Данные заданий ещё загружаются. Попробуйте обновить страницу.")
+        DungeonQuestAbandonChange.MISSING -> text("quests.changed", "<#d7b486>Задание изменилось или было завершено. Список обновлён.")
+        DungeonQuestAbandonChange.FAILED -> text("quests.abandon-failed", "<#d7b486>Не удалось отказаться от задания. Оно осталось в списке.")
     }
 
     internal fun open(player: Player, feedback: Component? = null) {
