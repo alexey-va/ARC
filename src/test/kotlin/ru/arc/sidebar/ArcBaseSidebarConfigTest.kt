@@ -53,12 +53,33 @@ class ArcBaseSidebarConfigTest : StringSpec({
         val rows = config.getStringList("styles.style01.lines")
 
         rows.first() shouldBe "&6| &f%arcranks_rank_name%"
-        rows.last() shouldBe "&8Онлайн: &a%online% &8• &fПинг: &e%player_ping% мс"
+        rows.last() shouldBe "&7Онлайн: &a%online% &7• &fПинг: &e%player_ping% мс"
         rows shouldContain "@survival &6| &f%lands_land_name_plain_here%"
         rows shouldNotContain "&6| &f%player%"
         rows shouldNotContain "&6| &fНаиграно: &e%cmi_user_playtime_hoursf% ч"
         rows shouldNotContain "&6Сервер"
+        rows[rows.indexOf("?%arcranks_quest_line_1%") - 1] shouldBe ""
         (rows.indexOf("?&6| %arcranks_quest_line_4%") < rows.lastIndex) shouldBe true
+    }
+
+    "scoreboard never uses dark gray text" {
+        val stream = requireNotNull(javaClass.classLoader.getResourceAsStream("modules/scoreboard.yml"))
+        val config = stream.use { YamlConfiguration.loadConfiguration(InputStreamReader(it)) }
+        val styles = requireNotNull(config.getConfigurationSection("styles"))
+
+        styles.getKeys(false).flatMap { config.getStringList("styles.$it.lines") }.none { "&8" in it } shouldBe true
+    }
+
+    "world aliases cover both spawns and dungeon world families" {
+        val stream = requireNotNull(javaClass.classLoader.getResourceAsStream("modules/misc.yml"))
+        val config = stream.use { YamlConfiguration.loadConfiguration(InputStreamReader(it)) }
+
+        config.getString("world-names.spawn") shouldBe "&2Спавн"
+        config.getString("world-names.sp11") shouldBe "&2Спавн"
+        config.getString("world-names.rc_origin_spawn") shouldBe "&2Спавн"
+        config.getString("world-names.em_*") shouldBe "&6Мир данжа"
+        config.getString("world-names.spn_*") shouldBe "&6Мир данжа"
+        config.getString("world-names.otd_dungeon") shouldBe "&6Мир данжа"
     }
 
     "server-scoped rows stay off spawn" {

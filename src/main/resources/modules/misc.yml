@@ -237,62 +237,66 @@ world-names:
   nether: '&4Ад'
   world_the_end: '&3Новый Энд'
   em_*: '&6Мир данжа'
+  spn_*: '&6Мир данжа'
+  otd_dungeon: '&6Мир данжа'
+  bs_dungeon_test_flat: '&6Мир данжа'
   spawn: '&2Спавн'
+  rc_origin_spawn: '&2Спавн'
   parkour1: '&3Паркур'
   mining: '&eМир майнинга'
-  sp11: '&7Обычный мир'
-  spn_the_jungle: '&7Обычный мир'
-  spn_end_incursion: '&7Обычный мир'
-  spn_the_grand_line: '&7Обычный мир'
-  spn_ruined_fortress: '&7Обычный мир'
-  spn_corrupted_crystal: '&7Обычный мир'
-  spn_underground_dungeon: '&7Обычный мир'
-  spn_the_cave_remastered: '&7Обычный мир'
-  spn_the_end_rescue: '&7Обычный мир'
-  spn_the_sakura_invaders: '&7Обычный мир'
-  spn_the_pirate_bay: '&7Обычный мир'
-  spn_pillager_base: '&7Обычный мир'
-  spn_the_skeleton_casttle: '&7Обычный мир'
-  pvp: '&7Обычный мир'
-  maze: '&7Обычный мир'
+  sp11: '&2Спавн'
+  spn_the_jungle: '&6Мир данжа'
+  spn_end_incursion: '&6Мир данжа'
+  spn_the_grand_line: '&6Мир данжа'
+  spn_ruined_fortress: '&6Мир данжа'
+  spn_corrupted_crystal: '&6Мир данжа'
+  spn_underground_dungeon: '&6Мир данжа'
+  spn_the_cave_remastered: '&6Мир данжа'
+  spn_the_end_rescue: '&6Мир данжа'
+  spn_the_sakura_invaders: '&6Мир данжа'
+  spn_the_pirate_bay: '&6Мир данжа'
+  spn_pillager_base: '&6Мир данжа'
+  spn_the_skeleton_casttle: '&6Мир данжа'
+  pvp: '&cPvP-арена'
+  maze: '&6Лабиринт'
   world: '&7Обычный мир'
-  boatrace: '&7Обычный мир'
-  spn_the_hell_ring_5: '&7Обычный мир'
-  spn_legends_of_the_guild_1: '&7Обычный мир'
-  spn_the_hell_ring_6: '&7Обычный мир'
-  spn_the_hell_ring_7: '&7Обычный мир'
-  spn_the_hell_ring_8: '&7Обычный мир'
-  spn_the_hell_ring_9: '&7Обычный мир'
-  spn_legends_of_the_guild_2: '&7Обычный мир'
-  build: '&7Обычный мир'
-  spn_the_hell_ring_10: spn_the_hell_ring_10
-  spn_the_hell_ring_11: spn_the_hell_ring_11
-  spn_the_hell_ring_12: spn_the_hell_ring_12
-  spn_the_hell_ring_13: spn_the_hell_ring_13
-  spn_the_hell_ring_14: spn_the_hell_ring_14
-  spn_the_hell_ring_15: spn_the_hell_ring_15
-  spn_the_hell_ring_16: spn_the_hell_ring_16
-  spn_the_hell_ring_17: spn_the_hell_ring_17
-  spn_the_hell_ring_18: spn_the_hell_ring_18
-  spn_the_hell_ring_19: spn_the_hell_ring_19
-  world_nether: world_nether
+  boatrace: '&bЛодочная гонка'
+  spn_the_hell_ring_5: '&6Мир данжа'
+  spn_legends_of_the_guild_1: '&6Мир данжа'
+  spn_the_hell_ring_6: '&6Мир данжа'
+  spn_the_hell_ring_7: '&6Мир данжа'
+  spn_the_hell_ring_8: '&6Мир данжа'
+  spn_the_hell_ring_9: '&6Мир данжа'
+  spn_legends_of_the_guild_2: '&6Мир данжа'
+  build: '&eСтроительный мир'
+  spn_the_hell_ring_10: '&6Мир данжа'
+  spn_the_hell_ring_11: '&6Мир данжа'
+  spn_the_hell_ring_12: '&6Мир данжа'
+  spn_the_hell_ring_13: '&6Мир данжа'
+  spn_the_hell_ring_14: '&6Мир данжа'
+  spn_the_hell_ring_15: '&6Мир данжа'
+  spn_the_hell_ring_16: '&6Мир данжа'
+  spn_the_hell_ring_17: '&6Мир данжа'
+  spn_the_hell_ring_18: '&6Мир данжа'
+  spn_the_hell_ring_19: '&6Мир данжа'
+  world_nether: '&4Ад'
   judass1: judass1
-  spn_the_hell_ring_20: spn_the_hell_ring_20
-  spn_the_hell_ring_21: spn_the_hell_ring_21
-  spn_the_hell_ring_22: spn_the_hell_ring_22
-  spn_the_hell_ring_23: spn_the_hell_ring_23
-  spn_the_hell_ring_24: spn_the_hell_ring_24
-  spn_the_hell_ring_25: spn_the_hell_ring_25
-  spn_the_hell_ring_26: spn_the_hell_ring_26
-  spn_the_hell_ring_27: spn_the_hell_ring_27
-  spn_the_hell_ring_28: spn_the_hell_ring_28
-  spn_legends_of_the_guild_3: spn_legends_of_the_guild_3
-  spn_legends_of_the_guild_4: spn_legends_of_the_guild_4
-  spn_the_hell_ring_29: spn_the_hell_ring_29
-  spn_legends_of_the_guild_5: spn_legends_of_the_guild_5
-  spn_legends_of_the_guild_6: spn_legends_of_the_guild_6
-  spn_legends_of_the_guild_7: spn_legends_of_the_guild_7
-  spn_the_hell_ring_30: spn_the_hell_ring_30
+  spn_the_hell_ring_20: '&6Мир данжа'
+  spn_the_hell_ring_21: '&6Мир данжа'
+  spn_the_hell_ring_22: '&6Мир данжа'
+  spn_the_hell_ring_23: '&6Мир данжа'
+  spn_the_hell_ring_24: '&6Мир данжа'
+  spn_the_hell_ring_25: '&6Мир данжа'
+  spn_the_hell_ring_26: '&6Мир данжа'
+  spn_the_hell_ring_27: '&6Мир данжа'
+  spn_the_hell_ring_28: '&6Мир данжа'
+  spn_legends_of_the_guild_3: '&6Мир данжа'
+  spn_legends_of_the_guild_4: '&6Мир данжа'
+  spn_the_hell_ring_29: '&6Мир данжа'
+  spn_legends_of_the_guild_5: '&6Мир данжа'
+  spn_legends_of_the_guild_6: '&6Мир данжа'
+  spn_legends_of_the_guild_7: '&6Мир данжа'
+  spn_the_hell_ring_30: '&6Мир данжа'
 # --- Миры, где перехватывается респавн (пустой set = нигде) ---
 respawn-intercept-worlds: !!set {}
 
