@@ -116,6 +116,20 @@ class TravelAnchorTargetingTest : FunSpec({
         rightOffset shouldBe TravelAnchorDisplayOffset(1.0, 0.0, 0.0)
     }
 
+    test("the glowing display shell expands every axis around its logical center") {
+        val logicalScale = 1.0f
+        val shell = travelAnchorDisplayShell(logicalScale, logicalDepth = logicalScale)
+        val expectedSize = (logicalScale + TRAVEL_ANCHOR_DISPLAY_SHELL_EPSILON).toDouble()
+
+        shell.width.toDouble() shouldBe (expectedSize plusOrMinus 1.0e-6)
+        shell.height.toDouble() shouldBe (expectedSize plusOrMinus 1.0e-6)
+        shell.depth.toDouble() shouldBe (expectedSize plusOrMinus 1.0e-6)
+        shell.originX.toDouble() + shell.width.toDouble() / 2.0 shouldBe (0.0 plusOrMinus 1.0e-6)
+        shell.originY.toDouble() + shell.height.toDouble() / 2.0 shouldBe (0.0 plusOrMinus 1.0e-6)
+        shell.originZ.toDouble() + shell.depth.toDouble() / 2.0 shouldBe (0.0 plusOrMinus 1.0e-6)
+        logicalScale shouldBe 1.0f
+    }
+
     test("standing on an anchor gives Shift priority over the staff hint") {
         travelAnchorTargetMessage(hasAnchorBelow = true, staffHeld = true) shouldBe "target-anchor"
         travelAnchorTargetMessage(hasAnchorBelow = false, staffHeld = true) shouldBe "target-staff"

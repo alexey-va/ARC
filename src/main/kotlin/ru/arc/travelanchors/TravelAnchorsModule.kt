@@ -120,6 +120,7 @@ private const val PROXY_DEPTH = 0.03f
 private const val OCCLUDED_PROXY_CLEARANCE = 0.06
 private const val PLAYER_HALF_WIDTH = 0.3
 private const val DISPLAY_VIEW_RANGE = 16f
+internal const val TRAVEL_ANCHOR_DISPLAY_SHELL_EPSILON = 0.01f
 private const val DEFAULT_TELEPORT_PORTAL_ITEM = "origin_gate_portals:origin_portal"
 private val DEFAULT_DISPLAY_MATERIALS = listOf(
     Material.LODESTONE,
@@ -555,6 +556,23 @@ internal fun travelAnchorDisplayOffset(
     y = (position.y + 0.5 - centerY) * scale,
     z = (position.z + 0.5 - centerZ) * scale,
 )
+
+internal data class TravelAnchorDisplayShell(
+    val width: Float,
+    val height: Float,
+    val depth: Float,
+) {
+    val originX: Float get() = -width / 2f
+    val originY: Float get() = -height / 2f
+    val originZ: Float get() = -depth / 2f
+}
+
+internal fun travelAnchorDisplayShell(logicalScale: Float, logicalDepth: Float): TravelAnchorDisplayShell =
+    TravelAnchorDisplayShell(
+        width = logicalScale + TRAVEL_ANCHOR_DISPLAY_SHELL_EPSILON,
+        height = logicalScale + TRAVEL_ANCHOR_DISPLAY_SHELL_EPSILON,
+        depth = logicalDepth + TRAVEL_ANCHOR_DISPLAY_SHELL_EPSILON,
+    )
 
 private data class TravelAnchorDisplayKey(
     val group: TravelAnchorPosition,
@@ -1312,10 +1330,11 @@ object TravelAnchorsModule : PluginModule, Listener {
                 if (display.block.material != material) display.block = material.createBlockData()
                 display.teleport(memberLocation)
                 display.billboard = if (shape.cameraFacing) Display.Billboard.CENTER else Display.Billboard.FIXED
+                val shell = travelAnchorDisplayShell(scale, shape.depth)
                 display.transformation = Transformation(
-                    Vector3f(-scale / 2f, -scale / 2f, -shape.depth / 2f),
+                    Vector3f(shell.originX, shell.originY, shell.originZ),
                     AxisAngle4f(),
-                    Vector3f(scale, scale, shape.depth),
+                    Vector3f(shell.width, shell.height, shell.depth),
                     AxisAngle4f(),
                 )
                 display.glowColorOverride = if (candidate == selected) SELECTED_COLOR else VISIBLE_COLOR
