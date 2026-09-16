@@ -20,6 +20,14 @@ class OriginSpawnConfigTest :
                 config.enabled shouldBe false
                 config.regenerativeBreakingEnabled shouldBe true
                 config.regenerativeBreakingRestoreDelayTicks shouldBe 100L
+                config.regenerativeBreakingBypassPermission shouldBe "arc.origin.spawn.build"
+                config.regenerativeBreakingFeedback.enabled shouldBe true
+                config.regenerativeBreakingFeedback.countIntervalTicks shouldBe 20L
+                config.regenerativeBreakingFeedback.messageCooldownTicks shouldBe 60L
+                config.regenerativeBreakingFeedback.resetAfterTicks shouldBe 2_400L
+                config.regenerativeBreakingFeedback.tiers.map(OriginBreakFeedbackTier::fromAttempt) shouldContainExactly
+                    listOf(1, 3, 5, 8, 12)
+                config.regenerativeBreakingFeedback.tiers.sumOf { it.messages.size } shouldBe 20
                 config.cycleTicks shouldBe 40L
                 config.pageTicks shouldBe 300L
                 config.pedestals shouldContainExactly
@@ -54,6 +62,12 @@ class OriginSpawnConfigTest :
                     regenerative-breaking:
                       enabled: false
                       restore-delay-ticks: 40
+                      bypass-permission: custom.origin.builder
+                      feedback:
+                        enabled: false
+                        count-interval-ticks: 10
+                        message-cooldown-ticks: 30
+                        reset-after-ticks: 600
                     chunks:
                       max-in-flight: 3
                     """.trimIndent() + "\n",
@@ -63,6 +77,11 @@ class OriginSpawnConfigTest :
                 first.worldName shouldBe "operator_origin"
                 first.regenerativeBreakingEnabled shouldBe false
                 first.regenerativeBreakingRestoreDelayTicks shouldBe 40L
+                first.regenerativeBreakingBypassPermission shouldBe "custom.origin.builder"
+                first.regenerativeBreakingFeedback.enabled shouldBe false
+                first.regenerativeBreakingFeedback.countIntervalTicks shouldBe 10L
+                first.regenerativeBreakingFeedback.messageCooldownTicks shouldBe 30L
+                first.regenerativeBreakingFeedback.resetAfterTicks shouldBe 600L
                 first.chunkRegion.maxInFlight shouldBe 3
                 first.pedestals.size shouldBe 6
                 val afterFirst = Files.readString(file)

@@ -6,9 +6,48 @@ world: rc_origin_spawn
 # While the Origin module is enabled, ARC always cancels real block breaking in
 # this world. This optional layer shows the block disappearing only to that
 # player: no drops, physics, or container loss. Disable it for plain protection.
+# The build permission bypasses both protection and feedback, restoring normal
+# breaking and drops. Feedback is a rate-limited action bar, not chat spam.
 regenerative-breaking:
   enabled: true
   restore-delay-ticks: 100
+  bypass-permission: arc.origin.spawn.build
+  feedback:
+    enabled: true
+    count-interval-ticks: 20
+    message-cooldown-ticks: 60
+    reset-after-ticks: 2400
+    tiers:
+      - from-attempt: 1
+        messages:
+          - "И зачем ты это делаешь?"
+          - "Ты нашёл блок, который любит оставаться целым."
+          - "Ты стучишься, а блок делает вид, что никого нет."
+          - "Проверяешь прочность спавна? Проверка пройдена."
+      - from-attempt: 3
+        messages:
+          - "Ты всё ещё надеешься?"
+          - "Блок уже понял намёк. И отказался."
+          - "Твоя кирка старается, но этот блок взял выходной."
+          - "Смотреть можно. Добывать — ну вот опять."
+      - from-attempt: 5
+        messages:
+          - "Ладно, теперь это уже принцип?"
+          - "Блок восстановился быстрее твоего плана."
+          - "Твоя кирка убедительна, но правила убедительнее."
+          - "Мы оба знаем, чем закончится следующая попытка."
+      - from-attempt: 8
+        messages:
+          - "Архитектор уже идёт. Он очень расстроен."
+          - "Комиссия по бессмысленному копанию уже в пути."
+          - "Ты почти убедил блок, но печать спавна сильнее."
+          - "Ещё немного — и блок начнёт ломать тебя морально."
+      - from-attempt: 12
+        messages:
+          - "Архитектор вызвал второго архитектора."
+          - "Финал: здесь можно копать только взглядом."
+          - "Блок официально считает это отношениями."
+          - "Легендарная бесполезная попытка засчитана."
 
 # ARC-owned Origin gates. The defaults are the visual centers; move them in-game
 # with `/arc originportals move <survival|mining|vanilla|gallery_exit>`.

@@ -37,6 +37,24 @@ class OriginRegenerativeBreakingTest :
             runtime.delays shouldContainExactly emptyList()
         }
 
+        "build permission bypass leaves the break completely untouched" {
+            val runtime = FakeRuntime()
+            val service = OriginBreakProtection(runtime)
+            service.apply(
+                OriginBreakProtectionSettings(
+                    protected = true,
+                    illusionEnabled = true,
+                    worldName = "rc_origin_spawn",
+                    restoreDelayTicks = 100L,
+                    feedback = feedbackSettings(),
+                ),
+            )
+
+            service.handle(target(), bypassProtection = true) shouldBe false
+            runtime.delays shouldContainExactly emptyList()
+            runtime.feedback shouldContainExactly emptyList()
+        }
+
         "a block changed after the event is never hidden" {
             val runtime = FakeRuntime()
             val service = OriginBreakProtection(runtime)
@@ -64,7 +82,104 @@ class OriginRegenerativeBreakingTest :
             runtime.runAll()
             runtime.restored shouldBe 1
         }
+
+        "feedback grows with a sustained series and resets after a quiet window" {
+            val runtime = FakeRuntime()
+            val service = OriginBreakProtection(runtime)
+            service.apply(
+                OriginBreakProtectionSettings(
+                    protected = true,
+                    illusionEnabled = false,
+                    worldName = "rc_origin_spawn",
+                    restoreDelayTicks = 100L,
+                    feedback = feedbackSettings(),
+                ),
+            )
+
+            service.handle(target())
+            runtime.feedback shouldContainExactly listOf("curious")
+
+            runtime.advance(1L)
+            service.handle(target())
+            runtime.feedback shouldContainExactly listOf("curious")
+
+            runtime.advance(1L)
+            service.handle(target())
+            runtime.feedback shouldContainExactly listOf("curious", "persistent")
+
+            runtime.advance(1L)
+            service.handle(target())
+            runtime.advance(1L)
+            service.handle(target())
+            runtime.feedback shouldContainExactly listOf("curious", "persistent", "final")
+
+            runtime.advance(11L)
+            service.handle(target())
+            runtime.feedback shouldContainExactly listOf("curious", "persistent", "final", "curious")
+        }
+
+        "feedback can be disabled independently and forget clears its series" {
+            val runtime = FakeRuntime()
+            val service = OriginBreakProtection(runtime)
+            service.apply(OriginBreakProtectionSettings(true, false, "rc_origin_spawn", 100L))
+            service.handle(target())
+            runtime.feedback shouldContainExactly emptyList()
+
+            service.apply(
+                OriginBreakProtectionSettings(
+                    protected = true,
+                    illusionEnabled = false,
+                    worldName = "rc_origin_spawn",
+                    restoreDelayTicks = 100L,
+                    feedback = feedbackSettings(),
+                ),
+            )
+            service.handle(target())
+            service.forget(target().playerId)
+            runtime.advance(2L)
+            service.handle(target())
+
+            runtime.feedback shouldContainExactly listOf("curious", "curious")
+        }
+
+        "feedback does not immediately repeat the same variant" {
+            val runtime = FakeRuntime()
+            val service = OriginBreakProtection(runtime)
+            service.apply(
+                OriginBreakProtectionSettings(
+                    protected = true,
+                    illusionEnabled = false,
+                    worldName = "rc_origin_spawn",
+                    restoreDelayTicks = 100L,
+                    feedback =
+                        feedbackSettings().copy(
+                            messageCooldownTicks = 1L,
+                            tiers = listOf(OriginBreakFeedbackTier(1, listOf("first", "second"))),
+                        ),
+                ),
+            )
+
+            service.handle(target())
+            runtime.advance(1L)
+            service.handle(target())
+
+            runtime.feedback shouldContainExactly listOf("first", "second")
+        }
     })
+
+private fun feedbackSettings() =
+    OriginBreakFeedbackSettings(
+        enabled = true,
+        countIntervalTicks = 1L,
+        messageCooldownTicks = 2L,
+        resetAfterTicks = 10L,
+        tiers =
+            listOf(
+                OriginBreakFeedbackTier(1, listOf("curious")),
+                OriginBreakFeedbackTier(3, listOf("persistent")),
+                OriginBreakFeedbackTier(5, listOf("final")),
+            ),
+    )
 
 private fun target(worldName: String = "rc_origin_spawn") =
     OriginBreakIllusionTarget(
@@ -77,11 +192,13 @@ private fun target(worldName: String = "rc_origin_spawn") =
         originalBlockData = "minecraft:stone",
     )
 
-private class FakeRuntime : OriginBreakIllusionRuntime {
+private class FakeRuntime : OriginBreakRuntime {
     private val tasks = mutableListOf<FakeTask>()
     var blockData: String? = "minecraft:stone"
     var shown = 0
     var restored = 0
+    var tick = 0L
+    val feedback = mutableListOf<String>()
     val delays: List<Long>
         get() = tasks.filterNot(FakeTask::isCancelled).map(FakeTask::delayTicks)
 
@@ -97,6 +214,19 @@ private class FakeRuntime : OriginBreakIllusionRuntime {
 
     override fun restore(target: OriginBreakIllusionTarget) {
         restored++
+    }
+
+    override fun currentTick(): Long = tick
+
+    override fun randomIndex(bound: Int): Int = 0
+
+    override fun showFeedback(playerId: UUID, message: String): Boolean {
+        feedback += message
+        return true
+    }
+
+    fun advance(ticks: Long) {
+        tick += ticks
     }
 
     fun runNext() {

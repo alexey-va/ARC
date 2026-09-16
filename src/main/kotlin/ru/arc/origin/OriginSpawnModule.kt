@@ -18,9 +18,10 @@ object OriginSpawnModule : PluginModule, Listener {
     private var chunks: OriginSpawnChunkManager? = null
     private var showcase: AuctionShowcaseManager? = null
     private var breakProtection: OriginBreakProtection? = null
+    private var breakBypassPermission = OriginSpawnConfig.DEFAULT_BREAK_BYPASS_PERMISSION
 
     override fun init() {
-        breakProtection = OriginBreakProtection(BukkitOriginBreakIllusionRuntime())
+        breakProtection = OriginBreakProtection(BukkitOriginBreakRuntime())
         Bukkit.getPluginManager().registerEvents(this, ARC.instance)
         chunks = OriginSpawnChunkManager(ARC.instance.chunkTicketRegistry)
         showcase = AuctionShowcaseManager()
@@ -65,6 +66,7 @@ object OriginSpawnModule : PluginModule, Listener {
                     z = event.block.z,
                     originalBlockData = event.block.blockData.asString,
                 ),
+                bypassProtection = event.player.hasPermission(breakBypassPermission),
             ) == true
         if (!protected) return
         event.isDropItems = false
@@ -74,12 +76,14 @@ object OriginSpawnModule : PluginModule, Listener {
     private fun apply(config: OriginSpawnConfig) {
         chunks?.apply(config)
         showcase?.apply(config)
+        breakBypassPermission = config.regenerativeBreakingBypassPermission
         breakProtection?.apply(
             OriginBreakProtectionSettings(
                 protected = config.enabled,
                 illusionEnabled = config.regenerativeBreakingEnabled,
                 worldName = config.worldName,
                 restoreDelayTicks = config.regenerativeBreakingRestoreDelayTicks,
+                feedback = config.regenerativeBreakingFeedback,
             ),
         )
     }

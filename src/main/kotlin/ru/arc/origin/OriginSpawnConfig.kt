@@ -27,6 +27,8 @@ internal class OriginSpawnConfig private constructor(
     val worldName: String,
     val regenerativeBreakingEnabled: Boolean,
     val regenerativeBreakingRestoreDelayTicks: Long,
+    val regenerativeBreakingBypassPermission: String,
+    val regenerativeBreakingFeedback: OriginBreakFeedbackSettings,
     val chunkRegion: OriginChunkRegion,
     val showcaseEnabled: Boolean,
     val cycleTicks: Long,
@@ -59,6 +61,7 @@ internal class OriginSpawnConfig private constructor(
 
     companion object {
         private const val RESOURCE = "origin-spawn.yml"
+        const val DEFAULT_BREAK_BYPASS_PERMISSION = "arc.origin.spawn.build"
 
         fun load(dataPath: Path): OriginSpawnConfig {
             val source = ConfigManager.ofModule(dataPath, RESOURCE)
@@ -83,8 +86,32 @@ internal class OriginSpawnConfig private constructor(
                 }
             val enabled = source.bool("enabled", false)
             val showcaseEnabled = source.bool("auction-showcase.enabled", false)
+            val bypassPermission =
+                source.string("regenerative-breaking.bypass-permission", DEFAULT_BREAK_BYPASS_PERMISSION).trim()
+            val feedbackTiers =
+                source.list<Map<String, Any?>>("regenerative-breaking.feedback.tiers").mapIndexed { index, raw ->
+                    val fromAttempt = (raw["from-attempt"] as? Number)?.toInt()
+                        ?: error("origin-spawn feedback tier #${index + 1} is missing numeric 'from-attempt'")
+                    val messages =
+                        (raw["messages"] as? List<*>)
+                            ?.mapNotNull { (it as? String)?.trim()?.takeIf(String::isNotEmpty) }
+                            .orEmpty()
+                    require(messages.isNotEmpty()) {
+                        "origin-spawn feedback tier #${index + 1} must contain at least one message"
+                    }
+                    OriginBreakFeedbackTier(fromAttempt, messages)
+                }
             require(!enabled || source.string("world", "").isNotBlank()) {
                 "origin-spawn.world must not be blank when enabled"
+            }
+            require(bypassPermission.isNotBlank()) {
+                "origin-spawn regenerative-breaking.bypass-permission must not be blank"
+            }
+            require(feedbackTiers.firstOrNull()?.fromAttempt == 1) {
+                "origin-spawn feedback tiers must start at attempt 1"
+            }
+            require(feedbackTiers.zipWithNext().all { (left, right) -> left.fromAttempt < right.fromAttempt }) {
+                "origin-spawn feedback tier thresholds must be strictly increasing"
             }
             require(!enabled || !showcaseEnabled || pedestals.size == 6) {
                 "origin-spawn auction showcase requires exactly 6 pedestals"
@@ -97,6 +124,21 @@ internal class OriginSpawnConfig private constructor(
                 regenerativeBreakingEnabled = source.bool("regenerative-breaking.enabled", true),
                 regenerativeBreakingRestoreDelayTicks =
                     source.long("regenerative-breaking.restore-delay-ticks", 100L).coerceIn(1L, 1_200L),
+                regenerativeBreakingBypassPermission = bypassPermission,
+                regenerativeBreakingFeedback =
+                    OriginBreakFeedbackSettings(
+                        enabled = source.bool("regenerative-breaking.feedback.enabled", true),
+                        countIntervalTicks =
+                            source.long("regenerative-breaking.feedback.count-interval-ticks", 20L)
+                                .coerceIn(1L, 1_200L),
+                        messageCooldownTicks =
+                            source.long("regenerative-breaking.feedback.message-cooldown-ticks", 60L)
+                                .coerceIn(1L, 72_000L),
+                        resetAfterTicks =
+                            source.long("regenerative-breaking.feedback.reset-after-ticks", 2_400L)
+                                .coerceIn(20L, 72_000L),
+                        tiers = feedbackTiers,
+                    ),
                 chunkRegion =
                     OriginChunkRegion(
                         minX = minX,

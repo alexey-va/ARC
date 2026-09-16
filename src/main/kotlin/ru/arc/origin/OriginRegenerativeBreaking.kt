@@ -1,5 +1,7 @@
 package ru.arc.origin
 
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.TextColor
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.block.TileState
@@ -12,6 +14,24 @@ internal data class OriginBreakProtectionSettings(
     val illusionEnabled: Boolean,
     val worldName: String,
     val restoreDelayTicks: Long,
+    val feedback: OriginBreakFeedbackSettings = OriginBreakFeedbackSettings.disabled(),
+)
+
+internal data class OriginBreakFeedbackSettings(
+    val enabled: Boolean,
+    val countIntervalTicks: Long,
+    val messageCooldownTicks: Long,
+    val resetAfterTicks: Long,
+    val tiers: List<OriginBreakFeedbackTier>,
+) {
+    companion object {
+        fun disabled() = OriginBreakFeedbackSettings(false, 20L, 60L, 2_400L, emptyList())
+    }
+}
+
+internal data class OriginBreakFeedbackTier(
+    val fromAttempt: Int,
+    val messages: List<String>,
 )
 
 internal data class OriginBreakIllusionTarget(
@@ -35,7 +55,7 @@ internal data class OriginBreakIllusionKey(
     val z: Int,
 )
 
-internal interface OriginBreakIllusionRuntime {
+internal interface OriginBreakRuntime {
     fun schedule(delayTicks: Long, action: () -> Unit): ScheduledTask
 
     fun currentBlockData(target: OriginBreakIllusionTarget): String?
@@ -43,9 +63,15 @@ internal interface OriginBreakIllusionRuntime {
     fun showBroken(target: OriginBreakIllusionTarget): Boolean
 
     fun restore(target: OriginBreakIllusionTarget)
+
+    fun currentTick(): Long
+
+    fun randomIndex(bound: Int): Int
+
+    fun showFeedback(playerId: UUID, message: String): Boolean
 }
 
-internal class BukkitOriginBreakIllusionRuntime : OriginBreakIllusionRuntime {
+internal class BukkitOriginBreakRuntime : OriginBreakRuntime {
     override fun schedule(delayTicks: Long, action: () -> Unit): ScheduledTask =
         Tasks.scheduler.runLater(delayTicks, Runnable(action))
 
@@ -74,10 +100,24 @@ internal class BukkitOriginBreakIllusionRuntime : OriginBreakIllusionRuntime {
         player.sendBlockChange(block.location, block.blockData)
         (block.state as? TileState)?.let { player.sendBlockUpdate(block.location, it) }
     }
+
+    override fun currentTick(): Long = Bukkit.getCurrentTick().toLong()
+
+    override fun randomIndex(bound: Int): Int = kotlin.random.Random.nextInt(bound)
+
+    override fun showFeedback(playerId: UUID, message: String): Boolean {
+        val player = Bukkit.getPlayer(playerId)?.takeIf { it.isOnline } ?: return false
+        player.sendActionBar(Component.text(message, FEEDBACK_COLOR))
+        return true
+    }
+
+    private companion object {
+        val FEEDBACK_COLOR: TextColor = TextColor.color(0xE6FFF3)
+    }
 }
 
 internal class OriginBreakProtection(
-    private val runtime: OriginBreakIllusionRuntime,
+    private val runtime: OriginBreakRuntime,
 ) {
     private data class PendingIllusion(
         val target: OriginBreakIllusionTarget,
@@ -87,19 +127,46 @@ internal class OriginBreakProtection(
         var visible: Boolean = false,
     )
 
+    private data class FeedbackKey(
+        val playerId: UUID,
+        val worldId: UUID,
+    )
+
+    private data class FeedbackState(
+        var attempts: Int = 0,
+        var lastCountTick: Long? = null,
+        var lastAttemptTick: Long? = null,
+        var lastMessageTick: Long? = null,
+        var lastMessage: String? = null,
+    ) {
+        fun reset() {
+            attempts = 0
+            lastCountTick = null
+            lastAttemptTick = null
+            lastMessageTick = null
+            lastMessage = null
+        }
+    }
+
     private var settings = OriginBreakProtectionSettings(false, false, "", 100L)
     private var generation = 0L
     private val pending = mutableMapOf<OriginBreakIllusionKey, PendingIllusion>()
+    private val feedback = mutableMapOf<FeedbackKey, FeedbackState>()
 
     fun apply(newSettings: OriginBreakProtectionSettings) {
         if (settings == newSettings) return
         restoreAll()
+        feedback.clear()
         settings = newSettings
     }
 
-    fun handle(target: OriginBreakIllusionTarget): Boolean {
+    fun handle(
+        target: OriginBreakIllusionTarget,
+        bypassProtection: Boolean = false,
+    ): Boolean {
         val current = settings
-        if (!current.protected || target.worldName != current.worldName) return false
+        if (bypassProtection || !current.protected || target.worldName != current.worldName) return false
+        showFeedback(target, current.feedback)
         if (!current.illusionEnabled) return true
 
         retire(target.key, restore = true)
@@ -113,11 +180,46 @@ internal class OriginBreakProtection(
 
     fun forget(playerId: UUID) {
         pending.keys.filter { it.playerId == playerId }.forEach { retire(it, restore = false) }
+        feedback.keys.removeIf { it.playerId == playerId }
     }
 
     fun shutdown() {
         restoreAll()
+        feedback.clear()
         settings = settings.copy(protected = false, illusionEnabled = false)
+    }
+
+    private fun showFeedback(
+        target: OriginBreakIllusionTarget,
+        feedbackSettings: OriginBreakFeedbackSettings,
+    ) {
+        if (!feedbackSettings.enabled || feedbackSettings.tiers.isEmpty()) return
+        val now = runtime.currentTick()
+        val state = feedback.getOrPut(FeedbackKey(target.playerId, target.worldId), ::FeedbackState)
+        val lastAttempt = state.lastAttemptTick
+        if (lastAttempt != null && (now < lastAttempt || now - lastAttempt > feedbackSettings.resetAfterTicks)) {
+            state.reset()
+        }
+        state.lastAttemptTick = now
+
+        val lastCount = state.lastCountTick
+        if (lastCount == null || now < lastCount || now - lastCount >= feedbackSettings.countIntervalTicks) {
+            state.attempts++
+            state.lastCountTick = now
+        }
+
+        val lastMessageTick = state.lastMessageTick
+        if (lastMessageTick != null && now >= lastMessageTick && now - lastMessageTick < feedbackSettings.messageCooldownTicks) {
+            return
+        }
+        val tier = feedbackSettings.tiers.lastOrNull { state.attempts >= it.fromAttempt } ?: return
+        val choices = tier.messages.filterNot { tier.messages.size > 1 && it == state.lastMessage }
+        if (choices.isEmpty()) return
+        val message = choices[runtime.randomIndex(choices.size).coerceIn(0, choices.lastIndex)]
+        if (runtime.showFeedback(target.playerId, message)) {
+            state.lastMessageTick = now
+            state.lastMessage = message
+        }
     }
 
     private fun show(key: OriginBreakIllusionKey, expectedGeneration: Long) {

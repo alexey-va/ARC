@@ -115,6 +115,7 @@ permissions:
       arc.dungeon.admin.extract: true
       arc.dungeon.admin.classgrant: true
       arc.investigations.cooldown.bypass: true
+      arc.origin.spawn.build: true
   arc.audit:
     description: Inspect ARC audit data
     default: op
@@ -217,6 +218,9 @@ permissions:
   arc.origin.portals.bypass:
     description: Bypass central ARC Origin portal teleport
     default: false
+  arc.origin.spawn.build:
+    description: Break blocks normally in the protected Origin spawn world
+    default: op
   arc.travelanchors.admin:
     description: Give, edit and use every ARC travel anchor
     default: op
