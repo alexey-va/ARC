@@ -46,4 +46,25 @@ class ArcBaseSidebarConfigTest : StringSpec({
             if (placeholder == "%arcranks_quest_line_2%") "&fСобрать пшеницу &a12/64" else placeholder
         } shouldBe "&6| %arcranks_quest_line_2%"
     }
+
+    "default sidebar is compact and ends with the server footer" {
+        val stream = requireNotNull(javaClass.classLoader.getResourceAsStream("modules/scoreboard.yml"))
+        val config = stream.use { YamlConfiguration.loadConfiguration(InputStreamReader(it)) }
+        val rows = config.getStringList("styles.style01.lines")
+
+        rows.first() shouldBe "&6| &f%arcranks_rank_name%"
+        rows.last() shouldBe "&8Онлайн: &a%online% &8• &fПинг: &e%player_ping% мс"
+        rows shouldContain "@survival &6| &f%lands_land_name_plain_here%"
+        rows shouldNotContain "&6| &f%player%"
+        rows shouldNotContain "&6| &fНаиграно: &e%cmi_user_playtime_hoursf% ч"
+        rows shouldNotContain "&6Сервер"
+        (rows.indexOf("?&6| %arcranks_quest_line_4%") < rows.lastIndex) shouldBe true
+    }
+
+    "server-scoped rows stay off spawn" {
+        resolveServerSidebarLine("@survival &6| &f%lands_land_name_plain_here%", "spawn") shouldBe null
+        resolveServerSidebarLine("@survival &6| &f%lands_land_name_plain_here%", "survival") shouldBe
+            "&6| &f%lands_land_name_plain_here%"
+        resolveServerSidebarLine("&6| &f%arc_worldname%", "spawn") shouldBe "&6| &f%arc_worldname%"
+    }
 })

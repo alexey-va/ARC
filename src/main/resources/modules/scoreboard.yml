@@ -8,24 +8,22 @@ title: '&#B22222&lRus&f&lCrafting'
 # current player settings menu keeps selecting the same layout.
 # A leading '?' marks a dynamic row that ARC hides when every placeholder on
 # that row is empty or unresolved.
+# A leading '@server ' shows a row only on that backend.
 styles:
   style01:
     lines:
-      - '&6| &f%player%'
       - '&6| &f%arcranks_rank_name%'
       - '&6| &f💰 &6%rediseco_bal_short_vault%  &f &d%rediseco_bal_short_tokens%'
-      - '&6| &fНаиграно: &e%cmi_user_playtime_hoursf% ч'
       - ''
       - '&6Место'
       - '&6| &f%arc_worldname%'
-      - '&6| &f%lands_land_name_plain_here%'
-      - ''
-      - '&6Сервер'
-      - '&6| &fОнлайн: &a%online% &8• &fПинг: &e%player_ping% мс'
+      - '@survival &6| &f%lands_land_name_plain_here%'
       - '?%arcranks_quest_line_1%'
       - '?&6| %arcranks_quest_line_2%'
       - '?&6| %arcranks_quest_line_3%'
       - '?&6| %arcranks_quest_line_4%'
+      - ''
+      - '&8Онлайн: &a%online% &8• &fПинг: &e%player_ping% мс'
   style02:
     lines:
       - '&6| &f%player%'

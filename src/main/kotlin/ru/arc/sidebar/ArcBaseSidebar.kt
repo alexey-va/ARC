@@ -44,8 +44,14 @@ internal class ArcBaseSidebar(
                 source.hide(player)
                 return@forEach
             }
+            val serverId = ARC.serverName.orEmpty()
             val rows = config.stringList("styles.$style.lines").mapNotNull { template ->
-                resolveOptionalSidebarLine(template) { placeholder -> resolvePlaceholder(player, placeholder) }
+                resolveServerSidebarLine(template, serverId)
+                    ?.let { serverLine ->
+                        resolveOptionalSidebarLine(serverLine) { placeholder ->
+                            resolvePlaceholder(player, placeholder)
+                        }
+                    }
                     ?.let { render(player, it) }
             }
             if (rows.isEmpty()) {
@@ -172,5 +178,11 @@ internal fun resolveOptionalSidebarLine(
     }
 }
 
+internal fun resolveServerSidebarLine(template: String, serverId: String): String? {
+    val match = SERVER_SCOPED_LINE.matchEntire(template) ?: return template
+    return match.groupValues[2].takeIf { match.groupValues[1].equals(serverId, ignoreCase = true) }
+}
+
 private const val OPTIONAL_LINE_PREFIX = "?"
 private val SIDEBAR_PLACEHOLDER = Regex("%[^%\\r\\n]+%")
+private val SERVER_SCOPED_LINE = Regex("^@([a-z0-9_-]+) (.+)$", RegexOption.IGNORE_CASE)
