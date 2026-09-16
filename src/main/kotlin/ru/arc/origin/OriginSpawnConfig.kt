@@ -25,6 +25,8 @@ internal class OriginSpawnConfig private constructor(
     private val source: Config,
     val enabled: Boolean,
     val worldName: String,
+    val regenerativeBreakingEnabled: Boolean,
+    val regenerativeBreakingRestoreDelayTicks: Long,
     val chunkRegion: OriginChunkRegion,
     val showcaseEnabled: Boolean,
     val cycleTicks: Long,
@@ -92,6 +94,9 @@ internal class OriginSpawnConfig private constructor(
                 source = source,
                 enabled = enabled,
                 worldName = source.string("world", "rc_origin_spawn").trim(),
+                regenerativeBreakingEnabled = source.bool("regenerative-breaking.enabled", true),
+                regenerativeBreakingRestoreDelayTicks =
+                    source.long("regenerative-breaking.restore-delay-ticks", 100L).coerceIn(1L, 1_200L),
                 chunkRegion =
                     OriginChunkRegion(
                         minX = minX,

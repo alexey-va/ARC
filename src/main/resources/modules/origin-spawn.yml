@@ -3,6 +3,13 @@
 enabled: false
 world: rc_origin_spawn
 
+# While the Origin module is enabled, ARC always cancels real block breaking in
+# this world. This optional layer shows the block disappearing only to that
+# player: no drops, physics, or container loss. Disable it for plain protection.
+regenerative-breaking:
+  enabled: true
+  restore-delay-ticks: 100
+
 # ARC-owned Origin gates. The defaults are the visual centers; move them in-game
 # with `/arc originportals move <survival|mining|vanilla|gallery_exit>`.
 origin-portals:

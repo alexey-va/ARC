@@ -18,6 +18,8 @@ class OriginSpawnConfigTest :
                 val plan = OriginChunkPlanner.plan(config.chunkRegion)
 
                 config.enabled shouldBe false
+                config.regenerativeBreakingEnabled shouldBe true
+                config.regenerativeBreakingRestoreDelayTicks shouldBe 100L
                 config.cycleTicks shouldBe 40L
                 config.pageTicks shouldBe 300L
                 config.pedestals shouldContainExactly
@@ -49,6 +51,9 @@ class OriginSpawnConfigTest :
                     """
                     enabled: false
                     world: operator_origin
+                    regenerative-breaking:
+                      enabled: false
+                      restore-delay-ticks: 40
                     chunks:
                       max-in-flight: 3
                     """.trimIndent() + "\n",
@@ -56,6 +61,8 @@ class OriginSpawnConfigTest :
 
                 val first = OriginSpawnConfig.load(directory)
                 first.worldName shouldBe "operator_origin"
+                first.regenerativeBreakingEnabled shouldBe false
+                first.regenerativeBreakingRestoreDelayTicks shouldBe 40L
                 first.chunkRegion.maxInFlight shouldBe 3
                 first.pedestals.size shouldBe 6
                 val afterFirst = Files.readString(file)

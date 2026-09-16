@@ -1,9 +1,11 @@
 package ru.arc.origin
 
 import org.bukkit.Bukkit
+import org.bukkit.event.EventPriority
 import org.bukkit.event.EventHandler
 import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
+import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.event.player.PlayerInteractEntityEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import ru.arc.ARC
@@ -15,8 +17,10 @@ object OriginSpawnModule : PluginModule, Listener {
 
     private var chunks: OriginSpawnChunkManager? = null
     private var showcase: AuctionShowcaseManager? = null
+    private var breakProtection: OriginBreakProtection? = null
 
     override fun init() {
+        breakProtection = OriginBreakProtection(BukkitOriginBreakIllusionRuntime())
         Bukkit.getPluginManager().registerEvents(this, ARC.instance)
         chunks = OriginSpawnChunkManager(ARC.instance.chunkTicketRegistry)
         showcase = AuctionShowcaseManager()
@@ -31,6 +35,8 @@ object OriginSpawnModule : PluginModule, Listener {
         HandlerList.unregisterAll(this)
         showcase?.shutdown()
         showcase = null
+        breakProtection?.shutdown()
+        breakProtection = null
         chunks?.shutdown()
         chunks = null
     }
@@ -43,10 +49,38 @@ object OriginSpawnModule : PluginModule, Listener {
     @EventHandler
     fun onQuit(event: PlayerQuitEvent) {
         showcase?.forget(event.player)
+        breakProtection?.forget(event.player.uniqueId)
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
+    fun onBreak(event: BlockBreakEvent) {
+        val protected =
+            breakProtection?.handle(
+                OriginBreakIllusionTarget(
+                    playerId = event.player.uniqueId,
+                    worldId = event.block.world.uid,
+                    worldName = event.block.world.name,
+                    x = event.block.x,
+                    y = event.block.y,
+                    z = event.block.z,
+                    originalBlockData = event.block.blockData.asString,
+                ),
+            ) == true
+        if (!protected) return
+        event.isDropItems = false
+        event.isCancelled = true
     }
 
     private fun apply(config: OriginSpawnConfig) {
         chunks?.apply(config)
         showcase?.apply(config)
+        breakProtection?.apply(
+            OriginBreakProtectionSettings(
+                protected = config.enabled,
+                illusionEnabled = config.regenerativeBreakingEnabled,
+                worldName = config.worldName,
+                restoreDelayTicks = config.regenerativeBreakingRestoreDelayTicks,
+            ),
+        )
     }
 }
