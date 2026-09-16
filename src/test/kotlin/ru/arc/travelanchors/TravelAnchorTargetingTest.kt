@@ -197,9 +197,11 @@ class TravelAnchorTargetingTest : FunSpec({
         travelAnchorSupportColumns(1.30, 0.5) shouldBe listOf(1 to 0)
     }
 
-    test("only distant proxies are flattened into camera-facing squares") {
+    test("distant and occluded anchors are flattened into camera-facing squares") {
         travelAnchorDisplayShape(actualDistance = 32.0, proxyDistance = 48.0, scale = 3.0f) shouldBe
             TravelAnchorDisplayShape(cameraFacing = false, depth = 3.0f)
+        travelAnchorDisplayShape(actualDistance = 8.0, proxyDistance = 48.0, scale = 1.0f, occluded = true) shouldBe
+            TravelAnchorDisplayShape(cameraFacing = true, depth = 0.03f)
         travelAnchorDisplayShape(actualDistance = 900.0, proxyDistance = 48.0, scale = 3.0f) shouldBe
             TravelAnchorDisplayShape(cameraFacing = true, depth = 0.03f)
     }

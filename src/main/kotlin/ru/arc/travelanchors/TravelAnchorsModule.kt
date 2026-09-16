@@ -7,6 +7,7 @@ import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.Bukkit
 import org.bukkit.Color
+import org.bukkit.FluidCollisionMode
 import org.bukkit.GameMode
 import org.bukkit.Location
 import org.bukkit.Material
@@ -328,8 +329,9 @@ internal fun travelAnchorDisplayShape(
     actualDistance: Double,
     proxyDistance: Double,
     scale: Float,
+    occluded: Boolean = false,
 ): TravelAnchorDisplayShape =
-    if (actualDistance > proxyDistance) TravelAnchorDisplayShape(cameraFacing = true, depth = PROXY_DEPTH)
+    if (occluded || actualDistance > proxyDistance) TravelAnchorDisplayShape(cameraFacing = true, depth = PROXY_DEPTH)
     else TravelAnchorDisplayShape(cameraFacing = false, depth = scale)
 
 internal enum class TravelAnchorInteraction { IGNORE, RENAME, TELEPORT }
@@ -559,6 +561,7 @@ private data class TravelAnchorRenderCandidate(
     val distanceSquared: Double,
     val dot: Double,
     val minimumSelectionDot: Double,
+    val occluded: Boolean,
 )
 
 private data class TravelAnchorTeleportPortalSettings(
@@ -1227,6 +1230,7 @@ object TravelAnchorsModule : PluginModule, Listener {
                         scale,
                         travelAnchorGroupRadius(members),
                     ),
+                    occluded = actualDistance <= current.proxyDistance && isOccluded(eye, center, positions),
                 )
             }
             .sortedBy(TravelAnchorRenderCandidate::distanceSquared)
@@ -1275,7 +1279,7 @@ object TravelAnchorsModule : PluginModule, Listener {
                 current.scaleStartDistance,
                 current.fullScaleDistance,
             )
-            val shape = travelAnchorDisplayShape(actualDistance, current.proxyDistance, scale)
+            val shape = travelAnchorDisplayShape(actualDistance, current.proxyDistance, scale, candidate.occluded)
             candidate.members.forEach { member ->
                 val key = TravelAnchorDisplayKey(candidate.key, member)
                 val offset = travelAnchorDisplayOffset(
@@ -1316,6 +1320,22 @@ object TravelAnchorsModule : PluginModule, Listener {
         val eye = player.eyeLocation
         val distance = travelAnchorDisplayDistance(Math.sqrt(candidate.distanceSquared), checkNotNull(settings).proxyDistance)
         return travelAnchorDisplayCenter(eye, candidate.center, distance)
+    }
+
+    private fun isOccluded(
+        eye: Location,
+        center: Location,
+        group: Collection<TravelAnchorPosition>,
+    ): Boolean {
+        val delta = center.toVector().subtract(eye.toVector())
+        val hit = eye.world?.rayTraceBlocks(
+            eye,
+            delta.clone().normalize(),
+            delta.length(),
+            FluidCollisionMode.NEVER,
+            true,
+        )?.hitBlock ?: return false
+        return TravelAnchorPosition.of(hit) !in group
     }
 
     private fun spawnDisplay(player: Player, location: Location): BlockDisplay {
