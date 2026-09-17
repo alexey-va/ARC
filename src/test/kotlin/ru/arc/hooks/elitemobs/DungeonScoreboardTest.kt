@@ -195,7 +195,9 @@ class DungeonScoreboardTest : FreeSpec({
         lines.first() shouldBe "Задание · Крушение!"
         lines.joinToString("\n") shouldContain "○ Скелеты 3 / 10"
         lines.joinToString("\n") shouldContain "123 / 500"
-        lines.joinToString("\n") shouldContain "… ещё 2"
+        lines.joinToString("\n") shouldContain "▶ Открыть дверь"
+        lines.joinToString("\n").contains("Вернуться к капитану") shouldBe false
+        lines.joinToString("\n").contains("… ещё") shouldBe false
         lines.joinToString("\n").contains("Крипта") shouldBe false
         lines.joinToString("\n").contains("Прохождение идёт") shouldBe false
         (lines.size <= 15) shouldBe true

@@ -129,11 +129,14 @@ internal class DungeonScoreboard(
         ), 32, 1).single())
         val goals = quest.lines.mapIndexed { index, text ->
             text to quest.lineStates.getOrElse(index) { DungeonQuestGoalState.ACTIVE }
-        }.sortedBy { (_, state) -> when (state) {
-            DungeonQuestGoalState.ACTIVE -> 0
-            DungeonQuestGoalState.NEXT -> 1
-            DungeonQuestGoalState.COMPLETE -> 2
-        } }
+        }.filterNot { (_, state) -> state == DungeonQuestGoalState.COMPLETE }
+            .sortedBy { (_, state) ->
+                when (state) {
+                    DungeonQuestGoalState.ACTIVE -> 0
+                    DungeonQuestGoalState.NEXT -> 1
+                    DungeonQuestGoalState.COMPLETE -> 2
+                }
+            }
         val visible = if (goals.size <= 3) goals else goals.take(2)
         visible.forEach { (text, state) ->
             rows += line(
