@@ -213,21 +213,25 @@ internal class ArcNpcHologramService(
 
     @EventHandler
     fun onSpawn(event: NPCSpawnEvent) {
+        if (!isPrimaryNpc(event.npc)) return
         Tasks.scheduler.runLater(1L) { reconcile(event.npc) }
     }
 
     @EventHandler
     fun onDespawn(event: NPCDespawnEvent) {
+        if (!isPrimaryNpc(event.npc)) return
         stacks[event.npc.id]?.let(::removeDisplays)
     }
 
     @EventHandler
     fun onRemove(event: NPCRemoveEvent) {
+        if (!isPrimaryNpc(event.npc)) return
         removeStackOnly(event.npc.id)
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun onSpeech(event: NPCSpeechEvent) {
+        if (!isPrimaryNpc(event.npc)) return
         if (event.npc.id !in speechBridges) return
         showTemporaryBubble(
             event.npc.id,
@@ -318,6 +322,9 @@ internal class ArcNpcHologramService(
     }
 
     private fun stackFor(npc: NPC): Stack? = stacks[npc.id] ?: reconcile(npc)
+
+    private fun isPrimaryNpc(npc: NPC): Boolean =
+        runCatching { npc.owningRegistry === CitizensAPI.getNPCRegistry() }.getOrDefault(false)
 
     private fun tickStacks() {
         if (closed || !config.enabled) return
