@@ -47,6 +47,7 @@ internal class ArcNpcHologramService(
         private const val BACKUP_KEY = "arc_npc_hologram_backup_v1"
         private const val DEFAULT_LINE_HEIGHT = 0.25
         private const val DEFAULT_VIEW_RANGE = -1
+        private val SPEECH_NEWLINE = Regex("<br>|\\n")
         private val HEADER_COLOR = TextColor.color(0xE8C383)
         private val LABEL_COLOR = TextColor.color(0x9AA8B7)
         private val VALUE_COLOR = TextColor.color(0xE6EDF3)
@@ -59,6 +60,7 @@ internal class ArcNpcHologramService(
         val viewRange: Int,
         val nameplateValue: String,
         val speechBubbles: Boolean?,
+        val sendTextToChat: Boolean?,
         val forceNameVisible: Boolean? = null,
     )
 
@@ -187,15 +189,14 @@ internal class ArcNpcHologramService(
         val stack = stackFor(npc) ?: return
         val text = npc.getTraitNullable(Text::class.java)
         val desired = desiredSpeechBubbles ?: stack.backup.speechBubbles
-        stack.backup = stack.backup.copy(speechBubbles = desired)
+        stack.backup = stack.backup.copy(
+            speechBubbles = desired,
+            sendTextToChat = stack.backup.sendTextToChat ?: text?.sendTextToChat(),
+        )
         saveBackup(npc, stack.backup)
         when {
-            desired != true -> speechBridges.remove(npc.id)
+            desired != true -> unbridgeSpeech(npc, text, stack.backup.sendTextToChat)
             text == null -> speechBridges.remove(npc.id)
-            !text.sendTextToChat() -> {
-                releaseToNative(npc, stack, preserveCurrentTrait = true)
-                warnOnce("speech:${npc.id}", "ARC NPC hologram migration skipped NPC {}: Text speech bubbles have no chat event", npc.id)
-            }
             else -> bridgeSpeech(npc, text)
         }
     }
@@ -225,10 +226,15 @@ internal class ArcNpcHologramService(
         removeStackOnly(event.npc.id)
     }
 
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun onSpeech(event: NPCSpeechEvent) {
         if (event.npc.id !in speechBridges) return
-        showTemporaryBubble(event.npc.id, listOf(event.context.message), config.speechDurationTicks)
+        showTemporaryBubble(
+            event.npc.id,
+            SPEECH_NEWLINE.split(event.context.message),
+            config.speechDurationTicks,
+        )
+        if (npcSpeechBridgeCancelsChat(stacks[event.npc.id]?.backup?.sendTextToChat)) event.isCancelled = true
     }
 
     override fun close() {
@@ -261,13 +267,11 @@ internal class ArcNpcHologramService(
         val text = npc.getTraitNullable(Text::class.java)
         val stored = existing?.backup ?: readBackup(npc)
         val desiredSpeech = stored?.speechBubbles ?: text?.useSpeechBubbles()
-        if (desiredSpeech == true && text?.sendTextToChat() != true) {
-            existing?.let { releaseToNative(npc, it, preserveCurrentTrait = true) }
-            warnOnce("speech:${npc.id}", "ARC NPC hologram migration skipped NPC {}: Text speech bubbles have no chat event", npc.id)
-            return null
-        }
 
         var backup = stored ?: captureBackup(npc, trait, text)
+        if (backup.sendTextToChat == null && text != null) {
+            backup = backup.copy(sendTextToChat = text.sendTextToChat())
+        }
         if (trait != null && existing != null) {
             backup = backup.copy(
                 hadHologram = true,
@@ -294,6 +298,7 @@ internal class ArcNpcHologramService(
         viewRange = trait?.viewRange ?: DEFAULT_VIEW_RANGE,
         nameplateValue = nativeNameplateValue(npc),
         speechBubbles = text?.useSpeechBubbles(),
+        sendTextToChat = text?.sendTextToChat(),
     )
 
     private fun applyBackup(stack: Stack, npc: NPC) {
@@ -436,6 +441,14 @@ internal class ArcNpcHologramService(
     private fun bridgeSpeech(npc: NPC, text: Text) {
         speechBridges += npc.id
         if (text.useSpeechBubbles()) text.toggleSpeechBubbles()
+        if (!text.sendTextToChat()) text.toggleSendTextToChat()
+    }
+
+    private fun unbridgeSpeech(npc: NPC, text: Text?, desiredSendTextToChat: Boolean?) {
+        speechBridges.remove(npc.id)
+        if (text != null && desiredSendTextToChat != null && text.sendTextToChat() != desiredSendTextToChat) {
+            text.toggleSendTextToChat()
+        }
     }
 
     private fun restoreAll() {
@@ -460,7 +473,7 @@ internal class ArcNpcHologramService(
             npc.getTraitNullable(HologramTrait::class.java)?.let { npc.removeTrait(HologramTrait::class.java) }
         }
         restoreNativeNameplate(npc, stack.backup.nameplateValue)
-        restoreSpeech(npc, stack.backup.speechBubbles)
+        restoreSpeech(npc, stack.backup.speechBubbles, stack.backup.sendTextToChat)
         npc.data().remove(BACKUP_KEY)
     }
 
@@ -476,15 +489,16 @@ internal class ArcNpcHologramService(
             }
         }
         restoreNativeNameplate(npc, stack.backup.nameplateValue)
-        restoreSpeech(npc, stack.backup.speechBubbles)
+        restoreSpeech(npc, stack.backup.speechBubbles, stack.backup.sendTextToChat)
         npc.data().remove(BACKUP_KEY)
         stacks.remove(npc.id)
         speechBridges.remove(npc.id)
     }
 
-    private fun restoreSpeech(npc: NPC, desired: Boolean?) {
+    private fun restoreSpeech(npc: NPC, desired: Boolean?, desiredSendTextToChat: Boolean?) {
         val text = npc.getTraitNullable(Text::class.java) ?: return
         if (desired != null && text.useSpeechBubbles() != desired) text.toggleSpeechBubbles()
+        if (desiredSendTextToChat != null && text.sendTextToChat() != desiredSendTextToChat) text.toggleSendTextToChat()
     }
 
     private fun removeDisplays(stack: Stack) {

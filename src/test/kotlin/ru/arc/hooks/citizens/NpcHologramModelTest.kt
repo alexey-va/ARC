@@ -54,4 +54,10 @@ class NpcHologramModelTest : StringSpec({
         npcHologramViewRange(citizensRange = 16, fallbackMultiplier = 1.0f) shouldBe 0.25f
         npcHologramViewRange(citizensRange = -1, fallbackMultiplier = 1.0f) shouldBe 1.0f
     }
+
+    "legacy no-chat speech remains silent through the ARC event bridge" {
+        npcSpeechBridgeCancelsChat(false) shouldBe true
+        npcSpeechBridgeCancelsChat(true) shouldBe false
+        npcSpeechBridgeCancelsChat(null) shouldBe false
+    }
 })

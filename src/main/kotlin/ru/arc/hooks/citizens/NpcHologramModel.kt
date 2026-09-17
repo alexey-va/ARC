@@ -85,6 +85,10 @@ internal fun npcHologramViewRange(citizensRange: Int, fallbackMultiplier: Float)
         ?.let { (it / 64.0f).coerceIn(0.05f, 4.0f) }
         ?: fallbackMultiplier
 
+/** A legacy no-chat Text trait must stay silent even though ARC enables its event bridge. */
+internal fun npcSpeechBridgeCancelsChat(originalSendTextToChat: Boolean?): Boolean =
+    originalSendTextToChat == false
+
 /** Separates the styled final name line from the permanent multiline body. */
 internal fun resolveNpcHologramPresentation(lines: List<String>, npcName: String): NpcHologramPresentation {
     val last = lines.lastOrNull() ?: return NpcHologramPresentation(npcName, lines, false)
