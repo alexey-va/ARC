@@ -62,16 +62,37 @@ class OriginScenePlanTest : FreeSpec({
             .sumOf(OriginSceneStep.Swing::repetitions) shouldBe 18
         luka.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().map { it.key } shouldContainExactly
             listOf("luka-blank", "luka-blank")
+        luka.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().all {
+            it.surface == "apprentice-work-surface" && it.origin == OriginScenePropOrigin.BOTTOM_CENTER
+        } shouldBe true
         luka.steps.filterIsInstance<OriginSceneStep.RemoveDisplay>().map { it.key } shouldContainExactly listOf("luka-blank")
         savva.steps.filterIsInstance<OriginSceneStep.ContainerLid>().map(OriginSceneStep.ContainerLid::anchor).toSet() shouldBe
             setOf("ore-cart", "ore-chest")
         scene.actors.getValue(351).home.x shouldBe scene.anchors.getValue("ore-cart-stand").x
         scene.actors.getValue(351).home.z shouldBe scene.anchors.getValue("ore-cart-stand").z
         bran.yieldAnchor shouldBe "dummy"
-        bran.yieldRange shouldBe 3.2
+        bran.yieldRange shouldBe 2.0
+        bran.steps.filterIsInstance<OriginSceneStep.Swing>().sumOf(OriginSceneStep.Swing::repetitions) shouldBe 24
         yar.steps.filterIsInstance<OriginSceneStep.Equip>().map(OriginSceneStep.Equip::material) shouldContainExactly
             listOf("RAW_IRON", "MAGMA_BLOCK", "IRON_INGOT", "AIR")
         yar.steps.filterIsInstance<OriginSceneStep.ContainerLid>().map(OriginSceneStep.ContainerLid::open) shouldContainExactly
             listOf(true, false, true, false)
+    }
+
+    "Edgar showcase cycle crosses the forge with an assistant and a scoped workpiece" {
+        val scene = OriginScenePlan.load(Files.createTempDirectory("origin-scenes-edgar-showcase-test")).scene("forge")
+        val cycle = scene.cycles.single { it.id == "master-forging-showcase" }
+
+        cycle.actorIds shouldBe setOf(349, 358)
+        cycle.steps.filterIsInstance<OriginSceneStep.Move>().map(OriginSceneStep.Move::anchor).toSet() shouldContainAll
+            setOf("stock-stand", "master-anvil-stand", "quench-stand")
+        cycle.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().size shouldBe 3
+        cycle.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().all {
+            it.surface == "master-work-surface" && it.origin == OriginScenePropOrigin.BOTTOM_CENTER
+        } shouldBe true
+        cycle.steps.filterIsInstance<OriginSceneStep.Swing>().filter { it.feedbackAnchor == "master-anvil" }
+            .sumOf(OriginSceneStep.Swing::repetitions) shouldBe 18
+        cycle.steps.filterIsInstance<OriginSceneStep.RemoveDisplay>().map(OriginSceneStep.RemoveDisplay::key) shouldContainExactly
+            listOf("edgar-masterpiece")
     }
 })

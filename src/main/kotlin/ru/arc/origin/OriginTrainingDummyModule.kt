@@ -1,6 +1,9 @@
+@file:Suppress("DEPRECATION") // Paper exposes no replacement cooldown-reset event in 1.21.11.
+
 package ru.arc.origin
 
 import com.denizenscript.denizen.objects.PlayerTag
+import com.destroystokyo.paper.event.player.PlayerAttackEntityCooldownResetEvent
 import dev.unnm3d.rediseconomy.api.RedisEconomyAPI
 import io.papermc.paper.event.player.PrePlayerAttackEntityEvent
 import net.citizensnpcs.api.CitizensAPI
@@ -16,6 +19,7 @@ import org.bukkit.Particle
 import org.bukkit.Sound
 import org.bukkit.SoundCategory
 import org.bukkit.entity.LivingEntity
+import org.bukkit.entity.Pig
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
@@ -59,7 +63,11 @@ internal data class OriginTrainingDummyConfig(
                 world = source.string("world", "rc_origin_spawn"),
                 dummyNpcId = source.integer("$root.dummy-npc-id", 364),
                 trainerNpcId = source.integer("$root.trainer-npc-id", 355),
-                location = OriginTrainingDummyPoint.parse(source.string("$root.location")),
+                location = OriginTrainingDummyPoint.parse(
+                    position = source.string("$root.position"),
+                    yaw = source.real("$root.yaw"),
+                    pitch = source.real("$root.pitch"),
+                ),
                 strongCharge = source.real("$root.strong-charge", 0.9).coerceIn(0.1, 1.0),
                 comboTimeoutMillis = source.integer("$root.combo-timeout-seconds", 15).toLong().coerceIn(2L, 60L) * 1_000L,
                 challengeHits = source.integer("$root.challenge-hits", 8).coerceIn(2, 20),
@@ -82,15 +90,17 @@ internal data class OriginTrainingDummyPoint(
     fun inWorld(world: org.bukkit.World) = Location(world, x, y, z, yaw, pitch)
 
     companion object {
-        fun parse(raw: String): OriginTrainingDummyPoint {
-            val values = raw.split(',').map(String::trim)
-            require(values.size == 5) { "training-dummy.location must be x,y,z,yaw,pitch" }
+        fun parse(position: String, yaw: Double, pitch: Double): OriginTrainingDummyPoint {
+            val values = position.split(',').map(String::trim)
+            require(values.size == 3) { "training-dummy.position must be x,y,z" }
+            require(yaw.isFinite() && yaw in -180.0..180.0) { "training-dummy.yaw must be within -180..180" }
+            require(pitch.isFinite() && pitch in -90.0..90.0) { "training-dummy.pitch must be within -90..90" }
             return OriginTrainingDummyPoint(
                 values[0].toDouble(),
                 values[1].toDouble(),
                 values[2].toDouble(),
-                values[3].toFloat(),
-                values[4].toFloat(),
+                yaw.toFloat(),
+                pitch.toFloat(),
             )
         }
     }
@@ -131,7 +141,13 @@ internal fun trainingReward(hits: Int, target: Int, partialReward: Int, fullRewa
     else -> 0
 }
 
+@Suppress("UNUSED_PARAMETER")
+internal fun trainingDamage(probeDamage: Double?, armorStandDamage: Double): Double? =
+    probeDamage?.takeIf { it.isFinite() && it >= 0.0 }
+
 private data class OriginTrainingAttack(val charge: Double, val capturedAt: Long)
+
+private data class OriginTrainingDamageProbe(val attacker: UUID, var damage: Double? = null)
 
 private data class OriginTrainingChallenge(
     val token: UUID,
@@ -150,6 +166,7 @@ object OriginTrainingDummyModule : PluginModule, Listener {
     private val combos = OriginTrainingComboCounter()
     private val challenges = mutableMapOf<UUID, OriginTrainingChallenge>()
     private val lastDamageEventAt = mutableMapOf<UUID, Long>()
+    private val damageProbes = mutableMapOf<UUID, OriginTrainingDamageProbe>()
     private val cooldownKey by lazy { NamespacedKey(ARC.instance, "origin_forge_training_cooldown_until") }
 
     override fun init() {
@@ -176,6 +193,7 @@ object OriginTrainingDummyModule : PluginModule, Listener {
         combos.clear()
         challenges.clear()
         lastDamageEventAt.clear()
+        damageProbes.clear()
         config = null
     }
 
@@ -204,6 +222,17 @@ object OriginTrainingDummyModule : PluginModule, Listener {
         )
     }
 
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
+    fun onDummyCooldownReset(event: PlayerAttackEntityCooldownResetEvent) {
+        val settings = config ?: return
+        if (isDummy(event.attackedEntity.uniqueId, settings)) {
+            // The nested living-target probe below owns the one real cooldown reset.
+            // Keeping the original strength here makes its damage identical to the
+            // player's intended hit instead of measuring the just-reset cooldown.
+            event.isCancelled = true
+        }
+    }
+
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     fun onDummyDamage(event: EntityDamageByEntityEvent) {
         val settings = config ?: return
@@ -224,7 +253,7 @@ object OriginTrainingDummyModule : PluginModule, Listener {
         // Paper supplies the pre-reset attack strength synchronously. If another plugin
         // suppresses that event, fail open for one hit instead of trapping the combo at 1/8.
         val charge = attack?.charge ?: 1.0
-        val damage = maxOf(event.finalDamage, event.damage).coerceAtLeast(0.0)
+        val damage = trainingDamage(measureTrainingDamage(player, event.entity.location), event.damage)
         anchorDummy()
         (event.entity as? LivingEntity)?.playHurtAnimation(0f)
         player.playSound(event.entity.location, Sound.ENTITY_ARMOR_STAND_HIT, SoundCategory.PLAYERS, 0.9f, 0.92f)
@@ -233,6 +262,14 @@ object OriginTrainingDummyModule : PluginModule, Listener {
         } else {
             strongHit(player, settings, now, damage, event.isCritical)
         }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
+    fun onDamageProbe(event: EntityDamageByEntityEvent) {
+        val probe = damageProbes[event.entity.uniqueId] ?: return
+        if (event.damager.uniqueId != probe.attacker) return
+        probe.damage = event.finalDamage.coerceAtLeast(0.0)
+        event.isCancelled = true
     }
 
     @EventHandler
@@ -302,7 +339,7 @@ object OriginTrainingDummyModule : PluginModule, Listener {
         )
     }
 
-    private fun weakHit(player: Player, settings: OriginTrainingDummyConfig, charge: Double, damage: Double) {
+    private fun weakHit(player: Player, settings: OriginTrainingDummyConfig, charge: Double, damage: Double?) {
         combos.reset(player.uniqueId)
         challenges[player.uniqueId]?.takeIf { it.active }?.hits = 0
         val percent = (charge * 100).roundToInt()
@@ -310,10 +347,10 @@ object OriginTrainingDummyModule : PluginModule, Listener {
         player.playSound(player.location, Sound.ENTITY_PLAYER_ATTACK_WEAK, SoundCategory.PLAYERS, 0.55f, 0.9f)
         player.spawnParticle(Particle.DAMAGE_INDICATOR, dummyEffectLocation(settings), 3, 0.12, 0.2, 0.12, 0.01)
         player.showTitleMM("<red><bold>$title", "<gray>Дождись полного замаха <dark_gray>• <white>$percent%", 0, 10, 4)
-        player.sendActionBar(Component.text("${formatDamage(damage)} урона • заряд $percent% • серия 0/${settings.challengeHits}", NamedTextColor.RED))
+        player.sendActionBar(Component.text("${damageLabel(damage)} • заряд $percent% • серия 0/${settings.challengeHits}", NamedTextColor.RED))
     }
 
-    private fun strongHit(player: Player, settings: OriginTrainingDummyConfig, now: Long, damage: Double, critical: Boolean) {
+    private fun strongHit(player: Player, settings: OriginTrainingDummyConfig, now: Long, damage: Double?, critical: Boolean) {
         val combo = combos.recordStrong(player.uniqueId, now, settings.comboTimeoutMillis, settings.challengeHits)
         val titles = listOf("", "Мощный удар", "Связка ×2", "Комбо ×3", "Серия ×4", "Серия ×5", "Ритм ×6", "Почти ×7", "Цепь замкнута")
         val colors = listOf("", "<yellow>", "<gold>", "<red>", "<light_purple>", "<light_purple>", "<aqua>", "<aqua>", "<green>")
@@ -325,18 +362,18 @@ object OriginTrainingDummyModule : PluginModule, Listener {
         player.spawnParticle(Particle.CRIT, location, 5 + combo.count * 2, 0.18, 0.28, 0.18, 0.05)
         player.showTitleMM(
             "$color<bold>${titles.getOrElse(combo.count) { "Цепь замкнута" }}",
-            "<white>${formatDamage(damage)} урона <dark_gray>• <yellow>серия ${combo.count}/${settings.challengeHits}",
+            "<white>${damageLabel(damage)} <dark_gray>• <yellow>серия ${combo.count}/${settings.challengeHits}",
             0,
             8,
             4,
         )
         val challenge = challenges[player.uniqueId]?.takeIf { it.active }
         if (challenge == null) {
-            player.sendActionBar(Component.text("Мощный удар • ${formatDamage(damage)} урона • серия ${combo.count}/${settings.challengeHits}", NamedTextColor.GREEN))
+            player.sendActionBar(Component.text("Мощный удар • ${damageLabel(damage)} • серия ${combo.count}/${settings.challengeHits}", NamedTextColor.GREEN))
             return
         }
         challenge.hits = combo.count
-        player.sendActionBar(Component.text("Испытание • ${combo.count}/${settings.challengeHits} • мощный удар • ${formatDamage(damage)} урона", NamedTextColor.GOLD))
+        player.sendActionBar(Component.text("Испытание • ${combo.count}/${settings.challengeHits} • мощный удар • ${damageLabel(damage)}", NamedTextColor.GOLD))
         if (combo.count >= settings.challengeHits) finishChallenge(player.uniqueId, challenge.token, settings)
     }
 
@@ -404,6 +441,39 @@ object OriginTrainingDummyModule : PluginModule, Listener {
         npc.entity.setGravity(false)
         npc.entity.velocity = Vector()
         npc.entity.teleport(settings.location.inWorld(world))
+        npc.entity.setRotation(settings.location.yaw, settings.location.pitch)
+    }
+
+    /**
+     * Runs the real server melee pipeline against an invisible, unarmoured living
+     * target. The nested damage event is cancelled before health, durability or
+     * enchantment side effects are committed, while its raw damage is retained.
+     */
+    private fun measureTrainingDamage(player: Player, location: Location): Double? {
+        val probeEntity = runCatching {
+            player.world.spawn(location, Pig::class.java) { pig ->
+                pig.setAdult()
+                pig.setAI(false)
+                pig.isSilent = true
+                pig.isInvisible = true
+                pig.isCollidable = false
+                pig.setGravity(false)
+                pig.isPersistent = false
+                pig.addScoreboardTag(DAMAGE_PROBE_TAG)
+            }
+        }.getOrNull() ?: return null
+        val probe = OriginTrainingDamageProbe(player.uniqueId)
+        damageProbes[probeEntity.uniqueId] = probe
+        return try {
+            Bukkit.getOnlinePlayers().forEach { viewer -> viewer.hideEntity(ARC.instance, probeEntity) }
+            runCatching {
+                player.attack(probeEntity)
+                probe.damage
+            }.getOrNull()
+        } finally {
+            damageProbes.remove(probeEntity.uniqueId)
+            probeEntity.remove()
+        }
     }
 
     private fun dummyEffectLocation(settings: OriginTrainingDummyConfig): Location {
@@ -417,7 +487,9 @@ object OriginTrainingDummyModule : PluginModule, Listener {
     private fun trainer(settings: OriginTrainingDummyConfig) =
         runCatching { CitizensAPI.getNPCRegistry().getById(settings.trainerNpcId) }.getOrNull()?.takeIf { it.isSpawned }
 
-    private fun formatDamage(damage: Double): String = String.format(java.util.Locale.US, "%.1f", damage)
+    private fun damageLabel(damage: Double?): String =
+        damage?.let { "${String.format(java.util.Locale.US, "%.1f", it)} урона" } ?: "урон не измерен"
 
     private const val LEGACY_COOLDOWN_FLAG = "rc_origin_forge_test_cooldown"
+    private const val DAMAGE_PROBE_TAG = "arc_origin_training_damage_probe"
 }

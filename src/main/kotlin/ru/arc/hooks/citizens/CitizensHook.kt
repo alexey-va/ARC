@@ -84,6 +84,8 @@ class CitizensHook : AutoCloseable {
 
     fun addChatBubble(id: Int, lineList: List<HologramLine>) {
         try {
+            val ttlTicks = lineList.maxOfOrNull(HologramLine::ticks) ?: 1
+            if (ArcNpcHologramModule.showTemporaryBubble(id, lineList.map(HologramLine::text), ttlTicks)) return
             val npc = CitizensAPI.getNPCRegistry().getById(id)
             if (npc == null) {
                 warn("NPC {} is null", id)

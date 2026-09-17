@@ -1,6 +1,7 @@
 package ru.arc.origin.scene
 
 import org.bukkit.Location
+import org.bukkit.Material
 import org.bukkit.World
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
@@ -61,11 +62,11 @@ internal sealed interface OriginSceneStep {
 
     data class BlockDisplay(
         val key: String,
-        val anchor: String,
+        val surface: String,
         val material: String,
-        val scaleX: Float,
-        val scaleY: Float,
-        val scaleZ: Float,
+        val origin: OriginScenePropOrigin,
+        val offset: OriginSceneVector,
+        val scale: OriginSceneVector,
         val interpolationTicks: Int,
     ) : OriginSceneStep {
         override val actorId: Int? = null
@@ -119,6 +120,7 @@ internal data class OriginSceneDefinition(
     val maxConcurrentCycles: Int,
     val actors: Map<Int, OriginSceneActor>,
     val anchors: Map<String, OriginScenePoint>,
+    val propSurfaces: Map<String, OriginScenePropSurface>,
     val routeProfiles: Map<String, NpcRouteProfile>,
     val cycles: List<OriginSceneCycle>,
 ) {
@@ -135,6 +137,7 @@ internal data class OriginSceneDefinition(
                 "scene $id cycle ${cycle.id} references yield anchor ${cycle.yieldAnchor}"
             }
             require(cycle.steps.isNotEmpty()) { "scene $id cycle ${cycle.id} has no steps" }
+            OriginScenePropContract.validateLifecycle(cycle.steps)
             cycle.steps.forEach { step ->
                 step.actorId?.let { require(it in cycle.actorIds) { "scene $id cycle ${cycle.id} step actor $it is not leased" } }
                 when (step) {
@@ -145,7 +148,13 @@ internal data class OriginSceneDefinition(
                     is OriginSceneStep.LookAtAnchor -> require(step.anchor in anchors)
                     is OriginSceneStep.LookAtActor -> require(step.targetActorId in actors)
                     is OriginSceneStep.Swing -> require(step.feedbackAnchor == null || step.feedbackAnchor in anchors)
-                    is OriginSceneStep.BlockDisplay -> require(step.anchor in anchors)
+                    is OriginSceneStep.BlockDisplay -> {
+                        require(step.surface in propSurfaces) { "scene $id cycle ${cycle.id} references prop surface ${step.surface}" }
+                        require(Material.matchMaterial(step.material)?.takeIf(Material::isBlock) != null) {
+                            "scene $id cycle ${cycle.id} prop ${step.key} has invalid block material ${step.material}"
+                        }
+                        OriginScenePropContract.resolve(propSurfaces.getValue(step.surface).near, step.origin, step.offset, step.scale)
+                    }
                     is OriginSceneStep.Sound -> require(step.anchor == null || step.anchor in anchors)
                     is OriginSceneStep.Particle -> require(step.anchor == null || step.anchor in anchors)
                     is OriginSceneStep.ContainerLid -> require(step.anchor in anchors)
@@ -201,6 +210,17 @@ internal data class OriginScenePlan(
             val anchors = source.stringList("$root.anchor-ids").associateWith { anchorId ->
                 point(source.string("$root.anchors.$anchorId"), "$root.anchors.$anchorId")
             }
+            val propSurfaces = source.stringList("$root.prop-surface-ids").associateWith { surfaceId ->
+                val surfaceRoot = "$root.prop-surfaces.$surfaceId"
+                OriginScenePropSurface(
+                    near = point(source.string("$surfaceRoot.near"), "$surfaceRoot.near"),
+                    materials = source.stringList("$surfaceRoot.material-ids").map { materialName ->
+                        requireNotNull(Material.matchMaterial(materialName)) { "Unknown material $materialName at $surfaceRoot.material-ids" }
+                    }.toSet(),
+                    searchRadius = source.integer("$surfaceRoot.search-radius", 2),
+                    topOffset = source.real("$surfaceRoot.top-offset", 1.0),
+                )
+            }
             val routeProfiles = source.stringList("$root.route-profile-ids").associateWith { profileId ->
                 routeProfile(source, "$root.route-profiles.$profileId", "$id-$profileId")
             }
@@ -212,6 +232,7 @@ internal data class OriginScenePlan(
                 maxConcurrentCycles = source.integer("$root.max-concurrent-cycles", 1).coerceIn(1, 8),
                 actors = actors,
                 anchors = anchors,
+                propSurfaces = propSurfaces,
                 routeProfiles = routeProfiles,
                 cycles = source.stringList("$root.cycle-ids").map { cycleId -> parseCycle(source, root, cycleId) },
             )
@@ -260,11 +281,11 @@ internal data class OriginScenePlan(
                 val scale = vector(source.string("$root.scale", "0.5,0.1,0.3"), "$root.scale")
                 OriginSceneStep.BlockDisplay(
                     key = source.string("$root.key"),
-                    anchor = source.string("$root.anchor"),
+                    surface = source.string("$root.surface"),
                     material = source.string("$root.material"),
-                    scaleX = scale.first,
-                    scaleY = scale.second,
-                    scaleZ = scale.third,
+                    origin = OriginScenePropOrigin.valueOf(source.string("$root.origin").uppercase()),
+                    offset = vector(source.string("$root.offset", "0,0,0"), "$root.offset"),
+                    scale = scale.requirePositive("$root.scale"),
                     interpolationTicks = source.integer("$root.interpolation-ticks", 0).coerceIn(0, 59),
                 )
             }
@@ -337,12 +358,10 @@ internal data class OriginScenePlan(
             )
         }
 
-        private fun vector(raw: String, path: String): Triple<Float, Float, Float> {
+        private fun vector(raw: String, path: String): OriginSceneVector {
             val values = raw.split(',').map(String::trim)
             require(values.size == 3) { "$path must be x,y,z" }
-            return Triple(values[0].toFloat(), values[1].toFloat(), values[2].toFloat()).also { vector ->
-                require(vector.first > 0f && vector.second > 0f && vector.third > 0f) { "$path values must be positive" }
-            }
+            return OriginSceneVector(values[0].toDouble(), values[1].toDouble(), values[2].toDouble())
         }
 
         private fun block(raw: String, path: String): Pair<Int, Int> {

@@ -1,0 +1,20 @@
+# ARC-owned Citizens labels and speech bubbles. Text is parsed only when its
+# source changes; the follow loop performs movement/expiry work only.
+enabled: true
+follow-interval-ticks: 2
+reconcile-interval-ticks: 40
+teleport-duration-ticks: 2
+
+layout:
+  name-offset: 0.20
+  body-gap: 0.26
+
+display:
+  # Paper display view range is a tracking multiplier; 1.0 is the normal range.
+  view-range: 1.0
+  scale: 0.92
+  line-width: 230
+  background-alpha: 112
+
+speech:
+  duration-ticks: 100

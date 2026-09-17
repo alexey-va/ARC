@@ -64,6 +64,7 @@ import ru.arc.core.modules.XActionModule
 import ru.arc.contracts.ContractsModule
 import ru.arc.investigation.InvestigationModule
 import ru.arc.hooks.HookRegistry
+import ru.arc.hooks.citizens.ArcNpcHologramModule
 import ru.arc.gui.GuiDefaults
 import ru.arc.gui.ArcMenus
 import ru.arc.dialogdemo.DialogDemoModule
@@ -232,6 +233,7 @@ open class ARC : JavaPlugin() {
             NetworkModule,
             HooksModule,
             NpcChunkTicketModule,
+            ArcNpcHologramModule,
             OriginSpawnModule,
             OriginPortalsModule,
             AiModule,
@@ -384,6 +386,7 @@ open class ARC : JavaPlugin() {
                 "modules/redis.yml",
                 "modules/ops-http.yml",
                 "modules/citizens-chunk-tickets.yml",
+                "modules/npc-holograms.yml",
                 "modules/origin-spawn.yml",
                 "modules/origin-dining.yml",
                 "modules/origin-scenes.yml",

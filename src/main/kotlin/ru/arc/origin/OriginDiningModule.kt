@@ -58,6 +58,7 @@ import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.PluginModule
 import ru.arc.core.modules.EconomyModule
 import ru.arc.hooks.HookRegistry
+import ru.arc.hooks.citizens.ArcNpcHologramModule
 import ru.arc.npc.CitizensNpcRouteController
 import ru.arc.npc.NpcRouteCell
 import ru.arc.npc.NpcRouteBounds
@@ -2825,6 +2826,12 @@ private class OriginDiningService : AutoCloseable {
     }
 
     private fun showSpeech(npcId: Int, line: String, color: NamedTextColor = NamedTextColor.GOLD) {
+        if (ArcNpcHologramModule.showTemporaryBubble(
+                npcId,
+                listOf(line),
+                OriginDiningLayout.ambientSpeechDurationTicks.toInt(),
+            )
+        ) return
         val npc = runCatching { CitizensAPI.getNPCRegistry().getById(npcId) }.getOrNull()?.takeIf { it.isSpawned } ?: return
         speechDisplays.remove(npcId)?.let { if (it.isValid) it.remove() }
         val display = npc.entity.world.spawn(npc.entity.location.clone().add(0.0, OriginDiningLayout.ambientSpeechHeight, 0.0), TextDisplay::class.java).apply {
@@ -3005,7 +3012,7 @@ private class OriginDiningService : AutoCloseable {
     private fun ambientActor(npcId: Int, allowSpeaking: Boolean = false): net.citizensnpcs.api.npc.NPC? {
         val npc = waiter(npcId)?.takeIf { it.isSpawned && it.entity.world.name == OriginDiningLayout.WORLD } ?: return null
         if (npcId in OriginDiningLayout.waiterIds && npc.entity.scoreboardTags.contains(WAITER_BUSY_TAG)) return null
-        if (!allowSpeaking && npcId in speechDisplays) return null
+        if (!allowSpeaking && (npcId in speechDisplays || ArcNpcHologramModule.hasTemporaryBubble(npcId))) return null
         return npc
     }
 

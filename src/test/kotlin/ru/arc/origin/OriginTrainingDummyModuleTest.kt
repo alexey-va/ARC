@@ -7,6 +7,22 @@ import org.bukkit.Material
 import java.util.UUID
 
 class OriginTrainingDummyModuleTest : StringSpec({
+    "dummy pose keeps Denizen yaw and pitch in named fields" {
+        val point = OriginTrainingDummyPoint.parse(
+            position = "71.63546148860222,70.0,72.61048723499574",
+            yaw = 129.2892,
+            pitch = -4.75167,
+        )
+
+        point.yaw shouldBe 129.2892f
+        point.pitch shouldBe -4.75167f
+    }
+
+    "displayed damage uses the living probe and never the armor stand constant" {
+        trainingDamage(probeDamage = 7.5, armorStandDamage = 1.0) shouldBe 7.5
+        trainingDamage(probeDamage = null, armorStandDamage = 1.0) shouldBe null
+    }
+
     "full charged hits advance the combo to eight" {
         var combo: OriginTrainingCombo? = null
         repeat(8) { index ->

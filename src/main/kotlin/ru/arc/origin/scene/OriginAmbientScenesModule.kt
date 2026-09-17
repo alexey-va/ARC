@@ -28,6 +28,7 @@ import org.joml.Vector3f
 import ru.arc.ARC
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.PluginModule
+import ru.arc.hooks.citizens.ArcNpcHologramModule
 import ru.arc.npc.CitizensNpcRouteController
 import ru.arc.npc.NpcRouteEvent
 import ru.arc.npc.NpcRouteObstacleSource
@@ -257,10 +258,8 @@ private class OriginSceneService(
                 runStep(running, index + 1)
             }
             is OriginSceneStep.Swing -> swing(running, index, step, 0)
-            is OriginSceneStep.BlockDisplay -> {
-                setBlockDisplay(running, step)
-                runStep(running, index + 1)
-            }
+            is OriginSceneStep.BlockDisplay -> if (setBlockDisplay(running, step)) runStep(running, index + 1)
+            else finish(running, "prop-apply-failed")
             is OriginSceneStep.RemoveDisplay -> {
                 removeDisplay(running, step.key)
                 runStep(running, index + 1)
@@ -352,15 +351,40 @@ private class OriginSceneService(
         else later(running, step.periodTicks) { swing(running, index, step, repetition + 1) }
     }
 
-    private fun setBlockDisplay(running: ActiveOriginSceneCycle, step: OriginSceneStep.BlockDisplay) {
-        val world = Bukkit.getWorld(plan.world) ?: return
-        val material = Material.matchMaterial(step.material)?.takeIf(Material::isBlock) ?: return
-        val location = running.scene.anchors.getValue(step.anchor).inWorld(world)
+    private fun setBlockDisplay(running: ActiveOriginSceneCycle, step: OriginSceneStep.BlockDisplay): Boolean {
+        val world = Bukkit.getWorld(plan.world) ?: return false
+        val material = Material.matchMaterial(step.material)?.takeIf(Material::isBlock) ?: return false
+        val surface = running.scene.propSurfaces.getValue(step.surface)
+        val surfacePoint = surface.resolve(world)
+        if (surfacePoint == null) {
+            warn(
+                "ORIGIN_SCENE phase=PROP_SURFACE_MISSING scene={} cycle={} key={} surface={} near={},{},{} materials={}",
+                running.scene.id,
+                running.cycle.id,
+                step.key,
+                step.surface,
+                surface.near.x,
+                surface.near.y,
+                surface.near.z,
+                surface.materials.joinToString(",") { it.name },
+            )
+            return false
+        }
+        val resolved = OriginScenePropContract.resolve(
+            surfacePoint,
+            step.origin,
+            step.offset,
+            step.scale,
+        )
+        val location = Location(world, resolved.x, resolved.y, resolved.z)
+        var created = false
         val display = running.displays[step.key]?.takeIf(BlockDisplay::isValid)
-            ?: world.spawn(location, BlockDisplay::class.java).also { created ->
-                created.isPersistent = false
-                created.addScoreboardTag(PROP_TAG)
-                running.displays[step.key] = created
+            ?: world.spawn(location, BlockDisplay::class.java).also { createdDisplay ->
+                createdDisplay.isPersistent = false
+                createdDisplay.addScoreboardTag(PROP_TAG)
+                createdDisplay.addScoreboardTag(propRunTag(running))
+                running.displays[step.key] = createdDisplay
+                created = true
             }
         display.block = material.createBlockData()
         display.teleport(location)
@@ -368,15 +392,31 @@ private class OriginSceneService(
         display.interpolationDuration = step.interpolationTicks
         display.teleportDuration = step.interpolationTicks.coerceAtMost(59)
         display.transformation = Transformation(
-            Vector3f(-step.scaleX / 2f, -step.scaleY / 2f, -step.scaleZ / 2f),
+            Vector3f(resolved.translationX, resolved.translationY, resolved.translationZ),
             AxisAngle4f(),
-            Vector3f(step.scaleX, step.scaleY, step.scaleZ),
+            Vector3f(step.scale.x.toFloat(), step.scale.y.toFloat(), step.scale.z.toFloat()),
             AxisAngle4f(),
         )
+        info(
+            "ORIGIN_SCENE phase=PROP_{} scene={} cycle={} key={} surface={} actual={},{},{} origin={}",
+            if (created) "SPAWNED" else "UPDATED",
+            running.scene.id,
+            running.cycle.id,
+            step.key,
+            step.surface,
+            resolved.x,
+            resolved.y,
+            resolved.z,
+            step.origin,
+        )
+        return true
     }
 
     private fun removeDisplay(running: ActiveOriginSceneCycle, key: String) {
-        running.displays.remove(key)?.takeIf(BlockDisplay::isValid)?.remove()
+        running.displays.remove(key)?.takeIf(BlockDisplay::isValid)?.let { display ->
+            display.remove()
+            info("ORIGIN_SCENE phase=PROP_REMOVED scene={} cycle={} key={}", running.scene.id, running.cycle.id, key)
+        }
     }
 
     private fun removeDisplays(running: ActiveOriginSceneCycle) {
@@ -545,6 +585,7 @@ private class OriginSceneService(
     }
 
     private fun showSpeech(actorId: Int, text: String) {
+        if (ArcNpcHologramModule.showTemporaryBubble(actorId, listOf(text), plan.speechDurationTicks.toInt())) return
         val actor = npc(actorId)?.takeIf(NPC::isSpawned) ?: return
         speech.remove(actorId)?.let { if (it.isValid) it.remove() }
         val display = actor.entity.world.spawn(actor.entity.location.clone().add(0.0, plan.speechHeight, 0.0), TextDisplay::class.java).apply {
@@ -599,6 +640,8 @@ private class OriginSceneService(
     }
 
     private fun isCurrent(running: ActiveOriginSceneCycle): Boolean = active[running.lease.token] === running
+
+    private fun propRunTag(running: ActiveOriginSceneCycle): String = "${PROP_TAG}_${running.lease.token.toString().take(8)}"
 
     private fun hasDeniedFlag(running: ActiveOriginSceneCycle): Boolean =
         running.cycle.actorIds.any { actorId ->

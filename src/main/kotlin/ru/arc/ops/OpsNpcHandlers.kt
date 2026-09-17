@@ -25,6 +25,7 @@ import org.bukkit.World
 import org.bukkit.entity.EntityType
 import org.bukkit.event.player.PlayerTeleportEvent
 import org.bukkit.inventory.ItemStack
+import ru.arc.hooks.citizens.ArcNpcHologramModule
 import java.security.MessageDigest
 import java.time.Duration
 import kotlin.math.floor
@@ -248,10 +249,14 @@ object OpsNpcHandlers {
         }
         npc.getTraitNullable(LookClose::class.java)?.let { spec["lookClose"] = lookCloseSummary(it) }
         npc.getTraitNullable(CommandTrait::class.java)?.let { spec["commands"] = commandSummary(it) }
-        npc.getTraitNullable(HologramTrait::class.java)?.let { spec["hologram"] = hologramSummary(it) }
+        val hologram = ArcNpcHologramModule.summary(npc)
+            ?: npc.getTraitNullable(HologramTrait::class.java)?.let(::hologramSummary)
+        hologram?.let { spec["hologram"] = it }
         npc.getTraitNullable(Equipment::class.java)?.let { spec["equipment"] = equipmentSummary(it) }
         npc.getTraitNullable(Waypoints::class.java)?.let { spec["path"] = pathSummary(it) }
-        npc.getTraitNullable(Text::class.java)?.let { spec["text"] = textSummary(it) }
+        npc.getTraitNullable(Text::class.java)?.let {
+            spec["text"] = textSummary(it, ArcNpcHologramModule.desiredSpeechBubbles(npc))
+        }
         return mapOf(
             "id" to npc.id,
             "uuid" to npc.uniqueId.toString(),
@@ -360,12 +365,14 @@ object OpsNpcHandlers {
         patch: NpcPatch<NameplateMode>,
     ) {
         val mode = (patch as? NpcPatch.Set)?.value ?: return
+        if (ArcNpcHologramModule.patchNameplate(npc, mode.storageValue.toString())) return
         npc.data().setPersistent(NPC.Metadata.NAMEPLATE_VISIBLE, mode.storageValue)
         npc.scheduleUpdate(NPCUpdate.PACKET)
     }
 
     internal fun nameplateSummary(npc: NPC): String =
-        when (npc.data().get<Any>(NPC.Metadata.NAMEPLATE_VISIBLE, true).toString().lowercase()) {
+        when ((ArcNpcHologramModule.desiredNameplate(npc)
+            ?: npc.data().get<Any>(NPC.Metadata.NAMEPLATE_VISIBLE, true).toString()).lowercase()) {
             "false" -> "hidden"
             "hover" -> "hover"
             else -> "visible"
@@ -463,8 +470,18 @@ object OpsNpcHandlers {
     ) {
         when (patch) {
             NpcPatch.Absent -> Unit
-            NpcPatch.Clear -> npc.removeTrait(HologramTrait::class.java)
+            NpcPatch.Clear -> {
+                if (ArcNpcHologramModule.clearHologram(npc)) return
+                npc.removeTrait(HologramTrait::class.java)
+            }
             is NpcPatch.Set -> {
+                if (ArcNpcHologramModule.patchHologram(
+                        npc = npc,
+                        lines = (patch.value.lines as? NpcPatch.Set)?.value,
+                        lineHeight = (patch.value.lineHeight as? NpcPatch.Set)?.value,
+                        viewRange = (patch.value.viewRange as? NpcPatch.Set)?.value,
+                    )
+                ) return
                 val trait = npc.getOrAddTrait(HologramTrait::class.java)
                 (patch.value.lines as? NpcPatch.Set)?.let {
                     trait.clear()
@@ -580,6 +597,14 @@ object OpsNpcHandlers {
                 (patch.value.delayTicks as? NpcPatch.Set)?.let { trait.setDelay(it.value) }
                 (patch.value.range as? NpcPatch.Set)?.let { trait.setRange(it.value) }
             }
+        }
+        when (patch) {
+            NpcPatch.Absent -> Unit
+            NpcPatch.Clear -> ArcNpcHologramModule.onTextPatched(npc, false)
+            is NpcPatch.Set -> ArcNpcHologramModule.onTextPatched(
+                npc,
+                (patch.value.speechBubbles as? NpcPatch.Set)?.value,
+            )
         }
     }
 
@@ -730,11 +755,13 @@ object OpsNpcHandlers {
         return result
     }
 
-    private fun textSummary(trait: Text): Map<String, Any?> {
+    private fun textSummary(trait: Text, desiredSpeechBubbles: Boolean?): Map<String, Any?> {
         val key = MemoryDataKey()
         PersistenceLoader.save(trait, key)
         trait.save(key)
-        return textSummary(trait, key)
+        val result = textSummary(trait, key).toMutableMap()
+        desiredSpeechBubbles?.let { result["speechBubbles"] = it }
+        return result
     }
 
     internal fun textSummary(
