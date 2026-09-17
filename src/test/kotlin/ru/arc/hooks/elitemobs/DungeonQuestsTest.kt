@@ -28,7 +28,8 @@ class DungeonQuestsTest : FreeSpec({
         try {
             val owner = UUID.randomUUID()
             val objective = mockk<Objective>()
-            every { QuestsConfig.getQuestScoreboardProgressionLine(objective) } returns "Скелеты 3 / 10"
+            every { QuestsConfig.getQuestScoreboardProgressionLine(objective) } returns "&7➤ Скелеты 3 / 10"
+            every { objective.isObjectiveCompleted } returns false
             fun quest(name: String, uuid: UUID = owner, redeemed: Boolean = false): Quest {
                 val objectives = mockk<QuestObjectives>()
                 every { objectives.isTurnedIn } returns redeemed
@@ -48,9 +49,19 @@ class DungeonQuestsTest : FreeSpec({
             result.map { it.id } shouldBe listOf(tracked.questID, first.questID)
             result.first().tracked shouldBe true
             result.first().lines shouldBe listOf("Скелеты 3 / 10")
-            every { QuestsConfig.getQuestScoreboardProgressionLine(objective) } returns "Скелеты 4 / 10"
-            dungeonQuestInfo(listOf(first), owner, null).single().lines shouldBe listOf("Скелеты 4 / 10")
+            result.first().lineStates shouldBe listOf(DungeonQuestGoalState.ACTIVE)
+            every { objective.isObjectiveCompleted } returns true
+            every { QuestsConfig.getQuestScoreboardProgressionLine(objective) } returns "&a✔ Скелеты 10 / 10"
+            dungeonQuestInfo(listOf(first), owner, null).single().also {
+                it.lines shouldBe listOf("Скелеты 10 / 10")
+                it.lineStates shouldBe listOf(DungeonQuestGoalState.COMPLETE)
+            }
         } finally { unmockkStatic(QuestsConfig::class) }
+    }
+
+    "long scoreboard goals keep their counter when compacted" {
+        compactDungeonQuestText("Уничтожить очень длинное название монстра 123 / 500", 28) shouldBe
+            "Уничтожить очень… 123 / 500"
     }
 
     "tracking action sets the requested state and stays idempotent" {

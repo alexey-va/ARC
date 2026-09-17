@@ -24,6 +24,7 @@ internal class DungeonScoreboard(
     private val enabled: (Player) -> Boolean = { true },
     private val party: (Player) -> DungeonPartyView? = { dungeon.parties.current(it) },
     private val resource: (Player) -> DungeonCombatResource? = ::readDungeonCombatResource,
+    private val quest: (Player) -> DungeonQuestInfo? = { player -> readDungeonQuests(player)?.firstOrNull(DungeonQuestInfo::tracked) },
     private val crystals: (Player) -> String? = ::readDungeonCrystals,
 ) {
     private companion object { const val MAX_LINES = ArcSidebarFrame.MAX_ROWS }
@@ -44,9 +45,9 @@ internal class DungeonScoreboard(
             }
             present += player.uniqueId
             val visit = view.visit
-            val name = wrapLegacyScoreboardText(legacy.serialize(dungeonDisplayName(visit)), 32, 2)
-            val overview = buildList {
-                addAll(name)
+            val trackedQuest = if (view.participant) quest(player)?.takeIf(DungeonQuestInfo::tracked) else null
+            val overview = trackedQuest?.let(::questRows) ?: buildList {
+                addAll(wrapLegacyScoreboardText(legacy.serialize(dungeonDisplayName(visit)), 32, 2))
                 add(line(if (visit.instanced) "instanced" else "open", if (visit.instanced) "<#aaa49a>Отдельное прохождение" else "<#aaa49a>Открытый данж"))
                 add(when {
                     visit.waiting -> line("waiting", "<#f4bd6a>Сбор группы")
@@ -119,6 +120,43 @@ internal class DungeonScoreboard(
     internal fun clear() { snapshots.clear(); sidebar?.close() }
     private fun line(key: String, fallback: String, vararg values: Pair<String, Component>): String =
         legacy.serialize(dungeon.text("scoreboard.$key", fallback, *values))
+
+    private fun questRows(quest: DungeonQuestInfo): List<String> {
+        val rows = mutableListOf(wrapLegacyScoreboardText(line(
+            "quest-heading",
+            "<#c4a7e7>Задание <#aaa49a>· <#e8dfd2><name>",
+            "name" to Component.text(compactDungeonQuestText(quest.name, 22)),
+        ), 32, 1).single())
+        val goals = quest.lines.mapIndexed { index, text ->
+            text to quest.lineStates.getOrElse(index) { DungeonQuestGoalState.ACTIVE }
+        }.sortedBy { (_, state) -> when (state) {
+            DungeonQuestGoalState.ACTIVE -> 0
+            DungeonQuestGoalState.NEXT -> 1
+            DungeonQuestGoalState.COMPLETE -> 2
+        } }
+        val visible = if (goals.size <= 3) goals else goals.take(2)
+        visible.forEach { (text, state) ->
+            rows += line(
+                when (state) {
+                    DungeonQuestGoalState.ACTIVE -> "quest-goal-active"
+                    DungeonQuestGoalState.COMPLETE -> "quest-goal-complete"
+                    DungeonQuestGoalState.NEXT -> "quest-goal-next"
+                },
+                when (state) {
+                    DungeonQuestGoalState.ACTIVE -> "<#f4bd6a>○ <#e8dfd2><goal>"
+                    DungeonQuestGoalState.COMPLETE -> "<#9bd48d>✔ <#e8dfd2><goal>"
+                    DungeonQuestGoalState.NEXT -> "<#92bed8>▶ <#e8dfd2><goal>"
+                },
+                "goal" to Component.text(compactDungeonQuestText(text, 28)),
+            )
+        }
+        if (goals.size > visible.size) rows += line(
+            "quest-more",
+            "<#aaa49a>… ещё <value>",
+            "value" to Component.text(goals.size - visible.size),
+        )
+        return rows
+    }
 }
 
 internal fun joinDungeonScoreboardSections(vararg sections: List<String>): List<String> = buildList {

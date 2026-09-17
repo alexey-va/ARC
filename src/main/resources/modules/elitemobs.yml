@@ -805,6 +805,11 @@ dungeon-qol:
       payment-failed: '<#d7b486>Не удалось списать кристаллы. Покупка отменена.'
       grant-failed: '<#d7b486>Не удалось включить бонус. Кристаллы возвращены.'
   scoreboard:
+    quest-heading: '<#c4a7e7>Задание <#aaa49a>· <#e8dfd2><name>'
+    quest-goal-active: '<#f4bd6a>○ <#e8dfd2><goal>'
+    quest-goal-complete: '<#9bd48d>✔ <#e8dfd2><goal>'
+    quest-goal-next: '<#92bed8>▶ <#e8dfd2><goal>'
+    quest-more: '<#aaa49a>… ещё <value>'
     waiting: <#f4bd6a>Сбор группы
     ongoing: <#9bd48d>Прохождение идёт
     finished: <#aaa49a>Поход окончен

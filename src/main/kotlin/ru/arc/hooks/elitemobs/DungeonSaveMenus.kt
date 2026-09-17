@@ -109,12 +109,6 @@ internal class DungeonSaveMenus(
             body += PaperDialogBody(if (entries == null) text("quests.unavailable", "<#d7b486>Данные заданий ещё загружаются. Попробуйте обновить страницу.")
                 else text("quests.empty", "<#f2eee8>Принятых заданий пока нет. Поговорите с персонажами, которые предлагают задания."), 468)
         } else {
-            body += DialogTables.body(
-                listed.map { quest -> plain(readableQuestText(TextUtil.legacy(quest.name))) to questStatus(quest) },
-                headers = text("quests.list-heading", "Задание") to text("quests.state-heading", "Состояние"),
-                frame = DialogTables.Frame.EPIC,
-                width = 320,
-            )
             if (pageCount > 1) body += PaperDialogBody(text("quests.page", "<#f2eee8>Страница <current> из <total>",
                 "current" to Component.text(page + 1), "total" to Component.text(pageCount)), 468)
         }
@@ -148,7 +142,13 @@ internal class DungeonSaveMenus(
         )
         if (entry.complete) body += PaperDialogBody(text("quests.complete", "<#9bd48d>Цели выполнены — задание готово к сдаче."), 468)
         if (entry.lines.isEmpty()) body += PaperDialogBody(text("quests.no-progress", "<#f2eee8>Текущих целей нет."), 468)
-        else entry.lines.forEach { body += PaperDialogBody(plain(readableQuestText(TextUtil.legacy(it))), 468) }
+        else {
+            val checklist = Component.empty().children(entry.lines.flatMapIndexed { index, goal ->
+                val row = dungeonQuestChecklistLine(goal, entry.lineStates.getOrElse(index) { DungeonQuestGoalState.ACTIVE })
+                if (index == 0) listOf(row) else listOf(Component.newline(), row)
+            })
+            body += PaperDialogBody(checklist, 320)
+        }
         if (!entry.trackable) body += PaperDialogBody(text("quests.not-trackable", "<#d7b486>Это задание нельзя выбрать для отслеживания."), 468)
         feedback?.let { body += PaperDialogBody(plain(it), 468) }
         val buttons = buildList {

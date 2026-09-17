@@ -153,6 +153,55 @@ class DungeonScoreboardTest : FreeSpec({
         lines.last() shouldBe "Shift + F — меню данжа"
     }
 
+    "tracked quest replaces low-priority dungeon overview and keeps compact goal counters" {
+        val player = mockk<Player>()
+        val id = UUID.randomUUID()
+        every { player.uniqueId } returns id
+        val qol = mockk<EMDungeonQol>()
+        every { qol.scoreboardView(player) } returns DungeonScoreboardView(
+            DungeonVisit("run", name = "Крипта", stats = DungeonVisitStats(3, "normal", 12)), true)
+        every { qol.text(any(), any(), *anyVararg()) } answers {
+            val values = thirdArg<Array<out Pair<String, net.kyori.adventure.text.Component>>>().toMap()
+            val plain = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+            values.entries.fold(secondArg<String>()) { text, (key, value) -> text.replace("<$key>", plain.serialize(value)) }
+                .let(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()::deserialize)
+        }
+        val quest = DungeonQuestInfo(
+            UUID.randomUUID(), "Крушение!", tracked = true, complete = false, trackable = true,
+            lines = listOf(
+                "Скелеты 3 / 10",
+                "Найти очень длинно названный реликт 123 / 500",
+                "Вернуться к капитану",
+                "Открыть дверь",
+            ),
+            lineStates = listOf(
+                DungeonQuestGoalState.ACTIVE,
+                DungeonQuestGoalState.ACTIVE,
+                DungeonQuestGoalState.COMPLETE,
+                DungeonQuestGoalState.NEXT,
+            ),
+        )
+        val board = DungeonScoreboard(
+            qol,
+            party = { null },
+            resource = { DungeonCombatResource(ClassResourceType.FURY, 37, 100) },
+            crystals = { "42" },
+            quest = { quest },
+        )
+
+        board.refresh(listOf(player))
+
+        val lines = scoreboardLines(board, id)
+        lines.first() shouldBe "Задание · Крушение!"
+        lines.joinToString("\n") shouldContain "○ Скелеты 3 / 10"
+        lines.joinToString("\n") shouldContain "123 / 500"
+        lines.joinToString("\n") shouldContain "… ещё 2"
+        lines.joinToString("\n").contains("Крипта") shouldBe false
+        lines.joinToString("\n").contains("Прохождение идёт") shouldBe false
+        (lines.size <= 15) shouldBe true
+        lines.last() shouldBe "Shift + F — меню данжа"
+    }
+
     "section spacing has no leading or trailing rows and keeps every blank separator" {
         val rows = joinDungeonScoreboardSections(
             emptyList(),

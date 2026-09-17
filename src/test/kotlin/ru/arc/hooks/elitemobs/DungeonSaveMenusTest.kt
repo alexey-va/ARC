@@ -69,8 +69,10 @@ class DungeonSaveMenusTest : FreeSpec({
         val firstId = UUID.randomUUID()
         val secondId = UUID.randomUUID()
         var entries: List<DungeonQuestInfo>? = listOf(
-            DungeonQuestInfo(firstId, "Первый", true, false, true, listOf("Скелеты 3 / 10")),
-            DungeonQuestInfo(secondId, "Второй", false, true, true, listOf("Вернитесь к кузнецу")),
+            DungeonQuestInfo(firstId, "Первый", true, false, true, listOf("Скелеты 3 / 10"),
+                listOf(DungeonQuestGoalState.ACTIVE)),
+            DungeonQuestInfo(secondId, "Второй", false, true, true, listOf("Вернитесь к кузнецу"),
+                listOf(DungeonQuestGoalState.NEXT)),
         )
         val shown = mutableListOf<PaperDialogScreen>()
         val menus = DungeonSaveMenus(dungeon, readQuests = { entries }) { _, screen, _ -> shown += screen }
@@ -81,10 +83,20 @@ class DungeonSaveMenusTest : FreeSpec({
             .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)
         shown.last().buttons[1].label shouldBe Component.text("<#9bd48d>✔ <name> ›")
             .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)
+        shown.last().body.flatMap { body ->
+            val points = mutableListOf<Int>()
+            fun collect(component: Component) {
+                (component as? net.kyori.adventure.text.TextComponent)?.content()?.codePoints()?.forEach(points::add)
+                component.children().forEach(::collect)
+            }
+            collect(body.text)
+            points
+        }.none { it in 0xE540..0xE59E } shouldBe true
 
         shown.last().buttons.first { it.id.value == "quest_1" }.onClick.handle(mockk())
         shown.last().id shouldBe "dungeon.quest"
-        shown.last().body.any { net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(it.text) == "Вернитесь к кузнецу" } shouldBe true
+        shown.last().body.any { net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(it.text) == "▶ Вернитесь к кузнецу" } shouldBe true
+        shown.last().body.single { net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(it.text).startsWith("▶") }.width shouldBe 320
 
         entries = emptyList()
         shown.last().exitButton!!.onClick.handle(mockk())
