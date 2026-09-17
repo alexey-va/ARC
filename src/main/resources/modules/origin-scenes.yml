@@ -131,7 +131,7 @@ scenes:
         initial-delay-seconds: 42
         cooldown-min-seconds: 105
         cooldown-max-seconds: 155
-        step-ids: [call, stock, face-stock, open-stock, take-stock, close-stock, furnace, face-fire, heat, flame, hot, call-doran, doran-stage, edgar-stage, face-work, doran-face-work, clear-hand, place-hot, doran-tool, rough, rough-shape, edgar-tool, fine, doran-finish, final-shape, bloom, ring, inspect, collect, carry-hot, quench, face-water, steam, splash, hiss, result, return, present, verdict]
+        step-ids: [call, stock, face-stock, open-stock, take-stock, close-stock, furnace, face-fire, heat, flame, hot, call-doran, doran-stage, edgar-stage, face-work, doran-face-work, clear-hand, place-hot, doran-tool, rough, rough-shape, edgar-tool, fine, blade-shape, forge-guard, guard, forge-grip, grip, pommel, doran-finish, bloom, ring, inspect, collect-blade, collect-guard, collect-grip, collect-pommel, carry-hot, quench, face-water, steam, splash, hiss, result, return, present, verdict]
         steps:
           call: {type: SPEECH, actor-id: 349, text: "Доран, большую заготовку. Покажем, как держится настоящий ритм."}
           stock: {type: MOVE, actor-id: 349, anchor: stock-stand, route-profile: floor, timeout-ticks: 260}
@@ -150,19 +150,27 @@ scenes:
           face-work: {type: LOOK_AT_ANCHOR, actor-id: 349, anchor: master-anvil}
           doran-face-work: {type: LOOK_AT_ANCHOR, actor-id: 358, anchor: master-anvil}
           clear-hand: {type: EQUIP, actor-id: 349, material: AIR}
-          place-hot: {type: BLOCK_DISPLAY, key: edgar-masterpiece, surface: master-work-surface, material: MAGMA_BLOCK, origin: BOTTOM_CENTER, scale: "0.34,0.16,0.28"}
+          place-hot: {type: BLOCK_DISPLAY, key: edgar-blade, surface: master-work-surface, material: MAGMA_BLOCK, origin: BOTTOM_CENTER, scale: "0.22,0.15,0.32"}
           doran-tool: {type: EQUIP, actor-id: 358, material: MACE}
           rough: {type: SWING, actor-id: 358, repetitions: 6, period-ticks: 12, feedback-anchor: master-anvil, particle: LAVA, particle-count: 2, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 1, sound-volume: 0.34, sound-pitch: 0.82}
-          rough-shape: {type: BLOCK_DISPLAY, key: edgar-masterpiece, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, scale: "0.52,0.10,0.34", interpolation-ticks: 8}
+          rough-shape: {type: BLOCK_DISPLAY, key: edgar-blade, surface: master-work-surface, material: MAGMA_BLOCK, origin: BOTTOM_CENTER, offset: "0.01,0,-0.04", scale: "0.17,0.09,0.58", rotation-y-degrees: -12, interpolation-ticks: 8}
           edgar-tool: {type: EQUIP, actor-id: 349, material: MACE}
           fine: {type: SWING, actor-id: 349, repetitions: 8, period-ticks: 9, feedback-anchor: master-anvil, particle: ELECTRIC_SPARK, particle-count: 4, particle-every: 1, sound: BLOCK_ANVIL_USE, sound-every: 2, sound-volume: 0.38, sound-pitch: 1.26}
+          blade-shape: {type: BLOCK_DISPLAY, key: edgar-blade, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0.017,0.01,-0.08", scale: "0.12,0.055,0.72", rotation-y-degrees: -12, interpolation-ticks: 10}
+          forge-guard: {type: SWING, actor-id: 349, repetitions: 3, period-ticks: 9, feedback-anchor: master-anvil, particle: ELECTRIC_SPARK, particle-count: 5, particle-every: 1, sound: BLOCK_ANVIL_USE, sound-every: 1, sound-volume: 0.36, sound-pitch: 1.38}
+          guard: {type: BLOCK_DISPLAY, key: edgar-guard, surface: master-work-surface, material: COPPER_BLOCK, origin: BOTTOM_CENTER, offset: "-0.052,0.012,0.25", scale: "0.36,0.065,0.065", rotation-y-degrees: -12, interpolation-ticks: 6}
+          forge-grip: {type: SWING, actor-id: 358, repetitions: 3, period-ticks: 10, feedback-anchor: master-anvil, particle: CRIT, particle-count: 4, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 1, sound-volume: 0.32, sound-pitch: 1.12}
+          grip: {type: BLOCK_DISPLAY, key: edgar-grip, surface: master-work-surface, material: DARK_OAK_PLANKS, origin: BOTTOM_CENTER, offset: "-0.079,0.012,0.38", scale: "0.075,0.07,0.22", rotation-y-degrees: -12, interpolation-ticks: 6}
+          pommel: {type: BLOCK_DISPLAY, key: edgar-pommel, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.108,0.012,0.52", scale: "0.14,0.08,0.075", rotation-y-degrees: -12, interpolation-ticks: 6}
           doran-finish: {type: SWING, actor-id: 358, repetitions: 4, period-ticks: 14, feedback-anchor: master-anvil, particle: CRIT, particle-count: 5, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 1, sound-volume: 0.44, sound-pitch: 0.92}
-          final-shape: {type: BLOCK_DISPLAY, key: edgar-masterpiece, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, scale: "0.68,0.06,0.42", interpolation-ticks: 10}
           bloom: {type: PARTICLE, anchor: master-anvil, particle: ELECTRIC_SPARK, count: 24}
           ring: {type: SOUND, anchor: master-anvil, sound: BLOCK_ANVIL_USE, volume: 0.62, pitch: 1.42}
           inspect: {type: WAIT, ticks: 28}
-          collect: {type: REMOVE_DISPLAY, key: edgar-masterpiece}
-          carry-hot: {type: EQUIP, actor-id: 349, material: MAGMA_BLOCK}
+          collect-blade: {type: REMOVE_DISPLAY, key: edgar-blade}
+          collect-guard: {type: REMOVE_DISPLAY, key: edgar-guard}
+          collect-grip: {type: REMOVE_DISPLAY, key: edgar-grip}
+          collect-pommel: {type: REMOVE_DISPLAY, key: edgar-pommel}
+          carry-hot: {type: EQUIP, actor-id: 349, material: IRON_SWORD}
           quench: {type: MOVE, actor-id: 349, anchor: quench-stand, route-profile: floor, timeout-ticks: 260}
           face-water: {type: LOOK_AT_ANCHOR, actor-id: 349, anchor: quench-cauldron}
           steam: {type: PARTICLE, anchor: quench-cauldron, particle: CLOUD, count: 28}
@@ -299,7 +307,7 @@ scenes:
         initial-delay-seconds: 22
         cooldown-min-seconds: 42
         cooldown-max-seconds: 64
-        step-ids: [stock, face-stock, open-stock, reach-stock, ore, close-stock, furnace, face-fire, feed, flame, crackle, heat, hot-billet, draw, quench, face-water, steam, hiss, cooled-ingot, inspect, result-stock, face-result-stock, open-result-stock, store, clear, close-result-stock, line]
+        step-ids: [stock, face-stock, open-stock, reach-stock, ore, close-stock, furnace, face-fire, feed, flame, crackle, heat, hot-billet, draw, casting, face-mould, clear-hand, mould, crucible, molten-cap, raise-crucible, pour, stream-a, fill-start, stream-b, fill-grow, stream-c, fill-full, pour-sound, pour-pause, clear-stream-a, clear-stream-b, clear-stream-c, clear-molten-cap, clear-crucible, cool-smoke, cool-hiss, cool-wait, cooled-casting, break-mould, clear-mould, inspect, collect-casting, cooled-ingot, result-stock, face-result-stock, open-result-stock, store, clear, close-result-stock, line]
         steps:
           stock: {type: MOVE, actor-id: 362, anchor: stock-stand, route-profile: floor, timeout-ticks: 220}
           face-stock: {type: LOOK_AT_ANCHOR, actor-id: 362, anchor: stock-chest}
@@ -315,12 +323,36 @@ scenes:
           heat: {type: WAIT, ticks: 50}
           hot-billet: {type: EQUIP, actor-id: 362, material: MAGMA_BLOCK}
           draw: {type: SWING, actor-id: 362, repetitions: 2, period-ticks: 10}
-          quench: {type: MOVE, actor-id: 362, anchor: quench-stand, route-profile: floor, timeout-ticks: 180}
-          face-water: {type: LOOK_AT_ANCHOR, actor-id: 362, anchor: quench-cauldron}
-          steam: {type: PARTICLE, anchor: quench-cauldron, particle: CLOUD, count: 14}
-          hiss: {type: SOUND, anchor: quench-cauldron, sound: BLOCK_FIRE_EXTINGUISH, volume: 0.44, pitch: 1.2}
+          casting: {type: MOVE, actor-id: 362, anchor: quench-stand, route-profile: floor, timeout-ticks: 180}
+          face-mould: {type: LOOK_AT_ANCHOR, actor-id: 362, anchor: quench-cauldron}
+          clear-hand: {type: EQUIP, actor-id: 362, material: AIR}
+          mould: {type: BLOCK_DISPLAY, key: yar-mould, anchor: quench-cauldron, material: POLISHED_BLACKSTONE, origin: CENTER, offset: "0,0.26,0", scale: "0.52,0.13,0.34", rotation-y-degrees: 8, interpolation-ticks: 6}
+          crucible: {type: BLOCK_DISPLAY, key: yar-crucible, anchor: quench-cauldron, material: POLISHED_BLACKSTONE, origin: CENTER, offset: "-0.44,0.82,-0.03", scale: "0.40,0.24,0.40", rotation-y-degrees: -16, interpolation-ticks: 8}
+          molten-cap: {type: BLOCK_DISPLAY, key: yar-molten-cap, anchor: quench-cauldron, material: MAGMA_BLOCK, origin: CENTER, offset: "-0.44,0.95,-0.03", scale: "0.31,0.035,0.31", rotation-y-degrees: -16, interpolation-ticks: 6}
+          raise-crucible: {type: WAIT, ticks: 18}
+          pour: {type: SWING, actor-id: 362, repetitions: 3, period-ticks: 9}
+          stream-a: {type: BLOCK_DISPLAY, key: yar-stream-a, anchor: quench-cauldron, material: MAGMA_BLOCK, origin: CENTER, offset: "-0.25,0.64,-0.01", scale: "0.075,0.32,0.075", rotation-y-degrees: -18, interpolation-ticks: 4}
+          fill-start: {type: BLOCK_DISPLAY, key: yar-casting, anchor: quench-cauldron, material: MAGMA_BLOCK, origin: BOTTOM_CENTER, offset: "0,0.34,0", scale: "0.10,0.055,0.15", rotation-y-degrees: 8, interpolation-ticks: 5}
+          stream-b: {type: BLOCK_DISPLAY, key: yar-stream-b, anchor: quench-cauldron, material: MAGMA_BLOCK, origin: CENTER, offset: "-0.13,0.51,0", scale: "0.07,0.28,0.07", rotation-y-degrees: -8, interpolation-ticks: 4}
+          fill-grow: {type: BLOCK_DISPLAY, key: yar-casting, anchor: quench-cauldron, material: MAGMA_BLOCK, origin: BOTTOM_CENTER, offset: "0,0.34,0", scale: "0.25,0.06,0.16", rotation-y-degrees: 8, interpolation-ticks: 6}
+          stream-c: {type: BLOCK_DISPLAY, key: yar-stream-c, anchor: quench-cauldron, material: MAGMA_BLOCK, origin: CENTER, offset: "-0.04,0.43,0.01", scale: "0.065,0.22,0.065", rotation-y-degrees: 5, interpolation-ticks: 4}
+          fill-full: {type: BLOCK_DISPLAY, key: yar-casting, anchor: quench-cauldron, material: MAGMA_BLOCK, origin: BOTTOM_CENTER, offset: "0,0.34,0", scale: "0.40,0.065,0.18", rotation-y-degrees: 8, interpolation-ticks: 7}
+          pour-sound: {type: SOUND, anchor: quench-cauldron, sound: BLOCK_LAVA_POP, volume: 0.56, pitch: 0.78}
+          pour-pause: {type: WAIT, ticks: 22}
+          clear-stream-a: {type: REMOVE_DISPLAY, key: yar-stream-a}
+          clear-stream-b: {type: REMOVE_DISPLAY, key: yar-stream-b}
+          clear-stream-c: {type: REMOVE_DISPLAY, key: yar-stream-c}
+          clear-molten-cap: {type: REMOVE_DISPLAY, key: yar-molten-cap}
+          clear-crucible: {type: REMOVE_DISPLAY, key: yar-crucible}
+          cool-smoke: {type: PARTICLE, anchor: quench-cauldron, particle: CLOUD, count: 24}
+          cool-hiss: {type: SOUND, anchor: quench-cauldron, sound: BLOCK_FIRE_EXTINGUISH, volume: 0.58, pitch: 0.92}
+          cool-wait: {type: WAIT, ticks: 34}
+          cooled-casting: {type: BLOCK_DISPLAY, key: yar-casting, anchor: quench-cauldron, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0,0.34,0", scale: "0.40,0.065,0.18", rotation-y-degrees: 8, interpolation-ticks: 10}
+          break-mould: {type: SOUND, anchor: quench-cauldron, sound: BLOCK_DEEPSLATE_TILES_BREAK, volume: 0.48, pitch: 0.84}
+          clear-mould: {type: REMOVE_DISPLAY, key: yar-mould}
           cooled-ingot: {type: EQUIP, actor-id: 362, material: IRON_INGOT}
           inspect: {type: WAIT, ticks: 30}
+          collect-casting: {type: REMOVE_DISPLAY, key: yar-casting}
           result-stock: {type: MOVE, actor-id: 362, anchor: stock-stand, route-profile: floor, timeout-ticks: 220}
           face-result-stock: {type: LOOK_AT_ANCHOR, actor-id: 362, anchor: stock-chest}
           open-result-stock: {type: CONTAINER_LID, actor-id: 362, anchor: stock-chest, state: OPEN}

@@ -354,24 +354,21 @@ private class OriginSceneService(
     private fun setBlockDisplay(running: ActiveOriginSceneCycle, step: OriginSceneStep.BlockDisplay): Boolean {
         val world = Bukkit.getWorld(plan.world) ?: return false
         val material = Material.matchMaterial(step.material)?.takeIf(Material::isBlock) ?: return false
-        val surface = running.scene.propSurfaces.getValue(step.surface)
-        val surfacePoint = surface.resolve(world)
-        if (surfacePoint == null) {
+        val surface = step.surface?.let(running.scene.propSurfaces::getValue)
+        val propAnchor = surface?.resolve(world) ?: step.anchor?.let(running.scene.anchors::getValue)
+        if (propAnchor == null) {
             warn(
-                "ORIGIN_SCENE phase=PROP_SURFACE_MISSING scene={} cycle={} key={} surface={} near={},{},{} materials={}",
+                "ORIGIN_SCENE phase=PROP_ANCHOR_MISSING scene={} cycle={} key={} surface={} anchor={}",
                 running.scene.id,
                 running.cycle.id,
                 step.key,
-                step.surface,
-                surface.near.x,
-                surface.near.y,
-                surface.near.z,
-                surface.materials.joinToString(",") { it.name },
+                step.surface ?: "none",
+                step.anchor ?: "none",
             )
             return false
         }
         val resolved = OriginScenePropContract.resolve(
-            surfacePoint,
+            propAnchor,
             step.origin,
             step.offset,
             step.scale,
@@ -399,12 +396,12 @@ private class OriginSceneService(
             AxisAngle4f(),
         )
         info(
-            "ORIGIN_SCENE phase=PROP_{} scene={} cycle={} key={} surface={} actual={},{},{} origin={}",
+            "ORIGIN_SCENE phase=PROP_{} scene={} cycle={} key={} support={} actual={},{},{} origin={}",
             if (created) "SPAWNED" else "UPDATED",
             running.scene.id,
             running.cycle.id,
             step.key,
-            step.surface,
+            step.surface?.let { "surface:$it" } ?: "anchor:${step.anchor}",
             resolved.x,
             resolved.y,
             resolved.z,

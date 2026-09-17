@@ -62,7 +62,8 @@ internal sealed interface OriginSceneStep {
 
     data class BlockDisplay(
         val key: String,
-        val surface: String,
+        val surface: String?,
+        val anchor: String?,
         val material: String,
         val origin: OriginScenePropOrigin,
         val offset: OriginSceneVector,
@@ -150,12 +151,20 @@ internal data class OriginSceneDefinition(
                     is OriginSceneStep.LookAtActor -> require(step.targetActorId in actors)
                     is OriginSceneStep.Swing -> require(step.feedbackAnchor == null || step.feedbackAnchor in anchors)
                     is OriginSceneStep.BlockDisplay -> {
-                        require(step.surface in propSurfaces) { "scene $id cycle ${cycle.id} references prop surface ${step.surface}" }
+                        require((step.surface == null) != (step.anchor == null)) {
+                            "scene $id cycle ${cycle.id} prop ${step.key} must reference exactly one surface or anchor"
+                        }
+                        step.surface?.let { surface ->
+                            require(surface in propSurfaces) { "scene $id cycle ${cycle.id} references prop surface $surface" }
+                        }
+                        step.anchor?.let { anchor ->
+                            require(anchor in anchors) { "scene $id cycle ${cycle.id} references prop anchor $anchor" }
+                        }
                         require(Material.matchMaterial(step.material)?.takeIf(Material::isBlock) != null) {
                             "scene $id cycle ${cycle.id} prop ${step.key} has invalid block material ${step.material}"
                         }
                         OriginScenePropContract.resolve(
-                            propSurfaces.getValue(step.surface).near,
+                            step.surface?.let { propSurfaces.getValue(it).near } ?: anchors.getValue(requireNotNull(step.anchor)),
                             step.origin,
                             step.offset,
                             step.scale,
@@ -288,7 +297,8 @@ internal data class OriginScenePlan(
                 val scale = vector(source.string("$root.scale", "0.5,0.1,0.3"), "$root.scale")
                 OriginSceneStep.BlockDisplay(
                     key = source.string("$root.key"),
-                    surface = source.string("$root.surface"),
+                    surface = source.string("$root.surface", "").takeIf(String::isNotBlank),
+                    anchor = source.string("$root.anchor", "").takeIf(String::isNotBlank),
                     material = source.string("$root.material"),
                     origin = OriginScenePropOrigin.valueOf(source.string("$root.origin").uppercase()),
                     offset = vector(source.string("$root.offset", "0,0,0"), "$root.offset"),

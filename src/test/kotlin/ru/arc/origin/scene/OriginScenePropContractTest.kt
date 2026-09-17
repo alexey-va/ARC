@@ -67,6 +67,7 @@ class OriginScenePropContractTest : StringSpec({
                     OriginSceneStep.BlockDisplay(
                         key = "unfinished",
                         surface = "surface",
+                        anchor = null,
                         material = "IRON_BLOCK",
                         origin = OriginScenePropOrigin.BOTTOM_CENTER,
                         offset = OriginSceneVector.ZERO,
