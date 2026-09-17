@@ -208,7 +208,7 @@ scenes:
         initial-delay-seconds: 5
         cooldown-min-seconds: 12
         cooldown-max-seconds: 20
-        step-ids: [stock, face-stock, open-stock, reach-stock, take, close-stock, bench, face-anvil, stencil, press-stencil, blank, place-blank, clear-hand, flatten, shape-blank, carve-x, consume-x, x-left, x-right, carve-u, consume-u, u-left, u-right, u-tail, carve-short-i, consume-short-i, short-i-left, short-i-right, short-i-diagonal, short-i-breve, sparks, ring, inspect, collect-x-left, collect-x-right, collect-u-left, collect-u-right, collect-u-tail, collect-short-i-left, collect-short-i-right, collect-short-i-diagonal, collect-short-i-breve, result, result-stock, face-result-stock, open-result-stock, store, clear, close-result-stock, line]
+        step-ids: [stock, face-stock, open-stock, reach-stock, take, close-stock, bench, face-anvil, stencil, press-stencil, blank, place-blank, clear-hand, flatten, shape-blank, carve-x, consume-x, x-left, x-right, carve-u, consume-u, u-left, u-right, carve-short-i, consume-short-i, short-i-left, short-i-right, short-i-diagonal, short-i-breve, sparks, ring, inspect, collect-x-left, collect-x-right, collect-u-left, collect-u-right, collect-short-i-left, collect-short-i-right, collect-short-i-diagonal, collect-short-i-breve, result, result-stock, face-result-stock, open-result-stock, store, clear, close-result-stock, line]
         steps:
           stock: {type: MOVE, actor-id: 354, anchor: stock-stand, route-profile: floor, timeout-ticks: 220}
           face-stock: {type: LOOK_AT_ANCHOR, actor-id: 354, anchor: stock-chest}
@@ -231,9 +231,8 @@ scenes:
           x-right: {type: BLOCK_DISPLAY, key: luka-letter-x-right, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.235,0.012,0", scale: "0.035,0.055,0.245", rotation-y-degrees: -38, interpolation-ticks: 4}
           carve-u: {type: SWING, actor-id: 354, repetitions: 5, period-ticks: 8, feedback-surface: apprentice-work-surface, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 2, sound-volume: 0.24, sound-pitch: 1.60}
           consume-u: {type: BLOCK_DISPLAY, key: luka-blank, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0.22,0,0", scale: "0.20,0.035,0.34", interpolation-ticks: 5}
-          u-left: {type: BLOCK_DISPLAY, key: luka-letter-u-left, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.070,0.012,-0.060", scale: "0.032,0.055,0.170", rotation-y-degrees: -34, interpolation-ticks: 4}
-          u-right: {type: BLOCK_DISPLAY, key: luka-letter-u-right, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0.018,0.012,0.010", scale: "0.034,0.055,0.295", rotation-y-degrees: 34, interpolation-ticks: 4}
-          u-tail: {type: BLOCK_DISPLAY, key: luka-letter-u-tail, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.080,0.012,0.125", scale: "0.030,0.055,0.105", rotation-y-degrees: 34, interpolation-ticks: 4}
+          u-left: {type: BLOCK_DISPLAY, key: luka-letter-u-left, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.058,0.012,-0.060", scale: "0.032,0.055,0.205", rotation-y-degrees: -35, interpolation-ticks: 4}
+          u-right: {type: BLOCK_DISPLAY, key: luka-letter-u-right, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.012,0.012,0.035", scale: "0.034,0.055,0.390", rotation-y-degrees: 35, interpolation-ticks: 4}
           carve-short-i: {type: SWING, actor-id: 354, repetitions: 6, period-ticks: 8, feedback-surface: apprentice-work-surface, particle: ELECTRIC_SPARK, particle-count: 4, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 2, sound-volume: 0.25, sound-pitch: 1.66}
           consume-short-i: {type: REMOVE_DISPLAY, key: luka-blank}
           short-i-left: {type: BLOCK_DISPLAY, key: luka-letter-short-i-left, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0.165,0.012,0.015", scale: "0.032,0.055,0.235", interpolation-ticks: 4}
@@ -247,7 +246,6 @@ scenes:
           collect-x-right: {type: REMOVE_DISPLAY, key: luka-letter-x-right}
           collect-u-left: {type: REMOVE_DISPLAY, key: luka-letter-u-left}
           collect-u-right: {type: REMOVE_DISPLAY, key: luka-letter-u-right}
-          collect-u-tail: {type: REMOVE_DISPLAY, key: luka-letter-u-tail}
           collect-short-i-left: {type: REMOVE_DISPLAY, key: luka-letter-short-i-left}
           collect-short-i-right: {type: REMOVE_DISPLAY, key: luka-letter-short-i-right}
           collect-short-i-diagonal: {type: REMOVE_DISPLAY, key: luka-letter-short-i-diagonal}
@@ -265,7 +263,7 @@ scenes:
         initial-delay-seconds: 34
         cooldown-min-seconds: 26
         cooldown-max-seconds: 44
-        step-ids: [face, blank, clear-hand, tool, flatten, plate, carve, zh-left, zh-mid, zh-right, o-left, o-right, o-top, o-bottom, p-left, p-right, p-top, a-left, a-right, a-bar, finish, inspect, clear-plate, clear-zh-left, clear-zh-mid, clear-zh-right, clear-o-left, clear-o-right, clear-o-top, clear-o-bottom, clear-p-left, clear-p-right, clear-p-top, clear-a-left, clear-a-right, clear-a-bar, result, line]
+        step-ids: [face, blank, clear-hand, tool, flatten, plate, carve, consume-plate, zh-left, zh-mid, zh-right, o-left, o-right, o-top, o-bottom, p-left, p-right, p-top, a-left, a-right, a-bar, finish, inspect, clear-zh-left, clear-zh-mid, clear-zh-right, clear-o-left, clear-o-right, clear-o-top, clear-o-bottom, clear-p-left, clear-p-right, clear-p-top, clear-a-left, clear-a-right, clear-a-bar, result, line]
         steps:
           face: {type: LOOK_AT_SURFACE, actor-id: 354, surface: apprentice-work-surface}
           blank: {type: BLOCK_DISPLAY, key: luka-jopa-plate, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, scale: "0.88,0.085,0.38"}
@@ -274,6 +272,7 @@ scenes:
           flatten: {type: SWING, actor-id: 354, repetitions: 7, period-ticks: 9, feedback-surface: apprentice-work-surface, particle: ELECTRIC_SPARK, particle-count: 3, sound: BLOCK_ANVIL_LAND, sound-every: 2, sound-volume: 0.25, sound-pitch: 1.48}
           plate: {type: BLOCK_DISPLAY, key: luka-jopa-plate, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, scale: "0.82,0.035,0.32", interpolation-ticks: 8}
           carve: {type: SWING, actor-id: 354, repetitions: 12, period-ticks: 7, feedback-surface: apprentice-work-surface, particle: ELECTRIC_SPARK, particle-count: 4, sound: BLOCK_ANVIL_USE, sound-every: 2, sound-volume: 0.27, sound-pitch: 1.62}
+          consume-plate: {type: REMOVE_DISPLAY, key: luka-jopa-plate}
           zh-left: {type: BLOCK_DISPLAY, key: luka-jopa-zh-left, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.315,0.012,0", scale: "0.026,0.055,0.245", rotation-y-degrees: 38, interpolation-ticks: 4}
           zh-mid: {type: BLOCK_DISPLAY, key: luka-jopa-zh-mid, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.315,0.012,0", scale: "0.026,0.055,0.245", interpolation-ticks: 4}
           zh-right: {type: BLOCK_DISPLAY, key: luka-jopa-zh-right, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.315,0.012,0", scale: "0.026,0.055,0.245", rotation-y-degrees: -38, interpolation-ticks: 4}
@@ -289,7 +288,6 @@ scenes:
           a-bar: {type: BLOCK_DISPLAY, key: luka-jopa-a-bar, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0.320,0.012,0.025", scale: "0.105,0.055,0.024", interpolation-ticks: 4}
           finish: {type: SOUND, anchor: apprentice-anvil, sound: BLOCK_ANVIL_USE, volume: 0.42, pitch: 1.46}
           inspect: {type: WAIT, ticks: 30}
-          clear-plate: {type: REMOVE_DISPLAY, key: luka-jopa-plate}
           clear-zh-left: {type: REMOVE_DISPLAY, key: luka-jopa-zh-left}
           clear-zh-mid: {type: REMOVE_DISPLAY, key: luka-jopa-zh-mid}
           clear-zh-right: {type: REMOVE_DISPLAY, key: luka-jopa-zh-right}

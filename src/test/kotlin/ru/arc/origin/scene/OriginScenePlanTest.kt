@@ -67,7 +67,6 @@ class OriginScenePlanTest : FreeSpec({
                 "luka-letter-x-right",
                 "luka-letter-u-left",
                 "luka-letter-u-right",
-                "luka-letter-u-tail",
                 "luka-letter-short-i-left",
                 "luka-letter-short-i-right",
                 "luka-letter-short-i-diagonal",
@@ -76,7 +75,8 @@ class OriginScenePlanTest : FreeSpec({
         luka.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().all {
             it.surface == "apprentice-work-surface" && it.origin == OriginScenePropOrigin.BOTTOM_CENTER
         } shouldBe true
-        luka.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().count { it.rotationYDegrees != 0f } shouldBe 6
+        luka.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().count { it.rotationYDegrees != 0f } shouldBe 5
+        luka.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().map { it.key }.count { it.startsWith("luka-letter-u-") } shouldBe 2
         luka.steps.filterIsInstance<OriginSceneStep.RemoveDisplay>().map { it.key }.toSet() shouldBe
             luka.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().map { it.key }.toSet()
         val alternate = scene.cycles.single { it.id == "apprentice-engraving-jopa" }
