@@ -9,6 +9,24 @@ import org.bukkit.configuration.file.YamlConfiguration
 import java.io.InputStreamReader
 
 class ArcBaseSidebarConfigTest : StringSpec({
+    "scoreboard hides clients below the configured minimum protocol" {
+        isSidebarClientSupported(763, 774) shouldBe false
+        isSidebarClientSupported(774, 774) shouldBe true
+        isSidebarClientSupported(776, 774) shouldBe true
+    }
+
+    "bundled scoreboard uses the server native protocol as its minimum" {
+        val stream = requireNotNull(javaClass.classLoader.getResourceAsStream("modules/scoreboard.yml"))
+        val config = stream.use { YamlConfiguration.loadConfiguration(InputStreamReader(it)) }
+
+        config.getInt("minimum-client-protocol") shouldBe 774
+    }
+
+    "scoreboard keeps clients with an unknown protocol on the existing path" {
+        isSidebarClientSupported(null, 774) shouldBe true
+        isSidebarClientSupported(-1, 774) shouldBe true
+    }
+
     "bundled scoreboard preserves every legacy selection with valid dynamic row counts" {
         val stream = requireNotNull(javaClass.classLoader.getResourceAsStream("modules/scoreboard.yml"))
         val config = stream.use { YamlConfiguration.loadConfiguration(InputStreamReader(it)) }

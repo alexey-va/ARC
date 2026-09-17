@@ -12,6 +12,7 @@ import org.bukkit.entity.Player
 import org.bukkit.scheduler.BukkitTask
 import ru.arc.ARC
 import ru.arc.config.ConfigManager
+import ru.arc.hooks.HookRegistry
 import ru.arc.paper.api.ArcSidebarFrame
 import ru.arc.paper.api.ArcSidebarHandle
 import ru.arc.paper.api.ArcSidebarPriorities
@@ -40,7 +41,7 @@ internal class ArcBaseSidebar(
         val next = linkedSetOf<UUID>()
         online.values.forEach { player ->
             val style = selectedSidebarStyle(player)
-            if (!enabledOnCurrentServer() || style == null) {
+            if (!enabledOnCurrentServer() || !supportsSidebarClient(player) || style == null) {
                 source.hide(player)
                 return@forEach
             }
@@ -88,6 +89,12 @@ internal class ArcBaseSidebar(
             player.hasPermission(if (index == 1) "tab.scoreboard" else "tab.scoreboard$index")
         }?.let { index -> "style${index.toString().padStart(2, '0')}" }
 
+    private fun supportsSidebarClient(player: Player): Boolean =
+        isSidebarClientSupported(
+            HookRegistry.viaVersionHook?.getPlayerVersion(player),
+            config.int("minimum-client-protocol", DEFAULT_MINIMUM_CLIENT_PROTOCOL).coerceAtLeast(0),
+        )
+
     private fun render(player: Player, template: String): Component {
         var rendered = replaceNativePlaceholders(template, player, ARC.serverName.orEmpty())
         rendered = resolvePlaceholder(player, rendered)
@@ -109,6 +116,7 @@ internal class ArcBaseSidebar(
     companion object {
         private const val RESOURCE = "modules/scoreboard.yml"
         private const val STYLE_COUNT = 20
+        private const val DEFAULT_MINIMUM_CLIENT_PROTOCOL = 774
         private val UNRESOLVED_PLACEHOLDER = Regex("%[^%\r\n]+%")
         private val DATE = DateTimeFormatter.ofPattern("dd.MM.yyyy")
         private val TIME = DateTimeFormatter.ofPattern("HH:mm")
@@ -162,6 +170,11 @@ internal class ArcBaseSidebar(
         private const val MEBIBYTE = 1024L * 1024L
     }
 }
+
+internal fun isSidebarClientSupported(
+    clientProtocol: Int?,
+    minimumClientProtocol: Int,
+): Boolean = clientProtocol == null || clientProtocol < 0 || clientProtocol >= minimumClientProtocol
 
 internal fun resolveOptionalSidebarLine(
     template: String,

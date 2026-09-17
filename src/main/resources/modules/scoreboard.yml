@@ -2,6 +2,8 @@
 # frames through ArcSidebarService; these layouts are the lowest-priority base.
 enabled: true
 enabled-servers: [spawn, survival]
+# Clients below the server's native protocol do not receive the native sidebar.
+minimum-client-protocol: 774
 title: '&#B22222&lRus&f&lCrafting'
 
 # Existing tab.scoreboard[2..20] permissions are intentionally preserved so the
