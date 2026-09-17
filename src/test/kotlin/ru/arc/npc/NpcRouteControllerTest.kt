@@ -97,6 +97,29 @@ class NpcRouteControllerTest : FreeSpec({
         path shouldBe listOf(start, NpcRouteCell(1, 0))
     }
 
+    "resolved snapped endpoint is accepted independently of the authored blocked anchor" {
+        isNpcRouteResolvedEndpointReached(1.7, 0.5, NpcRouteCell(1, 0), margin = 0.35) shouldBe true
+        isNpcRouteResolvedEndpointReached(4.5, 0.5, NpcRouteCell(1, 0), margin = 0.35) shouldBe false
+    }
+
+    "terminal outcome is consumed once" {
+        val outcomes = NpcRouteOutcomeTracker()
+
+        outcomes.record(351, NpcRouteOutcome(successful = true, phase = "FINISHED"))
+
+        outcomes.consume(351) shouldBe NpcRouteOutcome(successful = true, phase = "FINISHED")
+        outcomes.consume(351) shouldBe null
+    }
+
+    "new route clears stale terminal failure" {
+        val outcomes = NpcRouteOutcomeTracker()
+        outcomes.record(362, NpcRouteOutcome(successful = false, phase = "STALLED", reason = "no-progress"))
+
+        outcomes.reset(362)
+
+        outcomes.consume(362) shouldBe null
+    }
+
     "scene obstacle cells are treated as hard walls" {
         val profile = NpcRouteProfile(
             id = "hall",

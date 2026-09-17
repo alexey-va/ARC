@@ -301,10 +301,7 @@ private class OriginSceneService(
             if (hasDeniedFlag(running)) done(false)
             else if (!actor.isSpawned) done(false)
             else if (!routeController.isNavigating(actor)) {
-                val actual = actor.entity.location
-                val dx = actual.x - destination.x
-                val dz = actual.z - destination.z
-                done(actual.world == destination.world && dx * dx + dz * dz <= 2.25)
+                done(routeController.consumeOutcome(actor)?.successful == true)
             }
             else if (remainingTicks <= 2L) done(false)
             else awaitRoute(running, actor, destination, remainingTicks - 2L, done)
@@ -528,11 +525,17 @@ private class OriginSceneService(
 
     private fun logRouteEvent(event: NpcRouteEvent) {
         info(
-            "ORIGIN_SCENE phase=ROUTE_{} profile={} npc={} cells={} reason={}",
+            "ORIGIN_SCENE phase=ROUTE_{} profile={} npc={} cells={} actual={},{},{} target={},{},{} reason={}",
             event.phase,
             event.profileId,
             event.npcId,
             event.cells,
+            event.actual.x,
+            event.actual.y,
+            event.actual.z,
+            event.target.x,
+            event.target.y,
+            event.target.z,
             event.reason ?: "none",
         )
     }

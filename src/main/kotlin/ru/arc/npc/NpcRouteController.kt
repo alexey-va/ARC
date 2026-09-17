@@ -95,6 +95,17 @@ internal fun npcRouteHorizontalVelocity(
     return Vector(dx / distance * step, 0.0, dz / distance * step)
 }
 
+internal fun isNpcRouteResolvedEndpointReached(
+    actualX: Double,
+    actualZ: Double,
+    endpoint: NpcRouteCell,
+    margin: Double,
+): Boolean {
+    val dx = actualX - (endpoint.x + 0.5)
+    val dz = actualZ - (endpoint.z + 0.5)
+    return dx * dx + dz * dz <= margin * margin
+}
+
 internal fun smoothedNpcRouteTarget(
     points: List<Vector>,
     index: Int,
@@ -141,6 +152,28 @@ internal data class NpcRouteEvent(
     val cells: Int = 0,
     val reason: String? = null,
 )
+
+internal data class NpcRouteOutcome(
+    val successful: Boolean,
+    val phase: String,
+    val reason: String? = null,
+)
+
+internal class NpcRouteOutcomeTracker {
+    private val outcomes = mutableMapOf<Int, NpcRouteOutcome>()
+
+    fun reset(npcId: Int) {
+        outcomes.remove(npcId)
+    }
+
+    fun record(npcId: Int, outcome: NpcRouteOutcome) {
+        outcomes[npcId] = outcome
+    }
+
+    fun consume(npcId: Int): NpcRouteOutcome? = outcomes.remove(npcId)
+
+    fun clear() = outcomes.clear()
+}
 
 /** Bounded four-way A*: no diagonal corner cutting and no implicit height changes. */
 internal fun findNpcGridPath(
@@ -318,6 +351,7 @@ internal class CitizensNpcRouteController(
 ) : AutoCloseable {
     private val tasks = LifecycleTaskScope()
     private val active = mutableMapOf<Int, ActiveNpcRoute>()
+    private val outcomes = NpcRouteOutcomeTracker()
 
     fun navigate(
         npc: NPC,
@@ -328,6 +362,8 @@ internal class CitizensNpcRouteController(
     ): Boolean = navigate(npc, destination, profile, via, extraBlocked, 0)
 
     fun isNavigating(npc: NPC): Boolean = npc.id in active || npc.navigator.isNavigating
+
+    fun consumeOutcome(npc: NPC): NpcRouteOutcome? = outcomes.consume(npc.id)
 
     fun stop(npc: NPC) {
         active.remove(npc.id)
@@ -343,6 +379,7 @@ internal class CitizensNpcRouteController(
         recoveries: Int,
     ): Boolean {
         stop(npc)
+        outcomes.reset(npc.id)
         if (
             !npc.isSpawned ||
             npc.entity.world != destination.world ||
@@ -504,6 +541,7 @@ internal class CitizensNpcRouteController(
         if (actual.world != route.destination.world) {
             active.remove(npcId, route)
             npc.navigator.cancelNavigation()
+            outcomes.record(npcId, NpcRouteOutcome(false, "ABORTED", "world-changed"))
             event("ABORTED", route.profile, npc, route.destination, route.cells.size, "world-changed", actual)
             return
         }
@@ -523,6 +561,7 @@ internal class CitizensNpcRouteController(
                 }
             } else {
                 active.remove(npcId, route)
+                outcomes.record(npcId, NpcRouteOutcome(false, "DEVIATED", "left-level-floor"))
             }
             return
         }
@@ -543,7 +582,16 @@ internal class CitizensNpcRouteController(
         }
         if (!npc.navigator.isNavigating) {
             active.remove(npcId, route)
-            event("FINISHED", route.profile, npc, route.destination, route.cells.size)
+            val reached = isNpcRouteResolvedEndpointReached(
+                actual.x,
+                actual.z,
+                route.cells.last(),
+                route.profile.distanceMargin + 1.0e-3,
+            )
+            val phase = if (reached) "FINISHED" else "ABORTED"
+            val reason = if (reached) null else "navigation-cancelled"
+            outcomes.record(npcId, NpcRouteOutcome(reached, phase, reason))
+            event(phase, route.profile, npc, route.destination, route.cells.size, reason)
             return
         }
         val movement = hypot(actual.x - route.previousX, actual.z - route.previousZ)
@@ -553,6 +601,7 @@ internal class CitizensNpcRouteController(
         if (route.stalledPolls >= route.profile.stallPolls) {
             active.remove(npcId, route)
             npc.navigator.cancelNavigation()
+            outcomes.record(npcId, NpcRouteOutcome(false, "STALLED", "no-progress"))
             event("STALLED", route.profile, npc, route.destination, route.cells.size, "no-progress", actual)
             return
         }
@@ -577,5 +626,6 @@ internal class CitizensNpcRouteController(
             runCatching { CitizensAPI.getNPCRegistry().getById(id) }.getOrNull()?.takeIf { it.isSpawned }?.let(::stop)
         }
         active.clear()
+        outcomes.clear()
     }
 }
