@@ -67,6 +67,7 @@ internal sealed interface OriginSceneStep {
         val origin: OriginScenePropOrigin,
         val offset: OriginSceneVector,
         val scale: OriginSceneVector,
+        val rotationYDegrees: Float,
         val interpolationTicks: Int,
     ) : OriginSceneStep {
         override val actorId: Int? = null
@@ -153,7 +154,13 @@ internal data class OriginSceneDefinition(
                         require(Material.matchMaterial(step.material)?.takeIf(Material::isBlock) != null) {
                             "scene $id cycle ${cycle.id} prop ${step.key} has invalid block material ${step.material}"
                         }
-                        OriginScenePropContract.resolve(propSurfaces.getValue(step.surface).near, step.origin, step.offset, step.scale)
+                        OriginScenePropContract.resolve(
+                            propSurfaces.getValue(step.surface).near,
+                            step.origin,
+                            step.offset,
+                            step.scale,
+                            step.rotationYDegrees,
+                        )
                     }
                     is OriginSceneStep.Sound -> require(step.anchor == null || step.anchor in anchors)
                     is OriginSceneStep.Particle -> require(step.anchor == null || step.anchor in anchors)
@@ -286,6 +293,9 @@ internal data class OriginScenePlan(
                     origin = OriginScenePropOrigin.valueOf(source.string("$root.origin").uppercase()),
                     offset = vector(source.string("$root.offset", "0,0,0"), "$root.offset"),
                     scale = scale.requirePositive("$root.scale"),
+                    rotationYDegrees = source.real("$root.rotation-y-degrees", 0.0).toFloat().also {
+                        require(it.isFinite() && it in -360f..360f) { "$root.rotation-y-degrees must be within -360..360" }
+                    },
                     interpolationTicks = source.integer("$root.interpolation-ticks", 0).coerceIn(0, 59),
                 )
             }

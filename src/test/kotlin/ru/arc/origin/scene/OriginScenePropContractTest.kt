@@ -37,6 +37,23 @@ class OriginScenePropContractTest : StringSpec({
         resolved.z.shouldBeExactly(67.5)
     }
 
+    "rotated strokes keep their geometric center pinned to the configured offset" {
+        val resolved = OriginScenePropContract.resolve(
+            anchor = OriginScenePoint(78.5, 71.04, 67.5),
+            origin = OriginScenePropOrigin.BOTTOM_CENTER,
+            offset = OriginSceneVector(-0.2, 0.0, 0.0),
+            scale = OriginSceneVector(0.1, 0.05, 0.2),
+            rotationYDegrees = 90f,
+        )
+
+        resolved.x.shouldBeExactly(78.3)
+        resolved.y.shouldBeExactly(71.04)
+        resolved.z.shouldBeExactly(67.5)
+        resolved.translationX.shouldBeExactly(-0.1f)
+        resolved.translationY.shouldBeExactly(0.0f)
+        resolved.translationZ.shouldBeExactly(0.05f)
+    }
+
     "display lifecycle rejects removal before creation" {
         shouldThrow<IllegalArgumentException> {
             OriginScenePropContract.validateLifecycle(listOf(OriginSceneStep.RemoveDisplay("missing")))
@@ -54,6 +71,7 @@ class OriginScenePropContractTest : StringSpec({
                         origin = OriginScenePropOrigin.BOTTOM_CENTER,
                         offset = OriginSceneVector.ZERO,
                         scale = OriginSceneVector(0.5, 0.1, 0.3),
+                        rotationYDegrees = 0f,
                         interpolationTicks = 0,
                     ),
                 ),

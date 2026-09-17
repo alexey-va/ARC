@@ -3,7 +3,9 @@ package ru.arc.origin.scene
 import org.bukkit.Material
 import org.bukkit.World
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.floor
+import kotlin.math.sin
 
 /** Defines which point inside a display model is pinned to its world anchor. */
 internal enum class OriginScenePropOrigin {
@@ -91,9 +93,18 @@ internal object OriginScenePropContract {
         origin: OriginScenePropOrigin,
         offset: OriginSceneVector,
         scale: OriginSceneVector,
+        rotationYDegrees: Float = 0f,
     ): OriginSceneResolvedProp {
         scale.requirePositive("scene prop scale")
         offset.requireBounded("scene prop offset", MAX_OFFSET)
+        require(rotationYDegrees.isFinite() && rotationYDegrees in -360f..360f) {
+            "scene prop rotation-y-degrees must be within -360..360"
+        }
+        val radians = Math.toRadians(rotationYDegrees.toDouble())
+        val halfX = scale.x / 2.0
+        val halfZ = scale.z / 2.0
+        val rotatedHalfX = cos(radians) * halfX + sin(radians) * halfZ
+        val rotatedHalfZ = -sin(radians) * halfX + cos(radians) * halfZ
         val translationY = when (origin) {
             OriginScenePropOrigin.BOTTOM_CENTER -> 0f
             OriginScenePropOrigin.CENTER -> (-scale.y / 2.0).toFloat()
@@ -102,9 +113,9 @@ internal object OriginScenePropContract {
             x = anchor.x + offset.x,
             y = anchor.y + offset.y,
             z = anchor.z + offset.z,
-            translationX = (-scale.x / 2.0).toFloat(),
+            translationX = (-rotatedHalfX).toFloat(),
             translationY = translationY,
-            translationZ = (-scale.z / 2.0).toFloat(),
+            translationZ = (-rotatedHalfZ).toFloat(),
         )
     }
 

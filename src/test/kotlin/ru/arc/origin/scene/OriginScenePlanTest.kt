@@ -59,13 +59,26 @@ class OriginScenePlanTest : FreeSpec({
         luka.steps.filterIsInstance<OriginSceneStep.ContainerLid>().map(OriginSceneStep.ContainerLid::open) shouldContainExactly
             listOf(true, false, true, false)
         luka.steps.filterIsInstance<OriginSceneStep.Swing>().filter { it.feedbackAnchor == "apprentice-anvil" }
-            .sumOf(OriginSceneStep.Swing::repetitions) shouldBe 18
-        luka.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().map { it.key } shouldContainExactly
-            listOf("luka-blank", "luka-blank")
+            .sumOf(OriginSceneStep.Swing::repetitions) shouldBe 22
+        luka.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().map { it.key }.toSet() shouldBe
+            setOf(
+                "luka-blank",
+                "luka-letter-x-left",
+                "luka-letter-x-right",
+                "luka-letter-u-left",
+                "luka-letter-u-right",
+                "luka-letter-u-tail",
+                "luka-letter-short-i-left",
+                "luka-letter-short-i-right",
+                "luka-letter-short-i-diagonal",
+                "luka-letter-short-i-breve",
+            )
         luka.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().all {
             it.surface == "apprentice-work-surface" && it.origin == OriginScenePropOrigin.BOTTOM_CENTER
         } shouldBe true
-        luka.steps.filterIsInstance<OriginSceneStep.RemoveDisplay>().map { it.key } shouldContainExactly listOf("luka-blank")
+        luka.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().count { it.rotationYDegrees != 0f } shouldBe 6
+        luka.steps.filterIsInstance<OriginSceneStep.RemoveDisplay>().map { it.key }.toSet() shouldBe
+            luka.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().map { it.key }.toSet()
         savva.steps.filterIsInstance<OriginSceneStep.ContainerLid>().map(OriginSceneStep.ContainerLid::anchor).toSet() shouldBe
             setOf("ore-cart", "ore-chest")
         scene.actors.getValue(351).home.x shouldBe scene.anchors.getValue("ore-cart-stand").x

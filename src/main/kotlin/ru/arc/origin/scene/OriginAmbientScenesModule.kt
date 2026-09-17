@@ -375,6 +375,7 @@ private class OriginSceneService(
             step.origin,
             step.offset,
             step.scale,
+            step.rotationYDegrees,
         )
         val location = Location(world, resolved.x, resolved.y, resolved.z)
         var created = false
@@ -393,7 +394,7 @@ private class OriginSceneService(
         display.teleportDuration = step.interpolationTicks.coerceAtMost(59)
         display.transformation = Transformation(
             Vector3f(resolved.translationX, resolved.translationY, resolved.translationZ),
-            AxisAngle4f(),
+            AxisAngle4f(Math.toRadians(step.rotationYDegrees.toDouble()).toFloat(), 0f, 1f, 0f),
             Vector3f(step.scale.x.toFloat(), step.scale.y.toFloat(), step.scale.z.toFloat()),
             AxisAngle4f(),
         )

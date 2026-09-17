@@ -190,7 +190,7 @@ scenes:
         initial-delay-seconds: 5
         cooldown-min-seconds: 12
         cooldown-max-seconds: 20
-        step-ids: [stock, face-stock, open-stock, reach-stock, take, close-stock, bench, face-anvil, stencil, press-stencil, blank, place-blank, clear-hand, carve-rough, shape-blank, carve-fine, sparks, ring, inspect, collect, result, result-stock, face-result-stock, open-result-stock, store, clear, close-result-stock, line]
+        step-ids: [stock, face-stock, open-stock, reach-stock, take, close-stock, bench, face-anvil, stencil, press-stencil, blank, place-blank, clear-hand, flatten, shape-blank, carve-x, consume-x, x-left, x-right, carve-u, consume-u, u-left, u-right, u-tail, carve-short-i, consume-short-i, short-i-left, short-i-right, short-i-diagonal, short-i-breve, sparks, ring, inspect, collect-x-left, collect-x-right, collect-u-left, collect-u-right, collect-u-tail, collect-short-i-left, collect-short-i-right, collect-short-i-diagonal, collect-short-i-breve, result, result-stock, face-result-stock, open-result-stock, store, clear, close-result-stock, line]
         steps:
           stock: {type: MOVE, actor-id: 354, anchor: stock-stand, route-profile: floor, timeout-ticks: 220}
           face-stock: {type: LOOK_AT_ANCHOR, actor-id: 354, anchor: stock-chest}
@@ -205,13 +205,35 @@ scenes:
           blank: {type: EQUIP, actor-id: 354, material: IRON_INGOT}
           place-blank: {type: BLOCK_DISPLAY, key: luka-blank, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, scale: "0.46,0.11,0.30"}
           clear-hand: {type: EQUIP, actor-id: 354, material: AIR}
-          carve-rough: {type: SWING, actor-id: 354, repetitions: 9, period-ticks: 10, feedback-anchor: apprentice-anvil, particle: ELECTRIC_SPARK, particle-count: 2, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 3, sound-volume: 0.22, sound-pitch: 1.42}
+          flatten: {type: SWING, actor-id: 354, repetitions: 6, period-ticks: 10, feedback-anchor: apprentice-anvil, particle: ELECTRIC_SPARK, particle-count: 2, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 2, sound-volume: 0.22, sound-pitch: 1.42}
           shape-blank: {type: BLOCK_DISPLAY, key: luka-blank, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, scale: "0.64,0.06,0.40", interpolation-ticks: 8}
-          carve-fine: {type: SWING, actor-id: 354, repetitions: 9, period-ticks: 9, feedback-anchor: apprentice-anvil, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 3, sound-volume: 0.24, sound-pitch: 1.58}
+          carve-x: {type: SWING, actor-id: 354, repetitions: 5, period-ticks: 8, feedback-anchor: apprentice-anvil, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 2, sound-volume: 0.24, sound-pitch: 1.54}
+          consume-x: {type: BLOCK_DISPLAY, key: luka-blank, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0.10,0,0", scale: "0.43,0.045,0.36", interpolation-ticks: 5}
+          x-left: {type: BLOCK_DISPLAY, key: luka-letter-x-left, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.235,0.012,0", scale: "0.035,0.055,0.245", rotation-y-degrees: 38, interpolation-ticks: 4}
+          x-right: {type: BLOCK_DISPLAY, key: luka-letter-x-right, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.235,0.012,0", scale: "0.035,0.055,0.245", rotation-y-degrees: -38, interpolation-ticks: 4}
+          carve-u: {type: SWING, actor-id: 354, repetitions: 5, period-ticks: 8, feedback-anchor: apprentice-anvil, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 2, sound-volume: 0.24, sound-pitch: 1.60}
+          consume-u: {type: BLOCK_DISPLAY, key: luka-blank, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0.22,0,0", scale: "0.20,0.035,0.34", interpolation-ticks: 5}
+          u-left: {type: BLOCK_DISPLAY, key: luka-letter-u-left, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.055,0.012,-0.055", scale: "0.032,0.055,0.135", rotation-y-degrees: 34, interpolation-ticks: 4}
+          u-right: {type: BLOCK_DISPLAY, key: luka-letter-u-right, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0.025,0.012,-0.055", scale: "0.032,0.055,0.135", rotation-y-degrees: -34, interpolation-ticks: 4}
+          u-tail: {type: BLOCK_DISPLAY, key: luka-letter-u-tail, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.005,0.012,0.075", scale: "0.034,0.055,0.155", rotation-y-degrees: 17, interpolation-ticks: 4}
+          carve-short-i: {type: SWING, actor-id: 354, repetitions: 6, period-ticks: 8, feedback-anchor: apprentice-anvil, particle: ELECTRIC_SPARK, particle-count: 4, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 2, sound-volume: 0.25, sound-pitch: 1.66}
+          consume-short-i: {type: REMOVE_DISPLAY, key: luka-blank}
+          short-i-left: {type: BLOCK_DISPLAY, key: luka-letter-short-i-left, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0.165,0.012,0.015", scale: "0.032,0.055,0.235", interpolation-ticks: 4}
+          short-i-right: {type: BLOCK_DISPLAY, key: luka-letter-short-i-right, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0.295,0.012,0.015", scale: "0.032,0.055,0.235", interpolation-ticks: 4}
+          short-i-diagonal: {type: BLOCK_DISPLAY, key: luka-letter-short-i-diagonal, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0.230,0.012,0.015", scale: "0.032,0.055,0.245", rotation-y-degrees: -29, interpolation-ticks: 4}
+          short-i-breve: {type: BLOCK_DISPLAY, key: luka-letter-short-i-breve, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0.230,0.012,-0.145", scale: "0.105,0.055,0.026", interpolation-ticks: 4}
           sparks: {type: PARTICLE, anchor: apprentice-anvil, particle: ELECTRIC_SPARK, count: 14}
           ring: {type: SOUND, anchor: apprentice-anvil, sound: BLOCK_ANVIL_USE, volume: 0.34, pitch: 1.35}
           inspect: {type: WAIT, ticks: 24}
-          collect: {type: REMOVE_DISPLAY, key: luka-blank}
+          collect-x-left: {type: REMOVE_DISPLAY, key: luka-letter-x-left}
+          collect-x-right: {type: REMOVE_DISPLAY, key: luka-letter-x-right}
+          collect-u-left: {type: REMOVE_DISPLAY, key: luka-letter-u-left}
+          collect-u-right: {type: REMOVE_DISPLAY, key: luka-letter-u-right}
+          collect-u-tail: {type: REMOVE_DISPLAY, key: luka-letter-u-tail}
+          collect-short-i-left: {type: REMOVE_DISPLAY, key: luka-letter-short-i-left}
+          collect-short-i-right: {type: REMOVE_DISPLAY, key: luka-letter-short-i-right}
+          collect-short-i-diagonal: {type: REMOVE_DISPLAY, key: luka-letter-short-i-diagonal}
+          collect-short-i-breve: {type: REMOVE_DISPLAY, key: luka-letter-short-i-breve}
           result: {type: EQUIP, actor-id: 354, material: IRON_INGOT}
           result-stock: {type: MOVE, actor-id: 354, anchor: stock-stand, route-profile: floor, timeout-ticks: 220}
           face-result-stock: {type: LOOK_AT_ANCHOR, actor-id: 354, anchor: stock-chest}
@@ -219,7 +241,7 @@ scenes:
           store: {type: SWING, actor-id: 354, repetitions: 1, period-ticks: 8}
           clear: {type: EQUIP, actor-id: 354, material: AIR}
           close-result-stock: {type: CONTAINER_LID, actor-id: 354, anchor: stock-chest, state: CLOSE}
-          line: {type: SPEECH, actor-id: 354, text: "Клеймо готово. Заготовка возвращается в запас."}
+          line: {type: SPEECH, actor-id: 354, text: "Гравировка готова. Буквы ровные — всё как заказывали."}
       ore-inspection:
         actor-ids: ["351"]
         initial-delay-seconds: 14
