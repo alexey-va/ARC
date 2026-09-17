@@ -141,7 +141,7 @@ internal class ArcNpcHologramService(
         val npc = CitizensAPI.getNPCRegistry().getById(id) ?: return false
         val stack = stackFor(npc) ?: return false
         stack.state.showBubble(visible, ttlTicks, owner)
-        stack.bubbleBodyComponent = parseSpeechLines(visible)
+        stack.bubbleBodyComponent = npcSpeechComponent(visible.map(::parseRaw), VALUE_COLOR)
         updateDisplays(stack, npc, refreshText = true)
         return true
     }
@@ -578,11 +578,6 @@ internal class ArcNpcHologramService(
             parseRaw(raw).colorIfAbsent(if (index == 0) LABEL_COLOR else VALUE_COLOR)
         }.joinLines()
 
-    private fun parseSpeechLines(lines: List<String>): Component =
-        Component.text("◆ ", HEADER_COLOR).append(
-            lines.map { parseRaw(it).colorIfAbsent(VALUE_COLOR) }.joinLines(),
-        )
-
     private fun List<Component>.joinLines(): Component =
         foldIndexed(Component.empty()) { index, result, line ->
             if (index == 0) result.append(line) else result.append(Component.newline()).append(line)
@@ -598,3 +593,9 @@ internal class ArcNpcHologramService(
         if (warned.add(key)) warn(message, *args)
     }
 }
+
+internal fun npcSpeechComponent(lines: List<Component>, fallbackColor: TextColor): Component =
+    lines.map { it.colorIfAbsent(fallbackColor) }
+        .foldIndexed(Component.empty()) { index, result, line ->
+            if (index == 0) result.append(line) else result.append(Component.newline()).append(line)
+        }

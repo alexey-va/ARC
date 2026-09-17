@@ -42,6 +42,8 @@ internal sealed interface OriginSceneStep {
 
     data class LookAtAnchor(override val actorId: Int, val anchor: String) : OriginSceneStep
 
+    data class LookAtSurface(override val actorId: Int, val surface: String) : OriginSceneStep
+
     data class LookAtActor(override val actorId: Int, val targetActorId: Int) : OriginSceneStep
 
     data class Equip(override val actorId: Int, val material: String) : OriginSceneStep
@@ -51,6 +53,7 @@ internal sealed interface OriginSceneStep {
         val repetitions: Int,
         val periodTicks: Long,
         val feedbackAnchor: String? = null,
+        val feedbackSurface: String? = null,
         val particle: String? = null,
         val particleCount: Int = 3,
         val particleEvery: Int = 1,
@@ -148,8 +151,15 @@ internal data class OriginSceneDefinition(
                         require(step.routeProfile in routeProfiles) { "scene $id cycle ${cycle.id} references route ${step.routeProfile}" }
                     }
                     is OriginSceneStep.LookAtAnchor -> require(step.anchor in anchors)
+                    is OriginSceneStep.LookAtSurface -> require(step.surface in propSurfaces)
                     is OriginSceneStep.LookAtActor -> require(step.targetActorId in actors)
-                    is OriginSceneStep.Swing -> require(step.feedbackAnchor == null || step.feedbackAnchor in anchors)
+                    is OriginSceneStep.Swing -> {
+                        require(step.feedbackAnchor == null || step.feedbackAnchor in anchors)
+                        require(step.feedbackSurface == null || step.feedbackSurface in propSurfaces)
+                        require(step.feedbackAnchor == null || step.feedbackSurface == null) {
+                            "scene $id cycle ${cycle.id} swing must reference at most one feedback anchor or surface"
+                        }
+                    }
                     is OriginSceneStep.BlockDisplay -> {
                         require((step.surface == null) != (step.anchor == null)) {
                             "scene $id cycle ${cycle.id} prop ${step.key} must reference exactly one surface or anchor"
@@ -278,6 +288,7 @@ internal data class OriginScenePlan(
             )
             "WAIT" -> OriginSceneStep.Wait(source.integer("$root.ticks", 20).toLong().coerceIn(1L, 1_200L))
             "LOOK_AT_ANCHOR" -> OriginSceneStep.LookAtAnchor(source.integer("$root.actor-id"), source.string("$root.anchor"))
+            "LOOK_AT_SURFACE" -> OriginSceneStep.LookAtSurface(source.integer("$root.actor-id"), source.string("$root.surface"))
             "LOOK_AT_ACTOR" -> OriginSceneStep.LookAtActor(source.integer("$root.actor-id"), source.integer("$root.target-actor-id"))
             "EQUIP" -> OriginSceneStep.Equip(source.integer("$root.actor-id"), source.string("$root.material"))
             "SWING" -> OriginSceneStep.Swing(
@@ -285,6 +296,7 @@ internal data class OriginScenePlan(
                 repetitions = source.integer("$root.repetitions", 1).coerceIn(1, 20),
                 periodTicks = source.integer("$root.period-ticks", 10).toLong().coerceIn(1L, 100L),
                 feedbackAnchor = source.string("$root.feedback-anchor", "").takeIf(String::isNotBlank),
+                feedbackSurface = source.string("$root.feedback-surface", "").takeIf(String::isNotBlank),
                 particle = source.string("$root.particle", "").takeIf(String::isNotBlank),
                 particleCount = source.integer("$root.particle-count", 3).coerceIn(1, 50),
                 particleEvery = source.integer("$root.particle-every", 1).coerceIn(1, 20),

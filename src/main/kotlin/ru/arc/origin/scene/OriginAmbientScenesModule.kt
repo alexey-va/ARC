@@ -245,6 +245,14 @@ private class OriginSceneService(
                 npc(step.actorId)?.faceLocation(running.scene.anchors.getValue(step.anchor).inWorld(Bukkit.getWorld(plan.world)!!))
                 runStep(running, index + 1)
             }
+            is OriginSceneStep.LookAtSurface -> {
+                val target = resolveSurfaceLocation(running, step.surface)
+                if (target == null) finish(running, "look-surface-missing")
+                else {
+                    npc(step.actorId)?.faceLocation(target)
+                    runStep(running, index + 1)
+                }
+            }
             is OriginSceneStep.LookAtActor -> {
                 val target = npc(step.targetActorId)?.takeIf(NPC::isSpawned)
                 if (target == null) finish(running, "look-target-missing")
@@ -338,17 +346,31 @@ private class OriginSceneService(
 
     private fun swing(running: ActiveOriginSceneCycle, index: Int, step: OriginSceneStep.Swing, repetition: Int) {
         if (!isCurrent(running)) return
-        (npc(step.actorId)?.takeIf(NPC::isSpawned)?.entity as? LivingEntity)?.swingMainHand()
+        val actor = npc(step.actorId)?.takeIf(NPC::isSpawned)
+        val feedbackLocation = when {
+            step.feedbackSurface != null -> resolveSurfaceLocation(running, step.feedbackSurface)
+            else -> stepLocation(running, step.actorId, step.feedbackAnchor)
+        }
+        // Citizens or a nearby player may alter the head pose between strikes. The
+        // strike target owns the work pose, so reacquire it for every animation beat.
+        if (feedbackLocation != null && (step.feedbackAnchor != null || step.feedbackSurface != null)) {
+            actor?.faceLocation(feedbackLocation)
+        }
+        (actor?.entity as? LivingEntity)?.swingMainHand()
         val strike = repetition + 1
-        val feedbackLocation = stepLocation(running, step.actorId, step.feedbackAnchor)
         if (step.particle != null && strike % step.particleEvery == 0) {
-            spawnParticle(feedbackLocation, step.particle, step.particleCount, if (step.feedbackAnchor == null) 1.0 else 0.15)
+            spawnParticle(feedbackLocation, step.particle, step.particleCount, if (step.feedbackAnchor == null && step.feedbackSurface == null) 1.0 else 0.15)
         }
         if (step.sound != null && strike % step.soundEvery == 0) {
             playSound(feedbackLocation, step.sound, step.soundVolume, step.soundPitch)
         }
         if (repetition + 1 >= step.repetitions) runStep(running, index + 1)
         else later(running, step.periodTicks) { swing(running, index, step, repetition + 1) }
+    }
+
+    private fun resolveSurfaceLocation(running: ActiveOriginSceneCycle, surfaceId: String): Location? {
+        val world = Bukkit.getWorld(plan.world) ?: return null
+        return running.scene.propSurfaces.getValue(surfaceId).resolve(world)?.inWorld(world)
     }
 
     private fun setBlockDisplay(running: ActiveOriginSceneCycle, step: OriginSceneStep.BlockDisplay): Boolean {

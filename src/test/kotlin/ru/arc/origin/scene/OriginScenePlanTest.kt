@@ -13,7 +13,7 @@ class OriginScenePlanTest : FreeSpec({
         plan.world shouldBe "rc_origin_spawn"
         plan.scenes.map(OriginSceneDefinition::id) shouldContainAll listOf("forge", "mount-yard")
         plan.scene("forge").cycles.map(OriginSceneCycle::id) shouldContainAll
-            listOf("master-anvil", "ledger-orders", "ore-inspection", "blade-practice", "furnace-check")
+            listOf("master-anvil", "ledger-orders", "apprentice-engraving-jopa", "ore-inspection", "blade-practice", "furnace-check")
         plan.scene("mount-yard").cycles.map(OriginSceneCycle::id) shouldContainAll
             listOf("groom-wind", "inspect-buran", "inspect-ryzhik", "wind-paddock", "buran-paddock", "ryzhik-paddock")
     }
@@ -58,7 +58,7 @@ class OriginScenePlanTest : FreeSpec({
 
         luka.steps.filterIsInstance<OriginSceneStep.ContainerLid>().map(OriginSceneStep.ContainerLid::open) shouldContainExactly
             listOf(true, false, true, false)
-        luka.steps.filterIsInstance<OriginSceneStep.Swing>().filter { it.feedbackAnchor == "apprentice-anvil" }
+        luka.steps.filterIsInstance<OriginSceneStep.Swing>().filter { it.feedbackSurface == "apprentice-work-surface" }
             .sumOf(OriginSceneStep.Swing::repetitions) shouldBe 22
         luka.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().map { it.key }.toSet() shouldBe
             setOf(
@@ -79,6 +79,10 @@ class OriginScenePlanTest : FreeSpec({
         luka.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().count { it.rotationYDegrees != 0f } shouldBe 6
         luka.steps.filterIsInstance<OriginSceneStep.RemoveDisplay>().map { it.key }.toSet() shouldBe
             luka.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().map { it.key }.toSet()
+        val alternate = scene.cycles.single { it.id == "apprentice-engraving-jopa" }
+        alternate.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().map { it.key }.toSet().size shouldBe 14
+        alternate.steps.filterIsInstance<OriginSceneStep.RemoveDisplay>().map { it.key }.toSet() shouldBe
+            alternate.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().map { it.key }.toSet()
         savva.steps.filterIsInstance<OriginSceneStep.ContainerLid>().map(OriginSceneStep.ContainerLid::anchor).toSet() shouldBe
             setOf("ore-cart", "ore-chest")
         scene.actors.getValue(351).home.x shouldBe scene.anchors.getValue("ore-cart-stand").x
@@ -119,9 +123,11 @@ class OriginScenePlanTest : FreeSpec({
         cycle.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().all {
             it.surface == "master-work-surface" && it.anchor == null && it.origin == OriginScenePropOrigin.BOTTOM_CENTER
         } shouldBe true
-        cycle.steps.filterIsInstance<OriginSceneStep.Swing>().filter { it.feedbackAnchor == "master-anvil" }
+        cycle.steps.filterIsInstance<OriginSceneStep.Swing>().filter { it.feedbackSurface == "master-work-surface" }
             .sumOf(OriginSceneStep.Swing::repetitions) shouldBe 24
         cycle.steps.filterIsInstance<OriginSceneStep.RemoveDisplay>().map(OriginSceneStep.RemoveDisplay::key).toSet() shouldBe
             setOf("edgar-blade", "edgar-guard", "edgar-grip", "edgar-pommel")
+        cycle.steps.filterIsInstance<OriginSceneStep.LookAtSurface>().map(OriginSceneStep.LookAtSurface::surface).toSet() shouldBe
+            setOf("master-work-surface")
     }
 })

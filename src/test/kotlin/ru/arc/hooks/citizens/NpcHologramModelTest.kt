@@ -2,6 +2,9 @@ package ru.arc.hooks.citizens
 
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.TextColor
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 
 class NpcHologramModelTest : StringSpec({
     "source components are rebuilt only when authored content changes" {
@@ -70,5 +73,14 @@ class NpcHologramModelTest : StringSpec({
         npcSpeechBridgeCancelsChat(false) shouldBe true
         npcSpeechBridgeCancelsChat(true) shouldBe false
         npcSpeechBridgeCancelsChat(null) shouldBe false
+    }
+
+    "speech hologram has no decorative bullet and keeps line breaks" {
+        val component = npcSpeechComponent(
+            listOf(Component.text("Первая"), Component.text("Вторая")),
+            TextColor.color(0xE6EDF3),
+        )
+
+        PlainTextComponentSerializer.plainText().serialize(component) shouldBe "Первая\nВторая"
     }
 })

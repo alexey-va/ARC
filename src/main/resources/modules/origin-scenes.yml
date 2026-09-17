@@ -111,26 +111,36 @@ scenes:
         path-distance-margin: 0.35
         maximum-step-height: 0.125
 
-    cycle-ids: [master-anvil, master-forging-showcase, ledger-orders, apprentice-engraving, ore-inspection, blade-practice, hammer-rhythm, furnace-check]
+    cycle-ids: [master-anvil, master-forging-showcase, ledger-orders, apprentice-engraving, apprentice-engraving-jopa, ore-inspection, blade-practice, hammer-rhythm, furnace-check]
     cycles:
       master-anvil:
         actor-ids: ["349"]
         initial-delay-seconds: 5
-        cooldown-min-seconds: 22
-        cooldown-max-seconds: 38
-        step-ids: [face, equip, hammer, ring, remark, rest]
+        cooldown-min-seconds: 14
+        cooldown-max-seconds: 24
+        step-ids: [face, billet, place, clear-hand, equip, rough, shape-head, edge, shape-edge, ring, inspect, collect-head, collect-edge, result, remark, rest]
         steps:
-          face: {type: LOOK_AT_ANCHOR, actor-id: 349, anchor: master-anvil}
+          face: {type: LOOK_AT_SURFACE, actor-id: 349, surface: master-work-surface}
+          billet: {type: EQUIP, actor-id: 349, material: RAW_IRON}
+          place: {type: BLOCK_DISPLAY, key: edgar-axe-head, surface: master-work-surface, material: MAGMA_BLOCK, origin: BOTTOM_CENTER, scale: "0.30,0.11,0.20", rotation-y-degrees: -12}
+          clear-hand: {type: EQUIP, actor-id: 349, material: AIR}
           equip: {type: EQUIP, actor-id: 349, material: MACE}
-          hammer: {type: SWING, actor-id: 349, repetitions: 4, period-ticks: 11}
-          ring: {type: SOUND, anchor: master-anvil, sound: BLOCK_ANVIL_LAND, volume: 0.34, pitch: 1.18}
-          remark: {type: SPEECH, actor-id: 349, text: "Ровный звон. Значит, металл ещё слушается."}
+          rough: {type: SWING, actor-id: 349, repetitions: 7, period-ticks: 10, feedback-surface: master-work-surface, particle: LAVA, particle-count: 2, sound: BLOCK_ANVIL_LAND, sound-volume: 0.34, sound-pitch: 0.94}
+          shape-head: {type: BLOCK_DISPLAY, key: edgar-axe-head, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.06,0,0", scale: "0.38,0.065,0.25", rotation-y-degrees: -12, interpolation-ticks: 8}
+          edge: {type: SWING, actor-id: 349, repetitions: 6, period-ticks: 9, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 4, sound: BLOCK_ANVIL_USE, sound-every: 2, sound-volume: 0.38, sound-pitch: 1.32}
+          shape-edge: {type: BLOCK_DISPLAY, key: edgar-axe-edge, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0.20,0.01,0", scale: "0.16,0.045,0.38", rotation-y-degrees: -12, interpolation-ticks: 8}
+          ring: {type: SOUND, anchor: master-anvil, sound: BLOCK_ANVIL_USE, volume: 0.48, pitch: 1.28}
+          inspect: {type: WAIT, ticks: 18}
+          collect-head: {type: REMOVE_DISPLAY, key: edgar-axe-head}
+          collect-edge: {type: REMOVE_DISPLAY, key: edgar-axe-edge}
+          result: {type: EQUIP, actor-id: 349, material: IRON_AXE}
+          remark: {type: SPEECH, actor-id: 349, text: "Лезвие широкое, обух плотный. Такой топор не поведёт."}
           rest: {type: WAIT, ticks: 24}
       master-forging-showcase:
         actor-ids: ["349", "358"]
         initial-delay-seconds: 42
-        cooldown-min-seconds: 105
-        cooldown-max-seconds: 155
+        cooldown-min-seconds: 72
+        cooldown-max-seconds: 104
         step-ids: [call, stock, face-stock, open-stock, take-stock, close-stock, furnace, face-fire, heat, flame, hot, call-doran, doran-stage, edgar-stage, face-work, doran-face-work, clear-hand, place-hot, doran-tool, rough, rough-shape, edgar-tool, fine, blade-shape, forge-guard, guard, forge-grip, grip, pommel, doran-finish, bloom, ring, inspect, collect-blade, collect-guard, collect-grip, collect-pommel, carry-hot, quench, face-water, steam, splash, hiss, result, return, present, verdict]
         steps:
           call: {type: SPEECH, actor-id: 349, text: "Доран, большую заготовку. Покажем, как держится настоящий ритм."}
@@ -147,22 +157,22 @@ scenes:
           call-doran: {type: SPEECH, actor-id: 358, text: "Молот готов. Веди металл, мастер."}
           doran-stage: {type: MOVE, actor-id: 358, anchor: master-assistant-stand, route-profile: floor, timeout-ticks: 300}
           edgar-stage: {type: MOVE, actor-id: 349, anchor: master-anvil-stand, route-profile: floor, timeout-ticks: 260}
-          face-work: {type: LOOK_AT_ANCHOR, actor-id: 349, anchor: master-anvil}
-          doran-face-work: {type: LOOK_AT_ANCHOR, actor-id: 358, anchor: master-anvil}
+          face-work: {type: LOOK_AT_SURFACE, actor-id: 349, surface: master-work-surface}
+          doran-face-work: {type: LOOK_AT_SURFACE, actor-id: 358, surface: master-work-surface}
           clear-hand: {type: EQUIP, actor-id: 349, material: AIR}
           place-hot: {type: BLOCK_DISPLAY, key: edgar-blade, surface: master-work-surface, material: MAGMA_BLOCK, origin: BOTTOM_CENTER, scale: "0.22,0.15,0.32"}
           doran-tool: {type: EQUIP, actor-id: 358, material: MACE}
-          rough: {type: SWING, actor-id: 358, repetitions: 6, period-ticks: 12, feedback-anchor: master-anvil, particle: LAVA, particle-count: 2, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 1, sound-volume: 0.34, sound-pitch: 0.82}
+          rough: {type: SWING, actor-id: 358, repetitions: 6, period-ticks: 12, feedback-surface: master-work-surface, particle: LAVA, particle-count: 2, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 1, sound-volume: 0.34, sound-pitch: 0.82}
           rough-shape: {type: BLOCK_DISPLAY, key: edgar-blade, surface: master-work-surface, material: MAGMA_BLOCK, origin: BOTTOM_CENTER, offset: "0.01,0,-0.04", scale: "0.17,0.09,0.58", rotation-y-degrees: -12, interpolation-ticks: 8}
           edgar-tool: {type: EQUIP, actor-id: 349, material: MACE}
-          fine: {type: SWING, actor-id: 349, repetitions: 8, period-ticks: 9, feedback-anchor: master-anvil, particle: ELECTRIC_SPARK, particle-count: 4, particle-every: 1, sound: BLOCK_ANVIL_USE, sound-every: 2, sound-volume: 0.38, sound-pitch: 1.26}
+          fine: {type: SWING, actor-id: 349, repetitions: 8, period-ticks: 9, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 4, particle-every: 1, sound: BLOCK_ANVIL_USE, sound-every: 2, sound-volume: 0.38, sound-pitch: 1.26}
           blade-shape: {type: BLOCK_DISPLAY, key: edgar-blade, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0.017,0.01,-0.08", scale: "0.12,0.055,0.72", rotation-y-degrees: -12, interpolation-ticks: 10}
-          forge-guard: {type: SWING, actor-id: 349, repetitions: 3, period-ticks: 9, feedback-anchor: master-anvil, particle: ELECTRIC_SPARK, particle-count: 5, particle-every: 1, sound: BLOCK_ANVIL_USE, sound-every: 1, sound-volume: 0.36, sound-pitch: 1.38}
+          forge-guard: {type: SWING, actor-id: 349, repetitions: 3, period-ticks: 9, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 5, particle-every: 1, sound: BLOCK_ANVIL_USE, sound-every: 1, sound-volume: 0.36, sound-pitch: 1.38}
           guard: {type: BLOCK_DISPLAY, key: edgar-guard, surface: master-work-surface, material: COPPER_BLOCK, origin: BOTTOM_CENTER, offset: "-0.052,0.012,0.25", scale: "0.36,0.065,0.065", rotation-y-degrees: -12, interpolation-ticks: 6}
-          forge-grip: {type: SWING, actor-id: 358, repetitions: 3, period-ticks: 10, feedback-anchor: master-anvil, particle: CRIT, particle-count: 4, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 1, sound-volume: 0.32, sound-pitch: 1.12}
+          forge-grip: {type: SWING, actor-id: 358, repetitions: 3, period-ticks: 10, feedback-surface: master-work-surface, particle: CRIT, particle-count: 4, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 1, sound-volume: 0.32, sound-pitch: 1.12}
           grip: {type: BLOCK_DISPLAY, key: edgar-grip, surface: master-work-surface, material: DARK_OAK_PLANKS, origin: BOTTOM_CENTER, offset: "-0.079,0.012,0.38", scale: "0.075,0.07,0.22", rotation-y-degrees: -12, interpolation-ticks: 6}
           pommel: {type: BLOCK_DISPLAY, key: edgar-pommel, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.108,0.012,0.52", scale: "0.14,0.08,0.075", rotation-y-degrees: -12, interpolation-ticks: 6}
-          doran-finish: {type: SWING, actor-id: 358, repetitions: 4, period-ticks: 14, feedback-anchor: master-anvil, particle: CRIT, particle-count: 5, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 1, sound-volume: 0.44, sound-pitch: 0.92}
+          doran-finish: {type: SWING, actor-id: 358, repetitions: 4, period-ticks: 14, feedback-surface: master-work-surface, particle: CRIT, particle-count: 5, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 1, sound-volume: 0.44, sound-pitch: 0.92}
           bloom: {type: PARTICLE, anchor: master-anvil, particle: ELECTRIC_SPARK, count: 24}
           ring: {type: SOUND, anchor: master-anvil, sound: BLOCK_ANVIL_USE, volume: 0.62, pitch: 1.42}
           inspect: {type: WAIT, ticks: 28}
@@ -207,24 +217,24 @@ scenes:
           take: {type: EQUIP, actor-id: 354, material: IRON_INGOT}
           close-stock: {type: CONTAINER_LID, actor-id: 354, anchor: stock-chest, state: CLOSE}
           bench: {type: MOVE, actor-id: 354, anchor: apprentice-stand, route-profile: floor, timeout-ticks: 220}
-          face-anvil: {type: LOOK_AT_ANCHOR, actor-id: 354, anchor: apprentice-anvil}
+          face-anvil: {type: LOOK_AT_SURFACE, actor-id: 354, surface: apprentice-work-surface}
           stencil: {type: EQUIP, actor-id: 354, material: PAPER}
           press-stencil: {type: SWING, actor-id: 354, repetitions: 2, period-ticks: 10}
           blank: {type: EQUIP, actor-id: 354, material: IRON_INGOT}
           place-blank: {type: BLOCK_DISPLAY, key: luka-blank, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, scale: "0.46,0.11,0.30"}
           clear-hand: {type: EQUIP, actor-id: 354, material: AIR}
-          flatten: {type: SWING, actor-id: 354, repetitions: 6, period-ticks: 10, feedback-anchor: apprentice-anvil, particle: ELECTRIC_SPARK, particle-count: 2, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 2, sound-volume: 0.22, sound-pitch: 1.42}
+          flatten: {type: SWING, actor-id: 354, repetitions: 6, period-ticks: 10, feedback-surface: apprentice-work-surface, particle: ELECTRIC_SPARK, particle-count: 2, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 2, sound-volume: 0.22, sound-pitch: 1.42}
           shape-blank: {type: BLOCK_DISPLAY, key: luka-blank, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, scale: "0.64,0.06,0.40", interpolation-ticks: 8}
-          carve-x: {type: SWING, actor-id: 354, repetitions: 5, period-ticks: 8, feedback-anchor: apprentice-anvil, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 2, sound-volume: 0.24, sound-pitch: 1.54}
+          carve-x: {type: SWING, actor-id: 354, repetitions: 5, period-ticks: 8, feedback-surface: apprentice-work-surface, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 2, sound-volume: 0.24, sound-pitch: 1.54}
           consume-x: {type: BLOCK_DISPLAY, key: luka-blank, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0.10,0,0", scale: "0.43,0.045,0.36", interpolation-ticks: 5}
           x-left: {type: BLOCK_DISPLAY, key: luka-letter-x-left, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.235,0.012,0", scale: "0.035,0.055,0.245", rotation-y-degrees: 38, interpolation-ticks: 4}
           x-right: {type: BLOCK_DISPLAY, key: luka-letter-x-right, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.235,0.012,0", scale: "0.035,0.055,0.245", rotation-y-degrees: -38, interpolation-ticks: 4}
-          carve-u: {type: SWING, actor-id: 354, repetitions: 5, period-ticks: 8, feedback-anchor: apprentice-anvil, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 2, sound-volume: 0.24, sound-pitch: 1.60}
+          carve-u: {type: SWING, actor-id: 354, repetitions: 5, period-ticks: 8, feedback-surface: apprentice-work-surface, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 2, sound-volume: 0.24, sound-pitch: 1.60}
           consume-u: {type: BLOCK_DISPLAY, key: luka-blank, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0.22,0,0", scale: "0.20,0.035,0.34", interpolation-ticks: 5}
-          u-left: {type: BLOCK_DISPLAY, key: luka-letter-u-left, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.055,0.012,-0.055", scale: "0.032,0.055,0.135", rotation-y-degrees: 34, interpolation-ticks: 4}
-          u-right: {type: BLOCK_DISPLAY, key: luka-letter-u-right, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0.025,0.012,-0.055", scale: "0.032,0.055,0.135", rotation-y-degrees: -34, interpolation-ticks: 4}
-          u-tail: {type: BLOCK_DISPLAY, key: luka-letter-u-tail, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.005,0.012,0.075", scale: "0.034,0.055,0.155", rotation-y-degrees: 17, interpolation-ticks: 4}
-          carve-short-i: {type: SWING, actor-id: 354, repetitions: 6, period-ticks: 8, feedback-anchor: apprentice-anvil, particle: ELECTRIC_SPARK, particle-count: 4, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 2, sound-volume: 0.25, sound-pitch: 1.66}
+          u-left: {type: BLOCK_DISPLAY, key: luka-letter-u-left, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.070,0.012,-0.060", scale: "0.032,0.055,0.170", rotation-y-degrees: -34, interpolation-ticks: 4}
+          u-right: {type: BLOCK_DISPLAY, key: luka-letter-u-right, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0.018,0.012,0.010", scale: "0.034,0.055,0.295", rotation-y-degrees: 34, interpolation-ticks: 4}
+          u-tail: {type: BLOCK_DISPLAY, key: luka-letter-u-tail, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.080,0.012,0.125", scale: "0.030,0.055,0.105", rotation-y-degrees: 34, interpolation-ticks: 4}
+          carve-short-i: {type: SWING, actor-id: 354, repetitions: 6, period-ticks: 8, feedback-surface: apprentice-work-surface, particle: ELECTRIC_SPARK, particle-count: 4, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 2, sound-volume: 0.25, sound-pitch: 1.66}
           consume-short-i: {type: REMOVE_DISPLAY, key: luka-blank}
           short-i-left: {type: BLOCK_DISPLAY, key: luka-letter-short-i-left, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0.165,0.012,0.015", scale: "0.032,0.055,0.235", interpolation-ticks: 4}
           short-i-right: {type: BLOCK_DISPLAY, key: luka-letter-short-i-right, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0.295,0.012,0.015", scale: "0.032,0.055,0.235", interpolation-ticks: 4}
@@ -250,6 +260,51 @@ scenes:
           clear: {type: EQUIP, actor-id: 354, material: AIR}
           close-result-stock: {type: CONTAINER_LID, actor-id: 354, anchor: stock-chest, state: CLOSE}
           line: {type: SPEECH, actor-id: 354, text: "Гравировка готова. Буквы ровные — всё как заказывали."}
+      apprentice-engraving-jopa:
+        actor-ids: ["354"]
+        initial-delay-seconds: 34
+        cooldown-min-seconds: 26
+        cooldown-max-seconds: 44
+        step-ids: [face, blank, clear-hand, tool, flatten, plate, carve, zh-left, zh-mid, zh-right, o-left, o-right, o-top, o-bottom, p-left, p-right, p-top, a-left, a-right, a-bar, finish, inspect, clear-plate, clear-zh-left, clear-zh-mid, clear-zh-right, clear-o-left, clear-o-right, clear-o-top, clear-o-bottom, clear-p-left, clear-p-right, clear-p-top, clear-a-left, clear-a-right, clear-a-bar, result, line]
+        steps:
+          face: {type: LOOK_AT_SURFACE, actor-id: 354, surface: apprentice-work-surface}
+          blank: {type: BLOCK_DISPLAY, key: luka-jopa-plate, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, scale: "0.88,0.085,0.38"}
+          clear-hand: {type: EQUIP, actor-id: 354, material: AIR}
+          tool: {type: EQUIP, actor-id: 354, material: MACE}
+          flatten: {type: SWING, actor-id: 354, repetitions: 7, period-ticks: 9, feedback-surface: apprentice-work-surface, particle: ELECTRIC_SPARK, particle-count: 3, sound: BLOCK_ANVIL_LAND, sound-every: 2, sound-volume: 0.25, sound-pitch: 1.48}
+          plate: {type: BLOCK_DISPLAY, key: luka-jopa-plate, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, scale: "0.82,0.035,0.32", interpolation-ticks: 8}
+          carve: {type: SWING, actor-id: 354, repetitions: 12, period-ticks: 7, feedback-surface: apprentice-work-surface, particle: ELECTRIC_SPARK, particle-count: 4, sound: BLOCK_ANVIL_USE, sound-every: 2, sound-volume: 0.27, sound-pitch: 1.62}
+          zh-left: {type: BLOCK_DISPLAY, key: luka-jopa-zh-left, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.315,0.012,0", scale: "0.026,0.055,0.245", rotation-y-degrees: 38, interpolation-ticks: 4}
+          zh-mid: {type: BLOCK_DISPLAY, key: luka-jopa-zh-mid, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.315,0.012,0", scale: "0.026,0.055,0.245", interpolation-ticks: 4}
+          zh-right: {type: BLOCK_DISPLAY, key: luka-jopa-zh-right, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.315,0.012,0", scale: "0.026,0.055,0.245", rotation-y-degrees: -38, interpolation-ticks: 4}
+          o-left: {type: BLOCK_DISPLAY, key: luka-jopa-o-left, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.145,0.012,0", scale: "0.025,0.055,0.235", interpolation-ticks: 4}
+          o-right: {type: BLOCK_DISPLAY, key: luka-jopa-o-right, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.035,0.012,0", scale: "0.025,0.055,0.235", interpolation-ticks: 4}
+          o-top: {type: BLOCK_DISPLAY, key: luka-jopa-o-top, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.090,0.012,-0.105", scale: "0.135,0.055,0.025", interpolation-ticks: 4}
+          o-bottom: {type: BLOCK_DISPLAY, key: luka-jopa-o-bottom, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.090,0.012,0.105", scale: "0.135,0.055,0.025", interpolation-ticks: 4}
+          p-left: {type: BLOCK_DISPLAY, key: luka-jopa-p-left, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0.055,0.012,0", scale: "0.025,0.055,0.235", interpolation-ticks: 4}
+          p-right: {type: BLOCK_DISPLAY, key: luka-jopa-p-right, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0.165,0.012,0", scale: "0.025,0.055,0.235", interpolation-ticks: 4}
+          p-top: {type: BLOCK_DISPLAY, key: luka-jopa-p-top, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0.110,0.012,-0.105", scale: "0.135,0.055,0.025", interpolation-ticks: 4}
+          a-left: {type: BLOCK_DISPLAY, key: luka-jopa-a-left, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0.275,0.012,0", scale: "0.027,0.055,0.255", rotation-y-degrees: 24, interpolation-ticks: 4}
+          a-right: {type: BLOCK_DISPLAY, key: luka-jopa-a-right, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0.365,0.012,0", scale: "0.027,0.055,0.255", rotation-y-degrees: -24, interpolation-ticks: 4}
+          a-bar: {type: BLOCK_DISPLAY, key: luka-jopa-a-bar, surface: apprentice-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0.320,0.012,0.025", scale: "0.105,0.055,0.024", interpolation-ticks: 4}
+          finish: {type: SOUND, anchor: apprentice-anvil, sound: BLOCK_ANVIL_USE, volume: 0.42, pitch: 1.46}
+          inspect: {type: WAIT, ticks: 30}
+          clear-plate: {type: REMOVE_DISPLAY, key: luka-jopa-plate}
+          clear-zh-left: {type: REMOVE_DISPLAY, key: luka-jopa-zh-left}
+          clear-zh-mid: {type: REMOVE_DISPLAY, key: luka-jopa-zh-mid}
+          clear-zh-right: {type: REMOVE_DISPLAY, key: luka-jopa-zh-right}
+          clear-o-left: {type: REMOVE_DISPLAY, key: luka-jopa-o-left}
+          clear-o-right: {type: REMOVE_DISPLAY, key: luka-jopa-o-right}
+          clear-o-top: {type: REMOVE_DISPLAY, key: luka-jopa-o-top}
+          clear-o-bottom: {type: REMOVE_DISPLAY, key: luka-jopa-o-bottom}
+          clear-p-left: {type: REMOVE_DISPLAY, key: luka-jopa-p-left}
+          clear-p-right: {type: REMOVE_DISPLAY, key: luka-jopa-p-right}
+          clear-p-top: {type: REMOVE_DISPLAY, key: luka-jopa-p-top}
+          clear-a-left: {type: REMOVE_DISPLAY, key: luka-jopa-a-left}
+          clear-a-right: {type: REMOVE_DISPLAY, key: luka-jopa-a-right}
+          clear-a-bar: {type: REMOVE_DISPLAY, key: luka-jopa-a-bar}
+          result: {type: EQUIP, actor-id: 354, material: IRON_INGOT}
+          line: {type: SPEECH, actor-id: 354, text: "Ещё одна надпись готова. Заказчик просил без лишних вопросов."}
       ore-inspection:
         actor-ids: ["351"]
         initial-delay-seconds: 14
@@ -305,8 +360,8 @@ scenes:
       furnace-check:
         actor-ids: ["362"]
         initial-delay-seconds: 22
-        cooldown-min-seconds: 42
-        cooldown-max-seconds: 64
+        cooldown-min-seconds: 24
+        cooldown-max-seconds: 38
         step-ids: [stock, face-stock, open-stock, reach-stock, ore, close-stock, furnace, face-fire, feed, flame, crackle, heat, hot-billet, draw, casting, face-mould, clear-hand, mould, crucible, molten-cap, raise-crucible, pour, stream-a, fill-start, stream-b, fill-grow, stream-c, fill-full, pour-sound, pour-pause, clear-stream-a, clear-stream-b, clear-stream-c, clear-molten-cap, clear-crucible, cool-smoke, cool-hiss, cool-wait, cooled-casting, break-mould, clear-mould, inspect, collect-casting, cooled-ingot, result-stock, face-result-stock, open-result-stock, store, clear, close-result-stock, line]
         steps:
           stock: {type: MOVE, actor-id: 362, anchor: stock-stand, route-profile: floor, timeout-ticks: 220}
