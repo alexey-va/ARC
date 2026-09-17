@@ -9,6 +9,20 @@ speech:
   view-range: 1.0
   scale: 0.95
 
+# Kotlin owns NPC 364, the hit combo and Bran's timed challenge. The previous
+# Denizen owner is deliberately removed so one attack has exactly one counter.
+training-dummy:
+  dummy-npc-id: 364
+  trainer-npc-id: 355
+  location: "71.63546148860222,70.0,72.61048723499574,-4.75167,129.2892"
+  strong-charge: 0.9
+  combo-timeout-seconds: 15
+  challenge-hits: 8
+  challenge-duration-seconds: 18
+  cooldown-hours: 20
+  partial-reward: 20
+  full-reward: 60
+
 scene-ids: [forge, mount-yard]
 
 scenes:
@@ -26,7 +40,7 @@ scenes:
         home: "70.8895,70.0,62.2651,60.9,0"
         denied-denizen-flags: [rc_origin_forge_service_busy]
       351:
-        home: "70.9392,70.0,74.3837,-78.3,-3.7"
+        home: "68.5,70.0,62.5,116.6,5.0"
         denied-denizen-flags: [rc_origin_forge_service_busy]
       354:
         home: "79.6839,70.0,66.8583,-126.2,0"
@@ -49,7 +63,7 @@ scenes:
       stock-chest: "82.5,72.5,71.5"
       apprentice-stand: "79.6839,70.0,66.8583"
       apprentice-anvil: "79.1,70.65,67.8"
-      ore-cart-stand: "65.5,70.0,63.5"
+      ore-cart-stand: "68.5,70.0,62.5"
       ore-cart: "64.5,70.5,60.5"
       ore-chest-stand: "69.11,70.0,76.21"
       ore-chest: "69.5,70.5,77.5"
@@ -111,7 +125,7 @@ scenes:
         initial-delay-seconds: 5
         cooldown-min-seconds: 12
         cooldown-max-seconds: 20
-        step-ids: [stock, face-stock, open-stock, reach-stock, take, close-stock, bench, face-anvil, stencil, press-stencil, blank, carve, sparks, ring, inspect, result-stock, face-result-stock, open-result-stock, store, clear, close-result-stock, line]
+        step-ids: [stock, face-stock, open-stock, reach-stock, take, close-stock, bench, face-anvil, stencil, press-stencil, blank, place-blank, clear-hand, carve-rough, shape-blank, carve-fine, sparks, ring, inspect, collect, result, result-stock, face-result-stock, open-result-stock, store, clear, close-result-stock, line]
         steps:
           stock: {type: MOVE, actor-id: 354, anchor: stock-stand, route-profile: floor, timeout-ticks: 220}
           face-stock: {type: LOOK_AT_ANCHOR, actor-id: 354, anchor: stock-chest}
@@ -124,10 +138,16 @@ scenes:
           stencil: {type: EQUIP, actor-id: 354, material: PAPER}
           press-stencil: {type: SWING, actor-id: 354, repetitions: 2, period-ticks: 10}
           blank: {type: EQUIP, actor-id: 354, material: IRON_INGOT}
-          carve: {type: SWING, actor-id: 354, repetitions: 18, period-ticks: 10}
-          sparks: {type: PARTICLE, anchor: apprentice-anvil, particle: ELECTRIC_SPARK, count: 10}
+          place-blank: {type: BLOCK_DISPLAY, key: luka-blank, anchor: apprentice-anvil, material: IRON_BLOCK, scale: "0.46,0.11,0.30"}
+          clear-hand: {type: EQUIP, actor-id: 354, material: AIR}
+          carve-rough: {type: SWING, actor-id: 354, repetitions: 9, period-ticks: 10, feedback-anchor: apprentice-anvil, particle: ELECTRIC_SPARK, particle-count: 2, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 3, sound-volume: 0.22, sound-pitch: 1.42}
+          shape-blank: {type: BLOCK_DISPLAY, key: luka-blank, anchor: apprentice-anvil, material: IRON_BLOCK, scale: "0.64,0.06,0.40", interpolation-ticks: 8}
+          carve-fine: {type: SWING, actor-id: 354, repetitions: 9, period-ticks: 9, feedback-anchor: apprentice-anvil, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 3, sound-volume: 0.24, sound-pitch: 1.58}
+          sparks: {type: PARTICLE, anchor: apprentice-anvil, particle: ELECTRIC_SPARK, count: 14}
           ring: {type: SOUND, anchor: apprentice-anvil, sound: BLOCK_ANVIL_USE, volume: 0.34, pitch: 1.35}
           inspect: {type: WAIT, ticks: 24}
+          collect: {type: REMOVE_DISPLAY, key: luka-blank}
+          result: {type: EQUIP, actor-id: 354, material: IRON_INGOT}
           result-stock: {type: MOVE, actor-id: 354, anchor: stock-stand, route-profile: floor, timeout-ticks: 220}
           face-result-stock: {type: LOOK_AT_ANCHOR, actor-id: 354, anchor: stock-chest}
           open-result-stock: {type: CONTAINER_LID, actor-id: 354, anchor: stock-chest, state: OPEN}
@@ -155,12 +175,14 @@ scenes:
           clear: {type: EQUIP, actor-id: 351, material: AIR}
           close-chest: {type: CONTAINER_LID, actor-id: 351, anchor: ore-chest, state: CLOSE}
           clink: {type: SOUND, anchor: ore-chest, sound: BLOCK_IRON_PLACE, volume: 0.38, pitch: 0.92}
-          line: {type: SPEECH, actor-id: 351, text: "Руду принёс. Теперь обратно к манекену."}
+          line: {type: SPEECH, actor-id: 351, text: "Руду привёз. Проверю, всё ли дошло до склада."}
       blade-practice:
         actor-ids: ["355"]
         initial-delay-seconds: 18
         cooldown-min-seconds: 58
         cooldown-max-seconds: 86
+        yield-anchor: dummy
+        yield-range: 3.2
         step-ids: [stage, face, blade, strike, hit, sweep, line]
         steps:
           stage: {type: MOVE, actor-id: 355, anchor: dummy-stage, route-profile: floor, timeout-ticks: 220}

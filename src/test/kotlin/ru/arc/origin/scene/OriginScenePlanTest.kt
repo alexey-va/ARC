@@ -53,13 +53,22 @@ class OriginScenePlanTest : FreeSpec({
         val scene = OriginScenePlan.load(Files.createTempDirectory("origin-scenes-production-test")).scene("forge")
         val luka = scene.cycles.single { it.id == "apprentice-engraving" }
         val savva = scene.cycles.single { it.id == "ore-inspection" }
+        val bran = scene.cycles.single { it.id == "blade-practice" }
         val yar = scene.cycles.single { it.id == "furnace-check" }
 
         luka.steps.filterIsInstance<OriginSceneStep.ContainerLid>().map(OriginSceneStep.ContainerLid::open) shouldContainExactly
             listOf(true, false, true, false)
-        luka.steps.filterIsInstance<OriginSceneStep.Swing>().maxOf(OriginSceneStep.Swing::repetitions) shouldBe 18
+        luka.steps.filterIsInstance<OriginSceneStep.Swing>().filter { it.feedbackAnchor == "apprentice-anvil" }
+            .sumOf(OriginSceneStep.Swing::repetitions) shouldBe 18
+        luka.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().map { it.key } shouldContainExactly
+            listOf("luka-blank", "luka-blank")
+        luka.steps.filterIsInstance<OriginSceneStep.RemoveDisplay>().map { it.key } shouldContainExactly listOf("luka-blank")
         savva.steps.filterIsInstance<OriginSceneStep.ContainerLid>().map(OriginSceneStep.ContainerLid::anchor).toSet() shouldBe
             setOf("ore-cart", "ore-chest")
+        scene.actors.getValue(351).home.x shouldBe scene.anchors.getValue("ore-cart-stand").x
+        scene.actors.getValue(351).home.z shouldBe scene.anchors.getValue("ore-cart-stand").z
+        bran.yieldAnchor shouldBe "dummy"
+        bran.yieldRange shouldBe 3.2
         yar.steps.filterIsInstance<OriginSceneStep.Equip>().map(OriginSceneStep.Equip::material) shouldContainExactly
             listOf("RAW_IRON", "MAGMA_BLOCK", "IRON_INGOT", "AIR")
         yar.steps.filterIsInstance<OriginSceneStep.ContainerLid>().map(OriginSceneStep.ContainerLid::open) shouldContainExactly

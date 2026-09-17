@@ -79,6 +79,7 @@ import ru.arc.onboarding.OnboardingModule
 import ru.arc.origin.OriginSpawnModule
 import ru.arc.origin.OriginPortalsModule
 import ru.arc.origin.OriginDiningModule
+import ru.arc.origin.OriginTrainingDummyModule
 import ru.arc.origin.scene.OriginAmbientScenesModule
 import ru.arc.paper.chunk.PaperChunkTicketRegistry
 import ru.arc.restart.RestartModule
@@ -237,6 +238,7 @@ open class ARC : JavaPlugin() {
             EconomyModule,
             OriginDiningModule,
             OriginAmbientScenesModule,
+            OriginTrainingDummyModule,
             // Configuration (priority 30-49)
             ConfigModule,
             MetricsModule,

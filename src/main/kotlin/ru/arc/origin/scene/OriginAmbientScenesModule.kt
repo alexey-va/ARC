@@ -13,6 +13,7 @@ import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.Particle
 import org.bukkit.block.Lidded
+import org.bukkit.entity.BlockDisplay
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Display
 import org.bukkit.entity.TextDisplay
@@ -76,6 +77,10 @@ object OriginAmbientScenesModule : PluginModule, Listener {
     fun startCycle(sceneId: String, cycleId: String): OriginSceneStartResult =
         service?.startManual(sceneId, cycleId) ?: OriginSceneStartResult.Unavailable("scene-engine-not-ready")
 
+    fun interruptActor(actorId: Int, reason: String) {
+        service?.interruptActor(actorId, reason)
+    }
+
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
     fun onNpcClick(event: NPCRightClickEvent) {
         service?.interruptActor(event.npc.id, "player-click")
@@ -98,6 +103,7 @@ private data class ActiveOriginSceneCycle(
     val previousHands: MutableMap<Int, ItemStack?> = mutableMapOf(),
     val mountedPairs: MutableSet<Pair<Int, Int>> = mutableSetOf(),
     val openedContainers: MutableSet<Location> = mutableSetOf(),
+    val displays: MutableMap<String, BlockDisplay> = mutableMapOf(),
     val manual: Boolean = false,
     var returning: Boolean = false,
 )
@@ -113,6 +119,7 @@ private class OriginSceneService(
     private var closed = false
 
     fun start() {
+        removeAbandonedDisplays()
         val now = System.currentTimeMillis()
         plan.scenes.forEach { scene ->
             scene.cycles.forEach { cycle ->
@@ -139,6 +146,7 @@ private class OriginSceneService(
         val cycle = scene.cycles.firstOrNull { it.id == cycleId }
             ?: return OriginSceneStartResult.Unknown(sceneId, cycleId)
         val key = OriginSceneCycleKey(sceneId, cycleId)
+        if (playerOccupiesYieldZone(scene, cycle)) return OriginSceneStartResult.Busy(key, "player-near-yield-anchor")
 
         active.values.filter { running -> !running.manual && running.cycle.actorIds.any(cycle.actorIds::contains) }
             .toList()
@@ -158,12 +166,19 @@ private class OriginSceneService(
     private fun tick() {
         if (closed) return
         if (Bukkit.getWorld(plan.world) == null) return
+        active.values.filter { playerOccupiesYieldZone(it.scene, it.cycle) }
+            .toList()
+            .forEach { interruptCycle(it, "player-proximity") }
         val now = System.currentTimeMillis()
         for (scene in plan.scenes.shuffled()) {
             if (!hasAudience(scene)) continue
             if (active.values.count { it.scene.id == scene.id } >= scene.maxConcurrentCycles) continue
             for (cycle in scene.cycles.shuffled()) {
                 if (!coordinator.isDue(scene.id, cycle.id, now)) continue
+                if (playerOccupiesYieldZone(scene, cycle)) {
+                    coordinator.delay(scene.id, cycle.id, now + scene.retryMillis)
+                    continue
+                }
                 val actors = cycle.actorIds.mapNotNull(::npc).takeIf { it.size == cycle.actorIds.size }
                 if (actors == null || actors.any { !available(it, scene) }) {
                     coordinator.delay(scene.id, cycle.id, now + scene.retryMillis)
@@ -195,6 +210,14 @@ private class OriginSceneService(
         return Bukkit.getOnlinePlayers().any { player ->
             player.world.name == plan.world && player.location.distanceSquared(scene.anchor.inWorld(player.world)) <= rangeSquared
         }
+    }
+
+    private fun playerOccupiesYieldZone(scene: OriginSceneDefinition, cycle: OriginSceneCycle): Boolean {
+        val anchorId = cycle.yieldAnchor ?: return false
+        val world = Bukkit.getWorld(plan.world) ?: return false
+        val anchor = scene.anchors.getValue(anchorId).inWorld(world)
+        val rangeSquared = cycle.yieldRange * cycle.yieldRange
+        return world.players.any { it.location.distanceSquared(anchor) <= rangeSquared }
     }
 
     private fun available(npc: NPC, scene: OriginSceneDefinition): Boolean {
@@ -234,15 +257,21 @@ private class OriginSceneService(
                 runStep(running, index + 1)
             }
             is OriginSceneStep.Swing -> swing(running, index, step, 0)
+            is OriginSceneStep.BlockDisplay -> {
+                setBlockDisplay(running, step)
+                runStep(running, index + 1)
+            }
+            is OriginSceneStep.RemoveDisplay -> {
+                removeDisplay(running, step.key)
+                runStep(running, index + 1)
+            }
             is OriginSceneStep.Sound -> {
-                stepLocation(running, step.actorId, step.anchor)?.let { location ->
-                    SoundUtils.getSound(step.sound)?.let { location.world.playSound(location, it, step.volume, step.pitch) }
-                }
+                playSound(stepLocation(running, step.actorId, step.anchor), step.sound, step.volume, step.pitch)
                 runStep(running, index + 1)
             }
             is OriginSceneStep.Particle -> {
                 stepLocation(running, step.actorId, step.anchor)?.let { location ->
-                    runCatching { Particle.valueOf(step.particle) }.onSuccess { location.world.spawnParticle(it, location.clone().add(0.0, 1.0, 0.0), step.count, 0.22, 0.22, 0.22, 0.01) }
+                    spawnParticle(location, step.particle, step.count, if (step.anchor == null) 1.0 else 0.15)
                 }
                 runStep(running, index + 1)
             }
@@ -311,8 +340,67 @@ private class OriginSceneService(
     private fun swing(running: ActiveOriginSceneCycle, index: Int, step: OriginSceneStep.Swing, repetition: Int) {
         if (!isCurrent(running)) return
         (npc(step.actorId)?.takeIf(NPC::isSpawned)?.entity as? LivingEntity)?.swingMainHand()
+        val strike = repetition + 1
+        val feedbackLocation = stepLocation(running, step.actorId, step.feedbackAnchor)
+        if (step.particle != null && strike % step.particleEvery == 0) {
+            spawnParticle(feedbackLocation, step.particle, step.particleCount, if (step.feedbackAnchor == null) 1.0 else 0.15)
+        }
+        if (step.sound != null && strike % step.soundEvery == 0) {
+            playSound(feedbackLocation, step.sound, step.soundVolume, step.soundPitch)
+        }
         if (repetition + 1 >= step.repetitions) runStep(running, index + 1)
         else later(running, step.periodTicks) { swing(running, index, step, repetition + 1) }
+    }
+
+    private fun setBlockDisplay(running: ActiveOriginSceneCycle, step: OriginSceneStep.BlockDisplay) {
+        val world = Bukkit.getWorld(plan.world) ?: return
+        val material = Material.matchMaterial(step.material)?.takeIf(Material::isBlock) ?: return
+        val location = running.scene.anchors.getValue(step.anchor).inWorld(world)
+        val display = running.displays[step.key]?.takeIf(BlockDisplay::isValid)
+            ?: world.spawn(location, BlockDisplay::class.java).also { created ->
+                created.isPersistent = false
+                created.addScoreboardTag(PROP_TAG)
+                running.displays[step.key] = created
+            }
+        display.block = material.createBlockData()
+        display.teleport(location)
+        display.interpolationDelay = -1
+        display.interpolationDuration = step.interpolationTicks
+        display.teleportDuration = step.interpolationTicks.coerceAtMost(59)
+        display.transformation = Transformation(
+            Vector3f(-step.scaleX / 2f, -step.scaleY / 2f, -step.scaleZ / 2f),
+            AxisAngle4f(),
+            Vector3f(step.scaleX, step.scaleY, step.scaleZ),
+            AxisAngle4f(),
+        )
+    }
+
+    private fun removeDisplay(running: ActiveOriginSceneCycle, key: String) {
+        running.displays.remove(key)?.takeIf(BlockDisplay::isValid)?.remove()
+    }
+
+    private fun removeDisplays(running: ActiveOriginSceneCycle) {
+        running.displays.values.forEach { if (it.isValid) it.remove() }
+        running.displays.clear()
+    }
+
+    private fun removeAbandonedDisplays() {
+        Bukkit.getWorld(plan.world)
+            ?.getEntitiesByClass(BlockDisplay::class.java)
+            ?.filter { PROP_TAG in it.scoreboardTags }
+            ?.forEach(BlockDisplay::remove)
+    }
+
+    private fun spawnParticle(location: Location?, particleName: String, count: Int, yOffset: Double) {
+        if (location == null) return
+        runCatching { Particle.valueOf(particleName) }.onSuccess { particle ->
+            location.world.spawnParticle(particle, location.clone().add(0.0, yOffset, 0.0), count, 0.18, 0.12, 0.18, 0.015)
+        }
+    }
+
+    private fun playSound(location: Location?, soundName: String, volume: Float, pitch: Float) {
+        if (location == null) return
+        SoundUtils.getSound(soundName)?.let { location.world.playSound(location, it, volume, pitch) }
     }
 
     private fun equip(running: ActiveOriginSceneCycle, actorId: Int, materialName: String) {
@@ -351,6 +439,7 @@ private class OriginSceneService(
         }
         restoreHands(running)
         closeContainers(running)
+        removeDisplays(running)
         info("ORIGIN_SCENE phase=CYCLE_RETURNING scene={} cycle={} reason={}", running.scene.id, running.cycle.id, reason)
         returnHome(running, reason, keepMounted)
     }
@@ -451,6 +540,7 @@ private class OriginSceneService(
         }
         restoreHands(running)
         closeContainers(running)
+        removeDisplays(running)
         release(running, reason)
     }
 
@@ -551,6 +641,7 @@ private class OriginSceneService(
                 Bukkit.getWorld(plan.world)?.let { actor.entity.teleport(running.scene.actors.getValue(actor.id).home.inWorld(it)) }
             }
             restoreHands(running)
+            removeDisplays(running)
         }
         active.clear()
         coordinator.clear()
@@ -568,6 +659,7 @@ private class OriginSceneService(
 
     private companion object {
         const val SPEECH_TAG = "arc_origin_scene_speech"
+        const val PROP_TAG = "arc_origin_scene_prop"
         const val BUSY_TAG = "arc_origin_scene_busy"
     }
 }

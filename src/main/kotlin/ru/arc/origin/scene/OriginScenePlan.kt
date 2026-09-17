@@ -45,7 +45,35 @@ internal sealed interface OriginSceneStep {
 
     data class Equip(override val actorId: Int, val material: String) : OriginSceneStep
 
-    data class Swing(override val actorId: Int, val repetitions: Int, val periodTicks: Long) : OriginSceneStep
+    data class Swing(
+        override val actorId: Int,
+        val repetitions: Int,
+        val periodTicks: Long,
+        val feedbackAnchor: String? = null,
+        val particle: String? = null,
+        val particleCount: Int = 3,
+        val particleEvery: Int = 1,
+        val sound: String? = null,
+        val soundEvery: Int = 1,
+        val soundVolume: Float = 0.35f,
+        val soundPitch: Float = 1.0f,
+    ) : OriginSceneStep
+
+    data class BlockDisplay(
+        val key: String,
+        val anchor: String,
+        val material: String,
+        val scaleX: Float,
+        val scaleY: Float,
+        val scaleZ: Float,
+        val interpolationTicks: Int,
+    ) : OriginSceneStep {
+        override val actorId: Int? = null
+    }
+
+    data class RemoveDisplay(val key: String) : OriginSceneStep {
+        override val actorId: Int? = null
+    }
 
     data class Sound(
         override val actorId: Int?,
@@ -78,6 +106,8 @@ internal data class OriginSceneCycle(
     val actorIds: Set<Int>,
     val cooldownMillis: LongRange,
     val initialDelayMillis: Long,
+    val yieldAnchor: String?,
+    val yieldRange: Double,
     val steps: List<OriginSceneStep>,
 )
 
@@ -101,6 +131,9 @@ internal data class OriginSceneDefinition(
             require(cycle.actorIds.isNotEmpty() && cycle.actorIds.all(actors::containsKey)) {
                 "scene $id cycle ${cycle.id} references an undeclared actor"
             }
+            require(cycle.yieldAnchor == null || cycle.yieldAnchor in anchors) {
+                "scene $id cycle ${cycle.id} references yield anchor ${cycle.yieldAnchor}"
+            }
             require(cycle.steps.isNotEmpty()) { "scene $id cycle ${cycle.id} has no steps" }
             cycle.steps.forEach { step ->
                 step.actorId?.let { require(it in cycle.actorIds) { "scene $id cycle ${cycle.id} step actor $it is not leased" } }
@@ -111,6 +144,8 @@ internal data class OriginSceneDefinition(
                     }
                     is OriginSceneStep.LookAtAnchor -> require(step.anchor in anchors)
                     is OriginSceneStep.LookAtActor -> require(step.targetActorId in actors)
+                    is OriginSceneStep.Swing -> require(step.feedbackAnchor == null || step.feedbackAnchor in anchors)
+                    is OriginSceneStep.BlockDisplay -> require(step.anchor in anchors)
                     is OriginSceneStep.Sound -> require(step.anchor == null || step.anchor in anchors)
                     is OriginSceneStep.Particle -> require(step.anchor == null || step.anchor in anchors)
                     is OriginSceneStep.ContainerLid -> require(step.anchor in anchors)
@@ -191,6 +226,8 @@ internal data class OriginScenePlan(
                 actorIds = source.stringList("$root.actor-ids").map(String::toInt).toSet(),
                 cooldownMillis = minOf(minimum, maximum)..maxOf(minimum, maximum),
                 initialDelayMillis = source.integer("$root.initial-delay-seconds", 10).toLong().coerceIn(0L, 600L) * 1_000L,
+                yieldAnchor = source.string("$root.yield-anchor", "").takeIf(String::isNotBlank),
+                yieldRange = source.real("$root.yield-range", 2.5).coerceIn(1.0, 12.0),
                 steps = source.stringList("$root.step-ids").map { stepId -> parseStep(source, "$root.steps.$stepId") },
             )
         }
@@ -207,10 +244,31 @@ internal data class OriginScenePlan(
             "LOOK_AT_ACTOR" -> OriginSceneStep.LookAtActor(source.integer("$root.actor-id"), source.integer("$root.target-actor-id"))
             "EQUIP" -> OriginSceneStep.Equip(source.integer("$root.actor-id"), source.string("$root.material"))
             "SWING" -> OriginSceneStep.Swing(
-                source.integer("$root.actor-id"),
-                source.integer("$root.repetitions", 1).coerceIn(1, 20),
-                source.integer("$root.period-ticks", 10).toLong().coerceIn(1L, 100L),
+                actorId = source.integer("$root.actor-id"),
+                repetitions = source.integer("$root.repetitions", 1).coerceIn(1, 20),
+                periodTicks = source.integer("$root.period-ticks", 10).toLong().coerceIn(1L, 100L),
+                feedbackAnchor = source.string("$root.feedback-anchor", "").takeIf(String::isNotBlank),
+                particle = source.string("$root.particle", "").takeIf(String::isNotBlank),
+                particleCount = source.integer("$root.particle-count", 3).coerceIn(1, 50),
+                particleEvery = source.integer("$root.particle-every", 1).coerceIn(1, 20),
+                sound = source.string("$root.sound", "").takeIf(String::isNotBlank),
+                soundEvery = source.integer("$root.sound-every", 1).coerceIn(1, 20),
+                soundVolume = source.real("$root.sound-volume", 0.35).toFloat().coerceIn(0f, 4f),
+                soundPitch = source.real("$root.sound-pitch", 1.0).toFloat().coerceIn(0.5f, 2f),
             )
+            "BLOCK_DISPLAY" -> {
+                val scale = vector(source.string("$root.scale", "0.5,0.1,0.3"), "$root.scale")
+                OriginSceneStep.BlockDisplay(
+                    key = source.string("$root.key"),
+                    anchor = source.string("$root.anchor"),
+                    material = source.string("$root.material"),
+                    scaleX = scale.first,
+                    scaleY = scale.second,
+                    scaleZ = scale.third,
+                    interpolationTicks = source.integer("$root.interpolation-ticks", 0).coerceIn(0, 59),
+                )
+            }
+            "REMOVE_DISPLAY" -> OriginSceneStep.RemoveDisplay(source.string("$root.key"))
             "SOUND" -> OriginSceneStep.Sound(
                 actorId = source.integer("$root.actor-id", -1).takeIf { it >= 0 },
                 anchor = source.string("$root.anchor", "").takeIf(String::isNotBlank),
@@ -277,6 +335,14 @@ internal data class OriginScenePlan(
                 pitch = values.getOrNull(4)?.toFloat() ?: 0f,
                 explicitPose = values.size >= 4,
             )
+        }
+
+        private fun vector(raw: String, path: String): Triple<Float, Float, Float> {
+            val values = raw.split(',').map(String::trim)
+            require(values.size == 3) { "$path must be x,y,z" }
+            return Triple(values[0].toFloat(), values[1].toFloat(), values[2].toFloat()).also { vector ->
+                require(vector.first > 0f && vector.second > 0f && vector.third > 0f) { "$path values must be positive" }
+            }
         }
 
         private fun block(raw: String, path: String): Pair<Int, Int> {
