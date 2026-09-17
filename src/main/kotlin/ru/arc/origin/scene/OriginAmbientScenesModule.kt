@@ -9,8 +9,10 @@ import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import org.bukkit.Bukkit
 import org.bukkit.Color
+import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.Particle
+import org.bukkit.block.Lidded
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Display
 import org.bukkit.entity.TextDisplay
@@ -69,10 +71,24 @@ object OriginAmbientScenesModule : PluginModule, Listener {
         service = null
     }
 
+    fun cycleKeys(): List<OriginSceneCycleKey> = service?.cycleKeys().orEmpty()
+
+    fun startCycle(sceneId: String, cycleId: String): OriginSceneStartResult =
+        service?.startManual(sceneId, cycleId) ?: OriginSceneStartResult.Unavailable("scene-engine-not-ready")
+
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
     fun onNpcClick(event: NPCRightClickEvent) {
         service?.interruptActor(event.npc.id, "player-click")
     }
+}
+
+data class OriginSceneCycleKey(val sceneId: String, val cycleId: String)
+
+sealed interface OriginSceneStartResult {
+    data class Started(val key: OriginSceneCycleKey) : OriginSceneStartResult
+    data class Unknown(val sceneId: String, val cycleId: String) : OriginSceneStartResult
+    data class Busy(val key: OriginSceneCycleKey, val reason: String) : OriginSceneStartResult
+    data class Unavailable(val reason: String) : OriginSceneStartResult
 }
 
 private data class ActiveOriginSceneCycle(
@@ -81,6 +97,8 @@ private data class ActiveOriginSceneCycle(
     val cycle: OriginSceneCycle,
     val previousHands: MutableMap<Int, ItemStack?> = mutableMapOf(),
     val mountedPairs: MutableSet<Pair<Int, Int>> = mutableSetOf(),
+    val openedContainers: MutableSet<Location> = mutableSetOf(),
+    val manual: Boolean = false,
     var returning: Boolean = false,
 )
 
@@ -110,6 +128,33 @@ private class OriginSceneService(
         )
     }
 
+    fun cycleKeys(): List<OriginSceneCycleKey> = plan.scenes.flatMap { scene ->
+        scene.cycles.map { cycle -> OriginSceneCycleKey(scene.id, cycle.id) }
+    }
+
+    fun startManual(sceneId: String, cycleId: String): OriginSceneStartResult {
+        if (closed) return OriginSceneStartResult.Unavailable("scene-engine-closed")
+        val scene = plan.scenes.firstOrNull { it.id == sceneId }
+            ?: return OriginSceneStartResult.Unknown(sceneId, cycleId)
+        val cycle = scene.cycles.firstOrNull { it.id == cycleId }
+            ?: return OriginSceneStartResult.Unknown(sceneId, cycleId)
+        val key = OriginSceneCycleKey(sceneId, cycleId)
+
+        active.values.filter { running -> !running.manual && running.cycle.actorIds.any(cycle.actorIds::contains) }
+            .toList()
+            .forEach { interruptCycle(it, "manual-preempt") }
+
+        val actors = cycle.actorIds.mapNotNull(::npc).takeIf { it.size == cycle.actorIds.size }
+            ?: return OriginSceneStartResult.Unavailable("actor-missing")
+        val blocked = actors.firstOrNull { !available(it, scene) }
+        if (blocked != null) return OriginSceneStartResult.Busy(key, "actor-${blocked.id}-busy")
+
+        val lease = coordinator.tryAcquire(scene.id, cycle.id, cycle.actorIds, System.currentTimeMillis(), ignoreDue = true)
+            ?: return OriginSceneStartResult.Busy(key, "actor-lease-busy")
+        launch(scene, cycle, lease, manual = true)
+        return OriginSceneStartResult.Started(key)
+    }
+
     private fun tick() {
         if (closed) return
         if (Bukkit.getWorld(plan.world) == null) return
@@ -125,14 +170,24 @@ private class OriginSceneService(
                     continue
                 }
                 val lease = coordinator.tryAcquire(scene.id, cycle.id, cycle.actorIds, now) ?: continue
-                val running = ActiveOriginSceneCycle(lease, scene, cycle)
-                active[lease.token] = running
-                actors.forEach { it.entity.addScoreboardTag(BUSY_TAG) }
-                info("ORIGIN_SCENE phase=CYCLE_STARTED scene={} cycle={} actors={}", scene.id, cycle.id, cycle.actorIds.sorted().joinToString(","))
-                runStep(running, 0)
+                launch(scene, cycle, lease, manual = false)
                 break
             }
         }
+    }
+
+    private fun launch(scene: OriginSceneDefinition, cycle: OriginSceneCycle, lease: OriginSceneLease, manual: Boolean) {
+        val running = ActiveOriginSceneCycle(lease, scene, cycle, manual = manual)
+        active[lease.token] = running
+        cycle.actorIds.mapNotNull(::npc).forEach { it.entity.addScoreboardTag(BUSY_TAG) }
+        info(
+            "ORIGIN_SCENE phase=CYCLE_STARTED scene={} cycle={} actors={} trigger={}",
+            scene.id,
+            cycle.id,
+            cycle.actorIds.sorted().joinToString(","),
+            if (manual) "manual" else "ambient",
+        )
+        runStep(running, 0)
     }
 
     private fun hasAudience(scene: OriginSceneDefinition): Boolean {
@@ -195,6 +250,10 @@ private class OriginSceneService(
                 showSpeech(step.actorId, step.text)
                 runStep(running, index + 1)
             }
+            is OriginSceneStep.ContainerLid -> {
+                setContainerLid(running, step)
+                runStep(running, index + 1)
+            }
             is OriginSceneStep.Mount -> {
                 val rider = npc(step.actorId)?.takeIf(NPC::isSpawned)?.entity
                 val vehicle = npc(step.vehicleActorId)?.takeIf(NPC::isSpawned)?.entity
@@ -223,7 +282,9 @@ private class OriginSceneService(
         }
         awaitRoute(running, actor, destination, step.timeoutTicks) { success ->
             if (success) {
-                actor.entity.setRotation(destination.yaw, destination.pitch)
+                if (running.scene.anchors.getValue(step.anchor).explicitPose) {
+                    actor.entity.setRotation(destination.yaw, destination.pitch)
+                }
                 runStep(running, index + 1)
             } else finish(running, "route-timeout")
         }
@@ -267,6 +328,19 @@ private class OriginSceneService(
         equipment.set(CitizensEquipment.EquipmentSlot.HAND, ItemStack(material))
     }
 
+    private fun setContainerLid(running: ActiveOriginSceneCycle, step: OriginSceneStep.ContainerLid) {
+        val world = Bukkit.getWorld(plan.world) ?: return
+        val location = running.scene.anchors.getValue(step.anchor).inWorld(world).block.location
+        val lidded = location.block.state as? Lidded ?: return
+        if (step.open) {
+            lidded.open()
+            running.openedContainers += location
+        } else {
+            lidded.close()
+            running.openedContainers.remove(location)
+        }
+    }
+
     private fun finish(running: ActiveOriginSceneCycle, reason: String) {
         if (!isCurrent(running) || running.returning) return
         running.returning = true
@@ -279,6 +353,7 @@ private class OriginSceneService(
             }
         }
         restoreHands(running)
+        closeContainers(running)
         info("ORIGIN_SCENE phase=CYCLE_RETURNING scene={} cycle={} reason={}", running.scene.id, running.cycle.id, reason)
         returnHome(running, reason, keepMounted)
     }
@@ -304,21 +379,21 @@ private class OriginSceneService(
             release(running, reason)
             return
         }
-        awaitReturns(running, reason, 400L)
+        awaitReturns(running, reason, 400L, keepMounted)
     }
 
-    private fun awaitReturns(running: ActiveOriginSceneCycle, reason: String, remainingTicks: Long) {
+    private fun awaitReturns(running: ActiveOriginSceneCycle, reason: String, remainingTicks: Long, keepMounted: Boolean) {
         later(running, 4L, allowReturning = true) {
             val moving = running.cycle.actorIds.mapNotNull(::npc).filter(routeController::isNavigating)
-            if (moving.isEmpty()) release(running, reason)
+            if (moving.isEmpty()) {
+                restoreHomePoses(running, keepMounted)
+                release(running, reason)
+            }
             else if (remainingTicks <= 4L) {
-                val world = Bukkit.getWorld(plan.world)
-                moving.forEach { actor ->
-                    routeController.stop(actor)
-                    world?.let { actor.entity.teleport(running.scene.actors.getValue(actor.id).home.inWorld(it)) }
-                }
+                moving.forEach(routeController::stop)
+                restoreHomePoses(running, keepMounted)
                 release(running, "$reason-return-timeout")
-            } else awaitReturns(running, reason, remainingTicks - 4L)
+            } else awaitReturns(running, reason, remainingTicks - 4L, keepMounted)
         }
     }
 
@@ -330,6 +405,22 @@ private class OriginSceneService(
             )
         }
         running.previousHands.clear()
+    }
+
+    private fun closeContainers(running: ActiveOriginSceneCycle) {
+        running.openedContainers.forEach { location ->
+            (location.block.state as? Lidded)?.close()
+        }
+        running.openedContainers.clear()
+    }
+
+    private fun restoreHomePoses(running: ActiveOriginSceneCycle, keepMounted: Boolean) {
+        val world = Bukkit.getWorld(plan.world) ?: return
+        originSceneReturnActorIds(running.cycle.actorIds, running.mountedPairs, keepMounted).forEach { actorId ->
+            val actor = npc(actorId)?.takeIf(NPC::isSpawned) ?: return@forEach
+            val home = running.scene.actors.getValue(actorId).home.inWorld(world)
+            actor.entity.teleport(home)
+        }
     }
 
     private fun release(running: ActiveOriginSceneCycle, reason: String) {
@@ -348,6 +439,10 @@ private class OriginSceneService(
 
     fun interruptActor(actorId: Int, reason: String) {
         val running = active.values.firstOrNull { actorId in it.cycle.actorIds } ?: return
+        interruptCycle(running, reason)
+    }
+
+    private fun interruptCycle(running: ActiveOriginSceneCycle, reason: String) {
         if (!isCurrent(running)) return
         running.returning = true
         val world = Bukkit.getWorld(plan.world)
@@ -358,6 +453,7 @@ private class OriginSceneService(
             world?.let { actor.entity.teleport(running.scene.actors.getValue(actor.id).home.inWorld(it)) }
         }
         restoreHands(running)
+        closeContainers(running)
         release(running, reason)
     }
 

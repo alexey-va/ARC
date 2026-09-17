@@ -25,10 +25,11 @@ internal class OriginSceneCoordinator {
         cycleId: String,
         actorIds: Set<Int>,
         nowMillis: Long,
+        ignoreDue: Boolean = false,
     ): OriginSceneLease? {
         require(sceneId.isNotBlank() && cycleId.isNotBlank())
         require(actorIds.isNotEmpty())
-        if (!isDue(sceneId, cycleId, nowMillis) || actorIds.any(actorOwners::containsKey)) return null
+        if ((!ignoreDue && !isDue(sceneId, cycleId, nowMillis)) || actorIds.any(actorOwners::containsKey)) return null
         val lease = OriginSceneLease(UUID.randomUUID(), sceneId, cycleId, actorIds.toSet())
         leases[lease.token] = lease
         actorIds.forEach { actorOwners[it] = lease.token }

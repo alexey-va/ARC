@@ -58,6 +58,12 @@ commands:
     permission: ''
     player-only: true
     usage: /arc npc-chat <start <роль>|stop [разговор|all]>
+  npccycle:
+    name: npccycle
+    aliases: [npc-cycle]
+    permission: arc.admin
+    player-only: false
+    usage: /arc npccycle <list|цикл|сцена цикл>
   buy:
     name: buy
     aliases: [ ]

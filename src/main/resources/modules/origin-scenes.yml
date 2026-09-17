@@ -41,18 +41,25 @@ scenes:
         home: "80.7,70.0,78.4458,65.1,0"
         denied-denizen-flags: [rc_origin_forge_service_busy]
 
-    anchor-ids: [master-anvil, ledger-desk, stock, apprentice-anvil, dummy-stage, dummy, hammer-anvil, furnace, quench, forge-center]
+    anchor-ids: [master-anvil, ledger-desk, stock-stand, stock-chest, apprentice-stand, apprentice-anvil, ore-cart-stand, ore-cart, ore-chest-stand, ore-chest, dummy-stage, dummy, hammer-anvil, furnace-stand, furnace-fire, quench-stand, quench-cauldron]
     anchors:
       master-anvil: "76.5,70.65,69.5"
       ledger-desk: "70.4,70.75,61.6"
-      stock: "80.5,70.0,71.5"
+      stock-stand: "80.7,70.0625,71.4"
+      stock-chest: "82.5,72.5,71.5"
+      apprentice-stand: "79.6839,70.0,66.8583"
       apprentice-anvil: "79.1,70.65,67.8"
+      ore-cart-stand: "65.5,70.0,63.5"
+      ore-cart: "64.5,70.5,60.5"
+      ore-chest-stand: "69.11,70.0,76.21"
+      ore-chest: "69.5,70.5,77.5"
       dummy-stage: "69.5,70.0,73.2"
       dummy: "71.6355,71.1,72.6105"
       hammer-anvil: "75.7,70.65,78.4"
-      furnace: "80.5,70.0,79.5"
-      quench: "81.5,70.0,75.5"
-      forge-center: "75.5,70.0,73.5"
+      furnace-stand: "80.5,70.0,79.5"
+      furnace-fire: "81.5,71.0,80.5"
+      quench-stand: "81.5,70.0,75.5"
+      quench-cauldron: "82.5,70.8,76.5"
 
     route-profile-ids: [floor]
     route-profiles:
@@ -101,39 +108,60 @@ scenes:
           rest: {type: WAIT, ticks: 28}
       apprentice-engraving:
         actor-ids: ["354"]
-        initial-delay-seconds: 9
-        cooldown-min-seconds: 24
-        cooldown-max-seconds: 40
-        step-ids: [stock, take, home, face, carve, sparks, line, rest]
+        initial-delay-seconds: 5
+        cooldown-min-seconds: 12
+        cooldown-max-seconds: 20
+        step-ids: [stock, face-stock, open-stock, reach-stock, take, close-stock, bench, face-anvil, stencil, press-stencil, blank, carve, sparks, ring, inspect, result-stock, face-result-stock, open-result-stock, store, clear, close-result-stock, line]
         steps:
-          stock: {type: MOVE, actor-id: 354, anchor: stock, route-profile: floor, timeout-ticks: 220}
+          stock: {type: MOVE, actor-id: 354, anchor: stock-stand, route-profile: floor, timeout-ticks: 220}
+          face-stock: {type: LOOK_AT_ANCHOR, actor-id: 354, anchor: stock-chest}
+          open-stock: {type: CONTAINER_LID, actor-id: 354, anchor: stock-chest, state: OPEN}
+          reach-stock: {type: SWING, actor-id: 354, repetitions: 2, period-ticks: 8}
           take: {type: EQUIP, actor-id: 354, material: IRON_INGOT}
-          home: {type: MOVE, actor-id: 354, anchor: apprentice-anvil, route-profile: floor, timeout-ticks: 220}
-          face: {type: LOOK_AT_ANCHOR, actor-id: 354, anchor: apprentice-anvil}
-          carve: {type: SWING, actor-id: 354, repetitions: 8, period-ticks: 9}
-          sparks: {type: PARTICLE, anchor: apprentice-anvil, particle: CRIT, count: 7}
-          line: {type: SPEECH, actor-id: 354, text: "Ещё одна риска — и клеймо готово."}
-          rest: {type: WAIT, ticks: 20}
+          close-stock: {type: CONTAINER_LID, actor-id: 354, anchor: stock-chest, state: CLOSE}
+          bench: {type: MOVE, actor-id: 354, anchor: apprentice-stand, route-profile: floor, timeout-ticks: 220}
+          face-anvil: {type: LOOK_AT_ANCHOR, actor-id: 354, anchor: apprentice-anvil}
+          stencil: {type: EQUIP, actor-id: 354, material: PAPER}
+          press-stencil: {type: SWING, actor-id: 354, repetitions: 2, period-ticks: 10}
+          blank: {type: EQUIP, actor-id: 354, material: IRON_INGOT}
+          carve: {type: SWING, actor-id: 354, repetitions: 18, period-ticks: 10}
+          sparks: {type: PARTICLE, anchor: apprentice-anvil, particle: ELECTRIC_SPARK, count: 10}
+          ring: {type: SOUND, anchor: apprentice-anvil, sound: BLOCK_ANVIL_USE, volume: 0.34, pitch: 1.35}
+          inspect: {type: WAIT, ticks: 24}
+          result-stock: {type: MOVE, actor-id: 354, anchor: stock-stand, route-profile: floor, timeout-ticks: 220}
+          face-result-stock: {type: LOOK_AT_ANCHOR, actor-id: 354, anchor: stock-chest}
+          open-result-stock: {type: CONTAINER_LID, actor-id: 354, anchor: stock-chest, state: OPEN}
+          store: {type: SWING, actor-id: 354, repetitions: 1, period-ticks: 8}
+          clear: {type: EQUIP, actor-id: 354, material: AIR}
+          close-result-stock: {type: CONTAINER_LID, actor-id: 354, anchor: stock-chest, state: CLOSE}
+          line: {type: SPEECH, actor-id: 354, text: "Клеймо готово. Заготовка возвращается в запас."}
       ore-inspection:
         actor-ids: ["351"]
         initial-delay-seconds: 14
         cooldown-min-seconds: 52
         cooldown-max-seconds: 78
-        step-ids: [stock, face, take, inspect, clink, line, home]
+        step-ids: [cart, face-cart, open-cart, take, lift, close-cart, chest, face-chest, open-chest, store, clear, close-chest, clink, line]
         steps:
-          stock: {type: MOVE, actor-id: 351, anchor: stock, route-profile: floor, timeout-ticks: 240}
-          face: {type: LOOK_AT_ANCHOR, actor-id: 351, anchor: stock}
+          cart: {type: MOVE, actor-id: 351, anchor: ore-cart-stand, route-profile: floor, timeout-ticks: 260}
+          face-cart: {type: LOOK_AT_ANCHOR, actor-id: 351, anchor: ore-cart}
+          open-cart: {type: CONTAINER_LID, actor-id: 351, anchor: ore-cart, state: OPEN}
           take: {type: EQUIP, actor-id: 351, material: RAW_IRON}
-          inspect: {type: SWING, actor-id: 351, repetitions: 2, period-ticks: 14}
-          clink: {type: SOUND, anchor: stock, sound: BLOCK_IRON_PLACE, volume: 0.38, pitch: 0.92}
-          line: {type: SPEECH, actor-id: 351, text: "Эта жила чистая. Отправляю к печи."}
-          home: {type: MOVE, actor-id: 351, anchor: forge-center, route-profile: floor, timeout-ticks: 240}
+          lift: {type: SWING, actor-id: 351, repetitions: 2, period-ticks: 10}
+          close-cart: {type: CONTAINER_LID, actor-id: 351, anchor: ore-cart, state: CLOSE}
+          chest: {type: MOVE, actor-id: 351, anchor: ore-chest-stand, route-profile: floor, timeout-ticks: 280}
+          face-chest: {type: LOOK_AT_ANCHOR, actor-id: 351, anchor: ore-chest}
+          open-chest: {type: CONTAINER_LID, actor-id: 351, anchor: ore-chest, state: OPEN}
+          store: {type: SWING, actor-id: 351, repetitions: 2, period-ticks: 10}
+          clear: {type: EQUIP, actor-id: 351, material: AIR}
+          close-chest: {type: CONTAINER_LID, actor-id: 351, anchor: ore-chest, state: CLOSE}
+          clink: {type: SOUND, anchor: ore-chest, sound: BLOCK_IRON_PLACE, volume: 0.38, pitch: 0.92}
+          line: {type: SPEECH, actor-id: 351, text: "Руду принёс. Теперь обратно к манекену."}
       blade-practice:
         actor-ids: ["355"]
         initial-delay-seconds: 18
         cooldown-min-seconds: 58
         cooldown-max-seconds: 86
-        step-ids: [stage, face, blade, strike, hit, sweep, line, home]
+        step-ids: [stage, face, blade, strike, hit, sweep, line]
         steps:
           stage: {type: MOVE, actor-id: 355, anchor: dummy-stage, route-profile: floor, timeout-ticks: 220}
           face: {type: LOOK_AT_ANCHOR, actor-id: 355, anchor: dummy}
@@ -142,7 +170,6 @@ scenes:
           hit: {type: SOUND, anchor: dummy, sound: ENTITY_ARMOR_STAND_HIT, volume: 0.38, pitch: 1.06}
           sweep: {type: PARTICLE, anchor: dummy, particle: SWEEP_ATTACK, count: 2}
           line: {type: SPEECH, actor-id: 355, text: "Корпус ниже. Клинок сам найдёт линию."}
-          home: {type: MOVE, actor-id: 355, anchor: forge-center, route-profile: floor, timeout-ticks: 220}
       hammer-rhythm:
         actor-ids: ["358"]
         initial-delay-seconds: 7
@@ -159,23 +186,37 @@ scenes:
       furnace-check:
         actor-ids: ["362"]
         initial-delay-seconds: 22
-        cooldown-min-seconds: 54
-        cooldown-max-seconds: 82
-        step-ids: [stock, ore, furnace, face-fire, feed, flame, crackle, wait, quench, steam, hiss, line, home]
+        cooldown-min-seconds: 42
+        cooldown-max-seconds: 64
+        step-ids: [stock, face-stock, open-stock, reach-stock, ore, close-stock, furnace, face-fire, feed, flame, crackle, heat, hot-billet, draw, quench, face-water, steam, hiss, cooled-ingot, inspect, result-stock, face-result-stock, open-result-stock, store, clear, close-result-stock, line]
         steps:
-          stock: {type: MOVE, actor-id: 362, anchor: stock, route-profile: floor, timeout-ticks: 220}
+          stock: {type: MOVE, actor-id: 362, anchor: stock-stand, route-profile: floor, timeout-ticks: 220}
+          face-stock: {type: LOOK_AT_ANCHOR, actor-id: 362, anchor: stock-chest}
+          open-stock: {type: CONTAINER_LID, actor-id: 362, anchor: stock-chest, state: OPEN}
+          reach-stock: {type: SWING, actor-id: 362, repetitions: 2, period-ticks: 10}
           ore: {type: EQUIP, actor-id: 362, material: RAW_IRON}
-          furnace: {type: MOVE, actor-id: 362, anchor: furnace, route-profile: floor, timeout-ticks: 220}
-          face-fire: {type: LOOK_AT_ANCHOR, actor-id: 362, anchor: furnace}
-          feed: {type: SWING, actor-id: 362, repetitions: 2, period-ticks: 12}
-          flame: {type: PARTICLE, anchor: furnace, particle: SMALL_FLAME, count: 8}
-          crackle: {type: SOUND, anchor: furnace, sound: BLOCK_FURNACE_FIRE_CRACKLE, volume: 0.38, pitch: 0.88}
-          wait: {type: WAIT, ticks: 50}
-          quench: {type: MOVE, actor-id: 362, anchor: quench, route-profile: floor, timeout-ticks: 180}
-          steam: {type: PARTICLE, anchor: quench, particle: CLOUD, count: 9}
-          hiss: {type: SOUND, anchor: quench, sound: BLOCK_FIRE_EXTINGUISH, volume: 0.44, pitch: 1.2}
-          line: {type: SPEECH, actor-id: 362, text: "Теперь не трогать. Металл запоминает холод."}
-          home: {type: MOVE, actor-id: 362, anchor: furnace, route-profile: floor, timeout-ticks: 180}
+          close-stock: {type: CONTAINER_LID, actor-id: 362, anchor: stock-chest, state: CLOSE}
+          furnace: {type: MOVE, actor-id: 362, anchor: furnace-stand, route-profile: floor, timeout-ticks: 220}
+          face-fire: {type: LOOK_AT_ANCHOR, actor-id: 362, anchor: furnace-fire}
+          feed: {type: SWING, actor-id: 362, repetitions: 6, period-ticks: 10}
+          flame: {type: PARTICLE, anchor: furnace-fire, particle: SMALL_FLAME, count: 12}
+          crackle: {type: SOUND, anchor: furnace-fire, sound: BLOCK_FURNACE_FIRE_CRACKLE, volume: 0.38, pitch: 0.88}
+          heat: {type: WAIT, ticks: 50}
+          hot-billet: {type: EQUIP, actor-id: 362, material: MAGMA_BLOCK}
+          draw: {type: SWING, actor-id: 362, repetitions: 2, period-ticks: 10}
+          quench: {type: MOVE, actor-id: 362, anchor: quench-stand, route-profile: floor, timeout-ticks: 180}
+          face-water: {type: LOOK_AT_ANCHOR, actor-id: 362, anchor: quench-cauldron}
+          steam: {type: PARTICLE, anchor: quench-cauldron, particle: CLOUD, count: 14}
+          hiss: {type: SOUND, anchor: quench-cauldron, sound: BLOCK_FIRE_EXTINGUISH, volume: 0.44, pitch: 1.2}
+          cooled-ingot: {type: EQUIP, actor-id: 362, material: IRON_INGOT}
+          inspect: {type: WAIT, ticks: 30}
+          result-stock: {type: MOVE, actor-id: 362, anchor: stock-stand, route-profile: floor, timeout-ticks: 220}
+          face-result-stock: {type: LOOK_AT_ANCHOR, actor-id: 362, anchor: stock-chest}
+          open-result-stock: {type: CONTAINER_LID, actor-id: 362, anchor: stock-chest, state: OPEN}
+          store: {type: SWING, actor-id: 362, repetitions: 2, period-ticks: 10}
+          clear: {type: EQUIP, actor-id: 362, material: AIR}
+          close-result-stock: {type: CONTAINER_LID, actor-id: 362, anchor: stock-chest, state: CLOSE}
+          line: {type: SPEECH, actor-id: 362, text: "Остыл ровно. Готовый металл — обратно в запас."}
 
   mount-yard:
     anchor: "60.0,70.0,-128.0"

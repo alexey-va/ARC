@@ -36,6 +36,9 @@
 # Посмотреть статус охоты
 /arc hunt
 
+# Принудительно запустить ambient-цикл NPC для проверки
+/arc npccycle forge-yar
+
 # Запустить охоту по типу
 /arc hunt daily
 

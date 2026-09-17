@@ -14,6 +14,7 @@ internal data class OriginScenePoint(
     val z: Double,
     val yaw: Float = 0f,
     val pitch: Float = 0f,
+    val explicitPose: Boolean = false,
 ) {
     fun inWorld(world: World): Location = Location(world, x, y, z, yaw, pitch)
 }
@@ -63,6 +64,12 @@ internal sealed interface OriginSceneStep {
 
     data class Speech(override val actorId: Int, val text: String) : OriginSceneStep
 
+    data class ContainerLid(
+        override val actorId: Int,
+        val anchor: String,
+        val open: Boolean,
+    ) : OriginSceneStep
+
     data class Mount(override val actorId: Int, val vehicleActorId: Int) : OriginSceneStep
 }
 
@@ -106,6 +113,7 @@ internal data class OriginSceneDefinition(
                     is OriginSceneStep.LookAtActor -> require(step.targetActorId in actors)
                     is OriginSceneStep.Sound -> require(step.anchor == null || step.anchor in anchors)
                     is OriginSceneStep.Particle -> require(step.anchor == null || step.anchor in anchors)
+                    is OriginSceneStep.ContainerLid -> require(step.anchor in anchors)
                     is OriginSceneStep.Mount -> require(step.vehicleActorId in cycle.actorIds)
                     else -> Unit
                 }
@@ -217,6 +225,15 @@ internal data class OriginScenePlan(
                 count = source.integer("$root.count", 3).coerceIn(1, 50),
             )
             "SPEECH" -> OriginSceneStep.Speech(source.integer("$root.actor-id"), source.string("$root.text"))
+            "CONTAINER_LID" -> OriginSceneStep.ContainerLid(
+                actorId = source.integer("$root.actor-id"),
+                anchor = source.string("$root.anchor"),
+                open = when (val state = source.string("$root.state").uppercase()) {
+                    "OPEN" -> true
+                    "CLOSE" -> false
+                    else -> error("Unknown container state $state at $root")
+                },
+            )
             "MOUNT" -> OriginSceneStep.Mount(source.integer("$root.rider-id"), source.integer("$root.vehicle-id"))
             else -> error("Unknown Origin scene step type at $root")
         }
@@ -252,7 +269,14 @@ internal data class OriginScenePlan(
         private fun point(raw: String, path: String): OriginScenePoint {
             val values = raw.split(',').map(String::trim)
             require(values.size in 3..5) { "$path must be x,y,z[,yaw[,pitch]]" }
-            return OriginScenePoint(values[0].toDouble(), values[1].toDouble(), values[2].toDouble(), values.getOrNull(3)?.toFloat() ?: 0f, values.getOrNull(4)?.toFloat() ?: 0f)
+            return OriginScenePoint(
+                x = values[0].toDouble(),
+                y = values[1].toDouble(),
+                z = values[2].toDouble(),
+                yaw = values.getOrNull(3)?.toFloat() ?: 0f,
+                pitch = values.getOrNull(4)?.toFloat() ?: 0f,
+                explicitPose = values.size >= 4,
+            )
         }
 
         private fun block(raw: String, path: String): Pair<Int, Int> {

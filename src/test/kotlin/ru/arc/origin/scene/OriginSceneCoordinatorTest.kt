@@ -47,4 +47,15 @@ class OriginSceneCoordinatorTest : FreeSpec({
         originSceneReturnActorIds(actors, pairs, keepMounted = true) shouldBe setOf(413, 415)
         originSceneReturnActorIds(actors, pairs, keepMounted = false) shouldBe actors
     }
+
+    "manual acquisition bypasses cooldown but never an actor lease" {
+        val coordinator = OriginSceneCoordinator()
+        coordinator.delay("forge", "furnace-check", untilMillis = 50_000L)
+
+        coordinator.tryAcquire("forge", "furnace-check", setOf(362), nowMillis = 1_000L) shouldBe null
+        val manual = coordinator.tryAcquire("forge", "furnace-check", setOf(362), nowMillis = 1_000L, ignoreDue = true)
+
+        manual?.cycleId shouldBe "furnace-check"
+        coordinator.tryAcquire("forge", "other", setOf(362), nowMillis = 1_000L, ignoreDue = true) shouldBe null
+    }
 })
