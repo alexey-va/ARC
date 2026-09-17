@@ -28,6 +28,17 @@ class NpcHologramModelTest : StringSpec({
         state.visibleLines() shouldBe listOf("Body")
     }
 
+    "an owned temporary bubble can be cleared without touching another owner" {
+        val state = NpcHologramState()
+        state.apply(NpcHologramSource(name = "Guide", lines = listOf("Body"), lineHeight = 0.25, viewRange = 14))
+
+        state.showBubble(listOf("Owned"), ttlTicks = 20, owner = "dialogue-a")
+        state.clearBubble("dialogue-b") shouldBe false
+        state.visibleLines() shouldBe listOf("Owned")
+        state.clearBubble("dialogue-a") shouldBe true
+        state.visibleLines() shouldBe listOf("Body")
+    }
+
     "a legacy final name line is removed when ARC renders the name separately" {
         val presentation = resolveNpcHologramPresentation(
             lines = listOf("&eСоветы о кузне", "&7Главный кузнец", "&6&lЭдгар"),

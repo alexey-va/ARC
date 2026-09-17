@@ -145,7 +145,12 @@ class OriginDiningLayoutTest : FreeSpec({
         OriginDiningLayout.ambientCycleDelayMillis() shouldBe 18_000L..30_000L
         OriginDiningLayout.ambientDialogueRange shouldBe 8.0
         OriginDiningLayout.ambientAudienceRange shouldBe 24.0
-        OriginDiningLayout.ambientDialogueCount() shouldBe 10
+        OriginDiningLayout.ambientDialogueCount() shouldBe 30
+        OriginDiningLayout.ambientDialogueIds().distinct().size shouldBe 30
+        OriginDiningLayout.ambientDialogueLineCounts().all { it in setOf(8, 10) } shouldBe true
+        OriginDiningLayout.ambientDialogueLineCounts().all { it % 2 == 0 } shouldBe true
+        OriginDiningLayout.ambientDialogueLineCounts().sum() shouldBe
+            OriginDiningLayout.ambientDialogueLineCounts().count() * 8
         OriginDiningLayout.serviceDialogueCount() shouldBe 6
         OriginDiningLayout.theftCooldownMillis shouldBe 90_000L
         OriginDiningLayout.waiterPlayerRange shouldBe 1.8
@@ -162,6 +167,22 @@ class OriginDiningLayoutTest : FreeSpec({
         OriginDiningLayout.dynamicWaiterSideOffset shouldBe 1.0
         OriginDiningLayout.waiterHome(431) shouldBe OriginDiningPoint(-54.5, 72.0, 56.5, 180f)
         OriginDiningLayout.waiterHome(432) shouldBe OriginDiningPoint(-54.5, 72.0, 58.5, 180f)
+    }
+
+    "ambient dialogue catalog gives every guest pair six themed chains" {
+        val pairs = OriginDiningLayout.ambientDialogueNpcPairs()
+        pairs.size shouldBe 30
+        mapOf(
+            "brewery_north_" to (416 to 417),
+            "brewery_fire_" to (407 to 408),
+            "brewery_east_" to (419 to 420),
+            "restaurant_a_" to (433 to 434),
+            "restaurant_b_" to (435 to 436),
+        ).forEach { (prefix, pair) ->
+            val matching = pairs.filterKeys { it.startsWith(prefix) }
+            matching.size shouldBe 6
+            matching.values.toSet() shouldBe setOf(pair)
+        }
     }
 
     "ambient table dialogue waits for a nearby player" {

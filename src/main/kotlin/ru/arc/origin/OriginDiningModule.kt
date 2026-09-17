@@ -681,6 +681,13 @@ internal object OriginDiningLayout {
 
     internal fun ambientDialogueCount(): Int = OriginDiningAmbientLayout.dialogue.size
 
+    internal fun ambientDialogueLineCounts(): List<Int> = OriginDiningAmbientLayout.dialogue.map { it.lines.size }
+
+    internal fun ambientDialogueIds(): List<String> = OriginDiningAmbientLayout.dialogue.map { it.id }
+
+    internal fun ambientDialogueNpcPairs(): Map<String, Pair<Int, Int>> =
+        OriginDiningAmbientLayout.dialogue.associate { it.id to (it.firstNpcId to it.secondNpcId) }
+
     internal fun serviceDialogueCount(): Int = OriginDiningAmbientLayout.serviceDialogue.size
 
     internal fun ambientCycleDelayMillis(): LongRange = OriginDiningAmbientLayout.cycleDelayMillis
@@ -833,13 +840,69 @@ private data class OriginDiningAmbientRoute(
     var waypoint: Int = 0,
 )
 
-private data class OriginDiningDialogue(
+internal data class OriginDiningDialogue(
     val id: String,
     val firstNpcId: Int,
     val secondNpcId: Int,
-    val firstLine: String,
-    val secondLine: String,
+    val lines: List<String>,
+) {
+    fun speakerNpcId(index: Int): Int {
+        require(index in lines.indices) { "Dialogue '$id' line index $index is out of bounds for ${lines.size} lines" }
+        return if (index % 2 == 0) firstNpcId else secondNpcId
+    }
+
+    fun line(index: Int): OriginDiningDialogueLine =
+        OriginDiningDialogueLine(index, speakerNpcId(index), lines[index])
+}
+
+internal data class OriginDiningDialogueLine(
+    val index: Int,
+    val npcId: Int,
+    val text: String,
 )
+
+internal class OriginDiningDialogueSequence(
+    val token: UUID,
+    val dialogue: OriginDiningDialogue,
+) {
+    var nextLineIndex: Int = 0
+        private set
+    private var cancelled = false
+
+    val isComplete: Boolean
+        get() = nextLineIndex >= dialogue.lines.size
+
+    fun nextLine(callbackToken: UUID): OriginDiningDialogueLine? {
+        if (cancelled || callbackToken != token || isComplete) return null
+        return dialogue.line(nextLineIndex).also { nextLineIndex++ }
+    }
+
+    fun cancel(callbackToken: UUID): Boolean {
+        if (cancelled || callbackToken != token) return false
+        cancelled = true
+        return true
+    }
+}
+
+internal fun parseOriginDiningDialogueLines(
+    id: String,
+    configured: List<String>?,
+    legacyFirst: String,
+    legacySecond: String,
+): List<String> {
+    val lines = configured ?: listOf(legacyFirst, legacySecond)
+    require(lines.size >= 2) {
+        "Dialogue '$id' must contain at least two lines, got ${lines.size}"
+    }
+    require(lines.size % 2 == 0) {
+        "Dialogue '$id' must contain an even number of lines, got ${lines.size}"
+    }
+    val blankIndex = lines.indexOfFirst(String::isBlank)
+    require(blankIndex == -1) {
+        "Dialogue '$id' line $blankIndex must not be blank"
+    }
+    return lines.toList()
+}
 
 private data class OriginDiningDialogueActors(
     val dialogue: OriginDiningDialogue,
@@ -847,6 +910,18 @@ private data class OriginDiningDialogueActors(
     val second: net.citizensnpcs.api.npc.NPC,
     val audienceCount: Int,
 )
+
+private data class OriginDiningActiveDialogue(
+    val sequence: OriginDiningDialogueSequence,
+    val firstYaw: Float,
+    val firstPitch: Float,
+    val secondYaw: Float,
+    val secondPitch: Float,
+    val ownedSpeechDisplays: MutableMap<Int, TextDisplay> = mutableMapOf(),
+) {
+    val token: UUID get() = sequence.token
+    val dialogue: OriginDiningDialogue get() = sequence.dialogue
+}
 
 private data class OriginDiningServiceDialogue(
     val id: String,
@@ -917,11 +992,15 @@ private object OriginDiningAmbientLayout {
             source.stringList("scene.dialogue-ids").map { id ->
                 val root = "scene.dialogues.$id"
                 OriginDiningDialogue(
-                    id,
-                    source.integer("$root.first-npc-id"),
-                    source.integer("$root.second-npc-id"),
-                    source.string("$root.first-line"),
-                    source.string("$root.second-line"),
+                    id = id,
+                    firstNpcId = source.integer("$root.first-npc-id"),
+                    secondNpcId = source.integer("$root.second-npc-id"),
+                    lines = parseOriginDiningDialogueLines(
+                        id = id,
+                        configured = source.stringListOrNull("$root.lines"),
+                        legacyFirst = source.string("$root.first-line", ""),
+                        legacySecond = source.string("$root.second-line", ""),
+                    ),
                 )
             }
         serviceDialogue =
@@ -1029,6 +1108,7 @@ private class OriginDiningService : AutoCloseable {
     private val ambientTableDueAt = mutableMapOf<String, Long>()
     private val speechDisplays = mutableMapOf<Int, TextDisplay>()
     private val lastServiceDialogueByWaiter = mutableMapOf<Int, String>()
+    private var activeAmbientDialogue: OriginDiningActiveDialogue? = null
     private var lastDialogueId: String? = null
     private var nextAmbientAt = 0L
     private var nextDialogueAt = 0L
@@ -2825,15 +2905,31 @@ private class OriginDiningService : AutoCloseable {
         waiter(npcId)?.takeIf { it.isSpawned }?.entity?.setRotation(guest.seat.yaw, 0f)
     }
 
-    private fun showSpeech(npcId: Int, line: String, color: NamedTextColor = NamedTextColor.GOLD) {
+    private fun clearSpeech(npcId: Int) {
+        speechDisplays.remove(npcId)?.let { if (it.isValid) it.remove() }
+    }
+
+    private fun clearOwnedSpeech(active: OriginDiningActiveDialogue) {
+        active.ownedSpeechDisplays.forEach { (npcId, display) ->
+            if (speechDisplays.remove(npcId, display) && display.isValid) display.remove()
+        }
+        active.ownedSpeechDisplays.clear()
+        listOf(active.dialogue.firstNpcId, active.dialogue.secondNpcId)
+            .forEach { npcId ->
+                ArcNpcHologramModule.clearTemporaryBubble(npcId, active.token.toString())
+            }
+    }
+
+    private fun showSpeech(npcId: Int, line: String, color: NamedTextColor = NamedTextColor.GOLD, owner: String? = null): TextDisplay? {
         if (ArcNpcHologramModule.showTemporaryBubble(
                 npcId,
                 listOf(line),
                 OriginDiningLayout.ambientSpeechDurationTicks.toInt(),
+                owner,
             )
-        ) return
-        val npc = runCatching { CitizensAPI.getNPCRegistry().getById(npcId) }.getOrNull()?.takeIf { it.isSpawned } ?: return
-        speechDisplays.remove(npcId)?.let { if (it.isValid) it.remove() }
+        ) return null
+        val npc = runCatching { CitizensAPI.getNPCRegistry().getById(npcId) }.getOrNull()?.takeIf { it.isSpawned } ?: return null
+        clearSpeech(npcId)
         val display = npc.entity.world.spawn(npc.entity.location.clone().add(0.0, OriginDiningLayout.ambientSpeechHeight, 0.0), TextDisplay::class.java).apply {
             text(Component.text(line, color))
             billboard = Display.Billboard.CENTER
@@ -2874,6 +2970,7 @@ private class OriginDiningService : AutoCloseable {
                 info("ORIGIN_DINING phase=SPEECH_CLEARED npc={} display={}", npcId, short(display.uniqueId))
             }
         }
+        return display
     }
 
     private fun startAmbientRoute(table: OriginDiningGuestTable, reason: String): Boolean {
@@ -3021,6 +3118,142 @@ private class OriginDiningService : AutoCloseable {
         npc.entity.setRotation(yaw, pitch)
     }
 
+    private fun ambientDialogueAudienceCount(
+        first: net.citizensnpcs.api.npc.NPC,
+        second: net.citizensnpcs.api.npc.NPC,
+    ): Int {
+        val firstLocation = first.entity.location
+        val secondLocation = second.entity.location
+        if (firstLocation.world != secondLocation.world) return 0
+        if (firstLocation.distanceSquared(secondLocation) > OriginDiningLayout.ambientDialogueRange * OriginDiningLayout.ambientDialogueRange) {
+            return 0
+        }
+        val audience = Bukkit.getOnlinePlayers().map { player ->
+            val location = player.location
+            OriginDiningAudiencePosition(location.world.name, location.x, location.y, location.z)
+        }
+        return OriginDiningAudiencePolicy.countAudience(
+            actorWorld = firstLocation.world.name,
+            first = OriginDiningPoint(firstLocation.x, firstLocation.y, firstLocation.z),
+            second = OriginDiningPoint(secondLocation.x, secondLocation.y, secondLocation.z),
+            audience = audience,
+            range = OriginDiningLayout.ambientAudienceRange,
+        )
+    }
+
+    private fun scheduleAmbientDialogueLine(token: UUID, delayTicks: Long) {
+        tasks.runLater(delayTicks) { continueAmbientDialogue(token) }
+    }
+
+    private fun startAmbientDialogue(selected: OriginDiningDialogueActors) {
+        val dialogue = selected.dialogue
+        val active = OriginDiningActiveDialogue(
+            sequence = OriginDiningDialogueSequence(UUID.randomUUID(), dialogue),
+            firstYaw = selected.first.entity.location.yaw,
+            firstPitch = selected.first.entity.location.pitch,
+            secondYaw = selected.second.entity.location.yaw,
+            secondPitch = selected.second.entity.location.pitch,
+        )
+        activeAmbientDialogue = active
+        val firstLine = active.sequence.nextLine(active.token)
+        if (firstLine == null) {
+            cancelAmbientDialogue(active.token, "empty-sequence")
+            return
+        }
+        selected.first.faceLocation(selected.second.entity.location.clone().add(0.0, 1.4, 0.0))
+        showSpeech(selected.first.id, firstLine.text, owner = active.token.toString())
+            ?.let { active.ownedSpeechDisplays[selected.first.id] = it }
+        scheduleAmbientDialogueLine(active.token, OriginDiningLayout.ambientReplyDelayTicks.random())
+        lastDialogueId = dialogue.id
+        info(
+            "ORIGIN_DINING phase=AMBIENT_DIALOGUE_STARTED dialogue={} first={} second={} viewers={} lines={}",
+            dialogue.id,
+            dialogue.firstNpcId,
+            dialogue.secondNpcId,
+            selected.audienceCount,
+            dialogue.lines.size,
+        )
+    }
+
+    private fun continueAmbientDialogue(token: UUID) {
+        val active = activeAmbientDialogue?.takeIf { it.token == token } ?: return
+        val first = ambientActor(active.dialogue.firstNpcId, allowSpeaking = true)
+        val second = ambientActor(active.dialogue.secondNpcId, allowSpeaking = true)
+        if (first == null || second == null) {
+            cancelAmbientDialogue(token, "actor-unavailable")
+            return
+        }
+        val audienceCount = ambientDialogueAudienceCount(first, second)
+        if (audienceCount == 0) {
+            cancelAmbientDialogue(token, "audience-gone-or-pair-invalid")
+            return
+        }
+        if (active.sequence.isComplete) {
+            finishAmbientDialogue(token)
+            return
+        }
+        val line = active.sequence.nextLine(token) ?: run {
+            cancelAmbientDialogue(token, "sequence-rejected-callback")
+            return
+        }
+        val speaker = when (line.npcId) {
+            first.id -> first
+            second.id -> second
+            else -> {
+                cancelAmbientDialogue(token, "speaker-mismatch")
+                return
+            }
+        }
+        val other = if (speaker.id == first.id) second else first
+        speaker.faceLocation(other.entity.location.clone().add(0.0, 1.4, 0.0))
+        showSpeech(speaker.id, line.text, owner = active.token.toString())
+            ?.let { active.ownedSpeechDisplays[speaker.id] = it }
+        info(
+            "ORIGIN_DINING phase=AMBIENT_DIALOGUE_LINE dialogue={} index={} npc={} viewers={}",
+            active.dialogue.id,
+            line.index,
+            speaker.id,
+            audienceCount,
+        )
+        if (active.sequence.isComplete) {
+            tasks.runLater(OriginDiningLayout.ambientLookHoldTicks.random()) { finishAmbientDialogue(token) }
+        } else {
+            scheduleAmbientDialogueLine(token, OriginDiningLayout.ambientReplyDelayTicks.random())
+        }
+    }
+
+    private fun finishAmbientDialogue(token: UUID) {
+        val active = activeAmbientDialogue?.takeIf { it.token == token } ?: return
+        if (!active.sequence.isComplete) return
+        activeAmbientDialogue = null
+        restoreAmbientRotation(active.dialogue.firstNpcId, active.firstYaw, active.firstPitch)
+        restoreAmbientRotation(active.dialogue.secondNpcId, active.secondYaw, active.secondPitch)
+        val now = System.currentTimeMillis()
+        nextDialogueAt = now + OriginDiningLayout.ambientDialogueDelayMillis.random()
+        info(
+            "ORIGIN_DINING phase=AMBIENT_DIALOGUE_FINISHED dialogue={} lines={} next_delay_ms={}",
+            active.dialogue.id,
+            active.dialogue.lines.size,
+            nextDialogueAt - now,
+        )
+    }
+
+    private fun cancelAmbientDialogue(token: UUID, reason: String) {
+        val active = activeAmbientDialogue?.takeIf { it.token == token } ?: return
+        active.sequence.cancel(token)
+        activeAmbientDialogue = null
+        clearOwnedSpeech(active)
+        restoreAmbientRotation(active.dialogue.firstNpcId, active.firstYaw, active.firstPitch)
+        restoreAmbientRotation(active.dialogue.secondNpcId, active.secondYaw, active.secondPitch)
+        nextDialogueAt = System.currentTimeMillis() + OriginDiningLayout.ambientRetryMillis
+        info(
+            "ORIGIN_DINING phase=AMBIENT_DIALOGUE_CANCELLED dialogue={} next_line={} reason={}",
+            active.dialogue.id,
+            active.sequence.nextLineIndex,
+            reason,
+        )
+    }
+
     private fun tickAmbient(now: Long) {
         val tables = OriginDiningAmbientLayout.guestTables
         var routesStarted = 0
@@ -3041,57 +3274,16 @@ private class OriginDiningService : AutoCloseable {
             }
             nextAmbientAt = now + OriginDiningAmbientLayout.cycleDelayMillis.random()
         }
-        if (now >= nextDialogueAt && OriginDiningAmbientLayout.dialogue.isNotEmpty()) {
-            val audience = Bukkit.getOnlinePlayers().map { player ->
-                val location = player.location
-                OriginDiningAudiencePosition(location.world.name, location.x, location.y, location.z)
-            }
+        if (activeAmbientDialogue == null && now >= nextDialogueAt && OriginDiningAmbientLayout.dialogue.isNotEmpty()) {
             val candidates = OriginDiningAmbientLayout.dialogue.filterNot { it.id == lastDialogueId }.ifEmpty { OriginDiningAmbientLayout.dialogue }.shuffled()
             val selected = candidates.firstNotNullOfOrNull { dialogue ->
                 val first = ambientActor(dialogue.firstNpcId) ?: return@firstNotNullOfOrNull null
                 val second = ambientActor(dialogue.secondNpcId) ?: return@firstNotNullOfOrNull null
-                val firstLocation = first.entity.location
-                val secondLocation = second.entity.location
-                if (firstLocation.distanceSquared(secondLocation) > OriginDiningLayout.ambientDialogueRange * OriginDiningLayout.ambientDialogueRange) {
-                    return@firstNotNullOfOrNull null
-                }
-                val audienceCount = OriginDiningAudiencePolicy.countAudience(
-                    actorWorld = firstLocation.world.name,
-                    first = OriginDiningPoint(firstLocation.x, firstLocation.y, firstLocation.z),
-                    second = OriginDiningPoint(secondLocation.x, secondLocation.y, secondLocation.z),
-                    audience = audience,
-                    range = OriginDiningLayout.ambientAudienceRange,
-                )
+                val audienceCount = ambientDialogueAudienceCount(first, second)
                 if (audienceCount == 0) null else OriginDiningDialogueActors(dialogue, first, second, audienceCount)
             }
             if (selected != null) {
-                val (dialogue, first, second, audienceCount) = selected
-                val firstYaw = first.entity.location.yaw
-                val firstPitch = first.entity.location.pitch
-                val secondYaw = second.entity.location.yaw
-                val secondPitch = second.entity.location.pitch
-                first.faceLocation(second.entity.location.clone().add(0.0, 1.4, 0.0))
-                showSpeech(first.id, dialogue.firstLine)
-                val replyDelay = OriginDiningLayout.ambientReplyDelayTicks.random()
-                tasks.runLater(replyDelay + OriginDiningLayout.ambientLookHoldTicks.random()) {
-                    restoreAmbientRotation(dialogue.firstNpcId, firstYaw, firstPitch)
-                    restoreAmbientRotation(dialogue.secondNpcId, secondYaw, secondPitch)
-                }
-                tasks.runLater(replyDelay) {
-                    val currentFirst = ambientActor(dialogue.firstNpcId, allowSpeaking = true) ?: return@runLater
-                    val currentSecond = ambientActor(dialogue.secondNpcId) ?: return@runLater
-                    currentSecond.faceLocation(currentFirst.entity.location.clone().add(0.0, 1.4, 0.0))
-                    showSpeech(currentSecond.id, dialogue.secondLine)
-                }
-                lastDialogueId = dialogue.id
-                nextDialogueAt = now + OriginDiningLayout.ambientDialogueDelayMillis.random()
-                info(
-                    "ORIGIN_DINING phase=AMBIENT_DIALOGUE_STARTED dialogue={} first={} second={} viewers={}",
-                    dialogue.id,
-                    dialogue.firstNpcId,
-                    dialogue.secondNpcId,
-                    audienceCount,
-                )
+                startAmbientDialogue(selected)
             } else {
                 nextDialogueAt = now + OriginDiningLayout.ambientRetryMillis
             }
@@ -3342,6 +3534,7 @@ private class OriginDiningService : AutoCloseable {
 
     private fun removeRuntimeEntities() {
         ambientRoutes.keys.toList().forEach { cancelAmbientRoute(it, "service-stop") }
+        activeAmbientDialogue?.let { cancelAmbientDialogue(it.token, "service-stop") }
         meals.values.forEach { removeMeal(it, "service-stop") }
         guestMeals.values.forEach(::removeGuestMeal)
         guestMarkers.values.forEach { if (it.isValid) it.remove() }

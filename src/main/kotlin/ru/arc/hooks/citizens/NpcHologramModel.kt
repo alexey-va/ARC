@@ -22,6 +22,7 @@ internal class NpcHologramState {
     private data class Bubble(
         val lines: List<String>,
         var remainingTicks: Int,
+        val owner: String?,
     )
 
     fun apply(next: NpcHologramSource): Boolean {
@@ -33,7 +34,18 @@ internal class NpcHologramState {
     fun source(): NpcHologramSource? = source
 
     fun showBubble(lines: List<String>, ttlTicks: Int) {
-        bubble = Bubble(lines.filter(String::isNotEmpty), ttlTicks.coerceAtLeast(1))
+        showBubble(lines, ttlTicks, owner = null)
+    }
+
+    fun showBubble(lines: List<String>, ttlTicks: Int, owner: String?) {
+        bubble = Bubble(lines.filter(String::isNotEmpty), ttlTicks.coerceAtLeast(1), owner)
+    }
+
+    fun clearBubble(owner: String): Boolean {
+        val current = bubble ?: return false
+        if (current.owner != owner) return false
+        bubble = null
+        return true
     }
 
     /** Returns true when an expired bubble changed the visible content. */

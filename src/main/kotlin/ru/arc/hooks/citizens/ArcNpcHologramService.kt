@@ -131,14 +131,27 @@ internal class ArcNpcHologramService(
         }
     }
 
-    fun showTemporaryBubble(id: Int, lines: List<String>, ttlTicks: Int): Boolean {
+    fun showTemporaryBubble(id: Int, lines: List<String>, ttlTicks: Int): Boolean =
+        showTemporaryBubble(id, lines, ttlTicks, owner = null)
+
+    fun showTemporaryBubble(id: Int, lines: List<String>, ttlTicks: Int, owner: String?): Boolean {
         if (closed || !config.enabled) return false
         val visible = lines.map(String::trim).filter(String::isNotEmpty)
         if (visible.isEmpty()) return false
         val npc = CitizensAPI.getNPCRegistry().getById(id) ?: return false
         val stack = stackFor(npc) ?: return false
-        stack.state.showBubble(visible, ttlTicks)
+        stack.state.showBubble(visible, ttlTicks, owner)
         stack.bubbleBodyComponent = parseSpeechLines(visible)
+        updateDisplays(stack, npc, refreshText = true)
+        return true
+    }
+
+    fun clearTemporaryBubble(id: Int, owner: String): Boolean {
+        if (closed || !config.enabled) return false
+        val stack = stacks[id] ?: return false
+        if (!stack.state.clearBubble(owner)) return false
+        stack.bubbleBodyComponent = null
+        val npc = CitizensAPI.getNPCRegistry().getById(id) ?: return true
         updateDisplays(stack, npc, refreshText = true)
         return true
     }
