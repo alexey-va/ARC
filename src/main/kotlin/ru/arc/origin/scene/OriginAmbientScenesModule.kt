@@ -351,10 +351,14 @@ private class OriginSceneService(
             step.feedbackSurface != null -> resolveSurfaceLocation(running, step.feedbackSurface)
             else -> stepLocation(running, step.actorId, step.feedbackAnchor)
         }
+        val lookLocation = when {
+            step.feedbackSurface != null -> resolveSurfaceLookLocation(running, step.feedbackSurface)
+            else -> feedbackLocation
+        }
         // Citizens or a nearby player may alter the head pose between strikes. The
         // strike target owns the work pose, so reacquire it for every animation beat.
-        if (feedbackLocation != null && (step.feedbackAnchor != null || step.feedbackSurface != null)) {
-            actor?.faceLocation(feedbackLocation)
+        if (lookLocation != null && (step.feedbackAnchor != null || step.feedbackSurface != null)) {
+            actor?.faceLocation(lookLocation)
         }
         (actor?.entity as? LivingEntity)?.swingMainHand()
         val strike = repetition + 1
