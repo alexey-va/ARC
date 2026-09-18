@@ -87,6 +87,26 @@ class OriginScenePlanTest : FreeSpec({
         alternate.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().map { it.key }.toSet().size shouldBe 14
         alternate.steps.filterIsInstance<OriginSceneStep.RemoveDisplay>().map { it.key }.toSet() shouldBe
             alternate.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().map { it.key }.toSet()
+        val alternateSteps = alternate.steps
+        val alternateSwingIndices = alternateSteps.indices.filter { alternateSteps[it] is OriginSceneStep.Swing }
+        alternateSwingIndices.size shouldBe 5
+        val alternateDisplayIndex = { key: String ->
+            alternateSteps.indexOfFirst { it is OriginSceneStep.BlockDisplay && it.key == key }
+        }
+        (alternateSwingIndices[1] < alternateDisplayIndex("luka-jopa-zh-left")) shouldBe true
+        (alternateDisplayIndex("luka-jopa-zh-left") < alternateSwingIndices[2]) shouldBe true
+        (alternateSwingIndices[2] < alternateDisplayIndex("luka-jopa-o-left")) shouldBe true
+        (alternateDisplayIndex("luka-jopa-o-left") < alternateSwingIndices[3]) shouldBe true
+        (alternateSwingIndices[3] < alternateDisplayIndex("luka-jopa-p-left")) shouldBe true
+        (alternateDisplayIndex("luka-jopa-p-left") < alternateSwingIndices[4]) shouldBe true
+        (alternateSwingIndices[4] < alternateDisplayIndex("luka-jopa-a-left")) shouldBe true
+        alternate.steps.filterIsInstance<OriginSceneStep.BlockDisplay>()
+            .filter { it.key == "luka-jopa-plate" }
+            .map { it.scale.x } shouldContainExactly listOf(0.88, 0.82, 0.62, 0.43, 0.21)
+        val aStrokes = alternate.steps.filterIsInstance<OriginSceneStep.BlockDisplay>()
+            .filter { it.key.startsWith("luka-jopa-a-") }
+        aStrokes.single { it.key.endsWith("left") }.rotationYDegrees shouldBe -17f
+        aStrokes.single { it.key.endsWith("right") }.rotationYDegrees shouldBe 17f
         savva.steps.filterIsInstance<OriginSceneStep.ContainerLid>().map(OriginSceneStep.ContainerLid::anchor).toSet() shouldBe
             setOf("ore-cart", "ore-chest")
         scene.actors.getValue(351).home.x shouldBe scene.anchors.getValue("ore-cart-stand").x
