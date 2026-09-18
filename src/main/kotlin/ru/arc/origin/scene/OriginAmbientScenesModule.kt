@@ -493,20 +493,30 @@ private class OriginSceneService(
         val wasInvulnerable = target.isInvulnerable
         targetNpc.isProtected = false
         target.isInvulnerable = false
+        val healthBefore = target.health
+        var fallbackApplied = false
         try {
             target.damage(amount, source)
+            if (target.isValid && target.health >= healthBefore) {
+                // Citizens can still swallow damage for protected NPC implementations
+                // after the Bukkit event. Preserve a real HP transition as a fallback.
+                target.health = (healthBefore - amount).coerceAtLeast(0.1)
+                fallbackApplied = true
+            }
         } finally {
             targetNpc.isProtected = wasProtected
             target.isInvulnerable = wasInvulnerable
         }
         info(
-            "ORIGIN_SCENE phase=NPC_HIT scene={} cycle={} attacker={} target={} amount={} health={}",
+            "ORIGIN_SCENE phase=NPC_HIT scene={} cycle={} attacker={} target={} amount={} health-before={} health-after={} fallback={}",
             running.scene.id,
             running.cycle.id,
             sourceNpc.id,
             targetNpc.id,
             amount,
+            healthBefore,
             target.health,
+            fallbackApplied,
         )
     }
 
