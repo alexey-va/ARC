@@ -116,6 +116,10 @@ class OriginScenePlanTest : FreeSpec({
         bran.yieldAnchor shouldBe "dummy"
         bran.yieldRange shouldBe 2.0
         bran.steps.filterIsInstance<OriginSceneStep.Swing>().sumOf(OriginSceneStep.Swing::repetitions) shouldBe 24
+        bran.steps.filterIsInstance<OriginSceneStep.Swing>().all {
+            it.damageTargetNpcId == 364 && it.damageAmount == 1.0
+        } shouldBe true
+        scene.anchors.getValue("dummy-stage").z shouldBe 71.4
         yar.steps.filterIsInstance<OriginSceneStep.Equip>().map(OriginSceneStep.Equip::material) shouldContainExactly
             listOf("RAW_IRON", "MAGMA_BLOCK", "AIR", "IRON_INGOT", "AIR")
         yar.steps.filterIsInstance<OriginSceneStep.ContainerLid>().map(OriginSceneStep.ContainerLid::open) shouldContainExactly
@@ -140,6 +144,7 @@ class OriginScenePlanTest : FreeSpec({
     "Edgar showcase cycle crosses the forge with an assistant and a scoped workpiece" {
         val scene = OriginScenePlan.load(Files.createTempDirectory("origin-scenes-edgar-showcase-test")).scene("forge")
         val cycle = scene.cycles.single { it.id == "master-forging-showcase" }
+        val axe = scene.cycles.single { it.id == "master-anvil" }
 
         cycle.actorIds shouldBe setOf(349, 358)
         cycle.steps.filterIsInstance<OriginSceneStep.Move>().map(OriginSceneStep.Move::anchor).toSet() shouldContainAll
@@ -155,5 +160,10 @@ class OriginScenePlanTest : FreeSpec({
             setOf("edgar-blade", "edgar-guard", "edgar-grip", "edgar-pommel")
         cycle.steps.filterIsInstance<OriginSceneStep.LookAtSurface>().map(OriginSceneStep.LookAtSurface::surface).toSet() shouldBe
             setOf("master-work-surface")
+        axe.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().map { it.key }.toSet() shouldBe
+            setOf("edgar-axe-head", "edgar-axe-edge", "edgar-axe-eye", "edgar-axe-handle")
+        axe.steps.filterIsInstance<OriginSceneStep.RemoveDisplay>().map(OriginSceneStep.RemoveDisplay::key).toSet() shouldBe
+            axe.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().map(OriginSceneStep.BlockDisplay::key).toSet()
+        axe.steps.filterIsInstance<OriginSceneStep.Swing>().sumOf(OriginSceneStep.Swing::repetitions) shouldBe 27
     }
 })

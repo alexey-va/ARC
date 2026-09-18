@@ -18,6 +18,7 @@ training-dummy:
   yaw: 129.2892
   pitch: -4.75167
   strong-charge: 0.9
+  ambient-max-health: 1024.0
   combo-timeout-seconds: 15
   challenge-hits: 8
   challenge-duration-seconds: 18
@@ -71,7 +72,7 @@ scenes:
       ore-cart: "64.5,70.5,60.5"
       ore-chest-stand: "69.11,70.0,76.21"
       ore-chest: "69.5,70.5,77.5"
-      dummy-stage: "69.5,70.0,73.2"
+      dummy-stage: "70.0,70.0,71.4"
       dummy: "71.6355,71.1,72.6105"
       hammer-anvil: "75.7,70.65,78.4"
       furnace-stand: "80.5,70.0,79.5"
@@ -120,21 +121,27 @@ scenes:
         initial-delay-seconds: 5
         cooldown-min-seconds: 14
         cooldown-max-seconds: 24
-        step-ids: [face, billet, place, clear-hand, equip, rough, shape-head, edge, shape-edge, ring, inspect, collect-head, collect-edge, result, remark, rest]
+        step-ids: [face, billet, place, clear-hand, equip, rough, shape-head, edge, shape-edge, notch, shape-eye, handle-work, shape-handle, ring, inspect, collect-head, collect-edge, collect-eye, collect-handle, result, remark, rest]
         steps:
           face: {type: LOOK_AT_SURFACE, actor-id: 349, surface: master-work-surface}
           billet: {type: EQUIP, actor-id: 349, material: RAW_IRON}
           place: {type: BLOCK_DISPLAY, key: edgar-axe-head, surface: master-work-surface, material: MAGMA_BLOCK, origin: BOTTOM_CENTER, scale: "0.30,0.11,0.20", rotation-y-degrees: -12}
           clear-hand: {type: EQUIP, actor-id: 349, material: AIR}
           equip: {type: EQUIP, actor-id: 349, material: MACE}
-          rough: {type: SWING, actor-id: 349, repetitions: 7, period-ticks: 10, feedback-surface: master-work-surface, particle: LAVA, particle-count: 2, sound: BLOCK_ANVIL_LAND, sound-volume: 0.34, sound-pitch: 0.94}
-          shape-head: {type: BLOCK_DISPLAY, key: edgar-axe-head, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.06,0,0", scale: "0.38,0.065,0.25", rotation-y-degrees: -12, interpolation-ticks: 8}
-          edge: {type: SWING, actor-id: 349, repetitions: 6, period-ticks: 9, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 4, sound: BLOCK_ANVIL_USE, sound-every: 2, sound-volume: 0.38, sound-pitch: 1.32}
-          shape-edge: {type: BLOCK_DISPLAY, key: edgar-axe-edge, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0.20,0.01,0", scale: "0.16,0.045,0.38", rotation-y-degrees: -12, interpolation-ticks: 8}
+          rough: {type: SWING, actor-id: 349, repetitions: 9, period-ticks: 9, feedback-surface: master-work-surface, particle: LAVA, particle-count: 3, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 1, sound-volume: 0.36, sound-pitch: 0.92}
+          shape-head: {type: BLOCK_DISPLAY, key: edgar-axe-head, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.08,0,0", scale: "0.46,0.075,0.28", rotation-y-degrees: -12, interpolation-ticks: 8}
+          edge: {type: SWING, actor-id: 349, repetitions: 8, period-ticks: 8, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 5, particle-every: 1, sound: BLOCK_ANVIL_USE, sound-every: 1, sound-volume: 0.40, sound-pitch: 1.30}
+          shape-edge: {type: BLOCK_DISPLAY, key: edgar-axe-edge, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0.18,0.012,-0.015", scale: "0.24,0.055,0.46", rotation-y-degrees: -12, interpolation-ticks: 8}
+          notch: {type: SWING, actor-id: 349, repetitions: 5, period-ticks: 8, feedback-surface: master-work-surface, particle: CRIT, particle-count: 4, particle-every: 1, sound: BLOCK_ANVIL_USE, sound-every: 1, sound-volume: 0.36, sound-pitch: 1.48}
+          shape-eye: {type: BLOCK_DISPLAY, key: edgar-axe-eye, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.08,0.020,0.075", scale: "0.19,0.045,0.09", rotation-y-degrees: -12, interpolation-ticks: 6}
+          handle-work: {type: SWING, actor-id: 349, repetitions: 5, period-ticks: 10, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 1, sound-volume: 0.32, sound-pitch: 1.08}
+          shape-handle: {type: BLOCK_DISPLAY, key: edgar-axe-handle, surface: master-work-surface, material: DARK_OAK_PLANKS, origin: BOTTOM_CENTER, offset: "-0.23,0.015,0.34", scale: "0.075,0.065,0.52", rotation-y-degrees: -12, interpolation-ticks: 8}
           ring: {type: SOUND, anchor: master-anvil, sound: BLOCK_ANVIL_USE, volume: 0.48, pitch: 1.28}
           inspect: {type: WAIT, ticks: 18}
           collect-head: {type: REMOVE_DISPLAY, key: edgar-axe-head}
           collect-edge: {type: REMOVE_DISPLAY, key: edgar-axe-edge}
+          collect-eye: {type: REMOVE_DISPLAY, key: edgar-axe-eye}
+          collect-handle: {type: REMOVE_DISPLAY, key: edgar-axe-handle}
           result: {type: EQUIP, actor-id: 349, material: IRON_AXE}
           remark: {type: SPEECH, actor-id: 349, text: "Лезвие широкое, обух плотный. Такой топор не поведёт."}
           rest: {type: WAIT, ticks: 24}
@@ -344,11 +351,11 @@ scenes:
           stage: {type: MOVE, actor-id: 355, anchor: dummy-stage, route-profile: floor, timeout-ticks: 220}
           face: {type: LOOK_AT_ANCHOR, actor-id: 355, anchor: dummy}
           blade: {type: EQUIP, actor-id: 355, material: IRON_SWORD}
-          warmup: {type: SWING, actor-id: 355, repetitions: 8, period-ticks: 13, feedback-anchor: dummy, particle: SWEEP_ATTACK, particle-count: 1, particle-every: 2, sound: ENTITY_ARMOR_STAND_HIT, sound-every: 1, sound-volume: 0.30, sound-pitch: 0.96}
+          warmup: {type: SWING, actor-id: 355, repetitions: 8, period-ticks: 13, feedback-anchor: dummy, damage-target-npc-id: 364, damage-amount: 1.0, particle: SWEEP_ATTACK, particle-count: 1, particle-every: 2, sound: ENTITY_ARMOR_STAND_HIT, sound-every: 1, sound-volume: 0.30, sound-pitch: 0.96}
           settle: {type: WAIT, ticks: 24}
-          combo: {type: SWING, actor-id: 355, repetitions: 12, period-ticks: 9, feedback-anchor: dummy, particle: SWEEP_ATTACK, particle-count: 1, particle-every: 2, sound: ENTITY_ARMOR_STAND_HIT, sound-every: 1, sound-volume: 0.34, sound-pitch: 1.08}
+          combo: {type: SWING, actor-id: 355, repetitions: 12, period-ticks: 9, feedback-anchor: dummy, damage-target-npc-id: 364, damage-amount: 1.0, particle: SWEEP_ATTACK, particle-count: 1, particle-every: 2, sound: ENTITY_ARMOR_STAND_HIT, sound-every: 1, sound-volume: 0.34, sound-pitch: 1.08}
           breathe: {type: WAIT, ticks: 18}
-          finish: {type: SWING, actor-id: 355, repetitions: 4, period-ticks: 15, feedback-anchor: dummy, particle: CRIT, particle-count: 4, particle-every: 1, sound: ENTITY_ARMOR_STAND_HIT, sound-every: 1, sound-volume: 0.42, sound-pitch: 0.88}
+          finish: {type: SWING, actor-id: 355, repetitions: 4, period-ticks: 15, feedback-anchor: dummy, damage-target-npc-id: 364, damage-amount: 1.0, particle: CRIT, particle-count: 4, particle-every: 1, sound: ENTITY_ARMOR_STAND_HIT, sound-every: 1, sound-volume: 0.42, sound-pitch: 0.88}
           line: {type: SPEECH, actor-id: 355, text: "Двадцать четыре. Теперь ещё раз — без лишнего замаха."}
       hammer-rhythm:
         actor-ids: ["358"]

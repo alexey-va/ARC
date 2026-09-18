@@ -18,6 +18,7 @@ import org.bukkit.NamespacedKey
 import org.bukkit.Particle
 import org.bukkit.Sound
 import org.bukkit.SoundCategory
+import org.bukkit.attribute.Attribute
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Pig
 import org.bukkit.entity.Player
@@ -47,6 +48,7 @@ internal data class OriginTrainingDummyConfig(
     val trainerNpcId: Int,
     val location: OriginTrainingDummyPoint,
     val strongCharge: Double,
+    val ambientMaxHealth: Double,
     val comboTimeoutMillis: Long,
     val challengeHits: Int,
     val challengeDurationTicks: Long,
@@ -69,6 +71,7 @@ internal data class OriginTrainingDummyConfig(
                     pitch = source.real("$root.pitch"),
                 ),
                 strongCharge = source.real("$root.strong-charge", 0.9).coerceIn(0.1, 1.0),
+                ambientMaxHealth = source.real("$root.ambient-max-health", 1024.0).coerceIn(20.0, 1024.0),
                 comboTimeoutMillis = source.integer("$root.combo-timeout-seconds", 15).toLong().coerceIn(2L, 60L) * 1_000L,
                 challengeHits = source.integer("$root.challenge-hits", 8).coerceIn(2, 20),
                 challengeDurationTicks = source.integer("$root.challenge-duration-seconds", 18).toLong().coerceIn(5L, 60L) * 20L,
@@ -237,6 +240,16 @@ object OriginTrainingDummyModule : PluginModule, Listener {
     fun onDummyDamage(event: EntityDamageByEntityEvent) {
         val settings = config ?: return
         if (!isDummy(event.entity.uniqueId, settings)) return
+        val npcAttacker = runCatching { CitizensAPI.getNPCRegistry().getNPC(event.damager) }.getOrNull()
+        if (npcAttacker?.id == settings.trainerNpcId) {
+            info(
+                "ORIGIN_TRAINING_DUMMY phase=AMBIENT_HIT attacker={} finalDamage={} health={}",
+                npcAttacker.id,
+                event.finalDamage,
+                (event.entity as? LivingEntity)?.health,
+            )
+            return
+        }
         event.isCancelled = true
         val player = event.damager as? Player ?: return
         if (player.world.name != settings.world) return
@@ -440,6 +453,11 @@ object OriginTrainingDummyModule : PluginModule, Listener {
         npc.navigator.cancelNavigation()
         npc.entity.setGravity(false)
         npc.entity.velocity = Vector()
+        (npc.entity as? LivingEntity)?.let { living ->
+            val attribute = living.getAttribute(Attribute.MAX_HEALTH) ?: return@let
+            attribute.baseValue = maxOf(attribute.baseValue, settings.ambientMaxHealth)
+            if (!living.isDead && living.health <= 0.0) living.health = attribute.value
+        }
         npc.entity.teleport(settings.location.inWorld(world))
         npc.entity.setRotation(settings.location.yaw, settings.location.pitch)
     }

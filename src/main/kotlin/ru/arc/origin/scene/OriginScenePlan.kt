@@ -54,6 +54,8 @@ internal sealed interface OriginSceneStep {
         val periodTicks: Long,
         val feedbackAnchor: String? = null,
         val feedbackSurface: String? = null,
+        val damageTargetNpcId: Int? = null,
+        val damageAmount: Double = 0.0,
         val particle: String? = null,
         val particleCount: Int = 3,
         val particleEvery: Int = 1,
@@ -159,6 +161,11 @@ internal data class OriginSceneDefinition(
                         require(step.feedbackAnchor == null || step.feedbackSurface == null) {
                             "scene $id cycle ${cycle.id} swing must reference at most one feedback anchor or surface"
                         }
+                        require((step.damageTargetNpcId == null) == (step.damageAmount == 0.0)) {
+                            "scene $id cycle ${cycle.id} swing damage target and amount must be configured together"
+                        }
+                        require(step.damageTargetNpcId == null || step.damageTargetNpcId > 0)
+                        require(step.damageAmount == 0.0 || step.damageAmount in 0.1..20.0)
                     }
                     is OriginSceneStep.BlockDisplay -> {
                         require((step.surface == null) != (step.anchor == null)) {
@@ -298,6 +305,8 @@ internal data class OriginScenePlan(
                 periodTicks = source.integer("$root.period-ticks", 10).toLong().coerceIn(1L, 100L),
                 feedbackAnchor = source.string("$root.feedback-anchor", "").takeIf(String::isNotBlank),
                 feedbackSurface = source.string("$root.feedback-surface", "").takeIf(String::isNotBlank),
+                damageTargetNpcId = source.integer("$root.damage-target-npc-id", -1).takeIf { it > 0 },
+                damageAmount = source.real("$root.damage-amount", 0.0).coerceIn(0.0, 20.0),
                 particle = source.string("$root.particle", "").takeIf(String::isNotBlank),
                 particleCount = source.integer("$root.particle-count", 3).coerceIn(1, 50),
                 particleEvery = source.integer("$root.particle-every", 1).coerceIn(1, 20),

@@ -361,6 +361,9 @@ private class OriginSceneService(
             actor?.faceLocation(lookLocation)
         }
         (actor?.entity as? LivingEntity)?.swingMainHand()
+        if (step.damageTargetNpcId != null && step.damageAmount > 0.0) {
+            damageNpc(running, actor, step.damageTargetNpcId, step.damageAmount)
+        }
         val strike = repetition + 1
         if (step.particle != null && strike % step.particleEvery == 0) {
             spawnParticle(feedbackLocation, step.particle, step.particleCount, if (step.feedbackAnchor == null && step.feedbackSurface == null) 1.0 else 0.15)
@@ -471,6 +474,31 @@ private class OriginSceneService(
     private fun playSound(location: Location?, soundName: String, volume: Float, pitch: Float) {
         if (location == null) return
         SoundUtils.getSound(soundName)?.let { location.world.playSound(location, it, volume, pitch) }
+    }
+
+    private fun damageNpc(
+        running: ActiveOriginSceneCycle,
+        attacker: NPC?,
+        targetNpcId: Int,
+        amount: Double,
+    ) {
+        val sourceNpc = attacker ?: return
+        val source = sourceNpc.entity as? LivingEntity ?: return
+        val targetNpc = runCatching { CitizensAPI.getNPCRegistry().getById(targetNpcId) }
+            .getOrNull()
+            ?.takeIf(NPC::isSpawned)
+        val target = targetNpc?.entity as? LivingEntity ?: return
+        if (target.uniqueId == source.uniqueId || target.world != source.world) return
+        target.damage(amount, source)
+        info(
+            "ORIGIN_SCENE phase=NPC_HIT scene={} cycle={} attacker={} target={} amount={} health={}",
+            running.scene.id,
+            running.cycle.id,
+            sourceNpc.id,
+            targetNpc.id,
+            amount,
+            target.health,
+        )
     }
 
     private fun equip(running: ActiveOriginSceneCycle, actorId: Int, materialName: String) {
