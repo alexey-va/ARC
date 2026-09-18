@@ -37,6 +37,19 @@ class OriginScenePropContractTest : StringSpec({
         resolved.z.shouldBeExactly(67.5)
     }
 
+    "work surfaces expose a lower look target than their display support plane" {
+        val surface = OriginScenePropSurface(
+            near = OriginScenePoint(79.1, 70.65, 67.8),
+            materials = setOf(Material.ANVIL),
+            searchRadius = 2,
+            topOffset = 1.04,
+            lookTargetOffsetY = -1.15,
+        )
+
+        val target = surface.lookTarget(OriginScenePoint(78.5, 71.04, 67.5))
+        target.y.shouldBeExactly(69.89)
+    }
+
     "rotated strokes keep their geometric center pinned to the configured offset" {
         val resolved = OriginScenePropContract.resolve(
             anchor = OriginScenePoint(78.5, 71.04, 67.5),

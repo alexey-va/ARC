@@ -88,11 +88,13 @@ scenes:
         material-ids: [ANVIL, CHIPPED_ANVIL, DAMAGED_ANVIL]
         search-radius: 2
         top-offset: 1.04
+        look-target-offset-y: -1.15
       master-work-surface:
         near: "76.5,70.65,69.5"
         material-ids: [ANVIL, CHIPPED_ANVIL, DAMAGED_ANVIL]
         search-radius: 2
         top-offset: 1.04
+        look-target-offset-y: -1.15
 
     route-profile-ids: [floor]
     route-profiles:

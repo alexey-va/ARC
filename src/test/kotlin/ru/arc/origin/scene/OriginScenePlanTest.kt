@@ -47,6 +47,8 @@ class OriginScenePlanTest : FreeSpec({
         scene.actors.getValue(354).home.explicitPose shouldBe true
         (scene.anchors.getValue("apprentice-stand").x == scene.anchors.getValue("apprentice-anvil").x &&
             scene.anchors.getValue("apprentice-stand").z == scene.anchors.getValue("apprentice-anvil").z) shouldBe false
+        scene.propSurfaces.getValue("apprentice-work-surface").lookTargetOffsetY shouldBe -1.15
+        scene.propSurfaces.getValue("master-work-surface").lookTargetOffsetY shouldBe -1.15
     }
 
     "forge production cycles expose readable material transformations and container handoffs" {

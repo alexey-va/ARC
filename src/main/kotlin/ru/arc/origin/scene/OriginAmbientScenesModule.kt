@@ -246,7 +246,7 @@ private class OriginSceneService(
                 runStep(running, index + 1)
             }
             is OriginSceneStep.LookAtSurface -> {
-                val target = resolveSurfaceLocation(running, step.surface)
+                val target = resolveSurfaceLookLocation(running, step.surface)
                 if (target == null) finish(running, "look-surface-missing")
                 else {
                     npc(step.actorId)?.faceLocation(target)
@@ -371,6 +371,12 @@ private class OriginSceneService(
     private fun resolveSurfaceLocation(running: ActiveOriginSceneCycle, surfaceId: String): Location? {
         val world = Bukkit.getWorld(plan.world) ?: return null
         return running.scene.propSurfaces.getValue(surfaceId).resolve(world)?.inWorld(world)
+    }
+
+    private fun resolveSurfaceLookLocation(running: ActiveOriginSceneCycle, surfaceId: String): Location? {
+        val world = Bukkit.getWorld(plan.world) ?: return null
+        val surface = running.scene.propSurfaces.getValue(surfaceId)
+        return surface.resolve(world)?.let(surface::lookTarget)?.inWorld(world)
     }
 
     private fun setBlockDisplay(running: ActiveOriginSceneCycle, step: OriginSceneStep.BlockDisplay): Boolean {

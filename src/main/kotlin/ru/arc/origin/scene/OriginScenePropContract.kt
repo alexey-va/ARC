@@ -51,11 +51,15 @@ internal data class OriginScenePropSurface(
     val materials: Set<Material>,
     val searchRadius: Int,
     val topOffset: Double,
+    val lookTargetOffsetY: Double = -1.15,
 ) {
     init {
         require(materials.isNotEmpty() && materials.all(Material::isBlock)) { "scene prop surface requires block materials" }
         require(searchRadius in 0..4) { "scene prop surface search radius must be within 0..4" }
         require(topOffset.isFinite() && topOffset in 0.0..2.0) { "scene prop surface top offset must be within 0..2" }
+        require(lookTargetOffsetY.isFinite() && lookTargetOffsetY in -4.0..2.0) {
+            "scene prop surface look target offset must be within -4..2"
+        }
     }
 
     fun resolve(world: World): OriginScenePoint? {
@@ -80,6 +84,8 @@ internal data class OriginScenePropSurface(
 
     fun pointFor(blockX: Int, blockY: Int, blockZ: Int): OriginScenePoint =
         OriginScenePoint(blockX + 0.5, blockY + topOffset, blockZ + 0.5)
+
+    fun lookTarget(point: OriginScenePoint): OriginScenePoint = point.copy(y = point.y + lookTargetOffsetY)
 }
 
 /**

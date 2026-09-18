@@ -245,6 +245,7 @@ internal data class OriginScenePlan(
                     }.toSet(),
                     searchRadius = source.integer("$surfaceRoot.search-radius", 2),
                     topOffset = source.real("$surfaceRoot.top-offset", 1.0),
+                    lookTargetOffsetY = source.real("$surfaceRoot.look-target-offset-y", -1.15),
                 )
             }
             val routeProfiles = source.stringList("$root.route-profile-ids").associateWith { profileId ->
