@@ -205,6 +205,7 @@ class OriginScenePlanTest : FreeSpec({
             setOf("edgar-shield-board", "edgar-shield-rim", "edgar-shield-boss", "edgar-shield-grip"),
             29,
         )
+        shield.steps.filterIsInstance<OriginSceneStep.Equip>().last().material shouldBe "SHIELD"
         assertEdgarFigure(
             horseshoe,
             setOf(

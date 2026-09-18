@@ -198,7 +198,7 @@ scenes:
           collect-rim: {type: REMOVE_DISPLAY, key: edgar-shield-rim}
           collect-boss: {type: REMOVE_DISPLAY, key: edgar-shield-boss}
           collect-grip: {type: REMOVE_DISPLAY, key: edgar-shield-grip}
-          result: {type: EQUIP, actor-id: 349, material: IRON_SWORD}
+          result: {type: EQUIP, actor-id: 349, material: SHIELD}
           remark: {type: SPEECH, actor-id: 349, text: "Щит держит удар не красотой. Сначала каркас, потом сердце."}
           rest: {type: WAIT, ticks: 28}
       master-horseshoe:
