@@ -242,6 +242,7 @@ object OriginTrainingDummyModule : PluginModule, Listener {
         if (!isDummy(event.entity.uniqueId, settings)) return
         val npcAttacker = runCatching { CitizensAPI.getNPCRegistry().getNPC(event.damager) }.getOrNull()
         if (npcAttacker?.id == settings.trainerNpcId) {
+            event.isCancelled = false
             info(
                 "ORIGIN_TRAINING_DUMMY phase=AMBIENT_HIT attacker={} finalDamage={} health={}",
                 npcAttacker.id,
@@ -454,9 +455,9 @@ object OriginTrainingDummyModule : PluginModule, Listener {
         npc.entity.setGravity(false)
         npc.entity.velocity = Vector()
         (npc.entity as? LivingEntity)?.let { living ->
-            val attribute = living.getAttribute(Attribute.MAX_HEALTH) ?: return@let
-            attribute.baseValue = maxOf(attribute.baseValue, settings.ambientMaxHealth)
-            if (!living.isDead && living.health <= 0.0) living.health = attribute.value
+        val attribute = living.getAttribute(Attribute.MAX_HEALTH) ?: return@let
+        attribute.baseValue = maxOf(attribute.baseValue, settings.ambientMaxHealth)
+            if (!living.isDead) living.health = attribute.value
         }
         npc.entity.teleport(settings.location.inWorld(world))
         npc.entity.setRotation(settings.location.yaw, settings.location.pitch)

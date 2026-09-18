@@ -489,7 +489,16 @@ private class OriginSceneService(
             ?.takeIf(NPC::isSpawned)
         val target = targetNpc?.entity as? LivingEntity ?: return
         if (target.uniqueId == source.uniqueId || target.world != source.world) return
-        target.damage(amount, source)
+        val wasProtected = targetNpc.isProtected
+        val wasInvulnerable = target.isInvulnerable
+        targetNpc.isProtected = false
+        target.isInvulnerable = false
+        try {
+            target.damage(amount, source)
+        } finally {
+            targetNpc.isProtected = wasProtected
+            target.isInvulnerable = wasInvulnerable
+        }
         info(
             "ORIGIN_SCENE phase=NPC_HIT scene={} cycle={} attacker={} target={} amount={} health={}",
             running.scene.id,
