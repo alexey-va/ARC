@@ -13,7 +13,17 @@ class OriginScenePlanTest : FreeSpec({
         plan.world shouldBe "rc_origin_spawn"
         plan.scenes.map(OriginSceneDefinition::id) shouldContainAll listOf("forge", "mount-yard")
         plan.scene("forge").cycles.map(OriginSceneCycle::id) shouldContainAll
-            listOf("master-anvil", "ledger-orders", "apprentice-engraving-jopa", "ore-inspection", "blade-practice", "furnace-check")
+            listOf(
+                "master-anvil",
+                "master-spear",
+                "master-shield",
+                "master-horseshoe",
+                "ledger-orders",
+                "apprentice-engraving-jopa",
+                "ore-inspection",
+                "blade-practice",
+                "furnace-check",
+            )
         plan.scene("mount-yard").cycles.map(OriginSceneCycle::id) shouldContainAll
             listOf("groom-wind", "inspect-buran", "inspect-ryzhik", "wind-paddock", "buran-paddock", "ryzhik-paddock")
     }
@@ -145,6 +155,9 @@ class OriginScenePlanTest : FreeSpec({
         val scene = OriginScenePlan.load(Files.createTempDirectory("origin-scenes-edgar-showcase-test")).scene("forge")
         val cycle = scene.cycles.single { it.id == "master-forging-showcase" }
         val axe = scene.cycles.single { it.id == "master-anvil" }
+        val spear = scene.cycles.single { it.id == "master-spear" }
+        val shield = scene.cycles.single { it.id == "master-shield" }
+        val horseshoe = scene.cycles.single { it.id == "master-horseshoe" }
 
         cycle.actorIds shouldBe setOf(349, 358)
         cycle.steps.filterIsInstance<OriginSceneStep.Move>().map(OriginSceneStep.Move::anchor).toSet() shouldContainAll
@@ -165,5 +178,44 @@ class OriginScenePlanTest : FreeSpec({
         axe.steps.filterIsInstance<OriginSceneStep.RemoveDisplay>().map(OriginSceneStep.RemoveDisplay::key).toSet() shouldBe
             axe.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().map(OriginSceneStep.BlockDisplay::key).toSet()
         axe.steps.filterIsInstance<OriginSceneStep.Swing>().sumOf(OriginSceneStep.Swing::repetitions) shouldBe 27
+
+        fun assertEdgarFigure(
+            figure: OriginSceneCycle,
+            displayKeys: Set<String>,
+            swingCount: Int,
+        ) {
+            figure.actorIds shouldBe setOf(349)
+            figure.steps.filterIsInstance<OriginSceneStep.LookAtSurface>().map(OriginSceneStep.LookAtSurface::surface).toSet() shouldBe
+                setOf("master-work-surface")
+            figure.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().map(OriginSceneStep.BlockDisplay::key).toSet() shouldBe displayKeys
+            figure.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().all {
+                it.surface == "master-work-surface" && it.anchor == null && it.origin == OriginScenePropOrigin.BOTTOM_CENTER
+            } shouldBe true
+            figure.steps.filterIsInstance<OriginSceneStep.RemoveDisplay>().map(OriginSceneStep.RemoveDisplay::key).toSet() shouldBe displayKeys
+            figure.steps.filterIsInstance<OriginSceneStep.Swing>().sumOf(OriginSceneStep.Swing::repetitions) shouldBe swingCount
+        }
+
+        assertEdgarFigure(
+            spear,
+            setOf("edgar-spear-shaft", "edgar-spear-edge", "edgar-spear-socket", "edgar-spear-point"),
+            25,
+        )
+        assertEdgarFigure(
+            shield,
+            setOf("edgar-shield-board", "edgar-shield-rim", "edgar-shield-boss", "edgar-shield-grip"),
+            29,
+        )
+        assertEdgarFigure(
+            horseshoe,
+            setOf(
+                "edgar-horseshoe-base",
+                "edgar-horseshoe-left",
+                "edgar-horseshoe-right",
+                "edgar-horseshoe-heel",
+                "edgar-horseshoe-nail-left",
+                "edgar-horseshoe-nail-right",
+            ),
+            33,
+        )
     }
 })
