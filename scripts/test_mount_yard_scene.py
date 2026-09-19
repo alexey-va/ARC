@@ -55,6 +55,20 @@ class MountYardSceneTest(unittest.TestCase):
                 if step["state"] in allowed:
                     self.assertIn(step["actor-id"], allowed[step["state"]])
 
+    def test_caravan_uses_clear_aisle_and_retraces_loading_bay_exit(self):
+        steps = self.scene["cycles"]["caravan-preparation"]["steps"]
+        groups = {key: value for key, value in steps.items() if value["type"] == "MOVE_GROUP"}
+        self.assertEqual(["out-exit", "out-middle", "out-front", "return-middle", "return-exit", "return"],
+                         list(groups))
+        self.assertEqual({"caravan"}, {step["route-profile"] for step in groups.values()})
+        self.assertEqual(groups["out-exit"]["anchors"], groups["return-exit"]["anchors"])
+        forbidden = self.scene["route-profiles"]["caravan"]["forbidden-areas"]
+        self.assertEqual(["66,-140,76,-125"], forbidden)
+        for move in groups.values():
+            for anchor in move["anchors"]:
+                x, _, z, *_ = map(float, self.scene["anchors"][anchor].split(","))
+                self.assertFalse(66 <= x < 77 and -140 <= z < -124, anchor)
+
     def test_source_model_does_not_mutate_input(self):
         before = copy.deepcopy(self.scene)
         living_scene(self.scene)

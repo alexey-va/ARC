@@ -46,10 +46,12 @@ ANCHORS = {
     "packing-stand": "68.0,70,-141.5,-90,0",
     "packing-target": "69.5,69.7,-141.5",
     "caravan-helper": "67.5,70,-143.5,0,0",
-    "caravan-person-mid": "65.5,70,-134.5,0,0",
-    "caravan-animal-mid": "68.5,70,-134.5,0,0",
+    "caravan-person-exit": "65.5,70,-143.5,0,0",
+    "caravan-animal-exit": "65.5,70,-141.5,0,0",
+    "caravan-person-mid": "62.5,70,-134.5,0,0",
+    "caravan-animal-mid": "65.5,70,-134.5,0,0",
     "caravan-person-front": "61.5,70,-123.5,0,0",
-    "caravan-animal-front": "64.5,70,-123.5,0,0",
+    "caravan-animal-front": "63.5,70,-123.5,0,0",
 }
 HAY = (Part("bale", "HAY_BLOCK", (0, .85, .55), (.54, .45, .42)),
        Part("binding", "BROWN_TERRACOTTA", (0, .84, .55), (.08, .48, .44)))
@@ -151,17 +153,20 @@ def caravan_cycle():
     steps.update({"ready": say(PACKER, "Сумки закреплены, одеяло сверху. Репей, шагом!"),
                   "snort": sound(DONKEY, "ENTITY_DONKEY_AMBIENT", .9),
                   "show-load": pause(80)})
-    for name, anchors in (("out-middle", ["caravan-person-mid", "caravan-animal-mid"]),
+    for name, anchors in (("out-exit", ["caravan-person-exit", "caravan-animal-exit"]),
+                          ("out-middle", ["caravan-person-mid", "caravan-animal-mid"]),
                           ("out-front", ["caravan-person-front", "caravan-animal-front"])):
         steps[name] = step("MOVE_GROUP", actor_ids=[str(PACKER), str(DONKEY)], anchors=anchors,
-                           route_profile="yard", timeout_ticks=700)
+                           route_profile="caravan", timeout_ticks=700)
     steps["inspect-load"] = step("LOOK_AT_ACTOR", PACKER, target_actor_id=DONKEY)
     steps["line"] = say(PACKER, "Ничего не гремит и не сползает. Ещё круг — и обоз готов.")
     steps["rest"] = pause(220)
     steps["return-middle"] = step("MOVE_GROUP", actor_ids=[str(PACKER), str(DONKEY)],
-        anchors=["caravan-person-mid", "caravan-animal-mid"], route_profile="yard", timeout_ticks=700)
+        anchors=["caravan-person-mid", "caravan-animal-mid"], route_profile="caravan", timeout_ticks=700)
+    steps["return-exit"] = step("MOVE_GROUP", actor_ids=[str(PACKER), str(DONKEY)],
+        anchors=["caravan-person-exit", "caravan-animal-exit"], route_profile="caravan", timeout_ticks=700)
     steps["return"] = step("MOVE_GROUP", actor_ids=[str(PACKER), str(DONKEY)],
-        anchors=["packing-stand", "home-442"], route_profile="yard", timeout_ticks=700)
+        anchors=["packing-stand", "home-442"], route_profile="caravan", timeout_ticks=700)
     for stage in reversed(range(4)):
         steps[f"unload-work-{stage}"] = swing(PACKER, 3, 13)
         parts = [p for p in CARGO if p.stage == stage]
@@ -250,6 +255,12 @@ def living_scene(baseline):
             scene["actor-ids"].append(str(actor))
         scene["actors"][actor] = {"home": home, "denied-denizen-flags": []}
     scene["anchors"].update(ANCHORS)
+    # Keep a donkey-width clearance from the post at (67,-139) and the east
+    # pen's gates/trapdoors. The loading bay is reached through its south side.
+    caravan_route = copy.deepcopy(scene["route-profiles"]["yard"])
+    caravan_route["forbidden-areas"] = ["66,-140,76,-125"]
+    scene["route-profiles"]["caravan"] = caravan_route
+    scene["route-profile-ids"] = list(scene["route-profiles"])
     for actor, home in HOMES.items():
         scene["anchors"][f"home-{actor}"] = home
     scene["anchor-ids"] = list(scene["anchors"])
