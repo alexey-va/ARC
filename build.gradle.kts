@@ -3,9 +3,14 @@ import org.gradle.api.services.BuildService
 import org.gradle.api.services.BuildServiceParameters
 import org.gradle.internal.os.OperatingSystem
 import ru.arc.testing.containers.RedisTestService
+import java.net.URI
 import java.util.Properties
 import java.net.Socket
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
 import java.security.MessageDigest
+import java.time.Duration
 
 buildscript {
     repositories {
@@ -431,6 +436,18 @@ tasks {
 }
 
 val contractE2eFiles = layout.buildDirectory.dir("plugwright-e2e-generated")
+val contractTestFixture = sourceSets.create("contractTestFixture") {
+    compileClasspath += sourceSets.main.get().output
+    runtimeClasspath += sourceSets.main.get().output
+}
+configurations[contractTestFixture.implementationConfigurationName].extendsFrom(configurations.implementation.get())
+configurations[contractTestFixture.compileOnlyConfigurationName].extendsFrom(configurations.compileOnly.get())
+kotlin.target.compilations.getByName("contractTestFixture")
+    .associateWith(kotlin.target.compilations.getByName("main"))
+val contractTestFixtureJar = tasks.register<Jar>("contractTestFixtureJar") {
+    archiveBaseName.set("ARCContractTestFixture")
+    from(contractTestFixture.output)
+}
 val contractCrashFixture = sourceSets.create("contractCrashFixture") {
     compileClasspath += sourceSets.main.get().output
     runtimeClasspath += sourceSets.main.get().output
@@ -447,6 +464,39 @@ val cleanupE2e = providers.gradleProperty("cleanupE2e").map(String::toBoolean).o
 val dialogE2e = providers.gradleProperty("dialogE2e").map(String::toBoolean).orElse(false).get()
 val parkourE2e = providers.gradleProperty("parkourE2e").map(String::toBoolean).orElse(false).get()
 val contractCrashE2e = providers.gradleProperty("contractCrashE2e").map(String::toBoolean).orElse(false).get()
+val contractCitizensUrl = "https://ci.citizensnpcs.co/job/Citizens2/4246/artifact/dist/target/Citizens-2.0.43-b4246.jar"
+val contractCitizensSha256 = "738b617c79d2d5a797676c1a398587b1f1f5547e2206aae558d98aac78ef74db"
+val contractCitizensJar = layout.buildDirectory.file("plugwright-e2e-generated/Citizens-2.0.43-b4246.jar")
+val prepareContractCitizens = tasks.register("prepareContractCitizens") {
+    outputs.file(contractCitizensJar)
+    outputs.upToDateWhen { false }
+    doLast {
+        val response = HttpClient.newBuilder()
+            .followRedirects(HttpClient.Redirect.NORMAL)
+            .connectTimeout(Duration.ofSeconds(30))
+            .build()
+            .send(
+                HttpRequest.newBuilder(URI(contractCitizensUrl))
+                    .timeout(Duration.ofMinutes(2))
+                    .GET()
+                    .build(),
+                HttpResponse.BodyHandlers.ofByteArray(),
+            )
+        check(response.statusCode() in 200..299) {
+            "Citizens fixture download failed with HTTP ${response.statusCode()}"
+        }
+        val bytes = response.body()
+        val actual = MessageDigest.getInstance("SHA-256").digest(bytes)
+            .joinToString("") { "%02x".format(it) }
+        check(actual == contractCitizensSha256) {
+            "Unexpected Citizens fixture SHA-256: $actual"
+        }
+        contractCitizensJar.get().asFile.apply {
+            parentFile.mkdirs()
+            writeBytes(bytes)
+        }
+    }
+}
 
 // Isolated real-Paper tests run separately from the fast JVM suite.
 plugwright {
@@ -474,6 +524,8 @@ plugwright {
             file("plugins/ARC/modules/contracts.yml", contractE2eFiles.get().file("contracts.yml").asFile)
             file("plugins/RedisEconomy/config.yml", contractE2eFiles.get().file("rediseconomy.yml").asFile)
             file("plugins/RedisEconomy.jar", contractE2eFiles.get().file("RedisEconomy.jar").asFile)
+            file("plugins/Citizens-2.0.43-b4246.jar", contractCitizensJar.get().asFile)
+            file("plugins/ARCContractTestFixture.jar", contractTestFixtureJar.get().archiveFile.get().asFile)
             if (contractCrashE2e) {
                 file("plugins/ARCContractCrashFixture.jar", contractCrashFixtureJar.get().archiveFile.get().asFile)
             }
@@ -601,6 +653,8 @@ tasks.named<me.drownek.plugwright.PlugwrightTestTask>("plugwrightTest") {
         testFiles.set("parkour-real-paper")
     } else {
         dependsOn(prepareContractE2e)
+        dependsOn(prepareContractCitizens)
+        dependsOn(contractTestFixtureJar)
         usesService(e2eRedis)
         if (contractCrashE2e) {
             dependsOn(contractCrashFixtureJar)

@@ -45,7 +45,7 @@ test('table and divider gallery sends all specimens with pack spacing and workin
     const rootCommands = dialog.actions.map(button => button.action?.command);
     assert.ok(rootCommands.includes('/arc dialogdemo tables'));
     assert.ok(rootCommands.includes('/arc dialogdemo dividers'));
-    for (const [family, pageCount, perPage, prefix] of [['tables', 4, 3, 'Т'], ['dividers', 3, 6, 'Р']]) {
+    for (const [family, pageCount, perPage, prefix] of [['tables', 6, 3, 'Т'], ['dividers', 3, 6, 'Р']]) {
       await open(`/arc dialogdemo ${family}`);
       for (let page = 0; page < pageCount; page++) {
         const contents = dialog.body.map(body => plain(body.contents)).join('\n');

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test, expect, waitUntil } from '@drownek/plugwright';
-import { observeNativeDialog } from './native-dialog.js';
+import { clickContractDesk } from './contract-desk.js';
+import { observeNativeDialog, plain } from './native-dialog.js';
 
 const count = (player, name) => player.bot.inventory.items()
   .filter(item => item.name === name)
@@ -28,8 +29,9 @@ test('direct contract submission is unavailable; the board opens the real contra
     const board = await player.gui({ title: /Доска объявлений/i });
     const card = board.locator(item => item.getDisplayName().includes('E2E stone order'));
     await card.click();
-    await native.wait();
-    assert.ok(native.action('E2E stone order'), 'Board card did not open the native contract catalog');
+    const detail = await native.wait();
+    assert.ok(plain(detail.title).includes('E2E stone order'), 'Board card did not open the selected contract');
+    assert.ok(native.action(/Недоступно.*Сдать ресурсы/i), 'Board navigation must not mint an NPC submission grant');
     await player.deOp();
   } finally { native.close(); }
 });
@@ -44,6 +46,7 @@ test('an Origin quote consumes two real items once and a second click cannot dup
     const initialBalance = player.messageBuffer.length;
     player.chat('/balance');
     await expect(player).toHaveReceivedMessage(/You have 0(?:[.,]0{1,2})?(?: coins?)?!/i, { since: initialBalance });
+    await clickContractDesk(player, signal);
     await native.command('/arc contracts open spawn');
     await native.click('E2E stone order');
     const quantity = native.inputInitial('quantity');

@@ -5,6 +5,7 @@ import { readFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { once } from 'node:events';
 import { test, expect, waitUntil, ServerWrapper } from '@drownek/plugwright';
+import { clickContractDesk } from './contract-desk.js';
 import { observeNativeDialog } from './native-dialog.js';
 
 const enabled = process.env.ARC_CONTRACT_CRASH_FIXTURE === '1';
@@ -121,6 +122,7 @@ if (enabled) test('contract items, provider payment and journal survive real pro
       await expect(player).toHaveReceivedMessage(`CONTRACT_CRASH_ARMED:${phase}`, { since: beforeArm });
       await player.deOp();
       await balance(player, expectedBalance, signal);
+      await clickContractDesk(player, signal);
       await native.command('/arc contracts open spawn');
       await native.click('E2E stone order');
       const quantity = native.inputInitial('quantity');
