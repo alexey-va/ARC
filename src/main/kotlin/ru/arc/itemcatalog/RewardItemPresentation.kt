@@ -4,7 +4,7 @@ import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.inventory.ItemStack
 import ru.arc.util.TextUtil
 
-/** Authored stories belong to the actual prize, including prizes selected with a seal. */
+/** Applies authored identity only to curated collection prizes, never to quantity labels on case cards. */
 internal object RewardItemPresentation {
     fun apply(stack: ItemStack, entry: RewardCatalogEntry): ItemStack = stack.clone().also { result ->
         result.editMeta { meta ->

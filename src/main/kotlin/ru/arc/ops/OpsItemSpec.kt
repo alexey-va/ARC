@@ -3,6 +3,7 @@ package ru.arc.ops
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import de.tr7zw.changeme.nbtapi.NBT
+import dev.lone.itemsadder.api.CustomStack
 import io.papermc.paper.registry.RegistryAccess
 import io.papermc.paper.registry.RegistryKey
 import net.kyori.adventure.text.minimessage.MiniMessage
@@ -12,6 +13,7 @@ import org.bukkit.enchantments.Enchantment
 import org.bukkit.inventory.ItemFlag
 import org.bukkit.inventory.ItemStack
 import ru.arc.util.ConfigItemSpec
+import ru.arc.util.TextUtil
 import ru.arc.util.applySpec
 import ru.arc.util.customModelDataOrNull
 import ru.arc.util.itemStack
@@ -72,14 +74,27 @@ object OpsItemSpec {
             "iageneric:bag_of_coins" to (Material.STICK to 11138),
         )
 
-    fun build(json: JsonObject): ItemStack {
+    fun build(json: JsonObject): ItemStack = build(json, ::resolveItemsAdderStack)
+
+    internal fun build(
+        json: JsonObject,
+        itemsAdderResolver: (String) -> ItemStack?,
+    ): ItemStack {
         val itemsAdderId = json.stringOrNull("itemsadder")
         val mapped = itemsAdderId?.let { knownItemsAdder[it.lowercase()] }
         val itemFields = ConfigItemSpec.fromJsonFields(json.toItemFieldMap())
+        val explicitMaterialName = itemFields.material?.name ?: json.stringOrNull("material")
+        val itemsAdderStack =
+            if (itemsAdderId != null && mapped == null && explicitMaterialName == null) {
+                itemsAdderResolver(itemsAdderId)?.clone()
+                    ?: throw IllegalArgumentException("Unknown ItemsAdder item: $itemsAdderId")
+            } else {
+                null
+            }
 
-        val materialName = itemFields.material?.name
-            ?: json.stringOrNull("material")
+        val materialName = explicitMaterialName
             ?: mapped?.first?.name
+            ?: itemsAdderStack?.type?.name
             ?: throw IllegalArgumentException("material or itemsadder required")
 
         val material =
@@ -87,11 +102,10 @@ object OpsItemSpec {
                 ?: throw IllegalArgumentException("Unknown material: $materialName")
 
         val amount = json.get("amount")?.takeIf { !it.isJsonNull }?.asInt?.coerceAtLeast(1) ?: 1
-        val modelData =
+        val modelDataOverride =
             itemFields.modelData
                 ?: json.get("customModelData")?.takeIf { !it.isJsonNull }?.asInt
                 ?: mapped?.second
-                ?: 0
 
         val display = itemFields.display ?: json.stringOrNull("display")
         val lore = itemFields.lore ?: json.stringList("lore")
@@ -101,27 +115,56 @@ object OpsItemSpec {
         val flags = parseItemFlags(json.get("itemFlags"))
 
         val stack =
-            itemStack(material, amount) {
-                applySpec(
-                    ConfigItemSpec(
-                        material = null,
-                        display = display,
-                        lore = lore,
-                        modelData = modelData.takeIf { it != 0 },
-                    ),
-                    applyMaterial = false,
-                )
-                enchants.forEach { (enchant, level) ->
-                    enchant(enchant, level)
+            if (itemsAdderStack != null) {
+                itemsAdderStack.apply {
+                    this.amount = amount
+                    editMeta { meta ->
+                        modelDataOverride?.takeIf { it != 0 }?.let { data ->
+                            @Suppress("DEPRECATION")
+                            meta.setCustomModelData(data)
+                        }
+                        display?.let { meta.displayName(TextUtil.strip(miniMessage.deserialize(it))) }
+                        lore.takeIf { it.isNotEmpty() }?.let { lines ->
+                            meta.lore(lines.map { TextUtil.strip(miniMessage.deserialize(it))!! })
+                        }
+                        enchants.forEach { (enchant, level) ->
+                            meta.addEnchant(enchant, level, false)
+                        }
+                        if (flags.isNotEmpty()) {
+                            meta.addItemFlags(*flags.toTypedArray())
+                        }
+                        if (glowing) {
+                            meta.addEnchant(Enchantment.UNBREAKING, 1, true)
+                            meta.addItemFlags(ItemFlag.HIDE_ENCHANTS)
+                        }
+                        if (unbreakable) {
+                            meta.isUnbreakable = true
+                        }
+                    }
                 }
-                if (flags.isNotEmpty()) {
-                    flags(*flags.toTypedArray())
-                }
-                if (glowing) {
-                    glowing()
-                }
-                if (unbreakable) {
-                    unbreakable(true)
+            } else {
+                itemStack(material, amount) {
+                    applySpec(
+                        ConfigItemSpec(
+                            material = null,
+                            display = display,
+                            lore = lore,
+                            modelData = modelDataOverride?.takeIf { it != 0 },
+                        ),
+                        applyMaterial = false,
+                    )
+                    enchants.forEach { (enchant, level) ->
+                        enchant(enchant, level)
+                    }
+                    if (flags.isNotEmpty()) {
+                        flags(*flags.toTypedArray())
+                    }
+                    if (glowing) {
+                        glowing()
+                    }
+                    if (unbreakable) {
+                        unbreakable(true)
+                    }
                 }
             }
 
@@ -135,6 +178,9 @@ object OpsItemSpec {
 
         return stack
     }
+
+    private fun resolveItemsAdderStack(namespacedId: String): ItemStack? =
+        runCatching { CustomStack.getInstance(namespacedId)?.itemStack }.getOrNull()
 
     fun toMap(stack: ItemStack?): Map<String, Any?> {
         if (stack == null || stack.type.isAir) {

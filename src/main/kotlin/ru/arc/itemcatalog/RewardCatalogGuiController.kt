@@ -340,7 +340,7 @@ class RewardCatalogGuiController internal constructor(
                 val treasure = Treasures.getPool(source.pool)?.findById(source.id) ?: return@runCatching null
                 when (treasure) {
                     is Treasure.Item -> RewardItemEnhancer.enrich(treasure.stack, entry.enchantments)
-                        ?.let { capacityStacks(RewardItemPresentation.apply(it, entry), if (grant) treasure.amount else treasure.max) }
+                        ?.let { capacityStacks(it, if (grant) treasure.amount else treasure.max) }
                     is Treasure.Slimefun -> HookRegistry.sfHook?.getSlimefunItemStack(treasure.itemId)
                         ?.let { capacityStacks(it, if (grant) treasure.rolledAmount else treasure.max) }
                     is Treasure.Enchant -> if (grant) List(treasure.amount) { treasure.randomBook() }

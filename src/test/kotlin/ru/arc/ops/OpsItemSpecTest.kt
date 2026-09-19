@@ -4,8 +4,11 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import io.kotest.matchers.shouldBe
 import org.bukkit.Material
+import org.bukkit.NamespacedKey
 import org.bukkit.enchantments.Enchantment
 import org.bukkit.inventory.ItemFlag
+import org.bukkit.inventory.ItemStack
+import org.bukkit.persistence.PersistentDataType
 import ru.arc.KotestTestBase
 import ru.arc.util.customModelDataOrNull
 
@@ -62,6 +65,55 @@ class OpsItemSpecTest :
 
                 stack.type shouldBe Material.STICK
                 stack.customModelDataOrNull shouldBe 11138
+            }
+
+            it("should preserve a dynamically resolved ItemsAdder stack") {
+                val source =
+                    ItemStack(Material.PAPER).apply {
+                        itemMeta =
+                            itemMeta.apply {
+                                @Suppress("DEPRECATION")
+                                setCustomModelData(424242)
+                                isUnbreakable = true
+                                persistentDataContainer.set(
+                                    NamespacedKey("itemsadder", "id"),
+                                    PersistentDataType.STRING,
+                                    "blacksmith_hammer",
+                                )
+                            }
+                    }
+                val json =
+                    JsonObject().apply {
+                        addProperty("itemsadder", "fantasy_npc:blacksmith_hammer")
+                        addProperty("amount", 2)
+                    }
+
+                val stack =
+                    OpsItemSpec.build(json) { namespacedId ->
+                        namespacedId shouldBe "fantasy_npc:blacksmith_hammer"
+                        source
+                    }
+
+                stack.type shouldBe Material.PAPER
+                stack.amount shouldBe 2
+                stack.customModelDataOrNull shouldBe 424242
+                stack.itemMeta.isUnbreakable shouldBe true
+                stack.itemMeta.persistentDataContainer.get(
+                    NamespacedKey("itemsadder", "id"),
+                    PersistentDataType.STRING,
+                ) shouldBe "blacksmith_hammer"
+                source.amount shouldBe 1
+            }
+
+            it("should reject an unknown dynamic ItemsAdder item") {
+                val json =
+                    JsonObject().apply {
+                        addProperty("itemsadder", "fantasy_npc:missing")
+                    }
+
+                val error = runCatching { OpsItemSpec.build(json) { null } }.exceptionOrNull()
+
+                error?.message shouldBe "Unknown ItemsAdder item: fantasy_npc:missing"
             }
 
             it("should apply enchants and flags") {
