@@ -1,5 +1,6 @@
 package ru.arc.origin.scene
 
+import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.World
 import kotlin.math.abs
@@ -32,10 +33,24 @@ internal data class OriginSceneVector(
         }
     }
 
+    operator fun plus(other: OriginSceneVector): OriginSceneVector = OriginSceneVector(
+        x + other.x,
+        y + other.y,
+        z + other.z,
+    )
+
     companion object {
         val ZERO = OriginSceneVector(0.0, 0.0, 0.0)
     }
 }
+
+/** Position/yaw snapshot used to coalesce one actor's multipart cargo refresh. */
+internal data class OriginSceneFollowPose(
+    val x: Double,
+    val y: Double,
+    val z: Double,
+    val yaw: Float,
+)
 
 internal data class OriginSceneResolvedProp(
     val x: Double,
@@ -94,6 +109,35 @@ internal data class OriginScenePropSurface(
  * into individual scenes.
  */
 internal object OriginScenePropContract {
+    fun changedFollowActors(
+        previous: Map<Int, OriginSceneFollowPose>,
+        current: Map<Int, OriginSceneFollowPose>,
+    ): Set<Int> = current.filter { (actorId, pose) -> previous[actorId] != pose }.keys
+
+    /** Resolves a local cargo offset against an actor's current world pose. */
+    fun actorAnchor(actor: Location, offset: OriginSceneVector): OriginScenePoint {
+        val radians = Math.toRadians(actor.yaw.toDouble())
+        val x = offset.x * cos(radians) - offset.z * sin(radians)
+        val z = offset.x * sin(radians) + offset.z * cos(radians)
+        return OriginScenePoint(
+            x = actor.x + x,
+            y = actor.y + offset.y,
+            z = actor.z + z,
+            yaw = actor.yaw,
+            pitch = actor.pitch,
+            explicitPose = true,
+        )
+    }
+
+    /** Converts an actor yaw into the opposite-sign JOML display rotation. */
+    fun actorRelativeRotationY(rotationYDegrees: Float, actorYaw: Float): Float {
+        require(rotationYDegrees.isFinite() && actorYaw.isFinite()) { "scene rotations must be finite" }
+        var normalized = (rotationYDegrees.toDouble() - actorYaw.toDouble()) % 360.0
+        if (normalized > 180.0) normalized -= 360.0
+        if (normalized < -180.0) normalized += 360.0
+        return normalized.toFloat()
+    }
+
     fun resolve(
         anchor: OriginScenePoint,
         origin: OriginScenePropOrigin,

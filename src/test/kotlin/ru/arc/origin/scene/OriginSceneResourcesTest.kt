@@ -22,7 +22,10 @@ import org.bukkit.block.BlockState
 import org.bukkit.block.Lidded
 import org.bukkit.block.data.BlockData
 import org.bukkit.entity.BlockDisplay
+import org.bukkit.entity.Cat
+import org.bukkit.entity.Pose as BukkitPose
 import org.bukkit.inventory.ItemStack
+import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.eq
@@ -188,6 +191,49 @@ class OriginSceneResourcesTest : StringSpec({
         resources.displayCount shouldBe 1
         resources.cleanup() shouldBe emptyList()
         verify(exactly = 1) { display.remove() }
+    }
+
+    "animal pose changes clear for movement and restore the original state" {
+        val npc = mockNpc(20)
+        val cat = mockitoMock<Cat>()
+        every { npc.entity } returns cat
+        whenever(cat.pose).thenReturn(BukkitPose.STANDING)
+        whenever(cat.hasFixedPose()).thenReturn(false)
+        whenever(cat.isLyingDown).thenReturn(true)
+        whenever(cat.isHeadUp).thenReturn(false)
+
+        val resources = OriginSceneResources()
+        resources.setPose(npc, OriginScenePose.CAT_LIE)
+        mockitoVerify(cat).setLyingDown(true)
+        resources.clearMovementPose(npc)
+        mockitoVerify(cat, times(2)).setLyingDown(false)
+
+        resources.cleanup() shouldBe emptyList()
+        mockitoVerify(cat, times(3)).setPose(BukkitPose.STANDING, false)
+        mockitoVerify(cat, times(2)).setLyingDown(true)
+    }
+
+    "cat sit and lie poses are mutually exclusive and restore the original state" {
+        val npc = mockNpc(21)
+        val cat = mockitoMock<Cat>()
+        var sitting = false
+        every { npc.entity } returns cat
+        whenever(cat.pose).thenReturn(BukkitPose.STANDING)
+        whenever(cat.hasFixedPose()).thenReturn(false)
+        whenever(cat.isSitting).thenReturn(false)
+        whenever(cat.isLyingDown).thenReturn(false)
+        whenever(cat.isHeadUp).thenReturn(false)
+        doAnswer {
+            sitting = it.getArgument<Boolean>(0)
+            null
+        }.whenever(cat).setSitting(any())
+
+        val resources = OriginSceneResources()
+        resources.setPose(npc, OriginScenePose.SIT)
+        resources.setPose(npc, OriginScenePose.CAT_LIE)
+        sitting shouldBe false
+        resources.cleanup() shouldBe emptyList()
+        sitting shouldBe false
     }
 })
 

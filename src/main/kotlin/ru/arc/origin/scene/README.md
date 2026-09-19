@@ -17,11 +17,13 @@ and player-facing shops keep their own state and only preempt ambient leases.
   native cleanup enters `RECOVERING` and retains the actor lease for up to three
   attempts, 20 ticks apart. Shutdown drains retries synchronously. Exhaustion
   reports `recovery-incomplete`, never a successful completion.
-- `OriginSceneResources`: original Citizens equipment, open container lids and
-  transient BlockDisplays. Ownership is recorded before mutation where the
-  native API permits. Cleanup attempts every resource, removes successes and
-  retains failures for an explicit retry. An originally empty hand is a real
-  snapshot, not a missing entry.
+- `OriginSceneResources`: original Citizens equipment, native animal poses,
+  open container lids and transient BlockDisplays. Ownership is recorded before
+  mutation where the native API permits. Cleanup attempts every resource,
+  removes successes and retains failures for an explicit retry. Pose snapshots
+  remain owned through the return route so a temporarily cleared sit/graze can
+  be restored after navigation. An originally empty hand is a real snapshot,
+  not a missing entry.
 - `OriginAmbientScenesModule`: native execution adapter, route controller,
   audience/player-priority policy, configuration replacement and status.
 
@@ -34,6 +36,29 @@ exhausted the actor lease is released, so a provider failure can leave native
 state unrecovered and requires operator attention; this is not durable crash
 recovery. Fatal JVM errors are not swallowed.
 
+## Living scene steps
+
+The existing `MOVE`, `WAIT`, and `BLOCK_DISPLAY` forms remain valid. The
+following additions are bounded and lease-scoped:
+
+- `BLOCK_DISPLAY` may use `follow-actor-id` instead of `surface`/`anchor`.
+  `follow-offset` is an actor-local `x,y,z` offset rotated by actor yaw; the
+  existing `offset`, scale, origin, and rotation fields keep their prior
+  display semantics. The display refreshes through the cycle's
+  `OriginSceneExecution` scope and is fenced on interruption.
+- `POSE` accepts `STAND`, `SIT`, `CAT_LIE`, or `HORSE_GRAZE`. The runtime uses
+  Paper's native `Sittable`, `Cat`, and `AbstractHorse` APIs, captures the first
+  observed state, clears movement-blocking pose before a move, and restores it
+  on completion, interruption, or reload.
+- `DISMOUNT actor-id` leaves the vehicle, ejects passengers, and removes the
+  pair from mount bookkeeping so return routing includes both actors after an
+  explicit dismount.
+- `MOVE_GROUP` accepts `actor-ids` plus either one shared `anchor` or a
+  same-length `anchors` list, a declared `route-profile`, and bounded
+  `timeout-ticks` (20..1200). Routes start together; one unavailable actor or
+  failed route stops all members and aborts the step. The barrier advances only
+  after every route succeeds.
+
 ## Operator readback
 
 `/arc npccycle status [scene] [cycle]` uses the existing administrator permission
@@ -45,6 +70,14 @@ elapsed milliseconds, remaining cooldown, wait reason and last result.
 live in the ops repository at `classic/plugins/ARC/modules/origin-scenes.yml`;
 bundled defaults are `src/main/resources/modules/origin-scenes.yml`. Keep both
 schemas compatible. The figure authoring helper is `scripts/forge_figures.py`.
+
+Living-stable authoring uses `scripts/mount_yard_scene.py` and the multipart
+models in `scripts/mount_yard_models.py`. The helper emits an apply_patch patch
+for only the mount-yard section; it preserves unrelated forge overrides.
+Run `python3 -B -m unittest discover -s scripts -p 'test_mount_yard*.py'` for
+model budgets, leased attachments, native pose compatibility and repeatability.
+Native actor identities and physical support blocks are recorded in ops
+`docs/knowledge/npc-scene-origin-mounts.md` and `assets/origin-mount-yard/`.
 
 ## Focused verification
 

@@ -126,6 +126,26 @@ class OriginSceneExecutionTest : FreeSpec({
         effects.executed shouldBe listOf(0, 1)
         run.close()
     }
+
+    "a repeating callback is fenced when the execution is interrupted" {
+        val scheduler = TestTaskScheduler()
+        val effects = RecordingSceneEffects()
+        val run = OriginSceneExecution(listOf("work"), 100, effects, scheduler)
+        var calls = 0
+        run.start()
+        run.repeat(2) {
+            calls++
+            true
+        }
+
+        scheduler.tick(2)
+        calls shouldBe 1
+        run.interrupt("player-click")
+        scheduler.tick(20)
+        calls shouldBe 1
+        run.phase shouldBe OriginSceneExecutionPhase.FINISHED
+        effects.releases shouldBe listOf("player-click")
+    }
 })
 
 private class RecordingSceneEffects(

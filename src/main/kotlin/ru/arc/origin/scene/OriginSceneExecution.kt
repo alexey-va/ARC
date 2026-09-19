@@ -72,6 +72,25 @@ internal class OriginSceneExecution(
         }
     }
 
+    /**
+     * Runs a main-thread cycle-owned callback until it returns false or the
+     * execution leaves RUNNING. LifecycleTaskScope cancels the next callback
+     * on finish, interruption, reload and shutdown.
+     */
+    fun repeat(ticks: Long, action: () -> Boolean) {
+        require(ticks > 0L)
+        if (phase != OriginSceneExecutionPhase.RUNNING) return
+        guarded("schedule") {
+            actions.runLater(ticks) {
+                if (phase != OriginSceneExecutionPhase.RUNNING) return@runLater
+                var again = false
+                if (!attempt("step") { again = action() }) {
+                    interrupt("repeat-failed")
+                } else if (again) repeat(ticks, action)
+            }
+        }
+    }
+
     fun finish(result: String) {
         if (phase != OriginSceneExecutionPhase.RUNNING) return
         phase = OriginSceneExecutionPhase.RETURNING

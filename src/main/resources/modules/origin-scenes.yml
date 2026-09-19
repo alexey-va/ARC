@@ -734,36 +734,27 @@ scenes:
   mount-yard:
     anchor: "60.0,70.0,-128.0"
     audience-range: 72.0
-    retry-seconds: 7
-    max-concurrent-cycles: 3
-    actor-ids: ["370", "371", "412", "413", "414", "415", "422", "423"]
+    retry-seconds: 3
+    max-concurrent-cycles: 7
+    actor-ids: ["370", "371", "412", "413", "414", "415", "422", "423", "369", "440", "441", "442", "443", "444", "445", "446"]
     actors:
-      370:
-        home: "56.0612,70.0,-141.8403,-85.6,0"
-        denied-denizen-flags: []
-      371:
-        home: "63.6,70.0,-119.7132,57.0,-43.4"
-        denied-denizen-flags: []
-      412:
-        home: "54.3085,69.0,-106.8937,-144.9,0"
-        denied-denizen-flags: []
-      413:
-        home: "53.3103,69.0,-107.595,-144.9,0"
-        denied-denizen-flags: []
-      414:
-        home: "56.505,69.0,-116.5049,-134.4,0"
-        denied-denizen-flags: []
-      415:
-        home: "56.505,70.0,-116.5049,-134.4,0"
-        denied-denizen-flags: []
-      422:
-        home: "47.5,70.0,-136.5,-90,0"
-        denied-denizen-flags: []
-      423:
-        home: "72.5,70.0,-134.5,-180,0"
-        denied-denizen-flags: []
-
-    anchor-ids: [tack-table, wind-approach, buran-approach, ryzhik-approach, wind-graze, wind-turn, buran-graze, buran-turn, ryzhik-graze, ryzhik-turn, iney-turn, bay-turn, yard-center]
+      370: {"home": "56.0612,70.0,-141.8403,-85.6,0", "denied-denizen-flags": []}
+      371: {"home": "63.6,70.0,-119.7132,57.0,-43.4", "denied-denizen-flags": []}
+      412: {"home": "54.3085,69.0,-106.8937,-144.9,0", "denied-denizen-flags": []}
+      413: {"home": "53.3103,69.0,-107.595,-144.9,0", "denied-denizen-flags": []}
+      414: {"home": "56.505,69.0,-116.5049,-134.4,0", "denied-denizen-flags": []}
+      415: {"home": "56.505,70.0,-116.5049,-134.4,0", "denied-denizen-flags": []}
+      422: {"home": "47.5,70.0,-136.5,-90,0", "denied-denizen-flags": []}
+      423: {"home": "72.5,70.0,-134.5,-180,0", "denied-denizen-flags": []}
+      369: {"home": "54.6336,70,-119.518,180,0", "denied-denizen-flags": []}
+      440: {"home": "57.5,70,-133.5,180,0", "denied-denizen-flags": []}
+      441: {"home": "66.5,70,-141.5,-90,0", "denied-denizen-flags": []}
+      442: {"home": "69.5,70,-141.5,180,0", "denied-denizen-flags": []}
+      443: {"home": "52.5,70,-121.5,90,0", "denied-denizen-flags": []}
+      444: {"home": "57.5,70,-125.5,180,0", "denied-denizen-flags": []}
+      445: {"home": "45.5,70,-141.5,-90,0", "denied-denizen-flags": []}
+      446: {"home": "73.5,70,-141.5,90,0", "denied-denizen-flags": []}
+    anchor-ids: ["tack-table", "wind-approach", "buran-approach", "ryzhik-approach", "wind-graze", "wind-turn", "buran-graze", "buran-turn", "ryzhik-graze", "ryzhik-turn", "iney-turn", "bay-turn", "yard-center", "saddler-stand", "saddle-rack-stand", "helper-hay", "helper-barrels", "helper-feed", "feed-floor", "hay-source", "cat-nap", "cat-watch", "dog-patrol", "dog-watch", "goat-hay", "goat-turn", "llama-turn", "llama-watch", "donkey-graze", "packing-crates", "packing-stand", "packing-target", "caravan-helper", "caravan-person-mid", "caravan-animal-mid", "caravan-person-front", "caravan-animal-front", "home-369", "home-440", "home-441", "home-442", "home-443", "home-444", "home-445", "home-446", "helper-water", "water-trough"]
     anchors:
       tack-table: "60.5,70.0,-122.5"
       wind-approach: "62.5,70.0,-121.5"
@@ -778,143 +769,476 @@ scenes:
       iney-turn: "51.5,69.0,-100.5"
       bay-turn: "60.5,70.0,-123.5"
       yard-center: "58.5,70.0,-130.5"
-
-    route-profile-ids: [yard, north]
+      saddler-stand: "54.6336,70,-119.518,180,0"
+      saddle-rack-stand: "52.5,70,-121.5,180,0"
+      helper-hay: "57.5,70,-123.5,90,0"
+      helper-barrels: "56.5,70,-134.5,90,0"
+      helper-feed: "61.5,70,-121.5,-90,0"
+      feed-floor: "63.5,70.05,-121.5"
+      hay-source: "55.5,71,-125.5"
+      cat-nap: "51.5,70,-122.5,90,0"
+      cat-watch: "53.5,70,-120.5,-90,0"
+      dog-patrol: "60.5,70,-131.5,180,0"
+      dog-watch: "61.5,70,-139.5,180,0"
+      goat-hay: "47.5,70,-142.5,0,0"
+      goat-turn: "45.5,70,-137.5,180,0"
+      llama-turn: "71.5,70,-143.5,90,0"
+      llama-watch: "73.5,70,-138.5,180,0"
+      donkey-graze: "68.5,70,-139.5,180,0"
+      packing-crates: "66.5,70,-139.5,180,0"
+      packing-stand: "68.0,70,-141.5,-90,0"
+      packing-target: "69.5,69.7,-141.5"
+      caravan-helper: "67.5,70,-143.5,0,0"
+      caravan-person-mid: "65.5,70,-134.5,0,0"
+      caravan-animal-mid: "68.5,70,-134.5,0,0"
+      caravan-person-front: "61.5,70,-123.5,0,0"
+      caravan-animal-front: "64.5,70,-123.5,0,0"
+      home-369: "54.6336,70,-119.518,180,0"
+      home-440: "57.5,70,-133.5,180,0"
+      home-441: "66.5,70,-141.5,-90,0"
+      home-442: "69.5,70,-141.5,180,0"
+      home-443: "52.5,70,-121.5,90,0"
+      home-444: "57.5,70,-125.5,180,0"
+      home-445: "45.5,70,-141.5,-90,0"
+      home-446: "73.5,70,-141.5,90,0"
+      helper-water: "58.5,70,-121.5,90,0"
+      water-trough: "57.5,70.9,-121.5"
+    route-profile-ids: ["yard", "north"]
     route-profiles:
-      yard:
-        floor-y: 70
-        min-block: "43,-147"
-        max-block: "76,-116"
-        forbidden-areas: []
-        preferred-areas: ["47,-141,73,-125"]
-        max-visited: 2048
-        snap-radius: 3
-        poll-ticks: 2
-        stall-polls: 28
-        speed-modifier: 0.58
-        distance-margin: 0.55
-        path-distance-margin: 0.45
-        maximum-step-height: 0.125
-      north:
-        floor-y: 69
-        min-block: "48,-121"
-        max-block: "63,-98"
-        forbidden-areas: []
-        preferred-areas: ["50,-115,58,-100"]
-        max-visited: 1024
-        snap-radius: 3
-        poll-ticks: 2
-        stall-polls: 30
-        speed-modifier: 0.52
-        distance-margin: 0.7
-        path-distance-margin: 0.55
-        maximum-step-height: 0.125
-
-    cycle-ids: [groom-wind, inspect-buran, inspect-ryzhik, wind-paddock, buran-paddock, ryzhik-paddock, iney-patrol, bay-patrol]
+      yard: {"floor-y": 70, "min-block": "43,-147", "max-block": "76,-116", "forbidden-areas": [], "preferred-areas": ["47,-141,73,-125"], "max-visited": 2048, "snap-radius": 3, "poll-ticks": 2, "stall-polls": 28, "speed-modifier": 0.58, "distance-margin": 0.55, "path-distance-margin": 0.45, "maximum-step-height": 0.125}
+      north: {"floor-y": 69, "min-block": "48,-121", "max-block": "63,-98", "forbidden-areas": [], "preferred-areas": ["50,-115,58,-100"], "max-visited": 1024, "snap-radius": 3, "poll-ticks": 2, "stall-polls": 30, "speed-modifier": 0.52, "distance-margin": 0.7, "path-distance-margin": 0.55, "maximum-step-height": 0.125}
+    cycle-ids: ["groom-wind", "inspect-buran", "inspect-ryzhik", "wind-paddock", "buran-paddock", "ryzhik-paddock", "iney-patrol", "bay-patrol", "saddler-work", "caravan-preparation", "helper-hay", "helper-water", "cat-round", "dog-round", "goat-round", "llama-round", "donkey-rest", "cat-and-dog"]
     cycles:
       groom-wind:
         actor-ids: ["370", "371"]
         initial-delay-seconds: 8
         cooldown-min-seconds: 48
         cooldown-max-seconds: 70
-        step-ids: [table, brush, horse, face, groom, wool, hearts, line, carrot, feed, home]
+        step-ids: ["table", "brush", "horse", "face", "groom", "wool", "hearts", "line", "carrot", "feed", "home"]
         steps:
-          table: {type: MOVE, actor-id: 370, anchor: tack-table, route-profile: yard, timeout-ticks: 220}
-          brush: {type: EQUIP, actor-id: 370, material: BRUSH}
-          horse: {type: MOVE, actor-id: 370, anchor: wind-approach, route-profile: yard, timeout-ticks: 220}
-          face: {type: LOOK_AT_ACTOR, actor-id: 370, target-actor-id: 371}
-          groom: {type: SWING, actor-id: 370, repetitions: 5, period-ticks: 12}
-          wool: {type: SOUND, actor-id: 371, sound: BLOCK_WOOL_STEP, volume: 0.34, pitch: 1.25}
-          hearts: {type: PARTICLE, actor-id: 371, particle: HEART, count: 3}
-          line: {type: SPEECH, actor-id: 370, text: "Спокойно, Ветер. Гриву расчешем — и гулять."}
-          carrot: {type: EQUIP, actor-id: 370, material: CARROT}
-          feed: {type: SOUND, actor-id: 371, sound: ENTITY_HORSE_EAT, volume: 0.46, pitch: 1.0}
-          home: {type: MOVE, actor-id: 370, anchor: yard-center, route-profile: yard, timeout-ticks: 260}
+          table: {"type": "MOVE", "actor-id": 370, "anchor": "tack-table", "route-profile": "yard", "timeout-ticks": 220}
+          brush: {"type": "EQUIP", "actor-id": 370, "material": "BRUSH"}
+          horse: {"type": "MOVE", "actor-id": 370, "anchor": "wind-approach", "route-profile": "yard", "timeout-ticks": 220}
+          face: {"type": "LOOK_AT_ACTOR", "actor-id": 370, "target-actor-id": 371}
+          groom: {"type": "SWING", "actor-id": 370, "repetitions": 5, "period-ticks": 12}
+          wool: {"type": "SOUND", "actor-id": 371, "sound": "BLOCK_WOOL_STEP", "volume": 0.34, "pitch": 1.25}
+          hearts: {"type": "PARTICLE", "actor-id": 371, "particle": "HEART", "count": 3}
+          line: {"type": "SPEECH", "actor-id": 370, "text": "Спокойно, Ветер. Гриву расчешем — и гулять."}
+          carrot: {"type": "EQUIP", "actor-id": 370, "material": "CARROT"}
+          feed: {"type": "SOUND", "actor-id": 371, "sound": "ENTITY_HORSE_EAT", "volume": 0.46, "pitch": 1.0}
+          home: {"type": "MOVE", "actor-id": 370, "anchor": "yard-center", "route-profile": "yard", "timeout-ticks": 260}
       inspect-buran:
         actor-ids: ["370", "422"]
         initial-delay-seconds: 20
         cooldown-min-seconds: 64
         cooldown-max-seconds: 92
-        step-ids: [approach, wheat, face, inspect, snort, line, home]
+        step-ids: ["approach", "wheat", "face", "inspect", "snort", "line", "home"]
         steps:
-          approach: {type: MOVE, actor-id: 370, anchor: buran-approach, route-profile: yard, timeout-ticks: 260}
-          wheat: {type: EQUIP, actor-id: 370, material: WHEAT}
-          face: {type: LOOK_AT_ACTOR, actor-id: 370, target-actor-id: 422}
-          inspect: {type: SWING, actor-id: 370, repetitions: 3, period-ticks: 14}
-          snort: {type: SOUND, actor-id: 422, sound: ENTITY_HORSE_BREATHE, volume: 0.42, pitch: 0.9}
-          line: {type: SPEECH, actor-id: 370, text: "Копыто чистое. Буран сегодня хоть на дальний тракт."}
-          home: {type: MOVE, actor-id: 370, anchor: yard-center, route-profile: yard, timeout-ticks: 260}
+          approach: {"type": "MOVE", "actor-id": 370, "anchor": "buran-approach", "route-profile": "yard", "timeout-ticks": 260}
+          wheat: {"type": "EQUIP", "actor-id": 370, "material": "WHEAT"}
+          face: {"type": "LOOK_AT_ACTOR", "actor-id": 370, "target-actor-id": 422}
+          inspect: {"type": "SWING", "actor-id": 370, "repetitions": 3, "period-ticks": 14}
+          snort: {"type": "SOUND", "actor-id": 422, "sound": "ENTITY_HORSE_BREATHE", "volume": 0.42, "pitch": 0.9}
+          line: {"type": "SPEECH", "actor-id": 370, "text": "Копыто чистое. Буран сегодня хоть на дальний тракт."}
+          home: {"type": "MOVE", "actor-id": 370, "anchor": "yard-center", "route-profile": "yard", "timeout-ticks": 260}
       inspect-ryzhik:
         actor-ids: ["370", "423"]
         initial-delay-seconds: 32
         cooldown-min-seconds: 70
         cooldown-max-seconds: 100
-        step-ids: [approach, saddle, face, inspect, hearts, line, home]
+        step-ids: ["approach", "saddle", "face", "inspect", "hearts", "line", "home"]
         steps:
-          approach: {type: MOVE, actor-id: 370, anchor: ryzhik-approach, route-profile: yard, timeout-ticks: 260}
-          saddle: {type: EQUIP, actor-id: 370, material: SADDLE}
-          face: {type: LOOK_AT_ACTOR, actor-id: 370, target-actor-id: 423}
-          inspect: {type: SWING, actor-id: 370, repetitions: 3, period-ticks: 14}
-          hearts: {type: PARTICLE, actor-id: 423, particle: HAPPY_VILLAGER, count: 5}
-          line: {type: SPEECH, actor-id: 370, text: "Рыжик, подпруга ровно. Не хитри на повороте."}
-          home: {type: MOVE, actor-id: 370, anchor: yard-center, route-profile: yard, timeout-ticks: 260}
+          approach: {"type": "MOVE", "actor-id": 370, "anchor": "ryzhik-approach", "route-profile": "yard", "timeout-ticks": 260}
+          saddle: {"type": "EQUIP", "actor-id": 370, "material": "SADDLE"}
+          face: {"type": "LOOK_AT_ACTOR", "actor-id": 370, "target-actor-id": 423}
+          inspect: {"type": "SWING", "actor-id": 370, "repetitions": 3, "period-ticks": 14}
+          hearts: {"type": "PARTICLE", "actor-id": 423, "particle": "HAPPY_VILLAGER", "count": 5}
+          line: {"type": "SPEECH", "actor-id": 370, "text": "Рыжик, подпруга ровно. Не хитри на повороте."}
+          home: {"type": "MOVE", "actor-id": 370, "anchor": "yard-center", "route-profile": "yard", "timeout-ticks": 260}
       wind-paddock:
         actor-ids: ["371"]
         initial-delay-seconds: 12
-        cooldown-min-seconds: 42
-        cooldown-max-seconds: 68
-        step-ids: [graze, pause, turn, breathe, home]
+        cooldown-min-seconds: 16
+        cooldown-max-seconds: 30
+        step-ids: ["graze", "graze-pose", "pause", "stand-pose", "turn", "breathe", "home"]
         steps:
-          graze: {type: MOVE, actor-id: 371, anchor: wind-graze, route-profile: yard, timeout-ticks: 260}
-          pause: {type: WAIT, ticks: 34}
-          turn: {type: MOVE, actor-id: 371, anchor: wind-turn, route-profile: yard, timeout-ticks: 220}
-          breathe: {type: SOUND, actor-id: 371, sound: ENTITY_HORSE_BREATHE, volume: 0.3, pitch: 1.08}
-          home: {type: MOVE, actor-id: 371, anchor: wind-approach, route-profile: yard, timeout-ticks: 260}
+          graze: {"type": "MOVE", "actor-id": 371, "anchor": "wind-graze", "route-profile": "yard", "timeout-ticks": 260}
+          graze-pose: {"type": "POSE", "actor-id": 371, "state": "HORSE_GRAZE"}
+          pause: {"type": "WAIT", "ticks": 170}
+          stand-pose: {"type": "POSE", "actor-id": 371, "state": "STAND"}
+          turn: {"type": "MOVE", "actor-id": 371, "anchor": "wind-turn", "route-profile": "yard", "timeout-ticks": 220}
+          breathe: {"type": "SOUND", "actor-id": 371, "sound": "ENTITY_HORSE_BREATHE", "volume": 0.3, "pitch": 1.08}
+          home: {"type": "MOVE", "actor-id": 371, "anchor": "wind-approach", "route-profile": "yard", "timeout-ticks": 260}
       buran-paddock:
         actor-ids: ["422"]
         initial-delay-seconds: 24
-        cooldown-min-seconds: 50
-        cooldown-max-seconds: 76
-        step-ids: [graze, pause, turn, step, home]
+        cooldown-min-seconds: 16
+        cooldown-max-seconds: 30
+        step-ids: ["graze", "graze-pose", "pause", "stand-pose", "turn", "step", "home"]
         steps:
-          graze: {type: MOVE, actor-id: 422, anchor: buran-graze, route-profile: yard, timeout-ticks: 220}
-          pause: {type: WAIT, ticks: 42}
-          turn: {type: MOVE, actor-id: 422, anchor: buran-turn, route-profile: yard, timeout-ticks: 220}
-          step: {type: SOUND, actor-id: 422, sound: ENTITY_HORSE_STEP, volume: 0.28, pitch: 0.92}
-          home: {type: MOVE, actor-id: 422, anchor: buran-approach, route-profile: yard, timeout-ticks: 220}
+          graze: {"type": "MOVE", "actor-id": 422, "anchor": "buran-graze", "route-profile": "yard", "timeout-ticks": 220}
+          graze-pose: {"type": "POSE", "actor-id": 422, "state": "HORSE_GRAZE"}
+          pause: {"type": "WAIT", "ticks": 170}
+          stand-pose: {"type": "POSE", "actor-id": 422, "state": "STAND"}
+          turn: {"type": "MOVE", "actor-id": 422, "anchor": "buran-turn", "route-profile": "yard", "timeout-ticks": 220}
+          step: {"type": "SOUND", "actor-id": 422, "sound": "ENTITY_HORSE_STEP", "volume": 0.28, "pitch": 0.92}
+          home: {"type": "MOVE", "actor-id": 422, "anchor": "buran-approach", "route-profile": "yard", "timeout-ticks": 220}
       ryzhik-paddock:
         actor-ids: ["423"]
         initial-delay-seconds: 36
-        cooldown-min-seconds: 46
-        cooldown-max-seconds: 72
-        step-ids: [graze, turn, happy, pause, home]
+        cooldown-min-seconds: 16
+        cooldown-max-seconds: 30
+        step-ids: ["graze", "turn", "happy", "graze-pose", "pause", "stand-pose", "home"]
         steps:
-          graze: {type: MOVE, actor-id: 423, anchor: ryzhik-graze, route-profile: yard, timeout-ticks: 220}
-          turn: {type: MOVE, actor-id: 423, anchor: ryzhik-turn, route-profile: yard, timeout-ticks: 220}
-          happy: {type: PARTICLE, actor-id: 423, particle: HAPPY_VILLAGER, count: 4}
-          pause: {type: WAIT, ticks: 30}
-          home: {type: MOVE, actor-id: 423, anchor: ryzhik-approach, route-profile: yard, timeout-ticks: 220}
+          graze: {"type": "MOVE", "actor-id": 423, "anchor": "ryzhik-graze", "route-profile": "yard", "timeout-ticks": 220}
+          turn: {"type": "MOVE", "actor-id": 423, "anchor": "ryzhik-turn", "route-profile": "yard", "timeout-ticks": 220}
+          happy: {"type": "PARTICLE", "actor-id": 423, "particle": "HAPPY_VILLAGER", "count": 4}
+          graze-pose: {"type": "POSE", "actor-id": 423, "state": "HORSE_GRAZE"}
+          pause: {"type": "WAIT", "ticks": 170}
+          stand-pose: {"type": "POSE", "actor-id": 423, "state": "STAND"}
+          home: {"type": "MOVE", "actor-id": 423, "anchor": "ryzhik-approach", "route-profile": "yard", "timeout-ticks": 220}
       iney-patrol:
         actor-ids: ["412", "413"]
         initial-delay-seconds: 44
         cooldown-min-seconds: 92
         cooldown-max-seconds: 128
-        step-ids: [mount, out, check, line, home]
+        step-ids: ["mount", "out", "check", "line", "home"]
         steps:
-          mount: {type: MOUNT, rider-id: 412, vehicle-id: 413}
-          out: {type: MOVE, actor-id: 413, anchor: iney-turn, route-profile: north, timeout-ticks: 320}
-          check: {type: WAIT, ticks: 32}
-          line: {type: SPEECH, actor-id: 412, text: "Иней, спокойно. Дорога свободна."}
-          home: {type: MOVE, actor-id: 413, anchor: iney-turn, route-profile: north, timeout-ticks: 320}
+          mount: {"type": "MOUNT", "rider-id": 412, "vehicle-id": 413}
+          out: {"type": "MOVE", "actor-id": 413, "anchor": "iney-turn", "route-profile": "north", "timeout-ticks": 320}
+          check: {"type": "WAIT", "ticks": 32}
+          line: {"type": "SPEECH", "actor-id": 412, "text": "Иней, спокойно. Дорога свободна."}
+          home: {"type": "MOVE", "actor-id": 413, "anchor": "iney-turn", "route-profile": "north", "timeout-ticks": 320}
       bay-patrol:
         actor-ids: ["414", "415"]
         initial-delay-seconds: 58
         cooldown-min-seconds: 100
         cooldown-max-seconds: 140
-        step-ids: [mount, out, check, line, home]
+        step-ids: ["mount", "out", "check", "line", "home"]
         steps:
-          mount: {type: MOUNT, rider-id: 414, vehicle-id: 415}
-          out: {type: MOVE, actor-id: 415, anchor: bay-turn, route-profile: yard, timeout-ticks: 260}
-          check: {type: WAIT, ticks: 28}
-          line: {type: SPEECH, actor-id: 414, text: "Гнедой, шаг ровнее. Ворота узкие."}
-          home: {type: MOVE, actor-id: 415, anchor: bay-turn, route-profile: yard, timeout-ticks: 260}
+          mount: {"type": "MOUNT", "rider-id": 414, "vehicle-id": 415}
+          out: {"type": "MOVE", "actor-id": 415, "anchor": "bay-turn", "route-profile": "yard", "timeout-ticks": 260}
+          check: {"type": "WAIT", "ticks": 28}
+          line: {"type": "SPEECH", "actor-id": 414, "text": "Гнедой, шаг ровнее. Ворота узкие."}
+          home: {"type": "MOVE", "actor-id": 415, "anchor": "bay-turn", "route-profile": "yard", "timeout-ticks": 260}
+      saddler-work:
+        actor-ids: ["369"]
+        initial-delay-seconds: 3
+        cooldown-min-seconds: 4
+        cooldown-max-seconds: 9
+        step-ids: ["bench", "tool", "face", "start", "cut-seat", "cut-work", "shape-front", "shape-back", "shape-skirt-left", "shape-skirt-right", "shape-work", "stitch-stitch-left", "stitch-stitch-right", "stitch-horn", "stitch-horn-cap", "stitch-work", "stitch-line", "fit-strap-left", "fit-strap-right", "fit-buckle-left", "fit-buckle-right", "fit-stirrup-l-front", "fit-stirrup-l-back", "fit-stirrup-l-base", "fit-stirrup-r-front", "fit-stirrup-r-back", "fit-stirrup-r-base", "fit-work", "ready", "show", "empty-hand", "carry-seat", "carry-front", "carry-back", "carry-skirt-left", "carry-skirt-right", "carry-stitch-left", "carry-stitch-right", "carry-horn", "carry-horn-cap", "carry-strap-left", "carry-strap-right", "carry-buckle-left", "carry-buckle-right", "carry-stirrup-l-front", "carry-stirrup-l-back", "carry-stirrup-l-base", "carry-stirrup-r-front", "carry-stirrup-r-back", "carry-stirrup-r-base", "rack", "rack-look", "hang-seat", "hang-front", "hang-back", "hang-skirt-left", "hang-skirt-right", "hang-stitch-left", "hang-stitch-right", "hang-horn", "hang-horn-cap", "hang-strap-left", "hang-strap-right", "hang-buckle-left", "hang-buckle-right", "hang-stirrup-l-front", "hang-stirrup-l-back", "hang-stirrup-l-base", "hang-stirrup-r-front", "hang-stirrup-r-back", "hang-stirrup-r-base", "put", "back", "rack-display", "done-seat", "done-front", "done-back", "done-skirt-left", "done-skirt-right", "done-stitch-left", "done-stitch-right", "done-horn", "done-horn-cap", "done-strap-left", "done-strap-right", "done-buckle-left", "done-buckle-right", "done-stirrup-l-front", "done-stirrup-l-back", "done-stirrup-l-base", "done-stirrup-r-front", "done-stirrup-r-back", "done-stirrup-r-base"]
+        steps:
+          bench: {"type": "MOVE", "actor-id": 369, "anchor": "saddler-stand", "route-profile": "yard", "timeout-ticks": 500}
+          tool: {"type": "EQUIP", "actor-id": 369, "material": "SHEARS"}
+          face: {"type": "LOOK_AT_SURFACE", "actor-id": 369, "surface": "saddler-bench"}
+          start: {"type": "SPEECH", "actor-id": 369, "text": "Сначала кожа и основа. Хорошее седло не должно натирать."}
+          cut-seat: {"type": "BLOCK_DISPLAY", "key": "saddle-seat", "material": "BROWN_TERRACOTTA", "origin": "BOTTOM_CENTER", "offset": "0.0000,0.1000,0.0000", "scale": "0.5200,0.1200,0.6400", "interpolation-ticks": 5, "surface": "saddler-bench"}
+          cut-work: {"type": "SWING", "actor-id": 369, "repetitions": 12, "period-ticks": 15, "feedback-surface": "saddler-bench", "sound": "BLOCK_WOOL_PLACE", "sound-every": 3, "sound-volume": 0.25, "sound-pitch": 1.1, "particle": "WAX_OFF", "particle-count": 2, "particle-every": 4}
+          shape-front: {"type": "BLOCK_DISPLAY", "key": "saddle-front", "material": "DARK_OAK_PLANKS", "origin": "BOTTOM_CENTER", "offset": "0.0000,0.2000,-0.3000", "scale": "0.5600,0.1800,0.1200", "interpolation-ticks": 5, "surface": "saddler-bench"}
+          shape-back: {"type": "BLOCK_DISPLAY", "key": "saddle-back", "material": "DARK_OAK_PLANKS", "origin": "BOTTOM_CENTER", "offset": "0.0000,0.2000,0.3000", "scale": "0.5800,0.2200,0.1400", "interpolation-ticks": 5, "surface": "saddler-bench"}
+          shape-skirt-left: {"type": "BLOCK_DISPLAY", "key": "saddle-skirt-left", "material": "BROWN_TERRACOTTA", "origin": "BOTTOM_CENTER", "offset": "-0.3100,0.0200,0.0300", "scale": "0.1600,0.0900,0.7600", "interpolation-ticks": 5, "surface": "saddler-bench"}
+          shape-skirt-right: {"type": "BLOCK_DISPLAY", "key": "saddle-skirt-right", "material": "BROWN_TERRACOTTA", "origin": "BOTTOM_CENTER", "offset": "0.3100,0.0200,0.0300", "scale": "0.1600,0.0900,0.7600", "interpolation-ticks": 5, "surface": "saddler-bench"}
+          shape-work: {"type": "SWING", "actor-id": 369, "repetitions": 12, "period-ticks": 15, "feedback-surface": "saddler-bench", "sound": "BLOCK_WOOL_PLACE", "sound-every": 3, "sound-volume": 0.25, "sound-pitch": 1.25, "particle": "WAX_OFF", "particle-count": 2, "particle-every": 4}
+          stitch-stitch-left: {"type": "BLOCK_DISPLAY", "key": "saddle-stitch-left", "material": "YELLOW_TERRACOTTA", "origin": "BOTTOM_CENTER", "offset": "-0.2350,0.2210,0.0000", "scale": "0.0180,0.0100,0.4500", "interpolation-ticks": 5, "surface": "saddler-bench"}
+          stitch-stitch-right: {"type": "BLOCK_DISPLAY", "key": "saddle-stitch-right", "material": "YELLOW_TERRACOTTA", "origin": "BOTTOM_CENTER", "offset": "0.2350,0.2210,0.0000", "scale": "0.0180,0.0100,0.4500", "interpolation-ticks": 5, "surface": "saddler-bench"}
+          stitch-horn: {"type": "BLOCK_DISPLAY", "key": "saddle-horn", "material": "DARK_OAK_PLANKS", "origin": "BOTTOM_CENTER", "offset": "0.0000,0.3800,-0.3000", "scale": "0.0800,0.1400,0.0800", "interpolation-ticks": 5, "surface": "saddler-bench"}
+          stitch-horn-cap: {"type": "BLOCK_DISPLAY", "key": "saddle-horn-cap", "material": "BROWN_TERRACOTTA", "origin": "BOTTOM_CENTER", "offset": "0.0000,0.5000,-0.3000", "scale": "0.1400,0.0350,0.1200", "interpolation-ticks": 5, "surface": "saddler-bench"}
+          stitch-work: {"type": "SWING", "actor-id": 369, "repetitions": 12, "period-ticks": 15, "feedback-surface": "saddler-bench", "sound": "BLOCK_WOOL_PLACE", "sound-every": 3, "sound-volume": 0.25, "sound-pitch": 1.4000000000000001, "particle": "WAX_OFF", "particle-count": 2, "particle-every": 4}
+          stitch-line: {"type": "SPEECH", "actor-id": 369, "text": "Стежок к стежку. Теперь ремни, пряжки и стремена."}
+          fit-strap-left: {"type": "BLOCK_DISPLAY", "key": "saddle-strap-left", "material": "DARK_OAK_PLANKS", "origin": "BOTTOM_CENTER", "offset": "-0.3600,0.1000,0.0000", "scale": "0.0550,0.3000,0.0800", "interpolation-ticks": 5, "surface": "saddler-bench"}
+          fit-strap-right: {"type": "BLOCK_DISPLAY", "key": "saddle-strap-right", "material": "DARK_OAK_PLANKS", "origin": "BOTTOM_CENTER", "offset": "0.3600,0.1000,0.0000", "scale": "0.0550,0.3000,0.0800", "interpolation-ticks": 5, "surface": "saddler-bench"}
+          fit-buckle-left: {"type": "BLOCK_DISPLAY", "key": "saddle-buckle-left", "material": "CUT_COPPER", "origin": "BOTTOM_CENTER", "offset": "-0.3900,0.1800,0.0000", "scale": "0.0350,0.0700,0.1200", "interpolation-ticks": 5, "surface": "saddler-bench"}
+          fit-buckle-right: {"type": "BLOCK_DISPLAY", "key": "saddle-buckle-right", "material": "CUT_COPPER", "origin": "BOTTOM_CENTER", "offset": "0.3900,0.1800,0.0000", "scale": "0.0350,0.0700,0.1200", "interpolation-ticks": 5, "surface": "saddler-bench"}
+          fit-stirrup-l-front: {"type": "BLOCK_DISPLAY", "key": "saddle-stirrup-l-front", "material": "IRON_BLOCK", "origin": "BOTTOM_CENTER", "offset": "-0.4400,0.0150,-0.0550", "scale": "0.0350,0.1600,0.0350", "interpolation-ticks": 5, "surface": "saddler-bench"}
+          fit-stirrup-l-back: {"type": "BLOCK_DISPLAY", "key": "saddle-stirrup-l-back", "material": "IRON_BLOCK", "origin": "BOTTOM_CENTER", "offset": "-0.4400,0.0150,0.0550", "scale": "0.0350,0.1600,0.0350", "interpolation-ticks": 5, "surface": "saddler-bench"}
+          fit-stirrup-l-base: {"type": "BLOCK_DISPLAY", "key": "saddle-stirrup-l-base", "material": "IRON_BLOCK", "origin": "BOTTOM_CENTER", "offset": "-0.4400,0.0150,0.0000", "scale": "0.0350,0.0350,0.1450", "interpolation-ticks": 5, "surface": "saddler-bench"}
+          fit-stirrup-r-front: {"type": "BLOCK_DISPLAY", "key": "saddle-stirrup-r-front", "material": "IRON_BLOCK", "origin": "BOTTOM_CENTER", "offset": "0.4400,0.0150,-0.0550", "scale": "0.0350,0.1600,0.0350", "interpolation-ticks": 5, "surface": "saddler-bench"}
+          fit-stirrup-r-back: {"type": "BLOCK_DISPLAY", "key": "saddle-stirrup-r-back", "material": "IRON_BLOCK", "origin": "BOTTOM_CENTER", "offset": "0.4400,0.0150,0.0550", "scale": "0.0350,0.1600,0.0350", "interpolation-ticks": 5, "surface": "saddler-bench"}
+          fit-stirrup-r-base: {"type": "BLOCK_DISPLAY", "key": "saddle-stirrup-r-base", "material": "IRON_BLOCK", "origin": "BOTTOM_CENTER", "offset": "0.4400,0.0150,0.0000", "scale": "0.0350,0.0350,0.1450", "interpolation-ticks": 5, "surface": "saddler-bench"}
+          fit-work: {"type": "SWING", "actor-id": 369, "repetitions": 12, "period-ticks": 15, "feedback-surface": "saddler-bench", "sound": "BLOCK_WOOL_PLACE", "sound-every": 3, "sound-volume": 0.25, "sound-pitch": 1.55, "particle": "WAX_OFF", "particle-count": 2, "particle-every": 4}
+          ready: {"type": "SPEECH", "actor-id": 369, "text": "Мягкая посадка, крепкие ремни. Вот теперь можно в дорогу."}
+          show: {"type": "WAIT", "ticks": 100}
+          empty-hand: {"type": "EQUIP", "actor-id": 369, "material": "AIR"}
+          carry-seat: {"type": "BLOCK_DISPLAY", "key": "saddle-seat", "material": "BROWN_TERRACOTTA", "origin": "BOTTOM_CENTER", "scale": "0.4160,0.0960,0.5120", "interpolation-ticks": 5, "follow-actor-id": 369, "follow-offset": "0.0000,0.8800,0.6000"}
+          carry-front: {"type": "BLOCK_DISPLAY", "key": "saddle-front", "material": "DARK_OAK_PLANKS", "origin": "BOTTOM_CENTER", "scale": "0.4480,0.1440,0.0960", "interpolation-ticks": 5, "follow-actor-id": 369, "follow-offset": "0.0000,0.9600,0.3600"}
+          carry-back: {"type": "BLOCK_DISPLAY", "key": "saddle-back", "material": "DARK_OAK_PLANKS", "origin": "BOTTOM_CENTER", "scale": "0.4640,0.1760,0.1120", "interpolation-ticks": 5, "follow-actor-id": 369, "follow-offset": "0.0000,0.9600,0.8400"}
+          carry-skirt-left: {"type": "BLOCK_DISPLAY", "key": "saddle-skirt-left", "material": "BROWN_TERRACOTTA", "origin": "BOTTOM_CENTER", "scale": "0.1280,0.0720,0.6080", "interpolation-ticks": 5, "follow-actor-id": 369, "follow-offset": "-0.2480,0.8160,0.6240"}
+          carry-skirt-right: {"type": "BLOCK_DISPLAY", "key": "saddle-skirt-right", "material": "BROWN_TERRACOTTA", "origin": "BOTTOM_CENTER", "scale": "0.1280,0.0720,0.6080", "interpolation-ticks": 5, "follow-actor-id": 369, "follow-offset": "0.2480,0.8160,0.6240"}
+          carry-stitch-left: {"type": "BLOCK_DISPLAY", "key": "saddle-stitch-left", "material": "YELLOW_TERRACOTTA", "origin": "BOTTOM_CENTER", "scale": "0.0144,0.0080,0.3600", "interpolation-ticks": 5, "follow-actor-id": 369, "follow-offset": "-0.1880,0.9768,0.6000"}
+          carry-stitch-right: {"type": "BLOCK_DISPLAY", "key": "saddle-stitch-right", "material": "YELLOW_TERRACOTTA", "origin": "BOTTOM_CENTER", "scale": "0.0144,0.0080,0.3600", "interpolation-ticks": 5, "follow-actor-id": 369, "follow-offset": "0.1880,0.9768,0.6000"}
+          carry-horn: {"type": "BLOCK_DISPLAY", "key": "saddle-horn", "material": "DARK_OAK_PLANKS", "origin": "BOTTOM_CENTER", "scale": "0.0640,0.1120,0.0640", "interpolation-ticks": 5, "follow-actor-id": 369, "follow-offset": "0.0000,1.1040,0.3600"}
+          carry-horn-cap: {"type": "BLOCK_DISPLAY", "key": "saddle-horn-cap", "material": "BROWN_TERRACOTTA", "origin": "BOTTOM_CENTER", "scale": "0.1120,0.0280,0.0960", "interpolation-ticks": 5, "follow-actor-id": 369, "follow-offset": "0.0000,1.2000,0.3600"}
+          carry-strap-left: {"type": "BLOCK_DISPLAY", "key": "saddle-strap-left", "material": "DARK_OAK_PLANKS", "origin": "BOTTOM_CENTER", "scale": "0.0440,0.2400,0.0640", "interpolation-ticks": 5, "follow-actor-id": 369, "follow-offset": "-0.2880,0.8800,0.6000"}
+          carry-strap-right: {"type": "BLOCK_DISPLAY", "key": "saddle-strap-right", "material": "DARK_OAK_PLANKS", "origin": "BOTTOM_CENTER", "scale": "0.0440,0.2400,0.0640", "interpolation-ticks": 5, "follow-actor-id": 369, "follow-offset": "0.2880,0.8800,0.6000"}
+          carry-buckle-left: {"type": "BLOCK_DISPLAY", "key": "saddle-buckle-left", "material": "CUT_COPPER", "origin": "BOTTOM_CENTER", "scale": "0.0280,0.0560,0.0960", "interpolation-ticks": 5, "follow-actor-id": 369, "follow-offset": "-0.3120,0.9440,0.6000"}
+          carry-buckle-right: {"type": "BLOCK_DISPLAY", "key": "saddle-buckle-right", "material": "CUT_COPPER", "origin": "BOTTOM_CENTER", "scale": "0.0280,0.0560,0.0960", "interpolation-ticks": 5, "follow-actor-id": 369, "follow-offset": "0.3120,0.9440,0.6000"}
+          carry-stirrup-l-front: {"type": "BLOCK_DISPLAY", "key": "saddle-stirrup-l-front", "material": "IRON_BLOCK", "origin": "BOTTOM_CENTER", "scale": "0.0280,0.1280,0.0280", "interpolation-ticks": 5, "follow-actor-id": 369, "follow-offset": "-0.3520,0.8120,0.5560"}
+          carry-stirrup-l-back: {"type": "BLOCK_DISPLAY", "key": "saddle-stirrup-l-back", "material": "IRON_BLOCK", "origin": "BOTTOM_CENTER", "scale": "0.0280,0.1280,0.0280", "interpolation-ticks": 5, "follow-actor-id": 369, "follow-offset": "-0.3520,0.8120,0.6440"}
+          carry-stirrup-l-base: {"type": "BLOCK_DISPLAY", "key": "saddle-stirrup-l-base", "material": "IRON_BLOCK", "origin": "BOTTOM_CENTER", "scale": "0.0280,0.0280,0.1160", "interpolation-ticks": 5, "follow-actor-id": 369, "follow-offset": "-0.3520,0.8120,0.6000"}
+          carry-stirrup-r-front: {"type": "BLOCK_DISPLAY", "key": "saddle-stirrup-r-front", "material": "IRON_BLOCK", "origin": "BOTTOM_CENTER", "scale": "0.0280,0.1280,0.0280", "interpolation-ticks": 5, "follow-actor-id": 369, "follow-offset": "0.3520,0.8120,0.5560"}
+          carry-stirrup-r-back: {"type": "BLOCK_DISPLAY", "key": "saddle-stirrup-r-back", "material": "IRON_BLOCK", "origin": "BOTTOM_CENTER", "scale": "0.0280,0.1280,0.0280", "interpolation-ticks": 5, "follow-actor-id": 369, "follow-offset": "0.3520,0.8120,0.6440"}
+          carry-stirrup-r-base: {"type": "BLOCK_DISPLAY", "key": "saddle-stirrup-r-base", "material": "IRON_BLOCK", "origin": "BOTTOM_CENTER", "scale": "0.0280,0.0280,0.1160", "interpolation-ticks": 5, "follow-actor-id": 369, "follow-offset": "0.3520,0.8120,0.6000"}
+          rack: {"type": "MOVE", "actor-id": 369, "anchor": "saddle-rack-stand", "route-profile": "yard", "timeout-ticks": 500}
+          rack-look: {"type": "LOOK_AT_SURFACE", "actor-id": 369, "surface": "saddle-rack"}
+          hang-seat: {"type": "BLOCK_DISPLAY", "key": "saddle-seat", "material": "BROWN_TERRACOTTA", "origin": "BOTTOM_CENTER", "offset": "0.0000,0.1000,0.0000", "scale": "0.5200,0.1200,0.6400", "interpolation-ticks": 5, "surface": "saddle-rack"}
+          hang-front: {"type": "BLOCK_DISPLAY", "key": "saddle-front", "material": "DARK_OAK_PLANKS", "origin": "BOTTOM_CENTER", "offset": "0.0000,0.2000,-0.3000", "scale": "0.5600,0.1800,0.1200", "interpolation-ticks": 5, "surface": "saddle-rack"}
+          hang-back: {"type": "BLOCK_DISPLAY", "key": "saddle-back", "material": "DARK_OAK_PLANKS", "origin": "BOTTOM_CENTER", "offset": "0.0000,0.2000,0.3000", "scale": "0.5800,0.2200,0.1400", "interpolation-ticks": 5, "surface": "saddle-rack"}
+          hang-skirt-left: {"type": "BLOCK_DISPLAY", "key": "saddle-skirt-left", "material": "BROWN_TERRACOTTA", "origin": "BOTTOM_CENTER", "offset": "-0.3100,0.0200,0.0300", "scale": "0.1600,0.0900,0.7600", "interpolation-ticks": 5, "surface": "saddle-rack"}
+          hang-skirt-right: {"type": "BLOCK_DISPLAY", "key": "saddle-skirt-right", "material": "BROWN_TERRACOTTA", "origin": "BOTTOM_CENTER", "offset": "0.3100,0.0200,0.0300", "scale": "0.1600,0.0900,0.7600", "interpolation-ticks": 5, "surface": "saddle-rack"}
+          hang-stitch-left: {"type": "BLOCK_DISPLAY", "key": "saddle-stitch-left", "material": "YELLOW_TERRACOTTA", "origin": "BOTTOM_CENTER", "offset": "-0.2350,0.2210,0.0000", "scale": "0.0180,0.0100,0.4500", "interpolation-ticks": 5, "surface": "saddle-rack"}
+          hang-stitch-right: {"type": "BLOCK_DISPLAY", "key": "saddle-stitch-right", "material": "YELLOW_TERRACOTTA", "origin": "BOTTOM_CENTER", "offset": "0.2350,0.2210,0.0000", "scale": "0.0180,0.0100,0.4500", "interpolation-ticks": 5, "surface": "saddle-rack"}
+          hang-horn: {"type": "BLOCK_DISPLAY", "key": "saddle-horn", "material": "DARK_OAK_PLANKS", "origin": "BOTTOM_CENTER", "offset": "0.0000,0.3800,-0.3000", "scale": "0.0800,0.1400,0.0800", "interpolation-ticks": 5, "surface": "saddle-rack"}
+          hang-horn-cap: {"type": "BLOCK_DISPLAY", "key": "saddle-horn-cap", "material": "BROWN_TERRACOTTA", "origin": "BOTTOM_CENTER", "offset": "0.0000,0.5000,-0.3000", "scale": "0.1400,0.0350,0.1200", "interpolation-ticks": 5, "surface": "saddle-rack"}
+          hang-strap-left: {"type": "BLOCK_DISPLAY", "key": "saddle-strap-left", "material": "DARK_OAK_PLANKS", "origin": "BOTTOM_CENTER", "offset": "-0.3600,0.1000,0.0000", "scale": "0.0550,0.3000,0.0800", "interpolation-ticks": 5, "surface": "saddle-rack"}
+          hang-strap-right: {"type": "BLOCK_DISPLAY", "key": "saddle-strap-right", "material": "DARK_OAK_PLANKS", "origin": "BOTTOM_CENTER", "offset": "0.3600,0.1000,0.0000", "scale": "0.0550,0.3000,0.0800", "interpolation-ticks": 5, "surface": "saddle-rack"}
+          hang-buckle-left: {"type": "BLOCK_DISPLAY", "key": "saddle-buckle-left", "material": "CUT_COPPER", "origin": "BOTTOM_CENTER", "offset": "-0.3900,0.1800,0.0000", "scale": "0.0350,0.0700,0.1200", "interpolation-ticks": 5, "surface": "saddle-rack"}
+          hang-buckle-right: {"type": "BLOCK_DISPLAY", "key": "saddle-buckle-right", "material": "CUT_COPPER", "origin": "BOTTOM_CENTER", "offset": "0.3900,0.1800,0.0000", "scale": "0.0350,0.0700,0.1200", "interpolation-ticks": 5, "surface": "saddle-rack"}
+          hang-stirrup-l-front: {"type": "BLOCK_DISPLAY", "key": "saddle-stirrup-l-front", "material": "IRON_BLOCK", "origin": "BOTTOM_CENTER", "offset": "-0.4400,0.0150,-0.0550", "scale": "0.0350,0.1600,0.0350", "interpolation-ticks": 5, "surface": "saddle-rack"}
+          hang-stirrup-l-back: {"type": "BLOCK_DISPLAY", "key": "saddle-stirrup-l-back", "material": "IRON_BLOCK", "origin": "BOTTOM_CENTER", "offset": "-0.4400,0.0150,0.0550", "scale": "0.0350,0.1600,0.0350", "interpolation-ticks": 5, "surface": "saddle-rack"}
+          hang-stirrup-l-base: {"type": "BLOCK_DISPLAY", "key": "saddle-stirrup-l-base", "material": "IRON_BLOCK", "origin": "BOTTOM_CENTER", "offset": "-0.4400,0.0150,0.0000", "scale": "0.0350,0.0350,0.1450", "interpolation-ticks": 5, "surface": "saddle-rack"}
+          hang-stirrup-r-front: {"type": "BLOCK_DISPLAY", "key": "saddle-stirrup-r-front", "material": "IRON_BLOCK", "origin": "BOTTOM_CENTER", "offset": "0.4400,0.0150,-0.0550", "scale": "0.0350,0.1600,0.0350", "interpolation-ticks": 5, "surface": "saddle-rack"}
+          hang-stirrup-r-back: {"type": "BLOCK_DISPLAY", "key": "saddle-stirrup-r-back", "material": "IRON_BLOCK", "origin": "BOTTOM_CENTER", "offset": "0.4400,0.0150,0.0550", "scale": "0.0350,0.1600,0.0350", "interpolation-ticks": 5, "surface": "saddle-rack"}
+          hang-stirrup-r-base: {"type": "BLOCK_DISPLAY", "key": "saddle-stirrup-r-base", "material": "IRON_BLOCK", "origin": "BOTTOM_CENTER", "offset": "0.4400,0.0150,0.0000", "scale": "0.0350,0.0350,0.1450", "interpolation-ticks": 5, "surface": "saddle-rack"}
+          put: {"type": "SOUND", "actor-id": 369, "sound": "ITEM_ARMOR_EQUIP_LEATHER", "volume": 0.32, "pitch": 1.0}
+          back: {"type": "MOVE", "actor-id": 369, "anchor": "saddler-stand", "route-profile": "yard", "timeout-ticks": 500}
+          rack-display: {"type": "WAIT", "ticks": 260}
+          done-seat: {"type": "REMOVE_DISPLAY", "key": "saddle-seat"}
+          done-front: {"type": "REMOVE_DISPLAY", "key": "saddle-front"}
+          done-back: {"type": "REMOVE_DISPLAY", "key": "saddle-back"}
+          done-skirt-left: {"type": "REMOVE_DISPLAY", "key": "saddle-skirt-left"}
+          done-skirt-right: {"type": "REMOVE_DISPLAY", "key": "saddle-skirt-right"}
+          done-stitch-left: {"type": "REMOVE_DISPLAY", "key": "saddle-stitch-left"}
+          done-stitch-right: {"type": "REMOVE_DISPLAY", "key": "saddle-stitch-right"}
+          done-horn: {"type": "REMOVE_DISPLAY", "key": "saddle-horn"}
+          done-horn-cap: {"type": "REMOVE_DISPLAY", "key": "saddle-horn-cap"}
+          done-strap-left: {"type": "REMOVE_DISPLAY", "key": "saddle-strap-left"}
+          done-strap-right: {"type": "REMOVE_DISPLAY", "key": "saddle-strap-right"}
+          done-buckle-left: {"type": "REMOVE_DISPLAY", "key": "saddle-buckle-left"}
+          done-buckle-right: {"type": "REMOVE_DISPLAY", "key": "saddle-buckle-right"}
+          done-stirrup-l-front: {"type": "REMOVE_DISPLAY", "key": "saddle-stirrup-l-front"}
+          done-stirrup-l-back: {"type": "REMOVE_DISPLAY", "key": "saddle-stirrup-l-back"}
+          done-stirrup-l-base: {"type": "REMOVE_DISPLAY", "key": "saddle-stirrup-l-base"}
+          done-stirrup-r-front: {"type": "REMOVE_DISPLAY", "key": "saddle-stirrup-r-front"}
+          done-stirrup-r-back: {"type": "REMOVE_DISPLAY", "key": "saddle-stirrup-r-back"}
+          done-stirrup-r-base: {"type": "REMOVE_DISPLAY", "key": "saddle-stirrup-r-base"}
+      caravan-preparation:
+        actor-ids: ["441", "442", "370"]
+        initial-delay-seconds: 17
+        cooldown-min-seconds: 35
+        cooldown-max-seconds: 55
+        step-ids: ["crate", "call", "donkey-stand", "animal-still", "tom", "packer", "check", "brush", "groom", "approve", "face", "load-0-pad", "work-0", "load-1-left-pack", "load-1-right-pack", "load-1-left-lid", "load-1-right-lid", "work-1", "load-2-blanket", "load-2-strap-front", "load-2-strap-back", "work-2", "load-3-left-lock", "load-3-right-lock", "work-3", "ready", "snort", "show-load", "out-middle", "out-front", "inspect-load", "line", "rest", "return-middle", "return", "unload-work-3", "unload-3-left-lock", "unload-3-right-lock", "unload-work-2", "unload-2-blanket", "unload-2-strap-front", "unload-2-strap-back", "unload-work-1", "unload-1-left-pack", "unload-1-right-pack", "unload-1-left-lid", "unload-1-right-lid", "unload-work-0", "unload-0-pad", "finish"]
+        steps:
+          crate: {"type": "MOVE", "actor-id": 441, "anchor": "packing-crates", "route-profile": "yard", "timeout-ticks": 500}
+          call: {"type": "SPEECH", "actor-id": 441, "text": "Том, проверь Репея. Я пока уложу поклажу."}
+          donkey-stand: {"type": "MOVE", "actor-id": 442, "anchor": "home-442", "route-profile": "yard", "timeout-ticks": 500}
+          animal-still: {"type": "POSE", "actor-id": 442, "state": "STAND"}
+          tom: {"type": "MOVE", "actor-id": 370, "anchor": "caravan-helper", "route-profile": "yard", "timeout-ticks": 500}
+          packer: {"type": "MOVE", "actor-id": 441, "anchor": "packing-stand", "route-profile": "yard", "timeout-ticks": 500}
+          check: {"type": "LOOK_AT_ACTOR", "actor-id": 370, "target-actor-id": 442}
+          brush: {"type": "EQUIP", "actor-id": 370, "material": "BRUSH"}
+          groom: {"type": "SWING", "actor-id": 370, "repetitions": 10, "period-ticks": 12}
+          approve: {"type": "SPEECH", "actor-id": 370, "text": "Копыта чистые. Только груз поровну, Тихон."}
+          face: {"type": "LOOK_AT_ANCHOR", "actor-id": 441, "anchor": "packing-target"}
+          load-0-pad: {"type": "BLOCK_DISPLAY", "key": "cargo-pad", "material": "RED_WOOL", "origin": "BOTTOM_CENTER", "scale": "0.6000,0.0800,0.8200", "interpolation-ticks": 5, "follow-actor-id": 442, "follow-offset": "0.0000,1.1400,0.1200"}
+          work-0: {"type": "SWING", "actor-id": 441, "repetitions": 8, "period-ticks": 12, "feedback-anchor": "packing-target", "sound": "BLOCK_WOOL_PLACE", "sound-every": 3, "sound-volume": 0.25}
+          load-1-left-pack: {"type": "BLOCK_DISPLAY", "key": "cargo-left-pack", "material": "SPRUCE_PLANKS", "origin": "BOTTOM_CENTER", "scale": "0.3400,0.4200,0.4800", "interpolation-ticks": 5, "follow-actor-id": 442, "follow-offset": "-0.4700,0.6700,0.1200"}
+          load-1-right-pack: {"type": "BLOCK_DISPLAY", "key": "cargo-right-pack", "material": "SPRUCE_PLANKS", "origin": "BOTTOM_CENTER", "scale": "0.3400,0.4200,0.4800", "interpolation-ticks": 5, "follow-actor-id": 442, "follow-offset": "0.4700,0.6700,0.1200"}
+          load-1-left-lid: {"type": "BLOCK_DISPLAY", "key": "cargo-left-lid", "material": "DARK_OAK_PLANKS", "origin": "BOTTOM_CENTER", "scale": "0.3700,0.0550,0.5100", "interpolation-ticks": 5, "follow-actor-id": 442, "follow-offset": "-0.4700,1.0750,0.1200"}
+          load-1-right-lid: {"type": "BLOCK_DISPLAY", "key": "cargo-right-lid", "material": "DARK_OAK_PLANKS", "origin": "BOTTOM_CENTER", "scale": "0.3700,0.0550,0.5100", "interpolation-ticks": 5, "follow-actor-id": 442, "follow-offset": "0.4700,1.0750,0.1200"}
+          work-1: {"type": "SWING", "actor-id": 441, "repetitions": 8, "period-ticks": 12, "feedback-anchor": "packing-target", "sound": "BLOCK_WOOL_PLACE", "sound-every": 3, "sound-volume": 0.25}
+          load-2-blanket: {"type": "BLOCK_DISPLAY", "key": "cargo-blanket", "material": "CYAN_WOOL", "origin": "BOTTOM_CENTER", "scale": "0.6900,0.2100,0.2400", "interpolation-ticks": 5, "follow-actor-id": 442, "follow-offset": "0.0000,1.2200,0.2700"}
+          load-2-strap-front: {"type": "BLOCK_DISPLAY", "key": "cargo-strap-front", "material": "BROWN_TERRACOTTA", "origin": "BOTTOM_CENTER", "scale": "0.7400,0.0350,0.0600", "interpolation-ticks": 5, "follow-actor-id": 442, "follow-offset": "0.0000,1.2100,-0.1500"}
+          load-2-strap-back: {"type": "BLOCK_DISPLAY", "key": "cargo-strap-back", "material": "BROWN_TERRACOTTA", "origin": "BOTTOM_CENTER", "scale": "0.7400,0.0250,0.0450", "interpolation-ticks": 5, "follow-actor-id": 442, "follow-offset": "0.0000,1.4350,0.3200"}
+          work-2: {"type": "SWING", "actor-id": 441, "repetitions": 8, "period-ticks": 12, "feedback-anchor": "packing-target", "sound": "BLOCK_WOOL_PLACE", "sound-every": 3, "sound-volume": 0.25}
+          load-3-left-lock: {"type": "BLOCK_DISPLAY", "key": "cargo-left-lock", "material": "CUT_COPPER", "origin": "BOTTOM_CENTER", "scale": "0.0350,0.1000,0.0750", "interpolation-ticks": 5, "follow-actor-id": 442, "follow-offset": "-0.6500,0.9300,0.1200"}
+          load-3-right-lock: {"type": "BLOCK_DISPLAY", "key": "cargo-right-lock", "material": "CUT_COPPER", "origin": "BOTTOM_CENTER", "scale": "0.0350,0.1000,0.0750", "interpolation-ticks": 5, "follow-actor-id": 442, "follow-offset": "0.6500,0.9300,0.1200"}
+          work-3: {"type": "SWING", "actor-id": 441, "repetitions": 8, "period-ticks": 12, "feedback-anchor": "packing-target", "sound": "BLOCK_WOOL_PLACE", "sound-every": 3, "sound-volume": 0.25}
+          ready: {"type": "SPEECH", "actor-id": 441, "text": "Сумки закреплены, одеяло сверху. Репей, шагом!"}
+          snort: {"type": "SOUND", "actor-id": 442, "sound": "ENTITY_DONKEY_AMBIENT", "volume": 0.32, "pitch": 0.9}
+          show-load: {"type": "WAIT", "ticks": 80}
+          out-middle: {"type": "MOVE_GROUP", "actor-ids": ["441", "442"], "anchors": ["caravan-person-mid", "caravan-animal-mid"], "route-profile": "yard", "timeout-ticks": 700}
+          out-front: {"type": "MOVE_GROUP", "actor-ids": ["441", "442"], "anchors": ["caravan-person-front", "caravan-animal-front"], "route-profile": "yard", "timeout-ticks": 700}
+          inspect-load: {"type": "LOOK_AT_ACTOR", "actor-id": 441, "target-actor-id": 442}
+          line: {"type": "SPEECH", "actor-id": 441, "text": "Ничего не гремит и не сползает. Ещё круг — и обоз готов."}
+          rest: {"type": "WAIT", "ticks": 220}
+          return-middle: {"type": "MOVE_GROUP", "actor-ids": ["441", "442"], "anchors": ["caravan-person-mid", "caravan-animal-mid"], "route-profile": "yard", "timeout-ticks": 700}
+          return: {"type": "MOVE_GROUP", "actor-ids": ["441", "442"], "anchors": ["packing-stand", "home-442"], "route-profile": "yard", "timeout-ticks": 700}
+          unload-work-3: {"type": "SWING", "actor-id": 441, "repetitions": 3, "period-ticks": 13}
+          unload-3-left-lock: {"type": "REMOVE_DISPLAY", "key": "cargo-left-lock"}
+          unload-3-right-lock: {"type": "REMOVE_DISPLAY", "key": "cargo-right-lock"}
+          unload-work-2: {"type": "SWING", "actor-id": 441, "repetitions": 3, "period-ticks": 13}
+          unload-2-blanket: {"type": "REMOVE_DISPLAY", "key": "cargo-blanket"}
+          unload-2-strap-front: {"type": "REMOVE_DISPLAY", "key": "cargo-strap-front"}
+          unload-2-strap-back: {"type": "REMOVE_DISPLAY", "key": "cargo-strap-back"}
+          unload-work-1: {"type": "SWING", "actor-id": 441, "repetitions": 3, "period-ticks": 13}
+          unload-1-left-pack: {"type": "REMOVE_DISPLAY", "key": "cargo-left-pack"}
+          unload-1-right-pack: {"type": "REMOVE_DISPLAY", "key": "cargo-right-pack"}
+          unload-1-left-lid: {"type": "REMOVE_DISPLAY", "key": "cargo-left-lid"}
+          unload-1-right-lid: {"type": "REMOVE_DISPLAY", "key": "cargo-right-lid"}
+          unload-work-0: {"type": "SWING", "actor-id": 441, "repetitions": 3, "period-ticks": 13}
+          unload-0-pad: {"type": "REMOVE_DISPLAY", "key": "cargo-pad"}
+          finish: {"type": "SPEECH", "actor-id": 441, "text": "Отдыхай, Репей. До следующего выхода всё уложено."}
+      helper-hay:
+        actor-ids: ["440", "371"]
+        initial-delay-seconds: 10
+        cooldown-min-seconds: 25
+        cooldown-max-seconds: 45
+        step-ids: ["source", "look", "take", "hands", "carry-bale", "carry-binding", "deliver", "call", "animal", "put-look", "put", "serve-bale", "serve-binding", "graze", "eat", "meal", "eaten-bale", "eaten-binding", "last-bites", "clean-bale", "clean-binding", "stand"]
+        steps:
+          source: {"type": "MOVE", "actor-id": 440, "anchor": "helper-hay", "route-profile": "yard", "timeout-ticks": 500}
+          look: {"type": "LOOK_AT_ANCHOR", "actor-id": 440, "anchor": "hay-source"}
+          take: {"type": "SWING", "actor-id": 440, "repetitions": 4, "period-ticks": 12}
+          hands: {"type": "EQUIP", "actor-id": 440, "material": "AIR"}
+          carry-bale: {"type": "BLOCK_DISPLAY", "key": "hay-bale", "material": "HAY_BLOCK", "origin": "BOTTOM_CENTER", "scale": "0.5400,0.4500,0.4200", "interpolation-ticks": 5, "follow-actor-id": 440, "follow-offset": "0.0000,0.8500,0.5500"}
+          carry-binding: {"type": "BLOCK_DISPLAY", "key": "hay-binding", "material": "BROWN_TERRACOTTA", "origin": "BOTTOM_CENTER", "scale": "0.0800,0.4800,0.4400", "interpolation-ticks": 5, "follow-actor-id": 440, "follow-offset": "0.0000,0.8400,0.5500"}
+          deliver: {"type": "MOVE", "actor-id": 440, "anchor": "helper-feed", "route-profile": "yard", "timeout-ticks": 500}
+          call: {"type": "SPEECH", "actor-id": 440, "text": "Ветер, свежее сено. Только не всё разом!"}
+          animal: {"type": "MOVE", "actor-id": 371, "anchor": "wind-approach", "route-profile": "yard", "timeout-ticks": 500}
+          put-look: {"type": "LOOK_AT_ANCHOR", "actor-id": 440, "anchor": "feed-floor"}
+          put: {"type": "SWING", "actor-id": 440, "repetitions": 3, "period-ticks": 12}
+          serve-bale: {"type": "BLOCK_DISPLAY", "key": "hay-bale", "material": "HAY_BLOCK", "origin": "BOTTOM_CENTER", "offset": "0.0000,0.0300,0.0000", "scale": "0.5400,0.4500,0.4200", "interpolation-ticks": 5, "anchor": "feed-floor"}
+          serve-binding: {"type": "BLOCK_DISPLAY", "key": "hay-binding", "material": "BROWN_TERRACOTTA", "origin": "BOTTOM_CENTER", "offset": "0.0000,0.0200,0.0000", "scale": "0.0800,0.4800,0.4400", "interpolation-ticks": 5, "anchor": "feed-floor"}
+          graze: {"type": "POSE", "actor-id": 371, "state": "HORSE_GRAZE"}
+          eat: {"type": "SOUND", "actor-id": 371, "sound": "ENTITY_HORSE_EAT", "volume": 0.32, "pitch": 1.0}
+          meal: {"type": "WAIT", "ticks": 150}
+          eaten-bale: {"type": "BLOCK_DISPLAY", "key": "hay-bale", "material": "HAY_BLOCK", "origin": "BOTTOM_CENTER", "offset": "0.0000,0.0100,0.0000", "scale": "0.1620,0.1350,0.1260", "interpolation-ticks": 5, "anchor": "feed-floor"}
+          eaten-binding: {"type": "BLOCK_DISPLAY", "key": "hay-binding", "material": "BROWN_TERRACOTTA", "origin": "BOTTOM_CENTER", "offset": "0.0000,0.0070,0.0000", "scale": "0.0240,0.1440,0.1320", "interpolation-ticks": 5, "anchor": "feed-floor"}
+          last-bites: {"type": "WAIT", "ticks": 100}
+          clean-bale: {"type": "REMOVE_DISPLAY", "key": "hay-bale"}
+          clean-binding: {"type": "REMOVE_DISPLAY", "key": "hay-binding"}
+          stand: {"type": "POSE", "actor-id": 371, "state": "STAND"}
+      helper-water:
+        actor-ids: ["440"]
+        initial-delay-seconds: 42
+        cooldown-min-seconds: 45
+        cooldown-max-seconds: 65
+        step-ids: ["barrels", "fill", "hands", "bucket-base", "bucket-front", "bucket-back", "bucket-left", "bucket-right", "bucket-water", "bucket-handle", "deliver", "face-trough", "pour", "splash", "drops", "line", "wait", "empty-water", "back", "put-base", "put-front", "put-back", "put-left", "put-right", "put-handle"]
+        steps:
+          barrels: {"type": "MOVE", "actor-id": 440, "anchor": "helper-barrels", "route-profile": "yard", "timeout-ticks": 500}
+          fill: {"type": "SOUND", "actor-id": 440, "sound": "ITEM_BUCKET_FILL", "volume": 0.32, "pitch": 1.0}
+          hands: {"type": "EQUIP", "actor-id": 440, "material": "AIR"}
+          bucket-base: {"type": "BLOCK_DISPLAY", "key": "bucket-base", "material": "IRON_BLOCK", "origin": "BOTTOM_CENTER", "scale": "0.2600,0.0400,0.2600", "interpolation-ticks": 5, "follow-actor-id": 440, "follow-offset": "0.3800,0.6000,0.2000"}
+          bucket-front: {"type": "BLOCK_DISPLAY", "key": "bucket-front", "material": "IRON_BLOCK", "origin": "BOTTOM_CENTER", "scale": "0.2600,0.2300,0.0300", "interpolation-ticks": 5, "follow-actor-id": 440, "follow-offset": "0.3800,0.6400,0.0800"}
+          bucket-back: {"type": "BLOCK_DISPLAY", "key": "bucket-back", "material": "IRON_BLOCK", "origin": "BOTTOM_CENTER", "scale": "0.2600,0.2300,0.0300", "interpolation-ticks": 5, "follow-actor-id": 440, "follow-offset": "0.3800,0.6400,0.3200"}
+          bucket-left: {"type": "BLOCK_DISPLAY", "key": "bucket-left", "material": "IRON_BLOCK", "origin": "BOTTOM_CENTER", "scale": "0.0300,0.2300,0.2600", "interpolation-ticks": 5, "follow-actor-id": 440, "follow-offset": "0.2600,0.6400,0.2000"}
+          bucket-right: {"type": "BLOCK_DISPLAY", "key": "bucket-right", "material": "IRON_BLOCK", "origin": "BOTTOM_CENTER", "scale": "0.0300,0.2300,0.2600", "interpolation-ticks": 5, "follow-actor-id": 440, "follow-offset": "0.5000,0.6400,0.2000"}
+          bucket-water: {"type": "BLOCK_DISPLAY", "key": "bucket-water", "material": "LIGHT_BLUE_STAINED_GLASS", "origin": "BOTTOM_CENTER", "scale": "0.2000,0.0250,0.2000", "interpolation-ticks": 5, "follow-actor-id": 440, "follow-offset": "0.3800,0.8200,0.2000"}
+          bucket-handle: {"type": "BLOCK_DISPLAY", "key": "bucket-handle", "material": "IRON_BLOCK", "origin": "BOTTOM_CENTER", "scale": "0.0250,0.0250,0.2800", "interpolation-ticks": 5, "follow-actor-id": 440, "follow-offset": "0.3800,1.0200,0.2000"}
+          deliver: {"type": "MOVE", "actor-id": 440, "anchor": "helper-water", "route-profile": "yard", "timeout-ticks": 500}
+          face-trough: {"type": "LOOK_AT_SURFACE", "actor-id": 440, "surface": "water-trough"}
+          pour: {"type": "SWING", "actor-id": 440, "repetitions": 5, "period-ticks": 16}
+          splash: {"type": "SOUND", "actor-id": 440, "sound": "ITEM_BUCKET_EMPTY", "volume": 0.32, "pitch": 1.0}
+          drops: {"type": "PARTICLE", "anchor": "water-trough", "particle": "SPLASH", "count": 12}
+          line: {"type": "SPEECH", "actor-id": 440, "text": "Вода свежая. Теперь можно и мне передохнуть."}
+          wait: {"type": "WAIT", "ticks": 60}
+          empty-water: {"type": "REMOVE_DISPLAY", "key": "bucket-water"}
+          back: {"type": "MOVE", "actor-id": 440, "anchor": "helper-barrels", "route-profile": "yard", "timeout-ticks": 500}
+          put-base: {"type": "REMOVE_DISPLAY", "key": "bucket-base"}
+          put-front: {"type": "REMOVE_DISPLAY", "key": "bucket-front"}
+          put-back: {"type": "REMOVE_DISPLAY", "key": "bucket-back"}
+          put-left: {"type": "REMOVE_DISPLAY", "key": "bucket-left"}
+          put-right: {"type": "REMOVE_DISPLAY", "key": "bucket-right"}
+          put-handle: {"type": "REMOVE_DISPLAY", "key": "bucket-handle"}
+      cat-round:
+        actor-ids: ["443"]
+        initial-delay-seconds: 5
+        cooldown-min-seconds: 12
+        cooldown-max-seconds: 25
+        step-ids: ["stand", "out", "look", "voice", "observe", "turn", "sit", "watch", "lie", "nap", "up"]
+        steps:
+          stand: {"type": "POSE", "actor-id": 443, "state": "STAND"}
+          out: {"type": "MOVE", "actor-id": 443, "anchor": "cat-watch", "route-profile": "yard", "timeout-ticks": 500}
+          look: {"type": "LOOK_AT_ANCHOR", "actor-id": 443, "anchor": "cat-nap"}
+          voice: {"type": "SOUND", "actor-id": 443, "sound": "ENTITY_CAT_PURR", "volume": 0.32, "pitch": 1.0}
+          observe: {"type": "WAIT", "ticks": 100}
+          turn: {"type": "MOVE", "actor-id": 443, "anchor": "cat-nap", "route-profile": "yard", "timeout-ticks": 500}
+          sit: {"type": "POSE", "actor-id": 443, "state": "SIT"}
+          watch: {"type": "WAIT", "ticks": 120}
+          lie: {"type": "POSE", "actor-id": 443, "state": "CAT_LIE"}
+          nap: {"type": "WAIT", "ticks": 440}
+          up: {"type": "POSE", "actor-id": 443, "state": "STAND"}
+      dog-round:
+        actor-ids: ["444"]
+        initial-delay-seconds: 9
+        cooldown-min-seconds: 12
+        cooldown-max-seconds: 25
+        step-ids: ["stand", "out", "look", "voice", "observe", "turn", "home", "sit", "guard", "up"]
+        steps:
+          stand: {"type": "POSE", "actor-id": 444, "state": "STAND"}
+          out: {"type": "MOVE", "actor-id": 444, "anchor": "dog-patrol", "route-profile": "yard", "timeout-ticks": 500}
+          look: {"type": "LOOK_AT_ANCHOR", "actor-id": 444, "anchor": "dog-watch"}
+          voice: {"type": "SOUND", "actor-id": 444, "sound": "ENTITY_WOLF_AMBIENT", "volume": 0.32, "pitch": 1.0}
+          observe: {"type": "WAIT", "ticks": 100}
+          turn: {"type": "MOVE", "actor-id": 444, "anchor": "dog-watch", "route-profile": "yard", "timeout-ticks": 500}
+          home: {"type": "MOVE", "actor-id": 444, "anchor": "home-444", "route-profile": "yard", "timeout-ticks": 500}
+          sit: {"type": "POSE", "actor-id": 444, "state": "SIT"}
+          guard: {"type": "WAIT", "ticks": 340}
+          up: {"type": "POSE", "actor-id": 444, "state": "STAND"}
+      goat-round:
+        actor-ids: ["445"]
+        initial-delay-seconds: 13
+        cooldown-min-seconds: 12
+        cooldown-max-seconds: 25
+        step-ids: ["stand", "out", "look", "voice", "observe", "turn", "rest", "up"]
+        steps:
+          stand: {"type": "POSE", "actor-id": 445, "state": "STAND"}
+          out: {"type": "MOVE", "actor-id": 445, "anchor": "goat-hay", "route-profile": "yard", "timeout-ticks": 500}
+          look: {"type": "LOOK_AT_ANCHOR", "actor-id": 445, "anchor": "goat-turn"}
+          voice: {"type": "SOUND", "actor-id": 445, "sound": "ENTITY_GOAT_AMBIENT", "volume": 0.32, "pitch": 1.0}
+          observe: {"type": "WAIT", "ticks": 100}
+          turn: {"type": "MOVE", "actor-id": 445, "anchor": "goat-turn", "route-profile": "yard", "timeout-ticks": 500}
+          rest: {"type": "WAIT", "ticks": 160}
+          up: {"type": "POSE", "actor-id": 445, "state": "STAND"}
+      llama-round:
+        actor-ids: ["446"]
+        initial-delay-seconds: 21
+        cooldown-min-seconds: 12
+        cooldown-max-seconds: 25
+        step-ids: ["stand", "out", "look", "voice", "observe", "turn", "rest", "up"]
+        steps:
+          stand: {"type": "POSE", "actor-id": 446, "state": "STAND"}
+          out: {"type": "MOVE", "actor-id": 446, "anchor": "llama-turn", "route-profile": "yard", "timeout-ticks": 500}
+          look: {"type": "LOOK_AT_ANCHOR", "actor-id": 446, "anchor": "llama-watch"}
+          voice: {"type": "SOUND", "actor-id": 446, "sound": "ENTITY_LLAMA_AMBIENT", "volume": 0.32, "pitch": 1.0}
+          observe: {"type": "WAIT", "ticks": 100}
+          turn: {"type": "MOVE", "actor-id": 446, "anchor": "llama-watch", "route-profile": "yard", "timeout-ticks": 500}
+          rest: {"type": "WAIT", "ticks": 160}
+          up: {"type": "POSE", "actor-id": 446, "state": "STAND"}
+      donkey-rest:
+        actor-ids: ["442"]
+        initial-delay-seconds: 7
+        cooldown-min-seconds: 12
+        cooldown-max-seconds: 25
+        step-ids: ["stand", "out", "look", "voice", "observe", "turn", "graze", "eat", "up"]
+        steps:
+          stand: {"type": "POSE", "actor-id": 442, "state": "STAND"}
+          out: {"type": "MOVE", "actor-id": 442, "anchor": "donkey-graze", "route-profile": "yard", "timeout-ticks": 500}
+          look: {"type": "LOOK_AT_ANCHOR", "actor-id": 442, "anchor": "home-442"}
+          voice: {"type": "SOUND", "actor-id": 442, "sound": "ENTITY_DONKEY_AMBIENT", "volume": 0.32, "pitch": 1.0}
+          observe: {"type": "WAIT", "ticks": 100}
+          turn: {"type": "MOVE", "actor-id": 442, "anchor": "home-442", "route-profile": "yard", "timeout-ticks": 500}
+          graze: {"type": "POSE", "actor-id": 442, "state": "HORSE_GRAZE"}
+          eat: {"type": "WAIT", "ticks": 220}
+          up: {"type": "POSE", "actor-id": 442, "state": "STAND"}
+      cat-and-dog:
+        actor-ids: ["443", "444"]
+        initial-delay-seconds: 70
+        cooldown-min-seconds: 75
+        cooldown-max-seconds: 110
+        step-ids: ["cat", "dog", "cat-looks", "dog-looks", "cat-sits", "meow", "pause", "dog-sits", "reply", "truce"]
+        steps:
+          cat: {"type": "MOVE", "actor-id": 443, "anchor": "cat-watch", "route-profile": "yard", "timeout-ticks": 500}
+          dog: {"type": "MOVE", "actor-id": 444, "anchor": "home-444", "route-profile": "yard", "timeout-ticks": 500}
+          cat-looks: {"type": "LOOK_AT_ACTOR", "actor-id": 443, "target-actor-id": 444}
+          dog-looks: {"type": "LOOK_AT_ACTOR", "actor-id": 444, "target-actor-id": 443}
+          cat-sits: {"type": "POSE", "actor-id": 443, "state": "SIT"}
+          meow: {"type": "SOUND", "actor-id": 443, "sound": "ENTITY_CAT_AMBIENT", "volume": 0.32, "pitch": 1.15}
+          pause: {"type": "WAIT", "ticks": 70}
+          dog-sits: {"type": "POSE", "actor-id": 444, "state": "SIT"}
+          reply: {"type": "SOUND", "actor-id": 444, "sound": "ENTITY_WOLF_WHINE", "volume": 0.32, "pitch": 1.1}
+          truce: {"type": "WAIT", "ticks": 180}
+    prop-surface-ids: ["saddler-bench", "saddle-rack", "water-trough"]
+    prop-surfaces:
+      saddler-bench: {"near": "54.5,70,-121.5", "material-ids": ["SPRUCE_PLANKS"], "search-radius": 0, "top-offset": 1.02, "look-target-offset-y": -1.15}
+      saddle-rack: {"near": "52.5,70,-122.5", "material-ids": ["SPRUCE_FENCE"], "search-radius": 0, "top-offset": 1.51, "look-target-offset-y": -1.15}
+      water-trough: {"near": "57.5,70,-121.5", "material-ids": ["WATER_CAULDRON"], "search-radius": 0, "top-offset": 0.9, "look-target-offset-y": -1.15}

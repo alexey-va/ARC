@@ -34,6 +34,14 @@ internal data class OriginSceneActor(
     val deniedDenizenFlags: Set<String>,
 )
 
+/** Native animal pose operations supported by the configured entity type. */
+internal enum class OriginScenePose {
+    STAND,
+    SIT,
+    CAT_LIE,
+    HORSE_GRAZE,
+}
+
 internal sealed interface OriginSceneStep {
     val actorId: Int?
 
@@ -43,6 +51,16 @@ internal sealed interface OriginSceneStep {
         val routeProfile: String,
         val timeoutTicks: Long,
     ) : OriginSceneStep
+
+    /** Starts all routes at once and advances only after every actor arrives. */
+    data class MoveGroup(
+        val actorIds: List<Int>,
+        val targetAnchors: List<String>,
+        val routeProfile: String,
+        val timeoutTicks: Long,
+    ) : OriginSceneStep {
+        override val actorId: Int? = null
+    }
 
     data class Wait(val ticks: Long) : OriginSceneStep {
         override val actorId: Int? = null
@@ -83,6 +101,8 @@ internal sealed interface OriginSceneStep {
         val scale: OriginSceneVector,
         val rotationYDegrees: Float,
         val interpolationTicks: Int,
+        val followActorId: Int? = null,
+        val followOffset: OriginSceneVector = OriginSceneVector.ZERO,
     ) : OriginSceneStep {
         override val actorId: Int? = null
     }
@@ -115,6 +135,10 @@ internal sealed interface OriginSceneStep {
     ) : OriginSceneStep
 
     data class Mount(override val actorId: Int, val vehicleActorId: Int) : OriginSceneStep
+
+    data class Dismount(override val actorId: Int) : OriginSceneStep
+
+    data class Pose(override val actorId: Int, val pose: OriginScenePose) : OriginSceneStep
 }
 
 internal data class OriginSceneCycle(
@@ -134,6 +158,7 @@ private const val RETURN_AND_SAFETY_MARGIN_TICKS = 1_200L
 
 private fun authoredAsyncDurationTicks(step: OriginSceneStep): Long = when (step) {
     is OriginSceneStep.Move -> step.timeoutTicks
+    is OriginSceneStep.MoveGroup -> step.timeoutTicks
     is OriginSceneStep.Wait -> step.ticks
     is OriginSceneStep.Swing -> (step.repetitions - 1L) * step.periodTicks
     else -> 0L
@@ -214,6 +239,27 @@ internal data class OriginSceneDefinition(
                         require(step.anchor in anchors) { "$stepContext references anchor ${step.anchor}" }
                         require(step.routeProfile in routeProfiles) { "$stepContext references route ${step.routeProfile}" }
                     }
+                    is OriginSceneStep.MoveGroup -> {
+                        require(step.actorIds.isNotEmpty()) { "$stepContext has no actors" }
+                        require(step.actorIds.distinct().size == step.actorIds.size) {
+                            "$stepContext contains duplicate actors"
+                        }
+                        require(step.actorIds.all(cycle.actorIds::contains)) {
+                            "$stepContext references an actor outside the cycle lease"
+                        }
+                        require(step.targetAnchors.size == step.actorIds.size) {
+                            "$stepContext target count ${step.targetAnchors.size} does not match actor count ${step.actorIds.size}"
+                        }
+                        require(step.targetAnchors.all(anchors::containsKey)) {
+                            "$stepContext references an unknown target anchor"
+                        }
+                        require(step.routeProfile in routeProfiles) {
+                            "$stepContext references route ${step.routeProfile}"
+                        }
+                        require(step.timeoutTicks in 20L..1_200L) {
+                            "$stepContext timeout-ticks must be within 20..1200"
+                        }
+                    }
                     is OriginSceneStep.Wait -> require(step.ticks in 1L..1_200L) {
                         "$stepContext ticks must be within 1..1200"
                     }
@@ -277,8 +323,8 @@ internal data class OriginSceneDefinition(
                         }
                     }
                     is OriginSceneStep.BlockDisplay -> {
-                        require((step.surface == null) != (step.anchor == null)) {
-                            "$stepContext prop ${step.key} must reference exactly one surface or anchor"
+                        require(listOf(step.surface, step.anchor, step.followActorId).count { it != null } == 1) {
+                            "$stepContext prop ${step.key} must reference exactly one surface, anchor or follow actor"
                         }
                         step.surface?.let { surface ->
                             require(surface in propSurfaces) { "$stepContext references prop surface $surface" }
@@ -286,16 +332,24 @@ internal data class OriginSceneDefinition(
                         step.anchor?.let { anchor ->
                             require(anchor in anchors) { "$stepContext references prop anchor $anchor" }
                         }
+                        step.followActorId?.let { actorId ->
+                            require(actorId in cycle.actorIds) {
+                                "$stepContext follow actor $actorId is not leased"
+                            }
+                        }
                         require(Material.matchMaterial(step.material)?.takeIf(Material::isBlock) != null) {
                             "$stepContext has invalid block material ${step.material}"
                         }
                         OriginScenePropContract.resolve(
-                            step.surface?.let { propSurfaces.getValue(it).near } ?: anchors.getValue(requireNotNull(step.anchor)),
+                            step.surface?.let { propSurfaces.getValue(it).near }
+                                ?: step.anchor?.let { anchors.getValue(it) }
+                                ?: OriginScenePoint(0.0, 0.0, 0.0),
                             step.origin,
                             step.offset,
                             step.scale,
                             step.rotationYDegrees,
                         )
+                        step.followOffset.requireBounded("$stepContext follow-offset", 16.0)
                     }
                     is OriginSceneStep.RemoveDisplay -> require(step.key.isNotBlank()) {
                         "$stepContext prop key must not be blank"
@@ -330,6 +384,8 @@ internal data class OriginSceneDefinition(
                     is OriginSceneStep.Mount -> require(step.vehicleActorId in cycle.actorIds) {
                         "$stepContext vehicle ${step.vehicleActorId} is not leased"
                     }
+                    is OriginSceneStep.Dismount -> Unit
+                    is OriginSceneStep.Pose -> Unit
                 }
             }
         }
@@ -472,6 +528,23 @@ internal data class OriginScenePlan(
                 routeProfile = source.string("$root.route-profile"),
                 timeoutTicks = boundedInteger(source, "$root.timeout-ticks", 240, 20..1_200).toLong(),
             )
+            "MOVE_GROUP" -> {
+                val actorIds = distinctActorIds(source.stringList("$root.actor-ids"), "$root.actor-ids")
+                val commonAnchor = source.string("$root.anchor", "").trim()
+                val explicitAnchors = source.stringListOrNull("$root.anchors").orEmpty().map(String::trim)
+                val targetAnchors = if (explicitAnchors.isEmpty()) {
+                    require(commonAnchor.isNotBlank()) { "$root requires anchor or anchors" }
+                    List(actorIds.size) { commonAnchor }
+                } else {
+                    explicitAnchors
+                }
+                OriginSceneStep.MoveGroup(
+                    actorIds = actorIds,
+                    targetAnchors = targetAnchors,
+                    routeProfile = source.string("$root.route-profile"),
+                    timeoutTicks = boundedInteger(source, "$root.timeout-ticks", 240, 20..1_200).toLong(),
+                )
+            }
             "WAIT" -> OriginSceneStep.Wait(boundedInteger(source, "$root.ticks", 20, 1..1_200).toLong())
             "LOOK_AT_ANCHOR" -> OriginSceneStep.LookAtAnchor(source.integer("$root.actor-id"), source.string("$root.anchor"))
             "LOOK_AT_SURFACE" -> OriginSceneStep.LookAtSurface(source.integer("$root.actor-id"), source.string("$root.surface"))
@@ -506,6 +579,8 @@ internal data class OriginScenePlan(
                     scale = scale.requirePositive("$root.scale"),
                     rotationYDegrees = boundedReal(source, "$root.rotation-y-degrees", 0.0, -360.0..360.0).toFloat(),
                     interpolationTicks = boundedInteger(source, "$root.interpolation-ticks", 0, 0..59),
+                    followActorId = optionalActorInteger(source, "$root.follow-actor-id", -1),
+                    followOffset = vector(source.string("$root.follow-offset", "0,0,0"), "$root.follow-offset"),
                 )
             }
             "REMOVE_DISPLAY" -> OriginSceneStep.RemoveDisplay(source.string("$root.key"))
@@ -533,6 +608,12 @@ internal data class OriginScenePlan(
                 },
             )
             "MOUNT" -> OriginSceneStep.Mount(source.integer("$root.rider-id"), source.integer("$root.vehicle-id"))
+            "DISMOUNT" -> OriginSceneStep.Dismount(source.integer("$root.actor-id"))
+            "POSE" -> OriginSceneStep.Pose(
+                actorId = source.integer("$root.actor-id"),
+                pose = runCatching { OriginScenePose.valueOf(source.string("$root.state").uppercase(Locale.ROOT)) }
+                    .getOrElse { error("$root.state must be STAND, SIT, CAT_LIE or HORSE_GRAZE") },
+            )
             else -> error("Unknown Origin scene step type at $root")
         }
 

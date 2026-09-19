@@ -115,12 +115,21 @@ private data class ActiveOriginSceneCycle(
     val cycle: OriginSceneCycle,
     val mountedPairs: MutableSet<Pair<Int, Int>> = mutableSetOf(),
     val resources: OriginSceneResources = OriginSceneResources(),
+    val followingDisplays: MutableMap<String, OriginSceneStep.BlockDisplay> = mutableMapOf(),
+    val followingDisplayPoses: MutableMap<Int, OriginSceneFollowPose> = mutableMapOf(),
+    var followingDisplayRefreshScheduled: Boolean = false,
     val speechActors: MutableSet<Int> = mutableSetOf(),
     val manual: Boolean = false,
     val startedNanos: Long = System.nanoTime(),
 ) {
     lateinit var execution: OriginSceneExecution
 }
+
+private data class OriginSceneGroupRoute(
+    val actor: NPC,
+    val destination: Location,
+    val explicitPose: Boolean,
+)
 
 private data class OriginSceneSpeech(val display: TextDisplay, val owner: UUID)
 
@@ -314,6 +323,7 @@ private class OriginSceneService(
 
         when (val step = running.cycle.steps[index]) {
             is OriginSceneStep.Move -> move(running, index, step)
+            is OriginSceneStep.MoveGroup -> moveGroup(running, index, step)
             is OriginSceneStep.Wait -> later(running, step.ticks) { runStep(running, index + 1) }
             is OriginSceneStep.LookAtAnchor -> {
                 npc(step.actorId)?.faceLocation(running.scene.anchors.getValue(step.anchor).inWorld(Bukkit.getWorld(plan.world)!!))
@@ -341,8 +351,9 @@ private class OriginSceneService(
             }
             is OriginSceneStep.Swing -> swing(running, index, step, 0)
             is OriginSceneStep.BlockDisplay -> if (setBlockDisplay(running, step)) runStep(running, index + 1)
-            else finish(running, "prop-apply-failed")
+            else finish(running, if (step.followActorId != null) "follow-actor-unavailable" else "prop-apply-failed")
             is OriginSceneStep.RemoveDisplay -> {
+                running.followingDisplays.remove(step.key)
                 removeDisplay(running, step.key)
                 runStep(running, index + 1)
             }
@@ -375,6 +386,18 @@ private class OriginSceneService(
                     runStep(running, index + 1)
                 }
             }
+            is OriginSceneStep.Dismount -> {
+                dismount(running, step.actorId)
+                runStep(running, index + 1)
+            }
+            is OriginSceneStep.Pose -> {
+                val actor = npc(step.actorId)?.takeIf(NPC::isSpawned)
+                if (actor == null) finish(running, "pose-actor-missing")
+                else {
+                    running.resources.setPose(actor, step.pose)
+                    runStep(running, index + 1)
+                }
+            }
         }
     }
 
@@ -385,6 +408,7 @@ private class OriginSceneService(
             finish(running, "move-actor-missing")
             return
         }
+        running.resources.clearMovementPose(actor)
         val destination = running.scene.anchors.getValue(step.anchor).inWorld(world)
         if (!routeController.navigate(actor, destination, running.scene.routeProfiles.getValue(step.routeProfile))) {
             finish(running, "route-unavailable")
@@ -398,6 +422,96 @@ private class OriginSceneService(
                 runStep(running, index + 1)
             } else finish(running, "route-timeout")
         }
+    }
+
+    private fun moveGroup(running: ActiveOriginSceneCycle, index: Int, step: OriginSceneStep.MoveGroup) {
+        val world = Bukkit.getWorld(plan.world)
+        if (world == null) {
+            finish(running, "group-world-missing")
+            return
+        }
+        val routes = step.actorIds.mapIndexed { offset, actorId ->
+            val actor = npc(actorId)?.takeIf(NPC::isSpawned)
+            actor?.let {
+                val point = running.scene.anchors.getValue(step.targetAnchors[offset])
+                OriginSceneGroupRoute(it, point.inWorld(world), point.explicitPose)
+            }
+        }
+        if (routes.any { it == null }) {
+            finish(running, "group-actor-missing")
+            return
+        }
+        val resolvedRoutes = routes.filterNotNull()
+        val profile = running.scene.routeProfiles.getValue(step.routeProfile)
+        resolvedRoutes.forEach { route ->
+            running.resources.clearMovementPose(route.actor)
+        }
+        var routeFailed = false
+        resolvedRoutes.forEach { route ->
+            if (!routeController.navigate(route.actor, route.destination, profile)) routeFailed = true
+        }
+        if (routeFailed) {
+            resolvedRoutes.forEach { routeController.stop(it.actor) }
+            finish(running, "group-route-unavailable")
+            return
+        }
+        awaitGroupRoutes(running, index, resolvedRoutes, step.timeoutTicks, mutableSetOf())
+    }
+
+    private fun awaitGroupRoutes(
+        running: ActiveOriginSceneCycle,
+        index: Int,
+        routes: List<OriginSceneGroupRoute>,
+        remainingTicks: Long,
+        completed: MutableSet<Int>,
+    ) {
+        later(running, 2L) {
+            if (hasDeniedFlag(running)) {
+                routes.forEach { routeController.stop(it.actor) }
+                finish(running, "group-denizen-busy")
+                return@later
+            }
+            for (route in routes) {
+                if (route.actor.id in completed) continue
+                if (!route.actor.isSpawned) {
+                    routes.forEach { routeController.stop(it.actor) }
+                    finish(running, "group-actor-unavailable")
+                    return@later
+                }
+                if (routeController.isNavigating(route.actor)) continue
+                if (routeController.consumeOutcome(route.actor)?.successful != true) {
+                    routes.forEach { routeController.stop(it.actor) }
+                    finish(running, "group-route-failed")
+                    return@later
+                }
+                completed += route.actor.id
+            }
+            if (completed.size == routes.size) {
+                routes.forEach { route ->
+                    val anchor = route.destination
+                    if (route.explicitPose) {
+                        route.actor.entity.setRotation(anchor.yaw, anchor.pitch)
+                    }
+                }
+                runStep(running, index + 1)
+            } else if (remainingTicks <= 2L) {
+                routes.forEach { routeController.stop(it.actor) }
+                finish(running, "group-route-timeout")
+            } else {
+                awaitGroupRoutes(running, index, routes, remainingTicks - 2L, completed)
+            }
+        }
+    }
+
+    private fun dismount(running: ActiveOriginSceneCycle, actorId: Int) {
+        val actor = npc(actorId)?.takeIf(NPC::isSpawned)
+        if (actor == null) {
+            finish(running, "dismount-actor-missing")
+            return
+        }
+        actor.entity.leaveVehicle()
+        actor.entity.eject()
+        running.mountedPairs.removeIf { actorId == it.first || actorId == it.second }
     }
 
     private fun awaitRoute(
@@ -460,10 +574,21 @@ private class OriginSceneService(
         return surface.resolve(world)?.let(surface::lookTarget)?.inWorld(world)
     }
 
-    private fun setBlockDisplay(running: ActiveOriginSceneCycle, step: OriginSceneStep.BlockDisplay): Boolean {
+    private fun setBlockDisplay(
+        running: ActiveOriginSceneCycle,
+        step: OriginSceneStep.BlockDisplay,
+        emitLog: Boolean = true,
+        updateTracker: Boolean = true,
+    ): Boolean {
         val world = Bukkit.getWorld(plan.world) ?: return false
-        val surface = step.surface?.let(running.scene.propSurfaces::getValue)
-        val propAnchor = surface?.resolve(world) ?: step.anchor?.let(running.scene.anchors::getValue)
+        val followActor = step.followActorId?.let { npc(it)?.takeIf(NPC::isSpawned) }
+        if (step.followActorId != null && followActor == null) return false
+        val followLocation = followActor?.entity?.location
+        if (followLocation != null && followLocation.world != world) return false
+        val followPose = followLocation?.let { OriginSceneFollowPose(it.x, it.y, it.z, it.yaw) }
+        val propAnchor = followLocation?.let { OriginScenePropContract.actorAnchor(it, step.followOffset) }
+            ?: step.surface?.let(running.scene.propSurfaces::getValue)?.resolve(world)
+            ?: step.anchor?.let(running.scene.anchors::getValue)
         if (propAnchor == null) {
             warn(
                 "ORIGIN_SCENE phase=PROP_ANCHOR_MISSING scene={} cycle={} key={} surface={} anchor={}",
@@ -475,26 +600,91 @@ private class OriginSceneService(
             )
             return false
         }
+        val rotation = followActor?.let {
+            OriginScenePropContract.actorRelativeRotationY(step.rotationYDegrees, it.entity.yaw)
+        } ?: step.rotationYDegrees
         val resolved = OriginScenePropContract.resolve(
             propAnchor,
             step.origin,
             step.offset,
             step.scale,
-            step.rotationYDegrees,
+            rotation,
         )
-        val created = running.resources.updateDisplay(step.key, world, resolved, step, setOf(PROP_TAG, propRunTag(running)))
-        info(
-            "ORIGIN_SCENE phase=PROP_{} scene={} cycle={} key={} support={} actual={},{},{} origin={}",
-            if (created) "SPAWNED" else "UPDATED",
-            running.scene.id,
-            running.cycle.id,
+        val created = running.resources.updateDisplay(
             step.key,
-            step.surface?.let { "surface:$it" } ?: "anchor:${step.anchor}",
-            resolved.x,
-            resolved.y,
-            resolved.z,
-            step.origin,
+            world,
+            resolved,
+            step,
+            setOf(PROP_TAG, propRunTag(running)),
+            rotationYDegrees = rotation,
         )
+        if (followActor != null) {
+            running.followingDisplays[step.key] = step
+            if (updateTracker) followPose?.let { running.followingDisplayPoses[followActor.id] = it }
+            if (!running.followingDisplayRefreshScheduled) {
+                running.followingDisplayRefreshScheduled = true
+                running.execution.repeat(1L) {
+                    val current = running.followingDisplays.values.toList()
+                    if (current.isEmpty()) {
+                        running.followingDisplayPoses.clear()
+                        running.followingDisplayRefreshScheduled = false
+                        false
+                    } else {
+                        val actorPoses = mutableMapOf<Int, OriginSceneFollowPose>()
+                        val actorsAvailable = current.mapNotNull(OriginSceneStep.BlockDisplay::followActorId).distinct().all { actorId ->
+                            val actor = npc(actorId)?.takeIf(NPC::isSpawned)
+                            val location = actor?.entity?.location
+                            if (actor == null || location == null || location.world != Bukkit.getWorld(plan.world)) {
+                                false
+                            } else {
+                                actorPoses[actorId] = OriginSceneFollowPose(location.x, location.y, location.z, location.yaw)
+                                true
+                            }
+                        }
+                        val changedActors = OriginScenePropContract.changedFollowActors(
+                            running.followingDisplayPoses,
+                            actorPoses,
+                        )
+                        val updated = actorsAvailable && current.all { tracked ->
+                            val actorId = requireNotNull(tracked.followActorId)
+                            val pose = actorPoses[actorId]
+                            running.resources.hasDisplay(tracked.key) && pose != null &&
+                                (actorId !in changedActors ||
+                                    runCatching {
+                                        setBlockDisplay(running, tracked, emitLog = false, updateTracker = false)
+                                    }.getOrDefault(false))
+                        }
+                        if (!updated) {
+                            running.followingDisplayRefreshScheduled = false
+                            running.execution.interrupt("follow-actor-unavailable")
+                        } else {
+                            changedActors.forEach { actorId ->
+                                running.followingDisplayPoses[actorId] = actorPoses.getValue(actorId)
+                            }
+                        }
+                        updated
+                    }
+                }
+            }
+        } else {
+            running.followingDisplays.remove(step.key)
+        }
+        if (emitLog) {
+            info(
+                "ORIGIN_SCENE phase=PROP_{} scene={} cycle={} key={} support={} actual={},{},{} origin={}",
+                if (created) "SPAWNED" else "UPDATED",
+                running.scene.id,
+                running.cycle.id,
+                step.key,
+                step.surface?.let { "surface:$it" }
+                    ?: step.anchor?.let { "anchor:$it" }
+                    ?: "actor:${step.followActorId}",
+                resolved.x,
+                resolved.y,
+                resolved.z,
+                step.origin,
+            )
+        }
         return true
     }
 
@@ -624,10 +814,12 @@ private class OriginSceneService(
                 check(actor.entity.teleport(home)) { "NPC $actorId home teleport rejected" }
                 return@forEach
             }
+            running.resources.clearMovementPose(actor)
             if (routeController.navigate(actor, home, profile)) pending++
             else check(actor.entity.teleport(home)) { "NPC $actorId home teleport rejected" }
         }
         if (pending == 0) {
+            running.resources.restorePoses()
             running.execution.completeReturn(reason)
             return
         }
@@ -650,7 +842,10 @@ private class OriginSceneService(
     }
 
     private fun restoreHomePoses(running: ActiveOriginSceneCycle, keepMounted: Boolean) {
-        val world = Bukkit.getWorld(plan.world) ?: return
+        val world = Bukkit.getWorld(plan.world) ?: run {
+            running.resources.restorePoses()
+            return
+        }
         val failures = mutableListOf<Exception>()
         originSceneReturnActorIds(running.cycle.actorIds, running.mountedPairs, keepMounted).forEach { actorId ->
             val actor = npc(actorId)?.takeIf(NPC::isSpawned) ?: return@forEach
@@ -662,6 +857,7 @@ private class OriginSceneService(
         if (failures.isNotEmpty()) throw IllegalStateException("Scene home recovery incomplete").apply {
             failures.forEach(::addSuppressed)
         }
+        running.resources.restorePoses()
     }
 
     private fun release(running: ActiveOriginSceneCycle, reason: String) {

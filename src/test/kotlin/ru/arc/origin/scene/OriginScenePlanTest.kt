@@ -173,13 +173,60 @@ class OriginScenePlanTest : FreeSpec({
         shouldThrow<IllegalArgumentException> { OriginScenePoint(0.0, 0.0, 0.0, Float.POSITIVE_INFINITY) }
     }
 
+    "living scene steps validate leased actors and bounded group routes" {
+        val scene = OriginScenePlan.load(Files.createTempDirectory("origin-scenes-living-contract-test")).scene("forge")
+        val cycle = scene.cycles.single { it.id == "ledger-orders" }
+        val actorId = cycle.actorIds.first()
+        val routeProfile = scene.routeProfiles.keys.first()
+        val steps = listOf(
+            OriginSceneStep.BlockDisplay(
+                key = "cargo",
+                surface = null,
+                anchor = null,
+                material = "HAY_BLOCK",
+                origin = OriginScenePropOrigin.BOTTOM_CENTER,
+                offset = OriginSceneVector.ZERO,
+                scale = OriginSceneVector(0.5, 0.5, 0.5),
+                rotationYDegrees = 0f,
+                interpolationTicks = 2,
+                followActorId = actorId,
+                followOffset = OriginSceneVector(0.0, 1.0, -0.5),
+            ),
+            OriginSceneStep.RemoveDisplay("cargo"),
+            OriginSceneStep.Pose(actorId, OriginScenePose.STAND),
+            OriginSceneStep.Dismount(actorId),
+            OriginSceneStep.MoveGroup(listOf(actorId), listOf(scene.anchors.keys.first()), routeProfile, 20),
+        )
+
+        scene.copy(
+            cycles = scene.cycles.map {
+                if (it.id == cycle.id) it.copy(steps = steps, stepIds = steps.indices.map { index -> "living-$index" }) else it
+            },
+        ).validate()
+
+        shouldThrow<IllegalArgumentException> {
+            scene.copy(
+                cycles = scene.cycles.map {
+                    if (it.id == cycle.id) it.copy(
+                        steps = listOf(OriginSceneStep.MoveGroup(listOf(actorId), emptyList(), routeProfile, 20)),
+                        stepIds = listOf("bad-group"),
+                    ) else it
+                },
+            ).validate()
+        }
+    }
+
     "mount yard keeps multiple animals active without sharing one actor across simultaneous lanes" {
         val scene = OriginScenePlan.load(Files.createTempDirectory("origin-scenes-mount-test")).scene("mount-yard")
         val animalCycles = scene.cycles.filter { it.id.endsWith("-paddock") }
 
         animalCycles.size shouldBe 3
         animalCycles.flatMap(OriginSceneCycle::actorIds).toSet() shouldBe setOf(371, 422, 423)
-        scene.maxConcurrentCycles shouldBe 3
+        scene.maxConcurrentCycles shouldBe 7
+        scene.actors.keys.containsAll((440..446).toList()) shouldBe true
+        scene.cycles.map(OriginSceneCycle::id).toSet().containsAll(
+            setOf("saddler-work", "caravan-preparation", "helper-hay", "helper-water", "cat-and-dog"),
+        ) shouldBe true
     }
 
     "forge workstations separate walk stands from gaze targets" {
