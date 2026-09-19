@@ -7,6 +7,9 @@ import ru.arc.ARC
 import ru.arc.core.PluginModule
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
+import net.kyori.adventure.text.minimessage.MiniMessage
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 
 /** Global lifecycle and narrow integration API for ARC-owned NPC presentation. */
 object ArcNpcHologramModule : PluginModule {
@@ -25,7 +28,7 @@ object ArcNpcHologramModule : PluginModule {
             info("ARC_NPC_HOLOGRAM phase=DISABLED reason=config")
             return
         }
-        val active = ArcNpcHologramService(config)
+        val active = ArcNpcHologramService(config, FileNpcPresentationStore(ARC.instance.dataPath))
         service = active
         Bukkit.getPluginManager().registerEvents(active, ARC.instance)
         active.start()
@@ -61,6 +64,21 @@ object ArcNpcHologramModule : PluginModule {
     fun clearHologram(npc: NPC): Boolean = service?.clearHologram(npc) == true
 
     fun patchNameplate(npc: NPC, mode: String): Boolean = service?.patchNameplate(npc, mode) == true
+
+    fun patchName(npc: NPC, name: String): Boolean = service?.patchName(npc, name) == true
+
+    fun desiredName(npc: NPC): String? = service?.desiredName(npc)
+
+    fun plainName(npc: NPC): String {
+        val raw = desiredName(npc) ?: npc.name
+        val component = if ('§' in raw || '&' in raw) LegacyComponentSerializer.legacyAmpersand().deserialize(raw.replace('§', '&'))
+            else MiniMessage.miniMessage().deserialize(raw)
+        return PlainTextComponentSerializer.plainText().serialize(component)
+    }
+
+    fun matchesName(npc: NPC, name: String): Boolean = npc.name == name || plainName(npc) == name
+
+    fun isManaged(npc: NPC): Boolean = service?.isManaged(npc) == true
 
     fun desiredNameplate(npc: NPC): String? = service?.desiredNameplate(npc)
 

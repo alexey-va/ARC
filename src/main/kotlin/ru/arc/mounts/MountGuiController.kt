@@ -59,6 +59,8 @@ private class MountMenuHolder(
     val mountId: String? = null,
     val page: Int = 0,
     val pageCount: Int = 1,
+    val skinPage: Int = 0,
+    val skinPageCount: Int = 1,
     val filter: MountFilter = MountFilter.ALL,
     val ownedOnly: Boolean = false,
     val purpose: MountListPurpose = MountListPurpose.COLLECTION,
@@ -107,7 +109,7 @@ class MountGuiController(
         org.bukkit.event.HandlerList.unregisterAll(this)
     }
 
-    fun openList(player: Player) = openListPage(player, 0, MountFilter.ALL, true, MountListPurpose.COLLECTION)
+    fun openList(player: Player) = openListPage(player, 0, MountFilter.ALL, false, MountListPurpose.COLLECTION)
 
     fun openShop(player: Player) {
         if (!configProvider().purchasesEnabled) {
@@ -115,7 +117,7 @@ class MountGuiController(
             return openOwned(player)
         }
         if (!merchantAllowed(player)) {
-            send(player, "merchant-required", "<#ff9f0f>Покупки маунтов доступны у торговца на спавне.")
+            send(player, "merchant-required", "<#ff9f0f>Покупки маунтов доступны у Гектора или Эммы во дворе маунтов на спавне.")
             return openOwned(player)
         }
         openListPage(player, 0, MountFilter.ALL, false, MountListPurpose.SHOP)
@@ -125,7 +127,7 @@ class MountGuiController(
 
     fun openTrade(player: Player) {
         val transfer = transfers() ?: run {
-            player.sendMessage(component("<#ff9f0f>Упаковка маунтов доступна у Мирона на спавне."))
+            player.sendMessage(component("<#ff9f0f>Упаковка маунтов доступна у Тома на спавне."))
             return
         }
         transfer.recoverDelivery(player)
@@ -152,7 +154,7 @@ class MountGuiController(
     ) {
         val config = configProvider()
         val catalog = catalogProvider()
-        val effectiveOwnedOnly = ownedOnly || purpose == MountListPurpose.COLLECTION
+        val effectiveOwnedOnly = ownedOnly
         val favoriteMountId = summons.favoriteMountId(player.uniqueId)
         val profiles = catalog.all.associateWith { mount -> ownership.profile(subject(player), mount) }
         val matching =
@@ -199,7 +201,7 @@ class MountGuiController(
                 filterEmpty -> config.guiLines("list.empty-filter-lore", listOf("", "<#b8b8b8>Смените категорию внизу меню."))
                 else -> config.guiLines(
                     "list.empty-lore",
-                    listOf("", "<#b8b8b8>Маунтов можно приобрести у", "<#b8b8b8>Конюшего Остромира на спавне."),
+                    listOf("", "<#b8b8b8>Маунтов можно приобрести у Гектора", "<#b8b8b8>во дворе маунтов на спавне."),
                 )
             }
             inventory.setItem(
@@ -283,15 +285,6 @@ class MountGuiController(
                 glint = effectiveOwnedOnly,
             ),
         )
-        inventory.setItem(
-            LIST_BACK_SLOT,
-            styledItem(
-                MountGuiItemRole.BACK,
-                Material.BLUE_STAINED_GLASS_PANE,
-                config.guiText("common.back-name", "<#92bed8>Назад"),
-                actionLore(listOf(config.guiText("list.back-description", "<#8c8c8c>Вернуться в главное меню.")), "вернуться"),
-            ),
-        )
         show(player, inventory)
         click(player)
     }
@@ -311,6 +304,8 @@ class MountGuiController(
             MountScreen.DETAIL,
             mount.id,
             page = previous?.page ?: 0,
+            skinPage = previous?.skinPage ?: 0,
+            skinPageCount = previous?.skinPageCount ?: 1,
             filter = previous?.filter ?: MountFilter.ALL,
             ownedOnly = previous?.ownedOnly ?: false,
             purpose = previous?.purpose ?: MountListPurpose.COLLECTION,
@@ -322,11 +317,12 @@ class MountGuiController(
         fill(inventory)
         transfers()?.let { inventory.setItem(it.detailSlot, it.button(profile.unlocked)) }
         val favorite = summons.favoriteMountId(player.uniqueId) == mount.id
+        val purchaseAllowed = purchaseContextAllowed(player, holder)
         inventory.setItem(DETAIL_ICON_SLOT, items.mountIcon(mount, profile, detailed = true, favorite = favorite))
         inventory.setItem(DETAIL_FAVORITE_SLOT, items.favoriteItem(profile, favorite))
-        inventory.setItem(DETAIL_UPGRADE_SLOT, items.upgradeItem(mount, profile))
+        inventory.setItem(DETAIL_UPGRADE_SLOT, items.upgradeItem(mount, profile, merchantAvailable = purchaseAllowed))
         inventory.setItem(DETAIL_SUMMON_SLOT, items.summonItem(profile, config.sessionDuration))
-        inventory.setItem(DETAIL_GLOW_SLOT, items.glowItem(mount, profile))
+        inventory.setItem(DETAIL_GLOW_SLOT, items.glowItem(mount, profile, merchantAvailable = purchaseAllowed))
         inventory.setItem(DETAIL_SKINS_SLOT, items.skinsItem(mount, profile))
         inventory.setItem(DETAIL_WHISTLE_SLOT, items.whistleMenuItem(player, summons.favoriteMountId(player.uniqueId)))
         inventory.setItem(
@@ -356,6 +352,8 @@ class MountGuiController(
             MountScreen.ABILITIES,
             mount.id,
             page = previous?.page ?: 0,
+            skinPage = previous?.skinPage ?: 0,
+            skinPageCount = previous?.skinPageCount ?: 1,
             filter = previous?.filter ?: MountFilter.ALL,
             ownedOnly = previous?.ownedOnly ?: false,
             purpose = previous?.purpose ?: MountListPurpose.COLLECTION,
@@ -368,8 +366,14 @@ class MountGuiController(
         val inventory = Bukkit.createInventory(holder, DETAIL_SIZE, component(title))
         holder.backingInventory = inventory
         fill(inventory)
+        val purchaseAllowed = purchaseContextAllowed(player, holder)
         abilitySlots.forEach { (slot, abilityId) ->
-            mount.ability(abilityId)?.let { inventory.setItem(slot, items.abilityItem(ownership.profile(subject(player), mount), it)) }
+            mount.ability(abilityId)?.let {
+                inventory.setItem(
+                    slot,
+                    items.abilityItem(ownership.profile(subject(player), mount), it, merchantAvailable = purchaseAllowed),
+                )
+            }
         }
         inventory.setItem(
             DETAIL_BACK_SLOT,
@@ -394,6 +398,8 @@ class MountGuiController(
                 mount.id,
                 purpose = previous?.purpose ?: currentPurpose(player),
                 page = previous?.page ?: 0,
+                skinPage = previous?.skinPage ?: 0,
+                skinPageCount = previous?.skinPageCount ?: 1,
                 filter = previous?.filter ?: MountFilter.ALL,
                 ownedOnly = previous?.ownedOnly ?: false,
                 levelCardsBySlot = LEVEL_CARD_SLOTS.take(mount.maxLevel).mapIndexed { index, slot -> slot to index + 1 }.toMap(),
@@ -403,18 +409,19 @@ class MountGuiController(
         val inventory =
             Bukkit.createInventory(
                 holder,
-                TUNING_SIZE,
+                PROGRESSION_SIZE,
                 component(config.progressionTitle.replace("<mount>", escape(mount.displayName))),
             )
         holder.backingInventory = inventory
         fill(inventory)
-        inventory.setItem(TUNING_INFO_SLOT, items.progressionLevelsInfoItem(mount, profile))
-        inventory.setItem(TUNING_RIDER_VIEW_SLOT, items.tuningButtonItem(profile))
+        inventory.setItem(PROGRESSION_INFO_SLOT, items.progressionLevelsInfoItem(mount, profile))
+        inventory.setItem(PROGRESSION_TUNING_SLOT, items.tuningButtonItem(profile))
+        val purchaseAllowed = purchaseContextAllowed(player, holder)
         holder.levelCardsBySlot.forEach { (slot, level) ->
-            inventory.setItem(slot, items.levelCardItem(mount, profile, level))
+            inventory.setItem(slot, items.levelCardItem(mount, profile, level, merchantAvailable = purchaseAllowed))
         }
         inventory.setItem(
-            TUNING_BACK_SLOT,
+            PROGRESSION_BACK_SLOT,
             styledItem(
                 MountGuiItemRole.BACK,
                 Material.BLUE_STAINED_GLASS_PANE,
@@ -448,6 +455,8 @@ class MountGuiController(
                 mount.id,
                 purpose = previous?.purpose ?: currentPurpose(player),
                 page = previous?.page ?: 0,
+                skinPage = previous?.skinPage ?: 0,
+                skinPageCount = previous?.skinPageCount ?: 1,
                 filter = previous?.filter ?: MountFilter.ALL,
                 ownedOnly = previous?.ownedOnly ?: false,
                 speedPercentagesBySlot = speedSlots,
@@ -459,8 +468,8 @@ class MountGuiController(
         val inventory =
             Bukkit.createInventory(
                 holder,
-                TUNING_SIZE,
-                component(config.guiText("progression.tuning-title", "<#20252b><bold>Настройки маунта: <mount></bold>").replace("<mount>", escape(mount.displayName))),
+                TUNING_MENU_SIZE,
+                component(config.guiText("progression.tuning-title", "<#20252b><bold><mount></bold>").replace("<mount>", escape(mount.displayName))),
             )
         holder.backingInventory = inventory
         fill(inventory)
@@ -490,9 +499,9 @@ class MountGuiController(
                 inventory.setItem(slot, items.sizeTuningItem(mount, profile, option))
             }
         }
-        inventory.setItem(TUNING_RIDER_VIEW_SLOT, items.riderViewTuningItem(profile))
+        inventory.setItem(TUNING_MENU_RIDER_VIEW_SLOT, items.riderViewTuningItem(profile))
         inventory.setItem(
-            TUNING_BACK_SLOT,
+            TUNING_MENU_BACK_SLOT,
             styledItem(
                 MountGuiItemRole.BACK,
                 Material.BLUE_STAINED_GLASS_PANE,
@@ -504,16 +513,26 @@ class MountGuiController(
         click(player)
     }
 
-    private fun openSkins(player: Player, mount: MountDefinition, source: MountMenuHolder? = null) {
+    private fun openSkins(
+        player: Player,
+        mount: MountDefinition,
+        source: MountMenuHolder? = null,
+        requestedPage: Int? = null,
+    ) {
         val config = configProvider()
         val profile = ownership.profile(subject(player), mount)
         val allSkinIds = listOf(MountDefinition.DEFAULT_SKIN_ID) + mount.skins.map(MountSkinDefinition::id)
-        val slots = SKIN_CONTENT_SLOTS.zip(allSkinIds).toMap()
         val previous = source ?: player.openInventory.topInventory?.holder as? MountMenuHolder
+        val pageCount = maxOf(1, ceil(allSkinIds.size.toDouble() / SKIN_CONTENT_SLOTS.size).toInt())
+        val skinPage = (requestedPage ?: previous?.skinPage ?: 0).coerceIn(0, pageCount - 1)
+        val pageSkinIds = allSkinIds.drop(skinPage * SKIN_CONTENT_SLOTS.size).take(SKIN_CONTENT_SLOTS.size)
+        val slots = SKIN_CONTENT_SLOTS.zip(pageSkinIds).toMap()
         val holder = MountMenuHolder(
             MountScreen.SKINS,
             mount.id,
             page = previous?.page ?: 0,
+            skinPage = skinPage,
+            skinPageCount = pageCount,
             filter = previous?.filter ?: MountFilter.ALL,
             ownedOnly = previous?.ownedOnly ?: false,
             purpose = previous?.purpose ?: MountListPurpose.COLLECTION,
@@ -529,7 +548,28 @@ class MountGuiController(
             )
         holder.backingInventory = inventory
         fill(inventory)
-        slots.forEach { (slot, skinId) -> inventory.setItem(slot, items.skinItem(mount, profile, skinId)) }
+        val purchaseAllowed = purchaseContextAllowed(player, holder)
+        slots.forEach { (slot, skinId) ->
+            inventory.setItem(slot, items.skinItem(mount, profile, skinId, merchantAvailable = purchaseAllowed))
+        }
+        if (skinPage > 0) {
+            inventory.setItem(
+                SKINS_PREVIOUS_SLOT,
+                styledItem(
+                    MountGuiItemRole.PREVIOUS,
+                    Material.ARROW,
+                    config.guiText("list.previous-name", "<#92bed8>Предыдущая страница"),
+                    listOf(
+                        copy(
+                            "list.page",
+                            "<#8c8c8c>Страница: <#e6fff3><page>/<pages>",
+                            "page" to (skinPage + 1).toString(),
+                            "pages" to pageCount.toString(),
+                        ),
+                    ),
+                ),
+            )
+        }
         inventory.setItem(
             SKINS_BACK_SLOT,
             styledItem(
@@ -539,6 +579,24 @@ class MountGuiController(
                 actionLore(listOf(config.guiText("skins.back-description", "<#8c8c8c>Вернуться к маунту.")), "вернуться"),
             ),
         )
+        if (skinPage + 1 < pageCount) {
+            inventory.setItem(
+                SKINS_NEXT_SLOT,
+                styledItem(
+                    MountGuiItemRole.NEXT,
+                    Material.ARROW,
+                    config.guiText("list.next-name", "<#92bed8>Следующая страница"),
+                    listOf(
+                        copy(
+                            "list.page",
+                            "<#8c8c8c>Страница: <#e6fff3><page>/<pages>",
+                            "page" to (skinPage + 1).toString(),
+                            "pages" to pageCount.toString(),
+                        ),
+                    ),
+                ),
+            )
+        }
         show(player, inventory)
         click(player)
     }
@@ -550,6 +608,8 @@ class MountGuiController(
             MountScreen.CONFIRM,
             mount.id,
             page = previous?.page ?: 0,
+            skinPage = previous?.skinPage ?: 0,
+            skinPageCount = previous?.skinPageCount ?: 1,
             filter = previous?.filter ?: MountFilter.ALL,
             ownedOnly = previous?.ownedOnly ?: false,
             purpose = previous?.purpose ?: MountListPurpose.COLLECTION,
@@ -643,13 +703,14 @@ class MountGuiController(
             val openType = player.openInventory.topInventory?.type
             if (openType != null && openType != org.bukkit.event.inventory.InventoryType.CRAFTING) return@runLater
             when (parent.screen) {
-                MountScreen.LIST -> openListPage(player, parent.page, parent.filter, parent.ownedOnly, parent.purpose)
-                MountScreen.DETAIL -> parent.mountId?.let { openDetailFromSource(player, it, parent) }
-                MountScreen.ABILITIES -> parent.mountId?.let { catalogProvider()[it]?.let { mount -> openAbilities(player, mount, parent) } }
-                MountScreen.PROGRESSION -> parent.mountId?.let { catalogProvider()[it]?.let { mount -> openProgression(player, mount, parent) } }
-                MountScreen.TUNING -> parent.mountId?.let { catalogProvider()[it]?.let { mount -> openTuning(player, mount, parent) } }
-                MountScreen.SKINS -> parent.mountId?.let { catalogProvider()[it]?.let { mount -> openSkins(player, mount, parent) } }
-                MountScreen.CONFIRM -> Unit
+                MountScreen.LIST,
+                MountScreen.DETAIL,
+                MountScreen.ABILITIES,
+                MountScreen.PROGRESSION,
+                MountScreen.TUNING,
+                MountScreen.SKINS,
+                MountScreen.CONFIRM,
+                -> reopenHolder(player, parent)
             }
         }
     }
@@ -683,11 +744,6 @@ class MountGuiController(
 
     private fun handleListClick(player: Player, holder: MountMenuHolder, event: InventoryClickEvent) {
         when (event.rawSlot) {
-            LIST_BACK_SLOT -> if (event.click == ClickType.LEFT) {
-                player.closeInventory()
-                configProvider().backCommand.takeIf(String::isNotBlank)?.let(player::performCommand)
-                click(player)
-            }
             LIST_PREVIOUS_SLOT -> if (event.click == ClickType.LEFT && holder.page > 0) {
                 openListPage(player, holder.page - 1, holder.filter, holder.ownedOnly, holder.purpose)
             }
@@ -707,7 +763,8 @@ class MountGuiController(
                     holder.purpose == MountListPurpose.SHOP && profile.unlocked && event.click == ClickType.LEFT -> openDetailFromCurrent(player, mount.id)
                     profile.unlocked && event.click == ClickType.LEFT -> summon(player, mount)
                     profile.unlocked && event.click == ClickType.RIGHT -> openDetailFromCurrent(player, mount.id)
-                    holder.purpose == MountListPurpose.SHOP && !profile.unlocked && mount.price(1) != null && event.click == ClickType.LEFT -> openProgression(player, mount)
+                    holder.purpose == MountListPurpose.SHOP && !profile.unlocked && mount.price(1) != null && event.click == ClickType.LEFT ->
+                        if (requireMerchantForPurchase(player, holder)) openProgression(player, mount)
                 }
             }
         }
@@ -744,7 +801,10 @@ class MountGuiController(
                 }
             }
             DETAIL_UPGRADE_SLOT -> {
-                if (profile.unlocked || mount.price(1) != null) openProgression(player, mount)
+                when {
+                    profile.unlocked -> openProgression(player, mount)
+                    mount.price(1) != null && requireMerchantForPurchase(player, holder) -> openProgression(player, mount)
+                }
             }
             DETAIL_GLOW_SLOT -> {
                 when {
@@ -754,7 +814,7 @@ class MountGuiController(
                     }
                     mount.glowPrice == null -> Unit
                     !configProvider().purchasesEnabled -> Unit
-                    else -> openConfirm(player, mount, ConfirmAction.Glow)
+                    requireMerchantForPurchase(player, holder) -> openConfirm(player, mount, ConfirmAction.Glow)
                 }
             }
         }
@@ -771,7 +831,7 @@ class MountGuiController(
         when {
             !profile.unlocked || profile.ownsAbility(abilityId) -> Unit
             !configProvider().purchasesEnabled -> Unit
-            else -> openConfirm(player, mount, ConfirmAction.Ability(abilityId))
+            requireMerchantForPurchase(player, holder) -> openConfirm(player, mount, ConfirmAction.Ability(abilityId))
         }
     }
 
@@ -779,14 +839,19 @@ class MountGuiController(
         val mount = holder.mountId?.let(catalogProvider()::get) ?: return openList(player)
         val profile = ownership.profile(subject(player), mount)
         holder.levelCardsBySlot[slot]?.let { level ->
-            if (level == profile.level + 1 && mount.price(level) != null && configProvider().purchasesEnabled) {
+            if (
+                level == profile.level + 1 &&
+                mount.price(level) != null &&
+                configProvider().purchasesEnabled &&
+                requireMerchantForPurchase(player, holder)
+            ) {
                 openConfirm(player, mount, ConfirmAction.Level(level))
             }
             return
         }
         when (slot) {
-            TUNING_BACK_SLOT -> openDetailFromCurrent(player, mount.id)
-            TUNING_RIDER_VIEW_SLOT -> if (profile.unlocked) openTuning(player, mount, holder)
+            PROGRESSION_BACK_SLOT -> reopenHolder(player, holder.parent)
+            PROGRESSION_TUNING_SLOT -> if (profile.unlocked) openTuning(player, mount, holder)
         }
     }
 
@@ -796,8 +861,8 @@ class MountGuiController(
         if (!profile.unlocked) return openProgression(player, mount, holder.parent)
         val tuning = configProvider().tuning
         when (slot) {
-            TUNING_BACK_SLOT -> openProgression(player, mount, holder.parent)
-            TUNING_RIDER_VIEW_SLOT -> purchases.setRiderViewAutoHide(subject(player), mount, !(profile.riderViewAutoHide ?: true)) {
+            TUNING_MENU_BACK_SLOT -> openProgression(player, mount, holder.parent)
+            TUNING_MENU_RIDER_VIEW_SLOT -> purchases.setRiderViewAutoHide(subject(player), mount, !(profile.riderViewAutoHide ?: true)) {
                 handlePurchaseResult(player, mount, it, purchase = false, reopen = MountScreen.TUNING)
             }
             else -> {
@@ -834,7 +899,12 @@ class MountGuiController(
 
     private fun handleSkinClick(player: Player, holder: MountMenuHolder, slot: Int) {
         val mount = holder.mountId?.let(catalogProvider()::get) ?: return openList(player)
-        val skinId = holder.skinsBySlot[slot] ?: if (slot == SKINS_BACK_SLOT) return openDetailFromCurrent(player, mount.id) else return
+        when (slot) {
+            SKINS_PREVIOUS_SLOT -> return openSkins(player, mount, requestedPage = holder.skinPage - 1)
+            SKINS_NEXT_SLOT -> return openSkins(player, mount, requestedPage = holder.skinPage + 1)
+            SKINS_BACK_SLOT -> return openDetailFromCurrent(player, mount.id)
+        }
+        val skinId = holder.skinsBySlot[slot] ?: return
         val profile = ownership.profile(subject(player), mount)
         if (profile.ownsSkin(skinId)) {
             if (profile.activeSkinId == skinId) return
@@ -845,7 +915,7 @@ class MountGuiController(
         }
         val skin = mount.skin(skinId) ?: return
         if (skin.price == null || !configProvider().purchasesEnabled) return
-        openConfirm(player, mount, ConfirmAction.Skin(skinId))
+        if (requireMerchantForPurchase(player, holder)) openConfirm(player, mount, ConfirmAction.Skin(skinId))
     }
 
     private fun handleConfirmClick(player: Player, holder: MountMenuHolder, slot: Int) {
@@ -859,6 +929,19 @@ class MountGuiController(
                 else -> openDetailFromCurrent(player, mount.id)
             }
             CONFIRM_ACCEPT_SLOT -> {
+                if (!requireMerchantForPurchase(player, holder)) {
+                    reopen(
+                        player,
+                        mount,
+                        when (action) {
+                            is ConfirmAction.Skin -> MountScreen.SKINS
+                            is ConfirmAction.Level -> MountScreen.PROGRESSION
+                            is ConfirmAction.Ability -> MountScreen.ABILITIES
+                            else -> MountScreen.DETAIL
+                        },
+                    )
+                    return
+                }
                 if (!holder.confirmEnabled) return
                 holder.confirmEnabled = false
                 holder.backingInventory.setItem(
@@ -970,7 +1053,10 @@ class MountGuiController(
             MountPurchaseResult.InvalidLevel -> send(player, "invalid-level", "<red>Сначала купите предыдущий уровень.")
             MountPurchaseResult.NotUnlocked -> send(player, "not-unlocked", "<red>Сначала разблокируйте маунта или облик.")
             MountPurchaseResult.NotForSale -> send(player, "not-for-sale", "<red>Это улучшение нельзя купить.")
-            MountPurchaseResult.MerchantRequired -> send(player, "merchant-required", "<yellow>Покупки доступны только рядом с торговцем маунтами на спавне.")
+            MountPurchaseResult.MerchantRequired -> {
+                send(player, "merchant-required", "<yellow>Покупки доступны только рядом с Гектором или Эммой на спавне.")
+                reopen(player, mount, reopen)
+            }
             MountPurchaseResult.PurchasesDisabled -> purchasesDisabled(player)
             MountPurchaseResult.EconomyUnavailable -> send(player, "economy-unavailable", "<red>Экономика временно недоступна.")
             MountPurchaseResult.InsufficientFunds -> send(player, "not-enough-money", "<red>Недостаточно денег.")
@@ -1072,13 +1158,42 @@ class MountGuiController(
         }
 
     private fun purchasesDisabled(player: Player) {
-        send(player, "purchases-disabled", "<yellow>Покупки маунтов доступны на спавне.")
+        send(player, "purchases-disabled", "<yellow>Покупки маунтов доступны у Гектора или Эммы во дворе маунтов на спавне.")
         bass(player)
+    }
+
+    private fun reopenHolder(player: Player, holder: MountMenuHolder?) {
+        when (holder?.screen) {
+            MountScreen.LIST -> openListPage(player, holder.page, holder.filter, holder.ownedOnly, holder.purpose)
+            MountScreen.DETAIL -> holder.mountId?.let { openDetailFromSource(player, it, holder) }
+            MountScreen.ABILITIES -> holder.mountId?.let { catalogProvider()[it]?.let { mount -> openAbilities(player, mount, holder) } }
+            MountScreen.PROGRESSION -> holder.mountId?.let { catalogProvider()[it]?.let { mount -> openProgression(player, mount, holder) } }
+            MountScreen.TUNING -> holder.mountId?.let { catalogProvider()[it]?.let { mount -> openTuning(player, mount, holder) } }
+            MountScreen.SKINS -> holder.mountId?.let { catalogProvider()[it]?.let { mount -> openSkins(player, mount, holder) } }
+            MountScreen.CONFIRM,
+            null,
+            -> openList(player)
+        }
+    }
+
+    private fun purchaseContextAllowed(player: Player, holder: MountMenuHolder? = previousHolder(player)): Boolean =
+        holder?.purpose in setOf(MountListPurpose.SHOP, MountListPurpose.UPGRADES) && merchantAllowed(player)
+
+    private fun requireMerchantForPurchase(player: Player, holder: MountMenuHolder? = previousHolder(player)): Boolean {
+        if (holder?.purpose !in setOf(MountListPurpose.SHOP, MountListPurpose.UPGRADES)) {
+            send(player, "merchant-required", "<#ff9f0f>Покупки доступны только из магазина или улучшений у Гектора или Эммы во дворе маунтов на спавне.")
+            bass(player)
+            return false
+        }
+        if (merchantAllowed(player)) return true
+        send(player, "merchant-required", "<#ff9f0f>Покупки маунтов доступны у Гектора или Эммы во дворе маунтов на спавне.")
+        bass(player)
+        return false
     }
 
     private fun fill(inventory: Inventory, fallbackMaterial: Material = Material.GRAY_STAINED_GLASS_PANE) {
         val background = styledItem(MountGuiItemRole.BACKGROUND, fallbackMaterial, " ", emptyList(), hideTooltip = true)
-        for (slot in 0 until inventory.size) inventory.setItem(slot, background)
+        for (slot in (inventory.size - 9).coerceAtLeast(0) until inventory.size) inventory.setItem(slot, background)
     }
 
     private fun styledItem(
@@ -1090,7 +1205,27 @@ class MountGuiController(
         hideTooltip: Boolean = false,
     ): ItemStack {
         val style = configProvider().guiStyle(role)
-        return item(style.material ?: fallbackMaterial, display, lore, glint, style.customModelData, hideTooltip)
+        val defaultMaterial =
+            when (role) {
+                MountGuiItemRole.PREVIOUS,
+                MountGuiItemRole.NEXT,
+                -> Material.BLUE_STAINED_GLASS_PANE
+                else -> fallbackMaterial
+            }
+        val defaultModelData =
+            when (role) {
+                MountGuiItemRole.PREVIOUS -> 11013 // arc:left_gray
+                MountGuiItemRole.NEXT -> 11012 // arc:right_gray
+                else -> null
+            }
+        return item(
+            style.material ?: defaultMaterial,
+            display,
+            lore,
+            glint,
+            style.customModelData ?: defaultModelData,
+            hideTooltip,
+        )
     }
 
     private fun item(
@@ -1181,7 +1316,6 @@ class MountGuiController(
         private val LIST_SIZE get() = rows(ArcMenuSchema.MOUNT_LIST)
         private val LIST_CONTENT_SLOTS get() = region(ArcMenuSchema.MOUNT_LIST, ArcMenuSchema.MOUNT_ENTRIES)
         private val LIST_PREVIOUS_SLOT get() = slot(ArcMenuSchema.MOUNT_LIST, "previous")
-        private val LIST_BACK_SLOT get() = slot(ArcMenuSchema.MOUNT_LIST, "back")
         private val LIST_FILTER_SLOT get() = slot(ArcMenuSchema.MOUNT_LIST, "filter")
         private val LIST_NEXT_SLOT get() = slot(ArcMenuSchema.MOUNT_LIST, "next")
 
@@ -1195,20 +1329,26 @@ class MountGuiController(
         private val DETAIL_BACK_SLOT get() = slot(ArcMenuSchema.MOUNT_DETAIL, "back")
         private val DETAIL_WHISTLE_SLOT get() = slot(ArcMenuSchema.MOUNT_DETAIL, "whistle")
         private val DETAIL_ABILITY_SLOTS get() = region(ArcMenuSchema.MOUNT_DETAIL, ArcMenuSchema.MOUNT_ABILITIES)
-        private val LEVEL_CARD_SLOTS = listOf(10, 11, 12, 14, 15)
+        private val LEVEL_CARD_SLOTS get() = region(ArcMenuSchema.MOUNT_PROGRESSION, ArcMenuSchema.MOUNT_LEVELS)
 
-        private val TUNING_SIZE get() = rows(ArcMenuSchema.MOUNT_PROGRESSION)
-        private val TUNING_INFO_SLOT get() = slot(ArcMenuSchema.MOUNT_PROGRESSION, "info")
-        private val TUNING_LEVEL_SLOT get() = slot(ArcMenuSchema.MOUNT_PROGRESSION, "level")
-        private val TUNING_SPEED_SLOTS get() = region(ArcMenuSchema.MOUNT_PROGRESSION, ArcMenuSchema.MOUNT_SPEEDS)
-        private val TUNING_STEP_SLOTS get() = region(ArcMenuSchema.MOUNT_PROGRESSION, ArcMenuSchema.MOUNT_STEPS)
-        private val TUNING_SIZE_SLOTS get() = region(ArcMenuSchema.MOUNT_PROGRESSION, ArcMenuSchema.MOUNT_SIZES)
+        private val PROGRESSION_SIZE get() = rows(ArcMenuSchema.MOUNT_PROGRESSION)
+        private val PROGRESSION_INFO_SLOT get() = slot(ArcMenuSchema.MOUNT_PROGRESSION, "info")
+        private val PROGRESSION_BACK_SLOT get() = slot(ArcMenuSchema.MOUNT_PROGRESSION, "back")
+        private val PROGRESSION_TUNING_SLOT get() = slot(ArcMenuSchema.MOUNT_PROGRESSION, "tuning")
+
+        private val TUNING_MENU_SIZE get() = rows(ArcMenuSchema.MOUNT_TUNING)
+        private val TUNING_INFO_SLOT get() = slot(ArcMenuSchema.MOUNT_TUNING, "info")
+        private val TUNING_SPEED_SLOTS get() = region(ArcMenuSchema.MOUNT_TUNING, ArcMenuSchema.MOUNT_SPEEDS)
+        private val TUNING_STEP_SLOTS get() = region(ArcMenuSchema.MOUNT_TUNING, ArcMenuSchema.MOUNT_STEPS)
+        private val TUNING_SIZE_SLOTS get() = region(ArcMenuSchema.MOUNT_TUNING, ArcMenuSchema.MOUNT_SIZES)
         private val TUNING_NOT_APPLICABLE_SLOT get() = TUNING_STEP_SLOTS[TUNING_STEP_SLOTS.size / 2]
-        private val TUNING_BACK_SLOT get() = slot(ArcMenuSchema.MOUNT_PROGRESSION, "back")
-        private val TUNING_RIDER_VIEW_SLOT get() = slot(ArcMenuSchema.MOUNT_PROGRESSION, "rider-view")
+        private val TUNING_MENU_BACK_SLOT get() = slot(ArcMenuSchema.MOUNT_TUNING, "back")
+        private val TUNING_MENU_RIDER_VIEW_SLOT get() = slot(ArcMenuSchema.MOUNT_TUNING, "rider-view")
         private val SKINS_SIZE get() = rows(ArcMenuSchema.MOUNT_SKINS)
         private val SKIN_CONTENT_SLOTS get() = region(ArcMenuSchema.MOUNT_SKINS, ArcMenuSchema.MOUNT_SKIN_ENTRIES)
+        private val SKINS_PREVIOUS_SLOT get() = slot(ArcMenuSchema.MOUNT_SKINS, "previous")
         private val SKINS_BACK_SLOT get() = slot(ArcMenuSchema.MOUNT_SKINS, "back")
+        private val SKINS_NEXT_SLOT get() = slot(ArcMenuSchema.MOUNT_SKINS, "next")
 
         private val CONFIRM_SIZE get() = rows(ArcMenuSchema.MOUNT_CONFIRM)
         private val CONFIRM_CANCEL_SLOT get() = slot(ArcMenuSchema.MOUNT_CONFIRM, "cancel")

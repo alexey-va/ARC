@@ -101,7 +101,7 @@ private data class MountSession(
     val trampleDamageAtMillis: MutableMap<UUID, Long> = hashMapOf(),
 )
 
-class MountSessionController(
+class MountSessionController internal constructor(
     private val plugin: JavaPlugin,
     private val scheduler: TaskScheduler,
     private val configProvider: () -> MountModuleConfig,
@@ -109,6 +109,9 @@ class MountSessionController(
     private val message: (Player, String, String) -> Unit,
     private val onStateChanged: () -> Unit = {},
     private val setRiderMountHidden: (Player, LivingEntity, Boolean) -> Unit = { _, _, _ -> },
+    private val careBoostStatusProvider: (UUID, Long) -> MountCareBoostStatus = { _, _ ->
+        MountCareBoostStatus(record = null, active = false, remainingMillis = 0L, nextClaimInMillis = 0L)
+    },
 ) : Listener {
     private val sessionsByPlayer = ConcurrentHashMap<UUID, MountSession>()
     private val playerByEntity = ConcurrentHashMap<UUID, UUID>()
@@ -533,7 +536,7 @@ class MountSessionController(
                         refreshAbilityEffects(player, session.definition.abilities.passives, session.settings.abilityUpgrades)
                     }
                     updateRiderMountVisibility(player, entity, session)
-                    val maximumSpeed = move(player, entity, session)
+                    val maximumSpeed = move(player, entity, session, now)
                     updateRamBehavior(player, entity, session, maximumSpeed)
                     updateTrampleBehavior(player, entity, session, maximumSpeed, now)
                     emitTrail(entity, session)
@@ -567,7 +570,7 @@ class MountSessionController(
             .onFailure { warn("Unable to update rider-only mount visibility for {}: {}", player.name, it.javaClass.simpleName) }
     }
 
-    private fun move(player: Player, entity: LivingEntity, session: MountSession): Double {
+    private fun move(player: Player, entity: LivingEntity, session: MountSession, nowMillis: Long): Double {
         val config = configProvider()
         val speedScale =
             when (session.definition.movement) {
@@ -577,7 +580,15 @@ class MountSessionController(
             }
         val sprint = if (session.input.sprint) config.sprintMultiplier * session.settings.sprintMultiplier else 1.0
         val abilitySpeed = activeAbilitySpeedMultiplier(session.settings.abilityUpgrades)
-        val maximumSpeed = (session.settings.speed * speedScale * sprint * abilitySpeed).coerceAtMost(config.maximumSpeedBlocksPerTick)
+        // The persisted entitlement is applied to the immutable configured base
+        // exactly once per movement calculation. Expiry is wall-clock based and
+        // therefore takes effect on the next tick without any storage I/O.
+        val careBoostedSpeed = applyMountCareSpeed(
+            session.settings.speed,
+            careBoostStatusProvider(session.playerId, nowMillis),
+        )
+        val maximumSpeed = (careBoostedSpeed * speedScale * sprint * abilitySpeed)
+            .coerceAtMost(config.maximumSpeedBlocksPerTick)
         val planar = MountMotion.planarDirection(player.location.yaw, session.input)
         val timing = session.definition.motion.resolve(config.motionTiming)
         if (session.definition.movement == MountMovement.WALKING && entity is Horse) {

@@ -6,6 +6,12 @@ import ru.arc.core.Tasks
 
 internal enum class OriginSceneExecutionPhase { NEW, RUNNING, RETURNING, RECOVERING, FINISHED }
 
+/** Defines whether an interrupted cycle must move actors back to their homes. */
+internal enum class OriginSceneRecoveryPolicy {
+    RETURN_HOME,
+    KEEP_CURRENT_POSITION,
+}
+
 /** Native scene operations; execution owns their ordering, cancellation and failure recovery. */
 internal interface OriginSceneExecutionEffects {
     fun execute(stepIndex: Int)
@@ -103,34 +109,43 @@ internal class OriginSceneExecution(
         guarded("return") { effects.returnHome(result, immediate = false) }
     }
 
-    fun interrupt(result: String) {
+    fun interrupt(
+        result: String,
+        recoveryPolicy: OriginSceneRecoveryPolicy = OriginSceneRecoveryPolicy.RETURN_HOME,
+    ) {
         if (phase == OriginSceneExecutionPhase.FINISHED) return
         if (phase == OriginSceneExecutionPhase.RECOVERING && !closing) return
         phase = OriginSceneExecutionPhase.RECOVERING
         reason = result
         attempt("cancel") { actions.restart() }
         attempt("cancel") { deadline.close() }
-        recover(result, 1)
+        recover(result, recoveryPolicy, 1)
     }
 
-    private fun recover(result: String, attemptNumber: Int) {
+    private fun recover(result: String, recoveryPolicy: OriginSceneRecoveryPolicy, attemptNumber: Int) {
         val cleaned = attempt("cleanup") { effects.cleanup(keepMounted = false) }
-        val returned = attempt("return") { effects.returnHome(result, immediate = true) }
+        val returned = when (recoveryPolicy) {
+            OriginSceneRecoveryPolicy.RETURN_HOME ->
+                attempt("return") { effects.returnHome(result, immediate = true) }
+            OriginSceneRecoveryPolicy.KEEP_CURRENT_POSITION -> true
+        }
         if (cleaned && returned) {
             completeReturn(result)
         } else if (attemptNumber >= RECOVERY_ATTEMPTS) {
             completeReturn("$result-recovery-incomplete")
         } else if (closing) {
-            recover(result, attemptNumber + 1)
+            recover(result, recoveryPolicy, attemptNumber + 1)
         } else if (!attempt("recovery-schedule") {
             checkNotNull(actions.runLater(RECOVERY_RETRY_TICKS) {
-                if (phase == OriginSceneExecutionPhase.RECOVERING) recover(result, attemptNumber + 1)
+                if (phase == OriginSceneExecutionPhase.RECOVERING) {
+                    recover(result, recoveryPolicy, attemptNumber + 1)
+                }
             }) { "Scene recovery scope is inactive" }
         }) {
             // Scheduling can also fail during plugin teardown. Drain the small
             // remaining recovery budget without abandoning native resources.
             closing = true
-            recover(result, attemptNumber + 1)
+            recover(result, recoveryPolicy, attemptNumber + 1)
         }
     }
 

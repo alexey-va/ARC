@@ -1,9 +1,7 @@
 package ru.arc.hooks.citizens
 
-import com.google.common.cache.CacheBuilder
 import net.citizensnpcs.api.CitizensAPI
 import net.citizensnpcs.api.trait.trait.Equipment
-import net.citizensnpcs.trait.HologramTrait
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.entity.EntityType
@@ -12,13 +10,10 @@ import org.bukkit.inventory.ItemStack
 import ru.arc.ARC
 import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.warn
-import java.util.concurrent.ConcurrentLinkedDeque
-import java.util.concurrent.TimeUnit
 
 class CitizensHook : AutoCloseable {
 
     data class HologramLine(val text: String, val ticks: Int)
-    data class InsertedHologramLine(val line: Int, val expireTime: Long)
 
     enum class Animation { ARM_SWING, SIT, STOP_SITTING }
 
@@ -28,17 +23,12 @@ class CitizensHook : AutoCloseable {
         val location: Location,
     )
 
-    private val linesCache = CacheBuilder.newBuilder()
-        .expireAfterAccess(10, TimeUnit.MINUTES)
-        .build<Int, ConcurrentLinkedDeque<InsertedHologramLine>>()
-
     private var closed = false
 
     @Synchronized
     override fun close() {
         if (closed) return
         closed = true
-        linesCache.invalidateAll()
     }
 
     fun createNpc(name: String, location: Location): Int {
@@ -61,7 +51,7 @@ class CitizensHook : AutoCloseable {
         val world = origin.world ?: return null
         return CitizensAPI.getNPCRegistry()
             .asSequence()
-            .filter { it.isSpawned && it.name == expectedName }
+            .filter { it.isSpawned && ArcNpcHologramModule.matchesName(it, expectedName) }
             .mapNotNull { npc ->
                 val location = npc.entity?.location ?: return@mapNotNull null
                 if (location.world?.uid != world.uid) return@mapNotNull null
@@ -85,24 +75,7 @@ class CitizensHook : AutoCloseable {
     fun addChatBubble(id: Int, lineList: List<HologramLine>) {
         try {
             val ttlTicks = lineList.maxOfOrNull(HologramLine::ticks) ?: 1
-            if (ArcNpcHologramModule.showTemporaryBubble(id, lineList.map(HologramLine::text), ttlTicks)) return
-            val npc = CitizensAPI.getNPCRegistry().getById(id)
-            if (npc == null) {
-                warn("NPC {} is null", id)
-                return
-            }
-            val trait = npc.getOrAddTrait(HologramTrait::class.java)
-            val lineCache = linesCache.get(id) { ConcurrentLinkedDeque() }
-            for (line in lineCache.reversed()) {
-                trait.removeLine(line.line)
-            }
-            lineCache.clear()
-
-            var nextLine = trait.lines.size
-            lineList.reversed().forEach { line ->
-                trait.addTemporaryLine(line.text, line.ticks)
-                lineCache.add(InsertedHologramLine(nextLine++, System.currentTimeMillis() + line.ticks * 50L))
-            }
+            ArcNpcHologramModule.showTemporaryBubble(id, lineList.map(HologramLine::text), ttlTicks)
         } catch (e: Exception) {
             warn("Error adding hologram lines", e)
         }

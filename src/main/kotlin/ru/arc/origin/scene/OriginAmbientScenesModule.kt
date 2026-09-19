@@ -40,8 +40,8 @@ import kotlin.math.roundToInt
  * Kotlin owner of Origin's non-interactive forge and mount-yard choreography.
  *
  * Service/shop clicks remain owned by their dedicated handlers. A click merely
- * interrupts this ambient lease and returns the actor home before the service
- * handler takes over.
+ * interrupts this ambient lease, cleans up at the current position, and lets
+ * the service handler take over. Lifecycle aborts still return actors home.
  */
 object OriginAmbientScenesModule : PluginModule, Listener {
     override val name = "OriginAmbientScenes"
@@ -96,7 +96,11 @@ object OriginAmbientScenesModule : PluginModule, Listener {
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
     fun onNpcClick(event: NPCRightClickEvent) {
-        service?.interruptActor(event.npc.id, "player-click")
+        service?.interruptActor(
+            event.npc.id,
+            "player-click",
+            OriginSceneRecoveryPolicy.KEEP_CURRENT_POSITION,
+        )
     }
 }
 
@@ -878,13 +882,21 @@ private class OriginSceneService(
         )
     }
 
-    fun interruptActor(actorId: Int, reason: String) {
+    fun interruptActor(
+        actorId: Int,
+        reason: String,
+        recoveryPolicy: OriginSceneRecoveryPolicy = OriginSceneRecoveryPolicy.RETURN_HOME,
+    ) {
         val running = active.values.firstOrNull { actorId in it.cycle.actorIds } ?: return
-        interruptCycle(running, reason)
+        interruptCycle(running, reason, recoveryPolicy)
     }
 
-    private fun interruptCycle(running: ActiveOriginSceneCycle, reason: String) {
-        if (isCurrent(running)) running.execution.interrupt(reason)
+    private fun interruptCycle(
+        running: ActiveOriginSceneCycle,
+        reason: String,
+        recoveryPolicy: OriginSceneRecoveryPolicy = OriginSceneRecoveryPolicy.RETURN_HOME,
+    ) {
+        if (isCurrent(running)) running.execution.interrupt(reason, recoveryPolicy)
     }
 
     private fun speechOwner(running: ActiveOriginSceneCycle): String = "origin-scene:${running.lease.token}"

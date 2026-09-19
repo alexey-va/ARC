@@ -20,7 +20,6 @@ internal class MountGuiItems(
         favorite: Boolean = false,
         purpose: MountListPurpose = MountListPurpose.COLLECTION,
     ): ItemStack {
-        val acquisitionAvailable = !profile.unlocked && mount.price(1) != null
         val rarity = rarity(mount.rarity)
         val typeValue = "${movementColor(mount.movement)}${movementName(mount.movement)}"
         val skin = escape(skinName(mount, profile.activeSkinId))
@@ -46,12 +45,7 @@ internal class MountGuiItems(
                             ).firstOrNull() ?: "<#ffacd5>★ Любимый маунт",
                         )
                     }
-                    val path =
-                        when {
-                            profile.unlocked -> "list.mount-owned-core"
-                            acquisitionAvailable -> "list.mount-acquirable-core"
-                            else -> "list.mount-locked-core"
-                        }
+                    val path = if (profile.unlocked) "list.mount-owned-core" else "list.mount-locked-core"
                     val fallback =
                         when {
                             profile.unlocked ->
@@ -62,13 +56,6 @@ internal class MountGuiItems(
                                     "<#8c8c8c>Тип: <type-value>",
                                     "<#8c8c8c>Уровень: <#e6fff3><level>/<max-level>",
                                     "<#8c8c8c>Облик: <#e6fff3><skin>",
-                                )
-                            acquisitionAvailable ->
-                                listOf(
-                                    "<#ff9f0f>Доступен к получению",
-                                    "<rarity>",
-                                    "",
-                                    "<#8c8c8c>Получение: <#e6fff3><acquisition>",
                                 )
                             else ->
                                 listOf(
@@ -97,10 +84,7 @@ internal class MountGuiItems(
                                 },
                             )
                         }
-                        acquisitionAvailable -> {
-                            add("")
-                            add(copy("list.mount-acquirable-footer", actionFooter("открыть получение")))
-                        }
+                        else -> Unit
                     }
                 }
             } else {
@@ -230,18 +214,10 @@ internal class MountGuiItems(
                 }
             }
         return item(
-            Material.matchMaterial(mount.iconMaterial) ?: Material.PAPER,
+            if (profile.unlocked) Material.matchMaterial(mount.iconMaterial) ?: Material.PAPER else Material.RED_DYE,
             copy(
-                when {
-                    profile.unlocked -> "list.mount-owned-name"
-                    acquisitionAvailable -> "list.mount-acquirable-name"
-                    else -> "list.mount-locked-name"
-                },
-                when {
-                    profile.unlocked -> "<#ffacd5><mount>"
-                    acquisitionAvailable -> "<#92bed8><mount>"
-                    else -> "<#969696><mount>"
-                },
+                if (profile.unlocked) "list.mount-owned-name" else "list.mount-locked-name",
+                if (profile.unlocked) "<#ffacd5><mount>" else "<#c42323><mount>",
                 "mount" to escape(mount.displayName),
             ),
             lore,
@@ -339,7 +315,7 @@ internal class MountGuiItems(
         }
     }
 
-    fun upgradeItem(mount: MountDefinition, profile: MountProfile): ItemStack {
+    fun upgradeItem(mount: MountDefinition, profile: MountProfile, merchantAvailable: Boolean = true): ItemStack {
         val tuning = configProvider().tuning
         val values =
             arrayOf(
@@ -381,12 +357,19 @@ internal class MountGuiItems(
                 }
             }
         val purchasable = mount.price(1) != null
-        val lore = if (profile.unlocked || purchasable) actionLore(content, if (profile.unlocked) "открыть" else "купить") else content
+        val lore =
+            if (profile.unlocked) {
+                actionLore(content, "открыть")
+            } else if (purchasable && merchantAvailable) {
+                actionLore(content, "купить")
+            } else {
+                content + if (purchasable) listOf(configProvider().guiText("common.purchases-at-spawn", "<#ff9f0f>Покупка: Гектор или Эмма во дворе маунтов на спавне.")) else emptyList()
+            }
         return item(
             Material.COMPARATOR,
             copy(
-                if (profile.unlocked || !purchasable) "detail.upgrade-name" else "detail.upgrade-buy-name",
-                if (profile.unlocked || !purchasable) "<#92bed8>Развитие и тюнинг" else "<#ff9f0f>Купить первый уровень",
+                if (profile.unlocked || !purchasable) "detail.upgrade-name" else if (merchantAvailable) "detail.upgrade-buy-name" else "detail.upgrade-name",
+                if (profile.unlocked || !purchasable) "<#92bed8>Развитие и тюнинг" else if (merchantAvailable) "<#ff9f0f>Купить первый уровень" else "<#92bed8>Развитие и тюнинг",
             ),
             lore,
             glint = profile.level >= mount.maxLevel,
@@ -492,7 +475,7 @@ internal class MountGuiItems(
                             add("")
                             add(actionFooter("открыть покупку"))
                         } else {
-                            add(configProvider().guiText("common.purchases-at-spawn", "<#ff9f0f>Покупка доступна на спавне."))
+                            add(configProvider().guiText("common.purchases-at-spawn", "<#ff9f0f>Покупка: Гектор или Эмма во дворе маунтов на спавне."))
                         }
                     },
                     glint = next == mount.maxLevel,
@@ -501,7 +484,7 @@ internal class MountGuiItems(
         }
     }
 
-    fun levelCardItem(mount: MountDefinition, profile: MountProfile, levelNumber: Int): ItemStack {
+    fun levelCardItem(mount: MountDefinition, profile: MountProfile, levelNumber: Int, merchantAvailable: Boolean = true): ItemStack {
         val level = mount.level(levelNumber)
         val owned = profile.level >= levelNumber
         val available = !owned && profile.level + 1 == levelNumber && mount.price(levelNumber) != null
@@ -535,8 +518,8 @@ internal class MountGuiItems(
                 available -> {
                     add(priceLine("Цена", checkNotNull(level.price).toExactMinor(), mount.currency))
                     add(
-                        if (configProvider().purchasesEnabled) actionFooter("купить")
-                        else configProvider().guiText("common.purchases-at-spawn", "<#ff9f0f>Покупка доступна на спавне."),
+                        if (configProvider().purchasesEnabled && merchantAvailable) actionFooter("купить")
+                        else configProvider().guiText("common.purchases-at-spawn", "<#ff9f0f>Покупка: Гектор или Эмма во дворе маунтов на спавне."),
                     )
                 }
                 level.price == null -> add(copy("progression.level-card-special", "<#ff9f0f><acquisition>", "acquisition" to escape(mount.acquisition)))
@@ -546,8 +529,7 @@ internal class MountGuiItems(
         return item(
             when {
                 owned -> Material.LIME_DYE
-                available -> Material.EMERALD
-                else -> Material.GRAY_DYE
+                else -> Material.RED_DYE
             },
             copy(statePath, stateFallback, "level" to levelNumber.toString()),
             lore,
@@ -720,13 +702,21 @@ internal class MountGuiItems(
                 .takeIf { it >= 0 }
                 ?.plus(1)
         val material =
-            if (!available) Material.BARRIER
+            if (!available) Material.RED_DYE
             else STEP_TUNING_MATERIALS[tuning.walkingStepHeightsHundredths.indexOf(hundredths).coerceAtLeast(0)]
         return item(
             material,
             copy(
-                if (selected) "progression.step-selected-name" else "progression.step-name",
-                if (selected) "<#2bba43>Подъём: <step> блока" else "<#92bed8>Подъём: <step> блока",
+                when {
+                    selected -> "progression.step-selected-name"
+                    !available -> "progression.step-locked-name"
+                    else -> "progression.step-name"
+                },
+                when {
+                    selected -> "<#2bba43>Подъём: <step> блока"
+                    !available -> "<#c42323>Подъём: <step> блока"
+                    else -> "<#92bed8>Подъём: <step> блока"
+                },
                 "step" to formatHeight(hundredths / 100.0),
             ),
             buildList {
@@ -779,10 +769,18 @@ internal class MountGuiItems(
                 else -> Material.ARMOR_STAND
             }
         return item(
-            if (available) material else Material.BARRIER,
+            if (available) material else Material.RED_DYE,
             copy(
-                if (selected) "progression.size-selected-name" else "progression.size-name",
-                if (selected) "<#2bba43>Размер: <size>" else "<#92bed8>Размер: <size>",
+                when {
+                    selected -> "progression.size-selected-name"
+                    !available -> "progression.size-locked-name"
+                    else -> "progression.size-name"
+                },
+                when {
+                    selected -> "<#2bba43>Размер: <size>"
+                    !available -> "<#c42323>Размер: <size>"
+                    else -> "<#92bed8>Размер: <size>"
+                },
                 "size" to escape(option.displayName.lowercase()),
             ),
             buildList {
@@ -871,12 +869,12 @@ internal class MountGuiItems(
             )
         }
 
-    fun glowItem(mount: MountDefinition, profile: MountProfile): ItemStack =
+    fun glowItem(mount: MountDefinition, profile: MountProfile, merchantAvailable: Boolean = true): ItemStack =
         when {
             !profile.unlocked ->
                 item(
-                    Material.GRAY_DYE,
-                    copy("detail.glow-locked-name", "<#969696>Свечение недоступно"),
+                    Material.RED_DYE,
+                    copy("detail.glow-locked-name", "<#c42323>Свечение недоступно"),
                     copyLines("detail.glow-locked-lore", listOf("<#8c8c8c>Сначала получите маунта.")),
                 )
             profile.glowOwned ->
@@ -895,15 +893,15 @@ internal class MountGuiItems(
                 )
             mount.glowPrice != null ->
                 item(
-                    Material.GLOW_INK_SAC,
-                    copy("detail.glow-buy-name", "<#92bed8>Купить свечение"),
+                    Material.RED_DYE,
+                    copy("detail.glow-buy-name", "<#c42323>Купить свечение"),
                     buildList {
                         add(priceLine("Цена", mount.glowPrice.toExactMinor(), mount.currency))
-                        if (configProvider().purchasesEnabled) {
+                        if (configProvider().purchasesEnabled && merchantAvailable) {
                             add("")
                             add(actionFooter("открыть покупку"))
                         } else {
-                            add(configProvider().guiText("common.purchases-at-spawn", "<#ff9f0f>Покупка доступна на спавне."))
+                            add(configProvider().guiText("common.purchases-at-spawn", "<#ff9f0f>Покупка: Гектор или Эмма во дворе маунтов на спавне."))
                         }
                     },
                 )
@@ -946,13 +944,14 @@ internal class MountGuiItems(
     fun abilityItem(
         profile: MountProfile,
         ability: MountAbilityUpgradeDefinition,
+        merchantAvailable: Boolean = true,
     ): ItemStack {
         val owned = profile.ownsAbility(ability.id)
         return item(
-            Material.matchMaterial(ability.iconMaterial) ?: Material.PAPER,
+            if (owned) Material.matchMaterial(ability.iconMaterial) ?: Material.PAPER else Material.RED_DYE,
             copy(
                 if (owned) "detail.ability-owned-name" else "detail.ability-available-name",
-                if (owned) "<#2bba43><ability>" else "<#92bed8><ability>",
+                if (owned) "<#2bba43><ability>" else "<#c42323><ability>",
                 "ability" to escape(ability.displayName),
             ),
             buildList {
@@ -979,11 +978,11 @@ internal class MountGuiItems(
                     owned -> add(copy("detail.ability-owned", "<#2bba43>Куплено навсегда"))
                     else -> {
                         add(priceLine("Цена", ability.price.toExactMinor(), ability.currency))
-                        if (configProvider().purchasesEnabled) {
+                        if (configProvider().purchasesEnabled && merchantAvailable) {
                             add("")
                             add(actionFooter("открыть покупку"))
                         } else {
-                            add(configProvider().guiText("common.purchases-at-spawn", "<#ff9f0f>Покупка доступна на спавне."))
+                            add(configProvider().guiText("common.purchases-at-spawn", "<#ff9f0f>Покупка: Гектор или Эмма во дворе маунтов на спавне."))
                         }
                     }
                 }
@@ -992,7 +991,7 @@ internal class MountGuiItems(
         )
     }
 
-    fun skinItem(mount: MountDefinition, profile: MountProfile, skinId: String): ItemStack {
+    fun skinItem(mount: MountDefinition, profile: MountProfile, skinId: String, merchantAvailable: Boolean = true): ItemStack {
         if (skinId == MountDefinition.DEFAULT_SKIN_ID) {
             val selected = profile.activeSkinId == skinId
             return item(
@@ -1017,11 +1016,11 @@ internal class MountGuiItems(
         val owned = profile.ownsSkin(skinId)
         val selected = profile.activeSkinId == skinId
         return item(
-            Material.matchMaterial(skin.iconMaterial) ?: Material.LEATHER_HORSE_ARMOR,
+            if (owned || selected) Material.matchMaterial(skin.iconMaterial) ?: Material.LEATHER_HORSE_ARMOR else Material.RED_DYE,
             when {
                 selected -> copy("skins.skin-selected-name", "<#2bba43><skin>", "skin" to escape(skin.displayName))
                 owned -> copy("skins.skin-owned-name", "<#ffacd5><skin>", "skin" to escape(skin.displayName))
-                else -> copy("skins.skin-buy-name", "<#969696><skin>", "skin" to escape(skin.displayName))
+                else -> copy("skins.skin-buy-name", "<#c42323><skin>", "skin" to escape(skin.displayName))
             },
             listOf("") + appearanceDeltaLore(mount, skin) + buildList {
                 when {
@@ -1032,11 +1031,11 @@ internal class MountGuiItems(
                     }
                     skin.price != null -> {
                         add(priceLine("Цена", skin.price.toExactMinor(), mount.currency))
-                        if (configProvider().purchasesEnabled) {
+                        if (configProvider().purchasesEnabled && merchantAvailable) {
                             add("")
                             add(actionFooter("открыть покупку"))
                         } else {
-                            add(configProvider().guiText("common.purchases-at-spawn", "<#ff9f0f>Покупка доступна на спавне."))
+                            add(configProvider().guiText("common.purchases-at-spawn", "<#ff9f0f>Покупка: Гектор или Эмма во дворе маунтов на спавне."))
                         }
                     }
                     else -> add(copy("skins.special-reward", "<#ff9f0f>Особая награда"))

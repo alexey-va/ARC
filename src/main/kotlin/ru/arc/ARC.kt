@@ -82,6 +82,7 @@ import ru.arc.origin.OriginPortalsModule
 import ru.arc.origin.OriginDiningModule
 import ru.arc.origin.OriginTrainingDummyModule
 import ru.arc.origin.scene.OriginAmbientScenesModule
+import ru.arc.origin.mountyard.OriginMountYardModule
 import ru.arc.paper.chunk.PaperChunkTicketRegistry
 import ru.arc.restart.RestartModule
 import ru.arc.travelanchors.TravelAnchorsModule
@@ -241,6 +242,7 @@ open class ARC : JavaPlugin() {
             OriginDiningModule,
             OriginAmbientScenesModule,
             OriginTrainingDummyModule,
+            OriginMountYardModule,
             // Configuration (priority 30-49)
             ConfigModule,
             MetricsModule,
@@ -390,6 +392,9 @@ open class ARC : JavaPlugin() {
                 "modules/origin-spawn.yml",
                 "modules/origin-dining.yml",
                 "modules/origin-scenes.yml",
+                "modules/origin-mount-yard.yml",
+                "modules/origin-mount-care.yml",
+                "modules/mount-care-boost.yml",
                 "modules/announce.yml",
                 "modules/scheduled-commands.yml",
                 "modules/restart.yml",

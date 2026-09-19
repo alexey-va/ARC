@@ -51,6 +51,48 @@ class ArcMenuConfigurationTest : StringSpec({
         }
     }
 
+    "bundled mount schemas keep content and controls on their production rows" {
+        val configuration = ArcMenuConfiguration.loadResource(javaClass.classLoader)
+
+        configuration.catalog.require(ArcMenuSchema.MOUNT_LIST).apply {
+            rows shouldBe 6
+            backgroundTemplate shouldBe null
+            region(ArcMenuSchema.MOUNT_ENTRIES).map { it.index } shouldContainExactly (0..44).toList()
+            slot("previous").index shouldBe 45
+            slot("filter").index shouldBe 49
+            slot("next").index shouldBe 53
+            elements.keys shouldContainExactly setOf("previous", "filter", "next").map(MenuElementId::of).toSet()
+        }
+        configuration.catalog.require(ArcMenuSchema.MOUNT_PROGRESSION).apply {
+            rows shouldBe 3
+            backgroundTemplate shouldBe null
+            slot("info").index shouldBe 4
+            slot("back").index shouldBe 18
+            slot("tuning").index shouldBe 22
+            region(ArcMenuSchema.MOUNT_LEVELS).map { it.index } shouldContainExactly listOf(11, 13, 15)
+        }
+        configuration.catalog.require(ArcMenuSchema.MOUNT_TUNING).apply {
+            rows shouldBe 5
+            backgroundTemplate shouldBe null
+            slot("info").index shouldBe 4
+            region(ArcMenuSchema.MOUNT_SPEEDS).map { it.index } shouldContainExactly (11..15).toList()
+            region(ArcMenuSchema.MOUNT_STEPS).map { it.index } shouldContainExactly (20..24).toList()
+            region(ArcMenuSchema.MOUNT_SIZES).map { it.index } shouldContainExactly (29..33).toList()
+            slot("back").index shouldBe 36
+            slot("rider-view").index shouldBe 40
+        }
+        configuration.catalog.require(ArcMenuSchema.MOUNT_SKINS).apply {
+            rows shouldBe 6
+            backgroundTemplate shouldBe null
+            region(ArcMenuSchema.MOUNT_SKIN_ENTRIES).map { it.index } shouldContainExactly (0..44).toList()
+            slot("previous").index shouldBe 45
+            slot("back").index shouldBe 49
+            slot("next").index shouldBe 53
+        }
+        configuration.catalog.require(ArcMenuSchema.MOUNT_DETAIL).backgroundTemplate shouldBe null
+        configuration.catalog.require(ArcMenuSchema.MOUNT_CONFIRM).backgroundTemplate shouldBe null
+    }
+
     "investigation menu backgrounds render the canonical filler model" {
         val configuration = ArcMenuConfiguration.loadResource(javaClass.classLoader)
         val factory = PaperMenuItemFactory()

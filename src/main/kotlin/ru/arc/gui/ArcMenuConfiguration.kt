@@ -42,6 +42,7 @@ object ArcMenuSchema {
     val MOUNT_LIST = MenuId.of("mount-list")
     val MOUNT_DETAIL = MenuId.of("mount-detail")
     val MOUNT_PROGRESSION = MenuId.of("mount-progression")
+    val MOUNT_TUNING = MenuId.of("mount-tuning")
     val MOUNT_SKINS = MenuId.of("mount-skins")
     val MOUNT_CONFIRM = MenuId.of("mount-confirm")
     val STORE = (2..6).associateWith { MenuId.of("store-$it") }
@@ -67,6 +68,7 @@ object ArcMenuSchema {
     val BOARD_ENTRIES = MenuRegionId.of("board-entries")
     val MOUNT_ENTRIES = MenuRegionId.of("mounts")
     val MOUNT_ABILITIES = MenuRegionId.of("abilities")
+    val MOUNT_LEVELS = MenuRegionId.of("levels")
     val MOUNT_SPEEDS = MenuRegionId.of("speeds")
     val MOUNT_STEPS = MenuRegionId.of("steps")
     val MOUNT_SIZES = MenuRegionId.of("sizes")
@@ -172,7 +174,7 @@ object ArcMenuSchema {
             optionalElements = elements("delete"),
         ),
         MOUNT_LIST to MenuContract(
-            requiredElements = elements("info", "back", "previous", "filter", "next"),
+            requiredElements = elements("previous", "filter", "next"),
             requiredRegions = setOf(MOUNT_ENTRIES),
         ),
         MOUNT_DETAIL to MenuContract(
@@ -180,11 +182,15 @@ object ArcMenuSchema {
             requiredRegions = setOf(MOUNT_ABILITIES),
         ),
         MOUNT_PROGRESSION to MenuContract(
-            requiredElements = elements("info", "level", "back", "rider-view"),
+            requiredElements = elements("info", "back", "tuning"),
+            requiredRegions = setOf(MOUNT_LEVELS),
+        ),
+        MOUNT_TUNING to MenuContract(
+            requiredElements = elements("info", "back", "rider-view"),
             requiredRegions = setOf(MOUNT_SPEEDS, MOUNT_STEPS, MOUNT_SIZES),
         ),
         MOUNT_SKINS to MenuContract(
-            requiredElements = elements("back"),
+            requiredElements = elements("previous", "next", "back"),
             requiredRegions = setOf(MOUNT_SKIN_ENTRIES),
         ),
         MOUNT_CONFIRM to MenuContract(requiredElements = elements("cancel", "info", "accept")),

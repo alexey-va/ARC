@@ -69,31 +69,47 @@ class OriginSceneExecutionTest : FreeSpec({
         }
     }
 
-    "transient cleanup failure keeps ownership until the next main-thread retry" {
+    "player click cleans up and releases at the current position" {
+        val effects = RecordingSceneEffects()
+        val scheduler = TestTaskScheduler()
+        val run = OriginSceneExecution(listOf("work"), 5, effects, scheduler)
+        run.start()
+        run.interrupt("player-click", OriginSceneRecoveryPolicy.KEEP_CURRENT_POSITION)
+
+        run.phase shouldBe OriginSceneExecutionPhase.FINISHED
+        effects.cleanups shouldBe listOf(false)
+        effects.returns shouldBe emptyList()
+        effects.releases shouldBe listOf("player-click")
+        scheduler.pendingCount() shouldBe 0
+    }
+
+    "player click cleanup failure keeps retrying without home recovery" {
         val effects = RecordingSceneEffects(failCleanup = true)
         val scheduler = TestTaskScheduler()
         val run = OriginSceneExecution(listOf("work"), 5, effects, scheduler)
         run.start()
-        run.interrupt("player-click")
+        run.interrupt("player-click", OriginSceneRecoveryPolicy.KEEP_CURRENT_POSITION)
         run.phase shouldBe OriginSceneExecutionPhase.RECOVERING
         effects.releases shouldBe emptyList()
         effects.failCleanup = false
         scheduler.tick(20)
         run.phase shouldBe OriginSceneExecutionPhase.FINISHED
         effects.cleanups shouldBe listOf(false, false)
+        effects.returns shouldBe emptyList()
         effects.releases shouldBe listOf("player-click")
         scheduler.pendingCount() shouldBe 0
     }
 
     "permanent recovery failure is bounded and explicitly reported" {
-        val effects = RecordingSceneEffects(failCleanup = true, failReturn = true)
+        val effects = RecordingSceneEffects(failCleanup = true)
         val scheduler = TestTaskScheduler()
         val run = OriginSceneExecution(listOf("work"), 5, effects, scheduler)
         run.start()
-        run.interrupt("player-click")
+        run.interrupt("player-click", OriginSceneRecoveryPolicy.KEEP_CURRENT_POSITION)
         scheduler.tick(100)
         run.phase shouldBe OriginSceneExecutionPhase.FINISHED
         effects.cleanups shouldBe listOf(false, false, false)
+        effects.returns shouldBe emptyList()
         effects.releases shouldBe listOf("player-click-recovery-incomplete")
         scheduler.pendingCount() shouldBe 0
     }
@@ -103,7 +119,7 @@ class OriginSceneExecutionTest : FreeSpec({
         val scheduler = TestTaskScheduler()
         val run = OriginSceneExecution(listOf("work"), 5, effects, scheduler)
         run.start()
-        run.interrupt("player-click")
+        run.interrupt("player-click", OriginSceneRecoveryPolicy.KEEP_CURRENT_POSITION)
         run.close()
         scheduler.tick(100)
         run.phase shouldBe OriginSceneExecutionPhase.FINISHED

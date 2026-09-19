@@ -26,10 +26,13 @@ import org.bukkit.util.Transformation
 import org.joml.AxisAngle4f
 import org.joml.Vector3f
 import ru.arc.core.ScheduledTask
+import ru.arc.core.LifecycleTaskScope
+import ru.arc.core.TaskScheduler
 import ru.arc.core.Tasks
 import ru.arc.util.Common
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
+import java.util.UUID
 
 /**
  * One ARC-owned presentation stack per Citizens NPC: name plus one body layer.
@@ -39,6 +42,8 @@ import ru.arc.util.Logging.warn
  */
 internal class ArcNpcHologramService(
     private var config: ArcNpcHologramConfig,
+    private val store: NpcPresentationStore,
+    scheduler: TaskScheduler = Tasks.scheduler,
 ) : Listener, AutoCloseable {
     companion object {
         const val DISPLAY_TAG = "arc_npc_hologram"
@@ -66,9 +71,9 @@ internal class ArcNpcHologramService(
 
     private data class Stack(
         val npcId: Int,
+        val npcUuid: UUID,
         val state: NpcHologramState,
-        var backup: Backup,
-        var reportHologram: Boolean,
+        var presentation: NpcPresentation,
         var name: TextDisplay? = null,
         var body: TextDisplay? = null,
         var nameComponent: Component? = null,
@@ -77,6 +82,8 @@ internal class ArcNpcHologramService(
     )
 
     private val stacks = mutableMapOf<Int, Stack>()
+    private var catalog = store.load()
+    private val tasks = LifecycleTaskScope(scheduler)
     private val warned = mutableSetOf<String>()
     private val speechBridges = mutableSetOf<Int>()
     private val legacy = LegacyComponentSerializer.builder().character('&').hexColors().build()
@@ -91,13 +98,14 @@ internal class ArcNpcHologramService(
         closed = false
         removeAbandonedDisplays()
         startTasks()
-        Tasks.scheduler.runLater(1L) { reconcileAll() }
+        tasks.runLater(1L) { reconcileAll() }
     }
 
     fun reload(next: ArcNpcHologramConfig) {
+        val replacement = store.load()
+        catalog = replacement
         config = next
-        followTask?.cancel()
-        reconcileTask?.cancel()
+        tasks.restart()
         followTask = null
         reconcileTask = null
         stacks.values.forEach(::removeDisplays)
@@ -105,17 +113,20 @@ internal class ArcNpcHologramService(
         if (config.enabled) {
             closed = false
             startTasks()
-            Tasks.scheduler.runLater(1L) { reconcileAll() }
+            tasks.runLater(1L) { reconcileAll() }
         } else {
-            restoreAll()
+            clearStacks()
         }
     }
 
     fun reconcileAll() {
         if (closed || !config.enabled) return
         val registry = runCatching { CitizensAPI.getNPCRegistry() }.getOrNull() ?: return
+        val npcs = registry.toList()
+        // Persist the complete migration before touching any native presentation.
+        importPresentations(npcs)
         val seen = mutableSetOf<Int>()
-        registry.forEach { npc ->
+        npcs.forEach { npc ->
             seen += npc.id
             reconcile(npc)
         }
@@ -160,74 +171,73 @@ internal class ArcNpcHologramService(
 
     fun patchHologram(npc: NPC, lines: List<String>? = null, lineHeight: Double? = null, viewRange: Int? = null): Boolean {
         val stack = stackFor(npc) ?: return false
-        stack.backup = stack.backup.copy(
-            hadHologram = true,
-            hologramLines = lines?.toList() ?: stack.backup.hologramLines,
-            lineHeight = lineHeight ?: stack.backup.lineHeight,
-            viewRange = viewRange ?: stack.backup.viewRange,
-        )
-        stack.reportHologram = true
-        saveBackup(npc, stack.backup)
-        applyBackup(stack, npc)
+        val authored = lines?.let { resolveNpcHologramPresentation(it, npc.rawName) }
+        updatePresentation(npc, stack, stack.presentation.copy(
+            hasHologram = true,
+            name = authored?.takeIf { it.nameFromAuthoredLine }?.name ?: stack.presentation.name,
+            lines = authored?.lines ?: stack.presentation.lines,
+            lineHeight = lineHeight ?: stack.presentation.lineHeight,
+            viewRange = viewRange ?: stack.presentation.viewRange,
+        ))
         return true
     }
 
     fun clearHologram(npc: NPC): Boolean {
         val stack = stackFor(npc) ?: return false
-        npc.getTraitNullable(HologramTrait::class.java)?.let { npc.removeTrait(HologramTrait::class.java) }
-        stack.backup = stack.backup.copy(hadHologram = false, hologramLines = emptyList())
-        stack.reportHologram = false
-        saveBackup(npc, stack.backup)
-        applyBackup(stack, npc)
+        updatePresentation(npc, stack, stack.presentation.copy(hasHologram = false, lines = emptyList()))
         return true
     }
 
     fun patchNameplate(npc: NPC, mode: String): Boolean {
         val stack = stackFor(npc) ?: return false
         val normalized = mode.lowercase()
-        stack.backup = stack.backup.copy(
-            nameplateValue = normalized,
-            forceNameVisible = normalized != "false" && normalized != "hidden",
-        )
-        saveBackup(npc, stack.backup)
-        applyBackup(stack, npc)
+        updatePresentation(npc, stack, stack.presentation.copy(nameVisible = normalized !in setOf("false", "hidden")))
         return true
     }
 
-    fun desiredNameplate(npc: NPC): String? = stacks[npc.id]?.backup?.nameplateValue
+    fun patchName(npc: NPC, name: String): Boolean {
+        val stack = stackFor(npc) ?: return false
+        updatePresentation(npc, stack, stack.presentation.copy(name = name))
+        return true
+    }
 
-    fun desiredSpeechBubbles(npc: NPC): Boolean? = stacks[npc.id]?.backup?.speechBubbles
+    fun desiredName(npc: NPC): String? = catalog[npc.uniqueId]?.presentation?.name
+    fun isManaged(npc: NPC): Boolean = catalog.containsKey(npc.uniqueId)
+    fun desiredNameplate(npc: NPC): String? = catalog[npc.uniqueId]?.presentation?.nameVisible?.toString()
+    fun desiredSpeechBubbles(npc: NPC): Boolean? = catalog[npc.uniqueId]?.presentation?.speechBubbles
 
     fun onTextPatched(npc: NPC, desiredSpeechBubbles: Boolean?) {
         val stack = stackFor(npc) ?: return
         val text = npc.getTraitNullable(Text::class.java)
-        val desired = desiredSpeechBubbles ?: stack.backup.speechBubbles
-        stack.backup = stack.backup.copy(
+        val desired = desiredSpeechBubbles ?: stack.presentation.speechBubbles
+        updatePresentation(npc, stack, stack.presentation.copy(
             speechBubbles = desired,
-            sendTextToChat = stack.backup.sendTextToChat ?: text?.sendTextToChat(),
-        )
-        saveBackup(npc, stack.backup)
+            sendTextToChat = stack.presentation.sendTextToChat ?: text?.sendTextToChat(),
+        ))
         when {
-            desired != true -> unbridgeSpeech(npc, text, stack.backup.sendTextToChat)
+            desired != true -> unbridgeSpeech(npc, text, stack.presentation.sendTextToChat)
             text == null -> speechBridges.remove(npc.id)
             else -> bridgeSpeech(npc, text)
         }
     }
 
     fun summary(npc: NPC): Map<String, Any?>? {
-        val stack = stacks[npc.id] ?: return null
-        if (!stack.reportHologram) return null
+        val presentation = catalog[npc.uniqueId]?.presentation ?: return null
+        if (!presentation.hasHologram) return null
         return linkedMapOf(
-            "lines" to stack.backup.hologramLines,
-            "lineHeight" to stack.backup.lineHeight,
-            "viewRange" to stack.backup.viewRange,
+            "lines" to presentation.lines,
+            "lineHeight" to presentation.lineHeight,
+            "viewRange" to presentation.viewRange,
         )
     }
 
     @EventHandler
     fun onSpawn(event: NPCSpawnEvent) {
         if (!isPrimaryNpc(event.npc)) return
-        Tasks.scheduler.runLater(1L) { reconcile(event.npc) }
+        tasks.runLater(1L) {
+            importPresentations(listOf(event.npc))
+            reconcile(event.npc)
+        }
     }
 
     @EventHandler
@@ -251,61 +261,104 @@ internal class ArcNpcHologramService(
             SPEECH_NEWLINE.split(event.context.message),
             config.speechDurationTicks,
         )
-        if (npcSpeechBridgeCancelsChat(stacks[event.npc.id]?.backup?.sendTextToChat)) event.isCancelled = true
+        if (npcSpeechBridgeCancelsChat(stacks[event.npc.id]?.presentation?.sendTextToChat)) event.isCancelled = true
     }
 
     override fun close() {
         if (closed) return
         closed = true
-        followTask?.cancel()
-        reconcileTask?.cancel()
+        tasks.close()
         followTask = null
         reconcileTask = null
-        restoreAll()
+        clearStacks()
         warned.clear()
         reconciliationReported = false
     }
 
     private fun startTasks() {
-        followTask = Tasks.scheduler.runTimer(config.followIntervalTicks, config.followIntervalTicks) { tickStacks() }
-        reconcileTask = Tasks.scheduler.runTimer(config.reconcileIntervalTicks, config.reconcileIntervalTicks) { reconcileAll() }
+        followTask = tasks.runTimer(config.followIntervalTicks, config.followIntervalTicks) { tickStacks() }
+        reconcileTask = tasks.runTimer(config.reconcileIntervalTicks, config.reconcileIntervalTicks) { reconcileAll() }
     }
 
     private fun reconcile(npc: NPC): Stack? {
         if (closed || !config.enabled) return null
+        val record = catalog[npc.uniqueId] ?: return null
         val trait = npc.getTraitNullable(HologramTrait::class.java)
-        val existing = stacks[npc.id]
         if (trait != null && hasUnsupportedRenderer(trait)) {
-            existing?.let { releaseToNative(npc, it, preserveCurrentTrait = true) }
-            warnOnce("renderer:${npc.id}", "ARC NPC hologram migration skipped NPC {}: custom/item Citizens renderer remains native", npc.id)
+            removeStackOnly(npc.id)
+            warnOnce("renderer:${npc.id}", "ARC NPC hologram reconciliation skipped NPC {}: custom/item Citizens renderer remains native", npc.id)
             return null
         }
-
-        val text = npc.getTraitNullable(Text::class.java)
-        val stored = existing?.backup ?: readBackup(npc)
-        val desiredSpeech = stored?.speechBubbles ?: text?.useSpeechBubbles()
-
-        var backup = stored ?: captureBackup(npc, trait, text)
-        if (backup.sendTextToChat == null && text != null) {
-            backup = backup.copy(sendTextToChat = text.sendTextToChat())
+        if (stacks[npc.id]?.npcUuid?.let { it != npc.uniqueId } == true) removeStackOnly(npc.id)
+        val stack = stacks.getOrPut(npc.id) {
+            Stack(npc.id, npc.uniqueId, NpcHologramState(), record.presentation)
         }
-        if (trait != null && existing != null) {
-            backup = backup.copy(
-                hadHologram = true,
-                hologramLines = trait.lines.toList(),
-                lineHeight = trait.lineHeight,
-                viewRange = trait.viewRange,
+        stack.presentation = record.presentation
+        hideNativeNameplate(npc)
+        // Citizens may reattach this trait at spawn. Keep it empty: removeTrait
+        // invokes run() and unregisters listeners, causing repeated spawn churn.
+        if (trait != null) {
+            if (trait.lines.isNotEmpty()) trait.clear()
+            if (trait.nameRenderer != null) trait.onDespawn()
+        }
+        val text = npc.getTraitNullable(Text::class.java)
+        if (record.presentation.speechBubbles == true && text != null) bridgeSpeech(npc, text)
+        else unbridgeSpeech(npc, text, record.presentation.sendTextToChat)
+        applyPresentation(stack, npc)
+        return stack
+    }
+
+    private fun importPresentations(npcs: List<NPC>) {
+        val additions = linkedMapOf<UUID, NpcPresentationRecord>()
+        npcs.filterNot { it.uniqueId in catalog }.forEach { npc ->
+            val trait = npc.getTraitNullable(HologramTrait::class.java)
+            if (trait != null && hasUnsupportedRenderer(trait)) {
+                warnOnce("renderer:${npc.id}", "ARC NPC hologram migration skipped NPC {}: custom/item Citizens renderer remains native", npc.id)
+                return@forEach
+            }
+            val raw = npc.data().get<String>(BACKUP_KEY, "").takeIf(String::isNotBlank)
+            val backup = if (raw == null) captureBackup(npc, trait, npc.getTraitNullable(Text::class.java)) else {
+                try {
+                    requireNotNull(Common.gson.fromJson(raw, Backup::class.java)).also {
+                        requireNotNull(it.hologramLines).forEach(::requireNotNull)
+                        requireNotNull(it.nameplateValue)
+                    }
+                } catch (failure: Exception) {
+                    warnOnce("backup:${npc.id}", "ARC NPC hologram migration skipped NPC {}: invalid legacy backup", npc.id)
+                    return@forEach
+                }
+            }
+            val resolved = resolveNpcHologramPresentation(backup.hologramLines, npc.rawName)
+            additions[npc.uniqueId] = NpcPresentationRecord(
+                npcId = npc.id,
+                presentation = NpcPresentation(
+                    name = resolved.name,
+                    nameVisible = backup.forceNameVisible ?: (resolved.nameFromAuthoredLine || backup.nameplateValue !in setOf("false", "hidden")),
+                    lines = resolved.lines,
+                    lineHeight = backup.lineHeight,
+                    viewRange = backup.viewRange,
+                    hasHologram = backup.hadHologram,
+                    speechBubbles = backup.speechBubbles,
+                    sendTextToChat = backup.sendTextToChat,
+                ),
+                legacyBackup = raw ?: Common.gson.toJson(backup),
             )
         }
-        val stack = existing ?: Stack(npc.id, NpcHologramState(), backup, backup.hadHologram).also { stacks[npc.id] = it }
-        stack.backup = backup
-        stack.reportHologram = backup.hadHologram
-        saveBackup(npc, backup)
-        if (trait != null) npc.removeTrait(HologramTrait::class.java)
-        hideNativeNameplate(npc)
-        if (backup.speechBubbles == true && text != null) bridgeSpeech(npc, text)
-        applyBackup(stack, npc)
-        return stack
+        if (additions.isEmpty()) return
+        val replacement = catalog + additions
+        store.save(replacement)
+        catalog = replacement
+    }
+
+    private fun updatePresentation(npc: NPC, stack: Stack, presentation: NpcPresentation) {
+        val existing = catalog.getValue(npc.uniqueId)
+        if (existing.presentation != presentation) {
+            val replacement = catalog + (npc.uniqueId to existing.copy(presentation = presentation))
+            store.save(replacement)
+            catalog = replacement
+        }
+        stack.presentation = presentation
+        applyPresentation(stack, npc)
     }
 
     private fun captureBackup(npc: NPC, trait: HologramTrait?, text: Text?): Backup = Backup(
@@ -318,23 +371,25 @@ internal class ArcNpcHologramService(
         sendTextToChat = text?.sendTextToChat(),
     )
 
-    private fun applyBackup(stack: Stack, npc: NPC) {
-        val presentation = resolveNpcHologramPresentation(stack.backup.hologramLines, npc.rawName)
-        val showName = stack.backup.forceNameVisible ?: (
-            presentation.nameFromAuthoredLine || stack.backup.nameplateValue !in setOf("false", "hidden")
-        )
+    private fun applyPresentation(stack: Stack, npc: NPC) {
+        val presentation = stack.presentation
         val source = NpcHologramSource(
-            name = presentation.name.takeIf { showName },
+            name = presentation.name.takeIf { presentation.nameVisible },
             lines = presentation.lines,
-            lineHeight = stack.backup.lineHeight,
-            viewRange = stack.backup.viewRange,
+            lineHeight = presentation.lineHeight,
+            viewRange = presentation.viewRange,
         )
         val sourceChanged = stack.state.apply(source)
         if (sourceChanged) renderSource(stack)
         updateDisplays(stack, npc, refreshText = sourceChanged)
     }
 
-    private fun stackFor(npc: NPC): Stack? = stacks[npc.id] ?: reconcile(npc)
+    private fun stackFor(npc: NPC): Stack? {
+        if (closed || !config.enabled) return null
+        stacks[npc.id]?.takeIf { it.npcUuid == npc.uniqueId }?.let { return it }
+        importPresentations(listOf(npc))
+        return reconcile(npc)
+    }
 
     private fun isPrimaryNpc(npc: NPC): Boolean =
         runCatching { npc.owningRegistry === CitizensAPI.getNPCRegistry() }.getOrDefault(false)
@@ -343,7 +398,7 @@ internal class ArcNpcHologramService(
         if (closed || !config.enabled) return
         stacks.values.toList().forEach { stack ->
             val npc = CitizensAPI.getNPCRegistry().getById(stack.npcId)
-            if (npc == null) {
+            if (npc == null || npc.uniqueId != stack.npcUuid) {
                 removeStackOnly(stack.npcId)
                 return@forEach
             }
@@ -471,54 +526,10 @@ internal class ArcNpcHologramService(
         }
     }
 
-    private fun restoreAll() {
-        val registry = runCatching { CitizensAPI.getNPCRegistry() }.getOrNull()
-        stacks.values.toList().forEach { stack ->
-            val npc = registry?.getById(stack.npcId)
-            if (npc != null) restoreNative(npc, stack) else removeDisplays(stack)
-        }
+    private fun clearStacks() {
+        stacks.values.forEach(::removeDisplays)
         stacks.clear()
         speechBridges.clear()
-    }
-
-    private fun restoreNative(npc: NPC, stack: Stack) {
-        removeDisplays(stack)
-        if (stack.backup.hadHologram) {
-            val trait = npc.getOrAddTrait(HologramTrait::class.java)
-            trait.clear()
-            stack.backup.hologramLines.forEach(trait::addLine)
-            trait.lineHeight = stack.backup.lineHeight
-            trait.viewRange = stack.backup.viewRange
-        } else {
-            npc.getTraitNullable(HologramTrait::class.java)?.let { npc.removeTrait(HologramTrait::class.java) }
-        }
-        restoreNativeNameplate(npc, stack.backup.nameplateValue)
-        restoreSpeech(npc, stack.backup.speechBubbles, stack.backup.sendTextToChat)
-        npc.data().remove(BACKUP_KEY)
-    }
-
-    private fun releaseToNative(npc: NPC, stack: Stack, preserveCurrentTrait: Boolean) {
-        removeDisplays(stack)
-        if (!preserveCurrentTrait || npc.getTraitNullable(HologramTrait::class.java) == null) {
-            if (stack.backup.hadHologram) {
-                val trait = npc.getOrAddTrait(HologramTrait::class.java)
-                trait.clear()
-                stack.backup.hologramLines.forEach(trait::addLine)
-                trait.lineHeight = stack.backup.lineHeight
-                trait.viewRange = stack.backup.viewRange
-            }
-        }
-        restoreNativeNameplate(npc, stack.backup.nameplateValue)
-        restoreSpeech(npc, stack.backup.speechBubbles, stack.backup.sendTextToChat)
-        npc.data().remove(BACKUP_KEY)
-        stacks.remove(npc.id)
-        speechBridges.remove(npc.id)
-    }
-
-    private fun restoreSpeech(npc: NPC, desired: Boolean?, desiredSendTextToChat: Boolean?) {
-        val text = npc.getTraitNullable(Text::class.java) ?: return
-        if (desired != null && text.useSpeechBubbles() != desired) text.toggleSpeechBubbles()
-        if (desiredSendTextToChat != null && text.sendTextToChat() != desiredSendTextToChat) text.toggleSendTextToChat()
     }
 
     private fun removeDisplays(stack: Stack) {
@@ -550,27 +561,6 @@ internal class ArcNpcHologramService(
         if (nativeNameplateValue(npc) == "false") return
         npc.data().setPersistent(NPC.Metadata.NAMEPLATE_VISIBLE, false)
         npc.scheduleUpdate(NPCUpdate.PACKET)
-    }
-
-    private fun restoreNativeNameplate(npc: NPC, value: String) {
-        val restored: Any = when (value.lowercase()) {
-            "false", "hidden" -> false
-            "hover" -> "hover"
-            else -> true
-        }
-        npc.data().setPersistent(NPC.Metadata.NAMEPLATE_VISIBLE, restored)
-        npc.scheduleUpdate(NPCUpdate.PACKET)
-    }
-
-    private fun saveBackup(npc: NPC, backup: Backup) {
-        npc.data().setPersistent(BACKUP_KEY, Common.gson.toJson(backup))
-    }
-
-    private fun readBackup(npc: NPC): Backup? {
-        val raw = npc.data().get<String>(BACKUP_KEY, "").takeIf(String::isNotBlank) ?: return null
-        return runCatching { Common.gson.fromJson(raw, Backup::class.java) }
-            .onFailure { warnOnce("backup:${npc.id}", "ARC NPC hologram backup is invalid for NPC {}", npc.id) }
-            .getOrNull()
     }
 
     private fun parsePermanentLines(lines: List<String>): Component =

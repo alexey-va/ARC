@@ -60,7 +60,7 @@ object BlueMapNpcMarkers {
                     val location = npc.getStoredLocation() ?: return@forEach
                     val marker =
                         POIMarker(
-                            "#${npc.id} ${npc.name}",
+                            "#${npc.id} ${ru.arc.hooks.citizens.ArcNpcHologramModule.plainName(npc)}",
                             Vector3d(location.x, location.y, location.z),
                         )
                     marker.detail =
@@ -68,7 +68,7 @@ object BlueMapNpcMarkers {
                             append("<b>#")
                             append(npc.id)
                             append(" ")
-                            append(escapeHtml(npc.name))
+                            append(escapeHtml(ru.arc.hooks.citizens.ArcNpcHologramModule.plainName(npc)))
                             append("</b><br>")
                             append(escapeHtml(world.name))
                             append(" · ")

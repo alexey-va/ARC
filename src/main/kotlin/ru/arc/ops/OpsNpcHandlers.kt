@@ -133,7 +133,7 @@ object OpsNpcHandlers {
                     nearest?.let { (npc, distance) ->
                         mapOf(
                             "id" to npc.id,
-                            "name" to npc.name,
+                            "name" to (ArcNpcHologramModule.desiredName(npc) ?: npc.name),
                             "distance" to "%.2f".format(distance),
                         )
                     },
@@ -229,7 +229,7 @@ object OpsNpcHandlers {
         val location = locationOverride ?: persistentLocation(npc)
         val type = npc.getTraitNullable(MobType::class.java)?.type ?: npc.entity?.type
         val spec = linkedMapOf<String, Any?>(
-            "name" to npc.name,
+            "name" to (ArcNpcHologramModule.desiredName(npc) ?: npc.name),
             "nameplate" to nameplateSummary(npc),
             "type" to type?.name,
             "protected" to npc.isProtected,
@@ -249,8 +249,8 @@ object OpsNpcHandlers {
         }
         npc.getTraitNullable(LookClose::class.java)?.let { spec["lookClose"] = lookCloseSummary(it) }
         npc.getTraitNullable(CommandTrait::class.java)?.let { spec["commands"] = commandSummary(it) }
-        val hologram = ArcNpcHologramModule.summary(npc)
-            ?: npc.getTraitNullable(HologramTrait::class.java)?.let(::hologramSummary)
+        val hologram = if (ArcNpcHologramModule.isManaged(npc)) ArcNpcHologramModule.summary(npc)
+            else npc.getTraitNullable(HologramTrait::class.java)?.let(::hologramSummary)
         hologram?.let { spec["hologram"] = it }
         npc.getTraitNullable(Equipment::class.java)?.let { spec["equipment"] = equipmentSummary(it) }
         npc.getTraitNullable(Waypoints::class.java)?.let { spec["path"] = pathSummary(it) }
@@ -261,7 +261,7 @@ object OpsNpcHandlers {
             "id" to npc.id,
             "uuid" to npc.uniqueId.toString(),
             "minecraftUuid" to npc.minecraftUniqueId.toString(),
-            "name" to npc.name,
+            "name" to (ArcNpcHologramModule.desiredName(npc) ?: npc.name),
             "entityType" to type?.name,
             "spawned" to npc.isSpawned,
             "protected" to npc.isProtected,
@@ -331,7 +331,9 @@ object OpsNpcHandlers {
         prepared: PreparedNpcSpec,
         created: Boolean,
     ) {
-        (spec.name as? NpcPatch.Set)?.let { npc.name = it.value }
+        (spec.name as? NpcPatch.Set)?.let {
+            if (!ArcNpcHologramModule.patchName(npc, it.value)) npc.name = it.value
+        }
         applyNameplate(npc, spec.nameplate)
         (spec.type as? NpcPatch.Set)?.let { npc.setBukkitEntityType(it.value) }
         when (val value = spec.protectedState) {

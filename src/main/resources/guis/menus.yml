@@ -304,13 +304,11 @@ menus:
       schema-version: 1
       rows: 6
       elements:
-        info: { slot: 4, template: background }
-        back: { slot: 45, template: background }
-        previous: { slot: 48, template: background }
+        previous: { slot: 45, template: background }
         filter: { slot: 49, template: background }
-        next: { slot: 50, template: background }
+        next: { slot: 53, template: background }
       regions:
-        mounts: { slots: [10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43] }
+        mounts: { slots: ['0-44'] }
     mount-detail:
       schema-version: 1
       rows: 5
@@ -327,23 +325,33 @@ menus:
         abilities: { slots: [29, 30, 31, 32, 33] }
     mount-progression:
       schema-version: 1
-      rows: 6
+      rows: 3
       elements:
         info: { slot: 4, template: background }
-        level: { slot: 13, template: background }
-        back: { slot: 45, template: background }
-        rider-view: { slot: 49, template: background }
+        back: { slot: 18, template: background }
+        tuning: { slot: 22, template: background }
       regions:
-        speeds: { slots: ['20-24'] }
-        steps: { slots: ['29-33'] }
-        sizes: { slots: ['38-42'] }
+        levels: { slots: [11, 13, 15] }
+    mount-tuning:
+      schema-version: 1
+      rows: 5
+      elements:
+        info: { slot: 4, template: background }
+        back: { slot: 36, template: background }
+        rider-view: { slot: 40, template: background }
+      regions:
+        speeds: { slots: ['11-15'] }
+        steps: { slots: ['20-24'] }
+        sizes: { slots: ['29-33'] }
     mount-skins:
       schema-version: 1
       rows: 6
       elements:
-        back: { slot: 45, template: background }
+        previous: { slot: 45, template: background }
+        back: { slot: 49, template: background }
+        next: { slot: 53, template: background }
       regions:
-        skins: { slots: [10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34] }
+        skins: { slots: ['0-44'] }
     mount-confirm:
       schema-version: 1
       rows: 3

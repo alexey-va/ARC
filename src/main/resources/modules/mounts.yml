@@ -78,7 +78,7 @@ gui:
       footer-buy: "<#8c8c8c>[<#ff9f0f>▶<#8c8c8c>] <#ff9f0f>ЛКМ<#e6fff3> — купить"
       footer-cancel: "<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ЛКМ<#e6fff3> — отменить"
       selected: "<#2bba43>Выбрано"
-      purchases-at-spawn: "<#ff9f0f>Покупка доступна у торговца маунтами на спавне."
+      purchases-at-spawn: "<#ff9f0f>Покупка: Гектор или Эмма во дворе маунтов на спавне."
       back-name: "<#92bed8>Назад"
       price: "<#8c8c8c>Цена: <#ffacd5><price> <white><bold:false>💰</bold></white>"
       price-vault: "<#8c8c8c>Цена: <#ffacd5><price> <white><bold:false>💰</bold></white>"
@@ -126,7 +126,7 @@ gui:
       empty-lore:
         - ""
         - "<#b8b8b8>Маунтов можно приобрести у"
-        - "<#b8b8b8>Конюшего Остромира на спавне."
+        - "<#b8b8b8>Гектора во дворе маунтов на спавне."
       empty-filter-lore:
         - ""
         - "<#b8b8b8>Смените категорию внизу меню."
@@ -152,7 +152,7 @@ gui:
         - ""
         - "<#8c8c8c>Получение: <#e6fff3><acquisition>"
       mount-acquirable-footer: "<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ЛКМ<#e6fff3> — открыть получение"
-      mount-locked-name: "<#969696><mount>"
+      mount-locked-name: "<#c42323><mount>"
       mount-locked-core:
         - "<#c42323>✘ Не получен"
         - "<rarity>"
@@ -220,10 +220,10 @@ gui:
       glow-disabled-name: "<#969696>Свечение: выключено"
       glow-enabled-lore:
         - "<#8c8c8c>Свечение куплено навсегда."
-      glow-locked-name: "<#969696>Свечение недоступно"
+      glow-locked-name: "<#c42323>Свечение недоступно"
       glow-locked-lore:
         - "<#8c8c8c>Сначала получите маунта."
-      glow-buy-name: "<#92bed8>Купить свечение"
+      glow-buy-name: "<#c42323>Купить свечение"
       glow-unavailable-name: "<#969696>Свечение недоступно"
       glow-unavailable-lore:
         - "<#8c8c8c>Это украшение не продаётся."
@@ -235,7 +235,7 @@ gui:
       skins-locked-lore:
         - "<#8c8c8c>Сначала получите маунта."
       ability-owned-name: "<#2bba43><ability>"
-      ability-available-name: "<#92bed8><ability>"
+      ability-available-name: "<#c42323><ability>"
       ability-description: "<#8c8c8c><ability-description>"
       ability-speed: "<#8c8c8c>Скорость маунта: <#2bba43>+<increase>%"
       ability-owned: "<#2bba43>Куплено навсегда"
@@ -255,6 +255,7 @@ gui:
       whistle-available-lore:
         - "<#8c8c8c>ПКМ свистком — призвать любимого маунта."
     progression:
+      tuning-title: "<#20252b><bold><mount></bold>"
       back-description: "<#8c8c8c>Вернуться к маунту."
       tuning-back-description: "<#8c8c8c>Вернуться к уровням маунта."
       size-scale: "<#8c8c8c>Масштаб: <#e6fff3>×<scale>"
@@ -308,8 +309,8 @@ gui:
       level-step-upgrade: "<#8c8c8c>Макс. подъём: <#e6fff3><step-before> <#8c8c8c>→ <#2bba43><step-after> блока"
       level-step: "<#8c8c8c>Подъём: <#e6fff3><step> блока"
       level-card-owned-name: "<#2bba43>Уровень <level> · открыт"
-      level-card-available-name: "<#92bed8>Уровень <level> · доступен"
-      level-card-locked-name: "<#969696>Уровень <level> · закрыт"
+      level-card-available-name: "<#c42323>Уровень <level> · доступен"
+      level-card-locked-name: "<#c42323>Уровень <level> · закрыт"
       level-card-owned: "<#2bba43>Уже открыто"
       level-card-locked: "<#969696>Сначала откройте предыдущий уровень"
       level-card-special: "<#ff9f0f><acquisition>"
@@ -320,6 +321,7 @@ gui:
         - "<#8c8c8c>От максимума уровня: <#e6fff3><percentage>%"
       step-name: "<#92bed8>Подъём: <step> блока"
       step-selected-name: "<#2bba43>Подъём: <step> блока"
+      step-locked-name: "<#c42323>Подъём: <step> блока"
       step-lore:
         - "<#8c8c8c>Маунт автоматически заходит"
         - "<#8c8c8c>на препятствия этой высоты."
@@ -329,6 +331,7 @@ gui:
         - "<#8c8c8c>Эта настройка доступна только пешим маунтам."
       size-name: "<#92bed8>Размер: <size>"
       size-selected-name: "<#2bba43>Размер: <size>"
+      size-locked-name: "<#c42323>Размер: <size>"
       rider-view-auto-name: "<#2bba43>Корпус: скрывается"
       rider-view-visible-name: "<#92bed8>Корпус: всегда виден"
       rider-view-lore:
@@ -371,7 +374,7 @@ gui:
         dark-brown: "тёмно-коричневый"
       skin-selected-name: "<#2bba43><skin>"
       skin-owned-name: "<#ffacd5><skin>"
-      skin-buy-name: "<#969696><skin>"
+      skin-buy-name: "<#c42323><skin>"
       special-reward: "<#ff9f0f>Особая награда"
     confirm:
       cancel-name: "<#c42323>Отменить"
@@ -418,7 +421,7 @@ messages:
   whistle-already-owned: "<yellow>Свисток уже лежит у вас в инвентаре."
   whistle-disabled: "<yellow>Свисток маунта отключён на этом сервере."
   inventory-full: "<red>Освободите место в инвентаре."
-  purchases-disabled: "<yellow>Покупки маунтов доступны на спавне."
+  purchases-disabled: "<yellow>Покупки маунтов доступны у Гектора или Эммы во дворе маунтов на спавне."
   purchase-success: "<green>Покупка сохранена!"
   purchase-success-next-summon: "<yellow>Покупка сохранена; новый облик применится при следующем безопасном призыве."
   setting-saved: "<green>Настройка сохранена."
@@ -438,7 +441,7 @@ messages:
   purchase-manual-review: "<dark_red>Покупка приостановлена для безопасной проверки. Повторно не покупайте; обратитесь к администрации."
   admin-grant-all-success: "<green>Все маунты максимального уровня выданы игроку <white><player><green>. Всего: <white><count><green>."
 
-  merchant-required: <#ff9f0f>Покупки доступны у Конюшего Остромира и Шорницы Лады на спавне.
+  merchant-required: <#ff9f0f>Покупки доступны у Гектора или Эммы на спавне.
 ability-upgrades:
   water-breathing:
     name: "Дыхание глубин"
@@ -713,7 +716,7 @@ mounts:
     entity: ZOMBIE
     name: "Зомби"
     rarity: common
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Надёжный городской ходок"
@@ -777,7 +780,7 @@ mounts:
     entity: SKELETON
     name: "Скелет"
     rarity: common
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Сухой, лёгкий и отзывчивый всадник"
@@ -808,7 +811,7 @@ mounts:
     entity: PIG
     name: "Скорен"
     rarity: common
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: vault
     description:
       - "Тот самый Скорен."
@@ -858,7 +861,7 @@ mounts:
     entity: ENDERMAN
     name: "Эндермен"
     rarity: rare
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Высокий странник Бездны"
@@ -889,7 +892,7 @@ mounts:
     entity: HORSE
     name: "Лошадь"
     rarity: uncommon
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: vault
     description:
       - "Классика путешествий:"
@@ -945,7 +948,7 @@ mounts:
     entity: CAMEL
     name: "Верблюд"
     rarity: uncommon
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: vault
     description:
       - "Спокойный караванщик"
@@ -990,7 +993,7 @@ mounts:
     entity: GOAT
     name: "Горный козёл"
     rarity: uncommon
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Упрямый покоритель склонов"
@@ -1024,7 +1027,7 @@ mounts:
     entity: FOX
     name: "Лисица"
     rarity: uncommon
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Юркая рыжая спутница"
@@ -1066,7 +1069,7 @@ mounts:
     entity: FROG
     name: "Лягушка"
     rarity: uncommon
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Пружинистый ходок"
@@ -1106,7 +1109,7 @@ mounts:
     entity: RAVAGER
     name: "Разоритель"
     rarity: epic
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Тяжёлый престижный таран:"
@@ -1173,7 +1176,7 @@ mounts:
     entity: SNIFFER
     name: "Нюхач"
     rarity: rare
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Древний добряк для коллекционеров:"
@@ -1212,7 +1215,7 @@ mounts:
     entity: STRIDER
     name: "Лавомерка"
     rarity: rare
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Редкий спутник Нижнего мира"
@@ -1247,7 +1250,7 @@ mounts:
     entity: BEE
     name: "Пчела"
     rarity: common
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Дружелюбный первый воздушный маунт"
@@ -1291,7 +1294,7 @@ mounts:
     entity: TURTLE
     name: "Летающая черепаха"
     rarity: uncommon
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Невозможная черепаха,"
@@ -1329,7 +1332,7 @@ mounts:
     entity: FROG
     name: "Летающая лягушка"
     rarity: rare
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Манёвренный воздушный собрат"
@@ -1403,7 +1406,7 @@ mounts:
     entity: ALLAY
     name: "Эллэй"
     rarity: uncommon
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Лёгкий музыкальный проводник"
@@ -1440,7 +1443,7 @@ mounts:
     entity: PARROT
     name: "Попугай"
     rarity: uncommon
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Яркий воздушный разведчик"
@@ -1489,7 +1492,7 @@ mounts:
     entity: BAT
     name: "Летучая мышь"
     rarity: uncommon
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Компактный ночной пилот"
@@ -1521,7 +1524,7 @@ mounts:
     entity: VEX
     name: "Вредина"
     rarity: epic
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Эфирный боевой силуэт"
@@ -1558,7 +1561,7 @@ mounts:
     entity: BREEZE
     name: "Вихрь"
     rarity: epic
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Живой порыв ветра"
@@ -1600,7 +1603,7 @@ mounts:
     entity: PHANTOM
     name: "Фантом"
     rarity: epic
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Ночной хищник"
@@ -1632,7 +1635,7 @@ mounts:
     entity: GHAST
     name: "Гаст"
     rarity: legendary
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Корабль Нижнего мира:"
@@ -1676,7 +1679,7 @@ mounts:
     entity: HAPPY_GHAST
     name: "Счастливый гаст"
     rarity: legendary
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Дружелюбный флагман"
@@ -1709,7 +1712,7 @@ mounts:
     entity: DOLPHIN
     name: "Дельфин"
     rarity: common
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Быстрый и естественный водный маунт."
@@ -1739,7 +1742,7 @@ mounts:
     entity: AXOLOTL
     name: "Аксолотль"
     rarity: uncommon
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Милый подводный спутник"
@@ -1776,7 +1779,7 @@ mounts:
     entity: SQUID
     name: "Спрут"
     rarity: uncommon
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Мягкий подводный транспорт"
@@ -1815,7 +1818,7 @@ mounts:
     entity: GLOW_SQUID
     name: "Светящийся спрут"
     rarity: rare
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Редкий светящийся проводник"
@@ -1846,7 +1849,7 @@ mounts:
     entity: CAT
     name: "Кот"
     rarity: uncommon
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Ночной разведчик с мягкими лапами"
@@ -1888,7 +1891,7 @@ mounts:
     entity: WOLF
     name: "Волк"
     rarity: rare
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Быстрый охотник, который усиливает"
@@ -1935,7 +1938,7 @@ mounts:
     entity: ARMADILLO
     name: "Броненосец"
     rarity: uncommon
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Бронированный низкий транспорт"
@@ -1976,7 +1979,7 @@ mounts:
     entity: LLAMA
     name: "Лама"
     rarity: uncommon
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Караванный маунт с устойчивой походкой"
@@ -2017,7 +2020,7 @@ mounts:
     entity: OCELOT
     name: "Оцелот"
     rarity: rare
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Джунглевый спринтер"
@@ -2058,7 +2061,7 @@ mounts:
     entity: PANDA
     name: "Панда"
     rarity: rare
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Тяжёлый медик на бамбуковом топливе"
@@ -2105,7 +2108,7 @@ mounts:
     entity: PUFFERFISH
     name: "Иглобрюх"
     rarity: rare
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Подводный шар с характером"
@@ -2153,7 +2156,7 @@ mounts:
     entity: MAGMA_CUBE
     name: "Магмовый куб"
     rarity: epic
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Прыгающая печка Нижнего мира"
@@ -2199,7 +2202,7 @@ mounts:
     entity: MOOSHROOM
     name: "Мушрум"
     rarity: rare
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Грибная полевая лечебница"
@@ -2240,7 +2243,7 @@ mounts:
     entity: TADPOLE
     name: "Головастик"
     rarity: uncommon
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Крошечная торпеда, которая умеет"
@@ -2288,7 +2291,7 @@ mounts:
     entity: POLAR_BEAR
     name: "Белый медведь"
     rarity: epic
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Арктический танк, который защищает"
@@ -2348,7 +2351,7 @@ mounts:
     entity: COPPER_GOLEM
     name: "Медный голем"
     rarity: epic
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Заводной помощник, превращающий"
@@ -2396,7 +2399,7 @@ mounts:
     entity: IRON_GOLEM
     name: "Железный голем"
     rarity: legendary
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: vault
     description:
       - "Шагающая крепость для всадника"
@@ -2456,7 +2459,7 @@ mounts:
     entity: TRADER_LLAMA
     name: "Лама торговца"
     rarity: rare
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Караванная удача с быстрыми ногами"
@@ -2503,7 +2506,7 @@ mounts:
     entity: SNOW_GOLEM
     name: "Снежный голем"
     rarity: uncommon
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Лёгкий зимний транспорт"
@@ -2550,7 +2553,7 @@ mounts:
     entity: VILLAGER
     name: "Крестьянин"
     rarity: rare
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Самый сомнительный общественный транспорт"
@@ -2597,7 +2600,7 @@ mounts:
     entity: WANDERING_TRADER
     name: "Странствующий торговец"
     rarity: rare
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Передвижной рынок, который наконец"
@@ -2644,7 +2647,7 @@ mounts:
     entity: SKELETON_HORSE
     name: "Лошадь-скелет"
     rarity: epic
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Ночная костяная кавалерия"
@@ -2697,7 +2700,7 @@ mounts:
     entity: WARDEN
     name: "Хранитель"
     rarity: legendary
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Глубинный тяжеловес"
@@ -2756,7 +2759,7 @@ mounts:
     entity: CHICKEN
     name: "Курица"
     rarity: uncommon
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "От карманной паники ×0.1"
@@ -2805,7 +2808,7 @@ mounts:
     entity: GUARDIAN
     name: "Страж"
     rarity: epic
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Бронированный властелин глубин"
@@ -2836,7 +2839,7 @@ mounts:
     entity: TURTLE
     name: "Морская черепаха"
     rarity: rare
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Надёжная морская путешественница"
@@ -2869,7 +2872,7 @@ mounts:
     entity: HOGLIN
     name: "Хоглин"
     rarity: epic
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Тяжёлый незерский таран,"
@@ -2926,7 +2929,7 @@ mounts:
     entity: SHULKER
     name: "Шалкер"
     rarity: rare
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Летающая коробка с открытой крышкой"
@@ -2968,7 +2971,7 @@ mounts:
     entity: ENDERMITE
     name: "Эндермит"
     rarity: common
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Крошечная межмировая табуретка,"
@@ -3004,7 +3007,7 @@ mounts:
     entity: PIGLIN
     name: "Пиглин"
     rarity: uncommon
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Золотолюбивый проводник,"
@@ -3046,7 +3049,7 @@ mounts:
     entity: WITHER_SKELETON
     name: "Скелет-иссушитель"
     rarity: epic
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Высокий незерский всадник"
@@ -3088,7 +3091,7 @@ mounts:
     entity: VINDICATOR
     name: "Поборник"
     rarity: rare
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Злой рейдер с топором,"
@@ -3133,7 +3136,7 @@ mounts:
     entity: CREAKING
     name: "Скрипун"
     rarity: epic
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Живая бледная древесина,"
@@ -3179,7 +3182,7 @@ mounts:
     entity: CREEPER
     name: "Крипер"
     rarity: rare
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Бесшумный зелёный транспорт."
@@ -3221,7 +3224,7 @@ mounts:
     entity: ELDER_GUARDIAN
     name: "Древний страж"
     rarity: legendary
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Океанский исполин,"
@@ -3262,7 +3265,7 @@ mounts:
     entity: SILVERFISH
     name: "Чешуйница"
     rarity: common
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Каменная заноза на максималках:"
@@ -3298,7 +3301,7 @@ mounts:
     entity: WITCH
     name: "Ведьма"
     rarity: rare
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Передвижная алхимическая лавка"
@@ -3340,7 +3343,7 @@ mounts:
     entity: CAMEL_HUSK
     name: "Верблюд-кадавр"
     rarity: epic
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Мёртвый корабль пустыни,"
@@ -3390,7 +3393,7 @@ mounts:
     entity: STRAY
     name: "Зимогор"
     rarity: uncommon
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Ледяной скелет для снежных дорог"
@@ -3427,7 +3430,7 @@ mounts:
     entity: PARCHED
     name: "Пустынник"
     rarity: uncommon
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Высохший скелет жарких земель,"
@@ -3469,7 +3472,7 @@ mounts:
     entity: ZOGLIN
     name: "Зоглин"
     rarity: epic
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Неживой таран без тормозов,"
@@ -3518,7 +3521,7 @@ mounts:
     entity: NAUTILUS
     name: "Наутилус"
     rarity: rare
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Новый океанский скакун"
@@ -3548,7 +3551,7 @@ mounts:
     entity: ZOMBIE_NAUTILUS
     name: "Зомби-наутилус"
     rarity: epic
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Утопленная кавалерия,"
@@ -3585,7 +3588,7 @@ mounts:
     entity: BOGGED
     name: "Болотник"
     rarity: uncommon
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Заросший мхом скелет,"
@@ -3627,7 +3630,7 @@ mounts:
     entity: PIGLIN_BRUTE
     name: "Брутальный пиглин"
     rarity: epic
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Позолоченный тяжеловес"
@@ -3678,7 +3681,7 @@ mounts:
     entity: PILLAGER
     name: "Разбойник"
     rarity: uncommon
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Быстрый участник рейда"
@@ -3720,7 +3723,7 @@ mounts:
     entity: EVOKER
     name: "Заклинатель"
     rarity: epic
-    acquisition: "Магазин маунтов на спавне"
+    acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
       - "Маг рейда, превращённый"

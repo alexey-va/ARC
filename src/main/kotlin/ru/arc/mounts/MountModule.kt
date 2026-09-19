@@ -19,6 +19,7 @@ import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import ru.arc.util.TextUtil
 import java.util.Locale
+import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
 object MountModule : PluginModule {
@@ -34,6 +35,8 @@ object MountModule : PluginModule {
     private var quickSummons: MountQuickSummonController? = null
     private var gui: MountGuiController? = null
     private var transfers: MountTransferController? = null
+    private var careBoosts: MountCareBoostService? = null
+    private var careBoostHydration: MountCareBoostHydrationListener? = null
     private val rewardGrant = MountRewardGrant()
 
     internal fun currentBackgroundStyle(): MountGuiItemStyle? = config?.guiStyle(MountGuiItemRole.BACKGROUND)
@@ -60,6 +63,17 @@ object MountModule : PluginModule {
 
     fun grantReward(player: Player, id: String): CompletableFuture<MountRewardResult> =
         rewardGrant.grant(player, id)
+
+    internal fun claimDailyCareBoost(
+        playerId: UUID,
+        requestId: UUID,
+    ): CompletableFuture<MountCareBoostClaimResult> =
+        careBoosts?.claim(playerId, requestId)
+            ?: CompletableFuture.failedFuture(IllegalStateException("Mount care boost service is unavailable"))
+
+    internal fun dailyCareBoostStatus(playerId: UUID): CompletableFuture<MountCareBoostStatus> =
+        careBoosts?.status(playerId)
+            ?: CompletableFuture.failedFuture(IllegalStateException("Mount care boost service is unavailable"))
 
     internal fun activeMountSnapshot(player: org.bukkit.entity.Player): ActiveMountSnapshot? =
         sessions?.activeMountSnapshot(player)
@@ -90,6 +104,11 @@ object MountModule : PluginModule {
         val wallet = RedisEconomyMountWallet()
         val journal = FileMountPurchaseJournal(ARC.instance.dataPath.resolve("data").resolve("mount-purchases.json"))
         this.journal = journal
+        val loadedCareBoosts = MountCareBoostService(
+            store = ARC.redisManager?.let(::RedisMountCareBoostStore) ?: UnavailableMountCareBoostStore,
+            policy = MountCareBoostPolicy.load(ARC.instance.dataPath),
+        )
+        careBoosts = loadedCareBoosts
         val controller =
             MountSessionController(
                 plugin = ARC.instance,
@@ -101,6 +120,7 @@ object MountModule : PluginModule {
                 setRiderMountHidden = { player, entity, hidden ->
                     HookRegistry.packetEventsHook?.setEntityInvisibleFor(entity, player, hidden)
                 },
+                careBoostStatusProvider = { playerId, nowMillis -> loadedCareBoosts.cachedStatus(playerId, nowMillis) },
             )
         val coordinator =
             MountPurchaseCoordinator(
@@ -177,12 +197,32 @@ object MountModule : PluginModule {
         sessions = controller
         quickSummons = quickSummonController
         gui = guiController
+        val hydration = MountCareBoostHydrationListener(
+            plugin = ARC.instance,
+            scheduler = Tasks.scheduler,
+            service = loadedCareBoosts,
+            isCurrent = { careBoosts === loadedCareBoosts && sessions === controller },
+            onHydrated = { playerId -> refreshCareBoostedMount(playerId, controller, summonService, loadedCatalog) },
+        )
+        careBoostHydration = hydration
         try {
             controller.start()
             quickSummonController.start()
             guiController.start()
             transfers?.start()
             bindCommands(guiController, loadedOwnership, controller)
+            hydration.start()
+            Bukkit.getOnlinePlayers().forEach { player ->
+                loadedCareBoosts.hydrate(player.uniqueId).whenComplete { _, failure ->
+                    if (failure == null) {
+                        Tasks.scheduler.runLater(1L, Runnable {
+                            if (careBoosts === loadedCareBoosts && sessions === controller) {
+                                refreshCareBoostedMount(player.uniqueId, controller, summonService, loadedCatalog)
+                            }
+                        })
+                    }
+                }
+            }
         } catch (failure: Throwable) {
             shutdownRuntime()
             throw failure
@@ -194,6 +234,10 @@ object MountModule : PluginModule {
     private fun shutdownRuntime() {
         rewardGrant.close()
         bindUnavailableCommands()
+        careBoostHydration?.close()
+        careBoostHydration = null
+        careBoosts?.close()
+        careBoosts = null
         transfers?.close()
         transfers = null
         gui?.shutdown()
@@ -208,6 +252,18 @@ object MountModule : PluginModule {
         ownership = null
         catalog = null
         publishMetrics()
+    }
+
+    private fun refreshCareBoostedMount(
+        playerId: UUID,
+        controller: MountSessionController,
+        summonService: MountSummonService,
+        loadedCatalog: MountCatalog,
+    ) {
+        val player = Bukkit.getPlayer(playerId) ?: return
+        val snapshot = controller.activeMountSnapshot(player) ?: return
+        val mount = loadedCatalog[snapshot.mountId] ?: return
+        summonService.refreshActive(player, mount)
     }
 
     private fun bindCommands(
