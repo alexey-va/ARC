@@ -2,12 +2,15 @@ package ru.arc.origin.scene
 
 import org.bukkit.Location
 import org.bukkit.Material
+import org.bukkit.Particle
 import org.bukkit.World
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import ru.arc.npc.NpcRouteBounds
 import ru.arc.npc.NpcRouteProfile
+import ru.arc.util.SoundUtils
 import java.nio.file.Path
+import java.util.Locale
 
 internal data class OriginScenePoint(
     val x: Double,
@@ -17,6 +20,11 @@ internal data class OriginScenePoint(
     val pitch: Float = 0f,
     val explicitPose: Boolean = false,
 ) {
+    init {
+        require(x.isFinite() && y.isFinite() && z.isFinite()) { "scene points must have finite coordinates" }
+        require(yaw.isFinite() && pitch.isFinite()) { "scene poses must have finite yaw and pitch" }
+    }
+
     fun inWorld(world: World): Location = Location(world, x, y, z, yaw, pitch)
 }
 
@@ -117,7 +125,24 @@ internal data class OriginSceneCycle(
     val yieldAnchor: String?,
     val yieldRange: Double,
     val steps: List<OriginSceneStep>,
+    val stepIds: List<String> = steps.indices.map { "step-$it" },
+    val maxDurationTicks: Long = defaultMaxDurationTicks(steps),
 )
+
+private const val MAX_CYCLE_DURATION_TICKS = 1_728_000L // 24 hours at 20 TPS.
+private const val RETURN_AND_SAFETY_MARGIN_TICKS = 1_200L
+
+private fun authoredAsyncDurationTicks(step: OriginSceneStep): Long = when (step) {
+    is OriginSceneStep.Move -> step.timeoutTicks
+    is OriginSceneStep.Wait -> step.ticks
+    is OriginSceneStep.Swing -> (step.repetitions - 1L) * step.periodTicks
+    else -> 0L
+}
+
+private fun defaultMaxDurationTicks(steps: List<OriginSceneStep>): Long {
+    val authored = steps.sumOf(::authoredAsyncDurationTicks)
+    return authored * 2L + RETURN_AND_SAFETY_MARGIN_TICKS
+}
 
 internal data class OriginSceneDefinition(
     val id: String,
@@ -132,53 +157,137 @@ internal data class OriginSceneDefinition(
     val cycles: List<OriginSceneCycle>,
 ) {
     fun validate() {
-        require(id.isNotBlank())
-        require(audienceRange > 0.0)
-        require(maxConcurrentCycles > 0)
-        require(actors.isNotEmpty() && cycles.isNotEmpty())
+        require(id.isNotBlank()) { "scene id must not be blank" }
+        require(audienceRange.isFinite() && audienceRange in 4.0..128.0) {
+            "scene $id audience-range must be finite and within 4..128"
+        }
+        require(retryMillis in 1_000L..120_000L) { "scene $id retry-seconds must be within 1..120" }
+        require(maxConcurrentCycles in 1..8) { "scene $id max-concurrent-cycles must be within 1..8" }
+        require(actors.isNotEmpty() && cycles.isNotEmpty()) { "scene $id must declare actors and cycles" }
+        require(cycles.map(OriginSceneCycle::id).distinct().size == cycles.size) {
+            "scene $id has duplicate cycle ids"
+        }
+        actors.forEach { (actorId, actor) ->
+            require(actorId >= 0 && actor.id == actorId) { "scene $id has invalid actor id $actorId" }
+        }
+        require(anchors.keys.all(String::isNotBlank)) { "scene $id has a blank anchor id" }
+        require(propSurfaces.keys.all(String::isNotBlank)) { "scene $id has a blank prop surface id" }
+        require(routeProfiles.keys.all(String::isNotBlank)) { "scene $id has a blank route profile id" }
         cycles.forEach { cycle ->
+            val cycleContext = "scene $id cycle ${cycle.id}"
+            require(cycle.id.isNotBlank()) { "$cycleContext id must not be blank" }
             require(cycle.actorIds.isNotEmpty() && cycle.actorIds.all(actors::containsKey)) {
-                "scene $id cycle ${cycle.id} references an undeclared actor"
+                "$cycleContext references an undeclared actor"
+            }
+            require(cycle.cooldownMillis.first in 1_000L..3_600_000L && cycle.cooldownMillis.last in 1_000L..3_600_000L) {
+                "$cycleContext cooldown must be within 1..3600 seconds"
+            }
+            require(cycle.initialDelayMillis in 0L..600_000L) {
+                "$cycleContext initial-delay-seconds must be within 0..600"
             }
             require(cycle.yieldAnchor == null || cycle.yieldAnchor in anchors) {
-                "scene $id cycle ${cycle.id} references yield anchor ${cycle.yieldAnchor}"
+                "$cycleContext references yield anchor ${cycle.yieldAnchor}"
             }
-            require(cycle.steps.isNotEmpty()) { "scene $id cycle ${cycle.id} has no steps" }
-            OriginScenePropContract.validateLifecycle(cycle.steps)
-            cycle.steps.forEach { step ->
-                step.actorId?.let { require(it in cycle.actorIds) { "scene $id cycle ${cycle.id} step actor $it is not leased" } }
+            require(cycle.yieldRange.isFinite() && cycle.yieldRange in 1.0..12.0) {
+                "$cycleContext yield-range must be finite and within 1..12"
+            }
+            require(cycle.steps.isNotEmpty()) { "$cycleContext has no steps" }
+            require(cycle.stepIds.size == cycle.steps.size) {
+                "$cycleContext step id count ${cycle.stepIds.size} does not match step count ${cycle.steps.size}"
+            }
+            require(cycle.stepIds.all(String::isNotBlank)) { "$cycleContext has a blank step id" }
+            require(cycle.stepIds.distinct().size == cycle.stepIds.size) { "$cycleContext has duplicate step ids" }
+            require(cycle.maxDurationTicks in 1..MAX_CYCLE_DURATION_TICKS) {
+                "$cycleContext max-duration must be within 1..$MAX_CYCLE_DURATION_TICKS ticks"
+            }
+            OriginScenePropContract.validateLifecycle(cycle.steps) { index ->
+                "$cycleContext step ${cycle.stepIds[index]}"
+            }
+            cycle.steps.forEachIndexed { index, step ->
+                val stepContext = "$cycleContext step ${cycle.stepIds[index]}"
+                step.actorId?.let { actorId ->
+                    require(actorId in cycle.actorIds) { "$stepContext actor $actorId is not leased" }
+                }
                 when (step) {
                     is OriginSceneStep.Move -> {
-                        require(step.anchor in anchors) { "scene $id cycle ${cycle.id} references anchor ${step.anchor}" }
-                        require(step.routeProfile in routeProfiles) { "scene $id cycle ${cycle.id} references route ${step.routeProfile}" }
+                        require(step.timeoutTicks in 20L..1_200L) { "$stepContext timeout-ticks must be within 20..1200" }
+                        require(step.anchor in anchors) { "$stepContext references anchor ${step.anchor}" }
+                        require(step.routeProfile in routeProfiles) { "$stepContext references route ${step.routeProfile}" }
                     }
-                    is OriginSceneStep.LookAtAnchor -> require(step.anchor in anchors)
-                    is OriginSceneStep.LookAtSurface -> require(step.surface in propSurfaces)
-                    is OriginSceneStep.LookAtActor -> require(step.targetActorId in actors)
+                    is OriginSceneStep.Wait -> require(step.ticks in 1L..1_200L) {
+                        "$stepContext ticks must be within 1..1200"
+                    }
+                    is OriginSceneStep.LookAtAnchor -> require(step.anchor in anchors) {
+                        "$stepContext references anchor ${step.anchor}"
+                    }
+                    is OriginSceneStep.LookAtSurface -> require(step.surface in propSurfaces) {
+                        "$stepContext references prop surface ${step.surface}"
+                    }
+                    is OriginSceneStep.LookAtActor -> require(step.targetActorId in actors) {
+                        "$stepContext references actor ${step.targetActorId}"
+                    }
+                    is OriginSceneStep.Equip -> {
+                        val material = Material.matchMaterial(step.material)
+                        require(material != null) {
+                            "$stepContext has unknown material ${step.material}"
+                        }
+                        require(material.isItem || material.isAir) {
+                            "$stepContext material ${step.material} is not an item (AIR is allowed to clear the hand)"
+                        }
+                    }
                     is OriginSceneStep.Swing -> {
-                        require(step.feedbackAnchor == null || step.feedbackAnchor in anchors)
-                        require(step.feedbackSurface == null || step.feedbackSurface in propSurfaces)
+                        require(step.repetitions in 1..20) { "$stepContext repetitions must be within 1..20" }
+                        require(step.periodTicks in 1L..100L) { "$stepContext period-ticks must be within 1..100" }
+                        require(step.feedbackAnchor == null || step.feedbackAnchor in anchors) {
+                            "$stepContext references anchor ${step.feedbackAnchor}"
+                        }
+                        require(step.feedbackSurface == null || step.feedbackSurface in propSurfaces) {
+                            "$stepContext references prop surface ${step.feedbackSurface}"
+                        }
                         require(step.feedbackAnchor == null || step.feedbackSurface == null) {
-                            "scene $id cycle ${cycle.id} swing must reference at most one feedback anchor or surface"
+                            "$stepContext must reference at most one feedback anchor or surface"
                         }
                         require((step.damageTargetNpcId == null) == (step.damageAmount == 0.0)) {
-                            "scene $id cycle ${cycle.id} swing damage target and amount must be configured together"
+                            "$stepContext damage target and amount must be configured together"
                         }
-                        require(step.damageTargetNpcId == null || step.damageTargetNpcId > 0)
-                        require(step.damageAmount == 0.0 || step.damageAmount in 0.1..20.0)
+                        require(step.damageTargetNpcId == null || step.damageTargetNpcId >= 0) {
+                            "$stepContext damage target must be non-negative"
+                        }
+                        require(step.damageAmount.isFinite() && (step.damageAmount == 0.0 || step.damageAmount in 0.1..20.0)) {
+                            "$stepContext damage amount must be 0 or within 0.1..20"
+                        }
+                        require(step.particleCount in 1..50) { "$stepContext particle-count must be within 1..50" }
+                        require(step.particleEvery in 1..20) { "$stepContext particle-every must be within 1..20" }
+                        require(step.soundEvery in 1..20) { "$stepContext sound-every must be within 1..20" }
+                        require(step.soundVolume.isFinite() && step.soundVolume in 0f..4f) {
+                            "$stepContext sound-volume must be finite and within 0..4"
+                        }
+                        require(step.soundPitch.isFinite() && step.soundPitch in 0.5f..2f) {
+                            "$stepContext sound-pitch must be finite and within 0.5..2"
+                        }
+                        step.particle?.let { particleName ->
+                            val particle = runCatching { Particle.valueOf(particleName) }.getOrNull()
+                            require(particle != null) { "$stepContext has unknown particle $particleName" }
+                            require(particle.dataType == Void::class.java) {
+                                "$stepContext particle $particleName requires data ${particle.dataType.simpleName}, but runtime supplies no particle data"
+                            }
+                        }
+                        step.sound?.let { sound ->
+                            require(SoundUtils.getSound(sound) != null) { "$stepContext has unknown sound $sound" }
+                        }
                     }
                     is OriginSceneStep.BlockDisplay -> {
                         require((step.surface == null) != (step.anchor == null)) {
-                            "scene $id cycle ${cycle.id} prop ${step.key} must reference exactly one surface or anchor"
+                            "$stepContext prop ${step.key} must reference exactly one surface or anchor"
                         }
                         step.surface?.let { surface ->
-                            require(surface in propSurfaces) { "scene $id cycle ${cycle.id} references prop surface $surface" }
+                            require(surface in propSurfaces) { "$stepContext references prop surface $surface" }
                         }
                         step.anchor?.let { anchor ->
-                            require(anchor in anchors) { "scene $id cycle ${cycle.id} references prop anchor $anchor" }
+                            require(anchor in anchors) { "$stepContext references prop anchor $anchor" }
                         }
                         require(Material.matchMaterial(step.material)?.takeIf(Material::isBlock) != null) {
-                            "scene $id cycle ${cycle.id} prop ${step.key} has invalid block material ${step.material}"
+                            "$stepContext has invalid block material ${step.material}"
                         }
                         OriginScenePropContract.resolve(
                             step.surface?.let { propSurfaces.getValue(it).near } ?: anchors.getValue(requireNotNull(step.anchor)),
@@ -188,11 +297,39 @@ internal data class OriginSceneDefinition(
                             step.rotationYDegrees,
                         )
                     }
-                    is OriginSceneStep.Sound -> require(step.anchor == null || step.anchor in anchors)
-                    is OriginSceneStep.Particle -> require(step.anchor == null || step.anchor in anchors)
-                    is OriginSceneStep.ContainerLid -> require(step.anchor in anchors)
-                    is OriginSceneStep.Mount -> require(step.vehicleActorId in cycle.actorIds)
-                    else -> Unit
+                    is OriginSceneStep.RemoveDisplay -> require(step.key.isNotBlank()) {
+                        "$stepContext prop key must not be blank"
+                    }
+                    is OriginSceneStep.Sound -> {
+                        require(step.actorId != null || step.anchor != null) { "$stepContext has no location" }
+                        require(step.anchor == null || step.anchor in anchors) { "$stepContext references anchor ${step.anchor}" }
+                        require(step.volume.isFinite() && step.volume in 0f..4f) {
+                            "$stepContext volume must be finite and within 0..4"
+                        }
+                        require(step.pitch.isFinite() && step.pitch in 0.5f..2f) {
+                            "$stepContext pitch must be finite and within 0.5..2"
+                        }
+                        require(SoundUtils.getSound(step.sound) != null) { "$stepContext has unknown sound ${step.sound}" }
+                    }
+                    is OriginSceneStep.Particle -> {
+                        require(step.actorId != null || step.anchor != null) { "$stepContext has no location" }
+                        require(step.anchor == null || step.anchor in anchors) { "$stepContext references anchor ${step.anchor}" }
+                        require(step.count in 1..50) { "$stepContext count must be within 1..50" }
+                        val particle = runCatching { Particle.valueOf(step.particle) }.getOrNull()
+                        require(particle != null) {
+                            "$stepContext has unknown particle ${step.particle}"
+                        }
+                        require(particle.dataType == Void::class.java) {
+                            "$stepContext particle ${step.particle} requires data ${particle.dataType.simpleName}, but runtime supplies no particle data"
+                        }
+                    }
+                    is OriginSceneStep.Speech -> require(step.text.isNotBlank()) { "$stepContext text must not be blank" }
+                    is OriginSceneStep.ContainerLid -> require(step.anchor in anchors) {
+                        "$stepContext references anchor ${step.anchor}"
+                    }
+                    is OriginSceneStep.Mount -> require(step.vehicleActorId in cycle.actorIds) {
+                        "$stepContext vehicle ${step.vehicleActorId} is not leased"
+                    }
                 }
             }
         }
@@ -208,6 +345,25 @@ internal data class OriginScenePlan(
     val speechScale: Float,
     val scenes: List<OriginSceneDefinition>,
 ) {
+    init {
+        require(world.isNotBlank()) { "world must not be blank" }
+        require(tickTicks in 5L..100L) { "tick-ticks must be within 5..100" }
+        require(speechDurationTicks in 20L..300L) { "speech.duration-ticks must be within 20..300" }
+        require(speechHeight.isFinite() && speechHeight in 1.8..4.0) {
+            "speech.height must be finite and within 1.8..4"
+        }
+        require(speechViewRange.isFinite() && speechViewRange in 0.5f..4f) {
+            "speech.view-range must be finite and within 0.5..4"
+        }
+        require(speechScale.isFinite() && speechScale in 0.5f..2f) {
+            "speech.scale must be finite and within 0.5..2"
+        }
+        require(scenes.isNotEmpty()) { "scene-ids must not be empty" }
+        require(scenes.map(OriginSceneDefinition::id).distinct().size == scenes.size) {
+            "scene-ids contains duplicate ids"
+        }
+    }
+
     private val scenesById = scenes.associateBy(OriginSceneDefinition::id)
 
     fun scene(id: String): OriginSceneDefinition = requireNotNull(scenesById[id]) { "Unknown Origin scene: $id" }
@@ -216,23 +372,24 @@ internal data class OriginScenePlan(
         fun load(dataPath: Path): OriginScenePlan {
             val source = ConfigManager.ofModule(dataPath, "origin-scenes.yml")
             source.mergeMissingFromBundled("modules/origin-scenes.yml")
+            val sceneIds = distinctIds(source.stringList("scene-ids"), "scene-ids")
             val plan = OriginScenePlan(
                 world = source.string("world", "rc_origin_spawn"),
-                tickTicks = source.integer("tick-ticks", 20).toLong().coerceIn(5L, 100L),
-                speechDurationTicks = source.integer("speech.duration-ticks", 100).toLong().coerceIn(20L, 300L),
-                speechHeight = source.real("speech.height", 2.65).coerceIn(1.8, 4.0),
-                speechViewRange = source.real("speech.view-range", 1.0).toFloat().coerceIn(0.5f, 4f),
-                speechScale = source.real("speech.scale", 0.95).toFloat().coerceIn(0.5f, 2f),
-                scenes = source.stringList("scene-ids").map { parseScene(source, it) },
+                tickTicks = boundedInteger(source, "tick-ticks", 20, 5..100).toLong(),
+                speechDurationTicks = boundedInteger(source, "speech.duration-ticks", 100, 20..300).toLong(),
+                speechHeight = boundedReal(source, "speech.height", 2.65, 1.8..4.0),
+                speechViewRange = boundedReal(source, "speech.view-range", 1.0, 0.5..4.0).toFloat(),
+                speechScale = boundedReal(source, "speech.scale", 0.95, 0.5..2.0).toFloat(),
+                scenes = sceneIds.map { parseScene(source, it) },
             )
-            require(plan.scenes.map(OriginSceneDefinition::id).distinct().size == plan.scenes.size)
-            plan.scenes.forEach(OriginSceneDefinition::validate)
+            plan.scenes.forEach { it.validate() }
             return plan
         }
 
         private fun parseScene(source: Config, id: String): OriginSceneDefinition {
+            require(id.isNotBlank()) { "scene-ids contains a blank id" }
             val root = "scenes.$id"
-            val actorIds = source.stringList("$root.actor-ids").map(String::toInt)
+            val actorIds = distinctActorIds(source.stringList("$root.actor-ids"), "$root.actor-ids")
             val actors = actorIds.associateWith { actorId ->
                 OriginSceneActor(
                     id = actorId,
@@ -240,80 +397,101 @@ internal data class OriginScenePlan(
                     deniedDenizenFlags = source.stringList("$root.actors.$actorId.denied-denizen-flags").toSet(),
                 )
             }
-            val anchors = source.stringList("$root.anchor-ids").associateWith { anchorId ->
+            val anchors = distinctIds(source.stringList("$root.anchor-ids"), "$root.anchor-ids").associateWith { anchorId ->
                 point(source.string("$root.anchors.$anchorId"), "$root.anchors.$anchorId")
             }
-            val propSurfaces = source.stringList("$root.prop-surface-ids").associateWith { surfaceId ->
+            val propSurfaces = distinctIds(source.stringList("$root.prop-surface-ids"), "$root.prop-surface-ids").associateWith { surfaceId ->
                 val surfaceRoot = "$root.prop-surfaces.$surfaceId"
                 OriginScenePropSurface(
                     near = point(source.string("$surfaceRoot.near"), "$surfaceRoot.near"),
-                    materials = source.stringList("$surfaceRoot.material-ids").map { materialName ->
-                        requireNotNull(Material.matchMaterial(materialName)) { "Unknown material $materialName at $surfaceRoot.material-ids" }
+                    materials = source.stringList("$surfaceRoot.material-ids").mapIndexed { index, materialName ->
+                        requireNotNull(Material.matchMaterial(materialName)) {
+                            "Unknown material $materialName at $surfaceRoot.material-ids[$index]"
+                        }
                     }.toSet(),
-                    searchRadius = source.integer("$surfaceRoot.search-radius", 2),
-                    topOffset = source.real("$surfaceRoot.top-offset", 1.0),
-                    lookTargetOffsetY = source.real("$surfaceRoot.look-target-offset-y", -1.15),
+                    searchRadius = boundedInteger(source, "$surfaceRoot.search-radius", 2, 0..4),
+                    topOffset = boundedReal(source, "$surfaceRoot.top-offset", 1.0, 0.0..2.0),
+                    lookTargetOffsetY = boundedReal(source, "$surfaceRoot.look-target-offset-y", -1.15, -4.0..2.0),
                 )
             }
-            val routeProfiles = source.stringList("$root.route-profile-ids").associateWith { profileId ->
+            val routeProfiles = distinctIds(source.stringList("$root.route-profile-ids"), "$root.route-profile-ids").associateWith { profileId ->
                 routeProfile(source, "$root.route-profiles.$profileId", "$id-$profileId")
             }
+            val cycleIds = distinctIds(source.stringList("$root.cycle-ids"), "$root.cycle-ids")
             return OriginSceneDefinition(
                 id = id,
                 anchor = point(source.string("$root.anchor"), "$root.anchor"),
-                audienceRange = source.real("$root.audience-range", 48.0).coerceIn(4.0, 128.0),
-                retryMillis = source.integer("$root.retry-seconds", 8).toLong().coerceIn(1L, 120L) * 1_000L,
-                maxConcurrentCycles = source.integer("$root.max-concurrent-cycles", 1).coerceIn(1, 8),
+                audienceRange = boundedReal(source, "$root.audience-range", 48.0, 4.0..128.0),
+                retryMillis = boundedInteger(source, "$root.retry-seconds", 8, 1..120).toLong() * 1_000L,
+                maxConcurrentCycles = boundedInteger(source, "$root.max-concurrent-cycles", 1, 1..8),
                 actors = actors,
                 anchors = anchors,
                 propSurfaces = propSurfaces,
                 routeProfiles = routeProfiles,
-                cycles = source.stringList("$root.cycle-ids").map { cycleId -> parseCycle(source, root, cycleId) },
+                cycles = cycleIds.map { cycleId -> parseCycle(source, root, cycleId) },
             )
         }
 
         private fun parseCycle(source: Config, sceneRoot: String, id: String): OriginSceneCycle {
+            require(id.isNotBlank()) { "$sceneRoot.cycle-ids contains a blank id" }
             val root = "$sceneRoot.cycles.$id"
-            val minimum = source.integer("$root.cooldown-min-seconds", 30).toLong().coerceIn(1L, 3_600L) * 1_000L
-            val maximum = source.integer("$root.cooldown-max-seconds", 60).toLong().coerceIn(1L, 3_600L) * 1_000L
+            val minimum = boundedInteger(source, "$root.cooldown-min-seconds", 30, 1..3_600).toLong() * 1_000L
+            val maximum = boundedInteger(source, "$root.cooldown-max-seconds", 60, 1..3_600).toLong() * 1_000L
+            val actorIds = distinctActorIds(source.stringList("$root.actor-ids"), "$root.actor-ids")
+            val stepIds = distinctIds(source.stringList("$root.step-ids"), "$root.step-ids")
+            val steps = stepIds.map { stepId -> parseStep(source, "$root.steps.$stepId") }
+            val derivedMaxDurationTicks = defaultMaxDurationTicks(steps)
+            val configuredMaxDurationRaw = source.string("$root.max-duration-seconds", "").trim()
+            val maxDurationTicks = if (configuredMaxDurationRaw.isBlank()) {
+                derivedMaxDurationTicks
+            } else {
+                val configuredMaxDurationSeconds = configuredMaxDurationRaw.toIntOrNull()
+                    ?: error("$root.max-duration-seconds must be an integer (was '$configuredMaxDurationRaw')")
+                require(configuredMaxDurationSeconds in 1..86_400) {
+                    "$root.max-duration-seconds must be within 1..86400 seconds (or be omitted)"
+                }
+                configuredMaxDurationSeconds.toLong() * 20L
+            }
             return OriginSceneCycle(
                 id = id,
-                actorIds = source.stringList("$root.actor-ids").map(String::toInt).toSet(),
+                actorIds = actorIds.toSet(),
                 cooldownMillis = minOf(minimum, maximum)..maxOf(minimum, maximum),
-                initialDelayMillis = source.integer("$root.initial-delay-seconds", 10).toLong().coerceIn(0L, 600L) * 1_000L,
+                initialDelayMillis = boundedInteger(source, "$root.initial-delay-seconds", 10, 0..600).toLong() * 1_000L,
                 yieldAnchor = source.string("$root.yield-anchor", "").takeIf(String::isNotBlank),
-                yieldRange = source.real("$root.yield-range", 2.5).coerceIn(1.0, 12.0),
-                steps = source.stringList("$root.step-ids").map { stepId -> parseStep(source, "$root.steps.$stepId") },
+                yieldRange = boundedReal(source, "$root.yield-range", 2.5, 1.0..12.0),
+                steps = steps,
+                stepIds = stepIds,
+                maxDurationTicks = maxDurationTicks,
             )
         }
 
-        private fun parseStep(source: Config, root: String): OriginSceneStep = when (source.string("$root.type").uppercase()) {
+        private fun parseStep(source: Config, root: String): OriginSceneStep = when (source.string("$root.type").uppercase(Locale.ROOT)) {
             "MOVE" -> OriginSceneStep.Move(
                 actorId = source.integer("$root.actor-id"),
                 anchor = source.string("$root.anchor"),
                 routeProfile = source.string("$root.route-profile"),
-                timeoutTicks = source.integer("$root.timeout-ticks", 240).toLong().coerceIn(20L, 1_200L),
+                timeoutTicks = boundedInteger(source, "$root.timeout-ticks", 240, 20..1_200).toLong(),
             )
-            "WAIT" -> OriginSceneStep.Wait(source.integer("$root.ticks", 20).toLong().coerceIn(1L, 1_200L))
+            "WAIT" -> OriginSceneStep.Wait(boundedInteger(source, "$root.ticks", 20, 1..1_200).toLong())
             "LOOK_AT_ANCHOR" -> OriginSceneStep.LookAtAnchor(source.integer("$root.actor-id"), source.string("$root.anchor"))
             "LOOK_AT_SURFACE" -> OriginSceneStep.LookAtSurface(source.integer("$root.actor-id"), source.string("$root.surface"))
             "LOOK_AT_ACTOR" -> OriginSceneStep.LookAtActor(source.integer("$root.actor-id"), source.integer("$root.target-actor-id"))
             "EQUIP" -> OriginSceneStep.Equip(source.integer("$root.actor-id"), source.string("$root.material"))
             "SWING" -> OriginSceneStep.Swing(
                 actorId = source.integer("$root.actor-id"),
-                repetitions = source.integer("$root.repetitions", 1).coerceIn(1, 20),
-                periodTicks = source.integer("$root.period-ticks", 10).toLong().coerceIn(1L, 100L),
+                repetitions = boundedInteger(source, "$root.repetitions", 1, 1..20),
+                periodTicks = boundedInteger(source, "$root.period-ticks", 10, 1..100).toLong(),
                 feedbackAnchor = source.string("$root.feedback-anchor", "").takeIf(String::isNotBlank),
                 feedbackSurface = source.string("$root.feedback-surface", "").takeIf(String::isNotBlank),
-                damageTargetNpcId = source.integer("$root.damage-target-npc-id", -1).takeIf { it > 0 },
-                damageAmount = source.real("$root.damage-amount", 0.0).coerceIn(0.0, 20.0),
+                damageTargetNpcId = optionalActorInteger(source, "$root.damage-target-npc-id", -1),
+                damageAmount = boundedReal(source, "$root.damage-amount", 0.0, 0.0..20.0),
                 particle = source.string("$root.particle", "").takeIf(String::isNotBlank),
-                particleCount = source.integer("$root.particle-count", 3).coerceIn(1, 50),
-                particleEvery = source.integer("$root.particle-every", 1).coerceIn(1, 20),
+                particleCount = boundedInteger(source, "$root.particle-count", 3, 1..50),
+                particleEvery = boundedInteger(source, "$root.particle-every", 1, 1..20),
                 sound = source.string("$root.sound", "").takeIf(String::isNotBlank),
-                soundEvery = source.integer("$root.sound-every", 1).coerceIn(1, 20),
-                soundVolume = source.real("$root.sound-volume", 0.35).toFloat().coerceIn(0f, 4f),
-                soundPitch = source.real("$root.sound-pitch", 1.0).toFloat().coerceIn(0.5f, 2f),
+                soundEvery = boundedInteger(source, "$root.sound-every", 1, 1..20),
+                soundVolume = boundedReal(source, "$root.sound-volume", 0.35, 0.0..4.0).toFloat(),
+                soundPitch = boundedReal(source, "$root.sound-pitch", 1.0, 0.5..2.0).toFloat(),
             )
             "BLOCK_DISPLAY" -> {
                 val scale = vector(source.string("$root.scale", "0.5,0.1,0.3"), "$root.scale")
@@ -322,34 +500,33 @@ internal data class OriginScenePlan(
                     surface = source.string("$root.surface", "").takeIf(String::isNotBlank),
                     anchor = source.string("$root.anchor", "").takeIf(String::isNotBlank),
                     material = source.string("$root.material"),
-                    origin = OriginScenePropOrigin.valueOf(source.string("$root.origin").uppercase()),
+                    origin = runCatching { OriginScenePropOrigin.valueOf(source.string("$root.origin").uppercase(Locale.ROOT)) }
+                        .getOrElse { error("$root.origin must be BOTTOM_CENTER or CENTER") },
                     offset = vector(source.string("$root.offset", "0,0,0"), "$root.offset"),
                     scale = scale.requirePositive("$root.scale"),
-                    rotationYDegrees = source.real("$root.rotation-y-degrees", 0.0).toFloat().also {
-                        require(it.isFinite() && it in -360f..360f) { "$root.rotation-y-degrees must be within -360..360" }
-                    },
-                    interpolationTicks = source.integer("$root.interpolation-ticks", 0).coerceIn(0, 59),
+                    rotationYDegrees = boundedReal(source, "$root.rotation-y-degrees", 0.0, -360.0..360.0).toFloat(),
+                    interpolationTicks = boundedInteger(source, "$root.interpolation-ticks", 0, 0..59),
                 )
             }
             "REMOVE_DISPLAY" -> OriginSceneStep.RemoveDisplay(source.string("$root.key"))
             "SOUND" -> OriginSceneStep.Sound(
-                actorId = source.integer("$root.actor-id", -1).takeIf { it >= 0 },
+                actorId = optionalActorInteger(source, "$root.actor-id", -1),
                 anchor = source.string("$root.anchor", "").takeIf(String::isNotBlank),
                 sound = source.string("$root.sound"),
-                volume = source.real("$root.volume", 0.5).toFloat().coerceIn(0f, 4f),
-                pitch = source.real("$root.pitch", 1.0).toFloat().coerceIn(0.5f, 2f),
+                volume = boundedReal(source, "$root.volume", 0.5, 0.0..4.0).toFloat(),
+                pitch = boundedReal(source, "$root.pitch", 1.0, 0.5..2.0).toFloat(),
             )
             "PARTICLE" -> OriginSceneStep.Particle(
-                actorId = source.integer("$root.actor-id", -1).takeIf { it >= 0 },
+                actorId = optionalActorInteger(source, "$root.actor-id", -1),
                 anchor = source.string("$root.anchor", "").takeIf(String::isNotBlank),
                 particle = source.string("$root.particle"),
-                count = source.integer("$root.count", 3).coerceIn(1, 50),
+                count = boundedInteger(source, "$root.count", 3, 1..50),
             )
             "SPEECH" -> OriginSceneStep.Speech(source.integer("$root.actor-id"), source.string("$root.text"))
             "CONTAINER_LID" -> OriginSceneStep.ContainerLid(
                 actorId = source.integer("$root.actor-id"),
                 anchor = source.string("$root.anchor"),
-                open = when (val state = source.string("$root.state").uppercase()) {
+                open = when (val state = source.string("$root.state").uppercase(Locale.ROOT)) {
                     "OPEN" -> true
                     "CLOSE" -> false
                     else -> error("Unknown container state $state at $root")
@@ -368,34 +545,78 @@ internal data class OriginScenePlan(
                 bounds = NpcRouteBounds(minOf(minimum.first, maximum.first), maxOf(minimum.first, maximum.first), minOf(minimum.second, maximum.second), maxOf(minimum.second, maximum.second)),
                 forbidden = source.stringList("$root.forbidden-areas").mapIndexed { index, raw -> bounds(raw, "$root.forbidden-areas[$index]") },
                 preferred = source.stringList("$root.preferred-areas").mapIndexed { index, raw -> bounds(raw, "$root.preferred-areas[$index]") },
-                maxVisited = source.integer("$root.max-visited", 1_024).coerceIn(64, 4_096),
-                snapRadius = source.integer("$root.snap-radius", 3).coerceIn(1, 6),
-                pollTicks = source.integer("$root.poll-ticks", 2).toLong().coerceIn(1L, 10L),
-                stallPolls = source.integer("$root.stall-polls", 24).coerceIn(5, 100),
-                offFloorTolerance = source.real("$root.off-floor-tolerance", 0.45).coerceIn(0.1, 1.0),
-                distanceMargin = source.real("$root.distance-margin", 0.35).coerceIn(0.1, 2.0),
-                pathDistanceMargin = source.real("$root.path-distance-margin", 0.35).coerceIn(0.1, 2.0),
-                speedModifier = source.real("$root.speed-modifier", 0.68).toFloat().coerceIn(0.1f, 2f),
-                entityObstaclePadding = source.real("$root.entity-obstacle-padding", 0.25).coerceIn(0.0, 1.0),
-                obstacleRefreshPolls = source.integer("$root.obstacle-refresh-polls", 10).coerceIn(1, 100),
-                headingLookAheadCells = source.integer("$root.heading-look-ahead-cells", 2).coerceIn(1, 8),
-                headingUpdateTicks = source.integer("$root.heading-update-ticks", 1).toLong().coerceIn(1L, 10L),
-                headingMaxTurnDegreesPerTick = source.real("$root.heading-max-turn-degrees-per-tick", 18.0).toFloat().coerceIn(1f, 90f),
-                cornerSmoothingDistance = source.real("$root.corner-smoothing-distance", 0.75).coerceIn(0.0, 1.5),
-                cornerSmoothingLead = source.real("$root.corner-smoothing-lead", 0.30).coerceIn(0.0, 0.75),
-                maximumStepHeight = source.real("$root.maximum-step-height", 0.125).coerceIn(0.0, 0.5),
+                maxVisited = boundedInteger(source, "$root.max-visited", 1_024, 64..4_096),
+                snapRadius = boundedInteger(source, "$root.snap-radius", 3, 1..6),
+                pollTicks = boundedInteger(source, "$root.poll-ticks", 2, 1..10).toLong(),
+                stallPolls = boundedInteger(source, "$root.stall-polls", 24, 5..100),
+                offFloorTolerance = boundedReal(source, "$root.off-floor-tolerance", 0.45, 0.1..1.0),
+                distanceMargin = boundedReal(source, "$root.distance-margin", 0.35, 0.1..2.0),
+                pathDistanceMargin = boundedReal(source, "$root.path-distance-margin", 0.35, 0.1..2.0),
+                speedModifier = boundedReal(source, "$root.speed-modifier", 0.68, 0.1..2.0).toFloat(),
+                entityObstaclePadding = boundedReal(source, "$root.entity-obstacle-padding", 0.25, 0.0..1.0),
+                obstacleRefreshPolls = boundedInteger(source, "$root.obstacle-refresh-polls", 10, 1..100),
+                headingLookAheadCells = boundedInteger(source, "$root.heading-look-ahead-cells", 2, 1..8),
+                headingUpdateTicks = boundedInteger(source, "$root.heading-update-ticks", 1, 1..10).toLong(),
+                headingMaxTurnDegreesPerTick = boundedReal(source, "$root.heading-max-turn-degrees-per-tick", 18.0, 1.0..90.0).toFloat(),
+                cornerSmoothingDistance = boundedReal(source, "$root.corner-smoothing-distance", 0.75, 0.0..1.5),
+                cornerSmoothingLead = boundedReal(source, "$root.corner-smoothing-lead", 0.30, 0.0..0.75),
+                maximumStepHeight = boundedReal(source, "$root.maximum-step-height", 0.125, 0.0..0.5),
             )
         }
+
+        private fun distinctIds(raw: List<String>, path: String): List<String> {
+            require(raw.all(String::isNotBlank)) { "$path must not contain blank ids" }
+            require(raw.distinct().size == raw.size) { "$path contains duplicate ids" }
+            return raw
+        }
+
+        private fun distinctActorIds(raw: List<String>, path: String): List<Int> {
+            val ids = raw.mapIndexed { index, value -> parseInt(value, "$path[$index]") }
+            require(ids.all { it >= 0 }) { "$path must contain non-negative actor ids" }
+            require(ids.distinct().size == ids.size) { "$path contains duplicate actor ids" }
+            return ids
+        }
+
+        private fun boundedInteger(source: Config, path: String, default: Int, range: IntRange): Int {
+            val value = parseInt(source.string(path, default.toString()).trim(), path)
+            require(value in range) { "$path must be within ${range.first}..${range.last} (was $value)" }
+            return value
+        }
+
+        private fun boundedReal(source: Config, path: String, default: Double, range: ClosedFloatingPointRange<Double>): Double {
+            val value = parseDouble(source.string(path, default.toString()).trim(), path)
+            require(value.isFinite() && value in range) {
+                "$path must be finite and within ${range.start}..${range.endInclusive} (was $value)"
+            }
+            return value
+        }
+
+        private fun optionalActorInteger(source: Config, path: String, default: Int): Int? {
+            val value = parseInt(source.string(path, default.toString()).trim(), path)
+            require(value == -1 || value >= 0) { "$path must be -1 or a non-negative integer (was $value)" }
+            return value.takeUnless { it == -1 }
+        }
+
+        private fun parseInt(raw: String, path: String): Int = raw.toIntOrNull()
+            ?: error("$path must be an integer (was '$raw')")
+
+        private fun parseDouble(raw: String, path: String): Double = raw.toDoubleOrNull()?.also {
+            require(it.isFinite()) { "$path must be finite (was '$raw')" }
+        } ?: error("$path must be a number (was '$raw')")
+
+        private fun parseFloat(raw: String, path: String): Float = raw.toFloatOrNull()?.also {
+            require(it.isFinite()) { "$path must be finite (was '$raw')" }
+        } ?: error("$path must be a number (was '$raw')")
 
         private fun point(raw: String, path: String): OriginScenePoint {
             val values = raw.split(',').map(String::trim)
             require(values.size in 3..5) { "$path must be x,y,z[,yaw[,pitch]]" }
             return OriginScenePoint(
-                x = values[0].toDouble(),
-                y = values[1].toDouble(),
-                z = values[2].toDouble(),
-                yaw = values.getOrNull(3)?.toFloat() ?: 0f,
-                pitch = values.getOrNull(4)?.toFloat() ?: 0f,
+                x = parseDouble(values[0], "$path.x"),
+                y = parseDouble(values[1], "$path.y"),
+                z = parseDouble(values[2], "$path.z"),
+                yaw = values.getOrNull(3)?.let { parseFloat(it, "$path.yaw") } ?: 0f,
+                pitch = values.getOrNull(4)?.let { parseFloat(it, "$path.pitch") } ?: 0f,
                 explicitPose = values.size >= 4,
             )
         }
@@ -403,19 +624,28 @@ internal data class OriginScenePlan(
         private fun vector(raw: String, path: String): OriginSceneVector {
             val values = raw.split(',').map(String::trim)
             require(values.size == 3) { "$path must be x,y,z" }
-            return OriginSceneVector(values[0].toDouble(), values[1].toDouble(), values[2].toDouble())
+            return OriginSceneVector(
+                parseDouble(values[0], "$path.x"),
+                parseDouble(values[1], "$path.y"),
+                parseDouble(values[2], "$path.z"),
+            )
         }
 
         private fun block(raw: String, path: String): Pair<Int, Int> {
             val values = raw.split(',').map(String::trim)
             require(values.size == 2) { "$path must be x,z" }
-            return values[0].toInt() to values[1].toInt()
+            return parseInt(values[0], "$path.x") to parseInt(values[1], "$path.z")
         }
 
         private fun bounds(raw: String, path: String): NpcRouteBounds {
             val values = raw.split(',').map(String::trim)
             require(values.size == 4) { "$path must be min-x,min-z,max-x,max-z" }
-            return NpcRouteBounds(minOf(values[0].toInt(), values[2].toInt()), maxOf(values[0].toInt(), values[2].toInt()), minOf(values[1].toInt(), values[3].toInt()), maxOf(values[1].toInt(), values[3].toInt()))
+            return NpcRouteBounds(
+                minOf(parseInt(values[0], "$path.min-x"), parseInt(values[2], "$path.max-x")),
+                maxOf(parseInt(values[0], "$path.min-x"), parseInt(values[2], "$path.max-x")),
+                minOf(parseInt(values[1], "$path.min-z"), parseInt(values[3], "$path.max-z")),
+                maxOf(parseInt(values[1], "$path.min-z"), parseInt(values[3], "$path.max-z")),
+            )
         }
     }
 }

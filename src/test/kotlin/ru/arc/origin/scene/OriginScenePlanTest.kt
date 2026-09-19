@@ -1,12 +1,19 @@
 package ru.arc.origin.scene
 
 import io.kotest.core.spec.style.FreeSpec
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldContainAll
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
+import ru.arc.paper.testing.MockBukkitTestRuntime
 import java.nio.file.Files
 
 class OriginScenePlanTest : FreeSpec({
+    lateinit var paper: MockBukkitTestRuntime
+
+    beforeEach { paper = MockBukkitTestRuntime.open() }
+    afterEach { paper.close() }
+
     "bundled plan exposes independent forge and mount-yard scenes" {
         val plan = OriginScenePlan.load(Files.createTempDirectory("origin-scenes-plan-test"))
 
@@ -39,6 +46,131 @@ class OriginScenePlanTest : FreeSpec({
                 cycle.steps.filterIsInstance<OriginSceneStep.Move>().all { it.routeProfile in scene.routeProfiles } shouldBe true
             }
         }
+    }
+
+    "bundled cycles retain authored step ids and derive a watchdog budget" {
+        val cycle = OriginScenePlan.load(Files.createTempDirectory("origin-scenes-duration-test"))
+            .scene("forge")
+            .cycles
+            .single { it.id == "master-forging-showcase" }
+
+        cycle.stepIds.first() shouldBe "call"
+        cycle.stepIds.size shouldBe cycle.steps.size
+        val authoredTicks = cycle.steps.sumOf {
+            when (it) {
+                is OriginSceneStep.Move -> it.timeoutTicks
+                is OriginSceneStep.Wait -> it.ticks
+                is OriginSceneStep.Swing -> (it.repetitions - 1L) * it.periodTicks
+                else -> 0L
+            }
+        }
+        cycle.maxDurationTicks shouldBe authoredTicks * 2L + 1_200L
+    }
+
+    "plan validation rejects duplicate cycle and step identities with context" {
+        val scene = OriginScenePlan.load(Files.createTempDirectory("origin-scenes-duplicate-test")).scene("forge")
+        val cycle = scene.cycles.single { it.id == "ledger-orders" }
+
+        shouldThrow<IllegalArgumentException> {
+            scene.copy(cycles = scene.cycles + cycle).validate()
+        }
+        shouldThrow<IllegalArgumentException> {
+            val duplicateStepIds = cycle.stepIds.dropLast(1) + cycle.stepIds.first()
+            scene.copy(
+                cycles = scene.cycles.map { if (it.id == cycle.id) it.copy(stepIds = duplicateStepIds) else it },
+            ).validate()
+        }
+    }
+
+    "plan validation rejects unknown equipment material" {
+        val scene = OriginScenePlan.load(Files.createTempDirectory("origin-scenes-material-test")).scene("forge")
+        val cycle = scene.cycles.single { it.id == "ledger-orders" }
+        val steps = cycle.steps.map {
+            if (it is OriginSceneStep.Equip) it.copy(material = "NOT_A_MATERIAL") else it
+        }
+
+        shouldThrow<IllegalArgumentException> {
+            scene.copy(cycles = scene.cycles.map { if (it.id == cycle.id) it.copy(steps = steps) else it }).validate()
+        }
+    }
+
+    "plan validation rejects itemless equipment and particles requiring data" {
+        val scene = OriginScenePlan.load(Files.createTempDirectory("origin-scenes-runtime-contract-test")).scene("forge")
+        val cycle = scene.cycles.single { it.id == "ledger-orders" }
+
+        shouldThrow<IllegalArgumentException> {
+            val equip = OriginSceneStep.Equip(cycle.actorIds.first(), "WATER")
+            scene.copy(
+                cycles = scene.cycles.map {
+                    if (it.id == cycle.id) it.copy(steps = it.steps + equip, stepIds = it.stepIds + "bad-equip") else it
+                },
+            ).validate()
+        }
+        shouldThrow<IllegalArgumentException> {
+            val particle = OriginSceneStep.Particle(cycle.actorIds.first(), scene.anchors.keys.first(), "DUST", 1)
+            scene.copy(
+                cycles = scene.cycles.map {
+                    if (it.id == cycle.id) it.copy(steps = it.steps + particle, stepIds = it.stepIds + "bad-particle") else it
+                },
+            ).validate()
+        }
+        shouldThrow<IllegalArgumentException> {
+            val swingCycle = scene.cycles.single { it.id == "blade-practice" }
+            val swingSteps = swingCycle.steps.map { step ->
+                if (step is OriginSceneStep.Swing) step.copy(particle = "DUST") else step
+            }
+            scene.copy(
+                cycles = scene.cycles.map {
+                    if (it.id == swingCycle.id) it.copy(steps = swingSteps) else it
+                },
+            ).validate()
+        }
+    }
+
+    "plan validation accepts NPC registry id zero in actor and optional references" {
+        val scene = OriginScenePlan.load(Files.createTempDirectory("origin-scenes-zero-id-test")).scene("forge")
+        val cycle = scene.cycles.single { it.id == "ledger-orders" }
+        val zeroActor = scene.actors.getValue(350).copy(id = 0)
+        val zeroReferences = listOf(
+            OriginSceneStep.Sound(actorId = 0, anchor = null, sound = "ITEM_BOOK_PAGE_TURN", volume = 0.5f, pitch = 1.0f),
+            OriginSceneStep.Particle(actorId = 0, anchor = null, particle = "FLAME", count = 1),
+            OriginSceneStep.Swing(
+                actorId = cycle.actorIds.first(),
+                repetitions = 1,
+                periodTicks = 1,
+                damageTargetNpcId = 0,
+                damageAmount = 1.0,
+            ),
+        )
+
+        scene.copy(
+            actors = scene.actors + (0 to zeroActor),
+            cycles = scene.cycles.map {
+                if (it.id == cycle.id) it.copy(
+                    actorIds = it.actorIds + 0,
+                    steps = it.steps + zeroReferences,
+                    stepIds = it.stepIds + listOf("zero-sound", "zero-particle", "zero-damage"),
+                ) else it
+            },
+        ).validate()
+    }
+
+    "plan loading rejects malformed numeric scalars instead of applying defaults" {
+        listOf(
+            "tick-ticks: 1.5\n",
+            "speech:\n  height: not-a-number\n",
+        ).forEachIndexed { index, patch ->
+            val root = Files.createTempDirectory("origin-scenes-invalid-number-$index")
+            Files.createDirectories(root.resolve("modules"))
+            Files.writeString(root.resolve("modules/origin-scenes.yml"), patch)
+
+            shouldThrow<IllegalStateException> { OriginScenePlan.load(root) }
+        }
+    }
+
+    "scene points reject non-finite coordinates and poses" {
+        shouldThrow<IllegalArgumentException> { OriginScenePoint(Double.NaN, 0.0, 0.0) }
+        shouldThrow<IllegalArgumentException> { OriginScenePoint(0.0, 0.0, 0.0, Float.POSITIVE_INFINITY) }
     }
 
     "mount yard keeps multiple animals active without sharing one actor across simultaneous lanes" {

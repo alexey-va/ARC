@@ -4,7 +4,6 @@ import com.denizenscript.denizen.objects.NPCTag
 import net.citizensnpcs.api.CitizensAPI
 import net.citizensnpcs.api.event.NPCRightClickEvent
 import net.citizensnpcs.api.npc.NPC
-import net.citizensnpcs.api.trait.trait.Equipment as CitizensEquipment
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import org.bukkit.Bukkit
@@ -12,7 +11,6 @@ import org.bukkit.Color
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.Particle
-import org.bukkit.block.Lidded
 import org.bukkit.entity.BlockDisplay
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Display
@@ -21,7 +19,6 @@ import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
-import org.bukkit.inventory.ItemStack
 import org.bukkit.util.Transformation
 import org.joml.AxisAngle4f
 import org.joml.Vector3f
@@ -32,6 +29,7 @@ import ru.arc.hooks.citizens.ArcNpcHologramModule
 import ru.arc.npc.CitizensNpcRouteController
 import ru.arc.npc.NpcRouteEvent
 import ru.arc.npc.NpcRouteObstacleSource
+import ru.arc.observability.StructuredDebugLine
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import ru.arc.util.SoundUtils
@@ -63,8 +61,20 @@ object OriginAmbientScenesModule : PluginModule, Listener {
     }
 
     override fun reload() {
-        shutdown()
-        init()
+        // Validate before replacing the running generation: a bad edit must not
+        // tear down the last usable scene plan.
+        val replacement = try {
+            OriginScenePlan.load(ARC.instance.dataPath)
+        } catch (failure: Exception) {
+            warn("ORIGIN_SCENE phase=RELOAD_REJECTED previous_runtime=retained", failure)
+            return
+        }
+        if (service == null) {
+            init()
+            return
+        }
+        service?.close()
+        service = OriginSceneService(replacement).also { it.start() }
     }
 
     override fun shutdown() {
@@ -74,6 +84,8 @@ object OriginAmbientScenesModule : PluginModule, Listener {
     }
 
     fun cycleKeys(): List<OriginSceneCycleKey> = service?.cycleKeys().orEmpty()
+
+    fun status(): List<OriginSceneStatus> = service?.status().orEmpty()
 
     fun startCycle(sceneId: String, cycleId: String): OriginSceneStartResult =
         service?.startManual(sceneId, cycleId) ?: OriginSceneStartResult.Unavailable("scene-engine-not-ready")
@@ -101,13 +113,16 @@ private data class ActiveOriginSceneCycle(
     val lease: OriginSceneLease,
     val scene: OriginSceneDefinition,
     val cycle: OriginSceneCycle,
-    val previousHands: MutableMap<Int, ItemStack?> = mutableMapOf(),
     val mountedPairs: MutableSet<Pair<Int, Int>> = mutableSetOf(),
-    val openedContainers: MutableSet<Location> = mutableSetOf(),
-    val displays: MutableMap<String, BlockDisplay> = mutableMapOf(),
+    val resources: OriginSceneResources = OriginSceneResources(),
+    val speechActors: MutableSet<Int> = mutableSetOf(),
     val manual: Boolean = false,
-    var returning: Boolean = false,
-)
+    val startedNanos: Long = System.nanoTime(),
+) {
+    lateinit var execution: OriginSceneExecution
+}
+
+private data class OriginSceneSpeech(val display: TextDisplay, val owner: UUID)
 
 private class OriginSceneService(
     private val plan: OriginScenePlan,
@@ -116,7 +131,8 @@ private class OriginSceneService(
     private val coordinator = OriginSceneCoordinator()
     private val routeController = CitizensNpcRouteController(::logRouteEvent, NpcRouteObstacleSource(::originFurnitureObstacleCells))
     private val active = mutableMapOf<UUID, ActiveOriginSceneCycle>()
-    private val speech = mutableMapOf<Int, TextDisplay>()
+    private val speech = mutableMapOf<Int, OriginSceneSpeech>()
+    private val lastResults = mutableMapOf<OriginSceneCycleKey, String>()
     private var closed = false
 
     fun start() {
@@ -138,6 +154,45 @@ private class OriginSceneService(
 
     fun cycleKeys(): List<OriginSceneCycleKey> = plan.scenes.flatMap { scene ->
         scene.cycles.map { cycle -> OriginSceneCycleKey(scene.id, cycle.id) }
+    }
+
+    fun status(): List<OriginSceneStatus> {
+        val now = System.currentTimeMillis()
+        val busyActors = coordinator.busyActors()
+        return plan.scenes.flatMap { scene ->
+            scene.cycles.map { cycle ->
+                val running = active.values.firstOrNull { it.scene.id == scene.id && it.cycle.id == cycle.id }
+                val cooldown = if (running == null) coordinator.cooldownRemainingMillis(scene.id, cycle.id, now) else 0L
+                val reason = when {
+                    running != null -> running.execution.reason ?: "working"
+                    Bukkit.getWorld(plan.world) == null -> "world-unavailable"
+                    !hasAudience(scene) -> "no-audience"
+                    cooldown > 0L -> "cooldown"
+                    cycle.actorIds.any(busyActors::contains) -> "actor-leased"
+                    playerOccupiesYieldZone(scene, cycle) -> "player-proximity"
+                    cycle.actorIds.any { npc(it)?.isSpawned != true } -> "actor-unavailable"
+                    cycle.actorIds.mapNotNull(::npc).any { !available(it, scene) } -> "actor-service-or-route"
+                    active.values.count { it.scene.id == scene.id } >= scene.maxConcurrentCycles -> "scene-capacity"
+                    else -> "queued"
+                }
+                OriginSceneStatus(
+                    scene.id, cycle.id, running?.execution?.phase?.name ?: "WAITING",
+                    running?.execution?.stepId, running?.execution?.stepIndex ?: -1, cycle.steps.size,
+                    cycle.actorIds.sorted(), running?.resources?.displayCount ?: 0,
+                    running?.let { (System.nanoTime() - it.startedNanos).coerceAtLeast(0L) / 1_000_000L } ?: 0L,
+                    cooldown, reason, lastResults[OriginSceneCycleKey(scene.id, cycle.id)],
+                )
+            }
+        }
+    }
+
+    private fun reportFailure(running: ActiveOriginSceneCycle, stage: String, failure: Exception) {
+        warn(FAILURE_LINE.line(
+            "phase" to "FAILED", "scene" to running.scene.id, "cycle" to running.cycle.id,
+            "stage" to stage, "step" to running.execution.stepId,
+            "actors" to running.cycle.actorIds.sorted().joinToString(","),
+            "run" to running.lease.token, "recovery" to "cleanup-return-release",
+        ), failure)
     }
 
     fun startManual(sceneId: String, cycleId: String): OriginSceneStartResult {
@@ -166,7 +221,12 @@ private class OriginSceneService(
 
     private fun tick() {
         if (closed) return
-        if (Bukkit.getWorld(plan.world) == null) return
+        if (Bukkit.getWorld(plan.world) == null) {
+            active.values.toList().forEach { interruptCycle(it, "world-unavailable") }
+            return
+        }
+        active.values.filter { it.cycle.actorIds.any { id -> npc(id)?.isSpawned != true } }
+            .toList().forEach { interruptCycle(it, "actor-unavailable") }
         active.values.filter { playerOccupiesYieldZone(it.scene, it.cycle) }
             .toList()
             .forEach { interruptCycle(it, "player-proximity") }
@@ -196,8 +256,17 @@ private class OriginSceneService(
 
     private fun launch(scene: OriginSceneDefinition, cycle: OriginSceneCycle, lease: OriginSceneLease, manual: Boolean) {
         val running = ActiveOriginSceneCycle(lease, scene, cycle, manual = manual)
+        running.execution = OriginSceneExecution(cycle.stepIds, cycle.maxDurationTicks, object : OriginSceneExecutionEffects {
+            override fun execute(stepIndex: Int) = executeStep(running, stepIndex)
+            override fun cleanup(keepMounted: Boolean) = cleanup(running, keepMounted)
+            override fun returnHome(reason: String, immediate: Boolean) {
+                if (immediate) restoreHomePoses(running, keepMounted = false)
+                else returnHome(running, reason, keepMounted = reason == "complete")
+            }
+            override fun release(reason: String) = release(running, reason)
+            override fun reportFailure(stage: String, failure: Exception) = reportFailure(running, stage, failure)
+        })
         active[lease.token] = running
-        cycle.actorIds.mapNotNull(::npc).forEach { it.entity.addScoreboardTag(BUSY_TAG) }
         info(
             "ORIGIN_SCENE phase=CYCLE_STARTED scene={} cycle={} actors={} trigger={}",
             scene.id,
@@ -205,7 +274,13 @@ private class OriginSceneService(
             cycle.actorIds.sorted().joinToString(","),
             if (manual) "manual" else "ambient",
         )
-        runStep(running, 0)
+        try {
+            cycle.actorIds.mapNotNull(::npc).forEach { it.entity.addScoreboardTag(BUSY_TAG) }
+            running.execution.start()
+        } catch (failure: Exception) {
+            reportFailure(running, "start", failure)
+            running.execution.interrupt("start-failed")
+        }
     }
 
     private fun hasAudience(scene: OriginSceneDefinition): Boolean {
@@ -229,12 +304,9 @@ private class OriginSceneService(
         return flags.none { hasDenizenFlag(npc, it) }
     }
 
-    private fun runStep(running: ActiveOriginSceneCycle, index: Int) {
-        if (!isCurrent(running) || running.returning) return
-        if (index >= running.cycle.steps.size) {
-            finish(running, "complete")
-            return
-        }
+    private fun runStep(running: ActiveOriginSceneCycle, index: Int) = running.execution.advance(index)
+
+    private fun executeStep(running: ActiveOriginSceneCycle, index: Int) {
         if (hasDeniedFlag(running)) {
             finish(running, "denizen-busy")
             return
@@ -285,7 +357,7 @@ private class OriginSceneService(
                 runStep(running, index + 1)
             }
             is OriginSceneStep.Speech -> {
-                showSpeech(step.actorId, step.text)
+                showSpeech(running, step.actorId, step.text)
                 runStep(running, index + 1)
             }
             is OriginSceneStep.ContainerLid -> {
@@ -390,7 +462,6 @@ private class OriginSceneService(
 
     private fun setBlockDisplay(running: ActiveOriginSceneCycle, step: OriginSceneStep.BlockDisplay): Boolean {
         val world = Bukkit.getWorld(plan.world) ?: return false
-        val material = Material.matchMaterial(step.material)?.takeIf(Material::isBlock) ?: return false
         val surface = step.surface?.let(running.scene.propSurfaces::getValue)
         val propAnchor = surface?.resolve(world) ?: step.anchor?.let(running.scene.anchors::getValue)
         if (propAnchor == null) {
@@ -411,27 +482,7 @@ private class OriginSceneService(
             step.scale,
             step.rotationYDegrees,
         )
-        val location = Location(world, resolved.x, resolved.y, resolved.z)
-        var created = false
-        val display = running.displays[step.key]?.takeIf(BlockDisplay::isValid)
-            ?: world.spawn(location, BlockDisplay::class.java).also { createdDisplay ->
-                createdDisplay.isPersistent = false
-                createdDisplay.addScoreboardTag(PROP_TAG)
-                createdDisplay.addScoreboardTag(propRunTag(running))
-                running.displays[step.key] = createdDisplay
-                created = true
-            }
-        display.block = material.createBlockData()
-        display.teleport(location)
-        display.interpolationDelay = -1
-        display.interpolationDuration = step.interpolationTicks
-        display.teleportDuration = step.interpolationTicks.coerceAtMost(59)
-        display.transformation = Transformation(
-            Vector3f(resolved.translationX, resolved.translationY, resolved.translationZ),
-            AxisAngle4f(Math.toRadians(step.rotationYDegrees.toDouble()).toFloat(), 0f, 1f, 0f),
-            Vector3f(step.scale.x.toFloat(), step.scale.y.toFloat(), step.scale.z.toFloat()),
-            AxisAngle4f(),
-        )
+        val created = running.resources.updateDisplay(step.key, world, resolved, step, setOf(PROP_TAG, propRunTag(running)))
         info(
             "ORIGIN_SCENE phase=PROP_{} scene={} cycle={} key={} support={} actual={},{},{} origin={}",
             if (created) "SPAWNED" else "UPDATED",
@@ -448,15 +499,9 @@ private class OriginSceneService(
     }
 
     private fun removeDisplay(running: ActiveOriginSceneCycle, key: String) {
-        running.displays.remove(key)?.takeIf(BlockDisplay::isValid)?.let { display ->
-            display.remove()
+        if (running.resources.removeDisplay(key)) {
             info("ORIGIN_SCENE phase=PROP_REMOVED scene={} cycle={} key={}", running.scene.id, running.cycle.id, key)
         }
-    }
-
-    private fun removeDisplays(running: ActiveOriginSceneCycle) {
-        running.displays.values.forEach { if (it.isValid) it.remove() }
-        running.displays.clear()
     }
 
     private fun removeAbandonedDisplays() {
@@ -523,50 +568,51 @@ private class OriginSceneService(
     }
 
     private fun equip(running: ActiveOriginSceneCycle, actorId: Int, materialName: String) {
-        val actor = npc(actorId) ?: return
-        val equipment = actor.getOrAddTrait(CitizensEquipment::class.java)
-        running.previousHands.getOrPut(actorId) {
-            equipment.get(CitizensEquipment.EquipmentSlot.HAND)?.takeUnless { it.type.isAir }?.clone()
-        }
-        val material = Material.matchMaterial(materialName) ?: return
-        equipment.set(CitizensEquipment.EquipmentSlot.HAND, ItemStack(material))
+        val actor = requireNotNull(npc(actorId)) { "Scene actor $actorId unavailable" }
+        val material = requireNotNull(Material.matchMaterial(materialName)) { "Invalid scene material $materialName" }
+        running.resources.equip(actor, material)
     }
 
     private fun setContainerLid(running: ActiveOriginSceneCycle, step: OriginSceneStep.ContainerLid) {
-        val world = Bukkit.getWorld(plan.world) ?: return
+        val world = requireNotNull(Bukkit.getWorld(plan.world)) { "Scene world unavailable" }
         val location = running.scene.anchors.getValue(step.anchor).inWorld(world).block.location
-        val lidded = location.block.state as? Lidded ?: return
-        if (step.open) {
-            lidded.open()
-            running.openedContainers += location
-        } else {
-            lidded.close()
-            running.openedContainers.remove(location)
-        }
+        running.resources.setContainer(location, step.open)
     }
 
     private fun finish(running: ActiveOriginSceneCycle, reason: String) {
-        if (!isCurrent(running) || running.returning) return
-        running.returning = true
-        val keepMounted = reason == "complete"
+        running.execution.finish(reason)
+    }
+
+    private fun cleanup(running: ActiveOriginSceneCycle, keepMounted: Boolean) {
+        val failures = mutableListOf<Exception>()
         running.cycle.actorIds.mapNotNull(::npc).forEach { actor ->
-            routeController.stop(actor)
-            if (!keepMounted) {
-                actor.entity.leaveVehicle()
-                actor.entity.eject()
+            try { routeController.stop(actor) } catch (failure: Exception) { failures += failure }
+            if (!keepMounted && actor.isSpawned) {
+                try { actor.entity.leaveVehicle() } catch (failure: Exception) { failures += failure }
+                try { actor.entity.eject() } catch (failure: Exception) { failures += failure }
             }
         }
-        restoreHands(running)
-        closeContainers(running)
-        removeDisplays(running)
-        info("ORIGIN_SCENE phase=CYCLE_RETURNING scene={} cycle={} reason={}", running.scene.id, running.cycle.id, reason)
-        returnHome(running, reason, keepMounted)
+        running.resources.cleanup().forEach { failure ->
+            failures += IllegalStateException("Scene ${failure.resource} ${failure.id} cleanup failed", failure.failure)
+        }
+        if (!keepMounted) running.speechActors.forEach { actorId ->
+            try {
+                ArcNpcHologramModule.clearTemporaryBubble(actorId, speechOwner(running))
+                speech[actorId]?.takeIf { it.owner == running.lease.token }?.let { bubble ->
+                    removeSpeech(actorId, bubble.display)
+                }
+            } catch (failure: Exception) { failures += failure }
+        }
+        if (failures.isNotEmpty()) throw IllegalStateException("Scene recovery incomplete").apply {
+            failures.forEach(::addSuppressed)
+        }
     }
 
     private fun returnHome(running: ActiveOriginSceneCycle, reason: String, keepMounted: Boolean) {
+        info("ORIGIN_SCENE phase=CYCLE_RETURNING scene={} cycle={} reason={}", running.scene.id, running.cycle.id, reason)
         val world = Bukkit.getWorld(plan.world)
         if (world == null) {
-            release(running, reason)
+            running.execution.completeReturn(reason)
             return
         }
         var pending = 0
@@ -575,13 +621,14 @@ private class OriginSceneService(
             val home = running.scene.actors.getValue(actorId).home.inWorld(world)
             val profile = running.scene.routeProfiles.values.firstOrNull { it.floorY == home.blockY && NpcBounds.contains(it, home) }
             if (profile == null || actor.entity.location.distanceSquared(home) < 0.8) {
-                actor.entity.teleport(home)
+                check(actor.entity.teleport(home)) { "NPC $actorId home teleport rejected" }
                 return@forEach
             }
-            if (routeController.navigate(actor, home, profile)) pending++ else actor.entity.teleport(home)
+            if (routeController.navigate(actor, home, profile)) pending++
+            else check(actor.entity.teleport(home)) { "NPC $actorId home teleport rejected" }
         }
         if (pending == 0) {
-            release(running, reason)
+            running.execution.completeReturn(reason)
             return
         }
         awaitReturns(running, reason, 400L, keepMounted)
@@ -592,47 +639,40 @@ private class OriginSceneService(
             val moving = running.cycle.actorIds.mapNotNull(::npc).filter(routeController::isNavigating)
             if (moving.isEmpty()) {
                 restoreHomePoses(running, keepMounted)
-                release(running, reason)
+                running.execution.completeReturn(reason)
             }
             else if (remainingTicks <= 4L) {
                 moving.forEach(routeController::stop)
                 restoreHomePoses(running, keepMounted)
-                release(running, "$reason-return-timeout")
+                running.execution.completeReturn("$reason-return-timeout")
             } else awaitReturns(running, reason, remainingTicks - 4L, keepMounted)
         }
     }
 
-    private fun restoreHands(running: ActiveOriginSceneCycle) {
-        running.previousHands.forEach { (actorId, previous) ->
-            npc(actorId)?.getOrAddTrait(CitizensEquipment::class.java)?.set(
-                CitizensEquipment.EquipmentSlot.HAND,
-                previous ?: ItemStack(Material.AIR),
-            )
-        }
-        running.previousHands.clear()
-    }
-
-    private fun closeContainers(running: ActiveOriginSceneCycle) {
-        running.openedContainers.forEach { location ->
-            (location.block.state as? Lidded)?.close()
-        }
-        running.openedContainers.clear()
-    }
-
     private fun restoreHomePoses(running: ActiveOriginSceneCycle, keepMounted: Boolean) {
         val world = Bukkit.getWorld(plan.world) ?: return
+        val failures = mutableListOf<Exception>()
         originSceneReturnActorIds(running.cycle.actorIds, running.mountedPairs, keepMounted).forEach { actorId ->
             val actor = npc(actorId)?.takeIf(NPC::isSpawned) ?: return@forEach
             val home = running.scene.actors.getValue(actorId).home.inWorld(world)
-            actor.entity.teleport(home)
+            try {
+                check(actor.entity.teleport(home)) { "NPC $actorId home teleport rejected" }
+            } catch (failure: Exception) { failures += failure }
+        }
+        if (failures.isNotEmpty()) throw IllegalStateException("Scene home recovery incomplete").apply {
+            failures.forEach(::addSuppressed)
         }
     }
 
     private fun release(running: ActiveOriginSceneCycle, reason: String) {
         if (active.remove(running.lease.token) !== running) return
-        running.cycle.actorIds.mapNotNull(::npc).filter(NPC::isSpawned).forEach { it.entity.removeScoreboardTag(BUSY_TAG) }
         val cooldown = running.cycle.cooldownMillis.random()
         coordinator.release(running.lease, System.currentTimeMillis(), cooldown)
+        lastResults[OriginSceneCycleKey(running.scene.id, running.cycle.id)] = reason
+        running.cycle.actorIds.mapNotNull(::npc).filter(NPC::isSpawned).forEach { actor ->
+            try { actor.entity.removeScoreboardTag(BUSY_TAG) }
+            catch (failure: Exception) { reportFailure(running, "busy-tag", failure) }
+        }
         info(
             "ORIGIN_SCENE phase=CYCLE_FINISHED scene={} cycle={} reason={} cooldown_seconds={}",
             running.scene.id,
@@ -648,52 +688,48 @@ private class OriginSceneService(
     }
 
     private fun interruptCycle(running: ActiveOriginSceneCycle, reason: String) {
-        if (!isCurrent(running)) return
-        running.returning = true
-        val world = Bukkit.getWorld(plan.world)
-        running.cycle.actorIds.mapNotNull(::npc).forEach { actor ->
-            routeController.stop(actor)
-            actor.entity.leaveVehicle()
-            actor.entity.eject()
-            world?.let { actor.entity.teleport(running.scene.actors.getValue(actor.id).home.inWorld(it)) }
-        }
-        restoreHands(running)
-        closeContainers(running)
-        removeDisplays(running)
-        release(running, reason)
+        if (isCurrent(running)) running.execution.interrupt(reason)
     }
 
-    private fun showSpeech(actorId: Int, text: String) {
-        if (ArcNpcHologramModule.showTemporaryBubble(actorId, listOf(text), plan.speechDurationTicks.toInt())) return
+    private fun speechOwner(running: ActiveOriginSceneCycle): String = "origin-scene:${running.lease.token}"
+
+    private fun showSpeech(running: ActiveOriginSceneCycle, actorId: Int, text: String) {
+        running.speechActors += actorId
+        if (ArcNpcHologramModule.showTemporaryBubble(actorId, listOf(text), plan.speechDurationTicks.toInt(), speechOwner(running))) return
         val actor = npc(actorId)?.takeIf(NPC::isSpawned) ?: return
-        speech.remove(actorId)?.let { if (it.isValid) it.remove() }
-        val display = actor.entity.world.spawn(actor.entity.location.clone().add(0.0, plan.speechHeight, 0.0), TextDisplay::class.java).apply {
-            this.text(Component.text(text, NamedTextColor.GOLD))
-            billboard = Display.Billboard.CENTER
-            isShadowed = true
-            backgroundColor = Color.fromARGB(190, 18, 13, 9)
-            brightness = Display.Brightness(15, 15)
-            lineWidth = 190
-            viewRange = plan.speechViewRange
-            displayWidth = 4.5f
-            displayHeight = 2.0f
-            teleportDuration = 2
-            transformation = Transformation(Vector3f(), AxisAngle4f(), Vector3f(plan.speechScale), AxisAngle4f())
-            isPersistent = false
-            addScoreboardTag(SPEECH_TAG)
+        speech[actorId]?.let { removeSpeech(actorId, it.display) }
+        val display = actor.entity.world.spawn(actor.entity.location.clone().add(0.0, plan.speechHeight, 0.0), TextDisplay::class.java) { created ->
+            speech[actorId] = OriginSceneSpeech(created, running.lease.token)
+            created.text(Component.text(text, NamedTextColor.GOLD))
+            created.billboard = Display.Billboard.CENTER
+            created.isShadowed = true
+            created.backgroundColor = Color.fromARGB(190, 18, 13, 9)
+            created.brightness = Display.Brightness(15, 15)
+            created.lineWidth = 190
+            created.viewRange = plan.speechViewRange
+            created.displayWidth = 4.5f
+            created.displayHeight = 2.0f
+            created.teleportDuration = 2
+            created.transformation = Transformation(Vector3f(), AxisAngle4f(), Vector3f(plan.speechScale), AxisAngle4f())
+            created.isPersistent = false
+            created.addScoreboardTag(SPEECH_TAG)
+            created.addScoreboardTag(speechOwner(running))
         }
-        speech[actorId] = display
         followSpeech(actorId, display, plan.speechDurationTicks)
-        tasks.runLater(plan.speechDurationTicks) {
-            if (speech.remove(actorId, display) && display.isValid) display.remove()
-        }
+        tasks.runLater(plan.speechDurationTicks) { removeSpeech(actorId, display) }
+    }
+
+    private fun removeSpeech(actorId: Int, display: TextDisplay) {
+        val bubble = speech[actorId]?.takeIf { it.display === display } ?: return
+        if (display.isValid) display.remove()
+        speech.remove(actorId, bubble)
     }
 
     private fun followSpeech(actorId: Int, display: TextDisplay, remainingTicks: Long) {
-        if (speech[actorId] !== display || !display.isValid || remainingTicks <= 0L) return
+        if (speech[actorId]?.display !== display || !display.isValid || remainingTicks <= 0L) return
         val actor = npc(actorId)?.takeIf(NPC::isSpawned)
         if (actor == null) {
-            if (speech.remove(actorId, display)) display.remove()
+            removeSpeech(actorId, display)
             return
         }
         display.teleport(actor.entity.location.clone().add(0.0, plan.speechHeight, 0.0))
@@ -713,9 +749,7 @@ private class OriginSceneService(
         allowReturning: Boolean = false,
         block: () -> Unit,
     ) {
-        tasks.runLater(ticks) {
-            if (isCurrent(running) && (allowReturning || !running.returning)) block()
-        }
+        running.execution.after(ticks, allowReturning, block)
     }
 
     private fun isCurrent(running: ActiveOriginSceneCycle): Boolean = active[running.lease.token] === running
@@ -754,23 +788,16 @@ private class OriginSceneService(
 
     override fun close() {
         closed = true
-        active.values.toList().forEach { running ->
-            running.cycle.actorIds.mapNotNull(::npc).forEach { actor ->
-                routeController.stop(actor)
-                actor.entity.leaveVehicle()
-                actor.entity.eject()
-                actor.entity.removeScoreboardTag(BUSY_TAG)
-                Bukkit.getWorld(plan.world)?.let { actor.entity.teleport(running.scene.actors.getValue(actor.id).home.inWorld(it)) }
-            }
-            restoreHands(running)
-            removeDisplays(running)
-        }
+        tasks.close()
+        active.values.toList().forEach { it.execution.close() }
         active.clear()
         coordinator.clear()
-        speech.values.forEach { if (it.isValid) it.remove() }
+        speech.toMap().forEach { (actorId, bubble) ->
+            try { removeSpeech(actorId, bubble.display) }
+            catch (failure: Exception) { warn("ORIGIN_SCENE phase=FAILED stage=speech-close npc=$actorId", failure) }
+        }
         speech.clear()
         routeController.close()
-        tasks.close()
         info("ORIGIN_SCENE phase=STOPPED")
     }
 
@@ -780,6 +807,7 @@ private class OriginSceneService(
     }
 
     private companion object {
+        val FAILURE_LINE = StructuredDebugLine("ORIGIN_SCENE")
         const val SPEECH_TAG = "arc_origin_scene_speech"
         const val PROP_TAG = "arc_origin_scene_prop"
         const val BUSY_TAG = "arc_origin_scene_busy"

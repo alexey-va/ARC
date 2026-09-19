@@ -125,21 +125,25 @@ internal object OriginScenePropContract {
         )
     }
 
-    fun validateLifecycle(steps: List<OriginSceneStep>) {
+    fun validateLifecycle(steps: List<OriginSceneStep>, stepContext: (Int) -> String = { index -> "step[$index]" }) {
         val visible = mutableSetOf<String>()
-        steps.forEach { step ->
+        steps.forEachIndexed { index, step ->
+            val context = stepContext(index)
             when (step) {
                 is OriginSceneStep.BlockDisplay -> {
-                    require(step.key.isNotBlank()) { "scene prop key must not be blank" }
+                    require(step.key.isNotBlank()) { "$context prop key must not be blank" }
                     visible += step.key
                 }
                 is OriginSceneStep.RemoveDisplay -> require(visible.remove(step.key)) {
-                    "scene prop ${step.key} is removed before it is created"
+                    "$context prop ${step.key} is removed before it is created"
                 }
                 else -> Unit
             }
         }
-        require(visible.isEmpty()) { "scene props must be explicitly removed: ${visible.sorted().joinToString(",")}" }
+        require(visible.isEmpty()) {
+            val context = if (steps.isEmpty()) "scene props" else "${stepContext(steps.lastIndex)} props"
+            "$context must be explicitly removed: ${visible.sorted().joinToString(",")}"
+        }
     }
 
     private const val MAX_OFFSET = 16.0

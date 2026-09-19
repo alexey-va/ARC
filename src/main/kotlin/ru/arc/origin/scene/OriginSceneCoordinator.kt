@@ -51,6 +51,9 @@ internal class OriginSceneCoordinator {
 
     fun busyActors(): Set<Int> = actorOwners.keys.toSet()
 
+    fun cooldownRemainingMillis(sceneId: String, cycleId: String, nowMillis: Long): Long =
+        (dueAt.getOrDefault(sceneId to cycleId, 0L) - nowMillis).coerceAtLeast(0L)
+
     /** Oldest work goes first; a waiting joint cycle keeps its place for both actors. */
     fun readyCycleIds(sceneId: String, actorsByCycle: Map<String, Set<Int>>, nowMillis: Long): List<String> {
         val waitingActors = mutableSetOf<Int>()

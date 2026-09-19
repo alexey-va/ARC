@@ -14,10 +14,23 @@ object NpcCycleSubCommand : SubCommand {
     override val defaultName = "npccycle"
     override val defaultPermission = "arc.admin"
     override val defaultDescription = "Запустить настроенный цикл NPC"
-    override val defaultUsage = "/arc npccycle <list|цикл|сцена цикл>"
+    override val defaultUsage = "/arc npccycle <list|status [сцена] [цикл]|цикл|сцена цикл>"
 
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {
         val keys = OriginAmbientScenesModule.cycleKeys()
+        if (args.firstOrNull()?.equals("status", ignoreCase = true) == true) {
+            if (args.size > 3) {
+                sendUsage(sender)
+                return true
+            }
+            val statuses = OriginAmbientScenesModule.status().filter {
+                (args.size < 2 || it.sceneId.equals(args[1], ignoreCase = true)) &&
+                    (args.size < 3 || it.cycleId.equals(args[2], ignoreCase = true))
+            }
+            if (statuses.isEmpty()) sender.sendMessage(TextUtil.mm("<yellow>Нет доступных сцен по этому запросу.", true))
+            statuses.forEach { sender.sendMessage(it.debugLine()) }
+            return true
+        }
         if (args.isEmpty() || args.singleOrNull()?.equals("list", ignoreCase = true) == true) {
             if (keys.isEmpty()) {
                 sender.sendMessage(TextUtil.mm("<red>Движок NPC-сцен сейчас не готов.", true))
@@ -53,8 +66,16 @@ object NpcCycleSubCommand : SubCommand {
 
     override fun tabComplete(sender: CommandSender, args: Array<String>): List<String> {
         val keys = OriginAmbientScenesModule.cycleKeys()
+        if (args.firstOrNull()?.equals("status", ignoreCase = true) == true && args.size > 1) {
+            return when (args.size) {
+                2 -> keys.map(OriginSceneCycleKey::sceneId).distinct().tabComplete(args[1])
+                3 -> keys.filter { it.sceneId.equals(args[1], ignoreCase = true) }
+                    .map(OriginSceneCycleKey::cycleId).tabComplete(args[2])
+                else -> emptyList()
+            }
+        }
         return when (args.size) {
-            1 -> (listOf("list") + legacyAliases.keys + keys.map(OriginSceneCycleKey::sceneId) + keys.map(OriginSceneCycleKey::cycleId))
+            1 -> (listOf("list", "status") + legacyAliases.keys + keys.map(OriginSceneCycleKey::sceneId) + keys.map(OriginSceneCycleKey::cycleId))
                 .distinct()
                 .tabComplete(args[0])
             2 -> keys.filter { it.sceneId.equals(args[0], ignoreCase = true) }

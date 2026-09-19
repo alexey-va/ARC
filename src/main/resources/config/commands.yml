@@ -63,7 +63,7 @@ commands:
     aliases: [npc-cycle]
     permission: arc.admin
     player-only: false
-    usage: /arc npccycle <list|цикл|сцена цикл>
+    usage: /arc npccycle <list|status [сцена] [цикл]|цикл|сцена цикл>
   buy:
     name: buy
     aliases: [ ]
