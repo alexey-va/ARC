@@ -68,6 +68,7 @@ internal class EMDungeonQol(
     private val scoreboardPreferenceKey = NamespacedKey("arc", "dungeon_scoreboard_enabled")
     internal val scoreboard = DungeonScoreboard(this, sidebar, enabled = ::scoreboardEnabled)
     private val actionBarLocalization = EliteMobsActionBarPackets.create()
+    private var questCompass: QuestCompass? = null
     private val checkpoints = DungeonCheckpointStore()
     private val tasks = LifecycleTaskScope()
     private val combatUntil = mutableMapOf<UUID, Long>()
@@ -487,6 +488,8 @@ internal class EMDungeonQol(
     internal fun startAutosaves() {
         if (autosavesStarted) return
         autosavesStarted = true
+        questCompass = QuestCompass.create()
+        tasks.runTimer(1, 1) { questCompass?.refresh() }
         tasks.runTimer(20, 20) { scoreboard.refresh(Bukkit.getOnlinePlayers()) }
         tasks.runTimer(400, 400) {
             // Native player persistence must stay on the server thread; stagger its disk writes.
@@ -524,6 +527,8 @@ internal class EMDungeonQol(
     override fun close() {
         closed = true
         actionBarLocalization?.close()
+        questCompass?.close()
+        questCompass = null
         scoreboard.clear()
         pending.clear()
         combatUntil.clear()

@@ -50,6 +50,31 @@ Only positions are saved. Inventory, rewards, mobs, objectives and match state
 are never restored. A blocked ordinary command/plugin teleport in an instance
 shows a throttled, clickable explanation of exit and checkpoint commands.
 
+## Quest compass
+
+ARC 1.4.159 replaces the tracked EliteMobs quest's green compass with a WHITE
+Adventure bossbar: coral brackets/cardinals, a rotating 49-cell vanilla-font
+scale and colored objective markers. No downloaded Compass plugin or additional
+resource-pack assets are installed. WHITE is the requested client-pack convention;
+without a pack that hides that vanilla bar, its white background remains visible.
+
+`QuestCompass.kt` owns main-thread presentation and lifecycle, wired through
+`EMDungeonQol.startAutosaves` and `close`; `QuestCompassRenderer.kt` owns yaw and
+glyph layout. The adapter reads EliteMobs `QuestTracking.compassBar` using one
+cached, type-checked field, alongside the public `getPlayerTrackingQuests()` map.
+EliteMobs still resolves NPCs, remaining objectives, portals, turn-in targets and
+height cues. ARC transforms the native 63-cell/3-degree projection, not quest
+data, and refreshes the direction scale every tick even when target text is
+unchanged. The source compatibility owner is EliteMobs `quests/QuestTracking.java`.
+
+The native bar stays invisible, while its player membership continues to carry
+`BossBarOrderManager` dialogue suspension. ARC mirrors that membership on the
+next tick. Switching or stopping tracking removes the previous replacement;
+shutdown restores native visibility. Failed compatibility keeps the native
+compass and logs once. No permissions or allowlists were added, and no EliteMobs
+JAR change is required. Player-client appearance and white-bar invisibility must
+be checked separately from unit/lifecycle tests and artifact activation.
+
 ## Scope and safety
 
 Each player's PDC retains up to five manual and three rolling autosaves per
