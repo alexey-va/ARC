@@ -9,9 +9,10 @@ import kotlin.math.roundToInt
 
 /** Texture-free compass. Native EliteMobs owns target projection (63 cells, 3° each). */
 internal object QuestCompassRenderer {
-    const val WIDTH = 49
+    const val WIDTH = 73
     private const val CENTER = WIDTH / 2
-    private const val DEGREES_PER_CELL = 180.0 / (WIDTH - 1)
+    private const val DEGREES_PER_CELL = 1.0
+    private const val HALF_VIEW = CENTER * DEGREES_PER_CELL
     private val accent = TextColor.color(0xff6b6b)
     private val scale = TextColor.color(0xe8dfd2)
     private val target = TextColor.color(0x9bd48d)
@@ -25,33 +26,34 @@ internal object QuestCompassRenderer {
         if (plain.length != 63 || plain.any { it !in nativeSymbols }) return status(plain)
 
         val heading = if (yaw.isFinite()) yaw.toDouble() else 0.0
-        // Default-font dashes, ticks and cardinals each advance 6 GUI pixels.
-        // Unihex's "uniform" font is not monospaced: dot-filled cells collapse the rail.
-        val glyphs = CharArray(WIDTH) { '-' }
+        // The reference is an unruled strip: blank space, directions and POIs only.
+        // Default-font spaces advance 4 GUI pixels, keeping the strip about 300 px wide.
+        val glyphs = CharArray(WIDTH) { ' ' }
         val colors = Array<TextColor>(WIDTH) { scale }
         // Bukkit yaw: south=0, west=90, north=180, east=270.
-        for (bearing in 0 until 360 step 15) {
+        for (bearing in 0 until 360 step 90) {
             val relative = wrap(bearing - heading)
-            if (relative !in -90.0..90.0) continue
+            if (relative !in -HALF_VIEW..HALF_VIEW) continue
             val cell = (CENTER + relative / DEGREES_PER_CELL).roundToInt()
             glyphs[cell] = when (bearing) {
                 0 -> 'S'
                 90 -> 'W'
                 180 -> 'N'
                 270 -> 'E'
-                else -> '│'
+                else -> error("Unsupported cardinal bearing")
             }
-            if (bearing % 90 == 0) colors[cell] = accent
+            colors[cell] = accent
         }
-        colors[CENTER] = gold
-        if (glyphs[CENTER] == '-') glyphs[CENTER] = '│'
 
-        // Targets win collisions with ticks/cardinals. The native centre height cue wins last.
+        // Targets win collisions with cardinals. Never pin out-of-view targets to an edge.
         plain.forEachIndexed { index, symbol ->
             if (symbol == '-') return@forEachIndexed
-            val cell = (CENTER + (index - 31) * 3.0 / DEGREES_PER_CELL).roundToInt().coerceIn(0, WIDTH - 1)
+            val relative = (index - 31) * 3.0
+            if (relative !in -HALF_VIEW..HALF_VIEW) return@forEachIndexed
+            val cell = (CENTER + relative / DEGREES_PER_CELL).roundToInt()
             glyphs[cell] = when (symbol) {
-                '⦿', '⬯' -> '◇'
+                '⦿' -> '◇'
+                '⬯' -> '○'
                 else -> symbol
             }
             colors[cell] = when (symbol) {
@@ -64,10 +66,10 @@ internal object QuestCompassRenderer {
             glyphs[CENTER] = plain[31]
             colors[CENTER] = gold
         }
-        return Component.text("[", accent).font(font)
+        return Component.text("<", accent).font(font)
             .append(glyphs.indices.fold(Component.empty()) { line, index ->
                 line.append(Component.text(glyphs[index], colors[index]))
-            }).append(Component.text("]", accent))
+            }).append(Component.text(">", accent))
     }
 
     private fun wrap(degrees: Double): Double = ((degrees % 360 + 540) % 360) - 180
@@ -82,7 +84,7 @@ internal object QuestCompassRenderer {
             else -> text.replace('\n', ' ').replace('\r', ' ')
         }
         val bounded = if (localized.length > 40) localized.take(39) + "…" else localized
-        return Component.text("[ ", accent).append(Component.text(bounded, scale))
-            .append(Component.text(" ]", accent))
+        return Component.text("< ", accent).append(Component.text(bounded, scale))
+            .append(Component.text(" >", accent))
     }
 }

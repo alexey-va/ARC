@@ -53,8 +53,8 @@ shows a throttled, clickable explanation of exit and checkpoint commands.
 ## Quest compass
 
 ARC 1.4.159 replaces the tracked EliteMobs quest's green compass with a WHITE
-Adventure bossbar: coral brackets/cardinals, a rotating 49-cell default-font
-scale and colored objective markers. No downloaded Compass plugin or additional
+Adventure bossbar: coral angle brackets/cardinals, an unruled default-font strip
+and colored objective markers. No downloaded Compass plugin or additional
 resource-pack assets are installed. WHITE is the requested client-pack convention;
 without a pack that hides that vanilla bar, its white background remains visible.
 
@@ -64,7 +64,7 @@ glyph layout. The adapter reads EliteMobs `QuestTracking.compassBar` using one
 cached, type-checked field, alongside the public `getPlayerTrackingQuests()` map.
 EliteMobs still resolves NPCs, remaining objectives, portals, turn-in targets and
 height cues. ARC transforms the native 63-cell/3-degree projection, not quest
-data, and refreshes the direction scale every tick even when target text is
+data, and refreshes directions every tick even when target text is
 unchanged. The source compatibility owner is EliteMobs `quests/QuestTracking.java`.
 
 The native bar stays invisible, while its player membership continues to carry
@@ -75,16 +75,21 @@ compass and logs once. No permissions or allowlists were added, and no EliteMobs
 JAR change is required. Player-client appearance and white-bar invisibility must
 be checked separately from unit/lifecycle tests and artifact activation.
 
-The scale uses bright six-pixel dashes/ticks instead of narrow Unihex dots:
-302 logical GUI pixels including brackets before target-glyph substitutions.
+The texture-free reference uses blank space, not a ruler. ARC 1.4.167 renders
+73 space cells with one degree per cell and `< >` edges (302–304 logical GUI
+pixels before POI substitutions). There are no dashes, dots, ticks or centre
+divider. Directions retain their coral color at the centre. POIs stay distinct:
+`◇` quest/NPC/turn-in, `○` portal, `☠` kill objective, `⚔` fetch objective;
+native height cues remain `↑`, `↓`, `↕`.
 It is hidden outside worlds registered by `EliteMobsWorld.isEliteMobsWorld`,
 without stopping quest tracking. Entering an EliteMobs world restores the same
 compass unless an NPC dialogue is suppressing it.
 
 Edge cases: no selected quest means no compass; unresolved coordinates show a
 compact status, not a guessed marker. Known targets have no distance cutoff in
-the native projection, but its field of view is only ±90°: a target behind the
-player is not shown until they turn. Cross-world navigation uses EliteMobs'
+the native projection. The reference-style strip shows ±36° inside the native
+±90° projection: an out-of-view target is not pinned to an edge and appears
+when the player turns towards it. Cross-world navigation uses EliteMobs'
 direct wormhole entry when available; multi-hop portal routing is not implemented
 there. Without that entry, ARC retains the destination world identifier
 in the bounded status instead of reducing it to an unhelpful generic message.

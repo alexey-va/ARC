@@ -75,15 +75,15 @@ class QuestCompassEdgeCasesTest : FreeSpec({
         val west = text(90f)
 
         south shouldNotBe west
-        south[25] shouldBe 'S'
-        west[25] shouldBe 'W'
+        south[37] shouldBe 'S'
+        west[37] shouldBe 'W'
         south.length shouldBe west.length
     }
 
     "blank loading and no-destination native fallbacks stay compact" {
-        text(0f, "") shouldBe "[ Поиск цели… ]"
-        text(0f, "Waiting for the dungeon to start") shouldBe "[ Ожидание старта данжа ]"
-        text(0f, "[EM] No quest destination found!") shouldBe "[ Цель пока не найдена ]"
+        text(0f, "") shouldBe "< Поиск цели… >"
+        text(0f, "Waiting for the dungeon to start") shouldBe "< Ожидание старта данжа >"
+        text(0f, "[EM] No quest destination found!") shouldBe "< Цель пока не найдена >"
     }
 
     "different-world fallback preserves the useful world identifier" {
