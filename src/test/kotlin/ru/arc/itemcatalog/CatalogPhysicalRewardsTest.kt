@@ -5,6 +5,8 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkConstructor
+import io.mockk.unmockkConstructor
 import io.mockk.verify
 import io.mockk.mockkObject
 import io.mockk.mockkStatic
@@ -15,15 +17,57 @@ import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import ru.arc.mounts.MountMoneyEvidence
 import ru.arc.mounts.MountWallet
+import ru.arc.mounts.RedisEconomyMountWallet
+import ru.arc.hooks.RedisEcoHook
 import ru.arc.treasure.core.Treasure
 import ru.arc.treasure.core.Treasures
 import ru.arc.treasure.core.TreasurePool
 import ru.arc.paper.testing.MockBukkitTestRuntime
+import ru.arc.hooks.HookRegistry
 import java.util.UUID
 import java.nio.file.Files
 import java.util.Comparator
 
 class CatalogPhysicalRewardsTest : StringSpec({
+    "catalog does not instantiate the optional RedisEconomy adapter without its hook" {
+        val previousHook = HookRegistry.redisEcoHook
+        mockkConstructor(RedisEconomyMountWallet::class)
+        try {
+            HookRegistry.redisEcoHook = null
+            every { anyConstructed<RedisEconomyMountWallet>().walletForCurrency("vault") } returns null
+
+            val service = CatalogPhysicalRewards(
+                RewardCatalogSettings(false, "test", emptyList(), RewardCatalogMessages.DEFAULT),
+            )
+            (service.deposit(mockk(), "vault", 1.0, UUID.randomUUID()) is PhysicalRewardOutcome.Rejected) shouldBe true
+
+            verify(exactly = 0) { anyConstructed<RedisEconomyMountWallet>().walletForCurrency("vault") }
+        } finally {
+            HookRegistry.redisEcoHook = previousHook
+            unmockkConstructor(RedisEconomyMountWallet::class)
+        }
+    }
+
+    "catalog resolves a RedisEconomy hook that becomes available after construction" {
+        val previousHook = HookRegistry.redisEcoHook
+        mockkConstructor(RedisEconomyMountWallet::class)
+        try {
+            HookRegistry.redisEcoHook = null
+            val service = CatalogPhysicalRewards(
+                RewardCatalogSettings(false, "test", emptyList(), RewardCatalogMessages.DEFAULT),
+            )
+            HookRegistry.redisEcoHook = RedisEcoHook { null }
+            every { anyConstructed<RedisEconomyMountWallet>().walletForCurrency("vault") } returns null
+
+            (service.deposit(mockk(), "vault", 1.0, UUID.randomUUID()) is PhysicalRewardOutcome.Rejected) shouldBe true
+
+            verify(exactly = 1) { anyConstructed<RedisEconomyMountWallet>().walletForCurrency("vault") }
+        } finally {
+            HookRegistry.redisEcoHook = previousHook
+            unmockkConstructor(RedisEconomyMountWallet::class)
+        }
+    }
+
     "token cheques bind the exact configured currency and nominal" {
         CatalogPhysicalRewards.tokenAmount(Treasure.Command(listOf("rediseconomy:balance %player% tokens give 3 arc-lootbox-catalog"))) shouldBe 3L
         CatalogPhysicalRewards.tokenAmount(Treasure.Command(listOf("rediseconomy:balance %player% vault give 3 arc-lootbox-catalog"))) shouldBe null

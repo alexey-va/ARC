@@ -32,7 +32,7 @@ import java.util.concurrent.ThreadLocalRandom
 /** Converts provider-backed sources into durable physical entitlements. Native effects run only after a durable claim. */
 internal class CatalogPhysicalRewards(
     private val settings: RewardCatalogSettings,
-    private val wallets: MountWallet = RedisEconomyMountWallet(),
+    private val wallets: MountWallet? = null,
     private val frozen: FrozenPhysicalRewards? = null,
     /** Creates the configured seal so its authored icon and presentation survive archiving. */
     private val sealStack: (String, CatalogIconStyle?) -> ItemStack? = { _, _ -> null },
@@ -40,6 +40,9 @@ internal class CatalogPhysicalRewards(
     private val entries = settings.categories.filter { it.rolls == null }.flatMap { it.entries }
         .plus(settings.categories.filter { it.rolls != null }.flatMap { it.entries })
         .distinctBy { key(it) }.associateBy { key(it) }
+
+    private fun activeWallet(): MountWallet? =
+        wallets ?: HookRegistry.redisEcoHook?.let { RedisEconomyMountWallet() }
 
     fun key(entry: RewardCatalogEntry): String = when (val source = entry.source) {
         is RewardCatalogSource.Treasure -> "treasure:${source.pool}:${source.id}"
@@ -327,8 +330,8 @@ internal class CatalogPhysicalRewards(
     }
 
     private fun frozenProvidersReady(recipe: FrozenPhysicalRecipe): Boolean = when (recipe.type) {
-        "money" -> wallets.walletForCurrency(requireNotNull(recipe.currency)).let { it?.available == true }
-        "tokens" -> wallets.walletForCurrency("tokens")?.available == true
+        "money" -> activeWallet()?.walletForCurrency(requireNotNull(recipe.currency)).let { it?.available == true }
+        "tokens" -> activeWallet()?.walletForCurrency("tokens")?.available == true
         "command" -> commandProviderReady(requireNotNull(recipe.commandValue))
         "ae" -> Bukkit.getPluginManager().isPluginEnabled("AdvancedEnchantments")
         "mount" -> MountModule.rewardPreview(requireNotNull(recipe.mountId)) != null
@@ -345,7 +348,7 @@ internal class CatalogPhysicalRewards(
     private fun frozenTreasureProvidersReady(node: FrozenTreasureNode): Boolean = when (node.type) {
         "item" -> !node.requiresItemsAdder || Bukkit.getPluginManager().isPluginEnabled("ItemsAdder")
         "enchant", "potion" -> true
-        "money" -> wallets.walletForCurrency("vault")?.available == true
+        "money" -> activeWallet()?.walletForCurrency("vault")?.available == true
         "command" -> commandProviderReady(requireNotNull(node.commands).single())
         "sub-pool" -> node.children.orEmpty().filter { it.weight > 0 }.all(::frozenTreasureProvidersReady)
         "ae" -> Bukkit.getPluginManager().isPluginEnabled("AdvancedEnchantments")
@@ -355,7 +358,7 @@ internal class CatalogPhysicalRewards(
     }
 
     private fun commandProviderReady(command: String): Boolean = when {
-        tokenAmount(command) != null -> wallets.walletForCurrency("tokens")?.available == true
+        tokenAmount(command) != null -> activeWallet()?.walletForCurrency("tokens")?.available == true
         command.startsWith("arcbuilder:") -> Bukkit.getPluginManager().isPluginEnabled("ArcBuilder")
         command.startsWith("arcecojobs:") -> Bukkit.getPluginManager().isPluginEnabled("ArcEcoJobs")
         command.startsWith("elitemobs:") -> Bukkit.getPluginManager().isPluginEnabled("EliteMobs")
@@ -570,7 +573,7 @@ internal class CatalogPhysicalRewards(
     }
 
     internal fun deposit(player: Player, currency: String, amount: Double, operationId: UUID): PhysicalRewardOutcome {
-        val wallet = wallets.walletForCurrency(currency)?.takeIf { it.available } ?: return rejected()
+        val wallet = activeWallet()?.walletForCurrency(currency)?.takeIf { it.available } ?: return rejected()
         val minor = runCatching { BigDecimal.valueOf(amount).movePointRight(2).setScale(0, RoundingMode.HALF_UP).longValueExact() }
             .getOrNull()?.takeIf { it > 0 } ?: return rejected()
         val before = wallet.balanceMinor(player.uniqueId) ?: return rejected()
