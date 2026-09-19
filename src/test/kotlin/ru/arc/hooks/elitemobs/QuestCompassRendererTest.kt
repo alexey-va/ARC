@@ -4,6 +4,11 @@ import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import net.kyori.adventure.key.Key
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+import io.mockk.every
+import io.mockk.mockk
+import org.bukkit.Location
+import org.bukkit.World
+import java.util.UUID
 
 class QuestCompassRendererTest : FreeSpec({
     val empty = "-".repeat(63)
@@ -71,5 +76,61 @@ class QuestCompassRendererTest : FreeSpec({
         text(0f, "[EM] Go to world " + "long_world_".repeat(10) + "!").length shouldBe 44
         text(0f, "§a" + empty) shouldBe text(0f)
         text(0f, "x".repeat(100)).length shouldBe 44
+    }
+
+    "ambient compass projects distinct nearby offers and chests without a quest" {
+        val rendered = PlainTextComponentSerializer.plainText().serialize(QuestCompassRenderer.render(
+            0f, null, listOf(
+                CompassPoi(-15.0, 12.0, DungeonCompassPointKind.CHEST),
+                CompassPoi(20.0, 24.0, DungeonCompassPointKind.AVAILABLE_QUEST),
+                CompassPoi(180.0, 10.0, DungeonCompassPointKind.CHEST),
+                CompassPoi(10.0, 65.0, DungeonCompassPointKind.CHEST),
+            ),
+        ))
+        rendered[22] shouldBe '▣'
+        rendered[57] shouldBe '!'
+        rendered.count { it == '▣' } shouldBe 1
+        rendered[37] shouldBe 'S'
+    }
+
+    "tracked target wins a collision and nearby POIs cannot overcrowd the strip" {
+        val rendered = PlainTextComponentSerializer.plainText().serialize(QuestCompassRenderer.render(
+            0f, target(31, '⦿'), listOf(
+                CompassPoi(0.0, 1.0, DungeonCompassPointKind.CHEST),
+                CompassPoi(12.0, 20.0, DungeonCompassPointKind.CHEST),
+                CompassPoi(12.0, 2.0, DungeonCompassPointKind.AVAILABLE_QUEST),
+                CompassPoi(Double.NaN, 3.0, DungeonCompassPointKind.CHEST),
+            ),
+        ))
+        rendered[37] shouldBe '◇'
+        rendered[49] shouldBe '!'
+        rendered.count { it == '▣' } shouldBe 0
+    }
+
+    "unresolved tracking still permits real nearby points instead of inventing quest coordinates" {
+        val rendered = PlainTextComponentSerializer.plainText().serialize(QuestCompassRenderer.render(
+            0f, "[EM] No quest destination found!",
+            listOf(CompassPoi(0.0, 3.0, DungeonCompassPointKind.AVAILABLE_QUEST)),
+        ))
+        rendered[37] shouldBe '!'
+        rendered.contains('◇') shouldBe false
+    }
+
+    "POI bearing follows movement but never crosses world or nearby radius boundaries" {
+        val id = UUID.randomUUID()
+        val world = mockk<World> { every { uid } returns id }
+        val point = DungeonCompassPoint(id, 0.0, 64.0, 10.0, DungeonCompassPointKind.CHEST)
+        point.project(Location(world, 0.0, 64.0, 0.0))!!.bearing shouldBe 0.0
+        point.project(Location(world, 0.0, 64.0, 20.0))!!.bearing.let { kotlin.math.abs(it) } shouldBe 180.0
+        point.project(Location(world, 0.0, 64.0, -60.0)) shouldBe null
+        point.copy(worldId = UUID.randomUUID()).project(Location(world, 0.0, 64.0, 0.0)) shouldBe null
+        point.copy(x = Double.NaN).project(Location(world, 0.0, 64.0, 0.0)) shouldBe null
+        point.project(Location(world, 0.0, 64.0, 10.0)) shouldBe null
+    }
+
+    "crowded compass draws no more than eight visible nearby points" {
+        val points = (-30..30 step 3).map { CompassPoi(it.toDouble(), 10.0, DungeonCompassPointKind.CHEST) }
+        val rendered = PlainTextComponentSerializer.plainText().serialize(QuestCompassRenderer.render(0f, null, points))
+        rendered.count { it == '▣' } shouldBe 8
     }
 })

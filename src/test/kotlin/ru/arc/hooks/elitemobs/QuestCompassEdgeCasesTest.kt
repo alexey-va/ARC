@@ -5,14 +5,22 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
 import io.mockk.verify
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Location
+import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import org.bukkit.boss.BossBar as NativeBossBar
 import java.util.UUID
 
 class QuestCompassEdgeCasesTest : FreeSpec({
+    beforeTest {
+        mockkStatic(Bukkit::class)
+        every { Bukkit.getOnlinePlayers() } returns emptyList()
+    }
+    afterTest { unmockkStatic(Bukkit::class) }
     val plain = PlainTextComponentSerializer.plainText()
     val emptyNative = "-".repeat(63)
 

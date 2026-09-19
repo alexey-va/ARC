@@ -50,9 +50,9 @@ Only positions are saved. Inventory, rewards, mobs, objectives and match state
 are never restored. A blocked ordinary command/plugin teleport in an instance
 shows a throttled, clickable explanation of exit and checkpoint commands.
 
-## Quest compass
+## Dungeon compass
 
-ARC 1.4.159 replaces the tracked EliteMobs quest's green compass with a WHITE
+ARC replaces the tracked EliteMobs quest's green compass with a WHITE
 Adventure bossbar: coral angle brackets/cardinals, an unruled default-font strip
 and colored objective markers. No downloaded Compass plugin or additional
 resource-pack assets are installed. WHITE is the requested client-pack convention;
@@ -69,8 +69,10 @@ unchanged. The source compatibility owner is EliteMobs `quests/QuestTracking.jav
 
 The native bar stays invisible, while its player membership continues to carry
 `BossBarOrderManager` dialogue suspension. ARC mirrors that membership on the
-next tick. Switching or stopping tracking removes the previous replacement;
-shutdown restores native visibility. Failed compatibility keeps the native
+next tick. An EliteMobs-world explorer also receives the compass without a quest.
+Switching or stopping tracking retires the old replacement and retains one
+ambient compass. `QuestDialogueBossBarManager.hasActiveSession` suppresses it
+during NPC dialogue even without a native tracker. Shutdown restores native visibility. Failed compatibility keeps the native
 compass and logs once. No permissions or allowlists were added, and no EliteMobs
 JAR change is required. Player-client appearance and white-bar invisibility must
 be checked separately from unit/lifecycle tests and artifact activation.
@@ -85,8 +87,24 @@ It is hidden outside worlds registered by `EliteMobsWorld.isEliteMobsWorld`,
 without stopping quest tracking. Entering an EliteMobs world restores the same
 compass unless an NPC dialogue is suppressing it.
 
-Edge cases: no selected quest means no compass; unresolved coordinates show a
-compact status, not a guessed marker. Known targets have no distance cutoff in
+Nearby points are supplied read-only by `DungeonCompassPoints.kt`, using native
+treasure-chest and NPC registries, not scans of world blocks. `▣` marks a nearby
+lootable treasure chest; `!` marks an NPC with a quest the viewer can accept.
+The same-world radius is 64 blocks. Discovery and player-specific availability
+refresh once per second (immediately after a world change); projection follows
+movement and yaw every tick. At most eight visible nearby markers are drawn,
+with the nearest winning overlaps. Tracked objectives win over nearby markers.
+No chunks are loaded to discover points. Loot, cooldowns and quest state are
+never modified by this display.
+The chest adapter caches and type-checks the native private `restockTime` and
+`blacklistedPlayersInstance` fields because no read-only availability API exists.
+An adapter failure omits only that family of markers and logs the cause once;
+the compass and the other marker family keep working. Completed repeatable
+quests may reappear when the native permission/cooldown check allows them.
+
+Edge cases: no selected quest still shows directions and nearby points;
+unresolved coordinates show a compact status when there are no nearby points,
+or retain real nearby points without inventing a quest marker. Known tracked targets have no distance cutoff in
 the native projection. The reference-style strip shows ±36° inside the native
 ±90° projection: an out-of-view target is not pinned to an edge and appears
 when the player turns towards it. Cross-world navigation uses EliteMobs'
