@@ -740,10 +740,10 @@ scenes:
     actors:
       370: {"home": "56.0612,70.0,-141.8403,-85.6,0", "denied-denizen-flags": []}
       371: {"home": "63.6,70.0,-119.7132,57.0,-43.4", "denied-denizen-flags": []}
-      412: {"home": "48.5,69,-101.5,-90,0", "denied-denizen-flags": []}
-      413: {"home": "48.5,69,-101.5,-90,0", "denied-denizen-flags": []}
-      414: {"home": "52.5,69,-105.5,-90,0", "denied-denizen-flags": []}
-      415: {"home": "52.5,69,-105.5,-90,0", "denied-denizen-flags": []}
+      412: {"home": "43.5,68,-109.5,-90,0", "denied-denizen-flags": []}
+      413: {"home": "43.5,68,-109.5,-90,0", "denied-denizen-flags": []}
+      414: {"home": "73.5,68,-104.5,-90,0", "denied-denizen-flags": []}
+      415: {"home": "73.5,68,-104.5,-90,0", "denied-denizen-flags": []}
       422: {"home": "47.5,70.0,-136.5,-90,0", "denied-denizen-flags": []}
       423: {"home": "72.5,70.0,-134.5,-180,0", "denied-denizen-flags": []}
       369: {"home": "54.6336,70,-119.518,180,0", "denied-denizen-flags": []}
@@ -754,7 +754,7 @@ scenes:
       444: {"home": "57.5,70,-125.5,180,0", "denied-denizen-flags": []}
       445: {"home": "45.5,70,-141.5,-90,0", "denied-denizen-flags": []}
       446: {"home": "73.5,70,-141.5,90,0", "denied-denizen-flags": []}
-    anchor-ids: ["tack-table", "wind-approach", "buran-approach", "ryzhik-approach", "wind-graze", "wind-turn", "buran-graze", "buran-turn", "ryzhik-graze", "ryzhik-turn", "iney-turn", "bay-turn", "yard-center", "saddler-stand", "saddle-rack-stand", "helper-hay", "helper-barrels", "helper-feed", "feed-floor", "hay-source", "cat-nap", "cat-watch", "dog-patrol", "dog-watch", "goat-hay", "goat-turn", "llama-turn", "llama-watch", "donkey-graze", "packing-crates", "packing-stand", "packing-target", "caravan-helper", "caravan-person-mid", "caravan-animal-mid", "caravan-person-front", "caravan-animal-front", "home-369", "home-440", "home-441", "home-442", "home-443", "home-444", "home-445", "home-446", "helper-water", "water-trough", "caravan-person-exit", "caravan-animal-exit", "home-371", "home-422", "home-423", "home-415", "caravan-person-corner", "caravan-animal-corner", "home-412", "home-413", "iney-field-turn", "home-414", "bay-field-turn"]
+    anchor-ids: ["tack-table", "wind-approach", "buran-approach", "ryzhik-approach", "wind-graze", "wind-turn", "buran-graze", "buran-turn", "ryzhik-graze", "ryzhik-turn", "iney-turn", "bay-turn", "yard-center", "saddler-stand", "saddle-rack-stand", "helper-hay", "helper-barrels", "helper-feed", "feed-floor", "hay-source", "cat-nap", "cat-watch", "dog-patrol", "dog-watch", "goat-hay", "goat-turn", "llama-turn", "llama-watch", "donkey-graze", "packing-crates", "packing-stand", "packing-target", "caravan-helper", "caravan-person-mid", "caravan-animal-mid", "caravan-person-front", "caravan-animal-front", "home-369", "home-440", "home-441", "home-442", "home-443", "home-444", "home-445", "home-446", "helper-water", "water-trough", "caravan-person-exit", "caravan-animal-exit", "home-371", "home-422", "home-423", "home-415", "caravan-person-corner", "caravan-animal-corner", "home-412", "home-413", "home-414", "iney-field-point-0", "iney-field-point-1", "iney-field-point-2", "iney-field-point-3", "iney-field-point-4", "iney-field-point-5", "iney-field-point-6", "iney-field-point-7", "bay-field-point-0", "bay-field-point-1", "bay-field-point-2", "bay-field-point-3", "bay-field-point-4", "bay-field-point-5", "bay-field-point-6", "bay-field-point-7", "bay-field-point-8"]
     anchors:
       tack-table: "60.5,70.0,-122.5"
       wind-approach: "62.5,70.0,-121.5"
@@ -808,14 +808,29 @@ scenes:
       home-371: "63.6,70.0,-119.7132,57.0,-43.4"
       home-422: "47.5,70.0,-136.5,-90,0"
       home-423: "72.5,70.0,-134.5,-180,0"
-      home-415: "52.5,69,-105.5,-90,0"
+      home-415: "73.5,68,-104.5,-90,0"
       caravan-person-corner: "61.5,70,-139.5,0,0"
       caravan-animal-corner: "65.5,70,-138.5,0,0"
-      home-412: "48.5,69,-101.5,-90,0"
-      home-413: "48.5,69,-101.5,-90,0"
-      iney-field-turn: "51.5,69,-101.5,90,0"
-      home-414: "52.5,69,-105.5,-90,0"
-      bay-field-turn: "56.5,69,-105.5,90,0"
+      home-412: "43.5,68,-109.5,-90,0"
+      home-413: "43.5,68,-109.5,-90,0"
+      home-414: "73.5,68,-104.5,-90,0"
+      iney-field-point-0: "43.5,68,-109.5,-90,0"
+      iney-field-point-1: "47.5,68,-113.5,-90,0"
+      iney-field-point-2: "47.5,68,-117.5,-90,0"
+      iney-field-point-3: "47.5,69,-121.5,-90,0"
+      iney-field-point-4: "43.5,69,-124.5,-90,0"
+      iney-field-point-5: "39.5,68,-121.5,-90,0"
+      iney-field-point-6: "39.5,68,-117.5,-90,0"
+      iney-field-point-7: "43.5,68,-113.5,-90,0"
+      bay-field-point-0: "73.5,68,-104.5,-90,0"
+      bay-field-point-1: "81.5,68,-105.5,-90,0"
+      bay-field-point-2: "86.5,67,-109.5,-90,0"
+      bay-field-point-3: "87.5,67,-118.5,-90,0"
+      bay-field-point-4: "85.5,67,-126.5,-90,0"
+      bay-field-point-5: "81.5,68,-125.5,-90,0"
+      bay-field-point-6: "79.5,68,-125.5,-90,0"
+      bay-field-point-7: "77.5,69,-117.5,-90,0"
+      bay-field-point-8: "76.5,69,-109.5,-90,0"
     route-profile-ids: ["yard", "north", "caravan", "west-pen", "east-pen", "front-yard", "iney-field", "bay-field"]
     route-profiles:
       yard: {"floor-y": 70, "min-block": "43,-147", "max-block": "76,-116", "forbidden-areas": [], "preferred-areas": ["47,-141,73,-125"], "max-visited": 2048, "snap-radius": 3, "poll-ticks": 2, "stall-polls": 28, "speed-modifier": 0.58, "distance-margin": 0.55, "path-distance-margin": 0.45, "maximum-step-height": 0.125}
@@ -824,8 +839,8 @@ scenes:
       west-pen: {"floor-y": 70, "min-block": "47,-137", "max-block": "48,-134", "forbidden-areas": [], "preferred-areas": ["47,-141,73,-125"], "max-visited": 2048, "snap-radius": 1, "poll-ticks": 2, "stall-polls": 28, "speed-modifier": 0.58, "distance-margin": 0.55, "path-distance-margin": 0.45, "maximum-step-height": 0.125}
       east-pen: {"floor-y": 70, "min-block": "71,-135", "max-block": "73,-135", "forbidden-areas": [], "preferred-areas": ["47,-141,73,-125"], "max-visited": 2048, "snap-radius": 1, "poll-ticks": 2, "stall-polls": 28, "speed-modifier": 0.58, "distance-margin": 0.55, "path-distance-margin": 0.45, "maximum-step-height": 0.125}
       front-yard: {"floor-y": 70, "min-block": "55,-122", "max-block": "64,-116", "forbidden-areas": [], "preferred-areas": ["47,-141,73,-125"], "max-visited": 2048, "snap-radius": 1, "poll-ticks": 2, "stall-polls": 28, "speed-modifier": 0.58, "distance-margin": 0.55, "path-distance-margin": 0.45, "maximum-step-height": 0.125}
-      iney-field: {"floor-y": 69, "min-block": "48,-102", "max-block": "51,-102", "forbidden-areas": [], "preferred-areas": [], "max-visited": 128, "snap-radius": 1, "poll-ticks": 2, "stall-polls": 30, "speed-modifier": 0.42, "distance-margin": 0.22, "path-distance-margin": 0.2, "maximum-step-height": 0.125}
-      bay-field: {"floor-y": 69, "min-block": "52,-106", "max-block": "56,-106", "forbidden-areas": [], "preferred-areas": [], "max-visited": 128, "snap-radius": 1, "poll-ticks": 2, "stall-polls": 30, "speed-modifier": 0.42, "distance-margin": 0.22, "path-distance-margin": 0.2, "maximum-step-height": 0.125}
+      iney-field: {"floor-y": 69, "min-block": "37,-127", "max-block": "49,-108", "forbidden-areas": [], "preferred-areas": [], "max-visited": 1024, "snap-radius": 1, "poll-ticks": 2, "stall-polls": 50, "speed-modifier": 0.42, "distance-margin": 0.22, "path-distance-margin": 0.2, "maximum-step-height": 1.0, "maximum-surface-drop": 0.0625, "surface-search-range": 2, "allowed-support-materials": ["FARMLAND"]}
+      bay-field: {"floor-y": 69, "min-block": "71,-129", "max-block": "89,-103", "forbidden-areas": [], "preferred-areas": [], "max-visited": 1024, "snap-radius": 1, "poll-ticks": 2, "stall-polls": 50, "speed-modifier": 0.42, "distance-margin": 0.22, "path-distance-margin": 0.2, "maximum-step-height": 1.0, "maximum-surface-drop": 0.0625, "surface-search-range": 2, "allowed-support-materials": ["FARMLAND"]}
     cycle-ids: ["groom-wind", "inspect-buran", "inspect-ryzhik", "wind-paddock", "buran-paddock", "ryzhik-paddock", "iney-patrol", "bay-patrol", "saddler-work", "caravan-preparation", "helper-hay", "helper-water", "cat-round", "dog-round", "goat-round", "llama-round", "donkey-rest", "cat-and-dog"]
     cycles:
       groom-wind:
@@ -921,31 +936,53 @@ scenes:
         initial-delay-seconds: 2
         cooldown-min-seconds: 1
         cooldown-max-seconds: 3
-        step-ids: ["mount", "lap-0-out", "lap-0-back", "line", "lap-1-out", "lap-1-back", "lap-2-out", "lap-2-back"]
+        step-ids: ["mount", "lap-0-0", "lap-0-1", "lap-0-2", "lap-0-3", "lap-0-4", "lap-0-5", "lap-0-6", "lap-0-7", "line", "lap-1-0", "lap-1-1", "lap-1-2", "lap-1-3", "lap-1-4", "lap-1-5", "lap-1-6", "lap-1-7"]
         steps:
           mount: {"type": "MOUNT", "rider-id": 412, "vehicle-id": 413}
-          lap-0-out: {"type": "MOVE", "actor-id": 413, "anchor": "iney-field-turn", "route-profile": "iney-field", "timeout-ticks": 180}
-          lap-0-back: {"type": "MOVE", "actor-id": 413, "anchor": "home-413", "route-profile": "iney-field", "timeout-ticks": 180}
-          line: {"type": "SPEECH", "actor-id": 412, "text": "Иней, держим ровный шаг. До края поля и обратно."}
-          lap-1-out: {"type": "MOVE", "actor-id": 413, "anchor": "iney-field-turn", "route-profile": "iney-field", "timeout-ticks": 180}
-          lap-1-back: {"type": "MOVE", "actor-id": 413, "anchor": "home-413", "route-profile": "iney-field", "timeout-ticks": 180}
-          lap-2-out: {"type": "MOVE", "actor-id": 413, "anchor": "iney-field-turn", "route-profile": "iney-field", "timeout-ticks": 180}
-          lap-2-back: {"type": "MOVE", "actor-id": 413, "anchor": "home-413", "route-profile": "iney-field", "timeout-ticks": 180}
+          lap-0-0: {"type": "MOVE", "actor-id": 413, "anchor": "iney-field-point-1", "route-profile": "iney-field", "timeout-ticks": 600}
+          lap-0-1: {"type": "MOVE", "actor-id": 413, "anchor": "iney-field-point-2", "route-profile": "iney-field", "timeout-ticks": 600}
+          lap-0-2: {"type": "MOVE", "actor-id": 413, "anchor": "iney-field-point-3", "route-profile": "iney-field", "timeout-ticks": 600}
+          lap-0-3: {"type": "MOVE", "actor-id": 413, "anchor": "iney-field-point-4", "route-profile": "iney-field", "timeout-ticks": 600}
+          lap-0-4: {"type": "MOVE", "actor-id": 413, "anchor": "iney-field-point-5", "route-profile": "iney-field", "timeout-ticks": 600}
+          lap-0-5: {"type": "MOVE", "actor-id": 413, "anchor": "iney-field-point-6", "route-profile": "iney-field", "timeout-ticks": 600}
+          lap-0-6: {"type": "MOVE", "actor-id": 413, "anchor": "iney-field-point-7", "route-profile": "iney-field", "timeout-ticks": 600}
+          lap-0-7: {"type": "MOVE", "actor-id": 413, "anchor": "iney-field-point-0", "route-profile": "iney-field", "timeout-ticks": 600}
+          line: {"type": "SPEECH", "actor-id": 412, "text": "Иней, проверим морковные грядки и дальний край поля."}
+          lap-1-0: {"type": "MOVE", "actor-id": 413, "anchor": "iney-field-point-7", "route-profile": "iney-field", "timeout-ticks": 600}
+          lap-1-1: {"type": "MOVE", "actor-id": 413, "anchor": "iney-field-point-6", "route-profile": "iney-field", "timeout-ticks": 600}
+          lap-1-2: {"type": "MOVE", "actor-id": 413, "anchor": "iney-field-point-5", "route-profile": "iney-field", "timeout-ticks": 600}
+          lap-1-3: {"type": "MOVE", "actor-id": 413, "anchor": "iney-field-point-4", "route-profile": "iney-field", "timeout-ticks": 600}
+          lap-1-4: {"type": "MOVE", "actor-id": 413, "anchor": "iney-field-point-3", "route-profile": "iney-field", "timeout-ticks": 600}
+          lap-1-5: {"type": "MOVE", "actor-id": 413, "anchor": "iney-field-point-2", "route-profile": "iney-field", "timeout-ticks": 600}
+          lap-1-6: {"type": "MOVE", "actor-id": 413, "anchor": "iney-field-point-1", "route-profile": "iney-field", "timeout-ticks": 600}
+          lap-1-7: {"type": "MOVE", "actor-id": 413, "anchor": "iney-field-point-0", "route-profile": "iney-field", "timeout-ticks": 600}
       bay-patrol:
         actor-ids: ["414", "415"]
         initial-delay-seconds: 5
         cooldown-min-seconds: 1
         cooldown-max-seconds: 3
-        step-ids: ["mount", "lap-0-out", "lap-0-back", "line", "lap-1-out", "lap-1-back", "lap-2-out", "lap-2-back"]
+        step-ids: ["mount", "lap-0-0", "lap-0-1", "lap-0-2", "lap-0-3", "lap-0-4", "lap-0-5", "lap-0-6", "lap-0-7", "lap-0-8", "line", "lap-1-0", "lap-1-1", "lap-1-2", "lap-1-3", "lap-1-4", "lap-1-5", "lap-1-6", "lap-1-7", "lap-1-8"]
         steps:
           mount: {"type": "MOUNT", "rider-id": 414, "vehicle-id": 415}
-          lap-0-out: {"type": "MOVE", "actor-id": 415, "anchor": "bay-field-turn", "route-profile": "bay-field", "timeout-ticks": 180}
-          lap-0-back: {"type": "MOVE", "actor-id": 415, "anchor": "home-415", "route-profile": "bay-field", "timeout-ticks": 180}
-          line: {"type": "SPEECH", "actor-id": 414, "text": "Гнедой, разминаемся в поле. На дороге людям мешать не будем."}
-          lap-1-out: {"type": "MOVE", "actor-id": 415, "anchor": "bay-field-turn", "route-profile": "bay-field", "timeout-ticks": 180}
-          lap-1-back: {"type": "MOVE", "actor-id": 415, "anchor": "home-415", "route-profile": "bay-field", "timeout-ticks": 180}
-          lap-2-out: {"type": "MOVE", "actor-id": 415, "anchor": "bay-field-turn", "route-profile": "bay-field", "timeout-ticks": 180}
-          lap-2-back: {"type": "MOVE", "actor-id": 415, "anchor": "home-415", "route-profile": "bay-field", "timeout-ticks": 180}
+          lap-0-0: {"type": "MOVE", "actor-id": 415, "anchor": "bay-field-point-1", "route-profile": "bay-field", "timeout-ticks": 600}
+          lap-0-1: {"type": "MOVE", "actor-id": 415, "anchor": "bay-field-point-2", "route-profile": "bay-field", "timeout-ticks": 600}
+          lap-0-2: {"type": "MOVE", "actor-id": 415, "anchor": "bay-field-point-3", "route-profile": "bay-field", "timeout-ticks": 600}
+          lap-0-3: {"type": "MOVE", "actor-id": 415, "anchor": "bay-field-point-4", "route-profile": "bay-field", "timeout-ticks": 600}
+          lap-0-4: {"type": "MOVE", "actor-id": 415, "anchor": "bay-field-point-5", "route-profile": "bay-field", "timeout-ticks": 600}
+          lap-0-5: {"type": "MOVE", "actor-id": 415, "anchor": "bay-field-point-6", "route-profile": "bay-field", "timeout-ticks": 600}
+          lap-0-6: {"type": "MOVE", "actor-id": 415, "anchor": "bay-field-point-7", "route-profile": "bay-field", "timeout-ticks": 600}
+          lap-0-7: {"type": "MOVE", "actor-id": 415, "anchor": "bay-field-point-8", "route-profile": "bay-field", "timeout-ticks": 600}
+          lap-0-8: {"type": "MOVE", "actor-id": 415, "anchor": "bay-field-point-0", "route-profile": "bay-field", "timeout-ticks": 600}
+          line: {"type": "SPEECH", "actor-id": 414, "text": "Гнедой, обходим пшеницу большим кругом. Дорогу оставим людям."}
+          lap-1-0: {"type": "MOVE", "actor-id": 415, "anchor": "bay-field-point-8", "route-profile": "bay-field", "timeout-ticks": 600}
+          lap-1-1: {"type": "MOVE", "actor-id": 415, "anchor": "bay-field-point-7", "route-profile": "bay-field", "timeout-ticks": 600}
+          lap-1-2: {"type": "MOVE", "actor-id": 415, "anchor": "bay-field-point-6", "route-profile": "bay-field", "timeout-ticks": 600}
+          lap-1-3: {"type": "MOVE", "actor-id": 415, "anchor": "bay-field-point-5", "route-profile": "bay-field", "timeout-ticks": 600}
+          lap-1-4: {"type": "MOVE", "actor-id": 415, "anchor": "bay-field-point-4", "route-profile": "bay-field", "timeout-ticks": 600}
+          lap-1-5: {"type": "MOVE", "actor-id": 415, "anchor": "bay-field-point-3", "route-profile": "bay-field", "timeout-ticks": 600}
+          lap-1-6: {"type": "MOVE", "actor-id": 415, "anchor": "bay-field-point-2", "route-profile": "bay-field", "timeout-ticks": 600}
+          lap-1-7: {"type": "MOVE", "actor-id": 415, "anchor": "bay-field-point-1", "route-profile": "bay-field", "timeout-ticks": 600}
+          lap-1-8: {"type": "MOVE", "actor-id": 415, "anchor": "bay-field-point-0", "route-profile": "bay-field", "timeout-ticks": 600}
       saddler-work:
         actor-ids: ["369"]
         initial-delay-seconds: 3

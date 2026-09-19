@@ -168,6 +168,81 @@ class OriginScenePlanTest : FreeSpec({
         }
     }
 
+    "route profile rejects unknown allowed support material" {
+        val root = Files.createTempDirectory("origin-scenes-invalid-support-material-")
+        Files.createDirectories(root.resolve("modules"))
+        Files.writeString(
+            root.resolve("modules/origin-scenes.yml"),
+            """
+            scenes:
+              forge:
+                route-profiles:
+                  floor:
+                    allowed-support-materials: [NOT_A_MATERIAL]
+            """.trimIndent(),
+        )
+
+        shouldThrow<IllegalArgumentException> { OriginScenePlan.load(root) }
+    }
+
+    "route profile rejects item-only support material" {
+        val root = Files.createTempDirectory("origin-scenes-invalid-item-support-material-")
+        Files.createDirectories(root.resolve("modules"))
+        Files.writeString(
+            root.resolve("modules/origin-scenes.yml"),
+            """
+            scenes:
+              forge:
+                route-profiles:
+                  floor:
+                    allowed-support-materials: [POTION]
+            """.trimIndent(),
+        )
+
+        shouldThrow<IllegalArgumentException> { OriginScenePlan.load(root) }
+    }
+
+    "route profile parses bounded surface drop and support materials" {
+        val root = Files.createTempDirectory("origin-scenes-support-material-")
+        Files.createDirectories(root.resolve("modules"))
+        Files.writeString(
+            root.resolve("modules/origin-scenes.yml"),
+            """
+            scenes:
+              forge:
+                route-profiles:
+                  floor:
+                    maximum-surface-drop: 0.0625
+                    maximum-step-height: 1.0
+                    surface-search-range: 2
+                    allowed-support-materials: [FARMLAND]
+            """.trimIndent(),
+        )
+
+        val profile = OriginScenePlan.load(root).scene("forge").routeProfiles.getValue("floor")
+        profile.maximumSurfaceDrop shouldBe 0.0625
+        profile.maximumStepHeight shouldBe 1.0
+        profile.surfaceSearchRange shouldBe 2
+        profile.allowedSupportMaterials shouldBe setOf(org.bukkit.Material.FARMLAND)
+    }
+
+    "route profile rejects nonzero surface search without support allowlist" {
+        val root = Files.createTempDirectory("origin-scenes-surface-search-gate-")
+        Files.createDirectories(root.resolve("modules"))
+        Files.writeString(
+            root.resolve("modules/origin-scenes.yml"),
+            """
+            scenes:
+              forge:
+                route-profiles:
+                  floor:
+                    surface-search-range: 1
+            """.trimIndent(),
+        )
+
+        shouldThrow<IllegalArgumentException> { OriginScenePlan.load(root) }
+    }
+
     "scene points reject non-finite coordinates and poses" {
         shouldThrow<IllegalArgumentException> { OriginScenePoint(Double.NaN, 0.0, 0.0) }
         shouldThrow<IllegalArgumentException> { OriginScenePoint(0.0, 0.0, 0.0, Float.POSITIVE_INFINITY) }

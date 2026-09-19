@@ -1,8 +1,14 @@
 package ru.arc.npc
 
 import io.kotest.core.spec.style.FreeSpec
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
+import io.mockk.every
+import io.mockk.mockk
 import org.bukkit.Material
+import org.bukkit.World
+import org.bukkit.block.Block
+import org.bukkit.util.BoundingBox
 import org.bukkit.util.Vector
 
 class NpcRouteControllerTest : FreeSpec({
@@ -37,6 +43,89 @@ class NpcRouteControllerTest : FreeSpec({
         isNpcRouteFloorCovering(Material.RED_CARPET, 0.0625, 0.125) shouldBe true
         isNpcRouteFloorCovering(Material.RED_CARPET, 0.5, 0.125) shouldBe false
         isNpcRouteFloorCovering(Material.STONE, 0.0, 0.125) shouldBe false
+    }
+
+    "field surface opt-in accepts farmland drop but rejects slabs and roads" {
+        val support = BoundingBox(0.0, 0.0, 0.0, 1.0, 0.9375, 1.0)
+        val slab = BoundingBox(0.0, 0.0, 0.0, 1.0, 0.5, 1.0)
+        val defaultProfile = NpcRouteProfile("default", 69, NpcRouteBounds(0, 0, 0, 0))
+        val fieldProfile = defaultProfile.copy(
+            maximumSurfaceDrop = 0.0625,
+            allowedSupportMaterials = setOf(Material.FARMLAND),
+        )
+
+        isNpcRouteSupportBoxAllowed(Material.FARMLAND, support, defaultProfile) shouldBe false
+        isNpcRouteSupportBoxAllowed(Material.FARMLAND, support, fieldProfile) shouldBe true
+        isNpcRouteSupportBoxAllowed(Material.STONE_SLAB, slab, fieldProfile) shouldBe false
+        isNpcRouteSupportBoxAllowed(Material.DIRT_PATH, BoundingBox(0.0, 0.0, 0.0, 1.0, 1.0, 1.0), fieldProfile) shouldBe false
+    }
+
+    "default grid edges remain unconstrained while bounded terrain accepts one block ascent only" {
+        val start = NpcRouteCell(0, 0)
+        val goal = NpcRouteCell(1, 0)
+        val profile = NpcRouteProfile(
+            id = "field",
+            floorY = 69,
+            bounds = NpcRouteBounds(0, 1, 0, 0),
+            maximumStepHeight = 1.0,
+        )
+        val oneBlockAscent = mapOf(start to 69.0, goal to 70.0)
+        val edge = { from: NpcRouteCell, to: NpcRouteCell ->
+            kotlin.math.abs(oneBlockAscent.getValue(from) - oneBlockAscent.getValue(to)) <= profile.maximumStepHeight + 1.0e-6
+        }
+
+        findNpcGridPath(start, listOf(goal), profile) { true } shouldBe listOf(start, goal)
+        findNpcGridPath(start, listOf(goal), profile, isWalkable = { true }, canTraverse = edge) shouldBe listOf(start, goal)
+
+        val twoBlockCliff = oneBlockAscent + (goal to 71.0)
+        val cliffEdge = { from: NpcRouteCell, to: NpcRouteCell ->
+            kotlin.math.abs(twoBlockCliff.getValue(from) - twoBlockCliff.getValue(to)) <= profile.maximumStepHeight + 1.0e-6
+        }
+        findNpcGridPath(start, listOf(goal), profile, isWalkable = { true }, canTraverse = cliffEdge) shouldBe null
+    }
+
+    "surface search requires an explicit support allowlist" {
+        val defaultProfile = NpcRouteProfile("default", 69, NpcRouteBounds(0, 0, 0, 0))
+
+        shouldThrow<IllegalArgumentException> {
+            defaultProfile.copy(surfaceSearchRange = 1)
+        }
+    }
+
+    "surface resolver follows farmland terraces without accepting road support" {
+        val world = mockk<World>()
+        val air = routeTestBlock(Material.AIR, true)
+        val crops = routeTestBlock(Material.WHEAT, true)
+        val farmland = routeTestBlock(Material.FARMLAND, false, 0.9375)
+        val road = routeTestBlock(Material.DIRT_PATH, false, 0.9375)
+        every { world.getBlockAt(any<Int>(), any<Int>(), any<Int>()) } answers {
+            when (firstArg<Int>() to secondArg<Int>()) {
+                0 to 67, 1 to 68 -> farmland
+                0 to 68, 1 to 69 -> crops
+                2 to 67 -> road
+                else -> air
+            }
+        }
+        val field = NpcRouteProfile(
+            "field", 69, NpcRouteBounds(0, 2, 0, 0), maximumStepHeight = 1.0,
+            maximumSurfaceDrop = 0.0625, surfaceSearchRange = 2,
+            allowedSupportMaterials = setOf(Material.FARMLAND),
+        )
+        resolveSurfaceY(world, field, NpcRouteCell(0, 0)) shouldBe 67.9375
+        resolveSurfaceY(world, field, NpcRouteCell(1, 0)) shouldBe 68.9375
+        resolveSurfaceY(world, field, NpcRouteCell(2, 0)) shouldBe null
+        isNpcRouteActualYAllowed(68.9375, 67.9375, field) shouldBe true
+        isNpcRouteActualYAllowed(70.0, 67.9375, field) shouldBe false
+    }
+
+    "flat surface resolver preserves authored feet height on tall support" {
+        val world = mockk<World>()
+        every { world.getBlockAt(0, 69, 0) } returns routeTestBlock(Material.AIR, true)
+        every { world.getBlockAt(0, 70, 0) } returns routeTestBlock(Material.AIR, true)
+        every { world.getBlockAt(0, 68, 0) } returns routeTestBlock(Material.OAK_FENCE, false, 1.5)
+        val flat = NpcRouteProfile("flat", 69, NpcRouteBounds(0, 0, 0, 0))
+        resolveSurfaceY(world, flat, NpcRouteCell(0, 0)) shouldBe 69.0
+        isNpcRouteActualYAllowed(70.0, 69.0, flat) shouldBe false
     }
 
     "hard no-go areas are never crossed" {
@@ -134,3 +223,15 @@ class NpcRouteControllerTest : FreeSpec({
         path?.any { it.z != 1 } shouldBe true
     }
 })
+
+private fun routeTestBlock(material: Material, passable: Boolean, height: Double? = null): Block =
+    mockk<Block>().also { block ->
+        every { block.type } returns material
+        every { block.isPassable } returns passable
+        every { block.isLiquid } returns false
+        every { block.collisionShape } returns mockk {
+            every { boundingBoxes } returns height?.let {
+                listOf(BoundingBox(0.0, 0.0, 0.0, 1.0, it, 1.0))
+            }.orEmpty()
+        }
+    }

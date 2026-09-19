@@ -19,6 +19,7 @@ import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
+import org.bukkit.event.entity.EntityChangeBlockEvent
 import org.bukkit.util.Transformation
 import org.joml.AxisAngle4f
 import org.joml.Vector3f
@@ -27,8 +28,10 @@ import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.PluginModule
 import ru.arc.hooks.citizens.ArcNpcHologramModule
 import ru.arc.npc.CitizensNpcRouteController
+import ru.arc.npc.NpcRouteCell
 import ru.arc.npc.NpcRouteEvent
 import ru.arc.npc.NpcRouteObstacleSource
+import ru.arc.npc.NpcRouteProfile
 import ru.arc.observability.StructuredDebugLine
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
@@ -102,9 +105,48 @@ object OriginAmbientScenesModule : PluginModule, Listener {
             OriginSceneRecoveryPolicy.KEEP_CURRENT_POSITION,
         )
     }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    fun onSceneActorChangesCrop(event: EntityChangeBlockEvent) {
+        val actorId = CitizensAPI.getNPCRegistry().getNPC(event.entity)?.id ?: return
+        if (service?.protectsCrop(event.block.world.name, actorId, event.block.type) == true) {
+            event.isCancelled = true
+        }
+    }
 }
 
 data class OriginSceneCycleKey(val sceneId: String, val cycleId: String)
+
+/**
+ * Chooses a safe route profile for a cycle actor's home recovery.
+ *
+ * A cycle's own MOVE/MOVE_GROUP profile is authoritative when it accepts the
+ * authored home level and cell. Profiles from unrelated cycles remain a
+ * compatibility fallback for legacy flat homes.
+ */
+internal fun selectOriginSceneHomeProfile(
+    routeProfiles: Map<String, NpcRouteProfile>,
+    cycle: OriginSceneCycle,
+    actorId: Int,
+    home: Location,
+): NpcRouteProfile? {
+    val cycleProfileIds = cycle.steps.flatMap { step ->
+        when (step) {
+            is OriginSceneStep.Move -> listOf(step.routeProfile).takeIf { step.actorId == actorId }.orEmpty()
+            is OriginSceneStep.MoveGroup -> listOf(step.routeProfile).takeIf { actorId in step.actorIds }.orEmpty()
+            else -> emptyList()
+        }
+    }.distinct()
+    val homeCell = NpcRouteCell(home.blockX, home.blockZ)
+    fun accepts(profile: NpcRouteProfile): Boolean {
+        val authoredLevel = (profile.floorY - profile.surfaceSearchRange)..(profile.floorY + profile.surfaceSearchRange)
+        return home.blockY in authoredLevel && profile.allows(homeCell)
+    }
+    return cycleProfileIds.asSequence()
+        .mapNotNull(routeProfiles::get)
+        .firstOrNull(::accepts)
+        ?: routeProfiles.values.firstOrNull(::accepts)
+}
 
 sealed interface OriginSceneStartResult {
     data class Started(val key: OriginSceneCycleKey) : OriginSceneStartResult
@@ -146,7 +188,11 @@ private class OriginSceneService(
     private val active = mutableMapOf<UUID, ActiveOriginSceneCycle>()
     private val speech = mutableMapOf<Int, OriginSceneSpeech>()
     private val lastResults = mutableMapOf<OriginSceneCycleKey, String>()
+    private val cropProtection = OriginSceneCropProtection.from(plan)
     private var closed = false
+
+    fun protectsCrop(world: String, actorId: Int, material: Material): Boolean =
+        cropProtection.protects(world, actorId, material)
 
     fun start() {
         removeAbandonedDisplays()
@@ -813,7 +859,7 @@ private class OriginSceneService(
         originSceneReturnActorIds(running.cycle.actorIds, running.mountedPairs, keepMounted).forEach { actorId ->
             val actor = npc(actorId)?.takeIf(NPC::isSpawned) ?: return@forEach
             val home = running.scene.actors.getValue(actorId).home.inWorld(world)
-            val profile = running.scene.routeProfiles.values.firstOrNull { it.floorY == home.blockY && NpcBounds.contains(it, home) }
+            val profile = selectOriginSceneHomeProfile(running.scene.routeProfiles, running.cycle, actorId, home)
             if (profile == null || actor.entity.location.distanceSquared(home) < 0.8) {
                 check(actor.entity.teleport(home)) { "NPC $actorId home teleport rejected" }
                 return@forEach
@@ -1007,11 +1053,6 @@ private class OriginSceneService(
         speech.clear()
         routeController.close()
         info("ORIGIN_SCENE phase=STOPPED")
-    }
-
-    private object NpcBounds {
-        fun contains(profile: ru.arc.npc.NpcRouteProfile, location: org.bukkit.Location): Boolean =
-            location.blockX in profile.bounds.minX..profile.bounds.maxX && location.blockZ in profile.bounds.minZ..profile.bounds.maxZ
     }
 
     private companion object {
