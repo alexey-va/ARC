@@ -34,7 +34,7 @@ messages:
     weight: 1
     personal: false
   '4':
-    message: '<gold>Квесты <white>· Монеты и опыт путей выдаются автоматически.<newline>  <click:run_command:"/rank quests"><yellow>/rank quests</yellow></click> <white>— задания на сегодня.<newline>  <click:run_command:"/rank"><yellow>/rank</yellow></click> <white>— условия и преимущества следующего ранга.'
+    message: '<gold>Квесты <white>· Монеты и опыт путей выдаются автоматически.<newline>  <click:run_command:"/quests"><yellow>/quests</yellow></click> <white>— задания на сегодня.<newline>  <click:run_command:"/rank"><yellow>/rank</yellow></click> <white>— условия и преимущества следующего ранга.'
     servers: all
     player-specific: false
     cache: true
