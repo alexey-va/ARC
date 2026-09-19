@@ -100,6 +100,36 @@ async function stopReplacement(child) {
   try { await closed; } finally { clearTimeout(timer); }
 }
 
+function waitForCrashDisconnect(bot, signal, submit) {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      clearTimeout(timer);
+      bot.off('end', ended);
+      bot.off('error', failed);
+      signal?.removeEventListener('abort', aborted);
+    };
+    const finish = error => {
+      cleanup();
+      if (error) reject(error);
+      else resolve();
+    };
+    const ended = () => finish();
+    // Runtime.halt may reset the socket before emitting `end`. Unlike
+    // events.once(), tolerate that reset only while awaiting this deliberate
+    // crash; the caller still verifies the persisted phase and terminated PID.
+    const failed = error => { if (error.code !== 'ECONNRESET') finish(error); };
+    const aborted = () => finish(new Error('Crash disconnect wait aborted'));
+    const timer = setTimeout(() => finish(new Error('Deliberate crash did not disconnect the client')), 15000);
+    bot.once('end', ended);
+    bot.on('error', failed);
+    signal?.addEventListener('abort', aborted, { once: true });
+    if (signal?.aborted) aborted();
+    else {
+      try { submit(); } catch (error) { finish(error); }
+    }
+  });
+}
+
 if (enabled) test('contract items, provider payment and journal survive real process crashes without replay', async ({ player, signal }) => {
   const native = observeNativeDialog(player, signal);
   let replacement;
@@ -133,9 +163,8 @@ if (enabled) test('contract items, provider payment and journal survive real pro
       assert.ok(quoted, 'Confirmation dialog must expose the exact payout');
       const quotedMinor = Math.round(Number(quoted[0].replace(',', '.')) * 100);
       assert.ok(quotedMinor > 0, 'Quote must expose the exact positive payout');
-      const ended = once(player.bot, 'end', { signal });
-      native.send(text => /^Сдать(?:\s|$)/.test(text));
-      await ended;
+      await waitForCrashDisconnect(player.bot, signal, () =>
+        native.send(text => /^Сдать(?:\s|$)/.test(text)));
       const crash = await properties('crashed');
       assert.equal(crash.phase, phase, 'Paper must halt at the requested production boundary');
       const crashedPid = Number(crash.processId);
