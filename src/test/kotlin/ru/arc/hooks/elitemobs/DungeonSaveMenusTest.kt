@@ -90,13 +90,14 @@ class DungeonSaveMenusTest : FreeSpec({
         shown.last().buttons.map { it.id.value } shouldBe listOf("quest_0", "quest_1", "quest_2", "quest_3", "refresh")
         val plainText = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
         shown.last().buttons.take(4).map { plainText.serialize(it.label) } shouldBe
-            entries!!.map { "${it.name} ›" }
+            entries!!.map { "${if (it.tracked) "✔" else "○"} ${it.name} ›" }
         val bodyText = shown.last().body.flatMap { body ->
             listOf(net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(body.text))
         }
         listOf("В процессе · Отслеживается", "В процессе · Не отслеживается",
             "Готово к сдаче · Отслеживается", "Готово к сдаче · Не отслеживается").forEachIndexed { index, status ->
-            bodyText.any { it.contains("${entries!![index].name}\n$status") } shouldBe true
+            val entry = entries!![index]
+            bodyText.any { it.contains("${if (entry.tracked) "✔" else "○"} ${entry.name}\n$status") } shouldBe true
         }
         shown.last().body.flatMap { body ->
             val points = mutableListOf<Int>()
@@ -124,8 +125,15 @@ class DungeonSaveMenusTest : FreeSpec({
         shown.last().buttons.first { it.id.value == "quest_3" }.onClick.handle(mockk())
         shown.last().body.any { net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(it.text) == "Готово к сдаче · Не отслеживается" } shouldBe true
 
+        entries = entries!!.map { it.copy(tracked = it.id == ids[1]) }
+        menus.quests(player)
+        shown.last().buttons.take(4).map { plainText.serialize(it.label).first() } shouldBe listOf('○', '✔', '○', '○')
+        entries = entries!!.map { it.copy(tracked = false) }
+        menus.quests(player)
+        shown.last().buttons.take(4).map { plainText.serialize(it.label).first() } shouldBe List(4) { '○' }
+
         entries = emptyList()
-        shown.last().exitButton!!.onClick.handle(mockk())
+        menus.quests(player)
         shown.last().buttons.map { it.id.value } shouldBe listOf("refresh")
         shown.last().exitButton!!.id.value shouldBe "back"
         entries = null

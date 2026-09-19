@@ -104,14 +104,13 @@ internal class DungeonSaveMenus(
         val pageCount = ((entries.orEmpty().size + questsPerPage - 1) / questsPerPage).coerceAtLeast(1)
         val page = requestedPage.coerceIn(0, pageCount - 1)
         val listed = entries.orEmpty().drop(page * questsPerPage).take(questsPerPage)
-        val body = mutableListOf(PaperDialogBody(text("quests.intro", "<#f2eee8>Принятые задания EliteMobs. Под названием — прогресс и отслеживание. Выберите задание для управления."), 468))
+        val body = mutableListOf(PaperDialogBody(text("quests.intro", "<#f2eee8>✔ — отслеживается, ○ — не отслеживается. Готовность к сдаче указана отдельно. Выберите задание для управления."), 468))
         if (listed.isEmpty()) {
             body += PaperDialogBody(if (entries == null) text("quests.unavailable", "<#d7b486>Данные заданий ещё загружаются. Попробуйте обновить страницу.")
                 else text("quests.empty", "<#f2eee8>Принятых заданий пока нет. Поговорите с персонажами, которые предлагают задания."), 468)
         } else {
             val summary = Component.empty().children(listed.flatMapIndexed { index, quest ->
-                val name = plain(readableQuestText(TextUtil.legacy(quest.name)))
-                val row = text("quests.list-name", "<#c4a7e7><name>", "name" to name)
+                val row = questName(quest)
                     .append(Component.newline()).append(questStatus(quest))
                 if (index == 0) listOf(row) else listOf(Component.newline(), row)
             })
@@ -121,10 +120,7 @@ internal class DungeonSaveMenus(
         }
         feedback?.let { body += PaperDialogBody(plain(it), 468) }
         val questButtons = listed.mapIndexed { index, quest ->
-            val label = text(
-                "quests.open", "<#c4a7e7><name> ›",
-                "name" to plain(readableQuestText(TextUtil.legacy(quest.name))),
-            )
+            val label = questName(quest, navigation = true)
             pointButton("quest_$index", label, text("quests.open-tooltip", "Открыть прогресс и управление заданием")) { quest(player, quest.id) }
         }
         show(player, PaperDialogScreen(
@@ -202,6 +198,14 @@ internal class DungeonSaveMenus(
             }),
             exitButton = back { quest(player, questId) }, columns = 1,
         )) { confirmAbandon(player, questId) }
+    }
+
+    private fun questName(quest: DungeonQuestInfo, navigation: Boolean = false): Component {
+        val surface = if (navigation) "open" else "list-name"
+        val state = if (quest.tracked) "tracked" else "untracked"
+        val label = if (quest.tracked) "<#9bd48d>✔ <name>" else "<white>○ <name>"
+        return text("quests.$surface-$state", label + if (navigation) " <#c4a7e7>›" else "",
+            "name" to Component.text(plainDungeonQuestText(quest.name)))
     }
 
     private fun questStatus(quest: DungeonQuestInfo): Component = when {
