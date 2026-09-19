@@ -47,6 +47,26 @@ class MountGuiItemsCurrencyTest : TestBase() {
         config.guiText("list.mount-upgrades-ability-footer", "") shouldBe
             "<color:#ff9f0f>ПКМ<color:#e6fff3> — покупка улучшений"
     }
+
+    @Test
+    fun `passenger mounts show capacity and the boarding action in list and detail lore`() {
+        val config = bundledMountConfigForCurrency()
+        val mount = checkNotNull(config.catalog()["happy_ghast"])
+        val items = MountGuiItems({ config }, mockk(relaxed = true))
+        val profile = MountProfile(level = 1, glowOwned = false, glowDisabled = false)
+
+        val listLore =
+            checkNotNull(items.mountIcon(mount, profile).itemMeta?.lore())
+                .map(PlainTextComponentSerializer.plainText()::serialize)
+        val detailLore =
+            checkNotNull(items.mountIcon(mount, profile, detailed = true).itemMeta?.lore())
+                .map(PlainTextComponentSerializer.plainText()::serialize)
+
+        listLore.any { "Пассажирские места: 2" in it } shouldBe true
+        listLore.any { "ПКМ по маунту — сесть пассажиром" in it } shouldBe true
+        detailLore.any { "Особенность: Пассажирские места: 2" in it } shouldBe true
+        detailLore.any { "ПКМ по маунту — сесть пассажиром" in it } shouldBe true
+    }
 }
 
 private fun bundledMountConfigForCurrency(): MountModuleConfig {

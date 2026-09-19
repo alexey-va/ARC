@@ -13,6 +13,17 @@ Native production replacement for `Denizen/scripts/activities/rideable_mobs.dsc`
   transitions remain correct; hold and release Space for their charged jump.
   Flying and swimming mounts use WASD, Space to ascend and Shift to descend.
   Every mount uses double Shift to dismount; a single Shift never ends the ride.
+- Passenger capacity is an inherent catalog feature and needs no ownership node.
+  The configured `passenger-seats` count excludes the driver: Camel and Camel
+  Husk provide one extra seat, while Ravager and Happy Ghast provide two and
+  Polar Bear provides one. Passengers board with the mount's right-click action,
+  leave with one Shift, and are cleaned up when the driver session ends.
+  Large non-native mounts prepare one invisible, silent Camel carrier per guest
+  seat during summon, with both carriers mounted on the root beside the direct
+  root driver. Preparation takes about three seconds; guests should retry after
+  the preparation message. The first carrier uses root yaw plus
+  `passengers.carrier-yaw-offset`; the second uses root yaw minus it. Tune
+  carrier size with `passengers.carrier-scale`.
 - Typed per-mount abilities are configured under `abilities`. The mountain
   goat, frog, horse and fox have authored jump strengths. Contextual permanent
   upgrades are bought from the detail screen: night vision also fits the
@@ -138,8 +149,9 @@ the exact debit, refund or direct permission can be proven.
 The bundled and live file is `plugins/ARC/modules/mounts.yml`. It owns the
 catalog, rarity, descriptions, three level price/speed/handling/scale values,
 deterministic base appearance, skins, equipment, authored size profiles,
-behaviors and cosmetic trail geometry. Spawn, survival and parkour keep
-separate tracked copies for their world and purchasing policies.
+behaviors, passenger seat capacity and cosmetic trail geometry. Spawn, survival
+and parkour keep separate tracked copies for their world and purchasing
+policies.
 
 Metrics use no player or transaction labels:
 

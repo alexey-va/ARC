@@ -205,6 +205,21 @@ internal class MountGuiItems(
                                 )
                             }
                         }
+                        if (mount.passengerSeats > 0) {
+                            add(
+                                copy(
+                                    "detail.passenger-feature-line",
+                                    "<#8c8c8c>Особенность: <#ffacd5>Пассажирские места: <passengers>",
+                                    "passengers" to mount.passengerSeats.toString(),
+                                ),
+                            )
+                            add(
+                                copy(
+                                    "detail.passenger-feature-action",
+                                    "<#8c8c8c><#92bed8>ПКМ по маунту<#e6fff3> — сесть пассажиром",
+                                ),
+                            )
+                        }
                     } else {
                         add("")
                         add(copy("detail.locked-acquisition", "<#8c8c8c>Получение: <#e6fff3><acquisition>", *commonValues))
@@ -1245,6 +1260,22 @@ internal class MountGuiItems(
                 mount.abilities.highJump?.let { add(it.displayName to highJumpDescription(it)) }
                 mount.abilities.passives.forEach { add(it.displayName to passiveDescription(it)) }
                 mount.behaviors.forEach { add(it.displayName to it.description) }
+                if (mount.passengerSeats > 0) {
+                    add(
+                        copy(
+                            "list.passenger-feature-name",
+                            "Пассажирские места: <passengers>",
+                            "passengers" to mount.passengerSeats.toString(),
+                        ) to
+                            listOf(
+                                copy(
+                                    "list.passenger-feature-description",
+                                    "Дополнительных мест: <passengers>",
+                                    "passengers" to mount.passengerSeats.toString(),
+                                ),
+                            ),
+                    )
+                }
             }
         if (features.isEmpty()) return emptyList()
         return buildList {
@@ -1261,6 +1292,9 @@ internal class MountGuiItems(
                         ),
                     )
                 }
+            }
+            if (mount.passengerSeats > 0) {
+                add(copy("list.passenger-feature-action", "<#8c8c8c>  <#92bed8>ПКМ по маунту<#e6fff3> — сесть пассажиром"))
             }
         }
     }

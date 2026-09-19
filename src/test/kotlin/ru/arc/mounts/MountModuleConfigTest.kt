@@ -6,6 +6,7 @@ import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import org.bukkit.Material
 import ru.arc.config.ConfigManager
+import ru.arc.config.TestConfig
 import java.nio.file.Files
 import java.time.Duration
 
@@ -72,6 +73,44 @@ class MountModuleConfigTest : StringSpec({
                 .all { mount.skin(it) != null }
         } shouldBe true
         catalog.all.last().id shouldBe "evoker"
+    }
+
+    "passenger seats default to zero and stay within the supported carrier envelope" {
+        val catalog = bundledConfig("passenger-seats").catalog()
+
+        catalog["zombie"]!!.passengerSeats shouldBe 0
+        catalog["camel"]!!.passengerSeats shouldBe 1
+        catalog["camel_husk"]!!.passengerSeats shouldBe 1
+        catalog["happy_ghast"]!!.passengerSeats shouldBe 2
+        catalog["ravager"]!!.passengerSeats shouldBe 2
+        catalog["polar_bear"]!!.passengerSeats shouldBe 1
+
+        fun invalid(entity: String, seats: Int, index: Int) {
+            val dataPath = Files.createTempDirectory("arc-mounts-passenger-invalid-$index-")
+            val moduleDir = Files.createDirectories(dataPath.resolve("modules"))
+            Files.writeString(
+                moduleDir.resolve("mounts.yml"),
+                """
+                enabled: false
+                mounts:
+                  test_mount:
+                    type: walking
+                    entity: $entity
+                    passenger-seats: $seats
+                    item: PAPER
+                    name: Test mount
+                    acquisition: Test
+                    levels:
+                      - {speed: 1.0, price: 1}
+                """.trimIndent(),
+            )
+
+            shouldThrow<IllegalArgumentException> { MountModuleConfig.load(dataPath).catalog() }
+        }
+
+        invalid("CAMEL", 2, 0)
+        invalid("HAPPY_GHAST", 4, 1)
+        invalid("BEE", 3, 2)
     }
 
     "maximum level is a fast and intentionally expensive final sprint" {
@@ -292,6 +331,8 @@ class MountModuleConfigTest : StringSpec({
         config.ownershipMigrationComplete shouldBe false
         config.purchasesEnabled shouldBe false
         config.riderKnockoffDamage shouldBe 6.0
+        config.passengerCarrierScale shouldBe 0.8
+        config.passengerCarrierYawOffset shouldBe 90.0
         config.hideFlyingMountFromRider shouldBe true
         config.hideFlyingMountPitch shouldBe 35.0
         config.showFlyingMountPitch shouldBe 20.0
@@ -307,6 +348,32 @@ class MountModuleConfigTest : StringSpec({
         config.tuning.speedPercentages shouldBe listOf(50, 65, 80, 90, 100)
         config.tuning.walkingStepHeightsHundredths shouldBe listOf(110, 150, 200, 300, 400)
         config.tuning.walkingMaxStepHeightByLevelHundredths shouldBe listOf(110, 200, 400)
+    }
+
+    "passenger carrier tuning rejects non-finite and out-of-range enabled values" {
+        val invalidValues = listOf(
+            0.09 to 90.0,
+            2.01 to 90.0,
+            Double.NaN to 90.0,
+            0.8 to -180.1,
+            0.8 to 180.1,
+            0.8 to Double.POSITIVE_INFINITY,
+        )
+
+        invalidValues.forEach { (scale, yaw) ->
+            val config = MountModuleConfig(
+                TestConfig(
+                    mapOf(
+                        "enabled" to true,
+                        "passengers" to mapOf(
+                            "carrier-scale" to scale,
+                            "carrier-yaw-offset" to yaw,
+                        ),
+                    ),
+                ),
+            )
+            shouldThrow<IllegalArgumentException> { config.validated() }
+        }
     }
 
     "existing runtime config merges new bundled mount features without replacing server gates" {

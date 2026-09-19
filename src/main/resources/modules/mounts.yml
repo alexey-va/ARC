@@ -10,6 +10,10 @@ controls:
   double-sneak-window: 450ms
   hint-cooldown: 5s
 
+passengers:
+  carrier-scale: 0.8
+  carrier-yaw-offset: 90.0
+
 quick-summon:
   # Uses the client's "swap item with offhand" action, F by default, while sneaking.
   sneak-swap-hands: true
@@ -149,6 +153,9 @@ gui:
       features-title: "<#92bed8>Особенности"
       feature-name: "<#ffacd5>• <feature>"
       feature-description: "<#8c8c8c>  <feature-description>"
+      passenger-feature-name: "Пассажирские места: <passengers>"
+      passenger-feature-description: "Дополнительных мест: <passengers>"
+      passenger-feature-action: "<#8c8c8c>  <#92bed8>ПКМ по маунту<#e6fff3> — сесть пассажиром"
       mount-acquirable-name: "<#92bed8><mount>"
       mount-acquirable-core:
         - "<#ff9f0f>Доступен к получению"
@@ -177,6 +184,8 @@ gui:
       description-line: "<#e6fff3><mount-description>"
       innate-ability-line: "<#8c8c8c>Особенность: <#ffacd5><ability>"
       innate-description: "<#8c8c8c><ability-description>"
+      passenger-feature-line: "<#8c8c8c>Особенность: <#ffacd5>Пассажирские места: <passengers>"
+      passenger-feature-action: "<#8c8c8c><#92bed8>ПКМ по маунту<#e6fff3> — сесть пассажиром"
       effect-owned-line: "<#8c8c8c>Эффект: <#ffacd5><ability>"
       upgrade-available-line: "<#8c8c8c>Улучшение: <#92bed8><ability> <#969696>(не куплено)"
       behavior-line: "<#8c8c8c>Особенность: <#ffacd5><feature>"
@@ -410,6 +419,13 @@ messages:
   horse-controls: "<gray>WASD — движение, удерживайте Space и отпустите — прыжок, двойной Shift — спешиться"
   flight-controls: "<gray>WASD — движение, Space — вверх, Shift — вниз, двойной Shift — спешиться"
   dismount-hint: "<yellow>Ещё раз Shift — спешиться"
+  passenger-boarded: "<green>Вы заняли пассажирское место. <gray>Shift — спешиться; управляет всадник."
+  passenger-preparing: "<yellow>Сиденья готовятся. Попробуйте через пару секунд."
+  passenger-full: "<yellow>Все пассажирские места заняты."
+  passenger-not-supported: "<red>У этого маунта нет пассажирских мест."
+  passenger-already-riding: "<yellow>Сначала спешитесь с текущего транспорта."
+  passenger-driver-required: "<yellow>Сначала дождитесь всадника маунта."
+  passenger-board-failed: "<red>Не удалось сесть. Попробуйте ещё раз рядом с маунтом."
   descending: "<aqua>Снижение… <gray>двойной Shift — спешиться"
   expired: "<gray>Время поездки закончилось."
   already-riding: "<red>Вы уже используете маунта."
@@ -950,6 +966,7 @@ mounts:
     type: walking
     item: CAMEL_SPAWN_EGG
     entity: CAMEL
+    passenger-seats: 1
     name: "Верблюд"
     rarity: uncommon
     acquisition: "у Гектора во дворе маунтов на спавне"
@@ -1111,6 +1128,7 @@ mounts:
     type: walking
     item: RAVAGER_SPAWN_EGG
     entity: RAVAGER
+    passenger-seats: 2
     name: "Разоритель"
     rarity: epic
     acquisition: "у Гектора во дворе маунтов на спавне"
@@ -1681,6 +1699,7 @@ mounts:
     type: flying
     item: HAPPY_GHAST_SPAWN_EGG
     entity: HAPPY_GHAST
+    passenger-seats: 2
     name: "Счастливый гаст"
     rarity: legendary
     acquisition: "у Гектора во дворе маунтов на спавне"
@@ -2293,6 +2312,7 @@ mounts:
     type: walking
     item: POLAR_BEAR_SPAWN_EGG
     entity: POLAR_BEAR
+    passenger-seats: 1
     name: "Белый медведь"
     rarity: epic
     acquisition: "у Гектора во дворе маунтов на спавне"
@@ -3345,6 +3365,7 @@ mounts:
     type: walking
     item: CAMEL_HUSK_SPAWN_EGG
     entity: CAMEL_HUSK
+    passenger-seats: 1
     name: "Верблюд-кадавр"
     rarity: epic
     acquisition: "у Гектора во дворе маунтов на спавне"

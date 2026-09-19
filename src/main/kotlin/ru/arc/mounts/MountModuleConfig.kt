@@ -44,6 +44,8 @@ open class MountModuleConfig(private val config: Config) {
     open val riderKnockoffDamage: Double get() = config.double("safety.rider-knockoff-damage", 6.0)
     open val doubleSneakWindow: Duration get() = config.duration("controls.double-sneak-window", Duration.ofMillis(450))
     open val descendingHintCooldown: Duration get() = config.duration("controls.hint-cooldown", Duration.ofSeconds(5))
+    open val passengerCarrierScale: Double get() = config.double("passengers.carrier-scale", 0.8)
+    open val passengerCarrierYawOffset: Double get() = config.double("passengers.carrier-yaw-offset", 90.0)
     open val hideFlyingMountFromRider: Boolean get() = config.bool("rider-view.hide-flying-mount", true)
     open val hideFlyingMountPitch: Double get() = config.double("rider-view.hide-at-pitch", 35.0)
     open val showFlyingMountPitch: Double get() = config.double("rider-view.show-at-pitch", 20.0)
@@ -117,6 +119,7 @@ open class MountModuleConfig(private val config: Config) {
                     id = id,
                     movement = strictMovement(config.string("$root.type", "walking"), id),
                     entityType = config.string("$root.entity", id).trim().uppercase(Locale.ROOT),
+                    passengerSeats = config.integer("$root.passenger-seats", 0),
                     iconMaterial = config.string("$root.item", "PAPER").trim().uppercase(Locale.ROOT),
                     displayName = config.string("$root.name", id).trim(),
                     description = config.stringList("$root.description").map(String::trim).filter(String::isNotEmpty),
@@ -146,6 +149,12 @@ open class MountModuleConfig(private val config: Config) {
             "Mount rider-knockoff-damage must be positive"
         }
         require(!doubleSneakWindow.isZero && !doubleSneakWindow.isNegative) { "Mount double-sneak-window must be positive" }
+        require(passengerCarrierScale.isFinite() && passengerCarrierScale in 0.1..2.0) {
+            "Mount passenger carrier-scale must be between 0.1 and 2.0"
+        }
+        require(passengerCarrierYawOffset.isFinite() && passengerCarrierYawOffset in -180.0..180.0) {
+            "Mount passenger carrier-yaw-offset must be between -180 and 180"
+        }
         require(hideFlyingMountPitch.isFinite() && hideFlyingMountPitch in -90.0..90.0) {
             "Mount hide-at-pitch must be between -90 and 90"
         }

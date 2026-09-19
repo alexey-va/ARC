@@ -2,7 +2,7 @@
 
 The native mounts module is configured in `plugins/ARC/modules/mounts.yml`. The bundled resource is server-neutral; RusCrafting-specific ItemsAdder GUI models stay only in the runtime mirrors.
 
-The bundled catalog contains 72 mounts. The latest expansion adds Hoglin, Endermite, Piglin, Wither Skeleton, Vindicator, Creaking, Creeper, Silverfish, Witch, Camel Husk, Stray, Parched, Zoglin, Bogged, Piglin Brute, Pillager, Evoker, Shulker, Elder Guardian, Nautilus, Zombie Nautilus, and the command-only Ender Dragon. Guardian, Warden, Iron Golem, Copper Golem, and Magma Cube keep their existing canonical entries instead of being duplicated.
+The bundled catalog contains 71 mounts. The latest expansion adds Hoglin, Endermite, Piglin, Wither Skeleton, Vindicator, Creaking, Creeper, Silverfish, Witch, Camel Husk, Stray, Parched, Zoglin, Bogged, Piglin Brute, Pillager, Evoker, Shulker, Elder Guardian, Nautilus, Zombie Nautilus, and the command-only Ender Dragon. Guardian, Warden, Iron Golem, Copper Golem, and Magma Cube keep their existing canonical entries instead of being duplicated.
 
 ## Progression and tuning
 
@@ -48,6 +48,8 @@ Flying sessions have two rider comfort features enabled by default:
 - `movement.compensate-airborne-mining` adds a transient `BLOCK_BREAK_SPEED` modifier only for the duration of a flying session. Its ×5 result cancels Minecraft's ×0.2 airborne mining penalty without affecting the player's ground speed after dismount.
 
 The collection list always places unlocked mounts before locked mounts while preserving catalog order inside both groups. Menu lore uses real empty lore rows between state, characteristics, profile/acquisition, and action sections.
+
+Passenger seats are inherent catalog features and require no separate ownership. The configured count is the number of extra seats and excludes the driver: Camel and Camel Husk expose one, Ravager and Happy Ghast expose two, and Polar Bear exposes one. The list and detail cards show the capacity and the right-click boarding hint. A passenger exits with one Shift; the driver keeps the existing double-Shift dismount. Ending the driver's session cleans up every passenger, and flying passengers receive the existing slow-falling handoff after exit. Large non-native mounts prepare one invisible, silent Camel carrier per guest seat during summon; both carriers are native passengers of the root alongside the direct root driver. This setup takes about three seconds; during that window the passenger-preparing message asks guests to retry. The first carrier follows root yaw plus `passengers.carrier-yaw-offset`, the second follows root yaw minus it. `passengers.carrier-scale` controls carrier size.
 
 The collection no longer spends a permanent slot on balance. Price, balance and the exact remainder or shortage are shown together only in the purchase confirmation. Actionable lore ends in the shared `[▶] ЛКМ — результат` footer after one blank row, and the handler accepts only the exact click type printed there. Selected, truly locked, disabled, completed and loading states have neither the footer nor a click handler. A not-yet-owned mount with a configured first-level price is a separate actionable acquisition state; it is labelled `Доступен к получению` and opens progression instead of masquerading as locked. The full collection guide intentionally remains 13 visible rows by owner decision.
 

@@ -407,6 +407,7 @@ data class MountDefinition(
     val id: String,
     val movement: MountMovement,
     val entityType: String,
+    val passengerSeats: Int = 0,
     val iconMaterial: String,
     val displayName: String,
     val description: List<String>,
@@ -425,6 +426,9 @@ data class MountDefinition(
     init {
         require(validId(id)) { "Invalid mount id: $id" }
         require(entityType.isNotBlank()) { "Mount '$id' entity type is blank" }
+        require(passengerSeats in 0..passengerSeatLimit(entityType)) {
+            "Mount '$id' passenger-seats must be between 0 and ${passengerSeatLimit(entityType)} for $entityType"
+        }
         require(iconMaterial.isNotBlank()) { "Mount '$id' icon material is blank" }
         require(displayName.isNotBlank()) { "Mount '$id' display name is blank" }
         require(displayName.length <= 64) { "Mount '$id' display name is too long" }
@@ -553,6 +557,13 @@ data class MountDefinition(
         private const val MAX_SKINS = 16
         private const val MAX_SIZE_OPTIONS = 5
         const val DEFAULT_SKIN_ID = "default"
+
+        private fun passengerSeatLimit(entityType: String): Int =
+            when (entityType.uppercase(Locale.ROOT)) {
+                "CAMEL", "CAMEL_HUSK" -> 1
+                "HAPPY_GHAST" -> 3
+                else -> 2
+            }
 
         fun validId(value: String): Boolean = ID_PATTERN.matches(value)
     }

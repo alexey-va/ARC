@@ -126,11 +126,13 @@ class MountSessionController internal constructor(
         )
     private val pendingSpawnTokens = ConcurrentHashMap.newKeySet<UUID>()
     private val lastSummonAt = ConcurrentHashMap<UUID, Long>()
+    private val passengers = MountPassengerController(plugin, scheduler, configProvider)
     private var tickTask: ScheduledTask? = null
 
     fun start() {
         if (tickTask != null) return
         plugin.server.pluginManager.registerEvents(this, plugin)
+        passengers.start()
         tickTask = scheduler.runTimer(1L, 1L, Runnable(::tick))
     }
 
@@ -143,6 +145,7 @@ class MountSessionController internal constructor(
 
     fun shutdown() {
         stopAll()
+        passengers.shutdown()
         tickTask?.cancel()
         tickTask = null
         org.bukkit.event.HandlerList.unregisterAll(this)
@@ -221,6 +224,7 @@ class MountSessionController internal constructor(
             return MountSessionUpdateResult.UNSAFE_APPEARANCE
         }
         session.settings = settings
+        passengers.reconcileRide(session.entityId, session.hasRiderFireProtection())
         plugin.server.getPlayer(playerId)?.let {
             refreshAbilityEffects(it, session.definition.abilities.passives, settings.abilityUpgrades)
         }
@@ -305,6 +309,9 @@ class MountSessionController internal constructor(
                 )
             sessionsByPlayer[player.uniqueId] = session
             playerByEntity[spawned.uniqueId] = player.uniqueId
+            check(passengers.openRide(spawned, player, definition, session.hasRiderFireProtection())) {
+                "Unable to create passenger seats"
+            }
             setAirborneMiningCompensation(
                 player,
                 airborneMiningModifier,
@@ -336,6 +343,7 @@ class MountSessionController internal constructor(
         } catch (failure: Throwable) {
             sessionsByPlayer.remove(player.uniqueId)
             playerByEntity.remove(spawned.uniqueId)
+            passengers.closeRide(spawned.uniqueId)
             setAirborneMiningCompensation(player, airborneMiningModifier, enabled = false)
             spawned.remove()
             warn("Unable to spawn mount {} for {}: {}", definition.id, player.name, failure.javaClass.simpleName)
@@ -349,6 +357,7 @@ class MountSessionController internal constructor(
         session.stopping = true
         onStateChanged()
         playerByEntity.remove(session.entityId)
+        passengers.closeRide(session.entityId)
         val player = plugin.server.getPlayer(playerId)
         val entity = plugin.server.getEntity(session.entityId) as? LivingEntity
         val effectLocation = entity?.location ?: player?.location
@@ -432,7 +441,9 @@ class MountSessionController internal constructor(
             event.isCancelled = true
             return
         }
-        scheduler.runLater(1L, Runnable { remove(player.uniqueId, MountRemovalReason.DISMOUNTED) })
+        scheduler.runLater(1L, Runnable {
+            if (sessionsByPlayer[player.uniqueId] === session) remove(player.uniqueId, MountRemovalReason.DISMOUNTED)
+        })
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
@@ -457,10 +468,12 @@ class MountSessionController internal constructor(
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun onRiderKnockoff(event: EntityDamageEvent) {
         val player = event.entity as? Player ?: return
-        if (!sessionsByPlayer.containsKey(player.uniqueId)) return
+        val session = sessionsByPlayer[player.uniqueId] ?: return
         if (!shouldKnockRiderOff(event.finalDamage, configProvider().riderKnockoffDamage)) return
 
-        scheduler.runLater(1L, Runnable { remove(player.uniqueId, MountRemovalReason.KNOCKED_OFF) })
+        scheduler.runLater(1L, Runnable {
+            if (sessionsByPlayer[player.uniqueId] === session) remove(player.uniqueId, MountRemovalReason.KNOCKED_OFF)
+        })
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
@@ -493,9 +506,10 @@ class MountSessionController internal constructor(
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun onTeleport(event: PlayerTeleportEvent) {
-        if (sessionsByPlayer.containsKey(event.player.uniqueId)) {
-            scheduler.runLater(1L, Runnable { remove(event.player.uniqueId, MountRemovalReason.TELEPORTED) })
-        }
+        val session = sessionsByPlayer[event.player.uniqueId] ?: return
+        scheduler.runLater(1L, Runnable {
+            if (sessionsByPlayer[event.player.uniqueId] === session) remove(event.player.uniqueId, MountRemovalReason.TELEPORTED)
+        })
     }
 
     private fun tick() {
@@ -537,6 +551,10 @@ class MountSessionController internal constructor(
                     }
                     updateRiderMountVisibility(player, entity, session)
                     val maximumSpeed = move(player, entity, session, now)
+                    if (!passengers.reconcileRide(session.entityId, session.hasRiderFireProtection())) {
+                        remove(session.playerId, MountRemovalReason.INVALID)
+                        return@forEach
+                    }
                     updateRamBehavior(player, entity, session, maximumSpeed)
                     updateTrampleBehavior(player, entity, session, maximumSpeed, now)
                     emitTrail(entity, session)

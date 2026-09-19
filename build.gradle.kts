@@ -52,7 +52,7 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.172"
+version = "1.4.173"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.9"
