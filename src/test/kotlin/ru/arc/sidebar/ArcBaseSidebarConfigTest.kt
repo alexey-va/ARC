@@ -41,28 +41,29 @@ class ArcBaseSidebarConfigTest : StringSpec({
         }
     }
 
-    "default sidebar keeps ArcRanks rank and tracked quest content after the TAB migration" {
+    "default sidebar keeps ArcRanks rank and three distinct quest rows after the TAB migration" {
         val stream = requireNotNull(javaClass.classLoader.getResourceAsStream("modules/scoreboard.yml"))
         val config = stream.use { YamlConfiguration.loadConfiguration(InputStreamReader(it)) }
         val defaultRows = config.getStringList("styles.style01.lines")
         val profileRows = config.getStringList("styles.style04.lines")
 
-        defaultRows shouldContain "&6| &f%arcranks_rank_name%"
-        defaultRows shouldContain "?%arcranks_quest_line_1%"
-        defaultRows shouldContain "?&6| %arcranks_quest_line_4%"
+        defaultRows shouldContain "&6| &f%arcranks_rank_name% &e/rank"
+        defaultRows shouldContain "?%arcranks_quest_board_header%"
+        (1..3).forEach { defaultRows shouldContain "?&6| %arcranks_quest_board_$it%" }
+        defaultRows shouldContain "&6| &fДалее: &e%arcranks_next_rank%"
         profileRows shouldContain "&6| &fРанг: &e%arcranks_rank_name%"
         profileRows shouldContain "&6| &fСледующий: &e%arcranks_next_rank%"
         (defaultRows + profileRows) shouldNotContain "&6| &f%cmi_user_rank_displayname%"
     }
 
     "optional quest rows disappear when ArcRanks publishes no text" {
-        resolveOptionalSidebarLine("?&6| %arcranks_quest_line_2%") { placeholder ->
-            if (placeholder == "%arcranks_quest_line_2%") "" else placeholder
+        resolveOptionalSidebarLine("?&6| %arcranks_quest_board_1%") { placeholder ->
+            if (placeholder == "%arcranks_quest_board_1%") "" else placeholder
         } shouldBe null
 
-        resolveOptionalSidebarLine("?&6| %arcranks_quest_line_2%") { placeholder ->
-            if (placeholder == "%arcranks_quest_line_2%") "&fСобрать пшеницу &a12/64" else placeholder
-        } shouldBe "&6| %arcranks_quest_line_2%"
+        resolveOptionalSidebarLine("?&6| %arcranks_quest_board_1%") { placeholder ->
+            if (placeholder == "%arcranks_quest_board_1%") "&fСобрать пшеницу &a12/64" else placeholder
+        } shouldBe "&6| %arcranks_quest_board_1%"
     }
 
     "default sidebar is compact and ends with the server footer" {
@@ -70,14 +71,14 @@ class ArcBaseSidebarConfigTest : StringSpec({
         val config = stream.use { YamlConfiguration.loadConfiguration(InputStreamReader(it)) }
         val rows = config.getStringList("styles.style01.lines")
 
-        rows.first() shouldBe "&6| &f%arcranks_rank_name%"
+        rows.first() shouldBe "&6| &f%arcranks_rank_name% &e/rank"
         rows.last() shouldBe "&7Онлайн: &a%online% &7• &fПинг: &e%player_ping% мс"
         rows shouldContain "@survival &6| &f%lands_land_name_plain_here%"
         rows shouldNotContain "&6| &f%player%"
         rows shouldNotContain "&6| &fНаиграно: &e%cmi_user_playtime_hoursf% ч"
         rows shouldNotContain "&6Сервер"
-        rows[rows.indexOf("?%arcranks_quest_line_1%") - 1] shouldBe ""
-        (rows.indexOf("?&6| %arcranks_quest_line_4%") < rows.lastIndex) shouldBe true
+        rows[rows.indexOf("?%arcranks_quest_board_header%") - 1] shouldBe ""
+        (rows.indexOf("?&6| %arcranks_quest_board_3%") < rows.lastIndex) shouldBe true
     }
 
     "scoreboard never uses dark gray text" {

@@ -14,17 +14,18 @@ title: '&#B22222&lRus&f&lCrafting'
 styles:
   style01:
     lines:
-      - '&6| &f%arcranks_rank_name%'
+      - '&6| &f%arcranks_rank_name% &e/rank'
+      - '&6| &fДалее: &e%arcranks_next_rank%'
       - '&6| &f💰 &6%rediseco_bal_short_vault%  &f &d%rediseco_bal_short_tokens%'
       - ''
       - '&6Место'
       - '&6| &f%arc_worldname%'
       - '@survival &6| &f%lands_land_name_plain_here%'
       - ''
-      - '?%arcranks_quest_line_1%'
-      - '?&6| %arcranks_quest_line_2%'
-      - '?&6| %arcranks_quest_line_3%'
-      - '?&6| %arcranks_quest_line_4%'
+      - '?%arcranks_quest_board_header%'
+      - '?&6| %arcranks_quest_board_1%'
+      - '?&6| %arcranks_quest_board_2%'
+      - '?&6| %arcranks_quest_board_3%'
       - ''
       - '&7Онлайн: &a%online% &7• &fПинг: &e%player_ping% мс'
   style02:
@@ -45,9 +46,10 @@ styles:
       - '&6Накопления'
       - '&6| &fОчки профессий: &e%jobsr_user_points%'
       - '&6| &fНаиграно: &e%cmi_user_playtime_hoursf% ч'
-      - '?%arcranks_quest_line_1%'
-      - '?&6| %arcranks_quest_line_2%'
-      - '?&6| %arcranks_quest_line_3%'
+      - '?%arcranks_quest_board_header%'
+      - '?&6| %arcranks_quest_board_1%'
+      - '?&6| %arcranks_quest_board_2%'
+      - '?&6| %arcranks_quest_board_3%'
   style04:
     lines:
       - '&6Профиль'
@@ -63,8 +65,8 @@ styles:
       - '&6| &fСила: &b%auraskills_power%'
       - '&6| &fРейтинг: &e%auraskills_rank%'
       - '&6| &fМакс. здоровье: &c%auraskills_hp_max%'
-      - '?%arcranks_quest_line_1%'
-      - '?&6| %arcranks_quest_line_2%'
+      - '?&6| %arcranks_quest_board_1%'
+      - '?&6| %arcranks_quest_board_2%'
   style05:
     lines:
       - '&6Земли'
@@ -74,9 +76,10 @@ styles:
       - ''
       - '&6Координаты'
       - '&6| &fX: &e%player_x% &fY: &e%player_y% &fZ: &e%player_z%'
-      - '?%arcranks_quest_line_1%'
-      - '?&6| %arcranks_quest_line_2%'
-      - '?&6| %arcranks_quest_line_3%'
+      - '?%arcranks_quest_board_header%'
+      - '?&6| %arcranks_quest_board_1%'
+      - '?&6| %arcranks_quest_board_2%'
+      - '?&6| %arcranks_quest_board_3%'
   style06:
     lines:
       - '&6Координаты'
@@ -86,9 +89,10 @@ styles:
       - '&6| &fZ: &e%player_z%'
       - '&6| &fСервер: &e%server%'
       - '&6| &fВремя: &e%time%'
-      - '?%arcranks_quest_line_1%'
-      - '?&6| %arcranks_quest_line_2%'
-      - '?&6| %arcranks_quest_line_3%'
+      - '?%arcranks_quest_board_header%'
+      - '?&6| %arcranks_quest_board_1%'
+      - '?&6| %arcranks_quest_board_2%'
+      - '?&6| %arcranks_quest_board_3%'
   style07:
     lines:
       - '&6Онлайн'
@@ -99,9 +103,10 @@ styles:
       - '&6| &fСпавн: &a%online_spawn%'
       - '&6| &fВыживание: &a%online_survival%'
       - '&6| &fПаркур: &a%online_parkour%'
-      - '?%arcranks_quest_line_1%'
-      - '?&6| %arcranks_quest_line_2%'
-      - '?&6| %arcranks_quest_line_3%'
+      - '?%arcranks_quest_board_header%'
+      - '?&6| %arcranks_quest_board_1%'
+      - '?&6| %arcranks_quest_board_2%'
+      - '?&6| %arcranks_quest_board_3%'
   style08:
     lines:
       - '&6Сервер'
@@ -113,9 +118,10 @@ styles:
       - '&6Соединение'
       - '&6| &fПинг: &e%player_ping% мс'
       - '&6| &fПамять: &e%server_ram_used%&7/&e%server_ram_total% мб'
-      - '?%arcranks_quest_line_1%'
-      - '?&6| %arcranks_quest_line_2%'
-      - '?&6| %arcranks_quest_line_3%'
+      - '?%arcranks_quest_board_header%'
+      - '?&6| %arcranks_quest_board_1%'
+      - '?&6| %arcranks_quest_board_2%'
+      - '?&6| %arcranks_quest_board_3%'
   style09:
     lines:
       - '&6Время'
@@ -126,9 +132,10 @@ styles:
       - '&6| &fНаиграно: &e%cmi_user_playtime_hoursf% ч'
       - '&6| &fВ профессиях: &e%jobsr_user_seen%'
       - '&6| &fАптайм: &e%server_uptime%'
-      - '?%arcranks_quest_line_1%'
-      - '?&6| %arcranks_quest_line_2%'
-      - '?&6| %arcranks_quest_line_3%'
+      - '?%arcranks_quest_board_header%'
+      - '?&6| %arcranks_quest_board_1%'
+      - '?&6| %arcranks_quest_board_2%'
+      - '?&6| %arcranks_quest_board_3%'
   style10:
     lines:
       - '&6Профессии'
@@ -140,9 +147,10 @@ styles:
       - '&6| &fШахтёр: &e%jobsr_user_jlevel_Miner%'
       - '&6| &fФермер: &e%jobsr_user_jlevel_Farmer%'
       - '&6| &fСтроитель: &e%jobsr_user_jlevel_Builder%'
-      - '?%arcranks_quest_line_1%'
-      - '?&6| %arcranks_quest_line_2%'
-      - '?&6| %arcranks_quest_line_3%'
+      - '?%arcranks_quest_board_header%'
+      - '?&6| %arcranks_quest_board_1%'
+      - '?&6| %arcranks_quest_board_2%'
+      - '?&6| %arcranks_quest_board_3%'
   style11:
     lines:
       - '&6Навыки'
@@ -152,9 +160,10 @@ styles:
       - ''
       - '&6Опыт'
       - '&6| &fПрофессии: &e%jobsr_user_totallevels% ур.'
-      - '?%arcranks_quest_line_1%'
-      - '?&6| %arcranks_quest_line_2%'
-      - '?&6| %arcranks_quest_line_3%'
+      - '?%arcranks_quest_board_header%'
+      - '?&6| %arcranks_quest_board_1%'
+      - '?&6| %arcranks_quest_board_2%'
+      - '?&6| %arcranks_quest_board_3%'
   style12:
     lines:
       - '&6Добыча'
@@ -165,9 +174,10 @@ styles:
       - '&6Шахтёр'
       - '&6| &fУровень работы: &e%jobsr_user_jlevel_Miner%'
       - '&6| &fМир: %arc_worldname%'
-      - '?%arcranks_quest_line_1%'
-      - '?&6| %arcranks_quest_line_2%'
-      - '?&6| %arcranks_quest_line_3%'
+      - '?%arcranks_quest_board_header%'
+      - '?&6| %arcranks_quest_board_1%'
+      - '?&6| %arcranks_quest_board_2%'
+      - '?&6| %arcranks_quest_board_3%'
   style13:
     lines:
       - '&6Строитель'
@@ -179,9 +189,10 @@ styles:
       - '&6Работа'
       - '&6| &fСтроитель: &e%jobsr_user_jlevel_Builder% ур.'
       - '&6| &fЗемля: &a%lands_land_name_plain_here%'
-      - '?%arcranks_quest_line_1%'
-      - '?&6| %arcranks_quest_line_2%'
-      - '?&6| %arcranks_quest_line_3%'
+      - '?%arcranks_quest_board_header%'
+      - '?&6| %arcranks_quest_board_1%'
+      - '?&6| %arcranks_quest_board_2%'
+      - '?&6| %arcranks_quest_board_3%'
   style14:
     lines:
       - '&6Исследователь'
@@ -194,9 +205,10 @@ styles:
       - '&6Сейчас'
       - '&6| &f%arc_worldname%'
       - '&6| &fX: &e%player_x% &fZ: &e%player_z%'
-      - '?%arcranks_quest_line_1%'
-      - '?&6| %arcranks_quest_line_2%'
-      - '?&6| %arcranks_quest_line_3%'
+      - '?%arcranks_quest_board_header%'
+      - '?&6| %arcranks_quest_board_1%'
+      - '?&6| %arcranks_quest_board_2%'
+      - '?&6| %arcranks_quest_board_3%'
   style15:
     lines:
       - '&6Охотник'
@@ -209,9 +221,10 @@ styles:
       - '&6Статус'
       - '&6| &fМакс. здоровье: &c%auraskills_hp_max%'
       - '&6| &fПинг: &e%player_ping% мс'
-      - '?%arcranks_quest_line_1%'
-      - '?&6| %arcranks_quest_line_2%'
-      - '?&6| %arcranks_quest_line_3%'
+      - '?%arcranks_quest_board_header%'
+      - '?&6| %arcranks_quest_board_1%'
+      - '?&6| %arcranks_quest_board_2%'
+      - '?&6| %arcranks_quest_board_3%'
   style16:
     lines:
       - '&6Быт'
@@ -223,9 +236,10 @@ styles:
       - ''
       - '&6Дом'
       - '&6| &fЗемля: &a%lands_land_name_plain_here%'
-      - '?%arcranks_quest_line_1%'
-      - '?&6| %arcranks_quest_line_2%'
-      - '?&6| %arcranks_quest_line_3%'
+      - '?%arcranks_quest_board_header%'
+      - '?&6| %arcranks_quest_board_1%'
+      - '?&6| %arcranks_quest_board_2%'
+      - '?&6| %arcranks_quest_board_3%'
   style17:
     lines:
       - '&6Баланс'
@@ -237,9 +251,10 @@ styles:
       - ''
       - '&6Время'
       - '&6| &fНаиграно: &e%cmi_user_playtime_hoursf% ч'
-      - '?%arcranks_quest_line_1%'
-      - '?&6| %arcranks_quest_line_2%'
-      - '?&6| %arcranks_quest_line_3%'
+      - '?%arcranks_quest_board_header%'
+      - '?&6| %arcranks_quest_board_1%'
+      - '?&6| %arcranks_quest_board_2%'
+      - '?&6| %arcranks_quest_board_3%'
   style18:
     lines:
       - '&6Сводка'
@@ -262,9 +277,10 @@ styles:
       - '&6| &f%date% &7• &e%time%'
       - '&6| &f%arc_worldname%'
       - '&6| &fПинг: &e%player_ping% мс'
-      - '?%arcranks_quest_line_1%'
-      - '?&6| %arcranks_quest_line_2%'
-      - '?&6| %arcranks_quest_line_3%'
+      - '?%arcranks_quest_board_header%'
+      - '?&6| %arcranks_quest_board_1%'
+      - '?&6| %arcranks_quest_board_2%'
+      - '?&6| %arcranks_quest_board_3%'
   style20:
     lines:
       - '&6Игрок'
