@@ -5,6 +5,7 @@ import { readFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { once } from 'node:events';
 import { test, expect, waitUntil, ServerWrapper } from '@drownek/plugwright';
+import { observeNativeDialog } from './native-dialog.js';
 
 const enabled = process.env.ARC_CONTRACT_CRASH_FIXTURE === '1';
 const phases = [
@@ -99,6 +100,7 @@ async function stopReplacement(child) {
 }
 
 if (enabled) test('contract items, provider payment and journal survive real process crashes without replay', async ({ player, signal }) => {
+  const native = observeNativeDialog(player, signal);
   let replacement;
   let expectedBalance = 0;
   let expectedSpent = 0;
@@ -119,15 +121,18 @@ if (enabled) test('contract items, provider payment and journal survive real pro
       await expect(player).toHaveReceivedMessage(`CONTRACT_CRASH_ARMED:${phase}`, { since: beforeArm });
       await player.deOp();
       await balance(player, expectedBalance, signal);
-      player.chat('/arc contracts open spawn');
-      const list = await player.gui({ title: /Книга заказов/i });
-      await list.locator(item => item.getDisplayName().includes('E2E stone order')).click();
-      const detail = await player.gui({ title: /Сдать ресурсы/i });
-      const quote = await detail.locator(item => item.getDisplayName().includes('Выплата:')).displayName();
-      const quotedMinor = Math.round(Number(quote.replace(',', '.').replace(/[^\d.]/g, '')) * 100);
+      await native.command('/arc contracts open spawn');
+      await native.click('E2E stone order');
+      const quantity = native.inputInitial('quantity');
+      assert.equal(quantity, 2, 'Contract dialog default must select the two-item batch');
+      await native.click('Проверить сдачу', undefined, { quantity });
+      const quote = native.bodyText();
+      const quoted = quote.match(/\b\d+[.,]\d{2}\b/);
+      assert.ok(quoted, 'Confirmation dialog must expose the exact payout');
+      const quotedMinor = Math.round(Number(quoted[0].replace(',', '.')) * 100);
       assert.ok(quotedMinor > 0, 'Quote must expose the exact positive payout');
       const ended = once(player.bot, 'end', { signal });
-      await detail.locator(item => item.getDisplayName().includes('Подтвердить')).click().catch(() => undefined);
+      native.send(text => /^Сдать(?:\s|$)/.test(text));
       await ended;
       const crash = await properties('crashed');
       assert.equal(crash.phase, phase, 'Paper must halt at the requested production boundary');
@@ -143,6 +148,7 @@ if (enabled) test('contract items, provider payment and journal survive real pro
         assert.equal(replacement.exitCode, 86, 'The deliberate JVM halt must own the exit');
       }
       replacement = await startReplacement(player, index + 1, signal);
+      native.reattach();
       expectedBalance += paid ? quotedMinor : 0;
       expectedSpent += committed ? quotedMinor : 0;
       expectedHeld += committed ? 0 : quotedMinor;
@@ -168,11 +174,13 @@ if (enabled) test('contract items, provider payment and journal survive real pro
     await stopReplacement(replacement);
     replacement = undefined;
     replacement = await startReplacement(player, phases.length + 1, signal);
+    native.reattach();
     await balance(player, expectedBalance, signal);
     await waitUntil(() => countStone(player) === 2, { signal, message: 'Inventory did not synchronize after repeated recovery' });
     assert.deepEqual(await snapshot(player, 'repeat_recovery', signal), lastSnapshot,
       'A second recovery must not change items, payout, held quota or contract progress');
   } finally {
+    native.close();
     await stopReplacement(replacement);
   }
 });
