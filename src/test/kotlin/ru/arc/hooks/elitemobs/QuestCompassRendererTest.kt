@@ -44,7 +44,8 @@ class QuestCompassRendererTest : FreeSpec({
     "waiting and unresolved targets stay compact and do not become bogus markers" {
         text(0f, "Waiting for the dungeon to start") shouldBe "[ Ожидание старта данжа ]"
         text(0f, "[EM] No quest destination found!") shouldBe "[ Цель пока не найдена ]"
-        text(0f, "[EM] Go to world dungeon_instance_123!") shouldBe "[ Цель в другом мире ]"
+        text(0f, "[EM] Go to world dungeon_instance_123!") shouldBe "[ Цель в мире: dungeon_instance_123 ]"
+        text(0f, "[EM] Go to world " + "long_world_".repeat(10) + "!").length shouldBe 44
         text(0f, "§a" + empty) shouldBe text(0f)
         text(0f, "x".repeat(100)).length shouldBe 44
     }

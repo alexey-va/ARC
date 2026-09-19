@@ -75,7 +75,8 @@ internal object QuestCompassRenderer {
             text.isBlank() -> "Поиск цели…"
             text == "Waiting for the dungeon to start" -> "Ожидание старта данжа"
             text == "[EM] No quest destination found!" -> "Цель пока не найдена"
-            text.startsWith("[EM] Go to world ") -> "Цель в другом мире"
+            text.startsWith("[EM] Go to world ") ->
+                "Цель в мире: " + text.removePrefix("[EM] Go to world ").removeSuffix("!")
             else -> text.replace('\n', ' ').replace('\r', ' ')
         }
         val bounded = if (localized.length > 40) localized.take(39) + "…" else localized

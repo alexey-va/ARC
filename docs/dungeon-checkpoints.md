@@ -75,6 +75,16 @@ compass and logs once. No permissions or allowlists were added, and no EliteMobs
 JAR change is required. Player-client appearance and white-bar invisibility must
 be checked separately from unit/lifecycle tests and artifact activation.
 
+Edge cases: no selected quest means no compass; unresolved coordinates show a
+compact status, not a guessed marker. Known targets have no distance cutoff in
+the native projection, but its field of view is only ±90°: a target behind the
+player is not shown until they turn. Cross-world navigation uses EliteMobs'
+direct wormhole entry when available; multi-hop portal routing is not implemented
+there. Without that entry, ARC retains the destination world identifier
+in the bounded status instead of reducing it to an unhelpful generic message.
+These native behaviors were source-audited; the renderer and adapter edge cases
+have synthetic regression tests, not an end-to-end world-navigation proof.
+
 ## Scope and safety
 
 Each player's PDC retains up to five manual and three rolling autosaves per
