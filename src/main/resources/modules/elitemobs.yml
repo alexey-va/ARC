@@ -44,7 +44,7 @@ chests:
 
 dungeon-qol:
   quests:
-    intro: '<#f2eee8>Ваши принятые задания EliteMobs. Выполненные отмечены галочкой, отслеживаемое — стрелкой. Задания могут относиться к другим локациям.'
+    intro: '<#f2eee8>Принятые задания EliteMobs. Под названием — прогресс и отслеживание. Выберите задание для управления.'
     unavailable: '<#d7b486>Данные заданий ещё загружаются. Попробуйте обновить страницу.'
     empty: '<#f2eee8>Принятых заданий пока нет. Поговорите с персонажами, которые предлагают задания.'
     complete: '<#9bd48d>Цели выполнены — задание готово к сдаче.'
@@ -56,13 +56,12 @@ dungeon-qol:
     tooltip: 'Принятые задания EliteMobs и их текущий прогресс'
     list-heading: 'Задание'
     state-heading: 'Состояние'
-    status-complete-tracked: '<#9bd48d>✔ Выполнено · ▶ Отслеживается'
-    status-complete: '<#9bd48d>✔ Выполнено'
-    status-tracked: '<#9bd48d>▶ Отслеживается'
-    status-active: '<#f2eee8>○ В процессе'
-    open-complete: '<#9bd48d>✔ <name> ›'
-    open-tracked: '<#9bd48d>▶ <name> ›'
-    open-active: '<#f2eee8>○ <name> ›'
+    status-complete-tracked: '<#9bd48d>Готово к сдаче · <#9bd48d>Отслеживается'
+    status-complete-untracked: '<#9bd48d>Готово к сдаче · <#f2eee8>Не отслеживается'
+    status-in-progress-tracked: '<#f2eee8>В процессе · <#9bd48d>Отслеживается'
+    status-in-progress-untracked: '<#f2eee8>В процессе · <#f2eee8>Не отслеживается'
+    list-name: '<#c4a7e7><name>'
+    open: '<#c4a7e7><name> ›'
     open-tooltip: 'Открыть прогресс и управление заданием'
     previous: '<#92bed8>‹ Предыдущая страница'
     previous-tooltip: 'Показать предыдущие задания'

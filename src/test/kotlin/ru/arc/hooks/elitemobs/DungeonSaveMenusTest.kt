@@ -62,27 +62,42 @@ class DungeonSaveMenusTest : FreeSpec({
         shown.single().buttons.none { it.id.value == "shops" || it.id.value == "skill_boosts" } shouldBe true
     }
 
-    "quest overview marks state and opens a live quest detail" {
+    "quest overview and detail distinguish completion from tracking" {
         val player = paper.addPlayer("quest-viewer")
         val dungeon = mockk<EMDungeonQol>(relaxed = true)
-        every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(secondArg<String>()) }
-        val firstId = UUID.randomUUID()
-        val secondId = UUID.randomUUID()
+        every { dungeon.text(any(), any(), *anyVararg()) } answers {
+            val values = thirdArg<Array<out Pair<String, Component>>>()
+            ru.arc.util.TextUtil.mm(secondArg<String>(),
+                net.kyori.adventure.text.minimessage.tag.resolver.TagResolver.resolver(values.map { (name, value) ->
+                    net.kyori.adventure.text.minimessage.tag.resolver.Placeholder.component(name, value)
+                }))
+        }
+        val ids = List(4) { UUID.randomUUID() }
         var entries: List<DungeonQuestInfo>? = listOf(
-            DungeonQuestInfo(firstId, "Первый", true, false, true, listOf("Скелеты 3 / 10"),
+            DungeonQuestInfo(ids[0], "В процессе и отслеживается", true, false, true, listOf("Скелеты 3 / 10"),
                 listOf(DungeonQuestGoalState.ACTIVE)),
-            DungeonQuestInfo(secondId, "Второй", false, true, true, listOf("Вернитесь к кузнецу"),
+            DungeonQuestInfo(ids[1], "В процессе без отслеживания", false, false, true, listOf("Вернитесь к кузнецу"),
+                listOf(DungeonQuestGoalState.NEXT)),
+            DungeonQuestInfo(ids[2], "Готово и отслеживается", true, true, true, listOf("Сдайте награду"),
+                listOf(DungeonQuestGoalState.COMPLETE)),
+            DungeonQuestInfo(ids[3], "Готово без отслеживания", false, true, true, listOf("Сдайте награду"),
                 listOf(DungeonQuestGoalState.NEXT)),
         )
         val shown = mutableListOf<PaperDialogScreen>()
         val menus = DungeonSaveMenus(dungeon, readQuests = { entries }) { _, screen, _ -> shown += screen }
         menus.quests(player)
         shown.last().id shouldBe "dungeon.quests"
-        shown.last().buttons.map { it.id.value } shouldBe listOf("quest_0", "quest_1", "refresh")
-        shown.last().buttons[0].label shouldBe Component.text("<#9bd48d>▶ <name> ›")
-            .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)
-        shown.last().buttons[1].label shouldBe Component.text("<#9bd48d>✔ <name> ›")
-            .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)
+        shown.last().buttons.map { it.id.value } shouldBe listOf("quest_0", "quest_1", "quest_2", "quest_3", "refresh")
+        val plainText = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+        shown.last().buttons.take(4).map { plainText.serialize(it.label) } shouldBe
+            entries!!.map { "${it.name} ›" }
+        val bodyText = shown.last().body.flatMap { body ->
+            listOf(net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(body.text))
+        }
+        listOf("В процессе · Отслеживается", "В процессе · Не отслеживается",
+            "Готово к сдаче · Отслеживается", "Готово к сдаче · Не отслеживается").forEachIndexed { index, status ->
+            bodyText.any { it.contains("${entries!![index].name}\n$status") } shouldBe true
+        }
         shown.last().body.flatMap { body ->
             val points = mutableListOf<Int>()
             fun collect(component: Component) {
@@ -93,10 +108,21 @@ class DungeonSaveMenusTest : FreeSpec({
             points
         }.none { it in 0xE540..0xE59E } shouldBe true
 
-        shown.last().buttons.first { it.id.value == "quest_1" }.onClick.handle(mockk())
+        shown.last().buttons.first { it.id.value == "quest_0" }.onClick.handle(mockk())
         shown.last().id shouldBe "dungeon.quest"
-        shown.last().body.any { net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(it.text) == "▶ Вернитесь к кузнецу" } shouldBe true
-        shown.last().body.single { net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(it.text).startsWith("▶") }.width shouldBe 320
+        shown.last().body.any { net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(it.text) == "В процессе · Отслеживается" } shouldBe true
+        shown.last().body.any { plainText.serialize(it.text) == "○ Скелеты 3 / 10" } shouldBe true
+        shown.last().body.single { plainText.serialize(it.text) == "○ Скелеты 3 / 10" }.width shouldBe 320
+
+        shown.last().exitButton!!.onClick.handle(mockk())
+        shown.last().buttons.first { it.id.value == "quest_1" }.onClick.handle(mockk())
+        shown.last().body.any { net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(it.text) == "В процессе · Не отслеживается" } shouldBe true
+        shown.last().exitButton!!.onClick.handle(mockk())
+        shown.last().buttons.first { it.id.value == "quest_2" }.onClick.handle(mockk())
+        shown.last().body.any { net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(it.text) == "Готово к сдаче · Отслеживается" } shouldBe true
+        shown.last().exitButton!!.onClick.handle(mockk())
+        shown.last().buttons.first { it.id.value == "quest_3" }.onClick.handle(mockk())
+        shown.last().body.any { net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(it.text) == "Готово к сдаче · Не отслеживается" } shouldBe true
 
         entries = emptyList()
         shown.last().exitButton!!.onClick.handle(mockk())
@@ -104,8 +130,7 @@ class DungeonSaveMenusTest : FreeSpec({
         shown.last().exitButton!!.id.value shouldBe "back"
         entries = null
         menus.quests(player)
-        shown.last().body.last().text shouldBe Component.text("<#d7b486>Данные заданий ещё загружаются. Попробуйте обновить страницу.")
-            .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)
+        plainText.serialize(shown.last().body.last().text) shouldBe "Данные заданий ещё загружаются. Попробуйте обновить страницу."
     }
 
     "opening saves outside a resumable run returns to the panel explanation" {

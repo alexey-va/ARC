@@ -34,7 +34,7 @@ class QuestCompassTest : FreeSpec({
         val player = player()
         val native = native(player)
         val capture = slot<BossBar>()
-        val compass = QuestCompass({ mapOf(id to native) }, { player })
+        val compass = QuestCompass({ mapOf(id to native) }, { player }, isEliteWorld = { true })
         compass.refresh()
         compass.refresh()
         verify(exactly = 1) { player.showBossBar(capture(capture)) }
@@ -61,7 +61,7 @@ class QuestCompassTest : FreeSpec({
         val first = native(player)
         val second = native(player)
         var tracking = mapOf(id to first)
-        val compass = QuestCompass({ tracking }, { player })
+        val compass = QuestCompass({ tracking }, { player }, isEliteWorld = { true })
         compass.refresh()
         tracking = mapOf(id to second)
         compass.refresh()
@@ -80,7 +80,7 @@ class QuestCompassTest : FreeSpec({
         val native = native(player)
         var fail = false
         val warnings = mutableListOf<String>()
-        val compass = QuestCompass({ if (fail) error("unsupported") else mapOf(id to native) }, { player }, warnings::add)
+        val compass = QuestCompass({ if (fail) error("unsupported") else mapOf(id to native) }, { player }, warnings::add, { true })
         compass.refresh()
         fail = true
         repeat(3) { compass.refresh() }
@@ -93,7 +93,7 @@ class QuestCompassTest : FreeSpec({
         val id = UUID.randomUUID()
         val player = player()
         val native = native(player)
-        val compass = QuestCompass({ mapOf(id to native) }, { player })
+        val compass = QuestCompass({ mapOf(id to native) }, { player }, isEliteWorld = { true })
         val capture = slot<BossBar>()
         compass.refresh()
         verify { player.showBossBar(capture(capture)) }
@@ -109,10 +109,51 @@ class QuestCompassTest : FreeSpec({
         val id = UUID.randomUUID()
         val player = player()
         val native = native(player, visible = false)
-        val compass = QuestCompass({ mapOf(id to native) }, { player })
+        val compass = QuestCompass({ mapOf(id to native) }, { player }, isEliteWorld = { true })
         compass.refresh()
         compass.close()
         verify(exactly = 0) { player.showBossBar(any()) }
         verify(exactly = 0) { native.isVisible = true }
+    }
+    "leaving EliteMobs worlds hides both bars and returning restores the same tracked quest" {
+        val id = UUID.randomUUID()
+        val player = player()
+        val native = native(player)
+        var inEliteWorld = false
+        val compass = QuestCompass({ mapOf(id to native) }, { player }, isEliteWorld = { inEliteWorld })
+        compass.refresh()
+        verify(exactly = 0) { player.showBossBar(any()) }
+        verify(exactly = 1) { native.isVisible = false }
+
+        inEliteWorld = true
+        compass.refresh()
+        val capture = slot<BossBar>()
+        verify(exactly = 1) { player.showBossBar(capture(capture)) }
+        inEliteWorld = false
+        repeat(2) { compass.refresh() }
+        verify(exactly = 1) { player.hideBossBar(capture.captured) }
+        verify(exactly = 0) { native.isVisible = true }
+
+        inEliteWorld = true
+        compass.refresh()
+        verify(exactly = 2) { player.showBossBar(capture.captured) }
+        compass.close()
+    }
+
+    "returning to an EliteMobs world during dialogue does not reveal the compass" {
+        val id = UUID.randomUUID()
+        val player = player()
+        val native = native(player)
+        var inEliteWorld = false
+        val compass = QuestCompass({ mapOf(id to native) }, { player }, isEliteWorld = { inEliteWorld })
+        compass.refresh()
+        every { native.players } returns emptyList()
+        inEliteWorld = true
+        compass.refresh()
+        verify(exactly = 0) { player.showBossBar(any()) }
+        every { native.players } returns listOf(player)
+        compass.refresh()
+        verify(exactly = 1) { player.showBossBar(any()) }
+        compass.close()
     }
 })

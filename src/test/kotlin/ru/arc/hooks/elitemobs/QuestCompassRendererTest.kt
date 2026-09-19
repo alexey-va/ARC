@@ -2,6 +2,7 @@ package ru.arc.hooks.elitemobs
 
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
+import net.kyori.adventure.key.Key
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 
 class QuestCompassRendererTest : FreeSpec({
@@ -9,6 +10,21 @@ class QuestCompassRendererTest : FreeSpec({
     fun text(yaw: Float, native: String = empty) = PlainTextComponentSerializer.plainText()
         .serialize(QuestCompassRenderer.render(yaw, native))
     fun target(index: Int, glyph: Char) = empty.toCharArray().apply { this[index] = glyph }.concatToString()
+
+    "rail uses six-pixel default glyphs instead of collapsed dots in uniform font" {
+        // Official vanilla 1.21.11 bitmap advances; brackets=4, rail/ticks/cardinals=6.
+        for (yaw in 0..359) {
+            val rendered = QuestCompassRenderer.render(yaw.toFloat(), empty)
+            rendered.font() shouldBe Key.key("minecraft", "default")
+            text(yaw.toFloat()).sumOf { glyph ->
+                when (glyph) {
+                    '[', ']' -> 4
+                    '-', '│', 'N', 'E', 'S', 'W' -> 6
+                    else -> error("Unchecked compass glyph: $glyph")
+                }
+            } shouldBe 302
+        }
+    }
 
     "cardinal directions match Bukkit yaw and retain constant width" {
         mapOf(0f to 'S', 90f to 'W', 180f to 'N', -90f to 'E').forEach { (yaw, cardinal) ->

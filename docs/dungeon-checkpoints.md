@@ -53,7 +53,7 @@ shows a throttled, clickable explanation of exit and checkpoint commands.
 ## Quest compass
 
 ARC 1.4.159 replaces the tracked EliteMobs quest's green compass with a WHITE
-Adventure bossbar: coral brackets/cardinals, a rotating 49-cell vanilla-font
+Adventure bossbar: coral brackets/cardinals, a rotating 49-cell default-font
 scale and colored objective markers. No downloaded Compass plugin or additional
 resource-pack assets are installed. WHITE is the requested client-pack convention;
 without a pack that hides that vanilla bar, its white background remains visible.
@@ -74,6 +74,12 @@ shutdown restores native visibility. Failed compatibility keeps the native
 compass and logs once. No permissions or allowlists were added, and no EliteMobs
 JAR change is required. Player-client appearance and white-bar invisibility must
 be checked separately from unit/lifecycle tests and artifact activation.
+
+The scale uses bright six-pixel dashes/ticks instead of narrow Unihex dots:
+302 logical GUI pixels including brackets before target-glyph substitutions.
+It is hidden outside worlds registered by `EliteMobsWorld.isEliteMobsWorld`,
+without stopping quest tracking. Entering an EliteMobs world restores the same
+compass unless an NPC dialogue is suppressing it.
 
 Edge cases: no selected quest means no compass; unresolved coordinates show a
 compact status, not a guessed marker. Known targets have no distance cutoff in

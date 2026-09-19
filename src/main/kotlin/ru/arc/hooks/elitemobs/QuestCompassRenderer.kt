@@ -7,16 +7,16 @@ import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import kotlin.math.roundToInt
 
-/** Texture-free, fixed-width compass. Native EliteMobs owns target projection (63 cells, 3° each). */
+/** Texture-free compass. Native EliteMobs owns target projection (63 cells, 3° each). */
 internal object QuestCompassRenderer {
     const val WIDTH = 49
     private const val CENTER = WIDTH / 2
     private const val DEGREES_PER_CELL = 180.0 / (WIDTH - 1)
     private val accent = TextColor.color(0xff6b6b)
-    private val muted = TextColor.color(0x868b96)
+    private val scale = TextColor.color(0xe8dfd2)
     private val target = TextColor.color(0x9bd48d)
     private val gold = TextColor.color(0xffcf70)
-    private val uniform: Key = Key.key("minecraft", "uniform")
+    private val font: Key = Key.key("minecraft", "default")
     private val nativeSymbols = setOf('-', '⦿', '⬯', '☠', '⚔', '↑', '↓', '↕')
 
     fun render(yaw: Float, nativeTitle: String): Component {
@@ -25,8 +25,10 @@ internal object QuestCompassRenderer {
         if (plain.length != 63 || plain.any { it !in nativeSymbols }) return status(plain)
 
         val heading = if (yaw.isFinite()) yaw.toDouble() else 0.0
-        val glyphs = CharArray(WIDTH) { '·' }
-        val colors = Array<TextColor>(WIDTH) { muted }
+        // Default-font dashes, ticks and cardinals each advance 6 GUI pixels.
+        // Unihex's "uniform" font is not monospaced: dot-filled cells collapse the rail.
+        val glyphs = CharArray(WIDTH) { '-' }
+        val colors = Array<TextColor>(WIDTH) { scale }
         // Bukkit yaw: south=0, west=90, north=180, east=270.
         for (bearing in 0 until 360 step 15) {
             val relative = wrap(bearing - heading)
@@ -42,7 +44,7 @@ internal object QuestCompassRenderer {
             if (bearing % 90 == 0) colors[cell] = accent
         }
         colors[CENTER] = gold
-        if (glyphs[CENTER] == '·') glyphs[CENTER] = '│'
+        if (glyphs[CENTER] == '-') glyphs[CENTER] = '│'
 
         // Targets win collisions with ticks/cardinals. The native centre height cue wins last.
         plain.forEachIndexed { index, symbol ->
@@ -62,7 +64,7 @@ internal object QuestCompassRenderer {
             glyphs[CENTER] = plain[31]
             colors[CENTER] = gold
         }
-        return Component.text("[", accent).font(uniform)
+        return Component.text("[", accent).font(font)
             .append(glyphs.indices.fold(Component.empty()) { line, index ->
                 line.append(Component.text(glyphs[index], colors[index]))
             }).append(Component.text("]", accent))
@@ -80,7 +82,7 @@ internal object QuestCompassRenderer {
             else -> text.replace('\n', ' ').replace('\r', ' ')
         }
         val bounded = if (localized.length > 40) localized.take(39) + "…" else localized
-        return Component.text("[ ", accent).append(Component.text(bounded, muted))
+        return Component.text("[ ", accent).append(Component.text(bounded, scale))
             .append(Component.text(" ]", accent))
     }
 }

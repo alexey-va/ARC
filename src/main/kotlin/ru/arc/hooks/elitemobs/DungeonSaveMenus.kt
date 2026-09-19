@@ -104,21 +104,27 @@ internal class DungeonSaveMenus(
         val pageCount = ((entries.orEmpty().size + questsPerPage - 1) / questsPerPage).coerceAtLeast(1)
         val page = requestedPage.coerceIn(0, pageCount - 1)
         val listed = entries.orEmpty().drop(page * questsPerPage).take(questsPerPage)
-        val body = mutableListOf(PaperDialogBody(text("quests.intro", "<#f2eee8>Ваши принятые задания EliteMobs. Выполненные отмечены галочкой, отслеживаемое — стрелкой. Задания могут относиться к другим локациям."), 468))
+        val body = mutableListOf(PaperDialogBody(text("quests.intro", "<#f2eee8>Принятые задания EliteMobs. Под названием — прогресс и отслеживание. Выберите задание для управления."), 468))
         if (listed.isEmpty()) {
             body += PaperDialogBody(if (entries == null) text("quests.unavailable", "<#d7b486>Данные заданий ещё загружаются. Попробуйте обновить страницу.")
                 else text("quests.empty", "<#f2eee8>Принятых заданий пока нет. Поговорите с персонажами, которые предлагают задания."), 468)
         } else {
+            val summary = Component.empty().children(listed.flatMapIndexed { index, quest ->
+                val name = plain(readableQuestText(TextUtil.legacy(quest.name)))
+                val row = text("quests.list-name", "<#c4a7e7><name>", "name" to name)
+                    .append(Component.newline()).append(questStatus(quest))
+                if (index == 0) listOf(row) else listOf(Component.newline(), row)
+            })
+            body += PaperDialogBody(summary, 468)
             if (pageCount > 1) body += PaperDialogBody(text("quests.page", "<#f2eee8>Страница <current> из <total>",
                 "current" to Component.text(page + 1), "total" to Component.text(pageCount)), 468)
         }
         feedback?.let { body += PaperDialogBody(plain(it), 468) }
         val questButtons = listed.mapIndexed { index, quest ->
-            val label = when {
-                quest.complete -> text("quests.open-complete", "<#9bd48d>✔ <name> ›", "name" to plain(readableQuestText(TextUtil.legacy(quest.name))))
-                quest.tracked -> text("quests.open-tracked", "<#9bd48d>▶ <name> ›", "name" to plain(readableQuestText(TextUtil.legacy(quest.name))))
-                else -> text("quests.open-active", "<#f2eee8>○ <name> ›", "name" to plain(readableQuestText(TextUtil.legacy(quest.name))))
-            }
+            val label = text(
+                "quests.open", "<#c4a7e7><name> ›",
+                "name" to plain(readableQuestText(TextUtil.legacy(quest.name))),
+            )
             pointButton("quest_$index", label, text("quests.open-tooltip", "Открыть прогресс и управление заданием")) { quest(player, quest.id) }
         }
         show(player, PaperDialogScreen(
@@ -199,10 +205,10 @@ internal class DungeonSaveMenus(
     }
 
     private fun questStatus(quest: DungeonQuestInfo): Component = when {
-        quest.complete && quest.tracked -> text("quests.status-complete-tracked", "<#9bd48d>✔ Выполнено · ▶ Отслеживается")
-        quest.complete -> text("quests.status-complete", "<#9bd48d>✔ Выполнено")
-        quest.tracked -> text("quests.status-tracked", "<#9bd48d>▶ Отслеживается")
-        else -> text("quests.status-active", "<#f2eee8>○ В процессе")
+        quest.complete && quest.tracked -> text("quests.status-complete-tracked", "<#9bd48d>Готово к сдаче · <#9bd48d>Отслеживается")
+        quest.complete -> text("quests.status-complete-untracked", "<#9bd48d>Готово к сдаче · <#f2eee8>Не отслеживается")
+        quest.tracked -> text("quests.status-in-progress-tracked", "<#f2eee8>В процессе · <#9bd48d>Отслеживается")
+        else -> text("quests.status-in-progress-untracked", "<#f2eee8>В процессе · <#f2eee8>Не отслеживается")
     }
 
     private fun trackingMessage(result: DungeonQuestTrackingChange): Component = when (result) {

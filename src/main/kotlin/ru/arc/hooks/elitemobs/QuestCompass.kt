@@ -1,6 +1,7 @@
 package ru.arc.hooks.elitemobs
 
 import com.magmaguy.elitemobs.quests.QuestTracking
+import com.magmaguy.elitemobs.dungeons.EliteMobsWorld
 import net.kyori.adventure.bossbar.BossBar
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
@@ -17,6 +18,7 @@ internal class QuestCompass(
     private val trackedBars: () -> Map<UUID, NativeBossBar>,
     private val findPlayer: (UUID) -> Player? = Bukkit::getPlayer,
     private val warn: (String) -> Unit = { Logging.warn(it) },
+    private val isEliteWorld: (Player) -> Boolean = { EliteMobsWorld.isEliteMobsWorld(it.world.uid) },
 ) : AutoCloseable {
     private val sessions = mutableMapOf<UUID, Session>()
     private var closed = false
@@ -34,7 +36,7 @@ internal class QuestCompass(
                     return@forEach
                 }
                 val session = sessions.getOrPut(id) { Session(player, native) }
-                session.refresh()
+                session.refresh(isEliteWorld(player))
             }
         }.onFailure {
             close()
@@ -59,9 +61,9 @@ internal class QuestCompass(
 
         init { native.isVisible = false }
 
-        fun refresh() {
+        fun refresh(inEliteWorld: Boolean) {
             bar.name(QuestCompassRenderer.render(player.location.yaw, native.title))
-            val visible = nativeWasVisible && native.players.contains(player)
+            val visible = inEliteWorld && nativeWasVisible && native.players.contains(player)
             if (visible == shown) return
             if (visible) player.showBossBar(bar) else player.hideBossBar(bar)
             shown = visible
