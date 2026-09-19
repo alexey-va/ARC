@@ -13,7 +13,7 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath("ru.ruscrafting.arc:arc-core-integration-testing:2.7.5")
+        classpath("ru.ruscrafting.arc:arc-core-integration-testing:2.7.9")
     }
 }
 
