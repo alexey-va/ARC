@@ -464,43 +464,66 @@ val cleanupE2e = providers.gradleProperty("cleanupE2e").map(String::toBoolean).o
 val dialogE2e = providers.gradleProperty("dialogE2e").map(String::toBoolean).orElse(false).get()
 val parkourE2e = providers.gradleProperty("parkourE2e").map(String::toBoolean).orElse(false).get()
 val contractCrashE2e = providers.gradleProperty("contractCrashE2e").map(String::toBoolean).orElse(false).get()
-val contractCitizensUrl = "https://ci.citizensnpcs.co/job/Citizens2/4246/artifact/dist/target/Citizens-2.0.43-b4246.jar"
-val contractCitizensSha256 = "738b617c79d2d5a797676c1a398587b1f1f5547e2206aae558d98aac78ef74db"
-val contractCitizensJar = layout.buildDirectory.file("plugwright-e2e-generated/Citizens-2.0.43-b4246.jar")
-val prepareContractCitizens = tasks.register("prepareContractCitizens") {
-    outputs.file(contractCitizensJar)
+val e2eMinecraftVersion = providers.gradleProperty("e2eMinecraftVersion").orElse("26.1.2").get()
+
+fun pinnedE2eDownload(taskName: String, destination: File, url: String, sha256: String) = tasks.register(taskName) {
+    inputs.property("url", url)
+    inputs.property("sha256", sha256)
+    outputs.file(destination)
     outputs.upToDateWhen { false }
     doLast {
+        fun digest(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes)
+            .joinToString("") { "%02x".format(it) }
+        if (destination.isFile && digest(destination.readBytes()) == sha256) return@doLast
         val response = HttpClient.newBuilder()
             .followRedirects(HttpClient.Redirect.NORMAL)
             .connectTimeout(Duration.ofSeconds(30))
             .build()
             .send(
-                HttpRequest.newBuilder(URI(contractCitizensUrl))
+                HttpRequest.newBuilder(URI(url))
                     .timeout(Duration.ofMinutes(2))
                     .GET()
                     .build(),
                 HttpResponse.BodyHandlers.ofByteArray(),
             )
         check(response.statusCode() in 200..299) {
-            "Citizens fixture download failed with HTTP ${response.statusCode()}"
+            "${destination.name} download failed with HTTP ${response.statusCode()}"
         }
         val bytes = response.body()
-        val actual = MessageDigest.getInstance("SHA-256").digest(bytes)
-            .joinToString("") { "%02x".format(it) }
-        check(actual == contractCitizensSha256) {
-            "Unexpected Citizens fixture SHA-256: $actual"
+        val actual = digest(bytes)
+        check(actual == sha256) {
+            "Unexpected ${destination.name} SHA-256: $actual"
         }
-        contractCitizensJar.get().asFile.apply {
+        destination.apply {
             parentFile.mkdirs()
             writeBytes(bytes)
         }
     }
 }
+val contractCitizensJar = layout.buildDirectory.file("plugwright-e2e-generated/Citizens-2.0.43-b4246.jar")
+val prepareContractCitizens = pinnedE2eDownload(
+    "prepareContractCitizens", contractCitizensJar.get().asFile,
+    "https://ci.citizensnpcs.co/job/Citizens2/4246/artifact/dist/target/Citizens-2.0.43-b4246.jar",
+    "738b617c79d2d5a797676c1a398587b1f1f5547e2206aae558d98aac78ef74db",
+)
+// Plugwright 2.0.4 selects builds.last(), but the Paper v3 API is newest-first.
+// Pin the CI matrix's server builds instead of silently testing its oldest entries.
+val e2ePaperPin = when (e2eMinecraftVersion) {
+    "1.21.11" -> "paper-1.21.11-132.jar" to "5ffef465eeeb5f2a3c23a24419d97c51afd7dbb4923ff42df9a3f58bba1ccfba"
+    "26.1.2" -> "paper-26.1.2-74.jar" to "1d70b1dab9cf4a6de615209a536f3a45a2186240253c428213ce2188ab95e5f7"
+    else -> null
+}
+val e2ePaperJar = e2ePaperPin?.let { (name, _) -> layout.buildDirectory.file("plugwright-e2e-generated/$name") }
+val prepareE2ePaper = e2ePaperPin?.let { (name, sha256) ->
+    pinnedE2eDownload(
+        "prepareE2ePaper", requireNotNull(e2ePaperJar).get().asFile,
+        "https://fill-data.papermc.io/v1/objects/$sha256/$name", sha256,
+    )
+}
 
 // Isolated real-Paper tests run separately from the fast JVM suite.
 plugwright {
-    minecraftVersion.set(providers.gradleProperty("e2eMinecraftVersion").orElse("26.1.2"))
+    minecraftVersion.set(e2eMinecraftVersion)
     downloadPlugins {
         url("https://github.com/MilkBowl/Vault/releases/download/1.7.3/Vault.jar")
         url("https://github.com/A5H73Y/Parkour/releases/download/Parkour-7.2.8-RELEASE.136/Parkour-7.2.8-RELEASE.jar")
@@ -645,6 +668,10 @@ val prepareContractE2e = tasks.register("prepareContractE2e") {
 }
 
 tasks.named<me.drownek.plugwright.PlugwrightTestTask>("plugwrightTest") {
+    prepareE2ePaper?.let {
+        dependsOn(it)
+        serverJarPath.set(requireNotNull(e2ePaperJar).map { jar -> jar.asFile.absolutePath })
+    }
     if (dialogE2e) {
         testFiles.set("dialog-designs")
     } else if (cleanupE2e) {
