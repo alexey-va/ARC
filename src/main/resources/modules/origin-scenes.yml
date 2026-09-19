@@ -33,7 +33,7 @@ scenes:
     anchor: "75.5,70.0,72.5"
     audience-range: 80.0
     retry-seconds: 6
-    max-concurrent-cycles: 2
+    max-concurrent-cycles: 7
     actor-ids: ["349", "350", "351", "354", "355", "358", "362"]
     actors:
       349:
@@ -116,123 +116,337 @@ scenes:
 
     cycle-ids: [master-anvil, master-spear, master-shield, master-horseshoe, master-forging-showcase, ledger-orders, apprentice-engraving, apprentice-engraving-jopa, ore-inspection, blade-practice, hammer-rhythm, furnace-check]
     cycles:
+      # Generated solo silhouettes: scripts/forge_figures.py (ARC).
       master-anvil:
-        actor-ids: ["349"]
-        initial-delay-seconds: 5
-        cooldown-min-seconds: 14
-        cooldown-max-seconds: 24
-        step-ids: [face, billet, place, clear-hand, equip, rough, shape-head, edge, shape-edge, notch, shape-eye, handle-work, shape-handle, ring, inspect, collect-head, collect-edge, collect-eye, collect-handle, result, remark, rest]
+        actor-ids: ['349']
+        initial-delay-seconds: 1
+        cooldown-min-seconds: 1
+        cooldown-max-seconds: 2
+        step-ids: [face, billet, place, tool, draw-billet, forge-m, consume-0, part-00, part-02, part-03, part-06, part-09, forge-e, consume-1, part-01, part-04, part-07, part-10, forge-w, consume-2, part-08, part-12, part-14, forge-c, consume-blank, part-05, part-11, part-13, part-15, part-16, part-17, finish, inspect, collect-0, collect-1, collect-2, collect-3, collect-4, collect-5, collect-6, collect-7, collect-8, collect-9, collect-10, collect-11, collect-12, collect-13, collect-14, collect-15, collect-16, collect-17, result, remark, handoff]
         steps:
           face: {type: LOOK_AT_SURFACE, actor-id: 349, surface: master-work-surface}
           billet: {type: EQUIP, actor-id: 349, material: RAW_IRON}
-          place: {type: BLOCK_DISPLAY, key: edgar-axe-head, surface: master-work-surface, material: MAGMA_BLOCK, origin: BOTTOM_CENTER, scale: "0.30,0.11,0.20", rotation-y-degrees: -12}
-          clear-hand: {type: EQUIP, actor-id: 349, material: AIR}
-          equip: {type: EQUIP, actor-id: 349, material: MACE}
-          rough: {type: SWING, actor-id: 349, repetitions: 9, period-ticks: 9, feedback-surface: master-work-surface, particle: LAVA, particle-count: 3, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 1, sound-volume: 0.36, sound-pitch: 0.92}
-          shape-head: {type: BLOCK_DISPLAY, key: edgar-axe-head, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.08,0,0", scale: "0.46,0.075,0.28", rotation-y-degrees: -12, interpolation-ticks: 8}
-          edge: {type: SWING, actor-id: 349, repetitions: 8, period-ticks: 8, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 5, particle-every: 1, sound: BLOCK_ANVIL_USE, sound-every: 1, sound-volume: 0.40, sound-pitch: 1.30}
-          shape-edge: {type: BLOCK_DISPLAY, key: edgar-axe-edge, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0.18,0.012,-0.015", scale: "0.24,0.055,0.46", rotation-y-degrees: -12, interpolation-ticks: 8}
-          notch: {type: SWING, actor-id: 349, repetitions: 5, period-ticks: 8, feedback-surface: master-work-surface, particle: CRIT, particle-count: 4, particle-every: 1, sound: BLOCK_ANVIL_USE, sound-every: 1, sound-volume: 0.36, sound-pitch: 1.48}
-          shape-eye: {type: BLOCK_DISPLAY, key: edgar-axe-eye, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.08,0.020,0.075", scale: "0.19,0.045,0.09", rotation-y-degrees: -12, interpolation-ticks: 6}
-          handle-work: {type: SWING, actor-id: 349, repetitions: 5, period-ticks: 10, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 1, sound-volume: 0.32, sound-pitch: 1.08}
-          shape-handle: {type: BLOCK_DISPLAY, key: edgar-axe-handle, surface: master-work-surface, material: DARK_OAK_PLANKS, origin: BOTTOM_CENTER, offset: "-0.23,0.015,0.34", scale: "0.075,0.065,0.52", rotation-y-degrees: -12, interpolation-ticks: 8}
-          ring: {type: SOUND, anchor: master-anvil, sound: BLOCK_ANVIL_USE, volume: 0.48, pitch: 1.28}
-          inspect: {type: WAIT, ticks: 18}
-          collect-head: {type: REMOVE_DISPLAY, key: edgar-axe-head}
-          collect-edge: {type: REMOVE_DISPLAY, key: edgar-axe-edge}
-          collect-eye: {type: REMOVE_DISPLAY, key: edgar-axe-eye}
-          collect-handle: {type: REMOVE_DISPLAY, key: edgar-axe-handle}
+          place: {type: BLOCK_DISPLAY, key: edgar-axe-blank, surface: master-work-surface, material: MAGMA_BLOCK, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,0.0000', scale: '0.2200,0.0700,0.2500', interpolation-ticks: 8}
+          tool: {type: EQUIP, actor-id: 349, material: MACE}
+          draw-billet: {type: SWING, actor-id: 349, repetitions: 20, period-ticks: 16, feedback-surface: master-work-surface, particle: LAVA, particle-count: 3, particle-every: 2, sound: BLOCK_ANVIL_USE, sound-every: 2, sound-volume: 0.28, sound-pitch: 0.88}
+          forge-m: {type: SWING, actor-id: 349, repetitions: 20, period-ticks: 16, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 2, sound: BLOCK_ANVIL_USE, sound-every: 2, sound-volume: 0.28, sound-pitch: 0.96}
+          consume-0: {type: BLOCK_DISPLAY, key: edgar-axe-blank, surface: master-work-surface, material: MAGMA_BLOCK, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,0.0000', scale: '0.1800,0.0400,0.1800', interpolation-ticks: 8}
+          part-00: {type: BLOCK_DISPLAY, key: edgar-axe-part-00, surface: master-work-surface, material: LIGHT_GRAY_CONCRETE, origin: BOTTOM_CENTER, offset: '-0.0225,0.0000,-0.2475', scale: '0.0900,0.0750,0.2700', interpolation-ticks: 8}
+          part-02: {type: BLOCK_DISPLAY, key: edgar-axe-part-02, surface: master-work-surface, material: LIGHT_GRAY_CONCRETE, origin: BOTTOM_CENTER, offset: '-0.1125,0.0000,-0.2475', scale: '0.0900,0.0750,0.1800', interpolation-ticks: 8}
+          part-03: {type: BLOCK_DISPLAY, key: edgar-axe-part-03, surface: master-work-surface, material: LIGHT_GRAY_CONCRETE, origin: BOTTOM_CENTER, offset: '0.0450,0.0000,-0.2025', scale: '0.0450,0.0750,0.2700', interpolation-ticks: 8}
+          part-06: {type: BLOCK_DISPLAY, key: edgar-axe-part-06, surface: master-work-surface, material: LIGHT_GRAY_CONCRETE, origin: BOTTOM_CENTER, offset: '-0.1800,0.0000,-0.2475', scale: '0.0450,0.0750,0.0900', interpolation-ticks: 8}
+          part-09: {type: BLOCK_DISPLAY, key: edgar-axe-part-09, surface: master-work-surface, material: LIGHT_GRAY_CONCRETE, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,-0.0900', scale: '0.0450,0.0750,0.0450', interpolation-ticks: 8}
+          forge-e: {type: SWING, actor-id: 349, repetitions: 20, period-ticks: 16, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 2, sound: BLOCK_ANVIL_USE, sound-every: 2, sound-volume: 0.28, sound-pitch: 1.08}
+          consume-1: {type: BLOCK_DISPLAY, key: edgar-axe-blank, surface: master-work-surface, material: MAGMA_BLOCK, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,0.0000', scale: '0.0900,0.0400,0.0900', interpolation-ticks: 8}
+          part-01: {type: BLOCK_DISPLAY, key: edgar-axe-part-01, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '0.0675,0.0000,-0.3600', scale: '0.0900,0.0500,0.0450', interpolation-ticks: 8}
+          part-04: {type: BLOCK_DISPLAY, key: edgar-axe-part-04, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '0.1125,0.0000,-0.2025', scale: '0.0900,0.0500,0.2700', interpolation-ticks: 8}
+          part-07: {type: BLOCK_DISPLAY, key: edgar-axe-part-07, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '0.1800,0.0000,-0.2025', scale: '0.0450,0.0500,0.1800', interpolation-ticks: 8}
+          part-10: {type: BLOCK_DISPLAY, key: edgar-axe-part-10, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '0.0675,0.0000,-0.0450', scale: '0.0900,0.0500,0.0450', interpolation-ticks: 8}
+          forge-w: {type: SWING, actor-id: 349, repetitions: 20, period-ticks: 16, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 2, sound: BLOCK_ANVIL_USE, sound-every: 2, sound-volume: 0.28, sound-pitch: 1.2}
+          consume-2: {type: BLOCK_DISPLAY, key: edgar-axe-blank, surface: master-work-surface, material: MAGMA_BLOCK, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,0.0000', scale: '0.0600,0.0400,0.0600', interpolation-ticks: 8}
+          part-08: {type: BLOCK_DISPLAY, key: edgar-axe-part-08, surface: master-work-surface, material: DARK_OAK_PLANKS, origin: BOTTOM_CENTER, offset: '-0.1800,0.0000,-0.0900', scale: '0.0450,0.0500,0.2250', interpolation-ticks: 8}
+          part-12: {type: BLOCK_DISPLAY, key: edgar-axe-part-12, surface: master-work-surface, material: DARK_OAK_PLANKS, origin: BOTTOM_CENTER, offset: '-0.1800,0.0000,0.1125', scale: '0.0450,0.0500,0.0900', interpolation-ticks: 8}
+          part-14: {type: BLOCK_DISPLAY, key: edgar-axe-part-14, surface: master-work-surface, material: DARK_OAK_PLANKS, origin: BOTTOM_CENTER, offset: '-0.1800,0.0000,0.2475', scale: '0.0450,0.0500,0.0900', interpolation-ticks: 8}
+          forge-c: {type: SWING, actor-id: 349, repetitions: 20, period-ticks: 16, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 2, sound: BLOCK_ANVIL_USE, sound-every: 2, sound-volume: 0.28, sound-pitch: 1.3199999999999998}
+          consume-blank: {type: REMOVE_DISPLAY, key: edgar-axe-blank}
+          part-05: {type: BLOCK_DISPLAY, key: edgar-axe-part-05, surface: master-work-surface, material: CUT_COPPER, origin: BOTTOM_CENTER, offset: '-0.2250,0.0000,-0.2250', scale: '0.0450,0.0500,0.1350', interpolation-ticks: 8}
+          part-11: {type: BLOCK_DISPLAY, key: edgar-axe-part-11, surface: master-work-surface, material: CUT_COPPER, origin: BOTTOM_CENTER, offset: '-0.1800,0.0000,0.0450', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          part-13: {type: BLOCK_DISPLAY, key: edgar-axe-part-13, surface: master-work-surface, material: CUT_COPPER, origin: BOTTOM_CENTER, offset: '-0.1800,0.0000,0.1800', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          part-15: {type: BLOCK_DISPLAY, key: edgar-axe-part-15, surface: master-work-surface, material: CUT_COPPER, origin: BOTTOM_CENTER, offset: '-0.1800,0.0000,0.3375', scale: '0.0450,0.0500,0.0900', interpolation-ticks: 8}
+          part-16: {type: BLOCK_DISPLAY, key: edgar-axe-part-16, surface: master-work-surface, material: CUT_COPPER, origin: BOTTOM_CENTER, offset: '-0.2250,0.0000,0.3600', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          part-17: {type: BLOCK_DISPLAY, key: edgar-axe-part-17, surface: master-work-surface, material: CUT_COPPER, origin: BOTTOM_CENTER, offset: '-0.1350,0.0000,0.3600', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          finish: {type: SWING, actor-id: 349, repetitions: 20, period-ticks: 16, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 2, sound: BLOCK_ANVIL_USE, sound-every: 2, sound-volume: 0.28, sound-pitch: 1.48}
+          inspect: {type: WAIT, ticks: 60}
+          collect-0: {type: REMOVE_DISPLAY, key: edgar-axe-part-00}
+          collect-1: {type: REMOVE_DISPLAY, key: edgar-axe-part-02}
+          collect-2: {type: REMOVE_DISPLAY, key: edgar-axe-part-03}
+          collect-3: {type: REMOVE_DISPLAY, key: edgar-axe-part-06}
+          collect-4: {type: REMOVE_DISPLAY, key: edgar-axe-part-09}
+          collect-5: {type: REMOVE_DISPLAY, key: edgar-axe-part-01}
+          collect-6: {type: REMOVE_DISPLAY, key: edgar-axe-part-04}
+          collect-7: {type: REMOVE_DISPLAY, key: edgar-axe-part-07}
+          collect-8: {type: REMOVE_DISPLAY, key: edgar-axe-part-10}
+          collect-9: {type: REMOVE_DISPLAY, key: edgar-axe-part-08}
+          collect-10: {type: REMOVE_DISPLAY, key: edgar-axe-part-12}
+          collect-11: {type: REMOVE_DISPLAY, key: edgar-axe-part-14}
+          collect-12: {type: REMOVE_DISPLAY, key: edgar-axe-part-05}
+          collect-13: {type: REMOVE_DISPLAY, key: edgar-axe-part-11}
+          collect-14: {type: REMOVE_DISPLAY, key: edgar-axe-part-13}
+          collect-15: {type: REMOVE_DISPLAY, key: edgar-axe-part-15}
+          collect-16: {type: REMOVE_DISPLAY, key: edgar-axe-part-16}
+          collect-17: {type: REMOVE_DISPLAY, key: edgar-axe-part-17}
           result: {type: EQUIP, actor-id: 349, material: IRON_AXE}
-          remark: {type: SPEECH, actor-id: 349, text: "Лезвие широкое, обух плотный. Такой топор не поведёт."}
-          rest: {type: WAIT, ticks: 24}
+          remark: {type: SPEECH, actor-id: 349, text: 'Лезвие вытянуто, борода подрезана. Теперь топор готов.'}
+          handoff: {type: WAIT, ticks: 10}
       master-spear:
-        actor-ids: ["349"]
-        initial-delay-seconds: 28
-        cooldown-min-seconds: 42
-        cooldown-max-seconds: 68
-        step-ids: [face, billet, place, clear-hand, equip, rough, shape-shaft, edge, shape-edge, socket, shape-socket, point, shape-point, inspect, collect-shaft, collect-edge, collect-socket, collect-point, result, remark, rest]
+        actor-ids: ['349']
+        initial-delay-seconds: 1
+        cooldown-min-seconds: 1
+        cooldown-max-seconds: 2
+        step-ids: [face, billet, place, tool, draw-billet, forge-m, consume-0, part-02, part-05, part-06, part-09, part-10, part-16, part-17, forge-e, consume-1, part-00, part-01, part-03, part-04, part-07, part-08, part-11, part-12, part-13, part-14, part-15, forge-w, consume-2, part-19, part-21, part-23, forge-c, consume-blank, part-18, part-20, part-22, part-24, finish, inspect, collect-0, collect-1, collect-2, collect-3, collect-4, collect-5, collect-6, collect-7, collect-8, collect-9, collect-10, collect-11, collect-12, collect-13, collect-14, collect-15, collect-16, collect-17, collect-18, collect-19, collect-20, collect-21, collect-22, collect-23, collect-24, result, remark, handoff]
         steps:
           face: {type: LOOK_AT_SURFACE, actor-id: 349, surface: master-work-surface}
           billet: {type: EQUIP, actor-id: 349, material: RAW_IRON}
-          place: {type: BLOCK_DISPLAY, key: edgar-spear-shaft, surface: master-work-surface, material: MAGMA_BLOCK, origin: BOTTOM_CENTER, scale: "0.09,0.09,0.28", rotation-y-degrees: -12}
-          clear-hand: {type: EQUIP, actor-id: 349, material: AIR}
-          equip: {type: EQUIP, actor-id: 349, material: MACE}
-          rough: {type: SWING, actor-id: 349, repetitions: 8, period-ticks: 10, feedback-surface: master-work-surface, particle: LAVA, particle-count: 3, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 1, sound-volume: 0.35, sound-pitch: 0.88}
-          shape-shaft: {type: BLOCK_DISPLAY, key: edgar-spear-shaft, surface: master-work-surface, material: DARK_OAK_PLANKS, origin: BOTTOM_CENTER, offset: "-0.02,0.014,0.28", scale: "0.055,0.055,0.62", rotation-y-degrees: -12, interpolation-ticks: 8}
-          edge: {type: SWING, actor-id: 349, repetitions: 7, period-ticks: 9, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 5, particle-every: 1, sound: BLOCK_ANVIL_USE, sound-every: 1, sound-volume: 0.39, sound-pitch: 1.26}
-          shape-edge: {type: BLOCK_DISPLAY, key: edgar-spear-edge, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.02,0.020,0.78", scale: "0.20,0.07,0.26", rotation-y-degrees: -12, interpolation-ticks: 8}
-          socket: {type: SWING, actor-id: 349, repetitions: 5, period-ticks: 8, feedback-surface: master-work-surface, particle: CRIT, particle-count: 4, particle-every: 1, sound: BLOCK_ANVIL_USE, sound-every: 1, sound-volume: 0.35, sound-pitch: 1.44}
-          shape-socket: {type: BLOCK_DISPLAY, key: edgar-spear-socket, surface: master-work-surface, material: COPPER_BLOCK, origin: BOTTOM_CENTER, offset: "-0.02,0.022,0.62", scale: "0.12,0.055,0.12", rotation-y-degrees: -12, interpolation-ticks: 6}
-          point: {type: SWING, actor-id: 349, repetitions: 5, period-ticks: 8, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 4, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 1, sound-volume: 0.34, sound-pitch: 1.10}
-          shape-point: {type: BLOCK_DISPLAY, key: edgar-spear-point, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.02,0.030,0.98", scale: "0.08,0.055,0.20", rotation-y-degrees: -12, interpolation-ticks: 8}
-          inspect: {type: WAIT, ticks: 18}
-          collect-shaft: {type: REMOVE_DISPLAY, key: edgar-spear-shaft}
-          collect-edge: {type: REMOVE_DISPLAY, key: edgar-spear-edge}
-          collect-socket: {type: REMOVE_DISPLAY, key: edgar-spear-socket}
-          collect-point: {type: REMOVE_DISPLAY, key: edgar-spear-point}
+          place: {type: BLOCK_DISPLAY, key: edgar-spear-blank, surface: master-work-surface, material: MAGMA_BLOCK, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,0.0000', scale: '0.2200,0.0700,0.2500', interpolation-ticks: 8}
+          tool: {type: EQUIP, actor-id: 349, material: MACE}
+          draw-billet: {type: SWING, actor-id: 349, repetitions: 20, period-ticks: 16, feedback-surface: master-work-surface, particle: LAVA, particle-count: 3, particle-every: 2, sound: BLOCK_ANVIL_USE, sound-every: 2, sound-volume: 0.28, sound-pitch: 0.88}
+          forge-m: {type: SWING, actor-id: 349, repetitions: 20, period-ticks: 16, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 2, sound: BLOCK_ANVIL_USE, sound-every: 2, sound-volume: 0.28, sound-pitch: 0.96}
+          consume-0: {type: BLOCK_DISPLAY, key: edgar-spear-blank, surface: master-work-surface, material: MAGMA_BLOCK, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,0.0000', scale: '0.1800,0.0400,0.1800', interpolation-ticks: 8}
+          part-02: {type: BLOCK_DISPLAY, key: edgar-spear-part-02, surface: master-work-surface, material: LIGHT_GRAY_CONCRETE, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,-0.2025', scale: '0.0450,0.0750,0.3600', interpolation-ticks: 8}
+          part-05: {type: BLOCK_DISPLAY, key: edgar-spear-part-05, surface: master-work-surface, material: LIGHT_GRAY_CONCRETE, origin: BOTTOM_CENTER, offset: '-0.0450,0.0000,-0.2250', scale: '0.0450,0.0750,0.2250', interpolation-ticks: 8}
+          part-06: {type: BLOCK_DISPLAY, key: edgar-spear-part-06, surface: master-work-surface, material: LIGHT_GRAY_CONCRETE, origin: BOTTOM_CENTER, offset: '0.0450,0.0000,-0.2250', scale: '0.0450,0.0750,0.2250', interpolation-ticks: 8}
+          part-09: {type: BLOCK_DISPLAY, key: edgar-spear-part-09, surface: master-work-surface, material: LIGHT_GRAY_CONCRETE, origin: BOTTOM_CENTER, offset: '-0.0900,0.0000,-0.2025', scale: '0.0450,0.0750,0.0900', interpolation-ticks: 8}
+          part-10: {type: BLOCK_DISPLAY, key: edgar-spear-part-10, surface: master-work-surface, material: LIGHT_GRAY_CONCRETE, origin: BOTTOM_CENTER, offset: '0.0900,0.0000,-0.2025', scale: '0.0450,0.0750,0.0900', interpolation-ticks: 8}
+          part-16: {type: BLOCK_DISPLAY, key: edgar-spear-part-16, surface: master-work-surface, material: LIGHT_GRAY_CONCRETE, origin: BOTTOM_CENTER, offset: '-0.0450,0.0000,-0.0450', scale: '0.0450,0.0750,0.0450', interpolation-ticks: 8}
+          part-17: {type: BLOCK_DISPLAY, key: edgar-spear-part-17, surface: master-work-surface, material: LIGHT_GRAY_CONCRETE, origin: BOTTOM_CENTER, offset: '0.0450,0.0000,-0.0450', scale: '0.0450,0.0750,0.0450', interpolation-ticks: 8}
+          forge-e: {type: SWING, actor-id: 349, repetitions: 20, period-ticks: 16, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 2, sound: BLOCK_ANVIL_USE, sound-every: 2, sound-volume: 0.28, sound-pitch: 1.08}
+          consume-1: {type: BLOCK_DISPLAY, key: edgar-spear-blank, surface: master-work-surface, material: MAGMA_BLOCK, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,0.0000', scale: '0.0900,0.0400,0.0900', interpolation-ticks: 8}
+          part-00: {type: BLOCK_DISPLAY, key: edgar-spear-part-00, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,-0.4050', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          part-01: {type: BLOCK_DISPLAY, key: edgar-spear-part-01, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '-0.0450,0.0000,-0.3600', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          part-03: {type: BLOCK_DISPLAY, key: edgar-spear-part-03, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '0.0450,0.0000,-0.3600', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          part-04: {type: BLOCK_DISPLAY, key: edgar-spear-part-04, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '-0.0900,0.0000,-0.2925', scale: '0.0450,0.0500,0.0900', interpolation-ticks: 8}
+          part-07: {type: BLOCK_DISPLAY, key: edgar-spear-part-07, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '0.0900,0.0000,-0.2925', scale: '0.0450,0.0500,0.0900', interpolation-ticks: 8}
+          part-08: {type: BLOCK_DISPLAY, key: edgar-spear-part-08, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '-0.1350,0.0000,-0.2025', scale: '0.0450,0.0500,0.0900', interpolation-ticks: 8}
+          part-11: {type: BLOCK_DISPLAY, key: edgar-spear-part-11, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '0.1350,0.0000,-0.2025', scale: '0.0450,0.0500,0.0900', interpolation-ticks: 8}
+          part-12: {type: BLOCK_DISPLAY, key: edgar-spear-part-12, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '-0.0900,0.0000,-0.1350', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          part-13: {type: BLOCK_DISPLAY, key: edgar-spear-part-13, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '0.0900,0.0000,-0.1350', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          part-14: {type: BLOCK_DISPLAY, key: edgar-spear-part-14, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '-0.0450,0.0000,-0.0900', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          part-15: {type: BLOCK_DISPLAY, key: edgar-spear-part-15, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '0.0450,0.0000,-0.0900', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          forge-w: {type: SWING, actor-id: 349, repetitions: 20, period-ticks: 16, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 2, sound: BLOCK_ANVIL_USE, sound-every: 2, sound-volume: 0.28, sound-pitch: 1.2}
+          consume-2: {type: BLOCK_DISPLAY, key: edgar-spear-blank, surface: master-work-surface, material: MAGMA_BLOCK, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,0.0000', scale: '0.0600,0.0400,0.0600', interpolation-ticks: 8}
+          part-19: {type: BLOCK_DISPLAY, key: edgar-spear-part-19, surface: master-work-surface, material: DARK_OAK_PLANKS, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,0.0675', scale: '0.0450,0.0500,0.0900', interpolation-ticks: 8}
+          part-21: {type: BLOCK_DISPLAY, key: edgar-spear-part-21, surface: master-work-surface, material: DARK_OAK_PLANKS, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,0.2025', scale: '0.0450,0.0500,0.0900', interpolation-ticks: 8}
+          part-23: {type: BLOCK_DISPLAY, key: edgar-spear-part-23, surface: master-work-surface, material: DARK_OAK_PLANKS, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,0.3375', scale: '0.0450,0.0500,0.0900', interpolation-ticks: 8}
+          forge-c: {type: SWING, actor-id: 349, repetitions: 20, period-ticks: 16, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 2, sound: BLOCK_ANVIL_USE, sound-every: 2, sound-volume: 0.28, sound-pitch: 1.3199999999999998}
+          consume-blank: {type: REMOVE_DISPLAY, key: edgar-spear-blank}
+          part-18: {type: BLOCK_DISPLAY, key: edgar-spear-part-18, surface: master-work-surface, material: CUT_COPPER, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,0.0000', scale: '0.1350,0.0500,0.0450', interpolation-ticks: 8}
+          part-20: {type: BLOCK_DISPLAY, key: edgar-spear-part-20, surface: master-work-surface, material: CUT_COPPER, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,0.1350', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          part-22: {type: BLOCK_DISPLAY, key: edgar-spear-part-22, surface: master-work-surface, material: CUT_COPPER, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,0.2700', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          part-24: {type: BLOCK_DISPLAY, key: edgar-spear-part-24, surface: master-work-surface, material: CUT_COPPER, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,0.4050', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          finish: {type: SWING, actor-id: 349, repetitions: 20, period-ticks: 16, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 2, sound: BLOCK_ANVIL_USE, sound-every: 2, sound-volume: 0.28, sound-pitch: 1.48}
+          inspect: {type: WAIT, ticks: 60}
+          collect-0: {type: REMOVE_DISPLAY, key: edgar-spear-part-02}
+          collect-1: {type: REMOVE_DISPLAY, key: edgar-spear-part-05}
+          collect-2: {type: REMOVE_DISPLAY, key: edgar-spear-part-06}
+          collect-3: {type: REMOVE_DISPLAY, key: edgar-spear-part-09}
+          collect-4: {type: REMOVE_DISPLAY, key: edgar-spear-part-10}
+          collect-5: {type: REMOVE_DISPLAY, key: edgar-spear-part-16}
+          collect-6: {type: REMOVE_DISPLAY, key: edgar-spear-part-17}
+          collect-7: {type: REMOVE_DISPLAY, key: edgar-spear-part-00}
+          collect-8: {type: REMOVE_DISPLAY, key: edgar-spear-part-01}
+          collect-9: {type: REMOVE_DISPLAY, key: edgar-spear-part-03}
+          collect-10: {type: REMOVE_DISPLAY, key: edgar-spear-part-04}
+          collect-11: {type: REMOVE_DISPLAY, key: edgar-spear-part-07}
+          collect-12: {type: REMOVE_DISPLAY, key: edgar-spear-part-08}
+          collect-13: {type: REMOVE_DISPLAY, key: edgar-spear-part-11}
+          collect-14: {type: REMOVE_DISPLAY, key: edgar-spear-part-12}
+          collect-15: {type: REMOVE_DISPLAY, key: edgar-spear-part-13}
+          collect-16: {type: REMOVE_DISPLAY, key: edgar-spear-part-14}
+          collect-17: {type: REMOVE_DISPLAY, key: edgar-spear-part-15}
+          collect-18: {type: REMOVE_DISPLAY, key: edgar-spear-part-19}
+          collect-19: {type: REMOVE_DISPLAY, key: edgar-spear-part-21}
+          collect-20: {type: REMOVE_DISPLAY, key: edgar-spear-part-23}
+          collect-21: {type: REMOVE_DISPLAY, key: edgar-spear-part-18}
+          collect-22: {type: REMOVE_DISPLAY, key: edgar-spear-part-20}
+          collect-23: {type: REMOVE_DISPLAY, key: edgar-spear-part-22}
+          collect-24: {type: REMOVE_DISPLAY, key: edgar-spear-part-24}
           result: {type: EQUIP, actor-id: 349, material: TRIDENT}
-          remark: {type: SPEECH, actor-id: 349, text: "Острие должно держать линию. Копьё не прощает кривой руки."}
-          rest: {type: WAIT, ticks: 26}
+          remark: {type: SPEECH, actor-id: 349, text: 'Ровное перо, крепкая втулка. Можно насаживать на древко.'}
+          handoff: {type: WAIT, ticks: 10}
       master-shield:
-        actor-ids: ["349"]
-        initial-delay-seconds: 52
-        cooldown-min-seconds: 58
-        cooldown-max-seconds: 86
-        step-ids: [face, billet, place, clear-hand, equip, forge, shape-board, rim, shape-rim, boss, shape-boss, grip, shape-grip, inspect, collect-board, collect-rim, collect-boss, collect-grip, result, remark, rest]
+        actor-ids: ['349']
+        initial-delay-seconds: 1
+        cooldown-min-seconds: 1
+        cooldown-max-seconds: 2
+        step-ids: [face, billet, place, tool, draw-billet, forge-m, consume-0, part-08, part-11, part-12, forge-e, consume-1, part-00, part-01, part-03, part-25, part-26, part-27, part-30, part-31, part-32, part-33, part-34, part-35, part-37, part-38, forge-w, consume-2, part-02, part-04, part-06, part-07, part-09, part-10, part-13, part-14, part-17, part-18, part-19, part-20, part-21, part-22, part-24, part-28, part-29, part-36, forge-c, consume-blank, part-05, part-15, part-16, part-23, finish, inspect, collect-0, collect-1, collect-2, collect-3, collect-4, collect-5, collect-6, collect-7, collect-8, collect-9, collect-10, collect-11, collect-12, collect-13, collect-14, collect-15, collect-16, collect-17, collect-18, collect-19, collect-20, collect-21, collect-22, collect-23, collect-24, collect-25, collect-26, collect-27, collect-28, collect-29, collect-30, collect-31, collect-32, collect-33, collect-34, collect-35, collect-36, collect-37, collect-38, result, remark, handoff]
         steps:
           face: {type: LOOK_AT_SURFACE, actor-id: 349, surface: master-work-surface}
           billet: {type: EQUIP, actor-id: 349, material: RAW_IRON}
-          place: {type: BLOCK_DISPLAY, key: edgar-shield-board, surface: master-work-surface, material: MAGMA_BLOCK, origin: BOTTOM_CENTER, scale: "0.28,0.10,0.34", rotation-y-degrees: -12}
-          clear-hand: {type: EQUIP, actor-id: 349, material: AIR}
-          equip: {type: EQUIP, actor-id: 349, material: MACE}
-          forge: {type: SWING, actor-id: 349, repetitions: 10, period-ticks: 9, feedback-surface: master-work-surface, particle: LAVA, particle-count: 3, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 1, sound-volume: 0.36, sound-pitch: 0.90}
-          shape-board: {type: BLOCK_DISPLAY, key: edgar-shield-board, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.04,0,0.02", scale: "0.58,0.075,0.64", rotation-y-degrees: -12, interpolation-ticks: 10}
-          rim: {type: SWING, actor-id: 349, repetitions: 8, period-ticks: 8, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 5, particle-every: 1, sound: BLOCK_ANVIL_USE, sound-every: 1, sound-volume: 0.40, sound-pitch: 1.32}
-          shape-rim: {type: BLOCK_DISPLAY, key: edgar-shield-rim, surface: master-work-surface, material: COPPER_BLOCK, origin: BOTTOM_CENTER, offset: "-0.04,0.084,0.02", scale: "0.64,0.035,0.055", rotation-y-degrees: -12, interpolation-ticks: 8}
-          boss: {type: SWING, actor-id: 349, repetitions: 6, period-ticks: 8, feedback-surface: master-work-surface, particle: CRIT, particle-count: 5, particle-every: 1, sound: BLOCK_ANVIL_USE, sound-every: 1, sound-volume: 0.37, sound-pitch: 1.50}
-          shape-boss: {type: BLOCK_DISPLAY, key: edgar-shield-boss, surface: master-work-surface, material: GOLD_BLOCK, origin: BOTTOM_CENTER, offset: "-0.04,0.10,0.02", scale: "0.13,0.08,0.13", rotation-y-degrees: -12, interpolation-ticks: 6}
-          grip: {type: SWING, actor-id: 349, repetitions: 5, period-ticks: 10, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 1, sound-volume: 0.33, sound-pitch: 1.08}
-          shape-grip: {type: BLOCK_DISPLAY, key: edgar-shield-grip, surface: master-work-surface, material: DARK_OAK_PLANKS, origin: BOTTOM_CENTER, offset: "-0.04,0.086,0.16", scale: "0.065,0.065,0.22", rotation-y-degrees: -12, interpolation-ticks: 8}
-          inspect: {type: WAIT, ticks: 18}
-          collect-board: {type: REMOVE_DISPLAY, key: edgar-shield-board}
-          collect-rim: {type: REMOVE_DISPLAY, key: edgar-shield-rim}
-          collect-boss: {type: REMOVE_DISPLAY, key: edgar-shield-boss}
-          collect-grip: {type: REMOVE_DISPLAY, key: edgar-shield-grip}
+          place: {type: BLOCK_DISPLAY, key: edgar-shield-blank, surface: master-work-surface, material: MAGMA_BLOCK, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,0.0000', scale: '0.2200,0.0700,0.2500', interpolation-ticks: 8}
+          tool: {type: EQUIP, actor-id: 349, material: MACE}
+          draw-billet: {type: SWING, actor-id: 349, repetitions: 20, period-ticks: 16, feedback-surface: master-work-surface, particle: LAVA, particle-count: 3, particle-every: 2, sound: BLOCK_ANVIL_USE, sound-every: 2, sound-volume: 0.28, sound-pitch: 0.88}
+          forge-m: {type: SWING, actor-id: 349, repetitions: 20, period-ticks: 16, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 2, sound: BLOCK_ANVIL_USE, sound-every: 2, sound-volume: 0.28, sound-pitch: 0.96}
+          consume-0: {type: BLOCK_DISPLAY, key: edgar-shield-blank, surface: master-work-surface, material: MAGMA_BLOCK, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,0.0000', scale: '0.1800,0.0400,0.1800', interpolation-ticks: 8}
+          part-08: {type: BLOCK_DISPLAY, key: edgar-shield-part-08, surface: master-work-surface, material: LIGHT_GRAY_CONCRETE, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,-0.0900', scale: '0.1350,0.0750,0.2250', interpolation-ticks: 8}
+          part-11: {type: BLOCK_DISPLAY, key: edgar-shield-part-11, surface: master-work-surface, material: LIGHT_GRAY_CONCRETE, origin: BOTTOM_CENTER, offset: '-0.0900,0.0000,-0.0900', scale: '0.0450,0.0750,0.1350', interpolation-ticks: 8}
+          part-12: {type: BLOCK_DISPLAY, key: edgar-shield-part-12, surface: master-work-surface, material: LIGHT_GRAY_CONCRETE, origin: BOTTOM_CENTER, offset: '0.0900,0.0000,-0.0900', scale: '0.0450,0.0750,0.1350', interpolation-ticks: 8}
+          forge-e: {type: SWING, actor-id: 349, repetitions: 20, period-ticks: 16, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 2, sound: BLOCK_ANVIL_USE, sound-every: 2, sound-volume: 0.28, sound-pitch: 1.08}
+          consume-1: {type: BLOCK_DISPLAY, key: edgar-shield-blank, surface: master-work-surface, material: MAGMA_BLOCK, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,0.0000', scale: '0.0900,0.0400,0.0900', interpolation-ticks: 8}
+          part-00: {type: BLOCK_DISPLAY, key: edgar-shield-part-00, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,-0.4050', scale: '0.4950,0.0500,0.0450', interpolation-ticks: 8}
+          part-01: {type: BLOCK_DISPLAY, key: edgar-shield-part-01, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '-0.2700,0.0000,-0.1575', scale: '0.0450,0.0500,0.4500', interpolation-ticks: 8}
+          part-03: {type: BLOCK_DISPLAY, key: edgar-shield-part-03, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '0.2700,0.0000,-0.1575', scale: '0.0450,0.0500,0.4500', interpolation-ticks: 8}
+          part-25: {type: BLOCK_DISPLAY, key: edgar-shield-part-25, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '-0.2250,0.0000,0.1125', scale: '0.0450,0.0500,0.0900', interpolation-ticks: 8}
+          part-26: {type: BLOCK_DISPLAY, key: edgar-shield-part-26, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '0.2250,0.0000,0.1125', scale: '0.0450,0.0500,0.0900', interpolation-ticks: 8}
+          part-27: {type: BLOCK_DISPLAY, key: edgar-shield-part-27, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '-0.1800,0.0000,0.1800', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          part-30: {type: BLOCK_DISPLAY, key: edgar-shield-part-30, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '0.1800,0.0000,0.1800', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          part-31: {type: BLOCK_DISPLAY, key: edgar-shield-part-31, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '-0.1350,0.0000,0.2250', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          part-32: {type: BLOCK_DISPLAY, key: edgar-shield-part-32, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '0.1350,0.0000,0.2250', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          part-33: {type: BLOCK_DISPLAY, key: edgar-shield-part-33, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '-0.0900,0.0000,0.2700', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          part-34: {type: BLOCK_DISPLAY, key: edgar-shield-part-34, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '0.0900,0.0000,0.2700', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          part-35: {type: BLOCK_DISPLAY, key: edgar-shield-part-35, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '-0.0450,0.0000,0.3150', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          part-37: {type: BLOCK_DISPLAY, key: edgar-shield-part-37, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '0.0450,0.0000,0.3150', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          part-38: {type: BLOCK_DISPLAY, key: edgar-shield-part-38, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,0.3600', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          forge-w: {type: SWING, actor-id: 349, repetitions: 20, period-ticks: 16, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 2, sound: BLOCK_ANVIL_USE, sound-every: 2, sound-volume: 0.28, sound-pitch: 1.2}
+          consume-2: {type: BLOCK_DISPLAY, key: edgar-shield-blank, surface: master-work-surface, material: MAGMA_BLOCK, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,0.0000', scale: '0.0600,0.0400,0.0600', interpolation-ticks: 8}
+          part-02: {type: BLOCK_DISPLAY, key: edgar-shield-part-02, surface: master-work-surface, material: DARK_OAK_PLANKS, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,-0.3600', scale: '0.4950,0.0500,0.0450', interpolation-ticks: 8}
+          part-04: {type: BLOCK_DISPLAY, key: edgar-shield-part-04, surface: master-work-surface, material: DARK_OAK_PLANKS, origin: BOTTOM_CENTER, offset: '-0.1350,0.0000,-0.2700', scale: '0.2250,0.0500,0.1350', interpolation-ticks: 8}
+          part-06: {type: BLOCK_DISPLAY, key: edgar-shield-part-06, surface: master-work-surface, material: DARK_OAK_PLANKS, origin: BOTTOM_CENTER, offset: '0.1350,0.0000,-0.2700', scale: '0.2250,0.0500,0.1350', interpolation-ticks: 8}
+          part-07: {type: BLOCK_DISPLAY, key: edgar-shield-part-07, surface: master-work-surface, material: DARK_OAK_PLANKS, origin: BOTTOM_CENTER, offset: '-0.1575,0.0000,-0.1800', scale: '0.1800,0.0500,0.0450', interpolation-ticks: 8}
+          part-09: {type: BLOCK_DISPLAY, key: edgar-shield-part-09, surface: master-work-surface, material: DARK_OAK_PLANKS, origin: BOTTOM_CENTER, offset: '0.1575,0.0000,-0.1800', scale: '0.1800,0.0500,0.0450', interpolation-ticks: 8}
+          part-10: {type: BLOCK_DISPLAY, key: edgar-shield-part-10, surface: master-work-surface, material: DARK_OAK_PLANKS, origin: BOTTOM_CENTER, offset: '-0.1800,0.0000,-0.1350', scale: '0.1350,0.0500,0.0450', interpolation-ticks: 8}
+          part-13: {type: BLOCK_DISPLAY, key: edgar-shield-part-13, surface: master-work-surface, material: DARK_OAK_PLANKS, origin: BOTTOM_CENTER, offset: '0.1800,0.0000,-0.1350', scale: '0.1350,0.0500,0.0450', interpolation-ticks: 8}
+          part-14: {type: BLOCK_DISPLAY, key: edgar-shield-part-14, surface: master-work-surface, material: DARK_OAK_PLANKS, origin: BOTTOM_CENTER, offset: '-0.2250,0.0000,-0.0225', scale: '0.0450,0.0500,0.1800', interpolation-ticks: 8}
+          part-17: {type: BLOCK_DISPLAY, key: edgar-shield-part-17, surface: master-work-surface, material: DARK_OAK_PLANKS, origin: BOTTOM_CENTER, offset: '0.2250,0.0000,-0.0225', scale: '0.0450,0.0500,0.1800', interpolation-ticks: 8}
+          part-18: {type: BLOCK_DISPLAY, key: edgar-shield-part-18, surface: master-work-surface, material: DARK_OAK_PLANKS, origin: BOTTOM_CENTER, offset: '-0.1575,0.0000,0.0450', scale: '0.0900,0.0500,0.2250', interpolation-ticks: 8}
+          part-19: {type: BLOCK_DISPLAY, key: edgar-shield-part-19, surface: master-work-surface, material: DARK_OAK_PLANKS, origin: BOTTOM_CENTER, offset: '0.1575,0.0000,0.0450', scale: '0.0900,0.0500,0.2250', interpolation-ticks: 8}
+          part-20: {type: BLOCK_DISPLAY, key: edgar-shield-part-20, surface: master-work-surface, material: DARK_OAK_PLANKS, origin: BOTTOM_CENTER, offset: '-0.0900,0.0000,0.1125', scale: '0.0450,0.0500,0.2700', interpolation-ticks: 8}
+          part-21: {type: BLOCK_DISPLAY, key: edgar-shield-part-21, surface: master-work-surface, material: DARK_OAK_PLANKS, origin: BOTTOM_CENTER, offset: '0.0900,0.0000,0.1125', scale: '0.0450,0.0500,0.2700', interpolation-ticks: 8}
+          part-22: {type: BLOCK_DISPLAY, key: edgar-shield-part-22, surface: master-work-surface, material: DARK_OAK_PLANKS, origin: BOTTOM_CENTER, offset: '-0.0450,0.0000,0.1575', scale: '0.0450,0.0500,0.2700', interpolation-ticks: 8}
+          part-24: {type: BLOCK_DISPLAY, key: edgar-shield-part-24, surface: master-work-surface, material: DARK_OAK_PLANKS, origin: BOTTOM_CENTER, offset: '0.0450,0.0000,0.1575', scale: '0.0450,0.0500,0.2700', interpolation-ticks: 8}
+          part-28: {type: BLOCK_DISPLAY, key: edgar-shield-part-28, surface: master-work-surface, material: DARK_OAK_PLANKS, origin: BOTTOM_CENTER, offset: '-0.1350,0.0000,0.1800', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          part-29: {type: BLOCK_DISPLAY, key: edgar-shield-part-29, surface: master-work-surface, material: DARK_OAK_PLANKS, origin: BOTTOM_CENTER, offset: '0.1350,0.0000,0.1800', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          part-36: {type: BLOCK_DISPLAY, key: edgar-shield-part-36, surface: master-work-surface, material: DARK_OAK_PLANKS, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,0.3150', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          forge-c: {type: SWING, actor-id: 349, repetitions: 20, period-ticks: 16, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 2, sound: BLOCK_ANVIL_USE, sound-every: 2, sound-volume: 0.28, sound-pitch: 1.3199999999999998}
+          consume-blank: {type: REMOVE_DISPLAY, key: edgar-shield-blank}
+          part-05: {type: BLOCK_DISPLAY, key: edgar-shield-part-05, surface: master-work-surface, material: CUT_COPPER, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,-0.2700', scale: '0.0450,0.0500,0.1350', interpolation-ticks: 8}
+          part-15: {type: BLOCK_DISPLAY, key: edgar-shield-part-15, surface: master-work-surface, material: CUT_COPPER, origin: BOTTOM_CENTER, offset: '-0.1575,0.0000,-0.0900', scale: '0.0900,0.0500,0.0450', interpolation-ticks: 8}
+          part-16: {type: BLOCK_DISPLAY, key: edgar-shield-part-16, surface: master-work-surface, material: CUT_COPPER, origin: BOTTOM_CENTER, offset: '0.1575,0.0000,-0.0900', scale: '0.0900,0.0500,0.0450', interpolation-ticks: 8}
+          part-23: {type: BLOCK_DISPLAY, key: edgar-shield-part-23, surface: master-work-surface, material: CUT_COPPER, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,0.1575', scale: '0.0450,0.0500,0.2700', interpolation-ticks: 8}
+          finish: {type: SWING, actor-id: 349, repetitions: 20, period-ticks: 16, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 2, sound: BLOCK_ANVIL_USE, sound-every: 2, sound-volume: 0.28, sound-pitch: 1.48}
+          inspect: {type: WAIT, ticks: 60}
+          collect-0: {type: REMOVE_DISPLAY, key: edgar-shield-part-08}
+          collect-1: {type: REMOVE_DISPLAY, key: edgar-shield-part-11}
+          collect-2: {type: REMOVE_DISPLAY, key: edgar-shield-part-12}
+          collect-3: {type: REMOVE_DISPLAY, key: edgar-shield-part-00}
+          collect-4: {type: REMOVE_DISPLAY, key: edgar-shield-part-01}
+          collect-5: {type: REMOVE_DISPLAY, key: edgar-shield-part-03}
+          collect-6: {type: REMOVE_DISPLAY, key: edgar-shield-part-25}
+          collect-7: {type: REMOVE_DISPLAY, key: edgar-shield-part-26}
+          collect-8: {type: REMOVE_DISPLAY, key: edgar-shield-part-27}
+          collect-9: {type: REMOVE_DISPLAY, key: edgar-shield-part-30}
+          collect-10: {type: REMOVE_DISPLAY, key: edgar-shield-part-31}
+          collect-11: {type: REMOVE_DISPLAY, key: edgar-shield-part-32}
+          collect-12: {type: REMOVE_DISPLAY, key: edgar-shield-part-33}
+          collect-13: {type: REMOVE_DISPLAY, key: edgar-shield-part-34}
+          collect-14: {type: REMOVE_DISPLAY, key: edgar-shield-part-35}
+          collect-15: {type: REMOVE_DISPLAY, key: edgar-shield-part-37}
+          collect-16: {type: REMOVE_DISPLAY, key: edgar-shield-part-38}
+          collect-17: {type: REMOVE_DISPLAY, key: edgar-shield-part-02}
+          collect-18: {type: REMOVE_DISPLAY, key: edgar-shield-part-04}
+          collect-19: {type: REMOVE_DISPLAY, key: edgar-shield-part-06}
+          collect-20: {type: REMOVE_DISPLAY, key: edgar-shield-part-07}
+          collect-21: {type: REMOVE_DISPLAY, key: edgar-shield-part-09}
+          collect-22: {type: REMOVE_DISPLAY, key: edgar-shield-part-10}
+          collect-23: {type: REMOVE_DISPLAY, key: edgar-shield-part-13}
+          collect-24: {type: REMOVE_DISPLAY, key: edgar-shield-part-14}
+          collect-25: {type: REMOVE_DISPLAY, key: edgar-shield-part-17}
+          collect-26: {type: REMOVE_DISPLAY, key: edgar-shield-part-18}
+          collect-27: {type: REMOVE_DISPLAY, key: edgar-shield-part-19}
+          collect-28: {type: REMOVE_DISPLAY, key: edgar-shield-part-20}
+          collect-29: {type: REMOVE_DISPLAY, key: edgar-shield-part-21}
+          collect-30: {type: REMOVE_DISPLAY, key: edgar-shield-part-22}
+          collect-31: {type: REMOVE_DISPLAY, key: edgar-shield-part-24}
+          collect-32: {type: REMOVE_DISPLAY, key: edgar-shield-part-28}
+          collect-33: {type: REMOVE_DISPLAY, key: edgar-shield-part-29}
+          collect-34: {type: REMOVE_DISPLAY, key: edgar-shield-part-36}
+          collect-35: {type: REMOVE_DISPLAY, key: edgar-shield-part-05}
+          collect-36: {type: REMOVE_DISPLAY, key: edgar-shield-part-15}
+          collect-37: {type: REMOVE_DISPLAY, key: edgar-shield-part-16}
+          collect-38: {type: REMOVE_DISPLAY, key: edgar-shield-part-23}
           result: {type: EQUIP, actor-id: 349, material: SHIELD}
-          remark: {type: SPEECH, actor-id: 349, text: "Щит держит удар не красотой. Сначала каркас, потом сердце."}
-          rest: {type: WAIT, ticks: 28}
+          remark: {type: SPEECH, actor-id: 349, text: 'Обод замкнут, умбон посажен. Этот щит выдержит удар.'}
+          handoff: {type: WAIT, ticks: 10}
       master-horseshoe:
-        actor-ids: ["349"]
-        initial-delay-seconds: 76
-        cooldown-min-seconds: 66
-        cooldown-max-seconds: 98
-        step-ids: [face, billet, place, clear-hand, equip, rough, bend-left, shape-left, bend-right, shape-right, close-heel, shape-heel, nails, nail-left, nail-right, inspect, collect-base, collect-left, collect-right, collect-heel, collect-nail-left, collect-nail-right, result, remark, rest]
+        actor-ids: ['349']
+        initial-delay-seconds: 1
+        cooldown-min-seconds: 1
+        cooldown-max-seconds: 2
+        step-ids: [face, billet, place, tool, draw-billet, forge-m, consume-0, part-02, part-05, part-06, part-09, part-10, part-11, part-12, part-15, part-18, part-20, part-21, part-24, part-25, part-30, part-31, forge-e, consume-1, part-00, part-01, part-03, part-04, part-07, part-08, part-13, part-14, part-19, part-26, part-29, part-32, part-33, forge-c, consume-blank, part-16, part-17, part-22, part-23, part-27, part-28, finish, inspect, collect-0, collect-1, collect-2, collect-3, collect-4, collect-5, collect-6, collect-7, collect-8, collect-9, collect-10, collect-11, collect-12, collect-13, collect-14, collect-15, collect-16, collect-17, collect-18, collect-19, collect-20, collect-21, collect-22, collect-23, collect-24, collect-25, collect-26, collect-27, collect-28, collect-29, collect-30, collect-31, collect-32, collect-33, result, remark, handoff]
         steps:
           face: {type: LOOK_AT_SURFACE, actor-id: 349, surface: master-work-surface}
           billet: {type: EQUIP, actor-id: 349, material: RAW_IRON}
-          place: {type: BLOCK_DISPLAY, key: edgar-horseshoe-base, surface: master-work-surface, material: MAGMA_BLOCK, origin: BOTTOM_CENTER, scale: "0.30,0.10,0.36", rotation-y-degrees: -12}
-          clear-hand: {type: EQUIP, actor-id: 349, material: AIR}
-          equip: {type: EQUIP, actor-id: 349, material: MACE}
-          rough: {type: SWING, actor-id: 349, repetitions: 8, period-ticks: 9, feedback-surface: master-work-surface, particle: LAVA, particle-count: 3, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 1, sound-volume: 0.35, sound-pitch: 0.86}
-          bend-left: {type: SWING, actor-id: 349, repetitions: 7, period-ticks: 8, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 4, particle-every: 1, sound: BLOCK_ANVIL_USE, sound-every: 1, sound-volume: 0.38, sound-pitch: 1.24}
-          shape-left: {type: BLOCK_DISPLAY, key: edgar-horseshoe-left, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "-0.19,0.014,0.04", scale: "0.12,0.06,0.44", rotation-y-degrees: 25, interpolation-ticks: 8}
-          bend-right: {type: SWING, actor-id: 349, repetitions: 7, period-ticks: 8, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 4, particle-every: 1, sound: BLOCK_ANVIL_USE, sound-every: 1, sound-volume: 0.38, sound-pitch: 1.34}
-          shape-right: {type: BLOCK_DISPLAY, key: edgar-horseshoe-right, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0.19,0.014,0.04", scale: "0.12,0.06,0.44", rotation-y-degrees: -25, interpolation-ticks: 8}
-          close-heel: {type: SWING, actor-id: 349, repetitions: 6, period-ticks: 8, feedback-surface: master-work-surface, particle: CRIT, particle-count: 5, particle-every: 1, sound: BLOCK_ANVIL_LAND, sound-every: 1, sound-volume: 0.36, sound-pitch: 1.04}
-          shape-heel: {type: BLOCK_DISPLAY, key: edgar-horseshoe-heel, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: "0,0.014,-0.20", scale: "0.38,0.06,0.12", rotation-y-degrees: -12, interpolation-ticks: 8}
-          nails: {type: SWING, actor-id: 349, repetitions: 5, period-ticks: 9, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 1, sound: BLOCK_ANVIL_USE, sound-every: 1, sound-volume: 0.32, sound-pitch: 1.52}
-          nail-left: {type: BLOCK_DISPLAY, key: edgar-horseshoe-nail-left, surface: master-work-surface, material: GOLD_BLOCK, origin: BOTTOM_CENTER, offset: "-0.19,0.072,0.04", scale: "0.045,0.035,0.055", rotation-y-degrees: -12, interpolation-ticks: 6}
-          nail-right: {type: BLOCK_DISPLAY, key: edgar-horseshoe-nail-right, surface: master-work-surface, material: GOLD_BLOCK, origin: BOTTOM_CENTER, offset: "0.19,0.072,0.04", scale: "0.045,0.035,0.055", rotation-y-degrees: -12, interpolation-ticks: 6}
-          inspect: {type: WAIT, ticks: 18}
-          collect-base: {type: REMOVE_DISPLAY, key: edgar-horseshoe-base}
-          collect-left: {type: REMOVE_DISPLAY, key: edgar-horseshoe-left}
-          collect-right: {type: REMOVE_DISPLAY, key: edgar-horseshoe-right}
-          collect-heel: {type: REMOVE_DISPLAY, key: edgar-horseshoe-heel}
-          collect-nail-left: {type: REMOVE_DISPLAY, key: edgar-horseshoe-nail-left}
-          collect-nail-right: {type: REMOVE_DISPLAY, key: edgar-horseshoe-nail-right}
-          result: {type: EQUIP, actor-id: 349, material: IRON_AXE}
-          remark: {type: SPEECH, actor-id: 349, text: "Подкова готова. Копыто простит хозяину почти всё."}
-          rest: {type: WAIT, ticks: 30}
+          place: {type: BLOCK_DISPLAY, key: edgar-horseshoe-blank, surface: master-work-surface, material: MAGMA_BLOCK, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,0.0000', scale: '0.2200,0.0700,0.2500', interpolation-ticks: 8}
+          tool: {type: EQUIP, actor-id: 349, material: MACE}
+          draw-billet: {type: SWING, actor-id: 349, repetitions: 20, period-ticks: 16, feedback-surface: master-work-surface, particle: LAVA, particle-count: 3, particle-every: 2, sound: BLOCK_ANVIL_USE, sound-every: 2, sound-volume: 0.28, sound-pitch: 0.88}
+          forge-m: {type: SWING, actor-id: 349, repetitions: 20, period-ticks: 16, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 2, sound: BLOCK_ANVIL_USE, sound-every: 2, sound-volume: 0.28, sound-pitch: 0.96}
+          consume-0: {type: BLOCK_DISPLAY, key: edgar-horseshoe-blank, surface: master-work-surface, material: MAGMA_BLOCK, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,0.0000', scale: '0.1800,0.0400,0.1800', interpolation-ticks: 8}
+          part-02: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-02, surface: master-work-surface, material: LIGHT_GRAY_CONCRETE, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,-0.2925', scale: '0.3150,0.0750,0.0900', interpolation-ticks: 8}
+          part-05: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-05, surface: master-work-surface, material: LIGHT_GRAY_CONCRETE, origin: BOTTOM_CENTER, offset: '-0.1800,0.0000,-0.2250', scale: '0.0450,0.0750,0.1350', interpolation-ticks: 8}
+          part-06: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-06, surface: master-work-surface, material: LIGHT_GRAY_CONCRETE, origin: BOTTOM_CENTER, offset: '0.1800,0.0000,-0.2250', scale: '0.0450,0.0750,0.1350', interpolation-ticks: 8}
+          part-09: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-09, surface: master-work-surface, material: LIGHT_GRAY_CONCRETE, origin: BOTTOM_CENTER, offset: '-0.2250,0.0000,-0.0225', scale: '0.0450,0.0750,0.4500', interpolation-ticks: 8}
+          part-10: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-10, surface: master-work-surface, material: LIGHT_GRAY_CONCRETE, origin: BOTTOM_CENTER, offset: '-0.1350,0.0000,-0.2250', scale: '0.0450,0.0750,0.0450', interpolation-ticks: 8}
+          part-11: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-11, surface: master-work-surface, material: LIGHT_GRAY_CONCRETE, origin: BOTTOM_CENTER, offset: '0.1350,0.0000,-0.2250', scale: '0.0450,0.0750,0.0450', interpolation-ticks: 8}
+          part-12: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-12, surface: master-work-surface, material: LIGHT_GRAY_CONCRETE, origin: BOTTOM_CENTER, offset: '0.2250,0.0000,-0.0225', scale: '0.0450,0.0750,0.4500', interpolation-ticks: 8}
+          part-15: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-15, surface: master-work-surface, material: LIGHT_GRAY_CONCRETE, origin: BOTTOM_CENTER, offset: '-0.2700,0.0000,-0.0225', scale: '0.0450,0.0750,0.2700', interpolation-ticks: 8}
+          part-18: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-18, surface: master-work-surface, material: LIGHT_GRAY_CONCRETE, origin: BOTTOM_CENTER, offset: '0.2700,0.0000,-0.0225', scale: '0.0450,0.0750,0.2700', interpolation-ticks: 8}
+          part-20: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-20, surface: master-work-surface, material: LIGHT_GRAY_CONCRETE, origin: BOTTOM_CENTER, offset: '-0.1800,0.0000,-0.0675', scale: '0.0450,0.0750,0.0900', interpolation-ticks: 8}
+          part-21: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-21, surface: master-work-surface, material: LIGHT_GRAY_CONCRETE, origin: BOTTOM_CENTER, offset: '0.1800,0.0000,-0.0675', scale: '0.0450,0.0750,0.0900', interpolation-ticks: 8}
+          part-24: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-24, surface: master-work-surface, material: LIGHT_GRAY_CONCRETE, origin: BOTTOM_CENTER, offset: '-0.1800,0.0000,0.0675', scale: '0.0450,0.0750,0.0900', interpolation-ticks: 8}
+          part-25: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-25, surface: master-work-surface, material: LIGHT_GRAY_CONCRETE, origin: BOTTOM_CENTER, offset: '0.1800,0.0000,0.0675', scale: '0.0450,0.0750,0.0900', interpolation-ticks: 8}
+          part-30: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-30, surface: master-work-surface, material: LIGHT_GRAY_CONCRETE, origin: BOTTOM_CENTER, offset: '-0.1800,0.0000,0.1800', scale: '0.0450,0.0750,0.0450', interpolation-ticks: 8}
+          part-31: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-31, surface: master-work-surface, material: LIGHT_GRAY_CONCRETE, origin: BOTTOM_CENTER, offset: '0.1800,0.0000,0.1800', scale: '0.0450,0.0750,0.0450', interpolation-ticks: 8}
+          forge-e: {type: SWING, actor-id: 349, repetitions: 20, period-ticks: 16, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 2, sound: BLOCK_ANVIL_USE, sound-every: 2, sound-volume: 0.28, sound-pitch: 1.08}
+          consume-1: {type: BLOCK_DISPLAY, key: edgar-horseshoe-blank, surface: master-work-surface, material: MAGMA_BLOCK, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,0.0000', scale: '0.0900,0.0400,0.0900', interpolation-ticks: 8}
+          part-00: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-00, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '0.0000,0.0000,-0.3600', scale: '0.3150,0.0500,0.0450', interpolation-ticks: 8}
+          part-01: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-01, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '-0.1800,0.0000,-0.3150', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          part-03: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-03, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '0.1800,0.0000,-0.3150', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          part-04: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-04, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '-0.2250,0.0000,-0.2700', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          part-07: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-07, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '0.2250,0.0000,-0.2700', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          part-08: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-08, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '-0.2700,0.0000,-0.2025', scale: '0.0450,0.0500,0.0900', interpolation-ticks: 8}
+          part-13: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-13, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '0.2700,0.0000,-0.2025', scale: '0.0450,0.0500,0.0900', interpolation-ticks: 8}
+          part-14: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-14, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '-0.3150,0.0000,-0.0225', scale: '0.0450,0.0500,0.2700', interpolation-ticks: 8}
+          part-19: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-19, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '0.3150,0.0000,-0.0225', scale: '0.0450,0.0500,0.2700', interpolation-ticks: 8}
+          part-26: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-26, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '-0.2700,0.0000,0.1800', scale: '0.0450,0.0500,0.1350', interpolation-ticks: 8}
+          part-29: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-29, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '0.2700,0.0000,0.1800', scale: '0.0450,0.0500,0.1350', interpolation-ticks: 8}
+          part-32: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-32, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '-0.2025,0.0000,0.2250', scale: '0.0900,0.0500,0.0450', interpolation-ticks: 8}
+          part-33: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-33, surface: master-work-surface, material: IRON_BLOCK, origin: BOTTOM_CENTER, offset: '0.2025,0.0000,0.2250', scale: '0.0900,0.0500,0.0450', interpolation-ticks: 8}
+          forge-c: {type: SWING, actor-id: 349, repetitions: 20, period-ticks: 16, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 2, sound: BLOCK_ANVIL_USE, sound-every: 2, sound-volume: 0.28, sound-pitch: 1.2}
+          consume-blank: {type: REMOVE_DISPLAY, key: edgar-horseshoe-blank}
+          part-16: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-16, surface: master-work-surface, material: CUT_COPPER, origin: BOTTOM_CENTER, offset: '-0.1800,0.0000,-0.1350', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          part-17: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-17, surface: master-work-surface, material: CUT_COPPER, origin: BOTTOM_CENTER, offset: '0.1800,0.0000,-0.1350', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          part-22: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-22, surface: master-work-surface, material: CUT_COPPER, origin: BOTTOM_CENTER, offset: '-0.1800,0.0000,0.0000', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          part-23: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-23, surface: master-work-surface, material: CUT_COPPER, origin: BOTTOM_CENTER, offset: '0.1800,0.0000,0.0000', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          part-27: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-27, surface: master-work-surface, material: CUT_COPPER, origin: BOTTOM_CENTER, offset: '-0.1800,0.0000,0.1350', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          part-28: {type: BLOCK_DISPLAY, key: edgar-horseshoe-part-28, surface: master-work-surface, material: CUT_COPPER, origin: BOTTOM_CENTER, offset: '0.1800,0.0000,0.1350', scale: '0.0450,0.0500,0.0450', interpolation-ticks: 8}
+          finish: {type: SWING, actor-id: 349, repetitions: 20, period-ticks: 16, feedback-surface: master-work-surface, particle: ELECTRIC_SPARK, particle-count: 3, particle-every: 2, sound: BLOCK_ANVIL_USE, sound-every: 2, sound-volume: 0.28, sound-pitch: 1.48}
+          inspect: {type: WAIT, ticks: 60}
+          collect-0: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-02}
+          collect-1: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-05}
+          collect-2: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-06}
+          collect-3: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-09}
+          collect-4: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-10}
+          collect-5: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-11}
+          collect-6: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-12}
+          collect-7: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-15}
+          collect-8: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-18}
+          collect-9: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-20}
+          collect-10: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-21}
+          collect-11: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-24}
+          collect-12: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-25}
+          collect-13: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-30}
+          collect-14: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-31}
+          collect-15: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-00}
+          collect-16: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-01}
+          collect-17: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-03}
+          collect-18: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-04}
+          collect-19: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-07}
+          collect-20: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-08}
+          collect-21: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-13}
+          collect-22: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-14}
+          collect-23: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-19}
+          collect-24: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-26}
+          collect-25: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-29}
+          collect-26: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-32}
+          collect-27: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-33}
+          collect-28: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-16}
+          collect-29: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-17}
+          collect-30: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-22}
+          collect-31: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-23}
+          collect-32: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-27}
+          collect-33: {type: REMOVE_DISPLAY, key: edgar-horseshoe-part-28}
+          result: {type: EQUIP, actor-id: 349, material: IRON_NUGGET}
+          remark: {type: SPEECH, actor-id: 349, text: 'Дуга ровная, зацепы готовы. Такая подкова ляжет как надо.'}
+          handoff: {type: WAIT, ticks: 10}
       master-forging-showcase:
         actor-ids: ["349", "358"]
         initial-delay-seconds: 42

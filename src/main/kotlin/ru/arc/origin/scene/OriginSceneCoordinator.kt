@@ -51,6 +51,20 @@ internal class OriginSceneCoordinator {
 
     fun busyActors(): Set<Int> = actorOwners.keys.toSet()
 
+    /** Oldest work goes first; a waiting joint cycle keeps its place for both actors. */
+    fun readyCycleIds(sceneId: String, actorsByCycle: Map<String, Set<Int>>, nowMillis: Long): List<String> {
+        val waitingActors = mutableSetOf<Int>()
+        return actorsByCycle.keys
+            .filter { isDue(sceneId, it, nowMillis) }
+            .sortedWith(compareBy<String> { dueAt.getOrDefault(sceneId to it, 0L) }.thenBy { it })
+            .filter { cycleId ->
+                val actors = actorsByCycle.getValue(cycleId)
+                val behindEarlierWork = actors.any(waitingActors::contains)
+                if (!behindEarlierWork) waitingActors.addAll(actors)
+                !behindEarlierWork && actors.none(actorOwners::containsKey)
+            }
+    }
+
     fun clear() {
         actorOwners.clear()
         leases.clear()

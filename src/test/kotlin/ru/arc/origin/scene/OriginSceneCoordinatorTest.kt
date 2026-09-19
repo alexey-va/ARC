@@ -5,6 +5,34 @@ import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 
 class OriginSceneCoordinatorTest : FreeSpec({
+    "a joint cycle behind older solo work does not reserve an idle assistant" {
+        val coordinator = OriginSceneCoordinator()
+        val cycles = mapOf("axe" to setOf(349), "sword" to setOf(349, 358), "hammer" to setOf(358))
+        coordinator.delay("forge", "sword", 10L)
+        coordinator.delay("forge", "hammer", 20L)
+        val axe = coordinator.tryAcquire("forge", "axe", setOf(349), 0L)!!
+
+        coordinator.readyCycleIds("forge", cycles, 100L) shouldBe listOf("hammer")
+        coordinator.release(axe, 200L, 1L)
+        coordinator.readyCycleIds("forge", cycles, 300L) shouldBe listOf("sword")
+    }
+
+    "waiting sword retains its place while solo work finishes and reserves its assistant" {
+        val coordinator = OriginSceneCoordinator()
+        val cycles = mapOf("axe" to setOf(349), "sword" to setOf(349, 358), "hammer" to setOf(358), "luka" to setOf(354))
+        coordinator.delay("forge", "sword", 10L)
+        coordinator.delay("forge", "hammer", 20L)
+        val axe = coordinator.tryAcquire("forge", "axe", setOf(349), 0L)!!
+        coordinator.delay("forge", "axe", 30L)
+
+        coordinator.readyCycleIds("forge", cycles, 100L) shouldBe listOf("luka")
+        coordinator.release(axe, 200L, 1L)
+        coordinator.readyCycleIds("forge", cycles, 300L) shouldBe listOf("luka", "sword")
+        val sword = coordinator.tryAcquire("forge", "sword", setOf(349, 358), 300L)!!
+        coordinator.release(sword, 400L, 100L)
+        coordinator.readyCycleIds("forge", cycles, 450L) shouldBe listOf("luka", "hammer", "axe")
+    }
+
     "an actor can belong to only one running cycle" {
         val coordinator = OriginSceneCoordinator()
 

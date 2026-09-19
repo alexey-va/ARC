@@ -174,8 +174,10 @@ private class OriginSceneService(
         for (scene in plan.scenes.shuffled()) {
             if (!hasAudience(scene)) continue
             if (active.values.count { it.scene.id == scene.id } >= scene.maxConcurrentCycles) continue
-            for (cycle in scene.cycles.shuffled()) {
-                if (!coordinator.isDue(scene.id, cycle.id, now)) continue
+            val cyclesById = scene.cycles.associateBy { it.id }
+            val readyCycleIds = coordinator.readyCycleIds(scene.id, scene.cycles.associate { it.id to it.actorIds }, now)
+            for (cycleId in readyCycleIds) {
+                val cycle = cyclesById.getValue(cycleId)
                 if (playerOccupiesYieldZone(scene, cycle)) {
                     coordinator.delay(scene.id, cycle.id, now + scene.retryMillis)
                     continue

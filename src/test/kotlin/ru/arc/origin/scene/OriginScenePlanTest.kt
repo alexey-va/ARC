@@ -173,50 +173,22 @@ class OriginScenePlanTest : FreeSpec({
             setOf("edgar-blade", "edgar-guard", "edgar-grip", "edgar-pommel")
         cycle.steps.filterIsInstance<OriginSceneStep.LookAtSurface>().map(OriginSceneStep.LookAtSurface::surface).toSet() shouldBe
             setOf("master-work-surface")
-        axe.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().map { it.key }.toSet() shouldBe
-            setOf("edgar-axe-head", "edgar-axe-edge", "edgar-axe-eye", "edgar-axe-handle")
-        axe.steps.filterIsInstance<OriginSceneStep.RemoveDisplay>().map(OriginSceneStep.RemoveDisplay::key).toSet() shouldBe
-            axe.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().map(OriginSceneStep.BlockDisplay::key).toSet()
-        axe.steps.filterIsInstance<OriginSceneStep.Swing>().sumOf(OriginSceneStep.Swing::repetitions) shouldBe 27
-
-        fun assertEdgarFigure(
-            figure: OriginSceneCycle,
-            displayKeys: Set<String>,
-            swingCount: Int,
-        ) {
+        listOf(axe, spear, shield, horseshoe).forEach { figure ->
             figure.actorIds shouldBe setOf(349)
-            figure.steps.filterIsInstance<OriginSceneStep.LookAtSurface>().map(OriginSceneStep.LookAtSurface::surface).toSet() shouldBe
-                setOf("master-work-surface")
-            figure.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().map(OriginSceneStep.BlockDisplay::key).toSet() shouldBe displayKeys
-            figure.steps.filterIsInstance<OriginSceneStep.BlockDisplay>().all {
+            val displays = figure.steps.filterIsInstance<OriginSceneStep.BlockDisplay>()
+            val removals = figure.steps.filterIsInstance<OriginSceneStep.RemoveDisplay>()
+            displays.all {
                 it.surface == "master-work-surface" && it.anchor == null && it.origin == OriginScenePropOrigin.BOTTOM_CENTER
             } shouldBe true
-            figure.steps.filterIsInstance<OriginSceneStep.RemoveDisplay>().map(OriginSceneStep.RemoveDisplay::key).toSet() shouldBe displayKeys
-            figure.steps.filterIsInstance<OriginSceneStep.Swing>().sumOf(OriginSceneStep.Swing::repetitions) shouldBe swingCount
+            removals.map { it.key }.toSet() shouldBe displays.map { it.key }.toSet()
+            val swings = figure.steps.filterIsInstance<OriginSceneStep.Swing>()
+            swings.all { it.feedbackSurface == "master-work-surface" } shouldBe true
+            (swings.sumOf { it.repetitions * it.periodTicks } in 1_200L..2_400L) shouldBe true
+            (figure.cooldownMillis.last <= 2_000L) shouldBe true
+            val finishIndex = figure.steps.indexOfLast { it is OriginSceneStep.Swing }
+            val consumeIndex = figure.steps.indexOfFirst { it is OriginSceneStep.RemoveDisplay && it.key.endsWith("-blank") }
+            (consumeIndex in 0 until finishIndex) shouldBe true
         }
-
-        assertEdgarFigure(
-            spear,
-            setOf("edgar-spear-shaft", "edgar-spear-edge", "edgar-spear-socket", "edgar-spear-point"),
-            25,
-        )
-        assertEdgarFigure(
-            shield,
-            setOf("edgar-shield-board", "edgar-shield-rim", "edgar-shield-boss", "edgar-shield-grip"),
-            29,
-        )
         shield.steps.filterIsInstance<OriginSceneStep.Equip>().last().material shouldBe "SHIELD"
-        assertEdgarFigure(
-            horseshoe,
-            setOf(
-                "edgar-horseshoe-base",
-                "edgar-horseshoe-left",
-                "edgar-horseshoe-right",
-                "edgar-horseshoe-heel",
-                "edgar-horseshoe-nail-left",
-                "edgar-horseshoe-nail-right",
-            ),
-            33,
-        )
     }
 })
