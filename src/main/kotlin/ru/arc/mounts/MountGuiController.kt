@@ -185,7 +185,10 @@ class MountGuiController(
             MountListPurpose.UPGRADES -> config.guiText("upgrades-title", "<#20252b><bold>Улучшения маунтов</bold>")
             MountListPurpose.TRADE -> config.guiText("trade-title", "<#20252b><bold>Передача маунтов</bold>")
         }
-        val inventory = Bukkit.createInventory(holder, LIST_SIZE, component(title))
+        val compact = purpose == MountListPurpose.UPGRADES || purpose == MountListPurpose.TRADE
+        val contentRows = ((slots.keys.maxOrNull() ?: 0) / 9 + 1)
+        val size = if (compact) ((contentRows + 1) * 9).coerceAtMost(LIST_SIZE) else LIST_SIZE
+        val inventory = Bukkit.createInventory(holder, size, component(title))
         holder.backingInventory = inventory
         fill(inventory)
         if (visible.isEmpty()) {
@@ -205,7 +208,8 @@ class MountGuiController(
                 )
             }
             inventory.setItem(
-                LIST_CONTENT_SLOTS.minBy { kotlin.math.abs(it / 9 - 2) * 9 + kotlin.math.abs(it % 9 - 4) },
+                LIST_CONTENT_SLOTS.filter { it < size - 9 }
+                    .minBy { kotlin.math.abs(it / 9 - (size / 9 - 2) / 2) * 9 + kotlin.math.abs(it % 9 - 4) },
                 styledItem(MountGuiItemRole.INFO, Material.PAPER, title, lore),
             )
         }
@@ -215,7 +219,7 @@ class MountGuiController(
         }
         if (page > 0) {
             inventory.setItem(
-                LIST_PREVIOUS_SLOT,
+                listControlSlot(inventory, LIST_PREVIOUS_SLOT),
                 styledItem(
                     MountGuiItemRole.PREVIOUS,
                     Material.ARROW,
@@ -235,7 +239,7 @@ class MountGuiController(
         }
         if (page + 1 < pageCount) {
             inventory.setItem(
-                LIST_NEXT_SLOT,
+                listControlSlot(inventory, LIST_NEXT_SLOT),
                 styledItem(
                     MountGuiItemRole.NEXT,
                     Material.ARROW,
@@ -254,7 +258,7 @@ class MountGuiController(
             )
         }
         inventory.setItem(
-            LIST_FILTER_SLOT,
+            listControlSlot(inventory, LIST_FILTER_SLOT),
             styledItem(
                 filter.styleRole,
                 filter.icon,
@@ -413,7 +417,7 @@ class MountGuiController(
                 component(config.progressionTitle.replace("<mount>", escape(mount.displayName))),
             )
         holder.backingInventory = inventory
-        fill(inventory)
+        fill(inventory, full = true)
         inventory.setItem(PROGRESSION_INFO_SLOT, items.progressionLevelsInfoItem(mount, profile))
         inventory.setItem(PROGRESSION_TUNING_SLOT, items.tuningButtonItem(profile))
         val purchaseAllowed = purchaseContextAllowed(player, holder)
@@ -744,13 +748,13 @@ class MountGuiController(
 
     private fun handleListClick(player: Player, holder: MountMenuHolder, event: InventoryClickEvent) {
         when (event.rawSlot) {
-            LIST_PREVIOUS_SLOT -> if (event.click == ClickType.LEFT && holder.page > 0) {
+            listControlSlot(holder.backingInventory, LIST_PREVIOUS_SLOT) -> if (event.click == ClickType.LEFT && holder.page > 0) {
                 openListPage(player, holder.page - 1, holder.filter, holder.ownedOnly, holder.purpose)
             }
-            LIST_NEXT_SLOT -> if (event.click == ClickType.LEFT && holder.page + 1 < holder.pageCount) {
+            listControlSlot(holder.backingInventory, LIST_NEXT_SLOT) -> if (event.click == ClickType.LEFT && holder.page + 1 < holder.pageCount) {
                 openListPage(player, holder.page + 1, holder.filter, holder.ownedOnly, holder.purpose)
             }
-            LIST_FILTER_SLOT -> when (event.click) {
+            listControlSlot(holder.backingInventory, LIST_FILTER_SLOT) -> when (event.click) {
                 ClickType.LEFT -> openListPage(player, 0, holder.filter.next(), holder.ownedOnly, holder.purpose)
                 else -> Unit
             }
@@ -759,6 +763,7 @@ class MountGuiController(
                 val profile = ownership.profile(subject(player), mount)
                 when {
                     holder.purpose == MountListPurpose.UPGRADES && profile.unlocked && event.click == ClickType.LEFT -> openProgression(player, mount)
+                    holder.purpose == MountListPurpose.UPGRADES && profile.unlocked && event.click == ClickType.RIGHT -> openDetailFromCurrent(player, mount.id)
                     holder.purpose == MountListPurpose.TRADE && profile.unlocked && event.click == ClickType.LEFT -> transfers()?.confirm(player, mount.id) { openListPage(player, holder.page, holder.filter, holder.ownedOnly, holder.purpose) }
                     holder.purpose == MountListPurpose.SHOP && profile.unlocked && event.click == ClickType.LEFT -> openDetailFromCurrent(player, mount.id)
                     profile.unlocked && event.click == ClickType.LEFT -> summon(player, mount)
@@ -1191,9 +1196,13 @@ class MountGuiController(
         return false
     }
 
-    private fun fill(inventory: Inventory, fallbackMaterial: Material = Material.GRAY_STAINED_GLASS_PANE) {
+    private fun listControlSlot(inventory: Inventory, configuredSlot: Int): Int =
+        configuredSlot - (LIST_SIZE - inventory.size)
+
+    private fun fill(inventory: Inventory, fallbackMaterial: Material = Material.GRAY_STAINED_GLASS_PANE, full: Boolean = false) {
         val background = styledItem(MountGuiItemRole.BACKGROUND, fallbackMaterial, " ", emptyList(), hideTooltip = true)
-        for (slot in (inventory.size - 9).coerceAtLeast(0) until inventory.size) inventory.setItem(slot, background)
+        val firstSlot = if (full) 0 else (inventory.size - 9).coerceAtLeast(0)
+        for (slot in firstSlot until inventory.size) inventory.setItem(slot, background)
     }
 
     private fun styledItem(

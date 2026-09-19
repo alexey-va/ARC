@@ -82,7 +82,7 @@ gui:
       back-name: "<#92bed8>Назад"
       price: "<#8c8c8c>Цена: <#ffacd5><price> <white><bold:false>💰</bold></white>"
       price-vault: "<#8c8c8c>Цена: <#ffacd5><price> <white><bold:false>💰</bold></white>"
-      price-tokens: "<#8c8c8c>Цена: <#ffacd5><price> <#ffacd5>жетонов"
+      price-tokens: "<#8c8c8c>Цена: <#ffacd5><price> <currency>"
       balance: "<#8c8c8c>Баланс: <#ffacd5><balance> <white><bold:false>💰</bold></white>"
       remaining: "<#8c8c8c>Останется: <#ffacd5><remaining> <white><bold:false>💰</bold></white>"
       missing: "<#c42323>Не хватает: <#ffacd5><missing> <white><bold:false>💰</bold></white>"
@@ -90,6 +90,8 @@ gui:
       duration-hours: "<value> ч"
       duration-minutes: "<value> мин"
       duration-seconds: "<value> сек"
+    currencies:
+      tokens: "<#ffacd5>жетонов"
     list:
       type-walking-color: "<gray>"
       type-flying-color: "<green>"
@@ -120,6 +122,8 @@ gui:
         - "<#8c8c8c>Категория: <#e6fff3><category>"
         - "<#8c8c8c>Показано: <#e6fff3><shown>/<total>"
       filter-footer: "<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ЛКМ<#b8b8b8> — сменить категорию"
+      mount-upgrades-level-footer: "<#92bed8>ЛКМ<#e6fff3> — повышение уровня"
+      mount-upgrades-ability-footer: "<#ff9f0f>ПКМ<#e6fff3> — покупка улучшений"
       empty-title: "<#ffcf70>Коллекция пока пуста"
       empty-filter-title: "<#ffcf70>В этой категории пока пусто"
       empty-shop-title: "<#ffcf70>Магазин пока пуст"

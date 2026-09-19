@@ -13,6 +13,7 @@ from pathlib import Path
 import yaml
 
 from mount_yard_models import CARGO, SADDLE, Part, model_steps, remove_steps
+from mount_yard_riders import apply_rider_routes
 
 EMMA, TOM, WIND = 369, 370, 371
 HELPER, PACKER, DONKEY, CAT, DOG, GOAT, LLAMA = range(440, 447)
@@ -312,12 +313,10 @@ def living_scene(baseline):
             if value["type"] == "MOVE":
                 value["route-profile"] = profile
         steps["home"]["anchor"] = f"home-{actor}"
-    bay_steps = scene["cycles"]["bay-patrol"]["steps"]
-    bay_steps["out"]["route-profile"] = "front-yard"
-    bay_steps["home"].update({"route-profile": "front-yard", "anchor": "home-415"})
     scene["cycles"].update({"saddler-work": saddler_cycle(), "caravan-preparation": caravan_cycle(),
                              **helper_cycles(), **animal_cycles()})
     scene["cycle-ids"] = list(scene["cycles"])
+    apply_rider_routes(scene)
     return scene
 
 

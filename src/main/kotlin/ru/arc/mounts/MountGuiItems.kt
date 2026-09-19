@@ -75,14 +75,15 @@ internal class MountGuiItems(
                     when {
                         profile.unlocked -> {
                             add("")
-                            add(
-                                when (purpose) {
-                                    MountListPurpose.SHOP -> "<#92bed8>ЛКМ<#e6fff3> — карточка полученного маунта"
-                                    MountListPurpose.UPGRADES -> "<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ЛКМ<#e6fff3> — улучшения <#8c8c8c>· <#92bed8>ПКМ<#e6fff3> — открыть"
-                                    MountListPurpose.TRADE -> "<#8c8c8c>[<#ff9f0f>▶<#8c8c8c>] <#ff9f0f>ЛКМ<#e6fff3> — передать <#8c8c8c>· <#92bed8>ПКМ<#e6fff3> — открыть"
-                                    else -> copy("list.mount-owned-footer", "<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ЛКМ<#e6fff3> — призвать <#8c8c8c>· <#92bed8>ПКМ<#e6fff3> — открыть")
-                                },
-                            )
+                            when (purpose) {
+                                MountListPurpose.SHOP -> add("<#92bed8>ЛКМ<#e6fff3> — карточка полученного маунта")
+                                MountListPurpose.UPGRADES -> {
+                                    add(copy("list.mount-upgrades-level-footer", "<#92bed8>ЛКМ<#e6fff3> — повышение уровня"))
+                                    add(copy("list.mount-upgrades-ability-footer", "<#ff9f0f>ПКМ<#e6fff3> — покупка улучшений"))
+                                }
+                                MountListPurpose.TRADE -> add("<#8c8c8c>[<#ff9f0f>▶<#8c8c8c>] <#ff9f0f>ЛКМ<#e6fff3> — передать <#8c8c8c>· <#92bed8>ПКМ<#e6fff3> — открыть")
+                                else -> add(copy("list.mount-owned-footer", "<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ЛКМ<#e6fff3> — призвать <#8c8c8c>· <#92bed8>ПКМ<#e6fff3> — открыть"))
+                            }
                         }
                         else -> Unit
                     }
