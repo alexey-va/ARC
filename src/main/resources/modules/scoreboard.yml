@@ -15,7 +15,6 @@ styles:
   style01:
     lines:
       - '&6| &f%arcranks_rank_name% &e/rank'
-      - '&6| &fДалее: &e%arcranks_next_rank%'
       - '&6| &f💰 &6%rediseco_bal_short_vault%  &f &d%rediseco_bal_short_tokens%'
       - ''
       - '&6Место'

@@ -1326,7 +1326,7 @@ internal class HelpCenterController(
             CommandDefinition("rank", HelpCenterCategory.PROGRESS, "rank dialog", HelpCenterFeature.RANKS, "arcranks.use"),
             CommandDefinition("rankup", HelpCenterCategory.PROGRESS, "rankup", HelpCenterFeature.RANKS, "arcranks.rankup"),
             CommandDefinition("jobs", HelpCenterCategory.PROGRESS, "arcjobs dialog", HelpCenterFeature.JOBS, "arcecojobs.use"),
-            CommandDefinition("quests", HelpCenterCategory.PROGRESS, "rank quests", HelpCenterFeature.RANKS, "arcranks.use"),
+            CommandDefinition("quests", HelpCenterCategory.PROGRESS, "quests", HelpCenterFeature.RANKS, "arcranks.use"),
             CommandDefinition("skills", HelpCenterCategory.PROGRESS, "skills", HelpCenterFeature.SKILLS, opensInventory = true),
             CommandDefinition(
                 "slimefun",

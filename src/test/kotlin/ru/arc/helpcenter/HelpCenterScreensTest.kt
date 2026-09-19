@@ -264,7 +264,7 @@ class HelpCenterScreensTest {
         assertTrue(body().contains("Viewer"))
         assertFalse(screen.buttons.single { it.id.value == "quests" }.closeDialogBeforeAction)
         click("quests")
-        assertEquals(listOf("rank quests"), executed)
+        assertEquals(listOf("quests"), executed)
         click("root_activities")
         assertEquals(1, screen.buttons.count { it.id.value == "command_dungeons" })
         assertFalse(screen.buttons.any { it.id.value.contains("dungeon_portals") })
@@ -320,7 +320,7 @@ class HelpCenterScreensTest {
         assertFalse(screen.buttons.any { it.id.value == "command_rankup" })
         assertFalse(screen.buttons.single { it.id.value == "command_quests" }.closeDialogBeforeAction)
         click("command_quests")
-        assertEquals(listOf("rank quests"), executed)
+        assertEquals(listOf("quests"), executed)
         every { gateway.features() } returns HelpCenterFeature.entries.toSet() -
             setOf(HelpCenterFeature.RANKS, HelpCenterFeature.JOBS, HelpCenterFeature.SKILLS)
         open(HelpCenterPage.ROOT)
@@ -630,7 +630,7 @@ class HelpCenterScreensTest {
             Triple("root_activities", "giveaways", "giveaway"),
             Triple("root_progress", "jobs", "arcjobs dialog"),
             Triple("root_progress", "rank", "rank dialog"),
-            Triple("root_progress", "quests", "rank quests"),
+            Triple("root_progress", "quests", "quests"),
         )
         for ((entry, id, command) in destinations) {
             open(HelpCenterPage.ROOT)

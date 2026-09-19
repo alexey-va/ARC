@@ -50,7 +50,7 @@ class ArcBaseSidebarConfigTest : StringSpec({
         defaultRows shouldContain "&6| &f%arcranks_rank_name% &e/rank"
         defaultRows shouldContain "?%arcranks_quest_board_header%"
         (1..3).forEach { defaultRows shouldContain "?&6| %arcranks_quest_board_$it%" }
-        defaultRows shouldContain "&6| &fДалее: &e%arcranks_next_rank%"
+        defaultRows.none { "%arcranks_next_rank%" in it } shouldBe true
         profileRows shouldContain "&6| &fРанг: &e%arcranks_rank_name%"
         profileRows shouldContain "&6| &fСледующий: &e%arcranks_next_rank%"
         (defaultRows + profileRows) shouldNotContain "&6| &f%cmi_user_rank_displayname%"
