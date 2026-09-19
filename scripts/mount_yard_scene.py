@@ -24,6 +24,13 @@ HOMES = {
     LLAMA: "73.5,70,-141.5,90,0",
 }
 ANCHORS = {
+    "wind-graze": "62.5,70,-121.5,0,0",
+    "wind-turn": "61.5,70,-119.5,0,0",
+    "buran-graze": "47.5,70,-134.5,0,0",
+    "buran-turn": "48.5,70,-135.5,0,0",
+    "ryzhik-graze": "71.5,70,-134.5,0,0",
+    "ryzhik-turn": "73.5,70,-134.5,0,0",
+    "bay-turn": "59.5,70,-116.5,0,0",
     "saddler-stand": "54.6336,70,-119.518,180,0",
     "saddle-rack-stand": "52.5,70,-121.5,180,0",
     "helper-hay": "57.5,70,-123.5,90,0",
@@ -48,10 +55,12 @@ ANCHORS = {
     "caravan-helper": "67.5,70,-143.5,0,0",
     "caravan-person-exit": "65.5,70,-143.5,0,0",
     "caravan-animal-exit": "65.5,70,-141.5,0,0",
-    "caravan-person-mid": "62.5,70,-134.5,0,0",
-    "caravan-animal-mid": "65.5,70,-134.5,0,0",
-    "caravan-person-front": "61.5,70,-123.5,0,0",
-    "caravan-animal-front": "63.5,70,-123.5,0,0",
+    "caravan-person-corner": "61.5,70,-139.5,0,0",
+    "caravan-animal-corner": "65.5,70,-138.5,0,0",
+    "caravan-person-mid": "59.5,70,-134.5,0,0",
+    "caravan-animal-mid": "61.5,70,-134.5,0,0",
+    "caravan-person-front": "59.5,70,-123.5,0,0",
+    "caravan-animal-front": "61.5,70,-123.5,0,0",
 }
 HAY = (Part("bale", "HAY_BLOCK", (0, .85, .55), (.54, .45, .42)),
        Part("binding", "BROWN_TERRACOTTA", (0, .84, .55), (.08, .48, .44)))
@@ -154,6 +163,7 @@ def caravan_cycle():
                   "snort": sound(DONKEY, "ENTITY_DONKEY_AMBIENT", .9),
                   "show-load": pause(80)})
     for name, anchors in (("out-exit", ["caravan-person-exit", "caravan-animal-exit"]),
+                          ("out-corner", ["caravan-person-corner", "caravan-animal-corner"]),
                           ("out-middle", ["caravan-person-mid", "caravan-animal-mid"]),
                           ("out-front", ["caravan-person-front", "caravan-animal-front"])):
         steps[name] = step("MOVE_GROUP", actor_ids=[str(PACKER), str(DONKEY)], anchors=anchors,
@@ -163,6 +173,8 @@ def caravan_cycle():
     steps["rest"] = pause(220)
     steps["return-middle"] = step("MOVE_GROUP", actor_ids=[str(PACKER), str(DONKEY)],
         anchors=["caravan-person-mid", "caravan-animal-mid"], route_profile="caravan", timeout_ticks=700)
+    steps["return-corner"] = step("MOVE_GROUP", actor_ids=[str(PACKER), str(DONKEY)],
+        anchors=["caravan-person-corner", "caravan-animal-corner"], route_profile="caravan", timeout_ticks=700)
     steps["return-exit"] = step("MOVE_GROUP", actor_ids=[str(PACKER), str(DONKEY)],
         anchors=["caravan-person-exit", "caravan-animal-exit"], route_profile="caravan", timeout_ticks=700)
     steps["return"] = step("MOVE_GROUP", actor_ids=[str(PACKER), str(DONKEY)],
@@ -258,11 +270,19 @@ def living_scene(baseline):
     # Keep a donkey-width clearance from the post at (67,-139) and the east
     # pen's gates/trapdoors. The loading bay is reached through its south side.
     caravan_route = copy.deepcopy(scene["route-profiles"]["yard"])
-    caravan_route["forbidden-areas"] = ["66,-140,76,-125"]
+    caravan_route["forbidden-areas"] = ["66,-140,76,-125", "62,-134,76,-125", "43,-140,57,-123"]
     scene["route-profiles"]["caravan"] = caravan_route
+    for name, minimum, maximum in (("west-pen", "47,-137", "48,-134"),
+                                   ("east-pen", "71,-135", "73,-135"),
+                                   ("front-yard", "55,-122", "64,-116")):
+        profile = copy.deepcopy(scene["route-profiles"]["yard"])
+        profile.update({"min-block": minimum, "max-block": maximum, "snap-radius": 1})
+        scene["route-profiles"][name] = profile
     scene["route-profile-ids"] = list(scene["route-profiles"])
     for actor, home in HOMES.items():
         scene["anchors"][f"home-{actor}"] = home
+    for actor in (371, 422, 423, 415):
+        scene["anchors"][f"home-{actor}"] = scene["actors"][actor]["home"]
     scene["anchor-ids"] = list(scene["anchors"])
     scene["prop-surface-ids"] = ["saddler-bench", "saddle-rack", "water-trough"]
     scene["prop-surfaces"] = {
@@ -287,6 +307,14 @@ def living_scene(baseline):
                 reordered["stand-pose"] = pose(actor, "STAND")
         current["steps"], current["step-ids"] = reordered, list(reordered)
         current["cooldown-min-seconds"], current["cooldown-max-seconds"] = 16, 30
+        profile = {371: "front-yard", 422: "west-pen", 423: "east-pen"}[actor]
+        for value in reordered.values():
+            if value["type"] == "MOVE":
+                value["route-profile"] = profile
+        steps["home"]["anchor"] = f"home-{actor}"
+    bay_steps = scene["cycles"]["bay-patrol"]["steps"]
+    bay_steps["out"]["route-profile"] = "front-yard"
+    bay_steps["home"].update({"route-profile": "front-yard", "anchor": "home-415"})
     scene["cycles"].update({"saddler-work": saddler_cycle(), "caravan-preparation": caravan_cycle(),
                              **helper_cycles(), **animal_cycles()})
     scene["cycle-ids"] = list(scene["cycles"])

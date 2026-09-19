@@ -58,16 +58,32 @@ class MountYardSceneTest(unittest.TestCase):
     def test_caravan_uses_clear_aisle_and_retraces_loading_bay_exit(self):
         steps = self.scene["cycles"]["caravan-preparation"]["steps"]
         groups = {key: value for key, value in steps.items() if value["type"] == "MOVE_GROUP"}
-        self.assertEqual(["out-exit", "out-middle", "out-front", "return-middle", "return-exit", "return"],
+        self.assertEqual(["out-exit", "out-corner", "out-middle", "out-front", "return-middle", "return-corner", "return-exit", "return"],
                          list(groups))
         self.assertEqual({"caravan"}, {step["route-profile"] for step in groups.values()})
         self.assertEqual(groups["out-exit"]["anchors"], groups["return-exit"]["anchors"])
         forbidden = self.scene["route-profiles"]["caravan"]["forbidden-areas"]
-        self.assertEqual(["66,-140,76,-125"], forbidden)
+        self.assertEqual(["66,-140,76,-125", "62,-134,76,-125", "43,-140,57,-123"], forbidden)
         for move in groups.values():
             for anchor in move["anchors"]:
                 x, _, z, *_ = map(float, self.scene["anchors"][anchor].split(","))
-                self.assertFalse(66 <= x < 77 and -140 <= z < -124, anchor)
+                for area in forbidden:
+                    min_x, min_z, max_x, max_z = map(int, area.split(","))
+                    self.assertFalse(min_x <= x < max_x + 1 and min_z <= z < max_z + 1, anchor)
+
+    def test_paddock_routes_stay_inside_their_own_pen(self):
+        for cycle_id, profile_id in (("buran-paddock", "west-pen"), ("ryzhik-paddock", "east-pen")):
+            profile = self.scene["route-profiles"][profile_id]
+            self.assertEqual(1, profile["snap-radius"])
+            min_x, min_z = map(int, profile["min-block"].split(","))
+            max_x, max_z = map(int, profile["max-block"].split(","))
+            for step in self.scene["cycles"][cycle_id]["steps"].values():
+                if step["type"] != "MOVE":
+                    continue
+                self.assertEqual(profile_id, step["route-profile"])
+                x, _, z, *_ = map(float, self.scene["anchors"][step["anchor"]].split(","))
+                self.assertTrue(min_x <= x < max_x + 1 and min_z <= z < max_z + 1, step)
+        self.assertEqual("home-415", self.scene["cycles"]["bay-patrol"]["steps"]["home"]["anchor"])
 
     def test_source_model_does_not_mutate_input(self):
         before = copy.deepcopy(self.scene)

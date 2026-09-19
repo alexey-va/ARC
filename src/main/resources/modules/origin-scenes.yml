@@ -754,20 +754,20 @@ scenes:
       444: {"home": "57.5,70,-125.5,180,0", "denied-denizen-flags": []}
       445: {"home": "45.5,70,-141.5,-90,0", "denied-denizen-flags": []}
       446: {"home": "73.5,70,-141.5,90,0", "denied-denizen-flags": []}
-    anchor-ids: ["tack-table", "wind-approach", "buran-approach", "ryzhik-approach", "wind-graze", "wind-turn", "buran-graze", "buran-turn", "ryzhik-graze", "ryzhik-turn", "iney-turn", "bay-turn", "yard-center", "saddler-stand", "saddle-rack-stand", "helper-hay", "helper-barrels", "helper-feed", "feed-floor", "hay-source", "cat-nap", "cat-watch", "dog-patrol", "dog-watch", "goat-hay", "goat-turn", "llama-turn", "llama-watch", "donkey-graze", "packing-crates", "packing-stand", "packing-target", "caravan-helper", "caravan-person-mid", "caravan-animal-mid", "caravan-person-front", "caravan-animal-front", "home-369", "home-440", "home-441", "home-442", "home-443", "home-444", "home-445", "home-446", "helper-water", "water-trough", "caravan-person-exit", "caravan-animal-exit"]
+    anchor-ids: ["tack-table", "wind-approach", "buran-approach", "ryzhik-approach", "wind-graze", "wind-turn", "buran-graze", "buran-turn", "ryzhik-graze", "ryzhik-turn", "iney-turn", "bay-turn", "yard-center", "saddler-stand", "saddle-rack-stand", "helper-hay", "helper-barrels", "helper-feed", "feed-floor", "hay-source", "cat-nap", "cat-watch", "dog-patrol", "dog-watch", "goat-hay", "goat-turn", "llama-turn", "llama-watch", "donkey-graze", "packing-crates", "packing-stand", "packing-target", "caravan-helper", "caravan-person-mid", "caravan-animal-mid", "caravan-person-front", "caravan-animal-front", "home-369", "home-440", "home-441", "home-442", "home-443", "home-444", "home-445", "home-446", "helper-water", "water-trough", "caravan-person-exit", "caravan-animal-exit", "home-371", "home-422", "home-423", "home-415", "caravan-person-corner", "caravan-animal-corner"]
     anchors:
       tack-table: "60.5,70.0,-122.5"
       wind-approach: "62.5,70.0,-121.5"
       buran-approach: "49.5,70.0,-136.5"
       ryzhik-approach: "70.5,70.0,-134.5"
-      wind-graze: "65.5,70.0,-126.5"
-      wind-turn: "61.5,70.0,-132.5"
-      buran-graze: "51.5,70.0,-132.5"
-      buran-turn: "53.5,70.0,-139.5"
-      ryzhik-graze: "69.5,70.0,-128.5"
-      ryzhik-turn: "66.5,70.0,-134.5"
+      wind-graze: "62.5,70,-121.5,0,0"
+      wind-turn: "61.5,70,-119.5,0,0"
+      buran-graze: "47.5,70,-134.5,0,0"
+      buran-turn: "48.5,70,-135.5,0,0"
+      ryzhik-graze: "71.5,70,-134.5,0,0"
+      ryzhik-turn: "73.5,70,-134.5,0,0"
       iney-turn: "51.5,69.0,-100.5"
-      bay-turn: "60.5,70.0,-123.5"
+      bay-turn: "59.5,70,-116.5,0,0"
       yard-center: "58.5,70.0,-130.5"
       saddler-stand: "54.6336,70,-119.518,180,0"
       saddle-rack-stand: "52.5,70,-121.5,180,0"
@@ -789,10 +789,10 @@ scenes:
       packing-stand: "68.0,70,-141.5,-90,0"
       packing-target: "69.5,69.7,-141.5"
       caravan-helper: "67.5,70,-143.5,0,0"
-      caravan-person-mid: "62.5,70,-134.5,0,0"
-      caravan-animal-mid: "65.5,70,-134.5,0,0"
-      caravan-person-front: "61.5,70,-123.5,0,0"
-      caravan-animal-front: "63.5,70,-123.5,0,0"
+      caravan-person-mid: "59.5,70,-134.5,0,0"
+      caravan-animal-mid: "61.5,70,-134.5,0,0"
+      caravan-person-front: "59.5,70,-123.5,0,0"
+      caravan-animal-front: "61.5,70,-123.5,0,0"
       home-369: "54.6336,70,-119.518,180,0"
       home-440: "57.5,70,-133.5,180,0"
       home-441: "66.5,70,-141.5,-90,0"
@@ -805,11 +805,20 @@ scenes:
       water-trough: "57.5,70.9,-121.5"
       caravan-person-exit: "65.5,70,-143.5,0,0"
       caravan-animal-exit: "65.5,70,-141.5,0,0"
-    route-profile-ids: ["yard", "north", "caravan"]
+      home-371: "63.6,70.0,-119.7132,57.0,-43.4"
+      home-422: "47.5,70.0,-136.5,-90,0"
+      home-423: "72.5,70.0,-134.5,-180,0"
+      home-415: "56.505,70.0,-116.5049,-134.4,0"
+      caravan-person-corner: "61.5,70,-139.5,0,0"
+      caravan-animal-corner: "65.5,70,-138.5,0,0"
+    route-profile-ids: ["yard", "north", "caravan", "west-pen", "east-pen", "front-yard"]
     route-profiles:
       yard: {"floor-y": 70, "min-block": "43,-147", "max-block": "76,-116", "forbidden-areas": [], "preferred-areas": ["47,-141,73,-125"], "max-visited": 2048, "snap-radius": 3, "poll-ticks": 2, "stall-polls": 28, "speed-modifier": 0.58, "distance-margin": 0.55, "path-distance-margin": 0.45, "maximum-step-height": 0.125}
       north: {"floor-y": 69, "min-block": "48,-121", "max-block": "63,-98", "forbidden-areas": [], "preferred-areas": ["50,-115,58,-100"], "max-visited": 1024, "snap-radius": 3, "poll-ticks": 2, "stall-polls": 30, "speed-modifier": 0.52, "distance-margin": 0.7, "path-distance-margin": 0.55, "maximum-step-height": 0.125}
-      caravan: {"floor-y": 70, "min-block": "43,-147", "max-block": "76,-116", "forbidden-areas": ["66,-140,76,-125"], "preferred-areas": ["47,-141,73,-125"], "max-visited": 2048, "snap-radius": 3, "poll-ticks": 2, "stall-polls": 28, "speed-modifier": 0.58, "distance-margin": 0.55, "path-distance-margin": 0.45, "maximum-step-height": 0.125}
+      caravan: {"floor-y": 70, "min-block": "43,-147", "max-block": "76,-116", "forbidden-areas": ["66,-140,76,-125", "62,-134,76,-125", "43,-140,57,-123"], "preferred-areas": ["47,-141,73,-125"], "max-visited": 2048, "snap-radius": 3, "poll-ticks": 2, "stall-polls": 28, "speed-modifier": 0.58, "distance-margin": 0.55, "path-distance-margin": 0.45, "maximum-step-height": 0.125}
+      west-pen: {"floor-y": 70, "min-block": "47,-137", "max-block": "48,-134", "forbidden-areas": [], "preferred-areas": ["47,-141,73,-125"], "max-visited": 2048, "snap-radius": 1, "poll-ticks": 2, "stall-polls": 28, "speed-modifier": 0.58, "distance-margin": 0.55, "path-distance-margin": 0.45, "maximum-step-height": 0.125}
+      east-pen: {"floor-y": 70, "min-block": "71,-135", "max-block": "73,-135", "forbidden-areas": [], "preferred-areas": ["47,-141,73,-125"], "max-visited": 2048, "snap-radius": 1, "poll-ticks": 2, "stall-polls": 28, "speed-modifier": 0.58, "distance-margin": 0.55, "path-distance-margin": 0.45, "maximum-step-height": 0.125}
+      front-yard: {"floor-y": 70, "min-block": "55,-122", "max-block": "64,-116", "forbidden-areas": [], "preferred-areas": ["47,-141,73,-125"], "max-visited": 2048, "snap-radius": 1, "poll-ticks": 2, "stall-polls": 28, "speed-modifier": 0.58, "distance-margin": 0.55, "path-distance-margin": 0.45, "maximum-step-height": 0.125}
     cycle-ids: ["groom-wind", "inspect-buran", "inspect-ryzhik", "wind-paddock", "buran-paddock", "ryzhik-paddock", "iney-patrol", "bay-patrol", "saddler-work", "caravan-preparation", "helper-hay", "helper-water", "cat-round", "dog-round", "goat-round", "llama-round", "donkey-rest", "cat-and-dog"]
     cycles:
       groom-wind:
@@ -865,13 +874,13 @@ scenes:
         cooldown-max-seconds: 30
         step-ids: ["graze", "graze-pose", "pause", "stand-pose", "turn", "breathe", "home"]
         steps:
-          graze: {"type": "MOVE", "actor-id": 371, "anchor": "wind-graze", "route-profile": "yard", "timeout-ticks": 260}
+          graze: {"type": "MOVE", "actor-id": 371, "anchor": "wind-graze", "route-profile": "front-yard", "timeout-ticks": 260}
           graze-pose: {"type": "POSE", "actor-id": 371, "state": "HORSE_GRAZE"}
           pause: {"type": "WAIT", "ticks": 170}
           stand-pose: {"type": "POSE", "actor-id": 371, "state": "STAND"}
-          turn: {"type": "MOVE", "actor-id": 371, "anchor": "wind-turn", "route-profile": "yard", "timeout-ticks": 220}
+          turn: {"type": "MOVE", "actor-id": 371, "anchor": "wind-turn", "route-profile": "front-yard", "timeout-ticks": 220}
           breathe: {"type": "SOUND", "actor-id": 371, "sound": "ENTITY_HORSE_BREATHE", "volume": 0.3, "pitch": 1.08}
-          home: {"type": "MOVE", "actor-id": 371, "anchor": "wind-approach", "route-profile": "yard", "timeout-ticks": 260}
+          home: {"type": "MOVE", "actor-id": 371, "anchor": "home-371", "route-profile": "front-yard", "timeout-ticks": 260}
       buran-paddock:
         actor-ids: ["422"]
         initial-delay-seconds: 24
@@ -879,13 +888,13 @@ scenes:
         cooldown-max-seconds: 30
         step-ids: ["graze", "graze-pose", "pause", "stand-pose", "turn", "step", "home"]
         steps:
-          graze: {"type": "MOVE", "actor-id": 422, "anchor": "buran-graze", "route-profile": "yard", "timeout-ticks": 220}
+          graze: {"type": "MOVE", "actor-id": 422, "anchor": "buran-graze", "route-profile": "west-pen", "timeout-ticks": 220}
           graze-pose: {"type": "POSE", "actor-id": 422, "state": "HORSE_GRAZE"}
           pause: {"type": "WAIT", "ticks": 170}
           stand-pose: {"type": "POSE", "actor-id": 422, "state": "STAND"}
-          turn: {"type": "MOVE", "actor-id": 422, "anchor": "buran-turn", "route-profile": "yard", "timeout-ticks": 220}
+          turn: {"type": "MOVE", "actor-id": 422, "anchor": "buran-turn", "route-profile": "west-pen", "timeout-ticks": 220}
           step: {"type": "SOUND", "actor-id": 422, "sound": "ENTITY_HORSE_STEP", "volume": 0.28, "pitch": 0.92}
-          home: {"type": "MOVE", "actor-id": 422, "anchor": "buran-approach", "route-profile": "yard", "timeout-ticks": 220}
+          home: {"type": "MOVE", "actor-id": 422, "anchor": "home-422", "route-profile": "west-pen", "timeout-ticks": 220}
       ryzhik-paddock:
         actor-ids: ["423"]
         initial-delay-seconds: 36
@@ -893,13 +902,13 @@ scenes:
         cooldown-max-seconds: 30
         step-ids: ["graze", "turn", "happy", "graze-pose", "pause", "stand-pose", "home"]
         steps:
-          graze: {"type": "MOVE", "actor-id": 423, "anchor": "ryzhik-graze", "route-profile": "yard", "timeout-ticks": 220}
-          turn: {"type": "MOVE", "actor-id": 423, "anchor": "ryzhik-turn", "route-profile": "yard", "timeout-ticks": 220}
+          graze: {"type": "MOVE", "actor-id": 423, "anchor": "ryzhik-graze", "route-profile": "east-pen", "timeout-ticks": 220}
+          turn: {"type": "MOVE", "actor-id": 423, "anchor": "ryzhik-turn", "route-profile": "east-pen", "timeout-ticks": 220}
           happy: {"type": "PARTICLE", "actor-id": 423, "particle": "HAPPY_VILLAGER", "count": 4}
           graze-pose: {"type": "POSE", "actor-id": 423, "state": "HORSE_GRAZE"}
           pause: {"type": "WAIT", "ticks": 170}
           stand-pose: {"type": "POSE", "actor-id": 423, "state": "STAND"}
-          home: {"type": "MOVE", "actor-id": 423, "anchor": "ryzhik-approach", "route-profile": "yard", "timeout-ticks": 220}
+          home: {"type": "MOVE", "actor-id": 423, "anchor": "home-423", "route-profile": "east-pen", "timeout-ticks": 220}
       iney-patrol:
         actor-ids: ["412", "413"]
         initial-delay-seconds: 44
@@ -920,10 +929,10 @@ scenes:
         step-ids: ["mount", "out", "check", "line", "home"]
         steps:
           mount: {"type": "MOUNT", "rider-id": 414, "vehicle-id": 415}
-          out: {"type": "MOVE", "actor-id": 415, "anchor": "bay-turn", "route-profile": "yard", "timeout-ticks": 260}
+          out: {"type": "MOVE", "actor-id": 415, "anchor": "bay-turn", "route-profile": "front-yard", "timeout-ticks": 260}
           check: {"type": "WAIT", "ticks": 28}
           line: {"type": "SPEECH", "actor-id": 414, "text": "Гнедой, шаг ровнее. Ворота узкие."}
-          home: {"type": "MOVE", "actor-id": 415, "anchor": "bay-turn", "route-profile": "yard", "timeout-ticks": 260}
+          home: {"type": "MOVE", "actor-id": 415, "anchor": "home-415", "route-profile": "front-yard", "timeout-ticks": 260}
       saddler-work:
         actor-ids: ["369"]
         initial-delay-seconds: 3
@@ -1029,7 +1038,7 @@ scenes:
         initial-delay-seconds: 17
         cooldown-min-seconds: 35
         cooldown-max-seconds: 55
-        step-ids: ["crate", "call", "donkey-stand", "animal-still", "tom", "packer", "check", "brush", "groom", "approve", "face", "load-0-pad", "work-0", "load-1-left-pack", "load-1-right-pack", "load-1-left-lid", "load-1-right-lid", "work-1", "load-2-blanket", "load-2-strap-front", "load-2-strap-back", "work-2", "load-3-left-lock", "load-3-right-lock", "work-3", "ready", "snort", "show-load", "out-exit", "out-middle", "out-front", "inspect-load", "line", "rest", "return-middle", "return-exit", "return", "unload-work-3", "unload-3-left-lock", "unload-3-right-lock", "unload-work-2", "unload-2-blanket", "unload-2-strap-front", "unload-2-strap-back", "unload-work-1", "unload-1-left-pack", "unload-1-right-pack", "unload-1-left-lid", "unload-1-right-lid", "unload-work-0", "unload-0-pad", "finish"]
+        step-ids: ["crate", "call", "donkey-stand", "animal-still", "tom", "packer", "check", "brush", "groom", "approve", "face", "load-0-pad", "work-0", "load-1-left-pack", "load-1-right-pack", "load-1-left-lid", "load-1-right-lid", "work-1", "load-2-blanket", "load-2-strap-front", "load-2-strap-back", "work-2", "load-3-left-lock", "load-3-right-lock", "work-3", "ready", "snort", "show-load", "out-exit", "out-corner", "out-middle", "out-front", "inspect-load", "line", "rest", "return-middle", "return-corner", "return-exit", "return", "unload-work-3", "unload-3-left-lock", "unload-3-right-lock", "unload-work-2", "unload-2-blanket", "unload-2-strap-front", "unload-2-strap-back", "unload-work-1", "unload-1-left-pack", "unload-1-right-pack", "unload-1-left-lid", "unload-1-right-lid", "unload-work-0", "unload-0-pad", "finish"]
         steps:
           crate: {"type": "MOVE", "actor-id": 441, "anchor": "packing-crates", "route-profile": "yard", "timeout-ticks": 500}
           call: {"type": "SPEECH", "actor-id": 441, "text": "Том, проверь Репея. Я пока уложу поклажу."}
@@ -1060,12 +1069,14 @@ scenes:
           snort: {"type": "SOUND", "actor-id": 442, "sound": "ENTITY_DONKEY_AMBIENT", "volume": 0.32, "pitch": 0.9}
           show-load: {"type": "WAIT", "ticks": 80}
           out-exit: {"type": "MOVE_GROUP", "actor-ids": ["441", "442"], "anchors": ["caravan-person-exit", "caravan-animal-exit"], "route-profile": "caravan", "timeout-ticks": 700}
+          out-corner: {"type": "MOVE_GROUP", "actor-ids": ["441", "442"], "anchors": ["caravan-person-corner", "caravan-animal-corner"], "route-profile": "caravan", "timeout-ticks": 700}
           out-middle: {"type": "MOVE_GROUP", "actor-ids": ["441", "442"], "anchors": ["caravan-person-mid", "caravan-animal-mid"], "route-profile": "caravan", "timeout-ticks": 700}
           out-front: {"type": "MOVE_GROUP", "actor-ids": ["441", "442"], "anchors": ["caravan-person-front", "caravan-animal-front"], "route-profile": "caravan", "timeout-ticks": 700}
           inspect-load: {"type": "LOOK_AT_ACTOR", "actor-id": 441, "target-actor-id": 442}
           line: {"type": "SPEECH", "actor-id": 441, "text": "Ничего не гремит и не сползает. Ещё круг — и обоз готов."}
           rest: {"type": "WAIT", "ticks": 220}
           return-middle: {"type": "MOVE_GROUP", "actor-ids": ["441", "442"], "anchors": ["caravan-person-mid", "caravan-animal-mid"], "route-profile": "caravan", "timeout-ticks": 700}
+          return-corner: {"type": "MOVE_GROUP", "actor-ids": ["441", "442"], "anchors": ["caravan-person-corner", "caravan-animal-corner"], "route-profile": "caravan", "timeout-ticks": 700}
           return-exit: {"type": "MOVE_GROUP", "actor-ids": ["441", "442"], "anchors": ["caravan-person-exit", "caravan-animal-exit"], "route-profile": "caravan", "timeout-ticks": 700}
           return: {"type": "MOVE_GROUP", "actor-ids": ["441", "442"], "anchors": ["packing-stand", "home-442"], "route-profile": "caravan", "timeout-ticks": 700}
           unload-work-3: {"type": "SWING", "actor-id": 441, "repetitions": 3, "period-ticks": 13}
