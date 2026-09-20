@@ -3,6 +3,14 @@ package ru.arc.travelanchors
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.doubles.plusOrMinus
 import io.kotest.matchers.shouldBe
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
+import org.bukkit.Chunk
+import org.bukkit.entity.BlockDisplay
+import org.bukkit.entity.TextDisplay
+import org.bukkit.entity.ItemDisplay
+import org.bukkit.event.world.EntitiesLoadEvent
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.event.EventHandler
@@ -13,6 +21,24 @@ import java.nio.file.Files
 import java.util.UUID
 
 class TravelAnchorTargetingTest : FunSpec({
+    test("late entity load removes owned markers and leaves foreign displays and portal items intact") {
+        val marker = mockk<BlockDisplay>(relaxed = true)
+        val label = mockk<TextDisplay>(relaxed = true)
+        val foreign = mockk<BlockDisplay>(relaxed = true)
+        val portal = mockk<ItemDisplay>(relaxed = true)
+        every { marker.scoreboardTags } returns setOf(LEGACY_TRAVEL_ANCHOR_PREVIEW_TAG)
+        every { label.scoreboardTags } returns setOf(LEGACY_TRAVEL_ANCHOR_LABEL_TAG)
+        every { foreign.scoreboardTags } returns setOf("arc_foreign_display")
+        every { portal.scoreboardTags } returns setOf(LEGACY_TRAVEL_ANCHOR_PREVIEW_TAG)
+
+        TravelAnchorsModule.onEntitiesLoad(EntitiesLoadEvent(mockk<Chunk>(relaxed = true), listOf(marker, label, foreign, portal)))
+
+        verify(exactly = 1) { marker.remove() }
+        verify(exactly = 1) { label.remove() }
+        verify(exactly = 0) { foreign.remove() }
+        verify(exactly = 0) { portal.remove() }
+    }
+
     test("the closest aim wins and distance breaks an exact tie") {
         val candidates = listOf(
             AimCandidate("edge", distanceSquared = 4.0, dot = 0.92),

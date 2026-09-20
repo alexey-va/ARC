@@ -5,6 +5,8 @@ api-version: 1.20
 libraries:
   - com.google.code.gson:gson:2.10.1
   - redis.clients:jedis:5.2.0-beta4
+depend:
+  - packetevents
 softdepend:
   - Parties
   - Lands
@@ -41,7 +43,6 @@ softdepend:
   - RedisEconomy
   - LuckPerms
   - Vault
-  - packetevents
   - CoreProtect
 commands:
   dungeon:
