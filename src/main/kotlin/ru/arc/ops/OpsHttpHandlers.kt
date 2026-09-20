@@ -702,7 +702,12 @@ private object ArcRuntimeHealth : RuntimeHealthProvider {
                         "mount_purchase" to MountPurchaseJournalSnapshot.CURRENT_SCHEMA,
                         "season_catalog" to ContractsConfig.SEASON_CATALOG_SCHEMA_VERSION,
                     ),
-            dependencies = modules.dependencies + ("redis" to (ARC.redisManager?.isConnected() == true)),
+            dependencies = modules.dependencies +
+                if (ru.arc.config.ArcRedisConfig.get().enabled && ARC.instance.runtimeProfile == ru.arc.config.ArcRuntimeProfile.FULL) {
+                    mapOf("redis" to (ARC.redisManager?.isConnected() == true))
+                } else {
+                    emptyMap()
+                },
         )
     }
 }

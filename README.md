@@ -30,6 +30,24 @@ For coordinated local development, opt into source substitution explicitly:
 
 ## Deploy
 
+For a separate mode such as Slimefun, set `plugins/ARC/modules/runtime.yml`
+to `profile: isolated` before startup. This composition initializes only
+Config, OpsHttp, Restart and ItemInfo, and exposes `/arc help`, `/arc reload` and
+`/arc restart`. It does not initialize Redis, synchronization, gameplay hooks,
+economy, AI, menus, chunk tickets, telemetry providers or the base sidebar.
+ItemInfo retains Slimefun/ItemsAdder block hints using read-only identity APIs
+and cached LuckPerms preferences, without registering gameplay listeners.
+Ops HTTP still uses its own token and loopback configuration. Server identity
+comes from `modules/redis.yml` even though its Redis connection stays inactive.
+
+The default is `profile: full`; existing modes retain their current composition.
+Changing the profile requires a server restart. Misspelled values fail startup
+instead of falling back to the full composition. Focused verification:
+
+```bash
+./gradlew test --tests ru.arc.config.ArcRuntimeProfileTest --tests ru.arc.IsolatedRuntimeProfileTest shadowJar
+```
+
 Runtime configs: [ruscrafting-ops](https://github.com/alexey-va/ruscrafting-ops) — `classic/plugins/ARC/`, `classic_survival/...`
 
 ```bash

@@ -4,6 +4,8 @@ import org.bukkit.command.Command
 import org.bukkit.command.CommandExecutor
 import org.bukkit.command.CommandSender
 import org.bukkit.command.TabCompleter
+import ru.arc.ARC
+import ru.arc.config.ArcRuntimeProfile
 import ru.arc.commands.arc.subcommands.DialogDemoSubCommand
 import ru.arc.commands.arc.subcommands.AuditSubCommand
 import ru.arc.commands.arc.subcommands.BaltopSubCommand
@@ -54,7 +56,7 @@ import ru.arc.travelanchors.TravelAnchorSubCommand
  * Main /arc command that routes to subcommands.
  * All subcommand logic is delegated to individual [SubCommand] implementations.
  */
-class ArcCommand :
+class ArcCommand(private val profile: ArcRuntimeProfile = ArcRuntimeProfile.FULL) :
     CommandExecutor,
     TabCompleter {
     private val subcommands = mutableMapOf<String, SubCommand>()
@@ -62,55 +64,59 @@ class ArcCommand :
     // Legacy command is no longer needed - all subcommands are now in Kotlin
 
     init {
-        // Register all subcommands
-        register(
-            HelpSubCommand, // Help first for discoverability
-            DialogDemoSubCommand,
-            BuySubCommand,
-            ReloadSubCommand,
-            BoardSubCommand,
-            ChatSubCommand,
-            ClassGrantSubCommand(),
-            CommandHideSubCommand(),
-            ContractsSubCommand,
-            InvestigationSubCommand,
-            BaltopSubCommand,
-            AuditSubCommand,
-            RepoSubCommand,
-            EmshopSubCommand,
-            JobsboostsSubCommand,
-            LoggerSubCommand,
-            JoinMessageSubCommand,
-            QuitMessageSubCommand,
-            RespawnOnRtpSubCommand,
-            FirstRtpSubCommand,
-            OnboardingSubCommand,
-            OriginPortalsSubCommand,
-            RtpSubCommand,
-            LocationPoolSubCommand,
-            FurnitureSubCommand,
-            BrewerySubCommand,
-            HuntSubCommand,
-            TreasuresSubCommand,
-            ProductPathSubCommand,
-            NpcChatSubCommand,
-            NpcCycleSubCommand,
-            // New subcommands
-            TestSubCommand,
-            EliteLootSubCommand,
-            StoreSubCommand,
-            ItemsCatalogSubCommand,
-            LandsSubCommand,
-            GiveBoostSubCommand,
-            GiveSubCommand,
-            TravelAnchorSubCommand,
-            GiveTravelAnchorSubCommand,
-            GiveTravelStaffSubCommand,
-            PouchSubCommand,
-            SoundFollowSubCommand,
-            SchedulesSubCommand,
-            RestartSubCommand,
-        )
+        if (profile == ArcRuntimeProfile.ISOLATED) {
+            register(HelpSubCommand, ReloadSubCommand, RestartSubCommand)
+        } else {
+            // Register all subcommands
+            register(
+                HelpSubCommand, // Help first for discoverability
+                DialogDemoSubCommand,
+                BuySubCommand,
+                ReloadSubCommand,
+                BoardSubCommand,
+                ChatSubCommand,
+                ClassGrantSubCommand(),
+                CommandHideSubCommand(),
+                ContractsSubCommand,
+                InvestigationSubCommand,
+                BaltopSubCommand,
+                AuditSubCommand,
+                RepoSubCommand,
+                EmshopSubCommand,
+                JobsboostsSubCommand,
+                LoggerSubCommand,
+                JoinMessageSubCommand,
+                QuitMessageSubCommand,
+                RespawnOnRtpSubCommand,
+                FirstRtpSubCommand,
+                OnboardingSubCommand,
+                OriginPortalsSubCommand,
+                RtpSubCommand,
+                LocationPoolSubCommand,
+                FurnitureSubCommand,
+                BrewerySubCommand,
+                HuntSubCommand,
+                TreasuresSubCommand,
+                ProductPathSubCommand,
+                NpcChatSubCommand,
+                NpcCycleSubCommand,
+                // New subcommands
+                TestSubCommand,
+                EliteLootSubCommand,
+                StoreSubCommand,
+                ItemsCatalogSubCommand,
+                LandsSubCommand,
+                GiveBoostSubCommand,
+                GiveSubCommand,
+                TravelAnchorSubCommand,
+                GiveTravelAnchorSubCommand,
+                GiveTravelStaffSubCommand,
+                PouchSubCommand,
+                SoundFollowSubCommand,
+                SchedulesSubCommand,
+                RestartSubCommand,
+            )
+        }
     }
 
     private fun register(vararg commands: SubCommand) {
@@ -178,6 +184,9 @@ class ArcCommand :
     private fun getAvailableSubcommandNames(): List<String> =
         subcommands.values.filter { it.isAvailable() }.map { it.name }.distinct()
 
+    fun availableSubcommands(sender: CommandSender): List<SubCommand> =
+        subcommands.values.distinct().filter { it.isAvailable() && sender.checkPermission(it.permission) }
+
     override fun onTabComplete(
         sender: CommandSender,
         command: Command,
@@ -210,7 +219,11 @@ class ArcCommand :
     }
 
     companion object {
-        /** Singleton instance for registration */
-        val INSTANCE = ArcCommand()
+        private val fullInstance by lazy { ArcCommand(ArcRuntimeProfile.FULL) }
+        private val isolatedInstance by lazy { ArcCommand(ArcRuntimeProfile.ISOLATED) }
+
+        /** One command dispatcher per startup composition. */
+        val INSTANCE: ArcCommand
+            get() = if (ARC.plugin?.runtimeProfile == ArcRuntimeProfile.ISOLATED) isolatedInstance else fullInstance
     }
 }
