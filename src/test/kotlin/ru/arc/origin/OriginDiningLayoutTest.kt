@@ -165,8 +165,8 @@ class OriginDiningLayoutTest : FreeSpec({
         OriginDiningLayout.routeProfile(org.bukkit.Location(null, 1.5, 70.0, 57.5))?.id shouldBe "brewery"
         OriginDiningLayout.routeProfile(org.bukkit.Location(null, 100.0, 72.0, 100.0)) shouldBe null
         OriginDiningLayout.dynamicWaiterSideOffset shouldBe 1.0
-        OriginDiningLayout.waiterHome(431) shouldBe OriginDiningPoint(-54.5, 72.0, 56.5, 180f)
-        OriginDiningLayout.waiterHome(432) shouldBe OriginDiningPoint(-54.5, 72.0, 58.5, 180f)
+        OriginDiningLayout.waiterHome(431) shouldBe OriginDiningPoint(-51.5, 72.0, 56.5, 90f)
+        OriginDiningLayout.waiterHome(432) shouldBe OriginDiningPoint(-51.5, 72.0, 58.5, 90f)
     }
 
     "ambient dialogue catalog gives every guest pair six themed chains" {

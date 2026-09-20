@@ -1,4 +1,55 @@
 # ARC owns the interactive meals in both Origin restaurants.
+
+# Small, bounded choreography. ARC owns these props; no Denizen tasks.
+life:
+  audience-range: 24.0
+  effect-range: 14.0
+  max-active-cycles: 4
+  serving-ticks: 16
+  bite-interval-min-ticks: 180
+  bite-interval-max-ticks: 300
+  bite-duration-ticks: 24
+  steam-duration-ticks: 200
+  bartender-rest-min-ticks: 120
+  bartender-rest-max-ticks: 200
+  hand-side: 0.32
+  hand-forward: 0.45
+  hand-height: 1.05
+  pour-height: 0.3
+  # GROUND bounds, scale .65. Mug rests exactly on the carpet at y=73.0625.
+  mug: {item: "elitecreatures:restaurant_mug_full", scale: 0.65, surface-lift: 0.20475}
+  empty-mug: {item: "elitecreatures:restaurant_mug_empty", scale: 0.65, surface-lift: 0.20475}
+  pouring-bottle: {item: "elitecreatures:restaurant_pouring_bottle", scale: 0.65, surface-lift: 0.20475}
+  bottle-mouth-y: 0.2998125
+  empty-plate: {item: "elitecreatures:restaurant_food_eggbeacon_empty", scale: 0.65, surface-lift: 0.28375}
+  empty-plate-dish-ids: [egg, fish, steak]
+  empty-plates:
+    egg: {item: "elitecreatures:restaurant_food_eggbeacon_empty", scale: 0.65, surface-lift: 0.28375}
+    fish: {item: "elitecreatures:restaurant_food_halffish_empty", scale: 0.65, surface-lift: 0.12125}
+    steak: {item: "elitecreatures:restaurant_food_steak_empty", scale: 0.65, surface-lift: 0.28375}
+  bartender-ids: ["439"]
+  bartenders:
+    439:
+      station: "-52.5,73.0625,56.5,0"
+  ready-lines:
+    - "Кружки готовы. Только с пеной осторожнее."
+    - "Свежая порция — можно забирать."
+    - "Вот теперь порядок. Следующий заказ!"
+  empty-lines:
+    - "Спасибо, было вкусно."
+    - "Можно убрать тарелку."
+    - "Хороший ужин получился."
+
+conversation:
+  minimum-line-millis: 1800
+  maximum-line-millis: 7000
+  characters-per-second: 12.0
+  pause-between-lines-millis: 600
+  gesture-every-lines: 2
+  pair-cooldown-millis: 15000
+  venue-cooldown-millis: 3000
+  execution-timeout-millis: 120000
+
 # Run /arc reload after editing this file; no server restart is required.
 
 placement:
@@ -297,8 +348,8 @@ scene:
   waiters:
     410: {home: "1.5,70.0,57.5,180"}
     411: {home: "-1.5,70.0,60.5,180"}
-    431: {home: "-54.5,72.0,56.5,180"}
-    432: {home: "-54.5,72.0,58.5,180"}
+    431: {home: "-51.5,72.0,56.5,90"}
+    432: {home: "-51.5,72.0,58.5,90"}
   ambient-table-ids:
     - brewery_north
     - brewery_south
