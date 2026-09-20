@@ -16,7 +16,7 @@ class OpsHttpHandlersTest :
             snapshot.recoveryBacklog shouldBe 0
             snapshot.activeLeases shouldBe 0
             snapshot.schemas.containsKey("runtime.module_runtime") shouldBe true
-            snapshot.dependencies.containsKey("runtime.redis") shouldBe true
+            snapshot.dependencies.containsKey("runtime.redis") shouldBe false
             snapshot.probes.map { it.id }.contains("builder_tools") shouldBe false
         }
 

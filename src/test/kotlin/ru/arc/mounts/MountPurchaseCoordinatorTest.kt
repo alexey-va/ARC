@@ -213,10 +213,10 @@ class MountPurchaseCoordinatorTest : StringSpec({
         val fixture = PurchaseFixture().also { it.ownership.level = 1 }
         var result: MountPurchaseResult? = null
 
-        fixture.coordinator.setRiderViewAutoHide(fixture.subject(), fixture.mount, false) { result = it }
+        fixture.coordinator.setRiderViewAutoHide(fixture.subject(), fixture.mount, true) { result = it }
 
         result shouldBe MountPurchaseResult.Success
-        fixture.ownership.riderViewAutoHide shouldBe false
+        fixture.ownership.riderViewAutoHide shouldBe true
         fixture.wallet.withdrawals shouldBe 0
     }
 

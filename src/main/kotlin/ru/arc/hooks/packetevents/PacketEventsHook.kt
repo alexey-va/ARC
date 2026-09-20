@@ -6,6 +6,7 @@ import com.github.retrooper.packetevents.protocol.entity.data.EntityDataTypes
 import com.github.retrooper.packetevents.protocol.entity.type.EntityTypes
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerDestroyEntities
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityMetadata
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSetPassengers
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSpawnEntity
 import io.github.retrooper.packetevents.util.SpigotConversionUtil
 import net.kyori.adventure.util.TriState
@@ -31,6 +32,20 @@ class PacketEventsHook {
                     listOf(EntityData(0, EntityDataTypes.BYTE, commonEntityFlags(entity, invisibleForViewer = invisible))),
                 )
             PacketEvents.getAPI().playerManager.sendPacket(player, metadata)
+        }
+    }
+
+    /** Replays native riding links after every entity in a nested seat has been tracked. */
+    fun synchronizePassengersFor(player: Player, vehicles: List<LivingEntity>) {
+        runOnMainThread {
+            if (!player.isOnline || vehicles.any { !it.isValid }) return@runOnMainThread
+            vehicles.forEach { vehicle ->
+                val packet = WrapperPlayServerSetPassengers(
+                    vehicle.entityId,
+                    vehicle.passengers.map { it.entityId }.toIntArray(),
+                )
+                PacketEvents.getAPI().playerManager.sendPacket(player, packet)
+            }
         }
     }
 

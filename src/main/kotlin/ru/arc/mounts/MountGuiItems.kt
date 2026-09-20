@@ -829,8 +829,8 @@ internal class MountGuiItems(
         )
     }
 
-    fun riderViewTuningItem(profile: MountProfile): ItemStack {
-        val enabled = profile.riderViewAutoHide ?: true
+    fun riderViewTuningItem(mount: MountDefinition, profile: MountProfile): ItemStack {
+        val enabled = mount.effectiveRiderViewAutoHide(profile)
         return item(
             if (!profile.unlocked) Material.GRAY_DYE else if (enabled) Material.ENDER_EYE else Material.GLASS,
             copy(

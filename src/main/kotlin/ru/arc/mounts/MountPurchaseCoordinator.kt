@@ -214,7 +214,7 @@ class MountPurchaseCoordinator(
     ) {
         val profile = ownership.profile(subject, mount)
         if (!profile.unlocked) return callback(MountPurchaseResult.NotUnlocked)
-        if ((profile.riderViewAutoHide ?: true) == enabled) return callback(MountPurchaseResult.AlreadyOwned)
+        if (mount.effectiveRiderViewAutoHide(profile) == enabled) return callback(MountPurchaseResult.AlreadyOwned)
         runSetting(subject.uniqueId, callback) {
             ownership.setRiderViewAutoHide(subject.uniqueId, mount, enabled)
         }

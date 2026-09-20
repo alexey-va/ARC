@@ -141,6 +141,7 @@ class MountSummonServiceTest : TestBase() {
                     it.speed == 0.39 &&
                         it.walkingStepHeight == 1.5 &&
                         it.scaleMultiplier == 1.15 &&
+                        !it.riderViewAutoHide &&
                         it.skin == mount.skin("baby") &&
                         it.glow &&
                         it.abilityUpgrades.map(MountAbilityUpgradeDefinition::id) == listOf("night-vision")

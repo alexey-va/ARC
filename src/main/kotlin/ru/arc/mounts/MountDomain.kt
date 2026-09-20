@@ -519,6 +519,13 @@ data class MountDefinition(
             ?: available.firstOrNull()
     }
 
+    fun effectiveRiderViewAutoHide(profile: MountProfile): Boolean {
+        profile.riderViewAutoHide?.let { return it }
+        val size = effectiveSizeOption(profile.selectedSizeId, profile.level, profile.ownedSizeIds)?.multiplier ?: 1.0
+        val scale = level(profile.level).scaleMultiplier * size
+        return effectiveAppearance(scale, skin(profile.activeSkinId)).scale >= LARGE_MOUNT_APPEARANCE_SCALE
+    }
+
     fun levelPermission(level: Int): String = "arc.mounts.$id.$level"
 
     val speedTuningPermissionPrefix: String get() = "arc.mounts.$id.tuning.speed."
@@ -626,7 +633,7 @@ data class MountRuntimeSettings(
     val skin: MountSkinDefinition?,
     val glow: Boolean,
     val abilityUpgrades: List<MountAbilityUpgradeDefinition>,
-    val riderViewAutoHide: Boolean = true,
+    val riderViewAutoHide: Boolean = false,
 ) {
     init {
         require(speed.isFinite() && speed > 0.0) { "Mount runtime speed must be positive and finite" }
@@ -917,3 +924,5 @@ internal fun walkingJumpVelocity(baseVelocity: Double, abilities: MountAbilities
 
 internal fun activeAbilitySpeedMultiplier(abilities: Collection<MountAbilityUpgradeDefinition>): Double =
     abilities.fold(1.0) { total, ability -> total * ability.speedMultiplier }
+
+internal const val LARGE_MOUNT_APPEARANCE_SCALE = 2.0

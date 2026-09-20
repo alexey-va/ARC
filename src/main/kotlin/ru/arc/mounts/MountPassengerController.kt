@@ -38,10 +38,11 @@ internal class MountPassengerController(
     private val plugin: JavaPlugin,
     private val scheduler: TaskScheduler,
     private val configProvider: () -> MountModuleConfig,
+    private val synchronizePassengers: (Player, List<LivingEntity>) -> Unit = { _, _ -> },
 ) : Listener {
     private class Ride(
         val entity: LivingEntity,
-        val driverId: UUID,
+        val driver: Player,
         val definition: MountDefinition,
         var fireProtected: Boolean,
         val passengers: MutableSet<UUID> = linkedSetOf(),
@@ -51,7 +52,9 @@ internal class MountPassengerController(
         var attachingCarrier: Camel? = null,
         var seatsReady: Boolean = true,
         var prepareSeats: ScheduledTask? = null,
-    )
+    ) {
+        val driverId: UUID get() = driver.uniqueId
+    }
 
     private class Passenger(val player: Player, val ride: Ride, val vehicle: LivingEntity)
 
@@ -72,7 +75,7 @@ internal class MountPassengerController(
     }
 
     fun openRide(entity: LivingEntity, driver: Player, definition: MountDefinition, fireProtected: Boolean): Boolean {
-        val ride = Ride(entity, driver.uniqueId, definition, fireProtected)
+        val ride = Ride(entity, driver, definition, fireProtected)
         rides[entity.uniqueId] = ride
         if (definition.passengerSeats == 0 || definition.entityType in NATIVE_SEAT_TYPES) return true
         return try {
@@ -191,6 +194,16 @@ internal class MountPassengerController(
         val passenger = Passenger(player, ride, vehicle)
         passengers[player.uniqueId] = passenger
         ride.passengers.add(player.uniqueId)
+        if (ride.seats.isNotEmpty()) {
+            // Passenger entities do not receive normal position updates: the client
+            // must know both links to move the guest with the mount.
+            scheduler.runLater(1L, Runnable {
+                if (rides[ride.entity.uniqueId] !== ride || passengers[player.uniqueId] !== passenger ||
+                    !hasDriver(ride) || !ride.driver.isOnline || player.vehicle?.uniqueId != vehicle.uniqueId
+                ) return@Runnable
+                synchronizePassengers(ride.driver, ride.seats + ride.entity)
+            })
+        }
         extinguishRiderFire(player, ride.fireProtected)
         tell(player, "passenger-boarded", "<green>Вы заняли пассажирское место. <gray>Shift — спешиться; управляет всадник.")
     }

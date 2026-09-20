@@ -318,7 +318,7 @@ class MountGuiController(
         )
         val inventory = Bukkit.createInventory(holder, DETAIL_SIZE, component(config.detailTitle.replace("<mount>", escape(mount.displayName))))
         holder.backingInventory = inventory
-        fill(inventory)
+        fill(inventory, full = true)
         transfers()?.let { inventory.setItem(it.detailSlot, it.button(profile.unlocked)) }
         val favorite = summons.favoriteMountId(player.uniqueId) == mount.id
         val purchaseAllowed = purchaseContextAllowed(player, holder)
@@ -503,7 +503,7 @@ class MountGuiController(
                 inventory.setItem(slot, items.sizeTuningItem(mount, profile, option))
             }
         }
-        inventory.setItem(TUNING_MENU_RIDER_VIEW_SLOT, items.riderViewTuningItem(profile))
+        inventory.setItem(TUNING_MENU_RIDER_VIEW_SLOT, items.riderViewTuningItem(mount, profile))
         inventory.setItem(
             TUNING_MENU_BACK_SLOT,
             styledItem(
@@ -867,7 +867,7 @@ class MountGuiController(
         val tuning = configProvider().tuning
         when (slot) {
             TUNING_MENU_BACK_SLOT -> openProgression(player, mount, holder.parent)
-            TUNING_MENU_RIDER_VIEW_SLOT -> purchases.setRiderViewAutoHide(subject(player), mount, !(profile.riderViewAutoHide ?: true)) {
+            TUNING_MENU_RIDER_VIEW_SLOT -> purchases.setRiderViewAutoHide(subject(player), mount, !mount.effectiveRiderViewAutoHide(profile)) {
                 handlePurchaseResult(player, mount, it, purchase = false, reopen = MountScreen.TUNING)
             }
             else -> {

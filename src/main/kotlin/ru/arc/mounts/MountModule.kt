@@ -120,6 +120,9 @@ object MountModule : PluginModule {
                 setRiderMountHidden = { player, entity, hidden ->
                     HookRegistry.packetEventsHook?.setEntityInvisibleFor(entity, player, hidden)
                 },
+                synchronizePassengers = { player, vehicles ->
+                    HookRegistry.packetEventsHook?.synchronizePassengersFor(player, vehicles)
+                },
                 careBoostStatusProvider = { playerId, nowMillis -> loadedCareBoosts.cachedStatus(playerId, nowMillis) },
             )
         val coordinator =
