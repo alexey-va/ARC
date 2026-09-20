@@ -57,13 +57,14 @@ internal class OriginDiningLife(
     private val itemCache = mutableMapOf<String, ItemStack?>()
     private var viewers = emptyList<Player>()
     private var ticks = 0L
-    private var barSequence = 0
+    val drinks = OriginDiningDrinks(config, ::item)
     private var closed = false
 
     /** Called once per service reconciliation; no world or entity scan per prop. */
     fun tick() {
         if (closed) return
         ticks += 20
+        drinks.tick(ticks)
         viewers = Bukkit.getWorld(OriginDiningLayout.WORLD)?.players.orEmpty().filter { !it.isDead }
         cycles.values.toList().forEach { running ->
             if (running.actors.any { actor(it) == null } || running.actors.none { id -> actor(id)?.entity?.location?.let(::hasAudience) == true }) {
@@ -125,7 +126,8 @@ internal class OriginDiningLife(
             }
         }
         val key = "serve:$waiterId"
-        startCycle(key, setOf(waiterId), listOf(Beat("place", config.servingTicks + 2) { _, execution ->
+        startCycle(key, setOf(waiterId), listOf(Beat("place", config.servingTicks + 2) { resources, execution ->
+            resources.facePoint(npc, anchor)
             swing(npc)
             var elapsed = 0
             fun frame() {
@@ -156,7 +158,8 @@ internal class OriginDiningLife(
         val original = copyTransform(display.transformation)
         val target = handPoint(npc)
         return startCycle("collect:$waiterId", setOf(waiterId), listOf(
-            Beat("lift-plate", config.servingTicks + 2) { _, execution ->
+            Beat("lift-plate", config.servingTicks + 2) { resources, execution ->
+                resources.facePoint(npc, anchor)
                 swing(npc)
                 sound(anchor, Sound.BLOCK_DECORATED_POT_PLACE, 0.2f, 1.6f)
                 var elapsed = 0
@@ -191,14 +194,10 @@ internal class OriginDiningLife(
     private fun bite(meal: Meal): Boolean {
         val npc = actor(meal.actorId) ?: return false
         return startCycle("bite:${meal.key}", setOf(npc.id), listOf(
-            Beat("look-at-food", 8) { resources, _ -> resources.face(npc, meal.anchor) },
+            Beat("look-at-food", 8) { resources, _ -> resources.facePoint(npc, meal.anchor) },
             Beat("eat", config.biteDurationTicks) { resources, execution ->
-                resources.equip(npc, when (meal.dish) {
-                    "fish" -> Material.COOKED_SALMON
-                    "steak" -> Material.COOKED_BEEF
-                    else -> Material.BREAD
-                })
-                resources.useItem(npc)
+                resources.equip(npc, Material.AIR)
+                swing(npc)
                 sound(npc.entity.location, Sound.ENTITY_GENERIC_EAT, 0.23f, 1.0f)
                 execution.after((config.biteDurationTicks / 2).toLong()) {
                     swing(npc)
@@ -235,6 +234,7 @@ internal class OriginDiningLife(
     }
 
     private fun bartender(bar: DiningBar) {
+        if (drinks.hasPending(bar.actorId) || bar.waiterIds.isEmpty()) return
         val npc = actor(bar.actorId) ?: return
         val station = bar.station.inWorld(npc.entity.world)
         if (npc.entity.location.distanceSquared(station) > 9.0) return
@@ -242,20 +242,18 @@ internal class OriginDiningLife(
         val filledMug = item(config.mug) ?: return
         val bottle = item(config.pouringBottle) ?: return
         val owner = "dining-bar:${npc.id}"
-        val doubleOrder = barSequence % 3 == 2
         val beats = listOf(
             Beat("take-mug", 20) { resources, _ ->
-                resources.face(npc, station)
+                resources.facePoint(npc, station)
                 resources.equip(npc, Material.GLASS_BOTTLE)
                 resources.item("mug", station, mug, config.emptyMug.scale, config.emptyMug.lift)
-                if (doubleOrder) resources.item("mug-2", station.clone().add(0.3, 0.0, 0.0), mug, config.emptyMug.scale, config.emptyMug.lift)
                 swing(npc)
                 sound(station, Sound.BLOCK_DECORATED_POT_PLACE, 0.25f, 1.5f)
             },
             Beat("pour", 60) { resources, execution ->
                 var poured = 0
                 execution.repeat(5) {
-                    val cup = station.clone().add(if (doubleOrder && poured >= 6) 0.3 else 0.0, 0.0, 0.0)
+                    val cup = station.clone()
                     val spout = cup.clone().add(0.0, 0.62, 0.0)
                     val pouring = resources.item("bottle", spout, bottle, config.pouringBottle.scale, 0f)
                     pouring.transformation = diningPourTransform(config.pouringBottle.scale, config.bottleMouthY)
@@ -267,19 +265,18 @@ internal class OriginDiningLife(
             },
             Beat("ready", 55) { resources, _ ->
                 resources.removeItem("bottle")
-                resources.item("mug", station, filledMug, config.mug.scale, config.mug.lift)
-                if (doubleOrder) resources.item("mug-2", station.clone().add(0.3, 0.0, 0.0), filledMug, config.mug.scale, config.mug.lift)
+                resources.removeItem("mug")
+                drinks.ready(bar, station)
                 sound(station, Sound.BLOCK_NOTE_BLOCK_CHIME, 0.14f, 1.3f)
                 if (!ArcNpcHologramModule.hasTemporaryBubble(npc.id))
                     ArcNpcHologramModule.showTemporaryBubble(npc.id, listOf(config.readyLines.random()), 60, owner)
             },
-            Beat("pass-drinks", 15) { resources, _ -> resources.removeItem("mug"); resources.removeItem("mug-2"); swing(npc) },
             Beat("wipe-counter", 50) { resources, execution ->
                 resources.equip(npc, Material.PAPER)
-                resources.face(npc, station.clone().add(-0.2, 0.0, 0.0))
+                resources.facePoint(npc, station.clone().add(-0.2, 0.0, 0.0))
                 swing(npc)
-                execution.after(15) { resources.face(npc, station.clone().add(0.2, 0.0, 0.0)); swing(npc) }
-                execution.after(32) { resources.face(npc, station); swing(npc) }
+                execution.after(15) { resources.facePoint(npc, station.clone().add(0.2, 0.0, 0.0)); swing(npc) }
+                execution.after(32) { resources.facePoint(npc, station); swing(npc) }
                 var wipe = 0
                 execution.repeat(4) {
                     resources.solid("cloth", station.clone().add(-0.1 + sin(wipe * 0.8) * 0.22, 0.002, -0.08),
@@ -288,9 +285,9 @@ internal class OriginDiningLife(
                 }
             },
         )
-        if (startCycle(owner, setOf(npc.id), beats, config.bartenderRestTicks.random(), cleanup = {
+        startCycle(owner, setOf(npc.id), beats, config.bartenderRestTicks.random(), cleanup = {
                 ArcNpcHologramModule.clearTemporaryBubble(npc.id, owner)
-            })) barSequence++
+            })
     }
 
     private fun startCycle(
@@ -376,6 +373,7 @@ internal class OriginDiningLife(
         closed = true
         cycles.values.toList().forEach { it.execution.close() }
         cycles.clear()
+        drinks.close()
         meals.clear()
         itemCache.clear()
         viewers = emptyList()

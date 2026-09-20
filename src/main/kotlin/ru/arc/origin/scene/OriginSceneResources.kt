@@ -99,9 +99,20 @@ internal class OriginSceneResources {
     /** Conversation yaw is independent of mounted eye offsets and target-height compensation. */
     fun faceHorizontal(actor: NPC, target: Location, pitch: Float = 0f) {
         check(actor.isSpawned && actor.entity.world == target.world)
-        captureFacing(actor)
         val origin = actor.entity.location
         val yaw = npcRouteYaw(origin.x, origin.z, target.x, target.z)
+        faceRotation(actor, yaw, pitch)
+    }
+
+    /** Absolute work point, measured from eyes, never from Citizens' feet-based target. */
+    fun facePoint(actor: NPC, target: Location) {
+        captureFacing(actor)
+        explicitRotations += actor.id
+        faceOriginScenePoint(actor, target)
+    }
+
+    private fun faceRotation(actor: NPC, yaw: Float, pitch: Float) {
+        captureFacing(actor)
         explicitRotations += actor.id
         actor.getOrAddTrait(RotationTrait::class.java).physicalSession.rotateToHave(yaw, pitch)
         actor.entity.setRotation(yaw, pitch)
@@ -449,4 +460,15 @@ internal class OriginSceneResources {
         snapshot.catHeadUp?.let { cat?.setHeadUp(it) }
         snapshot.horseEatingGrass?.let { (snapshot.entity as AbstractHorse).setEatingGrass(it) }
     }
+}
+
+/** Caller owns the actor's lifecycle; the target is an absolute world point. */
+internal fun faceOriginScenePoint(actor: NPC, target: Location) {
+    check(actor.isSpawned && actor.entity.world == target.world)
+    val eye = (actor.entity as? LivingEntity)?.eyeLocation ?: actor.entity.location
+    val direction = target.toVector().subtract(eye.toVector())
+    if (direction.lengthSquared() < 1e-8) return
+    val look = eye.clone().setDirection(direction)
+    actor.getOrAddTrait(RotationTrait::class.java).physicalSession.rotateToHave(look.yaw, look.pitch)
+    actor.entity.setRotation(look.yaw, look.pitch)
 }

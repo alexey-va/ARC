@@ -12,7 +12,7 @@ Neither introduces a Denizen animation owner.
   obsolete returns. Ambient rest starts after physical home arrival.
 - Existing immediate personal waiter glow and the 120-second post-service
   player cooldown are unchanged.
-- A seated guest takes three bites, with native hand/use-item gestures and
+- A seated guest takes three bites, with empty-hand gestures and
   nearby sounds. The full dish stays visually unchanged until an empty plate
   replaces it; intermediate visual stages are deliberately absent.
 - Waiters collect empty plates before refilling. The collected plate stays in
@@ -23,8 +23,17 @@ Neither introduces a Denizen animation owner.
 - Each venue has its own conversation slot. Pairs are selected oldest-first;
   variants round-robin. Text reading time scales with phrase length. Toasts use
   one mug; other exchanges use nods. Service interrupts the guest's conversation.
-- Mateo takes a mug, pours from a tilted bottle, presents a foamy drink and
-  wipes the counter. Every third order has two mugs.
+- Mateo prepares one mug at a time. It stays on the counter until an assigned
+  waiter reaches the pickup point, carries it to a guest and places it beside
+  the plate. `OriginDiningDrinks` owns pending and served mugs; the existing
+  waiter route owns navigation, player preemption and return home. Cancellation
+  returns undelivered cargo to the counter. A table receives at most one mug;
+  after 45 seconds it becomes empty, and is cleared 15 seconds later.
+- Guest hands are empty on seating (including legacy Citizens bread). Work
+  gestures use `OriginSceneResources.facePoint`: calculate yaw/pitch from the
+  native eye location to the absolute prop location, then synchronize Citizens'
+  physical rotation and the entity. Do not feed an eye/world prop point into
+  the old feet-relative `NPC.faceLocation` path. Conversation facing stays level.
 
 ## Ownership and budgets
 
@@ -50,6 +59,15 @@ Diagnostics: `ORIGIN_DINING` records delivery/retry/home/collection transitions;
 `ORIGIN_DINING_LIFE` records completed cycles, empty plates and failures. A started
 route is not proof of delivery. Confirm `AMBIENT_ROUTE_FINISHED reason=cleared`,
 `WAITER_RELEASED`, and a later `AMBIENT_MEAL_SERVED` for a complete guest cycle.
+`ORIGIN_DINING_DRINK` records READY → ROUTE_STARTED → PICKED_UP → SERVED,
+or RETURNED_TO_COUNTER on cancellation. A READY line alone is not delivery.
+
+Table mugs reuse the verified GROUND model/scale .65 and support lift .20475.
+The tabletop offset (+.38 X) clears the dish and stays within the support block.
+Canonical analyzer `/tmp/verify_restaurant_displays.py --guest-mug` reports
+grounded, residual 0 at (-55.12,73,46.5) for both full and empty models:
+full SHA256 `4258300af53db8da39cfbbba4df0565bfdd67e0bf28ee56239184c7ac3cdae0b`,
+empty SHA256 `eeece0fb31e9bde5860454f7007cca00e050398294e0a1bdae87b9b990a04d8f`.
 
 Focused tests cover timing/fairness, cancellation, token ownership, layout,
 item-resource cleanup, geometry endpoints and the fixed bottle-mouth pivot.

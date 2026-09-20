@@ -6,7 +6,7 @@ import kotlin.math.sin
 /** A verified GROUND model, including its bottom-to-anchor support correction. */
 internal data class DiningProp(val item: String, val scale: Float, val lift: Float)
 
-internal data class DiningBar(val actorId: Int, val station: OriginDiningPoint)
+internal data class DiningBar(val actorId: Int, val station: OriginDiningPoint, val waiterIds: Set<Int> = emptySet())
 
 internal data class OriginDiningLifeConfig(
     val audienceRange: Double = 24.0,
@@ -21,6 +21,10 @@ internal data class OriginDiningLifeConfig(
     val handForward: Double = 0.45,
     val handHeight: Double = 1.05,
     val pourHeight: Double = 0.3,
+    val drinkTableOffsetX: Double = 0.38,
+    val drinkTableOffsetZ: Double = 0.0,
+    val drinkFullTicks: Int = 900,
+    val drinkEmptyTicks: Int = 300,
     val emptyPlate: DiningProp = DiningProp("minecraft:bowl", 0.65f, 0.0f),
     val mug: DiningProp = DiningProp("minecraft:potion", 0.5f, 0.0f),
     val emptyMug: DiningProp = mug,
@@ -61,6 +65,10 @@ internal data class OriginDiningLifeConfig(
                 handForward = real("hand-forward", 0.45, 0.0, 1.0),
                 handHeight = real("hand-height", 1.05, 0.2, 2.0),
                 pourHeight = real("pour-height", 0.3, 0.1, 0.6),
+                drinkTableOffsetX = real("drink-table-offset-x", 0.38, -0.45, 0.45),
+                drinkTableOffsetZ = real("drink-table-offset-z", 0.0, -0.45, 0.45),
+                drinkFullTicks = ticks("drink-full-ticks", 900, 200, 2400),
+                drinkEmptyTicks = ticks("drink-empty-ticks", 300, 100, 1200),
                 emptyPlate = prop("life.empty-plate", defaults.emptyPlate),
                 mug = prop("life.mug", defaults.mug),
                 emptyMug = prop("life.empty-mug", defaults.emptyMug),
@@ -71,7 +79,8 @@ internal data class OriginDiningLifeConfig(
                 },
                 bars = source.stringList("life.bartender-ids").mapNotNull { id ->
                     val actorId = id.toIntOrNull() ?: return@mapNotNull null
-                    DiningBar(actorId, OriginDiningLayout.configPoint(source, "life.bartenders.$id.station"))
+                    DiningBar(actorId, OriginDiningLayout.configPoint(source, "life.bartenders.$id.station"),
+                        source.stringList("life.bartenders.$id.waiter-ids").mapNotNull(String::toIntOrNull).toSet())
                 },
                 readyLines = source.stringList("life.ready-lines").filter(String::isNotBlank).ifEmpty { defaults.readyLines },
                 emptyLines = source.stringList("life.empty-lines").filter(String::isNotBlank).ifEmpty { defaults.emptyLines },

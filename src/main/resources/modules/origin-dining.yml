@@ -16,6 +16,10 @@ life:
   hand-forward: 0.45
   hand-height: 1.05
   pour-height: 0.3
+  drink-table-offset-x: 0.38
+  drink-table-offset-z: 0.0
+  drink-full-ticks: 900
+  drink-empty-ticks: 300
   # GROUND bounds, scale .65. Mug rests exactly on the carpet at y=73.0625.
   mug: {item: "elitecreatures:restaurant_mug_full", scale: 0.65, surface-lift: 0.20475}
   empty-mug: {item: "elitecreatures:restaurant_mug_empty", scale: 0.65, surface-lift: 0.20475}
@@ -31,6 +35,7 @@ life:
   bartenders:
     439:
       station: "-52.5,73.0625,56.5,0"
+      waiter-ids: ["431", "432"]
   ready-lines:
     - "Кружки готовы. Только с пеной осторожнее."
     - "Свежая порция — можно забирать."

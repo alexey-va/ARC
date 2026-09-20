@@ -146,6 +146,28 @@ class OriginSceneResourcesTest : StringSpec({
         mockitoVerify(entity).setRotation(37f, 0f)
     }
 
+    "work point above feet but below eyes makes a seated guest look down" {
+        val npc = mockk<NPC>()
+        val entity = mockitoMock<LivingEntity>()
+        val world = mockk<World>(relaxed = true)
+        val rotation = mockk<RotationTrait>(relaxed = true)
+        every { npc.id } returns 419
+        every { npc.isSpawned } returns true
+        every { npc.entity } returns entity
+        every { npc.hasTrait(LookClose::class.java) } returns false
+        every { npc.getOrAddTrait(RotationTrait::class.java) } returns rotation
+        whenever(entity.world).thenReturn(world)
+        whenever(entity.location).thenReturn(Location(world, 0.0, 70.0, 0.0, 0f, 0f))
+        whenever(entity.eyeLocation).thenReturn(Location(world, 0.0, 71.5, 0.0))
+        val resources = OriginSceneResources()
+        resources.facePoint(npc, Location(world, 0.0, 71.0, 0.5))
+        verify { rotation.physicalSession.rotateToHave(0f, 45f) }
+        mockitoVerify(entity).setRotation(0f, 45f)
+        verify(exactly = 0) { npc.faceLocation(any()) }
+        resources.cleanup() shouldBe emptyList()
+        verify { rotation.physicalSession.rotateToHave(0f, 0f) }
+    }
+
     "use item is cleared during cleanup" {
         val npc = mockk<NPC>()
         every { npc.id } returns 439
