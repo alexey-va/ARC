@@ -21,7 +21,8 @@ Native production replacement for `Denizen/scripts/activities/rideable_mobs.dsc`
   Large non-native mounts prepare one invisible, silent Camel carrier per guest
   seat during summon, with both carriers mounted on the root beside the direct
   root driver. Preparation takes about three seconds; guests should retry after
-  the preparation message. The first carrier uses root yaw plus
+  the preparation message. A single carrier uses root yaw plus 180 degrees to
+  place the guest behind the driver. With two seats, the first uses root yaw plus
   `passengers.carrier-yaw-offset`; the second uses root yaw minus it. Tune
   carrier size with `passengers.carrier-scale`.
 - Typed per-mount abilities are configured under `abilities`. The mountain

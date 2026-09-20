@@ -368,7 +368,10 @@ internal class MountPassengerController(
         val scale = (mountScale * config.passengerCarrierScale).coerceIn(0.0625, 16.0)
         carrier.getAttribute(Attribute.SCALE)?.let { if (it.baseValue != scale) it.baseValue = scale }
         // A separate native vehicle per seat keeps the other guest fixed when someone dismounts.
-        val yawOffset = config.passengerCarrierYawOffset.toFloat() * if (index == 0) 1 else -1
+        // The Camel's first seat lies forward of its origin. Turn a lone carrier
+        // backwards so its guest sits behind the driver instead of beside them.
+        val yawOffset = if (ride.definition.passengerSeats == 1) 180.0f
+            else config.passengerCarrierYawOffset.toFloat() * if (index == 0) 1 else -1
         carrier.setRotation(ride.entity.yaw + yawOffset, 0.0f)
     }
 

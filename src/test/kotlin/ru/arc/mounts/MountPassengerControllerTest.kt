@@ -290,6 +290,25 @@ class MountPassengerControllerTest : StringSpec({
         }
     }
 
+    "a single custom seat stays behind the driver through turns without remounting" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val fixture = PassengerFixture(paper, seats = 1, customCarrier = true)
+            val guest = fixture.player()
+            fixture.click(guest)
+            val carrier = fixture.carriers.single()
+            verify { carrier.setRotation(210.0f, 0.0f) }
+
+            every { fixture.mount.yaw } returns -90.0f
+            fixture.controller.reconcileRide(fixture.mount.uniqueId, fireProtected = false) shouldBe true
+
+            verify { carrier.setRotation(90.0f, 0.0f) }
+            fixture.vehicles[guest.uniqueId] shouldBe carrier
+            verify(exactly = 1) { carrier.addPassenger(guest) }
+            verify(exactly = 0) { carrier.teleport(any<Location>()) }
+            verify(exactly = 0) { carrier.removePassenger(guest) }
+        }
+    }
+
     "large mounts carry their driver and two guests in one native entity graph without teleports" {
         MockBukkitTestRuntime.open().use { paper ->
             val fixture = PassengerFixture(paper, seats = 2, customCarrier = true)
