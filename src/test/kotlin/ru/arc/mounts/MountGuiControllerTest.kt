@@ -450,7 +450,7 @@ class MountGuiControllerTest : TestBase() {
     }
 
     @Test
-    fun `list menus keep content empty while progression fills its background`() {
+    fun `list keeps content empty while detail and progression fill their backgrounds`() {
         val mount = testMount().copy(displayName = "Вредина")
         val profile = MountProfile(1, false, false)
         val ownership = mockk<MountOwnership> {
@@ -479,12 +479,20 @@ class MountGuiControllerTest : TestBase() {
             }
         }
 
+        fun assertDetailBackground(vararg contentSlots: Int) {
+            val inventory = player.openInventory.topInventory
+            val expectedContent = contentSlots.toSet()
+            (0 until inventory.size).filterNot(expectedContent::contains).forEach { slot ->
+                inventory.getItem(slot)?.type shouldBe Material.GRAY_STAINED_GLASS_PANE
+            }
+        }
+
         controller.start()
         try {
             controller.openList(player)
             assertBottomOnly(0)
             controller.onClick(clickEvent(player.openInventory, 0, ClickType.RIGHT))
-            assertBottomOnly(4, 13, 20, 22, 24, 29, 30, 31, 32, 33, 40, 42)
+            assertDetailBackground(4, 13, 20, 22, 24, 31, 36, 40, 42)
             controller.onClick(clickEvent(player.openInventory, 20))
             player.openInventory.topInventory.contents.all { it != null } shouldBe true
             plainName(player.openInventory.topInventory.getItem(11)) shouldBe "Уровень 1 · открыт"
@@ -503,7 +511,7 @@ class MountGuiControllerTest : TestBase() {
             assertBottomOnly(31)
             controller.onClick(clickEvent(player.openInventory, 36))
             controller.onClick(clickEvent(player.openInventory, 24))
-            assertBottomOnly(4, 13, 20, 22, 24, 29, 30, 31, 32, 33, 40, 42)
+            assertDetailBackground(4, 13, 20, 22, 24, 31, 36, 40, 42)
         } finally {
             controller.shutdown()
         }
@@ -927,7 +935,7 @@ class MountGuiControllerTest : TestBase() {
             profile = profile.copy(selectedSizeId = "keychain")
             lastArg<(MountPurchaseResult) -> Unit>()(MountPurchaseResult.Success)
         }
-        every { purchases.setRiderViewAutoHide(any(), mount, false, any()) } answers {
+        every { purchases.setRiderViewAutoHide(any(), mount, true, any()) } answers {
             lastArg<(MountPurchaseResult) -> Unit>()(MountPurchaseResult.Success)
         }
         val controller =
@@ -977,7 +985,7 @@ class MountGuiControllerTest : TestBase() {
             checkNotNull(player.openInventory.topInventory.getItem(33)?.itemMeta?.lore())
                 .map(PlainTextComponentSerializer.plainText()::serialize)
                 .any { it == "Особый размер" } shouldBe true
-            plainName(player.openInventory.topInventory.getItem(40)) shouldBe "Корпус: скрывается"
+            plainName(player.openInventory.topInventory.getItem(40)) shouldBe "Корпус: всегда виден"
 
             controller.onClick(clickEvent(player.openInventory, 30))
             verify(exactly = 1) { purchases.setSizeTuning(any(), mount, "standard", any()) }
@@ -989,7 +997,7 @@ class MountGuiControllerTest : TestBase() {
             verify(exactly = 1) { purchases.setSizeTuning(any(), mount, "keychain", any()) }
 
             controller.onClick(clickEvent(player.openInventory, 40))
-            verify(exactly = 1) { purchases.setRiderViewAutoHide(any(), mount, false, any()) }
+            verify(exactly = 1) { purchases.setRiderViewAutoHide(any(), mount, true, any()) }
 
             controller.onClick(clickEvent(player.openInventory, 24))
             verify(exactly = 0) { purchases.setStepHeightTuning(any(), any(), any(), any(), any()) }

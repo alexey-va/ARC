@@ -63,6 +63,39 @@ class MountPassengerControllerTest : StringSpec({
         }
     }
 
+    "custom seats repair the complete driver view once after boarding without moving entities" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val fixture = PassengerFixture(paper, seats = 2, customCarrier = true)
+            val guest = fixture.player()
+            fixture.click(guest)
+            fixture.synchronizedGraphs shouldBe emptyList()
+
+            fixture.runDelayed()
+
+            fixture.synchronizedGraphs shouldBe listOf(fixture.driver to (fixture.carriers + fixture.mount))
+            fixture.seatRiders.first() shouldBe listOf(guest)
+            fixture.riders shouldBe listOf(fixture.driver) + fixture.carriers
+            fixture.controller.reconcileRide(fixture.mount.uniqueId, fireProtected = false)
+            fixture.runDelayed()
+            fixture.synchronizedGraphs.size shouldBe 1
+        }
+    }
+
+    "native seats do not need graph repair and closed custom rides cannot replay stale links" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val native = PassengerFixture(paper, seats = 1)
+            native.click(native.player())
+            native.runDelayed()
+            native.synchronizedGraphs shouldBe emptyList()
+
+            val custom = PassengerFixture(paper, seats = 1, customCarrier = true)
+            custom.click(custom.player())
+            custom.controller.closeRide(custom.mount.uniqueId)
+            custom.runDelayed()
+            custom.synchronizedGraphs shouldBe emptyList()
+        }
+    }
+
     "ordinary mounts reject passengers and native vanilla boarding" {
         MockBukkitTestRuntime.open().use { paper ->
             val fixture = PassengerFixture(paper, seats = 0)
@@ -355,6 +388,7 @@ private class PassengerFixture(
     val vehicles = hashMapOf<UUID, Entity>()
     val feedback = mutableListOf<String>()
     val delayed = mutableListOf<Runnable>()
+    val synchronizedGraphs = mutableListOf<Pair<Player, List<LivingEntity>>>()
     var rejectBoarding = false
     val mount = mockk<LivingEntity>(relaxed = true)
     val carriers = List(if (customCarrier) seats else 0) { mockk<Camel>(relaxed = true) }
@@ -378,7 +412,10 @@ private class PassengerFixture(
         every { config.riderKnockoffDamage } returns 6.0
         every { config.passengerCarrierScale } returns 0.8
         every { config.passengerCarrierYawOffset } returns 90.0
-        controller = MountPassengerController(paper.createSimplePlugin("PassengerTest"), scheduler) { config }
+        controller = MountPassengerController(
+            paper.createSimplePlugin("PassengerTest"), scheduler, { config },
+            synchronizePassengers = { viewer, vehicles -> synchronizedGraphs.add(viewer to vehicles.toList()) },
+        )
         if (customCarrier) {
             val world = mockk<World>()
             every { mount.world } returns world

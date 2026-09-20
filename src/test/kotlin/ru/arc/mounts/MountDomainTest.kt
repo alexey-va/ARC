@@ -37,6 +37,23 @@ class MountDomainTest : StringSpec({
             )
     }
 
+    "rider view defaults stay visible at normal size and hide enlarged mounts" {
+        val mount = testMount().copy(
+            appearance = MountAppearance(scale = 1.0),
+            sizeOptions = listOf(
+                MountSizeOptionDefinition("standard", "Обычный", 1.0),
+                MountSizeOptionDefinition("giant", "Гигант", 2.0),
+            ),
+        )
+        val profile = MountProfile(1, false, false)
+        mount.effectiveRiderViewAutoHide(profile) shouldBe false
+        mount.effectiveRiderViewAutoHide(profile.copy(selectedSizeId = "giant")) shouldBe true
+        mount.effectiveRiderViewAutoHide(profile.copy(riderViewAutoHide = true)) shouldBe true
+        mount.effectiveRiderViewAutoHide(profile.copy(selectedSizeId = "giant", riderViewAutoHide = false)) shouldBe false
+        mount.copy(appearance = MountAppearance(scale = 0.5))
+            .effectiveRiderViewAutoHide(profile.copy(selectedSizeId = "giant")) shouldBe false
+    }
+
     "all mount ownership nodes use the ARC mounts namespace" {
         val mount = testMount()
 

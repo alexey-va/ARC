@@ -111,6 +111,7 @@ class MountSessionController internal constructor(
     private val message: (Player, String, String) -> Unit,
     private val onStateChanged: () -> Unit = {},
     private val setRiderMountHidden: (Player, LivingEntity, Boolean) -> Unit = { _, _, _ -> },
+    private val synchronizePassengers: (Player, List<LivingEntity>) -> Unit = { _, _ -> },
     private val careBoostStatusProvider: (UUID, Long) -> MountCareBoostStatus = { _, _ ->
         MountCareBoostStatus(record = null, active = false, remainingMillis = 0L, nextClaimInMillis = 0L)
     },
@@ -128,7 +129,7 @@ class MountSessionController internal constructor(
         )
     private val pendingSpawnTokens = ConcurrentHashMap.newKeySet<UUID>()
     private val lastSummonAt = ConcurrentHashMap<UUID, Long>()
-    private val passengers = MountPassengerController(plugin, scheduler, configProvider)
+    private val passengers = MountPassengerController(plugin, scheduler, configProvider, synchronizePassengers)
     private var tickTask: ScheduledTask? = null
 
     fun start() {
@@ -1106,7 +1107,7 @@ internal fun riderViewPitchThresholds(
 ): Pair<Float, Float> =
     when {
         appearanceScale >= 5.0 -> -10.0f to -25.0f
-        appearanceScale >= 2.0 -> 10.0f to -5.0f
+        appearanceScale >= LARGE_MOUNT_APPEARANCE_SCALE -> 10.0f to -5.0f
         else -> defaultHideAtPitch to defaultShowAtPitch
     }
 

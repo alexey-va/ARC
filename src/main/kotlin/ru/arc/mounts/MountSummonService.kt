@@ -115,7 +115,7 @@ class MountSummonService(
             skin = mount.skin(profile.activeSkinId),
             glow = profile.glowEnabled,
             abilityUpgrades = mount.abilities.upgrades.filter { profile.ownsAbility(it.id) },
-            riderViewAutoHide = profile.riderViewAutoHide ?: true,
+            riderViewAutoHide = mount.effectiveRiderViewAutoHide(profile),
         )
     }
 }
