@@ -39,6 +39,24 @@ class NpcRouteControllerTest : FreeSpec({
         smoothedNpcRouteTarget(points, 1, 1.15, 0.5, 0.35, 0.75, 0.30) shouldBe Vector(1.5, 72.0, 0.8)
     }
 
+    "tight smoothing lead cannot keep a route point outside its advancement margin" {
+        val points = listOf(Vector(0.5, 72.0, 0.5), Vector(1.5, 72.0, 0.5), Vector(1.5, 72.0, 1.5))
+        var actualX = 1.15
+        var actualZ = 0.5
+        var index = 1
+
+        repeat(100) {
+            while (index < points.lastIndex && kotlin.math.hypot(actualX - points[index].x, actualZ - points[index].z) <= 0.20) index++
+            if (index == points.lastIndex) return@repeat
+            val target = smoothedNpcRouteTarget(points, index, actualX, actualZ, 0.20, 0.75, 0.30)
+            val velocity = npcRouteHorizontalVelocity(actualX, actualZ, target.x, target.z, 0.084)
+            actualX += velocity.x
+            actualZ += velocity.z
+        }
+
+        index shouldBe 2
+    }
+
     "thin carpets are valid route coverings but taller blocks are not" {
         isNpcRouteFloorCovering(Material.RED_CARPET, 0.0625, 0.125) shouldBe true
         isNpcRouteFloorCovering(Material.RED_CARPET, 0.5, 0.125) shouldBe false
@@ -116,6 +134,73 @@ class NpcRouteControllerTest : FreeSpec({
         resolveSurfaceY(world, field, NpcRouteCell(2, 0)) shouldBe null
         isNpcRouteActualYAllowed(68.9375, 67.9375, field) shouldBe true
         isNpcRouteActualYAllowed(70.0, 67.9375, field) shouldBe false
+    }
+
+    "wide footprint rejects adjacent two-high hay while player footprint fits" {
+        val world = mockk<World>()
+        val air = routeTestBlock(Material.AIR, true)
+        val hay = routeTestBlock(Material.HAY_BLOCK, false, 1.0)
+        every { world.getBlockAt(any<Int>(), any<Int>(), any<Int>()) } answers {
+            when (Triple(firstArg<Int>(), secondArg<Int>(), thirdArg<Int>())) {
+                Triple(1, 69, 0), Triple(1, 70, 0) -> hay
+                else -> air
+            }
+        }
+        val cell = NpcRouteCell(0, 0)
+        val ravager = NpcRouteFootprint(0.975, 0.975, 0.0, 1.8)
+        val player = NpcRouteFootprint(0.30, 0.30, 0.0, 1.8)
+
+        isNpcRouteFootprintClear(world, cell, 69.0, ravager) shouldBe false
+        isNpcRouteFootprintClear(world, cell, 69.0, player) shouldBe true
+        val field = NpcRouteProfile("field", 69, NpcRouteBounds(0, 1, 0, 0),
+            maximumStepHeight = 1.0, allowedSupportMaterials = setOf(Material.FARMLAND))
+        isNpcRouteFootprintClear(world, cell, 69.0, ravager, field) shouldBe false
+    }
+
+    "wide footprint remains clear above an allowed farmland step and plants" {
+        val world = mockk<World>()
+        val air = routeTestBlock(Material.AIR, true)
+        val crop = routeTestBlock(Material.WHEAT, true)
+        val farmland = routeTestBlock(Material.FARMLAND, false, 0.9375)
+        every { world.getBlockAt(any<Int>(), any<Int>(), any<Int>()) } answers {
+            when (firstArg<Int>() to secondArg<Int>()) {
+                0 to 67 -> farmland
+                0 to 68 -> crop
+                1 to 68 -> farmland
+                1 to 69 -> crop
+                else -> air
+            }
+        }
+        val field = NpcRouteProfile(
+            "field", 69, NpcRouteBounds(0, 0, 0, 0), maximumStepHeight = 1.0,
+            maximumSurfaceDrop = 0.0625, surfaceSearchRange = 2,
+            allowedSupportMaterials = setOf(Material.FARMLAND),
+        )
+        val surface = resolveSurfaceY(world, field, NpcRouteCell(0, 0))
+        surface shouldBe 67.9375
+        val footprint = NpcRouteFootprint(0.975, 0.975, 0.0, 1.8)
+        isNpcRouteFootprintClear(world, NpcRouteCell(0, 0), surface!!, footprint) shouldBe false
+        isNpcRouteFootprintClear(world, NpcRouteCell(0, 0), surface, footprint, field) shouldBe true
+    }
+
+    "stepping clearance preserves thin carpets but rejects a low ceiling above a terrace" {
+        val world = mockk<World>()
+        val air = routeTestBlock(Material.AIR, true)
+        val carpet = routeTestBlock(Material.RED_CARPET, false, 0.0625)
+        val farmland = routeTestBlock(Material.FARMLAND, false, 0.9375)
+        val stone = routeTestBlock(Material.STONE, false, 1.0)
+        every { world.getBlockAt(any<Int>(), any<Int>(), any<Int>()) } returns air
+        every { world.getBlockAt(0, 68, 0) } returns carpet
+        val flat = NpcRouteProfile("flat", 68, NpcRouteBounds(0, 1, 0, 0))
+        val body = NpcRouteFootprint(0.3, 0.3, 0.0, 1.8)
+        isNpcRouteFootprintClear(world, NpcRouteCell(0, 0), 68.0, body, flat) shouldBe true
+
+        every { world.getBlockAt(0, 68, 0) } returns air
+        every { world.getBlockAt(1, 68, 0) } returns farmland
+        every { world.getBlockAt(0, 70, 0) } returns stone
+        val field = flat.copy(maximumStepHeight = 1.0, allowedSupportMaterials = setOf(Material.FARMLAND))
+        isNpcRouteFootprintClear(world, NpcRouteCell(0, 0), 67.9375,
+            NpcRouteFootprint(0.975, 0.975, 0.0, 1.8), field) shouldBe false
     }
 
     "flat surface resolver preserves authored feet height on tall support" {

@@ -11,6 +11,7 @@ import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.World
 import org.bukkit.attribute.Attribute
+import org.bukkit.entity.Entity
 import org.bukkit.entity.LivingEntity
 import org.bukkit.util.BoundingBox
 import org.bukkit.util.Vector
@@ -19,6 +20,8 @@ import java.util.PriorityQueue
 import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.atan2
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.hypot
 import kotlin.math.sign
 
@@ -126,6 +129,99 @@ internal fun isNpcRouteResolvedEndpointReached(
     return dx * dx + dz * dz <= margin * margin
 }
 
+internal data class NpcRouteFootprint(
+    val halfWidth: Double,
+    val halfDepth: Double,
+    val minYOffset: Double,
+    val maxYOffset: Double,
+) {
+    init {
+        require(halfWidth.isFinite() && halfWidth > 0.0)
+        require(halfDepth.isFinite() && halfDepth > 0.0)
+        require(minYOffset.isFinite() && maxYOffset.isFinite() && maxYOffset > minYOffset)
+    }
+}
+
+internal fun npcRouteFootprint(entity: Entity, margin: Double = 0.0): NpcRouteFootprint {
+    val originY = entity.location.y
+    val box = entity.boundingBox
+    val bodyHalfExtent = maxOf(box.maxX - box.minX, box.maxZ - box.minZ) / 2.0
+    val halfExtent = bodyHalfExtent + if (bodyHalfExtent > 0.5) margin else 0.0
+    return NpcRouteFootprint(
+        halfWidth = halfExtent,
+        halfDepth = halfExtent,
+        minYOffset = box.minY - originY,
+        maxYOffset = box.maxY - originY,
+    )
+}
+
+private const val NPC_ROUTE_COLLISION_EPSILON = 1.0e-6
+
+private fun npcRouteRangesOverlap(minA: Double, maxA: Double, minB: Double, maxB: Double): Boolean =
+    minA < maxB - NPC_ROUTE_COLLISION_EPSILON && maxA > minB + NPC_ROUTE_COLLISION_EPSILON
+
+/**
+ * Checks the entity-sized configuration-space footprint at one route cell.
+ * Support below the feet is intentionally excluded when it only touches the
+ * feet plane; adjacent native collision boxes still participate in the test.
+ */
+internal fun isNpcRouteFootprintClear(
+    world: World,
+    cell: NpcRouteCell,
+    surfaceY: Double,
+    footprint: NpcRouteFootprint,
+    profile: NpcRouteProfile? = null,
+): Boolean {
+    if (!surfaceY.isFinite()) return false
+    val minX = cell.x + 0.5 - footprint.halfWidth
+    val maxX = cell.x + 0.5 + footprint.halfWidth
+    val minZ = cell.z + 0.5 - footprint.halfDepth
+    val maxZ = cell.z + 0.5 + footprint.halfDepth
+    val minY = surfaceY + footprint.minYOffset
+    val maxY = surfaceY + footprint.maxYOffset + (profile?.maximumStepHeight ?: 0.0)
+    if (!minY.isFinite() || !maxY.isFinite() || maxY <= minY + NPC_ROUTE_COLLISION_EPSILON) return false
+
+    val minBlockX = floor(minX + NPC_ROUTE_COLLISION_EPSILON).toInt()
+    val maxBlockX = ceil(maxX - NPC_ROUTE_COLLISION_EPSILON).toInt() - 1
+    val minBlockY = floor(minY + NPC_ROUTE_COLLISION_EPSILON).toInt()
+    val maxBlockY = ceil(maxY - NPC_ROUTE_COLLISION_EPSILON).toInt() - 1
+    val minBlockZ = floor(minZ + NPC_ROUTE_COLLISION_EPSILON).toInt()
+    val maxBlockZ = ceil(maxZ - NPC_ROUTE_COLLISION_EPSILON).toInt() - 1
+
+    val collisions = mutableListOf<BoundingBox>()
+    var standingY = surfaceY
+    for (x in minBlockX..maxBlockX) {
+        for (y in minBlockY..maxBlockY) {
+            for (z in minBlockZ..maxBlockZ) {
+                val block = world.getBlockAt(x, y, z)
+                if (block.isLiquid) return false
+                for (box in block.collisionShape.boundingBoxes) {
+                    val boxMinX = x + box.minX
+                    val boxMaxX = x + box.maxX
+                    val boxMinY = y + box.minY
+                    val boxMaxY = y + box.maxY
+                    val boxMinZ = z + box.minZ
+                    val boxMaxZ = z + box.maxZ
+                    if (
+                        npcRouteRangesOverlap(minX, maxX, boxMinX, boxMaxX) &&
+                        npcRouteRangesOverlap(minZ, maxZ, boxMinZ, boxMaxZ)
+                    ) {
+                        collisions += BoundingBox(boxMinX, boxMinY, boxMinZ, boxMaxX, boxMaxY, boxMaxZ)
+                        val allowedStep = profile != null &&
+                            (block.type in profile.allowedSupportMaterials ||
+                                isNpcRouteFloorCovering(block.type, box.maxY, profile.maximumStepHeight)) &&
+                            boxMaxY <= surfaceY + profile.maximumStepHeight + NPC_ROUTE_COLLISION_EPSILON
+                        if (allowedStep) standingY = maxOf(standingY, boxMaxY)
+                    }
+                }
+            }
+        }
+    }
+    return collisions.none { box ->
+        npcRouteRangesOverlap(standingY + footprint.minYOffset, standingY + footprint.maxYOffset, box.minY, box.maxY)
+    }
+}
+
 internal fun smoothedNpcRouteTarget(
     points: List<Vector>,
     index: Int,
@@ -151,7 +247,7 @@ internal fun smoothedNpcRouteTarget(
     val progress = ((smoothingDistance - remaining) / (smoothingDistance - pathDistanceMargin)).coerceIn(0.0, 1.0)
     val outgoingLength = hypot(outgoingX, outgoingZ)
     if (outgoingLength <= 1.0e-6) return current
-    val lead = smoothingLead.coerceAtMost(outgoingLength) * progress
+    val lead = minOf(smoothingLead, outgoingLength, (pathDistanceMargin * 0.9).coerceAtLeast(0.0)) * progress
     return Vector(current.x + outgoingX / outgoingLength * lead, current.y, current.z + outgoingZ / outgoingLength * lead)
 }
 
@@ -366,6 +462,8 @@ private class FixedLevelPathStrategy(
             return true
         }
         val entity = npc.entity
+        // Horse adapters can reset this before every Citizens navigator update.
+        if (stepHeight != null && stepHeight.baseValue != maximumStepHeight) stepHeight.baseValue = maximumStepHeight
         if (entity.world != world) {
             setCancelReason(CancelReason.TARGET_MOVED_WORLD)
             return true
@@ -462,7 +560,19 @@ internal class CitizensNpcRouteController(
                 resolveSurfaceY(world, profile, cell).also { surfaceCache[cell] = it }
             }
         }
-        val starts = candidates(actual.blockX, actual.blockZ, profile, blocked, surfaceY)
+        val footprint = npcRouteFootprint(npc.entity, maxOf(profile.pathDistanceMargin, profile.distanceMargin))
+        val footprintCache = mutableMapOf<NpcRouteCell, Boolean>()
+        val footprintClear: (NpcRouteCell) -> Boolean = { cell ->
+            if (footprintCache.containsKey(cell)) {
+                footprintCache.getValue(cell)
+            } else {
+                val surface = surfaceY(cell)
+                (surface != null && isNpcRouteFootprintClear(world, cell, surface, footprint, profile)).also {
+                    footprintCache[cell] = it
+                }
+            }
+        }
+        val starts = candidates(actual.blockX, actual.blockZ, profile, blocked, surfaceY, footprintClear)
         val start = starts.firstOrNull()
         if (start == null) {
             event("PATH_UNAVAILABLE", profile, npc, destination, reason = "no-safe-endpoint")
@@ -470,9 +580,9 @@ internal class CitizensNpcRouteController(
         }
         val path = mutableListOf(start)
         for (anchor in via + destination) {
-            val goals = candidates(anchor.blockX, anchor.blockZ, profile, blocked, surfaceY)
+            val goals = candidates(anchor.blockX, anchor.blockZ, profile, blocked, surfaceY, footprintClear)
             val exact = NpcRouteCell(anchor.blockX, anchor.blockZ)
-            val walkable: (NpcRouteCell) -> Boolean = { it !in blocked && surfaceY(it) != null }
+            val walkable: (NpcRouteCell) -> Boolean = { it !in blocked && footprintClear(it) }
             val canTraverse: (NpcRouteCell, NpcRouteCell) -> Boolean = { from, to ->
                 val fromY = surfaceY(from)
                 val toY = surfaceY(to)
@@ -533,7 +643,7 @@ internal class CitizensNpcRouteController(
                 pathDistanceMargin = params.pathDistanceMargin(),
                 destinationMargin = params.distanceMargin(),
                 speedModifier = params.speedModifier(),
-                cornerSmoothingDistance = profile.cornerSmoothingDistance,
+                cornerSmoothingDistance = if (footprint.halfWidth > 0.5) 0.0 else profile.cornerSmoothingDistance,
                 cornerSmoothingLead = profile.cornerSmoothingLead,
                 maximumStepHeight = profile.maximumStepHeight,
             )
@@ -566,10 +676,11 @@ internal class CitizensNpcRouteController(
         profile: NpcRouteProfile,
         blocked: Set<NpcRouteCell>,
         surfaceY: (NpcRouteCell) -> Double?,
+        footprintClear: (NpcRouteCell) -> Boolean = { surfaceY(it) != null },
     ): List<NpcRouteCell> =
         (-profile.snapRadius..profile.snapRadius)
             .flatMap { dx -> (-profile.snapRadius..profile.snapRadius).map { dz -> NpcRouteCell(centerX + dx, centerZ + dz) } }
-            .filter { it !in blocked && profile.allows(it) && surfaceY(it) != null }
+            .filter { it !in blocked && profile.allows(it) && surfaceY(it) != null && footprintClear(it) }
             .sortedWith(compareBy({ (it.x - centerX) * (it.x - centerX) + (it.z - centerZ) * (it.z - centerZ) }, { it.x }, { it.z }))
 
     private fun configure(npc: NPC, profile: NpcRouteProfile) {
@@ -643,11 +754,24 @@ internal class CitizensNpcRouteController(
                 resolveSurfaceY(actual.world, route.profile, cell).also { surfaceCache[cell] = it }
             }
         }
+        val footprint = npcRouteFootprint(npc.entity, maxOf(route.profile.pathDistanceMargin, route.profile.distanceMargin))
+        val footprintCache = mutableMapOf<NpcRouteCell, Boolean>()
+        val footprintClear: (NpcRouteCell) -> Boolean = { cell ->
+            if (footprintCache.containsKey(cell)) {
+                footprintCache.getValue(cell)
+            } else {
+                val surface = surfaceY(cell)
+                (surface != null && isNpcRouteFootprintClear(actual.world, cell, surface, footprint, route.profile)).also {
+                    footprintCache[cell] = it
+                }
+            }
+        }
         val currentSurfaceY = surfaceY(currentCell)
         if (
             !route.profile.allows(currentCell) ||
             currentSurfaceY == null ||
-            !isNpcRouteActualYAllowed(actual.y, currentSurfaceY, route.profile)
+            !isNpcRouteActualYAllowed(actual.y, currentSurfaceY, route.profile) ||
+            !footprintClear(currentCell)
         ) {
             npc.navigator.cancelNavigation()
             event("DEVIATED", route.profile, npc, route.destination, route.cells.size, "left-level-floor", actual)
@@ -671,7 +795,8 @@ internal class CitizensNpcRouteController(
         val routeSurfaceInvalid = route.cells.any { cell ->
             cell in route.blocked ||
                 !route.profile.allows(cell) ||
-                surfaceY(cell) == null
+                surfaceY(cell) == null ||
+                (route.obstaclePolls == 0 && !footprintClear(cell))
         }
         val routeSurfaceChanged = route.surfaceYs.any { (cell, plannedY) ->
             val currentY = surfaceY(cell)
