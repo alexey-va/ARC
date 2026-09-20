@@ -8,8 +8,10 @@ import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import org.bukkit.attribute.Attribute
 import org.bukkit.attribute.AttributeModifier
+import org.bukkit.entity.AbstractHorse
 import org.bukkit.entity.Bat
 import org.bukkit.entity.Boss
+import org.bukkit.entity.Camel
 import org.bukkit.entity.Creeper
 import org.bukkit.entity.EnderDragon
 import org.bukkit.entity.Enemy
@@ -323,6 +325,9 @@ class MountSessionController internal constructor(
             player.world.playSound(player.location, Sound.ENTITY_HORSE_SADDLE, 1.0f, 1.0f)
             val (controlsKey, controlsFallback) =
                 when {
+                    spawned is Camel ->
+                        "camel-controls" to
+                            "<gray>WASD — движение, удерживайте Space и отпустите — рывок, двойной Shift — спешиться"
                     spawned is Horse ->
                         "horse-controls" to
                             "<gray>WASD — движение, удерживайте Space и отпустите — прыжок, двойной Shift — спешиться"
@@ -609,7 +614,10 @@ class MountSessionController internal constructor(
             .coerceAtMost(config.maximumSpeedBlocksPerTick)
         val planar = MountMotion.planarDirection(player.location.yaw, session.input)
         val timing = session.definition.motion.resolve(config.motionTiming)
-        if (session.definition.movement == MountMovement.WALKING && entity is Horse) {
+        val nativeHorse = nativeWalkingHorse(entity, session.definition.movement)
+        if (nativeHorse != null) {
+            // Saddled horses and camels are client-controlled. Velocity packets fight
+            // their predicted gravity and charged jump/dash, so only tune attributes.
             session.motionState =
                 MountMotion.advance(
                     current = session.motionState,
@@ -618,7 +626,7 @@ class MountSessionController internal constructor(
                     handlingMultiplier = session.settings.handlingMultiplier,
                 )
             configureNativeHorseMotion(
-                horse = entity,
+                horse = nativeHorse,
                 maximumSpeedBlocksPerTick = session.motionState.speed,
                 jumpVelocity = walkingJumpVelocity(config.jumpVelocity, session.definition.abilities),
                 stepHeight = session.settings.walkingStepHeight,
@@ -869,7 +877,7 @@ class MountSessionController internal constructor(
             configureWalkingStepHeight(entity, settings.walkingStepHeight)
         }
         (entity as? Mob)?.let(::configureMountMob)
-        (entity as? Horse)?.let { configureNativeHorse(it, player) }
+        nativeWalkingHorse(entity, definition.movement)?.let { configureNativeHorse(it, player) }
         MountAppearanceApplicator.apply(entity, definition.effectiveAppearance(settings.scaleMultiplier, settings.skin))
         tagEntity(entity, definition, player)
     }
@@ -974,14 +982,17 @@ internal fun configureWalkingStepHeight(entity: LivingEntity, stepHeight: Double
     entity.getAttribute(Attribute.STEP_HEIGHT)?.baseValue = stepHeight
 }
 
-internal fun configureNativeHorse(horse: Horse, player: Player) {
+internal fun nativeWalkingHorse(entity: LivingEntity, movement: MountMovement): AbstractHorse? =
+    if (movement == MountMovement.WALKING && (entity is Horse || entity is Camel)) entity as AbstractHorse else null
+
+internal fun configureNativeHorse(horse: AbstractHorse, player: Player) {
     horse.setAware(true)
     horse.isTamed = true
     horse.owner = player
 }
 
 internal fun configureNativeHorseMotion(
-    horse: Horse,
+    horse: AbstractHorse,
     maximumSpeedBlocksPerTick: Double,
     jumpVelocity: Double,
     stepHeight: Double,

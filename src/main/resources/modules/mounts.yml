@@ -416,6 +416,7 @@ gui:
 
 messages:
   ground-controls: "<gray>WASD — движение, Space — прыжок, двойной Shift — спешиться"
+  camel-controls: "<gray>WASD — движение, удерживайте Space и отпустите — рывок, двойной Shift — спешиться"
   horse-controls: "<gray>WASD — движение, удерживайте Space и отпустите — прыжок, двойной Shift — спешиться"
   flight-controls: "<gray>WASD — движение, Space — вверх, Shift — вниз, двойной Shift — спешиться"
   dismount-hint: "<yellow>Ещё раз Shift — спешиться"

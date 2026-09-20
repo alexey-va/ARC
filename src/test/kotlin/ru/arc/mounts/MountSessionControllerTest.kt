@@ -11,10 +11,13 @@ import org.bukkit.attribute.Attribute
 import org.bukkit.attribute.AttributeInstance
 import org.bukkit.attribute.AttributeModifier
 import org.bukkit.entity.Bat
+import org.bukkit.entity.Camel
+import org.bukkit.entity.CamelHusk
 import org.bukkit.entity.Creeper
 import org.bukkit.entity.EnderDragon
 import org.bukkit.entity.Horse
 import org.bukkit.entity.LivingEntity
+import org.bukkit.entity.Llama
 import org.bukkit.entity.Mob
 import org.bukkit.entity.Player
 import org.bukkit.entity.Vex
@@ -124,6 +127,28 @@ class MountSessionControllerTest : StringSpec({
         verify(exactly = 1) { stepHeight.baseValue = 1.1 }
         nativeHorseMovementAttribute(0.0) shouldBeExactly 0.0
         nativeHorseMovementAttribute(1.05) shouldBe (0.5 plusOrMinus 1.0e-9)
+    }
+
+    "both camel variants use native ridden physics instead of per tick velocity control" {
+        listOf(mockk<Camel>(relaxed = true), mockk<CamelHusk>(relaxed = true)).forEach { camel ->
+            nativeWalkingHorse(camel, MountMovement.WALKING) shouldBe camel
+            nativeWalkingHorse(camel, MountMovement.FLYING) shouldBe null
+            nativeWalkingHorse(camel, MountMovement.SWIMMING) shouldBe null
+            val player = mockk<Player>(relaxed = true)
+            val movementSpeed = mockk<AttributeInstance>(relaxed = true)
+            every { camel.getAttribute(Attribute.MOVEMENT_SPEED) } returns movementSpeed
+
+            configureMountMob(camel)
+            configureNativeHorse(camel, player)
+            configureNativeHorseMotion(camel, 0.42, 0.5, 1.1)
+
+            verify(exactly = 1) { camel.setAware(true) }
+            verify(exactly = 1) { movementSpeed.baseValue = nativeHorseMovementAttribute(0.42) }
+        }
+        val horse = mockk<Horse>()
+        nativeWalkingHorse(horse, MountMovement.WALKING) shouldBe horse
+        nativeWalkingHorse(mockk<Llama>(), MountMovement.WALKING) shouldBe null
+        nativeWalkingHorse(mockk<LivingEntity>(), MountMovement.WALKING) shouldBe null
     }
 
     "temporary mount entities are invulnerable" {
