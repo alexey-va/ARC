@@ -11,6 +11,7 @@ import de.tr7zw.changeme.nbtapi.NBT
 import net.citizensnpcs.api.CitizensAPI
 import net.citizensnpcs.api.astar.pathfinder.MinecraftBlockExaminer
 import net.citizensnpcs.api.event.NPCRightClickEvent
+import net.citizensnpcs.trait.RotationTrait
 import net.citizensnpcs.api.trait.trait.Equipment as CitizensEquipment
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
@@ -270,6 +271,10 @@ internal object OriginDiningReliabilityPolicy {
     fun hasArrivedHome(distance: Double): Boolean = distance.isFinite() && distance in 0.0..HOME_ARRIVAL_RADIUS
 
     fun ownsWaiterCallback(callbackToken: UUID, currentToken: UUID?): Boolean = callbackToken == currentToken
+
+    fun serviceQueue(dueAt: Map<String, Long>, occupiedTables: Set<String>, now: Long): List<String> =
+        dueAt.keys.filter { dueAt.getValue(it) <= now }
+            .sortedWith(compareBy<String> { it in occupiedTables }.thenBy { dueAt.getValue(it) })
 }
 
 private data class OriginDiningBlockBounds(
@@ -352,7 +357,7 @@ internal object OriginDiningLayout {
         private set
     var displayHeight = 4f
         private set
-    var dynamicTableHeight = 1.1
+    var dynamicTableHeight = 1.0
         private set
     var dynamicWaiterSideOffset = 1.5
         private set
@@ -474,7 +479,7 @@ internal object OriginDiningLayout {
         displayViewRange = source.real("display.view-range", 2.0).toFloat().coerceIn(0.5f, 16f)
         displayWidth = source.real("display.culling-width", 4.0).toFloat().coerceIn(0.5f, 16f)
         displayHeight = source.real("display.culling-height", 4.0).toFloat().coerceIn(0.5f, 16f)
-        dynamicTableHeight = source.real("dynamic-seats.table-height-above-seat", 1.1).coerceIn(0.4, 2.0)
+        dynamicTableHeight = source.real("dynamic-seats.table-height-above-seat", 1.0).coerceIn(0.4, 2.0)
         dynamicWaiterSideOffset = source.real("dynamic-seats.waiter-side-offset", 0.0).coerceIn(0.0, 3.0)
         dynamicDishOffsetX = source.real("dynamic-seats.dish-offset-x", 0.0).coerceIn(-2.0, 2.0)
         dynamicDishOffsetY = source.real("dynamic-seats.dish-offset-y", 0.0).coerceIn(-2.0, 2.0)
@@ -743,9 +748,9 @@ internal object OriginDiningLayout {
 
     private fun defaultSurfaceLifts() =
         mapOf(
-            "egg" to 0.28375f,
-            "fish" to 0.12125f,
-            "steak" to 0.28375f,
+            "egg" to 0.24375f,
+            "fish" to 0.08125f,
+            "steak" to 0.24375f,
             "herbal_tea" to 0.24475f,
             "berry_kvass" to 0.24475f,
             "spiced_mead" to 0.24475f,
@@ -1313,6 +1318,11 @@ private class OriginDiningService : AutoCloseable {
                     OriginDiningLayout.selectGuestSeats(guests, candidates, zone.minimumFreeSeats)
                 }
             assignments.putAll(zoneAssignments)
+            val unseated = zone.guestIds.filterNot(zoneAssignments::containsKey)
+            if (unseated.isNotEmpty()) warn(
+                "ORIGIN_DINING phase=AUTO_GUEST_SEATING_FAILED zone={} reason=insufficient-seats guests={} candidates={} reserved_for_players={}",
+                zone.id, unseated, candidates.size, zone.minimumFreeSeats,
+            )
             zoneAssignments.forEach { (npcId, seat) ->
                 val original = OriginDiningAmbientLayout.guestTables.firstOrNull { it.npcId == npcId }
                 if (original != null && candidates.isNotEmpty()) {
@@ -2421,12 +2431,16 @@ private class OriginDiningService : AutoCloseable {
             return
         }
         state.arrived = true
+        waiter(waiterId)?.takeIf { it.isSpawned }?.let { npc ->
+            npc.getOrAddTrait(RotationTrait::class.java).physicalSession.rotateToHave(state.home.yaw, 0f)
+            npc.entity.setRotation(state.home.yaw, 0f)
+        }
         clearWaiterCarry(waiterId)
         val now = System.currentTimeMillis()
         if (state.restMillis > 0L) {
             ambientWaiterAvailableAt[waiterId] = OriginDiningReliabilityPolicy.ambientAvailableAtArrival(now, state.restMillis)
         }
-        val releaseTicks = maxOf(OriginDiningLayout.waiterReturnReleaseTicks, state.restMillis / 50L)
+        val releaseTicks = if (state.restMillis > 0) state.restMillis / 50L else OriginDiningLayout.waiterReturnReleaseTicks
         tasks.runLater(releaseTicks) {
             val current = waiterReturns[waiterId]
             if (current?.token != token || !current.arrived || !OriginDiningReliabilityPolicy.ownsWaiterCallback(token, waiterOperationTokens[waiterId])) return@runLater
@@ -2597,7 +2611,7 @@ private class OriginDiningService : AutoCloseable {
         stack: ItemStack,
     ): OriginDiningMeal {
         val world = requireNotNull(Bukkit.getWorld(OriginDiningLayout.WORLD))
-        val anchor = session.seat.dish.inWorld(world)
+        val anchor = diningSurfaceAnchor(session.seat.dish.inWorld(world))
         val display = world.spawn(anchor, ItemDisplay::class.java)
         var hitbox: Interaction? = null
         try {
@@ -2939,7 +2953,12 @@ private class OriginDiningService : AutoCloseable {
                 isPersistent = false
                 addScoreboardTag(GUEST_MARKER_TAG)
             }
-            marker.addPassenger(npc.entity)
+            if (!marker.addPassenger(npc.entity) || npc.entity.vehicle?.uniqueId != marker.uniqueId) {
+                marker.remove()
+                guestMarkers.remove(guest.npcId)
+                warn("ORIGIN_DINING phase=GUEST_SEAT_FAILED npc={} target={} reason=mount-rejected", guest.npcId, point(guest.seat))
+                return@forEach
+            }
             npc.entity.setRotation(guest.seat.yaw, 0f)
             guestMarkers[guest.npcId] = marker
             info("ORIGIN_DINING phase=GUEST_SEATED npc={} target={} marker={}", guest.npcId, point(guest.seat), short(marker.uniqueId))
@@ -2955,7 +2974,7 @@ private class OriginDiningService : AutoCloseable {
     private fun spawnGuestMeal(table: OriginDiningGuestTable, dish: BreweryTableDialogs.Dish): OriginDiningGuestMeal? {
         val world = Bukkit.getWorld(OriginDiningLayout.WORLD) ?: return null
         val stack = dishItem(dish) ?: return null
-        val anchor = table.meal.inWorld(world)
+        val anchor = diningSurfaceAnchor(table.meal.inWorld(world))
         val display = world.spawn(anchor, ItemDisplay::class.java)
         var hitbox: Interaction? = null
         return try {
@@ -3318,7 +3337,14 @@ private class OriginDiningService : AutoCloseable {
         }
         val tables = OriginDiningAmbientLayout.guestTables
         var routesStarted = 0
-        val urgentTables = tables.filter { (ambientTableDueAt[it.id] ?: Long.MAX_VALUE) <= now }
+        // Empty and missing meals enter the same FIFO immediately, not a random
+        // 18–30 second rotation. A failed route retains its explicit retry time.
+        tables.filter { it.id !in guestMeals || life.isEmpty(it.id) }.forEach {
+            ambientTableDueAt.putIfAbsent(it.id, now)
+        }
+        val tablesById = tables.associateBy { it.id }
+        val urgentTables = OriginDiningReliabilityPolicy.serviceQueue(ambientTableDueAt, guestMeals.keys, now)
+            .mapNotNull(tablesById::get)
         for (table in urgentTables) {
             if (startAmbientRoute(table, "queued-refill")) {
                 routesStarted++

@@ -49,9 +49,9 @@ internal class OriginDiningConversationEffects(
         val speaker = actor(actorId) ?: return
         val other = actor(targetActorId) ?: return
         val owned = owners.getOrPut(ownerToken, ::Owned)
-        val target = (other.entity as? LivingEntity)?.eyeLocation ?: other.entity.location
+        val target = other.entity.location
         owned.targets[actorId] = target.clone()
-        owned.resources.face(speaker, target)
+        owned.resources.faceHorizontal(speaker, target)
     }
 
     override fun speak(ownerToken: UUID, actorId: Int, text: String, ttlMillis: Long) {
@@ -76,11 +76,11 @@ internal class OriginDiningConversationEffects(
             }
         } else {
             actorIds.forEach { id -> actor(id)?.let { npc ->
-                owned.targets[id]?.let { owned.resources.face(npc, it.clone().subtract(0.0, 0.18, 0.0)) }
+                owned.targets[id]?.let { owned.resources.faceHorizontal(npc, it, pitch = 6f) }
             } }
             owned.tasks.runLater(6) {
                 if (owners[ownerToken] === owned) actorIds.forEach { id -> actor(id)?.let { npc ->
-                    owned.targets[id]?.let { owned.resources.face(npc, it) }
+                    owned.targets[id]?.let { owned.resources.faceHorizontal(npc, it) }
                 } }
             }
         }

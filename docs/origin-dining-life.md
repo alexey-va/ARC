@@ -17,6 +17,9 @@ Neither introduces a Denizen animation owner.
   replaces it; intermediate visual stages are deliberately absent.
 - Waiters collect empty plates before refilling. The collected plate stays in
   the waiter's hand until home. Invalid meal entities re-enter the service queue.
+- Empty/missing meals enter an oldest-first queue every second; a missing meal
+  takes priority over collecting another plate. Rest is 3–6 seconds, only after
+  home arrival. Guests take three bites 20–32.5 seconds apart.
 - Each venue has its own conversation slot. Pairs are selected oldest-first;
   variants round-robin. Text reading time scales with phrase length. Toasts use
   one mug; other exchanges use nods. Service interrupts the guest's conversation.
@@ -52,3 +55,21 @@ Focused tests cover timing/fairness, cancellation, token ownership, layout,
 item-resource cleanup, geometry endpoints and the fixed bottle-mouth pivot.
 Native live readback and local textured model previews are distinct from
 in-game visual acceptance.
+
+## Table contact regression
+
+The old anchor (table top +0.1) and model clearance (+0.04) stacked into a
+0.14-block hover. Native readback on 2026-09-20 confirmed the fish display at
+(-15.5,71.1,40.5), translation Y=0.12125, above a log whose visible top is Y=71.
+Use the tabletop itself as the anchor: `GROUND`, scale .65, support translation
+Y=.24375 for egg/steak and .08125 for fish, including their empty plates.
+The six exact textured models have contact residual <1e-4 at Y=71.
+`diningSurfaceAnchor` additionally resolves loaded vanilla collision surfaces
+within .25 of the authored anchor (including carpet), excluding invisible
+barriers; furniture without visible native support retains its authored height.
+
+The brewery has six candidate stair chairs and five ambient guests. Reserving
+three candidates previously removed guests 419/420 and their food table from
+the active scene. Reserve one candidate (other player tables remain outside
+this zone); log insufficient capacity and rejected passenger attachment rather
+than reporting successful seating. Reset waiter home yaw after route arrival.

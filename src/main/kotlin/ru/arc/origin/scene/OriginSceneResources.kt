@@ -2,6 +2,7 @@ package ru.arc.origin.scene
 
 import net.citizensnpcs.api.npc.NPC
 import net.citizensnpcs.trait.LookClose
+import net.citizensnpcs.trait.RotationTrait
 import net.citizensnpcs.api.trait.trait.Equipment as CitizensEquipment
 import org.bukkit.Location
 import org.bukkit.Material
@@ -20,6 +21,7 @@ import org.bukkit.inventory.ItemStack
 import org.bukkit.util.Transformation
 import org.joml.AxisAngle4f
 import org.joml.Vector3f
+import ru.arc.npc.npcRouteYaw
 
 /** A failure retained by [OriginSceneResources] for an explicit cleanup retry. */
 internal data class OriginSceneCleanupFailure(
@@ -61,6 +63,7 @@ internal class OriginSceneResources {
     private val displays = linkedMapOf<String, BlockDisplay>()
     private val items = linkedMapOf<String, ItemDisplay>()
     private val rotations = linkedMapOf<Int, Pair<NPC, Location>>()
+    private val explicitRotations = mutableSetOf<Int>()
     private val lookClose = linkedMapOf<Int, Pair<LookClose, Boolean>>()
     private val usingItems = linkedMapOf<Int, LivingEntity>()
 
@@ -89,6 +92,22 @@ internal class OriginSceneResources {
     /** Owns the original facing for a seated gesture or workstation action. */
     fun face(actor: NPC, target: Location) {
         check(actor.isSpawned && actor.entity.world == target.world)
+        captureFacing(actor)
+        actor.faceLocation(target)
+    }
+
+    /** Conversation yaw is independent of mounted eye offsets and target-height compensation. */
+    fun faceHorizontal(actor: NPC, target: Location, pitch: Float = 0f) {
+        check(actor.isSpawned && actor.entity.world == target.world)
+        captureFacing(actor)
+        val origin = actor.entity.location
+        val yaw = npcRouteYaw(origin.x, origin.z, target.x, target.z)
+        explicitRotations += actor.id
+        actor.getOrAddTrait(RotationTrait::class.java).physicalSession.rotateToHave(yaw, pitch)
+        actor.entity.setRotation(yaw, pitch)
+    }
+
+    private fun captureFacing(actor: NPC) {
         rotations.putIfAbsent(actor.id, actor to actor.entity.location.clone())
         if (actor.id !in lookClose && actor.hasTrait(LookClose::class.java)) {
             val trait = actor.getTraitNullable(LookClose::class.java)
@@ -97,7 +116,6 @@ internal class OriginSceneResources {
                 trait.lookClose(false)
             }
         }
-        actor.faceLocation(target)
     }
 
     /** Starts the native eating/drinking pose without consuming an item or running its effects. */
@@ -356,8 +374,11 @@ internal class OriginSceneResources {
             try {
                 val (actor, original) = snapshot
                 if (actor.isSpawned && actor.entity.world == original.world) {
+                    if (id in explicitRotations) actor.getOrAddTrait(RotationTrait::class.java).physicalSession
+                        .rotateToHave(original.yaw, original.pitch)
                     actor.entity.setRotation(original.yaw, original.pitch)
                 }
+                explicitRotations.remove(id)
                 rotations.remove(id)
             } catch (failure: Exception) {
                 failures += OriginSceneCleanupFailure("rotation", id.toString(), failure)

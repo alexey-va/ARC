@@ -5,6 +5,13 @@ import io.kotest.matchers.shouldBe
 import java.util.UUID
 
 class OriginDiningReliabilityPolicyTest : FreeSpec({
+    "empty tables are refilled before collection and retry backoff is preserved" {
+        OriginDiningReliabilityPolicy.serviceQueue(
+            linkedMapOf("plate" to 10L, "later" to 30L, "retry" to 200L, "hungry" to 20L),
+            setOf("plate"), 100L,
+        ) shouldBe listOf("hungry", "later", "plate")
+    }
+
     "delivery route retries once and then exhausts" {
         OriginDiningReliabilityPolicy.shouldRetryDeliveryRoute(0) shouldBe true
         OriginDiningReliabilityPolicy.shouldRetryDeliveryRoute(1) shouldBe false

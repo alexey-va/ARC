@@ -48,12 +48,12 @@ class OriginDiningLayoutTest : FreeSpec({
     "every dish is centered one block in front of its chair" {
         val expected =
             mapOf(
-                "brewery_south_west" to Triple(-6.5, 71.1, 37.5),
-                "brewery_south_east" to Triple(-4.5, 71.1, 37.5),
+                "brewery_south_west" to Triple(-6.5, 71.0, 37.5),
+                "brewery_south_east" to Triple(-4.5, 71.0, 37.5),
                 "brewery_fire" to Triple(-8.5, 70.75, 47.5),
-                "brewery_west" to Triple(-14.5, 71.1, 53.5),
-                "restaurant_a" to Triple(-54.5, 73.1, 47.5),
-                "restaurant_b" to Triple(-47.5, 73.1, 51.5),
+                "brewery_west" to Triple(-14.5, 71.0, 53.5),
+                "restaurant_a" to Triple(-54.5, 73.0, 47.5),
+                "restaurant_b" to Triple(-47.5, 73.0, 51.5),
             )
 
         OriginDiningLayout.seats.forEach { seat ->
@@ -78,8 +78,12 @@ class OriginDiningLayoutTest : FreeSpec({
         OriginDiningLayout.displayScale("egg") shouldBe 0.65f
         OriginDiningLayout.displayScale("herbal_tea") shouldBe 0.65f
         OriginDiningLayout.displayScale("fish") shouldBe 0.65f
-        OriginDiningLayout.displayLift("steak") shouldBe 0.28375f
-        OriginDiningLayout.displayLift("egg") shouldBe 0.28375f
+        OriginDiningLayout.displayLift("steak") shouldBe 0.24375f
+        OriginDiningLayout.displayLift("egg") shouldBe 0.24375f
+        OriginDiningLayout.displayLift("fish") shouldBe 0.08125f
+        listOf("egg", "fish", "steak").forEach { dish ->
+            OriginDiningLayout.lifeConfig.emptyPlates.getValue(dish).lift shouldBe OriginDiningLayout.displayLift(dish)
+        }
         OriginDiningLayout.displayLift("herbal_tea") shouldBe 0.24475f
         OriginDiningLayout.mealHitboxSize shouldBe 1.8f
     }
@@ -123,6 +127,24 @@ class OriginDiningLayoutTest : FreeSpec({
         assignments.getValue(418) shouldBe OriginDiningPoint(-16.5, 70.0, 47.5)
     }
 
+    "brewery seats all five guests and leaves the remaining stair for players" {
+        val config = org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(
+            requireNotNull(javaClass.getResourceAsStream("/modules/origin-dining.yml")).reader(),
+        )
+        val reserved = config.getInt("scene.auto-seating.zones.brewery.minimum-free-seats")
+        val points = listOf(
+            OriginDiningPoint(-16.5, 70.0, 40.5), OriginDiningPoint(-14.5, 70.0, 40.5),
+            OriginDiningPoint(-16.5, 70.0, 47.5), OriginDiningPoint(-14.5, 70.0, 47.5),
+            OriginDiningPoint(-2.5, 70.0, 47.5), OriginDiningPoint(-2.5, 70.0, 45.5),
+        )
+        val selected = OriginDiningLayout.selectGuestSeats(
+            listOf(416 to points[0], 417 to points[1], 418 to points[2], 419 to points[4], 420 to points[5]), points, reserved,
+        )
+        selected.keys shouldBe setOf(416, 417, 418, 419, 420)
+        selected.getValue(419) shouldBe points[4]
+        selected.getValue(420) shouldBe points[5]
+    }
+
     "authored coordinates are loaded from the reloadable module config" {
         OriginDiningLayout.seats.single { it.id == "brewery_south_west" }.clickedBlock shouldBe Triple(-8, 70, 37)
         OriginDiningLayout.seats.single { it.id == "restaurant_a" }.clickedBlock shouldBe Triple(-55, 72, 48)
@@ -133,7 +155,7 @@ class OriginDiningLayoutTest : FreeSpec({
         OriginDiningLayout.ambientDialogueDelayMillis shouldBe 12_000L..20_000L
         OriginDiningLayout.ambientRetryMillis shouldBe 5_000L
         OriginDiningLayout.guestReconcileMillis shouldBe 5_000L
-        OriginDiningLayout.ambientWaiterRestMillis shouldBe 18_000L..30_000L
+        OriginDiningLayout.ambientWaiterRestMillis shouldBe 3_000L..6_000L
         OriginDiningLayout.ambientReplyDelayTicks shouldBe 18L..42L
         OriginDiningLayout.ambientLookHoldTicks shouldBe 32L..68L
         OriginDiningLayout.ambientSpeechDurationTicks shouldBe 200L
@@ -165,8 +187,8 @@ class OriginDiningLayoutTest : FreeSpec({
         OriginDiningLayout.routeProfile(org.bukkit.Location(null, 1.5, 70.0, 57.5))?.id shouldBe "brewery"
         OriginDiningLayout.routeProfile(org.bukkit.Location(null, 100.0, 72.0, 100.0)) shouldBe null
         OriginDiningLayout.dynamicWaiterSideOffset shouldBe 1.0
-        OriginDiningLayout.waiterHome(431) shouldBe OriginDiningPoint(-51.5, 72.0, 56.5, 90f)
-        OriginDiningLayout.waiterHome(432) shouldBe OriginDiningPoint(-51.5, 72.0, 58.5, 90f)
+        OriginDiningLayout.waiterHome(431) shouldBe OriginDiningPoint(-51.5, 72.0, 56.5, 63.434948f)
+        OriginDiningLayout.waiterHome(432) shouldBe OriginDiningPoint(-51.5, 72.0, 58.5, 116.56505f)
     }
 
     "ambient dialogue catalog gives every guest pair six themed chains" {

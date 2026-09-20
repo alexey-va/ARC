@@ -14,6 +14,7 @@ import io.mockk.verify
 import net.citizensnpcs.api.npc.NPC
 import net.citizensnpcs.api.trait.trait.Equipment as CitizensEquipment
 import net.citizensnpcs.trait.LookClose
+import net.citizensnpcs.trait.RotationTrait
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.Material
@@ -119,6 +120,30 @@ class OriginSceneResourcesTest : StringSpec({
         verify(exactly = 1) { lookClose.lookClose(false) }
         verify(exactly = 1) { lookClose.lookClose(true) }
         mockitoVerify(entity).setRotation(37.0f, 11.0f)
+    }
+
+    "horizontal conversation ignores partner height and restores its rotation owner" {
+        val npc = mockk<NPC>()
+        val entity = mockitoMock<Entity>()
+        val world = mockk<World>(relaxed = true)
+        val rotation = mockk<RotationTrait>(relaxed = true)
+        every { npc.id } returns 419
+        every { npc.isSpawned } returns true
+        every { npc.entity } returns entity
+        every { npc.hasTrait(LookClose::class.java) } returns false
+        every { npc.getOrAddTrait(RotationTrait::class.java) } returns rotation
+        whenever(entity.world).thenReturn(world)
+        whenever(entity.location).thenReturn(Location(world, 0.0, 70.0, 0.0, 37f, 0f))
+        val resources = OriginSceneResources()
+        resources.faceHorizontal(npc, Location(world, 2.0, 74.0, 0.0))
+        resources.faceHorizontal(npc, Location(world, 2.0, 74.0, 0.0), pitch = 6f)
+        resources.cleanup() shouldBe emptyList()
+        verify { rotation.physicalSession.rotateToHave(-90f, 0f) }
+        verify { rotation.physicalSession.rotateToHave(-90f, 6f) }
+        verify { rotation.physicalSession.rotateToHave(37f, 0f) }
+        verify(exactly = 0) { npc.faceLocation(any()) }
+        mockitoVerify(entity).setRotation(-90f, 0f)
+        mockitoVerify(entity).setRotation(37f, 0f)
     }
 
     "use item is cleared during cleanup" {
