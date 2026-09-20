@@ -18,6 +18,14 @@ class OriginDiningReliabilityPolicyTest : FreeSpec({
         ) shouldBe 60_000L
     }
 
+    "home arrival accepts the adjacent bar cell but rejects distant snapped routes" {
+        OriginDiningReliabilityPolicy.hasArrivedHome(1.07) shouldBe true
+        OriginDiningReliabilityPolicy.hasArrivedHome(1.25) shouldBe true
+        OriginDiningReliabilityPolicy.hasArrivedHome(1.251) shouldBe false
+        OriginDiningReliabilityPolicy.hasArrivedHome(3.01) shouldBe false
+        OriginDiningReliabilityPolicy.hasArrivedHome(Double.NaN) shouldBe false
+    }
+
     "stale waiter callbacks lose ownership after a replacement operation" {
         val oldToken = UUID.randomUUID()
         val newToken = UUID.randomUUID()
