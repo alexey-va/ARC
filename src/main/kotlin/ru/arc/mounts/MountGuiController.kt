@@ -369,7 +369,7 @@ class MountGuiController(
             .replace("<mount>", escape(mount.displayName))
         val inventory = Bukkit.createInventory(holder, DETAIL_SIZE, component(title))
         holder.backingInventory = inventory
-        fill(inventory)
+        fill(inventory, full = true)
         val purchaseAllowed = purchaseContextAllowed(player, holder)
         abilitySlots.forEach { (slot, abilityId) ->
             mount.ability(abilityId)?.let {
@@ -476,7 +476,7 @@ class MountGuiController(
                 component(config.guiText("progression.tuning-title", "<#20252b><bold><mount></bold>").replace("<mount>", escape(mount.displayName))),
             )
         holder.backingInventory = inventory
-        fill(inventory)
+        fill(inventory, full = true)
         inventory.setItem(TUNING_INFO_SLOT, items.progressionInfoItem(mount, profile, tuning))
         speedSlots.forEach { (slot, percentage) ->
             inventory.setItem(slot, items.speedTuningItem(mount, profile, tuning, percentage))
@@ -623,7 +623,7 @@ class MountGuiController(
         )
         val inventory = Bukkit.createInventory(holder, CONFIRM_SIZE, component(config.confirmTitle))
         holder.backingInventory = inventory
-        fill(inventory, Material.BLACK_STAINED_GLASS_PANE)
+        fill(inventory, Material.BLACK_STAINED_GLASS_PANE, full = true)
         val (name, price, description) = confirmationDetails(mount, action)
         val currency = if (action is ConfirmAction.Ability) mount.ability(action.abilityId)?.currency ?: mount.currency else mount.currency
         val balance = wallet.walletForCurrency(currency)?.balanceMinor(player.uniqueId)

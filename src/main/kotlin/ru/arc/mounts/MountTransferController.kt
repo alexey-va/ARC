@@ -84,7 +84,7 @@ class MountTransferController(
         val background = MountModule.currentBackgroundStyle()
         val filler = item(background?.material ?: Material.GRAY_STAINED_GLASS_PANE, " ", emptyList())
         filler.editMeta { meta -> background?.customModelData?.let { meta.setCustomModelData(it) } }
-        for (slot in (inventory.size - 9).coerceAtLeast(0) until inventory.size) inventory.setItem(slot, filler)
+        for (slot in 0 until inventory.size) inventory.setItem(slot, filler)
         val profileSnapshot = profile?.invoke(player.uniqueId, mount)
         val levelLine = if (profileSnapshot != null) {
             text("confirm-level", "<#e6fff3>Текущий уровень: <level>")

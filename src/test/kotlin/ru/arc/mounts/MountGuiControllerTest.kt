@@ -450,7 +450,7 @@ class MountGuiControllerTest : TestBase() {
     }
 
     @Test
-    fun `list keeps content empty while detail and progression fill their backgrounds`() {
+    fun `catalog grids keep content empty while action screens fill their backgrounds`() {
         val mount = testMount().copy(displayName = "Вредина")
         val profile = MountProfile(1, false, false)
         val ownership = mockk<MountOwnership> {
@@ -500,7 +500,7 @@ class MountGuiControllerTest : TestBase() {
             plainName(player.openInventory.topInventory.getItem(15)) shouldBe "Уровень 3 · закрыт"
             player.openInventory.topInventory.getItem(12)?.type shouldBe Material.GRAY_STAINED_GLASS_PANE
             controller.onClick(clickEvent(player.openInventory, 22))
-            assertBottomOnly(4, 11, 12, 13, 14, 15, 22, 36, 40)
+            assertDetailBackground(4, 11, 12, 13, 14, 15, 22, 36, 40)
             PlainTextComponentSerializer.plainText().serialize(player.openInventory.title()) shouldBe "Вредина"
             controller.onClick(clickEvent(player.openInventory, 36))
             controller.onClick(clickEvent(player.openInventory, 18))
@@ -508,7 +508,7 @@ class MountGuiControllerTest : TestBase() {
             assertBottomOnly(0, 1)
             controller.onClick(clickEvent(player.openInventory, 49))
             controller.onClick(clickEvent(player.openInventory, 31))
-            assertBottomOnly(31)
+            assertDetailBackground(31, 36)
             controller.onClick(clickEvent(player.openInventory, 36))
             controller.onClick(clickEvent(player.openInventory, 24))
             assertDetailBackground(4, 13, 20, 22, 24, 31, 36, 40, 42)
@@ -1137,6 +1137,7 @@ class MountGuiControllerTest : TestBase() {
             controller.onClick(clickEvent(player.openInventory, 24))
 
             plainName(player.openInventory.topInventory.getItem(15)) shouldBe "Недостаточно средств"
+            player.openInventory.topInventory.contents.all { it != null } shouldBe true
             val info = checkNotNull(player.openInventory.topInventory.getItem(13)?.itemMeta?.lore())
                 .map(PlainTextComponentSerializer.plainText()::serialize)
             info.any { it.startsWith("Баланс: ") } shouldBe true
