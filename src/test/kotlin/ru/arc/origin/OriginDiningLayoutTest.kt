@@ -167,12 +167,12 @@ class OriginDiningLayoutTest : FreeSpec({
         OriginDiningLayout.ambientCycleDelayMillis() shouldBe 18_000L..30_000L
         OriginDiningLayout.ambientDialogueRange shouldBe 8.0
         OriginDiningLayout.ambientAudienceRange shouldBe 24.0
-        OriginDiningLayout.ambientDialogueCount() shouldBe 30
-        OriginDiningLayout.ambientDialogueIds().distinct().size shouldBe 30
-        OriginDiningLayout.ambientDialogueLineCounts().all { it in setOf(8, 10) } shouldBe true
+        OriginDiningLayout.ambientDialogueCount() shouldBe 15
+        OriginDiningLayout.ambientDialogueIds().distinct().size shouldBe 15
+        OriginDiningLayout.ambientDialogueLineCounts().all { it == 16 } shouldBe true
         OriginDiningLayout.ambientDialogueLineCounts().all { it % 2 == 0 } shouldBe true
         OriginDiningLayout.ambientDialogueLineCounts().sum() shouldBe
-            OriginDiningLayout.ambientDialogueLineCounts().count() * 8
+            OriginDiningLayout.ambientDialogueLineCounts().count() * 16
         OriginDiningLayout.serviceDialogueCount() shouldBe 6
         OriginDiningLayout.theftCooldownMillis shouldBe 90_000L
         OriginDiningLayout.waiterPlayerRange shouldBe 1.8
@@ -191,9 +191,9 @@ class OriginDiningLayoutTest : FreeSpec({
         OriginDiningLayout.waiterHome(432) shouldBe OriginDiningPoint(-51.5, 72.0, 58.5, 116.56505f)
     }
 
-    "ambient dialogue catalog gives every guest pair six themed chains" {
+    "ambient dialogue catalog gives every guest pair three extended conversations" {
         val pairs = OriginDiningLayout.ambientDialogueNpcPairs()
-        pairs.size shouldBe 30
+        pairs.size shouldBe 15
         mapOf(
             "brewery_north_" to (416 to 417),
             "brewery_fire_" to (407 to 408),
@@ -202,8 +202,24 @@ class OriginDiningLayoutTest : FreeSpec({
             "restaurant_b_" to (435 to 436),
         ).forEach { (prefix, pair) ->
             val matching = pairs.filterKeys { it.startsWith(prefix) }
-            matching.size shouldBe 6
+            matching.size shouldBe 3
             matching.values.toSet() shouldBe setOf(pair)
+        }
+    }
+
+    "authored conversations stay readable and finish before the execution deadline" {
+        val source = org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(
+            checkNotNull(javaClass.getResourceAsStream("/modules/origin-dining.yml")).reader(),
+        )
+        val config = OriginDiningLayout.conversationConfig
+        OriginDiningLayout.ambientDialogueIds().forEach { id ->
+            val lines = source.getStringList("scene.dialogues.$id.lines")
+            lines.all { it.isNotBlank() && it.codePointCount(0, it.length) <= 84 } shouldBe true
+            val scheduledMillis = lines.sumOf { line ->
+                val millis = config.lineDurationMillis(line) + config.pauseBetweenLinesMillis
+                ((millis + 49L) / 50L) * 50L
+            }
+            (scheduledMillis + 5_000L < config.executionTimeoutMillis) shouldBe true
         }
     }
 
