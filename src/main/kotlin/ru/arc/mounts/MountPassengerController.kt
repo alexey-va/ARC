@@ -62,15 +62,23 @@ internal class MountPassengerController(
     private val passengers = hashMapOf<UUID, Passenger>()
     private val carriers = hashMapOf<UUID, Ride>()
     private val pendingCarrierSpawns = hashMapOf<UUID, Ride>()
+    private var carrierPoses: MountCarrierPosePackets? = null
     private val ownerKey = NamespacedKey(plugin, "mount_owner")
     private val mountIdKey = NamespacedKey(plugin, "mount_id")
     private val spawnTokenKey = NamespacedKey(plugin, "mount_spawn_token")
     private val seatKey = NamespacedKey(plugin, "mount_passenger_seat")
 
-    fun start() = plugin.server.pluginManager.registerEvents(this, plugin)
+    fun start() {
+        if (carrierPoses == null && plugin.server.pluginManager.isPluginEnabled("packetevents")) {
+            carrierPoses = MountCarrierPosePackets().also { it.start() }
+        }
+        plugin.server.pluginManager.registerEvents(this, plugin)
+    }
 
     fun shutdown() {
         rides.keys.toList().forEach(::closeRide)
+        carrierPoses?.close()
+        carrierPoses = null
         HandlerList.unregisterAll(this)
     }
 
@@ -106,6 +114,7 @@ internal class MountPassengerController(
         }
         ride.seats.forEach { carrier ->
             carriers.remove(carrier.uniqueId)
+            carrierPoses?.unregister(carrier.entityId)
             carrier.remove()
         }
     }
@@ -342,6 +351,7 @@ internal class MountPassengerController(
         ride.seats.add(carrier)
         check(carrier.isInWorld && carrier.isValid) { "Passenger carrier spawn was rejected" }
         carriers[carrier.uniqueId] = ride
+        carrierPoses?.register(carrier.entityId)
         ride.attachingCarrier = carrier
         try {
             check(ride.entity.addPassenger(carrier)) { "Passenger carrier attachment was rejected" }
