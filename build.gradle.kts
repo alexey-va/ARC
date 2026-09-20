@@ -18,7 +18,7 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath("ru.ruscrafting.arc:arc-core-integration-testing:2.7.9")
+        classpath("ru.ruscrafting.arc:arc-core-integration-testing:2.7.10")
     }
 }
 
@@ -55,7 +55,7 @@ group = "ARC"
 version = "1.4.178"
 description = "ARC"
 val pluginVersion = version.toString()
-val arcCoreVersion = "2.7.9"
+val arcCoreVersion = "2.7.10"
 val landsJar = providers.gradleProperty("landsJar").orNull?.let(::file)
 if (landsJar != null) require(landsJar.isFile) { "Lands JAR does not exist: $landsJar" }
 val landsCompileDependency: Any = landsJar?.let { files(it) } ?: libs.com.github.angeschossen.landsapi
@@ -525,6 +525,7 @@ val prepareE2ePaper = e2ePaperPin?.let { (name, sha256) ->
 plugwright {
     minecraftVersion.set(e2eMinecraftVersion)
     downloadPlugins {
+        url("https://github.com/retrooper/packetevents/releases/download/v2.12.1/packetevents-spigot-2.12.1.jar")
         url("https://github.com/MilkBowl/Vault/releases/download/1.7.3/Vault.jar")
         url("https://github.com/A5H73Y/Parkour/releases/download/Parkour-7.2.8-RELEASE.136/Parkour-7.2.8-RELEASE.jar")
     }

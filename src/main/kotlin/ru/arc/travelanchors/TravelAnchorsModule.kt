@@ -2,6 +2,7 @@ package ru.arc.travelanchors
 
 import com.destroystokyo.paper.event.player.PlayerJumpEvent
 import com.jeff_media.customblockdata.CustomBlockData
+import dev.lone.itemsadder.api.CustomStack
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.format.TextDecoration
@@ -18,6 +19,7 @@ import org.bukkit.SoundCategory
 import org.bukkit.block.Block
 import org.bukkit.entity.BlockDisplay
 import org.bukkit.entity.Display
+import org.bukkit.entity.Entity
 import org.bukkit.entity.Player
 import org.bukkit.entity.TextDisplay
 import org.bukkit.event.EventHandler
@@ -36,12 +38,12 @@ import org.bukkit.event.player.PlayerItemHeldEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.player.PlayerToggleSneakEvent
 import org.bukkit.event.world.ChunkLoadEvent
+import org.bukkit.event.world.EntitiesLoadEvent
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
 import org.bukkit.util.Transformation
 import org.joml.AxisAngle4f
-import org.joml.Matrix4f
 import org.joml.Vector3f
 import ru.arc.ARC
 import ru.arc.BukkitPortalOriginGate
@@ -64,6 +66,10 @@ import ru.arc.gui.ArcMenus
 import ru.arc.hooks.HookRegistry
 import ru.arc.network.NetworkPlayerName
 import ru.arc.ops.OpsItemHandlers
+import ru.arc.paper.display.PacketBlockDisplay
+import ru.arc.paper.display.PacketItemDisplay
+import ru.arc.paper.display.PacketTextDisplay
+import ru.arc.paper.display.PaperPacketDisplays
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogBody
 import ru.arc.paper.menu.PaperDialogButton
@@ -121,6 +127,27 @@ private const val OCCLUDED_PROXY_CLEARANCE = 0.06
 private const val PLAYER_HALF_WIDTH = 0.3
 private const val DISPLAY_VIEW_RANGE = 16f
 internal const val TRAVEL_ANCHOR_DISPLAY_SHELL_EPSILON = 0.01f
+internal const val LEGACY_TRAVEL_ANCHOR_PREVIEW_TAG = "arc_travel_anchor_preview"
+internal const val LEGACY_TRAVEL_ANCHOR_LABEL_TAG = "arc_travel_anchor_label"
+
+internal fun isLegacyTravelAnchorPreview(tags: Set<String>): Boolean =
+    LEGACY_TRAVEL_ANCHOR_PREVIEW_TAG in tags
+
+internal fun isLegacyTravelAnchorLabel(tags: Set<String>): Boolean =
+    LEGACY_TRAVEL_ANCHOR_LABEL_TAG in tags
+
+private fun packetDisplayTransformation(
+    x: Float,
+    y: Float,
+    z: Float,
+): Transformation =
+    Transformation(
+        Vector3f(),
+        AxisAngle4f(),
+        Vector3f(x, y, z),
+        AxisAngle4f(),
+    )
+
 private const val DEFAULT_TELEPORT_PORTAL_ITEM = "origin_gate_portals:origin_portal"
 private val DEFAULT_DISPLAY_MATERIALS = listOf(
     Material.LODESTONE,
@@ -606,6 +633,37 @@ private class ActiveTravelAnchorTeleportPortal(
     var task: ScheduledTask? = null
 }
 
+private class TravelAnchorPacketPortalHandle(
+    private val display: PacketItemDisplay,
+    private val soundLocation: Location,
+    private val settings: PortalOriginGateSettings,
+) : PortalOriginGateHandle {
+    override fun updateScale(multiplier: Float) {
+        if (!display.isValid) return
+        display.transformation = packetDisplayTransformation(
+            settings.width * multiplier,
+            settings.height * multiplier,
+            1f,
+        )
+    }
+
+    override fun playOpeningSound() {
+        if (settings.openingSoundEnabled && display.isValid) {
+            soundLocation.world?.playSound(
+                soundLocation,
+                settings.openingSoundId,
+                SoundCategory.BLOCKS,
+                settings.openingSoundVolume,
+                settings.openingSoundPitch,
+            )
+        }
+    }
+
+    override fun remove() {
+        display.remove()
+    }
+}
+
 private data class TravelAnchorSettings(
     val worlds: Set<String>,
     val range: Double,
@@ -836,11 +894,12 @@ object TravelAnchorsModule : PluginModule, Listener {
 
     private var settings: TravelAnchorSettings? = null
     private var renderTask: ScheduledTask? = null
+    private var packetDisplays: PaperPacketDisplays? = null
     private val activeTeleportPortals = mutableSetOf<ActiveTravelAnchorTeleportPortal>()
     private var networkStore: TravelAnchorNetworkStore? = null
     private val anchors = linkedSetOf<TravelAnchorPosition>()
-    private val displays = mutableMapOf<UUID, MutableMap<TravelAnchorDisplayKey, BlockDisplay>>()
-    private val labels = mutableMapOf<UUID, TextDisplay>()
+    private val displays = mutableMapOf<UUID, MutableMap<TravelAnchorDisplayKey, PacketBlockDisplay>>()
+    private val labels = mutableMapOf<UUID, PacketTextDisplay>()
     private val anchorNames = mutableMapOf<TravelAnchorPosition, String>()
     private val anchorOwners = mutableMapOf<TravelAnchorPosition, String>()
     private val anchorMaterials = mutableMapOf<TravelAnchorPosition, Material>()
@@ -860,6 +919,11 @@ object TravelAnchorsModule : PluginModule, Listener {
         shutdown()
         val next = TravelAnchorConfig.load(ARC.instance.dataPath)
         settings = next
+        packetDisplays = runCatching { PaperPacketDisplays(ARC.instance) }.getOrElse { failure ->
+            warn("TRAVEL_ANCHORS phase=DISPLAY reason=packet-service-unavailable", failure)
+            settings = null
+            return
+        }
         Bukkit.getPluginManager().registerEvents(this, ARC.instance)
         removeOrphanDisplays()
         Bukkit.getWorlds().filter { next.allowsWorld(it.name) }.forEach(::loadAnchorIndex)
@@ -909,6 +973,8 @@ object TravelAnchorsModule : PluginModule, Listener {
         displays.clear()
         labels.values.forEach { if (it.isValid) it.remove() }
         labels.clear()
+        packetDisplays?.close()
+        packetDisplays = null
         anchorNames.clear()
         anchorOwners.clear()
         anchorMaterials.clear()
@@ -1145,6 +1211,9 @@ object TravelAnchorsModule : PluginModule, Listener {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun onChunkLoad(event: ChunkLoadEvent) = loadAnchors(event.chunk)
 
+    @EventHandler(priority = EventPriority.MONITOR)
+    fun onEntitiesLoad(event: EntitiesLoadEvent) = removeLegacyOrphanDisplays(event.entities)
+
     @EventHandler(ignoreCancelled = true)
     fun onBlockExplode(event: BlockExplodeEvent) {
         event.blockList().removeIf(::isAnchor)
@@ -1302,7 +1371,7 @@ object TravelAnchorsModule : PluginModule, Listener {
         }
         playerDisplays.keys.filterNot { it in desired }.toList().forEach { key ->
             playerDisplays.remove(key)?.let {
-                player.hideEntity(ARC.instance, it)
+                it.hideFrom(player)
                 it.remove()
             }
         }
@@ -1373,37 +1442,29 @@ object TravelAnchorsModule : PluginModule, Listener {
         return travelAnchorOccludedProxyDistance(delta.length(), hit.hitPosition.distance(eye.toVector()))
     }
 
-    private fun spawnDisplay(player: Player, location: Location): BlockDisplay {
+    private fun spawnDisplay(player: Player, location: Location): PacketBlockDisplay {
         val current = checkNotNull(settings)
-        val display = location.world.spawn(location, BlockDisplay::class.java) {
-            it.block = current.displayMaterial.createBlockData()
-            it.isPersistent = false
-            it.isVisibleByDefault = false
-            it.isInvulnerable = true
-            it.setGravity(false)
-            it.isGlowing = true
-            it.glowColorOverride = VISIBLE_COLOR
-            it.brightness = Display.Brightness(15, 15)
-            it.interpolationDelay = 0
-            it.interpolationDuration = 1
-            it.teleportDuration = 1
-            it.viewRange = DISPLAY_VIEW_RANGE
-            it.displayWidth = current.maximumScale + 0.5f
-            it.displayHeight = current.maximumScale + 0.5f
-            it.addScoreboardTag("arc_travel_anchor_preview")
-        }
-        player.showEntity(ARC.instance, display)
+        val display = checkNotNull(packetDisplays).spawnBlock(location, current.displayMaterial.createBlockData())
+        display.isVisibleByDefault = false
+        display.isGlowing = true
+        display.glowColorOverride = VISIBLE_COLOR
+        display.brightness = Display.Brightness(15, 15)
+        display.interpolationDelay = 0
+        display.interpolationDuration = 1
+        display.teleportDuration = 1
+        display.viewRange = DISPLAY_VIEW_RANGE
+        display.displayWidth = current.maximumScale + 0.5f
+        display.displayHeight = current.maximumScale + 0.5f
+        display.showTo(player)
         return display
     }
 
     private fun renderLabel(player: Player, position: TravelAnchorPosition, marker: Location, scale: Float) {
         val current = checkNotNull(settings)
         val location = marker.clone().add(0.0, scale / 2.0 + 0.55, 0.0)
-        val label = labels[player.uniqueId]?.takeIf { it.isValid } ?: player.world.spawn(location, TextDisplay::class.java) {
-            it.isPersistent = false
+        val label = labels[player.uniqueId]?.takeIf { it.isValid } ?: checkNotNull(packetDisplays)
+            .spawnText(location, Component.empty()).also {
             it.isVisibleByDefault = false
-            it.isInvulnerable = true
-            it.setGravity(false)
             it.billboard = Display.Billboard.CENTER
             it.isSeeThrough = true
             it.isShadowed = true
@@ -1413,14 +1474,12 @@ object TravelAnchorsModule : PluginModule, Listener {
             it.lineWidth = 220
             it.teleportDuration = 1
             it.viewRange = DISPLAY_VIEW_RANGE
-            it.addScoreboardTag("arc_travel_anchor_label")
-        }.also {
+            it.showTo(player)
             labels[player.uniqueId] = it
-            player.showEntity(ARC.instance, it)
         }
         label.teleport(location)
         val labelScale = travelAnchorLabelScale(marker.distance(player.eyeLocation), current.labelMinimumScale, current.labelMaximumScale)
-        label.setTransformationMatrix(Matrix4f().scaling(labelScale))
+        label.transformation = packetDisplayTransformation(labelScale, labelScale, labelScale)
         val owner = anchorOwners[position]
             ?.takeUnless { identityAllows(it, player) }
             ?.let(::displayName)
@@ -1434,7 +1493,7 @@ object TravelAnchorsModule : PluginModule, Listener {
 
     private fun clearLabel(player: Player) {
         labels.remove(player.uniqueId)?.let {
-            player.hideEntity(ARC.instance, it)
+            it.hideFrom(player)
             if (it.isValid) it.remove()
         }
     }
@@ -1907,12 +1966,12 @@ object TravelAnchorsModule : PluginModule, Listener {
         val arrivalCenter = teleportPortalCenter(arrival, portal)
         removeTeleportPortalsNear(listOf(departureCenter, arrivalCenter))
 
-        val departureHandle = BukkitPortalOriginGate.spawn(
+        val departureHandle = spawnTravelAnchorPortal(
             departureCenter,
             portal.gate,
             PortalVisualStyle.ORIGIN,
         ) ?: return
-        val arrivalHandle = BukkitPortalOriginGate.spawn(
+        val arrivalHandle = spawnTravelAnchorPortal(
             arrivalCenter,
             portal.gate,
             PortalVisualStyle.ORIGIN,
@@ -1963,6 +2022,51 @@ object TravelAnchorsModule : PluginModule, Listener {
                     warn("TRAVEL_ANCHORS phase=EFFECTS reason=portal-animation-failed", it)
                 }
             }
+        }
+    }
+
+    private fun spawnTravelAnchorPortal(
+        center: Location,
+        settings: PortalOriginGateSettings,
+        style: PortalVisualStyle,
+        hiddenViewer: Player? = null,
+    ): PortalOriginGateHandle? {
+        // PortalOriginGate is shared with Portal and OriginPortalsModule; this
+        // packet adapter keeps their native visual path and lifecycle intact.
+        if (!Bukkit.getPluginManager().isPluginEnabled("ItemsAdder")) return null
+        val itemId = settings.itemIds[style] ?: return null
+        val portalItem = runCatching { CustomStack.getInstance(itemId)?.itemStack?.clone() }.getOrNull()
+            ?: run {
+                warn("TRAVEL_ANCHORS phase=EFFECTS reason=missing-teleport-portal-item item={}", itemId)
+                return null
+            }
+        val display = runCatching { checkNotNull(packetDisplays).spawnItem(center, portalItem) }.getOrElse { failure ->
+            warn("TRAVEL_ANCHORS phase=EFFECTS reason=packet-portal-spawn-failed", failure)
+            return null
+        }
+        return try {
+            display.itemDisplayTransform = org.bukkit.entity.ItemDisplay.ItemDisplayTransform.FIXED
+            display.billboard = Display.Billboard.FIXED
+            display.brightness = Display.Brightness(15, 15)
+            display.shadowRadius = 0f
+            display.shadowStrength = 0f
+            display.viewRange = settings.viewRange
+            display.displayWidth = settings.width * 1.25f
+            display.displayHeight = settings.height * 1.25f
+            display.interpolationDelay = 0
+            display.interpolationDuration = 0
+            display.teleportDuration = 0
+            display.transformation = packetDisplayTransformation(
+                settings.width * TELEPORT_PORTAL_TINY_SCALE,
+                settings.height * TELEPORT_PORTAL_TINY_SCALE,
+                1f,
+            )
+            hiddenViewer?.let(display::hideFrom)
+            TravelAnchorPacketPortalHandle(display, center.clone(), settings)
+        } catch (failure: Exception) {
+            display.remove()
+            warn("TRAVEL_ANCHORS phase=EFFECTS reason=packet-portal-config-failed", failure)
+            null
         }
     }
 
@@ -2442,7 +2546,7 @@ object TravelAnchorsModule : PluginModule, Listener {
 
     private fun clearDisplays(player: Player) {
         displays.remove(player.uniqueId)?.values?.forEach {
-            player.hideEntity(ARC.instance, it)
+            it.hideFrom(player)
             if (it.isValid) it.remove()
         }
         clearLabel(player)
@@ -2451,13 +2555,26 @@ object TravelAnchorsModule : PluginModule, Listener {
 
     private fun removeOrphanDisplays() {
         Bukkit.getWorlds().forEach { world ->
-            world.getEntitiesByClass(BlockDisplay::class.java)
-                .filter { "arc_travel_anchor_preview" in it.scoreboardTags }
-                .forEach(BlockDisplay::remove)
-            world.getEntitiesByClass(TextDisplay::class.java)
-                .filter { "arc_travel_anchor_label" in it.scoreboardTags }
-                .forEach(TextDisplay::remove)
+            removeLegacyOrphanDisplays(world.getEntitiesByClass(BlockDisplay::class.java))
+            removeLegacyOrphanDisplays(world.getEntitiesByClass(TextDisplay::class.java))
         }
+    }
+
+    private fun removeLegacyOrphanDisplays(entities: Iterable<Entity>) {
+        entities.forEach(::removeLegacyOrphanDisplay)
+    }
+
+    internal fun removeLegacyOrphanDisplay(entity: Entity): Boolean {
+        val owned = when (entity) {
+            is BlockDisplay -> isLegacyTravelAnchorPreview(entity.scoreboardTags)
+            is TextDisplay -> isLegacyTravelAnchorLabel(entity.scoreboardTags)
+            // ItemDisplay ownership is intentionally absent: origin-gate
+            // items are shared with unrelated portal modules.
+            else -> false
+        }
+        if (!owned) return false
+        entity.remove()
+        return true
     }
 
     private fun isFeatureAvailable(player: Player): Boolean =
