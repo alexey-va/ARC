@@ -13,6 +13,7 @@ import io.mockk.unmockkStatic
 import io.mockk.verify
 import net.citizensnpcs.api.npc.NPC
 import net.citizensnpcs.api.trait.trait.Equipment as CitizensEquipment
+import net.citizensnpcs.trait.LookClose
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.Material
@@ -23,8 +24,13 @@ import org.bukkit.block.Lidded
 import org.bukkit.block.data.BlockData
 import org.bukkit.entity.BlockDisplay
 import org.bukkit.entity.Cat
+import org.bukkit.entity.Entity
+import org.bukkit.entity.ItemDisplay
+import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Pose as BukkitPose
+import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
+import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doAnswer
@@ -69,6 +75,66 @@ class OriginSceneResourcesTest : StringSpec({
         resources.cleanup() shouldBe emptyList()
 
         mockitoVerify(equipment).set(CitizensEquipment.EquipmentSlot.HAND, original)
+    }
+
+    "custom hand item is cloned before scene ownership" {
+        val npc = mockNpc(22)
+        val equipment = mockitoMock<CitizensEquipment>()
+        val custom = ItemStack(Material.PAPER, 3)
+        every { npc.getOrAddTrait(CitizensEquipment::class.java) } returns equipment
+        whenever(equipment.get(CitizensEquipment.EquipmentSlot.HAND)).thenReturn(null)
+
+        val resources = OriginSceneResources()
+        resources.equip(npc, custom)
+        custom.amount = 1
+
+        val equipped = argumentCaptor<ItemStack>()
+        mockitoVerify(equipment).set(eq(CitizensEquipment.EquipmentSlot.HAND), equipped.capture())
+        equipped.firstValue.amount shouldBe 3
+    }
+
+    "face restores the original native rotation during cleanup" {
+        val npc = mockk<NPC>()
+        val entity = mockitoMock<Entity>()
+        val world = mockk<World>(relaxed = true)
+        val lookClose = mockk<LookClose>()
+        val original = Location(world, 12.0, 64.0, -4.0, 37.0f, 11.0f)
+        val target = Location(world, 20.0, 64.0, -4.0)
+        every { npc.id } returns 23
+        every { npc.isSpawned } returns true
+        every { npc.entity } returns entity
+        every { npc.hasTrait(LookClose::class.java) } returns true
+        every { npc.getTraitNullable(LookClose::class.java) } returns lookClose
+        every { npc.faceLocation(target) } just runs
+        every { lookClose.isEnabled } returns true
+        every { lookClose.lookClose(any()) } just runs
+        whenever(entity.world).thenReturn(world)
+        whenever(entity.location).thenReturn(original)
+
+        val resources = OriginSceneResources()
+        resources.face(npc, target)
+        resources.cleanup() shouldBe emptyList()
+
+        verify(exactly = 1) { npc.faceLocation(target) }
+        verify(exactly = 1) { lookClose.lookClose(false) }
+        verify(exactly = 1) { lookClose.lookClose(true) }
+        mockitoVerify(entity).setRotation(37.0f, 11.0f)
+    }
+
+    "use item is cleared during cleanup" {
+        val npc = mockk<NPC>()
+        every { npc.id } returns 439
+        val entity = mockitoMock<LivingEntity>()
+        every { npc.entity } returns entity
+        whenever(entity.hasActiveItem()).thenReturn(false)
+        whenever(entity.isValid).thenReturn(true)
+
+        val resources = OriginSceneResources()
+        resources.useItem(npc)
+        resources.cleanup() shouldBe emptyList()
+
+        mockitoVerify(entity).startUsingItem(EquipmentSlot.HAND)
+        mockitoVerify(entity).clearActiveItem()
     }
 
     "container opening failure remains owned and is retried by cleanup" {
@@ -175,6 +241,37 @@ class OriginSceneResourcesTest : StringSpec({
         resources.cleanup() shouldBe emptyList()
         verify(exactly = 1) { display.remove() }
         resources.displayCount shouldBe 0
+    }
+
+    "item displays stay within the budget and cleanup removes every owned item" {
+        val spawned = mutableListOf<ItemDisplay>()
+        val world = mockk<World>(relaxed = true) {
+            every {
+                spawn<ItemDisplay>(any<Location>(), ItemDisplay::class.java, any<Consumer<ItemDisplay>>())
+            } answers {
+                val display = mockk<ItemDisplay>(relaxed = true) {
+                    every { isValid } returns true
+                    every { teleport(any<Location>()) } returns true
+                }
+                spawned += display
+                thirdArg<Consumer<ItemDisplay>>().accept(display)
+                display
+            }
+        }
+        val resources = OriginSceneResources()
+        val location = Location(world, 12.0, 64.0, -4.0)
+
+        repeat(4) { index ->
+            resources.item("item-$index", location, ItemStack(Material.PAPER), 0.5f, 0.1f)
+        }
+        resources.displayCount shouldBe 4
+        shouldThrow<IllegalStateException> {
+            resources.item("item-over-budget", location, ItemStack(Material.PAPER), 0.5f, 0.1f)
+        }
+
+        resources.cleanup() shouldBe emptyList()
+        resources.displayCount shouldBe 0
+        spawned.forEach { verify(exactly = 1) { it.remove() } }
     }
 
     "rejected display teleport fails with an owned resource for cleanup" {

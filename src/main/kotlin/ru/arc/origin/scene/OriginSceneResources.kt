@@ -1,12 +1,16 @@
 package ru.arc.origin.scene
 
 import net.citizensnpcs.api.npc.NPC
+import net.citizensnpcs.trait.LookClose
 import net.citizensnpcs.api.trait.trait.Equipment as CitizensEquipment
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.World
 import org.bukkit.block.Lidded
 import org.bukkit.entity.BlockDisplay
+import org.bukkit.entity.ItemDisplay
+import org.bukkit.entity.Display
+import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.AbstractHorse
 import org.bukkit.entity.Cat
 import org.bukkit.entity.Entity
@@ -55,12 +59,21 @@ internal class OriginSceneResources {
     private val poses = linkedMapOf<Int, PoseSnapshot>()
     private val containers = linkedSetOf<Location>()
     private val displays = linkedMapOf<String, BlockDisplay>()
+    private val items = linkedMapOf<String, ItemDisplay>()
+    private val rotations = linkedMapOf<Int, Pair<NPC, Location>>()
+    private val lookClose = linkedMapOf<Int, Pair<LookClose, Boolean>>()
+    private val usingItems = linkedMapOf<Int, LivingEntity>()
 
     val displayCount: Int
-        get() = displays.size
+        get() = displays.size + items.size
 
     /** Equips the scene item while preserving the first observed hand state. */
     fun equip(actor: NPC, material: Material) {
+        equip(actor, ItemStack(material))
+    }
+
+    /** The same equipment lease also supports configured custom items. */
+    fun equip(actor: NPC, item: ItemStack) {
         val actorId = actor.id
         val equipment = actor.getOrAddTrait(CitizensEquipment::class.java)
         if (actorId !in hands) {
@@ -70,7 +83,97 @@ internal class OriginSceneResources {
                 original = equipment.get(CitizensEquipment.EquipmentSlot.HAND)?.clone(),
             )
         }
-        equipment.set(CitizensEquipment.EquipmentSlot.HAND, ItemStack(material))
+        equipment.set(CitizensEquipment.EquipmentSlot.HAND, item.clone())
+    }
+
+    /** Owns the original facing for a seated gesture or workstation action. */
+    fun face(actor: NPC, target: Location) {
+        check(actor.isSpawned && actor.entity.world == target.world)
+        rotations.putIfAbsent(actor.id, actor to actor.entity.location.clone())
+        if (actor.id !in lookClose && actor.hasTrait(LookClose::class.java)) {
+            val trait = actor.getTraitNullable(LookClose::class.java)
+            if (trait != null) {
+                lookClose[actor.id] = trait to trait.isEnabled
+                trait.lookClose(false)
+            }
+        }
+        actor.faceLocation(target)
+    }
+
+    /** Starts the native eating/drinking pose without consuming an item or running its effects. */
+    fun useItem(actor: NPC) {
+        val entity = actor.entity as? LivingEntity ?: return
+        if (actor.id !in usingItems && entity.hasActiveItem()) return
+        usingItems[actor.id] = entity
+        entity.startUsingItem(org.bukkit.inventory.EquipmentSlot.HAND)
+    }
+
+    /**
+     * A bounded native prop for short, small scenes. Durable/interactive meals
+     * stay with their domain owner; this lease removes only its own props.
+     * Model support lift must come from the configured model/context bounds.
+     */
+    fun item(
+        key: String,
+        location: Location,
+        stack: ItemStack,
+        scale: Float,
+        supportLift: Float,
+        interpolationTicks: Int = 4,
+    ): ItemDisplay {
+        require(scale.isFinite() && scale in 0.01f..4f)
+        require(supportLift.isFinite())
+        require(interpolationTicks in 0..59)
+        val display = items[key]?.takeIf { it.isValid } ?: run {
+            check(displayCount < 4) { "Small scene prop budget exceeded" }
+            location.world.spawn(location, ItemDisplay::class.java) { candidate ->
+                items[key] = candidate
+                candidate.isPersistent = false
+                candidate.setGravity(false)
+                candidate.isInvulnerable = true
+                candidate.addScoreboardTag("arc_origin_scene_item")
+            }.also { items[key] = it }
+        }
+        display.itemDisplayTransform = ItemDisplay.ItemDisplayTransform.GROUND
+        display.billboard = Display.Billboard.FIXED
+        display.viewRange = 0.5f
+        display.displayWidth = 2f
+        display.displayHeight = 2f
+        display.shadowRadius = 0f
+        display.setItemStack(stack)
+        display.teleportDuration = interpolationTicks
+        check(display.teleport(location)) { "Scene item $key rejected movement" }
+        display.interpolationDelay = 0
+        display.interpolationDuration = interpolationTicks
+        display.transformation = Transformation(
+            Vector3f(0f, supportLift, 0f), AxisAngle4f(), Vector3f(scale, scale, scale), AxisAngle4f(),
+        )
+        return display
+    }
+
+    fun removeItem(key: String) {
+        val item = items[key] ?: return
+        if (item.isValid) item.remove()
+        items.remove(key)
+    }
+
+    /** A small geometric workstation prop, with an explicit lower-corner anchor. */
+    fun solid(key: String, location: Location, material: Material, scale: Vector3f): BlockDisplay {
+        require(material.isBlock && scale.x > 0 && scale.y > 0 && scale.z > 0)
+        check(displays[key]?.isValid == true || displayCount < 4) { "Small scene prop budget exceeded" }
+        val display = displays[key]?.takeIf { it.isValid } ?: location.world.spawn(location, BlockDisplay::class.java) {
+            displays[key] = it
+            it.isPersistent = false
+            it.addScoreboardTag("arc_origin_scene_prop")
+        }.also { displays[key] = it }
+        display.block = material.createBlockData()
+        display.viewRange = 0.5f
+        display.displayWidth = 2f
+        display.displayHeight = 2f
+        display.teleportDuration = 4
+        check(display.teleport(location)) { "Scene block prop $key rejected movement" }
+        display.transformation = Transformation(Vector3f(), AxisAngle4f(), Vector3f(scale), AxisAngle4f())
+        return display
     }
 
     /** Captures the original native pose once, then applies a configured pose. */
@@ -193,6 +296,15 @@ internal class OriginSceneResources {
     fun cleanup(): List<OriginSceneCleanupFailure> {
         val failures = mutableListOf<OriginSceneCleanupFailure>()
 
+        usingItems.toMap().forEach { (id, entity) ->
+            try {
+                if (entity.isValid) entity.clearActiveItem()
+                usingItems.remove(id)
+            } catch (failure: Exception) {
+                failures += OriginSceneCleanupFailure("using-item", id.toString(), failure)
+            }
+        }
+
         hands.values.toList().forEach { snapshot ->
             try {
                 val equipment = snapshot.npc.getOrAddTrait(CitizensEquipment::class.java)
@@ -229,6 +341,34 @@ internal class OriginSceneResources {
                 displays.remove(key)
             } catch (failure: Exception) {
                 failures += OriginSceneCleanupFailure("display", key, failure)
+            }
+        }
+
+        items.toMap().forEach { (key, item) ->
+            try {
+                if (item.isValid) item.remove()
+                items.remove(key)
+            } catch (failure: Exception) {
+                failures += OriginSceneCleanupFailure("item", key, failure)
+            }
+        }
+        rotations.toMap().forEach { (id, snapshot) ->
+            try {
+                val (actor, original) = snapshot
+                if (actor.isSpawned && actor.entity.world == original.world) {
+                    actor.entity.setRotation(original.yaw, original.pitch)
+                }
+                rotations.remove(id)
+            } catch (failure: Exception) {
+                failures += OriginSceneCleanupFailure("rotation", id.toString(), failure)
+            }
+        }
+        lookClose.toMap().forEach { (id, snapshot) ->
+            try {
+                snapshot.first.lookClose(snapshot.second)
+                lookClose.remove(id)
+            } catch (failure: Exception) {
+                failures += OriginSceneCleanupFailure("look-close", id.toString(), failure)
             }
         }
 
