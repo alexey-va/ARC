@@ -320,7 +320,9 @@ open class ARC : JavaPlugin() {
             val commandMap = server.commandMap
             val inactive = commandMap.knownCommands.values.filterIsInstance<PluginCommand>()
                 .filter { it.plugin === this && it.name != "arc" }.toSet()
-            commandMap.knownCommands.entries.removeIf { it.value in inactive }
+            // Paper's Brigadier-backed entry iterator does not support removal.
+            val labels = commandMap.knownCommands.filterValues { it in inactive }.keys.toList()
+            labels.forEach { commandMap.knownCommands.remove(it) }
             inactive.forEach { it.unregister(commandMap) }
             return
         }
