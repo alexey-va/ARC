@@ -11,7 +11,7 @@ import org.bukkit.block.Block
 import org.bukkit.entity.Player
 import org.bukkit.entity.Entity
 import org.bukkit.inventory.ItemStack
-import ru.arc.hooks.HookRegistry
+import ru.arc.hooks.slimefun.SlimefunItemAccess
 import java.util.Locale
 
 /** Resolves only block identities owned by supported custom-content plugins. */
@@ -81,11 +81,11 @@ internal class BukkitItemInfoTargetResolver(
     }
 
     private fun slimefun(block: Block): ItemInfoTarget? {
-        val hook = HookRegistry.sfHook ?: return null
+        if (!Bukkit.getPluginManager().isPluginEnabled("Slimefun")) return null
         return runCatching {
-            val rawId = hook.getSlimefunBlockId(block)?.trim()?.takeIf(String::isNotEmpty) ?: return null
+            val rawId = SlimefunItemAccess.blockId(block)?.trim()?.takeIf(String::isNotEmpty) ?: return null
             val namespacedId = "slimefun:${rawId.lowercase(Locale.ROOT)}"
-            ItemInfoTarget(displayName(hook.getSlimefunItemStack(rawId), rawId), namespacedId)
+            ItemInfoTarget(displayName(SlimefunItemAccess.itemStack(rawId), rawId), namespacedId)
         }.getOrNull()
     }
 

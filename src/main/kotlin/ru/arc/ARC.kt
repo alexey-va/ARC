@@ -2,6 +2,7 @@ package ru.arc
 
 import org.bukkit.Bukkit
 import org.bukkit.command.CommandExecutor
+import org.bukkit.command.PluginCommand
 import org.bukkit.command.TabCompleter
 import org.bukkit.event.server.ServerCommandEvent
 import org.bukkit.plugin.java.JavaPlugin
@@ -30,6 +31,7 @@ import ru.arc.commandhide.CommandHideModule
 import ru.arc.citizens.NpcChunkTicketModule
 import ru.arc.cleanup.EntityCleanupModule
 import ru.arc.config.ConfigManager
+import ru.arc.config.ArcRuntimeProfile
 import ru.arc.config.LocationPoolConfig
 import ru.arc.core.ModuleRegistry
 import ru.arc.core.PaperArcRuntime
@@ -125,37 +127,45 @@ open class ARC : JavaPlugin() {
 
     private var baseSidebar: ArcBaseSidebar? = null
 
+    var runtimeProfile: ArcRuntimeProfile = ArcRuntimeProfile.FULL
+        private set
+
     // ==================== Lifecycle ====================
 
     override fun onLoad() {
         plugin = this
         createDefaultConfigs()
-        GuiDefaults.init(dataPath)
+        runtimeProfile = ArcRuntimeProfile.load(dataPath)
+        if (runtimeProfile == ArcRuntimeProfile.FULL) GuiDefaults.init(dataPath)
         initLogging()
     }
 
     override fun onEnable() {
         printBanner()
 
-        if (pluginMessenger == null) {
+        if (runtimeProfile == ArcRuntimeProfile.FULL && pluginMessenger == null) {
             pluginMessenger = PluginMessenger()
         }
 
         PaperArcRuntime.installScheduling(this)
-        ArcMenus.initialize(this, dataPath)
-        chunkTicketRegistry = PaperChunkTicketRegistry(this)
-        sidebarService = PaperArcSidebarService(this)
-        server.servicesManager.register(ArcSidebarService::class.java, sidebarService, this, ServicePriority.Normal)
-        RtpPlayerRegistry.initialize(dataPath)
+        if (runtimeProfile == ArcRuntimeProfile.FULL) {
+            ArcMenus.initialize(this, dataPath)
+            chunkTicketRegistry = PaperChunkTicketRegistry(this)
+            sidebarService = PaperArcSidebarService(this)
+            server.servicesManager.register(ArcSidebarService::class.java, sidebarService, this, ServicePriority.Normal)
+            RtpPlayerRegistry.initialize(dataPath)
+        }
         registerModules()
         PaperArcRuntime.installModuleLifecycleReporting(
             consoleLog = { consoleLog(it) },
             logError = { msg, t -> error(msg, t) },
         )
         ModuleRegistry.initAll()
-        server.servicesManager.register(ArcTelemetryProvider::class.java, ArcTelemetryProviderBridge, this, ServicePriority.Normal)
-        server.servicesManager.register(ArcItemMaterializer::class.java, ArcItemMaterializerBridge, this, ServicePriority.Normal)
-        baseSidebar = ArcBaseSidebar(this, sidebarService).also(ArcBaseSidebar::start)
+        if (runtimeProfile == ArcRuntimeProfile.FULL) {
+            server.servicesManager.register(ArcTelemetryProvider::class.java, ArcTelemetryProviderBridge, this, ServicePriority.Normal)
+            server.servicesManager.register(ArcItemMaterializer::class.java, ArcItemMaterializerBridge, this, ServicePriority.Normal)
+            baseSidebar = ArcBaseSidebar(this, sidebarService).also(ArcBaseSidebar::start)
+        }
         // Start the single Redis subscription after ALL modules have registered their channels.
         // Calling init() multiple times (once per module) caused the subscription to be
         // constantly restarted and never complete its 1s startup delay.
@@ -183,7 +193,7 @@ open class ARC : JavaPlugin() {
     override fun onDisable() {
         info("Stopping ARC plugin")
         server.servicesManager.unregisterAll(this)
-        Portal.removeAll()
+        if (runtimeProfile == ArcRuntimeProfile.FULL) Portal.removeAll()
         ModuleRegistry.shutdownAll()
         baseSidebar?.close()
         baseSidebar = null
@@ -191,7 +201,7 @@ open class ARC : JavaPlugin() {
             runCatching(sidebarService::close)
                 .onFailure { error("Failed to close ARC sidebar service", it) }
         }
-        ArcMenus.close()
+        if (runtimeProfile == ArcRuntimeProfile.FULL) ArcMenus.close()
         if (::chunkTicketRegistry.isInitialized) {
             runCatching(chunkTicketRegistry::close)
                 .onFailure { error("Failed to close ARC chunk ticket registry", it) }
@@ -208,10 +218,13 @@ open class ARC : JavaPlugin() {
     /** Reload all plugin configuration and modules. Called by /arc reload. */
     fun reload() {
         info("Reloading ARC plugin")
-        Portal.removeAll()
+        if (runtimeProfile == ArcRuntimeProfile.FULL) Portal.removeAll()
         // Reload YAML from disk before modules re-read configs (announce delay, etc.).
         ConfigManager.reloadAll()
-        ArcMenus.reload()
+        if (ArcRuntimeProfile.load(dataPath) != runtimeProfile) {
+            warn("Runtime profile changes require a server restart; keeping {}", runtimeProfile)
+        }
+        if (runtimeProfile == ArcRuntimeProfile.FULL) ArcMenus.reload()
         ModuleRegistry.reloadAll()
         baseSidebar?.refresh()
         // Modules may replace channel listeners during reload; restart the subscription once
@@ -227,6 +240,12 @@ open class ARC : JavaPlugin() {
 
     private fun registerModules() {
         debug("Registering modules...")
+
+        if (runtimeProfile == ArcRuntimeProfile.ISOLATED) {
+            ModuleRegistry.registerAll(ConfigModule, OpsHttpModule, RestartModule, ItemInfoModule)
+            info("Runtime profile isolated: Config, OpsHttp, Restart, ItemInfo only")
+            return
+        }
 
         ModuleRegistry.registerAll(
             // Core infrastructure (priority 10-29)
@@ -296,6 +315,15 @@ open class ARC : JavaPlugin() {
 
         val arcCommand = ArcCommand.INSTANCE
         registerCommand("arc", arcCommand, arcCommand)
+        if (runtimeProfile == ArcRuntimeProfile.ISOLATED) {
+            // Remove this plugin's unused labels and aliases, preserving other plugins.
+            val commandMap = server.commandMap
+            val inactive = commandMap.knownCommands.values.filterIsInstance<PluginCommand>()
+                .filter { it.plugin === this && it.name != "arc" }.toSet()
+            commandMap.knownCommands.entries.removeIf { it.value in inactive }
+            inactive.forEach { it.unregister(commandMap) }
+            return
+        }
         registerCommand("x", XCommand, XCommand)
         registerCommand("g", ChatModeAliasCommand, null)
         registerCommand("l", ChatModeAliasCommand, null)
@@ -383,6 +411,7 @@ open class ARC : JavaPlugin() {
         /** All resource paths bundled in the JAR that must exist on disk before modules start. */
         private val BUNDLED_RESOURCES =
             listOf(
+                "modules/runtime.yml",
                 "modules/logging.yml",
                 "modules/metrics.yml",
                 "modules/redis.yml",

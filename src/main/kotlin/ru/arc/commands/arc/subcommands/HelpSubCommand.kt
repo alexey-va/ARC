@@ -6,6 +6,9 @@ import net.kyori.adventure.text.event.HoverEvent
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.command.CommandSender
+import ru.arc.ARC
+import ru.arc.config.ArcRuntimeProfile
+import ru.arc.commands.arc.ArcCommand
 import ru.arc.commands.arc.CommandConfig
 import ru.arc.commands.arc.SubCommand
 import ru.arc.commands.arc.checkPermission
@@ -29,7 +32,7 @@ object HelpSubCommand : SubCommand {
 
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {
         val player = sender.player
-        if (player != null && HelpCenterModule.isAvailable()) {
+        if (player != null && ARC.plugin?.runtimeProfile != ArcRuntimeProfile.ISOLATED && HelpCenterModule.isAvailable()) {
             if (args.isEmpty()) {
                 if (HelpCenterModule.open(player, HelpCenterPage.HELP)) return true
             } else {
@@ -155,6 +158,9 @@ object HelpSubCommand : SubCommand {
      * Returns list of commands available to the sender.
      */
     private fun getAvailableCommands(sender: CommandSender): List<SubCommand> {
+        if (ARC.plugin?.runtimeProfile == ArcRuntimeProfile.ISOLATED) {
+            return ArcCommand.INSTANCE.availableSubcommands(sender)
+        }
         return listOf(
             HelpSubCommand,
             DialogDemoSubCommand,

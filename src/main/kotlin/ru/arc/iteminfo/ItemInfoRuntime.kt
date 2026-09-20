@@ -11,7 +11,7 @@ import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.player.PlayerTeleportEvent
 import ru.arc.core.LifecycleTaskScope
-import ru.arc.hooks.HookRegistry
+import ru.arc.hooks.luckperms.LuckPermsHook
 import ru.arc.onboarding.OnboardingModule
 import ru.arc.util.Logging.error
 
@@ -20,10 +20,11 @@ internal class ItemInfoRuntime(
 ) : Listener, AutoCloseable {
     private val tasks = LifecycleTaskScope()
     private val failedViewers = mutableSetOf<java.util.UUID>()
+    private val preferencesReader = if (Bukkit.getPluginManager().isPluginEnabled("LuckPerms")) LuckPermsHook() else null
     private val resolver = BukkitItemInfoTargetResolver(settings.targetDistance)
     private val controller = ItemInfoController(
         preferences = { player ->
-            ItemInfoPreferences.fromStored { key -> HookRegistry.luckPermsHook?.getCachedMeta(player.uniqueId, key) }
+            ItemInfoPreferences.fromStored { key -> preferencesReader?.getCachedMeta(player.uniqueId, key) }
         },
         target = { player ->
             if (player.isDead || player.gameMode == GameMode.SPECTATOR || OnboardingModule.claimGuide?.hasHologram(player) == true) null

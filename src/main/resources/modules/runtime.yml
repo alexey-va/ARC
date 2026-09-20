@@ -1,0 +1,5 @@
+# Applied at startup. Existing servers keep the full composition.
+# isolated: Config, OpsHttp, Restart, ItemInfo; /arc help, reload and restart.
+# Block hints use read-only Slimefun/ItemsAdder APIs without gameplay hooks.
+# No Redis, sync, economy, AI, menus or sidebar lifecycle.
+profile: full
