@@ -6,6 +6,7 @@ import net.citizensnpcs.api.ai.PathfinderType
 import net.citizensnpcs.api.ai.TargetType
 import net.citizensnpcs.api.ai.event.CancelReason
 import net.citizensnpcs.api.npc.NPC
+import net.citizensnpcs.util.NMS
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.World
@@ -592,6 +593,8 @@ internal class CitizensNpcRouteController(
         val route = active[npcId]?.takeIf { it.token == token } ?: return
         val npc = runCatching { CitizensAPI.getNPCRegistry().getById(npcId) }.getOrNull()?.takeIf { it.isSpawned } ?: return
         if (!npc.navigator.isNavigating || npc.entity.world != route.destination.world) return
+        // Citizens gates NPC movement on activatedTick; refresh it only for this live route heartbeat.
+        NMS.activate(npc.entity)
         val actual = npc.entity.location
         val searchEnd = (route.headingIndex + route.profile.headingLookAheadCells + 2).coerceAtMost(route.cells.lastIndex)
         route.headingIndex =
