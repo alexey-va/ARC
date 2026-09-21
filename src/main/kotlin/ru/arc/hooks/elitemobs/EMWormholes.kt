@@ -36,6 +36,8 @@ internal data class WormholeBoundaryCircle(val surfaceY: Double, val radius: Dou
 
 internal data class WormholeBoundaryPoint(val x: Double, val surfaceY: Double, val z: Double)
 
+internal data class WormholeBoundaryColumnPoint(val x: Double, val y: Double, val z: Double)
+
 private data class WormholeVisualCandidate(
     val location: Location,
     val sizeMultiplier: Double,
@@ -44,7 +46,7 @@ private data class WormholeVisualCandidate(
     val nearestDistanceSquared: Double,
 )
 
-private const val WORMHOLE_PARTICLE_BUILDERS_PER_PASS = 160
+private const val WORMHOLE_PARTICLE_BUILDERS_PER_PASS = 180
 
 /** Horizontal intersection of EliteMobs' spherical trigger with the local walking surface. */
 internal fun wormholeBoundaryCircle(
@@ -71,6 +73,24 @@ internal fun wormholeBoundaryPoints(
     return (0 until pointCount).mapNotNull { index ->
         val angle = 2.0 * PI * index / pointCount
         wormholeBoundaryPoint(centerY, centerSurfaceY, sizeMultiplier, cos(angle), sin(angle), surfaceYAt)
+    }
+}
+
+internal fun wormholeBoundaryColumnPoints(
+    basePoints: List<WormholeBoundaryPoint>,
+    height: Double,
+    levels: Int,
+): List<WormholeBoundaryColumnPoint> {
+    require(height.isFinite() && height > 0.0) { "height must be finite and positive" }
+    require(levels > 0) { "levels must be positive" }
+    return basePoints.flatMap { point ->
+        (1..levels).map { level ->
+            WormholeBoundaryColumnPoint(
+                x = point.x,
+                y = point.surfaceY + height * level / levels,
+                z = point.z,
+            )
+        }
     }
 }
 
@@ -245,13 +265,26 @@ class EMWormholes internal constructor(
         if (players.isEmpty()) return
         val particle = config.particle("wormholes.particle", Particle.DUST)
         val extra = config.real("wormholes.particle-extra", 0.0)
-        val particleSize = config.real("wormholes.particle-size", 0.65).toFloat().coerceIn(0.1f, 4.0f)
+        val particleSize = config.real("wormholes.particle-size", 1.15).toFloat().coerceIn(0.1f, 4.0f)
         val pointCount = config.integer("wormholes.boundary-points", 24).coerceIn(8, 64)
+        val boundaryParticleCount = config.integer("wormholes.boundary-particle-count", 3).coerceIn(1, 8)
         val heightOffset = config.real("wormholes.boundary-height-offset", 0.06)
+        val columnHeight = config.real("wormholes.column-height", 2.0).coerceIn(0.25, 4.0)
+        val columnLevels = config.integer("wormholes.column-levels", 4).coerceIn(1, 8)
+        val configuredColumnPointCount = config.integer("wormholes.column-points", 8).coerceIn(4, 32)
+        val columnPointCount = minOf(
+            configuredColumnPointCount,
+            ((WORMHOLE_PARTICLE_BUILDERS_PER_PASS - pointCount) / columnLevels).coerceAtLeast(4),
+        )
+        val columnParticleCount = config.integer("wormholes.column-particle-count", 2).coerceIn(1, 8)
         val renderDistance = config.real("wormholes.render-distance", 16.0).coerceAtLeast(1.0)
         val renderDistanceSquared = renderDistance * renderDistance
-        val configuredMaxRings = config.integer("wormholes.max-rings-per-pass", 6).coerceIn(1, 8)
-        val maxRingsPerPass = minOf(configuredMaxRings, (WORMHOLE_PARTICLE_BUILDERS_PER_PASS / pointCount).coerceAtLeast(1))
+        val configuredMaxRings = config.integer("wormholes.max-rings-per-pass", 3).coerceIn(1, 8)
+        val buildersPerPortal = pointCount + columnPointCount * columnLevels
+        val maxRingsPerPass = minOf(
+            configuredMaxRings,
+            (WORMHOLE_PARTICLE_BUILDERS_PER_PASS / buildersPerPortal).coerceAtLeast(1),
+        )
         val candidates = ArrayList<WormholeVisualCandidate>()
 
         for (wormhole in snapshot(wormholes)) {
@@ -300,8 +333,27 @@ class EMWormholes internal constructor(
             for (point in points) {
                 ParticleManager.queue(
                     ParticleBuilder(particle)
-                        .count(1)
+                        .count(boundaryParticleCount)
                         .location(world, location.x + point.x, point.surfaceY + heightOffset, location.z + point.z)
+                        .extra(extra)
+                        .offset(0.0, 0.0, 0.0)
+                        .receivers(candidate.receivers)
+                        .color(candidate.color, particleSize)
+                )
+            }
+            val columnBasePoints = wormholeBoundaryPoints(
+                centerY = location.y,
+                centerSurfaceY = centerSurfaceY,
+                sizeMultiplier = candidate.sizeMultiplier,
+                pointCount = columnPointCount,
+            ) { xOffset, zOffset ->
+                findWormholeSurfaceY(location, candidate.sizeMultiplier, location.x + xOffset, location.z + zOffset)
+            }
+            for (point in wormholeBoundaryColumnPoints(columnBasePoints, columnHeight, columnLevels)) {
+                ParticleManager.queue(
+                    ParticleBuilder(particle)
+                        .count(columnParticleCount)
+                        .location(world, location.x + point.x, point.y + heightOffset, location.z + point.z)
                         .extra(extra)
                         .offset(0.0, 0.0, 0.0)
                         .receivers(candidate.receivers)

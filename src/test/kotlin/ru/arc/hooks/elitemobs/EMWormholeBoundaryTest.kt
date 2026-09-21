@@ -19,6 +19,12 @@ class EMWormholeBoundaryTest : FreeSpec({
         boundary.radius shouldBe (sqrt(1.015625) plusOrMinus 1.0e-12)
     }
 
+    "half-size guild wormhole keeps an intentional floor entry area" {
+        val boundary = wormholeBoundaryCircle(centerY = 101.5, surfaceY = 101.0, sizeMultiplier = 0.5)!!
+
+        boundary.radius shouldBe (sqrt(0.3125) plusOrMinus 1.0e-12)
+    }
+
     "points form one crisp evenly sampled ring without duplicating the first point" {
         val points = wormholeBoundaryPoints(
             centerY = 10.0,
@@ -50,6 +56,24 @@ class EMWormholeBoundaryTest : FreeSpec({
         points.first().x shouldBe (sqrt(2.0) plusOrMinus 1.0e-12)
         points[2].surfaceY shouldBe 9.0
         points[2].x shouldBe (-sqrt(1.25) plusOrMinus 1.0e-12)
+    }
+
+    "column rises from every exact floor-boundary point without horizontal drift" {
+        val basePoints = listOf(
+            WormholeBoundaryPoint(x = 1.0, surfaceY = 9.0, z = 0.0),
+            WormholeBoundaryPoint(x = 0.0, surfaceY = 9.5, z = 1.0),
+        )
+
+        wormholeBoundaryColumnPoints(basePoints, height = 2.0, levels = 4) shouldBe listOf(
+            WormholeBoundaryColumnPoint(1.0, 9.5, 0.0),
+            WormholeBoundaryColumnPoint(1.0, 10.0, 0.0),
+            WormholeBoundaryColumnPoint(1.0, 10.5, 0.0),
+            WormholeBoundaryColumnPoint(1.0, 11.0, 0.0),
+            WormholeBoundaryColumnPoint(0.0, 10.0, 1.0),
+            WormholeBoundaryColumnPoint(0.0, 10.5, 1.0),
+            WormholeBoundaryColumnPoint(0.0, 11.0, 1.0),
+            WormholeBoundaryColumnPoint(0.0, 11.5, 1.0),
+        )
     }
 
     "point is omitted when a sharp step has no self-consistent horizontal surface" {

@@ -26,14 +26,19 @@ shop:
       - '<gray>Баланс: <balance> 💎'
   not-enough-space: <red>Нет места в инвентаре
 wormholes:
-  period-ticks: 5
+  period-ticks: 4
   particle: DUST
   particle-extra: 0.0
-  particle-size: 0.65
+  particle-size: 1.15
   boundary-points: 24
-  boundary-height-offset: 0.06
+  boundary-particle-count: 3
+  boundary-height-offset: 0.08
+  column-height: 2.0
+  column-levels: 4
+  column-points: 8
+  column-particle-count: 2
   render-distance: 16.0
-  max-rings-per-pass: 6
+  max-rings-per-pass: 3
 chests:
   particle-distance: 20
   particle: END_ROD
