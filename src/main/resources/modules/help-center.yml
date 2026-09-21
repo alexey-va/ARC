@@ -528,7 +528,7 @@ text:
   legacy-settings-tpa: "<#d7b486>Запросы телепортации: <state>"
   legacy-settings-tpa-tooltip: '<#e6fff3>Входящие запросы на телепортацию от игроков.<newline><#e8dfd2>Включено — вы можете получать запросы /tpa.<newline>Выключено — запросы будут игнорироваться.<newline>Разрешение запроса не означает его принятие.<newline><newline><#d7b486>Нажмите, чтобы переключить приём запросов.'
   legacy-settings-portal-style: "<#d7b486>Вид портала: <state><#d7b486> ›"
-  legacy-settings-portal-style-tooltip: "<#e8dfd2>Внешний вид создаваемого вами портала.<newline><#e8dfd2>Можно выбрать обычное, астральное, солнечное<newline>и другие оформления. Текущий вид указан на кнопке.<newline><newline><#d7b486>Нажмите, чтобы открыть выбор оформления."
+  legacy-settings-portal-style-tooltip: "<#e8dfd2>Внешний вид создаваемого вами портала.<newline><#e8dfd2>Можно выбрать классическое, обычное, астральное<newline>или пустотное оформление. Текущий вид указан на кнопке.<newline><newline><#d7b486>Нажмите, чтобы открыть выбор оформления."
   legacy-settings-admin: '<#ff6b61>Админские настройки: <#e6fff3><state>'
   legacy-settings-admin-tooltip: '<#e6fff3>Личные служебные режимы администратора.<newline><#e8dfd2>Откроется отдельное меню со Spy, CSpy<newline>и другими доступными настройками.<newline><newline><#d7b486>Нажмите, чтобы открыть меню.'
   legacy-state-on: "<#9bd48d>✔ вкл."
@@ -544,8 +544,6 @@ text:
   legacy-state-origin: 'Обычный Origin'
   legacy-state-legacy: 'Классический ARC'
   legacy-state-astral: 'Астральный'
-  legacy-state-chaos: 'Хаос'
-  legacy-state-solar: 'Солнечный'
   legacy-state-void: 'Пустота'
   legacy-options-body: '<#e8dfd2>Выберите параметр. Текущий режим указан в заголовке.'
   legacy-mode-label: '<#d7b486>Вид <number>'

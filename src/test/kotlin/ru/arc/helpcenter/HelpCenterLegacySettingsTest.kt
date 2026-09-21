@@ -67,12 +67,19 @@ class HelpCenterLegacySettingsTest {
     }
 
     @Test
-    fun `portal style selection rejects unknown styles and flight uses explicit booleans`() {
+    fun `portal style selection normalizes removed preferences and preserves legacy`() {
         val player = mockk<Player>()
         val backend = FakeBackend()
         val settings = HelpCenterLegacySettings(backend)
-        assertTrue(settings.execute(player, "portal-style-solar").join())
-        assertEquals("solar", backend.metadata["arc-portal-style"])
+        listOf("chaos", "solar").forEach { removedStyle ->
+            backend.metadata["arc-portal-style"] = removedStyle
+            assertEquals("origin", settings.entries(player).first { it.id == "portal-style" }.state)
+            assertTrue(settings.execute(player, "portal-style").join())
+            assertEquals("astral", backend.metadata["arc-portal-style"])
+        }
+        assertTrue(settings.execute(player, "portal-style-legacy").join())
+        assertEquals("legacy", backend.metadata["arc-portal-style"])
+        assertEquals(false, settings.execute(player, "portal-style-chaos").join())
         assertEquals(false, settings.execute(player, "portal-style-solar extra").join())
         assertTrue(settings.execute(player, "flight-enable").join())
         assertTrue(settings.execute(player, "flight-disable").join())

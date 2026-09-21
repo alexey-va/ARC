@@ -29,8 +29,6 @@ internal enum class PortalVisualStyle(val id: String) {
     LEGACY("legacy"),
     ORIGIN("origin"),
     ASTRAL("astral"),
-    CHAOS("chaos"),
-    SOLAR("solar"),
     VOID("void");
 
     val usesOriginGate: Boolean
@@ -41,7 +39,14 @@ internal enum class PortalVisualStyle(val id: String) {
             value
                 ?.trim()
                 ?.takeIf(String::isNotEmpty)
-                ?.let { normalized -> entries.firstOrNull { style -> style.id.equals(normalized, ignoreCase = true) } }
+                ?.let { normalized ->
+                    when (normalized.lowercase()) {
+                        // Preserve old LuckPerms metadata and config values while
+                        // keeping removed variants out of the selectable enum.
+                        "chaos", "solar" -> ORIGIN
+                        else -> entries.firstOrNull { style -> style.id.equals(normalized, ignoreCase = true) }
+                    }
+                }
     }
 }
 
@@ -670,20 +675,6 @@ internal object BukkitPortalOriginGate {
                     rgb(35, 205, 255),
                     rgb(46, 94, 255),
                     rgb(255, 75, 214),
-                )
-            PortalVisualStyle.CHAOS ->
-                OriginGateParticlePalette(
-                    rgb(255, 55, 75),
-                    rgb(142, 0, 42),
-                    rgb(255, 117, 60),
-                    rgb(177, 36, 255),
-                )
-            PortalVisualStyle.SOLAR ->
-                OriginGateParticlePalette(
-                    rgb(255, 164, 42),
-                    rgb(255, 232, 84),
-                    rgb(255, 87, 26),
-                    rgb(255, 199, 64),
                 )
             PortalVisualStyle.VOID ->
                 OriginGateParticlePalette(

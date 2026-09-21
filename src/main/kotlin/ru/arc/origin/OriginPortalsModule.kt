@@ -180,8 +180,6 @@ internal class OriginPortalsConfig private constructor(
             mapOf(
                 PortalVisualStyle.ORIGIN to "origin_gate_portals:origin_portal",
                 PortalVisualStyle.ASTRAL to "origin_gate_portals:astral_portal",
-                PortalVisualStyle.CHAOS to "origin_gate_portals:chaos_portal",
-                PortalVisualStyle.SOLAR to "origin_gate_portals:solar_portal",
                 PortalVisualStyle.VOID to "origin_gate_portals:void_portal",
             )
 
@@ -345,8 +343,6 @@ private class OriginPortalVisual(
         when (style) {
             PortalVisualStyle.ORIGIN -> TextColor.color(0x7EE787)
             PortalVisualStyle.ASTRAL -> TextColor.color(0x77D9FF)
-            PortalVisualStyle.CHAOS -> TextColor.color(0xFF8B6B)
-            PortalVisualStyle.SOLAR -> TextColor.color(0xFFD166)
             PortalVisualStyle.VOID -> TextColor.color(0xD7A8FF)
             else -> TextColor.color(0xF2E8D5)
         }

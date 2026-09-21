@@ -87,8 +87,6 @@ portal:
     items:
       origin: ""
       astral: ""
-      chaos: ""
-      solar: ""
       void: ""
     opening-start-tick: 0
     opening-duration-ticks: 66

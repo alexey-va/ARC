@@ -58,8 +58,6 @@ origin-portals:
   items:
     origin: origin_gate_portals:origin_portal
     astral: origin_gate_portals:astral_portal
-    chaos: origin_gate_portals:chaos_portal
-    solar: origin_gate_portals:solar_portal
     void: origin_gate_portals:void_portal
   pulse:
     amplitude: 0.035

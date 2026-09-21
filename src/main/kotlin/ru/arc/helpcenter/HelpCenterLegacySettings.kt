@@ -9,6 +9,7 @@ import net.william278.huskhomes.api.HuskHomesAPI
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import ru.arc.ARC
+import ru.arc.PortalVisualStyle
 import ru.arc.config.ConfigManager
 import ru.arc.hooks.HookRegistry
 import ru.arc.gui.MenuShortcutAction
@@ -162,8 +163,8 @@ class HelpCenterLegacySettings(
     }
 
     private fun nextPortalStyle(player: Player): CompletableFuture<Boolean> {
-        val current = backend.meta(player, PORTAL_STYLE_META)?.lowercase()
-        val currentIndex = PORTAL_STYLES.indexOf(current).takeIf { it >= 0 } ?: PORTAL_STYLES.indexOf("origin")
+        val current = PortalVisualStyle.parse(backend.meta(player, PORTAL_STYLE_META))?.id
+        val currentIndex = PORTAL_STYLES.indexOf(current).takeIf { it >= 0 } ?: PORTAL_STYLES.indexOf(PortalVisualStyle.ORIGIN.id)
         val next = PORTAL_STYLES[(currentIndex + 1) % PORTAL_STYLES.size]
         return backend.setMeta(player, PORTAL_STYLE_META, next)
     }
@@ -172,12 +173,12 @@ class HelpCenterLegacySettings(
     private fun onOff(player: Player, node: String) = if (backend.hasPermission(player, node)) "on" else "off"
     private fun cmiOnOff(player: Player, option: CmiOption) = backend.cmiOption(player, option)?.let { if (it) "on" else "off" }
     private fun portalStyleState(player: Player): String {
-        val preference = backend.meta(player, PORTAL_STYLE_META)?.lowercase()?.takeIf { it in PORTAL_STYLES }
+        val preference = PortalVisualStyle.parse(backend.meta(player, PORTAL_STYLE_META))?.id
         return preference ?: runCatching {
-            ConfigManager.of(ARC.instance.dataPath, "modules/misc.yml")
-                .string("portal.origin-gate.default-style", "origin")
-                .lowercase()
-                .takeIf { it in PORTAL_STYLES }
+            PortalVisualStyle.parse(
+                ConfigManager.of(ARC.instance.dataPath, "modules/misc.yml")
+                    .string("portal.origin-gate.default-style", PortalVisualStyle.ORIGIN.id),
+            )?.id
         }.getOrNull() ?: "unknown"
     }
     private fun entry(id: String, label: String, state: String?, tooltip: String) = HelpCenterLegacySettingEntry(id, label, state, tooltip)
@@ -269,7 +270,7 @@ class HelpCenterLegacySettings(
         private const val STAIRS_SIT = "cmi.command.sit.stairs"
         private const val ADMIN = "tab.group.admin"
         private const val PORTAL_STYLE_META = "arc-portal-style"
-        internal val PORTAL_STYLES = listOf("legacy", "origin", "astral", "chaos", "solar", "void")
+        internal val PORTAL_STYLES = PortalVisualStyle.entries.map { it.id }
         private fun modeNode(prefix: String, mode: Int) = if (mode == 1) prefix else "$prefix$mode"
         fun modeLabelKey(prefix: String, mode: Int): String? = when (prefix) {
             "tab.scoreboard", "tab.tablist" -> "legacy-settings-${if (prefix == "tab.scoreboard") "scoreboard" else "tablist"}-mode-$mode"

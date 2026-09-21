@@ -34,6 +34,12 @@ class OriginPortalsModuleTest : FreeSpec({
             survival.command shouldBe "arc rtp survival --only-if-first"
             survival.label shouldBe "Выживание"
             config.gateSettings(survival)!!.height shouldBe 16.8f
+            config.gateSettings(survival)!!.itemIds shouldBe
+                mapOf(
+                    ru.arc.PortalVisualStyle.ORIGIN to "origin_gate_portals:origin_portal",
+                    ru.arc.PortalVisualStyle.ASTRAL to "origin_gate_portals:astral_portal",
+                    ru.arc.PortalVisualStyle.VOID to "origin_gate_portals:void_portal",
+                )
 
             val mining = config.anchors.first { it.id == OriginPortalId.MINING }
             mining.style shouldBe ru.arc.PortalVisualStyle.ASTRAL

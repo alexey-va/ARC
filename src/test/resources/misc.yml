@@ -14,8 +14,6 @@ portal:
     items:
       origin: ""
       astral: ""
-      chaos: ""
-      solar: ""
       void: ""
 
 bees:

@@ -20,8 +20,16 @@ class PortalOriginGateTest : FreeSpec({
             PortalVisualStyle.entries.forEach { style ->
                 resolvePortalVisualStyle(PortalVisualStyle.ORIGIN, " ${style.id.uppercase()} ") shouldBe style
             }
+            PortalVisualStyle.entries.map { it.id } shouldBe listOf("legacy", "origin", "astral", "void")
             PortalVisualStyle.LEGACY.usesOriginGate.shouldBeFalse()
             PortalVisualStyle.ORIGIN.usesOriginGate.shouldBeTrue()
+        }
+
+        "normalizes removed saved preferences to Origin" {
+            resolvePortalVisualStyle(PortalVisualStyle.VOID, " chaos ") shouldBe PortalVisualStyle.ORIGIN
+            resolvePortalVisualStyle(PortalVisualStyle.ASTRAL, "SOLAR") shouldBe PortalVisualStyle.ORIGIN
+            PortalVisualStyle.parse("chaos") shouldBe PortalVisualStyle.ORIGIN
+            PortalVisualStyle.parse("solar") shouldBe PortalVisualStyle.ORIGIN
         }
     }
 
@@ -39,8 +47,6 @@ class PortalOriginGateTest : FreeSpec({
                 mapOf(
                     PortalVisualStyle.ORIGIN to "origin_gate_portals:origin_portal",
                     PortalVisualStyle.ASTRAL to "origin_gate_portals:astral_portal",
-                    PortalVisualStyle.CHAOS to "origin_gate_portals:chaos_portal",
-                    PortalVisualStyle.SOLAR to "origin_gate_portals:solar_portal",
                     PortalVisualStyle.VOID to "origin_gate_portals:void_portal",
                 )
             settings.openingCurve shouldBe OriginGateOpeningCurve.DRAMATIC
@@ -75,7 +81,7 @@ class PortalOriginGateTest : FreeSpec({
             val originGate = defaults.substringAfter("origin-gate:").substringBefore("# DUST_COLOR_TRANSITION")
             originGate.contains("enabled: false").shouldBeTrue()
             originGate.contains("default-style: origin").shouldBeTrue()
-            listOf("origin", "astral", "chaos", "solar", "void").forEach { style ->
+            listOf("origin", "astral", "void").forEach { style ->
                 originGate.contains("$style: \"\"").shouldBeTrue()
             }
         }
@@ -184,8 +190,6 @@ private fun settings(
     defaultStyle: String = "origin",
     origin: String = "origin_gate_portals:origin_portal",
     astral: String = "origin_gate_portals:astral_portal",
-    chaos: String = "origin_gate_portals:chaos_portal",
-    solar: String = "origin_gate_portals:solar_portal",
     void: String = "origin_gate_portals:void_portal",
     openingDuration: Int = 66,
     openingCurve: String = "dramatic",
@@ -209,8 +213,6 @@ private fun settings(
             mapOf(
                 PortalVisualStyle.ORIGIN to origin,
                 PortalVisualStyle.ASTRAL to astral,
-                PortalVisualStyle.CHAOS to chaos,
-                PortalVisualStyle.SOLAR to solar,
                 PortalVisualStyle.VOID to void,
             ),
         openingStartTick = 0,
