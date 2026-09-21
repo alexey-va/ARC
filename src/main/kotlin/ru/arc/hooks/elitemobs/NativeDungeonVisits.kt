@@ -114,7 +114,7 @@ internal fun normalizeDungeonEntry(
         .firstOrNull { !isNativeWormholeTrigger(it, volumes) && safe(it) }
 }
 
-/** Matches EliteMobs 10.8.1's WormholeManager trigger volume. */
+/** Matches EliteMobs 10.9.1's WormholeManager trigger volume. */
 internal fun nativeWormholeVolumes(): List<NativeWormholeVolume> =
     WormholeEntry.getWormholeEntries().mapNotNull { entry ->
         val portal = entry.location ?: return@mapNotNull null

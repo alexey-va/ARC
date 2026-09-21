@@ -28,9 +28,12 @@ shop:
 wormholes:
   period-ticks: 5
   particle: DUST
-  particle-offset: 0.5
-  particle-extra: 0.02
-  particle-count: 20
+  particle-extra: 0.0
+  particle-size: 0.65
+  boundary-points: 24
+  boundary-height-offset: 0.06
+  render-distance: 16.0
+  max-rings-per-pass: 6
 chests:
   particle-distance: 20
   particle: END_ROD
