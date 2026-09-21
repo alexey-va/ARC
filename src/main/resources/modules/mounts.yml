@@ -10,9 +10,14 @@ controls:
   double-sneak-window: 450ms
   hint-cooldown: 5s
 
+# This section is read asynchronously every 2 seconds; no ARC reload or re-summon needed.
+# Scale affects both horizontal distance and height of native carrier seats.
 passengers:
   carrier-scale: 0.8
   carrier-yaw-offset: 90.0
+  single-carrier-yaw-offset: 180.0
+  # Optional per-mount overrides of the same three keys, e.g. polar_bear or ravager.
+  mounts: {}
 
 quick-summon:
   # Uses the client's "swap item with offhand" action, F by default, while sneaking.

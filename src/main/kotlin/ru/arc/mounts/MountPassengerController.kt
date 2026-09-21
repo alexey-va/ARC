@@ -62,6 +62,7 @@ internal class MountPassengerController(
     private val passengers = hashMapOf<UUID, Passenger>()
     private val carriers = hashMapOf<UUID, Ride>()
     private val pendingCarrierSpawns = hashMapOf<UUID, Ride>()
+    private var liveSettings: MountPassengerSettings? = null
     private var carrierPoses: MountCarrierPosePackets? = null
     private val ownerKey = NamespacedKey(plugin, "mount_owner")
     private val mountIdKey = NamespacedKey(plugin, "mount_id")
@@ -69,6 +70,12 @@ internal class MountPassengerController(
     private val seatKey = NamespacedKey(plugin, "mount_passenger_seat")
 
     fun start() {
+        val config = configProvider()
+        liveSettings = MountPassengerSettings(
+            plugin.dataFolder.toPath(),
+            MountPassengerSeatSettings(config.passengerCarrierScale, 180.0, config.passengerCarrierYawOffset),
+            plugin.logger,
+        ).also { it.start(scheduler) }
         if (carrierPoses == null && plugin.server.pluginManager.isPluginEnabled("packetevents")) {
             carrierPoses = MountCarrierPosePackets().also { it.start() }
         }
@@ -76,6 +83,8 @@ internal class MountPassengerController(
     }
 
     fun shutdown() {
+        liveSettings?.close()
+        liveSettings = null
         rides.keys.toList().forEach(::closeRide)
         carrierPoses?.close()
         carrierPoses = null
@@ -365,13 +374,15 @@ internal class MountPassengerController(
     private fun updateCarrier(ride: Ride, carrier: Camel, index: Int) {
         val config = configProvider()
         val mountScale = ride.entity.getAttribute(Attribute.SCALE)?.value ?: 1.0
-        val scale = (mountScale * config.passengerCarrierScale).coerceIn(0.0625, 16.0)
+        val settings = liveSettings?.forMount(ride.definition.id)
+            ?: MountPassengerSeatSettings(config.passengerCarrierScale, 180.0, config.passengerCarrierYawOffset)
+        val scale = (mountScale * settings.scale).coerceIn(0.0625, 16.0)
         carrier.getAttribute(Attribute.SCALE)?.let { if (it.baseValue != scale) it.baseValue = scale }
         // A separate native vehicle per seat keeps the other guest fixed when someone dismounts.
         // The Camel's first seat lies forward of its origin. Turn a lone carrier
         // backwards so its guest sits behind the driver instead of beside them.
-        val yawOffset = if (ride.definition.passengerSeats == 1) 180.0f
-            else config.passengerCarrierYawOffset.toFloat() * if (index == 0) 1 else -1
+        val yawOffset = if (ride.definition.passengerSeats == 1) settings.singleYaw.toFloat()
+            else settings.pairedYaw.toFloat() * if (index == 0) 1 else -1
         carrier.setRotation(ride.entity.yaw + yawOffset, 0.0f)
     }
 

@@ -33,6 +33,24 @@ import java.util.UUID
 import java.util.function.Consumer
 
 class MountPassengerControllerTest : StringSpec({
+    "existing passenger carriers adopt changed geometry without remounting" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val fixture = PassengerFixture(paper, seats = 2, customCarrier = true)
+            val first = fixture.player()
+            val second = fixture.player()
+            fixture.click(first)
+            fixture.click(second)
+            every { fixture.config.passengerCarrierScale } returns 1.0
+            every { fixture.config.passengerCarrierYawOffset } returns 135.0
+            fixture.controller.reconcileRide(fixture.mount.uniqueId, false) shouldBe true
+            verify { fixture.carriers.first().setRotation(165.0f, 0.0f) }
+            verify { fixture.carriers.last().setRotation(-105.0f, 0.0f) }
+            fixture.seatRiders shouldBe listOf(listOf(first), listOf(second))
+            verify(exactly = 1) { fixture.carriers.first().addPassenger(first) }
+            verify(exactly = 1) { fixture.carriers.last().addPassenger(second) }
+        }
+    }
+
     "a camel carries one guest and a full ride refuses another without changing the driver" {
         MockBukkitTestRuntime.open().use { paper ->
             val fixture = PassengerFixture(paper, seats = 1)
@@ -413,7 +431,7 @@ private class PassengerFixture(
     val carriers = List(if (customCarrier) seats else 0) { mockk<Camel>(relaxed = true) }
     val seatRiders = List(carriers.size) { mutableListOf<Entity>() }
     private val scheduler = mockk<TaskScheduler>()
-    private val config = mockk<MountModuleConfig>()
+    val config = mockk<MountModuleConfig>()
     val controller: MountPassengerController
     val driver = player()
 
