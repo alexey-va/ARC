@@ -142,10 +142,12 @@ internal fun wormholeSurfaceY(centerY: Double, triggerRadius: Double, candidateT
 
 class EMWormholes internal constructor(
     private val config: Config,
+    private val wormholeConfig: Config = config,
     private val scheduleWormholes: (periodTicks: Long, task: () -> Unit) -> ScheduledTask,
 ) : AutoCloseable {
     constructor() : this(
         config = ConfigManager.of(ARC.instance.dataPath, "modules/elitemobs.yml"),
+        wormholeConfig = ConfigManager.of(ARC.instance.dataPath, "modules/elitemobs-wormholes.yml"),
         scheduleWormholes = { periodTicks, task ->
             repeating(periodTicks.ticks, delay = 20.ticks) {
                 task()
@@ -163,7 +165,7 @@ class EMWormholes internal constructor(
         check(!closed) { "EMWormholes is closed" }
         cancelTask()
         info("Starting wormhole task")
-        val periodTicks = config.integer("wormholes.period-ticks", 2).toLong()
+        val periodTicks = wormholeConfig.integer("wormholes.period-ticks", 4).toLong()
         require(periodTicks > 0) { "wormholes.period-ticks must be positive, got $periodTicks" }
         wormholeTask = scheduleWormholes(periodTicks) {
             try {
@@ -263,23 +265,23 @@ class EMWormholes internal constructor(
         if (wormholes.isEmpty()) return
         val players = PlayerManager.getOnlinePlayersThreadSafe()
         if (players.isEmpty()) return
-        val particle = config.particle("wormholes.particle", Particle.DUST)
-        val extra = config.real("wormholes.particle-extra", 0.0)
-        val particleSize = config.real("wormholes.particle-size", 1.15).toFloat().coerceIn(0.1f, 4.0f)
-        val pointCount = config.integer("wormholes.boundary-points", 24).coerceIn(8, 64)
-        val boundaryParticleCount = config.integer("wormholes.boundary-particle-count", 3).coerceIn(1, 8)
-        val heightOffset = config.real("wormholes.boundary-height-offset", 0.06)
-        val columnHeight = config.real("wormholes.column-height", 2.0).coerceIn(0.25, 4.0)
-        val columnLevels = config.integer("wormholes.column-levels", 4).coerceIn(1, 8)
-        val configuredColumnPointCount = config.integer("wormholes.column-points", 8).coerceIn(4, 32)
+        val particle = wormholeConfig.particle("wormholes.particle", Particle.DUST)
+        val extra = wormholeConfig.real("wormholes.particle-extra", 0.0)
+        val particleSize = wormholeConfig.real("wormholes.particle-size", 1.15).toFloat().coerceIn(0.1f, 4.0f)
+        val pointCount = wormholeConfig.integer("wormholes.boundary-points", 24).coerceIn(8, 64)
+        val boundaryParticleCount = wormholeConfig.integer("wormholes.boundary-particle-count", 3).coerceIn(1, 8)
+        val heightOffset = wormholeConfig.real("wormholes.boundary-height-offset", 0.08)
+        val columnHeight = wormholeConfig.real("wormholes.column-height", 2.0).coerceIn(0.25, 4.0)
+        val columnLevels = wormholeConfig.integer("wormholes.column-levels", 4).coerceIn(1, 8)
+        val configuredColumnPointCount = wormholeConfig.integer("wormholes.column-points", 8).coerceIn(4, 32)
         val columnPointCount = minOf(
             configuredColumnPointCount,
             ((WORMHOLE_PARTICLE_BUILDERS_PER_PASS - pointCount) / columnLevels).coerceAtLeast(4),
         )
-        val columnParticleCount = config.integer("wormholes.column-particle-count", 2).coerceIn(1, 8)
-        val renderDistance = config.real("wormholes.render-distance", 16.0).coerceAtLeast(1.0)
+        val columnParticleCount = wormholeConfig.integer("wormholes.column-particle-count", 2).coerceIn(1, 8)
+        val renderDistance = wormholeConfig.real("wormholes.render-distance", 16.0).coerceAtLeast(1.0)
         val renderDistanceSquared = renderDistance * renderDistance
-        val configuredMaxRings = config.integer("wormholes.max-rings-per-pass", 3).coerceIn(1, 8)
+        val configuredMaxRings = wormholeConfig.integer("wormholes.max-rings-per-pass", 3).coerceIn(1, 8)
         val buildersPerPortal = pointCount + columnPointCount * columnLevels
         val maxRingsPerPass = minOf(
             configuredMaxRings,

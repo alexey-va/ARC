@@ -1,6 +1,7 @@
 package ru.arc.hooks.elitemobs
 
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.matchers.shouldBe
 import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
 import org.junit.jupiter.api.AfterEach
@@ -65,6 +66,29 @@ class EMWormholesLifecycleTest {
         firstTask.isCancelled.shouldBeTrue()
         secondTask.isCancelled.shouldBeFalse()
         second.close()
+    }
+
+    @Test
+    fun `dedicated wormhole config owns the render period`() {
+        val mainConfig = config().also { it.setInt("wormholes.period-ticks", 2) }
+        val visualConfig = ConfigManager.of(tempDir, "elitemobs-wormholes.yml").also {
+            it.setInt("wormholes.period-ticks", 7)
+        }
+        var scheduledPeriod = 0L
+        val wormholes =
+            EMWormholes(
+                config = mainConfig,
+                wormholeConfig = visualConfig,
+                scheduleWormholes = { period, _ ->
+                    scheduledPeriod = period
+                    FakeScheduledTask()
+                },
+            )
+
+        wormholes.init()
+
+        scheduledPeriod shouldBe 7L
+        wormholes.close()
     }
 
     private fun config() =
