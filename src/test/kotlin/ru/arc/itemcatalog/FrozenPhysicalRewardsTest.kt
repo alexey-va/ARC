@@ -16,6 +16,28 @@ import java.util.Comparator
 import java.util.concurrent.CompletableFuture
 
 class FrozenPhysicalRewardsTest : StringSpec({
+    "travel-anchor recipes bind a bounded personal-anchor amount" {
+        FrozenPhysicalRecipe(
+            type = "travel-anchors",
+            travelAnchorAmount = 2,
+        ).validate()
+        runCatching {
+            FrozenPhysicalRecipe(
+                type = "travel-anchors",
+                travelAnchorAmount = 0,
+            ).validate()
+        }.isFailure shouldBe true
+        runCatching {
+            FrozenPhysicalRecipe(
+                type = "money",
+                currency = "vault",
+                minAmount = 1.0,
+                maxAmount = 1.0,
+                travelAnchorAmount = 2,
+            ).validate()
+        }.isFailure shouldBe true
+    }
+
     "dungeon case recipes bind a bounded case id and exact generator definition" {
         FrozenPhysicalRecipe(
             type = "dungeon-case",

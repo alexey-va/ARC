@@ -992,8 +992,14 @@ object TravelAnchorsModule : PluginModule, Listener {
     }
 
     fun giveAnchors(player: Player, amount: Int): Int {
-        val current = settings ?: return 0
-        return giveBoundItems(player, amount) { current.anchorItem(player.name) }
+        val stacks = createPersonalAnchorStacks(player.name, amount) ?: return 0
+        return OpsItemHandlers.giveStacks(player, stacks, dropOverflow = true)
+    }
+
+    internal fun createPersonalAnchorStacks(ownerName: String, amount: Int): List<ItemStack>? {
+        val current = settings ?: return null
+        if (amount !in 1..MAX_GIVE_AMOUNT) return null
+        return boundItems(amount) { current.anchorItem(ownerName) }
     }
 
     fun giveSharedAnchors(player: Player, amount: Int): Int {
@@ -1007,8 +1013,12 @@ object TravelAnchorsModule : PluginModule, Listener {
     }
 
     private fun giveBoundItems(player: Player, amount: Int, factory: () -> ItemStack): Int {
+        return OpsItemHandlers.giveStacks(player, boundItems(amount, factory), dropOverflow = true)
+    }
+
+    private fun boundItems(amount: Int, factory: () -> ItemStack): List<ItemStack> {
         var remaining = amount
-        val stacks = buildList {
+        return buildList {
             while (remaining > 0) {
                 val stack = factory()
                 stack.amount = min(remaining, stack.maxStackSize)
@@ -1016,7 +1026,6 @@ object TravelAnchorsModule : PluginModule, Listener {
                 remaining -= stack.amount
             }
         }
-        return OpsItemHandlers.giveStacks(player, stacks, dropOverflow = true)
     }
 
     fun message(key: String, vararg replacements: Pair<String, String>): Component =

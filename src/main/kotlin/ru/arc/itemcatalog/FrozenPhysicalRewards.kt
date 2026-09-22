@@ -232,12 +232,16 @@ internal data class FrozenPhysicalRecipe(
     val treasure: FrozenTreasureNode? = null,
     val dungeonCaseId: String? = null,
     val dungeonCaseDefinition: String? = null,
+    val travelAnchorAmount: Int? = null,
 ) {
     fun validate() {
         if (type != "dungeon-case") {
             require(dungeonCaseId == null && dungeonCaseDefinition == null) {
                 "Dungeon case fields require a dungeon-case recipe"
             }
+        }
+        if (type != "travel-anchors") {
+            require(travelAnchorAmount == null) { "Travel-anchor amount requires a travel-anchors recipe" }
         }
         when (type) {
             "money" -> validateAmount(currency, minAmount, maxAmount, expectedCurrency = "vault")
@@ -316,6 +320,13 @@ internal data class FrozenPhysicalRecipe(
                 require(currency == null && minAmount == null && maxAmount == null && tokenAmount == null)
                 require(commandKind == null && commandValue == null && mountId == null && furnitureBoxes == null)
                 require(sealItems == null && sealName == null && sealDescription == null && treasure == null)
+            }
+            "travel-anchors" -> {
+                require(travelAnchorAmount != null && travelAnchorAmount in 1..64) { "Frozen travel-anchor amount is invalid" }
+                require(currency == null && minAmount == null && maxAmount == null && tokenAmount == null)
+                require(commandKind == null && commandValue == null && mountId == null && furnitureBoxes == null)
+                require(sealItems == null && sealName == null && sealDescription == null && treasure == null)
+                require(dungeonCaseId == null && dungeonCaseDefinition == null)
             }
             else -> error("Unknown frozen physical recipe type: $type")
         }

@@ -358,6 +358,7 @@ class RewardCatalogGuiController internal constructor(
             is RewardCatalogSource.Mount,
             is RewardCatalogSource.FurniturePackage,
             is RewardCatalogSource.DungeonCase,
+            is RewardCatalogSource.TravelAnchors,
             -> physical(entry, grant)?.let(::listOf)
             is RewardCatalogSource.Planned -> null
         }

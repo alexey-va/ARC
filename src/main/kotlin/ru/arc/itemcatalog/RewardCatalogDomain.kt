@@ -24,6 +24,9 @@ sealed interface RewardCatalogSource {
 
     /** A transferable voucher that rolls the named EliteMobs dungeon case when redeemed. */
     data class DungeonCase(val id: String) : RewardCatalogSource
+
+    /** A transferable voucher that binds personal travel anchors to its redeemer. */
+    data class TravelAnchors(val amount: Int) : RewardCatalogSource
 }
 
 data class RewardFurniturePackage(val name: String, val items: List<String>)

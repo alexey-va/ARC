@@ -109,6 +109,11 @@ class RewardCatalogModuleConfig(private val config: Config) {
                 "mount" -> RewardCatalogSource.Mount(requiredId(map.getValue(key), "$path.mount", ID))
                 "package" -> RewardCatalogSource.FurniturePackage(requiredId(map.getValue(key), "$path.package", ID))
                 "dungeon-case" -> RewardCatalogSource.DungeonCase(requiredId(map.getValue(key), "$path.dungeon-case", ID))
+                "travel-anchors" -> RewardCatalogSource.TravelAnchors(
+                    integer(map.getValue(key), "$path.travel-anchors").also {
+                        require(it in 1..64) { "$path.travel-anchors must be in 1..64" }
+                    },
+                )
                 else -> error("unreachable source key")
             }
         val icon = if ("icon" in map) material(map["icon"], "$path.icon") else null
@@ -316,6 +321,7 @@ class RewardCatalogModuleConfig(private val config: Config) {
         private val PLUGIN_ID = Regex("[A-Za-z0-9._-]{1,64}")
         private val SOURCE_KEYS = setOf(
             "treasure", "preset", "pouch", "seal", "itemsadder", "planned", "mount", "package", "dungeon-case",
+            "travel-anchors",
         )
 
         fun load(dataPath: Path): RewardCatalogModuleConfig =
