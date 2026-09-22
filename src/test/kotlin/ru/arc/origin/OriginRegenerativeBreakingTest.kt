@@ -37,6 +37,17 @@ class OriginRegenerativeBreakingTest :
             runtime.delays shouldContainExactly emptyList()
         }
 
+        "Origin build protection follows the enabled world and admin bypass" {
+            val service = OriginBreakProtection(FakeRuntime())
+            service.isProtected("rc_origin_spawn", false) shouldBe false
+            service.apply(OriginBreakProtectionSettings(true, false, "rc_origin_spawn", 100L))
+            service.isProtected("rc_origin_spawn", false) shouldBe true
+            service.isProtected("rc_origin_spawn", true) shouldBe false
+            service.isProtected("world", false) shouldBe false
+            service.apply(OriginBreakProtectionSettings(false, true, "rc_origin_spawn", 100L))
+            service.isProtected("rc_origin_spawn", false) shouldBe false
+        }
+
         "build permission bypass leaves the break completely untouched" {
             val runtime = FakeRuntime()
             val service = OriginBreakProtection(runtime)

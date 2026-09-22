@@ -1,11 +1,21 @@
 package ru.arc.origin
 
+import dev.lone.itemsadder.api.Events.CustomBlockBreakEvent
+import dev.lone.itemsadder.api.Events.CustomBlockPlaceEvent
+import dev.lone.itemsadder.api.Events.FurnitureBreakEvent
+import dev.lone.itemsadder.api.Events.FurniturePlaceEvent
 import org.bukkit.Bukkit
+import org.bukkit.entity.Player
 import org.bukkit.event.EventPriority
 import org.bukkit.event.EventHandler
 import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
 import org.bukkit.event.block.BlockBreakEvent
+import org.bukkit.event.block.BlockPlaceEvent
+import org.bukkit.event.entity.EntityPlaceEvent
+import org.bukkit.event.hanging.HangingPlaceEvent
+import org.bukkit.event.player.PlayerBucketEmptyEvent
+import org.bukkit.event.player.PlayerBucketFillEvent
 import org.bukkit.event.player.PlayerInteractEntityEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import ru.arc.ARC
@@ -18,11 +28,15 @@ object OriginSpawnModule : PluginModule, Listener {
     private var chunks: OriginSpawnChunkManager? = null
     private var showcase: AuctionShowcaseManager? = null
     private var breakProtection: OriginBreakProtection? = null
+    private var itemsAdderProtection: Listener? = null
     private var breakBypassPermission = OriginSpawnConfig.DEFAULT_BREAK_BYPASS_PERMISSION
 
     override fun init() {
         breakProtection = OriginBreakProtection(BukkitOriginBreakRuntime())
         Bukkit.getPluginManager().registerEvents(this, ARC.instance)
+        if (Bukkit.getPluginManager().isPluginEnabled("ItemsAdder")) {
+            itemsAdderProtection = OriginItemsAdderProtection().also { Bukkit.getPluginManager().registerEvents(it, ARC.instance) }
+        }
         chunks = OriginSpawnChunkManager(ARC.instance.chunkTicketRegistry)
         showcase = AuctionShowcaseManager()
         apply(OriginSpawnConfig.load(ARC.instance.dataPath))
@@ -34,6 +48,8 @@ object OriginSpawnModule : PluginModule, Listener {
 
     override fun shutdown() {
         HandlerList.unregisterAll(this)
+        itemsAdderProtection?.let(HandlerList::unregisterAll)
+        itemsAdderProtection = null
         showcase?.shutdown()
         showcase = null
         breakProtection?.shutdown()
@@ -73,6 +89,38 @@ object OriginSpawnModule : PluginModule, Listener {
         event.isCancelled = true
     }
 
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    fun onPlace(event: BlockPlaceEvent) {
+        if (!deniesPlacement(event.player, event.blockPlaced.world.name)) return
+        event.setBuild(false)
+        event.isCancelled = true
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    fun onBucketEmpty(event: PlayerBucketEmptyEvent) {
+        if (deniesPlacement(event.player, event.block.world.name)) event.isCancelled = true
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    fun onBucketFill(event: PlayerBucketFillEvent) {
+        if (deniesPlacement(event.player, event.block.world.name)) event.isCancelled = true
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    fun onHangingPlace(event: HangingPlaceEvent) {
+        val player = event.player ?: return
+        if (deniesPlacement(player, event.entity.world.name)) event.isCancelled = true
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    fun onEntityPlace(event: EntityPlaceEvent) {
+        val player = event.player ?: return
+        if (deniesPlacement(player, event.entity.world.name)) event.isCancelled = true
+    }
+
+    internal fun deniesPlacement(player: Player, worldName: String): Boolean =
+        breakProtection?.isProtected(worldName, player.hasPermission(breakBypassPermission)) == true
+
     private fun apply(config: OriginSpawnConfig) {
         chunks?.apply(config)
         showcase?.apply(config)
@@ -86,5 +134,27 @@ object OriginSpawnModule : PluginModule, Listener {
                 feedback = config.regenerativeBreakingFeedback,
             ),
         )
+    }
+}
+
+private class OriginItemsAdderProtection : Listener {
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    fun onFurniturePlace(event: FurniturePlaceEvent) {
+        if (OriginSpawnModule.deniesPlacement(event.player, event.player.world.name)) event.isCancelled = true
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    fun onFurnitureBreak(event: FurnitureBreakEvent) {
+        if (OriginSpawnModule.deniesPlacement(event.player, event.player.world.name)) event.isCancelled = true
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    fun onCustomBlockPlace(event: CustomBlockPlaceEvent) {
+        if (OriginSpawnModule.deniesPlacement(event.player, event.block.world.name)) event.isCancelled = true
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    fun onCustomBlockBreak(event: CustomBlockBreakEvent) {
+        if (OriginSpawnModule.deniesPlacement(event.player, event.block.world.name)) event.isCancelled = true
     }
 }

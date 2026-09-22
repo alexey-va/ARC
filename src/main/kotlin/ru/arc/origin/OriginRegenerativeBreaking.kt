@@ -165,7 +165,7 @@ internal class OriginBreakProtection(
         bypassProtection: Boolean = false,
     ): Boolean {
         val current = settings
-        if (bypassProtection || !current.protected || target.worldName != current.worldName) return false
+        if (!isProtected(target.worldName, bypassProtection)) return false
         showFeedback(target, current.feedback)
         if (!current.illusionEnabled) return true
 
@@ -177,6 +177,9 @@ internal class OriginBreakProtection(
         }
         return true
     }
+
+    fun isProtected(worldName: String, hasBuildPermission: Boolean): Boolean =
+        settings.protected && worldName == settings.worldName && !hasBuildPermission
 
     fun forget(playerId: UUID) {
         pending.keys.filter { it.playerId == playerId }.forEach { retire(it, restore = false) }
