@@ -147,7 +147,6 @@ internal class HelpCenterController(
 
     private fun openRoot(player: Player) {
         val token = markNavigation(player) { openRoot(player) }
-        showRoot(player)
         gateway.loadProfile(player, settings.loadTimeoutSeconds).whenCompleteSync(tasks) { profile, failure ->
             if (!active || !player.isOnline || !navigation.isCurrent(player, token)) return@whenCompleteSync
             showRoot(player, profile.takeIf { failure == null })
@@ -157,7 +156,7 @@ internal class HelpCenterController(
     private fun showRoot(player: Player, profile: HelpCenterProfile? = null) {
         val body = mutableListOf(PaperDialogBody(text("root-body"), width = 506))
         if (profile == null) {
-            body += PaperDialogBody(text("root-state-loading"), width = 506)
+            body += PaperDialogBody(text("my-error"), width = 506)
         } else {
             val unavailable = settings.text("not-available")
             body += DialogTables.body(

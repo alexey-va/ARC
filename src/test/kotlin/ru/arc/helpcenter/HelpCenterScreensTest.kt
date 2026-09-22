@@ -253,6 +253,38 @@ class HelpCenterScreensTest {
     }
 
     @Test
+    fun `root opens once after profile is ready and ignores obsolete loads`() {
+        val first = CompletableFuture<HelpCenterProfile>()
+        val second = CompletableFuture<HelpCenterProfile>()
+        every { gateway.loadProfile(player, any()) } returnsMany listOf(first, second)
+        controller.open(player, HelpCenterPage.ROOT)
+        assertEquals(0, screenCount)
+        controller.open(player, HelpCenterPage.ROOT)
+        first.complete(HelpCenterProfile("Old", "survival", "vanilla", 1, 65, 2, null, null, null, null))
+        paper.performTicks(2)
+        assertEquals(0, screenCount)
+        second.complete(HelpCenterProfile("Viewer", "survival", "vanilla", 1, 65, 2, "100", "Игрок", null, 0))
+        paper.performTicks(2)
+        assertEquals(1, screenCount)
+        assertEquals("help.root", screen.id)
+        assertTrue(body().contains("Viewer"))
+    }
+
+    @Test
+    fun `root failure opens one usable menu`() {
+        val pending = CompletableFuture<HelpCenterProfile>()
+        every { gateway.loadProfile(player, any()) } returns pending
+        controller.open(player, HelpCenterPage.ROOT)
+        assertEquals(0, screenCount)
+        pending.completeExceptionally(IllegalStateException("profile unavailable"))
+        paper.performTicks(2)
+        assertEquals(1, screenCount)
+        assertEquals("help.root", screen.id)
+        assertTrue(body().contains("Часть профиля сейчас недоступна"))
+        assertTrue(screen.buttons.any { it.id.value == "travel" })
+    }
+
+    @Test
     fun `root is a compact server router and help is a separate support hub`() {
         open(HelpCenterPage.ROOT)
         player.addAttachment(paper.createSimplePlugin("TeamsPermission"), "arcjustteams.use", true)
