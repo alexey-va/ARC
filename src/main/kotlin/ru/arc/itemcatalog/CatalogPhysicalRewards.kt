@@ -18,10 +18,14 @@ import ru.arc.onetime.OneTimeUseFingerprint
 import ru.arc.treasure.core.AeArg
 import ru.arc.treasure.core.AeLoot
 import ru.arc.treasure.core.AeKind
+import ru.arc.treasure.core.MessageContext
 import ru.arc.treasure.core.Treasure
+import ru.arc.treasure.core.TreasureConfig
+import ru.arc.treasure.core.TreasureMessage
 import ru.arc.treasure.core.Treasures
 import ru.arc.travelanchors.TravelAnchorsModule
 import ru.arc.util.TextUtil
+import ru.arc.util.Logging.warn
 import ru.arc.util.withCustomModelData
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -612,7 +616,18 @@ internal class CatalogPhysicalRewards(
         val before = wallet.balanceMinor(player.uniqueId) ?: return rejected()
         val evidence = wallet.deposit(player.uniqueId, minor, "arc-reward:$operationId", before)
         return when {
-            evidence.providerAccepted == true && evidence.balanceAfterMinor == Math.addExact(before, minor) -> PhysicalRewardOutcome.Applied
+            evidence.providerAccepted == true && evidence.balanceAfterMinor == Math.addExact(before, minor) -> {
+                if (currency == "vault") {
+                    // Use the confirmed, rounded wallet delta, never reroll the reward for its message.
+                    runCatching {
+                        TreasureMessage.chat(TreasureConfig.DefaultMessages.moneyReceived)
+                            .send(MessageContext(player, amount = BigDecimal.valueOf(minor, 2)))
+                    }.onFailure {
+                        warn("Money reward receipt failed after payout: operation={} player={}", operationId, player.uniqueId, it)
+                    }
+                }
+                PhysicalRewardOutcome.Applied
+            }
             !evidence.providerCallAttempted || evidence.providerAccepted == false && evidence.balanceAfterMinor == before -> rejected()
             else -> uncertain()
         }

@@ -10,6 +10,7 @@ import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import ru.arc.KotestTestBase
 import ru.arc.treasure.core.GiveResult
+import ru.arc.treasure.core.GiveConfig
 import ru.arc.treasure.core.Treasure
 import ru.arc.treasure.core.TreasurePool
 
@@ -40,7 +41,8 @@ class PouchServiceTest :
                 val service =
                     PouchService(
                         poolProvider = pools::get,
-                        giveTreasure = { treasure, _, _ ->
+                        giveTreasure = { treasure, _, config ->
+                            config shouldBe GiveConfig.CONTAINER
                             given += treasure
                             GiveResult.Success(treasure)
                         },

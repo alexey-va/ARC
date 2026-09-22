@@ -497,9 +497,11 @@ sealed class Treasure {
 data class GiveConfig(
     val sendMessages: Boolean = true,
     val sendPoolMessages: Boolean = true,
+    val sendMoneyReceipts: Boolean = false,
 ) {
     companion object {
         val DEFAULT = GiveConfig()
         val SILENT = GiveConfig(sendMessages = false, sendPoolMessages = false)
+        val CONTAINER = GiveConfig(sendMessages = false, sendPoolMessages = false, sendMoneyReceipts = true)
     }
 }

@@ -124,7 +124,7 @@ class BlockListener : Listener {
             var delivered = 0
             repeat(rolls) {
                 val treasure = pool.random() ?: return@repeat
-                if (Treasures.service.give(treasure, event.player, GiveConfig.SILENT).isSuccess) delivered++
+                if (Treasures.service.give(treasure, event.player, GiveConfig.CONTAINER).isSuccess) delivered++
             }
             if (delivered > 0) {
                 consumeOneFromMainHand(event.player)

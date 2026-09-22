@@ -11,6 +11,7 @@ import ru.arc.util.Logging.warn
 sealed class GiveResult {
     data class Success(
         val treasure: Treasure,
+        val creditedMoney: Double? = null,
     ) : GiveResult()
 
     data class Failure(
@@ -62,10 +63,7 @@ class TreasureService(
                 is Treasure.Slimefun -> giveSlimefun(treasure, player)
             }
 
-        // Send messages on success
-        if (result.isSuccess && config.sendMessages) {
-            sendMessages(treasure, player, null)
-        }
+        sendMessages(treasure, player, null, config, result)
 
         return result
     }
@@ -99,10 +97,7 @@ class TreasureService(
                 is Treasure.Slimefun -> giveSlimefun(treasure, player)
             }
 
-        // Send messages on success
-        if (result.isSuccess && config.sendMessages) {
-            sendMessages(treasure, player, pool.takeIf { config.sendPoolMessages })
-        }
+        sendMessages(treasure, player, pool.takeIf { config.sendPoolMessages }, config, result)
 
         return result
     }
@@ -143,7 +138,7 @@ class TreasureService(
             return GiveResult.Failure("Economy transaction failed")
         }
 
-        return GiveResult.Success(treasure)
+        return GiveResult.Success(treasure, creditedMoney = response.amount)
     }
 
     private fun giveCommand(
@@ -245,21 +240,27 @@ class TreasureService(
         treasure: Treasure,
         player: Player,
         pool: TreasurePool?,
+        config: GiveConfig,
+        result: GiveResult,
     ) {
-        val context = buildMessageContext(treasure, player, pool?.id)
+        val success = result as? GiveResult.Success ?: return
+        // Only the concrete money grant emits a receipt, not its enclosing sub-pools.
+        if (!config.sendMessages && !(config.sendMoneyReceipts && treasure is Treasure.Money)) return
+        // A notification failure must never make an already paid container replayable.
+        runCatching {
+            val context = buildMessageContext(treasure, player, pool?.id, success.creditedMoney)
 
-        when {
-            treasure.messages.isNotEmpty() -> {
-                treasure.messages.forEach { it.send(context) }
-            }
+            when {
+                !config.sendMessages -> defaultMessageFor(treasure)?.send(context)
 
-            pool != null && pool.messages.isNotEmpty() -> {
-                pool.messages.forEach { it.send(context) }
-            }
+                treasure.messages.isNotEmpty() -> treasure.messages.forEach { it.send(context) }
 
-            else -> {
-                defaultMessageFor(treasure)?.send(context)
+                pool != null && pool.messages.isNotEmpty() -> pool.messages.forEach { it.send(context) }
+
+                else -> defaultMessageFor(treasure)?.send(context)
             }
+        }.onFailure {
+            warn("Treasure notification failed after payout: treasure={} player={}", treasure.id, player.uniqueId, it)
         }
     }
 
@@ -276,6 +277,7 @@ class TreasureService(
         treasure: Treasure,
         player: Player,
         poolId: String?,
+        creditedMoney: Double?,
     ): MessageContext =
         when (treasure) {
             is Treasure.Item -> {
@@ -295,7 +297,7 @@ class TreasureService(
             is Treasure.Money -> {
                 MessageContext(
                     player = player,
-                    amount = treasure.amount,
+                    amount = creditedMoney,
                     poolId = poolId,
                 )
             }

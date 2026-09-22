@@ -12,6 +12,7 @@ import io.mockk.mockkObject
 import io.mockk.mockkStatic
 import io.mockk.unmockkObject
 import io.mockk.unmockkStatic
+import net.kyori.adventure.text.Component
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
@@ -22,6 +23,8 @@ import ru.arc.hooks.RedisEcoHook
 import ru.arc.treasure.core.Treasure
 import ru.arc.treasure.core.Treasures
 import ru.arc.treasure.core.TreasurePool
+import ru.arc.treasure.core.TreasureConfig
+import ru.arc.util.TextUtil
 import ru.arc.paper.testing.MockBukkitTestRuntime
 import ru.arc.hooks.HookRegistry
 import java.util.UUID
@@ -29,6 +32,44 @@ import java.nio.file.Files
 import java.util.Comparator
 
 class CatalogPhysicalRewardsTest : StringSpec({
+    "money vouchers report only the confirmed rounded wallet delta" {
+        val player = mockk<Player>(relaxed = true)
+        val playerId = UUID.randomUUID()
+        val operationId = UUID.randomUUID()
+        every { player.uniqueId } returns playerId
+        val wallet = mockk<MountWallet>()
+        every { wallet.walletForCurrency("vault") } returns wallet
+        every { wallet.available } returns true
+        every { wallet.balanceMinor(playerId) } returns 700L
+        every { wallet.deposit(playerId, 12346L, "arc-reward:$operationId", 700L) } returns
+            MountMoneyEvidence(true, true, 13046L)
+        val service = CatalogPhysicalRewards(RewardCatalogSettings(false, "test", emptyList(), RewardCatalogMessages.DEFAULT), wallet)
+        mockkObject(TreasureConfig.DefaultMessages)
+        mockkStatic(TextUtil::class)
+        try {
+            every { TreasureConfig.DefaultMessages.moneyReceived } returns "paid %amount% coins"
+            every { TextUtil.mm(any<String>()) } answers { Component.text(firstArg<String>()) }
+            service.deposit(player, "vault", 123.456, operationId) shouldBe PhysicalRewardOutcome.Applied
+            verify(exactly = 1) { player.sendMessage(Component.text("paid ${"%.2f".format(123.46)} coins")) }
+
+            every { wallet.deposit(playerId, 12346L, "arc-reward:$operationId", 700L) } returns
+                MountMoneyEvidence(true, true, 13045L)
+            (service.deposit(player, "vault", 123.456, operationId) is PhysicalRewardOutcome.Uncertain) shouldBe true
+            every { wallet.deposit(playerId, 12346L, "arc-reward:$operationId", 700L) } returns
+                MountMoneyEvidence(false, false, 700L, "provider_unavailable")
+            (service.deposit(player, "vault", 123.456, operationId) is PhysicalRewardOutcome.Rejected) shouldBe true
+            verify(exactly = 1) { player.sendMessage(any<Component>()) }
+
+            every { wallet.deposit(playerId, 12346L, "arc-reward:$operationId", 700L) } returns
+                MountMoneyEvidence(true, true, 13046L)
+            every { player.sendMessage(any<Component>()) } throws IllegalStateException("disconnected")
+            service.deposit(player, "vault", 123.456, operationId) shouldBe PhysicalRewardOutcome.Applied
+        } finally {
+            unmockkStatic(TextUtil::class)
+            unmockkObject(TreasureConfig.DefaultMessages)
+        }
+    }
+
     "catalog does not instantiate the optional RedisEconomy adapter without its hook" {
         val previousHook = HookRegistry.redisEcoHook
         mockkConstructor(RedisEconomyMountWallet::class)

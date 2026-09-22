@@ -54,7 +54,7 @@ class PouchService(
                     failures += "Pool has no positive-weight rewards: ${source.poolId}"
                 } else {
                     val result = runCatching {
-                        giveTreasure(treasure, player, GiveConfig.SILENT)
+                        giveTreasure(treasure, player, GiveConfig.CONTAINER)
                     }.getOrElse { failure ->
                         failures += "Reward handler failed: ${source.poolId} (${failure::class.simpleName})"
                         return@repeat

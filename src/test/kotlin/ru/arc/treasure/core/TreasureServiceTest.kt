@@ -10,6 +10,7 @@ import io.mockk.unmockkStatic
 import io.mockk.verify
 import net.kyori.adventure.text.Component
 import net.milkbowl.vault.economy.Economy
+import net.milkbowl.vault.economy.EconomyResponse
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.entity.Player
@@ -37,10 +38,9 @@ class TreasureServiceTest :
             every { mockPlayer.name } returns "TestPlayer"
             every { mockPlayer.inventory } returns mockInventory
             every { mockInventory.addItem(any()) } returns hashMapOf()
-            every { mockEconomy.depositPlayer(any<Player>(), any()) } returns
-                mockk {
-                    every { transactionSuccess() } returns true
-                }
+            every { mockEconomy.depositPlayer(any<Player>(), any()) } answers {
+                EconomyResponse(secondArg<Double>(), 0.0, EconomyResponse.ResponseType.SUCCESS, null)
+            }
 
             // Create service with mock economy provider
             service =
@@ -115,6 +115,68 @@ class TreasureServiceTest :
         }
 
         describe("TreasureService giving money") {
+
+            listOf("direct", "pool", "nested").forEach { route ->
+                it("sends exactly one confirmed money receipt for a $route container reward") {
+                    val money = Treasure.Money(min = 100.0, max = 200.0,
+                        messages = listOf(TreasureMessage.chat("custom message without amount")))
+                    pools["coins"] = TreasurePool("coins", listOf(money), messages = listOf(TreasureMessage.chat("pool message")))
+                    every { mockEconomy.depositPlayer(any<Player>(), any()) } returns
+                        EconomyResponse(123.45, 1123.45, EconomyResponse.ResponseType.SUCCESS, null)
+                    mockkStatic(TextUtil::class)
+                    try {
+                        every { TextUtil.mm(any<String>()) } answers { Component.text(firstArg<String>()) }
+                        val result = when (route) {
+                            "pool" -> service.giveFromPool("coins", mockPlayer, GiveConfig.CONTAINER)
+                            "nested" -> service.give(Treasure.SubPool("coins"), mockPlayer, GiveConfig.CONTAINER)
+                            else -> service.give(money, mockPlayer, GiveConfig.CONTAINER)
+                        }
+                        result.shouldBeInstanceOf<GiveResult.Success>().creditedMoney shouldBe 123.45
+                        verify(exactly = 1) { mockEconomy.depositPlayer(mockPlayer, any()) }
+                        val expected = Component.text("<dark_green>Вы получили <yellow>${"%.2f".format(123.45)}<dark_green> монет")
+                        verify(exactly = 1) { mockPlayer.sendMessage(expected) }
+                        verify(exactly = 1) { mockPlayer.sendMessage(any<Component>()) }
+                    } finally {
+                        unmockkStatic(TextUtil::class)
+                    }
+                }
+            }
+
+            it("uses the provider receipt amount in custom messages instead of rerolling") {
+                val money = Treasure.Money(min = 100.0, max = 200.0,
+                    messages = listOf(TreasureMessage.chat("paid %amount%")))
+                every { mockEconomy.depositPlayer(any<Player>(), any()) } returns
+                    EconomyResponse(125.0, 1125.0, EconomyResponse.ResponseType.SUCCESS, null)
+                mockkStatic(TextUtil::class)
+                try {
+                    every { TextUtil.mm(any<String>()) } answers { Component.text(firstArg<String>()) }
+                    service.give(money, mockPlayer).shouldBeInstanceOf<GiveResult.Success>()
+                    verify(exactly = 1) { mockPlayer.sendMessage(Component.text("paid 125")) }
+                } finally {
+                    unmockkStatic(TextUtil::class)
+                }
+            }
+
+            it("keeps SILENT silent and does not spam container item rewards") {
+                service.give(Treasure.Money(100.0, 100.0), mockPlayer, GiveConfig.SILENT)
+                service.give(Treasure.Item(ItemStack(Material.DIAMOND)), mockPlayer, GiveConfig.CONTAINER)
+                verify(exactly = 0) { mockPlayer.sendMessage(any<Component>()) }
+            }
+
+            it("does not report a failed deposit") {
+                every { mockEconomy.depositPlayer(any<Player>(), any()) } returns
+                    EconomyResponse(0.0, 1000.0, EconomyResponse.ResponseType.FAILURE, "declined")
+                service.give(Treasure.Money(100.0, 100.0), mockPlayer, GiveConfig.CONTAINER)
+                    .shouldBeInstanceOf<GiveResult.Failure>()
+                verify(exactly = 0) { mockPlayer.sendMessage(any<Component>()) }
+            }
+
+            it("retains payout success when the receipt cannot be delivered") {
+                every { mockPlayer.sendMessage(any<Component>()) } throws IllegalStateException("disconnected")
+                service.give(Treasure.Money(100.0, 100.0), mockPlayer, GiveConfig.CONTAINER)
+                    .shouldBeInstanceOf<GiveResult.Success>().creditedMoney shouldBe 100.0
+                verify(exactly = 1) { mockEconomy.depositPlayer(mockPlayer, 100.0) }
+            }
 
             it("should deposit money via economy") {
                 val treasure = Treasure.Money(min = 100.0, max = 100.0)
