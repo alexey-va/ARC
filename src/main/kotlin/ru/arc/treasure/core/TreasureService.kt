@@ -221,6 +221,16 @@ class TreasureService(
         treasure: Treasure.Ae,
         player: Player,
     ): GiveResult {
+        if (AeNativeItems.supports(treasure)) {
+            val stacks = AeNativeItems.create(treasure)
+                ?: return GiveResult.Failure("AdvancedEnchantments item factory is unavailable")
+            stacks.forEach { stack ->
+                player.inventory.addItem(stack).values.forEach { overflow ->
+                    player.location.world?.dropItemNaturally(player.location, overflow)
+                }
+            }
+            return GiveResult.Success(treasure)
+        }
         val command = AeLoot.buildCommand(player.name, treasure)
         return giveCommand(Treasure.Command(listOf(command)), player)
     }

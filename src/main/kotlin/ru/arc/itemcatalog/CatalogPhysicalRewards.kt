@@ -17,6 +17,7 @@ import ru.arc.mounts.RedisEconomyMountWallet
 import ru.arc.onetime.OneTimeUseFingerprint
 import ru.arc.treasure.core.AeArg
 import ru.arc.treasure.core.AeLoot
+import ru.arc.treasure.core.AeNativeItems
 import ru.arc.treasure.core.AeKind
 import ru.arc.treasure.core.MessageContext
 import ru.arc.treasure.core.Treasure
@@ -42,6 +43,7 @@ internal class CatalogPhysicalRewards(
     /** Creates the configured seal so its authored icon and presentation survive archiving. */
     private val sealStack: (String, CatalogIconStyle?) -> ItemStack? = { _, _ -> null },
 ) {
+    private val particlePresets by lazy { ParticlePresetRewards() }
     private val entries = settings.categories.filter { it.rolls == null }.flatMap { it.entries }
         .plus(settings.categories.filter { it.rolls != null }.flatMap { it.entries })
         .distinctBy { key(it) }.associateBy { key(it) }
@@ -56,6 +58,7 @@ internal class CatalogPhysicalRewards(
         is RewardCatalogSource.Seal -> "seal:${source.categoryId}"
         is RewardCatalogSource.DungeonCase -> "dungeon-case:${source.id}"
         is RewardCatalogSource.TravelAnchors -> "travel-anchors:${source.amount}"
+        is RewardCatalogSource.ParticlePreset -> "particle-preset:${source.id}"
         else -> "native:${source}"
     }
 
@@ -68,8 +71,10 @@ internal class CatalogPhysicalRewards(
         is RewardCatalogSource.FurniturePackage,
         is RewardCatalogSource.DungeonCase,
         is RewardCatalogSource.TravelAnchors,
+        is RewardCatalogSource.ParticlePreset,
         -> true
-        is RewardCatalogSource.Treasure -> when (treasure(source)) {
+        is RewardCatalogSource.Treasure -> when (val value = treasure(source)) {
+            is Treasure.Ae -> !AeNativeItems.supports(value)
             is Treasure.Item,
             is Treasure.Slimefun,
             is Treasure.Enchant,
@@ -84,9 +89,13 @@ internal class CatalogPhysicalRewards(
 
     fun materialization(entry: RewardCatalogEntry): PhysicalRewardMaterialization? = runCatching {
         if (!isVoucherSource(entry)) return null
-        val archive = frozen ?: return null
         val sourceKey = key(entry)
         val spec = resolve(sourceKey) ?: return null
+        // Fixed, allowlisted entitlements must resolve on either backend without a local recipe archive.
+        if (entry.source is RewardCatalogSource.ParticlePreset) {
+            return PhysicalRewardMaterialization(sourceKey, spec.fingerprint.sha256)
+        }
+        val archive = frozen ?: return null
         val recipe = freezeRecipe(entry) ?: return null
         if (!frozenProvidersReady(recipe)) return null
         val archived = archive.prepare(sourceKey, recipe, spec.preview) ?: return null
@@ -99,6 +108,7 @@ internal class CatalogPhysicalRewards(
 
     /** Archived references can be delivered only while their native provider is live. */
     fun canMaterialize(key: String): Boolean = runCatching {
+        if (entries[key]?.source is RewardCatalogSource.ParticlePreset) return resolve(key) != null
         frozen?.find(key)?.let { frozenProvidersReady(it.recipe) }
             ?: (archivedSeal(key) != null)
     }.getOrDefault(false)
@@ -163,6 +173,7 @@ internal class CatalogPhysicalRewards(
                 if (!TravelAnchorsModule.isEnabled) return@runCatching null
                 "travel-anchors-v1:${source.amount}"
             }
+            is RewardCatalogSource.ParticlePreset -> "particle-preset-v1:${source.id}"
             else -> return@runCatching null
         }
         val fingerprint = OneTimeUseFingerprint.sha256(("catalog-v1\n$key\n$definition").toByteArray())
@@ -172,6 +183,9 @@ internal class CatalogPhysicalRewards(
     fun canRedeem(player: Player, spec: PhysicalRewardSpec): String? {
         frozen?.find(spec.key)?.let { archived ->
             if (!frozenProvidersReady(archived.recipe)) return UNAVAILABLE
+            if (archived.recipe.type == "particle-preset") {
+                return particlePresets.canRedeem(player, requireNotNull(archived.recipe.particlePresetId))
+            }
             val requiredSlots = if (archived.recipe.type == "travel-anchors") {
                 TravelAnchorsModule.createPersonalAnchorStacks(
                     player.name,
@@ -187,6 +201,9 @@ internal class CatalogPhysicalRewards(
         }
         val entry = entries[spec.key] ?: return UNAVAILABLE
         if (!providersReady(entry)) return UNAVAILABLE
+        if (entry.source is RewardCatalogSource.ParticlePreset) {
+            return particlePresets.canRedeem(player, entry.source.id)
+        }
         val requiredSlots = when (val source = entry.source) {
             is RewardCatalogSource.FurniturePackage -> (settings.packages[source.id]?.items?.size ?: return UNAVAILABLE).let { (it + 26) / 27 }
             is RewardCatalogSource.Mount -> 0
@@ -210,6 +227,7 @@ internal class CatalogPhysicalRewards(
         val entry = entries[spec.key] ?: return completed(rejected())
         return when (val source = entry.source) {
             is RewardCatalogSource.Mount -> MountModule.grantReward(player, source.id).thenApply(::mountOutcome)
+            is RewardCatalogSource.ParticlePreset -> particlePresets.redeem(player, source.id)
             is RewardCatalogSource.FurniturePackage -> completed(giveStacks(player, furnitureBoxes(source.id) ?: return completed(rejected())))
             is RewardCatalogSource.Treasure -> completed(redeemTreasure(player, treasure(source) ?: return completed(rejected()), operationId, emptySet()))
             is RewardCatalogSource.DungeonCase -> completed(
@@ -229,6 +247,7 @@ internal class CatalogPhysicalRewards(
     private fun freezeRecipe(entry: RewardCatalogEntry): FrozenPhysicalRecipe? = runCatching {
         when (val source = entry.source) {
             is RewardCatalogSource.Mount -> FrozenPhysicalRecipe("mount", mountId = source.id)
+            is RewardCatalogSource.ParticlePreset -> FrozenPhysicalRecipe("particle-preset", particlePresetId = source.id)
             is RewardCatalogSource.FurniturePackage -> {
                 val boxes = furnitureBoxes(source.id) ?: return@runCatching null
                 FrozenPhysicalRecipe(
@@ -374,6 +393,7 @@ internal class CatalogPhysicalRewards(
         "dungeon-case" -> Bukkit.getPluginManager().isPluginEnabled("EliteMobs") &&
             DungeonCaseRewards.definition(requireNotNull(recipe.dungeonCaseId)) == recipe.dungeonCaseDefinition
         "travel-anchors" -> TravelAnchorsModule.isEnabled
+        "particle-preset" -> particlePresets.ready(requireNotNull(recipe.particlePresetId))
         else -> false
     }
 
@@ -398,7 +418,7 @@ internal class CatalogPhysicalRewards(
     }
 
     private fun frozenRequiredSlots(recipe: FrozenPhysicalRecipe): Int? = when (recipe.type) {
-        "money", "tokens" -> 0
+        "money", "tokens", "particle-preset" -> 0
         "command" -> if (tokenAmount(requireNotNull(recipe.commandValue)) != null) 0 else 1
         "ae" -> 1
         "mount" -> 0
@@ -421,7 +441,7 @@ internal class CatalogPhysicalRewards(
             (requireNotNull(node.maxInt) + stack.maxStackSize - 1) / stack.maxStackSize
         }
         "enchant", "potion" -> requireNotNull(node.maxInt)
-        "ae" -> requireNotNull(node.amount)
+        "ae" -> frozenAe(node)?.let { requiredSlots(it, visitedPools) }
         "sub-pool" -> {
             val poolId = requireNotNull(node.poolId)
             if (poolId in visitedPools) return null
@@ -433,6 +453,7 @@ internal class CatalogPhysicalRewards(
 
     private fun redeemFrozen(recipe: FrozenPhysicalRecipe, player: Player, operationId: UUID): CompletableFuture<PhysicalRewardOutcome> = when (recipe.type) {
         "mount" -> MountModule.grantReward(player, requireNotNull(recipe.mountId)).thenApply(::mountOutcome)
+        "particle-preset" -> particlePresets.redeem(player, requireNotNull(recipe.particlePresetId))
         else -> completed(redeemFrozenSync(recipe, player, operationId))
     }
 
@@ -488,12 +509,17 @@ internal class CatalogPhysicalRewards(
             val value = Treasure.Potion(requireNotNull(node.minInt), requireNotNull(node.maxInt))
             giveStacks(player, List(value.amount) { Treasure.Potion.randomPotion() })
         }
-        "ae" -> {
-            val value = Treasure.Ae(
+        "ae" -> frozenAe(node)?.let { redeemTreasure(player, it, operationId, emptySet()) }
+            ?: PhysicalRewardOutcome.Rejected(UNAVAILABLE)
+        else -> PhysicalRewardOutcome.Rejected(UNAVAILABLE)
+    }
+
+    private fun frozenAe(node: FrozenTreasureNode): Treasure.Ae? = runCatching {
+            Treasure.Ae(
                 kind = when (requireNotNull(node.aeKind)) {
                     "item" -> AeKind.ITEM
                     "random_book" -> AeKind.RANDOM_BOOK
-                    else -> return PhysicalRewardOutcome.Rejected(UNAVAILABLE)
+                    else -> return@runCatching null
                 },
                 itemName = node.itemName,
                 amount = requireNotNull(node.amount),
@@ -502,14 +528,11 @@ internal class CatalogPhysicalRewards(
                         "random-tier" -> AeArg.RandomTier
                         "random-slot" -> AeArg.RandomSlot
                         "int" -> AeArg.IntRange(requireNotNull(arg.min), requireNotNull(arg.max))
-                        else -> return PhysicalRewardOutcome.Rejected(UNAVAILABLE)
+                        else -> return@runCatching null
                     }
                 },
             )
-            redeemTreasure(player, value, operationId, emptySet())
-        }
-        else -> PhysicalRewardOutcome.Rejected(UNAVAILABLE)
-    }
+    }.getOrNull()
 
     private fun redeemFrozenMoney(player: Player, min: Double, max: Double, operationId: UUID): PhysicalRewardOutcome =
         deposit(player, "vault", if (min == max) min else ThreadLocalRandom.current().nextDouble(min, max), operationId)
@@ -569,6 +592,10 @@ internal class CatalogPhysicalRewards(
                     is RewardCatalogSource.Mount -> listOf("<light_purple>Контракт открывает маунта I уровня.")
                     is RewardCatalogSource.DungeonCase -> listOf("<#d6c2ff>При использовании создаёт один предмет EliteMobs вашего уровня.")
                     is RewardCatalogSource.TravelAnchors -> listOf("<#67f4dc>При использовании выдаёт ${source.amount} личных путевых якоря.")
+                    is RewardCatalogSource.ParticlePreset -> listOf(
+                        "<#d1beff>Включить образ: <#e9a6ff>/pp group load ${source.id}",
+                        "<#d1beff>Выбрать или отключить: <#e9a6ff>/pp",
+                    )
                     else -> emptyList()
                 } + listOf("<green>ПКМ с предметом в руке — получить награду.", "<yellow>Можно хранить и передавать до использования.")).map { TextUtil.mm(it, true) })
             }
@@ -598,7 +625,9 @@ internal class CatalogPhysicalRewards(
             if (tokens != null) deposit(player, "tokens", tokens.toDouble(), operationId)
             else giveNativeCommand(player, value.commands.single())
         }
-        is Treasure.Ae -> giveNativeCommand(player, AeLoot.buildCommand(player.name, value))
+        is Treasure.Ae -> if (AeNativeItems.supports(value)) {
+            AeNativeItems.create(value)?.let { giveStacks(player, it) } ?: rejected()
+        } else giveNativeCommand(player, AeLoot.buildCommand(player.name, value))
         is Treasure.SubPool -> {
             if (value.poolId in visited || visited.size >= 8) rejected()
             else Treasures.getPool(value.poolId)?.random()?.let { redeemTreasure(player, it, operationId, visited + value.poolId) } ?: rejected()
@@ -663,7 +692,8 @@ internal class CatalogPhysicalRewards(
         return when (value) {
         is Treasure.Money -> 0
         is Treasure.Command -> if (tokenAmount(value) != null) 0 else 1
-        is Treasure.Ae -> value.amount.coerceAtLeast(1)
+        is Treasure.Ae -> if (AeNativeItems.supports(value)) AeNativeItems.create(value, preview = true)?.size
+            else value.amount.coerceAtLeast(1)
         is Treasure.SubPool -> if (value.poolId in visited || visited.size >= 8) null else
             Treasures.getPool(value.poolId)?.treasures?.map { requiredSlots(it, visited + value.poolId) ?: return null }?.maxOrNull()
         is Treasure.Item -> (value.max + value.stack.maxStackSize - 1) / value.stack.maxStackSize
@@ -752,7 +782,8 @@ internal class CatalogPhysicalRewards(
     private fun providersReady(entry: RewardCatalogEntry): Boolean =
         entry.requires.all { Bukkit.getPluginManager().isPluginEnabled(it) } &&
             (entry.source !is RewardCatalogSource.DungeonCase || Bukkit.getPluginManager().isPluginEnabled("EliteMobs")) &&
-            (entry.source !is RewardCatalogSource.TravelAnchors || TravelAnchorsModule.isEnabled)
+            (entry.source !is RewardCatalogSource.TravelAnchors || TravelAnchorsModule.isEnabled) &&
+            (entry.source !is RewardCatalogSource.ParticlePreset || particlePresets.ready(entry.source.id))
     private fun split(stack: ItemStack, amount: Int): List<ItemStack> = (0 until amount step stack.maxStackSize).map { offset ->
         stack.clone().also { it.amount = minOf(stack.maxStackSize, amount - offset) }
     }

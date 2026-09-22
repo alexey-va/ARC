@@ -25,6 +25,7 @@ softdepend:
   - zAuctionHouseV3
   - AdvancedEnchantments
   - ItemsAdder
+  - PlayerParticles
   - ProtocolLib
   - ProtocolSupport
   - ViaVersion

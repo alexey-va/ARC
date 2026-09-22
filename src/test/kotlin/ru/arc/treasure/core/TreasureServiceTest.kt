@@ -6,6 +6,8 @@ import io.mockk.clearAllMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
 import io.mockk.unmockkStatic
 import io.mockk.verify
 import net.kyori.adventure.text.Component
@@ -55,6 +57,24 @@ class TreasureServiceTest :
         }
 
         describe("TreasureService giving items") {
+
+            it("gives actual AE dust stacks from old containers and refuses unavailable native factories") {
+                val dust = Treasure.Ae(AeKind.ITEM, "magic", 16,
+                    listOf(AeArg.RandomTier, AeArg.IntRange(3, 3)))
+                val stack = ItemStack(Material.IRON_INGOT, 16)
+                mockkObject(AeNativeItems)
+                try {
+                    every { AeNativeItems.supports(dust) } returns true
+                    every { AeNativeItems.create(dust, false) } returns listOf(stack)
+                    service.give(dust, mockPlayer, GiveConfig.CONTAINER).shouldBeInstanceOf<GiveResult.Success>()
+                    verify(exactly = 1) { mockInventory.addItem(stack) }
+                    every { AeNativeItems.create(dust, false) } returns null
+                    service.give(dust, mockPlayer, GiveConfig.CONTAINER).shouldBeInstanceOf<GiveResult.Failure>()
+                    verify(exactly = 1) { mockInventory.addItem(any()) }
+                } finally {
+                    unmockkObject(AeNativeItems)
+                }
+            }
 
             it("should give item to player inventory") {
                 val treasure = Treasure.Item(ItemStack(Material.DIAMOND), min = 5, max = 5)

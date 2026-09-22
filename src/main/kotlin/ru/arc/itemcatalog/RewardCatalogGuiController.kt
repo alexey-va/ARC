@@ -21,6 +21,7 @@ import ru.arc.paper.api.ArcItemMaterializerCapabilitySnapshot
 import ru.arc.paper.menu.PaperMenuEntry
 import ru.arc.paper.menu.PaperMenuItemRenderContext
 import ru.arc.treasure.core.Treasure
+import ru.arc.treasure.core.AeNativeItems
 import ru.arc.treasure.core.Treasures
 import ru.arc.treasure.pouch.Pouches
 import ru.arc.util.ItemStackFactory
@@ -347,6 +348,8 @@ class RewardCatalogGuiController internal constructor(
                         else List(treasure.max) { ItemStack(Material.ENCHANTED_BOOK) }
                     is Treasure.Potion -> if (grant) List(treasure.amount) { Treasure.Potion.randomPotion() }
                         else List(treasure.max) { ItemStack(Material.POTION) }
+                    is Treasure.Ae -> if (AeNativeItems.supports(treasure)) AeNativeItems.create(treasure, preview = !grant)
+                        else physical(entry, grant)?.let(::listOf)
                     else -> physical(entry, grant)?.let(::listOf)
                 }
             }
@@ -359,6 +362,7 @@ class RewardCatalogGuiController internal constructor(
             is RewardCatalogSource.FurniturePackage,
             is RewardCatalogSource.DungeonCase,
             is RewardCatalogSource.TravelAnchors,
+            is RewardCatalogSource.ParticlePreset,
             -> physical(entry, grant)?.let(::listOf)
             is RewardCatalogSource.Planned -> null
         }

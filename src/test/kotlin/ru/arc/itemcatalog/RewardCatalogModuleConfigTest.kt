@@ -43,6 +43,39 @@ class RewardCatalogModuleConfigTest : StringSpec({
         }
     }
 
+    "particle preset sources accept only the fixed grantable entitlements" {
+        val root = Files.createTempDirectory("arc-reward-particle-presets")
+        try {
+            val entries = ParticlePresetEntitlements.IDS.joinToString("\n") { id ->
+                "      $id:\n        particle-preset: $id"
+            }
+            writeConfig(root, """
+                enabled: true
+                categories:
+                  cosmetics:
+                    entries:
+            """.trimIndent() + "\n" + entries)
+
+            val sources = RewardCatalogModuleConfig.load(root).snapshot().categories.single().entries
+                .associate { it.id to it.source }
+            ParticlePresetEntitlements.IDS.forEach { id ->
+                sources[id] shouldBe RewardCatalogSource.ParticlePreset(id)
+            }
+
+            writeConfig(root, """
+                enabled: true
+                categories:
+                  cosmetics:
+                    entries:
+                      arbitrary:
+                        particle-preset: arc_anything
+            """.trimIndent())
+            runCatching { RewardCatalogModuleConfig.load(root).snapshot() }.isFailure shouldBe true
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
     "parses reward sources with optional presentation fields and tolerant defaults" {
         val root = Files.createTempDirectory("arc-reward-catalog-sources")
         try {

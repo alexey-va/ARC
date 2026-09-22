@@ -32,6 +32,34 @@ import java.nio.file.Files
 import java.util.Comparator
 
 class CatalogPhysicalRewardsTest : StringSpec({
+    "particle certificates resolve on another backend without a local archive" {
+        MockBukkitTestRuntime.open().use {
+            mockkConstructor(ParticlePresetRewards::class)
+            try {
+                every { anyConstructed<ParticlePresetRewards>().ready("arc_rainbow") } returns true
+                val entry = RewardCatalogEntry(
+                    "rainbow", "Радуга", emptyList(), null, emptyList(),
+                    RewardCatalogSource.ParticlePreset("arc_rainbow"), CatalogIconStyle("PAPER"),
+                )
+                val settings = RewardCatalogSettings(
+                    true, "Каталог", listOf(RewardCatalogCategory(
+                        "cosmetics", "Косметика", emptyList(), CatalogIconStyle("CHEST"), listOf(entry),
+                    )), RewardCatalogMessages.DEFAULT,
+                )
+                val origin = CatalogPhysicalRewards(settings)
+                val destination = CatalogPhysicalRewards(settings)
+                val issued = requireNotNull(origin.materialization(entry))
+                issued.sourceKey shouldBe "particle-preset:arc_rainbow"
+                destination.canMaterialize(issued.sourceKey) shouldBe true
+                requireNotNull(destination.resolve(issued.sourceKey)).fingerprint.sha256 shouldBe issued.providerFingerprint
+                every { anyConstructed<ParticlePresetRewards>().ready("arc_rainbow") } returns false
+                destination.canMaterialize(issued.sourceKey) shouldBe false
+            } finally {
+                unmockkConstructor(ParticlePresetRewards::class)
+            }
+        }
+    }
+
     "money vouchers report only the confirmed rounded wallet delta" {
         val player = mockk<Player>(relaxed = true)
         val playerId = UUID.randomUUID()

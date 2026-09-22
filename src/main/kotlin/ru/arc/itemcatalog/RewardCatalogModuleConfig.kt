@@ -102,6 +102,7 @@ class RewardCatalogModuleConfig(private val config: Config) {
             when (val key = sourceKeys.single()) {
                 "treasure" -> parseTreasure(map.getValue(key), "$path.treasure")
                 "preset" -> RewardCatalogSource.Preset(requiredId(map.getValue(key), "$path.preset", PRESET_ID))
+                "particle-preset" -> RewardCatalogSource.ParticlePreset(particlePresetId(map.getValue(key), "$path.particle-preset"))
                 "pouch" -> RewardCatalogSource.Pouch(requiredId(map.getValue(key), "$path.pouch", POUCH_ID))
                 "seal" -> RewardCatalogSource.Seal(requiredId(map.getValue(key), "$path.seal", ID))
                 "itemsadder" -> RewardCatalogSource.ItemsAdder(requiredId(map.getValue(key), "$path.itemsadder", ITEMSADDER_ID))
@@ -171,6 +172,12 @@ class RewardCatalogModuleConfig(private val config: Config) {
         val pool = requiredId(map.required("pool", path), "$path.pool", POOL_ID)
         val id = requiredId(map.required("id", path), "$path.id", TREASURE_ID)
         return RewardCatalogSource.Treasure(pool, id)
+    }
+
+    private fun particlePresetId(raw: Any?, path: String): String {
+        val id = requiredString(raw, path, ID_LIMIT)
+        require(id in ParticlePresetEntitlements.IDS) { "$path is not an approved particle preset" }
+        return id
     }
 
     private fun parseMessages(): RewardCatalogMessages {
@@ -320,7 +327,7 @@ class RewardCatalogModuleConfig(private val config: Config) {
         private val ENCHANTMENT_ID = Regex("(?:minecraft:)?[a-z_]+")
         private val PLUGIN_ID = Regex("[A-Za-z0-9._-]{1,64}")
         private val SOURCE_KEYS = setOf(
-            "treasure", "preset", "pouch", "seal", "itemsadder", "planned", "mount", "package", "dungeon-case",
+            "treasure", "preset", "particle-preset", "pouch", "seal", "itemsadder", "planned", "mount", "package", "dungeon-case",
             "travel-anchors",
         )
 

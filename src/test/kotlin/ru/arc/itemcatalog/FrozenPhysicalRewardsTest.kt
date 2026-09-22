@@ -1,5 +1,6 @@
 package ru.arc.itemcatalog
 
+import com.google.gson.Gson
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
@@ -16,6 +17,31 @@ import java.util.Comparator
 import java.util.concurrent.CompletableFuture
 
 class FrozenPhysicalRewardsTest : StringSpec({
+    "particle preset recipes are strict while legacy archives default the new field to null" {
+        FrozenPhysicalRecipe(
+            type = "particle-preset",
+            particlePresetId = "arc_raincloud",
+        ).validate()
+
+        val legacy = Gson().fromJson(
+            """{"type":"money","currency":"vault","minAmount":1.0,"maxAmount":1.0}""",
+            FrozenPhysicalRecipe::class.java,
+        )
+        legacy.particlePresetId shouldBe null
+        legacy.validate()
+        Gson().toJson(legacy).contains("particlePresetId") shouldBe false
+
+        runCatching {
+            FrozenPhysicalRecipe("particle-preset", particlePresetId = "arc_unapproved").validate()
+        }.isFailure shouldBe true
+        runCatching {
+            FrozenPhysicalRecipe("money", currency = "vault", minAmount = 1.0, maxAmount = 1.0, particlePresetId = "arc_angel").validate()
+        }.isFailure shouldBe true
+        runCatching {
+            FrozenPhysicalRecipe("particle-preset", particlePresetId = "arc_angel", tokenAmount = 1).validate()
+        }.isFailure shouldBe true
+    }
+
     "travel-anchor recipes bind a bounded personal-anchor amount" {
         FrozenPhysicalRecipe(
             type = "travel-anchors",

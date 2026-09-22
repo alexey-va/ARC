@@ -233,6 +233,8 @@ internal data class FrozenPhysicalRecipe(
     val dungeonCaseId: String? = null,
     val dungeonCaseDefinition: String? = null,
     val travelAnchorAmount: Int? = null,
+    /** Stable approved PlayerParticles preset id; null for legacy and unrelated recipes. */
+    val particlePresetId: String? = null,
 ) {
     fun validate() {
         if (type != "dungeon-case") {
@@ -242,6 +244,9 @@ internal data class FrozenPhysicalRecipe(
         }
         if (type != "travel-anchors") {
             require(travelAnchorAmount == null) { "Travel-anchor amount requires a travel-anchors recipe" }
+        }
+        if (type != "particle-preset") {
+            require(particlePresetId == null) { "Particle preset id requires a particle-preset recipe" }
         }
         when (type) {
             "money" -> validateAmount(currency, minAmount, maxAmount, expectedCurrency = "vault")
@@ -327,6 +332,13 @@ internal data class FrozenPhysicalRecipe(
                 require(commandKind == null && commandValue == null && mountId == null && furnitureBoxes == null)
                 require(sealItems == null && sealName == null && sealDescription == null && treasure == null)
                 require(dungeonCaseId == null && dungeonCaseDefinition == null)
+            }
+            "particle-preset" -> {
+                require(particlePresetId in ParticlePresetEntitlements.IDS) { "Frozen particle preset id is invalid" }
+                require(currency == null && minAmount == null && maxAmount == null && tokenAmount == null)
+                require(commandKind == null && commandValue == null && mountId == null && furnitureBoxes == null)
+                require(sealItems == null && sealName == null && sealDescription == null && treasure == null)
+                require(dungeonCaseId == null && dungeonCaseDefinition == null && travelAnchorAmount == null)
             }
             else -> error("Unknown frozen physical recipe type: $type")
         }

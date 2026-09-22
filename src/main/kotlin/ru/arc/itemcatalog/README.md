@@ -61,7 +61,8 @@ categories:
 ```
 
 Each entry has exactly one source: `treasure` (`pool` + `id`), `preset`,
-`pouch`, `seal`, `itemsadder`, `mount`, `package`, or inert `planned`.
+`pouch`, `seal`, `itemsadder`, `mount`, `package`, `dungeon-case`,
+`travel-anchors`, `particle-preset`, or inert `planned`.
 Categories are capped at 64, entries at 512 per category and 2,000 in total.
 Names, descriptions and rarity retain authored MiniMessage colors. Stories and
 native equipment metadata are preserved on actual prizes, including seal choices.
@@ -87,6 +88,48 @@ presets and pouches retain native factories; currency, mount, package and
 opaque native item sources become unique physical vouchers. Rendering never
 mints a redeemable voucher. Right click in the main hand redeems it without an
 operator permission. Currency names and nominal amounts remain explicit.
+
+### Cosmetic certificates and direct AE consumables
+
+`particle-preset` accepts only `arc_raincloud`, `arc_rainbow`, and `arc_angel`.
+`ParticlePresetRewards` validates the active PlayerParticles 8.13 preset and
+the exact `arc.cosmetics.particles.<id>` permission with native override enabled.
+It grants one permanent, context-free LuckPerms node through `modifyUser` and
+waits for the save before the existing shared voucher journal commits. It never
+grants effect/style wildcards or changes rank groups. Already-owned certificates
+are rejected without consumption and can be transferred. Unknown save outcomes
+retain journal recovery ownership, not a retryable/free second grant.
+
+These fixed entitlements use stable `particle-preset:<id>` keys and fingerprints,
+not a backend-local recipe archive. A certificate can therefore be redeemed on
+either configured backend even if that backend has never issued the preset.
+
+PlayerParticles defaults must allow GUI entry without individual effect/style
+permissions, and preset overlap must remain off. A claimed preset then works
+even with `playerparticles.particles.max.0`: native preset loading bypasses the
+manual-particle limit. Use `/pp` or `/pp group load <id>`; no flight is granted.
+Original unrestricted-by-preset-permission rank presets remain unchanged.
+
+`AeNativeItems` materializes magic dust, white/black/holy-white scrolls and
+randomizers directly from AdvancedEnchantments' own factories. Case preparation
+freezes their complete native stacks; delivery clones that result, never rolls
+again and never creates an extra redemption voucher. A dust bundle rolls its
+tier once and uses its configured per-item success percentage. Stack splitting
+preserves native metadata and respects the actual item stack limit.
+
+The declared AEAPI has no consumable factory. The narrow reflective adapter is
+verified against AE **9.24.13**, root-JAR SHA-256
+`202ee20ab303623d6ee41ec05a58c9a1c1e8aef18ca16d43b52b78c9a220d0ab`.
+It fails closed on version/signature drift; review this seam before upgrading AE.
+Do not replace it with `giveitem magic ... <percent>`: that command does not
+implement the configured fixed dust percentage. Unchanged unsupported AE reward
+kinds retain the existing native command path for backward compatibility.
+
+Focused checks: `ParticlePresetRewardsTest`, `AeNativeItemsTest`,
+`RewardCatalogGuiControllerTest`, `RewardCatalogModuleConfigTest`,
+`FrozenPhysicalRewardsTest`, `CatalogPhysicalRewardsTest`, and
+`RewardCatalogDeploymentCompatibilityTest`. Test doubles do not prove real
+client particle rendering or an actual multi-server player claim.
 
 `PhysicalRewardController` uses the shared `OneTimeUseLedger`, SQL partition
 `arc.catalog-reward`, with private `reward-redemption.yml` SQL settings. Enable

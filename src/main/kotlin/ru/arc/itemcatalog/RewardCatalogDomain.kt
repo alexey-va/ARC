@@ -9,6 +9,9 @@ sealed interface RewardCatalogSource {
 
     data class Preset(val id: String) : RewardCatalogSource
 
+    /** A transferable certificate that permanently unlocks one named particle preset. */
+    data class ParticlePreset(val id: String) : RewardCatalogSource
+
     data class Pouch(val id: String) : RewardCatalogSource
 
     data class Seal(val categoryId: String) : RewardCatalogSource
@@ -27,6 +30,17 @@ sealed interface RewardCatalogSource {
 
     /** A transferable voucher that binds personal travel anchors to its redeemer. */
     data class TravelAnchors(val amount: Int) : RewardCatalogSource
+}
+
+/** Fixed grantable PlayerParticles entitlements; never accept an arbitrary permission suffix. */
+internal object ParticlePresetEntitlements {
+    const val PERMISSION_PREFIX = "arc.cosmetics.particles."
+    val IDS = setOf("arc_raincloud", "arc_angel", "arc_rainbow")
+
+    fun permission(id: String): String {
+        require(id in IDS) { "Unsupported particle preset: $id" }
+        return PERMISSION_PREFIX + id
+    }
 }
 
 data class RewardFurniturePackage(val name: String, val items: List<String>)
