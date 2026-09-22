@@ -1,9 +1,8 @@
 package ru.arc.iteminfo
 
 import net.kyori.adventure.text.Component
-import org.bukkit.Location
-import org.bukkit.util.Vector
-import ru.arc.onboarding.claimGuideLabelLocation
+import ru.arc.paper.api.InspectionViewMode
+import ru.arc.paper.api.InspectionViewPreferences
 import java.util.Locale
 
 enum class ItemInfoMode(val id: String) {
@@ -65,13 +64,14 @@ data class ItemInfoPreferences(
     }
 }
 
-internal fun itemInfoHologramLocation(
-    eye: Location,
-    verticalOffset: Double = 0.0,
-    horizontalOffset: Double = 0.0,
-): Location {
-    val location = claimGuideLabelLocation(eye, verticalOffset)
-    if (horizontalOffset == 0.0) return location
-    val yaw = Math.toRadians(eye.yaw.toDouble())
-    return location.add(Vector(-kotlin.math.cos(yaw), 0.0, -kotlin.math.sin(yaw)).multiply(horizontalOffset))
-}
+internal fun ItemInfoPreferences.toInspectionViewPreferences(): InspectionViewPreferences =
+    InspectionViewPreferences(
+        mode = when (mode) {
+            ItemInfoMode.HOLOGRAM -> InspectionViewMode.HOLOGRAM
+            ItemInfoMode.BOSSBAR -> InspectionViewMode.BOSSBAR
+            ItemInfoMode.OFF -> InspectionViewMode.OFF
+        },
+        scale = hologramScale,
+        verticalOffset = verticalOffset,
+        horizontalOffset = horizontalOffset,
+    )

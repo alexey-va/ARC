@@ -10,27 +10,44 @@ import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.player.PlayerTeleportEvent
+import ru.arc.ARC
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.hooks.luckperms.LuckPermsHook
 import ru.arc.onboarding.OnboardingModule
+import ru.arc.paper.api.ArcInspectionFrame
+import ru.arc.paper.api.ArcInspectionProvider
+import ru.arc.paper.inspection.PaperArcInspectionService
 import ru.arc.util.Logging.error
 
 internal class ItemInfoRuntime(
     settings: ItemInfoSettings,
+    private val inspection: PaperArcInspectionService,
 ) : Listener, AutoCloseable {
     private val tasks = LifecycleTaskScope()
     private val failedViewers = mutableSetOf<java.util.UUID>()
     private val preferencesReader = if (Bukkit.getPluginManager().isPluginEnabled("LuckPerms")) LuckPermsHook() else null
     private val resolver = BukkitItemInfoTargetResolver(settings.targetDistance)
+    private val readPreferences: (Player) -> ItemInfoPreferences = { player ->
+        ItemInfoPreferences.fromStored { key -> preferencesReader?.getCachedMeta(player.uniqueId, key) }
+    }
+    private val suppressedViewer: (Player) -> Boolean = { player ->
+        player.isDead || player.gameMode == GameMode.SPECTATOR ||
+            OnboardingModule.claimGuide?.hasHologram(player) == true
+    }
+    private val providerRegistration = inspection.register(
+        ARC.instance,
+        "item-info",
+        0,
+        ItemInfoInspectionProvider(
+            settings = settings,
+            resolveTarget = resolver::resolve,
+            preferences = readPreferences,
+        ),
+    )
     private val controller = ItemInfoController(
-        preferences = { player ->
-            ItemInfoPreferences.fromStored { key -> preferencesReader?.getCachedMeta(player.uniqueId, key) }
-        },
-        target = { player ->
-            if (player.isDead || player.gameMode == GameMode.SPECTATOR || OnboardingModule.claimGuide?.hasHologram(player) == true) null
-            else resolver.resolve(player)
-        },
-        renderer = BukkitItemInfoRenderer(settings),
+        preferences = readPreferences,
+        inspection = inspection,
+        suppressed = suppressedViewer,
     )
     private var tick = 0L
 
@@ -80,7 +97,23 @@ internal class ItemInfoRuntime(
 
     override fun close() {
         tasks.close()
-        controller.close()
+        providerRegistration.close()
         failedViewers.clear()
+    }
+}
+
+internal class ItemInfoInspectionProvider(
+    private val settings: ItemInfoSettings,
+    private val resolveTarget: (Player) -> ItemInfoTarget?,
+    private val preferences: (Player) -> ItemInfoPreferences,
+) : ArcInspectionProvider {
+    override fun resolve(player: Player): ArcInspectionFrame? {
+        if (!settings.enabled) return null
+        val target = resolveTarget(player) ?: return null
+        val showNamespacedId = preferences(player).showNamespacedId
+        return ArcInspectionFrame(
+            settings.hologramText(target, showNamespacedId),
+            settings.bossbarText(target, showNamespacedId),
+        )
     }
 }

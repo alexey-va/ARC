@@ -1,32 +1,19 @@
 package ru.arc.iteminfo
 
 import org.bukkit.entity.Player
-
-internal interface ItemInfoRenderer : AutoCloseable {
-    fun render(player: Player, preferences: ItemInfoPreferences, target: ItemInfoTarget)
-
-    fun follow(player: Player)
-
-    fun clear(player: Player)
-
-    override fun close()
-}
+import ru.arc.paper.inspection.PaperArcInspectionService
 
 internal class ItemInfoController(
     private val preferences: (Player) -> ItemInfoPreferences,
-    private val target: (Player) -> ItemInfoTarget?,
-    private val renderer: ItemInfoRenderer,
-) : AutoCloseable {
+    private val inspection: PaperArcInspectionService,
+    private val suppressed: (Player) -> Boolean = { false },
+) {
     fun update(player: Player) {
-        val selected = preferences(player)
-        val selectedTarget = if (selected.mode == ItemInfoMode.OFF) null else target(player)
-        if (selectedTarget == null) renderer.clear(player)
-        else renderer.render(player, selected, selectedTarget)
+        if (suppressed(player)) inspection.clear(player)
+        else inspection.update(player, preferences(player).toInspectionViewPreferences())
     }
 
-    fun follow(player: Player) = renderer.follow(player)
+    fun follow(player: Player) = inspection.follow(player)
 
-    fun reset(player: Player) = renderer.clear(player)
-
-    override fun close() = renderer.close()
+    fun reset(player: Player) = inspection.clear(player)
 }

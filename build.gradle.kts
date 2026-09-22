@@ -52,10 +52,10 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.193"
+version = "1.4.194"
 description = "ARC"
 val pluginVersion = version.toString()
-val arcCoreVersion = "2.7.11"
+val arcCoreVersion = "2.7.12"
 val landsJar = providers.gradleProperty("landsJar").orNull?.let(::file)
 if (landsJar != null) require(landsJar.isFile) { "Lands JAR does not exist: $landsJar" }
 val landsCompileDependency: Any = landsJar?.let { files(it) } ?: libs.com.github.angeschossen.landsapi

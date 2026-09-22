@@ -2,15 +2,19 @@ package ru.arc.iteminfo
 
 import org.bukkit.Bukkit
 import org.bukkit.event.HandlerList
+import org.bukkit.plugin.ServicePriority
 import ru.arc.ARC
 import ru.arc.core.PluginModule
 import ru.arc.util.Logging.info
+import ru.arc.paper.api.ArcInspectionService
+import ru.arc.paper.inspection.PaperArcInspectionService
 
 object ItemInfoModule : PluginModule {
     override val name = "ItemInfo"
     override val priority = 90
 
     private var runtime: ItemInfoRuntime? = null
+    private var inspection: PaperArcInspectionService? = null
 
     override fun init() = start(ItemInfoConfig.load(ARC.instance.dataPath).snapshot())
 
@@ -25,17 +29,27 @@ object ItemInfoModule : PluginModule {
             it.close()
         }
         runtime = null
+        inspection?.let {
+            Bukkit.getServicesManager().unregister(it)
+            it.close()
+        }
+        inspection = null
     }
 
     private fun start(settings: ItemInfoSettings) {
-        if (!settings.enabled) {
-            info("Item info module disabled by configuration")
-            return
-        }
-        runtime = ItemInfoRuntime(settings).also {
+        val service = PaperArcInspectionService(ARC.instance)
+        inspection = service
+        Bukkit.getServicesManager().register(
+            ArcInspectionService::class.java,
+            service,
+            ARC.instance,
+            ServicePriority.Normal,
+        )
+        runtime = ItemInfoRuntime(settings, service).also {
             Bukkit.getPluginManager().registerEvents(it, ARC.instance)
             it.start()
         }
-        info("Item info module initialized for ItemsAdder and Slimefun blocks")
+        if (settings.enabled) info("Item info module initialized for ItemsAdder and Slimefun blocks")
+        else info("Item info source disabled; shared inspection service initialized")
     }
 }

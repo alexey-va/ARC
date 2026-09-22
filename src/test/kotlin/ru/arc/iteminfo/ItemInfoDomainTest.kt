@@ -2,13 +2,10 @@ package ru.arc.iteminfo
 
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.doubles.plusOrMinus
-import io.mockk.mockk
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
-import org.bukkit.Location
-import org.bukkit.World
-import ru.arc.onboarding.claimGuideLabelLocation
+import ru.arc.paper.api.InspectionViewMode
+import ru.arc.paper.api.InspectionViewPreferences
 
 class ItemInfoDomainTest : StringSpec({
     "hologram is the default while every explicit mode roundtrips" {
@@ -18,17 +15,6 @@ class ItemInfoDomainTest : StringSpec({
         ItemInfoMode.entries.forEach { mode ->
             ItemInfoMode.fromStored(mode.id) shouldBe mode
             ItemInfoMode.fromStored(mode.id.uppercase()) shouldBe mode
-        }
-    }
-
-    "hologram uses the exact Lands onboarding default anchor" {
-        val world = mockk<World>()
-        listOf(
-            Location(world, 10.0, 70.0, 20.0, 0f, 0f),
-            Location(world, -4.5, 63.2, 9.5, 90f, -35f),
-            Location(world, 2.0, 100.0, -8.0, -170f, 55f),
-        ).forEach { eye ->
-            itemInfoHologramLocation(eye) shouldBe claimGuideLabelLocation(eye)
         }
     }
 
@@ -59,15 +45,24 @@ class ItemInfoDomainTest : StringSpec({
         ItemInfoPreferences.fromStored { "broken" } shouldBe ItemInfoPreferences.DEFAULT
     }
 
-    "positive personal offsets move the Lands anchor up and to screen right" {
-        val world = mockk<World>()
-        val eye = Location(world, 10.0, 70.0, 20.0, 0f, 0f)
-        val base = claimGuideLabelLocation(eye)
-        val adjusted = itemInfoHologramLocation(eye, verticalOffset = 0.40, horizontalOffset = 0.75)
-
-        adjusted.y shouldBe (base.y + 0.40 plusOrMinus 1.0e-9)
-        adjusted.x shouldBe (base.x - 0.75 plusOrMinus 1.0e-9)
-        adjusted.z shouldBe (base.z plusOrMinus 1.0e-9)
+    "shared inspection preferences preserve every mode and personal layout option" {
+        ItemInfoMode.entries.forEach { mode ->
+            ItemInfoPreferences(
+                mode = mode,
+                hologramScale = 1.25f,
+                verticalOffset = -0.25,
+                horizontalOffset = 0.75,
+            ).toInspectionViewPreferences() shouldBe InspectionViewPreferences(
+                mode = when (mode) {
+                    ItemInfoMode.HOLOGRAM -> InspectionViewMode.HOLOGRAM
+                    ItemInfoMode.BOSSBAR -> InspectionViewMode.BOSSBAR
+                    ItemInfoMode.OFF -> InspectionViewMode.OFF
+                },
+                scale = 1.25f,
+                verticalOffset = -0.25,
+                horizontalOffset = 0.75,
+            )
+        }
     }
 
     "presentation hides the technical id by default and can explicitly reveal it" {
