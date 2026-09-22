@@ -20,7 +20,7 @@ class OriginPortalsModuleTest : FreeSpec({
         try {
             val config = OriginPortalsConfig.load(directory)
             config.enabled shouldBe true
-            config.verticalOffset shouldBe 5.5
+            config.verticalOffset shouldBe 5.0
             config.anchors.map { it.id } shouldContainExactly OriginPortalId.entries
 
             val survival = config.anchors.first { it.id == OriginPortalId.SURVIVAL }
@@ -33,6 +33,9 @@ class OriginPortalsModuleTest : FreeSpec({
             survival.style shouldBe ru.arc.PortalVisualStyle.ORIGIN
             survival.command shouldBe "arc rtp survival --only-if-first"
             survival.label shouldBe "Выживание"
+            survival.verticalOffset shouldBe 5.0
+            survival.labelFrontDistance shouldBe 3.0
+            survival.labelScale shouldBe 4.6f
             config.gateSettings(survival)!!.height shouldBe 16.8f
             config.gateSettings(survival)!!.itemIds shouldBe
                 mapOf(
@@ -52,6 +55,8 @@ class OriginPortalsModuleTest : FreeSpec({
             gallery.width shouldBe 4.5
             gallery.height shouldBe 6.3
             gallery.command shouldBe "rcfurniturereturn"
+            gallery.labelFrontDistance shouldBe 0.0
+            gallery.labelScale shouldBe 0.9f
         } finally {
             directory.toFile().deleteRecursively()
         }
@@ -71,6 +76,11 @@ class OriginPortalsModuleTest : FreeSpec({
             entryDepth = 2.0,
             command = "test",
             label = "Тест",
+            verticalOffset = 5.0,
+            labelFrontDistance = 3.0,
+            labelSideOffset = 1.0,
+            labelHeightOffset = 0.75,
+            labelScale = 4.6f,
             style = ru.arc.PortalVisualStyle.ORIGIN,
         )
         val center = Location(world, 0.0, 0.0, 0.0)
@@ -80,6 +90,10 @@ class OriginPortalsModuleTest : FreeSpec({
         anchor.contains(Location(world, 2.1, 0.0, 0.0)).shouldBeFalse()
         anchor.contains(Location(world, 0.0, 0.0, 6.1)).shouldBeFalse()
         anchor.contains(Location(world, 0.0, 8.41, 0.0)).shouldBeFalse()
+        val hologram = anchor.labelLocation(world)
+        hologram.x shouldBe 3.0
+        hologram.y shouldBe 5.75
+        (kotlin.math.abs(hologram.z - 1.0) < 1e-9).shouldBeTrue()
     }
 
     "move persists feet coordinates and reloads the same anchor" {
@@ -96,6 +110,32 @@ class OriginPortalsModuleTest : FreeSpec({
             moved.y shouldBe 71.5
             moved.z shouldBe -2.75
             moved.yaw shouldBe 42.5f
+        } finally {
+            directory.toFile().deleteRecursively()
+        }
+    }
+
+    "hologram text, position, size and per-portal height can be tuned in config" {
+        val directory = Files.createTempDirectory("arc-origin-portals-hologram")
+        try {
+            OriginPortalsConfig.load(directory)
+            val source = ConfigManager.ofModule(directory, "origin-spawn.yml")
+            source.setString("origin-portals.anchors.survival.hologram.text", "Новый мир")
+            source.setDouble("origin-portals.anchors.survival.hologram.front-distance", 4.0)
+            source.setDouble("origin-portals.anchors.survival.hologram.side-offset", -1.5)
+            source.setDouble("origin-portals.anchors.survival.hologram.height-offset", 1.25)
+            source.setDouble("origin-portals.anchors.survival.hologram.scale", 3.2)
+            source.setDouble("origin-portals.anchors.survival.vertical-offset", 4.5)
+            source.saveStrict()
+            ConfigManager.clear()
+            val survival = OriginPortalsConfig.load(directory).anchors.first { it.id == OriginPortalId.SURVIVAL }
+            survival.label shouldBe "Новый мир"
+            survival.labelFrontDistance shouldBe 4.0
+            survival.labelSideOffset shouldBe -1.5
+            survival.labelHeightOffset shouldBe 1.25
+            survival.labelScale shouldBe 3.2f
+            survival.verticalOffset shouldBe 4.5
+            OriginPortalsConfig.load(directory).gateSettings(survival)!!.verticalOffset shouldBe 4.5
         } finally {
             directory.toFile().deleteRecursively()
         }

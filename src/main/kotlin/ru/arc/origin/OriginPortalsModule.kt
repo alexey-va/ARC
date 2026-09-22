@@ -127,9 +127,24 @@ internal data class OriginPortalAnchor(
     val entryDepth: Double,
     val command: String,
     val label: String,
+    val verticalOffset: Double,
+    val labelFrontDistance: Double,
+    val labelSideOffset: Double,
+    val labelHeightOffset: Double,
+    val labelScale: Float,
     val style: PortalVisualStyle,
 ) {
     fun center(world: org.bukkit.World): Location = Location(world, x, y, z, yaw, 0f)
+
+    fun labelLocation(world: org.bukkit.World): Location {
+        val angle = yaw * PI / 180.0
+        return Location(
+            world,
+            x + sin(angle) * labelFrontDistance + cos(angle) * labelSideOffset,
+            y + verticalOffset + labelHeightOffset,
+            z - cos(angle) * labelFrontDistance + sin(angle) * labelSideOffset,
+        )
+    }
 
     /** A thin, yaw-aware interaction plane keeps neighbouring central portals independent. */
     fun contains(location: Location): Boolean {
@@ -192,11 +207,12 @@ internal class OriginPortalsConfig private constructor(
                     .filter { it.usesOriginGate }
                     .associateWith { style -> source.string("$root.items.${style.id}", DEFAULT_ITEMS.getValue(style)) }
             val enabled = source.bool("$root.enabled", true)
-            val anchors = OriginPortalId.entries.map { id -> anchor(source, root, id) }
+            val verticalOffset = source.real("$root.vertical-offset", 5.5).finite(5.5).coerceIn(0.5, 12.0)
+            val anchors = OriginPortalId.entries.map { id -> anchor(source, root, id, verticalOffset) }
             return OriginPortalsConfig(
                 source = source,
                 enabled = enabled,
-                verticalOffset = source.real("$root.vertical-offset", 5.5).coerceIn(0.5, 12.0),
+                verticalOffset = verticalOffset,
                 entryDepth = source.real("$root.entry-depth", 2.0).coerceIn(0.5, 6.0),
                 pulseAmplitude = source.real("$root.pulse.amplitude", 0.035).toFloat().coerceIn(0.0f, 0.1f),
                 pulsePeriodTicks = source.integer("$root.pulse.period-ticks", 36).coerceIn(8, 200),
@@ -217,7 +233,7 @@ internal class OriginPortalsConfig private constructor(
             )
         }
 
-        private fun anchor(source: Config, root: String, id: OriginPortalId): OriginPortalAnchor {
+        private fun anchor(source: Config, root: String, id: OriginPortalId, verticalOffset: Double): OriginPortalAnchor {
             val path = "$root.anchors.${id.key}"
             val style = PortalVisualStyle.parse(source.string("$path.style", id.defaultStyle.id)) ?: id.defaultStyle
             val width = source.real("$path.width", id.defaultWidth).finite(id.defaultWidth).coerceIn(0.1, 12.0)
@@ -233,7 +249,13 @@ internal class OriginPortalsConfig private constructor(
                 height = height,
                 entryDepth = source.real("$path.entry-depth", source.real("$root.entry-depth", 2.0)).finite(2.0).coerceIn(0.5, 6.0),
                 command = source.string("$path.command", id.defaultCommand).trim().ifEmpty { id.defaultCommand },
-                label = source.string("$path.label", id.defaultLabel).trim().ifEmpty { id.defaultLabel },
+                label = source.string("$path.hologram.text", source.string("$path.label", id.defaultLabel)).trim(),
+                verticalOffset = source.real("$path.vertical-offset", verticalOffset).finite(verticalOffset).coerceIn(0.5, 12.0),
+                labelFrontDistance = source.real("$path.hologram.front-distance", 0.0).finite(0.0).coerceIn(-20.0, 20.0),
+                labelSideOffset = source.real("$path.hologram.side-offset", 0.0).finite(0.0).coerceIn(-20.0, 20.0),
+                labelHeightOffset = source.real("$path.hologram.height-offset", 0.75).finite(0.75).coerceIn(-20.0, 20.0),
+                labelScale = source.real("$path.hologram.scale", if (id.central) 1.15 else 0.9)
+                    .finite(if (id.central) 1.15 else 0.9).toFloat().coerceIn(0.1f, 8.0f),
                 style = style.takeIf { it.usesOriginGate } ?: id.defaultStyle,
             )
         }
@@ -251,7 +273,7 @@ internal class OriginPortalsConfig private constructor(
             closingDurationTicks = 1,
             width = anchor.width.toFloat(),
             height = anchor.height.toFloat(),
-            verticalOffset = verticalOffset,
+            verticalOffset = anchor.verticalOffset,
             yawOffsetDegrees = 0f,
             viewRange = 2.0f,
             openingSoundEnabled = false,
@@ -301,7 +323,7 @@ private class OriginPortalVisual(
     }
 
     private fun spawnLabel(world: org.bukkit.World): TextDisplay {
-        val location = anchor.center(world).add(0.0, config.verticalOffset + 0.75, 0.0)
+        val location = anchor.labelLocation(world)
         return world.spawn(location, TextDisplay::class.java) {
             it.text(
                 Component.text(anchor.label, labelColor(anchor.style))
@@ -314,7 +336,7 @@ private class OriginPortalVisual(
             it.backgroundColor = Color.fromARGB(0, 0, 0, 0)
             it.lineWidth = 220
             it.viewRange = 1.25f
-            it.setTransformationMatrix(Matrix4f().scaling(if (anchor.id.central) 1.15f else 0.9f))
+            it.setTransformationMatrix(Matrix4f().scaling(anchor.labelScale))
         }
     }
 

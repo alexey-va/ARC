@@ -49,11 +49,15 @@ regenerative-breaking:
           - "Блок официально считает это отношениями."
           - "Легендарная бесполезная попытка засчитана."
 
-# ARC-owned Origin gates. The defaults are the visual centers; move them in-game
-# with `/arc originportals move <survival|mining|vanilla|gallery_exit>`.
+# ARC-owned Origin gates. Each anchor's x/y/z/yaw positions its portal; the
+# global vertical-offset can be overridden per anchor. Move anchor coordinates
+# in-game with `/arc originportals move <survival|mining|vanilla|gallery_exit>`.
+# Hologram front-distance points toward the approaching player (opposite yaw),
+# side-offset shifts right along the gate, and height-offset starts at the
+# raised portal center. Text and scale are independent per portal.
 origin-portals:
   enabled: true
-  vertical-offset: 5.5
+  vertical-offset: 5.0
   entry-depth: 2.0
   items:
     origin: origin_gate_portals:origin_portal
@@ -85,7 +89,12 @@ origin-portals:
       width: 12.0
       height: 16.8
       style: origin
-      label: Выживание
+      hologram:
+        text: Выживание
+        front-distance: 3.0
+        side-offset: 0.0
+        height-offset: 0.75
+        scale: 4.6 # Four times the previous 1.15 display scale.
       command: arc rtp survival --only-if-first
     mining:
       world: rc_origin_spawn
@@ -96,7 +105,12 @@ origin-portals:
       width: 12.0
       height: 16.8
       style: astral
-      label: Ресурсы
+      hologram:
+        text: Ресурсы
+        front-distance: 3.0
+        side-offset: 0.0
+        height-offset: 0.75
+        scale: 4.6
       command: arc rtp mining --only-if-first
     vanilla:
       world: rc_origin_spawn
@@ -107,7 +121,12 @@ origin-portals:
       width: 12.0
       height: 16.8
       style: void
-      label: Ваниль
+      hologram:
+        text: Ваниль
+        front-distance: 3.0
+        side-offset: 0.0
+        height-offset: 0.75
+        scale: 4.6
       command: arc rtp vanilla --only-if-first
     gallery_exit:
       world: rc_atelier_furniture_gallery
