@@ -41,4 +41,26 @@ class OriginDiningReliabilityPolicyTest : FreeSpec({
         OriginDiningReliabilityPolicy.ownsWaiterCallback(oldToken, newToken) shouldBe false
         OriginDiningReliabilityPolicy.ownsWaiterCallback(oldToken, null) shouldBe false
     }
+
+    "reseat grace ends after eight seconds" {
+        val leftAt = 10_000L
+        OriginDiningReliabilityPolicy.withinReseatGrace(leftAt, leftAt) shouldBe true
+        OriginDiningReliabilityPolicy.withinReseatGrace(
+            leftAt + OriginDiningReliabilityPolicy.RESEAT_GRACE_MILLIS - 1,
+            leftAt,
+        ) shouldBe true
+        OriginDiningReliabilityPolicy.withinReseatGrace(
+            leftAt + OriginDiningReliabilityPolicy.RESEAT_GRACE_MILLIS,
+            leftAt,
+        ) shouldBe false
+        OriginDiningReliabilityPolicy.withinReseatGrace(leftAt, null) shouldBe false
+    }
+
+    "ambient service reserves one available restaurant waiter" {
+        OriginDiningReliabilityPolicy.leavesRestaurantWaiterFree(setOf(431), emptySet()) shouldBe true
+        OriginDiningReliabilityPolicy.leavesRestaurantWaiterFree(setOf(431), setOf(432)) shouldBe false
+        OriginDiningReliabilityPolicy.leavesRestaurantWaiterFree(setOf(432), setOf(431)) shouldBe false
+        OriginDiningReliabilityPolicy.leavesRestaurantWaiterFree(setOf(431, 432), emptySet()) shouldBe false
+        OriginDiningReliabilityPolicy.leavesRestaurantWaiterFree(setOf(410), setOf(411, 431, 432)) shouldBe true
+    }
 })

@@ -261,6 +261,8 @@ internal object OriginDiningServicePolicy {
 
 internal object OriginDiningReliabilityPolicy {
     const val MAX_DELIVERY_ROUTE_RETRIES = 1
+    const val RESEAT_GRACE_MILLIS = 8_000L
+    val RESTAURANT_WAITERS = setOf(431, 432)
     private const val HOME_ARRIVAL_RADIUS = 1.25
 
     fun shouldRetryDeliveryRoute(routeRetry: Int): Boolean = routeRetry < MAX_DELIVERY_ROUTE_RETRIES
@@ -271,6 +273,12 @@ internal object OriginDiningReliabilityPolicy {
     fun hasArrivedHome(distance: Double): Boolean = distance.isFinite() && distance in 0.0..HOME_ARRIVAL_RADIUS
 
     fun ownsWaiterCallback(callbackToken: UUID, currentToken: UUID?): Boolean = callbackToken == currentToken
+
+    fun withinReseatGrace(now: Long, unmountedAt: Long?): Boolean =
+        unmountedAt != null && now - unmountedAt < RESEAT_GRACE_MILLIS
+
+    fun leavesRestaurantWaiterFree(starting: Set<Int>, unavailable: Set<Int>): Boolean =
+        starting.none(RESTAURANT_WAITERS::contains) || RESTAURANT_WAITERS.any { it !in starting && it !in unavailable }
 
     fun serviceQueue(dueAt: Map<String, Long>, occupiedTables: Set<String>, now: Long): List<String> =
         dueAt.keys.filter { dueAt.getValue(it) <= now }
@@ -815,6 +823,7 @@ private data class OriginDiningSession(
     var mounted: Boolean,
     var phase: OriginDiningPhase,
     var touchedAt: Long,
+    var unmountedAt: Long? = null,
 )
 
 private data class OriginDiningMeal(
@@ -1145,8 +1154,10 @@ private class OriginDiningService : AutoCloseable {
             conversationVariants.flatMap { variant -> variant.actorIds.map { id -> id to (variant.actorIds - id) } }
                 .groupBy({ it.first }, { it.second }).mapValues { it.value.flatten().toSet() },
             available = { id -> ambientRoutes.values.none { it.table.npcId == id && it.atTable } &&
-                id !in activeDeliveries && id !in waiterApproaches },
-        ), OriginDiningLayout.conversationConfig)
+                id !in ambientRoutes && id !in activeDeliveries && id !in waiterApproaches &&
+                id !in waiterReturns && id !in waiterAssignments && id !in pendingWaiterCalls },
+        ), OriginDiningLayout.conversationConfig,
+        mayStart = { variant -> leavesWaiterFreeForPlayers(variant.actorIds) })
     private var nextAmbientAt = 0L
     private var nextGuestSeatReconcileAt = 0L
 
@@ -1886,9 +1897,12 @@ private class OriginDiningService : AutoCloseable {
         if (existing?.seat?.id == seat.id) {
             existing.chairVehicleId = chairVehicleId
             existing.mounted = true
+            existing.unmountedAt = null
             existing.touchedAt = System.currentTimeMillis()
             log("RESEATED", existing, player, null, seat.dish, "source=$source chair=${short(chairVehicleId)} seat_owner=server-chair-handler")
-            if (existing.phase == OriginDiningPhase.SEATED && seat.id !in meals) requestWaiter(existing, player, "reseated")
+            if (existing.phase == OriginDiningPhase.SEATED && seat.id !in meals && waiterAssignments[seat.waiterId] != existing.id) {
+                requestWaiter(existing, player, "reseated")
+            }
             return
         }
         occupants[seat.id]?.takeIf { it != player.uniqueId }?.let { occupant ->
@@ -1942,13 +1956,14 @@ private class OriginDiningService : AutoCloseable {
             if (replacement != null) {
                 current.chairVehicleId = replacement.uniqueId
                 current.mounted = true
+                current.unmountedAt = null
                 log("SEAT_VEHICLE_REPLACED", current, player, meals[current.seat.id]?.dish, current.seat.seat, "chair=${short(replacement.uniqueId)}")
                 return@runLater
             }
             current.mounted = false
+            current.unmountedAt = System.currentTimeMillis()
             pendingSeatAttempts.remove(player.uniqueId)
             dialogAuthorizations.remove(player.uniqueId)
-            if (current.phase != OriginDiningPhase.ORDERED) returnWaiterHome(current, "player-dismounted")
             log(
                 "DISMOUNTED",
                 current,
@@ -2381,6 +2396,19 @@ private class OriginDiningService : AutoCloseable {
         monitorWaiterReturn(waiterId, token, 0)
     }
 
+    private fun interruptWaiterReturn(waiterId: Int) {
+        val state = waiterReturns[waiterId] ?: return
+        if (!OriginDiningReliabilityPolicy.ownsWaiterCallback(state.token, waiterOperationTokens[waiterId])) return
+        waiterReturns.remove(waiterId, state)
+        waiterOperationTokens.remove(waiterId, state.token)
+        waiter(waiterId)?.takeIf { it.isSpawned }?.let { npc ->
+            stopWaiterNavigation(npc)
+            npc.entity.removeScoreboardTag(WAITER_BUSY_TAG)
+        }
+        clearWaiterCarry(waiterId)
+        info("ORIGIN_DINING phase=WAITER_RETURN_INTERRUPTED npc={} reason=player-approach", waiterId)
+    }
+
     private fun monitorWaiterReturn(waiterId: Int, token: UUID, poll: Int) {
         tasks.runLater(OriginDiningLayout.waiterPollTicks) {
             val state = waiterReturns[waiterId]?.takeIf { OriginDiningReliabilityPolicy.ownsWaiterCallback(token, it.token) }
@@ -2739,6 +2767,7 @@ private class OriginDiningService : AutoCloseable {
         val waiterId = session.seat.waiterId
         if (waiterReadyFor[waiterId] == session.id) return
         cancelAmbientRoute(waiterId, "player-approach")
+        interruptWaiterReturn(waiterId)
         val busyReason =
             when {
                 waiterId in activeDeliveries -> "active-delivery"
@@ -2798,7 +2827,9 @@ private class OriginDiningService : AutoCloseable {
                 returnWaiterHome(waiterId, sessionId, session, "approach-session-gone")
                 return@runLater
             }
-            if (!session.mounted || !nearVenue(player, session.seat)) {
+            if (!nearVenue(player, session.seat) ||
+                (!session.mounted && !OriginDiningReliabilityPolicy.withinReseatGrace(System.currentTimeMillis(), session.unmountedAt))
+            ) {
                 waiterApproaches.remove(waiterId, approachId)
                 returnWaiterHome(waiterId, sessionId, session, "approach-player-not-seated")
                 return@runLater
@@ -3181,6 +3212,7 @@ private class OriginDiningService : AutoCloseable {
         val waiterId = table.waiterId
         if (isWaiterResting(waiterId)) return false
         if (waiterId in ambientRoutes || waiterId in activeDeliveries || waiterId in waiterApproaches || waiterId in waiterAssignments || waiterId in waiterReturns) return false
+        if (!leavesWaiterFreeForPlayers(setOf(waiterId))) return false
         val npc = waiter(waiterId)?.takeIf { it.isSpawned && it.entity.world.name == OriginDiningLayout.WORLD } ?: return false
         if (!life.hasAudience(table.meal.inWorld(npc.entity.world))) return false
         val current = guestMeals[table.id]
@@ -3211,6 +3243,7 @@ private class OriginDiningService : AutoCloseable {
         val waiterId = table.waiterId
         if (isWaiterResting(waiterId) || waiterId in ambientRoutes || waiterId in activeDeliveries ||
             waiterId in waiterApproaches || waiterId in waiterAssignments || waiterId in waiterReturns) return false
+        if (!leavesWaiterFreeForPlayers(setOf(waiterId))) return false
         val npc = waiter(waiterId)?.takeIf { it.isSpawned && it.entity.world.name == OriginDiningLayout.WORLD } ?: return false
         if (!life.hasAudience(table.meal.inWorld(npc.entity.world))) return false
         val pickup = OriginDiningLayout.waiterHome(waiterId)?.inWorld(npc.entity.world) ?: return false
@@ -3386,6 +3419,15 @@ private class OriginDiningService : AutoCloseable {
     private fun isWaiterResting(waiterId: Int, now: Long = System.currentTimeMillis()): Boolean =
         waiterRestRemainingMillis(waiterId, now) > 0L
 
+    private fun leavesWaiterFreeForPlayers(starting: Set<Int>): Boolean {
+        val unavailable = ambientRoutes.keys + waiterReturns.keys + activeDeliveries.keys +
+            waiterApproaches.keys + waiterAssignments.keys + pendingWaiterCalls.keys + diningCoordinator.busyActors() +
+            OriginDiningReliabilityPolicy.RESTAURANT_WAITERS.filter { id ->
+                waiter(id)?.takeIf { it.isSpawned && it.entity.world.name == OriginDiningLayout.WORLD } == null
+            }
+        return OriginDiningReliabilityPolicy.leavesRestaurantWaiterFree(starting, unavailable)
+    }
+
     private fun waiterRestRemainingMillis(waiterId: Int, now: Long = System.currentTimeMillis()): Long =
         (ambientWaiterAvailableAt.getOrDefault(waiterId, 0L) - now).coerceAtLeast(0L)
 
@@ -3459,11 +3501,18 @@ private class OriginDiningService : AutoCloseable {
             }
             if (session.mounted && restaurantChairVehicle(player, session.seat) == null) {
                 session.mounted = false
+                session.unmountedAt = now
                 dialogAuthorizations.remove(session.playerId)
-                if (session.phase != OriginDiningPhase.ORDERED) returnWaiterHome(session, "chair-state-lost")
                 logWarn("CHAIR_STATE_LOST", session, player, meals[session.seat.id]?.dish, "vehicle=${player.vehicle?.entityId ?: "none"}")
             } else if (session.mounted) {
+                session.unmountedAt = null
                 session.touchedAt = now
+            }
+            if (!session.mounted && session.phase != OriginDiningPhase.ORDERED &&
+                !OriginDiningReliabilityPolicy.withinReseatGrace(now, session.unmountedAt) &&
+                waiterAssignments[session.seat.waiterId] == session.id
+            ) {
+                returnWaiterHome(session, "reseat-grace-expired")
             }
             if (session.seat.dynamic && player.world.getBlockAt(session.seat.clickedBlock.first, session.seat.clickedBlock.second, session.seat.clickedBlock.third).blockData !is Stairs) {
                 releaseSession(session.playerId, "dynamic-seat-removed")

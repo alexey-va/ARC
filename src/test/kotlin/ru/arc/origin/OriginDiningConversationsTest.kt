@@ -69,6 +69,27 @@ class OriginDiningConversationsTest : FreeSpec({
         effects.speeches.size shouldBe 1
     }
 
+    "conversation selection leaves a restaurant waiter available" {
+        val effects = RecordingConversationEffects(
+            listOf(431, 432, 439).associateWith { ActorSnapshot(it, "restaurant", true, true) },
+        )
+        val conversations = OriginDiningConversations(
+            ru.arc.origin.scene.OriginSceneCoordinator(),
+            listOf(
+                variant("both-waiters", "restaurant", 431, 432, "both", "reply"),
+                variant("one-waiter", "restaurant", 432, 439, "one", "reply"),
+            ),
+            effects,
+            shortConfig(),
+            TestTaskScheduler(),
+            mayStart = { OriginDiningReliabilityPolicy.leavesRestaurantWaiterFree(it.actorIds, emptySet()) },
+        )
+
+        conversations.tick(0L)
+
+        effects.speeches.map { it.text } shouldBe listOf("one")
+    }
+
     "line timing is readable, bounded, and gestures are emitted at the configured cadence" {
         val config = OriginDiningConversations.Config(
                 minimumLineMillis = 100L,

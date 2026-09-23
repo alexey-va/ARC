@@ -17,6 +17,7 @@ internal class OriginDiningConversations(
     private val effects: Effects,
     private val config: Config = Config(),
     private val scheduler: TaskScheduler? = null,
+    private val mayStart: (Variant) -> Boolean = { true },
 ) : AutoCloseable {
     data class Variant(
         val id: String,
@@ -164,7 +165,7 @@ internal class OriginDiningConversations(
                     val selected = pairVariants[nextIndex]
                     val first = effects.snapshot(selected.dialogue.firstNpcId)
                     val second = effects.snapshot(selected.dialogue.secondNpcId)
-                    if (first == null || second == null || !eligible(selected, first, second)) null
+                    if (first == null || second == null || !eligible(selected, first, second) || !mayStart(selected)) null
                     else pair to selected
                 }
                 .sortedWith(compareBy<Pair<PairKey, Variant>> { lastTalkedAt.getOrDefault(it.first, Long.MIN_VALUE) }
