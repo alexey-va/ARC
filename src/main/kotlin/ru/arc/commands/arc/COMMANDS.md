@@ -66,6 +66,8 @@
 
 ```bash
 /arc help              # список всех команд
+/arc help rtp          # открыть нативный выбор мира для обычного RTP
+/arc help travel       # телепортации, дома и варпы
 /arc help hunt         # подробная справка по hunt
 /arc help treasures    # подробная справка по treasures
 ```

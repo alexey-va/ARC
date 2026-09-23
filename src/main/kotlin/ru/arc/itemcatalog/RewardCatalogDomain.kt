@@ -57,6 +57,8 @@ data class RewardCatalogEntry(
     val enchantments: Map<String, Int> = emptyMap(),
     /** Optional ItemsAdder stack used only for catalogue presentation. */
     val previewItemsAdder: String? = null,
+    /** Optional resource-pack tooltip frame; never replaces native reward metadata. */
+    val tooltipStyle: String? = null,
 )
 
 data class RewardCatalogCategory(

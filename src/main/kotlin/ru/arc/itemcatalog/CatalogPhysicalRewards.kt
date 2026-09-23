@@ -98,7 +98,7 @@ internal class CatalogPhysicalRewards(
         val archive = frozen ?: return null
         val recipe = freezeRecipe(entry) ?: return null
         if (!frozenProvidersReady(recipe)) return null
-        val archived = archive.prepare(sourceKey, recipe, spec.preview) ?: return null
+        val archived = archive.prepare(sourceKey, recipe, RewardItemPresentation.tooltip(spec.preview, entry)) ?: return null
         if (entry.source is RewardCatalogSource.Seal) {
             val categoryId = archive.archivedCategoryId(archived.sourceKey) ?: return null
             return PhysicalRewardMaterialization(categoryId, archived.providerFingerprint)
@@ -177,7 +177,7 @@ internal class CatalogPhysicalRewards(
             else -> return@runCatching null
         }
         val fingerprint = OneTimeUseFingerprint.sha256(("catalog-v1\n$key\n$definition").toByteArray())
-        PhysicalRewardSpec(key, fingerprint, rewardPreview)
+        PhysicalRewardSpec(key, fingerprint, RewardItemPresentation.tooltip(rewardPreview, entry))
     }.getOrNull()
 
     fun canRedeem(player: Player, spec: PhysicalRewardSpec): String? {

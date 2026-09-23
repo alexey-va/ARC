@@ -87,9 +87,9 @@ class HelpCenterScreensTest {
             directory.resolve("help-center.yml"),
             """
             actions:
-              rtp-vanilla: 'arc rtp vanilla --only-if-first'
-              rtp-mining: 'arc rtp mining --only-if-first'
-              rtp-biomes: 'arc rtp survival --only-if-first'
+              rtp-vanilla: 'arc rtp vanilla'
+              rtp-mining: 'arc rtp mining'
+              rtp-biomes: 'arc rtp survival'
             """.trimIndent(),
         )
         val inventoryReturn = HelpCenterInventoryReturnRuntime(plugin, returnOnClose = { true })
@@ -439,15 +439,26 @@ class HelpCenterScreensTest {
         click("rtp")
         assertEquals(listOf("rtp_vanilla", "rtp_mining", "rtp_biomes"), screen.buttons.map { it.id.value })
         for ((button, command) in listOf(
-            "rtp_vanilla" to "arc rtp vanilla --only-if-first",
-            "rtp_mining" to "arc rtp mining --only-if-first",
-            "rtp_biomes" to "arc rtp survival --only-if-first",
+            "rtp_vanilla" to "arc rtp vanilla",
+            "rtp_mining" to "arc rtp mining",
+            "rtp_biomes" to "arc rtp survival",
         )) {
             click(button)
             assertEquals(command, executed.last())
             open(HelpCenterPage.TRAVEL)
             click("rtp")
         }
+    }
+
+    @Test
+    fun `direct rtp page alias opens the same native selector and routes regular rtp`() {
+        val page = HelpCenterPage.from("rtp")
+        assertEquals(HelpCenterPage.RTP, page)
+        open(requireNotNull(page))
+        assertEquals("help.travel.rtp", screen.id)
+        assertEquals(listOf("rtp_vanilla", "rtp_mining", "rtp_biomes"), screen.buttons.map { it.id.value })
+        click("rtp_mining")
+        assertEquals(listOf("arc rtp mining"), executed)
     }
 
     @Test
@@ -830,7 +841,7 @@ class HelpCenterScreensTest {
 
     @Test
     fun `all major screens construct actual published core dialog models`() {
-        listOf(HelpCenterPage.ROOT, HelpCenterPage.NOW, HelpCenterPage.COMMANDS, HelpCenterPage.TRAVEL,
+        listOf(HelpCenterPage.ROOT, HelpCenterPage.NOW, HelpCenterPage.COMMANDS, HelpCenterPage.RTP, HelpCenterPage.TRAVEL,
             HelpCenterPage.ACTIVITIES, HelpCenterPage.TECHNOLOGY, HelpCenterPage.SETTINGS, HelpCenterPage.RECOVERY,
             HelpCenterPage.HELP, HelpCenterPage.GOALS, HelpCenterPage.ITEM, HelpCenterPage.CONTEXT).forEach {
             open(it)

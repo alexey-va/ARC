@@ -366,7 +366,8 @@ class RewardCatalogGuiController internal constructor(
             -> physical(entry, grant)?.let(::listOf)
             is RewardCatalogSource.Planned -> null
         }
-        values?.takeIf { it.isNotEmpty() && it.size <= MAX_STACKS }?.let(::ResolvedReward)
+        values?.takeIf { it.isNotEmpty() && it.size <= MAX_STACKS }
+            ?.map { RewardItemPresentation.tooltip(it, entry) }?.let(::ResolvedReward)
     }.getOrNull()
 
     private fun physical(entry: RewardCatalogEntry, grant: Boolean): ItemStack? =
@@ -394,7 +395,7 @@ class RewardCatalogGuiController internal constructor(
                 settings.categories.sortedBy { it.id }.forEach { category ->
                     append(category.id).append('|').append(category.rolls).append('\n')
                     category.entries.sortedBy { it.id }.forEach { entry ->
-                        append(entry.id).append('|').append(entry.source).append('|')
+                        append(entry.id).append('|').append(entry.source).append('|').append(entry.tooltipStyle).append('|')
                         entry.enchantments.toSortedMap().forEach { (id, level) -> append(id).append('=').append(level).append(',') }
                         append('\n')
                     }
@@ -403,7 +404,9 @@ class RewardCatalogGuiController internal constructor(
         ).sha256
 
     private fun previewStack(entry: RewardCatalogEntry, resolved: ResolvedReward?): ItemStack =
-        resolved?.values?.firstOrNull()?.clone() ?: styledStack(entry.icon ?: CatalogIconStyle(Material.PAPER.name))
+        RewardItemPresentation.tooltip(
+            resolved?.values?.firstOrNull() ?: styledStack(entry.icon ?: CatalogIconStyle(Material.PAPER.name)), entry,
+        )
 
     private fun displayName(entry: RewardCatalogEntry, resolved: ResolvedReward?, preview: ItemStack): Component =
         entry.name?.let { authoredComponent(it, NAME_DEFAULT) }

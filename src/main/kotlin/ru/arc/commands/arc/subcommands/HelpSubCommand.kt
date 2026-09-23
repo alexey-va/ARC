@@ -28,7 +28,7 @@ object HelpSubCommand : SubCommand {
     override val defaultName = "help"
     override val defaultPermission = null // Доступно всем
     override val defaultDescription = "Показать справку по командам"
-    override val defaultUsage = "/arc help [команда]"
+    override val defaultUsage = "/arc help [раздел|команда]"
 
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {
         val player = sender.player

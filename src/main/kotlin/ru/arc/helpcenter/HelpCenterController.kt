@@ -127,6 +127,7 @@ internal class HelpCenterController(
             HelpCenterPage.GUIDE -> openGuide(player)
             HelpCenterPage.DUNGEONS_GUIDE -> openDungeonsGuide(player)
             HelpCenterPage.COMMANDS -> openCommands(player)
+            HelpCenterPage.RTP -> openRtp(player)
             HelpCenterPage.TRAVEL -> openTravel(player)
             HelpCenterPage.WARPS -> openWarps(player)
             HelpCenterPage.PRIVAT -> {

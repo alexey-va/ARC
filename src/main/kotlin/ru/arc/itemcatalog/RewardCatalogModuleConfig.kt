@@ -137,7 +137,14 @@ class RewardCatalogModuleConfig(private val config: Config) {
             (map["preview-itemsadder"] as? String)
                 ?.trim()
                 ?.takeIf { ITEMSADDER_ID.matches(it) }
-        return RewardCatalogEntry(id, name, description, rarity, requires, source, icon, weight, enchantments, previewItemsAdder)
+        val tooltipStyle = if ("tooltip-style" in map) {
+            requiredString(map["tooltip-style"], "$path.tooltip-style", 160).also {
+                require(Regex("[a-z0-9._-]+:[a-z0-9/._-]+").matches(it)) {
+                    "$path.tooltip-style must be a namespaced resource key"
+                }
+            }
+        } else null
+        return RewardCatalogEntry(id, name, description, rarity, requires, source, icon, weight, enchantments, previewItemsAdder, tooltipStyle)
     }
 
     private fun validateHierarchy(categories: List<RewardCatalogCategory>) {

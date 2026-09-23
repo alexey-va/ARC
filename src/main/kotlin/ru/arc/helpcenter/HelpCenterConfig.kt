@@ -76,9 +76,9 @@ class HelpCenterConfig(private val config: Config) {
         private const val RESOURCE = "help-center.yml"
 
         private val DEFAULT_ACTIONS = linkedMapOf(
-            "rtp-vanilla" to "rtp region=vanilla",
-            "rtp-mining" to "rtp region=mining",
-            "rtp-biomes" to "rtp region=survival",
+            "rtp-vanilla" to "arc rtp vanilla",
+            "rtp-mining" to "arc rtp mining",
+            "rtp-biomes" to "arc rtp survival",
         )
 
         fun load(dataPath: Path): HelpCenterConfig {

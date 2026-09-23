@@ -5,6 +5,31 @@ import io.kotest.matchers.shouldBe
 import java.nio.file.Files
 
 class RewardCatalogModuleConfigTest : StringSpec({
+    "tooltip frames are optional and accept namespaced paths without changing the source" {
+        val root = Files.createTempDirectory("arc-reward-tooltip")
+        try {
+            fun document(style: String) = """
+                enabled: true
+                categories:
+                  supplies:
+                    entries:
+                      scroll:
+                        preset: white_scroll
+                        $style
+            """.trimIndent()
+            writeConfig(root, document("tooltip-style: lzblocks:tooltip/rare"))
+            val entry = RewardCatalogModuleConfig.load(root).snapshot().categories.single().entries.single()
+            entry.tooltipStyle shouldBe "lzblocks:tooltip/rare"
+            entry.source shouldBe RewardCatalogSource.Preset("white_scroll")
+            writeConfig(root, document(""))
+            RewardCatalogModuleConfig.load(root).snapshot().categories.single().entries.single().tooltipStyle shouldBe null
+            writeConfig(root, document("tooltip-style: 'broken frame'"))
+            runCatching { RewardCatalogModuleConfig.load(root).snapshot() }.isFailure shouldBe true
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
     "bundled reward catalogue stays disabled and parses its portable schema" {
         val root = Files.createTempDirectory("arc-reward-catalog-config")
         try {

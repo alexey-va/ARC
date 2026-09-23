@@ -70,6 +70,16 @@ An optional `preview-itemsadder: namespace:item` selects a catalogue-only model;
 missing models use the authored icon. It never changes the reward source or the
 inert icon embedded in a physical voucher or its archived materialization.
 
+An optional `tooltip-style: namespace:tooltip/tier` sets the resource-pack frame
+on the catalogue preview and the issued native item or voucher. It only changes
+that component: source names/lore, enchantments, model and bearer identity stay
+intact. Missing settings preserve the native frame. Archived rewards retain the
+frame captured when prepared; visual changes never invalidate a bearer claim.
+Focused frame checks use `RewardItemPresentationTest` and the native AE preparation
+test. MockBukkit 4.116.3 drops its modern component map on `ItemStack.clone()`;
+those tests prove the adapter assignment and preserved native metadata, not the
+Paper serialized-frame round trip or client rendering.
+
 `parent` forms folders up to four levels deep. A case has `rolls: 1` and positive
 entry `weight`; displayed odds come from the same normalized weights. These
 are future case compositions, not automatic daily/rank acquisition. With

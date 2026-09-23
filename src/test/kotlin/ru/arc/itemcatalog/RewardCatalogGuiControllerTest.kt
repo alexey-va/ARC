@@ -9,6 +9,8 @@ import io.mockk.verify
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Material
+import io.papermc.paper.datacomponent.DataComponentTypes
+import net.kyori.adventure.key.Key
 import org.bukkit.inventory.ItemStack
 import ru.arc.paper.testing.MockBukkitTestRuntime
 import ru.arc.treasure.core.Treasure
@@ -27,15 +29,23 @@ class RewardCatalogGuiControllerTest : StringSpec({
             }
             val reward = Treasure.Ae(AeKind.ITEM, "magic", amount = 32, id = "dust")
             val entry = RewardCatalogEntry("dust", "Пыль ×32", emptyList(), null, emptyList(),
-                RewardCatalogSource.Treasure("dust_pool", "dust"), CatalogIconStyle("IRON_INGOT"), 10000)
+                RewardCatalogSource.Treasure("dust_pool", "dust"), CatalogIconStyle("IRON_INGOT"), 10000,
+                tooltipStyle = "lzblocks:tooltip/rare")
             val settings = RewardCatalogSettings(true, "Кейс", listOf(
                 RewardCatalogCategory("case_test", "Тест", emptyList(), CatalogIconStyle("CHEST"), listOf(entry), rolls = 1),
             ), RewardCatalogMessages.DEFAULT)
-            mockkObject(Treasures, AeNativeItems)
+            mockkObject(Treasures, AeNativeItems, RewardItemPresentation)
             try {
                 every { Treasures.getPool("dust_pool") } returns TreasurePool("dust_pool", listOf(reward))
                 every { AeNativeItems.supports(reward) } returns true
                 every { AeNativeItems.create(reward, preview = false) } returns listOf(native)
+                // Assert the real adapter output before MockBukkit's clone loses modern
+                // components; the exact clone limitation is documented in RewardItemPresentationTest.
+                every { RewardItemPresentation.tooltip(any(), entry) } answers {
+                    (callOriginal() as ItemStack).also {
+                        it.getData(DataComponentTypes.TOOLTIP_STYLE) shouldBe Key.key("lzblocks", "tooltip/rare")
+                    }
+                }
                 val physical = CatalogPhysicalRewards(settings)
                 physical.isVoucherSource(entry) shouldBe false
                 val controller = RewardCatalogGuiController(settings, "arc.test", physicalSource = physical::isVoucherSource)
@@ -48,8 +58,10 @@ class RewardCatalogGuiControllerTest : StringSpec({
                     issued.amount = 1
                 }
                 verify(exactly = 1) { AeNativeItems.create(reward, preview = false) }
+                verify(exactly = 1) { RewardItemPresentation.tooltip(any(), entry) }
+                native.getData(DataComponentTypes.TOOLTIP_STYLE) shouldBe null
             } finally {
-                unmockkObject(Treasures, AeNativeItems)
+                unmockkObject(Treasures, AeNativeItems, RewardItemPresentation)
             }
         }
     }
