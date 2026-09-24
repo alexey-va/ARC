@@ -110,7 +110,7 @@ class OriginPortalsModuleTest : FreeSpec({
         sides.size shouldBe 2
         sides.map { it.x } shouldContainExactly listOf(3.0, -3.0)
         sides.all { kotlin.math.abs(it.z - 1.0) < 1e-9 }.shouldBeTrue()
-        sides.map { it.yaw } shouldContainExactly listOf(90f, 270f)
+        sides.map { it.yaw } shouldContainExactly listOf(270f, 90f)
     }
 
     "move persists feet coordinates and reloads the same anchor" {
