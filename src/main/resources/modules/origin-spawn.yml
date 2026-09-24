@@ -55,6 +55,7 @@ regenerative-breaking:
 # Hologram front-distance points toward the approaching player (opposite yaw),
 # side-offset shifts right along the gate, and height-offset starts at the
 # raised portal center. Text and scale are independent per portal.
+# Both text faces share this front position; no second sign is placed behind the gate.
 # background-gray and background-alpha range from 0 to 255.
 origin-portals:
   enabled: true

@@ -154,7 +154,13 @@ internal data class OriginPortalAnchor(
 
     fun labelLocations(world: org.bukkit.World): List<Location> {
         val front = labelLocation(world)
-        return if (id.central) listOf(front.apply { yaw += 180f }, labelLocation(world, -labelFrontDistance)) else listOf(front)
+        if (!id.central) return listOf(front)
+        // One sign in front of the portal, with a readable face on either side.
+        // Separate the faces slightly so their backgrounds do not hide the text.
+        return listOf(
+            labelLocation(world, labelFrontDistance + 0.01).apply { yaw += 180f },
+            labelLocation(world, labelFrontDistance - 0.01),
+        )
     }
 
     /** A thin, yaw-aware interaction plane keeps neighbouring central portals independent. */

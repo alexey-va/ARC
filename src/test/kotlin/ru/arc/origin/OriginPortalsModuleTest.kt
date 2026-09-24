@@ -108,9 +108,33 @@ class OriginPortalsModuleTest : FreeSpec({
         hologram.yaw shouldBe anchor.yaw
         val sides = anchor.labelLocations(world)
         sides.size shouldBe 2
-        sides.map { it.x } shouldContainExactly listOf(3.0, -3.0)
+        sides.map { it.x } shouldContainExactly listOf(3.01, 2.99)
         sides.all { kotlin.math.abs(it.z - 1.0) < 1e-9 }.shouldBeTrue()
         sides.map { it.yaw } shouldContainExactly listOf(270f, 90f)
+    }
+
+    "central labels keep both faces at one configured position before every rotated portal" {
+        val directory = Files.createTempDirectory("arc-origin-portal-label-faces")
+        try {
+            val world = mockk<World>()
+            OriginPortalsConfig.load(directory).anchors.filter { it.id.central }.forEach { anchor ->
+                val faces = anchor.labelLocations(world)
+                faces.size shouldBe 2
+                val expected = anchor.labelLocation(world)
+                faces.forEach { face ->
+                    (face.distance(expected) < 0.011).shouldBeTrue()
+                    face.y shouldBe expected.y
+                    val angle = anchor.yaw * kotlin.math.PI / 180.0
+                    val frontDistance = (face.x - anchor.x) * kotlin.math.sin(angle) -
+                        (face.z - anchor.z) * kotlin.math.cos(angle)
+                    (frontDistance > 0.0).shouldBeTrue()
+                }
+                (kotlin.math.abs(faces[0].distance(faces[1]) - 0.02) < 1e-9).shouldBeTrue()
+                faces.map { it.yaw } shouldContainExactly listOf(anchor.yaw + 180f, anchor.yaw)
+            }
+        } finally {
+            directory.toFile().deleteRecursively()
+        }
     }
 
     "move persists feet coordinates and reloads the same anchor" {
