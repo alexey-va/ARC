@@ -100,7 +100,7 @@ class OriginPortalsModuleTest : FreeSpec({
         hologram.x shouldBe 3.0
         hologram.y shouldBe 5.75
         (kotlin.math.abs(hologram.z - 1.0) < 1e-9).shouldBeTrue()
-        hologram.yaw shouldBe 270f
+        hologram.yaw shouldBe anchor.yaw
     }
 
     "move persists feet coordinates and reloads the same anchor" {

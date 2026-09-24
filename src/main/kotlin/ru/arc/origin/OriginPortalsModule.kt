@@ -145,7 +145,7 @@ internal data class OriginPortalAnchor(
             x + sin(angle) * labelFrontDistance + cos(angle) * labelSideOffset,
             y + verticalOffset + labelHeightOffset,
             z - cos(angle) * labelFrontDistance + sin(angle) * labelSideOffset,
-            yaw + 180f,
+            yaw,
             0f,
         )
     }
