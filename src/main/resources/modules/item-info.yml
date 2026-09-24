@@ -1,6 +1,8 @@
 # Контекстная информация только для блоков ItemsAdder и Slimefun.
 enabled: true
 target-distance: 5.0
+# Exact item IDs hidden from ARC's contextual item-info display.
+excluded-item-ids: []
 
 text:
   name-only: '<white><name>'

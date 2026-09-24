@@ -110,6 +110,7 @@ internal class ItemInfoInspectionProvider(
     override fun resolve(player: Player): ArcInspectionFrame? {
         if (!settings.enabled) return null
         val target = resolveTarget(player) ?: return null
+        if (target.namespacedId in settings.excludedItemIds) return null
         val showNamespacedId = preferences(player).showNamespacedId
         return ArcInspectionFrame(
             settings.hologramText(target, showNamespacedId),

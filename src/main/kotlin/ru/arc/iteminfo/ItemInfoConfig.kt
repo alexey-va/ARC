@@ -13,6 +13,7 @@ internal data class ItemInfoSettings(
     val nameOnlyTemplate: String,
     val hologramTemplate: String,
     val bossbarTemplate: String,
+    val excludedItemIds: Set<String> = emptySet(),
 ) {
     private val miniMessage = MiniMessage.miniMessage()
 
@@ -39,6 +40,7 @@ internal class ItemInfoConfig(private val source: Config) {
             nameOnlyTemplate = required("text.name-only", "<white><name>"),
             hologramTemplate = required("text.hologram", "<white><name><newline><gray><id>"),
             bossbarTemplate = required("text.bossbar", "<white><name> <dark_gray>· <gray><id>"),
+            excludedItemIds = source.stringList("excluded-item-ids").toSet(),
         )
     }
 
