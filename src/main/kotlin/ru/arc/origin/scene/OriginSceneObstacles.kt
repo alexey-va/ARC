@@ -4,13 +4,24 @@ import org.bukkit.World
 import org.bukkit.util.BoundingBox
 import ru.arc.npc.NpcRouteCell
 import ru.arc.npc.NpcRouteProfile
+import ru.arc.worldcontent.FurnitureRuntime
 import ru.arc.worldcontent.ItemsAdderFurnitureRuntime
 import kotlin.math.ceil
 import kotlin.math.floor
 
+internal const val ORIGIN_SCENE_PROP_TAG = "arc_origin_scene_prop"
+
 /** Scene furniture is solid to every Kotlin-owned Origin NPC route. */
-internal fun originFurnitureObstacleCells(world: World, profile: NpcRouteProfile): Set<NpcRouteCell> {
-    if (!ItemsAdderFurnitureRuntime.available) return emptySet()
+internal fun originFurnitureObstacleCells(world: World, profile: NpcRouteProfile): Set<NpcRouteCell> =
+    originFurnitureObstacleCells(world, profile, ItemsAdderFurnitureRuntime)
+
+/** Injectable runtime keeps route obstacle filtering deterministic in focused tests. */
+internal fun originFurnitureObstacleCells(
+    world: World,
+    profile: NpcRouteProfile,
+    furnitureRuntime: FurnitureRuntime,
+): Set<NpcRouteCell> {
+    if (!furnitureRuntime.available) return emptySet()
     val search = BoundingBox(
         profile.bounds.minX.toDouble(),
         profile.floorY - 1.0,
@@ -35,7 +46,8 @@ internal fun originFurnitureObstacleCells(world: World, profile: NpcRouteProfile
     }
 
     world.getNearbyEntities(search).forEach { entity ->
-        val furniture = ItemsAdderFurnitureRuntime.inspect(entity) ?: return@forEach
+        if (ORIGIN_SCENE_PROP_TAG in entity.scoreboardTags) return@forEach
+        val furniture = furnitureRuntime.inspect(entity) ?: return@forEach
         addBox(entity.boundingBox)
         addBox(furniture.root.boundingBox)
         cells += NpcRouteCell(floor(furniture.root.location.x).toInt(), floor(furniture.root.location.z).toInt())

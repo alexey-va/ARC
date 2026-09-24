@@ -1142,7 +1142,7 @@ private class OriginSceneService(
     private companion object {
         val FAILURE_LINE = StructuredDebugLine("ORIGIN_SCENE")
         const val SPEECH_TAG = "arc_origin_scene_speech"
-        const val PROP_TAG = "arc_origin_scene_prop"
+        const val PROP_TAG = ORIGIN_SCENE_PROP_TAG
         const val BUSY_TAG = "arc_origin_scene_busy"
     }
 }
