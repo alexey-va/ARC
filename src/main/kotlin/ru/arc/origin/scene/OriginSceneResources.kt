@@ -186,6 +186,69 @@ internal class OriginSceneResources {
         items.remove(key)
     }
 
+    /** Creates or updates one ItemsAdder-backed portable prop under the scene display key. */
+    fun updateItemDisplay(
+        key: String,
+        location: Location,
+        stack: ItemStack,
+        context: OriginSceneItemDisplayContext,
+        scale: OriginSceneVector,
+        interpolationTicks: Int,
+        tags: Set<String>,
+    ): Boolean {
+        scale.requirePositive("origin scene item display scale")
+        scale.requireBounded("origin scene item display scale", 4.0)
+        require(scale.x >= 0.01 && scale.y >= 0.01 && scale.z >= 0.01) {
+            "origin scene item display scale values must be at least 0.01"
+        }
+        require(interpolationTicks in 0..59)
+        require(!stack.type.isAir) { "origin scene item display $key cannot use AIR" }
+        var created = false
+        val display = items[key]?.takeIf(ItemDisplay::isValid)
+            ?: run {
+                items.remove(key)
+                check(displayCount < 4) { "Small scene prop budget exceeded" }
+                val spawned = location.world.spawn(location, ItemDisplay::class.java) { candidate ->
+                    // Register before any consumer mutation so failed setup is still retryable on cleanup.
+                    items[key] = candidate
+                    candidate.isPersistent = false
+                    candidate.setGravity(false)
+                    candidate.isInvulnerable = true
+                    tags.forEach(candidate::addScoreboardTag)
+                }
+                if (items[key] !== spawned) items[key] = spawned
+                created = true
+                spawned
+            }
+
+        display.itemDisplayTransform = context.bukkitTransform()
+        display.billboard = Display.Billboard.FIXED
+        display.viewRange = 0.5f
+        display.displayWidth = 2f
+        display.displayHeight = 2f
+        display.shadowRadius = 0f
+        display.setItemStack(stack.clone())
+        display.interpolationDelay = -1
+        display.interpolationDuration = interpolationTicks
+        display.teleportDuration = interpolationTicks
+        check(display.teleport(location)) { "Scene item display $key rejected teleport to $location" }
+        // Keep model-context placement separate from the level entity yaw in the location.
+        display.transformation = Transformation(
+            Vector3f(),
+            AxisAngle4f(),
+            Vector3f(scale.x.toFloat(), scale.y.toFloat(), scale.z.toFloat()),
+            AxisAngle4f(),
+        )
+        return created
+    }
+
+    private fun OriginSceneItemDisplayContext.bukkitTransform(): ItemDisplay.ItemDisplayTransform = when (this) {
+        OriginSceneItemDisplayContext.NONE -> ItemDisplay.ItemDisplayTransform.NONE
+        OriginSceneItemDisplayContext.GROUND -> ItemDisplay.ItemDisplayTransform.GROUND
+        OriginSceneItemDisplayContext.FIXED -> ItemDisplay.ItemDisplayTransform.FIXED
+        OriginSceneItemDisplayContext.HEAD -> ItemDisplay.ItemDisplayTransform.HEAD
+    }
+
     /** A small geometric workstation prop, with an explicit lower-corner anchor. */
     fun solid(key: String, location: Location, material: Material, scale: Vector3f): BlockDisplay {
         require(material.isBlock && scale.x > 0 && scale.y > 0 && scale.z > 0)
@@ -308,13 +371,28 @@ internal class OriginSceneResources {
         return created
     }
 
-    fun hasDisplay(key: String): Boolean = displays[key]?.isValid == true
+    fun hasDisplay(key: String): Boolean = displays[key]?.isValid == true || items[key]?.isValid == true
 
     /** Removes one owned display; a failed removal remains owned for cleanup. */
     fun removeDisplay(key: String): Boolean {
-        val display = displays[key] ?: return false
-        if (display.isValid) display.remove()
-        displays.remove(key)
+        val blockDisplay = displays[key]
+        val itemDisplay = items[key]
+        if (blockDisplay == null && itemDisplay == null) return false
+        var failure: Exception? = null
+        try {
+            if (blockDisplay?.isValid == true) blockDisplay.remove()
+            if (blockDisplay != null) displays.remove(key)
+        } catch (problem: Exception) {
+            failure = problem
+        }
+        try {
+            if (itemDisplay?.isValid == true) itemDisplay.remove()
+            if (itemDisplay != null) items.remove(key)
+        } catch (problem: Exception) {
+            val current = failure
+            if (current == null) failure = problem else current.addSuppressed(problem)
+        }
+        failure?.let { throw it }
         return true
     }
 

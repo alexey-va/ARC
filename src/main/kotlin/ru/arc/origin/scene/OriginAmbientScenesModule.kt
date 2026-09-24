@@ -1,6 +1,7 @@
 package ru.arc.origin.scene
 
 import com.denizenscript.denizen.objects.NPCTag
+import dev.lone.itemsadder.api.CustomStack
 import net.citizensnpcs.api.CitizensAPI
 import net.citizensnpcs.api.event.NPCRightClickEvent
 import net.citizensnpcs.api.npc.NPC
@@ -12,6 +13,7 @@ import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.Particle
 import org.bukkit.entity.BlockDisplay
+import org.bukkit.entity.ItemDisplay
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Display
 import org.bukkit.entity.TextDisplay
@@ -161,7 +163,7 @@ private data class ActiveOriginSceneCycle(
     val cycle: OriginSceneCycle,
     val mountedPairs: MutableSet<Pair<Int, Int>> = mutableSetOf(),
     val resources: OriginSceneResources = OriginSceneResources(),
-    val followingDisplays: MutableMap<String, OriginSceneStep.BlockDisplay> = mutableMapOf(),
+    val followingDisplays: MutableMap<String, OriginSceneStep.Display> = mutableMapOf(),
     val followingDisplayPoses: MutableMap<Int, OriginSceneFollowPose> = mutableMapOf(),
     var followingDisplayRefreshScheduled: Boolean = false,
     val speechActors: MutableSet<Int> = mutableSetOf(),
@@ -400,10 +402,10 @@ private class OriginSceneService(
                 runStep(running, index + 1)
             }
             is OriginSceneStep.Swing -> swing(running, index, step, 0)
-            is OriginSceneStep.BlockDisplay -> if (setBlockDisplay(running, step)) runStep(running, index + 1)
+            is OriginSceneStep.Display -> if (setSceneDisplay(running, step)) runStep(running, index + 1)
             else finish(running, if (step.followActorId != null) "follow-actor-unavailable" else "prop-apply-failed")
             is OriginSceneStep.RemoveDisplay -> {
-                running.followingDisplays.remove(step.key)
+                clearFollowingDisplay(running, step.key)
                 removeDisplay(running, step.key)
                 runStep(running, index + 1)
             }
@@ -624,9 +626,9 @@ private class OriginSceneService(
         return surface.resolve(world)?.let(surface::lookTarget)?.inWorld(world)
     }
 
-    private fun setBlockDisplay(
+    private fun setSceneDisplay(
         running: ActiveOriginSceneCycle,
-        step: OriginSceneStep.BlockDisplay,
+        step: OriginSceneStep.Display,
         emitLog: Boolean = true,
         updateTracker: Boolean = true,
     ): Boolean {
@@ -636,41 +638,88 @@ private class OriginSceneService(
         val followLocation = followActor?.entity?.location
         if (followLocation != null && followLocation.world != world) return false
         val followPose = followLocation?.let { OriginSceneFollowPose(it.x, it.y, it.z, it.yaw) }
-        val propAnchor = followLocation?.let { OriginScenePropContract.actorAnchor(it, step.followOffset) }
-            ?: step.surface?.let(running.scene.propSurfaces::getValue)?.resolve(world)
-            ?: step.anchor?.let(running.scene.anchors::getValue)
+        val propAnchor = when (step) {
+            is OriginSceneStep.BlockDisplay -> followLocation?.let {
+                OriginScenePropContract.actorAnchor(it, step.followOffset)
+            } ?: step.surface?.let(running.scene.propSurfaces::getValue)?.resolve(world)
+                ?: step.anchor?.let(running.scene.anchors::getValue)
+            is OriginSceneStep.ItemDisplay -> followLocation?.let {
+                OriginScenePropContract.actorAnchor(it, step.followOffset)
+            } ?: step.anchor?.let(running.scene.anchors::getValue)
+        }
         if (propAnchor == null) {
             warn(
-                "ORIGIN_SCENE phase=PROP_ANCHOR_MISSING scene={} cycle={} key={} surface={} anchor={}",
+                "ORIGIN_SCENE phase=PROP_ANCHOR_MISSING scene={} cycle={} key={} follow={} anchor={}",
                 running.scene.id,
                 running.cycle.id,
                 step.key,
-                step.surface ?: "none",
+                step.followActorId ?: "none",
                 step.anchor ?: "none",
             )
             return false
         }
-        val rotation = followActor?.let {
-            OriginScenePropContract.actorRelativeRotationY(step.rotationYDegrees, it.entity.yaw)
-        } ?: step.rotationYDegrees
-        val resolved = OriginScenePropContract.resolve(
-            propAnchor,
-            step.origin,
-            step.offset,
-            step.scale,
-            rotation,
-        )
-        val created = running.resources.updateDisplay(
-            step.key,
-            world,
-            resolved,
-            step,
-            setOf(PROP_TAG, propRunTag(running)),
-            rotationYDegrees = rotation,
-        )
+        var actualPoint = propAnchor
+        var originLabel = "none"
+        val created = when (step) {
+            is OriginSceneStep.BlockDisplay -> {
+                val rotation = followActor?.let {
+                    OriginScenePropContract.actorRelativeRotationY(step.rotationYDegrees, it.entity.yaw)
+                } ?: step.rotationYDegrees
+                val resolved = OriginScenePropContract.resolve(
+                    propAnchor,
+                    step.origin,
+                    step.offset,
+                    step.scale,
+                    rotation,
+                )
+                actualPoint = actualPoint.copy(x = resolved.x, y = resolved.y, z = resolved.z)
+                originLabel = step.origin.name
+                running.resources.updateDisplay(
+                    step.key,
+                    world,
+                    resolved,
+                    step,
+                    setOf(PROP_TAG, propRunTag(running)),
+                    rotationYDegrees = rotation,
+                )
+            }
+            is OriginSceneStep.ItemDisplay -> {
+                val yaw = OriginScenePropContract.itemDisplayYaw(
+                    followLocation?.yaw ?: propAnchor.yaw,
+                    step.yawOffsetDegrees,
+                )
+                actualPoint = propAnchor.copy(
+                    x = propAnchor.x + step.offset.x,
+                    y = propAnchor.y + step.offset.y,
+                    z = propAnchor.z + step.offset.z,
+                    yaw = yaw,
+                    pitch = 0f,
+                )
+                originLabel = "item-context:${step.context}"
+                val stack = runCatching { CustomStack.getInstance(step.itemId)?.itemStack?.clone() }.getOrNull()
+                if (stack == null) {
+                    warn(
+                        "ORIGIN_SCENE phase=ITEM_DISPLAY_UNAVAILABLE scene={} cycle={} key={} item={}",
+                        running.scene.id,
+                        running.cycle.id,
+                        step.key,
+                        step.itemId,
+                    )
+                    return false
+                }
+                running.resources.updateItemDisplay(
+                    step.key,
+                    Location(world, actualPoint.x, actualPoint.y, actualPoint.z, yaw, 0f),
+                    stack,
+                    step.context,
+                    step.scale,
+                    step.interpolationTicks,
+                    setOf(PROP_TAG, propRunTag(running)),
+                )
+            }
+        }
         if (followActor != null) {
-            running.followingDisplays[step.key] = step
-            if (updateTracker) followPose?.let { running.followingDisplayPoses[followActor.id] = it }
+            trackFollowingDisplay(running, step, followPose, updateTracker)
             if (!running.followingDisplayRefreshScheduled) {
                 running.followingDisplayRefreshScheduled = true
                 running.execution.repeat(1L) {
@@ -681,7 +730,7 @@ private class OriginSceneService(
                         false
                     } else {
                         val actorPoses = mutableMapOf<Int, OriginSceneFollowPose>()
-                        val actorsAvailable = current.mapNotNull(OriginSceneStep.BlockDisplay::followActorId).distinct().all { actorId ->
+                        val actorsAvailable = current.mapNotNull(OriginSceneStep.Display::followActorId).distinct().all { actorId ->
                             val actor = npc(actorId)?.takeIf(NPC::isSpawned)
                             val location = actor?.entity?.location
                             if (actor == null || location == null || location.world != Bukkit.getWorld(plan.world)) {
@@ -701,7 +750,7 @@ private class OriginSceneService(
                             running.resources.hasDisplay(tracked.key) && pose != null &&
                                 (actorId !in changedActors ||
                                     runCatching {
-                                        setBlockDisplay(running, tracked, emitLog = false, updateTracker = false)
+                                        setSceneDisplay(running, tracked, emitLog = false, updateTracker = false)
                                     }.getOrDefault(false))
                         }
                         if (!updated) {
@@ -717,25 +766,53 @@ private class OriginSceneService(
                 }
             }
         } else {
-            running.followingDisplays.remove(step.key)
+            clearFollowingDisplay(running, step.key)
         }
         if (emitLog) {
+            val support = when (step) {
+                is OriginSceneStep.BlockDisplay -> step.surface?.let { "surface:$it" }
+                    ?: step.anchor?.let { "anchor:$it" }
+                    ?: "actor:${step.followActorId}"
+                is OriginSceneStep.ItemDisplay -> step.anchor?.let { "anchor:$it" }
+                    ?: "actor:${step.followActorId}"
+            }
             info(
                 "ORIGIN_SCENE phase=PROP_{} scene={} cycle={} key={} support={} actual={},{},{} origin={}",
                 if (created) "SPAWNED" else "UPDATED",
                 running.scene.id,
                 running.cycle.id,
                 step.key,
-                step.surface?.let { "surface:$it" }
-                    ?: step.anchor?.let { "anchor:$it" }
-                    ?: "actor:${step.followActorId}",
-                resolved.x,
-                resolved.y,
-                resolved.z,
-                step.origin,
+                support,
+                actualPoint.x,
+                actualPoint.y,
+                actualPoint.z,
+                originLabel,
             )
         }
         return true
+    }
+
+    private fun trackFollowingDisplay(
+        running: ActiveOriginSceneCycle,
+        step: OriginSceneStep.Display,
+        pose: OriginSceneFollowPose?,
+        updateTracker: Boolean,
+    ) {
+        val previousActor = running.followingDisplays.put(step.key, step)?.followActorId
+        val actorId = requireNotNull(step.followActorId)
+        if (previousActor != null && previousActor != actorId &&
+            running.followingDisplays.values.none { it.followActorId == previousActor }
+        ) {
+            running.followingDisplayPoses.remove(previousActor)
+        }
+        if (updateTracker) pose?.let { running.followingDisplayPoses[actorId] = it }
+    }
+
+    private fun clearFollowingDisplay(running: ActiveOriginSceneCycle, key: String) {
+        val previousActor = running.followingDisplays.remove(key)?.followActorId ?: return
+        if (running.followingDisplays.values.none { it.followActorId == previousActor }) {
+            running.followingDisplayPoses.remove(previousActor)
+        }
     }
 
     private fun removeDisplay(running: ActiveOriginSceneCycle, key: String) {
@@ -745,10 +822,14 @@ private class OriginSceneService(
     }
 
     private fun removeAbandonedDisplays() {
-        Bukkit.getWorld(plan.world)
-            ?.getEntitiesByClass(BlockDisplay::class.java)
-            ?.filter { PROP_TAG in it.scoreboardTags }
-            ?.forEach(BlockDisplay::remove)
+        Bukkit.getWorld(plan.world)?.let { world ->
+            world.getEntitiesByClass(BlockDisplay::class.java)
+                .filter { PROP_TAG in it.scoreboardTags }
+                .forEach(BlockDisplay::remove)
+            world.getEntitiesByClass(ItemDisplay::class.java)
+                .filter { PROP_TAG in it.scoreboardTags }
+                .forEach(ItemDisplay::remove)
+        }
     }
 
     private fun spawnParticle(location: Location?, particleName: String, count: Int, yOffset: Double) {
@@ -825,6 +906,9 @@ private class OriginSceneService(
 
     private fun cleanup(running: ActiveOriginSceneCycle, keepMounted: Boolean) {
         val failures = mutableListOf<Exception>()
+        running.followingDisplays.clear()
+        running.followingDisplayPoses.clear()
+        running.followingDisplayRefreshScheduled = false
         running.cycle.actorIds.mapNotNull(::npc).forEach { actor ->
             try { routeController.stop(actor) } catch (failure: Exception) { failures += failure }
             if (!keepMounted && actor.isSpawned) {

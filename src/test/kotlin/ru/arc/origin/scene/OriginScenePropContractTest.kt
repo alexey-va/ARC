@@ -83,6 +83,12 @@ class OriginScenePropContractTest : StringSpec({
         anchor.explicitPose shouldBe true
     }
 
+    "portable item yaw adds its correction to the anchor or actor yaw" {
+        OriginScenePropContract.itemDisplayYaw(0f, 180f).shouldBeExactly(180f)
+        OriginScenePropContract.itemDisplayYaw(90f, 180f).shouldBeExactly(270f)
+        OriginScenePropContract.itemDisplayYaw(270f, 180f).shouldBeExactly(90f)
+    }
+
     "multi-part cargo stays rigid and uses actor yaw for the display pivot" {
         val actor = Location(null, 10.0, 64.0, -4.0, 450f, 0f)
         val left = OriginScenePropContract.actorAnchor(actor, OriginSceneVector(-0.5, 1.0, 0.0))
@@ -132,6 +138,39 @@ class OriginScenePropContractTest : StringSpec({
     "display lifecycle rejects removal before creation" {
         shouldThrow<IllegalArgumentException> {
             OriginScenePropContract.validateLifecycle(listOf(OriginSceneStep.RemoveDisplay("missing")))
+        }
+    }
+
+    "item and block displays share one removable key lifecycle" {
+        val item = OriginSceneStep.ItemDisplay(
+            key = "wheelbarrow",
+            anchor = null,
+            itemId = "elitecreatures:farmer_decoration_v1_wheelbarrow",
+            context = OriginSceneItemDisplayContext.GROUND,
+            offset = OriginSceneVector.ZERO,
+            scale = OriginSceneVector(1.0, 1.0, 1.0),
+            yawOffsetDegrees = 180f,
+            interpolationTicks = 4,
+            followActorId = 7,
+            followOffset = OriginSceneVector(0.0, 0.078125, 1.0),
+        )
+        val block = OriginSceneStep.BlockDisplay(
+            key = "wheelbarrow",
+            surface = null,
+            anchor = "forge",
+            material = "IRON_BLOCK",
+            origin = OriginScenePropOrigin.BOTTOM_CENTER,
+            offset = OriginSceneVector.ZERO,
+            scale = OriginSceneVector(0.5, 0.5, 0.5),
+            rotationYDegrees = 0f,
+            interpolationTicks = 4,
+        )
+
+        OriginScenePropContract.validateLifecycle(
+            listOf(item, OriginSceneStep.RemoveDisplay(item.key), block, OriginSceneStep.RemoveDisplay(block.key)),
+        )
+        shouldThrow<IllegalArgumentException> {
+            OriginScenePropContract.validateLifecycle(listOf(item, block, OriginSceneStep.RemoveDisplay(item.key)))
         }
     }
 

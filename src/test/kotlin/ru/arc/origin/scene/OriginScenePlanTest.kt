@@ -5,6 +5,7 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldContainAll
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
+import ru.arc.npc.NpcRouteCell
 import ru.arc.paper.testing.MockBukkitTestRuntime
 import java.nio.file.Files
 
@@ -291,6 +292,74 @@ class OriginScenePlanTest : FreeSpec({
         }
     }
 
+    "ItemsAdder display steps support a followed prop restaged at an anchor with the same key" {
+        val scene = OriginScenePlan.load(Files.createTempDirectory("origin-scenes-item-display-contract-test"))
+            .scene("forge")
+        val cycle = scene.cycles.single { it.id == "ledger-orders" }
+        val actorId = cycle.actorIds.first()
+        val item = OriginSceneStep.ItemDisplay(
+            key = "wheelbarrow",
+            anchor = null,
+            itemId = "elitecreatures:farmer_decoration_v1_wheelbarrow",
+            context = OriginSceneItemDisplayContext.GROUND,
+            offset = OriginSceneVector.ZERO,
+            scale = OriginSceneVector(1.0, 1.0, 1.0),
+            yawOffsetDegrees = 180f,
+            interpolationTicks = 4,
+            followActorId = actorId,
+            followOffset = OriginSceneVector(0.0, 0.078125, 1.0),
+        )
+        val restaged = item.copy(
+            anchor = scene.anchors.keys.first(),
+            followActorId = null,
+            followOffset = OriginSceneVector.ZERO,
+        )
+        val steps = listOf(item, restaged, OriginSceneStep.RemoveDisplay(item.key))
+
+        scene.copy(
+            cycles = scene.cycles.map {
+                if (it.id == cycle.id) it.copy(steps = steps, stepIds = listOf("follow", "park", "remove")) else it
+            },
+        ).validate()
+
+        shouldThrow<IllegalArgumentException> {
+            val invalid = item.copy(itemId = "wheelbarrow")
+            val invalidSteps = listOf(invalid, OriginSceneStep.RemoveDisplay(invalid.key))
+            scene.copy(
+                cycles = scene.cycles.map {
+                    if (it.id == cycle.id) it.copy(
+                        steps = invalidSteps,
+                        stepIds = listOf("invalid-item", "remove"),
+                    ) else it
+                },
+            ).validate()
+        }
+    }
+
+    "ore inspection pushes and parks the cart on the protected haul route" {
+        val scene = OriginScenePlan.load(Files.createTempDirectory("origin-scenes-ore-haul-test")).scene("forge")
+        val cycle = scene.cycles.single { it.id == "ore-inspection" }
+        val cartSteps = cycle.steps.filterIsInstance<OriginSceneStep.ItemDisplay>().filter { it.key == "savva-cart" }
+
+        cartSteps.any { it.followActorId == 351 } shouldBe true
+        cartSteps.map(OriginSceneStep.ItemDisplay::itemId).toSet() shouldBe
+            setOf("elitecreatures:medieval_market_decoration_v1_cart_2")
+        cartSteps.all { it.context == OriginSceneItemDisplayContext.GROUND } shouldBe true
+        cartSteps.mapNotNull(OriginSceneStep.ItemDisplay::anchor).toSet() shouldBe setOf("ore-load-cart", "ore-park-cart")
+        cartSteps.none {
+            it.anchor != null && it.anchor in setOf("ore-chest", "ore-chest-stand", "ore-cart", "ore-cart-stand")
+        } shouldBe true
+        cycle.steps.filterIsInstance<OriginSceneStep.Move>().all { it.routeProfile == "ore-haul" } shouldBe true
+
+        val haul = scene.routeProfiles.getValue("ore-haul")
+        listOf(
+            NpcRouteCell(66, 73), // Bran
+            NpcRouteCell(71, 72), // training dummy
+            NpcRouteCell(76, 70), // Edgar
+            NpcRouteCell(79, 66), // Luka
+        ).forEach { cell -> haul.allows(cell) shouldBe false }
+    }
+
     "mount yard keeps multiple animals active without sharing one actor across simultaneous lanes" {
         val scene = OriginScenePlan.load(Files.createTempDirectory("origin-scenes-mount-test")).scene("mount-yard")
         val animalCycles = scene.cycles.filter { it.id.endsWith("-paddock") }
@@ -374,7 +443,7 @@ class OriginScenePlanTest : FreeSpec({
         aStrokes.single { it.key.endsWith("left") }.rotationYDegrees shouldBe -17f
         aStrokes.single { it.key.endsWith("right") }.rotationYDegrees shouldBe 17f
         savva.steps.filterIsInstance<OriginSceneStep.ContainerLid>().map(OriginSceneStep.ContainerLid::anchor).toSet() shouldBe
-            setOf("ore-cart", "ore-chest")
+            setOf("ore-cart", "stock-chest")
         scene.actors.getValue(351).home.x shouldBe scene.anchors.getValue("ore-cart-stand").x
         scene.actors.getValue(351).home.z shouldBe scene.anchors.getValue("ore-cart-stand").z
         bran.yieldAnchor shouldBe "dummy"

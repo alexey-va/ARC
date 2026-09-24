@@ -321,6 +321,88 @@ class OriginSceneResourcesTest : StringSpec({
         spawned.forEach { verify(exactly = 1) { it.remove() } }
     }
 
+    "ItemsAdder scene display restaging reuses the same entity key and removal owns it" {
+        val display = mockk<ItemDisplay>(relaxed = true) {
+            every { isValid } returns true
+            every { teleport(any<Location>()) } returns true
+        }
+        var spawnCount = 0
+        val world = mockk<World>(relaxed = true) {
+            every {
+                spawn<ItemDisplay>(any<Location>(), ItemDisplay::class.java, any<Consumer<ItemDisplay>>())
+            } answers {
+                spawnCount++
+                thirdArg<Consumer<ItemDisplay>>().accept(display)
+                display
+            }
+        }
+        val resources = OriginSceneResources()
+        val stack = ItemStack(Material.PAPER)
+        val scale = OriginSceneVector(1.0, 1.0, 1.0)
+
+        resources.updateItemDisplay(
+            "wheelbarrow",
+            Location(world, 12.0, 64.0, -4.0, 180f, 0f),
+            stack,
+            OriginSceneItemDisplayContext.GROUND,
+            scale,
+            4,
+            setOf("scene-test"),
+        ) shouldBe true
+        resources.updateItemDisplay(
+            "wheelbarrow",
+            Location(world, 18.0, 70.078125, 69.5, 90f, 0f),
+            stack,
+            OriginSceneItemDisplayContext.GROUND,
+            scale,
+            4,
+            setOf("scene-test"),
+        ) shouldBe false
+
+        spawnCount shouldBe 1
+        resources.displayCount shouldBe 1
+        verify(exactly = 2) { display.setItemStack(any()) }
+        verify(exactly = 2) { display.itemDisplayTransform = ItemDisplay.ItemDisplayTransform.GROUND }
+        resources.removeDisplay("wheelbarrow") shouldBe true
+        resources.removeDisplay("wheelbarrow") shouldBe false
+        resources.cleanup() shouldBe emptyList()
+        verify(exactly = 1) { display.remove() }
+    }
+
+    "item display setup failure remains owned for cleanup" {
+        val display = mockk<ItemDisplay>(relaxed = true) {
+            every { isValid } returns true
+            every { teleport(any<Location>()) } returns true
+            every { setItemStack(any()) } throws IllegalStateException("item setup failed")
+        }
+        val world = mockk<World>(relaxed = true) {
+            every {
+                spawn<ItemDisplay>(any<Location>(), ItemDisplay::class.java, any<Consumer<ItemDisplay>>())
+            } answers {
+                thirdArg<Consumer<ItemDisplay>>().accept(display)
+                display
+            }
+        }
+        val resources = OriginSceneResources()
+
+        shouldThrow<IllegalStateException> {
+            resources.updateItemDisplay(
+                "broken-cart",
+                Location(world, 0.0, 64.0, 0.0),
+                ItemStack(Material.PAPER),
+                OriginSceneItemDisplayContext.GROUND,
+                OriginSceneVector(1.0, 1.0, 1.0),
+                4,
+                setOf("scene-test"),
+            )
+        }
+
+        resources.displayCount shouldBe 1
+        resources.cleanup() shouldBe emptyList()
+        resources.displayCount shouldBe 0
+        verify(exactly = 1) { display.remove() }
+    }
+
     "rejected display teleport fails with an owned resource for cleanup" {
         val display = mockDisplay()
         every { display.teleport(any<Location>()) } returns false

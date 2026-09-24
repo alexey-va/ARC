@@ -2,6 +2,7 @@ package ru.arc.origin.scene
 
 import org.bukkit.Location
 import org.bukkit.Material
+import org.bukkit.NamespacedKey
 import org.bukkit.Particle
 import org.bukkit.World
 import ru.arc.config.Config
@@ -42,8 +43,24 @@ internal enum class OriginScenePose {
     HORSE_GRAZE,
 }
 
+/** Item-model display contexts retained by portable scene ItemDisplays. */
+internal enum class OriginSceneItemDisplayContext {
+    NONE,
+    GROUND,
+    FIXED,
+    HEAD,
+}
+
 internal sealed interface OriginSceneStep {
     val actorId: Int?
+
+    sealed interface Display : OriginSceneStep {
+        val key: String
+        val anchor: String?
+        val followActorId: Int?
+
+        override val actorId: Int? get() = null
+    }
 
     data class Move(
         override val actorId: Int,
@@ -92,20 +109,31 @@ internal sealed interface OriginSceneStep {
     ) : OriginSceneStep
 
     data class BlockDisplay(
-        val key: String,
+        override val key: String,
         val surface: String?,
-        val anchor: String?,
+        override val anchor: String?,
         val material: String,
         val origin: OriginScenePropOrigin,
         val offset: OriginSceneVector,
         val scale: OriginSceneVector,
         val rotationYDegrees: Float,
         val interpolationTicks: Int,
-        val followActorId: Int? = null,
+        override val followActorId: Int? = null,
         val followOffset: OriginSceneVector = OriginSceneVector.ZERO,
-    ) : OriginSceneStep {
-        override val actorId: Int? = null
-    }
+    ) : Display
+
+    data class ItemDisplay(
+        override val key: String,
+        override val anchor: String?,
+        val itemId: String,
+        val context: OriginSceneItemDisplayContext,
+        val offset: OriginSceneVector,
+        val scale: OriginSceneVector,
+        val yawOffsetDegrees: Float,
+        val interpolationTicks: Int,
+        override val followActorId: Int? = null,
+        val followOffset: OriginSceneVector = OriginSceneVector.ZERO,
+    ) : Display
 
     data class RemoveDisplay(val key: String) : OriginSceneStep {
         override val actorId: Int? = null
@@ -351,6 +379,35 @@ internal data class OriginSceneDefinition(
                         )
                         step.followOffset.requireBounded("$stepContext follow-offset", 16.0)
                     }
+                    is OriginSceneStep.ItemDisplay -> {
+                        require(listOf(step.anchor, step.followActorId).count { it != null } == 1) {
+                            "$stepContext item display ${step.key} must reference exactly one anchor or follow actor"
+                        }
+                        step.anchor?.let { anchor ->
+                            require(anchor in anchors) { "$stepContext references item display anchor $anchor" }
+                        }
+                        step.followActorId?.let { actorId ->
+                            require(actorId in cycle.actorIds) {
+                                "$stepContext item display follow actor $actorId is not leased"
+                            }
+                        }
+                        require(step.itemId.contains(':') && NamespacedKey.fromString(step.itemId) != null) {
+                            "$stepContext has invalid namespaced ItemsAdder item id ${step.itemId}"
+                        }
+                        step.scale.requirePositive("$stepContext item display scale")
+                        step.scale.requireBounded("$stepContext item display scale", 4.0)
+                        require(step.scale.x >= 0.01 && step.scale.y >= 0.01 && step.scale.z >= 0.01) {
+                            "$stepContext item display scale values must be at least 0.01"
+                        }
+                        require(step.yawOffsetDegrees.isFinite() && step.yawOffsetDegrees in -360f..360f) {
+                            "$stepContext item display yaw-offset-degrees must be finite and within -360..360"
+                        }
+                        require(step.interpolationTicks in 0..59) {
+                            "$stepContext item display interpolation-ticks must be within 0..59"
+                        }
+                        step.offset.requireBounded("$stepContext item display offset", 16.0)
+                        step.followOffset.requireBounded("$stepContext item display follow-offset", 16.0)
+                    }
                     is OriginSceneStep.RemoveDisplay -> require(step.key.isNotBlank()) {
                         "$stepContext prop key must not be blank"
                     }
@@ -583,6 +640,20 @@ internal data class OriginScenePlan(
                     followOffset = vector(source.string("$root.follow-offset", "0,0,0"), "$root.follow-offset"),
                 )
             }
+            "ITEM_DISPLAY" -> OriginSceneStep.ItemDisplay(
+                key = source.string("$root.key"),
+                anchor = source.string("$root.anchor", "").trim().takeIf(String::isNotBlank),
+                itemId = source.string("$root.item-id").trim(),
+                context = runCatching {
+                    OriginSceneItemDisplayContext.valueOf(source.string("$root.context", "GROUND").uppercase(Locale.ROOT))
+                }.getOrElse { error("$root.context must be NONE, GROUND, FIXED or HEAD") },
+                offset = vector(source.string("$root.offset", "0,0,0"), "$root.offset"),
+                scale = vector(source.string("$root.scale", "1,1,1"), "$root.scale"),
+                yawOffsetDegrees = boundedReal(source, "$root.yaw-offset-degrees", 0.0, -360.0..360.0).toFloat(),
+                interpolationTicks = boundedInteger(source, "$root.interpolation-ticks", 4, 0..59),
+                followActorId = optionalActorInteger(source, "$root.follow-actor-id", -1),
+                followOffset = vector(source.string("$root.follow-offset", "0,0,0"), "$root.follow-offset"),
+            )
             "REMOVE_DISPLAY" -> OriginSceneStep.RemoveDisplay(source.string("$root.key"))
             "SOUND" -> OriginSceneStep.Sound(
                 actorId = optionalActorInteger(source, "$root.actor-id", -1),

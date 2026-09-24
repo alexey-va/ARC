@@ -129,6 +129,15 @@ internal object OriginScenePropContract {
         )
     }
 
+    /** Applies a prop's horizontal correction to an anchor or actor yaw only. */
+    fun itemDisplayYaw(baseYaw: Float, yawOffsetDegrees: Float): Float {
+        require(baseYaw.isFinite() && yawOffsetDegrees.isFinite()) { "scene item display yaw must be finite" }
+        require(yawOffsetDegrees in -360f..360f) { "scene item display yaw offset must be within -360..360" }
+        var yaw = (baseYaw.toDouble() + yawOffsetDegrees.toDouble()) % 360.0
+        if (yaw < 0.0) yaw += 360.0
+        return yaw.toFloat()
+    }
+
     /** Converts an actor yaw into the opposite-sign JOML display rotation. */
     fun actorRelativeRotationY(rotationYDegrees: Float, actorYaw: Float): Float {
         require(rotationYDegrees.isFinite() && actorYaw.isFinite()) { "scene rotations must be finite" }
@@ -170,15 +179,25 @@ internal object OriginScenePropContract {
     }
 
     fun validateLifecycle(steps: List<OriginSceneStep>, stepContext: (Int) -> String = { index -> "step[$index]" }) {
-        val visible = mutableSetOf<String>()
+        val visible = mutableMapOf<String, String>()
         steps.forEachIndexed { index, step ->
             val context = stepContext(index)
             when (step) {
                 is OriginSceneStep.BlockDisplay -> {
                     require(step.key.isNotBlank()) { "$context prop key must not be blank" }
-                    visible += step.key
+                    require(visible[step.key].let { it == null || it == "block" }) {
+                        "$context prop ${step.key} changes display type without removal"
+                    }
+                    visible[step.key] = "block"
                 }
-                is OriginSceneStep.RemoveDisplay -> require(visible.remove(step.key)) {
+                is OriginSceneStep.ItemDisplay -> {
+                    require(step.key.isNotBlank()) { "$context prop key must not be blank" }
+                    require(visible[step.key].let { it == null || it == "item" }) {
+                        "$context prop ${step.key} changes display type without removal"
+                    }
+                    visible[step.key] = "item"
+                }
+                is OriginSceneStep.RemoveDisplay -> require(visible.remove(step.key) != null) {
                     "$context prop ${step.key} is removed before it is created"
                 }
                 else -> Unit
@@ -186,7 +205,7 @@ internal object OriginScenePropContract {
         }
         require(visible.isEmpty()) {
             val context = if (steps.isEmpty()) "scene props" else "${stepContext(steps.lastIndex)} props"
-            "$context must be explicitly removed: ${visible.sorted().joinToString(",")}"
+            "$context must be explicitly removed: ${visible.keys.sorted().joinToString(",")}"
         }
     }
 

@@ -43,7 +43,7 @@ scenes:
         home: "70.8895,70.0,62.2651,60.9,0"
         denied-denizen-flags: [rc_origin_forge_service_busy]
       351:
-        home: "68.5,70.0,62.5,116.6,5.0"
+        home: "69.5,70.0,63.5,116.6,5.0"
         denied-denizen-flags: [rc_origin_forge_service_busy]
       354:
         home: "79.6839,70.0,66.8583,-126.2,0"
@@ -58,7 +58,7 @@ scenes:
         home: "80.7,70.0,78.4458,65.1,0"
         denied-denizen-flags: [rc_origin_forge_service_busy]
 
-    anchor-ids: [master-anvil, master-anvil-stand, master-assistant-stand, ledger-desk, stock-stand, stock-chest, apprentice-stand, apprentice-anvil, ore-cart-stand, ore-cart, ore-chest-stand, ore-chest, dummy-stage, dummy, hammer-anvil, furnace-stand, furnace-fire, quench-stand, quench-cauldron]
+    anchor-ids: [master-anvil, master-anvil-stand, master-assistant-stand, ledger-desk, stock-stand, stock-chest, apprentice-stand, apprentice-anvil, ore-cart-stand, ore-cart, ore-chest-stand, ore-chest, dummy-stage, dummy, hammer-anvil, furnace-stand, furnace-fire, quench-stand, quench-cauldron, ore-load-stand, ore-load-cart, ore-route-entry, ore-route-turn, ore-passage, ore-park-stand, ore-park-cart, ore-unload-side, ore-return-side, ore-return-grip, ore-return-load]
     anchors:
       master-anvil: "76.5,70.65,69.5"
       master-anvil-stand: "76.5,70.0,70.5"
@@ -68,8 +68,19 @@ scenes:
       stock-chest: "82.5,72.5,71.5"
       apprentice-stand: "79.6839,70.0,66.8583"
       apprentice-anvil: "79.1,70.65,67.8"
-      ore-cart-stand: "68.5,70.0,62.5"
+      ore-cart-stand: "69.5,70.0,63.5"
       ore-cart: "64.5,70.5,60.5"
+      ore-load-stand: "70.5,70.0,65.5,-90,0"
+      ore-load-cart: "71.5,70.5625,65.5,-90,0"
+      ore-route-entry: "74.5,70.0,65.5"
+      ore-route-turn: "74.5,70.0,69.5"
+      ore-passage: "78.5,70.0,69.5"
+      ore-park-stand: "79.5,70.0,69.5,-90,0"
+      ore-park-cart: "80.5,70.5625,69.5,-90,0"
+      ore-unload-side: "79.5,70.0625,70.5"
+      ore-return-side: "81.5,70.0625,70.5"
+      ore-return-grip: "81.5,70.0,69.5,90,0"
+      ore-return-load: "72.5,70.0,65.5,90,0"
       ore-chest-stand: "69.11,70.0,76.21"
       ore-chest: "69.5,70.5,77.5"
       dummy-stage: "70.0,70.0,71.4"
@@ -97,7 +108,7 @@ scenes:
         top-offset: 1.04
         look-target-offset-y: -1.15
 
-    route-profile-ids: [floor]
+    route-profile-ids: [floor, ore-haul]
     route-profiles:
       floor:
         floor-y: 70
@@ -112,6 +123,26 @@ scenes:
         speed-modifier: 0.68
         distance-margin: 0.35
         path-distance-margin: 0.35
+        maximum-step-height: 0.125
+
+      # Savva's load and empty return both stay north of Bran and the dog chest.
+      ore-haul:
+        floor-y: 70
+        min-block: "68,62"
+        max-block: "81,71"
+        forbidden-areas: ["68,70,75,71", "76,70,77,71", "79,66,80,67", "70,62,71,62"]
+        preferred-areas: ["69,64,75,66", "74,65,75,69", "74,69,81,69"]
+        max-visited: 512
+        snap-radius: 2
+        poll-ticks: 2
+        stall-polls: 30
+        speed-modifier: 0.55
+        distance-margin: 0.20
+        path-distance-margin: 0.20
+        heading-look-ahead-cells: 1
+        heading-max-turn-degrees-per-tick: 8
+        corner-smoothing-distance: 0.45
+        corner-smoothing-lead: 0.18
         maximum-step-height: 0.125
 
     cycle-ids: [master-anvil, master-spear, master-shield, master-horseshoe, master-forging-showcase, ledger-orders, apprentice-engraving, apprentice-engraving-jopa, ore-inspection, blade-practice, hammer-rhythm, furnace-check]
@@ -625,22 +656,58 @@ scenes:
         initial-delay-seconds: 14
         cooldown-min-seconds: 52
         cooldown-max-seconds: 78
-        step-ids: [cart, face-cart, open-cart, take, lift, close-cart, chest, face-chest, open-chest, store, clear, close-chest, clink, line]
+        step-ids: ["waiting-cart", "source", "face-source", "open-source", "take-source", "ore-in-hand", "lift-source", "close-source", "load", "face-load", "load-ore", "loaded-cart", "grip", "take-handles", "push-cart", "push-ore", "outbound-entry", "outbound-turn", "outbound-passage", "park", "park-cart", "park-ore", "park-pause", "unload-side", "face-load-at-stock", "lift-ore", "carry-ore", "carry-load", "stock", "face-stock", "open-stock", "store", "store-pause", "stored-ore", "empty-hand", "close-stock", "clink", "around-cart", "return-grip", "face-return-cart", "turn-cart", "return-cart", "return-passage", "return-turn", "return-entry", "return-load", "rest-cart", "release-handles", "leave-cart", "home"]
         steps:
-          cart: {type: MOVE, actor-id: 351, anchor: ore-cart-stand, route-profile: floor, timeout-ticks: 260}
-          face-cart: {type: LOOK_AT_ANCHOR, actor-id: 351, anchor: ore-cart}
-          open-cart: {type: CONTAINER_LID, actor-id: 351, anchor: ore-cart, state: OPEN}
-          take: {type: EQUIP, actor-id: 351, material: RAW_IRON}
-          lift: {type: SWING, actor-id: 351, repetitions: 2, period-ticks: 10}
-          close-cart: {type: CONTAINER_LID, actor-id: 351, anchor: ore-cart, state: CLOSE}
-          chest: {type: MOVE, actor-id: 351, anchor: ore-chest-stand, route-profile: floor, timeout-ticks: 280}
-          face-chest: {type: LOOK_AT_ANCHOR, actor-id: 351, anchor: ore-chest}
-          open-chest: {type: CONTAINER_LID, actor-id: 351, anchor: ore-chest, state: OPEN}
-          store: {type: SWING, actor-id: 351, repetitions: 2, period-ticks: 10}
-          clear: {type: EQUIP, actor-id: 351, material: AIR}
-          close-chest: {type: CONTAINER_LID, actor-id: 351, anchor: ore-chest, state: CLOSE}
-          clink: {type: SOUND, anchor: ore-chest, sound: BLOCK_IRON_PLACE, volume: 0.38, pitch: 0.92}
-          line: {type: SPEECH, actor-id: 351, text: "Руду привёз. Проверю, всё ли дошло до склада."}
+          waiting-cart: {"type": "ITEM_DISPLAY", "key": "savva-cart", "item-id": "elitecreatures:medieval_market_decoration_v1_cart_2", "context": "GROUND", "scale": "3,3,3", "interpolation-ticks": 3, "anchor": "ore-load-cart"}
+          source: {"type": "MOVE", "actor-id": 351, "anchor": "ore-cart-stand", "route-profile": "ore-haul", "timeout-ticks": 240}
+          face-source: {"type": "LOOK_AT_ANCHOR", "actor-id": 351, "anchor": "ore-cart"}
+          open-source: {"type": "CONTAINER_LID", "actor-id": 351, "anchor": "ore-cart", "state": "OPEN"}
+          take-source: {"type": "SWING", "actor-id": 351, "repetitions": 2, "period-ticks": 10}
+          ore-in-hand: {"type": "EQUIP", "actor-id": 351, "material": "RAW_IRON"}
+          lift-source: {"type": "WAIT", "ticks": 20}
+          close-source: {"type": "CONTAINER_LID", "actor-id": 351, "anchor": "ore-cart", "state": "CLOSE"}
+          load: {"type": "MOVE", "actor-id": 351, "anchor": "ore-load-stand", "route-profile": "ore-haul", "timeout-ticks": 240}
+          face-load: {"type": "LOOK_AT_ANCHOR", "actor-id": 351, "anchor": "ore-load-cart"}
+          load-ore: {"type": "SWING", "actor-id": 351, "repetitions": 2, "period-ticks": 10}
+          loaded-cart: {"type": "BLOCK_DISPLAY", "key": "savva-ore", "material": "RAW_IRON_BLOCK", "origin": "BOTTOM_CENTER", "scale": "0.46,0.28,0.42", "interpolation-ticks": 3, "anchor": "ore-load-cart", "offset": "0,0.0875,0"}
+          grip: {"type": "EQUIP", "actor-id": 351, "material": "AIR"}
+          take-handles: {"type": "WAIT", "ticks": 20}
+          push-cart: {"type": "ITEM_DISPLAY", "key": "savva-cart", "item-id": "elitecreatures:medieval_market_decoration_v1_cart_2", "context": "GROUND", "scale": "3,3,3", "interpolation-ticks": 3, "follow-actor-id": 351, "follow-offset": "0,0.5625,1.0", "yaw-offset-degrees": 0}
+          push-ore: {"type": "BLOCK_DISPLAY", "key": "savva-ore", "material": "RAW_IRON_BLOCK", "origin": "BOTTOM_CENTER", "scale": "0.46,0.28,0.42", "interpolation-ticks": 3, "follow-actor-id": 351, "follow-offset": "0,0.65,1.0"}
+          outbound-entry: {"type": "MOVE", "actor-id": 351, "anchor": "ore-route-entry", "route-profile": "ore-haul", "timeout-ticks": 240}
+          outbound-turn: {"type": "MOVE", "actor-id": 351, "anchor": "ore-route-turn", "route-profile": "ore-haul", "timeout-ticks": 240}
+          outbound-passage: {"type": "MOVE", "actor-id": 351, "anchor": "ore-passage", "route-profile": "ore-haul", "timeout-ticks": 240}
+          park: {"type": "MOVE", "actor-id": 351, "anchor": "ore-park-stand", "route-profile": "ore-haul", "timeout-ticks": 240}
+          park-cart: {"type": "ITEM_DISPLAY", "key": "savva-cart", "item-id": "elitecreatures:medieval_market_decoration_v1_cart_2", "context": "GROUND", "scale": "3,3,3", "interpolation-ticks": 3, "anchor": "ore-park-cart"}
+          park-ore: {"type": "BLOCK_DISPLAY", "key": "savva-ore", "material": "RAW_IRON_BLOCK", "origin": "BOTTOM_CENTER", "scale": "0.46,0.28,0.42", "interpolation-ticks": 3, "anchor": "ore-park-cart", "offset": "0,0.0875,0"}
+          park-pause: {"type": "WAIT", "ticks": 20}
+          unload-side: {"type": "MOVE", "actor-id": 351, "anchor": "ore-unload-side", "route-profile": "ore-haul", "timeout-ticks": 240}
+          face-load-at-stock: {"type": "LOOK_AT_ANCHOR", "actor-id": 351, "anchor": "ore-park-cart"}
+          lift-ore: {"type": "SWING", "actor-id": 351, "repetitions": 2, "period-ticks": 10}
+          carry-ore: {"type": "EQUIP", "actor-id": 351, "material": "RAW_IRON"}
+          carry-load: {"type": "BLOCK_DISPLAY", "key": "savva-ore", "material": "RAW_IRON_BLOCK", "origin": "BOTTOM_CENTER", "scale": "0.46,0.28,0.42", "interpolation-ticks": 3, "follow-actor-id": 351, "follow-offset": "0,0.80,0.42"}
+          stock: {"type": "MOVE", "actor-id": 351, "anchor": "stock-stand", "route-profile": "ore-haul", "timeout-ticks": 240}
+          face-stock: {"type": "LOOK_AT_ANCHOR", "actor-id": 351, "anchor": "stock-chest"}
+          open-stock: {"type": "CONTAINER_LID", "actor-id": 351, "anchor": "stock-chest", "state": "OPEN"}
+          store: {"type": "SWING", "actor-id": 351, "repetitions": 2, "period-ticks": 10}
+          store-pause: {"type": "WAIT", "ticks": 20}
+          stored-ore: {"type": "REMOVE_DISPLAY", "key": "savva-ore"}
+          empty-hand: {"type": "EQUIP", "actor-id": 351, "material": "AIR"}
+          close-stock: {"type": "CONTAINER_LID", "actor-id": 351, "anchor": "stock-chest", "state": "CLOSE"}
+          clink: {"type": "SOUND", "anchor": "stock-chest", "sound": "BLOCK_IRON_PLACE", "volume": 0.38, "pitch": 0.92}
+          around-cart: {"type": "MOVE", "actor-id": 351, "anchor": "ore-return-side", "route-profile": "ore-haul", "timeout-ticks": 240}
+          return-grip: {"type": "MOVE", "actor-id": 351, "anchor": "ore-return-grip", "route-profile": "ore-haul", "timeout-ticks": 240}
+          face-return-cart: {"type": "LOOK_AT_ANCHOR", "actor-id": 351, "anchor": "ore-park-cart"}
+          turn-cart: {"type": "WAIT", "ticks": 16}
+          return-cart: {"type": "ITEM_DISPLAY", "key": "savva-cart", "item-id": "elitecreatures:medieval_market_decoration_v1_cart_2", "context": "GROUND", "scale": "3,3,3", "interpolation-ticks": 3, "follow-actor-id": 351, "follow-offset": "0,0.5625,1.0", "yaw-offset-degrees": 0}
+          return-passage: {"type": "MOVE", "actor-id": 351, "anchor": "ore-passage", "route-profile": "ore-haul", "timeout-ticks": 240}
+          return-turn: {"type": "MOVE", "actor-id": 351, "anchor": "ore-route-turn", "route-profile": "ore-haul", "timeout-ticks": 240}
+          return-entry: {"type": "MOVE", "actor-id": 351, "anchor": "ore-route-entry", "route-profile": "ore-haul", "timeout-ticks": 240}
+          return-load: {"type": "MOVE", "actor-id": 351, "anchor": "ore-return-load", "route-profile": "ore-haul", "timeout-ticks": 240}
+          rest-cart: {"type": "ITEM_DISPLAY", "key": "savva-cart", "item-id": "elitecreatures:medieval_market_decoration_v1_cart_2", "context": "GROUND", "scale": "3,3,3", "interpolation-ticks": 3, "anchor": "ore-load-cart"}
+          release-handles: {"type": "WAIT", "ticks": 20}
+          leave-cart: {"type": "REMOVE_DISPLAY", "key": "savva-cart"}
+          home: {"type": "MOVE", "actor-id": 351, "anchor": "ore-cart-stand", "route-profile": "ore-haul", "timeout-ticks": 240}
       blade-practice:
         actor-ids: ["355"]
         initial-delay-seconds: 18
