@@ -91,7 +91,7 @@ origin-portals:
       height: 16.8
       style: origin
       hologram:
-        text: Выживание
+        text: Новые биомы
         front-distance: 3.0
         side-offset: 0.0
         height-offset: -0.5
@@ -109,7 +109,7 @@ origin-portals:
       height: 16.8
       style: astral
       hologram:
-        text: Ресурсы
+        text: Мир добычи
         front-distance: 3.0
         side-offset: 0.0
         height-offset: -0.5
@@ -127,7 +127,7 @@ origin-portals:
       height: 16.8
       style: void
       hologram:
-        text: Ваниль
+        text: Ванильные биомы
         front-distance: 3.0
         side-offset: 0.0
         height-offset: -0.5

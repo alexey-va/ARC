@@ -32,7 +32,7 @@ class OriginPortalsModuleTest : FreeSpec({
             survival.height shouldBe 16.8
             survival.style shouldBe ru.arc.PortalVisualStyle.ORIGIN
             survival.command shouldBe "arc rtp survival --only-if-first"
-            survival.label shouldBe "Выживание"
+            survival.label shouldBe "Новые биомы"
             survival.verticalOffset shouldBe 5.0
             survival.labelFrontDistance shouldBe 3.0
             survival.labelHeightOffset shouldBe -0.5
@@ -50,9 +50,11 @@ class OriginPortalsModuleTest : FreeSpec({
             val mining = config.anchors.first { it.id == OriginPortalId.MINING }
             mining.style shouldBe ru.arc.PortalVisualStyle.ASTRAL
             mining.command shouldBe "arc rtp mining --only-if-first"
+            mining.label shouldBe "Мир добычи"
             val vanilla = config.anchors.first { it.id == OriginPortalId.VANILLA }
             vanilla.style shouldBe ru.arc.PortalVisualStyle.VOID
             vanilla.command shouldBe "arc rtp vanilla --only-if-first"
+            vanilla.label shouldBe "Ванильные биомы"
             val gallery = config.anchors.first { it.id == OriginPortalId.GALLERY_EXIT }
             gallery.worldName shouldBe "rc_atelier_furniture_gallery"
             gallery.width shouldBe 4.5
@@ -61,6 +63,7 @@ class OriginPortalsModuleTest : FreeSpec({
             gallery.labelFrontDistance shouldBe 0.0
             gallery.labelScale shouldBe 0.9f
             gallery.labelBackgroundAlpha shouldBe 0
+            gallery.labelLocations(mockk()).size shouldBe 1
         } finally {
             directory.toFile().deleteRecursively()
         }
@@ -101,6 +104,10 @@ class OriginPortalsModuleTest : FreeSpec({
         hologram.y shouldBe 5.75
         (kotlin.math.abs(hologram.z - 1.0) < 1e-9).shouldBeTrue()
         hologram.yaw shouldBe anchor.yaw
+        val sides = anchor.labelLocations(world)
+        sides.size shouldBe 2
+        sides.map { it.x } shouldContainExactly listOf(hologram.x, hologram.x)
+        sides.map { it.yaw } shouldContainExactly listOf(90f, 270f)
     }
 
     "move persists feet coordinates and reloads the same anchor" {

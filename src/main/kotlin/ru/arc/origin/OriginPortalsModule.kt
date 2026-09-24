@@ -57,7 +57,7 @@ internal enum class OriginPortalId(
         defaultWorld = "rc_origin_spawn",
         defaultStyle = PortalVisualStyle.ORIGIN,
         defaultCommand = "arc rtp survival --only-if-first",
-        defaultLabel = "Выживание",
+        defaultLabel = "Новые биомы",
         defaultX = 9.5,
         defaultY = 70.0,
         defaultZ = 0.5,
@@ -71,7 +71,7 @@ internal enum class OriginPortalId(
         defaultWorld = "rc_origin_spawn",
         defaultStyle = PortalVisualStyle.ASTRAL,
         defaultCommand = "arc rtp mining --only-if-first",
-        defaultLabel = "Ресурсы",
+        defaultLabel = "Мир добычи",
         defaultX = 6.914214,
         defaultY = 70.0,
         defaultZ = -5.914214,
@@ -85,7 +85,7 @@ internal enum class OriginPortalId(
         defaultWorld = "rc_origin_spawn",
         defaultStyle = PortalVisualStyle.VOID,
         defaultCommand = "arc rtp vanilla --only-if-first",
-        defaultLabel = "Ваниль",
+        defaultLabel = "Ванильные биомы",
         defaultX = 6.914214,
         defaultY = 70.0,
         defaultZ = 6.914214,
@@ -148,6 +148,11 @@ internal data class OriginPortalAnchor(
             yaw,
             0f,
         )
+    }
+
+    fun labelLocations(world: org.bukkit.World): List<Location> {
+        val front = labelLocation(world)
+        return if (id.central) listOf(front, front.clone().apply { yaw += 180f }) else listOf(front)
     }
 
     /** A thin, yaw-aware interaction plane keeps neighbouring central portals independent. */
@@ -309,7 +314,7 @@ private class OriginPortalVisual(
     private val config: OriginPortalsConfig,
 ) {
     private var controller: PortalOriginGateController? = null
-    private var label: TextDisplay? = null
+    private var labels: List<TextDisplay> = emptyList()
     private var spawnAttempted = false
 
     fun tick(tick: Int) {
@@ -321,7 +326,7 @@ private class OriginPortalVisual(
                 PortalOriginGateController(settings) {
                     BukkitPortalOriginGate.spawn(anchor.center(world), settings, anchor.style)
                 }
-            label = spawnLabel(world)
+            labels = anchor.labelLocations(world).map { spawnLabel(world, it) }
         }
         val active = controller?.tickOpening(settings.entryTick + tick) == true
         if (!active) return
@@ -331,8 +336,7 @@ private class OriginPortalVisual(
         renderParticles(world, tick, settings)
     }
 
-    private fun spawnLabel(world: org.bukkit.World): TextDisplay {
-        val location = anchor.labelLocation(world)
+    private fun spawnLabel(world: org.bukkit.World, location: Location): TextDisplay {
         return world.spawn(location, TextDisplay::class.java) {
             it.text(
                 Component.text(anchor.label, labelColor(anchor.style))
@@ -370,8 +374,8 @@ private class OriginPortalVisual(
     fun remove() {
         controller?.remove()
         controller = null
-        label?.remove()
-        label = null
+        labels.forEach { it.remove() }
+        labels = emptyList()
         spawnAttempted = false
     }
 
