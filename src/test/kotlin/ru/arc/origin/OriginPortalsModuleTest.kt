@@ -36,7 +36,7 @@ class OriginPortalsModuleTest : FreeSpec({
             survival.verticalOffset shouldBe 5.0
             survival.labelFrontDistance shouldBe 3.0
             survival.labelHeightOffset shouldBe -0.5
-            survival.labelScale shouldBe 6.0f
+            survival.labelScale shouldBe 2.5f
             survival.labelBackgroundGray shouldBe 48
             survival.labelBackgroundAlpha shouldBe 180
             config.gateSettings(survival)!!.height shouldBe 16.8f
@@ -51,10 +51,12 @@ class OriginPortalsModuleTest : FreeSpec({
             mining.style shouldBe ru.arc.PortalVisualStyle.ASTRAL
             mining.command shouldBe "arc rtp mining --only-if-first"
             mining.label shouldBe "Мир добычи"
+            mining.labelScale shouldBe 3.0f
             val vanilla = config.anchors.first { it.id == OriginPortalId.VANILLA }
             vanilla.style shouldBe ru.arc.PortalVisualStyle.VOID
             vanilla.command shouldBe "arc rtp vanilla --only-if-first"
             vanilla.label shouldBe "Ванильные биомы"
+            vanilla.labelScale shouldBe 2.0f
             val gallery = config.anchors.first { it.id == OriginPortalId.GALLERY_EXIT }
             gallery.worldName shouldBe "rc_atelier_furniture_gallery"
             gallery.width shouldBe 4.5
@@ -106,7 +108,8 @@ class OriginPortalsModuleTest : FreeSpec({
         hologram.yaw shouldBe anchor.yaw
         val sides = anchor.labelLocations(world)
         sides.size shouldBe 2
-        sides.map { it.x } shouldContainExactly listOf(hologram.x, hologram.x)
+        sides.map { it.x } shouldContainExactly listOf(3.0, -3.0)
+        sides.all { kotlin.math.abs(it.z - 1.0) < 1e-9 }.shouldBeTrue()
         sides.map { it.yaw } shouldContainExactly listOf(90f, 270f)
     }
 

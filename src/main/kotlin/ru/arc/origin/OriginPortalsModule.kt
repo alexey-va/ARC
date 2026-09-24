@@ -138,13 +138,15 @@ internal data class OriginPortalAnchor(
 ) {
     fun center(world: org.bukkit.World): Location = Location(world, x, y, z, yaw, 0f)
 
-    fun labelLocation(world: org.bukkit.World): Location {
+    fun labelLocation(world: org.bukkit.World): Location = labelLocation(world, labelFrontDistance)
+
+    private fun labelLocation(world: org.bukkit.World, frontDistance: Double): Location {
         val angle = yaw * PI / 180.0
         return Location(
             world,
-            x + sin(angle) * labelFrontDistance + cos(angle) * labelSideOffset,
+            x + sin(angle) * frontDistance + cos(angle) * labelSideOffset,
             y + verticalOffset + labelHeightOffset,
-            z - cos(angle) * labelFrontDistance + sin(angle) * labelSideOffset,
+            z - cos(angle) * frontDistance + sin(angle) * labelSideOffset,
             yaw,
             0f,
         )
@@ -152,7 +154,7 @@ internal data class OriginPortalAnchor(
 
     fun labelLocations(world: org.bukkit.World): List<Location> {
         val front = labelLocation(world)
-        return if (id.central) listOf(front, front.clone().apply { yaw += 180f }) else listOf(front)
+        return if (id.central) listOf(front, labelLocation(world, -labelFrontDistance).apply { yaw += 180f }) else listOf(front)
     }
 
     /** A thin, yaw-aware interaction plane keeps neighbouring central portals independent. */

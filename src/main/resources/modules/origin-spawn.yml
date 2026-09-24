@@ -95,7 +95,7 @@ origin-portals:
         front-distance: 3.0
         side-offset: 0.0
         height-offset: -0.5
-        scale: 6.0
+        scale: 2.5
         background-gray: 48
         background-alpha: 180
       command: arc rtp survival --only-if-first
@@ -113,7 +113,7 @@ origin-portals:
         front-distance: 3.0
         side-offset: 0.0
         height-offset: -0.5
-        scale: 6.0
+        scale: 3.0
         background-gray: 48
         background-alpha: 180
       command: arc rtp mining --only-if-first
@@ -131,7 +131,7 @@ origin-portals:
         front-distance: 3.0
         side-offset: 0.0
         height-offset: -0.5
-        scale: 6.0
+        scale: 2.0
         background-gray: 48
         background-alpha: 180
       command: arc rtp vanilla --only-if-first
