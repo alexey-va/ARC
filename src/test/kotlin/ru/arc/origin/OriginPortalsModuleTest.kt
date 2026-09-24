@@ -35,7 +35,10 @@ class OriginPortalsModuleTest : FreeSpec({
             survival.label shouldBe "Выживание"
             survival.verticalOffset shouldBe 5.0
             survival.labelFrontDistance shouldBe 3.0
-            survival.labelScale shouldBe 4.6f
+            survival.labelHeightOffset shouldBe -0.5
+            survival.labelScale shouldBe 6.0f
+            survival.labelBackgroundGray shouldBe 48
+            survival.labelBackgroundAlpha shouldBe 180
             config.gateSettings(survival)!!.height shouldBe 16.8f
             config.gateSettings(survival)!!.itemIds shouldBe
                 mapOf(
@@ -57,6 +60,7 @@ class OriginPortalsModuleTest : FreeSpec({
             gallery.command shouldBe "rcfurniturereturn"
             gallery.labelFrontDistance shouldBe 0.0
             gallery.labelScale shouldBe 0.9f
+            gallery.labelBackgroundAlpha shouldBe 0
         } finally {
             directory.toFile().deleteRecursively()
         }
@@ -81,6 +85,8 @@ class OriginPortalsModuleTest : FreeSpec({
             labelSideOffset = 1.0,
             labelHeightOffset = 0.75,
             labelScale = 4.6f,
+            labelBackgroundGray = 48,
+            labelBackgroundAlpha = 180,
             style = ru.arc.PortalVisualStyle.ORIGIN,
         )
         val center = Location(world, 0.0, 0.0, 0.0)
@@ -94,6 +100,7 @@ class OriginPortalsModuleTest : FreeSpec({
         hologram.x shouldBe 3.0
         hologram.y shouldBe 5.75
         (kotlin.math.abs(hologram.z - 1.0) < 1e-9).shouldBeTrue()
+        hologram.yaw shouldBe 270f
     }
 
     "move persists feet coordinates and reloads the same anchor" {
@@ -125,6 +132,8 @@ class OriginPortalsModuleTest : FreeSpec({
             source.setDouble("origin-portals.anchors.survival.hologram.side-offset", -1.5)
             source.setDouble("origin-portals.anchors.survival.hologram.height-offset", 1.25)
             source.setDouble("origin-portals.anchors.survival.hologram.scale", 3.2)
+            source.setInt("origin-portals.anchors.survival.hologram.background-gray", 72)
+            source.setInt("origin-portals.anchors.survival.hologram.background-alpha", 210)
             source.setDouble("origin-portals.anchors.survival.vertical-offset", 4.5)
             source.saveStrict()
             ConfigManager.clear()
@@ -134,6 +143,8 @@ class OriginPortalsModuleTest : FreeSpec({
             survival.labelSideOffset shouldBe -1.5
             survival.labelHeightOffset shouldBe 1.25
             survival.labelScale shouldBe 3.2f
+            survival.labelBackgroundGray shouldBe 72
+            survival.labelBackgroundAlpha shouldBe 210
             survival.verticalOffset shouldBe 4.5
             OriginPortalsConfig.load(directory).gateSettings(survival)!!.verticalOffset shouldBe 4.5
         } finally {

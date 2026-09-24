@@ -55,6 +55,7 @@ regenerative-breaking:
 # Hologram front-distance points toward the approaching player (opposite yaw),
 # side-offset shifts right along the gate, and height-offset starts at the
 # raised portal center. Text and scale are independent per portal.
+# background-gray and background-alpha range from 0 to 255.
 origin-portals:
   enabled: true
   vertical-offset: 5.0
@@ -93,8 +94,10 @@ origin-portals:
         text: Выживание
         front-distance: 3.0
         side-offset: 0.0
-        height-offset: 0.75
-        scale: 4.6 # Four times the previous 1.15 display scale.
+        height-offset: -0.5
+        scale: 6.0
+        background-gray: 48
+        background-alpha: 180
       command: arc rtp survival --only-if-first
     mining:
       world: rc_origin_spawn
@@ -109,8 +112,10 @@ origin-portals:
         text: Ресурсы
         front-distance: 3.0
         side-offset: 0.0
-        height-offset: 0.75
-        scale: 4.6
+        height-offset: -0.5
+        scale: 6.0
+        background-gray: 48
+        background-alpha: 180
       command: arc rtp mining --only-if-first
     vanilla:
       world: rc_origin_spawn
@@ -125,8 +130,10 @@ origin-portals:
         text: Ваниль
         front-distance: 3.0
         side-offset: 0.0
-        height-offset: 0.75
-        scale: 4.6
+        height-offset: -0.5
+        scale: 6.0
+        background-gray: 48
+        background-alpha: 180
       command: arc rtp vanilla --only-if-first
     gallery_exit:
       world: rc_atelier_furniture_gallery

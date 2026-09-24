@@ -132,6 +132,8 @@ internal data class OriginPortalAnchor(
     val labelSideOffset: Double,
     val labelHeightOffset: Double,
     val labelScale: Float,
+    val labelBackgroundGray: Int,
+    val labelBackgroundAlpha: Int,
     val style: PortalVisualStyle,
 ) {
     fun center(world: org.bukkit.World): Location = Location(world, x, y, z, yaw, 0f)
@@ -143,6 +145,8 @@ internal data class OriginPortalAnchor(
             x + sin(angle) * labelFrontDistance + cos(angle) * labelSideOffset,
             y + verticalOffset + labelHeightOffset,
             z - cos(angle) * labelFrontDistance + sin(angle) * labelSideOffset,
+            yaw + 180f,
+            0f,
         )
     }
 
@@ -253,9 +257,14 @@ internal class OriginPortalsConfig private constructor(
                 verticalOffset = source.real("$path.vertical-offset", verticalOffset).finite(verticalOffset).coerceIn(0.5, 12.0),
                 labelFrontDistance = source.real("$path.hologram.front-distance", 0.0).finite(0.0).coerceIn(-20.0, 20.0),
                 labelSideOffset = source.real("$path.hologram.side-offset", 0.0).finite(0.0).coerceIn(-20.0, 20.0),
-                labelHeightOffset = source.real("$path.hologram.height-offset", 0.75).finite(0.75).coerceIn(-20.0, 20.0),
-                labelScale = source.real("$path.hologram.scale", if (id.central) 1.15 else 0.9)
-                    .finite(if (id.central) 1.15 else 0.9).toFloat().coerceIn(0.1f, 8.0f),
+                labelHeightOffset = source.real("$path.hologram.height-offset", if (id.central) -0.5 else 0.75)
+                    .finite(if (id.central) -0.5 else 0.75).coerceIn(-20.0, 20.0),
+                labelScale = source.real("$path.hologram.scale", if (id.central) 6.0 else 0.9)
+                    .finite(if (id.central) 6.0 else 0.9).toFloat().coerceIn(0.1f, 8.0f),
+                labelBackgroundGray = source.integer("$path.hologram.background-gray", if (id.central) 48 else 0)
+                    .coerceIn(0, 255),
+                labelBackgroundAlpha = source.integer("$path.hologram.background-alpha", if (id.central) 180 else 0)
+                    .coerceIn(0, 255),
                 style = style.takeIf { it.usesOriginGate } ?: id.defaultStyle,
             )
         }
@@ -330,10 +339,15 @@ private class OriginPortalVisual(
                     .decorate(TextDecoration.BOLD)
                     .decoration(TextDecoration.ITALIC, false),
             )
-            it.billboard = Display.Billboard.CENTER
+            it.billboard = if (anchor.id.central) Display.Billboard.FIXED else Display.Billboard.CENTER
             it.isSeeThrough = false
             it.isShadowed = true
-            it.backgroundColor = Color.fromARGB(0, 0, 0, 0)
+            it.backgroundColor = Color.fromARGB(
+                anchor.labelBackgroundAlpha,
+                anchor.labelBackgroundGray,
+                anchor.labelBackgroundGray,
+                anchor.labelBackgroundGray,
+            )
             it.lineWidth = 220
             it.viewRange = 1.25f
             it.setTransformationMatrix(Matrix4f().scaling(anchor.labelScale))
