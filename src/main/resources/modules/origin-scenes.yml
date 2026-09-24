@@ -71,12 +71,12 @@ scenes:
       ore-cart-stand: "69.5,70.0,63.5"
       ore-cart: "64.5,70.5,60.5"
       ore-load-stand: "70.5,70.0,65.5,-90,0"
-      ore-load-cart: "71.5,70.5625,65.5,-90,0"
+      ore-load-cart: "71.5,70.5625,65.5,90,0"
       ore-route-entry: "74.5,70.0,65.5"
       ore-route-turn: "74.5,70.0,69.5"
       ore-passage: "78.5,70.0,69.5"
       ore-park-stand: "79.5,70.0,69.5,-90,0"
-      ore-park-cart: "80.5,70.5625,69.5,-90,0"
+      ore-park-cart: "80.5,70.5625,69.5,90,0"
       ore-unload-side: "79.5,70.0625,70.5"
       ore-return-side: "81.5,70.0625,70.5"
       ore-return-grip: "81.5,70.0,69.5,90,0"
@@ -672,7 +672,7 @@ scenes:
           loaded-cart: {"type": "BLOCK_DISPLAY", "key": "savva-ore", "material": "RAW_IRON_BLOCK", "origin": "BOTTOM_CENTER", "scale": "0.46,0.28,0.42", "interpolation-ticks": 3, "anchor": "ore-load-cart", "offset": "0,0.0875,0"}
           grip: {"type": "EQUIP", "actor-id": 351, "material": "AIR"}
           take-handles: {"type": "WAIT", "ticks": 20}
-          push-cart: {"type": "ITEM_DISPLAY", "key": "savva-cart", "item-id": "elitecreatures:medieval_market_decoration_v1_cart_2", "context": "GROUND", "scale": "3,3,3", "interpolation-ticks": 3, "follow-actor-id": 351, "follow-offset": "0,0.5625,1.0", "yaw-offset-degrees": 0}
+          push-cart: {"type": "ITEM_DISPLAY", "key": "savva-cart", "item-id": "elitecreatures:medieval_market_decoration_v1_cart_2", "context": "GROUND", "scale": "3,3,3", "interpolation-ticks": 3, "follow-actor-id": 351, "follow-offset": "0,0.5625,1.0", "yaw-offset-degrees": 180}
           push-ore: {"type": "BLOCK_DISPLAY", "key": "savva-ore", "material": "RAW_IRON_BLOCK", "origin": "BOTTOM_CENTER", "scale": "0.46,0.28,0.42", "interpolation-ticks": 3, "follow-actor-id": 351, "follow-offset": "0,0.65,1.0"}
           outbound-entry: {"type": "MOVE", "actor-id": 351, "anchor": "ore-route-entry", "route-profile": "ore-haul", "timeout-ticks": 240}
           outbound-turn: {"type": "MOVE", "actor-id": 351, "anchor": "ore-route-turn", "route-profile": "ore-haul", "timeout-ticks": 240}
@@ -699,7 +699,7 @@ scenes:
           return-grip: {"type": "MOVE", "actor-id": 351, "anchor": "ore-return-grip", "route-profile": "ore-haul", "timeout-ticks": 240}
           face-return-cart: {"type": "LOOK_AT_ANCHOR", "actor-id": 351, "anchor": "ore-park-cart"}
           turn-cart: {"type": "WAIT", "ticks": 16}
-          return-cart: {"type": "ITEM_DISPLAY", "key": "savva-cart", "item-id": "elitecreatures:medieval_market_decoration_v1_cart_2", "context": "GROUND", "scale": "3,3,3", "interpolation-ticks": 3, "follow-actor-id": 351, "follow-offset": "0,0.5625,1.0", "yaw-offset-degrees": 0}
+          return-cart: {"type": "ITEM_DISPLAY", "key": "savva-cart", "item-id": "elitecreatures:medieval_market_decoration_v1_cart_2", "context": "GROUND", "scale": "3,3,3", "interpolation-ticks": 3, "follow-actor-id": 351, "follow-offset": "0,0.5625,1.0", "yaw-offset-degrees": 180}
           return-passage: {"type": "MOVE", "actor-id": 351, "anchor": "ore-passage", "route-profile": "ore-haul", "timeout-ticks": 240}
           return-turn: {"type": "MOVE", "actor-id": 351, "anchor": "ore-route-turn", "route-profile": "ore-haul", "timeout-ticks": 240}
           return-entry: {"type": "MOVE", "actor-id": 351, "anchor": "ore-route-entry", "route-profile": "ore-haul", "timeout-ticks": 240}
