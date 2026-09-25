@@ -4,14 +4,19 @@ import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import java.text.Normalizer
 
 /** Validation and lore construction are kept Bukkit-free so their rules are easy to test. */
 internal object ItemLorePolicy {
-    const val MAX_ROWS = 6
+    // Bounds client form size and quadratic quote work; fields are added on demand.
+    const val MAX_ROWS = 32
     const val MAX_CODE_POINTS_PER_ROW = 80
+    const val MAX_INPUT_LENGTH = 1024
+    private const val MAX_EDIT_CELLS = 8_000_000L
 
     private val plain = PlainTextComponentSerializer.plainText()
+    private val legacy = LegacyComponentSerializer.builder().character('&').hexColors().build()
     private val defaultGap = Component.empty().decoration(TextDecoration.ITALIC, false)
 
     data class Draft(
@@ -25,47 +30,59 @@ internal object ItemLorePolicy {
         data class Rejected(val reason: Reason) : Result
     }
 
-    enum class Reason { TOO_MANY_EXISTING_ROWS, EXISTING_ROW_TOO_LONG, TOO_MANY_FIELDS, ROW_TOO_LONG, MULTILINE_INPUT }
+    enum class Reason { TOO_MANY_EXISTING_ROWS, EXISTING_ROW_TOO_LONG, TOO_MANY_FIELDS, ROW_TOO_LONG, MULTILINE_INPUT, COMPLEX_EDIT }
 
     fun originalRows(lore: List<Component>?): List<Component> = lore.orEmpty().let { rows ->
         if (rows.firstOrNull()?.let { plain.serialize(it).isEmpty() } == true) rows.drop(1) else rows
     }
 
+    /** White is the implicit editor color, so its leading code is never charged. */
+    fun editableText(row: Component): String = legacy.serialize(
+        row.replaceText { it.matchLiteral("&").replacement("&&") },
+    ).removePrefix("&f")
+
+    fun rowFits(row: Component): Boolean = codePoints(plain.serialize(row)) <= MAX_CODE_POINTS_PER_ROW &&
+        editableText(row).length <= MAX_INPUT_LENGTH
+
+    // Raw controls are rejected before parsing, so NUL can safely protect &&.
+    private fun parse(value: String): Component = legacy.deserialize(value.replace("&&", "\u0000"))
+        .replaceText { it.matchLiteral("\u0000").replacement("&") }
+        .colorIfAbsent(NamedTextColor.WHITE)
+        .decorationIfAbsent(TextDecoration.ITALIC, TextDecoration.State.FALSE)
+
     fun build(existingLore: List<Component>?, submitted: List<String>): Result {
         val originals = originalRows(existingLore)
         if (originals.size > MAX_ROWS) return Result.Rejected(Reason.TOO_MANY_EXISTING_ROWS)
-        if (originals.any { codePoints(plain.serialize(it)) > MAX_CODE_POINTS_PER_ROW }) {
-            return Result.Rejected(Reason.EXISTING_ROW_TOO_LONG)
-        }
+        if (originals.any { !rowFits(it) }) return Result.Rejected(Reason.EXISTING_ROW_TOO_LONG)
         if (submitted.size > MAX_ROWS) return Result.Rejected(Reason.TOO_MANY_FIELDS)
-        if (submitted.any { codePoints(it) > MAX_CODE_POINTS_PER_ROW }) return Result.Rejected(Reason.ROW_TOO_LONG)
+        if (submitted.any { it.length > MAX_INPUT_LENGTH }) return Result.Rejected(Reason.ROW_TOO_LONG)
         if (submitted.any { value -> value.any { it == '\n' || it == '\r' || it.isISOControl() } }) {
             return Result.Rejected(Reason.MULTILINE_INPUT)
         }
+        val parsed = submitted.map(::parse)
+        if (parsed.any { !rowFits(it) }) return Result.Rejected(Reason.ROW_TOO_LONG)
 
-        // An all-empty form is the explicit clear action, including when the
-        // original body had decorative blank rows. Otherwise keep unchanged
-        // empty rows inside the original body. Empty form slots
-        // beyond its end are just unused capacity; blanking a non-empty original
-        // row removes it and later rows compact naturally.
-        val body = if (submitted.isNotEmpty() && submitted.all(String::isBlank)) emptyList() else submitted.mapIndexedNotNull { index, value ->
+        // Preserve the exact original component (including metadata) when its
+        // editable text and formatting did not change. Blank fields remove rows;
+        // an all-empty form also clears decorative blank rows.
+        val body = if (parsed.all { plain.serialize(it).isBlank() }) emptyList() else parsed.mapIndexedNotNull { index, row ->
             val original = originals.getOrNull(index)
-            if (original != null && normalizeVisible(plain.serialize(original)) == normalizeVisible(value)) original
-            else if (value.isBlank()) null
-            else Component.text(value, NamedTextColor.WHITE).decoration(TextDecoration.ITALIC, false)
+            when {
+                original != null && normalizeVisible(editableText(original)) == normalizeVisible(editableText(row)) -> original
+                plain.serialize(row).isBlank() -> null
+                else -> row
+            }
         }
-        val originalVisible = originals.map(plain::serialize)
-        val newVisible = body.map(plain::serialize)
-        val distance = levenshtein(
-            canonical(originalVisible),
-            canonical(newVisible),
-        )
+        // Canonical legacy encoding includes color/style changes, and collapses
+        // redundant codes and equivalent hex/legacy spellings before pricing.
+        val distance = levenshtein(canonical(originals.map(::editableText)), canonical(body.map(::editableText)))
+            ?: return Result.Rejected(Reason.COMPLEX_EDIT)
         val lore = when {
             distance == 0 -> existingLore
             body.isEmpty() -> null
             else -> listOf(existingLore?.firstOrNull()?.takeIf { row -> plain.serialize(row).isEmpty() } ?: defaultGap) + body
         }
-        return Result.Ready(Draft(lore = lore, visibleRows = newVisible, editDistance = distance))
+        return Result.Ready(Draft(lore = lore, visibleRows = body.map(plain::serialize), editDistance = distance))
     }
 
     /** One default blank lore row is presentation spacing and is never part of a quote. */
@@ -73,24 +90,38 @@ internal object ItemLorePolicy {
 
     private fun normalizeVisible(value: String): String = Normalizer.normalize(value, Normalizer.Form.NFC)
 
-    fun levenshtein(left: String, right: String): Int {
+    fun levenshtein(left: String, right: String): Int? {
+        if (left == right) return 0
         val a = left.codePoints().toArray()
         val b = right.codePoints().toArray()
-        if (a.isEmpty()) return b.size
-        if (b.isEmpty()) return a.size
-        var previous = IntArray(b.size + 1) { it }
-        var current = IntArray(b.size + 1)
-        for (i in a.indices) {
+        var start = 0
+        while (start < a.size && start < b.size && a[start] == b[start]) start++
+        var endA = a.size
+        var endB = b.size
+        while (endA > start && endB > start && a[endA - 1] == b[endB - 1]) {
+            endA--
+            endB--
+        }
+        val sizeA = endA - start
+        val sizeB = endB - start
+        if (sizeA == 0) return sizeB
+        if (sizeB == 0) return sizeA
+        // Keep quote work bounded on the server thread even with a color before
+        // every character. Never approximate a price: ask for smaller edits.
+        if (sizeA.toLong() * sizeB > MAX_EDIT_CELLS) return null
+        var previous = IntArray(sizeB + 1) { it }
+        var current = IntArray(sizeB + 1)
+        for (i in 0 until sizeA) {
             current[0] = i + 1
-            for (j in b.indices) {
-                val substitution = previous[j] + if (a[i] == b[j]) 0 else 1
+            for (j in 0 until sizeB) {
+                val substitution = previous[j] + if (a[start + i] == b[start + j]) 0 else 1
                 current[j + 1] = minOf(current[j] + 1, previous[j + 1] + 1, substitution)
             }
             val swap = previous
             previous = current
             current = swap
         }
-        return previous[b.size]
+        return previous[sizeB]
     }
 
     fun quoteMinor(editDistance: Int, stackAmount: Int, rateMinorPerCharacter: Long): Long? {
