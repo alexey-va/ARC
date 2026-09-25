@@ -13,6 +13,7 @@ internal object ItemLorePolicy {
     const val MAX_ROWS = 32
     const val MAX_CODE_POINTS_PER_ROW = 80
     const val MAX_INPUT_LENGTH = 1024
+    private const val MAX_EDIT_CELLS = 8_000_000L
 
     private val plain = PlainTextComponentSerializer.plainText()
     private val legacy = LegacyComponentSerializer.builder().character('&').hexColors().build()
@@ -29,7 +30,7 @@ internal object ItemLorePolicy {
         data class Rejected(val reason: Reason) : Result
     }
 
-    enum class Reason { TOO_MANY_EXISTING_ROWS, EXISTING_ROW_TOO_LONG, TOO_MANY_FIELDS, ROW_TOO_LONG, MULTILINE_INPUT }
+    enum class Reason { TOO_MANY_EXISTING_ROWS, EXISTING_ROW_TOO_LONG, TOO_MANY_FIELDS, ROW_TOO_LONG, MULTILINE_INPUT, COMPLEX_EDIT }
 
     fun originalRows(lore: List<Component>?): List<Component> = lore.orEmpty().let { rows ->
         if (rows.firstOrNull()?.let { plain.serialize(it).isEmpty() } == true) rows.drop(1) else rows
@@ -75,6 +76,7 @@ internal object ItemLorePolicy {
         // Canonical legacy encoding includes color/style changes, and collapses
         // redundant codes and equivalent hex/legacy spellings before pricing.
         val distance = levenshtein(canonical(originals.map(::editableText)), canonical(body.map(::editableText)))
+            ?: return Result.Rejected(Reason.COMPLEX_EDIT)
         val lore = when {
             distance == 0 -> existingLore
             body.isEmpty() -> null
@@ -88,24 +90,38 @@ internal object ItemLorePolicy {
 
     private fun normalizeVisible(value: String): String = Normalizer.normalize(value, Normalizer.Form.NFC)
 
-    fun levenshtein(left: String, right: String): Int {
+    fun levenshtein(left: String, right: String): Int? {
+        if (left == right) return 0
         val a = left.codePoints().toArray()
         val b = right.codePoints().toArray()
-        if (a.isEmpty()) return b.size
-        if (b.isEmpty()) return a.size
-        var previous = IntArray(b.size + 1) { it }
-        var current = IntArray(b.size + 1)
-        for (i in a.indices) {
+        var start = 0
+        while (start < a.size && start < b.size && a[start] == b[start]) start++
+        var endA = a.size
+        var endB = b.size
+        while (endA > start && endB > start && a[endA - 1] == b[endB - 1]) {
+            endA--
+            endB--
+        }
+        val sizeA = endA - start
+        val sizeB = endB - start
+        if (sizeA == 0) return sizeB
+        if (sizeB == 0) return sizeA
+        // Keep quote work bounded on the server thread even with a color before
+        // every character. Never approximate a price: ask for smaller edits.
+        if (sizeA.toLong() * sizeB > MAX_EDIT_CELLS) return null
+        var previous = IntArray(sizeB + 1) { it }
+        var current = IntArray(sizeB + 1)
+        for (i in 0 until sizeA) {
             current[0] = i + 1
-            for (j in b.indices) {
-                val substitution = previous[j] + if (a[i] == b[j]) 0 else 1
+            for (j in 0 until sizeB) {
+                val substitution = previous[j] + if (a[start + i] == b[start + j]) 0 else 1
                 current[j + 1] = minOf(current[j] + 1, previous[j + 1] + 1, substitution)
             }
             val swap = previous
             previous = current
             current = swap
         }
-        return previous[b.size]
+        return previous[sizeB]
     }
 
     fun quoteMinor(editDistance: Int, stackAmount: Int, rateMinorPerCharacter: Long): Long? {

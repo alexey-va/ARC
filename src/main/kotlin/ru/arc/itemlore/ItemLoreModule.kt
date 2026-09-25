@@ -251,6 +251,7 @@ internal class ItemLoreEditor(
                 ItemLorePolicy.Reason.TOO_MANY_EXISTING_ROWS -> "too-many-rows"
                 ItemLorePolicy.Reason.EXISTING_ROW_TOO_LONG, ItemLorePolicy.Reason.ROW_TOO_LONG -> "row-too-long"
                 ItemLorePolicy.Reason.TOO_MANY_FIELDS, ItemLorePolicy.Reason.MULTILINE_INPUT -> "input-invalid"
+                ItemLorePolicy.Reason.COMPLEX_EDIT -> "complex-edit"
             }
             openEditor(player, session, submitted, root = true, problem = textKey)
             return

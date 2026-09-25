@@ -118,6 +118,21 @@ class ItemLorePolicyTest : FreeSpec({
             ItemLorePolicy.Result.Rejected(ItemLorePolicy.Reason.ROW_TOO_LONG)
     }
 
+    "bounds colored quote work while accepting no-op and a small edit in maximum lore" {
+        val rows = List(32) { "&#12ab34x&#654321x".repeat(40) }
+        val original = (ItemLorePolicy.build(emptyList(), rows) as ItemLorePolicy.Result.Ready).draft.lore
+        val unchanged = ItemLorePolicy.build(original, rows) as ItemLorePolicy.Result.Ready
+        unchanged.draft.editDistance shouldBe 0
+        unchanged.draft.lore shouldBe original
+        val small = rows.toMutableList().also { it[it.lastIndex] = it.last().dropLast(1) + "я" }
+        (ItemLorePolicy.build(original, small) as ItemLorePolicy.Result.Ready).draft.editDistance shouldBe 1
+        ItemLorePolicy.build(original, List(32) { "&#abcdefy&#123456y".repeat(40) }) shouldBe
+            ItemLorePolicy.Result.Rejected(ItemLorePolicy.Reason.COMPLEX_EDIT)
+        val maximumPlain = List(32) { "я".repeat(80) }
+        val plainLore = (ItemLorePolicy.build(emptyList(), maximumPlain) as ItemLorePolicy.Result.Ready).draft.lore
+        (ItemLorePolicy.build(plainLore, List(32) { "ю".repeat(80) }) as ItemLorePolicy.Result.Ready).draft.editDistance shouldBe 2560
+    }
+
     "rejects oversize existing content instead of truncating" {
         val tooMany = ItemLorePolicy.build((1..ItemLorePolicy.MAX_ROWS + 1).map { Component.text("$it") }, emptyList())
         tooMany shouldBe ItemLorePolicy.Result.Rejected(ItemLorePolicy.Reason.TOO_MANY_EXISTING_ROWS)
