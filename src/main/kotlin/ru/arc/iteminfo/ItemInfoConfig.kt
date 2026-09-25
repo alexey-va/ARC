@@ -1,11 +1,14 @@
 package ru.arc.iteminfo
 
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import java.nio.file.Path
+
+private const val ITEM_INFO_COIN_GLYPH = "💰"
 
 internal data class ItemInfoSettings(
     val enabled: Boolean,
@@ -17,8 +20,25 @@ internal data class ItemInfoSettings(
 ) {
     private val miniMessage = MiniMessage.miniMessage()
 
-    fun hologramText(target: ItemInfoTarget, showNamespacedId: Boolean): Component =
-        render(if (showNamespacedId) hologramTemplate else nameOnlyTemplate, target)
+    fun hologramText(target: ItemInfoTarget, showNamespacedId: Boolean): Component {
+        val base = render(if (showNamespacedId) hologramTemplate else nameOnlyTemplate, target)
+        // The shop provider may already include ARC's money glyph in its format.
+        // Keep the official glyph exactly once on this player-facing surface.
+        val purchasePrice = target.purchasePrice
+            ?.replace(ITEM_INFO_COIN_GLYPH, "")
+            ?.trim()
+            ?.takeIf(String::isNotEmpty)
+            ?: return base
+        val priceLine = Component.text(purchasePrice, NamedTextColor.GOLD)
+            .append(Component.space())
+            .append(Component.text(ITEM_INFO_COIN_GLYPH, NamedTextColor.WHITE))
+        val actionLine = Component.text("ПКМ — купить", NamedTextColor.GOLD)
+        return base
+            .append(Component.newline())
+            .append(priceLine)
+            .append(Component.newline())
+            .append(actionLine)
+    }
 
     fun bossbarText(target: ItemInfoTarget, showNamespacedId: Boolean): Component =
         render(if (showNamespacedId) bossbarTemplate else nameOnlyTemplate, target)

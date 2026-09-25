@@ -26,6 +26,16 @@ internal interface ShopPurchaseService {
     /** Re-reads one live offer before a dialog confirmation is committed. */
     fun furnitureOffer(player: Player, itemPath: String, amount: Int = 1): FurnitureShopOffer? = null
 
+    /** Current native offer found by the exact ItemsAdder namespace:id. */
+    fun furnitureOfferForId(player: Player, furnitureId: String): FurnitureShopOffer? = null
+
+    /** Opens the pinned shop's native purchase menu for one exact IA furniture item. */
+    fun openFurniturePurchaseMenu(player: Player, furnitureId: String): FurnitureShopMenuOpenResult =
+        FurnitureShopMenuOpenResult.NOT_LISTED
+
+    /** True when the live catalog has a native buyable IA furniture entry for [furnitureId]. */
+    fun hasFurniturePurchaseMenu(furnitureId: String): Boolean = false
+
     /**
      * Returns the cheapest currently accessible Vault offer that gives exactly
      * [amount] plain vanilla [material] items. Command products, custom item
@@ -42,6 +52,16 @@ internal interface ShopPurchaseService {
 
     /** Formats an aggregate Vault amount with the active shop provider. */
     fun formatVaultPrice(amount: Double): String? = null
+}
+
+internal enum class FurnitureShopMenuOpenResult {
+    OPENED,
+    NOT_LISTED,
+    NO_PERMISSION,
+    REQUIREMENTS_NOT_MET,
+    AMBIGUOUS_OFFER,
+    SHOP_UNAVAILABLE,
+    FAILED,
 }
 
 internal data class ShopMaterialQuote(

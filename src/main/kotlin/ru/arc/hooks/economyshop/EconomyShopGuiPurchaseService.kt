@@ -1,20 +1,38 @@
 package ru.arc.hooks.economyshop
 
 import dev.lone.itemsadder.api.CustomStack
+import me.gypopo.economyshopgui.EconomyShopGUI
 import me.gypopo.economyshopgui.api.EconomyShopGUIHook
+import me.gypopo.economyshopgui.api.events.ShopItemsLoadEvent
 import me.gypopo.economyshopgui.objects.ShopItem
+import me.gypopo.economyshopgui.objects.TransactionMenu
 import me.gypopo.economyshopgui.util.EcoType
 import me.gypopo.economyshopgui.util.EconomyType
 import me.gypopo.economyshopgui.util.Transaction
+import me.gypopo.economyshopgui.util.Transaction.Mode
+import me.gypopo.economyshopgui.util.Transaction.Type
 import org.bukkit.Material
+import org.bukkit.Bukkit
 import org.bukkit.entity.Player
+import org.bukkit.event.EventHandler
+import org.bukkit.event.EventPriority
+import org.bukkit.event.Listener
 import org.bukkit.inventory.ItemStack
 import java.util.Locale
 
 /** EconomyShopGUI Premium 6.3.0 implementation, loaded only while that plugin is present. */
 internal class EconomyShopGuiPurchaseService(
     private val translateItem: (ItemStack?) -> String,
-) : ShopPurchaseService {
+) : ShopPurchaseService, Listener {
+    @Volatile
+    private var furnitureItemIndex = FurnitureShopItemIndex.empty<ShopItem>()
+    @Volatile
+    private var loggedIndexFailure: String? = null
+
+    init {
+        rebuildFurnitureItemIndex()
+    }
+
     override fun itemQueries(player: Player): List<String> =
         allItems()
             .asSequence()
@@ -72,6 +90,69 @@ internal class EconomyShopGuiPurchaseService(
     override fun furnitureOffer(player: Player, itemPath: String, amount: Int): FurnitureShopOffer? {
         if (amount <= 0) return null
         return resolveItem(itemPath)?.let { item -> furnitureOffer(player, item, amount) }
+    }
+
+    override fun furnitureOfferForId(player: Player, furnitureId: String): FurnitureShopOffer? {
+        if (!canBrowseFurnitureShop(player)) return null
+        val matches = furnitureItemIndex.entries(furnitureId)
+        if (matches.isEmpty()) return null
+        val offers = matches.mapNotNull { item -> runCatching { furnitureOffer(player, item, 1) }.getOrNull() }
+        return offers.singleOrNull()
+    }
+
+    override fun hasFurniturePurchaseMenu(furnitureId: String): Boolean = furnitureItemIndex.contains(furnitureId)
+
+    override fun openFurniturePurchaseMenu(player: Player, furnitureId: String): FurnitureShopMenuOpenResult {
+        if (!isShopPluginEnabled()) return FurnitureShopMenuOpenResult.SHOP_UNAVAILABLE
+        val matches = furnitureItemIndex.entries(furnitureId)
+        if (matches.isEmpty()) return FurnitureShopMenuOpenResult.NOT_LISTED
+
+        val plugin = runCatching { EconomyShopGUI.getInstance() }.getOrNull()
+            ?: return FurnitureShopMenuOpenResult.SHOP_UNAVAILABLE
+        val hasGlobalShopPermission = player.hasPermission(SHOP_PERMISSION)
+        val allowedGameMode = player.gameMode !in plugin.bannedGamemodes
+
+        val eligible = mutableListOf<ShopItem>()
+        var permissionDenied = false
+        var requirementsNotMet = false
+        for (item in matches) {
+            if (item.hasItemError() || item.isHidden || item.isDisplayItem || !item.isBuyAble || item.isBuyCommand) {
+                continue
+            }
+            val canPurchase = hasGlobalShopPermission && allowedGameMode &&
+                runCatching { item.canPurchase(player, "shop", false) }.getOrDefault(false)
+            when (
+                furnitureShopMenuAccess(
+                    hasGlobalShopPermission = hasGlobalShopPermission,
+                    allowedGameMode = allowedGameMode,
+                    itemCanPurchase = canPurchase,
+                    requirementsMet = { runCatching { item.meetsRequirements(player, false) }.getOrDefault(false) },
+                )
+            ) {
+                FurnitureShopMenuAccessDecision.NO_PERMISSION -> permissionDenied = true
+                FurnitureShopMenuAccessDecision.REQUIREMENTS_NOT_MET -> requirementsNotMet = true
+                FurnitureShopMenuAccessDecision.ALLOWED -> eligible += item
+            }
+        }
+
+        if (eligible.isEmpty()) {
+            return when {
+                requirementsNotMet -> FurnitureShopMenuOpenResult.REQUIREMENTS_NOT_MET
+                permissionDenied -> FurnitureShopMenuOpenResult.NO_PERMISSION
+                else -> FurnitureShopMenuOpenResult.SHOP_UNAVAILABLE
+            }
+        }
+        val item = eligible.singleOrNull() ?: return FurnitureShopMenuOpenResult.AMBIGUOUS_OFFER
+
+        return try {
+            // Mirrors ESG 6.3.0 MenuHandler's normal BUY_SCREEN construction and open(false).
+            TransactionMenu(player, item, item.section(), false, Mode.BUY, Type.BUY_SCREEN, 1).open(false)
+            FurnitureShopMenuOpenResult.OPENED
+        } catch (_: LinkageError) {
+            FurnitureShopMenuOpenResult.FAILED
+        } catch (_: Exception) {
+            FurnitureShopMenuOpenResult.FAILED
+        }
     }
 
     override fun quotePlainMaterial(
@@ -147,6 +228,7 @@ internal class EconomyShopGuiPurchaseService(
         ) {
             return null
         }
+        if (!canBrowseFurnitureShop(player, item)) return null
         if (!EconomyShopGUIHook.hasPermissions(item, player)) return null
         if (!runCatching { item.meetsRequirements(player, true) }.getOrDefault(false)) return null
         if (item.limitedStockMode > 0) {
@@ -181,6 +263,72 @@ internal class EconomyShopGuiPurchaseService(
 
     private fun hasFurnitureBehaviour(custom: CustomStack): Boolean =
         runCatching { hasFurnitureBehaviour(custom.config, custom.id) }.getOrDefault(false)
+
+    /** Rebuild only on hook initialization and ESG's item-reload event, never on the viewer tick. */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun onShopItemsLoaded(@Suppress("UNUSED_PARAMETER") event: ShopItemsLoadEvent) {
+        rebuildFurnitureItemIndex()
+    }
+
+    private fun rebuildFurnitureItemIndex() {
+        if (!isShopPluginEnabled()) {
+            furnitureItemIndex = FurnitureShopItemIndex.empty(complete = false)
+            return
+        }
+
+        try {
+            val shopItems = EconomyShopGUIHook.getSections().values.asSequence()
+                .flatMap { section -> section.shopItems.asSequence() }
+                .take(MAX_INDEXED_SHOP_ITEMS + 1)
+                .toList()
+            if (shopItems.size > MAX_INDEXED_SHOP_ITEMS) {
+                furnitureItemIndex = FurnitureShopItemIndex.empty(complete = false)
+                logIndexUnavailable("shop-item-limit-exceeded")
+                return
+            }
+
+            furnitureItemIndex = FurnitureShopItemIndex.from(
+                shopItems.asSequence().mapNotNull { item ->
+                    runCatching { furnitureId(item) }.getOrNull()?.let { id -> id to item }
+                },
+                maxEntries = MAX_INDEXED_SHOP_ITEMS,
+            )
+            loggedIndexFailure = null
+        } catch (_: LinkageError) {
+            furnitureItemIndex = FurnitureShopItemIndex.empty(complete = false)
+            logIndexUnavailable("shop-api-unavailable")
+        } catch (_: Exception) {
+            furnitureItemIndex = FurnitureShopItemIndex.empty(complete = false)
+            logIndexUnavailable("shop-catalog-unavailable")
+        }
+    }
+
+    private fun furnitureId(item: ShopItem): String? {
+        if (item.hasItemError() || item.isHidden || item.isDisplayItem || !item.isBuyAble || item.isBuyCommand) {
+            return null
+        }
+        val custom = CustomStack.byItemStack(item.itemToGive) ?: return null
+        val id = custom.namespacedID?.trim()?.takeIf(String::isNotEmpty) ?: return null
+        return id.takeIf { hasFurnitureBehaviour(custom) }
+    }
+
+    private fun canBrowseFurnitureShop(player: Player, item: ShopItem? = null): Boolean {
+        if (!isShopPluginEnabled()) return false
+        val plugin = runCatching { EconomyShopGUI.getInstance() }.getOrNull() ?: return false
+        if (!player.hasPermission(SHOP_PERMISSION) || player.gameMode in plugin.bannedGamemodes) return false
+        return item == null || runCatching { item.canPurchase(player, "shop", true) }.getOrDefault(false)
+    }
+
+    private fun isShopPluginEnabled(): Boolean =
+        runCatching { Bukkit.getPluginManager().isPluginEnabled(SHOP_PLUGIN_NAME) }.getOrDefault(false)
+
+    private fun logIndexUnavailable(reason: String) {
+        if (loggedIndexFailure == reason) return
+        loggedIndexFailure = reason
+        runCatching {
+            Bukkit.getLogger().warning("ARC furniture shop index unavailable ($reason); gallery price and menu lookup fail closed")
+        }
+    }
 
     private fun vaultProvider() =
         allItems()
@@ -246,6 +394,12 @@ internal class EconomyShopGuiPurchaseService(
             Transaction.Result.CANT_STORE_PAYMENT,
             -> ShopPurchaseStatus.FAILED
         }
+
+    private companion object {
+        const val SHOP_PLUGIN_NAME = "EconomyShopGUI-Premium"
+        const val SHOP_PERMISSION = "EconomyShopGUI.shop"
+        const val MAX_INDEXED_SHOP_ITEMS = 16_384
+    }
 }
 
 /** Checks only the exact ItemsAdder item entry; sibling items in one file are ignored. */

@@ -21,6 +21,7 @@ enum class ItemInfoMode(val id: String) {
 data class ItemInfoTarget(
     val name: Component,
     val namespacedId: String,
+    val purchasePrice: String? = null,
 )
 
 data class ItemInfoPreferences(

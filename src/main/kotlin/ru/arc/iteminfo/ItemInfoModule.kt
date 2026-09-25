@@ -1,9 +1,11 @@
 package ru.arc.iteminfo
 
 import org.bukkit.Bukkit
+import org.bukkit.entity.Player
 import org.bukkit.event.HandlerList
 import org.bukkit.plugin.ServicePriority
 import ru.arc.ARC
+import ru.arc.hooks.HookRegistry
 import ru.arc.core.PluginModule
 import ru.arc.util.Logging.info
 import ru.arc.paper.api.ArcInspectionService
@@ -38,6 +40,11 @@ object ItemInfoModule : PluginModule {
 
     private fun start(settings: ItemInfoSettings) {
         val service = PaperArcInspectionService(ARC.instance)
+        val galleryPurchasePrice: (Player, String) -> String? = HookRegistry.shopPurchaseService
+            ?.let { purchaseService ->
+                { player, furnitureId -> purchaseService.furnitureOfferForId(player, furnitureId)?.formattedPrice }
+            }
+            ?: { _, _ -> null }
         inspection = service
         Bukkit.getServicesManager().register(
             ArcInspectionService::class.java,
@@ -45,7 +52,7 @@ object ItemInfoModule : PluginModule {
             ARC.instance,
             ServicePriority.Normal,
         )
-        runtime = ItemInfoRuntime(settings, service).also {
+        runtime = ItemInfoRuntime(settings, service, galleryPurchasePrice).also {
             Bukkit.getPluginManager().registerEvents(it, ARC.instance)
             it.start()
         }
