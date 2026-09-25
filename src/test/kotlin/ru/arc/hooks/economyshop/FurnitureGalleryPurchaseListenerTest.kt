@@ -2,6 +2,7 @@ package ru.arc.hooks.economyshop
 
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import io.mockk.Called
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -18,6 +19,20 @@ import org.bukkit.inventory.EquipmentSlot
 import java.util.UUID
 
 class FurnitureGalleryPurchaseListenerTest : StringSpec({
+    "plugin-spawned furniture without a player is ignored by purchase placement tracking" {
+        val purchases = mockk<ShopPurchaseService>()
+        val gallery = mockk<FurnitureGalleryInteractionRuntime>()
+        val placed = mockk<FurniturePlaceSuccessEvent>()
+        every { placed.player as Player? } returns null
+        val listener = FurnitureGalleryPurchaseListener(purchases, gallery,
+            currentTick = { error("Plugin placement must not update player placement ticks") })
+
+        listener.onFurniturePlaced(placed)
+
+        verify { purchases wasNot Called }
+        verify { gallery wasNot Called }
+    }
+
     "only main-hand right-clicks in the authored gallery can reach purchase routing" {
         FurnitureGalleryInteractionPolicy.accepts(
             worldName = FURNITURE_GALLERY_WORLD,

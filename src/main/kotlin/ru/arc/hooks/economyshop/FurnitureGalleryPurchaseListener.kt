@@ -39,9 +39,11 @@ internal class FurnitureGalleryPurchaseListener(
 
     @EventHandler(priority = EventPriority.MONITOR)
     fun onFurniturePlaced(event: FurniturePlaceSuccessEvent) {
-        if (event.player.world.name != FURNITURE_GALLERY_WORLD) return
+        // Furniture spawned through the ItemsAdder API has no placing player.
+        val player: Player? = event.player
+        if (player == null || player.world.name != FURNITURE_GALLERY_WORLD) return
         placementTicks.entries.removeIf { it.value != currentTick() }
-        placementTicks[event.player.uniqueId] = currentTick()
+        placementTicks[player.uniqueId] = currentTick()
     }
 
     /** Snapshot the target before ItemsAdder may turn the clicked floor into furniture. */
