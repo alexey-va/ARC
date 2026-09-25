@@ -4,6 +4,8 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
+import org.bukkit.entity.Entity
+import io.mockk.mockk
 import java.util.UUID
 
 class FurnitureGalleryPurchaseListenerTest : StringSpec({
@@ -44,6 +46,14 @@ class FurnitureGalleryPurchaseListenerTest : StringSpec({
         listenerMethods.getValue("onItemsAdderFurnitureInteract")
             .getAnnotation(EventHandler::class.java)
             .priority shouldBe EventPriority.HIGHEST
+    }
+
+    "ItemsAdder routing prefers its exact furniture root and falls back to the event entity" {
+        val furnitureRoot = mockk<Entity>()
+        val hitboxChild = mockk<Entity>()
+
+        exactItemsAdderFurnitureRoot(furnitureRoot, hitboxChild) shouldBe furnitureRoot
+        exactItemsAdderFurnitureRoot(null, hitboxChild) shouldBe hitboxChild
     }
 
     "paired entity, block, and ItemsAdder routes open once per global server tick" {

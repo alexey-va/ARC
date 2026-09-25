@@ -175,8 +175,8 @@ class HookRegistry(
     internal fun refreshFurnitureGalleryTargets() {
         check(!isClosed) { "HookRegistry is closed" }
         val purchases = shopPurchaseService ?: return
-        val targets = loadFurnitureGalleryTargets(ARC.instance.dataPath) ?: return
-        val nextRuntime = FurnitureGalleryInteractionRuntime(ARC.instance, targets)
+        val profiles = loadFurnitureGalleryTargets(ARC.instance.dataPath).orEmpty()
+        val nextRuntime = FurnitureGalleryInteractionRuntime(ARC.instance, profiles, purchases::hasFurniturePurchaseMenu)
         val nextListener = FurnitureGalleryPurchaseListener(purchases, nextRuntime)
 
         furnitureGalleryInteractionRuntime?.close()
@@ -450,6 +450,7 @@ class HookRegistry(
             val galleryRuntime = FurnitureGalleryInteractionRuntime(
                 ARC.instance,
                 loadFurnitureGalleryTargets(ARC.instance.dataPath).orEmpty(),
+                purchaseService::hasFurniturePurchaseMenu,
             )
             val galleryListener = FurnitureGalleryPurchaseListener(purchaseService, galleryRuntime)
             try {

@@ -78,7 +78,11 @@ internal class BukkitItemInfoTargetResolver(
             player.world.rayTraceEntities(eye, eye.direction, distance, if (gallery) 0.0 else 0.20) { entity ->
                 if (entity.uniqueId == player.uniqueId) return@rayTraceEntities false
                 if (gallery) {
-                    entity is Interaction && galleryMarkers?.read(entity) != null
+                    when (entity) {
+                        is Interaction -> galleryMarkers?.read(entity) != null
+                        is ItemDisplay, is ArmorStand -> furniture(entity, gallery = true) != null
+                        else -> false
+                    }
                 } else {
                     (entity is ItemDisplay || entity is ArmorStand) && furniture(entity, false) != null
                 }
@@ -106,14 +110,15 @@ internal class BukkitItemInfoTargetResolver(
     }
 
     private fun furniture(entity: Entity, gallery: Boolean): ItemInfoTarget? = runCatching {
-        if (gallery) {
+        if (gallery && entity is Interaction) {
             val marker = galleryMarkers?.read(entity) ?: return null
-            if (entity.world.name != FURNITURE_GALLERY_WORLD || entity !is Interaction) return null
+            if (entity.world.name != FURNITURE_GALLERY_WORLD) return null
             val custom = CustomStack.getInstance(marker.furnitureId) ?: return null
             if (custom.namespacedID != marker.furnitureId) return null
             return policy.filter(entity.location, customTarget(custom))
         }
         val custom = CustomFurniture.byAlreadySpawned(entity) ?: return null
+        if (gallery && (entity.world.name != FURNITURE_GALLERY_WORLD || custom.entity?.uniqueId != entity.uniqueId)) return null
         policy.filter(custom.entity?.location, customTarget(custom))
     }.getOrNull()
 

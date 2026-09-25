@@ -1,14 +1,18 @@
 package ru.arc.hooks.economyshop
 
 import dev.lone.itemsadder.api.CustomFurniture
+import dev.lone.itemsadder.api.Events.FurnitureBreakEvent
+import dev.lone.itemsadder.api.Events.FurniturePlaceSuccessEvent
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.NamespacedKey
 import org.bukkit.World
 import org.bukkit.entity.Entity
 import org.bukkit.entity.Interaction
+import org.bukkit.entity.ArmorStand
 import org.bukkit.entity.ItemDisplay
 import org.bukkit.event.EventHandler
+import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
 import org.bukkit.event.world.ChunkLoadEvent
 import org.bukkit.event.world.ChunkUnloadEvent
@@ -19,7 +23,10 @@ import ru.arc.ARC
 import ru.arc.config.ConfigManager
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.util.Logging.warn
+import java.nio.file.Path
 import java.util.LinkedHashMap
+import java.util.LinkedHashSet
+import java.util.UUID
 
 internal data class FurnitureGalleryMarker(
     val targetKey: String,
@@ -27,7 +34,7 @@ internal data class FurnitureGalleryMarker(
     val segment: Int,
 )
 
-/** Owns marker keys so purchase and ItemInfo routes resolve one exact target identity. */
+/** Owns marker keys so purchase and ItemInfo routes resolve one exact live root. */
 internal class FurnitureGalleryTargetMarkers(plugin: Plugin) {
     private val ownerKey = NamespacedKey(plugin, "furniture-gallery-hitbox")
     private val targetKey = NamespacedKey(plugin, "furniture-gallery-target")
@@ -38,6 +45,8 @@ internal class FurnitureGalleryTargetMarkers(plugin: Plugin) {
         val data = entity.persistentDataContainer
         if (data.get(ownerKey, PersistentDataType.BYTE) != MARKER_VERSION) return null
         val target = data.get(targetKey, PersistentDataType.STRING)?.takeIf(String::isNotBlank) ?: return null
+        if (!target.startsWith(NATIVE_ROOT_PREFIX)) return null
+        UUID.fromString(target.removePrefix(NATIVE_ROOT_PREFIX))
         val furniture = data.get(furnitureKey, PersistentDataType.STRING)
             ?.takeIf { it.matches(FURNITURE_ID_PATTERN) }
             ?: return null
@@ -46,262 +55,342 @@ internal class FurnitureGalleryTargetMarkers(plugin: Plugin) {
     }.getOrNull()
 
     fun isOwned(entity: Entity): Boolean =
-        entity.persistentDataContainer.get(ownerKey, PersistentDataType.BYTE) == MARKER_VERSION
+        entity.persistentDataContainer.get(ownerKey, PersistentDataType.BYTE) in OWNED_MARKER_VERSIONS
 
-    fun write(entity: Interaction, target: FurnitureGalleryTarget, segment: FurnitureGallerySegment) {
+    fun write(entity: Interaction, plan: FurnitureGalleryHitboxPlan, segment: FurnitureGallerySegment) {
         entity.persistentDataContainer.apply {
             set(ownerKey, PersistentDataType.BYTE, MARKER_VERSION)
-            set(targetKey, PersistentDataType.STRING, target.key)
-            set(furnitureKey, PersistentDataType.STRING, target.furnitureId)
+            set(targetKey, PersistentDataType.STRING, plan.targetKey)
+            set(furnitureKey, PersistentDataType.STRING, plan.furnitureId)
             set(segmentKey, PersistentDataType.INTEGER, segment.index)
         }
     }
 
+    fun matchesTarget(entity: Entity, targetKey: String, furnitureId: String, segment: Int): Boolean =
+        read(entity)?.let {
+            it.targetKey == targetKey && it.furnitureId == furnitureId && it.segment == segment
+        } == true
+
     private companion object {
-        val MARKER_VERSION: Byte = 1
+        val MARKER_VERSION: Byte = 2
+        val OWNED_MARKER_VERSIONS = setOf(1.toByte(), MARKER_VERSION)
+        const val NATIVE_ROOT_PREFIX = "native:"
         val FURNITURE_ID_PATTERN = Regex("[a-z0-9._-]+:[a-z0-9._/-]+")
     }
 }
 
-internal fun interface FurnitureGalleryNativeRootLookup {
-    fun matches(world: World, target: FurnitureGalleryTarget): Boolean
+internal fun interface FurnitureGalleryNativeRootResolver {
+    /** Returns an ID only when [entity] itself is the exact live IA furniture root. */
+    fun furnitureId(entity: Entity): String?
+}
+
+private object ItemsAdderFurnitureGalleryNativeRootResolver : FurnitureGalleryNativeRootResolver {
+    override fun furnitureId(entity: Entity): String? = runCatching {
+        val furniture = CustomFurniture.byAlreadySpawned(entity) ?: return null
+        if (furniture.entity?.uniqueId != entity.uniqueId) return null
+        furniture.namespacedID?.trim()?.takeIf(String::isNotEmpty)
+    }.getOrNull()
 }
 
 /**
- * Reconciles ephemeral click targets only in the authored gallery world. It
- * never loads chunks and never persists synthetic entities across restarts.
+ * Discovers exact ItemsAdder roots in already-loaded gallery chunks and owns
+ * transient Interaction boxes only for profile-backed IDs with a live ESG buy
+ * entry. Discovery is sliced; no task loads chunks or scans the ESG catalog.
  */
 internal class FurnitureGalleryInteractionRuntime(
     private val plugin: Plugin,
-    targets: List<FurnitureGalleryTarget>,
-    private val nativeRootLookup: FurnitureGalleryNativeRootLookup = ItemsAdderFurnitureGalleryRootLookup,
+    profiles: Map<String, FurnitureGalleryProfile>,
+    private val hasPurchaseOffer: (String) -> Boolean = { false },
+    private val rootResolver: FurnitureGalleryNativeRootResolver = ItemsAdderFurnitureGalleryNativeRootResolver,
 ) : Listener, AutoCloseable {
     private val tasks = LifecycleTaskScope()
     val markers = FurnitureGalleryTargetMarkers(plugin)
-    private val targetsByKey = targets.associateBy(FurnitureGalleryTarget::key)
-    private val targetList = targetsByKey.values.toList()
-    private val targetsByFurnitureId = targetList.groupBy(FurnitureGalleryTarget::furnitureId)
-    private val targetsByChunk = targetList
-        .flatMap { target -> target.dependencyChunks.map { chunk -> chunk to target } }
-        .groupBy({ it.first }, { it.second })
-        .mapValues { (_, values) -> values.distinctBy(FurnitureGalleryTarget::key) }
-    private val targetsByAnchorChunk = targetList.groupBy { it.anchorChunkX to it.anchorChunkZ }
-    private val retryRemaining = LinkedHashMap<String, Int>()
-    private val immediateReconcile = LinkedHashSet<String>()
-    private var retryScheduled = false
-    private var reconcileScheduled = false
+    private val profilesById = profiles.toMap()
+    private val roots = LinkedHashMap<UUID, RootState>()
+    private val pendingChunks = LinkedHashSet<Pair<Int, Int>>()
+    private val issueIds = LinkedHashSet<String>()
+    private var scannerScheduled = false
     private var closed = false
 
     init {
-        require(targets.size <= FURNITURE_GALLERY_MAX_TARGETS) {
-            "Furniture gallery target count exceeds $FURNITURE_GALLERY_MAX_TARGETS"
+        require(profiles.size <= FURNITURE_GALLERY_MAX_PROFILES) {
+            "Furniture gallery profile count exceeds $FURNITURE_GALLERY_MAX_PROFILES"
         }
-        require(targetsByKey.size == targets.size) { "Furniture gallery target keys must be unique" }
+        require(profiles.all { (id, profile) -> id == profile.furnitureId }) {
+            "Furniture gallery profile keys must match their exact furniture IDs"
+        }
     }
 
     fun start() {
         check(!closed) { "Furniture gallery interaction runtime is closed" }
         val token = tasks.restart()
         Bukkit.getWorld(FURNITURE_GALLERY_WORLD)?.let(::removeAllOwnedMarkers)
-        galleryWorld()?.let { world ->
-            targetList.forEach { target ->
-                if (target.touchesLoadedChunk(world)) enqueue(target)
-            }
-        }
-        scheduleImmediate(token)
-        if (targetList.isNotEmpty()) {
-            tasks.runTimer(token, RECONCILE_PERIOD_TICKS, RECONCILE_PERIOD_TICKS) {
-                val activeWorld = galleryWorld() ?: return@runTimer
-                targetList.asSequence()
-                    .filter { it.touchesLoadedChunk(activeWorld) }
-                    .forEach(::reconcileTarget)
-            }
+        roots.clear()
+        pendingChunks.clear()
+        galleryWorld()?.loadedChunks?.forEach { enqueueChunk(it.x, it.z) }
+        scheduleChunkScan(token)
+        tasks.runTimer(token, RECONCILE_PERIOD_TICKS, RECONCILE_PERIOD_TICKS) {
+            reconcileTrackedRoots()
+            galleryWorld()?.loadedChunks?.forEach { enqueueChunk(it.x, it.z) }
+            scheduleChunkScan(tasks.token())
         }
     }
 
-    fun targetForMarker(entity: Entity): FurnitureGalleryTarget? {
+    fun targetForMarker(entity: Entity): FurnitureGalleryHitboxPlan? {
         if (entity.world.name != FURNITURE_GALLERY_WORLD) return null
         val marker = markers.read(entity) ?: return null
-        val target = targetsByKey[marker.targetKey] ?: return null
-        if (target.furnitureId != marker.furnitureId || marker.segment !in target.segments.indices) return null
-        if (!entityMatchesSegment(entity, target, target.segments[marker.segment])) return null
-        val world = galleryWorld() ?: return null
-        if (!world.isChunkLoaded(target.anchorChunkX, target.anchorChunkZ)) return null
-        if (!nativeRootLookup.matches(world, target)) return null
-        return target
+        val rootId = marker.rootIdOrNull() ?: return null
+        val state = roots[rootId] ?: return null
+        val plan = state.plan
+        val segment = plan.segments.getOrNull(marker.segment) ?: return null
+        if (marker.targetKey != plan.targetKey || marker.furnitureId != plan.furnitureId) return null
+        if (!entityMatchesSegment(entity, plan, segment)) return null
+        if (!rootStillMatches(state)) return null
+        return plan
     }
 
-    fun targetForFurniture(furnitureId: String?, root: Entity?): FurnitureGalleryTarget? {
-        if (root == null || root.world.name != FURNITURE_GALLERY_WORLD) return null
-        val id = furnitureId?.takeIf(String::isNotBlank) ?: return null
-        val world = galleryWorld() ?: return null
-        return targetsByFurnitureId[id].orEmpty().firstOrNull { target ->
-            FurnitureGalleryTargetPlanner.matchesFurnitureRoot(target, id, root.location.toGalleryAnchor()) &&
-                world.isChunkLoaded(target.anchorChunkX, target.anchorChunkZ) &&
-                nativeRootLookup.matches(world, target)
-        }
+    /** Validates native IA clicks independently of profile availability. */
+    fun nativeFurnitureIdentity(furnitureId: String?, root: Entity?): String? {
+        if (root == null || root.world.name != FURNITURE_GALLERY_WORLD || !root.isValid) return null
+        val id = furnitureId?.trim()?.takeIf(String::isNotEmpty) ?: return null
+        if (rootResolver.furnitureId(root) != id) return null
+        return "native:${root.uniqueId}"
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.MONITOR)
+    fun onFurniturePlaced(event: FurniturePlaceSuccessEvent) {
+        if (closed) return
+        val furniture = runCatching { event.furniture }.getOrNull()
+        val entity = runCatching { furniture?.entity }.getOrNull()
+            ?: runCatching { event.bukkitEntity }.getOrNull()
+            ?: return
+        if (entity.world.name != FURNITURE_GALLERY_WORLD) return
+        tasks.runLater(1L) { enqueueChunk(entity.location.chunk.x, entity.location.chunk.z); scheduleChunkScan(tasks.token()) }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun onFurnitureBroken(event: FurnitureBreakEvent) {
+        if (closed || event.isCancelled) return
+        val furniture = runCatching { event.furniture }.getOrNull()
+        val entity = runCatching { furniture?.entity }.getOrNull()
+            ?: runCatching { event.bukkitEntity }.getOrNull()
+            ?: return
+        if (entity.world.name == FURNITURE_GALLERY_WORLD) removeRoot(entity.uniqueId)
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun onChunkLoad(event: ChunkLoadEvent) {
         if (event.world.name != FURNITURE_GALLERY_WORLD || closed) return
-        val affected = targetsByChunk[event.chunk.x to event.chunk.z].orEmpty()
-        affected.forEach(::enqueue)
-        scheduleImmediate(tasks.token())
+        enqueueChunk(event.chunk.x, event.chunk.z)
+        scheduleChunkScan(tasks.token())
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun onChunkUnload(event: ChunkUnloadEvent) {
         if (event.world.name != FURNITURE_GALLERY_WORLD || closed) return
-        targetsByAnchorChunk[event.chunk.x to event.chunk.z].orEmpty().asSequence()
-            .forEach { target ->
-                retryRemaining.remove(target.key)
-                immediateReconcile.remove(target.key)
-                removeTargetMarkers(target)
-            }
+        roots.values.asSequence()
+            .filter { it.plan.rootChunkX == event.chunk.x && it.plan.rootChunkZ == event.chunk.z }
+            .map { it.plan.rootId }
+            .toList()
+            .forEach(::removeRoot)
+        pendingChunks.remove(event.chunk.x to event.chunk.z)
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.MONITOR)
     fun onWorldLoad(event: WorldLoadEvent) {
         if (event.world.name != FURNITURE_GALLERY_WORLD || closed) return
-        targetList.forEach(::enqueue)
-        scheduleImmediate(tasks.token())
+        tasks.runLater(1L) {
+            event.world.loadedChunks.forEach { enqueueChunk(it.x, it.z) }
+            scheduleChunkScan(tasks.token())
+        }
     }
 
     override fun close() {
         if (closed) return
         closed = true
         tasks.close()
-        retryRemaining.clear()
-        immediateReconcile.clear()
-        retryScheduled = false
-        reconcileScheduled = false
+        pendingChunks.clear()
+        scannerScheduled = false
         Bukkit.getWorld(FURNITURE_GALLERY_WORLD)?.let(::removeAllOwnedMarkers)
+        roots.clear()
     }
 
-    private fun enqueue(target: FurnitureGalleryTarget) {
-        if (closed) return
-        retryRemaining[target.key] = RETRY_ATTEMPTS
-        immediateReconcile += target.key
+    private fun enqueueChunk(chunkX: Int, chunkZ: Int) {
+        if (!closed) pendingChunks += chunkX to chunkZ
     }
 
-    private fun scheduleImmediate(token: LifecycleTaskScope.Token) {
-        if (reconcileScheduled || immediateReconcile.isEmpty()) return
-        reconcileScheduled = true
+    private fun scheduleChunkScan(token: LifecycleTaskScope.Token) {
+        if (closed || scannerScheduled || pendingChunks.isEmpty()) return
+        scannerScheduled = true
         tasks.runLater(token, 1L) {
-            reconcileScheduled = false
-            val keys = immediateReconcile.toList()
-            immediateReconcile.clear()
-            keys.forEach { key ->
-                val target = targetsByKey[key] ?: return@forEach
-                when (reconcileTarget(target)) {
-                    TargetState.READY, TargetState.WAITING_FOR_CHUNK -> retryRemaining.remove(key)
-                    TargetState.WAITING_FOR_ROOT -> Unit
+            scannerScheduled = false
+            val world = galleryWorld()
+            if (world != null) {
+                repeat(CHUNKS_PER_SCAN_TICK) {
+                    val key = pendingChunks.firstOrNull() ?: return@repeat
+                    pendingChunks.remove(key)
+                    if (world.isChunkLoaded(key.first, key.second)) scanChunk(world, key.first, key.second)
                 }
+            } else {
+                pendingChunks.clear()
             }
-            scheduleRetry(tasks.token())
+            scheduleChunkScan(tasks.token())
         }
     }
 
-    private fun scheduleRetry(token: LifecycleTaskScope.Token) {
-        if (retryScheduled || retryRemaining.isEmpty()) return
-        retryScheduled = true
-        tasks.runLater(token, RETRY_PERIOD_TICKS) {
-            retryScheduled = false
-            val keys = retryRemaining.keys.toList()
-            keys.forEach { key ->
-                val target = targetsByKey[key] ?: run {
-                    retryRemaining.remove(key)
-                    return@forEach
-                }
-                when (reconcileTarget(target)) {
-                    TargetState.READY, TargetState.WAITING_FOR_CHUNK -> retryRemaining.remove(key)
-                    TargetState.WAITING_FOR_ROOT -> {
-                        val left = (retryRemaining[key] ?: 0) - 1
-                        if (left <= 0) retryRemaining.remove(key) else retryRemaining[key] = left
-                    }
-                }
+    private fun scanChunk(world: World, chunkX: Int, chunkZ: Int) {
+        if (world.name != FURNITURE_GALLERY_WORLD || !world.isChunkLoaded(chunkX, chunkZ)) return
+        val found = HashSet<UUID>()
+        val chunk = world.getChunkAt(chunkX, chunkZ)
+        chunk.entities.forEach { entity ->
+            if (markers.isOwned(entity)) return@forEach
+            if (entity !is ItemDisplay && entity !is ArmorStand) return@forEach
+            val id = runCatching { rootResolver.furnitureId(entity) }.getOrNull() ?: return@forEach
+            val profile = profilesById[id] ?: return@forEach
+            if (!runCatching { hasPurchaseOffer(id) }.getOrDefault(false)) return@forEach
+            found += entity.uniqueId
+            trackRoot(entity, profile)
+        }
+        roots.values.asSequence()
+            .filter { it.plan.rootChunkX == chunkX && it.plan.rootChunkZ == chunkZ && it.plan.rootId !in found }
+            .map { it.plan.rootId }
+            .toList()
+            .forEach(::removeRoot)
+    }
+
+    private fun trackRoot(entity: Entity, profile: FurnitureGalleryProfile) {
+        if (entity.world.name != FURNITURE_GALLERY_WORLD || !entity.isValid) return
+        val id = profile.furnitureId
+        if (rootResolver.furnitureId(entity) != id || !runCatching { hasPurchaseOffer(id) }.getOrDefault(false)) return
+        val anchor = entity.location.toGalleryAnchor()
+        val current = roots[entity.uniqueId]
+        if (current != null && current.profile === profile && current.plan.anchor == anchor) {
+            current.root = entity
+            reconcileMarkers(current)
+            return
+        }
+        val plan = runCatching { FurnitureGalleryTargetPlanner.plan(profile, entity.uniqueId, entity.location.toGalleryAnchor()) }
+            .getOrElse {
+                logIssue(id, "profile geometry is invalid")
+                removeRoot(entity.uniqueId)
+                return
             }
-            scheduleRetry(tasks.token())
+        if (current != null) removeRoot(entity.uniqueId)
+        if (roots.size >= FURNITURE_GALLERY_MAX_ROOTS) {
+            logIssue("<capacity>", "active profiled furniture roots exceed $FURNITURE_GALLERY_MAX_ROOTS")
+            return
+        }
+        val state = RootState(entity, profile, plan)
+        roots[entity.uniqueId] = state
+        reconcileMarkers(state)
+    }
+
+    private fun reconcileTrackedRoots() {
+        roots.values.toList().forEach { state ->
+            if (!rootStillMatches(state)) {
+                val entity = state.root
+                val currentId = if (entity.isValid && entity.world.name == FURNITURE_GALLERY_WORLD) {
+                    runCatching { rootResolver.furnitureId(entity) }.getOrNull()
+                } else null
+                removeRoot(state.plan.rootId)
+                if (currentId != null) profilesById[currentId]?.let { trackRoot(entity, it) }
+            } else {
+                trackRoot(state.root, profilesById.getValue(state.plan.furnitureId))
+            }
         }
     }
 
-    private fun reconcileTarget(target: FurnitureGalleryTarget): TargetState {
-        val world = galleryWorld() ?: return TargetState.WAITING_FOR_CHUNK
-        if (!world.isChunkLoaded(target.anchorChunkX, target.anchorChunkZ)) {
-            removeTargetMarkers(target)
-            return TargetState.WAITING_FOR_CHUNK
-        }
-        if (!nativeRootLookup.matches(world, target)) {
-            removeTargetMarkers(target)
-            return TargetState.WAITING_FOR_ROOT
-        }
+    private fun rootStillMatches(state: RootState): Boolean {
+        val root = state.root
+        return root.isValid && root.world.name == FURNITURE_GALLERY_WORLD &&
+            root.uniqueId == state.plan.rootId &&
+            root.location.toGalleryAnchor() == state.plan.anchor &&
+            runCatching { rootResolver.furnitureId(root) == state.plan.furnitureId }.getOrDefault(false) &&
+            runCatching { hasPurchaseOffer(state.plan.furnitureId) }.getOrDefault(false)
+    }
 
-        val loadedChunkKeys = target.segments.asSequence()
-            .map { it.chunkX to it.chunkZ }
-            .distinct()
-            .filter { (x, z) -> world.isChunkLoaded(x, z) }
-            .toSet()
+    private fun reconcileMarkers(state: RootState) {
+        val world = galleryWorld() ?: return
+        val plan = state.plan
+        if (!world.isChunkLoaded(plan.rootChunkX, plan.rootChunkZ) || !rootStillMatches(state)) {
+            removeRoot(state.plan.rootId)
+            return
+        }
+        val loadedChunks = plan.dependencyChunks.filterTo(HashSet()) { (x, z) -> world.isChunkLoaded(x, z) }
         val desired = FurnitureGalleryTargetPlanner.desiredSegments(
-            target,
-            anchorChunkLoaded = true,
-            exactRootLoaded = true,
-            loadedChunks = loadedChunkKeys,
+            plan,
+            rootChunkLoaded = true,
+            loadedChunks = loadedChunks,
         )
-        val existing = loadedSegments(world, target)
-        val desiredIndexes = desired.mapTo(HashSet(), FurnitureGallerySegment::index)
-        existing.filter { it.index !in desiredIndexes }.forEach { it.entity.remove() }
-        existing.groupBy(ExistingSegment::index).values.forEach { duplicates ->
-            duplicates.drop(1).forEach { it.entity.remove() }
-        }
-        val existingIndexes = existing.asSequence()
-            .filter { it.index in desiredIndexes }
-            .map { it.index }
-            .toSet()
-        desired.filterNot { it.index in existingIndexes }.forEach { segment -> spawnMarker(world, target, segment) }
-        return TargetState.READY
-    }
+        val desiredByIndex = desired.associateBy(FurnitureGallerySegment::index)
+        val desiredIndexes = desiredByIndex.keys
 
-    private fun loadedSegments(world: World, target: FurnitureGalleryTarget): List<ExistingSegment> =
-        target.segments.asSequence()
-            .map { it.chunkX to it.chunkZ }
-            .distinct()
-            .filter { (x, z) -> world.isChunkLoaded(x, z) }
-            .flatMap { (x, z) -> world.getChunkAt(x, z).entities.asSequence() }
+        state.markers.toMap().forEach { (index, uuid) ->
+            val entity = Bukkit.getEntity(uuid)
+            val segment = desiredByIndex[index]
+            if (entity == null || segment == null || !entityMatchesSegment(entity, plan, segment)) {
+                removeOwnedMarker(uuid, plan)
+                state.markers.remove(index)
+            }
+        }
+
+        val loadedExisting = desired.flatMap { segment ->
+            segment.touchedChunks.asSequence()
+                .filter { (x, z) -> world.isChunkLoaded(x, z) }
+                .flatMap { (x, z) -> world.getChunkAt(x, z).entities.asSequence() }
+        }.distinctBy(Entity::getUniqueId)
             .mapNotNull { entity ->
                 val marker = markers.read(entity) ?: return@mapNotNull null
-                if (marker.targetKey != target.key) return@mapNotNull null
-                val segment = target.segments.getOrNull(marker.segment)
-                    ?: return@mapNotNull ExistingSegment(marker.segment, entity)
-                if (!entityMatchesSegment(entity, target, segment)) {
+                if (marker.targetKey != plan.targetKey || marker.furnitureId != plan.furnitureId) return@mapNotNull null
+                val segment = desiredByIndex[marker.segment] ?: return@mapNotNull null
+                if (!entityMatchesSegment(entity, plan, segment)) {
                     entity.remove()
                     return@mapNotNull null
                 }
-                ExistingSegment(marker.segment, entity)
+                marker.segment to entity
             }
-            .toList()
-
-    private fun spawnMarker(world: World, target: FurnitureGalleryTarget, segment: FurnitureGallerySegment) {
-        val location = Location(world, segment.x, segment.y, segment.z)
-        val interaction = world.spawn(location, Interaction::class.java)
-        interaction.interactionWidth = segment.width.toFloat()
-        interaction.interactionHeight = segment.height.toFloat()
-        interaction.isResponsive = true
-        interaction.isPersistent = false
-        interaction.isInvulnerable = true
-        interaction.setGravity(false)
-        markers.write(interaction, target, segment)
+        val duplicates = loadedExisting.groupBy({ it.first }, { it.second })
+        duplicates.forEach { (index, entities) ->
+            val keep = state.markers[index]?.let(Bukkit::getEntity)?.takeIf { candidate -> entities.any { it.uniqueId == candidate.uniqueId } }
+                ?: entities.first()
+            state.markers[index] = keep.uniqueId
+            entities.filter { it.uniqueId != keep.uniqueId }.forEach(Entity::remove)
+        }
+        val existingIndexes = duplicates.keys
+        desired.filterNot { it.index in existingIndexes || it.index in state.markers }.forEach { segment ->
+            spawnMarker(world, state, segment)
+        }
+        state.markers.keys.filterNot(desiredIndexes::contains).toList().forEach { state.markers.remove(it) }
     }
 
-    private fun removeTargetMarkers(target: FurnitureGalleryTarget) {
-        val world = galleryWorld() ?: return
-        target.segments.asSequence()
-            .map { it.chunkX to it.chunkZ }
-            .distinct()
-            .filter { (x, z) -> world.isChunkLoaded(x, z) }
-            .flatMap { (x, z) -> world.getChunkAt(x, z).entities.asSequence() }
-            .filter { markers.read(it)?.targetKey == target.key }
-            .forEach(Entity::remove)
+    private fun spawnMarker(world: World, state: RootState, segment: FurnitureGallerySegment) {
+        val plan = state.plan
+        val interaction = runCatching {
+            world.spawn(Location(world, segment.x, segment.y, segment.z), Interaction::class.java).apply {
+                interactionWidth = segment.width.toFloat()
+                interactionHeight = segment.height.toFloat()
+                isResponsive = true
+                isPersistent = false
+                isInvulnerable = true
+                setGravity(false)
+                markers.write(this, plan, segment)
+            }
+        }.getOrElse {
+            logIssue(plan.furnitureId, "could not create a profiled click target")
+            return
+        }
+        state.markers[segment.index] = interaction.uniqueId
+    }
+
+    private fun removeRoot(rootId: UUID) {
+        val state = roots.remove(rootId) ?: return
+        state.markers.values.toList().forEach { markerId -> removeOwnedMarker(markerId, state.plan) }
+    }
+
+    private fun removeOwnedMarker(markerId: UUID, plan: FurnitureGalleryHitboxPlan) {
+        val entity = Bukkit.getEntity(markerId) ?: return
+        val marker = markers.read(entity) ?: return
+        if (marker.targetKey == plan.targetKey && marker.furnitureId == plan.furnitureId) entity.remove()
     }
 
     private fun removeAllOwnedMarkers(world: World) {
@@ -310,12 +399,14 @@ internal class FurnitureGalleryInteractionRuntime(
         }
     }
 
-    private fun entityMatchesSegment(entity: Entity, target: FurnitureGalleryTarget, segment: FurnitureGallerySegment): Boolean {
+    private fun entityMatchesSegment(
+        entity: Entity,
+        plan: FurnitureGalleryHitboxPlan,
+        segment: FurnitureGallerySegment,
+    ): Boolean {
         val interaction = entity as? Interaction ?: return false
         return entity.world.name == FURNITURE_GALLERY_WORLD &&
-            markers.read(entity)?.let {
-                it.targetKey == target.key && it.furnitureId == target.furnitureId && it.segment == segment.index
-            } == true &&
+            markers.matchesTarget(entity, plan.targetKey, plan.furnitureId, segment.index) &&
             kotlin.math.abs(entity.location.x - segment.x) <= MARKER_LOCATION_TOLERANCE &&
             kotlin.math.abs(entity.location.y - segment.y) <= MARKER_LOCATION_TOLERANCE &&
             kotlin.math.abs(entity.location.z - segment.z) <= MARKER_LOCATION_TOLERANCE &&
@@ -324,67 +415,58 @@ internal class FurnitureGalleryInteractionRuntime(
             interaction.isResponsive
     }
 
-    private fun FurnitureGalleryTarget.touchesLoadedChunk(world: World): Boolean =
-        dependencyChunks.any { (x, z) -> world.isChunkLoaded(x, z) }
+    private fun logIssue(id: String, detail: String) {
+        val key = id.take(256)
+        if (!issueIds.add(key)) return
+        if (issueIds.size > MAX_LOGGED_ISSUES) issueIds.remove(issueIds.first())
+        plugin.logger.warning("Furniture gallery $detail for $key; synthetic targets fail closed")
+    }
 
     private fun galleryWorld(): World? = Bukkit.getWorld(FURNITURE_GALLERY_WORLD)
 
     private fun Location.toGalleryAnchor() = FurnitureGalleryAnchor(x, y, z, yaw.toDouble())
 
-    private enum class TargetState { READY, WAITING_FOR_CHUNK, WAITING_FOR_ROOT }
-
-    private data class ExistingSegment(val index: Int, val entity: Entity)
+    private class RootState(
+        var root: Entity,
+        val profile: FurnitureGalleryProfile,
+        val plan: FurnitureGalleryHitboxPlan,
+        val markers: MutableMap<Int, UUID> = LinkedHashMap(),
+    )
 
     private companion object {
-        const val RETRY_ATTEMPTS = 5
-        const val RETRY_PERIOD_TICKS = 20L
+        const val CHUNKS_PER_SCAN_TICK = 8
         const val RECONCILE_PERIOD_TICKS = 100L
         const val MARKER_LOCATION_TOLERANCE = 0.01
         const val MARKER_SIZE_TOLERANCE = 0.01f
+        const val MAX_LOGGED_ISSUES = 64
     }
 }
 
-internal fun loadFurnitureGalleryTargets(dataPath: java.nio.file.Path): List<FurnitureGalleryTarget>? = try {
+internal fun loadFurnitureGalleryTargets(dataPath: Path): Map<String, FurnitureGalleryProfile>? = try {
     val config = ConfigManager.ofModule(dataPath, FURNITURE_GALLERY_TARGET_RESOURCE)
     config.mergeMissingFromBundled("modules/$FURNITURE_GALLERY_TARGET_RESOURCE")
     var invalidCount = 0
-    val invalidKeys = mutableListOf<String>()
-    val parsed = FurnitureGalleryTargetConfig(config).snapshot { key ->
+    val invalidIds = mutableListOf<String>()
+    val parsed = FurnitureGalleryTargetConfig(config).snapshot { id ->
         invalidCount++
-        if (invalidKeys.size < MAX_INVALID_TARGET_EXAMPLES) {
-            invalidKeys += key.filterNot(Char::isISOControl).take(80)
+        if (invalidIds.size < MAX_INVALID_PROFILE_EXAMPLES) {
+            invalidIds += id.filterNot(Char::isISOControl).take(100)
         }
     }
     if (invalidCount > 0) {
         ARC.instance.logger.warning(
-            "Furniture gallery skipped $invalidCount invalid target(s); examples=${invalidKeys.joinToString(",")}",
+            "Furniture gallery skipped $invalidCount invalid profile(s); examples=${invalidIds.joinToString(",")}",
         )
     }
     parsed
 } catch (failure: Exception) {
-    warn("Furniture gallery configuration is invalid; click targets remain disabled", failure)
+    warn("Furniture gallery profile configuration is invalid; synthetic click targets remain disabled", failure)
     null
 }
 
-private const val MAX_INVALID_TARGET_EXAMPLES = 5
+private const val MAX_INVALID_PROFILE_EXAMPLES = 5
 
-private object ItemsAdderFurnitureGalleryRootLookup : FurnitureGalleryNativeRootLookup {
-    override fun matches(world: World, target: FurnitureGalleryTarget): Boolean {
-        if (!world.isChunkLoaded(target.anchorChunkX, target.anchorChunkZ)) return false
-        return world.getChunkAt(target.anchorChunkX, target.anchorChunkZ).entities.asSequence()
-            .filterIsInstance<ItemDisplay>()
-            .filter { entity ->
-                FurnitureGalleryTargetPlanner.matchesAnchor(target.anchor, entity.location.toGalleryAnchor())
-            }
-            .any { entity ->
-                val furniture = runCatching { CustomFurniture.byAlreadySpawned(entity) }.getOrNull() ?: return@any false
-                FurnitureGalleryTargetPlanner.matchesFurnitureRoot(
-                    target,
-                    furniture.namespacedID,
-                    entity.location.toGalleryAnchor(),
-                ) && furniture.entity?.uniqueId == entity.uniqueId
-            }
-    }
-}
-
-private fun Location.toGalleryAnchor() = FurnitureGalleryAnchor(x, y, z, yaw.toDouble())
+private fun FurnitureGalleryMarker.rootIdOrNull(): UUID? =
+    targetKey.takeIf { it.startsWith("native:") }
+        ?.removePrefix("native:")
+        ?.let { runCatching { UUID.fromString(it) }.getOrNull() }

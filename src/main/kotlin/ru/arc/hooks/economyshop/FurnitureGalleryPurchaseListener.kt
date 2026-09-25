@@ -22,7 +22,7 @@ import java.util.UUID
 
 internal const val FURNITURE_GALLERY_WORLD = "rc_atelier_furniture_gallery"
 
-/** Routes only current catalog furniture clicks in the one authored gallery world. */
+/** Routes exact current catalog furniture clicks in the gallery, with or without a geometry profile. */
 internal class FurnitureGalleryPurchaseListener(
     private val purchases: ShopPurchaseService,
     private val gallery: FurnitureGalleryInteractionRuntime,
@@ -45,18 +45,20 @@ internal class FurnitureGalleryPurchaseListener(
             handleFurnitureClick(
                 player = event.player,
                 furnitureId = target.furnitureId,
-                targetIdentity = target.key,
+                targetIdentity = target.targetKey,
                 tick = Bukkit.getCurrentTick(),
                 cancel = { event.isCancelled = true },
             )
             return
         }
         val furniture = furniture(event.rightClicked) ?: return
-        val target = gallery.targetForFurniture(furniture.namespacedID, furniture.entity ?: event.rightClicked) ?: return
+        val id = furniture.namespacedID
+        val root = furniture.entity ?: event.rightClicked
+        val targetIdentity = gallery.nativeFurnitureIdentity(id, root) ?: return
         handleFurnitureClick(
             player = event.player,
-            furnitureId = target.furnitureId,
-            targetIdentity = target.key,
+            furnitureId = id,
+            targetIdentity = targetIdentity,
             tick = Bukkit.getCurrentTick(),
             cancel = { event.isCancelled = true },
         )
@@ -75,18 +77,20 @@ internal class FurnitureGalleryPurchaseListener(
             handleFurnitureClick(
                 player = event.player,
                 furnitureId = target.furnitureId,
-                targetIdentity = target.key,
+                targetIdentity = target.targetKey,
                 tick = Bukkit.getCurrentTick(),
                 cancel = { event.isCancelled = true },
             )
             return
         }
         val furniture = furniture(event.rightClicked) ?: return
-        val target = gallery.targetForFurniture(furniture.namespacedID, furniture.entity ?: event.rightClicked) ?: return
+        val id = furniture.namespacedID
+        val root = furniture.entity ?: event.rightClicked
+        val targetIdentity = gallery.nativeFurnitureIdentity(id, root) ?: return
         handleFurnitureClick(
             player = event.player,
-            furnitureId = target.furnitureId,
-            targetIdentity = target.key,
+            furnitureId = id,
+            targetIdentity = targetIdentity,
             tick = Bukkit.getCurrentTick(),
             cancel = { event.isCancelled = true },
         )
@@ -103,36 +107,36 @@ internal class FurnitureGalleryPurchaseListener(
         ) return
 
         val furniture = furniture(block) ?: return
-        val target = gallery.targetForFurniture(furniture.namespacedID, furniture.entity) ?: return
+        val id = furniture.namespacedID
+        val targetIdentity = gallery.nativeFurnitureIdentity(id, furniture.entity) ?: return
         handleFurnitureClick(
             player = event.player,
-            furnitureId = target.furnitureId,
-            targetIdentity = target.key,
+            furnitureId = id,
+            targetIdentity = targetIdentity,
             tick = Bukkit.getCurrentTick(),
             cancel = { event.isCancelled = true },
         )
     }
 
     /**
-     * ItemsAdder 4.0.18 fires this cancellable event before running the furniture
-     * interaction callback that can mount, rotate, or remove the displayed piece.
-     * Its Bukkit interaction listener runs at MONITOR, so cancelling this nested
-     * event at HIGHEST is the last safe read-side interception point.
+     * ItemsAdder fires this cancellable event before its seating/removal callback.
+     * This native route deliberately does not require a geometry profile, so a
+     * listed ID remains purchasable even when its model cannot get a precise box.
      */
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onItemsAdderFurnitureInteract(event: FurnitureInteractEvent) {
         val furniture = runCatching { event.furniture }.getOrNull() ?: return
         if (event.player.world.name != FURNITURE_GALLERY_WORLD) return
-        val entity = runCatching { furniture.entity }.getOrNull()
-            ?: runCatching { event.bukkitEntity }.getOrNull()
-        val target = gallery.targetForFurniture(
-            runCatching { furniture.namespacedID }.getOrNull(),
-            entity,
-        ) ?: return
+        val entity = exactItemsAdderFurnitureRoot(
+            furnitureRoot = runCatching { furniture.entity }.getOrNull(),
+            eventEntity = runCatching { event.bukkitEntity }.getOrNull(),
+        )
+        val id = runCatching { furniture.namespacedID }.getOrNull()
+        val targetIdentity = gallery.nativeFurnitureIdentity(id, entity) ?: return
         handleFurnitureClick(
             player = event.player,
-            furnitureId = target.furnitureId,
-            targetIdentity = target.key,
+            furnitureId = id,
+            targetIdentity = targetIdentity,
             tick = Bukkit.getCurrentTick(),
             cancel = { event.isCancelled = true },
         )
@@ -146,15 +150,12 @@ internal class FurnitureGalleryPurchaseListener(
         cancel: () -> Unit,
     ) {
         val id = furnitureId?.trim()?.takeIf(String::isNotEmpty) ?: return
-        // Only configured gallery targets reach this method. Keep ItemsAdder's
-        // native seating/removal callback blocked even when ESG has no current offer.
+        if (!purchases.hasFurniturePurchaseMenu(id)) return
+        // Only an exact current ESG furniture entry reaches this route. The
+        // ItemsAdder callback is cancelled before it can seat/remove the root.
         cancel()
         val key = FurnitureGalleryClickKey(player.uniqueId, id.lowercase(Locale.ROOT), targetIdentity)
         if (!deduplicator.first(key, tick)) return
-        if (!purchases.hasFurniturePurchaseMenu(id)) {
-            logUnavailable(id)
-            return
-        }
 
         when (purchases.openFurniturePurchaseMenu(player, id)) {
             FurnitureShopMenuOpenResult.OPENED,
@@ -190,6 +191,10 @@ internal class FurnitureGalleryPurchaseListener(
         const val MAX_LOGGED_ITEMS = 64
     }
 }
+
+/** Prefer the API's exact furniture root over an event entity which may be a hitbox child. */
+internal fun exactItemsAdderFurnitureRoot(furnitureRoot: Entity?, eventEntity: Entity?): Entity? =
+    furnitureRoot ?: eventEntity
 
 internal object FurnitureGalleryInteractionPolicy {
     fun accepts(worldName: String, rightClick: Boolean, mainHand: Boolean): Boolean =

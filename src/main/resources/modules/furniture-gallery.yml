@@ -1,3 +1,4 @@
-# Exact authored IA furniture anchors and world-space AABBs for the showroom.
-# Production targets are environment-owned. Empty by default outside that map.
-targets: {}
+# Local model vertices for furniture sold by the current EconomyShopGUI catalog.
+# Runtime hitboxes are attached only to exact IA roots currently placed in the gallery.
+# Environment-owned profiles may be installed beside this empty portable default.
+profiles: {}
