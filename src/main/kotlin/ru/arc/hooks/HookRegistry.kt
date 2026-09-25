@@ -4,6 +4,9 @@ import org.bukkit.Bukkit
 import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
 import ru.arc.ARC
+import ru.arc.chat.ChatModeConfig
+import ru.arc.chat.ItemsAdderChatGuard
+import ru.arc.chat.ChatGlyphProtection
 import ru.arc.hooks.auraskills.AuraSkillsHook
 import ru.arc.hooks.bank.BankHook
 import ru.arc.hooks.betterstructures.BSListener
@@ -62,6 +65,8 @@ class HookRegistry(
         private set
     var seasonTrophyProtectionListener: SeasonTrophyProtectionListener? = null
 
+    private var chatGlyphProtection: ChatGlyphProtection? = null
+
     private val registeredHooks = HashSet<String>()
     private val registeredListeners = LinkedHashSet<Listener>()
 
@@ -78,6 +83,8 @@ class HookRegistry(
         @JvmField var cmiHook: CMIHook? = null
 
         @JvmField var itemsAdderHook: ItemsAdderHook? = null
+
+        internal var chatGlyphGuard: ItemsAdderChatGuard? = null
 
         @JvmField var citizensHook: CitizensHook? = null
 
@@ -125,6 +132,7 @@ class HookRegistry(
             papiHook = null
             cmiHook = null
             itemsAdderHook = null
+            chatGlyphGuard = null
             citizensHook = null
             viaVersionHook = null
             wgHook = null
@@ -170,6 +178,8 @@ class HookRegistry(
         dungeonQol = null
         cleanup(failures) { auctionHook?.close() }
         cleanup(failures) { citizensHook?.close() }
+        cleanup(failures) { chatGlyphProtection?.close() }
+        chatGlyphProtection = null
         cleanup(failures) { papiHook?.clearPlaceholderCache() }
         cleanup(failures) { papiHook?.unregister() }
         if (jobsEnabled) {
@@ -402,6 +412,15 @@ class HookRegistry(
     }
 
     private fun registerVanillaEvents() {
+        if (chatGlyphProtection == null) {
+            val protection = ChatGlyphProtection(
+                ARC.instance, ARC.serverName ?: "unknown", ARC.redisManager,
+                ChatModeConfig.load(ARC.instance.dataPath),
+            )
+            chatGlyphProtection = protection
+            chatGlyphGuard = registerListener(protection.guard)
+            protection.start()
+        }
         if (chatListener == null) {
             chatListener = registerListener(ChatListener())
         }

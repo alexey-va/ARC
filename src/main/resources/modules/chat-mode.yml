@@ -3,3 +3,10 @@ message-color-variation:
   enabled: true
   # Deterministic hue shift range. Runtime values are clamped to 0..30 degrees.
   hue-amplitude-degrees: 12.0
+
+# ItemsAdder permissions also apply to pasted Unicode and player-command arguments.
+glyph-protection:
+  messages:
+    unauthorized: '<red>Этот символ недоступен вашему рангу.'
+    technical: '<red>Служебные символы интерфейса нельзя отправлять в чат.'
+    unavailable: '<red>Список символов ещё загружается. Повторите сообщение через несколько секунд.'

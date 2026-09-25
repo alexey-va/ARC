@@ -13,6 +13,7 @@ import org.bukkit.entity.Player
 import ru.arc.ARC
 import ru.arc.TitleInput
 import ru.arc.ai.GPTManager
+import ru.arc.hooks.HookRegistry
 import ru.arc.chat.ChatMessageColorVariation
 import ru.arc.chat.ChatMessageColorizer
 import ru.arc.chat.ChatMode
@@ -29,6 +30,7 @@ class ChatListener internal constructor(
     private val modeProvider: (UUID) -> ChatMode,
     private val titleInputProvider: (Player) -> Boolean,
     private val messageColorVariationProvider: () -> ChatMessageColorVariation,
+    private val rejectGlyphs: (AsyncChatEvent) -> Boolean = { false },
 ) : Listener {
     private val pendingChannels = ConcurrentHashMap<UUID, ChatMode>()
 
@@ -75,7 +77,8 @@ class ChatListener internal constructor(
 
     constructor() : this({ message, player ->
         GPTManager.processMessage(message, player, appendCancel = true)
-    }, ChatModeService::getMode, TitleInput::hasInput, productionVariationProvider())
+    }, ChatModeService::getMode, TitleInput::hasInput, productionVariationProvider(),
+        { event -> HookRegistry.chatGlyphGuard?.rejectChat(event) ?: event.isCancelled })
 
     @EventHandler(priority = EventPriority.LOWEST)
     fun onChatDecorate(event: AsyncChatDecorateEvent) {
@@ -92,6 +95,7 @@ class ChatListener internal constructor(
 
     @EventHandler(priority = EventPriority.LOWEST)
     fun onPlayerChat(event: AsyncChatEvent) {
+        if (rejectGlyphs(event)) return
         if (processTitleInput(event)) return
         val message = TextUtils.plain(event.message())
         val player = event.player

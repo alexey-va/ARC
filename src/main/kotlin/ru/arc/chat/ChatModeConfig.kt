@@ -29,6 +29,13 @@ open class ChatModeConfig(
                         ?: DEFAULT_HUE_AMPLITUDE_DEGREES,
             )
 
+    open val glyphUnauthorizedMessage: String
+        get() = config.string("glyph-protection.messages.unauthorized", "<red>Этот символ недоступен вашему рангу.")
+    open val glyphTechnicalMessage: String
+        get() = config.string("glyph-protection.messages.technical", "<red>Служебные символы интерфейса нельзя отправлять в чат.")
+    open val glyphRegistryUnavailableMessage: String
+        get() = config.string("glyph-protection.messages.unavailable", "<red>Список символов ещё загружается. Повторите сообщение через несколько секунд.")
+
     companion object {
         const val DEFAULT_HUE_AMPLITUDE_DEGREES = 12.0
         const val MAX_HUE_AMPLITUDE_DEGREES = 30.0
