@@ -182,8 +182,9 @@ internal class ItemLoreEditor(
         session.stage = Stage.EDITING
         session.values = values
         val price = formatPrice(settings.pricePerCharacterMinor)
-        val body = mutableListOf(PaperDialogBody(text(settings, "editor-body", "price" to price), WIDTH))
-        body += PaperDialogBody(text(settings, "editor-colors"), WIDTH)
+        val body = ItemLorePreview.editorHelp(text(settings, "editor-body", "price" to price)) {
+            text(settings, it)
+        }.toMutableList()
         if (values.size == ItemLorePolicy.MAX_ROWS) body += PaperDialogBody(text(settings, "row-limit"), WIDTH)
         problem?.let { body += PaperDialogBody(text(settings, it), WIDTH) }
         val buttons = buildList {
@@ -283,13 +284,11 @@ internal class ItemLoreEditor(
         if (!isNearSource(player, session, settings)) return invalidateWithMessage(player, session, "too-far")
         session.stage = Stage.PREVIEW
         val item = replacement(session, draft)
-        val before = ItemLorePolicy.originalRows(session.originalItem.itemMeta?.lore())
         val after = ItemLorePolicy.originalRows(draft.lore)
         val body = buildList {
             add(PaperDialogBody(itemHover(item), WIDTH))
-            add(ItemLorePreview.table(before, after) { text(settings, it) })
+            add(ItemLorePreview.framed(after) { text(settings, it) })
             add(PaperDialogBody(text(settings, "preview-body", "price" to formatPrice(session.quotedPriceMinor)), WIDTH))
-            if (draft.visibleRows.isEmpty()) add(PaperDialogBody(text(settings, "preview-empty"), WIDTH))
         }
         ArcMenus.openDialog(
             player,

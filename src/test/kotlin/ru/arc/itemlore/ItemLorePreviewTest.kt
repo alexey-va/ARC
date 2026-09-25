@@ -3,6 +3,10 @@ package ru.arc.itemlore
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
+import net.kyori.adventure.text.minimessage.MiniMessage
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
+import org.bukkit.configuration.file.YamlConfiguration
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.TextComponent
 import net.kyori.adventure.text.format.Style
@@ -30,60 +34,72 @@ class ItemLorePreviewTest : FreeSpec({
         return runs
     }
 
-    val labels = mapOf(
-        "preview-before" to "Было",
-        "preview-after" to "Станет",
-        "preview-blank-row" to "(пустая строка)",
-        "preview-missing-row" to "—",
-    )
-    val text: (String) -> Component = { key -> Component.text(labels.getValue(key)) }
-
-    "new lore renders in the framed table under the requested headers" {
-        val table = ItemLorePreview.table(
-            before = emptyList(),
-            after = listOf(Component.text("Добавлено", NamedTextColor.WHITE)),
-            text = text,
-        )
-        val rendered = plain.serialize(table.text)
-
-        table.width shouldBe 320
-        rendered shouldContain "Было"
-        rendered shouldContain "Станет"
-        rendered shouldContain "—"
-        rendered shouldContain "Добавлено"
-        rendered shouldContain "\uE570"
+    val resource = requireNotNull(javaClass.classLoader.getResourceAsStream("modules/item-lore.yml"))
+    val config = resource.reader(Charsets.UTF_8).use(YamlConfiguration::loadConfiguration)
+    val miniMessage = MiniMessage.miniMessage()
+    val text: (String) -> Component = { key ->
+        miniMessage.deserialize(requireNotNull(config.getString("text.$key")), Placeholder.unparsed("price", "5 монет"))
     }
 
-    "keeps every before and after row, including empty interior rows and long text" {
-        val long = "Редкое зачарование усиливает оружие при каждом точном ударе."
-        val table = ItemLorePreview.table(
-            before = listOf(
-                Component.text("Старое название", NamedTextColor.RED),
-                Component.empty(),
-                Component.text(long),
-            ),
-            after = listOf(
-                Component.text("Новое название", NamedTextColor.GREEN),
-                Component.text("Вторая строка"),
-                Component.text("Третья строка"),
-                Component.text("Четвёртая строка"),
-            ),
-            text = text,
-        )
-        val rendered = plain.serialize(table.text)
+    "preview is one outer frame with only the resulting lore and no table joints" {
+        val frame = ItemLorePreview.framed(listOf(Component.text("Добавлено", NamedTextColor.WHITE)), text)
+        val rendered = plain.serialize(frame.text)
 
-        rendered shouldContain "Старое название"
-        rendered shouldContain "Новое название"
-        rendered shouldContain "(пустая строка)"
-        rendered shouldContain "Вторая строка"
-        long.split(' ').forEach { rendered shouldContain it }
-        rendered shouldContain "Четвёртая строка"
+        frame.width shouldBe 320
+        rendered shouldContain "Добавлено"
         rendered shouldContain "\uE570"
-        coloredRuns(table.text).any { (content, color) ->
-            "Старое название" in content && color == NamedTextColor.RED
+        rendered shouldContain "\uE573"
+        rendered shouldContain "\uE57B"
+        rendered shouldContain "\uE57E"
+        listOf("Было", "Станет", "\uE572", "\uE575", "\uE579", "\uE57D").forEach {
+            rendered shouldNotContain it
+        }
+    }
+
+    "preserves colored lore, an actual blank line and long wrapped text" {
+        val long = "Редкое зачарование усиливает оружие при каждом точном ударе."
+        val frame = ItemLorePreview.framed(listOf(
+            Component.text("Зелёная строка", NamedTextColor.GREEN),
+            Component.empty(),
+            Component.text("Красная строка", NamedTextColor.RED),
+            Component.text(long),
+        ), text)
+        val rendered = plain.serialize(frame.text)
+        val rows = rendered.lines()
+        val first = rows.indexOfFirst { "Зелёная строка" in it }
+        val second = rows.indexOfFirst { "Красная строка" in it }
+        second - first shouldBe 2
+        rendered shouldNotContain "(пустая строка)"
+        long.split(' ').forEach { rendered shouldContain it }
+        coloredRuns(frame.text).any { (content, color) ->
+            "Зелёная строка" in content && color == NamedTextColor.GREEN
         } shouldBe true
-        coloredRuns(table.text).any { (content, color) ->
-            "Новое название" in content && color == NamedTextColor.GREEN
+        coloredRuns(frame.text).any { (content, color) ->
+            "Красная строка" in content && color == NamedTextColor.RED
+        } shouldBe true
+    }
+
+    "clearing lore shows its explanation inside the same single frame" {
+        val rendered = plain.serialize(ItemLorePreview.framed(emptyList(), text).text)
+        rendered shouldContain "описание будет очищено"
+        rendered shouldContain "\uE570"
+        rendered shouldNotContain "\uE575"
+    }
+
+    "editing help stays compact with three code rows and no table heading" {
+        val help = ItemLorePreview.editorHelp(text("editor-body"), text)
+        help.size shouldBe 2
+        help.forEach { it.width shouldBe 320 }
+        val intro = plain.serialize(help[0].text)
+        val codes = plain.serialize(help[1].text)
+        (intro.lines().size <= 6) shouldBe true
+        codes.lines().size shouldBe 5
+        intro shouldContain "5 монет"
+        intro shouldNotContain "\uE575"
+        listOf("&a", "&c", "&#RRGGBB", "&l", "&r", "&&").forEach { codes shouldContain it }
+        codes shouldNotContain "\uE579"
+        coloredRuns(help[1].text).any { (content, color) ->
+            "&a зелёный" in content && color == NamedTextColor.GREEN
         } shouldBe true
     }
 })
