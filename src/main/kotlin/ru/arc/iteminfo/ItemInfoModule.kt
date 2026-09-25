@@ -52,7 +52,12 @@ object ItemInfoModule : PluginModule {
             ARC.instance,
             ServicePriority.Normal,
         )
-        runtime = ItemInfoRuntime(settings, service, galleryPurchasePrice).also {
+        runtime = ItemInfoRuntime(
+            settings,
+            service,
+            galleryPurchasePrice,
+            HookRegistry.furnitureGalleryInteractionRuntime?.markers,
+        ).also {
             Bukkit.getPluginManager().registerEvents(it, ARC.instance)
             it.start()
         }

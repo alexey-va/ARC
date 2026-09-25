@@ -10,7 +10,12 @@ import org.bukkit.Location
 import org.bukkit.block.Block
 import org.bukkit.entity.Player
 import org.bukkit.entity.Entity
+import org.bukkit.entity.ArmorStand
+import org.bukkit.entity.Interaction
+import org.bukkit.entity.ItemDisplay
 import org.bukkit.inventory.ItemStack
+import ru.arc.hooks.economyshop.FURNITURE_GALLERY_WORLD
+import ru.arc.hooks.economyshop.FurnitureGalleryTargetMarkers
 import ru.arc.hooks.slimefun.SlimefunItemAccess
 import java.util.Locale
 
@@ -31,9 +36,32 @@ internal class ItemInfoTargetPolicy(
         if (location != null && managedCrate(location)) null else target
 }
 
+internal data class ItemInfoLocatedTarget(val target: ItemInfoTarget, val distanceSquared: Double)
+
+/** Resolves the entity actually returned by Paper's ray trace, never predicate iteration state. */
+internal object ItemInfoHitTargetSelection {
+    fun fromRayHit(
+        hitEntity: Entity?,
+        distanceSquared: Double,
+        blockDistanceSquared: Double?,
+        resolve: (Entity) -> ItemInfoTarget?,
+    ): ItemInfoLocatedTarget? {
+        val entity = hitEntity ?: return null
+        if (!distanceSquared.isFinite() || distanceSquared < 0.0) return null
+        if (blockDistanceSquared != null && distanceSquared > blockDistanceSquared + ENTITY_BLOCK_TIE_TOLERANCE) return null
+        return resolve(entity)?.let { ItemInfoLocatedTarget(it, distanceSquared) }
+    }
+
+    fun closest(vararg candidates: ItemInfoLocatedTarget?): ItemInfoTarget? =
+        candidates.filterNotNull().minByOrNull(ItemInfoLocatedTarget::distanceSquared)?.target
+
+    private const val ENTITY_BLOCK_TIE_TOLERANCE = 0.01
+}
+
 internal class BukkitItemInfoTargetResolver(
     private val distance: Double,
     private val managedCrate: (Location) -> Boolean = ExcellentCratesItemInfoBridge::contains,
+    private val galleryMarkers: FurnitureGalleryTargetMarkers? = null,
 ) {
     private val resolver = ItemInfoBlockResolver(::itemsAdder, ::slimefun) { managedCrate(it.location) }
     private val policy = ItemInfoTargetPolicy(managedCrate)
@@ -43,21 +71,28 @@ internal class BukkitItemInfoTargetResolver(
         val blockHit = player.rayTraceBlocks(distance, FluidCollisionMode.NEVER)
         val blockDistance = blockHit?.hitPosition?.distanceSquared(eye.toVector())
         val blockTarget = blockHit?.hitBlock?.let(resolver::resolve)?.let {
-            LocatedTarget(it, requireNotNull(blockDistance))
+            ItemInfoLocatedTarget(it, requireNotNull(blockDistance))
         }
-        var furnitureTarget: ItemInfoTarget? = null
+        val gallery = player.world.name == FURNITURE_GALLERY_WORLD
         val furnitureHit = if (Bukkit.getPluginManager().isPluginEnabled("ItemsAdder")) {
-            player.world.rayTraceEntities(eye, eye.direction, distance, 0.20) { entity ->
+            player.world.rayTraceEntities(eye, eye.direction, distance, if (gallery) 0.0 else 0.20) { entity ->
                 if (entity.uniqueId == player.uniqueId) return@rayTraceEntities false
-                furniture(entity)?.also { furnitureTarget = it } != null
+                if (gallery) {
+                    entity is Interaction && galleryMarkers?.read(entity) != null
+                } else {
+                    (entity is ItemDisplay || entity is ArmorStand) && furniture(entity, false) != null
+                }
             }
         } else null
         val entityTarget = furnitureHit?.let { hit ->
             val distanceSquared = hit.hitPosition.distanceSquared(eye.toVector())
-            furnitureTarget?.takeIf { blockDistance == null || distanceSquared <= blockDistance + 0.01 }
-                ?.let { LocatedTarget(it, distanceSquared) }
+            ItemInfoHitTargetSelection.fromRayHit(
+                hitEntity = hit.hitEntity,
+                distanceSquared = distanceSquared,
+                blockDistanceSquared = blockDistance,
+            ) { entity -> furniture(entity, gallery) }
         }
-        return listOfNotNull(blockTarget, entityTarget).minByOrNull(LocatedTarget::distanceSquared)?.target
+        return ItemInfoHitTargetSelection.closest(blockTarget, entityTarget)
     }
 
     private fun itemsAdder(block: Block): ItemInfoTarget? {
@@ -70,7 +105,14 @@ internal class BukkitItemInfoTargetResolver(
         }.getOrNull()
     }
 
-    private fun furniture(entity: Entity): ItemInfoTarget? = runCatching {
+    private fun furniture(entity: Entity, gallery: Boolean): ItemInfoTarget? = runCatching {
+        if (gallery) {
+            val marker = galleryMarkers?.read(entity) ?: return null
+            if (entity.world.name != FURNITURE_GALLERY_WORLD || entity !is Interaction) return null
+            val custom = CustomStack.getInstance(marker.furnitureId) ?: return null
+            if (custom.namespacedID != marker.furnitureId) return null
+            return policy.filter(entity.location, customTarget(custom))
+        }
         val custom = CustomFurniture.byAlreadySpawned(entity) ?: return null
         policy.filter(custom.entity?.location, customTarget(custom))
     }.getOrNull()
@@ -100,6 +142,4 @@ internal class BukkitItemInfoTargetResolver(
         .filter(String::isNotBlank)
         .joinToString(" ") { part -> part.lowercase(Locale.ROOT).replaceFirstChar { it.titlecase(Locale.ROOT) } }
         .ifBlank { id }
-
-    private data class LocatedTarget(val target: ItemInfoTarget, val distanceSquared: Double)
 }

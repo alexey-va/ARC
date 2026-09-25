@@ -1,0 +1,3 @@
+# Exact authored IA furniture anchors and world-space AABBs for the showroom.
+# Production targets are environment-owned. Empty by default outside that map.
+targets: {}

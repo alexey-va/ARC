@@ -18,8 +18,10 @@ import ru.arc.hooks.elitemobs.EMHook
 import ru.arc.hooks.elitemobs.EMListener
 import ru.arc.hooks.economyshop.EconomyShopGuiPurchaseService
 import ru.arc.hooks.economyshop.EconomyShopGuiAuditListener
+import ru.arc.hooks.economyshop.FurnitureGalleryInteractionRuntime
 import ru.arc.hooks.economyshop.FurnitureGalleryPurchaseListener
 import ru.arc.hooks.economyshop.ShopPurchaseService
+import ru.arc.hooks.economyshop.loadFurnitureGalleryTargets
 import ru.arc.hooks.lands.LandsHook
 import ru.arc.hooks.lootchest.LootChestHook
 import ru.arc.hooks.luckperms.LuckPermsHook
@@ -71,6 +73,7 @@ class HookRegistry(
 
     private val registeredHooks = HashSet<String>()
     private val registeredListeners = LinkedHashSet<Listener>()
+    private var furnitureGalleryPurchaseListener: FurnitureGalleryPurchaseListener? = null
 
     internal var isClosed: Boolean = false
         private set
@@ -128,6 +131,8 @@ class HookRegistry(
 
         internal var shopPurchaseService: ShopPurchaseService? = null
 
+        @JvmField internal var furnitureGalleryInteractionRuntime: FurnitureGalleryInteractionRuntime? = null
+
         private fun clearGlobalHooks() {
             landsHook = null
             huskHomesHook = null
@@ -155,6 +160,7 @@ class HookRegistry(
             myWorldsHook = null
             partiesHook = null
             shopPurchaseService = null
+            furnitureGalleryInteractionRuntime = null
         }
     }
 
@@ -163,6 +169,37 @@ class HookRegistry(
         papiHook?.clearPlaceholderCache()
         registerVanillaEvents()
         registerHooks()
+    }
+
+    /** Reloads the environment-owned target map without rebuilding other hooks. */
+    internal fun refreshFurnitureGalleryTargets() {
+        check(!isClosed) { "HookRegistry is closed" }
+        val purchases = shopPurchaseService ?: return
+        val targets = loadFurnitureGalleryTargets(ARC.instance.dataPath) ?: return
+        val nextRuntime = FurnitureGalleryInteractionRuntime(ARC.instance, targets)
+        val nextListener = FurnitureGalleryPurchaseListener(purchases, nextRuntime)
+
+        furnitureGalleryInteractionRuntime?.close()
+        furnitureGalleryInteractionRuntime?.let { old ->
+            HandlerList.unregisterAll(old)
+            registeredListeners.remove(old)
+        }
+        furnitureGalleryPurchaseListener?.let { old ->
+            HandlerList.unregisterAll(old)
+            registeredListeners.remove(old)
+        }
+        try {
+            registerListener(nextRuntime)
+            registerListener(nextListener)
+            furnitureGalleryInteractionRuntime = nextRuntime
+            furnitureGalleryPurchaseListener = nextListener
+            nextRuntime.start()
+        } catch (failure: Throwable) {
+            nextRuntime.close()
+            furnitureGalleryInteractionRuntime = null
+            furnitureGalleryPurchaseListener = null
+            throw failure
+        }
     }
 
     @Deprecated("Use close()", ReplaceWith("close()"))
@@ -179,6 +216,7 @@ class HookRegistry(
         cleanup(failures) { dungeonQol?.close() }
         dungeonQol = null
         cleanup(failures) { auctionHook?.close() }
+        cleanup(failures) { furnitureGalleryInteractionRuntime?.close() }
         cleanup(failures) { citizensHook?.close() }
         cleanup(failures) { chatGlyphProtection?.close() }
         chatGlyphProtection = null
@@ -194,6 +232,7 @@ class HookRegistry(
         }
         registeredListeners.clear()
         registeredHooks.clear()
+        furnitureGalleryPurchaseListener = null
         clearInstanceListeners()
         clearGlobalHooks()
 
@@ -408,10 +447,26 @@ class HookRegistry(
         register("EconomyShopGUI-Premium", true) {
             val translator = checkNotNull(translatorHook) { "Material translator is not initialized" }
             val purchaseService = EconomyShopGuiPurchaseService { item -> translator.translate(item) }
-            registerListener(purchaseService)
-            registerListener(FurnitureGalleryPurchaseListener(purchaseService))
-            registerListener(EconomyShopGuiAuditListener())
-            shopPurchaseService = purchaseService
+            val galleryRuntime = FurnitureGalleryInteractionRuntime(
+                ARC.instance,
+                loadFurnitureGalleryTargets(ARC.instance.dataPath).orEmpty(),
+            )
+            val galleryListener = FurnitureGalleryPurchaseListener(purchaseService, galleryRuntime)
+            try {
+                registerListener(purchaseService)
+                registerListener(galleryRuntime)
+                registerListener(galleryListener)
+                registerListener(EconomyShopGuiAuditListener())
+                furnitureGalleryInteractionRuntime = galleryRuntime
+                furnitureGalleryPurchaseListener = galleryListener
+                galleryRuntime.start()
+                shopPurchaseService = purchaseService
+            } catch (failure: Throwable) {
+                galleryRuntime.close()
+                furnitureGalleryInteractionRuntime = null
+                furnitureGalleryPurchaseListener = null
+                throw failure
+            }
         }
     }
 

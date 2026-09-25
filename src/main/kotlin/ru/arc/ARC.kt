@@ -461,6 +461,7 @@ open class ARC : JavaPlugin() {
                 "modules/lands-ui.yml",
                 "modules/help-center.yml",
                 "modules/item-info.yml",
+                "modules/furniture-gallery.yml",
                 "modules/pouches.yml",
                 "modules/backpacks.yml",
                 "modules/commands.yml",

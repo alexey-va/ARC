@@ -25,6 +25,7 @@ internal const val FURNITURE_GALLERY_WORLD = "rc_atelier_furniture_gallery"
 /** Routes only current catalog furniture clicks in the one authored gallery world. */
 internal class FurnitureGalleryPurchaseListener(
     private val purchases: ShopPurchaseService,
+    private val gallery: FurnitureGalleryInteractionRuntime,
 ) : Listener {
     private val deduplicator = FurnitureGalleryClickDeduplicator()
     private val loggedUnavailableItems = LinkedHashSet<String>()
@@ -40,11 +41,22 @@ internal class FurnitureGalleryPurchaseListener(
             )
         ) return
 
+        gallery.targetForMarker(event.rightClicked)?.let { target ->
+            handleFurnitureClick(
+                player = event.player,
+                furnitureId = target.furnitureId,
+                targetIdentity = target.key,
+                tick = Bukkit.getCurrentTick(),
+                cancel = { event.isCancelled = true },
+            )
+            return
+        }
         val furniture = furniture(event.rightClicked) ?: return
+        val target = gallery.targetForFurniture(furniture.namespacedID, furniture.entity ?: event.rightClicked) ?: return
         handleFurnitureClick(
             player = event.player,
-            furnitureId = furniture.namespacedID,
-            targetIdentity = furniture.entity?.uniqueId?.toString() ?: event.rightClicked.uniqueId.toString(),
+            furnitureId = target.furnitureId,
+            targetIdentity = target.key,
             tick = Bukkit.getCurrentTick(),
             cancel = { event.isCancelled = true },
         )
@@ -59,11 +71,22 @@ internal class FurnitureGalleryPurchaseListener(
             )
         ) return
 
+        gallery.targetForMarker(event.rightClicked)?.let { target ->
+            handleFurnitureClick(
+                player = event.player,
+                furnitureId = target.furnitureId,
+                targetIdentity = target.key,
+                tick = Bukkit.getCurrentTick(),
+                cancel = { event.isCancelled = true },
+            )
+            return
+        }
         val furniture = furniture(event.rightClicked) ?: return
+        val target = gallery.targetForFurniture(furniture.namespacedID, furniture.entity ?: event.rightClicked) ?: return
         handleFurnitureClick(
             player = event.player,
-            furnitureId = furniture.namespacedID,
-            targetIdentity = furniture.entity?.uniqueId?.toString() ?: event.rightClicked.uniqueId.toString(),
+            furnitureId = target.furnitureId,
+            targetIdentity = target.key,
             tick = Bukkit.getCurrentTick(),
             cancel = { event.isCancelled = true },
         )
@@ -80,11 +103,11 @@ internal class FurnitureGalleryPurchaseListener(
         ) return
 
         val furniture = furniture(block) ?: return
-        val blockIdentity = "${block.world.uid}:${block.x}:${block.y}:${block.z}"
+        val target = gallery.targetForFurniture(furniture.namespacedID, furniture.entity) ?: return
         handleFurnitureClick(
             player = event.player,
-            furnitureId = furniture.namespacedID,
-            targetIdentity = furniture.entity?.uniqueId?.toString() ?: blockIdentity,
+            furnitureId = target.furnitureId,
+            targetIdentity = target.key,
             tick = Bukkit.getCurrentTick(),
             cancel = { event.isCancelled = true },
         )
@@ -96,17 +119,20 @@ internal class FurnitureGalleryPurchaseListener(
      * Its Bukkit interaction listener runs at MONITOR, so cancelling this nested
      * event at HIGHEST is the last safe read-side interception point.
      */
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGHEST)
     fun onItemsAdderFurnitureInteract(event: FurnitureInteractEvent) {
         val furniture = runCatching { event.furniture }.getOrNull() ?: return
         if (event.player.world.name != FURNITURE_GALLERY_WORLD) return
+        val entity = runCatching { furniture.entity }.getOrNull()
+            ?: runCatching { event.bukkitEntity }.getOrNull()
+        val target = gallery.targetForFurniture(
+            runCatching { furniture.namespacedID }.getOrNull(),
+            entity,
+        ) ?: return
         handleFurnitureClick(
             player = event.player,
-            furnitureId = runCatching { furniture.namespacedID }.getOrNull(),
-            targetIdentity = runCatching { furniture.entity?.uniqueId?.toString() }
-                .getOrNull()
-                ?: runCatching { event.bukkitEntity?.uniqueId?.toString() }.getOrNull()
-                ?: "${furniture.namespacedID}",
+            furnitureId = target.furnitureId,
+            targetIdentity = target.key,
             tick = Bukkit.getCurrentTick(),
             cancel = { event.isCancelled = true },
         )
@@ -120,13 +146,15 @@ internal class FurnitureGalleryPurchaseListener(
         cancel: () -> Unit,
     ) {
         val id = furnitureId?.trim()?.takeIf(String::isNotEmpty) ?: return
-        if (!purchases.hasFurniturePurchaseMenu(id)) return
-
-        // Consume a matching gallery click even when a current ESG permission or
-        // requirement denies the menu; displayed seats must never mount players.
+        // Only configured gallery targets reach this method. Keep ItemsAdder's
+        // native seating/removal callback blocked even when ESG has no current offer.
         cancel()
         val key = FurnitureGalleryClickKey(player.uniqueId, id.lowercase(Locale.ROOT), targetIdentity)
         if (!deduplicator.first(key, tick)) return
+        if (!purchases.hasFurniturePurchaseMenu(id)) {
+            logUnavailable(id)
+            return
+        }
 
         when (purchases.openFurniturePurchaseMenu(player, id)) {
             FurnitureShopMenuOpenResult.OPENED,

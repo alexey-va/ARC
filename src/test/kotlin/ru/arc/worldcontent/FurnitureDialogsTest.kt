@@ -48,8 +48,9 @@ class FurnitureDialogsTest : FreeSpec({
         screen.id shouldBe "furniture.gallery"
         screen.columns shouldBe 1
         val text = screen.body.joinToString("\n") { PlainTextComponentSerializer.plainText().serialize(it.text) }
-        text shouldContain "48 тематических комнат"
-        text shouldContain "мебелью"
+        text shouldContain "25 небольших комнат"
+        text shouldContain "мебельными композициями"
+        text shouldContain "Наведитесь на мебель, чтобы увидеть цену. ПКМ откроет окно покупки."
         text shouldContain "порталом в фойе"
         text shouldNotContain "будущей мебельной экспозиции"
         text shouldNotContain "портал в конце зала"

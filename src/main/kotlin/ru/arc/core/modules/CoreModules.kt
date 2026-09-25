@@ -136,7 +136,10 @@ object HooksModule : PluginModule {
     }
 
     override fun reload() {
-        ARC.hookRegistry?.setupHooks()
+        ARC.hookRegistry?.let { registry ->
+            registry.setupHooks()
+            registry.refreshFurnitureGalleryTargets()
+        }
     }
 
     override fun shutdown() {

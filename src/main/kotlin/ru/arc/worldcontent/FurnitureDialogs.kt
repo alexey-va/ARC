@@ -28,7 +28,7 @@ object FurnitureDialogs {
     // Reviewed against origin_furniture_gallery.dsc; commands stay fixed so
     // no dialog value can become a player-command argument.
     internal val rooms = listOf(
-        GalleryRoom("room_01", "Главный выставочный зал"),
+        GalleryRoom("room_01", "Войти в галерею"),
     )
 
     private val visitCommands = rooms.associate { it.id to "rcfurniturevisit ${it.id}" }
@@ -67,7 +67,7 @@ object FurnitureDialogs {
             PaperDialogButton(
                 id = PaperDialogActionId.of("gallery"),
                 label = styled("Выставка мебели ›", actionColor),
-                tooltip = component("Открыть главный выставочный зал."),
+                tooltip = component("Посмотреть мебель в готовых интерьерах."),
                 onClick = { showGallery(player) },
             ),
         ),
@@ -78,14 +78,15 @@ object FurnitureDialogs {
         id = "furniture.gallery",
         title = styled("Выставка мебели", titleColor),
         body = listOf(
-            prose("В галерее собраны 48 тематических комнат с мебелью для вдохновения."),
+            prose("25 небольших комнат с готовыми мебельными композициями соединены круговым проходом."),
+            prose("Наведитесь на мебель, чтобы увидеть цену. ПКМ откроет окно покупки."),
             prose("Чтобы вернуться в Origin, воспользуйтесь порталом в фойе."),
         ),
         buttons = rooms.map { room ->
             PaperDialogButton(
                 id = PaperDialogActionId.of(room.id.replace('-', '_')),
                 label = styled("${room.label} ›", actionColor),
-                tooltip = component("Перейти в оформленный выставочный зал."),
+                tooltip = component("Перейти к комнатам с мебелью."),
                 width = 320,
                 closeDialogBeforeAction = true,
                 onClick = { context -> visitIfCurrent(context.player, room.id) },

@@ -4,6 +4,7 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.mockk
 import net.kyori.adventure.text.Component
+import org.bukkit.entity.Entity
 import org.bukkit.Location
 import org.bukkit.block.Block
 
@@ -61,5 +62,37 @@ class ItemInfoBlockResolverTest : StringSpec({
         policy.filter(crate, target) shouldBe null
         policy.filter(ordinary, target) shouldBe target
         policy.filter(null, target) shouldBe target
+    }
+
+    "entity target resolution uses the exact entity returned by the ray trace" {
+        val returnedHit = mockk<Entity>()
+        val expected = ItemInfoTarget(Component.text("Стол"), "furniture:table")
+        val decoy = ItemInfoTarget(Component.text("Кресло"), "furniture:chair")
+        val resolvedEntities = mutableListOf<Entity>()
+
+        val selection = ItemInfoHitTargetSelection.fromRayHit(
+            hitEntity = returnedHit,
+            distanceSquared = 1.0,
+            blockDistanceSquared = 4.0,
+        ) { entity ->
+            resolvedEntities += entity
+            if (entity === returnedHit) expected else decoy
+        }
+
+        selection?.target shouldBe expected
+        resolvedEntities shouldBe listOf(returnedHit)
+    }
+
+    "nearest resolved ray target wins while targets behind a block are discarded" {
+        val block = ItemInfoLocatedTarget(ItemInfoTarget(Component.text("Блок"), "block:known"), 1.0)
+        val nearEntity = ItemInfoLocatedTarget(ItemInfoTarget(Component.text("Стол"), "furniture:table"), 1.25)
+        val farEntity = ItemInfoHitTargetSelection.fromRayHit(
+            hitEntity = mockk(),
+            distanceSquared = 2.0,
+            blockDistanceSquared = 1.0,
+        ) { ItemInfoTarget(Component.text("Позади"), "furniture:behind") }
+
+        ItemInfoHitTargetSelection.closest(block, nearEntity, farEntity)?.namespacedId shouldBe "block:known"
+        ItemInfoHitTargetSelection.closest(nearEntity, null)?.namespacedId shouldBe "furniture:table"
     }
 })
