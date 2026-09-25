@@ -29,6 +29,9 @@ open class ChatModeConfig(
                         ?: DEFAULT_HUE_AMPLITUDE_DEGREES,
             )
 
+    open val isolatedGlyphProtectionEnabled: Boolean
+        get() = config.bool("glyph-protection.isolated-enabled", false)
+
     open val glyphUnauthorizedMessage: String
         get() = config.string("glyph-protection.messages.unauthorized", "<red>Этот символ недоступен вашему рангу.")
     open val glyphTechnicalMessage: String

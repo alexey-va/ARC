@@ -7,6 +7,8 @@ import org.bukkit.command.TabCompleter
 import org.bukkit.event.server.ServerCommandEvent
 import org.bukkit.plugin.java.JavaPlugin
 import org.bukkit.plugin.ServicePriority
+import ru.arc.chat.ChatModeConfig
+import ru.arc.chat.IsolatedChatGlyphModule
 import ru.arc.itemcatalog.ArcItemMaterializerBridge
 import ru.arc.paper.api.ArcTelemetryProvider
 import ru.arc.paper.api.ArcItemMaterializer
@@ -244,7 +246,12 @@ open class ARC : JavaPlugin() {
 
         if (runtimeProfile == ArcRuntimeProfile.ISOLATED) {
             ModuleRegistry.registerAll(ConfigModule, OpsHttpModule, RestartModule, ItemInfoModule)
-            info("Runtime profile isolated: Config, OpsHttp, Restart, ItemInfo only")
+            if (ChatModeConfig.load(dataPath).isolatedGlyphProtectionEnabled) {
+                ModuleRegistry.registerAll(RedisModule, IsolatedChatGlyphModule)
+                info("Runtime profile isolated: local operations with chat glyph authorization")
+            } else {
+                info("Runtime profile isolated: Config, OpsHttp, Restart, ItemInfo only")
+            }
             return
         }
 

@@ -6,6 +6,8 @@ message-color-variation:
 
 # ItemsAdder permissions also apply to pasted Unicode and player-command arguments.
 glyph-protection:
+  # Enables only the glyph guard and its Redis catalog in an isolated runtime. Requires restart.
+  isolated-enabled: false
   messages:
     unauthorized: '<red>Этот символ недоступен вашему рангу.'
     technical: '<red>Служебные символы интерфейса нельзя отправлять в чат.'
