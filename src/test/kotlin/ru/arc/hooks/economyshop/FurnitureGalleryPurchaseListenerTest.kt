@@ -4,8 +4,14 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
+import org.bukkit.World
 import org.bukkit.entity.Entity
+import org.bukkit.entity.Player
+import org.bukkit.event.player.PlayerInteractEntityEvent
+import org.bukkit.inventory.EquipmentSlot
 import io.mockk.mockk
+import io.mockk.every
+import io.mockk.verify
 import java.util.UUID
 
 class FurnitureGalleryPurchaseListenerTest : StringSpec({
@@ -32,11 +38,65 @@ class FurnitureGalleryPurchaseListenerTest : StringSpec({
         ) shouldBe false
     }
 
+    "WorldGuard pre-cancellation requires an exact gallery target with a current buy offer" {
+        FurnitureGalleryInteractionPolicy.shouldPreCancelExactPurchaseClick(
+            worldName = FURNITURE_GALLERY_WORLD,
+            rightClick = true,
+            mainHand = true,
+            exactGalleryFurniture = true,
+            hasCurrentPurchaseOffer = true,
+        ) shouldBe true
+
+        FurnitureGalleryInteractionPolicy.shouldPreCancelExactPurchaseClick(
+            worldName = "rc_origin_spawn",
+            rightClick = true,
+            mainHand = true,
+            exactGalleryFurniture = true,
+            hasCurrentPurchaseOffer = true,
+        ) shouldBe false
+        FurnitureGalleryInteractionPolicy.shouldPreCancelExactPurchaseClick(
+            worldName = FURNITURE_GALLERY_WORLD,
+            rightClick = true,
+            mainHand = true,
+            exactGalleryFurniture = false,
+            hasCurrentPurchaseOffer = true,
+        ) shouldBe false
+        FurnitureGalleryInteractionPolicy.shouldPreCancelExactPurchaseClick(
+            worldName = FURNITURE_GALLERY_WORLD,
+            rightClick = true,
+            mainHand = true,
+            exactGalleryFurniture = true,
+            hasCurrentPurchaseOffer = false,
+        ) shouldBe false
+        FurnitureGalleryInteractionPolicy.shouldPreCancelExactPurchaseClick(
+            worldName = FURNITURE_GALLERY_WORLD,
+            rightClick = true,
+            mainHand = false,
+            exactGalleryFurniture = true,
+            hasCurrentPurchaseOffer = true,
+        ) shouldBe false
+        FurnitureGalleryInteractionPolicy.shouldPreCancelExactPurchaseClick(
+            worldName = FURNITURE_GALLERY_WORLD,
+            rightClick = false,
+            mainHand = true,
+            exactGalleryFurniture = true,
+            hasCurrentPurchaseOffer = true,
+        ) shouldBe false
+    }
+
     "already-cancelled protection events still reach gallery routing" {
         // No ignoreCancelled opt-out on the Bukkit routes: WorldGuard cancellation
         // remains in place while the exact indexed furniture may open its menu.
+        // The LOWEST gate makes the exact shop click cancelled before WG's
+        // NORMAL ignoreCancelled handler; HIGHEST still observes it afterwards.
         val listenerMethods = FurnitureGalleryPurchaseListener::class.java.declaredMethods
             .associateBy { it.name }
+        listOf("onEntityInteractProtection", "onEntityInteractAtProtection").forEach { methodName ->
+            val handler = listenerMethods.getValue(methodName).getAnnotation(EventHandler::class.java)
+            handler.priority shouldBe EventPriority.LOWEST
+            handler.ignoreCancelled shouldBe false
+        }
+
         listOf("onEntityInteract", "onEntityInteractAt", "onBlockInteract").forEach { methodName ->
             val handler = listenerMethods.getValue(methodName).getAnnotation(EventHandler::class.java)
             handler.priority shouldBe EventPriority.HIGHEST
@@ -46,6 +106,47 @@ class FurnitureGalleryPurchaseListenerTest : StringSpec({
         listenerMethods.getValue("onItemsAdderFurnitureInteract")
             .getAnnotation(EventHandler::class.java)
             .priority shouldBe EventPriority.HIGHEST
+    }
+
+    "LOWEST protection gate cancels only a listed indexed marker and never opens a menu itself" {
+        val purchases = mockk<ShopPurchaseService>()
+        val gallery = mockk<FurnitureGalleryInteractionRuntime>()
+        val listener = FurnitureGalleryPurchaseListener(purchases, gallery)
+        val marker = mockk<Entity>()
+        val player = mockk<Player>()
+        val world = mockk<World>()
+        val event = mockk<PlayerInteractEntityEvent>(relaxed = true)
+        val plan = FurnitureGalleryTargetPlanner.plan(
+            FurnitureGalleryTargetPlanner.profile(
+                "arc:oak_chair",
+                listOf(
+                    FurnitureGalleryVertex(0.0, 0.0, 0.0),
+                    FurnitureGalleryVertex(0.4, 0.8, 0.4),
+                ),
+            ),
+            UUID.fromString("e8f19d6c-8177-49a6-bb2d-2ab8e2ab764a"),
+            FurnitureGalleryAnchor(0.5, 64.0, 0.5, 0.0),
+        )
+
+        every { event.player } returns player
+        every { event.hand } returns EquipmentSlot.HAND
+        every { event.rightClicked } returns marker
+        every { player.world } returns world
+        every { world.name } returns FURNITURE_GALLERY_WORLD
+        every { gallery.targetForMarker(marker) } returns plan
+        every { purchases.hasFurniturePurchaseMenu("arc:oak_chair") } returns true
+
+        listener.onEntityInteractProtection(event)
+
+        verify(exactly = 1) { event.isCancelled = true }
+        verify(exactly = 0) { purchases.openFurniturePurchaseMenu(any(), any()) }
+
+        every { purchases.hasFurniturePurchaseMenu("arc:oak_chair") } returns false
+
+        listener.onEntityInteractProtection(event)
+
+        verify(exactly = 1) { event.isCancelled = true }
+        verify(exactly = 0) { purchases.openFurniturePurchaseMenu(any(), any()) }
     }
 
     "ItemsAdder routing prefers its exact furniture root and falls back to the event entity" {

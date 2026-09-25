@@ -30,6 +30,32 @@ internal class FurnitureGalleryPurchaseListener(
     private val deduplicator = FurnitureGalleryClickDeduplicator()
     private val loggedUnavailableItems = LinkedHashSet<String>()
 
+    /**
+     * WorldGuard handles these events at NORMAL with ignoreCancelled=true. Mark
+     * only exact, currently purchasable gallery furniture before that handler;
+     * the HIGHEST route below still owns opening the native ESG menu.
+     */
+    @EventHandler(priority = EventPriority.LOWEST)
+    fun onEntityInteractProtection(event: PlayerInteractEntityEvent) {
+        if (event is PlayerInteractAtEntityEvent) return
+        preCancelPurchasableEntityClick(
+            worldName = event.player.world.name,
+            hand = event.hand,
+            entity = event.rightClicked,
+            cancel = { event.isCancelled = true },
+        )
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    fun onEntityInteractAtProtection(event: PlayerInteractAtEntityEvent) {
+        preCancelPurchasableEntityClick(
+            worldName = event.player.world.name,
+            hand = event.hand,
+            entity = event.rightClicked,
+            cancel = { event.isCancelled = true },
+        )
+    }
+
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onEntityInteract(event: PlayerInteractEntityEvent) {
         // Some Paper builds share the base handler list with INTERACT_AT.
@@ -41,24 +67,11 @@ internal class FurnitureGalleryPurchaseListener(
             )
         ) return
 
-        gallery.targetForMarker(event.rightClicked)?.let { target ->
-            handleFurnitureClick(
-                player = event.player,
-                furnitureId = target.furnitureId,
-                targetIdentity = target.targetKey,
-                tick = Bukkit.getCurrentTick(),
-                cancel = { event.isCancelled = true },
-            )
-            return
-        }
-        val furniture = furniture(event.rightClicked) ?: return
-        val id = furniture.namespacedID
-        val root = furniture.entity ?: event.rightClicked
-        val targetIdentity = gallery.nativeFurnitureIdentity(id, root) ?: return
+        val target = entityClickTarget(event.rightClicked) ?: return
         handleFurnitureClick(
             player = event.player,
-            furnitureId = id,
-            targetIdentity = targetIdentity,
+            furnitureId = target.furnitureId,
+            targetIdentity = target.targetIdentity,
             tick = Bukkit.getCurrentTick(),
             cancel = { event.isCancelled = true },
         )
@@ -73,24 +86,11 @@ internal class FurnitureGalleryPurchaseListener(
             )
         ) return
 
-        gallery.targetForMarker(event.rightClicked)?.let { target ->
-            handleFurnitureClick(
-                player = event.player,
-                furnitureId = target.furnitureId,
-                targetIdentity = target.targetKey,
-                tick = Bukkit.getCurrentTick(),
-                cancel = { event.isCancelled = true },
-            )
-            return
-        }
-        val furniture = furniture(event.rightClicked) ?: return
-        val id = furniture.namespacedID
-        val root = furniture.entity ?: event.rightClicked
-        val targetIdentity = gallery.nativeFurnitureIdentity(id, root) ?: return
+        val target = entityClickTarget(event.rightClicked) ?: return
         handleFurnitureClick(
             player = event.player,
-            furnitureId = id,
-            targetIdentity = targetIdentity,
+            furnitureId = target.furnitureId,
+            targetIdentity = target.targetIdentity,
             tick = Bukkit.getCurrentTick(),
             cancel = { event.isCancelled = true },
         )
@@ -177,6 +177,45 @@ internal class FurnitureGalleryPurchaseListener(
     private fun furniture(block: Block) =
         runCatching { CustomFurniture.byAlreadySpawned(block) }.getOrNull()
 
+    private fun preCancelPurchasableEntityClick(
+        worldName: String,
+        hand: EquipmentSlot,
+        entity: Entity,
+        cancel: () -> Unit,
+    ) {
+        if (!FurnitureGalleryInteractionPolicy.accepts(
+                worldName = worldName,
+                rightClick = true,
+                mainHand = hand == EquipmentSlot.HAND,
+            )
+        ) return
+
+        val target = entityClickTarget(entity) ?: return
+        if (!FurnitureGalleryInteractionPolicy.shouldPreCancelExactPurchaseClick(
+                worldName = worldName,
+                rightClick = true,
+                mainHand = hand == EquipmentSlot.HAND,
+                exactGalleryFurniture = true,
+                hasCurrentPurchaseOffer = purchases.hasFurniturePurchaseMenu(target.furnitureId),
+            )
+        ) return
+
+        // Never clear cancellation: this only suppresses WorldGuard's denial
+        // for this exact gallery shop target, not region protection generally.
+        cancel()
+    }
+
+    private fun entityClickTarget(entity: Entity): FurnitureGalleryEntityTarget? {
+        gallery.targetForMarker(entity)?.let { target ->
+            return FurnitureGalleryEntityTarget(target.furnitureId, target.targetKey)
+        }
+        val furniture = furniture(entity) ?: return null
+        val id = furniture.namespacedID ?: return null
+        val root = furniture.entity ?: entity
+        val targetIdentity = gallery.nativeFurnitureIdentity(id, root) ?: return null
+        return FurnitureGalleryEntityTarget(id, targetIdentity)
+    }
+
     private fun logUnavailable(furnitureId: String) {
         val key = furnitureId.take(256)
         if (!loggedUnavailableItems.add(key)) return
@@ -192,6 +231,11 @@ internal class FurnitureGalleryPurchaseListener(
     }
 }
 
+private data class FurnitureGalleryEntityTarget(
+    val furnitureId: String,
+    val targetIdentity: String,
+)
+
 /** Prefer the API's exact furniture root over an event entity which may be a hitbox child. */
 internal fun exactItemsAdderFurnitureRoot(furnitureRoot: Entity?, eventEntity: Entity?): Entity? =
     furnitureRoot ?: eventEntity
@@ -199,6 +243,15 @@ internal fun exactItemsAdderFurnitureRoot(furnitureRoot: Entity?, eventEntity: E
 internal object FurnitureGalleryInteractionPolicy {
     fun accepts(worldName: String, rightClick: Boolean, mainHand: Boolean): Boolean =
         worldName == FURNITURE_GALLERY_WORLD && rightClick && mainHand
+
+    fun shouldPreCancelExactPurchaseClick(
+        worldName: String,
+        rightClick: Boolean,
+        mainHand: Boolean,
+        exactGalleryFurniture: Boolean,
+        hasCurrentPurchaseOffer: Boolean,
+    ): Boolean =
+        accepts(worldName, rightClick, mainHand) && exactGalleryFurniture && hasCurrentPurchaseOffer
 }
 
 internal data class FurnitureGalleryClickKey(
