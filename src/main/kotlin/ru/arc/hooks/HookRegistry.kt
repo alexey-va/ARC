@@ -4,6 +4,7 @@ import org.bukkit.Bukkit
 import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
 import ru.arc.ARC
+import ru.arc.config.ArcRedisConfig
 import ru.arc.chat.ChatModeConfig
 import ru.arc.chat.ItemsAdderChatGuard
 import ru.arc.chat.ChatGlyphProtection
@@ -414,7 +415,7 @@ class HookRegistry(
     private fun registerVanillaEvents() {
         if (chatGlyphProtection == null) {
             val protection = ChatGlyphProtection(
-                ARC.instance, ARC.serverName ?: "unknown", ARC.redisManager,
+                ARC.instance, ArcRedisConfig.get().serverName, ARC.redisManager,
                 ChatModeConfig.load(ARC.instance.dataPath),
             )
             chatGlyphProtection = protection

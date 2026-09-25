@@ -7,7 +7,9 @@ not `getString()` values with generated offsets. Permission strings are already
 effective `ia.user.image.use.*` nodes, not configuration suffixes.
 
 `ChatGlyphProtection` owns reloads and lifecycle. Spawn and survival use their
-local ItemsAdder registry. Spawn publishes metadata through
+local ItemsAdder registry. Hooks initialize before ConfigModule assigns
+`ARC.serverName`; resolve the identity from `ArcRedisConfig` during startup.
+Spawn publishes metadata through
 `ChatGlyphNetworkCatalog` using core's leased Redis presence directory; parkour
 reads that catalog without an ItemsAdder dependency. An absent/expired catalog
 fails closed. Permissions are checked for every message, never replicated.
