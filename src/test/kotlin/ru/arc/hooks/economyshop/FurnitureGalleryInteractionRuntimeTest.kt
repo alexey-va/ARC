@@ -5,6 +5,7 @@ import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
+import io.papermc.paper.event.player.PrePlayerAttackEntityEvent
 import org.bukkit.Location
 import org.bukkit.entity.ArmorStand
 import org.bukkit.entity.Entity
@@ -112,7 +113,7 @@ class FurnitureGalleryInteractionRuntimeTest : StringSpec({
         }
     }
 
-    "temporarily suppresses only the targeted root markers for ItemsAdder's original swing" {
+    "uses the exact pre-attack marker to expose its native root to ItemsAdder's original swing" {
         MockBukkitTestRuntime.open().use { paper ->
             val scheduler = TestTaskScheduler()
             Tasks.install(scheduler)
@@ -130,7 +131,6 @@ class FurnitureGalleryInteractionRuntimeTest : StringSpec({
                     FurnitureGalleryVertex(0.6, 1.2, 0.3),
                 ),
             )
-            var targetedEntity: Entity? = null
             val runtime = FurnitureGalleryInteractionRuntime(
                 plugin = plugin,
                 profiles = mapOf(id to profile),
@@ -138,7 +138,6 @@ class FurnitureGalleryInteractionRuntimeTest : StringSpec({
                 rootResolver = FurnitureGalleryNativeRootResolver { entity ->
                     id.takeIf { entity.uniqueId in rootIds }
                 },
-                swingTargetResolver = FurnitureGallerySwingTargetResolver { targetedEntity },
             )
             val player = mockk<Player>(relaxed = true)
             every { player.world } returns world
@@ -152,19 +151,40 @@ class FurnitureGalleryInteractionRuntimeTest : StringSpec({
                 val otherRootMarkers = owned.filter { runtime.markers.read(it)?.targetKey == "native:${otherRoot.uniqueId}" }
                 rootMarkers shouldHaveSize 2
                 otherRootMarkers shouldHaveSize 2
-                targetedEntity = rootMarkers.first()
 
+                // Paper marks an invulnerable entity attack as cancelled by
+                // default even though the client follows it with an arm swing.
+                val invulnerableAttack = PrePlayerAttackEntityEvent(player, rootMarkers.first(), false)
+                invulnerableAttack.isCancelled shouldBe true
+                runtime.onPreNativeFurnitureAttack(invulnerableAttack)
+                rootMarkers.all { it.interactionWidth > 0.0f && it.interactionHeight > 0.0f } shouldBe true
+                otherRootMarkers.all { it.interactionWidth > 0.0f && it.interactionHeight > 0.0f } shouldBe true
+                invulnerableAttack.isCancelled shouldBe true
+
+                // The attack and swing packets may straddle a tick. The exact
+                // attacked root remains pending, then is suppressed at swing time.
+                scheduler.tick(1)
                 runtime.onNativeFurnitureSwing(PlayerAnimationEvent(player, PlayerAnimationType.ARM_SWING))
                 rootMarkers.all { it.interactionWidth == 0.0f && it.interactionHeight == 0.0f } shouldBe true
                 otherRootMarkers.all { it.interactionWidth > 0.0f && it.interactionHeight > 0.0f } shouldBe true
 
-                // The original swing reaches ItemsAdder before markers are restored on the next tick.
+                // ItemsAdder handles this original swing before the next-tick restore.
                 scheduler.tick(1)
                 rootMarkers.all { it.interactionWidth > 0.0f && it.interactionHeight > 0.0f } shouldBe true
                 otherRootMarkers.all { it.interactionWidth > 0.0f && it.interactionHeight > 0.0f } shouldBe true
 
-                // A non-ARC target cannot temporarily change any marker.
-                targetedEntity = null
+                // A cancelled attack that could have damaged an entity is not
+                // allowed to route around the protection which cancelled it.
+                val protectedAttack = PrePlayerAttackEntityEvent(player, rootMarkers.first(), true)
+                protectedAttack.isCancelled = true
+                runtime.onPreNativeFurnitureAttack(protectedAttack)
+                runtime.onNativeFurnitureSwing(PlayerAnimationEvent(player, PlayerAnimationType.ARM_SWING))
+                rootMarkers.all { it.interactionWidth > 0.0f && it.interactionHeight > 0.0f } shouldBe true
+
+                // An attack with no following swing expires without hiding the
+                // target on a later unrelated animation.
+                runtime.onPreNativeFurnitureAttack(PrePlayerAttackEntityEvent(player, rootMarkers.first(), false))
+                scheduler.tick(3)
                 runtime.onNativeFurnitureSwing(PlayerAnimationEvent(player, PlayerAnimationType.ARM_SWING))
                 rootMarkers.all { it.interactionWidth > 0.0f && it.interactionHeight > 0.0f } shouldBe true
             } finally {

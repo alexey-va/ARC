@@ -3,6 +3,7 @@ package ru.arc.hooks.economyshop
 import dev.lone.itemsadder.api.CustomFurniture
 import dev.lone.itemsadder.api.Events.FurnitureBreakEvent
 import dev.lone.itemsadder.api.Events.FurniturePlaceSuccessEvent
+import io.papermc.paper.event.player.PrePlayerAttackEntityEvent
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.NamespacedKey
@@ -87,10 +88,6 @@ internal fun interface FurnitureGalleryNativeRootResolver {
     fun furnitureId(entity: Entity): String?
 }
 
-internal fun interface FurnitureGallerySwingTargetResolver {
-    fun targetEntity(player: Player): Entity?
-}
-
 private object ItemsAdderFurnitureGalleryNativeRootResolver : FurnitureGalleryNativeRootResolver {
     override fun furnitureId(entity: Entity): String? = runCatching {
         val furniture = CustomFurniture.byAlreadySpawned(entity) ?: return null
@@ -109,13 +106,12 @@ internal class FurnitureGalleryInteractionRuntime(
     profiles: Map<String, FurnitureGalleryProfile>,
     private val hasPurchaseOffer: (String) -> Boolean = { false },
     private val rootResolver: FurnitureGalleryNativeRootResolver = ItemsAdderFurnitureGalleryNativeRootResolver,
-    private val swingTargetResolver: FurnitureGallerySwingTargetResolver =
-        FurnitureGallerySwingTargetResolver { player -> player.getTargetEntity(NATIVE_BREAK_RAY_DISTANCE) },
 ) : Listener, AutoCloseable {
     private val tasks = LifecycleTaskScope()
     val markers = FurnitureGalleryTargetMarkers(plugin)
     private val profilesById = profiles.toMap()
     private val roots = LinkedHashMap<UUID, RootState>()
+    private val pendingNativeSwings = LinkedHashMap<UUID, PendingNativeSwing>()
     private val pendingChunks = LinkedHashSet<Pair<Int, Int>>()
     private val issueIds = LinkedHashSet<String>()
     private var scannerScheduled = false
@@ -135,6 +131,7 @@ internal class FurnitureGalleryInteractionRuntime(
         val token = tasks.restart()
         Bukkit.getWorld(FURNITURE_GALLERY_WORLD)?.let(::removeAllOwnedMarkers)
         roots.clear()
+        pendingNativeSwings.clear()
         pendingChunks.clear()
         galleryWorld()?.loadedChunks?.forEach { enqueueChunk(it.x, it.z) }
         scheduleChunkScan(token)
@@ -188,19 +185,34 @@ internal class FurnitureGalleryInteractionRuntime(
     }
 
     /**
-     * Let ItemsAdder's own swing listener ray-trace the native furniture root
-     * instead of ARC's larger synthetic Interaction. Its normal protection,
-     * FurnitureBreakEvent, callbacks, and drop rules then remain in force.
+     * Capture the exact entity from the attack packet before vanilla ignores
+     * damage to an invulnerable Interaction. Paper's target-ray helper can
+     * select a different entity than the client's attack packet; ItemsAdder
+     * itself ray-traces only the nearest entity and stops if it is not native
+     * furniture. Retain this exact root for a few ticks, then collapse only its
+     * ARC markers during the corresponding original swing so IA's handler keeps
+     * its protection, FurnitureBreakEvent, callbacks, and drop rules.
      */
-    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = false)
+    fun onPreNativeFurnitureAttack(event: PrePlayerAttackEntityEvent) {
+        if (closed || event.player.world.name != FURNITURE_GALLERY_WORLD) return
+        // Paper marks willAttack=false as cancelled before listeners run. That
+        // is expected for invulnerable Interaction markers; a real cancellation
+        // of a would-be attack must still be respected.
+        if (event.willAttack() && event.isCancelled) return
+        val marker = event.attacked as? Interaction ?: return
+        val plan = targetForMarker(marker) ?: return
+        rememberNativeSwingTarget(event.player.uniqueId, plan)
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun onNativeFurnitureSwing(event: PlayerAnimationEvent) {
         if (closed || event.animationType != PlayerAnimationType.ARM_SWING) return
         val player = event.player
         if (player.world.name != FURNITURE_GALLERY_WORLD) return
-        val marker = runCatching { swingTargetResolver.targetEntity(player) }.getOrNull() as? Interaction
-            ?: return
-        val plan = targetForMarker(marker) ?: return
-        suppressRootMarkersForNativeSwing(plan)
+        val pending = pendingNativeSwings.remove(player.uniqueId) ?: return
+        if (roots[pending.plan.rootId]?.plan != pending.plan) return
+        suppressRootMarkersForNativeSwing(pending.plan)
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -235,6 +247,7 @@ internal class FurnitureGalleryInteractionRuntime(
         closed = true
         tasks.close()
         pendingChunks.clear()
+        pendingNativeSwings.clear()
         scannerScheduled = false
         Bukkit.getWorld(FURNITURE_GALLERY_WORLD)?.let(::removeAllOwnedMarkers)
         roots.clear()
@@ -470,6 +483,18 @@ internal class FurnitureGalleryInteractionRuntime(
         }
     }
 
+    private fun rememberNativeSwingTarget(playerId: UUID, plan: FurnitureGalleryHitboxPlan) {
+        val pending = PendingNativeSwing(plan)
+        pendingNativeSwings[playerId] = pending
+        val expiration = tasks.runLater(tasks.token(), PENDING_NATIVE_SWING_TTL_TICKS) {
+            if (pendingNativeSwings[playerId] === pending) pendingNativeSwings.remove(playerId)
+        }
+        if (expiration == null) {
+            if (pendingNativeSwings[playerId] === pending) pendingNativeSwings.remove(playerId)
+            logIssue(plan.furnitureId, "could not retain an ItemsAdder swing target")
+        }
+    }
+
     private fun logIssue(id: String, detail: String) {
         val key = id.take(256)
         if (!issueIds.add(key)) return
@@ -494,12 +519,14 @@ internal class FurnitureGalleryInteractionRuntime(
         val height: Float,
     )
 
+    private data class PendingNativeSwing(val plan: FurnitureGalleryHitboxPlan)
+
     private companion object {
         const val CHUNKS_PER_SCAN_TICK = 8
         const val RECONCILE_PERIOD_TICKS = 100L
         const val MARKER_LOCATION_TOLERANCE = 0.01
         const val MARKER_SIZE_TOLERANCE = 0.01f
-        const val NATIVE_BREAK_RAY_DISTANCE = 5
+        const val PENDING_NATIVE_SWING_TTL_TICKS = 3L
         const val MAX_LOGGED_ISSUES = 64
     }
 }
