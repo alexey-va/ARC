@@ -2,16 +2,16 @@ package ru.arc.hooks.economyshop
 
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
-import org.bukkit.event.EventHandler
-import org.bukkit.event.EventPriority
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
 import org.bukkit.World
 import org.bukkit.entity.Entity
 import org.bukkit.entity.Player
+import org.bukkit.event.EventHandler
+import org.bukkit.event.EventPriority
 import org.bukkit.event.player.PlayerInteractEntityEvent
 import org.bukkit.inventory.EquipmentSlot
-import io.mockk.mockk
-import io.mockk.every
-import io.mockk.verify
 import java.util.UUID
 
 class FurnitureGalleryPurchaseListenerTest : StringSpec({
@@ -96,6 +96,10 @@ class FurnitureGalleryPurchaseListenerTest : StringSpec({
             handler.priority shouldBe EventPriority.LOWEST
             handler.ignoreCancelled shouldBe false
         }
+        listenerMethods.values
+            .filter { it.getAnnotation(EventHandler::class.java)?.priority == EventPriority.LOWEST }
+            .map { it.name }
+            .toSet() shouldBe setOf("onEntityInteractProtection", "onEntityInteractAtProtection")
 
         listOf("onEntityInteract", "onEntityInteractAt", "onBlockInteract").forEach { methodName ->
             val handler = listenerMethods.getValue(methodName).getAnnotation(EventHandler::class.java)
