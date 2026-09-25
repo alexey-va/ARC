@@ -73,6 +73,7 @@ import ru.arc.dialogdemo.DialogDemoModule
 import ru.arc.helpcenter.HelpCenterModule
 import ru.arc.iteminfo.ItemInfoModule
 import ru.arc.itemcatalog.ItemsCatalogModule
+import ru.arc.itemlore.ItemLoreModule
 import ru.arc.itemcatalog.CaseRewardIssueCommand
 import ru.arc.landsui.LandsUiModule
 import ru.arc.network.NetworkRegistry
@@ -297,6 +298,7 @@ open class ARC : JavaPlugin() {
             MountModule,
             ArcParkourModule,
             ItemsCatalogModule,
+            ItemLoreModule,
             LandsUiModule,
             HelpCenterModule,
             DialogDemoModule,
