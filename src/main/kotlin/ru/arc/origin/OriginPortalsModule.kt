@@ -324,16 +324,43 @@ private class OriginPortalVisual(
     private var controller: PortalOriginGateController? = null
     private var labels: List<TextDisplay> = emptyList()
     private var spawnAttempted = false
+    private var gateSpawned = false
 
     fun tick(tick: Int) {
-        val world = Bukkit.getWorld(anchor.worldName) ?: return
-        val settings = config.gateSettings(anchor) ?: return
+        val world = Bukkit.getWorld(anchor.worldName) ?: run {
+            remove()
+            return
+        }
+        val settings = config.gateSettings(anchor) ?: run {
+            remove()
+            return
+        }
+        val chunksLoaded = originPortalVisualChunksLoaded(anchor, world)
+        if (
+            shouldResetOriginPortalVisual(
+                spawnAttempted = spawnAttempted,
+                chunksLoaded = chunksLoaded,
+                gateSpawned = gateSpawned,
+                gateActive = controller?.isActive == true,
+            )
+        ) {
+            remove()
+            if (!chunksLoaded) return
+        }
+        if (spawnAttempted && labels.any { !it.isValid }) {
+            labels.forEach { if (it.isValid) it.remove() }
+            labels = emptyList()
+        }
         if (!spawnAttempted) {
             spawnAttempted = true
             controller =
                 PortalOriginGateController(settings) {
-                    BukkitPortalOriginGate.spawn(anchor.center(world), settings, anchor.style)
+                    BukkitPortalOriginGate.spawn(anchor.center(world), settings, anchor.style).also {
+                        gateSpawned = it != null
+                    }
                 }
+        }
+        if (labels.isEmpty()) {
             labels = anchor.labelLocations(world).map { spawnLabel(world, it) }
         }
         val active = controller?.tickOpening(settings.entryTick + tick) == true
@@ -362,6 +389,7 @@ private class OriginPortalVisual(
             )
             it.lineWidth = 220
             it.viewRange = 1.25f
+            it.isPersistent = false
             it.setTransformationMatrix(Matrix4f().scaling(anchor.labelScale))
         }
     }
@@ -382,9 +410,10 @@ private class OriginPortalVisual(
     fun remove() {
         controller?.remove()
         controller = null
-        labels.forEach { it.remove() }
+        labels.forEach { if (it.isValid) it.remove() }
         labels = emptyList()
         spawnAttempted = false
+        gateSpawned = false
     }
 
     private fun labelColor(style: PortalVisualStyle): TextColor =
@@ -395,6 +424,21 @@ private class OriginPortalVisual(
             else -> TextColor.color(0xF2E8D5)
         }
 }
+
+internal fun originPortalVisualChunksLoaded(anchor: OriginPortalAnchor, world: org.bukkit.World): Boolean {
+    val locations = sequenceOf(anchor.center(world)) + anchor.labelLocations(world).asSequence()
+    return locations
+        .map { (it.blockX shr 4) to (it.blockZ shr 4) }
+        .distinct()
+        .all { (chunkX, chunkZ) -> world.isChunkLoaded(chunkX, chunkZ) }
+}
+
+internal fun shouldResetOriginPortalVisual(
+    spawnAttempted: Boolean,
+    chunksLoaded: Boolean,
+    gateSpawned: Boolean,
+    gateActive: Boolean,
+): Boolean = !chunksLoaded || (spawnAttempted && gateSpawned && !gateActive)
 
 object OriginPortalsModule : PluginModule, Listener {
     override val name = "OriginPortals"

@@ -638,8 +638,11 @@ private class TravelAnchorPacketPortalHandle(
     private val soundLocation: Location,
     private val settings: PortalOriginGateSettings,
 ) : PortalOriginGateHandle {
+    override val isValid: Boolean
+        get() = display.isValid
+
     override fun updateScale(multiplier: Float) {
-        if (!display.isValid) return
+        if (!isValid) return
         display.transformation = packetDisplayTransformation(
             settings.width * multiplier,
             settings.height * multiplier,
@@ -648,7 +651,7 @@ private class TravelAnchorPacketPortalHandle(
     }
 
     override fun playOpeningSound() {
-        if (settings.openingSoundEnabled && display.isValid) {
+        if (settings.openingSoundEnabled && isValid) {
             soundLocation.world?.playSound(
                 soundLocation,
                 settings.openingSoundId,
@@ -660,7 +663,7 @@ private class TravelAnchorPacketPortalHandle(
     }
 
     override fun remove() {
-        display.remove()
+        if (isValid) display.remove()
     }
 }
 

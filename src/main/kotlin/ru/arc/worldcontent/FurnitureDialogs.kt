@@ -78,8 +78,8 @@ object FurnitureDialogs {
         id = "furniture.gallery",
         title = styled("Выставка мебели", titleColor),
         body = listOf(
-            prose("Главный зал подготовлен для будущей мебельной экспозиции. Сейчас он открыт без выставленных предметов."),
-            prose("Осмотрите пространство и вернитесь в Origin через портал в конце зала."),
+            prose("В галерее собраны 48 тематических комнат с мебелью для вдохновения."),
+            prose("Чтобы вернуться в Origin, воспользуйтесь порталом в фойе."),
         ),
         buttons = rooms.map { room ->
             PaperDialogButton(

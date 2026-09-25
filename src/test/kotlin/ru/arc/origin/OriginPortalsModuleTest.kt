@@ -113,6 +113,51 @@ class OriginPortalsModuleTest : FreeSpec({
         sides.map { it.yaw } shouldContainExactly listOf(270f, 90f)
     }
 
+    "portal visuals wait for every visual chunk and reset lost native handles" {
+        val directory = Files.createTempDirectory("arc-origin-portal-visual-lifecycle")
+        try {
+            val gallery = OriginPortalsConfig.load(directory).anchors.first { it.id == OriginPortalId.GALLERY_EXIT }
+            val edgeAnchor = gallery.copy(x = 16.1, yaw = 270f, labelFrontDistance = 3.0)
+            val world = mockk<World>()
+            var unloadedChunk = 0 to 3
+            every { world.isChunkLoaded(any(), any()) } answers {
+                (firstArg<Int>() to secondArg<Int>()) != unloadedChunk
+            }
+
+            originPortalVisualChunksLoaded(edgeAnchor, world).shouldBeFalse()
+
+            unloadedChunk = 99 to 99
+            originPortalVisualChunksLoaded(edgeAnchor, world).shouldBeTrue()
+
+            shouldResetOriginPortalVisual(
+                spawnAttempted = true,
+                chunksLoaded = false,
+                gateSpawned = true,
+                gateActive = false,
+            ).shouldBeTrue()
+            shouldResetOriginPortalVisual(
+                spawnAttempted = true,
+                chunksLoaded = true,
+                gateSpawned = true,
+                gateActive = false,
+            ).shouldBeTrue()
+            shouldResetOriginPortalVisual(
+                spawnAttempted = true,
+                chunksLoaded = true,
+                gateSpawned = false,
+                gateActive = false,
+            ).shouldBeFalse()
+            shouldResetOriginPortalVisual(
+                spawnAttempted = true,
+                chunksLoaded = true,
+                gateSpawned = true,
+                gateActive = true,
+            ).shouldBeFalse()
+        } finally {
+            directory.toFile().deleteRecursively()
+        }
+    }
+
     "central labels keep both faces at one configured position before every rotated portal" {
         val directory = Files.createTempDirectory("arc-origin-portal-label-faces")
         try {

@@ -239,6 +239,8 @@ internal data class PortalOriginGateSettings(
 }
 
 internal interface PortalOriginGateHandle {
+    val isValid: Boolean
+
     fun updateScale(multiplier: Float)
 
     fun playOpeningSound()
@@ -258,17 +260,21 @@ internal class PortalOriginGateController(
     private var removed = false
 
     val isActive: Boolean
-        get() = !removed && handle != null
+        get() = !removed && handle?.isValid == true
 
     fun tickOpening(phase: Int): Boolean {
         if (removed || closing || phase < settings.openingStartTick) return isActive
 
+        if (handle?.isValid == false) {
+            handle = null
+            spawnAttempted = false
+        }
         if (!spawnAttempted) {
             spawnAttempted = true
             handle = spawn()
         }
 
-        val activeHandle = handle ?: return false
+        val activeHandle = handle?.takeIf(PortalOriginGateHandle::isValid) ?: return false
         val elapsedTicks = (phase - settings.openingStartTick).coerceAtLeast(0)
         activeHandle.updateScale(
             originGateOpeningScale(elapsedTicks, settings.openingDurationTicks, settings.openingCurve),
@@ -281,7 +287,7 @@ internal class PortalOriginGateController(
     }
 
     fun beginClosing() {
-        val activeHandle = handle ?: return
+        val activeHandle = handle?.takeIf(PortalOriginGateHandle::isValid) ?: return
         if (removed || closing) return
         closing = true
         closingTicks = 0
@@ -289,7 +295,7 @@ internal class PortalOriginGateController(
     }
 
     fun tickClosing(): Boolean {
-        if (removed || !closing || handle == null) return false
+        if (removed || !closing || handle?.isValid != true) return false
         if (closingTicks >= settings.closingDurationTicks) return false
         closingTicks++
         handle?.updateScale(originGateClosingScale(closingTicks, settings.closingDurationTicks))
@@ -298,7 +304,7 @@ internal class PortalOriginGateController(
 
     /** Applies a bounded feature-owned idle pulse without exposing the display entity. */
     fun updateScale(multiplier: Float) {
-        if (!removed) handle?.updateScale(multiplier)
+        if (!removed) handle?.takeIf(PortalOriginGateHandle::isValid)?.updateScale(multiplier)
     }
 
     fun remove() {
@@ -635,8 +641,11 @@ internal object BukkitPortalOriginGate {
         private val soundLocation: Location,
         private val settings: PortalOriginGateSettings,
     ) : PortalOriginGateHandle {
+        override val isValid: Boolean
+            get() = display.isValid
+
         override fun updateScale(multiplier: Float) {
-            if (!display.isValid) return
+            if (!isValid) return
             display.transformation = transformation(
                 settings.width * multiplier,
                 settings.height * multiplier,
@@ -645,11 +654,11 @@ internal object BukkitPortalOriginGate {
         }
 
         override fun playOpeningSound() {
-            if (display.isValid) playOpeningSound(soundLocation, settings)
+            if (isValid) playOpeningSound(soundLocation, settings)
         }
 
         override fun remove() {
-            if (display.isValid) display.remove()
+            if (isValid) display.remove()
         }
     }
 

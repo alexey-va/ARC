@@ -140,6 +140,31 @@ class PortalOriginGateTest : FreeSpec({
             controller.isActive.shouldBeFalse()
             controller.tickClosing().shouldBeFalse()
         }
+
+        "reports native handle validity and respawns a lost handle on the next opening tick" {
+            val unloaded = RecordingOriginGateHandle()
+            val replacement = RecordingOriginGateHandle()
+            var spawnCount = 0
+            val controller =
+                PortalOriginGateController(settings().shouldNotBeNull()) {
+                    spawnCount++
+                    if (spawnCount == 1) unloaded else replacement
+                }
+
+            controller.tickOpening(0).shouldBeTrue()
+            controller.isActive.shouldBeTrue()
+            unloaded.valid = false
+            controller.isActive.shouldBeFalse()
+
+            controller.tickOpening(1).shouldBeTrue()
+            controller.isActive.shouldBeTrue()
+            spawnCount shouldBe 2
+            unloaded.scales.size shouldBe 1
+            replacement.scales.size shouldBe 1
+            controller.remove()
+            unloaded.removeCount shouldBe 0
+            replacement.removeCount shouldBe 1
+        }
     }
 
     "origin-gate visual math" - {
@@ -245,6 +270,10 @@ private class RecordingOriginGateHandle : PortalOriginGateHandle {
     val scales = mutableListOf<Float>()
     var playOpeningSoundCount = 0
     var removeCount = 0
+    var valid = true
+
+    override val isValid: Boolean
+        get() = valid
 
     override fun updateScale(multiplier: Float) {
         scales += multiplier
@@ -256,5 +285,6 @@ private class RecordingOriginGateHandle : PortalOriginGateHandle {
 
     override fun remove() {
         removeCount++
+        valid = false
     }
 }

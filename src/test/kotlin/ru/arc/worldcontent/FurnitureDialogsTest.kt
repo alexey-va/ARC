@@ -47,8 +47,13 @@ class FurnitureDialogsTest : FreeSpec({
 
         screen.id shouldBe "furniture.gallery"
         screen.columns shouldBe 1
-        PlainTextComponentSerializer.plainText().serialize(screen.body.first().text) shouldContain "без выставленных предметов"
-        screen.body.joinToString("\n") { PlainTextComponentSerializer.plainText().serialize(it.text) } shouldNotContain "manifest"
+        val text = screen.body.joinToString("\n") { PlainTextComponentSerializer.plainText().serialize(it.text) }
+        text shouldContain "48 тематических комнат"
+        text shouldContain "мебелью"
+        text shouldContain "порталом в фойе"
+        text shouldNotContain "будущей мебельной экспозиции"
+        text shouldNotContain "портал в конце зала"
+        text shouldNotContain "manifest"
         screen.buttons.map { it.id.value }.shouldContainExactly(FurnitureDialogs.rooms.map { it.id })
         screen.buttons.all { it.closeDialogBeforeAction } shouldBe true
         screen.buttons.forEach { button ->
