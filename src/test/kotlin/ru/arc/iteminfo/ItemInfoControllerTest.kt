@@ -105,6 +105,7 @@ class ItemInfoControllerTest : StringSpec({
     companion object {
         private fun player(): Player = mockk {
             every { uniqueId } returns UUID.randomUUID()
+            every { world } returns mockk { every { name } returns "survival" }
         }
     }
 }

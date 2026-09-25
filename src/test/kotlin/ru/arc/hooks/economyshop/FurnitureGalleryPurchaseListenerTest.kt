@@ -11,6 +11,9 @@ import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.player.PlayerInteractEntityEvent
+import org.bukkit.event.player.PlayerInteractEvent
+import org.bukkit.event.block.Action
+import dev.lone.itemsadder.api.Events.FurniturePlaceSuccessEvent
 import org.bukkit.inventory.EquipmentSlot
 import java.util.UUID
 
@@ -99,7 +102,7 @@ class FurnitureGalleryPurchaseListenerTest : StringSpec({
         listenerMethods.values
             .filter { it.getAnnotation(EventHandler::class.java)?.priority == EventPriority.LOWEST }
             .map { it.name }
-            .toSet() shouldBe setOf("onEntityInteractProtection", "onEntityInteractAtProtection")
+            .toSet() shouldBe setOf("onEntityInteractProtection", "onEntityInteractAtProtection", "onBlockInteractCapture")
 
         listOf("onEntityInteract", "onEntityInteractAt", "onBlockInteract").forEach { methodName ->
             val handler = listenerMethods.getValue(methodName).getAnnotation(EventHandler::class.java)
@@ -112,45 +115,82 @@ class FurnitureGalleryPurchaseListenerTest : StringSpec({
             .priority shouldBe EventPriority.HIGHEST
     }
 
-    "LOWEST protection gate cancels only a listed indexed marker and never opens a menu itself" {
+    "placing furniture cannot open a purchase even if the ray already intersects a listed model" {
         val purchases = mockk<ShopPurchaseService>()
         val gallery = mockk<FurnitureGalleryInteractionRuntime>()
-        val listener = FurnitureGalleryPurchaseListener(purchases, gallery)
-        val marker = mockk<Entity>()
         val player = mockk<Player>()
         val world = mockk<World>()
-        val event = mockk<PlayerInteractEntityEvent>(relaxed = true)
-        val plan = FurnitureGalleryTargetPlanner.plan(
-            FurnitureGalleryTargetPlanner.profile(
-                "arc:oak_chair",
-                listOf(
-                    FurnitureGalleryVertex(0.0, 0.0, 0.0),
-                    FurnitureGalleryVertex(0.4, 0.8, 0.4),
-                ),
-            ),
-            UUID.fromString("e8f19d6c-8177-49a6-bb2d-2ab8e2ab764a"),
-            FurnitureGalleryAnchor(0.5, 64.0, 0.5, 0.0),
-        )
+        val event = mockk<PlayerInteractEvent>(relaxed = true)
+        every { player.world } returns world
+        every { player.uniqueId } returns UUID.randomUUID()
+        every { world.name } returns FURNITURE_GALLERY_WORLD
+        every { event.player } returns player
+        val listener = FurnitureGalleryPurchaseListener(purchases, gallery, { true }, { 100 })
 
+        listener.onBlockInteractCapture(event)
+        listener.onBlockInteract(event)
+
+        verify(exactly = 0) { gallery.targetInSight(any(), any()) }
+        verify(exactly = 0) { purchases.openFurniturePurchaseMenu(any(), any()) }
+        verify(exactly = 0) { event.isCancelled = true }
+    }
+
+    "a floor that becomes furniture during a click is not retroactively a purchase target" {
+        val purchases = mockk<ShopPurchaseService>()
+        val gallery = mockk<FurnitureGalleryInteractionRuntime>()
+        val player = mockk<Player>()
+        val world = mockk<World>()
+        val event = mockk<PlayerInteractEvent>(relaxed = true)
+        every { player.world } returns world
+        every { player.uniqueId } returns UUID.randomUUID()
+        every { world.name } returns FURNITURE_GALLERY_WORLD
         every { event.player } returns player
         every { event.hand } returns EquipmentSlot.HAND
-        every { event.rightClicked } returns marker
+        every { event.action } returns Action.RIGHT_CLICK_AIR
+        every { event.clickedBlock } returns null
+        every { gallery.targetInSight(player, 5.0) } returns null
+        val listener = FurnitureGalleryPurchaseListener(purchases, gallery, { false }, { 100 })
+        listener.onBlockInteractCapture(event)
+        every { gallery.targetInSight(player, 5.0) } returns FurnitureGallerySightTarget(
+            mockk(), "arc:oak_chair", "native:new-chair", 2.0,
+        )
+        listener.onBlockInteract(event)
+        verify(exactly = 1) { gallery.targetInSight(player, 5.0) }
+        verify(exactly = 0) { purchases.openFurniturePurchaseMenu(any(), any()) }
+    }
+
+    "a separate right click opens the ray-selected offer after placement, without any Interaction entity" {
+        val purchases = mockk<ShopPurchaseService>()
+        val gallery = mockk<FurnitureGalleryInteractionRuntime>()
+        val player = mockk<Player>()
+        val world = mockk<World>()
+        val root = mockk<Entity>()
+        val placed = mockk<FurniturePlaceSuccessEvent>()
+        val event = mockk<PlayerInteractEvent>(relaxed = true)
+        var tick = 100
         every { player.world } returns world
+        every { player.uniqueId } returns UUID.randomUUID()
         every { world.name } returns FURNITURE_GALLERY_WORLD
-        every { gallery.targetForMarker(marker) } returns plan
+        every { placed.player } returns player
+        every { event.player } returns player
+        every { event.hand } returns EquipmentSlot.HAND
+        every { event.action } returns Action.RIGHT_CLICK_AIR
+        every { event.clickedBlock } returns null
+        every { gallery.targetInSight(player, 5.0) } returns FurnitureGallerySightTarget(
+            root, "arc:oak_chair", "native:chair", 2.0,
+        )
         every { purchases.hasFurniturePurchaseMenu("arc:oak_chair") } returns true
-
-        listener.onEntityInteractProtection(event)
-
-        verify(exactly = 1) { event.isCancelled = true }
+        every { purchases.openFurniturePurchaseMenu(player, "arc:oak_chair") } returns FurnitureShopMenuOpenResult.OPENED
+        val listener = FurnitureGalleryPurchaseListener(purchases, gallery, { false }, { tick })
+        listener.onBlockInteractCapture(event)
+        listener.onFurniturePlaced(placed)
+        listener.onBlockInteract(event)
         verify(exactly = 0) { purchases.openFurniturePurchaseMenu(any(), any()) }
 
-        every { purchases.hasFurniturePurchaseMenu("arc:oak_chair") } returns false
-
-        listener.onEntityInteractProtection(event)
-
-        verify(exactly = 1) { event.isCancelled = true }
-        verify(exactly = 0) { purchases.openFurniturePurchaseMenu(any(), any()) }
+        tick++
+        listener.onBlockInteractCapture(event)
+        listener.onBlockInteract(event)
+        verify(exactly = 1) { purchases.openFurniturePurchaseMenu(player, "arc:oak_chair") }
     }
 
     "ItemsAdder routing prefers its exact furniture root and falls back to the event entity" {

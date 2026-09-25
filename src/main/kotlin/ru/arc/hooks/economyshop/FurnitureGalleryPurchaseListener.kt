@@ -1,7 +1,9 @@
 package ru.arc.hooks.economyshop
 
 import dev.lone.itemsadder.api.CustomFurniture
+import dev.lone.itemsadder.api.CustomStack
 import dev.lone.itemsadder.api.Events.FurnitureInteractEvent
+import dev.lone.itemsadder.api.Events.FurniturePlaceSuccessEvent
 import org.bukkit.Bukkit
 import org.bukkit.block.Block
 import org.bukkit.entity.Entity
@@ -19,6 +21,7 @@ import java.util.LinkedHashMap
 import java.util.LinkedHashSet
 import java.util.Locale
 import java.util.UUID
+import java.util.WeakHashMap
 
 internal const val FURNITURE_GALLERY_WORLD = "rc_atelier_furniture_gallery"
 
@@ -26,9 +29,42 @@ internal const val FURNITURE_GALLERY_WORLD = "rc_atelier_furniture_gallery"
 internal class FurnitureGalleryPurchaseListener(
     private val purchases: ShopPurchaseService,
     private val gallery: FurnitureGalleryInteractionRuntime,
+    private val placementItem: (Player) -> Boolean = ::holdingPlaceableItem,
+    private val currentTick: () -> Int = Bukkit::getCurrentTick,
 ) : Listener {
     private val deduplicator = FurnitureGalleryClickDeduplicator()
     private val loggedUnavailableItems = LinkedHashSet<String>()
+    private val blockClickTargets = WeakHashMap<PlayerInteractEvent, FurnitureGalleryEntityTarget>()
+    private val placementTicks = LinkedHashMap<UUID, Int>()
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    fun onFurniturePlaced(event: FurniturePlaceSuccessEvent) {
+        if (event.player.world.name != FURNITURE_GALLERY_WORLD) return
+        placementTicks.entries.removeIf { it.value != currentTick() }
+        placementTicks[event.player.uniqueId] = currentTick()
+    }
+
+    /** Snapshot the target before ItemsAdder may turn the clicked floor into furniture. */
+    @EventHandler(priority = EventPriority.LOWEST)
+    fun onBlockInteractCapture(event: PlayerInteractEvent) {
+        if (!canPurchase(event.player) || event.hand != EquipmentSlot.HAND ||
+            event.action !in setOf(Action.RIGHT_CLICK_BLOCK, Action.RIGHT_CLICK_AIR)) return
+        val native = event.clickedBlock?.let(::furniture)?.let { furniture ->
+            val id = furniture.namespacedID ?: return@let null
+            gallery.nativeFurnitureIdentity(id, furniture.entity)?.let { FurnitureGalleryEntityTarget(id, it) }
+        }
+        val target = native ?: gallery.targetInSight(event.player, PURCHASE_REACH)?.let {
+            FurnitureGalleryEntityTarget(it.furnitureId, it.targetKey)
+        } ?: return
+        if (!purchases.hasFurniturePurchaseMenu(target.furnitureId)) return
+        blockClickTargets[event] = target
+        // Do not let seating, placement or a region-denial callback consume a shop click.
+        event.isCancelled = true
+    }
+
+    private fun canPurchase(player: Player): Boolean =
+        player.world.name == FURNITURE_GALLERY_WORLD &&
+            placementTicks[player.uniqueId] != currentTick() && !placementItem(player)
 
     /**
      * WorldGuard handles these events at NORMAL with ignoreCancelled=true. Mark
@@ -39,7 +75,7 @@ internal class FurnitureGalleryPurchaseListener(
     fun onEntityInteractProtection(event: PlayerInteractEntityEvent) {
         if (event is PlayerInteractAtEntityEvent) return
         preCancelPurchasableEntityClick(
-            worldName = event.player.world.name,
+            player = event.player,
             hand = event.hand,
             entity = event.rightClicked,
             cancel = { event.isCancelled = true },
@@ -49,7 +85,7 @@ internal class FurnitureGalleryPurchaseListener(
     @EventHandler(priority = EventPriority.LOWEST)
     fun onEntityInteractAtProtection(event: PlayerInteractAtEntityEvent) {
         preCancelPurchasableEntityClick(
-            worldName = event.player.world.name,
+            player = event.player,
             hand = event.hand,
             entity = event.rightClicked,
             cancel = { event.isCancelled = true },
@@ -67,12 +103,13 @@ internal class FurnitureGalleryPurchaseListener(
             )
         ) return
 
+        if (!canPurchase(event.player)) return
         val target = entityClickTarget(event.rightClicked) ?: return
         handleFurnitureClick(
             player = event.player,
             furnitureId = target.furnitureId,
             targetIdentity = target.targetIdentity,
-            tick = Bukkit.getCurrentTick(),
+            tick = currentTick(),
             cancel = { event.isCancelled = true },
         )
     }
@@ -86,34 +123,26 @@ internal class FurnitureGalleryPurchaseListener(
             )
         ) return
 
+        if (!canPurchase(event.player)) return
         val target = entityClickTarget(event.rightClicked) ?: return
         handleFurnitureClick(
             player = event.player,
             furnitureId = target.furnitureId,
             targetIdentity = target.targetIdentity,
-            tick = Bukkit.getCurrentTick(),
+            tick = currentTick(),
             cancel = { event.isCancelled = true },
         )
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onBlockInteract(event: PlayerInteractEvent) {
-        val block = event.clickedBlock ?: return
-        if (!FurnitureGalleryInteractionPolicy.accepts(
-                worldName = event.player.world.name,
-                rightClick = event.action == Action.RIGHT_CLICK_BLOCK,
-                mainHand = event.hand == EquipmentSlot.HAND,
-            )
-        ) return
-
-        val furniture = furniture(block) ?: return
-        val id = furniture.namespacedID
-        val targetIdentity = gallery.nativeFurnitureIdentity(id, furniture.entity) ?: return
+        val target = blockClickTargets.remove(event) ?: return
+        if (!canPurchase(event.player)) return
         handleFurnitureClick(
             player = event.player,
-            furnitureId = id,
-            targetIdentity = targetIdentity,
-            tick = Bukkit.getCurrentTick(),
+            furnitureId = target.furnitureId,
+            targetIdentity = target.targetIdentity,
+            tick = currentTick(),
             cancel = { event.isCancelled = true },
         )
     }
@@ -126,7 +155,7 @@ internal class FurnitureGalleryPurchaseListener(
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onItemsAdderFurnitureInteract(event: FurnitureInteractEvent) {
         val furniture = runCatching { event.furniture }.getOrNull() ?: return
-        if (event.player.world.name != FURNITURE_GALLERY_WORLD) return
+        if (!canPurchase(event.player)) return
         val entity = exactItemsAdderFurnitureRoot(
             furnitureRoot = runCatching { furniture.entity }.getOrNull(),
             eventEntity = runCatching { event.bukkitEntity }.getOrNull(),
@@ -137,7 +166,7 @@ internal class FurnitureGalleryPurchaseListener(
             player = event.player,
             furnitureId = id,
             targetIdentity = targetIdentity,
-            tick = Bukkit.getCurrentTick(),
+            tick = currentTick(),
             cancel = { event.isCancelled = true },
         )
     }
@@ -149,6 +178,7 @@ internal class FurnitureGalleryPurchaseListener(
         tick: Int,
         cancel: () -> Unit,
     ) {
+        if (!canPurchase(player)) return
         val id = furnitureId?.trim()?.takeIf(String::isNotEmpty) ?: return
         if (!purchases.hasFurniturePurchaseMenu(id)) return
         // Only an exact current ESG furniture entry reaches this route. The
@@ -178,13 +208,14 @@ internal class FurnitureGalleryPurchaseListener(
         runCatching { CustomFurniture.byAlreadySpawned(block) }.getOrNull()
 
     private fun preCancelPurchasableEntityClick(
-        worldName: String,
+        player: Player,
         hand: EquipmentSlot,
         entity: Entity,
         cancel: () -> Unit,
     ) {
+        if (!canPurchase(player)) return
         if (!FurnitureGalleryInteractionPolicy.accepts(
-                worldName = worldName,
+                worldName = player.world.name,
                 rightClick = true,
                 mainHand = hand == EquipmentSlot.HAND,
             )
@@ -192,7 +223,7 @@ internal class FurnitureGalleryPurchaseListener(
 
         val target = entityClickTarget(entity) ?: return
         if (!FurnitureGalleryInteractionPolicy.shouldPreCancelExactPurchaseClick(
-                worldName = worldName,
+                worldName = player.world.name,
                 rightClick = true,
                 mainHand = hand == EquipmentSlot.HAND,
                 exactGalleryFurniture = true,
@@ -206,9 +237,6 @@ internal class FurnitureGalleryPurchaseListener(
     }
 
     private fun entityClickTarget(entity: Entity): FurnitureGalleryEntityTarget? {
-        gallery.targetForMarker(entity)?.let { target ->
-            return FurnitureGalleryEntityTarget(target.furnitureId, target.targetKey)
-        }
         val furniture = furniture(entity) ?: return null
         val id = furniture.namespacedID ?: return null
         val root = furniture.entity ?: entity
@@ -228,6 +256,7 @@ internal class FurnitureGalleryPurchaseListener(
 
     private companion object {
         const val MAX_LOGGED_ITEMS = 64
+        const val PURCHASE_REACH = 5.0
     }
 }
 
@@ -286,4 +315,12 @@ internal class FurnitureGalleryClickDeduplicator(
         }
         return true
     }
+}
+
+/** Building takes precedence while a block or ItemsAdder furniture is held. */
+private fun holdingPlaceableItem(player: Player): Boolean {
+    val held = player.inventory.itemInMainHand
+    if (held.type.isBlock && !held.type.isAir) return true
+    val custom = runCatching { CustomStack.byItemStack(held) }.getOrNull() ?: return false
+    return custom.isBlock || custom.config.isConfigurationSection("items.${custom.id}.behaviours.furniture")
 }

@@ -14,7 +14,7 @@ import ru.arc.ARC
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.hooks.luckperms.LuckPermsHook
 import ru.arc.hooks.economyshop.FURNITURE_GALLERY_WORLD
-import ru.arc.hooks.economyshop.FurnitureGalleryTargetMarkers
+import ru.arc.hooks.economyshop.FurnitureGalleryInteractionRuntime
 import ru.arc.onboarding.OnboardingModule
 import ru.arc.paper.api.ArcInspectionFrame
 import ru.arc.paper.api.ArcInspectionProvider
@@ -25,12 +25,12 @@ internal class ItemInfoRuntime(
     settings: ItemInfoSettings,
     private val inspection: PaperArcInspectionService,
     galleryPurchasePrice: (Player, String) -> String?,
-    galleryMarkers: FurnitureGalleryTargetMarkers?,
+    galleryRuntime: FurnitureGalleryInteractionRuntime?,
 ) : Listener, AutoCloseable {
     private val tasks = LifecycleTaskScope()
     private val failedViewers = mutableSetOf<java.util.UUID>()
     private val preferencesReader = if (Bukkit.getPluginManager().isPluginEnabled("LuckPerms")) LuckPermsHook() else null
-    private val resolver = BukkitItemInfoTargetResolver(settings.targetDistance, galleryMarkers = galleryMarkers)
+    private val resolver = BukkitItemInfoTargetResolver(settings.targetDistance, galleryRuntime = galleryRuntime)
     private val readPreferences: (Player) -> ItemInfoPreferences = { player ->
         ItemInfoPreferences.fromStored { key -> preferencesReader?.getCachedMeta(player.uniqueId, key) }
     }

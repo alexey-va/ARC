@@ -56,7 +56,7 @@ object ItemInfoModule : PluginModule {
             settings,
             service,
             galleryPurchasePrice,
-            HookRegistry.furnitureGalleryInteractionRuntime?.markers,
+            HookRegistry.furnitureGalleryInteractionRuntime,
         ).also {
             Bukkit.getPluginManager().registerEvents(it, ARC.instance)
             it.start()
