@@ -11,9 +11,12 @@ import org.bukkit.entity.Entity
 import org.bukkit.entity.Interaction
 import org.bukkit.entity.ArmorStand
 import org.bukkit.entity.ItemDisplay
+import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
+import org.bukkit.event.player.PlayerAnimationEvent
+import org.bukkit.event.player.PlayerAnimationType
 import org.bukkit.event.world.ChunkLoadEvent
 import org.bukkit.event.world.ChunkUnloadEvent
 import org.bukkit.event.world.WorldLoadEvent
@@ -84,6 +87,10 @@ internal fun interface FurnitureGalleryNativeRootResolver {
     fun furnitureId(entity: Entity): String?
 }
 
+internal fun interface FurnitureGallerySwingTargetResolver {
+    fun targetEntity(player: Player): Entity?
+}
+
 private object ItemsAdderFurnitureGalleryNativeRootResolver : FurnitureGalleryNativeRootResolver {
     override fun furnitureId(entity: Entity): String? = runCatching {
         val furniture = CustomFurniture.byAlreadySpawned(entity) ?: return null
@@ -102,6 +109,8 @@ internal class FurnitureGalleryInteractionRuntime(
     profiles: Map<String, FurnitureGalleryProfile>,
     private val hasPurchaseOffer: (String) -> Boolean = { false },
     private val rootResolver: FurnitureGalleryNativeRootResolver = ItemsAdderFurnitureGalleryNativeRootResolver,
+    private val swingTargetResolver: FurnitureGallerySwingTargetResolver =
+        FurnitureGallerySwingTargetResolver { player -> player.getTargetEntity(NATIVE_BREAK_RAY_DISTANCE) },
 ) : Listener, AutoCloseable {
     private val tasks = LifecycleTaskScope()
     val markers = FurnitureGalleryTargetMarkers(plugin)
@@ -176,6 +185,22 @@ internal class FurnitureGalleryInteractionRuntime(
             ?: runCatching { event.bukkitEntity }.getOrNull()
             ?: return
         if (entity.world.name == FURNITURE_GALLERY_WORLD) removeRoot(entity.uniqueId)
+    }
+
+    /**
+     * Let ItemsAdder's own swing listener ray-trace the native furniture root
+     * instead of ARC's larger synthetic Interaction. Its normal protection,
+     * FurnitureBreakEvent, callbacks, and drop rules then remain in force.
+     */
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
+    fun onNativeFurnitureSwing(event: PlayerAnimationEvent) {
+        if (closed || event.animationType != PlayerAnimationType.ARM_SWING) return
+        val player = event.player
+        if (player.world.name != FURNITURE_GALLERY_WORLD) return
+        val marker = runCatching { swingTargetResolver.targetEntity(player) }.getOrNull() as? Interaction
+            ?: return
+        val plan = targetForMarker(marker) ?: return
+        suppressRootMarkersForNativeSwing(plan)
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -415,6 +440,36 @@ internal class FurnitureGalleryInteractionRuntime(
             interaction.isResponsive
     }
 
+    private fun suppressRootMarkersForNativeSwing(plan: FurnitureGalleryHitboxPlan) {
+        val state = roots[plan.rootId]?.takeIf { it.plan == plan } ?: return
+        val suppressed = state.markers.mapNotNull { (segmentIndex, markerId) ->
+            val segment = plan.segments.getOrNull(segmentIndex) ?: return@mapNotNull null
+            val entity = Bukkit.getEntity(markerId) as? Interaction ?: return@mapNotNull null
+            val marker = markers.read(entity) ?: return@mapNotNull null
+            if (marker.targetKey != plan.targetKey || marker.furnitureId != plan.furnitureId) return@mapNotNull null
+            if (!entityMatchesSegment(entity, plan, segment)) return@mapNotNull null
+
+            SuppressedMarker(markerId, entity.interactionWidth, entity.interactionHeight).also {
+                entity.interactionWidth = 0.0f
+                entity.interactionHeight = 0.0f
+            }
+        }
+        if (suppressed.isEmpty()) return
+
+        tasks.runLater(1L) {
+            if (closed || roots[plan.rootId]?.plan != plan) return@runLater
+            val rootState = roots[plan.rootId] ?: return@runLater
+            if (!rootStillMatches(rootState)) return@runLater
+            suppressed.forEach { original ->
+                val entity = Bukkit.getEntity(original.markerId) as? Interaction ?: return@forEach
+                val marker = markers.read(entity) ?: return@forEach
+                if (marker.targetKey != plan.targetKey || marker.furnitureId != plan.furnitureId) return@forEach
+                entity.interactionWidth = original.width
+                entity.interactionHeight = original.height
+            }
+        }
+    }
+
     private fun logIssue(id: String, detail: String) {
         val key = id.take(256)
         if (!issueIds.add(key)) return
@@ -433,11 +488,18 @@ internal class FurnitureGalleryInteractionRuntime(
         val markers: MutableMap<Int, UUID> = LinkedHashMap(),
     )
 
+    private data class SuppressedMarker(
+        val markerId: UUID,
+        val width: Float,
+        val height: Float,
+    )
+
     private companion object {
         const val CHUNKS_PER_SCAN_TICK = 8
         const val RECONCILE_PERIOD_TICKS = 100L
         const val MARKER_LOCATION_TOLERANCE = 0.01
         const val MARKER_SIZE_TOLERANCE = 0.01f
+        const val NATIVE_BREAK_RAY_DISTANCE = 5
         const val MAX_LOGGED_ISSUES = 64
     }
 }

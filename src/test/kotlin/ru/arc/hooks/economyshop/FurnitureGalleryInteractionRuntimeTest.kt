@@ -3,9 +3,15 @@ package ru.arc.hooks.economyshop
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
+import io.mockk.every
+import io.mockk.mockk
 import org.bukkit.Location
 import org.bukkit.entity.ArmorStand
+import org.bukkit.entity.Entity
 import org.bukkit.entity.Interaction
+import org.bukkit.entity.Player
+import org.bukkit.event.player.PlayerAnimationEvent
+import org.bukkit.event.player.PlayerAnimationType
 import ru.arc.core.Tasks
 import ru.arc.core.TestTaskScheduler
 import ru.arc.paper.testing.MockBukkitTestRuntime
@@ -99,6 +105,68 @@ class FurnitureGalleryInteractionRuntimeTest : StringSpec({
                 runtime.nativeFurnitureIdentity("decor:other", root) shouldBe null
                 root.teleport(Location(elsewhere, 1.5, 64.0, 1.5))
                 runtime.nativeFurnitureIdentity("decor:unprofiled", root) shouldBe null
+            } finally {
+                runtime.close()
+                Tasks.reset()
+            }
+        }
+    }
+
+    "temporarily suppresses only the targeted root markers for ItemsAdder's original swing" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val scheduler = TestTaskScheduler()
+            Tasks.install(scheduler)
+            val plugin = paper.createSimplePlugin("FurnitureGallerySwingTest")
+            val world = paper.addSimpleWorld(FURNITURE_GALLERY_WORLD)
+            world.getChunkAt(0, 0)
+            val id = "decor:oak_table"
+            val root = world.spawn(Location(world, 1.5, 64.0, 1.5), ArmorStand::class.java)
+            val otherRoot = world.spawn(Location(world, 5.5, 64.0, 5.5), ArmorStand::class.java)
+            val rootIds = setOf(root.uniqueId, otherRoot.uniqueId)
+            val profile = FurnitureGalleryTargetPlanner.profile(
+                id,
+                listOf(
+                    FurnitureGalleryVertex(-0.6, 0.0, -0.3),
+                    FurnitureGalleryVertex(0.6, 1.2, 0.3),
+                ),
+            )
+            var targetedEntity: Entity? = null
+            val runtime = FurnitureGalleryInteractionRuntime(
+                plugin = plugin,
+                profiles = mapOf(id to profile),
+                hasPurchaseOffer = { it == id },
+                rootResolver = FurnitureGalleryNativeRootResolver { entity ->
+                    id.takeIf { entity.uniqueId in rootIds }
+                },
+                swingTargetResolver = FurnitureGallerySwingTargetResolver { targetedEntity },
+            )
+            val player = mockk<Player>(relaxed = true)
+            every { player.world } returns world
+
+            try {
+                runtime.start()
+                scheduler.tick(1)
+                val owned = world.entities.filterIsInstance<Interaction>().filter(runtime.markers::isOwned)
+                owned shouldHaveSize 4
+                val rootMarkers = owned.filter { runtime.markers.read(it)?.targetKey == "native:${root.uniqueId}" }
+                val otherRootMarkers = owned.filter { runtime.markers.read(it)?.targetKey == "native:${otherRoot.uniqueId}" }
+                rootMarkers shouldHaveSize 2
+                otherRootMarkers shouldHaveSize 2
+                targetedEntity = rootMarkers.first()
+
+                runtime.onNativeFurnitureSwing(PlayerAnimationEvent(player, PlayerAnimationType.ARM_SWING))
+                rootMarkers.all { it.interactionWidth == 0.0f && it.interactionHeight == 0.0f } shouldBe true
+                otherRootMarkers.all { it.interactionWidth > 0.0f && it.interactionHeight > 0.0f } shouldBe true
+
+                // The original swing reaches ItemsAdder before markers are restored on the next tick.
+                scheduler.tick(1)
+                rootMarkers.all { it.interactionWidth > 0.0f && it.interactionHeight > 0.0f } shouldBe true
+                otherRootMarkers.all { it.interactionWidth > 0.0f && it.interactionHeight > 0.0f } shouldBe true
+
+                // A non-ARC target cannot temporarily change any marker.
+                targetedEntity = null
+                runtime.onNativeFurnitureSwing(PlayerAnimationEvent(player, PlayerAnimationType.ARM_SWING))
+                rootMarkers.all { it.interactionWidth > 0.0f && it.interactionHeight > 0.0f } shouldBe true
             } finally {
                 runtime.close()
                 Tasks.reset()

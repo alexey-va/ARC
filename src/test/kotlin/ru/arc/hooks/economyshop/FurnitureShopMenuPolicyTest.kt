@@ -2,6 +2,7 @@ package ru.arc.hooks.economyshop
 
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import org.bukkit.GameMode
 
 class FurnitureShopMenuPolicyTest : StringSpec({
     "requires global shop, allowed gamemode, and item permission before checking requirements" {
@@ -35,5 +36,15 @@ class FurnitureShopMenuPolicyTest : StringSpec({
         furnitureShopMenuAccess(true, true, true) { true } shouldBe FurnitureShopMenuAccessDecision.ALLOWED
         furnitureShopMenuAccess(true, true, true) { false } shouldBe
             FurnitureShopMenuAccessDecision.REQUIREMENTS_NOT_MET
+    }
+
+    "allows banned game modes only with EconomyShopGUI's bypass permission" {
+        val banned = setOf(GameMode.CREATIVE, GameMode.SPECTATOR)
+
+        furnitureShopGameModeAllowed(GameMode.SURVIVAL, banned, hasBypassPermission = false) shouldBe true
+        furnitureShopGameModeAllowed(GameMode.CREATIVE, banned, hasBypassPermission = false) shouldBe false
+        furnitureShopGameModeAllowed(GameMode.SPECTATOR, banned, hasBypassPermission = false) shouldBe false
+        furnitureShopGameModeAllowed(GameMode.CREATIVE, banned, hasBypassPermission = true) shouldBe true
+        furnitureShopGameModeAllowed(GameMode.SPECTATOR, banned, hasBypassPermission = true) shouldBe true
     }
 })

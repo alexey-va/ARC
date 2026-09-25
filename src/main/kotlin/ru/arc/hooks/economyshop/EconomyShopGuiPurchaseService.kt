@@ -110,7 +110,11 @@ internal class EconomyShopGuiPurchaseService(
         val plugin = runCatching { EconomyShopGUI.getInstance() }.getOrNull()
             ?: return FurnitureShopMenuOpenResult.SHOP_UNAVAILABLE
         val hasGlobalShopPermission = player.hasPermission(SHOP_PERMISSION)
-        val allowedGameMode = player.gameMode !in plugin.bannedGamemodes
+        val allowedGameMode = furnitureShopGameModeAllowed(
+            gameMode = player.gameMode,
+            bannedGameModes = plugin.bannedGamemodes,
+            hasBypassPermission = player.hasPermission(GAMEMODE_BYPASS_PERMISSION),
+        )
 
         val eligible = mutableListOf<ShopItem>()
         var permissionDenied = false
@@ -315,7 +319,12 @@ internal class EconomyShopGuiPurchaseService(
     private fun canBrowseFurnitureShop(player: Player, item: ShopItem? = null): Boolean {
         if (!isShopPluginEnabled()) return false
         val plugin = runCatching { EconomyShopGUI.getInstance() }.getOrNull() ?: return false
-        if (!player.hasPermission(SHOP_PERMISSION) || player.gameMode in plugin.bannedGamemodes) return false
+        if (!player.hasPermission(SHOP_PERMISSION) || !furnitureShopGameModeAllowed(
+                gameMode = player.gameMode,
+                bannedGameModes = plugin.bannedGamemodes,
+                hasBypassPermission = player.hasPermission(GAMEMODE_BYPASS_PERMISSION),
+            )
+        ) return false
         return item == null || runCatching { item.canPurchase(player, "shop", true) }.getOrDefault(false)
     }
 
@@ -398,6 +407,7 @@ internal class EconomyShopGuiPurchaseService(
     private companion object {
         const val SHOP_PLUGIN_NAME = "EconomyShopGUI-Premium"
         const val SHOP_PERMISSION = "EconomyShopGUI.shop"
+        const val GAMEMODE_BYPASS_PERMISSION = "EconomyShopGUI.bypassgamemode"
         const val MAX_INDEXED_SHOP_ITEMS = 16_384
     }
 }
