@@ -83,8 +83,11 @@ internal class JoinMessageDialogs(
                         if (failure != null || result == null) {
                             reportFailure(player, failure ?: IllegalStateException("Missing message catalog"))
                         } else if (allowed(player, isJoin)) {
-                            val known = result.first.first.map { it.message }.toSet() + result.third.map(CustomJoinMessage::selectionKey)
-                            val removed = result.second - known
+                            val available = result.first.first
+                                .filter { it.permission?.let(player::hasPermission) != false }
+                                .map { it.message }.toSet() +
+                                if (player.hasPermission(CUSTOM_PERMISSION)) result.third.map(CustomJoinMessage::selectionKey) else emptyList()
+                            val removed = result.second - available
                             if (removed.isEmpty()) openCatalog(player, isJoin, result.first.first, result.second, result.third, startPage, result.first.second)
                             else finish(player, JoinMessagesManager.removeMessagesAsync(player.name, removed, isJoin)) {
                                 show(player, isJoin, startPage)
@@ -352,8 +355,15 @@ internal class JoinMessageDialogs(
     private fun allowed(player: Player, isJoin: Boolean, custom: Boolean = false): Boolean {
         if (!player.isOnline) return false
         val permission = if (isJoin) JoinMessageSubCommand.permission else QuitMessageSubCommand.permission
-        if ((permission != null && !player.hasPermission(permission)) || (custom && !player.hasPermission(CUSTOM_PERMISSION))) {
+        val catalogAllowed = permission == null || player.hasPermission(permission)
+        if (!catalogAllowed || (custom && !player.hasPermission(CUSTOM_PERMISSION))) {
             player.sendMessage(text("no-permission"))
+            // Native dialog actions consume their registration, including a denied click.
+            // Reopen the available catalog or close the flow instead of leaving dead buttons.
+            if (catalogAllowed) show(player, isJoin) else {
+                invalidate(player)
+                ArcMenus.closeDialog(player)
+            }
             return false
         }
         return true

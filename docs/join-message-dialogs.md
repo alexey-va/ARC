@@ -19,7 +19,8 @@ still published by ProxyARC through `arc.join_message_catalog`.
 - Saved personal phrases appear first in the same paginated catalog with a `★`
   marker and a tooltip identifying them. Clicking toggles them in place;
   editing and deleting remain in `Мои фразы`. Personal toggles recheck the
-  custom permission, and saved phrases remain visible if that permission is lost.
+  custom permission. Lost access automatically clears their active selection when
+  the catalog opens; the saved text remains visible and is never deleted.
 - Next/previous are always present at the bottom and wrap between the first
   and last page. On a single page both keep that page. Personal settings and
   the kind switch precede pagination. The switch control opens the other kind.
@@ -52,9 +53,15 @@ still published by ProxyARC through `arc.join_message_catalog`.
 | `arc.join.message.custom` | Also create/manage personal phrases | false |
 
 Custom editing requires both the applicable command permission and the custom
-permission. Each callback rechecks permission. Catalog-specific permissions are
-also retained and checked against the current catalog before enabling a phrase;
-an already-enabled phrase can be disabled after its catalog permission is lost.
+permission. The managed `admin` group explicitly grants the custom permission;
+`arc.admin` and Bukkit operator status do not bypass it. Each callback rechecks
+permission. Catalog-specific permissions are checked before enabling a phrase,
+and opening the catalog removes selections that have lost access. Regaining a
+permission does not silently re-enable those phrases.
+
+A denied personal action refreshes the permitted catalog. Losing catalog access
+closes the dialog flow. Both paths retire the consumed one-shot callback, so a
+permission failure cannot leave a visible menu with inert navigation buttons.
 
 `modules/join-message-dialog.yml` owns all visible text, button width, page size,
 and whether unavailable catalog entries remain visible. The old inventory

@@ -27,11 +27,14 @@ class JoinMessageDialogTest : FreeSpec({
     val dialogs = JoinMessageDialogs(config, runOnMain)
     val player = mockk<Player>(relaxed = true)
     var screen: PaperDialogScreen? = null
+    var actionsAvailable = false
     var dismiss: (() -> Unit)? = null
     var data = JoinMessagesData("Viewer")
     val permissions = mutableSetOf<String>()
     fun plain(component: Component) = PlainTextComponentSerializer.plainText().serialize(component)
     fun click(id: String, input: String = "") {
+        check(actionsAvailable) { "The consumed dialog action was not replaced" }
+        actionsAvailable = false
         val context = mockk<PaperDialogClickContext>()
         every { context.player } returns player
         every { context.text(any()) } returns input
@@ -44,6 +47,7 @@ class JoinMessageDialogTest : FreeSpec({
 
     beforeEach {
         screen = null
+        actionsAvailable = false
         dismiss = null
         data = JoinMessagesData("Viewer")
         permissions.clear()
@@ -57,6 +61,7 @@ class JoinMessageDialogTest : FreeSpec({
         every { player.isOnline } returns true
         every { player.hasPermission(any<String>()) } answers { firstArg<String>() in permissions }
         every { ArcMenus.openDialog(player, any(), any(), any(), any()) } answers {
+            actionsAvailable = true
             screen = secondArg()
             dismiss = arg(4)
         }
@@ -263,11 +268,13 @@ class JoinMessageDialogTest : FreeSpec({
         permissions -= JoinMessageDialogs.CUSTOM_PERMISSION
         click("own_0")
         verify(exactly = 0) { JoinMessagesManager.selectCustomMessageAsync(any(), any(), any(), any()) }
-        data.selectedMessages(true) shouldBe setOf("%player_name% принёс чай")
-        data.updateMessage("%player_name% принёс чай", true, false)
-        dialogs.show(player)
+        data.selectedMessages(true) shouldBe emptySet()
+        data.customMessages(true) shouldBe setOf("принёс чай")
         plain(screen!!.buttons.first().label) shouldBe "★ [Недоступно] ● Viewer принёс чай"
         screen!!.buttons.none { it.id.value == "custom" } shouldBe true
+        click("next")
+        click("switch")
+        screen!!.id shouldBe "messages.catalog.leave"
     }
 
     "permissions are rechecked on every callback including grants revoked after opening" {
@@ -281,11 +288,38 @@ class JoinMessageDialogTest : FreeSpec({
     }
 
     "opening prunes retired catalog selections without deleting saved custom phrases" {
+        permissions += JoinMessageDialogs.CUSTOM_PERMISSION
         data.updateMessage("retired", true, true)
         data.addCustomMessage("принёс чай", true)
         dialogs.show(player)
         data.selectedMessages(true) shouldBe setOf("%player_name% принёс чай")
         data.customMessages(true) shouldBe setOf("принёс чай")
+    }
+
+    "opening removes selections whose privilege was lost for either message kind" {
+        for (isJoin in listOf(true, false)) {
+            val restricted = "%player_name% privileged"
+            val available = "%player_name% welcome"
+            val entries = listOf(
+                JoinMessageCatalogEntry(id = "locked", message = restricted, permission = "rank.vip"),
+                JoinMessageCatalogEntry(id = "free", message = available),
+            )
+            every { JoinMessageCatalogManager.currentAsync() } returns CompletableFuture.completedFuture(
+                JoinMessageCatalog(join = entries, leave = entries),
+            )
+            data.updateMessage(restricted, isJoin, true)
+            data.updateMessage(available, isJoin, true)
+            data.addCustomMessage("моя фраза", isJoin)
+            dialogs.show(player, isJoin)
+            data.selectedMessages(isJoin) shouldBe setOf(available)
+            data.customMessages(isJoin) shouldBe setOf("моя фраза")
+            permissions += "rank.vip"
+            permissions += JoinMessageDialogs.CUSTOM_PERMISSION
+            dialogs.show(player, isJoin)
+            data.selectedMessages(isJoin) shouldBe setOf(available)
+            permissions -= "rank.vip"
+            permissions -= JoinMessageDialogs.CUSTOM_PERMISSION
+        }
     }
 
     "a retired or newly restricted catalog entry cannot be selected from an older screen" {
@@ -369,7 +403,13 @@ class JoinMessageDialogTest : FreeSpec({
         permissions -= JoinMessageDialogs.CUSTOM_PERMISSION
         click("save")
         verify(exactly = 0) { JoinMessagesManager.editCustomMessageAsync(any(), any(), any(), any()) }
+        screen!!.id shouldBe "messages.catalog.join"
         permissions += JoinMessageDialogs.CUSTOM_PERMISSION
+        dialogs.show(player)
+        click("custom")
+        click("custom_0")
+        click("edit")
+        click("preview", "<aqua>%player_name% вернулся")
         data.deleteCustomMessage("принёс чай", true)
         click("save")
         screen!!.id shouldBe "messages.editor.join"
