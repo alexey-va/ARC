@@ -1,33 +1,38 @@
 package ru.arc.itemlore
 
 import net.kyori.adventure.text.Component
-import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import ru.arc.paper.menu.DialogTables
 import ru.arc.paper.menu.PaperDialogBody
 
-/** Builds the framed, read-only before/after table shown in the lore preview. */
+/** Lore stays one text block; only the short formatting reference uses columns. */
 internal object ItemLorePreview {
-    private val plain = PlainTextComponentSerializer.plainText()
-
-    fun table(
-        before: List<Component>,
-        after: List<Component>,
+    fun framed(
+        lore: List<Component>,
         text: (String) -> Component,
-    ): PaperDialogBody {
-        fun cell(rows: List<Component>, index: Int): Component = rows.getOrNull(index)?.let { row ->
-            if (plain.serialize(row).isEmpty()) text("preview-blank-row") else row
-        } ?: text("preview-missing-row")
-
-        return DialogTables.body(
-            rows = (0 until maxOf(before.size, after.size)).map { index ->
-                cell(before, index) to cell(after, index)
+    ): PaperDialogBody = DialogTables.framedBody(
+        content = if (lore.isEmpty()) text("preview-empty") else Component.empty().children(
+            lore.flatMapIndexed { index, row ->
+                if (index == 0) listOf(row) else listOf(Component.newline(), row)
             },
-            headers = text("preview-before") to text("preview-after"),
+        ),
+        frame = DialogTables.Frame.EPIC,
+        width = WIDTH,
+    )
+
+    fun editorHelp(instructions: Component, text: (String) -> Component): List<PaperDialogBody> = listOf(
+        DialogTables.framedBody(instructions, DialogTables.Frame.EPIC, WIDTH),
+        DialogTables.body(
+            rows = listOf(
+                text("color-green") to text("color-red"),
+                text("color-hex") to text("color-bold"),
+                text("color-reset") to text("color-ampersand"),
+            ),
+            headers = null,
             frame = DialogTables.Frame.EPIC,
             width = WIDTH,
             columns = DialogTables.Columns.BALANCED,
-        )
-    }
+        ),
+    )
 
     private const val WIDTH = 320
 }
