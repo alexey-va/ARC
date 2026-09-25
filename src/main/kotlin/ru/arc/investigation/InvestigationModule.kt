@@ -50,6 +50,7 @@ object InvestigationModule : PluginModule {
 
     override fun init() {
         Bukkit.getPluginManager().registerEvents(InvestigationCaseFile, ARC.instance)
+        InvestigationCaseFile.registerPreciseEntityHandlerIfRequired(ARC.instance)
         val loaded = loadInvestigationRuntimeConfig(ARC.instance.dataPath)
         start(loaded.config, loaded.catalog)
     }

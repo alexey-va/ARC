@@ -8,6 +8,7 @@ import ru.arc.ARC
 import ru.arc.config.ArcRuntimeProfile
 import ru.arc.commands.arc.subcommands.DialogDemoSubCommand
 import ru.arc.commands.arc.subcommands.AuditSubCommand
+import ru.arc.commands.arc.subcommands.AuctionPedestalSubCommand
 import ru.arc.commands.arc.subcommands.BaltopSubCommand
 import ru.arc.commands.arc.subcommands.BoardSubCommand
 import ru.arc.commands.arc.subcommands.BrewerySubCommand
@@ -91,6 +92,7 @@ class ArcCommand(private val profile: ArcRuntimeProfile = ArcRuntimeProfile.FULL
                 FirstRtpSubCommand,
                 OnboardingSubCommand,
                 OriginPortalsSubCommand,
+                AuctionPedestalSubCommand,
                 RtpSubCommand,
                 LocationPoolSubCommand,
                 FurnitureSubCommand,

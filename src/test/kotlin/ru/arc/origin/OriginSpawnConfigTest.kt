@@ -32,12 +32,12 @@ class OriginSpawnConfigTest :
                 config.pageTicks shouldBe 300L
                 config.pedestals shouldContainExactly
                     listOf(
-                        AuctionPedestalSpec(-58.5, 72.08, -4.5, 0f),
-                        AuctionPedestalSpec(-61.5, 72.08, -4.5, 0f),
-                        AuctionPedestalSpec(-64.5, 72.08, -2.5, 0f),
-                        AuctionPedestalSpec(-58.5, 72.08, 4.5, 180f),
-                        AuctionPedestalSpec(-61.5, 72.08, 4.5, 180f),
-                        AuctionPedestalSpec(-64.5, 72.08, 2.5, 180f),
+                        AuctionPedestalSpec("configured-1", -58.5, 72.08, -4.5, 0f),
+                        AuctionPedestalSpec("configured-2", -61.5, 72.08, -4.5, 0f),
+                        AuctionPedestalSpec("configured-3", -64.5, 72.08, -2.5, 0f),
+                        AuctionPedestalSpec("configured-4", -58.5, 72.08, 4.5, 180f),
+                        AuctionPedestalSpec("configured-5", -61.5, 72.08, 4.5, 180f),
+                        AuctionPedestalSpec("configured-6", -64.5, 72.08, 2.5, 180f),
                     )
                 plan.size shouldBe 759
                 plan.first() shouldBe OriginChunkKey(0, -1)
@@ -89,6 +89,21 @@ class OriginSpawnConfigTest :
                 ConfigManager.ofModule(directory, "origin-spawn.yml")
                     .mergeMissingFromBundled("modules/origin-spawn.yml") shouldBe false
                 Files.readString(file) shouldBe afterFirst
+            } finally {
+                directory.toFile().deleteRecursively()
+            }
+        }
+
+        "an explicitly empty pedestal list remains a valid config override" {
+            val directory = Files.createTempDirectory("arc-origin-empty-pedestals")
+            try {
+                val modules = Files.createDirectories(directory.resolve("modules"))
+                Files.writeString(
+                    modules.resolve("origin-spawn.yml"),
+                    "auction-showcase:\n  pedestals: []\n",
+                )
+
+                OriginSpawnConfig.load(directory).pedestals shouldBe emptyList()
             } finally {
                 directory.toFile().deleteRecursively()
             }

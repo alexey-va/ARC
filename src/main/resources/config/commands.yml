@@ -131,6 +131,12 @@ commands:
     permission: arc.origin.portals.admin
     player-only: true
     usage: /arc originportals move <survival|mining|vanilla|gallery_exit>
+  auctionpedestal:
+    name: auctionpedestal
+    aliases: [auction-pedestal]
+    permission: arc.origin.auction.admin
+    player-only: true
+    usage: /arc auctionpedestal add
   locpool:
     name: locationpool
     aliases: [ ]

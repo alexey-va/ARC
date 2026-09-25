@@ -25,6 +25,7 @@ object OriginSpawnModule : PluginModule, Listener {
     override val name = "OriginSpawn"
     override val priority = 22
 
+    private var currentConfig: OriginSpawnConfig? = null
     private var chunks: OriginSpawnChunkManager? = null
     private var showcase: AuctionShowcaseManager? = null
     private var breakProtection: OriginBreakProtection? = null
@@ -52,6 +53,7 @@ object OriginSpawnModule : PluginModule, Listener {
         itemsAdderProtection = null
         showcase?.shutdown()
         showcase = null
+        currentConfig = null
         breakProtection?.shutdown()
         breakProtection = null
         chunks?.shutdown()
@@ -121,7 +123,16 @@ object OriginSpawnModule : PluginModule, Listener {
     internal fun deniesPlacement(player: Player, worldName: String): Boolean =
         breakProtection?.isProtected(worldName, player.hasPermission(breakBypassPermission)) == true
 
+    internal fun addAuctionPedestal(player: Player): String? {
+        val current = showcase ?: return "not-ready"
+        return current.add(player)
+    }
+
+    internal fun auctionPedestalMessage(key: String): net.kyori.adventure.text.Component =
+        currentConfig?.message(key) ?: ru.arc.util.TextUtil.mm("<#ff9f0f>Витрина сейчас недоступна.")
+
     private fun apply(config: OriginSpawnConfig) {
+        currentConfig = config
         chunks?.apply(config)
         showcase?.apply(config)
         breakBypassPermission = config.regenerativeBreakingBypassPermission

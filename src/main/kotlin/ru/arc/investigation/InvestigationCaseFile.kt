@@ -3,17 +3,22 @@ package ru.arc.investigation
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.entity.Player
+import org.bukkit.Bukkit
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
 import org.bukkit.event.block.Action
 import org.bukkit.event.player.PlayerDropItemEvent
 import org.bukkit.event.player.PlayerInteractEvent
+import org.bukkit.event.player.PlayerInteractEntityEvent
+import org.bukkit.event.player.PlayerInteractAtEntityEvent
 import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
+import org.bukkit.plugin.Plugin
+import org.bukkit.plugin.EventExecutor
 import ru.arc.ARC
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
@@ -23,12 +28,15 @@ import java.util.UUID
 
 /** A bound, replaceable summary of the player's active investigation. */
 object InvestigationCaseFile : Listener {
+    private data class RecentEntityUse(val entityId: UUID, val timestampNanos: Long)
+
     private val guiConfig: Config by lazy {
         ConfigManager.of(ARC.instance.dataFolder.toPath(), "guis/investigations.yml")
     }
     private val transactionKey: NamespacedKey by lazy { NamespacedKey(ARC.instance, "investigation_case") }
     private val ownerKey: NamespacedKey by lazy { NamespacedKey(ARC.instance, "investigation_case_owner") }
     private val expiresAtKey: NamespacedKey by lazy { NamespacedKey(ARC.instance, "investigation_case_expires_at") }
+    private val recentEntityUses = java.util.concurrent.ConcurrentHashMap<UUID, RecentEntityUse>()
 
     fun canIssue(player: Player): Boolean = caseFileSlots(player).isNotEmpty() || player.inventory.firstEmpty() >= 0
 
@@ -39,6 +47,21 @@ object InvestigationCaseFile : Listener {
         ownedSlots.forEach { player.inventory.setItem(it, null) }
         player.inventory.setItem(targetSlot, create(record, player.uniqueId))
         return true
+    }
+
+    /** Older Paper APIs have a separate HandlerList for precise entity clicks. */
+    internal fun registerPreciseEntityHandlerIfRequired(plugin: Plugin) {
+        if (PlayerInteractAtEntityEvent.getHandlerList() === PlayerInteractEntityEvent.getHandlerList()) return
+        Bukkit.getPluginManager().registerEvent(
+            PlayerInteractAtEntityEvent::class.java,
+            this,
+            EventPriority.HIGHEST,
+            EventExecutor { _, event ->
+                if (event is PlayerInteractAtEntityEvent) onUseEntity(event)
+            },
+            plugin,
+            false,
+        )
     }
 
     fun remove(player: Player, expectedTransactionId: String? = null) {
@@ -119,15 +142,18 @@ object InvestigationCaseFile : Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     fun onUse(event: PlayerInteractEvent) {
         if (event.hand != EquipmentSlot.HAND || event.action !in RIGHT_CLICK_ACTIONS) return
-        val stack = event.item ?: return
-        val transactionId = transactionId(stack) ?: return
-        event.isCancelled = true
-        val player = event.player
-        if (owner(stack) != player.uniqueId) {
-            player.sendActionBar(TextUtil.mm("<red>Это дело выдано другому следователю."))
-            return
-        }
-        InvestigationModule.openCaseFile(player, transactionId)
+        handleCaseFileUse(event.player, event.item, cancel = { event.isCancelled = true })
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    fun onUseEntity(event: PlayerInteractEntityEvent) {
+        if (event.hand != EquipmentSlot.HAND) return
+        handleCaseFileUse(
+            event.player,
+            event.player.inventory.itemInMainHand,
+            cancel = { event.isCancelled = true },
+            entityId = event.rightClicked.uniqueId,
+        )
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -145,6 +171,7 @@ object InvestigationCaseFile : Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     fun onQuit(event: PlayerQuitEvent) {
+        recentEntityUses.remove(event.player.uniqueId)
         InvestigationTargetGlow.clear(event.player)
     }
 
@@ -169,6 +196,8 @@ object InvestigationCaseFile : Listener {
     private fun transactionId(stack: ItemStack?): String? =
         stack?.itemMeta?.persistentDataContainer?.get(transactionKey, PersistentDataType.STRING)
 
+    internal fun isCaseFile(stack: ItemStack?): Boolean = transactionId(stack) != null
+
     private fun owner(stack: ItemStack?): UUID? =
         stack?.itemMeta?.persistentDataContainer?.get(ownerKey, PersistentDataType.STRING)
             ?.let { runCatching { UUID.fromString(it) }.getOrNull() }
@@ -176,7 +205,30 @@ object InvestigationCaseFile : Listener {
     private fun expiresAt(stack: ItemStack?): Long? =
         stack?.itemMeta?.persistentDataContainer?.get(expiresAtKey, PersistentDataType.LONG)
 
+    private fun handleCaseFileUse(
+        player: Player,
+        stack: ItemStack?,
+        cancel: () -> Unit,
+        entityId: UUID? = null,
+    ) {
+        val transactionId = transactionId(stack) ?: return
+        cancel()
+        if (entityId != null && isDuplicateEntityUse(player.uniqueId, entityId)) return
+        if (owner(stack) != player.uniqueId) {
+            player.sendActionBar(TextUtil.mm("<red>Это дело выдано другому следователю."))
+            return
+        }
+        InvestigationModule.openCaseFile(player, transactionId)
+    }
+
+    private fun isDuplicateEntityUse(playerId: UUID, entityId: UUID): Boolean {
+        val now = System.nanoTime()
+        val previous = recentEntityUses.put(playerId, RecentEntityUse(entityId, now)) ?: return false
+        return previous.entityId == entityId && now - previous.timestampNanos <= ENTITY_CLICK_DEDUPE_NANOS
+    }
+
     private val RIGHT_CLICK_ACTIONS = setOf(Action.RIGHT_CLICK_AIR, Action.RIGHT_CLICK_BLOCK)
+    private const val ENTITY_CLICK_DEDUPE_NANOS = 100_000_000L
 }
 
 internal fun shouldRemoveCaseFile(

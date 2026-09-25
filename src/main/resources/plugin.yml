@@ -217,6 +217,9 @@ permissions:
   arc.origin.portals.admin:
     description: Move ARC Origin portals
     default: op
+  arc.origin.auction.admin:
+    description: Add and manage Origin auction showcase pedestals
+    default: op
   arc.origin.portals.bypass:
     description: Bypass central ARC Origin portal teleport
     default: false

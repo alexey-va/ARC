@@ -14,13 +14,6 @@ internal data class OriginChunkRegion(
     val maxInFlight: Int,
 )
 
-internal data class AuctionPedestalSpec(
-    val x: Double,
-    val y: Double,
-    val z: Double,
-    val yaw: Float,
-)
-
 internal class OriginSpawnConfig private constructor(
     private val source: Config,
     val enabled: Boolean,
@@ -59,6 +52,12 @@ internal class OriginSpawnConfig private constructor(
                 DEFAULT_MESSAGES.getValue(key),
             ).decoration(TextDecoration.ITALIC, false)
 
+    fun adminDialogText(key: String): Component =
+        source.component(
+            "auction-showcase.admin-dialog.$key",
+            DEFAULT_ADMIN_DIALOG_TEXT.getValue(key),
+        ).decoration(TextDecoration.ITALIC, false)
+
     companion object {
         private const val RESOURCE = "origin-spawn.yml"
         const val DEFAULT_BREAK_BYPASS_PERMISSION = "arc.origin.spawn.build"
@@ -78,12 +77,14 @@ internal class OriginSpawnConfig private constructor(
             val pedestals =
                 source.list<Map<String, Any?>>("auction-showcase.pedestals").mapIndexed { index, raw ->
                     AuctionPedestalSpec(
+                        id = AuctionPedestalRules.configuredId(index),
                         x = raw.number("x", index),
                         y = raw.number("y", index),
                         z = raw.number("z", index),
                         yaw = raw.number("yaw", index).toFloat(),
                     )
                 }
+            AuctionPedestalRules.validate(pedestals)
             val enabled = source.bool("enabled", false)
             val showcaseEnabled = source.bool("auction-showcase.enabled", false)
             val bypassPermission =
@@ -113,10 +114,6 @@ internal class OriginSpawnConfig private constructor(
             require(feedbackTiers.zipWithNext().all { (left, right) -> left.fromAttempt < right.fromAttempt }) {
                 "origin-spawn feedback tier thresholds must be strictly increasing"
             }
-            require(!enabled || !showcaseEnabled || pedestals.size == 6) {
-                "origin-spawn auction showcase requires exactly 6 pedestals"
-            }
-
             return OriginSpawnConfig(
                 source = source,
                 enabled = enabled,
@@ -166,6 +163,32 @@ internal class OriginSpawnConfig private constructor(
                 "stale" to "<#ff9f0f>Лот уже недоступен — витрина обновлена",
                 "unavailable" to "<#ff9f0f>Аукцион сейчас недоступен",
                 "failed" to "<#ff9f0f>Не удалось открыть лот — попробуйте ещё раз",
+                "admin-only" to "<#ff6b61>У вас нет прав для управления витриной.",
+                "not-ready" to "<#ff9f0f>Витрина ещё загружается — попробуйте через секунду.",
+                "saving" to "<#ff9f0f>Сохранение витрины уже выполняется.",
+                "target-required" to "<#ff9f0f>Посмотрите на блок, на котором нужно поставить пьедестал.",
+                "wrong-world" to "<#ff9f0f>Пьедесталы можно ставить только в мире Origin.",
+                "outside-area" to "<#ff9f0f>Поставьте пьедестал в пределах территории спавна Origin.",
+                "invalid-target" to "<#ff9f0f>Нужен твёрдый блок с доступной верхней поверхностью.",
+                "duplicate" to "<#ff9f0f>На этом месте уже стоит пьедестал.",
+                "overlap" to "<#ff9f0f>Здесь пьедестал пересечётся с соседней витриной.",
+                "full" to "<#ff9f0f>Достигнут предел пьедесталов витрины.",
+                "saved" to "<#9bd48d>Пьедестал аукциона установлен.",
+                "removed" to "<#9bd48d>Пьедестал аукциона удалён.",
+                "save-failed" to "<#ff6b61>Не удалось сохранить витрину; изменения не применены.",
+                "stale-pedestal" to "<#ff9f0f>Этот пьедестал уже изменился — откройте его меню ещё раз.",
+            )
+
+        private val DEFAULT_ADMIN_DIALOG_TEXT =
+            mapOf(
+                "title" to "<#f2b84b>Пьедестал аукциона",
+                "empty-body" to "<#e8dfd2>На этом пьедестале сейчас нет лота.",
+                "open-lot" to "<white>› Открыть текущий лот",
+                "delete" to "<#ff6b61>Удалить пьедестал",
+                "confirm-title" to "<#ff6b61>Удалить пьедестал?",
+                "confirm-body" to "<#e8dfd2>Удаление сохранится после перезапуска. Действие не удаляет и не изменяет сам лот.",
+                "confirm-delete" to "<#ff6b61>Удалить",
+                "cancel" to "<white>‹ Назад",
             )
     }
 }

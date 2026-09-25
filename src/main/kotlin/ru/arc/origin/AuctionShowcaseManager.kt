@@ -3,6 +3,7 @@ package ru.arc.origin
 import net.kyori.adventure.text.Component
 import org.bukkit.Bukkit
 import org.bukkit.Color
+import org.bukkit.FluidCollisionMode
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.entity.BlockDisplay
@@ -18,7 +19,14 @@ import org.bukkit.inventory.ItemStack
 import org.bukkit.util.Transformation
 import org.joml.AxisAngle4f
 import org.joml.Vector3f
+import ru.arc.ARC
 import ru.arc.core.LifecycleTaskScope
+import ru.arc.gui.ArcMenus
+import ru.arc.investigation.InvestigationCaseFile
+import ru.arc.paper.menu.PaperDialogActionId
+import ru.arc.paper.menu.PaperDialogBody
+import ru.arc.paper.menu.PaperDialogButton
+import ru.arc.paper.menu.PaperDialogScreen
 import ru.arc.core.whenCompleteSync
 import ru.arc.hooks.HookRegistry
 import ru.arc.hooks.zauction.AuctionShowcaseListing
@@ -28,6 +36,8 @@ import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
+import kotlin.math.floor
 import kotlin.math.PI
 
 internal object AuctionShowcasePlanner {
@@ -56,6 +66,7 @@ internal object AuctionShowcasePlanner {
 
 internal class AuctionShowcaseManager {
     private data class Pedestal(
+        val spec: AuctionPedestalSpec,
         val base: BlockDisplay,
         val item: ItemDisplay,
         val text: TextDisplay,
@@ -64,6 +75,13 @@ internal class AuctionShowcaseManager {
     )
 
     private val tasks = LifecycleTaskScope()
+    // IO completions survive a config reload, but cannot re-enter after shutdown.
+    private val persistenceTasks = LifecycleTaskScope()
+    private val store = AuctionPedestalStore(ARC.instance.dataPath)
+    private var saved: AuctionPedestalSnapshot? = null
+    private var loaded = false
+    private var persistenceFailed = false
+    private var saving = false
     private val pedestals = mutableListOf<Pedestal>()
     private val interactionSlots = mutableMapOf<UUID, Pedestal>()
     private val clickTimes = mutableMapOf<UUID, Long>()
@@ -72,28 +90,48 @@ internal class AuctionShowcaseManager {
     private var cyclePage = 0
     private var rotation = 0f
 
+    init {
+        store.load().whenCompleteSync(persistenceTasks, persistenceTasks.token()) { snapshot, failure ->
+            if (failure != null) {
+                persistenceFailed = true
+                warn("Failed to load Origin auction pedestal positions; showcase remains unavailable", failure)
+            } else {
+                saved = snapshot
+                loaded = true
+                reconcile()
+            }
+        }
+    }
+
     fun apply(next: OriginSpawnConfig) {
         config = next
+        reconcile()
+    }
+
+    private fun specs(): List<AuctionPedestalSpec> = saved?.pedestals ?: config?.pedestals.orEmpty()
+
+    private fun reconcile() {
         val token = tasks.restart()
         removeEntities()
         cyclePage = 0
         rotation = 0f
-        if (!next.enabled || !next.showcaseEnabled) return
-
-        val world = world(next.worldName)
-        if (world == null) {
-            warn("Origin auction showcase is enabled, but world '{}' is unavailable", next.worldName)
+        val next = config ?: return
+        if (!loaded || persistenceFailed || !next.enabled || !next.showcaseEnabled) return
+        val world = world(next.worldName) ?: return
+        val positions = specs()
+        if (positions.isEmpty()) {
+            info("Origin auction showcase ready: world={}, pedestals=0", next.worldName)
             return
         }
-        val anchor = next.pedestals.first()
-        world.getChunkAtAsync(anchor.x.toInt() shr 4, anchor.z.toInt() shr 4, false)
+        val chunks = positions.map { floor(it.x).toInt() shr 4 to (floor(it.z).toInt() shr 4) }.distinct()
+        CompletableFuture.allOf(*chunks.map { (x, z) -> world.getChunkAtAsync(x, z, false) }.toTypedArray())
             .whenCompleteSync(tasks, token) { _, failure ->
                 if (failure != null) {
-                    warn("Failed to load Origin auction showcase chunk", failure)
+                    warn("Failed to load Origin auction showcase chunks", failure)
                     return@whenCompleteSync
                 }
-                cleanupTaggedEntities(world, next)
-                next.pedestals.forEach { spec -> pedestals += spawnPedestal(world, spec) }
+                cleanupTaggedEntities(world, positions + next.pedestals)
+                positions.forEach { spec -> pedestals += spawnPedestal(world, spec) }
                 refresh(advance = false)
                 tasks.runTimer(token, next.cycleTicks, next.cycleTicks) { refresh(advance = false) }
                 tasks.runTimer(token, next.pageTicks, next.pageTicks) { refresh(advance = true) }
@@ -102,8 +140,59 @@ internal class AuctionShowcaseManager {
             }
     }
 
+    /** Accepts one edit on the server thread; disk IO completes before displays change. */
+    fun add(player: Player): String? {
+        editFailure(player)?.let { return it }
+        val block = player.rayTraceBlocks(6.0, FluidCollisionMode.NEVER)?.hitBlock ?: return "target-required"
+        val region = config?.chunkRegion ?: return "not-ready"
+        if ((block.x shr 4) !in region.minX..region.maxX ||
+            (block.z shr 4) !in region.minZ..region.maxZ
+        ) return "outside-area"
+        val box = block.boundingBox
+        if (!block.type.isSolid || box.height <= 0.0) return "invalid-target"
+        val top = box.maxY
+        if (top + AuctionPedestalRules.STAND_HEIGHT >= block.world.maxHeight) return "invalid-target"
+        // Leave enough clear vertical space for the item and label above the base.
+        if ((kotlin.math.ceil(top).toInt()..floor(top + AuctionPedestalRules.STAND_HEIGHT).toInt()).any {
+                !block.world.getBlockAt(block.x, it, block.z).isPassable
+            }) return "invalid-target"
+        val candidate = AuctionPedestalRules.create(
+            block.x + 0.5, top, block.z + 0.5,
+            ((player.location.yaw % 360f) + 360f) % 360f,
+        )
+        AuctionPedestalRules.placementFailure(candidate, specs())?.let { return it.name.lowercase(Locale.ROOT) }
+        persist(player, specs() + candidate, "saved")
+        return null
+    }
+
+    private fun editFailure(player: Player): String? = when {
+        !player.hasPermission(ADMIN_PERMISSION) -> "admin-only"
+        !player.world.name.equals(config?.worldName, ignoreCase = true) -> "wrong-world"
+        !loaded || persistenceFailed || config?.enabled != true || config?.showcaseEnabled != true -> "not-ready"
+        saving -> "saving"
+        else -> null
+    }
+
+    private fun persist(player: Player, positions: List<AuctionPedestalSpec>, success: String) {
+        saving = true
+        val snapshot = AuctionPedestalSnapshot(pedestals = positions.toList())
+        store.save(snapshot).whenCompleteSync(persistenceTasks, persistenceTasks.token()) { _, failure ->
+            saving = false
+            if (failure != null) {
+                persistenceFailed = true
+                warn("Failed to persist Origin auction pedestal edit; further edits disabled", failure)
+                if (player.isOnline) player.sendMessage(config?.message("save-failed") ?: Component.empty())
+                return@whenCompleteSync
+            }
+            saved = snapshot
+            reconcile()
+            if (player.isOnline) player.sendMessage(config?.message(success) ?: Component.empty())
+        }
+    }
+
     fun handle(event: PlayerInteractEntityEvent): Boolean {
         if (event.hand != EquipmentSlot.HAND) return false
+        if (InvestigationCaseFile.isCaseFile(event.player.inventory.itemInMainHand)) return false
         val pedestal = interactionSlots[event.rightClicked.uniqueId] ?: return false
         event.isCancelled = true
         val player = event.player
@@ -112,11 +201,21 @@ internal class AuctionShowcaseManager {
         val previous = clickTimes.put(player.uniqueId, now)
         if (previous != null && now - previous < debounce) return true
 
-        val listingId = pedestal.listingId ?: return true
+        if (player.hasPermission(ADMIN_PERMISSION)) {
+            ArcMenus.beginDialogFlow(player)
+            openAdmin(player, pedestal.spec.id)
+        } else {
+            openListing(player, pedestal)
+        }
+        return true
+    }
+
+    private fun openListing(player: Player, pedestal: Pedestal) {
+        val listingId = pedestal.listingId ?: return
         val hook = HookRegistry.auctionHook
         if (hook == null) {
             player.sendActionBar(config?.message("unavailable") ?: Component.empty())
-            return true
+            return
         }
         hook.openShowcaseListing(player, listingId) { result ->
             when (result) {
@@ -134,7 +233,87 @@ internal class AuctionShowcaseManager {
                     if (player.isOnline) player.sendActionBar(config?.message("failed") ?: Component.empty())
             }
         }
-        return true
+    }
+
+    private fun currentAdminPedestal(player: Player, id: String, token: LifecycleTaskScope.Token): Pedestal? {
+        val failure = editFailure(player)
+        if (failure != null) {
+            player.sendMessage(config?.message(failure) ?: Component.empty())
+            return null
+        }
+        val current = pedestals.firstOrNull { it.spec.id == id }
+        if (!player.isOnline || !tasks.isCurrent(token) || current == null ||
+            current.base.location.distanceSquared(player.location) > 36.0
+        ) {
+            player.sendMessage(config?.message("stale-pedestal") ?: Component.empty())
+            return null
+        }
+        return current
+    }
+
+    internal fun openAdmin(player: Player, id: String) {
+        if (config == null) return
+        val token = tasks.token()
+        val pedestal = currentAdminPedestal(player, id, token) ?: return
+        val current = config ?: return
+        val listingId = pedestal.listingId
+        val buttons = mutableListOf<PaperDialogButton>()
+        if (listingId != null) buttons += PaperDialogButton(
+            id = PaperDialogActionId.of("open_lot"),
+            label = current.adminDialogText("open-lot"),
+            closeDialogBeforeAction = true,
+            onClick = { context ->
+                val active = currentAdminPedestal(context.player, id, token)
+                if (active != null) {
+                    if (active.listingId == listingId) openListing(context.player, active)
+                    else context.player.sendMessage(current.message("stale"))
+                }
+            },
+        )
+        buttons += PaperDialogButton(
+            id = PaperDialogActionId.of("delete"),
+            label = current.adminDialogText("delete"),
+            onClick = { context ->
+                if (currentAdminPedestal(context.player, id, token) != null) openDelete(context.player, id, token)
+            },
+        )
+        ArcMenus.openDialog(player, PaperDialogScreen(
+            id = "auction.pedestal",
+            title = current.adminDialogText("title"),
+            body = listOf(PaperDialogBody(
+                if (listingId == null) current.adminDialogText("empty-body") else pedestal.text.text(),
+            )),
+            buttons = buttons,
+        ), reopen = { openAdmin(player, id) })
+    }
+
+    private fun openDelete(player: Player, id: String, token: LifecycleTaskScope.Token) {
+        val current = config ?: return
+        if (currentAdminPedestal(player, id, token) == null) return
+        ArcMenus.openDialog(player, PaperDialogScreen(
+            id = "auction.pedestal.delete",
+            title = current.adminDialogText("confirm-title"),
+            body = listOf(PaperDialogBody(current.adminDialogText("confirm-body"))),
+            buttons = listOf(
+                PaperDialogButton(
+                    id = PaperDialogActionId.of("confirm_delete"),
+                    label = current.adminDialogText("confirm-delete"),
+                    closeDialogBeforeAction = true,
+                    onClick = { context ->
+                        if (currentAdminPedestal(context.player, id, token) != null) {
+                            persist(context.player, specs().filterNot { it.id == id }, "removed")
+                        }
+                    },
+                ),
+                PaperDialogButton(
+                    id = PaperDialogActionId.of("cancel"),
+                    label = current.adminDialogText("cancel"),
+                    onClick = { context ->
+                        if (currentAdminPedestal(context.player, id, token) != null) openAdmin(context.player, id)
+                    },
+                ),
+            ),
+        ), reopen = { openDelete(player, id, token) })
     }
 
     fun forget(player: Player) {
@@ -143,6 +322,10 @@ internal class AuctionShowcaseManager {
 
     fun shutdown() {
         tasks.close()
+        persistenceTasks.close()
+        store.closeAsync().whenComplete { _, failure ->
+            if (failure != null) warn("Failed to finish saving Origin auction pedestals at shutdown", failure)
+        }
         removeEntities()
         config = null
     }
@@ -165,7 +348,7 @@ internal class AuctionShowcaseManager {
     ) {
         val current = config ?: return
         pedestal.listingId = listing?.id
-        pedestal.interaction.isResponsive = listing != null
+        pedestal.interaction.isResponsive = true
         pedestal.item.setItemStack(listing?.item?.clone() ?: ItemStack(Material.AIR))
         pedestal.text.text(
             listing?.let { current.listingText(it.itemName, it.sellerName, it.price) } ?: Component.empty(),
@@ -231,7 +414,7 @@ internal class AuctionShowcaseManager {
         interaction.isInvulnerable = true
 
         listOf(base, item, text, interaction).forEach { it.addScoreboardTag(ENTITY_TAG) }
-        return Pedestal(base, item, text, interaction).also {
+        return Pedestal(spec, base, item, text, interaction).also {
             interactionSlots[interaction.uniqueId] = it
         }
     }
@@ -249,9 +432,9 @@ internal class AuctionShowcaseManager {
         display.isInvulnerable = true
     }
 
-    private fun cleanupTaggedEntities(world: org.bukkit.World, current: OriginSpawnConfig) {
-        current.pedestals
-            .map { (it.x.toInt() shr 4) to (it.z.toInt() shr 4) }
+    private fun cleanupTaggedEntities(world: org.bukkit.World, positions: List<AuctionPedestalSpec>) {
+        positions
+            .map { (floor(it.x).toInt() shr 4) to (floor(it.z).toInt() shr 4) }
             .distinct()
             .forEach { (x, z) ->
                 if (!world.isChunkLoaded(x, z)) return@forEach
@@ -276,7 +459,8 @@ internal class AuctionShowcaseManager {
         Bukkit.getWorld(name)
             ?: Bukkit.getWorlds().firstOrNull { it.name.lowercase(Locale.ROOT) == name.lowercase(Locale.ROOT) }
 
-    private companion object {
+    internal companion object {
+        const val ADMIN_PERMISSION = "arc.origin.auction.admin"
         const val ENTITY_TAG = "arc_origin_auction_showcase"
         const val ITEM_SCALE = 3.75f
         const val ITEM_SCALE_PULSE = 0.035f
