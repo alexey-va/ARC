@@ -86,20 +86,24 @@ class ItemLorePreviewTest : FreeSpec({
         rendered shouldNotContain "\uE575"
     }
 
-    "editing help stays compact with three code rows and no table heading" {
+    "editing help lists every legacy color and effect with readable examples" {
         val help = ItemLorePreview.editorHelp(text("editor-body"), text)
-        help.size shouldBe 2
+        help.size shouldBe 3
         help.forEach { it.width shouldBe 320 }
         val intro = plain.serialize(help[0].text)
         val codes = plain.serialize(help[1].text)
         (intro.lines().size <= 6) shouldBe true
-        codes.lines().size shouldBe 5
+        (codes.lines().size <= 16) shouldBe true
         intro shouldContain "5 монет"
         intro shouldNotContain "\uE575"
-        listOf("&a", "&c", "&#RRGGBB", "&l", "&r", "&&").forEach { codes shouldContain it }
+        ("0123456789abcdefklmnor".map { "&$it" } + listOf("&#RRGGBB", "&&")).forEach { codes shouldContain it }
+        val example = plain.serialize(help[2].text)
+        example shouldContain "&a&lМеч&r"
+        example shouldContain "Новый цвет снимает эффекты"
+        example shouldContain "&#FFAA00Текст"
         codes shouldNotContain "\uE579"
         coloredRuns(help[1].text).any { (content, color) ->
-            "&a зелёный" in content && color == NamedTextColor.GREEN
+            "Аа" in content && color == NamedTextColor.GREEN
         } shouldBe true
     }
 })
