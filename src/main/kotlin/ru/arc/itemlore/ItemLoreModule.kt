@@ -9,7 +9,6 @@ import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
-import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.event.EventHandler
@@ -117,7 +116,6 @@ internal class ItemLoreEditor(
     private val sessions = mutableMapOf<UUID, Session>()
     private var generation = 0L
     private var active = true
-    private val plain = PlainTextComponentSerializer.plainText()
     private val miniMessage = MiniMessage.miniMessage()
 
     fun open(player: org.bukkit.entity.Player, npc: NPC) {
@@ -136,7 +134,7 @@ internal class ItemLoreEditor(
         }
         val originalLore = stack.itemMeta?.lore()
         val originalRows = ItemLorePolicy.originalRows(originalLore)
-        val rowTooLong = originalRows.any { codePoints(plain.serialize(it)) > ItemLorePolicy.MAX_CODE_POINTS_PER_ROW }
+        val rowTooLong = originalRows.any { !ItemLorePolicy.rowFits(it) }
         if (originalRows.size > ItemLorePolicy.MAX_ROWS) {
             player.sendMessage(text(settings, "too-many-rows"))
             return
@@ -159,7 +157,7 @@ internal class ItemLoreEditor(
             originalBytes = snapshot.serializeAsBytes(),
             startedAtMillis = nowMillis(),
             generation = generation,
-            values = List(ItemLorePolicy.MAX_ROWS) { index -> originalRows.getOrNull(index)?.let(plain::serialize).orEmpty() },
+            values = originalRows.map(ItemLorePolicy::editableText),
         )
         sessions[player.uniqueId]?.stage = Stage.RETIRED
         sessions[player.uniqueId] = session
@@ -182,24 +180,35 @@ internal class ItemLoreEditor(
         if (!ensureValid(player, session)) return
         val settings = requireNotNull(currentSettings())
         session.stage = Stage.EDITING
-        session.values = values.take(ItemLorePolicy.MAX_ROWS)
+        session.values = values
         val price = formatPrice(settings.pricePerCharacterMinor)
         val body = mutableListOf(PaperDialogBody(text(settings, "editor-body", "price" to price), WIDTH))
+        body += PaperDialogBody(text(settings, "editor-colors"), WIDTH)
+        if (values.size == ItemLorePolicy.MAX_ROWS) body += PaperDialogBody(text(settings, "row-limit"), WIDTH)
         problem?.let { body += PaperDialogBody(text(settings, it), WIDTH) }
+        val buttons = buildList {
+            if (values.size < ItemLorePolicy.MAX_ROWS) {
+                add(contextButton("add_row", text(settings, "add-row")) { resizeEditor(it, add = true) })
+            }
+            if (values.isNotEmpty()) {
+                add(contextButton("remove_row", text(settings, "remove-row")) { resizeEditor(it, add = false) })
+            }
+            add(contextButton("preview", text(settings, "preview-label"), ::submitEditor))
+        }
         val screen = PaperDialogScreen(
             id = EDITOR_SCREEN,
             title = text(settings, "editor-title"),
             body = body,
-            inputs = (0 until ItemLorePolicy.MAX_ROWS).map { index ->
+            inputs = values.mapIndexed { index, value ->
                 PaperDialogTextInput(
                     PaperDialogInputId.of("lore_${index + 1}"),
                     text(settings, "line-label", "number" to (index + 1).toString()),
-                    session.values.getOrElse(index) { "" },
+                    value,
                     width = WIDTH,
                     maxLength = INPUT_MAX_LENGTH,
                 )
             },
-            buttons = listOf(contextButton("preview", text(settings, "preview-label"), ::submitEditor)),
+            buttons = buttons,
             columns = 1,
         )
         ArcMenus.openDialog(
@@ -210,14 +219,31 @@ internal class ItemLoreEditor(
         )
     }
 
+    private fun editorValues(context: PaperDialogClickContext, session: Session): List<String> =
+        session.values.mapIndexed { index, value ->
+            context.text(PaperDialogInputId.of("$INPUT_PREFIX${index + 1}")) ?: value
+        }
+
+    private fun resizeEditor(context: PaperDialogClickContext, add: Boolean) {
+        val session = sessions[context.player.uniqueId] ?: return
+        if (session.stage != Stage.EDITING || !ensureValid(context.player, session)) return
+        // Every form action submits its inputs. Capture them before rebuilding the
+        // screen so adding/removing a field cannot discard text typed in other rows.
+        val submitted = editorValues(context, session)
+        val resized = when {
+            add && submitted.size < ItemLorePolicy.MAX_ROWS -> submitted + ""
+            !add && submitted.isNotEmpty() -> submitted.dropLast(1)
+            else -> submitted
+        }
+        openEditor(context.player, session, resized, root = true)
+    }
+
     private fun submitEditor(context: PaperDialogClickContext) {
         val player = context.player
         val session = sessions[player.uniqueId] ?: return
         if (session.stage != Stage.EDITING) return
         if (!ensureValid(player, session)) return
-        val submitted = (0 until ItemLorePolicy.MAX_ROWS).map { index ->
-            context.text(PaperDialogInputId.of("lore_${index + 1}")).orEmpty()
-        }
+        val submitted = editorValues(context, session)
         val settings = requireNotNull(currentSettings())
         val result = ItemLorePolicy.build(session.originalItem.itemMeta?.lore(), submitted)
         if (result is ItemLorePolicy.Result.Rejected) {
@@ -256,16 +282,20 @@ internal class ItemLoreEditor(
         if (!isNearSource(player, session, settings)) return invalidateWithMessage(player, session, "too-far")
         session.stage = Stage.PREVIEW
         val item = replacement(session, draft)
-        var body = text(settings, "preview-body", "price" to formatPrice(session.quotedPriceMinor))
-        body = body.append(Component.newline()).append(itemHover(item))
-        if (draft.visibleRows.isEmpty()) body = body.append(Component.newline()).append(text(settings, "preview-empty"))
-        else draft.visibleRows.forEach { row -> body = body.append(Component.newline()).append(Component.text(row, NamedTextColor.WHITE).decoration(TextDecoration.ITALIC, false)) }
+        val before = ItemLorePolicy.originalRows(session.originalItem.itemMeta?.lore())
+        val after = ItemLorePolicy.originalRows(draft.lore)
+        val body = buildList {
+            add(PaperDialogBody(itemHover(item), WIDTH))
+            add(ItemLorePreview.table(before, after) { text(settings, it) })
+            add(PaperDialogBody(text(settings, "preview-body", "price" to formatPrice(session.quotedPriceMinor)), WIDTH))
+            if (draft.visibleRows.isEmpty()) add(PaperDialogBody(text(settings, "preview-empty"), WIDTH))
+        }
         ArcMenus.openDialog(
             player,
             PaperDialogScreen(
                 id = PREVIEW_SCREEN,
                 title = text(settings, "preview-title"),
-                body = listOf(PaperDialogBody(body, WIDTH)),
+                body = body,
                 buttons = listOf(contextButton("continue", text(settings, "preview-confirm")) { openConfirm(player, session, draft) }),
                 exitButton = dialogButton("edit", text(settings, "preview-back")) {
                     openEditor(player, session, session.values, root = false)
@@ -555,8 +585,6 @@ internal class ItemLoreEditor(
         active && sessions[session.playerId] === session && session.stage !in setOf(Stage.COMPLETE, Stage.RETIRED, Stage.PAYMENT) &&
             nowMillis() - session.startedAtMillis <= SESSION_TTL_MILLIS
 
-    private fun codePoints(value: String): Int = value.codePointCount(0, value.length)
-
     companion object {
         const val EDITOR_SCREEN = "item-lore.editor"
         const val PREVIEW_SCREEN = "item-lore.preview"
@@ -564,7 +592,7 @@ internal class ItemLoreEditor(
         const val SAVING_SCREEN = "item-lore.saving"
         const val RESULT_SCREEN = "item-lore.result"
         const val INPUT_PREFIX = "lore_"
-        const val INPUT_MAX_LENGTH = 160
+        const val INPUT_MAX_LENGTH = ItemLorePolicy.MAX_INPUT_LENGTH
         private const val WIDTH = 520
         private const val SESSION_TTL_MILLIS = 5 * 60 * 1000L
     }
