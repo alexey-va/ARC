@@ -4,7 +4,6 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.doubles.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.shouldNotBe
 import io.mockk.every
 import io.mockk.mockk
 import org.bukkit.FluidCollisionMode
@@ -13,6 +12,7 @@ import org.bukkit.NamespacedKey
 import org.bukkit.entity.ArmorStand
 import org.bukkit.entity.Entity
 import org.bukkit.entity.Interaction
+import org.bukkit.entity.ItemDisplay
 import org.bukkit.entity.Player
 import org.bukkit.persistence.PersistentDataType
 import org.bukkit.util.RayTraceResult
@@ -20,6 +20,8 @@ import org.bukkit.util.Vector
 import ru.arc.core.Tasks
 import ru.arc.core.TestTaskScheduler
 import ru.arc.paper.testing.MockBukkitTestRuntime
+import java.util.logging.Handler
+import java.util.logging.LogRecord
 import kotlin.math.abs
 
 class FurnitureGalleryInteractionRuntimeTest : StringSpec({
@@ -64,12 +66,13 @@ class FurnitureGalleryInteractionRuntimeTest : StringSpec({
                 markerV1.isValid shouldBe false
                 markerV2.isValid shouldBe false
                 world.entities.filterIsInstance<Interaction>() shouldHaveSize 1
-                val sight = runtime.targetInSight(player, 5.0)
-                sight shouldNotBe null
-                sight?.root?.uniqueId shouldBe root.uniqueId
-                sight?.furnitureId shouldBe id
-                sight?.targetKey shouldBe "native:${root.uniqueId}"
-                abs(requireNotNull(sight).distance - 0.7) shouldBeLessThanOrEqual 1.0e-6
+                val sight = requireNotNull(runtime.targetInSight(player, 5.0))
+                sight.root.uniqueId shouldBe root.uniqueId
+                sight.furnitureId shouldBe id
+                sight.targetKey shouldBe "native:${root.uniqueId}"
+                abs(requireNotNull(sight.modelBounds).maxY - 65.2) shouldBeLessThanOrEqual 1.0e-9
+                runtime.modelBoundsForNativeRoot(root, id) shouldBe sight.modelBounds
+                abs(sight.distance - 0.7) shouldBeLessThanOrEqual 1.0e-6
 
                 root.teleport(Location(world, 5.5, 64.0, 5.5, 90.0f, 0.0f))
                 eye = Location(world, 5.5, 65.0, 4.2, 0.0f, 0.0f)
@@ -86,6 +89,87 @@ class FurnitureGalleryInteractionRuntimeTest : StringSpec({
                 scheduler.timerCount() shouldBe 0
             } finally {
                 runtime.close()
+                Tasks.reset()
+            }
+        }
+    }
+
+    "resolves one configured native-root profile outside the gallery without an entity scan" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val scheduler = TestTaskScheduler()
+            Tasks.install(scheduler)
+            val plugin = paper.createSimplePlugin("FurnitureGalleryExternalBoundsTest")
+            val world = paper.addSimpleWorld("survival")
+            val root = world.spawn(Location(world, 3.0, 70.0, 5.0, 0.0f, 90.0f), ItemDisplay::class.java)
+            val id = "decor:wall_panel"
+            val profile = FurnitureGalleryTargetPlanner.profile(
+                id,
+                listOf(
+                    FurnitureGalleryVertex(-0.5, 0.0, -0.25),
+                    FurnitureGalleryVertex(0.5, 0.0, -0.25),
+                    FurnitureGalleryVertex(-0.5, 2.0, 0.25),
+                    FurnitureGalleryVertex(0.5, 2.0, 0.25),
+                ),
+            )
+            var identityLookups = 0
+            val runtime = FurnitureGalleryInteractionRuntime(
+                plugin = plugin,
+                profiles = mapOf(id to profile),
+                rootResolver = FurnitureGalleryNativeRootResolver { identityLookups++; id },
+            )
+
+            try {
+                runtime.start()
+                abs(requireNotNull(runtime.modelBoundsForNativeRoot(root, id)).maxY - 70.25) shouldBeLessThanOrEqual 1.0e-9
+                identityLookups shouldBe 0
+                root.isValid shouldBe true
+            } finally {
+                runtime.close()
+                Tasks.reset()
+            }
+        }
+    }
+
+    "warns when a configured profile cannot produce bounds for the native root pose" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val scheduler = TestTaskScheduler()
+            Tasks.install(scheduler)
+            val plugin = paper.createSimplePlugin("FurnitureGalleryInvalidPoseTest")
+            val warnings = mutableListOf<String>()
+            val handler = object : Handler() {
+                override fun publish(record: LogRecord) {
+                    warnings += record.message
+                }
+
+                override fun flush() = Unit
+                override fun close() = Unit
+            }
+            plugin.logger.addHandler(handler)
+            val world = paper.addSimpleWorld(FURNITURE_GALLERY_WORLD)
+            val root = world.spawn(Location(world, 3.0, 64.0, 3.0, 0.0f, 45.0f), ItemDisplay::class.java)
+            val id = "decor:unsupported_tilt"
+            val profile = FurnitureGalleryTargetPlanner.profile(
+                id,
+                listOf(
+                    FurnitureGalleryVertex(-0.5, 0.0, -0.5),
+                    FurnitureGalleryVertex(0.5, 0.0, -0.5),
+                    FurnitureGalleryVertex(-0.5, 1.0, 0.5),
+                    FurnitureGalleryVertex(0.5, 1.0, 0.5),
+                ),
+            )
+            val runtime = FurnitureGalleryInteractionRuntime(
+                plugin = plugin,
+                profiles = mapOf(id to profile),
+                rootResolver = FurnitureGalleryNativeRootResolver { id },
+            )
+
+            try {
+                runtime.start()
+                runtime.modelBoundsForNativeRoot(root, id) shouldBe null
+                warnings.any { "profile geometry is invalid; using native root bounds for $id" in it } shouldBe true
+            } finally {
+                runtime.close()
+                plugin.logger.removeHandler(handler)
                 Tasks.reset()
             }
         }

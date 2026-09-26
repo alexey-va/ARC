@@ -4,10 +4,12 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.doubles.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import ru.arc.config.Config
 import java.nio.file.Files
 import java.util.UUID
+import kotlin.math.abs
 
 class FurnitureGalleryTargetTest : StringSpec({
     "planner rotates local vertices by live yaw and translates from the exact spawned root" {
@@ -40,6 +42,88 @@ class FurnitureGalleryTargetTest : StringSpec({
         plan.segments shouldHaveSize 2
         plan.segments.map { it.z } shouldContainExactly listOf(21.0, 22.0)
         plan.segments.all { it.width == 1.0 && it.height == 2.0 } shouldBe true
+    }
+
+    "planner applies the negative native ItemDisplay wall pitch before yaw" {
+        val profile = profile(
+            "furniture:wall_panel",
+            boxVertices(minX = -0.5, minY = 0.0, minZ = 0.1, maxX = 0.5, maxY = 2.0, maxZ = 0.4),
+        )
+
+        val bounds = FurnitureGalleryTargetPlanner.modelBounds(
+            profile,
+            FurnitureGalleryAnchor(10.0, 64.0, 20.0, 90.0, 90.0),
+        )
+
+        // Native ItemDisplay +90° pitch is Rx(-90°): local positive Z maps upward.
+        abs(bounds.minY - 64.1) shouldBeLessThanOrEqual 1.0e-9
+        abs(bounds.maxY - 64.4) shouldBeLessThanOrEqual 1.0e-9
+        abs(bounds.widthX - 2.0) shouldBeLessThanOrEqual 1.0e-9
+        abs(bounds.widthZ - 1.0) shouldBeLessThanOrEqual 1.0e-9
+
+        shouldThrow<IllegalArgumentException> {
+            FurnitureGalleryTargetPlanner.modelBounds(
+                profile,
+                FurnitureGalleryAnchor(10.0, 64.0, 20.0, 45.0, 45.0),
+            )
+        }
+    }
+
+    "flat furniture model planes retain their real top without synthetic label height" {
+        val profile = profile(
+            "furniture:paper_plane",
+            listOf(
+                FurnitureGalleryVertex(-0.5, 0.0, -0.25),
+                FurnitureGalleryVertex(0.5, 0.0, -0.25),
+                FurnitureGalleryVertex(-0.5, 0.0, 0.25),
+                FurnitureGalleryVertex(0.5, 0.0, 0.25),
+            ),
+        )
+        val anchor = FurnitureGalleryAnchor(10.0, 64.0, 20.0, 0.0)
+
+        val bounds = FurnitureGalleryTargetPlanner.modelBounds(profile, anchor)
+        val plan = FurnitureGalleryTargetPlanner.plan(profile, UUID.randomUUID(), anchor)
+
+        bounds.minY shouldBe 64.0
+        bounds.maxY shouldBe 64.0
+        plan.bounds shouldBe bounds
+        plan.segments.all { it.height == 0.0 && it.y == 64.0 } shouldBe true
+    }
+
+    "a wall profile baked at pitch 90 is not rotated twice" {
+        val profile = profile(
+            "furniture:wall_shelf",
+            boxVertices(
+                minX = -1.56,
+                minY = -0.46475,
+                minZ = -0.001,
+                maxX = 0.52,
+                maxY = 0.46475,
+                maxZ = 0.454,
+            ),
+            referencePitch = 90.0,
+        )
+
+        val bounds = FurnitureGalleryTargetPlanner.modelBounds(
+            profile,
+            FurnitureGalleryAnchor(0.0, 64.0, 0.0, 0.0, 90.0),
+        )
+
+        abs(bounds.minX - -1.56) shouldBeLessThanOrEqual 1.0e-9
+        abs(bounds.maxX - 0.52) shouldBeLessThanOrEqual 1.0e-9
+        abs(bounds.minY - (64.0 - 0.46475)) shouldBeLessThanOrEqual 1.0e-9
+        abs(bounds.maxY - (64.0 + 0.46475)) shouldBeLessThanOrEqual 1.0e-9
+        abs(bounds.minZ - -0.001) shouldBeLessThanOrEqual 1.0e-9
+        abs(bounds.maxZ - 0.454) shouldBeLessThanOrEqual 1.0e-9
+
+        val quarterTurn = FurnitureGalleryTargetPlanner.modelBounds(
+            profile,
+            FurnitureGalleryAnchor(0.0, 64.0, 0.0, 90.0, 90.0),
+        )
+        abs(quarterTurn.minX - -0.454) shouldBeLessThanOrEqual 1.0e-9
+        abs(quarterTurn.maxX - 0.001) shouldBeLessThanOrEqual 1.0e-9
+        abs(quarterTurn.minZ - -1.56) shouldBeLessThanOrEqual 1.0e-9
+        abs(quarterTurn.maxZ - 0.52) shouldBeLessThanOrEqual 1.0e-9
     }
 
     "planner caps segment count and waits until every touched chunk is loaded" {
@@ -82,6 +166,13 @@ class FurnitureGalleryTargetTest : StringSpec({
         shouldThrow<IllegalArgumentException> {
             FurnitureGalleryTargetPlanner.plan(flat, UUID.randomUUID(), FurnitureGalleryAnchor(0.0, 64.0, 0.0, 0.0))
         }
+        val line = profile(
+            "fixture:line",
+            listOf(FurnitureGalleryVertex(-0.5, 0.0, 0.0), FurnitureGalleryVertex(0.5, 0.0, 0.0)),
+        )
+        shouldThrow<IllegalArgumentException> {
+            FurnitureGalleryTargetPlanner.modelBounds(line, FurnitureGalleryAnchor(0.0, 64.0, 0.0, 0.0))
+        }
         val remote = profile(
             "fixture:remote",
             listOf(
@@ -101,6 +192,11 @@ class FurnitureGalleryTargetTest : StringSpec({
                 vertices:
                   - [-0.25, 0.0, -0.25]
                   - [0.25, 1.0, 0.25]
+              fixture:wall_shelf:
+                pitch: 90
+                vertices:
+                  - [-1.56, -0.46475, -0.001]
+                  - [0.52, 0.46475, 0.454]
               fixture:bad:
                 vertices:
                   - [0.0, 0.0]
@@ -111,8 +207,9 @@ class FurnitureGalleryTargetTest : StringSpec({
 
         val profiles = config(yaml).snapshot { invalidIds += it }
 
-        profiles.keys shouldContainExactly listOf("fixture:oak_chair")
+        profiles.keys.toList() shouldContainExactly listOf("fixture:oak_chair", "fixture:wall_shelf")
         profiles.getValue("fixture:oak_chair").vertices shouldHaveSize 2
+        profiles.getValue("fixture:wall_shelf").referencePitch shouldBe 90.0
         invalidIds shouldContainExactly listOf("fixture:bad")
     }
 
@@ -137,8 +234,29 @@ class FurnitureGalleryTargetTest : StringSpec({
     }
 })
 
-private fun profile(id: String, vertices: List<FurnitureGalleryVertex>): FurnitureGalleryProfile =
-    FurnitureGalleryTargetPlanner.profile(id, vertices)
+private fun profile(
+    id: String,
+    vertices: List<FurnitureGalleryVertex>,
+    referencePitch: Double = 0.0,
+): FurnitureGalleryProfile = FurnitureGalleryTargetPlanner.profile(id, vertices, referencePitch)
+
+private fun boxVertices(
+    minX: Double,
+    minY: Double,
+    minZ: Double,
+    maxX: Double,
+    maxY: Double,
+    maxZ: Double,
+): List<FurnitureGalleryVertex> = listOf(
+    FurnitureGalleryVertex(minX, minY, minZ),
+    FurnitureGalleryVertex(maxX, minY, minZ),
+    FurnitureGalleryVertex(minX, minY, maxZ),
+    FurnitureGalleryVertex(maxX, minY, maxZ),
+    FurnitureGalleryVertex(minX, maxY, minZ),
+    FurnitureGalleryVertex(maxX, maxY, minZ),
+    FurnitureGalleryVertex(minX, maxY, maxZ),
+    FurnitureGalleryVertex(maxX, maxY, maxZ),
+)
 
 private fun config(yaml: String): FurnitureGalleryTargetConfig {
     val root = Files.createTempDirectory("furniture-gallery-profile-config-")

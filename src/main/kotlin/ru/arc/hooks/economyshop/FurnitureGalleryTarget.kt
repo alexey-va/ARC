@@ -2,10 +2,12 @@ package ru.arc.hooks.economyshop
 
 import ru.arc.config.Config
 import java.util.UUID
+import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.round
 
 internal const val FURNITURE_GALLERY_TARGET_RESOURCE = "furniture-gallery.yml"
 internal const val FURNITURE_GALLERY_MAX_ROOTS = 512
@@ -20,6 +22,8 @@ internal data class FurnitureGalleryVertex(val x: Double, val y: Double, val z: 
 internal data class FurnitureGalleryProfile(
     val furnitureId: String,
     val vertices: List<FurnitureGalleryVertex>,
+    /** Entity pitch already baked into these local vertices; configured as `pitch:`. */
+    val referencePitch: Double = 0.0,
 )
 
 internal data class FurnitureGalleryAnchor(
@@ -27,6 +31,7 @@ internal data class FurnitureGalleryAnchor(
     val y: Double,
     val z: Double,
     val yaw: Double,
+    val pitch: Double = 0.0,
 )
 
 internal data class FurnitureGalleryBounds(
@@ -74,10 +79,15 @@ internal data class FurnitureGalleryHitboxPlan(
 /**
  * Validates model-local grounded vertices and converts them to a bounded world
  * AABB for the live spawned root. Vertices already include IA/native item
- * transforms at yaw zero; runtime applies only live entity yaw and position.
+ * transforms at zero yaw/pitch; runtime applies the live ItemDisplay pitch,
+ * yaw and position.
  */
 internal object FurnitureGalleryTargetPlanner {
-    fun profile(furnitureId: String, vertices: List<FurnitureGalleryVertex>): FurnitureGalleryProfile {
+    fun profile(
+        furnitureId: String,
+        vertices: List<FurnitureGalleryVertex>,
+        referencePitch: Double = 0.0,
+    ): FurnitureGalleryProfile {
         require(furnitureId.matches(FURNITURE_ID_PATTERN)) { "Gallery furniture ID is invalid" }
         require(vertices.isNotEmpty() && vertices.size <= FURNITURE_GALLERY_MAX_VERTICES) {
             "Gallery profile must contain between 1 and $FURNITURE_GALLERY_MAX_VERTICES vertices"
@@ -85,7 +95,12 @@ internal object FurnitureGalleryTargetPlanner {
         require(vertices.all { vertex ->
             listOf(vertex.x, vertex.y, vertex.z).all { it.isFinite() && it in -LOCAL_COORDINATE_LIMIT..LOCAL_COORDINATE_LIMIT }
         }) { "Gallery profile vertices must be finite and within the supported local coordinate range" }
-        return FurnitureGalleryProfile(furnitureId, vertices.toList())
+        require(referencePitch.isFinite()) { "Gallery profile pitch must be finite" }
+        val normalizedReferencePitch = normalizeDegrees(referencePitch)
+        require(listOf(0.0, 90.0, 270.0).any {
+            degreesApart(normalizedReferencePitch, it) <= ROTATION_TOLERANCE_DEGREES
+        }) { "Gallery profile pitch must be 0, 90, or -90 degrees" }
+        return FurnitureGalleryProfile(furnitureId, vertices.toList(), referencePitch)
     }
 
     fun plan(
@@ -93,29 +108,11 @@ internal object FurnitureGalleryTargetPlanner {
         rootId: UUID,
         anchor: FurnitureGalleryAnchor,
     ): FurnitureGalleryHitboxPlan {
-        require(anchor.isFinite()) { "Gallery root location and yaw must be finite" }
-        require(anchor.x in -MAX_HORIZONTAL_COORDINATE..MAX_HORIZONTAL_COORDINATE &&
-            anchor.z in -MAX_HORIZONTAL_COORDINATE..MAX_HORIZONTAL_COORDINATE &&
-            anchor.y in MIN_GALLERY_ELEVATION..MAX_GALLERY_ELEVATION
-        ) { "Gallery root is outside the supported world range" }
-
-        val bounds = transform(profile, anchor)
-        val coordinates = listOf(bounds.minX, bounds.minY, bounds.minZ, bounds.maxX, bounds.maxY, bounds.maxZ)
-        require(coordinates.all(Double::isFinite)) { "Transformed gallery bounds must be finite" }
-        require(listOf(bounds.minX, bounds.maxX, bounds.minZ, bounds.maxZ)
-            .all { it in -MAX_HORIZONTAL_COORDINATE..MAX_HORIZONTAL_COORDINATE }
-        ) { "Transformed gallery bounds are outside the supported world range" }
-        require(listOf(bounds.minY, bounds.maxY).all { it in MIN_GALLERY_ELEVATION..MAX_GALLERY_ELEVATION }) {
-            "Transformed gallery bounds are outside the supported world range"
-        }
-
-        val dimensions = listOf(bounds.widthX, bounds.height, bounds.widthZ)
-        require(dimensions.all { it > MIN_DIMENSION && it <= FURNITURE_GALLERY_MAX_DIMENSION }) {
-            "Transformed gallery bounds must be positive and no larger than $FURNITURE_GALLERY_MAX_DIMENSION blocks"
-        }
+        val bounds = modelBounds(profile, anchor)
 
         val shortSide = min(bounds.widthX, bounds.widthZ)
         val longSide = max(bounds.widthX, bounds.widthZ)
+        require(shortSide > MIN_DIMENSION) { "Gallery interaction footprints must have positive X and Z dimensions" }
         val segmentCount = ceil(longSide / shortSide).toInt()
         require(segmentCount in 1..FURNITURE_GALLERY_MAX_SEGMENTS) {
             "Gallery profile must use between 1 and $FURNITURE_GALLERY_MAX_SEGMENTS interaction boxes"
@@ -162,6 +159,35 @@ internal object FurnitureGalleryTargetPlanner {
         )
     }
 
+    /** Returns the bounded transformed model geometry without planning interaction segments. */
+    fun modelBounds(profile: FurnitureGalleryProfile, anchor: FurnitureGalleryAnchor): FurnitureGalleryBounds {
+        require(anchor.isFinite()) { "Furniture root location and rotation must be finite" }
+        require(anchor.hasSupportedProfileRotation(profile)) {
+            "Furniture profile bounds support floor pitch at any yaw and wall pitch with cardinal yaw, relative to the profile's baked pitch"
+        }
+        require(anchor.x in -MAX_HORIZONTAL_COORDINATE..MAX_HORIZONTAL_COORDINATE &&
+            anchor.z in -MAX_HORIZONTAL_COORDINATE..MAX_HORIZONTAL_COORDINATE &&
+            anchor.y in MIN_GALLERY_ELEVATION..MAX_GALLERY_ELEVATION
+        ) { "Furniture root is outside the supported world range" }
+
+        val bounds = transform(profile, anchor)
+        val coordinates = listOf(bounds.minX, bounds.minY, bounds.minZ, bounds.maxX, bounds.maxY, bounds.maxZ)
+        require(coordinates.all(Double::isFinite)) { "Transformed furniture bounds must be finite" }
+        require(listOf(bounds.minX, bounds.maxX, bounds.minZ, bounds.maxZ)
+            .all { it in -MAX_HORIZONTAL_COORDINATE..MAX_HORIZONTAL_COORDINATE }
+        ) { "Transformed furniture bounds are outside the supported world range" }
+        require(listOf(bounds.minY, bounds.maxY).all { it in MIN_GALLERY_ELEVATION..MAX_GALLERY_ELEVATION }) {
+            "Transformed furniture bounds are outside the supported world range"
+        }
+        val dimensions = listOf(bounds.widthX, bounds.height, bounds.widthZ)
+        require(dimensions.all { it >= 0.0 && it <= FURNITURE_GALLERY_MAX_DIMENSION } &&
+            dimensions.count { it > MIN_DIMENSION } >= 2
+        ) {
+            "Transformed furniture bounds must have at least two nonzero dimensions and be no larger than $FURNITURE_GALLERY_MAX_DIMENSION blocks"
+        }
+        return bounds
+    }
+
     fun desiredSegments(
         plan: FurnitureGalleryHitboxPlan,
         rootChunkLoaded: Boolean,
@@ -172,6 +198,9 @@ internal object FurnitureGalleryTargetPlanner {
     }
 
     private fun transform(profile: FurnitureGalleryProfile, anchor: FurnitureGalleryAnchor): FurnitureGalleryBounds {
+        val pitch = Math.toRadians(profile.referencePitch - anchor.pitch)
+        val pitchCosine = kotlin.math.cos(pitch)
+        val pitchSine = kotlin.math.sin(pitch)
         val radians = Math.toRadians(-anchor.yaw)
         val cosine = kotlin.math.cos(radians)
         val sine = kotlin.math.sin(radians)
@@ -183,9 +212,12 @@ internal object FurnitureGalleryTargetPlanner {
         var maxZ = Double.NEGATIVE_INFINITY
 
         profile.vertices.forEach { vertex ->
-            val x = anchor.x + vertex.x * cosine + vertex.z * sine
-            val y = anchor.y + vertex.y
-            val z = anchor.z - vertex.x * sine + vertex.z * cosine
+            // ItemsAdder applies the live ItemDisplay pitch around X before the existing yaw transform.
+            val pitchedY = vertex.y * pitchCosine - vertex.z * pitchSine
+            val pitchedZ = vertex.y * pitchSine + vertex.z * pitchCosine
+            val x = anchor.x + vertex.x * cosine + pitchedZ * sine
+            val y = anchor.y + pitchedY
+            val z = anchor.z - vertex.x * sine + pitchedZ * cosine
             minX = min(minX, x)
             minY = min(minY, y)
             minZ = min(minZ, z)
@@ -197,11 +229,38 @@ internal object FurnitureGalleryTargetPlanner {
     }
 
     private fun FurnitureGalleryAnchor.isFinite(): Boolean =
-        listOf(x, y, z, yaw).all(Double::isFinite)
+        listOf(x, y, z, yaw, pitch).all(Double::isFinite)
+
+    private fun FurnitureGalleryAnchor.hasSupportedProfileRotation(profile: FurnitureGalleryProfile): Boolean {
+        val normalizedPitch = normalizeDegrees(pitch)
+        val referencePitch = normalizeDegrees(profile.referencePitch)
+        val pitchDelta = normalizeDegrees(pitch - profile.referencePitch)
+        val liveFloorPitch = degreesApart(normalizedPitch, 0.0) <= ROTATION_TOLERANCE_DEGREES
+        if (liveFloorPitch && degreesApart(referencePitch, 0.0) <= ROTATION_TOLERANCE_DEGREES) return true
+
+        val liveWallPitch = degreesApart(normalizedPitch, 90.0) <= ROTATION_TOLERANCE_DEGREES ||
+            degreesApart(normalizedPitch, 270.0) <= ROTATION_TOLERANCE_DEGREES
+        if (!liveWallPitch) return false
+        val quarterTurns = normalizeDegrees(yaw) / 90.0
+        val cardinalYaw = abs(quarterTurns - round(quarterTurns)) <= ROTATION_TOLERANCE_TURNS
+        if (!cardinalYaw) return false
+
+        val profilePitchAlreadyBaked = degreesApart(normalizedPitch, referencePitch) <= ROTATION_TOLERANCE_DEGREES
+        val supportedWallPitchDelta = degreesApart(pitchDelta, 90.0) <= ROTATION_TOLERANCE_DEGREES ||
+            degreesApart(pitchDelta, 270.0) <= ROTATION_TOLERANCE_DEGREES
+        return profilePitchAlreadyBaked || supportedWallPitchDelta
+    }
+
+    private fun normalizeDegrees(angle: Double): Double = ((angle % FULL_ROTATION) + FULL_ROTATION) % FULL_ROTATION
+
+    private fun degreesApart(first: Double, second: Double): Double = abs(first - second)
 
     private fun chunk(coordinate: Double): Int = floor(coordinate).toInt() shr 4
 
     private const val MIN_DIMENSION = 1.0e-6
+    private const val FULL_ROTATION = 360.0
+    private const val ROTATION_TOLERANCE_DEGREES = 0.05
+    private const val ROTATION_TOLERANCE_TURNS = ROTATION_TOLERANCE_DEGREES / 90.0
     private const val LOCAL_COORDINATE_LIMIT = 10.0
     private const val MAX_HORIZONTAL_COORDINATE = 30_000_000.0
     private const val MIN_GALLERY_ELEVATION = -2_048.0
@@ -222,11 +281,12 @@ internal class FurnitureGalleryTargetConfig(private val source: Config) {
             runCatching {
                 val config = stringMap(raw, "profiles.$id")
                 val vertices = vertexList(config["vertices"], "profiles.$id.vertices")
+                val referencePitch = config["pitch"]?.let { number(it, "profiles.$id.pitch") } ?: 0.0
                 totalVertices += vertices.size
                 require(totalVertices <= FURNITURE_GALLERY_MAX_TOTAL_VERTICES) {
                     "Gallery profile vertex count exceeds $FURNITURE_GALLERY_MAX_TOTAL_VERTICES"
                 }
-                FurnitureGalleryTargetPlanner.profile(id, vertices)
+                FurnitureGalleryTargetPlanner.profile(id, vertices, referencePitch)
             }.onSuccess { profile -> result[id] = profile }
                 .onFailure { onInvalidProfile(id) }
         }

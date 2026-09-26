@@ -12,6 +12,7 @@ import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.player.PlayerTeleportEvent
 import ru.arc.ARC
 import ru.arc.core.LifecycleTaskScope
+import ru.arc.furniturehitbox.FurnitureHitboxHint
 import ru.arc.hooks.luckperms.LuckPermsHook
 import ru.arc.hooks.economyshop.FURNITURE_GALLERY_WORLD
 import ru.arc.hooks.economyshop.FurnitureGalleryInteractionRuntime
@@ -28,6 +29,7 @@ internal class ItemInfoRuntime(
     galleryRuntime: FurnitureGalleryInteractionRuntime?,
 ) : Listener, AutoCloseable {
     private val tasks = LifecycleTaskScope()
+    private val furnitureHitboxHint = FurnitureHitboxHint.create(ARC.instance, galleryRuntime)
     private val failedViewers = mutableSetOf<java.util.UUID>()
     private val preferencesReader = if (Bukkit.getPluginManager().isPluginEnabled("LuckPerms")) LuckPermsHook() else null
     private val resolver = BukkitItemInfoTargetResolver(settings.targetDistance, galleryRuntime = galleryRuntime)
@@ -60,6 +62,7 @@ internal class ItemInfoRuntime(
         tasks.runTimer(1L, 1L) {
             tick++
             Bukkit.getOnlinePlayers().forEach { player ->
+                furnitureHitboxHint?.update(player, refreshTarget = tick == 1L || tick % 2L == 0L)
                 if (player.uniqueId in failedViewers) return@forEach
                 try {
                     if (tick == 1L || tick % 5L == 0L) controller.update(player)
@@ -74,11 +77,13 @@ internal class ItemInfoRuntime(
     }
 
     @EventHandler fun joined(event: PlayerJoinEvent) {
+        furnitureHitboxHint?.reset(event.player)
         failedViewers.remove(event.player.uniqueId)
         refreshSoon(event.player)
     }
 
     @EventHandler fun quit(event: PlayerQuitEvent) {
+        furnitureHitboxHint?.reset(event.player)
         controller.reset(event.player)
         failedViewers.remove(event.player.uniqueId)
     }
@@ -87,9 +92,13 @@ internal class ItemInfoRuntime(
 
     @EventHandler fun teleported(event: PlayerTeleportEvent) = resetAndRefresh(event.player)
 
-    @EventHandler fun died(event: PlayerDeathEvent) = controller.reset(event.entity)
+    @EventHandler fun died(event: PlayerDeathEvent) {
+        furnitureHitboxHint?.reset(event.entity)
+        controller.reset(event.entity)
+    }
 
     private fun resetAndRefresh(player: Player) {
+        furnitureHitboxHint?.reset(player)
         controller.reset(player)
         refreshSoon(player)
     }
@@ -102,6 +111,7 @@ internal class ItemInfoRuntime(
 
     override fun close() {
         tasks.close()
+        furnitureHitboxHint?.close()
         providerRegistration.close()
         failedViewers.clear()
     }

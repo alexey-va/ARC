@@ -5,11 +5,11 @@ import dev.lone.itemsadder.api.Events.FurnitureBreakEvent
 import dev.lone.itemsadder.api.Events.FurniturePlaceSuccessEvent
 import org.bukkit.Bukkit
 import org.bukkit.FluidCollisionMode
-import org.bukkit.Location
 import org.bukkit.NamespacedKey
 import org.bukkit.World
 import org.bukkit.block.Block
 import org.bukkit.entity.Entity
+import org.bukkit.entity.ItemDisplay
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
@@ -66,6 +66,7 @@ internal data class FurnitureGallerySightTarget(
     val furnitureId: String,
     val targetKey: String,
     val distance: Double,
+    val modelBounds: FurnitureGalleryBounds? = null,
 )
 
 /** Returns the first ray/AABB intersection in world-distance units. */
@@ -178,6 +179,7 @@ internal class FurnitureGalleryInteractionRuntime(
                 furnitureId = state.furnitureId,
                 targetKey = state.targetKey,
                 distance = distance,
+                modelBounds = state.modelBounds,
             )
         }
         return candidates.minByOrNull(FurnitureGallerySightTarget::distance)
@@ -189,6 +191,24 @@ internal class FurnitureGalleryInteractionRuntime(
         val id = furnitureId?.trim()?.takeIf(String::isNotEmpty) ?: return null
         if (rootResolver.furnitureId(root) != id) return null
         return "native:${root.uniqueId}"
+    }
+
+    /**
+     * Returns the configured model bounds for an already resolved native IA root.
+     * Gallery roots reuse their tracked snapshot; other worlds transform one exact
+     * configured profile without scanning entities or chunks.
+     */
+    fun modelBoundsForNativeRoot(root: Entity, furnitureId: String): FurnitureGalleryBounds? {
+        if (closed || !root.isValid || furnitureId.isBlank()) return null
+        if (root.world.name == FURNITURE_GALLERY_WORLD) {
+            val state = roots[root.uniqueId] ?: trackRoot(root) ?: return null
+            val current = refreshRoot(state) ?: return null
+            return current.modelBounds.takeIf { current.furnitureId == furnitureId }
+        }
+        val profile = profilesById[furnitureId] ?: return null
+        return runCatching {
+            FurnitureGalleryTargetPlanner.modelBounds(profile, root.toGalleryAnchor())
+        }.getOrNull()
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -308,19 +328,25 @@ internal class FurnitureGalleryInteractionRuntime(
             removeRoot(entity.uniqueId)
             return null
         }
-        val anchor = entity.location.toGalleryAnchor()
+        val anchor = entity.toGalleryAnchor()
         val current = roots[entity.uniqueId]
         if (current != null && current.furnitureId == id && current.anchor == anchor) {
             current.root = entity
             return current
         }
 
-        val plan = profilesById[id]?.let { profile ->
-            runCatching { FurnitureGalleryTargetPlanner.plan(profile, entity.uniqueId, anchor) }
-                .onFailure { logIssue(id, "profile geometry is invalid; using native root bounds") }
+        val profile = profilesById[id]
+        val plan = profile?.let {
+            runCatching { FurnitureGalleryTargetPlanner.plan(it, entity.uniqueId, anchor) }
                 .getOrNull()
         }
-        val bounds = plan?.bounds ?: nativeRootBounds(entity)
+        val modelBounds = plan?.bounds ?: profile?.let {
+            runCatching { FurnitureGalleryTargetPlanner.modelBounds(it, anchor) }.getOrNull()
+        }
+        if (profile != null && modelBounds == null) {
+            logIssue(id, "profile geometry is invalid; using native root bounds")
+        }
+        val bounds = modelBounds ?: nativeRootBounds(entity)
         if (bounds == null) {
             removeRoot(entity.uniqueId)
             return null
@@ -337,6 +363,7 @@ internal class FurnitureGalleryInteractionRuntime(
             targetKey = "native:${entity.uniqueId}",
             anchor = anchor,
             bounds = bounds,
+            modelBounds = modelBounds,
             rootChunkX = entity.location.chunk.x,
             rootChunkZ = entity.location.chunk.z,
         )
@@ -359,7 +386,7 @@ internal class FurnitureGalleryInteractionRuntime(
             removeRoot(root.uniqueId)
             return null
         }
-        if (state.furnitureId != id || state.anchor != root.location.toGalleryAnchor()) {
+        if (state.furnitureId != id || state.anchor != root.toGalleryAnchor()) {
             return trackRoot(root)
         }
         return state
@@ -403,7 +430,11 @@ internal class FurnitureGalleryInteractionRuntime(
 
     private fun galleryWorld(): World? = Bukkit.getWorld(FURNITURE_GALLERY_WORLD)
 
-    private fun Location.toGalleryAnchor() = FurnitureGalleryAnchor(x, y, z, yaw.toDouble())
+    private fun Entity.toGalleryAnchor(): FurnitureGalleryAnchor {
+        val location = location
+        val pitch = if (this is ItemDisplay) location.pitch.toDouble() else 0.0
+        return FurnitureGalleryAnchor(location.x, location.y, location.z, location.yaw.toDouble(), pitch)
+    }
 
     private data class RootState(
         var root: Entity,
@@ -411,6 +442,7 @@ internal class FurnitureGalleryInteractionRuntime(
         val targetKey: String,
         val anchor: FurnitureGalleryAnchor,
         val bounds: FurnitureGalleryBounds,
+        val modelBounds: FurnitureGalleryBounds?,
         val rootChunkX: Int,
         val rootChunkZ: Int,
     )
