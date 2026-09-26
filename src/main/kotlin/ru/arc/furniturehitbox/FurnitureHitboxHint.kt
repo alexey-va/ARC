@@ -15,6 +15,7 @@ internal data class FurnitureHitboxTarget(val root: Entity, val bounds: Bounding
 
 internal fun interface FurnitureHitboxSource {
     fun target(player: Player): FurnitureHitboxTarget?
+    fun refreshAvailability() {}
 }
 
 internal interface FurnitureHitboxOutline : AutoCloseable {
@@ -49,6 +50,8 @@ internal class FurnitureHitboxHint(
             onFailure(player, failure)
         }
     }
+
+    fun refreshAvailability() = source.refreshAvailability()
 
     fun reset(player: Player) {
         outline.clear(player.uniqueId)

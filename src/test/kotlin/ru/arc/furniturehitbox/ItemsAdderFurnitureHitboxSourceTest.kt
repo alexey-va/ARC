@@ -152,6 +152,16 @@ class ItemsAdderFurnitureHitboxSourceTest : StringSpec({
         nativeInteractionBounds(BoundingBox(0.0, 1.0, 0.0, 2.0, 1.0, 2.0)) shouldBe null
     }
 
+    "click outline excludes the square Interaction excess rejected by IA server ray validation" {
+        val model = BoundingBox(-1.0, 0.0, -0.2, 1.0, 2.0, 0.2)
+        val physical = nativeInteractionBounds(model)!!
+        val clickable = nativeFurnitureClickBounds(model, physical)!!
+        clickable shouldBe model
+        clickable.rayTrace(Vector(-4.0, 1.0, 0.75), Vector(1.0, 0.0, 0.0), 5.0) shouldBe null
+        (clickable.rayTrace(Vector(-4.0, 1.0, 0.0), Vector(1.0, 0.0, 0.0), 5.0) != null) shouldBe true
+        nativeFurnitureClickBounds(model, physical.clone().shift(0.0, 5.0, 0.0)) shouldBe null
+    }
+
     val jarPath = System.getenv("ITEMSADDER_4_0_18_JAR")
     if (!jarPath.isNullOrBlank()) {
         "ItemsAdder 4.0.18 artifact matches every cached-reflection binding" {
@@ -162,8 +172,8 @@ class ItemsAdderFurnitureHitboxSourceTest : StringSpec({
 
                 bindings.managerSingleton.declaringClass.name shouldBe "itemsadder.m.d"
                 bindings.managerSingleton.returnType.name shouldBe "itemsadder.m.d"
-                bindings.managerAccessor.declaringClass.name shouldBe "itemsadder.m.d"
-                bindings.managerAccessor.returnType.name shouldBe "itemsadder.m.co"
+                bindings.managerField.declaringClass.name shouldBe "itemsadder.m.d"
+                bindings.managerField.type.name shouldBe "itemsadder.m.co"
                 bindings.furnitureManagerField.type.name shouldBe "itemsadder.m.br"
                 bindings.hitboxManagerField.type.name shouldBe "itemsadder.m.ce"
                 bindings.viewerContextMethod.returnType.name shouldBe "itemsadder.m.ci"

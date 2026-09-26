@@ -14,11 +14,16 @@ loaded-root queries use the existing furniture model profiles to find the prop;
 `ci.j(Location)` plus an exact root UUID check resolves the native hit geometry.
 The suggested box then follows IA's own float width=max(X,Z), float height,
 center-X/min-Y/center-Z rule, not the visible model dimensions. Current native
-Interaction bounds take precedence once IA selects that root. Opaque blocks
+Interaction bounds take precedence once IA selects that root. Both paths intersect
+that box with the native ray-selection bounds: IA validates the click again, so
+the square Interaction excess must never be presented as a working click area. Opaque blocks
 occlude selection. Profile queries also work outside the gallery world.
 
 The exact-version adapter binds once, re-reads live manager instances after IA
-reloads, and disables only this optional hint with one warning on incompatibility.
+reloads, waits for the nullable furniture-manager field during asynchronous IA
+data loading, and disables only this optional hint with one warning on incompatibility.
+The shared heartbeat reports readiness once the native managers actually exist;
+the throwing d.v() accessor must not be used as a startup readiness check.
 An IA upgrade needs a new verified adapter; never silently reuse obfuscated names.
 No click/break events, protections, barriers, inventories or ownership are changed.
 

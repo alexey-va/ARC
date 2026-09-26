@@ -61,6 +61,7 @@ internal class ItemInfoRuntime(
     fun start() {
         tasks.runTimer(1L, 1L) {
             tick++
+            if (tick == 1L || tick % 20L == 0L) furnitureHitboxHint?.refreshAvailability()
             Bukkit.getOnlinePlayers().forEach { player ->
                 furnitureHitboxHint?.update(player, refreshTarget = tick == 1L || tick % 2L == 0L)
                 if (player.uniqueId in failedViewers) return@forEach

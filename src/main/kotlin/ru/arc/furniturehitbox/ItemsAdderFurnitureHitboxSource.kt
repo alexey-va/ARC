@@ -30,6 +30,7 @@ internal class ItemsAdderFurnitureHitboxSource private constructor(
 ) : FurnitureHitboxSource {
     private val warned = AtomicBoolean()
     @Volatile private var unavailable = false
+    private var readyReported = false
 
     override fun target(player: Player): FurnitureHitboxTarget? {
         if (unavailable || !itemsAdder.isEnabled || !player.isOnline || !Bukkit.isPrimaryThread()) return null
@@ -47,6 +48,21 @@ internal class ItemsAdderFurnitureHitboxSource private constructor(
         } catch (failure: RuntimeException) {
             warnOnce(failure)
             null
+        }
+    }
+
+    override fun refreshAvailability() {
+        if (unavailable || !itemsAdder.isEnabled || readyReported) return
+        try {
+            val manager = bindings.managerSingleton.invoke(null) ?: return
+            val furniture = bindings.managerField.get(manager) ?: return
+            if (bindings.furnitureManagerField.get(furniture) == null || bindings.hitboxManagerField.get(furniture) == null) return
+            readyReported = true
+            owner.logger.info("Furniture hitbox hint ready: ItemsAdder furniture data is loaded")
+        } catch (failure: ReflectiveOperationException) {
+            warnOnce(failure)
+        } catch (failure: LinkageError) {
+            warnOnce(failure)
         }
     }
 
@@ -84,7 +100,7 @@ internal class ItemsAdderFurnitureHitboxSource private constructor(
             }.sortedBy { it.second }
         if (candidates.isEmpty()) return null
         val manager = bindings.managerSingleton.invoke(null) ?: return null
-        val api = bindings.managerAccessor.invoke(manager) ?: return null
+        val api = bindings.managerField.get(manager) ?: return null
         val furnitureManager = bindings.furnitureManagerField.get(api) ?: return null
         val context = bindings.viewerContextMethod.invoke(furnitureManager, player) ?: return null
         for ((root, _) in candidates) {
@@ -93,7 +109,8 @@ internal class ItemsAdderFurnitureHitboxSource private constructor(
             if (exactRoot.uniqueId != root.uniqueId) continue
             val geometry = bindings.modelBoxMethod.invoke(native) ?: continue
             val bounds = bindings.nativeModelBoundsMethod.invoke(geometry) as? BoundingBox ?: continue
-            val clickBox = nativeInteractionBounds(bounds) ?: continue
+            val interaction = nativeInteractionBounds(bounds) ?: continue
+            val clickBox = nativeFurnitureClickBounds(bounds, interaction) ?: continue
             return FurnitureHitboxTarget(root, clickBox)
         }
         return null
@@ -103,7 +120,7 @@ internal class ItemsAdderFurnitureHitboxSource private constructor(
         // ItemsAdder can rebuild its manager during iazip reloads. Resolve the live manager for each
         // query; only class/method/field objects are retained by Bindings.
         val manager = bindings.managerSingleton.invoke(null) ?: return null
-        val itemsAdderApi = bindings.managerAccessor.invoke(manager) ?: return null
+        val itemsAdderApi = bindings.managerField.get(manager) ?: return null
         val furnitureManager = bindings.furnitureManagerField.get(itemsAdderApi) ?: return null
         val hitboxManager = bindings.hitboxManagerField.get(itemsAdderApi) ?: return null
         val viewerHitbox = bindings.viewerHitboxMethod.invoke(hitboxManager, player) ?: return null
@@ -166,7 +183,7 @@ internal class ItemsAdderFurnitureHitboxSource private constructor(
         } == true
         if (!visibleFromCurrentRay) return null
 
-        return rootBounds?.let { FurnitureHitboxTarget(root, it) }
+        return rootBounds?.let { nativeFurnitureClickBounds(modelBox, it) }?.let { FurnitureHitboxTarget(root, it) }
     }
 
     private fun interactionReach(player: Player): Double? = when (player.gameMode) {
@@ -185,7 +202,7 @@ internal class ItemsAdderFurnitureHitboxSource private constructor(
 
     internal class Bindings private constructor(
         val managerSingleton: Method,
-        val managerAccessor: Method,
+        val managerField: Field,
         val furnitureManagerField: Field,
         val hitboxManagerField: Field,
         val viewerContextMethod: Method,
@@ -225,7 +242,7 @@ internal class ItemsAdderFurnitureHitboxSource private constructor(
 
                 return Bindings(
                     managerSingleton = managerClass.getMethod("g"),
-                    managerAccessor = managerClass.accessibleMethod("v"),
+                    managerField = managerClass.declaredField("be"),
                     furnitureManagerField = itemsAdderClass.getField("kO"),
                     hitboxManagerField = itemsAdderClass.getField("kQ"),
                     viewerContextMethod = furnitureManagerClass.getMethod("A", Player::class.java),
@@ -273,11 +290,8 @@ internal class ItemsAdderFurnitureHitboxSource private constructor(
             }
             return try {
                 val bindings = Bindings.bind(itemsAdder.javaClass.classLoader)
-                // Validate the server-specific ItemsAdder manager now, but do not retain it across iazip reloads.
-                val manager = bindings.managerSingleton.invoke(null)
-                    ?: error("ItemsAdder manager is unavailable")
-                bindings.managerAccessor.invoke(manager)
-                    ?: error("ItemsAdder furniture manager is unavailable")
+                // IA constructs the furniture manager only after its asynchronous data load.
+                // d.v() throws while that field is null; absence is normal startup/reload state.
                 ItemsAdderFurnitureHitboxSource(plugin, itemsAdder, bindings, models)
             } catch (failure: InvocationTargetException) {
                 plugin.logger.warning(
@@ -331,6 +345,12 @@ internal fun nativeHitboxVisibleFromRay(
     return listOfNotNull(modelHit, interactionHit).any { hit ->
         hit.distanceSquared(origin) <= blockDistanceSquared + RAY_TIE_TOLERANCE_SQUARED
     }
+}
+
+/** IA validates an Interaction click against cj's ray box again; the square excess is not clickable. */
+internal fun nativeFurnitureClickBounds(model: BoundingBox, interaction: BoundingBox): BoundingBox? {
+    if (!model.overlaps(interaction)) return null
+    return model.clone().intersection(interaction)
 }
 
 /** Exact cg.a(BoundingBox, boolean) geometry: float width=max(X,Z), float height, centered at minY. */
