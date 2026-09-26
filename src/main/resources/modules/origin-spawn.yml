@@ -171,6 +171,7 @@ origin-portals:
         background-gray: 0
         background-alpha: 0
       particles:
+        enabled: false
         radius: 1.25
         height: 2.8
       pulse:

@@ -42,6 +42,8 @@ class OriginPortalsModuleTest : FreeSpec({
             survival.labelBackgroundGray shouldBe 48
             survival.labelBackgroundAlpha shouldBe 180
             config.gateSettings(survival)!!.height shouldBe 16.8f
+            survival.particlesEnabled.shouldBeTrue()
+            config.gateSettings(survival)!!.suctionEnabled.shouldBeTrue()
             config.gateSettings(survival)!!.itemIds shouldBe
                 mapOf(
                     ru.arc.PortalVisualStyle.ORIGIN to "origin_gate_portals:origin_portal",
@@ -85,6 +87,8 @@ class OriginPortalsModuleTest : FreeSpec({
             slimefun.particleRadius shouldBe 1.25
             slimefun.particleHeight shouldBe 2.8
             slimefun.pulseAmplitude shouldBe 0f
+            slimefun.particlesEnabled.shouldBeFalse()
+            config.gateSettings(slimefun)!!.suctionEnabled.shouldBeFalse()
             config.gateSettings(slimefun)!!.suctionRadius shouldBe 1.25
             config.gateSettings(slimefun)!!.suctionHeight shouldBe 2.8
         } finally {
@@ -158,6 +162,7 @@ class OriginPortalsModuleTest : FreeSpec({
             source.setBoolean("origin-portals.anchors.slimefun.enabled", true)
             source.setDouble("origin-portals.anchors.slimefun.particles.radius", 6.0)
             source.setDouble("origin-portals.anchors.slimefun.particles.height", 12.0)
+            source.setBoolean("origin-portals.anchors.slimefun.particles.enabled", true)
             source.setDouble("origin-portals.anchors.slimefun.pulse.amplitude", 0.08)
             source.saveStrict()
             ConfigManager.clear()
@@ -166,6 +171,8 @@ class OriginPortalsModuleTest : FreeSpec({
             slimefun.enabled.shouldBeTrue()
             slimefun.particleRadius shouldBe 1.4
             slimefun.particleHeight shouldBe 2.8
+            slimefun.particlesEnabled.shouldBeTrue()
+            OriginPortalsConfig.load(directory).gateSettings(slimefun)!!.suctionEnabled.shouldBeTrue()
             slimefun.pulseAmplitude shouldBe 0.08f
         } finally {
             directory.toFile().deleteRecursively()

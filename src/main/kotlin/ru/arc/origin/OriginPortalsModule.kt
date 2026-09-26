@@ -57,6 +57,7 @@ internal enum class OriginPortalId(
     val defaultParticleRadius: Double? = null,
     val defaultParticleHeight: Double? = null,
     val defaultPulseAmplitude: Double? = null,
+    val defaultParticlesEnabled: Boolean? = null,
     val maxParticleRadius: Double = 8.0,
     val maxParticleHeight: Double = 16.0,
     val maxTransferDistance: Double = 8.0,
@@ -137,6 +138,7 @@ internal enum class OriginPortalId(
         defaultParticleRadius = 1.25,
         defaultParticleHeight = 3.0,
         defaultPulseAmplitude = 0.0,
+        defaultParticlesEnabled = false,
         maxParticleRadius = 1.4,
         maxParticleHeight = 2.8,
         maxTransferDistance = 8.0,
@@ -171,6 +173,7 @@ internal data class OriginPortalAnchor(
     val labelBackgroundGray: Int,
     val labelBackgroundAlpha: Int,
     val style: PortalVisualStyle,
+    val particlesEnabled: Boolean = true,
     val particleRadius: Double = 5.5,
     val particleHeight: Double = 8.4,
     val pulseAmplitude: Float = 0.035f,
@@ -266,10 +269,20 @@ internal class OriginPortalsConfig private constructor(
             val enabled = source.bool("$root.enabled", true)
             val verticalOffset = source.real("$root.vertical-offset", 5.5).finite(5.5).coerceIn(0.5, 12.0)
             val pulseAmplitude = source.real("$root.pulse.amplitude", 0.035).toFloat().coerceIn(0.0f, 0.1f)
+            val particlesEnabled = source.bool("$root.particles.enabled", true)
             val particleRadius = source.real("$root.particles.radius", 5.5).coerceIn(0.25, 8.0)
             val particleHeight = source.real("$root.particles.height", 8.4).coerceIn(0.25, 16.0)
             val anchors = OriginPortalId.entries.map { id ->
-                anchor(source, root, id, verticalOffset, particleRadius, particleHeight, pulseAmplitude)
+                anchor(
+                    source,
+                    root,
+                    id,
+                    verticalOffset,
+                    particlesEnabled,
+                    particleRadius,
+                    particleHeight,
+                    pulseAmplitude,
+                )
             }
             return OriginPortalsConfig(
                 source = source,
@@ -278,7 +291,7 @@ internal class OriginPortalsConfig private constructor(
                 entryDepth = source.real("$root.entry-depth", 2.0).coerceIn(0.5, 6.0),
                 pulseAmplitude = pulseAmplitude,
                 pulsePeriodTicks = source.integer("$root.pulse.period-ticks", 36).coerceIn(8, 200),
-                particlesEnabled = source.bool("$root.particles.enabled", true),
+                particlesEnabled = particlesEnabled,
                 particleStreams = source.integer("$root.particles.streams", 4).coerceIn(1, 8),
                 reducedParticleStreams = source.integer("$root.particles.reduced-streams", 2).coerceIn(1, 8),
                 particlePointsPerStream = source.integer("$root.particles.points-per-stream", 2).coerceIn(1, 4),
@@ -300,6 +313,7 @@ internal class OriginPortalsConfig private constructor(
             root: String,
             id: OriginPortalId,
             verticalOffset: Double,
+            globalParticlesEnabled: Boolean,
             globalParticleRadius: Double,
             globalParticleHeight: Double,
             globalPulseAmplitude: Float,
@@ -345,6 +359,10 @@ internal class OriginPortalsConfig private constructor(
                 labelBackgroundAlpha = source.integer("$path.hologram.background-alpha", if (id.central) 180 else 0)
                     .coerceIn(0, 255),
                 style = style.takeIf { it.usesOriginGate } ?: id.defaultStyle,
+                particlesEnabled = source.bool(
+                    "$path.particles.enabled",
+                    id.defaultParticlesEnabled ?: globalParticlesEnabled,
+                ),
                 particleRadius = particleRadius,
                 particleHeight = particleHeight,
                 pulseAmplitude = pulseAmplitude,
@@ -374,7 +392,7 @@ internal class OriginPortalsConfig private constructor(
             openingSoundId = "minecraft:block.end_portal.spawn",
             openingSoundVolume = 1.0f,
             openingSoundPitch = 1.0f,
-            suctionEnabled = particlesEnabled,
+            suctionEnabled = anchor.particlesEnabled,
             suctionStreams = particleStreams.coerceAtMost(8),
             reducedSuctionStreams = reducedParticleStreams.coerceAtMost(particleStreams),
             suctionPointsPerStream = particlePointsPerStream.coerceAtMost(4),
@@ -470,7 +488,7 @@ private class OriginPortalVisual(
         tick: Int,
         settings: PortalOriginGateSettings,
     ) {
-        val center = anchor.center(world)
+        val center = originPortalDisplayCenter(anchor, world)
         val nearby = world.players.filter { it.location.distanceSquared(center) <= config.reducedParticleDistance * config.reducedParticleDistance }
         val full = nearby.filter { it.location.distanceSquared(center) <= config.fullParticleDistance * config.fullParticleDistance }
         val reduced = nearby.filterNot { it in full }
