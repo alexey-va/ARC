@@ -128,9 +128,9 @@ commands:
   originportals:
     name: originportals
     aliases: [origin-portals]
-    permission: arc.origin.portals.admin
+    permission: ""
     player-only: true
-    usage: /arc originportals move <survival|mining|vanilla|gallery_exit>
+    usage: /arc originportals <enter slimefun|move <survival|mining|vanilla|gallery_exit|slimefun>>
   auctionpedestal:
     name: auctionpedestal
     aliases: [auction-pedestal]

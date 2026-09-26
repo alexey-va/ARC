@@ -10,7 +10,9 @@ import io.mockk.mockk
 import org.bukkit.Location
 import org.bukkit.World
 import ru.arc.config.ConfigManager
+import ru.arc.commands.arc.subcommands.OriginPortalsSubCommand
 import java.nio.file.Files
+import java.util.UUID
 
 class OriginPortalsModuleTest : FreeSpec({
     afterTest { ConfigManager.clear() }
@@ -66,6 +68,25 @@ class OriginPortalsModuleTest : FreeSpec({
             gallery.labelScale shouldBe 0.9f
             gallery.labelBackgroundAlpha shouldBe 0
             gallery.labelLocations(mockk()).size shouldBe 1
+
+            val slimefun = config.anchors.first { it.id == OriginPortalId.SLIMEFUN }
+            slimefun.enabled.shouldBeFalse()
+            slimefun.worldName shouldBe "rc_origin_spawn"
+            slimefun.x shouldBe -17.5
+            slimefun.y shouldBe 72.0
+            slimefun.z shouldBe -52.5
+            slimefun.yaw shouldBe 180f
+            slimefun.width shouldBe 2.8
+            slimefun.height shouldBe 2.8
+            slimefun.entryDepth shouldBe 0.65
+            slimefun.verticalOffset shouldBe 1.4
+            (kotlin.math.abs(originPortalDisplayCenter(slimefun, mockk()).y - 73.4) < 1e-9).shouldBeTrue()
+            slimefun.command shouldBe "arc originportals enter slimefun"
+            slimefun.particleRadius shouldBe 1.25
+            slimefun.particleHeight shouldBe 2.8
+            slimefun.pulseAmplitude shouldBe 0f
+            config.gateSettings(slimefun)!!.suctionRadius shouldBe 1.25
+            config.gateSettings(slimefun)!!.suctionHeight shouldBe 2.8
         } finally {
             directory.toFile().deleteRecursively()
         }
@@ -111,6 +132,44 @@ class OriginPortalsModuleTest : FreeSpec({
         sides.map { it.x } shouldContainExactly listOf(3.01, 2.99)
         sides.all { kotlin.math.abs(it.z - 1.0) < 1e-9 }.shouldBeTrue()
         sides.map { it.yaw } shouldContainExactly listOf(270f, 90f)
+    }
+
+    "Slimefun entry volume stays at floor-level while the gate display is raised" {
+        val directory = Files.createTempDirectory("arc-origin-portals-slimefun-entry")
+        try {
+            val anchor = OriginPortalsConfig.load(directory).anchors.first { it.id == OriginPortalId.SLIMEFUN }.copy(enabled = true)
+            val world = mockk<World>()
+            everyWorldName(world, "rc_origin_spawn")
+
+            anchor.contains(Location(world, -17.5, 72.0, -52.5)).shouldBeTrue()
+            anchor.contains(Location(world, -17.5, 70.5, -52.5)).shouldBeFalse()
+            anchor.contains(Location(world, -17.5, 73.5, -52.5)).shouldBeFalse()
+            anchor.contains(Location(world, -15.9, 72.0, -52.5)).shouldBeFalse()
+        } finally {
+            directory.toFile().deleteRecursively()
+        }
+    }
+
+    "Slimefun anchor overrides stay within its small visual bounds" {
+        val directory = Files.createTempDirectory("arc-origin-portals-slimefun-bounds")
+        try {
+            OriginPortalsConfig.load(directory)
+            val source = ConfigManager.ofModule(directory, "origin-spawn.yml")
+            source.setBoolean("origin-portals.anchors.slimefun.enabled", true)
+            source.setDouble("origin-portals.anchors.slimefun.particles.radius", 6.0)
+            source.setDouble("origin-portals.anchors.slimefun.particles.height", 12.0)
+            source.setDouble("origin-portals.anchors.slimefun.pulse.amplitude", 0.08)
+            source.saveStrict()
+            ConfigManager.clear()
+
+            val slimefun = OriginPortalsConfig.load(directory).anchors.first { it.id == OriginPortalId.SLIMEFUN }
+            slimefun.enabled.shouldBeTrue()
+            slimefun.particleRadius shouldBe 1.4
+            slimefun.particleHeight shouldBe 2.8
+            slimefun.pulseAmplitude shouldBe 0.08f
+        } finally {
+            directory.toFile().deleteRecursively()
+        }
     }
 
     "portal visuals wait for every visual chunk and reset lost native handles" {
@@ -246,6 +305,27 @@ class OriginPortalsModuleTest : FreeSpec({
             "/arc rtp mining --only-if-first",
             "arc rtp survival --only-if-first",
         ).shouldBeFalse()
+    }
+
+    "public Slimefun entry is narrowly permission-bypassed and transfers are cooldown fenced" {
+        OriginPortalsSubCommand.isPublicAction(arrayOf("enter", "slimefun")).shouldBeTrue()
+        OriginPortalsSubCommand.isPublicAction(arrayOf("ENTER", "SLIMEFUN")).shouldBeTrue()
+        OriginPortalsSubCommand.isPublicAction(arrayOf("move", "slimefun")).shouldBeFalse()
+        OriginPortalsSubCommand.isPublicAction(arrayOf("enter", "slimefun", "extra")).shouldBeFalse()
+
+        var now = 1_000L
+        val tracker = OriginPortalTransferTracker(nowMillis = { now }, cooldownMillis = 10_000L)
+        val playerId = UUID.randomUUID()
+        val first = tracker.begin(playerId) as OriginPortalTransferAttempt.Started
+        (tracker.begin(playerId) is OriginPortalTransferAttempt.AlreadyPending).shouldBeTrue()
+        tracker.finish(playerId, first.token).shouldBeTrue()
+        (tracker.begin(playerId) is OriginPortalTransferAttempt.CoolingDown).shouldBeTrue()
+        now += 10_000L
+        val second = tracker.begin(playerId) as OriginPortalTransferAttempt.Started
+        tracker.finish(playerId, first.token).shouldBeFalse()
+        tracker.finish(playerId, second.token).shouldBeTrue()
+        tracker.clearPlayer(playerId)
+        (tracker.begin(playerId) is OriginPortalTransferAttempt.Started).shouldBeTrue()
     }
 })
 

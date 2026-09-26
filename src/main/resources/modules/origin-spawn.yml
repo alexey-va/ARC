@@ -51,12 +51,13 @@ regenerative-breaking:
 
 # ARC-owned Origin gates. Each anchor's x/y/z/yaw positions its portal; the
 # global vertical-offset can be overridden per anchor. Move anchor coordinates
-# in-game with `/arc originportals move <survival|mining|vanilla|gallery_exit>`.
+# in-game with `/arc originportals move <survival|mining|vanilla|gallery_exit|slimefun>`.
 # Hologram front-distance points toward the approaching player (opposite yaw),
 # side-offset shifts right along the gate, and height-offset starts at the
 # raised portal center. Text and scale are independent per portal.
 # Both text faces share this front position; no second sign is placed behind the gate.
 # background-gray and background-alpha range from 0 to 255.
+# Small destinations may override `particles.radius`, `particles.height`, and `pulse.amplitude`.
 origin-portals:
   enabled: true
   vertical-offset: 5.0
@@ -147,6 +148,34 @@ origin-portals:
       style: origin
       label: Вернуться в Origin
       command: rcfurniturereturn
+    slimefun:
+      # Leave disabled until this anchor is deliberately activated in the live config.
+      enabled: false
+      world: rc_origin_spawn
+      x: -17.5
+      y: 72.0
+      z: -52.5
+      yaw: 180.0
+      width: 2.8
+      height: 2.8
+      entry-depth: 0.65
+      transfer-distance: 8.0
+      style: origin
+      vertical-offset: 1.4
+      hologram:
+        text: Сервер Slimefun
+        front-distance: 0.65
+        side-offset: 0.0
+        height-offset: 1.8
+        scale: 0.75
+        background-gray: 0
+        background-alpha: 0
+      particles:
+        radius: 1.25
+        height: 2.8
+      pulse:
+        amplitude: 0.0
+      command: arc originportals enter slimefun
 
 # BlueMap Origin mask: X -256..256, Z -192..160. Chunk bounds are inclusive.
 chunks:

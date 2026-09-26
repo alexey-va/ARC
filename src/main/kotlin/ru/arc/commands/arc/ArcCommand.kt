@@ -159,8 +159,10 @@ class ArcCommand(private val profile: ArcRuntimeProfile = ArcRuntimeProfile.FULL
         val subArgs = args.drop(1).toTypedArray()
         val publicFurnitureAction =
             subCommand === FurnitureSubCommand && FurnitureSubCommand.isPublicAction(subArgs)
+        val publicOriginPortalAction =
+            subCommand === OriginPortalsSubCommand && OriginPortalsSubCommand.isPublicAction(subArgs)
         // Guide/gallery/shop are read-only player entry points; cleanup remains permission-gated.
-        if (!publicFurnitureAction && !sender.checkPermission(subCommand.permission)) {
+        if (!publicFurnitureAction && !publicOriginPortalAction && !sender.checkPermission(subCommand.permission)) {
             sender.sendMessage(CommandConfig.noPermission())
             return true
         }

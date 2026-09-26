@@ -26,10 +26,12 @@ import ru.arc.PortalVisualStyle
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import ru.arc.core.PluginModule
+import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.ScheduledTask
 import ru.arc.core.repeating
 import ru.arc.core.ticks
 import ru.arc.util.Logging.warn
+import ru.arc.util.TextUtil
 import java.nio.file.Path
 import java.util.UUID
 import kotlin.math.PI
@@ -50,6 +52,15 @@ internal enum class OriginPortalId(
     val defaultYaw: Float,
     val defaultWidth: Double,
     val defaultHeight: Double,
+    val defaultEnabled: Boolean = true,
+    val destinationServer: String? = null,
+    val defaultParticleRadius: Double? = null,
+    val defaultParticleHeight: Double? = null,
+    val defaultPulseAmplitude: Double? = null,
+    val maxParticleRadius: Double = 8.0,
+    val maxParticleHeight: Double = 16.0,
+    val maxTransferDistance: Double = 8.0,
+    val liftDisplayByConfiguredOffset: Boolean = false,
 ) {
     SURVIVAL(
         key = "survival",
@@ -107,6 +118,30 @@ internal enum class OriginPortalId(
         defaultWidth = 4.5,
         defaultHeight = 6.3,
     ),
+    SLIMEFUN(
+        key = "slimefun",
+        central = false,
+        defaultWorld = "rc_origin_spawn",
+        defaultStyle = PortalVisualStyle.ORIGIN,
+        defaultCommand = "arc originportals enter slimefun",
+        defaultLabel = "Slimefun",
+        // Disabled by default; the anchor is the floor-level entry point.
+        defaultX = -17.5,
+        defaultY = 72.0,
+        defaultZ = -52.5,
+        defaultYaw = 180f,
+        defaultWidth = 2.8,
+        defaultHeight = 2.8,
+        defaultEnabled = false,
+        destinationServer = "slimefun",
+        defaultParticleRadius = 1.25,
+        defaultParticleHeight = 3.0,
+        defaultPulseAmplitude = 0.0,
+        maxParticleRadius = 1.4,
+        maxParticleHeight = 2.8,
+        maxTransferDistance = 8.0,
+        liftDisplayByConfiguredOffset = true,
+    ),
     ;
 
     companion object {
@@ -117,6 +152,7 @@ internal enum class OriginPortalId(
 
 internal data class OriginPortalAnchor(
     val id: OriginPortalId,
+    val enabled: Boolean = true,
     val worldName: String,
     val x: Double,
     val y: Double,
@@ -135,6 +171,10 @@ internal data class OriginPortalAnchor(
     val labelBackgroundGray: Int,
     val labelBackgroundAlpha: Int,
     val style: PortalVisualStyle,
+    val particleRadius: Double = 5.5,
+    val particleHeight: Double = 8.4,
+    val pulseAmplitude: Float = 0.035f,
+    val transferDistance: Double = 8.0,
 ) {
     fun center(world: org.bukkit.World): Location = Location(world, x, y, z, yaw, 0f)
 
@@ -165,7 +205,7 @@ internal data class OriginPortalAnchor(
 
     /** A thin, yaw-aware interaction plane keeps neighbouring central portals independent. */
     fun contains(location: Location): Boolean {
-        if (location.world?.name != worldName) return false
+        if (!enabled || location.world?.name != worldName) return false
         val dx = location.x - x
         val dz = location.z - z
         val angle = yaw * PI / 180.0
@@ -225,21 +265,26 @@ internal class OriginPortalsConfig private constructor(
                     .associateWith { style -> source.string("$root.items.${style.id}", DEFAULT_ITEMS.getValue(style)) }
             val enabled = source.bool("$root.enabled", true)
             val verticalOffset = source.real("$root.vertical-offset", 5.5).finite(5.5).coerceIn(0.5, 12.0)
-            val anchors = OriginPortalId.entries.map { id -> anchor(source, root, id, verticalOffset) }
+            val pulseAmplitude = source.real("$root.pulse.amplitude", 0.035).toFloat().coerceIn(0.0f, 0.1f)
+            val particleRadius = source.real("$root.particles.radius", 5.5).coerceIn(0.25, 8.0)
+            val particleHeight = source.real("$root.particles.height", 8.4).coerceIn(0.25, 16.0)
+            val anchors = OriginPortalId.entries.map { id ->
+                anchor(source, root, id, verticalOffset, particleRadius, particleHeight, pulseAmplitude)
+            }
             return OriginPortalsConfig(
                 source = source,
                 enabled = enabled,
                 verticalOffset = verticalOffset,
                 entryDepth = source.real("$root.entry-depth", 2.0).coerceIn(0.5, 6.0),
-                pulseAmplitude = source.real("$root.pulse.amplitude", 0.035).toFloat().coerceIn(0.0f, 0.1f),
+                pulseAmplitude = pulseAmplitude,
                 pulsePeriodTicks = source.integer("$root.pulse.period-ticks", 36).coerceIn(8, 200),
                 particlesEnabled = source.bool("$root.particles.enabled", true),
                 particleStreams = source.integer("$root.particles.streams", 4).coerceIn(1, 8),
                 reducedParticleStreams = source.integer("$root.particles.reduced-streams", 2).coerceIn(1, 8),
                 particlePointsPerStream = source.integer("$root.particles.points-per-stream", 2).coerceIn(1, 4),
                 reducedParticlePointsPerStream = source.integer("$root.particles.reduced-points-per-stream", 1).coerceIn(1, 4),
-                particleRadius = source.real("$root.particles.radius", 5.5).coerceIn(0.25, 8.0),
-                particleHeight = source.real("$root.particles.height", 8.4).coerceIn(0.25, 16.0),
+                particleRadius = particleRadius,
+                particleHeight = particleHeight,
                 particleTurns = source.real("$root.particles.turns", 1.75).coerceIn(0.25, 4.0),
                 particleSize = source.real("$root.particles.size", 0.6).toFloat().coerceIn(0.1f, 2.0f),
                 particleCoreCount = source.integer("$root.particles.core-count", 4).coerceIn(0, 12),
@@ -250,13 +295,34 @@ internal class OriginPortalsConfig private constructor(
             )
         }
 
-        private fun anchor(source: Config, root: String, id: OriginPortalId, verticalOffset: Double): OriginPortalAnchor {
+        private fun anchor(
+            source: Config,
+            root: String,
+            id: OriginPortalId,
+            verticalOffset: Double,
+            globalParticleRadius: Double,
+            globalParticleHeight: Double,
+            globalPulseAmplitude: Float,
+        ): OriginPortalAnchor {
             val path = "$root.anchors.${id.key}"
             val style = PortalVisualStyle.parse(source.string("$path.style", id.defaultStyle.id)) ?: id.defaultStyle
             val width = source.real("$path.width", id.defaultWidth).finite(id.defaultWidth).coerceIn(0.1, 12.0)
             val height = source.real("$path.height", id.defaultHeight).finite(id.defaultHeight).coerceIn(0.1, 20.0)
+            val particleRadius = source.real(
+                "$path.particles.radius",
+                id.defaultParticleRadius ?: globalParticleRadius,
+            ).finite(id.defaultParticleRadius ?: globalParticleRadius).coerceIn(0.25, id.maxParticleRadius)
+            val particleHeight = source.real(
+                "$path.particles.height",
+                id.defaultParticleHeight ?: globalParticleHeight,
+            ).finite(id.defaultParticleHeight ?: globalParticleHeight).coerceIn(0.25, id.maxParticleHeight)
+            val pulseAmplitude = source.real(
+                "$path.pulse.amplitude",
+                id.defaultPulseAmplitude ?: globalPulseAmplitude.toDouble(),
+            ).finite(id.defaultPulseAmplitude ?: globalPulseAmplitude.toDouble()).toFloat().coerceIn(0.0f, 0.1f)
             return OriginPortalAnchor(
                 id = id,
+                enabled = source.bool("$path.enabled", id.defaultEnabled),
                 worldName = source.string("$path.world", id.defaultWorld).trim().ifEmpty { id.defaultWorld },
                 x = source.real("$path.x", id.defaultX).finite(id.defaultX),
                 y = source.real("$path.y", id.defaultY).finite(id.defaultY),
@@ -279,6 +345,11 @@ internal class OriginPortalsConfig private constructor(
                 labelBackgroundAlpha = source.integer("$path.hologram.background-alpha", if (id.central) 180 else 0)
                     .coerceIn(0, 255),
                 style = style.takeIf { it.usesOriginGate } ?: id.defaultStyle,
+                particleRadius = particleRadius,
+                particleHeight = particleHeight,
+                pulseAmplitude = pulseAmplitude,
+                transferDistance = source.real("$path.transfer-distance", id.maxTransferDistance)
+                    .finite(id.maxTransferDistance).coerceIn(1.0, id.maxTransferDistance),
             )
         }
 
@@ -308,8 +379,8 @@ internal class OriginPortalsConfig private constructor(
             reducedSuctionStreams = reducedParticleStreams.coerceAtMost(particleStreams),
             suctionPointsPerStream = particlePointsPerStream.coerceAtMost(4),
             reducedSuctionPointsPerStream = reducedParticlePointsPerStream.coerceAtMost(particlePointsPerStream),
-            suctionRadius = particleRadius,
-            suctionHeight = particleHeight,
+            suctionRadius = anchor.particleRadius,
+            suctionHeight = anchor.particleHeight,
             suctionTurns = particleTurns,
             suctionParticleSize = particleSize,
             suctionCoreCount = particleCoreCount,
@@ -355,7 +426,7 @@ private class OriginPortalVisual(
             spawnAttempted = true
             controller =
                 PortalOriginGateController(settings) {
-                    BukkitPortalOriginGate.spawn(anchor.center(world), settings, anchor.style).also {
+                BukkitPortalOriginGate.spawn(originPortalDisplayCenter(anchor, world), settings, anchor.style).also {
                         gateSpawned = it != null
                     }
                 }
@@ -365,7 +436,7 @@ private class OriginPortalVisual(
         }
         val active = controller?.tickOpening(settings.entryTick + tick) == true
         if (!active) return
-        val pulse = 1f + config.pulseAmplitude * sin((tick * 2.0 * PI) / config.pulsePeriodTicks).toFloat()
+        val pulse = 1f + anchor.pulseAmplitude * sin((tick * 2.0 * PI) / config.pulsePeriodTicks).toFloat()
         // The renderer owns the display transform; ARC only supplies a bounded idle pulse.
         controller?.updateScale(pulse)
         renderParticles(world, tick, settings)
@@ -433,6 +504,11 @@ internal fun originPortalVisualChunksLoaded(anchor: OriginPortalAnchor, world: o
         .all { (chunkX, chunkZ) -> world.isChunkLoaded(chunkX, chunkZ) }
 }
 
+internal fun originPortalDisplayCenter(anchor: OriginPortalAnchor, world: org.bukkit.World): Location =
+    anchor.center(world).apply {
+        if (anchor.id.liftDisplayByConfiguredOffset) y += anchor.verticalOffset
+    }
+
 internal fun shouldResetOriginPortalVisual(
     spawnAttempted: Boolean,
     chunksLoaded: Boolean,
@@ -447,10 +523,13 @@ object OriginPortalsModule : PluginModule, Listener {
     private var config: OriginPortalsConfig? = null
     private var visuals: List<OriginPortalVisual> = emptyList()
     private var task: ScheduledTask? = null
+    private var transferTasks = LifecycleTaskScope()
     private var tick = 0
     private val inside = mutableMapOf<UUID, OriginPortalId>()
+    private val transfers = OriginPortalTransferTracker()
 
     override fun init() {
+        transferTasks = LifecycleTaskScope()
         Bukkit.getPluginManager().registerEvents(this, ARC.instance)
         apply()
     }
@@ -464,6 +543,8 @@ object OriginPortalsModule : PluginModule, Listener {
         HandlerList.unregisterAll(this)
         task?.cancel()
         task = null
+        transferTasks.close()
+        transfers.clear()
         visuals.forEach(OriginPortalVisual::remove)
         visuals = emptyList()
         config = null
@@ -484,7 +565,11 @@ object OriginPortalsModule : PluginModule, Listener {
         val previous = config?.anchors?.nearestContaining(event.from)
         if (previous?.id == current.id || inside[event.player.uniqueId] == current.id) return
         inside[event.player.uniqueId] = current.id
-        event.player.performCommand(current.command)
+        if (current.id.destinationServer != null) {
+            beginTransfer(event.player, current)
+        } else {
+            event.player.performCommand(current.command)
+        }
     }
 
     /**
@@ -502,6 +587,24 @@ object OriginPortalsModule : PluginModule, Listener {
     @EventHandler
     fun onQuit(event: PlayerQuitEvent) {
         inside.remove(event.player.uniqueId)
+        transfers.clearPlayer(event.player.uniqueId)
+    }
+
+    internal fun enter(id: OriginPortalId, player: Player): OriginPortalEnterResult {
+        val current = config?.takeIf { it.enabled } ?: return OriginPortalEnterResult.PORTAL_DISABLED
+        val anchor = current.anchors.firstOrNull { it.id == id && it.enabled }
+            ?: return OriginPortalEnterResult.PORTAL_DISABLED
+        val destination = id.destinationServer ?: return OriginPortalEnterResult.UNSUPPORTED_DESTINATION
+        if (id != OriginPortalId.SLIMEFUN || destination != "slimefun") {
+            return OriginPortalEnterResult.UNSUPPORTED_DESTINATION
+        }
+        if (anchor.worldName != id.defaultWorld || player.world.name != id.defaultWorld) {
+            return OriginPortalEnterResult.WRONG_WORLD
+        }
+        if (player.location.distanceSquared(anchor.center(player.world)) > anchor.transferDistance * anchor.transferDistance) {
+            return OriginPortalEnterResult.TOO_FAR
+        }
+        return beginTransfer(player, anchor)
     }
 
     internal fun move(id: OriginPortalId, player: Player): Boolean = move(id, player.location)
@@ -527,7 +630,7 @@ object OriginPortalsModule : PluginModule, Listener {
         val next = OriginPortalsConfig.load(ARC.instance.dataPath)
         config = next
         if (!next.enabled) return
-        visuals = next.anchors.map { OriginPortalVisual(it, next) }
+        visuals = next.anchors.filter { it.enabled }.map { OriginPortalVisual(it, next) }
         task = repeating(1.ticks, delay = 1.ticks) {
             visuals.forEach { it.tick(tick) }
             tick = if (tick == Int.MAX_VALUE) 0 else tick + 1
@@ -536,6 +639,7 @@ object OriginPortalsModule : PluginModule, Listener {
 
     private fun List<OriginPortalAnchor>.nearestContaining(location: Location): OriginPortalAnchor? =
         asSequence()
+            .filter { it.enabled }
             .filter { it.contains(location) }
             .minByOrNull {
                 val dx = location.x - it.x
@@ -544,7 +648,90 @@ object OriginPortalsModule : PluginModule, Listener {
                 dx * dx + dy * dy + dz * dz
             }
 
+    private fun beginTransfer(player: Player, anchor: OriginPortalAnchor): OriginPortalEnterResult {
+        val destination = anchor.id.destinationServer ?: return OriginPortalEnterResult.UNSUPPORTED_DESTINATION
+        val sourceServer = ARC.serverName?.takeIf(String::isNotBlank)
+            ?: return OriginPortalEnterResult.TRANSFER_UNAVAILABLE
+        val attempt = transfers.begin(player.uniqueId)
+        if (attempt !is OriginPortalTransferAttempt.Started) {
+            return when (attempt) {
+                OriginPortalTransferAttempt.AlreadyPending -> OriginPortalEnterResult.ALREADY_PENDING
+                is OriginPortalTransferAttempt.CoolingDown -> OriginPortalEnterResult.COOLDOWN
+                is OriginPortalTransferAttempt.Started -> error("unreachable")
+            }
+        }
+        val messenger = ARC.pluginMessenger
+        if (messenger == null || !runCatching { messenger.sendPlayerToServer(player, destination) }.getOrDefault(false)) {
+            transfers.finish(player.uniqueId, attempt.token)
+            return OriginPortalEnterResult.TRANSFER_UNAVAILABLE
+        }
+        player.sendMessage(TextUtil.mm("<green>Запрос на переход на сервер <white>Slimefun<green> отправлен. Проверяю соединение…"))
+        transferTasks.runLater(TRANSFER_TIMEOUT_TICKS) {
+            if (!transfers.finish(player.uniqueId, attempt.token)) return@runLater
+            val currentPlayer = Bukkit.getPlayer(player.uniqueId) ?: return@runLater
+            if (currentPlayer.isOnline && ARC.serverName.equals(sourceServer, ignoreCase = true)) {
+                currentPlayer.sendMessage(
+                    TextUtil.mm(
+                        "<red>Переход не завершился: вы всё ещё на Origin. Попробуйте снова через несколько секунд.",
+                    ),
+                )
+            }
+        }
+        return OriginPortalEnterResult.REQUESTED
+    }
+
     private const val BYPASS_PERMISSION = "arc.origin.portals.bypass"
+    private const val TRANSFER_TIMEOUT_TICKS = 200L
+}
+
+internal enum class OriginPortalEnterResult {
+    REQUESTED,
+    PORTAL_DISABLED,
+    WRONG_WORLD,
+    TOO_FAR,
+    ALREADY_PENDING,
+    COOLDOWN,
+    TRANSFER_UNAVAILABLE,
+    UNSUPPORTED_DESTINATION,
+}
+
+internal sealed interface OriginPortalTransferAttempt {
+    data class Started(val token: Long) : OriginPortalTransferAttempt
+    data object AlreadyPending : OriginPortalTransferAttempt
+    data object CoolingDown : OriginPortalTransferAttempt
+}
+
+/** Per-player repeat guard; delayed callbacks are fenced by their unique token. */
+internal class OriginPortalTransferTracker(
+    private val nowMillis: () -> Long = System::currentTimeMillis,
+    private val cooldownMillis: Long = 10_000L,
+) {
+    private val pending = mutableMapOf<UUID, Long>()
+    private val cooldownUntil = mutableMapOf<UUID, Long>()
+    private var nextToken = 0L
+
+    fun begin(playerId: UUID): OriginPortalTransferAttempt {
+        val now = nowMillis()
+        cooldownUntil.entries.removeIf { it.value <= now && it.key !in pending }
+        if (playerId in pending) return OriginPortalTransferAttempt.AlreadyPending
+        if ((cooldownUntil[playerId] ?: Long.MIN_VALUE) > now) return OriginPortalTransferAttempt.CoolingDown
+        val token = ++nextToken
+        pending[playerId] = token
+        cooldownUntil[playerId] = now + cooldownMillis
+        return OriginPortalTransferAttempt.Started(token)
+    }
+
+    fun finish(playerId: UUID, token: Long): Boolean = pending.remove(playerId, token)
+
+    fun clearPlayer(playerId: UUID) {
+        pending.remove(playerId)
+        cooldownUntil.remove(playerId)
+    }
+
+    fun clear() {
+        pending.clear()
+        cooldownUntil.clear()
+    }
 }
 
 internal fun shouldBypassOriginPortal(id: OriginPortalId, hasBypassPermission: Boolean): Boolean =

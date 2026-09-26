@@ -232,7 +232,8 @@ class PluginMessenger : PluginMessageListener {
         player.sendPluginMessage(ARC.instance, "BungeeCord", bytes)
     }
 
-    fun sendPlayerToServer(player: Player, server: String) {
+    /** Returns whether this backend accepted the request for local plugin-message delivery. */
+    fun sendPlayerToServer(player: Player, server: String): Boolean {
         val bytes = ByteArrayOutputStream()
         val out = DataOutputStream(bytes)
         try {
@@ -240,9 +241,12 @@ class PluginMessenger : PluginMessageListener {
             out.writeUTF(server)
         } catch (e: Exception) {
             error("Error in sendPlayerToServer", e)
-            return
+            return false
         }
-        sendBungeeCord(player, bytes.toByteArray())
+        return runCatching {
+            sendBungeeCord(player, bytes.toByteArray())
+            true
+        }.onFailure { error("Error in sendPlayerToServer", it) }.getOrDefault(false)
     }
 }
 
