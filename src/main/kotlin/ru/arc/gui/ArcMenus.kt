@@ -43,13 +43,19 @@ object ArcMenus {
     private var shortcuts: MenuShortcutController? = null
 
     fun initialize(plugin: Plugin, root: Path) {
-        check(runtime == null) { "ARC menu runtime is already initialized" }
+        check(runtime == null && dialogRuntime == null) { "ARC menu runtime is already initialized" }
         dataRoot = root
         val disk = ConfigManager.of(root, ArcMenuConfiguration.RESOURCE)
         disk.mergeMissingFromBundled(ArcMenuConfiguration.RESOURCE)
         runtime = PaperMenuRuntime(plugin, BukkitTaskScheduler(plugin), ArcMenuConfiguration.load(root))
         dialogRuntime = PaperDialogRuntime(plugin)
         shortcuts = MenuShortcutController(plugin)
+    }
+
+    /** Install only the native dialog runtime for profiles with no inventory menus or global shortcuts. */
+    fun initializeDialogRuntime(plugin: Plugin) {
+        check(runtime == null && dialogRuntime == null) { "ARC menu runtime is already initialized" }
+        dialogRuntime = PaperDialogRuntime(plugin)
     }
 
     fun reload() {
@@ -159,9 +165,13 @@ object ArcMenus {
     internal fun resetForTests() {
         shortcuts?.close()
         shortcuts = null
+        dialogRuntime?.close()
         dialogRuntime = null
+        runtime?.close()
         runtime = null
     }
+
+    internal fun hasDialogRuntimeForTests(): Boolean = dialogRuntime != null
 
     val STANDARD_CLICKS: Set<ClickType> = setOf(
         ClickType.LEFT,

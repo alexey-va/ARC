@@ -41,6 +41,7 @@ softdepend:
   - Duels
   - BetterRTP
   - RTP
+  - justTeams
   - RedisEconomy
   - LuckPerms
   - Vault
@@ -100,7 +101,7 @@ commands:
     usage: /mount [menu|help|admin]
     permission: arc.mounts.use
   menu:
-    description: Open the main player hub
+    description: Open the player navigation menu
     usage: /menu
   loot:
     description: Open the lost loot mailbox

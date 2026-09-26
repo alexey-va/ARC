@@ -228,6 +228,9 @@ class ArcCommand(private val profile: ArcRuntimeProfile = ArcRuntimeProfile.FULL
 
         /** One command dispatcher per startup composition. */
         val INSTANCE: ArcCommand
-            get() = if (ARC.plugin?.runtimeProfile == ArcRuntimeProfile.ISOLATED) isolatedInstance else fullInstance
+            get() = when (ARC.plugin?.runtimeProfile) {
+                ArcRuntimeProfile.ISOLATED, ArcRuntimeProfile.SLIMEFUN -> isolatedInstance
+                else -> fullInstance
+            }
     }
 }

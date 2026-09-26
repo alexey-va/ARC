@@ -5,7 +5,8 @@ import java.nio.file.Path
 /** Bootstrap composition; changes take effect only after a server restart. */
 enum class ArcRuntimeProfile {
     FULL,
-    ISOLATED;
+    ISOLATED,
+    SLIMEFUN;
 
     companion object {
         fun load(dataPath: Path): ArcRuntimeProfile =
@@ -13,6 +14,6 @@ enum class ArcRuntimeProfile {
 
         fun parse(value: String): ArcRuntimeProfile =
             entries.firstOrNull { it.name.equals(value.trim(), ignoreCase = true) }
-                ?: throw IllegalArgumentException("Unknown ARC runtime profile '$value'; expected full or isolated")
+                ?: throw IllegalArgumentException("Unknown ARC runtime profile '$value'; expected full, isolated or slimefun")
     }
 }

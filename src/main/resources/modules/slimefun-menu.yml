@@ -1,0 +1,23 @@
+title: "<color:#E6BC76>Навигация Slimefun</color>"
+intro: "<color:#E8DFD2>Гайд, исследование мира, дома и общие сервисы сервера.</color>"
+unavailable: "<color:#E8DFD2>Сервис временно недоступен. Попробуйте позже.</color>"
+
+buttons:
+  guide:
+    label: "<color:#F1CD8C>Гайд Slimefun</color>"
+    tooltip: "<color:#E8DFD2>Открыть руководство по предметам и механизмам.</color>"
+  rtp:
+    label: "<color:#F1CD8C>Случайная телепортация</color>"
+    tooltip: "<color:#E8DFD2>Найти безопасное место в мире Slimefun.</color>"
+  homes:
+    label: "<color:#F1CD8C>Мои дома</color>"
+    tooltip: "<color:#E8DFD2>Посмотреть и выбрать сохранённый дом.</color>"
+  lands:
+    label: "<color:#F1CD8C>Мои земли</color>"
+    tooltip: "<color:#E8DFD2>Управлять территориями и участками.</color>"
+  team:
+    label: "<color:#F1CD8C>Команда</color>"
+    tooltip: "<color:#E8DFD2>Открыть общее меню команды.</color>"
+  shop:
+    label: "<color:#F1CD8C>Магазин ресурсов</color>"
+    tooltip: "<color:#E8DFD2>Покупать ресурсы для Slimefun.</color>"

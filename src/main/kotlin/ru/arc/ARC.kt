@@ -1,6 +1,7 @@
 package ru.arc
 
 import org.bukkit.Bukkit
+import org.bukkit.command.Command
 import org.bukkit.command.CommandExecutor
 import org.bukkit.command.PluginCommand
 import org.bukkit.command.TabCompleter
@@ -90,6 +91,9 @@ import ru.arc.origin.scene.OriginAmbientScenesModule
 import ru.arc.origin.mountyard.OriginMountYardModule
 import ru.arc.paper.chunk.PaperChunkTicketRegistry
 import ru.arc.restart.RestartModule
+import ru.arc.slimefunmenu.SlimefunMenuAliasCommand
+import ru.arc.slimefunmenu.SlimefunMenuCommand
+import ru.arc.slimefunmenu.SlimefunMenuModule
 import ru.arc.travelanchors.TravelAnchorsModule
 import ru.arc.rtp.RtpPlayerRegistry
 import ru.arc.scheduled.ScheduledCommandsModule
@@ -129,6 +133,7 @@ open class ARC : JavaPlugin() {
         private set
 
     private var baseSidebar: ArcBaseSidebar? = null
+    private var slimefunMenuAlias: Command? = null
 
     var runtimeProfile: ArcRuntimeProfile = ArcRuntimeProfile.FULL
         private set
@@ -153,6 +158,10 @@ open class ARC : JavaPlugin() {
         PaperArcRuntime.installScheduling(this)
         if (runtimeProfile == ArcRuntimeProfile.FULL) {
             ArcMenus.initialize(this, dataPath)
+        } else if (runtimeProfile == ArcRuntimeProfile.SLIMEFUN) {
+            ArcMenus.initializeDialogRuntime(this)
+        }
+        if (runtimeProfile == ArcRuntimeProfile.FULL) {
             chunkTicketRegistry = PaperChunkTicketRegistry(this)
             sidebarService = PaperArcSidebarService(this)
             server.servicesManager.register(ArcSidebarService::class.java, sidebarService, this, ServicePriority.Normal)
@@ -196,6 +205,7 @@ open class ARC : JavaPlugin() {
     override fun onDisable() {
         info("Stopping ARC plugin")
         server.servicesManager.unregisterAll(this)
+        unregisterSlimefunMenuAlias()
         if (runtimeProfile == ArcRuntimeProfile.FULL) Portal.removeAll()
         ModuleRegistry.shutdownAll()
         baseSidebar?.close()
@@ -204,7 +214,7 @@ open class ARC : JavaPlugin() {
             runCatching(sidebarService::close)
                 .onFailure { error("Failed to close ARC sidebar service", it) }
         }
-        if (runtimeProfile == ArcRuntimeProfile.FULL) ArcMenus.close()
+        if (runtimeProfile == ArcRuntimeProfile.FULL || runtimeProfile == ArcRuntimeProfile.SLIMEFUN) ArcMenus.close()
         if (::chunkTicketRegistry.isInitialized) {
             runCatching(chunkTicketRegistry::close)
                 .onFailure { error("Failed to close ARC chunk ticket registry", it) }
@@ -252,6 +262,18 @@ open class ARC : JavaPlugin() {
             } else {
                 info("Runtime profile isolated: Config, OpsHttp, Restart, ItemInfo only")
             }
+            return
+        }
+
+        if (runtimeProfile == ArcRuntimeProfile.SLIMEFUN) {
+            ModuleRegistry.registerAll(ConfigModule, OpsHttpModule, RestartModule, ItemInfoModule)
+            if (ChatModeConfig.load(dataPath).isolatedGlyphProtectionEnabled) {
+                ModuleRegistry.registerAll(RedisModule, IsolatedChatGlyphModule)
+                info("Runtime profile slimefun: local operations with chat glyph authorization")
+            } else {
+                info("Runtime profile slimefun: Config, OpsHttp, Restart, ItemInfo, SlimefunMenu")
+            }
+            ModuleRegistry.registerAll(SlimefunMenuModule)
             return
         }
 
@@ -335,6 +357,19 @@ open class ARC : JavaPlugin() {
             inactive.forEach { it.unregister(commandMap) }
             return
         }
+        if (runtimeProfile == ArcRuntimeProfile.SLIMEFUN) {
+            // Retain ARC and the utility menu; keep all FULL-only labels out of this profile.
+            val commandMap = server.commandMap
+            val preserved = setOf("arc", "menu")
+            val inactive = commandMap.knownCommands.values.filterIsInstance<PluginCommand>()
+                .filter { it.plugin === this && it.name !in preserved }.toSet()
+            val labels = commandMap.knownCommands.filterValues { it in inactive }.keys.toList()
+            labels.forEach { commandMap.knownCommands.remove(it) }
+            inactive.forEach { it.unregister(commandMap) }
+            registerCommand("menu", SlimefunMenuCommand, null)
+            registerSlimefunMenuAlias()
+            return
+        }
         registerCommand("x", XCommand, XCommand)
         registerCommand("g", ChatModeAliasCommand, null)
         registerCommand("l", ChatModeAliasCommand, null)
@@ -365,6 +400,32 @@ open class ARC : JavaPlugin() {
             val bridge = LegacySubCommandExecutor(subCommand)
             registerCommand(name, bridge, bridge)
         }
+    }
+
+    private fun registerSlimefunMenuAlias() {
+        val commandMap = server.commandMap
+        if (commandMap.getCommand("mm") != null) {
+            warn("Could not register /mm because another command already owns that label")
+            return
+        }
+        val alias = SlimefunMenuAliasCommand()
+        if (commandMap.register("arc", alias) && commandMap.getCommand("mm") === alias) {
+            slimefunMenuAlias = alias
+        } else {
+            removeSlimefunMenuAlias(commandMap, alias)
+            warn("Could not register /mm Slimefun menu alias")
+        }
+    }
+
+    private fun unregisterSlimefunMenuAlias() {
+        slimefunMenuAlias?.let { removeSlimefunMenuAlias(server.commandMap, it) }
+        slimefunMenuAlias = null
+    }
+
+    private fun removeSlimefunMenuAlias(commandMap: org.bukkit.command.CommandMap, alias: Command) {
+        val labels = commandMap.knownCommands.filterValues { it === alias }.keys.toList()
+        labels.forEach { commandMap.knownCommands.remove(it) }
+        alias.unregister(commandMap)
     }
 
     private fun registerCommand(
@@ -461,6 +522,7 @@ open class ARC : JavaPlugin() {
                 "modules/lands-ui.yml",
                 "modules/help-center.yml",
                 "modules/item-info.yml",
+                "modules/slimefun-menu.yml",
                 "modules/furniture-gallery.yml",
                 "modules/pouches.yml",
                 "modules/backpacks.yml",
