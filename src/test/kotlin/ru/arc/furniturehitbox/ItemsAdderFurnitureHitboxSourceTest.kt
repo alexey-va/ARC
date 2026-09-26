@@ -2,115 +2,45 @@ package ru.arc.furniturehitbox
 
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import io.mockk.every
 import io.mockk.mockk
 import org.bukkit.World
+import org.bukkit.Material
 import org.bukkit.block.Block
 import org.bukkit.entity.Entity
 import org.bukkit.util.BoundingBox
 import org.bukkit.util.Vector
-import java.net.URL
-import java.net.URLClassLoader
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
-import kotlin.math.cos
-import kotlin.math.sin
+import java.util.concurrent.TimeUnit
 
 class ItemsAdderFurnitureHitboxSourceTest : StringSpec({
-    "native cache freshness matches IA's tick, eye-position, direction, and reach window" {
-        val origin = Vector(0.0, 64.0, 0.0)
-        val direction = Vector(0.0, 0.0, 1.0)
-
-        nativeRayCacheFreshness(
-            cachedTick = 100L,
-            currentTick = 102L,
-            cachedOrigin = origin,
-            cachedDirection = direction,
-            cachedReach = 4.5,
-            currentOrigin = origin.clone(),
-            currentDirection = direction.clone(),
-            currentReach = 4.5,
-        ) shouldBe 4.5
-
-        nativeRayCacheFreshness(
-            cachedTick = 100L,
-            currentTick = 103L,
-            cachedOrigin = origin,
-            cachedDirection = direction,
-            cachedReach = 4.5,
-            currentOrigin = origin.clone(),
-            currentDirection = direction.clone(),
-            currentReach = 4.5,
-        ) shouldBe null
-
-        nativeRayCacheFreshness(
-            cachedTick = 100L,
-            currentTick = 101L,
-            cachedOrigin = origin,
-            cachedDirection = direction,
-            cachedReach = 4.5,
-            currentOrigin = origin.clone(),
-            currentDirection = Vector(sin(Math.toRadians(5.0)), 0.0, cos(Math.toRadians(5.0))),
-            currentReach = 4.5,
-        ) shouldBe null
-
-        nativeRayCacheFreshness(
-            cachedTick = 100L,
-            currentTick = 101L,
-            cachedOrigin = origin,
-            cachedDirection = direction,
-            cachedReach = 4.5,
-            currentOrigin = Vector(0.21, 64.0, 0.0),
-            currentDirection = direction.clone(),
-            currentReach = 4.5,
-        ) shouldBe null
-
-        nativeRayCacheFreshness(
-            cachedTick = 100L,
-            currentTick = 101L,
-            cachedOrigin = origin,
-            cachedDirection = direction,
-            cachedReach = 4.5,
-            currentOrigin = origin.clone(),
-            currentDirection = direction.clone(),
-            currentReach = 5.0,
-        ) shouldBe null
+    "foreground visible furniture wins over a background native hit and its barrier" {
+        val foreground = FurnitureHitboxTarget(mockk(), BoundingBox(0.0, 0.0, 0.0, 0.2, 1.0, 0.2))
+        val background = FurnitureHitboxTarget(mockk(), BoundingBox(1.0, 0.0, 1.0, 2.0, 1.0, 2.0))
+        val candidates = listOf(
+            FurnitureRayCandidate(foreground, nativeDistance = null, visualDistance = 1.0),
+            FurnitureRayCandidate(background, nativeDistance = 3.0, visualDistance = 3.0),
+        )
+        nearestFurnitureHitboxTarget(candidates, background, 2.5) shouldBe foreground
+        nearestFurnitureHitboxTarget(candidates.take(1), background, 2.5) shouldBe foreground
+        nearestFurnitureHitboxTarget(candidates.take(1), background, 0.5) shouldBe background
+        nearestFurnitureHitboxTarget(emptyList(), null, null) shouldBe null
     }
 
-    "native outline accepts aim on model or wider IA interaction box, but not through a wall" {
-        // IA expands the narrower horizontal dimension to max(widthX, widthZ) for its Interaction.
-        val model = BoundingBox(-1.0, 0.0, -0.2, 1.0, 2.0, 0.2)
-        val interaction = BoundingBox(-1.0, 0.0, -1.0, 1.0, 2.0, 1.0)
-        val origin = Vector(-4.0, 1.0, 0.75)
-        val direction = Vector(1.0, 0.0, 0.0)
-
-        nativeHitboxVisibleFromRay(
-            modelBounds = model,
-            interactionBounds = interaction,
-            origin = origin,
-            direction = direction,
-            reach = 5.0,
-            blockDistanceSquared = 25.0,
-        ) shouldBe true
-
-        nativeHitboxVisibleFromRay(
-            modelBounds = model,
-            interactionBounds = interaction,
-            origin = origin,
-            direction = direction,
-            reach = 5.0,
-            blockDistanceSquared = 1.0,
-        ) shouldBe false
-
-        nativeHitboxVisibleFromRay(
-            modelBounds = model,
-            interactionBounds = interaction,
-            origin = Vector(-4.0, 1.0, 0.0),
-            direction = direction,
-            reach = 5.0,
-            blockDistanceSquared = 25.0,
-        ) shouldBe true
+    "furniture uses the exact configured root box, never a square crop Interaction" {
+        val native = BoundingBox(10.0, 64.0, 20.0, 12.0, 64.1, 20.4)
+        val box = nativeFurnitureEntityBounds(native)!!
+        box shouldBe native
+        box.widthZ shouldBe 0.3999999999999986
+        box.rayTrace(Vector(9.0, 64.05, 20.7), Vector(1.0, 0.0, 0.0), 5.0) shouldBe null
+        box.shift(0.0, 5.0, 0.0)
+        native.minY shouldBe 64.0
+        nativeFurnitureEntityBounds(BoundingBox(0.0, 1.0, 0.0, 2.0, 1.0, 2.0)) shouldBe null
+        nativeFurnitureEntityBounds(BoundingBox(0.0, 0.0, 0.0, 17.0, 1.0, 2.0)) shouldBe null
     }
 
     "native block targeting returns only the exact opaque IA-owned block bounds" {
@@ -119,6 +49,7 @@ class ItemsAdderFurnitureHitboxSourceTest : StringSpec({
         val block = mockk<Block> {
             every { this@mockk.world } returns world
             every { isPassable } returns false
+            every { type } returns Material.BARRIER
             every { boundingBox } returns box
         }
         val root = mockk<Entity> {
@@ -126,92 +57,74 @@ class ItemsAdderFurnitureHitboxSourceTest : StringSpec({
             every { this@mockk.world } returns world
         }
         var resolvedBlock: Block? = null
-
         nativeFurnitureBlockTarget(block) {
             resolvedBlock = it
             root
         } shouldBe FurnitureHitboxTarget(root, box)
         resolvedBlock shouldBe block
-
-        val passable = mockk<Block> {
-            every { isPassable } returns true
-        }
-        nativeFurnitureBlockTarget(passable) { error("passable blocks must not resolve furniture") } shouldBe null
+        nativeFurnitureBlockTarget(mockk { every { isPassable } returns true }) {
+            error("passable blocks must not resolve furniture")
+        } shouldBe null
         nativeFurnitureBlockTarget(block) { null } shouldBe null
+        every { block.type } returns Material.STONE
+        nativeFurnitureBlockTarget(block) { error("ordinary support must not resolve furniture") } shouldBe null
     }
 
-    "native Interaction dimensions use square horizontal float bounds without model approximations" {
-        val native = BoundingBox(10.0, 64.0, 20.0, 12.0, 64.1, 20.4)
-        val box = nativeInteractionBounds(native)!!
-        box.widthX shouldBe 2.0
-        box.widthZ shouldBe 2.0
-        box.minY shouldBe 64.0
-        box.maxY shouldBe 64.0 + native.height.toFloat().toDouble()
-        box.centerX shouldBe native.centerX
-        box.centerZ shouldBe native.centerZ
-        nativeInteractionBounds(BoundingBox(0.0, 1.0, 0.0, 2.0, 1.0, 2.0)) shouldBe null
+    "wall occlusion rejects hidden furniture but permits its enclosed support" {
+        val furniture = BoundingBox(0.0, 64.0, 0.0, 2.0, 66.0, 2.0)
+        val wall = BoundingBox(-2.0, 64.0, 0.0, -1.0, 65.0, 1.0)
+        nativeFurnitureRayUnblocked(furniture, 3.0, 1.0, wall, false) shouldBe false
+        nativeFurnitureRayUnblocked(furniture, 1.0, 3.0, wall, false) shouldBe true
+        nativeFurnitureRayUnblocked(furniture, 3.0, null, null, false) shouldBe true
+        val support = BoundingBox(0.0, 64.0, 0.0, 1.0, 65.0, 1.0)
+        nativeFurnitureRayUnblocked(furniture, 3.0, 2.0, support, false) shouldBe true
     }
 
-    "click outline excludes the square Interaction excess rejected by IA server ray validation" {
-        val model = BoundingBox(-1.0, 0.0, -0.2, 1.0, 2.0, 0.2)
-        val physical = nativeInteractionBounds(model)!!
-        val clickable = nativeFurnitureClickBounds(model, physical)!!
-        clickable shouldBe model
-        clickable.rayTrace(Vector(-4.0, 1.0, 0.75), Vector(1.0, 0.0, 0.0), 5.0) shouldBe null
-        (clickable.rayTrace(Vector(-4.0, 1.0, 0.0), Vector(1.0, 0.0, 0.0), 5.0) != null) shouldBe true
-        nativeFurnitureClickBounds(model, physical.clone().shift(0.0, 5.0, 0.0)) shouldBe null
+    "IA barrier targeting requires its center inside the furniture root box" {
+        val native = BoundingBox(0.1, 64.1, 0.1, 0.9, 64.9, 0.9)
+        val owned = BoundingBox(0.0, 64.0, 0.0, 1.0, 65.0, 1.0)
+        nativeFurnitureRayUnblocked(native, 3.0, 2.5, owned, true) shouldBe true
+        val foreign = owned.clone().shift(3.0, 0.0, 0.0)
+        nativeFurnitureRayUnblocked(native, 3.0, 4.0, foreign, true) shouldBe false
     }
 
     val jarPath = System.getenv("ITEMSADDER_4_0_18_JAR")
     if (!jarPath.isNullOrBlank()) {
-        "ItemsAdder 4.0.18 artifact matches every cached-reflection binding" {
+        "exact IA artifact connects public furniture API to native entity bounds and arm-swing targeting" {
             val artifact = Path.of(jarPath)
-            check(Files.isRegularFile(artifact)) { "ITEMSADDER_4_0_18_JAR is not a file: $artifact" }
-            ItemsAdderJarClassLoader(artifact.toUri().toURL(), javaClass.classLoader).use { loader ->
-                val bindings = ItemsAdderFurnitureHitboxSource.Bindings.bind(loader)
-
-                bindings.managerSingleton.declaringClass.name shouldBe "itemsadder.m.d"
-                bindings.managerSingleton.returnType.name shouldBe "itemsadder.m.d"
-                bindings.managerField.declaringClass.name shouldBe "itemsadder.m.d"
-                bindings.managerField.type.name shouldBe "itemsadder.m.co"
-                bindings.furnitureManagerField.type.name shouldBe "itemsadder.m.br"
-                bindings.hitboxManagerField.type.name shouldBe "itemsadder.m.ce"
-                bindings.viewerContextMethod.returnType.name shouldBe "itemsadder.m.ci"
-                bindings.furnitureAtLocationMethod.returnType.name shouldBe "itemsadder.m.cj"
-                bindings.viewerHitboxMethod.returnType.name shouldBe "itemsadder.m.cg"
-                bindings.lastTargetField.type.name shouldBe "itemsadder.m.cl"
-                bindings.lastBlockField.type.name shouldBe "org.bukkit.block.Block"
-                bindings.cachedFurnitureMethod.returnType.name shouldBe "itemsadder.m.cj"
-                bindings.rootDisplayField.type.name shouldBe "org.bukkit.entity.ItemDisplay"
-                bindings.modelBoxMethod.returnType.name shouldBe "itemsadder.m.ck"
-                bindings.nativeModelBoundsMethod.returnType.name shouldBe "org.bukkit.util.BoundingBox"
-                bindings.modelRayTraceMethod.returnType.name shouldBe "org.bukkit.util.Vector"
-                bindings.viewerLocationField.type.name shouldBe "org.bukkit.Location"
-                bindings.viewerModelBoxField.type.name shouldBe "org.bukkit.util.BoundingBox"
-                bindings.viewerInteractionField.type.name shouldBe "org.bukkit.entity.Interaction"
-                bindings.customFurnitureByEntity.returnType.name shouldBe "dev.lone.itemsadder.api.CustomFurniture"
-                bindings.customFurnitureEntityMethod.returnType.name shouldBe "org.bukkit.entity.Entity"
+            check(Files.isRegularFile(artifact))
+            // This semantic path check intentionally starts at the public furniture API. Merely
+            // checking plausible obfuscated signatures previously accepted the unrelated crop system.
+            val api = disassemble(artifact, "dev.lone.itemsadder.api.CustomFurniture")
+            api shouldContain "Field behaviour:Litemsadder/m/js;"
+            api shouldContain "// String furniture"
+            val behaviour = disassemble(artifact, "itemsadder.m.js")
+            behaviour shouldContain "itemsadder/m/afz.a:(Lorg/bukkit/entity/Entity;Lorg/bukkit/util/BoundingBox;)V"
+            val selection = disassemble(artifact, "itemsadder.m.jl")
+            selection shouldContain "org/bukkit/entity/Entity.getBoundingBox:()Lorg/bukkit/util/BoundingBox;"
+            selection shouldContain "// double 5.0d"
+            val clicks = disassemble(artifact, "itemsadder.m.kv")
+            clicks shouldContain "itemsadder/m/jl.ao:(Lorg/bukkit/entity/Player;)Lorg/bukkit/entity/Entity;"
+            clicks shouldContain "dev/lone/itemsadder/api/CustomFurniture.byAlreadySpawned:(Lorg/bukkit/entity/Entity;)"
+            listOf(api, behaviour, selection, clicks).forEach {
+                it shouldNotContain "org/bukkit/entity/Interaction"
+                it shouldNotContain "itemsadder/m/co"
             }
         }
     }
 })
 
-private class ItemsAdderJarClassLoader(url: URL, parent: ClassLoader) : URLClassLoader(arrayOf(url), parent) {
-    override fun loadClass(name: String, resolve: Boolean): Class<*> {
-        if (!name.startsWith("itemsadder.m.") && !name.startsWith("dev.lone.itemsadder.")) {
-            return super.loadClass(name, resolve)
-        }
-        synchronized(getClassLoadingLock(name)) {
-            var loaded = findLoadedClass(name)
-            if (loaded == null) {
-                loaded = try {
-                    findClass(name)
-                } catch (_: ClassNotFoundException) {
-                    super.loadClass(name, false)
-                }
-            }
-            if (resolve) resolveClass(loaded)
-            return loaded
-        }
+private fun disassemble(artifact: Path, className: String): String {
+    val output = Files.createTempFile("ia-furniture-contract-", ".txt")
+    return try {
+        val process = ProcessBuilder(
+            Path.of(System.getProperty("java.home"), "bin", "javap").toString(),
+            "-p", "-c", "-classpath", artifact.toString(), className,
+        ).redirectErrorStream(true).redirectOutput(output.toFile()).start()
+        check(process.waitFor(20, TimeUnit.SECONDS)) { process.destroyForcibly(); "javap timed out" }
+        check(process.exitValue() == 0) { Files.readString(output) }
+        Files.readString(output)
+    } finally {
+        Files.deleteIfExists(output)
     }
 }
