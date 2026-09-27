@@ -15,6 +15,7 @@ internal fun interface ChatGlyphRegistry {
  */
 internal class ItemsAdderGlyphRegistry(
     private val apiClass: Class<*> = FontImageWrapper::class.java,
+    private val configuredLargeStickerMetrics: Map<String, ChatStickerFontMetrics> = emptyMap(),
 ) : ChatGlyphRegistry {
     // Resolve inside snapshot so an incompatible API enters the guard's closed
     // state instead of preventing registration and silently leaving chat open.
@@ -39,13 +40,16 @@ internal class ItemsAdderGlyphRegistry(
             val node = accessor.invoke(metadata)
             check(node == null || node is String) { "Invalid ItemsAdder font permission: $id" }
             val name = id.substringAfter(':')
+            val actualHeight = (height.invoke(wrapper) as Number).toInt()
+            val actualWidth = (width.invoke(wrapper) as Number).toInt()
+            val configuredHeight = configuredLargeStickerMetrics[id]?.height
+            val heightIsAllowed = configuredHeight?.let { it == actualHeight } ?: (actualHeight <= 16)
             ChatGlyphDefinition(
                 id = id,
                 unicode = unicode,
-                permission = (node as? String)?.takeIf { it.isNotBlank() },
+                permission = node?.takeIf { it.isNotBlank() },
                 technical = id.startsWith("_iainternal:") || name.startsWith("offset_") ||
-                    (height.invoke(wrapper) as Number).toInt() > 16 ||
-                    (width.invoke(wrapper) as Number).toInt() > 96,
+                    !heightIsAllowed || actualWidth > 96,
             )
         }
     }

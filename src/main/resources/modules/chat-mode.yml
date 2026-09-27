@@ -12,3 +12,11 @@ glyph-protection:
     unauthorized: '<red>Этот символ недоступен вашему рангу.'
     technical: '<red>Служебные символы интерфейса нельзя отправлять в чат.'
     unavailable: '<red>Список символов ещё загружается. Повторите сообщение через несколько секунд.'
+
+# Explicitly configured large ItemsAdder font images are standalone stickers.
+# Keep empty in the generic defaults; list only exact IDs present in the pack.
+stickers:
+  font-images: {}
+  messages:
+    public-chat-only: '<red>Большие стикеры доступны в обычном чате. Сначала выйдите из комнаты или чата персонала.'
+    standalone-only: '<red>Крупный стикер отправляется только отдельным сообщением.'

@@ -3,6 +3,7 @@ package ru.arc.spy
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
+import io.mockk.every
 import io.mockk.mockk
 import io.papermc.paper.chat.ChatRenderer
 import io.papermc.paper.event.player.AsyncChatEvent
@@ -20,6 +21,33 @@ import ru.arc.redis.RedisOperations
 
 class CrossServerSpyBridgeTest :
     FreeSpec({
+        "a large sticker is relayed to spy viewers as its literal alias without tall Unicode" {
+            failOnUnsupportedMockBukkitOperation {
+                MockBukkitTestRuntime.open().use { paper ->
+                    val player = paper.addPlayer("StickerPlayer")
+                    val redis = RecordingRedis()
+                    CrossServerSpyBridge(
+                        plugin = paper.createSimplePlugin("SpyStickerTest"),
+                        redis = redis,
+                        localServer = "spawn",
+                        settings = testSettings(),
+                        cmi = VisibleSpyState,
+                        now = { 1_780_000_000_000L },
+                        stickerLabel = { _, signed ->
+                            signed shouldBe ":wh_emperor:"
+                            ":wh_emperor:"
+                        },
+                    ).use { bridge ->
+                        bridge.start()
+                        paper.callEvent(chatEvent(player, "\uE3BE\uE000", originalMessage = ":wh_emperor:"))
+                        redis.publications shouldHaveSize 1
+                        SpyRelayCodec.decode(redis.publications.single().second, 4096, 1000)!!.content shouldBe
+                            ":wh_emperor:"
+                    }
+                }
+            }
+        }
+
         "a non-cancelled local chat message is published for remote SocialSpy viewers" {
             failOnUnsupportedMockBukkitOperation {
                 MockBukkitTestRuntime.open().use { paper ->
@@ -181,7 +209,7 @@ private fun chatEvent(
         ChatRenderer.defaultRenderer(),
         component,
         Component.text(originalMessage),
-        mockk<SignedMessage>(),
+        mockk<SignedMessage> { every { message() } returns originalMessage },
     )
 }
 

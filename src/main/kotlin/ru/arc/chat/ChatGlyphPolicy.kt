@@ -1,5 +1,15 @@
 package ru.arc.chat
 
+import java.util.Collections
+
+/** Immutable metadata exposed to the chat renderer for an exact configured sticker ID. */
+internal data class ChatStickerFontImage(
+    val id: String,
+    val unicode: String,
+    val height: Int,
+    val ascent: Int,
+)
+
 /**
  * One font image known to the active ItemsAdder registry.
  *
@@ -18,6 +28,7 @@ internal enum class ChatGlyphViolationReason {
     UNAUTHORIZED,
     TECHNICAL,
     UNKNOWN_PRIVATE_USE,
+    STICKER_MUST_BE_STANDALONE,
 }
 
 internal data class ChatGlyphViolation(
@@ -34,9 +45,19 @@ internal data class ChatGlyphViolation(
  * matching definition to be usable, preventing an ambiguous alias from
  * selecting a less-restricted definition.
  */
-internal class ChatGlyphPolicy(definitions: Collection<ChatGlyphDefinition>) {
+internal class ChatGlyphPolicy(
+    definitions: Collection<ChatGlyphDefinition>,
+    stickerFontImageMetrics: Map<String, ChatStickerFontMetrics> = emptyMap(),
+) {
     private val definitionsByUnicode: Map<String, List<ChatGlyphDefinition>>
     private val definitionsByAlias: Map<String, List<ChatGlyphDefinition>>
+    private val stickerImagesById: Map<String, ChatStickerFontImage>
+
+    /** Active, configured and non-technical images, keyed by their exact ItemsAdder ID. */
+    fun stickerFontImages(): Map<String, ChatStickerFontImage> = stickerImagesById
+
+    /** Resolves one configured sticker in its original signed-message form. */
+    fun standaloneSticker(message: String): ChatStickerFontImage? = standaloneStickerAt(message)
 
     init {
         val ordered = definitions.sortedWith(DEFINITION_ORDER)
@@ -56,6 +77,21 @@ internal class ChatGlyphPolicy(definitions: Collection<ChatGlyphDefinition>) {
             }
         }
         definitionsByAlias = aliases.mapValues { (_, values) -> values.toList() }
+        stickerImagesById = Collections.unmodifiableMap(
+            ordered.asSequence()
+                .filterNot(ChatGlyphDefinition::technical)
+                .mapNotNull { definition ->
+                    stickerFontImageMetrics[definition.id]?.let { metrics ->
+                        definition.id to ChatStickerFontImage(
+                            id = definition.id,
+                            unicode = definition.unicode,
+                            height = metrics.height,
+                            ascent = metrics.ascent,
+                        )
+                    }
+                }
+                .toMap(LinkedHashMap()),
+        )
     }
 
     /** Returns the first policy violation in [message], if there is one. */
@@ -68,6 +104,7 @@ internal class ChatGlyphPolicy(definitions: Collection<ChatGlyphDefinition>) {
         if (isOperator) return null
 
         var index = 0
+        var stickerGlyphId: String? = null
         while (index < message.length) {
             val placeholder = placeholderAt(message, index)
             if (placeholder != null) {
@@ -76,6 +113,7 @@ internal class ChatGlyphPolicy(definitions: Collection<ChatGlyphDefinition>) {
                 }
                 val definitions = placeholder.alias?.let(definitionsByAlias::get)
                 if (definitions != null) {
+                    stickerGlyphId = stickerGlyphId ?: configuredStickerId(definitions)
                     definitionViolation(definitions, hasPermission, channelPermission)?.let { return it }
                 }
             }
@@ -84,6 +122,7 @@ internal class ChatGlyphPolicy(definitions: Collection<ChatGlyphDefinition>) {
             val glyph = String(Character.toChars(codePoint))
             val definitions = definitionsByUnicode[glyph]
             if (definitions != null) {
+                stickerGlyphId = stickerGlyphId ?: configuredStickerId(definitions)
                 definitionViolation(definitions, hasPermission, channelPermission)?.let {
                     return it
                 }
@@ -93,7 +132,45 @@ internal class ChatGlyphPolicy(definitions: Collection<ChatGlyphDefinition>) {
 
             index += Character.charCount(codePoint)
         }
+        if (stickerGlyphId != null && standaloneSticker(message) == null) {
+            return ChatGlyphViolation(ChatGlyphViolationReason.STICKER_MUST_BE_STANDALONE, stickerGlyphId)
+        }
         return null
+    }
+
+    private fun configuredStickerId(definitions: List<ChatGlyphDefinition>): String? =
+        definitions.firstOrNull { it.id in stickerImagesById }?.id
+
+    private fun standaloneStickerAt(message: String): ChatStickerFontImage? {
+        var index = skipWhitespace(message, 0)
+        if (index < message.length && message[index] == '!') {
+            index = skipWhitespace(message, index + 1)
+        }
+        if (index >= message.length) return null
+
+        val placeholder = placeholderAt(message, index)
+        val sticker = if (placeholder != null) {
+            if (placeholder.technical) return null
+            val definitions = placeholder.alias?.let(definitionsByAlias::get) ?: return null
+            val id = configuredStickerId(definitions) ?: return null
+            index = placeholder.endExclusive
+            stickerImagesById[id]
+        } else {
+            val codePoint = message.codePointAt(index)
+            val glyph = String(Character.toChars(codePoint))
+            val definitions = definitionsByUnicode[glyph] ?: return null
+            val id = configuredStickerId(definitions) ?: return null
+            index += Character.charCount(codePoint)
+            stickerImagesById[id]
+        }
+
+        return sticker?.takeIf { skipWhitespace(message, index) == message.length }
+    }
+
+    private fun skipWhitespace(message: String, startIndex: Int): Int {
+        var index = startIndex
+        while (index < message.length && message[index].isWhitespace()) index++
+        return index
     }
 
     private fun definitionViolation(
@@ -127,9 +204,9 @@ internal class ChatGlyphPolicy(definitions: Collection<ChatGlyphDefinition>) {
             if (endIndex > startIndex + 1) {
                 val token = message.substring(startIndex + 1, endIndex)
                 if (token.startsWith(OFFSET_ALIAS_PREFIX, ignoreCase = true)) {
-                    return Placeholder(technical = true)
+                    return Placeholder(technical = true, endExclusive = endIndex + 1)
                 }
-                token.asFontImageAlias()?.let { return Placeholder(alias = it) }
+                token.asFontImageAlias()?.let { return Placeholder(alias = it, endExclusive = endIndex + 1) }
             }
         }
 
@@ -148,9 +225,9 @@ internal class ChatGlyphPolicy(definitions: Collection<ChatGlyphDefinition>) {
             if (endIndex > contentStart) {
                 val token = message.substring(contentStart, endIndex)
                 if (token.startsWith(OFFSET_ALIAS_PREFIX, ignoreCase = true)) {
-                    return Placeholder(technical = true)
+                    return Placeholder(technical = true, endExclusive = endIndex + 1)
                 }
-                token.asFontImageAlias()?.let { return Placeholder(alias = it) }
+                token.asFontImageAlias()?.let { return Placeholder(alias = it, endExclusive = endIndex + 1) }
             }
         }
 
@@ -160,6 +237,7 @@ internal class ChatGlyphPolicy(definitions: Collection<ChatGlyphDefinition>) {
     private data class Placeholder(
         val alias: String? = null,
         val technical: Boolean = false,
+        val endExclusive: Int,
     )
 
     private companion object {

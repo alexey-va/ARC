@@ -13,6 +13,7 @@ import org.bukkit.entity.Player
 import ru.arc.ARC
 import ru.arc.TitleInput
 import ru.arc.ai.GPTManager
+import ru.arc.chat.ChatStickerFontImage
 import ru.arc.hooks.HookRegistry
 import ru.arc.chat.ChatMessageColorVariation
 import ru.arc.chat.ChatMessageColorizer
@@ -31,8 +32,10 @@ class ChatListener internal constructor(
     private val titleInputProvider: (Player) -> Boolean,
     private val messageColorVariationProvider: () -> ChatMessageColorVariation,
     private val rejectGlyphs: (AsyncChatEvent) -> Boolean = { false },
+    private val standaloneStickerProvider: (Player, String) -> ChatStickerFontImage? = { _, _ -> null },
 ) : Listener {
     private val pendingChannels = ConcurrentHashMap<UUID, ChatMode>()
+    private val chatStickerRenderer = ChatStickerRenderer()
 
     internal constructor(npcMessageHandler: (String, Player) -> Unit) :
         this(
@@ -78,7 +81,8 @@ class ChatListener internal constructor(
     constructor() : this({ message, player ->
         GPTManager.processMessage(message, player, appendCancel = true)
     }, ChatModeService::getMode, TitleInput::hasInput, productionVariationProvider(),
-        { event -> HookRegistry.chatGlyphGuard?.rejectChat(event) ?: event.isCancelled })
+        { event -> HookRegistry.chatGlyphGuard?.rejectChat(event) ?: event.isCancelled },
+        { player, message -> HookRegistry.chatGlyphGuard?.standaloneSticker(player, message) })
 
     @EventHandler(priority = EventPriority.LOWEST)
     fun onChatDecorate(event: AsyncChatDecorateEvent) {
@@ -111,14 +115,18 @@ class ChatListener internal constructor(
             pendingChannels.remove(event.player.uniqueId)
                 ?: modeProvider(event.player.uniqueId)
         if (event.isCancelled) return
+        val sticker = standaloneStickerProvider(event.player, event.signedMessage().message())
         val renderer = event.renderer()
         event.renderer { source, sourceDisplayName, message, viewer ->
             ensureChannelPrefix(
                 colorSenderName(
-                    colorMessageBody(
-                        renderer.render(source, sourceDisplayName, message, viewer),
-                        source.name,
-                        channel,
+                    chatStickerRenderer.layout(
+                        colorMessageBody(
+                            renderer.render(source, sourceDisplayName, message, viewer),
+                            source.name,
+                            channel,
+                        ),
+                        sticker,
                     ),
                     source.name,
                     channel,

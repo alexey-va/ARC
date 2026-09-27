@@ -2,6 +2,7 @@ package ru.arc.spy
 
 import io.papermc.paper.event.player.AsyncChatEvent
 import org.bukkit.Bukkit
+import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.HandlerList
@@ -26,6 +27,7 @@ class CrossServerSpyBridge(
     private val cmi: SpyStateAccess,
     private val now: () -> Long = System::currentTimeMillis,
     private val chatMode: (UUID) -> ChatMode = ChatModeService::getMode,
+    private val stickerLabel: (Player, String) -> String? = { _, _ -> null },
 ) : Listener, AutoCloseable {
     private val log = LoggerFactory.getLogger(CrossServerSpyBridge::class.java)
     private val ingress = SpyRelayIngress(localServer, settings)
@@ -113,7 +115,9 @@ class CrossServerSpyBridge(
             )
         val deliveredContent =
             SpyRelayCodec.sanitizeContent(
-                TextUtils.plain(event.message()),
+                // Spy observations are one-line text, not the public chat renderer.
+                // Keep the sticker identity without relaying an unpadded tall glyph.
+                stickerLabel(event.player, event.signedMessage().message()) ?: TextUtils.plain(event.message()),
                 settings.maxContentLength,
             )
         if (originalContent.isEmpty() || deliveredContent.isEmpty()) return

@@ -8,6 +8,7 @@ import org.bukkit.event.Listener
 import ru.arc.ARC
 import ru.arc.config.ArcRedisConfig
 import ru.arc.core.PluginModule
+import ru.arc.listeners.ChatStickerLayoutListener
 
 /**
  * Minimal chat-glyph protection for opted-in isolated runtime profiles.
@@ -23,6 +24,7 @@ object IsolatedChatGlyphModule : PluginModule {
 
     private var protection: ChatGlyphProtection? = null
     private var chatListener: Listener? = null
+    private var stickerLayoutListener: Listener? = null
     private val hotConfigManager: ChatModeConfig
         get() = ChatModeConfig.load(ARC.instance.dataPath)
 
@@ -43,6 +45,12 @@ object IsolatedChatGlyphModule : PluginModule {
             val listener = IsolatedChatGlyphChatListener(activeProtection.guard)
             chatListener = listener
             plugin.server.pluginManager.registerEvents(listener, plugin)
+            val layoutListener =
+                ChatStickerLayoutListener { player, message ->
+                    activeProtection.guard.standaloneSticker(player, message)
+                }
+            stickerLayoutListener = layoutListener
+            plugin.server.pluginManager.registerEvents(layoutListener, plugin)
             activeProtection.start()
         } catch (failure: Throwable) {
             runCatching(::shutdown).exceptionOrNull()?.let { cleanupFailure ->
@@ -58,6 +66,8 @@ object IsolatedChatGlyphModule : PluginModule {
     override fun shutdown() {
         val listener = chatListener
         chatListener = null
+        val layoutListener = stickerLayoutListener
+        stickerLayoutListener = null
         val activeProtection = protection
         protection = null
 
@@ -72,6 +82,7 @@ object IsolatedChatGlyphModule : PluginModule {
         }
 
         attemptCleanup { listener?.let(HandlerList::unregisterAll) }
+        attemptCleanup { layoutListener?.let(HandlerList::unregisterAll) }
         attemptCleanup { activeProtection?.let { HandlerList.unregisterAll(it.guard) } }
         attemptCleanup { activeProtection?.close() }
         cleanupFailure?.let { throw it }

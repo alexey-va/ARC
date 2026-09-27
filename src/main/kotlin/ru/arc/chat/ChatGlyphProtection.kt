@@ -19,6 +19,7 @@ internal class ChatGlyphProtection(
 ) : AutoCloseable {
     private val tasks = LifecycleTaskScope()
     private val network = redis?.let(::ChatGlyphNetworkCatalog)
+    private val stickerFontImageMetrics = config.stickerFontImageMetrics
     private val hasItemsAdder = plugin.server.pluginManager.isPluginEnabled("ItemsAdder")
     private var registry: ChatGlyphRegistry? = null
     private var loadListener: Listener? = null
@@ -27,11 +28,19 @@ internal class ChatGlyphProtection(
     @Volatile private var closed = false
     private var networkDefinitions: List<ChatGlyphDefinition>? = null
     private var networkPolicy: ChatGlyphPolicy? = null
-    val guard = ItemsAdderChatGuard(::currentPolicy, config)
+    val guard = ItemsAdderChatGuard(
+        ::currentPolicy,
+        config,
+        stickerChannelAllowed = if (plugin.server.pluginManager.isPluginEnabled("CMI")) {
+            CmiStickerChannels::isPublicChat
+        } else {
+            { _, _ -> true }
+        },
+    )
 
     fun start() {
         if (hasItemsAdder) {
-            registry = ItemsAdderGlyphRegistry()
+            registry = ItemsAdderGlyphRegistry(configuredLargeStickerMetrics = stickerFontImageMetrics)
             loadListener = ItemsAdderGlyphLoadListener { tasks.runLater(1L, ::refreshLocal) }.also {
                 plugin.server.pluginManager.registerEvents(it, plugin)
             }
@@ -45,7 +54,9 @@ internal class ChatGlyphProtection(
         if (closed) return
         try {
             localDefinitions = registry?.snapshot().orEmpty()
-            localPolicy = localDefinitions.takeIf { it.isNotEmpty() }?.let(::ChatGlyphPolicy)
+            localPolicy = localDefinitions.takeIf { it.isNotEmpty() }?.let {
+                ChatGlyphPolicy(it, stickerFontImageMetrics)
+            }
             info("Chat glyph protection: source=ItemsAdder ready={} glyphs={}", localPolicy != null, localDefinitions.size)
         } catch (failure: Exception) {
             localDefinitions = emptyList()
@@ -80,7 +91,7 @@ internal class ChatGlyphProtection(
         val definitions = network?.current()
         if (definitions != networkDefinitions) {
             networkDefinitions = definitions
-            networkPolicy = definitions?.let(::ChatGlyphPolicy)
+            networkPolicy = definitions?.let { ChatGlyphPolicy(it, stickerFontImageMetrics) }
             info("Chat glyph protection: source=spawn ready={} glyphs={}", networkPolicy != null, definitions?.size ?: 0)
         }
         return networkPolicy
@@ -96,6 +107,9 @@ internal class ChatGlyphProtection(
         localPolicy = null
         synchronized(this) { networkDefinitions = null; networkPolicy = null }
     }
+
+    /** Active large-sticker metadata for the renderer; unavailable catalogs return an immutable empty map. */
+    fun stickerFontImages(): Map<String, ChatStickerFontImage> = guard.stickerFontImages()
 }
 
 // Kept separate: nodes without ItemsAdder must never register methods whose

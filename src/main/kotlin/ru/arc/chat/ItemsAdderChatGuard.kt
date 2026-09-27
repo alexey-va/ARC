@@ -1,6 +1,7 @@
 package ru.arc.chat
 
 import io.papermc.paper.event.player.AsyncChatEvent
+import net.kyori.adventure.text.Component
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
@@ -13,6 +14,7 @@ import ru.arc.util.TextUtil.mm
 internal class ItemsAdderChatGuard(
     private val policy: () -> ChatGlyphPolicy?,
     private val config: ChatModeConfig,
+    private val stickerChannelAllowed: (Player, Component) -> Boolean = { _, _ -> true },
     private val runSync: (() -> Unit) -> Unit = { action -> sync { action() } },
 ) : Listener, AutoCloseable {
     @Volatile private var closed = false
@@ -20,10 +22,27 @@ internal class ItemsAdderChatGuard(
     fun rejectChat(event: AsyncChatEvent): Boolean {
         if (event.isCancelled) return true
         // The signed source excludes CMI/ItemsAdder-generated offsets, badges and formatting.
-        val rejection = rejection(event.player, event.signedMessage().message(), "ia.user.image.chat") ?: return false
+        val source = event.signedMessage().message()
+        val rejection = rejection(event.player, source, "ia.user.image.chat")
+            ?: if (standaloneSticker(event.player, source) != null && !stickerChannelAllowed(event.player, event.message())) {
+                config.largeStickerPublicChatMessage
+            } else return false
         event.isCancelled = true
         notify(event.player, rejection)
         return true
+    }
+
+    /** Active exact-ID sticker map for renderers; unavailable catalogs expose no glyphs. */
+    fun stickerFontImages(): Map<String, ChatStickerFontImage> =
+        policy()?.stickerFontImages() ?: emptyMap()
+
+    /** Resolves an authorized signed-message sticker before provider offsets are added. */
+    fun standaloneSticker(player: Player, message: String): ChatStickerFontImage? {
+        val active = policy() ?: return null
+        if (!player.isOp && active.violation(message, player::hasPermission, channelPermission = "ia.user.image.chat") != null) {
+            return null
+        }
+        return active.standaloneSticker(message)
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
@@ -41,6 +60,7 @@ internal class ItemsAdderChatGuard(
         return when (active.violation(message, player::hasPermission, channelPermission = channelPermission)?.reason) {
             ChatGlyphViolationReason.UNAUTHORIZED -> config.glyphUnauthorizedMessage
             ChatGlyphViolationReason.TECHNICAL, ChatGlyphViolationReason.UNKNOWN_PRIVATE_USE -> config.glyphTechnicalMessage
+            ChatGlyphViolationReason.STICKER_MUST_BE_STANDALONE -> config.largeStickerStandaloneMessage
             null -> null
         }
     }

@@ -7,6 +7,7 @@ import io.mockk.mockk
 import io.mockk.verify
 import io.papermc.paper.event.player.AsyncChatEvent
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.entity.Player
 import org.bukkit.event.player.PlayerCommandPreprocessEvent
 import ru.arc.chat.ChatMode.LOCAL
@@ -30,7 +31,10 @@ class ItemsAdderChatGuardTest : FreeSpec({
             every { setCancelled(any()) } answers { cancelled = firstArg() }
         }
     }
-    fun guard(policy: () -> ChatGlyphPolicy?) = ItemsAdderChatGuard(policy, TestChatModeConfig()) { it() }
+    fun guard(
+        config: ChatModeConfig = TestChatModeConfig(),
+        policy: () -> ChatGlyphPolicy?,
+    ) = ItemsAdderChatGuard(policy, config) { it() }
 
     "denied raw glyph cancels before title or NPC processing" {
         val player = player("ia.user.image.chat")
@@ -89,5 +93,54 @@ class ItemsAdderChatGuardTest : FreeSpec({
     "operator retains native ItemsAdder bypass even before catalog load" {
         val player = player().apply { every { isOp } returns true }
         guard { null }.rejectChat(event(player, glyph)) shouldBe false
+    }
+
+    "large sticker guard uses the configured rejection text and exports only active exact IDs" {
+        val stickerId = "arc_warhammer:wh_adeptus"
+        val stickerUnicode = "\uE6A1"
+        val stickerMetrics = mapOf(stickerId to ChatStickerFontMetrics(48, 8))
+        val stickerPolicy = ChatGlyphPolicy(
+            listOf(ChatGlyphDefinition(stickerId, stickerUnicode, "ia.user.image.use.warhammer", false)),
+            stickerMetrics,
+        )
+        val config = TestChatModeConfig(
+            stickerFontImageMetrics = stickerMetrics,
+            largeStickerStandaloneMessage = "<red>Отправьте стикер отдельно.",
+        )
+        val player = player("ia.user.image.chat", "ia.user.image.use.warhammer")
+        every { player.isOnline } returns true
+        var sentMessage: Component? = null
+        every { player.sendMessage(any<Component>()) } answers { sentMessage = firstArg() }
+        val guard = guard(config) { stickerPolicy }
+
+        guard.stickerFontImages() shouldBe mapOf(
+            stickerId to ChatStickerFontImage(stickerId, stickerUnicode, 48, 8),
+        )
+        guard.standaloneSticker(player, "! :wh_adeptus:") shouldBe
+            ChatStickerFontImage(stickerId, stickerUnicode, 48, 8)
+        guard.standaloneSticker(player("ia.user.image.chat"), "! :wh_adeptus:") shouldBe null
+        guard.standaloneSticker(player, "caption :wh_adeptus:") shouldBe null
+        guard.rejectChat(event(player, "Привет $stickerUnicode")) shouldBe true
+        PlainTextComponentSerializer.plainText().serialize(checkNotNull(sentMessage)) shouldBe "Отправьте стикер отдельно."
+        guard.rejectChat(event(player, "! :wh_adeptus:")) shouldBe false
+    }
+
+    "private CMI routes reject large stickers before dispatch while ordinary chat still passes" {
+        val id = "arc_warhammer:wh_emperor"
+        val policy = ChatGlyphPolicy(
+            listOf(ChatGlyphDefinition(id, glyph, "ia.user.image.use.vip", false)),
+            mapOf(id to ChatStickerFontMetrics(48, 8)),
+        )
+        val player = player("ia.user.image.chat", "ia.user.image.use.vip")
+        var publicChat = false
+        val guard = ItemsAdderChatGuard(
+            { policy }, TestChatModeConfig(),
+            stickerChannelAllowed = { _, _ -> publicChat }, runSync = { it() },
+        )
+        guard.rejectChat(event(player, ":wh_emperor:")) shouldBe true
+        guard.rejectChat(event(player, glyph)) shouldBe true
+        guard.rejectChat(event(player, "обычный текст")) shouldBe false
+        publicChat = true
+        guard.rejectChat(event(player, ":wh_emperor:")) shouldBe false
     }
 })

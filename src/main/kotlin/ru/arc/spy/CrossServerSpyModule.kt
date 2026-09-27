@@ -3,6 +3,7 @@ package ru.arc.spy
 import org.bukkit.Bukkit
 import ru.arc.ARC
 import ru.arc.core.PluginModule
+import ru.arc.hooks.HookRegistry
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 
@@ -40,6 +41,11 @@ object CrossServerSpyModule : PluginModule {
                 localServer = server,
                 settings = settings,
                 cmi = CmiSpyAccess(),
+                stickerLabel = { player, message ->
+                    HookRegistry.chatGlyphGuard?.standaloneSticker(player, message)?.let { image ->
+                        ":${image.id.substringAfter(':')}:"
+                    }
+                },
             ).also(CrossServerSpyBridge::start)
     }
 
