@@ -119,14 +119,16 @@ internal fun nativeFurnitureRayUnblocked(
     return nativeBounds.contains(blockBounds)
 }
 
-/** Only an actual IA-owned solid block is outlined; a nearby support block is never guessed. */
+/** A barrier finds its furniture root; every hit path outlines that same native click box. */
 internal fun nativeFurnitureBlockTarget(block: Block?, rootForBlock: (Block) -> Entity?): FurnitureHitboxTarget? {
     // The public block overload searches nearby roots; it does not establish block ownership.
     // Furniture collisions are barriers. Never advertise an ordinary floor/wall as breakable.
     if (block == null || block.isPassable || block.type != Material.BARRIER) return null
     val root = rootForBlock(block) ?: return null
     if (!root.isValid || root.world.uid != block.world.uid) return null
-    val box = nativeFurnitureEntityBounds(block.boundingBox) ?: return null
+    val box = nativeFurnitureEntityBounds(root.boundingBox) ?: return null
+    // Match IA's barrier/root association without switching the frame to one collision cell.
+    if (!box.contains(block.boundingBox.center)) return null
     return FurnitureHitboxTarget(root, box)
 }
 

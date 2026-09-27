@@ -43,18 +43,45 @@ class ItemsAdderFurnitureHitboxSourceTest : StringSpec({
         nativeFurnitureEntityBounds(BoundingBox(0.0, 0.0, 0.0, 17.0, 1.0, 2.0)) shouldBe null
     }
 
-    "native block targeting returns only the exact opaque IA-owned block bounds" {
+    "barrier and entity hits keep the same whole furniture box while sweeping across its blocks" {
         val world = mockk<World> { every { uid } returns UUID.randomUUID() }
-        val box = BoundingBox(2.0, 64.0, 3.0, 3.0, 65.0, 4.0)
+        val box = BoundingBox(2.0, 64.0, 3.0, 5.0, 66.0, 4.0)
+        val root = mockk<Entity> {
+            every { isValid } returns true
+            every { this@mockk.world } returns world
+            every { boundingBox } returns box
+        }
+        val nativeTarget = FurnitureHitboxTarget(root, nativeFurnitureEntityBounds(box)!!)
+        for (x in 2..4) {
+            val block = mockk<Block> {
+                every { this@mockk.world } returns world
+                every { isPassable } returns false
+                every { type } returns Material.BARRIER
+                every { boundingBox } returns BoundingBox(x.toDouble(), 64.0, 3.0, x + 1.0, 65.0, 4.0)
+            }
+            val blockTarget = nativeFurnitureBlockTarget(block) { root }
+            blockTarget shouldBe nativeTarget
+            // The model, native entity and collision block can win on consecutive gaze updates.
+            for ((nativeDistance, visualDistance) in listOf(1.0 to null, 3.0 to null, null to 1.0, null to null)) {
+                val candidate = FurnitureRayCandidate(nativeTarget, nativeDistance, visualDistance)
+                nearestFurnitureHitboxTarget(listOf(candidate), blockTarget, 2.0) shouldBe nativeTarget
+            }
+        }
+    }
+
+    "barrier lookup rejects ordinary supports and roots whose box does not contain the barrier center" {
+        val world = mockk<World> { every { uid } returns UUID.randomUUID() }
+        val box = BoundingBox(2.0, 64.0, 3.0, 5.0, 66.0, 4.0)
         val block = mockk<Block> {
             every { this@mockk.world } returns world
             every { isPassable } returns false
             every { type } returns Material.BARRIER
-            every { boundingBox } returns box
+            every { boundingBox } returns BoundingBox(2.0, 64.0, 3.0, 3.0, 65.0, 4.0)
         }
         val root = mockk<Entity> {
             every { isValid } returns true
             every { this@mockk.world } returns world
+            every { boundingBox } returns box
         }
         var resolvedBlock: Block? = null
         nativeFurnitureBlockTarget(block) {
@@ -66,6 +93,8 @@ class ItemsAdderFurnitureHitboxSourceTest : StringSpec({
             error("passable blocks must not resolve furniture")
         } shouldBe null
         nativeFurnitureBlockTarget(block) { null } shouldBe null
+        every { root.boundingBox } returns box.clone().shift(3.0, 0.0, 0.0)
+        nativeFurnitureBlockTarget(block) { root } shouldBe null
         every { block.type } returns Material.STONE
         nativeFurnitureBlockTarget(block) { error("ordinary support must not resolve furniture") } shouldBe null
     }

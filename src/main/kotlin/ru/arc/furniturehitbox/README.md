@@ -10,7 +10,10 @@ confirmed by the public CustomFurniture API and furniture PDC identity. Nearby
 queries only inspect loaded ItemDisplay, ArmorStand and ItemFrame roots. The
 nearest native or visible-model surface wins; configured model profiles also
 find props whose click box is smaller or offset. Profiles help find a root but never
-replace its click box. Native solid furniture blocks use the public block API.
+replace its click box. Barrier hits use the public block API to find their root,
+require the barrier center inside that root's box, and show the same whole box.
+Sweeping between a model, native root and its barrier cells cannot shrink the
+frame to an individual collision block.
 Opaque blocks occlude selection, with IA's enclosed-support/owned-barrier rules.
 
 The exact deployed ItemsAdder 4.0.18 artifact establishes this semantic path:
