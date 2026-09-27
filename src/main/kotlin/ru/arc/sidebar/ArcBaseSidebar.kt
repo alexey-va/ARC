@@ -50,18 +50,14 @@ internal class ArcBaseSidebar(
                 HookRegistry.luckPermsHook?.getCachedMeta(player.uniqueId, SidebarQuestRewards.META_KEY),
             )
             val rows = config.stringList("styles.$style.lines").mapNotNull { template ->
-                resolveServerSidebarLine(template, serverId)
+                SidebarQuestRewards.visibleLine(template, rewardsEnabled)
+                    ?.let { resolveServerSidebarLine(it, serverId) }
                     ?.let { serverLine ->
                         resolveOptionalSidebarLine(serverLine) { placeholder ->
                             resolvePlaceholder(player, placeholder)
                         }
                     }
-                    ?.let { line ->
-                        val reward = if (rewardsEnabled) SidebarQuestRewards.placeholder(line)
-                            ?.let { placeholder -> resolvePlaceholder(player, placeholder).takeIf { it.isNotBlank() && it != placeholder } }
-                            ?.let { render(player, it) } else null
-                        SidebarQuestRewardRow(render(player, line), reward)
-                    }
+                    ?.let { render(player, it) }
             }
             if (rows.isEmpty()) {
                 source.hide(player)
@@ -72,7 +68,7 @@ internal class ArcBaseSidebar(
                 player,
                 ArcSidebarFrame(
                     title = title,
-                    rows = alignSidebarQuestRewards(title, rows),
+                    rows = rows,
                 ),
             )
             next += player.uniqueId
