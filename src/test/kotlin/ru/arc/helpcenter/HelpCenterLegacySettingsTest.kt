@@ -13,6 +13,21 @@ import java.util.concurrent.CompletableFuture
 
 class HelpCenterLegacySettingsTest {
     @Test
+    fun `quest reward visibility defaults on and persists independently of sidebar style`() {
+        val player = mockk<Player>()
+        val backend = FakeBackend()
+        backend.permissions["tab.scoreboard3"] = true
+        val settings = HelpCenterLegacySettings(backend)
+        assertTrue(settings.scoreboardRewardsEnabled(player))
+        assertTrue(settings.execute(player, "scoreboard-rewards").join())
+        val reopened = HelpCenterLegacySettings(backend)
+        assertEquals(false, reopened.scoreboardRewardsEnabled(player))
+        assertEquals("3", reopened.entries(player).first { it.id == "scoreboard" }.state)
+        assertTrue(reopened.execute(player, "scoreboard-rewards").join())
+        assertTrue(HelpCenterLegacySettings(backend).scoreboardRewardsEnabled(player))
+    }
+
+    @Test
     fun `input settings default safely and roundtrip through persistent metadata`() {
         val player = mockk<Player>()
         val backend = FakeBackend()

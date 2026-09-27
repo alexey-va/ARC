@@ -235,6 +235,8 @@ class HelpCenterConfig(private val config: Config) {
             "settings-options-lands-title" to "<#9bd48d>Границы земель",
             "settings-options-tablist-body" to "<#e8dfd2>Выберите оформление списка игроков по клавише Tab.<newline>«Выключить» уберёт дополнительное оформление.",
             "settings-options-tablist-title" to "<#86dcf1>Список игроков",
+            "settings-scoreboard-rewards-label" to "<#c4abff>Награды квестов: <state>",
+            "settings-scoreboard-rewards-tooltip" to "<#e8dfd2>Показывать монеты и жетоны справа<newline>от каждого квеста в информационной панели.",
             "settings-options-scoreboard-body" to "<#e8dfd2>Выберите набор информации справа на экране.<newline>«Выключить» полностью скроет панель.",
             "settings-options-scoreboard-title" to "<#86dcf1>Информационная панель",
             "settings-options-item-info-body" to "<#e8dfd2>Показывать название блока или мебели ItemsAdder либо Slimefun, на которые вы смотрите.<newline>Технический ID можно включить отдельно. Обычные блоки Minecraft не отображаются.",

@@ -1,5 +1,7 @@
 package ru.arc.helpcenter
 
+import ru.arc.sidebar.SidebarQuestRewards
+
 import com.Zrips.CMI.CMI
 import com.Zrips.CMI.Modules.PlayerOptions.PlayerOption
 import net.luckperms.api.LuckPermsProvider
@@ -97,8 +99,12 @@ class HelpCenterLegacySettings(
         return backend.setMeta(player, ItemInfoPreferences.LAYOUT_META_KEY, selected.storedLayout())
     }
 
+    fun scoreboardRewardsEnabled(player: Player): Boolean =
+        SidebarQuestRewards.enabled(backend.meta(player, SidebarQuestRewards.META_KEY))
+
     fun execute(player: Player, id: String): CompletableFuture<Boolean> = when (id) {
         "admin" -> if (backend.hasPermission(player, ADMIN)) backend.consoleCommand(player, ConsoleCommand.OPEN_ADMIN_SETTINGS) else falseFuture()
+        "scoreboard-rewards" -> backend.setMeta(player, SidebarQuestRewards.META_KEY, (!scoreboardRewardsEnabled(player)).toString())
         "scoreboard-off" -> backend.setExclusiveMode(player, "tab.scoreboard", null)
         "tablist-off" -> backend.setExclusiveMode(player, "tab.tablist", null)
         "item-info-hologram" -> backend.setMeta(player, ItemInfoMode.META_KEY, ItemInfoMode.HOLOGRAM.id)

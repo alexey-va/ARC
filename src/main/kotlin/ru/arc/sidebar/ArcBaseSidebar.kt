@@ -46,6 +46,9 @@ internal class ArcBaseSidebar(
                 return@forEach
             }
             val serverId = ARC.serverName.orEmpty()
+            val rewardsEnabled = SidebarQuestRewards.enabled(
+                HookRegistry.luckPermsHook?.getCachedMeta(player.uniqueId, SidebarQuestRewards.META_KEY),
+            )
             val rows = config.stringList("styles.$style.lines").mapNotNull { template ->
                 resolveServerSidebarLine(template, serverId)
                     ?.let { serverLine ->
@@ -53,17 +56,23 @@ internal class ArcBaseSidebar(
                             resolvePlaceholder(player, placeholder)
                         }
                     }
-                    ?.let { render(player, it) }
+                    ?.let { line ->
+                        val reward = if (rewardsEnabled) SidebarQuestRewards.placeholder(line)
+                            ?.let { placeholder -> resolvePlaceholder(player, placeholder).takeIf { it.isNotBlank() && it != placeholder } }
+                            ?.let { render(player, it) } else null
+                        SidebarQuestRewardRow(render(player, line), reward)
+                    }
             }
             if (rows.isEmpty()) {
                 source.hide(player)
                 return@forEach
             }
+            val title = render(player, config.string("title", "&#B22222&lRus&f&lCrafting"))
             source.show(
                 player,
                 ArcSidebarFrame(
-                    title = render(player, config.string("title", "&#B22222&lRus&f&lCrafting")),
-                    rows = rows,
+                    title = title,
+                    rows = alignSidebarQuestRewards(title, rows),
                 ),
             )
             next += player.uniqueId

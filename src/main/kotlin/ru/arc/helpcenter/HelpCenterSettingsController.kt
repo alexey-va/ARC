@@ -162,7 +162,12 @@ internal class HelpCenterSettingsController(
                 button("legacy_$id", label, tooltip) {
                     apply(player, id) { openOptions(player, group, actions, section) }
                 }
-            },
+            } + if (group == "scoreboard") listOf(
+                button("scoreboard_rewards_toggle",
+                    text("settings-scoreboard-rewards-label", "state" to booleanState(legacy.scoreboardRewardsEnabled(player))),
+                    text("settings-scoreboard-rewards-tooltip"),
+                ) { apply(player, "scoreboard-rewards") { openOptions(player, group, actions, section) } },
+            ) else emptyList(),
             exitButton = button("back", text(if (recharge) "settings-flight-back-label" else "settings-${section.key}-back-label")) {
                 if (recharge) openFlight(player) else openSection(player, section)
             }, columns = 2,
