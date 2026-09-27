@@ -37,6 +37,12 @@ internal class ItemInfoTargetPolicy(
 
 internal data class ItemInfoLocatedTarget(val target: ItemInfoTarget, val distanceSquared: Double)
 
+/** Prefers the current ItemsAdder furniture definition without losing the entity-stack fallback. */
+internal object ItemInfoFurnitureLabelStackSelection {
+    fun <T : Any> currentOrSaved(saved: T?, current: () -> T?): T? =
+        runCatching(current).getOrNull() ?: saved
+}
+
 /** Resolves the entity actually returned by Paper's ray trace, never predicate iteration state. */
 internal object ItemInfoHitTargetSelection {
     fun fromRayHit(
@@ -100,22 +106,32 @@ internal class BukkitItemInfoTargetResolver(
     private fun itemsAdder(block: Block): ItemInfoTarget? {
         if (!Bukkit.getPluginManager().isPluginEnabled("ItemsAdder")) return null
         return runCatching {
-            val custom: CustomStack = CustomBlock.byAlreadyPlaced(block)
-                ?: CustomFurniture.byAlreadySpawned(block)
-                ?: return null
-            customTarget(custom)
+            val customBlock: CustomStack? = CustomBlock.byAlreadyPlaced(block)
+            if (customBlock != null) {
+                customTarget(customBlock)
+            } else {
+                CustomFurniture.byAlreadySpawned(block)?.let { customTarget(it, furnitureDefinition = true) }
+            }
         }.getOrNull()
     }
 
     private fun furniture(entity: Entity, gallery: Boolean): ItemInfoTarget? = runCatching {
         val custom = CustomFurniture.byAlreadySpawned(entity) ?: return null
         if (gallery && (entity.world.name != FURNITURE_GALLERY_WORLD || custom.entity?.uniqueId != entity.uniqueId)) return null
-        policy.filter(custom.entity?.location, customTarget(custom))
+        policy.filter(custom.entity?.location, customTarget(custom, furnitureDefinition = true))
     }.getOrNull()
 
-    private fun customTarget(custom: CustomStack): ItemInfoTarget? {
+    private fun customTarget(custom: CustomStack, furnitureDefinition: Boolean = false): ItemInfoTarget? {
         val id = custom.namespacedID?.trim()?.takeIf(String::isNotEmpty) ?: return null
-        return ItemInfoTarget(displayName(custom.itemStack, id), id)
+        val savedStack = custom.itemStack
+        val labelStack = if (furnitureDefinition) {
+            ItemInfoFurnitureLabelStackSelection.currentOrSaved(savedStack) {
+                CustomStack.getInstance(id)?.itemStack
+            }
+        } else {
+            savedStack
+        }
+        return ItemInfoTarget(displayName(labelStack, id), id)
     }
 
     private fun slimefun(block: Block): ItemInfoTarget? {
