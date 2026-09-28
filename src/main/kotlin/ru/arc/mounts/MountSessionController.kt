@@ -102,6 +102,7 @@ private data class MountSession(
     var riderMountHidden: Boolean = false,
     var motionState: MountMotionState = MountMotionState(),
     var ramState: MountRamState = MountRamState(),
+    var airborneMiningCompensated: Boolean = false,
     var previousBoundingBox: BoundingBox? = null,
     val trampleDamageAtMillis: MutableMap<UUID, Long> = hashMapOf(),
 )
@@ -327,11 +328,7 @@ class MountSessionController internal constructor(
                     "Unable to create passenger seats"
                 }
             }
-            setAirborneMiningCompensation(
-                player,
-                airborneMiningModifier,
-                definition.movement == MountMovement.FLYING && config.compensateAirborneMining,
-            )
+            updateMiningCompensation(player, session)
             lastSummonAt[player.uniqueId] = now
             onStateChanged()
             player.world.spawnParticle(Particle.END_ROD, player.location, 10, 0.4, 0.4, 0.4, 0.01)
@@ -405,6 +402,17 @@ class MountSessionController internal constructor(
     private fun restoreVisualFlight(player: Player) {
         runCatching { visualFlight.restore(player) }
             .onFailure { warn("Unable to restore mount flight for {}: {}", player.name, it.javaClass.simpleName) }
+    }
+
+    private fun updateMiningCompensation(player: Player, session: MountSession) {
+        val enabled = shouldCompensateMountMining(
+            session.definition.movement, session.definition.control, player.isOnGround,
+            configProvider().compensateAirborneMining,
+        )
+        if (enabled != session.airborneMiningCompensated) {
+            setAirborneMiningCompensation(player, airborneMiningModifier, enabled)
+            session.airborneMiningCompensated = enabled
+        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -597,6 +605,7 @@ class MountSessionController internal constructor(
                     }
                     updateRiderMountVisibility(player, entity, session)
                     if (session.definition.control == MountControl.PLAYER_FLIGHT) {
+                        updateMiningCompensation(player, session)
                         val followed = runCatching {
                             visualFlight.updateSpeed(player, mountPlayerFlySpeed(maximumSpeed(session, now), player.isSprinting))
                             followVisualMount(player, entity, session.definition)
@@ -1179,6 +1188,14 @@ internal fun riderViewPitchThresholds(
     }
 
 internal fun airborneMiningCompensationAmount(): Double = 4.0
+
+internal fun shouldCompensateMountMining(
+    movement: MountMovement,
+    control: MountControl,
+    onGround: Boolean,
+    configured: Boolean,
+): Boolean = configured && movement == MountMovement.FLYING &&
+    (control == MountControl.VEHICLE || !onGround)
 
 internal fun setAirborneMiningCompensation(
     player: Player,

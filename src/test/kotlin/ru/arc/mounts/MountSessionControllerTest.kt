@@ -308,6 +308,15 @@ class MountSessionControllerTest : StringSpec({
         airborneMiningCompensationAmount() shouldBe 4.0
     }
 
+    "native flight mining compensation follows landing and takeoff without boosting ground mining" {
+        listOf(false, true, false).map { onGround ->
+            shouldCompensateMountMining(MountMovement.FLYING, MountControl.PLAYER_FLIGHT, onGround, true)
+        } shouldBe listOf(true, false, true)
+        shouldCompensateMountMining(MountMovement.FLYING, MountControl.VEHICLE, true, true) shouldBe true
+        shouldCompensateMountMining(MountMovement.WALKING, MountControl.VEHICLE, false, true) shouldBe false
+        shouldCompensateMountMining(MountMovement.FLYING, MountControl.PLAYER_FLIGHT, false, false) shouldBe false
+    }
+
     "every passive mount effect resolves to its exact Paper potion type" {
         MountAbilityEffect.RESISTANCE.potionEffectType() shouldBe PotionEffectType.RESISTANCE
         MountAbilityEffect.REGENERATION.potionEffectType() shouldBe PotionEffectType.REGENERATION
