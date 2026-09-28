@@ -190,6 +190,15 @@ class MountDomainTest : StringSpec({
         state.velocity shouldBe MotionVector(0.0, 0.0, state.speed)
     }
 
+    "zero timings respond immediately even on reversal and stop" {
+        val timing = MountMotionTiming(Duration.ZERO, Duration.ZERO, Duration.ZERO)
+        var state = MountMotionState(direction = MotionVector(0.0, 0.0, 1.0), speed = 1.0)
+        for (target in listOf(MotionVector(0.0, 0.0, -0.5), MotionVector(0.5, 0.0, 0.0), MotionVector.ZERO)) {
+            state = MountMotion.advance(state, target, timing, handlingMultiplier = 0.9)
+            state.velocity shouldBe target
+        }
+    }
+
     "reversing brakes before accelerating in the opposite direction" {
         val timing =
             MountMotionTiming(

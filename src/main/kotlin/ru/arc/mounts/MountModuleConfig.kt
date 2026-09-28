@@ -55,9 +55,9 @@ open class MountModuleConfig(private val config: Config) {
     open val motionTiming: MountMotionTiming
         get() =
             MountMotionTiming(
-                accelerationTime = config.duration("movement.acceleration-time", Duration.ofMillis(900)),
-                decelerationTime = config.duration("movement.deceleration-time", Duration.ofMillis(350)),
-                turnTime = config.duration("movement.turn-time", Duration.ofMillis(200)),
+                accelerationTime = config.duration("movement.acceleration-time", Duration.ZERO),
+                decelerationTime = config.duration("movement.deceleration-time", Duration.ZERO),
+                turnTime = config.duration("movement.turn-time", Duration.ZERO),
             )
     open val sprintMultiplier: Double get() = config.double("movement.sprint-multiplier", 1.15)
     open val jumpVelocity: Double get() = config.double("movement.jump-velocity", 0.5)
@@ -134,6 +134,8 @@ open class MountModuleConfig(private val config: Config) {
                     behaviors = behaviorList(root, id),
                     motion = motion("$root.motion"),
                     currency = config.string("$root.currency", "vault").trim(),
+                    control = strictControl(config.string("$root.control", "vehicle"), id),
+                    visualFlightOffsetY = config.doubleOrNull("$root.visual-flight-offset-y"),
                 )
             }
         return MountCatalog(definitions)
@@ -577,6 +579,10 @@ open class MountModuleConfig(private val config: Config) {
     private fun strictMovement(raw: String, mountId: String): MountMovement =
         runCatching { MountMovement.valueOf(raw.trim().uppercase(Locale.ROOT)) }
             .getOrElse { throw IllegalArgumentException("Mount '$mountId' has invalid type '$raw'") }
+
+    private fun strictControl(raw: String, mountId: String): MountControl =
+        runCatching { MountControl.valueOf(raw.trim().replace('-', '_').uppercase(Locale.ROOT)) }
+            .getOrElse { throw IllegalArgumentException("Mount '$mountId' has invalid control '$raw'") }
 
     private fun strictRarity(raw: String, mountId: String): MountRarity =
         runCatching { MountRarity.valueOf(raw.trim().uppercase(Locale.ROOT)) }

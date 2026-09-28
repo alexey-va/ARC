@@ -8,6 +8,8 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import org.bukkit.attribute.Attribute
+import org.bukkit.Location
+import org.bukkit.World
 import org.bukkit.attribute.AttributeInstance
 import org.bukkit.attribute.AttributeModifier
 import org.bukkit.entity.Bat
@@ -28,6 +30,36 @@ import org.bukkit.util.BoundingBox
 import java.util.UUID
 
 class MountSessionControllerTest : StringSpec({
+    "visual flight follows the pilot without boarding or moving the player" {
+        val player = mockk<Player>(relaxed = true)
+        val entity = mockk<LivingEntity>(relaxed = true)
+        val world = mockk<World>()
+        every { player.location } returns Location(world, 10.0, 70.0, 20.0, 90f, 35f)
+        every { player.world } returns world
+        every { entity.world } returns world
+        every { player.vehicle } returns null
+        every { player.allowFlight } returns true
+        every { entity.height } returns 2.0
+        every { entity.teleport(any<Location>()) } returns true
+        val definition = mockk<MountDefinition>()
+        every { definition.visualFlightOffsetY } returns null
+
+        isMountControlledBy(player, entity, MountControl.PLAYER_FLIGHT) shouldBe true
+        followVisualMount(player, entity, definition) shouldBe true
+
+        verify { entity.teleport(match<Location> { it.x == 10.0 && it.y == 68.5 && it.z == 20.0 && it.yaw == 90f && it.pitch == 0f }) }
+        verify(exactly = 0) { entity.addPassenger(any()) }
+        verify(exactly = 0) { player.teleport(any<Location>()) }
+        verify(exactly = 0) { player.velocity = any() }
+        every { player.allowFlight } returns false
+        isMountControlledBy(player, entity, MountControl.PLAYER_FLIGHT) shouldBe false
+    }
+
+    "native flight speed retains the configured nominal rate without doubling sprint" {
+        mountPlayerFlySpeed(0.98 / 1.8, false).toDouble() shouldBe (0.1 plusOrMinus 1.0e-7)
+        mountPlayerFlySpeed(0.98 / 1.8, true).toDouble() shouldBe (0.05 plusOrMinus 1.0e-7)
+    }
+
     "mount mobs stay physics-active while vanilla goals are disabled" {
         val mob = mockk<Mob>(relaxed = true)
 

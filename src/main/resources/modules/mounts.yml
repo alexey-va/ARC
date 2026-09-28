@@ -35,10 +35,10 @@ movement:
   walking-speed-scale: 0.16
   flying-speed-scale: 0.55
   swimming-speed-scale: 0.45
-  # 0s restores instant response. Individual mounts may override these under mounts.<id>.motion.
-  acceleration-time: 900ms
-  deceleration-time: 350ms
-  turn-time: 200ms
+  # Zero disables ARC inertia, including reversals. Native player-flight keeps vanilla physics.
+  acceleration-time: 0ms
+  deceleration-time: 0ms
+  turn-time: 0ms
   sprint-multiplier: 1.15
   jump-velocity: 0.5
   vertical-speed-ratio: 0.75
@@ -851,9 +851,9 @@ mounts:
           description:
             - "После спешивания оставляет Скорость II."
     motion:
-      acceleration-time: 350ms
-      deceleration-time: 250ms
-      turn-time: 120ms
+      acceleration-time: 0ms
+      deceleration-time: 0ms
+      turn-time: 0ms
     levels:
       - {speed: 1.65, handling: 0.9, sprint: 1, price: 25000}
       - {speed: 2.7, handling: 1, sprint: 1.03, price: 60000}
@@ -990,9 +990,9 @@ mounts:
           description:
             - "Защищает всадника от огня и лавы."
     motion:
-      acceleration-time: 1200ms
-      deceleration-time: 550ms
-      turn-time: 320ms
+      acceleration-time: 0ms
+      deceleration-time: 0ms
+      turn-time: 0ms
     levels:
       - {speed: 1.45, handling: 0.9, sprint: 1, price: 150000}
       - {speed: 2.35, handling: 1, sprint: 1.03, price: 300000}
@@ -1065,9 +1065,9 @@ mounts:
         name: "Лисий прыжок"
         multiplier: 1.35
     motion:
-      acceleration-time: 550ms
-      deceleration-time: 250ms
-      turn-time: 130ms
+      acceleration-time: 0ms
+      deceleration-time: 0ms
+      turn-time: 0ms
     levels:
       - {speed: 1.45, handling: 0.9, sprint: 1, price: 60}
       - {speed: 2.35, handling: 1, sprint: 1.03, price: 90}
@@ -1144,9 +1144,9 @@ mounts:
       - "дорогой, грозный"
       - "и удивительно быстрый."
     motion:
-      acceleration-time: 1300ms
-      deceleration-time: 550ms
-      turn-time: 320ms
+      acceleration-time: 0ms
+      deceleration-time: 0ms
+      turn-time: 0ms
     levels:
       - {speed: 1.65, handling: 0.9, sprint: 1, price: 240}
       - {speed: 2.65, handling: 1, sprint: 1.03, price: 360}
@@ -1274,6 +1274,7 @@ mounts:
         price: 40
   bee:
     type: flying
+    control: player-flight
     item: BEE_SPAWN_EGG
     entity: BEE
     name: "Пчела"
@@ -1318,6 +1319,7 @@ mounts:
         price: 15
   turtle:
     type: flying
+    control: player-flight
     item: TURTLE_SPAWN_EGG
     entity: TURTLE
     name: "Летающая черепаха"
@@ -1356,6 +1358,7 @@ mounts:
         price: 25
   frog2:
     type: flying
+    control: player-flight
     item: FROG_SPAWN_EGG
     entity: FROG
     name: "Летающая лягушка"
@@ -1399,6 +1402,7 @@ mounts:
           variant: WARM
   blaze:
     type: flying
+    control: player-flight
     item: BLAZE_SPAWN_EGG
     entity: BLAZE
     name: "Блэйз"
@@ -1430,6 +1434,7 @@ mounts:
         price: 120
   allay:
     type: flying
+    control: player-flight
     item: ALLAY_SPAWN_EGG
     entity: ALLAY
     name: "Эллэй"
@@ -1467,6 +1472,7 @@ mounts:
         price: 25
   parrot:
     type: flying
+    control: player-flight
     item: PARROT_SPAWN_EGG
     entity: PARROT
     name: "Попугай"
@@ -1516,6 +1522,7 @@ mounts:
           variant: GREEN
   bat:
     type: flying
+    control: player-flight
     item: BAT_SPAWN_EGG
     entity: BAT
     name: "Летучая мышь"
@@ -1548,6 +1555,7 @@ mounts:
         price: 25
   vex:
     type: flying
+    control: player-flight
     item: VEX_SPAWN_EGG
     entity: VEX
     name: "Вредина"
@@ -1585,6 +1593,7 @@ mounts:
         price: 70
   breeze:
     type: flying
+    control: player-flight
     item: BREEZE_SPAWN_EGG
     entity: BREEZE
     name: "Вихрь"
@@ -1604,9 +1613,9 @@ mounts:
           description:
             - "Смягчает падение после полёта."
     motion:
-      acceleration-time: 350ms
-      deceleration-time: 250ms
-      turn-time: 120ms
+      acceleration-time: 0ms
+      deceleration-time: 0ms
+      turn-time: 0ms
     levels:
       - {speed: 0.52, handling: 0.9, sprint: 1, price: 240}
       - {speed: 0.85, handling: 1, sprint: 1.03, price: 360}
@@ -1627,6 +1636,7 @@ mounts:
         price: 70
   phantom:
     type: flying
+    control: player-flight
     item: PHANTOM_SPAWN_EGG
     entity: PHANTOM
     name: "Фантом"
@@ -1659,6 +1669,7 @@ mounts:
         price: 70
   ghast:
     type: flying
+    control: player-flight
     item: GHAST_SPAWN_EGG
     entity: GHAST
     name: "Гаст"
@@ -2756,9 +2767,9 @@ mounts:
           description:
             - "Снижает получаемый всадником урон."
     motion:
-      acceleration-time: 1400ms
-      deceleration-time: 600ms
-      turn-time: 360ms
+      acceleration-time: 0ms
+      deceleration-time: 0ms
+      turn-time: 0ms
     levels:
       - {speed: 1.6, handling: 0.9, sprint: 1, price: 480}
       - {speed: 2.6, handling: 1, sprint: 1.03, price: 720}
@@ -2933,9 +2944,9 @@ mounts:
         damage: 2.5
         maximum-targets: 4
     motion:
-      acceleration-time: 1100ms
-      deceleration-time: 500ms
-      turn-time: 280ms
+      acceleration-time: 0ms
+      deceleration-time: 0ms
+      turn-time: 0ms
     levels:
       - {speed: 1.6, handling: 0.9, sprint: 1, price: 240}
       - {speed: 2.6, handling: 1, sprint: 1.03, price: 360}
@@ -2955,6 +2966,7 @@ mounts:
         price: 70
   shulker:
     type: flying
+    control: player-flight
     item: SHULKER_SPAWN_EGG
     entity: SHULKER
     name: "Шалкер"
@@ -3186,9 +3198,9 @@ mounts:
           description:
             - "Освещает тёмные леса и пещеры."
     motion:
-      acceleration-time: 1200ms
-      deceleration-time: 450ms
-      turn-time: 300ms
+      acceleration-time: 0ms
+      deceleration-time: 0ms
+      turn-time: 0ms
     levels:
       - {speed: 1.55, handling: 0.9, sprint: 1, price: 240}
       - {speed: 2.5, handling: 1, sprint: 1.03, price: 360}
@@ -3269,9 +3281,9 @@ mounts:
           description:
             - "Даёт всаднику Сопротивление II."
     motion:
-      acceleration-time: 1200ms
-      deceleration-time: 500ms
-      turn-time: 300ms
+      acceleration-time: 0ms
+      deceleration-time: 0ms
+      turn-time: 0ms
     levels:
       - {speed: 0.65, handling: 0.9, sprint: 1, price: 480}
       - {speed: 1.08, handling: 1, sprint: 1.03, price: 720}
@@ -3394,9 +3406,9 @@ mounts:
           description:
             - "Даёт всаднику Скорость I."
     motion:
-      acceleration-time: 1300ms
-      deceleration-time: 550ms
-      turn-time: 320ms
+      acceleration-time: 0ms
+      deceleration-time: 0ms
+      turn-time: 0ms
     levels:
       - {speed: 1.55, handling: 0.9, sprint: 1, price: 240}
       - {speed: 2.55, handling: 1, sprint: 1.03, price: 360}
@@ -3526,9 +3538,9 @@ mounts:
         damage: 3.0
         maximum-targets: 5
     motion:
-      acceleration-time: 1150ms
-      deceleration-time: 500ms
-      turn-time: 300ms
+      acceleration-time: 0ms
+      deceleration-time: 0ms
+      turn-time: 0ms
     levels:
       - {speed: 1.6, handling: 0.9, sprint: 1, price: 240}
       - {speed: 2.6, handling: 1, sprint: 1.03, price: 360}

@@ -24,6 +24,11 @@ enum class MountMovement(val displayName: String) {
     SWIMMING("Водный"),
 }
 
+enum class MountControl {
+    VEHICLE,
+    PLAYER_FLIGHT,
+}
+
 enum class MountRarity(val displayName: String, val color: String) {
     COMMON("Обычный", "<white>"),
     UNCOMMON("Необычный", "<green>"),
@@ -422,10 +427,18 @@ data class MountDefinition(
     val behaviors: List<MountBehaviorDefinition> = emptyList(),
     val motion: MountMotionOverride = MountMotionOverride(),
     val currency: String = "vault",
+    val control: MountControl = MountControl.VEHICLE,
+    val visualFlightOffsetY: Double? = null,
 ) {
     init {
         require(validId(id)) { "Invalid mount id: $id" }
         require(entityType.isNotBlank()) { "Mount '$id' entity type is blank" }
+        require(control != MountControl.PLAYER_FLIGHT || (movement == MountMovement.FLYING && passengerSeats == 0)) {
+            "Mount '$id' player-flight control requires a flying mount without passenger seats"
+        }
+        require(visualFlightOffsetY == null || (visualFlightOffsetY.isFinite() && visualFlightOffsetY in -16.0..16.0)) {
+            "Mount '$id' visual-flight-offset-y must be finite and between -16 and 16"
+        }
         require(passengerSeats in 0..passengerSeatLimit(entityType)) {
             "Mount '$id' passenger-seats must be between 0 and ${passengerSeatLimit(entityType)} for $entityType"
         }
@@ -813,6 +826,9 @@ object MountMotion {
         }
         val targetSpeed = targetVelocity.length
         val targetDirection = targetVelocity.normalized()
+        if (timing.accelerationTime.isZero && timing.decelerationTime.isZero && timing.turnTime.isZero) {
+            return MountMotionState(targetDirection, targetSpeed)
+        }
         val currentDirection = current.direction.normalized()
         val reversing =
             current.speed > MOTION_EPSILON &&

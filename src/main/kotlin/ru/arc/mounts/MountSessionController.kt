@@ -32,6 +32,9 @@ import org.bukkit.event.entity.ExplosionPrimeEvent
 import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerInputEvent
+import org.bukkit.event.player.PlayerJoinEvent
+import org.bukkit.event.player.PlayerGameModeChangeEvent
+import org.bukkit.event.player.PlayerInteractEntityEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.player.PlayerTeleportEvent
 import org.bukkit.persistence.PersistentDataType
@@ -116,6 +119,7 @@ class MountSessionController internal constructor(
         MountCareBoostStatus(record = null, active = false, remainingMillis = 0L, nextClaimInMillis = 0L)
     },
 ) : Listener {
+    private val visualFlight = MountVisualFlight(plugin)
     private val sessionsByPlayer = ConcurrentHashMap<UUID, MountSession>()
     private val playerByEntity = ConcurrentHashMap<UUID, UUID>()
     private val ownerKey = NamespacedKey(plugin, "mount_owner")
@@ -136,6 +140,7 @@ class MountSessionController internal constructor(
         if (tickTask != null) return
         plugin.server.pluginManager.registerEvents(this, plugin)
         passengers.start()
+        plugin.server.onlinePlayers.forEach(visualFlight::recover)
         tickTask = scheduler.runTimer(1L, 1L, Runnable(::tick))
     }
 
@@ -159,15 +164,15 @@ class MountSessionController internal constructor(
     fun activeSessionCount(): Int = sessionsByPlayer.size
 
     /**
-     * Returns a snapshot only while the controller still owns the session and the rider is
-     * actually mounted on that exact entity. Callers must not retain Bukkit objects from this
+     * Returns a snapshot only while the controller still owns the session and the rider
+     * controls that vehicle or visual flight. Callers must not retain Bukkit objects from this
      * method; the returned value is immutable and contains no mutation capability.
      */
     internal fun activeMountSnapshot(player: Player): ActiveMountSnapshot? {
         val session = sessionsByPlayer[player.uniqueId] ?: return null
         if (session.playerId != player.uniqueId) return null
         val entity = plugin.server.getEntity(session.entityId) as? LivingEntity ?: return null
-        if (!entity.isValid || !entity.passengers.contains(player)) return null
+        if (!entity.isValid || !isMountControlledBy(player, entity, session.definition.control)) return null
         return ActiveMountSnapshot(
             mountId = session.definition.id,
             mountName = session.definition.displayName,
@@ -200,13 +205,15 @@ class MountSessionController internal constructor(
                 replacementAppearance,
                 MountAppearanceApplicator.supportsAge(entity.type),
             )
-        if (!canApplyScale(entity, previousAppearance.scale, replacementAppearance.scale)) {
+        if (session.definition.control == MountControl.VEHICLE &&
+            !canApplyScale(entity, previousAppearance.scale, replacementAppearance.scale)) {
             return MountSessionUpdateResult.UNSAFE_APPEARANCE
         }
         val applied =
             runCatching {
                 MountAppearanceApplicator.apply(entity, replacementAppearance)
-                if (geometryMayGrow && entity.wouldCollideUsing(entity.boundingBox.clone())) {
+                if (session.definition.control == MountControl.VEHICLE && geometryMayGrow &&
+                    entity.wouldCollideUsing(entity.boundingBox.clone())) {
                     error("Replacement mount appearance collides with the world")
                 }
                 entity.isGlowing = settings.glow
@@ -296,7 +303,7 @@ class MountSessionController internal constructor(
 
         return try {
             configureEntity(spawned, definition, settings, player)
-            if (!spawned.addPassenger(player)) {
+            if (definition.control == MountControl.VEHICLE && !spawned.addPassenger(player)) {
                 spawned.remove()
                 return MountSpawnResult.SPAWN_FAILED
             }
@@ -312,8 +319,13 @@ class MountSessionController internal constructor(
                 )
             sessionsByPlayer[player.uniqueId] = session
             playerByEntity[spawned.uniqueId] = player.uniqueId
-            check(passengers.openRide(spawned, player, definition, session.hasRiderFireProtection())) {
-                "Unable to create passenger seats"
+            if (definition.control == MountControl.PLAYER_FLIGHT) {
+                visualFlight.begin(player, mountPlayerFlySpeed(maximumSpeed(session, now), player.isSprinting))
+                check(followVisualMount(player, spawned, definition)) { "Unable to position visual mount" }
+            } else {
+                check(passengers.openRide(spawned, player, definition, session.hasRiderFireProtection())) {
+                    "Unable to create passenger seats"
+                }
             }
             setAirborneMiningCompensation(
                 player,
@@ -350,6 +362,7 @@ class MountSessionController internal constructor(
             sessionsByPlayer.remove(player.uniqueId)
             playerByEntity.remove(spawned.uniqueId)
             passengers.closeRide(spawned.uniqueId)
+            if (definition.control == MountControl.PLAYER_FLIGHT) restoreVisualFlight(player)
             setAirborneMiningCompensation(player, airborneMiningModifier, enabled = false)
             spawned.remove()
             warn("Unable to spawn mount {} for {}: {}", definition.id, player.name, failure.javaClass.simpleName)
@@ -369,6 +382,7 @@ class MountSessionController internal constructor(
         val effectLocation = entity?.location ?: player?.location
 
         if (player != null) {
+            if (session.definition.control == MountControl.PLAYER_FLIGHT) restoreVisualFlight(player)
             if (entity != null && session.riderMountHidden) {
                 runCatching { setRiderMountHidden(player, entity, false) }
             }
@@ -386,6 +400,11 @@ class MountSessionController internal constructor(
         if (player != null && reason == MountRemovalReason.EXPIRED) {
             message(player, "expired", "<gray>Время поездки на маунте закончилось.")
         }
+    }
+
+    private fun restoreVisualFlight(player: Player) {
+        runCatching { visualFlight.restore(player) }
+            .onFailure { warn("Unable to restore mount flight for {}: {}", player.name, it.javaClass.simpleName) }
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -506,6 +525,22 @@ class MountSessionController internal constructor(
         if (playerByEntity.containsKey(event.entity.uniqueId)) event.isCancelled = true
     }
 
+    @EventHandler(priority = EventPriority.MONITOR)
+    fun onJoin(event: PlayerJoinEvent) = visualFlight.recover(event.player)
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun onGameModeChange(event: PlayerGameModeChangeEvent) {
+        if (sessionsByPlayer[event.player.uniqueId]?.definition?.control == MountControl.PLAYER_FLIGHT) {
+            remove(event.player.uniqueId, MountRemovalReason.INVALID)
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    fun onVisualMountInteract(event: PlayerInteractEntityEvent) {
+        val owner = playerByEntity[event.rightClicked.uniqueId] ?: return
+        if (sessionsByPlayer[owner]?.definition?.control == MountControl.PLAYER_FLIGHT) event.isCancelled = true
+    }
+
     @EventHandler fun onQuit(event: PlayerQuitEvent) = remove(event.player.uniqueId, MountRemovalReason.QUIT)
     @EventHandler fun onDeath(event: PlayerDeathEvent) = remove(event.entity.uniqueId, MountRemovalReason.DIED)
     @EventHandler fun onWorldChange(event: PlayerChangedWorldEvent) = remove(event.player.uniqueId, MountRemovalReason.CHANGED_WORLD)
@@ -513,6 +548,10 @@ class MountSessionController internal constructor(
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun onTeleport(event: PlayerTeleportEvent) {
         val session = sessionsByPlayer[event.player.uniqueId] ?: return
+        if (session.definition.control == MountControl.PLAYER_FLIGHT) {
+            remove(event.player.uniqueId, MountRemovalReason.TELEPORTED)
+            return
+        }
         scheduler.runLater(1L, Runnable {
             if (sessionsByPlayer[event.player.uniqueId] === session) remove(event.player.uniqueId, MountRemovalReason.TELEPORTED)
         })
@@ -523,20 +562,21 @@ class MountSessionController internal constructor(
         sessionsByPlayer.values.toList().forEach { session ->
             val player = plugin.server.getPlayer(session.playerId)
             val entity = plugin.server.getEntity(session.entityId) as? LivingEntity
+            val location = if (session.definition.control == MountControl.PLAYER_FLIGHT) player?.location else entity?.location
             when {
                 player == null || !player.isOnline -> remove(session.playerId, MountRemovalReason.QUIT)
-                entity == null || !entity.isValid || !entity.passengers.contains(player) -> remove(session.playerId, MountRemovalReason.INVALID)
+                entity == null || !entity.isValid || !isMountControlledBy(player, entity, session.definition.control) -> remove(session.playerId, MountRemovalReason.INVALID)
                 now >= session.expiresAtMillis -> remove(session.playerId, MountRemovalReason.EXPIRED)
                 now - session.lastActiveAtMillis >= configProvider().idleTimeout.toMillis() -> {
                     remove(session.playerId, MountRemovalReason.IDLE)
                 }
-                entity.location.y > entity.world.maxHeight + configProvider().maximumHeightAboveWorld -> {
+                location != null && location.y > location.world.maxHeight + configProvider().maximumHeightAboveWorld -> {
                     remove(session.playerId, MountRemovalReason.HEIGHT_LIMIT)
                 }
-                entity.location.y < entity.world.minHeight - configProvider().maximumHeightAboveWorld -> {
+                location != null && location.y < location.world.minHeight - configProvider().maximumHeightAboveWorld -> {
                     remove(session.playerId, MountRemovalReason.HEIGHT_LIMIT)
                 }
-                !entity.world.worldBorder.isInside(entity.location) -> {
+                location != null && !location.world.worldBorder.isInside(location) -> {
                     remove(session.playerId, MountRemovalReason.WORLD_BORDER)
                 }
                 session.definition.movement == MountMovement.SWIMMING &&
@@ -556,6 +596,22 @@ class MountSessionController internal constructor(
                         refreshAbilityEffects(player, session.definition.abilities.passives, session.settings.abilityUpgrades)
                     }
                     updateRiderMountVisibility(player, entity, session)
+                    if (session.definition.control == MountControl.PLAYER_FLIGHT) {
+                        val followed = runCatching {
+                            visualFlight.updateSpeed(player, mountPlayerFlySpeed(maximumSpeed(session, now), player.isSprinting))
+                            followVisualMount(player, entity, session.definition)
+                        }.onFailure { warn("Unable to update visual mount for {}: {}", player.name, it.javaClass.simpleName) }
+                        if (followed.getOrDefault(false) != true) {
+                            remove(session.playerId, MountRemovalReason.INVALID)
+                            return@forEach
+                        }
+                        val velocity = player.velocity
+                        session.motionState = MountMotionState(
+                            MotionVector(velocity.x, velocity.y, velocity.z).normalized(), velocity.length(),
+                        )
+                        emitTrail(entity, session)
+                        return@forEach
+                    }
                     val maximumSpeed = move(player, entity, session, now)
                     if (!passengers.reconcileRide(session.entityId, session.hasRiderFireProtection())) {
                         remove(session.playerId, MountRemovalReason.INVALID)
@@ -594,7 +650,7 @@ class MountSessionController internal constructor(
             .onFailure { warn("Unable to update rider-only mount visibility for {}: {}", player.name, it.javaClass.simpleName) }
     }
 
-    private fun move(player: Player, entity: LivingEntity, session: MountSession, nowMillis: Long): Double {
+    private fun maximumSpeed(session: MountSession, nowMillis: Long): Double {
         val config = configProvider()
         val speedScale =
             when (session.definition.movement) {
@@ -611,8 +667,13 @@ class MountSessionController internal constructor(
             session.settings.speed,
             careBoostStatusProvider(session.playerId, nowMillis),
         )
-        val maximumSpeed = (careBoostedSpeed * speedScale * sprint * abilitySpeed)
+        return (careBoostedSpeed * speedScale * sprint * abilitySpeed)
             .coerceAtMost(config.maximumSpeedBlocksPerTick)
+    }
+
+    private fun move(player: Player, entity: LivingEntity, session: MountSession, nowMillis: Long): Double {
+        val config = configProvider()
+        val maximumSpeed = maximumSpeed(session, nowMillis)
         val planar = MountMotion.planarDirection(player.location.yaw, session.input)
         val timing = session.definition.motion.resolve(config.motionTiming)
         val nativeHorse = nativeWalkingHorse(entity, session.definition.movement)
@@ -874,6 +935,12 @@ class MountSessionController internal constructor(
         entity.isGlowing = settings.glow
         configureMountDurability(entity)
         entity.setGravity(definition.movement == MountMovement.WALKING)
+        if (definition.control == MountControl.PLAYER_FLIGHT) {
+            entity.isCollidable = false
+            entity.isInvulnerable = true
+            entity.isSilent = true
+            entity.setAI(false)
+        }
         if (definition.movement == MountMovement.WALKING) {
             configureWalkingStepHeight(entity, settings.walkingStepHeight)
         }
@@ -1142,3 +1209,29 @@ internal fun shouldAllowCancelledMountSpawn(
         runCatching { UUID.fromString(spawnToken) }.getOrNull() in pendingSpawnTokens
 
 private const val HORSE_ATTRIBUTE_BLOCKS_PER_TICK = 2.1
+
+
+internal fun isMountControlledBy(player: Player, entity: LivingEntity, control: MountControl): Boolean =
+    if (control == MountControl.PLAYER_FLIGHT) {
+        player.vehicle == null && player.allowFlight && player.world == entity.world
+    } else {
+        entity.passengers.contains(player)
+    }
+
+/** Move only the cosmetic body; never teleport or apply per-tick velocity to its pilot. */
+internal fun followVisualMount(player: Player, entity: LivingEntity, definition: MountDefinition): Boolean {
+    val location = player.location
+    location.y += definition.visualFlightOffsetY ?: (-entity.height * 0.75)
+    location.pitch = 0.0f
+    entity.velocity = Vector(0.0, 0.0, 0.0)
+    return entity.teleport(location)
+}
+
+/** Nominal straight-line creative flight speed; the client owns acceleration and collisions. */
+internal fun mountPlayerFlySpeed(blocksPerTick: Double, sprinting: Boolean): Float {
+    require(blocksPerTick.isFinite() && blocksPerTick >= 0.0)
+    // Bukkit sends half this value as abilities.flyingSpeed. Vanilla horizontal
+    // input is damped by .98 and airborne momentum by .91; sprint doubles input.
+    val nativeSprint = if (sprinting) 2.0 else 1.0
+    return (blocksPerTick * 2.0 * (1.0 - 0.91) / (0.98 * nativeSprint)).coerceIn(0.0, 1.0).toFloat()
+}

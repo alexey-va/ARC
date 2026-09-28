@@ -75,6 +75,20 @@ class MountModuleConfigTest : StringSpec({
         catalog.all.last().id shouldBe "evoker"
     }
 
+    "catalog disables vehicle inertia and enables native flight only for solo flying mounts" {
+        val config = bundledConfig("controls")
+        config.catalog().all.forEach { mount ->
+            mount.motion.resolve(config.motionTiming) shouldBe MountMotionTiming(Duration.ZERO, Duration.ZERO, Duration.ZERO)
+            mount.control shouldBe if (mount.movement == MountMovement.FLYING && mount.passengerSeats == 0) {
+                MountControl.PLAYER_FLIGHT
+            } else MountControl.VEHICLE
+        }
+        val bee = config.catalog()["bee"]!!
+        shouldThrow<IllegalArgumentException> { bee.copy(movement = MountMovement.WALKING) }
+        shouldThrow<IllegalArgumentException> { config.catalog()["happy_ghast"]!!.copy(control = MountControl.PLAYER_FLIGHT) }
+        shouldThrow<IllegalArgumentException> { bee.copy(visualFlightOffsetY = Double.NaN) }
+    }
+
     "passenger seats default to zero and stay within the supported carrier envelope" {
         val catalog = bundledConfig("passenger-seats").catalog()
 
@@ -237,21 +251,10 @@ class MountModuleConfigTest : StringSpec({
         catalog.all.all { it.abilities.displayNames.isNotEmpty() || it.behaviors.isNotEmpty() } shouldBe true
     }
 
-    "authored sizes and motion make representative mounts feel distinct" {
-        val config = bundledConfig("mount-personality")
-        val catalog = config.catalog()
-        val defaults = config.motionTiming
-
+    "authored sizes remain distinct with inertia disabled" {
+        val catalog = bundledConfig("mount-personality").catalog()
         checkNotNull(catalog["horse"]).sizeOptions.map(MountSizeOptionDefinition::multiplier) shouldBe listOf(0.1, 1.0, 2.0, 3.0, 10.0)
         checkNotNull(catalog["bee"]).sizeOptions.map(MountSizeOptionDefinition::multiplier) shouldBe listOf(0.1, 0.5, 1.0, 3.0, 10.0)
-        checkNotNull(catalog["fox"]).motion.resolve(defaults) shouldBe
-            MountMotionTiming(Duration.ofMillis(550), Duration.ofMillis(250), Duration.ofMillis(130))
-        checkNotNull(catalog["camel"]).motion.resolve(defaults) shouldBe
-            MountMotionTiming(Duration.ofMillis(1_200), Duration.ofMillis(550), Duration.ofMillis(320))
-        checkNotNull(catalog["ravager"]).motion.resolve(defaults) shouldBe
-            MountMotionTiming(Duration.ofMillis(1_300), Duration.ofMillis(550), Duration.ofMillis(320))
-        checkNotNull(catalog["breeze"]).motion.resolve(defaults) shouldBe
-            MountMotionTiming(Duration.ofMillis(350), Duration.ofMillis(250), Duration.ofMillis(120))
     }
 
     "ravager has authored size tuning, a guarded ram and visible localized trails" {
@@ -339,12 +342,7 @@ class MountModuleConfigTest : StringSpec({
         config.compensateAirborneMining shouldBe true
         config.quickSummonSneakSwapHands shouldBe true
         config.quickSummonWhistle shouldBe true
-        config.motionTiming shouldBe
-            MountMotionTiming(
-                accelerationTime = Duration.ofMillis(900),
-                decelerationTime = Duration.ofMillis(350),
-                turnTime = Duration.ofMillis(200),
-            )
+        config.motionTiming shouldBe MountMotionTiming(Duration.ZERO, Duration.ZERO, Duration.ZERO)
         config.tuning.speedPercentages shouldBe listOf(50, 65, 80, 90, 100)
         config.tuning.walkingStepHeightsHundredths shouldBe listOf(110, 150, 200, 300, 400)
         config.tuning.walkingMaxStepHeightByLevelHundredths shouldBe listOf(110, 200, 400)
