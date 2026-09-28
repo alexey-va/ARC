@@ -76,6 +76,29 @@ class EliteMobsActionBarLocalizerTest : FreeSpec({
         localizer.localize(unrelated) shouldBe unrelated
     }
 
+    "only the exact alpha promotional system notice is suppressed" {
+        val localizer = EliteMobsActionBarLocalizer()
+        val notice = Component.text("[Alpha] Advanced Combat System", NamedTextColor.GOLD)
+            .append(Component.text(" is active here. The combat system is still in alpha, ", NamedTextColor.GRAY))
+            .append(Component.text("but testers have found it extremely enjoyable. ", NamedTextColor.GRAY))
+            .append(Component.text("Please share your feedback with ", NamedTextColor.WHITE))
+            .append(Component.text("the developer!", NamedTextColor.YELLOW))
+
+        localizer.shouldSuppressAlphaNotice(notice, isOverlay = false) shouldBe true
+        localizer.shouldSuppressAlphaNotice(
+            Component.text(
+                "[Alpha] Advanced Combat System is active here. The combat system is still in alpha, " +
+                    "but class data is still loading. Please share your feedback with the developer!",
+            ),
+            isOverlay = false,
+        ) shouldBe false
+        localizer.shouldSuppressAlphaNotice(
+            Component.text("Warning: Please share your feedback with the developer after reporting this issue."),
+            isOverlay = false,
+        ) shouldBe false
+        localizer.shouldSuppressAlphaNotice(notice, isOverlay = true) shouldBe false
+    }
+
     "off-class warning translates its class, weapons and effect" {
         val localizer = EliteMobsActionBarLocalizer(mapOf(
             "Paladin" to "Паладин",

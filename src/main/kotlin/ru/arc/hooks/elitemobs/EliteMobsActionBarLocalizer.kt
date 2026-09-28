@@ -49,6 +49,11 @@ internal class EliteMobsActionBarLocalizer(
         return Component.text(translated).style(component.style())
     }
 
+    internal fun shouldSuppressAlphaNotice(component: Component, isOverlay: Boolean): Boolean {
+        if (isOverlay) return false
+        return plain.serialize(component) == ALPHA_PROMOTIONAL_NOTICE
+    }
+
     internal fun translate(source: String): String {
         var translated = source
         for ((english, russian) in translations) translated = translated.replace(english, russian)
@@ -70,6 +75,9 @@ internal class EliteMobsActionBarLocalizer(
     }
 
     private companion object {
+        const val ALPHA_PROMOTIONAL_NOTICE =
+            "[Alpha] Advanced Combat System is active here. The combat system is still in alpha, " +
+                "but testers have found it extremely enjoyable. Please share your feedback with the developer!"
         val SECONDS = Regex("(\\d+(?:[.,]\\d+)?)s\\b")
         val ABILITY_RECEIPT = Regex("!.*-\\d+(?:[.,]\\d+)?\\s+(?:Fury|Mana|Resolve|Focus|Grace|Stamina)\\b")
         val FIXED_ANCHORS = listOf(
@@ -171,7 +179,11 @@ internal class EliteMobsActionBarPackets private constructor(
                     it.actionBarText = localizer.localize(it.actionBarText)
                 }
                 PacketType.Play.Server.SYSTEM_CHAT_MESSAGE -> WrapperPlayServerSystemChatMessage(event).let {
-                    if (it.isOverlay) it.message = localizer.localize(it.message)
+                    if (localizer.shouldSuppressAlphaNotice(it.message, it.isOverlay)) {
+                        event.isCancelled = true
+                    } else if (it.isOverlay) {
+                        it.message = localizer.localize(it.message)
+                    }
                 }
             }
         }
