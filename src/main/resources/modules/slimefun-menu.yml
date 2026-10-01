@@ -10,9 +10,19 @@ state:
 
 hub:
   world: "slimefun_hub"
-  x: 170.5
+  x: 172.5
+  y: 70.0
+  z: 220.5
+  yaw: 180.0
+  pitch: 0.0
+
+# Canonical network /spawn currently resolves PlayerWarps warp spawn on Origin.
+network-spawn:
+  server: spawn
+  world: rc_origin_spawn
+  x: 0.0
   y: 71.0
-  z: 206.5
+  z: 0.0
   yaw: 0.0
   pitch: 0.0
 

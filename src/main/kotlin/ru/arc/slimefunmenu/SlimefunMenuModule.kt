@@ -2,6 +2,7 @@ package ru.arc.slimefunmenu
 
 import com.bgsoftware.superiorskyblock.api.SuperiorSkyblockAPI
 import net.kyori.adventure.text.Component
+import net.william278.huskhomes.BukkitHuskHomes
 import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.Bukkit
 import org.bukkit.Location
@@ -16,6 +17,8 @@ import ru.arc.config.ArcRuntimeProfile
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import ru.arc.core.PluginModule
+import ru.arc.common.ServerLocation
+import ru.arc.hooks.HuskHomesTeleporter
 import ru.arc.gui.ArcMenus
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogBody
@@ -33,14 +36,21 @@ object SlimefunMenuModule : PluginModule {
     override val priority = 85
 
     private var config: Config? = null
+    private var homePolicy: SlimefunHomePolicy? = null
 
-    override fun init() = reload()
+    override fun init() {
+        reload()
+        homePolicy?.close()
+        homePolicy = SlimefunHomePolicy()
+    }
 
     override fun reload() {
         config = ConfigManager.of(ARC.instance.dataPath, RESOURCE).also { it.mergeMissingFromBundled(RESOURCE) }
     }
 
     override fun shutdown() {
+        homePolicy?.close()
+        homePolicy = null
         config = null
     }
 
@@ -333,7 +343,7 @@ object SlimefunMenuModule : PluginModule {
         val x = source.double("hub.x", DEFAULT_HUB_X)
         val y = source.double("hub.y", DEFAULT_HUB_Y)
         val z = source.double("hub.z", DEFAULT_HUB_Z)
-        val yaw = source.double("hub.yaw", 0.0)
+        val yaw = source.double("hub.yaw", 180.0)
         val pitch = source.double("hub.pitch", 0.0)
         val rotationYaw = yaw.toFloat()
         val rotationPitch = pitch.toFloat()
@@ -353,10 +363,37 @@ object SlimefunMenuModule : PluginModule {
     }
 
     fun sendToNetworkSpawn(player: Player) {
-        val messenger = ARC.pluginMessenger
-        if (!player.isOnline || messenger == null || !messenger.sendPlayerToServer(player, NETWORK_SPAWN_SERVER)) {
+        if (!ready(player)) return
+        val source = config
+        val homes = Bukkit.getPluginManager().getPlugin("HuskHomes") as? BukkitHuskHomes
+        val destination = source?.let {
+            networkSpawnDestination(
+                it.string("network-spawn.server", NETWORK_SPAWN_SERVER),
+                it.string("network-spawn.world", ""),
+                it.double("network-spawn.x", Double.NaN),
+                it.double("network-spawn.y", Double.NaN),
+                it.double("network-spawn.z", Double.NaN),
+                it.double("network-spawn.yaw", Double.NaN),
+                it.double("network-spawn.pitch", Double.NaN),
+            )
+        }
+        if (homes == null || !homes.isEnabled || !homes.settings.crossServer.isEnabled ||
+            destination == null || !HuskHomesTeleporter.teleport(player, destination)
+        ) {
             player.sendMessage(text("spawn.unavailable"))
         }
+    }
+
+    internal fun networkSpawnDestination(
+        server: String, world: String, x: Double, y: Double, z: Double, yaw: Double, pitch: Double,
+    ): ServerLocation? {
+        if (server != NETWORK_SPAWN_SERVER || !WORLD_NAME.matches(world) ||
+            listOf(x, y, z, yaw, pitch).any { !it.isFinite() } ||
+            !yaw.toFloat().isFinite() || !pitch.toFloat().isFinite() ||
+            x !in -30_000_000.0..30_000_000.0 || z !in -30_000_000.0..30_000_000.0 ||
+            y !in -2048.0..2048.0 || pitch !in -90.0..90.0
+        ) return null
+        return ServerLocation(server, world, x, y, z, yaw.toFloat(), pitch.toFloat())
     }
 
     private fun text(key: String): Component {
@@ -475,9 +512,10 @@ object SlimefunMenuModule : PluginModule {
     private val ADDON_ROUTES = setOf("guide", "shop", "hub", "spawn", "progress", "resources", "top")
     private const val SSB_PLUGIN = "SuperiorSkyblock2"
     private const val NETWORK_SPAWN_SERVER = "spawn"
-    private const val DEFAULT_HUB_X = 170.5
-    private const val DEFAULT_HUB_Y = 71.0
-    private const val DEFAULT_HUB_Z = 206.5
+    private val WORLD_NAME = Regex("[a-zA-Z0-9_-]{1,128}")
+    private const val DEFAULT_HUB_X = 172.5
+    private const val DEFAULT_HUB_Y = 70.0
+    private const val DEFAULT_HUB_Z = 220.5
 }
 
 object SlimefunMenuCommand : CommandExecutor, TabCompleter {
