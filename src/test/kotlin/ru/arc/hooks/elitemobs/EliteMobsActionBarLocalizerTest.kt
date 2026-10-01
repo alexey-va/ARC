@@ -110,4 +110,35 @@ class EliteMobsActionBarLocalizerTest : FreeSpec({
         plain.serialize(localizer.localize(Component.text(source))) shouldBe
             "Неподходящее оружие » -20% урона. Мечи и Топоры наносят +10% больше урона с классом Паладин."
     }
+
+    "chat onboarding notices translate their gradient heading and complete instructions" {
+        val localizer = EliteMobsActionBarLocalizer()
+        val noClass = "No class active!".fold(Component.empty()) { result, character ->
+            result.append(Component.text(character, NamedTextColor.GOLD))
+        }.append(Component.text(" Open /em class and pick a free class to use abilities here."))
+        val controls = Component.text("[Alpha] Advanced Combat System", NamedTextColor.GOLD)
+            .append(Component.text(" » New: hold sneak and double-tap F ", NamedTextColor.GRAY))
+            .append(Component.text("to toggle class controls anywhere outside EliteMobs content."))
+
+        plain.serialize(localizer.localizeChatNotice(noClass)) shouldBe
+            "Класс не выбран. Выберите бесплатный класс: Shift + F → Классы."
+        plain.serialize(localizer.localizeChatNotice(controls)) shouldBe
+            "Управление классом » Вне данжей его можно переключать: зажмите Shift и дважды нажмите F."
+        localizer.shouldSuppressAlphaNotice(noClass, isOverlay = false) shouldBe false
+        localizer.shouldSuppressAlphaNotice(controls, isOverlay = false) shouldBe false
+    }
+
+    "chat localization preserves combat errors and unrelated messages sharing the heading or class names" {
+        val localizer = EliteMobsActionBarLocalizer(mapOf("Mage" to "Маг"))
+        listOf(
+            "[Alpha] Advanced Combat System is disabled on this server.",
+            "Your [Alpha] Advanced Combat System class data could not be loaded. Please report this to the developer.",
+            "No class active! Class data is still loading.",
+            "Mage: No class active! Open /em class and pick a free class to use abilities here.",
+            "[EliteMobs] A message from the developer about the new combat system.",
+        ).forEach { text ->
+            val notice = Component.text(text)
+            localizer.localizeChatNotice(notice) shouldBe notice
+        }
+    }
 })

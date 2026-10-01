@@ -284,6 +284,17 @@ staging_dir="$(mktemp -d)"
 upload_path="${staging_dir}/${RP_UPLOAD_NAME}"
 cp "${RP_SOURCE}" "${upload_path}"
 
+# Java clients do not consume the bundled Bedrock pack or editor/system files.
+# Filter the publication copy so plugin exporters cannot reintroduce them.
+excluded_files="${staging_dir}/excluded-files.txt"
+unzip -Z1 "${upload_path}" | awk '
+  /(^|\/)rspm_bedrock_pack\// || tolower($0) ~ /(^|\/)desktop\.ini$/ || tolower($0) ~ /\.aseprite$/
+' > "${excluded_files}"
+if [[ -s "${excluded_files}" ]]; then
+  zip -q -d "${upload_path}" -@ < "${excluded_files}" || die "Unable to remove non-Java pack files"
+  log "Excluded non-Java/editor files=$(wc -l < "${excluded_files}" | tr -d ' ')"
+fi
+
 prepare_itemsadder_mirror
 
 # Minecraft 1.21.9+ reads min_format, max_format, and supported_formats from the

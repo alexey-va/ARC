@@ -17,15 +17,15 @@ import org.bukkit.Bukkit
 import ru.arc.util.Logging
 
 /**
- * Translates EliteMobs' resource-pack-free alpha combat action bar without patching EliteMobs.
- * Packets have no plugin owner, so the transformer accepts only the exact HUD, class-control and
- * ability-feedback shapes EliteMobs emits.
+ * Translates EliteMobs' resource-pack-free combat UI without patching EliteMobs.
+ * Packets have no plugin owner, so chat accepts only exact onboarding notices, while action bars
+ * accept the HUD, class-control and ability-feedback shapes EliteMobs emits.
  */
 internal class EliteMobsActionBarLocalizer(
     dynamicTranslations: Map<String, String> = emptyMap(),
 ) {
     private val plain = PlainTextComponentSerializer.plainText()
-    private val translations = (dynamicTranslations + FIXED_TRANSLATIONS)
+    private val translations = (dynamicTranslations + FIXED_TRANSLATIONS + CHAT_NOTICE_TRANSLATIONS)
         .filter { (source, target) -> source.isNotBlank() && source != target }
         .entries
         .sortedByDescending { it.key.length }
@@ -54,6 +54,9 @@ internal class EliteMobsActionBarLocalizer(
         return plain.serialize(component) == ALPHA_PROMOTIONAL_NOTICE
     }
 
+    internal fun localizeChatNotice(component: Component): Component =
+        if (plain.serialize(component) in CHAT_NOTICE_TRANSLATIONS) localize(component) else component
+
     internal fun translate(source: String): String {
         var translated = source
         for ((english, russian) in translations) translated = translated.replace(english, russian)
@@ -61,6 +64,7 @@ internal class EliteMobsActionBarLocalizer(
     }
 
     private fun looksLikeEliteMobsCombatUi(text: String): Boolean {
+        if (text in CHAT_NOTICE_TRANSLATIONS) return true
         if (text.startsWith("HP ")) return true
         if (FIXED_ANCHORS.any(text::contains)) return true
         if (text.contains("/F]") && text.contains("/LMB]") && text.contains("/RMB]")) return true
@@ -78,6 +82,13 @@ internal class EliteMobsActionBarLocalizer(
         const val ALPHA_PROMOTIONAL_NOTICE =
             "[Alpha] Advanced Combat System is active here. The combat system is still in alpha, " +
                 "but testers have found it extremely enjoyable. Please share your feedback with the developer!"
+        val CHAT_NOTICE_TRANSLATIONS = mapOf(
+            "No class active! Open /em class and pick a free class to use abilities here." to
+                "Класс не выбран. Выберите бесплатный класс: Shift + F → Классы.",
+            "[Alpha] Advanced Combat System » New: hold sneak and double-tap F " +
+                "to toggle class controls anywhere outside EliteMobs content." to
+                "Управление классом » Вне данжей его можно переключать: зажмите Shift и дважды нажмите F.",
+        )
         val SECONDS = Regex("(\\d+(?:[.,]\\d+)?)s\\b")
         val ABILITY_RECEIPT = Regex("!.*-\\d+(?:[.,]\\d+)?\\s+(?:Fury|Mana|Resolve|Focus|Grace|Stamina)\\b")
         val FIXED_ANCHORS = listOf(
@@ -183,6 +194,8 @@ internal class EliteMobsActionBarPackets private constructor(
                         event.isCancelled = true
                     } else if (it.isOverlay) {
                         it.message = localizer.localize(it.message)
+                    } else {
+                        it.message = localizer.localizeChatNotice(it.message)
                     }
                 }
             }
