@@ -1274,7 +1274,7 @@ mounts:
         price: 40
   bee:
     type: flying
-    control: player-flight
+    control: vehicle
     item: BEE_SPAWN_EGG
     entity: BEE
     name: "Пчела"
@@ -1319,7 +1319,7 @@ mounts:
         price: 15
   turtle:
     type: flying
-    control: player-flight
+    control: vehicle
     item: TURTLE_SPAWN_EGG
     entity: TURTLE
     name: "Летающая черепаха"
@@ -1358,7 +1358,7 @@ mounts:
         price: 25
   frog2:
     type: flying
-    control: player-flight
+    control: vehicle
     item: FROG_SPAWN_EGG
     entity: FROG
     name: "Летающая лягушка"
@@ -1402,7 +1402,7 @@ mounts:
           variant: WARM
   blaze:
     type: flying
-    control: player-flight
+    control: vehicle
     item: BLAZE_SPAWN_EGG
     entity: BLAZE
     name: "Блэйз"
@@ -1434,7 +1434,7 @@ mounts:
         price: 120
   allay:
     type: flying
-    control: player-flight
+    control: vehicle
     item: ALLAY_SPAWN_EGG
     entity: ALLAY
     name: "Эллэй"
@@ -1472,7 +1472,7 @@ mounts:
         price: 25
   parrot:
     type: flying
-    control: player-flight
+    control: vehicle
     item: PARROT_SPAWN_EGG
     entity: PARROT
     name: "Попугай"
@@ -1522,7 +1522,7 @@ mounts:
           variant: GREEN
   bat:
     type: flying
-    control: player-flight
+    control: vehicle
     item: BAT_SPAWN_EGG
     entity: BAT
     name: "Летучая мышь"
@@ -1555,7 +1555,7 @@ mounts:
         price: 25
   vex:
     type: flying
-    control: player-flight
+    control: vehicle
     item: VEX_SPAWN_EGG
     entity: VEX
     name: "Вредина"
@@ -1593,7 +1593,7 @@ mounts:
         price: 70
   breeze:
     type: flying
-    control: player-flight
+    control: vehicle
     item: BREEZE_SPAWN_EGG
     entity: BREEZE
     name: "Вихрь"
@@ -1636,7 +1636,7 @@ mounts:
         price: 70
   phantom:
     type: flying
-    control: player-flight
+    control: vehicle
     item: PHANTOM_SPAWN_EGG
     entity: PHANTOM
     name: "Фантом"
@@ -1669,7 +1669,7 @@ mounts:
         price: 70
   ghast:
     type: flying
-    control: player-flight
+    control: vehicle
     item: GHAST_SPAWN_EGG
     entity: GHAST
     name: "Гаст"
@@ -2966,7 +2966,7 @@ mounts:
         price: 70
   shulker:
     type: flying
-    control: player-flight
+    control: vehicle
     item: SHULKER_SPAWN_EGG
     entity: SHULKER
     name: "Шалкер"
