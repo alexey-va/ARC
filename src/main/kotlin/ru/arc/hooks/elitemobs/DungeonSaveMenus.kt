@@ -46,6 +46,7 @@ internal class DungeonSaveMenus(
         val view = dungeon.panelView(player) ?: run { unavailable(player); return }
         val classView = classService.view(player)
         val visit = view.visit
+        val continuation = dungeon.continuation(player)
         val blocked = dungeon.saveBlockReason(player, view.saves)
         val state = when {
             visit.waiting -> text("panel.waiting", "<#d7b486>Сбор группы · готовьтесь к старту")
@@ -83,6 +84,9 @@ internal class DungeonSaveMenus(
                 action("shop", "panel.shop-label", "<#f4d87a>Припасы ›", "panel.shop-tooltip", "Припасы, кейсы и бусты опыта за кристаллы") { shop(player) },
                 lostLoot(player),
                 action("saves", "panel.saves-label", "<#c4a7e7>Сохранения ›", "panel.saves-tooltip", "Ваши ручные точки, автосохранения и место прошлого выхода") { open(player) },
+                if (continuation != null) action("resume", "panel.resume-label", "<#9bd48d>Продолжить с места выхода", "panel.resume-tooltip", "Открыть личный портал к месту прошлого выхода из этого данжа", close = true) {
+                    dungeon.travel(player, continuation, "exit")
+                } else null,
                 action("entry", "panel.entry-label", "<#92bed8>К началу данжа ›", "panel.entry-tooltip", "Обычный портал к началу данжа", close = view.saves?.entry != null) {
                     if (view.saves?.entry != null) dungeon.travel(player, view.saves, "entry") else panel(player, text("panel.entry-unavailable", "<#e8dfd2>Безопасный переход ко входу сейчас недоступен. Для выхода используйте кнопку внизу."))
                 }.let { if (view.saves?.entry != null) it else it.copy(label = text("panel.entry-disabled", "<#e8dfd2>[Недоступно] К началу данжа")) },

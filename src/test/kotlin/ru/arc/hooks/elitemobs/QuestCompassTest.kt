@@ -129,22 +129,22 @@ class QuestCompassTest : FreeSpec({
         every { player.location } returns Location(firstWorld, 0.0, 64.0, 0.0)
         every { Bukkit.getOnlinePlayers() } returns listOf(player)
         var available = listOf(DungeonCompassPoint(firstId, 0.0, 64.0, 10.0, DungeonCompassPointKind.CHEST))
-        val points = mockk<DungeonCompassPoints> { every { nearby(player) } answers { available } }
+        val points = mockk<DungeonCompassPoints> { every { nearby(player, any()) } answers { available } }
         val compass = QuestCompass({ emptyMap() }, isEliteWorld = { true }, points = points)
         compass.refresh()
         val capture = slot<BossBar>()
         verify { player.showBossBar(capture(capture)) }
         val plain = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
-        plain.serialize(capture.captured.name())[37] shouldBe '▣'
+        plain.serialize(capture.captured.name())[37] shouldBe '□'
         repeat(19) { compass.refresh() }
-        verify(exactly = 1) { points.nearby(player) }
+        verify(exactly = 1) { points.nearby(player, 0L) }
         available = emptyList()
         compass.refresh()
-        plain.serialize(capture.captured.name()).contains('▣') shouldBe false
-        verify(exactly = 2) { points.nearby(player) }
+        plain.serialize(capture.captured.name()).contains('□') shouldBe false
+        verify(exactly = 1) { points.nearby(player, 20L) }
         every { player.location } returns Location(secondWorld, 0.0, 64.0, 0.0)
         compass.refresh()
-        verify(exactly = 3) { points.nearby(player) }
+        verify(exactly = 1) { points.nearby(player, 21L) }
         compass.close()
     }
 

@@ -72,7 +72,7 @@ internal class QuestCompass(
                 nearby = emptyList()
                 nextPointRefresh = 0
             } else if (tick >= nextPointRefresh || nearbyWorld != location.world?.uid) {
-                nearby = points.nearby(player)
+                nearby = points.nearby(player, tick)
                 nearbyWorld = location.world?.uid
                 nextPointRefresh = tick + 20
             }

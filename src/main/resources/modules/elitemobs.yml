@@ -100,6 +100,7 @@ dungeon-qol:
     saved-at: 'Сохранено'
     coordinates: 'Координаты'
   enabled: true
+  # Saves enable voluntary continuation; native entrances keep their arrival point.
   resume-enabled: true
   resume-hours: 72
   titles-enabled: true
@@ -117,6 +118,9 @@ dungeon-qol:
     entry:
       title: <gold>Готовы к данжу?
       subtitle: <white>Shift + F <gray>— меню данжа
+    continue-entry:
+      title: <gold>Вы в данже
+      subtitle: <white>Shift + F <gray>→</gray> <green>Продолжить с места выхода
     resumed:
       title: <green>Продолжаем
       subtitle: <white>Shift + F <gray>— меню данжа
@@ -144,6 +148,7 @@ dungeon-qol:
       seconds: <value> с
       unavailable: <#e8dfd2>Настройка автосохранения сейчас недоступна.
     messages:
+      resume-unavailable: '<#e8dfd2>В этом данже нет безопасного места прошлого выхода. Начало и другие точки доступны в меню: Shift + F → «Сохранения».'
       changed: <red>Данж или сохранение изменились. Нажмите Shift + F и откройте «Сохранения» заново.
       combat: '<red>Во время боя сохраняться и перемещаться нельзя. Подождите 15 секунд без боя. <#e8dfd2>Для выхода: Shift + F → «Выйти из данжа».'
       cooldown: <#e8dfd2>Подождите 5 секунд между сохранениями.
@@ -211,6 +216,8 @@ dungeon-qol:
     y: 78.0
     z: 267.5
   panel:
+    resume-label: '<#9bd48d>Продолжить с места выхода'
+    resume-tooltip: Открыть личный портал к месту прошлого выхода из этого данжа
     return-label: '<#92bed8>Вернуться в данж ›'
     return-tooltip: Вернуться в последний обычный данж на место выхода
     return-disabled: '<#e8dfd2>[Недоступно] Вернуться в данж'

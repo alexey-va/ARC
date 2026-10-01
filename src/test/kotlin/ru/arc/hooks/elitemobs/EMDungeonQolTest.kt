@@ -75,7 +75,7 @@ class EMDungeonQolTest : FreeSpec({
         }
     }
 
-    "wormhole plugin entry returns to the latest open dungeon exit even after recent combat" {
+    "wormhole plugin entry keeps its arrival point and offers the latest open exit" {
         withScheduler {
             val player = paper.addPlayer("wormhole-return")
             val dungeon = paper.addSimpleWorld("open-dungeon")
@@ -94,8 +94,10 @@ class EMDungeonQolTest : FreeSpec({
             qol.rememberDeparture(teleport(player, latest, hub.spawnLocation))
             player.teleport(hub.spawnLocation)
             val entry = PlayerTeleportEvent(player, hub.spawnLocation, dungeon.spawnLocation, PlayerTeleportEvent.TeleportCause.PLUGIN)
-            qol.resumeOnEntry(entry)
-            entry.to shouldBe latest
+            dispatchTeleport(paper, qol, entry)
+            entry.to shouldBe dungeon.spawnLocation
+            player.teleport(entry.to)
+            qol.continuation(player)!!.exit shouldBe latest
             qol.close()
         }
     }
@@ -118,6 +120,26 @@ class EMDungeonQolTest : FreeSpec({
             portal!!()
             portal!!()
             moved shouldBe listOf(exit)
+            qol.close()
+        }
+    }
+
+    "logout remembers the departure without changing the next native entrance" {
+        withScheduler {
+            val player = paper.addPlayer("logout-return")
+            val dungeon = paper.addSimpleWorld("logout-dungeon")
+            val hub = paper.addSimpleWorld("logout-hub")
+            val exit = Location(dungeon, 17.5, 70.0, -6.5)
+            val qol = EMDungeonQol(config(), { if (it == dungeon) DungeonVisit("open") else null }, { true }, clock = { 100L })
+            player.teleport(exit)
+            qol.rememberLogout(mockk<org.bukkit.event.player.PlayerQuitEvent> { every { getPlayer() } returns player })
+            player.teleport(hub.spawnLocation)
+            qol.lastReturn(player)!!.location shouldBe exit
+            val entry = teleport(player, hub.spawnLocation, dungeon.spawnLocation)
+            dispatchTeleport(paper, qol, entry)
+            entry.to shouldBe dungeon.spawnLocation
+            player.teleport(entry.to)
+            qol.continuation(player)!!.exit shouldBe exit
             qol.close()
         }
     }
@@ -148,17 +170,26 @@ class EMDungeonQolTest : FreeSpec({
         }
     }
 
-    "retargets a cross-world entry to a safe checkpoint for the current run" {
+    "cross-world entry keeps the native point and continuation requires a deliberate portal use" {
         withScheduler {
             val player = paper.addPlayer("resume")
             val dungeon = paper.addSimpleWorld("dungeon")
             val hub = paper.addSimpleWorld("hub")
             val checkpoint = Location(dungeon, 12.0, 70.0, 4.0)
-            val qol = EMDungeonQol(config(), { world -> if (world == dungeon) DungeonVisit("run") else null }, { true }, clock = { 100L })
+            var portal: (() -> Unit)? = null
+            val moved = mutableListOf<Location>()
+            val qol = EMDungeonQol(config(), { world -> if (world == dungeon) DungeonVisit("run") else null }, { true }, clock = { 100L },
+                move = { _, destination, _ -> moved += destination; true }, openPortal = { _, action -> portal = action })
             qol.rememberDeparture(teleport(player, checkpoint, Location(hub, 1.0, 70.0, 1.0)))
             val entry = teleport(player, Location(hub, 1.0, 70.0, 1.0), Location(dungeon, 0.0, 70.0, 0.0))
-            qol.resumeOnEntry(entry)
-            entry.to shouldBe checkpoint
+            dispatchTeleport(paper, qol, entry)
+            entry.to shouldBe Location(dungeon, 0.0, 70.0, 0.0)
+            player.teleport(entry.to)
+            qol.action(player, "resume")
+            moved shouldBe emptyList()
+            portal!!()
+            portal!!()
+            moved shouldBe listOf(checkpoint)
             qol.close()
         }
     }
@@ -173,12 +204,15 @@ class EMDungeonQolTest : FreeSpec({
             val point = Location(dungeon, 10.0, 70.0, 10.0)
             qol.rememberDeparture(teleport(player, point, Location(hub, 0.0, 70.0, 0.0)))
             val denied = teleport(player, Location(hub, 0.0, 70.0, 0.0), Location(dungeon, 0.0, 70.0, 0.0))
-            qol.resumeOnEntry(denied)
+            dispatchTeleport(paper, qol, denied)
             denied.to.x shouldBe 0.0
+            player.teleport(denied.to)
+            qol.continuation(player) shouldBe null
             members = setOf(player.uniqueId)
             val admitted = teleport(player, denied.from, denied.to)
-            qol.resumeOnEntry(admitted)
-            admitted.to shouldBe point
+            dispatchTeleport(paper, qol, admitted)
+            admitted.to shouldBe denied.to
+            qol.continuation(player)!!.exit shouldBe point
             qol.close()
         }
     }
@@ -208,7 +242,7 @@ class EMDungeonQolTest : FreeSpec({
         }
     }
 
-    "does not resume same-world, unsafe, dead, or cancelled teleports" {
+    "native same-world unsafe dead and cancelled destinations are never rewritten" {
         withScheduler {
             val dungeon = paper.addSimpleWorld("dungeon")
             val hub = paper.addSimpleWorld("hub")
@@ -218,13 +252,15 @@ class EMDungeonQolTest : FreeSpec({
             val player = paper.addPlayer("guard")
             safeQol.rememberDeparture(teleport(player, checkpoint, Location(hub, 1.0, 70.0, 1.0)))
             val sameWorld = teleport(player, Location(dungeon, 1.0, 70.0, 1.0), Location(dungeon, 2.0, 70.0, 2.0))
-            safeQol.resumeOnEntry(sameWorld)
+            dispatchTeleport(paper, safeQol, sameWorld)
             sameWorld.to shouldBe Location(dungeon, 2.0, 70.0, 2.0)
 
             val unsafeQol = EMDungeonQol(config(), resolve, { false }, clock = { 100L })
             val unsafe = teleport(player, Location(hub, 1.0, 70.0, 1.0), Location(dungeon, 2.0, 70.0, 2.0))
-            unsafeQol.resumeOnEntry(unsafe)
+            dispatchTeleport(paper, unsafeQol, unsafe)
             unsafe.to shouldBe Location(dungeon, 2.0, 70.0, 2.0)
+            player.teleport(unsafe.to)
+            unsafeQol.continuation(player) shouldBe null
 
             val dead = paper.addPlayer("dead")
             safeQol.rememberDeparture(teleport(dead, checkpoint, Location(hub, 1.0, 70.0, 1.0)))
@@ -232,7 +268,7 @@ class EMDungeonQolTest : FreeSpec({
             dead.health = 0.0
             safeQol.cancelTravelOnDeath(mockk<PlayerDeathEvent> { every { entity } returns dead })
             val deadEntry = teleport(dead, Location(hub, 1.0, 70.0, 1.0), Location(dungeon, 2.0, 70.0, 2.0))
-            safeQol.resumeOnEntry(deadEntry)
+            dispatchTeleport(paper, safeQol, deadEntry)
             deadEntry.to shouldBe Location(dungeon, 2.0, 70.0, 2.0)
 
             val live = paper.addPlayer("cancelled")
@@ -275,7 +311,39 @@ class EMDungeonQolTest : FreeSpec({
         }
     }
 
-    "death preserves resume manual and auto points while completion clears the old run" {
+    "entry subtitle offers continuation only for a safe admitted current-run departure" {
+        withScheduler { scheduler ->
+            val player = paper.addPlayer("continuation-hint")
+            val dungeon = paper.addSimpleWorld("continuation-dungeon")
+            val hub = paper.addSimpleWorld("continuation-hub")
+            val audience = RecordingAudience()
+            var run = "current"
+            var safe = true
+            val settings = config(titles = true)
+            val qol = EMDungeonQol(settings, { if (it == dungeon) DungeonVisit(run) else null }, { safe }, audience, { 100L })
+            val plain = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+            qol.rememberDeparture(teleport(player, Location(dungeon, 14.0, 70.0, 9.0), hub.spawnLocation))
+            player.teleport(dungeon.spawnLocation)
+            fun enteredSubtitle(): String {
+                qol.entered(PlayerChangedWorldEvent(player, hub))
+                scheduler.tick(30)
+                return plain.serialize(audience.titles.last().second.subtitle())
+            }
+            enteredSubtitle() shouldBe "Shift + F → Продолжить с места выхода"
+            audience.messages.size shouldBe 0
+            safe = false
+            enteredSubtitle() shouldBe "Shift + F — меню данжа"
+            safe = true
+            every { settings.bool("dungeon-qol.resume-enabled", true) } returns false
+            enteredSubtitle() shouldBe "Shift + F — меню данжа"
+            every { settings.bool("dungeon-qol.resume-enabled", true) } returns true
+            run = "new-run"
+            enteredSubtitle() shouldBe "Shift + F — меню данжа"
+            qol.close()
+        }
+    }
+
+    "death preserves optional continuation and saves while completion clears the old run" {
         withScheduler {
             val player = paper.addPlayer("clear")
             val dungeon = paper.addSimpleWorld("dungeon")
@@ -291,8 +359,9 @@ class EMDungeonQolTest : FreeSpec({
             qol.cancelTravelOnDeath(mockk<PlayerDeathEvent> { every { entity } returns player })
             qol.view(player)!!.points.map { it.kind }.toSet() shouldBe setOf(DungeonSaveKind.MANUAL, DungeonSaveKind.AUTO)
             val afterDeath = teleport(player, Location(hub, 1.0, 70.0, 1.0), Location(dungeon, 2.0, 70.0, 2.0))
-            qol.resumeOnEntry(afterDeath)
-            afterDeath.to shouldBe checkpoint
+            dispatchTeleport(paper, qol, afterDeath)
+            afterDeath.to shouldBe Location(dungeon, 2.0, 70.0, 2.0)
+            qol.continuation(player)!!.exit shouldBe checkpoint
 
             qol.rememberDeparture(teleport(player, checkpoint, Location(hub, 1.0, 70.0, 1.0)))
             val instance = mockk<DungeonInstance>()
@@ -300,8 +369,9 @@ class EMDungeonQolTest : FreeSpec({
             every { instance.world } returns dungeon
             qol.completed(mockk<DungeonCompleteEvent> { every { dungeonInstance } returns instance })
             val afterComplete = teleport(player, Location(hub, 1.0, 70.0, 1.0), Location(dungeon, 2.0, 70.0, 2.0))
-            qol.resumeOnEntry(afterComplete)
+            dispatchTeleport(paper, qol, afterComplete)
             afterComplete.to shouldBe Location(dungeon, 2.0, 70.0, 2.0)
+            qol.continuation(player) shouldBe null
             qol.close()
         }
     }
@@ -324,6 +394,12 @@ private fun config(titles: Boolean = false): Config = mockk<Config>(relaxed = tr
 
 private fun teleport(player: Player, from: Location, to: Location) =
     PlayerTeleportEvent(player, from, to, PlayerTeleportEvent.TeleportCause.COMMAND)
+
+private fun dispatchTeleport(paper: MockBukkitTestRuntime, qol: EMDungeonQol, event: PlayerTeleportEvent) {
+    val plugin = paper.server.pluginManager.getPlugin("DungeonEntryTest") ?: paper.createSimplePlugin("DungeonEntryTest")
+    paper.server.pluginManager.registerEvents(qol, plugin)
+    try { paper.callEvent(event) } finally { org.bukkit.event.HandlerList.unregisterAll(qol) }
+}
 
 private class RecordingAudience : PaperAudienceEffects {
     val messages = mutableListOf<Pair<Player, Component>>()

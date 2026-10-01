@@ -54,6 +54,27 @@ class DungeonPanelTest : FreeSpec({
         shown.last().id shouldBe "dungeon.panel"
     }
 
+    "continuation is an explicit root action tied to the displayed saved departure" {
+        val player = paper.addPlayer("continue")
+        val world = paper.addSimpleWorld("continue-dungeon")
+        val dungeon = mockk<EMDungeonQol>(relaxed = true)
+        val expected = DungeonSaveView(world.uid, "run", emptyList(), world.spawnLocation, Location(world, 12.0, 70.0, 4.0))
+        every { dungeon.panelView(player) } returns DungeonPanelView(world.uid, DungeonVisit("run"), expected)
+        every { dungeon.continuation(player) } returns expected
+        every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(secondArg<String>()) }
+        val shown = mutableListOf<PaperDialogScreen>()
+        val menus = DungeonSaveMenus(dungeon) { _, screen, _ -> shown += screen }
+        menus.panel(player)
+        val resume = shown.last().buttons.single { it.id.value == "resume" }
+        resume.closeDialogBeforeAction shouldBe true
+        verify(exactly = 0) { dungeon.travel(player, any(), any()) }
+        resume.onClick.handle(mockk())
+        verify(exactly = 1) { dungeon.travel(player, expected, "exit") }
+        every { dungeon.continuation(player) } returns null
+        menus.panel(player)
+        shown.last().buttons.none { it.id.value == "resume" } shouldBe true
+    }
+
     "root and child footers follow the default back preference" {
         val player = paper.addPlayer("footer")
         val world = paper.addSimpleWorld("dungeon")

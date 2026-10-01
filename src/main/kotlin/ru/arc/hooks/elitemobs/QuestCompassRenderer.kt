@@ -33,6 +33,7 @@ internal object QuestCompassRenderer {
     private val scale = TextColor.color(0xe8dfd2)
     private val target = TextColor.color(0x9bd48d)
     private val gold = TextColor.color(0xffcf70)
+    private val muted = TextColor.color(0x969696)
     private val font: Key = Key.key("minecraft", "default")
     private val nativeSymbols = setOf('-', '⦿', '⬯', '☠', '⚔', '↑', '↓', '↕')
 
@@ -68,7 +69,7 @@ internal object QuestCompassRenderer {
                 (CENTER + relative / DEGREES_PER_CELL).roundToInt() else null
         } else emptyList()
         val occupied = mutableListOf<Int>()
-        for (point in points.sortedBy { it.distance }) {
+        for (point in points.sortedWith(compareBy<CompassPoi> { it.kind.priority }.thenBy { it.distance })) {
             if (occupied.size >= 8) break
             if (!point.bearing.isFinite() || !point.distance.isFinite() || point.distance !in 0.0..DUNGEON_COMPASS_RADIUS) continue
             val relative = wrap(point.bearing - heading)
@@ -78,10 +79,35 @@ internal object QuestCompassRenderer {
             if ((nativeCells + occupied).any { kotlin.math.abs(it - cell) < 3 }) continue
             occupied += cell
             glyphs[cell] = when (point.kind) {
-                DungeonCompassPointKind.CHEST -> '▣'
+                DungeonCompassPointKind.ELITE_BOSS -> '☠'
+                DungeonCompassPointKind.ELITE_MOB, DungeonCompassPointKind.ARENA -> '⚔'
+                DungeonCompassPointKind.CHEST -> '□'
                 DungeonCompassPointKind.AVAILABLE_QUEST -> '!'
+                DungeonCompassPointKind.QUEST_UNAVAILABLE -> '?'
+                DungeonCompassPointKind.GUILD_NPC -> '⚑'
+                DungeonCompassPointKind.CLASS_TRAINER -> '▲'
+                DungeonCompassPointKind.TRANSPORT -> '↔'
+                DungeonCompassPointKind.SHOP -> '¤'
+                DungeonCompassPointKind.REPAIR -> '+'
+                DungeonCompassPointKind.SCRAP -> '×'
+                DungeonCompassPointKind.ENCHANT -> '★'
+                DungeonCompassPointKind.UNBIND -> '÷'
+                DungeonCompassPointKind.SCROLL -> '≡'
+                DungeonCompassPointKind.NPC_SERVICE -> '●'
             }
-            colors[cell] = if (point.kind == DungeonCompassPointKind.CHEST) gold else target
+            colors[cell] = when (point.kind) {
+                DungeonCompassPointKind.ELITE_BOSS, DungeonCompassPointKind.ELITE_MOB,
+                DungeonCompassPointKind.ARENA -> accent
+                DungeonCompassPointKind.CHEST, DungeonCompassPointKind.GUILD_NPC,
+                DungeonCompassPointKind.TRANSPORT, DungeonCompassPointKind.SHOP,
+                DungeonCompassPointKind.REPAIR, DungeonCompassPointKind.SCRAP,
+                DungeonCompassPointKind.UNBIND, DungeonCompassPointKind.SCROLL -> gold
+                DungeonCompassPointKind.ENCHANT -> target
+                DungeonCompassPointKind.NPC_SERVICE -> scale
+                DungeonCompassPointKind.AVAILABLE_QUEST,
+                DungeonCompassPointKind.CLASS_TRAINER -> target
+                DungeonCompassPointKind.QUEST_UNAVAILABLE -> muted
+            }
         }
 
         // Tracked targets win collisions with cardinals and nearby points.

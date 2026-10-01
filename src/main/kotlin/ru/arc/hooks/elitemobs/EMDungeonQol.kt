@@ -41,7 +41,7 @@ import java.time.Duration
 import java.util.UUID
 
 /**
- * Resumes only an existing dungeon world/run. Native EliteMobs still owns admission,
+ * Voluntary continuation stays in an existing world/run. Native EliteMobs owns arrival,
  * match progress and exits. PDC survives ordinary-world reloads; an instance token does not.
  */
 internal class EMDungeonQol(
@@ -98,17 +98,6 @@ internal class EMDungeonQol(
     private val enabled get() = config.bool("dungeon-qol.enabled", true)
     private val ttl get() = config.integer("dungeon-qol.resume-hours", 72).coerceIn(1, 720) * 3_600_000L
 
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    fun resumeOnEntry(event: PlayerTeleportEvent) {
-        if (!enabled || event.isCancelled || event.player.isDead || event.from.world.uid == event.to.world.uid) return
-        if (!config.bool("dungeon-qol.resume-enabled", true)) return
-        val visit = resolve(event.to.world) ?: return
-        if (!visit.canResume || !member(event.player, visit)) return
-        val destination = checkpoints.destination(event.player.persistentDataContainer, event.to.world, visit.run, clock(), ttl) ?: return
-        if (safe(destination)) event.to = destination
-        else checkpoints.forgetDestination(event.player.persistentDataContainer, destination.world.uid)
-    }
-
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun rememberDeparture(event: PlayerTeleportEvent) {
         if (!enabled || event.isCancelled || event.player.isDead || event.from.world.uid == event.to.world.uid) return
@@ -138,12 +127,13 @@ internal class EMDungeonQol(
         val world = player.world
         pending.remove(player.uniqueId)
         if (resolve(event.from)?.instanced == false) leaveWormholeWorld(player, event.from)
-        // Wait for native admission and entry text; no delayed teleport or bypass is created.
+        // Native admission owns the arrival point. Offer continuation only after entry.
         tasks.runLater(30L) {
             if (!enabled || !player.isOnline || player.world.uid != world.uid) return@runLater
             val visit = resolve(world) ?: return@runLater
             if (!member(player, visit)) return@runLater
             if (visit.waiting) show(player, "entry", "<gold>Готовы к данжу?", "<white>Shift + F <gray>— меню данжа")
+            else if (continuation(player) != null) show(player, "continue-entry", "<gold>Вы в данже", "<white>Shift + F <gray>→</gray> <green>Продолжить с места выхода")
             else show(player, "open-entry", "<gold>Вы в данже", "<white>Shift + F <gray>— меню данжа")
         }
     }
@@ -284,6 +274,10 @@ internal class EMDungeonQol(
             visit.entry?.clone(), checkpoints.destination(player.persistentDataContainer, player.world, visit.run, clock(), ttl))
     }
 
+    internal fun continuation(player: Player): DungeonSaveView? =
+        if (!config.bool("dungeon-qol.resume-enabled", true)) null
+        else view(player)?.takeIf { saved -> saved.exit?.let(safe) == true }
+
     internal fun lastReturn(player: Player): DungeonDeparture? {
         if (!enabled || closed || !config.bool("dungeon-qol.resume-enabled", true) || !player.isOnline ||
             player.isDead || player.gameMode == GameMode.SPECTATOR || resolve(player.world) != null) return null
@@ -329,6 +323,11 @@ internal class EMDungeonQol(
         when (action) {
             "menu", "меню" -> menus.panel(player)
             "return", "вернуться" -> returnToLast(player)
+            "resume", "продолжить" -> {
+                val expected = continuation(player)
+                if (expected == null) audience.sendMessage(player, text("saves.messages.resume-unavailable", "<#e8dfd2>В этом данже нет безопасного места прошлого выхода. Начало и другие точки доступны в меню: Shift + F → «Сохранения»."))
+                else travel(player, expected, "exit")
+            }
             "main" -> if (!HelpCenterModule.open(player)) audience.sendMessage(player, text("panel.main-unavailable", "<#d7b486>Главное меню сейчас недоступно. Попробуйте позже."))
             "party" -> menus.party(player)
             "shops", "магазины" -> {
@@ -459,6 +458,7 @@ internal class EMDungeonQol(
                 Logging.error("Dungeon checkpoint teleport failed", it); false
             }
             if (!moved) audience.sendMessage(player, text("saves.messages.blocked", "<red>Перемещение отменено защитой. Для выхода нажмите Shift + F → «Выйти из данжа»."))
+            else if (id == "exit") show(player, "resumed", "<green>Продолжаем", "<white>Shift + F <gray>— меню данжа")
         } }.onFailure {
             pending.remove(player.uniqueId, token)
             Logging.error("Unable to open dungeon checkpoint portal", it)

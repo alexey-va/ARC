@@ -78,18 +78,30 @@ class QuestCompassRendererTest : FreeSpec({
         text(0f, "x".repeat(100)).length shouldBe 44
     }
 
-    "ambient compass projects distinct nearby offers and chests without a quest" {
+    "ambient compass projects distinct nearby roles and chests without a quest" {
         val rendered = PlainTextComponentSerializer.plainText().serialize(QuestCompassRenderer.render(
             0f, null, listOf(
-                CompassPoi(-15.0, 12.0, DungeonCompassPointKind.CHEST),
-                CompassPoi(20.0, 24.0, DungeonCompassPointKind.AVAILABLE_QUEST),
+                CompassPoi(-30.0, 12.0, DungeonCompassPointKind.GUILD_NPC),
+                CompassPoi(-24.0, 10.0, DungeonCompassPointKind.CLASS_TRAINER),
+                CompassPoi(-18.0, 10.0, DungeonCompassPointKind.TRANSPORT),
+                CompassPoi(-12.0, 10.0, DungeonCompassPointKind.SHOP),
+                CompassPoi(-6.0, 10.0, DungeonCompassPointKind.NPC_SERVICE),
+                CompassPoi(6.0, 10.0, DungeonCompassPointKind.ELITE_MOB),
+                CompassPoi(12.0, 10.0, DungeonCompassPointKind.ELITE_BOSS),
+                CompassPoi(18.0, 10.0, DungeonCompassPointKind.CHEST),
                 CompassPoi(180.0, 10.0, DungeonCompassPointKind.CHEST),
                 CompassPoi(10.0, 65.0, DungeonCompassPointKind.CHEST),
             ),
         ))
-        rendered[22] shouldBe '▣'
-        rendered[57] shouldBe '!'
-        rendered.count { it == '▣' } shouldBe 1
+        rendered[7] shouldBe '⚑'
+        rendered[13] shouldBe '▲'
+        rendered[19] shouldBe '↔'
+        rendered[25] shouldBe '¤'
+        rendered[31] shouldBe '●'
+        rendered[43] shouldBe '⚔'
+        rendered[49] shouldBe '☠'
+        rendered[55] shouldBe '□'
+        rendered.count { it == '□' } shouldBe 1
         rendered[37] shouldBe 'S'
     }
 
@@ -97,14 +109,14 @@ class QuestCompassRendererTest : FreeSpec({
         val rendered = PlainTextComponentSerializer.plainText().serialize(QuestCompassRenderer.render(
             0f, target(31, '⦿'), listOf(
                 CompassPoi(0.0, 1.0, DungeonCompassPointKind.CHEST),
-                CompassPoi(12.0, 20.0, DungeonCompassPointKind.CHEST),
+                CompassPoi(12.0, 20.0, DungeonCompassPointKind.ELITE_BOSS),
                 CompassPoi(12.0, 2.0, DungeonCompassPointKind.AVAILABLE_QUEST),
-                CompassPoi(Double.NaN, 3.0, DungeonCompassPointKind.CHEST),
+                CompassPoi(Double.NaN, 3.0, DungeonCompassPointKind.ELITE_MOB),
             ),
         ))
         rendered[37] shouldBe '◇'
-        rendered[49] shouldBe '!'
-        rendered.count { it == '▣' } shouldBe 0
+        rendered[49] shouldBe '☠'
+        rendered.count { it == '□' } shouldBe 0
     }
 
     "unresolved tracking still permits real nearby points instead of inventing quest coordinates" {
@@ -129,8 +141,33 @@ class QuestCompassRendererTest : FreeSpec({
     }
 
     "crowded compass draws no more than eight visible nearby points" {
-        val points = (-30..30 step 3).map { CompassPoi(it.toDouble(), 10.0, DungeonCompassPointKind.CHEST) }
+        val points = (-30..30 step 3).map { CompassPoi(it.toDouble(), 10.0, DungeonCompassPointKind.ELITE_MOB) }
         val rendered = PlainTextComponentSerializer.plainText().serialize(QuestCompassRenderer.render(0f, null, points))
-        rendered.count { it == '▣' } shouldBe 8
+        rendered.count { it == '⚔' } shouldBe 8
+    }
+
+    "bosses outrank nearer common elites when the strip is crowded" {
+        val points = (-30..-9 step 3).map { CompassPoi(it.toDouble(), 1.0, DungeonCompassPointKind.ELITE_MOB) } +
+            CompassPoi(30.0, 64.0, DungeonCompassPointKind.ELITE_BOSS)
+        val rendered = PlainTextComponentSerializer.plainText().serialize(QuestCompassRenderer.render(0f, null, points))
+        rendered.count { it == '☠' } shouldBe 1
+        rendered.count { it == '⚔' } shouldBe 7
+    }
+
+    "elite NPC service roles use distinct visible markers" {
+        val markers = mapOf(
+            DungeonCompassPointKind.QUEST_UNAVAILABLE to '?',
+            DungeonCompassPointKind.REPAIR to '+',
+            DungeonCompassPointKind.SCRAP to '×',
+            DungeonCompassPointKind.ENCHANT to '★',
+            DungeonCompassPointKind.UNBIND to '÷',
+            DungeonCompassPointKind.SCROLL to '≡',
+        )
+        markers.forEach { (kind, marker) ->
+            val rendered = PlainTextComponentSerializer.plainText().serialize(
+                QuestCompassRenderer.render(45f, null, listOf(CompassPoi(45.0, 4.0, kind))),
+            )
+            rendered[37] shouldBe marker
+        }
     }
 })
