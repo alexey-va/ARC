@@ -2,6 +2,7 @@ package ru.arc.eliteloot
 
 import com.magmaguy.elitemobs.api.utils.EliteItemManager
 import com.magmaguy.elitemobs.config.AdventurersGuildConfig
+import com.magmaguy.elitemobs.config.ItemSettingsConfig
 import com.magmaguy.elitemobs.config.menus.premade.SkillBonusMenuConfig
 import com.magmaguy.elitemobs.items.EliteItemLore
 import com.magmaguy.elitemobs.items.upgradesystem.EliteEnchantmentItems
@@ -9,6 +10,7 @@ import com.magmaguy.elitemobs.skills.WeaponIdentityResolver
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.format.TextDecoration
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.NamespacedKey
 import org.bukkit.entity.Player
@@ -64,6 +66,46 @@ private fun sanitizeEliteLore(lines: List<Component>): List<Component> {
     )
 }
 
+private val legacyAmpersandSerializer = LegacyComponentSerializer.legacyAmpersand()
+private val legacySectionSerializer = LegacyComponentSerializer.legacySection()
+private val plainEliteTextSerializer = PlainTextComponentSerializer.plainText()
+private val magicEliteDamageLore = listOf(
+    Component.text(" ", TextColor.color(0xFFFFFF))
+        .append(Component.text("Магический урон по элитам", TextColor.color(0xFF716C)))
+        .decoration(TextDecoration.ITALIC, false),
+    Component.text("Зависит от уровня, навыка и заклинания", TextColor.color(0xB9C2D0))
+        .decoration(TextDecoration.ITALIC, false),
+)
+
+private fun plainEliteText(text: String): String =
+    plainEliteTextSerializer.serialize(legacyAmpersandSerializer.deserialize(
+        plainEliteTextSerializer.serialize(legacySectionSerializer.deserialize(text)),
+    ))
+
+/** Legacy EDPS measures physical attacks, while FMM magic damage depends on the level, skill and spell. */
+internal fun replaceMagicEliteDpsLore(
+    lines: List<Component>,
+    isMagicWeapon: Boolean,
+    weaponEntryTemplate: String,
+): List<Component> {
+    if (!isMagicWeapon) return lines
+    val template = plainEliteText(weaponEntryTemplate)
+    val placeholder = "\$EDPS"
+    val marker = template.indexOf(placeholder)
+    if (marker < 0 || template.indexOf(placeholder, marker + placeholder.length) >= 0) return lines
+
+    val prefix = Regex.escape(template.substring(0, marker))
+    val suffix = Regex.escape(template.substring(marker + placeholder.length))
+    val nativeDpsRow = Regex("^$prefix(?:\\d+(?:[.,]\\d+)?|[.,]\\d+)$suffix$")
+    return lines.flatMap { line ->
+        if (nativeDpsRow.matches(plainEliteTextSerializer.serialize(line))) {
+            magicEliteDamageLore
+        } else {
+            listOf(line)
+        }
+    }
+}
+
 internal fun eliteGearRequirementLine(skillName: String, level: Int): Component =
     Component.text(" ", TextColor.color(0xFFFFFF))
         .append(
@@ -90,10 +132,15 @@ internal fun replaceEliteGearRequirement(
 }
 
 private fun withEliteGearRequirement(item: ItemStack, lines: List<Component>): List<Component> {
-    if (!AdventurersGuildConfig.isSkillBasedGearRestriction()) return sanitizeEliteLore(lines)
-    val skill = WeaponIdentityResolver.progressionSkillIncludingArmor(item) ?: return sanitizeEliteLore(lines)
-    return replaceEliteGearRequirement(
+    val presentedLines = replaceMagicEliteDpsLore(
         lines,
+        WeaponIdentityResolver.isMagicWeapon(item),
+        ItemSettingsConfig.getWeaponEntry(),
+    )
+    if (!AdventurersGuildConfig.isSkillBasedGearRestriction()) return sanitizeEliteLore(presentedLines)
+    val skill = WeaponIdentityResolver.progressionSkillIncludingArmor(item) ?: return sanitizeEliteLore(presentedLines)
+    return replaceEliteGearRequirement(
+        presentedLines,
         SkillBonusMenuConfig.getSkillTypeDisplayName(skill),
         EliteItemManager.getRoundedItemLevel(item),
     )
@@ -111,6 +158,14 @@ internal fun presentEliteItem(item: ItemStack, viewer: Player): ItemStack {
         EliteItemLore(rendered, false)
         meta.lore(withEliteGearRequirement(rendered, rendered.itemMeta.lore().orEmpty()))
         meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_ENCHANTS)
+    } else {
+        meta.lore(
+            replaceMagicEliteDpsLore(
+                meta.lore().orEmpty(),
+                WeaponIdentityResolver.isMagicWeapon(item),
+                ItemSettingsConfig.getWeaponEntry(),
+            ),
+        )
     }
     meta.lore(sanitizeEliteLore(meta.lore().orEmpty()))
     item.itemMeta = meta
