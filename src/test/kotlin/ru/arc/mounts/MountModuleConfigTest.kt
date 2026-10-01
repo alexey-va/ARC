@@ -75,15 +75,13 @@ class MountModuleConfigTest : StringSpec({
         catalog.all.last().id shouldBe "evoker"
     }
 
-    "catalog disables vehicle inertia and enables native flight only for solo flying mounts" {
+    "catalog keeps every mount seated without vehicle inertia" {
         val config = bundledConfig("controls")
         config.catalog().all.forEach { mount ->
             mount.motion.resolve(config.motionTiming) shouldBe MountMotionTiming(Duration.ZERO, Duration.ZERO, Duration.ZERO)
-            mount.control shouldBe if (mount.movement == MountMovement.FLYING && mount.passengerSeats == 0) {
-                MountControl.PLAYER_FLIGHT
-            } else MountControl.VEHICLE
+            mount.control shouldBe MountControl.VEHICLE
         }
-        val bee = config.catalog()["bee"]!!
+        val bee = config.catalog()["bee"]!!.copy(control = MountControl.PLAYER_FLIGHT)
         shouldThrow<IllegalArgumentException> { bee.copy(movement = MountMovement.WALKING) }
         shouldThrow<IllegalArgumentException> { config.catalog()["happy_ghast"]!!.copy(control = MountControl.PLAYER_FLIGHT) }
         shouldThrow<IllegalArgumentException> { bee.copy(visualFlightOffsetY = Double.NaN) }
