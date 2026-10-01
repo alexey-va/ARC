@@ -27,23 +27,25 @@ import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
 import java.util.Locale
 
-class PluginMessenger : PluginMessageListener {
+class PluginMessenger(private val networkRtpEnabled: Boolean = true) : PluginMessageListener {
 
     init {
         Bukkit.getServer().messenger.registerOutgoingPluginChannel(ARC.instance, "BungeeCord")
-        Bukkit.getServer().messenger.registerOutgoingPluginChannel(
-            ARC.instance,
-            BackendRtpRequest.CHANNEL,
-        )
-        Bukkit.getServer().messenger.registerOutgoingPluginChannel(
-            ARC.instance,
-            BackendRtpReady.CHANNEL,
-        )
-        Bukkit.getServer().messenger.registerIncomingPluginChannel(
-            ARC.instance,
-            NetworkRtpRequest.CHANNEL,
-            this,
-        )
+        if (networkRtpEnabled) {
+            Bukkit.getServer().messenger.registerOutgoingPluginChannel(
+                ARC.instance,
+                BackendRtpRequest.CHANNEL,
+            )
+            Bukkit.getServer().messenger.registerOutgoingPluginChannel(
+                ARC.instance,
+                BackendRtpReady.CHANNEL,
+            )
+            Bukkit.getServer().messenger.registerIncomingPluginChannel(
+                ARC.instance,
+                NetworkRtpRequest.CHANNEL,
+                this,
+            )
+        }
     }
 
     override fun onPluginMessageReceived(
@@ -193,19 +195,21 @@ class PluginMessenger : PluginMessageListener {
     }
 
     fun shutdown() {
-        Bukkit.getServer().messenger.unregisterIncomingPluginChannel(
-            ARC.instance,
-            NetworkRtpRequest.CHANNEL,
-            this,
-        )
-        Bukkit.getServer().messenger.unregisterOutgoingPluginChannel(
-            ARC.instance,
-            BackendRtpRequest.CHANNEL,
-        )
-        Bukkit.getServer().messenger.unregisterOutgoingPluginChannel(
-            ARC.instance,
-            BackendRtpReady.CHANNEL,
-        )
+        if (networkRtpEnabled) {
+            Bukkit.getServer().messenger.unregisterIncomingPluginChannel(
+                ARC.instance,
+                NetworkRtpRequest.CHANNEL,
+                this,
+            )
+            Bukkit.getServer().messenger.unregisterOutgoingPluginChannel(
+                ARC.instance,
+                BackendRtpRequest.CHANNEL,
+            )
+            Bukkit.getServer().messenger.unregisterOutgoingPluginChannel(
+                ARC.instance,
+                BackendRtpReady.CHANNEL,
+            )
+        }
         Bukkit.getServer().messenger.unregisterOutgoingPluginChannel(ARC.instance, "BungeeCord")
     }
 

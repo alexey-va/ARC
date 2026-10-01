@@ -2,6 +2,7 @@ package ru.arc
 
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
@@ -39,7 +40,11 @@ class SlimefunRuntimeProfileTest : FreeSpec({
             val otherBuy = object : Command("buy") {
                 override fun execute(sender: CommandSender, label: String, args: Array<String>) = true
             }
+            val otherSpawn = object : Command("spawn") {
+                override fun execute(sender: CommandSender, label: String, args: Array<String>) = true
+            }
             runtime.server.commandMap.register("other", otherBuy)
+            runtime.server.commandMap.register("other", otherSpawn)
             val plugin = runtime.loadPlugin(SlimefunProfilePlugin::class.java)
 
             plugin.runtimeProfile shouldBe ArcRuntimeProfile.SLIMEFUN
@@ -49,13 +54,16 @@ class SlimefunRuntimeProfileTest : FreeSpec({
             ARC.redisManager shouldBe null
             ARC.networkRegistry shouldBe null
             ARC.hookRegistry shouldBe null
-            runtime.server.servicesManager.getRegistration(ArcSidebarService::class.java) shouldBe null
+            runtime.server.servicesManager.getRegistration(ArcSidebarService::class.java) shouldNotBe null
             ArcMenus.hasDialogRuntimeForTests() shouldBe true
 
             runtime.server.commandMap.getCommand("buy") shouldBe otherBuy
             runtime.server.commandMap.getCommand("arc:buy") shouldBe null
             runtime.server.commandMap.getCommand("arc:x") shouldBe null
             runtime.server.commandMap.getCommand("arc:menu") shouldBe runtime.server.commandMap.getCommand("menu")
+            runtime.server.commandMap.getCommand("skyblock") shouldBe runtime.server.commandMap.getCommand("sb")
+            runtime.server.commandMap.getCommand("skyblock") shouldBe runtime.server.commandMap.getCommand("islandmenu")
+            runtime.server.commandMap.getCommand("spawn") shouldBe runtime.server.commandMap.getCommand("arc:spawn")
             runtime.server.commandMap.getCommand("mm") shouldBe runtime.server.commandMap.getCommand("arc:mm")
             (runtime.server.commandMap.getCommand("mm") is SlimefunMenuAliasCommand) shouldBe true
             ArcCommand.INSTANCE.availableSubcommands(runtime.server.consoleSender)
@@ -69,6 +77,16 @@ class SlimefunRuntimeProfileTest : FreeSpec({
                 "team" to "justteams:team",
                 "shop" to "economyshopgui-premium:shop slimefun_resources",
             )
+            SlimefunMenuModule.islandActionIds(hasIsland = false) shouldBe listOf("island_create", "island_top", "visit")
+            SlimefunMenuModule.islandActionIds(hasIsland = true) shouldBe listOf(
+                "island_home", "island_manage", "island_team", "island_visitors", "island_settings", "island_biome", "island_top", "visit",
+            )
+            SlimefunMenuModule.curatedStarterIds(
+                configured = listOf("normal", " bogus text", "../../op", "normal", "desert"),
+                available = setOf("normal", "desert", "other"),
+            ) shouldBe listOf("normal", "desert")
+            runtime.server.messenger.getOutgoingChannels(plugin).toSet() shouldBe setOf("bungeecord:main")
+            runtime.server.messenger.getIncomingChannels(plugin).toSet() shouldBe emptySet()
 
             plugin.reload()
             ModuleRegistry.getRuntimeStatuses().map { it.name }.toSet() shouldBe
@@ -80,6 +98,7 @@ class SlimefunRuntimeProfileTest : FreeSpec({
             (runtime.server.commandMap.knownCommands.values.any { it === oldAlias }) shouldBe true
             runtime.server.pluginManager.disablePlugin(plugin)
             runtime.server.commandMap.getCommand("mm") shouldBe null
+            runtime.server.commandMap.getCommand("spawn") shouldBe otherSpawn
             runtime.server.commandMap.getCommand("arc:mm") shouldBe null
             runtime.server.commandMap.knownCommands.values.any { it === oldAlias } shouldBe false
             ArcMenus.hasDialogRuntimeForTests() shouldBe false
@@ -89,9 +108,11 @@ class SlimefunRuntimeProfileTest : FreeSpec({
             (reenabledAlias is SlimefunMenuAliasCommand) shouldBe true
             (reenabledAlias === oldAlias) shouldBe false
             runtime.server.commandMap.getCommand("arc:mm") shouldBe reenabledAlias
+            runtime.server.commandMap.getCommand("spawn") shouldBe runtime.server.commandMap.getCommand("arc:spawn")
             ArcMenus.hasDialogRuntimeForTests() shouldBe true
             runtime.server.pluginManager.disablePlugin(plugin)
             runtime.server.commandMap.getCommand("mm") shouldBe null
+            runtime.server.commandMap.getCommand("spawn") shouldBe otherSpawn
             runtime.server.commandMap.getCommand("arc:mm") shouldBe null
             runtime.server.commandMap.knownCommands.values.any { it === reenabledAlias } shouldBe false
         }

@@ -1,7 +1,7 @@
 # ARC owns the native Paper sidebar. Other plugins publish higher-priority
 # frames through ArcSidebarService; these layouts are the lowest-priority base.
 enabled: true
-enabled-servers: [spawn, survival]
+enabled-servers: [spawn, survival, slimefun]
 # Clients below the server's native protocol do not receive the native sidebar.
 minimum-client-protocol: 774
 title: '&#B22222&lRus&f&lCrafting'
@@ -314,3 +314,19 @@ styles:
       - '&6| &fПамять: &e%server_ram_used%&7/&e%server_ram_total% мб'
       - '?&6| %arcranks_quest_compact%'
       - '?&6| %arcranks_quest_reward_summary%'
+
+# This isolated mode keeps network branding and the user's sidebar visibility.
+# Only its local currency and island mechanics are displayed.
+slimefun:
+  lines:
+    - '&6| &f%player%'
+    - '&6| &fСлаймы: &a%rediseco_bal_formatted_shorthand_slimes%'
+    - ''
+    - '&6Остров'
+    - '&6| &f%superior_island_name%'
+    - '&6| &fУровень: &e%superior_island_level_format%'
+    - ''
+    - '&6| &f%slimefun_place%'
+    - '&6| &fМеню: &e/skyblock'
+    - ''
+    - '&fВ режиме: &a%serveronline% &f• Пинг: &e%player_ping% мс'

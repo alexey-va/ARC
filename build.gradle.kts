@@ -96,6 +96,9 @@ repositories {
     maven("https://mvn-repo.arim.space/lesser-gpl3/")
     maven("https://repo.magmaguy.com/releases")
     maven("https://repo.bluecolored.de/releases")
+    maven("https://repo.bg-software.com/repository/api/") {
+        content { includeGroup("com.bgsoftware") }
+    }
     mavenCentral()
 }
 
@@ -141,6 +144,8 @@ dependencies {
     compileOnly(libs.ru.ruscrafting.thirdparty.magmacore)
     compileOnly(libs.com.denizenscript.denizen) { isTransitive = false }
     compileOnly(libs.com.github.slimefun.slimefun4)
+    // SSB is server-provided; compile against its published API without shading it into ARC.
+    compileOnly("com.bgsoftware:SuperiorSkyblockAPI:2026.2")
     compileOnly(libs.com.magmaguy.betterstructures)
     compileOnly(libs.betterrtp.betterrtp)
     // Private mirror of the exact server-provided LeafRTP JAR; never shaded.
@@ -210,6 +215,7 @@ dependencies {
     // MockK
     testImplementation("io.mockk:mockk:1.14.7")
     testImplementation(libs.com.olziedev.playerwarps)
+    testRuntimeOnly("com.bgsoftware:SuperiorSkyblockAPI:2026.2")
 
     // Testcontainers — integration tests source set
     "integrationTestImplementation"("ru.ruscrafting.arc:arc-core-integration-testing:$arcCoreVersion")

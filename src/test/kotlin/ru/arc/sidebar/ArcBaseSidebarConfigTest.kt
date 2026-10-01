@@ -89,6 +89,17 @@ class ArcBaseSidebarConfigTest : StringSpec({
         styles.getKeys(false).flatMap { config.getStringList("styles.$it.lines") }.none { "&8" in it } shouldBe true
     }
 
+    "Slimefun sidebar exposes only its local currency and island navigation" {
+        val stream = requireNotNull(javaClass.classLoader.getResourceAsStream("modules/scoreboard.yml"))
+        val config = stream.use { YamlConfiguration.loadConfiguration(InputStreamReader(it)) }
+        config.getStringList("enabled-servers") shouldContain "slimefun"
+        val rows = config.getStringList("slimefun.lines")
+        (rows.size in 1..15) shouldBe true
+        rows shouldContain "&6| &fСлаймы: &a%rediseco_bal_formatted_shorthand_slimes%"
+        rows shouldContain "&6| &fМеню: &e/skyblock"
+        rows.none { "vault%" in it || "tokens%" in it || "quest" in it || "bank" in it } shouldBe true
+    }
+
     "world aliases cover both spawns and dungeon world families" {
         val stream = requireNotNull(javaClass.classLoader.getResourceAsStream("modules/misc.yml"))
         val config = stream.use { YamlConfiguration.loadConfiguration(InputStreamReader(it)) }

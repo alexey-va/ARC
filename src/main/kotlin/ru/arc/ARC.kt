@@ -94,6 +94,7 @@ import ru.arc.restart.RestartModule
 import ru.arc.slimefunmenu.SlimefunMenuAliasCommand
 import ru.arc.slimefunmenu.SlimefunMenuCommand
 import ru.arc.slimefunmenu.SlimefunMenuModule
+import ru.arc.slimefunmenu.NetworkSpawnCommand
 import ru.arc.travelanchors.TravelAnchorsModule
 import ru.arc.rtp.RtpPlayerRegistry
 import ru.arc.scheduled.ScheduledCommandsModule
@@ -134,6 +135,8 @@ open class ARC : JavaPlugin() {
 
     private var baseSidebar: ArcBaseSidebar? = null
     private var slimefunMenuAlias: Command? = null
+    private var networkSpawnAlias: Command? = null
+    private var previousNetworkSpawnCommand: Command? = null
 
     var runtimeProfile: ArcRuntimeProfile = ArcRuntimeProfile.FULL
         private set
@@ -151,8 +154,8 @@ open class ARC : JavaPlugin() {
     override fun onEnable() {
         printBanner()
 
-        if (runtimeProfile == ArcRuntimeProfile.FULL && pluginMessenger == null) {
-            pluginMessenger = PluginMessenger()
+        if ((runtimeProfile == ArcRuntimeProfile.FULL || runtimeProfile == ArcRuntimeProfile.SLIMEFUN) && pluginMessenger == null) {
+            pluginMessenger = PluginMessenger(networkRtpEnabled = runtimeProfile == ArcRuntimeProfile.FULL)
         }
 
         PaperArcRuntime.installScheduling(this)
@@ -161,10 +164,12 @@ open class ARC : JavaPlugin() {
         } else if (runtimeProfile == ArcRuntimeProfile.SLIMEFUN) {
             ArcMenus.initializeDialogRuntime(this)
         }
-        if (runtimeProfile == ArcRuntimeProfile.FULL) {
-            chunkTicketRegistry = PaperChunkTicketRegistry(this)
+        if (runtimeProfile == ArcRuntimeProfile.FULL || runtimeProfile == ArcRuntimeProfile.SLIMEFUN) {
             sidebarService = PaperArcSidebarService(this)
             server.servicesManager.register(ArcSidebarService::class.java, sidebarService, this, ServicePriority.Normal)
+        }
+        if (runtimeProfile == ArcRuntimeProfile.FULL) {
+            chunkTicketRegistry = PaperChunkTicketRegistry(this)
             RtpPlayerRegistry.initialize(dataPath)
         }
         registerModules()
@@ -176,6 +181,8 @@ open class ARC : JavaPlugin() {
         if (runtimeProfile == ArcRuntimeProfile.FULL) {
             server.servicesManager.register(ArcTelemetryProvider::class.java, ArcTelemetryProviderBridge, this, ServicePriority.Normal)
             server.servicesManager.register(ArcItemMaterializer::class.java, ArcItemMaterializerBridge, this, ServicePriority.Normal)
+        }
+        if (runtimeProfile == ArcRuntimeProfile.FULL || runtimeProfile == ArcRuntimeProfile.SLIMEFUN) {
             baseSidebar = ArcBaseSidebar(this, sidebarService).also(ArcBaseSidebar::start)
         }
         // Start the single Redis subscription after ALL modules have registered their channels.
@@ -206,6 +213,7 @@ open class ARC : JavaPlugin() {
         info("Stopping ARC plugin")
         server.servicesManager.unregisterAll(this)
         unregisterSlimefunMenuAlias()
+        unregisterNetworkSpawnAlias()
         if (runtimeProfile == ArcRuntimeProfile.FULL) Portal.removeAll()
         ModuleRegistry.shutdownAll()
         baseSidebar?.close()
@@ -360,16 +368,19 @@ open class ARC : JavaPlugin() {
         if (runtimeProfile == ArcRuntimeProfile.SLIMEFUN) {
             // Retain ARC and the utility menu; keep all FULL-only labels out of this profile.
             val commandMap = server.commandMap
-            val preserved = setOf("arc", "menu")
+            val preserved = setOf("arc", "menu", "skyblock")
             val inactive = commandMap.knownCommands.values.filterIsInstance<PluginCommand>()
                 .filter { it.plugin === this && it.name !in preserved }.toSet()
             val labels = commandMap.knownCommands.filterValues { it in inactive }.keys.toList()
             labels.forEach { commandMap.knownCommands.remove(it) }
             inactive.forEach { it.unregister(commandMap) }
             registerCommand("menu", SlimefunMenuCommand, null)
+            registerCommand("skyblock", SlimefunMenuCommand, SlimefunMenuCommand)
             registerSlimefunMenuAlias()
+            registerNetworkSpawnAlias()
             return
         }
+        unregisterOwnedPluginCommand("skyblock")
         registerCommand("x", XCommand, XCommand)
         registerCommand("g", ChatModeAliasCommand, null)
         registerCommand("l", ChatModeAliasCommand, null)
@@ -422,6 +433,51 @@ open class ARC : JavaPlugin() {
         slimefunMenuAlias = null
     }
 
+    private fun registerNetworkSpawnAlias() {
+        val commandMap = server.commandMap
+        val previous = commandMap.getCommand("spawn")
+        val alias = NetworkSpawnCommand()
+        commandMap.register("arc", alias)
+        if (commandMap.getCommand("arc:spawn") !== alias) {
+            removeNetworkSpawnAlias(commandMap, alias)
+            warn("Could not register the namespaced /arc:spawn network route")
+            return
+        }
+        if (previous != null) {
+            // SLIMEFUN owns the network /spawn route. Remember the prior alias so disabling ARC
+            // restores it instead of deleting another plugin's command-map entry.
+            previousNetworkSpawnCommand = previous
+            commandMap.knownCommands["spawn"] = alias
+            warn("Replacing the existing /spawn label with the Slimefun network route")
+        }
+        if (commandMap.getCommand("spawn") === alias) {
+            networkSpawnAlias = alias
+        } else {
+            removeNetworkSpawnAlias(commandMap, alias)
+            previousNetworkSpawnCommand = null
+            warn("Could not bind the unnamespaced /spawn network route")
+        }
+    }
+
+    private fun unregisterNetworkSpawnAlias() {
+        networkSpawnAlias?.let { alias ->
+            val commandMap = server.commandMap
+            if (commandMap.getCommand("spawn") === alias) {
+                val previous = previousNetworkSpawnCommand
+                if (previous == null) commandMap.knownCommands.remove("spawn") else commandMap.knownCommands["spawn"] = previous
+            }
+            removeNetworkSpawnAlias(commandMap, alias)
+        }
+        networkSpawnAlias = null
+        previousNetworkSpawnCommand = null
+    }
+
+    private fun removeNetworkSpawnAlias(commandMap: org.bukkit.command.CommandMap, alias: Command) {
+        val labels = commandMap.knownCommands.filterValues { it === alias }.keys.toList()
+        labels.forEach { commandMap.knownCommands.remove(it) }
+        alias.unregister(commandMap)
+    }
+
     private fun removeSlimefunMenuAlias(commandMap: org.bukkit.command.CommandMap, alias: Command) {
         val labels = commandMap.knownCommands.filterValues { it === alias }.keys.toList()
         labels.forEach { commandMap.knownCommands.remove(it) }
@@ -440,6 +496,15 @@ open class ARC : JavaPlugin() {
         }
         command.setExecutor(executor)
         completer?.let { command.tabCompleter = it }
+    }
+
+    private fun unregisterOwnedPluginCommand(name: String) {
+        val commandMap = server.commandMap
+        val inactive = commandMap.knownCommands.values.filterIsInstance<PluginCommand>()
+            .filter { it.plugin === this && it.name.equals(name, ignoreCase = true) }.toSet()
+        val labels = commandMap.knownCommands.filterValues { it in inactive }.keys.toList()
+        labels.forEach { commandMap.knownCommands.remove(it) }
+        inactive.forEach { it.unregister(commandMap) }
     }
 
     // ==================== Configuration ====================

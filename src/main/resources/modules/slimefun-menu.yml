@@ -1,23 +1,109 @@
-title: "<color:#E6BC76>Навигация Slimefun</color>"
-intro: "<color:#E8DFD2>Гайд, исследование мира, дома и общие сервисы сервера.</color>"
-unavailable: "<color:#E8DFD2>Сервис временно недоступен. Попробуйте позже.</color>"
+title: "<#e6bc76>Остров и Слаймфан</#e6bc76>"
+intro: "<#e8dfd2>SkyBlock, развитие острова и мир технологий Slimefun.</#e8dfd2>"
+unavailable: "<#e8dfd2>Сервис временно недоступен. Попробуйте позже.</#e8dfd2>"
+usage: "<#e8dfd2>Использование: /skyblock [guide|shop|hub|spawn]</#e8dfd2>"
+
+state:
+  own-island: "<#92bed8>Ваш остров: управление и команда.</#92bed8>"
+  no-island: "<#e8dfd2>Остров ещё не создан — начните с создания.</#e8dfd2>"
+  unavailable: "<#e8dfd2>Данные SkyBlock сейчас недоступны.</#e8dfd2>"
+
+hub:
+  world: "slimefun_hub"
+  x: 170.5
+  y: 71.0
+  z: 206.5
+  yaw: 0.0
+  pitch: 0.0
+
+starter-islands: [normal, mycel, desert]
+starters:
+  normal:
+    label: "<#9bd48d>Лесной остров ›</#9bd48d>"
+    tooltip: "<#e8dfd2>Спокойный старт в зелёном мире.</#e8dfd2>"
+  mycel:
+    label: "<#9bd48d>Грибной остров ›</#9bd48d>"
+    tooltip: "<#e8dfd2>Необычная природа и простор для развития.</#e8dfd2>"
+  desert:
+    label: "<#9bd48d>Пустынный остров ›</#9bd48d>"
+    tooltip: "<#e8dfd2>Открытый сухой биом для нового старта.</#e8dfd2>"
 
 buttons:
+  create:
+    label: "<#c4a7e7>Создать остров ›</#c4a7e7>"
+    tooltip: "<#e8dfd2>Начать путь на своём острове.</#e8dfd2>"
+  home:
+    label: "<#92bed8>Домой на остров ›</#92bed8>"
+    tooltip: "<#e8dfd2>Перейти на свой остров.</#e8dfd2>"
+  manage:
+    label: "<#c4a7e7>Управление островом ›</#c4a7e7>"
+    tooltip: "<#e8dfd2>Открыть настройки и инструменты острова.</#e8dfd2>"
+  island-team:
+    label: "<#9bd48d>Команда острова ›</#9bd48d>"
+    tooltip: "<#e8dfd2>Посмотреть участников и доступные действия.</#e8dfd2>"
+  visitors:
+    label: "<#9bd48d>Посетители ›</#9bd48d>"
+    tooltip: "<#e8dfd2>Настроить доступ посетителей к острову.</#e8dfd2>"
+  settings:
+    label: "<#c4a7e7>Настройки острова ›</#c4a7e7>"
+    tooltip: "<#e8dfd2>Изменить доступные настройки острова.</#e8dfd2>"
+  biome:
+    label: "<#9bd48d>Биом острова ›</#9bd48d>"
+    tooltip: "<#e8dfd2>Открыть выбор биома острова.</#e8dfd2>"
+  top:
+    label: "<#9bd48d>Рейтинг островов ›</#9bd48d>"
+    tooltip: "<#e8dfd2>Посмотреть рейтинг островов.</#e8dfd2>"
+  visit:
+    label: "<#92bed8>Посетить остров ›</#92bed8>"
+    tooltip: "<#e8dfd2>Ввести имя игрока для посещения острова.</#e8dfd2>"
   guide:
-    label: "<color:#F1CD8C>Гайд Slimefun</color>"
-    tooltip: "<color:#E8DFD2>Открыть руководство по предметам и механизмам.</color>"
-  rtp:
-    label: "<color:#F1CD8C>Случайная телепортация</color>"
-    tooltip: "<color:#E8DFD2>Найти безопасное место в мире Slimefun.</color>"
-  homes:
-    label: "<color:#F1CD8C>Мои дома</color>"
-    tooltip: "<color:#E8DFD2>Посмотреть и выбрать сохранённый дом.</color>"
-  lands:
-    label: "<color:#F1CD8C>Мои земли</color>"
-    tooltip: "<color:#E8DFD2>Управлять территориями и участками.</color>"
-  team:
-    label: "<color:#F1CD8C>Команда</color>"
-    tooltip: "<color:#E8DFD2>Открыть общее меню команды.</color>"
+    label: "<#85dfc4>Гайд Slimefun ›</#85dfc4>"
+    tooltip: "<#e8dfd2>Открыть шаги технологического развития.</#e8dfd2>"
   shop:
-    label: "<color:#F1CD8C>Магазин ресурсов</color>"
-    tooltip: "<color:#E8DFD2>Покупать ресурсы для Slimefun.</color>"
+    label: "<#f4d87a>Магазин ресурсов ›</#f4d87a>"
+    tooltip: "<#e8dfd2>Покупать ресурсы для Slimefun.</#e8dfd2>"
+  hub:
+    label: "<#92bed8>Хаб SkyBlock ›</#92bed8>"
+    tooltip: "<#e8dfd2>Перейти в локальный хаб этого сервера.</#e8dfd2>"
+  network-spawn:
+    label: "<#92bed8>На спавн сети ›</#92bed8>"
+    tooltip: "<#e8dfd2>Перейти на общий сервер spawn.</#e8dfd2>"
+  services:
+    label: "<#ffffff>Другие сервисы ›</#ffffff>"
+    tooltip: "<#e8dfd2>Открыть RTP, дома и территории.</#e8dfd2>"
+  rtp:
+    label: "<#92bed8>Случайная телепортация ›</#92bed8>"
+    tooltip: "<#e8dfd2>Найти безопасное место в мире Slimefun.</#e8dfd2>"
+  homes:
+    label: "<#92bed8>Мои дома ›</#92bed8>"
+    tooltip: "<#e8dfd2>Посмотреть и выбрать сохранённый дом.</#e8dfd2>"
+  lands:
+    label: "<#9bd48d>Мои земли ›</#9bd48d>"
+    tooltip: "<#e8dfd2>Управлять территориями и участками.</#e8dfd2>"
+  team:
+    label: "<#ffffff>Команды JustTeams ›</#ffffff>"
+    tooltip: "<#e8dfd2>Открыть общее меню команд.</#e8dfd2>"
+
+guide:
+  title: "<#85dfc4>Путь технологий</#85dfc4>"
+  body: "<#e8dfd2>1. Создайте остров и начните с доступных базовых ресурсов.</#e8dfd2>"
+  progression: "<#85dfc4>2. Откройте гайд Slimefun: изучите базовые рецепты и многоблочные механизмы.\n3. Собирайте ресурсы на острове, а нужные материалы приобретайте за слаймы в местном магазине.</#85dfc4>"
+  catalog:
+    label: "<#85dfc4>Открыть гайд Slimefun ›</#85dfc4>"
+    tooltip: "<#e8dfd2>Открыть каталог предметов и рецептов.</#e8dfd2>"
+
+visit:
+  title: "<#92bed8>Посещение острова</#92bed8>"
+  body: "<#e8dfd2>Укажите имя игрока, чей остров хотите посетить.</#e8dfd2>"
+  player-input: "<#e8dfd2>Имя игрока</#e8dfd2>"
+  submit:
+    label: "<#92bed8>Найти остров ›</#92bed8>"
+    tooltip: "<#e8dfd2>Найти остров игрока по имени.</#e8dfd2>"
+  invalid-body: "<#e8dfd2>Проверьте имя: 3–16 букв, цифр или символов _. Исправьте значение и попробуйте снова.</#e8dfd2>"
+
+services:
+  title: "<#ffffff>Сервисы Slimefun</#ffffff>"
+  body: "<#e8dfd2>Полезные команды этого мира.</#e8dfd2>"
+
+spawn:
+  unavailable: "<#e8dfd2>Сейчас не удалось отправить вас на сетевой спавн.</#e8dfd2>"

@@ -19,6 +19,7 @@ softdepend:
   - ProtectionStones
   - Denizen
   - Slimefun
+  - SuperiorSkyblock2
   - EconomyShopGUI-Premium
   - AutoSellChests
   - zAuctionHouse
@@ -103,6 +104,10 @@ commands:
   menu:
     description: Open the player navigation menu
     usage: /menu
+  skyblock:
+    description: Open the Slimefun SkyBlock island dialogue
+    usage: /skyblock [guide|shop|hub|spawn]
+    aliases: [sb, islandmenu]
   loot:
     description: Open the lost loot mailbox
     usage: /loot

@@ -49,7 +49,8 @@ internal class ArcBaseSidebar(
             val rewardsEnabled = SidebarQuestRewards.enabled(
                 HookRegistry.luckPermsHook?.getCachedMeta(player.uniqueId, SidebarQuestRewards.META_KEY),
             )
-            val rows = config.stringList("styles.$style.lines").mapNotNull { template ->
+            val layout = if (serverId.equals("slimefun", ignoreCase = true)) "slimefun.lines" else "styles.$style.lines"
+            val rows = config.stringList(layout).mapNotNull { template ->
                 SidebarQuestRewards.visibleLine(template, rewardsEnabled)
                     ?.let { resolveServerSidebarLine(it, serverId) }
                     ?.let { serverLine ->
@@ -150,6 +151,11 @@ internal class ArcBaseSidebar(
                 "%online_survival%" to serverOnline("survival").toString(),
                 "%online_parkour%" to serverOnline("parkour").toString(),
                 "%server%" to serverId,
+                "%slimefun_place%" to when {
+                    player.world.name == "slimefun_hub" -> "Хаб SkyBlock"
+                    player.world.name.startsWith("slimefun_skyblock") -> "Острова"
+                    else -> "Мир Slimefun"
+                },
                 "%server_version%" to Bukkit.getMinecraftVersion(),
                 "%server_tps_5_colored%" to String.format("%.1f", tps),
                 "%server_uptime%" to formatDuration(uptime),
