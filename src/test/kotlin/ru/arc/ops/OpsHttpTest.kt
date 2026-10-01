@@ -211,6 +211,27 @@ class OpsHttpServerTest : FreeSpec({
             }
         }
 
+        "should gate and advertise the Slimefun catalog with item reads" {
+            val enabled = testConfig
+            val disabled = TestOpsHttpConfig(token = testConfig.token, itemsReadEnabled = false)
+            listOf(enabled to true, disabled to false).forEach { (config, expected) ->
+                val server = OpsHttpServer { config }
+                server.start()
+                try {
+                    val index = open("http://127.0.0.1:${server.actualPort}/ops/", token = config.token)
+                    readBody(index).contains("/ops/slimefun/catalog") shouldBe expected
+
+                    if (!expected) {
+                        val catalog = open("http://127.0.0.1:${server.actualPort}/ops/slimefun/catalog", token = config.token)
+                        catalog.responseCode shouldBe 403
+                        readBody(catalog) shouldContain "Item read endpoints disabled"
+                    }
+                } finally {
+                    server.stop()
+                }
+            }
+        }
+
         "should validate product-interest report bounds before reading telemetry" {
             val config = testConfig.copy(productInterestReadEnabled = true)
             val server = OpsHttpServer { config }

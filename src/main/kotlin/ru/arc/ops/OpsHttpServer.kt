@@ -343,6 +343,9 @@ class OpsHttpServer(
             method == "GET" && segments == listOf("content", "health") ->
                 handleContentHealth(exchange, cfg)
 
+            method == "GET" && segments == listOf("slimefun", "catalog") ->
+                handleSlimefunCatalog(exchange, cfg, query)
+
             method == "POST" && segments == listOf("message") ->
                 handleMessage(exchange, cfg)
 
@@ -762,6 +765,47 @@ class OpsHttpServer(
         } catch (e: IllegalArgumentException) {
             val (code, json) = OpsJson.error(400, e.message ?: "Bad request")
             respond(exchange, code, json)
+        }
+    }
+
+    private fun handleSlimefunCatalog(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        query: Map<String, String>,
+    ) {
+        if (!cfg.itemsReadEnabled) {
+            respondError(exchange, 403, "Item read endpoints disabled in config")
+            return
+        }
+
+        val offset = query["offset"]?.toIntOrNull() ?: if ("offset" in query) {
+            respondError(exchange, 400, "offset must be a non-negative integer")
+            return
+        } else {
+            0
+        }
+        val limit = query["limit"]?.toIntOrNull() ?: if ("limit" in query) {
+            respondError(exchange, 400, "limit must be 1..100")
+            return
+        } else {
+            100
+        }
+        if (offset < 0) {
+            respondError(exchange, 400, "offset must be a non-negative integer")
+            return
+        }
+        if (limit !in 1..100) {
+            respondError(exchange, 400, "limit must be 1..100")
+            return
+        }
+
+        try {
+            val data = OpsSlimefunCatalogHandlers.list(offset, limit)
+            respond(exchange, 200, slimefunCatalogJson(data))
+        } catch (e: IllegalArgumentException) {
+            respondError(exchange, 400, e.message ?: "Invalid Slimefun catalog request")
+        } catch (e: IllegalStateException) {
+            respondError(exchange, 503, e.message ?: "Slimefun registry is unavailable")
         }
     }
 
@@ -2103,6 +2147,7 @@ class OpsHttpServer(
             routes += "POST /ops/item/preview {ItemSpec JSON}"
             routes += "GET /ops/cmi/kits[/{name}]"
             routes += "POST /ops/cmi/kits/preview {name,display,icon:ItemSpec,items:{},commands:[]}"
+            routes += "GET /ops/slimefun/catalog?offset=&limit= (limit 1..100)"
         }
         if (cfg.itemsGiveEnabled) {
             routes += "POST /ops/player/{name}/give {\"item\":{ItemSpec},\"slot\":-1,\"dropOverflow\":true}"

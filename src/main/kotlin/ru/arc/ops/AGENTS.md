@@ -215,6 +215,20 @@ failures, and reports `complete`, `healthy`, issue counts, unavailable
 components, unhealthy pools, and intentionally disabled kits/schedules. Do not
 turn it into a write, repair, reload, draw, or execution endpoint.
 
+## Slimefun registry catalog (canonical)
+
+```
+GET /ops/slimefun/catalog?offset=&limit=1..100
+```
+
+This authenticated, read-only page uses Slimefun's live item registry and the
+existing `itemsReadEnabled` gate (defaults are `offset=0`, `limit=100`). It
+returns stable ID-sorted items, static
+recipe inputs/output, and `RecipeDisplayItem` display recipes where available;
+dynamic machine recipes are outside this API's coverage. Stack entries retain
+both the Bukkit material and nullable Slimefun ID so vanilla ingredients remain
+distinguishable from Slimefun items.
+
 ## Product-interest report (canonical)
 
 ```

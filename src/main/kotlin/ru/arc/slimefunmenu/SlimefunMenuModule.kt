@@ -46,6 +46,7 @@ object SlimefunMenuModule : PluginModule {
 
     fun open(player: Player) {
         if (!ready(player)) return
+        if (delegateToSkyblockAddon(player, emptyArray())) return
         if (!ensureConfig(player)) return
         ArcMenus.beginDialogFlow(player)
         openRoot(player)
@@ -53,6 +54,7 @@ object SlimefunMenuModule : PluginModule {
 
     fun handleCommand(player: Player, args: Array<String>) {
         if (!ready(player)) return
+        if (delegateToSkyblockAddon(player, args)) return
         if (!ensureConfig(player)) return
         if (args.size > 1) {
             player.sendMessage(text("usage"))
@@ -88,6 +90,15 @@ object SlimefunMenuModule : PluginModule {
 
     private fun ready(player: Player): Boolean =
         player.isOnline && ARC.instance.isEnabled && ARC.instance.runtimeProfile == ArcRuntimeProfile.SLIMEFUN
+
+    /** Preserve the network entry aliases while the optional addon owns the complete SkyBlock UI. */
+    private fun delegateToSkyblockAddon(player: Player, args: Array<String>): Boolean {
+        if (args.size > 1 || args.any { it.lowercase() !in ADDON_ROUTES }) return false
+        val addon = Bukkit.getPluginManager().getPlugin("ArcSkyblock") ?: return false
+        val command = ARC.instance.server.commandMap.getCommand("arcskyblock:arcskyblock") as? PluginCommand ?: return false
+        if (!addon.isEnabled || command.plugin !== addon) return false
+        return Bukkit.dispatchCommand(player, (listOf("arcskyblock:arcskyblock") + args).joinToString(" "))
+    }
 
     private fun ensureConfig(player: Player): Boolean {
         if (config != null) return true
@@ -461,6 +472,7 @@ object SlimefunMenuModule : PluginModule {
     private val STARTER_ID = Regex("[A-Za-z0-9_-]{1,48}")
     private const val MAX_STARTER_CHOICES = 12
     private const val RESOURCE = "modules/slimefun-menu.yml"
+    private val ADDON_ROUTES = setOf("guide", "shop", "hub", "spawn", "progress", "resources", "top")
     private const val SSB_PLUGIN = "SuperiorSkyblock2"
     private const val NETWORK_SPAWN_SERVER = "spawn"
     private const val DEFAULT_HUB_X = 170.5
@@ -481,7 +493,7 @@ object SlimefunMenuCommand : CommandExecutor, TabCompleter {
 
     override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<String>): List<String> =
         if (command.name.equals("skyblock", ignoreCase = true) && args.size == 1) {
-            listOf("guide", "shop", "hub", "spawn").filter { it.startsWith(args[0], ignoreCase = true) }
+            listOf("guide", "shop", "hub", "spawn", "progress", "resources", "top").filter { it.startsWith(args[0], ignoreCase = true) }
         } else {
             emptyList()
         }
