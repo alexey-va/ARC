@@ -228,7 +228,7 @@ class EMWormholes internal constructor(
                     if (playerLocation.world != world) continue
                     if (location.distanceSquared(playerLocation) > distanceSquared) continue
 
-                    val restockTimers = chest.customTreasureChestConfigFields.restockTimers ?: continue
+                    val restockTimers = EMChestCooldowns.timers(chest.customTreasureChestConfigFields) ?: continue
                     val playerId = p.uniqueId.toString()
                     val found = restockTimers.any { timer -> belongsToPlayer(timer, playerId) }
                     if (found) continue

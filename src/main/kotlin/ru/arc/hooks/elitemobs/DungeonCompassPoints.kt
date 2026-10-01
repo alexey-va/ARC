@@ -81,7 +81,7 @@ internal class DungeonCompassPoints {
                     fields.isInstanced(),
                     fields.getDropStyle(),
                     state.restockTimeEpochSeconds,
-                    fields.getRestockTimers(),
+                    EMChestCooldowns.timers(fields),
                     state.blacklistedPlayers,
                     nowEpochSeconds,
                 )
