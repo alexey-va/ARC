@@ -177,6 +177,50 @@ class ItemsAdderHookTest :
         }
 
         "resource pack sync script" - {
+            "excludes Bedrock and editor files while retaining Java assets and licenses" {
+                val directory = Files.createTempDirectory("arc-resourcepack-sync-client-files")
+                val source = directory.resolve("generated.zip")
+                val uploaded = directory.resolve("uploaded.zip")
+                val fakeAws = directory.resolve("fake-aws.sh")
+                val script = BundledResourcePackSyncScript.install(directory.resolve("arc-data"))
+                val retained = mapOf(
+                    "pack.mcmeta" to """{"pack":{"min_format":75,"max_format":75}}""",
+                    "assets/freeminecraftmodels/models/entity/model.json" to "{}",
+                    "assets/freeminecraftmodels/textures/entity/model.png" to "java-texture",
+                    "assets/playing_cards/LICENSE.txt" to "license",
+                )
+                val excluded = listOf(
+                    "assets/freeminecraftmodels/rspm_bedrock_pack/models/entity/model.geo.json",
+                    "overlay/assets/elitemobs/rspm_bedrock_pack/textures/model.png",
+                    "assets/arc/textures/Desktop.INI",
+                    "assets/littlecatset/textures/animations/source.aseprite",
+                )
+                ZipOutputStream(Files.newOutputStream(source)).use { output ->
+                    (retained + excluded.associateWith { "unused" }).forEach { (name, text) ->
+                        output.putNextEntry(ZipEntry(name))
+                        output.write(text.toByteArray())
+                        output.closeEntry()
+                    }
+                }
+                fakeAws.writeText(fakeAwsUploaderScript())
+                fakeAws.toFile().setExecutable(true).shouldBeTrue()
+                ResourcePackSyncScript(script) {
+                    testEnvironment() + mapOf(
+                        "AWS_CLI" to fakeAws.toString(), "CAPTURED_UPLOAD" to uploaded.toString(),
+                        "RP_NOTIFY_ENABLED" to "0",
+                    )
+                }.publish(source).shouldBeTrue()
+                ZipFile(uploaded.toFile()).use { archive ->
+                    archive.entries().asSequence().map { it.name }.toSet() shouldBe retained.keys
+                    retained.forEach { (name, text) ->
+                        archive.getInputStream(archive.getEntry(name)).readAllBytes().decodeToString() shouldBe text
+                    }
+                }
+                ZipFile(source.toFile()).use { archive ->
+                    excluded.forEach { (archive.getEntry(it) != null) shouldBe true }
+                }
+            }
+
             "refuses a zip with a corrupted payload before upload" {
                 val directory = Files.createTempDirectory("arc-resourcepack-sync-corrupt")
                 val resourcePackZip = directory.resolve("generated.zip")
