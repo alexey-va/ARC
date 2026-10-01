@@ -3,9 +3,40 @@ package ru.arc.eliteloot
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.TextDecoration
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 
 class EliteLootPresentationTest : FreeSpec({
+    "magic weapon lore replaces only its native physical DPS row and stays stable" {
+        val plain = PlainTextComponentSerializer.plainText()
+        val entry = "&f &cБазовый элитный DPS: &a\$EDPS"
+        for (template in listOf(entry, entry.replace('&', '§'))) {
+            val row = LegacyComponentSerializer.legacyAmpersand()
+                .deserialize(entry.replace("\$EDPS", "4.0"))
+                .decoration(TextDecoration.ITALIC, true)
+            val lore = listOf(Component.text("Уровень: 43"), row, Component.text("Описание заклинания"))
+            val updated = replaceMagicEliteDpsLore(lore, true, template)
+            updated.map(plain::serialize) shouldBe listOf(
+                "Уровень: 43",
+                " Магический урон по элитам",
+                "Зависит от уровня, навыка и заклинания",
+                "Описание заклинания",
+            )
+            updated[1].decoration(TextDecoration.ITALIC) shouldBe TextDecoration.State.FALSE
+            updated[2].decoration(TextDecoration.ITALIC) shouldBe TextDecoration.State.FALSE
+            replaceMagicEliteDpsLore(updated, true, template) shouldBe updated
+        }
+    }
+    "physical items and unrelated or newer native stats retain their lore" {
+        val entry = "&f &cБазовый элитный DPS: &a\$EDPS"
+        val nativeRow = listOf(Component.text(" Базовый элитный DPS: 4.25"))
+        replaceMagicEliteDpsLore(nativeRow, false, entry) shouldBe nativeRow
+        replaceMagicEliteDpsLore(nativeRow, true, "Уровень оружия: \$itemLevel") shouldBe nativeRow
+        replaceMagicEliteDpsLore(nativeRow, true, "\$EDPS + \$EDPS") shouldBe nativeRow
+        val customLore = listOf(Component.text("Описание:  Базовый элитный DPS: 4.25"))
+        replaceMagicEliteDpsLore(customLore, true, entry) shouldBe customLore
+    }
     "tooltip progression has stable boundaries independent of resale price" {
         listOf(0, 19, 20, 39, 40, 59, 60, 79, 80, 99, 100, 190).map(::eliteTooltipTier) shouldBe
             listOf("common", "common", "uncommon", "uncommon", "rare", "rare", "epic", "epic", "legendary", "legendary", "artifact", "artifact")

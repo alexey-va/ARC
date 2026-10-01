@@ -1,7 +1,9 @@
 package ru.arc.hooks.elitemobs
 
 import com.magmaguy.elitemobs.instanced.MatchInstance
+import com.magmaguy.elitemobs.instanced.InstancePlayerMovement
 import com.magmaguy.elitemobs.instanced.dungeons.DungeonInstance
+import com.magmaguy.elitemobs.playerdata.database.PlayerData
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
@@ -34,11 +36,22 @@ class EMCheckpointTeleporterTest : FreeSpec({
         world = player.world
         match = mockk<DungeonInstance>()
         every { match.isCancelled } returns false
+        every { match.isDefunct } returns false
+        every { match.isDestroyingMatch } returns false
         every { match.state } returns MatchInstance.InstancedRegionState.ONGOING
         every { match.world } returns world
         every { match.players } returns linkedSetOf(player)
-        mockkStatic(MatchInstance::class)
-        every { MatchInstance.getPlayerInstance(player) } returns match
+        every { match["isInRegion"](any<Location>()) } returns true
+        // Native movement reads these fields directly, rather than the public getters.
+        for ((name, value) in mapOf(
+            "world" to world,
+            "state" to MatchInstance.InstancedRegionState.ONGOING,
+            "players" to hashSetOf(player),
+            "spectators" to hashSetOf<Player>(),
+        )) MatchInstance::class.java.getDeclaredField(name).apply { isAccessible = true }.set(match, value)
+        mockkStatic(MatchInstance::class, PlayerData::class)
+        every { MatchInstance.getPlayerInstance(any()) } answers { if (firstArg<Player>() === player) match else null }
+        every { PlayerData.getMatchInstance(any<Player>()) } answers { if (firstArg<Player>() === player) match else null }
         nativeGuard = MatchInstance.MatchInstanceEvents()
         paper.server.pluginManager.registerEvents(nativeGuard, plugin)
     }
@@ -49,33 +62,41 @@ class EMCheckpointTeleporterTest : FreeSpec({
     }
 
     afterEach {
-        MatchInstance.MatchInstanceEvents.teleportBypass = false
-        unmockkStatic(MatchInstance::class)
+        unmockkStatic(MatchInstance::class, PlayerData::class)
         paper.close()
     }
 
-    "native LOW consumes scoped bypass and cleanup restores global state" {
+    fun nativeAuthorizationActive(target: Player = player): Boolean = InstancePlayerMovement::class.java
+        .getDeclaredMethod("hasAuthorization", Player::class.java).apply { isAccessible = true }
+        .invoke(null, target) as Boolean
+
+    "native authorization exists only during the owned synchronous teleport" {
         installTeleporter()
         val destination = world.location(12.0, 70.0, 12.0)
-        var armedAtLowest = false
-        var clearedAfterNative = false
+        var authorizedAtLow = false
         val observer = object : Listener {
-            @EventHandler(priority = EventPriority.LOWEST)
-            fun observeArm(event: PlayerTeleportEvent) {
-                if (event.player === player) armedAtLowest = MatchInstance.MatchInstanceEvents.teleportBypass
-            }
-
             @EventHandler(priority = EventPriority.LOW)
             fun observeNative(event: PlayerTeleportEvent) {
-                if (event.player === player) clearedAfterNative = !MatchInstance.MatchInstanceEvents.teleportBypass
+                if (event.player === player) authorizedAtLow = nativeAuthorizationActive()
             }
         }
         paper.server.pluginManager.registerEvents(observer, plugin)
 
         teleporter.teleport(player, destination, instance = true) shouldBe true
-        armedAtLowest shouldBe true
-        clearedAfterNative shouldBe true
-        MatchInstance.MatchInstanceEvents.teleportBypass shouldBe false
+        authorizedAtLow shouldBe true
+        nativeAuthorizationActive() shouldBe false
+    }
+
+    "current native movement preserves a foreign cancellation" {
+        val canceller = object : Listener {
+            @EventHandler(priority = EventPriority.HIGH)
+            fun cancel(event: PlayerTeleportEvent) { event.isCancelled = true }
+        }
+        paper.server.pluginManager.registerEvents(canceller, plugin)
+        installTeleporter()
+
+        teleporter.teleport(player, world.location(12.0, 70.0, 12.0), instance = true) shouldBe false
+        nativeAuthorizationActive() shouldBe false
     }
 
     listOf(false, true).forEach { nativeRegisteredLast ->
@@ -101,7 +122,7 @@ class EMCheckpointTeleporterTest : FreeSpec({
                 paper.callEvent(ordinary)
                 ordinary.isCancelled shouldBe true
                 teleporter.teleport(player, destination, instance = true) shouldBe true
-                MatchInstance.MatchInstanceEvents.teleportBypass shouldBe false
+                nativeAuthorizationActive() shouldBe false
                 val subsequent = PlayerTeleportEvent(player, player.location, world.location(15.0, 70.0, 15.0), PlayerTeleportEvent.TeleportCause.PLUGIN)
                 paper.callEvent(subsequent)
                 subsequent.isCancelled shouldBe true
@@ -109,7 +130,7 @@ class EMCheckpointTeleporterTest : FreeSpec({
         }
     }
 
-    "pre-cancelled event stays cancelled and never arms native bypass" {
+    "pre-cancelled event stays cancelled and clears native authorization" {
         val canceller = object : Listener {
             @EventHandler(priority = EventPriority.LOWEST)
             fun cancel(event: PlayerTeleportEvent) { event.isCancelled = true }
@@ -118,7 +139,7 @@ class EMCheckpointTeleporterTest : FreeSpec({
         installTeleporter()
 
         teleporter.teleport(player, world.location(12.0, 70.0, 12.0), instance = true) shouldBe false
-        MatchInstance.MatchInstanceEvents.teleportBypass shouldBe false
+        nativeAuthorizationActive() shouldBe false
     }
 
     "redirect at HIGHEST is preserved as cancellation" {
@@ -130,15 +151,15 @@ class EMCheckpointTeleporterTest : FreeSpec({
         installTeleporter()
 
         teleporter.teleport(player, world.location(12.0, 70.0, 12.0), instance = true) shouldBe false
-        MatchInstance.MatchInstanceEvents.teleportBypass shouldBe false
+        nativeAuthorizationActive() shouldBe false
     }
 
-    "existing native global flag fails closed without clearing it" {
+    "native movement rejects a destination outside the instance" {
         installTeleporter()
-        MatchInstance.MatchInstanceEvents.teleportBypass = true
+        every { match["isInRegion"](any<Location>()) } answers { firstArg<Location>().blockX != 12 }
 
         teleporter.teleport(player, world.location(12.0, 70.0, 12.0), instance = true) shouldBe false
-        MatchInstance.MatchInstanceEvents.teleportBypass shouldBe true
+        nativeAuthorizationActive() shouldBe false
     }
 
     "foreign player and invalid instance state are rejected" {
@@ -156,12 +177,12 @@ class EMCheckpointTeleporterTest : FreeSpec({
         teleporter.teleport(player, world.location(12.0, 70.0, 12.0), instance = true) shouldBe false
     }
 
-    "wrong world and non-instance travel are handled without bypass" {
+    "wrong world and non-instance travel preserve native authorization scope" {
         installTeleporter()
         val other = paper.addSimpleWorld("other")
         teleporter.teleport(player, other.location(12.0, 70.0, 12.0), instance = true) shouldBe false
         teleporter.teleport(player, world.location(12.0, 70.0, 12.0), instance = false) shouldBe true
-        MatchInstance.MatchInstanceEvents.teleportBypass shouldBe false
+        nativeAuthorizationActive() shouldBe false
     }
 
     "nested foreign teleport is cancelled while the owned transaction remains scoped" {
@@ -181,7 +202,7 @@ class EMCheckpointTeleporterTest : FreeSpec({
 
         teleporter.teleport(player, world.location(12.0, 70.0, 12.0), instance = true) shouldBe true
         nestedCancelled shouldBe true
-        MatchInstance.MatchInstanceEvents.teleportBypass shouldBe false
+        nativeAuthorizationActive() shouldBe false
     }
 
     "finally clears scope when player teleport throws" {
@@ -189,12 +210,18 @@ class EMCheckpointTeleporterTest : FreeSpec({
         val throwing = mockk<Player>()
         every { throwing.uniqueId } returns player.uniqueId
         every { throwing.world } returns world
+        every { throwing.location } returns player.location
+        every { throwing.isOnline } returns true
+        every { throwing.isValid } returns true
         every { throwing.teleport(any<Location>(), PlayerTeleportEvent.TeleportCause.PLUGIN) } throws IllegalStateException("boom")
         every { MatchInstance.getPlayerInstance(throwing) } returns match
+        every { PlayerData.getMatchInstance(throwing) } returns match
         every { match.players } returns linkedSetOf(player, throwing)
+        MatchInstance::class.java.getDeclaredField("players").apply { isAccessible = true }
+            .set(match, hashSetOf(player, throwing))
 
         runCatching { teleporter.teleport(throwing, world.location(12.0, 70.0, 12.0), instance = true) }.isFailure shouldBe true
-        MatchInstance.MatchInstanceEvents.teleportBypass shouldBe false
+        nativeAuthorizationActive(throwing) shouldBe false
     }
 })
 

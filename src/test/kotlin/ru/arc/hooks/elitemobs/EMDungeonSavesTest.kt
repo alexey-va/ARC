@@ -2,7 +2,6 @@ package ru.arc.hooks.elitemobs
 
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.string.shouldContain
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -235,7 +234,7 @@ class EMDungeonSavesTest : FreeSpec({
         }
     }
 
-    "dungeon panel toggles the personal scoreboard preference and applies it immediately" {
+    "personal scoreboard preference remains persisted while its panel control is absent" {
         withScheduler {
             val player = paper.addPlayer("scoreboard-setting")
             val world = paper.addSimpleWorld("scoreboard-setting-world")
@@ -252,18 +251,13 @@ class EMDungeonSavesTest : FreeSpec({
             service.scoreboard.refresh(listOf(player))
             service.scoreboard.value(player.uniqueId, "active") shouldBe "true"
             menus.panel(player)
-            val enabledButton = screens.last().buttons.single { it.id.value == "scoreboard" }
-            net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
-                .serialize(enabledButton.label) shouldContain "включено"
+            screens.last().buttons.none { it.id.value == "scoreboard" } shouldBe true
 
-            enabledButton.onClick.handle(mockk(relaxed = true))
+            service.setScoreboardEnabled(player, false).success shouldBe true
 
             persisted shouldBe 1
             service.scoreboard.refresh(listOf(player))
             service.scoreboard.value(player.uniqueId, "active") shouldBe "false"
-            val disabledButton = screens.last().buttons.single { it.id.value == "scoreboard" }
-            net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
-                .serialize(disabledButton.label) shouldContain "выключено"
 
             service.close()
             val recreated = qol(world, player)
