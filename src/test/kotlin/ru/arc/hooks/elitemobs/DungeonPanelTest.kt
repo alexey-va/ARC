@@ -32,8 +32,10 @@ class DungeonPanelTest : FreeSpec({
             every { dungeon.panelView(player) } returns DungeonPanelView(world.uid, visit, null)
             DungeonSaveMenus(dungeon) { _, screen, _ -> shown += screen }.panel(player)
             shown.last().id shouldBe "dungeon.panel"
-            shown.last().buttons.map { it.id.value } shouldContain "saves"
-            shown.last().buttons.map { it.id.value } shouldContain "quit"
+            val ids = shown.last().buttons.map { it.id.value }
+            ids shouldContain "saves"
+            ids.none { it == "scoreboard" } shouldBe true
+            ("quit" in ids) shouldBe visit.instanced
         }
         shown.first().buttons.single { it.id.value == "start" }.closeDialogBeforeAction shouldBe true
     }

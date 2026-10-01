@@ -50,14 +50,15 @@ class DungeonSaveMenusTest : FreeSpec({
         val player = paper.addPlayer("panel-order")
         val dungeon = mockk<EMDungeonQol>(relaxed = true)
         val world = paper.addSimpleWorld("panel-order-world")
-        every { dungeon.panelView(player) } returns DungeonPanelView(world.uid, DungeonVisit("run"), null)
+        every { dungeon.panelView(player) } returns DungeonPanelView(world.uid, DungeonVisit("run", instanced = true), null)
+        every { dungeon.continuation(player) } returns null
         every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(secondArg<String>()) }
         val shown = mutableListOf<PaperDialogScreen>()
 
         DungeonSaveMenus(dungeon) { _, screen, _ -> shown += screen }.panel(player)
 
         shown.single().buttons.map { it.id.value } shouldBe listOf(
-            "quests", "classes", "party", "shop", "lost_loot", "saves", "entry", "guide", "about", "scoreboard", "quit",
+            "quests", "classes", "party", "shop", "lost_loot", "saves", "entry", "guide", "about", "quit",
         )
         shown.single().buttons.none { it.id.value == "shops" || it.id.value == "skill_boosts" } shouldBe true
     }
@@ -150,7 +151,7 @@ class DungeonSaveMenusTest : FreeSpec({
         val shown = mutableListOf<PaperDialogScreen>()
         DungeonSaveMenus(dungeon) { _, screen, _ -> shown += screen }.open(player)
         shown.single().id shouldBe "dungeon.panel.unavailable"
-        shown.single().buttons.map { it.id.value } shouldBe listOf("return", "lost_loot", "guide", "portals", "list", "classes", "party", "scoreboard")
+        shown.single().buttons.map { it.id.value } shouldBe listOf("return", "lost_loot", "guide", "portals", "list", "classes", "party")
         shown.single().exitButton!!.id.value shouldBe "back"
         shown.single().exitButton!!.closeDialogBeforeAction shouldBe false
         shown.single().body.map { it.text } shouldBe listOf(
@@ -434,13 +435,15 @@ class DungeonSaveMenusTest : FreeSpec({
         val world = paper.addSimpleWorld("dungeon")
         val saves = DungeonSaveView(world.uid, "run", emptyList(), null, null)
         every { dungeon.view(player) } returns saves
-        every { dungeon.panelView(player) } returns DungeonPanelView(world.uid, DungeonVisit("run"), saves)
+        every { dungeon.panelView(player) } returns DungeonPanelView(world.uid, DungeonVisit("run", instanced = true), saves)
         every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(secondArg<String>()) }
         var screen: PaperDialogScreen? = null
         DungeonSaveMenus(dungeon) { _, shown, _ -> screen = shown }.panel(player)
         screen!!.exitButton!!.onClick.handle(mockk())
         verify(exactly = 0) { dungeon.quit(any()) }
-        screen!!.buttons.single { it.id.value == "quit" }.onClick.handle(mockk())
+        val quit = screen!!.buttons.single { it.id.value == "quit" }
+        quit.closeDialogBeforeAction shouldBe true
+        quit.onClick.handle(mockk())
         verify { dungeon.panelAction(player, any(), "quit") }
     }
 

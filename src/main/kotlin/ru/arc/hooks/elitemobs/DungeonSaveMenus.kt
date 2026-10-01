@@ -47,6 +47,11 @@ internal class DungeonSaveMenus(
         val classView = classService.view(player)
         val visit = view.visit
         val continuation = dungeon.continuation(player)
+        val entryUnavailable = if (visit.instanced) {
+            text("panel.entry-unavailable", "<#e8dfd2>Безопасный переход ко входу сейчас недоступен. Для выхода используйте кнопку внизу.")
+        } else {
+            text("panel.entry-open-unavailable", "<#e8dfd2>Безопасный переход ко входу сейчас недоступен.")
+        }
         val blocked = dungeon.saveBlockReason(player, view.saves)
         val state = when {
             visit.waiting -> text("panel.waiting", "<#d7b486>Сбор группы · готовьтесь к старту")
@@ -88,7 +93,7 @@ internal class DungeonSaveMenus(
                     dungeon.travel(player, continuation, "exit")
                 } else null,
                 action("entry", "panel.entry-label", "<#92bed8>К началу данжа ›", "panel.entry-tooltip", "Обычный портал к началу данжа", close = view.saves?.entry != null) {
-                    if (view.saves?.entry != null) dungeon.travel(player, view.saves, "entry") else panel(player, text("panel.entry-unavailable", "<#e8dfd2>Безопасный переход ко входу сейчас недоступен. Для выхода используйте кнопку внизу."))
+                    if (view.saves?.entry != null) dungeon.travel(player, view.saves, "entry") else panel(player, entryUnavailable)
                 }.let { if (view.saves?.entry != null) it else it.copy(label = text("panel.entry-disabled", "<#e8dfd2>[Недоступно] К началу данжа")) },
                 action("guide", "panel.guide-label", "<#86dcf1>Гайд ›", "panel.guide-tooltip", "Читальная справка о данжах") {
                     if (!HelpCenterModule.openDungeonsGuide(player) { panel(player) }) {
@@ -96,8 +101,9 @@ internal class DungeonSaveMenus(
                     }
                 },
                 action("about", "panel.about-label", "<#86dcf1>О данже ›", "panel.about-tooltip", "Описание и подсказка этого данжа") { about(player) },
-                scoreboardButton(player),
-                action("quit", "panel.quit-label", "<#d7b486>Выйти из данжа", "panel.quit-tooltip", "Покинуть данж штатным способом", close = true) { dungeon.panelAction(player, view, "quit") }.let { if (visit.instanced) it else it.copy(tooltip = text("panel.quit-open-tooltip", "Вызвать выход ко спавну. Если появился портал, войдите в него.")) },
+                if (visit.instanced) action("quit", "panel.quit-label", "<#d7b486>Выйти из данжа", "panel.quit-tooltip", "Покинуть данж штатным способом", close = true) {
+                    dungeon.panelAction(player, view, "quit")
+                } else null,
             ),
             exitButton = if (MenuEscapeBehavior.goesBack(player)) back {} else close(), columns = 2,
         )) { panel(player) }
@@ -289,7 +295,6 @@ internal class DungeonSaveMenus(
             action("list", "panel.list-label", "<#ffb277>Выбрать данж ›", "panel.list-tooltip", "Открыть список данжей EliteMobs", close = true) { dungeon.action(player, "list") },
             classButton(player),
             partyButton(player),
-            scoreboardButton(player),
         ), exitButton = if (MenuEscapeBehavior.goesBack(player)) back {} else close(), columns = 2,
         )) { unavailable(player) }
     }
@@ -566,21 +571,6 @@ internal class DungeonSaveMenus(
     ) = DialogTables.body(rows, headers = headers, frame = frame, width = 420, columns = DialogTables.Columns.VALUE_WIDE)
 
     private fun autosaveSettingsButton(player: Player) = action("autosaves", "saves.settings.label", "<#c4a7e7>Автосохранение ›", "saves.settings.tooltip", "Выбрать интервал или отключить автоматические точки") { autosaveSettings(player) }
-
-    private fun scoreboardButton(player: Player): PaperDialogButton {
-        val enabled = dungeon.scoreboardEnabled(player)
-        return action(
-            "scoreboard",
-            if (enabled) "panel.scoreboard-on-label" else "panel.scoreboard-off-label",
-            if (enabled) "<#9bd48d>✔ Табло включено" else "<#f2eee8>○ Табло выключено",
-            "panel.scoreboard-tooltip",
-            "Показать или скрыть сведения о текущем походе справа на экране",
-        ) {
-            val result = dungeon.setScoreboardEnabled(player, !enabled)
-            val feedback = result.message.takeUnless { result.success }
-            if (dungeon.panelView(player) == null) unavailable(player, feedback) else panel(player, feedback)
-        }
-    }
 
     private fun autosaveSettings(player: Player, feedback: Component? = null) {
         val seconds = dungeon.autosaveSeconds(player)
