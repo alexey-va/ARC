@@ -45,6 +45,7 @@ internal class MountPassengerController(
         val driver: Player,
         val definition: MountDefinition,
         var fireProtected: Boolean,
+        val visualBody: LivingEntity? = null,
         val passengers: MutableSet<UUID> = linkedSetOf(),
         var boardingPlayerId: UUID? = null,
         var boardingVehicleId: UUID? = null,
@@ -61,6 +62,7 @@ internal class MountPassengerController(
     private val rides = hashMapOf<UUID, Ride>()
     private val passengers = hashMapOf<UUID, Passenger>()
     private val carriers = hashMapOf<UUID, Ride>()
+    private val visualBodies = hashMapOf<UUID, Ride>()
     private val pendingCarrierSpawns = hashMapOf<UUID, Ride>()
     private var liveSettings: MountPassengerSettings? = null
     private var carrierPoses: MountCarrierPosePackets? = null
@@ -91,9 +93,10 @@ internal class MountPassengerController(
         HandlerList.unregisterAll(this)
     }
 
-    fun openRide(entity: LivingEntity, driver: Player, definition: MountDefinition, fireProtected: Boolean): Boolean {
-        val ride = Ride(entity, driver, definition, fireProtected)
+    fun openRide(entity: LivingEntity, driver: Player, definition: MountDefinition, fireProtected: Boolean, visualBody: LivingEntity? = null): Boolean {
+        val ride = Ride(entity, driver, definition, fireProtected, visualBody)
         rides[entity.uniqueId] = ride
+        visualBody?.let { visualBodies[it.uniqueId] = ride }
         if (definition.passengerSeats == 0 || definition.entityType in NATIVE_SEAT_TYPES) return true
         return try {
             ride.seatsReady = false
@@ -113,6 +116,7 @@ internal class MountPassengerController(
 
     fun closeRide(entityId: UUID) {
         val ride = rides.remove(entityId) ?: return
+        ride.visualBody?.let { visualBodies.remove(it.uniqueId) }
         ride.prepareSeats?.cancel()
         ride.passengers.toList().forEach { id ->
             passengers[id]?.let { passenger ->
@@ -158,7 +162,7 @@ internal class MountPassengerController(
     fun onInteractAt(event: PlayerInteractAtEntityEvent) = interact(event)
 
     private fun interact(event: PlayerInteractEntityEvent) {
-        val ride = rides[event.rightClicked.uniqueId] ?: carriers[event.rightClicked.uniqueId] ?: return
+        val ride = rides[event.rightClicked.uniqueId] ?: carriers[event.rightClicked.uniqueId] ?: visualBodies[event.rightClicked.uniqueId] ?: return
         if (event.isCancelled) return
         event.isCancelled = true
         if (event.hand != EquipmentSlot.HAND) return
@@ -229,7 +233,7 @@ internal class MountPassengerController(
     /** Native mounting and other plugins must not bypass the configured capacity or replace the driver. */
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun onMount(event: EntityMountEvent) {
-        val ride = rides[event.mount.uniqueId] ?: carriers[event.mount.uniqueId] ?: return
+        val ride = rides[event.mount.uniqueId] ?: carriers[event.mount.uniqueId] ?: visualBodies[event.mount.uniqueId] ?: return
         if (event.entity === ride.attachingCarrier && event.mount.uniqueId == ride.entity.uniqueId) return
         if (
             event.entity !is Player || ride.boardingPlayerId != event.entity.uniqueId ||
@@ -241,7 +245,7 @@ internal class MountPassengerController(
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     fun onCarrierDismount(event: EntityDismountEvent) {
-        val ride = carriers[event.entity.uniqueId] ?: return
+        val ride = carriers[event.entity.uniqueId] ?: visualBodies[event.entity.uniqueId] ?: return
         if (event.dismounted.uniqueId == ride.entity.uniqueId && event.isCancellable) event.isCancelled = true
     }
 
@@ -328,7 +332,8 @@ internal class MountPassengerController(
         } == true
 
     private fun isFull(ride: Ride): Boolean = if (ride.seats.isEmpty()) {
-        ride.entity.passengers.count { it.uniqueId != ride.driverId } >= ride.definition.passengerSeats
+        ride.entity.passengers.count { it.uniqueId != ride.driverId && it.uniqueId != ride.visualBody?.uniqueId } >=
+            ride.definition.passengerSeats
     } else {
         ride.seats.all { it.passengers.isNotEmpty() }
     }

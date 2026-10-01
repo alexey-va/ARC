@@ -67,6 +67,55 @@ class MountGuiItemsCurrencyTest : TestBase() {
         detailLore.any { "Особенность: Пассажирские места: 2" in it } shouldBe true
         detailLore.any { "ПКМ по маунту — сесть пассажиром" in it } shouldBe true
     }
+
+    @Test
+    fun `upgrade lore keeps coin and token prices separate and locks paid sizes by level`() {
+        val base = testMount()
+        val skin = base.skins.first().copy(id = "premium", price = 150.0, currency = "tokens")
+        val paidSize = MountSizeOptionDefinition(
+            id = "keychain",
+            displayName = "Крошечный",
+            multiplier = 0.1,
+            minimumLevel = 1,
+            grantOnly = true,
+            price = 40.0,
+            currency = "tokens",
+        )
+        val lockedSize = paidSize.copy(id = "colossal", minimumLevel = 3, price = 100.0)
+        val mount = base.copy(
+            currency = "tokens",
+            glowPrice = 5_000.0,
+            glowCurrency = "vault",
+            skins = listOf(skin),
+            sizeOptions = listOf(MountSizeOptionDefinition("standard", "Обычный", 1.0), paidSize, lockedSize),
+        )
+        val runtimeConfig = mockk<MountModuleConfig> {
+            every { purchasesEnabled } returns true
+            every { guiText(any(), any()) } answers {
+                when (firstArg<String>()) {
+                    "common.price-vault" -> "COIN <price> <currency>"
+                    "common.price-tokens" -> "TOKEN <price> <currency>"
+                    "currencies.vault" -> "монет"
+                    "currencies.tokens" -> "жетонов"
+                    else -> secondArg()
+                }
+            }
+            every { guiLines(any(), any()) } answers { secondArg() }
+            every { guiStyle(any()) } returns MountGuiItemStyle()
+        }
+        val items = MountGuiItems({ runtimeConfig }, mockk(relaxed = true))
+        val profile = MountProfile(level = 1, glowOwned = false, glowDisabled = false)
+        fun lore(item: org.bukkit.inventory.ItemStack) =
+            checkNotNull(item.itemMeta?.lore()).map(PlainTextComponentSerializer.plainText()::serialize)
+
+        lore(items.glowItem(mount, profile)).any { "COIN" in it && "монет" in it } shouldBe true
+        lore(items.skinItem(mount, profile, skin.id)).any { "TOKEN" in it && "жетонов" in it } shouldBe true
+        lore(items.sizeTuningItem(mount, profile, paidSize)).any { "TOKEN" in it && "жетонов" in it } shouldBe true
+
+        val lockedLore = lore(items.sizeTuningItem(mount, profile, lockedSize))
+        lockedLore.any { "Откроется на уровне 3" in it } shouldBe true
+        lockedLore.none { "TOKEN" in it || "открыть покупку" in it } shouldBe true
+    }
 }
 
 private fun bundledMountConfigForCurrency(): MountModuleConfig {

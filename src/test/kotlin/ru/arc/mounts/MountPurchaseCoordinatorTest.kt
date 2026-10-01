@@ -98,6 +98,57 @@ class MountPurchaseCoordinatorTest : StringSpec({
         fixture.journal.records().single().currency shouldBe "tokens"
     }
 
+    "glow and skin currencies route independently from the mount currency" {
+        val tokenWallet = MutableWallet()
+        val mount = testMount().copy(
+            currency = "tokens",
+            glowCurrency = "vault",
+            skins = listOf(testMount().skins.single().copy(currency = "tokens")),
+        )
+        val fixture = PurchaseFixture(mount).also {
+            it.ownership.level = 1
+            it.wallet.currencyWallets["tokens"] = tokenWallet
+        }
+        var glowResult: MountPurchaseResult? = null
+        var skinResult: MountPurchaseResult? = null
+
+        fixture.coordinator.purchaseGlow(fixture.subject(), mount) { glowResult = it }
+        fixture.coordinator.purchaseSkin(fixture.subject(), mount, mount.skins.single()) { skinResult = it }
+
+        glowResult shouldBe MountPurchaseResult.Success
+        skinResult shouldBe MountPurchaseResult.Success
+        fixture.wallet.withdrawals shouldBe 1
+        tokenWallet.withdrawals shouldBe 1
+        fixture.journal.records().associate { it.kind to it.currency } shouldBe
+            mapOf(MountPurchaseKind.GLOW to "vault", MountPurchaseKind.SKIN to "tokens")
+    }
+
+    "paid special size records currency and becomes an owned size entitlement" {
+        val tokenWallet = MutableWallet()
+        val mount = testMount().copy(
+            currency = "vault",
+            sizeOptions = listOf(
+                MountSizeOptionDefinition("standard", "Обычный", 1.0),
+                MountSizeOptionDefinition("keychain", "Крошечный", 0.1, grantOnly = true, price = 40.0, currency = "tokens"),
+            ),
+        )
+        val fixture = PurchaseFixture(mount).also {
+            it.ownership.level = 1
+            it.wallet.currencyWallets["tokens"] = tokenWallet
+        }
+        var result: MountPurchaseResult? = null
+
+        fixture.coordinator.purchaseSize(fixture.subject(), mount, "keychain") { result = it }
+
+        result shouldBe MountPurchaseResult.Success
+        fixture.wallet.withdrawals shouldBe 0
+        tokenWallet.withdrawals shouldBe 1
+        fixture.ownership.ownedSizeIds shouldBe setOf("keychain")
+        fixture.journal.records().single().kind shouldBe MountPurchaseKind.SIZE
+        fixture.journal.records().single().currency shouldBe "tokens"
+        fixture.journal.records().single().status shouldBe MountPurchaseJournalStatus.COMPLETED
+    }
+
     "recovery uses recorded currency and price after catalog repricing" {
         val tokenWallet = MutableWallet()
         val fixture = PurchaseFixture().also { it.wallet.currencyWallets["tokens"] = tokenWallet }
@@ -273,6 +324,51 @@ class MountPurchaseCoordinatorTest : StringSpec({
         fixture.journal.records().single().status shouldBe MountPurchaseJournalStatus.COMPLETED
         manual shouldBe emptyList()
         fixture.wallet.withdrawals shouldBe 0
+    }
+
+    "startup recovery quarantines a paid size removed from the current catalog" {
+        val originalSize = MountSizeOptionDefinition("keychain", "Крошечный", 0.1, grantOnly = true, price = 40.0, currency = "tokens")
+        val mount = testMount().copy(sizeOptions = listOf(MountSizeOptionDefinition("standard", "Обычный", 1.0), originalSize))
+        val fixture = PurchaseFixture(mount)
+        val tokenWallet = MutableWallet()
+        fixture.wallet.currencyWallets["tokens"] = tokenWallet
+        val record = fixture.preparedRecord().copy(
+            kind = MountPurchaseKind.SIZE,
+            target = originalSize.id,
+            permission = mount.sizeOwnershipPermission(originalSize.id),
+            priceMinor = 4_000L,
+            currency = "tokens",
+        )
+        fixture.journal.persist(record) shouldBe true
+        fixture.journal.persist(
+            record.copy(
+                status = MountPurchaseJournalStatus.WITHDRAWAL_STARTED,
+                updatedAt = 2L,
+                balanceBeforeMinor = 10_000L,
+            ),
+        ) shouldBe true
+        fixture.journal.persist(
+            record.copy(
+                status = MountPurchaseJournalStatus.FUNDS_WITHDRAWN,
+                updatedAt = 3L,
+                balanceBeforeMinor = 10_000L,
+                balanceAfterMinor = 6_000L,
+                evidence = "exact_balance_delta",
+            ),
+        ) shouldBe true
+        val manual = mutableListOf<MountPurchaseJournalRecord>()
+
+        fixture.coordinator.recover(
+            MountCatalog(listOf(mount.copy(sizeOptions = listOf(MountSizeOptionDefinition("standard", "Обычный", 1.0))))),
+            manual::add,
+        )
+
+        fixture.journal.records().single().let { recovered ->
+            recovered.status shouldBe MountPurchaseJournalStatus.MANUAL_REVIEW
+            recovered.evidence shouldBe "startup_target_missing"
+        }
+        manual.map(MountPurchaseJournalRecord::transactionId) shouldBe listOf(record.transactionId)
+        tokenWallet.deposits shouldBe 0
     }
 
     "startup recovery uses exact provider history after an interrupted withdrawal call" {

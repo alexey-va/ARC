@@ -15,10 +15,10 @@ class MountModuleConfigTest : StringSpec({
         val config = bundledConfig("catalog")
         val catalog = config.catalog()
 
-        catalog.all shouldHaveSize 71
+        catalog.all shouldHaveSize 72
         catalog.all.groupingBy(MountDefinition::movement).eachCount() shouldBe
-            mapOf(MountMovement.WALKING to 47, MountMovement.FLYING to 13, MountMovement.SWIMMING to 11)
-        catalog.all.map(MountDefinition::id).toSet().size shouldBe 71
+            mapOf(MountMovement.WALKING to 47, MountMovement.FLYING to 14, MountMovement.SWIMMING to 11)
+        catalog.all.map(MountDefinition::id).toSet().size shouldBe 72
         setOf(
             "cat",
             "wolf",
@@ -79,12 +79,25 @@ class MountModuleConfigTest : StringSpec({
         val config = bundledConfig("controls")
         config.catalog().all.forEach { mount ->
             mount.motion.resolve(config.motionTiming) shouldBe MountMotionTiming(Duration.ZERO, Duration.ZERO, Duration.ZERO)
-            mount.control shouldBe MountControl.VEHICLE
+            mount.control shouldBe if (mount.id == "skycruiser") MountControl.NATIVE_FLIGHT else MountControl.VEHICLE
         }
         val bee = config.catalog()["bee"]!!.copy(control = MountControl.PLAYER_FLIGHT)
         shouldThrow<IllegalArgumentException> { bee.copy(movement = MountMovement.WALKING) }
         shouldThrow<IllegalArgumentException> { config.catalog()["happy_ghast"]!!.copy(control = MountControl.PLAYER_FLIGHT) }
         shouldThrow<IllegalArgumentException> { bee.copy(visualFlightOffsetY = Double.NaN) }
+    }
+
+    "native flight retains Happy Ghast as carrier and reserves the visible body seat" {
+        val mount = bundledConfig("native-flight").catalog()["skycruiser"]!!
+        mount.entityType shouldBe "HAPPY_GHAST"
+        mount.visualEntityType shouldBe "PHANTOM"
+        mount.passengerSeats shouldBe 2
+        shouldThrow<IllegalArgumentException> { mount.copy(entityType = "PHANTOM") }
+        shouldThrow<IllegalArgumentException> { mount.copy(control = MountControl.VEHICLE) }
+        shouldThrow<IllegalArgumentException> { mount.copy(passengerSeats = 3) }
+        val happy = bundledConfig("native-happy").catalog()["happy_ghast"]!!.copy(control = MountControl.NATIVE_FLIGHT)
+        shouldThrow<IllegalArgumentException> { happy.copy(appearance = happy.appearance.copy(baby = true)) }
+        shouldThrow<IllegalArgumentException> { happy.copy(appearance = happy.appearance.copy(equipment = emptyMap())) }
     }
 
     "passenger seats default to zero and stay within the supported carrier envelope" {
@@ -128,7 +141,7 @@ class MountModuleConfigTest : StringSpec({
     "maximum level is a fast and intentionally expensive final sprint" {
         val config = bundledConfig("progression")
         val catalog = config.catalog()
-        val purchasable = catalog.all.filter { it.price(3) != null }
+        val purchasable = catalog.all.filter { it.price(3) != null && it.control != MountControl.NATIVE_FLIGHT }
 
         purchasable.all { it.level(3).handlingMultiplier == 1.28 } shouldBe true
         purchasable.all { it.level(3).sprintMultiplier == 1.12 } shouldBe true
@@ -153,19 +166,87 @@ class MountModuleConfigTest : StringSpec({
         catalog["horse"]!!.levels.mapNotNull { it.price }.sum() shouldBe 420_000.0
         catalog["camel"]!!.levels.mapNotNull { it.price }.sum() shouldBe 1_050_000.0
         catalog["iron_golem"]!!.levels.mapNotNull { it.price }.sum() shouldBe 3_500_000.0
-        catalog.all.filter { it.rarity == MountRarity.LEGENDARY && it.currency == "tokens" }
+        catalog.all.filter { it.rarity == MountRarity.LEGENDARY && it.currency == "tokens" && it.control != MountControl.NATIVE_FLIGHT }
             .mapNotNull { it.price(3) }.toSet() shouldBe setOf(1200.0)
+        catalog["skycruiser"]!!.levels.map(MountLevelDefinition::speed) shouldBe listOf(1.1, 1.5, 1.9)
+        catalog["skycruiser"]!!.levels.map(MountLevelDefinition::price) shouldBe listOf(1200.0, 1800.0, 3000.0)
     }
 
-    "cosmetic prices use the mount currency without importing coin-scale amounts into tokens" {
+    "upgrade currencies allow simple coin purchases and premium token entitlements" {
         val catalog = bundledConfig("currencies").catalog()
-        catalog.all.filter { it.currency == "tokens" }.forEach { mount ->
-            mount.skins.mapNotNull { it.price }.all { it in 1.0..120.0 } shouldBe true
-            mount.glowPrice?.let { it in 1.0..60.0 } shouldBe true
+        catalog.all.forEach { mount ->
+            mount.glowCurrency shouldBe "vault"
+            mount.skins.filter { it.price != null }.all { it.currency == "tokens" && checkNotNull(it.price) in 1.0..150.0 } shouldBe true
+            checkNotNull(mount.sizeOptions.firstOrNull { it.id == "keychain" }).let { size ->
+                checkNotNull(size.price) shouldBe 40.0
+                size.currency shouldBe "tokens"
+            }
+            checkNotNull(mount.sizeOptions.firstOrNull { it.id == "colossal" }).let { size ->
+                checkNotNull(size.price) shouldBe 100.0
+                size.currency shouldBe "tokens"
+            }
         }
         catalog["pig"]!!.glowPrice shouldBe 5_000.0
-        catalog["horse"]!!.skin("electric-spiral")!!.price shouldBe 25_000.0
+        catalog["skycruiser"]!!.glowPrice shouldBe 25_000.0
+        catalog["horse"]!!.skin("electric-spiral")!!.price shouldBe 50.0
+        catalog["horse"]!!.skin("electric-spiral")!!.currency shouldBe "tokens"
         catalog["bee"]!!.skin("electric-spiral")!!.price shouldBe 50.0
+        catalog["skycruiser"]!!.skin("starlight")!!.price shouldBe 150.0
+        catalog["skycruiser"]!!.skin("starlight")!!.currency shouldBe "tokens"
+        catalog["skycruiser"]!!.ability("night-vision")!!.price shouldBe 15_000.0
+        catalog["skycruiser"]!!.ability("night-vision")!!.currency shouldBe "vault"
+        catalog["skycruiser"]!!.ability("fire-resistance")!!.price shouldBe 50.0
+        catalog["skycruiser"]!!.ability("fire-resistance")!!.currency shouldBe "tokens"
+    }
+
+    "per-skin glow and extreme-size currency fields parse independently of mount currency" {
+        val dataPath = Files.createTempDirectory("arc-mounts-mixed-upgrade-currency-")
+        val moduleDir = Files.createDirectories(dataPath.resolve("modules"))
+        Files.writeString(
+            moduleDir.resolve("mounts.yml"),
+            """
+            enabled: false
+            size-tuning-defaults:
+              tiny: {id: keychain, name: "Крошечный", multiplier: 0.1, price: 40, currency: tokens}
+              giant: {id: colossal, name: "Колоссальный", multiplier: 10.0, price: 100, currency: tokens}
+            mounts:
+              currency_probe:
+                type: walking
+                entity: PIG
+                item: PIG_SPAWN_EGG
+                name: Currency probe
+                acquisition: Test
+                currency: vault
+                buy-glow: 15000
+                buy-glow-currency: tokens
+                levels: [{speed: 1.0, price: 1}]
+                skins:
+                  tokens:
+                    name: Token skin
+                    item: AMETHYST_SHARD
+                    currency: tokens
+                    price: 7
+                  coins:
+                    name: Coin skin
+                    item: PINK_DYE
+                    currency: vault
+                    price: 99
+                    price-vault: 2000
+                size-tuning:
+                  - {id: keychain, name: "Крошечный", multiplier: 0.1}
+            """.trimIndent() + "\n",
+        )
+        val mount = checkNotNull(MountModuleConfig.load(dataPath).catalog()["currency_probe"])
+
+        mount.currency shouldBe "vault"
+        mount.glowPrice shouldBe 15_000.0
+        mount.glowCurrency shouldBe "tokens"
+        mount.skin("tokens")?.price shouldBe 7.0
+        mount.skin("tokens")?.currency shouldBe "tokens"
+        mount.skin("coins")?.price shouldBe 2_000.0
+        mount.skin("coins")?.currency shouldBe "vault"
+        mount.sizeOptions.first { it.id == "keychain" }.price shouldBe 40.0
+        mount.sizeOptions.first { it.id == "colossal" }.price shouldBe 100.0
     }
 
     "new shared trails are data-free particles within the emission budget" {
@@ -184,7 +265,8 @@ class MountModuleConfigTest : StringSpec({
                 (trail.count * 20.0 / trail.intervalTicks <= 60.0) shouldBe true
             }
         }
-        catalog["horse"]!!.skin("star-comet")!!.price shouldBe 60_000.0
+        catalog["horse"]!!.skin("star-comet")!!.price shouldBe 80.0
+        catalog["horse"]!!.skin("star-comet")!!.currency shouldBe "tokens"
         catalog["bee"]!!.skin("star-comet")!!.price shouldBe 80.0
     }
 
@@ -323,6 +405,22 @@ class MountModuleConfigTest : StringSpec({
 
     "every catalog appearance, material, entity and particle matches the exact Paper API" {
         MountModule.validatePaperTypes(bundledConfig("paper-types").catalog())
+    }
+
+    "paper validation rejects a paid size price below minor-unit precision" {
+        val bee = checkNotNull(bundledConfig("paper-types").catalog()["bee"])
+        val invalidPrice = MountSizeOptionDefinition(
+            id = "fractional",
+            displayName = "Дробный размер",
+            multiplier = 1.1,
+            grantOnly = true,
+            price = 0.001,
+            currency = "tokens",
+        )
+
+        shouldThrow<IllegalArgumentException> {
+            MountModule.validatePaperTypes(MountCatalog(listOf(bee.copy(sizeOptions = bee.sizeOptions + invalidPrice))))
+        }
     }
 
     "bundled module is fail-closed until a runtime mirror enables it" {

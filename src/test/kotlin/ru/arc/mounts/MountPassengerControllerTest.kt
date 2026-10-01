@@ -81,6 +81,35 @@ class MountPassengerControllerTest : StringSpec({
         }
     }
 
+    "visible native flight body shares the driver graph and forwards guest boarding" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val fixture = PassengerFixture(paper, seats = 2, flying = true, visualBody = true)
+            val first = fixture.player()
+            val second = fixture.player()
+            val extra = fixture.player()
+            val body = fixture.body!!
+            listOf(first, second, extra).forEach { guest ->
+                fixture.controller.onInteract(PlayerInteractEntityEvent(guest, body, EquipmentSlot.HAND))
+            }
+            fixture.riders shouldBe listOf(fixture.driver, body, first, second)
+            fixture.feedback.last() shouldBe "passenger-full"
+            val unsolicited = EntityMountEvent(extra, body)
+            fixture.controller.onMount(unsolicited)
+            unsolicited.isCancelled shouldBe true
+            val detach = EntityDismountEvent(body, fixture.mount)
+            fixture.controller.onCarrierDismount(detach)
+            detach.isCancelled shouldBe true
+            fixture.controller.closeRide(fixture.mount.uniqueId)
+            fixture.vehicles[first.uniqueId] shouldBe null
+            fixture.vehicles[second.uniqueId] shouldBe null
+            val staleClick = PlayerInteractEntityEvent(extra, body, EquipmentSlot.HAND)
+            fixture.controller.onInteract(staleClick)
+            staleClick.isCancelled shouldBe false
+            verify(exactly = 0) { body.teleport(any<Location>()) }
+            verify(exactly = 0) { body.velocity = any() }
+        }
+    }
+
     "custom seats repair the complete driver view once after boarding without moving entities" {
         MockBukkitTestRuntime.open().use { paper ->
             val fixture = PassengerFixture(paper, seats = 2, customCarrier = true)
@@ -420,6 +449,7 @@ private class PassengerFixture(
     flying: Boolean = false,
     customCarrier: Boolean = false,
     prepareSeats: Boolean = true,
+    visualBody: Boolean = false,
 ) {
     val riders = mutableListOf<Entity>()
     val vehicles = hashMapOf<UUID, Entity>()
@@ -428,6 +458,7 @@ private class PassengerFixture(
     val synchronizedGraphs = mutableListOf<Pair<Player, List<LivingEntity>>>()
     var rejectBoarding = false
     val mount = mockk<LivingEntity>(relaxed = true)
+    val body = if (visualBody) mockk<LivingEntity>(relaxed = true) else null
     val carriers = List(if (customCarrier) seats else 0) { mockk<Camel>(relaxed = true) }
     val seatRiders = List(carriers.size) { mutableListOf<Entity>() }
     private val scheduler = mockk<TaskScheduler>()
@@ -512,6 +543,11 @@ private class PassengerFixture(
         }
         riders.add(driver)
         vehicles[driver.uniqueId] = mount
+        body?.let {
+            every { it.uniqueId } returns UUID.randomUUID()
+            riders.add(it)
+            vehicles[it.uniqueId] = mount
+        }
         controller.openRide(
             mount, driver,
             testMount().copy(
@@ -520,6 +556,7 @@ private class PassengerFixture(
                 movement = if (flying) MountMovement.FLYING else MountMovement.WALKING,
             ),
             fireProtected = false,
+            visualBody = body,
         )
         if (prepareSeats) runDelayed()
     }

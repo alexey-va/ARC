@@ -11,7 +11,10 @@ Native production replacement for `Denizen/scripts/activities/rideable_mobs.dsc`
 - Walking mounts use WASD, automatically step over one-block terrain and use
   Space to jump. Horses retain native ridden physics so gravity and terrain
   transitions remain correct; hold and release Space for their charged jump.
-  Flying and swimming mounts use WASD, Space to ascend and Shift to descend.
+  Ordinary flying and swimming mounts use WASD, Space to ascend and Shift to descend.
+  Skycruiser uses native Happy Ghast flight along the view direction and Space
+  ascent. Its visible Phantom is a native passenger of the invisible carrier;
+  ARC does not move the pilot or teleport a following cosmetic body.
   Every mount uses double Shift to dismount; a single Shift never ends the ride.
 - Passenger capacity is an inherent catalog feature and needs no ownership node.
   The configured `passenger-seats` count excludes the driver: Camel and Camel
@@ -36,19 +39,18 @@ Native production replacement for `Denizen/scripts/activities/rideable_mobs.dsc`
   expensive final sprint and improves speed, steering and sprint response. An
   optional per-level `scale` multiplies the selected base or skin appearance;
   omitted values remain `1.0` for backward-compatible visuals.
-- Every mount exposes an ordinary size plus command-only comic extremes. A
+- Every mount exposes an ordinary size plus separately owned comic extremes. A
   selected size remains a free setting, but `grant-only` sizes require a
-  separate ownership node and never unlock from a purchased level. Authored
-  intermediate profiles may still use level gates.
+  separate ownership node through administration, rewards, or their configured
+  permanent purchase. Authored intermediate profiles may still use level gates.
 - Mount speed is controller-owned and ramps independently of vanilla entity
   friction. `movement.acceleration-time`, `deceleration-time` and `turn-time`
   set global response times; `0s` restores instant response. A mount may
   override any of them under `mounts.<id>.motion`. Opposite input brakes close
   to zero before the new direction accelerates, and horses keep native riding
   while ARC ramps their movement-speed attribute.
-- Motion overrides give representative mounts a distinct weight without a
-  second controller: the fox and Breeze react quickly, while the camel and
-  Ravager accelerate and turn more deliberately.
+- All bundled ARC motion timings are zero. Native Happy Ghast acceleration and
+  network prediction remain part of Minecraft's flight controller.
 - Appearance is deterministic. ARC fixes age, scale and variants, clears random
   entity equipment, then applies only the configured skin equipment. Zombie
   baby, iron guard and diamond warlord are separate unlockable skins.
@@ -75,8 +77,9 @@ Native production replacement for `Denizen/scripts/activities/rideable_mobs.dsc`
   state, world-border/height escape, or genuinely leaving water removes the
   temporary entity. Kelp, seagrass and bubble columns remain valid aquatic
   environments.
-- A short summon cooldown and a hard server-side velocity cap protect against
-  duplicate entities and unsafe catalog values.
+- A short summon cooldown protects against duplicate entities. ARC-controlled
+  vehicles have a server velocity cap; native flight uses a bounded nominal
+  speed attribute rather than a per-tick velocity clamp.
 - Native phasing entities such as the Vex use a swept Paper collision check
   before ARC applies velocity. Blocked axes stop while free axes keep moving,
   so the mount slides along a wall instead of carrying its rider through it.
@@ -129,6 +132,9 @@ despawning the NPC or losing Citizens fails closed before any debit.
 
 Purchases are enabled only on the spawn node. Prices are converted to exact
 minor currency units and charged directly through the RedisEconomy 4.5.12 API.
+Levels use the mount wallet, while glow, skins, abilities and paid extreme sizes
+select their configured wallet independently. Existing ownership survives a
+currency or price change; selecting an owned improvement never charges again.
 Historical provider doubles may contain a sub-cent binary tail; ARC accepts
 only a tiny drift within 0.05 of one minor unit, while real fractional-cent
 balances still fail closed. The adapter also refuses non-zero provider tax or a

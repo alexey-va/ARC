@@ -18,6 +18,7 @@ import org.bukkit.entity.CamelHusk
 import org.bukkit.entity.Creeper
 import org.bukkit.entity.EnderDragon
 import org.bukkit.entity.Horse
+import org.bukkit.entity.HappyGhast
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Llama
 import org.bukkit.entity.Mob
@@ -58,6 +59,28 @@ class MountSessionControllerTest : StringSpec({
     "native flight speed retains the configured nominal rate without doubling sprint" {
         mountPlayerFlySpeed(0.98 / 1.8, false).toDouble() shouldBe (0.1 plusOrMinus 1.0e-7)
         mountPlayerFlySpeed(0.98 / 1.8, true).toDouble() shouldBe (0.05 plusOrMinus 1.0e-7)
+    }
+
+    "native Happy Ghast flight only updates its speed attribute and keeps the pilot seated" {
+        val ghast = mockk<HappyGhast>(relaxed = true)
+        val speed = mockk<AttributeInstance>(relaxed = true)
+        val pilot = mockk<Player>(relaxed = true)
+        every { ghast.getAttribute(Attribute.FLYING_SPEED) } returns speed
+        every { ghast.passengers } returns listOf(pilot)
+        every { pilot.allowFlight } returns false
+
+        configureNativeHappyGhastMotion(ghast, 0.98 * 3.9 * (5.0 / 3.0) * 0.05 * 0.05 / 0.09)
+
+        verify { speed.baseValue = match { kotlin.math.abs(it - 0.05) < 1.0e-9 } }
+        verify(exactly = 0) { ghast.velocity = any() }
+        verify(exactly = 0) { ghast.setRotation(any(), any()) }
+        verify(exactly = 0) { ghast.teleport(any<Location>()) }
+        verify(exactly = 0) { pilot.velocity = any() }
+        verify(exactly = 0) { pilot.teleport(any<Location>()) }
+        isMountControlledBy(pilot, ghast, MountControl.NATIVE_FLIGHT) shouldBe true
+        every { ghast.passengers } returns listOf(mockk<LivingEntity>(), pilot)
+        isMountControlledBy(pilot, ghast, MountControl.NATIVE_FLIGHT) shouldBe false
+        nativeHappyGhastFlyingAttribute(0.0) shouldBe 0.0
     }
 
     "mount mobs stay physics-active while vanilla goals are disabled" {

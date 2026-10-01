@@ -27,6 +27,7 @@ enum class MountMovement(val displayName: String) {
 enum class MountControl {
     VEHICLE,
     PLAYER_FLIGHT,
+    NATIVE_FLIGHT,
 }
 
 enum class MountRarity(val displayName: String, val color: String) {
@@ -123,6 +124,8 @@ data class MountSizeOptionDefinition(
     val multiplier: Double,
     val minimumLevel: Int = 1,
     val grantOnly: Boolean = false,
+    val price: Double? = null,
+    val currency: String = "tokens",
 ) {
     init {
         require(MountDefinition.validId(id)) { "Invalid mount size option id: $id" }
@@ -131,6 +134,9 @@ data class MountSizeOptionDefinition(
             "Mount size option '$id' multiplier must be between $MIN_MOUNT_SIZE_MULTIPLIER and $MAX_MOUNT_SIZE_MULTIPLIER"
         }
         require(minimumLevel in 1..16) { "Mount size option '$id' minimum level must be between 1 and 16" }
+        require(price == null || price.isFinite() && price > 0.0) { "Mount size option '$id' price must be positive and finite" }
+        require(MOUNT_CURRENCY_PATTERN.matches(currency)) { "Mount size option '$id' currency is invalid" }
+        require(price == null || grantOnly) { "Mount size option '$id' must be grant-only to have a purchase price" }
     }
 }
 
@@ -399,12 +405,14 @@ data class MountSkinDefinition(
     val price: Double?,
     val appearance: MountAppearance,
     val trail: MountTrailDefinition? = null,
+    val currency: String = "vault",
 ) {
     init {
         require(MountDefinition.validId(id)) { "Invalid mount skin id: $id" }
         require(displayName.isNotBlank()) { "Mount skin '$id' display name is blank" }
         require(iconMaterial.isNotBlank()) { "Mount skin '$id' icon material is blank" }
         require(price == null || price.isFinite() && price > 0.0) { "Mount skin '$id' price must be positive and finite" }
+        require(MOUNT_CURRENCY_PATTERN.matches(currency)) { "Mount skin '$id' currency is invalid" }
     }
 }
 
@@ -429,12 +437,28 @@ data class MountDefinition(
     val currency: String = "vault",
     val control: MountControl = MountControl.VEHICLE,
     val visualFlightOffsetY: Double? = null,
+    val visualEntityType: String? = null,
+    val glowCurrency: String = currency,
 ) {
     init {
         require(validId(id)) { "Invalid mount id: $id" }
         require(entityType.isNotBlank()) { "Mount '$id' entity type is blank" }
         require(control != MountControl.PLAYER_FLIGHT || (movement == MountMovement.FLYING && passengerSeats == 0)) {
             "Mount '$id' player-flight control requires a flying mount without passenger seats"
+        }
+        if (control == MountControl.NATIVE_FLIGHT) {
+            require(movement == MountMovement.FLYING && entityType == "HAPPY_GHAST") {
+                "Mount '$id' native-flight control requires a flying Happy Ghast"
+            }
+            require(visualEntityType != null || (listOf(appearance) + skins.map(MountSkinDefinition::appearance)).all {
+                !it.baby && it.equipment[MountEquipmentSlot.BODY]?.endsWith("_HARNESS") == true
+            }) { "Mount '$id' native-flight appearances must be adult and wear a harness" }
+        }
+        require(visualEntityType == null || control == MountControl.NATIVE_FLIGHT) {
+            "Mount '$id' visual-entity requires native-flight control"
+        }
+        require(visualEntityType == null || passengerSeats <= 2) {
+            "Mount '$id' visual body reserves one Happy Ghast passenger seat"
         }
         require(visualFlightOffsetY == null || (visualFlightOffsetY.isFinite() && visualFlightOffsetY in -16.0..16.0)) {
             "Mount '$id' visual-flight-offset-y must be finite and between -16 and 16"
@@ -448,6 +472,7 @@ data class MountDefinition(
         require(description.size <= 6 && description.all { it.length <= 120 }) { "Mount '$id' description is invalid" }
         require(acquisition.isNotBlank() && acquisition.length <= 120) { "Mount '$id' acquisition text is invalid" }
         require(MOUNT_CURRENCY_PATTERN.matches(currency)) { "Mount '$id' currency is invalid" }
+        require(MOUNT_CURRENCY_PATTERN.matches(glowCurrency)) { "Mount '$id' glow currency is invalid" }
         require(levels.isNotEmpty()) { "Mount '$id' must have at least one level" }
         require(levels.size <= MAX_LEVELS) { "Mount '$id' has more than $MAX_LEVELS levels" }
         require(glowPrice == null || glowPrice.isFinite() && glowPrice > 0.0) {
@@ -487,6 +512,9 @@ data class MountDefinition(
             "Mount '$id' standard size option must be available at level 1"
         }
         require(sizeOptions.all { it.minimumLevel <= maxLevel }) { "Mount '$id' size option requires an unavailable level" }
+        require(sizeOptions.filter { it.multiplier == 1.0 }.all { !it.grantOnly && it.price == null }) {
+            "Mount '$id' standard size option must remain free and level-unlocked"
+        }
         require(behaviors.map(MountBehaviorDefinition::id).toSet().size == behaviors.size) {
             "Mount '$id' behavior ids must be unique"
         }

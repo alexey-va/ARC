@@ -2,7 +2,7 @@
 
 The native mounts module is configured in `plugins/ARC/modules/mounts.yml`. The bundled resource is server-neutral; RusCrafting-specific ItemsAdder GUI models stay only in the runtime mirrors.
 
-The bundled catalog contains 71 mounts. The latest expansion adds Hoglin, Endermite, Piglin, Wither Skeleton, Vindicator, Creaking, Creeper, Silverfish, Witch, Camel Husk, Stray, Parched, Zoglin, Bogged, Piglin Brute, Pillager, Evoker, Shulker, Elder Guardian, Nautilus, Zombie Nautilus, and the command-only Ender Dragon. Guardian, Warden, Iron Golem, Copper Golem, and Magma Cube keep their existing canonical entries instead of being duplicated.
+The bundled catalog contains 72 mounts, including the native-flight Skycruiser. The latest expansion adds Hoglin, Endermite, Piglin, Wither Skeleton, Vindicator, Creaking, Creeper, Silverfish, Witch, Camel Husk, Stray, Parched, Zoglin, Bogged, Piglin Brute, Pillager, Evoker, Shulker, Elder Guardian, Nautilus, and Zombie Nautilus. Guardian, Warden, Iron Golem, Copper Golem, and Magma Cube keep their existing canonical entries instead of being duplicated.
 
 ## Progression and tuning
 
@@ -13,7 +13,11 @@ Each configured level unlocks a maximum base speed. Walking levels also unlock a
 - `tuning.walking-max-step-height-by-level` defines the non-decreasing ceiling unlocked by each level.
 - `mounts.<id>.size-tuning` optionally adds authored intermediate profiles. `size-tuning-defaults` also supplies every mount with an ordinary profile and two grant-only comic extremes.
 
-The tiny and colossal profiles are deliberately not level rewards: a player must own `arc.mounts.<mount>.size.<size-id>`, issued by `/mount admin grant size ...` or another reward system. The selected state remains a separate `tuning.size` node, so revoking an entitlement safely removes the matching selection. Most mounts use ×10; already enlarged base models receive the largest safe multiplier inside the native scale envelope. Authored ×0.5, ×2 and ×3 profiles remain ordinary level-gated tuning.
+The tiny and colossal profiles are separate entitlements in `arc.mounts.<mount>.size.<size-id>`, issued by `/mount admin grant size ...`, rewards, or a configured permanent purchase. A `grant-only: true` size may declare `price` and `currency`; without a price it remains a reward-only entitlement. The selected state remains a separate `tuning.size` node, so revoking an entitlement safely removes the matching selection. Most mounts use ×10; already enlarged base models receive the largest safe multiplier inside the native scale envelope. Authored ×0.5, ×2 and ×3 profiles remain ordinary level-gated tuning.
+
+The wallet is selected per purchase. Levels retain the mount's `currency`; glow uses `buy-glow-currency`; each skin, ability and paid size has its own `currency`. A skin's `price-<currency>` overrides its plain `price`. These fields fall back to the existing mount wallet when omitted, except default extreme sizes, which use tokens. Permanent purchases and admin grants write the same ownership nodes; choosing an already owned improvement is free. Purchases remain limited to the live spawn merchants and use the existing withdrawal journal and exact refund/recovery checks.
+
+The 2026-10-02 catalog preserves every existing mount level price and existing token skin price. Simple upgrades use coins: glow costs 5,000–50,000, night vision 15,000 and water breathing 20,000. Advanced upgrades use tokens: patterned skins cost 15–150, fire resistance 50, dolphin grace 80, tiny size 40 and colossal size 100. Intermediate size, speed, step-height and rider-view choices remain free within the owned level's limits. Each purchase applies to one mount; it does not unlock that improvement across the collection.
 
 With no saved choice, the maximum unlocked value is active. A saved lower choice persists after an upgrade. If a level is revoked, an out-of-range step height is clamped to the new ceiling at runtime.
 
@@ -36,15 +40,23 @@ For example, 65% speed and a 1.10-block step height are `arc.mounts.horse.tuning
 
 Speed, step height, level/size scale, skin, glow and owned abilities resolve into one immutable runtime snapshot. A successful setting write reconciles the complete snapshot into the active ride on the main thread, so speed, step height, glow, skins and trails update immediately. Growing size is first checked against a feet-anchored prospective bounding box; a blocked growth remains saved for the next safe summon without creating mixed visual/session state. The accepted effective entity-scale range matches the native `0.0625..16` attribute contract, while player-facing tuning multipliers are bounded to `0.1..10` and every composed catalog appearance is validated before enable. Horses, Camels and Camel Husks retain native ridden physics and charged jumping or dashing, while ARC applies the configured speed, jump strength and selected step height continuously. ARC does not overwrite their velocity or facing every tick, which would conflict with the rider client's gravity and dash prediction. Other walking mounts use ARC velocity plus the native `STEP_HEIGHT` attribute. Piglins and Hoglins are kept stable outside the Nether, Shulkers remain visibly open, and active Creeper mounts cannot prime or explode.
 
-The Ender Dragon is deliberately the final catalog entry and has no money price at any level or skin. It can be issued only through mount administration. During a ride ARC keeps it in the `HOVER` phase, resolves movement against its full bounding box, and cancels any explosion event from the active mount entity.
-
 Mounts may also declare `abilities.passive.<id>`. These effects require no purchase and are refreshed only while that exact mount session is active. Every bundled mount now has at least one inherent ability, passive, upgrade, or typed behavior. Passive names are rendered as inherent features in the mount card instead of appearing as purchasable upgrades.
 
 Vehicle-controlled mounts keep their own motion state instead of feeding Minecraft-mutated entity velocity back into the controller. Global `movement.acceleration-time`, `movement.deceleration-time`, and `movement.turn-time` values describe the time to reach about 95% of the requested response at handling multiplier `1.0`; higher-level handling shortens those times. Set a value to `0s` for instant response. Any mount may override individual values under `mounts.<id>.motion`, with omitted values inherited from the global block. A reverse input brakes nearly to zero before acceleration changes direction unless all three timings are zero. The shipped catalog disables inertia for every mount, including per-mount overrides.
 
+### Native vehicle flight
+
+`control: native-flight` requires a flying `HAPPY_GHAST`. ARC equips an adult carrier with a harness and converts the configured nominal speed to its native `FLYING_SPEED` attribute. It never writes the driver’s position or velocity, or the carrier’s velocity or rotation. Vanilla Happy Ghast input handles flight along the view direction and Space ascent; double Shift retains ARC dismount handling. Native acceleration, turning and network corrections still belong to Minecraft.
+
+The Skycruiser uses `visual-entity: PHANTOM`: its small invisible Happy Ghast remains the real vehicle type seen by the controlling client, while a non-collidable, inert Phantom is another native passenger alongside the first-seat driver. Replacing the vehicle’s client entity type with a disguise would lose the native Happy Ghast controller. Passenger links attach the body without following teleports. The visual body reserves one of four native seats, leaving two human guests; clicking the body boards the same root ride. Appearance, glow, trails and rider-only hiding apply to the visible body. Scale changes alter the cosmetic shell, not the carrier’s fixed collision box. The session tracks and removes both entities on all exit and failed-spawn paths.
+
+Skycruiser has three permanent levels costing 1,200 / 1,800 / 3,000 tokens (6,000 total). Its nominal straight-flight rates before sprint/care are 0.605 / 0.825 / 1.045 blocks per tick at the production scale of 0.55. The existing nominal cap is 1.05; native diagonal and vertical travel are not a server-enforced velocity cap. Ordinary Java-client flight feel and body alignment require player acceptance; unit tests do not simulate client prediction.
+
+Its complete optional basket is 7,130 tokens for all levels, both authored skins, all nine shared skins, fire resistance and both extreme sizes, plus 40,000 coins for glow and night vision. The currencies are separate; no exchange rate is implied.
+
 ### Native player flight
 
-A flying mount without additional passenger seats can set `control: player-flight`; omitted `control` means `vehicle`. The shipped catalog uses `vehicle` for every mount: the native passenger link keeps the rider attached to the body, and all ARC motion timings remain zero. `player-flight` is an opt-in mode with known visual/collision limitations: the separate body follows server-received player positions and can trail behind on the client; server-only `setCollidable(false)` does not suppress client collision prediction. The player is not a passenger and uses ordinary creative-flight input/collision; the cosmetic mob follows the player without per-tick player teleportation or velocity writes. Looking up/down no longer steers altitude: use Space/Shift. After landing, double Space toggles ordinary flight again. Native client acceleration and sprint transitions remain distinct from ARC vehicle smoothing.
+A flying mount without additional passenger seats can set `control: player-flight`; omitted `control` means `vehicle`. The shipped catalog uses `vehicle` except for Skycruiser’s `native-flight`: the native passenger link keeps the rider attached to the body, and all ARC motion timings remain zero. `player-flight` is an opt-in mode with known visual/collision limitations: the separate body follows server-received player positions and can trail behind on the client; server-only `setCollidable(false)` does not suppress client collision prediction. The player is not a passenger and uses ordinary creative-flight input/collision; the cosmetic mob follows the player without per-tick player teleportation or velocity writes. Looking up/down no longer steers altitude: use Space/Shift. After landing, double Space toggles ordinary flight again. Native client acceleration and sprint transitions remain distinct from ARC vehicle smoothing.
 
 The configured level, speed tuning, ability/care boosts and sprint multiplier select a nominal straight-line fly speed. This is a conversion to native client flight units, not a server velocity clamp; diagonal/vertical input and client physics can differ. Prices, entitlements and resource quotas are unchanged. The visual body does not carry guests, take damage or execute ram/trample behaviors. Server-side collisions are disabled, but client-predicted pushing can still occur in this opt-in mode. Its size does not enlarge the player's collision body. Default model feet are 75% of its height below the player's feet; `visual-flight-offset-y` optionally replaces that offset in blocks (`-16..16`). The existing rider visibility preference still applies.
 
@@ -64,7 +76,7 @@ The carrier uses a fixed sitting pose. Vanilla client `startRiding` resets that 
 
 The collection no longer spends a permanent slot on balance. Price, balance and the exact remainder or shortage are shown together only in the purchase confirmation. Actionable lore ends in the shared `[▶] ЛКМ — результат` footer after one blank row, and the handler accepts only the exact click type printed there. Selected, truly locked, disabled, completed and loading states have neither the footer nor a click handler. A not-yet-owned mount with a configured first-level price is a separate actionable acquisition state; it is labelled `Доступен к получению` and opens progression instead of masquerading as locked. The full collection guide intentionally remains 13 visible rows by owner decision.
 
-Skin cards describe only changes from the mount's base appearance. Unsupported or unchanged age, inherited scale and raw enum/particle identifiers are omitted. Trails carry localized names and emit from a rear-body anchor derived from the current scaled bounding box, so effects remain visible on small and large entities. Every ordinary mount also receives five shared effect choices: an electric spiral, portal rings, a witch double helix, a runic orbit, and a light pulse. Structured patterns emit at most eight particles per interval, scale their geometry from the live body size, and retain a bounded radius on comic giant profiles. The command-only Ender Dragon exposes the same choices without money prices.
+Skin cards describe only changes from the mount's base appearance. Unsupported or unchanged age, inherited scale and raw enum/particle identifiers are omitted. Trails carry localized names and emit from a rear-body anchor derived from the current scaled bounding box, so effects remain visible on small and large entities. Every mount also receives nine shared effect choices. Structured patterns emit at most eight particles per interval, scale their geometry from the live body size, and retain a bounded radius on comic giant profiles.
 
 ## Typed mount behaviors
 
@@ -92,3 +104,15 @@ Both paths use the same summon service as the collection and detail menu. World,
 ## Administration
 
 `/mount admin grant-all <player>` grants the maximum configured level of every catalog mount. It does not grant glow, skins, ability upgrades, or grant-only sizes; those remain independent ownership records. Use `/mount admin grant size <player> <mount> <size-id>` and the matching `revoke` command for extreme sizes.
+
+Every purchasable category uses the same entitlement as its individual administration command:
+
+```text
+/mount admin grant level <player> skycruiser 3
+/mount admin grant glow <player> skycruiser
+/mount admin grant skin <player> skycruiser starlight
+/mount admin grant ability <player> skycruiser night-vision
+/mount admin grant size <player> skycruiser colossal
+```
+
+Replace `grant` with `revoke` to remove the corresponding right. These commands grant ownership without withdrawing currency. Free speed, step-height, ordinary size and rider-view selectors remain player preferences, with their maximum values unlocked by levels.

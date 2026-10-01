@@ -76,7 +76,7 @@ class MountPurchaseCoordinator(
             "glow",
             mount.glowPermission,
             price,
-            mount.currency,
+            mount.glowCurrency,
             callback,
         ) { ownership.grantGlow(subject.uniqueId, mount) }
     }
@@ -98,7 +98,7 @@ class MountPurchaseCoordinator(
             skin.id,
             mount.skinPermission(skin.id),
             price,
-            mount.currency,
+            skin.currency,
             callback,
         ) { ownership.grantSkin(subject.uniqueId, mount, skin) }
     }
@@ -123,6 +123,31 @@ class MountPurchaseCoordinator(
             ability.currency,
             callback,
         ) { ownership.grantAbility(subject.uniqueId, mount, ability) }
+    }
+
+    fun purchaseSize(
+        subject: MountPermissionSubject,
+        mount: MountDefinition,
+        sizeId: String,
+        callback: (MountPurchaseResult) -> Unit,
+    ) {
+        val profile = ownership.profile(subject, mount)
+        if (!profile.unlocked) return callback(MountPurchaseResult.NotUnlocked)
+        val size = mount.sizeOptions.firstOrNull { it.id == sizeId && it.grantOnly }
+            ?: return callback(MountPurchaseResult.NotForSale)
+        if (size.minimumLevel > profile.level) return callback(MountPurchaseResult.NotForSale)
+        if (profile.ownsSize(size)) return callback(MountPurchaseResult.AlreadyOwned)
+        val price = size.price ?: return callback(MountPurchaseResult.NotForSale)
+        purchase(
+            subject.uniqueId,
+            mount,
+            MountPurchaseKind.SIZE,
+            size.id,
+            mount.sizeOwnershipPermission(size.id),
+            price,
+            size.currency,
+            callback,
+        ) { ownership.grantSize(subject.uniqueId, mount, size) }
     }
 
     fun setGlowEnabled(
@@ -557,6 +582,9 @@ class MountPurchaseCoordinator(
             MountPurchaseKind.GLOW -> ownership.grantGlow(playerId, mount)
             MountPurchaseKind.SKIN -> mount.skin(record.target)?.let { ownership.grantSkin(playerId, mount, it) }
             MountPurchaseKind.ABILITY -> mount.ability(record.target)?.let { ownership.grantAbility(playerId, mount, it) }
+            MountPurchaseKind.SIZE -> mount.sizeOptions
+                .firstOrNull { it.grantOnly && it.id == record.target }
+                ?.let { ownership.grantSize(playerId, mount, it) }
         }
     }
 

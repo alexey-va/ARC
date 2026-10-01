@@ -773,6 +773,7 @@ internal class MountGuiItems(
         mount: MountDefinition,
         profile: MountProfile,
         option: MountSizeOptionDefinition,
+        merchantAvailable: Boolean = true,
     ): ItemStack {
         val entitled = profile.ownsSize(option)
         val available = profile.unlocked && option.minimumLevel <= profile.level && entitled
@@ -806,9 +807,27 @@ internal class MountGuiItems(
                 )
                 when {
                     !profile.unlocked -> add(copy("progression.mount-required", "<#c42323>Сначала получите маунта"))
+                    option.minimumLevel > profile.level ->
+                        add(
+                            copy(
+                                "progression.unlocks-at-level",
+                                "<#ff9f0f>Откроется на уровне <level>",
+                                "level" to option.minimumLevel.toString(),
+                            ),
+                        )
                     option.grantOnly && !entitled -> {
-                        add(copy("progression.size-special", "<#ff9f0f>Особый размер"))
-                        add(copy("progression.size-special-source", "<#8c8c8c>Награда событий и особых активностей."))
+                        if (option.price == null) {
+                            add(copy("progression.size-special", "<#ff9f0f>Особый размер"))
+                            add(copy("progression.size-special-source", "<#8c8c8c>Награда событий и особых активностей."))
+                        } else {
+                            add(priceLine("Цена", option.price.toExactMinor(), option.currency))
+                            if (configProvider().purchasesEnabled && merchantAvailable) {
+                                add("")
+                                add(actionFooter("открыть покупку"))
+                            } else {
+                                add(configProvider().guiText("common.purchases-at-spawn", "<#ff9f0f>Покупка: Гектор или Эмма во дворе маунтов на спавне."))
+                            }
+                        }
                     }
                     !available ->
                         add(
@@ -912,7 +931,7 @@ internal class MountGuiItems(
                     Material.RED_DYE,
                     copy("detail.glow-buy-name", "<#c42323>Купить свечение"),
                     buildList {
-                        add(priceLine("Цена", mount.glowPrice.toExactMinor(), mount.currency))
+                        add(priceLine("Цена", mount.glowPrice.toExactMinor(), mount.glowCurrency))
                         if (configProvider().purchasesEnabled && merchantAvailable) {
                             add("")
                             add(actionFooter("открыть покупку"))
@@ -1046,7 +1065,7 @@ internal class MountGuiItems(
                         add(actionFooter("выбрать"))
                     }
                     skin.price != null -> {
-                        add(priceLine("Цена", skin.price.toExactMinor(), mount.currency))
+                        add(priceLine("Цена", skin.price.toExactMinor(), skin.currency))
                         if (configProvider().purchasesEnabled && merchantAvailable) {
                             add("")
                             add(actionFooter("открыть покупку"))

@@ -57,12 +57,12 @@ tuning:
   # Level 1 clears ordinary blocks; levels 2 and 3 unlock two- and four-block climbing.
   walking-max-step-height-by-level: [1.10, 2.00, 4.00]
 
-# Every mount receives these extremes. Tiny and giant are reward entitlements,
-# never level purchases; the ordinary size remains a free tuning choice.
+# Every mount receives separately owned extremes, sold for tokens or granted
+# through mount administration and rewards. Ordinary tuning remains free.
 size-tuning-defaults:
   standard: {id: standard, name: "Обычный ×1", multiplier: 1.0}
-  tiny: {id: keychain, name: "Крошечный ×0.1", multiplier: 0.1}
-  giant: {id: colossal, name: "Колоссальный ×<scale>", multiplier: 10.0}
+  tiny: {id: keychain, name: "Крошечный ×0.1", multiplier: 0.1, price: 40, currency: tokens}
+  giant: {id: colossal, name: "Колоссальный ×<scale>", multiplier: 10.0, price: 100, currency: tokens}
 
 safety:
   post-flight-slow-falling: 8s
@@ -421,6 +421,7 @@ gui:
 
 messages:
   ground-controls: "<gray>WASD — движение, Space — прыжок, двойной Shift — спешиться"
+  native-flight-controls: "<gray>WASD — полёт по взгляду, Space — вверх, двойной Shift — спешиться"
   camel-controls: "<gray>WASD — движение, удерживайте Space и отпустите — рывок, двойной Shift — спешиться"
   horse-controls: "<gray>WASD — движение, удерживайте Space и отпустите — прыжок, двойной Shift — спешиться"
   flight-controls: "<gray>WASD — движение, Space — вверх, Shift — вниз, двойной Shift — спешиться"
@@ -475,8 +476,8 @@ ability-upgrades:
       - "Позволяет дышать под водой"
       - "всё время поездки."
     item: HEART_OF_THE_SEA
-    price: 25
-    currency: tokens
+    price: 20000
+    currency: vault
     effect: WATER_BREATHING
   night-vision:
     name: "Сумеречное зрение"
@@ -484,8 +485,8 @@ ability-upgrades:
       - "Освещает ночные дороги,"
       - "пещеры и океанские глубины."
     item: GLOW_INK_SAC
-    price: 40
-    currency: tokens
+    price: 15000
+    currency: vault
     effect: NIGHT_VISION
   fire-resistance:
     name: "Жаропрочная упряжь"
@@ -692,49 +693,49 @@ shared-skins:
   electric-spiral:
     name: "Электрическая спираль"
     preset: electric
-    price: 25000
-    price-tokens: 50
+    price: 50
+    currency: tokens
   portal-rings:
     name: "Портальные кольца"
     preset: portal
-    price: 35000
-    price-tokens: 65
+    price: 65
+    currency: tokens
   witch-helix:
     name: "Ведьмина двойная лента"
     preset: witchcraft
-    price: 45000
-    price-tokens: 80
+    price: 80
+    currency: tokens
   enchanted-orbit:
     name: "Руническая орбита"
     preset: enchanted
-    price: 60000
-    price-tokens: 100
+    price: 100
+    currency: tokens
   glow-pulse:
     name: "Световой пульс"
     preset: glow
-    price: 75000
-    price-tokens: 120
+    price: 120
+    currency: tokens
 
   frost-wave:
     name: Ледяная волна
     preset: frost
-    price: 30000
-    price-tokens: 35
+    price: 35
+    currency: tokens
   cherry-ribbons:
     name: Ленты сакуры
     preset: cherry
-    price: 40000
-    price-tokens: 50
+    price: 50
+    currency: tokens
   star-comet:
     name: Звёздная комета
     preset: comet
-    price: 60000
-    price-tokens: 80
+    price: 80
+    currency: tokens
   heart-beat:
     name: Сердечный пульс
     preset: heart
-    price: 45000
-    price-tokens: 60
+    price: 60
+    currency: tokens
 mounts:
   zombie:
     type: walking
@@ -759,7 +760,8 @@ mounts:
       - {speed: 1.35, handling: 0.9, sprint: 1, price: 30}
       - {speed: 2.25, handling: 1, sprint: 1.03, price: 45}
       - {speed: 4.8, handling: 1.28, sprint: 1.12, price: 75}
-    buy-glow: 10
+    buy-glow: 5000
+    buy-glow-currency: vault
     appearance:
       baby: false
       scale: 1
@@ -769,6 +771,7 @@ mounts:
         item: ZOMBIE_HEAD
         preset: starlight
         price: 15
+        currency: tokens
         appearance:
           baby: true
           scale: 1
@@ -777,6 +780,7 @@ mounts:
         item: IRON_CHESTPLATE
         preset: shadow
         price: 15
+        currency: tokens
         appearance:
           baby: false
           scale: 1
@@ -791,6 +795,7 @@ mounts:
         item: DIAMOND_CHESTPLATE
         preset: soulfire
         price: 15
+        currency: tokens
         appearance:
           baby: false
           scale: 1.08
@@ -817,7 +822,8 @@ mounts:
       - {speed: 1.35, handling: 0.9, sprint: 1, price: 30}
       - {speed: 2.25, handling: 1, sprint: 1.03, price: 45}
       - {speed: 4.8, handling: 1.28, sprint: 1.12, price: 75}
-    buy-glow: 10
+    buy-glow: 5000
+    buy-glow-currency: vault
     appearance:
       scale: 1
     skins:
@@ -826,11 +832,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 15
+        currency: tokens
       shadow:
         name: "Теневой комплект"
         item: ECHO_SHARD
         preset: shadow
         price: 15
+        currency: tokens
   pig:
     type: walking
     item: PIG_SPAWN_EGG
@@ -859,6 +867,7 @@ mounts:
       - {speed: 2.7, handling: 1, sprint: 1.03, price: 60000}
       - {speed: 5.6, handling: 1.28, sprint: 1.12, price: 120000}
     buy-glow: 5000
+    buy-glow-currency: vault
     appearance:
       baby: false
       scale: 1
@@ -875,12 +884,14 @@ mounts:
         name: "Звёздный комплект"
         item: AMETHYST_SHARD
         preset: starlight
-        price: 10000
+        price: 25
+        currency: tokens
       shadow:
         name: "Теневой комплект"
         item: ECHO_SHARD
         preset: shadow
-        price: 10000
+        price: 25
+        currency: tokens
   enderman:
     type: walking
     item: ENDERMAN_SPAWN_EGG
@@ -898,7 +909,8 @@ mounts:
       - {speed: 1.55, handling: 0.9, sprint: 1, price: 120}
       - {speed: 2.5, handling: 1, sprint: 1.03, price: 180}
       - {speed: 5.2, handling: 1.28, sprint: 1.12, price: 300}
-    buy-glow: 25
+    buy-glow: 15000
+    buy-glow-currency: vault
     appearance:
       scale: 0.92
     skins:
@@ -907,11 +919,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 40
+        currency: tokens
       shadow:
         name: "Теневой комплект"
         item: ECHO_SHARD
         preset: shadow
         price: 40
+        currency: tokens
   horse:
     type: walking
     item: HORSE_SPAWN_EGG
@@ -933,6 +947,7 @@ mounts:
       - {speed: 2.35, handling: 1, sprint: 1.03, price: 120000}
       - {speed: 5, handling: 1.28, sprint: 1.12, price: 250000}
     buy-glow: 10000
+    buy-glow-currency: vault
     appearance:
       baby: false
       scale: 1
@@ -950,7 +965,8 @@ mounts:
         name: "Королевская белая"
         item: DIAMOND_HORSE_ARMOR
         preset: starlight
-        price: 25000
+        price: 40
+        currency: tokens
         appearance:
           variant: WHITE
           secondary-variant: WHITE_DOTS
@@ -961,7 +977,8 @@ mounts:
         name: "Ночной скакун"
         item: IRON_HORSE_ARMOR
         preset: shadow
-        price: 25000
+        price: 40
+        currency: tokens
         appearance:
           variant: BLACK
           secondary-variant: BLACK_DOTS
@@ -998,6 +1015,7 @@ mounts:
       - {speed: 2.35, handling: 1, sprint: 1.03, price: 300000}
       - {speed: 5, handling: 1.28, sprint: 1.12, price: 600000}
     buy-glow: 25000
+    buy-glow-currency: vault
     appearance:
       baby: false
       scale: 1
@@ -1008,12 +1026,14 @@ mounts:
         name: "Звёздный комплект"
         item: AMETHYST_SHARD
         preset: starlight
-        price: 60000
+        price: 40
+        currency: tokens
       shadow:
         name: "Теневой комплект"
         item: ECHO_SHARD
         preset: shadow
-        price: 60000
+        price: 40
+        currency: tokens
   goat:
     type: walking
     item: GOAT_SPAWN_EGG
@@ -1033,7 +1053,8 @@ mounts:
       - {speed: 1.45, handling: 0.9, sprint: 1, price: 60}
       - {speed: 2.35, handling: 1, sprint: 1.03, price: 90}
       - {speed: 5, handling: 1.28, sprint: 1.12, price: 150}
-    buy-glow: 15
+    buy-glow: 10000
+    buy-glow-currency: vault
     appearance:
       baby: false
       scale: 1.15
@@ -1043,11 +1064,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 25
+        currency: tokens
       shadow:
         name: "Теневой комплект"
         item: ECHO_SHARD
         preset: shadow
         price: 25
+        currency: tokens
   fox:
     type: walking
     item: FOX_SPAWN_EGG
@@ -1072,7 +1095,8 @@ mounts:
       - {speed: 1.45, handling: 0.9, sprint: 1, price: 60}
       - {speed: 2.35, handling: 1, sprint: 1.03, price: 90}
       - {speed: 5, handling: 1.28, sprint: 1.12, price: 150}
-    buy-glow: 15
+    buy-glow: 10000
+    buy-glow-currency: vault
     appearance:
       baby: false
       scale: 1.35
@@ -1083,6 +1107,7 @@ mounts:
         item: SNOWBALL
         preset: starlight
         price: 25
+        currency: tokens
         appearance:
           variant: SNOW
       shadow_fox:
@@ -1090,6 +1115,7 @@ mounts:
         item: ECHO_SHARD
         preset: shadow
         price: 25
+        currency: tokens
   frog:
     type: walking
     item: FROG_SPAWN_EGG
@@ -1110,7 +1136,8 @@ mounts:
       - {speed: 1.45, handling: 0.9, sprint: 1, price: 60}
       - {speed: 2.35, handling: 1, sprint: 1.03, price: 90}
       - {speed: 5, handling: 1.28, sprint: 1.12, price: 150}
-    buy-glow: 15
+    buy-glow: 10000
+    buy-glow-currency: vault
     appearance:
       baby: false
       scale: 1.7
@@ -1121,6 +1148,7 @@ mounts:
         item: PACKED_ICE
         preset: starlight
         price: 25
+        currency: tokens
         appearance:
           variant: COLD
       warm:
@@ -1128,6 +1156,7 @@ mounts:
         item: MAGMA_CREAM
         preset: flame
         price: 25
+        currency: tokens
         appearance:
           variant: WARM
   ravager:
@@ -1151,7 +1180,8 @@ mounts:
       - {speed: 1.65, handling: 0.9, sprint: 1, price: 240}
       - {speed: 2.65, handling: 1, sprint: 1.03, price: 360}
       - {speed: 5.4, handling: 1.28, sprint: 1.12, price: 600}
-    buy-glow: 40
+    buy-glow: 20000
+    buy-glow-currency: vault
     appearance:
       scale: 0.82
     size-tuning:
@@ -1193,11 +1223,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 70
+        currency: tokens
       shadow:
         name: "Теневой комплект"
         item: ECHO_SHARD
         preset: shadow
         price: 70
+        currency: tokens
   sniffer:
     type: walking
     item: SNIFFER_SPAWN_EGG
@@ -1222,7 +1254,8 @@ mounts:
       - {speed: 1.55, handling: 0.9, sprint: 1, price: 120}
       - {speed: 2.5, handling: 1, sprint: 1.03, price: 180}
       - {speed: 5.2, handling: 1.28, sprint: 1.12, price: 300}
-    buy-glow: 25
+    buy-glow: 15000
+    buy-glow-currency: vault
     appearance:
       baby: false
       scale: 0.85
@@ -1232,11 +1265,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 40
+        currency: tokens
       shadow:
         name: "Теневой комплект"
         item: ECHO_SHARD
         preset: shadow
         price: 40
+        currency: tokens
   strider:
     type: walking
     item: STRIDER_SPAWN_EGG
@@ -1255,7 +1290,8 @@ mounts:
       - {speed: 1.55, handling: 0.9, sprint: 1, price: 120}
       - {speed: 2.5, handling: 1, sprint: 1.03, price: 180}
       - {speed: 5.2, handling: 1.28, sprint: 1.12, price: 300}
-    buy-glow: 25
+    buy-glow: 15000
+    buy-glow-currency: vault
     appearance:
       baby: false
       scale: 1.1
@@ -1267,11 +1303,13 @@ mounts:
         item: BLAZE_POWDER
         preset: flame
         price: 40
+        currency: tokens
       shadow:
         name: "Теневой комплект"
         item: ECHO_SHARD
         preset: shadow
         price: 40
+        currency: tokens
   bee:
     type: flying
     control: vehicle
@@ -1296,7 +1334,8 @@ mounts:
       - {speed: 0.42, handling: 0.9, sprint: 1, price: 120}
       - {speed: 0.72, handling: 1, sprint: 1.03, price: 180}
       - {speed: 1.35, handling: 1.28, sprint: 1.12, price: 300}
-    buy-glow: 10
+    buy-glow: 5000
+    buy-glow-currency: vault
     appearance:
       baby: false
       scale: 1
@@ -1312,11 +1351,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 15
+        currency: tokens
       cloud:
         name: "Облачный комплект"
         item: WHITE_DYE
         preset: cloud
         price: 15
+        currency: tokens
   turtle:
     type: flying
     control: vehicle
@@ -1341,7 +1382,8 @@ mounts:
       - {speed: 0.45, handling: 0.9, sprint: 1, price: 120}
       - {speed: 0.76, handling: 1, sprint: 1.03, price: 180}
       - {speed: 1.45, handling: 1.28, sprint: 1.12, price: 300}
-    buy-glow: 15
+    buy-glow: 10000
+    buy-glow-currency: vault
     appearance:
       baby: false
       scale: 1.15
@@ -1351,11 +1393,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 25
+        currency: tokens
       cloud:
         name: "Облачный комплект"
         item: WHITE_DYE
         preset: cloud
         price: 25
+        currency: tokens
   frog2:
     type: flying
     control: vehicle
@@ -1380,7 +1424,8 @@ mounts:
       - {speed: 0.48, handling: 0.9, sprint: 1, price: 120}
       - {speed: 0.8, handling: 1, sprint: 1.03, price: 180}
       - {speed: 1.52, handling: 1.28, sprint: 1.12, price: 300}
-    buy-glow: 25
+    buy-glow: 15000
+    buy-glow-currency: vault
     appearance:
       baby: false
       scale: 1.7
@@ -1391,6 +1436,7 @@ mounts:
         item: BLUE_ICE
         preset: starlight
         price: 40
+        currency: tokens
         appearance:
           variant: COLD
       fire_sky:
@@ -1398,6 +1444,7 @@ mounts:
         item: BLAZE_POWDER
         preset: flame
         price: 40
+        currency: tokens
         appearance:
           variant: WARM
   blaze:
@@ -1418,7 +1465,8 @@ mounts:
       - {speed: 0.55, handling: 0.9, sprint: 1, price: null}
       - {speed: 0.9, handling: 1, sprint: 1.03, price: 720}
       - {speed: 1.7, handling: 1.28, sprint: 1.12, price: 1200}
-    buy-glow: 60
+    buy-glow: 25000
+    buy-glow-currency: vault
     appearance:
       scale: 0.9
     skins:
@@ -1427,11 +1475,13 @@ mounts:
         item: BLAZE_POWDER
         preset: flame
         price: 120
+        currency: tokens
       shadow:
         name: "Теневой комплект"
         item: ECHO_SHARD
         preset: shadow
         price: 120
+        currency: tokens
   allay:
     type: flying
     control: vehicle
@@ -1456,7 +1506,8 @@ mounts:
       - {speed: 0.45, handling: 0.9, sprint: 1, price: 120}
       - {speed: 0.76, handling: 1, sprint: 1.03, price: 180}
       - {speed: 1.45, handling: 1.28, sprint: 1.12, price: 300}
-    buy-glow: 15
+    buy-glow: 10000
+    buy-glow-currency: vault
     appearance:
       scale: 2
     skins:
@@ -1465,11 +1516,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 25
+        currency: tokens
       cloud:
         name: "Облачный комплект"
         item: WHITE_DYE
         preset: cloud
         price: 25
+        currency: tokens
   parrot:
     type: flying
     control: vehicle
@@ -1494,7 +1547,8 @@ mounts:
       - {speed: 0.45, handling: 0.9, sprint: 1, price: 120}
       - {speed: 0.76, handling: 1, sprint: 1.03, price: 180}
       - {speed: 1.45, handling: 1.28, sprint: 1.12, price: 300}
-    buy-glow: 15
+    buy-glow: 10000
+    buy-glow-currency: vault
     appearance:
       baby: false
       scale: 1
@@ -1511,6 +1565,7 @@ mounts:
         item: LAPIS_LAZULI
         preset: starlight
         price: 25
+        currency: tokens
         appearance:
           variant: BLUE
       green:
@@ -1518,6 +1573,7 @@ mounts:
         item: EMERALD
         preset: shadow
         price: 25
+        currency: tokens
         appearance:
           variant: GREEN
   bat:
@@ -1539,7 +1595,8 @@ mounts:
       - {speed: 0.45, handling: 0.9, sprint: 1, price: 120}
       - {speed: 0.76, handling: 1, sprint: 1.03, price: 180}
       - {speed: 1.45, handling: 1.28, sprint: 1.12, price: 300}
-    buy-glow: 15
+    buy-glow: 10000
+    buy-glow-currency: vault
     appearance:
       scale: 2.1
     skins:
@@ -1548,11 +1605,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 25
+        currency: tokens
       cloud:
         name: "Облачный комплект"
         item: WHITE_DYE
         preset: cloud
         price: 25
+        currency: tokens
   vex:
     type: flying
     control: vehicle
@@ -1577,7 +1636,8 @@ mounts:
       - {speed: 0.52, handling: 0.9, sprint: 1, scale: 1, price: 240}
       - {speed: 0.85, handling: 1, sprint: 1.03, scale: 1, price: 360}
       - {speed: 1.6, handling: 1.28, sprint: 1.12, scale: 1, price: 600}
-    buy-glow: 40
+    buy-glow: 20000
+    buy-glow-currency: vault
     appearance:
       scale: 1.85
     skins:
@@ -1586,11 +1646,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 70
+        currency: tokens
       shadow:
         name: "Теневой комплект"
         item: ECHO_SHARD
         preset: shadow
         price: 70
+        currency: tokens
   breeze:
     type: flying
     control: vehicle
@@ -1620,7 +1682,8 @@ mounts:
       - {speed: 0.52, handling: 0.9, sprint: 1, price: 240}
       - {speed: 0.85, handling: 1, sprint: 1.03, price: 360}
       - {speed: 1.6, handling: 1.28, sprint: 1.12, price: 600}
-    buy-glow: 40
+    buy-glow: 20000
+    buy-glow-currency: vault
     appearance:
       scale: 0.9
     skins:
@@ -1629,11 +1692,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 70
+        currency: tokens
       shadow:
         name: "Теневой комплект"
         item: ECHO_SHARD
         preset: shadow
         price: 70
+        currency: tokens
   phantom:
     type: flying
     control: vehicle
@@ -1653,7 +1718,8 @@ mounts:
       - {speed: 0.52, handling: 0.9, sprint: 1, price: 240}
       - {speed: 0.85, handling: 1, sprint: 1.03, price: 360}
       - {speed: 1.6, handling: 1.28, sprint: 1.12, price: 600}
-    buy-glow: 40
+    buy-glow: 20000
+    buy-glow-currency: vault
     appearance:
       scale: 0.85
     skins:
@@ -1662,11 +1728,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 70
+        currency: tokens
       shadow:
         name: "Теневой комплект"
         item: ECHO_SHARD
         preset: shadow
         price: 70
+        currency: tokens
   ghast:
     type: flying
     control: vehicle
@@ -1692,7 +1760,8 @@ mounts:
       - {speed: 0.55, handling: 0.9, sprint: 1, price: 480}
       - {speed: 0.9, handling: 1, sprint: 1.03, price: 720}
       - {speed: 1.7, handling: 1.28, sprint: 1.12, price: 1200}
-    buy-glow: 60
+    buy-glow: 25000
+    buy-glow-currency: vault
     appearance:
       scale: 1
     size-tuning:
@@ -1707,11 +1776,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 120
+        currency: tokens
       soulfire:
         name: "Пламя душ"
         item: SOUL_LANTERN
         preset: soulfire
         price: 120
+        currency: tokens
   happy_ghast:
     type: flying
     item: HAPPY_GHAST_SPAWN_EGG
@@ -1730,7 +1801,8 @@ mounts:
       - {speed: 0.55, handling: 0.9, sprint: 1, price: 480}
       - {speed: 0.9, handling: 1, sprint: 1.03, price: 720}
       - {speed: 1.7, handling: 1.28, sprint: 1.12, price: 1200}
-    buy-glow: 60
+    buy-glow: 25000
+    buy-glow-currency: vault
     appearance:
       scale: 0.66
       equipment:
@@ -1741,11 +1813,50 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 120
+        currency: tokens
       soulfire:
         name: "Пламя душ"
         item: SOUL_LANTERN
         preset: soulfire
         price: 120
+        currency: tokens
+  skycruiser:
+    type: flying
+    control: native-flight
+    entity: HAPPY_GHAST
+    visual-entity: PHANTOM
+    passenger-seats: 2
+    item: PHANTOM_MEMBRANE
+    name: "Небесный крейсер"
+    rarity: legendary
+    acquisition: "у Гектора во дворе маунтов на спавне"
+    currency: tokens
+    description:
+      - "Крылатый флагман со штатным полётом."
+      - "Полёт по взгляду и два места для друзей."
+    abilities:
+      upgrades: [night-vision, fire-resistance]
+    levels:
+      - {speed: 1.1, handling: 1, sprint: 1, price: 1200}
+      - {speed: 1.5, handling: 1, sprint: 1, price: 1800}
+      - {speed: 1.9, handling: 1, sprint: 1, price: 3000}
+    buy-glow: 25000
+    buy-glow-currency: vault
+    appearance:
+      scale: 0.9
+    skins:
+      starlight:
+        name: "Звёздный комплект"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 150
+        currency: tokens
+      soulfire:
+        name: "Пламя душ"
+        item: SOUL_LANTERN
+        preset: soulfire
+        price: 150
+        currency: tokens
   dolphin:
     type: swimming
     item: DOLPHIN_SPAWN_EGG
@@ -1762,7 +1873,8 @@ mounts:
       - {speed: 0.52, handling: 0.9, sprint: 1, price: 30}
       - {speed: 0.88, handling: 1, sprint: 1.03, price: 45}
       - {speed: 1.65, handling: 1.28, sprint: 1.12, price: 75}
-    buy-glow: 10
+    buy-glow: 5000
+    buy-glow-currency: vault
     appearance:
       scale: 1.05
     skins:
@@ -1771,11 +1883,13 @@ mounts:
         item: NAUTILUS_SHELL
         preset: ocean
         price: 15
+        currency: tokens
       starlight:
         name: "Звёздный комплект"
         item: AMETHYST_SHARD
         preset: starlight
         price: 15
+        currency: tokens
   axolotl:
     type: swimming
     item: AXOLOTL_SPAWN_EGG
@@ -1793,7 +1907,8 @@ mounts:
       - {speed: 0.56, handling: 0.9, sprint: 1, price: 60}
       - {speed: 0.92, handling: 1, sprint: 1.03, price: 90}
       - {speed: 1.75, handling: 1.28, sprint: 1.12, price: 150}
-    buy-glow: 15
+    buy-glow: 10000
+    buy-glow-currency: vault
     appearance:
       baby: false
       scale: 1.7
@@ -1804,6 +1919,7 @@ mounts:
         item: GOLD_INGOT
         preset: starlight
         price: 25
+        currency: tokens
         appearance:
           variant: GOLD
       blue:
@@ -1811,6 +1927,7 @@ mounts:
         item: HEART_OF_THE_SEA
         preset: ocean
         price: 25
+        currency: tokens
         appearance:
           variant: BLUE
   squid:
@@ -1838,7 +1955,8 @@ mounts:
       - {speed: 0.56, handling: 0.9, sprint: 1, price: 60}
       - {speed: 0.92, handling: 1, sprint: 1.03, price: 90}
       - {speed: 1.75, handling: 1.28, sprint: 1.12, price: 150}
-    buy-glow: 15
+    buy-glow: 10000
+    buy-glow-currency: vault
     appearance:
       scale: 1.05
     skins:
@@ -1847,11 +1965,13 @@ mounts:
         item: NAUTILUS_SHELL
         preset: ocean
         price: 25
+        currency: tokens
       starlight:
         name: "Звёздный комплект"
         item: AMETHYST_SHARD
         preset: starlight
         price: 25
+        currency: tokens
   glow_squid:
     type: swimming
     item: GLOW_SQUID_SPAWN_EGG
@@ -1869,7 +1989,8 @@ mounts:
       - {speed: 0.6, handling: 0.9, sprint: 1, price: 120}
       - {speed: 0.98, handling: 1, sprint: 1.03, price: 180}
       - {speed: 1.85, handling: 1.28, sprint: 1.12, price: 300}
-    buy-glow: 25
+    buy-glow: 15000
+    buy-glow-currency: vault
     appearance:
       scale: 1.05
     skins:
@@ -1878,11 +1999,13 @@ mounts:
         item: NAUTILUS_SHELL
         preset: ocean
         price: 40
+        currency: tokens
       starlight:
         name: "Звёздный комплект"
         item: AMETHYST_SHARD
         preset: starlight
         price: 40
+        currency: tokens
   cat:
     type: walking
     item: CAT_SPAWN_EGG
@@ -1906,7 +2029,8 @@ mounts:
       - {speed: 1.45, handling: 0.9, sprint: 1, price: 60}
       - {speed: 2.35, handling: 1, sprint: 1.03, price: 90}
       - {speed: 5, handling: 1.28, sprint: 1.12, price: 150}
-    buy-glow: 15
+    buy-glow: 10000
+    buy-glow-currency: vault
     appearance: {baby: false, scale: 1}
     size-tuning:
       - {id: keychain, name: "Котёнок ×0.1", multiplier: 0.10, minimum-level: 1}
@@ -1920,11 +2044,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 25
+        currency: tokens
       shadow:
         name: "Теневой кот"
         item: ECHO_SHARD
         preset: shadow
         price: 25
+        currency: tokens
   wolf:
     type: walking
     item: WOLF_SPAWN_EGG
@@ -1954,7 +2080,8 @@ mounts:
       - {speed: 1.55, handling: 0.9, sprint: 1, price: 120}
       - {speed: 2.5, handling: 1, sprint: 1.03, price: 180}
       - {speed: 5.2, handling: 1.28, sprint: 1.12, price: 300}
-    buy-glow: 25
+    buy-glow: 15000
+    buy-glow-currency: vault
     appearance: {baby: false, scale: 1}
     size-tuning:
       - {id: compact, name: "Щенок ×0.5", multiplier: 0.50, minimum-level: 1}
@@ -1967,11 +2094,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 40
+        currency: tokens
       shadow:
         name: "Теневой волк"
         item: ECHO_SHARD
         preset: shadow
         price: 40
+        currency: tokens
   armadillo:
     type: walking
     item: ARMADILLO_SPAWN_EGG
@@ -1995,7 +2124,8 @@ mounts:
       - {speed: 1.45, handling: 0.9, sprint: 1, price: 60}
       - {speed: 2.35, handling: 1, sprint: 1.03, price: 90}
       - {speed: 5, handling: 1.28, sprint: 1.12, price: 150}
-    buy-glow: 15
+    buy-glow: 10000
+    buy-glow-currency: vault
     appearance: {baby: false, scale: 1}
     size-tuning:
       - {id: keychain, name: "Клубок ×0.1", multiplier: 0.10, minimum-level: 1}
@@ -2008,11 +2138,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 25
+        currency: tokens
       shadow:
         name: "Теневой панцирь"
         item: ECHO_SHARD
         preset: shadow
         price: 25
+        currency: tokens
   llama:
     type: walking
     item: LLAMA_SPAWN_EGG
@@ -2036,7 +2168,8 @@ mounts:
       - {speed: 1.45, handling: 0.9, sprint: 1, price: 60}
       - {speed: 2.35, handling: 1, sprint: 1.03, price: 90}
       - {speed: 5, handling: 1.28, sprint: 1.12, price: 150}
-    buy-glow: 15
+    buy-glow: 10000
+    buy-glow-currency: vault
     appearance: {baby: false, scale: 1}
     size-tuning:
       - {id: compact, name: "Компактная ×0.5", multiplier: 0.50, minimum-level: 1}
@@ -2049,11 +2182,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 25
+        currency: tokens
       shadow:
         name: "Теневой караван"
         item: ECHO_SHARD
         preset: shadow
         price: 25
+        currency: tokens
   ocelot:
     type: walking
     item: OCELOT_SPAWN_EGG
@@ -2077,7 +2212,8 @@ mounts:
       - {speed: 1.55, handling: 0.9, sprint: 1, price: 120}
       - {speed: 2.5, handling: 1, sprint: 1.03, price: 180}
       - {speed: 5.2, handling: 1.28, sprint: 1.12, price: 300}
-    buy-glow: 25
+    buy-glow: 15000
+    buy-glow-currency: vault
     appearance: {baby: false, scale: 1}
     size-tuning:
       - {id: keychain, name: "Котёнок ×0.1", multiplier: 0.10, minimum-level: 1}
@@ -2090,11 +2226,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 40
+        currency: tokens
       shadow:
         name: "Теневой оцелот"
         item: ECHO_SHARD
         preset: shadow
         price: 40
+        currency: tokens
   panda:
     type: walking
     item: PANDA_SPAWN_EGG
@@ -2124,7 +2262,8 @@ mounts:
       - {speed: 1.55, handling: 0.9, sprint: 1, price: 120}
       - {speed: 2.5, handling: 1, sprint: 1.03, price: 180}
       - {speed: 5.2, handling: 1.28, sprint: 1.12, price: 300}
-    buy-glow: 25
+    buy-glow: 15000
+    buy-glow-currency: vault
     appearance: {baby: false, scale: 1}
     size-tuning:
       - {id: compact, name: "Пандочка ×0.5", multiplier: 0.50, minimum-level: 1}
@@ -2137,11 +2276,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 40
+        currency: tokens
       shadow:
         name: "Теневая панда"
         item: ECHO_SHARD
         preset: shadow
         price: 40
+        currency: tokens
   pufferfish:
     type: swimming
     item: PUFFERFISH_SPAWN_EGG
@@ -2172,7 +2313,8 @@ mounts:
       - {speed: 0.6, handling: 0.9, sprint: 1, price: 120}
       - {speed: 0.98, handling: 1, sprint: 1.03, price: 180}
       - {speed: 1.85, handling: 1.28, sprint: 1.12, price: 300}
-    buy-glow: 25
+    buy-glow: 15000
+    buy-glow-currency: vault
     appearance: {scale: 1}
     size-tuning:
       - {id: keychain, name: "Пузырёк ×0.1", multiplier: 0.10, minimum-level: 1}
@@ -2185,11 +2327,13 @@ mounts:
         item: NAUTILUS_SHELL
         preset: ocean
         price: 40
+        currency: tokens
       starlight:
         name: "Звёздный иглобрюх"
         item: AMETHYST_SHARD
         preset: starlight
         price: 40
+        currency: tokens
   magma_cube:
     type: walking
     item: MAGMA_CUBE_SPAWN_EGG
@@ -2218,7 +2362,8 @@ mounts:
       - {speed: 1.6, handling: 0.9, sprint: 1, price: 240}
       - {speed: 2.6, handling: 1, sprint: 1.03, price: 360}
       - {speed: 5.4, handling: 1.28, sprint: 1.12, price: 600}
-    buy-glow: 40
+    buy-glow: 20000
+    buy-glow-currency: vault
     appearance: {scale: 1}
     size-tuning:
       - {id: keychain, name: "Искра ×0.1", multiplier: 0.10, minimum-level: 1}
@@ -2231,11 +2376,13 @@ mounts:
         item: BLAZE_POWDER
         preset: flame
         price: 70
+        currency: tokens
       soulfire:
         name: "Ядро душ"
         item: SOUL_LANTERN
         preset: soulfire
         price: 70
+        currency: tokens
   mooshroom:
     type: walking
     item: MOOSHROOM_SPAWN_EGG
@@ -2259,7 +2406,8 @@ mounts:
       - {speed: 1.55, handling: 0.9, sprint: 1, price: 120}
       - {speed: 2.5, handling: 1, sprint: 1.03, price: 180}
       - {speed: 5.2, handling: 1.28, sprint: 1.12, price: 300}
-    buy-glow: 25
+    buy-glow: 15000
+    buy-glow-currency: vault
     appearance: {baby: false, scale: 1}
     size-tuning:
       - {id: compact, name: "Грибочек ×0.5", multiplier: 0.50, minimum-level: 1}
@@ -2272,11 +2420,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 40
+        currency: tokens
       shadow:
         name: "Теневой мушрум"
         item: ECHO_SHARD
         preset: shadow
         price: 40
+        currency: tokens
   tadpole:
     type: swimming
     item: TADPOLE_BUCKET
@@ -2307,7 +2457,8 @@ mounts:
       - {speed: 0.56, handling: 0.9, sprint: 1, price: 60}
       - {speed: 0.92, handling: 1, sprint: 1.03, price: 90}
       - {speed: 1.75, handling: 1.28, sprint: 1.12, price: 150}
-    buy-glow: 15
+    buy-glow: 10000
+    buy-glow-currency: vault
     appearance: {scale: 1}
     size-tuning:
       - {id: keychain, name: "Капля ×0.1", multiplier: 0.10, minimum-level: 1}
@@ -2320,11 +2471,13 @@ mounts:
         item: NAUTILUS_SHELL
         preset: ocean
         price: 25
+        currency: tokens
       starlight:
         name: "Звёздный головастик"
         item: AMETHYST_SHARD
         preset: starlight
         price: 25
+        currency: tokens
   polar_bear:
     type: walking
     item: POLAR_BEAR_SPAWN_EGG
@@ -2368,7 +2521,8 @@ mounts:
       - {speed: 1.6, handling: 0.9, sprint: 1, price: 240}
       - {speed: 2.6, handling: 1, sprint: 1.03, price: 360}
       - {speed: 5.4, handling: 1.28, sprint: 1.12, price: 600}
-    buy-glow: 40
+    buy-glow: 20000
+    buy-glow-currency: vault
     appearance: {baby: false, scale: 1}
     size-tuning:
       - {id: compact, name: "Медвежонок ×0.5", multiplier: 0.50, minimum-level: 1}
@@ -2381,11 +2535,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 70
+        currency: tokens
       shadow:
         name: "Полярная тень"
         item: ECHO_SHARD
         preset: shadow
         price: 70
+        currency: tokens
   copper_golem:
     type: walking
     item: COPPER_GOLEM_SPAWN_EGG
@@ -2415,7 +2571,8 @@ mounts:
       - {speed: 1.6, handling: 0.9, sprint: 1, price: 240}
       - {speed: 2.6, handling: 1, sprint: 1.03, price: 360}
       - {speed: 5.4, handling: 1.28, sprint: 1.12, price: 600}
-    buy-glow: 40
+    buy-glow: 20000
+    buy-glow-currency: vault
     appearance: {scale: 1}
     size-tuning:
       - {id: keychain, name: "Заводной ×0.1", multiplier: 0.10, minimum-level: 1}
@@ -2429,11 +2586,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 70
+        currency: tokens
       shadow:
         name: "Тёмная патина"
         item: ECHO_SHARD
         preset: shadow
         price: 70
+        currency: tokens
   iron_golem:
     type: walking
     item: IRON_GOLEM_SPAWN_EGG
@@ -2477,6 +2636,7 @@ mounts:
       - {speed: 2.7, handling: 1, sprint: 1.03, price: 1000000}
       - {speed: 5.6, handling: 1.28, sprint: 1.12, price: 2000000}
     buy-glow: 50000
+    buy-glow-currency: vault
     appearance: {scale: 1}
     size-tuning:
       - {id: keychain, name: "Фигурка ×0.1", multiplier: 0.10, minimum-level: 1}
@@ -2488,12 +2648,14 @@ mounts:
         name: "Звёздное железо"
         item: AMETHYST_SHARD
         preset: starlight
-        price: 150000
+        price: 120
+        currency: tokens
       shadow:
         name: "Тёмное железо"
         item: ECHO_SHARD
         preset: shadow
-        price: 150000
+        price: 120
+        currency: tokens
   trader_llama:
     type: walking
     item: TRADER_LLAMA_SPAWN_EGG
@@ -2523,7 +2685,8 @@ mounts:
       - {speed: 1.55, handling: 0.9, sprint: 1, price: 120}
       - {speed: 2.5, handling: 1, sprint: 1.03, price: 180}
       - {speed: 5.2, handling: 1.28, sprint: 1.12, price: 300}
-    buy-glow: 25
+    buy-glow: 15000
+    buy-glow-currency: vault
     appearance: {baby: false, scale: 1}
     size-tuning:
       - {id: compact, name: "Компактная ×0.5", multiplier: 0.50, minimum-level: 1}
@@ -2536,11 +2699,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 40
+        currency: tokens
       shadow:
         name: "Теневой караван"
         item: ECHO_SHARD
         preset: shadow
         price: 40
+        currency: tokens
   snow_golem:
     type: walking
     item: SNOW_GOLEM_SPAWN_EGG
@@ -2570,7 +2735,8 @@ mounts:
       - {speed: 1.45, handling: 0.9, sprint: 1, price: 60}
       - {speed: 2.35, handling: 1, sprint: 1.03, price: 90}
       - {speed: 5, handling: 1.28, sprint: 1.12, price: 150}
-    buy-glow: 15
+    buy-glow: 10000
+    buy-glow-currency: vault
     appearance: {scale: 1}
     size-tuning:
       - {id: keychain, name: "Снеговичок ×0.1", multiplier: 0.10, minimum-level: 1}
@@ -2583,11 +2749,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 25
+        currency: tokens
       shadow:
         name: "Тёмный снег"
         item: ECHO_SHARD
         preset: shadow
         price: 25
+        currency: tokens
   villager:
     type: walking
     item: VILLAGER_SPAWN_EGG
@@ -2617,7 +2785,8 @@ mounts:
       - {speed: 1.55, handling: 0.9, sprint: 1, price: 120}
       - {speed: 2.5, handling: 1, sprint: 1.03, price: 180}
       - {speed: 5.2, handling: 1.28, sprint: 1.12, price: 300}
-    buy-glow: 25
+    buy-glow: 15000
+    buy-glow-currency: vault
     appearance: {baby: false, scale: 1}
     size-tuning:
       - {id: keychain, name: "Мини-житель ×0.1", multiplier: 0.10, minimum-level: 1}
@@ -2630,11 +2799,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 40
+        currency: tokens
       shadow:
         name: "Теневой крестьянин"
         item: ECHO_SHARD
         preset: shadow
         price: 40
+        currency: tokens
   wandering_trader:
     type: walking
     item: WANDERING_TRADER_SPAWN_EGG
@@ -2664,7 +2835,8 @@ mounts:
       - {speed: 1.55, handling: 0.9, sprint: 1, price: 120}
       - {speed: 2.5, handling: 1, sprint: 1.03, price: 180}
       - {speed: 5.2, handling: 1.28, sprint: 1.12, price: 300}
-    buy-glow: 25
+    buy-glow: 15000
+    buy-glow-currency: vault
     appearance: {scale: 1}
     size-tuning:
       - {id: keychain, name: "Ларёк ×0.1", multiplier: 0.10, minimum-level: 1}
@@ -2677,11 +2849,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 40
+        currency: tokens
       shadow:
         name: "Теневой торговец"
         item: ECHO_SHARD
         preset: shadow
         price: 40
+        currency: tokens
   skeleton_horse:
     type: walking
     item: SKELETON_HORSE_SPAWN_EGG
@@ -2716,7 +2890,8 @@ mounts:
       - {speed: 1.6, handling: 0.9, sprint: 1, price: 240}
       - {speed: 2.6, handling: 1, sprint: 1.03, price: 360}
       - {speed: 5.4, handling: 1.28, sprint: 1.12, price: 600}
-    buy-glow: 40
+    buy-glow: 20000
+    buy-glow-currency: vault
     appearance: {baby: false, scale: 1}
     size-tuning:
       - {id: keychain, name: "Костяшка ×0.1", multiplier: 0.10, minimum-level: 1}
@@ -2729,11 +2904,13 @@ mounts:
         item: SOUL_LANTERN
         preset: soulfire
         price: 70
+        currency: tokens
       shadow:
         name: "Теневая кавалерия"
         item: ECHO_SHARD
         preset: shadow
         price: 70
+        currency: tokens
   # Нарочито абсурдная коллекция: один моб, много размеров, никаких дублей.
   mega_warden:
     type: walking
@@ -2774,7 +2951,8 @@ mounts:
       - {speed: 1.6, handling: 0.9, sprint: 1, price: 480}
       - {speed: 2.6, handling: 1, sprint: 1.03, price: 720}
       - {speed: 5.4, handling: 1.28, sprint: 1.12, price: 1200}
-    buy-glow: 60
+    buy-glow: 25000
+    buy-glow-currency: vault
     appearance:
       scale: 1
     size-tuning:
@@ -2789,11 +2967,13 @@ mounts:
         item: ECHO_SHARD
         preset: shadow
         price: 120
+        currency: tokens
       soulfire:
         name: "Хранитель душ"
         item: SOUL_LANTERN
         preset: soulfire
         price: 120
+        currency: tokens
   pocket_chicken:
     type: walking
     item: CHICKEN_SPAWN_EGG
@@ -2822,7 +3002,8 @@ mounts:
       - {speed: 1.45, handling: 0.9, sprint: 1, price: 60}
       - {speed: 2.35, handling: 1, sprint: 1.03, price: 90}
       - {speed: 5, handling: 1.28, sprint: 1.12, price: 150}
-    buy-glow: 15
+    buy-glow: 10000
+    buy-glow-currency: vault
     appearance:
       baby: false
       scale: 1
@@ -2838,11 +3019,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 25
+        currency: tokens
       flame:
         name: "Огненная курица"
         item: BLAZE_POWDER
         preset: flame
         price: 25
+        currency: tokens
   guardian:
     type: swimming
     item: GUARDIAN_SPAWN_EGG
@@ -2860,7 +3043,8 @@ mounts:
       - {speed: 0.65, handling: 0.9, sprint: 1, price: 240}
       - {speed: 1.05, handling: 1, sprint: 1.03, price: 360}
       - {speed: 1.95, handling: 1.28, sprint: 1.12, price: 600}
-    buy-glow: 40
+    buy-glow: 20000
+    buy-glow-currency: vault
     appearance:
       scale: 1.05
     skins:
@@ -2869,11 +3053,13 @@ mounts:
         item: NAUTILUS_SHELL
         preset: ocean
         price: 70
+        currency: tokens
       shadow:
         name: "Теневой комплект"
         item: ECHO_SHARD
         preset: shadow
         price: 70
+        currency: tokens
   sea_turtle:
     type: swimming
     item: TURTLE_SPAWN_EGG
@@ -2892,7 +3078,8 @@ mounts:
       - {speed: 0.6, handling: 0.9, sprint: 1, price: 120}
       - {speed: 0.98, handling: 1, sprint: 1.03, price: 180}
       - {speed: 1.85, handling: 1.28, sprint: 1.12, price: 300}
-    buy-glow: 25
+    buy-glow: 15000
+    buy-glow-currency: vault
     appearance:
       baby: false
       scale: 1.2
@@ -2902,11 +3089,13 @@ mounts:
         item: NAUTILUS_SHELL
         preset: ocean
         price: 40
+        currency: tokens
       starlight:
         name: "Звёздный комплект"
         item: AMETHYST_SHARD
         preset: starlight
         price: 40
+        currency: tokens
   hoglin:
     type: walking
     item: HOGLIN_SPAWN_EGG
@@ -2951,7 +3140,8 @@ mounts:
       - {speed: 1.6, handling: 0.9, sprint: 1, price: 240}
       - {speed: 2.6, handling: 1, sprint: 1.03, price: 360}
       - {speed: 5.4, handling: 1.28, sprint: 1.12, price: 600}
-    buy-glow: 40
+    buy-glow: 20000
+    buy-glow-currency: vault
     appearance: {baby: false, scale: 1}
     skins:
       soulfire:
@@ -2959,11 +3149,13 @@ mounts:
         item: SOUL_LANTERN
         preset: soulfire
         price: 70
+        currency: tokens
       shadow:
         name: "Багровая тень"
         item: ECHO_SHARD
         preset: shadow
         price: 70
+        currency: tokens
   shulker:
     type: flying
     control: vehicle
@@ -2994,7 +3186,8 @@ mounts:
       - {speed: 0.55, handling: 0.9, sprint: 1, price: 120}
       - {speed: 0.95, handling: 1, sprint: 1.03, price: 180}
       - {speed: 1.9, handling: 1.28, sprint: 1.12, price: 300}
-    buy-glow: 25
+    buy-glow: 15000
+    buy-glow-currency: vault
     appearance: {scale: 1}
     skins:
       starlight:
@@ -3002,11 +3195,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 40
+        currency: tokens
       shadow:
         name: "Шалкер Бездны"
         item: ECHO_SHARD
         preset: shadow
         price: 40
+        currency: tokens
   endermite:
     type: walking
     item: ENDERMITE_SPAWN_EGG
@@ -3030,7 +3225,8 @@ mounts:
       - {speed: 1.8, handling: 0.95, sprint: 1, price: 30}
       - {speed: 2.9, handling: 1.05, sprint: 1.03, price: 45}
       - {speed: 5.8, handling: 1.28, sprint: 1.12, price: 75}
-    buy-glow: 10
+    buy-glow: 5000
+    buy-glow-currency: vault
     appearance: {scale: 1.2}
     skins:
       starlight:
@@ -3038,11 +3234,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 15
+        currency: tokens
       shadow:
         name: "Эндермит Бездны"
         item: ECHO_SHARD
         preset: shadow
         price: 15
+        currency: tokens
   piglin:
     type: walking
     item: PIGLIN_SPAWN_EGG
@@ -3072,7 +3270,8 @@ mounts:
       - {speed: 1.5, handling: 0.9, sprint: 1, price: 60}
       - {speed: 2.45, handling: 1, sprint: 1.03, price: 90}
       - {speed: 5.1, handling: 1.28, sprint: 1.12, price: 150}
-    buy-glow: 15
+    buy-glow: 10000
+    buy-glow-currency: vault
     appearance: {baby: false, scale: 1}
     skins:
       flame:
@@ -3080,11 +3279,13 @@ mounts:
         item: GOLD_INGOT
         preset: flame
         price: 25
+        currency: tokens
       shadow:
         name: "Чёрное золото"
         item: ECHO_SHARD
         preset: shadow
         price: 25
+        currency: tokens
   wither_skeleton:
     type: walking
     item: WITHER_SKELETON_SPAWN_EGG
@@ -3114,7 +3315,8 @@ mounts:
       - {speed: 1.6, handling: 0.9, sprint: 1, price: 240}
       - {speed: 2.6, handling: 1, sprint: 1.03, price: 360}
       - {speed: 5.4, handling: 1.28, sprint: 1.12, price: 600}
-    buy-glow: 40
+    buy-glow: 20000
+    buy-glow-currency: vault
     appearance: {scale: 1}
     skins:
       soulfire:
@@ -3122,11 +3324,13 @@ mounts:
         item: SOUL_LANTERN
         preset: soulfire
         price: 70
+        currency: tokens
       shadow:
         name: "Чёрный скелет"
         item: ECHO_SHARD
         preset: shadow
         price: 70
+        currency: tokens
   vindicator:
     type: walking
     item: VINDICATOR_SPAWN_EGG
@@ -3159,7 +3363,8 @@ mounts:
       - {speed: 1.55, handling: 0.9, sprint: 1, price: 120}
       - {speed: 2.55, handling: 1, sprint: 1.03, price: 180}
       - {speed: 5.2, handling: 1.28, sprint: 1.12, price: 300}
-    buy-glow: 25
+    buy-glow: 15000
+    buy-glow-currency: vault
     appearance: {scale: 1}
     skins:
       starlight:
@@ -3167,11 +3372,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 40
+        currency: tokens
       shadow:
         name: "Ночной рейдер"
         item: ECHO_SHARD
         preset: shadow
         price: 40
+        currency: tokens
   creaking:
     type: walking
     item: CREAKING_SPAWN_EGG
@@ -3205,7 +3412,8 @@ mounts:
       - {speed: 1.55, handling: 0.9, sprint: 1, price: 240}
       - {speed: 2.5, handling: 1, sprint: 1.03, price: 360}
       - {speed: 5.2, handling: 1.28, sprint: 1.12, price: 600}
-    buy-glow: 40
+    buy-glow: 20000
+    buy-glow-currency: vault
     appearance: {scale: 1}
     skins:
       starlight:
@@ -3213,11 +3421,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 70
+        currency: tokens
       shadow:
         name: "Сердце чащи"
         item: CREAKING_HEART
         preset: shadow
         price: 70
+        currency: tokens
   creeper:
     type: walking
     item: CREEPER_SPAWN_EGG
@@ -3247,7 +3457,8 @@ mounts:
       - {speed: 1.6, handling: 0.9, sprint: 1, price: 120}
       - {speed: 2.65, handling: 1, sprint: 1.03, price: 180}
       - {speed: 5.4, handling: 1.28, sprint: 1.12, price: 300}
-    buy-glow: 25
+    buy-glow: 15000
+    buy-glow-currency: vault
     appearance: {scale: 1}
     skins:
       starlight:
@@ -3255,11 +3466,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 40
+        currency: tokens
       shadow:
         name: "Тихий ужас"
         item: ECHO_SHARD
         preset: shadow
         price: 40
+        currency: tokens
   elder_guardian:
     type: swimming
     item: ELDER_GUARDIAN_SPAWN_EGG
@@ -3288,7 +3501,8 @@ mounts:
       - {speed: 0.65, handling: 0.9, sprint: 1, price: 480}
       - {speed: 1.08, handling: 1, sprint: 1.03, price: 720}
       - {speed: 2.05, handling: 1.28, sprint: 1.12, price: 1200}
-    buy-glow: 60
+    buy-glow: 25000
+    buy-glow-currency: vault
     appearance: {scale: 1}
     skins:
       ocean:
@@ -3296,11 +3510,13 @@ mounts:
         item: NAUTILUS_SHELL
         preset: ocean
         price: 120
+        currency: tokens
       shadow:
         name: "Страж Бездны"
         item: ECHO_SHARD
         preset: shadow
         price: 120
+        currency: tokens
   silverfish:
     type: walking
     item: SILVERFISH_SPAWN_EGG
@@ -3324,7 +3540,8 @@ mounts:
       - {speed: 1.85, handling: 0.95, sprint: 1, price: 30}
       - {speed: 3, handling: 1.05, sprint: 1.03, price: 45}
       - {speed: 6, handling: 1.28, sprint: 1.12, price: 75}
-    buy-glow: 10
+    buy-glow: 5000
+    buy-glow-currency: vault
     appearance: {scale: 1.2}
     skins:
       starlight:
@@ -3332,11 +3549,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 15
+        currency: tokens
       shadow:
         name: "Глубинная чешуйница"
         item: ECHO_SHARD
         preset: shadow
         price: 15
+        currency: tokens
   witch:
     type: walking
     item: WITCH_SPAWN_EGG
@@ -3366,7 +3585,8 @@ mounts:
       - {speed: 1.5, handling: 0.9, sprint: 1, price: 120}
       - {speed: 2.45, handling: 1, sprint: 1.03, price: 180}
       - {speed: 5.1, handling: 1.28, sprint: 1.12, price: 300}
-    buy-glow: 25
+    buy-glow: 15000
+    buy-glow-currency: vault
     appearance: {scale: 1}
     skins:
       starlight:
@@ -3374,11 +3594,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 40
+        currency: tokens
       shadow:
         name: "Ведьма Бездны"
         item: ECHO_SHARD
         preset: shadow
         price: 40
+        currency: tokens
   camel_husk:
     type: walking
     item: CAMEL_HUSK_SPAWN_EGG
@@ -3413,7 +3635,8 @@ mounts:
       - {speed: 1.55, handling: 0.9, sprint: 1, price: 240}
       - {speed: 2.55, handling: 1, sprint: 1.03, price: 360}
       - {speed: 5.25, handling: 1.28, sprint: 1.12, price: 600}
-    buy-glow: 40
+    buy-glow: 20000
+    buy-glow-currency: vault
     appearance:
       baby: false
       scale: 1
@@ -3425,11 +3648,13 @@ mounts:
         item: BLAZE_POWDER
         preset: flame
         price: 70
+        currency: tokens
       shadow:
         name: "Мёртвый караван"
         item: ECHO_SHARD
         preset: shadow
         price: 70
+        currency: tokens
   stray:
     type: walking
     item: STRAY_SPAWN_EGG
@@ -3454,7 +3679,8 @@ mounts:
       - {speed: 1.5, handling: 0.9, sprint: 1, price: 60}
       - {speed: 2.45, handling: 1, sprint: 1.03, price: 90}
       - {speed: 5.1, handling: 1.28, sprint: 1.12, price: 150}
-    buy-glow: 15
+    buy-glow: 10000
+    buy-glow-currency: vault
     appearance: {scale: 1}
     skins:
       starlight:
@@ -3462,11 +3688,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 25
+        currency: tokens
       shadow:
         name: "Чёрный лёд"
         item: ECHO_SHARD
         preset: shadow
         price: 25
+        currency: tokens
   parched:
     type: walking
     item: PARCHED_SPAWN_EGG
@@ -3496,7 +3724,8 @@ mounts:
       - {speed: 1.5, handling: 0.9, sprint: 1, price: 60}
       - {speed: 2.45, handling: 1, sprint: 1.03, price: 90}
       - {speed: 5.1, handling: 1.28, sprint: 1.12, price: 150}
-    buy-glow: 15
+    buy-glow: 10000
+    buy-glow-currency: vault
     appearance: {scale: 1}
     skins:
       flame:
@@ -3504,11 +3733,13 @@ mounts:
         item: BLAZE_POWDER
         preset: flame
         price: 25
+        currency: tokens
       shadow:
         name: "Ночная пустыня"
         item: ECHO_SHARD
         preset: shadow
         price: 25
+        currency: tokens
   zoglin:
     type: walking
     item: ZOGLIN_SPAWN_EGG
@@ -3545,7 +3776,8 @@ mounts:
       - {speed: 1.6, handling: 0.9, sprint: 1, price: 240}
       - {speed: 2.6, handling: 1, sprint: 1.03, price: 360}
       - {speed: 5.4, handling: 1.28, sprint: 1.12, price: 600}
-    buy-glow: 40
+    buy-glow: 20000
+    buy-glow-currency: vault
     appearance: {baby: false, scale: 1}
     skins:
       soulfire:
@@ -3553,11 +3785,13 @@ mounts:
         item: SOUL_LANTERN
         preset: soulfire
         price: 70
+        currency: tokens
       shadow:
         name: "Чёрный зоглин"
         item: ECHO_SHARD
         preset: shadow
         price: 70
+        currency: tokens
   nautilus:
     type: swimming
     item: NAUTILUS_SPAWN_EGG
@@ -3575,7 +3809,8 @@ mounts:
       - {speed: 0.65, handling: 0.9, sprint: 1, price: 120}
       - {speed: 1.08, handling: 1, sprint: 1.03, price: 180}
       - {speed: 2.05, handling: 1.28, sprint: 1.12, price: 300}
-    buy-glow: 25
+    buy-glow: 15000
+    buy-glow-currency: vault
     appearance: {baby: false, scale: 1}
     skins:
       ocean:
@@ -3583,11 +3818,13 @@ mounts:
         item: NAUTILUS_SHELL
         preset: ocean
         price: 40
+        currency: tokens
       starlight:
         name: "Звёздный наутилус"
         item: AMETHYST_SHARD
         preset: starlight
         price: 40
+        currency: tokens
   zombie_nautilus:
     type: swimming
     item: ZOMBIE_NAUTILUS_SPAWN_EGG
@@ -3612,7 +3849,8 @@ mounts:
       - {speed: 0.65, handling: 0.9, sprint: 1, price: 240}
       - {speed: 1.08, handling: 1, sprint: 1.03, price: 360}
       - {speed: 2.05, handling: 1.28, sprint: 1.12, price: 600}
-    buy-glow: 40
+    buy-glow: 20000
+    buy-glow-currency: vault
     appearance: {baby: false, scale: 1}
     skins:
       ocean:
@@ -3620,11 +3858,13 @@ mounts:
         item: NAUTILUS_SHELL
         preset: ocean
         price: 70
+        currency: tokens
       shadow:
         name: "Наутилус Бездны"
         item: ECHO_SHARD
         preset: shadow
         price: 70
+        currency: tokens
   bogged:
     type: walking
     item: BOGGED_SPAWN_EGG
@@ -3654,7 +3894,8 @@ mounts:
       - {speed: 1.5, handling: 0.9, sprint: 1, price: 60}
       - {speed: 2.45, handling: 1, sprint: 1.03, price: 90}
       - {speed: 5.1, handling: 1.28, sprint: 1.12, price: 150}
-    buy-glow: 15
+    buy-glow: 10000
+    buy-glow-currency: vault
     appearance: {scale: 1}
     skins:
       ocean:
@@ -3662,11 +3903,13 @@ mounts:
         item: NAUTILUS_SHELL
         preset: ocean
         price: 25
+        currency: tokens
       shadow:
         name: "Тёмный мох"
         item: ECHO_SHARD
         preset: shadow
         price: 25
+        currency: tokens
   piglin_brute:
     type: walking
     item: PIGLIN_BRUTE_SPAWN_EGG
@@ -3705,7 +3948,8 @@ mounts:
       - {speed: 1.55, handling: 0.9, sprint: 1, price: 240}
       - {speed: 2.55, handling: 1, sprint: 1.03, price: 360}
       - {speed: 5.25, handling: 1.28, sprint: 1.12, price: 600}
-    buy-glow: 40
+    buy-glow: 20000
+    buy-glow-currency: vault
     appearance: {baby: false, scale: 1}
     skins:
       flame:
@@ -3713,11 +3957,13 @@ mounts:
         item: GOLD_BLOCK
         preset: flame
         price: 70
+        currency: tokens
       shadow:
         name: "Брут Бездны"
         item: ECHO_SHARD
         preset: shadow
         price: 70
+        currency: tokens
   pillager:
     type: walking
     item: PILLAGER_SPAWN_EGG
@@ -3747,7 +3993,8 @@ mounts:
       - {speed: 1.55, handling: 0.9, sprint: 1, price: 60}
       - {speed: 2.55, handling: 1, sprint: 1.03, price: 90}
       - {speed: 5.25, handling: 1.28, sprint: 1.12, price: 150}
-    buy-glow: 15
+    buy-glow: 10000
+    buy-glow-currency: vault
     appearance: {scale: 1}
     skins:
       starlight:
@@ -3755,11 +4002,13 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 25
+        currency: tokens
       shadow:
         name: "Ночной дозор"
         item: ECHO_SHARD
         preset: shadow
         price: 25
+        currency: tokens
   evoker:
     type: walking
     item: EVOKER_SPAWN_EGG
@@ -3789,7 +4038,8 @@ mounts:
       - {speed: 1.5, handling: 0.9, sprint: 1, price: 240}
       - {speed: 2.45, handling: 1, sprint: 1.03, price: 360}
       - {speed: 5.1, handling: 1.28, sprint: 1.12, price: 600}
-    buy-glow: 40
+    buy-glow: 20000
+    buy-glow-currency: vault
     appearance: {scale: 1}
     skins:
       starlight:
@@ -3797,8 +4047,10 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 70
+        currency: tokens
       shadow:
         name: "Заклинатель Бездны"
         item: ECHO_SHARD
         preset: shadow
         price: 70
+        currency: tokens

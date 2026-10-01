@@ -308,7 +308,14 @@ object MountModule : PluginModule {
             require(entityType != null && entityType.isAlive && entityType.isSpawnable) {
                 "Mount '${definition.id}' has invalid entity type '${definition.entityType}'"
             }
-            MountAppearanceApplicator.validate(entityType, definition.appearance, "Mount '${definition.id}' appearance")
+            val appearanceType = definition.visualEntityType?.let { raw ->
+                val visualType = runCatching { EntityType.valueOf(raw) }.getOrNull()
+                require(visualType != null && visualType.isAlive && visualType.isSpawnable) {
+                    "Mount '${definition.id}' has invalid visual entity '$raw'"
+                }
+                visualType
+            } ?: entityType
+            MountAppearanceApplicator.validate(appearanceType, definition.appearance, "Mount '${definition.id}' appearance")
             definition.levels.forEach { level -> level.price?.toExactMinor() }
             definition.glowPrice?.toExactMinor()
             definition.abilities.upgrades.forEach { ability ->
@@ -322,7 +329,7 @@ object MountModule : PluginModule {
                     "Mount '${definition.id}' skin '${skin.id}' has unknown material '${skin.iconMaterial}'"
                 }
                 skin.price?.toExactMinor()
-                MountAppearanceApplicator.validate(entityType, skin.appearance, "Mount '${definition.id}' skin '${skin.id}'")
+                MountAppearanceApplicator.validate(appearanceType, skin.appearance, "Mount '${definition.id}' skin '${skin.id}'")
                 skin.trail?.let { trail ->
                     val particle = runCatching { org.bukkit.Particle.valueOf(trail.particle) }.getOrNull()
                     require(particle != null && particle.dataType == Void::class.java) {
@@ -330,6 +337,7 @@ object MountModule : PluginModule {
                     }
                 }
             }
+            definition.sizeOptions.forEach { size -> size.price?.toExactMinor() }
         }
     }
 

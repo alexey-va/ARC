@@ -52,6 +52,7 @@ private sealed interface ConfirmAction {
     data object Glow : ConfirmAction
     data class Skin(val skinId: String) : ConfirmAction
     data class Ability(val abilityId: String) : ConfirmAction
+    data class Size(val sizeId: String) : ConfirmAction
 }
 
 private class MountMenuHolder(
@@ -476,6 +477,7 @@ class MountGuiController(
                 component(config.guiText("progression.tuning-title", "<#20252b><bold><mount></bold>").replace("<mount>", escape(mount.displayName))),
             )
         holder.backingInventory = inventory
+        val purchaseAllowed = purchaseContextAllowed(player, holder)
         fill(inventory, full = true)
         inventory.setItem(TUNING_INFO_SLOT, items.progressionInfoItem(mount, profile, tuning))
         speedSlots.forEach { (slot, percentage) ->
@@ -500,7 +502,7 @@ class MountGuiController(
         }
         sizeSlots.forEach { (slot, sizeId) ->
             mount.sizeOptions.firstOrNull { it.id == sizeId }?.let { option ->
-                inventory.setItem(slot, items.sizeTuningItem(mount, profile, option))
+                inventory.setItem(slot, items.sizeTuningItem(mount, profile, option, merchantAvailable = purchaseAllowed))
             }
         }
         inventory.setItem(TUNING_MENU_RIDER_VIEW_SLOT, items.riderViewTuningItem(mount, profile))
@@ -625,7 +627,13 @@ class MountGuiController(
         holder.backingInventory = inventory
         fill(inventory, Material.BLACK_STAINED_GLASS_PANE, full = true)
         val (name, price, description) = confirmationDetails(mount, action)
-        val currency = if (action is ConfirmAction.Ability) mount.ability(action.abilityId)?.currency ?: mount.currency else mount.currency
+        val currency = when (action) {
+            is ConfirmAction.Ability -> mount.ability(action.abilityId)?.currency ?: mount.currency
+            is ConfirmAction.Skin -> mount.skin(action.skinId)?.currency ?: mount.currency
+            is ConfirmAction.Size -> mount.sizeOptions.firstOrNull { it.id == action.sizeId }?.currency ?: mount.currency
+            ConfirmAction.Glow -> mount.glowCurrency
+            is ConfirmAction.Level -> mount.currency
+        }
         val balance = wallet.walletForCurrency(currency)?.balanceMinor(player.uniqueId)
         val priceMinor = price.toExactMinor()
         holder.confirmEnabled = balance != null && balance >= priceMinor
@@ -889,13 +897,17 @@ class MountGuiController(
                 }
                 holder.sizeOptionsBySlot[slot]?.let { sizeId ->
                     val option = mount.sizeOptions.firstOrNull { it.id == sizeId } ?: return
-                    if (
-                        option.minimumLevel > profile.level ||
-                        !profile.ownsSize(option) ||
-                        mount.effectiveSizeOption(profile.selectedSizeId, profile.level, profile.ownedSizeIds)?.id == sizeId
-                    ) return
-                    purchases.setSizeTuning(subject(player), mount, sizeId) {
-                        handlePurchaseResult(player, mount, it, purchase = false, reopen = MountScreen.TUNING)
+                    if (option.minimumLevel > profile.level) return
+                    if (!profile.ownsSize(option)) {
+                        if (option.grantOnly && option.price != null && configProvider().purchasesEnabled && requireMerchantForPurchase(player, holder)) {
+                            openConfirm(player, mount, ConfirmAction.Size(sizeId))
+                        }
+                        return
+                    }
+                    if (mount.effectiveSizeOption(profile.selectedSizeId, profile.level, profile.ownedSizeIds)?.id != sizeId) {
+                        purchases.setSizeTuning(subject(player), mount, sizeId) {
+                            handlePurchaseResult(player, mount, it, purchase = false, reopen = MountScreen.TUNING)
+                        }
                     }
                 }
             }
@@ -931,6 +943,7 @@ class MountGuiController(
                 is ConfirmAction.Skin -> openSkins(player, mount)
                 is ConfirmAction.Level -> openProgression(player, mount)
                 is ConfirmAction.Ability -> openAbilities(player, mount)
+                is ConfirmAction.Size -> openTuning(player, mount)
                 else -> openDetailFromCurrent(player, mount.id)
             }
             CONFIRM_ACCEPT_SLOT -> {
@@ -942,6 +955,7 @@ class MountGuiController(
                             is ConfirmAction.Skin -> MountScreen.SKINS
                             is ConfirmAction.Level -> MountScreen.PROGRESSION
                             is ConfirmAction.Ability -> MountScreen.ABILITIES
+                            is ConfirmAction.Size -> MountScreen.TUNING
                             else -> MountScreen.DETAIL
                         },
                     )
@@ -968,6 +982,7 @@ class MountGuiController(
                                 is ConfirmAction.Skin -> MountScreen.SKINS
                                 is ConfirmAction.Level -> MountScreen.PROGRESSION
                                 is ConfirmAction.Ability -> MountScreen.ABILITIES
+                                is ConfirmAction.Size -> MountScreen.TUNING
                                 else -> MountScreen.DETAIL
                             },
                     )
@@ -977,6 +992,7 @@ class MountGuiController(
                     ConfirmAction.Glow -> purchases.purchaseGlow(subject(player), mount, callback)
                     is ConfirmAction.Skin -> mount.skin(action.skinId)?.let { purchases.purchaseSkin(subject(player), mount, it, callback) }
                     is ConfirmAction.Ability -> mount.ability(action.abilityId)?.let { purchases.purchaseAbility(subject(player), mount, it, callback) }
+                    is ConfirmAction.Size -> purchases.purchaseSize(subject(player), mount, action.sizeId, callback)
                 }
             }
         }
@@ -1158,6 +1174,17 @@ class MountGuiController(
                                 "ability-description" to escape(it),
                             )
                         },
+                )
+            }
+            is ConfirmAction.Size -> {
+                val size = checkNotNull(mount.sizeOptions.firstOrNull { it.id == action.sizeId && it.grantOnly })
+                Triple(
+                    copy("progression.size-name", "<#92bed8>Размер: <size>", "size" to escape(size.displayName)),
+                    checkNotNull(size.price),
+                    listOf(
+                        copy("confirm.mount-line", "<#8c8c8c>Маунт: <#e6fff3><mount>", "mount" to escape(mount.displayName)),
+                        copy("confirm.permanent-line", "<#8c8c8c>Особый размер приобретается навсегда."),
+                    ),
                 )
             }
         }

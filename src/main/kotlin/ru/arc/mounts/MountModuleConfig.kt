@@ -136,6 +136,11 @@ open class MountModuleConfig(private val config: Config) {
                     currency = config.string("$root.currency", "vault").trim(),
                     control = strictControl(config.string("$root.control", "vehicle"), id),
                     visualFlightOffsetY = config.doubleOrNull("$root.visual-flight-offset-y"),
+                    visualEntityType = config.string("$root.visual-entity", "").trim().uppercase(Locale.ROOT).ifEmpty { null },
+                    glowCurrency = config.string(
+                        "$root.buy-glow-currency",
+                        config.string("$root.currency", "vault"),
+                    ).trim(),
                 )
             }
         return MountCatalog(definitions)
@@ -243,6 +248,7 @@ open class MountModuleConfig(private val config: Config) {
             }
             val presetPath = presetId?.let { "cosmetics.$it" }
             val presetAppearance = presetPath?.let { appearance("$it.appearance", baseAppearance) } ?: baseAppearance
+            val currency = config.string("$path.currency", config.string("$root.currency", "vault")).trim()
             MountSkinDefinition(
                 id = id,
                 displayName =
@@ -253,9 +259,10 @@ open class MountModuleConfig(private val config: Config) {
                     (config.stringOrNull("$path.item")
                         ?: presetPath?.let { config.string("$it.item", "LEATHER_HORSE_ARMOR") }
                         ?: "LEATHER_HORSE_ARMOR").trim().uppercase(Locale.ROOT),
-                price = config.doubleOrNull("$path.price-${config.string("$root.currency", "vault")}") ?: config.doubleOrNull("$path.price"),
+                price = config.doubleOrNull("$path.price-$currency") ?: config.doubleOrNull("$path.price"),
                 appearance = appearance("$path.appearance", presetAppearance),
                 trail = trail("$path.trail") ?: presetPath?.let { trail("$it.trail") },
+                currency = currency,
             )
         }
     }
@@ -268,7 +275,7 @@ open class MountModuleConfig(private val config: Config) {
         skins: List<MountSkinDefinition>,
     ): List<MountSizeOptionDefinition> {
         val authored = config.list<Map<String, Any?>>("$root.size-tuning").mapIndexed { index, raw ->
-            val allowedKeys = setOf("id", "name", "multiplier", "minimum-level", "grant-only")
+            val allowedKeys = setOf("id", "name", "multiplier", "minimum-level", "grant-only", "price", "currency")
             val unknown = raw.keys.map(Any?::toString).toSet() - allowedKeys
             require(unknown.isEmpty()) {
                 "Mount '$mountId' size option ${index + 1} has unknown fields: ${unknown.sorted()}"
@@ -288,12 +295,22 @@ open class MountModuleConfig(private val config: Config) {
                     value as? Boolean
                         ?: throw IllegalArgumentException("Mount '$mountId' size option '$id' grant-only is not a boolean")
                 } ?: false
+            val defaultKey = when (id) {
+                config.string("size-tuning-defaults.tiny.id", "keychain").trim() -> "tiny"
+                config.string("size-tuning-defaults.giant.id", "colossal").trim() -> "giant"
+                else -> null
+            }
             MountSizeOptionDefinition(
                 id = id,
                 displayName = raw["name"]?.toString()?.trim().orEmpty(),
                 multiplier = requiredDouble(raw["multiplier"], "Mount '$mountId' size option '$id' multiplier"),
                 minimumLevel = minimumLevel,
-                grantOnly = grantOnly,
+                grantOnly = grantOnly || defaultKey != null,
+                price = nullableDouble(raw["price"], "Mount '$mountId' size option '$id' price")
+                    ?: defaultKey?.let { config.doubleOrNull("size-tuning-defaults.$it.price") },
+                currency = raw["currency"]?.toString()?.trim()
+                    ?: defaultKey?.let { config.string("size-tuning-defaults.$it.currency", "tokens").trim() }
+                    ?: config.string("$root.currency", "vault").trim(),
             )
         }
         val standard = defaultSizeOption("standard", grantOnly = false)
@@ -335,6 +352,8 @@ open class MountModuleConfig(private val config: Config) {
             displayName = config.string("$path.name", key).trim().replace("<scale>", formatSizeMultiplier(multiplier)),
             multiplier = multiplier,
             grantOnly = grantOnly,
+            price = config.doubleOrNull("$path.price"),
+            currency = config.string("$path.currency", "tokens").trim(),
         )
     }
 
