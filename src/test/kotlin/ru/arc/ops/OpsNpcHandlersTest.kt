@@ -24,14 +24,28 @@ import net.citizensnpcs.trait.SkinTrait
 import net.citizensnpcs.trait.text.Text
 import net.citizensnpcs.trait.waypoint.LinearWaypointProvider
 import net.citizensnpcs.trait.waypoint.Waypoints
+import org.bukkit.Bukkit
 import org.bukkit.entity.Entity
 import org.bukkit.entity.EntityType
 import org.bukkit.Location
 import org.bukkit.World
 import org.bukkit.event.player.PlayerTeleportEvent
+import ru.arc.paper.testing.MockBukkitTestRuntime
 import java.util.UUID
 
 class OpsNpcHandlersTest : FreeSpec({
+
+    "optional BlueMap integration" - {
+        "should leave Citizens handlers usable when BlueMap is absent" {
+            MockBukkitTestRuntime.open().use {
+                Bukkit.getPluginManager().isPluginEnabled("BlueMap") shouldBe false
+
+                OpsBlueMapIntegration.startIfEnabled()
+                OpsBlueMapIntegration.available() shouldBe false
+                OpsBlueMapIntegration.refresh()
+            }
+        }
+    }
 
     "presence-aware NpcSpec patch" - {
         "should preserve every setting omitted by a name-only edit" {

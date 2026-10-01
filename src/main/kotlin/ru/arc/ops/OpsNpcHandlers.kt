@@ -26,8 +26,10 @@ import org.bukkit.entity.EntityType
 import org.bukkit.event.player.PlayerTeleportEvent
 import org.bukkit.inventory.ItemStack
 import ru.arc.hooks.citizens.ArcNpcHologramModule
+import ru.arc.util.Logging.warn
 import java.security.MessageDigest
 import java.time.Duration
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.floor
 
 /**
@@ -71,7 +73,7 @@ object OpsNpcHandlers {
                 "provider" to "Citizens",
                 "count" to npcs.size,
                 "npcs" to npcs,
-                "blueMapMarkers" to BlueMapNpcMarkers.available(),
+                "blueMapMarkers" to OpsBlueMapIntegration.available(),
             )
         }
 
@@ -172,7 +174,7 @@ object OpsNpcHandlers {
                 if (created) npc.destroy()
                 throw failure
             }
-            BlueMapNpcMarkers.refresh()
+            OpsBlueMapIntegration.refresh()
             mapOf(
                 "operation" to "upsert",
                 "created" to created,
@@ -202,7 +204,7 @@ object OpsNpcHandlers {
             val before = summary(npc)
             npc.destroy()
             registry.saveToStore()
-            BlueMapNpcMarkers.refresh()
+            OpsBlueMapIntegration.refresh()
             mapOf(
                 "operation" to "delete",
                 "npc" to before,
@@ -914,6 +916,48 @@ object OpsNpcHandlers {
         return value.asString
     }
 
+}
+
+/** Keeps the optional BlueMap API behind a runtime availability boundary. */
+internal object OpsBlueMapIntegration {
+    private val apiLinkFailed = AtomicBoolean(false)
+
+    fun startIfEnabled() {
+        if (!canCall()) return
+        try {
+            BlueMapNpcMarkers.start()
+        } catch (failure: LinkageError) {
+            disableAfterLinkFailure(failure)
+        }
+    }
+
+    fun available(): Boolean {
+        if (!canCall()) return false
+        return try {
+            BlueMapNpcMarkers.available()
+        } catch (failure: LinkageError) {
+            disableAfterLinkFailure(failure)
+            false
+        }
+    }
+
+    fun refresh() {
+        if (!canCall()) return
+        try {
+            BlueMapNpcMarkers.refresh()
+        } catch (failure: LinkageError) {
+            disableAfterLinkFailure(failure)
+        }
+    }
+
+    private fun canCall(): Boolean =
+        !apiLinkFailed.get() && Bukkit.getPluginManager().isPluginEnabled("BlueMap")
+
+    private fun disableAfterLinkFailure(failure: LinkageError) {
+        if (apiLinkFailed.compareAndSet(false, true)) {
+            warn("BlueMap API failed to link; Citizens markers are disabled", failure)
+        }
+    }
 }
 
 private fun String.sha256(): String =

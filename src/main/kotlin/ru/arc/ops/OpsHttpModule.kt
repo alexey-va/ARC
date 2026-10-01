@@ -1,6 +1,5 @@
 package ru.arc.ops
 
-import org.bukkit.Bukkit
 import ru.arc.core.PluginModule
 import ru.arc.core.ScheduledTask
 import ru.arc.core.Tasks
@@ -33,9 +32,7 @@ object OpsHttpModule : PluginModule {
                 info(OpsHttpHandlers.runtimeHealthLine())
             }
         OpsStartupLogTap.install()
-        if (Bukkit.getPluginManager().isPluginEnabled("BlueMap")) {
-            BlueMapNpcMarkers.start()
-        }
+        OpsBlueMapIntegration.startIfEnabled()
         httpServer.start()
     }
 
