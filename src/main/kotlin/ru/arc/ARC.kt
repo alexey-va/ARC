@@ -159,6 +159,14 @@ open class ARC : JavaPlugin() {
         }
 
         PaperArcRuntime.installScheduling(this)
+        val configRoot = dataPath
+        ru.arc.core.async {
+            try {
+                ConfigManager.of(configRoot, "modules/misc.yml").mergeMissingFromBundled("modules/misc.yml")
+            } catch (failure: Exception) {
+                error("Could not merge portal animation defaults into modules/misc.yml", failure)
+            }
+        }
         if (runtimeProfile == ArcRuntimeProfile.FULL) {
             ArcMenus.initialize(this, dataPath)
         } else if (runtimeProfile == ArcRuntimeProfile.SLIMEFUN) {

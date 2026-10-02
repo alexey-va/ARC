@@ -82,6 +82,10 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
     private val seenBlocks = HashSet<Block>()
     private val blockChangePlayers = ConcurrentSkipListSet(Comparator.comparing(UUID::toString))
 
+    private val animation = PortalTimingSettings.load(config)
+    private var lastBorderStep = -1
+    private var legacyOpeningSoundPlayed = false
+
     private val phase = AtomicInteger()
     private val success = AtomicBoolean()
     private val removed = AtomicBoolean()
@@ -144,7 +148,7 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
     private fun createTask(): ScheduledTask {
         val cb = centerBlock!!
         return repeating(1.ticks, delay = 1.ticks) {
-            if (phase.get() > 400 || player?.isOnline != true) {
+            if (phase.get() > animation.lifetimeTicks || player?.isOnline != true) {
                 removePortal()
                 return@repeating
             }
@@ -158,7 +162,7 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
                 return@repeating
             }
             val nearbyPlayers = nearbyPlayers(cb)
-            if (phase.get() >= 58 && config.bool("portal.blindness", true)) {
+            if (phase.get() >= animation.blindnessStartTick && config.bool("portal.blindness", true)) {
                 val radius = config.real("portal.blindness-radius", 2.0)
                 val duration = config.integer("portal.blindness-duration", 40)
                 val closePlayers = nearbyPlayers.filter { p ->
@@ -169,21 +173,34 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
                     if (!p.hasPotionEffect(BLINDNESS)) p.addPotionEffect(potionEffect)
                 }
             }
-            if (phase.get() == 58 && originGate?.isActive != true) {
-                cb.world.playSound(cb.location, org.bukkit.Sound.BLOCK_END_PORTAL_SPAWN, 1f, 1f)
+            val originGateActive = originGate?.tickOpening(phase.get()) == true
+            if (!legacyOpeningSoundPlayed && phase.get() >= animation.materializeTick &&
+                !originGateActive && originGate?.isPendingOpening != true) {
+                legacyOpeningSoundPlayed = true
+                cb.world.playSound(
+                    cb.location, config.sound("portal.animation.legacy.opening-sound.id", org.bukkit.Sound.BLOCK_END_PORTAL_SPAWN),
+                    config.real("portal.animation.legacy.opening-sound.volume", 1.0).toFloat(),
+                    config.real("portal.animation.legacy.opening-sound.pitch", 1.0).toFloat(),
+                )
             }
 
-            val originGateActive = originGate?.tickOpening(phase.get()) == true
             if (originGateActive) {
+                if (blockChangePlayers.isNotEmpty()) {
+                    clearBlockPackets()
+                    blockChangePlayers.clear()
+                }
                 originGateSettings?.let { displayOriginGateParticles(nearbyPlayers, it) }
-            } else {
+            } else if (originGate?.isPendingOpening != true) {
                 addLocations()
                 displayParticles(nearbyPlayers)
-                if (phase.get() >= 58 && (phase.get() == 58 || phase.get() % 10 == 0)) {
+                if (phase.get() >= animation.materializeTick &&
+                    (phase.get() - animation.materializeTick) % animation.blockRefreshTicks == 0) {
                     placeBlocksPackets(nearbyPlayers)
                 }
             }
-            val entryTick = originGateSettings?.entryTick?.takeIf { originGate?.isActive == true } ?: 61
+            val entryTick = originGateSettings?.entryTick?.takeIf {
+                originGate?.isActive == true || originGate?.isPendingOpening == true
+            } ?: animation.entryTick
             if (phase.get() >= entryTick) {
                 val enteredPlayer = getEnteredPlayer(nearbyPlayers)
                 if (enteredPlayer != null && !success.getAndSet(true)) {
@@ -320,45 +337,52 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
         val y = cb.y.toDouble() + 1
         val z = cb.z.toDouble()
         val world = cb.world
-        if (phase.get() % 10 == 0 && phase.get() <= 40) cb.world.playSound(cb.location, org.bukkit.Sound.BLOCK_AMETHYST_BLOCK_CHIME, 30f, 1f)
-
-        when {
-            phase.get() <= 10 -> {
-                val loc1 = Location(world, x + phase.get() / 10.0, y, z)
-                val loc2 = Location(world, x, y + phase.get() / 10.0, z)
-                val loc3 = Location(world, x, y, z + phase.get() / 10.0)
-                borderLocations.addAll(listOf(loc1, loc2, loc3))
-                if (phase.get() % 2 == 0 || phase.get() % 10 == 0) reducedBorderLocations.addAll(listOf(loc1, loc2, loc3))
-            }
-            phase.get() <= 20 -> {
-                val p = phase.get()
-                val loc1 = Location(world, x + 1, y + (p - 10) / 10.0, z)
-                val loc2 = Location(world, x, y + p / 10.0, z)
-                val loc3 = Location(world, x, y + (p - 10) / 10.0, z + 1)
-                val loc4 = Location(world, x + 1, y, z + (p - 10) / 10.0)
-                val loc5 = Location(world, x + (p - 10) / 10.0, y, z + 1)
-                borderLocations.addAll(listOf(loc1, loc2, loc3, loc4, loc5))
-                if (p % 2 == 0 || p % 10 == 0) reducedBorderLocations.addAll(listOf(loc1, loc2, loc3, loc4, loc5))
-            }
-            phase.get() <= 30 -> {
-                val p = phase.get()
-                val loc1 = Location(world, x + 1, y + (p - 10) / 10.0, z)
-                val loc2 = Location(world, x + (p - 20) / 10.0, y + 2, z)
-                val loc3 = Location(world, x, y + 2, z + (p - 20) / 10.0)
-                val loc4 = Location(world, x, y + (p - 10) / 10.0, z + 1)
-                val loc5 = Location(world, x + 1, y + (p - 20) / 10.0, z + 1)
-                borderLocations.addAll(listOf(loc1, loc2, loc3, loc4, loc5))
-                if (p % 2 == 0 || p % 10 == 0) reducedBorderLocations.addAll(listOf(loc1, loc2, loc3, loc4, loc5))
-            }
-            phase.get() <= 40 -> {
-                val p = phase.get()
-                val loc1 = Location(world, x + 1, y + 2, z + (p - 30) / 10.0)
-                val loc2 = Location(world, x + (p - 30) / 10.0, y + 2, z + 1)
-                val loc3 = Location(world, x + 1, y + 1 + (p - 30) / 10.0, z + 1)
-                borderLocations.addAll(listOf(loc1, loc2, loc3))
-                if (p % 2 == 0 || p % 10 == 0) reducedBorderLocations.addAll(listOf(loc1, loc2, loc3))
+        if (phase.get() % animation.chimeIntervalTicks == 0 && phase.get() <= animation.borderDurationTicks) {
+            cb.world.playSound(
+                cb.location, config.sound("portal.animation.legacy.chime.id", org.bukkit.Sound.BLOCK_AMETHYST_BLOCK_CHIME),
+                config.real("portal.animation.legacy.chime.volume", 30.0).toFloat(),
+                config.real("portal.animation.legacy.chime.pitch", 1.0).toFloat(),
+            )
+        }
+        // Preserve every border sample even when several geometry steps fit in one animation tick.
+        val borderStep = (phase.get().toLong() * 40 / animation.borderDurationTicks).coerceAtMost(40).toInt()
+        for (p in (lastBorderStep + 1)..borderStep) {
+            when {
+                p <= 10 -> {
+                    val loc1 = Location(world, x + p / 10.0, y, z)
+                    val loc2 = Location(world, x, y + p / 10.0, z)
+                    val loc3 = Location(world, x, y, z + p / 10.0)
+                    borderLocations.addAll(listOf(loc1, loc2, loc3))
+                    if (p % 2 == 0 || p % 10 == 0) reducedBorderLocations.addAll(listOf(loc1, loc2, loc3))
+                }
+                p <= 20 -> {
+                    val loc1 = Location(world, x + 1, y + (p - 10) / 10.0, z)
+                    val loc2 = Location(world, x, y + p / 10.0, z)
+                    val loc3 = Location(world, x, y + (p - 10) / 10.0, z + 1)
+                    val loc4 = Location(world, x + 1, y, z + (p - 10) / 10.0)
+                    val loc5 = Location(world, x + (p - 10) / 10.0, y, z + 1)
+                    borderLocations.addAll(listOf(loc1, loc2, loc3, loc4, loc5))
+                    if (p % 2 == 0 || p % 10 == 0) reducedBorderLocations.addAll(listOf(loc1, loc2, loc3, loc4, loc5))
+                }
+                p <= 30 -> {
+                    val loc1 = Location(world, x + 1, y + (p - 10) / 10.0, z)
+                    val loc2 = Location(world, x + (p - 20) / 10.0, y + 2, z)
+                    val loc3 = Location(world, x, y + 2, z + (p - 20) / 10.0)
+                    val loc4 = Location(world, x, y + (p - 10) / 10.0, z + 1)
+                    val loc5 = Location(world, x + 1, y + (p - 20) / 10.0, z + 1)
+                    borderLocations.addAll(listOf(loc1, loc2, loc3, loc4, loc5))
+                    if (p % 2 == 0 || p % 10 == 0) reducedBorderLocations.addAll(listOf(loc1, loc2, loc3, loc4, loc5))
+                }
+                p <= 40 -> {
+                    val loc1 = Location(world, x + 1, y + 2, z + (p - 30) / 10.0)
+                    val loc2 = Location(world, x + (p - 30) / 10.0, y + 2, z + 1)
+                    val loc3 = Location(world, x + 1, y + 1 + (p - 30) / 10.0, z + 1)
+                    borderLocations.addAll(listOf(loc1, loc2, loc3))
+                    if (p % 2 == 0 || p % 10 == 0) reducedBorderLocations.addAll(listOf(loc1, loc2, loc3))
+                }
             }
         }
+        lastBorderStep = borderStep
     }
 
     private fun displayParticles(nearbyPlayers: Collection<Player>) {
@@ -397,7 +421,8 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
             }
         }
 
-        if (phase.get() >= 41 && (phase.get() - 41) % 10 == 0) {
+        if (phase.get() >= animation.particleStartTick &&
+            (phase.get() - animation.particleStartTick) % animation.particleIntervalTicks == 0) {
             val portalParticleCount = config.integer("portal.portal-particle.count", 5)
             val portalParticle = config.particle("portal.portal-particle.particle", Particle.PORTAL)
             val portalParticleExtra = config.real("portal.portal-particle.extra", 0.2)

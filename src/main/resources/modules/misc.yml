@@ -78,6 +78,27 @@ portal:
   message: <dark_green>Недалеко появляется портал...
   # Дистанция отображения частиц
   particle-distance: 50.0
+  # 20 тиков = 1 секунда. Применяется через /arc reload.
+  # Reload закрывает текущие порталы; новые используют обновлённые параметры.
+  animation:
+    lifetime-ticks: 400
+    blindness-start-tick: 12
+    legacy:
+      border-duration-ticks: 8
+      materialize-tick: 12
+      entry-tick: 12
+      block-refresh-ticks: 10
+      particle-start-tick: 8
+      particle-interval-ticks: 10
+      chime-interval-ticks: 4
+      chime:
+        id: BLOCK_AMETHYST_BLOCK_CHIME
+        volume: 30.0
+        pitch: 1.0
+      opening-sound:
+        id: BLOCK_END_PORTAL_SPAWN
+        volume: 1.0
+        pitch: 1.0
   # ItemDisplay-портал с выбором вида через LuckPerms meta arc-portal-style.
   # В переносимом default отключён; серверный override задаёт ItemsAdder ID.
   # Все параметры ниже применяются после /arc reload, без рестарта Paper.
@@ -89,10 +110,23 @@ portal:
       astral: ""
       void: ""
     opening-start-tick: 0
-    opening-duration-ticks: 66
+    opening-duration-ticks: 24
     # smooth — равномерно; dramatic — заряд и резкое раскрытие.
     opening-curve: dramatic
     closing-duration-ticks: 12
+    # Начало входа не зависит от завершения визуальной анимации.
+    entry-delay-ticks: 12
+    minimum-scale: 0.02
+    dramatic:
+      # Доля открытия до рывка; ниже = рывок начинается раньше.
+      charge-progress: 0.25
+      charge-scale: 0.08
+      # Выше = более резкое раскрытие после заряда.
+      snap-exponent: 6.0
+    idle:
+      amplitude: 0.035
+      # Радианы за тик; 0 отключает пульсацию.
+      speed: 0.18
     width: 6.0
     height: 8.4
     vertical-offset: 2.75
@@ -101,7 +135,7 @@ portal:
     sound:
       enabled: true
       # 20 тиков = 1 секунда; отсчитывается от начала анимации.
-      delay-ticks: 40
+      delay-ticks: 6
       id: minecraft:block.end_portal.spawn
       volume: 1.35
       pitch: 0.9
@@ -116,6 +150,22 @@ portal:
       turns: 2.25
       particle-size: 0.8
       core-count: 12
+      cycle-ticks: 24
+      trail-spacing: 0.055
+      rotation-speed: 0.18
+      radius-exponent: 0.88
+      height-exponent: 0.72
+      vertical-frequency: 0.72
+      stream-phase: 0.91
+      interval-ticks: 1
+      reduced-interval-ticks: 2
+      accent-size-multiplier: 0.8
+      accent-every: 3
+      core-interval-ticks: 3
+      reduced-core-divisor: 3
+      core-width-multiplier: 0.22
+      core-height-multiplier: 0.32
+      core-speed: 0.08
   # DUST_COLOR_TRANSITION: цвета и размер рамки
   border:
     color:

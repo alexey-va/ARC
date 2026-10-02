@@ -92,9 +92,12 @@ internal data class PortalOriginGateSettings(
     val suctionTurns: Double,
     val suctionParticleSize: Float,
     val suctionCoreCount: Int,
+    val entryDelayTicks: Int = 12,
+    val animation: PortalOriginGateAnimation = PortalOriginGateAnimation(),
+    val suctionMotion: PortalSuctionMotion = PortalSuctionMotion(),
 ) {
     val entryTick: Int
-        get() = openingStartTick + openingDurationTicks
+        get() = openingStartTick + entryDelayTicks
 
     companion object {
         private val namespacedId = Regex("[a-z0-9_.-]+:[a-z0-9_./-]+")
@@ -110,7 +113,7 @@ internal data class PortalOriginGateSettings(
                         config.string("$path.items.${style.id}", "")
                     },
                 openingStartTick = config.integer("$path.opening-start-tick", 0),
-                openingDurationTicks = config.integer("$path.opening-duration-ticks", 66),
+                openingDurationTicks = config.integer("$path.opening-duration-ticks", 24),
                 openingCurve = config.string("$path.opening-curve", "dramatic"),
                 closingDurationTicks = config.integer("$path.closing-duration-ticks", 12),
                 width = config.real("$path.width", 6.0).toFloat(),
@@ -119,7 +122,7 @@ internal data class PortalOriginGateSettings(
                 yawOffsetDegrees = config.real("$path.yaw-offset-degrees", 180.0).toFloat(),
                 viewRange = config.real("$path.view-range", 1.0).toFloat(),
                 openingSoundEnabled = config.bool("$path.sound.enabled", true),
-                openingSoundDelayTicks = config.integer("$path.sound.delay-ticks", 40),
+                openingSoundDelayTicks = config.integer("$path.sound.delay-ticks", 6),
                 openingSoundId = config.string("$path.sound.id", "minecraft:block.end_portal.spawn"),
                 openingSoundVolume = config.real("$path.sound.volume", 1.35).toFloat(),
                 openingSoundPitch = config.real("$path.sound.pitch", 0.9).toFloat(),
@@ -133,6 +136,9 @@ internal data class PortalOriginGateSettings(
                 suctionTurns = config.real("$path.suction.turns", 2.25),
                 suctionParticleSize = config.real("$path.suction.particle-size", 0.8).toFloat(),
                 suctionCoreCount = config.integer("$path.suction.core-count", 12),
+                entryDelayTicks = config.integer("$path.entry-delay-ticks", 12),
+                animation = PortalOriginGateAnimation.load(config, path),
+                suctionMotion = PortalSuctionMotion.load(config, "$path.suction"),
             ).also { settings ->
                 if (settings == null) {
                     warn("Portal origin-gate config is invalid; falling back to the legacy portal visual")
@@ -168,6 +174,9 @@ internal data class PortalOriginGateSettings(
             suctionParticleSize: Float,
             suctionCoreCount: Int,
             maxHeight: Float = 12.0f,
+            entryDelayTicks: Int = 12,
+            animation: PortalOriginGateAnimation = PortalOriginGateAnimation(),
+            suctionMotion: PortalSuctionMotion = PortalSuctionMotion(),
         ): PortalOriginGateSettings? {
             val normalizedDefaultStyle = PortalVisualStyle.parse(defaultStyle) ?: return null
             val normalizedItemIds =
@@ -177,7 +186,7 @@ internal data class PortalOriginGateSettings(
             val normalizedSound = openingSoundId.trim().lowercase()
             val normalizedOpeningCurve = OriginGateOpeningCurve.parse(openingCurve) ?: return null
             if (normalizedItemIds.values.any { id -> id.length !in 3..128 || !namespacedId.matches(id) }) return null
-            if (openingStartTick !in 0..58) return null
+            if (openingStartTick !in 0..200 || entryDelayTicks !in 0..200) return null
             if (openingDurationTicks !in 1..200 || closingDurationTicks !in 1..60) return null
             if (openingSoundDelayTicks !in 0..openingDurationTicks) return null
             if (!width.isFinite() || width !in 0.1f..12.0f) return null
@@ -233,6 +242,9 @@ internal data class PortalOriginGateSettings(
                 suctionTurns = suctionTurns,
                 suctionParticleSize = suctionParticleSize,
                 suctionCoreCount = suctionCoreCount,
+                entryDelayTicks = entryDelayTicks,
+                animation = animation,
+                suctionMotion = suctionMotion,
             )
         }
     }
@@ -257,10 +269,15 @@ internal class PortalOriginGateController(
     private var openingSoundPlayed = false
     private var closing = false
     private var closingTicks = 0
+    private var currentScale = settings.animation.minimumScale
+    private var closingStartScale = currentScale
     private var removed = false
 
     val isActive: Boolean
         get() = !removed && handle?.isValid == true
+
+    val isPendingOpening: Boolean
+        get() = !removed && !closing && !spawnAttempted
 
     fun tickOpening(phase: Int): Boolean {
         if (removed || closing || phase < settings.openingStartTick) return isActive
@@ -276,9 +293,10 @@ internal class PortalOriginGateController(
 
         val activeHandle = handle?.takeIf(PortalOriginGateHandle::isValid) ?: return false
         val elapsedTicks = (phase - settings.openingStartTick).coerceAtLeast(0)
-        activeHandle.updateScale(
-            originGateOpeningScale(elapsedTicks, settings.openingDurationTicks, settings.openingCurve),
+        currentScale = originGateOpeningScale(
+            elapsedTicks, settings.openingDurationTicks, settings.openingCurve, settings.animation,
         )
+        activeHandle.updateScale(currentScale)
         if (!openingSoundPlayed && elapsedTicks >= settings.openingSoundDelayTicks) {
             openingSoundPlayed = true
             activeHandle.playOpeningSound()
@@ -287,24 +305,28 @@ internal class PortalOriginGateController(
     }
 
     fun beginClosing() {
-        val activeHandle = handle?.takeIf(PortalOriginGateHandle::isValid) ?: return
-        if (removed || closing) return
+        if (handle?.isValid != true || removed || closing) return
         closing = true
         closingTicks = 0
-        activeHandle.updateScale(1f)
+        closingStartScale = currentScale
     }
 
     fun tickClosing(): Boolean {
         if (removed || !closing || handle?.isValid != true) return false
         if (closingTicks >= settings.closingDurationTicks) return false
         closingTicks++
-        handle?.updateScale(originGateClosingScale(closingTicks, settings.closingDurationTicks))
+        handle?.updateScale(originGateClosingScale(
+            closingTicks, settings.closingDurationTicks, settings.animation.minimumScale, closingStartScale,
+        ))
         return true
     }
 
     /** Applies a bounded feature-owned idle pulse without exposing the display entity. */
     fun updateScale(multiplier: Float) {
-        if (!removed) handle?.takeIf(PortalOriginGateHandle::isValid)?.updateScale(multiplier)
+        if (!removed) {
+            currentScale = multiplier
+            handle?.takeIf(PortalOriginGateHandle::isValid)?.updateScale(multiplier)
+        }
     }
 
     fun remove() {
@@ -319,41 +341,44 @@ internal fun originGateOpeningScale(
     elapsedTicks: Int,
     durationTicks: Int,
     curve: OriginGateOpeningCurve,
+    animation: PortalOriginGateAnimation = PortalOriginGateAnimation(),
 ): Float {
     if (elapsedTicks <= durationTicks) {
         val progress = (elapsedTicks.toFloat() / durationTicks).coerceIn(0f, 1f)
         val eased =
             when (curve) {
                 OriginGateOpeningCurve.SMOOTH -> progress * progress * (3f - 2f * progress)
-                OriginGateOpeningCurve.DRAMATIC -> dramaticOriginGateOpening(progress)
+                OriginGateOpeningCurve.DRAMATIC -> dramaticOriginGateOpening(progress, animation)
             }
-        return TINY_SCALE_MULTIPLIER + ((1f - TINY_SCALE_MULTIPLIER) * eased)
+        return animation.minimumScale + ((1f - animation.minimumScale) * eased)
     }
     val idleTicks = elapsedTicks - durationTicks
-    return 1f + (sin(idleTicks * 0.18f) * 0.035f)
+    return 1f + (sin(idleTicks * animation.idleSpeed) * animation.idleAmplitude)
 }
 
-private fun dramaticOriginGateOpening(progress: Float): Float {
-    if (progress <= DRAMATIC_SNAP_PROGRESS) {
-        val charge = (progress / DRAMATIC_SNAP_PROGRESS).coerceIn(0f, 1f)
+private fun dramaticOriginGateOpening(progress: Float, animation: PortalOriginGateAnimation): Float {
+    if (progress <= animation.chargeProgress) {
+        val charge = (progress / animation.chargeProgress).coerceIn(0f, 1f)
         val easedCharge = charge * charge * (3f - 2f * charge)
-        return DRAMATIC_CHARGE_SCALE * easedCharge
+        return animation.chargeScale * easedCharge
     }
 
     val snap =
-        ((progress - DRAMATIC_SNAP_PROGRESS) / (1f - DRAMATIC_SNAP_PROGRESS))
+        ((progress - animation.chargeProgress) / (1f - animation.chargeProgress))
             .coerceIn(0f, 1f)
-    val easedSnap = 1f - (1f - snap).pow(3)
-    return DRAMATIC_CHARGE_SCALE + ((1f - DRAMATIC_CHARGE_SCALE) * easedSnap)
+    val easedSnap = 1f - (1f - snap).pow(animation.snapExponent)
+    return animation.chargeScale + ((1f - animation.chargeScale) * easedSnap)
 }
 
 internal fun originGateClosingScale(
     elapsedTicks: Int,
     durationTicks: Int,
+    minimumScale: Float = 0.02f,
+    initialScale: Float = 1f,
 ): Float {
     val progress = (elapsedTicks.toFloat() / durationTicks).coerceIn(0f, 1f)
     val eased = progress * progress * (3f - 2f * progress)
-    return TINY_SCALE_MULTIPLIER + ((1f - TINY_SCALE_MULTIPLIER) * (1f - eased))
+    return minimumScale + ((initialScale - minimumScale) * (1f - eased))
 }
 
 internal fun originGateFacingYaw(
@@ -396,17 +421,18 @@ internal fun originGateParticleOffsets(
     radius: Double,
     height: Double,
     turns: Double,
+    motion: PortalSuctionMotion = PortalSuctionMotion(),
 ): List<OriginGateParticleOffset> {
-    val advance = Math.floorMod(tick, SUCTION_CYCLE_TICKS) / SUCTION_CYCLE_TICKS.toDouble()
+    val advance = Math.floorMod(tick, motion.cycleTicks) / motion.cycleTicks.toDouble()
     return buildList(streams * pointsPerStream) {
         repeat(streams) { stream ->
             repeat(pointsPerStream) { trailPoint ->
                 val travel =
-                    (advance + (stream / streams.toDouble()) + (trailPoint * SUCTION_TRAIL_SPACING)) % 1.0
+                    (advance + (stream / streams.toDouble()) + (trailPoint * motion.trailSpacing)) % 1.0
                 val remaining = 1.0 - travel
-                val currentRadius = radius * remaining.pow(0.88)
+                val currentRadius = radius * remaining.pow(motion.radiusExponent)
                 val angle =
-                    (tick * 0.18) +
+                    (tick * motion.rotationSpeed) +
                         ((2.0 * PI * stream) / streams) +
                         (travel * turns * 2.0 * PI)
                 add(
@@ -414,7 +440,7 @@ internal fun originGateParticleOffsets(
                         stream = stream,
                         trailPoint = trailPoint,
                         x = cos(angle) * currentRadius,
-                        y = sin((angle * 0.72) + (stream * 0.91)) * (height * 0.5) * remaining.pow(0.72),
+                        y = sin((angle * motion.verticalFrequency) + (stream * motion.streamPhase)) * (height * 0.5) * remaining.pow(motion.heightExponent),
                         z = sin(angle) * currentRadius,
                     ),
                 )
@@ -531,8 +557,8 @@ internal object BukkitPortalOriginGate {
         display.interpolationDelay = 0
         display.interpolationDuration = 0
         display.transformation = transformation(
-            settings.width * TINY_SCALE_MULTIPLIER,
-            settings.height * TINY_SCALE_MULTIPLIER,
+            settings.width * settings.animation.minimumScale,
+            settings.height * settings.animation.minimumScale,
             1f,
         )
     }
@@ -546,16 +572,18 @@ internal object BukkitPortalOriginGate {
         reducedReceivers: Collection<Player>,
     ) {
         if (!settings.suctionEnabled) return
-        renderSuction(
-            center,
-            tick,
-            settings.suctionStreams,
-            settings.suctionPointsPerStream,
-            settings,
-            style,
-            fullReceivers,
-        )
-        if (tick % 2 == 0) {
+        if (tick % settings.suctionMotion.intervalTicks == 0) {
+            renderSuction(
+                center,
+                tick,
+                settings.suctionStreams,
+                settings.suctionPointsPerStream,
+                settings,
+                style,
+                fullReceivers,
+            )
+        }
+        if (tick % settings.suctionMotion.reducedIntervalTicks == 0) {
             renderSuction(
                 center,
                 tick,
@@ -585,7 +613,7 @@ internal object BukkitPortalOriginGate {
             Particle.DustTransition(
                 palette.accentStart,
                 palette.accentEnd,
-                settings.suctionParticleSize * 0.8f,
+                settings.suctionParticleSize * settings.suctionMotion.accentSizeMultiplier,
             )
         val offsets =
             originGateParticleOffsets(
@@ -595,31 +623,32 @@ internal object BukkitPortalOriginGate {
                 settings.suctionRadius,
                 settings.suctionHeight,
                 settings.suctionTurns,
+                settings.suctionMotion,
             )
         for (offset in offsets) {
             ParticleBuilder(Particle.DUST_COLOR_TRANSITION)
                 .count(1)
                 .location(center.clone().add(offset.x, offset.y, offset.z))
                 .receivers(receivers)
-                .data(if ((offset.stream + offset.trailPoint) % 3 == 0) secondaryDust else primaryDust)
+                .data(if ((offset.stream + offset.trailPoint) % settings.suctionMotion.accentEvery == 0) secondaryDust else primaryDust)
                 .spawn()
         }
         val fullQuality =
             streams == settings.suctionStreams &&
                 pointsPerStream == settings.suctionPointsPerStream
-        if (settings.suctionCoreCount > 0 && tick % 3 == 0) {
+        if (settings.suctionCoreCount > 0 && tick % settings.suctionMotion.coreIntervalTicks == 0) {
             ParticleBuilder(Particle.REVERSE_PORTAL)
                 .count(
                     if (fullQuality) {
                         settings.suctionCoreCount
                     } else {
-                        (settings.suctionCoreCount / 3).coerceAtLeast(1)
+                        (settings.suctionCoreCount / settings.suctionMotion.reducedCoreDivisor).coerceAtLeast(1)
                     },
                 )
                 .location(center)
                 .receivers(receivers)
-                .offset(settings.width * 0.22, settings.height * 0.32, settings.width * 0.22)
-                .extra(0.08)
+                .offset(settings.width * settings.suctionMotion.coreWidthMultiplier, settings.height * settings.suctionMotion.coreHeightMultiplier, settings.width * settings.suctionMotion.coreWidthMultiplier)
+                .extra(settings.suctionMotion.coreSpeed)
                 .spawn()
         }
     }
@@ -708,10 +737,5 @@ internal object BukkitPortalOriginGate {
     ): Color = Color.fromRGB(red, green, blue)
 }
 
-private const val TINY_SCALE_MULTIPLIER = 0.02f
-private const val DRAMATIC_SNAP_PROGRESS = 0.60f
-private const val DRAMATIC_CHARGE_SCALE = 0.12f
-private const val SUCTION_CYCLE_TICKS = 24
-private const val SUCTION_TRAIL_SPACING = 0.055
 private const val MAX_SUCTION_PARTICLES_PER_TICK = 64
 private val ORIGIN_GATE_STYLES = PortalVisualStyle.entries.filter(PortalVisualStyle::usesOriginGate)

@@ -125,6 +125,29 @@ class PortalOriginGateTest : FreeSpec({
             controller.isActive.shouldBeFalse()
         }
 
+        "closes from its current scale when entered before opening completes" {
+            val handle = RecordingOriginGateHandle()
+            val controller = PortalOriginGateController(settings().shouldNotBeNull()) { handle }
+            controller.tickOpening(12).shouldBeTrue()
+            val entryScale = handle.scales.last()
+            (entryScale < 1f).shouldBeTrue()
+            controller.beginClosing()
+            handle.scales.last() shouldBe entryScale
+            repeat(12) { controller.tickClosing().shouldBeTrue() }
+            handle.scales.drop(1).zipWithNext().all { (a, b) -> b <= a }.shouldBeTrue()
+            handle.scales.last() shouldBe 0.02f
+        }
+
+        "waits for a delayed opening before deciding on legacy fallback" {
+            val handle = RecordingOriginGateHandle()
+            val controller = PortalOriginGateController(settings().shouldNotBeNull().copy(openingStartTick = 30)) { handle }
+            controller.isPendingOpening.shouldBeTrue()
+            controller.tickOpening(12).shouldBeFalse()
+            controller.isPendingOpening.shouldBeTrue()
+            controller.tickOpening(30).shouldBeTrue()
+            controller.isPendingOpening.shouldBeFalse()
+        }
+
         "attempts a missing provider once and leaves the legacy visual active" {
             var spawnCount = 0
             val controller =
@@ -195,16 +218,18 @@ class PortalOriginGateTest : FreeSpec({
             offsets.map { it.trailPoint }.distinct().size shouldBe 3
         }
 
-        "keeps the portal closed until the configured opening finishes" {
-            settings().shouldNotBeNull().entryTick shouldBe 66
-            settings(openingDuration = 96).shouldNotBeNull().entryTick shouldBe 96
+        "allows entry independently of the visual opening duration" {
+            settings().shouldNotBeNull().entryTick shouldBe 12
+            settings(openingDuration = 96).shouldNotBeNull().entryTick shouldBe 12
+            settings(entryDelayTicks = 4).shouldNotBeNull().entryTick shouldBe 4
+            settings(entryDelayTicks = 201).shouldBeNull()
         }
 
         "supports a sharp charge-and-snap opening while retaining the smooth option" {
             val dramaticMidpoint = originGateOpeningScale(33, 66, OriginGateOpeningCurve.DRAMATIC)
             val smoothMidpoint = originGateOpeningScale(33, 66, OriginGateOpeningCurve.SMOOTH)
 
-            (dramaticMidpoint in 0.1f..0.2f).shouldBeTrue()
+            (dramaticMidpoint > 0.9f).shouldBeTrue()
             smoothMidpoint shouldBe 0.51f
             originGateOpeningScale(66, 66, OriginGateOpeningCurve.DRAMATIC) shouldBe 1f
         }
@@ -231,6 +256,7 @@ private fun settings(
     suctionPointsPerStream: Int = 3,
     suctionRadius: Double = 6.0,
     suctionTurns: Double = 2.25,
+    entryDelayTicks: Int = 12,
 ): PortalOriginGateSettings? =
     PortalOriginGateSettings.validated(
         defaultStyle = defaultStyle,
@@ -264,6 +290,7 @@ private fun settings(
         suctionTurns = suctionTurns,
         suctionParticleSize = 0.8f,
         suctionCoreCount = 12,
+        entryDelayTicks = entryDelayTicks,
     )
 
 private class RecordingOriginGateHandle : PortalOriginGateHandle {
