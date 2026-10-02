@@ -6,7 +6,7 @@ The bundled catalog contains 72 mounts, including the native-flight Skycruiser. 
 
 ## Progression and tuning
 
-Each configured level unlocks a maximum base speed. Walking levels also unlock a maximum automatic step height. Players can freely select a lower active value in `/mount` → mount details → **Развитие и тюнинг**:
+Each configured level unlocks a maximum base speed. Walking levels also unlock a maximum automatic step height. The separate **Уровни** screen contains only level progression. **Настройки** brings together speed, step height, size, rider view, glow and ability upgrades, with skins reached from the same screen. Players can freely select a lower active value in `/mount` → mount details → **Настройки**:
 
 - `tuning.speed-percentages` selects a percentage of the current level speed;
 - `tuning.walking-step-heights` contains exact selectable native step heights in blocks;

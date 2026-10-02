@@ -4,17 +4,18 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import ru.arc.paper.menu.PaperMenuItemRenderContext
 import ru.arc.menu.MenuTemplateId
-import ru.arc.config.Config
 import ru.arc.menu.MenuElementId
 import ru.arc.menu.MenuId
 import ru.arc.paper.menu.PaperMenuConfigurationParser
 import ru.arc.paper.menu.PaperMenuItemFactory
 import ru.arc.paper.testing.MockBukkitTestRuntime
+import ru.arc.config.Config
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -68,18 +69,21 @@ class ArcMenuConfigurationTest : StringSpec({
             backgroundTemplate shouldBe null
             slot("info").index shouldBe 4
             slot("back").index shouldBe 18
-            slot("tuning").index shouldBe 22
+            elements.keys shouldContainExactly setOf("info", "back").map(MenuElementId::of).toSet()
             region(ArcMenuSchema.MOUNT_LEVELS).map { it.index } shouldContainExactly listOf(11, 13, 15)
         }
         configuration.catalog.require(ArcMenuSchema.MOUNT_TUNING).apply {
-            rows shouldBe 5
+            rows shouldBe 6
             backgroundTemplate shouldBe null
             slot("info").index shouldBe 4
+            slot("skins").index shouldBe 2
+            slot("glow").index shouldBe 6
             region(ArcMenuSchema.MOUNT_SPEEDS).map { it.index } shouldContainExactly (11..15).toList()
             region(ArcMenuSchema.MOUNT_STEPS).map { it.index } shouldContainExactly (20..24).toList()
             region(ArcMenuSchema.MOUNT_SIZES).map { it.index } shouldContainExactly (29..33).toList()
-            slot("back").index shouldBe 36
-            slot("rider-view").index shouldBe 40
+            region(ArcMenuSchema.MOUNT_ABILITIES).map { it.index } shouldContainExactly (38..42).toList()
+            slot("back").index shouldBe 45
+            slot("rider-view").index shouldBe 49
         }
         configuration.catalog.require(ArcMenuSchema.MOUNT_SKINS).apply {
             rows shouldBe 6
@@ -89,8 +93,67 @@ class ArcMenuConfigurationTest : StringSpec({
             slot("back").index shouldBe 49
             slot("next").index shouldBe 53
         }
-        configuration.catalog.require(ArcMenuSchema.MOUNT_DETAIL).backgroundTemplate shouldBe null
+        configuration.catalog.require(ArcMenuSchema.MOUNT_DETAIL).apply {
+            backgroundTemplate shouldBe null
+            slot("upgrade").index shouldBe 20
+            slot("settings").index shouldBe 24
+        }
         configuration.catalog.require(ArcMenuSchema.MOUNT_CONFIRM).backgroundTemplate shouldBe null
+    }
+
+    "legacy mount menus migrate glow into settings and preserve operator choices on repeated loads" {
+        val root = Files.createTempDirectory("arc-menu-mount-settings-migration")
+        val target = root.resolve(ArcMenuConfiguration.RESOURCE)
+        Files.createDirectories(target.parent)
+        javaClass.classLoader.getResourceAsStream(ArcMenuConfiguration.RESOURCE).use { source ->
+            Files.copy(checkNotNull(source), target)
+        }
+
+        val config = Config(root, ArcMenuConfiguration.RESOURCE)
+        config.removeKey("menus.layouts.mount-detail.elements.settings")
+        config.setInt("menus.layouts.mount-detail.elements.glow.slot", 31)
+        config.setString("menus.layouts.mount-detail.elements.glow.template", "lost-loot-back")
+        config.setInt("menus.layouts.mount-detail.elements.skins.slot", 40)
+        config.setString("menus.layouts.mount-detail.elements.skins.template", "background")
+        config.setStringList("menus.layouts.mount-detail.regions.abilities.slots", listOf("29-33"))
+        config.setInt("menus.layouts.mount-progression.elements.tuning.slot", 22)
+        config.setString("menus.layouts.mount-progression.elements.tuning.template", "background")
+        config.setInt("menus.layouts.mount-tuning.rows", 5)
+        config.setInt("menus.layouts.mount-tuning.elements.back.slot", 36)
+        config.setInt("menus.layouts.mount-tuning.elements.rider-view.slot", 40)
+        config.setStringList("menus.layouts.mount-tuning.regions.speeds.slots", listOf("9-13"))
+        config.setStringList("menus.layouts.mount-tuning.regions.steps.slots", listOf("18-22"))
+        config.setStringList("menus.layouts.mount-tuning.regions.sizes.slots", listOf("27-31"))
+        config.setInt("menus.templates.background.custom-model-data", 11999)
+        config.setInt("menus.layouts.investigation-hub.elements.start.slot", 15)
+        config.removeKey("menus.layouts.mount-list")
+        config.saveStrict()
+
+        val migrated = ArcMenuConfiguration.load(root)
+        migrated.catalog.require(ArcMenuSchema.MOUNT_DETAIL).slot("settings").index shouldBe 31
+        migrated.catalog.require(ArcMenuSchema.MOUNT_PROGRESSION).elements.keys shouldContainExactly
+            setOf("info", "back").map(MenuElementId::of).toSet()
+        migrated.catalog.require(ArcMenuSchema.MOUNT_TUNING).apply {
+            rows shouldBe 6
+            slot("back").index shouldBe 45
+            slot("rider-view").index shouldBe 49
+            region(ArcMenuSchema.MOUNT_SPEEDS).map { it.index } shouldContainExactly (9..13).toList()
+            region(ArcMenuSchema.MOUNT_STEPS).map { it.index } shouldContainExactly (18..22).toList()
+            region(ArcMenuSchema.MOUNT_SIZES).map { it.index } shouldContainExactly (27..31).toList()
+        }
+
+        val saved = Config(root, ArcMenuConfiguration.RESOURCE)
+        saved.stringOrNull("menus.layouts.mount-detail.elements.settings.template") shouldBe "lost-loot-back"
+        saved.intOrNull("menus.templates.background.custom-model-data") shouldBe 11999
+        saved.intOrNull("menus.layouts.investigation-hub.elements.start.slot") shouldBe 15
+        saved.intOrNull("menus.layouts.mount-detail.elements.glow.slot") shouldBe null
+        saved.intOrNull("menus.layouts.mount-detail.elements.skins.slot") shouldBe null
+        saved.stringList("menus.layouts.mount-detail.regions.abilities.slots") shouldBe emptyList()
+        saved.intOrNull("menus.layouts.mount-progression.elements.tuning.slot") shouldBe null
+
+        val afterMigration = Files.readString(target)
+        ArcMenuConfiguration.load(root).catalog.require(ArcMenuSchema.MOUNT_TUNING).rows shouldBe 6
+        Files.readString(target) shouldBe afterMigration
     }
 
     "investigation menu backgrounds render the canonical filler model" {

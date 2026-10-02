@@ -332,15 +332,7 @@ internal class MountGuiItems(
     }
 
     fun upgradeItem(mount: MountDefinition, profile: MountProfile, merchantAvailable: Boolean = true): ItemStack {
-        val tuning = configProvider().tuning
-        val values =
-            arrayOf(
-                "level" to profile.level.toString(),
-                "max-level" to mount.maxLevel.toString(),
-                "speed-percent" to tuning.speedPercentage(profile.selectedSpeedPercentage).toString(),
-                "step" to formatHeight(tuning.stepHeight(profile.level, profile.selectedStepHeightHundredths)),
-                "size" to escape(mount.effectiveSizeOption(profile.selectedSizeId, profile.level, profile.ownedSizeIds)?.displayName?.lowercase().orEmpty()),
-            )
+        val values = arrayOf("level" to profile.level.toString(), "max-level" to mount.maxLevel.toString())
         val content =
             if (!profile.unlocked) {
                 buildList {
@@ -357,20 +349,15 @@ internal class MountGuiItems(
                 }
             } else {
                 copyLines(
-                    "detail.upgrade-lore",
+                    "settings.levels-lore",
                     listOf(
-                        "<#8c8c8c>Уровень: <#e6fff3><level>/<max-level>",
-                        "<#8c8c8c>Скорость: <#e6fff3><speed-percent>%",
-                        "<#8c8c8c>Подъём: <#e6fff3><step> блока",
-                        "<#8c8c8c>Размер: <#e6fff3><size>",
+                        "<#b8b8b8>Уровень: <#e6fff3><level>/<max-level>",
+                        "",
+                        if (profile.level >= mount.maxLevel) "<#2bba43>Все уровни открыты."
+                        else "<#b8b8b8>Новые уровни повышают предел характеристик.",
                     ),
                     *values,
-                ).let { lines ->
-                    lines.filterIndexed { index, _ ->
-                        (index != 2 || mount.movement == MountMovement.WALKING) &&
-                            (index != 3 || mount.sizeOptions.isNotEmpty())
-                    }
-                }
+                )
             }
         val purchasable = mount.price(1) != null
         val lore =
@@ -382,10 +369,10 @@ internal class MountGuiItems(
                 content + if (purchasable) listOf(configProvider().guiText("common.purchases-at-spawn", "<#ff9f0f>Покупка: Гектор или Эмма во дворе маунтов на спавне.")) else emptyList()
             }
         return item(
-            Material.COMPARATOR,
+            Material.EXPERIENCE_BOTTLE,
             copy(
-                if (profile.unlocked || !purchasable) "detail.upgrade-name" else if (merchantAvailable) "detail.upgrade-buy-name" else "detail.upgrade-name",
-                if (profile.unlocked || !purchasable) "<#92bed8>Развитие и тюнинг" else if (merchantAvailable) "<#ff9f0f>Купить первый уровень" else "<#92bed8>Развитие и тюнинг",
+                if (profile.unlocked || !purchasable) "settings.levels-name" else if (merchantAvailable) "detail.upgrade-buy-name" else "settings.levels-name",
+                if (profile.unlocked || !purchasable) "<#92bed8>Уровни" else if (merchantAvailable) "<#ff9f0f>Купить первый уровень" else "<#92bed8>Уровни",
             ),
             lore,
             glint = profile.level >= mount.maxLevel,
@@ -556,51 +543,25 @@ internal class MountGuiItems(
     fun tuningButtonItem(profile: MountProfile): ItemStack =
         item(
             Material.COMPARATOR,
-            copy("progression.tuning-name", "<#92bed8>Настроить маунта"),
+            copy("settings.name", "<#92bed8>Настройки"),
             if (profile.unlocked) {
                 copyLines(
-                    "progression.tuning-lore",
+                    "settings.lore",
                     listOf(
-                        "<#8c8c8c>Скорость, подъём, размер и обзор всадника.",
+                        "<#b8b8b8>Скорость, подъём, размер и обзор.",
+                        "<#b8b8b8>Свечение, облики и способности.",
                         "",
                         "<#92bed8>ЛКМ — открыть настройки",
                     ),
                 )
             } else {
                 copyLines(
-                    "progression.tuning-locked-lore",
+                    "settings.locked-lore",
                     listOf("<#c42323>Сначала получите маунта."),
                 )
             },
             glint = profile.unlocked,
         )
-
-    fun abilitiesSummaryItem(mount: MountDefinition, profile: MountProfile): ItemStack {
-        val upgrades = mount.abilities.upgrades
-        return item(
-            Material.ENCHANTED_BOOK,
-            copy("detail.abilities-summary-name", "<#92bed8>Способности маунта"),
-            if (upgrades.isEmpty()) {
-                copyLines("detail.abilities-summary-empty", listOf("<#8c8c8c>У этого маунта нет покупных способностей."))
-            } else {
-                buildList {
-                    add(copy("detail.abilities-summary-title", "<#8c8c8c>Все способности в одном списке:"))
-                    upgrades.forEach { ability ->
-                        add(
-                            copy(
-                                "detail.abilities-summary-line",
-                                "<state> <#e6fff3><ability>",
-                                "state" to if (profile.ownsAbility(ability.id)) "<#2bba43>✔" else "<#969696>•",
-                                "ability" to escape(ability.displayName),
-                            ),
-                        )
-                    }
-                    add("")
-                    add(copy("detail.abilities-summary-footer", "<#8c8c8c>Покупки способностей доступны из этой карточки."))
-                }
-            },
-        )
-    }
 
     fun progressionInfoItem(
         mount: MountDefinition,
@@ -609,10 +570,10 @@ internal class MountGuiItems(
     ): ItemStack =
         item(
             Material.RECOVERY_COMPASS,
-            copy("progression.info-name", "<#92bed8>Профиль движения"),
+            copy("settings.info-name", "<#92bed8>Профиль движения"),
             if (!profile.unlocked) {
                 copyLines(
-                    "progression.info-locked-lore",
+                    "settings.info-locked-lore",
                     listOf(
                         "<#8c8c8c>Уровень открывает максимум характеристик.",
                         "<#8c8c8c>Вы сами выбираете значение внутри предела.",
@@ -623,7 +584,7 @@ internal class MountGuiItems(
             } else {
                 val levelSpeed = mount.speed(profile.level)
                 copyLines(
-                    "progression.info-lore",
+                    "settings.info-lore",
                     listOf(
                         "<#8c8c8c>Уровень открывает максимум характеристик.",
                         "<#8c8c8c>Вы сами выбираете значение внутри предела.",
@@ -632,7 +593,7 @@ internal class MountGuiItems(
                         "<#8c8c8c>Подъём: <#e6fff3><step> <#8c8c8c>/ <maximum-step> блока",
                         "<#8c8c8c>Размер: <#e6fff3><size>",
                         "",
-                        "<#969696>Тюнинг бесплатный и сохраняется между серверами.",
+                        "<#b8b8b8>Выбор доступных настроек бесплатный.",
                     ),
                     "current-speed" to formatSpeed(tuning.speed(levelSpeed, profile.selectedSpeedPercentage)),
                     "maximum-speed" to formatSpeed(levelSpeed),

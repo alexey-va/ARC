@@ -6,7 +6,7 @@ Native production replacement for `Denizen/scripts/activities/rideable_mobs.dsc`
 
 - `/mount` opens a paginated collection of owned mounts with walking, flying
   and swimming filters. Left click summons an owned mount; right click opens
-  its progression, glow and appearance controls. Locked mounts never appear
+  its card with separate level and settings buttons. Locked mounts never appear
   in the main collection, and a direct locked view returns to that collection.
 - Walking mounts use WASD, automatically step over one-block terrain and use
   Space to jump. Horses retain native ridden physics so gravity and terrain
@@ -30,7 +30,7 @@ Native production replacement for `Denizen/scripts/activities/rideable_mobs.dsc`
   carrier size with `passengers.carrier-scale`.
 - Typed per-mount abilities are configured under `abilities`. The mountain
   goat, frog, horse and fox have authored jump strengths. Contextual permanent
-  upgrades are bought from the detail screen: night vision also fits the
+  upgrades are bought from the dedicated settings screen: night vision also fits the
   skeleton and Enderman, water breathing supports aquatic mounts, fire
   resistance protects Nether mounts, and dolphin grace accelerates the
   dolphin. Effects are refreshed while riding and expire naturally after

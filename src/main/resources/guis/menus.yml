@@ -317,32 +317,31 @@ menus:
         favorite: { slot: 13, template: background }
         upgrade: { slot: 20, template: background }
         summon: { slot: 22, template: background }
-        glow: { slot: 24, template: background }
+        settings: { slot: 24, template: background }
         back: { slot: 36, template: background }
-        skins: { slot: 40, template: background }
         whistle: { slot: 42, template: background }
-      regions:
-        abilities: { slots: [29, 30, 31, 32, 33] }
     mount-progression:
       schema-version: 1
       rows: 3
       elements:
         info: { slot: 4, template: background }
         back: { slot: 18, template: background }
-        tuning: { slot: 22, template: background }
       regions:
         levels: { slots: [11, 13, 15] }
     mount-tuning:
       schema-version: 1
-      rows: 5
+      rows: 6
       elements:
+        skins: { slot: 2, template: background }
         info: { slot: 4, template: background }
-        back: { slot: 36, template: background }
-        rider-view: { slot: 40, template: background }
+        glow: { slot: 6, template: background }
+        back: { slot: 45, template: background }
+        rider-view: { slot: 49, template: background }
       regions:
         speeds: { slots: ['11-15'] }
         steps: { slots: ['20-24'] }
         sizes: { slots: ['29-33'] }
+        abilities: { slots: [38, 39, 40, 41, 42] }
     mount-skins:
       schema-version: 1
       rows: 6

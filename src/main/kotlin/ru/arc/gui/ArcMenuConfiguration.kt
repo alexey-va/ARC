@@ -178,16 +178,15 @@ object ArcMenuSchema {
             requiredRegions = setOf(MOUNT_ENTRIES),
         ),
         MOUNT_DETAIL to MenuContract(
-            requiredElements = elements("icon", "favorite", "upgrade", "summon", "glow", "skins", "back", "whistle"),
-            requiredRegions = setOf(MOUNT_ABILITIES),
+            requiredElements = elements("icon", "favorite", "upgrade", "summon", "settings", "back", "whistle"),
         ),
         MOUNT_PROGRESSION to MenuContract(
-            requiredElements = elements("info", "back", "tuning"),
+            requiredElements = elements("info", "back"),
             requiredRegions = setOf(MOUNT_LEVELS),
         ),
         MOUNT_TUNING to MenuContract(
-            requiredElements = elements("info", "back", "rider-view"),
-            requiredRegions = setOf(MOUNT_SPEEDS, MOUNT_STEPS, MOUNT_SIZES),
+            requiredElements = elements("info", "back", "rider-view", "skins", "glow"),
+            requiredRegions = setOf(MOUNT_SPEEDS, MOUNT_STEPS, MOUNT_SIZES, MOUNT_ABILITIES),
         ),
         MOUNT_SKINS to MenuContract(
             requiredElements = elements("previous", "next", "back"),
@@ -391,7 +390,29 @@ object ArcMenuSchema {
 object ArcMenuConfiguration {
     const val RESOURCE = "guis/menus.yml"
 
-    fun load(dataRoot: Path): PaperMenuConfiguration = parse(Config(dataRoot, RESOURCE))
+    fun load(dataRoot: Path): PaperMenuConfiguration {
+        val config = Config(dataRoot, RESOURCE)
+        migrateMountSettings(config)
+        return parse(config)
+    }
+
+    private fun migrateMountSettings(config: Config) {
+        val detail = "menus.layouts.mount-detail"
+        val oldGlowSlot = config.intOrNull("$detail.elements.glow.slot") ?: return
+        config.mergeMissingFromBundled(RESOURCE)
+        // Preserve the operator's old control position/template when it becomes Settings.
+        config.setInt("$detail.elements.settings.slot", oldGlowSlot)
+        config.setString("$detail.elements.settings.template", config.stringOrNull("$detail.elements.glow.template") ?: "background")
+        config.removeKey("$detail.elements.glow")
+        config.removeKey("$detail.elements.skins")
+        config.removeKey("$detail.regions.abilities")
+        config.removeKey("menus.layouts.mount-progression.elements.tuning")
+        val tuning = "menus.layouts.mount-tuning"
+        if (config.intOrNull("$tuning.rows") == 5) config.setInt("$tuning.rows", 6)
+        if (config.intOrNull("$tuning.elements.back.slot") == 36) config.setInt("$tuning.elements.back.slot", 45)
+        if (config.intOrNull("$tuning.elements.rider-view.slot") == 40) config.setInt("$tuning.elements.rider-view.slot", 49)
+        config.saveStrict()
+    }
 
     internal fun loadResource(classLoader: ClassLoader): PaperMenuConfiguration {
         val root = Files.createTempDirectory("arc-menu-resource")

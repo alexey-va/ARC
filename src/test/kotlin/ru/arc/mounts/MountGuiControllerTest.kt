@@ -59,11 +59,12 @@ class MountGuiControllerTest : TestBase() {
             controller.openList(player)
             controller.onClick(clickEvent(player.openInventory, 53))
             controller.onClick(clickEvent(player.openInventory, 0, ClickType.RIGHT))
-            controller.onClick(clickEvent(player.openInventory, 20))
+            controller.onClick(clickEvent(player.openInventory, 24))
+            player.openInventory.topInventory.size shouldBe 54
             server.scheduler.performOneTick()
             player.closeInventory(InventoryCloseEvent.Reason.PLAYER)
             server.scheduler.performOneTick()
-            plainName(player.openInventory.topInventory.getItem(31)) shouldBe "Способности маунта"
+            plainName(player.openInventory.topInventory.getItem(24)) shouldBe "Настройки"
             server.scheduler.performOneTick()
             player.closeInventory(InventoryCloseEvent.Reason.PLAYER)
             server.scheduler.performOneTick()
@@ -101,15 +102,6 @@ class MountGuiControllerTest : TestBase() {
         } finally {
             controller.shutdown()
         }
-    }
-
-    @Test
-    fun `detail ability controls stay centered for every supported count`() {
-        centeredDetailAbilitySlots(0) shouldBe emptyList()
-        centeredDetailAbilitySlots(1) shouldBe listOf(31)
-        centeredDetailAbilitySlots(2) shouldBe listOf(30, 32)
-        centeredDetailAbilitySlots(3) shouldBe listOf(29, 31, 33)
-        centeredDetailAbilitySlots(4) shouldBe listOf(29, 30, 32, 33)
     }
 
     @Test
@@ -492,7 +484,7 @@ class MountGuiControllerTest : TestBase() {
             controller.openList(player)
             assertBottomOnly(0)
             controller.onClick(clickEvent(player.openInventory, 0, ClickType.RIGHT))
-            assertDetailBackground(4, 13, 20, 22, 24, 31, 36, 40, 42)
+            assertDetailBackground(4, 13, 20, 22, 24, 36, 42)
             controller.onClick(clickEvent(player.openInventory, 20))
             player.openInventory.topInventory.contents.all { it != null } shouldBe true
             plainName(player.openInventory.topInventory.getItem(11)) shouldBe "Уровень 1 · открыт"
@@ -500,18 +492,17 @@ class MountGuiControllerTest : TestBase() {
             plainName(player.openInventory.topInventory.getItem(15)) shouldBe "Уровень 3 · закрыт"
             player.openInventory.topInventory.getItem(12)?.type shouldBe Material.GRAY_STAINED_GLASS_PANE
             controller.onClick(clickEvent(player.openInventory, 22))
-            assertDetailBackground(4, 11, 12, 13, 14, 15, 22, 36, 40)
-            PlainTextComponentSerializer.plainText().serialize(player.openInventory.title()) shouldBe "Вредина"
-            controller.onClick(clickEvent(player.openInventory, 36))
+            player.openInventory.topInventory.size shouldBe 27
+            player.openInventory.topInventory.getItem(22)?.type shouldBe Material.GRAY_STAINED_GLASS_PANE
             controller.onClick(clickEvent(player.openInventory, 18))
-            controller.onClick(clickEvent(player.openInventory, 40))
+            assertDetailBackground(4, 13, 20, 22, 24, 36, 42)
+            controller.onClick(clickEvent(player.openInventory, 24))
+            player.openInventory.topInventory.size shouldBe 54
+            controller.onClick(clickEvent(player.openInventory, 2))
             assertBottomOnly(0, 1)
             controller.onClick(clickEvent(player.openInventory, 49))
-            controller.onClick(clickEvent(player.openInventory, 31))
-            assertDetailBackground(31, 36)
-            controller.onClick(clickEvent(player.openInventory, 36))
-            controller.onClick(clickEvent(player.openInventory, 24))
-            assertDetailBackground(4, 13, 20, 22, 24, 31, 36, 40, 42)
+            player.openInventory.topInventory.size shouldBe 54
+            plainName(player.openInventory.topInventory.getItem(45)) shouldBe "Назад"
         } finally {
             controller.shutdown()
         }
@@ -602,7 +593,12 @@ class MountGuiControllerTest : TestBase() {
             player.openInventory.topInventory.getItem(13)?.type shouldBe Material.FEATHER
             controller.onClick(clickEvent(player.openInventory, 0, ClickType.RIGHT))
             player.openInventory.topInventory.size shouldBe 45
-            plainName(player.openInventory.topInventory.getItem(31)) shouldBe "Способности маунта"
+            plainName(player.openInventory.topInventory.getItem(24)) shouldBe "Настройки"
+            controller.onClick(clickEvent(player.openInventory, 24))
+            player.openInventory.topInventory.size shouldBe 54
+            plainName(player.openInventory.topInventory.getItem(45)) shouldBe "Назад"
+            controller.onClick(clickEvent(player.openInventory, 45))
+            player.openInventory.topInventory.size shouldBe 45
             controller.onClick(clickEvent(player.openInventory, 36))
             player.openInventory.topInventory.size shouldBe 18
             player.openInventory.topInventory.getItem(13)?.type shouldBe Material.FEATHER
@@ -733,14 +729,25 @@ class MountGuiControllerTest : TestBase() {
             controller.onClick(clickEvent(player.openInventory, 31))
             controller.onClick(clickEvent(player.openInventory, 31))
             player.openInventory.topInventory.size shouldBe 45
-
-            controller.onClick(clickEvent(player.openInventory, 36))
             controller.onClick(clickEvent(player.openInventory, 40))
-            controller.onClick(clickEvent(player.openInventory, 0))
+            player.openInventory.topInventory.size shouldBe 45
+
+            controller.onClick(clickEvent(player.openInventory, 24))
+            player.openInventory.topInventory.size shouldBe 54
+            controller.onClick(clickEvent(player.openInventory, 40))
+            controller.onClick(clickEvent(player.openInventory, 6))
+            player.openInventory.topInventory.size shouldBe 54
+            controller.onClick(clickEvent(player.openInventory, 2))
+            player.openInventory.topInventory.size shouldBe 54
+            controller.onClick(clickEvent(player.openInventory, 1))
+            player.openInventory.topInventory.size shouldBe 54
+            controller.onClick(clickEvent(player.openInventory, 49))
             player.openInventory.topInventory.size shouldBe 54
             verify(exactly = 0) { purchases.purchaseLevel(any(), any(), any(), any()) }
             verify(exactly = 0) { purchases.purchaseAbility(any(), any(), any(), any()) }
             verify(exactly = 0) { purchases.purchaseSkin(any(), any(), any(), any()) }
+            verify(exactly = 0) { purchases.purchaseGlow(any(), any(), any()) }
+            verify(exactly = 0) { purchases.purchaseSize(any(), any(), any(), any()) }
         } finally {
             controller.shutdown()
         }
@@ -877,7 +884,7 @@ class MountGuiControllerTest : TestBase() {
     }
 
     @Test
-    fun `progression submenu exposes selected tuning and routes a free speed change`() {
+    fun `detail routes settings and levels independently and free tuning stays in settings`() {
         val mount =
             testMount().copy(
                 movement = MountMovement.WALKING,
@@ -952,22 +959,15 @@ class MountGuiControllerTest : TestBase() {
         controller.start()
         try {
             controller.openDetail(player, mount.id)
-            plainName(player.openInventory.topInventory.getItem(31)) shouldBe "Способности маунта"
+            plainName(player.openInventory.topInventory.getItem(20)) shouldBe "Уровни"
+            plainName(player.openInventory.topInventory.getItem(24)) shouldBe "Настройки"
             controller.onClick(clickEvent(player.openInventory, 31))
-            plainName(player.openInventory.topInventory.getItem(31)) shouldBe "Ночное зрение"
-            controller.onClick(clickEvent(player.openInventory, 36))
-            controller.onClick(clickEvent(player.openInventory, 20))
+            controller.onClick(clickEvent(player.openInventory, 40))
+            player.openInventory.topInventory.size shouldBe 45
+            controller.onClick(clickEvent(player.openInventory, 24))
+            player.openInventory.topInventory.size shouldBe 54
+            plainName(player.openInventory.topInventory.getItem(40)) shouldBe "Ночное зрение"
 
-            plainName(player.openInventory.topInventory.getItem(11)) shouldBe "Уровень 1 · открыт"
-            plainName(player.openInventory.topInventory.getItem(13)) shouldBe "Уровень 2 · открыт"
-            plainName(player.openInventory.topInventory.getItem(15)) shouldBe "Уровень 3 · доступен"
-            player.openInventory.topInventory.getItem(15)?.type shouldBe Material.RED_DYE
-            plainName(player.openInventory.topInventory.getItem(22)) shouldBe "Настроить маунта"
-            player.openInventory.topInventory.contents.filterNotNull().map(::plainName).none {
-                it.startsWith("Скорость:") || it.startsWith("Подъём:") || it.startsWith("Размер:") || it.startsWith("Корпус:")
-            } shouldBe true
-
-            controller.onClick(clickEvent(player.openInventory, 22))
             plainName(player.openInventory.topInventory.getItem(12)) shouldBe "Скорость: 65%"
             player.openInventory.topInventory.getItem(12)?.itemMeta?.enchantmentGlintOverride shouldBe true
             checkNotNull(player.openInventory.topInventory.getItem(12)?.itemMeta?.lore())
@@ -985,7 +985,7 @@ class MountGuiControllerTest : TestBase() {
             checkNotNull(player.openInventory.topInventory.getItem(33)?.itemMeta?.lore())
                 .map(PlainTextComponentSerializer.plainText()::serialize)
                 .any { it == "Особый размер" } shouldBe true
-            plainName(player.openInventory.topInventory.getItem(40)) shouldBe "Корпус: всегда виден"
+            plainName(player.openInventory.topInventory.getItem(49)) shouldBe "Корпус: всегда виден"
 
             controller.onClick(clickEvent(player.openInventory, 30))
             verify(exactly = 1) { purchases.setSizeTuning(any(), mount, "standard", any()) }
@@ -996,7 +996,7 @@ class MountGuiControllerTest : TestBase() {
             controller.onClick(clickEvent(player.openInventory, 29))
             verify(exactly = 1) { purchases.setSizeTuning(any(), mount, "keychain", any()) }
 
-            controller.onClick(clickEvent(player.openInventory, 40))
+            controller.onClick(clickEvent(player.openInventory, 49))
             verify(exactly = 1) { purchases.setRiderViewAutoHide(any(), mount, true, any()) }
 
             controller.onClick(clickEvent(player.openInventory, 24))
@@ -1005,14 +1005,21 @@ class MountGuiControllerTest : TestBase() {
             controller.onClick(clickEvent(player.openInventory, 14))
 
             verify(exactly = 1) { purchases.setSpeedTuning(any(), mount, tuning, 90, any()) }
+            player.openInventory.topInventory.size shouldBe 54
+            verify(exactly = 0) { purchases.purchaseGlow(any(), any(), any()) }
+            verify(exactly = 0) { purchases.purchaseAbility(any(), any(), any(), any()) }
+            verify(exactly = 0) { purchases.purchaseSkin(any(), any(), any(), any()) }
+            verify(exactly = 0) { purchases.purchaseSize(any(), any(), any(), any()) }
 
-            player.closeInventory(InventoryCloseEvent.Reason.PLAYER)
-            server.scheduler.performOneTick()
-            plainName(player.openInventory.topInventory.getItem(11)) shouldBe "Уровень 1 · открыт"
-            server.scheduler.performOneTick()
-            player.closeInventory(InventoryCloseEvent.Reason.PLAYER)
-            server.scheduler.performOneTick()
-            plainName(player.openInventory.topInventory.getItem(31)) shouldBe "Способности маунта"
+            controller.onClick(clickEvent(player.openInventory, 45))
+            player.openInventory.topInventory.size shouldBe 45
+            controller.onClick(clickEvent(player.openInventory, 20))
+            plainName(player.openInventory.topInventory.getItem(13)) shouldBe "Уровень 2 · открыт"
+            player.openInventory.topInventory.getItem(22)?.type shouldBe Material.GRAY_STAINED_GLASS_PANE
+            controller.onClick(clickEvent(player.openInventory, 22))
+            player.openInventory.topInventory.size shouldBe 27
+            controller.onClick(clickEvent(player.openInventory, 18))
+            player.openInventory.topInventory.size shouldBe 45
         } finally {
             controller.shutdown()
         }
@@ -1080,7 +1087,8 @@ class MountGuiControllerTest : TestBase() {
         controller.start()
         try {
             controller.openDetail(player, ravager.id)
-            controller.onClick(clickEvent(player.openInventory, 40))
+            controller.onClick(clickEvent(player.openInventory, 24))
+            controller.onClick(clickEvent(player.openInventory, 2))
 
             val classicLore = checkNotNull(player.openInventory.topInventory.getItem(0)?.itemMeta?.lore())
                 .map(PlainTextComponentSerializer.plainText()::serialize)
@@ -1091,6 +1099,10 @@ class MountGuiControllerTest : TestBase() {
                 .map(PlainTextComponentSerializer.plainText()::serialize)
             starlightLore.any { it == "След: Звёздный след" } shouldBe true
             starlightLore.any { "END_ROD" in it || "0.82" in it || "взрослый" in it } shouldBe false
+
+            controller.onClick(clickEvent(player.openInventory, 49))
+            player.openInventory.topInventory.size shouldBe 54
+            plainName(player.openInventory.topInventory.getItem(45)) shouldBe "Назад"
         } finally {
             controller.shutdown()
         }
@@ -1135,6 +1147,7 @@ class MountGuiControllerTest : TestBase() {
             controller.openShop(player)
             controller.onClick(clickEvent(player.openInventory, 0))
             controller.onClick(clickEvent(player.openInventory, 24))
+            controller.onClick(clickEvent(player.openInventory, 6))
 
             plainName(player.openInventory.topInventory.getItem(15)) shouldBe "Недостаточно средств"
             player.openInventory.topInventory.contents.all { it != null } shouldBe true
@@ -1145,6 +1158,44 @@ class MountGuiControllerTest : TestBase() {
 
             controller.onClick(clickEvent(player.openInventory, 15))
             verify(exactly = 0) { purchases.purchaseGlow(any(), any(), any()) }
+        } finally {
+            controller.shutdown()
+        }
+    }
+
+    @Test
+    fun `canceling an ability confirmation returns to settings without purchase`() {
+        val mount = testMount()
+        val ownership = mockk<MountOwnership> {
+            every { profile(any(), mount) } returns MountProfile(1, false, false)
+            every { favoriteMountId(any()) } returns null
+        }
+        val purchases = mockk<MountPurchaseCoordinator>(relaxed = true)
+        val controller = mountGuiController(
+            configProvider = { interactionConfig(MountTuningDefinition(listOf(50, 100), listOf(110, 200, 400), listOf(110, 200, 400))) },
+            catalogProvider = { MountCatalog(listOf(mount)) },
+            ownership = ownership,
+            wallet = mockk {
+                every { walletForCurrency("vault") } answers { self as MountWallet }
+                every { balanceMinor(any()) } returns 5_000_000L
+            },
+            purchases = purchases,
+            sessions = mockk(relaxed = true),
+            merchantAllowed = { true },
+        )
+        val player = server.addPlayer("CancelSettingsBuyer")
+        controller.start()
+        try {
+            controller.openShop(player)
+            controller.onClick(clickEvent(player.openInventory, 0))
+            controller.onClick(clickEvent(player.openInventory, 24))
+            controller.onClick(clickEvent(player.openInventory, 40))
+            player.openInventory.topInventory.size shouldBe 27
+            controller.onClick(clickEvent(player.openInventory, 11))
+            player.openInventory.topInventory.size shouldBe 54
+            plainName(player.openInventory.topInventory.getItem(40)) shouldBe "Ночное зрение"
+            plainName(player.openInventory.topInventory.getItem(45)) shouldBe "Назад"
+            verify(exactly = 0) { purchases.purchaseAbility(any(), any(), any(), any()) }
         } finally {
             controller.shutdown()
         }
@@ -1189,24 +1240,40 @@ class MountGuiControllerTest : TestBase() {
             controller.onClick(clickEvent(player.openInventory, 0))
             nonLeftClicks.forEach { controller.onClick(clickEvent(player.openInventory, 13, it)) }
             verify(exactly = 0) { ownership.setFavoriteMount(any(), any()) }
+            nonLeftClicks.forEach { controller.onClick(clickEvent(player.openInventory, 24, it)) }
+            player.openInventory.topInventory.size shouldBe 45
 
-            controller.onClick(clickEvent(player.openInventory, 20))
-            nonLeftClicks.forEach { controller.onClick(clickEvent(player.openInventory, 20, it)) }
-            verify(exactly = 0) { purchases.setSpeedTuning(any(), any(), any(), any(), any()) }
-
-            controller.onClick(clickEvent(player.openInventory, 18))
-            controller.onClick(clickEvent(player.openInventory, 40))
+            controller.onClick(clickEvent(player.openInventory, 24))
+            player.openInventory.topInventory.size shouldBe 54
             nonLeftClicks.forEach {
-                controller.onClick(clickEvent(player.openInventory, 1, it))
+                controller.onClick(clickEvent(player.openInventory, 40, it))
+                controller.onClick(clickEvent(player.openInventory, 6, it))
+                controller.onClick(clickEvent(player.openInventory, 2, it))
                 player.openInventory.topInventory.size shouldBe 54
             }
 
-            controller.onClick(clickEvent(player.openInventory, 1))
+            controller.onClick(clickEvent(player.openInventory, 2))
+            player.openInventory.topInventory.size shouldBe 54
             nonLeftClicks.forEach {
-                controller.onClick(clickEvent(player.openInventory, 15, it))
                 controller.onClick(clickEvent(player.openInventory, 1, it))
+                controller.onClick(clickEvent(player.openInventory, 49, it))
+                player.openInventory.topInventory.size shouldBe 54
+            }
+
+            controller.onClick(clickEvent(player.openInventory, 49))
+            player.openInventory.topInventory.size shouldBe 54
+            controller.onClick(clickEvent(player.openInventory, 40))
+            player.openInventory.topInventory.size shouldBe 27
+            nonLeftClicks.forEach {
+                controller.onClick(clickEvent(player.openInventory, 11, it))
+                controller.onClick(clickEvent(player.openInventory, 15, it))
                 player.openInventory.topInventory.size shouldBe 27
             }
+            controller.onClick(clickEvent(player.openInventory, 11))
+            player.openInventory.topInventory.size shouldBe 54
+            verify(exactly = 0) { purchases.setSpeedTuning(any(), any(), any(), any(), any()) }
+            verify(exactly = 0) { purchases.purchaseAbility(any(), any(), any(), any()) }
+            verify(exactly = 0) { purchases.purchaseGlow(any(), any(), any()) }
             verify(exactly = 0) { purchases.purchaseSkin(any(), any(), any(), any()) }
         } finally {
             controller.shutdown()
