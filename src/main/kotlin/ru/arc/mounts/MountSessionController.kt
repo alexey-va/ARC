@@ -1,5 +1,6 @@
 package ru.arc.mounts
 
+import io.papermc.paper.event.player.PlayerTrackEntityEvent
 import org.bukkit.Input
 import org.bukkit.NamespacedKey
 import org.bukkit.Particle
@@ -317,19 +318,27 @@ class MountSessionController internal constructor(
             }
             if (definition.control == MountControl.PLAYER_FLIGHT) {
                 visualFlight.begin(player, mountPlayerFlySpeed(maximumSpeed(session, now), player.isSprinting))
-                check(followVisualMount(player, spawned, definition)) { "Unable to position visual mount" }
+                // The client moves this passenger with its own predicted player position.
+                // A server-teleported follower trails behind and can push its pilot.
+                check(player.addPassenger(spawned)) { "Unable to attach flight companion" }
             } else {
                 check(passengers.openRide(spawned, player, definition, session.hasRiderFireProtection(), visualEntity)) {
                     "Unable to create passenger seats"
                 }
             }
             updateMiningCompensation(player, session)
+            if (definition.control == MountControl.PLAYER_FLIGHT || visualEntity != null) {
+                replayFlightPassengers(player, session)
+            }
             lastSummonAt[player.uniqueId] = now
             onStateChanged()
             player.world.spawnParticle(Particle.END_ROD, player.location, 10, 0.4, 0.4, 0.4, 0.01)
             player.world.playSound(player.location, Sound.ENTITY_HORSE_SADDLE, 1.0f, 1.0f)
             val (controlsKey, controlsFallback) =
                 when {
+                    definition.control == MountControl.PLAYER_FLIGHT ->
+                        "player-flight-controls" to
+                            "<gray>WASD — полёт, Space — вверх, Shift — вниз, двойной Shift — завершить"
                     definition.control == MountControl.NATIVE_FLIGHT ->
                         "native-flight-controls" to
                             "<gray>WASD — полёт по взгляду, Space — вверх, двойной Shift — спешиться"
@@ -364,7 +373,7 @@ class MountSessionController internal constructor(
             if (definition.control == MountControl.PLAYER_FLIGHT) restoreVisualFlight(player)
             setAirborneMiningCompensation(player, airborneMiningModifier, enabled = false)
             spawned.remove()
-            warn("Unable to spawn mount {} for {}: {}", definition.id, player.name, failure.javaClass.simpleName)
+            warn("Unable to spawn mount {} for {}: {}", definition.id, player.name, failure.javaClass.simpleName, failure)
             MountSpawnResult.SPAWN_FAILED
         }
     }
@@ -555,6 +564,31 @@ class MountSessionController internal constructor(
         if (sessionsByPlayer[owner]?.definition?.control == MountControl.PLAYER_FLIGHT) event.isCancelled = true
     }
 
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun onFlightBodyTracked(event: PlayerTrackEntityEvent) {
+        val owner = playerByEntity[event.entity.uniqueId] ?: return
+        val session = sessionsByPlayer[owner] ?: return
+        if (session.definition.control == MountControl.PLAYER_FLIGHT || session.visualEntityId != null) {
+            replayFlightPassengers(event.player, session)
+        }
+    }
+
+    private fun replayFlightPassengers(viewer: Player, session: MountSession) {
+        // SetPassengers received before SpawnEntity drops the unknown passenger.
+        // Replay after tracking, including the pilot whose player is not tracked to itself.
+        scheduler.runLater(1L, Runnable {
+            if (sessionsByPlayer[session.playerId] !== session || !viewer.isOnline) return@Runnable
+            val pilot = plugin.server.getPlayer(session.playerId) ?: return@Runnable
+            val body = plugin.server.getEntity(session.entityId) as? LivingEntity ?: return@Runnable
+            if (!body.isValid || !isMountControlledBy(pilot, body, session.definition.control)) return@Runnable
+            synchronizePassengers(viewer, listOf(if (session.definition.control == MountControl.PLAYER_FLIGHT) pilot else body))
+            if (viewer.uniqueId == pilot.uniqueId && session.riderMountHidden) {
+                val appearance = session.visualEntityId?.let { plugin.server.getEntity(it) as? LivingEntity } ?: body
+                setRiderMountHidden(viewer, appearance, true)
+            }
+        })
+    }
+
     @EventHandler fun onQuit(event: PlayerQuitEvent) = remove(event.player.uniqueId, MountRemovalReason.QUIT)
     @EventHandler fun onDeath(event: PlayerDeathEvent) = remove(event.entity.uniqueId, MountRemovalReason.DIED)
     @EventHandler fun onWorldChange(event: PlayerChangedWorldEvent) = remove(event.player.uniqueId, MountRemovalReason.CHANGED_WORLD)
@@ -621,11 +655,11 @@ class MountSessionController internal constructor(
                     updateRiderMountVisibility(player, appearanceEntity, session)
                     if (session.definition.control == MountControl.PLAYER_FLIGHT) {
                         updateMiningCompensation(player, session)
-                        val followed = runCatching {
+                        val updated = runCatching {
                             visualFlight.updateSpeed(player, mountPlayerFlySpeed(maximumSpeed(session, now), player.isSprinting))
-                            followVisualMount(player, entity, session.definition)
+                            entity.setRotation(player.location.yaw, 0f)
                         }.onFailure { warn("Unable to update visual mount for {}: {}", player.name, it.javaClass.simpleName) }
-                        if (followed.getOrDefault(false) != true) {
+                        if (updated.isFailure) {
                             remove(session.playerId, MountRemovalReason.INVALID)
                             return@forEach
                         }
@@ -999,8 +1033,10 @@ class MountSessionController internal constructor(
     ): LivingEntity? {
         val spawnToken = UUID.randomUUID()
         pendingSpawnTokens.add(spawnToken)
+        val spawnLocation = player.location
+        if (definition.control == MountControl.PLAYER_FLIGHT) spawnLocation.add(0.0, player.height, 0.0)
         val entity = try {
-            player.world.spawnEntity(player.location, entityType, CreatureSpawnEvent.SpawnReason.CUSTOM) { spawned ->
+            player.world.spawnEntity(spawnLocation, entityType, CreatureSpawnEvent.SpawnReason.CUSTOM) { spawned ->
                 (spawned as? LivingEntity)?.let {
                     tagEntity(it, definition, player)
                     it.persistentDataContainer.set(spawnTokenKey, PersistentDataType.STRING, spawnToken.toString())
@@ -1302,21 +1338,12 @@ private const val HORSE_ATTRIBUTE_BLOCKS_PER_TICK = 2.1
 
 internal fun isMountControlledBy(player: Player, entity: LivingEntity, control: MountControl): Boolean =
     if (control == MountControl.PLAYER_FLIGHT) {
-        player.vehicle == null && player.allowFlight && player.world == entity.world
+        player.vehicle == null && player.allowFlight && player.world == entity.world && entity.vehicle?.uniqueId == player.uniqueId
     } else if (control == MountControl.NATIVE_FLIGHT) {
         entity.passengers.firstOrNull() == player
     } else {
         entity.passengers.contains(player)
     }
-
-/** Move only the cosmetic body; never teleport or apply per-tick velocity to its pilot. */
-internal fun followVisualMount(player: Player, entity: LivingEntity, definition: MountDefinition): Boolean {
-    val location = player.location
-    location.y += definition.visualFlightOffsetY ?: (-entity.height * 0.75)
-    location.pitch = 0.0f
-    entity.velocity = Vector(0.0, 0.0, 0.0)
-    return entity.teleport(location)
-}
 
 /** Nominal straight-line creative flight speed; the client owns acceleration and collisions. */
 internal fun mountPlayerFlySpeed(blocksPerTick: Double, sprinting: Boolean): Float {

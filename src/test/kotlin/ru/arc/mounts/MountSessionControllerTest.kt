@@ -31,29 +31,30 @@ import org.bukkit.util.BoundingBox
 import java.util.UUID
 
 class MountSessionControllerTest : StringSpec({
-    "visual flight follows the pilot without boarding or moving the player" {
+    "player flight ownership requires its body attached to the unmounted pilot" {
         val player = mockk<Player>(relaxed = true)
-        val entity = mockk<LivingEntity>(relaxed = true)
+        val body = mockk<LivingEntity>(relaxed = true)
         val world = mockk<World>()
-        every { player.location } returns Location(world, 10.0, 70.0, 20.0, 90f, 35f)
+        val playerId = UUID.randomUUID()
+        every { player.uniqueId } returns playerId
         every { player.world } returns world
-        every { entity.world } returns world
+        every { body.world } returns world
         every { player.vehicle } returns null
         every { player.allowFlight } returns true
-        every { entity.height } returns 2.0
-        every { entity.teleport(any<Location>()) } returns true
-        val definition = mockk<MountDefinition>()
-        every { definition.visualFlightOffsetY } returns null
+        every { body.vehicle } returns player
 
-        isMountControlledBy(player, entity, MountControl.PLAYER_FLIGHT) shouldBe true
-        followVisualMount(player, entity, definition) shouldBe true
+        isMountControlledBy(player, body, MountControl.PLAYER_FLIGHT) shouldBe true
 
-        verify { entity.teleport(match<Location> { it.x == 10.0 && it.y == 68.5 && it.z == 20.0 && it.yaw == 90f && it.pitch == 0f }) }
-        verify(exactly = 0) { entity.addPassenger(any()) }
-        verify(exactly = 0) { player.teleport(any<Location>()) }
-        verify(exactly = 0) { player.velocity = any() }
         every { player.allowFlight } returns false
-        isMountControlledBy(player, entity, MountControl.PLAYER_FLIGHT) shouldBe false
+        isMountControlledBy(player, body, MountControl.PLAYER_FLIGHT) shouldBe false
+        every { player.allowFlight } returns true
+
+        every { body.vehicle } returns mockk<LivingEntity>(relaxed = true)
+        isMountControlledBy(player, body, MountControl.PLAYER_FLIGHT) shouldBe false
+
+        every { body.vehicle } returns player
+        every { player.vehicle } returns mockk<LivingEntity>(relaxed = true)
+        isMountControlledBy(player, body, MountControl.PLAYER_FLIGHT) shouldBe false
     }
 
     "native flight speed retains the configured nominal rate without doubling sprint" {

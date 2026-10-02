@@ -422,6 +422,7 @@ gui:
 messages:
   ground-controls: "<gray>WASD — движение, Space — прыжок, двойной Shift — спешиться"
   native-flight-controls: "<gray>WASD — полёт по взгляду, Space — вверх, двойной Shift — спешиться"
+  player-flight-controls: "<gray>WASD — полёт, Space — вверх, Shift — вниз, двойной Shift — завершить"
   camel-controls: "<gray>WASD — движение, удерживайте Space и отпустите — рывок, двойной Shift — спешиться"
   horse-controls: "<gray>WASD — движение, удерживайте Space и отпустите — прыжок, двойной Shift — спешиться"
   flight-controls: "<gray>WASD — движение, Space — вверх, Shift — вниз, двойной Shift — спешиться"
@@ -1822,18 +1823,16 @@ mounts:
         currency: tokens
   skycruiser:
     type: flying
-    control: native-flight
-    entity: HAPPY_GHAST
-    visual-entity: PHANTOM
-    passenger-seats: 2
+    control: player-flight
+    entity: PHANTOM
     item: PHANTOM_MEMBRANE
     name: "Небесный крейсер"
     rarity: legendary
     acquisition: "у Гектора во дворе маунтов на спавне"
     currency: tokens
     description:
-      - "Крылатый флагман со штатным полётом."
-      - "Полёт по взгляду и два места для друзей."
+      - "Крылатый спутник с управлением как /fly."
+      - "Одиночный полёт без догоняющего корпуса."
     abilities:
       upgrades: [night-vision, fire-resistance]
     levels:

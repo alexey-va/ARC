@@ -12,9 +12,9 @@ Native production replacement for `Denizen/scripts/activities/rideable_mobs.dsc`
   Space to jump. Horses retain native ridden physics so gravity and terrain
   transitions remain correct; hold and release Space for their charged jump.
   Ordinary flying and swimming mounts use WASD, Space to ascend and Shift to descend.
-  Skycruiser uses native Happy Ghast flight along the view direction and Space
-  ascent. Its visible Phantom is a native passenger of the invisible carrier;
-  ARC does not move the pilot or teleport a following cosmetic body.
+  Skycruiser uses ordinary player flight, with Space ascent and Shift descent.
+  Its Phantom is the player's native passenger, a winged companion above the
+  pilot. There is no Happy Ghast carrier or teleported follower, and no guest seats.
   Every mount uses double Shift to dismount; a single Shift never ends the ride.
 - Passenger capacity is an inherent catalog feature and needs no ownership node.
   The configured `passenger-seats` count excludes the driver: Camel and Camel
@@ -49,7 +49,7 @@ Native production replacement for `Denizen/scripts/activities/rideable_mobs.dsc`
   override any of them under `mounts.<id>.motion`. Opposite input brakes close
   to zero before the new direction accelerates, and horses keep native riding
   while ARC ramps their movement-speed attribute.
-- All bundled ARC motion timings are zero. Native Happy Ghast acceleration and
+- All bundled ARC motion timings are zero. Native client flight acceleration and
   network prediction remain part of Minecraft's flight controller.
 - Appearance is deterministic. ARC fixes age, scale and variants, clears random
   entity equipment, then applies only the configured skin equipment. Zombie

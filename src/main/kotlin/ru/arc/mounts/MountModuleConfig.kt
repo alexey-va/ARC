@@ -135,7 +135,6 @@ open class MountModuleConfig(private val config: Config) {
                     motion = motion("$root.motion"),
                     currency = config.string("$root.currency", "vault").trim(),
                     control = strictControl(config.string("$root.control", "vehicle"), id),
-                    visualFlightOffsetY = config.doubleOrNull("$root.visual-flight-offset-y"),
                     visualEntityType = config.string("$root.visual-entity", "").trim().uppercase(Locale.ROOT).ifEmpty { null },
                     glowCurrency = config.string(
                         "$root.buy-glow-currency",

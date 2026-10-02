@@ -436,7 +436,6 @@ data class MountDefinition(
     val motion: MountMotionOverride = MountMotionOverride(),
     val currency: String = "vault",
     val control: MountControl = MountControl.VEHICLE,
-    val visualFlightOffsetY: Double? = null,
     val visualEntityType: String? = null,
     val glowCurrency: String = currency,
 ) {
@@ -459,9 +458,6 @@ data class MountDefinition(
         }
         require(visualEntityType == null || passengerSeats <= 2) {
             "Mount '$id' visual body reserves one Happy Ghast passenger seat"
-        }
-        require(visualFlightOffsetY == null || (visualFlightOffsetY.isFinite() && visualFlightOffsetY in -16.0..16.0)) {
-            "Mount '$id' visual-flight-offset-y must be finite and between -16 and 16"
         }
         require(passengerSeats in 0..passengerSeatLimit(entityType)) {
             "Mount '$id' passenger-seats must be between 0 and ${passengerSeatLimit(entityType)} for $entityType"

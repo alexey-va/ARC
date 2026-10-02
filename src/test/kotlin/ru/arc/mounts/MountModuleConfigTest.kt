@@ -75,29 +75,32 @@ class MountModuleConfigTest : StringSpec({
         catalog.all.last().id shouldBe "evoker"
     }
 
-    "catalog keeps every mount seated without vehicle inertia" {
+    "catalog separates the solo player-flight companion from vehicle mounts" {
         val config = bundledConfig("controls")
         config.catalog().all.forEach { mount ->
             mount.motion.resolve(config.motionTiming) shouldBe MountMotionTiming(Duration.ZERO, Duration.ZERO, Duration.ZERO)
-            mount.control shouldBe if (mount.id == "skycruiser") MountControl.NATIVE_FLIGHT else MountControl.VEHICLE
+            mount.control shouldBe if (mount.id == "skycruiser") MountControl.PLAYER_FLIGHT else MountControl.VEHICLE
         }
         val bee = config.catalog()["bee"]!!.copy(control = MountControl.PLAYER_FLIGHT)
         shouldThrow<IllegalArgumentException> { bee.copy(movement = MountMovement.WALKING) }
         shouldThrow<IllegalArgumentException> { config.catalog()["happy_ghast"]!!.copy(control = MountControl.PLAYER_FLIGHT) }
-        shouldThrow<IllegalArgumentException> { bee.copy(visualFlightOffsetY = Double.NaN) }
+        shouldThrow<IllegalArgumentException> { bee.copy(passengerSeats = 1) }
     }
 
-    "native flight retains Happy Ghast as carrier and reserves the visible body seat" {
+    "Skycruiser uses solo player flight while Happy Ghast keeps native-flight constraints" {
         val mount = bundledConfig("native-flight").catalog()["skycruiser"]!!
-        mount.entityType shouldBe "HAPPY_GHAST"
-        mount.visualEntityType shouldBe "PHANTOM"
-        mount.passengerSeats shouldBe 2
-        shouldThrow<IllegalArgumentException> { mount.copy(entityType = "PHANTOM") }
-        shouldThrow<IllegalArgumentException> { mount.copy(control = MountControl.VEHICLE) }
-        shouldThrow<IllegalArgumentException> { mount.copy(passengerSeats = 3) }
-        val happy = bundledConfig("native-happy").catalog()["happy_ghast"]!!.copy(control = MountControl.NATIVE_FLIGHT)
-        shouldThrow<IllegalArgumentException> { happy.copy(appearance = happy.appearance.copy(baby = true)) }
-        shouldThrow<IllegalArgumentException> { happy.copy(appearance = happy.appearance.copy(equipment = emptyMap())) }
+        mount.control shouldBe MountControl.PLAYER_FLIGHT
+        mount.entityType shouldBe "PHANTOM"
+        mount.visualEntityType shouldBe null
+        mount.passengerSeats shouldBe 0
+        shouldThrow<IllegalArgumentException> { mount.copy(passengerSeats = 1) }
+        shouldThrow<IllegalArgumentException> { mount.copy(control = MountControl.NATIVE_FLIGHT) }
+
+        val happy = bundledConfig("native-happy").catalog()["happy_ghast"]!!
+        happy.entityType shouldBe "HAPPY_GHAST"
+        val nativeHappy = happy.copy(control = MountControl.NATIVE_FLIGHT)
+        shouldThrow<IllegalArgumentException> { nativeHappy.copy(appearance = nativeHappy.appearance.copy(baby = true)) }
+        shouldThrow<IllegalArgumentException> { nativeHappy.copy(appearance = nativeHappy.appearance.copy(equipment = emptyMap())) }
     }
 
     "passenger seats default to zero and stay within the supported carrier envelope" {
@@ -141,7 +144,7 @@ class MountModuleConfigTest : StringSpec({
     "maximum level is a fast and intentionally expensive final sprint" {
         val config = bundledConfig("progression")
         val catalog = config.catalog()
-        val purchasable = catalog.all.filter { it.price(3) != null && it.control != MountControl.NATIVE_FLIGHT }
+        val purchasable = catalog.all.filter { it.price(3) != null && it.id != "skycruiser" }
 
         purchasable.all { it.level(3).handlingMultiplier == 1.28 } shouldBe true
         purchasable.all { it.level(3).sprintMultiplier == 1.12 } shouldBe true
@@ -166,7 +169,7 @@ class MountModuleConfigTest : StringSpec({
         catalog["horse"]!!.levels.mapNotNull { it.price }.sum() shouldBe 420_000.0
         catalog["camel"]!!.levels.mapNotNull { it.price }.sum() shouldBe 1_050_000.0
         catalog["iron_golem"]!!.levels.mapNotNull { it.price }.sum() shouldBe 3_500_000.0
-        catalog.all.filter { it.rarity == MountRarity.LEGENDARY && it.currency == "tokens" && it.control != MountControl.NATIVE_FLIGHT }
+        catalog.all.filter { it.rarity == MountRarity.LEGENDARY && it.currency == "tokens" && it.id != "skycruiser" }
             .mapNotNull { it.price(3) }.toSet() shouldBe setOf(1200.0)
         catalog["skycruiser"]!!.levels.map(MountLevelDefinition::speed) shouldBe listOf(1.1, 1.5, 1.9)
         catalog["skycruiser"]!!.levels.map(MountLevelDefinition::price) shouldBe listOf(1200.0, 1800.0, 3000.0)

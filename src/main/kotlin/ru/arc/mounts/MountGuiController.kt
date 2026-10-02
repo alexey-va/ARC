@@ -445,18 +445,6 @@ class MountGuiController(
             stepSlots.forEach { (slot, hundredths) ->
                 inventory.setItem(slot, items.stepHeightTuningItem(profile, tuning, hundredths))
             }
-        } else {
-            inventory.setItem(
-                TUNING_NOT_APPLICABLE_SLOT,
-                item(
-                    if (mount.movement == MountMovement.FLYING) Material.FEATHER else Material.HEART_OF_THE_SEA,
-                    config.guiText("progression.step-not-applicable-name", "<#969696>Подъём не используется"),
-                    config.guiLines(
-                        "progression.step-not-applicable-lore",
-                        listOf("<#8c8c8c>Эта настройка доступна только пешим маунтам."),
-                    ),
-                ),
-            )
         }
         sizeSlots.forEach { (slot, sizeId) ->
             mount.sizeOptions.firstOrNull { it.id == sizeId }?.let { option ->
@@ -1314,7 +1302,6 @@ class MountGuiController(
         private val TUNING_SPEED_SLOTS get() = region(ArcMenuSchema.MOUNT_TUNING, ArcMenuSchema.MOUNT_SPEEDS)
         private val TUNING_STEP_SLOTS get() = region(ArcMenuSchema.MOUNT_TUNING, ArcMenuSchema.MOUNT_STEPS)
         private val TUNING_SIZE_SLOTS get() = region(ArcMenuSchema.MOUNT_TUNING, ArcMenuSchema.MOUNT_SIZES)
-        private val TUNING_NOT_APPLICABLE_SLOT get() = TUNING_STEP_SLOTS[TUNING_STEP_SLOTS.size / 2]
         private val TUNING_MENU_BACK_SLOT get() = slot(ArcMenuSchema.MOUNT_TUNING, "back")
         private val TUNING_MENU_RIDER_VIEW_SLOT get() = slot(ArcMenuSchema.MOUNT_TUNING, "rider-view")
         private val SKINS_SIZE get() = rows(ArcMenuSchema.MOUNT_SKINS)
