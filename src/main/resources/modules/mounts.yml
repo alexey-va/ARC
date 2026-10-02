@@ -467,7 +467,7 @@ messages:
   setting-failed: "<red>Не удалось сохранить настройку."
   save-failed-refunded: "<red>Покупка не сохранилась. Деньги полностью возвращены."
   purchase-manual-review: "<dark_red>Покупка приостановлена для безопасной проверки. Повторно не покупайте; обратитесь к администрации."
-  admin-grant-all-success: "<green>Все маунты максимального уровня выданы игроку <white><player><green>. Всего: <white><count><green>."
+  admin-grant-all-success: "<green>Все маунты и улучшения выданы игроку <white><player><green>. Маунтов: <white><count><green>."
 
   merchant-required: <#ff9f0f>Покупки доступны у Гектора или Эммы на спавне.
 ability-upgrades:

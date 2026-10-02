@@ -7,6 +7,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Server
 import org.bukkit.command.Command
 import org.bukkit.command.CommandSender
@@ -99,6 +100,8 @@ class MountCommandTest : StringSpec({
         ) shouldBe true
 
         verify(exactly = 0) { fixture.sessions.spawn(any(), any(), any(), any()) }
+        fixture.command.onCommand(fixture.player, fixture.bukkitCommand, "mount", arrayOf("admin", "grant-all", "Rider"))
+        verify(exactly = 0) { fixture.ownership.grantAll(any(), any()) }
         fixture.command.onTabComplete(fixture.player, fixture.bukkitCommand, "mount", arrayOf(""))
             .shouldContainExactly("help", "menu", "owned", "pack", "shop", "trade", "upgrades", "view")
     }
@@ -194,9 +197,12 @@ class MountCommandTest : StringSpec({
         verify(exactly = 1) { fixture.ownership.revokeSize(fixture.playerId, specialMount, special) }
     }
 
-    "admin can grant every mount at its maximum level in one command" {
+    "admin grant-all persists the complete catalog before reporting success" {
         val secondMount = testMount().copy(id = "bat", displayName = "Летучая мышь")
-        val fixture = commandFixture(MountCatalog(listOf(mount, secondMount)), admin = true)
+        val mounts = MountCatalog(listOf(mount, secondMount))
+        val fixture = commandFixture(mounts, admin = true)
+        val saved = CompletableFuture<Void>()
+        every { fixture.ownership.grantAll(fixture.playerId, mounts.all) } returns saved
 
         fixture.command.onCommand(
             fixture.console,
@@ -205,10 +211,35 @@ class MountCommandTest : StringSpec({
             arrayOf("admin", "grant-all", "Rider"),
         ) shouldBe true
         fixture.scheduler.executeImmediate()
+        verify(exactly = 0) { fixture.console.sendMessage(any<Component>()) }
+        saved.complete(null)
+        fixture.scheduler.executeImmediate()
 
-        verify(exactly = 1) { fixture.ownership.grantLevel(fixture.playerId, mount, mount.maxLevel) }
-        verify(exactly = 1) { fixture.ownership.grantLevel(fixture.playerId, secondMount, secondMount.maxLevel) }
-        verify(exactly = 1) { fixture.console.sendMessage(any<Component>()) }
+        verify(exactly = 1) { fixture.ownership.grantAll(fixture.playerId, mounts.all) }
+        verify(exactly = 0) { fixture.ownership.grantLevel(any(), any(), any()) }
+        verify(exactly = 1) {
+            fixture.console.sendMessage(match<Component> {
+                PlainTextComponentSerializer.plainText().serialize(it).contains("Все маунты и улучшения выданы")
+            })
+        }
+    }
+
+    "admin grant-all reports a failed asynchronous save without confirming unlocks" {
+        val fixture = commandFixture(catalog, admin = true)
+        val saved = CompletableFuture<Void>()
+        every { fixture.ownership.grantAll(fixture.playerId, catalog.all) } returns saved
+
+        fixture.command.onCommand(fixture.console, fixture.bukkitCommand, "mount", arrayOf("admin", "grant-all", "Rider"))
+        fixture.scheduler.executeImmediate()
+        verify(exactly = 0) { fixture.console.sendMessage(any<Component>()) }
+        saved.completeExceptionally(IllegalStateException("save failed"))
+        fixture.scheduler.executeImmediate()
+
+        verify(exactly = 1) {
+            fixture.console.sendMessage(match<Component> {
+                PlainTextComponentSerializer.plainText().serialize(it).contains("Не удалось выдать")
+            })
+        }
     }
 
     "admin revoke-all without a target revokes the executing player's mounts" {
@@ -285,6 +316,7 @@ private fun commandFixture(catalog: MountCatalog, admin: Boolean = false): Mount
     val ownership = mockk<MountOwnership> {
         every { resolveUniqueId(any()) } returns CompletableFuture.completedFuture(playerId)
         every { grantLevel(any(), any(), any()) } returns CompletableFuture.completedFuture(null)
+        every { grantAll(any(), any()) } returns CompletableFuture.completedFuture(null)
         every { grantSkin(any(), any(), any()) } returns CompletableFuture.completedFuture(null)
         every { grantGlow(any(), any()) } returns CompletableFuture.completedFuture(null)
         every { revokeLevel(any(), any(), any()) } returns CompletableFuture.completedFuture(null)

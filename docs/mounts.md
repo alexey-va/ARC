@@ -103,7 +103,7 @@ Both paths use the same summon service as the collection and detail menu. World,
 
 ## Administration
 
-`/mount admin grant-all <player>` grants the maximum configured level of every catalog mount. It does not grant glow, skins, ability upgrades, or grant-only sizes; those remain independent ownership records. Use `/mount admin grant size <player> <mount> <size-id>` and the matching `revoke` command for extreme sizes.
+`/mount admin grant-all <player>` grants every catalog mount at its maximum configured level, glow, every skin, ability upgrade and grant-only size, including extreme Happy Ghast sizes. LuckPerms saves the complete grant in one asynchronous user modification. Existing selected skin, size, speed, rider visibility, favorite and disabled glow preferences remain unchanged; unlocks do not select a new appearance. Repeating the command adds missing rights without duplicating them. Previous level-only grants need the command run again; no bulk migration infers free upgrades from ordinary purchased levels. Individual `grant`/`revoke` commands still control each category.
 
 Every purchasable category uses the same entitlement as its individual administration command:
 

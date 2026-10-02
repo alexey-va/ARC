@@ -84,9 +84,7 @@ class MountCommand(
             if (playerId == null) {
                 failedFuture(PlayerNotFoundException(playerName))
             } else {
-                mounts.fold(CompletableFuture.completedFuture<Void>(null)) { previous, mount ->
-                    previous.thenCompose { ownership.grantLevel(playerId, mount, mount.maxLevel) }
-                }
+                ownership.grantAll(playerId, mounts)
             }
         }.whenComplete { _, failure ->
             scheduler.runSync(
@@ -96,10 +94,10 @@ class MountCommand(
                             failure == null ->
                                 config().message(
                                     "admin-grant-all-success",
-                                    "<green>Все маунты максимального уровня выданы игроку <white><player><green>. Всего: <white><count><green>.",
+                                    "<green>Все маунты и улучшения выданы игроку <white><player><green>. Маунтов: <white><count><green>.",
                                 ).replace("<player>", playerName).replace("<count>", mounts.size.toString())
                             unwrap(failure) is PlayerNotFoundException -> "<red>Игрок <white>$playerName <red>не найден."
-                            else -> "<red>Не удалось выдать все маунты. Часть изменений могла сохраниться."
+                            else -> "<red>Не удалось выдать всех маунтов и улучшения. Часть изменений могла сохраниться."
                         }
                     sender.sendMessage(TextUtil.mm(text, true))
                 },
@@ -344,7 +342,7 @@ class MountCommand(
 
     private fun sendAdminHelp(sender: CommandSender, label: String) {
         sender.sendMessage(TextUtil.mm("<yellow>/$label admin summon <маунт> [уровень] [облик]", true))
-        sender.sendMessage(TextUtil.mm("<yellow>/$label admin grant-all <игрок> <gray>— выдать всех маунтов максимального уровня", true))
+        sender.sendMessage(TextUtil.mm("<yellow>/$label admin grant-all <игрок> <gray>— выдать всех маунтов и все улучшения", true))
         sender.sendMessage(TextUtil.mm("<yellow>/$label admin revoke-all [игрок] <gray>— отозвать прямые права маунтов", true))
         sender.sendMessage(TextUtil.mm("<yellow>/$label admin grant <level|skin|glow|ability|size> <игрок> <маунт> [значение]", true))
         sender.sendMessage(TextUtil.mm("<yellow>/$label admin revoke <level|skin|glow|ability|size> <игрок> <маунт> [значение]", true))

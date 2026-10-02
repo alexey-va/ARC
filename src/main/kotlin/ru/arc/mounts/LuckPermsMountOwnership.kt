@@ -104,6 +104,20 @@ class LuckPermsMountOwnership(private val luckPerms: LuckPerms) : MountOwnership
         }
     }
 
+    override fun grantAll(playerId: UUID, mounts: Collection<MountDefinition>): CompletableFuture<Void> =
+        luckPerms.userManager.modifyUser(playerId) { user ->
+            mounts.forEach { mount ->
+                val permissions = buildList {
+                    add(mount.levelPermission(mount.maxLevel))
+                    add(mount.glowPermission)
+                    mount.skins.forEach { add(mount.skinPermission(it.id)) }
+                    mount.abilities.upgrades.forEach { add(mount.abilityPermission(it.id)) }
+                    mount.sizeOptions.filter { it.grantOnly }.forEach { add(mount.sizeOwnershipPermission(it.id)) }
+                }
+                permissions.forEach { user.data().add(permission(it)) }
+            }
+        }
+
     override fun revokeAll(playerId: UUID, mounts: Collection<MountDefinition>): CompletableFuture<Int> =
         java.util.concurrent.atomic.AtomicInteger().let { removed ->
             luckPerms.userManager.modifyUser(playerId) { user ->

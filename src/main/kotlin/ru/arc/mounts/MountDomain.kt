@@ -708,6 +708,9 @@ interface MountOwnership {
 
     fun revokeLevel(playerId: UUID, mount: MountDefinition, level: Int): CompletableFuture<Void>
 
+    fun grantAll(playerId: UUID, mounts: Collection<MountDefinition>): CompletableFuture<Void> =
+        CompletableFuture.failedFuture(UnsupportedOperationException("Bulk mount ownership persistence is unavailable"))
+
     fun revokeAll(playerId: UUID, mounts: Collection<MountDefinition>): CompletableFuture<Int> =
         CompletableFuture.completedFuture(0)
 
