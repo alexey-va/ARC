@@ -114,4 +114,14 @@ class PortalAnimationConfigTest : FreeSpec({
         offsets.all { it.x.isFinite() && it.y.isFinite() && it.z.isFinite() }.shouldBeTrue()
         (offsets != originGateParticleOffsets(7, 10, 3, 6.0, 7.0, 2.25)).shouldBeTrue()
     }
+
+    "a delayed missing provider materializes the legacy fallback before entry" {
+        val timing = PortalTimingSettings.load(ConfigManager.empty())
+        timing.shouldMaterializeLegacy(11, false) shouldBe false
+        timing.shouldMaterializeLegacy(12, false) shouldBe true
+        // A delayed gate can fail between the legacy packet refresh ticks.
+        timing.shouldMaterializeLegacy(30, false) shouldBe true
+        timing.shouldMaterializeLegacy(30, true) shouldBe false
+        timing.shouldMaterializeLegacy(32, true) shouldBe true
+    }
 })

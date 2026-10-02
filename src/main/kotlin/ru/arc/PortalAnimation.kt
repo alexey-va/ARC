@@ -75,6 +75,9 @@ internal data class PortalTimingSettings(
     val particleIntervalTicks: Int,
     val chimeIntervalTicks: Int,
 ) {
+    fun shouldMaterializeLegacy(tick: Int, materialized: Boolean): Boolean =
+        tick >= materializeTick && (!materialized || (tick - materializeTick) % blockRefreshTicks == 0)
+
     companion object {
         fun load(config: Config) = PortalTimingSettings(
             lifetimeTicks = config.portalInt("portal.animation.lifetime-ticks", 400, 1..1200),

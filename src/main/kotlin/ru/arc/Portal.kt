@@ -85,6 +85,7 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
     private val animation = PortalTimingSettings.load(config)
     private var lastBorderStep = -1
     private var legacyOpeningSoundPlayed = false
+    private var legacyMaterialized = false
 
     private val phase = AtomicInteger()
     private val success = AtomicBoolean()
@@ -188,14 +189,15 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
                 if (blockChangePlayers.isNotEmpty()) {
                     clearBlockPackets()
                     blockChangePlayers.clear()
+                    legacyMaterialized = false
                 }
                 originGateSettings?.let { displayOriginGateParticles(nearbyPlayers, it) }
             } else if (originGate?.isPendingOpening != true) {
                 addLocations()
                 displayParticles(nearbyPlayers)
-                if (phase.get() >= animation.materializeTick &&
-                    (phase.get() - animation.materializeTick) % animation.blockRefreshTicks == 0) {
+                if (animation.shouldMaterializeLegacy(phase.get(), legacyMaterialized)) {
                     placeBlocksPackets(nearbyPlayers)
+                    legacyMaterialized = true
                 }
             }
             val entryTick = originGateSettings?.entryTick?.takeIf {
