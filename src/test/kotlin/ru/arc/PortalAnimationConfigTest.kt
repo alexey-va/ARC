@@ -28,7 +28,7 @@ class PortalAnimationConfigTest : FreeSpec({
                 operator-key: preserved
             """.trimIndent())
             val config = ConfigManager.of(root, "modules/misc.yml")
-            config.mergeMissingFromBundled("modules/misc.yml") shouldBe true
+            config.mergeMissingFromBundled("config/portal-animation-defaults.yml") shouldBe true
             val first = PortalOriginGateSettings.load(config).shouldNotBeNull()
             first.openingDurationTicks shouldBe 66
             first.width shouldBe 5.5f
@@ -37,8 +37,9 @@ class PortalAnimationConfigTest : FreeSpec({
             first.animation.snapExponent shouldBe 6f
             first.suctionMotion.cycleTicks shouldBe 24
             config.string("operator-key") shouldBe "preserved"
+            config.stringList("portal.cmi-tp-types") shouldBe emptyList()
             val merged = Files.readString(file)
-            config.mergeMissingFromBundled("modules/misc.yml") shouldBe false
+            config.mergeMissingFromBundled("config/portal-animation-defaults.yml") shouldBe false
             Files.readString(file) shouldBe merged
 
             Files.writeString(file, merged

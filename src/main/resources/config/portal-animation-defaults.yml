@@ -1,0 +1,55 @@
+# Merge-forward defaults for the new portal animation knobs only.
+# The live operator config is plugins/ARC/modules/misc.yml.
+portal:
+  # 20 тиков = 1 секунда. Применяется через /arc reload.
+  # Reload закрывает текущие порталы; новые используют обновлённые параметры.
+  animation:
+    lifetime-ticks: 400
+    blindness-start-tick: 12
+    legacy:
+      border-duration-ticks: 8
+      materialize-tick: 12
+      entry-tick: 12
+      block-refresh-ticks: 10
+      particle-start-tick: 8
+      particle-interval-ticks: 10
+      chime-interval-ticks: 4
+      chime:
+        id: BLOCK_AMETHYST_BLOCK_CHIME
+        volume: 30.0
+        pitch: 1.0
+      opening-sound:
+        id: BLOCK_END_PORTAL_SPAWN
+        volume: 1.0
+        pitch: 1.0
+  origin-gate:
+    # Начало входа не зависит от завершения визуальной анимации.
+    entry-delay-ticks: 12
+    minimum-scale: 0.02
+    dramatic:
+      # Доля открытия до рывка; ниже = рывок начинается раньше.
+      charge-progress: 0.25
+      charge-scale: 0.08
+      # Выше = более резкое раскрытие после заряда.
+      snap-exponent: 6.0
+    idle:
+      amplitude: 0.035
+      # Радианы за тик; 0 отключает пульсацию.
+      speed: 0.18
+    suction:
+      cycle-ticks: 24
+      trail-spacing: 0.055
+      rotation-speed: 0.18
+      radius-exponent: 0.88
+      height-exponent: 0.72
+      vertical-frequency: 0.72
+      stream-phase: 0.91
+      interval-ticks: 1
+      reduced-interval-ticks: 2
+      accent-size-multiplier: 0.8
+      accent-every: 3
+      core-interval-ticks: 3
+      reduced-core-divisor: 3
+      core-width-multiplier: 0.22
+      core-height-multiplier: 0.32
+      core-speed: 0.08

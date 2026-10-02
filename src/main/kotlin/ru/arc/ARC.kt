@@ -162,7 +162,7 @@ open class ARC : JavaPlugin() {
         val configRoot = dataPath
         ru.arc.core.async {
             try {
-                ConfigManager.of(configRoot, "modules/misc.yml").mergeMissingFromBundled("modules/misc.yml")
+                ConfigManager.of(configRoot, "modules/misc.yml").mergeMissingFromBundled("config/portal-animation-defaults.yml")
             } catch (failure: Exception) {
                 error("Could not merge portal animation defaults into modules/misc.yml", failure)
             }
