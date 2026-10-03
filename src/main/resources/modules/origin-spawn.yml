@@ -51,7 +51,7 @@ regenerative-breaking:
 
 # ARC-owned Origin gates. Each anchor's x/y/z/yaw positions its portal; the
 # global vertical-offset can be overridden per anchor. Move anchor coordinates
-# in-game with `/arc originportals move <survival|mining|vanilla|gallery_exit|slimefun>`.
+# in-game with `/arc originportals move <survival|mining|vanilla|gallery_exit|slimefun|furniture_entry>`.
 # Hologram front-distance points toward the approaching player (opposite yaw),
 # side-offset shifts right along the gate, and height-offset starts at the
 # raised portal center. Text and scale are independent per portal.

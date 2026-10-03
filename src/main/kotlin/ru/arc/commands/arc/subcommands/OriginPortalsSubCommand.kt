@@ -16,7 +16,7 @@ object OriginPortalsSubCommand : SubCommand {
     override val defaultName = "originportals"
     override val defaultPermission: String? = null
     override val defaultDescription = "Войти в портал Slimefun или настроить Origin-порталы"
-    override val defaultUsage = "/arc originportals <enter slimefun|move <survival|mining|vanilla|gallery_exit|slimefun>>"
+    override val defaultUsage = "/arc originportals <enter slimefun|move <survival|mining|vanilla|gallery_exit|slimefun|furniture_entry>>"
     override val defaultPlayerOnly = true
 
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {
