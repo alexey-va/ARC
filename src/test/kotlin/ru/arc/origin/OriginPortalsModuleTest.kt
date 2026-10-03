@@ -340,8 +340,11 @@ class OriginPortalsModuleTest : FreeSpec({
             source.setInt("origin-portals.anchors.survival.hologram.background-alpha", 210)
             source.setDouble("origin-portals.anchors.survival.vertical-offset", 4.5)
             source.setDouble("origin-portals.anchors.furniture_entry.y", 71.0)
+            source.setDouble("origin-portals.anchors.furniture_entry.yaw", 37.5)
+            source.setDouble("origin-portals.anchors.furniture_entry.width", 7.5)
             source.setDouble("origin-portals.anchors.furniture_entry.height", 10.5)
-            source.setDouble("origin-portals.anchors.furniture_entry.vertical-offset", 5.25)
+            source.setDouble("origin-portals.anchors.furniture_entry.vertical-offset", 3.25)
+            source.setDouble("origin-portals.anchors.furniture_entry.hologram.height-offset", 2.75)
             source.setDouble("origin-portals.anchors.furniture_entry.visible-bottom-inset-ratio", 10.0 / 116.0)
             source.saveStrict()
             ConfigManager.clear()
@@ -357,12 +360,38 @@ class OriginPortalsModuleTest : FreeSpec({
             OriginPortalsConfig.load(directory).gateSettings(survival)!!.verticalOffset shouldBe 4.5
 
             val furniture = OriginPortalsConfig.load(directory).anchors.first { it.id == OriginPortalId.FURNITURE_ENTRY }
+            furniture.yaw shouldBe 37.5f
+            furniture.width shouldBe 7.5
+            furniture.height shouldBe 10.5
+            furniture.verticalOffset shouldBe 3.25
+            furniture.labelHeightOffset shouldBe 2.75
             furniture.visibleBottomInsetRatio shouldBe 10.0 / 116.0
-            val center = originPortalDisplayCenter(furniture, mockk())
+            furniture.id.usesFixedTwoSidedLabels.shouldBeTrue()
+            val world = mockk<World>()
+            val center = originPortalDisplayCenter(furniture, world)
+            val previousFurniture = furniture.copy(verticalOffset = 5.25)
+            previousFurniture.labelHeightOffset shouldBe furniture.labelHeightOffset
+            val previousCenter = originPortalDisplayCenter(previousFurniture, world)
+            (kotlin.math.abs((center.y - previousCenter.y) + 2.0) < 1e-9).shouldBeTrue()
             val visibleBottom = center.y - furniture.height / 2.0 +
                 furniture.height * furniture.visibleBottomInsetRatio
-            (kotlin.math.abs(visibleBottom - furniture.y) < 1e-9).shouldBeTrue()
-            furniture.labelLocation(mockk()).y shouldBe center.y + furniture.labelHeightOffset
+            val previousVisibleBottom = previousCenter.y - furniture.height / 2.0 +
+                furniture.height * furniture.visibleBottomInsetRatio
+            (kotlin.math.abs((visibleBottom - previousVisibleBottom) + 2.0) < 1e-9).shouldBeTrue()
+            (kotlin.math.abs(visibleBottom - (furniture.y - 2.0)) < 1e-9).shouldBeTrue()
+            val label = furniture.labelLocation(world)
+            (kotlin.math.abs(label.y - (center.y + furniture.labelHeightOffset)) < 1e-9).shouldBeTrue()
+            val previousLabel = previousFurniture.labelLocation(world)
+            (kotlin.math.abs((label.y - previousLabel.y) + 2.0) < 1e-9).shouldBeTrue()
+            val faces = furniture.labelLocations(world)
+            faces.size shouldBe 2
+            faces.forEach { face ->
+                (face.distance(label) < 0.011).shouldBeTrue()
+                face.y shouldBe label.y
+            }
+            (kotlin.math.abs(faces[0].distance(faces[1]) - 0.02) < 1e-9).shouldBeTrue()
+            faces.map { it.yaw } shouldContainExactly listOf(furniture.yaw + 180f, furniture.yaw)
+            OriginPortalId.GALLERY_EXIT.usesFixedTwoSidedLabels.shouldBeFalse()
         } finally {
             directory.toFile().deleteRecursively()
         }

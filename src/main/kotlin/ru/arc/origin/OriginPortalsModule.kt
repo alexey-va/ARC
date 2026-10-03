@@ -176,6 +176,9 @@ internal enum class OriginPortalId(
     ),
     ;
 
+    val usesFixedTwoSidedLabels: Boolean
+        get() = central || this == FURNITURE_ENTRY
+
     companion object {
         fun parse(raw: String?): OriginPortalId? =
             entries.firstOrNull { it.key.equals(raw?.trim(), ignoreCase = true) }
@@ -232,8 +235,8 @@ internal data class OriginPortalAnchor(
 
     fun labelLocations(world: org.bukkit.World): List<Location> {
         val front = labelLocation(world)
-        if (!id.central) return listOf(front)
-        // One sign in front of the portal, with a readable face on either side.
+        if (!id.usesFixedTwoSidedLabels) return listOf(front)
+        // Keep both fixed text faces in front of the portal, readable from either side.
         // Separate the faces slightly so their backgrounds do not hide the text.
         return listOf(
             labelLocation(world, labelFrontDistance + 0.01).apply { yaw += 180f },
@@ -515,7 +518,8 @@ private class OriginPortalVisual(
                     .decorate(TextDecoration.BOLD)
                     .decoration(TextDecoration.ITALIC, false),
             )
-            it.billboard = if (anchor.id.central) Display.Billboard.FIXED else Display.Billboard.CENTER
+            it.billboard =
+                if (anchor.id.usesFixedTwoSidedLabels) Display.Billboard.FIXED else Display.Billboard.CENTER
             it.isSeeThrough = false
             it.isShadowed = true
             it.backgroundColor = Color.fromARGB(

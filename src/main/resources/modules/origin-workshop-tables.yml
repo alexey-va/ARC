@@ -6,6 +6,11 @@ origin-workshop-tables:
   world: rc_origin_spawn
   table-ids: []
   dimensions:
-    width: 2.8
-    depth: 1.25
-    height: 1.04
+    width: 4.8
+    depth: 2.05
+    height: 1.08
+  warehouse:
+    enabled: false
+    x: 0.0
+    floor-y: 71.0
+    z: 0.0
