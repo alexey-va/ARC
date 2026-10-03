@@ -11,7 +11,15 @@
 - **Commands** — [`src/main/kotlin/ru/arc/commands/arc/COMMANDS.md`](src/main/kotlin/ru/arc/commands/arc/COMMANDS.md)
 - **Ops HTTP** — [`src/main/kotlin/ru/arc/ops/AGENTS.md`](src/main/kotlin/ru/arc/ops/AGENTS.md)
 
-Chat mode commands and shared state exist in ARC. ARC adds CMI's `!` routing
+Chat mode commands and shared state exist in ARC. Register its chat
+shortcuts through `ChatModeAliasCommand.register`: it reclaims `/g` and `/l`
+as primary ARC commands before clients receive the command tree. justTeams
+2.6.8 registers `/g` as a primary guild command (not an alias), so merely
+setting ARC's namespaced executor leaves the bare label routed to clans.
+Keep this ownership explicit and preserve the unrelated `/guild` and `/clan`
+routes when changing registration.
+
+ARC adds CMI's `!` routing
 prefix at `LOWEST` on Paper's `AsyncChatDecorateEvent`, which is emitted before
 CMI's `AsyncChatEvent` shout handler. Do not move the prefix back to
 `AsyncChatEvent`: CMI also listens at `LOWEST`, so registration order can make

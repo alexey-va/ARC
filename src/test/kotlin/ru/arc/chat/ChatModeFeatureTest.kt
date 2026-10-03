@@ -16,15 +16,20 @@ import net.kyori.adventure.text.TextComponent
 import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.command.Command
+import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
+import org.bukkit.plugin.java.JavaPlugin
+import org.bukkit.plugin.PluginDescriptionFile
+import org.mockbukkit.mockbukkit.MockBukkit
 import ru.arc.commands.arc.CommandConfig
 import ru.arc.commands.arc.subcommands.ChatSubCommand
 import ru.arc.commands.chat.ChatModeAliasCommand
 import ru.arc.core.Tasks
 import ru.arc.core.TestTaskScheduler
 import ru.arc.listeners.ChatListener
+import ru.arc.paper.testing.MockBukkitTestRuntime
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
@@ -287,6 +292,52 @@ class ChatModeFeatureTest : FreeSpec({
     }
 
     "commands" - {
+        "chat aliases replace the guild shortcut and dispatch ARC modes including namespaced commands" {
+            MockBukkitTestRuntime.open().use { runtime ->
+                var guildCalls = 0
+                val guild = object : Command("g") {
+                    override fun execute(sender: CommandSender, label: String, args: Array<String>): Boolean {
+                        guildCalls++
+                        return true
+                    }
+                }
+                val commandMap = runtime.server.commandMap
+                commandMap.register("justteams", guild)
+                commandMap.knownCommands["guild"] = guild
+                commandMap.knownCommands["l"] = guild
+                val descriptor = PluginDescriptionFile(
+                    """
+                    name: ARC
+                    version: test
+                    main: ru.arc.chat.ChatModeCommandTestPlugin
+                    commands:
+                      g: {}
+                      l: {}
+                    """.trimIndent().reader(),
+                )
+                val plugin = MockBukkit.loadWith(ChatModeCommandTestPlugin::class.java, descriptor)
+                commandMap.getCommand("g") shouldBe requireNotNull(plugin.getCommand("g"))
+                commandMap.getCommand("l") shouldBe requireNotNull(plugin.getCommand("l"))
+                commandMap.register("justteams", guild) shouldBe false
+                val player = runtime.addPlayer("ChatPlayer")
+                mockkObject(ChatModeService)
+                every {
+                    ChatModeService.selectMode(player.uniqueId, any())
+                } returns CompletableFuture.completedFuture(ChatModeSelection.CHANGED)
+
+                commandMap.dispatch(player, "g") shouldBe true
+                commandMap.dispatch(player, "l") shouldBe true
+                commandMap.dispatch(player, "${plugin.name.lowercase()}:g") shouldBe true
+                commandMap.dispatch(player, "${plugin.name.lowercase()}:l") shouldBe true
+
+                verify(exactly = 2) { ChatModeService.selectMode(player.uniqueId, ChatMode.GLOBAL) }
+                verify(exactly = 2) { ChatModeService.selectMode(player.uniqueId, ChatMode.LOCAL) }
+                guildCalls shouldBe 0
+                commandMap.getCommand("guild") shouldBe guild
+                commandMap.getCommand("justteams:g") shouldBe guild
+            }
+        }
+
         "reports when global mode is already selected" {
             val playerId = UUID.randomUUID()
             val player = player(playerId)
@@ -342,6 +393,12 @@ class ChatModeFeatureTest : FreeSpec({
         }
     }
 })
+
+open class ChatModeCommandTestPlugin : JavaPlugin() {
+    override fun onEnable() {
+        ChatModeAliasCommand.register(this)
+    }
+}
 
 private fun player(
     playerId: UUID,

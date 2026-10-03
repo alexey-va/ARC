@@ -390,8 +390,7 @@ open class ARC : JavaPlugin() {
         }
         unregisterOwnedPluginCommand("skyblock")
         registerCommand("x", XCommand, XCommand)
-        registerCommand("g", ChatModeAliasCommand, null)
-        registerCommand("l", ChatModeAliasCommand, null)
+        ChatModeAliasCommand.register(this)
         registerCommand("menu", MainMenuCommand, null)
         registerCommand("arc-reward-issue", CaseRewardIssueCommand(), null)
         val dungeonCommand = ru.arc.hooks.elitemobs.EMDungeonCommand(
