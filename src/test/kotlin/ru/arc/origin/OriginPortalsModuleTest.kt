@@ -91,6 +91,29 @@ class OriginPortalsModuleTest : FreeSpec({
             config.gateSettings(slimefun)!!.suctionEnabled.shouldBeFalse()
             config.gateSettings(slimefun)!!.suctionRadius shouldBe 1.25
             config.gateSettings(slimefun)!!.suctionHeight shouldBe 2.8
+
+            val furnitureEntry = config.anchors.first { it.id == OriginPortalId.FURNITURE_ENTRY }
+            furnitureEntry.enabled.shouldBeFalse()
+            furnitureEntry.worldName shouldBe "rc_origin_spawn"
+            furnitureEntry.x shouldBe -46.5
+            furnitureEntry.y shouldBe 71.9375
+            furnitureEntry.z shouldBe -70.5
+            furnitureEntry.yaw shouldBe 0f
+            furnitureEntry.width shouldBe 3.0
+            furnitureEntry.height shouldBe 4.2
+            furnitureEntry.verticalOffset shouldBe 2.1
+            (kotlin.math.abs(originPortalDisplayCenter(furnitureEntry, mockk()).y - 74.0375) < 1e-9).shouldBeTrue()
+            furnitureEntry.style shouldBe ru.arc.PortalVisualStyle.ORIGIN
+            furnitureEntry.command shouldBe "rcfurniturevisit room_01"
+            furnitureEntry.label shouldBe "Галерея мебели"
+            furnitureEntry.particlesEnabled.shouldBeFalse()
+            furnitureEntry.particleRadius shouldBe 1.25
+            furnitureEntry.particleHeight shouldBe 4.2
+            furnitureEntry.pulseAmplitude shouldBe 0f
+            config.gateSettings(furnitureEntry)!!.suctionEnabled.shouldBeFalse()
+            config.gateSettings(furnitureEntry)!!.suctionRadius shouldBe 1.25
+            config.gateSettings(furnitureEntry)!!.suctionHeight shouldBe 4.2
+            OriginPortalsSubCommand.defaultUsage.contains("furniture_entry").shouldBeTrue()
         } finally {
             directory.toFile().deleteRecursively()
         }
@@ -302,6 +325,7 @@ class OriginPortalsModuleTest : FreeSpec({
         shouldBypassOriginPortal(OriginPortalId.MINING, hasBypassPermission = true).shouldBeTrue()
         shouldBypassOriginPortal(OriginPortalId.VANILLA, hasBypassPermission = true).shouldBeTrue()
         shouldBypassOriginPortal(OriginPortalId.GALLERY_EXIT, hasBypassPermission = true).shouldBeFalse()
+        shouldBypassOriginPortal(OriginPortalId.FURNITURE_ENTRY, hasBypassPermission = true).shouldBeFalse()
         shouldBypassOriginPortal(OriginPortalId.SURVIVAL, hasBypassPermission = false).shouldBeFalse()
 
         matchesPortalCommand(

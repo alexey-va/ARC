@@ -62,6 +62,7 @@ internal enum class OriginPortalId(
     val maxParticleHeight: Double = 16.0,
     val maxTransferDistance: Double = 8.0,
     val liftDisplayByConfiguredOffset: Boolean = false,
+    val defaultVerticalOffset: Double? = null,
 ) {
     SURVIVAL(
         key = "survival",
@@ -143,6 +144,29 @@ internal enum class OriginPortalId(
         maxParticleHeight = 2.8,
         maxTransferDistance = 8.0,
         liftDisplayByConfiguredOffset = true,
+    ),
+    FURNITURE_ENTRY(
+        key = "furniture_entry",
+        central = false,
+        defaultWorld = "rc_origin_spawn",
+        defaultStyle = PortalVisualStyle.ORIGIN,
+        defaultCommand = "rcfurniturevisit room_01",
+        defaultLabel = "Галерея мебели",
+        defaultX = -46.5,
+        defaultY = 71.9375,
+        defaultZ = -70.5,
+        defaultYaw = 0f,
+        defaultWidth = 3.0,
+        defaultHeight = 4.2,
+        defaultEnabled = false,
+        defaultParticleRadius = 1.25,
+        defaultParticleHeight = 4.2,
+        defaultPulseAmplitude = 0.0,
+        defaultParticlesEnabled = false,
+        maxParticleRadius = 1.4,
+        maxParticleHeight = 4.2,
+        liftDisplayByConfiguredOffset = true,
+        defaultVerticalOffset = 2.1,
     ),
     ;
 
@@ -334,6 +358,7 @@ internal class OriginPortalsConfig private constructor(
                 "$path.pulse.amplitude",
                 id.defaultPulseAmplitude ?: globalPulseAmplitude.toDouble(),
             ).finite(id.defaultPulseAmplitude ?: globalPulseAmplitude.toDouble()).toFloat().coerceIn(0.0f, 0.1f)
+            val defaultVerticalOffset = id.defaultVerticalOffset ?: verticalOffset
             return OriginPortalAnchor(
                 id = id,
                 enabled = source.bool("$path.enabled", id.defaultEnabled),
@@ -347,7 +372,7 @@ internal class OriginPortalsConfig private constructor(
                 entryDepth = source.real("$path.entry-depth", source.real("$root.entry-depth", 2.0)).finite(2.0).coerceIn(0.5, 6.0),
                 command = source.string("$path.command", id.defaultCommand).trim().ifEmpty { id.defaultCommand },
                 label = source.string("$path.hologram.text", source.string("$path.label", id.defaultLabel)).trim(),
-                verticalOffset = source.real("$path.vertical-offset", verticalOffset).finite(verticalOffset).coerceIn(0.5, 12.0),
+                verticalOffset = source.real("$path.vertical-offset", defaultVerticalOffset).finite(defaultVerticalOffset).coerceIn(0.5, 12.0),
                 labelFrontDistance = source.real("$path.hologram.front-distance", 0.0).finite(0.0).coerceIn(-20.0, 20.0),
                 labelSideOffset = source.real("$path.hologram.side-offset", 0.0).finite(0.0).coerceIn(-20.0, 20.0),
                 labelHeightOffset = source.real("$path.hologram.height-offset", if (id.central) -0.5 else 0.75)
