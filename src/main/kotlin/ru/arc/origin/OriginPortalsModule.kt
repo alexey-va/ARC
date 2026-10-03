@@ -63,6 +63,9 @@ internal enum class OriginPortalId(
     val maxTransferDistance: Double = 8.0,
     val liftDisplayByConfiguredOffset: Boolean = false,
     val defaultVerticalOffset: Double? = null,
+    val feetAnchored: Boolean = false,
+    // Fraction of the scaled model height that is transparent below its visible alpha bounds.
+    val defaultVisibleBottomInsetRatio: Double = 0.0,
 ) {
     SURVIVAL(
         key = "survival",
@@ -167,6 +170,9 @@ internal enum class OriginPortalId(
         maxParticleHeight = 4.2,
         liftDisplayByConfiguredOffset = true,
         defaultVerticalOffset = 2.1,
+        feetAnchored = true,
+        // Across all 12 frames the visible alpha reaches y=106 of the 116px crop.
+        defaultVisibleBottomInsetRatio = 10.0 / 116.0,
     ),
     ;
 
@@ -202,6 +208,8 @@ internal data class OriginPortalAnchor(
     val particleHeight: Double = 8.4,
     val pulseAmplitude: Float = 0.035f,
     val transferDistance: Double = 8.0,
+    /** Fraction of model height to offset for transparent pixels below the visible image. */
+    val visibleBottomInsetRatio: Double = 0.0,
 ) {
     fun center(world: org.bukkit.World): Location = Location(world, x, y, z, yaw, 0f)
 
@@ -212,12 +220,15 @@ internal data class OriginPortalAnchor(
         return Location(
             world,
             x + sin(angle) * frontDistance + cos(angle) * labelSideOffset,
-            y + verticalOffset + labelHeightOffset,
+            y + verticalOffset + labelHeightOffset - displayBottomInset,
             z - cos(angle) * frontDistance + sin(angle) * labelSideOffset,
             yaw,
             0f,
         )
     }
+
+    private val displayBottomInset: Double
+        get() = if (id.liftDisplayByConfiguredOffset) height * visibleBottomInsetRatio else 0.0
 
     fun labelLocations(world: org.bukkit.World): List<Location> {
         val front = labelLocation(world)
@@ -230,7 +241,7 @@ internal data class OriginPortalAnchor(
         )
     }
 
-    /** A thin, yaw-aware interaction plane keeps neighbouring central portals independent. */
+    /** Yaw-aware portal volume; floor-anchored entries extend upward from their saved feet. */
     fun contains(location: Location): Boolean {
         if (!enabled || location.world?.name != worldName) return false
         val dx = location.x - x
@@ -238,7 +249,15 @@ internal data class OriginPortalAnchor(
         val angle = yaw * PI / 180.0
         val side = (dx * cos(angle)) + (dz * sin(angle))
         val depth = (-dx * sin(angle)) + (dz * cos(angle))
-        return abs(side) <= width / 2.0 && abs(depth) <= entryDepth && abs(location.y - y) <= height / 2.0
+        val verticalPosition = location.y - y
+        val insideHeight =
+            if (id.feetAnchored) {
+                // Coordinate subtraction can put the exact top a few ulps above height.
+                verticalPosition in -1e-7..(height + 1e-7)
+            } else {
+                abs(verticalPosition) <= height / 2.0
+            }
+        return abs(side) <= width / 2.0 && abs(depth) <= entryDepth && insideHeight
     }
 }
 
@@ -269,7 +288,7 @@ internal class OriginPortalsConfig private constructor(
         source.setDouble("$path.x", location.x)
         source.setDouble("$path.y", location.y)
         source.setDouble("$path.z", location.z)
-        source.setDouble("$path.yaw", location.yaw.toDouble())
+        source.setDouble("$path.yaw", originPortalMoveYaw(id, location.yaw).toDouble())
         source.saveStrict()
     }
 
@@ -393,6 +412,10 @@ internal class OriginPortalsConfig private constructor(
                 pulseAmplitude = pulseAmplitude,
                 transferDistance = source.real("$path.transfer-distance", id.maxTransferDistance)
                     .finite(id.maxTransferDistance).coerceIn(1.0, id.maxTransferDistance),
+                visibleBottomInsetRatio = source.real(
+                    "$path.visible-bottom-inset-ratio",
+                    id.defaultVisibleBottomInsetRatio,
+                ).finite(id.defaultVisibleBottomInsetRatio).coerceIn(0.0, 0.5),
             )
         }
 
@@ -549,8 +572,18 @@ internal fun originPortalVisualChunksLoaded(anchor: OriginPortalAnchor, world: o
 
 internal fun originPortalDisplayCenter(anchor: OriginPortalAnchor, world: org.bukkit.World): Location =
     anchor.center(world).apply {
-        if (anchor.id.liftDisplayByConfiguredOffset) y += anchor.verticalOffset
+        if (anchor.id.liftDisplayByConfiguredOffset) {
+            y += anchor.verticalOffset - (anchor.height * anchor.visibleBottomInsetRatio)
+        }
     }
+
+internal fun originPortalMoveYaw(id: OriginPortalId, playerYaw: Float): Float {
+    if (id != OriginPortalId.FURNITURE_ENTRY || !playerYaw.isFinite()) return playerYaw
+    var yaw = (playerYaw + 180f) % 360f
+    if (yaw < -180f) yaw += 360f
+    if (yaw > 180f) yaw -= 360f
+    return if (yaw == -180f) 180f else yaw
+}
 
 internal fun shouldResetOriginPortalVisual(
     spawnAttempted: Boolean,
@@ -777,8 +810,10 @@ internal class OriginPortalTransferTracker(
     }
 }
 
-internal fun shouldBypassOriginPortal(id: OriginPortalId, hasBypassPermission: Boolean): Boolean =
-    id.central && hasBypassPermission
+internal fun shouldBypassOriginPortal(
+    @Suppress("UNUSED_PARAMETER") id: OriginPortalId,
+    hasBypassPermission: Boolean,
+): Boolean = hasBypassPermission
 
 internal fun matchesPortalCommand(message: String, configuredCommand: String): Boolean =
     message.trim().removePrefix("/").equals(configuredCommand.trim().removePrefix("/"), ignoreCase = true)

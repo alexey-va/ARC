@@ -7,6 +7,7 @@ import ru.arc.commands.arc.tabComplete
 import ru.arc.origin.OriginPortalId
 import ru.arc.origin.OriginPortalEnterResult
 import ru.arc.origin.OriginPortalsModule
+import ru.arc.origin.originPortalMoveYaw
 import ru.arc.util.TextUtil
 import java.util.Locale
 
@@ -70,17 +71,19 @@ object OriginPortalsSubCommand : SubCommand {
             sendUsage(sender)
             return true
         }
-        if (!OriginPortalsModule.move(id, player)) {
+        val location = player.location
+        if (!OriginPortalsModule.move(id, location)) {
             sender.sendMessage(TextUtil.mm("<red>Не удалось сохранить координаты портала.", true))
             return true
         }
+        val yaw = originPortalMoveYaw(id, location.yaw)
         sender.sendMessage(
             TextUtil.mm(
                 "<green>Портал <white>${id.key}<green> перемещён на <white>%.3f %.3f %.3f <green>(yaw %.1f).".format(Locale.ROOT,
-                    player.location.x,
-                    player.location.y,
-                    player.location.z,
-                    player.location.yaw,
+                    location.x,
+                    location.y,
+                    location.z,
+                    yaw,
                 ),
                 true,
             ),

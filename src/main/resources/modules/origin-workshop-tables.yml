@@ -1,0 +1,11 @@
+# Client-only packet Display scene for the Origin furniture terrace.
+# Table x/z is its world-space center; floor-y is the floor and yaw accepts 0, 90, 180 or 270.
+# Roles: carpenter, upholsterer, assembler, finisher.
+origin-workshop-tables:
+  enabled: false
+  world: rc_origin_spawn
+  table-ids: []
+  dimensions:
+    width: 2.8
+    depth: 1.25
+    height: 1.04

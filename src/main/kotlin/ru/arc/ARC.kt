@@ -87,6 +87,7 @@ import ru.arc.origin.OriginSpawnModule
 import ru.arc.origin.OriginPortalsModule
 import ru.arc.origin.OriginDiningModule
 import ru.arc.origin.OriginTrainingDummyModule
+import ru.arc.origin.OriginWorkshopTablesModule
 import ru.arc.origin.scene.OriginAmbientScenesModule
 import ru.arc.origin.mountyard.OriginMountYardModule
 import ru.arc.paper.chunk.PaperChunkTicketRegistry
@@ -302,6 +303,7 @@ open class ARC : JavaPlugin() {
             ArcNpcHologramModule,
             OriginSpawnModule,
             OriginPortalsModule,
+            OriginWorkshopTablesModule,
             AiModule,
             EconomyModule,
             OriginDiningModule,

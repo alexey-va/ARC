@@ -102,7 +102,17 @@ class OriginPortalsModuleTest : FreeSpec({
             furnitureEntry.width shouldBe 3.0
             furnitureEntry.height shouldBe 4.2
             furnitureEntry.verticalOffset shouldBe 2.1
-            (kotlin.math.abs(originPortalDisplayCenter(furnitureEntry, mockk()).y - 74.0375) < 1e-9).shouldBeTrue()
+            furnitureEntry.visibleBottomInsetRatio shouldBe 10.0 / 116.0
+            val furnitureCenter = originPortalDisplayCenter(furnitureEntry, mockk())
+            (kotlin.math.abs(
+                furnitureCenter.y -
+                    (furnitureEntry.y + furnitureEntry.verticalOffset -
+                        (furnitureEntry.height * furnitureEntry.visibleBottomInsetRatio)),
+            ) < 1e-9).shouldBeTrue()
+            (kotlin.math.abs(
+                (furnitureCenter.y - furnitureEntry.height / 2.0 +
+                    furnitureEntry.height * furnitureEntry.visibleBottomInsetRatio) - furnitureEntry.y,
+            ) < 1e-9).shouldBeTrue()
             furnitureEntry.style shouldBe ru.arc.PortalVisualStyle.ORIGIN
             furnitureEntry.command shouldBe "rcfurniturevisit room_01"
             furnitureEntry.label shouldBe "Галерея мебели"
@@ -172,6 +182,23 @@ class OriginPortalsModuleTest : FreeSpec({
             anchor.contains(Location(world, -17.5, 70.5, -52.5)).shouldBeFalse()
             anchor.contains(Location(world, -17.5, 73.5, -52.5)).shouldBeFalse()
             anchor.contains(Location(world, -15.9, 72.0, -52.5)).shouldBeFalse()
+        } finally {
+            directory.toFile().deleteRecursively()
+        }
+    }
+
+    "furniture entry volume is anchored from its moved floor coordinate" {
+        val directory = Files.createTempDirectory("arc-origin-portals-furniture-entry")
+        try {
+            val anchor = OriginPortalsConfig.load(directory).anchors
+                .first { it.id == OriginPortalId.FURNITURE_ENTRY }.copy(enabled = true)
+            val world = mockk<World>()
+            everyWorldName(world, "rc_origin_spawn")
+
+            anchor.contains(Location(world, anchor.x, anchor.y, anchor.z)).shouldBeTrue()
+            anchor.contains(Location(world, anchor.x, anchor.y - 0.01, anchor.z)).shouldBeFalse()
+            anchor.contains(Location(world, anchor.x, anchor.y + anchor.height, anchor.z)).shouldBeTrue()
+            anchor.contains(Location(world, anchor.x, anchor.y + anchor.height + 0.01, anchor.z)).shouldBeFalse()
         } finally {
             directory.toFile().deleteRecursively()
         }
@@ -278,6 +305,7 @@ class OriginPortalsModuleTest : FreeSpec({
             val world = mockk<World>()
             everyWorldName(world, "rc_origin_spawn")
             config.persistFeet(OriginPortalId.SURVIVAL, Location(world, 13.25, 71.5, -2.75, 42.5f, 30f))
+            config.persistFeet(OriginPortalId.FURNITURE_ENTRY, Location(world, -46.5, 71.0, -52.5, 0f, 30f))
             ConfigManager.clear()
             val reloaded = OriginPortalsConfig.load(directory)
             val moved = reloaded.anchors.first { it.id == OriginPortalId.SURVIVAL }
@@ -285,6 +313,14 @@ class OriginPortalsModuleTest : FreeSpec({
             moved.y shouldBe 71.5
             moved.z shouldBe -2.75
             moved.yaw shouldBe 42.5f
+
+            val furniture = reloaded.anchors.first { it.id == OriginPortalId.FURNITURE_ENTRY }
+            furniture.x shouldBe -46.5
+            furniture.y shouldBe 71.0
+            furniture.z shouldBe -52.5
+            furniture.yaw shouldBe 180f
+            originPortalMoveYaw(OriginPortalId.FURNITURE_ENTRY, 170f) shouldBe -10f
+            originPortalMoveYaw(OriginPortalId.SURVIVAL, 170f) shouldBe 170f
         } finally {
             directory.toFile().deleteRecursively()
         }
@@ -303,6 +339,10 @@ class OriginPortalsModuleTest : FreeSpec({
             source.setInt("origin-portals.anchors.survival.hologram.background-gray", 72)
             source.setInt("origin-portals.anchors.survival.hologram.background-alpha", 210)
             source.setDouble("origin-portals.anchors.survival.vertical-offset", 4.5)
+            source.setDouble("origin-portals.anchors.furniture_entry.y", 71.0)
+            source.setDouble("origin-portals.anchors.furniture_entry.height", 10.5)
+            source.setDouble("origin-portals.anchors.furniture_entry.vertical-offset", 5.25)
+            source.setDouble("origin-portals.anchors.furniture_entry.visible-bottom-inset-ratio", 10.0 / 116.0)
             source.saveStrict()
             ConfigManager.clear()
             val survival = OriginPortalsConfig.load(directory).anchors.first { it.id == OriginPortalId.SURVIVAL }
@@ -315,18 +355,24 @@ class OriginPortalsModuleTest : FreeSpec({
             survival.labelBackgroundAlpha shouldBe 210
             survival.verticalOffset shouldBe 4.5
             OriginPortalsConfig.load(directory).gateSettings(survival)!!.verticalOffset shouldBe 4.5
+
+            val furniture = OriginPortalsConfig.load(directory).anchors.first { it.id == OriginPortalId.FURNITURE_ENTRY }
+            furniture.visibleBottomInsetRatio shouldBe 10.0 / 116.0
+            val center = originPortalDisplayCenter(furniture, mockk())
+            val visibleBottom = center.y - furniture.height / 2.0 +
+                furniture.height * furniture.visibleBottomInsetRatio
+            (kotlin.math.abs(visibleBottom - furniture.y) < 1e-9).shouldBeTrue()
+            furniture.labelLocation(mockk()).y shouldBe center.y + furniture.labelHeightOffset
         } finally {
             directory.toFile().deleteRecursively()
         }
     }
 
-    "administrator bypass covers central portals and their configured commands" {
-        shouldBypassOriginPortal(OriginPortalId.SURVIVAL, hasBypassPermission = true).shouldBeTrue()
-        shouldBypassOriginPortal(OriginPortalId.MINING, hasBypassPermission = true).shouldBeTrue()
-        shouldBypassOriginPortal(OriginPortalId.VANILLA, hasBypassPermission = true).shouldBeTrue()
-        shouldBypassOriginPortal(OriginPortalId.GALLERY_EXIT, hasBypassPermission = true).shouldBeFalse()
-        shouldBypassOriginPortal(OriginPortalId.FURNITURE_ENTRY, hasBypassPermission = true).shouldBeFalse()
-        shouldBypassOriginPortal(OriginPortalId.SURVIVAL, hasBypassPermission = false).shouldBeFalse()
+    "Origin portal bypass covers every configured portal and command" {
+        OriginPortalId.entries.forEach { id ->
+            shouldBypassOriginPortal(id, hasBypassPermission = true).shouldBeTrue()
+            shouldBypassOriginPortal(id, hasBypassPermission = false).shouldBeFalse()
+        }
 
         matchesPortalCommand(
             "/ARC RTP survival --only-if-first",
