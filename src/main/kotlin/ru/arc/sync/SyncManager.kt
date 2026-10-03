@@ -21,6 +21,27 @@ object SyncManager {
         syncMap[clazz] = sync
     }
 
+    /** Keep joined player state across reloads; initialize only newly enabled syncs. */
+    fun configureSync(
+        clazz: Class<*>,
+        enabled: Boolean,
+        onlinePlayers: Collection<UUID>,
+        create: () -> Sync?,
+    ): Sync? {
+        if (!enabled) {
+            syncMap.remove(clazz)?.let { sync ->
+                onlinePlayers.forEach(sync::forceSave)
+                sync.shutdown()
+            }
+            return null
+        }
+        syncMap[clazz]?.let { return it }
+        val sync = create() ?: return null
+        registerSync(clazz, sync)
+        onlinePlayers.forEach(sync::playerJoin)
+        return sync
+    }
+
     @Suppress("unused")
     fun unregisterSync(clazz: Class<*>) {
         syncMap.remove(clazz)
@@ -113,7 +134,7 @@ object SyncManager {
         SyncRoundRobin.reset()
     }
 
-    private object SyncRoundRobin {
+    internal object SyncRoundRobin {
         private var previous: Sync? = null
 
         fun getNext(syncs: Collection<Sync>): Sync? {
@@ -123,12 +144,9 @@ object SyncManager {
                 previous = syncs.first()
                 return previous
             }
-            for (sync in syncs) {
-                if (sync === prev) continue
-                previous = sync
-                return sync
-            }
-            previous = syncs.first()
+            val ordered = syncs.toList()
+            val nextIndex = (ordered.indexOfFirst { it === prev } + 1) % ordered.size
+            previous = ordered[nextIndex]
             return previous
         }
 

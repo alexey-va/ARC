@@ -2,6 +2,7 @@ package ru.arc.core.modules
 
 import kotlinx.coroutines.cancel
 import net.milkbowl.vault.economy.Economy
+import org.bukkit.Bukkit
 import org.bukkit.plugin.RegisteredServiceProvider
 import ru.arc.ARC
 import ru.arc.TitleInput
@@ -514,37 +515,55 @@ object SyncModule : PluginModule {
 
     override fun init() {
         val config: Config = ConfigManager.of(ARC.instance.dataPath, "modules/misc.yml")
+        val onlinePlayers = Bukkit.getOnlinePlayers().map { it.uniqueId }
 
-        if (HookRegistry.sfHook != null && config.bool("sync.slimefun", true)) {
+        SyncManager.configureSync(
+            SlimefunSync::class.java,
+            HookRegistry.sfHook != null && config.bool("sync.slimefun", true),
+            onlinePlayers,
+        ) {
             info("Starting slimefun sync")
-            SyncManager.registerSync(SlimefunSync::class.java, SlimefunSync())
+            SlimefunSync()
         }
 
-        if (HookRegistry.emHook != null && config.bool("sync.em", true)) {
+        SyncManager.configureSync(
+            EmSync::class.java,
+            HookRegistry.emHook != null && config.bool("sync.em", true),
+            onlinePlayers,
+        ) {
             info("Starting EM sync")
-            SyncManager.registerSync(EmSync::class.java, EmSync())
+            EmSync()
         }
 
-        if (HookRegistry.cmiHook != null && config.bool("sync.cmi", false)) {
+        SyncManager.configureSync(
+            CMISync::class.java,
+            HookRegistry.cmiHook != null && config.bool("sync.cmi", false),
+            onlinePlayers,
+        ) {
             info("Starting CMI sync")
-            SyncManager.registerSync(CMISync::class.java, CMISync())
+            CMISync()
         }
 
-        if (HookRegistry.auraSkillsHook != null && config.bool("sync.aura-skills", true)) {
+        SyncManager.configureSync(
+            SkillsSync::class.java,
+            HookRegistry.auraSkillsHook != null && config.bool("sync.aura-skills", true),
+            onlinePlayers,
+        ) {
             info("Starting AuraSkills sync")
-            SyncManager.registerSync(SkillsSync::class.java, SkillsSync())
+            SkillsSync()
         }
 
-        if (config.bool("sync.duels", true)) {
-            DuelsSync.createOrNull()?.let { sync ->
+        val duels = SyncManager.configureSync(DuelsSync::class.java, config.bool("sync.duels", true), onlinePlayers) {
+            DuelsSync.createOrNull()?.also {
                 info("Starting RusCrafting Duels stats sync")
-                SyncManager.registerSync(DuelsSync::class.java, sync)
-                DuelStatsBridge.install(sync)
             }
-        }
+        } as? DuelsSync
+        duels?.let(DuelStatsBridge::install) ?: DuelStatsBridge.uninstall()
 
         SyncManager.startSaveAllTasks()
     }
+
+    override fun reload() = init()
 
     override fun shutdown() {
         DuelStatsBridge.uninstall()
