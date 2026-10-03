@@ -191,14 +191,15 @@ class TreasureHuntService(
             return null
         }
 
-        // Clear blocks and place chests
+        // Revalidate authored points before placement; never replace world decoration.
         val placedChests = mutableMapOf<Location, PlacedChest>()
         val aliases = config.aliases
 
         for (location in locations) {
             val block = location.block
             if (block.type != Material.AIR) {
-                block.type = Material.AIR
+                debug("[treasure-hunt] occupied location skipped at {}: {}", location, block.type)
+                continue
             }
 
             val chestType = huntConfig.getRandomChestType()
