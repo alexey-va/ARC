@@ -4,6 +4,8 @@ import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.World
+import org.bukkit.entity.Display
+import org.bukkit.entity.Interaction
 import java.util.UUID
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -120,7 +122,19 @@ object FurnitureCleanupService {
             .filter { it.world == world.name }
             .forEach { candidates += CleanupTarget.Barrier(it) }
         val center = CleanupCenter(world.name, anchor.blockX, anchor.blockY, anchor.blockZ)
-        return execute(FurnitureCleanupPlan.create(center, 1, candidates), runtime)
+        val result = execute(FurnitureCleanupPlan.create(center, 1, candidates), runtime)
+        // IA 4 furniture can leave visual/hitbox entities without an IA marker.
+        // Their persisted spawn UUIDs establish ownership; proximity does not.
+        var removedResiduals = 0
+        entityIds.toSet().forEach { uuid ->
+            val entity = world.getEntity(uuid) ?: return@forEach
+            if (!entity.isValid || uuid in result.failedFurniture) return@forEach
+            if ((entity is Display || entity is Interaction) && runtime.inspect(entity) == null) {
+                entity.remove()
+                removedResiduals++
+            }
+        }
+        return result.copy(removedFurniture = result.removedFurniture + removedResiduals)
     }
 
     private inline fun forEachBlockInSphere(

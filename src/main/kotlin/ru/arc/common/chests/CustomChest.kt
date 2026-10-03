@@ -266,7 +266,7 @@ internal object ItemsAdderFurnitureLookup {
 
     fun findOnBlocks(block: Block): Any? {
         for ((dx, dy, dz) in NEIGHBOR_OFFSETS) {
-            findOnBlock(block.getRelative(dx, dy, dz))?.let { return it }
+            findOnBlock(block.getRelative(dx, dy, dz))?.takeIf { isAtAnchor(it, block) }?.let { return it }
         }
         return null
     }
@@ -276,12 +276,14 @@ internal object ItemsAdderFurnitureLookup {
         val center = block.location.add(0.5, 0.5, 0.5)
         val world = center.world ?: return null
         for (entity in world.getNearbyEntities(center, 2.5, 2.5, 2.5)) {
-            findOnEntity(entity)?.let { return it }
+            findOnEntity(entity)?.takeIf { isAtAnchor(it, block) }?.let { return it }
         }
         return null
     }
 
-    private fun findOnBlock(relative: Block): Any? =
+    private fun isAtAnchor(furniture: CustomFurniture, block: Block): Boolean = furniture.entity?.location?.block == block
+
+    private fun findOnBlock(relative: Block): CustomFurniture? =
         try {
             CustomFurniture.byAlreadySpawned(relative)
         } catch (e: Exception) {
@@ -289,7 +291,7 @@ internal object ItemsAdderFurnitureLookup {
             null
         }
 
-    private fun findOnEntity(entity: Entity): Any? =
+    private fun findOnEntity(entity: Entity): CustomFurniture? =
         try {
             CustomFurniture.byAlreadySpawned(entity)
         } catch (_: Exception) {
