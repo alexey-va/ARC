@@ -32,6 +32,7 @@ internal data class TreasureHuntGrappleSettings(
         private val DEFAULT_ITEM_LORE = listOf(
             "",
             "<gray>Нажмите <white>ПКМ<gray>, чтобы выстрелить и подтянуться.",
+            "<gray>Повторный <white>ПКМ<gray> меняет цель даже в полёте.",
             "",
             "<dark_gray>Действует во время охоты на спавне.",
         )

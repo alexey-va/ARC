@@ -28,14 +28,27 @@ object TreasureHuntManager {
         treasurePoolId: String,
         sender: CommandSender,
     ) {
+        startHunt(locationPool, chests, namespaceId, treasurePoolId, sender, replaceExisting = true)
+    }
+
+    @JvmStatic
+    fun startHunt(
+        locationPool: LocationPool,
+        chests: Int,
+        namespaceId: String,
+        treasurePoolId: String,
+        sender: CommandSender,
+        replaceExisting: Boolean,
+    ): ActiveHunt? {
         val variant = if (namespaceId == "vanilla") ChestVariant.VANILLA else ChestVariant.ITEMS_ADDER
-        TreasureHuntRegistry.startHunt(
+        return TreasureHuntRegistry.startHunt(
             locationPool = locationPool,
             chestCount = chests,
             chestVariant = variant,
             namespaceId = namespaceId.takeIf { it != "vanilla" },
             treasurePoolId = treasurePoolId,
             sender = sender,
+            replaceExisting = replaceExisting,
         )
     }
 
@@ -45,8 +58,16 @@ object TreasureHuntManager {
         chests: Int,
         sender: CommandSender,
     ) {
-        TreasureHuntRegistry.startHunt(type, chests, sender)
+        startHunt(type, chests, sender, replaceExisting = true)
     }
+
+    @JvmStatic
+    fun startHunt(
+        type: String,
+        chests: Int,
+        sender: CommandSender,
+        replaceExisting: Boolean,
+    ): ActiveHunt? = TreasureHuntRegistry.startHunt(type, chests, sender, replaceExisting)
 
     /**
      * Генерирует точки в радиусе от центра, создаёт эфемерный location_pool и запускает охоту.
@@ -60,6 +81,26 @@ object TreasureHuntManager {
         namespaceId: String,
         treasurePoolId: String,
         sender: CommandSender,
+    ): ActiveHunt? =
+        startGeneratedHunt(
+            center,
+            radius,
+            chests,
+            namespaceId,
+            treasurePoolId,
+            sender,
+            replaceExisting = true,
+        )
+
+    @JvmStatic
+    fun startGeneratedHunt(
+        center: Location,
+        radius: Double,
+        chests: Int,
+        namespaceId: String,
+        treasurePoolId: String,
+        sender: CommandSender,
+        replaceExisting: Boolean,
     ): ActiveHunt? {
         val world = center.world
         if (world == null) {
@@ -86,7 +127,7 @@ object TreasureHuntManager {
         locations.forEach { pool.addLocation(it) }
 
         val placed = minOf(chests, locations.size)
-        startHunt(pool, placed, namespaceId, treasurePoolId, sender)
+        startHunt(pool, placed, namespaceId, treasurePoolId, sender, replaceExisting)
 
         sender.sendMessage(
             ru.arc.util.TextUtil.mm(

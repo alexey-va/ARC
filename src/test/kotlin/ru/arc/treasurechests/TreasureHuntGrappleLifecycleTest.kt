@@ -4,21 +4,35 @@ import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkConstructor
+import io.mockk.slot
+import io.mockk.unmockkConstructor
+import io.mockk.verify
 import net.kyori.adventure.text.Component
+import org.bukkit.FluidCollisionMode
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.World
+import org.bukkit.block.BlockFace
 import org.bukkit.entity.Item
 import org.bukkit.entity.Player
+import org.bukkit.event.block.Action
 import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerDropItemEvent
+import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerQuitEvent
+import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
 import org.bukkit.plugin.java.JavaPlugin
+import org.bukkit.util.RayTraceResult
+import org.bukkit.util.Vector
+import org.mockbukkit.mockbukkit.world.WorldMock
 import ru.arc.config.TestConfig
 import ru.arc.core.BukkitTaskScheduler
+import ru.arc.paper.display.PacketBlockDisplay
+import ru.arc.paper.display.PacketItemDisplay
 import ru.arc.paper.display.PaperPacketDisplays
 import ru.arc.paper.testing.MockBukkitTestRuntime
 import java.util.concurrent.ConcurrentHashMap
@@ -147,23 +161,102 @@ class TreasureHuntGrappleLifecycleTest : DescribeSpec({
                 harness.grapple.close()
             }
         }
+
+        it("retargets an in-flight shot after a short interval and removes the old displays") {
+            withGrappleBlockRayTrace(hitDistance = 24.0) { runtime ->
+                val harness = harness(runtime)
+                val origin = runtime.addSimpleWorld("rc_origin_spawn")
+                val player = runtime.addPlayer("flight-redirect")
+                move(player, origin)
+                standOnGround(origin)
+                startHunt(harness.grapple, origin)
+                val hook = requireNotNull(player.inventory.itemInMainHand)
+                look(player, Vector(0.0, 0.0, -1.0))
+
+                harness.grapple.onInteract(rightClick(player, hook))
+                harness.spawnedHeads.size shouldBe 1
+                val oldHead = harness.spawnedHeads.single()
+                val oldCable = harness.spawnedCable.toList()
+
+                runtime.performTicks(3)
+                harness.grapple.onInteract(rightClick(player, hook))
+                harness.spawnedHeads.size shouldBe 1
+
+                runtime.performTicks(1)
+                look(player, Vector(1.0, 0.0, 0.0))
+                harness.grapple.onInteract(rightClick(player, hook))
+
+                harness.spawnedHeads.size shouldBe 2
+                harness.spawnedCable.size shouldBe oldCable.size * 2
+                verify(exactly = 1) { oldHead.remove() }
+                oldCable.forEach { display -> verify(exactly = 1) { display.remove() } }
+
+                runtime.performTicks(1)
+                val redirectedHeadPosition = slot<Location>()
+                verify { harness.spawnedHeads[1].teleport(capture(redirectedHeadPosition)) }
+                (redirectedHeadPosition.captured.x > player.location.x) shouldBe true
+                harness.grapple.close()
+            }
+        }
+
+        it("retargets a pulling shot without clearing the player's current velocity") {
+            withGrappleBlockRayTrace(hitDistance = 5.0) { runtime ->
+                val harness = harness(runtime)
+                val origin = runtime.addSimpleWorld("rc_origin_spawn")
+                val player = runtime.addPlayer("pull-redirect")
+                move(player, origin)
+                standOnGround(origin)
+                startHunt(harness.grapple, origin)
+                val hook = requireNotNull(player.inventory.itemInMainHand)
+                look(player, Vector(0.0, 0.0, -1.0))
+
+                harness.grapple.onInteract(rightClick(player, hook))
+                runtime.performTicks(3)
+                (player.velocity.length() > 0.0) shouldBe true
+                runtime.performTicks(1)
+                val oldHead = harness.spawnedHeads.single()
+                val oldCable = harness.spawnedCable.toList()
+                look(player, Vector(1.0, 0.0, 0.0))
+                val momentum = Vector(0.31, 0.42, -0.27)
+                player.velocity = momentum.clone()
+
+                harness.grapple.onInteract(rightClick(player, hook))
+
+                player.velocity shouldBe momentum
+                harness.spawnedHeads.size shouldBe 2
+                verify(exactly = 1) { oldHead.remove() }
+                oldCable.forEach { display -> verify(exactly = 1) { display.remove() } }
+                harness.grapple.close()
+            }
+        }
     }
 })
 
 private data class GrappleHarness(
     val plugin: TreasureHuntGrappleLifecycleTestPlugin,
     val grapple: TreasureHuntGrapple,
+    val spawnedHeads: MutableList<PacketItemDisplay>,
+    val spawnedCable: MutableList<PacketBlockDisplay>,
 )
 
 private fun harness(runtime: MockBukkitTestRuntime): GrappleHarness {
     val plugin = runtime.loadSimplePlugin(TreasureHuntGrappleLifecycleTestPlugin::class.java)
+    val spawnedHeads = mutableListOf<PacketItemDisplay>()
+    val spawnedCable = mutableListOf<PacketBlockDisplay>()
+    val displays = mockk<PaperPacketDisplays>(relaxed = true)
+    every { displays.spawnItem(any(), any()) } answers {
+        mockk<PacketItemDisplay>(relaxed = true).also { spawnedHeads.add(it) }
+    }
+    every { displays.spawnBlock(any(), any()) } answers {
+        mockk<PacketBlockDisplay>(relaxed = true).also { spawnedCable.add(it) }
+    }
     val grapple = TreasureHuntGrapple(
         plugin = plugin,
         scheduler = BukkitTaskScheduler(plugin),
-        displays = mockk<PaperPacketDisplays>(relaxed = true),
+        displays = displays,
     )
     grapple.reloadConfig(settings())
-    return GrappleHarness(plugin, grapple)
+    return GrappleHarness(plugin, grapple, spawnedHeads, spawnedCable)
 }
 
 private fun settings(enabled: Boolean = true): TreasureHuntGrappleSettings =
@@ -178,6 +271,59 @@ private fun startHunt(grapple: TreasureHuntGrapple, world: World) {
 
 private fun move(player: Player, world: World) {
     player.teleport(Location(world, 0.5, 64.0, 0.5))
+}
+
+private fun look(player: Player, direction: Vector) {
+    player.teleport(player.location.apply { setDirection(direction) })
+}
+
+private fun standOnGround(world: World) {
+    (-1..1).forEach { x ->
+        (-1..1).forEach { z -> world.getBlockAt(x, 63, z).type = Material.STONE }
+    }
+}
+
+private fun rightClick(player: Player, hook: ItemStack) = PlayerInteractEvent(
+    player,
+    Action.RIGHT_CLICK_AIR,
+    hook,
+    null,
+    BlockFace.SELF,
+    EquipmentSlot.HAND,
+)
+
+private fun withGrappleBlockRayTrace(
+    hitDistance: Double,
+    block: (MockBukkitTestRuntime) -> Unit,
+) {
+    mockkConstructor(WorldMock::class)
+    try {
+        every {
+            anyConstructed<WorldMock>().rayTraceBlocks(
+                any<Location>(),
+                any<Vector>(),
+                any<Double>(),
+                any<FluidCollisionMode>(),
+                any<Boolean>(),
+            )
+        } answers {
+            val maxDistance = thirdArg<Double>()
+            if (maxDistance < hitDistance) {
+                null
+            } else {
+                val start = firstArg<Location>()
+                val direction = secondArg<Vector>().clone().normalize()
+                val hitPosition = start.toVector().add(direction.multiply(hitDistance))
+                val world = requireNotNull(start.world)
+                val block = world.getBlockAt(hitPosition.blockX, hitPosition.blockY, hitPosition.blockZ)
+                block.type = Material.STONE
+                RayTraceResult(hitPosition, block, BlockFace.UP)
+            }
+        }
+        MockBukkitTestRuntime.open().use { runtime -> block(runtime) }
+    } finally {
+        unmockkConstructor(WorldMock::class)
+    }
 }
 
 private fun fillHotbar(player: Player) {

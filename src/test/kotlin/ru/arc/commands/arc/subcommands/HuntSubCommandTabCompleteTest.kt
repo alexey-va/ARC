@@ -124,6 +124,14 @@ class HuntSubCommandTabCompleteTest : KotestTestBase({
             chestCounts.shouldNotBeNull()
             chestCounts shouldContain "chests=5"
             chestCounts shouldContain "chests=10"
+
+            val replacementPolicies = HuntSubCommand.tabComplete(
+                player,
+                arrayOf("start", "preset=daily-tab-type", "replace="),
+            )
+            replacementPolicies.shouldNotBeNull()
+            replacementPolicies shouldContain "replace=true"
+            replacementPolicies shouldContain "replace=false"
         }
 
         it("suggests the named stop key when no hunts are active") {
@@ -193,6 +201,14 @@ class HuntSubCommandTabCompleteTest : KotestTestBase({
             HuntNamedArguments.finiteNumber("-Infinity") shouldBe null
         }
 
+        it("accepts only lowercase boolean replacement values") {
+            HuntNamedArguments.strictBoolean("true") shouldBe true
+            HuntNamedArguments.strictBoolean("false") shouldBe false
+            HuntNamedArguments.strictBoolean("True") shouldBe null
+            HuntNamedArguments.strictBoolean("yes") shouldBe null
+            HuntNamedArguments.strictBoolean("1") shouldBe null
+        }
+
         it("reports invalid or mixed named commands and never starts the hunt") {
             val activeHuntsBefore = TreasureHuntManager.getActiveHunts().toSet()
 
@@ -210,6 +226,36 @@ class HuntSubCommandTabCompleteTest : KotestTestBase({
                     "Используйте формат key=value; не смешивайте его с позиционными аргументами.",
             )
             TreasureHuntManager.getActiveHunts().toSet() shouldBe activeHuntsBefore
+        }
+
+        it("reports a no-replace preset start as skipped when that pool is active") {
+            TreasureHuntManager.stopAll()
+            val world = server.addSimpleWorld("replace-policy-world")
+            val poolId = "replace-policy-${System.nanoTime()}"
+            val typeId = "replace-policy-test"
+            val pool = LocationPoolManager.createPool(poolId)
+            val block = world.getBlockAt(90, 70, 90)
+            pool.addLocation(block.location)
+            loadPreset(typeId, poolId)
+
+            try {
+                TreasureHuntManager.startHunt(typeId, 1, player)
+                val existing = TreasureHuntManager.getByLocationPool(pool).shouldNotBeNull()
+
+                HuntSubCommand.execute(
+                    player,
+                    arrayOf("start", "preset=$typeId", "chests=1", "replace=false"),
+                )
+
+                PlainTextComponentSerializer.plainText().serialize(
+                    requireNotNull(player.nextComponentMessage()),
+                ) shouldBe "Охота в пуле $poolId уже активна; запуск пропущен."
+                TreasureHuntManager.getByLocationPool(pool) shouldBe existing
+                existing.remainingChests shouldBe 1
+                block.type shouldBe org.bukkit.Material.CHEST
+            } finally {
+                TreasureHuntManager.stopAll()
+            }
         }
     }
 })

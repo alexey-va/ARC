@@ -67,6 +67,7 @@ internal class TreasureHuntGrapple(
     private companion object {
         const val SPAWN_WORLD = "rc_origin_spawn"
         const val MAX_SHOT_LIFETIME_TICKS = 120
+        const val ACTIVE_REDIRECT_COOLDOWN_TICKS = 4L
         const val BODY_CENTER_Y = 0.9
         const val CABLE_WIDTH = 0.075f
         val CABLE_GLOW = Color.fromRGB(94, 224, 255)
@@ -232,8 +233,17 @@ internal class TreasureHuntGrapple(
             return
         }
         val now = player.ticksLived.toLong()
-        if (shots.containsKey(player.uniqueId) || now < (nextAllowedTick[player.uniqueId] ?: Long.MIN_VALUE)) return
-        nextAllowedTick[player.uniqueId] = now + config.cooldownTicks
+        val playerId = player.uniqueId
+        val activeShot = shots[playerId]
+        if (activeShot != null) {
+            val redirectCooldown = minOf(config.cooldownTicks, ACTIVE_REDIRECT_COOLDOWN_TICKS)
+            if (activeShot.ageTicks.toLong() < redirectCooldown) return
+            // Retargeting replaces packet visuals only; preserve any velocity from an active pull.
+            stopShot(playerId, dampVelocity = false)
+        } else if (now < (nextAllowedTick[playerId] ?: Long.MIN_VALUE)) {
+            return
+        }
+        nextAllowedTick[playerId] = now + config.cooldownTicks
         shoot(player, session, config)
     }
 

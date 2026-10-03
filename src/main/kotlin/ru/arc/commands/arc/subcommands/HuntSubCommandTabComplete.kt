@@ -36,7 +36,7 @@ internal object HuntSubCommandTabComplete {
     ): List<String> {
         if (completed.isEmpty()) {
             if (partial.contains('=')) {
-                return namedArguments(sender, partial, emptyList(), setOf("preset", "chests"))
+                return namedArguments(sender, partial, emptyList(), setOf("preset", "chests", "replace"))
             }
             return listOf("custom", "preset=") + presetIds().map { "preset=$it" }
         }
@@ -47,7 +47,7 @@ internal object HuntSubCommandTabComplete {
 
         val namedPreset = completed.any { '=' in it } || partial.contains('=')
         if (!namedPreset) return emptyList()
-        return namedArguments(sender, partial, completed, setOf("preset", "chests"))
+        return namedArguments(sender, partial, completed, setOf("preset", "chests", "replace"))
     }
 
     private fun completeCustom(
@@ -57,10 +57,10 @@ internal object HuntSubCommandTabComplete {
     ): List<String> {
         if (completed.isEmpty()) {
             if (partial.startsWith("pool=", ignoreCase = true)) {
-                return namedArguments(sender, partial, emptyList(), setOf("pool", "chests", "chest", "loot"))
+                return namedArguments(sender, partial, emptyList(), setOf("pool", "chests", "chest", "loot", "replace"))
             }
             if (partial.contains('=')) {
-                return namedArguments(sender, partial, emptyList(), setOf("pool", "chests", "chest", "loot"))
+                return namedArguments(sender, partial, emptyList(), setOf("pool", "chests", "chest", "loot", "replace"))
             }
             return listOf(GENERATE, "pool=") + persistentPools().map { "pool=$it" }
         }
@@ -70,7 +70,7 @@ internal object HuntSubCommandTabComplete {
         }
 
         if (completed.any { '=' in it } || partial.contains('=')) {
-            return namedArguments(sender, partial, completed, setOf("pool", "chests", "chest", "loot"))
+            return namedArguments(sender, partial, completed, setOf("pool", "chests", "chest", "loot", "replace"))
         }
         return emptyList()
     }
@@ -81,10 +81,15 @@ internal object HuntSubCommandTabComplete {
         partial: String,
     ): List<String> {
         if (completed.firstOrNull()?.lowercase()?.let { it in HERE_TOKENS } == true) {
-            return namedArguments(sender, partial, completed.drop(1), setOf("radius", "chests", "chest", "loot"))
+            return namedArguments(
+                sender,
+                partial,
+                completed.drop(1),
+                setOf("radius", "chests", "chest", "loot", "replace"),
+            )
         }
 
-        val coordinateKeys = setOf("world", "x", "y", "z", "radius", "chests", "chest", "loot")
+        val coordinateKeys = setOf("world", "x", "y", "z", "radius", "chests", "chest", "loot", "replace")
         if (completed.any { '=' in it } || partial.contains('=')) {
             return namedArguments(sender, partial, completed, coordinateKeys)
         }
@@ -148,6 +153,7 @@ internal object HuntSubCommandTabComplete {
             "chest" -> chestModels()
             "loot" -> treasurePools()
             "radius" -> RADIUS_HINTS
+            "replace" -> listOf("true", "false")
             "world" -> Bukkit.getWorlds().map { it.name }.sorted()
             "x" -> listOf((sender as? Player)?.location?.blockX?.toString() ?: "0")
             "y" -> listOf((sender as? Player)?.location?.blockY?.toString() ?: "0")

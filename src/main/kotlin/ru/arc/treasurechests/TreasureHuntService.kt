@@ -128,6 +128,12 @@ class TreasureHuntService(
     fun startHunt(
         typeId: String,
         chestCount: Int,
+    ): ActiveHunt? = startHunt(typeId, chestCount, replaceExisting = true)
+
+    fun startHunt(
+        typeId: String,
+        chestCount: Int,
+        replaceExisting: Boolean,
     ): ActiveHunt? {
         val huntConfig = config.huntTypes[typeId]
         if (huntConfig == null) {
@@ -144,7 +150,7 @@ class TreasureHuntService(
         }
 
         val count = if (chestCount > 0) chestCount else locationPool.size
-        return startHuntInternal(huntConfig, count)
+        return startHuntInternal(huntConfig, count, replaceExisting)
     }
 
     /**
@@ -154,6 +160,13 @@ class TreasureHuntService(
         locationPool: LocationPool,
         chestCount: Int,
         chestType: ChestType,
+    ): ActiveHunt? = startHunt(locationPool, chestCount, chestType, replaceExisting = true)
+
+    fun startHunt(
+        locationPool: LocationPool,
+        chestCount: Int,
+        chestType: ChestType,
+        replaceExisting: Boolean,
     ): ActiveHunt? {
         val huntConfig =
             TreasureHuntConfig.simple(
@@ -162,12 +175,13 @@ class TreasureHuntService(
                 chestType = chestType,
             )
 
-        return startHuntInternal(huntConfig, chestCount)
+        return startHuntInternal(huntConfig, chestCount, replaceExisting)
     }
 
     private fun startHuntInternal(
         huntConfig: TreasureHuntConfig,
         chestCount: Int,
+        replaceExisting: Boolean,
     ): ActiveHunt? {
         val locationPool = huntConfig.getLocationPool()
         if (locationPool == null) {
@@ -176,12 +190,18 @@ class TreasureHuntService(
             return null
         }
 
+        val existing = getByLocationPool(locationPool)
+        if (existing != null && !replaceExisting) {
+            debug("[treasure-hunt] skipped start for active pool {} because replace=false", locationPool.id)
+            return existing
+        }
+
         info("Starting treasure hunt for pool: ${locationPool.id}")
 
         // Stop existing hunt for this pool
-        getByLocationPool(locationPool)?.let { existing ->
+        existing?.let {
             info("Stopping existing hunt for pool: ${locationPool.id}")
-            stopHunt(existing)
+            stopHunt(it)
         }
 
         // Get random locations
@@ -658,7 +678,10 @@ class TreasureHuntService(
 
     fun onPlayerQuit(player: Player) {
         activeHunts.forEach { hunt ->
-            hunt.bossBarAudience.remove(player)
+            if (player in hunt.bossBarAudience) {
+                hunt.bossBar?.let { player.hideBossBar(it) }
+                hunt.bossBarAudience.remove(player)
+            }
         }
     }
 }

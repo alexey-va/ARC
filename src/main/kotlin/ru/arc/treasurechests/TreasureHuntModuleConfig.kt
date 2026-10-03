@@ -23,7 +23,7 @@ internal data class TreasureHuntHighlightSettings(
     companion object {
         fun load(section: ConfigSection): TreasureHuntHighlightSettings =
             TreasureHuntHighlightSettings(
-                enabled = section.boolean("enabled", true),
+                enabled = section.boolean("enabled", false),
                 color = Color.fromRGB(section.color("color", TextColor.color(255, 194, 66)).value()),
             )
     }

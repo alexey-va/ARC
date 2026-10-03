@@ -295,6 +295,7 @@ messages:
     success: '<green>Куплено <white>%amount% шт.<green> товара <white>%item%<green> за <white>%price%<green>.'
     success-no-price: '<green>Куплено <white>%amount% шт.<green> товара <white>%item%<green>.'
   hunt:
+    already-active: '<yellow>Охота в пуле <white>%location_pool%<yellow> уже активна; запуск пропущен.'
     no-types: <gray>Нет настроенных пресетов охот
     types-header: <gold>═══ Пресеты охот ═══
     types-blank: ''

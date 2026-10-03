@@ -50,16 +50,24 @@ internal object HuntNamedArguments {
 
     fun positiveChestCount(raw: String): Int? = raw.toIntOrNull()?.takeIf { it > 0 }
 
+    fun strictBoolean(raw: String): Boolean? =
+        when (raw) {
+            "true" -> true
+            "false" -> false
+            else -> null
+        }
+
     fun finiteNumber(raw: String): Double? = raw.toDoubleOrNull()?.takeIf { it.isFinite() }
 }
 
 /**
  * /arc hunt - управление охотой на сокровища.
  *
- * - start preset=<preset> [chests=<count>] — пресет из treasure-hunt.yml
- * - start custom pool=<location_pool> chests=<count> chest=<model> loot=<pool>
- * - start custom generate here radius=<radius> chests=<count> chest=<model> loot=<pool>
- * - start custom generate world=<world> x=<x> y=<y> z=<z> radius=<radius> chests=<count> chest=<model> loot=<pool>
+ * - start preset=<preset> [chests=<count>] [replace=true|false] — пресет из treasure-hunt.yml
+ * - start custom pool=<location_pool> chests=<count> chest=<model> loot=<pool> [replace=true|false]
+ * - start custom generate here radius=<radius> chests=<count> chest=<model> loot=<pool> [replace=true|false]
+ * - start custom generate world=<world> x=<x> y=<y> z=<z> radius=<radius>
+ *   chests=<count> chest=<model> loot=<pool> [replace=true|false]
  *
  * [chest] — модель сундука: alias из treasure-hunt.yml (pumpkin_1, easter) или vanilla.
  */
@@ -267,10 +275,11 @@ object HuntSubCommand : SubCommand {
     }
 
     private fun startNamedPreset(sender: CommandSender, tokens: List<String>) {
-        val args = parseNamedArguments(sender, tokens, setOf("preset", "chests")) ?: return
+        val args = parseNamedArguments(sender, tokens, setOf("preset", "chests", "replace")) ?: return
         if (!requireArguments(sender, args, listOf("preset"))) return
 
         val chests = args["chests"]?.let { parseChestCount(sender, it) ?: return } ?: 0
+        val replaceExisting = parseReplace(sender, args["replace"]) ?: return
         val presetId = args.getValue("preset")
         val huntType = TreasureHuntManager.getTreasureHuntType(presetId) ?: run {
             sender.sendMessage(CommandConfig.huntTypeNotFound())
@@ -281,7 +290,8 @@ object HuntSubCommand : SubCommand {
             return
         }
 
-        TreasureHuntManager.startHunt(presetId, chests, sender)
+        if (skipIfAlreadyActive(sender, locationPool, replaceExisting)) return
+        TreasureHuntManager.startHunt(presetId, chests, sender, replaceExisting)
         reportStartResult(sender, locationPool)
     }
 
@@ -320,9 +330,10 @@ object HuntSubCommand : SubCommand {
     }
 
     private fun startCustomPoolNamed(sender: CommandSender, tokens: List<String>) {
-        val args = parseNamedArguments(sender, tokens, setOf("pool", "chests", "chest", "loot")) ?: return
+        val args = parseNamedArguments(sender, tokens, setOf("pool", "chests", "chest", "loot", "replace")) ?: return
         if (!requireArguments(sender, args, listOf("pool", "chests", "chest", "loot"))) return
 
+        val replaceExisting = parseReplace(sender, args["replace"]) ?: return
         val chests = parseChestCount(sender, args.getValue("chests")) ?: return
         val poolId = args.getValue("pool")
         val locationPool = LocationPoolManager.getPool(poolId) ?: run {
@@ -330,7 +341,8 @@ object HuntSubCommand : SubCommand {
             return
         }
         val chestModel = resolveChestModel(args.getValue("chest"))
-        TreasureHuntManager.startHunt(locationPool, chests, chestModel, args.getValue("loot"), sender)
+        if (skipIfAlreadyActive(sender, locationPool, replaceExisting)) return
+        TreasureHuntManager.startHunt(locationPool, chests, chestModel, args.getValue("loot"), sender, replaceExisting)
         reportStartResult(sender, locationPool)
     }
 
@@ -367,7 +379,11 @@ object HuntSubCommand : SubCommand {
 
     private fun startCustomGenerateNamed(sender: CommandSender, tokens: List<String>) {
         if (tokens.firstOrNull()?.lowercase()?.let { it in HERE_TOKENS } == true) {
-            val args = parseNamedArguments(sender, tokens.drop(1), setOf("radius", "chests", "chest", "loot")) ?: return
+            val args = parseNamedArguments(
+                sender,
+                tokens.drop(1),
+                setOf("radius", "chests", "chest", "loot", "replace"),
+            ) ?: return
             if (!requireArguments(sender, args, listOf("radius", "chests", "chest", "loot"))) return
             val player = sender as? Player ?: run {
                 sender.sendMessage(CommandConfig.huntGeneratePlayerOnly())
@@ -375,15 +391,24 @@ object HuntSubCommand : SubCommand {
             }
             val radius = parseRadius(sender, args.getValue("radius")) ?: return
             val chests = parseChestCount(sender, args.getValue("chests")) ?: return
+            val replaceExisting = parseReplace(sender, args["replace"]) ?: return
             val chestModel = resolveChestModel(args.getValue("chest"))
-            runGeneratedHunt(sender, player.location, radius, chests, chestModel, args.getValue("loot"))
+            runGeneratedHunt(
+                sender,
+                player.location,
+                radius,
+                chests,
+                chestModel,
+                args.getValue("loot"),
+                replaceExisting,
+            )
             return
         }
 
         val args = parseNamedArguments(
             sender,
             tokens,
-            setOf("world", "x", "y", "z", "radius", "chests", "chest", "loot"),
+            setOf("world", "x", "y", "z", "radius", "chests", "chest", "loot", "replace"),
         ) ?: return
         if (!requireArguments(sender, args, listOf("world", "x", "y", "z", "radius", "chests", "chest", "loot"))) return
         val x = parseCoordinate(sender, "x", args.getValue("x")) ?: return
@@ -391,12 +416,21 @@ object HuntSubCommand : SubCommand {
         val z = parseCoordinate(sender, "z", args.getValue("z")) ?: return
         val radius = parseRadius(sender, args.getValue("radius")) ?: return
         val chests = parseChestCount(sender, args.getValue("chests")) ?: return
+        val replaceExisting = parseReplace(sender, args["replace"]) ?: return
         val chestModel = resolveChestModel(args.getValue("chest"))
         val world = Bukkit.getWorld(args.getValue("world")) ?: run {
             sender.sendMessage(CommandConfig.huntWorldNotFound())
             return
         }
-        runGeneratedHunt(sender, Location(world, x, y, z), radius, chests, chestModel, args.getValue("loot"))
+        runGeneratedHunt(
+            sender,
+            Location(world, x, y, z),
+            radius,
+            chests,
+            chestModel,
+            args.getValue("loot"),
+            replaceExisting,
+        )
     }
 
     private fun parseNamedArguments(
@@ -441,6 +475,32 @@ object HuntSubCommand : SubCommand {
             null
         }
 
+    private fun parseReplace(sender: CommandSender, raw: String?): Boolean? {
+        if (raw == null) return true
+        return HuntNamedArguments.strictBoolean(raw) ?: run {
+            sendArgumentError(sender, "replace должно быть true или false")
+            null
+        }
+    }
+
+    private fun skipIfAlreadyActive(
+        sender: CommandSender,
+        locationPool: LocationPool,
+        replaceExisting: Boolean,
+    ): Boolean {
+        if (replaceExisting || TreasureHuntManager.getByLocationPool(locationPool) == null) return false
+        sender.sendMessage(
+            CommandConfig.get(
+                "hunt.already-active",
+                "<yellow>Охота в пуле <white>%location_pool%<yellow> уже активна; " +
+                    "запуск пропущен.",
+                "%location_pool%",
+                locationPool.id,
+            ),
+        )
+        return true
+    }
+
     private fun parseRadius(sender: CommandSender, raw: String): Double? {
         val radius = HuntNamedArguments.finiteNumber(raw)?.takeIf { it > 0 }
         if (radius == null) sendArgumentError(sender, "radius должен быть конечным числом больше нуля")
@@ -460,6 +520,7 @@ object HuntSubCommand : SubCommand {
         chests: Int,
         chestModel: String,
         treasurePoolId: String,
+        replaceExisting: Boolean = true,
     ) {
         val hunt =
             TreasureHuntManager.startGeneratedHunt(
@@ -469,6 +530,7 @@ object HuntSubCommand : SubCommand {
                 chestModel,
                 treasurePoolId,
                 sender,
+                replaceExisting,
             )
         if (hunt != null) {
             sender.sendMessage(CommandConfig.huntStarted())

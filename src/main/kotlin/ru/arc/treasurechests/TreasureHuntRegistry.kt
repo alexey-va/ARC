@@ -124,8 +124,15 @@ object TreasureHuntRegistry {
         typeId: String,
         chestCount: Int,
         sender: CommandSender,
+    ): ActiveHunt? = startHunt(typeId, chestCount, sender, replaceExisting = true)
+
+    fun startHunt(
+        typeId: String,
+        chestCount: Int,
+        sender: CommandSender,
+        replaceExisting: Boolean,
     ): ActiveHunt? {
-        val hunt = service?.startHunt(typeId, chestCount)
+        val hunt = service?.startHunt(typeId, chestCount, replaceExisting)
         if (hunt == null) {
             sender.sendMessage(mm("<red>Не удалось запустить охоту: <yellow>$typeId</yellow>"))
         }
@@ -142,6 +149,24 @@ object TreasureHuntRegistry {
         namespaceId: String?,
         treasurePoolId: String,
         sender: CommandSender,
+    ): ActiveHunt? = startHunt(
+        locationPool,
+        chestCount,
+        chestVariant,
+        namespaceId,
+        treasurePoolId,
+        sender,
+        replaceExisting = true,
+    )
+
+    fun startHunt(
+        locationPool: LocationPool,
+        chestCount: Int,
+        chestVariant: ChestVariant,
+        namespaceId: String?,
+        treasurePoolId: String,
+        sender: CommandSender,
+        replaceExisting: Boolean,
     ): ActiveHunt? {
         // Проверяем treasure pool
         val treasurePool = Treasures.getPool(treasurePoolId)
@@ -171,7 +196,7 @@ object TreasureHuntRegistry {
                 }
             }
 
-        val hunt = service?.startHunt(locationPool, chestCount, chestType)
+        val hunt = service?.startHunt(locationPool, chestCount, chestType, replaceExisting)
         if (hunt == null) {
             sender.sendMessage(mm("<red>Не удалось запустить охоту."))
         }
