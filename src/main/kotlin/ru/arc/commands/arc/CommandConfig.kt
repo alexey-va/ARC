@@ -171,13 +171,14 @@ object CommandConfig {
     fun huntCustomNotEnoughArgs() =
         get(
             "hunt.custom-not-enough-args",
-            "<red>Недостаточно аргументов! <gray>/arc hunt start custom <location_pool> <chests> <chest> <treasure_pool>",
+            "<red>Недостаточно аргументов! <gray>/arc hunt start custom pool=<id> chests=<count> chest=<model> loot=<pool>",
         )
 
-    fun huntCustomHintDefault() = "<gray>Пул: <white>/arc hunt start custom <location_pool> <chests> <chest> <treasure_pool>"
+    fun huntCustomHintDefault() = "<gray>Пул: <white>/arc hunt start custom pool=<id> chests=<count> chest=<model> loot=<pool>"
 
     fun huntGenerateHintDefault() =
-        "<gray>Генерация: <white>/arc hunt start custom generate <x> <y> <z> <radius> <chests> <chest> <treasure_pool>"
+        "<gray>Генерация: <white>/arc hunt start custom generate here radius=<blocks> chests=<count> chest=<model> loot=<pool> " +
+            "<gray>или generate world=<world> x=<x> y=<y> z=<z> radius=<blocks> chests=<count> chest=<model> loot=<pool>"
 
     fun huntChestHintDefault() = "<gray><chest> — модель сундука (alias из treasure-hunt.yml: pumpkin_1, easter, …) или <white>vanilla"
 
@@ -186,7 +187,7 @@ object CommandConfig {
         poolSizeSuffix: String,
     ) = get(
         "hunt.type-location",
-        "<gray>  location_pool: <white>%location_pool%%pool_size%",
+        "<gray>  pool: <white>%location_pool%%pool_size%",
         "%location_pool%",
         locationPool,
         "%pool%",
@@ -198,18 +199,31 @@ object CommandConfig {
     fun huntGenerateNotEnoughArgs() =
         get(
             "hunt.generate-not-enough-args",
-            "<red>Недостаточно аргументов! <gray>/arc hunt start custom generate here <radius> <chests> <chest> <treasure_pool> " +
-                "или custom generate <x> <y> <z> <radius> <chests> <chest> <treasure_pool>",
-    )
+            "<red>Недостаточно аргументов! <gray>Укажите here radius=<blocks> chests=<count> chest=<model> loot=<pool> " +
+                "или world=<world> x=<x> y=<y> z=<z> radius=<blocks> chests=<count> chest=<model> loot=<pool>.",
+        )
 
     fun huntInvalidChests(value: String) =
         get("hunt.invalid-chests", "<red>Неверное количество сундуков: <white>%value%", "%value%", value)
 
-    fun huntSpecifyLocationPool() = get("hunt.specify-location-pool", "<red>Укажите location_pool для остановки!")
+    fun huntSpecifyLocationPool() = get("hunt.specify-location-pool", "<red>Укажите pool=<location_pool> для остановки!")
 
     fun huntGeneratePlayerOnly() = get("hunt.generate-player-only", "<red>Режим <white>here<red> только для игрока в мире.")
 
     fun huntGenerateNoWorld() = get("hunt.generate-no-world", "<red>Не удалось определить мир для генерации.")
+
+    fun huntWorldNotFound() = get("hunt.world-not-found", "<red>Мир из аргумента world= не найден.")
+
+    fun huntArgumentsError(reason: String) =
+        get(
+            "hunt.arguments-error",
+            "<red>Аргументы охоты: <white>%reason%<red>. <gray>Используйте формат key=value; не смешивайте его с позиционными аргументами.",
+            "%reason%",
+            reason,
+        )
+
+    fun huntStartFailed() =
+        get("hunt.start-failed", "<red>Охота не запущена: не удалось создать активную охоту. Проверьте пул точек и наград.")
 
     fun huntInvalidRadius(value: String) = get("hunt.invalid-radius", "<red>Неверный радиус: <white>%value%", "%value%", value)
 

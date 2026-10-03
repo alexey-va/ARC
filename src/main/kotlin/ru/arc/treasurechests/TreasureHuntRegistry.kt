@@ -127,7 +127,7 @@ object TreasureHuntRegistry {
     ): ActiveHunt? {
         val hunt = service?.startHunt(typeId, chestCount)
         if (hunt == null) {
-            sender.sendMessage(mm("<red>Could not start treasure hunt type: <yellow>$typeId</yellow>"))
+            sender.sendMessage(mm("<red>Не удалось запустить охоту: <yellow>$typeId</yellow>"))
         }
         return hunt
     }
@@ -147,7 +147,7 @@ object TreasureHuntRegistry {
         val treasurePool = Treasures.getPool(treasurePoolId)
         if (treasurePool == null) {
             warn("Could not find treasure pool: $treasurePoolId")
-            sender.sendMessage(mm("<red>Could not find treasure pool: <yellow>$treasurePoolId</yellow>"))
+            sender.sendMessage(mm("<red>Не найден набор наград: <yellow>$treasurePoolId</yellow>"))
             return null
         }
 
@@ -173,7 +173,7 @@ object TreasureHuntRegistry {
 
         val hunt = service?.startHunt(locationPool, chestCount, chestType)
         if (hunt == null) {
-            sender.sendMessage(mm("<red>Could not start treasure hunt"))
+            sender.sendMessage(mm("<red>Не удалось запустить охоту."))
         }
         return hunt
     }
@@ -216,6 +216,10 @@ object TreasureHuntRegistry {
     fun getActiveHunts(): List<ActiveHunt> = service?.getActiveHunts() ?: emptyList()
 
     fun hasActiveHunts(): Boolean = service?.hasActiveHunts() == true
+
+    internal fun attachGrapple(grapple: TreasureHuntGrapple?) {
+        service?.attachGrapple(grapple)
+    }
 
     /**
      * Получает все ID зарегистрированных типов охот.

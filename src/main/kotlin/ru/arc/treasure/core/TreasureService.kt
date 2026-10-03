@@ -3,6 +3,7 @@ package ru.arc.treasure.core
 import net.milkbowl.vault.economy.Economy
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
+import ru.arc.hooks.HookRegistry
 import ru.arc.util.Logging.warn
 
 /**
@@ -299,7 +300,8 @@ class TreasureService(
                             net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
                                 .plainText()
                                 .serialize(it)
-                        } ?: treasure.stack.type.name,
+                        } ?: HookRegistry.translatorHook?.translate(treasure.stack)
+                            ?: treasure.stack.type.name.replace('_', ' ').lowercase().replaceFirstChar { it.titlecase() },
                     poolId = poolId,
                 )
             }

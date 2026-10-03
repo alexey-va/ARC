@@ -16,6 +16,7 @@ softdepend:
   - WorldGuard
   - EliteMobs
   - HuskHomes
+  - HuskSync
   - ProtectionStones
   - Denizen
   - Slimefun

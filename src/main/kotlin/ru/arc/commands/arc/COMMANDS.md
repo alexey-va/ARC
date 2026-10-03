@@ -191,29 +191,31 @@ balance сверяется в точных minor units. Неоднозначны
 | `/arc hunt`        | Показать статус: активные охоты, доступные типы |
 | `/arc hunt status` | То же самое                                     |
 | `/arc hunt types`  | Список доступных типов охот с их пулами         |
-| `/arc hunt <type>` | Запустить охоту по типу (короткая форма)        |
 
 ### Запуск охоты
 
 ```bash
-# По типу (рекомендуется)
-/arc hunt start daily
-/arc hunt start daily 50   # переопределить кол-во сундуков
+# По пресету; без chests используется размер его пула
+/arc hunt start preset=daily
+/arc hunt start preset=daily chests=50
 
-# Короткая форма (без "start")
-/arc hunt daily
-/arc hunt daily 50
+# По готовому пулу локаций
+/arc hunt start custom pool=forest_pool chests=30 chest=vanilla loot=common_loot
 
-# Полная форма (для кастомных охот без предустановки)
-/arc hunt start forest_pool 30 vanilla common_loot
-# Параметры: пул_локаций кол-во_сундуков namespace пул_наград
+# Генерация рядом с игроком
+/arc hunt start custom generate here radius=80 chests=10 chest=pumpkin_1 loot=easter
+
+# Генерация вокруг явных координат
+/arc hunt start custom generate world=rc_origin_spawn x=0 y=71 z=0 radius=80 chests=10 chest=pumpkin_1 loot=easter
 ```
+
+Именованные аргументы можно указывать в любом порядке. Старые позиционные формы запуска и остановки пока остаются совместимы.
 
 ### Остановка охоты
 
 ```bash
-/arc hunt stop          # показать активные охоты для выбора
-/arc hunt stop my_pool  # остановить конкретную охоту по пулу
+/arc hunt stop          # показать подсказку
+/arc hunt stop pool=my_pool
 /arc hunt stopall       # остановить ВСЕ активные охоты
 ```
 
@@ -710,7 +712,7 @@ commands:
     name: "hunt"                              # название команды
     permission: "arc.treasure.hunt.admin"           # право (пусто = для всех)
     description: "Управление охотой"          # описание для /arc help
-    usage: "/arc hunt [status|types|start|stop|stopall]"
+    usage: "/arc hunt [status|types|start preset=<id> [chests=<count>]|start custom ...|stop pool=<id>|stopall]"
     player-only: false                        # требуется ли игрок
     aliases: ["th", "охота"]                  # альтернативные названия
 ```

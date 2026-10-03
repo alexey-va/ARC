@@ -11,6 +11,7 @@ import io.mockk.unmockkObject
 import io.mockk.unmockkStatic
 import io.mockk.verify
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import net.milkbowl.vault.economy.Economy
 import net.milkbowl.vault.economy.EconomyResponse
 import org.bukkit.Bukkit
@@ -19,6 +20,8 @@ import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.PlayerInventory
 import ru.arc.KotestTestBase
+import ru.arc.hooks.HookRegistry
+import ru.arc.hooks.ztranslator.TranslatorHook
 import ru.arc.util.TextUtil
 
 @Suppress("USELESS_CAST")
@@ -88,6 +91,52 @@ class TreasureServiceTest :
                             it.type == Material.DIAMOND && it.amount == 5
                         },
                     )
+                }
+            }
+
+            it("uses the translated vanilla item name in its receipt and keeps the quantity") {
+                val previousTranslator = HookRegistry.translatorHook
+                val translator = mockk<TranslatorHook>()
+                every { translator.translate(any<ItemStack>()) } returns "Козий рог"
+                HookRegistry.translatorHook = translator
+                try {
+                    service.give(Treasure.Item(ItemStack(Material.GOAT_HORN), min = 2, max = 2), mockPlayer)
+
+                    verify(exactly = 1) { translator.translate(match<ItemStack> { it.type == Material.GOAT_HORN }) }
+                    verify(exactly = 1) {
+                        mockPlayer.sendMessage(
+                            match<Component> {
+                                PlainTextComponentSerializer.plainText().serialize(it) == "Вы получили: Козий рог x2"
+                            },
+                        )
+                    }
+                } finally {
+                    HookRegistry.translatorHook = previousTranslator
+                }
+            }
+
+            it("preserves an item's existing display component in its receipt") {
+                val previousTranslator = HookRegistry.translatorHook
+                val translator = mockk<TranslatorHook>()
+                HookRegistry.translatorHook = translator
+                try {
+                    val stack = ItemStack(Material.GOAT_HORN)
+                    val meta = stack.itemMeta
+                    meta.displayName(Component.text("Рог из пещеры 🐐"))
+                    stack.itemMeta = meta
+
+                    service.give(Treasure.Item(stack, min = 3, max = 3), mockPlayer)
+
+                    verify(exactly = 0) { translator.translate(any<ItemStack>()) }
+                    verify(exactly = 1) {
+                        mockPlayer.sendMessage(
+                            match<Component> {
+                                PlainTextComponentSerializer.plainText().serialize(it) == "Вы получили: Рог из пещеры 🐐 x3"
+                            },
+                        )
+                    }
+                } finally {
+                    HookRegistry.translatorHook = previousTranslator
                 }
             }
 

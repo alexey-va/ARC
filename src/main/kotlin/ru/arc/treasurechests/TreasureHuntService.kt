@@ -14,6 +14,7 @@ import org.bukkit.entity.Firework
 import org.bukkit.entity.Player
 import org.bukkit.event.entity.CreatureSpawnEvent
 import ru.arc.common.chests.CustomChest
+import ru.arc.common.chests.ItemsAdderChest
 import ru.arc.common.locationpools.LocationPool
 import ru.arc.common.locationpools.LocationPoolManager
 import ru.arc.core.ScheduledTask
@@ -79,6 +80,7 @@ class TreasureHuntService(
 ) {
     private val activeHunts = ConcurrentLinkedDeque<ActiveHunt>()
     private val blockToHunt = ConcurrentHashMap<Location, ActiveHunt>()
+    private var grapple: TreasureHuntGrapple? = null
 
     private companion object {
         /** Сундуков за тик при массовом stop (IA destroy дорогой). */
@@ -94,7 +96,19 @@ class TreasureHuntService(
     fun reloadConfig(newConfig: TreasureHuntModuleConfig) {
         this.config = newConfig
         config.invalidateCache()
+        val highlight = config.highlightSettings
+        activeHunts.forEach { hunt ->
+            hunt.chests.values.forEach { placed -> applyHighlight(placed.chest, highlight.enabled, highlight.color) }
+        }
+        grapple?.reloadConfig(config.grappleSettings)
         info("Treasure hunt config reloaded with ${config.huntTypes.size} hunt types")
+    }
+
+    /** Attach the module-owned temporary hook controller after the service has initialized. */
+    internal fun attachGrapple(grapple: TreasureHuntGrapple?) {
+        this.grapple = grapple
+        grapple?.reloadConfig(config.grappleSettings)
+        grapple?.onActiveHuntsChanged(activeHunts.toList())
     }
 
     /**
@@ -194,6 +208,7 @@ class TreasureHuntService(
         // Revalidate authored points before placement; never replace world decoration.
         val placedChests = mutableMapOf<Location, PlacedChest>()
         val aliases = config.aliases
+        val highlight = config.highlightSettings
 
         for (location in locations) {
             val block = location.block
@@ -209,6 +224,7 @@ class TreasureHuntService(
             if (chest != null) {
                 val created = chest.create()
                 if (created) {
+                    applyHighlight(chest, highlight.enabled, highlight.color)
                     placedChests[block.location.toCenterLocation()] = PlacedChest(chest, chestType)
                 } else {
                     warn("Failed to create chest at $location")
@@ -242,6 +258,7 @@ class TreasureHuntService(
         // Register
         activeHunts.add(hunt)
         placedChests.keys.forEach { blockToHunt[it] = hunt }
+        grapple?.onActiveHuntsChanged(activeHunts.toList())
 
         info("Started hunt with ${placedChests.size} chests in ${world.name}")
         return hunt
@@ -270,6 +287,7 @@ class TreasureHuntService(
         // Unregister
         blockToHunt.entries.removeIf { it.value === hunt }
         activeHunts.remove(hunt)
+        grapple?.onActiveHuntsChanged(activeHunts.toList())
 
         val poolId = hunt.config.locationPoolId
         if (LocationPoolManager.isEphemeralPool(poolId)) {
@@ -361,6 +379,10 @@ class TreasureHuntService(
     fun getAliases(): Map<String, String> = config.aliases
 
     fun getMessages(): TreasureHuntMessages = config.messages
+
+    private fun applyHighlight(chest: CustomChest, enabled: Boolean, color: Color) {
+        (chest as? ItemsAdderChest)?.setHighlight(enabled, color)
+    }
 
     // === Display ===
 

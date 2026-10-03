@@ -42,6 +42,7 @@ import ru.arc.treasure.pouch.Pouches
 import ru.arc.treasurechests.HuntFurnitureJanitor
 import ru.arc.treasurechests.HuntFurnitureRegistry
 import ru.arc.treasurechests.TreasureHuntManager
+import ru.arc.treasurechests.TreasureHuntGrapple
 import ru.arc.treasurechests.TreasureHuntRegistry
 import ru.arc.util.CooldownManager
 import ru.arc.util.HeadTextureCache
@@ -363,11 +364,20 @@ object StoreModule : PluginModule {
 object TreasureModule : PluginModule {
     override val name = "Treasures"
     override val priority = 77
+    private var grapple: TreasureHuntGrapple? = null
 
     override fun init() {
+        grapple?.close()
+        grapple = null
         Treasures.init()
         Pouches.init()
         TreasureHuntRegistry.init()
+        if (ARC.plugin != null) {
+            TreasureHuntGrapple(ARC.instance, Tasks.scheduler).also { controller ->
+                grapple = controller
+                TreasureHuntRegistry.attachGrapple(controller)
+            }
+        }
         HuntFurnitureRegistry.init()
         HuntFurnitureJanitor.init(Tasks.scheduler)
     }
@@ -380,6 +390,9 @@ object TreasureModule : PluginModule {
 
     override fun shutdown() {
         HuntFurnitureJanitor.shutdown()
+        grapple?.close()
+        grapple = null
+        TreasureHuntRegistry.attachGrapple(null)
         TreasureHuntManager.stopAll()
         Treasures.shutdown()
     }

@@ -6,8 +6,35 @@
 # chest-types — варианты сундуков с весом; type: IA | VANILLA.
 #   ia-namespace-id — ключ из aliases; treasure-pool-id — пул наград.
 #   particle-path — суффикс для idle / claimed (см. секции ниже).
+# grapple — временный крюк-кошка только во время охоты в rc_origin_spawn.
+# highlight — подсветка активной ItemsAdder мебели; цвет в формате #RRGGBB.
 # idle / claimed — пресеты частиц и звука для нетронутого / открытого сундука.
 # =============================================================================
+
+highlight:
+  enabled: true
+  color: "#ffc242"
+
+grapple:
+  enabled: true
+  cooldown-ticks: 12
+  max-distance: 34.0
+  projectile-blocks-per-tick: 4.0
+  pull-speed: 1.0
+  stop-distance: 1.6
+  max-pull-ticks: 45
+  cable-segments: 8
+  item-name: <gold>Крюк-кошка
+  item-lore:
+    - ''
+    - <gray>Нажмите <white>ПКМ<gray>, чтобы выстрелить и подтянуться.
+    - ''
+    - <dark_gray>Действует во время охоты на спавне.
+  messages:
+    item-received: <gold>Крюк-кошка добавлен на панель быстрого доступа.
+    inventory-full: <gray>Освободите слот на панели быстрого доступа — крюк появится автоматически.
+    missed: <gray>Крюк не зацепился за поверхность.
+    pulling: <aqua>Есть зацеп! Вас подтягивает.
 
 # Сокращения для ItemsAdder chest id (используются в ia-namespace-id)
 aliases:

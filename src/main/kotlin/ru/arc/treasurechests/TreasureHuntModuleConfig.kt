@@ -1,5 +1,7 @@
 package ru.arc.treasurechests
 
+import net.kyori.adventure.text.format.TextColor
+import org.bukkit.Color
 import org.bukkit.Particle
 import ru.arc.common.WeightedRandom
 import ru.arc.common.locationpools.LocationPoolManager
@@ -13,6 +15,20 @@ import ru.arc.config.materialSet
 import ru.arc.config.particle
 import ru.arc.config.sound
 
+/** Typed, reloadable visual settings for active treasure-hunt furniture. */
+internal data class TreasureHuntHighlightSettings(
+    val enabled: Boolean,
+    val color: Color,
+) {
+    companion object {
+        fun load(section: ConfigSection): TreasureHuntHighlightSettings =
+            TreasureHuntHighlightSettings(
+                enabled = section.boolean("enabled", true),
+                color = Color.fromRGB(section.color("color", TextColor.color(255, 194, 66)).value()),
+            )
+    }
+}
+
 /**
  * Configuration for the treasure hunt module.
  *
@@ -22,6 +38,12 @@ import ru.arc.config.sound
 class TreasureHuntModuleConfig(
     private val config: Config,
 ) {
+    internal val highlightSettings: TreasureHuntHighlightSettings
+        get() = TreasureHuntHighlightSettings.load(config.section("highlight"))
+
+    internal val grappleSettings: TreasureHuntGrappleSettings
+        get() = TreasureHuntGrappleSettings.load(config.section("grapple"))
+
     val aliases: Map<String, String>
         get() = config.map("aliases")
 

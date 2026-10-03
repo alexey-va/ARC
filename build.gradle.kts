@@ -52,7 +52,7 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.253"
+version = "1.4.254"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.13"
@@ -159,6 +159,8 @@ dependencies {
     // Private mirror of the exact server-provided Premium JAR; never shaded.
     compileOnly("ru.ruscrafting.thirdparty:economyshopgui-premium:6.3.0")
     compileOnly(libs.net.william278.huskhomes)
+    // These sync-event API classes match the installed HuskSync 3.8.8 build.
+    compileOnly("net.william278.husksync:husksync-bukkit:3.8.7+1.21.8") { isTransitive = false }
     // CI uses the current public API. Release verification may supply the exact
     // active server JAR with -PlandsJar=/absolute/path/Lands.jar.
     compileOnly(landsCompileDependency)
@@ -235,6 +237,7 @@ dependencies {
     testImplementation("commons-lang:commons-lang:2.6")
     testImplementation(libs.com.zrips.cmi.api)
     testImplementation(libs.net.william278.huskhomes)
+    testImplementation("net.william278.husksync:husksync-bukkit:3.8.7+1.21.8") { isTransitive = false }
     testImplementation(libs.net.citizensnpcs.citizens.main) { exclude(group = "*", module = "*") }
     testImplementation(libs.com.denizenscript.denizen) { isTransitive = false }
     testImplementation(libs.ru.ruscrafting.thirdparty.elitemobs.api)

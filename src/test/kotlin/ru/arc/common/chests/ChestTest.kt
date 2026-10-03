@@ -9,8 +9,10 @@ import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import org.bukkit.Color
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
+import org.bukkit.entity.ItemDisplay
 import ru.arc.KotestTestBase
 import ru.arc.treasurechests.HuntFurnitureRegistry
 import java.nio.file.Files
@@ -211,6 +213,63 @@ class ChestTest :
 
                     result.shouldBeFalse()
                     verify(exactly = 0) { mockBlockDataProvider.setMarker(any(), any(), any()) }
+                }
+            }
+
+            describe("setHighlight") {
+
+                it("should highlight only the ItemsAdder root and restore its original glow state") {
+                    val world = server.addSimpleWorld("test")
+                    val block = world.getBlockAt(0, 64, 0)
+                    val root = world.spawn(block.location.toCenterLocation(), ItemDisplay::class.java)
+                    val nearby =
+                        world.spawn(
+                            block.getRelative(1, 0, 0).location.toCenterLocation(),
+                            ItemDisplay::class.java,
+                        )
+                    val originalColor = Color.fromRGB(0x6655AA)
+                    val nearbyColor = Color.fromRGB(0x33AA77)
+                    val highlightColor = Color.fromRGB(0xFFC242)
+
+                    root.isGlowing = false
+                    root.glowColorOverride = originalColor
+                    nearby.isGlowing = true
+                    nearby.glowColorOverride = nearbyColor
+
+                    val furniture = mockk<Any>()
+                    val scanner =
+                        mockk<FurnitureEntityScanner> {
+                            every { snapshotNear(block, any()) } returnsMany
+                                listOf(emptySet(), setOf(root.uniqueId, nearby.uniqueId))
+                        }
+                    val furnitureProvider =
+                        mockk<FurnitureProvider> {
+                            every { spawn("test:chest", block) } returns furniture
+                            every { getEntity(furniture) } returns root
+                        }
+                    val chest =
+                        ItemsAdderChest(
+                            block = block,
+                            namespaceId = "test:chest",
+                            blockDataProvider = mockk(relaxed = true),
+                            furnitureProvider = furnitureProvider,
+                            entityScanner = scanner,
+                        )
+
+                    chest.create().shouldBeTrue()
+                    chest.setHighlight(enabled = true, color = highlightColor)
+
+                    root.isGlowing shouldBe true
+                    root.glowColorOverride shouldBe highlightColor
+                    nearby.isGlowing shouldBe true
+                    nearby.glowColorOverride shouldBe nearbyColor
+
+                    chest.setHighlight(enabled = false, color = highlightColor)
+
+                    root.isGlowing shouldBe false
+                    root.glowColorOverride shouldBe originalColor
+                    nearby.isGlowing shouldBe true
+                    nearby.glowColorOverride shouldBe nearbyColor
                 }
             }
 

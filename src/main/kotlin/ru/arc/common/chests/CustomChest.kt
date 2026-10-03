@@ -2,10 +2,12 @@ package ru.arc.common.chests
 
 import com.jeff_media.customblockdata.CustomBlockData
 import dev.lone.itemsadder.api.CustomFurniture
+import org.bukkit.Color
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.block.Block
+import org.bukkit.entity.Display
 import org.bukkit.entity.Entity
 import org.bukkit.persistence.PersistentDataType
 import ru.arc.ARC
@@ -322,6 +324,13 @@ class ItemsAdderChest(
     }
 
     private var furniture: Any? = null
+    private var originalHighlight: OriginalHighlight? = null
+
+    private data class OriginalHighlight(
+        val entity: Entity,
+        val glowing: Boolean,
+        val color: Color?,
+    )
 
     override fun create(): Boolean {
         if (block.type != Material.AIR) {
@@ -358,7 +367,46 @@ class ItemsAdderChest(
         return true
     }
 
+    /**
+     * Applies the treasure-hunt outline to this furniture's root entity only.
+     * The first enabled call captures the ItemsAdder-authored glow state so a
+     * later disable or config reload can restore it exactly.
+     */
+    fun setHighlight(
+        enabled: Boolean,
+        color: Color,
+    ) {
+        if (!enabled) {
+            restoreHighlight()
+            return
+        }
+
+        val rootEntity = furniture?.let(furnitureProvider::getEntity)?.takeIf { it.isValid } ?: return
+        if (originalHighlight?.entity?.uniqueId != rootEntity.uniqueId) {
+            restoreHighlight()
+            originalHighlight =
+                OriginalHighlight(
+                    entity = rootEntity,
+                    glowing = rootEntity.isGlowing,
+                    color = (rootEntity as? Display)?.glowColorOverride,
+                )
+        }
+
+        rootEntity.isGlowing = true
+        (rootEntity as? Display)?.glowColorOverride = color
+    }
+
+    private fun restoreHighlight() {
+        val original = originalHighlight ?: return
+        if (original.entity.isValid) {
+            original.entity.isGlowing = original.glowing
+            (original.entity as? Display)?.glowColorOverride = original.color
+        }
+        originalHighlight = null
+    }
+
     override fun destroy() {
+        restoreHighlight()
         val anchor = HuntFurnitureRegistry.take(block)
         ItemsAdderFurnitureRemover.clearMarkers(block, blockDataProvider)
         val removed =
