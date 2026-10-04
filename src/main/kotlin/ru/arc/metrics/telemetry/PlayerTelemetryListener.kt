@@ -44,16 +44,16 @@ internal class PlayerTelemetryListener : AutoCloseable {
                 PlayerTelemetryModule.leave(it.player)
             }
             events.on<PlayerKickEvent>(EventPriority.MONITOR, ignoreCancelled = true) {
-                PlayerTelemetryModule.record(it.player.uniqueId, "player", "connection.kick", attributes = mapOf("cause" to it.cause.name))
+                PlayerTelemetryModule.recordNative(it.player.uniqueId, "player", "connection.kick", attributes = mapOf("cause" to it.cause.name))
             }
             events.on<PlayerChangedWorldEvent>(EventPriority.MONITOR) {
                 PlayerTelemetryModule.relocate(it.player, it.player.location)
-                PlayerTelemetryModule.record(it.player.uniqueId, "player", "world.enter", it.player.world.name,
+                PlayerTelemetryModule.recordNative(it.player.uniqueId, "player", "world.enter", it.player.world.name,
                     attributes = mapOf("fromWorld" to it.from.name))
             }
             events.on<PlayerTeleportEvent>(EventPriority.MONITOR, ignoreCancelled = false) {
                 if (!it.isCancelled) PlayerTelemetryModule.relocate(it.player, it.to)
-                PlayerTelemetryModule.record(it.player.uniqueId, "player", "teleport", it.to.world.name,
+                PlayerTelemetryModule.recordNative(it.player.uniqueId, "player", "teleport", it.to.world.name,
                     attributes = mapOf("cause" to it.cause.name, "cancelled" to it.isCancelled.toString(),
                         "fromWorld" to it.from.world.name, "fromX" to it.from.blockX.toString(), "fromY" to it.from.blockY.toString(),
                         "fromZ" to it.from.blockZ.toString(), "toX" to it.to.blockX.toString(), "toY" to it.to.blockY.toString(), "toZ" to it.to.blockZ.toString()))
@@ -84,11 +84,11 @@ internal class PlayerTelemetryListener : AutoCloseable {
                 }
             }
             events.on<PlayerDeathEvent>(EventPriority.MONITOR) {
-                PlayerTelemetryModule.record(it.player.uniqueId, "player", "death",
+                PlayerTelemetryModule.recordNative(it.player.uniqueId, "player", "death",
                     attributes = mapOf("cause" to (it.player.lastDamageCause?.cause?.name ?: "UNKNOWN")))
             }
             events.on<PlayerAdvancementDoneEvent>(EventPriority.MONITOR) {
-                PlayerTelemetryModule.record(it.player.uniqueId, "player", "advancement", it.advancement.key.toString())
+                PlayerTelemetryModule.recordNative(it.player.uniqueId, "player", "advancement", it.advancement.key.toString())
             }
             events.on<PlayerItemConsumeEvent>(EventPriority.MONITOR, ignoreCancelled = true) {
                 PlayerTelemetryModule.action(it.player, "item.consume", it.item.type.key.toString())
@@ -98,10 +98,10 @@ internal class PlayerTelemetryListener : AutoCloseable {
             }
             events.on<AsyncChatEvent>(EventPriority.MONITOR, ignoreCancelled = true) {
                 // The message, recipient list and signed chat payload are deliberately never accessed.
-                PlayerTelemetryModule.record(it.player.uniqueId, "player", "chat.sent")
+                PlayerTelemetryModule.recordNative(it.player.uniqueId, "player", "chat.sent")
             }
             events.on<InventoryOpenEvent>(EventPriority.MONITOR, ignoreCancelled = false) { event ->
-                (event.player as? Player)?.let { PlayerTelemetryModule.record(it.uniqueId, "inventory", "inventory.open", event.inventory.type.name.lowercase(),
+                (event.player as? Player)?.let { PlayerTelemetryModule.recordNative(it.uniqueId, "inventory", "inventory.open", event.inventory.type.name.lowercase(),
                     attributes = mapOf("cancelled" to event.isCancelled.toString(), "holderClass" to (event.inventory.holder?.javaClass?.name?.replace('$', '.') ?: "none"))) }
             }
             events.on<InventoryClickEvent>(EventPriority.MONITOR, ignoreCancelled = false) { event ->
@@ -111,7 +111,7 @@ internal class PlayerTelemetryListener : AutoCloseable {
                         "material" to (event.currentItem?.type?.key?.toString() ?: "minecraft:air"))) }
             }
             events.on<InventoryCloseEvent>(EventPriority.MONITOR) { event ->
-                (event.player as? Player)?.let { PlayerTelemetryModule.record(it.uniqueId, "inventory", "inventory.close", event.inventory.type.name.lowercase(),
+                (event.player as? Player)?.let { PlayerTelemetryModule.recordNative(it.uniqueId, "inventory", "inventory.close", event.inventory.type.name.lowercase(),
                     attributes = mapOf("reason" to event.reason.name)) }
             }
             events.on<PlayerResourcePackStatusEvent>(EventPriority.MONITOR) {
@@ -120,7 +120,7 @@ internal class PlayerTelemetryListener : AutoCloseable {
                 if (it.status == PlayerResourcePackStatusEvent.Status.ACCEPTED && packs.size < 4_096) packs.putIfAbsent(key, now)
                 val attributes = mutableMapOf("status" to it.status.name, "timingBasis" to "accepted_to_status")
                 packs[key]?.let { started -> attributes["elapsedMs"] = (now - started).coerceAtLeast(0).toString() }
-                PlayerTelemetryModule.record(it.player.uniqueId, "paper", "resource_pack.status", it.getID().toString(), attributes = attributes)
+                PlayerTelemetryModule.recordNative(it.player.uniqueId, "paper", "resource_pack.status", it.getID().toString(), attributes = attributes)
                 if (it.status.name !in setOf("ACCEPTED", "DOWNLOADED")) packs.remove(key)
             }
             if (Bukkit.getPluginManager().isPluginEnabled("Citizens")) {

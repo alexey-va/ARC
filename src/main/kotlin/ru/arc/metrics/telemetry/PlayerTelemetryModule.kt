@@ -83,7 +83,9 @@ object PlayerTelemetryModule : PluginModule {
                     observedActions.entries.toList().forEach { (id, action) ->
                         if (observedActions.remove(id, action)) tracker?.activity(id, action.first, action.second)
                     }
-                    Bukkit.getOnlinePlayers().forEach { tracker?.sample(it.uniqueId, it.location.position(), now) }
+                    Bukkit.getOnlinePlayers().forEach {
+                        if (contexts.containsKey(it.uniqueId)) tracker?.sample(it.uniqueId, it.location.position(), now)
+                    }
                 })
                 state = "capturing"
                 instance.offer(PlayerTelemetryEvent(eventId = UUID.randomUUID().toString(), occurredAt = System.currentTimeMillis(),
@@ -150,8 +152,11 @@ object PlayerTelemetryModule : PluginModule {
         return previous
     }
 
-    internal fun join(player: Player, resumed: Boolean = false) = tracker?.join(player.uniqueId, player.name,
-        player.name.lowercase() in qaNames, player.location.position(), System.currentTimeMillis(), resumed)
+    internal fun join(player: Player, resumed: Boolean = false) {
+        if (player.hasMetadata("NPC")) return
+        tracker?.join(player.uniqueId, player.name,
+            player.name.lowercase() in qaNames, player.location.position(), System.currentTimeMillis(), resumed)
+    }
 
     internal fun leave(player: Player) {
         observedActions.remove(player.uniqueId)?.let { tracker?.activity(player.uniqueId, it.first, it.second) }
@@ -165,6 +170,13 @@ object PlayerTelemetryModule : PluginModule {
     fun record(playerId: UUID, source: String, event: String, subject: String? = null,
                operationId: String? = null, attributes: Map<String, String> = emptyMap()): Boolean {
         val context = contexts[playerId]
+        return capture(context, source, event, subject, operationId, attributes, System.currentTimeMillis(), playerId)
+    }
+
+    /** Native Paper callbacks are accepted only for a player with a live, tracked join context. */
+    internal fun recordNative(playerId: UUID, source: String, event: String, subject: String? = null,
+                              operationId: String? = null, attributes: Map<String, String> = emptyMap()): Boolean {
+        val context = contexts[playerId] ?: return false
         return capture(context, source, event, subject, operationId, attributes, System.currentTimeMillis(), playerId)
     }
 
@@ -192,17 +204,19 @@ object PlayerTelemetryModule : PluginModule {
     }
 
     internal fun action(player: Player, event: String, subject: String? = null, attributes: Map<String, String> = emptyMap()): Boolean {
+        val context = contexts[player.uniqueId] ?: return false
         markActivity(player.uniqueId, event, System.currentTimeMillis())
-        return record(player.uniqueId, "player", event, subject, null, attributes)
+        return capture(context, "player", event, subject, null, attributes, System.currentTimeMillis(), player.uniqueId)
     }
 
     internal fun ui(playerId: String, visit: String, kind: ProductUiKind, view: ProductUiView, button: String, duration: Long, at: Long) {
         val player = runCatching { UUID.fromString(playerId) }.getOrNull() ?: return
+        val context = contexts[player] ?: return
         if (kind in setOf(ProductUiKind.CLICK, ProductUiKind.ATTEMPT, ProductUiKind.BLOCKED))
             markActivity(player, "ui.${kind.name.lowercase()}", at)
         val details = view.details + mapOf("visitId" to visit, "button" to button, "revision" to view.revision,
             "durationMs" to duration.toString()) + (view.buttons[button]?.let { mapOf("slot" to it.slot.toString()) } ?: emptyMap())
-        capture(contexts[player], "ui", "ui.${kind.name.lowercase()}", view.surface, null, details, at, player)
+        capture(context, "ui", "ui.${kind.name.lowercase()}", view.surface, null, details, at, player)
     }
 
     private fun markActivity(player: UUID, event: String, at: Long) {
