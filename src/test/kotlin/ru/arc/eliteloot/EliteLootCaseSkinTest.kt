@@ -1,6 +1,10 @@
 package ru.arc.eliteloot
 
 import com.magmaguy.elitemobs.api.utils.EliteItemManager
+import com.magmaguy.elitemobs.config.ItemSettingsConfig
+import com.magmaguy.elitemobs.skills.SkillType
+import com.magmaguy.elitemobs.skills.WeaponIdentityResolver
+import io.papermc.paper.datacomponent.DataComponentTypes
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.*
@@ -18,12 +22,77 @@ import ru.arc.config.Config
 import ru.arc.paper.testing.MockBukkitTestRuntime
 
 class EliteLootCaseSkinTest : FreeSpec({
+    "a recognized FMM staff receives a crossbow model without changing its weapon data" {
+        MockBukkitTestRuntime.open().use {
+            mockkStatic(EliteItemManager::class, WeaponIdentityResolver::class)
+            try {
+                every { EliteItemManager.isEliteMobsItem(any()) } returns true
+                every { WeaponIdentityResolver.progressionSkill(any()) } returns SkillType.STAVES
+                val config = mockk<Config>()
+                every { config.bool("replace-skins", true) } returns true
+                every { config.real("replace-chance", 0.9) } returns 1.0
+                val fmmKey = NamespacedKey("freeminecraftmodels", "fmm_item_id")
+                val ownerKey = NamespacedKey("elitemobs", "soulbind")
+                val original = ItemStack(Material.WOODEN_SPEAR)
+                original.setData(DataComponentTypes.ITEM_MODEL, net.kyori.adventure.key.Key.key("freeminecraftmodels:display/fmm_default_arcane_staff"))
+                original.editMeta {
+                    it.itemModel = NamespacedKey("freeminecraftmodels", "display/fmm_default_arcane_staff")
+                    it.persistentDataContainer.set(fmmKey, PersistentDataType.STRING, "fmm_default_arcane_staff")
+                    it.persistentDataContainer.set(ownerKey, PersistentDataType.STRING, "owner")
+                    it.addAttributeModifier(Attribute.ATTACK_DAMAGE, AttributeModifier(NamespacedKey("test", "staff_damage"), 13.0, AttributeModifier.Operation.ADD_NUMBER, EquipmentSlotGroup.MAINHAND))
+                    (it as Damageable).damage = 7
+                }
+                val donor = ItemStack(Material.CROSSBOW)
+                donor.setData(DataComponentTypes.CUSTOM_MODEL_DATA, io.papermc.paper.datacomponent.item.CustomModelData.customModelData().addFloat(10001f).build())
+                var selections = 0
+                val processor = EliteLootProcessor(config, selectDecor = {
+                    it shouldBe LootType.STAFF
+                    selections++
+                    DecorItem(Material.CROSSBOW, 1.0, 10001, iaNamespace = "3dfantasyweaponscit", iaId = "night_staff")
+                }, template = { donor })
+                processor.processEliteLoot(original) shouldBe original
+                original.type shouldBe Material.WOODEN_SPEAR
+                original.getData(DataComponentTypes.ITEM_MODEL) shouldBe net.kyori.adventure.key.Key.key("minecraft:crossbow")
+                original.getData(DataComponentTypes.CUSTOM_MODEL_DATA)!!.floats() shouldBe listOf(10001f)
+                original.itemMeta.persistentDataContainer.get(fmmKey, PersistentDataType.STRING) shouldBe "fmm_default_arcane_staff"
+                original.itemMeta.persistentDataContainer.get(ownerKey, PersistentDataType.STRING) shouldBe "owner"
+                original.itemMeta.getAttributeModifiers(Attribute.ATTACK_DAMAGE)!!.single().amount shouldBe 13.0
+                (original.itemMeta as Damageable).damage shouldBe 7
+                processor.processEliteLoot(original) shouldBe original
+                selections shouldBe 1
+            } finally { unmockkStatic(EliteItemManager::class, WeaponIdentityResolver::class) }
+        }
+    }
+
+    "staff routing requires explicit FMM identity and leaves wands and existing sword skins alone" {
+        MockBukkitTestRuntime.open().use {
+            mockkStatic(EliteItemManager::class, WeaponIdentityResolver::class)
+            try {
+                every { EliteItemManager.isEliteMobsItem(any()) } returns true
+                every { WeaponIdentityResolver.progressionSkill(any()) } returns SkillType.WANDS
+                EliteLootManager.toLootType(ItemStack(Material.WOODEN_SPEAR)) shouldBe null
+                val wand = ItemStack(Material.BLAZE_ROD)
+                wand.editMeta { it.persistentDataContainer.set(NamespacedKey("freeminecraftmodels", "fmm_item_id"), PersistentDataType.STRING, "fmm_default_arcane_wand") }
+                EliteLootManager.toLootType(wand) shouldBe null
+                val config = mockk<Config>()
+                every { config.bool("replace-skins", true) } returns true
+                val sword = ItemStack(Material.DIAMOND_SWORD)
+                sword.editMeta { it.setCustomModelData(999) }
+                sword.setData(DataComponentTypes.ITEM_MODEL, net.kyori.adventure.key.Key.key("example:existing_sword"))
+                val processor = EliteLootProcessor(config, selectDecor = { error("An existing sword model must not enter the pool") })
+                processor.processEliteLoot(sword) shouldBe sword
+                sword.getData(DataComponentTypes.ITEM_MODEL) shouldBe net.kyori.adventure.key.Key.key("example:existing_sword")
+            } finally { unmockkStatic(EliteItemManager::class, WeaponIdentityResolver::class) }
+        }
+    }
+
     "spawn preparation applies an in-place skin before pickup without changing the source reward" {
         MockBukkitTestRuntime.open().use {
-            mockkStatic(EliteItemManager::class)
+            mockkStatic(EliteItemManager::class, ItemSettingsConfig::class)
             try {
                 every { EliteItemManager.isEliteMobsItem(any()) } returns true
                 every { EliteItemManager.getRoundedItemLevel(any()) } returns 43
+                every { ItemSettingsConfig.getWeaponEntry() } returns ""
                 val original = ItemStack(Material.DIAMOND_CHESTPLATE)
                 val key = NamespacedKey("elitemobs", "soulbind")
                 original.editMeta { it.persistentDataContainer.set(key, PersistentDataType.STRING, "owner") }
@@ -38,7 +107,7 @@ class EliteLootCaseSkinTest : FreeSpec({
                 original.itemMeta.hasCustomModelData() shouldBe false
                 prepared.type shouldBe Material.DIAMOND_CHESTPLATE
                 verify(exactly = 1) { processor.processEliteLoot(any(), false) }
-            } finally { unmockkStatic(EliteItemManager::class) }
+            } finally { unmockkStatic(EliteItemManager::class, ItemSettingsConfig::class) }
         }
     }
 

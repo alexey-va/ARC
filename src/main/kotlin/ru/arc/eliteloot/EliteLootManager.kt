@@ -1,12 +1,17 @@
 package ru.arc.eliteloot
 
+import com.magmaguy.elitemobs.skills.SkillType
+import com.magmaguy.elitemobs.skills.WeaponIdentityResolver
 import org.bukkit.Material
+import org.bukkit.NamespacedKey
 import org.bukkit.inventory.ItemStack
+import org.bukkit.persistence.PersistentDataType
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import java.util.concurrent.ConcurrentHashMap
 
 object EliteLootManager {
+    private val fmmItemKey = NamespacedKey("freeminecraftmodels", "fmm_item_id")
     private data class State(
         val processor: EliteLootProcessor,
         val parser: EliteLootConfigParser,
@@ -50,7 +55,11 @@ object EliteLootManager {
     }
 
     @JvmStatic
-    fun toLootType(stack: ItemStack?): LootType? = stack?.let { toLootType(it.type) }
+    fun toLootType(stack: ItemStack?): LootType? = stack?.let {
+        if (it.itemMeta.persistentDataContainer.has(fmmItemKey, PersistentDataType.STRING) &&
+            WeaponIdentityResolver.progressionSkill(it) == SkillType.STAVES) LootType.STAFF
+        else toLootType(it.type)
+    }
 
     @JvmStatic
     fun toLootType(material: Material): LootType? = when (material) {

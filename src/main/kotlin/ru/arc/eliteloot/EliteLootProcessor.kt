@@ -22,11 +22,12 @@ class EliteLootProcessor(
     fun processEliteLoot(originalStack: ItemStack?, caseReward: Boolean = false): ItemStack? {
         if (originalStack == null || !EliteItemManager.isEliteMobsItem(originalStack)) return originalStack
         if (!caseReward && !config.bool("replace-skins", true)) return originalStack
-        val meta = originalStack.itemMeta
-        if (meta.persistentDataContainer.has(skinKey) || meta.hasItemModel() ||
-            (meta.hasCustomModelData() && meta.customModelData != 0)) return originalStack
-        if (!caseReward && Math.random() > config.real("replace-chance", 0.9)) return originalStack
         val type = EliteLootManager.toLootType(originalStack) ?: return originalStack
+        val meta = originalStack.itemMeta
+        if (meta.persistentDataContainer.has(skinKey)) return originalStack
+        if (type != LootType.STAFF && (meta.hasItemModel() ||
+            (meta.hasCustomModelData() && meta.customModelData != 0))) return originalStack
+        if (!caseReward && Math.random() > config.real("replace-chance", 0.9)) return originalStack
         val decor = selectDecor(type) ?: return originalStack
         val skin = template(decor) ?: return originalStack
         applyEliteSkin(originalStack, skin)
@@ -44,7 +45,8 @@ class EliteLootProcessor(
 /** Copy appearance only: the original material, attributes, durability and plugin identity stay intact. */
 @Suppress("UnstableApiUsage")
 internal fun applyEliteSkin(item: ItemStack, skin: ItemStack) {
-    skin.getData(DataComponentTypes.ITEM_MODEL)?.let { item.setData(DataComponentTypes.ITEM_MODEL, it) }
+    val itemModel = skin.getData(DataComponentTypes.ITEM_MODEL) ?: skin.type.key
+    item.setData(DataComponentTypes.ITEM_MODEL, itemModel)
     skin.getData(DataComponentTypes.CUSTOM_MODEL_DATA)?.let { item.setData(DataComponentTypes.CUSTOM_MODEL_DATA, it) }
     skin.getData(DataComponentTypes.DYED_COLOR)?.let { item.setData(DataComponentTypes.DYED_COLOR, it) }
     val originalEquipment = item.getData(DataComponentTypes.EQUIPPABLE)
