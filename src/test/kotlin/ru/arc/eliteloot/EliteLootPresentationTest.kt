@@ -6,6 +6,28 @@ import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+import org.bukkit.Material
+import org.bukkit.NamespacedKey
+import org.bukkit.inventory.ItemStack
+import org.bukkit.persistence.PersistentDataType
+import ru.arc.paper.testing.MockBukkitTestRuntime
+
+private val testElitePresentationRoot = NamespacedKey("elitemobs", "enchantment_presentation")
+private val testElitePresentationLines = NamespacedKey("elitemobs", "lines")
+private val testElitePresentationPosition = NamespacedKey("elitemobs", "position")
+
+private fun setTestElitePresentation(meta: org.bukkit.inventory.meta.ItemMeta, lines: List<String>, position: Int) {
+    val presentation = meta.persistentDataContainer.adapterContext.newPersistentDataContainer()
+    presentation.set(testElitePresentationLines, PersistentDataType.LIST.strings(), lines)
+    presentation.set(testElitePresentationPosition, PersistentDataType.INTEGER, position)
+    meta.persistentDataContainer.set(testElitePresentationRoot, PersistentDataType.TAG_CONTAINER, presentation)
+}
+
+private fun elitePresentationRange(meta: org.bukkit.inventory.meta.ItemMeta): Pair<List<String>, Int> {
+    val presentation = meta.persistentDataContainer.get(testElitePresentationRoot, PersistentDataType.TAG_CONTAINER)!!
+    return presentation.get(testElitePresentationLines, PersistentDataType.LIST.strings())!! to
+        presentation.get(testElitePresentationPosition, PersistentDataType.INTEGER)!!
+}
 
 class EliteLootPresentationTest : FreeSpec({
     "magic weapon lore replaces only its native physical DPS row and stays stable" {
@@ -63,6 +85,82 @@ class EliteLootPresentationTest : FreeSpec({
         val result = compactEliteLore(lines.map(Component::text))
         result.map(PlainTextComponentSerializer.plainText()::serialize) shouldBe listOf("Уровень: 43", "", "Описание")
         compactEliteLore(result) shouldBe result
+    }
+    "generated lore reindexing accepts only a unique exact replacement range" {
+        reindexedEliteEnchantmentLorePosition(
+            listOf("Уровень: 43", "Сгенерированная строка", "Описание"),
+            listOf("Сгенерированная строка"),
+            0,
+        ) shouldBe 1
+        reindexedEliteEnchantmentLorePosition(
+            listOf("Сгенерированная строка", "Сгенерированная строка"),
+            listOf("Сгенерированная строка"),
+            9,
+        ) shouldBe null
+        reindexedEliteEnchantmentLorePosition(
+            listOf("Уровень: 43", "Описание"),
+            listOf("Сгенерированная строка"),
+            0,
+        ) shouldBe null
+    }
+    "reindexes generated lore after compaction and remains valid on repeated presentation passes" {
+        MockBukkitTestRuntime.open().use {
+            val generated = listOf("Зачарование: Огненный удар", "Урон: 4")
+            val compacted = compactEliteLore(
+                (listOf("Уровень: 43", "", "") + generated + "Описание").map(Component::text),
+            )
+            val item = ItemStack(Material.DIAMOND_SWORD)
+            item.editMeta { meta ->
+                // The host recorded index 3 before ARC collapsed two adjacent blank rows to one.
+                meta.lore(compacted)
+                setTestElitePresentation(meta, generated, 3)
+            }
+
+            repeat(2) {
+                item.editMeta(::reindexEliteEnchantmentLore)
+                val meta = item.itemMeta
+                val (storedLines, position) = elitePresentationRange(meta)
+                val visibleLines = meta.lore().orEmpty().map(PlainTextComponentSerializer.plainText()::serialize)
+                visibleLines.subList(position, position + storedLines.size) shouldBe storedLines
+                position shouldBe 2
+
+                // Exercise the real ARC compactor and verify the host range after each presentation pass.
+                item.editMeta { it.lore(compactEliteLore(it.lore().orEmpty())) }
+                item.editMeta(::reindexEliteEnchantmentLore)
+                val finalMeta = item.itemMeta
+                val (finalLines, finalPosition) = elitePresentationRange(finalMeta)
+                val finalLore = finalMeta.lore().orEmpty().map(PlainTextComponentSerializer.plainText()::serialize)
+                finalLore.subList(finalPosition, finalPosition + finalLines.size) shouldBe finalLines
+                finalPosition shouldBe 2
+            }
+        }
+    }
+    "copying native presentation metadata leaves the original soulbind and price untouched" {
+        MockBukkitTestRuntime.open().use {
+            val ownerKey = NamespacedKey("elitemobs", "soulbind")
+            val priceKey = NamespacedKey("elitemobs", "itemvalue")
+            val source = ItemStack(Material.DIAMOND_SWORD)
+            source.editMeta { meta ->
+                setTestElitePresentation(meta, listOf("Generated enchantment"), 1)
+                meta.persistentDataContainer.set(ownerKey, PersistentDataType.STRING, "rerendered-owner")
+                meta.persistentDataContainer.set(priceKey, PersistentDataType.DOUBLE, 999.0)
+            }
+            val original = ItemStack(Material.DIAMOND_SWORD)
+            original.editMeta { meta ->
+                setTestElitePresentation(meta, listOf("Stale enchantment"), 0)
+                meta.persistentDataContainer.set(ownerKey, PersistentDataType.STRING, "original-owner")
+                meta.persistentDataContainer.set(priceKey, PersistentDataType.DOUBLE, 37.5)
+            }
+
+            val originalMeta = original.itemMeta
+            copyElitePresentationMetadata(source.itemMeta, originalMeta)
+            original.itemMeta = originalMeta
+
+            val copiedLines = elitePresentationRange(original.itemMeta).first
+            copiedLines shouldBe listOf("Generated enchantment")
+            original.itemMeta.persistentDataContainer.get(ownerKey, PersistentDataType.STRING) shouldBe "original-owner"
+            original.itemMeta.persistentDataContainer.get(priceKey, PersistentDataType.DOUBLE) shouldBe 37.5
+        }
     }
     "gear requirement is owned by ARC and sits directly below the item level" {
         val plain = PlainTextComponentSerializer.plainText()
