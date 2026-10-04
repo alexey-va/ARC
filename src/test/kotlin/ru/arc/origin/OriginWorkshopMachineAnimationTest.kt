@@ -10,6 +10,59 @@ class OriginWorkshopMachineAnimationTest : FreeSpec({
     val dimensions = OriginWorkshopTableDimensions.DEFAULT
     val tuning = OriginWorkshopMachineTuning()
 
+    "continuous drives own model parts separately from work and close their loop without a jump" {
+        val mechanisms = mapOf(
+            OriginWorkshopTableRole.CARPENTER to listOf(OriginWorkshopMechanism.SAW),
+            OriginWorkshopTableRole.UPHOLSTERER to listOf(OriginWorkshopMechanism.PRESS),
+            OriginWorkshopTableRole.ASSEMBLER to listOf(OriginWorkshopMechanism.VISE, OriginWorkshopMechanism.ANVIL),
+            OriginWorkshopTableRole.FINISHER to listOf(OriginWorkshopMechanism.FINISH),
+        )
+        for (role in OriginWorkshopTableRole.entries) {
+            val geometry = originWorkshopTablePieces(role, 0).associateBy { it.key }
+            val start = originWorkshopDrivePose(role, 0.0, dimensions, tuning)
+            start.pieces.isNotEmpty() shouldBe true
+            val workKeys = mechanisms.getValue(role).flatMap { originWorkshopMachinePose(it, 0.5, 0.65, dimensions, tuning).pieces.keys }.toSet()
+            start.pieces.keys.intersect(workKeys) shouldBe emptySet()
+            for (phase in listOf(0.0, 0.125, 0.25, 0.5, 0.75, 1.0)) {
+                val pose = originWorkshopDrivePose(role, phase, dimensions, tuning)
+                pose.pieces.keys shouldBe start.pieces.keys
+                geometry.keys.containsAll(pose.pieces.keys + workKeys) shouldBe true
+                pose.contact shouldBe null
+                for ((key, motion) in pose.pieces) {
+                    val piece = geometry.getValue(key)
+                    val offset = motion.centerOffset
+                    listOf(offset.x, offset.y, offset.z, motion.rotationDegrees).all(Double::isFinite) shouldBe true
+                    val angle = Math.toRadians(motion.rotationDegrees)
+                    val verticalSize = when (motion.rotationAxis) {
+                        OriginWorkshopRotationAxis.Z -> abs(sin(angle)) * piece.width + abs(cos(angle)) * piece.height
+                        OriginWorkshopRotationAxis.X -> abs(sin(angle)) * piece.depth + abs(cos(angle)) * piece.height
+                        else -> piece.height
+                    }
+                    (piece.y + offset.y - verticalSize / 2.0 > dimensions.height) shouldBe true
+                    if (phase == 1.0) {
+                        (abs(offset.x) + abs(offset.y) + abs(offset.z) < 1e-9) shouldBe true
+                        (abs(motion.rotationDegrees % 360.0) < 1e-9) shouldBe true
+                    }
+                }
+            }
+        }
+    }
+
+    "sewing needle meets fabric and the saw feed rollers stay above their board" {
+        val sewing = originWorkshopTablePieces(OriginWorkshopTableRole.UPHOLSTERER, 0).associateBy { it.key }
+        val needle = sewing.getValue("upholsterer-drive-needle")
+        val cloth = sewing.getValue("upholsterer-sewing-fabric")
+        val stroke = originWorkshopDrivePose(OriginWorkshopTableRole.UPHOLSTERER, 0.25, dimensions, tuning)
+        val needleBottom = needle.y + stroke.pieces.getValue(needle.key).centerOffset.y - needle.height / 2.0
+        (abs(needleBottom - cloth.y - cloth.height / 2.0) < 1e-9) shouldBe true
+        val fabricRoller = sewing.getValue("upholsterer-drive-fabric-roller-0")
+        (fabricRoller.y - kotlin.math.hypot(fabricRoller.width, fabricRoller.height) / 2.0 >= cloth.y + cloth.height / 2.0) shouldBe true
+        val saw = originWorkshopTablePieces(OriginWorkshopTableRole.CARPENTER, 0).associateBy { it.key }
+        val board = saw.getValue("carpenter-board-in-feed")
+        val roller = saw.getValue("carpenter-drive-feed-roller-0")
+        (roller.y - kotlin.math.hypot(roller.width, roller.height) / 2.0 >= board.y + board.height / 2.0) shouldBe true
+    }
+
     "finisher withdraws a rack panel before laying it on the table and returns to the same slot" {
         val panel = originWorkshopTablePieces(OriginWorkshopTableRole.FINISHER, 0)
             .single { it.key == "finisher-drying-panel-center" }

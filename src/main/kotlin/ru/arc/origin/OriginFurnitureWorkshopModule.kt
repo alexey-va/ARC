@@ -222,6 +222,7 @@ internal data class OriginFurnitureWorkshopSettings(
             "workshop must configure all four worker roles"
         }
         require(workers.map { it.role.npcId }.distinct().size == workers.size) { "workshop NPC ids must be unique" }
+        require(workers.map { it.tableId }.distinct().size == workers.size) { "parallel workshop workers need distinct tables" }
         require(routeProfile.snapRadius in 0..8) { "workshop route snap-radius must be within 0..8 cells" }
         validateOriginFurnitureWorkshopRoutes(workers, routeProfile)
     }
@@ -625,6 +626,16 @@ internal object OriginFurnitureWorkshopModule : PluginModule, Listener {
     private const val MAX_STARTUP_CHECKS = 30
 }
 
+/** A busy or delayed worker must not hold up the other, spatially separate stations. */
+internal fun workshopWorkersDue(
+    workers: List<OriginFurnitureWorkshopWorker>,
+    nextDueTick: Map<OriginFurnitureWorkshopRole, Long>,
+    activeRoles: Set<OriginFurnitureWorkshopRole>,
+    tick: Long,
+): List<OriginFurnitureWorkshopWorker> = workers.filter { worker ->
+    worker.role !in activeRoles && tick >= nextDueTick.getValue(worker.role)
+}
+
 private enum class WorkshopAfterRoute { PICKUP, WORK_RETURN, WORKSTATION, OUTPUT, HOME }
 
 private enum class WorkshopStage { ROUTING, PICKUP_HOLD, ASSEMBLY, BENCH_HOLD, STOCK_HOLD }
@@ -657,7 +668,7 @@ private class ActiveWorkshopCycle(
     var carriedProduct: PacketItemDisplay? = null
 }
 
-/** One exclusive, bounded workshop cycle. Item visuals are client-only and die with this owner. */
+/** Independent bounded cycles, one per workstation. All visuals die with this owner. */
 private class OriginFurnitureWorkshopRuntime private constructor(
     private val settings: OriginFurnitureWorkshopSettings,
     private val world: World,
@@ -670,7 +681,7 @@ private class OriginFurnitureWorkshopRuntime private constructor(
     private val stock = linkedMapOf<OriginFurnitureWorkshopRole, PacketItemDisplay>()
     private val lookCloseSnapshots = linkedMapOf<Int, Pair<LookClose, Boolean>>()
     private val nextDueTick = settings.workers.associate { it.role to it.initialDelayTicks }.toMutableMap()
-    private var active: ActiveWorkshopCycle? = null
+    private val active = linkedMapOf<OriginFurnitureWorkshopRole, ActiveWorkshopCycle>()
     private var tick = 0L
     private var closed = false
 
@@ -726,29 +737,41 @@ private class OriginFurnitureWorkshopRuntime private constructor(
         try {
             tickOnce()
         } catch (failure: Exception) {
-            val cycle = active
-            if (cycle != null) runCatching { abort(cycle, "tick-exception-${failure.javaClass.simpleName}") }
-            ARC.instance.logger.log(Level.WARNING, "ORIGIN_WORKSHOP phase=RUNTIME_ERROR actor=${cycle?.actor?.id ?: "none"} role=${cycle?.worker?.role?.key ?: "none"}", failure)
+            ARC.instance.logger.log(Level.WARNING, "ORIGIN_WORKSHOP phase=DISPATCH_ERROR", failure)
         }
     }
 
     private fun tickOnce() {
         tick++
-        val running = active
-        if (running != null) {
-            tickCycle(running)
-            return
+        if (tick % settings.machineUpdateTicks == 0L) {
+            settings.workers.forEach { worker ->
+                val actor = actors.getValue(worker.role)
+                OriginWorkshopTablesModule.animateDrive(worker.tableId, tick + WORKSHOP_MACHINE_INTERPOLATION_TICKS,
+                    actor.isSpawned && actor.entity.world == world && hasViewer(actor.entity.location))
+            }
+        }
+        active.values.toList().forEach { cycle ->
+            try {
+                tickCycle(cycle)
+            } catch (failure: Exception) {
+                runCatching { abort(cycle, "tick-exception-${failure.javaClass.simpleName}") }
+                ARC.instance.logger.log(Level.WARNING, "ORIGIN_WORKSHOP phase=RUNTIME_ERROR actor=${cycle.actor.id} role=${cycle.worker.role.key}", failure)
+            }
         }
         if (tick % settings.dispatcherIntervalTicks != 0L) return
-        val due = settings.workers.asSequence()
-            .filter { tick >= nextDueTick.getValue(it.role) }
+        workshopWorkersDue(settings.workers, nextDueTick, active.keys, tick)
             .filter { worker ->
                 val actor = actors.getValue(worker.role)
                 actor.isSpawned && actor.entity.world == world && !routeController.isNavigating(actor) && hasViewer(actor.entity.location)
             }
-            .minByOrNull { nextDueTick.getValue(it.role) }
-            ?: return
-        startCycle(due)
+            .forEach { worker ->
+                try {
+                    startCycle(worker)
+                } catch (failure: Exception) {
+                    active[worker.role]?.let { runCatching { abort(it, "start-exception-${failure.javaClass.simpleName}") } }
+                    ARC.instance.logger.log(Level.WARNING, "ORIGIN_WORKSHOP phase=START_ERROR role=${worker.role.key}", failure)
+                }
+            }
     }
 
     private fun startCycle(worker: OriginFurnitureWorkshopWorker) {
@@ -762,7 +785,7 @@ private class OriginFurnitureWorkshopRuntime private constructor(
             mainHand = equipment.get(CitizensEquipment.EquipmentSlot.HAND)?.clone(),
             offHand = equipment.get(CitizensEquipment.EquipmentSlot.OFF_HAND)?.clone(),
         )
-        active = cycle
+        check(active.putIfAbsent(worker.role, cycle) == null) { "Workshop ${worker.role.key} already has an active cycle" }
         nextDueTick[worker.role] = tick + worker.cycleDelayTicks
         log("CYCLE_STARTED", cycle, "deadline_ticks=${settings.activeTimeoutTicks}")
         beginRoute(cycle, worker.pickupRoute, WorkshopAfterRoute.PICKUP)
@@ -801,7 +824,7 @@ private class OriginFurnitureWorkshopRuntime private constructor(
     }
 
     private fun tickCycle(cycle: ActiveWorkshopCycle) {
-        if (cycle !== active) return
+        if (cycle !== active[cycle.worker.role]) return
         if (tick >= cycle.deadlineTick) {
             abort(cycle, "active-timeout")
             return
@@ -1103,12 +1126,12 @@ private class OriginFurnitureWorkshopRuntime private constructor(
         face(cycle.actor, cycle.worker.restFocus)
         restoreEquipment(cycle)
         removeCycleProps(cycle)
-        active = null
+        active.remove(cycle.worker.role)
         log("CYCLE_COMPLETED", cycle, "product=${cycle.worker.productId}")
     }
 
     private fun abort(cycle: ActiveWorkshopCycle, reason: String) {
-        if (cycle !== active) return
+        if (cycle !== active[cycle.worker.role]) return
         if (cycle.routeStarted) runCatching { routeController.stop(cycle.actor) }
         cycle.routeStarted = false
         restoreEquipment(cycle)
@@ -1117,7 +1140,7 @@ private class OriginFurnitureWorkshopRuntime private constructor(
             runCatching { cycle.actor.entity.teleport(cycle.worker.home.inWorld(world)) }
             runCatching { face(cycle.actor, cycle.worker.restFocus) }
         }
-        active = null
+        active.remove(cycle.worker.role)
         log("CYCLE_CANCELLED", cycle, "reason=$reason")
     }
 
@@ -1235,8 +1258,9 @@ private class OriginFurnitureWorkshopRuntime private constructor(
         if (closed) return
         closed = true
         tasks.close()
-        active?.let(::closeActor)
-        active = null
+        active.values.toList().forEach(::closeActor)
+        active.clear()
+        settings.workers.forEach { OriginWorkshopTablesModule.animateDrive(it.tableId, 0L, false) }
         routeController.close()
         stock.values.toList().forEach { runCatching { it.remove() } }
         stock.clear()

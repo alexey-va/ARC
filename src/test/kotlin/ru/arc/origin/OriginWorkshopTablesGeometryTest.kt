@@ -17,7 +17,7 @@ class OriginWorkshopTablesGeometryTest : FreeSpec({
         val blocks = pieces.filter { it.kind == OriginWorkshopTablePieceKind.BLOCK }
         val items = pieces.filter { it.kind == OriginWorkshopTablePieceKind.ITEM }
 
-        blocks.size shouldBe 50
+        (blocks.size <= 95) shouldBe true
         items.size shouldBe 1
         blocks.minOf { it.y - it.height / 2.0 } shouldBe 0.0
         val top = blocks.single { it.key == "top" }

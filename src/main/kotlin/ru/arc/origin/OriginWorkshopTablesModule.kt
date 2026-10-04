@@ -55,6 +55,7 @@ internal data class OriginWorkshopTableDefinition(
     val z: Double,
     val yaw: Int,
     val role: OriginWorkshopTableRole,
+    val stockOffsetX: Double? = null,
 ) {
     init {
         require(id.matches(Regex("[a-z0-9][a-z0-9_-]{0,31}"))) { "Invalid workshop table id '$id'" }
@@ -62,6 +63,9 @@ internal data class OriginWorkshopTableDefinition(
         require(floorY.isFinite() && floorY in -64.0..320.0) { "workshop table '$id' has invalid floor-y" }
         require(z.isFinite() && z in -30_000_000.0..30_000_000.0) { "workshop table '$id' has invalid z" }
         require(yaw in setOf(0, 90, 180, 270)) { "workshop table '$id' yaw must be 0, 90, 180 or 270" }
+        require(stockOffsetX == null || (stockOffsetX.isFinite() && kotlin.math.abs(stockOffsetX) in 3.9..5.0)) {
+            "workshop table '$id' stock-offset-x must leave room for the table and stock rack"
+        }
     }
 }
 
@@ -72,6 +76,7 @@ internal data class OriginWorkshopTablesSettings(
     val tables: List<OriginWorkshopTableDefinition>,
     val warehouse: OriginWorkshopWarehouseAnchor?,
     val machineTuning: OriginWorkshopMachineTuning,
+    val driveCycleTicks: Long,
 ) {
     companion object {
         private const val RESOURCE = "origin-workshop-tables.yml"
@@ -98,10 +103,14 @@ internal data class OriginWorkshopTablesSettings(
                     z = source.doubleOrNull("$path.z") ?: error("$path.z is required"),
                     yaw = source.intOrNull("$path.yaw") ?: error("$path.yaw is required"),
                     role = OriginWorkshopTableRole.parse(source.string("$path.role")),
+                    stockOffsetX = source.doubleOrNull("$path.stock-offset-x"),
                 )
             }
             require(tables.map { listOf(it.x, it.floorY, it.z) }.distinct().size == tables.size) {
                 "$ROOT contains tables with duplicate centers"
+            }
+            require(tables.all { it.stockOffsetX == null || kotlin.math.abs(it.stockOffsetX) >= dimensions.width / 2.0 + 1.50 }) {
+                "$ROOT stock racks must stay clear of the configured table width"
             }
             val enabled = source.bool("$ROOT.enabled", false)
             require(!enabled || tables.size == MAX_TABLES) {
@@ -117,6 +126,8 @@ internal data class OriginWorkshopTablesSettings(
                     source.doubleOrNull("$warehousePath.z") ?: error("$warehousePath.z is required"),
                 )
             } else null
+            val driveCycleTicks = source.long("$ROOT.machinery.idle-cycle-ticks", 80L)
+            require(driveCycleTicks in 40L..400L) { "workshop drive cycle must be within 40..400 ticks" }
             return OriginWorkshopTablesSettings(
                 enabled = enabled,
                 world = world,
@@ -124,6 +135,7 @@ internal data class OriginWorkshopTablesSettings(
                 tables = tables,
                 warehouse = warehouse,
                 machineTuning = OriginWorkshopMachineTuning.load(source),
+                driveCycleTicks = driveCycleTicks,
             )
         }
 
@@ -250,6 +262,8 @@ internal fun originWorkshopTablePieces(
             add(blockPiece("carpenter-table-saw", Material.STONECUTTER, tuning.sawPivotX,
                 dimensions.height - 0.36, tuning.sawPivotZ + 0.505, 0.92, 0.72, 0.92))
             val boardZ = tuning.sawPivotZ - 0.175
+            val flywheelZ = tuning.sawPivotZ + 1.05
+            val flywheelY = dimensions.height + tuning.sawPivotYOffset
             add(blockPiece("carpenter-board-feed", Material.SPRUCE_PLANKS, tuning.sawPivotX,
                 dimensions.height + 0.08, boardZ, 2.0, 0.10, 0.44))
             add(blockPiece("carpenter-rip-fence", Material.DARK_OAK_PLANKS, tuning.sawPivotX,
@@ -263,6 +277,26 @@ internal fun originWorkshopTablePieces(
                 dimensions.height + 0.31, tuning.sawPivotZ + 1.16, 0.14, 0.62, 0.14))
             add(blockPiece("carpenter-saw-axle", Material.IRON_BLOCK, tuning.sawPivotX,
                 dimensions.height + tuning.sawPivotYOffset, tuning.sawPivotZ + 0.555, 0.09, 0.09, 1.21))
+            add(blockPiece("carpenter-drive-flywheel-hub", Material.POLISHED_ANDESITE,
+                tuning.sawPivotX, flywheelY, flywheelZ - 0.04, 0.14, 0.14, 0.10))
+            for ((index, width) in listOf(0.95, 1.50, 1.85, 2.0, 2.0, 1.85, 1.50, 0.95).withIndex()) {
+                add(blockPiece("carpenter-drive-flywheel-rim-$index", Material.COPPER_BLOCK,
+                    tuning.sawPivotX, flywheelY + (index - 3.5) * 0.23 / 4.0, flywheelZ,
+                    width * 0.23, 0.23 / 4.0, 0.07))
+            }
+            add(blockPiece("carpenter-drive-flywheel-spoke-x", Material.IRON_BLOCK,
+                tuning.sawPivotX, flywheelY, flywheelZ - 0.045, 0.40, 0.055, 0.04))
+            add(blockPiece("carpenter-drive-flywheel-spoke-y", Material.IRON_BLOCK,
+                tuning.sawPivotX, flywheelY, flywheelZ - 0.045, 0.055, 0.40, 0.04))
+            for (index in 0..1) {
+                val rollerX = tuning.sawFeedStartX + if (index == 0) 0.17 else 0.50
+                add(blockPiece("carpenter-drive-feed-roller-$index", Material.DARK_OAK_PLANKS,
+                    rollerX, dimensions.height + 0.38, boardZ, 0.18, 0.18, 0.35))
+                add(blockPiece("carpenter-drive-feed-roller-axle-$index", Material.IRON_BLOCK,
+                    rollerX, dimensions.height + 0.38, boardZ, 0.05, 0.05, 0.41))
+                for (side in listOf(-1.0, 1.0)) add(blockPiece("carpenter-drive-feed-bearing-$index-$side", Material.IRON_BLOCK,
+                    rollerX, dimensions.height + 0.255, boardZ + side * 0.19, 0.05, 0.25, 0.03))
+            }
 
             // The built-in stonecutter blade sits too low to read at workshop scale, so add a
             // raised, pixel-rounded metal disk on the operator-facing side of the housing.
@@ -409,7 +443,7 @@ internal fun originWorkshopTablePieces(
                 0.65, 0.06, 0.30),
         )
     }
-    val worldPieces = (pieces + machine + workpieces).map { piece -> rotatePiece(piece, yaw) }.toMutableList()
+    val worldPieces = (pieces + machine + workpieces + originWorkshopDrivePieces(role, dimensions, tuning)).map { piece -> rotatePiece(piece, yaw) }.toMutableList()
     roleProps(role).forEachIndexed { index, prop ->
         val local = OriginWorkshopTablePiece(
             key = "${role.key}-prop-$index",
@@ -479,6 +513,7 @@ internal object OriginWorkshopTablesModule : PluginModule {
     private val machineTables = linkedMapOf<String, WorkshopMachineTable>()
     private val activeMachineKeys = mutableMapOf<String, Set<String>>()
     private val activeMechanisms = mutableMapOf<String, OriginWorkshopMechanism>()
+    private val runningDrives = mutableSetOf<String>()
 
     private data class WorkshopMachinePart(
         val display: PacketDisplay,
@@ -494,6 +529,7 @@ internal object OriginWorkshopTablesModule : PluginModule {
         val dimensions: OriginWorkshopTableDimensions,
         val tuning: OriginWorkshopMachineTuning,
         val world: org.bukkit.World,
+        val driveCycleTicks: Long,
     )
 
     override fun init() = reload()
@@ -526,6 +562,11 @@ internal object OriginWorkshopTablesModule : PluginModule {
         try {
             settings.tables.forEach { table ->
                 val machineParts = linkedMapOf<String, WorkshopMachinePart>()
+                val driveKeys = originWorkshopDrivePose(table.role, 0.0, settings.dimensions, settings.machineTuning).pieces.keys
+                val workKeys = OriginWorkshopMechanism.entries.filter { supports(table.role, it) }.flatMap {
+                    originWorkshopMachinePose(it, 0.0, 0.0, settings.dimensions, settings.machineTuning).pieces.keys
+                }.toSet()
+                check(driveKeys.intersect(workKeys).isEmpty()) { "Workshop ${table.id} has competing drive and work animation owners" }
                 originWorkshopTablePieces(table.role, table.yaw, settings.dimensions, settings.machineTuning).forEach { piece ->
                     if (piece.kind == OriginWorkshopTablePieceKind.BLOCK) {
                         val location = Location(
@@ -556,7 +597,7 @@ internal object OriginWorkshopTablesModule : PluginModule {
                                 settings.machineTuning.hammerRestAngleDegrees,
                             )
                         }
-                        if (piece.key in MACHINE_CONTROLLED_PIECE_KEYS) {
+                        if (piece.key in workKeys || piece.key in driveKeys) {
                             display.isVisibleByDefault = piece.key !in ORIGIN_WORKSHOP_MACHINE_HIDDEN_IDLE_PIECES
                             machineParts[piece.key] = WorkshopMachinePart(
                                 display = display,
@@ -581,50 +622,68 @@ internal object OriginWorkshopTablesModule : PluginModule {
                         display.transformation = itemTransform(piece.width, piece.flat)
                     }
                 }
+                check(machineParts.keys.containsAll(driveKeys + workKeys)) { "Workshop ${table.id} has an animation without a matching model part" }
                 createdMachineTables[table.id] = WorkshopMachineTable(
                     table,
                     machineParts,
                     settings.dimensions,
                     settings.machineTuning,
                     world,
+                    settings.driveCycleTicks,
                 )
+                table.stockOffsetX?.let { stockX ->
+                    val (dx, dz) = rotateLocal(stockX, 0.0, table.yaw)
+                    spawnStock(owner, created, world, table.x + dx, table.floorY, table.z + dz,
+                        table.yaw, originWorkshopStationStockGeometry(table.role))
+                }
             }
             settings.warehouse?.let { anchor ->
-                val warehouse = originWorkshopWarehouseGeometry()
-                warehouse.blocks.forEach { piece ->
-                    val display = owner.spawnBlock(
-                        Location(world, anchor.x + piece.x - piece.width / 2.0,
-                            anchor.floorY + piece.y - piece.height / 2.0,
-                            anchor.z + piece.z - piece.depth / 2.0),
-                        piece.material.createBlockData(),
-                    )
-                    created += display
-                    display.transformation = cuboidTransform(piece.width, piece.height, piece.depth)
-                }
-                warehouse.items.forEach { piece ->
-                    val item = CustomStack.getInstance(piece.itemId)?.itemStack?.clone()
-                        ?: error("Warehouse furniture '${piece.itemId}' is missing from ItemsAdder")
-                    val modelBottom = if (piece.itemId == "furnituresplus:white_wooden_diningtable") 0.51875 else 0.5
-                    val display = owner.spawnItem(
-                        Location(world, anchor.x + piece.x,
-                            anchor.floorY + piece.y + modelBottom * piece.scale,
-                            anchor.z + piece.z, piece.yaw, 0f),
-                        item,
-                    )
-                    created += display
-                    display.itemDisplayTransform = ItemDisplay.ItemDisplayTransform.NONE
-                    display.transformation = itemTransform(piece.scale, flat = false)
-                }
+                spawnStock(owner, created, world, anchor.x, anchor.floorY, anchor.z, 0, originWorkshopWarehouseGeometry())
             }
             clearScene()
             handles += created
             machineTables.putAll(createdMachineTables)
             ARC.instance.logger.info(
-                "Origin workshop tables loaded: tables=${settings.tables.size} warehouse=${settings.warehouse != null} client-only displays=${created.size}",
+                "Origin workshop tables loaded: tables=${settings.tables.size} local-stock=${settings.tables.count { it.stockOffsetX != null }} warehouse=${settings.warehouse != null} client-only displays=${created.size}",
             )
         } catch (failure: Exception) {
             created.forEach(PacketDisplay::remove)
             ARC.instance.logger.log(Level.WARNING, "Origin workshop tables could not be constructed; keeping current scene", failure)
+        }
+    }
+
+    private fun spawnStock(
+        owner: PaperPacketDisplays,
+        created: MutableList<PacketDisplay>,
+        world: org.bukkit.World,
+        x: Double,
+        floorY: Double,
+        z: Double,
+        yaw: Int,
+        stock: OriginWorkshopWarehouseGeometry,
+    ) {
+        stock.blocks.forEach { local ->
+            val piece = rotatePiece(local, yaw)
+            val display = owner.spawnBlock(
+                Location(world, x + piece.x - piece.width / 2.0,
+                    floorY + piece.y - piece.height / 2.0, z + piece.z - piece.depth / 2.0),
+                piece.material.createBlockData(),
+            )
+            created += display
+            display.transformation = cuboidTransform(piece.width, piece.height, piece.depth)
+        }
+        stock.items.forEach { piece ->
+            val item = CustomStack.getInstance(piece.itemId)?.itemStack?.clone()
+                ?: error("Workshop stock furniture '${piece.itemId}' is missing from ItemsAdder")
+            val (dx, dz) = rotateLocal(piece.x, piece.z, yaw)
+            val modelBottom = if (piece.itemId == "furnituresplus:white_wooden_diningtable") 0.51875 else 0.5
+            val display = owner.spawnItem(
+                Location(world, x + dx, floorY + piece.y + modelBottom * piece.scale,
+                    z + dz, yaw + piece.yaw, 0f), item,
+            )
+            created += display
+            display.itemDisplayTransform = ItemDisplay.ItemDisplayTransform.NONE
+            display.transformation = itemTransform(piece.scale, flat = false)
         }
     }
 
@@ -641,6 +700,22 @@ internal object OriginWorkshopTablesModule : PluginModule {
         machineTables.clear()
         activeMachineKeys.clear()
         activeMechanisms.clear()
+        runningDrives.clear()
+    }
+
+    /** Free-running shafts share the scene tick; never touch the material/contact animation keys. */
+    fun animateDrive(tableId: String, tick: Long, enabled: Boolean) {
+        val table = machineTables[tableId] ?: return
+        if (!enabled && !runningDrives.remove(tableId)) return
+        val phase = if (enabled) {
+            runningDrives += tableId
+            ((tick + table.definition.role.ordinal * 17L) % table.driveCycleTicks).toDouble() / table.driveCycleTicks
+        } else 0.0
+        val pose = originWorkshopDrivePose(table.definition.role, phase, table.dimensions, table.tuning)
+        pose.pieces.forEach { (key, motion) ->
+            val part = table.pieces[key] ?: return@forEach
+            applyMotion(part, table.definition.yaw, motion)
+        }
     }
 
     /** Apply one table-local pose to the already-owned client-only display handles. */
@@ -809,16 +884,4 @@ internal object OriginWorkshopTablesModule : PluginModule {
         Quaternionf(),
     )
 
-    private val MACHINE_CONTROLLED_PIECE_KEYS = buildSet {
-        addAll(ORIGIN_WORKSHOP_MACHINE_HIDDEN_IDLE_PIECES)
-        add("assembler-clamp-left")
-        add("assembler-clamp-right")
-        add("assembler-vise-handle")
-        add("assembler-hammer-arm")
-        add("assembler-hammer-head")
-        add("upholsterer-press-platen")
-        add("upholsterer-press-ram")
-        add("finisher-drying-panel-center")
-        for (index in 0..8) add("carpenter-saw-blade-row-$index")
-    }
 }

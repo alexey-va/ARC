@@ -33,6 +33,70 @@ internal data class OriginWorkshopMachinePose(
     val contact: OriginWorkshopPoint?,
 )
 
+/** Independent drive shafts run while the workshop is observed; material poses keep their own owner. */
+@Suppress("UNUSED_PARAMETER")
+internal fun originWorkshopDrivePose(
+    role: OriginWorkshopTableRole,
+    phase: Double,
+    dimensions: OriginWorkshopTableDimensions,
+    tuning: OriginWorkshopMachineTuning,
+): OriginWorkshopMachinePose {
+    require(phase.isFinite())
+    val p = phase.coerceIn(0.0, 1.0)
+    val angle = p * 360.0
+    val radians = p * 2.0 * PI
+    val pieces = buildMap {
+        when (role) {
+            OriginWorkshopTableRole.CARPENTER -> {
+                putAll(workshopWheelMotion("carpenter-drive-flywheel", 0.23, angle))
+                for (index in 0..1) put("carpenter-drive-feed-roller-$index", OriginWorkshopPieceMotion(
+                    rotationAxis = OriginWorkshopRotationAxis.Z, rotationDegrees = -angle * 2.0,
+                ))
+            }
+            OriginWorkshopTableRole.UPHOLSTERER -> {
+                putAll(workshopWheelMotion("upholsterer-drive-handwheel", 0.22, angle * 2.0))
+                put("upholsterer-drive-needle", OriginWorkshopPieceMotion(
+                    centerOffset = OriginWorkshopPoint(0.0, -0.035 * (1.0 - cos(radians * 2.0)), 0.0),
+                ))
+                put("upholsterer-drive-shuttle", OriginWorkshopPieceMotion(
+                    centerOffset = OriginWorkshopPoint(0.17 * sin(radians * 2.0), 0.0, 0.0),
+                ))
+                for (index in 0..1) put("upholsterer-drive-fabric-roller-$index", OriginWorkshopPieceMotion(
+                    rotationAxis = OriginWorkshopRotationAxis.Z, rotationDegrees = -angle,
+                ))
+            }
+            OriginWorkshopTableRole.ASSEMBLER -> putAll(workshopWheelMotion("assembler-drive-freewheel", 0.23, angle))
+            OriginWorkshopTableRole.FINISHER -> {
+                put("finisher-drive-sanding-disc", OriginWorkshopPieceMotion(
+                    rotationAxis = OriginWorkshopRotationAxis.Y, rotationDegrees = angle,
+                ))
+                put("finisher-drive-disc-marker", OriginWorkshopPieceMotion(
+                    centerOffset = OriginWorkshopPoint(0.14 * (cos(radians) - 1.0), 0.0, -0.14 * sin(radians)),
+                    rotationAxis = OriginWorkshopRotationAxis.Y, rotationDegrees = angle,
+                ))
+                for (key in listOf("carriage", "handle", "head")) put("finisher-drive-brush-$key", OriginWorkshopPieceMotion(
+                    centerOffset = OriginWorkshopPoint(0.20 * sin(radians), 0.0, 0.0),
+                ))
+            }
+        }
+    }
+    return OriginWorkshopMachinePose(pieces, null)
+}
+
+private fun workshopWheelMotion(prefix: String, radius: Double, degrees: Double): Map<String, OriginWorkshopPieceMotion> = buildMap {
+    val rotation = degrees * PI / 180.0
+    for (index in 0..7) {
+        val baselineY = (index - 3.5) * radius / 4.0
+        put("$prefix-rim-$index", OriginWorkshopPieceMotion(
+            centerOffset = OriginWorkshopPoint(-baselineY * sin(rotation), baselineY * (cos(rotation) - 1.0), 0.0),
+            rotationAxis = OriginWorkshopRotationAxis.Z, rotationDegrees = degrees,
+        ))
+    }
+    for (axis in listOf("x", "y")) put("$prefix-spoke-$axis", OriginWorkshopPieceMotion(
+        rotationAxis = OriginWorkshopRotationAxis.Z, rotationDegrees = degrees,
+    ))
+}
+
 /** Small operator-tunable machine anchors and motion amplitudes; table IDs and station footprints stay fixed. */
 internal data class OriginWorkshopMachineTuning(
     val sawPivotX: Double = -1.15,
@@ -206,7 +270,7 @@ internal fun originWorkshopMachinePose(
                         rotationDegrees = angle,
                     ),
                     "assembler-anvil-workpiece" to OriginWorkshopPieceMotion(visible = true),
-                ),
+                ) + workshopWheelMotion("assembler-hammer-cam", 0.18, (angle - tuning.hammerRestAngleDegrees) * 3.0),
                 OriginWorkshopPoint(tuning.anvilCenterX, dimensions.height + 0.67, tuning.anvilCenterZ),
             )
         }

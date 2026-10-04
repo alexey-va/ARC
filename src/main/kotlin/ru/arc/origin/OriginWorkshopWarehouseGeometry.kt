@@ -46,7 +46,7 @@ internal fun originWorkshopWarehouseGeometry(): OriginWorkshopWarehouseGeometry 
             }
         }
 
-        // The live Denizen products occupy these three front pallets.
+        // Legacy shared-warehouse layout; ARC owns the three reserved product displays.
         val palletCenters = listOf(-2.5, 0.0, 3.0)
         palletCenters.forEachIndexed { pallet, x ->
             for (runnerX in listOf(-0.65, 0.0, 0.65)) {

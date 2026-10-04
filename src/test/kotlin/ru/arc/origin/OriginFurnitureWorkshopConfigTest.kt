@@ -55,6 +55,12 @@ class OriginFurnitureWorkshopConfigTest :
                 settings.world shouldBe "rc_origin_spawn"
                 settings.workers.map { it.role.npcId } shouldBe listOf(430, 458, 459, 460)
                 settings.workers.map { it.tableId } shouldBe listOf("carpenter", "upholsterer", "assembler", "finisher")
+                val allDue = settings.workers.associate { it.role to 100L }
+                workshopWorkersDue(settings.workers, allDue, emptySet(), 100L) shouldBe settings.workers
+                workshopWorkersDue(settings.workers, allDue, setOf(OriginFurnitureWorkshopRole.CARPENTER), 100L)
+                    .map { it.role } shouldBe settings.workers.drop(1).map { it.role }
+                workshopWorkersDue(settings.workers, allDue, emptySet(), 99L) shouldBe emptyList()
+                workshopWorkersDue(settings.workers, allDue, allDue.keys, 100L) shouldBe emptyList()
                 settings.workers.last().deliverOutput shouldBe false
                 settings.workers.flatMap { it.beats }.filter { it.mechanism != OriginWorkshopMechanism.NONE }
                     .associate { it.phase to it.mechanism } shouldBe mapOf(
@@ -79,10 +85,24 @@ class OriginFurnitureWorkshopConfigTest :
                     "furnituresplus:white_wooden_diningtable",
                 )
                 settings.workers.filter { it.deliverOutput }.map { Triple(it.output.x, it.output.y, it.output.z) } shouldBe listOf(
-                    Triple(-52.0, 71.18, -51.1),
-                    Triple(-49.5, 71.18, -51.1),
-                    Triple(-46.5, 71.18, -51.1),
+                    Triple(-36.5, 71.18, -69.5),
+                    Triple(-36.5, 71.18, -54.5),
+                    Triple(-44.5, 71.18, -46.5),
                 )
+
+                // Concurrent workers stay in separate front-of-table lanes, including their stock trip.
+                val lanes = settings.workers.map { worker ->
+                    listOf(worker.home, worker.pickup, worker.workApproach, worker.outputApproach) +
+                        worker.beats.mapNotNull { it.approach } +
+                        (worker.pickupRoute + worker.workReturnRoute + worker.outputRoute + worker.homeReturnRoute).map { it.point }
+                }
+                lanes.forEachIndexed { index, lane ->
+                    lanes.drop(index + 1).forEach { other ->
+                        val separatedX = lane.maxOf { it.x } + 1.0 < other.minOf { it.x } || other.maxOf { it.x } + 1.0 < lane.minOf { it.x }
+                        val separatedZ = lane.maxOf { it.z } + 1.0 < other.minOf { it.z } || other.maxOf { it.z } + 1.0 < lane.minOf { it.z }
+                        (separatedX || separatedZ) shouldBe true
+                    }
+                }
 
                 settings.workers.forEach { worker ->
                     worker.parts.size shouldBe when (worker.role) {

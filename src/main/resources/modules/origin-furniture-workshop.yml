@@ -2,7 +2,7 @@
 origin-furniture-workshop:
   enabled: false
   world: rc_origin_spawn
-  dispatcher-interval-ticks: 60
+  dispatcher-interval-ticks: 10
   viewer-radius: 24
   active-timeout-ticks: 1800
   pickup-duration-ticks: 8
@@ -25,10 +25,13 @@ origin-furniture-workshop:
       - { min-x: -38, max-x: -35, min-z: -76, max-z: -72 }
       - { min-x: -38, max-x: -35, min-z: -61, max-z: -57 }
       - { min-x: -51, max-x: -47, min-z: -48, max-z: -45 }
-      - { min-x: -55, max-x: -45, min-z: -53, max-z: -51 }
+      - { min-x: -38, max-x: -36, min-z: -71, max-z: -69 }
+      - { min-x: -38, max-x: -36, min-z: -56, max-z: -54 }
+      - { min-x: -46, max-x: -44, min-z: -48, max-z: -46 }
+      - { min-x: -58, max-x: -56, min-z: -48, max-z: -46 }
     preferred:
-      - { min-x: -40, max-x: -40, min-z: -76, max-z: -49 }
-      - { min-x: -52, max-x: -46, min-z: -50, max-z: -50 }
+      - { min-x: -39, max-x: -39, min-z: -76, max-z: -49 }
+      - { min-x: -63, max-x: -44, min-z: -49, max-z: -49 }
     max-visited: 1024
     snap-radius: 3
     poll-ticks: 2
@@ -55,30 +58,20 @@ origin-furniture-workshop:
       work-approach: { x: -38.5, y: 71, z: -73.5, yaw: -90 }
       bench: { x: -36.5, y: 72.15, z: -73.5, yaw: -90 }
       rest-focus: { x: -36.5, y: 72.15, z: -73.5, yaw: -90 }
-      output-approach: { x: -52.5, y: 71, z: -49.5, yaw: 90 }
-      output: { x: -52, y: 71.18, z: -51.1 }
+      output-approach: { x: -38.5, y: 71, z: -69.5, yaw: -90 }
+      output: { x: -36.5, y: 71.18, z: -69.5, yaw: 270 }
       routes:
         pickup:
           - { point: { x: -38.5, y: 71, z: -75.5, yaw: -90 }, timeout-ticks: 120 }
         work-return:
           - { point: { x: -38.5, y: 71, z: -73.5, yaw: -90 }, timeout-ticks: 120 }
         output:
-          - { point: { x: -39.5, y: 71, z: -73.5, yaw: 90 }, timeout-ticks: 120 }
-          - { point: { x: -39.5, y: 71, z: -65.5 }, timeout-ticks: 240 }
-          - { point: { x: -39.5, y: 71, z: -57.5 }, timeout-ticks: 240 }
-          - { point: { x: -39.5, y: 71, z: -49.5 }, timeout-ticks: 240 }
-          - { point: { x: -45.5, y: 71, z: -49.5, yaw: 90 }, timeout-ticks: 240 }
-          - { point: { x: -52.5, y: 71, z: -49.5, yaw: 90 }, timeout-ticks: 240 }
+          - { point: { x: -38.5, y: 71, z: -69.5, yaw: -90 }, timeout-ticks: 200 }
         home-return:
-          - { point: { x: -45.5, y: 71, z: -49.5, yaw: -90 }, timeout-ticks: 240 }
-          - { point: { x: -39.5, y: 71, z: -49.5, yaw: -90 }, timeout-ticks: 240 }
-          - { point: { x: -39.5, y: 71, z: -57.5, yaw: 180 }, timeout-ticks: 240 }
-          - { point: { x: -39.5, y: 71, z: -65.5, yaw: 180 }, timeout-ticks: 240 }
-          - { point: { x: -39.5, y: 71, z: -73.5, yaw: 180 }, timeout-ticks: 240 }
-          - { point: { x: -38.5, y: 71, z: -73.5, yaw: -90 }, timeout-ticks: 120 }
-      initial-delay-ticks: 60
-      cycle-delay-ticks: 700
-      finished-hold-ticks: 60
+          - { point: { x: -38.5, y: 71, z: -73.5, yaw: -90 }, timeout-ticks: 200 }
+      initial-delay-ticks: 20
+      cycle-delay-ticks: 200
+      finished-hold-ticks: 32
       raw-hand: OAK_PLANKS
       raw-root-material: OAK_PLANKS
       raw-root-scale: 0.32
@@ -171,28 +164,20 @@ origin-furniture-workshop:
       work-approach: { x: -38.5, y: 71, z: -58.5, yaw: -90 }
       bench: { x: -36.5, y: 72.15, z: -58.5, yaw: -90 }
       rest-focus: { x: -36.5, y: 72.15, z: -58.5, yaw: -90 }
-      output-approach: { x: -49.5, y: 71, z: -49.5, yaw: 90 }
-      output: { x: -49.5, y: 71.18, z: -51.1 }
+      output-approach: { x: -38.5, y: 71, z: -54.5, yaw: -90 }
+      output: { x: -36.5, y: 71.18, z: -54.5, yaw: 270 }
       routes:
         pickup:
           - { point: { x: -38.5, y: 71, z: -60.5, yaw: -90 }, timeout-ticks: 160 }
         work-return:
           - { point: { x: -38.5, y: 71, z: -58.5, yaw: -90 }, timeout-ticks: 160 }
         output:
-          - { point: { x: -39.5, y: 71, z: -58.5, yaw: 90 }, timeout-ticks: 160 }
-          - { point: { x: -39.5, y: 71, z: -53.5 }, timeout-ticks: 240 }
-          - { point: { x: -39.5, y: 71, z: -49.5 }, timeout-ticks: 240 }
-          - { point: { x: -45.5, y: 71, z: -49.5, yaw: 90 }, timeout-ticks: 240 }
-          - { point: { x: -49.5, y: 71, z: -49.5, yaw: 90 }, timeout-ticks: 240 }
+          - { point: { x: -38.5, y: 71, z: -54.5, yaw: -90 }, timeout-ticks: 200 }
         home-return:
-          - { point: { x: -45.5, y: 71, z: -49.5, yaw: -90 }, timeout-ticks: 240 }
-          - { point: { x: -39.5, y: 71, z: -49.5, yaw: -90 }, timeout-ticks: 240 }
-          - { point: { x: -39.5, y: 71, z: -53.5, yaw: 180 }, timeout-ticks: 240 }
-          - { point: { x: -39.5, y: 71, z: -58.5, yaw: 180 }, timeout-ticks: 240 }
-          - { point: { x: -38.5, y: 71, z: -58.5, yaw: -90 }, timeout-ticks: 160 }
-      initial-delay-ticks: 240
-      cycle-delay-ticks: 860
-      finished-hold-ticks: 60
+          - { point: { x: -38.5, y: 71, z: -58.5, yaw: -90 }, timeout-ticks: 200 }
+      initial-delay-ticks: 50
+      cycle-delay-ticks: 200
+      finished-hold-ticks: 32
       raw-hand: RED_WOOL
       raw-root-material: RED_WOOL
       raw-root-scale: 0.32
@@ -269,22 +254,20 @@ origin-furniture-workshop:
       work-approach: { x: -48.5, y: 71, z: -48.5 }
       bench: { x: -48.5, y: 72.15, z: -46.5 }
       rest-focus: { x: -48.5, y: 72.15, z: -46.5 }
-      output-approach: { x: -46.5, y: 71, z: -49.5, yaw: 180 }
-      output: { x: -46.5, y: 71.18, z: -51.1 }
+      output-approach: { x: -44.5, y: 71, z: -48.5, yaw: 0 }
+      output: { x: -44.5, y: 71.18, z: -46.5, yaw: 0 }
       routes:
         pickup:
           - { point: { x: -50.5, y: 71, z: -48.5, yaw: 90 }, timeout-ticks: 120 }
         work-return:
           - { point: { x: -48.5, y: 71, z: -48.5 }, timeout-ticks: 120 }
         output:
-          - { point: { x: -46.5, y: 71, z: -48.5, yaw: -90 }, timeout-ticks: 120 }
-          - { point: { x: -46.5, y: 71, z: -49.5, yaw: 180 }, timeout-ticks: 120 }
+          - { point: { x: -44.5, y: 71, z: -48.5, yaw: 0 }, timeout-ticks: 200 }
         home-return:
-          - { point: { x: -46.5, y: 71, z: -48.5 }, timeout-ticks: 120 }
-          - { point: { x: -48.5, y: 71, z: -48.5 }, timeout-ticks: 120 }
-      initial-delay-ticks: 420
-      cycle-delay-ticks: 1020
-      finished-hold-ticks: 60
+          - { point: { x: -48.5, y: 71, z: -48.5, yaw: 0 }, timeout-ticks: 200 }
+      initial-delay-ticks: 80
+      cycle-delay-ticks: 200
+      finished-hold-ticks: 32
       raw-hand: SPRUCE_PLANKS
       raw-root-material: SPRUCE_PLANKS
       raw-root-scale: 0.32
@@ -410,9 +393,9 @@ origin-furniture-workshop:
           - { point: { x: -60.5, y: 71, z: -48.5, yaw: 0 }, timeout-ticks: 120 }
         home-return:
           - { point: { x: -60.5, y: 71, z: -48.5, yaw: 0 }, timeout-ticks: 120 }
-      initial-delay-ticks: 20
-      cycle-delay-ticks: 1180
-      finished-hold-ticks: 60
+      initial-delay-ticks: 110
+      cycle-delay-ticks: 200
+      finished-hold-ticks: 32
       raw-hand: BRUSH
       raw-root-material: SPRUCE_PLANKS
       raw-root-scale: 0.32

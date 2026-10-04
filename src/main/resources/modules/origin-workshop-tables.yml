@@ -10,6 +10,7 @@ origin-workshop-tables:
     depth: 2.05
     height: 1.08
   machinery:
+    idle-cycle-ticks: 80
     saw:
       pivot-x: -1.15
       pivot-y-offset: 0.62
