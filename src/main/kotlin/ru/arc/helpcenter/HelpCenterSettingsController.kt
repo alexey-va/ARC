@@ -200,7 +200,7 @@ internal class HelpCenterSettingsController(
     private fun openScoreboardSkills(player: Player, section: Section) {
         navigation.visit(player) { openScoreboardSkills(player, section) }
         val selected = legacy.scoreboardSkills(player)
-        val choices = sidebarSkillChoices(player)
+        val choices = sidebarSkillChoices()
         showDialog(player, PaperDialogScreen(
             id = "help.settings.scoreboard.skills", title = text("settings-scoreboard-skills-choose-label"),
             body = listOf(PaperDialogBody(text(if (choices.isEmpty()) "settings-scoreboard-skills-unavailable" else "settings-scoreboard-skills-choose-body"), 468)),

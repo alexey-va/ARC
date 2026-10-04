@@ -6,9 +6,31 @@ import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.shouldBe
 import org.bukkit.configuration.file.YamlConfiguration
+import dev.aurelium.auraskills.api.skill.Skill
+import io.mockk.every
+import io.mockk.mockk
 import java.io.InputStreamReader
+import java.util.Locale
 
 class ArcBaseSidebarConfigTest : StringSpec({
+    "skills use Russian names and a separate title above both data rows" {
+        val skill = mockk<Skill>()
+        every { skill.getDisplayName(any()) } answers {
+            if (firstArg<Locale>().language == "ru") "Рыбак" else "Fishing"
+        }
+        sidebarSkillName(skill) shouldBe "Рыбак"
+
+        val stream = requireNotNull(javaClass.classLoader.getResourceAsStream("modules/scoreboard.yml"))
+        val config = stream.use { YamlConfiguration.loadConfiguration(InputStreamReader(it)) }
+        listOf("sections.skills", "slimefun.sections.skills").forEach { path ->
+            config.getStringList(path) shouldContainExactly listOf(
+                "&6Навыки",
+                "?&6| &f%arc_sidebar_skill_1%",
+                "?&6| &f%arc_sidebar_skill_2%",
+            )
+        }
+    }
+
     "scoreboard hides clients below the configured minimum protocol" {
         isSidebarClientSupported(763, 774) shouldBe false
         isSidebarClientSupported(774, 774) shouldBe true

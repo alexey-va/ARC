@@ -36,7 +36,8 @@ sections:
     - '?&6Работы: &f%arc_sidebar_profession_1%'
     - '?&6| &f%arc_sidebar_profession_2%'
   skills:
-    - '?&6Навыки: &f%arc_sidebar_skill_1%'
+    - '&6Навыки'
+    - '?&6| &f%arc_sidebar_skill_1%'
     - '?&6| &f%arc_sidebar_skill_2%'
   footer:
     - '&7Онлайн: &a%online% &7• &fПинг: &e%player_ping% мс'
@@ -63,7 +64,8 @@ slimefun:
       - '?&6Работы: &f%arc_sidebar_profession_1%'
       - '?&6| &f%arc_sidebar_profession_2%'
     skills:
-      - '?&6Навыки: &f%arc_sidebar_skill_1%'
+      - '&6Навыки'
+      - '?&6| &f%arc_sidebar_skill_1%'
       - '?&6| &f%arc_sidebar_skill_2%'
     footer:
       - '&fВ режиме: &a%serveronline% &f• Пинг: &e%player_ping% мс'

@@ -161,7 +161,7 @@ class HelpCenterLegacySettings(
         if (id == "scoreboard-skills-auto") return backend.setMeta(player, SIDEBAR_SKILLS_META_KEY, "")
         if (id.startsWith("scoreboard-skill:")) {
             val skill = id.removePrefix("scoreboard-skill:")
-            if (sidebarSkillChoices(player).none { it.id == skill }) return falseFuture()
+            if (sidebarSkillChoices().none { it.id == skill }) return falseFuture()
             return backend.setMeta(player, SIDEBAR_SKILLS_META_KEY, toggleSidebarSkill(scoreboardSkills(player), skill).joinToString(","))
         }
         SidebarSection.entries.firstOrNull { "scoreboard-section-${it.id}" == id }?.let {

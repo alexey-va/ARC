@@ -52,7 +52,7 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.274"
+version = "1.4.275"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.17"
@@ -246,6 +246,7 @@ dependencies {
     testImplementation(libs.io.lettuce.lettuce.core)
     testImplementation(libs.net.luckperms.api)
     testImplementation(libs.me.clip.placeholderapi)
+    testImplementation(libs.dev.aurelium.auraskills.api.bukkit)
     testImplementation("commons-lang:commons-lang:2.6")
     testImplementation(libs.com.zrips.cmi.api)
     testImplementation(libs.net.william278.huskhomes)

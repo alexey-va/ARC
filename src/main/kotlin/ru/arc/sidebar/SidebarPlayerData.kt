@@ -6,11 +6,13 @@ import com.willfp.ecojobs.api.getJobProgress
 import com.willfp.ecojobs.jobs.Job
 import org.bukkit.Bukkit
 import dev.aurelium.auraskills.api.AuraSkillsApi
+import dev.aurelium.auraskills.api.skill.Skill
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.entity.Player
 import ru.arc.hooks.HookRegistry
 import ru.arc.treasurechests.TreasureHuntRegistry
+import java.util.Locale
 
 internal const val SIDEBAR_SKILLS_META_KEY = "arc-scoreboard-skills-selection"
 internal data class SidebarSkillChoice(val id: String, val name: String)
@@ -20,9 +22,11 @@ internal fun selectedSidebarSkills(value: String?): List<String> = value.orEmpty
 internal fun toggleSidebarSkill(selected: List<String>, id: String): List<String> =
     if (id in selected) selected - id else (selected + id).takeLast(2)
 
-internal fun sidebarSkillChoices(player: Player): List<SidebarSkillChoice> =
+internal fun sidebarSkillName(skill: Skill): String = skill.getDisplayName(Locale.forLanguageTag("ru"))
+
+internal fun sidebarSkillChoices(): List<SidebarSkillChoice> =
     if (HookRegistry.auraSkillsHook == null) emptyList() else AuraSkillsApi.get().globalRegistry.skills
-        .filter { it.isEnabled }.map { SidebarSkillChoice(it.id.toString(), PlainTextComponentSerializer.plainText().serialize(LegacyComponentSerializer.legacySection().deserialize(it.getDisplayName(player.locale()).replace('&', '§')))) }.sortedBy { it.id }
+        .filter { it.isEnabled }.map { SidebarSkillChoice(it.id.toString(), PlainTextComponentSerializer.plainText().serialize(LegacyComponentSerializer.legacySection().deserialize(sidebarSkillName(it).replace('&', '§')))) }.sortedBy { it.id }
 
 /** Reads only loaded online-player state on the main thread, once per selected section. */
 internal fun sidebarPlayerData(player: Player, section: SidebarSection): Map<String, String> = when (section) {
@@ -44,7 +48,7 @@ internal fun sidebarPlayerData(player: Player, section: SidebarSection): Map<Str
         skills.mapIndexed { index, skill ->
                 val level = user.getSkillLevel(skill)
                 val percent = if (level >= skill.maxLevel) 100 else sidebarProgressPercent(user.getSkillXp(skill), api.xpRequirements.getXpRequired(skill, level + 1))
-                "%arc_sidebar_skill_${index + 1}%" to "${skill.getDisplayName(player.locale())} &e$level &fур. &7• &a$percent%"
+                "%arc_sidebar_skill_${index + 1}%" to "${sidebarSkillName(skill)} &e$level &fур. &7• &a$percent%"
             }.toMap()
     }
     SidebarSection.ACTIVITY -> TreasureHuntRegistry.getActiveHunts().firstOrNull { it.world == player.world }?.let { hunt ->

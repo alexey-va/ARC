@@ -76,6 +76,7 @@ internal class ArcBaseSidebar(
             if (progress.isBlank() || progress == token || progress in setOf("…", "...")) return emptyList()
         }
         val data = sidebarPlayerData(player, section)
+        if (section == SidebarSection.SKILLS && data.isEmpty()) return emptyList()
         return config.stringList("$layout.${section.id}").mapNotNull { template ->
             val serverLine = resolveServerSidebarLine(template, serverId) ?: return@mapNotNull null
             val line = resolveOptionalSidebarLine(serverLine) { placeholder ->
