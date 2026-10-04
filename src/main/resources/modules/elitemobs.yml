@@ -266,6 +266,183 @@ dungeon-qol:
     portals-label: '<#92bed8>К порталам ›'
     list-label: '<#ffb277>Выбрать данж ›'
     about-title: '<#86dcf1>О данже'
+  adventure:
+    crystals-value: <white>💎</white> <#c7a0e8><amount>
+    intro: <#e8dfd2>Подберите поход или займитесь своим героем. Внутри данжа /данж и Shift + F открывают быстрые действия.
+    share-denied: <#e8dfd2>У вас нет доступа к отправке предметов в чат.
+    share-empty: <#e8dfd2>Возьмите предмет в основную руку.
+    share-no-description: <#e8dfd2>У этого предмета нет названия и описания для отправки в чат.
+    title: <#ffb277>Данжи и приключения
+    catalog-intro: <#e8dfd2>Найдите данж по названию или описанию. На карточке — уровень, тип похода и подробности.
+    catalog-empty: <#e8dfd2>По этому запросу ничего не найдено. Измените поиск или выберите «Все данжи».
+    catalog-card: <white><name> <#ffb277>· <level> ›
+    catalog-card-tooltip: <#e8dfd2><type> · уровень <level><newline><newline><description><newline><newline><#ffb277>Открыть подробности похода
+    catalog-title: <#ffb277>Каталог данжей
+    search-input: <white>Поиск по названию или описанию
+    access-ready: <#9bd48d>Открыт
+    access-locked: <white>Нет доступа
+    max-players: <#e8dfd2>До <count> игроков
+    enter-default: <#9bd48d>Войти в данж
+    quit-label: <#e5ba73>Выйти из данжа
+    quit-label-tooltip: <#e8dfd2>Покинуть наблюдение штатным способом
+    enter-difficulty: <#9bd48d><difficulty> · войти
+    enter-disabled: <white>[Недоступно] <difficulty>
+    level-input: <white>Уровень похода
+    lobbies-intro: <#e8dfd2>Выберите собирающуюся группу. Идущий поход можно посмотреть, если наблюдение разрешено.
+    lobbies-empty: <#e8dfd2>Открытых групп пока нет. Вернитесь к карточке данжа и создайте свой поход.
+    lobby-tooltip: <#e8dfd2>Уровень <level> · <difficulty><newline><newline><players>
+    lobbies-title: <#e5ba73>Группы данжа
+    stats-title: <#86dcf1>Статистика приключений
+    skill-progress: <#c4abff>Уровень <level><newline><#e8dfd2><xp> / <next> опыта
+    skills-title: <#c4abff>Боевые навыки
+    equipment-slot: <#86dcf1><slot> ›
+    gear-title: <#86dcf1>Снаряжение и бой
+    perks: <#c4abff>Перки оружия<newline><#e8dfd2><weapon><newline><newline><#c4abff>Перки брони<newline><#e8dfd2><armor>
+    bosses-intro: <#e8dfd2>Здесь только живые боссы. Нажмите на цель, чтобы включить указатель; повторное нажатие выключит его.
+    bosses-empty: <#e8dfd2>Сейчас нет боссов для отслеживания.
+    boss-tooltip: <#e8dfd2>Уровень <level> · <world><newline><newline>Включить или выключить отслеживание этого босса
+    bosses-title: <#ffb277>Боссы мира
+    travel-intro: <#e8dfd2>Подготовка к походу, торговцы и возвращение к приключениям.
+    return-unavailable: <#e8dfd2>Нет доступного места выхода. Сначала посетите обычный данж и выйдите из него.
+    travel-title: <#92bed8>Телепорты приключений
+    action-requested: <#9bd48d>✔ Подготовка похода запрошена
+    action-spectating: <#92bed8>Запрос на наблюдение отправлен
+    action-tracked: <#9bd48d>✔ Отслеживание переключено
+    action-untracked: <#e8dfd2>Отслеживание выключено
+    invalid-selection: <#e8dfd2>Выбранный уровень или сложность изменились. Выберите их заново.
+    action-failed: <#e8dfd2>Действие не выполнено. Проверьте сообщение и попробуйте снова.
+    back-label: <white>‹ Назад
+    loading: <#e8dfd2>Данные героя ещё загружаются. Попробуйте обновить страницу.
+    unavailable: <#e8dfd2>Сейчас недоступно
+    no-permission: <#e8dfd2>У вас нет доступа к этому действию.
+    leave-first: <#e8dfd2>Сначала завершите текущий поход или выйдите через панель данжа. Просматривать каталог можно прямо здесь.
+    changed: <#e8dfd2>Список изменился. Страница обновлена; выберите цель заново.
+    catalog-label: <#ffb277>Каталог данжей ›
+    catalog-label-tooltip: <#e8dfd2>Поиск, уровни и выбор похода
+    quests-label: <#c4abff>Задания ›
+    quests-label-tooltip: <#e8dfd2>Прогресс, отслеживание и управление заданиями
+    party-label: <#e5ba73>Группа ›
+    party-label-tooltip: <#e8dfd2>Собрать группу и пригласить друзей
+    classes-label: <#c4abff>Классы ›
+    classes-label-tooltip: <#e8dfd2>Выбор класса, способности и ветки развития
+    skills-label: <#c4abff>Навыки ›
+    skills-label-tooltip: <#e8dfd2>Уровни оружия и брони, опыт до следующего уровня
+    gear-label: <#86dcf1>Снаряжение ›
+    gear-label-tooltip: <#e8dfd2>Вещи, боевые параметры и выбранные перки
+    stats-label: <#86dcf1>Статистика ›
+    stats-label-tooltip: <#e8dfd2>Рейтинг, пройденные данжи и достижения
+    bosses-label: <#ffb277>Боссы ›
+    bosses-label-tooltip: <#e8dfd2>Найти живого босса и включить отслеживание
+    travel-label: <#92bed8>Телепорты ›
+    travel-label-tooltip: <#e8dfd2>Гильдия, магазины, спавн и личный возврат
+    guide-label: <white>Гайд ›
+    guide-label-tooltip: <#e8dfd2>Правила и советы по данжам
+    share-label: <white>Показать предмет в чате
+    share-label-tooltip: <#e8dfd2>Отправить в чат предмет, который вы держите в руке
+    current-label: <#ffb277>Текущий данж ›
+    current-label-tooltip: <#e8dfd2>Вернуться к быстрым действиям текущего похода
+    search-label: <white>Найти
+    search-label-tooltip: <#e8dfd2>Применить поисковую строку
+    previous-label: <#92bed8>‹ Предыдущая страница
+    previous-label-tooltip: <#e8dfd2>Предыдущие боссы
+    next-label: <#92bed8>Следующая страница ›
+    next-label-tooltip: <#e8dfd2>Следующие боссы
+    lobbies-label: <#e5ba73>Другие группы ›
+    lobbies-label-tooltip: <#e8dfd2>Войти в собирающуюся группу или наблюдать за походом
+    equipment-label: <#86dcf1><slot> ›
+    equipment-label-tooltip: <#e8dfd2>Показать предмет, уровень и описание
+    combat-label: <#86dcf1>Боевые параметры ›
+    combat-label-tooltip: <#e8dfd2>Все множители, защита и характеристики
+    perks-label: <#c4abff>Перки ›
+    perks-label-tooltip: <#e8dfd2>Выбранные перки оружия и брони
+    refresh-label: <white>Обновить
+    refresh-label-tooltip: <#e8dfd2>Получить текущие данные
+    filter-all-on: <#9bd48d>✔ Все данжи
+    filter-all-off: <white>○ Все данжи
+    filter-all-on-tooltip: '<#e8dfd2>Показать: Все данжи'
+    filter-all-off-tooltip: '<#e8dfd2>Показать: Все данжи'
+    filter-open-on: <#9bd48d>✔ Открытый мир
+    filter-open-off: <white>○ Открытый мир
+    filter-open-on-tooltip: '<#e8dfd2>Показать: Открытый мир'
+    filter-open-off-tooltip: '<#e8dfd2>Показать: Открытый мир'
+    filter-instanced-on: <#9bd48d>✔ Инстансы
+    filter-instanced-off: <white>○ Инстансы
+    filter-instanced-on-tooltip: '<#e8dfd2>Показать: Инстансы'
+    filter-instanced-off-tooltip: '<#e8dfd2>Показать: Инстансы'
+    global-label: <#e5ba73>Главное меню ›
+    global-tooltip: 'Каталог данжей, навыки, классы, статистика и боссы'
+    close-label: <white>Закрыть
+    guild-label: <#92bed8>Гильдия ›
+    guild-label-disabled: <white>[Недоступно] Гильдия
+    shops-label: <#92bed8>Магазины ›
+    shops-label-disabled: <white>[Недоступно] Магазины
+    spawn-label: <#92bed8>Спавн ›
+    spawn-label-disabled: <white>[Недоступно] Спавн
+    return-label: <#92bed8>Вернуться в данж ›
+    return-disabled: <white>[Недоступно] Вернуться в данж
+    type-open_dungeon: <#92bed8>Открытый мир
+    type-arena: <#ffb277>Арена
+    type-instanced_dungeon: <#c4abff>Отдельный поход
+    type-dynamic_dungeon: <#c4abff>Гибкий уровень
+    join-lobby: <#9bd48d>Группа <number> · войти
+    spectate-lobby: <#92bed8>Группа <number> · наблюдать
+    perks-title: <#c4abff>Перки оружия и брони
+    combat-title: <#86dcf1>Боевые параметры
+    guild-label-tooltip: <#e8dfd2>Перейти к порталам и заданиям Гильдии
+    shops-label-tooltip: <#e8dfd2>Перейти к торговцам Гильдии
+    spawn-label-tooltip: <#e8dfd2>Вернуться на спавн
+    return-label-tooltip: <#e8dfd2>Личный портал к месту последнего выхода из обычного данжа
+    skill-label: <#c4abff><name> · перки ›
+    skill-tooltip: <#e8dfd2>Выбрать или выключить перки этого навыка
+    skill-perks-intro: <#e8dfd2>✔ — выбранный перк. Нажмите для переключения. Требования и эффект указаны в подсказке.
+    skill-perks-title: <#c4abff><name> · перки
+    perk-active: <#9bd48d>✔ <name>
+    perk-ready: <#c4abff>○ <name>
+    perk-locked: <white>[<level>] <name>
+    perk-tooltip: <#e8dfd2>Ступень <tier> · нужен уровень <level><newline><newline><description><newline><newline><#c4abff><bonus>
+    perk-activated: <#9bd48d>✔ Перк включён
+    perk-deactivated: <#e8dfd2>Перк выключен
+    perk-level-required: <#e8dfd2>Ваш уровень навыка пока недостаточен для этого перка.
+    perk-limit: <#e8dfd2>Достигнут лимит активных перков. Сначала выключите один из выбранных.
+    fields:
+      skillLevel: <#e8dfd2>Уровень навыка
+      activePerks: <#e8dfd2>Активные перки
+      combatLevel: <#e8dfd2>Боевой уровень
+      money: <#e8dfd2>Кристаллы
+      activeQuests: <#e8dfd2>Активные задания
+      score: <#e8dfd2>Счёт приключений
+      found: <#e8dfd2>Найдено
+      page: <#e8dfd2>Страница
+      type: <#e8dfd2>Тип похода
+      level: <#e8dfd2>Уровень
+      access: <#e8dfd2>Доступ
+      maxPlayers: <#e8dfd2>Группа
+      itemLevel: <#e8dfd2>Уровень предмета
+      rank: <#e8dfd2>Место в рейтинге
+      dungeons: <#e8dfd2>Пройдено данжей
+      kills: <#e8dfd2>Убито элит
+      highestKill: <#e8dfd2>Сильнейшая победа
+      quests: <#e8dfd2>Выполнено заданий
+      deaths: <#e8dfd2>Смерти
+      referenceLevel: <#e8dfd2>Уровень противника
+      weaponLevel: <#e8dfd2>Уровень оружия
+      weaponSkill: <#e8dfd2>Навык оружия
+      weaponSkillLevel: <#e8dfd2>Уровень навыка
+      armorSkillLevel: <#e8dfd2>Навык брони
+      armorLevel: <#e8dfd2>Защита брони
+      weaponFactor: <#e8dfd2>Множитель оружия
+      critChance: <#e8dfd2>Шанс крита
+      enchantmentBonus: <#e8dfd2>Бонус зачарований
+      threatMultiplier: <#e8dfd2>Множитель угрозы
+      health: <#e8dfd2>Здоровье
+      maxHealth: <#e8dfd2>Максимум здоровья
+      defenseMatch: <#e8dfd2>Защита от ударов
+      slot-helmet: <#e8dfd2>Шлем
+      slot-chestplate: <#e8dfd2>Нагрудник
+      slot-leggings: <#e8dfd2>Поножи
+      slot-boots: <#e8dfd2>Ботинки
+      slot-mainhand: <#e8dfd2>Основная рука
+      slot-offhand: <#e8dfd2>Вторая рука
   party:
     title: '<#e5ba73>Группа'
     body: '<#e8dfd2>Соберите группу до входа в данж. Приглашённый игрок принимает приглашение здесь же.'

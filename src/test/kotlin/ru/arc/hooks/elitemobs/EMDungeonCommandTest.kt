@@ -62,6 +62,6 @@ class EMDungeonCommandTest : FreeSpec({
         verify { sender.sendMessage(any<Component>()) }
 
         every { command.name } returns "dungeon"
-        EMDungeonCommand(config, { _, _, _ -> }, { true }).onTabComplete(player, command, "dungeon", arrayOf("с")) shouldContainExactly listOf("сохраниться", "сохранения", "список")
+        EMDungeonCommand(config, { _, _, _ -> }, { true }).onTabComplete(player, command, "dungeon", arrayOf("с")) shouldContainExactly listOf("список", "статистика", "снаряжение", "сохраниться", "сохранения")
     }
 })

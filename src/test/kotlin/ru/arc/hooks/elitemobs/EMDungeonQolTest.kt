@@ -7,6 +7,9 @@ import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
+import io.mockk.verify
 import net.kyori.adventure.bossbar.BossBar
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.title.Title
@@ -14,8 +17,10 @@ import org.bukkit.Location
 import org.bukkit.entity.Player
 import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.event.player.PlayerChangedWorldEvent
+import org.bukkit.event.player.PlayerCommandPreprocessEvent
 import org.bukkit.event.player.PlayerTeleportEvent
 import ru.arc.config.Config
+import ru.arc.gui.ArcMenus
 import ru.arc.common.ServerLocation
 import ru.arc.core.Tasks
 import ru.arc.core.TestTaskScheduler
@@ -26,6 +31,60 @@ class EMDungeonQolTest : FreeSpec({
     lateinit var paper: MockBukkitTestRuntime
     beforeEach { paper = MockBukkitTestRuntime.open() }
     afterEach { paper.close() }
+
+    "only authorized bare EliteMobs roots are replaced and subcommands retain their owner" {
+        withScheduler {
+            val player = paper.addPlayer("em-routing")
+            val settings = config()
+            val qol = EMDungeonQol(settings, resolve = { null })
+            for (command in listOf("/em shareitem", "/em spawntp", "/elitemobs reload", "/em dungeon")) {
+                val event = PlayerCommandPreprocessEvent(player, command)
+                qol.openEliteMobsMenu(event)
+                event.isCancelled shouldBe false
+            }
+            val denied = PlayerCommandPreprocessEvent(player, "/em")
+            qol.openEliteMobsMenu(denied)
+            denied.isCancelled shouldBe false
+            player.isOp = true
+            mockkObject(ArcMenus)
+            try {
+                val shown = mutableListOf<ru.arc.paper.menu.PaperDialogScreen>()
+                every { ArcMenus.openDialog(player, any(), any(), any(), any()) } answers { shown += secondArg<ru.arc.paper.menu.PaperDialogScreen>() }
+                for (command in listOf("/em", "/ELITEMOBS", "/elitemobs:em", "/elitemobs:elitemobs")) {
+                    val event = PlayerCommandPreprocessEvent(player, command)
+                    qol.openEliteMobsMenu(event)
+                    event.isCancelled shouldBe true
+                    shown.last().id shouldBe "dungeon.main"
+                }
+            } finally {
+                unmockkObject(ArcMenus)
+            }
+            every { settings.bool("dungeon-qol.enabled", true) } returns false
+            val disabled = PlayerCommandPreprocessEvent(player, "/em")
+            qol.openEliteMobsMenu(disabled)
+            disabled.isCancelled shouldBe false
+            qol.close()
+        }
+    }
+
+    "spectators and nonmembers remain inside the instance travel boundary" {
+        withScheduler {
+            val world = paper.addSimpleWorld("spectator-boundary")
+            val player = mockk<Player>(relaxed = true)
+            every { player.world } returns world
+            every { player.isOnline } returns true
+            every { player.gameMode } returns org.bukkit.GameMode.SPECTATOR
+            val audience = RecordingAudience()
+            val qol = EMDungeonQol(config(), resolve = { DungeonVisit("spectated", instanced = true, members = emptySet()) }, audience = audience)
+            qol.panelView(player) shouldBe null
+            qol.insideInstance(player) shouldBe true
+            qol.action(player, "tp")
+            qol.action(player, "shops")
+            verify(exactly = 0) { player.performCommand(any()) }
+            audience.messages.size shouldBe 2
+            qol.close()
+        }
+    }
 
     "shops action sends the configured adventure guild destination through HuskHomes" {
         withScheduler {

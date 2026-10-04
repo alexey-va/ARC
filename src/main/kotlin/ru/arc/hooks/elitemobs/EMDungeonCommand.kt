@@ -41,13 +41,14 @@ class EMDungeonCommand(
                 player.sendMessage(config.component("dungeon-qol.messages.unavailable", "<red>Данжи сейчас недоступны.</red>"))
             return true
         }
+        ru.arc.gui.ArcMenus.beginDialogFlow(player)
         dispatch(player, action, if (shortcut != null) args.toList() else args.drop(1))
         return true
     }
 
     override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<String>): List<String> =
         if (command.name == "dungeon" && args.size == 1) {
-            listOf("меню", "menu", "начать", "выйти", "вход", "вернуться", "продолжить", "магазины", "сохраниться", "сохранения", "тп", "список", "помощь", "start", "quit", "entry", "return", "resume", "shops", "save", "saves", "tp", "list", "help")
+            listOf("меню", "menu", "общее", "список", "статистика", "снаряжение", "навыки", "боссы", "классы", "задания", "телепорты", "начать", "выйти", "вход", "вернуться", "продолжить", "магазины", "сохраниться", "сохранения", "тп", "помощь", "global", "stats", "gear", "skills", "bosses", "classes", "quests", "travel", "start", "quit", "entry", "return", "resume", "shops", "save", "saves", "tp", "list", "help")
                 .filter { it.startsWith(args[0], ignoreCase = true) }
         } else emptyList()
 }

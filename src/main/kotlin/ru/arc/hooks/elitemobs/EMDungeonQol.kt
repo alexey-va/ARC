@@ -25,6 +25,7 @@ import ru.arc.util.Logging
 import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.player.PlayerTeleportEvent
+import org.bukkit.event.player.PlayerCommandPreprocessEvent
 import ru.arc.Portal
 import ru.arc.PortalData
 import ru.arc.ARC
@@ -247,6 +248,9 @@ internal class EMDungeonQol(
         DungeonPanelView(player.world.uid, it, view(player))
     }
 
+    /** Location is the travel boundary even for spectators and players outside the roster. */
+    internal fun insideInstance(player: Player): Boolean = resolve(player.world)?.instanced == true
+
     internal fun scoreboardView(player: Player): DungeonScoreboardView? {
         if (!enabled || closed || !player.isOnline || player.isDead) return null
         val visit = resolve(player.world) ?: return null
@@ -322,6 +326,15 @@ internal class EMDungeonQol(
     internal fun action(player: Player, action: String, args: List<String> = emptyList()) {
         when (action) {
             "menu", "меню" -> menus.panel(player)
+            "global", "общее" -> menus.main(player)
+            "list", "список" -> menus.catalog(player)
+            "stats", "статистика" -> menus.statistics(player)
+            "gear", "снаряжение" -> menus.gear(player)
+            "skills", "навыки" -> menus.skills(player)
+            "bosses", "боссы" -> menus.bosses(player)
+            "travel", "телепорты" -> menus.travelMenu(player)
+            "classes", "классы" -> menus.classes(player)
+            "quests", "задания", "journal" -> menus.quests(player)
             "return", "вернуться" -> returnToLast(player)
             "resume", "продолжить" -> {
                 val expected = continuation(player)
@@ -331,12 +344,12 @@ internal class EMDungeonQol(
             "main" -> if (!HelpCenterModule.open(player)) audience.sendMessage(player, text("panel.main-unavailable", "<#d7b486>Главное меню сейчас недоступно. Попробуйте позже."))
             "party" -> menus.party(player)
             "shops", "магазины" -> {
-                if (resolve(player.world)?.instanced == true) audience.sendMessage(player, text("messages.leave-first", "<#d7b486>Сначала выйдите из текущего данжа: Shift + F → «Выйти из данжа»."))
+                if (insideInstance(player)) audience.sendMessage(player, text("messages.leave-first", "<#d7b486>Сначала выйдите из текущего данжа: Shift + F → «Выйти из данжа»."))
                 else if (!travelToShops(player, shopsLocation())) audience.sendMessage(player, text("messages.shops-unavailable", "<#aaa49a>Магазины сейчас недоступны. Попробуйте позже."))
             }
-            "tp", "тп", "порталы", "list", "список" -> {
-                if (current(player)?.instanced == true) audience.sendMessage(player, text("messages.leave-first", "<#d7b486>Сначала выйдите из текущего данжа: Shift + F → «Выйти из данжа»."))
-                else player.performCommand(if (action in setOf("list", "список")) "elitemobs:em" else "pw aguild")
+            "tp", "тп", "порталы" -> {
+                if (insideInstance(player)) audience.sendMessage(player, text("messages.leave-first", "<#d7b486>Сначала выйдите из текущего данжа: Shift + F → «Выйти из данжа»."))
+                else player.performCommand("pw aguild")
             }
             "start", "начать" -> {
                 val visit = current(player)
@@ -346,7 +359,6 @@ internal class EMDungeonQol(
                     else -> player.performCommand("elitemobs:elitemobs start")
                 }
             }
-            "journal" -> if (current(player) != null) player.performCommand("elitemobs:em") else audience.sendMessage(player, outside())
             "quit", "leave", "выйти" -> quit(player)
             "save", "сохраниться" -> {
                 val expected = view(player)
@@ -360,6 +372,16 @@ internal class EMDungeonQol(
             "saves", "сохранения" -> menus.open(player)
             else -> audience.sendMessage(player, text("messages.help", "<gold>Shift + F</gold> <gray>— меню данжа: старт, сохранения и выход.</gray>"))
         }
+    }
+
+    /** Replace only the native root screen; all EliteMobs subcommands retain their owner. */
+    @EventHandler(ignoreCancelled = true)
+    fun openEliteMobsMenu(event: PlayerCommandPreprocessEvent) {
+        if (event.message.trim().lowercase() !in setOf("/em", "/elitemobs", "/elitemobs:em", "/elitemobs:elitemobs")) return
+        if (!enabled || closed || !event.player.hasPermission("elitemobs.command")) return
+        event.isCancelled = true
+        ru.arc.gui.ArcMenus.beginDialogFlow(event.player)
+        menus.panel(event.player)
     }
 
     private fun shopsLocation(): ServerLocation = ServerLocation(
