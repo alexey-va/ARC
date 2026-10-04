@@ -14,7 +14,7 @@ import ru.arc.itemcatalog.ArcItemMaterializerBridge
 import ru.arc.paper.api.ArcTelemetryProvider
 import ru.arc.paper.api.ArcItemMaterializer
 import ru.arc.paper.api.ArcSidebarService
-import ru.arc.paper.sidebar.PaperArcSidebarService
+import ru.arc.sidebar.SectionedSidebarService
 import ru.arc.metrics.ArcTelemetryProviderBridge
 import ru.arc.audit.autosell.AutoSellAuditModule
 import ru.arc.audit.bank.BankAuditModule
@@ -132,7 +132,7 @@ open class ARC : JavaPlugin() {
     internal lateinit var chunkTicketRegistry: PaperChunkTicketRegistry
         private set
 
-    internal lateinit var sidebarService: PaperArcSidebarService
+    internal lateinit var sidebarService: SectionedSidebarService
         private set
 
     private var baseSidebar: ArcBaseSidebar? = null
@@ -175,7 +175,7 @@ open class ARC : JavaPlugin() {
             ArcMenus.initializeDialogRuntime(this)
         }
         if (runtimeProfile == ArcRuntimeProfile.FULL || runtimeProfile == ArcRuntimeProfile.SLIMEFUN) {
-            sidebarService = PaperArcSidebarService(this)
+            sidebarService = SectionedSidebarService(this)
             server.servicesManager.register(ArcSidebarService::class.java, sidebarService, this, ServicePriority.Normal)
         }
         if (runtimeProfile == ArcRuntimeProfile.FULL) {

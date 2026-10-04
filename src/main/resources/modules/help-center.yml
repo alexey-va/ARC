@@ -161,7 +161,7 @@ text:
   settings-options-tablist-title: "<#86dcf1>Список игроков"
   settings-scoreboard-rewards-label: 'Итог наград'
   settings-scoreboard-rewards-tooltip: '<#e8dfd2>Итог под квестами: получено сегодня / всего.<newline>Показывается вместе с секцией квестов.'
-  settings-options-scoreboard-body: '<#e8dfd2>Включайте нужные секции панели справа на экране.<newline>Изменения сохраняются для вашего игрока.<newline>Квесты и итог наград появляются, когда есть задания.'
+  settings-options-scoreboard-body: "<#e8dfd2>Включайте нужные секции панели справа на экране.<newline>Новые секции выключены по умолчанию; выбор сохраняется для вашего игрока.<newline>Панель вмещает 15 строк. При нехватке места целые секции временно скрываются: сначала онлайн, итог наград, навыки и профессии.<newline>Квесты, занятие и координаты имеют приоритет."
   settings-scoreboard-selected: '<#9bd48d>✔ <label>'
   settings-scoreboard-unselected: '<#ffffff>○ <label>'
   settings-scoreboard-visible-label: 'Показывать панель'
@@ -176,6 +176,22 @@ text:
   settings-scoreboard-quests-tooltip: '<#e8dfd2>Текущие задания и их прогресс.<newline>Если заданий нет, секция скрывается.<newline>Отключение также скрывает итог наград.'
   settings-scoreboard-footer-label: 'Онлайн и пинг'
   settings-scoreboard-footer-tooltip: '<#e8dfd2>Нижняя строка: число игроков и задержка соединения.'
+  settings-scoreboard-rank-progress-label: "Прогресс ранга"
+  settings-scoreboard-rank-progress-tooltip: "<#e8dfd2>Следующий ранг, активные минуты и выполненные пути.<newline>На верхнем ранге секция скрывается."
+  settings-scoreboard-coordinates-label: "Координаты"
+  settings-scoreboard-coordinates-tooltip: "<#e8dfd2>Координаты X/Y/Z и направление взгляда."
+  settings-scoreboard-profession-label: "Профессии"
+  settings-scoreboard-profession-tooltip: "<#e8dfd2>До двух ваших работ: уровень и прогресс до следующего.<newline>Если работ нет, секция скрывается."
+  settings-scoreboard-skills-label: "Навыки"
+  settings-scoreboard-skills-tooltip: "<#e8dfd2>До двух выбранных навыков: уровень и прогресс.<newline>Без выбора — два наиболее развитых навыка."
+  settings-scoreboard-activity-label: "Текущее занятие"
+  settings-scoreboard-activity-tooltip: "<#e8dfd2>Встраивает текущую игровую панель в основную.<newline>Если отдельной панели нет — показывает охоту в вашем мире.<newline>При отключении игровые панели работают как раньше."
+  settings-scoreboard-skills-choose-label: "Выбрать навыки"
+  settings-scoreboard-skills-choose-tooltip: "<#e8dfd2>Выберите до двух навыков для панели."
+  settings-scoreboard-skills-choose-body: "<#e8dfd2>Выберите до двух навыков.<newline>Третий выбор заменит первый. Повторное нажатие снимает выбор.<newline>Без выбора показываются два наиболее развитых навыка."
+  settings-scoreboard-skills-unavailable: "<#e8dfd2>В этом режиме навыки недоступны."
+  settings-scoreboard-skills-auto-label: "<#86dcf1>Автоматически: два лучших навыка"
+  settings-scoreboard-skills-back-label: "<#86dcf1>‹ К настройкам панели"
   settings-options-scoreboard-title: "<#86dcf1>Информационная панель"
   settings-options-item-info-body: "<#e8dfd2>Показывать название блока или мебели ItemsAdder либо Slimefun, на которые вы смотрите.<newline>Технический ID можно включить отдельно. Обычные блоки Minecraft не отображаются."
   settings-options-item-info-title: "<#86dcf1>Информация о блоке"
