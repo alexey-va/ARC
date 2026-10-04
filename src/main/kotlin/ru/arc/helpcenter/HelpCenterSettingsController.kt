@@ -20,6 +20,7 @@ import ru.arc.paper.menu.PaperDialogNumberRangeInput
 import ru.arc.paper.menu.PaperDialogScreen
 import ru.arc.iteminfo.ItemInfoPreferences
 import ru.arc.sidebar.SidebarSection
+import ru.arc.sidebar.sidebarSkillChoices
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -189,8 +190,28 @@ internal class HelpCenterSettingsController(
                     toggleLabel("settings-scoreboard-${part.id}-label", legacy.scoreboardSectionEnabled(player, part)),
                     text("settings-scoreboard-${part.id}-tooltip"),
                 ) { apply(player, "scoreboard-section-${part.id}") { openScoreboard(player, section) } }
+            } + button("scoreboard_skills_choose", text("settings-scoreboard-skills-choose-label"), text("settings-scoreboard-skills-choose-tooltip")) {
+                openScoreboardSkills(player, section)
             },
             exitButton = button("back", text("settings-${section.key}-back-label")) { openSection(player, section) }, columns = 2,
+        ))
+    }
+
+    private fun openScoreboardSkills(player: Player, section: Section) {
+        navigation.visit(player) { openScoreboardSkills(player, section) }
+        val selected = legacy.scoreboardSkills(player)
+        val choices = sidebarSkillChoices(player)
+        showDialog(player, PaperDialogScreen(
+            id = "help.settings.scoreboard.skills", title = text("settings-scoreboard-skills-choose-label"),
+            body = listOf(PaperDialogBody(text(if (choices.isEmpty()) "settings-scoreboard-skills-unavailable" else "settings-scoreboard-skills-choose-body"), 468)),
+            buttons = listOf(button("skills_auto", text("settings-scoreboard-skills-auto-label")) {
+                apply(player, "scoreboard-skills-auto") { openScoreboardSkills(player, section) }
+            }) + choices.mapIndexed { index, skill ->
+                button("skill_$index", text(if (skill.id in selected) "settings-scoreboard-selected" else "settings-scoreboard-unselected", "label" to Component.text(skill.name))) {
+                    apply(player, "scoreboard-skill:${skill.id}") { openScoreboardSkills(player, section) }
+                }
+            },
+            exitButton = button("back", text("settings-scoreboard-skills-back-label")) { openScoreboard(player, section) }, columns = 2,
         ))
     }
 

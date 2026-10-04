@@ -21,16 +21,16 @@ class HelpCenterLegacySettingsTest {
         backend.permissions["tab.tablist3"] = true
         val settings = HelpCenterLegacySettings(backend)
         SidebarSection.entries.forEach { section ->
-            assertTrue(settings.scoreboardSectionEnabled(player, section))
+            assertEquals(section.defaultEnabled, settings.scoreboardSectionEnabled(player, section))
             assertTrue(settings.execute(player, "scoreboard-section-${section.id}").join())
-            assertEquals(false, HelpCenterLegacySettings(backend).scoreboardSectionEnabled(player, section))
+            assertEquals(!section.defaultEnabled, HelpCenterLegacySettings(backend).scoreboardSectionEnabled(player, section))
         }
         assertTrue(settings.execute(player, "scoreboard-toggle").join())
         assertEquals("off", settings.entries(player).first { it.id == "scoreboard" }.state)
         assertTrue(settings.execute(player, "scoreboard-toggle").join())
         assertEquals("on", settings.entries(player).first { it.id == "scoreboard" }.state)
         assertEquals("3", settings.entries(player).first { it.id == "tablist" }.state)
-        SidebarSection.entries.forEach { assertEquals(false, settings.scoreboardSectionEnabled(player, it)) }
+        SidebarSection.entries.forEach { assertEquals(!it.defaultEnabled, settings.scoreboardSectionEnabled(player, it)) }
         assertEquals(false, settings.execute(player, "scoreboard-section-unknown").join())
     }
 

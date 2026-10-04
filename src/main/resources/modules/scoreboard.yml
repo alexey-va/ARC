@@ -6,16 +6,22 @@ title: '&#B22222&lRus&f&lCrafting'
 
 # One layout. Personal section visibility is stored in LuckPerms metadata.
 # '?' hides a row when its placeholders are empty; '@server ' scopes a row.
-# Empty groups disappear, with one separator between remaining groups.
+# Empty groups disappear. Complete sections are trimmed to the 15-row limit.
+# New optional sections default off; activity/quests/coordinates have higher priority.
 sections:
   rank:
     - '&6| &f%arcranks_rank_name% &e/rank'
   balance:
     - '&6| &f💰 &6%rediseco_bal_short_vault%  &f &d%rediseco_bal_short_tokens%'
+  rank-progress:
+    - '?&6| &fСледующий: &e%arcranks_next_rank%'
+    - '?&6| &f%arcranks_next_rank_progress_compact%'
   location:
     - '&6Место'
     - '&6| &f%arc_worldname%'
     - '@survival &6| &f%lands_land_name_plain_here%'
+  coordinates:
+    - '&6| &fXYZ: &e%player_x% %player_y% %player_z% &7• &f%player_direction%'
   quests:
     - '?%arcranks_quest_board_header%'
     - '?&6| %arcranks_quest_board_1%'
@@ -23,6 +29,15 @@ sections:
     - '?&6| %arcranks_quest_board_3%'
   rewards:
     - '?&6| %arcranks_quest_reward_summary%'
+  activity:
+    - '?&6Занятие: &f%arc_sidebar_activity_name%'
+    - '?&6| &fСундуки: &e%arc_sidebar_activity_progress%'
+  profession:
+    - '?&6Работы: &f%arc_sidebar_profession_1%'
+    - '?&6| &f%arc_sidebar_profession_2%'
+  skills:
+    - '?&6Навыки: &f%arc_sidebar_skill_1%'
+    - '?&6| &f%arc_sidebar_skill_2%'
   footer:
     - '&7Онлайн: &a%online% &7• &fПинг: &e%player_ping% мс'
 
@@ -39,5 +54,16 @@ slimefun:
       - '&6| &fУровень: &e%superior_island_level_format%'
       - '&6| &f%slimefun_place%'
       - '&6| &fМеню: &e/skyblock'
+    coordinates:
+      - '&6| &fXYZ: &e%player_x% %player_y% %player_z% &7• &f%player_direction%'
+    activity:
+      - '?&6Занятие: &f%arc_sidebar_activity_name%'
+      - '?&6| &fСундуки: &e%arc_sidebar_activity_progress%'
+    profession:
+      - '?&6Работы: &f%arc_sidebar_profession_1%'
+      - '?&6| &f%arc_sidebar_profession_2%'
+    skills:
+      - '?&6Навыки: &f%arc_sidebar_skill_1%'
+      - '?&6| &f%arc_sidebar_skill_2%'
     footer:
       - '&fВ режиме: &a%serveronline% &f• Пинг: &e%player_ping% мс'

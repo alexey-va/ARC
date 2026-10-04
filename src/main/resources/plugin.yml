@@ -37,6 +37,8 @@ softdepend:
   - YamipaPlugin
   - LootChest
   - Jobs
+  - EcoJobs
+  - AuraSkills
   - BetterStructures
   - PlaceholderAPI
   - Parkour
