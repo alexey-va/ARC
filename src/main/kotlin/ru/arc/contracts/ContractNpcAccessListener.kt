@@ -19,6 +19,10 @@ class ContractNpcAccessListener : Listener {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = false)
     fun revokeCancelledNpcClick(event: NPCRightClickEvent) {
         if (event.isCancelled) ContractOriginGate.revoke(event.clicker.uniqueId)
+        else if (ContractOriginGate.groupForNpc(event.npc.id) == FoodContractDepositGui.GROUP &&
+            ContractOriginGate.canSubmit(event.clicker, FoodContractDepositGui.GROUP)) {
+            FoodContractDepositGui.open(event.clicker)
+        }
     }
 
     @EventHandler

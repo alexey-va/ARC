@@ -588,6 +588,7 @@ object ContractsManager {
     fun submit(
         player: Player,
         quote: ContractSubmissionQuote,
+        inventorySlots: Set<Int>? = null,
     ): CompletableFuture<ContractSubmissionOutcome> {
         check(Bukkit.isPrimaryThread()) { "Contract submissions must be started on the main thread" }
         val playerId = player.uniqueId
@@ -642,6 +643,7 @@ object ContractsManager {
                                     policy,
                                     quote = quote,
                                     availableNetworkBudgetMinor = remainingWeeklyBudget(System.currentTimeMillis()),
+                                    inventorySlots = inventorySlots,
                                 )
                             }
                         publishResourceContractCommitted(quote.contractId, submitted)

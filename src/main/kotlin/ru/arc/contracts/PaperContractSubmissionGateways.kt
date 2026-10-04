@@ -34,11 +34,16 @@ class PaperContractInventoryGateway(
         contractGroup: String,
     ): PreparedContractInventory? = prepareInternal(playerId, itemKey, quantity, contractGroup)
 
+    override suspend fun prepareFromSlots(
+        playerId: String, itemKey: String, quantity: Int, contractGroup: String, slots: Set<Int>,
+    ): PreparedContractInventory? = prepareInternal(playerId, itemKey, quantity, contractGroup, slots)
+
     private suspend fun prepareInternal(
         playerId: String,
         itemKey: String,
         quantity: Int,
         contractGroup: String?,
+        sourceSlots: Set<Int>? = null,
     ): PreparedContractInventory? =
         onBukkitMain {
             val uuid = runCatching { UUID.fromString(playerId) }.getOrNull() ?: return@onBukkitMain null
@@ -50,11 +55,13 @@ class PaperContractInventoryGateway(
             }
             val material = PaperContractItems.material(itemKey) ?: return@onBukkitMain null
             require(quantity in 1..EscrowedItemPayload.MAX_ITEM_QUANTITY) { "Invalid contract inventory quantity" }
+            require(sourceSlots == null || sourceSlots.isNotEmpty() && sourceSlots.all { it in 0..35 })
 
             var remaining = quantity
             val slots = mutableListOf<PaperContractSlotPlan>()
             player.inventory.storageContents.forEachIndexed { slot, stack ->
-                if (remaining == 0 || stack == null || !PaperContractItems.isPlainExact(stack, material, itemKey)) {
+                if (remaining == 0 || sourceSlots != null && slot !in sourceSlots ||
+                    stack == null || !PaperContractItems.isPlainExact(stack, material, itemKey)) {
                     return@forEachIndexed
                 }
                 val take = minOf(stack.amount, remaining)
@@ -75,16 +82,23 @@ class PaperContractInventoryGateway(
 }
 
 internal object PaperContractItems {
+    const val ANY_RAW_FISH = "arc:any_raw_fish"
+    val rawFishKeys = setOf("minecraft:cod", "minecraft:salmon", "minecraft:tropical_fish", "minecraft:pufferfish")
+
     fun material(itemKey: String): Material? {
+        if (itemKey == ANY_RAW_FISH) return Material.COD
         if (!itemKey.startsWith("minecraft:")) return null
         val material = Material.matchMaterial(itemKey.substringAfter(':')) ?: return null
         return material.takeIf { it.isItem && !it.isAir }
     }
 
     fun isPlainExact(stack: ItemStack, material: Material, itemKey: String): Boolean =
-        stack.type == material &&
-            stack.type.key.toString() == itemKey &&
-            stack.isSimilar(ItemStack(material, stack.amount))
+        matchesKey(itemKey, stack.type.key.toString()) &&
+            (itemKey == ANY_RAW_FISH || stack.type == material) &&
+            stack.isSimilar(ItemStack(stack.type, stack.amount))
+
+    fun matchesKey(orderKey: String, stackKey: String): Boolean =
+        if (orderKey == ANY_RAW_FISH) stackKey in rawFishKeys else orderKey == stackKey
 
     fun countPlain(player: Player, itemKey: String): Int {
         check(Bukkit.isPrimaryThread()) { "Contract inventory count must run on the Bukkit main thread" }

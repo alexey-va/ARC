@@ -200,6 +200,9 @@ open class ContractsConfig(
             startsAt = if (config.bool("selection.enabled", false))
                 instant(config.string("selection.starts-at", ""), "selection.starts-at") else 0,
             perGroup = config.integer("selection.orders-per-group", 3),
+            perGroupOverrides = config.keys("selection.group-order-counts").associateWith {
+                config.integer("selection.group-order-counts.$it", 3)
+            },
         )
 
     open fun validated(allowSeasonMutations: Boolean = false): ContractsConfig {
@@ -516,6 +519,7 @@ open class ContractsConfig(
             350 to "forge_orders",
             367 to "bank_orders",
             390 to "guild_orders",
+            439 to "food_orders",
         )
 
         const val MAX_CONFIGURED_ORDERS = 64

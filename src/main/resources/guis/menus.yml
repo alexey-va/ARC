@@ -2,6 +2,15 @@
 # rows, slots, regions, backgrounds, materials, names and lore composition.
 menus:
   layouts:
+    food-contracts:
+      schema-version: 1
+      rows: 6
+      background: { template: background }
+      elements:
+        info: { slot: 40, template: food-contract-info }
+      regions:
+        food-orders: { slots: ["10-16", "19-25", "28-34"] }
+        food-deposit: { slots: ["46-52"] }
     investigation-hub:
       schema-version: 1
       rows: 3
@@ -403,6 +412,25 @@ menus:
         store-items: { slots: ['0-44'] }
 
   templates:
+    food-contract-order:
+      material: PAPER
+      name: '<italic:false><#ffcd70><bold><name>'
+      lore:
+        - '<italic:false><#e6fff3>Принимается: <accepted>'
+        - '<italic:false>'
+        - '<italic:false><#b8b8b8>За штуку: <#ffcd70><price> <white>💰</white>'
+        - '<italic:false><#b8b8b8>Ваш остаток: <white><remaining> шт.'
+        - '<italic:false>'
+        - '<italic:false><state>'
+    food-contract-info:
+      material: HOPPER
+      name: '<italic:false><#92bed8><bold><name>'
+      lore:
+        - '<italic:false><#e6fff3><accepted>'
+        - '<italic:false>'
+        - '<italic:false><status>'
+        - '<italic:false><#e6fff3>Shift + ЛКМ по стопке — быстрая сдача.'
+        - '<italic:false><#b8b8b8>Оплата сразу после приёма. Лишнее остаётся у вас.'
     lost-loot-back:
       material: ARROW
       name: '<#92bed8>‹ В меню данжей'

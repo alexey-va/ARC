@@ -22,6 +22,27 @@ class ContractSubmissionCoordinatorTest : StringSpec({
             maxSubmissionQuantity = 32,
         )
 
+    "food orders reject generic inventory submission before escrow or payment" {
+        runTest {
+            val food = definition.copy(group = "food_orders", itemKey = "arc:any_raw_fish")
+            val events = mutableListOf<String>()
+            val persistence = FakePersistence(food, events)
+            val inventory = object : ContractInventoryGateway {
+                override suspend fun prepare(playerId: String, itemKey: String, quantity: Int): PreparedContractInventory? =
+                    error("A food order must never scan unoffered inventory")
+            }
+            val payment = FakePayment(0L, ContractPaymentEvidence(true, 2_000L), events)
+            val coordinator = ContractSubmissionCoordinator(persistence, inventory, payment, tickingClock())
+            for (slots in listOf(null, emptySet<Int>())) {
+                coordinator.submit(food, "unoffered", "player-1", 8, inventorySlots = slots) shouldBe
+                    ContractSubmissionOutcome.Rejected(SubmissionRejection.INVENTORY_UNAVAILABLE)
+            }
+            persistence.journals shouldBe emptyMap()
+            events shouldBe emptyList()
+            payment.depositCalls shouldBe 0
+        }
+    }
+
     "rejects stale or changed GUI quotes before touching inventory or payment" {
         runTest {
             val longWindow = definition.copy(windowEndsAt = 100_000L)

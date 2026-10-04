@@ -33,6 +33,8 @@ object ContractOriginGate {
     private val settings = AtomicReference(Settings())
     private val grants = ConcurrentHashMap<UUID, Grant>()
 
+    internal fun groupForNpc(npcId: Int): String? = settings.get().npcRoutes[npcId]
+
     fun configure(config: ContractsConfig) {
         settings.set(
             Settings(

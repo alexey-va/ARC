@@ -30,6 +30,59 @@ class PaperContractSubmissionGatewaysTest : StringSpec({
         MockBukkit.unmock()
     }
 
+    "deposit transactions consume only the offered slots and recheck the NPC grant" {
+        runTest {
+            val player = server.addPlayer("OfferedFish")
+            player.teleport(server.getWorld("rc_origin_spawn")!!.spawnLocation)
+            player.inventory.setItem(0, ItemStack(Material.PUFFERFISH, 64))
+            player.inventory.setItem(7, ItemStack(Material.COD, 8))
+            io.mockk.mockkObject(ContractOriginGate)
+            try {
+                every { ContractOriginGate.canSubmit(player, "food_orders") } returns true
+                val gateway = PaperContractInventoryGateway(PaperPlayerDataPersistence {})
+                val prepared = gateway.prepareFromSlots(player.uniqueId.toString(), PaperContractItems.ANY_RAW_FISH,
+                    8, "food_orders", setOf(7))!!
+                gateway.prepareFromSlots(player.uniqueId.toString(), PaperContractItems.ANY_RAW_FISH,
+                    9, "food_orders", setOf(7)) shouldBe null
+                prepared.removeExact() shouldBe ContractInventoryMutation.Confirmed
+                player.inventory.getItem(0)?.amount shouldBe 64
+                player.inventory.getItem(7) shouldBe null
+                prepared.restoreExact() shouldBe ContractInventoryMutation.Confirmed
+                val next = gateway.prepareFromSlots(player.uniqueId.toString(), PaperContractItems.ANY_RAW_FISH,
+                    8, "food_orders", setOf(7))!!
+                every { ContractOriginGate.canSubmit(player, "food_orders") } returns false
+                next.removeExact() shouldBe ContractInventoryMutation.NotPerformed("outside_origin")
+                player.inventory.getItem(7)?.amount shouldBe 8
+            } finally { io.mockk.unmockkObject(ContractOriginGate) }
+        }
+    }
+
+    "any raw fish counts mixed species and restores their exact identity" {
+        runTest {
+            val player = server.addPlayer("MixedFish")
+            player.teleport(server.getWorld("rc_origin_spawn")!!.spawnLocation)
+            player.inventory.setItem(0, ItemStack(Material.COD, 3))
+            player.inventory.setItem(1, ItemStack(Material.SALMON, 4))
+            player.inventory.setItem(2, ItemStack(Material.TROPICAL_FISH, 2))
+            player.inventory.setItem(3, ItemStack(Material.PUFFERFISH, 1))
+            player.inventory.setItem(4, ItemStack(Material.COOKED_COD, 64))
+            val named = ItemStack(Material.COD, 64)
+            named.editMeta { it.displayName(Component.text("Special fish")) }
+            player.inventory.setItem(5, named)
+            PaperContractItems.countPlain(player, PaperContractItems.ANY_RAW_FISH) shouldBe 10
+            val prepared = PaperContractInventoryGateway(PaperPlayerDataPersistence {})
+                .prepare(player.uniqueId.toString(), PaperContractItems.ANY_RAW_FISH, 8)!!
+            prepared.payloads.map { it.quantity } shouldContainExactly listOf(3, 4, 1)
+            prepared.removeExact() shouldBe ContractInventoryMutation.Confirmed
+            player.inventory.getItem(2)?.amount shouldBe 1
+            player.inventory.getItem(4)?.amount shouldBe 64
+            prepared.restoreExact() shouldBe ContractInventoryMutation.Confirmed
+            player.inventory.getItem(0)?.type shouldBe Material.COD
+            player.inventory.getItem(1)?.type shouldBe Material.SALMON
+            player.inventory.getItem(2)?.amount shouldBe 2
+        }
+    }
+
     "removes and restores the exact prevalidated vanilla slots" {
         runTest {
             val player = server.addPlayer("ContractMiner")

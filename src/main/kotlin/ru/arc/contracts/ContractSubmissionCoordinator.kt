@@ -25,6 +25,11 @@ interface PreparedContractInventory {
 }
 
 interface ContractInventoryGateway {
+    /** Deposit desks restrict the transaction to the stacks actually offered. */
+    suspend fun prepareFromSlots(
+        playerId: String, itemKey: String, quantity: Int, contractGroup: String, slots: Set<Int>,
+    ): PreparedContractInventory? = null
+
     suspend fun prepare(
         playerId: String,
         itemKey: String,
@@ -134,7 +139,12 @@ class ContractSubmissionCoordinator(
         policy: ContractRankPolicy = ContractRankPolicy.IDENTITY,
         quote: ContractSubmissionQuote? = null,
         availableNetworkBudgetMinor: Long = Long.MAX_VALUE,
+        inventorySlots: Set<Int>? = null,
     ): ContractSubmissionOutcome {
+        // Food orders accept only the native slots explicitly offered at the desk.
+        if (definition.group == "food_orders" && inventorySlots.isNullOrEmpty()) {
+            return ContractSubmissionOutcome.Rejected(SubmissionRejection.INVENTORY_UNAVAILABLE)
+        }
         val records =
             try {
                 persistence.journalRecords().onEach { it.validated() }
@@ -195,7 +205,11 @@ class ContractSubmissionCoordinator(
 
         val preparedInventory =
             try {
-                inventory.prepare(playerId, definition.itemKey, plan.acceptedQuantity.toInt(), definition.group)
+                if (inventorySlots == null) {
+                    inventory.prepare(playerId, definition.itemKey, plan.acceptedQuantity.toInt(), definition.group)
+                } else {
+                    inventory.prepareFromSlots(playerId, definition.itemKey, plan.acceptedQuantity.toInt(), definition.group, inventorySlots)
+                }
             } catch (_: Throwable) {
                 null
             } ?: return ContractSubmissionOutcome.Rejected(SubmissionRejection.INVENTORY_UNAVAILABLE)

@@ -3,12 +3,19 @@ package ru.arc.contracts
 import ru.arc.repository.Entity
 
 /** Selection spends existing envelopes; it never derives prices from player activity. */
-data class ContractSelectionPolicy(val enabled: Boolean = false, val startsAt: Long = 0, val perGroup: Int = 3) {
+data class ContractSelectionPolicy(
+    val enabled: Boolean = false, val startsAt: Long = 0, val perGroup: Int = 3,
+    val perGroupOverrides: Map<String, Int> = emptyMap(),
+) {
     init {
         require(perGroup in 1..9)
         require(startsAt >= 0 && (!enabled || startsAt == ContractRotation.weekStart(startsAt)))
+        require(perGroupOverrides.all { (group, count) ->
+            Regex("[a-z0-9][a-z0-9_-]{2,47}").matches(group) && count in 1..64
+        })
     }
     fun applies(now: Long) = enabled && now >= startsAt
+    fun count(group: String) = perGroupOverrides[group] ?: perGroup
 }
 
 data class ContractSelectionPlan(
@@ -70,9 +77,9 @@ object ContractSelectionPlanner {
                 .thenByDescending { demand[it.id] == true }
                 .thenBy { stableRotation(it.id, week) }.thenBy { it.id })
             .groupBy { it.group }.toSortedMap()
-        repeat(policy.perGroup) {
+        repeat(maxOf(policy.perGroup, policy.perGroupOverrides.values.maxOrNull() ?: 0)) {
             ranked.forEach { (group, options) ->
-                if (selected.count { it.group == group } < policy.perGroup) {
+                if (selected.count { it.group == group } < policy.count(group)) {
                     val next = options.firstOrNull { option -> option.budgetMinor <= remaining && selected.none { it.id == option.id } }
                     if (next != null) {
                         selected += next
@@ -112,9 +119,22 @@ class ContractSelectionPublisher(private val persistence: ContractSelectionPersi
         records: List<ResourceContractRecord>,
         held: Set<String>,
     ) {
-        val plan = persistence.find(week) ?: if (leader) {
+        var plan = persistence.find(week) ?: if (leader) {
             ContractSelectionPlanner.plan(week, candidates, policy, budgetMinor, history, records, held)
         } else return
+        // Newly configured desks can open during a week, without reshuffling
+        // the saved orders or changing their prices, windows and obligations.
+        if (leader) {
+            val newGroups = candidates.map { it.group }.toSet() - plan.orders.map { it.group }.toSet()
+            if (newGroups.isNotEmpty()) {
+                val retained = plan.orders.map(ResourceContractRecord::empty) + records
+                val additions = ContractSelectionPlanner.plan(
+                    week, plan.orders + candidates.filter { it.group in newGroups }, policy,
+                    budgetMinor, history, retained, held + retained.map { it.stateId },
+                )
+                plan = additions
+            }
+        }
         try {
             plan.validated()
             require(plan.weekStartsAt == week && plan.budgetMinor <= budgetMinor)

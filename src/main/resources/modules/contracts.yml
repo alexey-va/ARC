@@ -19,6 +19,7 @@ submission-access:
     "350": forge_orders
     "367": bank_orders
     "390": guild_orders
+    "439": food_orders
 
 # Resource orders use exact decimal base prices. Sales require a GUI quote on
 # rc_origin_spawn. Optional weekly-recurring renews at Monday 00:00 in

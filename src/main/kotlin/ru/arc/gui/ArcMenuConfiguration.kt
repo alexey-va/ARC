@@ -19,6 +19,7 @@ object ArcMenuSchema {
     val INVESTIGATION_TESTIMONY = MenuId.of("investigation-testimony")
     val CONTRACTS_LIST = MenuId.of("contracts-list")
     val CONTRACTS_DETAIL = MenuId.of("contracts-detail")
+    val FOOD_CONTRACTS = MenuId.of("food-contracts")
     val SCHEDULED_LIST = MenuId.of("scheduled-list")
     val ELITE_LOOT = MenuId.of("elite-loot")
     val LOST_LOOT = MenuId.of("lost-elite-loot")
@@ -50,6 +51,8 @@ object ArcMenuSchema {
     val WITNESSES = MenuRegionId.of("witnesses")
     val VERDICTS = MenuRegionId.of("verdicts")
     val CONTRACT_ORDERS = MenuRegionId.of("orders")
+    val FOOD_ORDERS = MenuRegionId.of("food-orders")
+    val FOOD_DEPOSIT = MenuRegionId.of("food-deposit")
     val SCHEDULED_ENTRIES = MenuRegionId.of("entries")
     val ELITE_LOOT_ITEMS = MenuRegionId.of("items")
     val LOST_LOOT_ITEMS = MenuRegionId.of("lost-items")
@@ -78,6 +81,7 @@ object ArcMenuSchema {
     private fun elements(vararg ids: String) = ids.mapTo(linkedSetOf(), MenuElementId::of)
 
     val contracts: Map<MenuId, MenuContract> = linkedMapOf(
+        FOOD_CONTRACTS to MenuContract(requiredElements = elements("info"), requiredRegions = setOf(FOOD_ORDERS, FOOD_DEPOSIT)),
         INVESTIGATION_HUB to MenuContract(requiredElements = elements("start", "contracts")),
         INVESTIGATION_CASE to MenuContract(
             requiredElements = elements("next-step", "dossier", "evidence", "return"),
@@ -202,6 +206,8 @@ object ArcMenuSchema {
     )
 
     val textContracts: Map<String, PaperMenuTextContract> = mapOf(
+        "food-contract-order" to PaperMenuTextContract(values = setOf("name", "price", "remaining", "state", "accepted")),
+        "food-contract-info" to PaperMenuTextContract(values = setOf("name", "accepted", "status")),
         "background" to PaperMenuTextContract(),
         "store-back" to PaperMenuTextContract(),
         "investigation-start" to PaperMenuTextContract(

@@ -41,6 +41,7 @@ object NpcContractsGui {
     fun start() {
         shutdown()
         tasks = LifecycleTaskScope()
+        FoodContractDepositGui.start()
         val redis = ARC.redisManager ?: return
         tracking = ContractTrackingRuntime(
             ARC.instance, RedisContractTrackingStore(redis, Common.gson),
@@ -64,6 +65,7 @@ object NpcContractsGui {
     }
 
     fun shutdown() {
+        FoodContractDepositGui.shutdown()
         tasks?.close()
         tasks = null
         tracking?.close()
@@ -142,6 +144,10 @@ object NpcContractsGui {
     }
 
     private fun showList(player: Player, group: String, requestedPage: Int) {
+        if (group == FoodContractDepositGui.GROUP && ContractOriginGate.canSubmit(player, group)) {
+            FoodContractDepositGui.open(player)
+            return
+        }
         val now = System.currentTimeMillis()
         val entries = catalogEntries(player, group, now)
         val pages = ((entries.size + PAGE_SIZE - 1) / PAGE_SIZE).coerceAtLeast(1)
@@ -258,6 +264,10 @@ object NpcContractsGui {
     ) {
         val view = currentView(player, contractId) ?: return showList(player, browseGroup, 0)
         val group = view.contract.group
+        if (group == FoodContractDepositGui.GROUP && ContractOriginGate.canSubmit(player, group)) {
+            FoodContractDepositGui.open(player, contractId)
+            return
+        }
         val available = PaperContractItems.countPlain(player, view.contract.itemKey)
         val selection = ContractQuantitySelector.select(view, available, requestedQuantity)
         val originAllowed = ContractOriginGate.canSubmit(player, group)
@@ -504,6 +514,7 @@ object NpcContractsGui {
         "forge_orders" -> "Кузница"
         "bank_orders" -> "Банк"
         "guild_orders" -> "Гильдия"
+        "food_orders" -> "Бар Матео"
         else -> "Заказы"
     })
 
@@ -703,7 +714,7 @@ object NpcContractsGui {
     private const val TABLE_WIDTH = 380
     private const val BUTTON_WIDTH = 320
     private const val HALF_BUTTON_WIDTH = 158
-    private val SOURCES = listOf("bank_orders", "forge_orders", "guild_orders", "all")
+    private val SOURCES = listOf("bank_orders", "forge_orders", "guild_orders", "food_orders", "all")
     private val WHITE = TextColor.color(0xFFFFFF)
     private val BODY_COLOR = TextColor.color(0xE8DFD2)
     private val WARM_COLOR = TextColor.color(0xD7B486)
