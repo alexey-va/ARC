@@ -630,5 +630,14 @@ class MountPurchaseCoordinator(
     private fun nextTime(previous: Long): Long = maxOf(clock(), previous + 1L)
 
     private fun persist(record: MountPurchaseJournalRecord): Boolean =
-        runCatching { journal.persist(record) }.getOrDefault(false).also { if (it) onStateChanged() }
+        runCatching { journal.persist(record) }.getOrDefault(false).also { persisted ->
+            if (persisted) {
+                onStateChanged()
+                ru.arc.metrics.telemetry.PlayerTelemetryModule.record(UUID.fromString(record.playerId), "mounts",
+                    "mount.purchase.${record.status.name.lowercase()}", record.mountId, record.transactionId,
+                    mapOf("kind" to record.kind.name, "target" to record.target, "currency" to record.currency,
+                        "amountMinor" to record.priceMinor.toString(), "createdAt" to record.createdAt.toString(),
+                        "durationMs" to (record.updatedAt - record.createdAt).toString()))
+            }
+        }
 }

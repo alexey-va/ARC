@@ -131,7 +131,9 @@ class AuditService private constructor(
                     origin = metadata.origin,
                     context = context,
                 )
-            store.append(AuditEvent(playerName, transaction)).whenComplete { _, failure ->
+            val event = AuditEvent(playerName, transaction)
+            ru.arc.metrics.telemetry.PlayerTelemetryModule.economy(event)
+            store.append(event).whenComplete { _, failure ->
                 if (failure != null) {
                     error("Failed to persist economy audit event for {}", playerName, failure)
                     monitor?.persistenceFailure(metadata)

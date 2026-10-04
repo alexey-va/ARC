@@ -128,6 +128,12 @@ class OpsHttpServer(
         val method = exchange.requestMethod.uppercase()
         val path = exchange.requestURI.rawPath.removePrefix("/ops").trim('/')
         val segments = if (path.isEmpty()) emptyList() else path.split('/')
+        // Telemetry owns a strict parser: malformed, duplicate and unknown query parameters must
+        // fail closed instead of passing through the legacy generic parser below.
+        if (segments.firstOrNull() == "telemetry") {
+            handlePlayerTelemetry(exchange, cfg, method, segments.drop(1))
+            return
+        }
         val query = parseQuery(exchange.requestURI.rawQuery)
 
         when {
@@ -2111,6 +2117,12 @@ class OpsHttpServer(
         }
         if (cfg.productInterestReadEnabled) {
             routes += "GET /ops/product/interest?days=1..35&limit=1..100"
+        }
+        if (cfg.playerTelemetryReadEnabled) {
+            routes += "GET /ops/telemetry/health"
+            routes += "GET /ops/telemetry/catalog"
+            routes += "GET /ops/telemetry/events?from=&until=&player-id=&player-name=&session-id=&server=&source=&event=&subject=&include-qa=&limit=&cursor-at=&cursor-event-id="
+            routes += "GET /ops/telemetry/summary?from=&until=&player-id=&player-name=&session-id=&server=&source=&event=&subject=&include-qa=&limit="
         }
         if (cfg.contractReconciliationReadEnabled) {
             routes += "GET /ops/economy/contracts/reconciliations?limit="

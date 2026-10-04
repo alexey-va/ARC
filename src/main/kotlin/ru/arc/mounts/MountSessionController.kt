@@ -108,6 +108,7 @@ private data class MountSession(
     var airborneMiningCompensated: Boolean = false,
     var previousBoundingBox: BoundingBox? = null,
     val trampleDamageAtMillis: MutableMap<UUID, Long> = hashMapOf(),
+    val startedAtMillis: Long = System.currentTimeMillis(),
 )
 
 class MountSessionController internal constructor(
@@ -361,6 +362,8 @@ class MountSessionController internal constructor(
                 ru.arc.metrics.ProductFeature.MOUNTS,
                 ru.arc.metrics.ProductEntryPoint.GAMEPLAY,
             )
+            ru.arc.metrics.telemetry.PlayerTelemetryModule.record(player.uniqueId, "mounts", "mount.ride_started", definition.id,
+                spawned.uniqueId.toString(), mapOf("control" to definition.control.name, "movement" to definition.movement.name))
             MountSpawnResult.SUCCESS
         } catch (failure: Throwable) {
             sessionsByPlayer.remove(player.uniqueId)
@@ -382,6 +385,9 @@ class MountSessionController internal constructor(
         val session = sessionsByPlayer.remove(playerId) ?: return
         if (session.stopping) return
         session.stopping = true
+        ru.arc.metrics.telemetry.PlayerTelemetryModule.record(playerId, "mounts", "mount.ride_ended", session.definition.id,
+            session.entityId.toString(), mapOf("reason" to reason.name,
+                "durationMs" to (System.currentTimeMillis() - session.startedAtMillis).coerceAtLeast(0).toString()))
         onStateChanged()
         playerByEntity.remove(session.entityId)
         session.visualEntityId?.let(playerByEntity::remove)

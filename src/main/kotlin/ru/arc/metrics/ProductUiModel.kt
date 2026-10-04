@@ -8,7 +8,7 @@ import java.security.MessageDigest
 
 /** Stable operator-owned identifiers only. Never derive these from item lore, player names or dialog inputs. */
 data class ProductUiButton(val slot: Int, val feature: ProductFeature? = null)
-data class ProductUiView(val surface: String, val revision: String, val buttons: Map<String, ProductUiButton>)
+data class ProductUiView(val surface: String, val revision: String, val buttons: Map<String, ProductUiButton>, val details: Map<String, String> = emptyMap())
 
 enum class ProductUiKind { OPEN, IMPRESSION, CLICK, ATTEMPT, BLOCKED, CLOSE, NO_CHOICE, CENSORED }
 

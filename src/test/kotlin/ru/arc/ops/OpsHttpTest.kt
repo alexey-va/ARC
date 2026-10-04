@@ -211,6 +211,46 @@ class OpsHttpServerTest : FreeSpec({
             }
         }
 
+        "should gate and advertise the typed player-telemetry read surface" {
+            val enabled = testConfig.copy(playerTelemetryReadEnabled = true)
+            val disabled = testConfig.copy(playerTelemetryReadEnabled = false)
+
+            listOf(enabled to true, disabled to false).forEach { (config, expected) ->
+                val server = OpsHttpServer { config }
+                server.start()
+                try {
+                    val index = open("http://127.0.0.1:${server.actualPort}/ops/", token = config.token)
+                    readBody(index).contains("/ops/telemetry/events") shouldBe expected
+                    val catalog = open("http://127.0.0.1:${server.actualPort}/ops/telemetry/catalog", token = config.token)
+                    catalog.responseCode shouldBe if (expected) 200 else 403
+                    if (expected) readBody(catalog) shouldContain "from is inclusive"
+                    else readBody(catalog) shouldContain "Player-telemetry read endpoint disabled"
+                } finally {
+                    server.stop()
+                }
+            }
+        }
+
+        "should reject malformed and duplicate telemetry filters before storage access" {
+            val server = OpsHttpServer { testConfig }
+            server.start()
+            try {
+                val base = "http://127.0.0.1:${server.actualPort}/ops/telemetry/events"
+                listOf(
+                    "?limit=0",
+                    "?from=2026-10-01T00:00:00Z",
+                    "?from=2026-10-01T00:00:00Z&until=2026-10-02T00:00:00Z&event=death&event=teleport",
+                    "?from=2026-10-01T00:00:00Z&until=2026-10-02T00:00:00Z&unknown=value",
+                    "?from=2026-10-01T00:00:00Z&until=2026-10-02T00:00:00Z&include-qa=yes",
+                    "?from=2026-10-01T00:00:00Z&until=2026-10-02T00:00:00Z&cursor-at=2026-10-01T00:00:00Z",
+                ).forEach { suffix ->
+                    open("$base$suffix", token = testConfig.token).responseCode shouldBe 400
+                }
+            } finally {
+                server.stop()
+            }
+        }
+
         "should gate and advertise the Slimefun catalog with item reads" {
             val enabled = testConfig
             val disabled = TestOpsHttpConfig(token = testConfig.token, itemsReadEnabled = false)

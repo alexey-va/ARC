@@ -38,7 +38,7 @@ class ProductUiTest : StringSpec({
 
     "render refresh never inflates impressions and blocked clicks are choices without accepted clicks" {
         val events = mutableListOf<Pair<ProductUiKind, String>>()
-        val tracker = ProductUiTracker { _, kind, _, button, _, _ -> events += kind to button }
+        val tracker = ProductUiTracker { _, _, kind, _, button, _, _ -> events += kind to button }
         val view = ProductUiView("arc:help.root", revision, mapOf("rtp" to ProductUiButton(1)))
         tracker.open("player", "visit", view, now)
         tracker.render("player", "visit", view, now + 1)
@@ -57,7 +57,7 @@ class ProductUiTest : StringSpec({
 
     "raw attempts count as a choice while an untouched close is no-choice" {
         val events = mutableListOf<ProductUiKind>()
-        val tracker = ProductUiTracker { _, kind, _, _, _, _ -> events += kind }
+        val tracker = ProductUiTracker { _, _, kind, _, _, _, _ -> events += kind }
         val view = ProductUiView("arc:help.root", revision, mapOf("rtp" to ProductUiButton(1)))
         tracker.open("player", "attempt", view, now)
         tracker.attempt("player", "attempt", view, "rtp", now + 1)
@@ -72,7 +72,7 @@ class ProductUiTest : StringSpec({
 
     "render refresh becomes the authoritative view for later clicks" {
         val seen = mutableListOf<ProductUiView>()
-        val tracker = ProductUiTracker { _, kind, view, _, _, _ -> if (kind == ProductUiKind.CLICK) seen += view }
+        val tracker = ProductUiTracker { _, _, kind, view, _, _, _ -> if (kind == ProductUiKind.CLICK) seen += view }
         val first = ProductUiView("arc:help.root", revision, mapOf("rtp" to ProductUiButton(1)))
         val refreshed = first.copy(revision = "abcdef012345", buttons = mapOf("homes" to ProductUiButton(2)))
         tracker.open("player", "visit", first, now)

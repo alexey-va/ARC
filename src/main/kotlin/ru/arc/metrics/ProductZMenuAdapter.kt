@@ -10,7 +10,6 @@ import java.io.File
 import java.lang.reflect.Proxy
 import java.util.Locale
 import java.util.UUID
-import java.util.WeakHashMap
 
 /** zMenu 1.1.1.8 InventoryListener observes actual opens; its onButtonClick is BEFORE requirements.
  * Physical button presses are therefore ATTEMPT, never fabricated accepted clicks or gameplay results.
@@ -19,7 +18,6 @@ import java.util.WeakHashMap
 internal class ProductZMenuAdapter(private val plugin: Plugin, private val observer: ProductUiObservation) : AutoCloseable {
     private data class View(val inventory: Inventory, val slots: Map<Int, String>)
     private val views = mutableMapOf<UUID, View>()
-    private val revisions = WeakHashMap<Any, String>()
     private val refreshes = mutableMapOf<UUID, ScheduledTask>()
     var failures: Long = 0; private set
     private var manager: Any? = null
@@ -84,16 +82,14 @@ internal class ProductZMenuAdapter(private val plugin: Plugin, private val obser
                 ?.takeIf(ProductUiCodec.ID::matches) ?: continue
             slots[slot] = id
         }
-        val revision = revisions.getOrPut(menu) {
-            if (!file.isFile || file.length() > 524_288) return
-            ProductUiCodec.revision(file.readText())
-        }
+        // A layout fingerprint uses the already rendered identifiers; telemetry never reads a file on the game thread.
+        val revision = ProductUiCodec.revision(name + slots.entries.sortedBy { it.key }.joinToString { "${it.key}:${it.value}" })
         val surface = "zmenu:$name"
         val buttons = slots.entries.groupBy({ it.value }, { it.key }).mapValues { (id, positions) ->
             ProductUiButton(positions.first(), productUiFeature(surface, id))
         }
         views[player.uniqueId] = View(inventory, slots)
-        observer.open(player, inventory, ProductUiView(surface, revision, buttons))
+        observer.open(player, inventory, ProductUiView(surface, revision, buttons, mapOf("revisionBasis" to "rendered_buttons")))
     }
 
     /** Called once at LOWEST, before native click handlers can replace/close this inventory. */
@@ -122,7 +118,6 @@ internal class ProductZMenuAdapter(private val plugin: Plugin, private val obser
         refreshes.values.forEach { it.cancel() }
         refreshes.clear()
         views.clear()
-        revisions.clear()
     }
 
     private fun call(target: Any, name: String): Any? =

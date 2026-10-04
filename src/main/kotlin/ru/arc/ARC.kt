@@ -315,6 +315,7 @@ open class ARC : JavaPlugin() {
             // Configuration (priority 30-49)
             ConfigModule,
             MetricsModule,
+            ru.arc.metrics.telemetry.PlayerTelemetryModule,
             OpsHttpModule,
             LocationPoolModule,
             BoardModule,

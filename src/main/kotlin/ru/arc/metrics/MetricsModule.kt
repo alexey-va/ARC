@@ -94,6 +94,8 @@ object MetricsModule : PluginModule {
         entry: ProductEntryPoint = ProductEntryPoint.API,
     ) {
         productInterest?.featureInterest(player.uniqueId.toString(), feature, entry)
+        ru.arc.metrics.telemetry.PlayerTelemetryModule.record(player.uniqueId, "arc", "feature.interest", feature.label,
+            attributes = mapOf("entry" to entry.label))
     }
 
     fun recordProductOutcome(
@@ -112,6 +114,10 @@ object MetricsModule : PluginModule {
         entry: ProductEntryPoint = ProductEntryPoint.API,
     ) {
         productInterest?.outcome(playerId, outcome, feature, entry)
+        runCatching { java.util.UUID.fromString(playerId) }.getOrNull()?.let { id ->
+            ru.arc.metrics.telemetry.PlayerTelemetryModule.record(id, "arc", "mechanic.outcome", outcome.label,
+                attributes = mapOf("entry" to entry.label) + (feature?.let { mapOf("feature" to it.label) } ?: emptyMap()))
+        }
     }
 
     fun recordProductOnboardingHint(
@@ -179,6 +185,10 @@ object MetricsModule : PluginModule {
 
     internal fun breakJobWork(playerId: java.util.UUID) {
         productInterest?.breakJobWork(ExternalProductEnvelopeCodec.player(playerId))
+    }
+
+    internal fun ensureUiCapture() {
+        if (productUi == null) productUi = ProductUiListener(ARC.instance, productInterest).also(ProductUiListener::start)
     }
 
     internal fun observeExternalUi(payload: Map<String, Any>) {
@@ -458,6 +468,7 @@ object MetricsModule : PluginModule {
                     (redis?.getChannelCount() ?: 0).toDouble(),
                 )
         }
+        metrics.recordSnapshot("player-telemetry", "product") { ru.arc.metrics.telemetry.PlayerTelemetryModule.metricSnapshot() }
         dungeonInterest?.sample()
         productUi?.refreshSnapshot()
         productInterest?.let { product ->

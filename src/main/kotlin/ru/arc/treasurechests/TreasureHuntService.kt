@@ -389,6 +389,9 @@ class TreasureHuntService(
             ru.arc.metrics.ProductEntryPoint.GAMEPLAY,
         )
 
+        ru.arc.metrics.telemetry.PlayerTelemetryModule.record(player.uniqueId, "treasure", "treasure.chest_claimed",
+            placedChest.chestType.treasurePoolId, attributes = mapOf("remainingChests" to hunt.remainingChests.toString(),
+                "totalChests" to hunt.totalChests.toString(), "huntStartedAt" to hunt.startTime.toString()))
         debug("Player ${player.name} claimed chest at $centerLoc")
         return true
     }

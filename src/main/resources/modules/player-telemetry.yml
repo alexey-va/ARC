@@ -1,0 +1,23 @@
+# Bounded per-player journey capture. The SQL connection reuses modules/audit.yml;
+# never copy database credentials into this file.
+enabled: true
+retention-days: 90
+retention-batch-size: 1000
+shutdown-timeout-ms: 5000
+
+writer:
+  batch-size: 250
+  capture-queue-capacity: 20000
+  max-outbox-events: 250000
+  max-outbox-bytes: 536870912
+  max-record-bytes: 1048576
+  flush-interval-ms: 250
+  retry-interval-ms: 1000
+
+queries:
+  max-limit: 500
+  max-summary-groups: 5000
+
+sample-interval-seconds: 1
+position-interval-seconds: 15
+idle-after-seconds: 60

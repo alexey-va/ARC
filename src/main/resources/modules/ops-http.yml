@@ -38,6 +38,9 @@ economy-audit-read-enabled: true
 # teleport causes and anonymized exit contexts. Never returns player identity.
 product-interest-read-enabled: true
 
+# GET /ops/telemetry/{health,catalog,events,summary} — authenticated typed player journey reads.
+player-telemetry-read-enabled: true
+
 # Authenticated Economy V2 manual-review evidence. Preview is read-only;
 # apply resolves one exact journal revision. Typed writes stay enabled; policy
 # and the exact preview digest remain the authorization boundary.

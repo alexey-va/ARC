@@ -1,7 +1,7 @@
 package ru.arc.metrics
 
 /** Main-thread UI visit state. A rendered button is exposed once per visit, even across refreshes/pages. */
-internal class ProductUiTracker(private val record: (String, ProductUiKind, ProductUiView, String, Long, Long) -> Unit) {
+internal class ProductUiTracker(private val record: (String, String, ProductUiKind, ProductUiView, String, Long, Long) -> Unit) {
     private data class Visit(val id: String, var view: ProductUiView, val started: Long,
         val impressed: MutableSet<String> = linkedSetOf(), var selected: Boolean = false)
     private val visits = linkedMapOf<String, Visit>()
@@ -12,7 +12,7 @@ internal class ProductUiTracker(private val record: (String, ProductUiKind, Prod
         if (current != null) close(player, current.id, now, censored = true)
         val visit = Visit(id, view, now)
         visits[player] = visit
-        record(player, ProductUiKind.OPEN, view, "_menu", 0, now)
+        record(player, id, ProductUiKind.OPEN, view, "_menu", 0, now)
         impressions(player, visit, view, now)
     }
 
@@ -25,7 +25,7 @@ internal class ProductUiTracker(private val record: (String, ProductUiKind, Prod
     private fun impressions(player: String, visit: Visit, view: ProductUiView, now: Long) {
         view.buttons.forEach { (button, _) ->
             if (visit.impressed.size < 128 && visit.impressed.add(button))
-                record(player, ProductUiKind.IMPRESSION, view, button, 0, now)
+                record(player, visit.id, ProductUiKind.IMPRESSION, view, button, 0, now)
         }
     }
 
@@ -35,23 +35,23 @@ internal class ProductUiTracker(private val record: (String, ProductUiKind, Prod
         visit.selected = true
         if (accepted) {
             // Event order/adapter gaps must not invent an impression. Coverage remains visible as click > impression.
-            record(player, ProductUiKind.CLICK, visit.view, button, 0, now)
-        } else record(player, ProductUiKind.BLOCKED, visit.view, button, 0, now)
+            record(player, visit.id, ProductUiKind.CLICK, visit.view.copy(details = _view.details), button, 0, now)
+        } else record(player, visit.id, ProductUiKind.BLOCKED, visit.view.copy(details = _view.details), button, 0, now)
     }
 
     fun attempt(player: String, id: String, _view: ProductUiView, button: String, now: Long) {
         val visit = visits[player]?.takeIf { it.id == id } ?: return
         if (!ProductUiCodec.ID.matches(button)) return
         visit.selected = true
-        record(player, ProductUiKind.ATTEMPT, visit.view, button, 0, now)
+        record(player, visit.id, ProductUiKind.ATTEMPT, visit.view.copy(details = _view.details), button, 0, now)
     }
 
     fun close(player: String, id: String?, now: Long, censored: Boolean) {
         val visit = visits[player]?.takeIf { id == null || it.id == id } ?: return
         visits.remove(player)
-        record(player, if (censored) ProductUiKind.CENSORED else ProductUiKind.CLOSE,
+        record(player, visit.id, if (censored) ProductUiKind.CENSORED else ProductUiKind.CLOSE,
             visit.view, "_menu", if (censored) 0 else (now - visit.started).coerceIn(0, 86_400_000), now)
-        if (!censored && !visit.selected) record(player, ProductUiKind.NO_CHOICE, visit.view, "_menu", 0, now)
+        if (!censored && !visit.selected) record(player, visit.id, ProductUiKind.NO_CHOICE, visit.view, "_menu", 0, now)
     }
 
     fun shutdown(now: Long) = visits.keys.toList().forEach { close(it, null, now, censored = true) }

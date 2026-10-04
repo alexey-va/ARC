@@ -415,6 +415,12 @@ object ContractsManager {
     ): Boolean {
         val recorded = dungeonObserver.started(runId, world, participantIds, now)
         if (recorded) {
+            participantIds.forEach { rawId ->
+                runCatching { java.util.UUID.fromString(rawId) }.getOrNull()?.let { id ->
+                    ru.arc.metrics.telemetry.PlayerTelemetryModule.record(id, "dungeons", "dungeon.started", world, runId,
+                        mapOf("participants" to participantIds.size.toString()) + (instanceWorld?.let { mapOf("instanceWorld" to it) } ?: emptyMap()))
+                }
+            }
             instanceWorld?.let { consumeSeasonDungeonAdmissionsAtStart(it, now) }
             publishMetrics()
         }
@@ -431,6 +437,12 @@ object ContractsManager {
     ): DungeonContractCompletionObservation? {
         val observation = dungeonObserver.completed(runId, world, participantIds, now)
         if (observation != null) {
+            observation.playerOutcomes.forEach { (rawId, outcome) ->
+                runCatching { java.util.UUID.fromString(rawId) }.getOrNull()?.let { id ->
+                    ru.arc.metrics.telemetry.PlayerTelemetryModule.record(id, "dungeons", "dungeon.finished", world, runId,
+                        mapOf("outcome" to outcome.name) + (instanceWorld?.let { mapOf("instanceWorld" to it) } ?: emptyMap()))
+                }
+            }
             val completedPlayers =
                 observation.playerOutcomes.filterValues { it == DungeonCompletionPlayerOutcome.START_TO_FINISH }.keys
             completedPlayers.forEach { playerId ->

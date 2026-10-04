@@ -23,15 +23,16 @@ interface ProductUiObservation {
 }
 
 /** ARC-owned sink for bounded UI observations received through ArcTelemetryProvider. */
-internal class ProductUiListener(private val plugin: Plugin, private val product: ProductInterestTelemetry) :
+internal class ProductUiListener(private val plugin: Plugin, private val product: ProductInterestTelemetry?) :
     Listener,
     AutoCloseable,
     ProductUiObservation {
     private data class NativeView(val id: String, val inventory: Inventory, val view: ProductUiView)
     private val nativeViews = mutableMapOf<UUID, NativeView>()
     private val coverage = linkedMapOf<String, Boolean>()
-    private val tracker = ProductUiTracker { player, kind, view, button, duration, at ->
-        product.ui(player, kind, view, button, duration, at)
+    private val tracker = ProductUiTracker { player, visit, kind, view, button, duration, at ->
+        product?.ui(player, kind, view, button, duration, at)
+        ru.arc.metrics.telemetry.PlayerTelemetryModule.ui(player, visit, kind, view, button, duration, at)
     }
     private val zMenu = ProductZMenuAdapter(plugin, this)
 
@@ -63,7 +64,15 @@ internal class ProductUiListener(private val plugin: Plugin, private val product
             key to ProductUiButton(slot, productUiFeature(surface, key))
         }.toMap()
         coverage[owner] = true
-        val view = ProductUiView(surface, revision, buttons)
+        val details = buildMap<String, String> {
+            listOf("rawSlot", "regionIndex", "pageIndex", "pageCount", "amount").forEach { key ->
+                (data[key] as? Number)?.toInt()?.takeIf { it in 0..100_000 }?.let { put(key, it.toString()) }
+            }
+            listOf("clickType", "action", "material").forEach { key ->
+                (data[key] as? String)?.takeIf { it.length <= 96 && it.all { c -> c.isLetterOrDigit() || c in "_:.-/" } }?.let { put(key, it) }
+            }
+        }
+        val view = ProductUiView(surface, revision, buttons, details)
         when (data["phase"]) {
             "open" -> tracker.open(player, visit, view, now)
             "render" -> tracker.render(player, visit, view, now)
@@ -139,6 +148,6 @@ internal class ProductUiListener(private val plugin: Plugin, private val product
         HandlerList.unregisterAll(this)
     }
     companion object {
-        private val CORE_PRODUCER = Regex("arc[a-z0-9_-]{0,32}", RegexOption.IGNORE_CASE)
+        private val CORE_PRODUCER = Regex("(?:arc[a-z0-9_-]{0,32}|trails)", RegexOption.IGNORE_CASE)
     }
 }

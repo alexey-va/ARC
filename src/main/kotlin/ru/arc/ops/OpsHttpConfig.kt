@@ -42,6 +42,9 @@ open class OpsHttpConfig(private val config: Config) {
     open val productInterestReadEnabled: Boolean
         get() = config.bool("product-interest-read-enabled", true)
 
+    open val playerTelemetryReadEnabled: Boolean
+        get() = config.bool("player-telemetry-read-enabled", true)
+
     open val contractReconciliationReadEnabled: Boolean
         get() = config.bool("contract-reconciliation-read-enabled", true)
 
@@ -164,6 +167,7 @@ class TestOpsHttpConfig(
     override val runAsEnabled: Boolean = false,
     override val economyAuditReadEnabled: Boolean = true,
     override val productInterestReadEnabled: Boolean = true,
+    override val playerTelemetryReadEnabled: Boolean = true,
     override val contractReconciliationReadEnabled: Boolean = true,
     override val contractReconciliationWriteEnabled: Boolean = false,
     override val itemsReadEnabled: Boolean = true,
@@ -201,6 +205,7 @@ class TestOpsHttpConfig(
         runAsEnabled: Boolean = this.runAsEnabled,
         economyAuditReadEnabled: Boolean = this.economyAuditReadEnabled,
         productInterestReadEnabled: Boolean = this.productInterestReadEnabled,
+        playerTelemetryReadEnabled: Boolean = this.playerTelemetryReadEnabled,
         contractReconciliationReadEnabled: Boolean = this.contractReconciliationReadEnabled,
         contractReconciliationWriteEnabled: Boolean = this.contractReconciliationWriteEnabled,
         itemsGiveEnabled: Boolean = this.itemsGiveEnabled,
@@ -241,6 +246,7 @@ class TestOpsHttpConfig(
             runAsEnabled = runAsEnabled,
             economyAuditReadEnabled = economyAuditReadEnabled,
             productInterestReadEnabled = productInterestReadEnabled,
+            playerTelemetryReadEnabled = playerTelemetryReadEnabled,
             contractReconciliationReadEnabled = contractReconciliationReadEnabled,
             contractReconciliationWriteEnabled = contractReconciliationWriteEnabled,
             itemsReadEnabled = itemsReadEnabled,
