@@ -205,6 +205,7 @@ internal data class OriginFurnitureWorkshopSettings(
             "workshop must configure exactly the three existing worker roles"
         }
         require(workers.map { it.role.npcId }.distinct().size == workers.size) { "workshop NPC ids must be unique" }
+        require(routeProfile.snapRadius in 0..8) { "workshop route snap-radius must be within 0..8 cells" }
         validateOriginFurnitureWorkshopRoutes(workers, routeProfile)
     }
 

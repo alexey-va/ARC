@@ -1,6 +1,7 @@
 package ru.arc.origin
 
 import io.kotest.core.spec.style.FreeSpec
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import ru.arc.config.ConfigManager
 import ru.arc.paper.testing.MockBukkitTestRuntime
@@ -14,6 +15,24 @@ class OriginFurnitureWorkshopConfigTest :
         afterEach {
             ConfigManager.clear()
             paper.close()
+        }
+
+        "negative endpoint search radius rejects an operator override before runtime replacement" {
+            val dataPath = Files.createTempDirectory("origin-furniture-workshop-invalid")
+            try {
+                val modulePath = dataPath.resolve("modules/origin-furniture-workshop.yml")
+                Files.createDirectories(modulePath.parent)
+                val bundled = OriginFurnitureWorkshopConfigTest::class.java.classLoader
+                    .getResourceAsStream("modules/origin-furniture-workshop.yml")!!
+                    .bufferedReader().use { it.readText() }
+                Files.writeString(modulePath, bundled.replace("snap-radius: 3", "snap-radius: -1"))
+
+                shouldThrow<IllegalArgumentException> {
+                    OriginFurnitureWorkshopSettings.load(dataPath)
+                }.message shouldBe "workshop route snap-radius must be within 0..8 cells"
+            } finally {
+                dataPath.toFile().deleteRecursively()
+            }
         }
 
         "bundled workshop config keeps the three existing actors on safe centered routes" {
