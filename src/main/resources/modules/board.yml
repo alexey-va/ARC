@@ -11,6 +11,15 @@ entry-lifetime-seconds: 259200
 publish-cost: 5000
 # Интервал напоминания / анонса (секунды)
 seconds-announce: 600
+# NPC-заказы появляются на доске и в общем цикле при этой рыночной надбавке.
+# Ранговый бонус игрока не учитывается. Публикация NPC не создаёт платную запись.
+contract-advertisements:
+  minimum-premium-percent: 10
+  authors:
+    food_orders: Матео
+    forge_orders: Мила
+    bank_orders: Делопроизводитель Артур
+    guild_orders: Староста Григорий
 # Право видеть входящие объявления
 receive-permission: arc.board.announce
 # Стоимость редактирования

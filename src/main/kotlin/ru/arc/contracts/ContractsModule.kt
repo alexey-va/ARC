@@ -62,6 +62,9 @@ data class ResourceContractView(
     val remainingQuantity: Long,
     val contributors: Int,
     val group: String = ResourceContractDefinition.DEFAULT_GROUP,
+    val basePayoutMinorPerUnit: Long = payoutMinorPerUnit,
+    val minSubmissionQuantity: Int = 1,
+    val minimumSubmissionPayoutMinor: Long = payoutMinorPerUnit,
 )
 
 data class ResourceContractPlayerView(
@@ -1042,6 +1045,12 @@ object ContractsManager {
                         (definition.targetQuantity - state.acceptedQuantity - reservedQuantity).coerceAtLeast(0L),
                     contributors = (state.perPlayerQuantity.keys + reservations.map { it.playerId }).size,
                     group = definition.group,
+                    basePayoutMinorPerUnit = definition.payoutMinorPerUnit,
+                    minSubmissionQuantity = definition.minSubmissionQuantity,
+                    minimumSubmissionPayoutMinor = ContractMarketPricing.payoutMinor(
+                        definition, state.acceptedQuantity + reservedQuantity,
+                        definition.minSubmissionQuantity.toLong(), now,
+                    ),
                 )
             RuntimeResourceContractView(definition, state, reservations, view)
         }

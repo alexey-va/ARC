@@ -1106,16 +1106,18 @@ menus:
       lore: []
     board-contract:
       material: WRITABLE_BOOK
-      name: '<gold><name>'
+      name: '<italic:false><gold><name> <green><growth>'
       lore:
         - ''
-        - '<gray>Городская закупка · <status>'
+        - '<gray>Объявитель: <white><author>'
+        - '<gray>Заказ NPC · <status>'
         - ''
-        - '<gray>Ресурс: <white><item>'
         - '<gray>Сдано: <white><accepted>/<target> <dark_gray>(<progress>%)'
         - '<gray>В обработке: <white><reserved>'
         - '<gray>Осталось: <white><remaining>'
         - '<gray>Следующий предмет: <gold><payout> <white>💰</white>'
+        - '<gray>Базовая цена: <white><base> <white>💰</white>'
+        - '<gray>Надбавка к базовой цене: <green><growth>'
         - '<gray>Остаток бюджета: <green><budget>'
         - '<gray>До: <white><ends>'
         - ''
@@ -1123,7 +1125,7 @@ menus:
     board-contract-empty:
       material: WRITABLE_BOOK
       name: '<gold>Заказы сервера'
-      lore: ['<gray>Статус: <state>', '', '<gray>Активных заказов пока нет.', '<gray>Недельный лимит: <green><budget>']
+      lore: ['<gray>Статус: <state>', '', '<gray>Сдача товаров пока отключена.', '<gray>Недельный лимит: <green><budget>']
     board-publish:
       material: PLAYER_HEAD
       custom-model-data: 11010

@@ -78,6 +78,7 @@ object BoardGuiFactory {
             val view = card.view
             val item = ArcMenus.item("board-contract", PaperMenuItemRenderContext(values = mapOf(
                 "name" to Component.text(view.displayName),
+                "author" to Component.text(card.advertiser),
                 "status" to card.status,
                 "item" to Component.text(view.itemKey),
                 "accepted" to Component.text(view.acceptedQuantity),
@@ -86,6 +87,8 @@ object BoardGuiFactory {
                 "progress" to Component.text(card.progressPercent),
                 "remaining" to Component.text(view.remainingQuantity),
                 "payout" to Component.text(money(view.payoutMinorPerUnit)),
+                "base" to Component.text(money(view.basePayoutMinorPerUnit)),
+                "growth" to Component.text(card.priceGrowth),
                 "budget" to Component.text(money(card.remainingBudgetMinor)),
                 "ends" to Component.text(card.endsAt),
                 "action" to card.action(ContractOriginGate.canSubmit(player, view.group)),

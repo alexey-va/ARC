@@ -374,7 +374,7 @@ object ArcMenuSchema {
         ),
         "treasure-edit-delete" to PaperMenuTextContract(),
         "treasure-back" to PaperMenuTextContract(),
-        "board-contract" to PaperMenuTextContract(values = setOf("name", "status", "item", "accepted", "reserved", "target", "progress", "remaining", "payout", "budget", "ends", "action")),
+        "board-contract" to PaperMenuTextContract(values = setOf("name", "author", "status", "item", "accepted", "reserved", "target", "progress", "remaining", "payout", "base", "growth", "budget", "ends", "action")),
         "board-contract-empty" to PaperMenuTextContract(values = setOf("state", "budget")),
         "board-publish" to PaperMenuTextContract(values = setOf("cost")),
         "board-back" to PaperMenuTextContract(),

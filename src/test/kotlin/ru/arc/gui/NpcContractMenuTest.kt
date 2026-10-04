@@ -41,4 +41,30 @@ class NpcContractMenuTest : StringSpec({
             text.contains("+25% от базовой") shouldBe true
         }
     }
+    "Board NPC advert shows author and market premium in the shared paginated region" {
+        MockBukkitTestRuntime.open().use {
+            val configuration = ArcMenuConfiguration.loadResource(javaClass.classLoader)
+            configuration.catalog.require(ArcMenuSchema.BOARD).region(ArcMenuSchema.BOARD_ENTRIES).size shouldBe 45
+            val item = PaperMenuItemFactory().create(configuration.template(MenuTemplateId.of("board-contract")),
+                PaperMenuItemRenderContext(values = mapOf(
+                    "name" to Component.text("Любая сырая рыба"), "author" to Component.text("Матео"),
+                    "status" to Component.text("открыт"), "item" to Component.text("arc:any_raw_fish"),
+                    "accepted" to Component.text("0"), "reserved" to Component.text("0"),
+                    "target" to Component.text("100"), "progress" to Component.text("0"),
+                    "remaining" to Component.text("100"), "payout" to Component.text("1.50"),
+                    "base" to Component.text("1.20"), "growth" to Component.text("+25%"),
+                    "budget" to Component.text("100.00"), "ends" to Component.text("12 октября"),
+                    "action" to Component.text("Сдача у NPC: Матео · спавн"),
+                ))).withType(Material.COD)
+            item.type shouldBe Material.COD
+            item.itemMeta.displayName()!!.decoration(TextDecoration.ITALIC) shouldBe TextDecoration.State.FALSE
+            val text = item.itemMeta.lore()!!.joinToString("\n") { PlainTextComponentSerializer.plainText().serialize(it) }
+            text.contains("Объявитель: Матео") shouldBe true
+            text.contains("1.50 💰") shouldBe true
+            text.contains("Базовая цена: 1.20 💰") shouldBe true
+            text.contains("Надбавка к базовой цене: +25%") shouldBe true
+            text.contains("arc:any_raw_fish") shouldBe false
+        }
+    }
+
 })

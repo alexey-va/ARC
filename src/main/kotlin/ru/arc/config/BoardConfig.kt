@@ -19,6 +19,9 @@ object BoardConfig {
     val secondsAnnounce: Int get() = config.integer("seconds-announce", 600)
     val receivePermission: String get() = config.string("receive-permission", "arc.board.announce")
     val mainMenuBackCommand: String get() = config.string("main-menu-back-command", "menu")
+    val contractMinimumPremiumPercent: Int get() = config.integer("contract-advertisements.minimum-premium-percent", 10).coerceAtLeast(1)
+
+    fun contractAdvertiser(group: String): String = config.string("contract-advertisements.authors.$group", contractAdvertiserName(group))
 
     // ── Item fields ───────────────────────────────────────────────────────────
 
@@ -56,4 +59,12 @@ object BoardConfig {
     private fun String.miniToLegacy(): String =
         LegacyComponentSerializer.legacyAmpersand()
             .serialize(MiniMessage.miniMessage().deserialize(this))
+}
+
+internal fun contractAdvertiserName(group: String): String = when (group) {
+    "food_orders" -> "Матео"
+    "forge_orders" -> "Мила"
+    "bank_orders" -> "Делопроизводитель Артур"
+    "guild_orders" -> "Староста Григорий"
+    else -> "Городские заказы"
 }

@@ -7,6 +7,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.minimessage.MiniMessage
@@ -602,6 +604,8 @@ object BoardManager {
     private var updateCacheJob: kotlinx.coroutines.Job? = null
     private var announceJob: kotlinx.coroutines.Job? = null
     private var purgeJob: kotlinx.coroutines.Job? = null
+    private val contractAnnouncements = ContractBoardAnnouncementRotation()
+    private val announcementMutex = Mutex()
 
     @JvmStatic
     fun isAvailable(): Boolean = initialized
@@ -638,6 +642,7 @@ object BoardManager {
         if (!initialized) return
         cancelTasks()
         runBlocking { repo.shutdown() }
+        contractAnnouncements.clear()
         initialized = false
     }
 
@@ -701,37 +706,45 @@ object BoardManager {
     @JvmStatic
     fun announceNext() {
         scope.launch {
-            val entries = repo.all().getOrNull() ?: return@launch
-            val entry = selectNextAnnounceEntry(entries) ?: return@launch
-
-            entry.changeLastShown(System.currentTimeMillis())
-            repo.save(entry)
-
-            runCatching { BarColor.valueOf(config.string("color", "YELLOW").uppercase()) }
-                .getOrDefault(BarColor.YELLOW)
-            val finalColor = entry.color
-            val message =
-                XMessage(
-                    type = XMessage.Type.BOSS_BAR,
-                    serializedMessage = "&7[&6${entry.playerName}&7]&r ${entry.title}",
-                    serializationType = XMessage.SerializationType.LEGACY,
-                    bossBarData =
-                        XMessage.BossBarData(
-                            color = finalColor,
-                            name = "board",
-                            keepFor = config.integer("keep-for", 10),
-                            seconds = config.integer("seconds-boss-bar", 10),
-                        ),
-                    conditions = listOf(XCondition.ofPermission(BoardConfig.receivePermission)),
+            announcementMutex.withLock {
+                val entries = repo.all().getOrNull() ?: return@launch
+                val playerEntry = selectNextAnnounceEntry(entries)
+                val contract = contractAnnouncements.next(
+                    ContractBoardCards.current().filterIsInstance<ContractBoardCard.Order>(),
+                    playerAvailable = playerEntry != null,
+                    now = System.currentTimeMillis(),
                 )
-            withContext(module = "board", player = entry.playerName, action = "announce") {
-                Logging.debug(
-                    "Board announce entry={} title=\"{}\" {}",
-                    entry.id(),
-                    entry.title.take(80),
-                    message.logSummary(),
-                )
-                AnnounceManager.announce(message)
+                if (contract == null && playerEntry == null) return@launch
+                if (contract == null) {
+                    playerEntry!!.changeLastShown(System.currentTimeMillis())
+                    repo.save(playerEntry)
+                }
+                val author = contract?.advertiser ?: playerEntry!!.playerName
+                val title = contract?.view?.displayName ?: playerEntry!!.title
+                val message =
+                    XMessage(
+                        type = XMessage.Type.BOSS_BAR,
+                        serializedMessage = contract?.let { MiniMessage.miniMessage().serialize(it.announcement) }
+                            ?: "&7[&6${playerEntry!!.playerName}&7]&r ${playerEntry.title}",
+                        serializationType = if (contract != null) XMessage.SerializationType.MINI_MESSAGE else XMessage.SerializationType.LEGACY,
+                        bossBarData =
+                            XMessage.BossBarData(
+                                color = contract?.let { BarColor.YELLOW } ?: playerEntry!!.color,
+                                name = "board",
+                                keepFor = config.integer("keep-for", 10),
+                                seconds = config.integer("seconds-boss-bar", 10),
+                            ),
+                        conditions = listOf(XCondition.ofPermission(BoardConfig.receivePermission)),
+                    )
+                withContext(module = "board", player = author, action = "announce") {
+                    Logging.debug(
+                        "Board announce entry={} title=\"{}\" {}",
+                        contract?.view?.id ?: playerEntry!!.id(),
+                        title.take(80),
+                        message.logSummary(),
+                    )
+                    AnnounceManager.announce(message)
+                }
             }
         }
     }
