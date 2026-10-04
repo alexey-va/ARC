@@ -137,6 +137,8 @@ open class ARC : JavaPlugin() {
         private set
 
     private var baseSidebar: ArcBaseSidebar? = null
+    internal var tablist: ru.arc.tablist.ArcTablist? = null
+        private set
     private var slimefunMenuAlias: Command? = null
     private var networkSpawnAlias: Command? = null
     private var previousNetworkSpawnCommand: Command? = null
@@ -195,6 +197,7 @@ open class ARC : JavaPlugin() {
         }
         if (runtimeProfile == ArcRuntimeProfile.FULL || runtimeProfile == ArcRuntimeProfile.SLIMEFUN) {
             baseSidebar = ArcBaseSidebar(this, sidebarService).also(ArcBaseSidebar::start)
+            tablist = ru.arc.tablist.ArcTablist(this).also { it.start() }
         }
         // Start the single Redis subscription after ALL modules have registered their channels.
         // Calling init() multiple times (once per module) caused the subscription to be
@@ -229,6 +232,8 @@ open class ARC : JavaPlugin() {
         ModuleRegistry.shutdownAll()
         baseSidebar?.close()
         baseSidebar = null
+        tablist?.close()
+        tablist = null
         if (::sidebarService.isInitialized) {
             runCatching(sidebarService::close)
                 .onFailure { error("Failed to close ARC sidebar service", it) }
@@ -259,6 +264,7 @@ open class ARC : JavaPlugin() {
         if (runtimeProfile == ArcRuntimeProfile.FULL) ArcMenus.reload()
         ModuleRegistry.reloadAll()
         baseSidebar?.refresh()
+        tablist?.refresh()
         // Modules may replace channel listeners during reload; restart the subscription once
         // after every module has refreshed its registrations.
         redisManager?.let {
@@ -619,6 +625,7 @@ open class ARC : JavaPlugin() {
                 "modules/text.yml",
                 "modules/misc.yml",
                 "modules/scoreboard.yml",
+                "modules/tablist.yml",
                 "modules/join-message-dialog.yml",
                 "config/commands.yml",
                 "guis/defaults.yml",

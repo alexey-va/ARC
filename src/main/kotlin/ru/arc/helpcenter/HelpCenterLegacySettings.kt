@@ -7,6 +7,9 @@ import ru.arc.sidebar.SIDEBAR_SKILLS_META_KEY
 import ru.arc.sidebar.selectedSidebarSkills
 import ru.arc.sidebar.sidebarSkillChoices
 import ru.arc.sidebar.toggleSidebarSkill
+import ru.arc.tablist.TABLIST_SKILLS_META_KEY
+import ru.arc.tablist.TablistSection
+import ru.arc.tablist.tablistEnabled as hasAnyTablistMode
 
 import com.Zrips.CMI.CMI
 import com.Zrips.CMI.Modules.PlayerOptions.PlayerOption
@@ -72,7 +75,7 @@ class HelpCenterLegacySettings(
         entry("shortcut", "legacy-settings-shortcut", MenuShortcutAction.from(backend.meta(player, MenuShortcutAction.META_KEY)).id, "legacy-settings-shortcut-tooltip"),
         entry("escape", "legacy-settings-escape", if (MenuEscapeBehavior.goesBack(backend.meta(player, MenuEscapeBehavior.META_KEY))) "back" else "close", "legacy-settings-escape-tooltip"),
         entry("scoreboard", "legacy-settings-scoreboard", if (scoreboardEnabled(player)) "on" else "off", "legacy-settings-scoreboard-tooltip"),
-        entry("tablist", "legacy-settings-tablist", modeState(player, "tab.tablist"), "legacy-settings-tablist-tooltip"),
+        entry("tablist", "legacy-settings-tablist", if (tablistEnabled(player)) "on" else "off", "legacy-settings-tablist-tooltip"),
         entry("item-info", "legacy-settings-item-info", ItemInfoMode.fromStored(backend.meta(player, ItemInfoMode.META_KEY)).id, "legacy-settings-item-info-tooltip"),
         entry("lands", "legacy-settings-lands", null, "legacy-settings-lands-tooltip"),
         entry("portal-by-other", "legacy-settings-portal-by-other", onOff(player, PORTAL_BY_OTHER), "legacy-settings-portal-by-other-tooltip"),
@@ -110,16 +113,24 @@ class HelpCenterLegacySettings(
 
     fun scoreboardEnabled(player: Player): Boolean = sidebarEnabled { backend.hasPermission(player, it) }
 
+    fun tablistEnabled(player: Player): Boolean = hasAnyTablistMode { backend.hasPermission(player, it) }
+
     internal fun scoreboardSectionEnabled(player: Player, section: SidebarSection): Boolean =
         section.enabled(backend.meta(player, section.metaKey))
 
     internal fun scoreboardSkills(player: Player): List<String> = selectedSidebarSkills(backend.meta(player, SIDEBAR_SKILLS_META_KEY))
+
+    internal fun tablistSectionEnabled(player: Player, section: TablistSection): Boolean =
+        section.enabled(backend.meta(player, section.metaKey))
+
+    internal fun tablistSkills(player: Player): List<String> = selectedSidebarSkills(backend.meta(player, TABLIST_SKILLS_META_KEY))
 
     fun execute(player: Player, id: String): CompletableFuture<Boolean> = when (id) {
         "admin" -> if (backend.hasPermission(player, ADMIN)) backend.consoleCommand(player, ConsoleCommand.OPEN_ADMIN_SETTINGS) else falseFuture()
         "scoreboard-rewards" -> backend.setMeta(player, SidebarQuestRewards.META_KEY, (!scoreboardRewardsEnabled(player)).toString())
         "scoreboard-toggle" -> backend.setExclusiveMode(player, "tab.scoreboard", if (scoreboardEnabled(player)) null else 1)
         "scoreboard-off" -> backend.setExclusiveMode(player, "tab.scoreboard", null)
+        "tablist-toggle" -> backend.setExclusiveMode(player, "tab.tablist", if (tablistEnabled(player)) null else 1)
         "tablist-off" -> backend.setExclusiveMode(player, "tab.tablist", null)
         "item-info-hologram" -> backend.setMeta(player, ItemInfoMode.META_KEY, ItemInfoMode.HOLOGRAM.id)
         "item-info-bossbar" -> backend.setMeta(player, ItemInfoMode.META_KEY, ItemInfoMode.BOSSBAR.id)
@@ -159,13 +170,22 @@ class HelpCenterLegacySettings(
 
     private fun modeAction(player: Player, id: String): CompletableFuture<Boolean> {
         if (id == "scoreboard-skills-auto") return backend.setMeta(player, SIDEBAR_SKILLS_META_KEY, "")
+        if (id == "tablist-skills-auto") return backend.setMeta(player, TABLIST_SKILLS_META_KEY, "")
         if (id.startsWith("scoreboard-skill:")) {
             val skill = id.removePrefix("scoreboard-skill:")
             if (sidebarSkillChoices().none { it.id == skill }) return falseFuture()
             return backend.setMeta(player, SIDEBAR_SKILLS_META_KEY, toggleSidebarSkill(scoreboardSkills(player), skill).joinToString(","))
         }
+        if (id.startsWith("tablist-skill:")) {
+            val skill = id.removePrefix("tablist-skill:")
+            if (sidebarSkillChoices().none { it.id == skill }) return falseFuture()
+            return backend.setMeta(player, TABLIST_SKILLS_META_KEY, toggleSidebarSkill(tablistSkills(player), skill).joinToString(","))
+        }
         SidebarSection.entries.firstOrNull { "scoreboard-section-${it.id}" == id }?.let {
             return backend.setMeta(player, it.metaKey, (!scoreboardSectionEnabled(player, it)).toString())
+        }
+        TablistSection.entries.firstOrNull { "tablist-section-${it.id}" == id }?.let {
+            return backend.setMeta(player, it.metaKey, (!tablistSectionEnabled(player, it)).toString())
         }
         MenuShortcutAction.entries.firstOrNull { "shortcut-${it.id}" == id }?.let {
             return backend.setMeta(player, MenuShortcutAction.META_KEY, it.id)
@@ -198,7 +218,6 @@ class HelpCenterLegacySettings(
         return backend.setMeta(player, PORTAL_STYLE_META, next)
     }
 
-    private fun modeState(player: Player, prefix: String): String = (1..20).firstOrNull { mode -> backend.hasPermission(player, modeNode(prefix, mode)) }?.toString() ?: "off"
     private fun onOff(player: Player, node: String) = if (backend.hasPermission(player, node)) "on" else "off"
     private fun cmiOnOff(player: Player, option: CmiOption) = backend.cmiOption(player, option)?.let { if (it) "on" else "off" }
     private fun portalStyleState(player: Player): String {

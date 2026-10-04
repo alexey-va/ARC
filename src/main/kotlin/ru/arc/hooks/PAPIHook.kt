@@ -43,6 +43,8 @@ class PAPIHook internal constructor(
             params.startsWith("cache_", ignoreCase = true) ->
                 cachedPlaceholderResolver.resolve(player, params)
             player == null -> null
+            params.lowercase() in setOf("tablist_ready", "tablist_header", "tablist_footer") ->
+                ARC.instance.tablist?.value(player.uniqueId, params) ?: if (params.equals("tablist_ready", true)) "false" else ""
             params.split("_")[0] == "jobsboosts" -> jobsBoosts(player, params)
             params.startsWith("rubycount") -> formatRubyCount(player)
             params.startsWith("guildrank") -> formatGuildRankAndPrestige(player)
@@ -59,6 +61,9 @@ class PAPIHook internal constructor(
 
     override fun getPlaceholders(): List<String> = listOf(
         "%arc_players%",
+        "%arc_tablist_ready%",
+        "%arc_tablist_header%",
+        "%arc_tablist_footer%",
         "%arc_jobsboosts_has_<boost_name>%",
         "%arc_rubycount%",
         "%arc_guildrank%",

@@ -2,9 +2,15 @@ package ru.arc.helpcenter
 
 import io.mockk.every
 import io.mockk.mockk
+import io.kotest.matchers.booleans.shouldBeFalse
+import io.kotest.matchers.booleans.shouldBeTrue
+import io.kotest.matchers.shouldBe
 import ru.arc.iteminfo.ItemInfoMode
 import ru.arc.iteminfo.ItemInfoPreferences
+import ru.arc.sidebar.SIDEBAR_SKILLS_META_KEY
 import ru.arc.sidebar.SidebarSection
+import ru.arc.tablist.TABLIST_SKILLS_META_KEY
+import ru.arc.tablist.TablistSection
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -29,9 +35,72 @@ class HelpCenterLegacySettingsTest {
         assertEquals("off", settings.entries(player).first { it.id == "scoreboard" }.state)
         assertTrue(settings.execute(player, "scoreboard-toggle").join())
         assertEquals("on", settings.entries(player).first { it.id == "scoreboard" }.state)
-        assertEquals("3", settings.entries(player).first { it.id == "tablist" }.state)
+        assertEquals("on", settings.entries(player).first { it.id == "tablist" }.state)
         SidebarSection.entries.forEach { assertEquals(!it.defaultEnabled, settings.scoreboardSectionEnabled(player, it)) }
         assertEquals(false, settings.execute(player, "scoreboard-section-unknown").join())
+    }
+
+    @Test
+    fun `tablist preferences survive disable and reopen independently of scoreboard and skills`() {
+        val player = mockk<Player>()
+        val backend = FakeBackend()
+        backend.permissions["tab.scoreboard5"] = true
+        backend.permissions["tab.tablist3"] = true
+        backend.metadata[SidebarSection.LOCATION.metaKey] = "false"
+        backend.metadata[SIDEBAR_SKILLS_META_KEY] = "excavation,foraging"
+        backend.metadata[TABLIST_SKILLS_META_KEY] = "farming,mining"
+        val settings = HelpCenterLegacySettings(backend)
+
+        settings.entries(player).first { it.id == "tablist" }.state.shouldBe("on")
+        settings.entries(player).first { it.id == "scoreboard" }.state.shouldBe("on")
+        settings.scoreboardSkills(player).shouldBe(listOf("excavation", "foraging"))
+        settings.tablistSkills(player).shouldBe(listOf("farming", "mining"))
+        settings.scoreboardSectionEnabled(player, SidebarSection.LOCATION).shouldBeFalse()
+        TablistSection.entries.forEach { settings.tablistSectionEnabled(player, it).shouldBe(it.defaultEnabled) }
+
+        settings.execute(player, "tablist-section-profile").join().shouldBeTrue()
+        settings.execute(player, "tablist-section-location").join().shouldBeTrue()
+        settings.tablistSectionEnabled(player, TablistSection.PROFILE).shouldBeFalse()
+        settings.tablistSectionEnabled(player, TablistSection.LOCATION).shouldBeTrue()
+        settings.scoreboardSectionEnabled(player, SidebarSection.LOCATION).shouldBeFalse()
+        settings.execute(player, "tablist-toggle").join().shouldBeTrue()
+
+        val reopened = HelpCenterLegacySettings(backend)
+        reopened.entries(player).first { it.id == "tablist" }.state.shouldBe("off")
+        reopened.entries(player).first { it.id == "scoreboard" }.state.shouldBe("on")
+        reopened.tablistSectionEnabled(player, TablistSection.PROFILE).shouldBeFalse()
+        reopened.tablistSectionEnabled(player, TablistSection.LOCATION).shouldBeTrue()
+        reopened.scoreboardSectionEnabled(player, SidebarSection.LOCATION).shouldBeFalse()
+        reopened.scoreboardSkills(player).shouldBe(listOf("excavation", "foraging"))
+        reopened.tablistSkills(player).shouldBe(listOf("farming", "mining"))
+
+        reopened.execute(player, "tablist-toggle").join().shouldBeTrue()
+        val enabledAgain = HelpCenterLegacySettings(backend)
+        enabledAgain.entries(player).first { it.id == "tablist" }.state.shouldBe("on")
+        enabledAgain.entries(player).first { it.id == "scoreboard" }.state.shouldBe("on")
+        enabledAgain.tablistSectionEnabled(player, TablistSection.PROFILE).shouldBeFalse()
+        enabledAgain.tablistSectionEnabled(player, TablistSection.LOCATION).shouldBeTrue()
+        enabledAgain.scoreboardSectionEnabled(player, SidebarSection.LOCATION).shouldBeFalse()
+        enabledAgain.tablistSkills(player).shouldBe(listOf("farming", "mining"))
+
+        enabledAgain.execute(player, "tablist-skills-auto").join().shouldBeTrue()
+        val automatic = HelpCenterLegacySettings(backend)
+        automatic.tablistSkills(player).shouldBe(emptyList())
+        automatic.scoreboardSkills(player).shouldBe(listOf("excavation", "foraging"))
+    }
+
+    @Test
+    fun `legacy tablist mode actions remain available for compatibility`() {
+        val player = mockk<Player>()
+        val backend = FakeBackend()
+        val settings = HelpCenterLegacySettings(backend)
+
+        settings.execute(player, "tablist-7").join().shouldBeTrue()
+        backend.permissions["tab.tablist7"].shouldBe(true)
+        HelpCenterLegacySettings(backend).entries(player).first { it.id == "tablist" }.state.shouldBe("on")
+        settings.execute(player, "tablist-21").join().shouldBeFalse()
+        settings.execute(player, "tablist-off").join().shouldBeTrue()
+        HelpCenterLegacySettings(backend).entries(player).first { it.id == "tablist" }.state.shouldBe("off")
     }
 
     @Test
