@@ -2,6 +2,7 @@ package ru.arc.origin
 
 import dev.lone.itemsadder.api.CustomStack
 import net.citizensnpcs.api.CitizensAPI
+import net.citizensnpcs.api.event.CitizensEnableEvent
 import net.citizensnpcs.api.npc.NPC
 import net.citizensnpcs.trait.LookClose
 import net.citizensnpcs.api.trait.trait.Equipment as CitizensEquipment
@@ -14,6 +15,9 @@ import org.bukkit.World
 import org.bukkit.entity.Display
 import org.bukkit.entity.ItemDisplay
 import org.bukkit.entity.LivingEntity
+import org.bukkit.event.EventHandler
+import org.bukkit.event.HandlerList
+import org.bukkit.event.Listener
 import org.bukkit.inventory.ItemStack
 import org.bukkit.util.Transformation
 import org.joml.AxisAngle4f
@@ -453,15 +457,24 @@ internal fun validateOriginFurnitureWorkshopRoutes(
 
 internal fun isWorkshopCellCenter(value: Double): Boolean = abs(value - (floor(value) + 0.5)) <= 1.0e-6
 
-internal object OriginFurnitureWorkshopModule : PluginModule {
+internal object OriginFurnitureWorkshopModule : PluginModule, Listener {
     override val name = "OriginFurnitureWorkshop"
     override val priority = 26
 
     private var runtime: OriginFurnitureWorkshopRuntime? = null
+    private var startupTasks: LifecycleTaskScope? = null
+    private var pendingSettings: OriginFurnitureWorkshopSettings? = null
+    private var startupGeneration = 0L
+    private var startupChecks = 0
+    private var listenerRegistered = false
 
-    override fun init() = reload()
+    override fun init() {
+        registerCitizensListenerIfReady()
+        reload()
+    }
 
     override fun reload() {
+        cancelPendingStartup()
         val settings = try {
             OriginFurnitureWorkshopSettings.load(ARC.instance.dataPath)
         } catch (failure: Exception) {
@@ -475,11 +488,32 @@ internal object OriginFurnitureWorkshopModule : PluginModule {
             return
         }
 
+        when (prepareAndStart(settings)) {
+            WorkshopStartupAttempt.STARTED, WorkshopStartupAttempt.FAILED -> Unit
+            WorkshopStartupAttempt.WAITING_FOR_CITIZENS -> deferUntilCitizensReady(settings)
+        }
+    }
+
+    @EventHandler
+    fun onCitizensEnable(event: CitizensEnableEvent) {
+        val settings = pendingSettings ?: return
+        when (prepareAndStart(settings)) {
+            WorkshopStartupAttempt.STARTED -> {
+                finishPendingStartup()
+                ARC.instance.logger.info("ORIGIN_WORKSHOP phase=STARTED source=citizens-enable-event")
+            }
+            WorkshopStartupAttempt.FAILED -> finishPendingStartup()
+            WorkshopStartupAttempt.WAITING_FOR_CITIZENS -> Unit
+        }
+    }
+
+    private fun prepareAndStart(settings: OriginFurnitureWorkshopSettings): WorkshopStartupAttempt {
+        if (!citizensRegistryContainsWorkers(settings)) return WorkshopStartupAttempt.WAITING_FOR_CITIZENS
         val prepared = try {
             OriginFurnitureWorkshopRuntime.prepare(settings)
         } catch (failure: Exception) {
             ARC.instance.logger.log(Level.WARNING, "Origin furniture workshop could not prepare; keeping current runtime", failure)
-            return
+            return WorkshopStartupAttempt.FAILED
         }
         runtime?.close()
         runtime = try {
@@ -489,12 +523,77 @@ internal object OriginFurnitureWorkshopModule : PluginModule {
             ARC.instance.logger.log(Level.WARNING, "Origin furniture workshop failed to start", failure)
             null
         }
+        return if (runtime === prepared) WorkshopStartupAttempt.STARTED else WorkshopStartupAttempt.FAILED
+    }
+
+    private fun citizensRegistryContainsWorkers(settings: OriginFurnitureWorkshopSettings): Boolean {
+        if (!Bukkit.getPluginManager().isPluginEnabled("Citizens") || !CitizensAPI.hasImplementation()) return false
+        return runCatching {
+            val registry = CitizensAPI.getNPCRegistry()
+            settings.workers.all { registry.getById(it.role.npcId) != null }
+        }.getOrDefault(false)
+    }
+
+    private fun deferUntilCitizensReady(settings: OriginFurnitureWorkshopSettings) {
+        pendingSettings = settings
+        val generation = startupGeneration
+        startupChecks = 0
+        startupTasks = LifecycleTaskScope().also { tasks ->
+            ARC.instance.logger.info(
+                "ORIGIN_WORKSHOP phase=WAITING_FOR_CITIZENS check_interval_ticks=$STARTUP_CHECK_INTERVAL_TICKS max_checks=$MAX_STARTUP_CHECKS",
+            )
+            tasks.runTimer(1L, STARTUP_CHECK_INTERVAL_TICKS) {
+                if (generation != startupGeneration || pendingSettings !== settings) return@runTimer
+                registerCitizensListenerIfReady()
+                startupChecks++
+                when (prepareAndStart(settings)) {
+                    WorkshopStartupAttempt.STARTED -> {
+                        val checks = startupChecks
+                        finishPendingStartup()
+                        ARC.instance.logger.info("ORIGIN_WORKSHOP phase=STARTED source=registry-readiness-check checks=$checks")
+                    }
+                    WorkshopStartupAttempt.FAILED -> finishPendingStartup()
+                    WorkshopStartupAttempt.WAITING_FOR_CITIZENS -> if (startupChecks >= MAX_STARTUP_CHECKS) {
+                        finishPendingStartup()
+                        ARC.instance.logger.warning(
+                            "ORIGIN_WORKSHOP phase=STARTUP_EXHAUSTED checks=$MAX_STARTUP_CHECKS reason=required-npcs-not-in-registry",
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private fun registerCitizensListenerIfReady() {
+        if (listenerRegistered || !Bukkit.getPluginManager().isPluginEnabled("Citizens")) return
+        Bukkit.getPluginManager().registerEvents(this, ARC.instance)
+        listenerRegistered = true
+    }
+
+    private fun finishPendingStartup() {
+        startupTasks?.close()
+        startupTasks = null
+        pendingSettings = null
+        startupChecks = 0
+    }
+
+    private fun cancelPendingStartup() {
+        startupGeneration++
+        finishPendingStartup()
     }
 
     override fun shutdown() {
+        cancelPendingStartup()
         runtime?.close()
         runtime = null
+        if (listenerRegistered) HandlerList.unregisterAll(this)
+        listenerRegistered = false
     }
+
+    private enum class WorkshopStartupAttempt { STARTED, WAITING_FOR_CITIZENS, FAILED }
+
+    private const val STARTUP_CHECK_INTERVAL_TICKS = 20L
+    private const val MAX_STARTUP_CHECKS = 30
 }
 
 private enum class WorkshopAfterRoute { PICKUP, WORK_RETURN, OUTPUT, HOME }

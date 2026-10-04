@@ -6,6 +6,7 @@ import net.citizensnpcs.api.ai.PathfinderType
 import net.citizensnpcs.api.ai.TargetType
 import net.citizensnpcs.api.ai.event.CancelReason
 import net.citizensnpcs.api.npc.NPC
+import net.citizensnpcs.trait.RotationTrait
 import net.citizensnpcs.util.NMS
 import org.bukkit.Location
 import org.bukkit.Material
@@ -634,6 +635,7 @@ internal class CitizensNpcRouteController(
         val initialHeadingYaw = path.drop(1).firstOrNull()?.let { cell ->
             npcRouteYaw(actual.x, actual.z, cell.x + 0.5, cell.z + 0.5)
         } ?: actual.yaw
+        npc.getOrAddTrait(RotationTrait::class.java).physicalSession.rotateToHave(initialHeadingYaw, 0f)
         npc.entity.setRotation(initialHeadingYaw, 0f)
         npc.navigator.setTarget { params ->
             FixedLevelPathStrategy(
@@ -727,6 +729,7 @@ internal class CitizensNpcRouteController(
                 route.profile.headingMaxTurnDegreesPerTick * route.profile.headingUpdateTicks,
             )
         }
+        npc.getOrAddTrait(RotationTrait::class.java).physicalSession.rotateToHave(route.headingYaw, 0f)
         npc.entity.setRotation(route.headingYaw, 0f)
         tasks.runLater(route.profile.headingUpdateTicks) { monitorHeading(npcId, token) }
     }

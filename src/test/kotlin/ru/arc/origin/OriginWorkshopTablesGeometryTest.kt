@@ -17,7 +17,7 @@ class OriginWorkshopTablesGeometryTest : FreeSpec({
         val blocks = pieces.filter { it.kind == OriginWorkshopTablePieceKind.BLOCK }
         val items = pieces.filter { it.kind == OriginWorkshopTablePieceKind.ITEM }
 
-        blocks.size shouldBe 37
+        blocks.size shouldBe 47
         items.size shouldBe 1
         blocks.minOf { it.y - it.height / 2.0 } shouldBe 0.0
         val top = blocks.single { it.key == "top" }
@@ -38,6 +38,17 @@ class OriginWorkshopTablesGeometryTest : FreeSpec({
         saw.material shouldBe Material.STONECUTTER
         saw.width shouldBe 0.92
         saw.height shouldBe 0.74
+        val bladeRows = blocks.filter { it.key.startsWith("carpenter-saw-blade-row-") }.sortedBy { it.y }
+        bladeRows.size shouldBe 9
+        bladeRows.map { it.width } shouldBe listOf(0.25, 0.45, 0.60, 0.72, 0.78, 0.72, 0.60, 0.45, 0.25)
+        (bladeRows.minOf { it.y - it.height / 2.0 } > dimensions.height) shouldBe true
+        (bladeRows.maxOf { it.y + it.height / 2.0 } > saw.y + saw.height / 2.0) shouldBe true
+        bladeRows.all {
+            abs(saw.z - saw.depth / 2.0 - (it.z + it.depth / 2.0) - 0.01) < 1e-9
+        } shouldBe true
+        val bladeHub = blocks.single { it.key == "carpenter-saw-blade-hub" }
+        bladeHub.material shouldBe Material.POLISHED_ANDESITE
+        (bladeHub.y - dimensions.height > 0.5) shouldBe true
         val boardFeed = blocks.single { it.key == "carpenter-board-feed" }
         val boardInFeed = blocks.single { it.key == "carpenter-board-in-feed" }
         val ripFence = blocks.single { it.key == "carpenter-rip-fence" }
@@ -143,11 +154,16 @@ class OriginWorkshopTablesGeometryTest : FreeSpec({
         val finishing = originWorkshopTablePieces(OriginWorkshopTableRole.FINISHER, yaw = 0, dimensions = dimensions)
             .associateBy { it.key }
         val frontPost = finishing.getValue("finisher-drying-post-front-left")
-        val dryingRail = finishing.getValue("finisher-drying-rail-front")
-        val dryingBoard = finishing.getValue("finisher-drying-board-left")
+        val lowerRail = finishing.getValue("finisher-drying-rail-lower-front")
+        val upperRail = finishing.getValue("finisher-drying-rail-upper-front")
+        val dryingPanel = finishing.getValue("finisher-drying-panel-center")
+        val topRail = finishing.getValue("finisher-drying-rail-top-front")
         (abs(frontPost.y - frontPost.height / 2.0 - dimensions.height - 0.005) < 1e-9) shouldBe true
-        (abs(dryingRail.y - dryingRail.height / 2.0 - (frontPost.y + frontPost.height / 2.0)) < 1e-9) shouldBe true
-        (abs(dryingBoard.y - dryingBoard.height / 2.0 - (dryingRail.y + dryingRail.height / 2.0)) < 1e-9) shouldBe true
+        frontPost.height shouldBe 1.12
+        (abs(dryingPanel.y - dryingPanel.height / 2.0 - (lowerRail.y + lowerRail.height / 2.0)) < 1e-9) shouldBe true
+        (abs(dryingPanel.y + dryingPanel.height / 2.0 - (upperRail.y - upperRail.height / 2.0)) < 1e-9) shouldBe true
+        (topRail.y + topRail.height / 2.0 > finishing.getValue("back-tool-board").y + finishing.getValue("back-tool-board").height / 2.0) shouldBe true
+        (topRail.y + topRail.height / 2.0 < frontPost.y + frontPost.height / 2.0) shouldBe true
 
         for (role in OriginWorkshopTableRole.entries) for (yaw in listOf(0, 90, 180, 270)) {
             val pieces = originWorkshopTablePieces(role, yaw, dimensions)

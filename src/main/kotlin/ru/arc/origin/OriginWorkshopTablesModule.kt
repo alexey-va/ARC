@@ -237,16 +237,34 @@ internal fun originWorkshopTablePieces(
     }
 
     val machine = when (role) {
-        OriginWorkshopTableRole.CARPENTER -> listOf(
-            blockPiece("carpenter-table-saw", Material.STONECUTTER, -1.15, dimensions.height + 0.37, -0.12,
-                0.92, 0.74, 0.92),
-            blockPiece("carpenter-board-feed", Material.SPRUCE_PLANKS, -1.15, dimensions.height + 0.035, -0.80,
-                0.90, 0.06, 0.44),
-            blockPiece("carpenter-rip-fence", Material.DARK_OAK_PLANKS, -0.78, dimensions.height + 0.14, -0.80,
-                0.08, 0.15, 0.42),
-            blockPiece("carpenter-drive-motor", Material.BLACKSTONE, -1.15, dimensions.height + 0.14, 0.49,
-                0.42, 0.28, 0.30),
-        )
+        OriginWorkshopTableRole.CARPENTER -> buildList {
+            add(blockPiece("carpenter-table-saw", Material.STONECUTTER, -1.15, dimensions.height + 0.37, -0.12,
+                0.92, 0.74, 0.92))
+            add(blockPiece("carpenter-board-feed", Material.SPRUCE_PLANKS, -1.15, dimensions.height + 0.035, -0.80,
+                0.90, 0.06, 0.44))
+            add(blockPiece("carpenter-rip-fence", Material.DARK_OAK_PLANKS, -0.78, dimensions.height + 0.14, -0.80,
+                0.08, 0.15, 0.42))
+            add(blockPiece("carpenter-drive-motor", Material.BLACKSTONE, -1.15, dimensions.height + 0.17, 0.53,
+                0.56, 0.34, 0.38))
+
+            // The built-in stonecutter blade sits too low to read at workshop scale, so add a
+            // raised, pixel-rounded metal disk on the operator-facing side of the housing.
+            val bladeWidths = listOf(0.25, 0.45, 0.60, 0.72, 0.78, 0.72, 0.60, 0.45, 0.25)
+            bladeWidths.forEachIndexed { index, width ->
+                add(blockPiece(
+                    "carpenter-saw-blade-row-$index",
+                    if (index == 0 || index == 4 || index == 8) Material.LIGHT_GRAY_CONCRETE else Material.IRON_BLOCK,
+                    -1.15,
+                    dimensions.height + 0.62 + (index - 4) * 0.095,
+                    -0.625,
+                    width,
+                    0.095,
+                    0.07,
+                ))
+            }
+            add(blockPiece("carpenter-saw-blade-hub", Material.POLISHED_ANDESITE, -1.15,
+                dimensions.height + 0.62, -0.675, 0.18, 0.18, 0.07))
+        }
         OriginWorkshopTableRole.UPHOLSTERER -> listOf(
             blockPiece("upholsterer-loom", Material.LOOM, -1.15, dimensions.height + 0.36, -0.14,
                 0.68, 0.72, 0.62),
@@ -270,26 +288,32 @@ internal fun originWorkshopTablePieces(
         OriginWorkshopTableRole.FINISHER -> listOf(
             blockPiece("finisher-paint-bath", Material.WATER_CAULDRON, -1.15, dimensions.height + 0.30, -0.14,
                 0.72, 0.60, 0.72),
-            blockPiece(
-                "finisher-drying-post-front-left", Material.STRIPPED_SPRUCE_LOG, 0.30,
-                dimensions.height + 0.195, 0.16,
-                0.08, 0.38, 0.08),
-            blockPiece(
-                "finisher-drying-post-back-left", Material.STRIPPED_SPRUCE_LOG, 0.30,
-                dimensions.height + 0.195, 0.48,
-                0.08, 0.38, 0.08),
-            blockPiece(
-                "finisher-drying-post-front-right", Material.STRIPPED_SPRUCE_LOG, 1.30,
-                dimensions.height + 0.195, 0.16,
-                0.08, 0.38, 0.08),
-            blockPiece(
-                "finisher-drying-post-back-right", Material.STRIPPED_SPRUCE_LOG, 1.30,
-                dimensions.height + 0.195, 0.48,
-                0.08, 0.38, 0.08),
-            blockPiece("finisher-drying-rail-front", Material.SPRUCE_PLANKS, 0.80, dimensions.height + 0.415, 0.16,
-                1.00, 0.06, 0.06),
-            blockPiece("finisher-drying-rail-back", Material.SPRUCE_PLANKS, 0.80, dimensions.height + 0.415, 0.48,
-                1.00, 0.06, 0.06),
+            blockPiece("finisher-drying-post-front-left", Material.STRIPPED_BIRCH_LOG, 0.55,
+                dimensions.height + 0.565, -0.35, 0.10, 1.12, 0.10),
+            blockPiece("finisher-drying-post-back-left", Material.STRIPPED_BIRCH_LOG, 0.55,
+                dimensions.height + 0.565, 0.10, 0.10, 1.12, 0.10),
+            blockPiece("finisher-drying-post-front-right", Material.STRIPPED_BIRCH_LOG, 1.65,
+                dimensions.height + 0.565, -0.35, 0.10, 1.12, 0.10),
+            blockPiece("finisher-drying-post-back-right", Material.STRIPPED_BIRCH_LOG, 1.65,
+                dimensions.height + 0.565, 0.10, 0.10, 1.12, 0.10),
+            blockPiece("finisher-drying-rail-lower-front", Material.DARK_OAK_PLANKS, 1.10,
+                dimensions.height + 0.14, -0.35, 1.00, 0.08, 0.08),
+            blockPiece("finisher-drying-rail-lower-back", Material.DARK_OAK_PLANKS, 1.10,
+                dimensions.height + 0.14, 0.10, 1.00, 0.08, 0.08),
+            blockPiece("finisher-drying-rail-upper-front", Material.DARK_OAK_PLANKS, 1.10,
+                dimensions.height + 0.90, -0.35, 1.00, 0.08, 0.08),
+            blockPiece("finisher-drying-rail-upper-back", Material.DARK_OAK_PLANKS, 1.10,
+                dimensions.height + 0.90, 0.10, 1.00, 0.08, 0.08),
+            blockPiece("finisher-drying-rail-top-front", Material.SPRUCE_PLANKS, 1.10,
+                dimensions.height + 1.05, -0.35, 1.00, 0.08, 0.08),
+            blockPiece("finisher-drying-rail-top-back", Material.SPRUCE_PLANKS, 1.10,
+                dimensions.height + 1.05, 0.10, 1.00, 0.08, 0.08),
+            blockPiece("finisher-drying-panel-left", Material.BIRCH_PLANKS, 0.75,
+                dimensions.height + 0.52, -0.35, 0.18, 0.68, 0.06),
+            blockPiece("finisher-drying-panel-center", Material.OAK_PLANKS, 1.10,
+                dimensions.height + 0.52, -0.35, 0.18, 0.68, 0.06),
+            blockPiece("finisher-drying-panel-right", Material.SPRUCE_PLANKS, 1.45,
+                dimensions.height + 0.52, -0.35, 0.18, 0.68, 0.06),
         )
     }
     val workpieces = when (role) {
@@ -320,10 +344,6 @@ internal fun originWorkshopTablePieces(
             blockPiece("finisher-finished-board", Material.SPRUCE_PLANKS,
                 0.29 * dimensions.width, dimensions.height + 0.035, -0.10 * dimensions.depth,
                 0.65, 0.06, 0.30),
-            blockPiece("finisher-drying-board-left", Material.OAK_PLANKS, 0.55, dimensions.height + 0.475, 0.32,
-                0.48, 0.06, 0.36),
-            blockPiece("finisher-drying-board-right", Material.BIRCH_PLANKS, 1.05, dimensions.height + 0.475, 0.32,
-                0.48, 0.06, 0.36),
         )
     }
     val worldPieces = (pieces + machine + workpieces).map { piece -> rotatePiece(piece, yaw) }.toMutableList()
