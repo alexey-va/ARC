@@ -4,6 +4,7 @@ import io.mockk.every
 import io.mockk.mockk
 import ru.arc.iteminfo.ItemInfoMode
 import ru.arc.iteminfo.ItemInfoPreferences
+import ru.arc.sidebar.SidebarSection
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -12,6 +13,27 @@ import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
 class HelpCenterLegacySettingsTest {
+    @Test
+    fun `scoreboard section preferences persist across reopen without changing the tablist`() {
+        val player = mockk<Player>()
+        val backend = FakeBackend()
+        backend.permissions["tab.scoreboard20"] = true
+        backend.permissions["tab.tablist3"] = true
+        val settings = HelpCenterLegacySettings(backend)
+        SidebarSection.entries.forEach { section ->
+            assertTrue(settings.scoreboardSectionEnabled(player, section))
+            assertTrue(settings.execute(player, "scoreboard-section-${section.id}").join())
+            assertEquals(false, HelpCenterLegacySettings(backend).scoreboardSectionEnabled(player, section))
+        }
+        assertTrue(settings.execute(player, "scoreboard-toggle").join())
+        assertEquals("off", settings.entries(player).first { it.id == "scoreboard" }.state)
+        assertTrue(settings.execute(player, "scoreboard-toggle").join())
+        assertEquals("on", settings.entries(player).first { it.id == "scoreboard" }.state)
+        assertEquals("3", settings.entries(player).first { it.id == "tablist" }.state)
+        SidebarSection.entries.forEach { assertEquals(false, settings.scoreboardSectionEnabled(player, it)) }
+        assertEquals(false, settings.execute(player, "scoreboard-section-unknown").join())
+    }
+
     @Test
     fun `quest reward visibility defaults on and persists independently of sidebar style`() {
         val player = mockk<Player>()
@@ -22,7 +44,7 @@ class HelpCenterLegacySettingsTest {
         assertTrue(settings.execute(player, "scoreboard-rewards").join())
         val reopened = HelpCenterLegacySettings(backend)
         assertEquals(false, reopened.scoreboardRewardsEnabled(player))
-        assertEquals("3", reopened.entries(player).first { it.id == "scoreboard" }.state)
+        assertEquals("on", reopened.entries(player).first { it.id == "scoreboard" }.state)
         assertTrue(reopened.execute(player, "scoreboard-rewards").join())
         assertTrue(HelpCenterLegacySettings(backend).scoreboardRewardsEnabled(player))
     }
@@ -69,7 +91,7 @@ class HelpCenterLegacySettingsTest {
         backend.permissions["tab.group.admin"] = true
 
         val settings = HelpCenterLegacySettings(backend)
-        assertEquals("3", settings.entries(player).first { it.id == "scoreboard" }.state)
+        assertEquals("on", settings.entries(player).first { it.id == "scoreboard" }.state)
         assertEquals("on", settings.entries(player).first { it.id == "notifications" }.state)
 
         assertTrue(settings.execute(player, "notifications").join())
@@ -121,7 +143,10 @@ class HelpCenterLegacySettingsTest {
         override fun flightState(player: Player) = null
         override fun tpaEnabled(player: Player) = null
         override fun setPermission(player: Player, node: String, enabled: Boolean) = CompletableFuture.completedFuture(permissions.put(node, enabled) == null || true)
-        override fun setExclusiveMode(player: Player, prefix: String, mode: Int?) = CompletableFuture.completedFuture(true)
+        override fun setExclusiveMode(player: Player, prefix: String, mode: Int?): CompletableFuture<Boolean> {
+            (1..20).forEach { index -> permissions[if (index == 1) prefix else "$prefix$index"] = mode == index }
+            return CompletableFuture.completedFuture(true)
+        }
         override fun setMeta(player: Player, key: String, value: String) = CompletableFuture.completedFuture(true).also { metadata[key] = value }
         override fun command(player: Player, command: HelpCenterLegacySettings.PlayerCommand) = CompletableFuture.completedFuture(commands.add(command).let { true })
         override fun consoleCommand(player: Player, command: HelpCenterLegacySettings.ConsoleCommand) = CompletableFuture.completedFuture(consoleCommands.add(command).let { true })

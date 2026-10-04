@@ -1,6 +1,8 @@
 package ru.arc.helpcenter
 
 import ru.arc.sidebar.SidebarQuestRewards
+import ru.arc.sidebar.SidebarSection
+import ru.arc.sidebar.sidebarEnabled
 
 import com.Zrips.CMI.CMI
 import com.Zrips.CMI.Modules.PlayerOptions.PlayerOption
@@ -65,7 +67,7 @@ class HelpCenterLegacySettings(
     fun entries(player: Player): List<HelpCenterLegacySettingEntry> = listOf(
         entry("shortcut", "legacy-settings-shortcut", MenuShortcutAction.from(backend.meta(player, MenuShortcutAction.META_KEY)).id, "legacy-settings-shortcut-tooltip"),
         entry("escape", "legacy-settings-escape", if (MenuEscapeBehavior.goesBack(backend.meta(player, MenuEscapeBehavior.META_KEY))) "back" else "close", "legacy-settings-escape-tooltip"),
-        entry("scoreboard", "legacy-settings-scoreboard", modeState(player, "tab.scoreboard"), "legacy-settings-scoreboard-tooltip"),
+        entry("scoreboard", "legacy-settings-scoreboard", if (scoreboardEnabled(player)) "on" else "off", "legacy-settings-scoreboard-tooltip"),
         entry("tablist", "legacy-settings-tablist", modeState(player, "tab.tablist"), "legacy-settings-tablist-tooltip"),
         entry("item-info", "legacy-settings-item-info", ItemInfoMode.fromStored(backend.meta(player, ItemInfoMode.META_KEY)).id, "legacy-settings-item-info-tooltip"),
         entry("lands", "legacy-settings-lands", null, "legacy-settings-lands-tooltip"),
@@ -102,9 +104,15 @@ class HelpCenterLegacySettings(
     fun scoreboardRewardsEnabled(player: Player): Boolean =
         SidebarQuestRewards.enabled(backend.meta(player, SidebarQuestRewards.META_KEY))
 
+    fun scoreboardEnabled(player: Player): Boolean = sidebarEnabled { backend.hasPermission(player, it) }
+
+    internal fun scoreboardSectionEnabled(player: Player, section: SidebarSection): Boolean =
+        section.enabled(backend.meta(player, section.metaKey))
+
     fun execute(player: Player, id: String): CompletableFuture<Boolean> = when (id) {
         "admin" -> if (backend.hasPermission(player, ADMIN)) backend.consoleCommand(player, ConsoleCommand.OPEN_ADMIN_SETTINGS) else falseFuture()
         "scoreboard-rewards" -> backend.setMeta(player, SidebarQuestRewards.META_KEY, (!scoreboardRewardsEnabled(player)).toString())
+        "scoreboard-toggle" -> backend.setExclusiveMode(player, "tab.scoreboard", if (scoreboardEnabled(player)) null else 1)
         "scoreboard-off" -> backend.setExclusiveMode(player, "tab.scoreboard", null)
         "tablist-off" -> backend.setExclusiveMode(player, "tab.tablist", null)
         "item-info-hologram" -> backend.setMeta(player, ItemInfoMode.META_KEY, ItemInfoMode.HOLOGRAM.id)
@@ -144,6 +152,9 @@ class HelpCenterLegacySettings(
     }
 
     private fun modeAction(player: Player, id: String): CompletableFuture<Boolean> {
+        SidebarSection.entries.firstOrNull { "scoreboard-section-${it.id}" == id }?.let {
+            return backend.setMeta(player, it.metaKey, (!scoreboardSectionEnabled(player, it)).toString())
+        }
         MenuShortcutAction.entries.firstOrNull { "shortcut-${it.id}" == id }?.let {
             return backend.setMeta(player, MenuShortcutAction.META_KEY, it.id)
         }

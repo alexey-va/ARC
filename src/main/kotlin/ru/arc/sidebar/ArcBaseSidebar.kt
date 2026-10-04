@@ -40,26 +40,23 @@ internal class ArcBaseSidebar(
         (shown - online.keys).forEach(source::hide)
         val next = linkedSetOf<UUID>()
         online.values.forEach { player ->
-            val style = selectedSidebarStyle(player)
-            if (!enabledOnCurrentServer() || !supportsSidebarClient(player) || style == null) {
+            if (!enabledOnCurrentServer() || !supportsSidebarClient(player) || !sidebarEnabled(player::hasPermission)) {
                 source.hide(player)
                 return@forEach
             }
             val serverId = ARC.serverName.orEmpty()
-            val rewardsEnabled = SidebarQuestRewards.enabled(
-                HookRegistry.luckPermsHook?.getCachedMeta(player.uniqueId, SidebarQuestRewards.META_KEY),
-            )
-            val layout = if (serverId.equals("slimefun", ignoreCase = true)) "slimefun.lines" else "styles.$style.lines"
-            val rows = config.stringList(layout).mapNotNull { template ->
-                SidebarQuestRewards.visibleLine(template, rewardsEnabled)
-                    ?.let { resolveServerSidebarLine(it, serverId) }
-                    ?.let { serverLine ->
+            val layout = if (serverId.equals("slimefun", ignoreCase = true)) "slimefun.sections" else "sections"
+            val rows = composeSidebarSections(
+                enabled = { section -> section.enabled(HookRegistry.luckPermsHook?.getCachedMeta(player.uniqueId, section.metaKey)) },
+                lines = { section -> config.stringList("$layout.${section.id}") },
+                resolve = { template ->
+                    resolveServerSidebarLine(template, serverId)?.let { serverLine ->
                         resolveOptionalSidebarLine(serverLine) { placeholder ->
                             resolvePlaceholder(player, placeholder)
                         }
                     }
-                    ?.let { render(player, it) }
-            }
+                },
+            ).map { render(player, it) }
             if (rows.isEmpty()) {
                 source.hide(player)
                 return@forEach
@@ -90,11 +87,6 @@ internal class ArcBaseSidebar(
         return serverId in config.stringList("enabled-servers", listOf("spawn", "survival")).map(String::lowercase)
     }
 
-    private fun selectedSidebarStyle(player: Player): String? =
-        (1..STYLE_COUNT).firstOrNull { index ->
-            player.hasPermission(if (index == 1) "tab.scoreboard" else "tab.scoreboard$index")
-        }?.let { index -> "style${index.toString().padStart(2, '0')}" }
-
     private fun supportsSidebarClient(player: Player): Boolean =
         isSidebarClientSupported(
             HookRegistry.viaVersionHook?.getPlayerVersion(player),
@@ -121,7 +113,6 @@ internal class ArcBaseSidebar(
 
     companion object {
         private const val RESOURCE = "modules/scoreboard.yml"
-        private const val STYLE_COUNT = 20
         private const val DEFAULT_MINIMUM_CLIENT_PROTOCOL = 774
         private val UNRESOLVED_PLACEHOLDER = Regex("%[^%\r\n]+%")
         private val DATE = DateTimeFormatter.ofPattern("dd.MM.yyyy")

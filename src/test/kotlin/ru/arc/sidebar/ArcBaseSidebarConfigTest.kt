@@ -27,33 +27,46 @@ class ArcBaseSidebarConfigTest : StringSpec({
         isSidebarClientSupported(-1, 774) shouldBe true
     }
 
-    "bundled scoreboard preserves every legacy selection with valid dynamic row counts" {
+    "one sidebar keeps six independently configurable sections and valid row counts" {
         val stream = requireNotNull(javaClass.classLoader.getResourceAsStream("modules/scoreboard.yml"))
         val config = stream.use { YamlConfiguration.loadConfiguration(InputStreamReader(it)) }
-        val styles = requireNotNull(config.getConfigurationSection("styles"))
-
-        styles.getKeys(false).sorted() shouldContainExactly (1..20).map { "style${it.toString().padStart(2, '0')}" }
-        styles.getKeys(false).forEach { id ->
-            val rows = config.getStringList("styles.$id.lines")
-            (rows.size in 1..15) shouldBe true
-            rows.first().isNotEmpty() shouldBe true
-            rows.last().isNotEmpty() shouldBe true
-        }
+        config.contains("styles") shouldBe false
+        requireNotNull(config.getConfigurationSection("sections")).getKeys(false).toList() shouldContainExactly
+            SidebarSection.entries.map { it.id }
+        val rows = composeSidebarSections({ true }, { config.getStringList("sections.${it.id}") }, { it })
+        (rows.size in 1..15) shouldBe true
+        rows.first() shouldBe "&6| &f%arcranks_rank_name% &e/rank"
+        rows.last() shouldBe "&7Онлайн: &a%online% &7• &fПинг: &e%player_ping% мс"
+        (1..3).forEach { rows shouldContain "?&6| %arcranks_quest_board_$it%" }
+        rows shouldContain "@survival &6| &f%lands_land_name_plain_here%"
+        rows.none { "&8" in it } shouldBe true
     }
 
-    "default sidebar keeps ArcRanks rank and three distinct quest rows after the TAB migration" {
-        val stream = requireNotNull(javaClass.classLoader.getResourceAsStream("modules/scoreboard.yml"))
-        val config = stream.use { YamlConfiguration.loadConfiguration(InputStreamReader(it)) }
-        val defaultRows = config.getStringList("styles.style01.lines")
-        val profileRows = config.getStringList("styles.style04.lines")
+    "section composition handles every selection without orphaned rewards or blank groups" {
+        val sections = SidebarSection.entries
+        for (mask in 0 until (1 shl sections.size)) {
+            val visible = sections.filterIndexed { index, _ -> mask and (1 shl index) != 0 }.toSet()
+            val rows = composeSidebarSections({ it in visible }, { listOf(it.id) }, { it })
+            val expected = sections.filter { it in visible && (it != SidebarSection.REWARDS || SidebarSection.QUESTS in visible) }
+            rows.filter(String::isNotBlank) shouldContainExactly expected.map { it.id }
+            rows.firstOrNull()?.isBlank() shouldBe if (rows.isEmpty()) null else false
+            rows.lastOrNull()?.isBlank() shouldBe if (rows.isEmpty()) null else false
+            rows.zipWithNext().none { (a, b) -> a.isBlank() && b.isBlank() } shouldBe true
+        }
+        composeSidebarSections({ true }, { if (it == SidebarSection.QUESTS) listOf("?quest") else emptyList() }, { null }) shouldBe emptyList()
+    }
 
-        defaultRows shouldContain "&6| &f%arcranks_rank_name% &e/rank"
-        defaultRows shouldContain "?%arcranks_quest_board_header%"
-        (1..3).forEach { defaultRows shouldContain "?&6| %arcranks_quest_board_$it%" }
-        defaultRows.none { "%arcranks_next_rank%" in it } shouldBe true
-        profileRows shouldContain "&6| &fРанг: &e%arcranks_rank_name%"
-        profileRows shouldContain "&6| &fСледующий: &e%arcranks_next_rank%"
-        (defaultRows + profileRows) shouldNotContain "&6| &f%cmi_user_rank_displayname%"
+    "legacy choices preserve visibility and section metadata defaults on" {
+        (1..20).forEach { index ->
+            sidebarEnabled { it == if (index == 1) "tab.scoreboard" else "tab.scoreboard$index" } shouldBe true
+        }
+        sidebarEnabled { false } shouldBe false
+        SidebarSection.entries.forEach {
+            it.enabled(null) shouldBe true
+            it.enabled("false") shouldBe false
+            it.enabled("FALSE") shouldBe false
+        }
+        SidebarSection.REWARDS.metaKey shouldBe SidebarQuestRewards.META_KEY
     }
 
     "optional quest rows disappear when ArcRanks publishes no text" {
@@ -66,34 +79,11 @@ class ArcBaseSidebarConfigTest : StringSpec({
         } shouldBe "&6| %arcranks_quest_board_1%"
     }
 
-    "default sidebar is compact and ends with the server footer" {
-        val stream = requireNotNull(javaClass.classLoader.getResourceAsStream("modules/scoreboard.yml"))
-        val config = stream.use { YamlConfiguration.loadConfiguration(InputStreamReader(it)) }
-        val rows = config.getStringList("styles.style01.lines")
-
-        rows.first() shouldBe "&6| &f%arcranks_rank_name% &e/rank"
-        rows.last() shouldBe "&7Онлайн: &a%online% &7• &fПинг: &e%player_ping% мс"
-        rows shouldContain "@survival &6| &f%lands_land_name_plain_here%"
-        rows shouldNotContain "&6| &f%player%"
-        rows shouldNotContain "&6| &fНаиграно: &e%cmi_user_playtime_hoursf% ч"
-        rows shouldNotContain "&6Сервер"
-        rows[rows.indexOf("?%arcranks_quest_board_header%") - 1] shouldBe ""
-        (rows.indexOf("?&6| %arcranks_quest_board_3%") < rows.lastIndex) shouldBe true
-    }
-
-    "scoreboard never uses dark gray text" {
-        val stream = requireNotNull(javaClass.classLoader.getResourceAsStream("modules/scoreboard.yml"))
-        val config = stream.use { YamlConfiguration.loadConfiguration(InputStreamReader(it)) }
-        val styles = requireNotNull(config.getConfigurationSection("styles"))
-
-        styles.getKeys(false).flatMap { config.getStringList("styles.$it.lines") }.none { "&8" in it } shouldBe true
-    }
-
     "Slimefun sidebar exposes only its local currency and island navigation" {
         val stream = requireNotNull(javaClass.classLoader.getResourceAsStream("modules/scoreboard.yml"))
         val config = stream.use { YamlConfiguration.loadConfiguration(InputStreamReader(it)) }
         config.getStringList("enabled-servers") shouldContain "slimefun"
-        val rows = config.getStringList("slimefun.lines")
+        val rows = composeSidebarSections({ true }, { config.getStringList("slimefun.sections.${it.id}") }, { it })
         (rows.size in 1..15) shouldBe true
         rows shouldContain "&6| &fСлаймы: &a%rediseco_bal_formatted_shorthand_slimes%"
         rows shouldContain "&6| &fМеню: &e/skyblock"

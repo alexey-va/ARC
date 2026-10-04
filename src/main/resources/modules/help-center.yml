@@ -159,9 +159,23 @@ text:
   settings-options-lands-title: "<#9bd48d>Границы земель"
   settings-options-tablist-body: "<#e8dfd2>Выберите оформление списка игроков по клавише Tab.<newline>«Выключить» уберёт дополнительное оформление."
   settings-options-tablist-title: "<#86dcf1>Список игроков"
-  settings-scoreboard-rewards-label: '<#c4abff>Итог наград: <state>'
-  settings-scoreboard-rewards-tooltip: '<#e8dfd2>Показывать итог под заданиями:<newline>получено сегодня / всего за текущие квесты.<newline>Монеты и жетоны считаются отдельно.'
-  settings-options-scoreboard-body: "<#e8dfd2>Выберите набор информации справа на экране.<newline>«Выключить» полностью скроет панель."
+  settings-scoreboard-rewards-label: 'Итог наград'
+  settings-scoreboard-rewards-tooltip: '<#e8dfd2>Итог под квестами: получено сегодня / всего.<newline>Показывается вместе с секцией квестов.'
+  settings-options-scoreboard-body: '<#e8dfd2>Включайте нужные секции панели справа на экране.<newline>Изменения сохраняются для вашего игрока.<newline>Квесты и итог наград появляются, когда есть задания.'
+  settings-scoreboard-selected: '<#9bd48d>✔ <label>'
+  settings-scoreboard-unselected: '<#ffffff>○ <label>'
+  settings-scoreboard-visible-label: 'Показывать панель'
+  settings-scoreboard-visible-tooltip: '<#e8dfd2>Показывать основную панель справа.<newline>Выбор секций сохраняется и при отключённой панели.<newline>Панели активных занятий управляются отдельно.'
+  settings-scoreboard-rank-label: 'Ранг и профиль'
+  settings-scoreboard-rank-tooltip: '<#e8dfd2>Ваш текущий ранг и переход к его прогрессу.<newline>В SkyBlock — имя игрока.'
+  settings-scoreboard-balance-label: 'Баланс'
+  settings-scoreboard-balance-tooltip: '<#e8dfd2>Монеты и премиум-валюта.<newline>В SkyBlock — местный баланс слаймов.'
+  settings-scoreboard-location-label: 'Место'
+  settings-scoreboard-location-tooltip: '<#e8dfd2>Мир и земля на Выживании.<newline>В SkyBlock — остров и навигация.'
+  settings-scoreboard-quests-label: 'Квесты'
+  settings-scoreboard-quests-tooltip: '<#e8dfd2>Текущие задания и их прогресс.<newline>Если заданий нет, секция скрывается.<newline>Отключение также скрывает итог наград.'
+  settings-scoreboard-footer-label: 'Онлайн и пинг'
+  settings-scoreboard-footer-tooltip: '<#e8dfd2>Нижняя строка: число игроков и задержка соединения.'
   settings-options-scoreboard-title: "<#86dcf1>Информационная панель"
   settings-options-item-info-body: "<#e8dfd2>Показывать название блока или мебели ItemsAdder либо Slimefun, на которые вы смотрите.<newline>Технический ID можно включить отдельно. Обычные блоки Minecraft не отображаются."
   settings-options-item-info-title: "<#86dcf1>Информация о блоке"
@@ -505,7 +519,7 @@ text:
   chat-global-state: 'глобальный'
   chat-local-state: 'локальный'
   legacy-settings-scoreboard: "<#d7b486>Панель: <state><#d7b486> ›"
-  legacy-settings-scoreboard-tooltip: '<#e6fff3>Панель с информацией справа на экране.<newline><#e8dfd2>Выберите подходящий набор данных:<newline>баланс, координаты, профессии или прогресс.<newline><newline><#d7b486>Нажмите, чтобы выбрать один из 20 видов<newline>или полностью скрыть панель.'
+  legacy-settings-scoreboard-tooltip: '<#e8dfd2>Настройте секции панели справа на экране:<newline>ранг, баланс, место, квесты и онлайн.<newline>Каждую секцию можно скрыть отдельно.'
   legacy-settings-tablist: "<#d7b486>Tab: <state><#d7b486> ›"
   legacy-settings-tablist-tooltip: '<#e6fff3>Оформление списка игроков по клавише Tab.<newline><#e8dfd2>Виды отличаются набором дополнительных<newline>данных: профиль, баланс, место и прогресс.<newline><newline><#d7b486>Нажмите, чтобы выбрать один из 20 видов<newline>или выключить дополнительное оформление.'
   legacy-settings-item-info: "<#d7b486>Информация о блоке: <state><#d7b486> ›"
@@ -561,26 +575,6 @@ text:
   legacy-action-flight-off: "<#e8dfd2>Отключить"
   legacy-action-flight-recharge: "<italic:false><#d7b486>Пополнить заряд ›"
   legacy-action-flight-toggle: '<#d7b486>Переключить полёт'
-  legacy-settings-scoreboard-mode-1: '<#d7b486>Дефолт'
-  legacy-settings-scoreboard-mode-2: '<#d7b486>Мини'
-  legacy-settings-scoreboard-mode-3: '<#d7b486>Кошелёк'
-  legacy-settings-scoreboard-mode-4: '<#d7b486>Профиль'
-  legacy-settings-scoreboard-mode-5: '<#d7b486>Земли'
-  legacy-settings-scoreboard-mode-6: '<#d7b486>Координаты'
-  legacy-settings-scoreboard-mode-7: '<#d7b486>Онлайн'
-  legacy-settings-scoreboard-mode-8: '<#d7b486>Сервер'
-  legacy-settings-scoreboard-mode-9: '<#d7b486>Время'
-  legacy-settings-scoreboard-mode-10: '<#d7b486>Профессии'
-  legacy-settings-scoreboard-mode-11: '<#d7b486>Навыки'
-  legacy-settings-scoreboard-mode-12: '<#d7b486>Добыча'
-  legacy-settings-scoreboard-mode-13: '<#d7b486>Строитель'
-  legacy-settings-scoreboard-mode-14: '<#d7b486>Исследователь'
-  legacy-settings-scoreboard-mode-15: '<#d7b486>Охотник'
-  legacy-settings-scoreboard-mode-16: '<#d7b486>Быт'
-  legacy-settings-scoreboard-mode-17: '<#d7b486>Баланс'
-  legacy-settings-scoreboard-mode-18: '<#d7b486>Сводка'
-  legacy-settings-scoreboard-mode-19: '<#d7b486>Лайт'
-  legacy-settings-scoreboard-mode-20: '<#d7b486>Админ'
   legacy-settings-tablist-mode-1: '<#d7b486>Дефолт'
   legacy-settings-tablist-mode-2: '<#d7b486>Мини'
   legacy-settings-tablist-mode-3: '<#d7b486>Импульс'

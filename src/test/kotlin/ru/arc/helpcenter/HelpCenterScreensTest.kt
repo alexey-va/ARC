@@ -13,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
 import ru.arc.config.ConfigManager
+import ru.arc.sidebar.SidebarSection
 import ru.arc.core.BukkitTaskScheduler
 import ru.arc.core.Tasks
 import ru.arc.paper.menu.PaperDialogClickContext
@@ -534,6 +535,38 @@ class HelpCenterScreensTest {
         later.complete(Unit)
         paper.performTicks(2)
         assertEquals("help.root", screen.id)
+    }
+
+    @Test
+    fun `scoreboard settings expose one layout and refresh sections only after save completes`() {
+        var visible = true
+        var quests = true
+        val save = CompletableFuture<Boolean>()
+        every { legacy.scoreboardEnabled(player) } answers { visible }
+        every { legacy.scoreboardSectionEnabled(player, any()) } answers {
+            if (secondArg<SidebarSection>() == SidebarSection.QUESTS) quests else true
+        }
+        every { legacy.execute(player, "scoreboard-section-quests") } returns save
+        every { legacy.execute(player, "scoreboard-toggle") } answers {
+            visible = !visible
+            CompletableFuture.completedFuture(true)
+        }
+        open(HelpCenterPage.SETTINGS)
+        click("settings_interface")
+        click("legacy_scoreboard")
+        assertEquals("help.settings.scoreboard", screen.id)
+        assertEquals(listOf("scoreboard_toggle") + SidebarSection.entries.map { "scoreboard_section_${it.id}" }, screen.buttons.map { it.id.value })
+        assertTrue(screen.buttons.all { plain(it.label).startsWith("✔") })
+        click("scoreboard_section_quests")
+        assertTrue(plain(screen.buttons.single { it.id.value == "scoreboard_section_quests" }.label).startsWith("✔"))
+        quests = false
+        save.complete(true)
+        paper.performTicks(2)
+        assertEquals("○ Квесты", plain(screen.buttons.single { it.id.value == "scoreboard_section_quests" }.label))
+        click("scoreboard_toggle")
+        assertEquals("○ Показывать панель", plain(screen.buttons.first().label))
+        click("back")
+        assertEquals("help.settings.section.interface", screen.id)
     }
 
     @Test

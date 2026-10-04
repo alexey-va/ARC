@@ -19,6 +19,7 @@ import ru.arc.paper.menu.PaperDialogInputId
 import ru.arc.paper.menu.PaperDialogNumberRangeInput
 import ru.arc.paper.menu.PaperDialogScreen
 import ru.arc.iteminfo.ItemInfoPreferences
+import ru.arc.sidebar.SidebarSection
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -125,7 +126,8 @@ internal class HelpCenterSettingsController(
             when (entry.id) {
                 "shortcut" -> openOptions(player, entry.id, MenuShortcutAction.entries.map { "shortcut-${it.id}" }, section)
                 "escape" -> openOptions(player, entry.id, listOf("escape-close", "escape-back"), section)
-                "scoreboard", "tablist" -> openOptions(player, entry.id, (1..20).map { "${entry.id}-$it" } + "${entry.id}-off", section)
+                "scoreboard" -> openScoreboard(player, section)
+                "tablist" -> openOptions(player, entry.id, (1..20).map { "${entry.id}-$it" } + "${entry.id}-off", section)
                 "item-info" -> openItemInfo(player, section)
                 "lands" -> openOptions(player, entry.id, listOf("lands-show", "lands-hide"), section)
                 "portal-style" -> openOptions(player, entry.id, HelpCenterLegacySettings.PORTAL_STYLES.map { "portal-style-$it" }, section)
@@ -162,15 +164,33 @@ internal class HelpCenterSettingsController(
                 button("legacy_$id", label, tooltip) {
                     apply(player, id) { openOptions(player, group, actions, section) }
                 }
-            } + if (group == "scoreboard") listOf(
-                button("scoreboard_rewards_toggle",
-                    text("settings-scoreboard-rewards-label", "state" to booleanState(legacy.scoreboardRewardsEnabled(player))),
-                    text("settings-scoreboard-rewards-tooltip"),
-                ) { apply(player, "scoreboard-rewards") { openOptions(player, group, actions, section) } },
-            ) else emptyList(),
+            },
             exitButton = button("back", text(if (recharge) "settings-flight-back-label" else "settings-${section.key}-back-label")) {
                 if (recharge) openFlight(player) else openSection(player, section)
             }, columns = 2,
+        ))
+    }
+
+    private fun openScoreboard(player: Player, section: Section) {
+        navigation.visit(player) { openScoreboard(player, section) }
+        fun toggleLabel(key: String, enabled: Boolean): Component = text(
+            if (enabled) "settings-scoreboard-selected" else "settings-scoreboard-unselected",
+            "label" to text(key),
+        )
+        showDialog(player, PaperDialogScreen(
+            id = "help.settings.scoreboard", title = text("settings-options-scoreboard-title"),
+            body = listOf(PaperDialogBody(text("settings-options-scoreboard-body"), 468)),
+            buttons = listOf(button(
+                "scoreboard_toggle", toggleLabel("settings-scoreboard-visible-label", legacy.scoreboardEnabled(player)),
+                text("settings-scoreboard-visible-tooltip"),
+            ) { apply(player, "scoreboard-toggle") { openScoreboard(player, section) } }) + SidebarSection.entries.map { part ->
+                button(
+                    "scoreboard_section_${part.id}",
+                    toggleLabel("settings-scoreboard-${part.id}-label", legacy.scoreboardSectionEnabled(player, part)),
+                    text("settings-scoreboard-${part.id}-tooltip"),
+                ) { apply(player, "scoreboard-section-${part.id}") { openScoreboard(player, section) } }
+            },
+            exitButton = button("back", text("settings-${section.key}-back-label")) { openSection(player, section) }, columns = 2,
         ))
     }
 
