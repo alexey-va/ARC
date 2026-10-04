@@ -80,16 +80,13 @@ buttons:
     tooltip: "<#e8dfd2>Перейти на общий сервер spawn.</#e8dfd2>"
   services:
     label: "<#ffffff>Другие сервисы ›</#ffffff>"
-    tooltip: "<#e8dfd2>Открыть RTP, дома и территории.</#e8dfd2>"
+    tooltip: "<#e8dfd2>Открыть RTP, дома и команды.</#e8dfd2>"
   rtp:
     label: "<#92bed8>Случайная телепортация ›</#92bed8>"
     tooltip: "<#e8dfd2>Найти безопасное место в мире Slimefun.</#e8dfd2>"
   homes:
     label: "<#92bed8>Мои дома ›</#92bed8>"
     tooltip: "<#e8dfd2>Посмотреть и выбрать сохранённый дом.</#e8dfd2>"
-  lands:
-    label: "<#9bd48d>Мои земли ›</#9bd48d>"
-    tooltip: "<#e8dfd2>Управлять территориями и участками.</#e8dfd2>"
   team:
     label: "<#ffffff>Команды JustTeams ›</#ffffff>"
     tooltip: "<#e8dfd2>Открыть общее меню команд.</#e8dfd2>"
