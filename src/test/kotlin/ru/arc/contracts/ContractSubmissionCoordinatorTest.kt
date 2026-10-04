@@ -43,6 +43,27 @@ class ContractSubmissionCoordinatorTest : StringSpec({
         }
     }
 
+    "explicit staged food is journalled before removal and paid once without scanning native inventory" {
+        runTest {
+            val food = definition.copy(group = "food_orders", itemKey = "arc:any_raw_fish")
+            val events = mutableListOf<String>()
+            val persistence = FakePersistence(food, events)
+            val inventory = object : ContractInventoryGateway {
+                override suspend fun prepare(playerId: String, itemKey: String, quantity: Int): PreparedContractInventory? =
+                    error("Explicit desk input must not scan native inventory")
+            }
+            val payment = FakePayment(0L, ContractPaymentEvidence(true, 2_000L), events)
+            val offered = FakePreparedInventory(food.itemKey, 8, events)
+            val result = ContractSubmissionCoordinator(persistence, inventory, payment, tickingClock())
+                .submit(food, "staged", "player-1", 8, offeredInventory = offered)
+            (result is ContractSubmissionOutcome.Committed) shouldBe true
+            payment.depositCalls shouldBe 1
+            (events.indexOf("journal:item_removal_started") < events.indexOf("inventory:remove")) shouldBe true
+            (events.indexOf("journal:items_escrowed") < events.indexOf("payment:deposit")) shouldBe true
+            persistence.state.acceptedQuantity shouldBe 8L
+        }
+    }
+
     "rejects stale or changed GUI quotes before touching inventory or payment" {
         runTest {
             val longWindow = definition.copy(windowEndsAt = 100_000L)

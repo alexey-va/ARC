@@ -1,0 +1,129 @@
+package ru.arc.contracts
+
+import org.bukkit.NamespacedKey
+import org.bukkit.entity.Player
+import org.bukkit.inventory.ItemStack
+import org.bukkit.persistence.PersistentDataType
+import ru.arc.paper.menu.PaperCloudStorage
+import ru.arc.paper.playerstate.NativePaperPlayerDataPersistence
+import ru.arc.paper.playerstate.PaperPlayerDataPersistence
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.DataInputStream
+import java.io.DataOutputStream
+
+/** Offered items and native inventory live in the same player-data save. */
+internal class ContractDeskStorage(
+    private val player: Player,
+    private val group: String,
+    private val accepts: (ItemStack) -> Boolean,
+    private val persistence: PaperPlayerDataPersistence = NativePaperPlayerDataPersistence,
+) : PaperCloudStorage {
+    private val key = NamespacedKey("arc", "contract_desk_$group")
+    var pending = false
+    private var dirty = false
+
+    override fun snapshot(): List<ItemStack?> = player.persistentDataContainer.get(key, PersistentDataType.BYTE_ARRAY)
+        ?.let(::decodeContractDeskItems) ?: List(9) { null }
+
+    override fun compareAndSet(expected: List<ItemStack?>, replacement: List<ItemStack?>): Boolean {
+        if (pending || !player.isOnline || replacement.any { item -> item != null &&
+                expected.none { it?.isSimilar(item) == true } && !accepts(item) }) return false
+        return replace(expected, replacement)
+    }
+
+    private fun replace(expected: List<ItemStack?>, replacement: List<ItemStack?>): Boolean {
+        if (snapshot() != expected) return false
+        require(replacement.size == 9)
+        if (replacement.all { it == null }) player.persistentDataContainer.remove(key)
+        else player.persistentDataContainer.set(key, PersistentDataType.BYTE_ARRAY, encodeContractDeskItems(replacement))
+        dirty = true
+        return true
+    }
+
+    /** Called after the cloud chest has synchronously updated native slots/cursor. */
+    fun persistTransfer() {
+        if (!dirty) return
+        persistence.persist(player)
+        dirty = false
+    }
+
+    fun returnItems() {
+        if (pending) return
+        val before = snapshot()
+        if (before.all { it == null }) return
+        val remaining = before.map { item -> item?.let { player.inventory.addItem(it.clone()).values.firstOrNull() } }
+        check(replace(before, remaining))
+        persistTransfer()
+    }
+
+    fun prepare(itemKey: String, quantity: Int): PreparedContractInventory? {
+        if (!pending || !ContractOriginGate.canSubmit(player, group)) return null
+        val material = PaperContractItems.material(itemKey) ?: return null
+        val before = snapshot()
+        val after = before.map { it?.clone() }.toMutableList()
+        val payloads = mutableListOf<EscrowedItemPayload>()
+        var left = quantity
+        before.forEachIndexed { slot, item ->
+            if (left == 0 || item == null || !PaperContractItems.isPlainExact(item, material, itemKey)) return@forEachIndexed
+            val take = minOf(left, item.amount)
+            payloads += PaperContractItemPayloadCodec.captureVerified(itemKey, item.clone().also { it.amount = take })
+            after[slot] = (item.amount - take).takeIf { it > 0 }?.let { amount -> item.clone().also { it.amount = amount } }
+            left -= take
+        }
+        if (quantity <= 0 || left != 0) return null
+        return object : PreparedContractInventory {
+            override val payloads = payloads.toList()
+            private var removed = false
+            override suspend fun removeExact(canRemove: () -> Boolean): ContractInventoryMutation = onBukkitMain {
+                when {
+                    removed -> ContractInventoryMutation.Ambiguous
+                    !player.isOnline || !pending || !ContractOriginGate.canSubmit(player, group) ->
+                        ContractInventoryMutation.NotPerformed("desk_unavailable")
+                    !canRemove() -> ContractInventoryMutation.NotPerformed("submission_expired")
+                    !replace(before, after) -> ContractInventoryMutation.NotPerformed("slot_changed")
+                    else -> try {
+                        persistTransfer()
+                        removed = true
+                        ContractInventoryMutation.Confirmed
+                    } catch (_: Throwable) { ContractInventoryMutation.Ambiguous }
+                }
+            }
+            override suspend fun restoreExact(): ContractInventoryMutation = onBukkitMain {
+                if (!player.isOnline) return@onBukkitMain ContractInventoryMutation.NotPerformed("player_offline")
+                if (!removed) return@onBukkitMain if (snapshot() == before) ContractInventoryMutation.Confirmed
+                    else ContractInventoryMutation.NotPerformed("escrow_not_removed")
+                if (!replace(after, before)) return@onBukkitMain ContractInventoryMutation.NotPerformed("refund_slot_changed")
+                try {
+                    persistTransfer()
+                    removed = false
+                    ContractInventoryMutation.Confirmed
+                } catch (_: Throwable) { ContractInventoryMutation.Ambiguous }
+            }
+        }
+    }
+}
+
+internal fun encodeContractDeskItems(items: List<ItemStack?>): ByteArray {
+    require(items.size == 9)
+    return ByteArrayOutputStream().also { bytes -> DataOutputStream(bytes).use { out ->
+        items.forEach { item ->
+            val payload = item?.serializeAsBytes()
+            out.writeInt(payload?.size ?: -1)
+            if (payload != null) out.write(payload)
+        }
+    } }.toByteArray()
+}
+
+internal fun decodeContractDeskItems(bytes: ByteArray): List<ItemStack?> = DataInputStream(ByteArrayInputStream(bytes)).use { input ->
+    require(bytes.size <= 256 * 1024)
+    val items = List(9) {
+        val size = input.readInt()
+        if (size == -1) null else {
+            require(size in 1..65536 && size <= input.available())
+            ItemStack.deserializeBytes(input.readNBytes(size))
+        }
+    }
+    require(input.available() == 0)
+    items
+}

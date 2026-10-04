@@ -20,6 +20,7 @@ class ContractSelectionRuntime(
     private val leader: () -> Boolean,
     private val records: () -> List<ResourceContractRecord>,
     private val reservedStateIds: () -> Set<String>,
+    private val enableDynamicPricing: suspend (ContractSelectionPlan, List<ResourceContractDefinition>) -> ContractSelectionPlan,
 ) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val repository: CachedRepository<ContractSelectionPlan> = try { redisRepo(
@@ -33,7 +34,7 @@ class ContractSelectionRuntime(
             repository.markDirty(plan)
             repository.saveDirty().getOrThrow()
         }
-    })
+    }, enableDynamicPricing)
     private var task: ScheduledTask? = null
     @Volatile private var unavailable = false
 

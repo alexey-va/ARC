@@ -1,0 +1,101 @@
+package ru.arc.contracts
+
+import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.shouldBe
+import io.mockk.every
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
+import kotlinx.coroutines.test.runTest
+import org.bukkit.Material
+import org.bukkit.inventory.ItemStack
+import ru.arc.paper.playerstate.PaperPlayerDataPersistence
+import ru.arc.paper.testing.MockBukkitTestRuntime
+
+class ContractDeskStorageTest : StringSpec({
+    "staging persists with native slots, survives reopening and returns exact species on close" {
+        MockBukkitTestRuntime.open().use { runtime ->
+            val player = runtime.server.addPlayer()
+            val saved = mutableListOf<Pair<Int, Int>>()
+            lateinit var storage: ContractDeskStorage
+            storage = ContractDeskStorage(player, "food_orders", { it.type == Material.COD || it.type == Material.SALMON },
+                PaperPlayerDataPersistence { saved += player.inventory.storageContents.filterNotNull().sumOf { it.amount } to
+                    storage.snapshot().filterNotNull().sumOf { it.amount } })
+            player.inventory.setItem(0, ItemStack(Material.COD, 8))
+            val before = storage.snapshot()
+            val offered = before.toMutableList().also { it[2] = player.inventory.getItem(0)?.clone() }
+            storage.compareAndSet(before, offered) shouldBe true
+            saved.size shouldBe 0 // The chest updates native inventory before the shared save.
+            player.inventory.setItem(0, null)
+            storage.persistTransfer()
+            saved shouldBe listOf(0 to 8)
+            storage.compareAndSet(before, offered) shouldBe false
+            storage.compareAndSet(offered, offered.toMutableList().also { it[3] = ItemStack(Material.DIAMOND) }) shouldBe false
+            val reopened = ContractDeskStorage(player, "food_orders", { true }, PaperPlayerDataPersistence {})
+            reopened.snapshot() shouldBe offered
+            reopened.returnItems()
+            reopened.snapshot() shouldBe List(9) { null }
+            player.inventory.storageContents.filterNotNull() shouldBe listOf(ItemStack(Material.COD, 8))
+        }
+    }
+    "confirmed sale removes only staged items and refund is exact durable CAS with the final NPC gate" {
+        MockBukkitTestRuntime.open().use { runtime -> runTest {
+            val player = runtime.server.addPlayer()
+            player.inventory.setItem(0, ItemStack(Material.PUFFERFISH, 64))
+            val storage = ContractDeskStorage(player, "food_orders", { true }, PaperPlayerDataPersistence {})
+            val offered = storage.snapshot().toMutableList().also {
+                it[0] = ItemStack(Material.COD, 3); it[1] = ItemStack(Material.SALMON, 4)
+            }
+            storage.compareAndSet(storage.snapshot(), offered) shouldBe true
+            mockkObject(ContractOriginGate)
+            try {
+                every { ContractOriginGate.canSubmit(player, "food_orders") } returns true
+                storage.prepare(PaperContractItems.ANY_RAW_FISH, 5) shouldBe null
+                storage.pending = true
+                storage.compareAndSet(offered, List(9) { null }) shouldBe false
+                val prepared = storage.prepare(PaperContractItems.ANY_RAW_FISH, 5)!!
+                prepared.payloads.map { it.quantity } shouldBe listOf(3, 2)
+                prepared.removeExact() shouldBe ContractInventoryMutation.Confirmed
+                storage.snapshot()[0] shouldBe null
+                storage.snapshot()[1] shouldBe ItemStack(Material.SALMON, 2)
+                player.inventory.getItem(0) shouldBe ItemStack(Material.PUFFERFISH, 64)
+                prepared.restoreExact() shouldBe ContractInventoryMutation.Confirmed
+                storage.snapshot() shouldBe offered
+                val next = storage.prepare(PaperContractItems.ANY_RAW_FISH, 5)!!
+                every { ContractOriginGate.canSubmit(player, "food_orders") } returns false
+                next.removeExact() shouldBe ContractInventoryMutation.NotPerformed("desk_unavailable")
+                storage.snapshot() shouldBe offered
+            } finally { unmockkObject(ContractOriginGate) }
+        } }
+    }
+    "full native inventory keeps unsold input safely in the desk and a failed save cannot acknowledge escrow" {
+        MockBukkitTestRuntime.open().use { runtime -> runTest {
+            val player = runtime.server.addPlayer()
+            // MockBukkit's addItem also scans equipment cells; saturate its
+            // complete inventory to model Paper's full storageContents.
+            for (slot in 0 until player.inventory.size) player.inventory.setItem(slot, ItemStack(Material.STONE, 64))
+            var failSave = false
+            val storage = ContractDeskStorage(player, "forge_orders", { true }, PaperPlayerDataPersistence { if (failSave) error("save failed") })
+            val offered = storage.snapshot().toMutableList().also { it[0] = ItemStack(Material.RAW_IRON, 5) }
+            storage.compareAndSet(storage.snapshot(), offered) shouldBe true
+            storage.returnItems()
+            storage.snapshot() shouldBe offered
+            mockkObject(ContractOriginGate)
+            try {
+                every { ContractOriginGate.canSubmit(player, "forge_orders") } returns true
+                storage.pending = true
+                val prepared = storage.prepare("minecraft:raw_iron", 5)!!
+                failSave = true
+                prepared.removeExact() shouldBe ContractInventoryMutation.Ambiguous
+                storage.snapshot().all { it == null } shouldBe true
+                prepared.removeExact() shouldBe ContractInventoryMutation.NotPerformed("slot_changed")
+            } finally { unmockkObject(ContractOriginGate) }
+        } }
+    }
+    "market growth is shown separately from rank and rounds consistently for cheap items" {
+        contractPriceGrowth(120, 150) shouldBe "+25%"
+        contractPriceGrowth(120, 126) shouldBe "+5%"
+        contractPriceGrowth(120, 60) shouldBe "-50%"
+        contractPriceGrowth(10_000, 12_500) shouldBe "+25%"
+        contractPriceGrowth(20, 20) shouldBe "+0%"
+    }
+})

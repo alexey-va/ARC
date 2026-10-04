@@ -211,9 +211,12 @@ object ContractsManager {
                 config = { requireNotNull(configRef.get()) },
                 leader = { isLeader() },
                 records = {
-                    val snapshots = newJournalRepo.allNow().filter { it.definitionSnapshot != null }
+                    val missing = newRepo.allNow().filter { it.definitionSnapshot == null }.map { it.stateId }.toSet()
+                    val snapshots = newJournalRepo.allNow().filter { it.definitionSnapshot != null &&
+                        ResourceContractRecord.stateId(it.contractId, it.contractWindowStartsAt) in missing }
                         .groupBy { ResourceContractRecord.stateId(it.contractId, it.contractWindowStartsAt) }
-                        .mapValues { (_, journals) -> journals.map { requireNotNull(it.definitionSnapshot) }.distinct().single() }
+                        .mapValues { (_, journals) -> ContractDynamicPricingUpgrade.legacyJournalSnapshot(
+                            journals.map { requireNotNull(it.definitionSnapshot) }) }
                     newRepo.allNow().map { record ->
                         if (record.definitionSnapshot != null) record
                         else record.copy(definitionSnapshot = snapshots[record.stateId])
@@ -222,6 +225,16 @@ object ContractsManager {
                 reservedStateIds = {
                     newJournalRepo.allNow().filter { it.quotaReservation() != null }
                         .map { ResourceContractRecord.stateId(it.contractId, it.contractWindowStartsAt) }.toSet()
+                },
+                enableDynamicPricing = { plan, candidates ->
+                    submissionMutex.withLock {
+                        val blocked = newJournalRepo.allNow().filterNot { it.isTerminal() }
+                            .map { ResourceContractRecord.stateId(it.contractId, it.contractWindowStartsAt) }.toSet()
+                        val upgrade = ContractDynamicPricingUpgrade.plan(plan, candidates, newRepo.allNow(), blocked)
+                        upgrade.records.forEach(newRepo::markDirty)
+                        if (upgrade.records.isNotEmpty()) newRepo.saveDirty().getOrThrow()
+                        upgrade.plan
+                    }
                 },
             )
             selectionRuntime = newSelection
@@ -554,11 +567,21 @@ object ContractsManager {
         if (!seasonResourceStageOpen(definition)) return null
         val state = repo?.getNow(ResourceContractRecord.stateId(definition.id, definition.windowStartsAt))?.state
             ?: ResourceContractState.empty(definition)
-        val plan = ResourceContractEngine.plan(
+        val reservations = activeReservations(definition, state)
+        val policy = ContractRankPolicyResolver.resolve(player)
+        var plan = ResourceContractEngine.plan(
             definition, state.validatedAgainst(definition), "quote-${UUID.randomUUID()}", player.uniqueId.toString(),
-            requestedQuantity, now, activeReservations(definition, state), ContractRankPolicyResolver.resolve(player),
+            requestedQuantity, now, reservations, policy,
         ) as? ContractSubmissionPlan.Accepted ?: return null
-        if (plan.payoutMinor > remainingWeeklyBudget(now)) return null
+        val networkBudget = remainingWeeklyBudget(now)
+        if (plan.payoutMinor > networkBudget) {
+            val quantity = ContractMarketPricing.affordableQuantity(definition,
+                state.acceptedQuantity + reservations.sumOf { it.quantity }, plan.acceptedQuantity, networkBudget, now, policy)
+            if (quantity < definition.minSubmissionQuantity) return null
+            plan = ResourceContractEngine.plan(definition, state.validatedAgainst(definition),
+                "quote-${UUID.randomUUID()}", player.uniqueId.toString(), quantity.toInt(), now, reservations, policy)
+                as? ContractSubmissionPlan.Accepted ?: return null
+        }
         return ContractSubmissionQuote(
             definition.id, definition.windowStartsAt, plan.playerId, plan.acceptedQuantity.toInt(),
             plan.payoutMinor, plan.expectedRevision, now,
@@ -589,6 +612,7 @@ object ContractsManager {
         player: Player,
         quote: ContractSubmissionQuote,
         inventorySlots: Set<Int>? = null,
+        offeredInventory: PreparedContractInventory? = null,
     ): CompletableFuture<ContractSubmissionOutcome> {
         check(Bukkit.isPrimaryThread()) { "Contract submissions must be started on the main thread" }
         val playerId = player.uniqueId
@@ -644,6 +668,7 @@ object ContractsManager {
                                     quote = quote,
                                     availableNetworkBudgetMinor = remainingWeeklyBudget(System.currentTimeMillis()),
                                     inventorySlots = inventorySlots,
+                                    offeredInventory = offeredInventory,
                                 )
                             }
                         publishResourceContractCommitted(quote.contractId, submitted)
@@ -1589,12 +1614,12 @@ object ContractsManager {
         }
 
         records.filter { it.status == ContractSubmissionJournalStatus.PAID }.forEach { paid ->
-            val definition = paid.definitionSnapshot ?:
+            val stateId = ResourceContractRecord.stateId(paid.contractId, paid.contractWindowStartsAt)
+            val current = requireNotNull(contractRepository.getNow(stateId)) { "Missing state for paid contract ${paid.contractId}" }
+            val definition = paid.definitionSnapshot ?: current.definitionSnapshot ?:
                 config.resourceOrdersAt(paid.contractWindowStartsAt).firstOrNull {
                     it.id == paid.contractId && it.windowStartsAt == paid.contractWindowStartsAt
                 } ?: return@forEach
-            val stateId = ResourceContractRecord.stateId(definition.id, definition.windowStartsAt)
-            val current = requireNotNull(contractRepository.getNow(stateId)) { "Missing state for paid contract ${definition.id}" }
             val recovery =
                 ContractSubmissionRecoveryEngine.recoverPaid(
                     definition,

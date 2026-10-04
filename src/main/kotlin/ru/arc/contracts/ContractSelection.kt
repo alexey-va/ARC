@@ -106,7 +106,10 @@ interface ContractSelectionPersistence {
 }
 
 /** Publication is downstream of a confirmed durable commit, including retries of cached writes. */
-class ContractSelectionPublisher(private val persistence: ContractSelectionPersistence) {
+class ContractSelectionPublisher(
+    private val persistence: ContractSelectionPersistence,
+    private val enableDynamicPricing: suspend (ContractSelectionPlan, List<ResourceContractDefinition>) -> ContractSelectionPlan = { plan, _ -> plan },
+) {
     private val published = java.util.concurrent.atomic.AtomicReference<ContractSelectionPlan?>()
 
     suspend fun refresh(
@@ -134,6 +137,7 @@ class ContractSelectionPublisher(private val persistence: ContractSelectionPersi
                 )
                 plan = additions
             }
+            plan = enableDynamicPricing(plan, candidates)
         }
         try {
             plan.validated()

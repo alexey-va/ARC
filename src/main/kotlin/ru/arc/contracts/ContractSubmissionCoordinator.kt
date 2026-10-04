@@ -140,9 +140,10 @@ class ContractSubmissionCoordinator(
         quote: ContractSubmissionQuote? = null,
         availableNetworkBudgetMinor: Long = Long.MAX_VALUE,
         inventorySlots: Set<Int>? = null,
+        offeredInventory: PreparedContractInventory? = null,
     ): ContractSubmissionOutcome {
         // Food orders accept only the native slots explicitly offered at the desk.
-        if (definition.group == "food_orders" && inventorySlots.isNullOrEmpty()) {
+        if (definition.group == "food_orders" && inventorySlots.isNullOrEmpty() && offeredInventory == null) {
             return ContractSubmissionOutcome.Rejected(SubmissionRejection.INVENTORY_UNAVAILABLE)
         }
         val records =
@@ -205,7 +206,9 @@ class ContractSubmissionCoordinator(
 
         val preparedInventory =
             try {
-                if (inventorySlots == null) {
+                if (offeredInventory != null) {
+                    offeredInventory
+                } else if (inventorySlots == null) {
                     inventory.prepare(playerId, definition.itemKey, plan.acceptedQuantity.toInt(), definition.group)
                 } else {
                     inventory.prepareFromSlots(playerId, definition.itemKey, plan.acceptedQuantity.toInt(), definition.group, inventorySlots)

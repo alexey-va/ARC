@@ -41,7 +41,7 @@ object NpcContractsGui {
     fun start() {
         shutdown()
         tasks = LifecycleTaskScope()
-        FoodContractDepositGui.start()
+        NpcContractDepositGui.start()
         val redis = ARC.redisManager ?: return
         tracking = ContractTrackingRuntime(
             ARC.instance, RedisContractTrackingStore(redis, Common.gson),
@@ -65,7 +65,7 @@ object NpcContractsGui {
     }
 
     fun shutdown() {
-        FoodContractDepositGui.shutdown()
+        NpcContractDepositGui.shutdown()
         tasks?.close()
         tasks = null
         tracking?.close()
@@ -144,8 +144,8 @@ object NpcContractsGui {
     }
 
     private fun showList(player: Player, group: String, requestedPage: Int) {
-        if (group == FoodContractDepositGui.GROUP && ContractOriginGate.canSubmit(player, group)) {
-            FoodContractDepositGui.open(player)
+        if (ContractOriginGate.canSubmit(player, group)) {
+            NpcContractDepositGui.open(player, group)
             return
         }
         val now = System.currentTimeMillis()
@@ -264,8 +264,8 @@ object NpcContractsGui {
     ) {
         val view = currentView(player, contractId) ?: return showList(player, browseGroup, 0)
         val group = view.contract.group
-        if (group == FoodContractDepositGui.GROUP && ContractOriginGate.canSubmit(player, group)) {
-            FoodContractDepositGui.open(player, contractId)
+        if (ContractOriginGate.canSubmit(player, group)) {
+            NpcContractDepositGui.open(player, group)
             return
         }
         val available = PaperContractItems.countPlain(player, view.contract.itemKey)
