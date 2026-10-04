@@ -13,6 +13,9 @@ class PAPIHookTest :
             it("advertises the complete public placeholder contract") {
                 PAPIHook().getPlaceholders().shouldContainExactly(
                     "%arc_players%",
+                    "%arc_tablist_ready%",
+                    "%arc_tablist_header%",
+                    "%arc_tablist_footer%",
                     "%arc_jobsboosts_has_<boost_name>%",
                     "%arc_rubycount%",
                     "%arc_guildrank%",

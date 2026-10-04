@@ -29,7 +29,7 @@ internal fun sidebarSkillChoices(): List<SidebarSkillChoice> =
         .filter { it.isEnabled }.map { SidebarSkillChoice(it.id.toString(), PlainTextComponentSerializer.plainText().serialize(LegacyComponentSerializer.legacySection().deserialize(sidebarSkillName(it).replace('&', '§')))) }.sortedBy { it.id }
 
 /** Reads only loaded online-player state on the main thread, once per selected section. */
-internal fun sidebarPlayerData(player: Player, section: SidebarSection): Map<String, String> = when (section) {
+internal fun sidebarPlayerData(player: Player, section: SidebarSection, skillsMetaKey: String = SIDEBAR_SKILLS_META_KEY): Map<String, String> = when (section) {
     SidebarSection.PROFESSION -> if (!Bukkit.getPluginManager().isPluginEnabled("EcoJobs")) emptyMap() else {
         player.activeJobs.sortedWith(compareByDescending<Job> { player.getJobLevel(it) }.thenBy { it.id })
             .take(2).mapIndexed { index, job ->
@@ -42,7 +42,7 @@ internal fun sidebarPlayerData(player: Player, section: SidebarSection): Map<Str
         val api = AuraSkillsApi.get()
         val user = api.getUser(player.uniqueId)
         val available = api.globalRegistry.skills.filter { it.isEnabled }
-        val selected = selectedSidebarSkills(HookRegistry.luckPermsHook?.getCachedMeta(player.uniqueId, SIDEBAR_SKILLS_META_KEY))
+        val selected = selectedSidebarSkills(HookRegistry.luckPermsHook?.getCachedMeta(player.uniqueId, skillsMetaKey))
         val skills = if (selected.isEmpty()) available.sortedWith(compareByDescending<dev.aurelium.auraskills.api.skill.Skill> { user.getSkillLevel(it) }.thenBy { it.id.toString() }).take(2)
             else selected.mapNotNull { id -> available.firstOrNull { it.id.toString() == id } }
         skills.mapIndexed { index, skill ->

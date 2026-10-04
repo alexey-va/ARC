@@ -21,6 +21,7 @@ import ru.arc.paper.menu.PaperDialogScreen
 import ru.arc.iteminfo.ItemInfoPreferences
 import ru.arc.sidebar.SidebarSection
 import ru.arc.sidebar.sidebarSkillChoices
+import ru.arc.tablist.TablistSection
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -128,7 +129,7 @@ internal class HelpCenterSettingsController(
                 "shortcut" -> openOptions(player, entry.id, MenuShortcutAction.entries.map { "shortcut-${it.id}" }, section)
                 "escape" -> openOptions(player, entry.id, listOf("escape-close", "escape-back"), section)
                 "scoreboard" -> openScoreboard(player, section)
-                "tablist" -> openOptions(player, entry.id, (1..20).map { "${entry.id}-$it" } + "${entry.id}-off", section)
+                "tablist" -> openTablist(player, section)
                 "item-info" -> openItemInfo(player, section)
                 "lands" -> openOptions(player, entry.id, listOf("lands-show", "lands-hide"), section)
                 "portal-style" -> openOptions(player, entry.id, HelpCenterLegacySettings.PORTAL_STYLES.map { "portal-style-$it" }, section)
@@ -212,6 +213,52 @@ internal class HelpCenterSettingsController(
                 }
             },
             exitButton = button("back", text("settings-scoreboard-skills-back-label")) { openScoreboard(player, section) }, columns = 2,
+        ))
+    }
+
+    private fun openTablist(player: Player, section: Section) {
+        navigation.visit(player) { openTablist(player, section) }
+        fun toggleLabel(key: String, enabled: Boolean): Component = text(
+            if (enabled) "settings-scoreboard-selected" else "settings-scoreboard-unselected",
+            "label" to text(key),
+        )
+        showDialog(player, PaperDialogScreen(
+            id = "help.settings.tablist", title = text("settings-options-tablist-title"),
+            body = listOf(PaperDialogBody(text("settings-options-tablist-body"), 468)),
+            buttons = listOf(button(
+                "tablist_toggle", toggleLabel("settings-tablist-visible-label", legacy.tablistEnabled(player)),
+                text("settings-tablist-visible-tooltip"),
+            ) { apply(player, "tablist-toggle") { openTablist(player, section) } }) + TablistSection.entries.map { part ->
+                button(
+                    "tablist_section_${part.id}",
+                    toggleLabel("settings-tablist-${part.id}-label", legacy.tablistSectionEnabled(player, part)),
+                    text("settings-tablist-${part.id}-tooltip"),
+                ) { apply(player, "tablist-section-${part.id}") { openTablist(player, section) } }
+            } + button("tablist_skills_choose", text("settings-tablist-skills-choose-label"), text("settings-tablist-skills-choose-tooltip")) {
+                openTablistSkills(player, section)
+            },
+            exitButton = button("back", text("settings-${section.key}-back-label")) { openSection(player, section) }, columns = 2,
+        ))
+    }
+
+    private fun openTablistSkills(player: Player, section: Section) {
+        navigation.visit(player) { openTablistSkills(player, section) }
+        val selected = legacy.tablistSkills(player)
+        val choices = sidebarSkillChoices()
+        showDialog(player, PaperDialogScreen(
+            id = "help.settings.tablist.skills", title = text("settings-tablist-skills-title"),
+            body = listOf(PaperDialogBody(text(if (choices.isEmpty()) "settings-tablist-skills-unavailable" else "settings-tablist-skills-choose-body"), 468)),
+            buttons = listOf(button("tablist_skills_auto", text("settings-tablist-skills-auto-label")) {
+                apply(player, "tablist-skills-auto") { openTablistSkills(player, section) }
+            }) + choices.mapIndexed { index, skill ->
+                button("tablist_skill_$index", text(
+                    if (skill.id in selected) "settings-scoreboard-selected" else "settings-scoreboard-unselected",
+                    "label" to Component.text(skill.name),
+                )) {
+                    apply(player, "tablist-skill:${skill.id}") { openTablistSkills(player, section) }
+                }
+            },
+            exitButton = button("back", text("settings-tablist-skills-back-label")) { openTablist(player, section) }, columns = 2,
         ))
     }
 

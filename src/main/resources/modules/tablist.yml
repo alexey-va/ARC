@@ -1,0 +1,69 @@
+# TAB owns the player table. ARC publishes personal multiline header/footer via TAB-Bridge.
+# Settings are separate from the sidebar; new optional sections default off.
+# This is a visual budget, not a protocol limit. Whole sections return when space is available.
+maximum-rows: 22
+brand:
+  - ''
+  - '&#FFFFFF      󰼑      &r'
+  - ''
+  - ''
+sections:
+  profile:
+    - '&#FFFFFF%player% &#7C8596• &#53CFE0%arcranks_rank_name%'
+  balance:
+    - '&#F6C453%rediseco_bal_short_vault% &#FFFFFF💰 &#7C8596• &#B58CFF%rediseco_bal_short_tokens% &#FFFFFF'
+  location:
+    - '&#F4F6FA%arc_worldname%'
+    - '@survival ?&#9BD48D%lands_land_name_plain_here%'
+  coordinates:
+    - '&#F4F6FAX &#F6C453%player_x% &#F4F6FAY &#F6C453%player_y% &#F4F6FAZ &#F6C453%player_z% &#7C8596• &#F4F6FA%player_direction%'
+  rank-progress:
+    - '&#F6C453Следующий ранг'
+    - '?&#F4F6FA%arcranks_next_rank% &#7C8596• &#9BD48D%arcranks_next_rank_progress_compact%'
+  quests:
+    - '?&#F6C453%arcranks_quest_board_header%'
+    - '?&#F4F6FA%arcranks_quest_board_1%'
+    - '?&#F4F6FA%arcranks_quest_board_2%'
+    - '?&#F4F6FA%arcranks_quest_board_3%'
+  activity:
+    - '?&#F6C453%arc_sidebar_activity_name%'
+    - '?&#F4F6FAСундуки: &#9BD48D%arc_sidebar_activity_progress%'
+  profession:
+    - '&#F6C453Профессии'
+    - '?&#F4F6FA%arc_sidebar_profession_1%'
+    - '?&#F4F6FA%arc_sidebar_profession_2%'
+  skills:
+    - '&#F6C453Навыки'
+    - '?&#F4F6FA%arc_sidebar_skill_1%'
+    - '?&#F4F6FA%arc_sidebar_skill_2%'
+  online:
+    - '&#F4F6FAОнлайн: &#63D18E%online% &#7C8596• &#F4F6FAЗдесь: &#63D18E%serveronline%'
+  technical:
+    - '<font:arc:small_caps><#F6C453>Пинг</#F6C453> <#63D18E>%player_ping% мс</#63D18E>  <#F6C453>Tps</#F6C453> <#63D18E>%server_tps_5_colored%</#63D18E></font>'
+slimefun:
+  sections:
+    profile:
+      - '&#FFFFFF%player% &#7C8596• &#85DFC4SkyBlock · Slimefun'
+    balance:
+      - '&#F4F6FAСлаймы: &#9BD48D%rediseco_bal_formatted_shorthand_slimes% &#FFFFFF'
+    location:
+      - '&#F6C453Остров'
+      - '?&#F4F6FA%superior_island_name% &#7C8596• &#F4F6FAУровень: &#9BD48D%superior_island_level_format%'
+      - '&#F4F6FA%slimefun_place% &#7C8596• &#F4F6FA/skyblock'
+    coordinates:
+      - '&#F4F6FAX &#F6C453%player_x% &#F4F6FAY &#F6C453%player_y% &#F4F6FAZ &#F6C453%player_z% &#7C8596• &#F4F6FA%player_direction%'
+    activity:
+      - '?&#F6C453%arc_sidebar_activity_name%'
+      - '?&#F4F6FAСундуки: &#9BD48D%arc_sidebar_activity_progress%'
+    profession:
+      - '&#F6C453Профессии'
+      - '?&#F4F6FA%arc_sidebar_profession_1%'
+      - '?&#F4F6FA%arc_sidebar_profession_2%'
+    skills:
+      - '&#F6C453Навыки'
+      - '?&#F4F6FA%arc_sidebar_skill_1%'
+      - '?&#F4F6FA%arc_sidebar_skill_2%'
+    online:
+      - '&#F4F6FAОнлайн: &#63D18E%online% &#7C8596• &#F4F6FAЗдесь: &#63D18E%serveronline%'
+    technical:
+      - '<font:arc:small_caps><#F6C453>Пинг</#F6C453> <#63D18E>%player_ping% мс</#63D18E>  <#F6C453>Tps</#F6C453> <#63D18E>%server_tps_5_colored%</#63D18E></font>'
