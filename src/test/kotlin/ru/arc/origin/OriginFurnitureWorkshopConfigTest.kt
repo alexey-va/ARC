@@ -3,6 +3,7 @@ package ru.arc.origin
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.doubles.plusOrMinus
 import ru.arc.config.ConfigManager
 import ru.arc.paper.testing.MockBukkitTestRuntime
 import java.nio.file.Files
@@ -15,6 +16,16 @@ class OriginFurnitureWorkshopConfigTest :
         afterEach {
             ConfigManager.clear()
             paper.close()
+        }
+
+        "machine feedback meets the contact pose for fractional tick durations" {
+            listOf(10L, 16L, 20L, 24L, 28L).forEach { gap ->
+                workshopMachineStrokeProgress(0L, gap) shouldBe 0.0
+                workshopMachineStrokeProgress(workshopMachineContactTick(gap), gap) shouldBe (0.65 plusOrMinus 1e-12)
+                workshopMachineStrokeProgress(gap, gap) shouldBe 1.0
+                (0L..gap).map { workshopMachineStrokeProgress(it, gap) }
+                    .zipWithNext().all { (before, after) -> before <= after } shouldBe true
+            }
         }
 
         "negative endpoint search radius rejects an operator override before runtime replacement" {
@@ -35,20 +46,39 @@ class OriginFurnitureWorkshopConfigTest :
             }
         }
 
-        "bundled workshop config keeps the three existing actors on safe centered routes" {
+        "bundled workshop config keeps four workers on safe centered routes" {
             val dataPath = Files.createTempDirectory("origin-furniture-workshop-test")
             try {
                 val settings = OriginFurnitureWorkshopSettings.load(dataPath)
 
                 settings.enabled shouldBe false
                 settings.world shouldBe "rc_origin_spawn"
-                settings.workers.map { it.role.npcId } shouldBe listOf(430, 458, 459)
-                settings.workers.map { it.productId } shouldBe listOf(
+                settings.workers.map { it.role.npcId } shouldBe listOf(430, 458, 459, 460)
+                settings.workers.map { it.tableId } shouldBe listOf("carpenter", "upholsterer", "assembler", "finisher")
+                settings.workers.last().deliverOutput shouldBe false
+                settings.workers.flatMap { it.beats }.filter { it.mechanism != OriginWorkshopMechanism.NONE }
+                    .associate { it.phase to it.mechanism } shouldBe mapOf(
+                        "saw" to OriginWorkshopMechanism.SAW,
+                        "stretch" to OriginWorkshopMechanism.PRESS,
+                        "brace" to OriginWorkshopMechanism.VISE,
+                        "tap" to OriginWorkshopMechanism.ANVIL,
+                        "coat" to OriginWorkshopMechanism.FINISH,
+                    )
+                val carpenter = settings.workers.first()
+                val unsafeBeats = carpenter.beats.map { beat ->
+                    if (beat.mechanism == OriginWorkshopMechanism.SAW) {
+                        beat.copy(approach = beat.approach!!.copy(x = -100.5))
+                    } else beat
+                }
+                shouldThrow<IllegalArgumentException> {
+                    settings.copy(workers = listOf(carpenter.copy(beats = unsafeBeats)) + settings.workers.drop(1))
+                }
+                settings.workers.filter { it.deliverOutput }.map { it.productId } shouldBe listOf(
                     "furnituresplus:white_wooden_chair",
                     "furnituresplus:red_wooden_sofa_single",
                     "furnituresplus:white_wooden_diningtable",
                 )
-                settings.workers.map { Triple(it.output.x, it.output.y, it.output.z) } shouldBe listOf(
+                settings.workers.filter { it.deliverOutput }.map { Triple(it.output.x, it.output.y, it.output.z) } shouldBe listOf(
                     Triple(-52.0, 71.18, -51.1),
                     Triple(-49.5, 71.18, -51.1),
                     Triple(-46.5, 71.18, -51.1),
@@ -60,6 +90,12 @@ class OriginFurnitureWorkshopConfigTest :
                         else -> 2
                     }
                     worker.beats.isNotEmpty() shouldBe true
+                    worker.beats.mapNotNull { it.approach }.forEach { approach ->
+                        isWorkshopCellCenter(approach.x) shouldBe true
+                        isWorkshopCellCenter(approach.z) shouldBe true
+                        floor(approach.y).toInt() shouldBe settings.routeProfile.floorY
+                        settings.routeProfile.allows(approach.cell()) shouldBe true
+                    }
                     listOf(
                         worker.home to (worker.pickupRoute to worker.pickup),
                         worker.pickup to (worker.workReturnRoute to worker.workApproach),

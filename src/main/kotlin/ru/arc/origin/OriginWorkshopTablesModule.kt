@@ -71,6 +71,7 @@ internal data class OriginWorkshopTablesSettings(
     val dimensions: OriginWorkshopTableDimensions,
     val tables: List<OriginWorkshopTableDefinition>,
     val warehouse: OriginWorkshopWarehouseAnchor?,
+    val machineTuning: OriginWorkshopMachineTuning,
 ) {
     companion object {
         private const val RESOURCE = "origin-workshop-tables.yml"
@@ -116,7 +117,14 @@ internal data class OriginWorkshopTablesSettings(
                     source.doubleOrNull("$warehousePath.z") ?: error("$warehousePath.z is required"),
                 )
             } else null
-            return OriginWorkshopTablesSettings(enabled, world, dimensions, tables, warehouse)
+            return OriginWorkshopTablesSettings(
+                enabled = enabled,
+                world = world,
+                dimensions = dimensions,
+                tables = tables,
+                warehouse = warehouse,
+                machineTuning = OriginWorkshopMachineTuning.load(source),
+            )
         }
 
         private const val MAX_TABLES = 4
@@ -160,6 +168,7 @@ internal fun originWorkshopTablePieces(
     role: OriginWorkshopTableRole,
     yaw: Int,
     dimensions: OriginWorkshopTableDimensions = OriginWorkshopTableDimensions.DEFAULT,
+    tuning: OriginWorkshopMachineTuning = OriginWorkshopMachineTuning(),
 ): List<OriginWorkshopTablePiece> {
     require(yaw in setOf(0, 90, 180, 270)) { "workshop table yaw must be 0, 90, 180 or 270" }
     val topThickness = 0.18
@@ -238,14 +247,22 @@ internal fun originWorkshopTablePieces(
 
     val machine = when (role) {
         OriginWorkshopTableRole.CARPENTER -> buildList {
-            add(blockPiece("carpenter-table-saw", Material.STONECUTTER, -1.15, dimensions.height + 0.37, -0.12,
-                0.92, 0.74, 0.92))
-            add(blockPiece("carpenter-board-feed", Material.SPRUCE_PLANKS, -1.15, dimensions.height + 0.035, -0.80,
-                0.90, 0.06, 0.44))
-            add(blockPiece("carpenter-rip-fence", Material.DARK_OAK_PLANKS, -0.78, dimensions.height + 0.14, -0.80,
-                0.08, 0.15, 0.42))
-            add(blockPiece("carpenter-drive-motor", Material.BLACKSTONE, -1.15, dimensions.height + 0.17, 0.53,
-                0.56, 0.34, 0.38))
+            add(blockPiece("carpenter-table-saw", Material.STONECUTTER, tuning.sawPivotX,
+                dimensions.height - 0.36, tuning.sawPivotZ + 0.505, 0.92, 0.72, 0.92))
+            val boardZ = tuning.sawPivotZ - 0.175
+            add(blockPiece("carpenter-board-feed", Material.SPRUCE_PLANKS, tuning.sawPivotX,
+                dimensions.height + 0.08, boardZ, 2.0, 0.10, 0.44))
+            add(blockPiece("carpenter-rip-fence", Material.DARK_OAK_PLANKS, tuning.sawPivotX,
+                dimensions.height + 0.16, boardZ - 0.20, 2.0, 0.06, 0.05))
+            add(blockPiece("carpenter-feed-support-rail", Material.DARK_OAK_PLANKS, tuning.sawPivotX,
+                dimensions.height + 0.16, boardZ + 0.20, 2.0, 0.06, 0.05))
+            add(blockPiece("carpenter-drive-motor", Material.BLACKSTONE, tuning.sawPivotX,
+                dimensions.height + 0.17, tuning.sawPivotZ + 1.16, 0.56, 0.34, 0.38))
+
+            add(blockPiece("carpenter-saw-bearing-post", Material.STRIPPED_SPRUCE_LOG, tuning.sawPivotX,
+                dimensions.height + 0.31, tuning.sawPivotZ + 1.16, 0.14, 0.62, 0.14))
+            add(blockPiece("carpenter-saw-axle", Material.IRON_BLOCK, tuning.sawPivotX,
+                dimensions.height + tuning.sawPivotYOffset, tuning.sawPivotZ + 0.555, 0.09, 0.09, 1.21))
 
             // The built-in stonecutter blade sits too low to read at workshop scale, so add a
             // raised, pixel-rounded metal disk on the operator-facing side of the housing.
@@ -254,37 +271,81 @@ internal fun originWorkshopTablePieces(
                 add(blockPiece(
                     "carpenter-saw-blade-row-$index",
                     if (index == 0 || index == 4 || index == 8) Material.LIGHT_GRAY_CONCRETE else Material.IRON_BLOCK,
-                    -1.15,
-                    dimensions.height + 0.62 + (index - 4) * 0.095,
-                    -0.625,
+                    tuning.sawPivotX,
+                    dimensions.height + tuning.sawPivotYOffset + (index - 4) * 0.095,
+                    tuning.sawPivotZ,
                     width,
                     0.095,
                     0.07,
                 ))
             }
-            add(blockPiece("carpenter-saw-blade-hub", Material.POLISHED_ANDESITE, -1.15,
-                dimensions.height + 0.62, -0.675, 0.18, 0.18, 0.07))
+            add(blockPiece("carpenter-saw-blade-hub", Material.POLISHED_ANDESITE, tuning.sawPivotX,
+                dimensions.height + tuning.sawPivotYOffset, tuning.sawPivotZ - 0.05, 0.18, 0.18, 0.07))
         }
-        OriginWorkshopTableRole.UPHOLSTERER -> listOf(
-            blockPiece("upholsterer-loom", Material.LOOM, -1.15, dimensions.height + 0.36, -0.14,
-                0.68, 0.72, 0.62),
-        )
-        OriginWorkshopTableRole.ASSEMBLER -> listOf(
-            blockPiece("assembler-anvil", Material.ANVIL, -1.15, dimensions.height + 0.31, -0.14,
+        OriginWorkshopTableRole.UPHOLSTERER -> buildList {
+            add(blockPiece("upholsterer-loom", Material.LOOM, tuning.pressCenterX, dimensions.height + 0.36,
+                tuning.pressCenterZ, 0.68, 0.72, 0.62))
+            add(blockPiece("upholsterer-press-post-left", Material.STRIPPED_SPRUCE_LOG,
+                tuning.pressCenterX - 0.46, dimensions.height + 0.65, tuning.pressCenterZ, 0.12, 1.30, 0.12))
+            add(blockPiece("upholsterer-press-post-right", Material.STRIPPED_SPRUCE_LOG,
+                tuning.pressCenterX + 0.46, dimensions.height + 0.65, tuning.pressCenterZ, 0.12, 1.30, 0.12))
+            add(blockPiece("upholsterer-press-crossbeam", Material.DARK_OAK_PLANKS,
+                tuning.pressCenterX, dimensions.height + 1.30, tuning.pressCenterZ, 1.06, 0.10, 0.78))
+            add(blockPiece("upholsterer-press-platen", Material.IRON_BLOCK,
+                tuning.pressCenterX, dimensions.height + 0.90, tuning.pressCenterZ, 0.76, 0.08, 0.68))
+            add(blockPiece("upholsterer-press-ram", Material.IRON_BLOCK,
+                tuning.pressCenterX, dimensions.height + 1.095, tuning.pressCenterZ, 0.12, 0.31, 0.12))
+        }
+        OriginWorkshopTableRole.ASSEMBLER -> buildList {
+            add(blockPiece("assembler-anvil", Material.ANVIL, tuning.anvilCenterX,
+                dimensions.height + 0.31, tuning.anvilCenterZ,
                 0.76, 0.62, 0.70),
-            blockPiece("assembler-vise-bed", Material.DARK_OAK_PLANKS, 0.80, dimensions.height + 0.035, 0.24,
+            )
+            add(blockPiece("assembler-vise-bed", Material.DARK_OAK_PLANKS, tuning.viseCenterX,
+                dimensions.height + 0.035, tuning.viseCenterZ,
                 1.12, 0.06, 0.46),
-            blockPiece("assembler-vise-post-left", Material.STRIPPED_SPRUCE_LOG, 0.32, dimensions.height + 0.23, 0.24,
+            )
+            add(blockPiece("assembler-vise-post-left", Material.STRIPPED_SPRUCE_LOG, tuning.viseCenterX - 0.48,
+                dimensions.height + 0.23, tuning.viseCenterZ,
                 0.08, 0.33, 0.12),
-            blockPiece("assembler-vise-post-right", Material.STRIPPED_SPRUCE_LOG, 1.28, dimensions.height + 0.23, 0.24,
+            )
+            add(blockPiece("assembler-vise-post-right", Material.STRIPPED_SPRUCE_LOG, tuning.viseCenterX + 0.48,
+                dimensions.height + 0.23, tuning.viseCenterZ,
                 0.08, 0.33, 0.12),
-            blockPiece("assembler-vise-crossbar", Material.DARK_OAK_PLANKS, 0.80, dimensions.height + 0.435, 0.24,
+            )
+            add(blockPiece("assembler-vise-crossbar", Material.DARK_OAK_PLANKS, tuning.viseCenterX,
+                dimensions.height + 0.435, tuning.viseCenterZ,
                 0.96, 0.08, 0.12),
-            blockPiece("assembler-clamp-left", Material.IRON_BLOCK, 0.40, dimensions.height + 0.17, 0.24,
+            )
+            add(blockPiece("assembler-clamp-left", Material.IRON_BLOCK, tuning.viseCenterX - 0.40 - tuning.viseJawTravel,
+                dimensions.height + 0.17, tuning.viseCenterZ,
                 0.12, 0.20, 0.16),
-            blockPiece("assembler-clamp-right", Material.IRON_BLOCK, 1.20, dimensions.height + 0.17, 0.24,
+            )
+            add(blockPiece("assembler-clamp-right", Material.IRON_BLOCK, tuning.viseCenterX + 0.40 + tuning.viseJawTravel,
+                dimensions.height + 0.17, tuning.viseCenterZ,
                 0.12, 0.20, 0.16),
-        )
+            )
+            add(blockPiece("assembler-vise-screw", Material.IRON_BLOCK, tuning.viseCenterX - 0.57,
+                dimensions.height + 0.17, tuning.viseCenterZ, 0.30, 0.055, 0.055))
+            add(blockPiece("assembler-vise-handle", Material.IRON_BLOCK, tuning.viseCenterX - 0.70,
+                dimensions.height + 0.17, tuning.viseCenterZ, 0.055, 0.20, 0.055))
+            val pivotY = dimensions.height + tuning.hammerPivotYOffset
+            val pivotZ = tuning.hammerPivotZ
+            val restRadians = Math.toRadians(tuning.hammerRestAngleDegrees)
+            val armDy = -tuning.hammerArmLength * kotlin.math.sin(restRadians)
+            val armDz = tuning.hammerArmLength * kotlin.math.cos(restRadians)
+            add(blockPiece("assembler-trip-hammer-post", Material.STRIPPED_SPRUCE_LOG,
+                tuning.anvilCenterX, dimensions.height + 0.90, pivotZ + 0.07, 0.14, 1.00, 0.14))
+            add(blockPiece("assembler-trip-hammer-pivot", Material.IRON_BLOCK,
+                tuning.anvilCenterX, pivotY, pivotZ, 0.22, 0.22, 0.22))
+            add(blockPiece("assembler-hammer-arm", Material.IRON_BLOCK,
+                tuning.anvilCenterX, pivotY + armDy / 2.0, pivotZ + armDz / 2.0,
+                0.12, 0.12, tuning.hammerArmLength))
+            add(blockPiece("assembler-hammer-head", Material.IRON_BLOCK,
+                tuning.anvilCenterX, pivotY + armDy, pivotZ + armDz, 0.28, 0.14, 0.18))
+            add(blockPiece("assembler-anvil-workpiece", Material.IRON_BLOCK,
+                tuning.anvilCenterX, dimensions.height + 0.645, tuning.anvilCenterZ, 0.22, 0.05, 0.22))
+        }
         OriginWorkshopTableRole.FINISHER -> listOf(
             blockPiece("finisher-paint-bath", Material.WATER_CAULDRON, -1.15, dimensions.height + 0.30, -0.14,
                 0.72, 0.60, 0.72),
@@ -321,8 +382,8 @@ internal fun originWorkshopTablePieces(
             blockPiece("carpenter-board-sample", Material.SPRUCE_PLANKS,
                 0.29 * dimensions.width, dimensions.height + 0.035, -0.10 * dimensions.depth,
                 0.65, 0.06, 0.30),
-            blockPiece("carpenter-board-in-feed", Material.OAK_PLANKS, -1.15, dimensions.height + 0.09, -0.80,
-                0.38, 0.05, 0.44),
+            blockPiece("carpenter-board-in-feed", Material.OAK_PLANKS, tuning.sawFeedStartX,
+                dimensions.height + 0.19, tuning.sawPivotZ - 0.175, 0.82, 0.12, 0.35),
         )
         OriginWorkshopTableRole.UPHOLSTERER -> listOf(
             blockPiece("upholsterer-cloth-roll", Material.RED_WOOL,
@@ -334,10 +395,12 @@ internal fun originWorkshopTablePieces(
                 0.72, 0.18, 0.46),
             blockPiece("upholsterer-cushion-cover", Material.RED_WOOL, 0.96, dimensions.height + 0.265, 0.38,
                 0.70, 0.04, 0.44),
+            blockPiece("upholsterer-press-cloth", Material.RED_WOOL,
+                tuning.pressCenterX, dimensions.height + 0.74, tuning.pressCenterZ, 0.52, 0.04, 0.46),
         )
         OriginWorkshopTableRole.ASSEMBLER -> listOf(blockPiece(
             "assembler-board-sample", Material.SPRUCE_PLANKS,
-            0.80, dimensions.height + 0.10, 0.24,
+            tuning.viseCenterX, dimensions.height + 0.10, tuning.viseCenterZ,
             0.68, 0.06, 0.30,
         ))
         OriginWorkshopTableRole.FINISHER -> listOf(
@@ -413,6 +476,25 @@ internal object OriginWorkshopTablesModule : PluginModule {
 
     private var displays: PaperPacketDisplays? = null
     private val handles = mutableListOf<PacketDisplay>()
+    private val machineTables = linkedMapOf<String, WorkshopMachineTable>()
+    private val activeMachineKeys = mutableMapOf<String, Set<String>>()
+    private val activeMechanisms = mutableMapOf<String, OriginWorkshopMechanism>()
+
+    private data class WorkshopMachinePart(
+        val display: PacketDisplay,
+        val piece: OriginWorkshopTablePiece,
+        val location: Location,
+        val transformation: Transformation,
+        val visible: Boolean,
+    )
+
+    private data class WorkshopMachineTable(
+        val definition: OriginWorkshopTableDefinition,
+        val pieces: Map<String, WorkshopMachinePart>,
+        val dimensions: OriginWorkshopTableDimensions,
+        val tuning: OriginWorkshopMachineTuning,
+        val world: org.bukkit.World,
+    )
 
     override fun init() = reload()
 
@@ -440,9 +522,11 @@ internal object OriginWorkshopTablesModule : PluginModule {
             return
         }
         val created = mutableListOf<PacketDisplay>()
+        val createdMachineTables = linkedMapOf<String, WorkshopMachineTable>()
         try {
             settings.tables.forEach { table ->
-                originWorkshopTablePieces(table.role, table.yaw, settings.dimensions).forEach { piece ->
+                val machineParts = linkedMapOf<String, WorkshopMachinePart>()
+                originWorkshopTablePieces(table.role, table.yaw, settings.dimensions, settings.machineTuning).forEach { piece ->
                     if (piece.kind == OriginWorkshopTablePieceKind.BLOCK) {
                         val location = Location(
                             world,
@@ -463,6 +547,25 @@ internal object OriginWorkshopTablesModule : PluginModule {
                         val display = owner.spawnBlock(location, block)
                         created += display
                         display.transformation = cuboidTransform(piece.width, piece.height, piece.depth)
+                        if (piece.key == "assembler-hammer-arm" || piece.key == "assembler-hammer-head") {
+                            display.transformation = centeredRotation(
+                                display.transformation,
+                                piece,
+                                table.yaw,
+                                OriginWorkshopRotationAxis.X,
+                                settings.machineTuning.hammerRestAngleDegrees,
+                            )
+                        }
+                        if (piece.key in MACHINE_CONTROLLED_PIECE_KEYS) {
+                            display.isVisibleByDefault = piece.key !in ORIGIN_WORKSHOP_MACHINE_HIDDEN_IDLE_PIECES
+                            machineParts[piece.key] = WorkshopMachinePart(
+                                display = display,
+                                piece = piece,
+                                location = display.location.clone(),
+                                transformation = copyTransformation(display.transformation),
+                                visible = display.isVisibleByDefault,
+                            )
+                        }
                     } else {
                         val location = Location(
                             world,
@@ -478,6 +581,13 @@ internal object OriginWorkshopTablesModule : PluginModule {
                         display.transformation = itemTransform(piece.width, piece.flat)
                     }
                 }
+                createdMachineTables[table.id] = WorkshopMachineTable(
+                    table,
+                    machineParts,
+                    settings.dimensions,
+                    settings.machineTuning,
+                    world,
+                )
             }
             settings.warehouse?.let { anchor ->
                 val warehouse = originWorkshopWarehouseGeometry()
@@ -508,6 +618,7 @@ internal object OriginWorkshopTablesModule : PluginModule {
             }
             clearScene()
             handles += created
+            machineTables.putAll(createdMachineTables)
             ARC.instance.logger.info(
                 "Origin workshop tables loaded: tables=${settings.tables.size} warehouse=${settings.warehouse != null} client-only displays=${created.size}",
             )
@@ -524,9 +635,165 @@ internal object OriginWorkshopTablesModule : PluginModule {
     }
 
     private fun clearScene() {
+        machineTables.keys.toList().forEach(::resetWork)
         handles.forEach(PacketDisplay::remove)
         handles.clear()
+        machineTables.clear()
+        activeMachineKeys.clear()
+        activeMechanisms.clear()
     }
+
+    /** Apply one table-local pose to the already-owned client-only display handles. */
+    fun animateWork(
+        tableId: String,
+        mechanism: OriginWorkshopMechanism,
+        progress: Double,
+        strokeProgress: Double,
+    ): Location? {
+        val table = machineTables[tableId] ?: return null
+        if (mechanism == OriginWorkshopMechanism.NONE || !supports(table.definition.role, mechanism)) {
+            resetWork(tableId)
+            return null
+        }
+        if (activeMechanisms[tableId] != mechanism) {
+            resetWork(tableId)
+        }
+        val pose = originWorkshopMachinePose(mechanism, progress, strokeProgress, table.dimensions, table.tuning)
+        pose.pieces.forEach { (key, motion) ->
+            val part = table.pieces[key] ?: return@forEach
+            applyMotion(part, table.definition.yaw, motion)
+        }
+        activeMachineKeys[tableId] = pose.pieces.keys
+        activeMechanisms[tableId] = mechanism
+        val contact = pose.contact ?: return null
+        val (worldX, worldZ) = rotateLocal(contact.x, contact.z, table.definition.yaw)
+        return Location(
+            table.world,
+            table.definition.x + worldX,
+            table.definition.floorY + contact.y,
+            table.definition.z + worldZ,
+        )
+    }
+
+    /** Restore every touched display to its captured pose and idle visibility. */
+    fun resetWork(tableId: String) {
+        val table = machineTables[tableId] ?: return
+        val active = activeMachineKeys.remove(tableId).orEmpty()
+        activeMechanisms.remove(tableId)
+        active.forEach { key ->
+            val part = table.pieces[key] ?: return@forEach
+            if (!part.display.isValid) return@forEach
+            part.display.interpolationDuration = 0
+            part.display.interpolationDelay = 0
+            part.display.teleportDuration = 0
+            part.display.teleport(part.location)
+            part.display.transformation = copyTransformation(part.transformation)
+            part.display.isVisibleByDefault = part.visible
+        }
+    }
+
+    private fun supports(role: OriginWorkshopTableRole, mechanism: OriginWorkshopMechanism): Boolean = when (mechanism) {
+        OriginWorkshopMechanism.NONE -> false
+        OriginWorkshopMechanism.SAW -> role == OriginWorkshopTableRole.CARPENTER
+        OriginWorkshopMechanism.VISE, OriginWorkshopMechanism.ANVIL -> role == OriginWorkshopTableRole.ASSEMBLER
+        OriginWorkshopMechanism.PRESS -> role == OriginWorkshopTableRole.UPHOLSTERER
+        OriginWorkshopMechanism.FINISH -> role == OriginWorkshopTableRole.FINISHER
+    }
+
+    private fun applyMotion(part: WorkshopMachinePart, yaw: Int, motion: OriginWorkshopPieceMotion) {
+        val factor = motion.scaleYFactor
+        require(factor.isFinite() && factor > 0.0) { "Workshop machine scale must be positive and finite" }
+        val offset = rotateLocal(motion.centerOffset.x, motion.centerOffset.z, yaw)
+        val base = part.location
+        val width = part.piece.width
+        val height = part.piece.height
+        val depth = part.piece.depth
+        val centerX = base.x + width / 2.0 + offset.first
+        val centerY = base.y + height / 2.0 + motion.centerOffset.y
+        val centerZ = base.z + depth / 2.0 + offset.second
+        part.display.teleport(Location(
+            base.world,
+            centerX - width / 2.0,
+            centerY - height * factor / 2.0,
+            centerZ - depth / 2.0,
+            base.yaw,
+            base.pitch,
+        ))
+        part.display.transformation = motionTransformation(part, yaw, motion)
+        part.display.interpolationDelay = 0
+        part.display.interpolationDuration = WORKSHOP_MACHINE_INTERPOLATION_TICKS
+        part.display.teleportDuration = WORKSHOP_MACHINE_INTERPOLATION_TICKS
+        motion.visible?.let { part.display.isVisibleByDefault = it }
+    }
+
+    private fun motionTransformation(
+        part: WorkshopMachinePart,
+        yaw: Int,
+        motion: OriginWorkshopPieceMotion,
+    ): Transformation {
+        val base = part.transformation
+        val scale = Vector3f(base.scale.x, base.scale.y * motion.scaleYFactor.toFloat(), base.scale.z)
+        val rotation = motion.rotationAxis?.let { axis ->
+            val worldAxis = worldAxis(axis, yaw)
+            Quaternionf().rotationAxis(
+                Math.toRadians(motion.rotationDegrees).toFloat(),
+                worldAxis.x,
+                worldAxis.y,
+                worldAxis.z,
+            )
+        } ?: Quaternionf(base.leftRotation)
+        return centeredTransform(base, part.piece, scale, rotation)
+    }
+
+    private fun centeredRotation(
+        base: Transformation,
+        piece: OriginWorkshopTablePiece,
+        yaw: Int,
+        axis: OriginWorkshopRotationAxis,
+        degrees: Double,
+    ): Transformation {
+        val worldAxis = worldAxis(axis, yaw)
+        val rotation = Quaternionf().rotationAxis(
+            Math.toRadians(degrees).toFloat(), worldAxis.x, worldAxis.y, worldAxis.z,
+        )
+        return centeredTransform(base, piece, Vector3f(base.scale), rotation)
+    }
+
+    private fun centeredTransform(
+        base: Transformation,
+        piece: OriginWorkshopTablePiece,
+        scale: Vector3f,
+        rotation: Quaternionf,
+    ): Transformation {
+        val center = Vector3f(scale.x / 2f, scale.y / 2f, scale.z / 2f)
+        val rotatedCenter = Vector3f(center).also(rotation::transform)
+        val translation = Vector3f(center).sub(rotatedCenter)
+        return Transformation(translation, rotation, scale, Quaternionf(base.rightRotation))
+    }
+
+    private fun worldAxis(axis: OriginWorkshopRotationAxis, yaw: Int): Vector3f {
+        val local = when (axis) {
+            OriginWorkshopRotationAxis.X -> OriginWorkshopPoint(1.0, 0.0, 0.0)
+            OriginWorkshopRotationAxis.Y -> OriginWorkshopPoint(0.0, 1.0, 0.0)
+            OriginWorkshopRotationAxis.Z -> OriginWorkshopPoint(0.0, 0.0, 1.0)
+        }
+        val (x, z) = rotateLocal(local.x, local.z, yaw)
+        return Vector3f(x.toFloat(), local.y.toFloat(), z.toFloat()).normalize()
+    }
+
+    private fun rotateLocal(x: Double, z: Double, yaw: Int): Pair<Double, Double> = when (yaw) {
+        90 -> -z to x
+        180 -> -x to -z
+        270 -> z to -x
+        else -> x to z
+    }
+
+    private fun copyTransformation(source: Transformation) = Transformation(
+        Vector3f(source.translation),
+        Quaternionf(source.leftRotation),
+        Vector3f(source.scale),
+        Quaternionf(source.rightRotation),
+    )
 
     private fun cuboidTransform(width: Double, height: Double, depth: Double) = Transformation(
         Vector3f(0f, 0f, 0f),
@@ -541,4 +808,17 @@ internal object OriginWorkshopTablesModule : PluginModule {
         Vector3f(scale.toFloat(), scale.toFloat(), scale.toFloat()),
         Quaternionf(),
     )
+
+    private val MACHINE_CONTROLLED_PIECE_KEYS = buildSet {
+        addAll(ORIGIN_WORKSHOP_MACHINE_HIDDEN_IDLE_PIECES)
+        add("assembler-clamp-left")
+        add("assembler-clamp-right")
+        add("assembler-vise-handle")
+        add("assembler-hammer-arm")
+        add("assembler-hammer-head")
+        add("upholsterer-press-platen")
+        add("upholsterer-press-ram")
+        add("finisher-drying-panel-center")
+        for (index in 0..8) add("carpenter-saw-blade-row-$index")
+    }
 }

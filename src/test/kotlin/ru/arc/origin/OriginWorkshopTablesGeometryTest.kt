@@ -17,7 +17,7 @@ class OriginWorkshopTablesGeometryTest : FreeSpec({
         val blocks = pieces.filter { it.kind == OriginWorkshopTablePieceKind.BLOCK }
         val items = pieces.filter { it.kind == OriginWorkshopTablePieceKind.ITEM }
 
-        blocks.size shouldBe 47
+        blocks.size shouldBe 50
         items.size shouldBe 1
         blocks.minOf { it.y - it.height / 2.0 } shouldBe 0.0
         val top = blocks.single { it.key == "top" }
@@ -37,7 +37,7 @@ class OriginWorkshopTablesGeometryTest : FreeSpec({
         val saw = blocks.single { it.key == "carpenter-table-saw" }
         saw.material shouldBe Material.STONECUTTER
         saw.width shouldBe 0.92
-        saw.height shouldBe 0.74
+        saw.height shouldBe 0.72
         val bladeRows = blocks.filter { it.key.startsWith("carpenter-saw-blade-row-") }.sortedBy { it.y }
         bladeRows.size shouldBe 9
         bladeRows.map { it.width } shouldBe listOf(0.25, 0.45, 0.60, 0.72, 0.78, 0.72, 0.60, 0.45, 0.25)
@@ -52,13 +52,23 @@ class OriginWorkshopTablesGeometryTest : FreeSpec({
         val boardFeed = blocks.single { it.key == "carpenter-board-feed" }
         val boardInFeed = blocks.single { it.key == "carpenter-board-in-feed" }
         val ripFence = blocks.single { it.key == "carpenter-rip-fence" }
+        val feedSupport = blocks.single { it.key == "carpenter-feed-support-rail" }
         val motor = blocks.single { it.key == "carpenter-drive-motor" }
         (abs(boardInFeed.y - boardInFeed.height / 2.0 - (boardFeed.y + boardFeed.height / 2.0)) < 1e-9) shouldBe true
-        (abs(boardInFeed.z - boardInFeed.depth / 2.0 - (boardFeed.z - boardFeed.depth / 2.0)) < 1e-9) shouldBe true
-        (abs(boardInFeed.z + boardInFeed.depth / 2.0 - (saw.z - saw.depth / 2.0)) < 1e-9) shouldBe true
+        (abs(boardInFeed.z + boardInFeed.depth / 2.0 - OriginWorkshopMachineTuning().sawPivotZ) < 1e-9) shouldBe true
+        (boardInFeed.z + boardInFeed.depth / 2.0 < saw.z - saw.depth / 2.0) shouldBe true
         (abs(boardFeed.z + boardFeed.depth / 2.0 - (saw.z - saw.depth / 2.0)) < 1e-9) shouldBe true
         (abs(ripFence.y - ripFence.height / 2.0 - (boardFeed.y + boardFeed.height / 2.0)) < 1e-9) shouldBe true
-        (abs(motor.z - motor.depth / 2.0 - (saw.z + saw.depth / 2.0)) < 1e-9) shouldBe true
+        (abs(feedSupport.y - feedSupport.height / 2.0 - (boardFeed.y + boardFeed.height / 2.0)) < 1e-9) shouldBe true
+        // A small gap keeps the two separately-rendered casing faces from fighting.
+        (abs(motor.z - motor.depth / 2.0 - (saw.z + saw.depth / 2.0) - 0.005) < 1e-9) shouldBe true
+        val bearing = blocks.single { it.key == "carpenter-saw-bearing-post" }
+        val axle = blocks.single { it.key == "carpenter-saw-axle" }
+        (abs(bearing.y - bearing.height / 2.0 - dimensions.height) < 1e-9) shouldBe true
+        (abs(bearing.y + bearing.height / 2.0 - bladeHub.y) < 1e-9) shouldBe true
+        (abs(axle.y - bladeHub.y) < 1e-9) shouldBe true
+        (abs(axle.z - axle.depth / 2.0 - bladeHub.z) < 1e-9) shouldBe true
+        (abs(axle.z + axle.depth / 2.0 - bearing.z) < 1e-9) shouldBe true
     }
 
     "right-angle yaw swaps the table footprint and rotates role props with it" {
@@ -148,8 +158,8 @@ class OriginWorkshopTablesGeometryTest : FreeSpec({
         (abs(rightPost.y - rightPost.height / 2.0 - (viseBed.y + viseBed.height / 2.0)) < 1e-9) shouldBe true
         (abs(crossbar.y - crossbar.height / 2.0 - (leftPost.y + leftPost.height / 2.0)) < 1e-9) shouldBe true
         (abs(board.y - board.height / 2.0 - (viseBed.y + viseBed.height / 2.0) - 0.005) < 1e-9) shouldBe true
-        (abs(leftClamp.x + leftClamp.width / 2.0 - (board.x - board.width / 2.0)) < 1e-9) shouldBe true
-        (abs(rightClamp.x - rightClamp.width / 2.0 - (board.x + board.width / 2.0)) < 1e-9) shouldBe true
+        (abs(leftClamp.x + leftClamp.width / 2.0 - (board.x - board.width / 2.0) + 0.10) < 1e-9) shouldBe true
+        (abs(rightClamp.x - rightClamp.width / 2.0 - (board.x + board.width / 2.0) - 0.10) < 1e-9) shouldBe true
 
         val finishing = originWorkshopTablePieces(OriginWorkshopTableRole.FINISHER, yaw = 0, dimensions = dimensions)
             .associateBy { it.key }
