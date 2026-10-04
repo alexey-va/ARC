@@ -5,116 +5,72 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.nulls.shouldBeNull
 
 class ContractDeskLayoutTest : StringSpec({
-    "sparse order rows are symmetric for every occupancy from zero through nine" {
-        for (count in 0..9) {
-            val slots = ContractDeskLayout.calculate(count).orderSlots
-            val columns = slots.map { it % 9 }
-
-            columns.size shouldBe count
-            columns shouldBe columns.sorted()
-            columns.map { 8 - it }.sorted() shouldBe columns
+    "only sparse lists up to five orders are centered symmetrically on the left" {
+        for (count in 1..5) {
+            val layout = ContractDeskLayout.calculate(count)
+            val columns = layout.orderSlots.map { it % 9 }
+            columns.map { 4 - it }.sorted() shouldBe columns
+            layout.orderSlots.map { it / 9 }.distinct() shouldBe listOf(layout.rows / 2)
         }
     }
 
-    "chooses the required height and balances orders across order rows" {
-        val expectedRows = mapOf(
-            0 to 3,
-            1 to 3,
-            9 to 3,
-            10 to 4,
-            18 to 4,
-            19 to 5,
-            27 to 5,
-            28 to 6,
-            36 to 6,
-            37 to 6,
+    "larger lists fill every left column consecutively without decorative gaps" {
+        for (count in 6..30) {
+            val layout = ContractDeskLayout.calculate(count)
+            layout.orderSlots shouldBe (0 until count).map { it / 5 * 9 + it % 5 }
+        }
+        ContractDeskLayout.calculate(21).rows shouldBe 5
+        ContractDeskLayout.calculate(21).orderSlots shouldBe listOf(
+            0,1,2,3,4,9,10,11,12,13,18,19,20,21,22,27,28,29,30,31,36,
         )
+    }
 
-        expectedRows.forEach { (count, rows) ->
-            ContractDeskLayout.calculate(count).rows shouldBe rows
+    "keeps input in a separate nine-slot square and controls in the middle column" {
+        for (count in 0..80) {
+            val layout = ContractDeskLayout.calculate(count)
+            val middle = layout.rows / 2
+            layout.depositSlots shouldBe ((middle - 1)..(middle + 1)).flatMap { row -> (6..8).map { row * 9 + it } }
+            layout.saleSlot shouldBe middle * 9 + 5
+            val all = layout.orderSlots + layout.depositSlots + listOfNotNull(layout.saleSlot, layout.previousPage, layout.nextPage)
+            all.distinct().size shouldBe all.size
+            all.all { it in 0 until layout.rows * 9 } shouldBe true
+            layout.orderSlots.all { it % 9 < 5 } shouldBe true
+            layout.depositSlots.all { it % 9 >= 6 } shouldBe true
         }
-
-        val ten = ContractDeskLayout.calculate(10)
-        ten.orderSlots.map { it / 9 }.groupingBy { it }.eachCount().values.sorted() shouldBe listOf(5, 5)
-
-        val twentyOne = ContractDeskLayout.calculate(21)
-        twentyOne.orderSlots.map { it / 9 }.groupingBy { it }.eachCount().values.sorted() shouldBe listOf(7, 7, 7)
+        val empty = ContractDeskLayout.calculate(0)
+        empty.rows shouldBe 3
+        empty.visibleOrderRange.isEmpty() shouldBe true
+        empty.orderSlots shouldBe emptyList()
+        empty.depositSlots shouldBe listOf(6,7,8,15,16,17,24,25,26)
+        empty.saleSlot shouldBe 14
+        empty.previousPage.shouldBeNull()
+        empty.nextPage.shouldBeNull()
     }
 
-    "empty geometry keeps a usable height and has no page controls" {
-        val layout = ContractDeskLayout.calculate(0)
-
-        layout.rows shouldBe 3
-        layout.page shouldBe 0
-        layout.pageCount shouldBe 1
-        layout.visibleOrderRange.isEmpty() shouldBe true
-        layout.orderSlots shouldBe emptyList()
-        layout.depositSlots shouldBe (9 until 18).toList()
-        layout.footerSaleCenter shouldBe 22
-        layout.infoLeft shouldBe 18
-        layout.previousPage.shouldBeNull()
-        layout.nextPage.shouldBeNull()
-    }
-
-    "pagination starts only after 36 orders, clamps the requested page, and keeps height stable" {
-        val full = ContractDeskLayout.calculate(36)
-        full.pageCount shouldBe 1
-        full.previousPage.shouldBeNull()
-        full.nextPage.shouldBeNull()
-
-        val first = ContractDeskLayout.calculate(37, requestedPage = -4)
+    "pagination starts after thirty and keeps input and controls stable on short pages" {
+        ContractDeskLayout.calculate(30).pageCount shouldBe 1
+        val first = ContractDeskLayout.calculate(31, -10)
+        val last = ContractDeskLayout.calculate(31, 40)
         first.page shouldBe 0
         first.pageCount shouldBe 2
-        first.visibleOrderRange shouldBe (0..35)
-        first.orderSlots.size shouldBe 36
-        first.rows shouldBe 6
-        first.infoLeft shouldBe 45
-        first.previousPage shouldBe 48
-        first.footerSaleCenter shouldBe 49
-        first.nextPage shouldBe 50
-
-        val last = ContractDeskLayout.calculate(37, requestedPage = 40)
-        last.page shouldBe 1
-        last.visibleOrderRange shouldBe (36..36)
-        last.orderSlots.size shouldBe 1
+        first.visibleOrderRange shouldBe (0..29)
+        last.visibleOrderRange shouldBe (30..30)
+        last.orderSlots shouldBe listOf(29)
         last.rows shouldBe first.rows
-        last.orderSlots.single() % 9 shouldBe 4
+        last.depositSlots shouldBe first.depositSlots
+        last.saleSlot shouldBe first.saleSlot
+        last.previousPage shouldBe first.previousPage
+        last.nextPage shouldBe first.nextPage
     }
 
-    "representative layouts keep every returned slot unique and in range" {
-        for ((count, page) in listOf(3 to 0, 10 to 0, 21 to 0, 36 to 0, 37 to 0, 37 to 1)) {
-            val layout = ContractDeskLayout.calculate(count, requestedPage = page)
-            val footerSlots = listOfNotNull(
-                layout.footerSaleCenter,
-                layout.infoLeft,
-                layout.previousPage,
-                layout.nextPage,
-            )
-            val allSlots = layout.orderSlots + layout.depositSlots + footerSlots
-            val inventorySize = layout.rows * 9
-            val visibleCount =
-                minOf(count - page * ContractDeskLayout.ORDERS_PER_PAGE, ContractDeskLayout.ORDERS_PER_PAGE)
-
-            layout.visibleOrderRange.count() shouldBe visibleCount
-            layout.orderSlots.size shouldBe visibleCount
-            layout.depositSlots.size shouldBe 9
-            allSlots.distinct().size shouldBe allSlots.size
-            allSlots.all { it in 0 until inventorySize } shouldBe true
-            layout.depositSlots shouldBe (layout.depositSlots.first()..layout.depositSlots.last()).toList()
-
-            val rowOccupancies = layout.orderSlots.map { it / 9 }.groupingBy { it }.eachCount().values
-            if (rowOccupancies.isNotEmpty()) {
-                val spread = rowOccupancies.maxOrNull()!! - rowOccupancies.minOrNull()!!
-                val balanced = spread <= 1
-                balanced shouldBe true
-            }
-        }
-    }
-
-    "total order indices map one-to-one to physical order slots" {
-        val layout = ContractDeskLayout.calculate(21)
-
-        layout.visibleOrderRange.count() shouldBe layout.orderSlots.size
-        layout.orderSlots.zip(layout.visibleOrderRange).map { (slot, _) -> slot }.distinct().size shouldBe 21
+    "an open chest uses its fixed capacity when the catalog changes between rotations" {
+        val first = ContractDeskLayout.calculate(40, fixedRows = 3)
+        val last = ContractDeskLayout.calculate(40, 2, fixedRows = 3)
+        first.pageCount shouldBe 3
+        first.visibleOrderRange shouldBe (0..14)
+        last.visibleOrderRange shouldBe (30..39)
+        last.orderSlots.size shouldBe 10
+        last.depositSlots shouldBe first.depositSlots
+        last.saleSlot shouldBe first.saleSlot
     }
 })

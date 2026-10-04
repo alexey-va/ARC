@@ -66,9 +66,7 @@ object NpcContractDepositGui : Listener {
                 title = TextUtil.mm(config.string("boards.$group.desk-title", "<#20252b>Заказы")),
                 background = ArcMenus.background(desk.menu),
                 buttons = mapOf(
-                    MenuElementId.of("info") to PaperCloudStorageButton(ArcMenus.item(desk.menu, "info", context(
-                        "status" to Component.empty(), "page" to Component.empty()))) {},
-                    MenuElementId.of("sell") to PaperCloudStorageButton(ArcMenus.item(desk.menu, "sell", context("status" to Component.empty()))) { sell(desk) },
+                    MenuElementId.of("sell") to PaperCloudStorageButton(ArcMenus.item(desk.menu, "sell", context("status" to Component.empty(), "page" to Component.empty()))) { sell(desk) },
                     MenuElementId.of("previous") to PaperCloudStorageButton(ArcMenus.item(desk.menu, "previous")) { turnPage(desk, -1) },
                     MenuElementId.of("next") to PaperCloudStorageButton(ArcMenus.item(desk.menu, "next")) { turnPage(desk, 1) },
                 ),
@@ -93,11 +91,10 @@ object NpcContractDepositGui : Listener {
         val orders = views(desk.player, desk.group)
         // A live catalog generation closes these sessions on reload. Between
         // weekly rotations retain the open chest size and paginate its capacity.
-        val capacity = (desk.rows - 2) * 9
-        val pages = ((orders.size + capacity - 1) / capacity).coerceAtLeast(1)
-        desk.page = desk.page.coerceIn(0, pages - 1)
-        val visible = orders.drop(desk.page * capacity).take(capacity)
-        val geometry = ContractDeskLayout.calculate(visible.size)
+        val geometry = ContractDeskLayout.calculate(orders.size, desk.page, fixedRows = desk.rows)
+        val pages = geometry.pageCount
+        desk.page = geometry.page
+        val visible = geometry.visibleOrderRange.map(orders::get)
         val layout = ArcMenus.current().catalog.require(desk.menu)
         val inventory = desk.session.inventory
         val background = ArcMenus.background(desk.menu)
@@ -119,16 +116,15 @@ object NpcContractDepositGui : Listener {
                 "rank" to Component.text(contractPriceGrowth(10_000L, view.payoutBasisPoints.toLong())),
                 "remaining" to Component.text(view.playerRemainingQuantity),
                 "state" to if (availability == ContractBookAvailability.READY)
-                    text("accepting", "<#2bba43>Положите товар в пустой ряд и нажмите «Продать».")
+                    text("accepting", "<#2bba43>Положите товар в ячейки справа и нажмите «Продать».")
                     else TextUtil.mm(config.string("defaults.availability.${availability.messageKey}", availability.fallback)),
             )).withType(material))
         }
         val status = if (desk.storage.pending) text("processing", "<#ff9f0f>Принимаем товары…")
             else if (orders.isEmpty()) text("empty", "<#ff9f0f>Сейчас открытых заказов нет.")
-            else text("instruction", "<#e6fff3>Выбирать заказ не нужно — просто положите товары.")
-        inventory.setItem(layout.slot("info").index, ArcMenus.item(desk.menu, "info", context(
+            else text("instruction", "<#e6fff3>Слева — заказы. Справа — товары для сдачи.")
+        inventory.setItem(layout.slot("sell").index, ArcMenus.item(desk.menu, "sell", context(
             "status" to status, "page" to if (pages > 1) Component.text("Страница ${desk.page + 1} / $pages") else Component.empty())))
-        inventory.setItem(layout.slot("sell").index, ArcMenus.item(desk.menu, "sell", context("status" to status)))
         inventory.setItem(layout.slot("previous").index, if (pages > 1 && desk.page > 0) ArcMenus.item(desk.menu, "previous") else background?.clone())
         inventory.setItem(layout.slot("next").index, if (pages > 1 && desk.page < pages - 1) ArcMenus.item(desk.menu, "next") else background?.clone())
         desk.session.refresh()

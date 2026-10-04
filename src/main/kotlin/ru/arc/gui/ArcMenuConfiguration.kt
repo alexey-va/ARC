@@ -82,7 +82,7 @@ object ArcMenuSchema {
 
     val contracts: Map<MenuId, MenuContract> = linkedMapOf(
         *CONTRACT_DESKS.values.map { menu ->
-            menu to MenuContract(requiredElements = elements("info", "sell", "previous", "next"),
+            menu to MenuContract(requiredElements = elements("sell", "previous", "next"),
                 requiredRegions = setOf(CONTRACT_DEPOSIT, CONTRACT_DESK_ORDERS))
         }.toTypedArray(),
         INVESTIGATION_HUB to MenuContract(requiredElements = elements("start", "contracts")),
@@ -211,7 +211,7 @@ object ArcMenuSchema {
     val textContracts: Map<String, PaperMenuTextContract> = mapOf(
         "contract-desk-info" to PaperMenuTextContract(values = setOf("status", "page")),
         "contract-desk-order" to PaperMenuTextContract(values = setOf("name", "accepted", "price", "base", "growth", "rank", "remaining", "state")),
-        "contract-desk-sell" to PaperMenuTextContract(values = setOf("status")),
+        "contract-desk-sell" to PaperMenuTextContract(values = setOf("status", "page")),
         "contract-desk-previous" to PaperMenuTextContract(),
         "contract-desk-next" to PaperMenuTextContract(),
         "background" to PaperMenuTextContract(),

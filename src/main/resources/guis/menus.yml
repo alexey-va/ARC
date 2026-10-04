@@ -7,49 +7,45 @@ menus:
       rows: 3
       background: { template: background }
       elements:
-        info: { slot: 18, template: contract-desk-info }
-        previous: { slot: 21, template: contract-desk-previous }
-        sell: { slot: 22, template: contract-desk-sell }
+        previous: { slot: 5, template: contract-desk-previous }
+        sell: { slot: 14, template: contract-desk-sell }
         next: { slot: 23, template: contract-desk-next }
       regions:
-        contract-orders: { slots: ['0-8'] }
-        contract-deposit: { slots: ['9-17'] }
+        contract-orders: { slots: ['0-4', '9-13', '18-22'] }
+        contract-deposit: { slots: ['6-8', '15-17', '24-26'] }
     contracts-desk-4:
       schema-version: 1
       rows: 4
       background: { template: background }
       elements:
-        info: { slot: 27, template: contract-desk-info }
-        previous: { slot: 30, template: contract-desk-previous }
-        sell: { slot: 31, template: contract-desk-sell }
+        previous: { slot: 14, template: contract-desk-previous }
+        sell: { slot: 23, template: contract-desk-sell }
         next: { slot: 32, template: contract-desk-next }
       regions:
-        contract-orders: { slots: ['0-17'] }
-        contract-deposit: { slots: ['18-26'] }
+        contract-orders: { slots: ['0-4', '9-13', '18-22', '27-31'] }
+        contract-deposit: { slots: ['15-17', '24-26', '33-35'] }
     contracts-desk-5:
       schema-version: 1
       rows: 5
       background: { template: background }
       elements:
-        info: { slot: 36, template: contract-desk-info }
-        previous: { slot: 39, template: contract-desk-previous }
-        sell: { slot: 40, template: contract-desk-sell }
-        next: { slot: 41, template: contract-desk-next }
+        previous: { slot: 14, template: contract-desk-previous }
+        sell: { slot: 23, template: contract-desk-sell }
+        next: { slot: 32, template: contract-desk-next }
       regions:
-        contract-orders: { slots: ['0-26'] }
-        contract-deposit: { slots: ['27-35'] }
+        contract-orders: { slots: ['0-4', '9-13', '18-22', '27-31', '36-40'] }
+        contract-deposit: { slots: ['15-17', '24-26', '33-35'] }
     contracts-desk-6:
       schema-version: 1
       rows: 6
       background: { template: background }
       elements:
-        info: { slot: 45, template: contract-desk-info }
-        previous: { slot: 48, template: contract-desk-previous }
-        sell: { slot: 49, template: contract-desk-sell }
-        next: { slot: 50, template: contract-desk-next }
+        previous: { slot: 23, template: contract-desk-previous }
+        sell: { slot: 32, template: contract-desk-sell }
+        next: { slot: 41, template: contract-desk-next }
       regions:
-        contract-orders: { slots: ['0-35'] }
-        contract-deposit: { slots: ['36-44'] }
+        contract-orders: { slots: ['0-4', '9-13', '18-22', '27-31', '36-40', '45-49'] }
+        contract-deposit: { slots: ['24-26', '33-35', '42-44'] }
     investigation-hub:
       schema-version: 1
       rows: 3
@@ -468,7 +464,7 @@ menus:
       material: HOPPER
       name: '<italic:false><#92bed8><bold>Сдача заказов'
       lore:
-        - '<italic:false><#e6fff3>Положите товары в пустой ряд.'
+        - '<italic:false><#e6fff3>Положите товары в ячейки справа.'
         - '<italic:false><#e6fff3>Shift + ЛКМ — положить стопку.'
         - '<italic:false><#e6fff3>Нажмите «Продать» для сдачи.'
         - '<italic:false>'
@@ -480,10 +476,12 @@ menus:
       material: LIME_DYE
       name: '<italic:false><#2bba43><bold>Продать'
       lore:
-        - '<italic:false><#e6fff3>Сдать вложенные товары по текущим ценам.'
+        - '<italic:false><#e6fff3>Положите товары в ячейки справа.'
+        - '<italic:false><#e6fff3>Нажмите — сдать по текущим ценам.'
         - '<italic:false><#e6fff3>Окно останется открытым.'
         - '<italic:false>'
         - '<italic:false><status>'
+        - '<italic:false><#b8b8b8><page>'
     contract-desk-previous:
       material: ARROW
       name: '<italic:false><#92bed8>‹ Предыдущая страница'
