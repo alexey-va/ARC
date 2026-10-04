@@ -7,17 +7,24 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
+import io.mockk.verify
 import org.bukkit.command.Command
 import org.bukkit.command.CommandSender
+import org.bukkit.event.HandlerList
+import org.bukkit.plugin.PluginDescriptionFile
+import org.mockbukkit.mockbukkit.MockBukkit
 import ru.arc.commands.arc.ArcCommand
 import ru.arc.config.ArcRuntimeProfile
 import ru.arc.config.ConfigManager
 import ru.arc.core.ModuleRegistry
 import ru.arc.core.modules.RedisModule
 import ru.arc.gui.ArcMenus
+import ru.arc.listeners.ChatListener
 import ru.arc.paper.api.ArcSidebarService
 import ru.arc.paper.testing.MockBukkitTestRuntime
 import ru.arc.redis.RedisManager
+import ru.arc.redis.ChannelListener
+import ru.arc.xserver.playerlist.PlayerManager
 import ru.arc.slimefunmenu.SlimefunMenuAliasCommand
 import ru.arc.slimefunmenu.SlimefunMenuModule
 import ru.arc.util.Logging
@@ -40,20 +47,30 @@ class SlimefunRuntimeProfileTest : FreeSpec({
             val otherBuy = object : Command("buy") {
                 override fun execute(sender: CommandSender, label: String, args: Array<String>) = true
             }
+            val justTeamsGuild = object : Command("g") {
+                override fun execute(sender: CommandSender, label: String, args: Array<String>) = true
+            }
+            val justTeamsGuildAlias = object : Command("guild") {
+                override fun execute(sender: CommandSender, label: String, args: Array<String>) = true
+            }
             val otherSpawn = object : Command("spawn") {
                 override fun execute(sender: CommandSender, label: String, args: Array<String>) = true
             }
+            runtime.server.commandMap.register("justteams", justTeamsGuild)
+            runtime.server.commandMap.register("justteams", justTeamsGuildAlias)
             runtime.server.commandMap.register("other", otherBuy)
             runtime.server.commandMap.register("other", otherSpawn)
-            val plugin = runtime.loadPlugin(SlimefunProfilePlugin::class.java)
+            val plugin = loadSlimefunProfilePlugin(SlimefunProfilePlugin::class.java)
 
             plugin.runtimeProfile shouldBe ArcRuntimeProfile.SLIMEFUN
             ModuleRegistry.getRuntimeStatuses().map { it.name }.toSet() shouldBe
-                setOf("Config", "OpsHttp", "Restart", "ItemInfo", "SlimefunMenu")
+                setOf("Config", "OpsHttp", "Restart", "ItemInfo", "Redis", "ChatMode", "SlimefunNetworkChat", "SlimefunMenu")
             ModuleRegistry.getRuntimeStatuses().all { it.ready && it.failures == 0L } shouldBe true
             ARC.redisManager shouldBe null
             ARC.networkRegistry shouldBe null
             ARC.hookRegistry shouldBe null
+            ModuleRegistry.getRuntimeStatuses().map { it.name }.toSet().intersect(setOf("Hooks", "Network", "Economy", "Sync")) shouldBe emptySet()
+            HandlerList.getRegisteredListeners(plugin).any { it.listener is ChatListener } shouldBe true
             runtime.server.servicesManager.getRegistration(ArcSidebarService::class.java) shouldNotBe null
             ArcMenus.hasDialogRuntimeForTests() shouldBe true
 
@@ -66,6 +83,14 @@ class SlimefunRuntimeProfileTest : FreeSpec({
             runtime.server.commandMap.getCommand("spawn") shouldBe runtime.server.commandMap.getCommand("arc:spawn")
             runtime.server.commandMap.getCommand("mm") shouldBe runtime.server.commandMap.getCommand("arc:mm")
             (runtime.server.commandMap.getCommand("mm") is SlimefunMenuAliasCommand) shouldBe true
+            val globalChatCommand = checkNotNull(plugin.getCommand("g"))
+            val localChatCommand = checkNotNull(plugin.getCommand("l"))
+            runtime.server.commandMap.getCommand("g") shouldBe globalChatCommand
+            runtime.server.commandMap.getCommand("l") shouldBe localChatCommand
+            runtime.server.commandMap.getCommand("${plugin.name.lowercase()}:g") shouldBe globalChatCommand
+            runtime.server.commandMap.getCommand("${plugin.name.lowercase()}:l") shouldBe localChatCommand
+            runtime.server.commandMap.getCommand("justteams:g") shouldBe justTeamsGuild
+            runtime.server.commandMap.getCommand("guild") shouldBe justTeamsGuildAlias
             ArcCommand.INSTANCE.availableSubcommands(runtime.server.consoleSender)
                 .map { it.configKey }.toSet() shouldBe setOf("help", "reload", "restart")
 
@@ -73,7 +98,6 @@ class SlimefunRuntimeProfileTest : FreeSpec({
                 "guide" to "slimefun:slimefun guide",
                 "rtp" to "rtp:rtp",
                 "homes" to "huskhomes:homes",
-                "lands" to "lands:lands",
                 "team" to "justteams:team",
                 "shop" to "economyshopgui-premium:shop slimefun_resources",
             )
@@ -90,7 +114,7 @@ class SlimefunRuntimeProfileTest : FreeSpec({
 
             plugin.reload()
             ModuleRegistry.getRuntimeStatuses().map { it.name }.toSet() shouldBe
-                setOf("Config", "OpsHttp", "Restart", "ItemInfo", "SlimefunMenu")
+                setOf("Config", "OpsHttp", "Restart", "ItemInfo", "Redis", "ChatMode", "SlimefunNetworkChat", "SlimefunMenu")
             ModuleRegistry.getRuntimeStatuses().all { it.ready && it.failures == 0L } shouldBe true
             ArcMenus.hasDialogRuntimeForTests() shouldBe true
 
@@ -134,24 +158,45 @@ class SlimefunRuntimeProfileTest : FreeSpec({
         every { RedisModule.reload() } answers { ARC.redisManager = redis }
         try {
             MockBukkitTestRuntime.open().use { runtime ->
-                val plugin = runtime.loadPlugin(SlimefunGlyphProfilePlugin::class.java)
+                val plugin = loadSlimefunProfilePlugin(SlimefunGlyphProfilePlugin::class.java)
                 plugin.runtimeProfile shouldBe ArcRuntimeProfile.SLIMEFUN
                 ModuleRegistry.getRuntimeStatuses().map { it.name }.toSet() shouldBe
-                    setOf("Redis", "ChatGlyphProtection", "Config", "OpsHttp", "Restart", "ItemInfo", "SlimefunMenu")
+                    setOf("Redis", "ChatGlyphProtection", "Config", "OpsHttp", "Restart", "ItemInfo", "ChatMode", "SlimefunNetworkChat", "SlimefunMenu")
                 ModuleRegistry.getRuntimeStatuses().all { it.ready && it.failures == 0L } shouldBe true
+                verify(atLeast = 1) { redis.registerChannelUnique("arc.proxy_player_list", any()) }
+                val listeners = mutableListOf<ChannelListener>()
+                verify(atLeast = 1) { redis.registerChannelUnique("arc.proxy_player_list", capture(listeners)) }
+                listeners.last().consume(
+                    "arc.proxy_player_list",
+                    """[{"username":"SkyblockQA","server":"slimefun","uuid":"00000000-0000-0000-0000-000000000001","joinTime":1},{"username":"SpawnQA","server":"spawn","uuid":"00000000-0000-0000-0000-000000000002","joinTime":1}]""",
+                    "proxy",
+                )
+                PlayerManager.getPlayerNames() shouldBe setOf("SkyblockQA", "SpawnQA")
+                HandlerList.getRegisteredListeners(plugin).any { it.listener is ChatListener } shouldBe true
                 plugin.reload()
                 ModuleRegistry.getRuntimeStatuses().all { it.ready && it.failures == 0L } shouldBe true
+                verify(atLeast = 2) { redis.registerChannelUnique("arc.proxy_player_list", any()) }
                 ARC.networkRegistry shouldBe null
                 ARC.hookRegistry shouldBe null
+                runtime.server.pluginManager.disablePlugin(plugin)
+                verify(atLeast = 2) { redis.unregisterChannel("arc.proxy_player_list", any()) }
             }
         } finally {
             unmockkObject(RedisModule)
             ARC.plugin = null
             ARC.redisManager = null
+            PlayerManager.readMessage("[]")
             ConfigManager.clear()
         }
     }
 })
+
+private fun <T : ARC> loadSlimefunProfilePlugin(type: Class<T>): T {
+    val descriptor = ARC::class.java.classLoader.getResourceAsStream("plugin.yml")
+        ?.use { PluginDescriptionFile(it) }
+        ?: error("ARC plugin.yml must be available to the Slimefun profile test")
+    return MockBukkit.loadWith(type, descriptor)
+}
 
 open class SlimefunProfilePlugin : ARC() {
     override fun onLoad() {
@@ -159,17 +204,21 @@ open class SlimefunProfilePlugin : ARC() {
             parentFile.mkdirs()
             writeText("profile: slimefun\n")
         }
+        File(dataFolder, "modules/redis.yml").apply {
+            parentFile.mkdirs()
+            writeText("enabled: false\nserver-name: slimefun\nmain-server: false\n")
+        }
         super.onLoad()
     }
 }
 
 open class SlimefunGlyphProfilePlugin : SlimefunProfilePlugin() {
     override fun onLoad() {
+        super.onLoad()
         File(dataFolder, "modules/chat-mode.yml").apply {
             parentFile.mkdirs()
             writeText("glyph-protection:\n  isolated-enabled: true\n")
         }
         File(dataFolder, "modules/redis.yml").writeText("enabled: true\nserver-name: slimefun\nmain-server: false\n")
-        super.onLoad()
     }
 }

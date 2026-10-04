@@ -16,6 +16,7 @@ import org.bukkit.NamespacedKey
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemFlag
 import org.bukkit.inventory.ItemStack
+import org.bukkit.inventory.meta.ItemMeta
 import org.bukkit.persistence.PersistentDataType
 
 internal fun eliteTooltipTier(level: Int): String = when {
@@ -81,6 +82,55 @@ private fun plainEliteText(text: String): String =
     plainEliteTextSerializer.serialize(legacyAmpersandSerializer.deserialize(
         plainEliteTextSerializer.serialize(legacySectionSerializer.deserialize(text)),
     ))
+
+private val elitePresentationRootKey = NamespacedKey("elitemobs", "enchantment_presentation")
+private val elitePresentationLinesKey = NamespacedKey("elitemobs", "lines")
+private val elitePresentationPositionKey = NamespacedKey("elitemobs", "position")
+
+internal fun reindexedEliteEnchantmentLorePosition(
+    hostLore: List<String>,
+    generatedLore: List<String>,
+    recordedPosition: Int,
+): Int? {
+    val lastStart = hostLore.size - generatedLore.size
+    if (recordedPosition in 0..lastStart &&
+        hostLore.subList(recordedPosition, recordedPosition + generatedLore.size) == generatedLore
+    ) return recordedPosition
+    if (generatedLore.isEmpty() || lastStart < 0) return null
+
+    val matches = (0..lastStart).filter { position ->
+        hostLore.subList(position, position + generatedLore.size) == generatedLore
+    }
+    return matches.singleOrNull()
+}
+
+/** Keep EliteMobs' stored generated-lore range aligned after ARC inserts or compacts other rows. */
+internal fun reindexEliteEnchantmentLore(meta: ItemMeta) {
+    val container = meta.persistentDataContainer
+        .get(elitePresentationRootKey, PersistentDataType.TAG_CONTAINER) ?: return
+    val generatedLore = container.get(elitePresentationLinesKey, PersistentDataType.LIST.strings()) ?: return
+    val recordedPosition = container.get(elitePresentationPositionKey, PersistentDataType.INTEGER) ?: return
+    val correctedPosition = reindexedEliteEnchantmentLorePosition(
+        meta.getLore().orEmpty(),
+        generatedLore,
+        recordedPosition,
+    ) ?: return
+    if (correctedPosition != recordedPosition) {
+        container.set(elitePresentationPositionKey, PersistentDataType.INTEGER, correctedPosition)
+        meta.persistentDataContainer.set(elitePresentationRootKey, PersistentDataType.TAG_CONTAINER, container)
+    }
+}
+
+/** Native rendering can change other PDC, such as price; only transfer its lore ownership record. */
+internal fun copyElitePresentationMetadata(source: ItemMeta, destination: ItemMeta) {
+    val presentation = source.persistentDataContainer
+        .get(elitePresentationRootKey, PersistentDataType.TAG_CONTAINER)
+    if (presentation == null) {
+        destination.persistentDataContainer.remove(elitePresentationRootKey)
+    } else {
+        destination.persistentDataContainer.set(elitePresentationRootKey, PersistentDataType.TAG_CONTAINER, presentation)
+    }
+}
 
 /** Legacy EDPS measures physical attacks, while FMM magic damage depends on the level, skill and spell. */
 internal fun replaceMagicEliteDpsLore(
@@ -150,13 +200,15 @@ private fun withEliteGearRequirement(item: ItemStack, lines: List<Component>): L
 internal fun presentEliteItem(item: ItemStack, viewer: Player): ItemStack {
     if (!EliteItemManager.isEliteMobsItem(item)) return item
     val meta = item.itemMeta
-    meta.displayName()?.let { meta.displayName(localizeLegacyEliteText(it)) }
-    meta.tooltipStyle = NamespacedKey("lzblocks", "tooltip/${eliteTooltipTier(EliteItemManager.getRoundedItemLevel(item))}")
+    val tooltipStyle = NamespacedKey("lzblocks", "tooltip/${eliteTooltipTier(EliteItemManager.getRoundedItemLevel(item))}")
     val owner = meta.persistentDataContainer.get(NamespacedKey("elitemobs", "soulbind"), PersistentDataType.STRING)
     if ((owner == null || owner == viewer.uniqueId.toString()) && !EliteEnchantmentItems.isEliteEnchantmentBook(item)) {
         val rendered = item.clone()
+        rendered.editMeta(::reindexEliteEnchantmentLore)
         EliteItemLore(rendered, false)
-        meta.lore(withEliteGearRequirement(rendered, rendered.itemMeta.lore().orEmpty()))
+        val renderedMeta = rendered.itemMeta
+        copyElitePresentationMetadata(renderedMeta, meta)
+        meta.lore(withEliteGearRequirement(rendered, renderedMeta.lore().orEmpty()))
         meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_ENCHANTS)
     } else {
         meta.lore(
@@ -167,7 +219,10 @@ internal fun presentEliteItem(item: ItemStack, viewer: Player): ItemStack {
             ),
         )
     }
+    meta.displayName()?.let { meta.displayName(localizeLegacyEliteText(it)) }
+    meta.tooltipStyle = tooltipStyle
     meta.lore(sanitizeEliteLore(meta.lore().orEmpty()))
+    reindexEliteEnchantmentLore(meta)
     item.itemMeta = meta
     return item
 }
@@ -180,6 +235,7 @@ internal fun prepareEliteDrop(item: ItemStack, processor: EliteLootProcessor? = 
     prepared.editMeta { meta ->
         meta.displayName()?.let { meta.displayName(localizeLegacyEliteText(it)) }
         meta.lore(withEliteGearRequirement(prepared, meta.lore().orEmpty()))
+        reindexEliteEnchantmentLore(meta)
     }
     prepared.setData(io.papermc.paper.datacomponent.DataComponentTypes.TOOLTIP_STYLE,
         net.kyori.adventure.key.Key.key("lzblocks", "tooltip/${eliteTooltipTier(EliteItemManager.getRoundedItemLevel(prepared))}"))

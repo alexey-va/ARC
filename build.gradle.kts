@@ -52,7 +52,7 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.268"
+version = "1.4.271"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.17"
@@ -72,6 +72,13 @@ kotlin.target.compilations.getByName("integrationTest")
     .associateWith(kotlin.target.compilations.getByName("main"))
 
 repositories {
+    exclusiveContent {
+        forRepository { maven("https://repo.auxilor.io/repository/maven-public/") }
+        filter {
+            includeModule("com.willfp", "EcoJobs")
+            includeModule("com.willfp", "eco")
+        }
+    }
     mavenLocal()
     maven("https://repo.olziedev.com/") {
         content { includeModule("com.olziedev", "playerwarps-api") }
@@ -131,6 +138,10 @@ dependencies {
     implementation(libs.org.apache.logging.log4j.log4j.core)
     implementation(libs.com.google.code.gson.gson)
     implementation(libs.pl.tkowalcz.tjahzi.log4j2.appender.nodep)
+
+    // Read-only current profession state; both plugins remain server-provided.
+    compileOnly("com.willfp:EcoJobs:2026.33") { isTransitive = false }
+    compileOnly("com.willfp:eco:2026.33") { isTransitive = false }
 
     // server-provided
     compileOnly(libs.io.papermc.paper.paper.api)

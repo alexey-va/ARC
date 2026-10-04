@@ -544,7 +544,7 @@ class HelpCenterScreensTest {
         val save = CompletableFuture<Boolean>()
         every { legacy.scoreboardEnabled(player) } answers { visible }
         every { legacy.scoreboardSectionEnabled(player, any()) } answers {
-            if (secondArg<SidebarSection>() == SidebarSection.QUESTS) quests else true
+            if (secondArg<SidebarSection>() == SidebarSection.QUESTS) quests else secondArg<SidebarSection>().defaultEnabled
         }
         every { legacy.execute(player, "scoreboard-section-quests") } returns save
         every { legacy.execute(player, "scoreboard-toggle") } answers {
@@ -555,8 +555,10 @@ class HelpCenterScreensTest {
         click("settings_interface")
         click("legacy_scoreboard")
         assertEquals("help.settings.scoreboard", screen.id)
-        assertEquals(listOf("scoreboard_toggle") + SidebarSection.entries.map { "scoreboard_section_${it.id}" }, screen.buttons.map { it.id.value })
-        assertTrue(screen.buttons.all { plain(it.label).startsWith("✔") })
+        assertEquals(listOf("scoreboard_toggle") + SidebarSection.entries.map { "scoreboard_section_${it.id.replace('-', '_')}" } + "scoreboard_skills_choose", screen.buttons.map { it.id.value })
+        SidebarSection.entries.forEach { part ->
+            assertTrue(plain(screen.buttons.single { it.id.value == "scoreboard_section_${part.id.replace('-', '_')}" }.label).startsWith(if (part.defaultEnabled) "✔" else "○"))
+        }
         click("scoreboard_section_quests")
         assertTrue(plain(screen.buttons.single { it.id.value == "scoreboard_section_quests" }.label).startsWith("✔"))
         quests = false

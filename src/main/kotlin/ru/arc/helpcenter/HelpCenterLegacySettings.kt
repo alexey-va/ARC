@@ -3,6 +3,10 @@ package ru.arc.helpcenter
 import ru.arc.sidebar.SidebarQuestRewards
 import ru.arc.sidebar.SidebarSection
 import ru.arc.sidebar.sidebarEnabled
+import ru.arc.sidebar.SIDEBAR_SKILLS_META_KEY
+import ru.arc.sidebar.selectedSidebarSkills
+import ru.arc.sidebar.sidebarSkillChoices
+import ru.arc.sidebar.toggleSidebarSkill
 
 import com.Zrips.CMI.CMI
 import com.Zrips.CMI.Modules.PlayerOptions.PlayerOption
@@ -109,6 +113,8 @@ class HelpCenterLegacySettings(
     internal fun scoreboardSectionEnabled(player: Player, section: SidebarSection): Boolean =
         section.enabled(backend.meta(player, section.metaKey))
 
+    internal fun scoreboardSkills(player: Player): List<String> = selectedSidebarSkills(backend.meta(player, SIDEBAR_SKILLS_META_KEY))
+
     fun execute(player: Player, id: String): CompletableFuture<Boolean> = when (id) {
         "admin" -> if (backend.hasPermission(player, ADMIN)) backend.consoleCommand(player, ConsoleCommand.OPEN_ADMIN_SETTINGS) else falseFuture()
         "scoreboard-rewards" -> backend.setMeta(player, SidebarQuestRewards.META_KEY, (!scoreboardRewardsEnabled(player)).toString())
@@ -152,6 +158,12 @@ class HelpCenterLegacySettings(
     }
 
     private fun modeAction(player: Player, id: String): CompletableFuture<Boolean> {
+        if (id == "scoreboard-skills-auto") return backend.setMeta(player, SIDEBAR_SKILLS_META_KEY, "")
+        if (id.startsWith("scoreboard-skill:")) {
+            val skill = id.removePrefix("scoreboard-skill:")
+            if (sidebarSkillChoices(player).none { it.id == skill }) return falseFuture()
+            return backend.setMeta(player, SIDEBAR_SKILLS_META_KEY, toggleSidebarSkill(scoreboardSkills(player), skill).joinToString(","))
+        }
         SidebarSection.entries.firstOrNull { "scoreboard-section-${it.id}" == id }?.let {
             return backend.setMeta(player, it.metaKey, (!scoreboardSectionEnabled(player, it)).toString())
         }

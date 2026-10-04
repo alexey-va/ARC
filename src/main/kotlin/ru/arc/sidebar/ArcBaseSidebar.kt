@@ -16,13 +16,12 @@ import ru.arc.hooks.HookRegistry
 import ru.arc.paper.api.ArcSidebarFrame
 import ru.arc.paper.api.ArcSidebarHandle
 import ru.arc.paper.api.ArcSidebarPriorities
-import ru.arc.paper.api.ArcSidebarService
 import ru.arc.xserver.playerlist.PlayerManager
 
 /** Lowest-priority replacement for the former Velocity TAB sidebar layouts. */
 internal class ArcBaseSidebar(
     private val plugin: ARC,
-    service: ArcSidebarService,
+    private val service: SectionedSidebarService,
 ) : AutoCloseable {
     private val config = ConfigManager.of(plugin.dataPath, RESOURCE)
     private val source: ArcSidebarHandle = service.register(plugin, "base", ArcSidebarPriorities.BASE)
@@ -32,49 +31,62 @@ internal class ArcBaseSidebar(
 
     fun start() {
         check(task == null) { "Base sidebar is already started" }
+        service.refreshPlayer = ::refreshPlayer
         task = plugin.server.scheduler.runTaskTimer(plugin, Runnable(::refresh), 10L, 20L)
     }
 
     internal fun refresh() {
         val online = Bukkit.getOnlinePlayers().associateBy(Player::getUniqueId)
         (shown - online.keys).forEach(source::hide)
-        val next = linkedSetOf<UUID>()
-        online.values.forEach { player ->
-            if (!enabledOnCurrentServer() || !supportsSidebarClient(player) || !sidebarEnabled(player::hasPermission)) {
-                source.hide(player)
-                return@forEach
-            }
-            val serverId = ARC.serverName.orEmpty()
-            val layout = if (serverId.equals("slimefun", ignoreCase = true)) "slimefun.sections" else "sections"
-            val rows = composeSidebarSections(
-                enabled = { section -> section.enabled(HookRegistry.luckPermsHook?.getCachedMeta(player.uniqueId, section.metaKey)) },
-                lines = { section -> config.stringList("$layout.${section.id}") },
-                resolve = { template ->
-                    resolveServerSidebarLine(template, serverId)?.let { serverLine ->
-                        resolveOptionalSidebarLine(serverLine) { placeholder ->
-                            resolvePlaceholder(player, placeholder)
-                        }
-                    }
-                },
-            ).map { render(player, it) }
-            if (rows.isEmpty()) {
-                source.hide(player)
-                return@forEach
-            }
-            val title = render(player, config.string("title", "&#B22222&lRus&f&lCrafting"))
-            source.show(
-                player,
-                ArcSidebarFrame(
-                    title = title,
-                    rows = rows,
-                ),
-            )
-            next += player.uniqueId
+        shown = shown.intersect(online.keys)
+        online.values.forEach(::refreshPlayer)
+    }
+
+    internal fun refreshPlayer(player: Player) {
+        if (!enabledOnCurrentServer() || !supportsSidebarClient(player) || !sidebarEnabled(player::hasPermission)) {
+            source.hide(player)
+            shown -= player.uniqueId
+            return
         }
-        shown = next
+        val serverId = ARC.serverName.orEmpty()
+        val layout = if (serverId.equals("slimefun", ignoreCase = true)) "slimefun.sections" else "sections"
+        fun enabled(section: SidebarSection) = section.enabled(HookRegistry.luckPermsHook?.getCachedMeta(player.uniqueId, section.metaKey))
+        val rows = composeSidebarSections(
+            enabled = ::enabled,
+            lines = { section -> sectionRows(player, section, layout, serverId) },
+            separator = Component.empty(),
+            isBlank = { it == Component.empty() },
+        )
+        if (rows.isEmpty()) {
+            source.hide(player)
+            shown -= player.uniqueId
+            return
+        }
+        val frame = ArcSidebarFrame(render(player, config.string("title", "&#B22222&lRus&f&lCrafting")), rows)
+        source.show(player, frame)
+        service.present(player, frame, enabled(SidebarSection.ACTIVITY))
+        shown += player.uniqueId
+    }
+
+    private fun sectionRows(player: Player, section: SidebarSection, layout: String, serverId: String): List<Component> {
+        if (section == SidebarSection.ACTIVITY) service.activity(player.uniqueId)?.let { return it.rows }
+        if (section == SidebarSection.RANK_PROGRESS) {
+            val token = "%arcranks_next_rank_progress_compact%"
+            val progress = resolvePlaceholder(player, token)
+            if (progress.isBlank() || progress == token || progress in setOf("…", "...")) return emptyList()
+        }
+        val data = sidebarPlayerData(player, section)
+        return config.stringList("$layout.${section.id}").mapNotNull { template ->
+            val serverLine = resolveServerSidebarLine(template, serverId) ?: return@mapNotNull null
+            val line = resolveOptionalSidebarLine(serverLine) { placeholder ->
+                if (placeholder.startsWith("%arc_sidebar_")) data[placeholder].orEmpty() else resolvePlaceholder(player, placeholder)
+            } ?: return@mapNotNull null
+            render(player, data.entries.fold(line) { text, (key, value) -> text.replace(key, value) })
+        }
     }
 
     override fun close() {
+        service.refreshPlayer = null
         task?.cancel()
         task = null
         shown = emptySet()
@@ -136,6 +148,7 @@ internal class ArcBaseSidebar(
                 "%player_x%" to player.location.blockX.toString(),
                 "%player_y%" to player.location.blockY.toString(),
                 "%player_z%" to player.location.blockZ.toString(),
+                "%player_direction%" to sidebarDirection(player.location.yaw),
                 "%online%" to networkTotal.toString(),
                 "%serveronline%" to serverOnline(serverId).toString(),
                 "%online_spawn%" to serverOnline("spawn").toString(),
@@ -188,7 +201,7 @@ internal fun resolveOptionalSidebarLine(
     if (placeholders.isEmpty()) return content
     return content.takeIf {
         placeholders.any { placeholder ->
-            resolvePlaceholder(placeholder).let { resolved -> resolved.isNotBlank() && resolved != placeholder }
+            resolvePlaceholder(placeholder).let { resolved -> resolved.isNotBlank() && resolved != placeholder && resolved !in setOf("…", "...") }
         }
     }
 }

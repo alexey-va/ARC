@@ -419,7 +419,6 @@ object SlimefunMenuModule : PluginModule {
         MenuRoute("guide", "Slimefun", "slimefun:slimefun", listOf("guide")),
         MenuRoute("rtp", "RTP", "rtp:rtp"),
         MenuRoute("homes", "HuskHomes", "huskhomes:homes"),
-        MenuRoute("lands", "Lands", "lands:lands"),
         MenuRoute("team", "justTeams", "justteams:team"),
         MenuRoute("shop", "EconomyShopGUI-Premium", "economyshopgui-premium:shop", listOf("slimefun_resources")),
     )
@@ -464,13 +463,11 @@ object SlimefunMenuModule : PluginModule {
         "buttons.network-spawn.label" to "<#92bed8>На спавн сети ›</#92bed8>",
         "buttons.network-spawn.tooltip" to "<#e8dfd2>Перейти на общий сервер spawn.</#e8dfd2>",
         "buttons.services.label" to "<#ffffff>Другие сервисы ›</#ffffff>",
-        "buttons.services.tooltip" to "<#e8dfd2>Открыть RTP, дома и территории.</#e8dfd2>",
+        "buttons.services.tooltip" to "<#e8dfd2>Открыть RTP, дома и команды.</#e8dfd2>",
         "buttons.rtp.label" to "<#92bed8>Случайная телепортация ›</#92bed8>",
         "buttons.rtp.tooltip" to "<#e8dfd2>Найти безопасное место в мире Slimefun.</#e8dfd2>",
         "buttons.homes.label" to "<#92bed8>Мои дома ›</#92bed8>",
         "buttons.homes.tooltip" to "<#e8dfd2>Посмотреть и выбрать сохранённый дом.</#e8dfd2>",
-        "buttons.lands.label" to "<#9bd48d>Мои земли ›</#9bd48d>",
-        "buttons.lands.tooltip" to "<#e8dfd2>Управлять территориями и участками.</#e8dfd2>",
         "buttons.team.label" to "<#ffffff>Команды JustTeams ›</#ffffff>",
         "buttons.team.tooltip" to "<#e8dfd2>Открыть общее меню команд.</#e8dfd2>",
         "guide.title" to "<#85dfc4>Путь технологий</#85dfc4>",
@@ -494,7 +491,7 @@ object SlimefunMenuModule : PluginModule {
         "starters.empty" to "<#e8dfd2>Сейчас нет доступных стартовых вариантов. Попробуйте позже.</#e8dfd2>",
     )
 
-    private val SERVICE_ROUTE_IDS = setOf("rtp", "homes", "lands", "team")
+    private val SERVICE_ROUTE_IDS = setOf("rtp", "homes", "team")
     private val ISLAND_ROUTES = mapOf(
         "island_home" to ("buttons.home" to "teleport"),
         "island_manage" to ("buttons.manage" to "panel"),

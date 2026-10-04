@@ -1,7 +1,7 @@
 # Applied at startup. Existing servers keep the full composition.
 # isolated: Config, OpsHttp, Restart, ItemInfo; /arc help, reload and restart.
-# slimefun: the isolated base plus one native Slimefun navigation menu.
+# slimefun: utility modules, native menu/sidebar, network chat and proxy player list.
 # Block hints use read-only Slimefun/ItemsAdder APIs without gameplay hooks.
-# Both lightweight profiles have no sync, economy, AI, scheduled commands or sidebar lifecycle.
-# Redis and glyph protection remain opt-in through modules/chat-mode.yml.
+# Both lightweight profiles have no sync, economy, AI or scheduled commands.
+# Slimefun uses shared ARC Redis for chat and online counts; glyph protection remains opt-in.
 profile: full

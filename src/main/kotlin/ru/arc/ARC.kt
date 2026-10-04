@@ -10,11 +10,12 @@ import org.bukkit.plugin.java.JavaPlugin
 import org.bukkit.plugin.ServicePriority
 import ru.arc.chat.ChatModeConfig
 import ru.arc.chat.IsolatedChatGlyphModule
+import ru.arc.chat.SlimefunNetworkChatModule
 import ru.arc.itemcatalog.ArcItemMaterializerBridge
 import ru.arc.paper.api.ArcTelemetryProvider
 import ru.arc.paper.api.ArcItemMaterializer
 import ru.arc.paper.api.ArcSidebarService
-import ru.arc.paper.sidebar.PaperArcSidebarService
+import ru.arc.sidebar.SectionedSidebarService
 import ru.arc.metrics.ArcTelemetryProviderBridge
 import ru.arc.audit.autosell.AutoSellAuditModule
 import ru.arc.audit.bank.BankAuditModule
@@ -132,7 +133,7 @@ open class ARC : JavaPlugin() {
     internal lateinit var chunkTicketRegistry: PaperChunkTicketRegistry
         private set
 
-    internal lateinit var sidebarService: PaperArcSidebarService
+    internal lateinit var sidebarService: SectionedSidebarService
         private set
 
     private var baseSidebar: ArcBaseSidebar? = null
@@ -175,7 +176,7 @@ open class ARC : JavaPlugin() {
             ArcMenus.initializeDialogRuntime(this)
         }
         if (runtimeProfile == ArcRuntimeProfile.FULL || runtimeProfile == ArcRuntimeProfile.SLIMEFUN) {
-            sidebarService = PaperArcSidebarService(this)
+            sidebarService = SectionedSidebarService(this)
             server.servicesManager.register(ArcSidebarService::class.java, sidebarService, this, ServicePriority.Normal)
         }
         if (runtimeProfile == ArcRuntimeProfile.FULL) {
@@ -284,12 +285,20 @@ open class ARC : JavaPlugin() {
         }
 
         if (runtimeProfile == ArcRuntimeProfile.SLIMEFUN) {
-            ModuleRegistry.registerAll(ConfigModule, OpsHttpModule, RestartModule, ItemInfoModule)
+            ModuleRegistry.registerAll(
+                ConfigModule,
+                OpsHttpModule,
+                RestartModule,
+                ItemInfoModule,
+                RedisModule,
+                ChatModeModule,
+                SlimefunNetworkChatModule,
+            )
             if (ChatModeConfig.load(dataPath).isolatedGlyphProtectionEnabled) {
-                ModuleRegistry.registerAll(RedisModule, IsolatedChatGlyphModule)
-                info("Runtime profile slimefun: local operations with chat glyph authorization")
+                ModuleRegistry.registerAll(IsolatedChatGlyphModule)
+                info("Runtime profile slimefun: isolated chat glyph protection enabled")
             } else {
-                info("Runtime profile slimefun: Config, OpsHttp, Restart, ItemInfo, SlimefunMenu")
+                info("Runtime profile slimefun: utility, shared chat mode, and player list")
             }
             ModuleRegistry.registerAll(SlimefunMenuModule)
             return
@@ -379,14 +388,15 @@ open class ARC : JavaPlugin() {
             return
         }
         if (runtimeProfile == ArcRuntimeProfile.SLIMEFUN) {
-            // Retain ARC and the utility menu; keep all FULL-only labels out of this profile.
+            // Retain the utility menu and chat-mode aliases; keep FULL-only labels out.
             val commandMap = server.commandMap
-            val preserved = setOf("arc", "menu", "skyblock")
+            val preserved = setOf("arc", "menu", "skyblock", "g", "l")
             val inactive = commandMap.knownCommands.values.filterIsInstance<PluginCommand>()
                 .filter { it.plugin === this && it.name !in preserved }.toSet()
             val labels = commandMap.knownCommands.filterValues { it in inactive }.keys.toList()
             labels.forEach { commandMap.knownCommands.remove(it) }
             inactive.forEach { it.unregister(commandMap) }
+            ChatModeAliasCommand.register(this)
             registerCommand("menu", SlimefunMenuCommand, null)
             registerCommand("skyblock", SlimefunMenuCommand, SlimefunMenuCommand)
             registerSlimefunMenuAlias()
