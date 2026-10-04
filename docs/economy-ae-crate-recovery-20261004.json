@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "title": "Restore existing AE crate rewards after the 9.24.15 upgrade",
+  "assumptions": [
+    "Read-only spawn journal at 2026-10-04T15:09Z: five unprepared ARC_CURRENT AE receipts (dust 16 and 32, black scrolls 2 and 4, randomizers 8). Two older FROZEN_ITEMS and two prepared MAIL receipts are separate recovery cases.",
+    "The patch adds the verified AE 9.24.15 factory version alongside 9.24.13. Reward identities, weights, quantities, success percentages, free-key periods and paid-key prices are unchanged.",
+    "The observed five receipts can release at most 48 dust, 6 black scrolls and 8 randomizers in total, subject to successful claim and inventory capacity. This is one finite backlog, not recurring daily income.",
+    "Low/base/high assume 0/1/2 already-selected AE receipts claimed per affected player-day. Participants 1/2/5 and a five-receipt cap describe only the observed recovery week; they are sensitivity assumptions, not measured player activity.",
+    "Ordinary future AE rewards regain the same configured item progression as the previously compatible provider. No new roll, extra debit, reroll, boost, money redemption or automatic grant is introduced.",
+    "Native AE item progression is not converted to vault or tokens. SELL-to-contract plans and the current SELL state are unchanged. Repeat clicks reuse the existing opening and frozen preparation receipt.",
+    "Delivery requires spawn ARC activation and a player claim; survival restart is explicitly deferred. Live claim acceptance remains to be observed."
+  ],
+  "participants": [1, 2, 5],
+  "currencies": {
+    "vault": {
+      "minor_per_unit": 100,
+      "disposable_per_player_day": {"before": ["0", "0", "0"], "after": ["0", "0", "0"]},
+      "flows": []
+    },
+    "tokens": {
+      "minor_per_unit": 1,
+      "disposable_per_player_day": {"before": ["0", "0", "0"], "after": ["0", "0", "0"]},
+      "flows": []
+    },
+    "ae_pending_reward_receipt": {
+      "minor_per_unit": 1,
+      "disposable_per_player_day": {"before": ["0", "0", "0"], "after": ["0", "1", "2"]},
+      "flows": [
+        {
+          "id": "existing_ae_mail_recovery",
+          "kind": "item",
+          "source": "AeNativeItems and ManagedOpeningEngine.claim",
+          "basis": "One already-selected reward per existing opening; never create a replacement opening or redraw the reward.",
+          "before": {
+            "enabled": false,
+            "amount_per_event": {"value": "1", "unit": "major"},
+            "events_per_player_day": ["0", "0", "0"]
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {"value": "1", "unit": "major"},
+            "events_per_player_day": ["0", "1", "2"],
+            "network_weekly_cap": {"value": "5", "unit": "major"}
+          }
+        }
+      ]
+    }
+  },
+  "prices": []
+}

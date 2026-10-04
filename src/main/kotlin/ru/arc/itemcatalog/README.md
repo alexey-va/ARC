@@ -128,9 +128,12 @@ tier once and uses its configured per-item success percentage. Stack splitting
 preserves native metadata and respects the actual item stack limit.
 
 The declared AEAPI has no consumable factory. The narrow reflective adapter is
-verified against AE **9.24.13**, root-JAR SHA-256
-`202ee20ab303623d6ee41ec05a58c9a1c1e8aef18ca16d43b52b78c9a220d0ab`.
-It fails closed on version/signature drift; review this seam before upgrading AE.
+verified against AE **9.24.13** (root-JAR SHA-256
+`202ee20ab303623d6ee41ec05a58c9a1c1e8aef18ca16d43b52b78c9a220d0ab`) and
+**9.24.15** (spawn JAR SHA-256
+`110ff13c95c46fb1bbd1604f88ad7cecb19294cb658e0a5f5072b2164e6382e6`). It
+fails closed on other versions or signature drift; review this seam before
+adding another version.
 Do not replace it with `giveitem magic ... <percent>`: that command does not
 implement the configured fixed dust percentage. Unchanged unsupported AE reward
 kinds retain the existing native command path for backward compatibility.

@@ -10,6 +10,8 @@ import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.logging.Level
 
+private val VERIFIED_AE_PLUGIN_VERSIONS = setOf("9.24.13", "9.24.15")
+
 /**
  * Materializes the small allowlist of AE rewards as AE-owned ItemStacks.
  *
@@ -19,7 +21,6 @@ import java.util.logging.Level
  */
 object AeNativeItems {
     private const val PLUGIN_NAME = "AdvancedEnchantments"
-    private const val PLUGIN_VERSION = "9.24.13"
 
     private val materializer = AeNativeItemMaterializer(::nativeFactories)
 
@@ -32,6 +33,8 @@ object AeNativeItems {
         preview: Boolean = false,
     ): List<ItemStack>? = materializer.create(treasure, preview)
 
+    internal fun supportsPluginVersion(version: String): Boolean = version in VERIFIED_AE_PLUGIN_VERSIONS
+
     @Volatile
     private var cachedBinding: CachedBinding? = null
 
@@ -39,7 +42,7 @@ object AeNativeItems {
 
     private fun nativeFactories(): AeNativeItemFactories? {
         val provider = Bukkit.getPluginManager().getPlugin(PLUGIN_NAME) ?: return null
-        if (!provider.isEnabled || provider.description.version != PLUGIN_VERSION) {
+        if (!provider.isEnabled || !supportsPluginVersion(provider.description.version)) {
             return null
         }
 
@@ -318,7 +321,7 @@ private class ReflectiveAeNativeItemFactories(
         private fun logIncompatibleSurface(failure: Throwable) {
             Bukkit.getLogger().log(
                 Level.WARNING,
-                "ARC AdvancedEnchantments native rewards require the verified 9.24.13 item-factory surface; integration is disabled.",
+                "ARC AdvancedEnchantments native rewards require the verified item-factory surface for ${VERIFIED_AE_PLUGIN_VERSIONS.joinToString()}; integration is disabled.",
                 failure,
             )
         }

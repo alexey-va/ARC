@@ -17,6 +17,16 @@ import ru.arc.paper.testing.MockBukkitTestRuntime
 
 class AeNativeItemsTest {
     @Test
+    fun `accepts only AE versions with verified native factory signatures`() {
+        assertTrue(AeNativeItems.supportsPluginVersion("9.24.13"))
+        assertTrue(AeNativeItems.supportsPluginVersion("9.24.15"))
+
+        listOf("9.24.12", "9.24.14", "9.24.16", "9.24.15-SNAPSHOT").forEach {
+            assertFalse(AeNativeItems.supportsPluginVersion(it))
+        }
+    }
+
+    @Test
     fun `supports only the fixed native AE item allowlist and validated args`() {
         val materializer = AeNativeItemMaterializer { null }
 
