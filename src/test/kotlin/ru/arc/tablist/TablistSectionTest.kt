@@ -20,6 +20,8 @@ class TablistSectionTest : StringSpec({
             it.enabled("TRUE") shouldBe true
             it.enabled("false") shouldBe false
         }
+        config.getStringList("slimefun.sections.balance") shouldContainExactly
+            listOf("&#F4F6FAСлаймы: &#9BD48D%rediseco_bal_short_slimes% &#FFFFFF")
         tablistEnabled { it == "tab.tablist20" } shouldBe true
         tablistEnabled { false } shouldBe false
     }

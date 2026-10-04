@@ -45,7 +45,7 @@ slimefun:
     profile:
       - '&#FFFFFF%player% &#7C8596• &#85DFC4SkyBlock · Slimefun'
     balance:
-      - '&#F4F6FAСлаймы: &#9BD48D%rediseco_bal_formatted_shorthand_slimes% &#FFFFFF'
+      - '&#F4F6FAСлаймы: &#9BD48D%rediseco_bal_short_slimes% &#FFFFFF'
     location:
       - '&#F6C453Остров'
       - '?&#F4F6FA%superior_island_name% &#7C8596• &#F4F6FAУровень: &#9BD48D%superior_island_level_format%'

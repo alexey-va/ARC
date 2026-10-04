@@ -296,6 +296,7 @@ open class ARC : JavaPlugin() {
                 OpsHttpModule,
                 RestartModule,
                 ItemInfoModule,
+                HooksModule,
                 RedisModule,
                 ChatModeModule,
                 SlimefunNetworkChatModule,
@@ -306,7 +307,7 @@ open class ARC : JavaPlugin() {
             } else {
                 info("Runtime profile slimefun: utility, shared chat mode, and player list")
             }
-            ModuleRegistry.registerAll(SlimefunMenuModule)
+            ModuleRegistry.registerAll(SlimefunMenuModule, HelpCenterModule)
             return
         }
 

@@ -18,6 +18,8 @@ import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import ru.arc.core.PluginModule
 import ru.arc.common.ServerLocation
+import ru.arc.helpcenter.HelpCenterModule
+import ru.arc.helpcenter.HelpCenterPage
 import ru.arc.hooks.HuskHomesTeleporter
 import ru.arc.gui.ArcMenus
 import ru.arc.paper.menu.PaperDialogActionId
@@ -133,6 +135,9 @@ object SlimefunMenuModule : PluginModule {
             button("hub", "buttons.hub", close = true) { teleportToHub(it.player) },
             button("network_spawn", "buttons.network-spawn", close = true) { sendToNetworkSpawn(it.player) },
             button("services", "buttons.services", close = false) { openServices(it.player) },
+            button("player_settings", "buttons.player-settings", close = false) {
+                HelpCenterModule.open(it.player, HelpCenterPage.SETTINGS)
+            },
         )
         return PaperDialogScreen(
             id = "slimefun.skyblock.root",
@@ -448,6 +453,8 @@ object SlimefunMenuModule : PluginModule {
         "buttons.visitors.tooltip" to "<#e8dfd2>Настроить доступ посетителей к острову.</#e8dfd2>",
         "buttons.settings.label" to "<#c4a7e7>Настройки острова ›</#c4a7e7>",
         "buttons.settings.tooltip" to "<#e8dfd2>Изменить доступные настройки острова.</#e8dfd2>",
+        "buttons.player-settings.label" to "<#ffffff>Настройки игрока</#ffffff>",
+        "buttons.player-settings.tooltip" to "<#e8dfd2>Настроить личный таблист и другие параметры интерфейса.</#e8dfd2>",
         "buttons.biome.label" to "<#9bd48d>Биом острова ›</#9bd48d>",
         "buttons.biome.tooltip" to "<#e8dfd2>Открыть выбор биома острова.</#e8dfd2>",
         "buttons.top.label" to "<#9bd48d>Рейтинг островов ›</#9bd48d>",

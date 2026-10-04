@@ -6,6 +6,8 @@ import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.entity.Player
+import ru.arc.ARC
+import ru.arc.config.ArcRuntimeProfile
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.whenCompleteSync
 import ru.arc.gui.ArcMenus
@@ -17,6 +19,7 @@ import ru.arc.paper.menu.PaperDialogClickContext
 import ru.arc.paper.menu.PaperDialogInputId
 import ru.arc.paper.menu.PaperDialogScreen
 import ru.arc.paper.menu.PaperDialogTextInput
+import ru.arc.slimefunmenu.SlimefunMenuModule
 
 internal class HelpCenterController(
     private val settings: HelpCenterSettings,
@@ -106,7 +109,7 @@ internal class HelpCenterController(
 
     private val personalSettings by lazy {
         HelpCenterSettingsController(settings, gateway, legacySettings, navigation, showDialog,
-            ::executeCatalog, ::executeInventory, ::openRoot)
+            ::executeCatalog, ::executeInventory, ::openSettingsRoot)
     }
 
     fun close() {
@@ -554,6 +557,15 @@ internal class HelpCenterController(
     }
 
     private fun openSettings(player: Player) = personalSettings.open(player)
+
+    private fun openSettingsRoot(player: Player) {
+        if (ARC.instance.runtimeProfile == ArcRuntimeProfile.SLIMEFUN) {
+            markNavigation(player)
+            SlimefunMenuModule.open(player)
+        } else {
+            openRoot(player)
+        }
+    }
 
     private fun openRecovery(player: Player, returnTo: HelpCenterPage = HelpCenterPage.COMMANDS) {
         markNavigation(player) { openRecovery(player, returnTo) }
@@ -1277,7 +1289,7 @@ internal class HelpCenterController(
             CommandDefinition("rtp", HelpCenterCategory.TRAVEL, "rtp"),
             CommandDefinition("back", HelpCenterCategory.TRAVEL, "back"),
             CommandDefinition("stuck", HelpCenterCategory.TRAVEL, "stuck"),
-            CommandDefinition("privat", HelpCenterCategory.PROTECTION, "privat"),
+            CommandDefinition("privat", HelpCenterCategory.PROTECTION, "privat", HelpCenterFeature.LANDS),
             CommandDefinition(
                 "events",
                 HelpCenterCategory.ACTIVITIES,

@@ -19,6 +19,8 @@ import ru.arc.config.ConfigManager
 import ru.arc.core.ModuleRegistry
 import ru.arc.core.modules.RedisModule
 import ru.arc.gui.ArcMenus
+import ru.arc.helpcenter.HelpCenterModule
+import ru.arc.hooks.HookRegistry
 import ru.arc.listeners.ChatListener
 import ru.arc.paper.api.ArcSidebarService
 import ru.arc.paper.testing.MockBukkitTestRuntime
@@ -37,7 +39,7 @@ class SlimefunRuntimeProfileTest : FreeSpec({
         ArcMenus.resetForTests()
     }
 
-    "slimefun profile loads only utility modules, exposes its menu routes and closes cleanly" {
+    "slimefun profile loads utility modules and personal interface settings, exposes its menu routes and closes cleanly" {
         Logging.disableLokiAppender = true
         Logging.quietMode = true
         Logging.bootstrapForTests()
@@ -64,15 +66,23 @@ class SlimefunRuntimeProfileTest : FreeSpec({
 
             plugin.runtimeProfile shouldBe ArcRuntimeProfile.SLIMEFUN
             ModuleRegistry.getRuntimeStatuses().map { it.name }.toSet() shouldBe
-                setOf("Config", "OpsHttp", "Restart", "ItemInfo", "Redis", "ChatMode", "SlimefunNetworkChat", "SlimefunMenu")
+                setOf("Config", "OpsHttp", "Restart", "ItemInfo", "Redis", "ChatMode", "SlimefunNetworkChat", "SlimefunMenu", "Hooks", "HelpCenter")
             ModuleRegistry.getRuntimeStatuses().all { it.ready && it.failures == 0L } shouldBe true
             ARC.redisManager shouldBe null
             ARC.networkRegistry shouldBe null
-            ARC.hookRegistry shouldBe null
-            ModuleRegistry.getRuntimeStatuses().map { it.name }.toSet().intersect(setOf("Hooks", "Network", "Economy", "Sync")) shouldBe emptySet()
+            ARC.hookRegistry shouldNotBe null
+            ModuleRegistry.getRuntimeStatuses().map { it.name }.toSet().intersect(setOf("Network", "Economy", "Sync")) shouldBe emptySet()
             HandlerList.getRegisteredListeners(plugin).any { it.listener is ChatListener } shouldBe true
             runtime.server.servicesManager.getRegistration(ArcSidebarService::class.java) shouldNotBe null
             ArcMenus.hasDialogRuntimeForTests() shouldBe true
+            HelpCenterModule.isAvailable() shouldBe true
+            plugin.tablist shouldNotBe null
+            HookRegistry.landsHook shouldBe null
+            HookRegistry.emHook shouldBe null
+            HookRegistry.jobsEnabled shouldBe false
+            val interfaceHooks = checkNotNull(ARC.hookRegistry)
+            interfaceHooks.chatListener shouldBe null
+            interfaceHooks.blockListener shouldBe null
 
             runtime.server.commandMap.getCommand("buy") shouldBe otherBuy
             runtime.server.commandMap.getCommand("arc:buy") shouldBe null
@@ -114,7 +124,7 @@ class SlimefunRuntimeProfileTest : FreeSpec({
 
             plugin.reload()
             ModuleRegistry.getRuntimeStatuses().map { it.name }.toSet() shouldBe
-                setOf("Config", "OpsHttp", "Restart", "ItemInfo", "Redis", "ChatMode", "SlimefunNetworkChat", "SlimefunMenu")
+                setOf("Config", "OpsHttp", "Restart", "ItemInfo", "Redis", "ChatMode", "SlimefunNetworkChat", "SlimefunMenu", "Hooks", "HelpCenter")
             ModuleRegistry.getRuntimeStatuses().all { it.ready && it.failures == 0L } shouldBe true
             ArcMenus.hasDialogRuntimeForTests() shouldBe true
 
@@ -126,6 +136,10 @@ class SlimefunRuntimeProfileTest : FreeSpec({
             runtime.server.commandMap.getCommand("arc:mm") shouldBe null
             runtime.server.commandMap.knownCommands.values.any { it === oldAlias } shouldBe false
             ArcMenus.hasDialogRuntimeForTests() shouldBe false
+            HelpCenterModule.isAvailable() shouldBe false
+            interfaceHooks.isClosed shouldBe true
+            ARC.hookRegistry shouldBe null
+            plugin.tablist shouldBe null
 
             runtime.server.pluginManager.enablePlugin(plugin)
             val reenabledAlias = runtime.server.commandMap.getCommand("mm")
@@ -161,7 +175,7 @@ class SlimefunRuntimeProfileTest : FreeSpec({
                 val plugin = loadSlimefunProfilePlugin(SlimefunGlyphProfilePlugin::class.java)
                 plugin.runtimeProfile shouldBe ArcRuntimeProfile.SLIMEFUN
                 ModuleRegistry.getRuntimeStatuses().map { it.name }.toSet() shouldBe
-                    setOf("Redis", "ChatGlyphProtection", "Config", "OpsHttp", "Restart", "ItemInfo", "ChatMode", "SlimefunNetworkChat", "SlimefunMenu")
+                    setOf("Redis", "ChatGlyphProtection", "Config", "OpsHttp", "Restart", "ItemInfo", "ChatMode", "SlimefunNetworkChat", "SlimefunMenu", "Hooks", "HelpCenter")
                 ModuleRegistry.getRuntimeStatuses().all { it.ready && it.failures == 0L } shouldBe true
                 verify(atLeast = 1) { redis.registerChannelUnique("arc.proxy_player_list", any()) }
                 val listeners = mutableListOf<ChannelListener>()
@@ -177,7 +191,7 @@ class SlimefunRuntimeProfileTest : FreeSpec({
                 ModuleRegistry.getRuntimeStatuses().all { it.ready && it.failures == 0L } shouldBe true
                 verify(atLeast = 2) { redis.registerChannelUnique("arc.proxy_player_list", any()) }
                 ARC.networkRegistry shouldBe null
-                ARC.hookRegistry shouldBe null
+                ARC.hookRegistry shouldNotBe null
                 runtime.server.pluginManager.disablePlugin(plugin)
                 verify(atLeast = 2) { redis.unregisterChannel("arc.proxy_player_list", any()) }
             }

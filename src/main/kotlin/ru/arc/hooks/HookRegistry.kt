@@ -5,6 +5,7 @@ import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
 import ru.arc.ARC
 import ru.arc.config.ArcRedisConfig
+import ru.arc.config.ArcRuntimeProfile
 import ru.arc.chat.ChatModeConfig
 import ru.arc.chat.ItemsAdderChatGuard
 import ru.arc.chat.ChatGlyphProtection
@@ -167,6 +168,10 @@ class HookRegistry(
     fun setupHooks() {
         check(!isClosed) { "HookRegistry is closed" }
         papiHook?.clearPlaceholderCache()
+        if (ARC.instance.runtimeProfile == ArcRuntimeProfile.SLIMEFUN) {
+            registerInterfaceHooks()
+            return
+        }
         registerVanillaEvents()
         registerHooks()
     }
@@ -319,12 +324,18 @@ class HookRegistry(
         return listener
     }
 
-    private fun registerHooks() {
+    private fun registerInterfaceHooks() {
         register("PlaceholderAPI", true) {
             val hook = PAPIHook()
             check(hook.register()) { "PlaceholderAPI rejected ARC expansion registration" }
             papiHook = hook
         }
+        register("LuckPerms", true) { luckPermsHook = LuckPermsHook() }
+        register("AuraSkills", true) { auraSkillsHook = AuraSkillsHook() }
+    }
+
+    private fun registerHooks() {
+        registerInterfaceHooks()
         register("WorldGuard", true) {
             wgHook = registerListener(WGHook())
         }
@@ -407,8 +418,6 @@ class HookRegistry(
             redisEcoHook = hook
         }
         if (translatorHook == null) translatorHook = TranslatorHook()
-        register("LuckPerms", true) { luckPermsHook = LuckPermsHook() }
-        register("AuraSkills", true) { auraSkillsHook = AuraSkillsHook() }
         register("CMI", true) {
             val hook = CMIHook()
             registerListener(CMIListener())

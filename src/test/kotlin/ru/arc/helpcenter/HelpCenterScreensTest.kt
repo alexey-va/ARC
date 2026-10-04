@@ -589,8 +589,17 @@ class HelpCenterScreensTest {
         open(HelpCenterPage.SETTINGS)
         click("settings_interface")
         click("legacy_tablist")
-        assertEquals(21, screen.buttons.size)
-        assertTrue(plain(screen.buttons.last().label).startsWith("✔"))
+        assertEquals("help.settings.tablist", screen.id)
+        assertEquals(listOf("tablist_toggle", "tablist_section_profile", "tablist_section_balance",
+            "tablist_section_location", "tablist_section_coordinates", "tablist_section_rank_progress",
+            "tablist_section_quests", "tablist_section_activity", "tablist_section_profession",
+            "tablist_section_skills", "tablist_section_online", "tablist_section_technical", "tablist_skills_choose"),
+            screen.buttons.map { it.id.value })
+        assertTrue(plain(screen.buttons.first().label).startsWith("○"))
+        click("tablist_skills_choose")
+        assertEquals("help.settings.tablist.skills", screen.id)
+        click("back")
+        assertEquals("help.settings.tablist", screen.id)
         click("back")
         assertEquals("help.settings.section.interface", screen.id)
         click("legacy_item_info")
