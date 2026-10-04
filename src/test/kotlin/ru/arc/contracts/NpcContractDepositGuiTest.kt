@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import ru.arc.TestBase
 import ru.arc.gui.ArcMenus
+import ru.arc.gui.ArcMenuSchema
 import ru.arc.paper.playerstate.NativePaperPlayerDataPersistence
 import java.util.concurrent.CompletableFuture
 
@@ -65,18 +66,25 @@ class NpcContractDepositGuiTest : TestBase() {
                     "bank_orders" -> "Закупки палаты сделок"
                     else -> "Снабжение гильдии"
                 }
-                inventoryView.setCursor(ItemStack(Material.COD, 3))
-                server.pluginManager.callEvent(InventoryClickEvent(inventoryView, InventoryType.SlotType.CONTAINER,
-                    9, ClickType.LEFT, InventoryAction.PLACE_ALL))
-                top.getItem(9) shouldBe ItemStack(Material.COD, 3)
-                inventoryView.cursor.type.isAir shouldBe true
+                val layout = ArcMenus.current().catalog.require(ArcMenuSchema.CONTRACT_DESKS.getValue(3))
+                val deposits = layout.region(ArcMenuSchema.CONTRACT_DEPOSIT).map { it.index }
+                deposits shouldBe listOf(6,7,8,15,16,17,24,25,26)
+                deposits.forEachIndexed { index, slot ->
+                    val offered = ItemStack(Material.COD, index + 1)
+                    inventoryView.setCursor(offered)
+                    server.pluginManager.callEvent(InventoryClickEvent(inventoryView, InventoryType.SlotType.CONTAINER,
+                        slot, ClickType.LEFT, InventoryAction.PLACE_ALL))
+                    top.getItem(slot) shouldBe offered
+                    inventoryView.cursor.type.isAir shouldBe true
+                }
+                ContractDeskStorage(player, group, { false }).snapshot().map { it?.amount } shouldBe (1..9).toList()
                 saleCalls shouldBe 0
                 fun sell() = server.pluginManager.callEvent(InventoryClickEvent(inventoryView,
-                    InventoryType.SlotType.CONTAINER, 22, ClickType.LEFT, InventoryAction.PICKUP_ALL))
+                    InventoryType.SlotType.CONTAINER, layout.slot("sell").index, ClickType.LEFT, InventoryAction.PICKUP_ALL))
                 sell()
                 server.scheduler.performTicks(5)
                 saleCalls shouldBe 1
-                top.getItem(9) shouldBe null
+                deposits.forEach { slot -> top.getItem(slot) shouldBe null }
                 player.inventory.getItem(0) shouldBe ItemStack(Material.COD, 64)
                 (player.openInventory.topInventory === top) shouldBe true
                 sell()

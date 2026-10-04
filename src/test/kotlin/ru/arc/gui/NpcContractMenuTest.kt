@@ -18,10 +18,14 @@ class NpcContractMenuTest : StringSpec({
             for (rows in 3..6) {
                 val layout = catalog.catalog.require(ArcMenuSchema.CONTRACT_DESKS.getValue(rows))
                 layout.rows shouldBe rows
-                val depositStart = (rows - 2) * 9
-                layout.region(ArcMenuSchema.CONTRACT_DEPOSIT).map { it.index } shouldBe (depositStart until depositStart + 9).toList()
-                layout.region(ArcMenuSchema.CONTRACT_DESK_ORDERS).size shouldBe depositStart
-                layout.slot("sell").index shouldBe (rows - 1) * 9 + 4
+                val middle = rows / 2
+                layout.region(ArcMenuSchema.CONTRACT_DEPOSIT).map { it.index } shouldBe
+                    ((middle - 1)..(middle + 1)).flatMap { row -> (6..8).map { row * 9 + it } }
+                layout.region(ArcMenuSchema.CONTRACT_DESK_ORDERS).map { it.index } shouldBe
+                    (0 until rows).flatMap { row -> (0..4).map { row * 9 + it } }
+                layout.slot("sell").index shouldBe middle * 9 + 5
+                layout.slot("previous").index shouldBe (middle - 1) * 9 + 5
+                layout.slot("next").index shouldBe (middle + 1) * 9 + 5
                 layout.backgroundTemplate shouldBe MenuTemplateId.of("background")
                 layout.pagination shouldBe null
             }
