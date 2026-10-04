@@ -17,7 +17,7 @@ class OriginWorkshopTablesGeometryTest : FreeSpec({
         val blocks = pieces.filter { it.kind == OriginWorkshopTablePieceKind.BLOCK }
         val items = pieces.filter { it.kind == OriginWorkshopTablePieceKind.ITEM }
 
-        blocks.size shouldBe 33
+        blocks.size shouldBe 37
         items.size shouldBe 1
         blocks.minOf { it.y - it.height / 2.0 } shouldBe 0.0
         val top = blocks.single { it.key == "top" }
@@ -33,6 +33,21 @@ class OriginWorkshopTablesGeometryTest : FreeSpec({
         items.all { it.flat } shouldBe true
         val boardSample = blocks.single { it.key == "carpenter-board-sample" }
         (abs(boardSample.y - boardSample.height / 2.0 - dimensions.height - 0.005) < 1e-9) shouldBe true
+
+        val saw = blocks.single { it.key == "carpenter-table-saw" }
+        saw.material shouldBe Material.STONECUTTER
+        saw.width shouldBe 0.92
+        saw.height shouldBe 0.74
+        val boardFeed = blocks.single { it.key == "carpenter-board-feed" }
+        val boardInFeed = blocks.single { it.key == "carpenter-board-in-feed" }
+        val ripFence = blocks.single { it.key == "carpenter-rip-fence" }
+        val motor = blocks.single { it.key == "carpenter-drive-motor" }
+        (abs(boardInFeed.y - boardInFeed.height / 2.0 - (boardFeed.y + boardFeed.height / 2.0)) < 1e-9) shouldBe true
+        (abs(boardInFeed.z - boardInFeed.depth / 2.0 - (boardFeed.z - boardFeed.depth / 2.0)) < 1e-9) shouldBe true
+        (abs(boardInFeed.z + boardInFeed.depth / 2.0 - (saw.z - saw.depth / 2.0)) < 1e-9) shouldBe true
+        (abs(boardFeed.z + boardFeed.depth / 2.0 - (saw.z - saw.depth / 2.0)) < 1e-9) shouldBe true
+        (abs(ripFence.y - ripFence.height / 2.0 - (boardFeed.y + boardFeed.height / 2.0)) < 1e-9) shouldBe true
+        (abs(motor.z - motor.depth / 2.0 - (saw.z + saw.depth / 2.0)) < 1e-9) shouldBe true
     }
 
     "right-angle yaw swaps the table footprint and rotates role props with it" {
@@ -91,6 +106,58 @@ class OriginWorkshopTablesGeometryTest : FreeSpec({
             dimensions = dimensions,
         ).single { it.key == "finisher-finished-board" }
         (abs(finishedBoard.y - finishedBoard.height / 2.0 - dimensions.height - 0.005) < 1e-9) shouldBe true
+    }
+
+    "craft-specific samples and fixtures meet their supports and stay inside the table" {
+        val dimensions = OriginWorkshopTableDimensions.DEFAULT
+        val upholstery = originWorkshopTablePieces(
+            OriginWorkshopTableRole.UPHOLSTERER,
+            yaw = 0,
+            dimensions = dimensions,
+        )
+            .associateBy { it.key }
+        val cushionBase = upholstery.getValue("upholsterer-cushion-base")
+        val padding = upholstery.getValue("upholsterer-cushion-padding")
+        val cover = upholstery.getValue("upholsterer-cushion-cover")
+        (abs(cushionBase.y - cushionBase.height / 2.0 - dimensions.height - 0.005) < 1e-9) shouldBe true
+        (abs(padding.y - padding.height / 2.0 - (cushionBase.y + cushionBase.height / 2.0)) < 1e-9) shouldBe true
+        (abs(cover.y - cover.height / 2.0 - (padding.y + padding.height / 2.0)) < 1e-9) shouldBe true
+
+        val assembly = originWorkshopTablePieces(OriginWorkshopTableRole.ASSEMBLER, yaw = 0, dimensions = dimensions)
+            .associateBy { it.key }
+        val viseBed = assembly.getValue("assembler-vise-bed")
+        val leftPost = assembly.getValue("assembler-vise-post-left")
+        val rightPost = assembly.getValue("assembler-vise-post-right")
+        val crossbar = assembly.getValue("assembler-vise-crossbar")
+        val board = assembly.getValue("assembler-board-sample")
+        val leftClamp = assembly.getValue("assembler-clamp-left")
+        val rightClamp = assembly.getValue("assembler-clamp-right")
+        (abs(viseBed.y - viseBed.height / 2.0 - dimensions.height - 0.005) < 1e-9) shouldBe true
+        (abs(leftPost.y - leftPost.height / 2.0 - (viseBed.y + viseBed.height / 2.0)) < 1e-9) shouldBe true
+        (abs(rightPost.y - rightPost.height / 2.0 - (viseBed.y + viseBed.height / 2.0)) < 1e-9) shouldBe true
+        (abs(crossbar.y - crossbar.height / 2.0 - (leftPost.y + leftPost.height / 2.0)) < 1e-9) shouldBe true
+        (abs(board.y - board.height / 2.0 - (viseBed.y + viseBed.height / 2.0) - 0.005) < 1e-9) shouldBe true
+        (abs(leftClamp.x + leftClamp.width / 2.0 - (board.x - board.width / 2.0)) < 1e-9) shouldBe true
+        (abs(rightClamp.x - rightClamp.width / 2.0 - (board.x + board.width / 2.0)) < 1e-9) shouldBe true
+
+        val finishing = originWorkshopTablePieces(OriginWorkshopTableRole.FINISHER, yaw = 0, dimensions = dimensions)
+            .associateBy { it.key }
+        val frontPost = finishing.getValue("finisher-drying-post-front-left")
+        val dryingRail = finishing.getValue("finisher-drying-rail-front")
+        val dryingBoard = finishing.getValue("finisher-drying-board-left")
+        (abs(frontPost.y - frontPost.height / 2.0 - dimensions.height - 0.005) < 1e-9) shouldBe true
+        (abs(dryingRail.y - dryingRail.height / 2.0 - (frontPost.y + frontPost.height / 2.0)) < 1e-9) shouldBe true
+        (abs(dryingBoard.y - dryingBoard.height / 2.0 - (dryingRail.y + dryingRail.height / 2.0)) < 1e-9) shouldBe true
+
+        for (role in OriginWorkshopTableRole.entries) for (yaw in listOf(0, 90, 180, 270)) {
+            val pieces = originWorkshopTablePieces(role, yaw, dimensions)
+            val halfX = if (yaw == 90 || yaw == 270) dimensions.depth / 2.0 else dimensions.width / 2.0
+            val halfZ = if (yaw == 90 || yaw == 270) dimensions.width / 2.0 else dimensions.depth / 2.0
+            (pieces.all {
+                it.x - it.width / 2.0 >= -halfX - 1e-9 && it.x + it.width / 2.0 <= halfX + 1e-9 &&
+                    it.z - it.depth / 2.0 >= -halfZ - 1e-9 && it.z + it.depth / 2.0 <= halfZ + 1e-9
+            }) shouldBe true
+        }
     }
 
     "runtime YAML schema loads four centered tables and shared dimensions" {

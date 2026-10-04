@@ -238,8 +238,14 @@ internal fun originWorkshopTablePieces(
 
     val machine = when (role) {
         OriginWorkshopTableRole.CARPENTER -> listOf(
-            blockPiece("carpenter-stonecutter", Material.STONECUTTER, -1.15, dimensions.height + 0.35, -0.14,
-                0.72, 0.70, 0.72),
+            blockPiece("carpenter-table-saw", Material.STONECUTTER, -1.15, dimensions.height + 0.37, -0.12,
+                0.92, 0.74, 0.92),
+            blockPiece("carpenter-board-feed", Material.SPRUCE_PLANKS, -1.15, dimensions.height + 0.035, -0.80,
+                0.90, 0.06, 0.44),
+            blockPiece("carpenter-rip-fence", Material.DARK_OAK_PLANKS, -0.78, dimensions.height + 0.14, -0.80,
+                0.08, 0.15, 0.42),
+            blockPiece("carpenter-drive-motor", Material.BLACKSTONE, -1.15, dimensions.height + 0.14, 0.49,
+                0.42, 0.28, 0.30),
         )
         OriginWorkshopTableRole.UPHOLSTERER -> listOf(
             blockPiece("upholsterer-loom", Material.LOOM, -1.15, dimensions.height + 0.36, -0.14,
@@ -248,39 +254,79 @@ internal fun originWorkshopTablePieces(
         OriginWorkshopTableRole.ASSEMBLER -> listOf(
             blockPiece("assembler-anvil", Material.ANVIL, -1.15, dimensions.height + 0.31, -0.14,
                 0.76, 0.62, 0.70),
-            blockPiece("assembler-clamp-left", Material.IRON_BLOCK, -0.52, dimensions.height + 0.18, -0.16,
-                0.14, 0.36, 0.14),
-            blockPiece("assembler-clamp-right", Material.IRON_BLOCK, -0.24, dimensions.height + 0.18, -0.16,
-                0.14, 0.36, 0.14),
+            blockPiece("assembler-vise-bed", Material.DARK_OAK_PLANKS, 0.80, dimensions.height + 0.035, 0.24,
+                1.12, 0.06, 0.46),
+            blockPiece("assembler-vise-post-left", Material.STRIPPED_SPRUCE_LOG, 0.32, dimensions.height + 0.23, 0.24,
+                0.08, 0.33, 0.12),
+            blockPiece("assembler-vise-post-right", Material.STRIPPED_SPRUCE_LOG, 1.28, dimensions.height + 0.23, 0.24,
+                0.08, 0.33, 0.12),
+            blockPiece("assembler-vise-crossbar", Material.DARK_OAK_PLANKS, 0.80, dimensions.height + 0.435, 0.24,
+                0.96, 0.08, 0.12),
+            blockPiece("assembler-clamp-left", Material.IRON_BLOCK, 0.40, dimensions.height + 0.17, 0.24,
+                0.12, 0.20, 0.16),
+            blockPiece("assembler-clamp-right", Material.IRON_BLOCK, 1.20, dimensions.height + 0.17, 0.24,
+                0.12, 0.20, 0.16),
         )
         OriginWorkshopTableRole.FINISHER -> listOf(
             blockPiece("finisher-paint-bath", Material.WATER_CAULDRON, -1.15, dimensions.height + 0.30, -0.14,
                 0.72, 0.60, 0.72),
+            blockPiece(
+                "finisher-drying-post-front-left", Material.STRIPPED_SPRUCE_LOG, 0.30,
+                dimensions.height + 0.195, 0.16,
+                0.08, 0.38, 0.08),
+            blockPiece(
+                "finisher-drying-post-back-left", Material.STRIPPED_SPRUCE_LOG, 0.30,
+                dimensions.height + 0.195, 0.48,
+                0.08, 0.38, 0.08),
+            blockPiece(
+                "finisher-drying-post-front-right", Material.STRIPPED_SPRUCE_LOG, 1.30,
+                dimensions.height + 0.195, 0.16,
+                0.08, 0.38, 0.08),
+            blockPiece(
+                "finisher-drying-post-back-right", Material.STRIPPED_SPRUCE_LOG, 1.30,
+                dimensions.height + 0.195, 0.48,
+                0.08, 0.38, 0.08),
+            blockPiece("finisher-drying-rail-front", Material.SPRUCE_PLANKS, 0.80, dimensions.height + 0.415, 0.16,
+                1.00, 0.06, 0.06),
+            blockPiece("finisher-drying-rail-back", Material.SPRUCE_PLANKS, 0.80, dimensions.height + 0.415, 0.48,
+                1.00, 0.06, 0.06),
         )
     }
-    val workpiece = when (role) {
-        OriginWorkshopTableRole.CARPENTER -> blockPiece(
-            "carpenter-board-sample", Material.SPRUCE_PLANKS,
-            0.29 * dimensions.width, dimensions.height + 0.035, -0.10 * dimensions.depth,
-            0.65, 0.06, 0.30,
+    val workpieces = when (role) {
+        OriginWorkshopTableRole.CARPENTER -> listOf(
+            blockPiece("carpenter-board-sample", Material.SPRUCE_PLANKS,
+                0.29 * dimensions.width, dimensions.height + 0.035, -0.10 * dimensions.depth,
+                0.65, 0.06, 0.30),
+            blockPiece("carpenter-board-in-feed", Material.OAK_PLANKS, -1.15, dimensions.height + 0.09, -0.80,
+                0.38, 0.05, 0.44),
         )
-        OriginWorkshopTableRole.UPHOLSTERER -> blockPiece(
-            "upholsterer-cloth-roll", Material.RED_WOOL,
-            0.29 * dimensions.width, dimensions.height + 0.085, -0.10 * dimensions.depth,
-            0.65, 0.16, 0.35,
+        OriginWorkshopTableRole.UPHOLSTERER -> listOf(
+            blockPiece("upholsterer-cloth-roll", Material.RED_WOOL,
+                0.29 * dimensions.width, dimensions.height + 0.085, -0.10 * dimensions.depth,
+                0.65, 0.16, 0.35),
+            blockPiece("upholsterer-cushion-base", Material.SPRUCE_PLANKS, 0.96, dimensions.height + 0.035, 0.38,
+                0.76, 0.06, 0.50),
+            blockPiece("upholsterer-cushion-padding", Material.WHITE_WOOL, 0.96, dimensions.height + 0.155, 0.38,
+                0.72, 0.18, 0.46),
+            blockPiece("upholsterer-cushion-cover", Material.RED_WOOL, 0.96, dimensions.height + 0.265, 0.38,
+                0.70, 0.04, 0.44),
         )
-        OriginWorkshopTableRole.ASSEMBLER -> blockPiece(
+        OriginWorkshopTableRole.ASSEMBLER -> listOf(blockPiece(
             "assembler-board-sample", Material.SPRUCE_PLANKS,
-            0.29 * dimensions.width, dimensions.height + 0.035, -0.10 * dimensions.depth,
-            0.65, 0.06, 0.30,
-        )
-        OriginWorkshopTableRole.FINISHER -> blockPiece(
-            "finisher-finished-board", Material.SPRUCE_PLANKS,
-            0.29 * dimensions.width, dimensions.height + 0.035, -0.10 * dimensions.depth,
-            0.65, 0.06, 0.30,
+            0.80, dimensions.height + 0.10, 0.24,
+            0.68, 0.06, 0.30,
+        ))
+        OriginWorkshopTableRole.FINISHER -> listOf(
+            blockPiece("finisher-finished-board", Material.SPRUCE_PLANKS,
+                0.29 * dimensions.width, dimensions.height + 0.035, -0.10 * dimensions.depth,
+                0.65, 0.06, 0.30),
+            blockPiece("finisher-drying-board-left", Material.OAK_PLANKS, 0.55, dimensions.height + 0.475, 0.32,
+                0.48, 0.06, 0.36),
+            blockPiece("finisher-drying-board-right", Material.BIRCH_PLANKS, 1.05, dimensions.height + 0.475, 0.32,
+                0.48, 0.06, 0.36),
         )
     }
-    val worldPieces = (pieces + machine + workpiece).map { piece -> rotatePiece(piece, yaw) }.toMutableList()
+    val worldPieces = (pieces + machine + workpieces).map { piece -> rotatePiece(piece, yaw) }.toMutableList()
     roleProps(role).forEachIndexed { index, prop ->
         val local = OriginWorkshopTablePiece(
             key = "${role.key}-prop-$index",

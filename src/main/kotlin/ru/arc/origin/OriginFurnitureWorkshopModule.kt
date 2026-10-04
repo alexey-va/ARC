@@ -1,0 +1,1048 @@
+package ru.arc.origin
+
+import dev.lone.itemsadder.api.CustomStack
+import net.citizensnpcs.api.CitizensAPI
+import net.citizensnpcs.api.npc.NPC
+import net.citizensnpcs.trait.LookClose
+import net.citizensnpcs.api.trait.trait.Equipment as CitizensEquipment
+import org.bukkit.Bukkit
+import org.bukkit.Location
+import org.bukkit.Material
+import org.bukkit.Particle
+import org.bukkit.Sound
+import org.bukkit.World
+import org.bukkit.entity.Display
+import org.bukkit.entity.ItemDisplay
+import org.bukkit.entity.LivingEntity
+import org.bukkit.inventory.ItemStack
+import org.bukkit.util.Transformation
+import org.joml.AxisAngle4f
+import org.joml.Vector3f
+import ru.arc.ARC
+import ru.arc.config.Config
+import ru.arc.config.ConfigManager
+import ru.arc.core.LifecycleTaskScope
+import ru.arc.core.PluginModule
+import ru.arc.npc.CitizensNpcRouteController
+import ru.arc.npc.NpcRouteBounds
+import ru.arc.npc.NpcRouteCell
+import ru.arc.npc.NpcRouteEvent
+import ru.arc.npc.NpcRouteObstacleSource
+import ru.arc.npc.NpcRouteProfile
+import ru.arc.origin.scene.faceOriginScenePoint
+import ru.arc.origin.scene.originFurnitureObstacleCells
+import ru.arc.paper.display.PacketItemDisplay
+import ru.arc.paper.display.PaperPacketDisplays
+import ru.arc.util.SoundUtils
+import java.nio.file.Path
+import java.util.Locale
+import java.util.UUID
+import java.util.logging.Level
+import kotlin.math.abs
+import kotlin.math.floor
+
+/** A world-space workshop anchor. Route anchors are validated as cell-centered floor points. */
+internal data class OriginFurnitureWorkshopPoint(
+    val x: Double,
+    val y: Double,
+    val z: Double,
+    val yaw: Float = 0f,
+    val pitch: Float = 0f,
+) {
+    init {
+        require(x.isFinite() && x in -30_000_000.0..30_000_000.0) { "workshop point x is invalid" }
+        require(y.isFinite() && y in -64.0..320.0) { "workshop point y is invalid" }
+        require(z.isFinite() && z in -30_000_000.0..30_000_000.0) { "workshop point z is invalid" }
+        require(yaw.isFinite() && pitch.isFinite() && pitch in -90f..90f) { "workshop point pose is invalid" }
+    }
+
+    fun inWorld(world: World): Location = Location(world, x, y, z, yaw, pitch)
+
+    fun cell(): NpcRouteCell = NpcRouteCell(floor(x).toInt(), floor(z).toInt())
+
+    fun sameCell(other: OriginFurnitureWorkshopPoint): Boolean = cell() == other.cell()
+}
+
+internal data class OriginFurnitureWorkshopLeg(
+    val point: OriginFurnitureWorkshopPoint,
+    val timeoutTicks: Long,
+) {
+    init {
+        require(timeoutTicks in 20L..1_200L) { "workshop route timeout must be within 20..1200 ticks" }
+    }
+}
+
+internal data class OriginFurnitureWorkshopPart(
+    val material: Material,
+    val scale: Double,
+    val source: OriginFurnitureWorkshopPoint,
+    val join: OriginFurnitureWorkshopPoint,
+    val convergeDelayTicks: Long,
+) {
+    init {
+        require(material.isItem && !material.isAir) { "workshop part material must be an item" }
+        require(scale.isFinite() && scale in 0.01..4.0) { "workshop part scale must be within 0.01..4" }
+        require(convergeDelayTicks in 0L..120L) { "workshop part converge delay must be within 0..120 ticks" }
+    }
+}
+
+internal data class OriginFurnitureWorkshopBeat(
+    val phase: String,
+    val hand: Material,
+    val offhand: Material,
+    val focus: OriginFurnitureWorkshopPoint,
+    val rootAt: OriginFurnitureWorkshopPoint,
+    val rootScale: Double,
+    val strokes: Int,
+    val strokeGapTicks: Long,
+    val durationTicks: Long,
+    val converge: Boolean,
+    val particleMaterial: Material,
+    val particleQuantity: Int,
+    val sound: Sound,
+    val soundPitch: Float,
+) {
+    init {
+        require(phase.matches(Regex("[a-z0-9_-]{1,32}"))) { "invalid workshop phase '$phase'" }
+        require(hand.isItem && !hand.isAir && offhand.isItem && !offhand.isAir) {
+            "workshop beat equipment must be item materials"
+        }
+        require(rootScale.isFinite() && rootScale in 0.01..4.0) { "workshop beat root scale must be within 0.01..4" }
+        require(strokes in 1..20 && strokeGapTicks in 1L..100L) { "workshop beat strokes are invalid" }
+        require(durationTicks in 1L..1_200L) { "workshop beat duration must be within 1..1200 ticks" }
+        require(particleMaterial.isItem && !particleMaterial.isAir) { "workshop particle must be an item material" }
+        require(particleQuantity in 1..50) { "workshop particle quantity must be within 1..50" }
+        require(soundPitch.isFinite() && soundPitch in 0.5f..2f) { "workshop sound pitch must be within 0.5..2" }
+    }
+}
+
+internal enum class OriginFurnitureWorkshopRole(val key: String, val npcId: Int) {
+    CARPENTER("carpenter", 430),
+    UPHOLSTERER("upholsterer", 458),
+    ASSEMBLER("assembler", 459),
+}
+
+internal data class OriginFurnitureWorkshopWorker(
+    val role: OriginFurnitureWorkshopRole,
+    val home: OriginFurnitureWorkshopPoint,
+    val pickup: OriginFurnitureWorkshopPoint,
+    val pickupSource: OriginFurnitureWorkshopPoint,
+    val workApproach: OriginFurnitureWorkshopPoint,
+    val bench: OriginFurnitureWorkshopPoint,
+    val restFocus: OriginFurnitureWorkshopPoint,
+    val outputApproach: OriginFurnitureWorkshopPoint,
+    val output: OriginFurnitureWorkshopPoint,
+    val pickupRoute: List<OriginFurnitureWorkshopLeg>,
+    val workReturnRoute: List<OriginFurnitureWorkshopLeg>,
+    val outputRoute: List<OriginFurnitureWorkshopLeg>,
+    val homeReturnRoute: List<OriginFurnitureWorkshopLeg>,
+    val initialDelayTicks: Long,
+    val cycleDelayTicks: Long,
+    val finishedHoldTicks: Long,
+    val rawHand: Material,
+    val rawRootMaterial: Material,
+    val rawRootScale: Double,
+    val productId: String,
+    val finishedScale: Double,
+    val finishedTranslationY: Double,
+    val parts: List<OriginFurnitureWorkshopPart>,
+    val beats: List<OriginFurnitureWorkshopBeat>,
+) {
+    init {
+        require(initialDelayTicks in 0L..12_000L) { "workshop initial delay must be within 0..12000 ticks" }
+        require(cycleDelayTicks in 200L..72_000L) { "workshop cycle delay must be within 200..72000 ticks" }
+        require(finishedHoldTicks in 1L..1_200L) { "workshop finished hold must be within 1..1200 ticks" }
+        require(rawHand.isItem && !rawHand.isAir && rawRootMaterial.isItem && !rawRootMaterial.isAir) {
+            "workshop raw materials must be items"
+        }
+        require(rawRootScale.isFinite() && rawRootScale in 0.01..4.0) { "workshop raw root scale must be within 0.01..4" }
+        require(productId.contains(':') && productId.matches(Regex("[a-z0-9_.-]+:[a-z0-9_./-]+"))) {
+            "workshop product id must be namespaced"
+        }
+        require(finishedScale.isFinite() && finishedScale in 0.01..4.0) { "workshop finished scale must be within 0.01..4" }
+        require(finishedTranslationY.isFinite() && finishedTranslationY in -4.0..4.0) {
+            "workshop finished translation-y must be within -4..4"
+        }
+        require(parts.size in 1..4 && beats.size in 1..8) { "workshop role needs 1..4 parts and 1..8 beats" }
+    }
+}
+
+internal data class OriginFurnitureWorkshopSettings(
+    val enabled: Boolean,
+    val world: String,
+    val dispatcherIntervalTicks: Long,
+    val viewerRadius: Double,
+    val activeTimeoutTicks: Long,
+    val pickupDurationTicks: Long,
+    val pickupSound: Sound,
+    val soundVolume: Float,
+    val propInterpolationTicks: Int,
+    val carryScale: Double,
+    val carryOffsetY: Double,
+    val carryTranslationY: Double,
+    val carryYaw: Float,
+    val carryPitch: Float,
+    val routeProfile: NpcRouteProfile,
+    val workers: List<OriginFurnitureWorkshopWorker>,
+) {
+    init {
+        require(world == WORKSHOP_WORLD) { "workshop world must be '$WORKSHOP_WORLD'" }
+        require(dispatcherIntervalTicks in 1L..200L) { "workshop dispatcher interval must be within 1..200 ticks" }
+        require(viewerRadius.isFinite() && viewerRadius in 4.0..64.0) { "workshop viewer radius must be within 4..64" }
+        require(activeTimeoutTicks in 100L..12_000L) { "workshop active timeout must be within 100..12000 ticks" }
+        require(pickupDurationTicks in 1L..100L) { "workshop pickup duration must be within 1..100 ticks" }
+        require(soundVolume.isFinite() && soundVolume in 0f..4f) { "workshop sound volume must be within 0..4" }
+        require(propInterpolationTicks in 0..59) { "workshop interpolation must be within 0..59 ticks" }
+        require(carryScale.isFinite() && carryScale in 0.01..4.0) { "workshop carry scale must be within 0.01..4" }
+        require(carryOffsetY.isFinite() && carryOffsetY in -4.0..4.0) { "workshop carry offset-y must be within -4..4" }
+        require(carryTranslationY.isFinite() && carryTranslationY in -4.0..4.0) {
+            "workshop carry translation-y must be within -4..4"
+        }
+        require(carryYaw.isFinite() && carryYaw in -360f..360f && carryPitch.isFinite() && carryPitch in -90f..90f) {
+            "workshop carry pose is invalid"
+        }
+        require(workers.map { it.role }.toSet() == OriginFurnitureWorkshopRole.entries.toSet()) {
+            "workshop must configure exactly the three existing worker roles"
+        }
+        require(workers.map { it.role.npcId }.distinct().size == workers.size) { "workshop NPC ids must be unique" }
+        validateOriginFurnitureWorkshopRoutes(workers, routeProfile)
+    }
+
+    companion object {
+        private const val RESOURCE = "origin-furniture-workshop.yml"
+        private const val ROOT = "origin-furniture-workshop"
+
+        fun load(dataPath: Path): OriginFurnitureWorkshopSettings {
+            val source = ConfigManager.ofModule(dataPath, RESOURCE)
+            source.mergeMissingFromBundled("modules/$RESOURCE")
+            val root = ROOT
+            val routeRoot = "$root.route"
+            val routeProfile = NpcRouteProfile(
+                id = "${root}-workshop",
+                floorY = source.int("$routeRoot.floor-y", 71),
+                bounds = NpcRouteBounds(
+                    source.int("$routeRoot.bounds.min-x", -55),
+                    source.int("$routeRoot.bounds.max-x", -38),
+                    source.int("$routeRoot.bounds.min-z", -76),
+                    source.int("$routeRoot.bounds.max-z", -49),
+                ),
+                forbidden = readBounds(source, "$routeRoot.forbidden"),
+                preferred = readBounds(source, "$routeRoot.preferred"),
+                maxVisited = source.int("$routeRoot.max-visited", 1_024),
+                snapRadius = source.int("$routeRoot.snap-radius", 3),
+                pollTicks = source.long("$routeRoot.poll-ticks", 2L),
+                stallPolls = source.int("$routeRoot.stall-polls", 20),
+                offFloorTolerance = source.real("$routeRoot.off-floor-tolerance", 0.45),
+                distanceMargin = source.real("$routeRoot.distance-margin", 0.35),
+                pathDistanceMargin = source.real("$routeRoot.path-distance-margin", 0.35),
+                speedModifier = source.real("$routeRoot.speed", 0.65).toFloat(),
+                entityObstaclePadding = source.real("$routeRoot.entity-obstacle-padding", 0.25),
+                obstacleRefreshPolls = source.int("$routeRoot.obstacle-refresh-polls", 10),
+                headingLookAheadCells = source.int("$routeRoot.heading-look-ahead-cells", 2),
+                headingUpdateTicks = source.long("$routeRoot.heading-update-ticks", 1L),
+                headingMaxTurnDegreesPerTick = source.real("$routeRoot.heading-max-turn-degrees-per-tick", 18.0).toFloat(),
+                cornerSmoothingDistance = source.real("$routeRoot.corner-smoothing-distance", 0.75),
+                cornerSmoothingLead = source.real("$routeRoot.corner-smoothing-lead", 0.30),
+                maximumStepHeight = source.real("$routeRoot.maximum-step-height", 0.125),
+            )
+            val workers = OriginFurnitureWorkshopRole.entries.map { role -> parseWorker(source, "$root.actors.${role.key}", role) }
+            return OriginFurnitureWorkshopSettings(
+                enabled = source.bool("$root.enabled", false),
+                world = source.string("$root.world", WORKSHOP_WORLD).trim(),
+                dispatcherIntervalTicks = source.long("$root.dispatcher-interval-ticks", 60L),
+                viewerRadius = source.real("$root.viewer-radius", 24.0),
+                activeTimeoutTicks = source.long("$root.active-timeout-ticks", 1_800L),
+                pickupDurationTicks = source.long("$root.pickup-duration-ticks", 8L),
+                pickupSound = readSound(source.string("$root.pickup-sound", "BLOCK_WOOD_PLACE"), "$root.pickup-sound"),
+                soundVolume = source.real("$root.sound-volume", 0.22).toFloat(),
+                propInterpolationTicks = source.int("$root.prop-interpolation-ticks", 6),
+                carryScale = source.real("$root.carry.scale", 0.34),
+                carryOffsetY = source.real("$root.carry.offset-y", 0.7),
+                carryTranslationY = source.real("$root.carry.translation-y", 0.18),
+                carryYaw = source.real("$root.carry.yaw", 90.0).toFloat(),
+                carryPitch = source.real("$root.carry.pitch", 0.0).toFloat(),
+                routeProfile = routeProfile,
+                workers = workers,
+            )
+        }
+
+        private fun parseWorker(
+            config: Config,
+            path: String,
+            role: OriginFurnitureWorkshopRole,
+        ): OriginFurnitureWorkshopWorker {
+            val configuredId = config.int("$path.npc-id", role.npcId)
+            require(configuredId == role.npcId) { "$path.npc-id must remain the existing NPC ${role.npcId}" }
+            val routes = "$path.routes"
+            return OriginFurnitureWorkshopWorker(
+                role = role,
+                home = readPoint(config, "$path.home"),
+                pickup = readPoint(config, "$path.pickup"),
+                pickupSource = readPoint(config, "$path.pickup-source"),
+                workApproach = readPoint(config, "$path.work-approach"),
+                bench = readPoint(config, "$path.bench"),
+                restFocus = readPoint(config, "$path.rest-focus"),
+                outputApproach = readPoint(config, "$path.output-approach"),
+                output = readPoint(config, "$path.output"),
+                pickupRoute = readLegs(config, "$routes.pickup"),
+                workReturnRoute = readLegs(config, "$routes.work-return"),
+                outputRoute = readLegs(config, "$routes.output"),
+                homeReturnRoute = readLegs(config, "$routes.home-return"),
+                initialDelayTicks = config.long("$path.initial-delay-ticks", 0L),
+                cycleDelayTicks = config.long("$path.cycle-delay-ticks", 700L),
+                finishedHoldTicks = config.long("$path.finished-hold-ticks", 60L),
+                rawHand = readMaterial(config.string("$path.raw-hand"), "$path.raw-hand"),
+                rawRootMaterial = readMaterial(config.string("$path.raw-root-material"), "$path.raw-root-material"),
+                rawRootScale = config.real("$path.raw-root-scale", 0.32),
+                productId = config.string("$path.product-id"),
+                finishedScale = config.real("$path.finished-scale", 1.0),
+                finishedTranslationY = config.real("$path.finished-translation-y", 0.5),
+                parts = readParts(config, "$path.parts"),
+                beats = readBeats(config, "$path.beats"),
+            )
+        }
+
+        private fun readPoint(config: Config, path: String): OriginFurnitureWorkshopPoint {
+            val map = readMap(config, path)
+            return OriginFurnitureWorkshopPoint(
+                x = requiredDouble(map, "x", path),
+                y = requiredDouble(map, "y", path),
+                z = requiredDouble(map, "z", path),
+                yaw = optionalDouble(map, "yaw", 0.0).toFloat(),
+                pitch = optionalDouble(map, "pitch", 0.0).toFloat(),
+            )
+        }
+
+        private fun readLegs(config: Config, path: String): List<OriginFurnitureWorkshopLeg> = readList(config, path).mapIndexed { index, value ->
+            val map = requireMap(value, "$path[$index]")
+            val pointMap = requireMap(map["point"], "$path[$index].point")
+            OriginFurnitureWorkshopLeg(
+                point = OriginFurnitureWorkshopPoint(
+                    requiredDouble(pointMap, "x", "$path[$index].point"),
+                    requiredDouble(pointMap, "y", "$path[$index].point"),
+                    requiredDouble(pointMap, "z", "$path[$index].point"),
+                    optionalDouble(pointMap, "yaw", 0.0).toFloat(),
+                    optionalDouble(pointMap, "pitch", 0.0).toFloat(),
+                ),
+                timeoutTicks = requiredLong(map, "timeout-ticks", "$path[$index]"),
+            )
+        }
+
+        private fun readParts(config: Config, path: String): List<OriginFurnitureWorkshopPart> = readList(config, path).mapIndexed { index, value ->
+            val map = requireMap(value, "$path[$index]")
+            OriginFurnitureWorkshopPart(
+                material = readMaterial(requiredString(map, "material", "$path[$index]"), "$path[$index].material"),
+                scale = requiredDouble(map, "scale", "$path[$index]"),
+                source = pointFromMap(requireMap(map["source"], "$path[$index].source"), "$path[$index].source"),
+                join = pointFromMap(requireMap(map["join"], "$path[$index].join"), "$path[$index].join"),
+                convergeDelayTicks = requiredLong(map, "converge-delay-ticks", "$path[$index]"),
+            )
+        }
+
+        private fun readBeats(config: Config, path: String): List<OriginFurnitureWorkshopBeat> = readList(config, path).mapIndexed { index, value ->
+            val map = requireMap(value, "$path[$index]")
+            val beatPath = "$path[$index]"
+            val gesture = requiredString(map, "gesture", beatPath).uppercase(Locale.ROOT)
+            require(gesture == "ARM_SWING") { "$beatPath.gesture currently supports ARM_SWING only" }
+            OriginFurnitureWorkshopBeat(
+                phase = requiredString(map, "phase", beatPath).lowercase(Locale.ROOT),
+                hand = readMaterial(requiredString(map, "hand", beatPath), "$beatPath.hand"),
+                offhand = readMaterial(requiredString(map, "offhand", beatPath), "$beatPath.offhand"),
+                focus = pointFromMap(requireMap(map["focus"], "$beatPath.focus"), "$beatPath.focus"),
+                rootAt = pointFromMap(requireMap(map["root-at"], "$beatPath.root-at"), "$beatPath.root-at"),
+                rootScale = requiredDouble(map, "root-scale", beatPath),
+                strokes = requiredLong(map, "strokes", beatPath).toInt(),
+                strokeGapTicks = requiredLong(map, "stroke-gap-ticks", beatPath),
+                durationTicks = requiredLong(map, "duration-ticks", beatPath),
+                converge = map["converge"] as? Boolean ?: false,
+                particleMaterial = readMaterial(requiredString(map, "particle-material", beatPath), "$beatPath.particle-material"),
+                particleQuantity = requiredLong(map, "particle-quantity", beatPath).toInt(),
+                sound = readSound(requiredString(map, "sound", beatPath), "$beatPath.sound"),
+                soundPitch = requiredDouble(map, "sound-pitch", beatPath).toFloat(),
+            )
+        }
+
+        private fun pointFromMap(map: Map<*, *>, path: String) = OriginFurnitureWorkshopPoint(
+            requiredDouble(map, "x", path),
+            requiredDouble(map, "y", path),
+            requiredDouble(map, "z", path),
+            optionalDouble(map, "yaw", 0.0).toFloat(),
+            optionalDouble(map, "pitch", 0.0).toFloat(),
+        )
+
+        private fun readBounds(config: Config, path: String): List<NpcRouteBounds> = readList(config, path).mapIndexed { index, value ->
+            val map = requireMap(value, "$path[$index]")
+            NpcRouteBounds(
+                requiredLong(map, "min-x", "$path[$index]").toInt(),
+                requiredLong(map, "max-x", "$path[$index]").toInt(),
+                requiredLong(map, "min-z", "$path[$index]").toInt(),
+                requiredLong(map, "max-z", "$path[$index]").toInt(),
+            )
+        }
+
+        private fun readList(config: Config, path: String): List<Any?> = config.list<Any?>(path)
+
+        private fun readMap(config: Config, path: String): Map<String, Any?> =
+            requireMap(config.map<Any?>(path), path)
+
+        private fun requireMap(value: Any?, path: String): Map<String, Any?> = requireMap(value as? Map<*, *>, path)
+
+        private fun requireMap(value: Map<*, *>?, path: String): Map<String, Any?> {
+            require(value != null) { "$path must be a mapping" }
+            return value.entries.associate { (key, item) ->
+                require(key is String) { "$path contains a non-string key" }
+                key to item
+            }
+        }
+
+        private fun requiredString(map: Map<*, *>, key: String, path: String): String =
+            map[key] as? String ?: error("$path.$key is required")
+
+        private fun requiredDouble(map: Map<*, *>, key: String, path: String): Double =
+            (map[key] as? Number)?.toDouble() ?: (map[key] as? String)?.toDoubleOrNull()
+            ?: error("$path.$key must be numeric")
+
+        private fun optionalDouble(map: Map<*, *>, key: String, default: Double): Double =
+            (map[key] as? Number)?.toDouble() ?: (map[key] as? String)?.toDoubleOrNull() ?: default
+
+        private fun requiredLong(map: Map<*, *>, key: String, path: String): Long =
+            (map[key] as? Number)?.toLong() ?: (map[key] as? String)?.toLongOrNull()
+            ?: error("$path.$key must be an integer")
+
+        private fun readMaterial(value: String, path: String): Material =
+            Material.matchMaterial(value.trim().uppercase(Locale.ROOT))
+                ?: error("$path has unknown material '$value'")
+
+        private fun readSound(value: String, path: String): Sound =
+            SoundUtils.getSound(value.trim()) ?: error("$path has unknown sound '$value'")
+    }
+}
+
+/** Checks the authored route endpoints and hard walls without touching Bukkit world state. */
+internal fun validateOriginFurnitureWorkshopRoutes(
+    workers: List<OriginFurnitureWorkshopWorker>,
+    profile: NpcRouteProfile,
+) {
+    workers.forEach { worker ->
+        val routes = listOf(
+            "pickup" to (worker.pickupRoute to worker.pickup),
+            "work-return" to (worker.workReturnRoute to worker.workApproach),
+            "output" to (worker.outputRoute to worker.outputApproach),
+            "home-return" to (worker.homeReturnRoute to worker.home),
+        )
+        routes.forEach { (name, routeAndTarget) ->
+            val (legs, target) = routeAndTarget
+            require(legs.isNotEmpty()) { "${worker.role.key} route $name must contain at least one leg" }
+            require(legs.last().point.sameCell(target)) {
+                "${worker.role.key} route $name must end at its authored endpoint"
+            }
+            legs.forEachIndexed { index, leg ->
+                val cell = leg.point.cell()
+                require(profile.allows(cell)) { "${worker.role.key} route $name leg ${index + 1} enters a forbidden or out-of-bounds cell $cell" }
+                require(floor(leg.point.y).toInt() == profile.floorY) {
+                    "${worker.role.key} route $name leg ${index + 1} must stay on floor ${profile.floorY}"
+                }
+                require(isWorkshopCellCenter(leg.point.x) && isWorkshopCellCenter(leg.point.z)) {
+                    "${worker.role.key} route $name leg ${index + 1} must be centered in its floor cell"
+                }
+            }
+        }
+    }
+}
+
+internal fun isWorkshopCellCenter(value: Double): Boolean = abs(value - (floor(value) + 0.5)) <= 1.0e-6
+
+internal object OriginFurnitureWorkshopModule : PluginModule {
+    override val name = "OriginFurnitureWorkshop"
+    override val priority = 26
+
+    private var runtime: OriginFurnitureWorkshopRuntime? = null
+
+    override fun init() = reload()
+
+    override fun reload() {
+        val settings = try {
+            OriginFurnitureWorkshopSettings.load(ARC.instance.dataPath)
+        } catch (failure: Exception) {
+            ARC.instance.logger.log(Level.WARNING, "Origin furniture workshop config rejected; keeping current runtime", failure)
+            return
+        }
+        if (!settings.enabled) {
+            runtime?.close()
+            runtime = null
+            ARC.instance.logger.info("ORIGIN_WORKSHOP phase=DISABLED reason=config")
+            return
+        }
+
+        val prepared = try {
+            OriginFurnitureWorkshopRuntime.prepare(settings)
+        } catch (failure: Exception) {
+            ARC.instance.logger.log(Level.WARNING, "Origin furniture workshop could not prepare; keeping current runtime", failure)
+            return
+        }
+        runtime?.close()
+        runtime = try {
+            prepared.also(OriginFurnitureWorkshopRuntime::start)
+        } catch (failure: Exception) {
+            prepared.close()
+            ARC.instance.logger.log(Level.WARNING, "Origin furniture workshop failed to start", failure)
+            null
+        }
+    }
+
+    override fun shutdown() {
+        runtime?.close()
+        runtime = null
+    }
+}
+
+private enum class WorkshopAfterRoute { PICKUP, WORK_RETURN, OUTPUT, HOME }
+
+private enum class WorkshopStage { ROUTING, PICKUP_HOLD, ASSEMBLY, BENCH_HOLD, STOCK_HOLD }
+
+private data class WorkshopPropKey(val role: OriginFurnitureWorkshopRole, val token: UUID, val key: String)
+
+private class ActiveWorkshopCycle(
+    val worker: OriginFurnitureWorkshopWorker,
+    val actor: NPC,
+    val token: UUID,
+    val deadlineTick: Long,
+    val mainHand: ItemStack?,
+    val offHand: ItemStack?,
+) {
+    var stage = WorkshopStage.ROUTING
+    var afterRoute = WorkshopAfterRoute.PICKUP
+    var route: List<OriginFurnitureWorkshopLeg> = emptyList()
+    var routeIndex = 0
+    var legDeadlineTick = 0L
+    var legMaxPitchDegrees = 0.0
+    var dueTick = 0L
+    var beatIndex = 0
+    var beatPhase = 0
+    var beatStroke = 0
+    var convergeIndex = 0
+    var routeStarted = false
+    val props = linkedMapOf<String, PacketItemDisplay>()
+    var carriedProduct: PacketItemDisplay? = null
+}
+
+/** One exclusive, bounded workshop cycle. Item visuals are client-only and die with this owner. */
+private class OriginFurnitureWorkshopRuntime private constructor(
+    private val settings: OriginFurnitureWorkshopSettings,
+    private val world: World,
+    private val actors: Map<OriginFurnitureWorkshopRole, NPC>,
+    private val products: Map<OriginFurnitureWorkshopRole, ItemStack>,
+) : AutoCloseable {
+    private val tasks = LifecycleTaskScope()
+    private val routeController = CitizensNpcRouteController(::logRoute, NpcRouteObstacleSource(::originFurnitureObstacleCells))
+    private val displays = PaperPacketDisplays(ARC.instance)
+    private val stock = linkedMapOf<OriginFurnitureWorkshopRole, PacketItemDisplay>()
+    private val lookCloseSnapshots = linkedMapOf<Int, Pair<LookClose, Boolean>>()
+    private val nextDueTick = settings.workers.associate { it.role to it.initialDelayTicks }.toMutableMap()
+    private var active: ActiveWorkshopCycle? = null
+    private var tick = 0L
+    private var closed = false
+
+    companion object {
+        fun prepare(settings: OriginFurnitureWorkshopSettings): OriginFurnitureWorkshopRuntime {
+            check(Bukkit.getPluginManager().isPluginEnabled("Citizens")) { "Citizens is not enabled" }
+            check(Bukkit.getPluginManager().isPluginEnabled("ItemsAdder")) { "ItemsAdder is not enabled" }
+            check(Bukkit.getPluginManager().isPluginEnabled("packetevents")) { "PacketEvents is not enabled" }
+            val world = requireNotNull(Bukkit.getWorld(settings.world)) { "Workshop world '${settings.world}' is not loaded" }
+            val actors = settings.workers.associate { worker ->
+                val actor = requireNotNull(CitizensAPI.getNPCRegistry().getById(worker.role.npcId)) {
+                    "Workshop NPC ${worker.role.npcId} for ${worker.role.key} is missing"
+                }
+                worker.role to actor
+            }
+            val products = settings.workers.associate { worker ->
+                val product = CustomStack.getInstance(worker.productId)?.itemStack?.clone()
+                    ?: error("Workshop product '${worker.productId}' is unavailable from ItemsAdder")
+                worker.role to product
+            }
+            return OriginFurnitureWorkshopRuntime(settings, world, actors, products)
+        }
+    }
+
+    fun start() {
+        check(!closed) { "Workshop runtime is closed" }
+        settings.workers.forEach { worker ->
+            val actor = actors.getValue(worker.role)
+            actor.getTraitNullable(LookClose::class.java)?.let { trait ->
+                lookCloseSnapshots[actor.id] = trait to trait.isEnabled
+                trait.lookClose(false)
+            }
+            if (actor.isSpawned && actor.entity.world == world) {
+                check(!actor.navigator.isNavigating) { "Workshop NPC ${actor.id} is navigating outside this runtime" }
+                check(actor.entity.teleport(worker.home.inWorld(world))) { "Workshop NPC ${actor.id} rejected home reset" }
+                faceOriginScenePoint(actor, worker.restFocus.inWorld(world))
+            }
+            stock[worker.role] = createItemDisplay(
+                item = products.getValue(worker.role),
+                location = worker.output.inWorld(world),
+                displayTransform = ItemDisplay.ItemDisplayTransform.NONE,
+                scale = worker.finishedScale,
+                translationY = worker.finishedTranslationY,
+                key = WorkshopPropKey(worker.role, UUID(0L, 0L), "stock"),
+            )
+        }
+        tasks.runTimer(1L, 1L, ::tick)
+        log("READY", detail = "actors=${settings.workers.joinToString(",") { "${it.role.key}:${it.role.npcId}" }}")
+    }
+
+    private fun tick() {
+        if (closed) return
+        try {
+            tickOnce()
+        } catch (failure: Exception) {
+            val cycle = active
+            if (cycle != null) runCatching { abort(cycle, "tick-exception-${failure.javaClass.simpleName}") }
+            ARC.instance.logger.log(Level.WARNING, "ORIGIN_WORKSHOP phase=RUNTIME_ERROR actor=${cycle?.actor?.id ?: "none"} role=${cycle?.worker?.role?.key ?: "none"}", failure)
+        }
+    }
+
+    private fun tickOnce() {
+        tick++
+        val running = active
+        if (running != null) {
+            tickCycle(running)
+            return
+        }
+        if (tick % settings.dispatcherIntervalTicks != 0L) return
+        val due = settings.workers.asSequence()
+            .filter { tick >= nextDueTick.getValue(it.role) }
+            .filter { worker ->
+                val actor = actors.getValue(worker.role)
+                actor.isSpawned && actor.entity.world == world && !routeController.isNavigating(actor) && hasViewer(actor.entity.location)
+            }
+            .minByOrNull { nextDueTick.getValue(it.role) }
+            ?: return
+        startCycle(due)
+    }
+
+    private fun startCycle(worker: OriginFurnitureWorkshopWorker) {
+        val actor = actors.getValue(worker.role)
+        val equipment = actor.getOrAddTrait(CitizensEquipment::class.java)
+        val cycle = ActiveWorkshopCycle(
+            worker = worker,
+            actor = actor,
+            token = UUID.randomUUID(),
+            deadlineTick = tick + settings.activeTimeoutTicks,
+            mainHand = equipment.get(CitizensEquipment.EquipmentSlot.HAND)?.clone(),
+            offHand = equipment.get(CitizensEquipment.EquipmentSlot.OFF_HAND)?.clone(),
+        )
+        active = cycle
+        nextDueTick[worker.role] = tick + worker.cycleDelayTicks
+        log("CYCLE_STARTED", cycle, "deadline_ticks=${settings.activeTimeoutTicks}")
+        beginRoute(cycle, worker.pickupRoute, WorkshopAfterRoute.PICKUP)
+    }
+
+    private fun beginRoute(cycle: ActiveWorkshopCycle, legs: List<OriginFurnitureWorkshopLeg>, after: WorkshopAfterRoute) {
+        if (legs.isEmpty()) {
+            abort(cycle, "empty-route-${after.name.lowercase(Locale.ROOT)}")
+            return
+        }
+        cycle.route = legs
+        cycle.routeIndex = 0
+        cycle.afterRoute = after
+        cycle.stage = WorkshopStage.ROUTING
+        startRouteLeg(cycle)
+    }
+
+    private fun startRouteLeg(cycle: ActiveWorkshopCycle) {
+        val leg = cycle.route[cycle.routeIndex]
+        if (!cycle.actor.isSpawned || cycle.actor.entity.world != world) {
+            abort(cycle, "actor-unavailable-before-route")
+            return
+        }
+        if (!routeController.navigate(cycle.actor, leg.point.inWorld(world), settings.routeProfile)) {
+            abort(cycle, "route-rejected-${cycle.afterRoute.name.lowercase(Locale.ROOT)}-${cycle.routeIndex + 1}")
+            return
+        }
+        cycle.routeStarted = true
+        cycle.legDeadlineTick = tick + leg.timeoutTicks
+        cycle.legMaxPitchDegrees = 0.0
+        log(
+            "ROUTE_START",
+            cycle,
+            "leg=${cycle.routeIndex + 1}/${cycle.route.size} purpose=${cycle.afterRoute.name.lowercase(Locale.ROOT)} target=${pointText(leg.point)} timeout_ticks=${leg.timeoutTicks}",
+        )
+    }
+
+    private fun tickCycle(cycle: ActiveWorkshopCycle) {
+        if (cycle !== active) return
+        if (tick >= cycle.deadlineTick) {
+            abort(cycle, "active-timeout")
+            return
+        }
+        if (!cycle.actor.isSpawned || cycle.actor.entity.world != world) {
+            abort(cycle, "actor-left-workshop-world")
+            return
+        }
+        if (!hasViewer(cycle.actor.entity.location)) {
+            abort(cycle, "viewer-left-radius")
+            return
+        }
+        when (cycle.stage) {
+            WorkshopStage.ROUTING -> tickRoute(cycle)
+            WorkshopStage.PICKUP_HOLD -> if (tick >= cycle.dueTick) {
+                setEquipment(cycle.actor, CitizensEquipment.EquipmentSlot.HAND, ItemStack(cycle.worker.rawHand))
+                beginRoute(cycle, cycle.worker.workReturnRoute, WorkshopAfterRoute.WORK_RETURN)
+            }
+            WorkshopStage.ASSEMBLY -> tickAssembly(cycle)
+            WorkshopStage.BENCH_HOLD -> if (tick >= cycle.dueTick) {
+                prepareCarry(cycle)
+                beginRoute(cycle, cycle.worker.outputRoute, WorkshopAfterRoute.OUTPUT)
+            }
+            WorkshopStage.STOCK_HOLD -> if (tick >= cycle.dueTick) {
+                beginRoute(cycle, cycle.worker.homeReturnRoute, WorkshopAfterRoute.HOME)
+            }
+        }
+    }
+
+    private fun tickRoute(cycle: ActiveWorkshopCycle) {
+        val pitch = abs(cycle.actor.entity.location.pitch.toDouble())
+        cycle.legMaxPitchDegrees = maxOf(cycle.legMaxPitchDegrees, pitch)
+        cycle.carriedProduct?.takeIf { it.isValid }?.let { carry ->
+            carry.teleport(carryLocation(cycle.actor, world))
+        }
+        if (tick >= cycle.legDeadlineTick && routeController.isNavigating(cycle.actor)) {
+            routeController.stop(cycle.actor)
+            cycle.routeStarted = false
+            abort(cycle, "route-timeout-${cycle.afterRoute.name.lowercase(Locale.ROOT)}-${cycle.routeIndex + 1}")
+            return
+        }
+        if (routeController.isNavigating(cycle.actor)) return
+        val outcome = routeController.consumeOutcome(cycle.actor)
+        cycle.routeStarted = false
+        if (outcome?.successful != true) {
+            abort(cycle, "route-failed-${cycle.afterRoute.name.lowercase(Locale.ROOT)}-${cycle.routeIndex + 1}-${outcome?.reason ?: "missing-outcome"}")
+            return
+        }
+        log(
+            "ROUTE_FINISHED",
+            cycle,
+            "leg=${cycle.routeIndex + 1}/${cycle.route.size} purpose=${cycle.afterRoute.name.lowercase(Locale.ROOT)} target=${pointText(cycle.route[cycle.routeIndex].point)} max_abs_pitch_degrees=${"%.3f".format(Locale.ROOT, cycle.legMaxPitchDegrees)}",
+        )
+        cycle.routeIndex++
+        if (cycle.routeIndex < cycle.route.size) startRouteLeg(cycle)
+        else completeRoute(cycle)
+    }
+
+    private fun completeRoute(cycle: ActiveWorkshopCycle) {
+        when (cycle.afterRoute) {
+            WorkshopAfterRoute.PICKUP -> {
+                face(cycle.actor, cycle.worker.pickupSource)
+                swing(cycle.actor)
+                playSound(cycle.worker.pickupSource.inWorld(world), settings.pickupSound, settings.soundVolume, 0.95f)
+                cycle.stage = WorkshopStage.PICKUP_HOLD
+                cycle.dueTick = tick + settings.pickupDurationTicks
+                log("PICKUP", cycle, "duration_ticks=${settings.pickupDurationTicks}")
+            }
+            WorkshopAfterRoute.WORK_RETURN -> beginAssembly(cycle)
+            WorkshopAfterRoute.OUTPUT -> storeProduct(cycle)
+            WorkshopAfterRoute.HOME -> completeCycle(cycle)
+        }
+    }
+
+    private fun beginAssembly(cycle: ActiveWorkshopCycle) {
+        val worker = cycle.worker
+        face(cycle.actor, worker.restFocus)
+        val rawRoot = createItemDisplay(
+            ItemStack(worker.rawRootMaterial),
+            worker.bench.inWorld(world),
+            ItemDisplay.ItemDisplayTransform.FIXED,
+            worker.rawRootScale,
+            0.0,
+            WorkshopPropKey(worker.role, cycle.token, "root"),
+        )
+        cycle.props["root"] = rawRoot
+        worker.parts.forEachIndexed { index, part ->
+            cycle.props["part-$index"] = createItemDisplay(
+                ItemStack(part.material),
+                part.source.inWorld(world),
+                ItemDisplay.ItemDisplayTransform.FIXED,
+                part.scale,
+                0.0,
+                WorkshopPropKey(worker.role, cycle.token, "part-$index"),
+            )
+        }
+        cycle.stage = WorkshopStage.ASSEMBLY
+        cycle.beatIndex = 0
+        cycle.beatPhase = 0
+        startBeat(cycle)
+        log("ASSEMBLY_STARTED", cycle, "parts=${worker.parts.size} beats=${worker.beats.size}")
+    }
+
+    private fun startBeat(cycle: ActiveWorkshopCycle) {
+        if (cycle.beatIndex >= cycle.worker.beats.size) {
+            finishAssembly(cycle)
+            return
+        }
+        val beat = cycle.worker.beats[cycle.beatIndex]
+        val root = cycle.props["root"] ?: run {
+            abort(cycle, "assembly-root-missing")
+            return
+        }
+        setEquipment(cycle.actor, CitizensEquipment.EquipmentSlot.HAND, ItemStack(beat.hand))
+        setEquipment(cycle.actor, CitizensEquipment.EquipmentSlot.OFF_HAND, ItemStack(beat.offhand))
+        face(cycle.actor, beat.focus)
+        root.itemDisplayTransform = ItemDisplay.ItemDisplayTransform.FIXED
+        root.itemStack = ItemStack(cycle.worker.rawRootMaterial)
+        root.teleport(beat.rootAt.inWorld(world))
+        setTransformation(root, beat.rootScale, 0.0)
+        cycle.beatPhase = if (beat.converge) 0 else 1
+        cycle.convergeIndex = 0
+        cycle.beatStroke = 0
+        cycle.dueTick = tick
+        log("BEAT_STARTED", cycle, "beat=${beat.phase} index=${cycle.beatIndex + 1}/${cycle.worker.beats.size}")
+    }
+
+    private fun tickAssembly(cycle: ActiveWorkshopCycle) {
+        val beat = cycle.worker.beats.getOrNull(cycle.beatIndex) ?: return
+        if (cycle.beatPhase == 0) {
+            if (cycle.convergeIndex >= cycle.worker.parts.size) {
+                cycle.beatPhase = 1
+                cycle.dueTick = tick
+            } else if (tick >= cycle.dueTick) {
+                val partIndex = cycle.convergeIndex
+                val part = cycle.worker.parts[partIndex]
+                val display = cycle.props["part-$partIndex"] ?: run {
+                    abort(cycle, "assembly-part-missing-$partIndex")
+                    return
+                }
+                display.teleport(part.join.inWorld(world))
+                cycle.convergeIndex++
+                cycle.dueTick = tick + part.convergeDelayTicks
+            }
+            return
+        }
+        if (cycle.beatPhase == 1) {
+            if (cycle.beatStroke < beat.strokes && tick >= cycle.dueTick) {
+                swing(cycle.actor)
+                cycle.beatStroke++
+                cycle.dueTick = tick + beat.strokeGapTicks
+            } else if (cycle.beatStroke >= beat.strokes) {
+                cycle.beatPhase = 2
+                cycle.dueTick = tick + beat.durationTicks
+            }
+            return
+        }
+        if (tick < cycle.dueTick) return
+        val feedback = beat.focus.inWorld(world)
+        playItemParticles(feedback, ItemStack(beat.particleMaterial), beat.particleQuantity)
+        playSound(feedback, beat.sound, settings.soundVolume, beat.soundPitch)
+        log("BEAT_FINISHED", cycle, "beat=${beat.phase} index=${cycle.beatIndex + 1}/${cycle.worker.beats.size}")
+        cycle.beatIndex++
+        startBeat(cycle)
+    }
+
+    private fun finishAssembly(cycle: ActiveWorkshopCycle) {
+        val root = cycle.props["root"] ?: run {
+            abort(cycle, "assembly-root-missing-at-finish")
+            return
+        }
+        root.itemStack = products.getValue(cycle.worker.role).clone()
+        root.itemDisplayTransform = ItemDisplay.ItemDisplayTransform.NONE
+        root.teleport(cycle.worker.bench.inWorld(world))
+        setTransformation(root, settings.carryScale, settings.carryTranslationY)
+        cycle.worker.parts.indices.forEach { index ->
+            cycle.props.remove("part-$index")?.remove()
+        }
+        face(cycle.actor, cycle.worker.bench)
+        cycle.carriedProduct = root
+        cycle.stage = WorkshopStage.BENCH_HOLD
+        cycle.dueTick = tick + cycle.worker.finishedHoldTicks
+        log("PRODUCT_READY", cycle, "hold_ticks=${cycle.worker.finishedHoldTicks}")
+    }
+
+    private fun prepareCarry(cycle: ActiveWorkshopCycle) {
+        val carried = cycle.carriedProduct ?: run {
+            abort(cycle, "carry-product-missing")
+            return
+        }
+        setTransformation(carried, settings.carryScale, settings.carryTranslationY)
+        carried.teleport(carryLocation(cycle.actor, world))
+    }
+
+    private fun storeProduct(cycle: ActiveWorkshopCycle) {
+        val worker = cycle.worker
+        val carried = cycle.carriedProduct ?: run {
+            abort(cycle, "stock-product-missing")
+            return
+        }
+        val previousStock = stock[worker.role] ?: run {
+            abort(cycle, "stock-display-missing")
+            return
+        }
+        previousStock.remove()
+        carried.teleport(worker.output.inWorld(world))
+        setTransformation(carried, worker.finishedScale, worker.finishedTranslationY)
+        stock[worker.role] = carried
+        cycle.props.remove("root")
+        cycle.carriedProduct = null
+        playItemParticles(worker.output.inWorld(world), products.getValue(worker.role), 8)
+        face(cycle.actor, worker.output)
+        cycle.stage = WorkshopStage.STOCK_HOLD
+        cycle.dueTick = tick + worker.finishedHoldTicks
+        log("STOCK_REPLACED", cycle, "item=${worker.productId} hold_ticks=${worker.finishedHoldTicks}")
+    }
+
+    private fun completeCycle(cycle: ActiveWorkshopCycle) {
+        face(cycle.actor, cycle.worker.restFocus)
+        restoreEquipment(cycle)
+        removeCycleProps(cycle)
+        active = null
+        log("CYCLE_COMPLETED", cycle, "product=${cycle.worker.productId}")
+    }
+
+    private fun abort(cycle: ActiveWorkshopCycle, reason: String) {
+        if (cycle !== active) return
+        if (cycle.routeStarted) runCatching { routeController.stop(cycle.actor) }
+        cycle.routeStarted = false
+        restoreEquipment(cycle)
+        removeCycleProps(cycle)
+        if (cycle.actor.isSpawned && cycle.actor.entity.world == world) {
+            runCatching { cycle.actor.entity.teleport(cycle.worker.home.inWorld(world)) }
+            runCatching { face(cycle.actor, cycle.worker.restFocus) }
+        }
+        active = null
+        log("CYCLE_CANCELLED", cycle, "reason=$reason")
+    }
+
+    private fun restoreEquipment(cycle: ActiveWorkshopCycle) {
+        val equipment = runCatching { cycle.actor.getOrAddTrait(CitizensEquipment::class.java) }.getOrNull() ?: return
+        runCatching { equipment.set(CitizensEquipment.EquipmentSlot.HAND, cycle.mainHand?.clone() ?: ItemStack(Material.AIR)) }
+        runCatching { equipment.set(CitizensEquipment.EquipmentSlot.OFF_HAND, cycle.offHand?.clone() ?: ItemStack(Material.AIR)) }
+    }
+
+    private fun removeCycleProps(cycle: ActiveWorkshopCycle) {
+        cycle.props.values.toList().forEach { runCatching { it.remove() } }
+        cycle.props.clear()
+        cycle.carriedProduct = null
+    }
+
+    private fun createItemDisplay(
+        item: ItemStack,
+        location: Location,
+        displayTransform: ItemDisplay.ItemDisplayTransform,
+        scale: Double,
+        translationY: Double,
+        key: WorkshopPropKey,
+    ): PacketItemDisplay = displays.spawnItem(location, item.clone()).apply {
+        isVisibleByDefault = true
+        billboard = Display.Billboard.FIXED
+        viewRange = 0.5f
+        displayWidth = 2f
+        displayHeight = 2f
+        shadowRadius = 0f
+        interpolationDelay = -1
+        interpolationDuration = settings.propInterpolationTicks
+        teleportDuration = settings.propInterpolationTicks
+        itemDisplayTransform = displayTransform
+        setTransformation(this, scale, translationY)
+        log("PROP_CREATED", detail = "role=${key.role.key} kind=${key.key} token=${key.token}")
+    }
+
+    private fun setTransformation(display: PacketItemDisplay, scale: Double, translationY: Double) {
+        display.transformation = Transformation(
+            Vector3f(0f, translationY.toFloat(), 0f),
+            AxisAngle4f(),
+            Vector3f(scale.toFloat(), scale.toFloat(), scale.toFloat()),
+            AxisAngle4f(),
+        )
+        display.interpolationDuration = settings.propInterpolationTicks
+        display.teleportDuration = settings.propInterpolationTicks
+    }
+
+    private fun carryLocation(actor: NPC, world: World): Location {
+        val location = actor.entity.location
+        return Location(
+            world,
+            location.x,
+            location.y + settings.carryOffsetY,
+            location.z,
+            settings.carryYaw,
+            settings.carryPitch,
+        )
+    }
+
+    private fun setEquipment(actor: NPC, slot: CitizensEquipment.EquipmentSlot, item: ItemStack) {
+        actor.getOrAddTrait(CitizensEquipment::class.java).set(slot, item.clone())
+    }
+
+    private fun face(actor: NPC, point: OriginFurnitureWorkshopPoint) {
+        faceOriginScenePoint(actor, point.inWorld(world))
+    }
+
+    private fun swing(actor: NPC) {
+        (actor.entity as? LivingEntity)?.swingMainHand()
+    }
+
+    private fun playSound(location: Location, sound: Sound, volume: Float, pitch: Float) {
+        playersNear(location).forEach { it.playSound(location, sound, volume, pitch) }
+    }
+
+    private fun playItemParticles(location: Location, item: ItemStack, quantity: Int) {
+        world.spawnParticle(Particle.ITEM, location, quantity, 0.18, 0.12, 0.18, 0.015, item.clone())
+    }
+
+    private fun playersNear(location: Location) = Bukkit.getOnlinePlayers().filter { player ->
+        player.world == world && player.location.distanceSquared(location) <= settings.viewerRadius * settings.viewerRadius
+    }
+
+    private fun hasViewer(location: Location): Boolean = playersNear(location).isNotEmpty()
+
+    private fun logRoute(event: NpcRouteEvent) {
+        val reason = event.reason?.let { " reason=$it" }.orEmpty()
+        log(
+            "NAV_${event.phase}",
+            detail = "actor=${event.npcId} profile=${event.profileId} cells=${event.cells} actual=${pointText(event.actual)} target=${pointText(event.target)}$reason",
+        )
+    }
+
+    private fun log(phase: String, cycle: ActiveWorkshopCycle? = null, detail: String = "") {
+        val worker = cycle?.worker
+        val actorId = cycle?.actor?.id?.toString() ?: worker?.role?.npcId?.toString() ?: "none"
+        val role = worker?.role?.key ?: "none"
+        val token = cycle?.token?.toString()?.take(8) ?: "none"
+        ARC.instance.logger.info("ORIGIN_WORKSHOP phase=$phase actor=$actorId role=$role token=$token $detail")
+    }
+
+    private fun closeActor(cycle: ActiveWorkshopCycle) {
+        if (cycle.routeStarted) routeController.stop(cycle.actor)
+        restoreEquipment(cycle)
+        removeCycleProps(cycle)
+        if (cycle.actor.isSpawned && cycle.actor.entity.world == world) {
+            runCatching { cycle.actor.entity.teleport(cycle.worker.home.inWorld(world)) }
+            runCatching { face(cycle.actor, cycle.worker.restFocus) }
+        }
+    }
+
+    override fun close() {
+        if (closed) return
+        closed = true
+        tasks.close()
+        active?.let(::closeActor)
+        active = null
+        routeController.close()
+        stock.values.toList().forEach { runCatching { it.remove() } }
+        stock.clear()
+        displays.close()
+        lookCloseSnapshots.values.forEach { (trait, enabled) ->
+            runCatching { trait.lookClose(enabled) }.onFailure { failure ->
+                ARC.instance.logger.log(Level.WARNING, "Could not restore workshop NPC LookClose", failure)
+            }
+        }
+        lookCloseSnapshots.clear()
+        log("CLOSED")
+    }
+
+    private fun pointText(point: OriginFurnitureWorkshopPoint): String =
+        "${"%.2f".format(Locale.ROOT, point.x)},${"%.2f".format(Locale.ROOT, point.y)},${"%.2f".format(Locale.ROOT, point.z)}"
+
+    private fun pointText(location: Location): String =
+        "${"%.2f".format(Locale.ROOT, location.x)},${"%.2f".format(Locale.ROOT, location.y)},${"%.2f".format(Locale.ROOT, location.z)}"
+}
+
+private const val WORKSHOP_WORLD = "rc_origin_spawn"

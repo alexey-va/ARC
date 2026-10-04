@@ -86,6 +86,7 @@ import ru.arc.onboarding.OnboardingModule
 import ru.arc.origin.OriginSpawnModule
 import ru.arc.origin.OriginPortalsModule
 import ru.arc.origin.OriginDiningModule
+import ru.arc.origin.OriginFurnitureWorkshopModule
 import ru.arc.origin.OriginTrainingDummyModule
 import ru.arc.origin.OriginWorkshopTablesModule
 import ru.arc.origin.scene.OriginAmbientScenesModule
@@ -308,6 +309,7 @@ open class ARC : JavaPlugin() {
             EconomyModule,
             OriginDiningModule,
             OriginAmbientScenesModule,
+            OriginFurnitureWorkshopModule,
             OriginTrainingDummyModule,
             OriginMountYardModule,
             // Configuration (priority 30-49)
@@ -567,6 +569,7 @@ open class ARC : JavaPlugin() {
                 "modules/origin-spawn.yml",
                 "modules/origin-dining.yml",
                 "modules/origin-scenes.yml",
+                "modules/origin-furniture-workshop.yml",
                 "modules/origin-mount-yard.yml",
                 "modules/origin-mount-care.yml",
                 "modules/mount-care-boost.yml",
