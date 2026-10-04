@@ -36,6 +36,11 @@ class SoundUtilsTest :
                 sound shouldBe Sound.ENTITY_PLAYER_LEVELUP
             }
 
+            it("resolves the configured treasure-hunt namespaced sound IDs") {
+                SoundUtils.getSound("minecraft:block.amethyst_block.chime").shouldNotBeNull()
+                SoundUtils.getSound("minecraft:entity.experience_orb.pickup").shouldNotBeNull()
+            }
+
             it("should normalize surrounding whitespace") {
                 val sound = SoundUtils.getSound("  ENTITY_PLAYER_LEVELUP  ")
 
@@ -114,6 +119,13 @@ class SoundUtilsTest :
 
                 result.shouldBeFalse()
             }
+
+            it("plays the configured treasure-hunt idle sound at a location") {
+                val world = server.addSimpleWorld("treasure-hunt-idle-sound")
+                val location = world.getBlockAt(0, 64, 0).location
+
+                SoundUtils.playSound(location, "minecraft:block.amethyst_block.chime").shouldBeTrue()
+            }
         }
 
         describe("playSound to player") {
@@ -132,6 +144,18 @@ class SoundUtilsTest :
                 val result = SoundUtils.playSound(player, "invalid_sound")
 
                 result.shouldBeFalse()
+            }
+
+            it("plays the configured treasure-hunt claim sound to a player") {
+                val world = server.addSimpleWorld("treasure-hunt-claim-sound")
+                val player = server.addPlayer("TreasureClaimSoundPlayer")
+                val location = world.getBlockAt(0, 64, 0).location
+
+                SoundUtils.playSoundAt(
+                    player,
+                    location,
+                    "minecraft:entity.experience_orb.pickup",
+                ).shouldBeTrue()
             }
         }
 

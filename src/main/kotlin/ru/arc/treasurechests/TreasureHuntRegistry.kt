@@ -139,6 +139,56 @@ object TreasureHuntRegistry {
         return hunt
     }
 
+    /** Starts an already resolved config, preserving its inherited preset settings. */
+    fun startHunt(
+        config: TreasureHuntConfig,
+        chestCount: Int,
+        sender: CommandSender,
+        replaceExisting: Boolean,
+    ): ActiveHunt? {
+        if (!validateStartConfig(config, sender)) return null
+        val hunt = service?.startHunt(config, chestCount, replaceExisting)
+        if (hunt == null) sender.sendMessage(mm("<red>Не удалось запустить охоту."))
+        return hunt
+    }
+
+    /** Validates reward pools and required hooks before a caller places or generates any chests. */
+    internal fun validateStartConfig(config: TreasureHuntConfig, sender: CommandSender): Boolean =
+        validateChestTypes(config.chestTypes.values(), sender)
+
+    private fun validateChestTypes(
+        chestTypes: Iterable<ChestType>,
+        sender: CommandSender,
+    ): Boolean {
+        val types = chestTypes.toList()
+        if (types.isEmpty()) {
+            sender.sendMessage(mm("<red>У пресета не настроен ни один вид сундука."))
+            return false
+        }
+        for (chestType in types) {
+            if (!validateRewardPool(chestType.treasurePoolId, sender)) return false
+            if (chestType.type == ChestVariant.ITEMS_ADDER && !validateItemsAdderHook(sender)) return false
+        }
+        return true
+    }
+
+    private fun validateRewardPool(poolId: String, sender: CommandSender): Boolean {
+        if (Treasures.getPool(poolId) != null) return true
+        warn("Could not find treasure pool: $poolId")
+        sender.sendMessage(mm("<red>Не найден набор наград: <yellow>$poolId</yellow>"))
+        return false
+    }
+
+    private fun validateItemsAdderHook(
+        sender: CommandSender,
+        throwIfUnavailable: Boolean = false,
+    ): Boolean {
+        if (HookRegistry.itemsAdderHook != null) return true
+        if (throwIfUnavailable) throw IllegalArgumentException("ItemsAdder is not loaded!")
+        sender.sendMessage(mm("<red>ItemsAdder не загружен"))
+        return false
+    }
+
     /**
      * Запускает охоту с указанными параметрами.
      */
@@ -168,18 +218,8 @@ object TreasureHuntRegistry {
         sender: CommandSender,
         replaceExisting: Boolean,
     ): ActiveHunt? {
-        // Проверяем treasure pool
-        val treasurePool = Treasures.getPool(treasurePoolId)
-        if (treasurePool == null) {
-            warn("Could not find treasure pool: $treasurePoolId")
-            sender.sendMessage(mm("<red>Не найден набор наград: <yellow>$treasurePoolId</yellow>"))
-            return null
-        }
-
-        // Проверяем ItemsAdder hook
-        if (chestVariant == ChestVariant.ITEMS_ADDER && HookRegistry.itemsAdderHook == null) {
-            throw IllegalArgumentException("ItemsAdder is not loaded!")
-        }
+        if (!validateRewardPool(treasurePoolId, sender)) return null
+        if (chestVariant == ChestVariant.ITEMS_ADDER && !validateItemsAdderHook(sender, throwIfUnavailable = true)) return null
 
         // Создаём тип сундука
         val chestType =

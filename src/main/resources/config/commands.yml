@@ -152,7 +152,7 @@ commands:
     aliases: [ ]
     permission: arc.treasure.hunt.admin
     player-only: false
-    usage: "/arc hunt [status|types|start preset=<id> [chests=<count>]|start custom ...|stop pool=<id>|stopall]"
+    usage: "/arc hunt [status|types|start preset=<id> chests=<count> [locations=<pool>] [chest=<appearance>] [rewards=<pool>] [replace=true|false]|start preset=<id> generate=true center=here radius=<blocks> chests=<count> [chest=<appearance>] [rewards=<pool>]|start locations=<pool> chests=<count> chest=<appearance> rewards=<pool> [replace=true|false]|start generate=true center=here radius=<blocks> chests=<count> chest=<appearance> rewards=<pool> [replace=true|false]|stop locations=<active-pool>|stopall]"
   schedules:
     name: schedules
     aliases: [ scheduler, cron ]
@@ -300,27 +300,32 @@ messages:
     types-header: <gold>═══ Пресеты охот ═══
     types-blank: ''
     types-custom-header: <gold>─── Своя охота ───
-    types-stop-hint: '<gray>Стоп: <white>/arc hunt stop pool=<location_pool>'
+    types-stop-hint: '<gray>Стоп: <white>/arc hunt stop locations=<active_location_pool>'
     type-name: <yellow>%type%
-    type-location: '<gray>  pool: <white>%location_pool%%pool_size%'
-    type-treasure: '<gray>  loot: <white>%treasure_pools%'
-    type-chest: '<gray>  chest: <white>%chests%'
-    type-start: '<gray>  → <white>/arc hunt start preset=%type% [chests=...]'
-    custom-hint: '<gray>пул:  <white>/arc hunt start custom pool=<id> chests=<count> chest=<model> loot=<pool>'
-    generate-hint: '<gray>ген:  <white>/arc hunt start custom generate here radius=<blocks> chests=<count> chest=<model> loot=<pool> · world=<world> x=<x> y=<y> z=<z> radius=<blocks> chests=<count> chest=<model> loot=<pool>'
-    chest-hint: '<gray>chest — модель сундука (pumpkin_1, vanilla, …) · loot — пул наград из /arc treasures'
-    custom-not-enough-args: '<red>Недостаточно аргументов! <gray>/arc hunt start custom pool=<id> chests=<count> chest=<model> loot=<pool>'
-    generate-not-enough-args: '<red>Недостаточно аргументов! <gray>Укажите here radius=<blocks> chests=<count> chest=<model> loot=<pool> или world=<world> x=<x> y=<y> z=<z> radius=<blocks> chests=<count> chest=<model> loot=<pool>.'
+    type-location: '<gray>  Пул локаций (locations): <white>%location_pool%%pool_size%'
+    type-treasure: '<gray>  Пулы наград (rewards): <white>%treasure_pools%'
+    type-chest: '<gray>  Виды сундуков (chest): <white>%chests%'
+    type-start: '<gray>  → <white>/arc hunt start preset=%type% chests=<count>'
+    custom-hint: '<gray>Пул локаций: <white>/arc hunt start locations=<location_pool> chests=<count> chest=<appearance> rewards=<reward_pool>'
+    generate-hint: '<gray>Генерация: <white>/arc hunt start generate=true center=here radius=<blocks> chests=<count> chest=<appearance> rewards=<reward_pool> <gray>или generate=true world=<world> x=<x> y=<y> z=<z> radius=<blocks> chests=<count> chest=<appearance> rewards=<reward_pool>. Для пресета: preset=<id> generate=true center=here radius=<blocks> chests=<count>; chest= и rewards= можно опустить.'
+    chest-hint: '<gray>Для любого запуска обязателен положительный chests=<count>; locations — пул точек; rewards — пул наград; chest — вид сундука (настроенный alias или <white>vanilla<gray>). Для preset= можно переопределить пул локаций, chest и rewards; при генерации locations= не указывается.'
+    custom-not-enough-args: '<red>Недостаточно аргументов. <gray>Используйте /arc hunt types для примеров с locations=, chests=, chest= и rewards=.'
+    generate-not-enough-args: '<red>Недостаточно аргументов. <gray>Используйте generate=true center=here radius=<blocks> chests=<count> chest=<appearance> rewards=<reward_pool> либо generate=true world=<world> x=<x> y=<y> z=<z> radius=<blocks> chests=<count> chest=<appearance> rewards=<reward_pool>.'
     generate-player-only: <red>Режим <white>here<red> только для игрока в мире.
     generate-no-world: <red>Не удалось определить мир для генерации.
     invalid-radius:
       <red>Неверный радиус: <white>%value%
     location-pool-not-found: <red>Пул локаций <white>%location_pool%<red> не найден!
-    specify-location-pool: <red>Укажите pool=<location_pool> для остановки!
-    arguments-error: '<red>Аргументы охоты: <white>%reason%<red>. <gray>Используйте формат key=value; не смешивайте его с позиционными аргументами.'
+    location-pool-empty: '<red>Пул локаций пуст: <white>%location_pool%'
+    specify-location-pool: <red>Укажите locations=<active_location_pool> для остановки!
+    arguments-error: '<red>Аргументы охоты: <white>%reason%<red>. <gray>Все значения задаются как key=value; старые позиционные формы недоступны. Справка: /arc hunt types.'
     start-failed: '<red>Охота не запущена: не удалось создать активную охоту. Проверьте пул точек и наград.'
     world-not-found: '<red>Мир из аргумента world= не найден.'
-    not-enough-args: '<red>Недостаточно аргументов! <gray>Синтаксис: /arc hunt start custom pool=<id> chests=<count> chest=<model> loot=<pool>'
+    reward-pool-not-found: '<red>Пул наград <white>%pool_id%<red> не найден.'
+    chest-model-not-found: '<red>Неизвестный вид сундука. Доступны только настроенные aliases и vanilla; список: /arc hunt types'
+    chest-model-unavailable: '<red>Модели сундуков ItemsAdder сейчас недоступны.'
+    no-chest-types: '<red>У пресета не настроен ни один вид сундука.'
+    not-enough-args: '<red>Недостаточно аргументов. <gray>Синтаксис: /arc hunt start locations=<pool> chests=<count> chest=<appearance> rewards=<pool>'
     active-item: '<gray>• <white>%location_pool% <gray>- <yellow>%chests%<gray> сундуков'
   treasures:
     list-header: '<gold>Пулы наград (%count%):'

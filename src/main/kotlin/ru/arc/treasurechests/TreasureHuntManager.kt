@@ -69,6 +69,15 @@ object TreasureHuntManager {
         replaceExisting: Boolean,
     ): ActiveHunt? = TreasureHuntRegistry.startHunt(type, chests, sender, replaceExisting)
 
+    /** Starts a resolved config so command overrides retain the preset's lifecycle and presentation settings. */
+    @JvmStatic
+    fun startHunt(
+        config: TreasureHuntConfig,
+        chests: Int,
+        sender: CommandSender,
+        replaceExisting: Boolean,
+    ): ActiveHunt? = TreasureHuntRegistry.startHunt(config, chests, sender, replaceExisting)
+
     /**
      * Генерирует точки в радиусе от центра, создаёт эфемерный location_pool и запускает охоту.
      * Пул не сохраняется на диск и удаляется при остановке охоты.
@@ -102,17 +111,32 @@ object TreasureHuntManager {
         sender: CommandSender,
         replaceExisting: Boolean,
     ): ActiveHunt? {
-        val world = center.world
-        if (world == null) {
-            sender.sendMessage(
-                ru.arc.util.TextUtil
-                    .mm("<red>Мир не найден"),
-            )
+        val chestType =
+            if (namespaceId == "vanilla") {
+                ChestType.vanilla(treasurePoolId)
+            } else {
+                ChestType.itemsAdder(namespaceId, treasurePoolId)
+            }
+        val huntConfig = TreasureHuntConfig.simple("generated-${System.nanoTime()}", "", chestType)
+        return startGeneratedHunt(center, radius, chests, huntConfig, sender, replaceExisting)
+    }
+
+    /** Generates locations, then starts the supplied preset config against that ephemeral pool. */
+    @JvmStatic
+    fun startGeneratedHunt(
+        center: Location,
+        radius: Double,
+        chests: Int,
+        config: TreasureHuntConfig,
+        sender: CommandSender,
+        replaceExisting: Boolean,
+    ): ActiveHunt? {
+        if (!TreasureHuntRegistry.validateStartConfig(config, sender)) return null
+        val world = center.world ?: run {
+            sender.sendMessage(ru.arc.util.TextUtil.mm("<red>Мир не найден"))
             return null
         }
-
-        val config = HuntLocationGeneratorConfig(horizontalRadius = radius)
-        val locations = HuntLocationGenerator.generate(world, center, chests, config)
+        val locations = HuntLocationGenerator.generate(world, center, chests, HuntLocationGeneratorConfig(horizontalRadius = radius))
         if (locations.isEmpty()) {
             sender.sendMessage(
                 ru.arc.util.TextUtil.mm(
@@ -124,10 +148,12 @@ object TreasureHuntManager {
         }
 
         val pool = LocationPoolManager.createEphemeralPool()
-        locations.forEach { pool.addLocation(it) }
-
-        val placed = minOf(chests, locations.size)
-        startHunt(pool, placed, namespaceId, treasurePoolId, sender, replaceExisting)
+        locations.forEach(pool::addLocation)
+        val hunt = startHunt(config.copy(locationPoolId = pool.id), minOf(chests, locations.size), sender, replaceExisting)
+        if (hunt == null) {
+            LocationPoolManager.removeEphemeralPool(pool.id)
+            return null
+        }
 
         sender.sendMessage(
             ru.arc.util.TextUtil.mm(
@@ -135,7 +161,7 @@ object TreasureHuntManager {
                     "(location_pool: <white>${pool.id}<green>, радиус: <white>$radius<green>)",
             ),
         )
-        return TreasureHuntRegistry.getByLocationPool(pool)
+        return hunt
     }
 
     @JvmStatic

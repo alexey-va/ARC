@@ -98,6 +98,10 @@ class TreasureHuntService(
         config.invalidateCache()
         val highlight = config.highlightSettings
         activeHunts.forEach { hunt ->
+            config.huntTypes[hunt.config.id]?.let { refreshed ->
+                hunt.config = hunt.config.copy(bossBar = refreshed.bossBar, announcements = refreshed.announcements)
+                updateBossBar(hunt)
+            }
             hunt.chests.values.forEach { placed -> applyHighlight(placed.chest, highlight.enabled, highlight.color) }
         }
         grapple?.reloadConfig(config.grappleSettings)
@@ -119,6 +123,13 @@ class TreasureHuntService(
     }
 
     // === Hunt Management ===
+
+    /** Starts a resolved configuration through the same placement lifecycle; call on the world-owning thread. */
+    fun startHunt(
+        huntConfig: TreasureHuntConfig,
+        chestCount: Int,
+        replaceExisting: Boolean,
+    ): ActiveHunt? = startHuntInternal(huntConfig, chestCount, replaceExisting)
 
     /**
      * Start a hunt by type ID.
@@ -523,7 +534,13 @@ class TreasureHuntService(
 
                 if (player.location.distance(chestLocation) > particleConfig.soundRadius) continue
 
-                SoundUtils.playSoundAt(player, chestLocation.toCenterLocation(), particleConfig.sound)
+                SoundUtils.playSoundAt(
+                    player,
+                    chestLocation.toCenterLocation(),
+                    particleConfig.sound,
+                    particleConfig.soundVolume,
+                    particleConfig.soundPitch,
+                )
             }
         }
 
@@ -532,7 +549,12 @@ class TreasureHuntService(
     }
 
     private fun updateBossBar(hunt: ActiveHunt) {
-        if (!hunt.config.bossBar.visible) return
+        if (!hunt.config.bossBar.visible) {
+            hunt.bossBar?.let { bar -> hunt.bossBarAudience.forEach { it.hideBossBar(bar) } }
+            hunt.bossBarAudience.clear()
+            hunt.bossBar = null
+            return
+        }
 
         val message =
             hunt.config.bossBar.message
@@ -551,6 +573,8 @@ class TreasureHuntService(
         } else {
             hunt.bossBar?.name(mm(message))
             hunt.bossBar?.progress(progress.coerceIn(0f, 1f))
+            hunt.bossBar?.color(hunt.config.bossBar.color)
+            hunt.bossBar?.overlay(hunt.config.bossBar.overlay)
         }
 
         // Update audience
@@ -607,7 +631,7 @@ class TreasureHuntService(
         )
 
         // Sound
-        SoundUtils.playSound(block.location, particleConfig.sound)
+        SoundUtils.playSound(block.location, particleConfig.sound, particleConfig.soundVolume, particleConfig.soundPitch)
 
         // Firework
         if (launchFirework) {
@@ -699,12 +723,15 @@ data class PlacedChest(
  * Thread-safe: uses ConcurrentHashMap for chests and thread-safe set for audience.
  */
 class ActiveHunt(
-    val config: TreasureHuntConfig,
+    config: TreasureHuntConfig,
     val world: World,
     val chests: ConcurrentHashMap<Location, PlacedChest>,
     val totalChests: Int,
     val startTime: Long,
 ) {
+    var config: TreasureHuntConfig = config
+        internal set
+
     @Volatile
     var displayTask: ScheduledTask? = null
 

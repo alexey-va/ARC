@@ -228,6 +228,8 @@ class ParticleSettings(
             radius = sec.int("radius", default.radius),
             soundRadius = sec.int("sound-radius", default.soundRadius),
             sound = sec.string("sound", default.sound),
+            soundVolume = sec.positiveFiniteFloat("sound-volume", default.soundVolume),
+            soundPitch = sec.positiveFiniteFloat("sound-pitch", default.soundPitch),
         )
     }
 
@@ -267,4 +269,15 @@ data class ChestParticleConfig(
     val radius: Int = 30,
     val soundRadius: Int = 30,
     val sound: String = "block_amethyst_cluster_hit",
+    val soundVolume: Float = 1.0f,
+    val soundPitch: Float = 1.0f,
 )
+
+private fun ConfigSection.positiveFiniteFloat(
+    key: String,
+    fallback: Float,
+): Float =
+    double(key, fallback.toDouble())
+        .toFloat()
+        .takeIf { it.isFinite() && it > 0f }
+        ?: fallback

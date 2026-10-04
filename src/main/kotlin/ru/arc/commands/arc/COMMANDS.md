@@ -39,8 +39,8 @@
 # Принудительно запустить ambient-цикл NPC для проверки
 /arc npccycle forge-yar
 
-# Запустить охоту по типу
-/arc hunt daily
+# Запустить пресет охоты
+/arc hunt start preset=spawn chests=12
 
 # Добавить предмет в пул наград
 /arc treasures common add
@@ -177,7 +177,9 @@ balance сверяется в точных minor units. Неоднозначны
 ## /arc hunt
 
 Управление охотой на сокровища. Охота создаёт сундуки в случайных локациях из пула, игроки находят и открывают их для
-получения наград.
+получения наград. Аргументы запуска задаются только как `key=value` и могут идти в любом порядке. Позиционные значения
+`daily`, `custom`, а также отдельные `generate` и `here` не поддерживаются; генерация задаётся как `generate=true center=here`
+или через именованные координаты. Старые ключи `pool=` и `loot=` заменены на `locations=` и `rewards=`.
 
 | Параметр         | Значение            |
 |------------------|---------------------|
@@ -190,34 +192,52 @@ balance сверяется в точных minor units. Неоднозначны
 |--------------------|-------------------------------------------------|
 | `/arc hunt`        | Показать статус: активные охоты, доступные типы |
 | `/arc hunt status` | То же самое                                     |
-| `/arc hunt types`  | Список доступных типов охот с их пулами         |
+| `/arc hunt types`  | Список доступных пресетов, пулов и видов сундуков |
 
 ### Запуск охоты
 
 ```bash
-# По пресету; без chests используется размер его пула
-/arc hunt start preset=daily
-/arc hunt start preset=daily chests=50
+# Пресет; число сундуков указывается всегда
+/arc hunt start preset=spawn chests=12
+/arc hunt start preset=easter chests=18
 
-# По готовому пулу локаций
-/arc hunt start custom pool=forest_pool chests=30 chest=vanilla loot=common_loot
+# Своя охота по сохранённому пулу локаций
+/arc hunt start locations=forest_pool chests=12 chest=vanilla rewards=spawn_hunt
 
-# Генерация рядом с игроком
-/arc hunt start custom generate here radius=80 chests=10 chest=pumpkin_1 loot=easter
+# Генерация около игрока (только игрок может использовать center=here)
+/arc hunt start generate=true center=here radius=80 chests=12 chest=easter rewards=spawn_hunt
 
 # Генерация вокруг явных координат
-/arc hunt start custom generate world=rc_origin_spawn x=0 y=71 z=0 radius=80 chests=10 chest=pumpkin_1 loot=easter
+/arc hunt start generate=true world=rc_origin_spawn x=0 y=71 z=0 radius=80 chests=12 chest=easter rewards=spawn_hunt
+
+# Генерация для пресета сохраняет его объявления, эффекты и TTL
+/arc hunt start preset=easter generate=true center=here radius=80 chests=12
+
+# Переопределить у пресета пул точек, вид сундука и пул наград
+/arc hunt start preset=easter locations=forest_pool chests=18 chest=halloween rewards=spawn_hunt
 ```
 
-Именованные аргументы можно указывать в любом порядке. Старые позиционные формы запуска и остановки пока остаются совместимы.
+`chests=` обязательно указывается для каждого запуска и задаёт количество для выбранного пресета. Для `preset=`
+можно также указать `locations=`, `chest=` и `rewards=`; с `generate=true` укажите центр и радиус, не добавляя `locations=`.
+Сгенерированная охота сохраняет настройки пресета, включая эффекты, объявления, босс-бар и срок жизни. Без пресета нужен либо полный набор
+`locations=`, `chests=`, `chest=`, `rewards=`, либо `generate=true` с `center=here` или с `world=`, `x=`, `y=`, `z=`,
+а также `radius=`, `chests=`, `chest=` и `rewards=`.
+
+`locations=` — пул точек из `/arc locationpool`; `rewards=` — пул наград из `/arc treasures`; `chest=` — настроенный
+alias внешнего вида сундука либо `vanilla`; `chests=` — положительное количество сундуков. `replace=true|false`
+управляет заменой охоты в том же пуле локаций. Tab подсказывает реальные пресеты, сохранённые пулы, пулы наград и
+настроенные aliases. Для известного пула подсказки количества не превышают его размер; вручную введённое значение
+не получает нового лимита.
 
 ### Остановка охоты
 
 ```bash
-/arc hunt stop          # показать подсказку
-/arc hunt stop pool=my_pool
+/arc hunt stop locations=forest_pool
 /arc hunt stopall       # остановить ВСЕ активные охоты
 ```
+
+`stop` принимает только `locations=<active_location_pool>` из активной охоты. `status`, `types` и `stopall` не принимают
+дополнительных аргументов. При ошибке команда указывает на `/arc hunt types`.
 
 ### Типы охот
 
@@ -712,7 +732,7 @@ commands:
     name: "hunt"                              # название команды
     permission: "arc.treasure.hunt.admin"           # право (пусто = для всех)
     description: "Управление охотой"          # описание для /arc help
-    usage: "/arc hunt [status|types|start preset=<id> [chests=<count>]|start custom ...|stop pool=<id>|stopall]"
+    usage: "/arc hunt [status|types|start preset=<id> chests=<count> [locations=<pool>] [chest=<appearance>] [rewards=<pool>] [replace=true|false]|start preset=<id> generate=true center=here radius=<blocks> chests=<count> [chest=<appearance>] [rewards=<pool>]|start locations=<pool> chests=<count> chest=<appearance> rewards=<pool> [replace=true|false]|start generate=true center=here radius=<blocks> chests=<count> chest=<appearance> rewards=<pool> [replace=true|false]|stop locations=<active-pool>|stopall]"
     player-only: false                        # требуется ли игрок
     aliases: ["th", "охота"]                  # альтернативные названия
 ```

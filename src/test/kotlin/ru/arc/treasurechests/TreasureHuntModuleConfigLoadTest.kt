@@ -1,112 +1,119 @@
 package ru.arc.treasurechests
 
-import net.kyori.adventure.bossbar.BossBar
+import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.collections.shouldContain
+import io.kotest.matchers.shouldBe
 import org.bukkit.Particle
-import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.io.TempDir
 import ru.arc.config.ConfigManager
-import java.nio.file.Path
+import ru.arc.config.TestConfig
+import java.nio.file.Files
 
-/**
- * Verifies that [TreasureHuntModuleConfig.load] reads values from the bundled `modules/treasure-hunt.yml`.
- */
-class TreasureHuntModuleConfigLoadTest {
+class TreasureHuntModuleConfigLoadTest :
+    DescribeSpec({
+        beforeEach { ConfigManager.clear() }
+        afterEach { ConfigManager.clear() }
 
-    @TempDir
-    lateinit var tempDir: Path
+        describe("bundled treasure hunt settings") {
+            it("exposes the configured hunt presets") {
+                val types = loadConfig().loadHuntTypes()
 
-    @BeforeEach
-    fun setUp() {
-        ConfigManager.clear()
-    }
+                types.keys shouldContain "spawn"
+                types.keys shouldContain "easter"
+                types.keys shouldContain "halloween"
+                types.keys shouldContain "vanilla"
+            }
 
-    @AfterEach
-    fun tearDown() {
-        ConfigManager.clear()
-    }
+            it("uses the portable spawn pool and the configured model counts") {
+                val types = loadConfig().loadHuntTypes()
 
-    @Test
-    fun `bundled YAML exposes easter hunt type`() {
-        val cfg = TreasureHuntModuleConfig.load(tempDir)
-        val types = cfg.loadHuntTypes()
-        assertTrue(types.containsKey("easter"), "Expected 'easter' hunt type from bundled YAML")
-    }
+                types.values.forEach { it.locationPoolId shouldBe "spawn" }
+                types.getValue("spawn").chestTypes.size() shouldBe 3
+                types.getValue("easter").chestTypes.size() shouldBe 1
+                types.getValue("halloween").chestTypes.size() shouldBe 1
+                types.getValue("vanilla").chestTypes.size() shouldBe 1
 
-    @Test
-    fun `easter hunt type has correct location pool`() {
-        val cfg = TreasureHuntModuleConfig.load(tempDir)
-        val easter = cfg.loadHuntTypes()["easter"]!!
-        assertEquals("spawn", easter.locationPoolId)
-    }
+                for (type in types.values) {
+                    type.chestTypes.values().forEach {
+                        it.treasurePoolId shouldBe "spawn_hunt"
+                    }
+                }
 
-    @Test
-    fun `easter hunt type has correct boss bar settings`() {
-        val cfg = TreasureHuntModuleConfig.load(tempDir)
-        val easter = cfg.loadHuntTypes()["easter"]!!
-        assertTrue(easter.bossBar.visible)
-        assertEquals(BossBar.Color.GREEN, easter.bossBar.color)
-    }
+                types.getValue("vanilla").chestTypes.values().single().particlePath shouldBe
+                    "default"
+                types.getValue("easter").chestTypes.values().single().particlePath shouldBe
+                    "easter"
+                types.getValue("halloween").chestTypes.values().single().particlePath shouldBe
+                    "halloween"
+            }
 
-    @Test
-    fun `easter hunt type has correct chest types count`() {
-        val cfg = TreasureHuntModuleConfig.load(tempDir)
-        val easter = cfg.loadHuntTypes()["easter"]!!
-        // Bundled YAML has keys 2..6 (5 chest types)
-        assertEquals(5, easter.chestTypes.size())
-    }
+            it("uses the shared announcement, lifetime, fireworks, and boss bar contract") {
+                val types = loadConfig().loadHuntTypes()
 
-    @Test
-    fun `easter hunt type announces start globally`() {
-        val cfg = TreasureHuntModuleConfig.load(tempDir)
-        val easter = cfg.loadHuntTypes()["easter"]!!
-        assertTrue(easter.announcements.announceStartGlobally)
-        assertTrue(easter.announcements.announceStart)
-    }
+                for (type in types.values) {
+                    type.timeoutSeconds shouldBe 1800L
+                    type.bossBar.visible shouldBe true
+                    type.bossBar.color shouldBe net.kyori.adventure.bossbar.BossBar.Color.YELLOW
+                    type.announcements.announceStart shouldBe true
+                    type.announcements.announceStartGlobally shouldBe true
+                    type.effects.launchFireworks shouldBe false
+                }
+            }
 
-    @Test
-    fun `easter hunt type has correct TTL`() {
-        val cfg = TreasureHuntModuleConfig.load(tempDir)
-        val easter = cfg.loadHuntTypes()["easter"]!!
-        assertEquals(3600L, easter.timeoutSeconds)
-    }
+            it("keeps the Easter and Halloween aliases available") {
+                val aliases = loadConfig().aliases
 
-    @Test
-    fun `bundled YAML has correct aliases`() {
-        val cfg = TreasureHuntModuleConfig.load(tempDir)
-        val aliases = cfg.aliases
-        assertTrue(aliases.containsKey("easter"))
-        assertTrue(aliases.containsKey("pot"))
-    }
+                aliases.keys shouldBe setOf("easter", "halloween")
+            }
 
-    @Test
-    fun `particle settings idle ticks loaded correctly`() {
-        val cfg = TreasureHuntModuleConfig.load(tempDir)
-        assertEquals(5L, cfg.particles.idleTicks)
-    }
+            it("loads the configured idle update and sound cadence") {
+                val particles = loadConfig().particles
 
-    @Test
-    fun `particle settings player sound each loaded correctly`() {
-        val cfg = TreasureHuntModuleConfig.load(tempDir)
-        assertEquals(1, cfg.particles.playerSoundEach)
-    }
+                particles.idleTicks shouldBe 5L
+                particles.playerSoundEach shouldBe 11
+            }
 
-    @Test
-    fun `particle settings default idle uses FLAME`() {
-        val cfg = TreasureHuntModuleConfig.load(tempDir)
-        val idle = cfg.particles.getIdleConfig("default")
-        assertEquals(Particle.FLAME, idle.particle)
-        assertEquals(20, idle.count)
-    }
+            it("loads the same idle and claim appearance contract for all three paths") {
+                val particles = loadConfig().particles
 
-    @Test
-    fun `particle settings halloween idle uses END_ROD`() {
-        val cfg = TreasureHuntModuleConfig.load(tempDir)
-        val idle = cfg.particles.getIdleConfig("halloween")
-        assertEquals(Particle.END_ROD, idle.particle)
-        assertEquals(10, idle.count)
-    }
-}
+                for (path in listOf("default", "easter", "halloween")) {
+                    val idle = particles.getIdleConfig(path)
+                    idle.particle shouldBe Particle.END_ROD
+                    idle.count shouldBe 3
+                    idle.offset shouldBe 0.35
+                    idle.extra shouldBe 0.01
+                    idle.radius shouldBe 24
+                    idle.soundRadius shouldBe 12
+                    idle.sound shouldBe "minecraft:block.amethyst_block.chime"
+                    idle.soundVolume shouldBe 1.2f
+                    idle.soundPitch shouldBe 1.3f
+
+                    val claimed = particles.getClaimedConfig(path)
+                    claimed.particle shouldBe Particle.FIREWORK
+                    claimed.count shouldBe 18
+                    claimed.offset shouldBe 0.32
+                    claimed.extra shouldBe 0.04
+                    claimed.sound shouldBe "minecraft:entity.experience_orb.pickup"
+                    claimed.soundVolume shouldBe 1.0f
+                    claimed.soundPitch shouldBe 1.25f
+                }
+            }
+        }
+
+        describe("sound level validation") {
+            it("falls back for nonfinite or nonpositive configured levels") {
+                val config = TestConfig(
+                    mapOf(
+                        "idle.default.sound-volume" to Double.POSITIVE_INFINITY,
+                        "idle.default.sound-pitch" to 0.0,
+                    ),
+                )
+                val idle = ParticleSettings(config).getIdleConfig("default")
+
+                idle.soundVolume shouldBe 1.0f
+                idle.soundPitch shouldBe 1.0f
+            }
+        }
+    })
+
+private fun loadConfig(): TreasureHuntModuleConfig =
+    TreasureHuntModuleConfig.load(Files.createTempDirectory("treasure-hunt-config-test"))

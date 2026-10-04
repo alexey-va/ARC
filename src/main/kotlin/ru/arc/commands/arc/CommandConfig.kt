@@ -171,26 +171,29 @@ object CommandConfig {
     fun huntCustomNotEnoughArgs() =
         get(
             "hunt.custom-not-enough-args",
-            "<red>Недостаточно аргументов! <gray>/arc hunt start custom pool=<id> chests=<count> chest=<model> loot=<pool>",
+            "<red>Недостаточно аргументов. <gray>Используйте /arc hunt types для примеров с locations=, chests=, chest= и rewards=.",
         )
 
-    fun huntCustomHintDefault() = "<gray>Пул: <white>/arc hunt start custom pool=<id> chests=<count> chest=<model> loot=<pool>"
+    fun huntCustomHintDefault() =
+        "<gray>Пул: <white>/arc hunt start locations=<location_pool> chests=<count> chest=<appearance> rewards=<reward_pool>"
 
     fun huntGenerateHintDefault() =
-        "<gray>Генерация: <white>/arc hunt start custom generate here radius=<blocks> chests=<count> chest=<model> loot=<pool> " +
-            "<gray>или generate world=<world> x=<x> y=<y> z=<z> radius=<blocks> chests=<count> chest=<model> loot=<pool>"
+        "<gray>Генерация: <white>/arc hunt start generate=true center=here radius=<blocks> chests=<count> " +
+            "chest=<appearance> rewards=<reward_pool> <gray>или generate=true world=<world> x=<x> y=<y> z=<z> radius=<blocks> chests=<count> chest=<appearance> rewards=<reward_pool>; " +
+            "пример для пресета: /arc hunt start preset=<id> generate=true center=here radius=<blocks> chests=<count>"
 
-    fun huntChestHintDefault() = "<gray><chest> — модель сундука (alias из treasure-hunt.yml: pumpkin_1, easter, …) или <white>vanilla"
+    fun huntChestHintDefault() =
+        "<gray>Для любого запуска укажите положительное chests=<count>; locations — пул точек; rewards — пул наград; " +
+            "chest — вид сундука (настроенный alias или <white>vanilla<gray>). Для preset= можно переопределить пул локаций, вид сундука и пул наград; " +
+            "в режиме генерации locations= не указывается."
 
     fun huntTypeLocation(
         locationPool: String,
         poolSizeSuffix: String,
     ) = get(
         "hunt.type-location",
-        "<gray>  pool: <white>%location_pool%%pool_size%",
+        "<gray>  Пул локаций (locations): <white>%location_pool%%pool_size%",
         "%location_pool%",
-        locationPool,
-        "%pool%",
         locationPool,
         "%pool_size%",
         poolSizeSuffix,
@@ -199,14 +202,14 @@ object CommandConfig {
     fun huntGenerateNotEnoughArgs() =
         get(
             "hunt.generate-not-enough-args",
-            "<red>Недостаточно аргументов! <gray>Укажите here radius=<blocks> chests=<count> chest=<model> loot=<pool> " +
-                "или world=<world> x=<x> y=<y> z=<z> radius=<blocks> chests=<count> chest=<model> loot=<pool>.",
+            "<red>Недостаточно аргументов. <gray>Используйте generate=true center=here radius=<blocks> chests=<count> " +
+                "chest=<appearance> rewards=<reward_pool> либо generate=true world=<world> x=<x> y=<y> z=<z> radius=<blocks> chests=<count> chest=<appearance> rewards=<reward_pool>.",
         )
 
     fun huntInvalidChests(value: String) =
         get("hunt.invalid-chests", "<red>Неверное количество сундуков: <white>%value%", "%value%", value)
 
-    fun huntSpecifyLocationPool() = get("hunt.specify-location-pool", "<red>Укажите pool=<location_pool> для остановки!")
+    fun huntSpecifyLocationPool() = get("hunt.specify-location-pool", "<red>Укажите locations=<active_location_pool> для остановки!")
 
     fun huntGeneratePlayerOnly() = get("hunt.generate-player-only", "<red>Режим <white>here<red> только для игрока в мире.")
 
@@ -214,10 +217,18 @@ object CommandConfig {
 
     fun huntWorldNotFound() = get("hunt.world-not-found", "<red>Мир из аргумента world= не найден.")
 
+    fun huntRewardPoolNotFound(poolId: String) =
+        get(
+            "hunt.reward-pool-not-found",
+            "<red>Пул наград <white>%pool_id%<red> не найден.",
+            "%pool_id%",
+            poolId,
+        )
+
     fun huntArgumentsError(reason: String) =
         get(
             "hunt.arguments-error",
-            "<red>Аргументы охоты: <white>%reason%<red>. <gray>Используйте формат key=value; не смешивайте его с позиционными аргументами.",
+            "<red>Аргументы охоты: <white>%reason%<red>. <gray>Все значения задаются как key=value; старые позиционные формы недоступны. Справка: /arc hunt types.",
             "%reason%",
             reason,
         )

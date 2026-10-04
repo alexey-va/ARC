@@ -1,20 +1,11 @@
-# =============================================================================
-# treasure-hunt.yml — типы охот на сокровища (TreasureHuntModule / Registry).
-#
-# aliases — короткие имена → полный ItemsAdder id; в chest-types указывайте alias.
-# treasure-hunt-types.<id> — один тип охоты: пул локаций, сундуки, бар, TTL.
-# chest-types — варианты сундуков с весом; type: IA | VANILLA.
-#   ia-namespace-id — ключ из aliases; treasure-pool-id — пул наград.
-#   particle-path — суффикс для idle / claimed (см. секции ниже).
-# grapple — временный крюк-кошка только во время охоты в rc_origin_spawn.
-# highlight — подсветка активной ItemsAdder мебели; цвет в формате #RRGGBB.
-# idle / claimed — пресеты частиц и звука для нетронутого / открытого сундука.
-# =============================================================================
-
+# Охота за сокровищами: spawn смешивает три вида; остальные пресеты выбирают один вид.
+# /arc hunt start preset=spawn chests=6
+# /arc hunt start locations=<pool> chests=6 chest=halloween rewards=spawn_hunt
+# aliases — доступные ItemsAdder-модели для chest=; vanilla встроен.
+# Пул локаций, награды и внешний вид задаются независимо. Подсветка через стены выключена.
 highlight:
   enabled: false
-  color: "#ffc242"
-
+  color: '#ffc242'
 grapple:
   enabled: true
   cooldown-ticks: 12
@@ -26,132 +17,170 @@ grapple:
   cable-segments: 8
   item-name: <gold>Крюк-кошка
   item-lore:
-    - ''
-    - <gray>Нажмите <white>ПКМ<gray>, чтобы выстрелить и подтянуться.
-    - <gray>Повторный <white>ПКМ<gray> меняет цель даже в полёте.
-    - ''
-    - <dark_gray>Действует во время охоты на спавне.
+  - ''
+  - <gray>Нажмите <white>ПКМ<gray>, чтобы выстрелить и подтянуться.
+  - <gray>Повторный <white>ПКМ<gray> меняет цель даже в полёте.
+  - ''
+  - <dark_gray>Действует во время охоты на спавне.
   messages:
     item-received: <gold>Крюк-кошка добавлен на панель быстрого доступа.
     inventory-full: <gray>Освободите слот на панели быстрого доступа — крюк появится автоматически.
     missed: <gray>Крюк не зацепился за поверхность.
     pulling: <aqua>Есть зацеп! Вас подтягивает.
-
-# Сокращения для ItemsAdder chest id (используются в ia-namespace-id)
 aliases:
+  halloween: elitecreatures:halloween_decoration_v1_pumpkin_1
   easter: elitecreatures:easterbunny_animated_weapon_set_chest
-  pot: elitecreatures:halloween_decoration_v1_witch_pot
-  pumpkin_1: elitecreatures:halloween_decoration_v1_pumpkin_1
-  pumpkin_2: elitecreatures:halloween_decoration_v1_pumpkin_2
-  pumpkin_3: elitecreatures:halloween_decoration_v1_pumpkin_3
-  pumpkin_4: elitecreatures:halloween_decoration_v1_pumpkin_4
-  skull_in_jar: elitecreatures:halloween_decoration_v1_skull_jar
-# Зарегистрированные типы охоты (ключ = id для /arc hunt start <type>)
 treasure-hunt-types:
-  easter:
-    # Пул локаций (location_pools/*.yml), куда ставятся сундуки
+  spawn:
     location-pool-id: spawn
-    # Варианты сундуков на точке (ключ — произвольный слот)
-    chest-types:
-      #'1':
-      #  type: VANILLA
-      #  ia-namespace-id: easter
-      #  treasure-pool-id: easter
-      #  particle-path: halloween
-      #  weight: 1
-      '2':
-        type: IA
-        ia-namespace-id: pumpkin_1
-        treasure-pool-id: easter
-        particle-path: halloween
-        weight: 1
-      '3':
-        type: IA
-        ia-namespace-id: pumpkin_2
-        treasure-pool-id: easter
-        particle-path: halloween
-        weight: 1
-      '4':
-        type: IA
-        ia-namespace-id: pumpkin_3
-        treasure-pool-id: easter
-        particle-path: halloween
-        weight: 1
-      '5':
-        type: IA
-        ia-namespace-id: pumpkin_4
-        treasure-pool-id: easter
-        particle-path: halloween
-        weight: 1
-      '6':
-        type: IA
-        ia-namespace-id: skull_in_jar
-        treasure-pool-id: easter
-        particle-path: halloween
-        weight: 1
-    # Текст босс-бара; %left% — сколько сундуков осталось
-    boss-bar-message: <red>Идет охота за сокровищами! <gray>Осталось %left%
+    boss-bar-message: <gold>Охота за сокровищами <white>· Осталось <gold>%left%
     boss-bar-visible: true
-    # Время жизни охоты (секунды)
-    seconds-ttl: 3600
+    seconds-ttl: 1800
     announce-stop: true
-    stop-message: <red>Охота за сокровищами на спавне закончилась!
+    stop-message: <gold>Охота за сокровищами <gray>· <white>Поиск завершён.
     announce-start: true
-    start-message: <red>Охота за сокровищами на спавне началась!
-    # Анонс на всех серверах (если Redis/широковещание включено)
+    start-message: "\n  <gold>Охота за сокровищами\n  <white>Ищите тайники на спавне: у вас <gold>30 минут<white>.\n"
     announce-start-globally: true
-    launch-fireworks: true
-    boss-bar-color: GREEN
+    launch-fireworks: false
+    boss-bar-color: YELLOW
     boss-bar-overlay: PROGRESS
-# Эффекты «ожидания» у неоткрытых сундуков
+    chest-types:
+      vanilla:
+        type: VANILLA
+        treasure-pool-id: spawn_hunt
+        particle-path: default
+        weight: 1
+      halloween:
+        type: IA
+        ia-namespace-id: halloween
+        treasure-pool-id: spawn_hunt
+        particle-path: halloween
+        weight: 1
+      easter:
+        type: IA
+        ia-namespace-id: easter
+        treasure-pool-id: spawn_hunt
+        particle-path: easter
+        weight: 1
+  vanilla:
+    location-pool-id: spawn
+    boss-bar-message: <gold>Охота за сокровищами <white>· Осталось <gold>%left%
+    boss-bar-visible: true
+    seconds-ttl: 1800
+    announce-stop: true
+    stop-message: <gold>Охота за сокровищами <gray>· <white>Поиск завершён.
+    announce-start: true
+    start-message: "\n  <gold>Охота за сокровищами\n  <white>Ищите тайники на спавне: у вас <gold>30 минут<white>.\n"
+    announce-start-globally: true
+    launch-fireworks: false
+    boss-bar-color: YELLOW
+    boss-bar-overlay: PROGRESS
+    chest-types:
+      vanilla:
+        type: VANILLA
+        treasure-pool-id: spawn_hunt
+        particle-path: default
+        weight: 1
+  halloween:
+    location-pool-id: spawn
+    boss-bar-message: <gold>Охота за сокровищами <white>· Осталось <gold>%left%
+    boss-bar-visible: true
+    seconds-ttl: 1800
+    announce-stop: true
+    stop-message: <gold>Охота за сокровищами <gray>· <white>Поиск завершён.
+    announce-start: true
+    start-message: "\n  <gold>Охота за сокровищами\n  <white>Ищите тайники на спавне: у вас <gold>30 минут<white>.\n"
+    announce-start-globally: true
+    launch-fireworks: false
+    boss-bar-color: YELLOW
+    boss-bar-overlay: PROGRESS
+    chest-types:
+      halloween:
+        type: IA
+        ia-namespace-id: halloween
+        treasure-pool-id: spawn_hunt
+        particle-path: halloween
+        weight: 1
+  easter:
+    location-pool-id: spawn
+    boss-bar-message: <gold>Охота за сокровищами <white>· Осталось <gold>%left%
+    boss-bar-visible: true
+    seconds-ttl: 1800
+    announce-stop: true
+    stop-message: <gold>Охота за сокровищами <gray>· <white>Поиск завершён.
+    announce-start: true
+    start-message: "\n  <gold>Охота за сокровищами\n  <white>Ищите тайники на спавне: у вас <gold>30 минут<white>.\n"
+    announce-start-globally: true
+    launch-fireworks: false
+    boss-bar-color: YELLOW
+    boss-bar-overlay: PROGRESS
+    chest-types:
+      easter:
+        type: IA
+        ia-namespace-id: easter
+        treasure-pool-id: spawn_hunt
+        particle-path: easter
+        weight: 1
 idle:
-  # Тик интервала спавна частиц (общий)
   ticks: 5
+  player-sound-each: 11
   default:
-    particle: FLAME
-    count: 20
-    offset: 0.1
-    extra: 0.03
+    particle: END_ROD
+    count: 3
+    offset: 0.35
+    extra: 0.01
+    radius: 24
+    sound-radius: 12
+    sound: minecraft:block.amethyst_block.chime
+    sound-volume: 1.2
+    sound-pitch: 1.3
+  halloween:
+    particle: END_ROD
+    count: 3
+    offset: 0.35
+    extra: 0.01
+    radius: 24
+    sound-radius: 12
+    sound: minecraft:block.amethyst_block.chime
+    sound-volume: 1.2
+    sound-pitch: 1.3
   easter:
     particle: END_ROD
     count: 3
-    offset: 0.1
+    offset: 0.35
     extra: 0.01
-  halloween:
-    particle: END_ROD
-    count: 10
-    offset: 0.2
-    extra: 0.055
-    radius: 20
-    sound-radius: 20
-    sound: block_amethyst_cluster_hit
-  # Как часто проигрывать звук каждому игроку (тики)
-  player-sound-each: 1
-# Сообщения команд / ошибок
+    radius: 24
+    sound-radius: 12
+    sound: minecraft:block.amethyst_block.chime
+    sound-volume: 1.2
+    sound-pitch: 1.3
 messages:
   location-pool-not-found: <red>Пул локаций %location_pool_id% не найден!
-  hunt-stopped: <gray>Охота на сокровища остановлена!
-  hunt-not-found: <red>Охота на сокровища не найдена!
-  not-enough-args: '<red>Неверная команда! <gray>/arc hunt start custom <location_pool> <chests> <chest> <treasure_pool>
-    или /arc hunt start custom generate <x> <y> <z> <radius> <chests> <chest> <treasure_pool>
-    или /arc hunt start <preset> или /arc hunt stop <location_pool>'
-# Эффект после открытия сундука (ключ = particle-path из chest-type)
+  hunt-stopped: <gray>Охота за сокровищами остановлена!
+  hunt-not-found: <red>Охота за сокровищами не найдена!
+  not-enough-args: <red>Неверная команда. <gray>/arc hunt start preset=spawn chests=6 или /arc hunt stop locations=spawn
 claimed:
-  easter:
-    particle: END_ROD
-    count: 15
-    offset: 0.1
-    extra: 0.05
-    sound: BLOCK_AMETHYST_CLUSTER_BREAK
   default:
-    particle: END_ROD
-    count: 15
-    offset: 0.1
-    extra: 0.05
-    sound: BLOCK_AMETHYST_CLUSTER_BREAK
+    particle: FIREWORK
+    count: 18
+    offset: 0.32
+    extra: 0.04
+    sound: minecraft:entity.experience_orb.pickup
+    sound-volume: 1.0
+    sound-pitch: 1.25
   halloween:
-    particle: END_ROD
-    count: 15
-    offset: 0.1
-    extra: 0.05
-    sound: BLOCK_AMETHYST_CLUSTER_BREAK
+    particle: FIREWORK
+    count: 18
+    offset: 0.32
+    extra: 0.04
+    sound: minecraft:entity.experience_orb.pickup
+    sound-volume: 1.0
+    sound-pitch: 1.25
+  easter:
+    particle: FIREWORK
+    count: 18
+    offset: 0.32
+    extra: 0.04
+    sound: minecraft:entity.experience_orb.pickup
+    sound-volume: 1.0
+    sound-pitch: 1.25
