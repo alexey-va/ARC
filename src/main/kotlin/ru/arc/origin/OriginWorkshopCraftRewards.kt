@@ -26,8 +26,25 @@ internal data class WorkshopCraftClaim(val request: String, val nextAt: Long) {
     }
 }
 
-internal fun workshopClaimAllowed(current: WorkshopCraftClaim?, request: UUID, now: Long): Boolean =
-    current == null || (current.request != request.toString() && now >= current.nextAt)
+internal const val WORKSHOP_COOLDOWN_BYPASS = "arc.origin.workshop.cooldown.bypass"
+
+internal fun workshopClaimAllowed(current: WorkshopCraftClaim?, request: UUID, now: Long, bypass: Boolean = false): Boolean =
+    current == null || (current.request != request.toString() && (bypass || now >= current.nextAt))
+
+internal fun workshopReleaseClaim(current: WorkshopCraftClaim?, claim: WorkshopCraftClaim, previous: WorkshopCraftClaim?): RedisHashDecision<WorkshopCraftClaim> =
+    when {
+        current != claim -> RedisHashDecision.Reject
+        previous != null -> RedisHashDecision.Write(previous)
+        else -> RedisHashDecision.Delete
+    }
+
+internal fun workshopCooldownText(remainingMillis: Long): String {
+    val minutes = (remainingMillis / 60_000 + if (remainingMillis % 60_000 > 0) 1 else 0).coerceAtLeast(1)
+    return listOfNotNull(
+        (minutes / 60).takeIf { it > 0 }?.let { "$it ч" },
+        (minutes % 60).takeIf { it > 0 }?.let { "$it мин" },
+    ).joinToString(" ")
+}
 
 internal fun workshopCraftClaimCodec() = BoundedJsonCodec(
     Common.gson, WorkshopCraftClaim::class.java,
@@ -89,11 +106,14 @@ internal class OriginWorkshopCraftRewards(
         null -> "Мастерская временно недоступна."
     }
 
-    fun status(playerId: UUID): CompletableFuture<Long> = redis?.loadMapEntries(KEY, playerId.toString())
-        ?.thenApply { values ->
+    fun status(player: Player): CompletableFuture<Long> {
+        val bypass = player.hasPermission(WORKSHOP_COOLDOWN_BYPASS)
+        return redis?.loadMapEntries(KEY, player.uniqueId.toString())?.thenApply { values ->
             require(values.size == 1)
-            values.single()?.let(codec::decode)?.let { (it.nextAt - System.currentTimeMillis()).coerceAtLeast(0L) } ?: 0L
+            val claim = values.single()?.let(codec::decode)
+            if (bypass) 0L else claim?.let { (it.nextAt - System.currentTimeMillis()).coerceAtLeast(0L) } ?: 0L
         } ?: CompletableFuture.failedFuture(IllegalStateException("Workshop quota storage unavailable"))
+    }
 
     fun complete(player: Player, requestId: UUID, stillValid: () -> Boolean, callback: (String?) -> Unit) {
         if (closed || !player.isOnline || !stillValid()) return
@@ -107,14 +127,15 @@ internal class OriginWorkshopCraftRewards(
             return
         }
         val now = System.currentTimeMillis()
+        val bypass = player.hasPermission(WORKSHOP_COOLDOWN_BYPASS)
         val claim = WorkshopCraftClaim(requestId.toString(), Math.addExact(now, cooldownMillis))
         val generation = tasks.token()
         store.update(playerId.toString()) { current ->
-            if (workshopClaimAllowed(current, requestId, now)) RedisHashDecision.Write(claim)
+            if (workshopClaimAllowed(current, requestId, now, bypass)) RedisHashDecision.Write(claim)
             else RedisHashDecision.Reject
         }.whenComplete { result, failure ->
             if (closed) {
-                if (result is RedisHashUpdateResult.Changed && result.after == claim) releaseUnused(playerId, claim)
+                if (result is RedisHashUpdateResult.Changed && result.after == claim) releaseUnused(playerId, claim, result.before)
                 pending.remove(playerId)
                 if (pending.isEmpty()) tasks.close()
                 return@whenComplete
@@ -122,7 +143,7 @@ internal class OriginWorkshopCraftRewards(
             tasks.runSync(generation) {
                 pending.remove(playerId)
                 if (closed) {
-                    if (result is RedisHashUpdateResult.Changed && result.after == claim) releaseUnused(playerId, claim)
+                    if (result is RedisHashUpdateResult.Changed && result.after == claim) releaseUnused(playerId, claim, result.before)
                     if (pending.isEmpty()) tasks.close()
                     return@runSync
                 }
@@ -138,7 +159,7 @@ internal class OriginWorkshopCraftRewards(
                 // The durable claim precedes the inventory side effect. Unknown crash outcomes
                 // retain the quota and are never replayed; inventory changes use one snapshot.
                 if (closed || !player.isOnline || !stillValid()) {
-                    releaseUnused(playerId, claim)
+                    releaseUnused(playerId, claim, result.before)
                     if (closed && pending.isEmpty()) tasks.close()
                     return@runSync
                 }
@@ -153,7 +174,7 @@ internal class OriginWorkshopCraftRewards(
                         return@runSync
                     }
                     else -> {
-                        releaseUnused(playerId, claim)
+                        releaseUnused(playerId, claim, result.before)
                         callback(missing(player) ?: "Не удалось выдать мебель. Освободи место и начни снова.")
                         return@runSync
                     }
@@ -169,9 +190,9 @@ internal class OriginWorkshopCraftRewards(
         return planWorkshopCraft(player.inventory.storageContents, reward)
     }
 
-    private fun releaseUnused(playerId: UUID, claim: WorkshopCraftClaim) {
+    private fun releaseUnused(playerId: UUID, claim: WorkshopCraftClaim, previous: WorkshopCraftClaim?) {
         updater?.update(playerId.toString()) { current ->
-            if (current == claim) RedisHashDecision.Delete else RedisHashDecision.Reject
+            workshopReleaseClaim(current, claim, previous)
         }?.whenComplete { _, failure ->
             if (failure != null) ARC.instance.logger.log(Level.WARNING,
                 "ORIGIN_WORKSHOP_GAME unused claim retained player=$playerId request=${claim.request}", failure)

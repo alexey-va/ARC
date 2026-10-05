@@ -126,6 +126,7 @@ permissions:
       arc.dungeon.admin.extract: true
       arc.dungeon.admin.classgrant: true
       arc.investigations.cooldown.bypass: true
+      arc.origin.workshop.cooldown.bypass: true
       arc.origin.spawn.build: true
   arc.audit:
     description: Inspect ARC audit data
@@ -232,6 +233,9 @@ permissions:
   arc.origin.portals.bypass:
     description: Bypass central ARC Origin portal teleport
     default: false
+  arc.origin.workshop.cooldown.bypass:
+    description: Bypass the cooldown between Origin workshop furniture rewards
+    default: op
   arc.origin.spawn.build:
     description: Break blocks normally in the protected Origin spawn world
     default: op

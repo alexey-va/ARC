@@ -7,6 +7,7 @@ import net.kyori.adventure.text.Component
 import org.bukkit.Material
 import org.bukkit.inventory.ItemStack
 import ru.arc.paper.testing.MockBukkitTestRuntime
+import ru.arc.redis.safety.RedisHashDecision
 import java.util.UUID
 
 class OriginWorkshopCraftRewardsTest : StringSpec({
@@ -61,5 +62,24 @@ class OriginWorkshopCraftRewardsTest : StringSpec({
         workshopClaimAllowed(claim, request, 2000) shouldBe false
         workshopClaimAllowed(claim, UUID.randomUUID(), 999) shouldBe false
         workshopClaimAllowed(claim, UUID.randomUUID(), 1000) shouldBe true
+        workshopClaimAllowed(claim, UUID.randomUUID(), 999, bypass = true) shouldBe true
+        workshopClaimAllowed(claim, request, 999, bypass = true) shouldBe false
+        workshopClaimAllowed(claim, request, 2000, bypass = true) shouldBe false
+    }
+    "unused admin claim restores the prior cooldown without overwriting a newer claim" {
+        val previous = WorkshopCraftClaim(UUID.randomUUID().toString(), 1000)
+        val claim = WorkshopCraftClaim(UUID.randomUUID().toString(), 2000)
+        workshopReleaseClaim(claim, claim, previous) shouldBe RedisHashDecision.Write(previous)
+        workshopReleaseClaim(claim, claim, null) shouldBe RedisHashDecision.Delete
+        workshopReleaseClaim(previous, claim, null) shouldBe RedisHashDecision.Reject
+        workshopReleaseClaim(null, claim, previous) shouldBe RedisHashDecision.Reject
+    }
+    "cooldown rounds up without displaying thousands of minutes" {
+        workshopCooldownText(1400 * 60_000L) shouldBe "23 ч 20 мин"
+        workshopCooldownText(86_400_000L) shouldBe "24 ч"
+        workshopCooldownText(3_600_001L) shouldBe "1 ч 1 мин"
+        workshopCooldownText(3_599_999L) shouldBe "1 ч"
+        workshopCooldownText(60_000L) shouldBe "1 мин"
+        workshopCooldownText(1L) shouldBe "1 мин"
     }
 })
