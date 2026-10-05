@@ -10,6 +10,7 @@ import ru.arc.iteminfo.ItemInfoPreferences
 import ru.arc.sidebar.SIDEBAR_SKILLS_META_KEY
 import ru.arc.sidebar.SidebarSection
 import ru.arc.tablist.TABLIST_SKILLS_META_KEY
+import ru.arc.tablist.TablistCapacity
 import ru.arc.tablist.TablistSection
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -21,7 +22,7 @@ import java.util.concurrent.CompletableFuture
 class HelpCenterLegacySettingsTest {
     @Test
     fun `scoreboard section preferences persist across reopen without changing the tablist`() {
-        val player = mockk<Player>()
+        val player = mockPlayer()
         val backend = FakeBackend()
         backend.permissions["tab.scoreboard20"] = true
         backend.permissions["tab.tablist3"] = true
@@ -42,7 +43,7 @@ class HelpCenterLegacySettingsTest {
 
     @Test
     fun `tablist preferences survive disable and reopen independently of scoreboard and skills`() {
-        val player = mockk<Player>()
+        val player = mockPlayer()
         val backend = FakeBackend()
         backend.permissions["tab.scoreboard5"] = true
         backend.permissions["tab.tablist3"] = true
@@ -90,8 +91,69 @@ class HelpCenterLegacySettingsTest {
     }
 
     @Test
+    fun `tablist capacity rejects additions before metadata writes but allows removals and fitting additions`() {
+        val player = mockPlayer()
+        val backend = FakeBackend().apply { capacity = TablistCapacity(selectedCount = 5, usedRows = 24, maximumRows = 22) }
+        val settings = HelpCenterLegacySettings(backend)
+        val defaultSections = TablistSection.entries.filter { it.defaultEnabled }.map { it.id }.toSet()
+
+        settings.execute(player, "tablist-section-location").join().shouldBeFalse()
+        backend.lastCapacitySections.shouldBe(defaultSections + TablistSection.LOCATION.id)
+        backend.metadata.containsKey(TablistSection.LOCATION.metaKey).shouldBeFalse()
+        HelpCenterLegacySettings(backend).tablistSectionEnabled(player, TablistSection.LOCATION).shouldBeFalse()
+
+        settings.execute(player, "tablist-section-profile").join().shouldBeTrue()
+        backend.metadata[TablistSection.PROFILE.metaKey].shouldBe("false")
+
+        backend.capacity = TablistCapacity(selectedCount = 4, usedRows = 22, maximumRows = 22)
+        settings.execute(player, "tablist-section-location").join().shouldBeTrue()
+        backend.metadata[TablistSection.LOCATION.metaKey].shouldBe("true")
+        HelpCenterLegacySettings(backend).tablistSectionEnabled(player, TablistSection.LOCATION).shouldBeTrue()
+    }
+
+    @Test
+    fun `pending tablist section saves reserve capacity and release it on success or failure`() {
+        val player = mockPlayer()
+        val backend = FakeBackend()
+        var maximumRows = 21
+        backend.capacityForSections = { sections ->
+            TablistCapacity(sections.size, usedRows = 16 + sections.size, maximumRows = maximumRows)
+        }
+        val settings = HelpCenterLegacySettings(backend)
+        val defaultSections = TablistSection.entries.filter { it.defaultEnabled }.map { it.id }.toSet()
+        val locationSave = CompletableFuture<Boolean>()
+        backend.deferredMetaWrites[TablistSection.LOCATION.metaKey] = locationSave
+
+        val first = settings.execute(player, "tablist-section-location")
+        first.isDone.shouldBeFalse()
+        settings.tablistSectionEnabled(player, TablistSection.LOCATION).shouldBeTrue()
+        settings.execute(player, "tablist-section-coordinates").join().shouldBeFalse()
+        backend.lastCapacitySections.shouldBe(defaultSections + TablistSection.LOCATION.id + TablistSection.COORDINATES.id)
+        backend.metaWrites.map { it.first }.shouldBe(listOf(TablistSection.LOCATION.metaKey))
+
+        locationSave.complete(true)
+        first.join().shouldBeTrue()
+        settings.tablistSectionEnabled(player, TablistSection.LOCATION).shouldBeTrue()
+
+        maximumRows = 22
+        val coordinatesSave = CompletableFuture<Boolean>()
+        backend.deferredMetaWrites[TablistSection.COORDINATES.metaKey] = coordinatesSave
+        val second = settings.execute(player, "tablist-section-coordinates")
+        second.isDone.shouldBeFalse()
+        settings.execute(player, "tablist-section-coordinates").join().shouldBeFalse()
+        backend.metaWrites.count { it.first == TablistSection.COORDINATES.metaKey }.shouldBe(1)
+
+        coordinatesSave.completeExceptionally(IllegalStateException("metadata save failed"))
+        runCatching { second.join() }.isFailure.shouldBeTrue()
+        settings.tablistSectionEnabled(player, TablistSection.COORDINATES).shouldBeFalse()
+        settings.execute(player, "tablist-section-coordinates").join().shouldBeTrue()
+        backend.metaWrites.count { it.first == TablistSection.COORDINATES.metaKey }.shouldBe(2)
+        settings.tablistSectionEnabled(player, TablistSection.COORDINATES).shouldBeTrue()
+    }
+
+    @Test
     fun `legacy tablist mode actions remain available for compatibility`() {
-        val player = mockk<Player>()
+        val player = mockPlayer()
         val backend = FakeBackend()
         val settings = HelpCenterLegacySettings(backend)
 
@@ -105,7 +167,7 @@ class HelpCenterLegacySettingsTest {
 
     @Test
     fun `quest reward visibility defaults on and persists independently of sidebar style`() {
-        val player = mockk<Player>()
+        val player = mockPlayer()
         val backend = FakeBackend()
         backend.permissions["tab.scoreboard3"] = true
         val settings = HelpCenterLegacySettings(backend)
@@ -120,7 +182,7 @@ class HelpCenterLegacySettingsTest {
 
     @Test
     fun `input settings default safely and roundtrip through persistent metadata`() {
-        val player = mockk<Player>()
+        val player = mockPlayer()
         val backend = FakeBackend()
         val settings = HelpCenterLegacySettings(backend)
         assertEquals("main", settings.entries(player).first { it.id == "shortcut" }.state)
@@ -152,9 +214,8 @@ class HelpCenterLegacySettingsTest {
 
     @Test
     fun `entries expose canonical states and execute only typed actions`() {
-        val player = mockk<Player>()
+        val player = mockPlayer()
         val backend = FakeBackend()
-        every { player.uniqueId } returns UUID.randomUUID()
         backend.permissions["arc.chat.notify"] = true
         backend.permissions["tab.scoreboard3"] = true
         backend.permissions["tab.group.admin"] = true
@@ -174,7 +235,7 @@ class HelpCenterLegacySettingsTest {
 
     @Test
     fun `portal style selection normalizes removed preferences and preserves legacy`() {
-        val player = mockk<Player>()
+        val player = mockPlayer()
         val backend = FakeBackend()
         val settings = HelpCenterLegacySettings(backend)
         listOf("chaos", "solar").forEach { removedStyle ->
@@ -194,11 +255,15 @@ class HelpCenterLegacySettingsTest {
 
     @Test
     fun `unknown ids cannot execute arbitrary commands`() {
-        val player = mockk<Player>()
+        val player = mockPlayer()
         val backend = FakeBackend()
         val settings = HelpCenterLegacySettings(backend)
         assertEquals(false, settings.execute(player, "console rm -rf /").join())
         assertTrue(backend.commands.isEmpty())
+    }
+
+    private fun mockPlayer() = mockk<Player> {
+        every { uniqueId } returns UUID.randomUUID()
     }
 
     private class FakeBackend : HelpCenterLegacySettings.Backend {
@@ -206,8 +271,14 @@ class HelpCenterLegacySettingsTest {
         val permissions = mutableMapOf<String, Boolean>()
         val commands = mutableListOf<HelpCenterLegacySettings.PlayerCommand>()
         val consoleCommands = mutableListOf<HelpCenterLegacySettings.ConsoleCommand>()
+        var capacity: TablistCapacity? = null
+        var capacityForSections: (Set<String>) -> TablistCapacity? = { capacity }
+        var lastCapacitySections = emptySet<String>()
+        val metaWrites = mutableListOf<Pair<String, String>>()
+        val deferredMetaWrites = mutableMapOf<String, CompletableFuture<Boolean>>()
         override fun hasPermission(player: Player, node: String) = permissions[node] == true
         override fun meta(player: Player, key: String) = metadata[key]
+        override fun tablistCapacity(player: Player, sectionIds: Set<String>) = capacityForSections(sectionIds).also { lastCapacitySections = sectionIds }
         override fun cmiOption(player: Player, option: HelpCenterLegacySettings.CmiOption) = null
         override fun flightState(player: Player) = null
         override fun tpaEnabled(player: Player) = null
@@ -216,7 +287,16 @@ class HelpCenterLegacySettingsTest {
             (1..20).forEach { index -> permissions[if (index == 1) prefix else "$prefix$index"] = mode == index }
             return CompletableFuture.completedFuture(true)
         }
-        override fun setMeta(player: Player, key: String, value: String) = CompletableFuture.completedFuture(true).also { metadata[key] = value }
+        override fun setMeta(player: Player, key: String, value: String): CompletableFuture<Boolean> {
+            metaWrites += key to value
+            val deferred = deferredMetaWrites.remove(key)
+            if (deferred != null) {
+                return deferred.whenComplete { accepted, failure ->
+                    if (failure == null && accepted == true) metadata[key] = value
+                }
+            }
+            return CompletableFuture.completedFuture(true).also { metadata[key] = value }
+        }
         override fun command(player: Player, command: HelpCenterLegacySettings.PlayerCommand) = CompletableFuture.completedFuture(commands.add(command).let { true })
         override fun consoleCommand(player: Player, command: HelpCenterLegacySettings.ConsoleCommand) = CompletableFuture.completedFuture(consoleCommands.add(command).let { true })
     }

@@ -21,6 +21,7 @@ import ru.arc.paper.menu.PaperDialogScreen
 import ru.arc.iteminfo.ItemInfoPreferences
 import ru.arc.sidebar.SidebarSection
 import ru.arc.sidebar.sidebarSkillChoices
+import ru.arc.tablist.TablistCapacity
 import ru.arc.tablist.TablistSection
 import java.text.NumberFormat
 import java.util.Locale
@@ -218,22 +219,55 @@ internal class HelpCenterSettingsController(
 
     private fun openTablist(player: Player, section: Section) {
         navigation.visit(player) { openTablist(player, section) }
+        val capacity = legacy.tablistCapacity(player)
+        val body = when {
+            capacity == null -> text("settings-options-tablist-body")
+            capacity.fits -> text(
+                "settings-options-tablist-capacity-body",
+                "sections" to Component.text(capacity.selectedCount),
+                "used" to Component.text(capacity.usedRows),
+                "maximum" to Component.text(capacity.maximumRows),
+                "available" to Component.text(capacity.availableRows),
+            )
+            else -> text(
+                "settings-options-tablist-overflow-body",
+                "sections" to Component.text(capacity.selectedCount),
+                "used" to Component.text(capacity.usedRows),
+                "maximum" to Component.text(capacity.maximumRows),
+            )
+        }
         fun toggleLabel(key: String, enabled: Boolean): Component = text(
             if (enabled) "settings-scoreboard-selected" else "settings-scoreboard-unselected",
             "label" to text(key),
         )
         showDialog(player, PaperDialogScreen(
             id = "help.settings.tablist", title = text("settings-options-tablist-title"),
-            body = listOf(PaperDialogBody(text("settings-options-tablist-body"), 468)),
+            body = listOf(PaperDialogBody(body, 468)),
             buttons = listOf(button(
                 "tablist_toggle", toggleLabel("settings-tablist-visible-label", legacy.tablistEnabled(player)),
                 text("settings-tablist-visible-tooltip"),
             ) { apply(player, "tablist-toggle") { openTablist(player, section) } }) + TablistSection.entries.map { part ->
+                val enabled = legacy.tablistSectionEnabled(player, part)
+                val projectedCapacity = legacy.tablistCapacity(player, adding = if (enabled) null else part)
+                val capacityTooltip = projectedCapacity?.let { status ->
+                    val key = when {
+                        enabled && !status.fits -> "settings-tablist-capacity-overflow-tooltip"
+                        !enabled && !status.fits -> "settings-tablist-capacity-denied-tooltip"
+                        else -> "settings-tablist-capacity-available-tooltip"
+                    }
+                    text(
+                        key,
+                        "used" to Component.text(status.usedRows),
+                        "maximum" to Component.text(status.maximumRows),
+                        "available" to Component.text(status.availableRows),
+                    )
+                }
                 button(
                     "tablist_section_${part.id}",
-                    toggleLabel("settings-tablist-${part.id}-label", legacy.tablistSectionEnabled(player, part)),
-                    text("settings-tablist-${part.id}-tooltip"),
-                ) { apply(player, "tablist-section-${part.id}") { openTablist(player, section) } }
+                    toggleLabel("settings-tablist-${part.id}-label", enabled),
+                    capacityTooltip?.let { text("settings-tablist-${part.id}-tooltip").append(Component.newline()).append(it) }
+                        ?: text("settings-tablist-${part.id}-tooltip"),
+                ) { toggleTablistSection(player, part, section) }
             } + button("tablist_skills_choose", text("settings-tablist-skills-choose-label"), text("settings-tablist-skills-choose-tooltip")) {
                 openTablistSkills(player, section)
             },
@@ -394,13 +428,46 @@ internal class HelpCenterSettingsController(
         ))
     }
 
-    private fun apply(player: Player, id: String, refresh: () -> Unit) {
+    private fun apply(player: Player, id: String, onRejected: (() -> Unit)? = null, refresh: () -> Unit) {
         val token = navigation.visit(player, refresh)
         legacy.execute(player, id).whenCompleteSync(tasks) { accepted, failure ->
             if (!active || !player.isOnline || !navigation.isCurrent(player, token)) return@whenCompleteSync
-            if (failure != null || accepted != true) player.sendMessage(text("action-failed"))
+            if (failure != null || accepted != true) {
+                if (onRejected == null) player.sendMessage(text("action-failed")) else onRejected()
+            }
             refresh()
         }
+    }
+
+    private fun toggleTablistSection(player: Player, part: TablistSection, section: Section) {
+        val enabled = legacy.tablistSectionEnabled(player, part)
+        val capacity = legacy.tablistCapacity(player, adding = if (enabled) null else part)
+        if (!enabled && capacity != null && !capacity.fits) {
+            sendTablistCapacityRejection(player, capacity)
+            openTablist(player, section)
+            return
+        }
+        apply(
+            player,
+            "tablist-section-${part.id}",
+            onRejected = {
+                val stillEnabled = legacy.tablistSectionEnabled(player, part)
+                val currentCapacity = legacy.tablistCapacity(player, adding = if (stillEnabled) null else part)
+                if (!stillEnabled && currentCapacity != null && !currentCapacity.fits) {
+                    sendTablistCapacityRejection(player, currentCapacity)
+                } else {
+                    player.sendMessage(text("action-failed"))
+                }
+            },
+        ) { openTablist(player, section) }
+    }
+
+    private fun sendTablistCapacityRejection(player: Player, capacity: TablistCapacity) {
+        player.sendMessage(text(
+            "settings-tablist-capacity-rejected",
+            "used" to Component.text(capacity.usedRows),
+            "maximum" to Component.text(capacity.maximumRows),
+        ))
     }
 
     private fun state(entry: HelpCenterLegacySettingEntry): Component = when {
