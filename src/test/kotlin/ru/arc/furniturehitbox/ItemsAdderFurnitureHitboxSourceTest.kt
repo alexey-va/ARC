@@ -99,6 +99,32 @@ class ItemsAdderFurnitureHitboxSourceTest : StringSpec({
         nativeFurnitureBlockTarget(block) { error("ordinary support must not resolve furniture") } shouldBe null
     }
 
+    "large fountain barriers on the maximum native borders keep the whole outline" {
+        val world = mockk<World> { every { uid } returns UUID.randomUUID() }
+        val box = BoundingBox(73.5, 67.001, 4.5, 77.5, 71.001, 8.5)
+        val root = mockk<Entity> {
+            every { isValid } returns true
+            every { this@mockk.world } returns world
+            every { boundingBox } returns box
+        }
+        for ((x, z) in listOf(74 to 5, 77 to 5, 74 to 8, 77 to 8)) {
+            val barrier = BoundingBox(x.toDouble(), 70.0, z.toDouble(), x + 1.0, 71.0, z + 1.0)
+            val block = mockk<Block> {
+                every { this@mockk.world } returns world
+                every { isPassable } returns false
+                every { type } returns Material.BARRIER
+                every { boundingBox } returns barrier
+            }
+            nativeFurnitureBlockTarget(block) { root } shouldBe FurnitureHitboxTarget(root, box)
+            nativeFurnitureRayUnblocked(box, 3.0, 2.5, barrier, true) shouldBe true
+            barrier.widthX shouldBe 1.0
+            barrier.height shouldBe 1.0
+            barrier.widthZ shouldBe 1.0
+        }
+        val outside = BoundingBox(78.0, 70.0, 8.0, 79.0, 71.0, 9.0)
+        nativeFurnitureRayUnblocked(box, 3.0, 2.5, outside, true) shouldBe false
+    }
+
     "wall occlusion rejects hidden furniture but permits its enclosed support" {
         val furniture = BoundingBox(0.0, 64.0, 0.0, 2.0, 66.0, 2.0)
         val wall = BoundingBox(-2.0, 64.0, 0.0, -1.0, 65.0, 1.0)

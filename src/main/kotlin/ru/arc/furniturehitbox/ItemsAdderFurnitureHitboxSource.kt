@@ -105,7 +105,7 @@ internal fun nativeFurnitureEntityBounds(bounds: BoundingBox): BoundingBox? {
     return bounds.clone()
 }
 
-/** IA permits a support block enclosed by the root box and a barrier whose center is inside it. */
+/** IA includes barrier centers on the root's maximum faces via the box containment overload. */
 internal fun nativeFurnitureRayUnblocked(
     nativeBounds: BoundingBox,
     targetDistance: Double,
@@ -113,7 +113,7 @@ internal fun nativeFurnitureRayUnblocked(
     blockBounds: BoundingBox?,
     barrier: Boolean,
 ): Boolean {
-    if (barrier && blockBounds != null) return nativeBounds.contains(blockBounds.center)
+    if (barrier && blockBounds != null) return nativeBounds.contains(blockBounds.clone().expand(-0.5))
     if (blockDistance == null || targetDistance <= blockDistance + RAY_TOLERANCE) return true
     if (blockBounds == null) return false
     return nativeBounds.contains(blockBounds)
@@ -128,7 +128,7 @@ internal fun nativeFurnitureBlockTarget(block: Block?, rootForBlock: (Block) -> 
     if (!root.isValid || root.world.uid != block.world.uid) return null
     val box = nativeFurnitureEntityBounds(root.boundingBox) ?: return null
     // Match IA's barrier/root association without switching the frame to one collision cell.
-    if (!box.contains(block.boundingBox.center)) return null
+    if (!box.contains(block.boundingBox.clone().expand(-0.5))) return null
     return FurnitureHitboxTarget(root, box)
 }
 

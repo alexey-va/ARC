@@ -11,7 +11,9 @@ queries only inspect loaded ItemDisplay, ArmorStand and ItemFrame roots. The
 nearest native or visible-model surface wins; configured model profiles also
 find props whose click box is smaller or offset. Profiles help find a root but never
 replace its click box. Barrier hits use the public block API to find their root,
-require the barrier center inside that root's box, and show the same whole box.
+require the barrier center inside or on the boundary of that root's box, and show
+the same whole box. As in IA, containment uses the block box shrunk by 0.5 rather
+than the center-vector overload, which excludes maximum faces.
 Sweeping between a model, native root and its barrier cells cannot shrink the
 frame to an individual collision block.
 Opaque blocks occlude selection, with IA's enclosed-support/owned-barrier rules.
