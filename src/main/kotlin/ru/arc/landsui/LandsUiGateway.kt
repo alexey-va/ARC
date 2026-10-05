@@ -45,8 +45,9 @@ enum class LandsUiAdminAction(val command: String, private val commandPermission
 
 class BukkitLandsUiGateway internal constructor(
     private val integration: LandsIntegration = LandsIntegration.of(ARC.instance),
+    roleName: (me.angeschossen.lands.api.role.Role) -> String = { it.name },
 ) : LandsUiGateway {
-    private val management = LandsUiManagementService(integration)
+    private val management = LandsUiManagementService(integration, roleName)
 
     override fun lands(player: Player): List<LandsUiLand> {
         val landPlayer = integration.getLandPlayer(player.uniqueId) ?: return emptyList()

@@ -6,6 +6,8 @@ limits:
   max-listed-players: 12
 
 text:
+  role-visitor-name: 'Гость'
+  role-tenant-name: 'Арендатор'
   role-readonly-body: '<#e8dfd2>Текущие права роли в регионе <white><area><#e8dfd2>. Здесь доступен просмотр.'
   native-role-settings-label: '<#c4a7e7>Настроить права в Lands ›'
   admin-search-label: '<#c4a7e7>[Админ] Найти приват ›'

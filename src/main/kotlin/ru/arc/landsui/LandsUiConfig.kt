@@ -1,5 +1,7 @@
 package ru.arc.landsui
 
+import me.angeschossen.lands.api.role.Role
+import me.angeschossen.lands.api.role.enums.RoleType
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import java.nio.file.Path
@@ -10,6 +12,12 @@ data class LandsUiSettings(
     private val text: Map<String, String>,
 ) {
     fun text(key: String): String = text.getValue(key)
+
+    fun roleName(role: Role): String = when (role.type) {
+        RoleType.VISITOR -> text("role-visitor-name")
+        RoleType.TENANT -> text("role-tenant-name")
+        else -> role.name
+    }
 }
 
 class LandsUiConfig(private val config: Config) {
@@ -38,6 +46,8 @@ class LandsUiConfig(private val config: Config) {
         }
 
         private val DEFAULT_TEXT = linkedMapOf(
+            "role-visitor-name" to "Гость",
+            "role-tenant-name" to "Арендатор",
             "role-readonly-body" to "<#e8dfd2>Текущие права роли в регионе <white><area><#e8dfd2>. Здесь доступен просмотр.",
             "native-role-settings-label" to "<#c4a7e7>Настроить права в Lands ›",
             "admin-search-label" to "<#c4a7e7>[Админ] Найти приват ›",

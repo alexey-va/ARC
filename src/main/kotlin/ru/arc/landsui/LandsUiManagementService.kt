@@ -15,7 +15,10 @@ import ru.arc.lands.trustedPlayerIds
 import java.util.UUID
 
 /** Lands-backed implementation for the detailed, permission-aware dialog pages. */
-internal class LandsUiManagementService(private val integration: LandsIntegration) {
+internal class LandsUiManagementService(
+    private val integration: LandsIntegration,
+    private val roleName: (Role) -> String,
+) {
     fun managementView(player: Player, context: LandsUiContext): LandsUiManagementView? {
         val landPlayer = integration.getLandPlayer(player.uniqueId) ?: return null
         val land = resolveLand(player, landPlayer, context) ?: return null
@@ -35,7 +38,7 @@ internal class LandsUiManagementService(private val integration: LandsIntegratio
             LandsUiMember(
                 id = memberId,
                 name = playerName(memberId),
-                role = memberRole.name,
+                role = roleName(memberRole),
                 online = Bukkit.getPlayer(memberId) != null,
                 owner = memberId == area.ownerUID,
                 removable = memberId != area.ownerUID && mayUntrust && (isAdmin || memberRole.priority < viewerRole.priority),
@@ -62,10 +65,10 @@ internal class LandsUiManagementService(private val integration: LandsIntegratio
             context = context.copy(areaId = area.ulid.toString()),
             land = uiLand(player, land),
             areaName = area.name,
-            viewerRole = viewerRole.name,
+            viewerRole = roleName(viewerRole),
             description = titleText(land.getTitleMessage(landPlayer)),
             members = members,
-            roles = areaRoles.map { LandsUiRole(roleId(it), it.name, it.isVisitorRole) }
+            roles = areaRoles.map { LandsUiRole(roleId(it), roleName(it), it.isVisitorRole) }
                 .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name }),
             areas = areas(land).map { LandsUiArea(it.ulid.toString(), it.name, it.isDefault) }
                 .sortedWith(compareBy<LandsUiArea> { !it.main }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }),

@@ -99,7 +99,7 @@ object LandsUiModule : PluginModule {
             return
         }
         regionAreaLimits = RegionAreaLimits.install()
-        val gateway = BukkitLandsUiGateway()
+        val gateway = BukkitLandsUiGateway(roleName = loaded::roleName)
         controller = LandsUiController(loaded, gateway)
         regionTool = RegionTool(loaded, gateway).also { it.start() }
         claimTool = ClaimBlockTool(loaded).also { it.start() }
