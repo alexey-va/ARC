@@ -102,7 +102,7 @@ internal class DungeonAdventureMenus(
         if (listed.isEmpty()) body += PaperDialogBody(text("catalog-empty", "<#e8dfd2>По этому запросу ничего не найдено. Измените поиск или выберите «Все данжи»."), 468)
         feedback?.let { body += PaperDialogBody(it, 468) }
         val filters = listOf("all" to "Все данжи", "open" to "Открытый мир", "instanced" to "Инстансы")
-        val buttons = filters.map { (kind, fallback) ->
+        val contentButtons = filters.map { (kind, fallback) ->
             val selected = kind == query.kind
             button("filter_$kind", "filter-$kind-${if (selected) "on" else "off"}",
                 "${if (selected) "<#9bd48d>✔" else "<white>○"} $fallback", "Показать: $fallback") {
@@ -117,7 +117,10 @@ internal class DungeonAdventureMenus(
                     "type" to typeLabel(entry), "level" to Component.text(levelRange(entry)),
                     "description" to Component.text(entry.description.map(::clean).joinToString("\n").ifBlank { clean(entry.name) })),
                 width = 230, onClick = { detail(player, entry.id, query) })
-        } + if (pages > 1) listOf(
+        }
+        val buttons = if (pages > 1) paginatedButtons(
+            contentButtons,
+            refresh { catalog(player, query) },
             button("previous", "previous-label", "<#92bed8>‹ Предыдущая страница", "Вернуться на предыдущую страницу") {
                 val search = entered(it)
                 catalog(player, query.copy(search = search, page = if (search == query.search) (query.page - 1 + pages) % pages else 0))
@@ -126,7 +129,7 @@ internal class DungeonAdventureMenus(
                 val search = entered(it)
                 catalog(player, query.copy(search = search, page = if (search == query.search) (query.page + 1) % pages else 0))
             },
-        ) else emptyList()
+        ) else contentButtons
         show(player, PaperDialogScreen(id = "dungeon.catalog", title = text("catalog-title", "<#ffb277>Каталог данжей"),
             body = body, inputs = listOf(PaperDialogTextInput(searchInput, text("search-input", "<white>Поиск по названию или описанию"),
                 initial = query.search, maxLength = 80, width = 468)), buttons = buttons, exitButton = back { main(player) }, columns = 2)) {
@@ -178,7 +181,7 @@ internal class DungeonAdventureMenus(
         val body = mutableListOf(PaperDialogBody(text("lobbies-intro", "<#e8dfd2>Выберите собирающуюся группу. Идущий поход можно посмотреть, если наблюдение разрешено."), 468))
         if (entries.isEmpty()) body += PaperDialogBody(text("lobbies-empty", "<#e8dfd2>Открытых групп пока нет. Вернитесь к карточке данжа и создайте свой поход."), 468)
         feedback?.let { body += PaperDialogBody(it, 468) }
-        val buttons = entries.drop(page * pageSize).take(pageSize).mapIndexed { index, lobby ->
+        val contentButtons = entries.drop(page * pageSize).take(pageSize).mapIndexed { index, lobby ->
             PaperDialogButton(PaperDialogActionId.of("lobby_$index"),
                 text(if (lobby.waiting) "join-lobby" else "spectate-lobby", if (lobby.waiting) "<#9bd48d>Группа <number> · войти" else "<#92bed8>Группа <number> · наблюдать", "number" to Component.text(page * pageSize + index + 1)),
                 text("lobby-tooltip", "<#e8dfd2>Уровень <level> · <difficulty><newline><newline><players>",
@@ -188,10 +191,13 @@ internal class DungeonAdventureMenus(
                     val result = data.join(player, content, lobby.id, !lobby.waiting)
                     if (result !in ACCEPTED_ACTIONS) lobbies(player, content, query, page, resultText(result))
                 })
-        } + if (pages > 1) listOf(
+        }
+        val buttons = if (pages > 1) paginatedButtons(
+            contentButtons,
+            refresh { lobbies(player, content, query, page) },
             button("previous", "previous-label", "<#92bed8>‹ Предыдущая страница", "Предыдущие группы") { lobbies(player, content, query, (page - 1 + pages) % pages) },
             button("next", "next-label", "<#92bed8>Следующая страница ›", "Следующие группы") { lobbies(player, content, query, (page + 1) % pages) },
-        ) else listOf(refresh { lobbies(player, content, query, page) })
+        ) else contentButtons + refresh { lobbies(player, content, query, page) }
         show(player, PaperDialogScreen(id = "dungeon.catalog.lobbies", title = text("lobbies-title", "<#e5ba73>Группы данжа"),
             body = body, buttons = buttons, exitButton = back { detail(player, content, query) }, columns = 2)) { lobbies(player, content, query, page) }
     }
@@ -214,15 +220,18 @@ internal class DungeonAdventureMenus(
             Component.text(clean(it.name)) to text("skill-progress", "<#c4abff>Уровень <level><newline><#e8dfd2><xp> / <next> опыта",
                 "level" to Component.text(it.level), "xp" to Component.text(it.xp), "next" to Component.text(it.nextXp))
         }, DialogTables.Frame.EPIC, separators = true))
-        val buttons = listed.mapIndexed { index, skill ->
+        val contentButtons = listed.mapIndexed { index, skill ->
             PaperDialogButton(PaperDialogActionId.of("skill_$index"),
                 text("skill-label", "<#c4abff><name> · перки ›", "name" to Component.text(clean(skill.name))),
                 text("skill-tooltip", "<#e8dfd2>Выбрать или выключить перки этого навыка"), width = 230,
                 onClick = { skillPerks(player, skill.id, page) })
-        } + if (pages > 1) listOf(
+        }
+        val buttons = if (pages > 1) paginatedButtons(
+            contentButtons,
+            refresh { skills(player, page) },
             button("previous", "previous-label", "<#92bed8>‹ Предыдущая страница", "Предыдущие навыки") { skills(player, (page - 1 + pages) % pages) },
             button("next", "next-label", "<#92bed8>Следующая страница ›", "Следующие навыки") { skills(player, (page + 1) % pages) },
-        ) else listOf(refresh { skills(player, page) })
+        ) else contentButtons + refresh { skills(player, page) }
         show(player, PaperDialogScreen(id = "dungeon.skills", title = text("skills-title", "<#c4abff>Боевые навыки"),
             body = body, buttons = buttons, exitButton = back { main(player) }, columns = 2)) { skills(player, page) }
     }
@@ -236,7 +245,7 @@ internal class DungeonAdventureMenus(
             label("activePerks", "Активные перки") to Component.text("${view.perks.count { it.active }} / ${view.maxActive}"),
         ), DialogTables.Frame.EPIC), PaperDialogBody(text("skill-perks-intro", "<#e8dfd2>✔ — выбранный перк. Нажмите для переключения. Требования и эффект указаны в подсказке."), 468))
         feedback?.let { body += PaperDialogBody(it, 468) }
-        val buttons = view.perks.drop(page * pageSize).take(pageSize).mapIndexed { index, perk ->
+        val contentButtons = view.perks.drop(page * pageSize).take(pageSize).mapIndexed { index, perk ->
             val unlocked = view.skill.level >= perk.requiredLevel
             PaperDialogButton(PaperDialogActionId.of("perk_$index"),
                 text(if (perk.active) "perk-active" else if (unlocked) "perk-ready" else "perk-locked",
@@ -246,10 +255,13 @@ internal class DungeonAdventureMenus(
                     "tier" to Component.text(perk.tier), "level" to Component.text(perk.requiredLevel),
                     "description" to Component.text(perk.description.map(::clean).joinToString("\n")), "bonus" to Component.text(clean(perk.bonus))),
                 width = 230, onClick = { skillPerks(player, skillId, skillPage, page, resultText(data.togglePerk(player, skillId, perk.id))) })
-        } + if (pages > 1) listOf(
+        }
+        val buttons = if (pages > 1) paginatedButtons(
+            contentButtons,
+            refresh { skillPerks(player, skillId, skillPage, page) },
             button("previous", "previous-label", "<#92bed8>‹ Предыдущая страница", "Предыдущие перки") { skillPerks(player, skillId, skillPage, (page - 1 + pages) % pages) },
             button("next", "next-label", "<#92bed8>Следующая страница ›", "Следующие перки") { skillPerks(player, skillId, skillPage, (page + 1) % pages) },
-        ) else emptyList()
+        ) else contentButtons
         show(player, PaperDialogScreen(id = "dungeon.skill.perks", title = text("skill-perks-title", "<#c4abff><name> · перки",
             "name" to Component.text(clean(view.skill.name))), body = body, buttons = buttons,
             exitButton = back { skills(player, skillPage) }, columns = 2)) { skillPerks(player, skillId, skillPage, page) }
@@ -305,15 +317,18 @@ internal class DungeonAdventureMenus(
         val body = mutableListOf(PaperDialogBody(text("bosses-intro", "<#e8dfd2>Здесь только живые боссы. Нажмите на цель, чтобы включить указатель; повторное нажатие выключит его."), 468))
         if (entries.isEmpty()) body += PaperDialogBody(text("bosses-empty", "<#e8dfd2>Сейчас нет боссов для отслеживания."), 468)
         feedback?.let { body += PaperDialogBody(it, 468) }
-        val buttons = entries.drop(page * pageSize).take(pageSize).mapIndexed { index, boss ->
+        val contentButtons = entries.drop(page * pageSize).take(pageSize).mapIndexed { index, boss ->
             PaperDialogButton(PaperDialogActionId.of("boss_$index"), Component.text(clean(boss.name)).color(net.kyori.adventure.text.format.TextColor.color(0xffb277)),
                 text("boss-tooltip", "<#e8dfd2>Уровень <level> · <world><newline><newline>Включить или выключить отслеживание этого босса",
                     "level" to Component.text(boss.level), "world" to Component.text(boss.world)), width = 230,
                 onClick = { bosses(player, page, resultText(data.track(player, boss.id))) })
-        } + if (pages > 1) listOf(
+        }
+        val buttons = if (pages > 1) paginatedButtons(
+            contentButtons,
+            refresh { bosses(player, page) },
             button("previous", "previous-label", "<#92bed8>‹ Предыдущая страница", "Предыдущие боссы") { bosses(player, (page - 1 + pages) % pages) },
             button("next", "next-label", "<#92bed8>Следующая страница ›", "Следующие боссы") { bosses(player, (page + 1) % pages) },
-        ) else listOf(refresh { bosses(player, page) })
+        ) else contentButtons + refresh { bosses(player, page) }
         show(player, PaperDialogScreen(id = "dungeon.bosses", title = text("bosses-title", "<#ffb277>Боссы мира"),
             body = body, buttons = buttons, exitButton = back { main(player) }, columns = 2)) { bosses(player, page) }
     }
@@ -369,6 +384,15 @@ internal class DungeonAdventureMenus(
         text(if (MenuEscapeBehavior.goesBack(player)) "back-label" else "close-label", if (MenuEscapeBehavior.goesBack(player)) "<white>‹ Назад" else "<white>Закрыть"), width = 200, closeDialogBeforeAction = !MenuEscapeBehavior.goesBack(player), onClick = {})
     private fun back(returnTo: () -> Unit) = PaperDialogButton(PaperDialogActionId.of("back"), text("back-label", "<white>‹ Назад"), width = 200, onClick = { returnTo() })
     private fun refresh(action: () -> Unit) = button("refresh", "refresh-label", "<white>Обновить", "Получить текущие данные") { action() }
+
+    /** Paper dialog buttons are a flat two-column grid; refresh completes an odd content row before pagination. */
+    private fun paginatedButtons(
+        content: List<PaperDialogButton>,
+        refresh: PaperDialogButton,
+        previous: PaperDialogButton,
+        next: PaperDialogButton,
+    ): List<PaperDialogButton> = content + (if (content.size % 2 == 1) listOf(refresh) else emptyList()) + listOf(previous, next)
+
     private fun button(id: String, key: String, fallback: String, hint: String, close: Boolean = false, action: (PaperDialogClickContext) -> Unit) =
         PaperDialogButton(PaperDialogActionId.of(id), text(key, fallback), text("$key-tooltip", "<#e8dfd2>$hint"), width = 230, closeDialogBeforeAction = close, onClick = action)
     private fun label(key: String, fallback: String) = text("fields.$key", "<#e8dfd2>$fallback")

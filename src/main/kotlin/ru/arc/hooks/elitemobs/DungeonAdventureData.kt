@@ -31,7 +31,7 @@ import com.magmaguy.elitemobs.skills.WeaponIdentityResolver
 import com.magmaguy.elitemobs.skills.bonuses.PlayerSkillSelection
 import com.magmaguy.elitemobs.skills.bonuses.SkillBonus
 import com.magmaguy.elitemobs.skills.bonuses.SkillBonusRegistry
-import com.magmaguy.magmacore.util.AttributeManager
+import org.bukkit.attribute.Attribute
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import java.util.Locale
@@ -230,7 +230,7 @@ internal object NativeDungeonAdventureService : DungeonAdventureService {
         val critChance = (inventory?.getCritChance(true) ?: 0.0) * 100.0
         val enchantmentBonus = (inventory?.getEliteEnchantmentDamage(true) ?: 0.0) * 100.0
         val threatMultiplier = 1.0 + (inventory?.getLoudStrikesBonusMultiplier(true) ?: 0.0)
-        val maxHealth = max(0.0, AttributeManager.getAttributeValue(player, "generic_max_health"))
+        val maxHealth = max(0.0, player.getAttribute(Attribute.MAX_HEALTH)?.value ?: player.health)
         val health = player.health.coerceIn(0.0, maxHealth)
 
         val summary = listOf(
@@ -250,7 +250,7 @@ internal object NativeDungeonAdventureService : DungeonAdventureService {
             DungeonAdventureValue("maxHealth", formatNumber(maxHealth)),
             DungeonAdventureValue("defenseMatch", "$defenseMatch%"),
         )
-        val equipment = listOf(
+        val equipment = listOf<Pair<String, ItemStack?>>(
             "helmet" to player.inventory.helmet,
             "chestplate" to player.inventory.chestplate,
             "leggings" to player.inventory.leggings,
