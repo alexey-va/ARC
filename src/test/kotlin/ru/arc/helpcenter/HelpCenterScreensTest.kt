@@ -12,8 +12,11 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
+import org.mockbukkit.mockbukkit.entity.PlayerMock
 import ru.arc.config.ConfigManager
 import ru.arc.sidebar.SidebarSection
+import ru.arc.tablist.TablistCapacity
+import ru.arc.tablist.TablistSection
 import ru.arc.core.BukkitTaskScheduler
 import ru.arc.core.Tasks
 import ru.arc.paper.menu.PaperDialogClickContext
@@ -569,6 +572,36 @@ class HelpCenterScreensTest {
         assertEquals("○ Показывать панель", plain(screen.buttons.first().label))
         click("back")
         assertEquals("help.settings.section.interface", screen.id)
+    }
+
+    @Test
+    fun `tablist settings show capacity and refuse sections that would overflow`() {
+        val current = TablistCapacity(selectedCount = 4, usedRows = 20, maximumRows = 22)
+        val withLocation = TablistCapacity(selectedCount = 5, usedRows = 25, maximumRows = 22)
+        every { legacy.tablistSectionEnabled(player, any()) } answers { secondArg<TablistSection>().defaultEnabled }
+        every { legacy.tablistCapacity(player) } returns current
+        every { legacy.tablistCapacity(player, any<TablistSection>()) } answers {
+            if (secondArg<TablistSection?>() == TablistSection.LOCATION) withLocation else current
+        }
+
+        open(HelpCenterPage.SETTINGS)
+        click("settings_interface")
+        click("legacy_tablist")
+
+        assertTrue(body().contains("Выбрано секций: 4"))
+        assertTrue(body().contains("20/22"))
+        assertTrue(body().contains("свободно: 2"))
+        val location = screen.buttons.single { it.id.value == "tablist_section_location" }
+        assertTrue(plain(location.tooltip).contains("25/22"))
+        assertTrue(plain(location.tooltip).contains("Отключите другой раздел", ignoreCase = true))
+
+        click("tablist_section_location")
+        val refusal = (player as PlayerMock).nextComponentMessage()
+        assertNotNull(refusal)
+        assertTrue(plain(refusal!!).contains("Не хватает места"))
+        assertTrue(plain(refusal).contains("Отключите другой раздел"))
+        verify(exactly = 0) { legacy.execute(player, "tablist-section-location") }
+        assertEquals("help.settings.tablist", screen.id)
     }
 
     @Test

@@ -30,25 +30,40 @@ internal fun tablistEnabled(hasPermission: (String) -> Boolean): Boolean =
 
 internal data class TablistFrame(val header: String = "", val footer: String = "")
 
+data class TablistCapacity(val selectedCount: Int, val usedRows: Int, val maximumRows: Int) {
+    val fits: Boolean get() = usedRows <= maximumRows
+    val availableRows: Int get() = (maximumRows - usedRows).coerceAtLeast(0)
+}
+
+private fun tablistSectionRows(brand: List<String>, sections: Map<TablistSection, List<String>>): Pair<List<String>, List<String>> {
+    val profile = sections[TablistSection.PROFILE].orEmpty()
+    val header = brand + profile + if (profile.isEmpty()) emptyList() else listOf("")
+    val groups = TablistSection.entries.filter { it != TablistSection.PROFILE }.mapNotNull(sections::get).filter(List<String>::isNotEmpty)
+    val footer = if (groups.isEmpty()) emptyList() else listOf("") + groups.reduce { a, b -> a + "" + b } + ""
+    return header to footer
+}
+
+private fun normalizeTablistSections(sections: Map<TablistSection, List<String>>) =
+    sections.mapValues { (_, rows) -> rows.dropWhile(String::isBlank).dropLastWhile(String::isBlank) }
+        .filterValues(List<String>::isNotEmpty)
+
+/** Reserve authored optional rows too, so new quests or skills cannot overflow a saved selection. */
+internal fun tablistCapacity(brand: List<String>, sections: Map<TablistSection, List<String>>, maximumRows: Int): TablistCapacity {
+    val (header, footer) = tablistSectionRows(brand, normalizeTablistSections(sections))
+    return TablistCapacity(sections.size, header.size + footer.size, maximumRows.coerceAtLeast(brand.size))
+}
+
 /** Trim complete sections, preserving logo spacing and removing unused separators. */
 internal fun composeTablistSections(
     brand: List<String>,
     sections: Map<TablistSection, List<String>>,
     maximumRows: Int,
 ): TablistFrame {
-    val visible = sections.mapValues { (_, rows) -> rows.dropWhile(String::isBlank).dropLastWhile(String::isBlank) }
-        .filterValues(List<String>::isNotEmpty).toMutableMap()
-    fun compose(): Pair<List<String>, List<String>> {
-        val profile = visible[TablistSection.PROFILE].orEmpty()
-        val header = brand + profile + if (profile.isEmpty()) emptyList() else listOf("")
-        val groups = TablistSection.entries.filter { it != TablistSection.PROFILE }.mapNotNull(visible::get)
-        val footer = if (groups.isEmpty()) emptyList() else listOf("") + groups.reduce { a, b -> a + "" + b } + ""
-        return header to footer
-    }
-    var frame = compose()
+    val visible = normalizeTablistSections(sections).toMutableMap()
+    var frame = tablistSectionRows(brand, visible)
     while (frame.first.size + frame.second.size > maximumRows.coerceAtLeast(brand.size) && visible.isNotEmpty()) {
         visible.remove(visible.keys.minBy(TablistSection::priority))
-        frame = compose()
+        frame = tablistSectionRows(brand, visible)
     }
     return TablistFrame(frame.first.joinToString("\n"), frame.second.joinToString("\n"))
 }

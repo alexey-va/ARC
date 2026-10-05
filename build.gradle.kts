@@ -52,7 +52,7 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.281"
+version = "1.4.283"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.17"
@@ -151,7 +151,8 @@ dependencies {
         exclude(group = "io.netty")
     }
     // Immutable private mirrors of the exact EliteMobs API and its mutable MagmaCore snapshot.
-    // Both are provided by the shaded EliteMobs runtime and must never be shaded into ARC.
+    // MagmaCore resolves API supertypes at compile time, but EliteMobs relocates it at runtime.
+    // ARC must not call its unrelocated classes or shade either dependency; prefer Paper APIs.
     compileOnly(libs.ru.ruscrafting.thirdparty.elitemobs.api)
     compileOnly(libs.ru.ruscrafting.thirdparty.magmacore)
     compileOnly(libs.com.denizenscript.denizen) { isTransitive = false }

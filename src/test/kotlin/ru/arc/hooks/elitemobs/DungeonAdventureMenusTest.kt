@@ -72,6 +72,10 @@ class DungeonAdventureMenusTest : FreeSpec({
         screens.last().buttons.single { it.id.value == "search" }.onClick.handle(input)
         screens.last().inputs.single().initial shouldBe "Пещера"
         screens.last().buttons.single { it.id.value == "next" }.onClick.handle(input)
+        screens.last().buttons.single { it.id.value == "next" }.onClick.handle(input)
+        screens.last().buttons.map { it.id.value }.takeLast(3) shouldBe listOf("refresh", "previous", "next")
+        screens.last().buttons.size % screens.last().columns shouldBe 0
+        screens.last().buttons.indexOfFirst { it.id.value == "previous" } % screens.last().columns shouldBe 0
         val beforeDetail = screens.last().buttons.filter { it.id.value.startsWith("dungeon_") }.map { it.label }
         screens.last().buttons.first { it.id.value.startsWith("dungeon_") }.onClick.handle(input)
         screens.last().id shouldBe "dungeon.catalog.detail"
@@ -144,7 +148,14 @@ class DungeonAdventureMenusTest : FreeSpec({
         menus.skills(player)
         screens.last().buttons.count { it.id.value.startsWith("skill_") } shouldBe 6
         screens.last().buttons.single { it.id.value == "next" }.onClick.handle(mockk())
+        val lastSkillsPage = screens.last()
+        lastSkillsPage.buttons.count { it.id.value.startsWith("skill_") } shouldBe 5
+        lastSkillsPage.buttons.map { it.id.value }.takeLast(3) shouldBe listOf("refresh", "previous", "next")
+        lastSkillsPage.buttons.size % lastSkillsPage.columns shouldBe 0
+        lastSkillsPage.buttons.indexOfFirst { it.id.value == "previous" } % lastSkillsPage.columns shouldBe 0
+        lastSkillsPage.buttons.single { it.id.value == "refresh" }.onClick.handle(mockk())
         screens.last().buttons.count { it.id.value.startsWith("skill_") } shouldBe 5
+        screens.last().buttons.map { it.id.value }.takeLast(2) shouldBe listOf("previous", "next")
         screens.last().buttons.single { it.id.value == "skill_0" }.onClick.handle(mockk())
         screens.last().id shouldBe "dungeon.skill.perks"
         every { data.perks(player, skill.id) } returns DungeonSkillPerkView(skill, 3, listOf(perk.copy(active = true)))
@@ -178,6 +189,7 @@ class DungeonAdventureMenusTest : FreeSpec({
         menus.catalog(player); selected += screens.last()
         screens.last().buttons.single { it.id.value == "dungeon_0" }.onClick.handle(mockk()); selected += screens.last()
         menus.skills(player); selected += screens.last()
+        screens.last().buttons.single { it.id.value == "next" }.onClick.handle(mockk()); selected += screens.last()
         menus.statistics(player); selected += screens.last()
         every { data.gear(player) } returns DungeonGearView(
             listOf(DungeonAdventureValue("combatLevel", "40"), DungeonAdventureValue("weaponLevel", "42"),
