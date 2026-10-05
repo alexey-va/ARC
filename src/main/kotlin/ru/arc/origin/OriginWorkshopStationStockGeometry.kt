@@ -20,6 +20,9 @@ internal fun originWorkshopStationStockGeometry(role: OriginWorkshopTableRole): 
                 for (index in 0..2) block("board-bundle-layer-$index",
                     if (index % 2 == 0) Material.OAK_PLANKS else Material.SPRUCE_PLANKS,
                     0.0, 0.225 + index * 0.09, 0.30, 1.80, 0.09, 0.22)
+                for (index in 0..2) block("chair-stock-board-layer-$index",
+                    if (index % 2 == 0) Material.SPRUCE_PLANKS else Material.OAK_PLANKS,
+                    0.0, 0.225 + index * 0.09, -0.75, 1.80, 0.09, 0.45)
                 for (index in 0..1) block("stacked-log-$index", Material.STRIPPED_OAK_LOG,
                     0.80, 0.25 + index * 0.14, 0.0, 0.18, 0.14, 0.64)
             }
@@ -48,7 +51,8 @@ internal fun originWorkshopStationStockGeometry(role: OriginWorkshopTableRole): 
         OriginWorkshopTableRole.UPHOLSTERER -> "furnituresplus:red_wooden_sofa_single"
         OriginWorkshopTableRole.ASSEMBLER -> "furnituresplus:white_wooden_diningtable"
     }
-    // Keep one small sample toward the outer pallet edge; live output stays centered.
-    val items = listOf(OriginWorkshopWarehouseItem(product, 0.58, 0.18, -0.93, 0f, 0.65))
+    // Carpenter's stock gap holds materials only; finished furniture stays under the awning.
+    val items = if (role == OriginWorkshopTableRole.CARPENTER) emptyList() else
+        listOf(OriginWorkshopWarehouseItem(product, 0.58, 0.18, -0.93, 0f, 0.65))
     return OriginWorkshopWarehouseGeometry(blocks, items)
 }

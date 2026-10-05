@@ -234,6 +234,19 @@ internal fun originWorkshopTablePieces(
                 braceThickness, braceThickness, dimensions.depth - legSize * 2))
         }
 
+        if (role == OriginWorkshopTableRole.CARPENTER) {
+            val apronY = dimensions.height - 0.30
+            val apronZ = dimensions.depth / 2.0 - 0.20
+            for (side in listOf(-1.0, 1.0)) {
+                add(blockPiece("carpenter-bench-apron-$side", Material.DARK_OAK_PLANKS,
+                    0.0, apronY, side * apronZ, dimensions.width - 0.84, 0.20, 0.12))
+                for (x in listOf(-dimensions.width / 2.0 + 0.75, dimensions.width / 2.0 - 0.75)) {
+                    add(blockPiece("carpenter-apron-peg-$side-$x", Material.COPPER_BLOCK,
+                        x, apronY, side * (apronZ + 0.075), 0.055, 0.055, 0.03))
+                }
+            }
+        }
+
         if (role != OriginWorkshopTableRole.CARPENTER) {
             val cabinetWidth = 0.84
             val cabinetDepth = 0.72
@@ -348,6 +361,8 @@ internal fun originWorkshopTablePieces(
             // A cantilevered drill leaves its operator-facing work surface clear for the carried board.
             add(blockPiece("carpenter-drill-foot", Material.POLISHED_BLACKSTONE,
                 0.0, dimensions.height + 0.035, 0.67, 0.48, 0.07, 0.42))
+            add(blockPiece("carpenter-drill-mounting-plate", Material.DARK_OAK_PLANKS,
+                0.0, dimensions.height + 0.018, 0.67, 0.60, 0.036, 0.52))
             add(blockPiece("carpenter-drill-post", Material.STRIPPED_SPRUCE_LOG,
                 0.0, dimensions.height + 0.56, 0.77, 0.14, 1.12, 0.14))
             add(blockPiece("carpenter-drill-head", Material.BLACKSTONE,
@@ -397,10 +412,18 @@ internal fun originWorkshopTablePieces(
                 1.30, dimensions.height + 0.07, 0.50, 0.14, 0.14, 0.52))
             add(blockPiece("carpenter-leg-right", Material.STRIPPED_SPRUCE_LOG,
                 1.75, dimensions.height + 0.07, 0.50, 0.14, 0.14, 0.52))
-            add(blockPiece("carpenter-start-apron", Material.DARK_OAK_PLANKS,
-                0.0, dimensions.height + 0.07, -1.09, 0.46, 0.14, 0.30))
-            add(blockPiece("carpenter-start-handle", Material.LEVER,
-                0.0, dimensions.height + 0.20, -1.20, 0.12, 0.12, 0.05))
+            val toolX = -minOf(2.02, dimensions.width / 2.0 - 0.28)
+            val toolZ = dimensions.depth / 2.0 - 0.445
+            add(blockPiece("carpenter-back-tool-tray", Material.DARK_OAK_PLANKS,
+                toolX, dimensions.height + 0.035, toolZ, 0.56, 0.07, 0.62))
+            add(blockPiece("carpenter-mallet-head", Material.OAK_PLANKS,
+                toolX - 0.10, dimensions.height + 0.11, toolZ - 0.24, 0.24, 0.08, 0.14))
+            add(blockPiece("carpenter-mallet-handle", Material.STRIPPED_BIRCH_LOG,
+                toolX - 0.10, dimensions.height + 0.11, toolZ - 0.05, 0.06, 0.08, 0.28))
+            add(blockPiece("carpenter-chisel-blade", Material.IRON_BLOCK,
+                toolX + 0.12, dimensions.height + 0.0875, toolZ + 0.07, 0.06, 0.035, 0.14))
+            add(blockPiece("carpenter-chisel-handle", Material.STRIPPED_SPRUCE_LOG,
+                toolX + 0.12, dimensions.height + 0.10, toolZ + 0.215, 0.06, 0.06, 0.18))
         }
         OriginWorkshopTableRole.UPHOLSTERER -> buildList {
             add(blockPiece("upholsterer-loom", Material.LOOM, tuning.pressCenterX, dimensions.height + 0.36,
@@ -794,8 +817,14 @@ internal object OriginWorkshopTablesModule : PluginModule {
     ): Map<String, List<PacketDisplay>> {
         if (role != OriginWorkshopTableRole.CARPENTER) return emptyMap()
         fun parts(vararg keys: String) = keys.map { pieces.getValue(it).display }
+        val benchBody = pieces.values.filter { part ->
+            val key = part.piece.key
+            key == "top" || key.startsWith("long-edge-") || key.startsWith("end-edge-") ||
+                (key.startsWith("leg-") && !key.startsWith("carpenter-")) ||
+                key.startsWith("carpenter-bench-apron-") || key.startsWith("carpenter-apron-peg-")
+        }.map { it.display }
         val controls = linkedMapOf(
-            "start" to parts("carpenter-start-handle"),
+            "start" to benchBody,
             "stock" to stock,
             "saw" to parts("carpenter-saw-control-handle"),
             "drill" to parts(
@@ -827,6 +856,10 @@ internal object OriginWorkshopTablesModule : PluginModule {
         val point = originWorkshopPointInWorld(table.definition, local)
         return Location(table.world, point.x, point.y, point.z)
     }
+
+    /** Configured dimensions for a currently loaded station, used to resolve its live interaction bounds. */
+    internal fun dimensionsFor(tableId: String): OriginWorkshopTableDimensions? =
+        machineTables[tableId]?.dimensions
 
     private fun clearScene() {
         machineTables.keys.toList().forEach {

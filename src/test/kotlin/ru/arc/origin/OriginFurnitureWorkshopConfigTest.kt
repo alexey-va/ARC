@@ -87,7 +87,7 @@ class OriginFurnitureWorkshopConfigTest :
                     "furnituresplus:white_wooden_diningtable",
                 )
                 settings.workers.filter { it.deliverOutput }.map { Triple(it.output.x, it.output.y, it.output.z) } shouldBe listOf(
-                    Triple(-36.5, 71.18, -67.0),
+                    Triple(-36.5, 71.0, -70.0),
                     Triple(-36.5, 71.18, -64.0),
                     Triple(-44.5, 71.18, -46.5),
                 )

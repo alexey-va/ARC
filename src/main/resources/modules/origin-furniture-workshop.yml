@@ -57,20 +57,20 @@ origin-furniture-workshop:
       npc-id: 430
       table-id: carpenter
       home: { x: -38.5, y: 71, z: -73.5, yaw: -90 }
-      pickup: { x: -38.5, y: 71, z: -67.5, yaw: -90 }
-      pickup-source: { x: -35.75, y: 71.75, z: -67.0, yaw: -90 }
+      pickup: { x: -38.5, y: 71, z: -66.5, yaw: -90 }
+      pickup-source: { x: -36.2, y: 71.44, z: -66.0, yaw: -90 }
       work-approach: { x: -38.5, y: 71, z: -73.5, yaw: -90 }
       bench: { x: -36.5, y: 72.15, z: -73.5, yaw: -90 }
       rest-focus: { x: -36.5, y: 72.15, z: -73.5, yaw: -90 }
-      output-approach: { x: -38.5, y: 71, z: -67.5, yaw: -90 }
-      output: { x: -36.5, y: 71.18, z: -67.0, yaw: 270 }
+      output-approach: { x: -38.5, y: 71, z: -69.5, yaw: -90 }
+      output: { x: -36.5, y: 71, z: -70.0, yaw: 270 }
       routes:
         pickup:
-          - { point: { x: -38.5, y: 71, z: -67.5, yaw: -90 }, timeout-ticks: 240 }
+          - { point: { x: -38.5, y: 71, z: -66.5, yaw: -90 }, timeout-ticks: 240 }
         work-return:
           - { point: { x: -38.5, y: 71, z: -73.5, yaw: -90 }, timeout-ticks: 240 }
         output:
-          - { point: { x: -38.5, y: 71, z: -67.5, yaw: -90 }, timeout-ticks: 200 }
+          - { point: { x: -38.5, y: 71, z: -69.5, yaw: -90 }, timeout-ticks: 200 }
         home-return:
           - { point: { x: -38.5, y: 71, z: -73.5, yaw: -90 }, timeout-ticks: 200 }
       initial-delay-ticks: 20

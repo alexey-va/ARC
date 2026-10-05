@@ -91,6 +91,7 @@ class OriginWorkshopTablesGeometryTest : FreeSpec({
         val controlBracket = blocks.single { it.key == "carpenter-drill-control-bracket" }
         val controlHub = blocks.single { it.key == "carpenter-drill-control-wheel-hub" }
         val drillFoot = blocks.single { it.key == "carpenter-drill-foot" }
+        val drillMount = blocks.single { it.key == "carpenter-drill-mounting-plate" }
         val drillQuill = blocks.single { it.key == "carpenter-drill-quill" }
         val drillSpindle = blocks.single { it.key == "carpenter-drill-spindle" }
         val drillBit = blocks.single { it.key == "carpenter-drill-bit" }
@@ -108,6 +109,19 @@ class OriginWorkshopTablesGeometryTest : FreeSpec({
         boxesOverlap(drillSpindle, drillBit) shouldBe true
         boxesOverlap(drillArm, controlBracket) shouldBe true
         boxesOverlap(controlBracket, controlHub) shouldBe true
+        drillMount.material shouldBe Material.DARK_OAK_PLANKS
+        boxesOverlap(drillMount, drillFoot) shouldBe true
+        (abs(drillMount.y - drillMount.height / 2.0 - dimensions.height) < 1e-9) shouldBe true
+        (drillMount.width > drillFoot.width && drillMount.depth > drillFoot.depth) shouldBe true
+
+        val aprons = blocks.filter { it.key.startsWith("carpenter-bench-apron-") }
+        val apronPegs = blocks.filter { it.key.startsWith("carpenter-apron-peg-") }
+        aprons.size shouldBe 2
+        apronPegs.size shouldBe 4
+        aprons.all { it.material == Material.DARK_OAK_PLANKS } shouldBe true
+        val tableLegs = blocks.filter { it.key.startsWith("leg-") }
+        aprons.forEach { apron -> tableLegs.count { boxesOverlap(apron, it) } shouldBe 2 }
+        apronPegs.all { peg -> aprons.any { boxesOverlap(peg, it) } } shouldBe true
 
         val assemblyBed = blocks.single { it.key == "carpenter-assembly-bed" }
         val looseLeft = blocks.single { it.key == "carpenter-leg-left" }
@@ -119,16 +133,10 @@ class OriginWorkshopTablesGeometryTest : FreeSpec({
         (looseRight.y - looseRight.height / 2.0 >= dimensions.height) shouldBe true
         blocks.none { it.key == "carpenter-assembly-workpiece" } shouldBe true
 
-        val frontEdge = blocks.single { it.key == "long-edge--1.0" }
-        val startApron = blocks.single { it.key == "carpenter-start-apron" }
-        val startHandle = blocks.single { it.key == "carpenter-start-handle" }
-        (startApron.z - startApron.depth / 2.0 < frontEdge.z + frontEdge.depth / 2.0) shouldBe true
-        (startApron.z + startApron.depth / 2.0 > frontEdge.z - frontEdge.depth / 2.0) shouldBe true
-        (abs(startApron.y - startApron.height / 2.0 - dimensions.height) < 1e-9) shouldBe true
-        (abs(startHandle.y - startHandle.height / 2.0 - (startApron.y + startApron.height / 2.0)) < 1e-9) shouldBe true
-        (abs(abs(startHandle.z + 1.35) - 0.15) < 1e-9) shouldBe true
-        boxesOverlap(startApron, frontEdge) shouldBe true
-        boxesOverlap(startApron, startHandle) shouldBe true
+        blocks.none { it.key.startsWith("carpenter-start-") } shouldBe true
+        blocks.single { it.key == "top" }.material shouldBe Material.SPRUCE_PLANKS
+        blocks.filter { it.key.startsWith("long-edge-") || it.key.startsWith("end-edge-") }.size shouldBe 4
+        blocks.filter { it.key.startsWith("leg-") }.size shouldBe 4
         val sawControl = blocks.single { it.key == "carpenter-saw-control-handle" }
         val sawControlPost = blocks.single { it.key == "carpenter-saw-control-post" }
         boxesOverlap(sawControlPost, sawControl) shouldBe true
@@ -139,6 +147,27 @@ class OriginWorkshopTablesGeometryTest : FreeSpec({
         val rightClampControl = blocks.single { it.key == "carpenter-assembly-clamp-control-right" }
         boxesOverlap(leftClamp, leftClampControl) shouldBe true
         boxesOverlap(rightClamp, rightClampControl) shouldBe true
+
+        val toolTray = blocks.single { it.key == "carpenter-back-tool-tray" }
+        val handTools = listOf(
+            blocks.single { it.key == "carpenter-mallet-head" },
+            blocks.single { it.key == "carpenter-mallet-handle" },
+            blocks.single { it.key == "carpenter-chisel-blade" },
+            blocks.single { it.key == "carpenter-chisel-handle" },
+        )
+        handTools.all { boxesOverlap(toolTray, it) } shouldBe true
+        val toolClearance = listOf(
+            boardFeed,
+            sawControl,
+            drillFoot,
+            controlHub,
+            assemblyBed,
+            looseLeft,
+            looseRight,
+            leftClamp,
+            rightClamp,
+        )
+        (listOf(toolTray) + handTools).none { tool -> toolClearance.any { boxesOverlap(tool, it) } } shouldBe true
     }
 
     "right-angle yaw swaps the table footprint and rotates role props with it" {
@@ -271,7 +300,7 @@ class OriginWorkshopTablesGeometryTest : FreeSpec({
             val pieces = originWorkshopTablePieces(role, yaw, dimensions)
             val halfX = if (yaw == 90 || yaw == 270) dimensions.depth / 2.0 else dimensions.width / 2.0
             val halfZ = if (yaw == 90 || yaw == 270) dimensions.width / 2.0 else dimensions.depth / 2.0
-            (pieces.filterNot { it.key in setOf("carpenter-start-apron", "carpenter-start-handle") }.all {
+            (pieces.all {
                 it.x - it.width / 2.0 >= -halfX - 1e-9 && it.x + it.width / 2.0 <= halfX + 1e-9 &&
                     it.z - it.depth / 2.0 >= -halfZ - 1e-9 && it.z + it.depth / 2.0 <= halfZ + 1e-9
             }) shouldBe true

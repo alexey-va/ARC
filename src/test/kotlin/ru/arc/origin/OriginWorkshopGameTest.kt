@@ -82,7 +82,7 @@ class OriginWorkshopGameTest : FreeSpec({
 
     "stock trip stays in range while sneak, departure and expiry cancel the session" {
         fun reason(online: Boolean = true, sameWorld: Boolean = true, sneaking: Boolean = false,
-            distance: Double = 6.5 * 6.5, elapsed: Long = 1) = originWorkshopCancelReason(
+            distance: Double = 7.5 * 7.5, elapsed: Long = 1) = originWorkshopCancelReason(
             online, sameWorld, sneaking, distance, elapsed, rules.timeout, 144.0)
         reason() shouldBe null
         reason(distance = 144.0) shouldBe null
@@ -106,4 +106,22 @@ class OriginWorkshopGameTest : FreeSpec({
         originWorkshopRayHit(origin, origin, OriginWorkshopVec3(0.0, 0.0, -2.0), 0.25, 4.5) shouldBe null
         originWorkshopRayHit(origin, direction, OriginWorkshopVec3(0.0, 0.0, -2.0), 0.25, 4.5001) shouldBe null
     }
+
+    "whole bench can be selected from front, side and above without extending reach" {
+        val bench = originWorkshopStartInteractionAabb(OriginWorkshopTableDimensions.DEFAULT)
+        fun hit(origin: OriginWorkshopVec3, direction: OriginWorkshopVec3, reach: Double = 4.5) =
+            originWorkshopRayAabbHit(origin, direction, bench, reach)
+        (hit(OriginWorkshopVec3(0.0, 1.2, -3.025), OriginWorkshopVec3(0.0, 0.0, 4.0))!! in 1.999..2.001) shouldBe true
+        (hit(OriginWorkshopVec3(-4.4, 1.2, 0.0), OriginWorkshopVec3(1.0, 0.0, 0.0))!! in 1.999..2.001) shouldBe true
+        (hit(OriginWorkshopVec3(0.0, 3.63, 0.0), OriginWorkshopVec3(0.0, -1.0, 0.0))!! in 1.999..2.001) shouldBe true
+        hit(OriginWorkshopVec3(0.0, 1.2, 0.0), OriginWorkshopVec3(0.0, 0.0, -1.0)) shouldBe null
+        hit(OriginWorkshopVec3(0.0, 1.2, -6.0), OriginWorkshopVec3(0.0, 0.0, 1.0)) shouldBe null
+        hit(OriginWorkshopVec3(3.0, 1.2, -3.0), OriginWorkshopVec3(0.0, 0.0, 1.0)) shouldBe null
+        hit(OriginWorkshopVec3(0.0, 2.0, -3.0), OriginWorkshopVec3(0.0, 0.0, 1.0)) shouldBe null
+        hit(OriginWorkshopVec3(0.0, 1.2, -3.0), OriginWorkshopVec3(0.0, 0.0, -1.0)) shouldBe null
+        hit(OriginWorkshopVec3(Double.NaN, 1.2, -3.0), OriginWorkshopVec3(0.0, 0.0, 1.0)) shouldBe null
+        hit(OriginWorkshopVec3(0.0, 1.2, -3.0), OriginWorkshopVec3(0.0, 0.0, 0.0)) shouldBe null
+        hit(OriginWorkshopVec3(0.0, 1.2, -3.0), OriginWorkshopVec3(0.0, 0.0, 1.0), 4.5001) shouldBe null
+    }
+
 })

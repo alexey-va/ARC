@@ -21,35 +21,48 @@ class OriginWorkshopStationStockGeometryTest : FreeSpec({
             } shouldBe true
             stock.blocks.none { it.key.startsWith("rack-") || it.key.contains("shelf") } shouldBe true
 
-            stock.items.size shouldBe 1
-            val sample = stock.items.single()
-            sample.x shouldBe 0.58
-            sample.y shouldBe 0.18
-            sample.z shouldBe -0.93
-            sample.scale shouldBe 0.65
+            if (role == OriginWorkshopTableRole.CARPENTER) {
+                stock.items shouldBe emptyList()
+                val carpenterCenterZ = -66.0
+                stock.blocks.all { piece ->
+                    carpenterCenterZ - piece.x - piece.width / 2.0 >= -67.0 - 1e-9 &&
+                        carpenterCenterZ - piece.x + piece.width / 2.0 <= -65.0 + 1e-9
+                } shouldBe true
+                val chairAreaBoards = stock.blocks.filter { it.key.startsWith("chair-stock-board-layer-") }
+                chairAreaBoards.size shouldBe 3
+                chairAreaBoards.zip(listOf(0.225, 0.315, 0.405)).all { (piece, y) -> abs(piece.y - y) < 1e-9 } shouldBe true
+                chairAreaBoards.all { it.z == -0.75 && it.width == 1.80 && it.depth == 0.45 } shouldBe true
+            } else {
+                stock.items.size shouldBe 1
+                val sample = stock.items.single()
+                sample.x shouldBe 0.58
+                sample.y shouldBe 0.18
+                sample.z shouldBe -0.93
+                sample.scale shouldBe 0.65
 
-            val sampleBounds = modelBounds(sample.itemId)
-            val outputBounds = modelBounds(sample.itemId)
-            val sampleMinWorldX = sample.z + sampleBounds.minZ * sample.scale
-            val sampleMaxWorldX = sample.z + sampleBounds.maxZ * sample.scale
-            val sampleMinWorldZ = -sample.x - sampleBounds.maxX * sample.scale
-            val sampleMaxWorldZ = -sample.x - sampleBounds.minX * sample.scale
-            val outputMinWorldX = outputBounds.minZ
-            val outputMaxWorldX = outputBounds.maxZ
-            val outputMinWorldZ = -outputBounds.maxX
-            val outputMaxWorldZ = -outputBounds.minX
-            val separateFromOutput = sampleMaxWorldX <= outputMinWorldX ||
-                outputMaxWorldX <= sampleMinWorldX ||
-                sampleMaxWorldZ <= outputMinWorldZ ||
-                outputMaxWorldZ <= sampleMinWorldZ
-            separateFromOutput shouldBe true
-            (sampleMinWorldX >= -1.325 - 1e-9 && sampleMaxWorldX <= 0.95 + 1e-9) shouldBe true
-            (sampleMinWorldZ >= -0.95 - 1e-9 && sampleMaxWorldZ <= 0.95 + 1e-9) shouldBe true
-            val modelAnchor = if (sample.itemId.endsWith("white_wooden_diningtable")) 0.51875 else 0.5
-            abs(sample.y + (sampleBounds.minY + modelAnchor) * sample.scale - 0.18) shouldBe 0.0
-            (sample.y + (sampleBounds.maxY + modelAnchor) * sample.scale <= 1.5) shouldBe true
+                val sampleBounds = modelBounds(sample.itemId)
+                val outputBounds = modelBounds(sample.itemId)
+                val sampleMinWorldX = sample.z + sampleBounds.minZ * sample.scale
+                val sampleMaxWorldX = sample.z + sampleBounds.maxZ * sample.scale
+                val sampleMinWorldZ = -sample.x - sampleBounds.maxX * sample.scale
+                val sampleMaxWorldZ = -sample.x - sampleBounds.minX * sample.scale
+                val outputMinWorldX = outputBounds.minZ
+                val outputMaxWorldX = outputBounds.maxZ
+                val outputMinWorldZ = -outputBounds.maxX
+                val outputMaxWorldZ = -outputBounds.minX
+                val separateFromOutput = sampleMaxWorldX <= outputMinWorldX ||
+                    outputMaxWorldX <= sampleMinWorldX ||
+                    sampleMaxWorldZ <= outputMinWorldZ ||
+                    outputMaxWorldZ <= sampleMinWorldZ
+                separateFromOutput shouldBe true
+                (sampleMinWorldX >= -1.325 - 1e-9 && sampleMaxWorldX <= 0.95 + 1e-9) shouldBe true
+                (sampleMinWorldZ >= -0.95 - 1e-9 && sampleMaxWorldZ <= 0.95 + 1e-9) shouldBe true
+                val modelAnchor = if (sample.itemId.endsWith("white_wooden_diningtable")) 0.51875 else 0.5
+                abs(sample.y + (sampleBounds.minY + modelAnchor) * sample.scale - 0.18) shouldBe 0.0
+                (sample.y + (sampleBounds.maxY + modelAnchor) * sample.scale <= 1.5) shouldBe true
+            }
 
-            for (stockCenterZ in listOf(-67.0, -64.0)) {
+            for (stockCenterZ in listOf(-66.0, -64.0)) {
                 stock.blocks.all { piece ->
                     val minZ = stockCenterZ - piece.x - piece.width / 2.0
                     val maxZ = stockCenterZ - piece.x + piece.width / 2.0
@@ -61,9 +74,12 @@ class OriginWorkshopStationStockGeometryTest : FreeSpec({
                     val maxZ = stockCenterZ - item.x - bounds.minX * item.scale
                     minZ >= -68.0 - 1e-9 && maxZ <= -63.0 + 1e-9
                 } shouldBe true
-                val outputMinZ = stockCenterZ - outputBounds.maxX
-                val outputMaxZ = stockCenterZ - outputBounds.minX
-                (outputMinZ >= -68.0 - 1e-9 && outputMaxZ <= -63.0 + 1e-9) shouldBe true
+                stock.items.forEach { item ->
+                    val outputBounds = modelBounds(item.itemId)
+                    val outputMinZ = stockCenterZ - outputBounds.maxX
+                    val outputMaxZ = stockCenterZ - outputBounds.minX
+                    (outputMinZ >= -68.0 - 1e-9 && outputMaxZ <= -63.0 + 1e-9) shouldBe true
+                }
             }
         }
     }

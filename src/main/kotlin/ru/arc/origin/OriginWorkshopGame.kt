@@ -194,6 +194,64 @@ internal data class OriginWorkshopVec3(val x: Double, val y: Double, val z: Doub
     fun dot(v: OriginWorkshopVec3) = x * v.x + y * v.y + z * v.z
 }
 
+internal data class OriginWorkshopAabb(
+    val minX: Double,
+    val minY: Double,
+    val minZ: Double,
+    val maxX: Double,
+    val maxY: Double,
+    val maxZ: Double,
+) {
+    init {
+        require(listOf(minX, minY, minZ, maxX, maxY, maxZ).all(Double::isFinite))
+        require(minX <= maxX && minY <= maxY && minZ <= maxZ)
+    }
+}
+
+/** Local-space click volume over the actual tabletop and its front edge. */
+internal fun originWorkshopStartInteractionAabb(dimensions: OriginWorkshopTableDimensions): OriginWorkshopAabb =
+    OriginWorkshopAabb(
+        minX = -dimensions.width / 2.0,
+        minY = dimensions.height - 0.15,
+        minZ = -dimensions.depth / 2.0,
+        maxX = dimensions.width / 2.0,
+        maxY = dimensions.height + 0.55,
+        maxZ = dimensions.depth / 2.0,
+    )
+
+/** Ray/AABB distance in blocks, normalized to the ray direction for focused interaction tests. */
+internal fun originWorkshopRayAabbHit(
+    origin: OriginWorkshopVec3,
+    direction: OriginWorkshopVec3,
+    bounds: OriginWorkshopAabb,
+    reach: Double,
+): Double? {
+    if (!listOf(origin.x, origin.y, origin.z, direction.x, direction.y, direction.z, reach).all(Double::isFinite)) return null
+    if (reach !in 0.0..4.5) return null
+    if (origin.x in bounds.minX..bounds.maxX && origin.y in bounds.minY..bounds.maxY &&
+        origin.z in bounds.minZ..bounds.maxZ) return null
+    val length = sqrt(direction.dot(direction))
+    if (length < 1e-6) return null
+    val ray = direction * (1.0 / length)
+    var near = 0.0
+    var far = reach
+
+    fun clip(originAxis: Double, directionAxis: Double, minimum: Double, maximum: Double): Boolean {
+        if (kotlin.math.abs(directionAxis) < 1e-9) return originAxis in minimum..maximum
+        val first = (minimum - originAxis) / directionAxis
+        val second = (maximum - originAxis) / directionAxis
+        near = maxOf(near, minOf(first, second))
+        far = minOf(far, maxOf(first, second))
+        return near <= far
+    }
+
+    if (!clip(origin.x, ray.x, bounds.minX, bounds.maxX) ||
+        !clip(origin.y, ray.y, bounds.minY, bounds.maxY) ||
+        !clip(origin.z, ray.z, bounds.minZ, bounds.maxZ)
+    ) return null
+    return near.takeIf { it in 0.0..reach }
+}
+
 internal fun originWorkshopRayHit(
     origin: OriginWorkshopVec3,
     direction: OriginWorkshopVec3,
@@ -252,6 +310,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
     private const val HOVER_SOUND_NANOS = 700_000_000L
     private const val HOVER_CHECK_TICKS = 2L
     private const val GUIDANCE_REFRESH_TICKS = 20L
+    private const val BUSY_FEEDBACK_NANOS = 1_000_000_000L
     private const val MAX_RECENT_INPUTS = 64
 
     private val RAW_BOARD_SIZE = OriginWorkshopGamePartSize(1.0f, 0.08f, 0.22f)
@@ -259,7 +318,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
     private val LEG_SIZE = OriginWorkshopGamePartSize(0.14f, 0.52f, 0.14f)
 
     private val start = OriginWorkshopPoint(0.0, 1.28, -1.35)
-    private val stock = OriginWorkshopPoint(-6.5, 0.44, 0.30)
+    private val stock = OriginWorkshopPoint(-7.5, 0.44, 0.30)
     private val sawInput = OriginWorkshopPoint(-1.35, 1.29, -0.55)
     private val sawInputCenter = OriginWorkshopPoint(-1.35, 1.25, -0.55)
     private val sawOutput = OriginWorkshopPoint(-0.35, 1.29, -0.55)
@@ -304,6 +363,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
     private var settings: GameSettings? = null
     private var owner: PaperPacketDisplays? = null
     private var label: PacketTextDisplay? = null
+    private var occupancyLabel: PacketTextDisplay? = null
     private var rewards: OriginWorkshopCraftRewards? = null
     private var commonTasks = LifecycleTaskScope()
     private var session: Session? = null
@@ -311,6 +371,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
     private val accepted = linkedMapOf<UUID, Long>()
     private val idleHoverers = mutableSetOf<UUID>()
     private val hoverSounds = linkedMapOf<UUID, Long>()
+    private val busyFeedbackNanos = linkedMapOf<UUID, Long>()
     private var registered = false
     private var generation = 0L
 
@@ -356,7 +417,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
             return
         }
         OriginWorkshopTablesModule.highlightCraftControl(TABLE, "start")
-        val labelLocation = OriginWorkshopTablesModule.pointAt(TABLE, start.copy(y = 1.78))
+        val labelLocation = OriginWorkshopTablesModule.pointAt(TABLE, frontGuidanceAnchor(OriginWorkshopPoint(0.0, 0.0, 0.0)))
         label = labelLocation?.let { spawnLabel(it, "Столярная мастерская · ЛКМ", visibleByDefault = true) }
         idleHoverers.clear()
         commonTasks.runTimer(HOVER_CHECK_TICKS, HOVER_CHECK_TICKS) { updateIdleHover() }
@@ -390,6 +451,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         accepted.remove(event.player.uniqueId)
         idleHoverers.remove(event.player.uniqueId)
         hoverSounds.remove(event.player.uniqueId)
+        busyFeedbackNanos.remove(event.player.uniqueId)
     }
 
     private fun click(player: Player): Boolean {
@@ -401,7 +463,11 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         if (accepted.size >= MAX_RECENT_INPUTS) accepted.entries.firstOrNull()?.let { accepted.remove(it.key) }
 
         val current = session
-        if (current != null && current.playerId != player.uniqueId) return false
+        if (current != null && current.playerId != player.uniqueId) {
+            if (!isWorkshopInteraction(player)) return false
+            sendBusyFeedback(player, current.playerId, nowNanos)
+            return true
+        }
         if (current != null) {
             val station = OriginWorkshopTablesModule.pointAt(TABLE, start)
             val reason = originWorkshopCancelReason(
@@ -421,9 +487,12 @@ internal object OriginWorkshopGame : PluginModule, Listener {
             }
             advanceTimedStage(current, player, nowTick())
         }
-        val point = current?.let { target(it.progress.stage) } ?: start
-        val location = OriginWorkshopTablesModule.pointAt(TABLE, point) ?: return false
-        if (targetDistance(player, location) == null) return false
+        if (current == null) {
+            if (startInteractionDistance(player) == null) return false
+        } else {
+            val location = OriginWorkshopTablesModule.pointAt(TABLE, target(current.progress.stage)) ?: return false
+            if (targetDistance(player, location) == null) return false
+        }
 
         accepted[player.uniqueId] = nowNanos
         if (current == null) startClick(player) else sessionClick(player, current)
@@ -466,7 +535,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
                         return@runSync
                     }
                     if (session != null) {
-                        player.sendActionBar(Component.text("Верстак занят. Попробуй чуть позже."))
+                        sendBusyFeedback(player, session!!.playerId)
                         return@runSync
                     }
                     begin(player)
@@ -487,10 +556,11 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         session = active
         idleHoverers.clear()
         label?.remove()
-        label = OriginWorkshopTablesModule.pointAt(TABLE, start.copy(y = 1.78))?.let {
+        label = OriginWorkshopTablesModule.pointAt(TABLE, labelAnchor(OriginWorkshopGameStage.STOCK))?.let {
             spawnLabel(it, "Этап 1/15 · Возьми заготовку со склада · ЛКМ", visibleByDefault = false)
         }
         label?.showTo(player)
+        setOccupancyLabel(player)
         active.tasks.runTimer(STEP_TICKS, STEP_TICKS) { step(active, rules) }
         showStage(active, player, "START")
     }
@@ -621,21 +691,17 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         val station = OriginWorkshopTablesModule.pointAt(TABLE, start) ?: return
         val now = System.nanoTime()
         val next = Bukkit.getOnlinePlayers().asSequence()
-            .filter { it.world.uid == station.world.uid && it.location.distanceSquared(station) <= 64.0 }
-            .filter { targetDistance(it, station) != null }
+            .filter { it.world.uid == station.world.uid && it.location.distanceSquared(station) <= 100.0 }
+            .filter { startInteractionDistance(it) != null }
             .mapTo(linkedSetOf()) { it.uniqueId }
         next.forEach { id ->
             if (id !in idleHoverers) {
                 val prior = hoverSounds[id]
                 if (prior == null || now - prior >= HOVER_SOUND_NANOS) {
-                    Bukkit.getPlayer(id)?.playSound(
-                        Bukkit.getPlayer(id)?.location ?: station,
-                        Sound.UI_BUTTON_CLICK,
-                        SoundCategory.PLAYERS,
-                        0.20f,
-                        1.45f,
-                    )
-                    hoverSounds[id] = now
+                    Bukkit.getPlayer(id)?.let { player ->
+                        player.playSound(player.location, Sound.UI_BUTTON_CLICK, SoundCategory.PLAYERS, 0.20f, 1.45f)
+                        hoverSounds[id] = now
+                    }
                 }
             }
         }
@@ -824,8 +890,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         }
         player.sendActionBar(Component.text(taskLabel))
         label?.takeIf(PacketTextDisplay::isValid)?.let { currentLabel ->
-            val local = target(stage)
-            val at = OriginWorkshopTablesModule.pointAt(TABLE, local.copy(y = local.y + 0.48))
+            val at = OriginWorkshopTablesModule.pointAt(TABLE, labelAnchor(stage))
             if (at != null && at.world.uid == active.worldId) currentLabel.teleport(at)
             val shortLabel = buildString {
                 append(stage.step).append('/').append(OriginWorkshopGameStage.TOTAL_STEPS)
@@ -970,6 +1035,61 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         return reach
     }
 
+    private fun startInteractionDistance(player: Player): Double? {
+        val station = OriginWorkshopTablesModule.pointAt(TABLE, start) ?: return null
+        if (player.world.uid != station.world.uid) return null
+        val bounds = startInteractionBounds() ?: return null
+        val eye = player.eyeLocation
+        val direction = eye.direction.normalize()
+        val reach = originWorkshopRayAabbHit(
+            OriginWorkshopVec3(eye.x, eye.y, eye.z),
+            OriginWorkshopVec3(direction.x, direction.y, direction.z),
+            bounds,
+            REACH,
+        ) ?: return null
+        if (player.world.rayTraceBlocks(eye, direction, reach + BLOCK_EPSILON, FluidCollisionMode.NEVER, true) != null) return null
+        return reach
+    }
+
+    private fun startInteractionBounds(): OriginWorkshopAabb? {
+        val dimensions = OriginWorkshopTablesModule.dimensionsFor(TABLE) ?: return null
+        val localBounds = originWorkshopStartInteractionAabb(dimensions)
+        val localCorners = buildList {
+            for (x in listOf(localBounds.minX, localBounds.maxX))
+                for (y in listOf(localBounds.minY, localBounds.maxY))
+                    for (z in listOf(localBounds.minZ, localBounds.maxZ)) {
+                add(OriginWorkshopPoint(x, y, z))
+            }
+        }
+        val corners = localCorners.map { OriginWorkshopTablesModule.pointAt(TABLE, it) ?: return null }
+        return OriginWorkshopAabb(
+            minX = corners.minOf { it.x }, minY = corners.minOf { it.y }, minZ = corners.minOf { it.z },
+            maxX = corners.maxOf { it.x }, maxY = corners.maxOf { it.y }, maxZ = corners.maxOf { it.z },
+        )
+    }
+
+    private fun isWorkshopInteraction(player: Player): Boolean {
+        if (startInteractionDistance(player) != null) return true
+        val anchors = listOf(stock, sawInput, sawOutput, sawControl, drillInput, drillControl,
+            assembly, clampLeft, clampRight, legLeft, legRight)
+        return anchors.any { anchor ->
+            OriginWorkshopTablesModule.pointAt(TABLE, anchor)?.let { targetDistance(player, it) } != null
+        }
+    }
+
+    private fun sendBusyFeedback(player: Player, ownerId: UUID, now: Long = System.nanoTime()) {
+        val previous = busyFeedbackNanos[player.uniqueId]
+        if (previous == null || now - previous >= BUSY_FEEDBACK_NANOS) {
+            val ownerName = Bukkit.getPlayer(ownerId)?.name ?: "другой игрок"
+            player.sendActionBar(Component.text("За верстаком работает $ownerName."))
+            busyFeedbackNanos[player.uniqueId] = now
+        }
+        busyFeedbackNanos.entries.removeIf { now - it.value > 60_000_000_000L || Bukkit.getPlayer(it.key) == null }
+        while (busyFeedbackNanos.size > MAX_RECENT_INPUTS) {
+            busyFeedbackNanos.entries.firstOrNull()?.let { busyFeedbackNanos.remove(it.key) } ?: break
+        }
+    }
+
     private fun spawnBlock(
         displays: PaperPacketDisplays,
         material: Material,
@@ -1039,13 +1159,42 @@ internal object OriginWorkshopGame : PluginModule, Listener {
 
     private fun showStart() {
         OriginWorkshopTablesModule.highlightCraftControl(TABLE, "start")
+        occupancyLabel?.remove()
+        occupancyLabel = null
         label?.remove()
-        label = OriginWorkshopTablesModule.pointAt(TABLE, start.copy(y = 1.78))?.let {
+        label = OriginWorkshopTablesModule.pointAt(TABLE, frontGuidanceAnchor(OriginWorkshopPoint(0.0, 0.0, 0.0)))?.let {
             spawnLabel(it, "Столярная мастерская · ЛКМ", visibleByDefault = true)
         }
     }
 
-    private fun spawnLabel(at: Location, text: String, visibleByDefault: Boolean): PacketTextDisplay? {
+    private fun frontGuidanceAnchor(target: OriginWorkshopPoint): OriginWorkshopPoint =
+        OriginWorkshopPoint(target.x.coerceIn(-1.5, 1.5), 2.25, -1.5)
+
+    private fun labelAnchor(stage: OriginWorkshopGameStage): OriginWorkshopPoint =
+        if (stage == OriginWorkshopGameStage.STOCK) OriginWorkshopPoint(stock.x, 1.45, -0.8)
+        else frontGuidanceAnchor(target(stage))
+
+    private fun setOccupancyLabel(player: Player) {
+        occupancyLabel?.remove()
+        val local = OriginWorkshopPoint(0.0, 2.65, -1.5)
+        occupancyLabel = OriginWorkshopTablesModule.pointAt(TABLE, local)?.let {
+            spawnLabel(
+                it,
+                "За верстаком: ${player.name}",
+                visibleByDefault = true,
+                scale = 0.38f,
+                lineWidth = 220,
+            )
+        }
+    }
+
+    private fun spawnLabel(
+        at: Location,
+        text: String,
+        visibleByDefault: Boolean,
+        scale: Float = 0.52f,
+        lineWidth: Int = 260,
+    ): PacketTextDisplay? {
         val displayOwner = owner ?: return null
         return runCatching {
             displayOwner.spawnText(at, Component.text(text)).apply {
@@ -1053,14 +1202,14 @@ internal object OriginWorkshopGame : PluginModule, Listener {
                 billboard = Display.Billboard.CENTER
                 viewRange = 0.55f
                 shadowRadius = 0f
-                lineWidth = 260
+                this.lineWidth = lineWidth
                 isShadowed = true
                 backgroundColor = Color.fromARGB(150, 12, 10, 8)
                 isSeeThrough = false
                 isDefaultBackground = false
                 textOpacity = 230.toByte()
                 transformation = Transformation(
-                    Vector3f(), AxisAngle4f(), Vector3f(0.52f), AxisAngle4f(),
+                    Vector3f(), AxisAngle4f(), Vector3f(scale), AxisAngle4f(),
                 )
             }
         }.onFailure {
@@ -1117,8 +1266,11 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         commonTasks = LifecycleTaskScope()
         rewards?.close()
         rewards = null
+        occupancyLabel?.remove()
+        occupancyLabel = null
         label?.remove()
         label = null
+        busyFeedbackNanos.clear()
         owner?.close()
         owner = null
         OriginWorkshopTablesModule.resetCraft(TABLE)
