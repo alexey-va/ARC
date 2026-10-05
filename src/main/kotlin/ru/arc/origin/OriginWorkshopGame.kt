@@ -507,10 +507,10 @@ internal object OriginWorkshopGame : PluginModule, Listener {
             player.sendActionBar(Component.text("Сейчас проверяется много заявок. Попробуй ещё раз через минуту."))
             return
         }
-        player.sendActionBar(Component.text("Проверяю 24-часовой перерыв."))
+        player.sendActionBar(Component.text("Проверяю доступ к сборке."))
         val token = commonTasks.token()
         val generationAtQuery = generation
-        handler.status(player.uniqueId).whenComplete { remaining, failure ->
+        handler.status(player).whenComplete { remaining, failure ->
             commonTasks.runSync(token) {
                 pendingStatus.remove(player.uniqueId)
                 if (generationAtQuery != generation || !player.isOnline || owner == null) return@runSync
@@ -526,8 +526,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
                     )
                     player.sendActionBar(Component.text("Не удалось проверить перерыв. Попробуй позже."))
                 } else if ((remaining ?: Long.MAX_VALUE) > 0) {
-                    val minutes = kotlin.math.ceil((remaining ?: 0L) / 60_000.0).toLong().coerceAtLeast(1)
-                    player.sendActionBar(Component.text("Недавно уже собирали мебель. Подожди ещё " + minutes + " мин."))
+                    player.sendActionBar(Component.text("Недавно уже собирали мебель. Подожди ещё " + workshopCooldownText(remaining!!) + "."))
                 } else {
                     val missing = handler.missing(player)
                     if (missing != null) {
@@ -718,7 +717,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         val hovered = targetLocation != null && targetDistance(player, targetLocation) != null
         if (active.hoveredControl == hovered) return
         active.hoveredControl = hovered
-        OriginWorkshopTablesModule.highlightCraftControl(TABLE, active.highlightedControl, hovered)
+        OriginWorkshopTablesModule.highlightCraftControl(TABLE, active.highlightedControl, hovered, viewer = player)
         currentPickableDisplay(active)?.let { part ->
             part.isGlowing = true
             part.glowColorOverride = if (hovered) hoverGlow else woodGlow
@@ -859,7 +858,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         val stage = active.progress.stage
         val nextControl = control(stage)
         if (active.highlightedControl != nextControl || active.hoveredControl) {
-            OriginWorkshopTablesModule.highlightCraftControl(TABLE, nextControl, hovered = false)
+            OriginWorkshopTablesModule.highlightCraftControl(TABLE, nextControl, hovered = false, viewer = player)
             active.highlightedControl = nextControl
             active.hoveredControl = false
         }
@@ -1245,8 +1244,10 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         handler.complete(player, request, valid) { error ->
             if (active !== session || generationAtRequest != generation) return@complete
             if (error == null) {
+                val next = if (player.hasPermission(WORKSHOP_COOLDOWN_BYPASS)) "Можно сразу начать новую сборку."
+                    else "Новую сборку можно начать через 24 часа."
                 player.sendMessage(
-                    Component.text("\n  Стул собран и добавлен в инвентарь.\n  Новую сборку можно начать через 24 часа.\n"),
+                    Component.text("\n  Стул собран и добавлен в инвентарь.\n  $next\n"),
                 )
                 log(active, "REWARD_DELIVERED", active.progress.stage)
             } else {

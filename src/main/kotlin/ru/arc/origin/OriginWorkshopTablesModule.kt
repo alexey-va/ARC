@@ -15,9 +15,11 @@ import org.joml.Vector3f
 import ru.arc.ARC
 import ru.arc.config.ConfigManager
 import ru.arc.core.PluginModule
+import ru.arc.paper.display.PacketBlockDisplay
 import ru.arc.paper.display.PacketDisplay
 import ru.arc.paper.display.PaperPacketDisplays
 import java.nio.file.Path
+import java.util.UUID
 import java.util.logging.Level
 
 internal data class OriginWorkshopTableDimensions(
@@ -625,6 +627,13 @@ internal object OriginWorkshopTablesModule : PluginModule {
     private val runningDrives = mutableSetOf<String>()
     private val activeCraftKeys = mutableMapOf<String, Set<String>>()
     private val activeCraftHighlights = mutableMapOf<String, Map<PacketDisplay, Color>>()
+    private val activeCraftOverlays = mutableMapOf<String, CraftGlowOverlay>()
+
+    private data class CraftGlowOverlay(
+        val viewerId: UUID,
+        val control: String,
+        val sourceToOverlay: Map<PacketDisplay, PacketDisplay>,
+    )
 
     private data class WorkshopMachinePart(
         val display: PacketDisplay,
@@ -874,6 +883,7 @@ internal object OriginWorkshopTablesModule : PluginModule {
         runningDrives.clear()
         activeCraftKeys.clear()
         activeCraftHighlights.clear()
+        activeCraftOverlays.clear()
     }
 
     /** Free-running shafts share the scene tick; never touch the material/contact animation keys. */
@@ -924,13 +934,65 @@ internal object OriginWorkshopTablesModule : PluginModule {
     }
 
     /** Glow only the real stock, machine or source-part displays that correspond to a game control. */
-    fun highlightCraftControl(tableId: String, control: String?, hovered: Boolean = false) {
+    fun highlightCraftControl(
+        tableId: String,
+        control: String?,
+        hovered: Boolean = false,
+        viewer: org.bukkit.entity.Player? = null,
+    ) {
         val table = machineTables[tableId] ?: return
         if (table.definition.role != OriginWorkshopTableRole.CARPENTER) return
         val color = if (hovered) craftHoverGlow else craftGlow
+
+        if (viewer != null) {
+            clearSharedCraftHighlight(tableId)
+            val name = control
+            if (name == null) {
+                removeCraftOverlay(tableId)
+                return
+            }
+            val sources = (table.craftControls[name] ?: error("Unknown carpenter craft control '$name'"))
+                .distinct().filter(PacketDisplay::isValid)
+            val current = activeCraftOverlays[tableId]
+            val reusable = current != null && current.viewerId == viewer.uniqueId && current.control == name &&
+                current.sourceToOverlay.keys == sources.toSet() && current.sourceToOverlay.values.all(PacketDisplay::isValid)
+            val overlay = if (reusable) current!! else {
+                removeCraftOverlay(tableId)
+                val copies = linkedMapOf<PacketDisplay, PacketDisplay>()
+                val owner = displays ?: return
+                sources.forEach { source ->
+                    val sourceBlock = source as? PacketBlockDisplay
+                        ?: error("Carpenter craft control '$name' contains a non-block display")
+                    val copy = owner.spawnBlock(source.location, sourceBlock.blockData)
+                    handles += copy
+                    copy.isVisibleByDefault = false
+                    copy.showTo(viewer)
+                    copy.billboard = source.billboard
+                    copy.brightness = source.brightness
+                    copy.interpolationDelay = source.interpolationDelay
+                    copy.interpolationDuration = source.interpolationDuration
+                    copy.teleportDuration = source.teleportDuration
+                    copy.viewRange = source.viewRange
+                    copy.shadowRadius = source.shadowRadius
+                    copy.shadowStrength = source.shadowStrength
+                    copy.displayWidth = source.displayWidth
+                    copy.displayHeight = source.displayHeight
+                    copy.transformation = expandedGlowTransform(source.transformation)
+                    copy.isGlowing = true
+                    copies[source] = copy
+                }
+                CraftGlowOverlay(viewer.uniqueId, name, copies).also { activeCraftOverlays[tableId] = it }
+            }
+            overlay.sourceToOverlay.values.forEach { copy ->
+                if (copy.isValid && copy.glowColorOverride != color) copy.glowColorOverride = color
+            }
+            return
+        }
+
+        removeCraftOverlay(tableId)
         val next = control?.let { name ->
-            (table.craftControls[name] ?: error("Unknown carpenter craft control '$name'")).distinct()
-                .associateWith { color }
+            (table.craftControls[name] ?: error("Unknown carpenter craft control '$name'"))
+                .distinct().associateWith { color }
         }.orEmpty()
         val previous = activeCraftHighlights[tableId].orEmpty()
         (previous.keys - next.keys).forEach { display ->
@@ -952,6 +1014,33 @@ internal object OriginWorkshopTablesModule : PluginModule {
         if (next.isEmpty()) activeCraftHighlights.remove(tableId) else activeCraftHighlights[tableId] = next
     }
 
+    private fun clearSharedCraftHighlight(tableId: String) {
+        activeCraftHighlights.remove(tableId).orEmpty().keys.forEach { display ->
+            if (display.isValid) {
+                display.isGlowing = false
+                display.glowColorOverride = null
+            }
+        }
+    }
+
+    private fun removeCraftOverlay(tableId: String) {
+        activeCraftOverlays.remove(tableId)?.sourceToOverlay?.values?.forEach { copy ->
+            if (copy.isValid) copy.remove()
+            handles.remove(copy)
+        }
+    }
+
+    private fun syncCraftOverlay(tableId: String) {
+        activeCraftOverlays[tableId]?.sourceToOverlay?.forEach { (source, copy) ->
+            if (!source.isValid || !copy.isValid) return@forEach
+            copy.teleport(source.location)
+            copy.interpolationDelay = source.interpolationDelay
+            copy.interpolationDuration = source.interpolationDuration
+            copy.teleportDuration = source.teleportDuration
+            copy.transformation = expandedGlowTransform(source.transformation)
+        }
+    }
+
     /** Drive one craft machine directly, without the autonomous display cycle used by other roles. */
     fun animateCraftMachine(tableId: String, machine: String, progress: Double) {
         require(progress.isFinite()) { "Craft machine progress must be finite" }
@@ -962,6 +1051,7 @@ internal object OriginWorkshopTablesModule : PluginModule {
             val part = table.pieces[key] ?: error("Carpenter craft machine '$machine' has no model part '$key'")
             applyMotion(part, table.definition.yaw, motion)
         }
+        syncCraftOverlay(tableId)
         activeCraftKeys[tableId] = activeCraftKeys[tableId].orEmpty() + pose.pieces.keys
     }
 
@@ -977,12 +1067,16 @@ internal object OriginWorkshopTablesModule : PluginModule {
         val display = table.pieces[key]?.display ?: error("Carpenter craft source '$part' has no model part")
         if (!display.isValid) return
         display.isVisibleByDefault = visible
+        if (!visible && activeCraftOverlays[tableId]?.sourceToOverlay?.containsKey(display) == true) {
+            removeCraftOverlay(tableId)
+        }
         activeCraftKeys[tableId] = activeCraftKeys[tableId].orEmpty() + key
     }
 
     /** Restore every craft-touched machine/source handle and clear the current glow target. */
     fun resetCraft(tableId: String) {
         val table = machineTables[tableId] ?: return
+        removeCraftOverlay(tableId)
         activeCraftKeys.remove(tableId).orEmpty().forEach { key ->
             val part = table.pieces[key] ?: return@forEach
             if (!part.display.isValid) return@forEach
@@ -999,6 +1093,20 @@ internal object OriginWorkshopTablesModule : PluginModule {
                 display.glowColorOverride = null
             }
         }
+    }
+
+    private fun expandedGlowTransform(source: Transformation): Transformation {
+        val scale = Vector3f(source.scale).mul(1.04f)
+        val localCenter = Vector3f(0.5f, 0.5f, 0.5f).also(source.rightRotation::transform)
+        val oldCenter = Vector3f(localCenter).mul(source.scale).also(source.leftRotation::transform)
+        val newCenter = Vector3f(localCenter).mul(scale).also(source.leftRotation::transform)
+        val translation = Vector3f(source.translation).add(oldCenter).sub(newCenter)
+        return Transformation(
+            translation,
+            Quaternionf(source.leftRotation),
+            scale,
+            Quaternionf(source.rightRotation),
+        )
     }
 
     /** Restore every touched display to its captured pose and idle visibility. */
