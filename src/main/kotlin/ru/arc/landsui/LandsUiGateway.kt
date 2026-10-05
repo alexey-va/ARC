@@ -1,11 +1,15 @@
 package ru.arc.landsui
 
 import me.angeschossen.lands.api.LandsIntegration
+import me.angeschossen.lands.api.items.ItemType
 import org.bukkit.Bukkit
+import org.bukkit.NamespacedKey
 import org.bukkit.entity.Player
+import org.bukkit.persistence.PersistentDataType
 import ru.arc.ARC
 import ru.arc.lands.currentLands
 import ru.arc.lands.trustedPlayerIds
+import ru.arc.onboarding.ClaimBlockIdentity
 
 interface LandsUiGateway {
     fun lands(player: Player): List<LandsUiLand>
@@ -24,6 +28,7 @@ interface LandsUiGateway {
     fun roleRules(player: Player, context: LandsUiContext, roleId: String): List<LandsUiRule>
     fun searchLands(player: Player, query: String): List<LandsUiLand>
     fun change(player: Player, context: LandsUiContext, change: LandsUiChange): LandsUiChangeResult
+    fun giveClaimBlock(player: Player): LandsUiClaimBlockResult
 }
 
 data class LandsUiClaim(val landId: String, val worldId: java.util.UUID, val chunkX: Int, val chunkZ: Int)
@@ -34,6 +39,8 @@ internal fun canConfirmUnclaim(expected: LandsUiClaim, actual: LandsUiClaim?, cu
     sameClaim(expected, actual) && currentLandId == expected.landId
 
 enum class LandsUiCommandResult { EXECUTED, LAND_UNAVAILABLE, COMMAND_REJECTED, ACTIVE_SELECTION }
+
+enum class LandsUiClaimBlockResult { GIVEN, ALREADY_PRESENT, INVENTORY_FULL, COOLDOWN, UNAVAILABLE }
 
 enum class LandsUiAdminAction(val command: String, private val commandPermission: String) {
     MENU("lands menu", "lands.command.menu"),
@@ -48,6 +55,24 @@ class BukkitLandsUiGateway internal constructor(
     roleName: (me.angeschossen.lands.api.role.Role) -> String = { it.name },
 ) : LandsUiGateway {
     private val management = LandsUiManagementService(integration, roleName)
+
+    override fun giveClaimBlock(player: Player): LandsUiClaimBlockResult {
+        val landPlayer = integration.getLandPlayer(player.uniqueId) ?: return LandsUiClaimBlockResult.UNAVAILABLE
+        val inventory = player.inventory
+        if (inventory.contents.any { it != null && ClaimBlockIdentity.matches(it) && ClaimBlockIdentity.usableBy(it, player) }) {
+            return LandsUiClaimBlockResult.ALREADY_PRESENT
+        }
+        val slot = inventory.storageContents.indexOfFirst { it == null || it.type.isAir }
+        if (slot < 0) return LandsUiClaimBlockResult.INVENTORY_FULL
+        val now = System.currentTimeMillis()
+        val cooldownKey = NamespacedKey("arc", "lands_claim_block_next_at")
+        if ((player.persistentDataContainer.get(cooldownKey, PersistentDataType.LONG) ?: 0L) > now) {
+            return LandsUiClaimBlockResult.COOLDOWN
+        }
+        inventory.setItem(slot, ItemType.CLAIM_BLOCK.build(landPlayer).also { it.amount = 1 })
+        player.persistentDataContainer.set(cooldownKey, PersistentDataType.LONG, now + 30 * 60 * 1_000L)
+        return LandsUiClaimBlockResult.GIVEN
+    }
 
     override fun lands(player: Player): List<LandsUiLand> {
         val landPlayer = integration.getLandPlayer(player.uniqueId) ?: return emptyList()

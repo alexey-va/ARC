@@ -52,9 +52,6 @@ class LandsUiController(
         val nearby = gateway.inspectedLand(player)
         val selected = lands.firstOrNull { it.selected }
         val body = mutableListOf(
-            PaperDialogBody(if (nearby == null) text("location-empty") else text(
-                "location-body", "land" to nearby.name, "owner" to playerName(nearby.ownerId),
-            )),
             DialogTables.body(
                 rows = listOf(
                     text("table-settlements-label") to text("table-count-value", "count" to lands.size.toString()),
@@ -69,17 +66,28 @@ class LandsUiController(
                 ),
                 frame = DialogTables.Frame.LEGENDARY,
                 width = 320,
+                columns = DialogTables.Columns.BALANCED,
             ),
             PaperDialogBody(
                 text("root-body"),
                 width = 500,
             ),
+            DialogTables.body(
+                rows = listOf("create", "edit", "claim", "trust", "untrust").map { command ->
+                    text("root-command-$command") to text("root-command-$command-help")
+                },
+                headers = text("root-command-heading") to text("root-command-help-heading"),
+                frame = DialogTables.Frame.LEGENDARY,
+                width = 320,
+                columns = DialogTables.Columns.BALANCED,
+            ),
         )
         if (lands.isEmpty()) body += PaperDialogBody(text("root-empty"))
-        val buttons = listOf(button("inspect", text(if (nearby == null) "inspect-empty-label" else "inspect-label"),
-            text(if (nearby == null) "location-empty" else "inspect-tooltip")) {
-            val current = gateway.inspectedLand(player)
-            if (current == null) openRoot(player) else openInspection(player, current.id)
+        val buttons = listOfNotNull(nearby?.let {
+            button("inspect", text("inspect-label"), text("inspect-tooltip")) {
+                val current = gateway.inspectedLand(player)
+                if (current == null) openRoot(player) else openInspection(player, current.id)
+            }
         }) + lands.mapIndexed { index, land ->
             button(
                 "land_$index",
@@ -94,6 +102,16 @@ class LandsUiController(
                 ),
             ) { selectAndOpenDetails(player, land.id) }
         } + listOf(
+            button("claim_get", text("claim-get-label"), text("claim-get-tooltip")) {
+                val message = when (gateway.giveClaimBlock(player)) {
+                    LandsUiClaimBlockResult.GIVEN -> "claim-get-given"
+                    LandsUiClaimBlockResult.ALREADY_PRESENT -> "claim-get-already-present"
+                    LandsUiClaimBlockResult.INVENTORY_FULL -> "claim-get-inventory-full"
+                    LandsUiClaimBlockResult.COOLDOWN -> "claim-get-cooldown"
+                    LandsUiClaimBlockResult.UNAVAILABLE -> "claim-get-unavailable"
+                }
+                player.sendMessage(text(message))
+            }.closing(),
             button("create", text("create-label"), text("create-tooltip")) { openCreate(player) },
             button("guide", text("guide-label"), text("guide-tooltip")) { openGuide(player) },
         ) + (if (player.hasPermission("lands.admin.command.edit")) listOf(
@@ -117,8 +135,6 @@ class LandsUiController(
 
     private fun openInspection(player: Player, landId: String) =
         management.open(player, LandsUiContext(landId, LandsUiAccess.CURRENT))
-
-    private fun playerName(id: java.util.UUID): String = gateway.playerName(id) ?: id.toString()
 
     fun openInvite(player: Player, target: LandsUiPlayer) {
         val lands = LandsUiPlanner.inviteableLands(target.id, gateway.lands(player))

@@ -63,9 +63,23 @@ class LandsUiInspectionTest : StringSpec({
             mockkObject(ArcMenus)
             try {
                 every { ArcMenus.openDialog(player, any(), any(), any(), any()) } answers { screen = secondArg() }
+                every { gateway.inspectedLand(player) } returns null
+                controller.openRoot(player)
+                checkNotNull(screen).buttons.any { it.id.value == "inspect" } shouldBe false
+                bodyText(checkNotNull(screen)).contains("Приват под ногами") shouldBe false
+                bodyText(checkNotNull(screen)).contains("Выбранное") shouldBe true
+                bodyText(checkNotNull(screen)).contains("Запривачено") shouldBe true
+                bodyText(checkNotNull(screen)).contains("/lands trust НИК") shouldBe true
+                every { gateway.giveClaimBlock(player) } returns LandsUiClaimBlockResult.GIVEN
+                val getBlock = checkNotNull(screen).buttons.single { it.id.value == "claim_get" }
+                getBlock.closeDialogBeforeAction shouldBe true
+                getBlock.onClick.handle(context)
+                verify(exactly = 1) { gateway.giveClaimBlock(player) }
+
+                every { gateway.inspectedLand(player) } returns land
                 controller.openRoot(player)
                 checkNotNull(screen).buttons.first().id.value shouldBe "inspect"
-                bodyText(checkNotNull(screen)).contains("HeadPlayer") shouldBe true
+                bodyText(checkNotNull(screen)).contains("HeadPlayer") shouldBe false
                 checkNotNull(screen).buttons.first().onClick.handle(context)
                 val inspection = checkNotNull(screen)
                 inspection.id shouldBe "lands.inspect"
