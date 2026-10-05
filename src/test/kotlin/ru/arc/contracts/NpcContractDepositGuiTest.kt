@@ -33,16 +33,18 @@ class NpcContractDepositGuiTest : TestBase() {
             NpcContractDepositGui.start()
             for (group in listOf("food_orders", "forge_orders", "bank_orders", "guild_orders")) {
                 val definition = ResourceContractDefinition("order_$group", "Треска", "minecraft:cod",
-                    ContractFunding.SERVER_ENVELOPE, 1000, Long.MAX_VALUE, 100, 10_000, 100, 64,
-                    maxSubmissionQuantity = 64, group = group)
+                    ContractFunding.SERVER_ENVELOPE, 1000, Long.MAX_VALUE, 100, 500_000, 1536, 1536,
+                    maxSubmissionQuantity = 1536, group = group)
                 val view = ResourceContractPlayerView(ResourceContractView(definition.id, definition.displayName,
                     definition.itemKey, "server-envelope", "open", definition.windowStartsAt, definition.windowEndsAt,
-                    100, 10_000, 0, 0, 100, 0, 0, 100, 0, group), 1, 64, 64, 0, 0, 64, 100,
+                    100, 500_000, 0, 0, 1536, 0, 0, 1536, 0, group), 1, 1536, 1536, 0, 0, 1536, 100,
                     10_000, 10_000, definition, 0, 1500)
                 every { ContractOriginGate.canSubmit(player, group) } returns true
-                every { ContractsManager.currentPlayerViews(player.uniqueId, group, any(), any()) } returns listOf(view)
-                every { ContractsManager.quote(player, definition.id, any()) } answers {
-                    ContractSubmissionQuote(definition.id, 1000, player.uniqueId.toString(), thirdArg(),
+                every { ContractsManager.currentPlayerViews(player.uniqueId, group, any(), any()) } returns if (group == "food_orders") (1..21).map { index ->
+                    view.copy(contract = view.contract.copy(id = "order_${group}_$index", displayName = "Треска $index"))
+                } else listOf(view)
+                every { ContractsManager.quote(player, any(), any()) } answers {
+                    ContractSubmissionQuote(secondArg(), 1000, player.uniqueId.toString(), thirdArg(),
                         thirdArg<Int>() * 100L, 0, 1500)
                 }
                 var saleCalls = 0
@@ -59,16 +61,16 @@ class NpcContractDepositGuiTest : TestBase() {
                 NpcContractDepositGui.open(player, group)
                 val inventoryView = player.openInventory
                 val top = inventoryView.topInventory
-                top.size shouldBe 27
+                top.size shouldBe 54
                 PlainTextComponentSerializer.plainText().serialize(inventoryView.title()) shouldBe when (group) {
                     "food_orders" -> "Матео · продукты для бара"
                     "forge_orders" -> "Заказы кузницы"
                     "bank_orders" -> "Закупки палаты сделок"
                     else -> "Снабжение гильдии"
                 }
-                val layout = ArcMenus.current().catalog.require(ArcMenuSchema.CONTRACT_DESKS.getValue(3))
+                val layout = ArcMenus.current().catalog.require(ArcMenuSchema.CONTRACT_DESKS.getValue(6))
                 val deposits = layout.region(ArcMenuSchema.CONTRACT_DEPOSIT).map { it.index }
-                deposits shouldBe listOf(6,7,8,15,16,17,24,25,26)
+                deposits shouldBe (0 until 6).flatMap { row -> (5..8).map { row * 9 + it } }
                 deposits.forEachIndexed { index, slot ->
                     val offered = ItemStack(Material.COD, index + 1)
                     inventoryView.setCursor(offered)
@@ -77,8 +79,21 @@ class NpcContractDepositGuiTest : TestBase() {
                     top.getItem(slot) shouldBe offered
                     inventoryView.cursor.type.isAir shouldBe true
                 }
-                ContractDeskStorage(player, group, { false }).snapshot().map { it?.amount } shouldBe (1..9).toList()
+                ContractDeskStorage(player, group, { false }).snapshot().map { it?.amount } shouldBe (1..24).toList()
                 saleCalls shouldBe 0
+                top.getItem(46)!!.type shouldBe Material.GRAY_STAINED_GLASS_PANE
+                top.getItem(46)!!.itemMeta.hasCustomModelData() shouldBe false
+                if (group == "food_orders") {
+                    top.getItem(48)!!.itemMeta.customModelData shouldBe 11008
+                    server.pluginManager.callEvent(InventoryClickEvent(inventoryView,
+                        InventoryType.SlotType.CONTAINER, 48, ClickType.LEFT, InventoryAction.PICKUP_ALL))
+                    server.scheduler.performTicks(1)
+                    PlainTextComponentSerializer.plainText().serialize(top.getItem(19)!!.itemMeta.displayName()!!)
+                        .contains("Треска 21") shouldBe true
+                    top.getItem(45)!!.itemMeta.customModelData shouldBe 11009
+                    ContractDeskStorage(player, group, { false }).snapshot().map { it?.amount } shouldBe (1..24).toList()
+                    saleCalls shouldBe 0
+                }
                 fun sell() = server.pluginManager.callEvent(InventoryClickEvent(inventoryView,
                     InventoryType.SlotType.CONTAINER, layout.slot("sell").index, ClickType.LEFT, InventoryAction.PICKUP_ALL))
                 sell()

@@ -212,6 +212,7 @@ object ArcMenuSchema {
         "contract-desk-info" to PaperMenuTextContract(values = setOf("status", "page")),
         "contract-desk-order" to PaperMenuTextContract(values = setOf("name", "accepted", "price", "base", "growth", "rank", "remaining", "state")),
         "contract-desk-sell" to PaperMenuTextContract(values = setOf("status", "page")),
+        "contract-desk-empty" to PaperMenuTextContract(),
         "contract-desk-previous" to PaperMenuTextContract(),
         "contract-desk-next" to PaperMenuTextContract(),
         "background" to PaperMenuTextContract(),

@@ -24,7 +24,7 @@ internal class ContractDeskStorage(
     private var dirty = false
 
     override fun snapshot(): List<ItemStack?> = player.persistentDataContainer.get(key, PersistentDataType.BYTE_ARRAY)
-        ?.let(::decodeContractDeskItems) ?: List(9) { null }
+        ?.let(::decodeContractDeskItems) ?: List(ContractDeskLayout.DEPOSIT_CAPACITY) { null }
 
     override fun compareAndSet(expected: List<ItemStack?>, replacement: List<ItemStack?>): Boolean {
         if (pending || !player.isOnline || replacement.any { item -> item != null &&
@@ -34,7 +34,7 @@ internal class ContractDeskStorage(
 
     private fun replace(expected: List<ItemStack?>, replacement: List<ItemStack?>): Boolean {
         if (snapshot() != expected) return false
-        require(replacement.size == 9)
+        require(replacement.size == ContractDeskLayout.DEPOSIT_CAPACITY)
         if (replacement.all { it == null }) player.persistentDataContainer.remove(key)
         else player.persistentDataContainer.set(key, PersistentDataType.BYTE_ARRAY, encodeContractDeskItems(replacement))
         dirty = true
@@ -105,8 +105,9 @@ internal class ContractDeskStorage(
 }
 
 internal fun encodeContractDeskItems(items: List<ItemStack?>): ByteArray {
-    require(items.size == 9)
+    require(items.size == 9 || items.size == ContractDeskLayout.DEPOSIT_CAPACITY)
     return ByteArrayOutputStream().also { bytes -> DataOutputStream(bytes).use { out ->
+        if (items.size == ContractDeskLayout.DEPOSIT_CAPACITY) out.writeInt(-24)
         items.forEach { item ->
             val payload = item?.serializeAsBytes()
             out.writeInt(payload?.size ?: -1)
@@ -117,13 +118,16 @@ internal fun encodeContractDeskItems(items: List<ItemStack?>): ByteArray {
 
 internal fun decodeContractDeskItems(bytes: ByteArray): List<ItemStack?> = DataInputStream(ByteArrayInputStream(bytes)).use { input ->
     require(bytes.size <= 256 * 1024)
-    val items = List(9) {
-        val size = input.readInt()
-        if (size == -1) null else {
-            require(size in 1..65536 && size <= input.available())
-            ItemStack.deserializeBytes(input.readNBytes(size))
+    val first = input.readInt()
+    val expanded = first == -24
+    val items = List(if (expanded) ContractDeskLayout.DEPOSIT_CAPACITY else 9) { slot ->
+        val payloadSize = if (!expanded && slot == 0) first else input.readInt()
+        if (payloadSize == -1) null else {
+            require(payloadSize in 1..65536 && payloadSize <= input.available())
+            ItemStack.deserializeBytes(input.readNBytes(payloadSize))
         }
     }
     require(input.available() == 0)
-    items
+    // Old desks have nine unversioned records. The new negative marker keeps truncation fail-closed.
+    items + List(ContractDeskLayout.DEPOSIT_CAPACITY - items.size) { null }
 }

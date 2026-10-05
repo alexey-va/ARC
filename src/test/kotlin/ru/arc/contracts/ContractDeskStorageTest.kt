@@ -1,6 +1,7 @@
 package ru.arc.contracts
 
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.assertions.throwables.shouldThrowAny
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockkObject
@@ -33,7 +34,7 @@ class ContractDeskStorageTest : StringSpec({
             val reopened = ContractDeskStorage(player, "food_orders", { true }, PaperPlayerDataPersistence {})
             reopened.snapshot() shouldBe offered
             reopened.returnItems()
-            reopened.snapshot() shouldBe List(9) { null }
+            reopened.snapshot() shouldBe List(24) { null }
             player.inventory.storageContents.filterNotNull() shouldBe listOf(ItemStack(Material.COD, 8))
         }
     }
@@ -51,7 +52,7 @@ class ContractDeskStorageTest : StringSpec({
                 every { ContractOriginGate.canSubmit(player, "food_orders") } returns true
                 storage.prepare(PaperContractItems.ANY_RAW_FISH, 5) shouldBe null
                 storage.pending = true
-                storage.compareAndSet(offered, List(9) { null }) shouldBe false
+                storage.compareAndSet(offered, List(24) { null }) shouldBe false
                 val prepared = storage.prepare(PaperContractItems.ANY_RAW_FISH, 5)!!
                 prepared.payloads.map { it.quantity } shouldBe listOf(3, 2)
                 prepared.removeExact() shouldBe ContractInventoryMutation.Confirmed
@@ -90,6 +91,33 @@ class ContractDeskStorageTest : StringSpec({
                 prepared.removeExact() shouldBe ContractInventoryMutation.NotPerformed("slot_changed")
             } finally { unmockkObject(ContractOriginGate) }
         } }
+    }
+    "legacy nine-cell PDC expands without moving items and all twenty-four cells round-trip" {
+        MockBukkitTestRuntime.open().use { runtime ->
+            val player = runtime.server.addPlayer()
+            val legacy = List<ItemStack?>(9) { slot -> if (slot == 8) ItemStack(Material.SALMON, 7) else null }
+            val occupiedFirst = legacy.toMutableList().also { it[0] = ItemStack(Material.COD, 1) }
+            decodeContractDeskItems(encodeContractDeskItems(occupiedFirst)) shouldBe occupiedFirst + List(15) { null }
+            val key = org.bukkit.NamespacedKey("arc", "contract_desk_food_orders")
+            player.persistentDataContainer.set(key, org.bukkit.persistence.PersistentDataType.BYTE_ARRAY,
+                encodeContractDeskItems(legacy))
+            val storage = ContractDeskStorage(player, "food_orders", { true }, PaperPlayerDataPersistence {})
+            val expanded = storage.snapshot()
+            expanded shouldBe legacy + List(15) { null }
+            val offered = expanded.toMutableList().also { it[23] = ItemStack(Material.COD, 13) }
+            storage.compareAndSet(expanded, offered) shouldBe true
+            decodeContractDeskItems(encodeContractDeskItems(offered)) shouldBe offered
+            ContractDeskStorage(player, "food_orders", { true }, PaperPlayerDataPersistence {}).snapshot() shouldBe offered
+            storage.returnItems()
+            storage.snapshot() shouldBe List(24) { null }
+            player.inventory.storageContents.filterNotNull().sumOf { it.amount } shouldBe 20
+        }
+    }
+    "expanded codec rejects truncation at the old record count and trailing bytes" {
+        val bytes = encodeContractDeskItems(List(24) { null })
+        decodeContractDeskItems(bytes) shouldBe List(24) { null }
+        shouldThrowAny { decodeContractDeskItems(bytes.copyOf(4 + 9 * 4)) }
+        shouldThrowAny { decodeContractDeskItems(bytes + byteArrayOf(0)) }
     }
     "market growth is shown separately from rank and rounds consistently for cheap items" {
         contractPriceGrowth(120, 150) shouldBe "+25%"

@@ -91,14 +91,16 @@ object NpcContractDepositGui : Listener {
         val orders = views(desk.player, desk.group)
         // A live catalog generation closes these sessions on reload. Between
         // weekly rotations retain the open chest size and paginate its capacity.
-        val geometry = ContractDeskLayout.calculate(orders.size, desk.page, fixedRows = desk.rows)
+        val geometry = ContractDeskLayout.calculate(orders.size, desk.page)
         val pages = geometry.pageCount
         desk.page = geometry.page
         val visible = geometry.visibleOrderRange.map(orders::get)
         val layout = ArcMenus.current().catalog.require(desk.menu)
         val inventory = desk.session.inventory
-        val background = ArcMenus.background(desk.menu)
-        layout.region(ArcMenuSchema.CONTRACT_DESK_ORDERS).forEach { inventory.setItem(it.index, background?.clone()) }
+        val empty = ArcMenus.item("contract-desk-empty")
+        val leftSlots = layout.region(ArcMenuSchema.CONTRACT_DESK_ORDERS).map { it.index } +
+            (layout.slot("previous").index..layout.slot("next").index)
+        leftSlots.forEach { inventory.setItem(it, empty.clone()) }
         visible.zip(geometry.orderSlots).forEach { (view, slot) ->
             val material = PaperContractItems.material(view.contract.itemKey) ?: return@forEach
             val definition = view.pricingDefinition ?: return@forEach
@@ -125,8 +127,8 @@ object NpcContractDepositGui : Listener {
             else text("instruction", "<#e6fff3>Слева — заказы. Справа — товары для сдачи.")
         inventory.setItem(layout.slot("sell").index, ArcMenus.item(desk.menu, "sell", context(
             "status" to status, "page" to if (pages > 1) Component.text("Страница ${desk.page + 1} / $pages") else Component.empty())))
-        inventory.setItem(layout.slot("previous").index, if (pages > 1 && desk.page > 0) ArcMenus.item(desk.menu, "previous") else background?.clone())
-        inventory.setItem(layout.slot("next").index, if (pages > 1 && desk.page < pages - 1) ArcMenus.item(desk.menu, "next") else background?.clone())
+        inventory.setItem(layout.slot("previous").index, if (pages > 1 && desk.page > 0) ArcMenus.item(desk.menu, "previous") else empty.clone())
+        inventory.setItem(layout.slot("next").index, if (pages > 1 && desk.page < pages - 1) ArcMenus.item(desk.menu, "next") else empty.clone())
         desk.session.refresh()
     }
 
