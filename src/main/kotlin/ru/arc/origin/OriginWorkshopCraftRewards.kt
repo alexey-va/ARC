@@ -1,0 +1,222 @@
+package ru.arc.origin
+
+import dev.lone.itemsadder.api.CustomStack
+import com.google.gson.JsonElement
+import org.bukkit.Material
+import org.bukkit.entity.Player
+import org.bukkit.inventory.ItemStack
+import ru.arc.ARC
+import ru.arc.core.LifecycleTaskScope
+import ru.arc.redis.safety.BoundedJsonCodec
+import ru.arc.redis.safety.JsonObjectContract
+import ru.arc.redis.safety.JsonResourceBounds
+import ru.arc.redis.safety.JsonRootContract
+import ru.arc.redis.safety.RedisHashDecision
+import ru.arc.redis.safety.RedisHashUpdateResult
+import ru.arc.redis.safety.RedisHashUpdater
+import ru.arc.util.Common
+import java.util.UUID
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ConcurrentHashMap
+import java.util.logging.Level
+
+internal data class WorkshopCraftClaim(val request: String, val nextAt: Long) {
+    fun validate() {
+        require(UUID.fromString(request).toString() == request)
+        require(nextAt > 0)
+    }
+}
+
+internal fun workshopClaimAllowed(current: WorkshopCraftClaim?, request: UUID, now: Long): Boolean =
+    current == null || (current.request != request.toString() && now >= current.nextAt)
+
+internal fun workshopCraftClaimCodec() = BoundedJsonCodec(
+    Common.gson, WorkshopCraftClaim::class.java,
+    object : JsonRootContract {
+        override fun validate(value: JsonElement) {
+            JsonObjectContract(allowedFields = setOf("request", "nextAt")).validate(value)
+            val request = value.asJsonObject.get("request")
+            val nextAt = value.asJsonObject.get("nextAt")
+            require(request.isJsonPrimitive && request.asJsonPrimitive.isString)
+            require(nextAt.isJsonPrimitive && nextAt.asJsonPrimitive.isNumber)
+            require(nextAt.asString.matches(Regex("[1-9][0-9]{0,18}")))
+            require(nextAt.asString.toLongOrNull() != null)
+        }
+    },
+    JsonResourceBounds(maxCharacters = 256, maxDepth = 2, maxContainerEntries = 4,
+        maxTotalNodes = 8, maxStringCharacters = 64),
+) { it.validate() }
+
+internal sealed interface WorkshopCraftPlan {
+    data class Ready(val contents: Array<ItemStack?>) : WorkshopCraftPlan
+    data class Missing(val material: Material, val amount: Int) : WorkshopCraftPlan
+    data object Full : WorkshopCraftPlan
+}
+
+/** One detached inventory replacement: an interrupted game never removes materials. */
+internal fun planWorkshopCraft(
+    storage: Array<ItemStack?>,
+    cost: Map<Material, Int>,
+    reward: ItemStack,
+): WorkshopCraftPlan {
+    require(!reward.type.isAir && cost.isNotEmpty())
+    val after = storage.map { it?.clone() }.toTypedArray()
+    for ((material, quantity) in cost) {
+        require(material.isItem && quantity in 1..2_304)
+        val plain = ItemStack(material)
+        var remaining = quantity
+        for (slot in after.indices) {
+            val item = after[slot] ?: continue
+            // Custom, renamed and otherwise modified items are never consumed as raw material.
+            if (!item.isSimilar(plain)) continue
+            val take = minOf(remaining, item.amount)
+            remaining -= take
+            after[slot] = if (take == item.amount) null else item.also { it.amount -= take }
+            if (remaining == 0) break
+        }
+        if (remaining != 0) return WorkshopCraftPlan.Missing(material, remaining)
+    }
+    val slot = after.indices.firstOrNull { after[it]?.let { stack ->
+        stack.isSimilar(reward) && stack.amount < stack.maxStackSize
+    } == true } ?: after.indices.firstOrNull { after[it] == null || after[it]?.type?.isAir == true }
+        ?: return WorkshopCraftPlan.Full
+    after[slot] = after[slot]?.takeUnless { it.type.isAir }?.also { it.amount++ }
+        ?: reward.clone().also { it.amount = 1 }
+    return WorkshopCraftPlan.Ready(after)
+}
+
+/** Async durable quota, followed by one server-thread material-to-furniture exchange. */
+internal class OriginWorkshopCraftRewards(
+    private val cost: Map<Material, Int>,
+    private val cooldownMillis: Long,
+    private val productId: String,
+) : AutoCloseable {
+    private val redis = ARC.redisManager
+    private val tasks = LifecycleTaskScope()
+    @Volatile private var closed = false
+    private val pending = ConcurrentHashMap.newKeySet<UUID>()
+    private val codec = workshopCraftClaimCodec()
+    private val updater = redis?.let { RedisHashUpdater(it, KEY, codec) }
+
+    init {
+        require(cooldownMillis in 3_600_000L..604_800_000L)
+        require(cost.isNotEmpty() && cost.all { (m, n) -> m.isItem && !m.isAir && n in 1..2_304 })
+    }
+
+    fun missing(player: Player): String? = when (val plan = plan(player)) {
+        is WorkshopCraftPlan.Ready -> null
+        is WorkshopCraftPlan.Missing -> "Не хватает: ${materialName(plan.material)} ×${plan.amount}."
+        WorkshopCraftPlan.Full -> "Освободи место для готовой мебели."
+        null -> "Мастерская временно недоступна."
+    }
+
+    fun status(playerId: UUID): CompletableFuture<Long> = redis?.loadMapEntries(KEY, playerId.toString())
+        ?.thenApply { values ->
+            require(values.size == 1)
+            values.single()?.let(codec::decode)?.let { (it.nextAt - System.currentTimeMillis()).coerceAtLeast(0L) } ?: 0L
+        } ?: CompletableFuture.failedFuture(IllegalStateException("Workshop quota storage unavailable"))
+
+    fun complete(player: Player, requestId: UUID, stillValid: () -> Boolean, callback: (String?) -> Unit) {
+        if (closed || !player.isOnline || !stillValid()) return
+        val playerId = player.uniqueId
+        if (!pending.add(playerId)) return
+        val problem = missing(player)
+        val store = updater
+        if (problem != null || store == null) {
+            pending.remove(playerId)
+            callback(problem ?: "Мастерская временно недоступна; материалы сохранены.")
+            return
+        }
+        val now = System.currentTimeMillis()
+        val claim = WorkshopCraftClaim(requestId.toString(), Math.addExact(now, cooldownMillis))
+        val generation = tasks.token()
+        store.update(playerId.toString()) { current ->
+            if (workshopClaimAllowed(current, requestId, now)) RedisHashDecision.Write(claim)
+            else RedisHashDecision.Reject
+        }.whenComplete { result, failure ->
+            if (closed) {
+                if (result is RedisHashUpdateResult.Changed && result.after == claim) releaseUnused(playerId, claim)
+                pending.remove(playerId)
+                if (pending.isEmpty()) tasks.close()
+                return@whenComplete
+            }
+            tasks.runSync(generation) {
+                pending.remove(playerId)
+                if (closed) {
+                    if (result is RedisHashUpdateResult.Changed && result.after == claim) releaseUnused(playerId, claim)
+                    if (pending.isEmpty()) tasks.close()
+                    return@runSync
+                }
+                if (failure != null) {
+                    ARC.instance.logger.log(Level.WARNING, "ORIGIN_WORKSHOP_GAME claim unconfirmed player=$playerId request=$requestId", failure)
+                    if (!closed && player.isOnline && stillValid()) callback("Не удалось подтвердить сборку. Материалы сохранены.")
+                    return@runSync
+                }
+                if (result !is RedisHashUpdateResult.Changed || result.after != claim) {
+                    if (!closed && player.isOnline && stillValid()) callback("Сегодня мебель уже получена. Приходи после окончания перерыва.")
+                    return@runSync
+                }
+                // The durable claim precedes the inventory side effect. Unknown crash outcomes
+                // retain the quota and are never replayed; both inventory sides share one snapshot.
+                if (closed || !player.isOnline || !stillValid()) {
+                    releaseUnused(playerId, claim)
+                    if (closed && pending.isEmpty()) tasks.close()
+                    return@runSync
+                }
+                val before = player.inventory.storageContents.map { it?.clone() }.toTypedArray()
+                when (val plan = plan(player)) {
+                    is WorkshopCraftPlan.Ready -> try {
+                        player.inventory.storageContents = plan.contents
+                    } catch (error: Exception) {
+                        runCatching { player.inventory.storageContents = before }
+                        ARC.instance.logger.log(Level.SEVERE, "ORIGIN_WORKSHOP_GAME exchange uncertain player=$playerId request=$requestId", error)
+                        callback("Не удалось завершить выдачу. Сообщи администрации; повторная выдача заблокирована.")
+                        return@runSync
+                    }
+                    else -> {
+                        releaseUnused(playerId, claim)
+                        callback(missing(player) ?: "Материалы изменились. Начни сборку снова.")
+                        return@runSync
+                    }
+                }
+                ARC.instance.logger.info("ORIGIN_WORKSHOP_GAME reward=DELIVERED player=$playerId request=$requestId product=$productId")
+                callback(null)
+            }
+        }
+    }
+
+    private fun plan(player: Player): WorkshopCraftPlan? {
+        val reward = CustomStack.getInstance(productId)?.itemStack?.clone() ?: return null
+        return planWorkshopCraft(player.inventory.storageContents, cost, reward)
+    }
+
+    private fun releaseUnused(playerId: UUID, claim: WorkshopCraftClaim) {
+        updater?.update(playerId.toString()) { current ->
+            if (current == claim) RedisHashDecision.Delete else RedisHashDecision.Reject
+        }?.whenComplete { _, failure ->
+            if (failure != null) ARC.instance.logger.log(Level.WARNING,
+                "ORIGIN_WORKSHOP_GAME unused claim retained player=$playerId request=${claim.request}", failure)
+        }
+    }
+
+    override fun close() {
+        closed = true
+        // Let an in-flight durable claim finish and release it if the owner reloaded.
+        if (pending.isEmpty()) tasks.close()
+    }
+
+    private companion object {
+        const val KEY = "arc.origin-furniture-craft.v1"
+        fun materialName(material: Material): String = when (material) {
+            Material.OAK_PLANKS -> "дубовые доски"
+            Material.SPRUCE_PLANKS -> "еловые доски"
+            Material.SPRUCE_LOG -> "еловые брёвна"
+            Material.STICK -> "палки"
+            Material.WHITE_WOOL -> "белая шерсть"
+            Material.YELLOW_WOOL -> "жёлтая шерсть"
+            Material.IRON_INGOT -> "железные слитки"
+            Material.IRON_NUGGET -> "кусочки железа"
+            else -> material.name.lowercase().replace('_', ' ')
+        }
+    }
+}

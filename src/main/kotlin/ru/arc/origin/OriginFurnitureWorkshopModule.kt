@@ -5,6 +5,7 @@ import net.citizensnpcs.api.CitizensAPI
 import net.citizensnpcs.api.event.CitizensEnableEvent
 import net.citizensnpcs.api.npc.NPC
 import net.citizensnpcs.trait.LookClose
+import net.citizensnpcs.trait.SleepTrait
 import net.citizensnpcs.api.trait.trait.Equipment as CitizensEquipment
 import org.bukkit.Bukkit
 import org.bukkit.Location
@@ -43,7 +44,9 @@ import java.util.Locale
 import java.util.UUID
 import java.util.logging.Level
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.floor
+import kotlin.math.sin
 
 /** A world-space workshop anchor. Route anchors are validated as cell-centered floor points. */
 internal data class OriginFurnitureWorkshopPoint(
@@ -65,6 +68,34 @@ internal data class OriginFurnitureWorkshopPoint(
     fun cell(): NpcRouteCell = NpcRouteCell(floor(x).toInt(), floor(z).toInt())
 
     fun sameCell(other: OriginFurnitureWorkshopPoint): Boolean = cell() == other.cell()
+}
+
+internal data class OriginFurnitureWorkshopCarryAnchor(
+    val x: Double,
+    val z: Double,
+    val yaw: Float,
+)
+
+/** Places a carried display in front of the actor while keeping its configured facing offset. */
+internal fun originFurnitureWorkshopCarryAnchor(
+    x: Double,
+    z: Double,
+    actorYaw: Float,
+    forwardDistance: Double,
+    yawOffset: Float,
+): OriginFurnitureWorkshopCarryAnchor {
+    require(x.isFinite() && z.isFinite() && actorYaw.isFinite() && yawOffset.isFinite()) {
+        "workshop carry pose must be finite"
+    }
+    require(forwardDistance.isFinite() && forwardDistance >= 0.0) {
+        "workshop carry forward-distance must be finite and non-negative"
+    }
+    val radians = Math.toRadians(actorYaw.toDouble())
+    return OriginFurnitureWorkshopCarryAnchor(
+        x = x - sin(radians) * forwardDistance,
+        z = z + cos(radians) * forwardDistance,
+        yaw = actorYaw + yawOffset,
+    )
 }
 
 internal data class OriginFurnitureWorkshopLeg(
@@ -159,6 +190,7 @@ internal data class OriginFurnitureWorkshopWorker(
     val finishedTranslationY: Double,
     val parts: List<OriginFurnitureWorkshopPart>,
     val beats: List<OriginFurnitureWorkshopBeat>,
+    val sleepingAt: OriginFurnitureWorkshopPoint? = null,
 ) {
     init {
         require(tableId.matches(Regex("[a-z0-9_-]{1,48}"))) { "invalid workshop table id '$tableId'" }
@@ -195,7 +227,8 @@ internal data class OriginFurnitureWorkshopSettings(
     val carryScale: Double,
     val carryOffsetY: Double,
     val carryTranslationY: Double,
-    val carryYaw: Float,
+    val carryForwardDistance: Double,
+    val carryYawOffset: Float,
     val carryPitch: Float,
     val routeProfile: NpcRouteProfile,
     val workers: List<OriginFurnitureWorkshopWorker>,
@@ -215,7 +248,10 @@ internal data class OriginFurnitureWorkshopSettings(
         require(carryTranslationY.isFinite() && carryTranslationY in -4.0..4.0) {
             "workshop carry translation-y must be within -4..4"
         }
-        require(carryYaw.isFinite() && carryYaw in -360f..360f && carryPitch.isFinite() && carryPitch in -90f..90f) {
+        require(carryForwardDistance.isFinite() && carryForwardDistance in 0.0..2.0) {
+            "workshop carry forward-distance must be within 0..2"
+        }
+        require(carryYawOffset.isFinite() && carryYawOffset in -360f..360f && carryPitch.isFinite() && carryPitch in -90f..90f) {
             "workshop carry pose is invalid"
         }
         require(workers.map { it.role }.toSet() == OriginFurnitureWorkshopRole.entries.toSet()) {
@@ -280,7 +316,11 @@ internal data class OriginFurnitureWorkshopSettings(
                 carryScale = source.real("$root.carry.scale", 0.34),
                 carryOffsetY = source.real("$root.carry.offset-y", 0.7),
                 carryTranslationY = source.real("$root.carry.translation-y", 0.18),
-                carryYaw = source.real("$root.carry.yaw", 90.0).toFloat(),
+                carryForwardDistance = source.real("$root.carry.forward-distance", 0.4),
+                carryYawOffset = source.real(
+                    "$root.carry.yaw-offset",
+                    source.real("$root.carry.yaw", 90.0),
+                ).toFloat(),
                 carryPitch = source.real("$root.carry.pitch", 0.0).toFloat(),
                 routeProfile = routeProfile,
                 workers = workers,
@@ -322,6 +362,7 @@ internal data class OriginFurnitureWorkshopSettings(
                 finishedTranslationY = config.real("$path.finished-translation-y", 0.5),
                 parts = readParts(config, "$path.parts"),
                 beats = readBeats(config, "$path.beats"),
+                sleepingAt = if (config.bool("$path.sleeping", false)) readPoint(config, "$path.sleeping-at") else null,
             )
         }
 
@@ -633,7 +674,7 @@ internal fun workshopWorkersDue(
     activeRoles: Set<OriginFurnitureWorkshopRole>,
     tick: Long,
 ): List<OriginFurnitureWorkshopWorker> = workers.filter { worker ->
-    worker.role !in activeRoles && tick >= nextDueTick.getValue(worker.role)
+    worker.sleepingAt == null && worker.role !in activeRoles && tick >= nextDueTick.getValue(worker.role)
 }
 
 private enum class WorkshopAfterRoute { PICKUP, WORK_RETURN, WORKSTATION, OUTPUT, HOME }
@@ -716,8 +757,10 @@ private class OriginFurnitureWorkshopRuntime private constructor(
             }
             if (actor.isSpawned && actor.entity.world == world) {
                 check(!actor.navigator.isNavigating) { "Workshop NPC ${actor.id} is navigating outside this runtime" }
-                check(actor.entity.teleport(worker.home.inWorld(world))) { "Workshop NPC ${actor.id} rejected home reset" }
-                faceOriginScenePoint(actor, worker.restFocus.inWorld(world))
+                actor.getTraitNullable(SleepTrait::class.java)?.setSleeping(null)
+                check(actor.entity.teleport((worker.sleepingAt ?: worker.home).inWorld(world))) { "Workshop NPC ${actor.id} rejected home reset" }
+                if (worker.sleepingAt != null) actor.getOrAddTrait(SleepTrait::class.java).setSleeping(worker.sleepingAt.inWorld(world))
+                else faceOriginScenePoint(actor, worker.restFocus.inWorld(world))
             }
             if (worker.deliverOutput) stock[worker.role] = createItemDisplay(
                 item = products.getValue(worker.role),
@@ -744,7 +787,7 @@ private class OriginFurnitureWorkshopRuntime private constructor(
     private fun tickOnce() {
         tick++
         if (tick % settings.machineUpdateTicks == 0L) {
-            settings.workers.forEach { worker ->
+            settings.workers.filter { it.sleepingAt == null }.forEach { worker ->
                 val actor = actors.getValue(worker.role)
                 OriginWorkshopTablesModule.animateDrive(worker.tableId, tick + WORKSHOP_MACHINE_INTERPOLATION_TICKS,
                     actor.isSpawned && actor.entity.world == world && hasViewer(actor.entity.location))
@@ -1192,12 +1235,19 @@ private class OriginFurnitureWorkshopRuntime private constructor(
 
     private fun carryLocation(actor: NPC, world: World): Location {
         val location = actor.entity.location
+        val anchor = originFurnitureWorkshopCarryAnchor(
+            x = location.x,
+            z = location.z,
+            actorYaw = location.yaw,
+            forwardDistance = settings.carryForwardDistance,
+            yawOffset = settings.carryYawOffset,
+        )
         return Location(
             world,
-            location.x,
+            anchor.x,
             location.y + settings.carryOffsetY,
-            location.z,
-            settings.carryYaw,
+            anchor.z,
+            anchor.yaw,
             settings.carryPitch,
         )
     }
@@ -1260,6 +1310,9 @@ private class OriginFurnitureWorkshopRuntime private constructor(
         tasks.close()
         active.values.toList().forEach(::closeActor)
         active.clear()
+        settings.workers.filter { it.sleepingAt != null }.forEach { worker ->
+            actors[worker.role]?.getTraitNullable(SleepTrait::class.java)?.setSleeping(null)
+        }
         settings.workers.forEach { OriginWorkshopTablesModule.animateDrive(it.tableId, 0L, false) }
         routeController.close()
         stock.values.toList().forEach { runCatching { it.remove() } }

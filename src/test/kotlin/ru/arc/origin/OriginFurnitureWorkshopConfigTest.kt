@@ -56,9 +56,9 @@ class OriginFurnitureWorkshopConfigTest :
                 settings.workers.map { it.role.npcId } shouldBe listOf(430, 458, 459, 460)
                 settings.workers.map { it.tableId } shouldBe listOf("carpenter", "upholsterer", "assembler", "finisher")
                 val allDue = settings.workers.associate { it.role to 100L }
-                workshopWorkersDue(settings.workers, allDue, emptySet(), 100L) shouldBe settings.workers
+                workshopWorkersDue(settings.workers, allDue, emptySet(), 100L) shouldBe settings.workers.filter { it.sleepingAt == null }
                 workshopWorkersDue(settings.workers, allDue, setOf(OriginFurnitureWorkshopRole.CARPENTER), 100L)
-                    .map { it.role } shouldBe settings.workers.drop(1).map { it.role }
+                    .map { it.role } shouldBe settings.workers.drop(1).filter { it.sleepingAt == null }.map { it.role }
                 workshopWorkersDue(settings.workers, allDue, emptySet(), 99L) shouldBe emptyList()
                 workshopWorkersDue(settings.workers, allDue, allDue.keys, 100L) shouldBe emptyList()
                 settings.workers.last().deliverOutput shouldBe false
@@ -85,8 +85,8 @@ class OriginFurnitureWorkshopConfigTest :
                     "furnituresplus:white_wooden_diningtable",
                 )
                 settings.workers.filter { it.deliverOutput }.map { Triple(it.output.x, it.output.y, it.output.z) } shouldBe listOf(
-                    Triple(-36.5, 71.18, -69.5),
-                    Triple(-36.5, 71.18, -54.5),
+                    Triple(-36.5, 71.18, -67.0),
+                    Triple(-36.5, 71.18, -64.0),
                     Triple(-44.5, 71.18, -46.5),
                 )
 
