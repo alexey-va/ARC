@@ -264,7 +264,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         }
         OriginWorkshopTablesModule.pointAt(TABLE, OriginWorkshopPoint(0.0, 1.78, -1.35))?.let { labelAt ->
             label = runCatching {
-                displayOwner.spawnText(labelAt, Component.text("Собрать стул · ПКМ")).apply {
+                displayOwner.spawnText(labelAt, Component.text("Собрать стул · ЛКМ")).apply {
                     isVisibleByDefault = true
                     billboard = Display.Billboard.CENTER
                     viewRange = 0.55f
