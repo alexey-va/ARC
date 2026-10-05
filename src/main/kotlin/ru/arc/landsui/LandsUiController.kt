@@ -35,13 +35,18 @@ class LandsUiController(
     fun openCurrent(player: Player) {
         val landId = gateway.currentLandId(player)
         if (landId != null && gateway.land(player, landId) != null) selectAndOpenDetails(player, landId)
+        else if (landId != null) openInspection(player, landId)
         else openRoot(player)
     }
 
     fun openRoot(player: Player) {
         val lands = gateway.lands(player)
+        val nearby = gateway.inspectedLand(player)
         val selected = lands.firstOrNull { it.selected }
         val body = mutableListOf(
+            PaperDialogBody(if (nearby == null) text("location-empty") else text(
+                "location-body", "land" to nearby.name, "owner" to playerName(nearby.ownerId),
+            )),
             DialogTables.body(
                 rows = listOf(
                     text("table-settlements-label") to text("table-count-value", "count" to lands.size.toString()),
@@ -63,7 +68,11 @@ class LandsUiController(
             ),
         )
         if (lands.isEmpty()) body += PaperDialogBody(text("root-empty"))
-        val buttons = lands.mapIndexed { index, land ->
+        val buttons = listOf(button("inspect", text(if (nearby == null) "inspect-empty-label" else "inspect-label"),
+            text(if (nearby == null) "location-empty" else "inspect-tooltip")) {
+            val current = gateway.inspectedLand(player)
+            if (current == null) openRoot(player) else openInspection(player, current.id)
+        }) + lands.mapIndexed { index, land ->
             button(
                 "land_$index",
                 text(if (land.selected) "land-selected-label" else "land-label", "land" to land.name),
@@ -93,6 +102,96 @@ class LandsUiController(
             reopen = { openRoot(player) },
         )
     }
+
+    private fun openInspection(player: Player, landId: String) {
+        withInspectedLand(player, landId) { land ->
+            val buttons = mutableListOf(
+                button("inspect_members", text("members-label"), text("inspect-members-tooltip")) {
+                    openInspectionMembers(player, landId)
+                },
+            )
+            if (gateway.land(player, landId) != null) {
+                buttons += button("manage", text("manage-label"), text("manage-tooltip")) {
+                    selectAndOpenDetails(player, landId)
+                }
+            }
+            LandsUiAdminAction.entries.filter { it.allowed(player) }.forEach { action ->
+                val key = if (action == LandsUiAdminAction.MENU) "admin-menu" else "admin-members"
+                buttons += button("admin_${action.name.lowercase()}", text("$key-label"), text("$key-tooltip")) {
+                    if (!action.allowed(player)) {
+                        player.sendMessage(text("admin-denied"))
+                        openInspection(player, landId)
+                    } else when (gateway.administerCurrent(player, landId, action)) {
+                        LandsUiCommandResult.EXECUTED -> Unit
+                        LandsUiCommandResult.LAND_UNAVAILABLE -> {
+                            player.sendMessage(text("inspect-moved"))
+                            openRoot(player)
+                        }
+                        else -> player.sendMessage(text("action-failed"))
+                    }
+                }.closing()
+            }
+            show(player, PaperDialogScreen(
+                id = "lands.inspect",
+                title = text("inspect-title", "land" to land.name),
+                body = listOf(DialogTables.body(
+                    rows = listOf(
+                        text("table-land-label") to text("inspect-value", "value" to land.name),
+                        text("table-owner-label") to text("inspect-value", "value" to playerName(land.ownerId)),
+                        text("table-territory-label") to text("inspect-chunks", "chunks" to land.chunks.toString()),
+                        text("table-members-label") to text("inspect-value", "value" to land.memberIds.size.toString()),
+                    ), frame = DialogTables.Frame.LEGENDARY, width = 320,
+                )),
+                buttons = buttons,
+                exitButton = back("back") { openRoot(player) },
+                columns = 2,
+            ), reopen = { openInspection(player, landId) })
+        }
+    }
+
+    private fun openInspectionMembers(player: Player, landId: String, requestedPage: Int = 0) {
+        withInspectedLand(player, landId) { land ->
+            val members = land.memberIds.map { id -> id to playerName(id) }
+                .sortedWith(compareBy<Pair<java.util.UUID, String>> { it.first != land.ownerId }
+                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.second })
+            val lastPage = (members.size - 1).coerceAtLeast(0) / settings.maxListedPlayers
+            val page = requestedPage.coerceIn(0, lastPage)
+            val rows = members.drop(page * settings.maxListedPlayers).take(settings.maxListedPlayers).map { (id, name) ->
+                text("inspect-value", "value" to name) to text(
+                    if (id == land.ownerId) "inspect-owner" else "inspect-member",
+                )
+            }
+            val buttons = mutableListOf<PaperDialogButton>()
+            if (page > 0) buttons += button("previous", text("previous-page")) {
+                openInspectionMembers(player, landId, page - 1)
+            }
+            if (page < lastPage) buttons += button("next", text("next-page")) {
+                openInspectionMembers(player, landId, page + 1)
+            }
+            show(player, PaperDialogScreen(
+                id = "lands.inspect-members",
+                title = text("members-title", "land" to land.name),
+                body = listOf(
+                    PaperDialogBody(text("inspect-members-page", "page" to (page + 1).toString(),
+                        "pages" to (lastPage + 1).toString(), "members" to members.size.toString())),
+                    DialogTables.body(rows = rows, frame = DialogTables.Frame.LEGENDARY, width = 320),
+                ),
+                buttons = buttons,
+                exitButton = back("back") { openInspection(player, landId) },
+                columns = 2,
+            ), reopen = { openInspectionMembers(player, landId, page) })
+        }
+    }
+
+    private fun withInspectedLand(player: Player, landId: String, action: (LandsUiLand) -> Unit) {
+        val current = gateway.inspectedLand(player)
+        if (current == null || current.id != landId) {
+            player.sendMessage(text("inspect-moved"))
+            openRoot(player)
+        } else action(current)
+    }
+
+    private fun playerName(id: java.util.UUID): String = gateway.playerName(id) ?: id.toString()
 
     fun openInvite(player: Player, target: LandsUiPlayer) {
         val lands = LandsUiPlanner.inviteableLands(target.id, gateway.lands(player))

@@ -17,6 +17,8 @@ interface LandsUiGateway {
     fun selectAndExecute(player: Player, landId: String, command: String): LandsUiCommandResult
     fun unclaimCurrent(player: Player, landId: String): LandsUiCommandResult
     fun currentLandId(player: Player): String?
+    fun inspectedLand(player: Player): LandsUiLand?
+    fun administerCurrent(player: Player, landId: String, action: LandsUiAdminAction): LandsUiCommandResult
     fun currentClaim(player: Player): LandsUiClaim?
 }
 
@@ -28,6 +30,14 @@ internal fun canConfirmUnclaim(expected: LandsUiClaim, actual: LandsUiClaim?, cu
     sameClaim(expected, actual) && currentLandId == expected.landId
 
 enum class LandsUiCommandResult { EXECUTED, LAND_UNAVAILABLE, COMMAND_REJECTED, ACTIVE_SELECTION }
+
+enum class LandsUiAdminAction(val command: String, private val commandPermission: String) {
+    MENU("lands menu", "lands.command.menu"),
+    MEMBERS("lands member menu", "lands.command.member.menu");
+
+    fun allowed(player: Player): Boolean =
+        player.hasPermission("lands.admin.command.edit") && player.hasPermission(commandPermission)
+}
 
 class BukkitLandsUiGateway internal constructor(
     private val integration: LandsIntegration = LandsIntegration.of(ARC.instance),
@@ -87,6 +97,30 @@ class BukkitLandsUiGateway internal constructor(
         val location = player.location
         return integration.getLandByUnloadedChunk(location.world, location.blockX shr 4, location.blockZ shr 4)
             ?.ulid?.toString()
+    }
+
+    override fun inspectedLand(player: Player): LandsUiLand? {
+        val location = player.location
+        val land = integration.getLandByUnloadedChunk(location.world, location.blockX shr 4, location.blockZ shr 4)
+            ?.takeIf { it.exists() } ?: return null
+        return LandsUiLand(
+            id = land.ulid.toString(), name = land.name, ownerId = land.ownerUID,
+            chunks = land.chunksAmount, maxChunks = land.maxChunks,
+            memberIds = land.trustedPlayerIds() + land.ownerUID, maxMembers = land.maxMembers,
+            balance = land.balance, selected = false,
+        )
+    }
+
+    override fun administerCurrent(player: Player, landId: String, action: LandsUiAdminAction): LandsUiCommandResult {
+        if (!action.allowed(player)) return LandsUiCommandResult.COMMAND_REJECTED
+        val location = player.location
+        val land = integration.getLandByUnloadedChunk(location.world, location.blockX shr 4, location.blockZ shr 4)
+            ?.takeIf { it.exists() && it.ulid.toString() == landId }
+            ?: return LandsUiCommandResult.LAND_UNAVAILABLE
+        val landPlayer = integration.getLandPlayer(player.uniqueId) ?: return LandsUiCommandResult.LAND_UNAVAILABLE
+        landPlayer.setEditLand(land)
+        return if (player.performCommand(action.command)) LandsUiCommandResult.EXECUTED
+        else LandsUiCommandResult.COMMAND_REJECTED
     }
 
     override fun currentClaim(player: Player): LandsUiClaim? {
