@@ -43,7 +43,7 @@ text:
   roles-title: '<#c4a7e7>Роли · <area>'
   roles-body: '<#e8dfd2>Откройте роль, чтобы посмотреть её разрешения. Настройка прав доступна через кнопку в карточке роли.'
   role-entry: '<#c4a7e7><role> ›'
-  visitor-role-entry: '<#86dcf1><role> · гости ›'
+  visitor-role-entry: '<#86dcf1><role> ›'
   role-title: '<#c4a7e7>Права · <role>'
   role-body: '<#e8dfd2>Регион: <white><area><newline><#e8dfd2>Ниже — текущие права роли. Для изменения откройте настройки Lands, затем «Роли» и эту роль.'
   rule-enabled: '<#9bd48d>✔ <rule> · разрешено'

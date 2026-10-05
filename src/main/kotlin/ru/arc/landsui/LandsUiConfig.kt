@@ -75,7 +75,7 @@ class LandsUiConfig(private val config: Config) {
             "roles-title" to "<#c4a7e7>Роли · <area>",
             "roles-body" to "<#e8dfd2>Откройте роль, чтобы посмотреть её разрешения. Настройка прав доступна через кнопку в карточке роли.",
             "role-entry" to "<#c4a7e7><role> ›",
-            "visitor-role-entry" to "<#86dcf1><role> · гости ›",
+            "visitor-role-entry" to "<#86dcf1><role> ›",
             "role-title" to "<#c4a7e7>Права · <role>",
             "role-body" to "<#e8dfd2>Регион: <white><area><newline><#e8dfd2>Ниже — текущие права роли. Для изменения откройте настройки Lands, затем «Роли» и эту роль.",
             "rule-enabled" to "<#9bd48d>✔ <rule> · разрешено",
