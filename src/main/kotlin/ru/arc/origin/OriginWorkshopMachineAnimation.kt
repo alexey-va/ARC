@@ -12,7 +12,7 @@ internal val ORIGIN_WORKSHOP_MACHINE_HIDDEN_IDLE_PIECES = setOf(
     "upholsterer-press-cloth",
 )
 
-internal enum class OriginWorkshopMechanism { NONE, SAW, VISE, ANVIL, PRESS, FINISH }
+internal enum class OriginWorkshopMechanism { NONE, SAW, DRILL, CLAMP_LEFT, CLAMP_RIGHT, VISE, ANVIL, PRESS, FINISH }
 
 internal enum class OriginWorkshopRotationAxis { X, Y, Z }
 
@@ -231,6 +231,70 @@ internal fun originWorkshopMachinePose(
                 OriginWorkshopPoint(tuning.sawPivotX, dimensions.height + 0.22, tuning.sawPivotZ),
             )
         }
+        OriginWorkshopMechanism.DRILL -> {
+            // One complete down-and-return stroke; the quill and bit are clear at both ends.
+            val stroke = if (p <= 0.5) {
+                smoothstep((p / 0.5).coerceIn(0.0, 1.0))
+            } else {
+                smoothstep(((1.0 - p) / 0.5).coerceIn(0.0, 1.0))
+            }
+            val spin = 720.0 * p
+            val pieces = buildMap {
+                put("carpenter-drill-quill", OriginWorkshopPieceMotion(
+                    centerOffset = OriginWorkshopPoint(0.0, -0.18 * stroke, 0.0),
+                ))
+                put("carpenter-drill-spindle", OriginWorkshopPieceMotion(
+                    centerOffset = OriginWorkshopPoint(0.0, -0.20 * stroke, 0.0),
+                    rotationAxis = OriginWorkshopRotationAxis.Y,
+                    rotationDegrees = spin,
+                ))
+                put("carpenter-drill-bit", OriginWorkshopPieceMotion(
+                    centerOffset = OriginWorkshopPoint(0.0, -0.16 * stroke, 0.0),
+                    rotationAxis = OriginWorkshopRotationAxis.Y,
+                    rotationDegrees = spin,
+                ))
+                val wheelRadians = spin * PI / 180.0
+                for (index in 0..7) {
+                    val dy = (index - 3.5) * 0.14 / 4.0
+                    put("carpenter-drill-control-wheel-rim-$index", OriginWorkshopPieceMotion(
+                        centerOffset = OriginWorkshopPoint(
+                            -dy * sin(wheelRadians),
+                            dy * (cos(wheelRadians) - 1.0),
+                            0.0,
+                        ),
+                        rotationAxis = OriginWorkshopRotationAxis.Z,
+                        rotationDegrees = spin,
+                    ))
+                }
+                for (axis in listOf("x", "y")) put("carpenter-drill-control-wheel-spoke-$axis", OriginWorkshopPieceMotion(
+                    rotationAxis = OriginWorkshopRotationAxis.Z,
+                    rotationDegrees = spin,
+                ))
+            }
+            OriginWorkshopMachinePose(pieces, OriginWorkshopPoint(0.0, dimensions.height + 0.04, -0.55))
+        }
+        OriginWorkshopMechanism.CLAMP_LEFT -> OriginWorkshopMachinePose(
+            mapOf(
+                "carpenter-assembly-clamp-left" to OriginWorkshopPieceMotion(
+                    centerOffset = OriginWorkshopPoint(0.12 * smoothstep(p), 0.0, 0.0),
+                ),
+                "carpenter-assembly-clamp-control-left" to OriginWorkshopPieceMotion(
+                    centerOffset = OriginWorkshopPoint(0.12 * smoothstep(p), 0.0, 0.0),
+                ),
+            ),
+            OriginWorkshopPoint(1.35, dimensions.height + 0.21, -0.65),
+        )
+        OriginWorkshopMechanism.CLAMP_RIGHT -> OriginWorkshopMachinePose(
+            mapOf(
+                "carpenter-assembly-clamp-right" to OriginWorkshopPieceMotion(
+                    centerOffset = OriginWorkshopPoint(-0.12 * smoothstep(p), 0.0, 0.0),
+                ),
+                "carpenter-assembly-clamp-control-right" to OriginWorkshopPieceMotion(
+                    centerOffset = OriginWorkshopPoint(-0.12 * smoothstep(p), 0.0, 0.0),
+                ),
+            ),
+            OriginWorkshopPoint(1.35, dimensions.height + 0.21, -0.65),
+        )
         OriginWorkshopMechanism.VISE -> {
             val closed = smoothstep((p / 0.20).coerceIn(0.0, 1.0)) *
                 (1.0 - smoothstep(((p - 0.80) / 0.20).coerceIn(0.0, 1.0)))
@@ -298,6 +362,26 @@ internal fun originWorkshopMachinePose(
             )
         }
     }
+}
+
+/** Craft-driver pose API; it leaves the legacy saw teaching sample hidden under the real carried board. */
+internal fun originWorkshopCraftMachinePose(
+    machine: String,
+    progress: Double,
+    dimensions: OriginWorkshopTableDimensions,
+    tuning: OriginWorkshopMachineTuning,
+): OriginWorkshopMachinePose {
+    val mechanism = when (machine) {
+        "saw" -> OriginWorkshopMechanism.SAW
+        "drill" -> OriginWorkshopMechanism.DRILL
+        "clamp-left" -> OriginWorkshopMechanism.CLAMP_LEFT
+        "clamp-right" -> OriginWorkshopMechanism.CLAMP_RIGHT
+        else -> error("Unknown carpenter craft machine '$machine'")
+    }
+    val pose = originWorkshopMachinePose(mechanism, progress, 0.0, dimensions, tuning)
+    if (machine != "saw") return pose
+    val sample = pose.pieces.getValue("carpenter-board-in-feed")
+    return pose.copy(pieces = pose.pieces + ("carpenter-board-in-feed" to sample.copy(visible = false)))
 }
 
 private fun smoothstep(value: Double): Double = value * value * (3.0 - 2.0 * value)

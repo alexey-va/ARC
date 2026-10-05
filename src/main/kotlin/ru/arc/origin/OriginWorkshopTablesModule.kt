@@ -2,6 +2,7 @@ package ru.arc.origin
 
 import dev.lone.itemsadder.api.CustomStack
 import org.bukkit.Bukkit
+import org.bukkit.Color
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.block.BlockFace
@@ -233,51 +234,59 @@ internal fun originWorkshopTablePieces(
                 braceThickness, braceThickness, dimensions.depth - legSize * 2))
         }
 
-        val cabinetWidth = 0.84
-        val cabinetDepth = 0.72
-        val cabinetBottom = 0.14
-        val cabinetHeight = dimensions.height - topThickness - cabinetBottom
-        val drawerFaceHeight = 0.19
-        val cabinetZ = -0.10
-        for (x in listOf(-1.15, 1.15)) {
-            add(blockPiece("drawer-cabinet-$x", Material.DARK_OAK_PLANKS, x,
-                cabinetBottom + cabinetHeight / 2.0, cabinetZ,
-                cabinetWidth, cabinetHeight, cabinetDepth))
-            val faceZ = cabinetZ - cabinetDepth / 2.0 - 0.025
-            for (faceY in listOf(cabinetBottom + 0.20, cabinetBottom + 0.49)) {
-                add(blockPiece("drawer-face-$x-$faceY", Material.SPRUCE_PLANKS, x, faceY, faceZ,
-                    cabinetWidth - 0.12, drawerFaceHeight, 0.05))
-                add(blockPiece("drawer-handle-$x-$faceY", Material.IRON_BLOCK, x, faceY, faceZ - 0.045,
-                    0.18, 0.045, 0.045))
+        if (role != OriginWorkshopTableRole.CARPENTER) {
+            val cabinetWidth = 0.84
+            val cabinetDepth = 0.72
+            val cabinetBottom = 0.14
+            val cabinetHeight = dimensions.height - topThickness - cabinetBottom
+            val drawerFaceHeight = 0.19
+            val cabinetZ = -0.10
+            for (x in listOf(-1.15, 1.15)) {
+                add(blockPiece("drawer-cabinet-$x", Material.DARK_OAK_PLANKS, x,
+                    cabinetBottom + cabinetHeight / 2.0, cabinetZ,
+                    cabinetWidth, cabinetHeight, cabinetDepth))
+                val faceZ = cabinetZ - cabinetDepth / 2.0 - 0.025
+                for (faceY in listOf(cabinetBottom + 0.20, cabinetBottom + 0.49)) {
+                    add(blockPiece("drawer-face-$x-$faceY", Material.SPRUCE_PLANKS, x, faceY, faceZ,
+                        cabinetWidth - 0.12, drawerFaceHeight, 0.05))
+                    add(blockPiece("drawer-handle-$x-$faceY", Material.IRON_BLOCK, x, faceY, faceZ - 0.045,
+                        0.18, 0.045, 0.045))
+                }
             }
         }
 
-        add(blockPiece("lower-stock-shelf", Material.DARK_OAK_PLANKS, 0.0, 0.22, 0.36,
-            1.55, 0.10, 0.78))
-        listOf(
-            Triple(Material.SPRUCE_PLANKS, 0.28, 0.18),
-            Triple(Material.OAK_PLANKS, 0.40, 0.39),
-            Triple(Material.BIRCH_PLANKS, 0.52, 0.60),
-        ).forEachIndexed { index, (material, y, z) ->
-            add(blockPiece("stock-board-$index", material, 0.0, y, z, 1.38, 0.07, 0.16))
+        if (role != OriginWorkshopTableRole.CARPENTER) {
+            add(blockPiece("lower-stock-shelf", Material.DARK_OAK_PLANKS, 0.0, 0.22, 0.36,
+                1.55, 0.10, 0.78))
+            listOf(
+                Triple(Material.SPRUCE_PLANKS, 0.28, 0.18),
+                Triple(Material.OAK_PLANKS, 0.40, 0.39),
+                Triple(Material.BIRCH_PLANKS, 0.52, 0.60),
+            ).forEachIndexed { index, (material, y, z) ->
+                add(blockPiece("stock-board-$index", material, 0.0, y, z, 1.38, 0.07, 0.16))
+            }
         }
 
-        val boardZ = dimensions.depth / 2.0 - 0.30
-        add(blockPiece("back-tool-board", Material.DARK_OAK_PLANKS, 0.0, dimensions.height + 0.39, boardZ,
-            2.46, 0.78, 0.12))
-        for (x in listOf(-1.30, 1.30)) {
-            add(blockPiece("rack-post-$x", Material.STRIPPED_SPRUCE_LOG, x, dimensions.height + 0.48,
-                dimensions.depth / 2.0 - 0.12, 0.14, 0.96, 0.14))
+        if (role != OriginWorkshopTableRole.CARPENTER) {
+            val boardZ = dimensions.depth / 2.0 - 0.30
+            add(blockPiece("back-tool-board", Material.DARK_OAK_PLANKS, 0.0, dimensions.height + 0.39, boardZ,
+                2.46, 0.78, 0.12))
+            for (x in listOf(-1.30, 1.30)) {
+                add(blockPiece("rack-post-$x", Material.STRIPPED_SPRUCE_LOG, x, dimensions.height + 0.48,
+                    dimensions.depth / 2.0 - 0.12, 0.14, 0.96, 0.14))
+            }
+            add(blockPiece("back-rack-shelf", Material.SPRUCE_PLANKS, 0.0, dimensions.height + 0.96,
+                dimensions.depth / 2.0 - 0.18, 2.75, 0.12, 0.25))
         }
-        add(blockPiece("back-rack-shelf", Material.SPRUCE_PLANKS, 0.0, dimensions.height + 0.96,
-            dimensions.depth / 2.0 - 0.18, 2.75, 0.12, 0.25))
     }
 
     val machine = when (role) {
         OriginWorkshopTableRole.CARPENTER -> buildList {
             add(blockPiece("carpenter-table-saw", Material.STONECUTTER, tuning.sawPivotX,
                 dimensions.height - 0.36, tuning.sawPivotZ + 0.505, 0.92, 0.72, 0.92))
-            val boardZ = tuning.sawPivotZ - 0.175
+            // Center the feed surface on the carried board path; its forward edge
+            // still reaches the saw blade at sawPivotZ.
+            val boardZ = tuning.sawPivotZ + 0.075
             val flywheelZ = tuning.sawPivotZ + 1.05
             val flywheelY = dimensions.height + tuning.sawPivotYOffset
             add(blockPiece("carpenter-board-feed", Material.SPRUCE_PLANKS, tuning.sawPivotX,
@@ -331,6 +340,67 @@ internal fun originWorkshopTablePieces(
             }
             add(blockPiece("carpenter-saw-blade-hub", Material.POLISHED_ANDESITE, tuning.sawPivotX,
                 dimensions.height + tuning.sawPivotYOffset, tuning.sawPivotZ - 0.05, 0.18, 0.18, 0.07))
+            add(blockPiece("carpenter-saw-control-handle", Material.IRON_BLOCK,
+                -1.65, dimensions.height + 0.34, -0.70, 0.09, 0.18, 0.09))
+            add(blockPiece("carpenter-saw-control-post", Material.STRIPPED_SPRUCE_LOG,
+                -1.65, dimensions.height + 0.13, -0.70, 0.09, 0.26, 0.09))
+
+            // A cantilevered drill leaves its operator-facing work surface clear for the carried board.
+            add(blockPiece("carpenter-drill-foot", Material.POLISHED_BLACKSTONE,
+                0.0, dimensions.height + 0.035, 0.67, 0.48, 0.07, 0.42))
+            add(blockPiece("carpenter-drill-post", Material.STRIPPED_SPRUCE_LOG,
+                0.0, dimensions.height + 0.56, 0.77, 0.14, 1.12, 0.14))
+            add(blockPiece("carpenter-drill-head", Material.BLACKSTONE,
+                0.0, dimensions.height + 1.01, 0.40, 0.42, 0.24, 0.80))
+            add(blockPiece("carpenter-drill-arm", Material.DARK_OAK_PLANKS,
+                0.0, dimensions.height + 1.02, -0.20, 0.64, 0.12, 0.72))
+            add(blockPiece("carpenter-drill-control-bracket", Material.IRON_BLOCK,
+                0.30, dimensions.height + 0.82, -0.42, 0.07, 0.48, 0.07))
+            add(blockPiece("carpenter-drill-quill", Material.IRON_BLOCK,
+                0.0, dimensions.height + 0.77, -0.49, 0.12, 0.38, 0.12))
+            add(blockPiece("carpenter-drill-spindle", Material.IRON_BLOCK,
+                0.0, dimensions.height + 0.48, -0.55, 0.065, 0.34, 0.065))
+            add(blockPiece("carpenter-drill-bit", Material.IRON_BLOCK,
+                0.0, dimensions.height + 0.255, -0.55, 0.045, 0.11, 0.045))
+            add(blockPiece("carpenter-drill-control-wheel-hub", Material.POLISHED_ANDESITE,
+                0.30, dimensions.height + 0.58, -0.42, 0.09, 0.09, 0.09))
+            for ((index, width) in listOf(0.95, 1.50, 1.85, 2.0, 2.0, 1.85, 1.50, 0.95).withIndex()) {
+                add(blockPiece("carpenter-drill-control-wheel-rim-$index", Material.COPPER_BLOCK,
+                    0.30, dimensions.height + 0.58 + (index - 3.5) * 0.14 / 4.0, -0.42,
+                    width * 0.14, 0.14 / 4.0, 0.035))
+            }
+            add(blockPiece("carpenter-drill-control-wheel-spoke-x", Material.IRON_BLOCK,
+                0.30, dimensions.height + 0.58, -0.44, 0.24, 0.035, 0.025))
+            add(blockPiece("carpenter-drill-control-wheel-spoke-y", Material.IRON_BLOCK,
+                0.30, dimensions.height + 0.58, -0.44, 0.035, 0.24, 0.025))
+
+            // The assembly bed is deliberately empty: the game mounts its transient board/legs here.
+            add(blockPiece("carpenter-assembly-bed", Material.DARK_OAK_PLANKS,
+                1.35, dimensions.height + 0.035, -0.35, 1.18, 0.07, 0.64))
+            add(blockPiece("carpenter-assembly-guide-front", Material.STRIPPED_SPRUCE_LOG,
+                1.35, dimensions.height + 0.13, -0.65, 1.18, 0.12, 0.08))
+            add(blockPiece("carpenter-assembly-guide-back", Material.STRIPPED_SPRUCE_LOG,
+                1.35, dimensions.height + 0.13, -0.05, 1.18, 0.12, 0.08))
+            add(blockPiece("carpenter-assembly-stop-left", Material.IRON_BLOCK,
+                0.79, dimensions.height + 0.12, -0.35, 0.07, 0.16, 0.42))
+            add(blockPiece("carpenter-assembly-stop-right", Material.IRON_BLOCK,
+                1.91, dimensions.height + 0.12, -0.35, 0.07, 0.16, 0.42))
+            add(blockPiece("carpenter-assembly-clamp-left", Material.IRON_BLOCK,
+                0.95, dimensions.height + 0.19, -0.65, 0.12, 0.24, 0.16))
+            add(blockPiece("carpenter-assembly-clamp-right", Material.IRON_BLOCK,
+                1.95, dimensions.height + 0.19, -0.65, 0.12, 0.24, 0.16))
+            add(blockPiece("carpenter-assembly-clamp-control-left", Material.COPPER_BLOCK,
+                0.95, dimensions.height + 0.35, -0.65, 0.08, 0.08, 0.08))
+            add(blockPiece("carpenter-assembly-clamp-control-right", Material.COPPER_BLOCK,
+                1.95, dimensions.height + 0.35, -0.65, 0.08, 0.08, 0.08))
+            add(blockPiece("carpenter-leg-left", Material.STRIPPED_SPRUCE_LOG,
+                1.30, dimensions.height + 0.07, 0.50, 0.14, 0.14, 0.52))
+            add(blockPiece("carpenter-leg-right", Material.STRIPPED_SPRUCE_LOG,
+                1.75, dimensions.height + 0.07, 0.50, 0.14, 0.14, 0.52))
+            add(blockPiece("carpenter-start-apron", Material.DARK_OAK_PLANKS,
+                0.0, dimensions.height + 0.07, -1.09, 0.46, 0.14, 0.30))
+            add(blockPiece("carpenter-start-handle", Material.LEVER,
+                0.0, dimensions.height + 0.20, -1.20, 0.12, 0.12, 0.05))
         }
         OriginWorkshopTableRole.UPHOLSTERER -> buildList {
             add(blockPiece("upholsterer-loom", Material.LOOM, tuning.pressCenterX, dimensions.height + 0.36,
@@ -429,11 +499,8 @@ internal fun originWorkshopTablePieces(
     }
     val workpieces = when (role) {
         OriginWorkshopTableRole.CARPENTER -> listOf(
-            blockPiece("carpenter-board-sample", Material.SPRUCE_PLANKS,
-                0.29 * dimensions.width, dimensions.height + 0.035, -0.10 * dimensions.depth,
-                0.65, 0.06, 0.30),
             blockPiece("carpenter-board-in-feed", Material.OAK_PLANKS, tuning.sawFeedStartX,
-                dimensions.height + 0.19, tuning.sawPivotZ - 0.175, 0.82, 0.12, 0.35),
+                dimensions.height + 0.19, tuning.sawPivotZ + 0.075, 0.82, 0.12, 0.35),
         )
         OriginWorkshopTableRole.UPHOLSTERER -> listOf(
             blockPiece("upholsterer-cloth-roll", Material.RED_WOOL,
@@ -507,7 +574,7 @@ private fun rotatePiece(piece: OriginWorkshopTablePiece, yaw: Int): OriginWorksh
 
 private fun roleProps(role: OriginWorkshopTableRole): List<WorkshopItemProp> = when (role) {
     OriginWorkshopTableRole.CARPENTER -> listOf(
-        WorkshopItemProp(Material.IRON_AXE, 0.05, -0.10, 0.62, flat = true),
+        WorkshopItemProp(Material.IRON_AXE, 0.05, -0.40, 0.40, flat = true),
     )
     OriginWorkshopTableRole.UPHOLSTERER -> listOf(
         WorkshopItemProp(Material.SHEARS, 0.05, -0.10, 0.60, flat = true),
@@ -524,12 +591,17 @@ internal object OriginWorkshopTablesModule : PluginModule {
     override val name = "OriginWorkshopTables"
     override val priority = 24
 
+    private val craftGlow = Color.fromRGB(0xD8, 0x91, 0x35)
+    private val craftHoverGlow = Color.fromRGB(0xFF, 0xD2, 0x63)
+
     private var displays: PaperPacketDisplays? = null
     private val handles = mutableListOf<PacketDisplay>()
     private val machineTables = linkedMapOf<String, WorkshopMachineTable>()
     private val activeMachineKeys = mutableMapOf<String, Set<String>>()
     private val activeMechanisms = mutableMapOf<String, OriginWorkshopMechanism>()
     private val runningDrives = mutableSetOf<String>()
+    private val activeCraftKeys = mutableMapOf<String, Set<String>>()
+    private val activeCraftHighlights = mutableMapOf<String, Map<PacketDisplay, Color>>()
 
     private data class WorkshopMachinePart(
         val display: PacketDisplay,
@@ -546,6 +618,7 @@ internal object OriginWorkshopTablesModule : PluginModule {
         val tuning: OriginWorkshopMachineTuning,
         val world: org.bukkit.World,
         val driveCycleTicks: Long,
+        val craftControls: Map<String, List<PacketDisplay>>,
     )
 
     override fun init() = reload()
@@ -615,14 +688,14 @@ internal object OriginWorkshopTablesModule : PluginModule {
                         }
                         if (piece.key in workKeys || piece.key in driveKeys) {
                             display.isVisibleByDefault = piece.key !in ORIGIN_WORKSHOP_MACHINE_HIDDEN_IDLE_PIECES
-                            machineParts[piece.key] = WorkshopMachinePart(
-                                display = display,
-                                piece = piece,
-                                location = display.location.clone(),
-                                transformation = copyTransformation(display.transformation),
-                                visible = display.isVisibleByDefault,
-                            )
                         }
+                        machineParts[piece.key] = WorkshopMachinePart(
+                            display = display,
+                            piece = piece,
+                            location = display.location.clone(),
+                            transformation = copyTransformation(display.transformation),
+                            visible = display.isVisibleByDefault,
+                        )
                     } else {
                         val location = Location(
                             world,
@@ -636,9 +709,21 @@ internal object OriginWorkshopTablesModule : PluginModule {
                         created += display
                         display.itemDisplayTransform = ItemDisplay.ItemDisplayTransform.NONE
                         display.transformation = itemTransform(piece.width, piece.flat)
+                        machineParts[piece.key] = WorkshopMachinePart(
+                            display = display,
+                            piece = piece,
+                            location = display.location.clone(),
+                            transformation = copyTransformation(display.transformation),
+                            visible = display.isVisibleByDefault,
+                        )
                     }
                 }
                 check(machineParts.keys.containsAll(driveKeys + workKeys)) { "Workshop ${table.id} has an animation without a matching model part" }
+                val stockHandles = table.stockOffsetX?.let { stockX ->
+                    val (dx, dz) = rotateLocal(stockX, 0.0, table.yaw)
+                    spawnStock(owner, created, world, table.x + dx, table.floorY, table.z + dz,
+                        table.yaw, originWorkshopStationStockGeometry(table.role))
+                }.orEmpty()
                 createdMachineTables[table.id] = WorkshopMachineTable(
                     table,
                     machineParts,
@@ -646,12 +731,8 @@ internal object OriginWorkshopTablesModule : PluginModule {
                     settings.machineTuning,
                     world,
                     settings.driveCycleTicks,
+                    craftControlDisplays(table.role, machineParts, stockHandles),
                 )
-                table.stockOffsetX?.let { stockX ->
-                    val (dx, dz) = rotateLocal(stockX, 0.0, table.yaw)
-                    spawnStock(owner, created, world, table.x + dx, table.floorY, table.z + dz,
-                        table.yaw, originWorkshopStationStockGeometry(table.role))
-                }
             }
             settings.warehouse?.let { anchor ->
                 spawnStock(owner, created, world, anchor.x, anchor.floorY, anchor.z, 0, originWorkshopWarehouseGeometry())
@@ -677,7 +758,8 @@ internal object OriginWorkshopTablesModule : PluginModule {
         z: Double,
         yaw: Int,
         stock: OriginWorkshopWarehouseGeometry,
-    ) {
+    ): List<PacketDisplay> {
+        val craftStockHandles = mutableListOf<PacketDisplay>()
         stock.blocks.forEach { local ->
             val piece = rotatePiece(local, yaw)
             val display = owner.spawnBlock(
@@ -687,6 +769,7 @@ internal object OriginWorkshopTablesModule : PluginModule {
             )
             created += display
             display.transformation = cuboidTransform(piece.width, piece.height, piece.depth)
+            if (local.key.startsWith("board-bundle-layer-")) craftStockHandles += display
         }
         stock.items.forEach { piece ->
             val item = CustomStack.getInstance(piece.itemId)?.itemStack?.clone()
@@ -701,6 +784,35 @@ internal object OriginWorkshopTablesModule : PluginModule {
             display.itemDisplayTransform = ItemDisplay.ItemDisplayTransform.NONE
             display.transformation = itemTransform(piece.scale, flat = false)
         }
+        return craftStockHandles
+    }
+
+    private fun craftControlDisplays(
+        role: OriginWorkshopTableRole,
+        pieces: Map<String, WorkshopMachinePart>,
+        stock: List<PacketDisplay>,
+    ): Map<String, List<PacketDisplay>> {
+        if (role != OriginWorkshopTableRole.CARPENTER) return emptyMap()
+        fun parts(vararg keys: String) = keys.map { pieces.getValue(it).display }
+        val controls = linkedMapOf(
+            "start" to parts("carpenter-start-handle"),
+            "stock" to stock,
+            "saw" to parts("carpenter-saw-control-handle"),
+            "drill" to parts(
+                "carpenter-drill-control-wheel-hub",
+                "carpenter-drill-control-wheel-spoke-y",
+            ),
+            "assembly" to parts(
+                "carpenter-assembly-bed",
+                "carpenter-assembly-guide-front",
+                "carpenter-assembly-guide-back",
+            ),
+            "clamp-left" to parts("carpenter-assembly-clamp-left", "carpenter-assembly-clamp-control-left"),
+            "clamp-right" to parts("carpenter-assembly-clamp-right", "carpenter-assembly-clamp-control-right"),
+            "leg-left" to parts("carpenter-leg-left"),
+            "leg-right" to parts("carpenter-leg-right"),
+        )
+        return controls
     }
 
     override fun shutdown() {
@@ -717,13 +829,18 @@ internal object OriginWorkshopTablesModule : PluginModule {
     }
 
     private fun clearScene() {
-        machineTables.keys.toList().forEach(::resetWork)
+        machineTables.keys.toList().forEach {
+            resetCraft(it)
+            resetWork(it)
+        }
         handles.forEach(PacketDisplay::remove)
         handles.clear()
         machineTables.clear()
         activeMachineKeys.clear()
         activeMechanisms.clear()
         runningDrives.clear()
+        activeCraftKeys.clear()
+        activeCraftHighlights.clear()
     }
 
     /** Free-running shafts share the scene tick; never touch the material/contact animation keys. */
@@ -773,6 +890,84 @@ internal object OriginWorkshopTablesModule : PluginModule {
         )
     }
 
+    /** Glow only the real stock, machine or source-part displays that correspond to a game control. */
+    fun highlightCraftControl(tableId: String, control: String?, hovered: Boolean = false) {
+        val table = machineTables[tableId] ?: return
+        if (table.definition.role != OriginWorkshopTableRole.CARPENTER) return
+        val color = if (hovered) craftHoverGlow else craftGlow
+        val next = control?.let { name ->
+            (table.craftControls[name] ?: error("Unknown carpenter craft control '$name'")).distinct()
+                .associateWith { color }
+        }.orEmpty()
+        val previous = activeCraftHighlights[tableId].orEmpty()
+        (previous.keys - next.keys).forEach { display ->
+            if (display.isValid && display.isGlowing) {
+                display.isGlowing = false
+                display.glowColorOverride = null
+            }
+        }
+        next.forEach { (display, nextColor) ->
+            if (!display.isValid) return@forEach
+            val currentColor = previous[display]
+            if (currentColor == null) {
+                display.glowColorOverride = nextColor
+                display.isGlowing = true
+            } else if (currentColor != nextColor) {
+                display.glowColorOverride = nextColor
+            }
+        }
+        if (next.isEmpty()) activeCraftHighlights.remove(tableId) else activeCraftHighlights[tableId] = next
+    }
+
+    /** Drive one craft machine directly, without the autonomous display cycle used by other roles. */
+    fun animateCraftMachine(tableId: String, machine: String, progress: Double) {
+        require(progress.isFinite()) { "Craft machine progress must be finite" }
+        val table = machineTables[tableId] ?: return
+        if (table.definition.role != OriginWorkshopTableRole.CARPENTER) return
+        val pose = originWorkshopCraftMachinePose(machine, progress, table.dimensions, table.tuning)
+        pose.pieces.forEach { (key, motion) ->
+            val part = table.pieces[key] ?: error("Carpenter craft machine '$machine' has no model part '$key'")
+            applyMotion(part, table.definition.yaw, motion)
+        }
+        activeCraftKeys[tableId] = activeCraftKeys[tableId].orEmpty() + pose.pieces.keys
+    }
+
+    /** Hide a picked static source stick; resetCraft restores its authored visibility. */
+    fun setCraftPartVisible(tableId: String, part: String, visible: Boolean) {
+        val table = machineTables[tableId] ?: return
+        if (table.definition.role != OriginWorkshopTableRole.CARPENTER) return
+        val key = when (part) {
+            "leg-left" -> "carpenter-leg-left"
+            "leg-right" -> "carpenter-leg-right"
+            else -> error("Unknown carpenter craft part '$part'")
+        }
+        val display = table.pieces[key]?.display ?: error("Carpenter craft source '$part' has no model part")
+        if (!display.isValid) return
+        display.isVisibleByDefault = visible
+        activeCraftKeys[tableId] = activeCraftKeys[tableId].orEmpty() + key
+    }
+
+    /** Restore every craft-touched machine/source handle and clear the current glow target. */
+    fun resetCraft(tableId: String) {
+        val table = machineTables[tableId] ?: return
+        activeCraftKeys.remove(tableId).orEmpty().forEach { key ->
+            val part = table.pieces[key] ?: return@forEach
+            if (!part.display.isValid) return@forEach
+            part.display.interpolationDuration = 0
+            part.display.interpolationDelay = 0
+            part.display.teleportDuration = 0
+            part.display.teleport(part.location)
+            part.display.transformation = copyTransformation(part.transformation)
+            part.display.isVisibleByDefault = part.visible
+        }
+        activeCraftHighlights.remove(tableId).orEmpty().keys.forEach { display ->
+            if (display.isValid) {
+                display.isGlowing = false
+                display.glowColorOverride = null
+            }
+        }
+    }
+
     /** Restore every touched display to its captured pose and idle visibility. */
     fun resetWork(tableId: String) {
         val table = machineTables[tableId] ?: return
@@ -792,7 +987,8 @@ internal object OriginWorkshopTablesModule : PluginModule {
 
     private fun supports(role: OriginWorkshopTableRole, mechanism: OriginWorkshopMechanism): Boolean = when (mechanism) {
         OriginWorkshopMechanism.NONE -> false
-        OriginWorkshopMechanism.SAW -> role == OriginWorkshopTableRole.CARPENTER
+        OriginWorkshopMechanism.SAW, OriginWorkshopMechanism.DRILL,
+        OriginWorkshopMechanism.CLAMP_LEFT, OriginWorkshopMechanism.CLAMP_RIGHT -> role == OriginWorkshopTableRole.CARPENTER
         OriginWorkshopMechanism.VISE, OriginWorkshopMechanism.ANVIL -> role == OriginWorkshopTableRole.ASSEMBLER
         OriginWorkshopMechanism.PRESS -> role == OriginWorkshopTableRole.UPHOLSTERER
         OriginWorkshopMechanism.FINISH -> role == OriginWorkshopTableRole.FINISHER

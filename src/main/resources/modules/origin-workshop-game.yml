@@ -1,14 +1,4 @@
 origin-workshop-game:
   enabled: false
-
-  # One player may use the finisher station at a time. Rhythm values are ticks.
-  rhythm:
-    beat-period-ticks: 108
-    window-start-ticks: 62
-    window-width-ticks: 16
-    clamp-pause-ticks: 20
-    clamp-hits: 4
-    finish-hits: 5
-    finished-hold-ticks: 60
-
+  # One player uses the carpenter station; stock materials stay in the scene.
   session-timeout-seconds: 180

@@ -6,65 +6,104 @@ import io.kotest.matchers.shouldBe
 class OriginWorkshopGameTest : FreeSpec({
     val rules = OriginWorkshopGameRules()
 
-    "part must be picked and placed before the machine accepts hits" {
-        val start = OriginWorkshopGameProgress(OriginWorkshopGameStage.PICK)
-        originWorkshopPlace(start, 0, rules) shouldBe null
-        val carrying = originWorkshopPick(start)
-        carrying?.stage shouldBe OriginWorkshopGameStage.CARRY
-        val clamping = originWorkshopPlace(carrying!!, 0, rules)
-        clamping?.stage shouldBe OriginWorkshopGameStage.CLAMP
-        clamping?.nextBeat shouldBe 62L
-        originWorkshopHit(clamping!!, 61, rules).result shouldBe OriginWorkshopHitResult.EARLY
-    }
-
-    "clamp and finish require deliberate beat windows and cannot complete in under 45 seconds" {
-        var progress = originWorkshopPlace(
-            originWorkshopPick(OriginWorkshopGameProgress(OriginWorkshopGameStage.PICK))!!,
-            0,
-            rules,
-        )!!
-        val clampTimes = listOf(62L, 170L, 278L, 386L)
-        clampTimes.forEachIndexed { index, at ->
-            val hit = originWorkshopHit(progress, at, rules)
-            hit.result shouldBe if (index == clampTimes.lastIndex) OriginWorkshopHitResult.CLAMPED else OriginWorkshopHitResult.HIT
-            progress = hit.progress
+    "one chair needs stock, saw, drill, both legs and both clamps in that order" {
+        var now = 0L
+        var progress = OriginWorkshopGameProgress(OriginWorkshopGameStage.STOCK)
+        fun act(action: OriginWorkshopGameAction, expected: OriginWorkshopGameStage) {
+            val previous = progress
+            progress = originWorkshopTransition(progress, action, ++now)!!
+            progress.stage shouldBe expected
+            originWorkshopTransition(progress, action, now) shouldBe null
+            (progress != previous) shouldBe true
         }
-        progress.stage shouldBe OriginWorkshopGameStage.PAUSE
-        originWorkshopAdvance(progress, 405, rules).stage shouldBe OriginWorkshopGameStage.PAUSE
-        progress = originWorkshopAdvance(progress, 406, rules)
-        progress.stage shouldBe OriginWorkshopGameStage.FINISH
-        progress.nextBeat shouldBe 468L
-
-        listOf(468L, 576L, 684L, 792L, 900L).forEachIndexed { index, at ->
-            val hit = originWorkshopHit(progress, at, rules)
-            hit.result shouldBe if (index == 4) OriginWorkshopHitResult.FINISHED else OriginWorkshopHitResult.HIT
-            progress = hit.progress
+        fun finishOperation(ticks: Long, expected: OriginWorkshopGameStage) {
+            originWorkshopAdvance(progress, now + ticks - 1, rules) shouldBe progress
+            now += ticks
+            progress = originWorkshopAdvance(progress, now, rules)
+            progress.stage shouldBe expected
         }
-        progress.finishedAt shouldBe 900L
-        progress.stage shouldBe OriginWorkshopGameStage.DISPLAY
-        originWorkshopAdvance(progress, 959, rules).stage shouldBe OriginWorkshopGameStage.DISPLAY
-        originWorkshopAdvance(progress, 960, rules).stage shouldBe OriginWorkshopGameStage.REWARDING
-        rules.minimumRhythm shouldBe 900L
+        act(OriginWorkshopGameAction.PICK_STOCK, OriginWorkshopGameStage.CARRY_RAW_TO_SAW)
+        act(OriginWorkshopGameAction.PLACE_SAW, OriginWorkshopGameStage.START_SAW)
+        act(OriginWorkshopGameAction.ACTIVATE_SAW, OriginWorkshopGameStage.SAWING)
+        finishOperation(rules.sawTicks, OriginWorkshopGameStage.PICK_SAWN_BOARD)
+        act(OriginWorkshopGameAction.PICK_SAWN_BOARD, OriginWorkshopGameStage.CARRY_BOARD_TO_DRILL)
+        act(OriginWorkshopGameAction.PLACE_DRILL, OriginWorkshopGameStage.START_DRILL)
+        act(OriginWorkshopGameAction.ACTIVATE_DRILL, OriginWorkshopGameStage.DRILLING)
+        finishOperation(rules.drillTicks, OriginWorkshopGameStage.PICK_DRILLED_BOARD)
+        act(OriginWorkshopGameAction.PICK_DRILLED_BOARD, OriginWorkshopGameStage.CARRY_BOARD_TO_JIG)
+        act(OriginWorkshopGameAction.PLACE_JIG, OriginWorkshopGameStage.LEG_LEFT)
+        act(OriginWorkshopGameAction.PICK_LEFT_LEG, OriginWorkshopGameStage.CARRY_LEG_LEFT)
+        act(OriginWorkshopGameAction.PLACE_LEFT_LEG, OriginWorkshopGameStage.LEG_RIGHT)
+        act(OriginWorkshopGameAction.PICK_RIGHT_LEG, OriginWorkshopGameStage.CARRY_LEG_RIGHT)
+        act(OriginWorkshopGameAction.PLACE_RIGHT_LEG, OriginWorkshopGameStage.CLAMP_LEFT)
+        act(OriginWorkshopGameAction.TIGHTEN_LEFT, OriginWorkshopGameStage.CLAMPING_LEFT)
+        finishOperation(rules.clampTicks, OriginWorkshopGameStage.CLAMP_RIGHT)
+        act(OriginWorkshopGameAction.TIGHTEN_RIGHT, OriginWorkshopGameStage.CLAMPING_RIGHT)
+        finishOperation(rules.clampTicks, OriginWorkshopGameStage.FINISHING)
+        finishOperation(rules.chairHoldTicks, OriginWorkshopGameStage.REWARDING)
+        originWorkshopAdvance(progress, now + 10_000, rules) shouldBe progress
     }
 
-    "a missed beat resets the next window instead of granting progress" {
-        val progress = OriginWorkshopGameProgress(OriginWorkshopGameStage.CLAMP, nextBeat = 100L)
-        val late = originWorkshopHit(progress, 117L, rules)
-        late.result shouldBe OriginWorkshopHitResult.LATE
-        late.progress.hits shouldBe 0
-        late.progress.nextBeat shouldBe 225L
-        val onNextBeat = originWorkshopHit(late.progress, 225L, rules)
-        onNextBeat.result shouldBe OriginWorkshopHitResult.HIT
-        onNextBeat.progress.hits shouldBe 1
+    "waiting never skips a required pickup and extra clicks never skip processing" {
+        for (stage in listOf(OriginWorkshopGameStage.STOCK, OriginWorkshopGameStage.PICK_SAWN_BOARD,
+            OriginWorkshopGameStage.PICK_DRILLED_BOARD, OriginWorkshopGameStage.LEG_LEFT,
+            OriginWorkshopGameStage.LEG_RIGHT, OriginWorkshopGameStage.CLAMP_LEFT)) {
+            val progress = OriginWorkshopGameProgress(stage)
+            originWorkshopAdvance(progress, 10_000, rules) shouldBe progress
+        }
+        for (stage in listOf(OriginWorkshopGameStage.SAWING, OriginWorkshopGameStage.DRILLING,
+            OriginWorkshopGameStage.CLAMPING_LEFT, OriginWorkshopGameStage.CLAMPING_RIGHT,
+            OriginWorkshopGameStage.FINISHING, OriginWorkshopGameStage.REWARDING)) {
+            OriginWorkshopGameAction.entries.forEach { action ->
+                originWorkshopTransition(OriginWorkshopGameProgress(stage), action, 1) shouldBe null
+            }
+        }
+        originWorkshopTransition(OriginWorkshopGameProgress(OriginWorkshopGameStage.STOCK),
+            OriginWorkshopGameAction.PLACE_JIG, 1) shouldBe null
+        originWorkshopTransition(OriginWorkshopGameProgress(OriginWorkshopGameStage.LEG_LEFT),
+            OriginWorkshopGameAction.TIGHTEN_LEFT, 1) shouldBe null
     }
 
-    "aim intersection respects forward direction, sphere miss, and 4.5 block reach" {
+    "a delayed animation tick finishes only its current operation without resetting or skipping the handoff" {
+        val sawing = OriginWorkshopGameProgress(OriginWorkshopGameStage.SAWING, 100)
+        val ready = originWorkshopAdvance(sawing, 900, rules)
+        ready.stage shouldBe OriginWorkshopGameStage.PICK_SAWN_BOARD
+        ready.stageStartedAt shouldBe 900L
+        originWorkshopAdvance(ready, 2000, rules) shouldBe ready
+    }
+
+    "paired arm and interact packets count once but the next deliberate click is accepted" {
+        val window = 120_000_000L
+        originWorkshopIsDuplicateClick(null, 1_000, window) shouldBe false
+        originWorkshopIsDuplicateClick(1_000, 1_000, window) shouldBe true
+        originWorkshopIsDuplicateClick(1_000, 1_000 + window, window) shouldBe true
+        originWorkshopIsDuplicateClick(1_000, 1_001 + window, window) shouldBe false
+    }
+
+    "stock trip stays in range while sneak, departure and expiry cancel the session" {
+        fun reason(online: Boolean = true, sameWorld: Boolean = true, sneaking: Boolean = false,
+            distance: Double = 6.5 * 6.5, elapsed: Long = 1) = originWorkshopCancelReason(
+            online, sameWorld, sneaking, distance, elapsed, rules.timeout, 144.0)
+        reason() shouldBe null
+        reason(distance = 144.0) shouldBe null
+        reason(distance = 144.001) shouldBe OriginWorkshopCancelReason.TOO_FAR
+        reason(distance = Double.NaN) shouldBe OriginWorkshopCancelReason.TOO_FAR
+        reason(sneaking = true) shouldBe OriginWorkshopCancelReason.SNEAKING
+        reason(sameWorld = false) shouldBe OriginWorkshopCancelReason.WORLD_CHANGED
+        reason(online = false) shouldBe OriginWorkshopCancelReason.OFFLINE
+        reason(elapsed = rules.timeout) shouldBe OriginWorkshopCancelReason.TIMEOUT
+    }
+
+    "aim intersection rejects misses, backward targets, invalid coordinates and overreach" {
         val origin = OriginWorkshopVec3(0.0, 0.0, 0.0)
         val direction = OriginWorkshopVec3(0.0, 0.0, -1.0)
         originWorkshopRayHit(origin, direction, OriginWorkshopVec3(0.0, 0.0, -3.0), 0.25, 4.5) shouldBe 2.75
-        originWorkshopRayHit(origin, direction, OriginWorkshopVec3(0.0, 0.0, -5.0), 0.25, 4.5) shouldBe null
-        originWorkshopRayHit(origin, direction, OriginWorkshopVec3(1.0, 0.0, -3.0), 0.25, 4.5) shouldBe null
-        originWorkshopRayHit(origin, direction, OriginWorkshopVec3(0.0, 0.0, 3.0), 0.25, 4.5) shouldBe null
+        for (target in listOf(OriginWorkshopVec3(0.0, 0.0, -5.0),
+            OriginWorkshopVec3(1.0, 0.0, -3.0), OriginWorkshopVec3(0.0, 0.0, 3.0),
+            OriginWorkshopVec3(Double.NaN, 0.0, -2.0))) {
+            originWorkshopRayHit(origin, direction, target, 0.25, 4.5) shouldBe null
+        }
+        originWorkshopRayHit(origin, origin, OriginWorkshopVec3(0.0, 0.0, -2.0), 0.25, 4.5) shouldBe null
         originWorkshopRayHit(origin, direction, OriginWorkshopVec3(0.0, 0.0, -2.0), 0.25, 4.5001) shouldBe null
     }
 })

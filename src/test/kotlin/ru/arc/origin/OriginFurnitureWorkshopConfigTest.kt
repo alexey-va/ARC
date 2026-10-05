@@ -61,6 +61,8 @@ class OriginFurnitureWorkshopConfigTest :
                     .map { it.role } shouldBe settings.workers.drop(1).filter { it.sleepingAt == null }.map { it.role }
                 workshopWorkersDue(settings.workers, allDue, emptySet(), 99L) shouldBe emptyList()
                 workshopWorkersDue(settings.workers, allDue, allDue.keys, 100L) shouldBe emptyList()
+                settings.workers.filter { it.sleepingAt != null }.map { it.role } shouldBe listOf(OriginFurnitureWorkshopRole.CARPENTER)
+                settings.workers.first().sleepingAt?.y shouldBe 71.0
                 settings.workers.last().deliverOutput shouldBe false
                 settings.workers.flatMap { it.beats }.filter { it.mechanism != OriginWorkshopMechanism.NONE }
                     .associate { it.phase to it.mechanism } shouldBe mapOf(

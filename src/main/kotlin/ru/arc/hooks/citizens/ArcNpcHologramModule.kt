@@ -56,6 +56,9 @@ object ArcNpcHologramModule : PluginModule {
     fun clearTemporaryBubble(npcId: Int, owner: String): Boolean =
         service?.clearTemporaryBubble(npcId, owner) == true
 
+    fun setNameHiddenTemporarily(npcId: Int, owner: String, hidden: Boolean): Boolean =
+        service?.setNameHiddenTemporarily(npcId, owner, hidden) == true
+
     fun hasTemporaryBubble(npcId: Int): Boolean = service?.hasTemporaryBubble(npcId) == true
 
     fun patchHologram(npc: NPC, lines: List<String>? = null, lineHeight: Double? = null, viewRange: Int? = null): Boolean =

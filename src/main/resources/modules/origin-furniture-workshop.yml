@@ -52,6 +52,8 @@ origin-furniture-workshop:
     maximum-step-height: 0.125
   actors:
     carpenter:
+      sleeping: true
+      sleeping-at: { x: -56.5, y: 71, z: -46.5, yaw: 90 }
       npc-id: 430
       table-id: carpenter
       home: { x: -38.5, y: 71, z: -73.5, yaw: -90 }
@@ -376,8 +378,6 @@ origin-furniture-workshop:
           sound: BLOCK_WOOD_PLACE
           sound-pitch: 1.2
     finisher:
-      sleeping: true
-      sleeping-at: { x: -56.5, y: 71.55, z: -46.5, yaw: 90 }
       npc-id: 460
       table-id: finisher
       home: { x: -60.5, y: 71, z: -48.5, yaw: 0 }

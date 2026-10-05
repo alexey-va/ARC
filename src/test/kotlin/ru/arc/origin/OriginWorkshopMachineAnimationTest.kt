@@ -12,7 +12,12 @@ class OriginWorkshopMachineAnimationTest : FreeSpec({
 
     "continuous drives own model parts separately from work and close their loop without a jump" {
         val mechanisms = mapOf(
-            OriginWorkshopTableRole.CARPENTER to listOf(OriginWorkshopMechanism.SAW),
+            OriginWorkshopTableRole.CARPENTER to listOf(
+                OriginWorkshopMechanism.SAW,
+                OriginWorkshopMechanism.DRILL,
+                OriginWorkshopMechanism.CLAMP_LEFT,
+                OriginWorkshopMechanism.CLAMP_RIGHT,
+            ),
             OriginWorkshopTableRole.UPHOLSTERER to listOf(OriginWorkshopMechanism.PRESS),
             OriginWorkshopTableRole.ASSEMBLER to listOf(OriginWorkshopMechanism.VISE, OriginWorkshopMechanism.ANVIL),
             OriginWorkshopTableRole.FINISHER to listOf(OriginWorkshopMechanism.FINISH),
@@ -105,6 +110,59 @@ class OriginWorkshopMachineAnimationTest : FreeSpec({
         val lowestBlade = pieces.filter { it.key.startsWith("carpenter-saw-blade-row-") }
             .minOf { it.y - it.height / 2.0 }
         (contact.y in (lowestBlade..(board.y + board.height / 2.0))) shouldBe true
+        for (progress in listOf(0.0, 0.5, 1.0)) {
+            originWorkshopCraftMachinePose("saw", progress, dimensions, tuning)
+                .pieces.getValue("carpenter-board-in-feed").visible shouldBe false
+        }
+    }
+
+    "drill wheel keeps its radius and the bit meets an 0.08-block workpiece on the downstroke" {
+        val pieces = originWorkshopTablePieces(OriginWorkshopTableRole.CARPENTER, 0, dimensions, tuning)
+            .associateBy { it.key }
+        val bit = pieces.getValue("carpenter-drill-bit")
+        val contact = originWorkshopMachinePose(OriginWorkshopMechanism.DRILL, 0.5, 0.0, dimensions, tuning).contact!!
+        val drill = listOf(0.0, 0.25, 0.5, 0.75, 1.0).map { progress ->
+            progress to originWorkshopMachinePose(OriginWorkshopMechanism.DRILL, progress, 0.0, dimensions, tuning)
+        }
+        drill.forEach { (progress, pose) ->
+            pieces.keys.containsAll(pose.pieces.keys) shouldBe true
+            if (progress == 0.0 || progress == 1.0) {
+                abs(pose.pieces.getValue("carpenter-drill-bit").centerOffset.y) shouldBe 0.0
+                abs(pose.pieces.getValue("carpenter-drill-quill").centerOffset.y) shouldBe 0.0
+                abs(pose.pieces.getValue("carpenter-drill-bit").rotationDegrees % 360.0) shouldBe 0.0
+            }
+        }
+        val downstroke = drill.single { it.first == 0.5 }.second
+        val bitBottom = bit.y + downstroke.pieces.getValue(bit.key).centerOffset.y - bit.height / 2.0
+        (abs(bitBottom - contact.y) < 1e-9) shouldBe true
+        (abs(contact.y - (dimensions.height + 0.04)) < 1e-9) shouldBe true
+
+        for (progress in listOf(0.25, 0.5)) {
+            for (index in 0..7) {
+                val baselineY = (index - 3.5) * 0.14 / 4.0
+                val offset = originWorkshopMachinePose(OriginWorkshopMechanism.DRILL, progress, 0.0, dimensions, tuning)
+                    .pieces.getValue("carpenter-drill-control-wheel-rim-$index").centerOffset
+                (abs(kotlin.math.hypot(offset.x, baselineY + offset.y) - abs(baselineY)) < 1e-9) shouldBe true
+                (abs(offset.z) < 1e-9) shouldBe true
+                drill.single { it.first == progress }.second.pieces
+                    .getValue("carpenter-drill-control-wheel-rim-$index").rotationDegrees shouldBe 720.0 * progress
+            }
+        }
+    }
+
+    "separate clamps move inward and keep each completed jaw closed until craft reset" {
+        val leftOpen = originWorkshopMachinePose(OriginWorkshopMechanism.CLAMP_LEFT, 0.0, 0.0, dimensions, tuning)
+        val leftClosed = originWorkshopMachinePose(OriginWorkshopMechanism.CLAMP_LEFT, 1.0, 0.0, dimensions, tuning)
+        val rightOpen = originWorkshopMachinePose(OriginWorkshopMechanism.CLAMP_RIGHT, 0.0, 0.0, dimensions, tuning)
+        val rightClosed = originWorkshopMachinePose(OriginWorkshopMechanism.CLAMP_RIGHT, 1.0, 0.0, dimensions, tuning)
+        leftOpen.pieces.getValue("carpenter-assembly-clamp-left").centerOffset.x shouldBe 0.0
+        rightOpen.pieces.getValue("carpenter-assembly-clamp-right").centerOffset.x shouldBe 0.0
+        (leftClosed.pieces.getValue("carpenter-assembly-clamp-left").centerOffset.x > 0.0) shouldBe true
+        (rightClosed.pieces.getValue("carpenter-assembly-clamp-right").centerOffset.x < 0.0) shouldBe true
+        leftClosed.pieces.getValue("carpenter-assembly-clamp-left").centerOffset.x shouldBe 0.12
+        rightClosed.pieces.getValue("carpenter-assembly-clamp-right").centerOffset.x shouldBe -0.12
+        leftClosed.pieces.getValue("carpenter-assembly-clamp-control-left").centerOffset.x shouldBe 0.12
+        rightClosed.pieces.getValue("carpenter-assembly-clamp-control-right").centerOffset.x shouldBe -0.12
     }
 
     "vise starts and ends open, then closes both jaws onto the board" {

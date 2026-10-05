@@ -20,34 +20,38 @@ class OriginWorkshopCraftRewardsTest : StringSpec({
         shouldThrowAny { codec.decode("""{"request":"invalid","nextAt":1000}""") }
         shouldThrowAny { codec.decode("""{"request":"${claim.request}"}""") }
     }
-    "exchange consumes exact plain materials and grants one metadata-preserving chair atomically" {
+    "empty inventory receives one chair with metadata and requires no ingredients" {
         MockBukkitTestRuntime.open().use {
             val storage = arrayOfNulls<ItemStack>(36)
-            storage[0] = ItemStack(Material.SPRUCE_PLANKS, 6)
-            storage[1] = ItemStack(Material.SPRUCE_PLANKS, 4)
-            storage[2] = ItemStack(Material.STICK, 4)
             val reward = ItemStack(Material.PAPER, 3).also { s -> s.editMeta { it.displayName(Component.text("Chair")) } }
-            val cost = mapOf(Material.SPRUCE_PLANKS to 8, Material.STICK to 4)
-            val ready = planWorkshopCraft(storage, cost, reward) as WorkshopCraftPlan.Ready
-            storage[0]?.amount shouldBe 6
-            ready.contents.filterNotNull().filter { it.type == Material.SPRUCE_PLANKS }.sumOf { it.amount } shouldBe 2
-            val chair = ready.contents.filterNotNull().single { it.type == Material.PAPER }
+            val ready = planWorkshopCraft(storage, reward) as WorkshopCraftPlan.Ready
+            storage.filterNotNull().size shouldBe 0
+            val chair = ready.contents.filterNotNull().single()
             chair.amount shouldBe 1
             chair.itemMeta shouldBe reward.itemMeta
-            (planWorkshopCraft(ready.contents, cost, reward) is WorkshopCraftPlan.Missing) shouldBe true
         }
     }
-    "full inventory and custom material fail without touching the original snapshot" {
+    "reward preserves unrelated materials and stacks only with the same chair" {
+        MockBukkitTestRuntime.open().use {
+            val reward = ItemStack(Material.PAPER).also { s -> s.editMeta { it.displayName(Component.text("Chair")) } }
+            val storage = arrayOfNulls<ItemStack>(36)
+            storage[0] = ItemStack(Material.SPRUCE_LOG, 2)
+            storage[1] = ItemStack(Material.YELLOW_WOOL)
+            storage[2] = ItemStack(Material.PAPER, 4)
+            storage[3] = reward.clone().also { it.amount = 2 }
+            val ready = planWorkshopCraft(storage, reward) as WorkshopCraftPlan.Ready
+            ready.contents[0]?.amount shouldBe 2
+            ready.contents[1]?.amount shouldBe 1
+            ready.contents[2]?.amount shouldBe 4
+            ready.contents[3]?.amount shouldBe 3
+            storage[3]?.amount shouldBe 2
+        }
+    }
+    "full inventory rejects delivery without modifying its snapshot" {
         MockBukkitTestRuntime.open().use {
             val full = Array<ItemStack?>(36) { ItemStack(Material.COBBLESTONE, 64) }
-            full[0] = ItemStack(Material.STICK, 64)
-            planWorkshopCraft(full, mapOf(Material.STICK to 4), ItemStack(Material.PAPER)) shouldBe WorkshopCraftPlan.Full
-            full[0]?.amount shouldBe 64
-            val custom = arrayOfNulls<ItemStack>(36)
-            custom[0] = ItemStack(Material.STICK, 8).also { s -> s.editMeta { it.displayName(Component.text("Magic wand")) } }
-            planWorkshopCraft(custom, mapOf(Material.STICK to 4), ItemStack(Material.PAPER)) shouldBe
-                WorkshopCraftPlan.Missing(Material.STICK, 4)
-            custom[0]?.amount shouldBe 8
+            planWorkshopCraft(full, ItemStack(Material.PAPER)) shouldBe WorkshopCraftPlan.Full
+            full.forEach { it?.amount shouldBe 64 }
         }
     }
     "durable quota rejects duplicate completion and survives a fresh session until exact expiry" {

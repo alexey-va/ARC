@@ -2,7 +2,6 @@ package ru.arc.origin
 
 import dev.lone.itemsadder.api.CustomStack
 import com.google.gson.JsonElement
-import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import ru.arc.ARC
@@ -49,33 +48,16 @@ internal fun workshopCraftClaimCodec() = BoundedJsonCodec(
 
 internal sealed interface WorkshopCraftPlan {
     data class Ready(val contents: Array<ItemStack?>) : WorkshopCraftPlan
-    data class Missing(val material: Material, val amount: Int) : WorkshopCraftPlan
     data object Full : WorkshopCraftPlan
 }
 
-/** One detached inventory replacement: an interrupted game never removes materials. */
+/** Add one finished chair to a detached snapshot; workshop stock never enters inventory. */
 internal fun planWorkshopCraft(
     storage: Array<ItemStack?>,
-    cost: Map<Material, Int>,
     reward: ItemStack,
 ): WorkshopCraftPlan {
-    require(!reward.type.isAir && cost.isNotEmpty())
+    require(!reward.type.isAir)
     val after = storage.map { it?.clone() }.toTypedArray()
-    for ((material, quantity) in cost) {
-        require(material.isItem && quantity in 1..2_304)
-        val plain = ItemStack(material)
-        var remaining = quantity
-        for (slot in after.indices) {
-            val item = after[slot] ?: continue
-            // Custom, renamed and otherwise modified items are never consumed as raw material.
-            if (!item.isSimilar(plain)) continue
-            val take = minOf(remaining, item.amount)
-            remaining -= take
-            after[slot] = if (take == item.amount) null else item.also { it.amount -= take }
-            if (remaining == 0) break
-        }
-        if (remaining != 0) return WorkshopCraftPlan.Missing(material, remaining)
-    }
     val slot = after.indices.firstOrNull { after[it]?.let { stack ->
         stack.isSimilar(reward) && stack.amount < stack.maxStackSize
     } == true } ?: after.indices.firstOrNull { after[it] == null || after[it]?.type?.isAir == true }
@@ -85,9 +67,8 @@ internal fun planWorkshopCraft(
     return WorkshopCraftPlan.Ready(after)
 }
 
-/** Async durable quota, followed by one server-thread material-to-furniture exchange. */
+/** Async durable quota, followed by one server-thread furniture delivery. */
 internal class OriginWorkshopCraftRewards(
-    private val cost: Map<Material, Int>,
     private val cooldownMillis: Long,
     private val productId: String,
 ) : AutoCloseable {
@@ -100,12 +81,10 @@ internal class OriginWorkshopCraftRewards(
 
     init {
         require(cooldownMillis in 3_600_000L..604_800_000L)
-        require(cost.isNotEmpty() && cost.all { (m, n) -> m.isItem && !m.isAir && n in 1..2_304 })
     }
 
     fun missing(player: Player): String? = when (val plan = plan(player)) {
         is WorkshopCraftPlan.Ready -> null
-        is WorkshopCraftPlan.Missing -> "Не хватает: ${materialName(plan.material)} ×${plan.amount}."
         WorkshopCraftPlan.Full -> "Освободи место для готовой мебели."
         null -> "Мастерская временно недоступна."
     }
@@ -124,7 +103,7 @@ internal class OriginWorkshopCraftRewards(
         val store = updater
         if (problem != null || store == null) {
             pending.remove(playerId)
-            callback(problem ?: "Мастерская временно недоступна; материалы сохранены.")
+            callback(problem ?: "Мастерская временно недоступна.")
             return
         }
         val now = System.currentTimeMillis()
@@ -149,7 +128,7 @@ internal class OriginWorkshopCraftRewards(
                 }
                 if (failure != null) {
                     ARC.instance.logger.log(Level.WARNING, "ORIGIN_WORKSHOP_GAME claim unconfirmed player=$playerId request=$requestId", failure)
-                    if (!closed && player.isOnline && stillValid()) callback("Не удалось подтвердить сборку. Материалы сохранены.")
+                    if (!closed && player.isOnline && stillValid()) callback("Не удалось подтвердить сборку. Попробуй позже.")
                     return@runSync
                 }
                 if (result !is RedisHashUpdateResult.Changed || result.after != claim) {
@@ -157,7 +136,7 @@ internal class OriginWorkshopCraftRewards(
                     return@runSync
                 }
                 // The durable claim precedes the inventory side effect. Unknown crash outcomes
-                // retain the quota and are never replayed; both inventory sides share one snapshot.
+                // retain the quota and are never replayed; inventory changes use one snapshot.
                 if (closed || !player.isOnline || !stillValid()) {
                     releaseUnused(playerId, claim)
                     if (closed && pending.isEmpty()) tasks.close()
@@ -175,7 +154,7 @@ internal class OriginWorkshopCraftRewards(
                     }
                     else -> {
                         releaseUnused(playerId, claim)
-                        callback(missing(player) ?: "Материалы изменились. Начни сборку снова.")
+                        callback(missing(player) ?: "Не удалось выдать мебель. Освободи место и начни снова.")
                         return@runSync
                     }
                 }
@@ -187,7 +166,7 @@ internal class OriginWorkshopCraftRewards(
 
     private fun plan(player: Player): WorkshopCraftPlan? {
         val reward = CustomStack.getInstance(productId)?.itemStack?.clone() ?: return null
-        return planWorkshopCraft(player.inventory.storageContents, cost, reward)
+        return planWorkshopCraft(player.inventory.storageContents, reward)
     }
 
     private fun releaseUnused(playerId: UUID, claim: WorkshopCraftClaim) {
@@ -207,16 +186,5 @@ internal class OriginWorkshopCraftRewards(
 
     private companion object {
         const val KEY = "arc.origin-furniture-craft.v1"
-        fun materialName(material: Material): String = when (material) {
-            Material.OAK_PLANKS -> "дубовые доски"
-            Material.SPRUCE_PLANKS -> "еловые доски"
-            Material.SPRUCE_LOG -> "еловые брёвна"
-            Material.STICK -> "палки"
-            Material.WHITE_WOOL -> "белая шерсть"
-            Material.YELLOW_WOOL -> "жёлтая шерсть"
-            Material.IRON_INGOT -> "железные слитки"
-            Material.IRON_NUGGET -> "кусочки железа"
-            else -> material.name.lowercase().replace('_', ' ')
-        }
     }
 }

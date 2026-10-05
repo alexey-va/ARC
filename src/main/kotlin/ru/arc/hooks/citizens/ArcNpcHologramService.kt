@@ -34,6 +34,19 @@ import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import java.util.UUID
 
+internal fun npcHologramSource(
+    presentation: NpcPresentation,
+    hiddenTemporarily: Boolean,
+): NpcHologramSource = NpcHologramSource(
+    name = presentation.name.takeIf { presentation.nameVisible && !hiddenTemporarily },
+    lines = presentation.lines,
+    lineHeight = presentation.lineHeight,
+    viewRange = presentation.viewRange,
+)
+
+internal fun updatedTemporaryNameHideOwners(owners: Set<String>, owner: String, hidden: Boolean): Set<String> =
+    if (hidden) owners + owner else owners - owner
+
 /**
  * One ARC-owned presentation stack per Citizens NPC: name plus one body layer.
  * Permanent lines and temporary speech reuse the body display, so they cannot
@@ -83,6 +96,7 @@ internal class ArcNpcHologramService(
 
     private val stacks = mutableMapOf<Int, Stack>()
     private var catalog = store.load()
+    private val temporaryNameHideOwners = mutableMapOf<UUID, Set<String>>()
     private val tasks = LifecycleTaskScope(scheduler)
     private val warned = mutableSetOf<String>()
     private val speechBridges = mutableSetOf<Int>()
@@ -164,6 +178,21 @@ internal class ArcNpcHologramService(
         stack.bubbleBodyComponent = null
         val npc = CitizensAPI.getNPCRegistry().getById(id) ?: return true
         updateDisplays(stack, npc, refreshText = true)
+        return true
+    }
+
+    fun setNameHiddenTemporarily(id: Int, owner: String, hidden: Boolean): Boolean {
+        require(owner.isNotBlank() && owner.length <= 64) { "temporary name-hide owner is invalid" }
+        if (closed) return false
+        val npc = CitizensAPI.getNPCRegistry().getById(id) ?: return false
+        if (hidden && !config.enabled) return false
+        val stack = if (config.enabled) stackFor(npc) else null
+        val current = temporaryNameHideOwners[npc.uniqueId].orEmpty()
+        val replacement = updatedTemporaryNameHideOwners(current, owner, hidden)
+        if (replacement == current) return true
+        if (replacement.isEmpty()) temporaryNameHideOwners.remove(npc.uniqueId)
+        else temporaryNameHideOwners[npc.uniqueId] = replacement
+        if (stack != null) applyPresentation(stack, npc)
         return true
     }
 
@@ -249,6 +278,7 @@ internal class ArcNpcHologramService(
     @EventHandler
     fun onRemove(event: NPCRemoveEvent) {
         if (!isPrimaryNpc(event.npc)) return
+        temporaryNameHideOwners.remove(event.npc.uniqueId)
         removeStackOnly(event.npc.id)
     }
 
@@ -271,6 +301,7 @@ internal class ArcNpcHologramService(
         followTask = null
         reconcileTask = null
         clearStacks()
+        temporaryNameHideOwners.clear()
         warned.clear()
         reconciliationReported = false
     }
@@ -285,7 +316,7 @@ internal class ArcNpcHologramService(
         val record = catalog[npc.uniqueId] ?: return null
         val trait = npc.getTraitNullable(HologramTrait::class.java)
         if (trait != null && hasUnsupportedRenderer(trait)) {
-            removeStackOnly(npc.id)
+            removeStackOnly(npc.id, forgetNameHides = false)
             warnOnce("renderer:${npc.id}", "ARC NPC hologram reconciliation skipped NPC {}: custom/item Citizens renderer remains native", npc.id)
             return null
         }
@@ -373,11 +404,9 @@ internal class ArcNpcHologramService(
 
     private fun applyPresentation(stack: Stack, npc: NPC) {
         val presentation = stack.presentation
-        val source = NpcHologramSource(
-            name = presentation.name.takeIf { presentation.nameVisible },
-            lines = presentation.lines,
-            lineHeight = presentation.lineHeight,
-            viewRange = presentation.viewRange,
+        val source = npcHologramSource(
+            presentation,
+            hiddenTemporarily = !temporaryNameHideOwners[stack.npcUuid].isNullOrEmpty(),
         )
         val sourceChanged = stack.state.apply(source)
         if (sourceChanged) renderSource(stack)
@@ -539,8 +568,11 @@ internal class ArcNpcHologramService(
         stack.body = null
     }
 
-    private fun removeStackOnly(id: Int) {
-        stacks.remove(id)?.let(::removeDisplays)
+    private fun removeStackOnly(id: Int, forgetNameHides: Boolean = true) {
+        stacks.remove(id)?.let { stack ->
+            if (forgetNameHides) temporaryNameHideOwners.remove(stack.npcUuid)
+            removeDisplays(stack)
+        }
         speechBridges.remove(id)
     }
 

@@ -28,11 +28,10 @@ class OriginWorkshopTablesGeometryTest : FreeSpec({
         (abs(positiveLongEdge.z - positiveLongEdge.depth / 2.0 - top.depth / 2.0) < 1e-9) shouldBe true
         val positiveEndEdge = blocks.single { it.key == "end-edge-1.0" }
         (abs(positiveEndEdge.x - positiveEndEdge.width / 2.0 - top.width / 2.0) < 1e-9) shouldBe true
-        items.minOf { it.width } shouldBe 0.62
+        items.minOf { it.width } shouldBe 0.40
         items.single().material shouldBe Material.IRON_AXE
         items.all { it.flat } shouldBe true
-        val boardSample = blocks.single { it.key == "carpenter-board-sample" }
-        (abs(boardSample.y - boardSample.height / 2.0 - dimensions.height - 0.005) < 1e-9) shouldBe true
+        blocks.none { it.key == "carpenter-board-sample" } shouldBe true
 
         val saw = blocks.single { it.key == "carpenter-table-saw" }
         saw.material shouldBe Material.STONECUTTER
@@ -54,12 +53,25 @@ class OriginWorkshopTablesGeometryTest : FreeSpec({
         val ripFence = blocks.single { it.key == "carpenter-rip-fence" }
         val feedSupport = blocks.single { it.key == "carpenter-feed-support-rail" }
         val motor = blocks.single { it.key == "carpenter-drive-motor" }
+        val tuning = OriginWorkshopMachineTuning()
         (abs(boardInFeed.y - boardInFeed.height / 2.0 - (boardFeed.y + boardFeed.height / 2.0)) < 1e-9) shouldBe true
-        (abs(boardInFeed.z + boardInFeed.depth / 2.0 - OriginWorkshopMachineTuning().sawPivotZ) < 1e-9) shouldBe true
-        (boardInFeed.z + boardInFeed.depth / 2.0 < saw.z - saw.depth / 2.0) shouldBe true
-        (abs(boardFeed.z + boardFeed.depth / 2.0 - (saw.z - saw.depth / 2.0)) < 1e-9) shouldBe true
+        (abs(boardFeed.z - (tuning.sawPivotZ + 0.075)) < 1e-9) shouldBe true
+        (abs(boardInFeed.z - boardFeed.z) < 1e-9) shouldBe true
         (abs(ripFence.y - ripFence.height / 2.0 - (boardFeed.y + boardFeed.height / 2.0)) < 1e-9) shouldBe true
         (abs(feedSupport.y - feedSupport.height / 2.0 - (boardFeed.y + boardFeed.height / 2.0)) < 1e-9) shouldBe true
+        val carriedBoard = OriginWorkshopPoint(-1.35, dimensions.height + 0.17, boardFeed.z)
+        val carriedBoardSize = Triple(1.0, 0.08, 0.22)
+        (abs(carriedBoard.y - carriedBoardSize.second / 2.0 - (boardFeed.y + boardFeed.height / 2.0)) < 1e-9) shouldBe true
+        val bladeIntersectsCarriedBoard = bladeRows.any { blade ->
+            val xOverlap = blade.x - blade.width / 2.0 < carriedBoard.x + carriedBoardSize.first / 2.0 &&
+                blade.x + blade.width / 2.0 > carriedBoard.x - carriedBoardSize.first / 2.0
+            val yOverlap = blade.y - blade.height / 2.0 < carriedBoard.y + carriedBoardSize.second / 2.0 &&
+                blade.y + blade.height / 2.0 > carriedBoard.y - carriedBoardSize.second / 2.0
+            val zOverlap = blade.z - blade.depth / 2.0 < carriedBoard.z + carriedBoardSize.third / 2.0 &&
+                blade.z + blade.depth / 2.0 > carriedBoard.z - carriedBoardSize.third / 2.0
+            xOverlap && yOverlap && zOverlap
+        }
+        bladeIntersectsCarriedBoard shouldBe true
         // A small gap keeps the two separately-rendered casing faces from fighting.
         (abs(motor.z - motor.depth / 2.0 - (saw.z + saw.depth / 2.0) - 0.005) < 1e-9) shouldBe true
         val bearing = blocks.single { it.key == "carpenter-saw-bearing-post" }
@@ -69,6 +81,61 @@ class OriginWorkshopTablesGeometryTest : FreeSpec({
         (abs(axle.y - bladeHub.y) < 1e-9) shouldBe true
         (abs(axle.z - axle.depth / 2.0 - bladeHub.z) < 1e-9) shouldBe true
         (abs(axle.z + axle.depth / 2.0 - bearing.z) < 1e-9) shouldBe true
+
+        val drillHead = blocks.single { it.key == "carpenter-drill-head" }
+        val drillPost = blocks.single { it.key == "carpenter-drill-post" }
+        val drillArm = blocks.single { it.key == "carpenter-drill-arm" }
+        val controlBracket = blocks.single { it.key == "carpenter-drill-control-bracket" }
+        val controlHub = blocks.single { it.key == "carpenter-drill-control-wheel-hub" }
+        val drillFoot = blocks.single { it.key == "carpenter-drill-foot" }
+        val drillQuill = blocks.single { it.key == "carpenter-drill-quill" }
+        val drillSpindle = blocks.single { it.key == "carpenter-drill-spindle" }
+        val drillBit = blocks.single { it.key == "carpenter-drill-bit" }
+        fun overlapsOnAxis(a: Double, aSize: Double, b: Double, bSize: Double) =
+            a - aSize / 2.0 <= b + bSize / 2.0 + 1e-9 && b - bSize / 2.0 <= a + aSize / 2.0 + 1e-9
+        fun boxesOverlap(a: OriginWorkshopTablePiece, b: OriginWorkshopTablePiece) =
+            overlapsOnAxis(a.x, a.width, b.x, b.width) &&
+                overlapsOnAxis(a.y, a.height, b.y, b.height) &&
+                overlapsOnAxis(a.z, a.depth, b.z, b.depth)
+        boxesOverlap(drillFoot, drillPost) shouldBe true
+        boxesOverlap(drillHead, drillPost) shouldBe true
+        boxesOverlap(drillHead, drillArm) shouldBe true
+        boxesOverlap(drillArm, drillQuill) shouldBe true
+        boxesOverlap(drillQuill, drillSpindle) shouldBe true
+        boxesOverlap(drillSpindle, drillBit) shouldBe true
+        boxesOverlap(drillArm, controlBracket) shouldBe true
+        boxesOverlap(controlBracket, controlHub) shouldBe true
+
+        val assemblyBed = blocks.single { it.key == "carpenter-assembly-bed" }
+        val looseLeft = blocks.single { it.key == "carpenter-leg-left" }
+        val looseRight = blocks.single { it.key == "carpenter-leg-right" }
+        (abs(assemblyBed.y - assemblyBed.height / 2.0 - dimensions.height) < 1e-9) shouldBe true
+        looseLeft.x shouldBe 1.30
+        looseRight.x shouldBe 1.75
+        (looseLeft.y - looseLeft.height / 2.0 >= dimensions.height) shouldBe true
+        (looseRight.y - looseRight.height / 2.0 >= dimensions.height) shouldBe true
+        blocks.none { it.key == "carpenter-assembly-workpiece" } shouldBe true
+
+        val frontEdge = blocks.single { it.key == "long-edge--1.0" }
+        val startApron = blocks.single { it.key == "carpenter-start-apron" }
+        val startHandle = blocks.single { it.key == "carpenter-start-handle" }
+        (startApron.z - startApron.depth / 2.0 < frontEdge.z + frontEdge.depth / 2.0) shouldBe true
+        (startApron.z + startApron.depth / 2.0 > frontEdge.z - frontEdge.depth / 2.0) shouldBe true
+        (abs(startApron.y - startApron.height / 2.0 - dimensions.height) < 1e-9) shouldBe true
+        (abs(startHandle.y - startHandle.height / 2.0 - (startApron.y + startApron.height / 2.0)) < 1e-9) shouldBe true
+        (abs(abs(startHandle.z + 1.35) - 0.15) < 1e-9) shouldBe true
+        boxesOverlap(startApron, frontEdge) shouldBe true
+        boxesOverlap(startApron, startHandle) shouldBe true
+        val sawControl = blocks.single { it.key == "carpenter-saw-control-handle" }
+        val sawControlPost = blocks.single { it.key == "carpenter-saw-control-post" }
+        boxesOverlap(sawControlPost, sawControl) shouldBe true
+        (abs(sawControlPost.y - sawControlPost.height / 2.0 - dimensions.height) < 1e-9) shouldBe true
+        val leftClamp = blocks.single { it.key == "carpenter-assembly-clamp-left" }
+        val leftClampControl = blocks.single { it.key == "carpenter-assembly-clamp-control-left" }
+        val rightClamp = blocks.single { it.key == "carpenter-assembly-clamp-right" }
+        val rightClampControl = blocks.single { it.key == "carpenter-assembly-clamp-control-right" }
+        boxesOverlap(leftClamp, leftClampControl) shouldBe true
+        boxesOverlap(rightClamp, rightClampControl) shouldBe true
     }
 
     "right-angle yaw swaps the table footprint and rotates role props with it" {
@@ -201,7 +268,7 @@ class OriginWorkshopTablesGeometryTest : FreeSpec({
             val pieces = originWorkshopTablePieces(role, yaw, dimensions)
             val halfX = if (yaw == 90 || yaw == 270) dimensions.depth / 2.0 else dimensions.width / 2.0
             val halfZ = if (yaw == 90 || yaw == 270) dimensions.width / 2.0 else dimensions.depth / 2.0
-            (pieces.all {
+            (pieces.filterNot { it.key in setOf("carpenter-start-apron", "carpenter-start-handle") }.all {
                 it.x - it.width / 2.0 >= -halfX - 1e-9 && it.x + it.width / 2.0 <= halfX + 1e-9 &&
                     it.z - it.depth / 2.0 >= -halfZ - 1e-9 && it.z + it.depth / 2.0 <= halfZ + 1e-9
             }) shouldBe true

@@ -28,6 +28,7 @@ import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.PluginModule
+import ru.arc.hooks.citizens.ArcNpcHologramModule
 import ru.arc.npc.CitizensNpcRouteController
 import ru.arc.npc.NpcRouteBounds
 import ru.arc.npc.NpcRouteCell
@@ -528,6 +529,8 @@ internal fun validateOriginFurnitureWorkshopRoutes(
 
 internal fun isWorkshopCellCenter(value: Double): Boolean = abs(value - (floor(value) + 0.5)) <= 1.0e-6
 
+private const val WORKSHOP_SLEEP_NAME_OWNER = "origin-workshop-sleep"
+
 internal object OriginFurnitureWorkshopModule : PluginModule, Listener {
     override val name = "OriginFurnitureWorkshop"
     override val priority = 26
@@ -721,6 +724,8 @@ private class OriginFurnitureWorkshopRuntime private constructor(
     private val displays = PaperPacketDisplays(ARC.instance)
     private val stock = linkedMapOf<OriginFurnitureWorkshopRole, PacketItemDisplay>()
     private val lookCloseSnapshots = linkedMapOf<Int, Pair<LookClose, Boolean>>()
+    private val sleepingEquipmentSnapshots = linkedMapOf<Int, Pair<ItemStack?, ItemStack?>>()
+    private val sleepingNameplateSnapshots = linkedMapOf<Int, Pair<Boolean, Boolean>>()
     private val nextDueTick = settings.workers.associate { it.role to it.initialDelayTicks }.toMutableMap()
     private val active = linkedMapOf<OriginFurnitureWorkshopRole, ActiveWorkshopCycle>()
     private var tick = 0L
@@ -754,6 +759,16 @@ private class OriginFurnitureWorkshopRuntime private constructor(
             actor.getTraitNullable(LookClose::class.java)?.let { trait ->
                 lookCloseSnapshots[actor.id] = trait to trait.isEnabled
                 trait.lookClose(false)
+            }
+            if (worker.sleepingAt != null) {
+                ArcNpcHologramModule.setNameHiddenTemporarily(actor.id, WORKSHOP_SLEEP_NAME_OWNER, true)
+                val npcData = actor.data()
+                val hasNameplateOverride = npcData.has(NPC.Metadata.NAMEPLATE_VISIBLE)
+                sleepingNameplateSnapshots[actor.id] = hasNameplateOverride to
+                    npcData.get(NPC.Metadata.NAMEPLATE_VISIBLE, true)
+                npcData.set(NPC.Metadata.NAMEPLATE_VISIBLE, false)
+                sleepingEquipmentSnapshots[actor.id] = snapshotEquipment(actor)
+                setEquipment(actor, null, null)
             }
             if (actor.isSpawned && actor.entity.world == world) {
                 check(!actor.navigator.isNavigating) { "Workshop NPC ${actor.id} is navigating outside this runtime" }
@@ -1139,6 +1154,8 @@ private class OriginFurnitureWorkshopRuntime private constructor(
             return
         }
         setTransformation(carried, settings.carryScale, settings.carryTranslationY)
+        // The carry target is refreshed every runtime tick; long prop interpolation trails each update.
+        carried.teleportDuration = 1
         carried.teleport(carryLocation(cycle.actor, world))
     }
 
@@ -1187,10 +1204,25 @@ private class OriginFurnitureWorkshopRuntime private constructor(
         log("CYCLE_CANCELLED", cycle, "reason=$reason")
     }
 
+    private fun snapshotEquipment(actor: NPC): Pair<ItemStack?, ItemStack?> {
+        val equipment = actor.getOrAddTrait(CitizensEquipment::class.java)
+        return equipment.get(CitizensEquipment.EquipmentSlot.HAND)?.clone() to
+            equipment.get(CitizensEquipment.EquipmentSlot.OFF_HAND)?.clone()
+    }
+
+    private fun setEquipment(actor: NPC, hand: ItemStack?, offHand: ItemStack?) {
+        val equipment = actor.getOrAddTrait(CitizensEquipment::class.java)
+        equipment.set(CitizensEquipment.EquipmentSlot.HAND, hand?.clone() ?: ItemStack(Material.AIR))
+        equipment.set(CitizensEquipment.EquipmentSlot.OFF_HAND, offHand?.clone() ?: ItemStack(Material.AIR))
+    }
+
     private fun restoreEquipment(cycle: ActiveWorkshopCycle) {
-        val equipment = runCatching { cycle.actor.getOrAddTrait(CitizensEquipment::class.java) }.getOrNull() ?: return
-        runCatching { equipment.set(CitizensEquipment.EquipmentSlot.HAND, cycle.mainHand?.clone() ?: ItemStack(Material.AIR)) }
-        runCatching { equipment.set(CitizensEquipment.EquipmentSlot.OFF_HAND, cycle.offHand?.clone() ?: ItemStack(Material.AIR)) }
+        runCatching {
+            setEquipment(cycle.actor, CitizensEquipment.EquipmentSlot.HAND, cycle.mainHand ?: ItemStack(Material.AIR))
+        }
+        runCatching {
+            setEquipment(cycle.actor, CitizensEquipment.EquipmentSlot.OFF_HAND, cycle.offHand ?: ItemStack(Material.AIR))
+        }
     }
 
     private fun removeCycleProps(cycle: ActiveWorkshopCycle) {
@@ -1311,7 +1343,50 @@ private class OriginFurnitureWorkshopRuntime private constructor(
         active.values.toList().forEach(::closeActor)
         active.clear()
         settings.workers.filter { it.sleepingAt != null }.forEach { worker ->
-            actors[worker.role]?.getTraitNullable(SleepTrait::class.java)?.setSleeping(null)
+            actors[worker.role]?.let { actor ->
+                runCatching {
+                    ArcNpcHologramModule.setNameHiddenTemporarily(actor.id, WORKSHOP_SLEEP_NAME_OWNER, false)
+                }.onFailure { failure ->
+                    ARC.instance.logger.log(
+                        Level.WARNING,
+                        "ORIGIN_WORKSHOP phase=SLEEP_RESTORE_FAILED actor=${actor.id} role=${worker.role.key} part=arc-name",
+                        failure,
+                    )
+                }
+                sleepingNameplateSnapshots.remove(actor.id)?.let { (hadOverride, wasVisible) ->
+                    runCatching {
+                        if (hadOverride) actor.data().set(NPC.Metadata.NAMEPLATE_VISIBLE, wasVisible)
+                        else actor.data().remove(NPC.Metadata.NAMEPLATE_VISIBLE)
+                    }.onFailure { failure ->
+                        ARC.instance.logger.log(
+                            Level.WARNING,
+                            "ORIGIN_WORKSHOP phase=SLEEP_RESTORE_FAILED actor=${actor.id} role=${worker.role.key} part=nameplate",
+                            failure,
+                        )
+                    }
+                }
+                sleepingEquipmentSnapshots.remove(actor.id)?.let { (hand, offHand) ->
+                    runCatching {
+                        setEquipment(actor, CitizensEquipment.EquipmentSlot.HAND, hand ?: ItemStack(Material.AIR))
+                    }.onFailure { failure ->
+                        ARC.instance.logger.log(
+                            Level.WARNING,
+                            "ORIGIN_WORKSHOP phase=SLEEP_RESTORE_FAILED actor=${actor.id} role=${worker.role.key} part=main-hand",
+                            failure,
+                        )
+                    }
+                    runCatching {
+                        setEquipment(actor, CitizensEquipment.EquipmentSlot.OFF_HAND, offHand ?: ItemStack(Material.AIR))
+                    }.onFailure { failure ->
+                        ARC.instance.logger.log(
+                            Level.WARNING,
+                            "ORIGIN_WORKSHOP phase=SLEEP_RESTORE_FAILED actor=${actor.id} role=${worker.role.key} part=off-hand",
+                            failure,
+                        )
+                    }
+                }
+                actor.getTraitNullable(SleepTrait::class.java)?.setSleeping(null)
+            }
         }
         settings.workers.forEach { OriginWorkshopTablesModule.animateDrive(it.tableId, 0L, false) }
         routeController.close()

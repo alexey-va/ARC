@@ -114,6 +114,42 @@ class ArcNpcHologramServiceTest : StringSpec({
         }
     }
 
+    "temporary name hides are owner-scoped and leave persisted name and body alone" {
+        val presentation = NpcPresentation(
+            name = "§6Эдгар",
+            nameVisible = true,
+            lines = listOf("Мастер"),
+        )
+        var owners = emptySet<String>()
+        owners = updatedTemporaryNameHideOwners(owners, "origin-workshop-sleep", true)
+        owners = updatedTemporaryNameHideOwners(owners, "another-owner", true)
+        npcHologramSource(presentation, owners.isNotEmpty()).let {
+            it.name shouldBe null
+            it.lines shouldBe presentation.lines
+        }
+
+        owners = updatedTemporaryNameHideOwners(owners, "origin-workshop-sleep", false)
+        npcHologramSource(presentation, owners.isNotEmpty()).name shouldBe null
+        owners = updatedTemporaryNameHideOwners(owners, "another-owner", false)
+        npcHologramSource(presentation, owners.isNotEmpty()).let {
+            it.name shouldBe presentation.name
+            it.lines shouldBe presentation.lines
+        }
+    }
+
+    "temporary name hiding does not patch the durable presentation catalog" {
+        withHologram(listOf("Мастер", "§6Эдгар")) { f ->
+            f.service.reconcileAll()
+
+            f.service.setNameHiddenTemporarily(12, "origin-workshop-sleep", true) shouldBe true
+            f.service.desiredNameplate(f.npc) shouldBe "true"
+            f.service.setNameHiddenTemporarily(12, "origin-workshop-sleep", false) shouldBe true
+            f.service.desiredNameplate(f.npc) shouldBe "true"
+
+            verify(exactly = 1) { f.store.save(any()) }
+        }
+    }
+
     "a reused numeric ID does not inherit the old UUID's presentation" {
         withHologram { f ->
             f.service.reconcileAll()
@@ -142,6 +178,7 @@ private class HologramFixture(nativeLines: List<String>, legacyBackup: String) {
         var nativeNameVisible = true
         every { CitizensAPI.getNPCRegistry() } returns registry
         every { registry.iterator() } answers { mutableListOf(npc).iterator() }
+        every { registry.getById(12) } returns npc
         every { npc.id } returns 12
         every { npc.uniqueId } returns uuid
         every { npc.rawName } returns "Эдгар"
