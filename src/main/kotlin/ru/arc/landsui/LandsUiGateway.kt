@@ -20,6 +20,10 @@ interface LandsUiGateway {
     fun inspectedLand(player: Player): LandsUiLand?
     fun administerCurrent(player: Player, landId: String, action: LandsUiAdminAction): LandsUiCommandResult
     fun currentClaim(player: Player): LandsUiClaim?
+    fun managementView(player: Player, context: LandsUiContext): LandsUiManagementView?
+    fun roleRules(player: Player, context: LandsUiContext, roleId: String): List<LandsUiRule>
+    fun searchLands(player: Player, query: String): List<LandsUiLand>
+    fun change(player: Player, context: LandsUiContext, change: LandsUiChange): LandsUiChangeResult
 }
 
 data class LandsUiClaim(val landId: String, val worldId: java.util.UUID, val chunkX: Int, val chunkZ: Int)
@@ -42,6 +46,7 @@ enum class LandsUiAdminAction(val command: String, private val commandPermission
 class BukkitLandsUiGateway internal constructor(
     private val integration: LandsIntegration = LandsIntegration.of(ARC.instance),
 ) : LandsUiGateway {
+    private val management = LandsUiManagementService(integration)
 
     override fun lands(player: Player): List<LandsUiLand> {
         val landPlayer = integration.getLandPlayer(player.uniqueId) ?: return emptyList()
@@ -146,4 +151,15 @@ class BukkitLandsUiGateway internal constructor(
             LandsUiCommandResult.COMMAND_REJECTED
         }
     }
+
+    override fun managementView(player: Player, context: LandsUiContext): LandsUiManagementView? =
+        management.managementView(player, context)
+
+    override fun roleRules(player: Player, context: LandsUiContext, roleId: String): List<LandsUiRule> =
+        management.roleRules(player, context, roleId)
+
+    override fun searchLands(player: Player, query: String): List<LandsUiLand> = management.searchLands(player, query)
+
+    override fun change(player: Player, context: LandsUiContext, change: LandsUiChange): LandsUiChangeResult =
+        management.change(player, context, change)
 }

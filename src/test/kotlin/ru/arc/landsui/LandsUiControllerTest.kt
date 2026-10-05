@@ -44,6 +44,10 @@ class LandsUiControllerTest : StringSpec({
             )
             val gateway = mockk<LandsUiGateway>(relaxed = true)
             every { gateway.land(player, land.id) } returns land
+            val memberContext = LandsUiContext(land.id, LandsUiAccess.MEMBER)
+            every { gateway.managementView(player, memberContext) } returns landsUiTestView(
+                memberContext, land, permissions = setOf(LandsUiPermission.TRUST),
+            )
             val settings = try {
                 ConfigManager.clear()
                 LandsUiConfig.load(dataPath).snapshot()
@@ -65,7 +69,7 @@ class LandsUiControllerTest : StringSpec({
                     val detailsIds = details.buttons.map { it.id.value }
                     detailsIds shouldContain "add_member"
                     detailsIds shouldBe listOf(
-                        "claim", "unclaim", "add_member", "rename", "members", "territory", "lands_menu", "delete",
+                        "members", "rules", "roles", "territory", "add_member", "settings",
                     )
                     ("region_tool" in detailsIds) shouldBe false
                     detailsIds.all { '-' !in it } shouldBe true
@@ -91,6 +95,9 @@ class LandsUiControllerTest : StringSpec({
                     checkNotNull(screen).id shouldBe "lands.home"
                     every { gateway.currentLandId(player) } returns "foreign-land"
                     every { gateway.land(player, "foreign-land") } returns null
+                    every {
+                        gateway.managementView(player, LandsUiContext("foreign-land", LandsUiAccess.CURRENT))
+                    } returns null
                     controller.openCurrent(player)
                     checkNotNull(screen).id shouldBe "lands.home"
 
@@ -125,6 +132,8 @@ class LandsUiControllerTest : StringSpec({
             val land = LandsUiLand("land-radius", "Дом", playerId, 1, 64, setOf(playerId), 12, 0.0, true)
             val gateway = mockk<LandsUiGateway>(relaxed = true)
             every { gateway.land(player, land.id) } returns land
+            val memberContext = LandsUiContext(land.id, LandsUiAccess.MEMBER)
+            every { gateway.managementView(player, memberContext) } returns landsUiTestView(memberContext, land)
             val settings = try {
                 ConfigManager.clear()
                 LandsUiConfig.load(dataPath).snapshot()

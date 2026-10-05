@@ -7,6 +7,7 @@ import io.mockk.mockk
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
 import io.mockk.verify
+import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.entity.Player
 import ru.arc.config.ConfigManager
@@ -20,25 +21,41 @@ import java.nio.file.Files
 import java.util.UUID
 
 class LandsUiInspectionTest : StringSpec({
-    "visitor sees current owner and every member without selecting or modifying a foreign land" {
+    "visitor sees current members across pages without admin or mutation actions" {
         MockBukkitTestRuntime.open().use {
             val data = Files.createTempDirectory("lands-inspection")
             val player = mockk<Player>(relaxed = true)
             val owner = UUID.randomUUID()
             val members = (1..13).map { UUID(0, it.toLong()) }.toSet() + owner
             val land = LandsUiLand("foreign", "Соседи", owner, 7, 64, members, 25, 1234.0, false)
+            val currentContext = LandsUiContext(land.id, LandsUiAccess.CURRENT)
+            val unknown = members.first { it != owner }
+            val uiMembers = members.map { id ->
+                LandsUiMember(
+                    id = id,
+                    name = when (id) {
+                        owner -> "HeadPlayer"
+                        unknown -> id.toString()
+                        else -> "Player${id.leastSignificantBits}"
+                    },
+                    role = if (id == owner) "owner" else "member",
+                    online = false,
+                    owner = id == owner,
+                    removable = false,
+                    assignableRoleIds = emptySet(),
+                )
+            }
+            val currentView = landsUiTestView(currentContext, land, members = uiMembers)
             val gateway = mockk<LandsUiGateway>(relaxed = true)
             every { gateway.lands(player) } returns emptyList()
             every { gateway.land(player, any()) } returns null
             every { gateway.currentLandId(player) } returns land.id
             every { gateway.inspectedLand(player) } returns land
-            every { gateway.playerName(any()) } answers { "Player" + firstArg<UUID>().leastSignificantBits }
             every { gateway.playerName(owner) } returns "HeadPlayer"
-            // Unknown offline profiles must remain visible, not silently disappear.
-            val unknown = members.first { it != owner }
-            every { gateway.playerName(unknown) } returns null
+            every { gateway.managementView(player, currentContext) } returns currentView
             val context = mockk<PaperDialogClickContext>(relaxed = true)
             every { context.player } returns player
+            every { player.hasPermission("lands.admin.command.edit") } returns false
             Tasks.install(mockk<TaskScheduler>(relaxed = true))
             ConfigManager.clear()
             val controller = LandsUiController(LandsUiConfig.load(data).snapshot(), gateway)
@@ -50,49 +67,54 @@ class LandsUiInspectionTest : StringSpec({
                 checkNotNull(screen).buttons.first().id.value shouldBe "inspect"
                 bodyText(checkNotNull(screen)).contains("HeadPlayer") shouldBe true
                 checkNotNull(screen).buttons.first().onClick.handle(context)
-                checkNotNull(screen).id shouldBe "lands.inspect"
-                bodyText(checkNotNull(screen)).contains("HeadPlayer") shouldBe true
-                bodyText(checkNotNull(screen)).contains("1234") shouldBe false
-                checkNotNull(screen).buttons.map { it.id.value } shouldBe listOf("inspect_members")
-                checkNotNull(screen).buttons.single().onClick.handle(context)
+                val inspection = checkNotNull(screen)
+                inspection.id shouldBe "lands.inspect"
+                bodyText(inspection).contains("HeadPlayer") shouldBe true
+                bodyText(inspection).contains("1234") shouldBe false
+                inspection.buttons.map { it.id.value } shouldBe listOf("members", "rules", "roles", "territory")
+
+                inspection.buttons.single { it.id.value == "members" }.onClick.handle(context)
                 val firstPage = checkNotNull(screen)
-                firstPage.id shouldBe "lands.inspect-members"
-                bodyText(firstPage).contains("HeadPlayer") shouldBe true
-                bodyText(firstPage).contains(unknown.toString().takeLast(12)) shouldBe true
+                firstPage.id shouldBe "lands.members"
+                bodyText(firstPage).contains("Страница 1 из 2") shouldBe true
+                firstPage.buttons.last().id.value shouldBe "next"
                 firstPage.buttons.single { it.id.value == "next" }.onClick.handle(context)
                 val lastPage = checkNotNull(screen)
                 bodyText(lastPage).contains("Страница 2 из 2") shouldBe true
-                lastPage.buttons.map { it.id.value } shouldBe listOf("previous")
-                val allText = bodyText(firstPage) + bodyText(lastPage)
+                lastPage.buttons.last().id.value shouldBe "previous"
+
+                val memberLabels = (firstPage.buttons + lastPage.buttons)
+                    .filter { it.id.value.startsWith("member_") }
+                    .map { plainText(it.label) }
+                memberLabels.size shouldBe members.size
+                memberLabels.joinToString("\n").contains("HeadPlayer") shouldBe true
+                memberLabels.joinToString("\n").contains(unknown.toString()) shouldBe true
                 members.filter { it != owner && it != unknown }.forEach { id ->
-                    allText.contains("Player" + id.leastSignificantBits) shouldBe true
+                    memberLabels.joinToString("\n").contains("Player${id.leastSignificantBits}") shouldBe true
                 }
+
                 lastPage.exitButton!!.onClick.handle(context)
                 checkNotNull(screen).id shouldBe "lands.inspect"
                 controller.openCurrent(player)
                 checkNotNull(screen).id shouldBe "lands.inspect"
-                every { gateway.inspectedLand(player) } returns land.copy(id = "another-land")
-                checkNotNull(screen).buttons.first().onClick.handle(context)
+
+                // A current-view lookup can expire after a page was opened (for example, the player moved).
+                every { gateway.managementView(player, currentContext) } returns null
+                controller.openCurrent(player)
                 checkNotNull(screen).id shouldBe "lands.home"
+
+                every { gateway.managementView(player, currentContext) } returns currentView
+                controller.openCurrent(player)
+                checkNotNull(screen).buttons.map { it.id.value } shouldBe listOf("members", "rules", "roles", "territory")
+                every { player.hasPermission("lands.admin.command.edit") } returns true
+                controller.openCurrent(player)
+                checkNotNull(screen).buttons.map { it.id.value } shouldBe listOf("members", "rules", "roles", "territory", "admin")
+
                 verify(exactly = 0) { gateway.select(any(), any()) }
                 verify(exactly = 0) { gateway.selectAndExecute(any(), any(), any()) }
                 verify(exactly = 0) { gateway.execute(any(), any()) }
                 verify(exactly = 0) { gateway.administerCurrent(any(), any(), any()) }
-
-                every { gateway.inspectedLand(player) } returns land
-                every { player.hasPermission("lands.admin.command.edit") } returns true
-                every { player.hasPermission("lands.command.menu") } returns true
-                every { player.hasPermission("lands.command.member.menu") } returns true
-                controller.openCurrent(player)
-                val adminScreen = checkNotNull(screen)
-                adminScreen.buttons.map { it.id.value } shouldBe listOf("inspect_members", "admin_menu", "admin_members")
-                every { gateway.administerCurrent(player, land.id, LandsUiAdminAction.MEMBERS) } returns LandsUiCommandResult.EXECUTED
-                adminScreen.buttons.single { it.id.value == "admin_members" }.onClick.handle(context)
-                verify { gateway.administerCurrent(player, land.id, LandsUiAdminAction.MEMBERS) }
-                every { player.hasPermission("lands.admin.command.edit") } returns false
-                adminScreen.buttons.single { it.id.value == "admin_menu" }.onClick.handle(context)
-                verify(exactly = 0) { gateway.administerCurrent(any(), any(), LandsUiAdminAction.MENU) }
-                checkNotNull(screen).buttons.map { it.id.value } shouldBe listOf("inspect_members")
+                verify(exactly = 0) { gateway.change(any(), any(), any()) }
             } finally {
                 controller.close()
                 Tasks.reset()
@@ -107,3 +129,5 @@ class LandsUiInspectionTest : StringSpec({
 private fun bodyText(screen: PaperDialogScreen): String = screen.body.joinToString("\n") {
     PlainTextComponentSerializer.plainText().serialize(it.text)
 }
+
+private fun plainText(component: Component): String = PlainTextComponentSerializer.plainText().serialize(component)

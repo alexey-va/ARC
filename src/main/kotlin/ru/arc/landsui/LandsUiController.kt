@@ -30,6 +30,14 @@ class LandsUiController(
     private val amountFormat = DecimalFormat("#,##0.##")
     private val tasks = LifecycleTaskScope()
 
+    private val management by lazy {
+        LandsManagementMenus(settings, gateway, ::openRoot) { player, context ->
+            if (context.access == LandsUiAccess.MEMBER) {
+                listOfNotNull(claimRadiusButton(player), claimDisplayButton(player, context.landId))
+            } else emptyList()
+        }
+    }
+
     fun close() = tasks.close()
 
     fun openCurrent(player: Player) {
@@ -88,7 +96,11 @@ class LandsUiController(
         } + listOf(
             button("create", text("create-label"), text("create-tooltip")) { openCreate(player) },
             button("guide", text("guide-label"), text("guide-tooltip")) { openGuide(player) },
-        ) + listOfNotNull(claimRadiusButton(player)) + listOfNotNull(claimDisplayButton(player, null))
+        ) + (if (player.hasPermission("lands.admin.command.edit")) listOf(
+            button("admin_search", text("admin-search-label"), text("admin-search-tooltip")) {
+                management.openSearch(player)
+            },
+        ) else emptyList()) + listOfNotNull(claimRadiusButton(player)) + listOfNotNull(claimDisplayButton(player, null))
         show(
             player,
             PaperDialogScreen(
@@ -103,93 +115,8 @@ class LandsUiController(
         )
     }
 
-    private fun openInspection(player: Player, landId: String) {
-        withInspectedLand(player, landId) { land ->
-            val buttons = mutableListOf(
-                button("inspect_members", text("members-label"), text("inspect-members-tooltip")) {
-                    openInspectionMembers(player, landId)
-                },
-            )
-            if (gateway.land(player, landId) != null) {
-                buttons += button("manage", text("manage-label"), text("manage-tooltip")) {
-                    selectAndOpenDetails(player, landId)
-                }
-            }
-            LandsUiAdminAction.entries.filter { it.allowed(player) }.forEach { action ->
-                val key = if (action == LandsUiAdminAction.MENU) "admin-menu" else "admin-members"
-                buttons += button("admin_${action.name.lowercase()}", text("$key-label"), text("$key-tooltip")) {
-                    if (!action.allowed(player)) {
-                        player.sendMessage(text("admin-denied"))
-                        openInspection(player, landId)
-                    } else when (gateway.administerCurrent(player, landId, action)) {
-                        LandsUiCommandResult.EXECUTED -> Unit
-                        LandsUiCommandResult.LAND_UNAVAILABLE -> {
-                            player.sendMessage(text("inspect-moved"))
-                            openRoot(player)
-                        }
-                        else -> player.sendMessage(text("action-failed"))
-                    }
-                }.closing()
-            }
-            show(player, PaperDialogScreen(
-                id = "lands.inspect",
-                title = text("inspect-title", "land" to land.name),
-                body = listOf(DialogTables.body(
-                    rows = listOf(
-                        text("table-land-label") to text("inspect-value", "value" to land.name),
-                        text("table-owner-label") to text("inspect-value", "value" to playerName(land.ownerId)),
-                        text("table-territory-label") to text("inspect-chunks", "chunks" to land.chunks.toString()),
-                        text("table-members-label") to text("inspect-value", "value" to land.memberIds.size.toString()),
-                    ), frame = DialogTables.Frame.LEGENDARY, width = 320,
-                )),
-                buttons = buttons,
-                exitButton = back("back") { openRoot(player) },
-                columns = 2,
-            ), reopen = { openInspection(player, landId) })
-        }
-    }
-
-    private fun openInspectionMembers(player: Player, landId: String, requestedPage: Int = 0) {
-        withInspectedLand(player, landId) { land ->
-            val members = land.memberIds.map { id -> id to playerName(id) }
-                .sortedWith(compareBy<Pair<java.util.UUID, String>> { it.first != land.ownerId }
-                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.second })
-            val lastPage = (members.size - 1).coerceAtLeast(0) / settings.maxListedPlayers
-            val page = requestedPage.coerceIn(0, lastPage)
-            val rows = members.drop(page * settings.maxListedPlayers).take(settings.maxListedPlayers).map { (id, name) ->
-                text("inspect-value", "value" to name) to text(
-                    if (id == land.ownerId) "inspect-owner" else "inspect-member",
-                )
-            }
-            val buttons = mutableListOf<PaperDialogButton>()
-            if (page > 0) buttons += button("previous", text("previous-page")) {
-                openInspectionMembers(player, landId, page - 1)
-            }
-            if (page < lastPage) buttons += button("next", text("next-page")) {
-                openInspectionMembers(player, landId, page + 1)
-            }
-            show(player, PaperDialogScreen(
-                id = "lands.inspect-members",
-                title = text("members-title", "land" to land.name),
-                body = listOf(
-                    PaperDialogBody(text("inspect-members-page", "page" to (page + 1).toString(),
-                        "pages" to (lastPage + 1).toString(), "members" to members.size.toString())),
-                    DialogTables.body(rows = rows, frame = DialogTables.Frame.LEGENDARY, width = 320),
-                ),
-                buttons = buttons,
-                exitButton = back("back") { openInspection(player, landId) },
-                columns = 2,
-            ), reopen = { openInspectionMembers(player, landId, page) })
-        }
-    }
-
-    private fun withInspectedLand(player: Player, landId: String, action: (LandsUiLand) -> Unit) {
-        val current = gateway.inspectedLand(player)
-        if (current == null || current.id != landId) {
-            player.sendMessage(text("inspect-moved"))
-            openRoot(player)
-        } else action(current)
-    }
+    private fun openInspection(player: Player, landId: String) =
+        management.open(player, LandsUiContext(landId, LandsUiAccess.CURRENT))
 
     private fun playerName(id: java.util.UUID): String = gateway.playerName(id) ?: id.toString()
 
@@ -208,7 +135,7 @@ class LandsUiController(
                 body = listOf(PaperDialogBody(text("invite-picker-body", "player" to target.name), width = 500)),
                 buttons = lands.mapIndexed { index, land ->
                     button("invite_land_$index", text("invite-land-label", "land" to land.name)) {
-                        executeForLand(player, land.id) { LandsUiCommands.addMember(target.name) }
+                        management.execute(player, LandsUiContext(land.id, LandsUiAccess.MEMBER), LandsUiChange.Trust(target.name))
                     }.closing()
                 },
                 exitButton = back("back") { openRoot(player) },
@@ -227,51 +154,8 @@ class LandsUiController(
         openDetails(player, landId)
     }
 
-    fun openDetails(player: Player, landId: String) {
-        withLand(player, landId) { land ->
-            val role = settings.text(if (land.ownerId == player.uniqueId) "role-owner" else "role-member")
-            val buttons = mutableListOf(
-                commandButton("claim", "claim-label", "claim-tooltip", player, land.id, "claim"),
-                button("unclaim", text("unclaim-label"), text("unclaim-tooltip")) { openUnclaimConfirm(player, land.id) },
-                button("add_member", text("add-member-label"), text("members-tooltip")) { openAddMember(player, land.id) },
-            )
-            if (land.ownerId == player.uniqueId) {
-                buttons += button("rename", text("rename-label"), text("rename-tooltip")) { openRename(player, land.id) }
-            }
-            buttons += button("members", text("members-label"), text("members-tooltip")) { openMembers(player, land.id) }
-            buttons += button("territory", text("territory-label"), text("territory-tooltip")) { openTerritory(player, land.id) }
-            claimRadiusButton(player)?.let(buttons::add)
-            claimDisplayButton(player, land.id)?.let(buttons::add)
-            buttons += button("lands_menu", text("open-lands-label"), text("open-lands-tooltip")) {
-                executeForLand(player, land.id, LandsUiCommands::menu)
-            }.closing()
-            if (land.ownerId == player.uniqueId) {
-                buttons += button("delete", text("delete-label"), text("delete-tooltip")) { openDanger(player, land.id) }
-            }
-            show(
-                player,
-                PaperDialogScreen(
-                    id = "lands.details",
-                    title = text("details-title", "land" to land.name),
-                    body = listOf(DialogTables.body(
-                        rows = listOf(
-                            text("table-role-label") to Component.text(role),
-                            text("table-territory-label") to text("table-territory-value",
-                                "used" to land.chunks.toString(), "maximum" to land.maxChunks.toString()),
-                            text("table-members-label") to text("table-slots-value",
-                                "used" to land.memberIds.size.toString(), "maximum" to land.maxMembers.toString()),
-                            text("table-balance-label") to text("table-coins-value", "value" to amountFormat.format(land.balance)),
-                        ),
-                        frame = DialogTables.Frame.LEGENDARY,
-                    )),
-                    buttons = buttons,
-                    exitButton = back("back") { openRoot(player) },
-                    columns = 2,
-                ),
-                reopen = { openDetails(player, landId) },
-            )
-        }
-    }
+    fun openDetails(player: Player, landId: String) =
+        management.open(player, LandsUiContext(landId, LandsUiAccess.MEMBER))
 
     private fun claimRadiusButton(player: Player): PaperDialogButton? =
         ClaimBlockIdentity.heldRadius(player)?.let { radius ->
@@ -424,211 +308,8 @@ class LandsUiController(
         )
     }
 
-    private fun openRename(player: Player, landId: String) {
-        withLand(player, landId) { land ->
-            if (land.ownerId != player.uniqueId) return@withLand openDetails(player, landId)
-            show(
-                player,
-                PaperDialogScreen(
-                    id = "lands.rename",
-                    title = text("rename-title", "land" to land.name),
-                    body = listOf(PaperDialogBody(text("rename-body"))),
-                    inputs = listOf(PaperDialogTextInput(NAME_INPUT, text("name-input"), initial = land.name, maxLength = 24)),
-                    buttons = listOf(
-                        contextButton("rename_submit", text("rename-submit-label")) { context ->
-                            val newName = context.text(NAME_INPUT).orEmpty().trim()
-                            val command = runCatching { LandsUiCommands.rename(newName) }.getOrNull()
-                            if (command == null) {
-                                player.sendMessage(text("invalid-name"))
-                                openRename(player, landId)
-                            } else {
-                                executeForLand(player, landId) { LandsUiCommands.rename(newName) }
-                            }
-                        }.closing(),
-                    ),
-                    exitButton = back("back") { openDetails(player, landId) },
-                ),
-            )
-        }
-    }
-
-    private fun openMembers(player: Player, landId: String) {
-        withLand(player, landId) { land ->
-            val memberButtons = land.memberIds
-                .asSequence()
-                .filter { it != land.ownerId }
-                .mapNotNull { memberId -> gateway.playerName(memberId)?.let { memberId to it } }
-                .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.second })
-                .take(settings.maxListedPlayers)
-                .mapIndexed { index, (_, name) ->
-                    button(
-                        "member_$index",
-                        text("member-label", "player" to name),
-                        text("member-tooltip", "player" to name),
-                    ) { openRemoveMember(player, landId, name) }
-                }
-                .toList()
-            show(
-                player,
-                PaperDialogScreen(
-                    id = "lands.members",
-                    title = text("members-title", "land" to land.name),
-                    body = listOf(
-                        PaperDialogBody(
-                            text(
-                                "members-body",
-                                "members" to land.memberIds.size.toString(),
-                                "max_members" to land.maxMembers.toString(),
-                            ),
-                        ),
-                    ),
-                    buttons = memberButtons + button("add_member", text("add-member-label")) { openAddMember(player, landId) },
-                    exitButton = back("back") { openDetails(player, landId) },
-                    columns = 2,
-                ),
-                reopen = { openMembers(player, landId) },
-            )
-        }
-    }
-
-    fun openAddMember(player: Player, landId: String) {
-        withLand(player, landId) { land ->
-            val candidates = LandsUiPlanner.addablePlayers(player.uniqueId, land, gateway.onlinePlayers())
-                .take(settings.maxListedPlayers)
-            val candidateButtons = candidates.mapIndexed { index, candidate ->
-                button("candidate_$index", text("candidate-label", "player" to candidate.name)) {
-                    executeForLand(player, landId) { LandsUiCommands.addMember(candidate.name) }
-                }.closing()
-            }
-            show(
-                player,
-                PaperDialogScreen(
-                    id = "lands.add",
-                    title = text("add-title", "land" to land.name),
-                    body = listOf(PaperDialogBody(text("add-body", "limit" to settings.maxListedPlayers.toString()))),
-                    inputs = listOf(PaperDialogTextInput(PLAYER_INPUT, text("player-input"), maxLength = 16)),
-                    buttons = listOf(
-                        contextButton("add_submit", text("add-submit-label")) { context ->
-                            val name = context.text(PLAYER_INPUT).orEmpty().trim()
-                            if (runCatching { LandsUiCommands.member(name) }.isFailure) {
-                                player.sendMessage(text("invalid-player"))
-                                openAddMember(player, landId)
-                            } else {
-                                executeForLand(player, landId) { LandsUiCommands.addMember(name) }
-                            }
-                        }.closing(),
-                    ) + candidateButtons,
-                    exitButton = back("back") { openMembers(player, landId) },
-                    columns = 2,
-                ),
-            )
-        }
-    }
-
-    private fun openRemoveMember(player: Player, landId: String, memberName: String) {
-        withLand(player, landId) { land ->
-            show(
-                player,
-                PaperDialogScreen(
-                    id = "lands.remove",
-                    title = text("remove-title"),
-                    body = listOf(PaperDialogBody(text("remove-body", "player" to memberName, "land" to land.name))),
-                    buttons = listOf(
-                        button("remove_confirm", text("remove-confirm-label", "player" to memberName)) {
-                            executeForLand(player, landId) { LandsUiCommands.removeMember(memberName) }
-                        }.closing(),
-                    ),
-                    exitButton = back("back") { openMembers(player, landId) },
-                ),
-            )
-        }
-    }
-
-    private fun openTerritory(player: Player, landId: String) {
-        withLand(player, landId) { land ->
-            show(
-                player,
-                PaperDialogScreen(
-                    id = "lands.territory",
-                    title = text("territory-title", "land" to land.name),
-                    body = listOf(
-                        territorySummary(land),
-                        PaperDialogBody(text("territory-body", "land" to land.name), width = 468),
-                    ),
-                    buttons = listOf(
-                        commandButton("claim", "claim-label", "claim-tooltip", player, landId, "claim"),
-                        button("unclaim", text("unclaim-label"), text("unclaim-tooltip")) { openUnclaimConfirm(player, landId) },
-                        commandButton("setspawn", "setspawn-label", "setspawn-tooltip", player, landId, "setspawn"),
-                        commandButton("spawn", "spawn-label", "spawn-tooltip", player, landId, "spawn"),
-                        commandButton("areas", "areas-label", "areas-tooltip", player, landId, "menu", "areas"),
-                        button("mainblock", text("mainblock-label"), text("mainblock-tooltip")) {
-                            openMainblockGuide(player, landId)
-                        },
-                    ),
-                    exitButton = back("back") { openDetails(player, landId) },
-                    columns = 2,
-                ),
-                reopen = { openTerritory(player, landId) },
-            )
-        }
-    }
-
-    private fun openMainblockGuide(player: Player, landId: String) {
-        withLand(player, landId) { land ->
-            show(
-                player,
-                PaperDialogScreen(
-                    id = "lands.mainblock",
-                    title = text("mainblock-title", "land" to land.name),
-                    body = listOf(PaperDialogBody(text("mainblock-body"), width = 500)),
-                    buttons = listOf(
-                        button("lands_menu", text("open-lands-label"), text("open-lands-tooltip")) {
-                            executeForLand(player, landId, LandsUiCommands::menu)
-                        }.closing(),
-                    ),
-                    exitButton = back("back") { openTerritory(player, landId) },
-                ),
-            )
-        }
-    }
-
-    private fun openUnclaimConfirm(player: Player, landId: String) {
-        val claim = gateway.currentClaim(player)
-        val land = gateway.land(player, landId)
-        if (claim == null || land == null || claim.landId != landId) {
-            player.sendMessage(text("unclaim-no-claim"))
-            openDetails(player, landId)
-            return
-        }
-        show(
-            player,
-            PaperDialogScreen(
-                id = "lands.unclaim",
-                title = text("unclaim-title", "land" to land.name),
-                body = listOf(PaperDialogBody(text("unclaim-body", "land" to land.name,
-                    "chunk_x" to claim.chunkX.toString(), "chunk_z" to claim.chunkZ.toString()), width = 500)),
-                buttons = listOf(
-                    button("unclaim_confirm", text("unclaim-confirm-label")) {
-                        val fresh = gateway.currentClaim(player)
-                        if (!canConfirmUnclaim(claim, fresh, gateway.land(player, landId)?.id)) {
-                            player.sendMessage(text("unclaim-stale"))
-                            openDetails(player, landId)
-                        } else {
-                            when (gateway.unclaimCurrent(player, landId)) {
-                                LandsUiCommandResult.EXECUTED -> Unit
-                                LandsUiCommandResult.LAND_UNAVAILABLE -> {
-                                    player.sendMessage(text("land-gone")); openRoot(player)
-                                }
-                                LandsUiCommandResult.COMMAND_REJECTED -> player.sendMessage(text("action-failed"))
-                                LandsUiCommandResult.ACTIVE_SELECTION -> player.sendMessage(text("unclaim-selection-active"))
-                            }
-                        }
-                    }.closing(),
-                ),
-                exitButton = back("back") { openDetails(player, landId) },
-            ),
-        )
-    }
+    fun openAddMember(player: Player, landId: String) =
+        management.openAddMember(player, LandsUiContext(landId, LandsUiAccess.MEMBER))
 
     private fun openGuide(player: Player) {
         show(
@@ -731,7 +412,9 @@ class LandsUiController(
                         PaperDialogBody(text("created-table-help"), width = 468),
                     ),
                     buttons = listOf(
-                        commandButton("claim", "created-claim-label", "claim-tooltip", player, land.id, "claim"),
+                        button("claim", text("created-claim-label"), text("claim-tooltip")) {
+                            management.execute(player, LandsUiContext(land.id, LandsUiAccess.MEMBER), LandsUiChange.Claim)
+                        }.closing(),
                         button("details", text("created-details-label")) { openDetails(player, land.id) },
                     ),
                     exitButton = back("back") { openRoot(player) },
@@ -751,55 +434,6 @@ class LandsUiController(
         frame = DialogTables.Frame.LEGENDARY,
         width = 320,
     )
-
-    private fun openDanger(player: Player, landId: String) {
-        withLand(player, landId) { land ->
-            if (land.ownerId != player.uniqueId) return@withLand openDetails(player, landId)
-            show(
-                player,
-                PaperDialogScreen(
-                    id = "lands.danger",
-                    title = text("danger-title", "land" to land.name),
-                    body = listOf(PaperDialogBody(text("danger-body", "land" to land.name))),
-                    buttons = listOf(
-                        button("delete_confirm", text("delete-confirm-label")) {
-                            executeForLand(player, landId) { LandsUiCommands.flat("delete") }
-                        }.closing(),
-                    ),
-                    exitButton = back("back") { openDetails(player, landId) },
-                ),
-            )
-        }
-    }
-
-    private fun commandButton(
-        id: String,
-        label: String,
-        tooltip: String,
-        player: Player,
-        landId: String,
-        vararg arguments: String,
-    ): PaperDialogButton = button(id, text(label), text(tooltip)) {
-        executeForLand(player, landId) { LandsUiCommands.flat(*arguments) }
-    }.closing()
-
-    private fun executeForLand(player: Player, landId: String, command: () -> String) {
-        val land = gateway.land(player, landId)
-        if (land == null) {
-            player.sendMessage(text("land-gone"))
-            openRoot(player)
-            return
-        }
-        when (gateway.selectAndExecute(player, land.id, command())) {
-            LandsUiCommandResult.EXECUTED -> Unit
-            LandsUiCommandResult.LAND_UNAVAILABLE -> {
-                player.sendMessage(text("land-gone"))
-                openRoot(player)
-            }
-            LandsUiCommandResult.COMMAND_REJECTED -> player.sendMessage(text("action-failed"))
-            LandsUiCommandResult.ACTIVE_SELECTION -> player.sendMessage(text("unclaim-selection-active"))
-        }
-    }
 
     private fun withLand(player: Player, landId: String, action: (LandsUiLand) -> Unit) {
         val land = gateway.land(player, landId)
@@ -845,6 +479,5 @@ class LandsUiController(
     companion object {
         private const val CREATE_POLL_ATTEMPTS = 10
         private val NAME_INPUT = PaperDialogInputId.of("land_name")
-        private val PLAYER_INPUT = PaperDialogInputId.of("player_name")
     }
 }
