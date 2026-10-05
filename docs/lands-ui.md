@@ -53,5 +53,5 @@ Focused verification: `./gradlew test --tests 'ru.arc.landsui.*'
 -PlandsJar=/path/to/Lands-8.6.6.jar`. A build/test pass does not establish live
 activation or ordinary-client visual acceptance; report those separately.
 
-2026-10-05: ARC 1.4.288 passes all 42 focused Lands UI tests against the exact
+2026-10-05: ARC 1.4.289 passes all 42 focused Lands UI tests against the exact
 Lands 8.6.6 runtime JAR. Server activation and client acceptance are separate.
