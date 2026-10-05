@@ -7,6 +7,7 @@ import io.mockk.mockkObject
 import io.mockk.runs
 import io.mockk.unmockkObject
 import io.mockk.verify
+import org.bukkit.GameMode
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.event.EventHandler
@@ -17,9 +18,68 @@ import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
 import org.junit.jupiter.api.Test
 import ru.arc.landsui.LandsUiModule
+import ru.arc.helpcenter.HelpCenterPage
 import ru.arc.paper.testing.MockBukkitTestRuntime
 
 class MenuShortcutControllerTest {
+    @Test
+    fun `spectator shortcut opens main before EliteMobs while plain F and disabled shortcut pass through`() {
+        MockBukkitTestRuntime.open().use { paper ->
+            val player = paper.addPlayer("spectator-shortcut")
+            player.gameMode = GameMode.SPECTATOR
+            var action = MenuShortcutAction.MAIN
+            var opened = 0
+            var abilityInputs = 0
+            val eliteMobs = object : Listener {
+                @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+                fun onSwapHands(event: PlayerSwapHandItemsEvent) {
+                    abilityInputs++
+                    event.isCancelled = true
+                }
+            }
+            paper.server.pluginManager.registerEvents(eliteMobs, paper.createSimplePlugin("elitemobs-spectator"))
+            MenuShortcutController(
+                paper.createSimplePlugin("arc-spectator"),
+                selection = { action },
+                openMenu = { _, page ->
+                    page shouldBe HelpCenterPage.ROOT
+                    opened++
+                    true
+                },
+                inDungeon = { false },
+                openDungeonMenu = { error("Spectators cannot open the dungeon panel") },
+                eliteMobsAbilityListener = { it === eliteMobs },
+            ).use {
+                fun swap(cancelled: Boolean = false) = PlayerSwapHandItemsEvent(
+                    player, player.inventory.itemInMainHand, player.inventory.itemInOffHand,
+                ).also {
+                    it.isCancelled = cancelled
+                    paper.server.pluginManager.callEvent(it)
+                }
+
+                player.isSneaking = true
+                repeat(2) { swap().isCancelled shouldBe true }
+                opened shouldBe 2
+                abilityInputs shouldBe 0
+
+                swap(cancelled = true)
+                opened shouldBe 2
+                abilityInputs shouldBe 0
+
+                player.isSneaking = false
+                swap()
+                opened shouldBe 2
+                abilityInputs shouldBe 1
+
+                player.isSneaking = true
+                action = MenuShortcutAction.DISABLED
+                swap()
+                opened shouldBe 2
+                abilityInputs shouldBe 2
+            }
+        }
+    }
+
     @Test
     fun `early dungeon shortcut cancellation prevents EliteMobs ability handling`() {
         MockBukkitTestRuntime.open().use { paper ->
@@ -73,7 +133,7 @@ class MenuShortcutControllerTest {
                     player.inventory.itemInOffHand,
                 ).also {
                     it.isCancelled = cancelled
-                    shortcuts.onDungeonSwapHands(it)
+                    shortcuts.onSwapHands(it)
                 }
 
                 player.isSneaking = false
@@ -83,7 +143,6 @@ class MenuShortcutControllerTest {
                 player.isSneaking = true
                 val shifted = swap()
                 shifted.isCancelled shouldBe true
-                shortcuts.onSwapHands(shifted)
                 opened shouldBe 1
 
                 // EliteMobs runs at the same priority but is registered first and cancels F once

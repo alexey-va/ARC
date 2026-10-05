@@ -50,27 +50,15 @@ class MenuShortcutController(
     }
 
     /**
-     * EliteMobs also consumes swap-hands at LOWEST while dungeon controls are active. Its matching
+     * EliteMobs also consumes swap-hands at LOWEST while class controls are active. Its matching
      * listener is moved after this one when startup timing registered it first, so cancelling
-     * Shift+F here makes EliteMobs' ignoreCancelled listener skip it. Accepting an already-cancelled
-     * event is a fallback for later registration drift; plain F remains untouched.
+     * Shift+F here makes EliteMobs' ignoreCancelled listener skip it, even when the player cannot
+     * open a dungeon panel (for example, a spectator). Dungeon and claim shortcuts retain their
+     * already-cancelled fallback; personal shortcuts respect other cancellations. Plain F is untouched.
      */
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
-    fun onDungeonSwapHands(event: PlayerSwapHandItemsEvent) {
-        if (!event.player.isSneaking) return
-        if (isClaimBlockShortcut(event.player)) {
-            openClaimBlockMenu(event)
-            return
-        }
-        if (!inDungeon(event.player)) return
-        event.isCancelled = true
-        ArcMenus.beginDialogFlow(event.player)
-        openDungeonMenu(event.player)
-    }
-
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun onSwapHands(event: PlayerSwapHandItemsEvent) {
-        if (event.isCancelled || !event.player.isSneaking) return
+        if (!event.player.isSneaking) return
         if (isClaimBlockShortcut(event.player)) {
             openClaimBlockMenu(event)
             return
@@ -81,6 +69,7 @@ class MenuShortcutController(
             openDungeonMenu(event.player)
             return
         }
+        if (event.isCancelled) return
         val action = selection(event.player)
         if (action == MenuShortcutAction.DISABLED) return
         // Cancel before opening a screen: the selected action must never also swap items.
