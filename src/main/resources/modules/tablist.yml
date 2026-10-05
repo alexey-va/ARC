@@ -36,7 +36,7 @@ sections:
     - '?&#F4F6FA%arc_sidebar_skill_1%'
     - '?&#F4F6FA%arc_sidebar_skill_2%'
   online:
-    - '<font:arc:small_caps><#F6C453>Сеть</#F6C453> <#63D18E>%online%</#63D18E>  <#F6C453>Здесь</#F6C453> <#63D18E>%serveronline%</#63D18E></font>'
+    - '<font:arc:small_caps><#F6C453>Онлайн</#F6C453> <#63D18E>%online%</#63D18E></font>'
   technical:
     - '<font:arc:small_caps><#F6C453>Пинг</#F6C453> <#63D18E>%player_ping% мс</#63D18E>  <#F6C453>Tps</#F6C453> <#63D18E>%server_tps_5_colored%</#63D18E></font>'
 slimefun:
@@ -61,6 +61,6 @@ slimefun:
       - '?&#F4F6FA%arc_sidebar_skill_1%'
       - '?&#F4F6FA%arc_sidebar_skill_2%'
     online:
-      - '<font:arc:small_caps><#F6C453>Сеть</#F6C453> <#63D18E>%online%</#63D18E>  <#F6C453>Здесь</#F6C453> <#63D18E>%serveronline%</#63D18E></font>'
+      - '<font:arc:small_caps><#F6C453>Онлайн</#F6C453> <#63D18E>%online%</#63D18E></font>'
     technical:
       - '<font:arc:small_caps><#F6C453>Пинг</#F6C453> <#63D18E>%player_ping% мс</#63D18E>  <#F6C453>Tps</#F6C453> <#63D18E>%server_tps_5_colored%</#63D18E></font>'

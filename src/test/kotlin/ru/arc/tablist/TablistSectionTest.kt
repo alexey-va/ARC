@@ -82,7 +82,7 @@ class TablistSectionTest : StringSpec({
     }
 
     "short data is grouped in the established small caps paired style" {
-        listOf("coordinates", "rank-progress", "activity", "online", "technical").forEach { id ->
+        listOf("coordinates", "rank-progress", "activity", "technical").forEach { id ->
             val rows = config.getStringList("sections.$id")
             rows.size shouldBe 1
             rows.single().contains("<font:arc:small_caps>") shouldBe true

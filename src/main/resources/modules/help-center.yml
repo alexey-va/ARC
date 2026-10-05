@@ -174,7 +174,7 @@ text:
   settings-tablist-skills-title: "<#86dcf1>Навыки в списке игроков"
   settings-tablist-technical-tooltip: "<#e8dfd2>Задержка соединения и число тиков сервера в секунду."
   settings-tablist-technical-label: "Пинг и TPS"
-  settings-tablist-online-tooltip: "<#e8dfd2>Общий онлайн и число игроков на текущем сервере."
+  settings-tablist-online-tooltip: "<#e8dfd2>Число игроков онлайн."
   settings-tablist-online-label: "Онлайн"
   settings-tablist-skills-tooltip: "<#e8dfd2>До двух выбранных навыков; без выбора показываются два лучших."
   settings-tablist-skills-label: "Навыки"
