@@ -34,6 +34,11 @@ internal class ArcTablist(private val plugin: ARC) : AutoCloseable {
         else -> ""
     }
 
+    fun capacity(selected: Set<TablistSection>): TablistCapacity {
+        val serverId = ARC.serverName.orEmpty()
+        return tablistCapacity(config.stringList("brand"), selected.associateWith { sectionTemplates(it, serverId) }, maximumRows())
+    }
+
     fun refresh() {
         if (!Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI")) {
             frames = emptyMap()
@@ -55,17 +60,23 @@ internal class ArcTablist(private val plugin: ARC) : AutoCloseable {
     private fun render(player: Player): TablistFrame {
         if (!tablistEnabled(player::hasPermission)) return TablistFrame()
         val serverId = ARC.serverName.orEmpty()
-        val layout = if (serverId.equals("slimefun", true)) "slimefun.sections" else "sections"
         val sections = TablistSection.entries.filter {
             it.enabled(HookRegistry.luckPermsHook?.getCachedMeta(player.uniqueId, it.metaKey))
-        }.associateWith { section -> sectionRows(player, section, layout, serverId) }
+        }.associateWith { section -> sectionRows(player, section, serverId) }
         return composeTablistSections(
             config.stringList("brand").map { resolve(player, it) }, sections,
-            config.int("maximum-rows", 22).coerceIn(8, 40),
+            maximumRows(),
         )
     }
 
-    private fun sectionRows(player: Player, section: TablistSection, layout: String, serverId: String): List<String> {
+    private fun maximumRows() = config.int("maximum-rows", 22).coerceIn(8, 40)
+
+    private fun sectionTemplates(section: TablistSection, serverId: String): List<String> {
+        val layout = if (serverId.equals("slimefun", true)) "slimefun.sections" else "sections"
+        return config.stringList("$layout.${section.id}").mapNotNull { resolveServerSidebarLine(it, serverId) }
+    }
+
+    private fun sectionRows(player: Player, section: TablistSection, serverId: String): List<String> {
         if (section == TablistSection.RANK_PROGRESS && resolve(player, "%arcranks_next_rank_progress_compact%") in setOf("", "…", "...")) return emptyList()
         val dataSection = when (section) {
             TablistSection.PROFESSION -> SidebarSection.PROFESSION
@@ -75,9 +86,8 @@ internal class ArcTablist(private val plugin: ARC) : AutoCloseable {
         }
         val data = dataSection?.let { sidebarPlayerData(player, it, TABLIST_SKILLS_META_KEY) }.orEmpty()
         if (dataSection != null && data.isEmpty()) return emptyList()
-        val rows = config.stringList("$layout.${section.id}").mapNotNull { template ->
-            val scoped = resolveServerSidebarLine(template, serverId) ?: return@mapNotNull null
-            val line = resolveOptionalSidebarLine(scoped) { token ->
+        val rows = sectionTemplates(section, serverId).mapNotNull { template ->
+            val line = resolveOptionalSidebarLine(template) { token ->
                 if (token.startsWith("%arc_sidebar_")) data[token].orEmpty() else resolve(player, token)
             } ?: return@mapNotNull null
             resolve(player, line, data)
@@ -99,8 +109,7 @@ internal class ArcTablist(private val plugin: ARC) : AutoCloseable {
     }
 
     companion object {
-        private val HEADED_SECTIONS = setOf(TablistSection.RANK_PROGRESS, TablistSection.QUESTS,
-            TablistSection.ACTIVITY, TablistSection.PROFESSION, TablistSection.SKILLS)
+        private val HEADED_SECTIONS = setOf(TablistSection.QUESTS, TablistSection.PROFESSION, TablistSection.SKILLS)
     }
 }
 

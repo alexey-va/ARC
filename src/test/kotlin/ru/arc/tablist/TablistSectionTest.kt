@@ -49,6 +49,47 @@ class TablistSectionTest : StringSpec({
         composeTablistSections(brand, mapOf(TablistSection.SKILLS to emptyList()), 22).footer shouldBe ""
     }
 
+    "capacity uses the same spacing as rendering and reserves optional future data" {
+        val sections = linkedMapOf(TablistSection.PROFILE to listOf("Player"),
+            TablistSection.QUESTS to listOf("?Title", "?Quest 1", "?Quest 2", "?Quest 3"),
+            TablistSection.TECHNICAL to listOf("Ping Tps"))
+        val capacity = tablistCapacity(brand, sections, 14)
+        capacity shouldBe TablistCapacity(3, 14, 14)
+        capacity.fits shouldBe true
+        capacity.availableRows shouldBe 0
+        tablistCapacity(brand, sections + (TablistSection.ONLINE to listOf("Online")), 14).fits shouldBe false
+        tablistCapacity(brand, sections - TablistSection.QUESTS, 14).availableRows shouldBe 5
+        val frame = composeTablistSections(brand, sections, 14)
+        frame.header.split('\n').size + frame.footer.split('\n').size shouldBe capacity.usedRows
+        // Optional rows count even while their placeholders are empty; no later overflow.
+        tablistCapacity(brand, sections, 13).fits shouldBe false
+    }
+
+    "every admitted selection fits even when all reserved rows become visible" {
+        listOf("spawn", "survival", "slimefun").forEach { server ->
+            val layout = if (server == "slimefun") "slimefun.sections" else "sections"
+            for (mask in 0 until (1 shl TablistSection.entries.size)) {
+                val sections = TablistSection.entries.filterIndexed { index, _ -> mask and (1 shl index) != 0 }
+                    .associateWith { section -> config.getStringList("$layout.${section.id}").mapNotNull { ru.arc.sidebar.resolveServerSidebarLine(it, server) } }
+                val capacity = tablistCapacity(config.getStringList("brand"), sections, config.getInt("maximum-rows"))
+                if (capacity.fits) {
+                    val frame = composeTablistSections(config.getStringList("brand"), sections, capacity.maximumRows)
+                    val expectedRows = sections.values.flatten()
+                    expectedRows.forEach { row -> (row in frame.header || row in frame.footer) shouldBe true }
+                }
+            }
+        }
+    }
+
+    "short data is grouped in the established small caps paired style" {
+        listOf("coordinates", "rank-progress", "activity", "online", "technical").forEach { id ->
+            val rows = config.getStringList("sections.$id")
+            rows.size shouldBe 1
+            rows.single().contains("<font:arc:small_caps>") shouldBe true
+            rows.single().contains("  ") shouldBe true
+        }
+    }
+
     "placeholder cleanup preserves literal percent text inside resolved values" {
         resolveTablistTemplate("Место: %region% • %unknown%") { token ->
             if (token == "%region%") "Земля %foo% • 50%" else token

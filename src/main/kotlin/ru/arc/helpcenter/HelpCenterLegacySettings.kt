@@ -8,6 +8,7 @@ import ru.arc.sidebar.selectedSidebarSkills
 import ru.arc.sidebar.sidebarSkillChoices
 import ru.arc.sidebar.toggleSidebarSkill
 import ru.arc.tablist.TABLIST_SKILLS_META_KEY
+import ru.arc.tablist.TablistCapacity
 import ru.arc.tablist.TablistSection
 import ru.arc.tablist.tablistEnabled as hasAnyTablistMode
 
@@ -27,7 +28,9 @@ import ru.arc.gui.MenuShortcutAction
 import ru.arc.gui.MenuEscapeBehavior
 import ru.arc.iteminfo.ItemInfoMode
 import ru.arc.iteminfo.ItemInfoPreferences
+import java.util.UUID
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ConcurrentHashMap
 
 data class HelpCenterLegacySettingEntry(
     val id: String,
@@ -42,6 +45,10 @@ data class HelpCenterFlightSnapshot(val charge: Double, val maximum: Int, val en
 class HelpCenterLegacySettings(
     private val backend: Backend = BukkitBackend(),
 ) {
+    private val pendingTablistSections = ConcurrentHashMap<Pair<UUID, TablistSection>, Boolean>()
+    // ponytail: short shared check/reserve lock; use per-player locks if contention is measured.
+    private val tablistSectionUpdateLock = Any()
+
     interface Backend {
         fun hasPermission(player: Player, node: String): Boolean
         fun meta(player: Player, key: String): String?
@@ -49,6 +56,7 @@ class HelpCenterLegacySettings(
         fun flightSnapshot(player: Player): HelpCenterFlightSnapshot? = null
         fun flightState(player: Player): String?
         fun tpaEnabled(player: Player): Boolean?
+        fun tablistCapacity(player: Player, sectionIds: Set<String>): TablistCapacity? = null
         fun setPermission(player: Player, node: String, enabled: Boolean): CompletableFuture<Boolean>
         fun setExclusiveMode(player: Player, prefix: String, mode: Int?): CompletableFuture<Boolean>
         fun setMeta(player: Player, key: String, value: String): CompletableFuture<Boolean>
@@ -121,7 +129,13 @@ class HelpCenterLegacySettings(
     internal fun scoreboardSkills(player: Player): List<String> = selectedSidebarSkills(backend.meta(player, SIDEBAR_SKILLS_META_KEY))
 
     internal fun tablistSectionEnabled(player: Player, section: TablistSection): Boolean =
-        section.enabled(backend.meta(player, section.metaKey))
+        pendingTablistSections[player.uniqueId to section] ?: section.enabled(backend.meta(player, section.metaKey))
+
+    internal fun tablistCapacity(player: Player, adding: TablistSection? = null): TablistCapacity? {
+        val selected = TablistSection.entries.filterTo(linkedSetOf()) { tablistSectionEnabled(player, it) }
+        adding?.let(selected::add)
+        return backend.tablistCapacity(player, selected.mapTo(linkedSetOf(), TablistSection::id))
+    }
 
     internal fun tablistSkills(player: Player): List<String> = selectedSidebarSkills(backend.meta(player, TABLIST_SKILLS_META_KEY))
 
@@ -185,7 +199,7 @@ class HelpCenterLegacySettings(
             return backend.setMeta(player, it.metaKey, (!scoreboardSectionEnabled(player, it)).toString())
         }
         TablistSection.entries.firstOrNull { "tablist-section-${it.id}" == id }?.let {
-            return backend.setMeta(player, it.metaKey, (!tablistSectionEnabled(player, it)).toString())
+            return toggleTablistSection(player, it)
         }
         MenuShortcutAction.entries.firstOrNull { "shortcut-${it.id}" == id }?.let {
             return backend.setMeta(player, MenuShortcutAction.META_KEY, it.id)
@@ -197,6 +211,25 @@ class HelpCenterLegacySettings(
         val mode = match.groupValues[2].toIntOrNull()?.takeIf { it in 1..20 } ?: return falseFuture()
         return backend.setExclusiveMode(player, match.groupValues[1].let { if (it == "scoreboard") "tab.scoreboard" else "tab.tablist" }, mode)
     }
+
+    private fun toggleTablistSection(player: Player, section: TablistSection): CompletableFuture<Boolean> =
+        synchronized(tablistSectionUpdateLock) {
+            val reservation = player.uniqueId to section
+            if (pendingTablistSections.containsKey(reservation)) return@synchronized falseFuture()
+
+            val enabled = tablistSectionEnabled(player, section)
+            val desired = !enabled
+            if (desired && tablistCapacity(player, adding = section)?.fits == false) return@synchronized falseFuture()
+
+            pendingTablistSections[reservation] = desired
+            val save = try {
+                backend.setMeta(player, section.metaKey, desired.toString())
+            } catch (failure: Throwable) {
+                pendingTablistSections.remove(reservation, desired)
+                return@synchronized CompletableFuture.failedFuture(failure)
+            }
+            save.whenComplete { _, _ -> pendingTablistSections.remove(reservation, desired) }
+        }
 
     private fun togglePermission(player: Player, node: String) = backend.setPermission(player, node, !backend.hasPermission(player, node))
 
@@ -236,6 +269,9 @@ class HelpCenterLegacySettings(
     private class BukkitBackend : Backend {
         override fun hasPermission(player: Player, node: String) = player.hasPermission(node)
         override fun meta(player: Player, key: String) = HookRegistry.luckPermsHook?.getCachedMeta(player.uniqueId, key)
+        override fun tablistCapacity(player: Player, sectionIds: Set<String>): TablistCapacity? = runCatching {
+            ARC.instance.tablist?.capacity(TablistSection.entries.filterTo(linkedSetOf()) { it.id in sectionIds })
+        }.getOrNull()
         override fun cmiOption(player: Player, option: CmiOption): Boolean? = runCatching {
             val user = CMI.getInstance().playerManager.getUser(player.uniqueId) ?: return null
             user.getOptionState(if (option == CmiOption.SHIFT_SIGN_EDIT) PlayerOption.shiftSignEdit else PlayerOption.totemBossBar)
