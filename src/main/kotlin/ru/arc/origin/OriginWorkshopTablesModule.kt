@@ -63,8 +63,8 @@ internal data class OriginWorkshopTableDefinition(
         require(floorY.isFinite() && floorY in -64.0..320.0) { "workshop table '$id' has invalid floor-y" }
         require(z.isFinite() && z in -30_000_000.0..30_000_000.0) { "workshop table '$id' has invalid z" }
         require(yaw in setOf(0, 90, 180, 270)) { "workshop table '$id' yaw must be 0, 90, 180 or 270" }
-        require(stockOffsetX == null || (stockOffsetX.isFinite() && kotlin.math.abs(stockOffsetX) in 3.9..5.0)) {
-            "workshop table '$id' stock-offset-x must leave room for the table and stock rack"
+        require(stockOffsetX == null || (stockOffsetX.isFinite() && kotlin.math.abs(stockOffsetX) in 3.9..12.0)) {
+            "workshop table '$id' stock-offset-x must leave room for the table and stay within the local stock area"
         }
     }
 }
@@ -149,6 +149,22 @@ internal data class OriginWorkshopWarehouseAnchor(val x: Double, val floorY: Dou
         require(floorY.isFinite() && floorY in -64.0..320.0) { "warehouse floor-y is invalid" }
         require(z.isFinite() && z in -30_000_000.0..30_000_000.0) { "warehouse z is invalid" }
     }
+}
+
+private fun rotateWorkshopLocal(x: Double, z: Double, yaw: Int): Pair<Double, Double> = when (yaw) {
+    90 -> -z to x
+    180 -> -x to -z
+    270 -> z to -x
+    else -> x to z
+}
+
+/** Resolve a station-local anchor against its authored center, floor and yaw. */
+internal fun originWorkshopPointInWorld(
+    table: OriginWorkshopTableDefinition,
+    local: OriginWorkshopPoint,
+): OriginWorkshopPoint {
+    val (x, z) = rotateWorkshopLocal(local.x, local.z, table.yaw)
+    return OriginWorkshopPoint(table.x + x, table.floorY + local.y, table.z + z)
 }
 
 internal enum class OriginWorkshopTablePieceKind { BLOCK, ITEM }
@@ -693,6 +709,13 @@ internal object OriginWorkshopTablesModule : PluginModule {
         displays = null
     }
 
+    /** Resolve a station-local anchor without reading or mutating world state. Call on the server thread. */
+    internal fun pointAt(tableId: String, local: OriginWorkshopPoint): Location? {
+        val table = machineTables[tableId] ?: return null
+        val point = originWorkshopPointInWorld(table.definition, local)
+        return Location(table.world, point.x, point.y, point.z)
+    }
+
     private fun clearScene() {
         machineTables.keys.toList().forEach(::resetWork)
         handles.forEach(PacketDisplay::remove)
@@ -856,12 +879,8 @@ internal object OriginWorkshopTablesModule : PluginModule {
         return Vector3f(x.toFloat(), local.y.toFloat(), z.toFloat()).normalize()
     }
 
-    private fun rotateLocal(x: Double, z: Double, yaw: Int): Pair<Double, Double> = when (yaw) {
-        90 -> -z to x
-        180 -> -x to -z
-        270 -> z to -x
-        else -> x to z
-    }
+    private fun rotateLocal(x: Double, z: Double, yaw: Int): Pair<Double, Double> =
+        rotateWorkshopLocal(x, z, yaw)
 
     private fun copyTransformation(source: Transformation) = Transformation(
         Vector3f(source.translation),

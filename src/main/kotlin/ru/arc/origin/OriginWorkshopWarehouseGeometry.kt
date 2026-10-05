@@ -2,7 +2,7 @@ package ru.arc.origin
 
 import org.bukkit.Material
 
-/** Static furniture's Y is the shelf top; the display owner applies the model's anchor offset. */
+/** Static furniture's Y is the supporting surface; the display owner applies the model's anchor offset. */
 internal data class OriginWorkshopWarehouseItem(
     val itemId: String,
     val x: Double,
@@ -17,56 +17,45 @@ internal data class OriginWorkshopWarehouseGeometry(
     val items: List<OriginWorkshopWarehouseItem>,
 )
 
-/** Local coordinates use a 10 by 3 footprint, with the long rack on the north (-Z) wall. */
+/** Three low material pallets fill a 10 by 3 footprint without shelf frames. */
 internal fun originWorkshopWarehouseGeometry(): OriginWorkshopWarehouseGeometry {
+    val palletCenters = listOf(-3.0, 0.0, 3.0)
     val blocks = buildList {
-        val rackPosts = listOf(-4.85, -2.0, 2.0, 4.85)
-        rackPosts.forEachIndexed { index, x ->
-            add(warehouseBlock("rack-post-$index", Material.STRIPPED_SPRUCE_LOG, x, 1.63, -1.43,
-                0.14, 3.10, 0.14))
-        }
-        for ((key, y) in listOf("lower" to 0.38, "crown" to 2.88)) {
-            add(warehouseBlock("rack-back-rail-$key", Material.DARK_OAK_PLANKS, 0.0, y, -1.30,
-                9.70, 0.12, 0.12))
-        }
-
-        val bays = listOf(
-            -3.425 to 2.71,
-            0.0 to 3.86,
-            3.425 to 2.71,
-        )
-        for ((tier, shelfY) in listOf("lower" to 0.26, "upper" to 1.98)) {
-            bays.forEachIndexed { bay, (x, width) ->
-                add(warehouseBlock("shelf-$tier-$bay", Material.SPRUCE_PLANKS, x, shelfY, -0.90,
-                    width, 0.12, 1.20))
-                add(warehouseBlock("shelf-support-$tier-$bay", Material.DARK_OAK_PLANKS, x, shelfY - 0.10, -1.42,
-                    width, 0.08, 0.10))
-                add(warehouseBlock("shelf-lip-$tier-$bay", Material.DARK_OAK_PLANKS, x, shelfY + 0.10, -0.325,
-                    width, 0.08, 0.05))
-            }
-        }
-
-        // Legacy shared-warehouse layout; ARC owns the three reserved product displays.
-        val palletCenters = listOf(-2.5, 0.0, 3.0)
         palletCenters.forEachIndexed { pallet, x ->
-            for (runnerX in listOf(-0.65, 0.0, 0.65)) {
+            for (runnerX in listOf(-1.25, 0.0, 1.25)) {
                 add(warehouseBlock("pallet-$pallet-runner-$runnerX", Material.STRIPPED_SPRUCE_LOG,
-                    x + runnerX, 0.04, 0.4, 0.12, 0.08, 1.30))
+                    x + runnerX, 0.04, 0.2, 0.12, 0.08, 1.50))
             }
-            for ((board, offset) in listOf(-0.45, 0.0, 0.45).withIndex()) {
+            for ((board, z) in listOf(-0.35, 0.20, 0.75).withIndex()) {
                 add(warehouseBlock("pallet-$pallet-deck-$board", Material.SPRUCE_PLANKS,
-                    x, 0.13, 0.4 + offset, 1.80, 0.10, 0.40))
+                    x, 0.13, z, 3.20, 0.10, 0.56))
             }
         }
+
+        for (index in 0..3) add(warehouseBlock("lumber-bundle-layer-$index",
+            if (index % 2 == 0) Material.OAK_PLANKS else Material.SPRUCE_PLANKS,
+            -3.25, 0.225 + index * 0.09, 0.80, 1.60, 0.09, 0.18))
+        for (index in 0..1) add(warehouseBlock("lumber-log-$index", Material.STRIPPED_OAK_LOG,
+            -2.05, 0.25 + index * 0.14, 0.80, 0.18, 0.14, 0.48))
+
+        listOf(Material.RED_WOOL, Material.WHITE_WOOL, Material.BROWN_WOOL).forEachIndexed { index, material ->
+            val x = -0.85 + index * 0.85
+            add(warehouseBlock("fabric-bale-$index", material, x, 0.39, 0.80, 0.56, 0.42, 0.28))
+            add(warehouseBlock("fabric-bale-strap-$index", Material.BROWN_WOOL, x, 0.61, 0.80, 0.07, 0.02, 0.30))
+        }
+
+        for (index in 0..2) add(warehouseBlock("finished-panel-layer-$index",
+            listOf(Material.BIRCH_PLANKS, Material.OAK_PLANKS, Material.SPRUCE_PLANKS)[index],
+            3.0, 0.225 + index * 0.09, 0.80, 2.50, 0.09, 0.20))
     }
 
     val items = listOf(
-        OriginWorkshopWarehouseItem("furnituresplus:white_wooden_chair", -4.05, 0.32, -0.90, 0f, 1.0),
-        OriginWorkshopWarehouseItem("furnituresplus:red_wooden_sofa_single", -1.25, 0.32, -0.90, 0f, 1.0),
-        OriginWorkshopWarehouseItem("furnituresplus:white_wooden_chair", 1.30, 0.32, -0.90, 0f, 1.0),
-        OriginWorkshopWarehouseItem("furnituresplus:white_wooden_diningtable", -4.05, 2.04, -0.90, 0f, 1.0),
-        OriginWorkshopWarehouseItem("furnituresplus:red_wooden_sofa_single", -1.25, 2.04, -0.90, 0f, 1.0),
-        OriginWorkshopWarehouseItem("furnituresplus:red_wooden_sofa_single", 4.15, 2.04, -0.90, 0f, 1.0),
+        OriginWorkshopWarehouseItem("furnituresplus:white_wooden_chair", -3.70, 0.18, 0.0, 0f, 0.84),
+        OriginWorkshopWarehouseItem("furnituresplus:white_wooden_chair", -2.30, 0.18, 0.0, 0f, 0.84),
+        OriginWorkshopWarehouseItem("furnituresplus:red_wooden_sofa_single", -0.78, 0.18, 0.0, 0f, 0.84),
+        OriginWorkshopWarehouseItem("furnituresplus:white_wooden_diningtable", 0.78, 0.18, 0.0, 0f, 0.84),
+        OriginWorkshopWarehouseItem("furnituresplus:red_wooden_sofa_single", 2.30, 0.18, 0.0, 0f, 0.84),
+        OriginWorkshopWarehouseItem("furnituresplus:red_wooden_sofa_single", 3.70, 0.18, 0.0, 0f, 0.84),
     )
     return OriginWorkshopWarehouseGeometry(blocks, items)
 }

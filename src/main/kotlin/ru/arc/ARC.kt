@@ -87,6 +87,7 @@ import ru.arc.onboarding.OnboardingModule
 import ru.arc.origin.OriginSpawnModule
 import ru.arc.origin.OriginPortalsModule
 import ru.arc.origin.OriginDiningModule
+import ru.arc.origin.OriginWorkshopGame
 import ru.arc.origin.OriginFurnitureWorkshopModule
 import ru.arc.origin.OriginTrainingDummyModule
 import ru.arc.origin.OriginWorkshopTablesModule
@@ -326,6 +327,7 @@ open class ARC : JavaPlugin() {
             OriginDiningModule,
             OriginAmbientScenesModule,
             OriginFurnitureWorkshopModule,
+            OriginWorkshopGame,
             OriginTrainingDummyModule,
             OriginMountYardModule,
             // Configuration (priority 30-49)

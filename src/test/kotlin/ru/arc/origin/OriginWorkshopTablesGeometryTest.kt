@@ -94,6 +94,28 @@ class OriginWorkshopTablesGeometryTest : FreeSpec({
         rotatedTool.z shouldBe straightTool.x
     }
 
+    "station-local anchors follow each authored yaw and floor" {
+        val local = OriginWorkshopPoint(2.0, 0.5, -1.0)
+        val expected = mapOf(
+            0 to OriginWorkshopPoint(-34.5, 71.5, -74.5),
+            90 to OriginWorkshopPoint(-35.5, 71.5, -71.5),
+            180 to OriginWorkshopPoint(-38.5, 71.5, -72.5),
+            270 to OriginWorkshopPoint(-37.5, 71.5, -75.5),
+        )
+
+        for ((yaw, point) in expected) {
+            val table = OriginWorkshopTableDefinition(
+                id = "anchor-$yaw",
+                x = -36.5,
+                floorY = 71.0,
+                z = -73.5,
+                yaw = yaw,
+                role = OriginWorkshopTableRole.CARPENTER,
+            )
+            originWorkshopPointInWorld(table, local) shouldBe point
+        }
+    }
+
     "runtime dimensions preserve floor contact and top alignment" {
         val dimensions = OriginWorkshopTableDimensions(width = 4.4, depth = 2.0, height = 1.0)
         val blocks = originWorkshopTablePieces(
@@ -202,10 +224,10 @@ class OriginWorkshopTablesGeometryTest : FreeSpec({
               warehouse: { enabled: true, x: -49.5, floor-y: 71.0, z: -51.5 }
               table-ids: [carpenter, upholsterer, assembler, finisher]
               tables:
-                carpenter: { x: -36.5, floor-y: 71.0, z: -73.5, yaw: 90, role: carpenter }
-                upholsterer: { x: -36.5, floor-y: 71.0, z: -58.5, yaw: 90, role: upholsterer }
-                assembler: { x: -48.5, floor-y: 71.0, z: -46.5, yaw: 0, role: assembler }
-                finisher: { x: -60.5, floor-y: 71.0, z: -46.5, yaw: 0, role: finisher }
+                carpenter: { x: -36.5, floor-y: 71.0, z: -73.5, yaw: 270, role: carpenter, stock-offset-x: -8.0 }
+                upholsterer: { x: -36.5, floor-y: 71.0, z: -58.5, yaw: 270, role: upholsterer, stock-offset-x: 7.0 }
+                assembler: { x: -48.5, floor-y: 71.0, z: -46.5, yaw: 0, role: assembler, stock-offset-x: -6.0 }
+                finisher: { x: -60.5, floor-y: 71.0, z: -46.5, yaw: 0, role: finisher, stock-offset-x: 6.0 }
             """.trimIndent(),
         )
 
@@ -213,7 +235,8 @@ class OriginWorkshopTablesGeometryTest : FreeSpec({
 
         settings.enabled shouldBe true
         settings.tables.map { it.id } shouldBe listOf("carpenter", "upholsterer", "assembler", "finisher")
-        settings.tables.map { it.yaw } shouldBe listOf(90, 90, 0, 0)
+        settings.tables.map { it.yaw } shouldBe listOf(270, 270, 0, 0)
+        settings.tables.map { it.stockOffsetX } shouldBe listOf(-8.0, 7.0, -6.0, 6.0)
         settings.tables.first().floorY shouldBe 71.0
         settings.dimensions shouldBe OriginWorkshopTableDimensions.DEFAULT
         settings.warehouse shouldBe OriginWorkshopWarehouseAnchor(-49.5, 71.0, -51.5)
