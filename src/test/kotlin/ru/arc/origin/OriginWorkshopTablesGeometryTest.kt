@@ -72,6 +72,9 @@ class OriginWorkshopTablesGeometryTest : FreeSpec({
             xOverlap && yOverlap && zOverlap
         }
         bladeIntersectsCarriedBoard shouldBe true
+        // The next operation rests a 0.72-wide board on the tabletop at local x=0.
+        // The taller saw feed must end before that board, so its left end stays visible.
+        (boardFeed.x + boardFeed.width / 2.0 < -0.72 / 2.0) shouldBe true
         // A small gap keeps the two separately-rendered casing faces from fighting.
         (abs(motor.z - motor.depth / 2.0 - (saw.z + saw.depth / 2.0) - 0.005) < 1e-9) shouldBe true
         val bearing = blocks.single { it.key == "carpenter-saw-bearing-post" }

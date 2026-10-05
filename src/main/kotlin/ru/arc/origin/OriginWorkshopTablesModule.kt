@@ -290,11 +290,11 @@ internal fun originWorkshopTablePieces(
             val flywheelZ = tuning.sawPivotZ + 1.05
             val flywheelY = dimensions.height + tuning.sawPivotYOffset
             add(blockPiece("carpenter-board-feed", Material.SPRUCE_PLANKS, tuning.sawPivotX,
-                dimensions.height + 0.08, boardZ, 2.0, 0.10, 0.44))
+                dimensions.height + 0.08, boardZ, 1.50, 0.10, 0.44))
             add(blockPiece("carpenter-rip-fence", Material.DARK_OAK_PLANKS, tuning.sawPivotX,
-                dimensions.height + 0.16, boardZ - 0.20, 2.0, 0.06, 0.05))
+                dimensions.height + 0.16, boardZ - 0.20, 1.50, 0.06, 0.05))
             add(blockPiece("carpenter-feed-support-rail", Material.DARK_OAK_PLANKS, tuning.sawPivotX,
-                dimensions.height + 0.16, boardZ + 0.20, 2.0, 0.06, 0.05))
+                dimensions.height + 0.16, boardZ + 0.20, 1.50, 0.06, 0.05))
             add(blockPiece("carpenter-drive-motor", Material.BLACKSTONE, tuning.sawPivotX,
                 dimensions.height + 0.17, tuning.sawPivotZ + 1.16, 0.56, 0.34, 0.38))
 
