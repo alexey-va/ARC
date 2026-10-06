@@ -91,18 +91,77 @@ class OriginWorkshopGameTest : FreeSpec({
         originWorkshopIsDuplicateClick(1_000, 1_001 + window, window) shouldBe false
     }
 
-    "stock trip stays in range while sneak, departure and expiry cancel the session" {
-        fun reason(online: Boolean = true, sameWorld: Boolean = true, sneaking: Boolean = false,
-            distance: Double = 7.5 * 7.5, elapsed: Long = 1) = originWorkshopCancelReason(
-            online, sameWorld, sneaking, distance, elapsed, rules.timeout, 144.0)
-        reason() shouldBe null
-        reason(distance = 144.0) shouldBe null
-        reason(distance = 144.001) shouldBe OriginWorkshopCancelReason.TOO_FAR
-        reason(distance = Double.NaN) shouldBe OriginWorkshopCancelReason.TOO_FAR
-        reason(sneaking = true) shouldBe OriginWorkshopCancelReason.SNEAKING
-        reason(sameWorld = false) shouldBe OriginWorkshopCancelReason.WORLD_CHANGED
-        reason(online = false) shouldBe OriginWorkshopCancelReason.OFFLINE
-        reason(elapsed = rules.timeout) shouldBe OriginWorkshopCancelReason.TIMEOUT
+    "session range includes the stock trip and bounded vertical movement, but excludes creative flight" {
+        originWorkshopInSessionRange(7.5, 0.0, 0.0) shouldBe true
+        originWorkshopInSessionRange(0.0, 7.9, 0.0) shouldBe true
+        originWorkshopInSessionRange(12.0, 0.0, 0.0) shouldBe true
+        originWorkshopInSessionRange(12.001, 0.0, 0.0) shouldBe false
+        originWorkshopInSessionRange(0.0, 8.001, 0.0) shouldBe false
+        originWorkshopInSessionRange(9.0, 0.0, 9.0) shouldBe false
+    }
+
+    "session range rejects every non-finite coordinate" {
+        for (invalid in listOf(Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY)) {
+            originWorkshopInSessionRange(invalid, 0.0, 0.0) shouldBe false
+            originWorkshopInSessionRange(0.0, invalid, 0.0) shouldBe false
+            originWorkshopInSessionRange(0.0, 0.0, invalid) shouldBe false
+        }
+    }
+
+    "leaving starts a 400 tick grace period and returning resets it" {
+        val activity = OriginWorkshopSessionActivity(100L)
+        activity.cancelReason(online = true, sameWorld = true, inRange = false, now = 1_000L,
+            timeoutTicks = 10_000L) shouldBe null
+        activity.outsideSince shouldBe 1_000L
+        activity.cancelReason(online = true, sameWorld = true, inRange = false, now = 1_399L,
+            timeoutTicks = 10_000L) shouldBe null
+        activity.cancelReason(online = true, sameWorld = true, inRange = false, now = 1_400L,
+            timeoutTicks = 10_000L) shouldBe OriginWorkshopCancelReason.TOO_FAR
+
+        val returned = OriginWorkshopSessionActivity(100L)
+        returned.cancelReason(online = true, sameWorld = true, inRange = false, now = 2_000L,
+            timeoutTicks = 10_000L) shouldBe null
+        returned.cancelReason(online = true, sameWorld = true, inRange = true, now = 2_399L,
+            timeoutTicks = 10_000L) shouldBe null
+        returned.outsideSince shouldBe null
+        returned.cancelReason(online = true, sameWorld = true, inRange = false, now = 2_400L,
+            timeoutTicks = 10_000L) shouldBe null
+        returned.outsideSince shouldBe 2_400L
+        returned.cancelReason(online = true, sameWorld = true, inRange = false, now = 2_799L,
+            timeoutTicks = 10_000L) shouldBe null
+        returned.cancelReason(online = true, sameWorld = true, inRange = false, now = 2_800L,
+            timeoutTicks = 10_000L) shouldBe OriginWorkshopCancelReason.TOO_FAR
+    }
+
+    "idle times out on its boundary while recorded activity extends the deadline" {
+        val idle = OriginWorkshopSessionActivity(1_000L)
+        idle.cancelReason(online = true, sameWorld = true, inRange = true, now = 1_199L,
+            timeoutTicks = 200L) shouldBe null
+        idle.lastActivityAt shouldBe 1_000L
+        idle.cancelReason(online = true, sameWorld = true, inRange = true, now = 1_200L,
+            timeoutTicks = 200L) shouldBe OriginWorkshopCancelReason.TIMEOUT
+
+        val active = OriginWorkshopSessionActivity(1_000L)
+        active.cancelReason(online = true, sameWorld = true, inRange = true, now = 1_199L,
+            timeoutTicks = 200L) shouldBe null
+        active.recordActivity(1_199L)
+        active.lastActivityAt shouldBe 1_199L
+        active.cancelReason(online = true, sameWorld = true, inRange = true, now = 1_398L,
+            timeoutTicks = 200L) shouldBe null
+        active.cancelReason(online = true, sameWorld = true, inRange = true, now = 1_399L,
+            timeoutTicks = 200L) shouldBe OriginWorkshopCancelReason.TIMEOUT
+    }
+
+    "offline and world changes cancel immediately" {
+        val offline = OriginWorkshopSessionActivity(0L)
+        offline.cancelReason(online = false, sameWorld = true, inRange = true, now = 10_000L,
+            timeoutTicks = 20_000L) shouldBe OriginWorkshopCancelReason.OFFLINE
+        offline.outsideSince shouldBe null
+
+        val changedWorld = OriginWorkshopSessionActivity(0L)
+        changedWorld.cancelReason(online = true, sameWorld = false, inRange = true, now = 10_000L,
+            timeoutTicks = 20_000L) shouldBe OriginWorkshopCancelReason.WORLD_CHANGED
+        changedWorld.outsideSince shouldBe null
     }
 
     "aim intersection rejects misses, backward targets, invalid coordinates and overreach" {

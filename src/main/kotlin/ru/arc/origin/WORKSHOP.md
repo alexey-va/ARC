@@ -61,7 +61,11 @@ application fails; failures are logged, and an unconfirmed station stays closed.
 
 The game calls `acquirePlayerTable` only after the asynchronous quota response
 and fresh station/distance checks. `ownsPlayerTable` fences every active tick
-and reward callback. The timeout measures inactivity since the last production step. Quit,
+and reward callback. Movement, aiming, clicks and production progress refresh the
+inactivity timer; the last 30 seconds show a warning. Crouching never cancels a
+game. The session allows 12 blocks horizontally and 8 vertically, with 20 seconds
+to return after leaving that area. Interactions still require the normal 4.5-block
+reach. Quit,
 cancellation, timeout, module reload and shutdown
 remove game displays and release the exact reservation. NPC runtime replacement
 invalidates old reservations even if the same first station becomes available.

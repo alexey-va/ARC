@@ -195,24 +195,30 @@ private fun defaultCarpenterRecipe(rules: OriginWorkshopGameRules = OriginWorksh
     originWorkshopGameRecipe(OriginWorkshopTableRole.CARPENTER, "furnituresplus:white_wooden_chair",
         OriginWorkshopTableDimensions.DEFAULT, OriginWorkshopMachineTuning(), OriginWorkshopPoint(-7.5, 0.44, 0.30), rules)
 
-internal enum class OriginWorkshopCancelReason { OFFLINE, WORLD_CHANGED, TOO_FAR, SNEAKING, TIMEOUT }
+private const val WORKSHOP_RETURN_GRACE_TICKS = 400L
 
-internal fun originWorkshopCancelReason(
-    online: Boolean,
-    sameWorld: Boolean,
-    sneaking: Boolean,
-    distanceSquared: Double,
-    elapsedTicks: Long,
-    timeoutTicks: Long,
-    maxDistanceSquared: Double,
-): OriginWorkshopCancelReason? = when {
-    !online -> OriginWorkshopCancelReason.OFFLINE
-    !sameWorld -> OriginWorkshopCancelReason.WORLD_CHANGED
-    !distanceSquared.isFinite() || distanceSquared > maxDistanceSquared ->
-        OriginWorkshopCancelReason.TOO_FAR
-    sneaking -> OriginWorkshopCancelReason.SNEAKING
-    elapsedTicks >= timeoutTicks -> OriginWorkshopCancelReason.TIMEOUT
-    else -> null
+internal enum class OriginWorkshopCancelReason { OFFLINE, WORLD_CHANGED, TOO_FAR, TIMEOUT }
+
+internal fun originWorkshopInSessionRange(dx: Double, dy: Double, dz: Double): Boolean =
+    dx.isFinite() && dy.isFinite() && dz.isFinite() && dx * dx + dz * dz <= 144.0 && abs(dy) <= 8.0
+
+internal class OriginWorkshopSessionActivity(startedAt: Long) {
+    var lastActivityAt = startedAt
+        private set
+    var outsideSince: Long? = null
+        private set
+
+    fun recordActivity(now: Long) { lastActivityAt = now }
+
+    fun cancelReason(online: Boolean, sameWorld: Boolean, inRange: Boolean, now: Long,
+                     timeoutTicks: Long): OriginWorkshopCancelReason? {
+        if (!online) return OriginWorkshopCancelReason.OFFLINE
+        if (!sameWorld) return OriginWorkshopCancelReason.WORLD_CHANGED
+        outsideSince = if (inRange) null else outsideSince ?: now
+        if (outsideSince?.let { now - it >= WORKSHOP_RETURN_GRACE_TICKS } == true) return OriginWorkshopCancelReason.TOO_FAR
+        if (now - lastActivityAt >= timeoutTicks) return OriginWorkshopCancelReason.TIMEOUT
+        return null
+    }
 }
 
 internal fun originWorkshopIsDuplicateClick(previousNanos: Long?, nowNanos: Long, windowNanos: Long): Boolean =
@@ -429,7 +435,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         var progress: OriginWorkshopGameProgress,
         val workpieceRenderer: OriginWorkshopWorkpieceRenderer,
         val boardModels: Map<OriginWorkshopBoardModel, ItemStack> = emptyMap(),
-        var lastProgressAt: Long = began,
+        val activity: OriginWorkshopSessionActivity = OriginWorkshopSessionActivity(began),
         val parts: MutableList<PacketDisplay> = mutableListOf(),
         var workpiece: Prop? = null,
         var carried: Prop? = null,
@@ -521,6 +527,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
     fun onMove(event: PlayerMoveEvent) {
         val active = session?.takeIf { it.playerId == event.player.uniqueId } ?: return
         if (event.to.world.uid != active.worldId) return
+        if (event.from != event.to) active.activity.recordActivity(nowTick())
         if (active.carried != null || active.brush != null) carry(active, event.player, event.to)
     }
 
@@ -563,18 +570,8 @@ internal object OriginWorkshopGame : PluginModule, Listener {
             return true
         }
         if (current != null) {
-            val station = OriginWorkshopTablesModule.pointAt(tableId, start)
-            val reason = originWorkshopCancelReason(
-                online = player.isOnline,
-                sameWorld = station != null && station.world.uid == current.worldId && player.world.uid == current.worldId,
-                sneaking = player.isSneaking,
-                distanceSquared = if (station != null && station.world.uid == player.world.uid) {
-                    player.location.distanceSquared(station)
-                } else Double.POSITIVE_INFINITY,
-                elapsedTicks = nowTick() - current.lastProgressAt,
-                timeoutTicks = settings?.rules?.timeout ?: 3_600,
-                maxDistanceSquared = SESSION_RANGE_SQUARED,
-            )
+            current.activity.recordActivity(nowTick())
+            val reason = cancellationReason(current, player, settings?.rules?.timeout ?: 3_600)
             if (reason != null) {
                 cancel(current, reason.name.lowercase(), true)
                 return true
@@ -722,7 +719,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         val next = originWorkshopTransition(active.progress, action, now, active.recipe) ?: return
         if (!applyAction(player, active, action)) return
         active.progress = next
-        active.lastProgressAt = now
+        active.activity.recordActivity(now)
         showStage(active, player, "STAGE")
         animateMachine(active, now)
         player.playSound(
@@ -843,6 +840,20 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         return true
     }
 
+    private fun inSessionRange(active: Session, player: Player): Boolean {
+        val station = OriginWorkshopTablesModule.pointAt(active.tableId, start) ?: return false
+        val location = player.location
+        return station.world.uid == active.worldId && player.world.uid == active.worldId && originWorkshopInSessionRange(
+            location.x - station.x, location.y - station.y, location.z - station.z,
+        )
+    }
+
+    private fun cancellationReason(active: Session, player: Player?, timeoutTicks: Long): OriginWorkshopCancelReason? =
+        active.activity.cancelReason(
+            player?.isOnline == true, player?.world?.uid == active.worldId,
+            player != null && inSessionRange(active, player), nowTick(), timeoutTicks,
+        )
+
     private fun step(active: Session, rules: OriginWorkshopGameRules) {
         if (active !== session) return
         if (!OriginFurnitureWorkshopModule.ownsPlayerTable(active.tableId, active.playerId)) {
@@ -850,18 +861,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
             return
         }
         val player = Bukkit.getPlayer(active.playerId)
-        val station = OriginWorkshopTablesModule.pointAt(tableId, start)
-        val reason = originWorkshopCancelReason(
-            online = player?.isOnline == true,
-            sameWorld = station != null && station.world.uid == active.worldId && player?.world?.uid == active.worldId,
-            sneaking = player?.isSneaking == true,
-            distanceSquared = if (player != null && station != null && player.world.uid == station.world.uid) {
-                player.location.distanceSquared(station)
-            } else Double.POSITIVE_INFINITY,
-            elapsedTicks = nowTick() - active.lastProgressAt,
-            timeoutTicks = rules.timeout,
-            maxDistanceSquared = SESSION_RANGE_SQUARED,
-        )
+        val reason = cancellationReason(active, player, rules.timeout)
         if (reason != null) {
             cancel(active, reason.name.lowercase(), reason != OriginWorkshopCancelReason.OFFLINE)
             return
@@ -977,7 +977,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
             else -> Unit
         }
         active.progress = after
-        active.lastProgressAt = now
+        active.activity.recordActivity(now)
         showStage(active, player, "STAGE")
     }
 
@@ -1073,11 +1073,18 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         val timed = timedProgress(active, now)
         val stepLabel = "Этап ${minOf(stage.step, active.recipe.totalSteps)}/${active.recipe.totalSteps} · ${stage.instruction}"
         val taskLabel = if (timed == null) {
-            "$stepLabel · ${if (active.recipe.interactions[stage] == null) "Станок работает" else "ЛКМ"} · Shift — отмена"
+            "$stepLabel · ${if (active.recipe.interactions[stage] == null) "Станок работает" else "ЛКМ"}"
         } else {
-            "$stepLabel · ${floor(timed * 100.0).toInt()}% · Shift — отмена"
+            "$stepLabel · ${floor(timed * 100.0).toInt()}%"
         }
-        player.sendActionBar(Component.text(taskLabel))
+        val outsideRemaining = active.activity.outsideSince?.let { (WORKSHOP_RETURN_GRACE_TICKS - (now - it) + 19L) / 20L }
+        val idleRemaining = ((settings?.rules?.timeout ?: 3_600L) - (now - active.activity.lastActivityAt) + 19L) / 20L
+        val notice = when {
+            outsideRemaining != null -> "Вернись к станку: сборка прервётся через ${outsideRemaining.coerceAtLeast(0)} с."
+            idleRemaining <= 30L -> "Сборка прервётся через ${idleRemaining.coerceAtLeast(0)} с бездействия. Двигайся или продолжи работу."
+            else -> taskLabel
+        }
+        player.sendActionBar(Component.text(notice))
         label?.takeIf(PacketTextDisplay::isValid)?.let { currentLabel ->
             val at = OriginWorkshopTablesModule.pointAt(tableId, labelAnchor(active, stage))
             if (at != null && at.world.uid == active.worldId) currentLabel.teleport(at)
@@ -1385,7 +1392,13 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         OriginWorkshopTablesModule.resetWork(active.tableId)
         showStart()
         if (notify && player?.isOnline == true) {
-            player.sendActionBar(Component.text("Сборка прервана. Заготовки остались на складе."))
+            val cause = when (reason) {
+                "too_far" -> "Ты надолго отошёл от станка."
+                "timeout" -> "Станок освобождён после бездействия."
+                "world_changed" -> "Ты покинул мастерскую."
+                else -> "Сборка прервана."
+            }
+            player.sendActionBar(Component.text("$cause Заготовки остались на складе."))
         }
     }
 
@@ -1479,18 +1492,18 @@ internal object OriginWorkshopGame : PluginModule, Listener {
     }
 
     private fun reward(active: Session, player: Player) {
-        if (active.rewardSent) return
+        if (active.rewardSent || !inSessionRange(active, player)) return
         active.rewardSent = true
         val handler = active.rewardHandler
         val request = UUID.randomUUID()
         val generationAtRequest = generation
+        // A claim accepted at the bench may finish during the return grace. The session
+        // is still the owner; invalidating it merely for a step away would orphan this request.
         val valid = {
             active === session && generationAtRequest == generation &&
                 OriginFurnitureWorkshopModule.ownsPlayerTable(active.tableId, active.playerId) &&
                 active.progress.stage == OriginWorkshopGameStage.REWARDING &&
-                player.isOnline && player.world.uid == active.worldId &&
-                (OriginWorkshopTablesModule.pointAt(tableId, start)?.takeIf { it.world.uid == active.worldId }
-                    ?.let { player.location.distanceSquared(it) } ?: Double.POSITIVE_INFINITY) <= SESSION_RANGE_SQUARED
+                player.isOnline && player.world.uid == active.worldId
         }
         log(active, "REWARD_REQUEST", active.progress.stage)
         handler.complete(player, request, valid) { error ->
