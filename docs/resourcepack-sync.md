@@ -14,8 +14,7 @@ credentials belong only in the private server configuration.
 The script uploads:
 
 - `RusCraftingResource.zip` — latest resource pack;
-- `RusCraftingResource.zip.sha256` — checksum used to skip unchanged packs;
-- `archive/YYYYMMDD-HHMMSS-RusCraftingResource.zip` — versioned archive.
+- `RusCraftingResource.zip.sha256` — checksum used to skip unchanged packs.
 
 On the production spawn node it also treats spawn ItemsAdder as the only
 content authority. A completed `iazip` stages and checksum-verifies exact copies
@@ -34,9 +33,9 @@ The mirror is disabled by default and enabled only in the private spawn
 strictly bounded, the target must remain below the same network root, and a
 directory lock rejects concurrent mirror attempts.
 
-After the archive and public object uploads succeed, the script publishes a
-versioned event containing only the staged ZIP SHA-256 and a random request ID
-to `arc.resourcepack.published` through the existing Redis connection. ProxyARC
+After the current ZIP object upload succeeds, the script publishes a versioned event
+containing only the staged ZIP SHA-256 and a random request ID to
+`arc.resourcepack.published` through the existing Redis connection. ProxyARC
 accepts that event only from the Paper server identities and runs the fixed
 VelocityResourcePacks `generatehashes` command.
 Each request has a random ID; the script waits up to 30 seconds for ProxyARC to

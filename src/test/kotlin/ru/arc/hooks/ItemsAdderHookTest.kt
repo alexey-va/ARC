@@ -171,6 +171,7 @@ class ItemsAdderHookTest :
                 environment["AWS_ACCESS_KEY_ID"] shouldBe ""
                 environment["AWS_SECRET_ACCESS_KEY"] shouldBe ""
                 environment["S3_BUCKET"] shouldBe "ruscraftinresources"
+                environment.containsKey("S3_RP_ARCHIVE_PREFIX").shouldBeFalse()
                 environment["IA_MIRROR_ENABLED"] shouldBe "0"
                 environment["IA_MIRROR_BACKUP_KEEP"] shouldBe "3"
             }
@@ -305,6 +306,46 @@ class ItemsAdderHookTest :
 
                 uploadedZip.shouldExist()
                 Files.mismatch(resourcePackZip, uploadedZip) shouldBe -1L
+            }
+
+            "writes only the current resource pack and manifest, then skips an unchanged pack" {
+                val directory = Files.createTempDirectory("arc-resourcepack-sync-current-only")
+                val resourcePackZip = directory.resolve("generated.zip")
+                val uploadedZip = directory.resolve("uploaded.zip")
+                val capturedManifest = directory.resolve("manifest.txt")
+                val capturedWrites = directory.resolve("s3-writes.txt")
+                val fakeAws = directory.resolve("fake-aws.sh")
+                val script = BundledResourcePackSyncScript.install(directory.resolve("arc-data"))
+
+                ZipOutputStream(Files.newOutputStream(resourcePackZip)).use { output ->
+                    output.putNextEntry(ZipEntry("pack.mcmeta"))
+                    output.write("""{"pack":{"description":"ready","min_format":75,"max_format":75}}""".toByteArray())
+                    output.closeEntry()
+                }
+                fakeAws.writeText(fakeAwsUploaderScript())
+                fakeAws.toFile().setExecutable(true).shouldBeTrue()
+                val publisher = ResourcePackSyncScript(script) {
+                    testEnvironment() +
+                        mapOf(
+                            "AWS_CLI" to fakeAws.toAbsolutePath().toString(),
+                            "CAPTURED_UPLOAD" to uploadedZip.toAbsolutePath().toString(),
+                            "CAPTURED_MANIFEST" to capturedManifest.toAbsolutePath().toString(),
+                            "CAPTURED_S3_WRITES" to capturedWrites.toAbsolutePath().toString(),
+                            "RP_NOTIFY_ENABLED" to "0",
+                        )
+                }
+
+                publisher.publish(resourcePackZip).shouldBeTrue()
+                capturedWrites.readLines() shouldBe listOf(
+                    "s3://ruscraftinresources/RusCraftingResource.zip",
+                    "s3://ruscraftinresources/RusCraftingResource.zip.sha256",
+                )
+                Files.mismatch(resourcePackZip, uploadedZip) shouldBe -1L
+                capturedManifest.readText() shouldContain "RusCraftingResource.zip"
+
+                Files.delete(capturedWrites)
+                publisher.publish(resourcePackZip).shouldBeTrue()
+                Files.exists(capturedWrites).shouldBeFalse()
             }
 
             "patches modern ItemsAdder metadata in staging before upload" {
@@ -888,7 +929,14 @@ private fun fakeAwsUploaderScript(): String =
     """
     |#!/bin/sh
     |if [ "${'$'}4" = "-" ]; then
+    |  if [ -n "${'$'}CAPTURED_MANIFEST" ] && [ -f "${'$'}CAPTURED_MANIFEST" ]; then
+    |    cat "${'$'}CAPTURED_MANIFEST"
+    |    exit 0
+    |  fi
     |  exit 1
+    |fi
+    |if [ -n "${'$'}CAPTURED_S3_WRITES" ]; then
+    |  printf '%s\n' "${'$'}4" >> "${'$'}CAPTURED_S3_WRITES"
     |fi
     |if [ "${'$'}3" = "-" ]; then
     |  if [ -n "${'$'}CAPTURED_MANIFEST" ]; then

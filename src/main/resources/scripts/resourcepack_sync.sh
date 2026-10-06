@@ -21,7 +21,6 @@ RP_UPLOAD_NAME="${RP_UPLOAD_NAME:-RusCraftingResource.zip}"
 AWS="${AWS_CLI:-aws}"
 S3_KEY="${S3_RP_KEY:-${RP_UPLOAD_NAME}}"
 S3_MANIFEST_KEY="${S3_RP_MANIFEST_KEY:-${RP_UPLOAD_NAME}.sha256}"
-ARCHIVE_PREFIX="${S3_RP_ARCHIVE_PREFIX:-archive}"
 IA_MIRROR_ENABLED="${IA_MIRROR_ENABLED:-0}"
 IA_MIRROR_SOURCE_SERVER="${IA_MIRROR_SOURCE_SERVER:-classic}"
 IA_MIRROR_TARGET_SERVER="${IA_MIRROR_TARGET_SERVER:-classic_survival}"
@@ -510,12 +509,6 @@ if [[ "${local_sha}" == "${remote_sha}" && "${FORCE_UPLOAD:-0}" != "1" ]]; then
   activate_itemsadder_mirror
   exit 0
 fi
-
-archive_key="${ARCHIVE_PREFIX}/$(date +%Y%m%d-%H%M%S)-${RP_UPLOAD_NAME}"
-log "Archive → s3://${S3_BUCKET}/${archive_key}"
-"${AWS}" s3 cp "${upload_path}" "s3://${S3_BUCKET}/${archive_key}" \
-  --endpoint-url "${S3_ENDPOINT}" \
-  --content-type "application/zip"
 
 log "Uploading $(du -h "${upload_path}" | cut -f1) as ${RP_UPLOAD_NAME} → s3://${S3_BUCKET}/${S3_KEY}"
 "${AWS}" s3 cp "${upload_path}" "s3://${S3_BUCKET}/${S3_KEY}" \

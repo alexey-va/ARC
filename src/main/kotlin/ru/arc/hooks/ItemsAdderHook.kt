@@ -256,7 +256,6 @@ internal class ResourcePackSyncConfig(
             "RP_UPLOAD_NAME" to config.string("s3.upload-name", "RusCraftingResource.zip"),
             "S3_RP_KEY" to config.string("s3.key", "RusCraftingResource.zip"),
             "S3_RP_MANIFEST_KEY" to config.string("s3.manifest-key", "RusCraftingResource.zip.sha256"),
-            "S3_RP_ARCHIVE_PREFIX" to config.string("s3.archive-prefix", "archive"),
             "FORCE_UPLOAD" to if (config.bool("force-upload", false)) "1" else "0",
             "IA_MIRROR_ENABLED" to if (config.bool("survival-mirror.enabled", false)) "1" else "0",
             "IA_MIRROR_SOURCE_SERVER" to config.string("survival-mirror.source-server-dir", "classic"),
