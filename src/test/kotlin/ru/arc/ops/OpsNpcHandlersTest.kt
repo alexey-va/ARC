@@ -27,6 +27,7 @@ import net.citizensnpcs.trait.waypoint.Waypoints
 import org.bukkit.Bukkit
 import org.bukkit.entity.Entity
 import org.bukkit.entity.EntityType
+import org.bukkit.entity.Pose
 import org.bukkit.Location
 import org.bukkit.World
 import org.bukkit.event.player.PlayerTeleportEvent
@@ -270,9 +271,11 @@ class OpsNpcHandlersTest : FreeSpec({
             val target = Location(world, 379.0, 119.0, 272.0, 180f, 0f)
             val entity = mockk<Entity>()
             every { entity.type } returns EntityType.VILLAGER
+            every { entity.pose } returns Pose.SLEEPING
             val navigatorParameters = mockk<NavigatorParameters>(relaxed = true)
             val navigator = mockk<Navigator>()
             every { navigator.localParameters } returns navigatorParameters
+            every { navigator.isPaused } returns true
             val npc = mockk<NPC>()
             every { npc.id } returns 198
             every { npc.uniqueId } returns UUID.fromString("40c163b0-491f-41d4-8135-41b3950da6e4")
@@ -294,6 +297,9 @@ class OpsNpcHandlersTest : FreeSpec({
 
             location["x"] shouldBe 379.0
             location["z"] shouldBe 272.0
+            response["pose"] shouldBe "SLEEPING"
+            response["navigationPaused"] shouldBe true
+            (response["spec"] as Map<*, *>).containsKey("pose") shouldBe false
         }
     }
 

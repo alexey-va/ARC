@@ -17,8 +17,10 @@ internal class OriginWorkshopSleepShift(private val tables: List<String>, privat
     private var player: UUID? = null
     val table: String get() = tables[index]
 
-    fun resting(now: Long) {
+    fun resting(now: Long, workerIndex: Int = index) {
         check(!ready)
+        require(workerIndex in tables.indices)
+        index = workerIndex
         ready = true
         due = now + durationTicks
     }
@@ -37,14 +39,12 @@ internal class OriginWorkshopSleepShift(private val tables: List<String>, privat
 
     fun rotationDue(now: Long): Boolean = ready && player == null && now >= due
 
-    fun leaveRest() {
-        check(player == null) { "An occupied workshop cannot change shift" }
-        ready = false
-    }
-
-    fun next() {
-        check(!ready && player == null)
-        index = (index + 1) % tables.size
+    /** Commit only after the replacement's sleeping pose has been confirmed. */
+    fun replaceWith(workerIndex: Int, now: Long) {
+        check(rotationDue(now)) { "An occupied or unexpired workshop cannot change shift" }
+        require(workerIndex in tables.indices && workerIndex != index)
+        index = workerIndex
+        due = now + durationTicks
     }
 
     fun invalidate() {

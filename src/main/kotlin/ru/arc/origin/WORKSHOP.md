@@ -41,11 +41,21 @@ the normal finish/cancel cleanup restores that fixture for the next session.
 
 ## Turn lifecycle
 
-Only the sleeping worker's station accepts a game. The current worker finishes
-its decorative cycle, walks to the sofa approach, and enters the sleeping pose.
-Other workers continue their own cycles. After the configured rest, the worker
-wakes, walks home and hands the next turn to the next worker. An occupied
-station delays waking until the session ends or is cancelled.
+Only a worker with a confirmed sleeping pose opens its station to a game. At
+startup the first available worker is seated immediately, even without viewers.
+After the configured rest, the next available worker finishes its decorative
+cycle and walks to the sofa approach. The current worker keeps sleeping during
+that walk, route retries and any active player session. Only after the incoming
+NPC's actual Bukkit pose is SLEEPING does the old worker wake and walk home.
+Returning and incoming workers cannot start new production cycles. A missing
+sleeper is replaced immediately by another available worker; a skin respawn's
+lost sleeping pose is repaired before invalidating a current player's lease.
+
+Both Citizens sleep and pose traits are applied before the readiness check;
+setting a sleep target alone is not confirmation. The workshop resumes its
+owned NPC navigators and restores their prior pause states on shutdown. Sleep
+coverage cannot be maintained if all four actors are despawned or native pose
+application fails; failures are logged, and an unconfirmed station stays closed.
 
 The game calls `acquirePlayerTable` only after the asynchronous quota response
 and fresh station/distance checks. `ownsPlayerTable` fences every active tick
@@ -64,7 +74,8 @@ overrides are in sibling `ruscrafting-ops/classic/plugins/ARC/modules/`.
 `sleeping` flag. Duration and sofa/approach coordinates load with the module's
 normal reload; reload recreates routing and turn state. The authored default
 is 2400 ticks, with approach `-56.5,71,-49.5` and seat `-56.5,71,-46.5`.
-The seat transition alone uses teleportation; walking uses the existing
+Initial placement, recovery and the seat transition use teleportation; normal
+shift walking uses the existing
 `CitizensNpcRouteController` and the configured safe floor bounds.
 
 ## Focused checks and evidence

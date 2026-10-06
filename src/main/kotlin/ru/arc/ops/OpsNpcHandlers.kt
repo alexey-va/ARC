@@ -266,6 +266,8 @@ object OpsNpcHandlers {
             "name" to (ArcNpcHologramModule.desiredName(npc) ?: npc.name),
             "entityType" to type?.name,
             "spawned" to npc.isSpawned,
+            "pose" to npc.entity?.pose?.name,
+            "navigationPaused" to npc.navigator.isPaused,
             "protected" to npc.isProtected,
             "location" to locationMap(location),
             "spec" to spec,

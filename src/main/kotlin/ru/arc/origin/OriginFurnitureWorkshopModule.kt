@@ -6,6 +6,7 @@ import net.citizensnpcs.api.event.CitizensEnableEvent
 import net.citizensnpcs.api.npc.NPC
 import net.citizensnpcs.trait.LookClose
 import net.citizensnpcs.trait.SleepTrait
+import net.citizensnpcs.trait.EntityPoseTrait
 import net.citizensnpcs.api.trait.trait.Equipment as CitizensEquipment
 import org.bukkit.Bukkit
 import org.bukkit.Location
@@ -16,6 +17,7 @@ import org.bukkit.World
 import org.bukkit.entity.Display
 import org.bukkit.entity.ItemDisplay
 import org.bukkit.entity.LivingEntity
+import org.bukkit.entity.Pose
 import org.bukkit.event.EventHandler
 import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
@@ -704,7 +706,12 @@ internal fun workshopWorkersDue(
     worker.role !in activeRoles && tick >= nextDueTick.getValue(worker.role)
 }
 
-private enum class WorkshopSleepStage { WAIT_FOR_WORK, TO_REST, SLEEPING, HOME }
+private class WorkshopSleepJourney(val workerIndex: Int) {
+    var started = false
+    var arrived = false
+    var deadline = 0L
+    var retryAt = 0L
+}
 
 private enum class WorkshopAfterRoute { PICKUP, WORK_RETURN, WORKSTATION, OUTPUT, HOME }
 
@@ -750,13 +757,14 @@ private class OriginFurnitureWorkshopRuntime private constructor(
     private val displays = PaperPacketDisplays(ARC.instance)
     private val stock = linkedMapOf<OriginFurnitureWorkshopRole, PacketItemDisplay>()
     private val lookCloseSnapshots = linkedMapOf<Int, Pair<LookClose, Boolean>>()
+    private val navigationPauseSnapshots = linkedMapOf<Int, Boolean>()
     private val sleepingEquipmentSnapshots = linkedMapOf<Int, Pair<ItemStack?, ItemStack?>>()
     private val sleepingNameplateSnapshots = linkedMapOf<Int, Pair<Boolean, Boolean>>()
     private val nextDueTick = settings.workers.associate { it.role to it.initialDelayTicks }.toMutableMap()
     private val active = linkedMapOf<OriginFurnitureWorkshopRole, ActiveWorkshopCycle>()
     private val sleepShift = OriginWorkshopSleepShift(settings.workers.map { it.tableId }, settings.sleepDurationTicks)
-    private var sleepStage = WorkshopSleepStage.WAIT_FOR_WORK
-    private var sleepRouteDeadline = 0L
+    private var incomingSleeper: WorkshopSleepJourney? = null
+    private val returningWorkers = linkedMapOf<Int, WorkshopSleepJourney>()
     private var sleepRetryAt = 0L
     private var tick = 0L
     private var closed = false
@@ -792,6 +800,7 @@ private class OriginFurnitureWorkshopRuntime private constructor(
             }
             if (actor.isSpawned && actor.entity.world == world) {
                 check(!actor.navigator.isNavigating) { "Workshop NPC ${actor.id} is navigating outside this runtime" }
+                resumeWorkshopNavigation(actor)
                 actor.getTraitNullable(SleepTrait::class.java)?.setSleeping(null)
                 check(actor.entity.teleport(worker.home.inWorld(world))) { "Workshop NPC ${actor.id} rejected home reset" }
                 faceOriginScenePoint(actor, worker.restFocus.inWorld(world))
@@ -805,6 +814,8 @@ private class OriginFurnitureWorkshopRuntime private constructor(
                 key = WorkshopPropKey(worker.role, UUID(0L, 0L), "stock"),
             )
         }
+        // Establish rest before production starts, including when nobody is watching.
+        tickSleep()
         tasks.runTimer(1L, 1L, ::tick)
         log("READY", detail = "actors=${settings.workers.joinToString(",") { "${it.role.key}:${it.role.npcId}" }}")
     }
@@ -823,17 +834,17 @@ private class OriginFurnitureWorkshopRuntime private constructor(
         try {
             tickSleep()
         } catch (failure: Exception) {
-            val worker = settings.workers[sleepShift.index]
-            sleepShift.invalidate()
-            sleepStage = WorkshopSleepStage.WAIT_FOR_WORK
-            sleepRetryAt = tick + worker.cycleDelayTicks
-            runCatching { routeController.stop(actors.getValue(worker.role)) }
-            runCatching { restoreSleepingWorker(worker) }
+            sleepRetryAt = tick + 100L
             ARC.instance.logger.log(Level.WARNING,
-                "ORIGIN_WORKSHOP phase=SLEEP_ERROR actor=${worker.role.npcId} retry_tick=$sleepRetryAt", failure)
+                "ORIGIN_WORKSHOP phase=SLEEP_ERROR retry_tick=$sleepRetryAt", failure)
+        }
+        val restingRoles = buildSet {
+            add(settings.workers[sleepShift.index].role)
+            incomingSleeper?.let { add(settings.workers[it.workerIndex].role) }
+            returningWorkers.keys.forEach { add(settings.workers[it].role) }
         }
         if (tick % settings.machineUpdateTicks == 0L) {
-            settings.workers.filter { it.tableId != sleepShift.table || it.role in active }.forEach { worker ->
+            settings.workers.filter { it.role !in restingRoles || it.role in active }.forEach { worker ->
                 val actor = actors.getValue(worker.role)
                 OriginWorkshopTablesModule.animateDrive(worker.tableId, tick + WORKSHOP_MACHINE_INTERPOLATION_TICKS,
                     actor.isSpawned && actor.entity.world == world && hasViewer(actor.entity.location))
@@ -848,7 +859,7 @@ private class OriginFurnitureWorkshopRuntime private constructor(
             }
         }
         if (tick % settings.dispatcherIntervalTicks != 0L) return
-        workshopWorkersDue(settings.workers, nextDueTick, active.keys + settings.workers[sleepShift.index].role, tick)
+        workshopWorkersDue(settings.workers, nextDueTick, active.keys + restingRoles, tick)
             .filter { worker ->
                 val actor = actors.getValue(worker.role)
                 actor.isSpawned && actor.entity.world == world && !routeController.isNavigating(actor) && hasViewer(actor.entity.location)
@@ -865,7 +876,7 @@ private class OriginFurnitureWorkshopRuntime private constructor(
 
     fun availablePlayerTable(): String? {
         val actor = actors.getValue(settings.workers[sleepShift.index].role)
-        return sleepShift.table.takeIf { !closed && sleepShift.ready && actor.isSpawned && actor.entity.world == world }
+        return sleepShift.table.takeIf { !closed && sleepShift.ready && isSleeping(actor) }
     }
 
     fun productIdFor(tableId: String): String? = settings.workers.firstOrNull { it.tableId == tableId }?.productId
@@ -879,90 +890,142 @@ private class OriginFurnitureWorkshopRuntime private constructor(
     fun releasePlayerTable(tableId: String, playerId: UUID) = sleepShift.release(tableId, playerId)
 
     private fun tickSleep() {
-        val worker = settings.workers[sleepShift.index]
-        val actor = actors.getValue(worker.role)
-        if (!actor.isSpawned || actor.entity.world != world) {
-            if (sleepStage != WorkshopSleepStage.WAIT_FOR_WORK) {
-                sleepShift.invalidate()
-                routeController.stop(actor)
-                restoreSleepingWorker(worker)
-                sleepStage = WorkshopSleepStage.WAIT_FOR_WORK
-                sleepRetryAt = tick + worker.cycleDelayTicks
-                ARC.instance.logger.warning("ORIGIN_WORKSHOP phase=SLEEP_INTERRUPTED actor=${actor.id} reason=actor-unavailable")
+        if (tick < sleepRetryAt) return
+        val current = settings.workers[sleepShift.index]
+        val currentActor = actors.getValue(current.role)
+        if (sleepShift.ready && !isSleeping(currentActor)) {
+            // Citizens may respawn an NPC while refreshing its skin. Restore its pose first.
+            if (isAvailable(currentActor) && seatSleepingWorker(current)) return
+            sleepShift.invalidate()
+            restoreSleepingWorker(current)
+            log("SLEEP_INTERRUPTED", detail = "actor=${currentActor.id} reason=actor-or-pose-unavailable")
+        }
+        if (!sleepShift.ready) {
+            // Initial seating and recovery must not depend on viewers or a long approach route.
+            val index = settings.workers.indices.map { (sleepShift.index + it) % settings.workers.size }
+                .firstOrNull { isAvailable(actors.getValue(settings.workers[it].role)) } ?: return
+            val worker = settings.workers[index]
+            active[worker.role]?.let { abort(it, "sleep-coverage-recovery") }
+            incomingSleeper?.let { routeController.stop(actors.getValue(settings.workers[it.workerIndex].role)) }
+            incomingSleeper = null
+            returningWorkers.remove(index)
+            routeController.stop(actors.getValue(worker.role))
+            OriginWorkshopTablesModule.resetWork(worker.tableId)
+            OriginWorkshopTablesModule.animateDrive(worker.tableId, tick, false)
+            if (!seatSleepingWorker(worker)) {
+                sleepRetryAt = tick + 100L
+                return
             }
+            sleepShift.resting(tick, index)
+            log("SLEEP_STARTED", detail = "actor=${worker.role.npcId} table=${worker.tableId} initial=true")
+        }
+        returningWorkers.values.toList().forEach { journey ->
+            val worker = settings.workers[journey.workerIndex]
+            if (advanceSleepJourney(journey, worker.home, "HOME")) {
+                returningWorkers.remove(journey.workerIndex)
+                faceOriginScenePoint(actors.getValue(worker.role), worker.restFocus.inWorld(world))
+                nextDueTick[worker.role] = tick + worker.initialDelayTicks
+            }
+        }
+        if (incomingSleeper == null && sleepShift.rotationDue(tick)) {
+            val next = (1 until settings.workers.size).map { (sleepShift.index + it) % settings.workers.size }
+                .firstOrNull { it !in returningWorkers && isAvailable(actors.getValue(settings.workers[it].role)) }
+            incomingSleeper = next?.let(::WorkshopSleepJourney)
+        }
+        val incoming = incomingSleeper ?: return
+        val worker = settings.workers[incoming.workerIndex]
+        val actor = actors.getValue(worker.role)
+        if (!isAvailable(actor)) {
+            routeController.stop(actor)
+            incomingSleeper = null
             return
         }
-        when (sleepStage) {
-            WorkshopSleepStage.WAIT_FOR_WORK -> {
-                if (worker.role in active || tick < sleepRetryAt || !hasWorkshopViewer()) return
-                OriginWorkshopTablesModule.resetWork(worker.tableId)
-                OriginWorkshopTablesModule.animateDrive(worker.tableId, tick, false)
-                startSleepRoute(worker, settings.sleepApproach, WorkshopSleepStage.TO_REST)
-            }
-            WorkshopSleepStage.TO_REST, WorkshopSleepStage.HOME -> {
-                if (routeController.isNavigating(actor) && tick < sleepRouteDeadline) return
-                val outcome = if (routeController.isNavigating(actor)) {
-                    routeController.stop(actor)
-                    null
-                } else routeController.consumeOutcome(actor)
-                if (outcome?.successful != true) {
-                    val phase = sleepStage
-                    restoreSleepingWorker(worker)
-                    sleepShift.invalidate()
-                    sleepStage = WorkshopSleepStage.WAIT_FOR_WORK
-                    sleepRetryAt = tick + worker.cycleDelayTicks
-                    ARC.instance.logger.warning("ORIGIN_WORKSHOP phase=SLEEP_ROUTE_FAILED actor=${actor.id} target=$phase reason=${outcome?.reason ?: "timeout-or-missing-outcome"}")
-                    return
-                }
-                if (sleepStage == WorkshopSleepStage.HOME) {
-                    faceOriginScenePoint(actor, worker.restFocus.inWorld(world))
-                    nextDueTick[worker.role] = tick + worker.initialDelayTicks
-                    sleepShift.next()
-                    sleepStage = WorkshopSleepStage.WAIT_FOR_WORK
-                    sleepRetryAt = tick
-                    log("SLEEP_TURN", detail = "next=${sleepShift.table}")
-                } else {
-                    // Walking ends at the front of the existing sofa; only seating uses a teleport.
-                    check(actor.entity.teleport(settings.sleepAt.inWorld(world))) { "Workshop NPC ${actor.id} rejected sleep seat" }
-                    sleepingEquipmentSnapshots[actor.id] = snapshotEquipment(actor)
-                    val npcData = actor.data()
-                    sleepingNameplateSnapshots[actor.id] = npcData.has(NPC.Metadata.NAMEPLATE_VISIBLE) to
-                        npcData.get(NPC.Metadata.NAMEPLATE_VISIBLE, true)
-                    ArcNpcHologramModule.setNameHiddenTemporarily(actor.id, WORKSHOP_SLEEP_NAME_OWNER, true)
-                    npcData.set(NPC.Metadata.NAMEPLATE_VISIBLE, false)
-                    setEquipment(actor, null, null)
-                    actor.getOrAddTrait(SleepTrait::class.java).setSleeping(settings.sleepAt.inWorld(world))
-                    sleepShift.resting(tick)
-                    sleepStage = WorkshopSleepStage.SLEEPING
-                    log("SLEEP_STARTED", detail = "actor=${actor.id} table=${worker.tableId} duration_ticks=${settings.sleepDurationTicks}")
-                }
-            }
-            WorkshopSleepStage.SLEEPING -> {
-                if (!sleepShift.rotationDue(tick) || !hasWorkshopViewer()) return
-                sleepShift.leaveRest()
-                sleepStage = WorkshopSleepStage.WAIT_FOR_WORK
-                sleepRetryAt = tick + worker.cycleDelayTicks
-                restoreSleepingWorker(worker)
+        if (worker.role in active) return // Reserve the next turn, but let its existing cycle finish.
+        if (!advanceSleepJourney(incoming, settings.sleepApproach, "TO_REST")) return
+        if (!sleepShift.rotationDue(tick)) return // A game can acquire the old station while the next NPC walks.
+        if (!seatSleepingWorker(worker)) {
+            sleepRetryAt = tick + 100L
+            return
+        }
+        val previous = sleepShift.index
+        // The new NPC is visibly asleep before either the old lease or old pose is retired.
+        sleepShift.replaceWith(incoming.workerIndex, tick)
+        incomingSleeper = null
+        returningWorkers[previous] = WorkshopSleepJourney(previous)
+        val previousWorker = settings.workers[previous]
+        restoreSleepingWorker(previousWorker)
+        log("SLEEP_STARTED", detail = "actor=${actor.id} table=${worker.tableId} previous=${previousWorker.role.npcId}")
+    }
+
+    private fun advanceSleepJourney(
+        journey: WorkshopSleepJourney,
+        destination: OriginFurnitureWorkshopPoint,
+        phase: String,
+    ): Boolean {
+        if (journey.arrived) return true
+        val worker = settings.workers[journey.workerIndex]
+        val actor = actors.getValue(worker.role)
+        if (!isAvailable(actor) || tick < journey.retryAt) return false
+        var failureReason = "route-unavailable"
+        if (!journey.started) {
+            // Leave the sofa by its front anchor; floor travel remains normal Citizens navigation.
+            if (phase == "HOME" && journey.retryAt == 0L) {
                 check(actor.entity.teleport(settings.sleepApproach.inWorld(world))) { "Workshop NPC ${actor.id} rejected sleep exit" }
-                startSleepRoute(worker, worker.home, WorkshopSleepStage.HOME)
-                log("SLEEP_FINISHED", detail = "actor=${actor.id} table=${worker.tableId}")
             }
+            OriginWorkshopTablesModule.resetWork(worker.tableId)
+            OriginWorkshopTablesModule.animateDrive(worker.tableId, tick, false)
+            resumeWorkshopNavigation(actor)
+            journey.started = routeController.navigate(actor, destination.inWorld(world), settings.routeProfile)
+            journey.deadline = tick + settings.activeTimeoutTicks
+            if (journey.started) return false
+        } else {
+            if (routeController.isNavigating(actor) && tick < journey.deadline) return false
+            val outcome = routeController.consumeOutcome(actor)
+            if (outcome?.successful == true) {
+                journey.arrived = true
+                return true
+            }
+            failureReason = outcome?.reason ?: "timeout-or-missing-outcome"
+        }
+        routeController.stop(actor)
+        journey.started = false
+        journey.retryAt = tick + worker.cycleDelayTicks
+        ARC.instance.logger.warning("ORIGIN_WORKSHOP phase=SLEEP_ROUTE_FAILED actor=${actor.id} target=$phase reason=$failureReason retry_tick=${journey.retryAt}")
+        return false
+    }
+
+    private fun isAvailable(actor: NPC): Boolean = actor.isSpawned && actor.entity.world == world
+
+    private fun isSleeping(actor: NPC): Boolean = isAvailable(actor) && actor.entity.pose == Pose.SLEEPING
+
+    private fun resumeWorkshopNavigation(actor: NPC) {
+        navigationPauseSnapshots.putIfAbsent(actor.id, actor.navigator.isPaused)
+        if (actor.navigator.isPaused) {
+            actor.navigator.isPaused = false
+            log("SLEEP_NAV_RESUMED", detail = "actor=${actor.id}")
         }
     }
 
-    private fun startSleepRoute(
-        worker: OriginFurnitureWorkshopWorker,
-        destination: OriginFurnitureWorkshopPoint,
-        next: WorkshopSleepStage,
-    ) {
+    private fun seatSleepingWorker(worker: OriginFurnitureWorkshopWorker): Boolean {
         val actor = actors.getValue(worker.role)
-        sleepStage = next
-        sleepRouteDeadline = tick + settings.activeTimeoutTicks
-        if (!routeController.navigate(actor, destination.inWorld(world), settings.routeProfile)) {
-            sleepStage = WorkshopSleepStage.WAIT_FOR_WORK
-            sleepRetryAt = tick + worker.cycleDelayTicks
-            ARC.instance.logger.warning("ORIGIN_WORKSHOP phase=SLEEP_ROUTE_UNAVAILABLE actor=${actor.id} target=$next")
+        val npcData = actor.data()
+        sleepingEquipmentSnapshots.getOrPut(actor.id) { snapshotEquipment(actor) }
+        sleepingNameplateSnapshots.getOrPut(actor.id) {
+            npcData.has(NPC.Metadata.NAMEPLATE_VISIBLE) to npcData.get(NPC.Metadata.NAMEPLATE_VISIBLE, true)
         }
+        check(actor.entity.teleport(settings.sleepAt.inWorld(world))) { "Workshop NPC ${actor.id} rejected sleep seat" }
+        ArcNpcHologramModule.setNameHiddenTemporarily(actor.id, WORKSHOP_SLEEP_NAME_OWNER, true)
+        npcData.set(NPC.Metadata.NAMEPLATE_VISIBLE, false)
+        setEquipment(actor, null, null)
+        actor.getOrAddTrait(SleepTrait::class.java).apply {
+            setSleeping(settings.sleepAt.inWorld(world))
+            run()
+        }
+        actor.getOrAddTrait(EntityPoseTrait::class.java).run()
+        if (isSleeping(actor)) return true
+        restoreSleepingWorker(worker)
+        ARC.instance.logger.warning("ORIGIN_WORKSHOP phase=SLEEP_POSE_FAILED actor=${actor.id}")
+        return false
     }
 
     private fun restoreSleepingWorker(worker: OriginFurnitureWorkshopWorker) {
@@ -1492,8 +1555,6 @@ private class OriginFurnitureWorkshopRuntime private constructor(
 
     private fun hasViewer(location: Location): Boolean = playersNear(location).isNotEmpty()
 
-    private fun hasWorkshopViewer(): Boolean = settings.workers.any { hasViewer(it.home.inWorld(world)) }
-
     private fun logRoute(event: NpcRouteEvent) {
         val reason = event.reason?.let { " reason=$it" }.orEmpty()
         log(
@@ -1543,6 +1604,12 @@ private class OriginFurnitureWorkshopRuntime private constructor(
             OriginWorkshopTablesModule.animateDrive(worker.tableId, 0L, false)
         } }
         cleanup("routes") { routeController.close() }
+        navigationPauseSnapshots.forEach { (id, paused) ->
+            cleanup("navigation-pause-$id") { actors.values.first { it.id == id }.navigator.isPaused = paused }
+        }
+        navigationPauseSnapshots.clear()
+        incomingSleeper = null
+        returningWorkers.clear()
         stock.values.toList().forEach { runCatching { it.remove() } }
         stock.clear()
         cleanup("displays") { displays.close() }

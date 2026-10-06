@@ -829,7 +829,7 @@ internal class CitizensNpcRouteController(
                 route.profile.distanceMargin + 1.0e-3,
             )
             val phase = if (reached) "FINISHED" else "ABORTED"
-            val reason = if (reached) null else "navigation-cancelled"
+            val reason = if (reached) null else if (npc.navigator.isPaused) "navigator-paused" else "navigation-cancelled"
             outcomes.record(npcId, NpcRouteOutcome(reached, phase, reason))
             event(phase, route.profile, npc, route.destination, route.cells.size, reason)
             return
