@@ -64,6 +64,75 @@ class FrozenPhysicalRewardsTest : StringSpec({
         }.isFailure shouldBe true
     }
 
+    "choice archive snapshots stay unpublished until asynchronous child and parent persistence" {
+        MockBukkitTestRuntime.open().use {
+            val root = Files.createTempDirectory("arc-frozen-choice")
+            try {
+                val archive = FrozenPhysicalRewards(root)
+                val child = archive.capture(
+                    "travel-anchors:2",
+                    FrozenPhysicalRecipe(type = "travel-anchors", travelAnchorAmount = 2),
+                    ItemStack(Material.DIAMOND),
+                )!!
+                val option = FrozenChoiceOption(
+                    id = "adventure",
+                    name = "Путешествие",
+                    description = listOf("Два личных якоря."),
+                    childKey = child.materialization.sourceKey,
+                    childFingerprint = child.materialization.providerFingerprint,
+                )
+                val parent = archive.capture(
+                    "choice:weekly",
+                    FrozenPhysicalRecipe(type = "choice", choiceOptions = listOf(option, option.copy(id = "building", childKey = "frozen:${"b".repeat(64)}", childFingerprint = "b".repeat(64)), option.copy(id = "work", childKey = "frozen:${"c".repeat(64)}", childFingerprint = "c".repeat(64)))),
+                    ItemStack(Material.PAPER),
+                )!!
+
+                archive.find(child.materialization.sourceKey) shouldBe null
+                archive.find(parent.materialization.sourceKey) shouldBe null
+                CompletableFuture.supplyAsync { archive.persist(child) }.get() shouldBe child.materialization
+                CompletableFuture.supplyAsync { archive.persist(parent) }.get() shouldBe parent.materialization
+
+                val reloaded = FrozenPhysicalRewards(root)
+                val stored = reloaded.find(parent.materialization.sourceKey)!!
+                stored.recipe.choiceOptions?.map { it.id } shouldBe listOf("adventure", "building", "work")
+                stored.recipe.choiceOptions?.first()?.childKey shouldBe child.materialization.sourceKey
+            } finally {
+                deleteTree(root)
+            }
+        }
+
+        runCatching {
+            FrozenPhysicalRecipe(type = "choice", choiceOptions = emptyList()).validate()
+        }.isFailure shouldBe true
+    }
+
+    "storage validation checks archive structure without deserializing Bukkit stacks" {
+        MockBukkitTestRuntime.open().use {
+            val recipe = FrozenPhysicalRecipe(
+                type = "furniture",
+                furnitureBoxes = listOf(java.util.Base64.getEncoder().encodeToString(byteArrayOf(0))),
+            )
+            val sourceKey = "furniture:structural-check"
+            val previewBytes = ItemStack(Material.DIAMOND).serializeAsBytes()
+            val preview = java.util.Base64.getEncoder().encodeToString(previewBytes)
+            val fingerprint = OneTimeUseFingerprint.sha256(
+                "arc-frozen-physical-v1\n$sourceKey\n${Gson().toJson(recipe)}\n${OneTimeUseFingerprint.sha256(previewBytes).sha256}"
+                    .toByteArray(Charsets.UTF_8),
+            ).sha256
+            val record = FrozenPhysicalRewardRecord(
+                version = 1,
+                key = "frozen:$fingerprint",
+                sourceKey = sourceKey,
+                fingerprint = fingerprint,
+                preview = preview,
+                recipe = recipe,
+            )
+
+            record.validate(validateBukkitStacks = false)
+            runCatching { record.validate() }.isFailure shouldBe true
+        }
+    }
+
     "dungeon case recipes bind a bounded case id and exact generator definition" {
         FrozenPhysicalRecipe(
             type = "dungeon-case",

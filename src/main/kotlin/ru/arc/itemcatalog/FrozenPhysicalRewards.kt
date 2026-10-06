@@ -8,6 +8,7 @@ import ru.arc.persistence.DurableRecordJournal
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Base64
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Durable archive for provider-backed catalogue rewards.
@@ -27,9 +28,11 @@ internal class FrozenPhysicalRewards(root: Path) {
         decode = { bytes ->
             requireNotNull(gson.fromJson(bytes.toString(Charsets.UTF_8), FrozenPhysicalRewardRecord::class.java))
         },
-        validate = FrozenPhysicalRewardRecord::validate,
+        // Storage-thread validation is structural only. Bukkit ItemStack/PDC validation
+        // runs once on the owner thread when records are captured or loaded.
+        validate = { record -> record.validate(validateBukkitStacks = false) },
     )
-    private val records = linkedMapOf<String, FrozenPhysicalRewardRecord>()
+    private val records = ConcurrentHashMap<String, FrozenPhysicalRewardRecord>()
 
     init {
         // A bad archive must not take ARC down. The affected frozen source is
@@ -37,7 +40,7 @@ internal class FrozenPhysicalRewards(root: Path) {
         loadRecords().forEach { stored -> records[stored.recordId] = stored.value }
     }
 
-    /** A corrupt record must not hide unrelated valid historical records. */
+    /** Loads records independently; full Bukkit stack/PDC checks run here on the startup owner thread. */
     private fun loadRecords(): List<DurableRecord<FrozenPhysicalRewardRecord>> = runCatching {
         Files.list(journal.directory).use { paths ->
             paths
@@ -46,7 +49,7 @@ internal class FrozenPhysicalRewards(root: Path) {
                 .map { path: Path ->
                     val recordId = path.fileName.toString().removeSuffix(".json")
                     runCatching<DurableRecord<FrozenPhysicalRewardRecord>?> {
-                        journal.loadOrNull(recordId)?.let { DurableRecord(recordId, it) }
+                        journal.loadOrNull(recordId)?.also { it.validate() }?.let { DurableRecord(recordId, it) }
                     }
                         .onFailure { failure ->
                             ru.arc.util.Logging.warn(
@@ -64,13 +67,12 @@ internal class FrozenPhysicalRewards(root: Path) {
         ru.arc.util.Logging.warn("Frozen physical reward archive unavailable: {}", failure.javaClass.simpleName)
     }.getOrElse { emptyList() }
 
-    /** Archives one immutable recipe, returning its content-addressed voucher key. */
-    @Synchronized
-    fun prepare(
+    /** Captures Bukkit-owned item bytes and the content address without doing journal I/O. */
+    fun capture(
         sourceKey: String,
         recipe: FrozenPhysicalRecipe,
         preview: ItemStack,
-    ): PhysicalRewardMaterialization? = runCatching {
+    ): FrozenPhysicalPrepared? = runCatching {
         require(PhysicalRewardVoucher.isValidKey(sourceKey)) { "Physical reward source key is invalid" }
         recipe.validate()
         val previewBytes = preview.serializeAsBytes()
@@ -93,7 +95,14 @@ internal class FrozenPhysicalRewards(root: Path) {
             fingerprint = fingerprint,
             preview = previewEncoded,
             recipe = recipe,
-        ).also(FrozenPhysicalRewardRecord::validate)
+        ).also { it.validate() }
+        FrozenPhysicalPrepared(record)
+    }.getOrNull()
+
+    /** Persists a snapshot on a storage executor and publishes its readback to the in-memory archive. */
+    fun persist(prepared: FrozenPhysicalPrepared): PhysicalRewardMaterialization? = runCatching {
+        val record = prepared.record.also { it.validate(validateBukkitStacks = false) }
+        val fingerprint = record.fingerprint
         val existing = records[fingerprint]
         if (existing != null) {
             require(existing == record) { "Frozen physical reward content address collision" }
@@ -101,12 +110,17 @@ internal class FrozenPhysicalRewards(root: Path) {
         }
         val stored = journal.commit(fingerprint, record)
         check(stored == record) { "Frozen physical reward archive readback mismatch" }
-        records[fingerprint] = stored
+        val raced = records.putIfAbsent(fingerprint, stored)
+        require(raced == null || raced == stored) { "Frozen physical reward content address collision" }
         PhysicalRewardMaterialization(stored.key, stored.fingerprint)
     }.getOrNull()
 
-    /** Returns an archived record only for a complete, content-addressed key. */
+    /** Legacy callers retain the existing synchronous preparation contract. */
     @Synchronized
+    fun prepare(sourceKey: String, recipe: FrozenPhysicalRecipe, preview: ItemStack): PhysicalRewardMaterialization? =
+        persist(capture(sourceKey, recipe, preview) ?: return null)
+
+    /** Returns an archived record only for a complete, content-addressed key. */
     fun find(key: String): FrozenPhysicalRewardRecord? {
         val fingerprint = key.removePrefix("frozen:").takeIf { key.startsWith("frozen:") } ?: return null
         if (!FINGERPRINT.matches(fingerprint)) return null
@@ -114,7 +128,6 @@ internal class FrozenPhysicalRewards(root: Path) {
     }
 
     /** Stable, valid collection-seal marker for one archived record. */
-    @Synchronized
     fun archivedCategoryId(key: String): String? {
         val fingerprint = key.removePrefix("frozen:").takeIf { key.startsWith("frozen:") } ?: return null
         if (!FINGERPRINT.matches(fingerprint)) return null
@@ -124,7 +137,6 @@ internal class FrozenPhysicalRewards(root: Path) {
     }
 
     /** Resolves an archived seal into detached choices for the existing one-choice exchange. */
-    @Synchronized
     fun archivedSeal(categoryId: String): ArchivedCollectionSeal? {
         if (!CollectionSealIdentity.isValidCategoryId(categoryId) || !categoryId.startsWith("set_frozen_")) return null
         val fingerprint = categoryId.removePrefix("set_frozen_").takeIf(FINGERPRINT::matches) ?: return null
@@ -141,7 +153,6 @@ internal class FrozenPhysicalRewards(root: Path) {
     }
 
     /** Returns the inert, configured preview for an archived seal marker. */
-    @Synchronized
     fun archivedSealPreview(categoryId: String): ItemStack? {
         val fingerprint = categoryId.removePrefix("set_frozen_").takeIf {
             CollectionSealIdentity.isValidCategoryId(categoryId) && categoryId.startsWith("set_frozen_") && FINGERPRINT.matches(it)
@@ -150,7 +161,6 @@ internal class FrozenPhysicalRewards(root: Path) {
         return preview(record)
     }
 
-    @Synchronized
     fun preview(record: FrozenPhysicalRewardRecord): ItemStack? = runCatching {
         ItemStack.deserializeBytes(Base64.getDecoder().decode(record.preview)).takeIf { !it.type.isAir }
     }.getOrNull()
@@ -180,7 +190,8 @@ internal data class FrozenPhysicalRewardRecord(
     val preview: String,
     val recipe: FrozenPhysicalRecipe,
 ) {
-    fun validate() {
+    /** Set false only for storage-thread checks that must not deserialize Bukkit ItemStacks. */
+    fun validate(validateBukkitStacks: Boolean = true) {
         require(version == 1) { "Unsupported frozen physical reward version" }
         require(PhysicalRewardVoucher.isValidKey(key)) { "Frozen physical reward key is invalid" }
         require(key == "frozen:$fingerprint") { "Frozen physical reward key does not match fingerprint" }
@@ -189,15 +200,17 @@ internal data class FrozenPhysicalRewardRecord(
         require(preview.isNotBlank() && preview.length <= 1_000_000) { "Archived preview is invalid" }
         val previewBytes = Base64.getDecoder().decode(preview)
         require(previewBytes.size <= 512 * 1024) { "Archived preview is too large" }
-        val previewStack = ItemStack.deserializeBytes(previewBytes)
-        require(!previewStack.type.isAir) { "Archived preview is air" }
-        require(PhysicalRewardVoucher.identity(previewStack) == null) {
-            "Archived preview carries a physical voucher identity"
+        if (validateBukkitStacks) {
+            val previewStack = ItemStack.deserializeBytes(previewBytes)
+            require(!previewStack.type.isAir) { "Archived preview is air" }
+            require(PhysicalRewardVoucher.identity(previewStack) == null) {
+                "Archived preview carries a physical voucher identity"
+            }
+            require(CollectionSealIdentity.categoryId(previewStack) == null) {
+                "Archived preview carries a collection seal identity"
+            }
         }
-        require(CollectionSealIdentity.categoryId(previewStack) == null) {
-            "Archived preview carries a collection seal identity"
-        }
-        recipe.validate()
+        recipe.validate(validateBukkitStacks)
         val expectedFingerprint = OneTimeUseFingerprint.sha256(
             buildString {
                 append("arc-frozen-physical-v1\n")
@@ -213,6 +226,21 @@ internal data class FrozenPhysicalRewardRecord(
         val FINGERPRINT = Regex("[a-f0-9]{64}")
     }
 }
+
+/** Owner-thread snapshot ready for bounded asynchronous journal persistence. */
+internal data class FrozenPhysicalPrepared(val record: FrozenPhysicalRewardRecord) {
+    val materialization: PhysicalRewardMaterialization
+        get() = PhysicalRewardMaterialization(record.key, record.fingerprint)
+}
+
+/** Immutable child voucher address and its authored choice copy. */
+internal data class FrozenChoiceOption(
+    val id: String,
+    val name: String,
+    val description: List<String>,
+    val childKey: String,
+    val childFingerprint: String,
+)
 
 /** Effect recipe for a provider-backed reward. It contains no player identity. */
 internal data class FrozenPhysicalRecipe(
@@ -235,8 +263,21 @@ internal data class FrozenPhysicalRecipe(
     val travelAnchorAmount: Int? = null,
     /** Stable approved PlayerParticles preset id; null for legacy and unrelated recipes. */
     val particlePresetId: String? = null,
+    /** Ordered frozen option addresses for a choice voucher; null for other recipes. */
+    val choiceOptions: List<FrozenChoiceOption>? = null,
+    /** Map geometry and prize address are archived together; no live pool is consulted on redemption. */
+    val mapId: String? = null,
+    val mapPrizeKey: String? = null,
+    val mapPrizeFingerprint: String? = null,
+    val mapDestinations: List<PersonalTreasureMapDestination>? = null,
 ) {
-    fun validate() {
+    /** Set false only for storage-thread checks that must not deserialize Bukkit ItemStacks. */
+    fun validate(validateBukkitStacks: Boolean = true) {
+        if (type != "personal-map") {
+            require(mapId == null && mapPrizeKey == null && mapPrizeFingerprint == null && mapDestinations == null) {
+                "Personal map fields require a personal-map recipe"
+            }
+        }
         if (type != "dungeon-case") {
             require(dungeonCaseId == null && dungeonCaseDefinition == null) {
                 "Dungeon case fields require a dungeon-case recipe"
@@ -247,6 +288,9 @@ internal data class FrozenPhysicalRecipe(
         }
         if (type != "particle-preset") {
             require(particlePresetId == null) { "Particle preset id requires a particle-preset recipe" }
+        }
+        if (type != "choice") {
+            require(choiceOptions == null) { "Choice options require a choice recipe" }
         }
         when (type) {
             "money" -> validateAmount(currency, minAmount, maxAmount, expectedCurrency = "vault")
@@ -282,7 +326,9 @@ internal data class FrozenPhysicalRecipe(
                     require(encoded.length in 1..700_000) { "Frozen furniture box is too large" }
                     val bytes = Base64.getDecoder().decode(encoded)
                     require(bytes.size <= 512 * 1024) { "Frozen furniture box is too large" }
-                    require(!ItemStack.deserializeBytes(bytes).type.isAir) { "Frozen furniture box is air" }
+                    if (validateBukkitStacks) {
+                        require(!ItemStack.deserializeBytes(bytes).type.isAir) { "Frozen furniture box is air" }
+                    }
                 }
                 require(currency == null && minAmount == null && maxAmount == null && tokenAmount == null)
                 require(commandKind == null && commandValue == null && mountId == null && sealItems == null && sealName == null && sealDescription == null && treasure == null)
@@ -293,13 +339,15 @@ internal data class FrozenPhysicalRecipe(
                     require(encoded.length in 1..700_000) { "Frozen seal snapshot entry is too large" }
                     val bytes = Base64.getDecoder().decode(encoded)
                     require(bytes.size <= 512 * 1024) { "Frozen seal snapshot entry is too large" }
-                    val stack = ItemStack.deserializeBytes(bytes)
-                    require(!stack.type.isAir) { "Frozen seal snapshot entry is air" }
-                    require(PhysicalRewardVoucher.identity(stack) == null) {
-                        "Frozen seal snapshot entry carries a physical voucher identity"
-                    }
-                    require(CollectionSealIdentity.categoryId(stack) == null) {
-                        "Frozen seal snapshot entry carries a collection seal identity"
+                    if (validateBukkitStacks) {
+                        val stack = ItemStack.deserializeBytes(bytes)
+                        require(!stack.type.isAir) { "Frozen seal snapshot entry is air" }
+                        require(PhysicalRewardVoucher.identity(stack) == null) {
+                            "Frozen seal snapshot entry carries a physical voucher identity"
+                        }
+                        require(CollectionSealIdentity.categoryId(stack) == null) {
+                            "Frozen seal snapshot entry carries a collection seal identity"
+                        }
                     }
                 }
                 require(sealName != null && sealName.length in 1..256) { "Frozen seal name is invalid" }
@@ -311,7 +359,7 @@ internal data class FrozenPhysicalRecipe(
             }
             "treasure" -> {
                 require(treasure != null) { "Frozen treasure recipe is missing" }
-                treasure.validate(0, emptySet())
+                treasure.validate(0, emptySet(), validateBukkitStacks)
                 require(currency == null && minAmount == null && maxAmount == null && tokenAmount == null)
                 require(commandKind == null && commandValue == null && mountId == null && furnitureBoxes == null && sealItems == null && sealName == null && sealDescription == null)
             }
@@ -340,6 +388,47 @@ internal data class FrozenPhysicalRecipe(
                 require(sealItems == null && sealName == null && sealDescription == null && treasure == null)
                 require(dungeonCaseId == null && dungeonCaseDefinition == null && travelAnchorAmount == null)
             }
+            "choice" -> {
+                require(choiceOptions != null && choiceOptions.size in 3..32) { "Frozen choice options are invalid" }
+                require(choiceOptions.map { it.id }.distinct().size == choiceOptions.size) { "Frozen choice option ids are duplicated" }
+                choiceOptions.forEach { option ->
+                    require(option.id.matches(ID_PATTERN)) { "Frozen choice option id is invalid" }
+                    require(option.name.isNotBlank() && option.name.length <= 256) { "Frozen choice option name is invalid" }
+                    require(option.description.size <= 12 && option.description.all { it.length <= 512 }) {
+                        "Frozen choice option description is invalid"
+                    }
+                    require(PhysicalRewardVoucher.isValidKey(option.childKey) && option.childKey.startsWith("frozen:")) {
+                        "Frozen choice child key is invalid"
+                    }
+                    require(option.childFingerprint.matches(FINGERPRINT)) { "Frozen choice child fingerprint is invalid" }
+                }
+                require(choiceOptions.map { it.childKey }.distinct().size == choiceOptions.size) {
+                    "Frozen choice options must have unique child rewards"
+                }
+                require(currency == null && minAmount == null && maxAmount == null && tokenAmount == null)
+                require(commandKind == null && commandValue == null && mountId == null && furnitureBoxes == null)
+                require(sealItems == null && sealName == null && sealDescription == null && treasure == null)
+                require(dungeonCaseId == null && dungeonCaseDefinition == null && travelAnchorAmount == null && particlePresetId == null)
+            }
+            "personal-map" -> {
+                require(mapId != null && ID_PATTERN.matches(mapId)) { "Frozen map id is invalid" }
+                require(mapPrizeFingerprint != null && FINGERPRINT.matches(mapPrizeFingerprint)) {
+                    "Frozen map prize fingerprint is invalid"
+                }
+                require(mapPrizeKey == "frozen:$mapPrizeFingerprint") { "Frozen map prize key is invalid" }
+                require(mapDestinations != null && mapDestinations.size in 1..PersonalTreasureMapDefinition.MAX_DESTINATIONS) {
+                    "Frozen map destinations are invalid"
+                }
+                // Gson bypasses data-class constructors, so persisted coordinates need the same validation as YAML.
+                mapDestinations.forEach { point ->
+                    PersonalTreasureMapDestination(point.server, point.world, point.x, point.y, point.z, point.hint)
+                }
+                require(mapDestinations.distinct().size == mapDestinations.size) { "Frozen map destinations are duplicated" }
+                require(currency == null && minAmount == null && maxAmount == null && tokenAmount == null)
+                require(commandKind == null && commandValue == null && mountId == null && furnitureBoxes == null)
+                require(sealItems == null && sealName == null && sealDescription == null && treasure == null)
+                require(dungeonCaseId == null && dungeonCaseDefinition == null && travelAnchorAmount == null && particlePresetId == null)
+            }
             else -> error("Unknown frozen physical recipe type: $type")
         }
     }
@@ -354,6 +443,7 @@ internal data class FrozenPhysicalRecipe(
     private companion object {
         val ID_PATTERN = Regex("[A-Za-z0-9_.:/-]{1,256}")
         val DUNGEON_CASE_ID_PATTERN = Regex("[a-z0-9_-]{1,64}")
+        val FINGERPRINT = Regex("[a-f0-9]{64}")
         val ALLOWED_COMMAND_KINDS = setOf("arcbuilder", "arcecojobs", "elitemobs")
         val ALLOWED_COMMANDS = mapOf(
             "arcbuilder" to Regex("arcbuilder:builder systembook %player% [a-z0-9_-]+\\.schem"),
@@ -384,7 +474,8 @@ internal data class FrozenTreasureNode(
     val amount: Int? = null,
     val aeArgs: List<FrozenAeArg>? = null,
 ) {
-    fun validate(depth: Int, visitedPools: Set<String>) {
+    /** Set false only for storage-thread checks that must not deserialize Bukkit ItemStacks. */
+    fun validate(depth: Int, visitedPools: Set<String>, validateBukkitStacks: Boolean = true) {
         require(depth <= 8) { "Frozen treasure graph is too deep" }
         require(id.isNotBlank() && id.length <= 256) { "Frozen treasure id is invalid" }
         require(weight in 0..1_000_000) { "Frozen treasure weight is invalid" }
@@ -393,7 +484,9 @@ internal data class FrozenTreasureNode(
             "item" -> {
                 validateIntRange()
                 require(stack != null && stack.length in 1..700_000)
-                require(!ItemStack.deserializeBytes(Base64.getDecoder().decode(stack)).type.isAir)
+                val bytes = Base64.getDecoder().decode(stack)
+                require(bytes.size <= 512 * 1024)
+                if (validateBukkitStacks) require(!ItemStack.deserializeBytes(bytes).type.isAir)
                 require(itemId == null && exclude == null && commands == null && poolId == null && children == null)
                 require(aeKind == null && itemName == null && amount == null && aeArgs == null)
             }
@@ -413,7 +506,7 @@ internal data class FrozenTreasureNode(
                 require(poolId !in visitedPools)
                 require(children != null && children.size in 1..216)
                 require(children.any { it.weight > 0 })
-                children.forEach { it.validate(depth + 1, visitedPools + poolId) }
+                children.forEach { it.validate(depth + 1, visitedPools + poolId, validateBukkitStacks) }
                 require(stack == null && itemId == null && exclude == null && commands == null)
                 require(aeKind == null && itemName == null && amount == null && aeArgs == null)
             }
@@ -437,7 +530,7 @@ internal data class FrozenTreasureNode(
                 require(itemId?.length in 1..256)
                 val bytes = Base64.getDecoder().decode(requireNotNull(stack))
                 require(bytes.size <= 512 * 1024)
-                require(!ItemStack.deserializeBytes(bytes).type.isAir)
+                if (validateBukkitStacks) require(!ItemStack.deserializeBytes(bytes).type.isAir)
                 require(exclude == null && commands == null && poolId == null && children == null)
                 require(aeKind == null && itemName == null && amount == null && aeArgs == null)
             }

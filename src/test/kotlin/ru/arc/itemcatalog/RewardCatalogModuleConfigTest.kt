@@ -101,6 +101,76 @@ class RewardCatalogModuleConfigTest : StringSpec({
         }
     }
 
+    "choice source accepts 3..32 unique concrete references and rejects one-option or nested pools" {
+        val root = Files.createTempDirectory("arc-reward-choice-config")
+        try {
+            fun document(optionCount: Int): String {
+                val lines = mutableListOf("enabled: true", "categories:", "  prizes:", "    entries:")
+                repeat(maxOf(3, optionCount)) { index ->
+                    lines += "      reward_$index:"
+                    lines += "        travel-anchors: 2"
+                }
+                lines += listOf(
+                    "  weekly:",
+                    "    rolls: 1",
+                    "    entries:",
+                    "      gift:",
+                    "        weight: 1",
+                    "        choice:",
+                )
+                repeat(optionCount) { index ->
+                    lines += "          - {id: option_$index, category: prizes, entry: reward_$index}"
+                }
+                return lines.joinToString("\n")
+            }
+
+            writeConfig(root, document(12))
+            val source = RewardCatalogModuleConfig.load(root).snapshot().categories
+                .first { it.id == "weekly" }.entries.single().source as RewardCatalogSource.Choice
+            source.options.size shouldBe 12
+            source.options.first() shouldBe RewardCatalogChoiceRef("option_0", "prizes", "reward_0")
+
+            writeConfig(root, document(32))
+            val maxSource = RewardCatalogModuleConfig.load(root).snapshot().categories
+                .first { it.id == "weekly" }.entries.single().source as RewardCatalogSource.Choice
+            maxSource.options.size shouldBe 32
+
+            writeConfig(root, document(1))
+            runCatching { RewardCatalogModuleConfig.load(root).snapshot() }.isFailure shouldBe true
+            writeConfig(root, document(3).replace(
+                "id: option_1, category: prizes, entry: reward_1",
+                "id: option_1, category: prizes, entry: reward_0",
+            ))
+            runCatching { RewardCatalogModuleConfig.load(root).snapshot() }.isFailure shouldBe true
+            writeConfig(root, """
+                enabled: true
+                categories:
+                  prizes:
+                    entries:
+                      reward_0: {travel-anchors: 2}
+                      reward_1: {travel-anchors: 2}
+                      reward_2: {travel-anchors: 2}
+                      nested:
+                        choice:
+                          - {id: a, category: prizes, entry: reward_0}
+                          - {id: b, category: prizes, entry: reward_1}
+                          - {id: c, category: prizes, entry: reward_2}
+                  weekly:
+                    rolls: 1
+                    entries:
+                      gift:
+                        weight: 1
+                        choice:
+                          - {id: a, category: prizes, entry: nested}
+                          - {id: b, category: prizes, entry: reward_1}
+                          - {id: c, category: prizes, entry: reward_2}
+            """.trimIndent())
+            runCatching { RewardCatalogModuleConfig.load(root).snapshot() }.isFailure shouldBe true
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
     "parses reward sources with optional presentation fields and tolerant defaults" {
         val root = Files.createTempDirectory("arc-reward-catalog-sources")
         try {

@@ -51,8 +51,11 @@ class PhysicalRewardController(
     private val canRedeem: (org.bukkit.entity.Player, PhysicalRewardSpec) -> String? = { _, _ -> null },
     private val redeem: (org.bukkit.entity.Player, PhysicalRewardSpec, UUID) -> CompletableFuture<PhysicalRewardOutcome>,
     scope: String,
+    private val openChoice: ((org.bukkit.entity.Player, PhysicalRewardVoucherIdentity, PhysicalRewardSpec, List<Int>, (Int) -> Unit) -> Unit)? = null,
+    private val beforeUse: (org.bukkit.entity.Player, PhysicalRewardSpec, PhysicalRewardVoucherIdentity) -> Boolean = { _, _, _ -> true },
 ) : AutoCloseable {
     private val operationScope = OneTimeUseScope.parse(scope)
+    private val scopeValue = scope
     private val active = AtomicBoolean(true)
     private val registered = AtomicBoolean(false)
     private val pending = ConcurrentHashMap<UUID, PhysicalRewardRedemption>()
@@ -67,7 +70,7 @@ class PhysicalRewardController(
             val player = event.player
             val identity = PhysicalRewardVoucher.identity(player.inventory.itemInMainHand) ?: return
             event.isCancelled = true
-            start(player, identity)
+            openOrStart(player, identity)
         }
 
         @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
@@ -168,7 +171,47 @@ class PhysicalRewardController(
             null
         }
 
-    private fun start(player: org.bukkit.entity.Player, identity: PhysicalRewardVoucherIdentity) {
+    private fun openOrStart(player: org.bukkit.entity.Player, identity: PhysicalRewardVoucherIdentity) {
+        if (!active.get() || !ledger.available) return unavailable(player)
+        if (PhysicalRewardVoucher.identity(player.inventory.itemInMainHand) != identity) return unavailable(player)
+        val spec = resolveSafely(identity.key)
+        if (spec == null || spec.key != identity.key || spec.fingerprint != identity.fingerprint) return unavailable(player)
+        val mayContinue = try {
+            beforeUse(player, spec, identity)
+        } catch (failure: Throwable) {
+            warn("Physical reward pre-use hook failed: player={} voucher={} cause={}", player.uniqueId, identity.id, failure.javaClass.simpleName)
+            unavailable(player)
+            return
+        }
+        if (!mayContinue) return
+        val options = spec.choiceOptions
+        if (options == null) {
+            start(player, identity)
+            return
+        }
+        val offered = runCatching {
+            RewardChoiceSelector.offeredIndices(identity.id, spec.fingerprint.sha256, options)
+        }.getOrNull()?.toList() ?: return unavailable(player)
+        val dialog = openChoice ?: return unavailable(player)
+        try {
+            dialog(player, identity, spec, offered) { selected ->
+                start(
+                    player,
+                    identity,
+                    ChoiceSelection(spec.fingerprint.sha256, offered.toList(), selected),
+                )
+            }
+        } catch (failure: Throwable) {
+            warn("Physical reward choice dialog failed: player={} voucher={} cause={}", player.uniqueId, identity.id, failure.javaClass.simpleName)
+            unavailable(player)
+        }
+    }
+
+    private fun start(
+        player: org.bukkit.entity.Player,
+        identity: PhysicalRewardVoucherIdentity,
+        choiceSelection: ChoiceSelection? = null,
+    ) {
         if (!active.get() || !ledger.available) return unavailable(player)
         if (pending.containsKey(player.uniqueId)) {
             player.sendMessage(TextUtil.mm(BUSY_MESSAGE, true))
@@ -179,7 +222,18 @@ class PhysicalRewardController(
             unavailable(player)
             return
         }
-        val redemption = PhysicalRewardRedemption(player.uniqueId, identity, UUID.randomUUID())
+        if (choiceSelection != null) {
+            if (PhysicalRewardVoucher.identity(player.inventory.itemInMainHand) != identity || !validChoiceSelection(identity, spec, choiceSelection)) {
+                unavailable(player)
+                return
+            }
+        } else if (spec.choiceOptions != null) {
+            unavailable(player)
+            return
+        }
+        val claimScope = if (choiceSelection == null) operationScope.value else "$scopeValue.choice.${choiceSelection.selectedIndex}"
+        val parsedScope = runCatching { OneTimeUseScope.parse(claimScope) }.getOrNull() ?: return unavailable(player)
+        val redemption = PhysicalRewardRedemption(player.uniqueId, identity, UUID.randomUUID(), parsedScope.value, choiceSelection)
         val rejected = synchronized(stateMonitor) {
             !active.get() || pending.putIfAbsent(player.uniqueId, redemption) != null
         }
@@ -192,7 +246,7 @@ class PhysicalRewardController(
                 identity = OneTimeUseIdentity(identity.id, identity.fingerprint),
                 claimId = redemption.claimId,
                 claimantId = player.uniqueId,
-                scope = operationScope,
+                scope = parsedScope,
             )
         val taskScope =
             try {
@@ -267,9 +321,20 @@ class PhysicalRewardController(
                     release(redemption, player, UNAVAILABLE_MESSAGE)
                     return
                 }
+                val claimSpec = redemption.choiceSelection?.let { selection ->
+                    if (!validChoiceSelection(redemption.voucher, current, selection)) {
+                        release(redemption, player, UNAVAILABLE_MESSAGE)
+                        return
+                    }
+                    current.copy(selectedChoiceIndex = selection.selectedIndex)
+                } ?: current.takeIf { it.choiceOptions == null }
+                if (claimSpec == null) {
+                    release(redemption, player, UNAVAILABLE_MESSAGE)
+                    return
+                }
                 val rejection =
                     try {
-                        canRedeem(player, current)
+                        canRedeem(player, claimSpec)
                     } catch (readFailure: Throwable) {
                         warn("Physical reward preflight failed: player={} voucher={} cause={}", player.uniqueId, redemption.voucher.id, readFailure.javaClass.simpleName)
                         release(redemption, player, UNAVAILABLE_MESSAGE)
@@ -282,7 +347,7 @@ class PhysicalRewardController(
                 redemption.phase = PhysicalRewardRedemption.Phase.MUTATING
                 val nativeStage =
                     try {
-                        redeem(player, current, redemption.claimId)
+                        redeem(player, claimSpec, redemption.claimId)
                     } catch (mutationFailure: Throwable) {
                         handleNative(player, redemption, null, mutationFailure)
                         return
@@ -629,6 +694,20 @@ class PhysicalRewardController(
             null
         }
 
+    private fun validChoiceSelection(
+        identity: PhysicalRewardVoucherIdentity,
+        spec: PhysicalRewardSpec,
+        selection: ChoiceSelection,
+    ): Boolean {
+        val options = spec.choiceOptions ?: return false
+        if (spec.fingerprint != identity.fingerprint || selection.definitionFingerprint != spec.fingerprint.sha256) return false
+        if (selection.offeredIndices.size != 3 || selection.offeredIndices.distinct().size != 3) return false
+        if (selection.selectedIndex !in selection.offeredIndices) return false
+        return runCatching {
+            RewardChoiceSelector.offeredIndices(identity.id, spec.fingerprint.sha256, options) == selection.offeredIndices
+        }.getOrDefault(false)
+    }
+
     /** Sends player-facing text only through the current Paper lifecycle. */
     private fun notifyIfLive(player: org.bukkit.entity.Player, message: String?) {
         if (message == null) return
@@ -645,7 +724,7 @@ class PhysicalRewardController(
             val plain = lore.joinToString("\n") {
                 PlainTextComponentSerializer.plainText().serialize(TextUtil.strip(it) ?: Component.empty())
             }
-            if (plain.contains("ПКМ") && plain.contains("получ", ignoreCase = true)) return@editMeta
+            if (plain.contains("ПКМ")) return@editMeta
             meta.lore(lore + listOf(Component.empty(), TextUtil.mm(ACTION_HINT, true)))
         }
     }

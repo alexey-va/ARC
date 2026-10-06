@@ -159,6 +159,21 @@ class RewardCatalogGuiController internal constructor(
                 "totalWeight" to category.entries.sumOf { it.weight?.toLong() ?: 0L },
                 "planned" to planned,
                 "unavailable" to unavailable,
+                "interactive" to category.entries.mapNotNull { entry ->
+                    val kind = when (entry.source) {
+                        is RewardCatalogSource.Choice -> "choice"
+                        is RewardCatalogSource.PersonalMap -> "personal-map"
+                        else -> return@mapNotNull null
+                    }
+                    val prepared = physicalMaterialization(entry)
+                    mapOf(
+                        "id" to entry.id,
+                        "type" to kind,
+                        "options" to (entry.source as? RewardCatalogSource.Choice)?.options?.size,
+                        "sourceKey" to prepared?.sourceKey,
+                        "fingerprint" to prepared?.providerFingerprint,
+                    )
+                },
             )
         },
     )
@@ -363,6 +378,8 @@ class RewardCatalogGuiController internal constructor(
             is RewardCatalogSource.DungeonCase,
             is RewardCatalogSource.TravelAnchors,
             is RewardCatalogSource.ParticlePreset,
+            is RewardCatalogSource.Choice,
+            is RewardCatalogSource.PersonalMap,
             -> physical(entry, grant)?.let(::listOf)
             is RewardCatalogSource.Planned -> null
         }

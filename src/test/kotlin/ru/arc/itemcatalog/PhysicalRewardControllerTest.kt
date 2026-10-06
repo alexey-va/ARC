@@ -219,6 +219,151 @@ class PhysicalRewardControllerTest : StringSpec({
             }
         }
     }
+
+    "choice dialog close is free and confirmed choice is claimed once with its frozen option index" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val ledger = RecordingVoucherLedger()
+            val options = choiceOptions(12)
+            val spec = choiceSpec(options)
+            var offered: List<Int>? = null
+            var select: ((Int) -> Unit)? = null
+            var appliedIndex: Int? = null
+            val controller = PhysicalRewardController(
+                paper.createSimplePlugin("PhysicalRewardChoice"), ledger,
+                { key -> spec.takeIf { it.key == key } },
+                { _, _ -> null },
+                { _, selected, _ ->
+                    appliedIndex = selected.selectedChoiceIndex
+                    CompletableFuture.completedFuture(PhysicalRewardOutcome.Applied)
+                },
+                "spawn",
+                { _, _, _, indices, callback -> offered = indices.toList(); select = callback },
+            )
+            val scheduler = TestTaskScheduler()
+            Tasks.withScheduler(scheduler) {
+                controller.register()
+                try {
+                    val player = paper.addPlayer("choice-holder")
+                    val voucher = controller.createStack("choice.test")!!
+                    val identity = PhysicalRewardVoucher.identity(voucher)!!
+                    player.inventory.setItemInMainHand(voucher)
+
+                    paper.callEvent(interact(player, Action.RIGHT_CLICK_AIR))
+                    val firstOffer = requireNotNull(offered)
+                    // Leaving the native dialog with Escape invokes no selection callback.
+                    ledger.calls shouldBe emptyList()
+                    paper.callEvent(interact(player, Action.RIGHT_CLICK_AIR))
+                    offered shouldBe firstOffer
+                    ledger.calls shouldBe emptyList()
+
+                    val selected = firstOffer[1]
+                    requireNotNull(select).invoke(selected)
+                    flush(scheduler)
+
+                    ledger.lastRequest?.identity?.useId shouldBe identity.id
+                    ledger.lastRequest?.identity?.fingerprint shouldBe identity.fingerprint
+                    ledger.lastRequest?.scope?.value shouldBe "spawn.choice.$selected"
+                    appliedIndex shouldBe selected
+                    ledger.calls shouldContainExactly listOf("claim", "commit")
+                    player.inventory.itemInMainHand.type shouldBe Material.AIR
+
+                    // A stale double-click callback cannot claim again after the bearer was consumed.
+                    requireNotNull(select).invoke(selected)
+                    flush(scheduler)
+                    ledger.calls shouldContainExactly listOf("claim", "commit")
+                } finally {
+                    controller.close()
+                }
+            }
+        }
+    }
+
+    "choice confirmation rejects an unoffered option and a moved bearer before claiming" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val options = choiceOptions(12)
+            val spec = choiceSpec(options)
+            val ledger = RecordingVoucherLedger()
+            var select: ((Int) -> Unit)? = null
+            val controller = choiceController(
+                paper.createSimplePlugin("PhysicalRewardChoiceTamper"), ledger, spec,
+                onDialog = { select = it },
+            )
+            val scheduler = TestTaskScheduler()
+            Tasks.withScheduler(scheduler) {
+                controller.register()
+                try {
+                    val player = paper.addPlayer("choice-tamper")
+                    player.inventory.setItemInMainHand(controller.createStack(spec.key)!!)
+                    paper.callEvent(interact(player, Action.RIGHT_CLICK_AIR))
+                    requireNotNull(select).invoke((0..11).first { index -> index !in RewardChoiceSelector.offeredIndices(
+                        PhysicalRewardVoucher.identity(player.inventory.itemInMainHand)!!.id,
+                        spec.fingerprint.sha256,
+                        options,
+                    ) })
+                    ledger.calls shouldBe emptyList()
+
+                    paper.callEvent(interact(player, Action.RIGHT_CLICK_AIR))
+                    val identity = PhysicalRewardVoucher.identity(player.inventory.itemInMainHand)!!
+                    player.inventory.setItemInMainHand(ItemStack(Material.GOLD_INGOT))
+                    val nextOffered = RewardChoiceSelector.offeredIndices(identity.id, spec.fingerprint.sha256, options)
+                    requireNotNull(select).invoke(nextOffered.first())
+                    ledger.calls shouldBe emptyList()
+                } finally {
+                    controller.close()
+                }
+            }
+        }
+    }
+
+    "uncertain choice remains claimed across reconstructed controller without a second native effect" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val seen = mutableSetOf<java.util.UUID>()
+            val ledger = RecordingVoucherLedger(claimResult = { request ->
+                if (seen.add(request.identity.useId)) OneTimeUseClaimResult.Acquired(OneTimeUseClaim.acquired(request, true))
+                else OneTimeUseClaimResult.AlreadyConsumed
+            })
+            val spec = choiceSpec(choiceOptions(12))
+            val plugin = paper.createSimplePlugin("PhysicalRewardChoiceRecovery")
+            var effects = 0
+            var select: ((Int) -> Unit)? = null
+            val makeController = { uncertain: Boolean ->
+                choiceController(plugin, ledger, spec, onDialog = { select = it }) { _, _, _ ->
+                    effects++
+                    CompletableFuture.completedFuture(
+                        if (uncertain) PhysicalRewardOutcome.Uncertain("provider timeout") else PhysicalRewardOutcome.Applied,
+                    )
+                }
+            }
+            val first = makeController(true)
+            val scheduler = TestTaskScheduler()
+            Tasks.withScheduler(scheduler) {
+                first.register()
+                val player = paper.addPlayer("choice-retry")
+                val voucher = first.createStack(spec.key)!!
+                val identity = PhysicalRewardVoucher.identity(voucher)!!
+                player.inventory.setItemInMainHand(voucher)
+                paper.callEvent(interact(player, Action.RIGHT_CLICK_AIR))
+                val index = RewardChoiceSelector.offeredIndices(identity.id, spec.fingerprint.sha256, spec.choiceOptions!!).first()
+                requireNotNull(select).invoke(index)
+                flush(scheduler)
+                ledger.calls shouldContainExactly listOf("claim", "abandon")
+                first.close()
+
+                val second = makeController(false)
+                second.register()
+                try {
+                    paper.callEvent(interact(player, Action.RIGHT_CLICK_AIR))
+                    requireNotNull(select).invoke(index)
+                    flush(scheduler)
+                    ledger.calls shouldContainExactly listOf("claim", "abandon", "claim")
+                    ledger.lastRequest?.scope?.value shouldBe "spawn.choice.$index"
+                    effects shouldBe 1
+                } finally {
+                    second.close()
+                }
+            }
+        }
+    }
 })
 
 private fun controller(
@@ -235,6 +380,41 @@ private fun controller(
         },
     )
     return PhysicalRewardController(plugin, ledger, { key -> spec.takeIf { it.key == key } }, canRedeem, redeem, "arc.catalog-reward")
+}
+
+private fun choiceController(
+    plugin: org.bukkit.plugin.Plugin,
+    ledger: RecordingVoucherLedger,
+    spec: PhysicalRewardSpec,
+    onDialog: ((Int) -> Unit) -> Unit,
+    redeem: (org.bukkit.entity.Player, PhysicalRewardSpec, java.util.UUID) -> CompletableFuture<PhysicalRewardOutcome> = { _, _, _ ->
+        CompletableFuture.completedFuture(PhysicalRewardOutcome.Applied)
+    },
+): PhysicalRewardController = PhysicalRewardController(
+    plugin,
+    ledger,
+    { key -> spec.takeIf { it.key == key } },
+    { _, _ -> null },
+    redeem,
+    "spawn",
+    { _, _, _, _, selected -> onDialog(selected) },
+)
+
+private fun choiceSpec(options: List<PhysicalRewardChoiceOption>) = PhysicalRewardSpec(
+    key = "choice.test",
+    fingerprint = OneTimeUseFingerprint.sha256Fields("choice.test", "frozen-definition-v1"),
+    preview = ItemStack(Material.PAPER),
+    choiceOptions = options,
+)
+
+private fun choiceOptions(count: Int) = (0 until count).map { index ->
+    PhysicalRewardChoiceOption(
+        id = "option_$index",
+        name = "Награда $index",
+        description = listOf("Описание $index"),
+        childKey = "frozen:${"%064x".format(index + 1)}",
+        childFingerprint = "%064x".format(index + 1),
+    )
 }
 
 private fun interact(player: org.bukkit.entity.Player, action: Action): PlayerInteractEvent =

@@ -33,6 +33,8 @@ import java.math.RoundingMode
 import java.util.Base64
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.ThreadLocalRandom
 
 /** Converts provider-backed sources into durable physical entitlements. Native effects run only after a durable claim. */
@@ -44,6 +46,8 @@ internal class CatalogPhysicalRewards(
     private val sealStack: (String, CatalogIconStyle?) -> ItemStack? = { _, _ -> null },
 ) {
     private val particlePresets by lazy { ParticlePresetRewards() }
+    private val preparedInteractive = ConcurrentHashMap<String, PhysicalRewardMaterialization>()
+    private val interactiveReady = AtomicBoolean(false)
     private val entries = settings.categories.filter { it.rolls == null }.flatMap { it.entries }
         .plus(settings.categories.filter { it.rolls != null }.flatMap { it.entries })
         .distinctBy { key(it) }.associateBy { key(it) }
@@ -59,6 +63,11 @@ internal class CatalogPhysicalRewards(
         is RewardCatalogSource.DungeonCase -> "dungeon-case:${source.id}"
         is RewardCatalogSource.TravelAnchors -> "travel-anchors:${source.amount}"
         is RewardCatalogSource.ParticlePreset -> "particle-preset:${source.id}"
+        is RewardCatalogSource.Choice -> "choice:${OneTimeUseFingerprint.sha256(source.options.joinToString("\n") { "${it.id}|${it.categoryId}|${it.entryId}" }.toByteArray()).sha256}"
+        is RewardCatalogSource.PersonalMap -> "personal-map:${OneTimeUseFingerprint.sha256Fields(
+            "personal-map-source-v1", entry.id, source.rewardCategoryId, source.rewardEntryId,
+            source.destinations.joinToString("\n"),
+        ).sha256}"
         else -> "native:${source}"
     }
 
@@ -72,6 +81,8 @@ internal class CatalogPhysicalRewards(
         is RewardCatalogSource.DungeonCase,
         is RewardCatalogSource.TravelAnchors,
         is RewardCatalogSource.ParticlePreset,
+        is RewardCatalogSource.Choice,
+        is RewardCatalogSource.PersonalMap,
         -> true
         is RewardCatalogSource.Treasure -> when (val value = treasure(source)) {
             is Treasure.Ae -> !AeNativeItems.supports(value)
@@ -90,6 +101,10 @@ internal class CatalogPhysicalRewards(
     fun materialization(entry: RewardCatalogEntry): PhysicalRewardMaterialization? = runCatching {
         if (!isVoucherSource(entry)) return null
         val sourceKey = key(entry)
+        if (entry.source is RewardCatalogSource.Choice || entry.source is RewardCatalogSource.PersonalMap) {
+            if (!interactiveReady.get()) return null
+            return preparedInteractive[sourceKey]
+        }
         val spec = resolve(sourceKey) ?: return null
         // Fixed, allowlisted entitlements must resolve on either backend without a local recipe archive.
         if (entry.source is RewardCatalogSource.ParticlePreset) {
@@ -105,6 +120,110 @@ internal class CatalogPhysicalRewards(
         }
         return archived
     }.getOrNull()
+
+    /** Captures all configured choice children and parent recipes on the Bukkit owner thread. */
+    fun captureInteractiveArchives(): List<FrozenPhysicalPrepared>? = runCatching {
+        val archive = frozen ?: return@runCatching emptyList()
+        val interactiveEntries = entries.values.filter {
+            it.source is RewardCatalogSource.Choice || it.source is RewardCatalogSource.PersonalMap
+        }
+        val prepared = linkedMapOf<String, FrozenPhysicalPrepared>()
+        fun capture(sourceKey: String, recipe: FrozenPhysicalRecipe, preview: ItemStack): FrozenPhysicalPrepared? {
+            val snapshot = archive.capture(sourceKey, recipe, preview) ?: return null
+            val previous = prepared.putIfAbsent(snapshot.record.fingerprint, snapshot)
+            require(previous == null || previous.record == snapshot.record) { "Choice archive fingerprint collision" }
+            return previous ?: snapshot
+        }
+        val interactiveSnapshots = mutableListOf<FrozenPhysicalPrepared>()
+        fun captureChild(categoryId: String, entryId: String): Pair<RewardCatalogEntry, FrozenPhysicalPrepared>? {
+            val (_, child) = settings.entry(categoryId, entryId) ?: return null
+            if (child.source is RewardCatalogSource.Choice || child.source is RewardCatalogSource.PersonalMap) return null
+            val childSourceKey = key(child)
+            val childSpec = resolve(childSourceKey) ?: return null
+            val childRecipe = freezeRecipe(child) ?: return null
+            if (!frozenProvidersReady(childRecipe)) return null
+            val snapshot = capture(
+                childSourceKey,
+                childRecipe,
+                RewardItemPresentation.tooltip(childSpec.preview, child),
+            ) ?: return null
+            return child to snapshot
+        }
+        interactiveEntries.forEach { entry ->
+            val recipe = when (val source = entry.source) {
+                is RewardCatalogSource.Choice -> {
+                    val childSourceKeys = mutableSetOf<String>()
+                    val options = source.options.map { ref ->
+                        val (child, archivedChild) = captureChild(ref.categoryId, ref.entryId) ?: return@runCatching null
+                        if (!childSourceKeys.add(key(child))) return@runCatching null
+                        FrozenChoiceOption(
+                            id = ref.id,
+                            name = child.name ?: ref.id,
+                            description = child.description,
+                            childKey = archivedChild.materialization.sourceKey,
+                            childFingerprint = archivedChild.materialization.providerFingerprint,
+                        )
+                    }
+                    if (options.map { it.childKey }.distinct().size != options.size) return@runCatching null
+                    FrozenPhysicalRecipe(type = "choice", choiceOptions = options)
+                }
+                is RewardCatalogSource.PersonalMap -> {
+                    val (child, archivedChild) = captureChild(source.rewardCategoryId, source.rewardEntryId)
+                        ?: return@runCatching null
+                    FrozenPhysicalRecipe(
+                        type = "personal-map",
+                        mapId = entry.id,
+                        mapPrizeKey = archivedChild.materialization.sourceKey,
+                        mapPrizeFingerprint = archivedChild.materialization.providerFingerprint,
+                        mapDestinations = source.destinations,
+                    )
+                }
+                else -> return@forEach
+            }
+            val composite = capture(
+                key(entry),
+                recipe,
+                RewardItemPresentation.tooltip(preview(entry), entry),
+            ) ?: return@runCatching null
+            interactiveSnapshots += composite
+        }
+        // Interactive parents are persisted after all frozen prize/option records.
+        prepared.values.filter { it.record.recipe.type !in INTERACTIVE_RECIPE_TYPES } +
+            interactiveSnapshots.distinctBy { it.record.fingerprint }
+    }.getOrNull()
+
+    /** Commits captured interactive children and parents in dependency order on a storage executor. */
+    fun persistInteractiveArchives(snapshots: List<FrozenPhysicalPrepared>): Boolean = runCatching {
+        val archive = frozen ?: return false
+        val materializations = linkedMapOf<String, PhysicalRewardMaterialization>()
+        snapshots.forEach { snapshot ->
+            val materialization = archive.persist(snapshot) ?: return false
+            if (snapshot.record.recipe.type in INTERACTIVE_RECIPE_TYPES) {
+                materializations[snapshot.record.sourceKey] = materialization
+            }
+        }
+        preparedInteractive.clear()
+        preparedInteractive.putAll(materializations)
+        interactiveReady.set(true)
+        true
+    }.getOrDefault(false)
+
+    /** Resolves the exact map definition archived with this bearer source. */
+    fun personalMapDefinition(spec: PhysicalRewardSpec): PersonalTreasureMapDefinition? {
+        val archived = frozen?.find(spec.key)?.takeIf {
+            it.fingerprint == spec.fingerprint.sha256 && it.recipe.type == "personal-map"
+        } ?: return null
+        val recipe = archived.recipe
+        val child = frozen.find(requireNotNull(recipe.mapPrizeKey)) ?: return null
+        if (child.fingerprint != recipe.mapPrizeFingerprint) return null
+        return runCatching {
+            PersonalTreasureMapDefinition(
+                requireNotNull(recipe.mapId),
+                requireNotNull(recipe.mapPrizeKey),
+                recipe.mapDestinations.orEmpty(),
+            )
+        }.getOrNull()
+    }
 
     /** Archived references can be delivered only while their native provider is live. */
     fun canMaterialize(key: String): Boolean = runCatching {
@@ -137,10 +256,28 @@ internal class CatalogPhysicalRewards(
     fun resolve(key: String): PhysicalRewardSpec? = runCatching {
         frozen?.find(key)?.let { archived ->
             val preview = frozen.preview(archived) ?: return@runCatching null
+            when (archived.recipe.type) {
+                "choice" -> archived.recipe.choiceOptions.orEmpty().forEach { option ->
+                    val child = frozen.find(option.childKey) ?: return@runCatching null
+                    if (child.fingerprint != option.childFingerprint) return@runCatching null
+                }
+                "personal-map" -> {
+                    val child = frozen.find(requireNotNull(archived.recipe.mapPrizeKey)) ?: return@runCatching null
+                    if (child.fingerprint != archived.recipe.mapPrizeFingerprint) return@runCatching null
+                }
+            }
+            val choiceOptions = if (archived.recipe.type == "choice") {
+                archived.recipe.choiceOptions.orEmpty().map { option ->
+                    PhysicalRewardChoiceOption(
+                        option.id, option.name, option.description, option.childKey, option.childFingerprint,
+                    )
+                }
+            } else null
             return@runCatching PhysicalRewardSpec(
                 key = archived.key,
                 fingerprint = OneTimeUseFingerprint.parse(archived.fingerprint),
                 preview = preview,
+                choiceOptions = choiceOptions,
             )
         }
         val entry = entries[key] ?: return@runCatching null
@@ -182,17 +319,18 @@ internal class CatalogPhysicalRewards(
 
     fun canRedeem(player: Player, spec: PhysicalRewardSpec): String? {
         frozen?.find(spec.key)?.let { archived ->
-            if (!frozenProvidersReady(archived.recipe)) return UNAVAILABLE
-            if (archived.recipe.type == "particle-preset") {
-                return particlePresets.canRedeem(player, requireNotNull(archived.recipe.particlePresetId))
+            val recipe = selectedRecipe(archived.recipe, spec) ?: return UNAVAILABLE
+            if (!frozenProvidersReady(recipe)) return UNAVAILABLE
+            if (recipe.type == "particle-preset") {
+                return particlePresets.canRedeem(player, requireNotNull(recipe.particlePresetId))
             }
-            val requiredSlots = if (archived.recipe.type == "travel-anchors") {
+            val requiredSlots = if (recipe.type == "travel-anchors") {
                 TravelAnchorsModule.createPersonalAnchorStacks(
                     player.name,
-                    requireNotNull(archived.recipe.travelAnchorAmount),
+                    requireNotNull(recipe.travelAnchorAmount),
                 )?.size ?: return UNAVAILABLE
             } else {
-                frozenRequiredSlots(archived.recipe) ?: return UNAVAILABLE
+                frozenRequiredSlots(recipe) ?: return UNAVAILABLE
             }
             if (player.inventory.storageContents.count { it == null || it.type.isAir } < requiredSlots) {
                 return "<red>Освободите $requiredSlots яч. инвентаря для награды."
@@ -221,8 +359,9 @@ internal class CatalogPhysicalRewards(
 
     fun redeem(player: Player, spec: PhysicalRewardSpec, operationId: UUID): CompletableFuture<PhysicalRewardOutcome> {
         frozen?.find(spec.key)?.let { archived ->
-            if (!frozenProvidersReady(archived.recipe)) return completed(rejected())
-            return redeemFrozen(archived.recipe, player, operationId)
+            val recipe = selectedRecipe(archived.recipe, spec) ?: return completed(rejected())
+            if (!frozenProvidersReady(recipe)) return completed(rejected())
+            return redeemFrozen(recipe, player, operationId)
         }
         val entry = entries[spec.key] ?: return completed(rejected())
         return when (val source = entry.source) {
@@ -394,7 +533,30 @@ internal class CatalogPhysicalRewards(
             DungeonCaseRewards.definition(requireNotNull(recipe.dungeonCaseId)) == recipe.dungeonCaseDefinition
         "travel-anchors" -> TravelAnchorsModule.isEnabled
         "particle-preset" -> particlePresets.ready(requireNotNull(recipe.particlePresetId))
+        "choice" -> recipe.choiceOptions.orEmpty().all { option ->
+            frozen?.find(option.childKey)?.let { child ->
+                child.fingerprint == option.childFingerprint && frozenProvidersReady(child.recipe)
+            } == true
+        }
+        "personal-map" -> frozen?.find(requireNotNull(recipe.mapPrizeKey))?.let { child ->
+            child.fingerprint == recipe.mapPrizeFingerprint && frozenProvidersReady(child.recipe)
+        } == true
         else -> false
+    }
+
+    private fun selectedRecipe(recipe: FrozenPhysicalRecipe, spec: PhysicalRewardSpec): FrozenPhysicalRecipe? {
+        val childAddress = when (recipe.type) {
+            "choice" -> {
+                val index = spec.selectedChoiceIndex ?: return null
+                val option = recipe.choiceOptions?.getOrNull(index) ?: return null
+                option.childKey to option.childFingerprint
+            }
+            "personal-map" -> recipe.mapPrizeKey to recipe.mapPrizeFingerprint
+            else -> return recipe.takeIf { spec.selectedChoiceIndex == null }
+        }
+        val (childKey, childFingerprint) = childAddress
+        val child = frozen?.find(requireNotNull(childKey)) ?: return null
+        return child.recipe.takeIf { child.fingerprint == childFingerprint }
     }
 
     private fun frozenTreasureProvidersReady(node: FrozenTreasureNode): Boolean = when (node.type) {
@@ -574,7 +736,7 @@ internal class CatalogPhysicalRewards(
     private fun preview(entry: RewardCatalogEntry): ItemStack = renderPreview(entry, allowItemsAdder = false)
 
     private fun renderPreview(entry: RewardCatalogEntry, allowItemsAdder: Boolean): ItemStack {
-        val style = entry.icon ?: CatalogIconStyle("PAPER")
+        val style = entry.icon ?: CatalogIconStyle(if (entry.source is RewardCatalogSource.PersonalMap) "FILLED_MAP" else "PAPER")
         val stack = entry.previewItemsAdder
             ?.takeIf { allowItemsAdder }
             ?.let { id -> runCatching { CustomStack.getInstance(id)?.itemStack?.clone() }.getOrNull() }
@@ -596,8 +758,14 @@ internal class CatalogPhysicalRewards(
                         "<#d1beff>Включить образ: <#e9a6ff>/pp group load ${source.id}",
                         "<#d1beff>Выбрать или отключить: <#e9a6ff>/pp",
                     )
+                    is RewardCatalogSource.Choice -> listOf("<#ffd166>При использовании выберите одну из трёх наград.")
+                    is RewardCatalogSource.PersonalMap -> emptyList()
                     else -> emptyList()
-                } + listOf("<green>ПКМ с предметом в руке — получить награду.", "<yellow>Можно хранить и передавать до использования.")).map { TextUtil.mm(it, true) })
+                } + if (entry.source is RewardCatalogSource.PersonalMap) {
+                    listOf("<#9bd48d>ПКМ — активировать личную карту.", "<#e8dfd2>После активации тайник доступен только вам.", "<#e9c46a>У тайника нажмите ПКМ ещё раз, чтобы забрать находку.")
+                } else {
+                    listOf("<green>ПКМ с предметом в руке — получить награду.", "<yellow>Можно хранить и передавать до использования.")
+                }).map { TextUtil.mm(it, true) })
             }
         }
     }
@@ -794,6 +962,7 @@ internal class CatalogPhysicalRewards(
     private fun completed(outcome: PhysicalRewardOutcome) = CompletableFuture.completedFuture(outcome)
 
     companion object {
+        private val INTERACTIVE_RECIPE_TYPES = setOf("choice", "personal-map")
         private const val UNAVAILABLE = "<red>Награда сейчас недоступна. Предмет сохранён."
         private const val MAX_GRAPH_NODES = 2_048
         private const val MAX_POOL_DEPTH = 8

@@ -62,7 +62,7 @@ categories:
 
 Each entry has exactly one source: `treasure` (`pool` + `id`), `preset`,
 `pouch`, `seal`, `itemsadder`, `mount`, `package`, `dungeon-case`,
-`travel-anchors`, `particle-preset`, or inert `planned`.
+`travel-anchors`, `particle-preset`, `choice`, `personal-map`, or inert `planned`.
 Categories are capped at 64, entries at 512 per category and 2,000 in total.
 Names, descriptions and rarity retain authored MiniMessage colors. Stories and
 native equipment metadata are preserved on actual prizes, including seal choices.
@@ -98,6 +98,37 @@ presets and pouches retain native factories; currency, mount, package and
 opaque native item sources become unique physical vouchers. Rendering never
 mints a redeemable voucher. Right click in the main hand redeems it without an
 operator permission. Currency names and nominal amounts remain explicit.
+
+### Gifts and personal treasure maps
+
+A `choice` source contains an ordered list of 3–32 `{id, category, entry}`
+references to concrete physical rewards. At startup, provider-backed child
+recipes and the whole pool are captured on the Paper thread and archived off
+thread before the source becomes available. A voucher always presents three
+unique offers, derived from its UUID and frozen pool fingerprint. Closing the
+native dialog does not reserve or consume anything. Confirming one offer
+rechecks the held voucher and offered index, then records that index in the
+existing one-use claim scope before granting the frozen child reward. Reload,
+transfer and repeated opening preserve the same offers. Unknown native outcomes
+retain the ordinary journal recovery ownership.
+
+A `personal-map` source contains `reward: {category, entry}` and 1–64 authored
+`destinations`, each with `server`, `world`, finite `x/y/z` and a short `hint`.
+Its icon must be `FILLED_MAP`. The map and prize recipe are frozen together.
+The first right-click binds the voucher to its activator and opens guidance;
+it never claims a prize, even when activated at the target. Before activation
+the item is transferable. Later, only its owner within three blocks of its
+fixed destination can claim the prize. Owner, destination, held identity and
+position are checked again after the durable claim and before the effect.
+
+The map uses a contextual Paper renderer and an owner-only packet chest marker.
+It does not scan terrain, load target chunks or place blocks. Holding a bound
+map restores its renderer after reload or backend transfer. The two backends
+must carry the same definitions and provider content so their warmup archives
+have identical addresses; historical local archive files must be retained.
+The runtime retries unavailable startup providers for up to 60 seconds. Map
+rendering and real backend transfer require a native-client check; unit tests
+cover identity, selection, archive and claim rules only.
 
 ### Cosmetic certificates and direct AE consumables
 

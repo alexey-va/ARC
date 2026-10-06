@@ -4,6 +4,7 @@ import org.bukkit.entity.Player
 import org.bukkit.Bukkit
 import ru.arc.ARC
 import ru.arc.core.PluginModule
+import ru.arc.core.Tasks
 import ru.arc.onetime.OneTimeUseLedger
 import ru.arc.onetime.UnavailableOneTimeUseLedger
 import ru.arc.sql.onetime.MySqlOneTimeUseLedger
@@ -16,6 +17,7 @@ import ru.arc.util.Logging.warn
 import ru.arc.util.TextUtil
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 object ItemsCatalogModule : PluginModule {
     override val name = "ItemsCatalog"
@@ -28,6 +30,8 @@ object ItemsCatalogModule : PluginModule {
     @Volatile private var collectionSeals: CollectionSealController? = null
     @Volatile private var physicalRewards: PhysicalRewardController? = null
     private var rewardLedger: OneTimeUseLedger? = null
+    private var personalMaps: PersonalTreasureMapController? = null
+    private val interactiveWarmupEpoch = AtomicInteger()
 
     override fun init() {
         start(
@@ -118,9 +122,36 @@ object ItemsCatalogModule : PluginModule {
             UnavailableOneTimeUseLedger
         } else UnavailableOneTimeUseLedger
         rewardLedger = ledger
+        val maps = if (rewards.enabled) PersonalTreasureMapController(
+            ARC.instance, nativeRewards::resolve, nativeRewards::personalMapDefinition,
+        ).also { personalMaps = it } else null
+        val choiceDialogs = RewardChoiceController()
         val physical = PhysicalRewardController(
-            ARC.instance, ledger, nativeRewards::resolve, nativeRewards::canRedeem,
-            nativeRewards::redeem, ARC.serverName ?: "arc",
+            ARC.instance, ledger, nativeRewards::resolve,
+            { player, spec ->
+                val mapFailure = if (maps != null && nativeRewards.personalMapDefinition(spec) != null) {
+                    val voucher = PhysicalRewardVoucher.identity(player.inventory.itemInMainHand)
+                    if (voucher == null) PersonalTreasureMapFailure.INVALID_OR_STALE
+                    else maps.preflight(player, voucher, spec)
+                } else null
+                mapFailure?.let(::mapFailureMessage) ?: nativeRewards.canRedeem(player, spec)
+            },
+            nativeRewards::redeem, ARC.serverName ?: "arc", choiceDialogs::open,
+            beforeUse = { player, spec, voucher ->
+                when (maps?.beforeUse(player, player.inventory.itemInMainHand)) {
+                    PersonalTreasureMapUseDecision.OPEN_MAP -> {
+                        showMapGuidance(player, maps)
+                        false
+                    }
+                    PersonalTreasureMapUseDecision.REJECT -> {
+                        player.sendActionBar(TextUtil.mm(mapFailureMessage(
+                            maps.preflight(player, voucher, spec) ?: PersonalTreasureMapFailure.INVALID_OR_STALE,
+                        ), true))
+                        false
+                    }
+                    else -> true
+                }
+            },
         )
         if (rewards.enabled) {
             physical.register()
@@ -135,7 +166,12 @@ object ItemsCatalogModule : PluginModule {
             rewards, loaded.givePermission, seals::createStack,
             { entry ->
                 if (entry.previewItemsAdder != null) nativeRewards.visualPreview(entry)
-                else physical.previewStack(nativeRewards.key(entry))
+                else {
+                    val key = if (entry.source is RewardCatalogSource.Choice || entry.source is RewardCatalogSource.PersonalMap) {
+                        nativeRewards.materialization(entry)?.sourceKey
+                    } else nativeRewards.key(entry)
+                    key?.let(physical::previewStack)
+                }
             },
             { entry -> nativeRewards.materialization(entry)
                 ?.let { createPhysical(it.sourceKey) } },
@@ -143,6 +179,8 @@ object ItemsCatalogModule : PluginModule {
             nativeRewards::materialization,
             createPhysical,
         ).takeIf { rewards.enabled }
+        val warmupEpoch = interactiveWarmupEpoch.incrementAndGet()
+        if (rewards.enabled) warmInteractiveArchives(nativeRewards, warmupEpoch, attempt = 1)
         info(
             "Reward catalogue loaded: enabled={} categories={} entries={}",
             rewards.enabled,
@@ -167,10 +205,13 @@ object ItemsCatalogModule : PluginModule {
     }
 
     private fun shutdownRuntime() {
+        interactiveWarmupEpoch.incrementAndGet()
         controller?.shutdown()
         controller = null
         rewardController?.shutdown()
         rewardController = null
+        personalMaps?.close()
+        personalMaps = null
         val closingRewards = physicalRewards
         val closingLedger = rewardLedger
         physicalRewards = null
@@ -185,6 +226,59 @@ object ItemsCatalogModule : PluginModule {
         service?.shutdown()
         service = null
     }
+
+    /** Provider-backed choice/map sources appear only after their frozen records commit successfully. */
+    private fun warmInteractiveArchives(
+        nativeRewards: CatalogPhysicalRewards,
+        epoch: Int,
+        attempt: Int,
+        captured: List<FrozenPhysicalPrepared>? = null,
+    ) {
+        if (interactiveWarmupEpoch.get() != epoch) return
+        val snapshots = captured ?: nativeRewards.captureInteractiveArchives()
+        if (snapshots == null) {
+            if (attempt >= INTERACTIVE_WARMUP_ATTEMPTS) {
+                warn("Choice/map reward archive capture stayed unavailable after {} attempts", attempt)
+                return
+            }
+            Tasks.scheduler.runLater(INTERACTIVE_WARMUP_TICKS, Runnable {
+                warmInteractiveArchives(nativeRewards, epoch, attempt + 1)
+            })
+            return
+        }
+        Tasks.scheduler.runAsync(Runnable {
+            if (interactiveWarmupEpoch.get() != epoch) return@Runnable
+            if (nativeRewards.persistInteractiveArchives(snapshots)) return@Runnable
+            if (attempt >= INTERACTIVE_WARMUP_ATTEMPTS) {
+                warn("Choice/map reward archive persistence stayed unavailable after {} attempts", attempt)
+            } else {
+                Tasks.scheduler.runLater(INTERACTIVE_WARMUP_TICKS, Runnable {
+                    warmInteractiveArchives(nativeRewards, epoch, attempt + 1, snapshots)
+                })
+            }
+        })
+    }
+
+    private fun showMapGuidance(player: Player, maps: PersonalTreasureMapController) {
+        val guidance = maps.guidance(player) ?: return
+        val message = when {
+            !guidance.onDestinationServer || !guidance.onDestinationWorld -> "<#e8dfd2>Ваш тайник находится на Спавне. Возьмите карту с собой."
+            guidance.withinClaimRadius -> "<#9bd48d>Тайник здесь · ПКМ — забрать находку"
+            else -> "<#e8dfd2>До тайника <#e9c46a>${kotlin.math.ceil(guidance.distance ?: 0.0).toInt()} м <#e8dfd2>· ${guidance.hint}"
+        }
+        player.sendActionBar(TextUtil.mm(message, true))
+    }
+
+    private fun mapFailureMessage(failure: PersonalTreasureMapFailure): String = when (failure) {
+        PersonalTreasureMapFailure.WRONG_OWNER -> "<#e9c46a>Эту карту уже активировал другой игрок."
+        PersonalTreasureMapFailure.WRONG_SERVER,
+        PersonalTreasureMapFailure.WRONG_WORLD -> "<#e8dfd2>Ваш тайник находится на Спавне. Возьмите карту с собой."
+        PersonalTreasureMapFailure.TOO_FAR -> "<#e9c46a>Подойдите к тайнику ближе и нажмите ПКМ."
+        PersonalTreasureMapFailure.INVALID_OR_STALE -> "<#e9c46a>Эта карта сейчас недоступна."
+    }
+
+    private const val INTERACTIVE_WARMUP_TICKS = 20L
+    private const val INTERACTIVE_WARMUP_ATTEMPTS = 60
 }
 
 internal fun rewardCatalogOrDefault(

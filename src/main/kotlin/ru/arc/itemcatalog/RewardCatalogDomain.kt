@@ -30,7 +30,20 @@ sealed interface RewardCatalogSource {
 
     /** A transferable voucher that binds personal travel anchors to its redeemer. */
     data class TravelAnchors(val amount: Int) : RewardCatalogSource
+
+    /** A physical bearer voucher that offers three stable choices from a frozen pool. */
+    data class Choice(val options: List<RewardCatalogChoiceRef>) : RewardCatalogSource
+
+    /** An owner-bound map whose frozen prize can only be claimed at its authored destination. */
+    data class PersonalMap(
+        val rewardCategoryId: String,
+        val rewardEntryId: String,
+        val destinations: List<PersonalTreasureMapDestination>,
+    ) : RewardCatalogSource
 }
+
+/** Stable reference within one configured choice pool. */
+data class RewardCatalogChoiceRef(val id: String, val categoryId: String, val entryId: String)
 
 /** Fixed grantable PlayerParticles entitlements; never accept an arbitrary permission suffix. */
 internal object ParticlePresetEntitlements {
@@ -115,6 +128,12 @@ data class RewardCatalogSettings(
     /** Finds one concrete outcome in a one-roll case. Non-case catalogue groups are never issuable here. */
     fun caseEntry(categoryId: String, entryId: String): Pair<RewardCatalogCategory, RewardCatalogEntry>? {
         val category = categories.firstOrNull { it.id == categoryId && it.rolls == 1 } ?: return null
+        val entry = category.entries.firstOrNull { it.id == entryId } ?: return null
+        return category to entry
+    }
+
+    fun entry(categoryId: String, entryId: String): Pair<RewardCatalogCategory, RewardCatalogEntry>? {
+        val category = categories.firstOrNull { it.id == categoryId } ?: return null
         val entry = category.entries.firstOrNull { it.id == entryId } ?: return null
         return category to entry
     }

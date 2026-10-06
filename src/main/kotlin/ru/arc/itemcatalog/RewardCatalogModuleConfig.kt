@@ -27,6 +27,8 @@ class RewardCatalogModuleConfig(private val config: Config) {
             "Reward catalog supports at most $MAX_ENTRIES entries"
         }
         validateHierarchy(categories)
+        validateChoiceReferences(categories)
+        validateMapReferences(categories)
         val packages = parsePackages()
         categories.flatMap { it.entries }.forEach { entry ->
             val source = entry.source as? RewardCatalogSource.FurniturePackage
@@ -115,9 +117,14 @@ class RewardCatalogModuleConfig(private val config: Config) {
                         require(it in 1..64) { "$path.travel-anchors must be in 1..64" }
                     },
                 )
+                "choice" -> RewardCatalogSource.Choice(parseChoiceOptions(map.getValue(key), "$path.choice"))
+                "personal-map" -> parsePersonalMap(map.getValue(key), "$path.personal-map")
                 else -> error("unreachable source key")
             }
         val icon = if ("icon" in map) material(map["icon"], "$path.icon") else null
+        require(source !is RewardCatalogSource.PersonalMap || icon == null || icon.material == "FILLED_MAP") {
+            "$path.icon must use FILLED_MAP for a personal map"
+        }
         val weight = if ("weight" in map) integer(map["weight"], "$path.weight") else null
         require(weight == null || weight in 1..1_000_000) { "$path.weight must be in 1..1000000" }
         val enchantments = if ("enchantments" in map) {
@@ -169,6 +176,93 @@ class RewardCatalogModuleConfig(private val config: Config) {
                     target.entries.all { it.source is RewardCatalogSource.Treasure || it.source is RewardCatalogSource.ItemsAdder }) {
                     "categories.${category.id}.entries.${entry.id}.seal must reference an equipment collection"
                 }
+            }
+        }
+    }
+
+    private fun parseChoiceOptions(raw: Any?, path: String): List<RewardCatalogChoiceRef> {
+        val values = raw as? List<*> ?: throw invalid(path, "expected list of option references")
+        require(values.size in 3..32) { "$path must contain 3..32 options" }
+        val options = values.mapIndexed { index, value ->
+            val itemPath = "$path[$index]"
+            val map = strictMap(value, itemPath)
+            rejectUnknown(map, setOf("id", "category", "entry"), itemPath)
+            RewardCatalogChoiceRef(
+                id = requiredId(map.required("id", itemPath), "$itemPath.id", ID),
+                categoryId = requiredId(map.required("category", itemPath), "$itemPath.category", ID),
+                entryId = requiredId(map.required("entry", itemPath), "$itemPath.entry", ID),
+            )
+        }
+        require(options.map { it.id }.distinct().size == options.size) { "$path contains duplicate option ids" }
+        require(options.map { it.categoryId to it.entryId }.distinct().size == options.size) {
+            "$path contains duplicate reward references"
+        }
+        return options
+    }
+
+    private fun validateChoiceReferences(categories: List<RewardCatalogCategory>) {
+        val byCategory = categories.associateBy { it.id }
+        categories.flatMap { it.entries }.forEach { entry ->
+            val source = entry.source as? RewardCatalogSource.Choice ?: return@forEach
+            source.options.forEach { option ->
+                val target = byCategory[option.categoryId]?.entries?.firstOrNull { it.id == option.entryId }
+                    ?: throw invalid("choice.${option.id}", "unknown reward '${option.categoryId}/${option.entryId}'")
+                require(target.source !is RewardCatalogSource.Choice) {
+                    "Choice option '${option.id}' cannot reference another choice reward"
+                }
+                require(target.source is RewardCatalogSource.Treasure ||
+                    target.source is RewardCatalogSource.Mount ||
+                    target.source is RewardCatalogSource.FurniturePackage ||
+                    target.source is RewardCatalogSource.DungeonCase ||
+                    target.source is RewardCatalogSource.TravelAnchors ||
+                    target.source is RewardCatalogSource.ParticlePreset) {
+                    "Choice option '${option.id}' must reference a physical-reward source"
+                }
+            }
+        }
+    }
+
+    private fun parsePersonalMap(raw: Any?, path: String): RewardCatalogSource.PersonalMap {
+        val map = strictMap(raw, path)
+        rejectUnknown(map, setOf("reward", "destinations"), path)
+        val reward = strictMap(map.required("reward", path), "$path.reward")
+        rejectUnknown(reward, setOf("category", "entry"), "$path.reward")
+        val locations = map.required("destinations", path) as? List<*>
+            ?: throw invalid("$path.destinations", "expected list")
+        require(locations.size in 1..PersonalTreasureMapDefinition.MAX_DESTINATIONS) {
+            "$path.destinations must contain 1..${PersonalTreasureMapDefinition.MAX_DESTINATIONS} locations"
+        }
+        val destinations = locations.mapIndexed { index, rawDestination ->
+            val locationPath = "$path.destinations[$index]"
+            val destination = strictMap(rawDestination, locationPath)
+            rejectUnknown(destination, setOf("server", "world", "x", "y", "z", "hint"), locationPath)
+            fun coordinate(key: String): Double = (destination.required(key, locationPath) as? Number)?.toDouble()
+                ?.takeIf(Double::isFinite) ?: throw invalid("$locationPath.$key", "expected finite number")
+            PersonalTreasureMapDestination(
+                requiredString(destination["server"], "$locationPath.server", 48),
+                requiredString(destination["world"], "$locationPath.world", 128),
+                coordinate("x"), coordinate("y"), coordinate("z"),
+                requiredString(destination["hint"], "$locationPath.hint", 128),
+            )
+        }
+        require(destinations.distinct().size == destinations.size) { "$path contains duplicate destinations" }
+        return RewardCatalogSource.PersonalMap(
+            requiredId(reward["category"], "$path.reward.category", ID),
+            requiredId(reward["entry"], "$path.reward.entry", ID),
+            destinations,
+        )
+    }
+
+    private fun validateMapReferences(categories: List<RewardCatalogCategory>) {
+        val entries = categories.flatMap { category -> category.entries.map { (category.id to it.id) to it } }.toMap()
+        entries.values.forEach { entry ->
+            val map = entry.source as? RewardCatalogSource.PersonalMap ?: return@forEach
+            val target = entries[map.rewardCategoryId to map.rewardEntryId]
+                ?: throw invalid("personal-map.${entry.id}", "unknown prize '${map.rewardCategoryId}/${map.rewardEntryId}'")
+            require(target.source is RewardCatalogSource.Treasure || target.source is RewardCatalogSource.Mount ||
+                target.source is RewardCatalogSource.FurniturePackage || target.source is RewardCatalogSource.DungeonCase ||
+                target.source is RewardCatalogSource.TravelAnchors || target.source is RewardCatalogSource.ParticlePreset) {
+                "Personal map '${entry.id}' must reference a concrete physical reward; nested maps and choices are unsupported"
             }
         }
     }
@@ -335,7 +429,7 @@ class RewardCatalogModuleConfig(private val config: Config) {
         private val PLUGIN_ID = Regex("[A-Za-z0-9._-]{1,64}")
         private val SOURCE_KEYS = setOf(
             "treasure", "preset", "particle-preset", "pouch", "seal", "itemsadder", "planned", "mount", "package", "dungeon-case",
-            "travel-anchors",
+            "travel-anchors", "choice", "personal-map",
         )
 
         fun load(dataPath: Path): RewardCatalogModuleConfig =
