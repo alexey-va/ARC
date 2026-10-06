@@ -99,6 +99,13 @@ commands:
     permission: arc.admin
     player-only: false
     usage: /arc npccycle <list|status [сцена] [цикл]|цикл|сцена цикл>
+  workshop:
+    name: workshop
+    aliases: [ ]
+    permission: arc.admin
+    player-only: false
+    description: Управлять мастерской Origin
+    usage: /arc workshop sleep <npc-id>
   buy:
     name: buy
     aliases: [ ]

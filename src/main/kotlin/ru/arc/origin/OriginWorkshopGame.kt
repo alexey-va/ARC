@@ -46,137 +46,6 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
-internal enum class OriginWorkshopGameStage(val step: Int, val instruction: String) {
-    STOCK(1, "Возьми заготовку со склада."),
-    CARRY_RAW_TO_SAW(2, "Перетащи заготовку к пиле."),
-    START_SAW(3, "Нажми рукоять пилы."),
-    SAWING(3, "Пила распускает заготовку."),
-    SAW_REPOSITION(4, "Разверни доску для второго распила."),
-    START_SAW_SECOND(5, "Запусти второй распил рукоятью."),
-    SAWING_SECOND(5, "Пила подравнивает второй торец."),
-    PICK_SAWN_BOARD(6, "Забери распиленную доску."),
-    CARRY_BOARD_TO_DRILL(7, "Положи доску под сверло."),
-    START_DRILL(8, "Нажми рукоять сверла."),
-    DRILLING(8, "Сверло делает отверстия."),
-    DRILL_ALIGN_CENTER(9, "Сдвинь доску к центральной отметке."),
-    START_DRILL_SECOND(10, "Опусти сверло для второго отверстия."),
-    DRILLING_SECOND(10, "Сверло делает второе отверстие."),
-    DRILL_ALIGN_LAST(11, "Сдвинь доску к последней отметке."),
-    START_DRILL_THIRD(12, "Опусти сверло для третьего отверстия."),
-    DRILLING_THIRD(12, "Сверло делает третье отверстие."),
-    PICK_DRILLED_BOARD(13, "Забери просверленную доску."),
-    CARRY_BOARD_TO_JIG(14, "Положи доску в сборочный шаблон."),
-    LEG_LEFT(15, "Возьми левую ножку."),
-    CARRY_LEG_LEFT(16, "Перетащи левую ножку в шаблон."),
-    LEG_RIGHT(17, "Возьми правую ножку."),
-    CARRY_LEG_RIGHT(18, "Перетащи правую ножку в шаблон."),
-    CLAMP_LEFT(19, "Затяни левый зажим."),
-    CLAMPING_LEFT(19, "Левый зажим стягивает детали."),
-    CLAMP_RIGHT(20, "Затяни правый зажим."),
-    CLAMPING_RIGHT(20, "Правый зажим стягивает детали."),
-    FINISHING(21, "Готовый стул просыхает."),
-    REWARDING(21, "Готовая мебель отправляется в инвентарь."),
-    CLOSED(21, "Сборка завершена."),
-
-    UPHOLSTER_FABRIC(1, "Возьми красную ткань со склада."),
-    UPHOLSTER_PLACE_FABRIC(2, "Положи ткань под прижим."),
-    UPHOLSTER_START_PRESS(3, "Опусти прижим, чтобы прострочить чехол."),
-    UPHOLSTER_PRESSING(3, "Станок прострачивает чехол."),
-    UPHOLSTER_PICK_COVER(4, "Забери простроченный чехол."),
-    UPHOLSTER_PLACE_COVER(5, "Надень чехол на подушку дивана."),
-    UPHOLSTER_FINISHING(5, "Проверь готовую обивку."),
-
-    ASSEMBLER_STOCK(1, "Возьми столешницу со склада."),
-    ASSEMBLER_PLACE_VISE(2, "Положи столешницу в тиски."),
-    ASSEMBLER_START_VISE(3, "Зажми столешницу винтовой рукоятью."),
-    ASSEMBLER_VISING(3, "Тиски выравнивают кромку."),
-    ASSEMBLER_PICK_VISED(4, "Забери выровненную столешницу."),
-    ASSEMBLER_PLACE_ANVIL(4, "Положи столешницу на наковальню."),
-    ASSEMBLER_START_ANVIL(5, "Запусти сборочный молот."),
-    ASSEMBLER_HAMMERING(5, "Молот фиксирует соединение."),
-    ASSEMBLER_FINISHING(5, "Проверь готовую столешницу."),
-
-    FINISHER_START_PANEL(1, "Опусти панель сушилки на стол."),
-    FINISHER_WITHDRAWING(1, "Панель ложится на шлифовальную площадку."),
-    FINISHER_DIP_BRUSH(2, "Окуни кисть в защитный состав."),
-    FINISHER_COAT_NEAR(3, "Покрой ближний край панели."),
-    FINISHER_COAT_CENTER(4, "Проведи кистью по середине."),
-    FINISHER_COAT_FAR(5, "Покрой дальний край панели."),
-    FINISHER_DRYING(5, "Панель возвращается на сушилку."),
-    FINISHER_FINISHING(5, "Проверь готовое покрытие.");
-
-    companion object {
-        const val TOTAL_STEPS = 21
-    }
-}
-
-internal enum class OriginWorkshopGameAction {
-    PICK_STOCK,
-    PLACE_SAW,
-    ACTIVATE_SAW,
-    REPOSITION_SAW,
-    PICK_SAWN_BOARD,
-    PLACE_DRILL,
-    ACTIVATE_DRILL,
-    ALIGN_DRILL_CENTER,
-    ALIGN_DRILL_LAST,
-    PICK_DRILLED_BOARD,
-    PLACE_JIG,
-    PICK_LEFT_LEG,
-    PLACE_LEFT_LEG,
-    PICK_RIGHT_LEG,
-    PLACE_RIGHT_LEG,
-    TIGHTEN_LEFT,
-    TIGHTEN_RIGHT,
-    PICK_FABRIC,
-    PLACE_FABRIC,
-    ACTIVATE_PRESS,
-    PICK_PRESSED_COVER,
-    PLACE_CUSHION_COVER,
-    PICK_TABLETOP,
-    PLACE_VISE,
-    TIGHTEN_VISE,
-    PICK_VISED_TABLETOP,
-    PLACE_ANVIL,
-    ACTIVATE_ANVIL,
-    START_FINISH_PANEL,
-    DIP_FINISH_BRUSH,
-    COAT_PANEL_NEAR,
-    COAT_PANEL_CENTER,
-    COAT_PANEL_FAR,
-}
-
-internal data class OriginWorkshopGameRules(
-    val sawTicks: Long = 60,
-    val drillTicks: Long = 40,
-    val clampTicks: Long = 20,
-    val chairHoldTicks: Long = 60,
-    val pressTicks: Long = 60,
-    val viseTicks: Long = 40,
-    val hammerTicks: Long = 60,
-    val finishingTicks: Long = 60,
-    val timeout: Long = 3_600,
-) {
-    init {
-        require(
-            listOf(sawTicks, drillTicks, clampTicks, chairHoldTicks, pressTicks, viseTicks, hammerTicks, finishingTicks)
-                .all { it in 1L..1_200L },
-        )
-        require(timeout in 20L..12_000L)
-    }
-}
-
-internal data class OriginWorkshopGameProgress(
-    val stage: OriginWorkshopGameStage,
-    val stageStartedAt: Long = 0,
-)
-
-internal data class OriginWorkshopGamePartSize(val x: Float, val y: Float, val z: Float) {
-    init {
-        require(x.isFinite() && y.isFinite() && z.isFinite() && x > 0f && y > 0f && z > 0f)
-    }
-}
-
 internal fun originWorkshopTransition(
     progress: OriginWorkshopGameProgress,
     action: OriginWorkshopGameAction,
@@ -384,17 +253,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
 
     private val CUT_BOARD_SIZE = OriginWorkshopGamePartSize(0.72f, 0.08f, 0.22f)
 
-    private val COATING_ACTIONS = setOf(OriginWorkshopGameAction.COAT_PANEL_NEAR,
-        OriginWorkshopGameAction.COAT_PANEL_CENTER, OriginWorkshopGameAction.COAT_PANEL_FAR)
-    private val PLACEMENT_ACTIONS = COATING_ACTIONS + setOf(
-        OriginWorkshopGameAction.PLACE_SAW, OriginWorkshopGameAction.PLACE_DRILL, OriginWorkshopGameAction.PLACE_JIG,
-        OriginWorkshopGameAction.PLACE_LEFT_LEG, OriginWorkshopGameAction.PLACE_RIGHT_LEG,
-        OriginWorkshopGameAction.PLACE_FABRIC, OriginWorkshopGameAction.PLACE_CUSHION_COVER,
-        OriginWorkshopGameAction.PLACE_VISE, OriginWorkshopGameAction.PLACE_ANVIL)
-
     private val start = OriginWorkshopPoint(0.0, 1.28, -1.35)
-    private val woodGlow = Color.fromRGB(191, 139, 82)
-    private val hoverGlow = Color.fromRGB(255, 210, 99)
 
     private data class PropPiece(val display: PacketBlockDisplay?, val geometry: OriginWorkshopWorkpiecePiece)
     private data class Prop(
@@ -413,6 +272,14 @@ internal object OriginWorkshopGame : PluginModule, Listener {
             displays.forEach {
                 it.isGlowing = color != null
                 it.glowColorOverride = color
+            }
+        }
+
+        fun cue(hovered: Boolean) {
+            pieces.mapNotNull { it.display }.forEach {
+                it.isGlowing = false
+                it.brightness = Display.Brightness(15, 15)
+                it.blockData = (if (hovered) Material.WHITE_CONCRETE else Material.LIGHT_BLUE_CONCRETE).createBlockData()
             }
         }
 
@@ -443,7 +310,16 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         var rightLeg: Prop? = null,
         var brush: PacketItemDisplay? = null,
         var targetMarker: Prop? = null,
-        val coating: MutableList<PacketDisplay> = mutableListOf(),
+        var stretchedEdges: Int = 0,
+        var seams: Int = 0,
+        var padded: Boolean = false,
+        var tuckedEdges: Int = 0,
+        var coverFasteners: Int = 0,
+        var planedEdges: Int = 0,
+        var joinedEdges: Int = 0,
+        var panelBackUp: Boolean = false,
+        val sandedFaces: IntArray = intArrayOf(0, 0),
+        val coatedFaces: IntArray = intArrayOf(0, 0),
         var highlightedControl: String? = null,
         var hoveredControl: Boolean = false,
         var lastGuideTick: Long = Long.MIN_VALUE,
@@ -742,6 +618,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
             OriginWorkshopGameAction.PICK_STOCK,
             OriginWorkshopGameAction.PICK_FABRIC,
             OriginWorkshopGameAction.PICK_TABLETOP,
+            OriginWorkshopGameAction.PICK_PADDING,
             OriginWorkshopGameAction.PICK_LEFT_LEG,
             OriginWorkshopGameAction.PICK_RIGHT_LEG -> {
                 val size = active.recipe.partSizes[action] ?: return false
@@ -757,8 +634,9 @@ internal object OriginWorkshopGame : PluginModule, Listener {
                 )
                 active.carried = part
                 carry(active, player)
-                if (action == OriginWorkshopGameAction.PICK_LEFT_LEG || action == OriginWorkshopGameAction.PICK_RIGHT_LEG)
-                    OriginWorkshopTablesModule.setCraftPartVisible(tableId, interaction.control ?: return false, false)
+                if (active.recipe.role == OriginWorkshopTableRole.CARPENTER &&
+                    action in setOf(OriginWorkshopGameAction.PICK_LEFT_LEG, OriginWorkshopGameAction.PICK_RIGHT_LEG)
+                ) OriginWorkshopTablesModule.setCraftPartVisible(tableId, interaction.control ?: return false, false)
             }
             OriginWorkshopGameAction.PLACE_SAW,
             OriginWorkshopGameAction.PLACE_DRILL,
@@ -767,6 +645,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
             OriginWorkshopGameAction.PLACE_VISE,
             OriginWorkshopGameAction.PLACE_ANVIL,
             OriginWorkshopGameAction.PLACE_CUSHION_COVER,
+            OriginWorkshopGameAction.PLACE_ASSEMBLY_TOP,
             OriginWorkshopGameAction.PLACE_LEFT_LEG,
             OriginWorkshopGameAction.PLACE_RIGHT_LEG -> {
                 val item = active.carried ?: return false
@@ -777,12 +656,16 @@ internal object OriginWorkshopGame : PluginModule, Listener {
                     else -> active.workpiece = item
                 }
                 active.carried = null
-                if (action == OriginWorkshopGameAction.PLACE_CUSHION_COVER) finishProduct(active)
+                if (action == OriginWorkshopGameAction.PLACE_CUSHION_COVER) {
+                    OriginWorkshopTablesModule.setCraftPartVisible(tableId, "cushion-cover", false)
+                    OriginWorkshopTablesModule.setCraftPartVisible(tableId, "cushion-padding", false)
+                }
             }
             OriginWorkshopGameAction.PICK_SAWN_BOARD,
             OriginWorkshopGameAction.PICK_DRILLED_BOARD,
             OriginWorkshopGameAction.PICK_PRESSED_COVER,
-            OriginWorkshopGameAction.PICK_VISED_TABLETOP -> {
+            OriginWorkshopGameAction.PICK_VISED_TABLETOP,
+            OriginWorkshopGameAction.PICK_JOINED_TABLETOP -> {
                 active.carried = active.workpiece ?: return false
                 active.workpiece = null
                 carry(active, player)
@@ -797,6 +680,37 @@ internal object OriginWorkshopGame : PluginModule, Listener {
                 val item = active.workpiece ?: return false
                 settle(active, item, interaction.target) ?: return false
             }
+            OriginWorkshopGameAction.STRETCH_FABRIC_LEFT,
+            OriginWorkshopGameAction.STRETCH_FABRIC_RIGHT -> {
+                active.stretchedEdges++
+                refreshUpholstery(active, player)
+            }
+            OriginWorkshopGameAction.TURN_FABRIC,
+            OriginWorkshopGameAction.ROTATE_TABLETOP,
+            OriginWorkshopGameAction.ALIGN_JOIN_SECOND -> {
+                val item = active.workpiece ?: return false
+                val center = item.center ?: return false
+                moveProp(item, center, Quaternionf(item.rotation).rotateY(Math.PI.toFloat()), carrying = false)
+            }
+            OriginWorkshopGameAction.RELEASE_VISE ->
+                OriginWorkshopTablesModule.animateCraftMachine(tableId, "vise", 1.0)
+            OriginWorkshopGameAction.PLACE_PADDING -> {
+                active.carried?.remove() ?: return false
+                active.carried = null
+                active.padded = true
+                refreshUpholstery(active, player)
+            }
+            OriginWorkshopGameAction.TUCK_PADDING_NEAR,
+            OriginWorkshopGameAction.TUCK_PADDING_FAR -> {
+                active.tuckedEdges++
+                refreshUpholstery(active, player)
+            }
+            OriginWorkshopGameAction.FASTEN_COVER_LEFT,
+            OriginWorkshopGameAction.FASTEN_COVER_RIGHT -> {
+                active.coverFasteners++
+                refreshUpholstery(active, player)
+                if (action == OriginWorkshopGameAction.FASTEN_COVER_RIGHT) finishProduct(active)
+            }
             OriginWorkshopGameAction.START_FINISH_PANEL,
             OriginWorkshopGameAction.ACTIVATE_SAW,
             OriginWorkshopGameAction.ACTIVATE_DRILL,
@@ -805,39 +719,81 @@ internal object OriginWorkshopGame : PluginModule, Listener {
             OriginWorkshopGameAction.ACTIVATE_ANVIL,
             OriginWorkshopGameAction.TIGHTEN_LEFT,
             OriginWorkshopGameAction.TIGHTEN_RIGHT -> Unit
+            OriginWorkshopGameAction.PICK_ABRASIVE,
             OriginWorkshopGameAction.DIP_FINISH_BRUSH -> {
                 val at = OriginWorkshopTablesModule.pointAt(tableId, interaction.target) ?: return false
-                active.brush = owner?.spawnItem(at, ItemStack(Material.BRUSH))?.apply {
+                active.brush?.remove()
+                val material = if (action == OriginWorkshopGameAction.PICK_ABRASIVE) Material.SANDSTONE else Material.BRUSH
+                active.brush = owner?.spawnItem(at, ItemStack(material))?.apply {
                     isVisibleByDefault = false
                     showTo(player)
                     itemDisplayTransform = ItemDisplay.ItemDisplayTransform.FIXED
                     teleportDuration = 0
                     interpolationDuration = 0
-                    transformation = Transformation(Vector3f(), Quaternionf(), Vector3f(0.5f), Quaternionf())
+                    transformation = Transformation(Vector3f(), Quaternionf(), Vector3f(0.3f), Quaternionf())
                 }?.also { active.parts += it } ?: return false
+            }
+            OriginWorkshopGameAction.SAND_PANEL_NEAR,
+            OriginWorkshopGameAction.SAND_PANEL_CENTER,
+            OriginWorkshopGameAction.SAND_PANEL_FAR -> {
+                active.sandedFaces[if (active.panelBackUp) 1 else 0]++
+                refreshFinishingPanel(active, player)
+            }
+            OriginWorkshopGameAction.FLIP_PANEL -> {
+                active.panelBackUp = !active.panelBackUp
+                refreshFinishingPanel(active, player)
             }
             OriginWorkshopGameAction.COAT_PANEL_NEAR,
             OriginWorkshopGameAction.COAT_PANEL_CENTER,
             OriginWorkshopGameAction.COAT_PANEL_FAR -> {
-                val at = OriginWorkshopTablesModule.pointAt(tableId, interaction.target) ?: return false
-                // Three real successive bands make applied finish visible before the panel returns to the rack.
-                val patch = spawnBlock(owner ?: return false, Material.STRIPPED_BIRCH_WOOD, at,
-                    OriginWorkshopGamePartSize(0.18f, 0.012f, 0.22f))
-                patch.isVisibleByDefault = false
-                patch.showTo(player)
-                active.parts += patch
-                active.coating += patch
-                if (action == OriginWorkshopGameAction.COAT_PANEL_FAR) {
-                    active.brush?.remove()
-                    active.brush = null
-                    // The moving physical panel retains the finished material while the fixed bands are removed.
-                    active.coating.forEach(PacketDisplay::remove)
-                    active.coating.clear()
-                    OriginWorkshopTablesModule.setCraftFinishedPanel(tableId, true)
-                }
+                active.coatedFaces[if (active.panelBackUp) 1 else 0]++
+                refreshFinishingPanel(active, player)
+            }
+            OriginWorkshopGameAction.HANG_FINISHED_PANEL -> {
+                active.brush?.remove()
+                active.brush = null
+                active.workpiece?.remove()
+                active.workpiece = null
+                OriginWorkshopTablesModule.setCraftFinishedPanel(tableId, true)
+                OriginWorkshopTablesModule.setCraftPartVisible(tableId, "panel", true)
             }
         }
         return true
+    }
+
+    private fun replaceWorkpiece(active: Session, player: Player, pieces: List<OriginWorkshopWorkpiecePiece>) {
+        val previous = active.workpiece ?: return
+        val center = previous.center ?: return
+        val rotation = Quaternionf(previous.rotation)
+        previous.remove()
+        active.workpiece = spawnProp(active, player, pieces).also { moveProp(it, center, rotation, carrying = false) }
+    }
+
+    private fun fastenAssemblerLeg(active: Session, player: Player, left: Boolean) {
+        val previous = (if (left) active.leftLeg else active.rightLeg) ?: return
+        val center = previous.center ?: return
+        val rotation = Quaternionf(previous.rotation)
+        val fastened = spawnProp(active, player, originWorkshopAssemblerLegPieces(fastened = true))
+        moveProp(fastened, center, rotation, carrying = false)
+        previous.remove()
+        if (left) active.leftLeg = fastened else active.rightLeg = fastened
+    }
+
+    private fun refreshUpholstery(active: Session, player: Player) = replaceWorkpiece(active, player,
+        originWorkshopUpholsteryPieces(active.stretchedEdges, active.seams, active.padded, active.tuckedEdges, active.coverFasteners))
+
+    private fun refreshFinishingPanel(active: Session, player: Player) {
+        val height = OriginWorkshopTablesModule.dimensionsFor(tableId)?.height ?: return
+        val point = OriginWorkshopPoint(0.0, height + 0.04, -0.45)
+        val center = OriginWorkshopTablesModule.pointAt(tableId, point) ?: return
+        active.workpiece?.remove()
+        active.workpiece = spawnProp(active, player, originWorkshopFinishingPanelPieces(
+            active.sandedFaces[0], active.sandedFaces[1], active.coatedFaces[0], active.coatedFaces[1],
+        )).also {
+            val rotation = boardRotation()
+            if (active.panelBackUp) rotation.rotateX(Math.PI.toFloat())
+            moveProp(it, center, rotation, carrying = false)
+        }
     }
 
     private fun inSessionRange(active: Session, player: Player): Boolean {
@@ -899,7 +855,6 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         if (next != idleHoverers) {
             idleHoverers.clear()
             idleHoverers.addAll(next)
-            OriginWorkshopTablesModule.highlightCraftControl(tableId, "start", hovered = next.isNotEmpty())
         }
         hoverSounds.entries.removeIf { Bukkit.getPlayer(it.key) == null }
     }
@@ -908,9 +863,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         val hovered = activeTargetDistance(active, player) != null
         if (active.hoveredControl == hovered) return
         active.hoveredControl = hovered
-        OriginWorkshopTablesModule.highlightCraftControl(tableId, active.highlightedControl, hovered, viewer = player)
-        currentPickableDisplay(active)?.glow(if (hovered) hoverGlow else woodGlow)
-        active.targetMarker?.glow(if (hovered) hoverGlow else woodGlow)
+        active.targetMarker?.cue(hovered)
         if (hovered) {
             val now = System.nanoTime()
             if (now - active.lastHoverSound >= HOVER_SOUND_NANOS) {
@@ -961,18 +914,28 @@ internal object OriginWorkshopGame : PluginModule, Listener {
                 active.workpiece = spawnProp(active, player, originWorkshopBoardPieces(holes), boardModel)
                 settle(active, active.workpiece!!, drillCenter)
             }
-            OriginWorkshopGameStage.UPHOLSTER_PRESSING -> {
-                active.workpiece?.remove()
-                // Padded cover with contrasting stitched borders, visibly different from a flat fabric sheet.
-                val size = OriginWorkshopGamePartSize(0.64f, 0.12f, 0.46f)
-                val pieces = mutableListOf(OriginWorkshopWorkpiecePiece(OriginWorkshopPoint(0.0, 0.0, 0.0), size, Material.RED_WOOL))
-                for (z in listOf(-0.20, 0.20)) pieces += OriginWorkshopWorkpiecePiece(
-                    OriginWorkshopPoint(0.0, 0.064, z), OriginWorkshopGamePartSize(0.56f, 0.01f, 0.012f), Material.WHITE_WOOL)
-                active.workpiece = spawnProp(active, player, pieces)
-                settle(active, active.workpiece!!, target(active, OriginWorkshopGameStage.UPHOLSTER_PICK_COVER))
+            OriginWorkshopGameStage.UPHOLSTER_PRESSING,
+            OriginWorkshopGameStage.UPHOLSTER_PRESSING_SECOND -> {
+                active.seams++
+                refreshUpholstery(active, player)
             }
-            OriginWorkshopGameStage.CLAMPING_RIGHT,
+            OriginWorkshopGameStage.ASSEMBLER_VISING,
+            OriginWorkshopGameStage.ASSEMBLER_VISING_SECOND -> {
+                active.planedEdges++
+                replaceWorkpiece(active, player, originWorkshopJoinedTopPieces(active.planedEdges, active.joinedEdges))
+            }
             OriginWorkshopGameStage.ASSEMBLER_HAMMERING,
+            OriginWorkshopGameStage.ASSEMBLER_HAMMERING_SECOND -> {
+                active.joinedEdges++
+                replaceWorkpiece(active, player, originWorkshopJoinedTopPieces(active.planedEdges, active.joinedEdges))
+            }
+            OriginWorkshopGameStage.FINISHER_WITHDRAWING -> {
+                OriginWorkshopTablesModule.setCraftPartVisible(tableId, "panel", false)
+                refreshFinishingPanel(active, player)
+            }
+            OriginWorkshopGameStage.ASSEMBLER_CLAMPING_LEFT -> fastenAssemblerLeg(active, player, left = true)
+            OriginWorkshopGameStage.ASSEMBLER_CLAMPING_RIGHT -> finishProduct(active)
+            OriginWorkshopGameStage.CLAMPING_RIGHT,
             OriginWorkshopGameStage.FINISHER_DRYING -> finishProduct(active)
             else -> Unit
         }
@@ -989,7 +952,8 @@ internal object OriginWorkshopGame : PluginModule, Listener {
             val player = Bukkit.getPlayer(active.playerId)
             active.workpiece?.remove()
             active.workpiece = null
-            val at = OriginWorkshopTablesModule.pointAt(tableId, active.recipe.resultAnchor)
+            val at = OriginWorkshopTablesModule.resultAt(tableId, active.recipe.productId)
+            if (at == null) ARC.instance.logger.warning("ORIGIN_WORKSHOP_GAME phase=RESULT_DISPLAY_UNAVAILABLE table=${active.tableId} product=${active.recipe.productId}")
             if (at != null && player != null) {
                 val display = runCatching { owner?.spawnItem(at, chair) }.onFailure {
                     ARC.instance.logger.log(Level.WARNING, "Origin workshop chair display unavailable player=" + active.playerId, it)
@@ -997,7 +961,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
                 if (display != null) {
                     display.isVisibleByDefault = false
                     display.showTo(player)
-                    display.itemDisplayTransform = ItemDisplay.ItemDisplayTransform.FIXED
+                    display.itemDisplayTransform = ItemDisplay.ItemDisplayTransform.NONE
                     display.billboard = Display.Billboard.FIXED
                     display.viewRange = 0.8f
                     display.displayWidth = 1.0f
@@ -1031,26 +995,18 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         active.targetMarker?.remove()
         active.targetMarker = null
         val action = active.recipe.interactions[stage]?.action
-        val needsMarker = action in PLACEMENT_ACTIONS
-        val nextControl = if (needsMarker || currentPickableDisplay(active) != null) null else control(active, stage)
-        if (needsMarker) {
+        if (action != null) {
             val point = target(active, stage)
-            val coating = action in COATING_ACTIONS
-            val geometry = originWorkshopPlacementMarker(coating)
+            val geometry = originWorkshopPlacementMarker(action)
             active.targetMarker = spawnProp(active, player, geometry).also {
                 settle(active, it, point)
-                it.glow(woodGlow)
+                it.cue(false)
             }
         }
-        if (active.highlightedControl != nextControl || active.hoveredControl) {
-            OriginWorkshopTablesModule.highlightCraftControl(tableId, nextControl, hovered = false, viewer = player)
-            active.highlightedControl = nextControl
-            active.hoveredControl = false
-        }
+        OriginWorkshopTablesModule.highlightCraftControl(tableId, null, viewer = player)
+        active.highlightedControl = control(active, stage)
+        active.hoveredControl = false
         active.workpiece?.glow(null)
-        currentPickableDisplay(active)?.let { part ->
-            part.glow(woodGlow)
-        }
         refreshGuidance(active, player, nowTick(), force = true)
         log(active, phase, stage)
     }
@@ -1062,7 +1018,8 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         OriginWorkshopGameStage.PICK_SAWN_BOARD,
         OriginWorkshopGameStage.PICK_DRILLED_BOARD,
         OriginWorkshopGameStage.UPHOLSTER_PICK_COVER,
-        OriginWorkshopGameStage.ASSEMBLER_PICK_VISED -> active.workpiece
+        OriginWorkshopGameStage.ASSEMBLER_PICK_VISED,
+        OriginWorkshopGameStage.ASSEMBLER_PICK_JOINED_TOP -> active.workpiece
         else -> null
     }
 
@@ -1179,7 +1136,10 @@ internal object OriginWorkshopGame : PluginModule, Listener {
             moveProp(item, center, Quaternionf().rotationY(pose.rotationRadians.toFloat()), carrying = true)
             item.glow(null)
         }
-        active.brush?.teleport(center)
+        // Small hand tools follow the hand below eye level, independently of the shoulder workpiece.
+        val hand = location.clone().add(location.direction.setY(0.0).normalize().multiply(0.45))
+            .add(pose.center.x * 0.7, 1.0, pose.center.z * 0.7).apply { yaw = 0f; pitch = 0f }
+        active.brush?.teleport(hand)
     }
 
     private fun moveProp(item: Prop, center: Location, rotation: Quaternionf, carrying: Boolean) {
@@ -1214,7 +1174,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
     private fun activeTargetDistance(active: Session, player: Player): Double? {
         if (active.targetMarker != null) {
             val at = OriginWorkshopTablesModule.pointAt(tableId, target(active, active.progress.stage)) ?: return null
-            return targetDistance(player, at)
+            targetDistance(player, at)?.let { return it }
         }
         val pickable = currentPickableDisplay(active)
         val displays = if (pickable == null) active.highlightedControl?.let {
@@ -1425,7 +1385,6 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         val product = OriginFurnitureWorkshopModule.productIdFor(next) ?: return
         val gameSettings = settings ?: return
         val recipe = OriginWorkshopTablesModule.recipeFor(next, product, gameSettings.rules, gameSettings.workpieceRenderer) ?: return
-        OriginWorkshopTablesModule.highlightCraftControl(next, "start")
         label = OriginWorkshopTablesModule.pointAt(next, frontGuidanceAnchor(start))?.let {
             spawnLabel(it, recipe.title + " · ЛКМ", visibleByDefault = true)
         }

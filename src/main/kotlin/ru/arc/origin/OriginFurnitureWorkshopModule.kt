@@ -166,6 +166,18 @@ internal enum class OriginFurnitureWorkshopRole(val key: String, val npcId: Int)
     FINISHER("finisher", 460),
 }
 
+internal enum class OriginFurnitureWorkshopSleepRequestResult {
+    QUEUED,
+    ALREADY_SLEEPING,
+    UNKNOWN_NPC,
+    NPC_UNAVAILABLE,
+    SHIFT_UNAVAILABLE,
+    WORKSHOP_UNAVAILABLE,
+}
+
+internal fun originWorkshopSleepNpcIds(): List<Int> =
+    OriginFurnitureWorkshopRole.entries.map(OriginFurnitureWorkshopRole::npcId)
+
 internal data class OriginFurnitureWorkshopWorker(
     val role: OriginFurnitureWorkshopRole,
     val tableId: String,
@@ -562,6 +574,8 @@ internal object OriginFurnitureWorkshopModule : PluginModule, Listener {
     internal fun releasePlayerTable(tableId: String, playerId: UUID) {
         runtime?.releasePlayerTable(tableId, playerId)
     }
+    internal fun requestSleep(npcId: Int): OriginFurnitureWorkshopSleepRequestResult =
+        runtime?.requestSleep(npcId) ?: OriginFurnitureWorkshopSleepRequestResult.WORKSHOP_UNAVAILABLE
     private var startupTasks: LifecycleTaskScope? = null
     private var pendingSettings: OriginFurnitureWorkshopSettings? = null
     private var startupGeneration = 0L
@@ -706,7 +720,7 @@ internal fun workshopWorkersDue(
     worker.role !in activeRoles && tick >= nextDueTick.getValue(worker.role)
 }
 
-private class WorkshopSleepJourney(val workerIndex: Int) {
+private class WorkshopSleepJourney(val workerIndex: Int, val leaveBed: Boolean = true) {
     var started = false
     var arrived = false
     var deadline = 0L
@@ -889,6 +903,33 @@ private class OriginFurnitureWorkshopRuntime private constructor(
 
     fun releasePlayerTable(tableId: String, playerId: UUID) = sleepShift.release(tableId, playerId)
 
+    fun requestSleep(npcId: Int): OriginFurnitureWorkshopSleepRequestResult {
+        if (closed) return OriginFurnitureWorkshopSleepRequestResult.WORKSHOP_UNAVAILABLE
+        val workerIndex = settings.workers.indexOfFirst { it.role.npcId == npcId }
+        if (workerIndex < 0) return OriginFurnitureWorkshopSleepRequestResult.UNKNOWN_NPC
+        val worker = settings.workers[workerIndex]
+        val actor = actors.getValue(worker.role)
+        if (!isAvailable(actor)) return OriginFurnitureWorkshopSleepRequestResult.NPC_UNAVAILABLE
+        if (isSleeping(actor)) return OriginFurnitureWorkshopSleepRequestResult.ALREADY_SLEEPING
+        if (!sleepShift.ready || workerIndex == sleepShift.index) {
+            return OriginFurnitureWorkshopSleepRequestResult.SHIFT_UNAVAILABLE
+        }
+
+        sleepShift.forceNext(workerIndex, tick)
+        sleepRetryAt = tick
+        val displaced = incomingSleeper
+        if (displaced != null && displaced.workerIndex != workerIndex) {
+            incomingSleeper = null
+            val displacedWorker = settings.workers[displaced.workerIndex]
+            if (displacedWorker.role !in active) {
+                routeController.stop(actors.getValue(displacedWorker.role))
+                returningWorkers[displaced.workerIndex] = WorkshopSleepJourney(displaced.workerIndex, leaveBed = false)
+            }
+        }
+        log("SLEEP_QUEUED", detail = "actor=$npcId index=$workerIndex")
+        return OriginFurnitureWorkshopSleepRequestResult.QUEUED
+    }
+
     private fun tickSleep() {
         if (tick < sleepRetryAt) return
         val current = settings.workers[sleepShift.index]
@@ -902,12 +943,25 @@ private class OriginFurnitureWorkshopRuntime private constructor(
         }
         if (!sleepShift.ready) {
             // Initial seating and recovery must not depend on viewers or a long approach route.
-            val index = settings.workers.indices.map { (sleepShift.index + it) % settings.workers.size }
-                .firstOrNull { isAvailable(actors.getValue(settings.workers[it].role)) } ?: return
+            val available = settings.workers.indices
+                .map { (sleepShift.index + it) % settings.workers.size }
+                .filter { isAvailable(actors.getValue(settings.workers[it].role)) }
+            val idle = available.filter { settings.workers[it].role !in active }
+            val index = idle.firstOrNull { it != sleepShift.forcedNextIndex }
+                ?: idle.firstOrNull()
+                ?: available.firstOrNull()
+                ?: return
             val worker = settings.workers[index]
             active[worker.role]?.let { abort(it, "sleep-coverage-recovery") }
-            incomingSleeper?.let { routeController.stop(actors.getValue(settings.workers[it.workerIndex].role)) }
+            val displaced = incomingSleeper
             incomingSleeper = null
+            if (displaced != null && displaced.workerIndex != index) {
+                val displacedWorker = settings.workers[displaced.workerIndex]
+                if (displacedWorker.role !in active) {
+                    routeController.stop(actors.getValue(displacedWorker.role))
+                    returningWorkers[displaced.workerIndex] = WorkshopSleepJourney(displaced.workerIndex, leaveBed = false)
+                }
+            }
             returningWorkers.remove(index)
             routeController.stop(actors.getValue(worker.role))
             OriginWorkshopTablesModule.resetWork(worker.tableId)
@@ -928,8 +982,10 @@ private class OriginFurnitureWorkshopRuntime private constructor(
             }
         }
         if (incomingSleeper == null && sleepShift.rotationDue(tick)) {
-            val next = (1 until settings.workers.size).map { (sleepShift.index + it) % settings.workers.size }
-                .firstOrNull { it !in returningWorkers && isAvailable(actors.getValue(settings.workers[it].role)) }
+            val available = settings.workers.indices
+                .filter { isAvailable(actors.getValue(settings.workers[it].role)) }
+                .toSet()
+            val next = sleepShift.nextWorkerIndex(available, returningWorkers.keys)
             incomingSleeper = next?.let(::WorkshopSleepJourney)
         }
         val incoming = incomingSleeper ?: return
@@ -969,7 +1025,7 @@ private class OriginFurnitureWorkshopRuntime private constructor(
         var failureReason = "route-unavailable"
         if (!journey.started) {
             // Leave the sofa by its front anchor; floor travel remains normal Citizens navigation.
-            if (phase == "HOME" && journey.retryAt == 0L) {
+            if (phase == "HOME" && journey.retryAt == 0L && journey.leaveBed) {
                 wakeOriginWorkshopNpc(actor)
                 check(actor.entity.teleport(settings.sleepApproach.inWorld(world))) { "Workshop NPC ${actor.id} rejected sleep exit" }
             }

@@ -38,6 +38,7 @@ import ru.arc.commands.arc.subcommands.LocationPoolSubCommand
 import ru.arc.commands.arc.subcommands.LandsSubCommand
 import ru.arc.commands.arc.subcommands.NpcChatSubCommand
 import ru.arc.commands.arc.subcommands.NpcCycleSubCommand
+import ru.arc.commands.arc.subcommands.WorkshopSubCommand
 import ru.arc.commands.arc.subcommands.OnboardingSubCommand
 import ru.arc.commands.arc.subcommands.OriginPortalsSubCommand
 import ru.arc.commands.arc.subcommands.LoggerSubCommand
@@ -107,6 +108,7 @@ class ArcCommand(private val profile: ArcRuntimeProfile = ArcRuntimeProfile.FULL
                 ProductPathSubCommand,
                 NpcChatSubCommand,
                 NpcCycleSubCommand,
+                WorkshopSubCommand,
                 // New subcommands
                 TestSubCommand,
                 EliteLootSubCommand,

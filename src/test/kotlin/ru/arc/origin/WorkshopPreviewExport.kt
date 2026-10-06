@@ -13,10 +13,10 @@ object WorkshopPreviewExport {
         val rules = OriginWorkshopGameRules()
         val states = mutableListOf<Map<String, Any>>()
         fun state(id: String, title: String, role: OriginWorkshopTableRole, machine: String? = null,
-            progress: Double = 0.0, extras: List<Map<String, Any>> = emptyList(), finished: Boolean = false) {
+            progress: Double = 0.0, extras: List<Map<String, Any>> = emptyList(), finished: Boolean = false, hidden: Set<String> = emptySet()) {
             val pose = machine?.let { originWorkshopCraftMachinePose(it, progress, dimensions, tuning) }
             val pieces = originWorkshopTablePieces(role, 0, dimensions, tuning)
-                .filter { it.kind == OriginWorkshopTablePieceKind.BLOCK }
+                .filter { it.kind == OriginWorkshopTablePieceKind.BLOCK && it.key !in hidden }
                 .filterNot { finished && it.key in originWorkshopFinishedAssemblyFixturePieceKeys(role) }
                 .mapNotNull { piece ->
                     val motion = pose?.pieces?.get(piece.key)
@@ -49,9 +49,9 @@ object WorkshopPreviewExport {
         for ((id, stage) in listOf("load-saw" to OriginWorkshopGameStage.CARRY_RAW_TO_SAW,
             "load-drill" to OriginWorkshopGameStage.CARRY_BOARD_TO_DRILL, "assembly-slot" to OriginWorkshopGameStage.CARRY_BOARD_TO_JIG)) {
             val target = recipe.interactions.getValue(stage).target
-            val marker = originWorkshopPlacementMarker(false).mapIndexed { i, p ->
+            val marker = originWorkshopPlacementMarker().mapIndexed { i, p ->
                 cuboid("target-$i", p.material.name, target.x + p.center.x, target.y + p.center.y, target.z + p.center.z,
-                    p.size.x.toDouble(), p.size.y.toDouble(), p.size.z.toDouble()) + ("highlight" to true)
+                    p.size.x.toDouble(), p.size.y.toDouble(), p.size.z.toDouble()) + ("cue" to true)
             }
             state(id, "Столяр · ${stage.instruction}", OriginWorkshopTableRole.CARPENTER, extras = marker)
         }
@@ -81,13 +81,71 @@ object WorkshopPreviewExport {
         state("hammer", "Сборщик · удар молота", OriginWorkshopTableRole.ASSEMBLER, "anvil", 0.65,
             listOf(cuboid("player-tabletop", "SPRUCE_PLANKS", tuning.anvilCenterX, dimensions.height + 0.67, tuning.anvilCenterZ, 0.68, 0.06, 0.30)))
         state("panel", "Отделочник · панель на столе", OriginWorkshopTableRole.FINISHER, "finish", 0.25)
-        val coating = listOf(-0.67, -0.45, -0.23).mapIndexed { i, z -> cuboid("coat-$i", "STRIPPED_BIRCH_WOOD",
+        val coating = listOf(-0.67, -0.45, -0.23).mapIndexed { i, z -> cuboid("coat-$i", "STRIPPED_DARK_OAK_WOOD",
             0.0, dimensions.height + 0.074, z, 0.18, 0.012, 0.22) }
         state("coated", "Отделочник · три полосы покрытия", OriginWorkshopTableRole.FINISHER, "finish", 0.25, coating)
+        fun prop(key: String, geometry: List<OriginWorkshopWorkpiecePiece>, center: OriginWorkshopPoint,
+            flip: Boolean = false): List<Map<String, Any>> = geometry.mapIndexed { i, piece ->
+            val sign = if (flip) -1.0 else 1.0
+            cuboid("$key-$i", piece.material.name, center.x + piece.center.x,
+                center.y + sign * piece.center.y, center.z + sign * piece.center.z,
+                piece.size.x.toDouble(), piece.size.y.toDouble(), piece.size.z.toDouble()) +
+                ("rotationX" to if (flip) 180.0 else 0.0)
+        }
+        fun cue(recipe: OriginWorkshopGameRecipe, stage: OriginWorkshopGameStage) =
+            prop("cue", originWorkshopPlacementMarker(recipe.interactions.getValue(stage).action), recipe.interactions.getValue(stage).target)
+                .map { it + ("cue" to true) }
+        fun recipeFor(role: OriginWorkshopTableRole) = originWorkshopGameRecipe(role, "preview:${role.key}",
+            dimensions, tuning, OriginWorkshopPoint(-7.5, 0.405, 0.30), rules)
+        val upholster = recipeFor(OriginWorkshopTableRole.UPHOLSTERER)
+        val pressAt = upholster.interactions.getValue(OriginWorkshopGameStage.UPHOLSTER_PLACE_FABRIC).target
+        state("press-cue", "Обивщик · нижняя ручка и первый шов", OriginWorkshopTableRole.UPHOLSTERER,
+            extras = prop("cloth", originWorkshopUpholsteryPieces(2, 1), pressAt) + cue(upholster, OriginWorkshopGameStage.UPHOLSTER_START_PRESS_SECOND))
+        val cushionAt = upholster.interactions.getValue(OriginWorkshopGameStage.UPHOLSTER_PLACE_COVER).target
+        val hiddenCushion = setOf("upholsterer-cushion-cover", "upholsterer-cushion-padding")
+        for (tucked in 0..2) state("cushion-$tucked", "Обивщик · набивка и края: $tucked/2", OriginWorkshopTableRole.UPHOLSTERER,
+            extras = prop("cushion", originWorkshopUpholsteryPieces(2, 2, true, tucked, if (tucked == 2) 2 else 0), cushionAt),
+            hidden = hiddenCushion)
+        val assembler = recipeFor(OriginWorkshopTableRole.ASSEMBLER)
+        val assemblyAt = assembler.interactions.getValue(OriginWorkshopGameStage.ASSEMBLER_PLACE_ASSEMBLY_TOP).target
+        val assembledLegs = listOf(OriginWorkshopGameStage.ASSEMBLER_PLACE_LEFT_LEG, OriginWorkshopGameStage.ASSEMBLER_PLACE_RIGHT_LEG).flatMap { stage ->
+            prop(stage.name, originWorkshopAssemblerLegPieces(fastened = stage == OriginWorkshopGameStage.ASSEMBLER_PLACE_LEFT_LEG),
+                assembler.interactions.getValue(stage).target)
+        }
+        state("joined-top", "Сборщик · соединения после двух ударов", OriginWorkshopTableRole.ASSEMBLER,
+            extras = prop("top", originWorkshopJoinedTopPieces(2, 2), assembler.interactions.getValue(OriginWorkshopGameStage.ASSEMBLER_PLACE_ANVIL).target))
+        state("table-assembly", "Сборщик · столешница и обе ножки", OriginWorkshopTableRole.ASSEMBLER,
+            extras = prop("top", originWorkshopJoinedTopPieces(2, 2), assemblyAt) + assembledLegs + cue(assembler, OriginWorkshopGameStage.ASSEMBLER_TIGHTEN_RIGHT))
+        val finisher = recipeFor(OriginWorkshopTableRole.FINISHER)
+        state("rack-cue", "Отделочник · нижняя ручка сушилки", OriginWorkshopTableRole.FINISHER,
+            extras = cue(finisher, OriginWorkshopGameStage.FINISHER_START_PANEL))
+        val panelAt = OriginWorkshopPoint(0.0, dimensions.height + 0.04, -0.45)
+        for (back in listOf(false, true)) for (coat in 0..3) state("finish-${if (back) "back" else "front"}-$coat",
+            "Отделочник · ${if (back) "обратная" else "лицевая"} сторона, покрыто: $coat/3", OriginWorkshopTableRole.FINISHER,
+            extras = prop("panel", originWorkshopFinishingPanelPieces(3, if (back) 3 else 0,
+                if (back) 3 else coat, if (back) coat else 0), panelAt, back) + cue(finisher, when (coat) {
+                    0 -> OriginWorkshopGameStage.FINISHER_COAT_NEAR
+                    1 -> OriginWorkshopGameStage.FINISHER_COAT_CENTER
+                    2 -> OriginWorkshopGameStage.FINISHER_COAT_FAR
+                    else -> if (back) OriginWorkshopGameStage.FINISHER_HANG_PANEL else OriginWorkshopGameStage.FINISHER_FLIP_FOR_BACK_COAT
+                }),
+            hidden = setOf("finisher-drying-panel-center"))
+        for (role in OriginWorkshopTableRole.entries) {
+            val product = when (role) {
+                OriginWorkshopTableRole.UPHOLSTERER -> "furnituresplus:red_wooden_sofa_single"
+                OriginWorkshopTableRole.ASSEMBLER -> "furnituresplus:white_wooden_diningtable"
+                else -> "furnituresplus:white_wooden_chair"
+            }
+            val at = originWorkshopResultAnchor(role, product, dimensions)
+            state("result-${role.key}", "${names[role]} · готовая мебель на свободной площадке", role,
+                extras = listOf(cuboid("finished-furniture", product, at.x, at.y, at.z, 1.0, 1.0, 1.0)),
+                finished = role == OriginWorkshopTableRole.CARPENTER,
+                hidden = if (role == OriginWorkshopTableRole.UPHOLSTERER) hiddenCushion else emptySet())
+        }
         val output = Path.of(args.single())
         Files.createDirectories(output.parent)
         Files.writeString(output, GsonBuilder().setPrettyPrinting().create().toJson(mapOf("states" to states,
-            "evidence" to "Production geometry and poses; local yaw 0; vanilla block assets and exact arc_workshop item models/UVs; no world, NPCs or finished furniture models. Item model native Y180 and runtime compensation cancel.")))
+            "evidence" to "Production geometry, processing poses and filled cues; local yaw 0; exact vanilla and ItemsAdder face UVs. Finished furniture uses NONE, scale 0.65, native Y180 and analyzed tabletop contact. Finished anchors are checked against canonical machine assemblies; the carpenter fixture is hidden. No live world geometry is rendered. Workshop board native Y180 and compensation cancel.")))
         println("WORKSHOP_PREVIEW states=${states.size} output=$output")
     }
 }

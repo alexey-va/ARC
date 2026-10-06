@@ -132,7 +132,7 @@ class OriginWorkshopWorkpieceTest : FreeSpec({
     }
 
     "all visible corners of a placement marker stay inside the click radius" {
-        for (coating in listOf(false, true)) for (piece in originWorkshopPlacementMarker(coating)) {
+        for (action in OriginWorkshopGameAction.entries) for (piece in originWorkshopPlacementMarker(action)) {
             val x = abs(piece.center.x) + piece.size.x / 2
             val y = abs(piece.center.y) + piece.size.y / 2
             val z = abs(piece.center.z) + piece.size.z / 2

@@ -37,6 +37,8 @@ internal fun originWorkshopStationStockGeometry(role: OriginWorkshopTableRole): 
                 for (index in 0..3) block("tabletop-blank-layer-$index",
                     if (index % 2 == 0) Material.SPRUCE_PLANKS else Material.OAK_PLANKS,
                     0.0, 0.225 + index * 0.09, 0.30, 1.80, 0.09, 0.22)
+                for (x in listOf(-0.55, 0.55)) block("assembly-leg-stock-$x", Material.STRIPPED_SPRUCE_LOG,
+                    x, 0.25, -0.25, 0.14, 0.14, 0.52)
             }
             OriginWorkshopTableRole.FINISHER -> {
                 for (index in 0..2) block("cured-panel-layer-$index",

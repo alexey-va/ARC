@@ -2,6 +2,20 @@ package ru.arc.origin
 
 import org.bukkit.Material
 
+private val ASSEMBLER_LEG_SIZE = OriginWorkshopGamePartSize(0.14f, 0.52f, 0.14f)
+
+/** The finished assembly adds a small iron pin to the exposed front face of the leg. */
+internal fun originWorkshopAssemblerLegPieces(fastened: Boolean): List<OriginWorkshopWorkpiecePiece> = buildList {
+    add(OriginWorkshopWorkpiecePiece(OriginWorkshopPoint(0.0, 0.0, 0.0), ASSEMBLER_LEG_SIZE, Material.STRIPPED_SPRUCE_LOG))
+    if (fastened) add(
+        OriginWorkshopWorkpiecePiece(
+            OriginWorkshopPoint(0.0, 0.24, -0.0875),
+            OriginWorkshopGamePartSize(0.035f, 0.035f, 0.035f),
+            Material.IRON_BLOCK,
+        ),
+    )
+}
+
 /** A deliberate player input at a real station-local point. */
 internal data class OriginWorkshopRecipeInteraction(
     val action: OriginWorkshopGameAction,
@@ -69,7 +83,7 @@ internal fun originWorkshopGameRecipe(
 
     val h = dimensions.height
     val carpenterBoard = OriginWorkshopGamePartSize(1.0f, 0.08f, 0.22f)
-    val leg = OriginWorkshopGamePartSize(0.14f, 0.52f, 0.14f)
+    val leg = ASSEMBLER_LEG_SIZE
     val interactions: Map<OriginWorkshopGameStage, OriginWorkshopRecipeInteraction>
     val timed: Map<OriginWorkshopGameStage, OriginWorkshopTimedStep>
     val materials: Map<OriginWorkshopGameAction, Material>
@@ -77,7 +91,7 @@ internal fun originWorkshopGameRecipe(
     val totalSteps: Int
     val initialStage: OriginWorkshopGameStage
     val title: String
-    val resultAnchor: OriginWorkshopPoint
+    val resultAnchor = originWorkshopResultAnchor(role, productId, dimensions)
 
     when (role) {
         OriginWorkshopTableRole.CARPENTER -> {
@@ -140,33 +154,61 @@ internal fun originWorkshopGameRecipe(
             totalSteps = 21
             initialStage = OriginWorkshopGameStage.STOCK
             title = "Столярная мастерская · белый стул"
-            resultAnchor = point(1.35, h + 0.325, -0.35)
         }
         OriginWorkshopTableRole.UPHOLSTERER -> {
             val press = point(tuning.pressCenterX, h + 0.74, tuning.pressCenterZ)
             val fabricBed = point(tuning.pressCenterX, h + 0.74, tuning.pressCenterZ)
-            val cushion = point(0.96, h + 0.265, 0.38)
+            val pressHandle = point(tuning.pressCenterX - 0.46, h + 0.42, tuning.pressCenterZ - 0.45)
+            val cushion = point(0.96, h + 0.085, 0.38)
+            val padding = point(0.96, h + 0.105, 0.38)
+            val cushionNear = point(0.96, h + 0.185, 0.18)
+            val cushionFar = point(0.96, h + 0.185, 0.58)
+            val cushionLeft = point(0.622, h + 0.085, 0.38)
+            val cushionRight = point(1.298, h + 0.085, 0.38)
             interactions = listOf(
                 interaction(OriginWorkshopGameStage.UPHOLSTER_FABRIC, OriginWorkshopGameAction.PICK_FABRIC, stock, "stock", OriginWorkshopGameStage.UPHOLSTER_PLACE_FABRIC),
-                interaction(OriginWorkshopGameStage.UPHOLSTER_PLACE_FABRIC, OriginWorkshopGameAction.PLACE_FABRIC, fabricBed, null, OriginWorkshopGameStage.UPHOLSTER_START_PRESS),
-                interaction(OriginWorkshopGameStage.UPHOLSTER_START_PRESS, OriginWorkshopGameAction.ACTIVATE_PRESS, point(tuning.pressCenterX, h + 1.095, tuning.pressCenterZ), "press", OriginWorkshopGameStage.UPHOLSTER_PRESSING),
+                interaction(OriginWorkshopGameStage.UPHOLSTER_PLACE_FABRIC, OriginWorkshopGameAction.PLACE_FABRIC, fabricBed, null, OriginWorkshopGameStage.UPHOLSTER_STRETCH_LEFT),
+                interaction(OriginWorkshopGameStage.UPHOLSTER_STRETCH_LEFT, OriginWorkshopGameAction.STRETCH_FABRIC_LEFT, point(tuning.pressCenterX - 0.20, h + 0.74, tuning.pressCenterZ), null, OriginWorkshopGameStage.UPHOLSTER_STRETCH_RIGHT),
+                interaction(OriginWorkshopGameStage.UPHOLSTER_STRETCH_RIGHT, OriginWorkshopGameAction.STRETCH_FABRIC_RIGHT, point(tuning.pressCenterX + 0.20, h + 0.74, tuning.pressCenterZ), null, OriginWorkshopGameStage.UPHOLSTER_START_PRESS),
+                interaction(OriginWorkshopGameStage.UPHOLSTER_START_PRESS, OriginWorkshopGameAction.ACTIVATE_PRESS, pressHandle, "press", OriginWorkshopGameStage.UPHOLSTER_PRESSING),
+                interaction(OriginWorkshopGameStage.UPHOLSTER_TURN_FABRIC, OriginWorkshopGameAction.TURN_FABRIC, fabricBed, null, OriginWorkshopGameStage.UPHOLSTER_START_PRESS_SECOND),
+                interaction(OriginWorkshopGameStage.UPHOLSTER_START_PRESS_SECOND, OriginWorkshopGameAction.ACTIVATE_PRESS, pressHandle, "press", OriginWorkshopGameStage.UPHOLSTER_PRESSING_SECOND),
                 interaction(OriginWorkshopGameStage.UPHOLSTER_PICK_COVER, OriginWorkshopGameAction.PICK_PRESSED_COVER, press, null, OriginWorkshopGameStage.UPHOLSTER_PLACE_COVER),
-                interaction(OriginWorkshopGameStage.UPHOLSTER_PLACE_COVER, OriginWorkshopGameAction.PLACE_CUSHION_COVER, cushion, null, OriginWorkshopGameStage.UPHOLSTER_FINISHING),
+                interaction(OriginWorkshopGameStage.UPHOLSTER_PLACE_COVER, OriginWorkshopGameAction.PLACE_CUSHION_COVER, cushion, null, OriginWorkshopGameStage.UPHOLSTER_PICK_PADDING),
+                interaction(OriginWorkshopGameStage.UPHOLSTER_PICK_PADDING, OriginWorkshopGameAction.PICK_PADDING, point(stock.x + 0.62, stock.y, stock.z), "stock", OriginWorkshopGameStage.UPHOLSTER_PLACE_PADDING),
+                interaction(OriginWorkshopGameStage.UPHOLSTER_PLACE_PADDING, OriginWorkshopGameAction.PLACE_PADDING, padding, null, OriginWorkshopGameStage.UPHOLSTER_TUCK_NEAR),
+                interaction(OriginWorkshopGameStage.UPHOLSTER_TUCK_NEAR, OriginWorkshopGameAction.TUCK_PADDING_NEAR, cushionNear, null, OriginWorkshopGameStage.UPHOLSTER_TUCK_FAR),
+                interaction(OriginWorkshopGameStage.UPHOLSTER_TUCK_FAR, OriginWorkshopGameAction.TUCK_PADDING_FAR, cushionFar, null, OriginWorkshopGameStage.UPHOLSTER_FASTEN_LEFT),
+                interaction(OriginWorkshopGameStage.UPHOLSTER_FASTEN_LEFT, OriginWorkshopGameAction.FASTEN_COVER_LEFT, cushionLeft, "cushion", OriginWorkshopGameStage.UPHOLSTER_FASTEN_RIGHT),
+                interaction(OriginWorkshopGameStage.UPHOLSTER_FASTEN_RIGHT, OriginWorkshopGameAction.FASTEN_COVER_RIGHT, cushionRight, "cushion", OriginWorkshopGameStage.UPHOLSTER_FINISHING),
             ).toMap()
             timed = listOf(
-                timed(OriginWorkshopGameStage.UPHOLSTER_PRESSING, OriginWorkshopGameStage.UPHOLSTER_PICK_COVER, rules.pressTicks, "press", press, "press"),
+                timed(OriginWorkshopGameStage.UPHOLSTER_PRESSING, OriginWorkshopGameStage.UPHOLSTER_TURN_FABRIC, rules.pressTicks, "press", press, "press"),
+                timed(OriginWorkshopGameStage.UPHOLSTER_PRESSING_SECOND, OriginWorkshopGameStage.UPHOLSTER_PICK_COVER, rules.pressTicks, "press", press, "press"),
                 timed(OriginWorkshopGameStage.UPHOLSTER_FINISHING, OriginWorkshopGameStage.REWARDING, rules.finishingTicks, null, cushion, null),
             ).toMap()
-            materials = mapOf(OriginWorkshopGameAction.PICK_FABRIC to Material.RED_WOOL)
-            partSizes = mapOf(OriginWorkshopGameAction.PICK_FABRIC to OriginWorkshopGamePartSize(0.64f, 0.05f, 0.46f))
-            totalSteps = 5
+            materials = mapOf(
+                OriginWorkshopGameAction.PICK_FABRIC to Material.RED_WOOL,
+                OriginWorkshopGameAction.PICK_PADDING to Material.WHITE_WOOL,
+            )
+            partSizes = mapOf(
+                OriginWorkshopGameAction.PICK_FABRIC to OriginWorkshopGamePartSize(0.64f, 0.05f, 0.46f),
+                OriginWorkshopGameAction.PICK_PADDING to OriginWorkshopGamePartSize(0.62f, 0.16f, 0.40f),
+            )
+            totalSteps = 15
             initialStage = OriginWorkshopGameStage.UPHOLSTER_FABRIC
             title = "Обивочная мастерская · красный диван"
-            resultAnchor = point(0.96, h + 0.48, 0.38)
         }
         OriginWorkshopTableRole.ASSEMBLER -> {
             val vise = point(tuning.viseCenterX, h + 0.10, tuning.viseCenterZ)
             val anvil = point(tuning.anvilCenterX, h + 0.67, tuning.anvilCenterZ)
+            val anvilSecondSupport = point(tuning.anvilCenterX + 0.18, h + 0.67, tuning.anvilCenterZ)
+            val assemblyTop = point(0.0, h + 0.55, -0.45)
+            val leftLeg = point(-0.24, h + 0.26, -0.45)
+            val rightLeg = point(0.24, h + 0.26, -0.45)
+            val leftLegStock = point(stock.x - 0.55, 0.32, stock.z - 0.55)
+            val rightLegStock = point(stock.x + 0.55, 0.32, stock.z - 0.55)
+            val viseHandle = point(tuning.viseCenterX - 0.70, h + 0.17, tuning.viseCenterZ)
             val hammer = point(
                 tuning.anvilCenterX,
                 h + tuning.hammerPivotYOffset - tuning.hammerArmLength * kotlin.math.sin(Math.toRadians(tuning.hammerRestAngleDegrees)),
@@ -175,44 +217,93 @@ internal fun originWorkshopGameRecipe(
             interactions = listOf(
                 interaction(OriginWorkshopGameStage.ASSEMBLER_STOCK, OriginWorkshopGameAction.PICK_TABLETOP, stock, "stock", OriginWorkshopGameStage.ASSEMBLER_PLACE_VISE),
                 interaction(OriginWorkshopGameStage.ASSEMBLER_PLACE_VISE, OriginWorkshopGameAction.PLACE_VISE, vise, null, OriginWorkshopGameStage.ASSEMBLER_START_VISE),
-                interaction(OriginWorkshopGameStage.ASSEMBLER_START_VISE, OriginWorkshopGameAction.TIGHTEN_VISE, point(tuning.viseCenterX - 0.70, h + 0.17, tuning.viseCenterZ), "vise", OriginWorkshopGameStage.ASSEMBLER_VISING),
+                interaction(OriginWorkshopGameStage.ASSEMBLER_START_VISE, OriginWorkshopGameAction.TIGHTEN_VISE, viseHandle, "vise", OriginWorkshopGameStage.ASSEMBLER_VISING),
+                interaction(OriginWorkshopGameStage.ASSEMBLER_ROTATE_TOP, OriginWorkshopGameAction.ROTATE_TABLETOP, vise, null, OriginWorkshopGameStage.ASSEMBLER_RETIGHTEN_VISE),
+                interaction(OriginWorkshopGameStage.ASSEMBLER_RETIGHTEN_VISE, OriginWorkshopGameAction.TIGHTEN_VISE, viseHandle, "vise", OriginWorkshopGameStage.ASSEMBLER_VISING_SECOND),
+                interaction(OriginWorkshopGameStage.ASSEMBLER_RELEASE_VISE, OriginWorkshopGameAction.RELEASE_VISE, viseHandle, "vise", OriginWorkshopGameStage.ASSEMBLER_PICK_VISED),
                 interaction(OriginWorkshopGameStage.ASSEMBLER_PICK_VISED, OriginWorkshopGameAction.PICK_VISED_TABLETOP, vise, null, OriginWorkshopGameStage.ASSEMBLER_PLACE_ANVIL),
                 interaction(OriginWorkshopGameStage.ASSEMBLER_PLACE_ANVIL, OriginWorkshopGameAction.PLACE_ANVIL, anvil, null, OriginWorkshopGameStage.ASSEMBLER_START_ANVIL),
                 interaction(OriginWorkshopGameStage.ASSEMBLER_START_ANVIL, OriginWorkshopGameAction.ACTIVATE_ANVIL, hammer, "anvil", OriginWorkshopGameStage.ASSEMBLER_HAMMERING),
+                interaction(OriginWorkshopGameStage.ASSEMBLER_ALIGN_SECOND, OriginWorkshopGameAction.ALIGN_JOIN_SECOND, anvilSecondSupport, null, OriginWorkshopGameStage.ASSEMBLER_START_ANVIL_SECOND),
+                interaction(OriginWorkshopGameStage.ASSEMBLER_START_ANVIL_SECOND, OriginWorkshopGameAction.ACTIVATE_ANVIL, hammer, "anvil", OriginWorkshopGameStage.ASSEMBLER_HAMMERING_SECOND),
+                interaction(OriginWorkshopGameStage.ASSEMBLER_PICK_JOINED_TOP, OriginWorkshopGameAction.PICK_JOINED_TABLETOP, anvil, null, OriginWorkshopGameStage.ASSEMBLER_PLACE_ASSEMBLY_TOP),
+                interaction(OriginWorkshopGameStage.ASSEMBLER_PLACE_ASSEMBLY_TOP, OriginWorkshopGameAction.PLACE_ASSEMBLY_TOP, assemblyTop, null, OriginWorkshopGameStage.ASSEMBLER_PICK_LEFT_LEG),
+                interaction(OriginWorkshopGameStage.ASSEMBLER_PICK_LEFT_LEG, OriginWorkshopGameAction.PICK_LEFT_LEG, leftLegStock, "leg-left", OriginWorkshopGameStage.ASSEMBLER_PLACE_LEFT_LEG),
+                interaction(OriginWorkshopGameStage.ASSEMBLER_PLACE_LEFT_LEG, OriginWorkshopGameAction.PLACE_LEFT_LEG, leftLeg, null, OriginWorkshopGameStage.ASSEMBLER_PICK_RIGHT_LEG),
+                interaction(OriginWorkshopGameStage.ASSEMBLER_PICK_RIGHT_LEG, OriginWorkshopGameAction.PICK_RIGHT_LEG, rightLegStock, "leg-right", OriginWorkshopGameStage.ASSEMBLER_PLACE_RIGHT_LEG),
+                interaction(OriginWorkshopGameStage.ASSEMBLER_PLACE_RIGHT_LEG, OriginWorkshopGameAction.PLACE_RIGHT_LEG, rightLeg, null, OriginWorkshopGameStage.ASSEMBLER_TIGHTEN_LEFT),
+                interaction(OriginWorkshopGameStage.ASSEMBLER_TIGHTEN_LEFT, OriginWorkshopGameAction.TIGHTEN_LEFT, point(-0.24, h + 0.50, -0.45), null, OriginWorkshopGameStage.ASSEMBLER_CLAMPING_LEFT),
+                interaction(OriginWorkshopGameStage.ASSEMBLER_TIGHTEN_RIGHT, OriginWorkshopGameAction.TIGHTEN_RIGHT, point(0.24, h + 0.50, -0.45), null, OriginWorkshopGameStage.ASSEMBLER_CLAMPING_RIGHT),
             ).toMap()
             timed = listOf(
-                timed(OriginWorkshopGameStage.ASSEMBLER_VISING, OriginWorkshopGameStage.ASSEMBLER_PICK_VISED, rules.viseTicks, "vise", vise, "vise"),
-                timed(OriginWorkshopGameStage.ASSEMBLER_HAMMERING, OriginWorkshopGameStage.ASSEMBLER_FINISHING, rules.hammerTicks, "anvil", anvil, "anvil"),
-                timed(OriginWorkshopGameStage.ASSEMBLER_FINISHING, OriginWorkshopGameStage.REWARDING, rules.finishingTicks, null, anvil, null),
+                timed(OriginWorkshopGameStage.ASSEMBLER_VISING, OriginWorkshopGameStage.ASSEMBLER_ROTATE_TOP, rules.viseTicks, "vise", vise, "vise"),
+                timed(OriginWorkshopGameStage.ASSEMBLER_VISING_SECOND, OriginWorkshopGameStage.ASSEMBLER_RELEASE_VISE, rules.viseTicks, "vise", vise, "vise"),
+                timed(OriginWorkshopGameStage.ASSEMBLER_HAMMERING, OriginWorkshopGameStage.ASSEMBLER_ALIGN_SECOND, rules.hammerTicks, "anvil", anvil, "anvil"),
+                timed(OriginWorkshopGameStage.ASSEMBLER_HAMMERING_SECOND, OriginWorkshopGameStage.ASSEMBLER_PICK_JOINED_TOP, rules.hammerTicks, "anvil", anvil, "anvil"),
+                timed(OriginWorkshopGameStage.ASSEMBLER_CLAMPING_LEFT, OriginWorkshopGameStage.ASSEMBLER_TIGHTEN_RIGHT, rules.clampTicks, null, point(-0.24, h + 0.50, -0.45), null),
+                timed(OriginWorkshopGameStage.ASSEMBLER_CLAMPING_RIGHT, OriginWorkshopGameStage.ASSEMBLER_FINISHING, rules.clampTicks, null, point(0.24, h + 0.50, -0.45), null),
+                timed(OriginWorkshopGameStage.ASSEMBLER_FINISHING, OriginWorkshopGameStage.REWARDING, rules.finishingTicks, null, assemblyTop, null),
             ).toMap()
-            materials = mapOf(OriginWorkshopGameAction.PICK_TABLETOP to Material.SPRUCE_PLANKS)
-            partSizes = mapOf(OriginWorkshopGameAction.PICK_TABLETOP to OriginWorkshopGamePartSize(0.68f, 0.06f, 0.30f))
-            totalSteps = 5
+            materials = mapOf(
+                OriginWorkshopGameAction.PICK_TABLETOP to Material.SPRUCE_PLANKS,
+                OriginWorkshopGameAction.PICK_LEFT_LEG to Material.STRIPPED_SPRUCE_LOG,
+                OriginWorkshopGameAction.PICK_RIGHT_LEG to Material.STRIPPED_SPRUCE_LOG,
+            )
+            partSizes = mapOf(
+                OriginWorkshopGameAction.PICK_TABLETOP to OriginWorkshopGamePartSize(0.68f, 0.06f, 0.30f),
+                OriginWorkshopGameAction.PICK_LEFT_LEG to leg,
+                OriginWorkshopGameAction.PICK_RIGHT_LEG to leg,
+            )
+            totalSteps = 19
             initialStage = OriginWorkshopGameStage.ASSEMBLER_STOCK
             title = "Сборочная мастерская · белый стол"
-            resultAnchor = point(tuning.anvilCenterX, h + 0.98, tuning.anvilCenterZ)
         }
         OriginWorkshopTableRole.FINISHER -> {
+            val rackHandle = point(1.10, h + 0.14, -0.42)
             val panel = point(1.10, h + 0.52, -0.35)
             val workPanelCenter = point(0.0, h + 0.074, -0.45)
+            val sander = point(-1.87, h + 0.09, -0.14)
+            val near = point(0.0, h + 0.074, -0.67)
+            val center = point(0.0, h + 0.074, -0.45)
+            val far = point(0.0, h + 0.074, -0.23)
+            val bath = point(-1.15, h + 0.30, -0.14)
             interactions = listOf(
-                interaction(OriginWorkshopGameStage.FINISHER_START_PANEL, OriginWorkshopGameAction.START_FINISH_PANEL, panel, "rack", OriginWorkshopGameStage.FINISHER_WITHDRAWING),
-                interaction(OriginWorkshopGameStage.FINISHER_DIP_BRUSH, OriginWorkshopGameAction.DIP_FINISH_BRUSH, point(-1.15, h + 0.30, -0.14), "bath", OriginWorkshopGameStage.FINISHER_COAT_NEAR),
-                interaction(OriginWorkshopGameStage.FINISHER_COAT_NEAR, OriginWorkshopGameAction.COAT_PANEL_NEAR, point(0.0, h + 0.074, -0.67), null, OriginWorkshopGameStage.FINISHER_COAT_CENTER),
-                interaction(OriginWorkshopGameStage.FINISHER_COAT_CENTER, OriginWorkshopGameAction.COAT_PANEL_CENTER, workPanelCenter, null, OriginWorkshopGameStage.FINISHER_COAT_FAR),
-                interaction(OriginWorkshopGameStage.FINISHER_COAT_FAR, OriginWorkshopGameAction.COAT_PANEL_FAR, point(0.0, h + 0.074, -0.23), null, OriginWorkshopGameStage.FINISHER_DRYING),
+                interaction(OriginWorkshopGameStage.FINISHER_START_PANEL, OriginWorkshopGameAction.START_FINISH_PANEL, rackHandle, "rack", OriginWorkshopGameStage.FINISHER_WITHDRAWING),
+                interaction(OriginWorkshopGameStage.FINISHER_PICK_ABRASIVE, OriginWorkshopGameAction.PICK_ABRASIVE, sander, "abrasive", OriginWorkshopGameStage.FINISHER_SAND_NEAR),
+                interaction(OriginWorkshopGameStage.FINISHER_SAND_NEAR, OriginWorkshopGameAction.SAND_PANEL_NEAR, near, null, OriginWorkshopGameStage.FINISHER_SAND_CENTER),
+                interaction(OriginWorkshopGameStage.FINISHER_SAND_CENTER, OriginWorkshopGameAction.SAND_PANEL_CENTER, center, null, OriginWorkshopGameStage.FINISHER_SAND_FAR),
+                interaction(OriginWorkshopGameStage.FINISHER_SAND_FAR, OriginWorkshopGameAction.SAND_PANEL_FAR, far, null, OriginWorkshopGameStage.FINISHER_FLIP_FOR_BACK_SANDING),
+                interaction(OriginWorkshopGameStage.FINISHER_FLIP_FOR_BACK_SANDING, OriginWorkshopGameAction.FLIP_PANEL, workPanelCenter, null, OriginWorkshopGameStage.FINISHER_SAND_BACK_NEAR),
+                interaction(OriginWorkshopGameStage.FINISHER_SAND_BACK_NEAR, OriginWorkshopGameAction.SAND_PANEL_NEAR, near, null, OriginWorkshopGameStage.FINISHER_SAND_BACK_CENTER),
+                interaction(OriginWorkshopGameStage.FINISHER_SAND_BACK_CENTER, OriginWorkshopGameAction.SAND_PANEL_CENTER, center, null, OriginWorkshopGameStage.FINISHER_SAND_BACK_FAR),
+                interaction(OriginWorkshopGameStage.FINISHER_SAND_BACK_FAR, OriginWorkshopGameAction.SAND_PANEL_FAR, far, null, OriginWorkshopGameStage.FINISHER_DIP_BRUSH),
+                interaction(OriginWorkshopGameStage.FINISHER_DIP_BRUSH, OriginWorkshopGameAction.DIP_FINISH_BRUSH, bath, "bath", OriginWorkshopGameStage.FINISHER_COAT_NEAR),
+                interaction(OriginWorkshopGameStage.FINISHER_COAT_NEAR, OriginWorkshopGameAction.COAT_PANEL_NEAR, near, null, OriginWorkshopGameStage.FINISHER_COAT_CENTER),
+                interaction(OriginWorkshopGameStage.FINISHER_COAT_CENTER, OriginWorkshopGameAction.COAT_PANEL_CENTER, center, null, OriginWorkshopGameStage.FINISHER_COAT_FAR),
+                interaction(OriginWorkshopGameStage.FINISHER_COAT_FAR, OriginWorkshopGameAction.COAT_PANEL_FAR, far, null, OriginWorkshopGameStage.FINISHER_FLIP_FOR_BACK_COAT),
+                interaction(OriginWorkshopGameStage.FINISHER_FLIP_FOR_BACK_COAT, OriginWorkshopGameAction.FLIP_PANEL, workPanelCenter, null, OriginWorkshopGameStage.FINISHER_DIP_BRUSH_SECOND),
+                interaction(OriginWorkshopGameStage.FINISHER_DIP_BRUSH_SECOND, OriginWorkshopGameAction.DIP_FINISH_BRUSH, bath, "bath", OriginWorkshopGameStage.FINISHER_COAT_BACK_NEAR),
+                interaction(OriginWorkshopGameStage.FINISHER_COAT_BACK_NEAR, OriginWorkshopGameAction.COAT_PANEL_NEAR, near, null, OriginWorkshopGameStage.FINISHER_COAT_BACK_CENTER),
+                interaction(OriginWorkshopGameStage.FINISHER_COAT_BACK_CENTER, OriginWorkshopGameAction.COAT_PANEL_CENTER, center, null, OriginWorkshopGameStage.FINISHER_COAT_BACK_FAR),
+                interaction(OriginWorkshopGameStage.FINISHER_COAT_BACK_FAR, OriginWorkshopGameAction.COAT_PANEL_FAR, far, null, OriginWorkshopGameStage.FINISHER_HANG_PANEL),
+                interaction(OriginWorkshopGameStage.FINISHER_HANG_PANEL, OriginWorkshopGameAction.HANG_FINISHED_PANEL, rackHandle, "rack", OriginWorkshopGameStage.FINISHER_DRYING),
             ).toMap()
             timed = listOf(
-                timed(OriginWorkshopGameStage.FINISHER_WITHDRAWING, OriginWorkshopGameStage.FINISHER_DIP_BRUSH, rules.finishingTicks, "finish", workPanelCenter, null),
+                timed(OriginWorkshopGameStage.FINISHER_WITHDRAWING, OriginWorkshopGameStage.FINISHER_PICK_ABRASIVE, rules.finishingTicks, "finish", workPanelCenter, null),
                 timed(OriginWorkshopGameStage.FINISHER_DRYING, OriginWorkshopGameStage.FINISHER_FINISHING, rules.finishingTicks, "finish", panel, null),
                 timed(OriginWorkshopGameStage.FINISHER_FINISHING, OriginWorkshopGameStage.REWARDING, rules.chairHoldTicks, null, panel, null),
             ).toMap()
-            materials = mapOf(OriginWorkshopGameAction.START_FINISH_PANEL to Material.OAK_PLANKS)
-            partSizes = mapOf(OriginWorkshopGameAction.START_FINISH_PANEL to OriginWorkshopGamePartSize(0.18f, 0.06f, 0.68f))
-            totalSteps = 5
+            materials = mapOf(
+                OriginWorkshopGameAction.START_FINISH_PANEL to Material.OAK_PLANKS,
+                OriginWorkshopGameAction.PICK_ABRASIVE to Material.SANDSTONE,
+            )
+            partSizes = mapOf(
+                OriginWorkshopGameAction.START_FINISH_PANEL to OriginWorkshopGamePartSize(0.18f, 0.06f, 0.68f),
+                OriginWorkshopGameAction.PICK_ABRASIVE to OriginWorkshopGamePartSize(0.18f, 0.06f, 0.18f),
+            )
+            totalSteps = 19
             initialStage = OriginWorkshopGameStage.FINISHER_START_PANEL
             title = "Отделочная мастерская · защитное покрытие"
-            resultAnchor = point(1.35, h + 0.325, -0.35)
         }
     }
 

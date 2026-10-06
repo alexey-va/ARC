@@ -95,6 +95,61 @@ class OriginWorkshopSleepShiftTest : FreeSpec({
         shift.ready shouldBe true
     }
 
+    "a forced sleeper expires the timer without cancelling a player's lease" {
+        val shift = OriginWorkshopSleepShift(tables, duration)
+        val player = UUID.randomUUID()
+        shift.resting(now = 100L)
+        shift.acquire("carpenter", player) shouldBe true
+
+        shift.forceNext(workerIndex = 3, now = 500L)
+
+        shift.forcedNextIndex shouldBe 3
+        shift.rotationDue(500L) shouldBe false
+        shift.owns("carpenter", player) shouldBe true
+        // Candidate selection is pure; tickSleep gates it behind rotationDue before routing.
+        shift.nextWorkerIndex(available = setOf(1, 2, 3), returning = emptySet()) shouldBe 3
+        shouldThrow<IllegalStateException> { shift.replaceWith(3, 500L) }
+        shift.owns("carpenter", player) shouldBe true
+
+        shift.release("carpenter", player)
+        shift.rotationDue(500L) shouldBe true
+        shift.nextWorkerIndex(available = setOf(1, 2, 3), returning = emptySet()) shouldBe 3
+        shouldThrow<IllegalStateException> { shift.replaceWith(2, 500L) }
+        shift.replaceWith(3, 500L)
+
+        shift.index shouldBe 3
+        shift.forcedNextIndex shouldBe null
+        shift.rotationDue(500L + duration - 1) shouldBe false
+        shift.rotationDue(500L + duration) shouldBe true
+    }
+
+    "a forced target never falls through while unavailable or returning" {
+        val shift = OriginWorkshopSleepShift(tables, duration)
+        shift.resting(now = 0L)
+        shift.forceNext(workerIndex = 2, now = 10L)
+
+        shift.nextWorkerIndex(available = setOf(1, 3), returning = emptySet()) shouldBe null
+        shift.nextWorkerIndex(available = setOf(1, 2, 3), returning = setOf(2)) shouldBe null
+        shift.forcedNextIndex shouldBe 2
+        shift.index shouldBe 0
+
+        shift.nextWorkerIndex(available = setOf(1, 2, 3), returning = emptySet()) shouldBe 2
+    }
+
+    "recovery seating another worker preserves the exact forced request" {
+        val shift = OriginWorkshopSleepShift(tables, duration)
+        shift.resting(now = 0L)
+        shift.forceNext(workerIndex = 3, now = 50L)
+
+        shift.invalidate()
+        shift.resting(now = 100L, workerIndex = 1)
+
+        shift.index shouldBe 1
+        shift.forcedNextIndex shouldBe 3
+        shift.rotationDue(100L) shouldBe true
+        shift.nextWorkerIndex(available = setOf(0, 2, 3), returning = emptySet()) shouldBe 3
+    }
+
     "invalidation drops an old lease and lets recovery seat another available worker" {
         val shift = OriginWorkshopSleepShift(tables, duration)
         val oldPlayer = UUID.randomUUID()

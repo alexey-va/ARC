@@ -471,6 +471,10 @@ internal fun originWorkshopTablePieces(
                 tuning.pressCenterX, dimensions.height + 0.90, tuning.pressCenterZ, 0.76, 0.08, 0.68))
             add(blockPiece("upholsterer-press-ram", Material.WAXED_COPPER_BLOCK,
                 tuning.pressCenterX, dimensions.height + 1.095, tuning.pressCenterZ, 0.12, 0.31, 0.12))
+            add(blockPiece("upholsterer-press-control-arm", Material.IRON_BLOCK,
+                tuning.pressCenterX - 0.46, dimensions.height + 0.42, tuning.pressCenterZ - 0.225, 0.06, 0.06, 0.45))
+            add(blockPiece("upholsterer-press-control-grip", Material.WAXED_OXIDIZED_COPPER,
+                tuning.pressCenterX - 0.46, dimensions.height + 0.42, tuning.pressCenterZ - 0.45, 0.09, 0.26, 0.09))
         }
         OriginWorkshopTableRole.ASSEMBLER -> buildList {
             add(blockPiece("assembler-anvil", Material.ANVIL, tuning.anvilCenterX,
@@ -523,6 +527,8 @@ internal fun originWorkshopTablePieces(
                 tuning.anvilCenterX, dimensions.height + 0.645, tuning.anvilCenterZ, 0.22, 0.05, 0.22))
         }
         OriginWorkshopTableRole.FINISHER -> listOf(
+            blockPiece("finisher-abrasive-stock", Material.SANDSTONE, -1.87, dimensions.height + 0.06, -0.14,
+                0.18, 0.06, 0.18),
             blockPiece("finisher-paint-bath", Material.WATER_CAULDRON, -1.15, dimensions.height + 0.30, -0.14,
                 0.72, 0.60, 0.72),
             blockPiece("finisher-drying-post-front-left", Material.STRIPPED_BIRCH_LOG, 0.55,
@@ -551,6 +557,8 @@ internal fun originWorkshopTablePieces(
                 dimensions.height + 0.52, -0.35, 0.18, 0.68, 0.06),
             blockPiece("finisher-drying-panel-right", Material.SPRUCE_PLANKS, 1.45,
                 dimensions.height + 0.52, -0.35, 0.18, 0.68, 0.06),
+            blockPiece("finisher-rack-control-grip", Material.WAXED_OXIDIZED_COPPER, 1.10,
+                dimensions.height + 0.14, -0.42, 0.20, 0.065, 0.07),
         )
     }
     val workpieces = when (role) {
@@ -835,7 +843,7 @@ internal object OriginWorkshopTablesModule : PluginModule {
             if (local.key in setOf(
                     "board-bundle-layer-2",
                     "fabric-bale-0",
-                    "tabletop-blank-layer-2",
+                    "tabletop-blank-layer-3",
                     "cured-panel-layer-2",
                 )
             ) craftStockHandles += display
@@ -878,7 +886,7 @@ internal object OriginWorkshopTablesModule : PluginModule {
                 "leg-right" to parts("carpenter-leg-right"),
             ))
             OriginWorkshopTableRole.UPHOLSTERER -> controls.putAll(mapOf(
-                "press" to parts("upholsterer-press-ram"),
+                "press" to parts("upholsterer-press-control-grip"),
                 "cushion" to parts("upholsterer-cushion-cover"),
             ))
             OriginWorkshopTableRole.ASSEMBLER -> controls.putAll(mapOf(
@@ -886,8 +894,9 @@ internal object OriginWorkshopTablesModule : PluginModule {
                 "anvil" to parts("assembler-hammer-head"),
             ))
             OriginWorkshopTableRole.FINISHER -> controls.putAll(mapOf(
-                "rack" to parts("finisher-drying-panel-center", "finisher-drying-rail-lower-front", "finisher-drying-rail-upper-front"),
+                "rack" to parts("finisher-rack-control-grip"),
                 "bath" to parts("finisher-paint-bath"),
+                "abrasive" to parts("finisher-abrasive-stock"),
                 "panel" to parts("finisher-drying-panel-center"),
             ))
         }
@@ -905,6 +914,14 @@ internal object OriginWorkshopTablesModule : PluginModule {
         val table = machineTables[tableId] ?: return null
         val point = originWorkshopPointInWorld(table.definition, local)
         return Location(table.world, point.x, point.y, point.z)
+    }
+
+    internal fun resultAt(tableId: String, productId: String): Location? {
+        val table = machineTables[tableId] ?: return null
+        if (originWorkshopResultBounds(productId) == null) return null
+        val at = pointAt(tableId, originWorkshopResultAnchor(table.definition.role, productId, table.dimensions)) ?: return null
+        at.yaw = table.definition.yaw.toFloat()
+        return at
     }
 
     /** Configured dimensions for a currently loaded station, used to resolve its live interaction bounds. */
@@ -925,8 +942,8 @@ internal object OriginWorkshopTablesModule : PluginModule {
                 val stockX = table.definition.stockOffsetX ?: return null
                 when (table.definition.role) {
                     OriginWorkshopTableRole.CARPENTER -> OriginWorkshopPoint(stockX, 0.405, 0.30)
-                    OriginWorkshopTableRole.UPHOLSTERER -> OriginWorkshopPoint(stockX - 0.62, 0.39, 0.30)
-                    OriginWorkshopTableRole.ASSEMBLER -> OriginWorkshopPoint(stockX, 0.405, 0.30)
+                    OriginWorkshopTableRole.UPHOLSTERER -> OriginWorkshopPoint(stockX - 0.62, 0.62, 0.30)
+                    OriginWorkshopTableRole.ASSEMBLER -> OriginWorkshopPoint(stockX, 0.54, 0.30)
                     OriginWorkshopTableRole.FINISHER -> error("Finisher input comes from its drying rack")
                 }
             }
@@ -1147,9 +1164,12 @@ internal object OriginWorkshopTablesModule : PluginModule {
             OriginWorkshopTableRole.CARPENTER to "leg-left" -> "carpenter-leg-left"
             OriginWorkshopTableRole.CARPENTER to "leg-right" -> "carpenter-leg-right"
             OriginWorkshopTableRole.UPHOLSTERER to "press-cloth" -> "upholsterer-press-cloth"
+            OriginWorkshopTableRole.UPHOLSTERER to "cushion-padding" -> "upholsterer-cushion-padding"
+            OriginWorkshopTableRole.UPHOLSTERER to "cushion-cover" -> "upholsterer-cushion-cover"
             OriginWorkshopTableRole.ASSEMBLER to "tabletop" -> "assembler-board-sample"
             OriginWorkshopTableRole.ASSEMBLER to "anvil-workpiece" -> "assembler-anvil-workpiece"
             OriginWorkshopTableRole.FINISHER to "finished-board" -> "finisher-finished-board"
+            OriginWorkshopTableRole.FINISHER to "panel" -> "finisher-drying-panel-center"
             else -> error("Unknown ${table.definition.role.key} craft part '$part'")
         }
         val display = table.pieces[key]?.display ?: error("${table.definition.role.key} craft source '$part' has no model part")
@@ -1174,7 +1194,7 @@ internal object OriginWorkshopTablesModule : PluginModule {
         }
     }
 
-    /** Recolor the finisher's rack panel after its three private coating bands complete. */
+    /** Recolor the finisher's rack panel after both faces have been sanded and coated. */
     fun setCraftFinishedPanel(tableId: String, finished: Boolean) {
         val table = machineTables[tableId] ?: return
         if (table.definition.role != OriginWorkshopTableRole.FINISHER) return
@@ -1182,7 +1202,7 @@ internal object OriginWorkshopTablesModule : PluginModule {
         val part = table.pieces[key] ?: error("Finisher rack has no center panel")
         val display = part.display as? PacketBlockDisplay ?: error("Finisher rack center panel is not a block display")
         if (!display.isValid) return
-        display.blockData = (if (finished) Material.STRIPPED_BIRCH_WOOD else part.piece.material).createBlockData()
+        display.blockData = (if (finished) Material.STRIPPED_DARK_OAK_WOOD else part.piece.material).createBlockData()
         activeCraftKeys[tableId] = activeCraftKeys[tableId].orEmpty() + key
     }
 

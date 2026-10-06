@@ -174,14 +174,22 @@ private val DRILL_HOLE_X = listOf(-0.23, 0.0, 0.23)
 private val COARSE_HOLE_CENTERS = listOf(-0.24, 0.0, 0.24)
 private const val COARSE_GRID_EPSILON = 1.0e-9
 
-/** A thin, private outline centered exactly on the accepted loading/coating target. */
-internal fun originWorkshopPlacementMarker(coating: Boolean): List<OriginWorkshopWorkpiecePiece> {
-    val halfX = if (coating) 0.09f else 0.25f
-    val halfZ = if (coating) 0.10f else 0.15f
-    return buildList {
-        for (x in listOf(-halfX, halfX)) add(OriginWorkshopWorkpiecePiece(
-            OriginWorkshopPoint(x.toDouble(), 0.016, 0.0), OriginWorkshopGamePartSize(0.018f, 0.012f, halfZ * 2), Material.CUT_COPPER))
-        for (z in listOf(-halfZ, halfZ)) add(OriginWorkshopWorkpiecePiece(
-            OriginWorkshopPoint(0.0, 0.016, z.toDouble()), OriginWorkshopGamePartSize(halfX * 2, 0.012f, 0.018f), Material.CUT_COPPER))
+/** A filled private cue centered on the accepted action target, readable without a glow outline. */
+internal fun originWorkshopPlacementMarker(action: OriginWorkshopGameAction? = null): List<OriginWorkshopWorkpiecePiece> {
+    val compact = when (action) {
+        OriginWorkshopGameAction.SAND_PANEL_NEAR, OriginWorkshopGameAction.SAND_PANEL_CENTER,
+        OriginWorkshopGameAction.SAND_PANEL_FAR, OriginWorkshopGameAction.COAT_PANEL_NEAR,
+        OriginWorkshopGameAction.COAT_PANEL_CENTER, OriginWorkshopGameAction.COAT_PANEL_FAR,
+        OriginWorkshopGameAction.FLIP_PANEL -> true
+        else -> false
     }
+    val span = if (compact) 0.075f else 0.16f
+    val thickness = if (compact) 0.025f else 0.045f
+    val center = OriginWorkshopPoint(0.0, if (compact) 0.05 else 0.08, 0.0)
+    // Leave the narrow finishing panel visible around its filled, full-brightness cue.
+    return listOf(
+        OriginWorkshopWorkpiecePiece(center, OriginWorkshopGamePartSize(span, thickness, thickness), Material.LIGHT_BLUE_CONCRETE),
+        OriginWorkshopWorkpiecePiece(center, OriginWorkshopGamePartSize(thickness, span, thickness), Material.LIGHT_BLUE_CONCRETE),
+        OriginWorkshopWorkpiecePiece(center, OriginWorkshopGamePartSize(thickness, thickness, span), Material.LIGHT_BLUE_CONCRETE),
+    )
 }

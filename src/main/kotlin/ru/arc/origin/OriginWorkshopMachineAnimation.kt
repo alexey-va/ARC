@@ -345,6 +345,9 @@ internal fun originWorkshopMachinePose(
             val clothScale = 1.0 - tuning.pressClothCompression * pressure
             OriginWorkshopMachinePose(
                 mapOf(
+                    "upholsterer-press-control-grip" to OriginWorkshopPieceMotion(
+                        centerOffset = OriginWorkshopPoint(0.0, -0.06 * pressure, 0.0),
+                    ),
                     "upholsterer-press-platen" to OriginWorkshopPieceMotion(
                         centerOffset = OriginWorkshopPoint(0.0, -tuning.pressTravel * pressure, 0.0),
                     ),
