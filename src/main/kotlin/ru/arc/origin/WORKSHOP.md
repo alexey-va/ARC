@@ -52,7 +52,9 @@ sleeper is replaced immediately by another available worker; a skin respawn's
 lost sleeping pose is repaired before invalidating a current player's lease.
 
 Both Citizens sleep and pose traits are applied before the readiness check;
-setting a sleep target alone is not confirmation. The workshop resumes its
+setting a sleep target alone is not confirmation. Wakeup clears the Citizens
+sleep target and calls native `HumanEntity.wakeup(false)` when still sleeping,
+before teleporting off the bed or navigating home. The workshop resumes its
 owned NPC navigators and restores their prior pause states on shutdown. Sleep
 coverage cannot be maintained if all four actors are despawned or native pose
 application fails; failures are logged, and an unconfirmed station stays closed.

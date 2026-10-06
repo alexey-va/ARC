@@ -801,7 +801,7 @@ private class OriginFurnitureWorkshopRuntime private constructor(
             if (actor.isSpawned && actor.entity.world == world) {
                 check(!actor.navigator.isNavigating) { "Workshop NPC ${actor.id} is navigating outside this runtime" }
                 resumeWorkshopNavigation(actor)
-                actor.getTraitNullable(SleepTrait::class.java)?.setSleeping(null)
+                wakeOriginWorkshopNpc(actor)
                 check(actor.entity.teleport(worker.home.inWorld(world))) { "Workshop NPC ${actor.id} rejected home reset" }
                 faceOriginScenePoint(actor, worker.restFocus.inWorld(world))
             }
@@ -970,6 +970,7 @@ private class OriginFurnitureWorkshopRuntime private constructor(
         if (!journey.started) {
             // Leave the sofa by its front anchor; floor travel remains normal Citizens navigation.
             if (phase == "HOME" && journey.retryAt == 0L) {
+                wakeOriginWorkshopNpc(actor)
                 check(actor.entity.teleport(settings.sleepApproach.inWorld(world))) { "Workshop NPC ${actor.id} rejected sleep exit" }
             }
             OriginWorkshopTablesModule.resetWork(worker.tableId)
@@ -1071,7 +1072,7 @@ private class OriginFurnitureWorkshopRuntime private constructor(
                 )
             }
         }
-        runCatching { actor.getTraitNullable(SleepTrait::class.java)?.setSleeping(null) }.onFailure { failure ->
+        runCatching { wakeOriginWorkshopNpc(actor) }.onFailure { failure ->
             ARC.instance.logger.log(Level.WARNING,
                 "ORIGIN_WORKSHOP phase=SLEEP_RESTORE_FAILED actor=${actor.id} role=${worker.role.key} part=sleep-trait", failure)
         }
