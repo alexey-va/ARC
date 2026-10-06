@@ -115,9 +115,9 @@ The receipt uses `h=1.08`, with the same relative proof for any station height.
 | `board_raw` | 12575 | 1.25 / 1.21 | `044be60b62a52b306da160ea28b74efad5f2d9d1739e7f0c69609d5a25b07f45` |
 | `board_cut_once` | 12576 | 1.25 / 1.21 | `c432b61e87e981d2fefccbccb94d71a2639b8584abf9b5ab7c180b1e95e24b7f` |
 | `board_cut` | 12577 | 1.25 / 1.21 | `122992fc05ed1e2521e390a91e87286995f94f953fa644a0f2880794b79927b8` |
-| `board_drilled_1` | 12578 | 1.22 / 1.18 | `35bae5dcfa8082181223daeccaf0dba1bfa525690c913af889f354b91df447cf` |
-| `board_drilled_2` | 12579 | 1.22 / 1.18 | `28d421a144138f546ff3b5c8ca44507e739ff914daa6ee6ea25c894a0510399f` |
-| `board_drilled_3` | 12580 | 1.22 / 1.18 | `6b0b1472c18242c3050611b844a87b0080f9ff8a5c34643e1f3b697c33a0b810` |
+| `board_drilled_1` | 12578 | 1.22 / 1.18 | `70b207930eff71835e9d37fb23dc2ed280f3e3830a17c2457da50883a6bf0c2c` |
+| `board_drilled_2` | 12579 | 1.22 / 1.18 | `5f1ad1cf39e4d5e156731c31f9c18b269ff9bc342ddf948572b5680602c3f8e7` |
+| `board_drilled_3` | 12580 | 1.22 / 1.18 | `b13c560f6b47f5a3f436d3b467a7743bc7524d5e198ddbd09e497e4970694c84` |
 | `board_offcut` | 12581 | 1.12 / 1.08 | `ef4b0e759aeae4aad7cf393f64fd4b1294e77073c8a7275abbb5cb1f3ac3e1d2` |
 
 Reproduce with the installed `itemsadder-item-display-grounding` analyzer:
@@ -131,10 +131,15 @@ python3 -B <skill>/scripts/analyze_itemsadder_display.py \
   --entity-position 0,1.22,0 --surface-y 1.18 --output <report.json> --report
 ```
 
-The generated pack preserves all seven model geometries, UVs and fixed transforms;
-ItemsAdder aliases oak to `ia:18`, whose atlas entry resolves to vanilla
-`minecraft:block/oak_planks`. All paper item-selection overlays contain the seven
-new models. Generation is verified; publication on this run failed at the archive
-upload with `BucketMaxSizeExceeded`, before replacing the public pack. The analyzer
-warning `active_client_pack_identity_not_verified` remains open. Do not activate
-the new game JAR until publication and the public pack manifest are verified.
+The generated pack preserves all seven model geometries, UVs and fixed transforms.
+ItemsAdder creates separate vanilla-oak sprite aliases for block and modern item
+atlases; both resolve to `minecraft:block/oak_planks`. All paper item-selection
+overlays contain the seven models. The initial bucket-capacity failure was fixed
+by removing dated archive uploads and clearing the existing archives. Publication
+and the public pack manifest are checked before activating the game JAR; native
+Minecraft rendering remains a separate client check.
+
+There are no new textures. The seven source models contain 25 cuboids and 126
+faces in total; the most complex state is ten cuboids / 48 faces. The 24 fully
+internal rail-end faces are omitted. ItemsAdder generates two compatibility
+copies of the model set; these do not represent additional gameplay states.
