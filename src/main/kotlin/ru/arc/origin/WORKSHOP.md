@@ -98,3 +98,43 @@ content tree. Their face UVs are anchored to a shared model coordinate system,
 so drilling reveals holes without rescaling or repeating the grain per cuboid.
 The same geometric pieces remain the analytic hitboxes. Missing board assets
 block a new carpenter session before reservation or a reward claim.
+
+### Board grounding receipt (2026-10-06)
+
+The actual Spawn allocation cache assigns PAPER custom model data 12575–12581.
+Source model hashes below are the analyzer's resolved-model SHA-256. Fixed item
+context is neutral, scale is `(1,1,1)`, translation/right rotation are identity,
+and left quaternion `(0,1,0,0)` cancels the native ItemDisplay Y+180 base once.
+All seven reports are `grounded` with zero post-adjustment contact residual.
+The exact production geometry defines support at table height `h + .13` for
+saw feed, `h + .10` for drill rails and `h` for offcuts; board centers add `.04`.
+The receipt uses `h=1.08`, with the same relative proof for any station height.
+
+| Item suffix | PAPER CMD | Entity Y / support Y | Resolved model SHA-256 |
+| --- | ---: | --- | --- |
+| `board_raw` | 12575 | 1.25 / 1.21 | `044be60b62a52b306da160ea28b74efad5f2d9d1739e7f0c69609d5a25b07f45` |
+| `board_cut_once` | 12576 | 1.25 / 1.21 | `c432b61e87e981d2fefccbccb94d71a2639b8584abf9b5ab7c180b1e95e24b7f` |
+| `board_cut` | 12577 | 1.25 / 1.21 | `122992fc05ed1e2521e390a91e87286995f94f953fa644a0f2880794b79927b8` |
+| `board_drilled_1` | 12578 | 1.22 / 1.18 | `35bae5dcfa8082181223daeccaf0dba1bfa525690c913af889f354b91df447cf` |
+| `board_drilled_2` | 12579 | 1.22 / 1.18 | `28d421a144138f546ff3b5c8ca44507e739ff914daa6ee6ea25c894a0510399f` |
+| `board_drilled_3` | 12580 | 1.22 / 1.18 | `6b0b1472c18242c3050611b844a87b0080f9ff8a5c34643e1f3b697c33a0b810` |
+| `board_offcut` | 12581 | 1.12 / 1.08 | `ef4b0e759aeae4aad7cf393f64fd4b1294e77073c8a7275abbb5cb1f3ac3e1d2` |
+
+Reproduce with the installed `itemsadder-item-display-grounding` analyzer:
+
+```sh
+python3 -B <skill>/scripts/analyze_itemsadder_display.py \
+  --itemsadder-root <source-contents-and-actual-allocation-cache> \
+  --resource-pack <vanilla-1.21.11-client.jar> \
+  --item-id arc_workshop:board_drilled_3 --context fixed \
+  --left-quaternion 0,1,0,0 --scale 1,1,1 \
+  --entity-position 0,1.22,0 --surface-y 1.18 --output <report.json> --report
+```
+
+The generated pack preserves all seven model geometries, UVs and fixed transforms;
+ItemsAdder aliases oak to `ia:18`, whose atlas entry resolves to vanilla
+`minecraft:block/oak_planks`. All paper item-selection overlays contain the seven
+new models. Generation is verified; publication on this run failed at the archive
+upload with `BucketMaxSizeExceeded`, before replacing the public pack. The analyzer
+warning `active_client_pack_identity_not_verified` remains open. Do not activate
+the new game JAR until publication and the public pack manifest are verified.
