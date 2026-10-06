@@ -368,6 +368,8 @@ open class ARC : JavaPlugin() {
             ItemsCatalogModule,
             ItemLoreModule,
             LandsUiModule,
+            ru.arc.decorinteraction.DecorInteractionModule,
+            ru.arc.survival.SurvivalGameplayModule,
             HelpCenterModule,
             DialogDemoModule,
             CommandHideModule,

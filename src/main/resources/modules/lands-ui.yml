@@ -2,6 +2,9 @@
 # typed actions; Lands remains the authority for permissions, economy and data.
 enabled: true
 
+command-shortcuts:
+  enabled: false
+
 limits:
   max-listed-players: 12
 

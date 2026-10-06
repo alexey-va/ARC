@@ -7,6 +7,11 @@ import org.bukkit.command.TabCompleter
 import ru.arc.ARC
 import ru.arc.config.ArcRuntimeProfile
 import ru.arc.commands.arc.subcommands.DialogDemoSubCommand
+import ru.arc.commands.arc.subcommands.DecorInteractionSubCommand
+import ru.arc.commands.arc.subcommands.ServerSubCommand
+import ru.arc.commands.arc.subcommands.ChargesSubCommand
+import ru.arc.commands.arc.subcommands.ClaimBlockSubCommand
+import ru.arc.commands.arc.subcommands.UnbindSubCommand
 import ru.arc.commands.arc.subcommands.AuditSubCommand
 import ru.arc.commands.arc.subcommands.AuctionPedestalSubCommand
 import ru.arc.commands.arc.subcommands.BaltopSubCommand
@@ -108,6 +113,11 @@ class ArcCommand(private val profile: ArcRuntimeProfile = ArcRuntimeProfile.FULL
                 StoreSubCommand,
                 ItemsCatalogSubCommand,
                 LandsSubCommand,
+                DecorInteractionSubCommand,
+                ServerSubCommand,
+                ChargesSubCommand,
+                ClaimBlockSubCommand,
+                UnbindSubCommand,
                 GiveBoostSubCommand,
                 GiveSubCommand,
                 TravelAnchorSubCommand,

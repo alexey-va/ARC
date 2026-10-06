@@ -4,6 +4,41 @@
 # =============================================================================
 
 commands:
+  unbind:
+    name: unbind
+    aliases: []
+    permission: denizencommand.remove-soulbind
+    player-only: true
+    description: Снять привязку EliteMobs с предмета в руке
+    usage: /arc unbind
+  interact:
+    name: interact
+    aliases: []
+    permission: arc.system.interactions
+    player-only: false
+    description: Взаимодействия с декором
+    usage: /arc interact <drink|fountain|well|milk|tea|fish|harvest|rest> <player> [type]
+  server:
+    name: server
+    aliases: []
+    permission: ''
+    player-only: false
+    description: Перейти на другой сервер
+    usage: /arc server <main|etd> [player]
+  charges:
+    name: charges
+    aliases: []
+    permission: arc.reset-charges
+    player-only: false
+    description: Восстановить заряды CMI
+    usage: /arc charges <player>
+  claimblock:
+    name: claimblock
+    aliases: []
+    permission: arc.give-claim-block
+    player-only: false
+    description: Выдать блок привата
+    usage: /arc claimblock give <player> [amount]
   contracts:
     name: contracts
     aliases: [заказы]

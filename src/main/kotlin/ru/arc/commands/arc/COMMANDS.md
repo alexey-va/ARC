@@ -54,6 +54,25 @@
 
 ---
 
+## Совместимость Survival после Denizen
+
+| Команда | Действие | Право |
+|---|---|---|
+| `/arc interact <drink\|fountain\|well\|milk\|tea\|fish\|harvest\|rest> <player> [type]` | Декор, результаты и прежние кулдауны LuckPerms | `arc.system.interactions` |
+| `/arc server <main\|etd> [player]` | Переход на Spawn или ETD; чужой игрок только с отдельным правом | Нет; `arc.switch-other` для чужого игрока |
+| `/arc charges <player>` | Восстановить заряды CMI; при полных вернуть 50 000 монет за покупку | `arc.reset-charges` |
+| `/arc claimblock give <player> [amount]` | Выдать нативный блок привата Lands | `arc.give-claim-block` |
+| `/arc unbind` | Снять привязку EliteMobs с предмета в руке | `denizencommand.remove-soulbind` |
+
+Для `drink` тип — `beer` или `wine`, для `harvest` — `corn` или `rice`.
+Модули `decor-interactions` и `survival-gameplay` по умолчанию выключены;
+включены только на Survival. `lands-ui.command-shortcuts.enabled` направляет
+`/wand`, `//wand`, `/rg`, `/&fswand` в существующее меню приватов, кроме игроков
+с `arc.wand-bypass`; `/home set` вызывает `/sethome` HuskHomes.
+Старые внешние вызовы мебели и магазина сохраняются через алиасы в серверном
+`commands.yml`: `arcsystem`, `main`, `etd`, `reset-charges`, `give-claim-block`,
+`remove-soulbind`. Новых отдельных команд в `plugin.yml` нет.
+
 ## /arc help
 
 Показывает список всех доступных команд с описаниями.

@@ -1,7 +1,10 @@
 package ru.arc.landsui
 
+import me.angeschossen.lands.api.LandsIntegration
+import me.angeschossen.lands.api.items.ItemType
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
+import org.bukkit.inventory.ItemStack
 import ru.arc.ARC
 import ru.arc.gui.ArcMenus
 import ru.arc.core.PluginModule
@@ -16,6 +19,7 @@ object LandsUiModule : PluginModule {
     @Volatile private var settings: LandsUiSettings? = null
     @Volatile private var controller: LandsUiController? = null
     @Volatile private var regionTool: RegionTool? = null
+    private var commandShortcuts: ClaimMenuCommandListener? = null
     private var claimTool: ClaimBlockTool? = null
     private var regionAreaLimits: AutoCloseable? = null
 
@@ -24,6 +28,8 @@ object LandsUiModule : PluginModule {
     override fun reload() = start(LandsUiConfig.load(ARC.instance.dataPath).snapshot())
 
     override fun shutdown() {
+        commandShortcuts?.close()
+        commandShortcuts = null
         claimTool?.close()
         claimTool = null
         regionTool?.close()
@@ -36,6 +42,16 @@ object LandsUiModule : PluginModule {
     }
 
     fun isAvailable(): Boolean = controller != null
+
+    fun createClaimBlockItem(player: Player): ItemStack? {
+        if (!Bukkit.getPluginManager().isPluginEnabled("Lands")) return null
+        return runCatching {
+            val landPlayer = LandsIntegration.of(ARC.instance).getLandPlayer(player.uniqueId) ?: return null
+            ItemType.CLAIM_BLOCK.build(landPlayer)
+        }.onFailure { failure ->
+            warn("Could not create Lands claim block for {}: {}", player.name, failure.message)
+        }.getOrNull()
+    }
 
     fun open(player: Player) {
         ArcMenus.beginDialogFlow(player)
@@ -80,6 +96,8 @@ object LandsUiModule : PluginModule {
     }
 
     private fun start(loaded: LandsUiSettings) {
+        commandShortcuts?.close()
+        commandShortcuts = null
         controller?.close()
         controller = null
         claimTool?.close()
@@ -89,6 +107,12 @@ object LandsUiModule : PluginModule {
         regionAreaLimits?.close()
         regionAreaLimits = null
         settings = loaded
+        if (loaded.commandShortcutsEnabled) {
+            commandShortcuts = ClaimMenuCommandListener(
+                canOpenClaimMenu = ::isAvailable,
+                openClaimMenu = ::openCurrent,
+            ).also { Bukkit.getPluginManager().registerEvents(it, ARC.instance) }
+        }
         if (!loaded.enabled) {
             info("Lands UI module disabled by configuration")
             return

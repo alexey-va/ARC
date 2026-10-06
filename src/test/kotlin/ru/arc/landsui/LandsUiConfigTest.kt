@@ -17,10 +17,11 @@ class LandsUiConfigTest : StringSpec({
             val settings = LandsUiConfig.load(root).snapshot()
 
             settings.enabled shouldBe true
+            settings.commandShortcutsEnabled shouldBe false
             settings.maxListedPlayers shouldBe 12
             settings.text("guide-commands-body").contains("/lands edit НАЗВАНИЕ") shouldBe true
-            settings.text("guide-commands-body").contains("/lands delete") shouldBe true
-            settings.text("guide-body").contains("текущее поселение", ignoreCase = true) shouldBe true
+            settings.text("guide-commands-body").contains("/lands menu") shouldBe true
+            settings.text("guide-body").contains("Выбранное поселение", ignoreCase = true) shouldBe true
             settings.text("created-body").contains("первый чанк") shouldBe true
             listOf(
                 "land-label",
@@ -71,6 +72,20 @@ class LandsUiConfigTest : StringSpec({
             ).forEach { (key, color) ->
                 withClue(key) { settings.text(key).contains(color) shouldBe true }
             }
+        } finally {
+            ConfigManager.clear()
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    "enables command shortcuts only when explicitly configured" {
+        val root = Files.createTempDirectory("arc-lands-ui-shortcuts")
+        try {
+            val modules = Files.createDirectories(root.resolve("modules"))
+            Files.writeString(modules.resolve("lands-ui.yml"), "command-shortcuts:\n  enabled: true\n")
+            ConfigManager.clear()
+
+            LandsUiConfig.load(root).snapshot().commandShortcutsEnabled shouldBe true
         } finally {
             ConfigManager.clear()
             root.toFile().deleteRecursively()

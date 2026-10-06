@@ -10,6 +10,7 @@ data class LandsUiSettings(
     val enabled: Boolean,
     val maxListedPlayers: Int,
     private val text: Map<String, String>,
+    val commandShortcutsEnabled: Boolean = false,
 ) {
     fun text(key: String): String = text.getValue(key)
 
@@ -27,6 +28,7 @@ class LandsUiConfig(private val config: Config) {
         return LandsUiSettings(
             enabled = config.bool("enabled", true),
             maxListedPlayers = maxListedPlayers,
+            commandShortcutsEnabled = config.bool("command-shortcuts.enabled", false),
             text = DEFAULT_TEXT.mapValues { (key, fallback) ->
                 config.string("text.$key", fallback).also { value ->
                     require(value.isNotBlank()) { "Lands UI text '$key' cannot be blank" }

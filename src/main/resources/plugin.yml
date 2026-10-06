@@ -119,6 +119,24 @@ commands:
     description: Materialize one exact physical ARC case reward
     usage: /arc-reward-issue <player> <case> <entry>
 permissions:
+  denizencommand.remove-soulbind:
+    description: Remove EliteMobs soulbind from the held item
+    default: op
+  arc.system.interactions:
+    description: Run configured decoration interactions
+    default: op
+  arc.reset-charges:
+    description: Refill CMI charges through the existing paid service
+    default: op
+  arc.give-claim-block:
+    description: Give an owner-bound Lands claim block
+    default: op
+  arc.switch-other:
+    description: Transfer another player to a configured server
+    default: op
+  arc.wand-bypass:
+    description: Use WorldEdit and WorldGuard commands without the claims-menu redirect
+    default: op
   arc.admin:
     description: Administer ARC
     default: op

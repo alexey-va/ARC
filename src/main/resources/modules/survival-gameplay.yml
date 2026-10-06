@@ -1,0 +1,12 @@
+# Survival-only gameplay events retired from Denizen.
+# Leave disabled on every node unless the Survival server explicitly enables this module.
+enabled: false
+
+spawner:
+  chance-message: '⛏ Спавнер выпадет с шансом <chance>% с шелковым касанием'
+
+wither-cleanup:
+  world: survival
+  # Strictly older than two hours (20 ticks per second).
+  age-limit-ticks: 144000
+  period-ticks: 1200
