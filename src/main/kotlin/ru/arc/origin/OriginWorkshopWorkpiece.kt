@@ -4,6 +4,7 @@ import org.bukkit.Material
 import org.joml.Matrix4f
 import org.joml.Quaternionf
 import org.joml.Vector3f
+import java.util.Locale
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -17,6 +18,60 @@ internal enum class OriginWorkshopBoardModel(val itemId: String) {
     DRILLED_2("arc_workshop:board_drilled_2"),
     DRILLED_3("arc_workshop:board_drilled_3"),
     OFFCUT("arc_workshop:board_offcut"),
+}
+
+internal enum class OriginWorkshopWorkpieceRenderer(val configValue: String) {
+    MODEL("model"),
+    CUBES("cubes");
+
+    companion object {
+        fun parse(value: String): OriginWorkshopWorkpieceRenderer =
+            entries.firstOrNull { it.configValue == value.trim().lowercase(Locale.ROOT) }
+                ?: throw IllegalArgumentException("workpiece-renderer must be 'model' or 'cubes', got '$value'")
+    }
+}
+
+/** Coarse 0.08-block cube layout exported by the workshop cube preview. */
+internal fun originWorkshopCoarseBoardPieces(model: OriginWorkshopBoardModel): List<OriginWorkshopWorkpiecePiece> {
+    val (lengthCells, holes) = when (model) {
+        OriginWorkshopBoardModel.RAW -> 13 to 0
+        OriginWorkshopBoardModel.CUT_ONCE -> 11 to 0
+        OriginWorkshopBoardModel.CUT -> 9 to 0
+        OriginWorkshopBoardModel.DRILLED_1 -> 9 to 1
+        OriginWorkshopBoardModel.DRILLED_2 -> 9 to 2
+        OriginWorkshopBoardModel.DRILLED_3 -> 9 to 3
+        OriginWorkshopBoardModel.OFFCUT -> 2 to 0
+    }
+    val cell = 0.08
+    val length = lengthCells * cell
+    val widthCells = 3
+    val missing = buildSet {
+        for (holeX in COARSE_HOLE_CENTERS.take(holes)) {
+            for (xIndex in 0 until lengthCells) {
+                val lower = -length / 2.0 + xIndex * cell
+                val upper = lower + cell
+                if (lower >= holeX - cell / 2.0 - COARSE_GRID_EPSILON &&
+                    upper <= holeX + cell / 2.0 + COARSE_GRID_EPSILON
+                ) {
+                    add(xIndex to 1)
+                }
+            }
+        }
+    }
+    return buildList {
+        for (xIndex in 0 until lengthCells) for (zIndex in 0 until widthCells) {
+            if ((xIndex to zIndex) in missing) continue
+            add(OriginWorkshopWorkpiecePiece(
+                OriginWorkshopPoint(
+                    -length / 2.0 + (xIndex + 0.5) * cell,
+                    0.0,
+                    -widthCells * cell / 2.0 + (zIndex + 0.5) * cell,
+                ),
+                OriginWorkshopGamePartSize(cell.toFloat(), cell.toFloat(), cell.toFloat()),
+                Material.OAK_PLANKS,
+            ))
+        }
+    }
 }
 
 /** ItemDisplay has a native Y+180 turn; cancel it once while preserving the board's world rotation. */
@@ -116,6 +171,8 @@ private const val HOLE_SIDE = 0.075
 private const val SIDE_RAIL_WIDTH = (BOARD_WIDTH - HOLE_SIDE) / 2.0
 private const val SIDE_RAIL_CENTER_Z = HOLE_SIDE / 2.0 + SIDE_RAIL_WIDTH / 2.0
 private val DRILL_HOLE_X = listOf(-0.23, 0.0, 0.23)
+private val COARSE_HOLE_CENTERS = listOf(-0.24, 0.0, 0.24)
+private const val COARSE_GRID_EPSILON = 1.0e-9
 
 /** A thin, private outline centered exactly on the accepted loading/coating target. */
 internal fun originWorkshopPlacementMarker(coating: Boolean): List<OriginWorkshopWorkpiecePiece> {

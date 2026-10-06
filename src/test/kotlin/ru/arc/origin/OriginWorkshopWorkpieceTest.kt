@@ -12,6 +12,50 @@ import org.joml.Quaternionf
 import org.joml.Vector3f
 
 class OriginWorkshopWorkpieceTest : FreeSpec({
+    "workpiece renderer accepts the two config values and coarse board states match the cube preview" {
+        OriginWorkshopWorkpieceRenderer.parse(" model ") shouldBe OriginWorkshopWorkpieceRenderer.MODEL
+        OriginWorkshopWorkpieceRenderer.parse("CUBES") shouldBe OriginWorkshopWorkpieceRenderer.CUBES
+        shouldThrow<IllegalArgumentException> { OriginWorkshopWorkpieceRenderer.parse("display") }
+
+        val expected = linkedMapOf(
+            OriginWorkshopBoardModel.RAW to (39 to 1.04),
+            OriginWorkshopBoardModel.CUT_ONCE to (33 to 0.88),
+            OriginWorkshopBoardModel.CUT to (27 to 0.72),
+            OriginWorkshopBoardModel.DRILLED_1 to (26 to 0.72),
+            OriginWorkshopBoardModel.DRILLED_2 to (25 to 0.72),
+            OriginWorkshopBoardModel.DRILLED_3 to (24 to 0.72),
+            OriginWorkshopBoardModel.OFFCUT to (6 to 0.16),
+        )
+        expected.forEach { (model, dimensions) ->
+            val pieces = originWorkshopCoarseBoardPieces(model)
+            pieces.size shouldBe dimensions.first
+            pieces.all { it.material == Material.OAK_PLANKS } shouldBe true
+            pieces.all { it.size == OriginWorkshopGamePartSize(0.08f, 0.08f, 0.08f) } shouldBe true
+            pieces.map { it.center }.toSet().size shouldBe pieces.size
+            (pieces.maxOf { it.center.x + it.size.x / 2.0 } - pieces.minOf { it.center.x - it.size.x / 2.0 })
+                .near(dimensions.second) shouldBe true
+            (pieces.maxOf { it.center.z + it.size.z / 2.0 } - pieces.minOf { it.center.z - it.size.z / 2.0 })
+                .near(0.24) shouldBe true
+            (pieces.maxOf { it.center.y + it.size.y / 2.0 } - pieces.minOf { it.center.y - it.size.y / 2.0 })
+                .near(0.08) shouldBe true
+        }
+
+        val drilled = listOf(
+            OriginWorkshopBoardModel.DRILLED_1 to 1,
+            OriginWorkshopBoardModel.DRILLED_2 to 2,
+            OriginWorkshopBoardModel.DRILLED_3 to 3,
+        )
+        drilled.forEach { (model, holes) ->
+            val pieces = originWorkshopCoarseBoardPieces(model)
+            listOf(-0.24, 0.0, 0.24).take(holes).forEach { holeX ->
+                pieces.any { it.center.x.near(holeX) && it.center.y.near(0.0) && it.center.z.near(0.0) } shouldBe false
+                for (sideZ in listOf(-0.08, 0.08)) {
+                    pieces.any { it.center.x.near(holeX) && it.center.z.near(sideZ) } shouldBe true
+                }
+            }
+        }
+    }
+
     "the sawn board stays centered in one cuboid before drilling" {
         originWorkshopBoardPieces(0).single().size shouldBe OriginWorkshopGamePartSize(0.72f, 0.08f, 0.22f)
         originWorkshopBoardPieces(0).single().center shouldBe OriginWorkshopPoint(0.0, 0.0, 0.0)

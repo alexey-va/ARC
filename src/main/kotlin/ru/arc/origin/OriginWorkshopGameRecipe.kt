@@ -48,6 +48,7 @@ internal fun originWorkshopGameRecipe(
     tuning: OriginWorkshopMachineTuning,
     stock: OriginWorkshopPoint,
     rules: OriginWorkshopGameRules,
+    workpieceRenderer: OriginWorkshopWorkpieceRenderer = OriginWorkshopWorkpieceRenderer.MODEL,
 ): OriginWorkshopGameRecipe {
     fun point(x: Double, y: Double, z: Double) = OriginWorkshopPoint(x, y, z)
     fun interaction(
@@ -84,9 +85,10 @@ internal fun originWorkshopGameRecipe(
             val sawInput = point(tuning.sawFeedStartX, h + 0.17, boardZ)
             val sawOutput = point(tuning.sawFeedStartX + tuning.sawFeedDistance, h + 0.17, boardZ)
             val sawControl = point(-1.65, h + 0.34, -0.70)
-            val drillInput = point(0.23, h + 0.14, -0.55)
+            val drillHoleEdge = if (workpieceRenderer == OriginWorkshopWorkpieceRenderer.CUBES) 0.24 else 0.23
+            val drillInput = point(drillHoleEdge, h + 0.14, -0.55)
             val drillCenter = point(0.0, h + 0.14, -0.55)
-            val drillLast = point(-0.23, h + 0.14, -0.55)
+            val drillLast = point(-drillHoleEdge, h + 0.14, -0.55)
             val drillControl = point(0.30, h + 0.58, -0.42)
             val assembly = point(1.35, h + 0.035, -0.35)
             val leftLeg = point(1.30, h + 0.07, 0.50)
@@ -240,4 +242,19 @@ internal fun originWorkshopAdvance(
     val timed = recipe.timedStages[progress.stage] ?: return progress
     if (now - progress.stageStartedAt < timed.durationTicks) return progress
     return OriginWorkshopGameProgress(timed.nextStage, now)
+}
+
+/** A drilled board settles at the center of the hole just processed, directly under the fixed spindle. */
+internal fun originWorkshopDrillSettleTarget(
+    recipe: OriginWorkshopGameRecipe,
+    stage: OriginWorkshopGameStage,
+): OriginWorkshopPoint? {
+    if (recipe.role != OriginWorkshopTableRole.CARPENTER) return null
+    return when (stage) {
+        OriginWorkshopGameStage.DRILLING,
+        OriginWorkshopGameStage.DRILLING_SECOND,
+        OriginWorkshopGameStage.DRILLING_THIRD,
+        -> recipe.timedStages[stage]?.target
+        else -> null
+    }
 }

@@ -337,7 +337,11 @@ internal fun originWorkshopRayTransformedCube(
     return near.takeIf { it > 0.0 && it <= reach }
 }
 
-private data class GameSettings(val enabled: Boolean, val rules: OriginWorkshopGameRules) {
+private data class GameSettings(
+    val enabled: Boolean,
+    val rules: OriginWorkshopGameRules,
+    val workpieceRenderer: OriginWorkshopWorkpieceRenderer,
+) {
     companion object {
         fun load(): GameSettings {
             val config = ConfigManager.ofModule(ARC.instance.dataPath, "origin-workshop-game.yml")
@@ -346,6 +350,7 @@ private data class GameSettings(val enabled: Boolean, val rules: OriginWorkshopG
             return GameSettings(
                 config.bool("origin-workshop-game.enabled", false),
                 OriginWorkshopGameRules(timeout = timeout),
+                OriginWorkshopWorkpieceRenderer.parse(config.string("origin-workshop-game.workpiece-renderer", "model")),
             )
         }
     }
@@ -422,6 +427,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         val recipe: OriginWorkshopGameRecipe,
         val rewardHandler: OriginWorkshopCraftRewards,
         var progress: OriginWorkshopGameProgress,
+        val workpieceRenderer: OriginWorkshopWorkpieceRenderer,
         val boardModels: Map<OriginWorkshopBoardModel, ItemStack> = emptyMap(),
         var lastProgressAt: Long = began,
         val parts: MutableList<PacketDisplay> = mutableListOf(),
@@ -589,8 +595,10 @@ internal object OriginWorkshopGame : PluginModule, Listener {
     private fun startClick(player: Player) {
         val selectedTable = idleTable ?: return
         val productId = OriginFurnitureWorkshopModule.productIdFor(selectedTable) ?: return
-        val recipe = OriginWorkshopTablesModule.recipeFor(selectedTable, productId, settings?.rules ?: return) ?: return
-        val boardModels = loadBoardModels(player, recipe) ?: return
+        val gameSettings = settings ?: return
+        val renderer = gameSettings.workpieceRenderer
+        val recipe = OriginWorkshopTablesModule.recipeFor(selectedTable, productId, gameSettings.rules, renderer) ?: return
+        val boardModels = loadBoardModels(player, recipe, renderer) ?: return
         val handler = rewards.getOrPut(productId) { OriginWorkshopCraftRewards(COOLDOWN, productId) }
         if (!pendingStatus.add(player.uniqueId)) return
         if (pendingStatus.size > 32) {
@@ -634,7 +642,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
                         sendBusyFeedback(player, session!!.playerId)
                         return@runSync
                     }
-                    begin(player, selectedTable, recipe, handler, boardModels)
+                    begin(player, selectedTable, recipe, handler, renderer, boardModels)
                 }
             }
         }
@@ -643,8 +651,9 @@ internal object OriginWorkshopGame : PluginModule, Listener {
     private fun loadBoardModels(
         player: Player,
         recipe: OriginWorkshopGameRecipe,
+        renderer: OriginWorkshopWorkpieceRenderer,
     ): Map<OriginWorkshopBoardModel, ItemStack>? {
-        if (recipe.role != OriginWorkshopTableRole.CARPENTER) return emptyMap()
+        if (recipe.role != OriginWorkshopTableRole.CARPENTER || renderer == OriginWorkshopWorkpieceRenderer.CUBES) return emptyMap()
         val resolved = linkedMapOf<OriginWorkshopBoardModel, ItemStack>()
         for (model in OriginWorkshopBoardModel.entries) {
             val lookup = runCatching { CustomStack.getInstance(model.itemId)?.itemStack?.clone() }
@@ -667,6 +676,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         selectedTable: String,
         recipe: OriginWorkshopGameRecipe,
         handler: OriginWorkshopCraftRewards,
+        renderer: OriginWorkshopWorkpieceRenderer,
         boardModels: Map<OriginWorkshopBoardModel, ItemStack>,
     ) {
         val rules = settings?.rules ?: return
@@ -677,6 +687,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         val active = Session(
             UUID.randomUUID(), player.uniqueId, player.world.uid, nowTick(), selectedTable, recipe, handler,
             OriginWorkshopGameProgress(recipe.initialStage, nowTick()),
+            renderer,
             boardModels,
         )
         session = active
@@ -935,6 +946,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
             OriginWorkshopGameStage.DRILLING,
             OriginWorkshopGameStage.DRILLING_SECOND,
             OriginWorkshopGameStage.DRILLING_THIRD -> {
+                val drillCenter = originWorkshopDrillSettleTarget(active.recipe, before.stage) ?: return
                 active.workpiece?.remove()
                 val holes = when (before.stage) {
                     OriginWorkshopGameStage.DRILLING -> 1
@@ -947,8 +959,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
                     else -> OriginWorkshopBoardModel.DRILLED_3
                 }
                 active.workpiece = spawnProp(active, player, originWorkshopBoardPieces(holes), boardModel)
-                val base = target(active, OriginWorkshopGameStage.CARRY_BOARD_TO_DRILL)
-                settle(active, active.workpiece!!, base.copy(x = base.x - 0.23 * (holes - 1)))
+                settle(active, active.workpiece!!, drillCenter)
             }
             OriginWorkshopGameStage.UPHOLSTER_PRESSING -> {
                 active.workpiece?.remove()
@@ -1116,7 +1127,10 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         boardModel: OriginWorkshopBoardModel? = null,
     ): Prop {
         val displays = checkNotNull(owner)
-        val itemDisplay = boardModel?.let { model ->
+        val renderGeometry = if (boardModel != null && active.workpieceRenderer == OriginWorkshopWorkpieceRenderer.CUBES) {
+            originWorkshopCoarseBoardPieces(boardModel)
+        } else geometry
+        val itemDisplay = boardModel?.takeIf { active.workpieceRenderer == OriginWorkshopWorkpieceRenderer.MODEL }?.let { model ->
             val item = active.boardModels[model] ?: error("Validated workshop board model ${model.itemId} is missing from the session")
             displays.spawnItem(player.location, item.clone()).apply {
                 isVisibleByDefault = false
@@ -1133,8 +1147,8 @@ internal object OriginWorkshopGame : PluginModule, Listener {
                 transformation = Transformation(Vector3f(), Quaternionf(), Vector3f(1f), Quaternionf())
             }
         }?.also { active.parts += it }
-        val pieces = geometry.map { piece ->
-            val display = if (boardModel == null) spawnBlock(displays, piece.material, player.location, piece.size).apply {
+        val pieces = renderGeometry.map { piece ->
+            val display = if (itemDisplay == null) spawnBlock(displays, piece.material, player.location, piece.size).apply {
                 isVisibleByDefault = false
                 showTo(player)
             } else null
@@ -1396,7 +1410,8 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         idleTable = next
         if (next == null) return
         val product = OriginFurnitureWorkshopModule.productIdFor(next) ?: return
-        val recipe = OriginWorkshopTablesModule.recipeFor(next, product, settings?.rules ?: return) ?: return
+        val gameSettings = settings ?: return
+        val recipe = OriginWorkshopTablesModule.recipeFor(next, product, gameSettings.rules, gameSettings.workpieceRenderer) ?: return
         OriginWorkshopTablesModule.highlightCraftControl(next, "start")
         label = OriginWorkshopTablesModule.pointAt(next, frontGuidanceAnchor(start))?.let {
             spawnLabel(it, recipe.title + " · ЛКМ", visibleByDefault = true)

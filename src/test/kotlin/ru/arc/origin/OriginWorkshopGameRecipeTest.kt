@@ -121,4 +121,61 @@ class OriginWorkshopGameRecipeTest : FreeSpec({
         recipes.getValue(OriginWorkshopTableRole.FINISHER).resultAnchor.y shouldBe dimensions.height + 0.325
         abs(interaction(OriginWorkshopTableRole.FINISHER, OriginWorkshopGameAction.START_FINISH_PANEL).target.y - (dimensions.height + 0.52)) shouldBe 0.0
     }
+
+    "each renderer puts the processed board hole under the fixed drill spindle" {
+        val dimensions = OriginWorkshopTableDimensions.DEFAULT
+        val tuning = OriginWorkshopMachineTuning()
+        val rules = OriginWorkshopGameRules()
+        val spindle = originWorkshopTablePieces(OriginWorkshopTableRole.CARPENTER, 0, dimensions, tuning)
+            .single { it.key == "carpenter-drill-bit" }
+        val drillStages = listOf(
+            OriginWorkshopGameStage.DRILLING,
+            OriginWorkshopGameStage.DRILLING_SECOND,
+            OriginWorkshopGameStage.DRILLING_THIRD,
+        )
+
+        for ((renderer, edgeHole) in listOf(
+            OriginWorkshopWorkpieceRenderer.MODEL to 0.23,
+            OriginWorkshopWorkpieceRenderer.CUBES to 0.24,
+        )) {
+            val recipe = originWorkshopGameRecipe(
+                OriginWorkshopTableRole.CARPENTER, "test:drill-${renderer.configValue}", dimensions, tuning,
+                OriginWorkshopPoint(0.0, 0.0, 0.0), rules, renderer,
+            )
+            val holeCenters = listOf(-edgeHole, 0.0, edgeHole)
+            val boardCenters = drillStages.map { stage ->
+                val target = originWorkshopDrillSettleTarget(recipe, stage)
+                (target != null) shouldBe true
+                target!!
+            }
+
+            boardCenters.zip(holeCenters).forEach { (boardCenter, holeX) ->
+                (abs(boardCenter.x + holeX - spindle.x) < 1e-9) shouldBe true
+                boardCenter.z shouldBe spindle.z
+            }
+            recipe.interactions.getValue(OriginWorkshopGameStage.CARRY_BOARD_TO_DRILL).target.x shouldBe edgeHole
+            recipe.interactions.getValue(OriginWorkshopGameStage.DRILL_ALIGN_CENTER).target.x shouldBe 0.0
+            recipe.interactions.getValue(OriginWorkshopGameStage.DRILL_ALIGN_LAST).target.x shouldBe -edgeHole
+        }
+    }
+
+    "the saw feed crosses the full raw cube board and the blade clears both feed endpoints" {
+        val dimensions = OriginWorkshopTableDimensions.DEFAULT
+        val tuning = OriginWorkshopMachineTuning()
+        val recipe = originWorkshopGameRecipe(
+            OriginWorkshopTableRole.CARPENTER, "test:saw-cubes", dimensions, tuning,
+            OriginWorkshopPoint(0.0, 0.0, 0.0), OriginWorkshopGameRules(), OriginWorkshopWorkpieceRenderer.CUBES,
+        )
+        val input = recipe.interactions.getValue(OriginWorkshopGameStage.CARRY_RAW_TO_SAW).target
+        val output = recipe.timedStages.getValue(OriginWorkshopGameStage.SAWING).target
+        val raw = originWorkshopCoarseBoardPieces(OriginWorkshopBoardModel.RAW)
+        val halfLength = raw.maxOf { it.center.x + it.size.x / 2.0 }
+        val bladeAtInput = tuning.sawPivotX - input.x
+        val bladeAtOutput = tuning.sawPivotX - output.x
+
+        raw.size shouldBe 39
+        (bladeAtInput > halfLength) shouldBe true
+        (bladeAtOutput < -halfLength) shouldBe true
+        (output.x - input.x > 2 * halfLength) shouldBe true
+    }
 })

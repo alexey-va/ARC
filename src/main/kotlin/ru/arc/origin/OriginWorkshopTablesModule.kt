@@ -916,6 +916,7 @@ internal object OriginWorkshopTablesModule : PluginModule {
         tableId: String,
         productId: String,
         rules: OriginWorkshopGameRules,
+        workpieceRenderer: OriginWorkshopWorkpieceRenderer = OriginWorkshopWorkpieceRenderer.MODEL,
     ): OriginWorkshopGameRecipe? {
         val table = machineTables[tableId] ?: return null
         val stock = when (table.definition.role) {
@@ -937,6 +938,7 @@ internal object OriginWorkshopTablesModule : PluginModule {
             table.tuning,
             stock,
             rules,
+            workpieceRenderer,
         )
     }
 

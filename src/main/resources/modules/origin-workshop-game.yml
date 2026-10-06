@@ -3,3 +3,5 @@ origin-workshop-game:
   # One player uses the sleeping worker's station; all materials stay in the scene.
   # Cancel after this many seconds without completing a production step.
   session-timeout-seconds: 180
+  # Carpenter board workpieces: ItemsAdder mesh (model) or equal 0.08-block packet cubes.
+  workpiece-renderer: model
