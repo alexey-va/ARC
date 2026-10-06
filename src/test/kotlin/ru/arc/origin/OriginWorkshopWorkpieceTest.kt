@@ -3,16 +3,62 @@ package ru.arc.origin
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.floats.shouldBeLessThan
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 import org.bukkit.Material
+import org.joml.Quaternionf
+import org.joml.Vector3f
 
 class OriginWorkshopWorkpieceTest : FreeSpec({
     "the sawn board stays centered in one cuboid before drilling" {
         originWorkshopBoardPieces(0).single().size shouldBe OriginWorkshopGamePartSize(0.72f, 0.08f, 0.22f)
         originWorkshopBoardPieces(0).single().center shouldBe OriginWorkshopPoint(0.0, 0.0, 0.0)
         originWorkshopBoardPieces(0).single().material shouldBe Material.OAK_PLANKS
+    }
+
+    "fixed ItemDisplay compensation cancels the native half turn for every workpiece pose" {
+        for (angle in listOf(-Math.PI, -Math.PI / 2, 0.0, Math.PI / 3, Math.PI)) {
+            val desired = Quaternionf().rotationY(angle.toFloat())
+            val entity = originWorkshopBoardItemDisplayRotation(desired)
+            val rendered = Quaternionf(entity).rotateY(Math.PI.toFloat())
+            for (point in listOf(Vector3f(1f, 0f, 0f), Vector3f(0f, 0f, 1f))) {
+                val expected = Vector3f(point).rotate(desired)
+                val actual = Vector3f(point).rotate(rendered)
+                (actual.distance(expected) < 1.0e-5f) shouldBe true
+            }
+        }
+    }
+
+    "pure board cuboid hitboxes stay centered and match rotated piece dimensions" {
+        val center = OriginWorkshopPoint(5.25, 72.0, -8.5)
+        val piece = OriginWorkshopWorkpiecePiece(
+            OriginWorkshopPoint(0.18, 0.03, -0.02),
+            OriginWorkshopGamePartSize(0.24f, 0.08f, 0.075f),
+            Material.OAK_PLANKS,
+        )
+        for (angle in listOf(0.0, Math.PI / 2, Math.PI, -Math.PI / 2)) {
+            val rotation = Quaternionf().rotationY(angle.toFloat())
+            val matrix = originWorkshopWorkpieceHitboxMatrix(center, rotation, piece)
+            val corners = buildList {
+                for (x in listOf(0f, 1f)) for (y in listOf(0f, 1f)) for (z in listOf(0f, 1f)) {
+                    add(matrix.transformPosition(Vector3f(x, y, z)))
+                }
+            }
+            val localCenter = rotation.transform(Vector3f(piece.center.x.toFloat(), piece.center.y.toFloat(), piece.center.z.toFloat()))
+            val half = rotation.transform(Vector3f(piece.size.x / 2f, piece.size.y / 2f, piece.size.z / 2f))
+            val expected = Vector3f(center.x.toFloat(), center.y.toFloat(), center.z.toFloat()).add(localCenter)
+            val actualCenter = Vector3f(
+                (corners.minOf { it.x } + corners.maxOf { it.x }) / 2f,
+                (corners.minOf { it.y } + corners.maxOf { it.y }) / 2f,
+                (corners.minOf { it.z } + corners.maxOf { it.z }) / 2f,
+            )
+            actualCenter.distance(expected) shouldBeLessThan 1.0e-5f
+            (corners.maxOf { it.x } - corners.minOf { it.x }).near(2f * abs(half.x)) shouldBe true
+            (corners.maxOf { it.y } - corners.minOf { it.y }).near(2f * abs(half.y)) shouldBe true
+            (corners.maxOf { it.z } - corners.minOf { it.z }).near(2f * abs(half.z)) shouldBe true
+        }
     }
 
     "progressive drilling makes one through-hole at a time without overlapping wood pieces" {
@@ -77,6 +123,8 @@ private fun volume(piece: OriginWorkshopWorkpiecePiece): Double =
     piece.size.x.toDouble() * piece.size.y.toDouble() * piece.size.z.toDouble()
 
 private fun Double.near(expected: Double): Boolean = abs(this - expected) <= 1.0e-8
+
+private fun Float.near(expected: Float): Boolean = abs(this - expected) <= 1.0e-5f
 
 private fun contains(pieces: List<OriginWorkshopWorkpiecePiece>, x: Double, y: Double, z: Double): Boolean =
     pieces.any { piece ->

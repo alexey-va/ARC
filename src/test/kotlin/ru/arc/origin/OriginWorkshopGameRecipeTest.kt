@@ -94,9 +94,9 @@ class OriginWorkshopGameRecipeTest : FreeSpec({
             recipes.getValue(role).interactions.values.single { it.action == action }
 
         val carpenterSawInput = interaction(OriginWorkshopTableRole.CARPENTER, OriginWorkshopGameAction.PLACE_SAW).target
-        carpenterSawInput shouldBe OriginWorkshopPoint(tuning.sawFeedStartX, dimensions.height + 0.19, tuning.sawPivotZ + 0.075)
+        carpenterSawInput shouldBe OriginWorkshopPoint(tuning.sawFeedStartX, dimensions.height + 0.17, tuning.sawPivotZ + 0.075)
         recipes.getValue(OriginWorkshopTableRole.CARPENTER).timedStages.getValue(OriginWorkshopGameStage.SAWING).target shouldBe
-            OriginWorkshopPoint(tuning.sawFeedStartX + tuning.sawFeedDistance, dimensions.height + 0.19, tuning.sawPivotZ + 0.075)
+            OriginWorkshopPoint(tuning.sawFeedStartX + tuning.sawFeedDistance, dimensions.height + 0.17, tuning.sawPivotZ + 0.075)
 
         interaction(OriginWorkshopTableRole.UPHOLSTERER, OriginWorkshopGameAction.ACTIVATE_PRESS).target shouldBe
             OriginWorkshopPoint(tuning.pressCenterX, dimensions.height + 1.095, tuning.pressCenterZ)

@@ -81,8 +81,8 @@ internal fun originWorkshopGameRecipe(
     when (role) {
         OriginWorkshopTableRole.CARPENTER -> {
             val boardZ = tuning.sawPivotZ + 0.075
-            val sawInput = point(tuning.sawFeedStartX, h + 0.19, boardZ)
-            val sawOutput = point(tuning.sawFeedStartX + tuning.sawFeedDistance, h + 0.19, boardZ)
+            val sawInput = point(tuning.sawFeedStartX, h + 0.17, boardZ)
+            val sawOutput = point(tuning.sawFeedStartX + tuning.sawFeedDistance, h + 0.17, boardZ)
             val sawControl = point(-1.65, h + 0.34, -0.70)
             val drillInput = point(0.23, h + 0.14, -0.55)
             val drillCenter = point(0.0, h + 0.14, -0.55)

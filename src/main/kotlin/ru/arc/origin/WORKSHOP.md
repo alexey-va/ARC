@@ -84,11 +84,17 @@ observation; a successful package or health response does not establish them.
 
 `./gradlew exportWorkshopPreview -PworkshopPreviewOutput=/absolute/path/scene.json`
 exports the production table geometry, mechanism poses, progressive board holes,
-and shoulder anchor. It includes all four stations and 17 representative states;
+and shoulder anchor. It includes all four stations and 19 representative states;
 it does not instantiate Bukkit worlds/entities or claim native-client acceptance.
 Bake its vanilla material palette with the sibling ops location-atelier's
 `vanilla_assets.py` and the cached client JAR, then inspect textured renders from
 front, side, top, overview, and the player's 1.62-block eye level. Use the actual
 block model quads scaled by each display's dimensions. A human mannequin is only
-an approximate silhouette; world context, NPCs and ItemsAdder result models are
+an approximate silhouette; world context, NPCs and finished ItemsAdder furniture models are
 not included in this receipt. Re-export after model/pose changes.
+
+Carpenter boards use the `arc_workshop:board_*` ItemsAdder models from the ops
+content tree. Their face UVs are anchored to a shared model coordinate system,
+so drilling reveals holes without rescaling or repeating the grain per cuboid.
+The same geometric pieces remain the analytic hitboxes. Missing board assets
+block a new carpenter session before reservation or a reward claim.

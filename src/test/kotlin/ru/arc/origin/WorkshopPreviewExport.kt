@@ -37,10 +37,10 @@ object WorkshopPreviewExport {
         fun cuboid(key: String, material: String, x: Double, y: Double, z: Double, w: Double, h: Double, d: Double,
             ry: Double = 0.0) = mapOf<String, Any>("key" to key, "material" to material, "x" to x, "y" to y, "z" to z,
                 "width" to w, "height" to h, "depth" to d, "rotationY" to ry)
-        fun board(holes: Int, center: OriginWorkshopPoint) = originWorkshopBoardPieces(holes).mapIndexed { i, p ->
-            cuboid("player-board-$i", p.material.name, center.x + p.center.x, center.y + p.center.y, center.z + p.center.z,
-                p.size.x.toDouble(), p.size.y.toDouble(), p.size.z.toDouble())
-        }
+        fun item(key: String, model: String, center: OriginWorkshopPoint, ry: Double = 0.0) =
+            cuboid(key, "arc_workshop:$model", center.x, center.y, center.z, 1.0, 1.0, 1.0, ry)
+        fun board(holes: Int, center: OriginWorkshopPoint) = listOf(item("player-board",
+            if (holes == 0) "board_cut" else "board_drilled_$holes", center))
         val names = mapOf(OriginWorkshopTableRole.CARPENTER to "Столяр", OriginWorkshopTableRole.UPHOLSTERER to "Обивщик",
             OriginWorkshopTableRole.ASSEMBLER to "Сборщик", OriginWorkshopTableRole.FINISHER to "Отделочник")
         OriginWorkshopTableRole.entries.forEach { state(it.key, "${names[it]} · станок", it) }
@@ -57,8 +57,10 @@ object WorkshopPreviewExport {
         }
         val cutAt = recipe.interactions.getValue(OriginWorkshopGameStage.PICK_SAWN_BOARD).target
         val offcuts = listOf(0.30, 0.58).mapIndexed { i, z ->
-            cuboid("offcut-$i", "OAK_PLANKS", cutAt.x - 0.60, cutAt.y - 0.15, cutAt.z + z, 0.12, 0.08, 0.22)
+            item("offcut-$i", "board_offcut", OriginWorkshopPoint(cutAt.x - 0.60, cutAt.y - 0.13, cutAt.z + z))
         }
+        state("raw-board", "Столяр · целая заготовка", OriginWorkshopTableRole.CARPENTER, extras = listOf(item("player-board", "board_raw", cutAt)))
+        state("one-cut", "Столяр · первый распил", OriginWorkshopTableRole.CARPENTER, extras = listOf(item("player-board", "board_cut_once", cutAt)) + offcuts.take(1))
         state("two-cuts", "Столяр · два распила и обрезки", OriginWorkshopTableRole.CARPENTER, "saw", 1.0, board(0, cutAt) + offcuts)
         val drill = recipe.interactions.getValue(OriginWorkshopGameStage.CARRY_BOARD_TO_DRILL).target
         for (holes in 1..3) state("holes-$holes", "Столяр · отверстий: $holes", OriginWorkshopTableRole.CARPENTER, "drill", 1.0,
@@ -72,7 +74,7 @@ object WorkshopPreviewExport {
             cuboid("mannequin-arm-left", "BLUE_TERRACOTTA", 0.36, 1.04, -2.2, 0.22, 0.72, 0.25),
             cuboid("mannequin-leg-right", "GRAY_TERRACOTTA", -0.13, 0.34, -2.2, 0.24, 0.68, 0.25),
             cuboid("mannequin-leg-left", "GRAY_TERRACOTTA", 0.13, 0.34, -2.2, 0.24, 0.68, 0.25),
-            cuboid("shoulder-board", "OAK_PLANKS", pose.center.x, pose.center.y, -2.2 + pose.center.z, 1.0, 0.08, 0.22, Math.toDegrees(pose.rotationRadians)))
+            item("shoulder-board", "board_raw", pose.center.copy(z = -2.2 + pose.center.z), Math.toDegrees(pose.rotationRadians)))
         state("shoulder", "Столяр · заготовка на плече (манекен)", OriginWorkshopTableRole.CARPENTER, extras = mannequin)
         state("press", "Обивщик · прижим в нижней точке", OriginWorkshopTableRole.UPHOLSTERER, "press", 0.65,
             listOf(cuboid("player-cloth", "RED_WOOL", tuning.pressCenterX, dimensions.height + 0.74, tuning.pressCenterZ, 0.64, 0.05, 0.46)))
@@ -85,7 +87,7 @@ object WorkshopPreviewExport {
         val output = Path.of(args.single())
         Files.createDirectories(output.parent)
         Files.writeString(output, GsonBuilder().setPrettyPrinting().create().toJson(mapOf("states" to states,
-            "evidence" to "Production geometry and poses; local yaw 0; vanilla block assets; no world, NPCs or ItemsAdder item models.")))
+            "evidence" to "Production geometry and poses; local yaw 0; vanilla block assets and exact arc_workshop item models/UVs; no world, NPCs or finished furniture models. Item model native Y180 and runtime compensation cancel.")))
         println("WORKSHOP_PREVIEW states=${states.size} output=$output")
     }
 }

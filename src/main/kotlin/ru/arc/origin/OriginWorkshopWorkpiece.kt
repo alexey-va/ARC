@@ -1,9 +1,43 @@
 package ru.arc.origin
 
 import org.bukkit.Material
+import org.joml.Matrix4f
+import org.joml.Quaternionf
+import org.joml.Vector3f
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
+
+/** ItemsAdder board models are the single visible render for each carpenter workpiece state. */
+internal enum class OriginWorkshopBoardModel(val itemId: String) {
+    RAW("arc_workshop:board_raw"),
+    CUT_ONCE("arc_workshop:board_cut_once"),
+    CUT("arc_workshop:board_cut"),
+    DRILLED_1("arc_workshop:board_drilled_1"),
+    DRILLED_2("arc_workshop:board_drilled_2"),
+    DRILLED_3("arc_workshop:board_drilled_3"),
+    OFFCUT("arc_workshop:board_offcut"),
+}
+
+/** ItemDisplay has a native Y+180 turn; cancel it once while preserving the board's world rotation. */
+internal fun originWorkshopBoardItemDisplayRotation(modelRotation: Quaternionf): Quaternionf =
+    Quaternionf(modelRotation).rotateY(Math.PI.toFloat())
+
+/** Unit-cube transform for one pure analytical board piece at a centered world pose. */
+internal fun originWorkshopWorkpieceHitboxMatrix(
+    center: OriginWorkshopPoint,
+    rotation: Quaternionf,
+    piece: OriginWorkshopWorkpiecePiece,
+): Matrix4f {
+    val size = piece.size
+    val offset = rotation.transform(Vector3f(piece.center.x.toFloat(), piece.center.y.toFloat(), piece.center.z.toFloat()))
+    val half = rotation.transform(Vector3f(size.x / 2f, size.y / 2f, size.z / 2f))
+    return Matrix4f().translation(
+        center.x.toFloat() + offset.x - half.x,
+        center.y.toFloat() + offset.y - half.y,
+        center.z.toFloat() + offset.z - half.z,
+    ).rotate(rotation).scale(size.x, size.y, size.z)
+}
 
 /** A board-local cuboid; center coordinates are relative to the centered workpiece. */
 internal data class OriginWorkshopWorkpiecePiece(

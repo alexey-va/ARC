@@ -385,12 +385,31 @@ internal object OriginWorkshopGame : PluginModule, Listener {
     private val woodGlow = Color.fromRGB(191, 139, 82)
     private val hoverGlow = Color.fromRGB(255, 210, 99)
 
-    private data class PropPiece(val display: PacketBlockDisplay, val geometry: OriginWorkshopWorkpiecePiece)
-    private data class Prop(val pieces: List<PropPiece>) {
-        fun remove() = pieces.forEach { it.display.remove() }
-        fun glow(color: Color?) = pieces.forEach {
-            it.display.isGlowing = color != null
-            it.display.glowColorOverride = color
+    private data class PropPiece(val display: PacketBlockDisplay?, val geometry: OriginWorkshopWorkpiecePiece)
+    private data class Prop(
+        val pieces: List<PropPiece>,
+        val itemDisplay: PacketItemDisplay? = null,
+        var center: Location? = null,
+        var rotation: Quaternionf = Quaternionf(),
+    ) {
+        fun remove() {
+            pieces.forEach { it.display?.remove() }
+            itemDisplay?.remove()
+        }
+
+        fun glow(color: Color?) {
+            val displays: List<PacketDisplay> = itemDisplay?.let { listOf(it) } ?: pieces.mapNotNull { it.display }
+            displays.forEach {
+                it.isGlowing = color != null
+                it.glowColorOverride = color
+            }
+        }
+
+        fun hitboxMatrix(piece: PropPiece): Matrix4f? {
+            val atCenter = center ?: return null
+            return originWorkshopWorkpieceHitboxMatrix(
+                OriginWorkshopPoint(atCenter.x, atCenter.y, atCenter.z), rotation, piece.geometry,
+            )
         }
     }
 
@@ -403,6 +422,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         val recipe: OriginWorkshopGameRecipe,
         val rewardHandler: OriginWorkshopCraftRewards,
         var progress: OriginWorkshopGameProgress,
+        val boardModels: Map<OriginWorkshopBoardModel, ItemStack> = emptyMap(),
         var lastProgressAt: Long = began,
         val parts: MutableList<PacketDisplay> = mutableListOf(),
         var workpiece: Prop? = null,
@@ -570,6 +590,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         val selectedTable = idleTable ?: return
         val productId = OriginFurnitureWorkshopModule.productIdFor(selectedTable) ?: return
         val recipe = OriginWorkshopTablesModule.recipeFor(selectedTable, productId, settings?.rules ?: return) ?: return
+        val boardModels = loadBoardModels(player, recipe) ?: return
         val handler = rewards.getOrPut(productId) { OriginWorkshopCraftRewards(COOLDOWN, productId) }
         if (!pendingStatus.add(player.uniqueId)) return
         if (pendingStatus.size > 32) {
@@ -613,13 +634,41 @@ internal object OriginWorkshopGame : PluginModule, Listener {
                         sendBusyFeedback(player, session!!.playerId)
                         return@runSync
                     }
-                    begin(player, selectedTable, recipe, handler)
+                    begin(player, selectedTable, recipe, handler, boardModels)
                 }
             }
         }
     }
 
-    private fun begin(player: Player, selectedTable: String, recipe: OriginWorkshopGameRecipe, handler: OriginWorkshopCraftRewards) {
+    private fun loadBoardModels(
+        player: Player,
+        recipe: OriginWorkshopGameRecipe,
+    ): Map<OriginWorkshopBoardModel, ItemStack>? {
+        if (recipe.role != OriginWorkshopTableRole.CARPENTER) return emptyMap()
+        val resolved = linkedMapOf<OriginWorkshopBoardModel, ItemStack>()
+        for (model in OriginWorkshopBoardModel.entries) {
+            val lookup = runCatching { CustomStack.getInstance(model.itemId)?.itemStack?.clone() }
+            val stack = lookup.getOrNull()
+            if (stack == null) {
+                val message = "ORIGIN_WORKSHOP_GAME phase=BOARD_MODEL_MISSING player=${player.uniqueId} model=${model.itemId}"
+                val failure = lookup.exceptionOrNull()
+                if (failure == null) ARC.instance.logger.warning(message)
+                else ARC.instance.logger.log(Level.WARNING, message, failure)
+                player.sendActionBar(Component.text("Не удалось загрузить модель доски. Попробуй позже."))
+                return null
+            }
+            resolved[model] = stack
+        }
+        return resolved
+    }
+
+    private fun begin(
+        player: Player,
+        selectedTable: String,
+        recipe: OriginWorkshopGameRecipe,
+        handler: OriginWorkshopCraftRewards,
+        boardModels: Map<OriginWorkshopBoardModel, ItemStack>,
+    ) {
         val rules = settings?.rules ?: return
         val startLocation = OriginWorkshopTablesModule.pointAt(selectedTable, start) ?: return
         if (player.world.uid != startLocation.world.uid || player.location.distanceSquared(startLocation) > SESSION_RANGE_SQUARED) return
@@ -628,6 +677,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         val active = Session(
             UUID.randomUUID(), player.uniqueId, player.world.uid, nowTick(), selectedTable, recipe, handler,
             OriginWorkshopGameProgress(recipe.initialStage, nowTick()),
+            boardModels,
         )
         session = active
         try {
@@ -688,7 +738,15 @@ internal object OriginWorkshopGame : PluginModule, Listener {
             OriginWorkshopGameAction.PICK_RIGHT_LEG -> {
                 val size = active.recipe.partSizes[action] ?: return false
                 val material = active.recipe.materials[action] ?: return false
-                val part = spawnProp(active, player, listOf(OriginWorkshopWorkpiecePiece(OriginWorkshopPoint(0.0, 0.0, 0.0), size, material)))
+                val boardModel = if (action == OriginWorkshopGameAction.PICK_STOCK &&
+                    active.recipe.role == OriginWorkshopTableRole.CARPENTER
+                ) OriginWorkshopBoardModel.RAW else null
+                val part = spawnProp(
+                    active,
+                    player,
+                    listOf(OriginWorkshopWorkpiecePiece(OriginWorkshopPoint(0.0, 0.0, 0.0), size, material)),
+                    boardModel,
+                )
                 active.carried = part
                 carry(active, player)
                 if (action == OriginWorkshopGameAction.PICK_LEFT_LEG || action == OriginWorkshopGameAction.PICK_RIGHT_LEG)
@@ -866,11 +924,13 @@ internal object OriginWorkshopGame : PluginModule, Listener {
                 val output = target(active, OriginWorkshopGameStage.PICK_SAWN_BOARD)
                 val pieces = if (second) originWorkshopBoardPieces(holes = 0) else listOf(OriginWorkshopWorkpiecePiece(
                     OriginWorkshopPoint(0.0, 0.0, 0.0), boardSize, Material.OAK_PLANKS))
-                active.workpiece = spawnProp(active, player, pieces)
+                val boardModel = if (second) OriginWorkshopBoardModel.CUT else OriginWorkshopBoardModel.CUT_ONCE
+                active.workpiece = spawnProp(active, player, pieces, boardModel)
                 settle(active, active.workpiece!!, output)
                 val offcut = spawnProp(active, player, listOf(OriginWorkshopWorkpiecePiece(
-                    OriginWorkshopPoint(0.0, 0.0, 0.0), OriginWorkshopGamePartSize(0.12f, 0.08f, 0.22f), Material.OAK_PLANKS)))
-                settle(active, offcut, OriginWorkshopPoint(output.x - 0.60, output.y - 0.15, output.z + if (second) 0.58 else 0.30))
+                    OriginWorkshopPoint(0.0, 0.0, 0.0), OriginWorkshopGamePartSize(0.12f, 0.08f, 0.22f), Material.OAK_PLANKS)),
+                    OriginWorkshopBoardModel.OFFCUT)
+                settle(active, offcut, OriginWorkshopPoint(output.x - 0.60, output.y - 0.13, output.z + if (second) 0.58 else 0.30))
             }
             OriginWorkshopGameStage.DRILLING,
             OriginWorkshopGameStage.DRILLING_SECOND,
@@ -881,7 +941,12 @@ internal object OriginWorkshopGame : PluginModule, Listener {
                     OriginWorkshopGameStage.DRILLING_SECOND -> 2
                     else -> 3
                 }
-                active.workpiece = spawnProp(active, player, originWorkshopBoardPieces(holes))
+                val boardModel = when (holes) {
+                    1 -> OriginWorkshopBoardModel.DRILLED_1
+                    2 -> OriginWorkshopBoardModel.DRILLED_2
+                    else -> OriginWorkshopBoardModel.DRILLED_3
+                }
+                active.workpiece = spawnProp(active, player, originWorkshopBoardPieces(holes), boardModel)
                 val base = target(active, OriginWorkshopGameStage.CARRY_BOARD_TO_DRILL)
                 settle(active, active.workpiece!!, base.copy(x = base.x - 0.23 * (holes - 1)))
             }
@@ -1044,16 +1109,39 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         moveProp(board, center, rotation, carrying = false)
     }
 
-    private fun spawnProp(active: Session, player: Player, geometry: List<OriginWorkshopWorkpiecePiece>): Prop {
+    private fun spawnProp(
+        active: Session,
+        player: Player,
+        geometry: List<OriginWorkshopWorkpiecePiece>,
+        boardModel: OriginWorkshopBoardModel? = null,
+    ): Prop {
         val displays = checkNotNull(owner)
-        return Prop(geometry.map { piece ->
-            val display = spawnBlock(displays, piece.material, player.location, piece.size).apply {
+        val itemDisplay = boardModel?.let { model ->
+            val item = active.boardModels[model] ?: error("Validated workshop board model ${model.itemId} is missing from the session")
+            displays.spawnItem(player.location, item.clone()).apply {
                 isVisibleByDefault = false
                 showTo(player)
+                itemDisplayTransform = ItemDisplay.ItemDisplayTransform.FIXED
+                billboard = Display.Billboard.FIXED
+                viewRange = 0.8f
+                displayWidth = 1.0f
+                displayHeight = 1.0f
+                shadowRadius = 0f
+                interpolationDelay = -1
+                interpolationDuration = 2
+                teleportDuration = 1
+                transformation = Transformation(Vector3f(), Quaternionf(), Vector3f(1f), Quaternionf())
             }
-            active.parts += display
+        }?.also { active.parts += it }
+        val pieces = geometry.map { piece ->
+            val display = if (boardModel == null) spawnBlock(displays, piece.material, player.location, piece.size).apply {
+                isVisibleByDefault = false
+                showTo(player)
+            } else null
+            display?.let { active.parts += it }
             PropPiece(display, piece)
-        })
+        }
+        return Prop(pieces, itemDisplay)
     }
 
     private fun settle(active: Session, item: Prop, point: OriginWorkshopPoint): Location? {
@@ -1074,14 +1162,25 @@ internal object OriginWorkshopGame : PluginModule, Listener {
     }
 
     private fun moveProp(item: Prop, center: Location, rotation: Quaternionf, carrying: Boolean) {
+        item.center = center.clone().apply { yaw = 0f; pitch = 0f }
+        item.rotation = Quaternionf(rotation)
         item.pieces.forEach { piece ->
+            val display = piece.display ?: return@forEach
             val geometry = piece.geometry
             val offset = rotation.transform(Vector3f(geometry.center.x.toFloat(), geometry.center.y.toFloat(), geometry.center.z.toFloat()))
             val at = center.clone().add(offset.x.toDouble(), offset.y.toDouble(), offset.z.toDouble()).apply { yaw = 0f; pitch = 0f }
-            piece.display.interpolationDuration = if (carrying) 0 else 2
-            piece.display.teleportDuration = if (carrying) 0 else 1
-            piece.display.transformation = Transformation(Vector3f(), rotation, Vector3f(geometry.size.x, geometry.size.y, geometry.size.z), Quaternionf())
-            moveBlockCenter(piece.display, at, geometry.size, rotation)
+            display.interpolationDuration = if (carrying) 0 else 2
+            display.teleportDuration = if (carrying) 0 else 1
+            display.transformation = Transformation(Vector3f(), rotation, Vector3f(geometry.size.x, geometry.size.y, geometry.size.z), Quaternionf())
+            moveBlockCenter(display, at, geometry.size, rotation)
+        }
+        item.itemDisplay?.apply {
+            interpolationDuration = if (carrying) 0 else 2
+            teleportDuration = if (carrying) 0 else 1
+            teleport(center.clone().apply { yaw = 0f; pitch = 0f })
+            transformation = Transformation(
+                Vector3f(), originWorkshopBoardItemDisplayRotation(rotation), Vector3f(1f), Quaternionf(),
+            )
         }
     }
 
@@ -1096,25 +1195,47 @@ internal object OriginWorkshopGame : PluginModule, Listener {
             val at = OriginWorkshopTablesModule.pointAt(tableId, target(active, active.progress.stage)) ?: return null
             return targetDistance(player, at)
         }
-        val displays = currentPickableDisplay(active)?.pieces?.map { it.display }
-            ?: active.highlightedControl?.let { OriginWorkshopTablesModule.craftControlDisplaysFor(tableId, it) }
-            ?: return OriginWorkshopTablesModule.pointAt(tableId, target(active, active.progress.stage))?.let { targetDistance(player, it) }
+        val pickable = currentPickableDisplay(active)
+        val displays = if (pickable == null) active.highlightedControl?.let {
+            OriginWorkshopTablesModule.craftControlDisplaysFor(tableId, it)
+        } else null
+        if (pickable == null && displays == null) {
+            return OriginWorkshopTablesModule.pointAt(tableId, target(active, active.progress.stage))?.let { targetDistance(player, it) }
+        }
         val eye = player.eyeLocation
         val direction = eye.direction.normalize()
-        val reach = displays.filterIsInstance<PacketBlockDisplay>().mapNotNull { display ->
-            val location = display.location
-            if (location.world.uid != player.world.uid) return@mapNotNull null
-            val t = display.transformation
-            val matrix = Matrix4f().translation(location.x.toFloat(), location.y.toFloat(), location.z.toFloat())
-                .rotateY(Math.toRadians(-location.yaw.toDouble()).toFloat())
-                .rotateX(Math.toRadians(location.pitch.toDouble()).toFloat())
-                .translate(t.translation).rotate(t.leftRotation).scale(t.scale).rotate(t.rightRotation)
-            originWorkshopRayTransformedCube(OriginWorkshopVec3(eye.x, eye.y, eye.z),
-                OriginWorkshopVec3(direction.x, direction.y, direction.z), matrix, REACH)
-        }.minOrNull() ?: return null
+        val origin = OriginWorkshopVec3(eye.x, eye.y, eye.z)
+        val ray = OriginWorkshopVec3(direction.x, direction.y, direction.z)
+        val reach = if (pickable != null) {
+            pickable.pieces.mapNotNull { piece ->
+                val display = piece.display
+                val matrix = if (display != null) {
+                    if (display.location.world.uid != player.world.uid) return@mapNotNull null
+                    blockDisplayHitMatrix(display)
+                } else {
+                    if (pickable.center?.world?.uid != player.world.uid) return@mapNotNull null
+                    pickable.hitboxMatrix(piece) ?: return@mapNotNull null
+                }
+                originWorkshopRayTransformedCube(origin, ray, matrix, REACH)
+            }.minOrNull()
+        } else {
+            displays!!.filterIsInstance<PacketBlockDisplay>().mapNotNull { display ->
+                if (display.location.world.uid != player.world.uid) return@mapNotNull null
+                originWorkshopRayTransformedCube(origin, ray, blockDisplayHitMatrix(display), REACH)
+            }.minOrNull()
+        } ?: return null
         return reach.takeUnless {
             player.world.rayTraceBlocks(eye, direction, reach + BLOCK_EPSILON, FluidCollisionMode.NEVER, true) != null
         }
+    }
+
+    private fun blockDisplayHitMatrix(display: PacketBlockDisplay): Matrix4f {
+        val location = display.location
+        val transform = display.transformation
+        return Matrix4f().translation(location.x.toFloat(), location.y.toFloat(), location.z.toFloat())
+            .rotateY(Math.toRadians(-location.yaw.toDouble()).toFloat())
+            .rotateX(Math.toRadians(location.pitch.toDouble()).toFloat())
+            .translate(transform.translation).rotate(transform.leftRotation).scale(transform.scale).rotate(transform.rightRotation)
     }
 
     private fun targetDistance(player: Player, target: Location): Double? {
