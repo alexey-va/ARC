@@ -1,0 +1,94 @@
+# Origin furniture workshop
+
+The furniture terrace runs on the `classic` server in Minecraft world
+`rc_origin_spawn`. Server names, world names and repository paths are separate.
+
+## Owners
+
+- `OriginWorkshopTablesModule.kt`: packet-only benches, materials, mechanisms,
+  their local geometry and player-only highlight overlays.
+- `OriginWorkshopGameRecipe.kt`: role-specific input and processing sequences.
+- `OriginWorkshopWorkpiece.kt`: actual cut/drilled board geometry and shoulder pose.
+- `OriginWorkshopGame.kt`: one player session, the selected station's production
+  sequence, material handoffs, guidance, cancellation and finished-product view.
+- `OriginFurnitureWorkshopModule.kt`: Citizens workers, bounded floor routes,
+  decorative production and the shared sleeping place.
+- `OriginWorkshopSleepShift.kt`: ordered sleep turns and exclusive player
+  reservation. Taking a station pins the current turn until release.
+- `OriginWorkshopCraftRewards.kt`: one furniture item through the existing
+  asynchronous Redis claim, shared across every station for 24 hours. The
+  administrator bypass remains `arc.origin.workshop.cooldown.bypass`.
+
+The four workers are carpenter 430, upholsterer 458, assembler 459 and finisher
+460. Their products come from the active NPC worker configuration. Stock and
+carried materials are scene props; they never consume player inventory items.
+
+The carpenter makes two cuts with a deliberate turn between them, then aligns
+and drills three holes separately. Both offcuts remain on the bench; the board
+contains progressive through-holes and retains them on the shoulder. Upholstery
+uses fabric, press and a cushion; assembly uses vise and hammer; finishing uses
+three separately coated panel regions and a return to the drying rack.
+
+Carried props follow player movement and each server tick without additional
+client interpolation; they use body-yaw shoulder coordinates instead of the old
+eye ray in front of the camera. The native client's network delay still applies.
+Placement highlights and hit targets share station-local recipe geometry. The
+bench top is tiled into individual light planks to preserve texture density,
+with dark framing and metallic mechanisms for contrast. The drill retracts clear
+of the finished holes; two support rails keep the board on a visible drill bed.
+The assembly jig is hidden while the finished chair occupies its space, and
+the normal finish/cancel cleanup restores that fixture for the next session.
+
+## Turn lifecycle
+
+Only the sleeping worker's station accepts a game. The current worker finishes
+its decorative cycle, walks to the sofa approach, and enters the sleeping pose.
+Other workers continue their own cycles. After the configured rest, the worker
+wakes, walks home and hands the next turn to the next worker. An occupied
+station delays waking until the session ends or is cancelled.
+
+The game calls `acquirePlayerTable` only after the asynchronous quota response
+and fresh station/distance checks. `ownsPlayerTable` fences every active tick
+and reward callback. The timeout measures inactivity since the last production step. Quit,
+cancellation, timeout, module reload and shutdown
+remove game displays and release the exact reservation. NPC runtime replacement
+invalidates old reservations even if the same first station becomes available.
+
+## Configuration
+
+Bundled defaults are in `src/main/resources/modules/origin-workshop-game.yml`,
+`origin-workshop-tables.yml` and `origin-furniture-workshop.yml`. Tracked active
+overrides are in sibling `ruscrafting-ops/classic/plugins/ARC/modules/`.
+
+`origin-furniture-workshop.sleep-rotation` replaces the old permanent per-worker
+`sleeping` flag. Duration and sofa/approach coordinates load with the module's
+normal reload; reload recreates routing and turn state. The authored default
+is 2400 ticks, with approach `-56.5,71,-49.5` and seat `-56.5,71,-46.5`.
+The seat transition alone uses teleportation; walking uses the existing
+`CitizensNpcRouteController` and the configured safe floor bounds.
+
+## Focused checks and evidence
+
+Run the `ru.arc.origin.OriginWorkshopSleepShiftTest`,
+`OriginFurnitureWorkshopConfigTest`, `OriginWorkshopGameTest`, and
+`OriginWorkshopCraftRewardsTest` Kotest specs, plus recipe/geometry tests for
+changed station models. A nonzero executed-case count with no skips is required.
+
+Pure sequence and geometry checks establish ordering and ownership, not native
+Minecraft appearance. Server verification separately checks the exact delivered
+JAR/configuration, module readiness and `ORIGIN_WORKSHOP` sleep/route events.
+Client smoothness, reachability and product appearance need actual client
+observation; a successful package or health response does not establish them.
+
+## Offline visual receipt
+
+`./gradlew exportWorkshopPreview -PworkshopPreviewOutput=/absolute/path/scene.json`
+exports the production table geometry, mechanism poses, progressive board holes,
+and shoulder anchor. It includes all four stations and 17 representative states;
+it does not instantiate Bukkit worlds/entities or claim native-client acceptance.
+Bake its vanilla material palette with the sibling ops location-atelier's
+`vanilla_assets.py` and the cached client JAR, then inspect textured renders from
+front, side, top, overview, and the player's 1.62-block eye level. Use the actual
+block model quads scaled by each display's dimensions. A human mannequin is only
+an approximate silhouette; world context, NPCs and ItemsAdder result models are
+not included in this receipt. Re-export after model/pose changes.

@@ -17,17 +17,28 @@ class OriginWorkshopTablesGeometryTest : FreeSpec({
         val blocks = pieces.filter { it.kind == OriginWorkshopTablePieceKind.BLOCK }
         val items = pieces.filter { it.kind == OriginWorkshopTablePieceKind.ITEM }
 
-        (blocks.size <= 95) shouldBe true
+        // The tiled top replaces one stretched display with at most fifteen small planks.
+        (blocks.size <= 110) shouldBe true
         items.size shouldBe 1
         blocks.minOf { it.y - it.height / 2.0 } shouldBe 0.0
-        val top = blocks.single { it.key == "top" }
-        (abs(top.y + top.height / 2.0 - dimensions.height) < 1e-9) shouldBe true
-        (abs(top.width + 0.20 - dimensions.width) < 1e-9) shouldBe true
-        (abs(top.depth + 0.20 - dimensions.depth) < 1e-9) shouldBe true
+        val topWidth = dimensions.width - 0.20
+        val topDepth = dimensions.depth - 0.20
+        val tabletopPlanks = blocks.filter { it.key.startsWith("tabletop-plank-") }
+        (tabletopPlanks.size in 1..15) shouldBe true
+        (tabletopPlanks.maxOf { maxOf(it.width, it.depth) } <= 1.0) shouldBe true
+        tabletopPlanks.sumOf { it.width * it.depth }.let { abs(it - topWidth * topDepth) < 1e-9 } shouldBe true
+        (abs(tabletopPlanks.minOf { it.x - it.width / 2.0 } + topWidth / 2.0) < 1e-9) shouldBe true
+        (abs(tabletopPlanks.maxOf { it.x + it.width / 2.0 } - topWidth / 2.0) < 1e-9) shouldBe true
+        (abs(tabletopPlanks.minOf { it.z - it.depth / 2.0 } + topDepth / 2.0) < 1e-9) shouldBe true
+        (abs(tabletopPlanks.maxOf { it.z + it.depth / 2.0 } - topDepth / 2.0) < 1e-9) shouldBe true
+        tabletopPlanks.all { abs(it.y + it.height / 2.0 - dimensions.height) < 1e-9 } shouldBe true
+        tabletopPlanks.all { it.material == Material.BIRCH_PLANKS } shouldBe true
+        blocks.filter { it.key.startsWith("long-edge-") || it.key.startsWith("end-edge-") }
+            .all { it.material == Material.DARK_OAK_PLANKS } shouldBe true
         val positiveLongEdge = blocks.single { it.key == "long-edge-1.0" }
-        (abs(positiveLongEdge.z - positiveLongEdge.depth / 2.0 - top.depth / 2.0) < 1e-9) shouldBe true
+        (abs(positiveLongEdge.z - positiveLongEdge.depth / 2.0 - topDepth / 2.0) < 1e-9) shouldBe true
         val positiveEndEdge = blocks.single { it.key == "end-edge-1.0" }
-        (abs(positiveEndEdge.x - positiveEndEdge.width / 2.0 - top.width / 2.0) < 1e-9) shouldBe true
+        (abs(positiveEndEdge.x - positiveEndEdge.width / 2.0 - topWidth / 2.0) < 1e-9) shouldBe true
         items.minOf { it.width } shouldBe 0.40
         items.single().material shouldBe Material.IRON_AXE
         items.all { it.flat } shouldBe true
@@ -134,7 +145,7 @@ class OriginWorkshopTablesGeometryTest : FreeSpec({
         blocks.none { it.key == "carpenter-assembly-workpiece" } shouldBe true
 
         blocks.none { it.key.startsWith("carpenter-start-") } shouldBe true
-        blocks.single { it.key == "top" }.material shouldBe Material.SPRUCE_PLANKS
+        tabletopPlanks.map { it.key }.distinct().size shouldBe tabletopPlanks.size
         blocks.filter { it.key.startsWith("long-edge-") || it.key.startsWith("end-edge-") }.size shouldBe 4
         blocks.filter { it.key.startsWith("leg-") }.size shouldBe 4
         val sawControl = blocks.single { it.key == "carpenter-saw-control-handle" }
@@ -182,13 +193,18 @@ class OriginWorkshopTablesGeometryTest : FreeSpec({
             yaw = 90,
             dimensions = dimensions,
         )
-        val straightTop = straight.single { it.key == "top" }
-        val rotatedTop = rotated.single { it.key == "top" }
+        val straightTop = straight.filter { it.key.startsWith("tabletop-plank-") }
+        val rotatedTop = rotated.filter { it.key.startsWith("tabletop-plank-") }
         val straightTool = straight.first { it.key == "carpenter-prop-0" }
         val rotatedTool = rotated.first { it.key == "carpenter-prop-0" }
 
-        rotatedTop.width shouldBe straightTop.depth
-        rotatedTop.depth shouldBe straightTop.width
+        fun xSpan(pieces: List<OriginWorkshopTablePiece>) =
+            pieces.maxOf { it.x + it.width / 2.0 } - pieces.minOf { it.x - it.width / 2.0 }
+        fun zSpan(pieces: List<OriginWorkshopTablePiece>) =
+            pieces.maxOf { it.z + it.depth / 2.0 } - pieces.minOf { it.z - it.depth / 2.0 }
+        (abs(xSpan(rotatedTop) - zSpan(straightTop)) < 1e-9) shouldBe true
+        (abs(zSpan(rotatedTop) - xSpan(straightTop)) < 1e-9) shouldBe true
+        rotatedTop.size shouldBe straightTop.size
         rotatedTool.x shouldBe -straightTool.z
         rotatedTool.z shouldBe straightTool.x
     }
@@ -225,7 +241,8 @@ class OriginWorkshopTablesGeometryTest : FreeSpec({
             .filter { it.kind == OriginWorkshopTablePieceKind.BLOCK }
 
         blocks.minOf { it.y - it.height / 2.0 } shouldBe 0.0
-        (abs(blocks.single { it.key == "top" }.let { it.y + it.height / 2.0 } - dimensions.height) < 1e-9) shouldBe true
+        blocks.filter { it.key.startsWith("tabletop-plank-") }
+            .all { abs(it.y + it.height / 2.0 - dimensions.height) < 1e-9 } shouldBe true
         (abs(maxOf(
             blocks.maxOf { it.x + it.width / 2.0 },
             blocks.maxOf { it.z + it.depth / 2.0 },

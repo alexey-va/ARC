@@ -11,6 +11,10 @@ origin-furniture-workshop:
   prop-interpolation-ticks: 6
   machine-update-ticks: 2
   workstation-route-timeout-ticks: 120
+  sleep-rotation:
+    duration-ticks: 2400
+    approach: { x: -56.5, y: 71, z: -49.5, yaw: 0 }
+    at: { x: -56.5, y: 71, z: -46.5, yaw: 90 }
   carry:
     scale: 0.34
     forward-distance: 0.45
@@ -52,8 +56,6 @@ origin-furniture-workshop:
     maximum-step-height: 0.125
   actors:
     carpenter:
-      sleeping: true
-      sleeping-at: { x: -56.5, y: 71, z: -46.5, yaw: 90 }
       npc-id: 430
       table-id: carpenter
       home: { x: -38.5, y: 71, z: -73.5, yaw: -90 }

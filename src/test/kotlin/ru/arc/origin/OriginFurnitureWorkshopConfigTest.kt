@@ -56,13 +56,16 @@ class OriginFurnitureWorkshopConfigTest :
                 settings.workers.map { it.role.npcId } shouldBe listOf(430, 458, 459, 460)
                 settings.workers.map { it.tableId } shouldBe listOf("carpenter", "upholsterer", "assembler", "finisher")
                 val allDue = settings.workers.associate { it.role to 100L }
-                workshopWorkersDue(settings.workers, allDue, emptySet(), 100L) shouldBe settings.workers.filter { it.sleepingAt == null }
+                workshopWorkersDue(settings.workers, allDue, emptySet(), 100L) shouldBe settings.workers
                 workshopWorkersDue(settings.workers, allDue, setOf(OriginFurnitureWorkshopRole.CARPENTER), 100L)
-                    .map { it.role } shouldBe settings.workers.drop(1).filter { it.sleepingAt == null }.map { it.role }
+                    .map { it.role } shouldBe settings.workers.drop(1).map { it.role }
                 workshopWorkersDue(settings.workers, allDue, emptySet(), 99L) shouldBe emptyList()
                 workshopWorkersDue(settings.workers, allDue, allDue.keys, 100L) shouldBe emptyList()
-                settings.workers.filter { it.sleepingAt != null }.map { it.role } shouldBe listOf(OriginFurnitureWorkshopRole.CARPENTER)
-                settings.workers.first().sleepingAt?.y shouldBe 71.0
+                settings.sleepDurationTicks shouldBe 2400L
+                settings.sleepAt.y shouldBe 71.0
+                settings.routeProfile.allows(settings.sleepApproach.cell()) shouldBe true
+                shouldThrow<IllegalArgumentException> { settings.copy(sleepDurationTicks = 0) }
+                shouldThrow<IllegalArgumentException> { settings.copy(sleepApproach = settings.sleepAt) }
                 settings.workers.last().deliverOutput shouldBe false
                 settings.workers.flatMap { it.beats }.filter { it.mechanism != OriginWorkshopMechanism.NONE }
                     .associate { it.phase to it.mechanism } shouldBe mapOf(

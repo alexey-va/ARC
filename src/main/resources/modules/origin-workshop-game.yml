@@ -1,4 +1,5 @@
 origin-workshop-game:
   enabled: false
-  # One player uses the carpenter station; stock materials stay in the scene.
+  # One player uses the sleeping worker's station; all materials stay in the scene.
+  # Cancel after this many seconds without completing a production step.
   session-timeout-seconds: 180

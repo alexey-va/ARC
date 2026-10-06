@@ -52,7 +52,7 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.296"
+version = "1.4.297"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.17"
@@ -718,4 +718,16 @@ tasks.named<me.drownek.plugwright.PlugwrightTestTask>("plugwrightTest") {
             }
         }
     }
+}
+
+// Offline receipt for the source-driven workstation viewer; never spawns Bukkit entities.
+tasks.register<JavaExec>("exportWorkshopPreview") {
+    group = "verification"
+    description = "Export furniture workstation geometry and processing poses as JSON"
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("ru.arc.origin.WorkshopPreviewExport")
+    args(providers.gradleProperty("workshopPreviewOutput").getOrElse(
+        layout.buildDirectory.file("workshop-preview/scene.json").get().asFile.absolutePath,
+    ))
 }

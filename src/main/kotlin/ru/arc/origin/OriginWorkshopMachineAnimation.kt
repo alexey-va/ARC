@@ -241,15 +241,15 @@ internal fun originWorkshopMachinePose(
             val spin = 720.0 * p
             val pieces = buildMap {
                 put("carpenter-drill-quill", OriginWorkshopPieceMotion(
-                    centerOffset = OriginWorkshopPoint(0.0, -0.18 * stroke, 0.0),
+                    centerOffset = OriginWorkshopPoint(0.0, -0.30 * stroke, 0.0),
                 ))
                 put("carpenter-drill-spindle", OriginWorkshopPieceMotion(
-                    centerOffset = OriginWorkshopPoint(0.0, -0.20 * stroke, 0.0),
+                    centerOffset = OriginWorkshopPoint(0.0, -0.30 * stroke, 0.0),
                     rotationAxis = OriginWorkshopRotationAxis.Y,
                     rotationDegrees = spin,
                 ))
                 put("carpenter-drill-bit", OriginWorkshopPieceMotion(
-                    centerOffset = OriginWorkshopPoint(0.0, -0.16 * stroke, 0.0),
+                    centerOffset = OriginWorkshopPoint(0.0, -0.30 * stroke, 0.0),
                     rotationAxis = OriginWorkshopRotationAxis.Y,
                     rotationDegrees = spin,
                 ))
@@ -271,7 +271,7 @@ internal fun originWorkshopMachinePose(
                     rotationDegrees = spin,
                 ))
             }
-            OriginWorkshopMachinePose(pieces, OriginWorkshopPoint(0.0, dimensions.height + 0.04, -0.55))
+            OriginWorkshopMachinePose(pieces, OriginWorkshopPoint(0.0, dimensions.height + 0.06, -0.55))
         }
         OriginWorkshopMechanism.CLAMP_LEFT -> OriginWorkshopMachinePose(
             mapOf(
@@ -370,19 +370,34 @@ internal fun originWorkshopCraftMachinePose(
     progress: Double,
     dimensions: OriginWorkshopTableDimensions,
     tuning: OriginWorkshopMachineTuning,
+    strokeProgress: Double = progress,
 ): OriginWorkshopMachinePose {
     val mechanism = when (machine) {
         "saw" -> OriginWorkshopMechanism.SAW
         "drill" -> OriginWorkshopMechanism.DRILL
         "clamp-left" -> OriginWorkshopMechanism.CLAMP_LEFT
         "clamp-right" -> OriginWorkshopMechanism.CLAMP_RIGHT
-        else -> error("Unknown carpenter craft machine '$machine'")
+        "vise" -> OriginWorkshopMechanism.VISE
+        "anvil" -> OriginWorkshopMechanism.ANVIL
+        "press" -> OriginWorkshopMechanism.PRESS
+        "finish" -> OriginWorkshopMechanism.FINISH
+        else -> error("Unknown workshop craft machine '$machine'")
     }
-    val pose = originWorkshopMachinePose(mechanism, progress, 0.0, dimensions, tuning)
-    if (machine != "saw") return pose
-    val sample = pose.pieces.getValue("carpenter-board-in-feed")
-    return pose.copy(pieces = pose.pieces + ("carpenter-board-in-feed" to sample.copy(visible = false)))
+    val p = progress.coerceIn(0.0, 1.0)
+    val stroke = strokeProgress.coerceIn(0.0, 1.0)
+    val pose = originWorkshopMachinePose(mechanism, p, stroke, dimensions, tuning)
+    // Player props replace the autonomous sample on these machines.
+    val sampleKey = when (machine) {
+        "saw" -> "carpenter-board-in-feed"
+        "vise" -> "assembler-board-sample"
+        "anvil" -> "assembler-anvil-workpiece"
+        "press" -> "upholsterer-press-cloth"
+        else -> return pose
+    }
+    val sample = pose.pieces.getValue(sampleKey)
+    return pose.copy(pieces = pose.pieces + (sampleKey to sample.copy(visible = false)))
 }
+
 
 private fun smoothstep(value: Double): Double = value * value * (3.0 - 2.0 * value)
 

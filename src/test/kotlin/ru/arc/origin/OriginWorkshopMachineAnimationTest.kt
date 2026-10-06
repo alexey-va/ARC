@@ -120,6 +120,9 @@ class OriginWorkshopMachineAnimationTest : FreeSpec({
         val pieces = originWorkshopTablePieces(OriginWorkshopTableRole.CARPENTER, 0, dimensions, tuning)
             .associateBy { it.key }
         val bit = pieces.getValue("carpenter-drill-bit")
+        // The raised tip clears the real player board; the stroke passes its underside.
+        val boardTop = dimensions.height + 0.18
+        (bit.y - bit.height / 2.0 > boardTop) shouldBe true
         val contact = originWorkshopMachinePose(OriginWorkshopMechanism.DRILL, 0.5, 0.0, dimensions, tuning).contact!!
         val drill = listOf(0.0, 0.25, 0.5, 0.75, 1.0).map { progress ->
             progress to originWorkshopMachinePose(OriginWorkshopMechanism.DRILL, progress, 0.0, dimensions, tuning)
@@ -135,7 +138,7 @@ class OriginWorkshopMachineAnimationTest : FreeSpec({
         val downstroke = drill.single { it.first == 0.5 }.second
         val bitBottom = bit.y + downstroke.pieces.getValue(bit.key).centerOffset.y - bit.height / 2.0
         (abs(bitBottom - contact.y) < 1e-9) shouldBe true
-        (abs(contact.y - (dimensions.height + 0.04)) < 1e-9) shouldBe true
+        (abs(contact.y - (dimensions.height + 0.06)) < 1e-9) shouldBe true
 
         for (progress in listOf(0.25, 0.5)) {
             for (index in 0..7) {
@@ -206,6 +209,17 @@ class OriginWorkshopMachineAnimationTest : FreeSpec({
             hammer.centerOffset shouldBe OriginWorkshopPoint(0.0, 0.0, 0.0)
             hammer.rotationDegrees shouldBe tuning.hammerRestAngleDegrees
         }
+    }
+
+    "player press moves through a full stroke and every machine hides its autonomous sample" {
+        val middle = originWorkshopCraftMachinePose("press", 0.65, dimensions, tuning)
+        (middle.pieces.getValue("upholsterer-press-platen").centerOffset.y < -0.10) shouldBe true
+        for ((machine, key) in mapOf("saw" to "carpenter-board-in-feed", "press" to "upholsterer-press-cloth",
+            "vise" to "assembler-board-sample", "anvil" to "assembler-anvil-workpiece")) {
+            for (p in listOf(0.0, 0.5, 1.0))
+                originWorkshopCraftMachinePose(machine, p, dimensions, tuning).pieces.getValue(key).visible shouldBe false
+        }
+        originWorkshopCraftMachinePose("press", 1.0, dimensions, tuning).pieces.getValue("upholsterer-press-platen").centerOffset.y shouldBe 0.0
     }
 
     "press platen touches compressed cloth and releases at stroke ends" {

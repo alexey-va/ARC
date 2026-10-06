@@ -2,11 +2,13 @@ package ru.arc.origin
 
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
+import org.joml.Matrix4f
+import kotlin.math.abs
 
 class OriginWorkshopGameTest : FreeSpec({
     val rules = OriginWorkshopGameRules()
 
-    "one chair needs stock, saw, drill, both legs and both clamps in that order" {
+    "one chair needs two cuts, three holes, both legs and both clamps in that order" {
         var now = 0L
         var progress = OriginWorkshopGameProgress(OriginWorkshopGameStage.STOCK)
         fun act(action: OriginWorkshopGameAction, expected: OriginWorkshopGameStage) {
@@ -25,10 +27,19 @@ class OriginWorkshopGameTest : FreeSpec({
         act(OriginWorkshopGameAction.PICK_STOCK, OriginWorkshopGameStage.CARRY_RAW_TO_SAW)
         act(OriginWorkshopGameAction.PLACE_SAW, OriginWorkshopGameStage.START_SAW)
         act(OriginWorkshopGameAction.ACTIVATE_SAW, OriginWorkshopGameStage.SAWING)
+        finishOperation(rules.sawTicks, OriginWorkshopGameStage.SAW_REPOSITION)
+        act(OriginWorkshopGameAction.REPOSITION_SAW, OriginWorkshopGameStage.START_SAW_SECOND)
+        act(OriginWorkshopGameAction.ACTIVATE_SAW, OriginWorkshopGameStage.SAWING_SECOND)
         finishOperation(rules.sawTicks, OriginWorkshopGameStage.PICK_SAWN_BOARD)
         act(OriginWorkshopGameAction.PICK_SAWN_BOARD, OriginWorkshopGameStage.CARRY_BOARD_TO_DRILL)
         act(OriginWorkshopGameAction.PLACE_DRILL, OriginWorkshopGameStage.START_DRILL)
         act(OriginWorkshopGameAction.ACTIVATE_DRILL, OriginWorkshopGameStage.DRILLING)
+        finishOperation(rules.drillTicks, OriginWorkshopGameStage.DRILL_ALIGN_CENTER)
+        act(OriginWorkshopGameAction.ALIGN_DRILL_CENTER, OriginWorkshopGameStage.START_DRILL_SECOND)
+        act(OriginWorkshopGameAction.ACTIVATE_DRILL, OriginWorkshopGameStage.DRILLING_SECOND)
+        finishOperation(rules.drillTicks, OriginWorkshopGameStage.DRILL_ALIGN_LAST)
+        act(OriginWorkshopGameAction.ALIGN_DRILL_LAST, OriginWorkshopGameStage.START_DRILL_THIRD)
+        act(OriginWorkshopGameAction.ACTIVATE_DRILL, OriginWorkshopGameStage.DRILLING_THIRD)
         finishOperation(rules.drillTicks, OriginWorkshopGameStage.PICK_DRILLED_BOARD)
         act(OriginWorkshopGameAction.PICK_DRILLED_BOARD, OriginWorkshopGameStage.CARRY_BOARD_TO_JIG)
         act(OriginWorkshopGameAction.PLACE_JIG, OriginWorkshopGameStage.LEG_LEFT)
@@ -45,13 +56,13 @@ class OriginWorkshopGameTest : FreeSpec({
     }
 
     "waiting never skips a required pickup and extra clicks never skip processing" {
-        for (stage in listOf(OriginWorkshopGameStage.STOCK, OriginWorkshopGameStage.PICK_SAWN_BOARD,
+        for (stage in listOf(OriginWorkshopGameStage.STOCK, OriginWorkshopGameStage.SAW_REPOSITION, OriginWorkshopGameStage.DRILL_ALIGN_CENTER, OriginWorkshopGameStage.DRILL_ALIGN_LAST, OriginWorkshopGameStage.PICK_SAWN_BOARD,
             OriginWorkshopGameStage.PICK_DRILLED_BOARD, OriginWorkshopGameStage.LEG_LEFT,
             OriginWorkshopGameStage.LEG_RIGHT, OriginWorkshopGameStage.CLAMP_LEFT)) {
             val progress = OriginWorkshopGameProgress(stage)
             originWorkshopAdvance(progress, 10_000, rules) shouldBe progress
         }
-        for (stage in listOf(OriginWorkshopGameStage.SAWING, OriginWorkshopGameStage.DRILLING,
+        for (stage in listOf(OriginWorkshopGameStage.SAWING, OriginWorkshopGameStage.SAWING_SECOND, OriginWorkshopGameStage.DRILLING, OriginWorkshopGameStage.DRILLING_SECOND, OriginWorkshopGameStage.DRILLING_THIRD,
             OriginWorkshopGameStage.CLAMPING_LEFT, OriginWorkshopGameStage.CLAMPING_RIGHT,
             OriginWorkshopGameStage.FINISHING, OriginWorkshopGameStage.REWARDING)) {
             OriginWorkshopGameAction.entries.forEach { action ->
@@ -67,7 +78,7 @@ class OriginWorkshopGameTest : FreeSpec({
     "a delayed animation tick finishes only its current operation without resetting or skipping the handoff" {
         val sawing = OriginWorkshopGameProgress(OriginWorkshopGameStage.SAWING, 100)
         val ready = originWorkshopAdvance(sawing, 900, rules)
-        ready.stage shouldBe OriginWorkshopGameStage.PICK_SAWN_BOARD
+        ready.stage shouldBe OriginWorkshopGameStage.SAW_REPOSITION
         ready.stageStartedAt shouldBe 900L
         originWorkshopAdvance(ready, 2000, rules) shouldBe ready
     }
@@ -105,6 +116,17 @@ class OriginWorkshopGameTest : FreeSpec({
         }
         originWorkshopRayHit(origin, origin, OriginWorkshopVec3(0.0, 0.0, -2.0), 0.25, 4.5) shouldBe null
         originWorkshopRayHit(origin, direction, OriginWorkshopVec3(0.0, 0.0, -2.0), 0.25, 4.5001) shouldBe null
+    }
+
+    "highlighted control hit follows its actual scale and rotation instead of a nearby anchor" {
+        val origin = OriginWorkshopVec3(0.0, 0.0, 0.0)
+        val direction = OriginWorkshopVec3(0.0, 0.0, -1.0)
+        val narrowHandle = Matrix4f().translation(-0.04f, -0.30f, -3f).scale(0.08f, 0.60f, 0.08f)
+        (abs(originWorkshopRayTransformedCube(origin, direction, narrowHandle, 4.5)!! - 2.92) < 0.0001) shouldBe true
+        originWorkshopRayTransformedCube(OriginWorkshopVec3(0.1, 0.0, 0.0), direction, narrowHandle, 4.5) shouldBe null
+        val rotated = Matrix4f().translation(0.0f, 0.0f, -3f).rotateY(Math.PI.toFloat() / 2).translate(-0.5f, -0.05f, -0.1f).scale(1f, 0.1f, 0.2f)
+        (abs(originWorkshopRayTransformedCube(origin, direction, rotated, 4.5)!! - 2.5) < 0.0001) shouldBe true
+        originWorkshopRayTransformedCube(origin, direction, rotated, 2.4) shouldBe null
     }
 
     "whole bench can be selected from front, side and above without extending reach" {

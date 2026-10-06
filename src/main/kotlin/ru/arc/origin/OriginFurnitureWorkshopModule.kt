@@ -191,7 +191,6 @@ internal data class OriginFurnitureWorkshopWorker(
     val finishedTranslationY: Double,
     val parts: List<OriginFurnitureWorkshopPart>,
     val beats: List<OriginFurnitureWorkshopBeat>,
-    val sleepingAt: OriginFurnitureWorkshopPoint? = null,
 ) {
     init {
         require(tableId.matches(Regex("[a-z0-9_-]{1,48}"))) { "invalid workshop table id '$tableId'" }
@@ -233,6 +232,9 @@ internal data class OriginFurnitureWorkshopSettings(
     val carryPitch: Float,
     val routeProfile: NpcRouteProfile,
     val workers: List<OriginFurnitureWorkshopWorker>,
+    val sleepDurationTicks: Long,
+    val sleepApproach: OriginFurnitureWorkshopPoint,
+    val sleepAt: OriginFurnitureWorkshopPoint,
 ) {
     init {
         require(world == WORKSHOP_WORLD) { "workshop world must be '$WORKSHOP_WORLD'" }
@@ -261,6 +263,16 @@ internal data class OriginFurnitureWorkshopSettings(
         require(workers.map { it.role.npcId }.distinct().size == workers.size) { "workshop NPC ids must be unique" }
         require(workers.map { it.tableId }.distinct().size == workers.size) { "parallel workshop workers need distinct tables" }
         require(routeProfile.snapRadius in 0..8) { "workshop route snap-radius must be within 0..8 cells" }
+        require(sleepDurationTicks in 200L..72_000L) { "workshop sleep duration must be within 200..72000 ticks" }
+        require(isWorkshopCellCenter(sleepApproach.x) && isWorkshopCellCenter(sleepApproach.z) &&
+            floor(sleepApproach.y).toInt() == routeProfile.floorY && routeProfile.allows(sleepApproach.cell())) {
+            "workshop sleep approach must be a safe centered route point"
+        }
+        val sleepDx = sleepApproach.x - sleepAt.x
+        val sleepDz = sleepApproach.z - sleepAt.z
+        require(sleepDx * sleepDx + sleepDz * sleepDz <= 16.0 && abs(sleepAt.y - sleepApproach.y) <= 1.0) {
+            "workshop sleep seat must be near its approach"
+        }
         validateOriginFurnitureWorkshopRoutes(workers, routeProfile)
     }
 
@@ -325,6 +337,9 @@ internal data class OriginFurnitureWorkshopSettings(
                 carryPitch = source.real("$root.carry.pitch", 0.0).toFloat(),
                 routeProfile = routeProfile,
                 workers = workers,
+                sleepDurationTicks = source.long("$root.sleep-rotation.duration-ticks", 2_400L),
+                sleepApproach = readPoint(source, "$root.sleep-rotation.approach"),
+                sleepAt = readPoint(source, "$root.sleep-rotation.at"),
             )
         }
 
@@ -363,7 +378,6 @@ internal data class OriginFurnitureWorkshopSettings(
                 finishedTranslationY = config.real("$path.finished-translation-y", 0.5),
                 parts = readParts(config, "$path.parts"),
                 beats = readBeats(config, "$path.beats"),
-                sleepingAt = if (config.bool("$path.sleeping", false)) readPoint(config, "$path.sleeping-at") else null,
             )
         }
 
@@ -536,6 +550,16 @@ internal object OriginFurnitureWorkshopModule : PluginModule, Listener {
     override val priority = 26
 
     private var runtime: OriginFurnitureWorkshopRuntime? = null
+
+    internal fun availablePlayerTable(): String? = runtime?.availablePlayerTable()
+    internal fun productIdFor(tableId: String): String? = runtime?.productIdFor(tableId)
+    internal fun acquirePlayerTable(tableId: String, playerId: UUID): Boolean =
+        runtime?.acquirePlayerTable(tableId, playerId) == true
+    internal fun ownsPlayerTable(tableId: String, playerId: UUID): Boolean =
+        runtime?.ownsPlayerTable(tableId, playerId) == true
+    internal fun releasePlayerTable(tableId: String, playerId: UUID) {
+        runtime?.releasePlayerTable(tableId, playerId)
+    }
     private var startupTasks: LifecycleTaskScope? = null
     private var pendingSettings: OriginFurnitureWorkshopSettings? = null
     private var startupGeneration = 0L
@@ -677,8 +701,10 @@ internal fun workshopWorkersDue(
     activeRoles: Set<OriginFurnitureWorkshopRole>,
     tick: Long,
 ): List<OriginFurnitureWorkshopWorker> = workers.filter { worker ->
-    worker.sleepingAt == null && worker.role !in activeRoles && tick >= nextDueTick.getValue(worker.role)
+    worker.role !in activeRoles && tick >= nextDueTick.getValue(worker.role)
 }
+
+private enum class WorkshopSleepStage { WAIT_FOR_WORK, TO_REST, SLEEPING, HOME }
 
 private enum class WorkshopAfterRoute { PICKUP, WORK_RETURN, WORKSTATION, OUTPUT, HOME }
 
@@ -728,6 +754,10 @@ private class OriginFurnitureWorkshopRuntime private constructor(
     private val sleepingNameplateSnapshots = linkedMapOf<Int, Pair<Boolean, Boolean>>()
     private val nextDueTick = settings.workers.associate { it.role to it.initialDelayTicks }.toMutableMap()
     private val active = linkedMapOf<OriginFurnitureWorkshopRole, ActiveWorkshopCycle>()
+    private val sleepShift = OriginWorkshopSleepShift(settings.workers.map { it.tableId }, settings.sleepDurationTicks)
+    private var sleepStage = WorkshopSleepStage.WAIT_FOR_WORK
+    private var sleepRouteDeadline = 0L
+    private var sleepRetryAt = 0L
     private var tick = 0L
     private var closed = false
 
@@ -760,22 +790,11 @@ private class OriginFurnitureWorkshopRuntime private constructor(
                 lookCloseSnapshots[actor.id] = trait to trait.isEnabled
                 trait.lookClose(false)
             }
-            if (worker.sleepingAt != null) {
-                ArcNpcHologramModule.setNameHiddenTemporarily(actor.id, WORKSHOP_SLEEP_NAME_OWNER, true)
-                val npcData = actor.data()
-                val hasNameplateOverride = npcData.has(NPC.Metadata.NAMEPLATE_VISIBLE)
-                sleepingNameplateSnapshots[actor.id] = hasNameplateOverride to
-                    npcData.get(NPC.Metadata.NAMEPLATE_VISIBLE, true)
-                npcData.set(NPC.Metadata.NAMEPLATE_VISIBLE, false)
-                sleepingEquipmentSnapshots[actor.id] = snapshotEquipment(actor)
-                setEquipment(actor, null, null)
-            }
             if (actor.isSpawned && actor.entity.world == world) {
                 check(!actor.navigator.isNavigating) { "Workshop NPC ${actor.id} is navigating outside this runtime" }
                 actor.getTraitNullable(SleepTrait::class.java)?.setSleeping(null)
-                check(actor.entity.teleport((worker.sleepingAt ?: worker.home).inWorld(world))) { "Workshop NPC ${actor.id} rejected home reset" }
-                if (worker.sleepingAt != null) actor.getOrAddTrait(SleepTrait::class.java).setSleeping(worker.sleepingAt.inWorld(world))
-                else faceOriginScenePoint(actor, worker.restFocus.inWorld(world))
+                check(actor.entity.teleport(worker.home.inWorld(world))) { "Workshop NPC ${actor.id} rejected home reset" }
+                faceOriginScenePoint(actor, worker.restFocus.inWorld(world))
             }
             if (worker.deliverOutput) stock[worker.role] = createItemDisplay(
                 item = products.getValue(worker.role),
@@ -801,8 +820,20 @@ private class OriginFurnitureWorkshopRuntime private constructor(
 
     private fun tickOnce() {
         tick++
+        try {
+            tickSleep()
+        } catch (failure: Exception) {
+            val worker = settings.workers[sleepShift.index]
+            sleepShift.invalidate()
+            sleepStage = WorkshopSleepStage.WAIT_FOR_WORK
+            sleepRetryAt = tick + worker.cycleDelayTicks
+            runCatching { routeController.stop(actors.getValue(worker.role)) }
+            runCatching { restoreSleepingWorker(worker) }
+            ARC.instance.logger.log(Level.WARNING,
+                "ORIGIN_WORKSHOP phase=SLEEP_ERROR actor=${worker.role.npcId} retry_tick=$sleepRetryAt", failure)
+        }
         if (tick % settings.machineUpdateTicks == 0L) {
-            settings.workers.filter { it.sleepingAt == null }.forEach { worker ->
+            settings.workers.filter { it.tableId != sleepShift.table || it.role in active }.forEach { worker ->
                 val actor = actors.getValue(worker.role)
                 OriginWorkshopTablesModule.animateDrive(worker.tableId, tick + WORKSHOP_MACHINE_INTERPOLATION_TICKS,
                     actor.isSpawned && actor.entity.world == world && hasViewer(actor.entity.location))
@@ -817,7 +848,7 @@ private class OriginFurnitureWorkshopRuntime private constructor(
             }
         }
         if (tick % settings.dispatcherIntervalTicks != 0L) return
-        workshopWorkersDue(settings.workers, nextDueTick, active.keys, tick)
+        workshopWorkersDue(settings.workers, nextDueTick, active.keys + settings.workers[sleepShift.index].role, tick)
             .filter { worker ->
                 val actor = actors.getValue(worker.role)
                 actor.isSpawned && actor.entity.world == world && !routeController.isNavigating(actor) && hasViewer(actor.entity.location)
@@ -830,6 +861,157 @@ private class OriginFurnitureWorkshopRuntime private constructor(
                     ARC.instance.logger.log(Level.WARNING, "ORIGIN_WORKSHOP phase=START_ERROR role=${worker.role.key}", failure)
                 }
             }
+    }
+
+    fun availablePlayerTable(): String? {
+        val actor = actors.getValue(settings.workers[sleepShift.index].role)
+        return sleepShift.table.takeIf { !closed && sleepShift.ready && actor.isSpawned && actor.entity.world == world }
+    }
+
+    fun productIdFor(tableId: String): String? = settings.workers.firstOrNull { it.tableId == tableId }?.productId
+
+    fun acquirePlayerTable(tableId: String, playerId: UUID): Boolean =
+        availablePlayerTable() == tableId && sleepShift.acquire(tableId, playerId)
+
+    fun ownsPlayerTable(tableId: String, playerId: UUID): Boolean =
+        availablePlayerTable() == tableId && sleepShift.owns(tableId, playerId)
+
+    fun releasePlayerTable(tableId: String, playerId: UUID) = sleepShift.release(tableId, playerId)
+
+    private fun tickSleep() {
+        val worker = settings.workers[sleepShift.index]
+        val actor = actors.getValue(worker.role)
+        if (!actor.isSpawned || actor.entity.world != world) {
+            if (sleepStage != WorkshopSleepStage.WAIT_FOR_WORK) {
+                sleepShift.invalidate()
+                routeController.stop(actor)
+                restoreSleepingWorker(worker)
+                sleepStage = WorkshopSleepStage.WAIT_FOR_WORK
+                sleepRetryAt = tick + worker.cycleDelayTicks
+                ARC.instance.logger.warning("ORIGIN_WORKSHOP phase=SLEEP_INTERRUPTED actor=${actor.id} reason=actor-unavailable")
+            }
+            return
+        }
+        when (sleepStage) {
+            WorkshopSleepStage.WAIT_FOR_WORK -> {
+                if (worker.role in active || tick < sleepRetryAt || !hasWorkshopViewer()) return
+                OriginWorkshopTablesModule.resetWork(worker.tableId)
+                OriginWorkshopTablesModule.animateDrive(worker.tableId, tick, false)
+                startSleepRoute(worker, settings.sleepApproach, WorkshopSleepStage.TO_REST)
+            }
+            WorkshopSleepStage.TO_REST, WorkshopSleepStage.HOME -> {
+                if (routeController.isNavigating(actor) && tick < sleepRouteDeadline) return
+                val outcome = if (routeController.isNavigating(actor)) {
+                    routeController.stop(actor)
+                    null
+                } else routeController.consumeOutcome(actor)
+                if (outcome?.successful != true) {
+                    val phase = sleepStage
+                    restoreSleepingWorker(worker)
+                    sleepShift.invalidate()
+                    sleepStage = WorkshopSleepStage.WAIT_FOR_WORK
+                    sleepRetryAt = tick + worker.cycleDelayTicks
+                    ARC.instance.logger.warning("ORIGIN_WORKSHOP phase=SLEEP_ROUTE_FAILED actor=${actor.id} target=$phase reason=${outcome?.reason ?: "timeout-or-missing-outcome"}")
+                    return
+                }
+                if (sleepStage == WorkshopSleepStage.HOME) {
+                    faceOriginScenePoint(actor, worker.restFocus.inWorld(world))
+                    nextDueTick[worker.role] = tick + worker.initialDelayTicks
+                    sleepShift.next()
+                    sleepStage = WorkshopSleepStage.WAIT_FOR_WORK
+                    sleepRetryAt = tick
+                    log("SLEEP_TURN", detail = "next=${sleepShift.table}")
+                } else {
+                    // Walking ends at the front of the existing sofa; only seating uses a teleport.
+                    check(actor.entity.teleport(settings.sleepAt.inWorld(world))) { "Workshop NPC ${actor.id} rejected sleep seat" }
+                    sleepingEquipmentSnapshots[actor.id] = snapshotEquipment(actor)
+                    val npcData = actor.data()
+                    sleepingNameplateSnapshots[actor.id] = npcData.has(NPC.Metadata.NAMEPLATE_VISIBLE) to
+                        npcData.get(NPC.Metadata.NAMEPLATE_VISIBLE, true)
+                    ArcNpcHologramModule.setNameHiddenTemporarily(actor.id, WORKSHOP_SLEEP_NAME_OWNER, true)
+                    npcData.set(NPC.Metadata.NAMEPLATE_VISIBLE, false)
+                    setEquipment(actor, null, null)
+                    actor.getOrAddTrait(SleepTrait::class.java).setSleeping(settings.sleepAt.inWorld(world))
+                    sleepShift.resting(tick)
+                    sleepStage = WorkshopSleepStage.SLEEPING
+                    log("SLEEP_STARTED", detail = "actor=${actor.id} table=${worker.tableId} duration_ticks=${settings.sleepDurationTicks}")
+                }
+            }
+            WorkshopSleepStage.SLEEPING -> {
+                if (!sleepShift.rotationDue(tick) || !hasWorkshopViewer()) return
+                sleepShift.leaveRest()
+                sleepStage = WorkshopSleepStage.WAIT_FOR_WORK
+                sleepRetryAt = tick + worker.cycleDelayTicks
+                restoreSleepingWorker(worker)
+                check(actor.entity.teleport(settings.sleepApproach.inWorld(world))) { "Workshop NPC ${actor.id} rejected sleep exit" }
+                startSleepRoute(worker, worker.home, WorkshopSleepStage.HOME)
+                log("SLEEP_FINISHED", detail = "actor=${actor.id} table=${worker.tableId}")
+            }
+        }
+    }
+
+    private fun startSleepRoute(
+        worker: OriginFurnitureWorkshopWorker,
+        destination: OriginFurnitureWorkshopPoint,
+        next: WorkshopSleepStage,
+    ) {
+        val actor = actors.getValue(worker.role)
+        sleepStage = next
+        sleepRouteDeadline = tick + settings.activeTimeoutTicks
+        if (!routeController.navigate(actor, destination.inWorld(world), settings.routeProfile)) {
+            sleepStage = WorkshopSleepStage.WAIT_FOR_WORK
+            sleepRetryAt = tick + worker.cycleDelayTicks
+            ARC.instance.logger.warning("ORIGIN_WORKSHOP phase=SLEEP_ROUTE_UNAVAILABLE actor=${actor.id} target=$next")
+        }
+    }
+
+    private fun restoreSleepingWorker(worker: OriginFurnitureWorkshopWorker) {
+        val actor = actors.getValue(worker.role)
+        runCatching {
+            ArcNpcHologramModule.setNameHiddenTemporarily(actor.id, WORKSHOP_SLEEP_NAME_OWNER, false)
+        }.onFailure { failure ->
+            ARC.instance.logger.log(
+                Level.WARNING,
+                "ORIGIN_WORKSHOP phase=SLEEP_RESTORE_FAILED actor=${actor.id} role=${worker.role.key} part=arc-name",
+                failure,
+            )
+        }
+        sleepingNameplateSnapshots.remove(actor.id)?.let { (hadOverride, wasVisible) ->
+            runCatching {
+                if (hadOverride) actor.data().set(NPC.Metadata.NAMEPLATE_VISIBLE, wasVisible)
+                else actor.data().remove(NPC.Metadata.NAMEPLATE_VISIBLE)
+            }.onFailure { failure ->
+                ARC.instance.logger.log(
+                    Level.WARNING,
+                    "ORIGIN_WORKSHOP phase=SLEEP_RESTORE_FAILED actor=${actor.id} role=${worker.role.key} part=nameplate",
+                    failure,
+                )
+            }
+        }
+        sleepingEquipmentSnapshots.remove(actor.id)?.let { (hand, offHand) ->
+            runCatching {
+                setEquipment(actor, CitizensEquipment.EquipmentSlot.HAND, hand ?: ItemStack(Material.AIR))
+            }.onFailure { failure ->
+                ARC.instance.logger.log(
+                    Level.WARNING,
+                    "ORIGIN_WORKSHOP phase=SLEEP_RESTORE_FAILED actor=${actor.id} role=${worker.role.key} part=main-hand",
+                    failure,
+                )
+            }
+            runCatching {
+                setEquipment(actor, CitizensEquipment.EquipmentSlot.OFF_HAND, offHand ?: ItemStack(Material.AIR))
+            }.onFailure { failure ->
+                ARC.instance.logger.log(
+                    Level.WARNING,
+                    "ORIGIN_WORKSHOP phase=SLEEP_RESTORE_FAILED actor=${actor.id} role=${worker.role.key} part=off-hand",
+                    failure,
+                )
+            }
+        }
+        runCatching { actor.getTraitNullable(SleepTrait::class.java)?.setSleeping(null) }.onFailure { failure ->
+            ARC.instance.logger.log(Level.WARNING,
+                "ORIGIN_WORKSHOP phase=SLEEP_RESTORE_FAILED actor=${actor.id} role=${worker.role.key} part=sleep-trait", failure)
+        }
     }
 
     private fun startCycle(worker: OriginFurnitureWorkshopWorker) {
@@ -1310,6 +1492,8 @@ private class OriginFurnitureWorkshopRuntime private constructor(
 
     private fun hasViewer(location: Location): Boolean = playersNear(location).isNotEmpty()
 
+    private fun hasWorkshopViewer(): Boolean = settings.workers.any { hasViewer(it.home.inWorld(world)) }
+
     private fun logRoute(event: NpcRouteEvent) {
         val reason = event.reason?.let { " reason=$it" }.orEmpty()
         log(
@@ -1339,60 +1523,29 @@ private class OriginFurnitureWorkshopRuntime private constructor(
     override fun close() {
         if (closed) return
         closed = true
-        tasks.close()
-        active.values.toList().forEach(::closeActor)
-        active.clear()
-        settings.workers.filter { it.sleepingAt != null }.forEach { worker ->
-            actors[worker.role]?.let { actor ->
-                runCatching {
-                    ArcNpcHologramModule.setNameHiddenTemporarily(actor.id, WORKSHOP_SLEEP_NAME_OWNER, false)
-                }.onFailure { failure ->
-                    ARC.instance.logger.log(
-                        Level.WARNING,
-                        "ORIGIN_WORKSHOP phase=SLEEP_RESTORE_FAILED actor=${actor.id} role=${worker.role.key} part=arc-name",
-                        failure,
-                    )
-                }
-                sleepingNameplateSnapshots.remove(actor.id)?.let { (hadOverride, wasVisible) ->
-                    runCatching {
-                        if (hadOverride) actor.data().set(NPC.Metadata.NAMEPLATE_VISIBLE, wasVisible)
-                        else actor.data().remove(NPC.Metadata.NAMEPLATE_VISIBLE)
-                    }.onFailure { failure ->
-                        ARC.instance.logger.log(
-                            Level.WARNING,
-                            "ORIGIN_WORKSHOP phase=SLEEP_RESTORE_FAILED actor=${actor.id} role=${worker.role.key} part=nameplate",
-                            failure,
-                        )
-                    }
-                }
-                sleepingEquipmentSnapshots.remove(actor.id)?.let { (hand, offHand) ->
-                    runCatching {
-                        setEquipment(actor, CitizensEquipment.EquipmentSlot.HAND, hand ?: ItemStack(Material.AIR))
-                    }.onFailure { failure ->
-                        ARC.instance.logger.log(
-                            Level.WARNING,
-                            "ORIGIN_WORKSHOP phase=SLEEP_RESTORE_FAILED actor=${actor.id} role=${worker.role.key} part=main-hand",
-                            failure,
-                        )
-                    }
-                    runCatching {
-                        setEquipment(actor, CitizensEquipment.EquipmentSlot.OFF_HAND, offHand ?: ItemStack(Material.AIR))
-                    }.onFailure { failure ->
-                        ARC.instance.logger.log(
-                            Level.WARNING,
-                            "ORIGIN_WORKSHOP phase=SLEEP_RESTORE_FAILED actor=${actor.id} role=${worker.role.key} part=off-hand",
-                            failure,
-                        )
-                    }
-                }
-                actor.getTraitNullable(SleepTrait::class.java)?.setSleeping(null)
+        fun cleanup(part: String, operation: () -> Unit) {
+            runCatching(operation).onFailure { failure ->
+                ARC.instance.logger.log(Level.WARNING, "ORIGIN_WORKSHOP phase=CLOSE_FAILED part=$part", failure)
             }
         }
-        settings.workers.forEach { OriginWorkshopTablesModule.animateDrive(it.tableId, 0L, false) }
-        routeController.close()
+        cleanup("tasks") { tasks.close() }
+        active.values.toList().forEach { cycle -> cleanup("actor-${cycle.actor.id}") { closeActor(cycle) } }
+        active.clear()
+        sleepShift.invalidate()
+        settings.workers.forEach { worker ->
+            cleanup("sleep-${worker.role.key}") { restoreSleepingWorker(worker) }
+            val actor = actors.getValue(worker.role)
+            if (actor.isSpawned && actor.entity.world == world) {
+                runCatching { actor.entity.teleport(worker.home.inWorld(world)) }
+            }
+        }
+        settings.workers.forEach { worker -> cleanup("drive-${worker.tableId}") {
+            OriginWorkshopTablesModule.animateDrive(worker.tableId, 0L, false)
+        } }
+        cleanup("routes") { routeController.close() }
         stock.values.toList().forEach { runCatching { it.remove() } }
         stock.clear()
-        displays.close()
+        cleanup("displays") { displays.close() }
         lookCloseSnapshots.values.forEach { (trait, enabled) ->
             runCatching { trait.lookClose(enabled) }.onFailure { failure ->
                 ARC.instance.logger.log(Level.WARNING, "Could not restore workshop NPC LookClose", failure)
