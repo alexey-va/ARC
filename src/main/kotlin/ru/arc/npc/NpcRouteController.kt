@@ -414,6 +414,13 @@ private data class ActiveNpcRoute(
     val recoveries: Int = 0,
 )
 
+/** Range to the final endpoint must cover the entire detour, not just its first cell. */
+internal fun npcRouteRequiredRange(start: Vector, points: List<Vector>, margin: Double): Float {
+    val destination = points.last()
+    // Citizens checks distance to the final destination before every custom-strategy update.
+    return (maxOf(start.distance(destination), points.maxOf { it.distance(destination) }) + margin + 1.0).toFloat()
+}
+
 /**
  * Follows ARC's already validated cells directly. Citizens' built-in iterable
  * strategy hands every cell back to the Minecraft navigator for living NPCs,
@@ -638,6 +645,8 @@ internal class CitizensNpcRouteController(
         npc.getOrAddTrait(RotationTrait::class.java).physicalSession.rotateToHave(initialHeadingYaw, 0f)
         npc.entity.setRotation(initialHeadingYaw, 0f)
         npc.navigator.setTarget { params ->
+            // Change only this route's cloned parameters; preserve the NPC's persisted defaults.
+            params.range(maxOf(params.range(), npcRouteRequiredRange(actual.toVector(), vectors, profile.distanceMargin)))
             FixedLevelPathStrategy(
                 npc = npc,
                 world = world,

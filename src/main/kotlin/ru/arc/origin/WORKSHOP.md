@@ -77,6 +77,9 @@ is 2400 ticks, with approach `-56.5,71,-49.5` and seat `-56.5,71,-46.5`.
 Initial placement, recovery and the seat transition use teleportation; normal
 shift walking uses the existing
 `CitizensNpcRouteController` and the configured safe floor bounds.
+The route's cloned Citizens parameters cover the farthest planned point from
+the final endpoint; a short inherited NPC range must not cancel a valid long
+walk to the sofa. Persisted navigator defaults are preserved.
 
 ## Focused checks and evidence
 

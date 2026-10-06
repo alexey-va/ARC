@@ -23,6 +23,24 @@ class NpcRouteControllerTest : FreeSpec({
         npcRouteYaw(0.0, 0.0, 1.0, 0.0) shouldBe -90f
     }
 
+    "Citizens range covers long routes from the actual start" {
+        val start = Vector(0.0, 0.0, 0.0)
+        val destination = Vector(30.0, 0.0, 0.0)
+
+        val range = npcRouteRequiredRange(start, listOf(start, destination), 0.35)
+
+        range shouldBe 31.35f
+        (range > 19f) shouldBe true
+    }
+
+    "Citizens range covers the furthest detour point in three dimensions" {
+        val start = Vector(0.0, 0.0, 0.0)
+        val destination = Vector(10.0, 0.0, 0.0)
+        val detour = Vector(10.0, 12.0, 0.0)
+
+        npcRouteRequiredRange(start, listOf(start, detour, destination), 0.25) shouldBe 13.25f
+    }
+
     "direct route movement stays horizontal and cannot overshoot a cell" {
         npcRouteHorizontalVelocity(0.0, 0.0, 1.0, 0.0, 0.2).let { velocity ->
             velocity.x shouldBe 0.2
