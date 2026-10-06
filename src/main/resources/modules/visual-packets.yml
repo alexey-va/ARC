@@ -1,0 +1,14 @@
+# Shared application-payload budget for opt-in client-only displays, glow changes,
+# and short visual effects. Vanilla gameplay packets are not included.
+# Combined rate across all plugins, in decimal megabits per second (Mbit/s).
+server-mbps: 32.0
+# Rate available to one connection across all participating plugins (Mbit/s).
+viewer-mbps: 2.0
+# Token-bucket capacity equals each rate multiplied by this duration (10-30000).
+burst-ms: 250
+# Period for source summaries and bounded overload warnings (30-3600 seconds).
+log-interval-seconds: 30
+
+# Emit interval totals and per-plugin-feature bytes, packets, Mbit/s and deferred
+# counts. Source labels are stable plugin:feature names; player identifiers are not used.
+verbose-logs: true

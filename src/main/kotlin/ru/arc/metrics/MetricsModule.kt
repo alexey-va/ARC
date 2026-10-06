@@ -452,6 +452,7 @@ object MetricsModule : PluginModule {
         metrics.recordSnapshot("paper-fast", "platform") {
             val redis = ARC.redisManager
             paper.fastSnapshot() +
+                ARC.instance.visualPacketRuntime?.metricPoints().orEmpty() +
                 MetricPoint(
                     "arc_redis_connected",
                     "ARC Redis connection state",

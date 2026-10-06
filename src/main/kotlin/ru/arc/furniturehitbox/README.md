@@ -30,7 +30,7 @@ from the public API, not just the signatures of plausible internal classes.
 Readiness is reported once the public furniture registry is loaded. No
 click/break events, protections, barriers, inventories or ownership are changed.
 
-`PacketFurnitureHitboxOutline` uses Core 2.7.13 `PaperPacketDisplays`: twelve thin,
+`PacketFurnitureHitboxOutline` uses Core 2.7.18 `PaperPacketDisplays`: twelve thin,
 glowing block-display rods visible only to their owner, with no native entities.
 Identical frames reuse their handles; partial failures and shutdown release them.
 

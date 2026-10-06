@@ -922,7 +922,7 @@ object TravelAnchorsModule : PluginModule, Listener {
         shutdown()
         val next = TravelAnchorConfig.load(ARC.instance.dataPath)
         settings = next
-        packetDisplays = runCatching { PaperPacketDisplays(ARC.instance) }.getOrElse { failure ->
+        packetDisplays = runCatching { PaperPacketDisplays(ARC.instance, "travel-anchors") }.getOrElse { failure ->
             warn("TRAVEL_ANCHORS phase=DISPLAY reason=packet-service-unavailable", failure)
             settings = null
             return

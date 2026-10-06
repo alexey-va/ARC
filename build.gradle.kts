@@ -18,7 +18,7 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath("ru.ruscrafting.arc:arc-core-integration-testing:2.7.17")
+        classpath("ru.ruscrafting.arc:arc-core-integration-testing:2.7.18")
     }
 }
 
@@ -52,10 +52,10 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.308"
+version = "1.4.309"
 description = "ARC"
 val pluginVersion = version.toString()
-val arcCoreVersion = "2.7.17"
+val arcCoreVersion = "2.7.18"
 val landsJar = providers.gradleProperty("landsJar").orNull?.let(::file)
 if (landsJar != null) require(landsJar.isFile) { "Lands JAR does not exist: $landsJar" }
 val landsCompileDependency: Any = landsJar?.let { files(it) } ?: libs.com.github.angeschossen.landsapi

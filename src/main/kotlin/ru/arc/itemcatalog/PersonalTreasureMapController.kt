@@ -398,7 +398,7 @@ internal interface PersonalTreasureMapMarker : AutoCloseable {
 private class PacketPersonalTreasureMapMarker(plugin: Plugin) : PersonalTreasureMapMarker {
     private data class MarkerKey(val worldId: UUID, val x: Double, val y: Double, val z: Double)
 
-    private val displays = PaperPacketDisplays(plugin)
+    private val displays = PaperPacketDisplays(plugin, "personal-treasure-map")
     private val markers = mutableMapOf<UUID, Pair<MarkerKey, PacketItemDisplay>>()
 
     override fun show(player: Player, destination: PersonalTreasureMapDestination) {

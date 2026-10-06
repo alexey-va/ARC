@@ -768,7 +768,7 @@ private class OriginFurnitureWorkshopRuntime private constructor(
 ) : AutoCloseable {
     private val tasks = LifecycleTaskScope()
     private val routeController = CitizensNpcRouteController(::logRoute, NpcRouteObstacleSource(::originFurnitureObstacleCells))
-    private val displays = PaperPacketDisplays(ARC.instance)
+    private val displays = PaperPacketDisplays(ARC.instance, "workshop-workers")
     private val stock = linkedMapOf<OriginFurnitureWorkshopRole, PacketItemDisplay>()
     private val lookCloseSnapshots = linkedMapOf<Int, Pair<LookClose, Boolean>>()
     private val navigationPauseSnapshots = linkedMapOf<Int, Boolean>()

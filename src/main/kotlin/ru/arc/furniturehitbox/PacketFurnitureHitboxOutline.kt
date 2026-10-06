@@ -52,7 +52,7 @@ internal class PacketFurnitureHitboxOutline(
     private val displays: PaperPacketDisplays,
     private val block: BlockData,
 ) : FurnitureHitboxOutline {
-    constructor(plugin: Plugin) : this(PaperPacketDisplays(plugin), Material.LIGHT_BLUE_CONCRETE.createBlockData())
+    constructor(plugin: Plugin) : this(PaperPacketDisplays(plugin, "furniture-outline"), Material.LIGHT_BLUE_CONCRETE.createBlockData())
     private data class Frame(val worldId: UUID, val rootId: UUID, val box: BoundingBox, val lines: List<PacketBlockDisplay>)
     private val frames = mutableMapOf<UUID, Frame>()
 

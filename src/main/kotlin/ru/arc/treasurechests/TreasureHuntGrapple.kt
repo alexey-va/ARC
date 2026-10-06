@@ -62,7 +62,7 @@ import kotlin.math.ceil
 internal class TreasureHuntGrapple(
     private val plugin: JavaPlugin,
     private val scheduler: TaskScheduler,
-    private val displays: PaperPacketDisplays = PaperPacketDisplays(plugin),
+    private val displays: PaperPacketDisplays = PaperPacketDisplays(plugin, "treasure-hunt-grapple"),
 ) : Listener, AutoCloseable {
     private companion object {
         const val SPAWN_WORLD = "rc_origin_spawn"

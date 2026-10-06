@@ -94,6 +94,7 @@ import ru.arc.origin.OriginWorkshopTablesModule
 import ru.arc.origin.scene.OriginAmbientScenesModule
 import ru.arc.origin.mountyard.OriginMountYardModule
 import ru.arc.paper.chunk.PaperChunkTicketRegistry
+import ru.arc.paper.packet.PaperVisualPacketRuntime
 import ru.arc.restart.RestartModule
 import ru.arc.slimefunmenu.SlimefunMenuAliasCommand
 import ru.arc.slimefunmenu.SlimefunMenuCommand
@@ -137,6 +138,9 @@ open class ARC : JavaPlugin() {
     internal lateinit var sidebarService: SectionedSidebarService
         private set
 
+    internal var visualPacketRuntime: PaperVisualPacketRuntime? = null
+        private set
+
     private var baseSidebar: ArcBaseSidebar? = null
     internal var tablist: ru.arc.tablist.ArcTablist? = null
         private set
@@ -165,6 +169,7 @@ open class ARC : JavaPlugin() {
         }
 
         PaperArcRuntime.installScheduling(this)
+        visualPacketRuntime = PaperVisualPacketRuntime.install(this)
         val configRoot = dataPath
         ru.arc.core.async {
             try {
@@ -231,6 +236,9 @@ open class ARC : JavaPlugin() {
         unregisterNetworkSpawnAlias()
         if (runtimeProfile == ArcRuntimeProfile.FULL) Portal.removeAll()
         ModuleRegistry.shutdownAll()
+        runCatching { visualPacketRuntime?.close() }
+            .onFailure { failure -> error("Failed to close the visual packet budget", failure) }
+        visualPacketRuntime = null
         baseSidebar?.close()
         baseSidebar = null
         tablist?.close()
@@ -259,6 +267,18 @@ open class ARC : JavaPlugin() {
         if (runtimeProfile == ArcRuntimeProfile.FULL) Portal.removeAll()
         // Reload YAML from disk before modules re-read configs (announce delay, etc.).
         ConfigManager.reloadAll()
+        visualPacketRuntime?.let { runtime ->
+            try {
+                runtime.reload(
+                    ConfigManager.of(
+                        dataPath.resolve(ConfigManager.MODULE_YAML_DIR),
+                        PaperVisualPacketRuntime.CONFIG_FILE,
+                    ),
+                )
+            } catch (failure: IllegalArgumentException) {
+                warn("Invalid modules/visual-packets.yml; keeping active visual packet limits: {}", failure.message)
+            }
+        }
         if (ArcRuntimeProfile.load(dataPath) != runtimeProfile) {
             warn("Runtime profile changes require a server restart; keeping {}", runtimeProfile)
         }
@@ -584,6 +604,7 @@ open class ARC : JavaPlugin() {
                 "modules/runtime.yml",
                 "modules/logging.yml",
                 "modules/metrics.yml",
+                "modules/visual-packets.yml",
                 "modules/redis.yml",
                 "modules/ops-http.yml",
                 "modules/citizens-chunk-tickets.yml",

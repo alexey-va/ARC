@@ -373,7 +373,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
             return
         }
         val displayOwner = try {
-            PaperPacketDisplays(ARC.instance)
+            PaperPacketDisplays(ARC.instance, "workshop-game")
         } catch (failure: Exception) {
             ARC.instance.logger.log(Level.WARNING, "Origin workshop game display owner unavailable", failure)
             return

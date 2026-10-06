@@ -712,7 +712,7 @@ internal object OriginWorkshopTablesModule : PluginModule {
         }
 
         val owner = displays ?: try {
-            PaperPacketDisplays(ARC.instance).also { displays = it }
+            PaperPacketDisplays(ARC.instance, "workshop-tables").also { displays = it }
         } catch (failure: Exception) {
             ARC.instance.logger.log(Level.WARNING, "Origin workshop tables could not open the packet display owner", failure)
             return

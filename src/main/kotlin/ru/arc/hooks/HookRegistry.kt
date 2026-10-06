@@ -223,6 +223,7 @@ class HookRegistry(
         cleanup(failures) { auctionHook?.close() }
         cleanup(failures) { furnitureGalleryInteractionRuntime?.close() }
         cleanup(failures) { citizensHook?.close() }
+        cleanup(failures) { packetEventsHook?.close() }
         cleanup(failures) { chatGlyphProtection?.close() }
         chatGlyphProtection = null
         cleanup(failures) { papiHook?.clearPlaceholderCache() }
