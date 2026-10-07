@@ -38,6 +38,7 @@ import ru.arc.paper.display.PacketDisplay
 import ru.arc.paper.display.PacketItemDisplay
 import ru.arc.paper.display.PacketTextDisplay
 import ru.arc.paper.display.PaperPacketDisplays
+import ru.arc.paper.particle.PaperViewerParticles
 import java.util.UUID
 import java.util.logging.Level
 import kotlin.math.floor
@@ -336,6 +337,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
 
     private var settings: GameSettings? = null
     private var owner: PaperPacketDisplays? = null
+    private var particleOwner: PaperViewerParticles? = null
     private var label: PacketTextDisplay? = null
     private var occupancyLabel: PacketTextDisplay? = null
     private val rewards = mutableMapOf<String, OriginWorkshopCraftRewards>()
@@ -378,7 +380,15 @@ internal object OriginWorkshopGame : PluginModule, Listener {
             ARC.instance.logger.log(Level.WARNING, "Origin workshop game display owner unavailable", failure)
             return
         }
+        val particles = try {
+            PaperViewerParticles(ARC.instance, "workshop-game")
+        } catch (failure: Exception) {
+            displayOwner.close()
+            ARC.instance.logger.log(Level.WARNING, "Origin workshop game particle owner unavailable", failure)
+            return
+        }
         owner = displayOwner
+        particleOwner = particles
         idleHoverers.clear()
         commonTasks.runTimer(HOVER_CHECK_TICKS, HOVER_CHECK_TICKS) { updateIdleHover() }
         ARC.instance.logger.info("ORIGIN_WORKSHOP_GAME phase=READY player=none session=none stage=STOCK")
@@ -845,7 +855,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         active.lastCueParticleTick = now
         val at = center.clone().add(0.0, marker.pieces.first().geometry.center.y, 0.0)
         // Private, sparse dust: two small particles per 0.6 seconds, only at the current clickable target.
-        player.spawnParticle(Particle.DUST, at, 2, 0.10, 0.06, 0.10, 0.0, CUE_PARTICLE_DUST)
+        particleOwner?.dust(player, at, CUE_PARTICLE_DUST, 2, 0.10, 0.06, 0.10, 0.0)
     }
 
     private fun updateIdleHover() {
@@ -1009,6 +1019,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
 
     private fun showStage(active: Session, player: Player, phase: String) {
         val stage = active.progress.stage
+        particleOwner?.invalidatePending()
         active.targetMarker?.remove()
         active.targetMarker = null
         val action = active.recipe.interactions[stage]?.action
@@ -1337,6 +1348,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
 
     private fun finishSession(active: Session) {
         if (active !== session) return
+        particleOwner?.invalidatePending()
         session = null
         OriginFurnitureWorkshopModule.releasePlayerTable(active.tableId, active.playerId)
         active.tasks.close()
@@ -1355,6 +1367,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         if (active !== session) return
         val player = Bukkit.getPlayer(active.playerId)
         log(active, "CANCEL", active.progress.stage, reason)
+        particleOwner?.invalidatePending()
         session = null
         OriginFurnitureWorkshopModule.releasePlayerTable(active.tableId, active.playerId)
         active.progress = OriginWorkshopGameProgress(OriginWorkshopGameStage.CLOSED, nowTick())
@@ -1515,6 +1528,8 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         busyFeedbackNanos.clear()
         owner?.close()
         owner = null
+        particleOwner?.close()
+        particleOwner = null
         idleTable?.let { OriginWorkshopTablesModule.resetCraft(it) }
         idleTable = null
     }
