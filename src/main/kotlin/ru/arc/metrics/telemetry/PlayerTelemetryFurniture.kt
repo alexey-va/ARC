@@ -4,6 +4,7 @@ import dev.lone.itemsadder.api.Events.FurnitureBreakEvent
 import dev.lone.itemsadder.api.Events.FurnitureInteractEvent
 import dev.lone.itemsadder.api.Events.FurniturePlaceEvent
 import dev.lone.itemsadder.api.Events.FurniturePlaceSuccessEvent
+import org.bukkit.entity.Player
 import org.bukkit.event.EventPriority
 import ru.arc.core.EventScope
 
@@ -15,7 +16,9 @@ internal object PlayerTelemetryFurniture {
                 mapOf("cancelled" to it.isCancelled.toString()))
         }
         scope.on<FurniturePlaceSuccessEvent>(EventPriority.MONITOR) { event ->
-            val player = event.player
+            // ItemsAdder fires this event for API-spawned furniture with a null player,
+            // despite Bukkit's inherited PlayerEvent getter being annotated non-null.
+            val player: Player? = event.player
             if (player != null) PlayerTelemetryModule.action(player, "furniture.placed", event.namespacedID)
         }
         scope.on<FurnitureBreakEvent>(EventPriority.MONITOR, ignoreCancelled = false) {

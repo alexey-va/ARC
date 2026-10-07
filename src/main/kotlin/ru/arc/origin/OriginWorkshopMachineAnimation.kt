@@ -375,6 +375,10 @@ internal fun originWorkshopCraftMachinePose(
     tuning: OriginWorkshopMachineTuning,
     strokeProgress: Double = progress,
 ): OriginWorkshopMachinePose {
+    require(progress.isFinite() && strokeProgress.isFinite()) { "Craft machine progress must be finite" }
+    val p = progress.coerceIn(0.0, 1.0)
+    if (machine == "sewing") return originWorkshopSewingPose(p)
+    if (machine == "sewing-foot") return originWorkshopSewingFootPose(p)
     val mechanism = when (machine) {
         "saw" -> OriginWorkshopMechanism.SAW
         "drill" -> OriginWorkshopMechanism.DRILL
@@ -386,7 +390,6 @@ internal fun originWorkshopCraftMachinePose(
         "finish" -> OriginWorkshopMechanism.FINISH
         else -> error("Unknown workshop craft machine '$machine'")
     }
-    val p = progress.coerceIn(0.0, 1.0)
     val stroke = strokeProgress.coerceIn(0.0, 1.0)
     val pose = originWorkshopMachinePose(mechanism, p, stroke, dimensions, tuning)
     // Player props replace the autonomous sample on these machines.
@@ -399,6 +402,62 @@ internal fun originWorkshopCraftMachinePose(
     }
     val sample = pose.pieces.getValue(sampleKey)
     return pose.copy(pieces = pose.pieces + (sampleKey to sample.copy(visible = false)))
+}
+
+private const val ORIGIN_WORKSHOP_STITCHES_PER_PASS = 5
+
+/** Five full needle/shuttle cycles; the needle is clear at both ends of a timed pass. */
+private fun originWorkshopSewingPose(progress: Double): OriginWorkshopMachinePose {
+    val turn = progress * ORIGIN_WORKSHOP_STITCHES_PER_PASS
+    val cycle = if (progress >= 1.0) 0.0 else turn - kotlin.math.floor(turn)
+    val stroke = if (cycle <= 0.5) {
+        smoothstep(cycle * 2.0)
+    } else {
+        smoothstep((1.0 - cycle) * 2.0)
+    }
+    val radians = turn * 2.0 * PI
+    val degrees = turn * 360.0
+    val pieces = buildMap {
+        putAll(workshopWheelMotion("upholsterer-drive-handwheel", 0.22, degrees))
+        put("upholsterer-drive-needle", OriginWorkshopPieceMotion(
+            centerOffset = OriginWorkshopPoint(0.0, -0.08 * stroke, 0.0),
+        ))
+        put("upholsterer-drive-shuttle", OriginWorkshopPieceMotion(
+            centerOffset = OriginWorkshopPoint(if (progress >= 1.0) 0.0 else 0.17 * sin(radians), 0.0, 0.0),
+        ))
+        for (index in 0..1) put("upholsterer-drive-fabric-roller-$index", OriginWorkshopPieceMotion(
+            rotationAxis = OriginWorkshopRotationAxis.Z,
+            rotationDegrees = -degrees,
+        ))
+        // Keep the cloth clamped for every stitch, then lift before the pickup/reposition step.
+        putAll(originWorkshopSewingFootPose(if (progress < 1.0) 1.0 else 0.0).pieces)
+    }
+    return OriginWorkshopMachinePose(pieces, null)
+}
+
+/** The foot rests 0.10 blocks above the cloth until the player lowers it with the needle-side lever. */
+private fun originWorkshopSewingFootPose(progress: Double): OriginWorkshopMachinePose {
+    val down = smoothstep(progress)
+    val pieces = mapOf(
+        "upholsterer-sewing-foot-toe-left" to OriginWorkshopPieceMotion(
+            centerOffset = OriginWorkshopPoint(0.0, -0.10 * down, 0.0),
+        ),
+        "upholsterer-sewing-foot-toe-right" to OriginWorkshopPieceMotion(
+            centerOffset = OriginWorkshopPoint(0.0, -0.10 * down, 0.0),
+        ),
+        "upholsterer-sewing-foot-bridge" to OriginWorkshopPieceMotion(
+            centerOffset = OriginWorkshopPoint(0.0, -0.10 * down, 0.0),
+        ),
+        "upholsterer-sewing-foot-shank" to OriginWorkshopPieceMotion(
+            centerOffset = OriginWorkshopPoint(0.0, -0.05 * down, 0.0),
+            scaleYFactor = 1.0 + 0.10 * down / 0.366,
+        ),
+        "upholsterer-sewing-foot-lifter" to OriginWorkshopPieceMotion(
+            rotationAxis = OriginWorkshopRotationAxis.X,
+            rotationDegrees = 15.0 * down,
+        ),
+    )
+    return OriginWorkshopMachinePose(pieces, null)
 }
 
 

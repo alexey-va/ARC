@@ -138,6 +138,29 @@ class OriginWorkshopWorkpieceTest : FreeSpec({
             val z = abs(piece.center.z) + piece.size.z / 2
             (x * x + y * y + z * z <= 0.36 * 0.36) shouldBe true
         }
+
+        val pinDepth = originWorkshopAssemblerLegPieces(fastened = true).last().size.z.toDouble()
+        val fastenerMarker = originWorkshopPlacementMarker(OriginWorkshopGameAction.TIGHTEN_LEFT, pinDepth).single()
+        val x = abs(fastenerMarker.center.x) + fastenerMarker.size.x / 2
+        val y = abs(fastenerMarker.center.y) + fastenerMarker.size.y / 2
+        val z = abs(fastenerMarker.center.z) + fastenerMarker.size.z / 2
+        (x * x + y * y + z * z <= 0.36 * 0.36) shouldBe true
+        shouldThrow<IllegalArgumentException> {
+            originWorkshopPlacementMarker(OriginWorkshopGameAction.TIGHTEN_VISE, pinDepth)
+        }
+    }
+
+    "sewing feed maps finite progress to the needle span and clamps its endpoints" {
+        val dimensions = OriginWorkshopTableDimensions.DEFAULT
+        for ((progress, x) in listOf(0.0 to 0.72, 0.5 to 0.42, 1.0 to 0.12)) {
+            val feed = originWorkshopSewingClothPoint(dimensions, progress)
+            feed.x shouldBe x
+            feed.y shouldBe dimensions.height + 0.14
+            feed.z.near(-0.39) shouldBe true
+        }
+        originWorkshopSewingClothPoint(dimensions, -1.0) shouldBe originWorkshopSewingClothPoint(dimensions, 0.0)
+        originWorkshopSewingClothPoint(dimensions, 2.0) shouldBe originWorkshopSewingClothPoint(dimensions, 1.0)
+        shouldThrow<IllegalArgumentException> { originWorkshopSewingClothPoint(dimensions, Double.NaN) }
     }
 
     "shoulder board follows horizontal forward at cardinal yaws and lowers while sneaking" {

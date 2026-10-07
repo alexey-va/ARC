@@ -222,6 +222,80 @@ class OriginWorkshopMachineAnimationTest : FreeSpec({
         originWorkshopCraftMachinePose("press", 1.0, dimensions, tuning).pieces.getValue("upholsterer-press-platen").centerOffset.y shouldBe 0.0
     }
 
+    "session sewing cycles the needle five times and clears it at both ends" {
+        val start = originWorkshopCraftMachinePose("sewing", 0.0, dimensions, tuning)
+        val middle = originWorkshopCraftMachinePose("sewing", 0.10, dimensions, tuning)
+        val finish = originWorkshopCraftMachinePose("sewing", 1.0, dimensions, tuning)
+        val needleKey = "upholsterer-drive-needle"
+        val needle = originWorkshopTablePieces(OriginWorkshopTableRole.UPHOLSTERER, 0, dimensions, tuning)
+            .single { it.key == needleKey }
+
+        start.pieces.getValue(needleKey).centerOffset.y shouldBe 0.0
+        start.pieces.getValue("upholsterer-sewing-foot-toe-left").centerOffset.y shouldBe -0.10
+        start.pieces.getValue("upholsterer-sewing-foot-lifter").rotationDegrees shouldBe 15.0
+        middle.pieces.getValue(needleKey).centerOffset.y shouldBe -0.08
+        middle.pieces.getValue("upholsterer-sewing-foot-toe-right").centerOffset.y shouldBe -0.10
+        finish.pieces.getValue(needleKey).centerOffset.y shouldBe 0.0
+        finish.pieces.getValue("upholsterer-sewing-foot-toe-left").centerOffset.y shouldBe 0.0
+        finish.pieces.getValue("upholsterer-sewing-foot-lifter").rotationDegrees shouldBe 0.0
+        finish.pieces.getValue("upholsterer-drive-handwheel-spoke-x").rotationDegrees shouldBe 1800.0
+        finish.pieces.getValue("upholsterer-drive-fabric-roller-0").rotationDegrees shouldBe -1800.0
+        finish.pieces.getValue("upholsterer-drive-shuttle").centerOffset.x shouldBe 0.0
+
+        val lowestNeedleBottom = needle.y - needle.height / 2.0 + middle.pieces.getValue(needleKey).centerOffset.y
+        (abs(lowestNeedleBottom - (dimensions.height + 0.14)) < 1e-9) shouldBe true
+        // Session cloth top is h+.152; the needle penetrates by .012 before retracting.
+        (abs((dimensions.height + 0.152) - lowestNeedleBottom - 0.012) < 1e-9) shouldBe true
+    }
+
+    "sewing-foot hand lever lowers the two-prong presser foot onto the session cloth" {
+        val pieces = originWorkshopTablePieces(OriginWorkshopTableRole.UPHOLSTERER, 0, dimensions, tuning)
+            .associateBy { it.key }
+        val footLeft = pieces.getValue("upholsterer-sewing-foot-toe-left")
+        val footRight = pieces.getValue("upholsterer-sewing-foot-toe-right")
+        val needle = pieces.getValue("upholsterer-drive-needle")
+        val bridge = pieces.getValue("upholsterer-sewing-foot-bridge")
+        val shank = pieces.getValue("upholsterer-sewing-foot-shank")
+        val arm = pieces.getValue("upholsterer-sewing-arm")
+        val lifter = pieces.getValue("upholsterer-sewing-foot-lifter")
+        val lowered = originWorkshopCraftMachinePose("sewing-foot", 1.0, dimensions, tuning)
+
+        val gap = footRight.x - footRight.width / 2.0 - (footLeft.x + footLeft.width / 2.0)
+        (gap > needle.width) shouldBe true
+        for (toe in listOf(footLeft, footRight)) {
+            val motion = lowered.pieces.getValue(toe.key)
+            (abs(toe.y + motion.centerOffset.y - toe.height / 2.0 - dimensions.height - 0.154) < 1e-9) shouldBe true
+        }
+        (abs(bridge.y - bridge.height / 2.0 - (footLeft.y + footLeft.height / 2.0)) < 1e-9) shouldBe true
+        (abs(bridge.z - bridge.depth / 2.0 - (footRight.z + footRight.depth / 2.0)) < 1e-9) shouldBe true
+        (abs(shank.y + shank.height / 2.0 - (arm.y - arm.height / 2.0)) < 1e-9) shouldBe true
+        (abs(shank.y - shank.height / 2.0 - (bridge.y + bridge.height / 2.0)) < 1e-9) shouldBe true
+        val bridgeCoversShankX = bridge.x - bridge.width / 2.0 < shank.x + shank.width / 2.0 &&
+            bridge.x + bridge.width / 2.0 > shank.x - shank.width / 2.0
+        val bridgeCoversShankZ = bridge.z - bridge.depth / 2.0 < shank.z + shank.depth / 2.0 &&
+            bridge.z + bridge.depth / 2.0 > shank.z - shank.depth / 2.0
+        (bridgeCoversShankX && bridgeCoversShankZ) shouldBe true
+        lifter.material shouldBe org.bukkit.Material.COPPER_BLOCK
+        lifter.x shouldBe 0.515
+        lifter.y shouldBe dimensions.height + 0.24
+        lifter.z shouldBe -0.58
+        val lifterToeGap = lifter.x - lifter.width / 2.0 - (footRight.x + footRight.width / 2.0)
+        (abs(lifterToeGap - 0.005) < 1e-9) shouldBe true
+        val shankBottom = shank.y - shank.height / 2.0
+        val lifterTop = lifter.y + lifter.height / 2.0
+        (abs(shankBottom - lifterTop - 0.014) < 1e-9) shouldBe true
+        lowered.pieces.getValue(lifter.key).rotationDegrees shouldBe 15.0
+        val lifterRear = lifter.z + abs(cos(Math.toRadians(15.0)) * lifter.depth / 2.0) +
+            abs(sin(Math.toRadians(15.0)) * lifter.height / 2.0)
+        (bridge.z - bridge.depth / 2.0 - lifterRear > 0.012) shouldBe true
+        val clothTop = dimensions.height + 0.152
+        (abs((dimensions.height + 0.154) - clothTop - 0.002) < 1e-9) shouldBe true
+
+        val raised = originWorkshopCraftMachinePose("sewing-foot", 0.0, dimensions, tuning)
+        raised.pieces.getValue(footLeft.key).centerOffset.y shouldBe 0.0
+        raised.pieces.getValue(lifter.key).rotationDegrees shouldBe 0.0
+    }
+
     "press platen touches compressed cloth and releases at stroke ends" {
         val pieces = originWorkshopTablePieces(OriginWorkshopTableRole.UPHOLSTERER, 0, dimensions, tuning)
             .associateBy { it.key }

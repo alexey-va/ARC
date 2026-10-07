@@ -9,10 +9,10 @@ internal fun originWorkshopStationStockGeometry(role: OriginWorkshopTableRole): 
             add(OriginWorkshopTablePiece(key, material, OriginWorkshopTablePieceKind.BLOCK, x, y, z, w, h, d))
         }
         for (x in listOf(-0.80, 0.0, 0.80)) {
-            block("pallet-runner-$x", Material.STRIPPED_SPRUCE_LOG, x, 0.04, -0.175, 0.12, 0.08, 2.20)
+            block("pallet-runner-$x", Material.STRIPPED_DARK_OAK_LOG, x, 0.04, -0.20, 0.12, 0.08, 2.10)
         }
-        for ((index, z) in listOf(-0.85, -0.15, 0.50).withIndex()) {
-            block("pallet-deck-$index", Material.SPRUCE_PLANKS, 0.0, 0.13, z, 1.90, 0.10, if (index == 0) 0.95 else 0.90)
+        for ((index, z) in listOf(-0.95, -0.20, 0.55).withIndex()) {
+            block("pallet-deck-$index", Material.DARK_OAK_PLANKS, 0.0, 0.13, z, 1.90, 0.10, 0.70)
         }
 
         when (role) {
@@ -24,7 +24,7 @@ internal fun originWorkshopStationStockGeometry(role: OriginWorkshopTableRole): 
                     if (index % 2 == 0) Material.SPRUCE_PLANKS else Material.OAK_PLANKS,
                     0.0, 0.225 + index * 0.09, -0.75, 1.80, 0.09, 0.45)
                 for (index in 0..1) block("stacked-log-$index", Material.STRIPPED_OAK_LOG,
-                    0.80, 0.25 + index * 0.14, 0.0, 0.18, 0.14, 0.64)
+                    0.80, 0.25 + index * 0.14, -0.20, 0.18, 0.14, 0.64)
             }
             OriginWorkshopTableRole.UPHOLSTERER -> {
                 listOf(Material.RED_WOOL, Material.WHITE_WOOL, Material.BROWN_WOOL).forEachIndexed { index, material ->
@@ -44,7 +44,7 @@ internal fun originWorkshopStationStockGeometry(role: OriginWorkshopTableRole): 
                 for (index in 0..2) block("cured-panel-layer-$index",
                     listOf(Material.BIRCH_PLANKS, Material.OAK_PLANKS, Material.SPRUCE_PLANKS)[index],
                     0.0, 0.225 + index * 0.09, 0.30, 1.65, 0.09, 0.22)
-                block("coating-crate", Material.BARREL, 0.75, 0.39, 0.30, 0.42, 0.42, 0.42)
+                block("coating-crate", Material.BARREL, -0.70, 0.39, -0.90, 0.42, 0.42, 0.42)
             }
         }
     }

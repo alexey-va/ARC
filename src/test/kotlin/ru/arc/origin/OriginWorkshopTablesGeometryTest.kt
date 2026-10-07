@@ -150,7 +150,7 @@ class OriginWorkshopTablesGeometryTest : FreeSpec({
         blocks.filter { it.key.startsWith("leg-") }.size shouldBe 4
         val sawControl = blocks.single { it.key == "carpenter-saw-control-handle" }
         val sawControlPost = blocks.single { it.key == "carpenter-saw-control-post" }
-        boxesOverlap(sawControlPost, sawControl) shouldBe true
+        boxesOverlap(sawControlPost, sawControl) shouldBe false
         (abs(sawControlPost.y - sawControlPost.height / 2.0 - dimensions.height) < 1e-9) shouldBe true
         val leftClamp = blocks.single { it.key == "carpenter-assembly-clamp-left" }
         val leftClampControl = blocks.single { it.key == "carpenter-assembly-clamp-control-left" }
@@ -179,6 +179,61 @@ class OriginWorkshopTablesGeometryTest : FreeSpec({
             rightClamp,
         )
         (listOf(toolTray) + handTools).none { tool -> toolClearance.any { boxesOverlap(tool, it) } } shouldBe true
+    }
+
+    "exposed machine joints meet at faces without penetrating" {
+        val dimensions = OriginWorkshopTableDimensions.DEFAULT
+        val carpenter = originWorkshopTablePieces(OriginWorkshopTableRole.CARPENTER, yaw = 0, dimensions = dimensions)
+            .associateBy { it.key }
+        fun contact(actual: Double, expected: Double = 0.0) = (abs(actual - expected) < 1e-9)
+
+        val rollerAxle = carpenter.getValue("carpenter-drive-feed-roller-axle-0")
+        for (side in listOf(-1.0, 1.0)) {
+            val bearing = carpenter.getValue("carpenter-drive-feed-bearing-0-$side")
+            val gap = if (side < 0.0) {
+                rollerAxle.z - rollerAxle.depth / 2.0 - (bearing.z + bearing.depth / 2.0)
+            } else {
+                bearing.z - bearing.depth / 2.0 - (rollerAxle.z + rollerAxle.depth / 2.0)
+            }
+            contact(gap) shouldBe true
+        }
+
+        val sawHandle = carpenter.getValue("carpenter-saw-control-handle")
+        val sawPost = carpenter.getValue("carpenter-saw-control-post")
+        contact(sawHandle.y - sawHandle.height / 2.0 - (sawPost.y + sawPost.height / 2.0), 0.002) shouldBe true
+
+        val malletHead = carpenter.getValue("carpenter-mallet-head")
+        val malletHandle = carpenter.getValue("carpenter-mallet-handle")
+        contact(malletHandle.z - malletHandle.depth / 2.0 - (malletHead.z + malletHead.depth / 2.0)) shouldBe true
+        val chiselBlade = carpenter.getValue("carpenter-chisel-blade")
+        val chiselHandle = carpenter.getValue("carpenter-chisel-handle")
+        contact(chiselHandle.z - chiselHandle.depth / 2.0 - (chiselBlade.z + chiselBlade.depth / 2.0), 0.002) shouldBe true
+
+        val assembler = originWorkshopTablePieces(OriginWorkshopTableRole.ASSEMBLER, yaw = 0, dimensions = dimensions)
+            .associateBy { it.key }
+        val viseScrew = assembler.getValue("assembler-vise-screw")
+        val viseHandle = assembler.getValue("assembler-vise-handle")
+        contact(viseScrew.x - viseScrew.width / 2.0 - (viseHandle.x + viseHandle.width / 2.0), 0.002) shouldBe true
+
+        val upholsterer = originWorkshopTablePieces(OriginWorkshopTableRole.UPHOLSTERER, yaw = 0, dimensions = dimensions)
+            .associateBy { it.key }
+        val sewingArm = upholsterer.getValue("upholsterer-sewing-arm")
+        val sewingPost = upholsterer.getValue("upholsterer-sewing-post")
+        contact(sewingArm.y - sewingArm.height / 2.0 - (sewingPost.y + sewingPost.height / 2.0)) shouldBe true
+        val finisher = originWorkshopTablePieces(OriginWorkshopTableRole.FINISHER, yaw = 0, dimensions = dimensions)
+            .associateBy { it.key }
+        val brushRail = finisher.getValue("finisher-brush-rail")
+        val leftBrushPost = finisher.getValue("finisher-brush-post--1.58")
+        val rightBrushPost = finisher.getValue("finisher-brush-post--0.72")
+        for (post in listOf(leftBrushPost, rightBrushPost)) {
+            contact(brushRail.y - brushRail.height / 2.0 - (post.y + post.height / 2.0)) shouldBe true
+        }
+        contact(brushRail.x - brushRail.width / 2.0 - (leftBrushPost.x - leftBrushPost.width / 2.0)) shouldBe true
+        contact(brushRail.x + brushRail.width / 2.0 - (rightBrushPost.x + rightBrushPost.width / 2.0)) shouldBe true
+
+        val finishedBoard = finisher.getValue("finisher-finished-board")
+        val frontDryingPost = finisher.getValue("finisher-drying-post-front-right")
+        (finishedBoard.z - finishedBoard.depth / 2.0 - (frontDryingPost.z + frontDryingPost.depth / 2.0) > 0.04) shouldBe true
     }
 
     "right-angle yaw swaps the table footprint and rotates role props with it" {
@@ -295,6 +350,13 @@ class OriginWorkshopTablesGeometryTest : FreeSpec({
         (abs(leftPost.y - leftPost.height / 2.0 - (viseBed.y + viseBed.height / 2.0)) < 1e-9) shouldBe true
         (abs(rightPost.y - rightPost.height / 2.0 - (viseBed.y + viseBed.height / 2.0)) < 1e-9) shouldBe true
         (abs(crossbar.y - crossbar.height / 2.0 - (leftPost.y + leftPost.height / 2.0)) < 1e-9) shouldBe true
+        for ((post, clamp) in listOf(leftPost to leftClamp, rightPost to rightClamp)) {
+            val clampRear = clamp.z + clamp.depth / 2.0
+            val postFront = post.z - post.depth / 2.0
+            (postFront - clampRear > 0.039) shouldBe true
+            (crossbar.z - crossbar.depth / 2.0 < post.z - post.depth / 2.0) shouldBe true
+            (crossbar.z + crossbar.depth / 2.0 > post.z + post.depth / 2.0) shouldBe true
+        }
         (abs(board.y - board.height / 2.0 - (viseBed.y + viseBed.height / 2.0) - 0.005) < 1e-9) shouldBe true
         (abs(leftClamp.x + leftClamp.width / 2.0 - (board.x - board.width / 2.0) + 0.10) < 1e-9) shouldBe true
         (abs(rightClamp.x - rightClamp.width / 2.0 - (board.x + board.width / 2.0) - 0.10) < 1e-9) shouldBe true

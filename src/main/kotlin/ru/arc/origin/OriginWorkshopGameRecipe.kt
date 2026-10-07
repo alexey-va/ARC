@@ -2,15 +2,23 @@ package ru.arc.origin
 
 import org.bukkit.Material
 
+private val ASSEMBLER_TABLETOP_SIZE = OriginWorkshopGamePartSize(0.68f, 0.06f, 0.30f)
 private val ASSEMBLER_LEG_SIZE = OriginWorkshopGamePartSize(0.14f, 0.52f, 0.14f)
+private val ASSEMBLER_LEG_FASTENER_SIZE = OriginWorkshopGamePartSize(0.035f, 0.035f, 0.035f)
+private const val ASSEMBLER_LEG_FASTENER_BASE_CLEARANCE = 0.0025
+private val ASSEMBLER_LEG_FASTENER_OFFSET = OriginWorkshopPoint(
+    0.0,
+    -ASSEMBLER_LEG_SIZE.y / 2.0 + ASSEMBLER_LEG_FASTENER_SIZE.y / 2.0 + ASSEMBLER_LEG_FASTENER_BASE_CLEARANCE,
+    -ASSEMBLER_LEG_SIZE.z / 2.0 - ASSEMBLER_LEG_FASTENER_SIZE.z / 2.0,
+)
 
-/** The finished assembly adds a small iron pin to the exposed front face of the leg. */
+/** The finished assembly adds a small iron pin near the leg's tabletop attachment end. */
 internal fun originWorkshopAssemblerLegPieces(fastened: Boolean): List<OriginWorkshopWorkpiecePiece> = buildList {
     add(OriginWorkshopWorkpiecePiece(OriginWorkshopPoint(0.0, 0.0, 0.0), ASSEMBLER_LEG_SIZE, Material.STRIPPED_SPRUCE_LOG))
     if (fastened) add(
         OriginWorkshopWorkpiecePiece(
-            OriginWorkshopPoint(0.0, 0.24, -0.0875),
-            OriginWorkshopGamePartSize(0.035f, 0.035f, 0.035f),
+            ASSEMBLER_LEG_FASTENER_OFFSET,
+            ASSEMBLER_LEG_FASTENER_SIZE,
             Material.IRON_BLOCK,
         ),
     )
@@ -159,6 +167,11 @@ internal fun originWorkshopGameRecipe(
             val press = point(tuning.pressCenterX, h + 0.74, tuning.pressCenterZ)
             val fabricBed = point(tuning.pressCenterX, h + 0.74, tuning.pressCenterZ)
             val pressHandle = point(tuning.pressCenterX - 0.46, h + 0.42, tuning.pressCenterZ - 0.45)
+            val sewingStart = originWorkshopSewingClothPoint(dimensions, 0.0)
+            val sewingNeedleFeed = originWorkshopSewingClothPoint(dimensions, 0.5)
+            val sewingEnd = originWorkshopSewingClothPoint(dimensions, 1.0)
+            val sewingFoot = point(0.515, h + 0.24, -0.58)
+            val sewingHandwheel = point(1.22, h + 0.44, -0.79)
             val cushion = point(0.96, h + 0.085, 0.38)
             val padding = point(0.96, h + 0.105, 0.38)
             val cushionNear = point(0.96, h + 0.185, 0.18)
@@ -171,9 +184,13 @@ internal fun originWorkshopGameRecipe(
                 interaction(OriginWorkshopGameStage.UPHOLSTER_STRETCH_LEFT, OriginWorkshopGameAction.STRETCH_FABRIC_LEFT, point(tuning.pressCenterX - 0.20, h + 0.74, tuning.pressCenterZ), null, OriginWorkshopGameStage.UPHOLSTER_STRETCH_RIGHT),
                 interaction(OriginWorkshopGameStage.UPHOLSTER_STRETCH_RIGHT, OriginWorkshopGameAction.STRETCH_FABRIC_RIGHT, point(tuning.pressCenterX + 0.20, h + 0.74, tuning.pressCenterZ), null, OriginWorkshopGameStage.UPHOLSTER_START_PRESS),
                 interaction(OriginWorkshopGameStage.UPHOLSTER_START_PRESS, OriginWorkshopGameAction.ACTIVATE_PRESS, pressHandle, "press", OriginWorkshopGameStage.UPHOLSTER_PRESSING),
-                interaction(OriginWorkshopGameStage.UPHOLSTER_TURN_FABRIC, OriginWorkshopGameAction.TURN_FABRIC, fabricBed, null, OriginWorkshopGameStage.UPHOLSTER_START_PRESS_SECOND),
-                interaction(OriginWorkshopGameStage.UPHOLSTER_START_PRESS_SECOND, OriginWorkshopGameAction.ACTIVATE_PRESS, pressHandle, "press", OriginWorkshopGameStage.UPHOLSTER_PRESSING_SECOND),
-                interaction(OriginWorkshopGameStage.UPHOLSTER_PICK_COVER, OriginWorkshopGameAction.PICK_PRESSED_COVER, press, null, OriginWorkshopGameStage.UPHOLSTER_PLACE_COVER),
+                interaction(OriginWorkshopGameStage.UPHOLSTER_PICK_PRESSED_COVER, OriginWorkshopGameAction.PICK_PRESSED_COVER, press, null, OriginWorkshopGameStage.UPHOLSTER_PLACE_SEWING),
+                interaction(OriginWorkshopGameStage.UPHOLSTER_PLACE_SEWING, OriginWorkshopGameAction.PLACE_SEWING, sewingStart, null, OriginWorkshopGameStage.UPHOLSTER_LOWER_SEWING_FOOT),
+                interaction(OriginWorkshopGameStage.UPHOLSTER_LOWER_SEWING_FOOT, OriginWorkshopGameAction.LOWER_SEWING_FOOT, sewingFoot, "sewing-foot", OriginWorkshopGameStage.UPHOLSTER_START_SEWING),
+                interaction(OriginWorkshopGameStage.UPHOLSTER_START_SEWING, OriginWorkshopGameAction.START_SEWING, sewingHandwheel, "sewing", OriginWorkshopGameStage.UPHOLSTER_SEWING),
+                interaction(OriginWorkshopGameStage.UPHOLSTER_TURN_FABRIC, OriginWorkshopGameAction.TURN_FABRIC, sewingEnd, null, OriginWorkshopGameStage.UPHOLSTER_START_SEWING_SECOND),
+                interaction(OriginWorkshopGameStage.UPHOLSTER_START_SEWING_SECOND, OriginWorkshopGameAction.START_SEWING, sewingHandwheel, "sewing", OriginWorkshopGameStage.UPHOLSTER_SEWING_SECOND),
+                interaction(OriginWorkshopGameStage.UPHOLSTER_PICK_COVER, OriginWorkshopGameAction.PICK_SEWN_COVER, sewingEnd, null, OriginWorkshopGameStage.UPHOLSTER_PLACE_COVER),
                 interaction(OriginWorkshopGameStage.UPHOLSTER_PLACE_COVER, OriginWorkshopGameAction.PLACE_CUSHION_COVER, cushion, null, OriginWorkshopGameStage.UPHOLSTER_PICK_PADDING),
                 interaction(OriginWorkshopGameStage.UPHOLSTER_PICK_PADDING, OriginWorkshopGameAction.PICK_PADDING, point(stock.x + 0.62, stock.y, stock.z), "stock", OriginWorkshopGameStage.UPHOLSTER_PLACE_PADDING),
                 interaction(OriginWorkshopGameStage.UPHOLSTER_PLACE_PADDING, OriginWorkshopGameAction.PLACE_PADDING, padding, null, OriginWorkshopGameStage.UPHOLSTER_TUCK_NEAR),
@@ -183,8 +200,9 @@ internal fun originWorkshopGameRecipe(
                 interaction(OriginWorkshopGameStage.UPHOLSTER_FASTEN_RIGHT, OriginWorkshopGameAction.FASTEN_COVER_RIGHT, cushionRight, "cushion", OriginWorkshopGameStage.UPHOLSTER_FINISHING),
             ).toMap()
             timed = listOf(
-                timed(OriginWorkshopGameStage.UPHOLSTER_PRESSING, OriginWorkshopGameStage.UPHOLSTER_TURN_FABRIC, rules.pressTicks, "press", press, "press"),
-                timed(OriginWorkshopGameStage.UPHOLSTER_PRESSING_SECOND, OriginWorkshopGameStage.UPHOLSTER_PICK_COVER, rules.pressTicks, "press", press, "press"),
+                timed(OriginWorkshopGameStage.UPHOLSTER_PRESSING, OriginWorkshopGameStage.UPHOLSTER_PICK_PRESSED_COVER, rules.pressTicks, "press", press, "press"),
+                timed(OriginWorkshopGameStage.UPHOLSTER_SEWING, OriginWorkshopGameStage.UPHOLSTER_TURN_FABRIC, rules.pressTicks, "sewing", sewingNeedleFeed, "sewing"),
+                timed(OriginWorkshopGameStage.UPHOLSTER_SEWING_SECOND, OriginWorkshopGameStage.UPHOLSTER_PICK_COVER, rules.pressTicks, "sewing", sewingNeedleFeed, "sewing"),
                 timed(OriginWorkshopGameStage.UPHOLSTER_FINISHING, OriginWorkshopGameStage.REWARDING, rules.finishingTicks, null, cushion, null),
             ).toMap()
             materials = mapOf(
@@ -195,7 +213,7 @@ internal fun originWorkshopGameRecipe(
                 OriginWorkshopGameAction.PICK_FABRIC to OriginWorkshopGamePartSize(0.64f, 0.05f, 0.46f),
                 OriginWorkshopGameAction.PICK_PADDING to OriginWorkshopGamePartSize(0.62f, 0.16f, 0.40f),
             )
-            totalSteps = 15
+            totalSteps = 19
             initialStage = OriginWorkshopGameStage.UPHOLSTER_FABRIC
             title = "Обивочная мастерская · красный диван"
         }
@@ -203,12 +221,24 @@ internal fun originWorkshopGameRecipe(
             val vise = point(tuning.viseCenterX, h + 0.10, tuning.viseCenterZ)
             val anvil = point(tuning.anvilCenterX, h + 0.67, tuning.anvilCenterZ)
             val anvilSecondSupport = point(tuning.anvilCenterX + 0.18, h + 0.67, tuning.anvilCenterZ)
-            val assemblyTop = point(0.0, h + 0.55, -0.45)
-            val leftLeg = point(-0.24, h + 0.26, -0.45)
-            val rightLeg = point(0.24, h + 0.26, -0.45)
+            val assemblyTop = point(0.0, h + ASSEMBLER_TABLETOP_SIZE.y / 2.0, -0.45)
+            val legCenterY = h + ASSEMBLER_TABLETOP_SIZE.y + ASSEMBLER_LEG_SIZE.y / 2.0
+            val leftLeg = point(-0.24, legCenterY, -0.45)
+            val rightLeg = point(0.24, legCenterY, -0.45)
+            val legFastenerOffset = originWorkshopAssemblerLegPieces(fastened = true).last().center
+            val leftLegFastener = point(
+                leftLeg.x + legFastenerOffset.x,
+                leftLeg.y + legFastenerOffset.y,
+                leftLeg.z + legFastenerOffset.z,
+            )
+            val rightLegFastener = point(
+                rightLeg.x + legFastenerOffset.x,
+                rightLeg.y + legFastenerOffset.y,
+                rightLeg.z + legFastenerOffset.z,
+            )
             val leftLegStock = point(stock.x - 0.55, 0.32, stock.z - 0.55)
             val rightLegStock = point(stock.x + 0.55, 0.32, stock.z - 0.55)
-            val viseHandle = point(tuning.viseCenterX - 0.70, h + 0.17, tuning.viseCenterZ)
+            val viseHandle = point(tuning.viseCenterX - 0.7495, h + 0.17, tuning.viseCenterZ)
             val hammer = point(
                 tuning.anvilCenterX,
                 h + tuning.hammerPivotYOffset - tuning.hammerArmLength * kotlin.math.sin(Math.toRadians(tuning.hammerRestAngleDegrees)),
@@ -232,16 +262,16 @@ internal fun originWorkshopGameRecipe(
                 interaction(OriginWorkshopGameStage.ASSEMBLER_PLACE_LEFT_LEG, OriginWorkshopGameAction.PLACE_LEFT_LEG, leftLeg, null, OriginWorkshopGameStage.ASSEMBLER_PICK_RIGHT_LEG),
                 interaction(OriginWorkshopGameStage.ASSEMBLER_PICK_RIGHT_LEG, OriginWorkshopGameAction.PICK_RIGHT_LEG, rightLegStock, "leg-right", OriginWorkshopGameStage.ASSEMBLER_PLACE_RIGHT_LEG),
                 interaction(OriginWorkshopGameStage.ASSEMBLER_PLACE_RIGHT_LEG, OriginWorkshopGameAction.PLACE_RIGHT_LEG, rightLeg, null, OriginWorkshopGameStage.ASSEMBLER_TIGHTEN_LEFT),
-                interaction(OriginWorkshopGameStage.ASSEMBLER_TIGHTEN_LEFT, OriginWorkshopGameAction.TIGHTEN_LEFT, point(-0.24, h + 0.50, -0.45), null, OriginWorkshopGameStage.ASSEMBLER_CLAMPING_LEFT),
-                interaction(OriginWorkshopGameStage.ASSEMBLER_TIGHTEN_RIGHT, OriginWorkshopGameAction.TIGHTEN_RIGHT, point(0.24, h + 0.50, -0.45), null, OriginWorkshopGameStage.ASSEMBLER_CLAMPING_RIGHT),
+                interaction(OriginWorkshopGameStage.ASSEMBLER_TIGHTEN_LEFT, OriginWorkshopGameAction.TIGHTEN_LEFT, leftLegFastener, null, OriginWorkshopGameStage.ASSEMBLER_CLAMPING_LEFT),
+                interaction(OriginWorkshopGameStage.ASSEMBLER_TIGHTEN_RIGHT, OriginWorkshopGameAction.TIGHTEN_RIGHT, rightLegFastener, null, OriginWorkshopGameStage.ASSEMBLER_CLAMPING_RIGHT),
             ).toMap()
             timed = listOf(
                 timed(OriginWorkshopGameStage.ASSEMBLER_VISING, OriginWorkshopGameStage.ASSEMBLER_ROTATE_TOP, rules.viseTicks, "vise", vise, "vise"),
                 timed(OriginWorkshopGameStage.ASSEMBLER_VISING_SECOND, OriginWorkshopGameStage.ASSEMBLER_RELEASE_VISE, rules.viseTicks, "vise", vise, "vise"),
                 timed(OriginWorkshopGameStage.ASSEMBLER_HAMMERING, OriginWorkshopGameStage.ASSEMBLER_ALIGN_SECOND, rules.hammerTicks, "anvil", anvil, "anvil"),
                 timed(OriginWorkshopGameStage.ASSEMBLER_HAMMERING_SECOND, OriginWorkshopGameStage.ASSEMBLER_PICK_JOINED_TOP, rules.hammerTicks, "anvil", anvil, "anvil"),
-                timed(OriginWorkshopGameStage.ASSEMBLER_CLAMPING_LEFT, OriginWorkshopGameStage.ASSEMBLER_TIGHTEN_RIGHT, rules.clampTicks, null, point(-0.24, h + 0.50, -0.45), null),
-                timed(OriginWorkshopGameStage.ASSEMBLER_CLAMPING_RIGHT, OriginWorkshopGameStage.ASSEMBLER_FINISHING, rules.clampTicks, null, point(0.24, h + 0.50, -0.45), null),
+                timed(OriginWorkshopGameStage.ASSEMBLER_CLAMPING_LEFT, OriginWorkshopGameStage.ASSEMBLER_TIGHTEN_RIGHT, rules.clampTicks, null, leftLegFastener, null),
+                timed(OriginWorkshopGameStage.ASSEMBLER_CLAMPING_RIGHT, OriginWorkshopGameStage.ASSEMBLER_FINISHING, rules.clampTicks, null, rightLegFastener, null),
                 timed(OriginWorkshopGameStage.ASSEMBLER_FINISHING, OriginWorkshopGameStage.REWARDING, rules.finishingTicks, null, assemblyTop, null),
             ).toMap()
             materials = mapOf(
@@ -250,7 +280,7 @@ internal fun originWorkshopGameRecipe(
                 OriginWorkshopGameAction.PICK_RIGHT_LEG to Material.STRIPPED_SPRUCE_LOG,
             )
             partSizes = mapOf(
-                OriginWorkshopGameAction.PICK_TABLETOP to OriginWorkshopGamePartSize(0.68f, 0.06f, 0.30f),
+                OriginWorkshopGameAction.PICK_TABLETOP to ASSEMBLER_TABLETOP_SIZE,
                 OriginWorkshopGameAction.PICK_LEFT_LEG to leg,
                 OriginWorkshopGameAction.PICK_RIGHT_LEG to leg,
             )

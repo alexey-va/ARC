@@ -41,9 +41,13 @@ class OriginWorkshopGameRecipeTest : FreeSpec({
                 OriginWorkshopGameAction.STRETCH_FABRIC_LEFT,
                 OriginWorkshopGameAction.STRETCH_FABRIC_RIGHT,
                 OriginWorkshopGameAction.ACTIVATE_PRESS,
-                OriginWorkshopGameAction.TURN_FABRIC,
-                OriginWorkshopGameAction.ACTIVATE_PRESS,
                 OriginWorkshopGameAction.PICK_PRESSED_COVER,
+                OriginWorkshopGameAction.PLACE_SEWING,
+                OriginWorkshopGameAction.LOWER_SEWING_FOOT,
+                OriginWorkshopGameAction.START_SEWING,
+                OriginWorkshopGameAction.TURN_FABRIC,
+                OriginWorkshopGameAction.START_SEWING,
+                OriginWorkshopGameAction.PICK_SEWN_COVER,
                 OriginWorkshopGameAction.PLACE_CUSHION_COVER,
                 OriginWorkshopGameAction.PICK_PADDING,
                 OriginWorkshopGameAction.PLACE_PADDING,
@@ -97,7 +101,7 @@ class OriginWorkshopGameRecipeTest : FreeSpec({
         )
         val expectedSteps = mapOf(
             OriginWorkshopTableRole.CARPENTER to 21,
-            OriginWorkshopTableRole.UPHOLSTERER to 15,
+            OriginWorkshopTableRole.UPHOLSTERER to 19,
             OriginWorkshopTableRole.ASSEMBLER to 19,
             OriginWorkshopTableRole.FINISHER to 19,
         )
@@ -114,7 +118,8 @@ class OriginWorkshopGameRecipeTest : FreeSpec({
             ),
             OriginWorkshopTableRole.UPHOLSTERER to listOf(
                 OriginWorkshopGameStage.UPHOLSTER_PRESSING,
-                OriginWorkshopGameStage.UPHOLSTER_PRESSING_SECOND,
+                OriginWorkshopGameStage.UPHOLSTER_SEWING,
+                OriginWorkshopGameStage.UPHOLSTER_SEWING_SECOND,
                 OriginWorkshopGameStage.UPHOLSTER_FINISHING,
             ),
             OriginWorkshopTableRole.ASSEMBLER to listOf(
@@ -184,7 +189,10 @@ class OriginWorkshopGameRecipeTest : FreeSpec({
                     inputs.map { it.second }.count { it == OriginWorkshopGameAction.ALIGN_DRILL_LAST } shouldBe 1
                 }
                 OriginWorkshopTableRole.UPHOLSTERER -> {
-                    inputs.count { it.second == OriginWorkshopGameAction.ACTIVATE_PRESS } shouldBe 2
+                    inputs.count { it.second == OriginWorkshopGameAction.ACTIVATE_PRESS } shouldBe 1
+                    inputs.count { it.second == OriginWorkshopGameAction.START_SEWING } shouldBe 2
+                    inputs.count { it.second == OriginWorkshopGameAction.LOWER_SEWING_FOOT } shouldBe 1
+                    inputs.count { it.second == OriginWorkshopGameAction.PLACE_SEWING } shouldBe 1
                     inputs.count { it.second == OriginWorkshopGameAction.FASTEN_COVER_LEFT } shouldBe 1
                     inputs.count { it.second == OriginWorkshopGameAction.FASTEN_COVER_RIGHT } shouldBe 1
                 }
@@ -228,8 +236,12 @@ class OriginWorkshopGameRecipeTest : FreeSpec({
         rightClamp.machine shouldBe null
         leftClamp.durationTicks shouldBe rules.clampTicks
         rightClamp.durationTicks shouldBe rules.clampTicks
-        leftClamp.target shouldBe OriginWorkshopPoint(-0.24, dimensions.height + 0.50, -0.45)
-        rightClamp.target shouldBe OriginWorkshopPoint(0.24, dimensions.height + 0.50, -0.45)
+        (abs(leftClamp.target.x + 0.24) < 1.0e-9) shouldBe true
+        (abs(leftClamp.target.y - (dimensions.height + 0.08)) < 1.0e-7) shouldBe true
+        (abs(leftClamp.target.z + 0.5375) < 1.0e-7) shouldBe true
+        (abs(rightClamp.target.x - 0.24) < 1.0e-9) shouldBe true
+        (abs(rightClamp.target.y - (dimensions.height + 0.08)) < 1.0e-7) shouldBe true
+        (abs(rightClamp.target.z + 0.5375) < 1.0e-7) shouldBe true
         assembler.interactions.getValue(OriginWorkshopGameStage.ASSEMBLER_TIGHTEN_LEFT).control shouldBe null
         assembler.interactions.getValue(OriginWorkshopGameStage.ASSEMBLER_TIGHTEN_RIGHT).control shouldBe null
 
@@ -239,7 +251,9 @@ class OriginWorkshopGameRecipeTest : FreeSpec({
         fastenedLeg.first() shouldBe leg
         val pin = fastenedLeg.last()
         pin.material shouldBe Material.IRON_BLOCK
-        pin.center shouldBe OriginWorkshopPoint(0.0, 0.24, -0.0875)
+        pin.center.x shouldBe 0.0
+        (abs(pin.center.y + 0.24) < 1.0e-7) shouldBe true
+        (abs(pin.center.z + 0.0875) < 1.0e-7) shouldBe true
         pin.size shouldBe OriginWorkshopGamePartSize(0.035f, 0.035f, 0.035f)
     }
 
@@ -260,17 +274,45 @@ class OriginWorkshopGameRecipeTest : FreeSpec({
 
         val pressHandle = OriginWorkshopPoint(tuning.pressCenterX - 0.46, dimensions.height + 0.42, tuning.pressCenterZ - 0.45)
         target(OriginWorkshopTableRole.UPHOLSTERER, OriginWorkshopGameStage.UPHOLSTER_START_PRESS) shouldBe pressHandle
-        target(OriginWorkshopTableRole.UPHOLSTERER, OriginWorkshopGameStage.UPHOLSTER_START_PRESS_SECOND) shouldBe pressHandle
+        target(OriginWorkshopTableRole.UPHOLSTERER, OriginWorkshopGameStage.UPHOLSTER_PLACE_SEWING) shouldBe
+            originWorkshopSewingClothPoint(dimensions, 0.0)
+        target(OriginWorkshopTableRole.UPHOLSTERER, OriginWorkshopGameStage.UPHOLSTER_LOWER_SEWING_FOOT) shouldBe
+            OriginWorkshopPoint(0.515, dimensions.height + 0.24, -0.58)
+        target(OriginWorkshopTableRole.UPHOLSTERER, OriginWorkshopGameStage.UPHOLSTER_START_SEWING) shouldBe
+            OriginWorkshopPoint(1.22, dimensions.height + 0.44, -0.79)
+        target(OriginWorkshopTableRole.UPHOLSTERER, OriginWorkshopGameStage.UPHOLSTER_TURN_FABRIC) shouldBe
+            originWorkshopSewingClothPoint(dimensions, 1.0)
+        target(OriginWorkshopTableRole.UPHOLSTERER, OriginWorkshopGameStage.UPHOLSTER_PICK_COVER) shouldBe
+            originWorkshopSewingClothPoint(dimensions, 1.0)
         target(OriginWorkshopTableRole.UPHOLSTERER, OriginWorkshopGameStage.UPHOLSTER_PICK_PADDING) shouldBe
             OriginWorkshopPoint(stock.x + 0.62, stock.y, stock.z)
         recipes.getValue(OriginWorkshopTableRole.UPHOLSTERER).materials[OriginWorkshopGameAction.PICK_PADDING] shouldBe Material.WHITE_WOOL
 
         target(OriginWorkshopTableRole.ASSEMBLER, OriginWorkshopGameStage.ASSEMBLER_PLACE_ASSEMBLY_TOP) shouldBe
-            OriginWorkshopPoint(0.0, dimensions.height + 0.55, -0.45)
+            OriginWorkshopPoint(
+                0.0,
+                dimensions.height + recipes.getValue(OriginWorkshopTableRole.ASSEMBLER)
+                    .partSizes.getValue(OriginWorkshopGameAction.PICK_TABLETOP).y / 2.0,
+                -0.45,
+            )
         target(OriginWorkshopTableRole.ASSEMBLER, OriginWorkshopGameStage.ASSEMBLER_PLACE_LEFT_LEG) shouldBe
-            OriginWorkshopPoint(-0.24, dimensions.height + 0.26, -0.45)
+            OriginWorkshopPoint(
+                -0.24,
+                dimensions.height + recipes.getValue(OriginWorkshopTableRole.ASSEMBLER)
+                    .partSizes.getValue(OriginWorkshopGameAction.PICK_TABLETOP).y +
+                    recipes.getValue(OriginWorkshopTableRole.ASSEMBLER)
+                        .partSizes.getValue(OriginWorkshopGameAction.PICK_LEFT_LEG).y / 2.0,
+                -0.45,
+            )
         target(OriginWorkshopTableRole.ASSEMBLER, OriginWorkshopGameStage.ASSEMBLER_PLACE_RIGHT_LEG) shouldBe
-            OriginWorkshopPoint(0.24, dimensions.height + 0.26, -0.45)
+            OriginWorkshopPoint(
+                0.24,
+                dimensions.height + recipes.getValue(OriginWorkshopTableRole.ASSEMBLER)
+                    .partSizes.getValue(OriginWorkshopGameAction.PICK_TABLETOP).y +
+                    recipes.getValue(OriginWorkshopTableRole.ASSEMBLER)
+                        .partSizes.getValue(OriginWorkshopGameAction.PICK_LEFT_LEG).y / 2.0,
+                -0.45,
+            )
         target(OriginWorkshopTableRole.ASSEMBLER, OriginWorkshopGameStage.ASSEMBLER_PICK_LEFT_LEG) shouldBe
             OriginWorkshopPoint(stock.x - 0.55, 0.32, stock.z - 0.55)
         target(OriginWorkshopTableRole.ASSEMBLER, OriginWorkshopGameStage.ASSEMBLER_PICK_RIGHT_LEG) shouldBe
@@ -311,6 +353,64 @@ class OriginWorkshopGameRecipeTest : FreeSpec({
         recipes.getValue(OriginWorkshopTableRole.CARPENTER).totalSteps shouldBe 21
     }
 
+    "assembler tabletop rests on the bench, upright legs sit on top, and tightening targets the attachment pins" {
+        val dimensions = OriginWorkshopTableDimensions.DEFAULT
+        val tuning = OriginWorkshopMachineTuning()
+        val recipe = originWorkshopGameRecipe(
+            OriginWorkshopTableRole.ASSEMBLER,
+            "test:assembler-contact",
+            dimensions,
+            tuning,
+            OriginWorkshopPoint(-7.5, 0.44, 0.30),
+            OriginWorkshopGameRules(),
+        )
+        val tabletopSurface = originWorkshopTablePieces(
+            OriginWorkshopTableRole.ASSEMBLER,
+            yaw = 0,
+            dimensions = dimensions,
+            tuning = tuning,
+        ).filter { it.key.startsWith("tabletop-plank-") }.maxOf { it.y + it.height / 2.0 }
+        val topCenter = recipe.interactions.getValue(OriginWorkshopGameStage.ASSEMBLER_PLACE_ASSEMBLY_TOP).target
+        val board = originWorkshopJoinedTopPieces(edges = 2, joints = 2).first()
+        val boardBottom = topCenter.y + board.center.y - board.size.y / 2.0
+        val boardTop = topCenter.y + board.center.y + board.size.y / 2.0
+
+        (abs(boardBottom - tabletopSurface) < 1.0e-9) shouldBe true
+        (abs(boardTop - (tabletopSurface + board.size.y)) < 1.0e-9) shouldBe true
+
+        val leg = originWorkshopAssemblerLegPieces(fastened = false).single()
+        val fastenedPin = originWorkshopAssemblerLegPieces(fastened = true).last()
+        val pinBaseClearance = fastenedPin.center.y - fastenedPin.size.y / 2.0 -
+            (leg.center.y - leg.size.y / 2.0)
+        (abs(pinBaseClearance - 0.0025) < 1.0e-6) shouldBe true
+
+        for (stage in listOf(OriginWorkshopGameStage.ASSEMBLER_PLACE_LEFT_LEG, OriginWorkshopGameStage.ASSEMBLER_PLACE_RIGHT_LEG)) {
+            val legCenter = recipe.interactions.getValue(stage).target
+            val legBottom = legCenter.y + leg.center.y - leg.size.y / 2.0
+            val legTop = legCenter.y + leg.center.y + leg.size.y / 2.0
+            (abs(legBottom - boardTop) < 1.0e-6) shouldBe true
+            (legTop > boardTop) shouldBe true
+
+            val tightenStage = if (stage == OriginWorkshopGameStage.ASSEMBLER_PLACE_LEFT_LEG) {
+                OriginWorkshopGameStage.ASSEMBLER_TIGHTEN_LEFT
+            } else {
+                OriginWorkshopGameStage.ASSEMBLER_TIGHTEN_RIGHT
+            }
+            val tightenTarget = recipe.interactions.getValue(tightenStage).target
+            tightenTarget shouldBe OriginWorkshopPoint(
+                legCenter.x + fastenedPin.center.x,
+                legCenter.y + fastenedPin.center.y,
+                legCenter.z + fastenedPin.center.z,
+            )
+            val timedStage = if (stage == OriginWorkshopGameStage.ASSEMBLER_PLACE_LEFT_LEG) {
+                OriginWorkshopGameStage.ASSEMBLER_CLAMPING_LEFT
+            } else {
+                OriginWorkshopGameStage.ASSEMBLER_CLAMPING_RIGHT
+            }
+            recipe.timedStages.getValue(timedStage).target shouldBe tightenTarget
+        }
+    }
+
     "recipes use supplied dimensions, machine tuning, and each staffed role's stock anchor" {
         val dimensions = OriginWorkshopTableDimensions(width = 4.6, depth = 2.15, height = 1.12)
         val tuning = OriginWorkshopMachineTuning(
@@ -346,6 +446,8 @@ class OriginWorkshopGameRecipeTest : FreeSpec({
             OriginWorkshopPoint(tuning.pressCenterX - 0.46, dimensions.height + 0.42, tuning.pressCenterZ - 0.45)
         interaction(OriginWorkshopTableRole.ASSEMBLER, OriginWorkshopGameAction.PLACE_VISE).target shouldBe
             OriginWorkshopPoint(tuning.viseCenterX, dimensions.height + 0.10, tuning.viseCenterZ)
+        interaction(OriginWorkshopTableRole.ASSEMBLER, OriginWorkshopGameAction.TIGHTEN_VISE).target shouldBe
+            OriginWorkshopPoint(tuning.viseCenterX - 0.7495, dimensions.height + 0.17, tuning.viseCenterZ)
         interaction(OriginWorkshopTableRole.ASSEMBLER, OriginWorkshopGameAction.PLACE_ANVIL).target shouldBe
             OriginWorkshopPoint(tuning.anvilCenterX, dimensions.height + 0.67, tuning.anvilCenterZ)
 
@@ -364,6 +466,58 @@ class OriginWorkshopGameRecipeTest : FreeSpec({
         recipes.getValue(OriginWorkshopTableRole.ASSEMBLER).resultAnchor.y shouldBe dimensions.height + 0.3371875
         recipes.getValue(OriginWorkshopTableRole.FINISHER).resultAnchor.y shouldBe dimensions.height + 0.325
         abs(interaction(OriginWorkshopTableRole.FINISHER, OriginWorkshopGameAction.START_FINISH_PANEL).target.y - (dimensions.height + 0.14)) shouldBe 0.0
+    }
+
+    "upholsterer feed carries both seams across the fixed needle with contact on the sewing bed" {
+        val dimensions = OriginWorkshopTableDimensions.DEFAULT
+        val tuning = OriginWorkshopMachineTuning()
+        val stock = OriginWorkshopPoint(-7.5, 0.44, 0.30)
+        val recipe = originWorkshopGameRecipe(
+            OriginWorkshopTableRole.UPHOLSTERER,
+            "test:sewing-feed",
+            dimensions,
+            tuning,
+            stock,
+            OriginWorkshopGameRules(),
+        )
+        val base = originWorkshopUpholsteryPieces(stretchedEdges = 2).single()
+        val needleX = 0.42
+        val needleZ = -0.58
+        val bed = originWorkshopDrivePieces(OriginWorkshopTableRole.UPHOLSTERER, dimensions, tuning)
+            .single { it.key == "upholsterer-sewing-bed" }
+        val bedTop = bed.y + bed.height / 2.0
+
+        for (progress in listOf(0.0, 0.5, 1.0)) {
+            val feed = originWorkshopSewingClothPoint(dimensions, progress)
+            val leftX = feed.x + base.center.x - base.size.x / 2.0
+            val rightX = feed.x + base.center.x + base.size.x / 2.0
+            val clothBottom = feed.y + base.center.y - base.size.y / 2.0
+            val clothTop = feed.y + base.center.y + base.size.y / 2.0
+            (needleX in leftX..rightX) shouldBe true
+            (abs(feed.z - 0.19 - needleZ) < 1.0e-7) shouldBe true
+            (abs(clothBottom - bedTop) < 1.0e-7) shouldBe true
+            (abs(clothTop - (dimensions.height + 0.152)) < 1.0e-6) shouldBe true
+        }
+
+        val firstSeam = originWorkshopUpholsteryPieces(stretchedEdges = 2, seams = 1).last()
+        val secondSeam = originWorkshopUpholsteryPieces(stretchedEdges = 2, seams = 2).last()
+        val feedCenterZ = originWorkshopSewingClothPoint(dimensions, 0.5).z
+        (abs(feedCenterZ + firstSeam.center.z - needleZ) < 1.0e-7) shouldBe true
+        // The far seam changes sides after the runtime's Y+180 turnover.
+        (abs(feedCenterZ - secondSeam.center.z - needleZ) < 1.0e-7) shouldBe true
+
+        recipe.totalSteps shouldBe 19
+        recipe.interactions.getValue(OriginWorkshopGameStage.UPHOLSTER_PLACE_SEWING).target shouldBe
+            originWorkshopSewingClothPoint(dimensions, 0.0)
+        recipe.interactions.getValue(OriginWorkshopGameStage.UPHOLSTER_TURN_FABRIC).target shouldBe
+            originWorkshopSewingClothPoint(dimensions, 1.0)
+        recipe.interactions.getValue(OriginWorkshopGameStage.UPHOLSTER_START_SEWING).control shouldBe "sewing"
+        recipe.interactions.getValue(OriginWorkshopGameStage.UPHOLSTER_LOWER_SEWING_FOOT).control shouldBe "sewing-foot"
+        for (stage in listOf(OriginWorkshopGameStage.UPHOLSTER_SEWING, OriginWorkshopGameStage.UPHOLSTER_SEWING_SECOND)) {
+            recipe.timedStages.getValue(stage).target shouldBe originWorkshopSewingClothPoint(dimensions, 0.5)
+            recipe.timedStages.getValue(stage).machine shouldBe "sewing"
+            recipe.timedStages.getValue(stage).durationTicks shouldBe OriginWorkshopGameRules().pressTicks
+        }
     }
 
     "each renderer puts the processed board hole under the fixed drill spindle" {

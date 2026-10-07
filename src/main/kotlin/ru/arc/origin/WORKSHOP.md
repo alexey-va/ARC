@@ -20,13 +20,22 @@ The furniture terrace runs on the `classic` server in Minecraft world
   administrator bypass remains `arc.origin.workshop.cooldown.bypass`.
 
 The four workers are carpenter 430, upholsterer 458, assembler 459 and finisher
-460. Their products come from the active NPC worker configuration. Stock and
+460. Their decorative products come from the active NPC worker configuration.
+Each player session selects one item from the curated 330-item
+`origin-workshop-reward-pool.json`; the same selection controls both the finished
+display and reward delivery. Fountains, infrastructure and unsuitable props are
+excluded. Each entry records verified allocation and model bounds, allowing the
+result to fit its support area and rest on the tabletop. The pool reuses existing
+ItemsAdder assets and introduces no resource-pack textures or models. Stock and
 carried materials are scene props; they never consume player inventory items.
 
 The carpenter makes two cuts with a deliberate turn between them, then aligns
 and drills three holes separately. Both offcuts remain on the bench; the board
 contains progressive through-holes and retains them on the shoulder. Upholstery
-uses fabric, press and a cushion; assembly uses vise and hammer; finishing uses
+uses 19 deliberate actions: pressing, placing cloth on the sewing bed, lowering
+the foot, sewing one edge, turning the cloth, sewing the other edge, then padding
+and fastening the cover. The needle, foot, wheel and cloth feed move together;
+seams appear only after sewing. Assembly uses vise and hammer; finishing uses
 three separately coated panel regions and a return to the drying rack.
 
 Carried props follow player movement and each server tick without additional
@@ -36,8 +45,12 @@ Placement highlights and hit targets share station-local recipe geometry. The
 bench top is tiled into individual light planks to preserve texture density,
 with dark framing and metallic mechanisms for contrast. The drill retracts clear
 of the finished holes; two support rails keep the board on a visible drill bed.
-The assembly jig is hidden while the finished chair occupies its space, and
+The assembly jig is hidden while the finished furniture occupies its space, and
 the normal finish/cancel cleanup restores that fixture for the next session.
+During assembly the inverted tabletop rests on the bench and its legs meet the
+underside. Native glow marks a free bench; active placement guidance shares the
+actual interaction target. Two-line instruction holograms sit behind the working
+area, with a separate anchor for actions at the stock pallet.
 
 ## Turn lifecycle
 
@@ -104,14 +117,25 @@ observation; a successful package or health response does not establish them.
 
 `./gradlew exportWorkshopPreview -PworkshopPreviewOutput=/absolute/path/scene.json`
 exports the production table geometry, mechanism poses, progressive board holes,
-and shoulder anchor. It includes all four stations and 19 representative states;
+and shoulder anchor. It includes all four stations and representative states;
 it does not instantiate Bukkit worlds/entities or claim native-client acceptance.
 Bake its vanilla material palette with the sibling ops location-atelier's
 `vanilla_assets.py` and the cached client JAR, then inspect textured renders from
 front, side, top, overview, and the player's 1.62-block eye level. Use the actual
 block model quads scaled by each display's dimensions. A human mannequin is only
-an approximate silhouette; world context, NPCs and finished ItemsAdder furniture models are
-not included in this receipt. Re-export after model/pose changes.
+an approximate silhouette. Furniture meshes must come from their actual baked
+ItemsAdder models; a bounds proxy cannot establish appearance. Re-export after
+model/pose changes.
+
+Build the receipt with the ops location-atelier's tracked
+`build-workshop-preview.mjs`. It writes the HTML and diagnostics report, then
+returns a nonzero exit code if transformed model faces expose a coplanar overlap.
+The preview also shows those errors visibly. Legitimate opposite-face support
+contact and fully hidden internal faces are handled separately. Visibility is
+sampled from multiple directions, so passing this detector supplements visual
+inspection rather than proving every camera angle. Check the actual player-eye
+view as well as front, side and top views. Native Minecraft glow and client
+rendering remain separate checks.
 
 Carpenter boards use the `arc_workshop:board_*` ItemsAdder models from the ops
 content tree. Their face UVs are anchored to a shared model coordinate system,

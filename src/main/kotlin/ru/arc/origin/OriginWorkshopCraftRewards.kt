@@ -68,7 +68,7 @@ internal sealed interface WorkshopCraftPlan {
     data object Full : WorkshopCraftPlan
 }
 
-/** Add one finished chair to a detached snapshot; workshop stock never enters inventory. */
+/** Add one finished furniture item to a detached snapshot; workshop stock never enters inventory. */
 internal fun planWorkshopCraft(
     storage: Array<ItemStack?>,
     reward: ItemStack,

@@ -27,10 +27,16 @@ internal fun originWorkshopDrivePieces(
             // Right-hand sewing station, ahead of the tool board and clear of the cushion sample behind it.
             part("upholsterer-sewing-bed", Material.POLISHED_BLACKSTONE, 0.65, h + 0.06, -0.58, 1.50, 0.12, 0.58)
             part("upholsterer-sewing-post", Material.POLISHED_BLACKSTONE, 1.22, h + 0.40, -0.52, 0.18, 0.56, 0.18)
-            part("upholsterer-sewing-arm", Material.POLISHED_BLACKSTONE, 0.80, h + 0.72, -0.52, 1.02, 0.12, 0.18)
+            part("upholsterer-sewing-arm", Material.POLISHED_BLACKSTONE, 0.80, h + 0.74, -0.52, 1.02, 0.12, 0.18)
             part("upholsterer-sewing-fabric", Material.RED_WOOL, 0.42, h + 0.135, -0.58, 0.50, 0.03, 0.44)
             part("upholsterer-drive-needle", Material.IRON_BLOCK, 0.42, h + 0.34, -0.58, 0.035, 0.24, 0.035)
             part("upholsterer-sewing-needle-guide", Material.IRON_BLOCK, 0.42, h + 0.52, -0.58, 0.08, 0.28, 0.08)
+            part("upholsterer-sewing-foot-toe-left", Material.IRON_BLOCK, 0.375, h + 0.264, -0.58, 0.045, 0.02, 0.10)
+            part("upholsterer-sewing-foot-toe-right", Material.IRON_BLOCK, 0.465, h + 0.264, -0.58, 0.045, 0.02, 0.10)
+            part("upholsterer-sewing-foot-bridge", Material.IRON_BLOCK, 0.42, h + 0.294, -0.46, 0.21, 0.04, 0.14)
+            part("upholsterer-sewing-foot-shank", Material.IRON_BLOCK, 0.52, h + 0.497, -0.43, 0.035, 0.366, 0.035)
+            // A compact hand lever sits beside the presser foot where the recipe cue points.
+            part("upholsterer-sewing-foot-lifter", Material.COPPER_BLOCK, 0.515, h + 0.24, -0.58, 0.045, 0.12, 0.045)
             part("upholsterer-drive-shuttle", Material.COPPER_BLOCK, 0.42, h + 0.075, -0.895, 0.15, 0.045, 0.055)
             part("upholsterer-sewing-shuttle-rail", Material.IRON_BLOCK, 0.42, h + 0.035, -0.895, 0.60, 0.035, 0.08)
             wheel("upholsterer-drive-handwheel", 1.22, h + 0.44, -0.75, 0.22)
@@ -60,7 +66,7 @@ internal fun originWorkshopDrivePieces(
             // The finishing brush hangs from a supported transverse gantry over the coating bath.
             for (x in listOf(-1.58, -0.72)) part("finisher-brush-post-$x", Material.STRIPPED_SPRUCE_LOG,
                 x, h + 0.56, 0.34, 0.08, 1.12, 0.08)
-            part("finisher-brush-rail", Material.IRON_BLOCK, -1.15, h + 1.15, 0.34, 1.02, 0.07, 0.08)
+            part("finisher-brush-rail", Material.IRON_BLOCK, -1.15, h + 1.155, 0.34, 0.94, 0.07, 0.08)
             part("finisher-drive-brush-carriage", Material.COPPER_BLOCK, -1.15, h + 1.15, 0.24, 0.18, 0.13, 0.12)
             part("finisher-drive-brush-handle", Material.STRIPPED_OAK_LOG, -1.15, h + 0.91, 0.20, 0.05, 0.36, 0.05)
             part("finisher-drive-brush-head", Material.BROWN_WOOL, -1.15, h + 0.67, 0.20, 0.24, 0.12, 0.12)

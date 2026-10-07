@@ -20,6 +20,27 @@ internal enum class OriginWorkshopBoardModel(val itemId: String) {
     OFFCUT("arc_workshop:board_offcut"),
 }
 
+private const val SEWING_NEEDLE_X = 0.42
+private const val SEWING_NEEDLE_Z = -0.58
+private const val SEWING_NEAR_SEAM_Z = -0.19
+private const val SEWING_FEED_TRAVEL = 0.60
+private const val SEWING_FEED_START_X = SEWING_NEEDLE_X + SEWING_FEED_TRAVEL / 2.0
+private const val SEWING_CLOTH_CENTER_HEIGHT = 0.14
+
+/** Table-local center for the stretched cloth as it travels across either seam under the fixed needle. */
+internal fun originWorkshopSewingClothPoint(
+    dimensions: OriginWorkshopTableDimensions,
+    progress: Double,
+): OriginWorkshopPoint {
+    require(progress.isFinite()) { "sewing feed progress must be finite" }
+    val feedProgress = progress.coerceIn(0.0, 1.0)
+    return OriginWorkshopPoint(
+        SEWING_FEED_START_X - SEWING_FEED_TRAVEL * feedProgress,
+        dimensions.height + SEWING_CLOTH_CENTER_HEIGHT,
+        SEWING_NEEDLE_Z - SEWING_NEAR_SEAM_Z,
+    )
+}
+
 internal enum class OriginWorkshopWorkpieceRenderer(val configValue: String) {
     MODEL("model"),
     CUBES("cubes");
@@ -175,7 +196,17 @@ private val COARSE_HOLE_CENTERS = listOf(-0.24, 0.0, 0.24)
 private const val COARSE_GRID_EPSILON = 1.0e-9
 
 /** A solid private target; full-brightness faces complement the native glow silhouette. */
-internal fun originWorkshopPlacementMarker(action: OriginWorkshopGameAction? = null): List<OriginWorkshopWorkpiecePiece> {
+internal fun originWorkshopPlacementMarker(
+    action: OriginWorkshopGameAction? = null,
+    targetFaceDepth: Double? = null,
+): List<OriginWorkshopWorkpiecePiece> {
+    require(targetFaceDepth == null || (targetFaceDepth.isFinite() && targetFaceDepth > 0.0)) {
+        "placement target face depth must be positive and finite"
+    }
+    require(targetFaceDepth == null || action in setOf(
+        OriginWorkshopGameAction.TIGHTEN_LEFT,
+        OriginWorkshopGameAction.TIGHTEN_RIGHT,
+    )) { "placement target face depth is reserved for fastener targets" }
     val compact = when (action) {
         OriginWorkshopGameAction.SAND_PANEL_NEAR, OriginWorkshopGameAction.SAND_PANEL_CENTER,
         OriginWorkshopGameAction.SAND_PANEL_FAR, OriginWorkshopGameAction.COAT_PANEL_NEAR,
@@ -183,8 +214,12 @@ internal fun originWorkshopPlacementMarker(action: OriginWorkshopGameAction? = n
         OriginWorkshopGameAction.FLIP_PANEL -> true
         else -> false
     }
-    val span = if (compact) 0.075f else 0.14f
-    val center = OriginWorkshopPoint(0.0, if (compact) 0.05 else 0.08, 0.0)
+    val span = if (compact || targetFaceDepth != null) 0.075f else 0.14f
+    val center = if (targetFaceDepth != null) {
+        OriginWorkshopPoint(0.0, 0.0, -span / 2.0 - targetFaceDepth / 2.0 - 0.0025)
+    } else {
+        OriginWorkshopPoint(0.0, if (compact) 0.05 else 0.08, 0.0)
+    }
     // One solid cube stays filled from both table-level and overhead views.
     return listOf(OriginWorkshopWorkpiecePiece(
         center, OriginWorkshopGamePartSize(span, span, span), Material.LIGHT_BLUE_CONCRETE,

@@ -303,6 +303,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         val began: Long,
         val tableId: String,
         val recipe: OriginWorkshopGameRecipe,
+        val reward: OriginWorkshopRewardCandidate,
         val rewardHandler: OriginWorkshopCraftRewards,
         var progress: OriginWorkshopGameProgress,
         val workpieceRenderer: OriginWorkshopWorkpieceRenderer,
@@ -341,6 +342,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
     private var label: PacketTextDisplay? = null
     private var occupancyLabel: PacketTextDisplay? = null
     private val rewards = mutableMapOf<String, OriginWorkshopCraftRewards>()
+    private var rewardPool: List<OriginWorkshopRewardCandidate> = emptyList()
     private var idleTable: String? = null
     private val tableId: String get() = session?.tableId ?: idleTable.orEmpty()
     private var commonTasks = LifecycleTaskScope()
@@ -368,8 +370,15 @@ internal object OriginWorkshopGame : PluginModule, Listener {
             ARC.instance.logger.log(Level.WARNING, "Origin workshop game config rejected; keeping current runtime", failure)
             return
         }
+        val loadedRewards = try {
+            if (loaded.enabled) OriginWorkshopRewardPool.entries else emptyList()
+        } catch (failure: Exception) {
+            ARC.instance.logger.log(Level.WARNING, "Origin workshop reward pool rejected; keeping current runtime", failure)
+            return
+        }
         stop("reload")
         settings = loaded
+        rewardPool = loadedRewards
         if (!loaded.enabled) {
             ARC.instance.logger.info("ORIGIN_WORKSHOP_GAME phase=DISABLED player=none session=none stage=NONE")
             return
@@ -487,7 +496,9 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         val renderer = gameSettings.workpieceRenderer
         val recipe = OriginWorkshopTablesModule.recipeFor(selectedTable, productId, gameSettings.rules, renderer) ?: return
         val boardModels = loadBoardModels(player, recipe, renderer) ?: return
-        val handler = rewards.getOrPut(productId) { OriginWorkshopCraftRewards(COOLDOWN, productId) }
+        // Choose once; this same candidate owns both the result display and durable delivery.
+        val reward = rewardPool.randomOrNull() ?: return
+        val handler = rewards.getOrPut(reward.itemId) { OriginWorkshopCraftRewards(COOLDOWN, reward.itemId) }
         if (!pendingStatus.add(player.uniqueId)) return
         if (pendingStatus.size > 32) {
             pendingStatus.remove(player.uniqueId)
@@ -530,7 +541,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
                         sendBusyFeedback(player, session!!.playerId)
                         return@runSync
                     }
-                    begin(player, selectedTable, recipe, handler, renderer, boardModels)
+                    begin(player, selectedTable, recipe, reward, handler, renderer, boardModels)
                 }
             }
         }
@@ -563,6 +574,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         player: Player,
         selectedTable: String,
         recipe: OriginWorkshopGameRecipe,
+        reward: OriginWorkshopRewardCandidate,
         handler: OriginWorkshopCraftRewards,
         renderer: OriginWorkshopWorkpieceRenderer,
         boardModels: Map<OriginWorkshopBoardModel, ItemStack>,
@@ -573,7 +585,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
 
         if (!OriginFurnitureWorkshopModule.acquirePlayerTable(selectedTable, player.uniqueId)) return
         val active = Session(
-            UUID.randomUUID(), player.uniqueId, player.world.uid, nowTick(), selectedTable, recipe, handler,
+            UUID.randomUUID(), player.uniqueId, player.world.uid, nowTick(), selectedTable, recipe, reward, handler,
             OriginWorkshopGameProgress(recipe.initialStage, nowTick()),
             renderer,
             boardModels,
@@ -657,6 +669,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
             OriginWorkshopGameAction.PLACE_DRILL,
             OriginWorkshopGameAction.PLACE_JIG,
             OriginWorkshopGameAction.PLACE_FABRIC,
+            OriginWorkshopGameAction.PLACE_SEWING,
             OriginWorkshopGameAction.PLACE_VISE,
             OriginWorkshopGameAction.PLACE_ANVIL,
             OriginWorkshopGameAction.PLACE_CUSHION_COVER,
@@ -671,6 +684,9 @@ internal object OriginWorkshopGame : PluginModule, Listener {
                     else -> active.workpiece = item
                 }
                 active.carried = null
+                if (action == OriginWorkshopGameAction.PLACE_SEWING) {
+                    OriginWorkshopTablesModule.setCraftPartVisible(tableId, "sewing-fabric", false)
+                }
                 if (action == OriginWorkshopGameAction.PLACE_CUSHION_COVER) {
                     OriginWorkshopTablesModule.setCraftPartVisible(tableId, "cushion-cover", false)
                     OriginWorkshopTablesModule.setCraftPartVisible(tableId, "cushion-padding", false)
@@ -679,6 +695,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
             OriginWorkshopGameAction.PICK_SAWN_BOARD,
             OriginWorkshopGameAction.PICK_DRILLED_BOARD,
             OriginWorkshopGameAction.PICK_PRESSED_COVER,
+            OriginWorkshopGameAction.PICK_SEWN_COVER,
             OriginWorkshopGameAction.PICK_VISED_TABLETOP,
             OriginWorkshopGameAction.PICK_JOINED_TABLETOP -> {
                 active.carried = active.workpiece ?: return false
@@ -700,7 +717,13 @@ internal object OriginWorkshopGame : PluginModule, Listener {
                 active.stretchedEdges++
                 refreshUpholstery(active, player)
             }
-            OriginWorkshopGameAction.TURN_FABRIC,
+            OriginWorkshopGameAction.TURN_FABRIC -> {
+                val item = active.workpiece ?: return false
+                val dimensions = OriginWorkshopTablesModule.dimensionsFor(tableId) ?: return false
+                val at = OriginWorkshopTablesModule.pointAt(tableId, originWorkshopSewingClothPoint(dimensions, 0.0))
+                    ?: return false
+                moveProp(item, at, Quaternionf(item.rotation).rotateY(Math.PI.toFloat()), carrying = false)
+            }
             OriginWorkshopGameAction.ROTATE_TABLETOP,
             OriginWorkshopGameAction.ALIGN_JOIN_SECOND -> {
                 val item = active.workpiece ?: return false
@@ -730,10 +753,13 @@ internal object OriginWorkshopGame : PluginModule, Listener {
             OriginWorkshopGameAction.ACTIVATE_SAW,
             OriginWorkshopGameAction.ACTIVATE_DRILL,
             OriginWorkshopGameAction.ACTIVATE_PRESS,
+            OriginWorkshopGameAction.START_SEWING,
             OriginWorkshopGameAction.TIGHTEN_VISE,
             OriginWorkshopGameAction.ACTIVATE_ANVIL,
             OriginWorkshopGameAction.TIGHTEN_LEFT,
             OriginWorkshopGameAction.TIGHTEN_RIGHT -> Unit
+            OriginWorkshopGameAction.LOWER_SEWING_FOOT ->
+                OriginWorkshopTablesModule.animateCraftMachine(tableId, "sewing-foot", 1.0)
             OriginWorkshopGameAction.PICK_ABRASIVE,
             OriginWorkshopGameAction.DIP_FINISH_BRUSH -> {
                 val at = OriginWorkshopTablesModule.pointAt(tableId, interaction.target) ?: return false
@@ -882,6 +908,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         if (next != idleHoverers) {
             idleHoverers.clear()
             idleHoverers.addAll(next)
+            OriginWorkshopTablesModule.highlightCraftControl(tableId, "start", hovered = next.isNotEmpty())
         }
         hoverSounds.entries.removeIf { Bukkit.getPlayer(it.key) == null }
     }
@@ -941,8 +968,8 @@ internal object OriginWorkshopGame : PluginModule, Listener {
                 active.workpiece = spawnProp(active, player, originWorkshopBoardPieces(holes), boardModel)
                 settle(active, active.workpiece!!, drillCenter)
             }
-            OriginWorkshopGameStage.UPHOLSTER_PRESSING,
-            OriginWorkshopGameStage.UPHOLSTER_PRESSING_SECOND -> {
+            OriginWorkshopGameStage.UPHOLSTER_SEWING,
+            OriginWorkshopGameStage.UPHOLSTER_SEWING_SECOND -> {
                 active.seams++
                 refreshUpholstery(active, player)
             }
@@ -972,18 +999,20 @@ internal object OriginWorkshopGame : PluginModule, Listener {
     }
 
     private fun finishProduct(active: Session) {
-        val chair = CustomStack.getInstance(active.recipe.productId)?.itemStack?.clone()
-        if (chair == null) {
+        val furniture = CustomStack.getInstance(active.reward.itemId)?.itemStack?.clone()
+        if (furniture == null) {
             ARC.instance.logger.warning("ORIGIN_WORKSHOP_GAME phase=RESULT_MISSING player=" + active.playerId + " session=" + active.id)
         } else {
             val player = Bukkit.getPlayer(active.playerId)
             active.workpiece?.remove()
             active.workpiece = null
-            val at = OriginWorkshopTablesModule.resultAt(tableId, active.recipe.productId)
-            if (at == null) ARC.instance.logger.warning("ORIGIN_WORKSHOP_GAME phase=RESULT_DISPLAY_UNAVAILABLE table=${active.tableId} product=${active.recipe.productId}")
+            val at = OriginWorkshopTablesModule.dimensionsFor(tableId)?.let { dimensions ->
+                OriginWorkshopTablesModule.resultAt(tableId, active.reward.anchor(active.recipe.role, dimensions))
+            }
+            if (at == null) ARC.instance.logger.warning("ORIGIN_WORKSHOP_GAME phase=RESULT_DISPLAY_UNAVAILABLE table=${active.tableId} product=${active.reward.itemId}")
             if (at != null && player != null) {
-                val display = runCatching { owner?.spawnItem(at, chair) }.onFailure {
-                    ARC.instance.logger.log(Level.WARNING, "Origin workshop chair display unavailable player=" + active.playerId, it)
+                val display = runCatching { owner?.spawnItem(at, furniture) }.onFailure {
+                    ARC.instance.logger.log(Level.WARNING, "Origin workshop furniture display unavailable player=" + active.playerId, it)
                 }.getOrNull()
                 if (display != null) {
                     display.isVisibleByDefault = false
@@ -998,7 +1027,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
                     display.interpolationDuration = 2
                     display.teleportDuration = 2
                     display.transformation = Transformation(
-                        Vector3f(), AxisAngle4f(), Vector3f(0.65f), AxisAngle4f(),
+                        Vector3f(), AxisAngle4f(), Vector3f(active.reward.scale.toFloat()), AxisAngle4f(),
                     )
                     active.parts += display
                     OriginWorkshopTablesModule.setCraftAssemblyFixtureVisible(active.tableId, false)
@@ -1025,7 +1054,10 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         val action = active.recipe.interactions[stage]?.action
         if (action != null) {
             val point = target(active, stage)
-            val geometry = originWorkshopPlacementMarker(action)
+            val fastenerDepth = if (active.recipe.role == OriginWorkshopTableRole.ASSEMBLER &&
+                action in setOf(OriginWorkshopGameAction.TIGHTEN_LEFT, OriginWorkshopGameAction.TIGHTEN_RIGHT)
+            ) 0.035 else null
+            val geometry = originWorkshopPlacementMarker(action, targetFaceDepth = fastenerDepth)
             active.targetMarker = spawnProp(active, player, geometry).also {
                 settle(active, it, point)
                 it.cue(false)
@@ -1046,6 +1078,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         OriginWorkshopGameStage.PICK_SAWN_BOARD,
         OriginWorkshopGameStage.PICK_DRILLED_BOARD,
         OriginWorkshopGameStage.UPHOLSTER_PICK_COVER,
+        OriginWorkshopGameStage.UPHOLSTER_PICK_PRESSED_COVER,
         OriginWorkshopGameStage.ASSEMBLER_PICK_VISED,
         OriginWorkshopGameStage.ASSEMBLER_PICK_JOINED_TOP -> active.workpiece
         else -> null
@@ -1075,7 +1108,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
             if (at != null && at.world.uid == active.worldId) currentLabel.teleport(at)
             val shortLabel = buildString {
                 append(minOf(stage.step, active.recipe.totalSteps)).append('/').append(active.recipe.totalSteps)
-                append(" · ").append(stage.instruction)
+                append("\n").append(stage.instruction)
                 if (timed != null) append(" · ").append(floor(timed * 100.0).toInt()).append('%')
                 else if (active.recipe.interactions[stage] != null) append(" · ЛКМ")
             }
@@ -1099,6 +1132,12 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         }
         OriginWorkshopTablesModule.animateCraftMachine(tableId, machine, machineProgress)
         if (machine == "saw") animateSawWorkpiece(active, progress)
+        if (machine == "sewing") {
+            val cloth = active.workpiece ?: return
+            val dimensions = OriginWorkshopTablesModule.dimensionsFor(tableId) ?: return
+            val at = OriginWorkshopTablesModule.pointAt(tableId, originWorkshopSewingClothPoint(dimensions, progress)) ?: return
+            moveProp(cloth, at, Quaternionf(cloth.rotation), carrying = false)
+        }
     }
 
     private fun animateSawWorkpiece(active: Session, progress: Double) {
@@ -1415,24 +1454,27 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         val product = OriginFurnitureWorkshopModule.productIdFor(next) ?: return
         val gameSettings = settings ?: return
         val recipe = OriginWorkshopTablesModule.recipeFor(next, product, gameSettings.rules, gameSettings.workpieceRenderer) ?: return
-        label = OriginWorkshopTablesModule.pointAt(next, frontGuidanceAnchor(start))?.let {
-            spawnLabel(it, recipe.title + " · ЛКМ", visibleByDefault = true)
+        OriginWorkshopTablesModule.highlightCraftControl(next, "start", hovered = false)
+        label = OriginWorkshopTablesModule.pointAt(next, benchGuidanceAnchor(start))?.let {
+            spawnLabel(it, recipe.title.substringBefore(" · ") + "\nСлучайная мебель · ЛКМ", visibleByDefault = true)
         }
     }
 
-    private fun frontGuidanceAnchor(target: OriginWorkshopPoint): OriginWorkshopPoint =
-        OriginWorkshopPoint(target.x.coerceIn(-1.5, 1.5), 2.25, -1.5)
+    private fun benchGuidanceAnchor(target: OriginWorkshopPoint): OriginWorkshopPoint =
+        originWorkshopGuidanceAnchor(OriginWorkshopTablesModule.dimensionsFor(tableId)
+            ?: OriginWorkshopTableDimensions.DEFAULT, target, stock = false)
 
     private fun labelAnchor(active: Session, stage: OriginWorkshopGameStage): OriginWorkshopPoint {
         val target = target(active, stage)
-        return if (active.recipe.interactions[stage]?.control == "stock")
-            OriginWorkshopPoint(target.x, 1.45, target.z - 1.1)
-        else frontGuidanceAnchor(target)
+        return originWorkshopGuidanceAnchor(OriginWorkshopTablesModule.dimensionsFor(active.tableId)
+            ?: OriginWorkshopTableDimensions.DEFAULT, target,
+            stock = originWorkshopUsesStockGuidance(active.recipe.role, active.recipe.interactions[stage]))
     }
 
     private fun setOccupancyLabel(player: Player) {
         occupancyLabel?.remove()
-        val local = OriginWorkshopPoint(0.0, 2.65, -1.5)
+        val guide = benchGuidanceAnchor(start)
+        val local = guide.copy(y = guide.y + 0.38)
         occupancyLabel = OriginWorkshopTablesModule.pointAt(tableId, local)?.let {
             spawnLabel(
                 it,
@@ -1448,8 +1490,8 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         at: Location,
         text: String,
         visibleByDefault: Boolean,
-        scale: Float = 0.52f,
-        lineWidth: Int = 260,
+        scale: Float = 0.42f,
+        lineWidth: Int = 220,
     ): PacketTextDisplay? {
         val displayOwner = owner ?: return null
         return runCatching {
@@ -1537,7 +1579,8 @@ internal object OriginWorkshopGame : PluginModule, Listener {
     private fun log(active: Session, phase: String, stage: OriginWorkshopGameStage, detail: String = "") {
         ARC.instance.logger.info(
             "ORIGIN_WORKSHOP_GAME phase=" + phase + " player=" + active.playerId + " session=" + active.id +
-                " table=" + active.tableId + " stage=" + stage + if (detail.isEmpty()) "" else " detail=" + detail,
+                " table=" + active.tableId + " reward=" + active.reward.itemId + " stage=" + stage +
+                if (detail.isEmpty()) "" else " detail=" + detail,
         )
     }
 

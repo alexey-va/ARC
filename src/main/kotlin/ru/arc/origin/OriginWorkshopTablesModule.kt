@@ -362,7 +362,7 @@ internal fun originWorkshopTablePieces(
                 add(blockPiece("carpenter-drive-feed-roller-axle-$index", Material.IRON_BLOCK,
                     rollerX, dimensions.height + 0.38, boardZ, 0.05, 0.05, 0.41))
                 for (side in listOf(-1.0, 1.0)) add(blockPiece("carpenter-drive-feed-bearing-$index-$side", Material.IRON_BLOCK,
-                    rollerX, dimensions.height + 0.255, boardZ + side * 0.19, 0.05, 0.25, 0.03))
+                    rollerX, dimensions.height + 0.255, boardZ + side * 0.22, 0.05, 0.25, 0.03))
             }
 
             // The built-in stonecutter blade sits too low to read at workshop scale, so add a
@@ -383,7 +383,7 @@ internal fun originWorkshopTablePieces(
             add(blockPiece("carpenter-saw-blade-hub", Material.POLISHED_ANDESITE, tuning.sawPivotX,
                 dimensions.height + tuning.sawPivotYOffset, tuning.sawPivotZ - 0.05, 0.18, 0.18, 0.07))
             add(blockPiece("carpenter-saw-control-handle", Material.WAXED_COPPER_BLOCK,
-                -1.65, dimensions.height + 0.34, -0.70, 0.09, 0.18, 0.09))
+                -1.65, dimensions.height + 0.352, -0.70, 0.09, 0.18, 0.09))
             add(blockPiece("carpenter-saw-control-post", Material.STRIPPED_SPRUCE_LOG,
                 -1.65, dimensions.height + 0.13, -0.70, 0.09, 0.26, 0.09))
 
@@ -452,11 +452,11 @@ internal fun originWorkshopTablePieces(
             add(blockPiece("carpenter-mallet-head", Material.OAK_PLANKS,
                 toolX - 0.10, dimensions.height + 0.11, toolZ - 0.24, 0.24, 0.08, 0.14))
             add(blockPiece("carpenter-mallet-handle", Material.STRIPPED_BIRCH_LOG,
-                toolX - 0.10, dimensions.height + 0.11, toolZ - 0.05, 0.06, 0.08, 0.28))
+                toolX - 0.10, dimensions.height + 0.11, toolZ - 0.03, 0.06, 0.08, 0.28))
             add(blockPiece("carpenter-chisel-blade", Material.IRON_BLOCK,
                 toolX + 0.12, dimensions.height + 0.0875, toolZ + 0.07, 0.06, 0.035, 0.14))
             add(blockPiece("carpenter-chisel-handle", Material.STRIPPED_SPRUCE_LOG,
-                toolX + 0.12, dimensions.height + 0.10, toolZ + 0.215, 0.06, 0.06, 0.18))
+                toolX + 0.12, dimensions.height + 0.10, toolZ + 0.232, 0.06, 0.06, 0.18))
         }
         OriginWorkshopTableRole.UPHOLSTERER -> buildList {
             add(blockPiece("upholsterer-loom", Material.LOOM, tuning.pressCenterX, dimensions.height + 0.36,
@@ -486,16 +486,16 @@ internal fun originWorkshopTablePieces(
                 1.12, 0.06, 0.46),
             )
             add(blockPiece("assembler-vise-post-left", Material.STRIPPED_SPRUCE_LOG, tuning.viseCenterX - 0.48,
-                dimensions.height + 0.23, tuning.viseCenterZ,
+                dimensions.height + 0.23, tuning.viseCenterZ + 0.18,
                 0.08, 0.33, 0.12),
             )
             add(blockPiece("assembler-vise-post-right", Material.STRIPPED_SPRUCE_LOG, tuning.viseCenterX + 0.48,
-                dimensions.height + 0.23, tuning.viseCenterZ,
+                dimensions.height + 0.23, tuning.viseCenterZ + 0.18,
                 0.08, 0.33, 0.12),
             )
             add(blockPiece("assembler-vise-crossbar", Material.DARK_OAK_PLANKS, tuning.viseCenterX,
-                dimensions.height + 0.435, tuning.viseCenterZ,
-                0.96, 0.08, 0.12),
+                dimensions.height + 0.435, tuning.viseCenterZ + 0.18,
+                0.96, 0.08, 0.30),
             )
             add(blockPiece("assembler-clamp-left", Material.IRON_BLOCK, tuning.viseCenterX - 0.40 - tuning.viseJawTravel,
                 dimensions.height + 0.17, tuning.viseCenterZ,
@@ -507,7 +507,7 @@ internal fun originWorkshopTablePieces(
             )
             add(blockPiece("assembler-vise-screw", Material.IRON_BLOCK, tuning.viseCenterX - 0.57,
                 dimensions.height + 0.17, tuning.viseCenterZ, 0.30, 0.055, 0.055))
-            add(blockPiece("assembler-vise-handle", Material.WAXED_OXIDIZED_COPPER, tuning.viseCenterX - 0.70,
+            add(blockPiece("assembler-vise-handle", Material.WAXED_OXIDIZED_COPPER, tuning.viseCenterX - 0.7495,
                 dimensions.height + 0.17, tuning.viseCenterZ, 0.055, 0.20, 0.055))
             val pivotY = dimensions.height + tuning.hammerPivotYOffset
             val pivotZ = tuning.hammerPivotZ
@@ -586,7 +586,7 @@ internal fun originWorkshopTablePieces(
         ))
         OriginWorkshopTableRole.FINISHER -> listOf(
             blockPiece("finisher-finished-board", Material.SPRUCE_PLANKS,
-                0.29 * dimensions.width, dimensions.height + 0.035, -0.10 * dimensions.depth,
+                0.29 * dimensions.width, dimensions.height + 0.035, -0.05 * dimensions.depth,
                 0.65, 0.06, 0.30),
         )
     }
@@ -887,6 +887,12 @@ internal object OriginWorkshopTablesModule : PluginModule {
             ))
             OriginWorkshopTableRole.UPHOLSTERER -> controls.putAll(mapOf(
                 "press" to parts("upholsterer-press-control-grip"),
+                "sewing" to parts("upholsterer-drive-handwheel-hub", "upholsterer-drive-handwheel-spoke-x"),
+                "sewing-foot" to parts(
+                    "upholsterer-sewing-foot-lifter",
+                    "upholsterer-sewing-foot-toe-left",
+                    "upholsterer-sewing-foot-toe-right",
+                ),
                 "cushion" to parts("upholsterer-cushion-cover"),
             ))
             OriginWorkshopTableRole.ASSEMBLER -> controls.putAll(mapOf(
@@ -916,12 +922,18 @@ internal object OriginWorkshopTablesModule : PluginModule {
         return Location(table.world, point.x, point.y, point.z)
     }
 
+    /** Resolve a table-local result anchor, including the station's world yaw for spawned models. */
+    internal fun resultAt(tableId: String, local: OriginWorkshopPoint): Location? {
+        val table = machineTables[tableId] ?: return null
+        val at = pointAt(tableId, local) ?: return null
+        at.yaw = table.definition.yaw.toFloat()
+        return at
+    }
+
     internal fun resultAt(tableId: String, productId: String): Location? {
         val table = machineTables[tableId] ?: return null
         if (originWorkshopResultBounds(productId) == null) return null
-        val at = pointAt(tableId, originWorkshopResultAnchor(table.definition.role, productId, table.dimensions)) ?: return null
-        at.yaw = table.definition.yaw.toFloat()
-        return at
+        return resultAt(tableId, originWorkshopResultAnchor(table.definition.role, productId, table.dimensions))
     }
 
     /** Configured dimensions for a currently loaded station, used to resolve its live interaction bounds. */
@@ -1142,7 +1154,7 @@ internal object OriginWorkshopTablesModule : PluginModule {
         val table = machineTables[tableId] ?: return
         val roleMatches = when (machine) {
             "saw", "drill", "clamp-left", "clamp-right" -> table.definition.role == OriginWorkshopTableRole.CARPENTER
-            "press" -> table.definition.role == OriginWorkshopTableRole.UPHOLSTERER
+            "press", "sewing", "sewing-foot" -> table.definition.role == OriginWorkshopTableRole.UPHOLSTERER
             "vise", "anvil" -> table.definition.role == OriginWorkshopTableRole.ASSEMBLER
             "finish" -> table.definition.role == OriginWorkshopTableRole.FINISHER
             else -> error("Unknown workshop craft machine '$machine'")
@@ -1164,6 +1176,7 @@ internal object OriginWorkshopTablesModule : PluginModule {
             OriginWorkshopTableRole.CARPENTER to "leg-left" -> "carpenter-leg-left"
             OriginWorkshopTableRole.CARPENTER to "leg-right" -> "carpenter-leg-right"
             OriginWorkshopTableRole.UPHOLSTERER to "press-cloth" -> "upholsterer-press-cloth"
+            OriginWorkshopTableRole.UPHOLSTERER to "sewing-fabric" -> "upholsterer-sewing-fabric"
             OriginWorkshopTableRole.UPHOLSTERER to "cushion-padding" -> "upholsterer-cushion-padding"
             OriginWorkshopTableRole.UPHOLSTERER to "cushion-cover" -> "upholsterer-cushion-cover"
             OriginWorkshopTableRole.ASSEMBLER to "tabletop" -> "assembler-board-sample"

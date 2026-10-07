@@ -17,18 +17,18 @@ internal data class OriginWorkshopWarehouseGeometry(
     val items: List<OriginWorkshopWarehouseItem>,
 )
 
-/** Three low material pallets fill a 10 by 3 footprint without shelf frames. */
+/** Three low, separated material pallets fit inside the existing 10 by 3 footprint. */
 internal fun originWorkshopWarehouseGeometry(): OriginWorkshopWarehouseGeometry {
     val palletCenters = listOf(-3.0, 0.0, 3.0)
     val blocks = buildList {
         palletCenters.forEachIndexed { pallet, x ->
             for (runnerX in listOf(-1.25, 0.0, 1.25)) {
-                add(warehouseBlock("pallet-$pallet-runner-$runnerX", Material.STRIPPED_SPRUCE_LOG,
-                    x + runnerX, 0.04, 0.2, 0.12, 0.08, 1.50))
+                add(warehouseBlock("pallet-$pallet-runner-$runnerX", Material.STRIPPED_DARK_OAK_LOG,
+                    x + runnerX, 0.04, 0.2, 0.12, 0.08, 1.62))
             }
             for ((board, z) in listOf(-0.35, 0.20, 0.75).withIndex()) {
-                add(warehouseBlock("pallet-$pallet-deck-$board", Material.SPRUCE_PLANKS,
-                    x, 0.13, z, 3.20, 0.10, 0.56))
+                add(warehouseBlock("pallet-$pallet-deck-$board", Material.DARK_OAK_PLANKS,
+                    x, 0.13, z, 2.80, 0.10, 0.52))
             }
         }
 
