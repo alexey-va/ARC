@@ -25,6 +25,7 @@ class HelpCenterEnchantmentsControllerTest {
     private lateinit var player: Player
     private lateinit var controller: HelpCenterController
     private lateinit var screen: PaperDialogScreen
+    private var screenDisplays = 0
     private lateinit var inventoryReturn: HelpCenterInventoryReturnRuntime
     private val executed = mutableListOf<String>()
     private val directory = Files.createTempDirectory("enchantments-controller")
@@ -71,7 +72,10 @@ class HelpCenterEnchantmentsControllerTest {
             inventoryReturn = inventoryReturn,
             inviteToLand = { _, _ -> },
             navigation = navigation,
-            showDialog = { _, value -> screen = value },
+            showDialog = { _, value ->
+                screen = value
+                screenDisplays++
+            },
             closeDialog = {},
             enchantmentsGuide = HelpCenterEnchantmentsGuideConfig.load(directory).snapshot(),
             enchantmentsCatalog = { fixtureCatalog },
@@ -152,10 +156,12 @@ class HelpCenterEnchantmentsControllerTest {
         assertEquals("help.enchantments.acquisition", screen.id)
         click("enchanter")
         assertEquals(listOf("enchanter"), executed)
+        val beforeReturn = screenDisplays
 
         player.closeInventory()
         paper.performTicks(2)
 
+        assertEquals(beforeReturn + 1, screenDisplays)
         assertEquals("help.enchantments.acquisition", screen.id)
     }
 
