@@ -61,6 +61,30 @@ object StaffSpellPreviewExport {
         )
     }
 
+    private fun point(x: Double, y: Double, z: Double): Map<String, Double> = mapOf(
+        "x" to x,
+        "y" to y,
+        "z" to z,
+    )
+
+    private fun playerCamera(spell: StaffSpell, event: Event, frame: Frame): Map<String, Any> {
+        val (position, target) = when {
+            spell == StaffSpell.NOVA -> point(0.0, 1.62, 0.0) to point(0.0, 1.62, 8.0)
+            spell == StaffSpell.MARK -> point(0.0, 0.7, -6.0) to point(0.0, 0.7, 2.0)
+            spell == StaffSpell.EMBER && event.id == "flight" ->
+                point(0.0, 0.0, -frame.ageTicks * 1.2) to point(0.0, 0.0, 8.0)
+            spell == StaffSpell.EMBER -> point(0.0, 0.0, -24.0) to point(0.0, 0.0, 0.0)
+            else -> point(0.0, 0.0, 0.0) to point(0.0, 0.0, 8.0)
+        }
+        return mapOf(
+            "position" to position,
+            "target" to target,
+            "fovDegrees" to 50,
+            "nearClip" to 0.05,
+            "farClip" to 150,
+        )
+    }
+
     private fun state(spell: StaffSpell, event: Event, frame: Frame): ExportedState {
         val inputs = event.inputs
         val parts = staffDisplayParts(
@@ -85,6 +109,7 @@ object StaffSpellPreviewExport {
             "gameplayEvent" to true,
             "length" to inputs.length,
             "radius" to inputs.radius,
+            "camera" to playerCamera(spell, event, frame),
             "pieces" to parts.mapIndexed { index, part -> pieceMetadata(spell, event, index, part) },
         ), parts.map { "minecraft:${it.material.name.lowercase()}" })
     }
@@ -108,13 +133,8 @@ object StaffSpellPreviewExport {
             "states" to states,
             "palette" to palette,
             "coordinates" to mapOf("space" to "spell-local", "origin" to "cast point; +Z forward", "unit" to "block"),
-            "camera" to mapOf(
-                "position" to mapOf("x" to 0.0, "y" to 1.62, "z" to -1.2),
-                "fovDegrees" to 50,
-                "nearClip" to 0.05,
-                "farClip" to 150,
-            ),
-            "evidence" to "Each state calls staffDisplayParts and preserves its exact centers and scales; part quaternions are converted to XYZ Euler angles for the preview renderer. Samples follow the runtime's ${FRAME_TICKS}-tick frame step at ages strictly below their removal duration and use only controller-backed events. CHAIN impact length is set to the 24-block targeting maximum; target-to-target chain segment lengths vary in live play. The palette map can be baked from the version-matched Minecraft 1.21.11 client JAR. Native Minecraft rendering is not simulated.",
+            "cameraNote" to "Player view uses a flat +Z cast-line approximation with spell-specific local origins; caster yaw/pitch, target repositioning, and player movement are not simulated.",
+            "evidence" to "Each state calls staffDisplayParts and preserves its exact centers and scales; part quaternions are converted to XYZ Euler angles for the preview renderer. Samples follow the runtime's ${FRAME_TICKS}-tick frame step at ages strictly below their removal duration and use only controller-backed events. Player cameras are state-specific: eye-origin for CHAIN/FROST/LANCE, feet-origin for NOVA, a representative six-block offset for MARK, and age-based flight or impact offsets for EMBER. CHAIN impact length is set to the 24-block targeting maximum; target-to-target chain segment lengths vary in live play. The palette map can be baked from the version-matched Minecraft 1.21.11 client JAR. Native Minecraft rendering is not simulated.",
         )).plus("\n"))
         println("STAFF_SPELL_PREVIEW states=${states.size} materials=${palette.size} output=$output")
     }

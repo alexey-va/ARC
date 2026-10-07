@@ -271,9 +271,9 @@ private fun novaDisplayParts(
         }
     }
 
-    // A bright green core anchors the translucent strands to the same funnel.
-    parts += part(Material.SEA_LANTERN, 0.0, height * 0.43, 0.0, 0.42, 0.72, 0.42, yaw = spin)
-    parts += part(Material.EMERALD_BLOCK, 0.0, height * 0.59, 0.0, 0.30, 0.48, 0.30, yaw = -spin * 1.2)
+    // Keep the central crystals above the caster's head so the first-person view stays open.
+    parts += part(Material.SEA_LANTERN, 0.0, height * 0.77, 0.0, 0.42, 0.72, 0.42, yaw = spin)
+    parts += part(Material.EMERALD_BLOCK, 0.0, height * 0.94, 0.0, 0.30, 0.48, 0.30, yaw = -spin * 1.2)
     repeat(6) { index ->
         val angle = spin * 0.55 + index * PI / 3.0
         val crownRadius = reach * (0.88 + flare * 0.08)
