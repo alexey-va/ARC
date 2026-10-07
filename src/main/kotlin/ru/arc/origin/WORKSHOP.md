@@ -38,9 +38,12 @@ and fastening the cover. The needle, foot, wheel and cloth feed move together;
 seams appear only after sewing. Assembly uses vise and hammer; finishing uses
 three separately coated panel regions and a return to the drying rack.
 
-Carried props follow player movement and each server tick without additional
-client interpolation; they use body-yaw shoulder coordinates instead of the old
-eye ray in front of the camera. The native client's network delay still applies.
+Carried props use client-only passenger links to the player through the shared
+packet renderer, preserving each display ID when picked up or placed. Translation
+follows client player movement without server-driven world-position teleports;
+body yaw and pose changes still arrive through server metadata. Narrow boards
+rest on the right shoulder clear of the head; wide panels and tall parts use a
+side carry selected from their real geometry. Personal markers remain private.
 Placement highlights and hit targets share station-local recipe geometry. The
 bench top is tiled into individual light planks to preserve texture density,
 with dark framing and metallic mechanisms for contrast. The drill retracts clear

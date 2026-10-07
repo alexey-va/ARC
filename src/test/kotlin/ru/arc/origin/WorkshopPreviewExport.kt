@@ -221,7 +221,7 @@ object WorkshopPreviewExport {
         fun state(id: String, title: String, role: OriginWorkshopTableRole, machine: String? = null,
             progress: Double = 0.0, extras: List<Map<String, Any>> = emptyList(), finished: Boolean = false,
             hidden: Set<String> = emptySet(), guidance: Map<String, Any>? = null,
-            extraMachines: List<Pair<String, Double>> = emptyList()) {
+            extraMachines: List<Pair<String, Double>> = emptyList(), camera: Map<String, Any>? = null) {
             val poses = buildList {
                 machine?.let { add(originWorkshopCraftMachinePose(it, progress, dimensions, tuning)) }
                 extraMachines.forEach { (machineId, machineProgress) ->
@@ -247,6 +247,7 @@ object WorkshopPreviewExport {
                 }
             val scene = mutableMapOf<String, Any>("id" to id, "title" to title, "role" to role.key, "pieces" to pieces + extras)
             guidance?.let { scene["guidance"] = it }
+            camera?.let { scene["camera"] = it }
             states += scene
         }
         fun cuboid(key: String, material: String, x: Double, y: Double, z: Double, w: Double, h: Double, d: Double,
@@ -281,16 +282,99 @@ object WorkshopPreviewExport {
         for (holes in 1..3) state("holes-$holes", "Столяр · отверстий: $holes", OriginWorkshopTableRole.CARPENTER, "drill", 1.0,
             board(holes, drill.copy(x = drill.x - 0.23 * (holes - 1))) + offcuts)
         state("chair-clearance", "Столяр · место готового стула (без модели ItemsAdder)", OriginWorkshopTableRole.CARPENTER, finished = true)
-        val pose = originWorkshopShoulderPose(0.0, false)
-        val mannequin = listOf(
-            cuboid("mannequin-head", "TERRACOTTA", 0.0, 1.65, -2.2, 0.50, 0.50, 0.50),
-            cuboid("mannequin-body", "BLUE_TERRACOTTA", 0.0, 1.04, -2.2, 0.50, 0.72, 0.25),
-            cuboid("mannequin-arm-right", "BLUE_TERRACOTTA", -0.36, 1.0275, -2.2, 0.22, 0.72, 0.25),
-            cuboid("mannequin-arm-left", "BLUE_TERRACOTTA", 0.36, 1.04, -2.2, 0.22, 0.72, 0.25),
-            cuboid("mannequin-leg-right", "GRAY_TERRACOTTA", -0.13, 0.34, -2.2, 0.24, 0.68, 0.25),
-            cuboid("mannequin-leg-left", "GRAY_TERRACOTTA", 0.13, 0.34, -2.2, 0.24, 0.68, 0.25),
-            item("shoulder-board", "board_raw", pose.center.copy(z = -2.2 + pose.center.z), Math.toDegrees(pose.rotationRadians)))
-        state("shoulder", "Столяр · заготовка на плече (манекен)", OriginWorkshopTableRole.CARPENTER, extras = mannequin)
+        val carryAnchorZ = -2.2
+        fun carryCamera(sneaking: Boolean) = mapOf<String, Any>(
+            "id" to "carry-player-eye",
+            "position" to pointMetadata(OriginWorkshopPoint(0.0, if (sneaking) 1.32 else 1.62, -3.65)),
+            "target" to pointMetadata(OriginWorkshopPoint(0.0, if (sneaking) 0.72 else 1.02, carryAnchorZ)),
+            "eyeHeight" to if (sneaking) 1.32 else 1.62,
+            "fovDegrees" to 70.0,
+            "near" to 0.05,
+            "far" to 8.0,
+            "stance" to if (sneaking) "sneaking" else "standing",
+            "coordinateSpace" to "table-local",
+            "source" to "local player-eye view centered on the carried workpiece and mannequin",
+        )
+        fun carryMannequin(sneaking: Boolean): List<Map<String, Any>> {
+            val headCenterY = if (sneaking) 1.35 else 1.65
+            val torsoCenterY = if (sneaking) 0.89 else 1.04
+            val torsoHeight = if (sneaking) 0.42 else 0.72
+            return listOf(
+                cuboid("mannequin-head", "TERRACOTTA", 0.0, headCenterY, carryAnchorZ, 0.50, 0.50, 0.50),
+                cuboid("mannequin-body", "BLUE_TERRACOTTA", 0.0, torsoCenterY, carryAnchorZ, 0.50, torsoHeight, 0.25),
+                cuboid("mannequin-arm-right", "BLUE_TERRACOTTA", -0.36, torsoCenterY, carryAnchorZ, 0.22, torsoHeight, 0.25),
+                cuboid("mannequin-arm-left", "BLUE_TERRACOTTA", 0.36, torsoCenterY, carryAnchorZ, 0.22, torsoHeight, 0.25),
+                cuboid("mannequin-leg-right", "GRAY_TERRACOTTA", -0.13, 0.34, carryAnchorZ, 0.24, 0.68, 0.25),
+                cuboid("mannequin-leg-left", "GRAY_TERRACOTTA", 0.13, 0.34, carryAnchorZ, 0.24, 0.68, 0.25),
+            )
+        }
+        fun carryCuboids(key: String, geometry: List<OriginWorkshopWorkpiecePiece>, pose: OriginWorkshopCarryPose): List<Map<String, Any>> {
+            val euler = Vector3f().also { pose.rotation.getEulerAnglesXYZ(it) }
+            return geometry.mapIndexed { index, piece ->
+                val offset = pose.rotation.transform(Vector3f(
+                    piece.center.x.toFloat(), piece.center.y.toFloat(), piece.center.z.toFloat(),
+                ))
+                cuboid(
+                    "$key-$index", piece.material.name,
+                    pose.center.x + offset.x,
+                    pose.center.y + offset.y,
+                    carryAnchorZ + pose.center.z + offset.z,
+                    piece.size.x.toDouble(), piece.size.y.toDouble(), piece.size.z.toDouble(),
+                ) + mapOf(
+                    "rotationX" to Math.toDegrees(euler.x.toDouble()),
+                    "rotationY" to Math.toDegrees(euler.y.toDouble()),
+                    "rotationZ" to Math.toDegrees(euler.z.toDouble()),
+                )
+            }
+        }
+        val rawBoard = listOf(OriginWorkshopWorkpiecePiece(
+            OriginWorkshopPoint(0.0, 0.0, 0.0),
+            recipe.partSizes.getValue(OriginWorkshopGameAction.PICK_STOCK),
+            recipe.materials.getValue(OriginWorkshopGameAction.PICK_STOCK),
+        ))
+        fun carriedBoard(sneaking: Boolean): List<Map<String, Any>> {
+            val pose = originWorkshopCarryPose(0.0, sneaking, rawBoard)
+            val euler = Vector3f().also { pose.rotation.getEulerAnglesXYZ(it) }
+            return listOf(item(
+                "carried-raw-board", "board_raw",
+                OriginWorkshopPoint(pose.center.x, pose.center.y, carryAnchorZ + pose.center.z),
+                Math.toDegrees(euler.y.toDouble()),
+            ))
+        }
+        val upholstery = originWorkshopGameRecipe(
+            OriginWorkshopTableRole.UPHOLSTERER,
+            "preview:carry-upholstery",
+            dimensions,
+            tuning,
+            OriginWorkshopPoint(-7.5, 0.405, 0.30),
+            rules,
+        )
+        val cloth = originWorkshopUpholsteryPieces(stretchedEdges = 2)
+        val tabletop = originWorkshopJoinedTopPieces(edges = 2, joints = 2)
+        val leg = originWorkshopAssemblerLegPieces(fastened = false)
+        val padding = listOf(OriginWorkshopWorkpiecePiece(
+            OriginWorkshopPoint(0.0, 0.0, 0.0),
+            upholstery.partSizes.getValue(OriginWorkshopGameAction.PICK_PADDING),
+            upholstery.materials.getValue(OriginWorkshopGameAction.PICK_PADDING),
+        ))
+        fun carryState(id: String, title: String, role: OriginWorkshopTableRole,
+            geometry: List<OriginWorkshopWorkpiecePiece>, sneaking: Boolean,
+            modelBoard: Boolean = false) {
+            val pose = originWorkshopCarryPose(0.0, sneaking, geometry)
+            val prop = if (modelBoard) carriedBoard(sneaking) else carryCuboids(id, geometry, pose)
+            state(
+                id, title, role,
+                extras = carryMannequin(sneaking) + prop,
+                camera = carryCamera(sneaking),
+            )
+        }
+        carryState("carry-raw-board-standing", "Столяр · доска на плече, стоя", OriginWorkshopTableRole.CARPENTER, rawBoard, false, modelBoard = true)
+        carryState("carry-raw-board-sneaking", "Столяр · доска на плече, присев", OriginWorkshopTableRole.CARPENTER, rawBoard, true, modelBoard = true)
+        carryState("carry-cloth-standing", "Обивщик · ткань сбоку, стоя", OriginWorkshopTableRole.UPHOLSTERER, cloth, false)
+        carryState("carry-cloth-sneaking", "Обивщик · ткань сбоку, присев", OriginWorkshopTableRole.UPHOLSTERER, cloth, true)
+        carryState("carry-tabletop-sneaking", "Сборщик · столешница сбоку, присев", OriginWorkshopTableRole.ASSEMBLER, tabletop, true)
+        carryState("carry-leg-standing", "Сборщик · ножка у корпуса, стоя", OriginWorkshopTableRole.ASSEMBLER, leg, false)
+        carryState("carry-padding-standing", "Обивщик · набивка у корпуса, стоя", OriginWorkshopTableRole.UPHOLSTERER, padding, false)
         state("press", "Обивщик · прижим в нижней точке", OriginWorkshopTableRole.UPHOLSTERER, "press", 0.65,
             listOf(cuboid("player-cloth", "RED_WOOL", tuning.pressCenterX, dimensions.height + 0.74, tuning.pressCenterZ, 0.64, 0.05, 0.46)))
         state("hammer", "Сборщик · удар молота", OriginWorkshopTableRole.ASSEMBLER, "anvil", 0.65,

@@ -55,7 +55,7 @@ class OriginWorkshopPropTest : FreeSpec({
 
         val rotation = Quaternionf().rotationY((Math.PI / 2).toFloat())
         val movedCenter = Location(null, 4.0, 70.0, -8.0)
-        prop.move(movedCenter, rotation, carrying = true)
+        prop.move(movedCenter, rotation)
         val transforms = mutableListOf<Transformation>()
         verify(exactly = 2) { display.transformation = capture(transforms) }
         val secondTransforms = mutableListOf<Transformation>()
@@ -76,8 +76,8 @@ class OriginWorkshopPropTest : FreeSpec({
         )
         rotation.transform(secondLocalCorner)
         secondTransforms.last().translation.distance(secondLocalCorner) shouldBeLessThan 1.0e-5f
-        verify { display.interpolationDuration = 0 }
-        verify { display.teleportDuration = 0 }
+        verify { display.interpolationDuration = 2 }
+        verify { display.teleportDuration = 1 }
         val movedLocations = mutableListOf<Location>()
         verify(exactly = 2) { display.teleport(capture(movedLocations)) }
         movedLocations.last().x shouldBe 4.0
@@ -95,6 +95,40 @@ class OriginWorkshopPropTest : FreeSpec({
             rotation.transform(Vector3f(piece.center.x.toFloat(), piece.center.y.toFloat(), piece.center.z.toFloat())),
         )
         hitboxCenter.distance(expectedCenter) shouldBeLessThan 1.0e-5f
+    }
+
+    "carried cubes and models mount without follower teleports and detach before placement" {
+        for (model in listOf(null, ItemStack(Material.OAK_PLANKS))) {
+            val harness = PropDisplayHarness()
+            val prop = OriginWorkshopProp(harness.owner, Location(null, 0.0, 64.0, 0.0), listOf(workshopPiece()), model)
+            val display = prop.itemDisplay ?: prop.pieces.single().display!!
+            val carrier = mockk<Player>(relaxed = true)
+            var feet = Location(null, 3.0, 64.0, 4.0)
+            every { carrier.location } answers { feet.clone() }
+            every { carrier.height } returns 1.8
+            val pose = OriginWorkshopCarryPose(OriginWorkshopPoint(-0.4, 1.42, -0.1), Quaternionf())
+
+            prop.carry(carrier, pose)
+            feet = Location(null, 9.0, 66.0, 7.0)
+            prop.carry(carrier, pose)
+
+            verify(exactly = 2) { display.attachTo(carrier) }
+            // Only the original stationary spawn pose teleports; walking changes no world anchor.
+            verify(exactly = 1) { display.teleport(any()) }
+            verify(exactly = 0) { display.remove() }
+            prop.center.x shouldBe 8.6
+            prop.center.y shouldBe 67.42
+            val transforms = mutableListOf<Transformation>()
+            verify { display.transformation = capture(transforms) }
+            val shapeCorner = if (model == null) Vector3f(-0.06f, -0.04f, -0.05f) else Vector3f()
+            transforms.last().translation.distance(shapeCorner.add(-0.4f, -0.38f, -0.1f)) shouldBeLessThan 1.0e-5f
+
+            val placed = Location(null, 2.0, 65.0, 6.0)
+            prop.move(placed, Quaternionf())
+            verifyOrder { display.attachTo(carrier); display.detach(); display.teleport(placed) }
+            verify(exactly = 2) { display.teleport(any()) }
+            verify(exactly = 0) { display.remove() }
+        }
     }
 
     "private placement marker is shown only to its viewer after pose setup" {
@@ -224,7 +258,7 @@ class OriginWorkshopPropTest : FreeSpec({
         harness.items shouldHaveSize 1
         verify { item.itemStack = match { it.type == Material.BIRCH_PLANKS } }
         verify(exactly = 0) { item.remove() }
-        prop.move(Location(null, 3.0, 67.0, -2.0), Quaternionf().rotationY(0.7f), carrying = false)
+        prop.move(Location(null, 3.0, 67.0, -2.0), Quaternionf().rotationY(0.7f))
         val transformations = mutableListOf<Transformation>()
         verify(exactly = 2) { item.transformation = capture(transformations) }
         val itemDirection = transformations.last().leftRotation.transform(Vector3f(1f, 0f, 0f))

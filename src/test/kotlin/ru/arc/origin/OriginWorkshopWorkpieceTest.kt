@@ -5,8 +5,7 @@ import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.floats.shouldBeLessThan
 import kotlin.math.abs
-import kotlin.math.cos
-import kotlin.math.sin
+import kotlin.math.max
 import org.bukkit.Material
 import org.joml.Quaternionf
 import org.joml.Vector3f
@@ -163,26 +162,231 @@ class OriginWorkshopWorkpieceTest : FreeSpec({
         shouldThrow<IllegalArgumentException> { originWorkshopSewingClothPoint(dimensions, Double.NaN) }
     }
 
-    "shoulder board follows horizontal forward at cardinal yaws and lowers while sneaking" {
+    "carried board follows the shoulder, clears the head, and stays slightly behind at cardinal yaws" {
+        val board = originWorkshopBoardPieces(0)
         for (yawDegrees in listOf(0.0, 90.0, 180.0, 270.0)) {
-            val yaw = Math.toRadians(yawDegrees)
-            val forwardX = -sin(yaw)
-            val forwardZ = cos(yaw)
-            val rightX = -cos(yaw)
-            val rightZ = -sin(yaw)
-            val standing = originWorkshopShoulderPose(yawDegrees, sneaking = false)
-            val sneaking = originWorkshopShoulderPose(yawDegrees, sneaking = true)
+            val pose = originWorkshopCarryPose(yawDegrees, sneaking = false, geometry = board)
+            val bounds = carryEnvelope(yawDegrees, board, pose)
+            val forward = bodyForward(yawDegrees)
+            val longAxis = pose.rotation.transform(Vector3f(1f, 0f, 0f))
+            val thicknessAxis = pose.rotation.transform(Vector3f(0f, 1f, 0f))
 
-            cos(standing.rotationRadians).near(forwardX) shouldBe true
-            (-sin(standing.rotationRadians)).near(forwardZ) shouldBe true
-            standing.center.x.near(forwardX * 0.12 + rightX * 0.36) shouldBe true
-            standing.center.z.near(forwardZ * 0.12 + rightZ * 0.36) shouldBe true
-            standing.center.y shouldBe 1.43
-            sneaking.center.y shouldBe 1.18
+            (dot(longAxis, forward) > 0.999) shouldBe true
+            (abs(thicknessAxis.y) > 0.999) shouldBe true
+            (bounds.minRight >= headHalfWidth(boardHeadFixture().size) + CARRY_TEST_CLEARANCE - 1.0e-4) shouldBe true
+            (bounds.centerForward in -0.25..-0.05) shouldBe true
+            assertCarryMeasurement(
+                actual = bounds.minY,
+                expected = torsoTop(bodyTorsoFixture()),
+                label = "standing board bottom at yaw=$yawDegrees should rest on the shoulder",
+            )
+            (bounds.maxY > headBottom(boardHeadFixture())) shouldBe true
+
+            val crouched = carryEnvelope(
+                yawDegrees,
+                board,
+                originWorkshopCarryPose(yawDegrees, sneaking = true, geometry = board),
+            )
+            assertCarryMeasurement(
+                actual = crouched.minY,
+                expected = torsoTop(bodyTorsoFixture()) - 0.30,
+                label = "sneaking board bottom at yaw=$yawDegrees should follow the lowered shoulder",
+            )
         }
-        shouldThrow<IllegalArgumentException> { originWorkshopShoulderPose(Double.NaN, sneaking = false) }
+    }
+
+    "wide cloth and tabletop turn upright beside the torso below the face" {
+        val wideItems = listOf(
+            originWorkshopUpholsteryPieces(stretchedEdges = 2),
+            originWorkshopJoinedTopPieces(edges = 2, joints = 2),
+        )
+        for (yawDegrees in listOf(0.0, 90.0, 180.0, 270.0)) for (geometry in wideItems) {
+            val pose = originWorkshopCarryPose(yawDegrees, sneaking = false, geometry = geometry)
+            val bounds = carryEnvelope(yawDegrees, geometry, pose)
+            val forward = bodyForward(yawDegrees)
+            val longAxis = pose.rotation.transform(Vector3f(1f, 0f, 0f))
+            val panelHeightAxis = pose.rotation.transform(Vector3f(0f, 0f, 1f))
+
+            (dot(longAxis, forward) > 0.999) shouldBe true
+            (abs(panelHeightAxis.y) > 0.999) shouldBe true
+            (bounds.minRight >= bodySideExtent(bodyTorsoFixture(), bodyRightArmFixture()) + CARRY_TEST_CLEARANCE - 1.0e-4) shouldBe true
+            (bounds.maxY < headBottom(boardHeadFixture())) shouldBe true
+        }
+    }
+
+    "legs and padding stay upright, clear the torso, and remain below the face" {
+        val recipe = originWorkshopGameRecipe(
+            OriginWorkshopTableRole.UPHOLSTERER,
+            "preview:carry-test",
+            OriginWorkshopTableDimensions.DEFAULT,
+            OriginWorkshopMachineTuning(),
+            OriginWorkshopPoint(0.0, 0.0, 0.0),
+            OriginWorkshopGameRules(),
+        )
+        val leg = originWorkshopAssemblerLegPieces(fastened = true)
+        val padding = listOf(
+            OriginWorkshopWorkpiecePiece(
+                OriginWorkshopPoint(0.0, 0.0, 0.0),
+                recipe.partSizes.getValue(OriginWorkshopGameAction.PICK_PADDING),
+                Material.WHITE_WOOL,
+            ),
+        )
+        for (yawDegrees in listOf(0.0, 90.0, 180.0, 270.0)) for (geometry in listOf(leg, padding)) {
+            val pose = originWorkshopCarryPose(yawDegrees, sneaking = false, geometry = geometry)
+            val bounds = carryEnvelope(yawDegrees, geometry, pose)
+            val localUp = pose.rotation.transform(Vector3f(0f, 1f, 0f))
+
+            (abs(localUp.y) > 0.999) shouldBe true
+            (bounds.minRight >= bodySideExtent(bodyTorsoFixture(), bodyRightArmFixture()) + CARRY_TEST_CLEARANCE - 1.0e-4) shouldBe true
+            (bounds.maxY < headBottom(boardHeadFixture())) shouldBe true
+        }
+    }
+
+    "sneaking lowers the actual carried bounds without changing their orientation or side clearance" {
+        val geometries = listOf(
+            originWorkshopBoardPieces(0),
+            originWorkshopUpholsteryPieces(stretchedEdges = 2),
+            originWorkshopJoinedTopPieces(edges = 2, joints = 2),
+            originWorkshopAssemblerLegPieces(fastened = true),
+        )
+        for (yawDegrees in listOf(0.0, 90.0, 180.0, 270.0)) for (geometry in geometries) {
+            val standingPose = originWorkshopCarryPose(yawDegrees, sneaking = false, geometry = geometry)
+            val sneakingPose = originWorkshopCarryPose(yawDegrees, sneaking = true, geometry = geometry)
+            val standing = carryEnvelope(yawDegrees, geometry, standingPose)
+            val sneaking = carryEnvelope(yawDegrees, geometry, sneakingPose)
+
+            (standingPose.rotation.x.near(sneakingPose.rotation.x) &&
+                standingPose.rotation.y.near(sneakingPose.rotation.y) &&
+                standingPose.rotation.z.near(sneakingPose.rotation.z) &&
+                standingPose.rotation.w.near(sneakingPose.rotation.w)) shouldBe true
+            assertCarryMeasurement(
+                actual = standing.minY - sneaking.minY,
+                expected = 0.30,
+                label = "sneaking lower-bound drop at yaw=$yawDegrees",
+            )
+            assertCarryMeasurement(
+                actual = standing.maxY - sneaking.maxY,
+                expected = 0.30,
+                label = "sneaking upper-bound drop at yaw=$yawDegrees",
+            )
+            (standing.minRight - sneaking.minRight).near(0.0) shouldBe true
+        }
+    }
+
+    "carry pose rejects malformed geometry and non-finite body yaw" {
+        val board = originWorkshopBoardPieces(0)
+        shouldThrow<IllegalArgumentException> { originWorkshopCarryPose(Double.NaN, false, board) }
+        shouldThrow<IllegalArgumentException> { originWorkshopCarryPose(Double.POSITIVE_INFINITY, false, board) }
+        shouldThrow<IllegalArgumentException> { originWorkshopCarryPose(0.0, false, emptyList()) }
+        val finiteExtremeYaw = originWorkshopCarryPose(Double.MAX_VALUE, false, board)
+        listOf(
+            finiteExtremeYaw.center.x.toFloat(), finiteExtremeYaw.center.y.toFloat(), finiteExtremeYaw.center.z.toFloat(),
+            finiteExtremeYaw.rotation.x, finiteExtremeYaw.rotation.y, finiteExtremeYaw.rotation.z, finiteExtremeYaw.rotation.w,
+        ).all { it.isFinite() } shouldBe true
+        shouldThrow<IllegalArgumentException> {
+            originWorkshopCarryPose(0.0, false, listOf(board.single().copy(center = OriginWorkshopPoint(Double.NaN, 0.0, 0.0))))
+        }
     }
 })
+
+private data class CarryEnvelope(
+    val minRight: Double,
+    val centerForward: Double,
+    val minY: Double,
+    val maxY: Double,
+)
+
+private fun carryEnvelope(
+    yawDegrees: Double,
+    geometry: List<OriginWorkshopWorkpiecePiece>,
+    pose: OriginWorkshopCarryPose,
+): CarryEnvelope {
+    val forward = bodyForward(yawDegrees)
+    val right = bodyRight(yawDegrees)
+    val axisX = pose.rotation.transform(Vector3f(1f, 0f, 0f))
+    val axisY = pose.rotation.transform(Vector3f(0f, 1f, 0f))
+    val axisZ = pose.rotation.transform(Vector3f(0f, 0f, 1f))
+    val base = Vector3f(pose.center.x.toFloat(), pose.center.y.toFloat(), pose.center.z.toFloat())
+    var minRight = Double.POSITIVE_INFINITY
+    var minForward = Double.POSITIVE_INFINITY
+    var maxForward = Double.NEGATIVE_INFINITY
+    var minY = Double.POSITIVE_INFINITY
+    var maxY = Double.NEGATIVE_INFINITY
+
+    geometry.forEach { piece ->
+        val center = pose.rotation.transform(Vector3f(
+            piece.center.x.toFloat(), piece.center.y.toFloat(), piece.center.z.toFloat(),
+        )).add(base)
+        val halfRight = abs(dot(axisX, right)) * piece.size.x / 2.0 +
+            abs(dot(axisY, right)) * piece.size.y / 2.0 +
+            abs(dot(axisZ, right)) * piece.size.z / 2.0
+        val halfForward = abs(dot(axisX, forward)) * piece.size.x / 2.0 +
+            abs(dot(axisY, forward)) * piece.size.y / 2.0 +
+            abs(dot(axisZ, forward)) * piece.size.z / 2.0
+        val halfUp = abs(axisX.y) * piece.size.x / 2.0 +
+            abs(axisY.y) * piece.size.y / 2.0 +
+            abs(axisZ.y) * piece.size.z / 2.0
+        val centerRight = dot(center, right)
+        val centerForward = dot(center, forward)
+        minRight = minOf(minRight, centerRight - halfRight)
+        minForward = minOf(minForward, centerForward - halfForward)
+        maxForward = maxOf(maxForward, centerForward + halfForward)
+        minY = minOf(minY, center.y - halfUp)
+        maxY = maxOf(maxY, center.y + halfUp)
+    }
+    return CarryEnvelope(minRight, (minForward + maxForward) / 2.0, minY, maxY)
+}
+
+private fun bodyForward(yawDegrees: Double): Vector3f {
+    val yaw = Math.toRadians(yawDegrees)
+    return Vector3f(-kotlin.math.sin(yaw).toFloat(), 0f, kotlin.math.cos(yaw).toFloat())
+}
+
+private fun bodyRight(yawDegrees: Double): Vector3f {
+    val yaw = Math.toRadians(yawDegrees)
+    return Vector3f(-kotlin.math.cos(yaw).toFloat(), 0f, -kotlin.math.sin(yaw).toFloat())
+}
+
+private fun dot(first: Vector3f, second: Vector3f): Double =
+    first.x.toDouble() * second.x + first.y.toDouble() * second.y + first.z.toDouble() * second.z
+
+private fun boardHeadFixture() = OriginWorkshopWorkpiecePiece(
+    OriginWorkshopPoint(0.0, 1.65, 0.0),
+    OriginWorkshopGamePartSize(0.50f, 0.50f, 0.50f),
+    Material.TERRACOTTA,
+)
+
+private fun bodyTorsoFixture() = OriginWorkshopWorkpiecePiece(
+    OriginWorkshopPoint(0.0, 1.04, 0.0),
+    OriginWorkshopGamePartSize(0.50f, 0.72f, 0.25f),
+    Material.BLUE_TERRACOTTA,
+)
+
+private fun bodyRightArmFixture() = OriginWorkshopWorkpiecePiece(
+    OriginWorkshopPoint(-0.36, 1.0275, 0.0),
+    OriginWorkshopGamePartSize(0.22f, 0.72f, 0.25f),
+    Material.BLUE_TERRACOTTA,
+)
+
+private fun headHalfWidth(size: OriginWorkshopGamePartSize): Double = max(size.x, size.z) / 2.0
+private fun torsoTop(piece: OriginWorkshopWorkpiecePiece): Double = piece.center.y + piece.size.y / 2.0
+private fun headBottom(piece: OriginWorkshopWorkpiecePiece): Double = piece.center.y - piece.size.y / 2.0
+private fun bodySideExtent(torso: OriginWorkshopWorkpiecePiece, arm: OriginWorkshopWorkpiecePiece): Double =
+    max(torso.size.x / 2.0, abs(arm.center.x) + arm.size.x / 2.0)
+
+private const val CARRY_TEST_CLEARANCE = 0.04
+// Carry poses are converted through JOML Vector3f before reaching the ItemDisplay API.
+private const val CARRY_FLOAT_ROUNDING_TOLERANCE = 1.0e-6
+
+private fun assertCarryMeasurement(actual: Double, expected: Double, label: String) {
+    val delta = actual - expected
+    if (abs(delta) > CARRY_FLOAT_ROUNDING_TOLERANCE) {
+        throw AssertionError(
+            "$label: expected $expected blocks, got $actual (delta=$delta, " +
+                "float-rounding tolerance=$CARRY_FLOAT_ROUNDING_TOLERANCE)",
+        )
+    }
+}
 
 private const val EPSILON = 1.0e-7
 

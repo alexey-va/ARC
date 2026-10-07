@@ -37,6 +37,8 @@ internal class OriginWorkshopProp(
     private var currentCenter = center.clone().withoutViewRotation()
     private var currentRotation = Quaternionf()
     private var removed = false
+    private var carrier: Player? = null
+    private val passengerTranslation = Vector3f()
 
     val pieces: List<OriginWorkshopPropPiece>
         get() = currentPieces
@@ -76,12 +78,26 @@ internal class OriginWorkshopProp(
     }
 
     /** Moves all visible parts around the same center and rotation pivot. */
-    fun move(center: Location, rotation: Quaternionf, carrying: Boolean) {
+    fun move(center: Location, rotation: Quaternionf) {
         check(!removed) { "workshop prop has been removed" }
+        carrier = null
+        passengerTranslation.zero()
         currentCenter = center.clone().withoutViewRotation()
         currentRotation = Quaternionf(rotation)
-        currentPieces.forEach { piece -> piece.display?.let { applyBlockPose(it, piece.geometry, carrying) } }
-        currentItemDisplay?.let { applyItemPose(it, carrying) }
+        currentPieces.forEach { piece -> piece.display?.let { applyBlockPose(it, piece.geometry) } }
+        currentItemDisplay?.let(::applyItemPose)
+    }
+
+    /** The client moves passengers with its player; only the local pose comes from server snapshots. */
+    fun carry(player: Player, pose: OriginWorkshopCarryPose) {
+        check(!removed) { "workshop prop has been removed" }
+        carrier = player
+        currentCenter = player.location.add(pose.center.x, pose.center.y, pose.center.z).withoutViewRotation()
+        currentRotation = Quaternionf(pose.rotation)
+        // Vanilla 1.21.11 uses the player's pose height for PASSENGER and the display's feet for VEHICLE.
+        passengerTranslation.set(pose.center.x.toFloat(), (pose.center.y - player.height).toFloat(), pose.center.z.toFloat())
+        currentPieces.forEach { piece -> piece.display?.let { applyBlockPose(it, piece.geometry) } }
+        currentItemDisplay?.let(::applyItemPose)
     }
 
     /** Hitbox for one cuboid, matching the same local pivot used by the packet transformation. */
@@ -115,6 +131,7 @@ internal class OriginWorkshopProp(
     fun remove() {
         if (removed) return
         removed = true
+        carrier = null
         currentPieces.forEach { it.display?.remove() }
         currentPieces = emptyList()
         currentItemDisplay?.remove()
@@ -149,7 +166,7 @@ internal class OriginWorkshopProp(
                 if (display.blockData.material != nextGeometry.material) {
                     display.blockData = nextGeometry.material.createBlockData()
                 }
-                applyBlockPose(display, nextGeometry, carrying = false)
+                applyBlockPose(display, nextGeometry)
             }
             result[newIndex] = piece
         }
@@ -162,7 +179,7 @@ internal class OriginWorkshopProp(
         val display = owner.spawnBlock(currentCenter.clone(), geometry.material.createBlockData())
         onSpawn(display)
         configureBlockDisplay(display)
-        applyBlockPose(display, geometry, carrying = false)
+        applyBlockPose(display, geometry)
         showIfPrivate(display)
         return display
     }
@@ -171,7 +188,7 @@ internal class OriginWorkshopProp(
         val display = owner.spawnItem(currentCenter.clone(), model.clone())
         onSpawn(display)
         configureItemDisplay(display)
-        applyItemPose(display, carrying = false)
+        applyItemPose(display)
         showIfPrivate(display)
         return display
     }
@@ -204,17 +221,14 @@ internal class OriginWorkshopProp(
     private fun applyBlockPose(
         display: PacketBlockDisplay,
         geometry: OriginWorkshopWorkpiecePiece,
-        carrying: Boolean,
     ) {
-        display.interpolationDuration = if (carrying) 0 else 2
-        display.teleportDuration = if (carrying) 0 else 1
-        display.teleport(currentCenter.clone())
+        applyAnchor(display)
         val localCorner = Vector3f(
             geometry.center.x.toFloat() - geometry.size.x / 2f,
             geometry.center.y.toFloat() - geometry.size.y / 2f,
             geometry.center.z.toFloat() - geometry.size.z / 2f,
         )
-        currentRotation.transform(localCorner)
+        currentRotation.transform(localCorner).add(passengerTranslation)
         display.transformation = Transformation(
             localCorner,
             Quaternionf(currentRotation),
@@ -223,16 +237,25 @@ internal class OriginWorkshopProp(
         )
     }
 
-    private fun applyItemPose(display: PacketItemDisplay, carrying: Boolean) {
-        display.interpolationDuration = if (carrying) 0 else 2
-        display.teleportDuration = if (carrying) 0 else 1
-        display.teleport(currentCenter.clone())
+    private fun applyItemPose(display: PacketItemDisplay) {
+        applyAnchor(display)
         display.transformation = Transformation(
-            Vector3f(),
+            Vector3f(passengerTranslation),
             originWorkshopBoardItemDisplayRotation(currentRotation),
             Vector3f(1f),
             Quaternionf(),
         )
+    }
+
+    private fun applyAnchor(display: PacketDisplay) {
+        val player = carrier
+        display.interpolationDuration = if (player != null) 1 else 2
+        display.teleportDuration = if (player != null) 0 else 1
+        if (player != null) display.attachTo(player)
+        else {
+            display.detach()
+            display.teleport(currentCenter.clone())
+        }
     }
 
     private fun showIfPrivate(display: PacketDisplay) {

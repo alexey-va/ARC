@@ -403,7 +403,6 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         val active = session?.takeIf { it.playerId == event.player.uniqueId } ?: return
         if (event.to.world.uid != active.worldId) return
         if (event.from != event.to) active.activity.recordActivity(nowTick())
-        if (active.carried != null || active.brush != null) carry(active, event.player, event.to)
     }
 
     @EventHandler
@@ -758,6 +757,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
                     interpolationDuration = 0
                     transformation = Transformation(Vector3f(), Quaternionf(), Vector3f(0.3f), Quaternionf())
                 }?.also { active.parts += it } ?: return false
+                carry(active, player)
             }
             OriginWorkshopGameAction.SAND_PANEL_NEAR,
             OriginWorkshopGameAction.SAND_PANEL_CENTER,
@@ -812,7 +812,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         val height = OriginWorkshopTablesModule.dimensionsFor(tableId)?.height ?: return
         val center = OriginWorkshopTablesModule.pointAt(tableId, OriginWorkshopPoint(0.0, height + 0.04, -0.45)) ?: return
         active.workpiece = spawnProp(active, player, pieces).also {
-            moveProp(it, center, boardRotation(), carrying = false)
+            moveProp(it, center, boardRotation())
         }
     }
 
@@ -830,7 +830,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
             OriginWorkshopPoint(turn.to.x, turn.to.y, turn.to.z), turn.rotation, turn.flip, turn.lift, progress,
         )
         moveProp(turn.prop, turn.from.clone().apply { x = pose.center.x; y = pose.center.y; z = pose.center.z },
-            pose.rotation, carrying = false)
+            pose.rotation)
         if (progress >= 1.0) {
             active.turn = null
             if (turn.lowerSewingFoot) OriginWorkshopTablesModule.animateCraftMachine(tableId, "sewing-foot", 1.0)
@@ -1138,7 +1138,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
             val cloth = active.workpiece ?: return
             val dimensions = OriginWorkshopTablesModule.dimensionsFor(tableId) ?: return
             val at = OriginWorkshopTablesModule.pointAt(tableId, originWorkshopSewingClothPoint(dimensions, progress)) ?: return
-            moveProp(cloth, at, Quaternionf(cloth.rotation), carrying = false)
+            moveProp(cloth, at, Quaternionf(cloth.rotation))
         }
     }
 
@@ -1150,7 +1150,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         val center = intake.clone().add(outfeed.toVector().subtract(intake.toVector()).multiply(progress))
         val rotation = boardRotation()
         if (active.progress.stage == OriginWorkshopGameStage.SAWING_SECOND) rotation.rotateY(Math.PI.toFloat())
-        moveProp(board, center, rotation, carrying = false)
+        moveProp(board, center, rotation)
     }
 
     private fun renderGeometry(active: Session, geometry: List<OriginWorkshopWorkpiecePiece>,
@@ -1174,26 +1174,37 @@ internal object OriginWorkshopGame : PluginModule, Listener {
 
     private fun settle(active: Session, item: OriginWorkshopProp, point: OriginWorkshopPoint): Location? {
         val center = OriginWorkshopTablesModule.pointAt(tableId, point) ?: return null
-        moveProp(item, center, boardRotation(), carrying = false)
+        moveProp(item, center, boardRotation())
         item.glow(null)
         return center
     }
 
-    private fun carry(active: Session, player: Player, location: Location = player.location) {
-        val pose = originWorkshopShoulderPose(location.yaw.toDouble(), player.isSneaking)
-        val center = location.clone().add(pose.center.x, pose.center.y, pose.center.z).apply { yaw = 0f; pitch = 0f }
+    private fun carry(active: Session, player: Player) {
+        val bodyYaw = player.bodyYaw.toDouble()
         active.carried?.let { item ->
-            moveProp(item, center, Quaternionf().rotationY(pose.rotationRadians.toFloat()), carrying = true)
+            val pose = originWorkshopCarryPose(bodyYaw, player.isSneaking, item.pieces.map { it.geometry })
+            item.carry(player, pose)
             item.glow(null)
         }
-        // Small hand tools follow the hand below eye level, independently of the shoulder workpiece.
-        val hand = location.clone().add(location.direction.setY(0.0).normalize().multiply(0.45))
-            .add(pose.center.x * 0.7, 1.0, pose.center.z * 0.7).apply { yaw = 0f; pitch = 0f }
-        active.brush?.teleport(hand)
+        active.brush?.let { brush ->
+            val yaw = Math.toRadians(bodyYaw)
+            val forwardX = -kotlin.math.sin(yaw)
+            val forwardZ = kotlin.math.cos(yaw)
+            val rightX = -kotlin.math.cos(yaw)
+            val rightZ = -kotlin.math.sin(yaw)
+            brush.attachTo(player)
+            brush.interpolationDuration = 1
+            brush.transformation = Transformation(
+                Vector3f((rightX * 0.38 + forwardX * 0.28).toFloat(),
+                    ((if (player.isSneaking) 0.78 else 1.03) - player.height).toFloat(),
+                    (rightZ * 0.38 + forwardZ * 0.28).toFloat()),
+                Quaternionf().rotationY(-yaw.toFloat()), Vector3f(0.3f), Quaternionf(),
+            )
+        }
     }
 
-    private fun moveProp(item: OriginWorkshopProp, center: Location, rotation: Quaternionf, carrying: Boolean) =
-        item.move(center, rotation, carrying)
+    private fun moveProp(item: OriginWorkshopProp, center: Location, rotation: Quaternionf) =
+        item.move(center, rotation)
 
     /** Named controls and pickable materials use the exact rendered cubes, not a nearby control anchor. */
     private fun activeTargetDistance(active: Session, player: Player): Double? {
