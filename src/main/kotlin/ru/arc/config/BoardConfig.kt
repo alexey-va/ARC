@@ -1,7 +1,5 @@
 package ru.arc.config
 
-import net.kyori.adventure.text.minimessage.MiniMessage
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import ru.arc.ARC
 
 object BoardConfig {
@@ -31,16 +29,16 @@ object BoardConfig {
     val editBottom: List<String> get() = config.stringList("item.click-to-edit")
     val rateBottom: List<String> get() = config.stringList("item.click-to-rate")
 
-    // ── GUI names (ChestGui requires legacy §-format) ─────────────────────────
+    // ── MiniMessage GUI names ───────────────────────────────────────────────
 
     val createEntryGuiName: String
-        get() = config.string("create-entry-gui-name", "<gray>Создать объявление").miniToLegacy()
+        get() = config.string("create-entry-gui-name", "<dark_gray>Создать объявление")
     val editEntryGuiName: String
-        get() = config.string("edit-entry-gui-name", "<gray>Редактировать объявление").miniToLegacy()
+        get() = config.string("edit-entry-gui-name", "<dark_gray>Редактировать объявление")
     val boardGuiName: String
-        get() = config.string("board-gui-name", "<gray>Доска объявлений").miniToLegacy()
+        get() = config.string("board-gui-name", "<dark_gray>Доска объявлений")
     val rateGuiName: String
-        get() = config.string("rate-gui-name", "<gray>Оценить объявление").miniToLegacy()
+        get() = config.string("rate-gui-name", "<dark_gray>Оценить объявление")
 
     // ── Arbitrary key lookup (for locale strings in board YAMLs) ─────────────
 
@@ -53,12 +51,6 @@ object BoardConfig {
     /** Module YAML — use [ru.arc.util.fromConfig] with item paths (`add-menu.publish`, …). */
     @JvmStatic
     fun config(): Config = ConfigManager.ofModule(ARC.instance.dataFolder.toPath(), "board.yml")
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private fun String.miniToLegacy(): String =
-        LegacyComponentSerializer.legacyAmpersand()
-            .serialize(MiniMessage.miniMessage().deserialize(this))
 }
 
 internal fun contractAdvertiserName(group: String): String = when (group) {

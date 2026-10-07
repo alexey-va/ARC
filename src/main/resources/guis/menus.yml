@@ -313,11 +313,10 @@ menus:
     board:
       schema-version: 1
       rows: 6
-      background: { template: background }
       elements:
         back: { slot: 45, template: board-back }
-        previous: { slot: 48, template: menu-previous }
-        next: { slot: 50, template: menu-next }
+        previous: { slot: 48, template: board-previous }
+        next: { slot: 50, template: board-next }
         publish: { slot: 53, template: board-publish }
       regions:
         board-entries: { slots: ['0-44'] }
@@ -1124,16 +1123,29 @@ menus:
       material: WRITABLE_BOOK
       name: '<gold>Заказы сервера'
       lore: ['<gray>Статус: <state>', '', '<gray>Сдача товаров пока отключена.', '<gray>Недельный лимит: <green><budget>']
+    board-previous:
+      material: BLUE_STAINED_GLASS_PANE
+      custom-model-data: 11009
+      name: '<#92bed8>Предыдущая страница'
+      lore: ['', '<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ЛКМ<#b8b8b8> — назад']
+    board-next:
+      material: BLUE_STAINED_GLASS_PANE
+      custom-model-data: 11008
+      name: '<#92bed8>Следующая страница'
+      lore: ['', '<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ЛКМ<#b8b8b8> — вперёд']
     board-publish:
-      material: PLAYER_HEAD
-      custom-model-data: 11010
-      name: '<green>Опубликовать объявление'
-      lore: ['<gray>Стоимость: <gold><cost>', '', '<yellow>Нажмите для создания']
+      material: WRITABLE_BOOK
+      name: '<#2bba43>Опубликовать объявление'
+      lore:
+        - ''
+        - '<#b8b8b8>Стоимость: <#ffcd70><cost> <white>💰</white>'
+        - ''
+        - '<#8c8c8c>[<#2bba43>▶<#8c8c8c>] <#2bba43>ЛКМ<#b8b8b8> — создать объявление'
     board-back:
       material: BLUE_STAINED_GLASS_PANE
-      custom-model-data: 11013
-      name: '<gray>« Назад'
-      lore: []
+      custom-model-data: 11001
+      name: '<#92bed8>Назад'
+      lore: ['', '<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ЛКМ<#b8b8b8> — вернуться']
     board-rate-action:
       material: PAPER
       name: '<name>'
@@ -1142,9 +1154,9 @@ menus:
         - { text: '<gray>Нажмите для подтверждения', unless: applied }
     board-rate-back:
       material: BLUE_STAINED_GLASS_PANE
-      custom-model-data: 11013
-      name: '<gray>« Назад'
-      lore: []
+      custom-model-data: 11001
+      name: '<#92bed8>Назад'
+      lore: ['', '<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ЛКМ<#b8b8b8> — вернуться']
     board-edit-field:
       material: PAPER
       name: '<name>'

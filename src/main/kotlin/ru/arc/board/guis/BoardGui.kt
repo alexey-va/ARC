@@ -2,9 +2,7 @@ package ru.arc.board.guis
 
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.minimessage.MiniMessage
-import org.bukkit.Bukkit
 import org.bukkit.entity.Player
-import org.bukkit.inventory.meta.SkullMeta
 import ru.arc.ARC
 import ru.arc.board.BoardEntryData
 import ru.arc.board.BoardItem
@@ -39,10 +37,6 @@ object BoardGuiFactory {
             "publish",
             values("cost" to formatAmount(BoardConfig.publishCost)),
         )
-        (publish.itemMeta as? SkullMeta)?.let { meta ->
-            meta.owningPlayer = Bukkit.getOfflinePlayer(player.uniqueId)
-            publish.itemMeta = meta
-        }
         ArcMenus.open(
             player,
             ArcMenuSchema.BOARD,

@@ -378,6 +378,8 @@ object ArcMenuSchema {
         "treasure-back" to PaperMenuTextContract(),
         "board-contract" to PaperMenuTextContract(values = setOf("name", "author", "status", "item", "accepted", "reserved", "target", "progress", "remaining", "payout", "base", "growth", "budget", "ends", "action")),
         "board-contract-empty" to PaperMenuTextContract(values = setOf("state", "budget")),
+        "board-previous" to PaperMenuTextContract(),
+        "board-next" to PaperMenuTextContract(),
         "board-publish" to PaperMenuTextContract(values = setOf("cost")),
         "board-back" to PaperMenuTextContract(),
         "board-rate-action" to PaperMenuTextContract(values = setOf("name"), flags = setOf("applied")),
