@@ -15,7 +15,7 @@ import ru.arc.util.Logging.warn
 import kotlin.math.cos
 
 internal enum class StaffSpell(val id: String) {
-    CHAIN("chain"), MARK("mark"), FROST("frost");
+    CHAIN("chain"), MARK("mark"), FROST("frost"), LANCE("lance"), EMBER("ember"), NOVA("nova");
 
     companion object {
         val itemKey = NamespacedKey("arc", "staff_spell_prototype")
@@ -44,6 +44,11 @@ internal data class StaffSpellSettings(
     val frostSlowTicks: Int,
     val maxAreaTargets: Int,
     val tuning: Map<StaffSpell, StaffSpellTuning>,
+    val lanceWidth: Double = 0.22,
+    val lanceTargets: Int = 3,
+    val emberSpeed: Double = 1.2,
+    val emberRadius: Double = 2.8,
+    val novaRadius: Double = 6.0,
 )
 
 /** Values are read again on ARC reload; the controller owns one validated settings generation. */
@@ -65,11 +70,19 @@ internal open class StaffSpellConfig(private val config: Config) {
                 StaffSpell.CHAIN -> Triple(1.0, 8.0, 24)
                 StaffSpell.MARK -> Triple(1.6, 12.0, 40)
                 StaffSpell.FROST -> Triple(0.8, 6.0, 32)
+                StaffSpell.LANCE -> Triple(1.3, 10.0, 28)
+                StaffSpell.EMBER -> Triple(1.4, 10.0, 36)
+                StaffSpell.NOVA -> Triple(0.9, 7.0, 40)
             }
             StaffSpellTuning(number("${spell.id}.power", power, 0.1..5.0),
                 number("${spell.id}.vanilla-damage", damage, 0.1..40.0),
                 config.integer("${spell.id}.cooldown-ticks", ticks).coerceIn(4, 200).toLong())
         },
+        number("lance.width", 0.22, 0.0..0.6),
+        config.integer("lance.targets", 3).coerceIn(1, 8),
+        number("ember.speed", 1.2, 0.5..3.0),
+        number("ember.radius", 2.8, 1.0..6.0),
+        number("nova.radius", 6.0, 2.0..10.0),
     )
 
     private fun number(key: String, fallback: Double, bounds: ClosedFloatingPointRange<Double>) =
@@ -96,6 +109,7 @@ internal open class StaffSpellConfig(private val config: Config) {
             meta.displayName(config.component("${spell.id}.name", TagResolver.empty()).decoration(TextDecoration.ITALIC, false))
             meta.lore(listOf(Component.empty(),
                 config.component("${spell.id}.description", TagResolver.empty()).decoration(TextDecoration.ITALIC, false),
+                config.component("${spell.id}.aim", TagResolver.empty()).decoration(TextDecoration.ITALIC, false),
                 text("prototype"), Component.empty(), text("use")))
             meta.persistentDataContainer.set(StaffSpell.itemKey, PersistentDataType.STRING, spell.id)
             meta.setMaxStackSize(1)

@@ -1,7 +1,7 @@
 # Prototype staff attacks
 
-`/arc stafftest` gives the caller three mechanics samples. The existing `arc.test`
-administrator permission controls item issuance. `/arc stafftest chain|mark|frost`
+`/arc stafftest` gives the caller six mechanics samples. The existing `arc.test`
+administrator permission controls item issuance. `/arc stafftest chain|mark|frost|lance|ember|nova`
 gives one sample; an optional final player name allows console/operator delivery.
 The entire selected set must fit in free inventory slots before anything is given.
 There are no loot-table or shop changes. Anyone holding an issued sample can use it.
@@ -11,26 +11,41 @@ There are no loot-table or shop changes. Anyone holding an issued sample can use
   by visible links. Each jump has reduced damage.
 - **Разрыв / mark:** the Night Staff (`3dfantasyweaponscit:night_staff`) places a
   short-lived mark that follows the acquired mob, then detonates at its current
-  position and damages nearby visible mobs.
+  position and damages nearby visible mobs. With no target it forms at the aimed
+  wall/range endpoint instead.
 - **Ледяной хлопок / frost:** the Northgate Guardian Staff
   (`3dfantasyweaponscit:northgate_guardian_staff`) sends a wide cone that damages
   nearby visible mobs; slowness applies only after an actual health/absorption
-  reduction.
+  reduction. It does not steer; point the cone yourself.
+- **Солнечное копьё / lance:** the Winged Staff
+  (`3dfantasyweaponscit:sagrada_winged_staff`) fires an instant narrow golden beam,
+  piercing up to three mobs directly along the reticle. There is no soft lock.
+- **Пепельная комета / ember:** the Hermit Staff
+  (`3dfantasyweaponscit:bermunde_hermit_staff`) launches a straight flying fire orb.
+  Lead moving targets manually; it bursts on the first mob/wall or at maximum
+  range. Collision is checked along each movement segment, not just at endpoints.
+- **Изумрудная волна / nova:** the Celtic Staff
+  (`3dfantasyweaponscit:holy_celtic_staff`) strikes visible mobs within six blocks
+  around the caster once, with expanding turquoise/green rings.
 
 Use the main-hand right click, including a direct click on an entity. Look near a
-mob; small particles over its head preview the selected target. All samples share
+mob for chain/mark; small particles over its head preview their selected target.
+The other four spells do not acquire a soft-lock target. Every spell can fire into
+empty space and consumes its cooldown on a miss. All samples share
 one caster cooldown, so swapping sample items cannot bypass it. Walls block initial
 acquisition, every chain link, and blast damage. Players, NPCs, armor stands and
 tamed pets are excluded. EliteMobs also applies its instance/minion eligibility.
-The mark cancels on death, quit, world change, invalid target, excessive distance,
-module reload or shutdown. Its cast captures combat facts, so changing the held
-item cannot change a delayed hit's level or critical roll.
+Marks and flying orbs cancel on caster death, quit, world change, module reload
+or shutdown. Acquired marks also cancel on an invalid/distant target. Flight has
+a fixed maximum range and at most eight orbs per caster; visual bursts are short
+and use only particles and local sounds. Each cast captures combat facts, so
+changing the held item cannot change a delayed hit's level or critical roll.
 
 ## Ownership and damage contract
 
 `src/main/kotlin/ru/arc/staffspells/` owns input, targeting, visuals and lifecycle.
 `modules/staff-spells.yml` owns tuning and Russian item text. `StaffSpellsModule`
-reloads through `/arc reload`; a reload clears pending marks and old scheduled
+reloads through `/arc reload`; a reload clears pending marks, flying orbs and old scheduled
 effects before installing the new settings. No displays or temporary blocks exist.
 
 These are separate `BLAZE_ROD` items marked only with ARC's
@@ -67,7 +82,8 @@ Bukkit damage remain usable without loading the optional integration classes.
 Run the focused staff tests through the repository's Gradle `test` task with the
 fully qualified class names, then package with `shadowJar`. Deterministic checks
 cover target geometry, occlusion, item identity and delayed-effect lifecycle.
+Tests also cover empty casts, manual aim, piercing and swept orb collision.
 They do not establish in-client appearance or the feel of fighting moving mobs.
-On the selected runtime, use the issuance command and compare the three samples
+On the selected runtime, use the issuance command and compare the six samples
 against moving mobs, an obstructed target and a group, then try switching items
 during cooldown. Review EliteMobs scaling/progression in real combat separately.

@@ -86,6 +86,17 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
+    "all six prototype items can be granted without optional ItemsAdder skins" {
+        withStaffHarness { h ->
+            val player = h.paper.addPlayer("all-prototypes")
+
+            h.controller.give(player, StaffSpell.entries) shouldBe true
+
+            player.inventory.storageContents.filterNotNull().mapNotNull { StaffSpell.from(it) } shouldBe
+                StaffSpell.entries
+        }
+    }
+
     "auto-aim follows a moved off-axis mob and excludes mobs behind or beyond range" {
         withStaffHarness(settings = staffSettings(range = 5.0, aimDegrees = 15.0)) { h ->
             val world = h.paper.addSimpleWorld("staff-aim")
@@ -145,6 +156,144 @@ class StaffSpellsTest : FreeSpec({
             h.controller.cast(player)
 
             h.hits.map { it.uniqueId } shouldBe listOf(target.uniqueId)
+        }
+    }
+
+    "all six spells cast into empty space and use the shared cooldown" {
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("staff-empty-casts")
+            val player = h.player("staff-empty-casts", world, StaffSpell.CHAIN)
+            val spells = StaffSpell.entries
+
+            spells.forEachIndexed { index, spell ->
+                player.inventory.setItemInMainHand(h.config.item(spell))
+                h.controller.cast(player)
+                h.captures.size shouldBe index + 1
+
+                player.inventory.setItemInMainHand(h.config.item(spells[(index + 1) % spells.size]))
+                h.controller.cast(player)
+                h.captures.size shouldBe index + 1
+                h.scheduler.tick(20)
+            }
+
+            h.hits shouldBe emptyList()
+        }
+    }
+
+    "manual lance and ember do not acquire an off-axis mob" {
+        withStaffHarness(settings = staffSettings(range = 10.0)) { h ->
+            h.controller.start()
+            for (spell in listOf(StaffSpell.LANCE, StaffSpell.EMBER)) {
+                val world = h.paper.addSimpleWorld("staff-manual-${spell.id}")
+                val player = h.player("staff-manual-${spell.id}", world, spell)
+                // Within the 12-degree soft aim cone, but outside the manual beam/projectile path.
+                h.zombie(world, x = 1.5, z = 7.0)
+
+                h.controller.cast(player)
+                if (spell == StaffSpell.EMBER) h.scheduler.tick(12)
+
+                h.hits shouldBe emptyList()
+            }
+        }
+    }
+
+    "lance pierces up to its target limit" {
+        withStaffHarness(settings = staffSettings(lanceTargets = 3)) { h ->
+            val world = h.paper.addSimpleWorld("staff-lance-pierce")
+            val player = h.player("staff-lance-pierce", world, StaffSpell.LANCE)
+            val first = h.zombie(world, x = 0.5, z = 4.0)
+            val second = h.zombie(world, x = 0.5, z = 6.0)
+            val third = h.zombie(world, x = 0.5, z = 8.5)
+            val beyondTargetLimit = h.zombie(world, x = 0.5, z = 11.0)
+
+            h.controller.cast(player)
+
+            h.hits.map { it.uniqueId } shouldBe listOf(first.uniqueId, second.uniqueId, third.uniqueId)
+            beyondTargetLimit.isValid shouldBe true
+        }
+    }
+
+    "lance wall collision stops the beam while target budget remains" {
+        withStaffHarness(settings = staffSettings(lanceTargets = 8)) { h ->
+            val world = h.paper.addSimpleWorld("staff-lance-wall")
+            val player = h.player("staff-lance-wall", world, StaffSpell.LANCE)
+            val inFront = h.zombie(world, x = 0.5, z = 4.0)
+            val behindWall = h.zombie(world, x = 0.5, z = 12.0)
+            for (x in -1..1) for (y in 64..67) world.getBlockAt(x, y, 10).type = Material.STONE
+
+            h.controller.cast(player)
+
+            h.hits.map { it.uniqueId } shouldBe listOf(inFront.uniqueId)
+            behindWall.isValid shouldBe true
+        }
+    }
+
+    "ember swept segment hits a mob and quit cancels a pending projectile" {
+        withStaffHarness(settings = staffSettings(range = 10.0, emberSpeed = 2.5)) { h ->
+            h.controller.start()
+            val hitWorld = h.paper.addSimpleWorld("staff-ember-hit")
+            val player = h.player("staff-ember-hit", hitWorld, StaffSpell.EMBER)
+            val target = h.zombie(hitWorld, x = 0.5, z = 3.2)
+
+            h.controller.cast(player)
+            h.scheduler.tick(1)
+
+            h.hits.map { it.uniqueId } shouldBe listOf(target.uniqueId)
+
+            h.hits.clear()
+            val wallWorld = h.paper.addSimpleWorld("staff-ember-wall")
+            val wallPlayer = h.player("staff-ember-wall", wallWorld, StaffSpell.EMBER)
+            h.zombie(wallWorld, x = 0.5, z = 7.0)
+            for (x in -1..1) for (y in 64..67) wallWorld.getBlockAt(x, y, 3).type = Material.STONE
+
+            h.controller.cast(wallPlayer)
+            h.scheduler.tick(1)
+
+            h.hits shouldBe emptyList()
+
+            h.hits.clear()
+            val cancelledWorld = h.paper.addSimpleWorld("staff-ember-quit")
+            val quitting = h.player("staff-ember-quit", cancelledWorld, StaffSpell.EMBER)
+            h.zombie(cancelledWorld, x = 0.5, z = 3.2)
+            h.controller.cast(quitting)
+            h.controller.onQuit(PlayerQuitEvent(quitting, Component.empty()))
+            h.scheduler.tick(10)
+
+            h.hits shouldBe emptyList()
+        }
+    }
+
+    "mark without an acquired target blasts its aimed point" {
+        withStaffHarness(settings = staffSettings(range = 8.0, markTicks = 4)) { h ->
+            val world = h.paper.addSimpleWorld("staff-mark-point")
+            val player = h.player("staff-mark-point", world, StaffSpell.MARK)
+            h.controller.start()
+
+            h.controller.cast(player)
+            h.captures.size shouldBe 1
+            h.hits shouldBe emptyList()
+            val targetNearRangePoint = h.zombie(world, x = 0.5, z = 8.0)
+
+            h.scheduler.tick(4)
+
+            h.hits.map { it.uniqueId } shouldBe listOf(targetNearRangePoint.uniqueId)
+        }
+    }
+
+    "nova respects its radius and occluding blocks" {
+        withStaffHarness(settings = staffSettings(novaRadius = 6.0)) { h ->
+            val world = h.paper.addSimpleWorld("staff-nova")
+            val player = h.player("staff-nova", world, StaffSpell.NOVA)
+            val near = h.zombie(world, x = 0.5, z = 4.5)
+            val hiddenInsideRadius = h.zombie(world, x = 3.0, z = 3.0)
+            val outside = h.zombie(world, x = 0.5, z = 8.0)
+            world.getBlockAt(2, 65, 2).type = Material.STONE
+
+            h.controller.cast(player)
+
+            h.hits.map { it.uniqueId } shouldBe listOf(near.uniqueId)
+            hiddenInsideRadius.isValid shouldBe true
+            outside.isValid shouldBe true
         }
     }
 
@@ -246,6 +395,7 @@ private data class StaffHarness(
     val scheduler: TestTaskScheduler,
     val config: StaffSpellConfig,
     val controller: StaffSpellController,
+    val captures: MutableList<Player>,
     val hits: MutableList<LivingEntity>,
     val hitLocations: MutableList<Location>,
 ) {
@@ -278,17 +428,20 @@ private fun withStaffHarness(
                 val direction = secondArg<Vector>().clone().normalize()
                 val distance = thirdArg<Double>()
                 val world = requireNotNull(start.world)
-                if (direction.z <= 0.0 || start.z >= 3.0) return@answers null
-                val distanceToWall = (3.0 - start.z) / direction.z
-                if (distanceToWall > distance) return@answers null
-                val hitPosition = start.toVector().add(direction.multiply(distanceToWall))
-                val block = world.getBlockAt(hitPosition.blockX, hitPosition.blockY, hitPosition.blockZ)
-                if (block.type.isAir) null else RayTraceResult(hitPosition, block, BlockFace.NORTH)
+                val steps = (distance / 0.1).toInt().coerceAtLeast(1)
+                (1..steps).firstNotNullOfOrNull { step ->
+                    val hitPosition = start.toVector().add(direction.clone().multiply(distance * step / steps))
+                    val block = world.getBlockAt(hitPosition.blockX, hitPosition.blockY, hitPosition.blockZ)
+                    if (block.type.isAir) null else RayTraceResult(hitPosition, block, BlockFace.NORTH)
+                }
             }
             MockBukkitTestRuntime.open().use { paper ->
                 Tasks.withScheduler(scheduler) {
+                    CooldownManager.stop()
                     CooldownManager.clearAll()
+                    CooldownManager.setupTask(5, scheduler)
                     val damage = mockk<StaffSpellDamage>()
+                    val captures = mutableListOf<Player>()
                     val hits = mutableListOf<LivingEntity>()
                     val hitLocations = mutableListOf<Location>()
                     every { damage.eligible(any(), any()) } answers {
@@ -297,6 +450,7 @@ private fun withStaffHarness(
                     }
                     every { damage.capture(any()) } answers {
                         val player = firstArg<Player>()
+                        captures += player
                         StaffSpellCast(player.uniqueId, UUID.randomUUID(), 1, null, null, false)
                     }
                     every { damage.hit(any(), any(), any(), any(), any()) } answers {
@@ -307,11 +461,12 @@ private fun withStaffHarness(
                         hit(player, target)
                     }
                     val controller = StaffSpellController(config, settings, damage)
-                    val harness = StaffHarness(paper, scheduler, config, controller, hits, hitLocations)
+                    val harness = StaffHarness(paper, scheduler, config, controller, captures, hits, hitLocations)
                     try {
                         block(harness)
                     } finally {
                         controller.close()
+                        CooldownManager.stop()
                         CooldownManager.clearAll()
                     }
                 }
@@ -329,6 +484,11 @@ private fun staffSettings(
     markTicks: Int = 18,
     frostRange: Double = 7.0,
     frostDegrees: Double = 50.0,
+    lanceWidth: Double = 0.22,
+    lanceTargets: Int = 3,
+    emberSpeed: Double = 1.2,
+    emberRadius: Double = 2.8,
+    novaRadius: Double = 6.0,
 ) = StaffSpellSettings(
     range = range,
     aimDegrees = aimDegrees,
@@ -341,6 +501,11 @@ private fun staffSettings(
     frostDegrees = frostDegrees,
     frostSlowTicks = 40,
     maxAreaTargets = 8,
+    lanceWidth = lanceWidth,
+    lanceTargets = lanceTargets,
+    emberSpeed = emberSpeed,
+    emberRadius = emberRadius,
+    novaRadius = novaRadius,
     tuning = StaffSpell.entries.associateWith { StaffSpellTuning(power = 1.0, vanillaDamage = 6.0, cooldownTicks = 20) },
 )
 

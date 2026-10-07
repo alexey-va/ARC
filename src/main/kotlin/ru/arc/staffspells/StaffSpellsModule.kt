@@ -33,9 +33,8 @@ import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.PluginModule
 import ru.arc.util.CooldownManager
 import java.util.UUID
-import kotlin.math.ceil
-import kotlin.math.cos
-import kotlin.math.sin
+import org.bukkit.util.Vector
+import kotlin.math.min
 
 object StaffSpellsModule : PluginModule {
     override val name = "StaffSpells"
@@ -69,15 +68,17 @@ internal class StaffSpellController(
     private val damage: StaffSpellDamage,
 ) : Listener, AutoCloseable {
     private val tasks = LifecycleTaskScope()
+    private val visuals = StaffSpellVisuals(tasks)
     private val marks = mutableMapOf<UUID, PendingStaffMark>()
+    private val embers = mutableListOf<PendingStaffEmber>()
     private val cooldownId = "staff-spells"
 
     fun start() {
         tasks.runTimer(4, 4) {
             Bukkit.getOnlinePlayers().forEach { player ->
                 val spell = StaffSpell.from(player.inventory.itemInMainHand)
-                if (ready(player) && spell != null) {
-                    castTargets(player, spell).forEach { selected ->
+                if (ready(player) && spell in setOf(StaffSpell.CHAIN, StaffSpell.MARK)) {
+                    listOfNotNull(target(player)).forEach { selected ->
                         player.spawnParticle(Particle.END_ROD, center(selected).add(0.0, selected.height * 0.55, 0.0),
                             2, 0.13, 0.05, 0.13, 0.0)
                     }
@@ -85,6 +86,7 @@ internal class StaffSpellController(
             }
         }
         tasks.runTimer(2, 2) { tickMarks() }
+        tasks.runTimer(1, 1) { tickEmbers() }
     }
 
     fun give(player: Player, spells: List<StaffSpell>): Boolean {
@@ -134,11 +136,6 @@ internal class StaffSpellController(
             player.sendActionBar(config.text("cooldown"))
             return
         }
-        val targets = castTargets(player, spell)
-        if (targets.isEmpty()) {
-            player.sendActionBar(config.text("no-target"))
-            return
-        }
         val cast = damage.capture(player) ?: run {
             player.sendActionBar(config.text("unavailable"))
             return
@@ -146,19 +143,40 @@ internal class StaffSpellController(
         val tuning = settings.tuning.getValue(spell)
         CooldownManager.addCooldown(player.uniqueId, cooldownId, tuning.cooldownTicks)
         when (spell) {
-            StaffSpell.CHAIN -> chain(player, targets.first(), cast, tuning)
+            StaffSpell.CHAIN -> chain(player, target(player), cast, tuning)
             StaffSpell.MARK -> {
-                marks[player.uniqueId] = PendingStaffMark(targets.first(), player.world.uid, cast, tuning, settings.markTicks)
-                beam(player.eyeLocation, center(targets.first()), Particle.ENCHANT)
-                player.world.playSound(targets.first().location, Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.5f, 1.5f)
+                val selected = target(player)
+                val point = selected?.let(::center) ?: aimPoint(player)
+                marks[player.uniqueId] = PendingStaffMark(selected, point, player.world.uid, cast, tuning, settings.markTicks)
+                visuals.markLaunch(player.eyeLocation, point)
             }
             StaffSpell.FROST -> {
-                targets.forEach { target ->
+                aimed(player, settings.frostRange, settings.frostDegrees).take(settings.maxAreaTargets).forEach { target ->
                     if (damage.hit(player, target, cast, tuning.power, tuning.vanillaDamage)) {
                         target.addPotionEffect(PotionEffect(PotionEffectType.SLOWNESS, settings.frostSlowTicks, 1, false, true))
                     }
                 }
-                frostVisual(player)
+                visuals.frost(player.eyeLocation, settings.frostRange, settings.frostDegrees)
+            }
+            StaffSpell.LANCE -> {
+                val eye = player.eyeLocation
+                val end = aimPoint(player)
+                lineTargets(player, eye, end, settings.lanceWidth).take(settings.lanceTargets).forEach {
+                    damage.hit(player, it, cast, tuning.power, tuning.vanillaDamage)
+                }
+                visuals.lance(eye, end)
+            }
+            StaffSpell.EMBER -> {
+                // The direction is captured once. Flight never steers towards a nearby mob.
+                if (embers.count { it.cast.casterId == player.uniqueId } >= 8)
+                    embers.removeAt(embers.indexOfFirst { it.cast.casterId == player.uniqueId })
+                embers += PendingStaffEmber(player.eyeLocation, player.eyeLocation.direction, cast, tuning, settings.range)
+                visuals.emberTrail(player.eyeLocation, player.eyeLocation)
+            }
+            StaffSpell.NOVA -> {
+                val origin = player.location.add(0.0, 0.8, 0.0)
+                areaDamage(player, origin, settings.novaRadius, cast, tuning)
+                visuals.nova(origin, settings.novaRadius)
             }
         }
         tasks.runLater(tuning.cooldownTicks) {
@@ -167,7 +185,11 @@ internal class StaffSpellController(
         }
     }
 
-    private fun chain(player: Player, first: LivingEntity, cast: StaffSpellCast, tuning: StaffSpellTuning) {
+    private fun chain(player: Player, first: LivingEntity?, cast: StaffSpellCast, tuning: StaffSpellTuning) {
+        if (first == null) {
+            visuals.lightning(player.eyeLocation, aimPoint(player))
+            return
+        }
         val visited = mutableSetOf<UUID>()
         var current: LivingEntity? = first
         var origin = player.eyeLocation
@@ -176,9 +198,8 @@ internal class StaffSpellController(
             val victim = current ?: return
             val endpoint = center(victim)
             visited += victim.uniqueId
+            visuals.lightning(origin, endpoint)
             if (!damage.hit(player, victim, cast, tuning.power * scale, tuning.vanillaDamage * scale)) return
-            beam(origin, endpoint, Particle.ELECTRIC_SPARK)
-            endpoint.world.playSound(endpoint, Sound.ENTITY_FIREWORK_ROCKET_TWINKLE, 0.4f, 1.5f)
             origin = endpoint
             current = nearby(player, endpoint, settings.chainRadius)
                 .filter { it.uniqueId !in visited }
@@ -194,9 +215,10 @@ internal class StaffSpellController(
         while (iterator.hasNext()) {
             val (playerId, mark) = iterator.next()
             val player = Bukkit.getPlayer(playerId)
+            val origin = mark.target?.let(::center) ?: mark.point
             if (player == null || !ready(player) || player.world.uid != mark.worldId ||
-                !damage.eligible(player, mark.target) ||
-                player.location.distanceSquared(mark.target.location) > settings.range * settings.range) {
+                (mark.target != null && !damage.eligible(player, mark.target)) ||
+                player.eyeLocation.distanceSquared(origin) > (settings.range + 1) * (settings.range + 1)) {
                 iterator.remove()
                 continue
             }
@@ -205,28 +227,84 @@ internal class StaffSpellController(
                 iterator.remove()
                 due += player to mark
             } else {
-                ring(center(mark.target), 0.65, Particle.WITCH, 10)
+                visuals.markCharge(origin, 1.0 - mark.remainingTicks.toDouble() / settings.markTicks)
             }
         }
         due.forEach { (player, mark) ->
-            val origin = center(mark.target)
-            if (!visible(player.eyeLocation, origin)) return@forEach
-            val targets = (listOf(mark.target) + nearby(player, origin, settings.markRadius)
-                .sortedBy { center(it).distanceSquared(origin) }).distinctBy { it.uniqueId }
-                .filter { visible(origin, center(it)) && visible(player.eyeLocation, center(it)) }
-                .take(settings.maxAreaTargets)
-            targets.forEach { damage.hit(player, it, mark.cast, mark.tuning.power, mark.tuning.vanillaDamage) }
-            ring(origin, settings.markRadius, Particle.WITCH, 40)
-            origin.world.spawnParticle(Particle.FLASH, origin, 1)
-            origin.world.playSound(origin, Sound.ENTITY_EVOKER_CAST_SPELL, 0.7f, 0.7f)
+            val origin = mark.target?.let(::center) ?: mark.point
+            areaDamage(player, origin, settings.markRadius, mark.cast, mark.tuning, mark.target)
+            visuals.markBurst(origin, settings.markRadius)
         }
     }
 
-    private fun target(player: Player) = aimed(player, settings.range, settings.aimDegrees).firstOrNull()
+    private fun tickEmbers() {
+        val impacts = mutableListOf<Triple<Player, PendingStaffEmber, Pair<Location, LivingEntity?>>>()
+        val iterator = embers.iterator()
+        while (iterator.hasNext()) {
+            val ember = iterator.next()
+            val player = Bukkit.getPlayer(ember.cast.casterId)
+            if (player == null || !ready(player) || player.world != ember.position.world) {
+                iterator.remove()
+                continue
+            }
+            val from = ember.position
+            val distance = min(ember.remainingDistance, settings.emberSpeed)
+            val blockEnd = rayEnd(from, ember.direction, distance)
+            val victim = lineTargets(player, from, blockEnd, 0.25).firstOrNull()
+            val collision = victim?.boundingBox?.expand(0.25)
+                ?.rayTrace(from.toVector(), ember.direction, from.distance(blockEnd))?.hitPosition
+            val end = collision?.toLocation(from.world) ?: blockEnd
+            visuals.emberTrail(from, end)
+            ember.remainingDistance -= distance
+            if (victim != null || from.distanceSquared(blockEnd) < distance * distance - 0.0001 || ember.remainingDistance <= 0.001) {
+                iterator.remove()
+                impacts += Triple(player, ember, end to victim)
+            } else {
+                ember.position = end
+            }
+        }
+        // Damage events can themselves trigger quit/teleport cleanup; no active list iterator here.
+        impacts.forEach { (player, ember, impact) ->
+            areaDamage(player, impact.first, settings.emberRadius, ember.cast, ember.tuning, impact.second)
+            visuals.emberBurst(impact.first, settings.emberRadius)
+        }
+    }
 
-    private fun castTargets(player: Player, spell: StaffSpell) =
-        if (spell == StaffSpell.FROST) aimed(player, settings.frostRange, settings.frostDegrees)
-            .take(settings.maxAreaTargets) else listOfNotNull(target(player))
+    private fun areaDamage(player: Player, origin: Location, radius: Double, cast: StaffSpellCast,
+        tuning: StaffSpellTuning, primary: LivingEntity? = null) {
+        if (!visible(player.eyeLocation, origin)) return
+        (listOfNotNull(primary) + nearby(player, origin, radius).sortedBy { center(it).distanceSquared(origin) })
+            .distinctBy { it.uniqueId }
+            .filter { visible(origin, center(it)) && visible(player.eyeLocation, center(it)) }
+            .take(settings.maxAreaTargets)
+            .forEach { damage.hit(player, it, cast, tuning.power, tuning.vanillaDamage) }
+    }
+
+    /** Exact swept collision along the cast line, never soft acquisition. */
+    private fun lineTargets(player: Player, from: Location, to: Location, width: Double): List<LivingEntity> {
+        val direction = to.toVector().subtract(from.toVector())
+        val length = direction.length()
+        if (length < 0.001) return emptyList()
+        direction.multiply(1.0 / length)
+        val midpoint = from.clone().add(direction.clone().multiply(length / 2))
+        return from.world.getNearbyLivingEntities(midpoint, length / 2 + width + 2)
+            .filter { damage.eligible(player, it) }
+            .mapNotNull { entity ->
+                entity.boundingBox.expand(width).rayTrace(from.toVector(), direction, length)
+                    ?.let { entity to it.hitPosition.distanceSquared(from.toVector()) }
+            }.sortedBy { it.second }.map { it.first }.filter { visible(from, center(it)) }
+    }
+
+    private fun aimPoint(player: Player) = rayEnd(player.eyeLocation, player.eyeLocation.direction, settings.range)
+
+    private fun rayEnd(from: Location, direction: Vector, range: Double): Location {
+        val hit = from.world.rayTraceBlocks(from, direction, range, FluidCollisionMode.NEVER, true)
+        // Keep bursts just outside the wall, so line-of-sight starts in air.
+        val distance = hit?.hitPosition?.distance(from.toVector())?.let { (it - 0.04).coerceAtLeast(0.0) } ?: range
+        return from.clone().add(direction.clone().multiply(distance))
+    }
+
+    private fun target(player: Player) = aimed(player, settings.range, settings.aimDegrees).firstOrNull()
 
     private fun aimed(player: Player, range: Double, angle: Double): List<LivingEntity> {
         val eye = player.eyeLocation
@@ -249,34 +327,28 @@ internal class StaffSpellController(
     private fun ready(player: Player) = player.isOnline && !player.isDead &&
         player.gameMode != GameMode.SPECTATOR && player.isValid
 
-    private fun frostVisual(player: Player) {
-        val eye = player.eyeLocation
-        val forward = eye.direction
-        val right = org.bukkit.util.Vector(-forward.z, 0.0, forward.x)
-        if (right.lengthSquared() < 0.001) right.setX(1.0)
-        right.normalize()
-        for (distance in 1..settings.frostRange.toInt()) {
-            for (step in -5..5) {
-                val radians = Math.toRadians(step * settings.frostDegrees / 5)
-                val direction = forward.clone().multiply(cos(radians)).add(right.clone().multiply(sin(radians)))
-                eye.world.spawnParticle(Particle.SNOWFLAKE, eye.clone().add(direction.multiply(distance.toDouble())), 1, 0.0, 0.1, 0.0, 0.0)
-            }
-        }
-        eye.world.playSound(eye, Sound.BLOCK_GLASS_BREAK, 0.7f, 0.6f)
+    private fun cancel(playerId: UUID) {
+        marks.remove(playerId)
+        embers.removeAll { it.cast.casterId == playerId }
     }
 
-    @EventHandler fun onQuit(event: PlayerQuitEvent) { marks.remove(event.player.uniqueId) }
-    @EventHandler fun onWorldChange(event: PlayerChangedWorldEvent) { marks.remove(event.player.uniqueId) }
-    @EventHandler fun onDeath(event: PlayerDeathEvent) { marks.remove(event.entity.uniqueId) }
+    @EventHandler fun onQuit(event: PlayerQuitEvent) = cancel(event.player.uniqueId)
+    @EventHandler fun onWorldChange(event: PlayerChangedWorldEvent) = cancel(event.player.uniqueId)
+    @EventHandler fun onDeath(event: PlayerDeathEvent) = cancel(event.entity.uniqueId)
 
     override fun close() {
         tasks.close()
         marks.clear()
+        embers.clear()
     }
+
 }
 
-private data class PendingStaffMark(val target: LivingEntity, val worldId: UUID,
+private data class PendingStaffMark(val target: LivingEntity?, val point: Location, val worldId: UUID,
     val cast: StaffSpellCast, val tuning: StaffSpellTuning, var remainingTicks: Int)
+
+private data class PendingStaffEmber(var position: Location, val direction: Vector,
+    val cast: StaffSpellCast, val tuning: StaffSpellTuning, var remainingDistance: Double)
 
 internal fun center(entity: LivingEntity) = entity.location.add(0.0, entity.height * 0.5, 0.0)
 
@@ -289,26 +361,11 @@ internal fun visible(from: Location, to: Location): Boolean {
         FluidCollisionMode.NEVER, true) == null
 }
 
-private fun beam(from: Location, to: Location, particle: Particle) {
-    val offset = to.toVector().subtract(from.toVector())
-    val count = ceil(offset.length() * 3).toInt().coerceIn(1, 80)
-    for (i in 0..count) from.world.spawnParticle(particle,
-        from.clone().add(offset.clone().multiply(i.toDouble() / count)), 1, 0.025, 0.025, 0.025, 0.0)
-}
-
-private fun ring(origin: Location, radius: Double, particle: Particle, count: Int) {
-    repeat(count) { i ->
-        val angle = i * Math.PI * 2 / count
-        origin.world.spawnParticle(particle, origin.clone().add(cos(angle) * radius, 0.0, sin(angle) * radius),
-            1, 0.0, 0.0, 0.0, 0.0)
-    }
-}
-
 object StaffTestSubCommand : SubCommand {
     override val configKey = "stafftest"
     override val defaultPermission = "arc.test"
     override val defaultDescription = "Выдать посохи для пробы новых атак"
-    override val defaultUsage = "/arc stafftest [all|chain|mark|frost] [игрок]"
+    override val defaultUsage = "/arc stafftest [all|chain|mark|frost|lance|ember|nova] [игрок]"
 
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {
         if (args.size > 2) { sendUsage(sender); return true }
