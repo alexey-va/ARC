@@ -157,7 +157,9 @@ object NpcContractDepositGui : Listener {
                 else reasons.firstOrNull() ?: ContractBookAvailability.CLOSED
             }
         }
-        val lines = mutableListOf<Component>()
+        val groups = mutableListOf<List<Component>>()
+        if (pages > 1) groups += listOf(text("button.page", "<#b8b8b8>Страница <current> / <pages>",
+            "current" to Component.text(desk.page + 1), "pages" to Component.text(pages)))
         val name = when {
             desk.storage.pending -> text("processing", "<#ff9f0f>Принимаем товары…")
             result?.review == true -> text("button.review", "<#c42323>Сдача на проверке")
@@ -175,35 +177,37 @@ object NpcContractDepositGui : Listener {
             else -> text("button.sell", "<#2bba43>Продать")
         }
         if (desk.storage.pending) {
-            lines += text("processing", "<#ff9f0f>Принимаем товары…")
+            groups += listOf(text("processing", "<#ff9f0f>Принимаем товары…"))
         } else {
             if (result != null && result.quantity > 0) {
-                lines += text("success", "<#2bba43>Принято <quantity> шт. · +<price> <white>💰</white>",
-                    "quantity" to Component.text(result.quantity), "price" to Component.text(formatContractMoney(result.payout)))
-                result.items.forEach { (material, amount) ->
-                    lines += itemLine("accepted", "<#e6fff3>Сдано: <item> × <quantity>", material, amount)
+                groups += listOf(text("success", "<#2bba43>Принято <quantity> шт. · +<price> <white>💰</white>",
+                    "quantity" to Component.text(result.quantity), "price" to Component.text(formatContractMoney(result.payout))))
+                groups += result.items.map { (material, amount) ->
+                    itemLine("accepted", "<#8c8c8c>• <#b8b8b8>Сдано: <#e6fff3><item> <#92bed8>× <quantity>", material, amount)
                 }
             }
-            if (result?.review == true) lines += text("review", "<#c42323>Сдача остановлена для проверки. Не повторяйте её до разбора администратором.")
-            result?.rejection?.let(lines::add)
+            if (result?.review == true) groups += listOf(text("review", "<#c42323>Сдача остановлена для проверки. Не повторяйте её до разбора администратором."))
+            result?.rejection?.let { groups += listOf(it) }
             offered.forEach { (material, stacks) ->
-                lines += if (result == null) itemLine("offered", "<#e6fff3>К сдаче: <item> × <quantity>", material, stacks.sumOf { it.amount })
-                    else itemLine("remaining", "<#e6fff3>Осталось: <item> × <quantity>", material, stacks.sumOf { it.amount })
+                val item = if (result == null) itemLine("offered", "<#8c8c8c>• <#b8b8b8>К сдаче: <#e6fff3><item> <#92bed8>× <quantity>", material, stacks.sumOf { it.amount })
+                    else itemLine("remaining", "<#8c8c8c>• <#b8b8b8>Осталось: <#e6fff3><item> <#92bed8>× <quantity>", material, stacks.sumOf { it.amount })
                 val state = states.getValue(material)
-                lines += if (state == ContractBookAvailability.UNAVAILABLE)
+                val reason = if (state == ContractBookAvailability.UNAVAILABLE)
                     text("button.unavailable", "<#ff9f0f>Приём сейчас недоступен. Попробуйте позже.")
                 else TextUtil.mm(config.string("defaults.availability.${state.messageKey}", state.fallback))
+                groups += listOf(item, text("button.state", "  <state>", "state" to reason))
             }
-            if (result == null && offered.isEmpty()) lines += if (orders.isEmpty())
+            if (result == null && offered.isEmpty()) groups += listOf(if (orders.isEmpty())
                 text("empty", "<#ff9f0f>Сейчас открытых заказов нет.")
-                else text("instruction", "<#e6fff3>Слева — заказы. Справа — товары для сдачи.")
+                else text("instruction", "<#e6fff3>Слева — заказы. Справа — товары для сдачи."))
             if (result?.review != true && ContractBookAvailability.READY in states.values)
-                lines += text("button.action", "<#2bba43>Нажмите, чтобы сдать доступные товары.")
+                groups += listOf(text("button.action", "<#8c8c8c>[<#2bba43>▶<#8c8c8c>] <#2bba43>ЛКМ <#b8b8b8>— сдать доступные товары"))
         }
         return ArcMenus.item(desk.menu, "sell", PaperMenuItemRenderContext(
             values = mapOf("name" to name, "status" to name,
                 "page" to if (pages > 1) Component.text("Страница ${desk.page + 1} / $pages") else Component.empty()),
-            repeats = mapOf("details" to lines.map { mapOf("line" to it) }),
+            repeats = mapOf("details" to groups.filter { it.isNotEmpty() }
+                .flatMap { listOf(Component.empty()) + it }.map { mapOf("line" to it) }),
         ))
     }
 

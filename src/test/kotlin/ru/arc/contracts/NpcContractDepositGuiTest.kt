@@ -9,6 +9,7 @@ import io.mockk.unmockkObject
 import kotlinx.coroutines.runBlocking
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.TranslatableComponent
+import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.Material
 import org.bukkit.event.inventory.ClickType
 import org.bukkit.event.inventory.InventoryAction
@@ -128,6 +129,7 @@ class NpcContractDepositGuiTest : TestBase() {
                 player.inventory.getItem(0) shouldBe ItemStack(Material.COD, 64)
                 (player.openInventory.topInventory === top) shouldBe true
                 val soldButton = top.getItem(layout.slot("sell").index)!!
+                soldButton.assertDeskTooltip()
                 val soldTitle = soldButton.plainDisplayName()
                 soldTitle.contains("Сдано") shouldBe true
                 soldTitle.contains("+300") shouldBe true
@@ -165,7 +167,7 @@ class NpcContractDepositGuiTest : TestBase() {
             NpcContractDepositGui.start()
             every { ContractOriginGate.canSubmit(player, "food_orders") } returns true
             every { ContractsManager.currentPlayerViews(player.uniqueId, "food_orders", any(), any()) } answers {
-                listOf(mushroomOrder(playerRemaining = 0))
+                listOf(foodOrder(playerRemaining = 0))
             }
             every { ContractsManager.quote(player, any(), any()) } returns null
             every { ContractsManager.submit(player, any(), null, any()) } answers {
@@ -186,6 +188,7 @@ class NpcContractDepositGuiTest : TestBase() {
             top.getItem(depositSlot) shouldBe ItemStack(Material.BROWN_MUSHROOM, 16)
 
             val button = top.getItem(layout.slot("sell").index)!!
+            button.assertDeskTooltip()
             button.plainDisplayName().contains("Лимит исчерпан") shouldBe true
             button.itemMeta.lore().orEmpty().any { line -> line.containsTranslation(Material.BROWN_MUSHROOM.translationKey()) } shouldBe true
             button.plainLore().any { it.contains("16") } shouldBe true
@@ -207,6 +210,80 @@ class NpcContractDepositGuiTest : TestBase() {
     }
 
     @Test
+    fun `mixed ready and capped goods have grouped sell lore and one final action`() {
+        val player = server.addPlayer()
+        val orders = listOf(
+            foodOrder(playerRemaining = 64, id = "berries-order", itemKey = "minecraft:glow_berries",
+                displayName = "Светящиеся ягоды", playerCap = 64),
+            foodOrder(playerRemaining = 0),
+        )
+        var submitCalls = 0
+        mockkObject(ContractOriginGate, NativePaperPlayerDataPersistence)
+        every { NativePaperPlayerDataPersistence.persist(player) } returns Unit
+        mockkStatic(ContractsManager::class)
+        try {
+            server.scheduler.cancelTasks(plugin)
+            NpcContractDepositGui.start()
+            every { ContractOriginGate.canSubmit(player, "food_orders") } returns true
+            every { ContractsManager.currentPlayerViews(player.uniqueId, "food_orders", any(), any()) } returns orders
+            every { ContractsManager.quote(player, any(), any()) } answers {
+                val quantity = thirdArg<Int>()
+                ContractSubmissionQuote(secondArg(), 1_000, player.uniqueId.toString(), quantity,
+                    quantity * 100L, 0, 1_500)
+            }
+            every { ContractsManager.submit(player, any(), null, any()) } answers {
+                submitCalls++
+                CompletableFuture.completedFuture(ContractSubmissionOutcome.Unavailable("unexpected"))
+            }
+            NpcContractDepositGui.open(player, "food_orders")
+            val inventoryView = player.openInventory
+            val top = inventoryView.topInventory
+            val layout = ArcMenus.current().catalog.require(ArcMenuSchema.CONTRACT_DESKS.getValue(6))
+            val deposits = layout.region(ArcMenuSchema.CONTRACT_DEPOSIT).map { it.index }
+            val staged = listOf(
+                deposits[0] to ItemStack(Material.GLOW_BERRIES, 64),
+                deposits[1] to ItemStack(Material.BROWN_MUSHROOM, 64),
+                deposits[2] to ItemStack(Material.BROWN_MUSHROOM, 64),
+            )
+            staged.forEach { (slot, item) ->
+                inventoryView.setCursor(item)
+                server.pluginManager.callEvent(InventoryClickEvent(inventoryView, InventoryType.SlotType.CONTAINER,
+                    slot, ClickType.LEFT, InventoryAction.PLACE_ALL))
+                server.scheduler.performTicks(1)
+                top.getItem(slot) shouldBe item
+            }
+
+            val button = top.getItem(layout.slot("sell").index)!!
+            button.assertDeskTooltip()
+            button.plainDisplayName().contains("Продать доступные товары") shouldBe true
+            val lore = button.itemMeta.lore().orEmpty()
+            val plain = lore.map(PlainTextComponentSerializer.plainText()::serialize)
+            plain.takeWhile { it.isBlank() }.size shouldBe 1
+            plain.count { it.isBlank() } shouldBe 3
+            val berriesIndex = lore.indices.single { lore[it].containsTranslation(Material.GLOW_BERRIES.translationKey()) }
+            val mushroomIndex = lore.indices.single { lore[it].containsTranslation(Material.BROWN_MUSHROOM.translationKey()) }
+            berriesIndex shouldBe 1
+            plain[berriesIndex].startsWith("•") shouldBe true
+            plain[berriesIndex].contains("64") shouldBe true
+            plain[berriesIndex + 1].contains("Можно сдать сейчас") shouldBe true
+            plain[berriesIndex + 2].isBlank() shouldBe true
+            mushroomIndex shouldBe berriesIndex + 3
+            plain[mushroomIndex].startsWith("•") shouldBe true
+            plain[mushroomIndex].contains("128") shouldBe true
+            plain[mushroomIndex + 1].contains("Ваш лимит по заказу исчерпан") shouldBe true
+            plain[mushroomIndex + 2].isBlank() shouldBe true
+            plain.last().startsWith("[▶] ЛКМ — сдать доступные товары") shouldBe true
+            plain.none { it.startsWith("Страница ") } shouldBe true
+            submitCalls shouldBe 0
+        } finally {
+            NpcContractDepositGui.shutdown()
+            unmockkObject(ContractOriginGate, NativePaperPlayerDataPersistence)
+            unmockkStatic(ContractsManager::class)
+            ArcMenus.close()
+        }
+    }
+
+    @Test
     fun `partial mushroom sale reports accepted payout and capped remainder then resets on new input`() {
         val player = server.addPlayer()
         var playerRemaining = 10L
@@ -219,7 +296,7 @@ class NpcContractDepositGuiTest : TestBase() {
             NpcContractDepositGui.start()
             every { ContractOriginGate.canSubmit(player, "food_orders") } returns true
             every { ContractsManager.currentPlayerViews(player.uniqueId, "food_orders", any(), any()) } answers {
-                listOf(mushroomOrder(playerRemaining = playerRemaining))
+                listOf(foodOrder(playerRemaining = playerRemaining))
             }
             every { ContractsManager.quote(player, any(), any()) } answers {
                 val quantity = minOf(thirdArg<Int>().toLong(), playerRemaining).toInt()
@@ -255,6 +332,7 @@ class NpcContractDepositGuiTest : TestBase() {
             server.scheduler.performTicks(5)
             submitCalls shouldBe 1
             val button = top.getItem(layout.slot("sell").index)!!
+            button.assertDeskTooltip()
             button.plainDisplayName().contains("Сдано частично") shouldBe true
             button.plainDisplayName().contains("+10") shouldBe true
             button.itemMeta.lore().orEmpty().any { line ->
@@ -286,18 +364,24 @@ class NpcContractDepositGuiTest : TestBase() {
     }
 }
 
-private fun mushroomOrder(playerRemaining: Long): ResourceContractPlayerView {
+private fun foodOrder(
+    playerRemaining: Long,
+    id: String = "mushroom-order",
+    itemKey: String = "minecraft:brown_mushroom",
+    displayName: String = "Коричневые грибы",
+    playerCap: Long = 10,
+): ResourceContractPlayerView {
     val definition = ResourceContractDefinition(
-        id = "mushroom-order",
-        displayName = "Коричневые грибы",
-        itemKey = "minecraft:brown_mushroom",
+        id = id,
+        displayName = displayName,
+        itemKey = itemKey,
         funding = ContractFunding.SERVER_ENVELOPE,
         windowStartsAt = 1_000,
         windowEndsAt = Long.MAX_VALUE,
         payoutMinorPerUnit = 100,
         budgetMinor = 500_000,
         targetQuantity = 1_536,
-        perPlayerQuantityCap = 10,
+        perPlayerQuantityCap = playerCap,
         maxSubmissionQuantity = 1_536,
         group = "food_orders",
     )
@@ -341,6 +425,19 @@ private fun ItemStack.plainDisplayName(): String =
 
 private fun ItemStack.plainLore(): List<String> =
     itemMeta.lore().orEmpty().map(PlainTextComponentSerializer.plainText()::serialize)
+
+private fun ItemStack.assertDeskTooltip() {
+    requireNotNull(itemMeta.displayName()).decoration(TextDecoration.ITALIC) shouldBe TextDecoration.State.FALSE
+    val lines = itemMeta.lore().orEmpty()
+    lines.forEach { it.decoration(TextDecoration.ITALIC) shouldBe TextDecoration.State.FALSE }
+    val plain = lines.map(PlainTextComponentSerializer.plainText()::serialize)
+    if (plain.isNotEmpty()) {
+        plain.first().isBlank() shouldBe true
+        plain.getOrNull(1)?.isBlank() shouldBe false
+        plain.last().isBlank() shouldBe false
+        plain.zipWithNext().none { (first, second) -> first.isBlank() && second.isBlank() } shouldBe true
+    }
+}
 
 private fun Component.containsTranslation(key: String): Boolean =
     (this as? TranslatableComponent)?.key() == key || children().any { it.containsTranslation(key) }

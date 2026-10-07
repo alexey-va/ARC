@@ -477,7 +477,6 @@ menus:
       name: '<italic:false><bold><name>'
       lore:
         - { repeat: details, text: '<italic:false><line>' }
-        - '<italic:false><#b8b8b8><page>'
     contract-desk-empty:
       material: LIGHT_GRAY_STAINED_GLASS_PANE
       name: '<italic:false> '
