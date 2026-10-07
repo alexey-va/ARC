@@ -4,7 +4,7 @@ package ru.arc.contracts
 internal object ContractDeskLayout {
     const val ROWS = 6
     const val ORDER_COLUMNS = 4
-    const val ORDERS_PER_PAGE = ORDER_COLUMNS * (ROWS - 1)
+    const val ORDERS_PER_PAGE = ORDER_COLUMNS * ROWS - 2
     const val DEPOSIT_CAPACITY = 4 * ROWS
 
     data class Geometry(
@@ -25,14 +25,9 @@ internal object ContractDeskLayout {
         val page = requestedPage.coerceIn(0, pageCount - 1)
         val first = page * ORDERS_PER_PAGE
         val count = minOf(totalOrders - first, ORDERS_PER_PAGE)
-        val slots = when (count) {
-            1 -> listOf(19)
-            2 -> listOf(19, 20)
-            3 -> listOf(18, 19, 20)
-            4 -> listOf(18, 19, 20, 21)
-            5 -> listOf(10, 18, 19, 20, 28)
-            else -> (0 until count).map { it / ORDER_COLUMNS * 9 + it % ORDER_COLUMNS }
-        }
+        val slots = ((0 until ROWS - 1).flatMap { row ->
+            (0 until ORDER_COLUMNS).map { row * 9 + it }
+        } + listOf(46, 47)).take(count)
         return Geometry(
             ROWS, page, pageCount, first until first + count, slots,
             (0 until ROWS).flatMap { row -> (5..8).map { row * 9 + it } },

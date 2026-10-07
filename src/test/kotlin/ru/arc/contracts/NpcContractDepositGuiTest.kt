@@ -40,7 +40,7 @@ class NpcContractDepositGuiTest : TestBase() {
                     100, 500_000, 0, 0, 1536, 0, 0, 1536, 0, group), 1, 1536, 1536, 0, 0, 1536, 100,
                     10_000, 10_000, definition, 0, 1500)
                 every { ContractOriginGate.canSubmit(player, group) } returns true
-                every { ContractsManager.currentPlayerViews(player.uniqueId, group, any(), any()) } returns if (group == "food_orders") (1..21).map { index ->
+                every { ContractsManager.currentPlayerViews(player.uniqueId, group, any(), any()) } returns if (group == "food_orders") (1..23).map { index ->
                     view.copy(contract = view.contract.copy(id = "order_${group}_$index", displayName = "Треска $index"))
                 } else listOf(view)
                 every { ContractsManager.quote(player, any(), any()) } answers {
@@ -81,19 +81,25 @@ class NpcContractDepositGuiTest : TestBase() {
                 }
                 ContractDeskStorage(player, group, { false }).snapshot().map { it?.amount } shouldBe (1..24).toList()
                 saleCalls shouldBe 0
-                top.getItem(46)!!.type shouldBe Material.GRAY_STAINED_GLASS_PANE
-                top.getItem(46)!!.itemMeta.hasCustomModelData() shouldBe false
                 if (group == "food_orders") {
+                    for ((slot, index) in listOf(46 to 21, 47 to 22)) {
+                        top.getItem(slot)!!.type shouldBe Material.COD
+                        PlainTextComponentSerializer.plainText().serialize(top.getItem(slot)!!.itemMeta.displayName()!!)
+                            .contains("Треска $index") shouldBe true
+                    }
                     top.getItem(48)!!.itemMeta.customModelData shouldBe 11008
                     server.pluginManager.callEvent(InventoryClickEvent(inventoryView,
                         InventoryType.SlotType.CONTAINER, 48, ClickType.LEFT, InventoryAction.PICKUP_ALL))
                     server.scheduler.performTicks(1)
-                    PlainTextComponentSerializer.plainText().serialize(top.getItem(19)!!.itemMeta.displayName()!!)
-                        .contains("Треска 21") shouldBe true
+                    PlainTextComponentSerializer.plainText().serialize(top.getItem(0)!!.itemMeta.displayName()!!)
+                        .contains("Треска 23") shouldBe true
+                    top.getItem(19)!!.type shouldBe Material.LIGHT_GRAY_STAINED_GLASS_PANE
                     top.getItem(45)!!.itemMeta.customModelData shouldBe 11009
                     ContractDeskStorage(player, group, { false }).snapshot().map { it?.amount } shouldBe (1..24).toList()
                     saleCalls shouldBe 0
                 }
+                top.getItem(46)!!.type shouldBe Material.LIGHT_GRAY_STAINED_GLASS_PANE
+                top.getItem(46)!!.itemMeta.hasCustomModelData() shouldBe false
                 fun sell() = server.pluginManager.callEvent(InventoryClickEvent(inventoryView,
                     InventoryType.SlotType.CONTAINER, layout.slot("sell").index, ClickType.LEFT, InventoryAction.PICKUP_ALL))
                 sell()

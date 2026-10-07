@@ -20,7 +20,7 @@ class NpcContractMenuTest : StringSpec({
             layout.region(ArcMenuSchema.CONTRACT_DEPOSIT).map { it.index } shouldBe
                 (0 until 6).flatMap { row -> (5..8).map { row * 9 + it } }
             layout.region(ArcMenuSchema.CONTRACT_DESK_ORDERS).map { it.index } shouldBe
-                (0 until 5).flatMap { row -> (0..3).map { row * 9 + it } }
+                (0 until 5).flatMap { row -> (0..3).map { row * 9 + it } } + listOf(46, 47)
             layout.slot("sell").index shouldBe 4
             layout.slot("previous").index shouldBe 45
             layout.slot("next").index shouldBe 48
@@ -33,7 +33,7 @@ class NpcContractMenuTest : StringSpec({
                 arrow.itemMeta.customModelData shouldBe model
             }
             val filler = factory.create(catalog.template(MenuTemplateId.of("contract-desk-empty")), PaperMenuItemRenderContext())
-            filler.type shouldBe Material.GRAY_STAINED_GLASS_PANE
+            filler.type shouldBe Material.LIGHT_GRAY_STAINED_GLASS_PANE
             filler.itemMeta.hasCustomModelData() shouldBe false
             val item = PaperMenuItemFactory().create(catalog.template(MenuTemplateId.of("contract-desk-order")),
                 PaperMenuItemRenderContext(values = mapOf(

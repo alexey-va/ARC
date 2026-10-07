@@ -44,7 +44,7 @@ menus:
         sell: { slot: 4, template: contract-desk-sell }
         next: { slot: 48, template: contract-desk-next }
       regions:
-        contract-orders: { slots: ['0-3', '9-12', '18-21', '27-30', '36-39'] }
+        contract-orders: { slots: ['0-3', '9-12', '18-21', '27-30', '36-39', '46-47'] }
         contract-deposit: { slots: ['5-8', '14-17', '23-26', '32-35', '41-44', '50-53'] }
     investigation-hub:
       schema-version: 1
@@ -483,7 +483,7 @@ menus:
         - '<italic:false><status>'
         - '<italic:false><#b8b8b8><page>'
     contract-desk-empty:
-      material: GRAY_STAINED_GLASS_PANE
+      material: LIGHT_GRAY_STAINED_GLASS_PANE
       name: '<italic:false> '
     contract-desk-previous:
       material: BLUE_STAINED_GLASS_PANE
