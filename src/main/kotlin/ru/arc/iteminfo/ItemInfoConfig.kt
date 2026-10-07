@@ -67,10 +67,7 @@ internal class ItemInfoConfig(private val source: Config) {
                 maxItems = source.int("chest-preview.max-items", ChestPreviewSettings.DEFAULT_MAX_ITEMS),
                 maxDistance = source.double("chest-preview.max-distance", ChestPreviewSettings.DEFAULT_MAX_DISTANCE),
                 verticalGap = source.double("chest-preview.vertical-gap", ChestPreviewSettings.DEFAULT_VERTICAL_GAP),
-                titleTemplate = required("chest-preview.text.title", ChestPreviewSettings.DEFAULT_TITLE_TEMPLATE),
-                entryTemplate = required("chest-preview.text.entry", ChestPreviewSettings.DEFAULT_ENTRY_TEMPLATE),
-                emptyTemplate = required("chest-preview.text.empty", ChestPreviewSettings.DEFAULT_EMPTY_TEMPLATE),
-                overflowTemplate = required("chest-preview.text.overflow", ChestPreviewSettings.DEFAULT_OVERFLOW_TEMPLATE),
+                backgroundOpacity = source.int("chest-preview.background-opacity", ChestPreviewSettings.DEFAULT_BACKGROUND_OPACITY),
             ),
         )
     }

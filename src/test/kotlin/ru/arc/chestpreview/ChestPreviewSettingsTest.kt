@@ -10,10 +10,7 @@ class ChestPreviewSettingsTest : StringSpec({
             maxItems = 6,
             maxDistance = 4.5,
             verticalGap = 0.15,
-            titleTemplate = "<gold>Содержимое сундука",
-            entryTemplate = "<white><name> <gray>× <count>",
-            emptyTemplate = "<gray>Пусто",
-            overflowTemplate = "<dark_gray>И ещё: <count>",
+            backgroundOpacity = 40,
         )
     }
 
@@ -29,8 +26,10 @@ class ChestPreviewSettingsTest : StringSpec({
         }
     }
 
-    "message templates cannot be blank or oversized" {
-        shouldThrow<IllegalArgumentException> { ChestPreviewSettings(titleTemplate = " ") }
-        shouldThrow<IllegalArgumentException> { ChestPreviewSettings(entryTemplate = "x".repeat(501)) }
+    "background opacity includes fully transparent and opaque bounds" {
+        ChestPreviewSettings(backgroundOpacity = 0).backgroundOpacity shouldBe 0
+        ChestPreviewSettings(backgroundOpacity = 100).backgroundOpacity shouldBe 100
+        shouldThrow<IllegalArgumentException> { ChestPreviewSettings(backgroundOpacity = -1) }
+        shouldThrow<IllegalArgumentException> { ChestPreviewSettings(backgroundOpacity = 101) }
     }
 })

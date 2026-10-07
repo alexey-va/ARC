@@ -11,6 +11,7 @@ import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.player.PlayerTeleportEvent
 import ru.arc.ARC
+import ru.arc.chestpreview.ChestPreviewIcons
 import ru.arc.chestpreview.ChestPreviewProvider
 import ru.arc.chestpreview.ChestPreviewTarget
 import ru.arc.core.LifecycleTaskScope
@@ -22,6 +23,7 @@ import ru.arc.onboarding.OnboardingModule
 import ru.arc.paper.api.ArcInspectionFrame
 import ru.arc.paper.api.ArcInspectionProvider
 import ru.arc.paper.inspection.PaperArcInspectionService
+import ru.arc.paper.display.PaperPacketDisplays
 import ru.arc.util.Logging.error
 
 internal class ItemInfoRuntime(
@@ -54,16 +56,20 @@ internal class ItemInfoRuntime(
             galleryPurchasePrice = galleryPurchasePrice,
         ),
     )
+    private val chestPreview = ChestPreviewProvider(settings.chestPreview, chestPreviewResolver)
+    private val chestIcons = ChestPreviewIcons(PaperPacketDisplays(ARC.instance, "chest-preview"), settings.chestPreview)
     private val chestPreviewRegistration = inspection.register(
         ARC.instance,
         "chest-preview",
         50,
-        ChestPreviewProvider(settings.chestPreview, chestPreviewResolver),
+        chestPreview,
     )
     private val controller = ItemInfoController(
         preferences = readPreferences,
         inspection = inspection,
         suppressed = suppressedViewer,
+        chestPreview = chestPreview,
+        chestIcons = chestIcons,
     )
     private var tick = 0L
 
@@ -123,6 +129,7 @@ internal class ItemInfoRuntime(
         tasks.close()
         furnitureHitboxHint?.close()
         chestPreviewRegistration.close()
+        chestIcons.close()
         providerRegistration.close()
         failedViewers.clear()
     }

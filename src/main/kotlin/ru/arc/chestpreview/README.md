@@ -8,15 +8,31 @@ granted by the module. The existing inspection preference must be `HOLOGRAM`;
 
 `plugins/ARC/modules/item-info.yml` owns `chest-preview.max-items` (default 6,
 range 1–12), `max-distance` (default 4.5, never beyond actual interaction reach),
-`vertical-gap` (default 0.15), and the Russian text templates. Similar stacks are
-summed in stable physical slot order. The final line reports omitted groups.
-Custom names are literal, bounded text; lore and nested inventory contents are
-never included. Vanilla item names use the client's translated item label.
+`vertical-gap` (default 0.15), and `background-opacity` (integer percentage,
+0 fully transparent, 100 opaque; default 40). `/arc reload` reloads configuration
+before replacing the ItemInfo runtime and its display owner. Existing scenes are
+removed and the next inspection tick uses the new opacity; no restart is needed
+for subsequent setting changes once this plugin version is active.
 
-The shared inspection service sends a private TextDisplay. Its bottom edge is
-anchored above the chest midpoint. No Bukkit entity, inventory window, synthetic
-interaction/open event or world mutation is created. The existing five-tick
-inspection refresh also rechecks permission and access before each content read.
+The preview contains **only item icons** in a compact three-column grid, without
+names, titles, counts, overflow or empty-state labels. Similar stacks share one
+icon in physical slot order. Empty chests have no visible panel. The item model
+and appearance metadata are retained, with display amount normalized to one.
+
+The existing inspection arbitration selects the chest provider by priority. Its
+empty frame suppresses lower text sources, while the host captures that winning
+provider's icon snapshot for a private `PaperPacketDisplays` scene. OFF, BOSSBAR,
+a higher-priority winner, target loss, suppression and player reset clear the
+icons. The blank-space TextDisplay is only a background rectangle; it contains
+no readable glyphs. The items use native GUI ItemDisplay transforms. All parts
+share one chest-top anchor and client billboard, retaining display handles on
+unchanged refreshes. No Bukkit entity, inventory window, synthetic open event or
+world mutation is created. The five-tick inspection refresh rechecks access
+before reading contents.
+
+Visual reference: [Volmit Gloss container previews](https://github.com/VolmitSoftware/docs/blob/master/gloss/15-container-previews.md)
+and its slot-grid example. ARC retains its own access checks, permission and
+compact text-free layout; Gloss is not installed or required.
 
 ## Access boundary
 
@@ -51,7 +67,9 @@ Run the focused `ChestPreviewAccessTest`, `ChestPreviewProviderTest`,
 `ChestPreviewSettingsTest`, and `ItemInfoConfigTest` suites. They cover permission
 before target resolution, both-half authorization before content reads,
 unavailable chunks, lock/loot/obstruction, failed providers, stable aggregation,
-bounded names/output, viewer isolation and config bounds.
+icon limits, viewer isolation and config bounds. Icon-renderer and controller checks
+cover private audience, no readable text, unchanged handle identity, mode changes,
+cleanup and opacity. The config test reloads the file with a changed opacity.
 
 Native client acceptance after owner-controlled activation: grant only the test
 account `arc.chest-preview`, compare an allowed chest and a denied Lands/WG chest,

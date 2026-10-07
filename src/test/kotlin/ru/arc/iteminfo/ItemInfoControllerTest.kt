@@ -9,6 +9,10 @@ import io.mockk.verifySequence
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.entity.Player
+import ru.arc.chestpreview.ChestPreviewIcons
+import ru.arc.chestpreview.ChestPreviewProvider
+import ru.arc.chestpreview.ChestPreviewFrame
+import ru.arc.paper.api.InspectionHologramAnchor
 import ru.arc.paper.api.InspectionViewMode
 import ru.arc.paper.api.InspectionViewPreferences
 import ru.arc.paper.inspection.PaperArcInspectionService
@@ -39,6 +43,35 @@ class ItemInfoControllerTest : StringSpec({
             inspection.follow(player)
             inspection.clear(player)
         }
+    }
+
+    "chest icons honor hologram mode and clear together with suppressed inspection" {
+        val player = player()
+        val inspection = mockk<PaperArcInspectionService>(relaxed = true)
+        val provider = mockk<ChestPreviewProvider>()
+        val icons = mockk<ChestPreviewIcons>(relaxed = true)
+        val frame = ChestPreviewFrame(InspectionHologramAnchor(UUID.randomUUID(), 0.5, 64.0, 0.5), emptyList())
+        every { provider.selectedFrame(player, any()) } answers {
+            secondArg<() -> Unit>().invoke()
+            frame
+        }
+        var mode = ItemInfoMode.HOLOGRAM
+        var suppressed = false
+        val controller = ItemInfoController(
+            { ItemInfoPreferences.DEFAULT.copy(mode = mode) }, inspection, { suppressed }, provider, icons,
+        )
+        controller.update(player)
+        verify(exactly = 1) { icons.update(player, frame, ItemInfoPreferences.DEFAULT.hologramScale) }
+        for (other in listOf(ItemInfoMode.OFF, ItemInfoMode.BOSSBAR)) {
+            mode = other
+            controller.update(player)
+        }
+        verify(exactly = 2) { icons.update(player, null, ItemInfoPreferences.DEFAULT.hologramScale) }
+        suppressed = true
+        controller.update(player)
+        controller.reset(player)
+        verify(exactly = 2) { icons.clear(player) }
+        verify(exactly = 2) { inspection.clear(player) }
     }
 
     "item info source preserves both formatted modes and the existing technical-id preference" {

@@ -26,6 +26,8 @@ class ItemInfoConfigTest : StringSpec({
             { it.setInt("chest-preview.max-items", 13) },
             { it.setDouble("chest-preview.max-distance", 4.6) },
             { it.setDouble("chest-preview.vertical-gap", 0.51) },
+            { it.setInt("chest-preview.background-opacity", -1) },
+            { it.setInt("chest-preview.background-opacity", 101) },
         )
 
         invalidValues.forEach { configure ->
@@ -38,5 +40,18 @@ class ItemInfoConfigTest : StringSpec({
                 directory.toFile().deleteRecursively()
             }
         }
+    }
+    "config reload changes opacity without retaining the previous snapshot" {
+        val directory = Files.createTempDirectory("arc-chest-opacity-reload-")
+        try {
+            val path = directory.resolve("modules/item-info.yml")
+            Files.createDirectories(path.parent)
+            Files.writeString(path, "chest-preview:\n  background-opacity: 25\n")
+            val source = Config(directory, "modules/item-info.yml")
+            ItemInfoConfig(source).snapshot().chestPreview.backgroundOpacity shouldBe 25
+            Files.writeString(path, "chest-preview:\n  background-opacity: 80\n")
+            source.reload()
+            ItemInfoConfig(source).snapshot().chestPreview.backgroundOpacity shouldBe 80
+        } finally { directory.toFile().deleteRecursively() }
     }
 })

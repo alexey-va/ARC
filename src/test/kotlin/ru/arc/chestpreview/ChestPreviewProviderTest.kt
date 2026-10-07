@@ -6,7 +6,6 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import net.kyori.adventure.text.Component
-import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Material
 import org.bukkit.World
 import org.bukkit.block.Chest
@@ -21,118 +20,88 @@ class ChestPreviewProviderTest : StringSpec({
     beforeSpec { MockBukkit.mock() }
     afterSpec { MockBukkit.unmock() }
 
-    "permission is checked before resolving a chest or reading inventory" {
+    "permission is checked before target resolution or inventory reads" {
         val player = mockk<Player>()
         every { player.hasPermission("arc.chest-preview") } returns false
-        var resolverCalls = 0
-        val provider = ChestPreviewProvider(ChestPreviewSettings()) { _, _ ->
-            resolverCalls++
-            error("unauthorized viewers must not resolve targets")
-        }
-
+        val provider = ChestPreviewProvider(ChestPreviewSettings()) { _, _ -> error("must not resolve") }
         provider.resolve(player) shouldBe null
-        resolverCalls shouldBe 0
     }
 
-    "similar stacks aggregate in half and slot order in a hologram-only frame" {
-        val world = mockk<World>()
-        val player = permittedPlayer(world)
-        val chestA = chest(arrayOf(
-            named(Material.DIAMOND, "<red>Ruby").apply { amount = 3 },
-            named(Material.EMERALD, "Emerald").apply { amount = 2 },
-            named(Material.DIAMOND, "<red>Ruby").apply { amount = 5 },
-            null,
-        ))
-        val chestB = chest(arrayOf(
-            named(Material.DIAMOND, "Ruby").apply { amount = 1 },
-            named(Material.EMERALD, "Emerald").apply { amount = 4 },
-        ))
+    "distinct icons retain item appearance and physical slot order without any text" {
+        val world = world()
+        val player = player(world)
+        val diamond = ItemStack(Material.DIAMOND, 3).apply { editMeta { it.displayName(Component.text("Ruby")) } }
+        val first = chest(arrayOf(diamond, ItemStack(Material.EMERALD, 2), diamond.clone().apply { amount = 5 }))
+        val second = chest(arrayOf(ItemStack(Material.DIAMOND), ItemStack(Material.EMERALD, 4)))
         val provider = ChestPreviewProvider(ChestPreviewSettings()) { _, _ ->
-            ChestPreviewTarget(listOf(chestA, chestB), InspectionHologramAnchor(world.uid, 4.5, 70.0, -2.5))
+            ChestPreviewTarget(listOf(first, second), InspectionHologramAnchor(world.uid, 4.5, 70.0, -2.5))
         }
-
-        val frame = provider.resolve(player)!!
-        val text = PlainTextComponentSerializer.plainText().serialize(frame.hologram)
-
-        text shouldBe "Содержимое сундука\n<red>Ruby × 8\nEmerald × 6\nRuby × 1"
-        frame.hologramAnchor shouldBe InspectionHologramAnchor(world.uid, 4.5, 70.15, -2.5)
-        // Selecting BOSSBAR or OFF must not force chest contents into another view mode.
-        frame.bossbar shouldBe Component.empty()
-        verify(exactly = 1) { chestA.blockInventory }
-        verify(exactly = 1) { chestB.blockInventory }
+        val frame = provider.selectedFrame(player) {
+            val suppression = provider.resolve(player)!!
+            suppression.hologram shouldBe Component.empty()
+            suppression.bossbar shouldBe Component.empty()
+            suppression.suppressesLowerSources shouldBe true
+        }!!
+        frame.items.map { it.type } shouldBe listOf(Material.DIAMOND, Material.EMERALD, Material.DIAMOND)
+        frame.items.map { it.amount } shouldBe listOf(1, 1, 1)
+        frame.items.first().isSimilar(diamond) shouldBe true
+        diamond.amount shouldBe 3
+        frame.anchor shouldBe InspectionHologramAnchor(world.uid, 4.5, 70.15, -2.5)
+        verify(exactly = 1) { first.blockInventory }
+        verify(exactly = 1) { second.blockInventory }
     }
 
-    "overflow counts omitted groups and empty inventories show the empty state" {
-        val world = mockk<World>()
-        val player = permittedPlayer(world)
-        val chest = chest(arrayOf(
-            named(Material.DIAMOND, "Алмаз").apply { amount = 1 },
-            named(Material.EMERALD, "Изумруд").apply { amount = 1 },
-            named(Material.GOLD_INGOT, "Золото").apply { amount = 1 },
-        ))
+    "max items caps icons and empty inventory has no empty-state label" {
+        val world = world(); val player = player(world)
+        var inventory = chest(arrayOf(ItemStack(Material.DIAMOND), ItemStack(Material.EMERALD), ItemStack(Material.GOLD_INGOT)))
         val provider = ChestPreviewProvider(ChestPreviewSettings(maxItems = 2)) { _, _ ->
-            ChestPreviewTarget(listOf(chest), InspectionHologramAnchor(world.uid, 0.5, 64.0, 0.5))
+            ChestPreviewTarget(listOf(inventory), InspectionHologramAnchor(world.uid, 0.5, 64.0, 0.5))
         }
-        PlainTextComponentSerializer.plainText().serialize(provider.resolve(player)!!.hologram) shouldBe
-            "Содержимое сундука\nАлмаз × 1\nИзумруд × 1\nИ ещё: 1"
-
-        val emptyChest = chest(arrayOfNulls(27))
-        val empty = ChestPreviewProvider(ChestPreviewSettings()) { _, _ ->
-            ChestPreviewTarget(listOf(emptyChest), InspectionHologramAnchor(world.uid, 0.5, 64.0, 0.5))
-        }
-        PlainTextComponentSerializer.plainText().serialize(empty.resolve(player)!!.hologram) shouldBe
-            "Содержимое сундука\nПусто"
+        provider.selectedFrame(player) { provider.resolve(player) }!!.items.size shouldBe 2
+        inventory = chest(arrayOfNulls(27))
+        provider.selectedFrame(player) { provider.resolve(player) }!!.items shouldBe emptyList()
     }
 
-    "the default item label stays a translatable component" {
-        chestPreviewDisplayName(ItemStack(Material.DIAMOND)) shouldBe
-            Component.translatable(Material.DIAMOND.translationKey())
-    }
-
-    "each viewer resolves a fresh target without sharing the prior viewer payload" {
-        val world = mockk<World>()
-        val first = permittedPlayer(world)
-        val second = permittedPlayer(world)
-        val firstChest = chest(arrayOf(named(Material.PAPER, "Первый")))
-        val secondChest = chest(arrayOf(named(Material.PAPER, "Второй")))
-        val provider = ChestPreviewProvider(ChestPreviewSettings()) { player, _ ->
-            val selected = if (player === first) firstChest else secondChest
-            ChestPreviewTarget(listOf(selected), InspectionHologramAnchor(world.uid, 0.5, 64.0, 0.5))
-        }
-
-        val serializer = PlainTextComponentSerializer.plainText()
-        serializer.serialize(provider.resolve(first)!!.hologram) shouldBe "Содержимое сундука\nПервый × 1"
-        serializer.serialize(provider.resolve(second)!!.hologram) shouldBe "Содержимое сундука\nВторой × 1"
-        verify(exactly = 1) { firstChest.blockInventory }
-        verify(exactly = 1) { secondChest.blockInventory }
-    }
-
-    "pathological custom names are normalized and capped" {
-        val world = mockk<World>()
-        val player = permittedPlayer(world)
-        val chest = chest(arrayOf(named(Material.PAPER, "a\n" + "x".repeat(90))))
+    "a higher priority winner or OFF does not retain the previous scene" {
+        val world = world(); val player = player(world)
+        val inventory = chest(arrayOf(ItemStack(Material.DIAMOND)))
         val provider = ChestPreviewProvider(ChestPreviewSettings()) { _, _ ->
-            ChestPreviewTarget(listOf(chest), InspectionHologramAnchor(world.uid, 0.5, 64.0, 0.5))
+            ChestPreviewTarget(listOf(inventory), InspectionHologramAnchor(world.uid, 0.5, 64.0, 0.5))
         }
+        provider.selectedFrame(player) { provider.resolve(player) }!!.items.size shouldBe 1
+        provider.selectedFrame(player) { /* shared inspector did not select this provider */ } shouldBe null
+        provider.resolve(player) // Out-of-cycle registration resolution must not cache a scene.
+        provider.selectedFrame(player) {} shouldBe null
+    }
 
-        val row = PlainTextComponentSerializer.plainText().serialize(provider.resolve(player)!!.hologram).lines()[1]
-        row shouldBe "a ${"x".repeat(63)} × 1"
+    "capture never shares another viewer's inventory" {
+        val world = world(); val first = player(world); val second = player(world)
+        val inventory = chest(arrayOf(ItemStack(Material.PAPER)))
+        val provider = ChestPreviewProvider(ChestPreviewSettings()) { _, _ ->
+            ChestPreviewTarget(listOf(inventory), InspectionHologramAnchor(world.uid, 0.5, 64.0, 0.5))
+        }
+        provider.selectedFrame(first) { provider.resolve(second) } shouldBe null
+    }
+
+    "wrong-world targets are rejected before reading contents" {
+        val world = world(); val player = player(world)
+        val inventory = mockk<Chest>()
+        val provider = ChestPreviewProvider(ChestPreviewSettings()) { _, _ ->
+            ChestPreviewTarget(listOf(inventory), InspectionHologramAnchor(UUID.randomUUID(), 0.5, 64.0, 0.5))
+        }
+        provider.selectedFrame(player) { provider.resolve(player) } shouldBe null
+        verify(exactly = 0) { inventory.blockInventory }
     }
 })
 
-private fun permittedPlayer(world: World): Player = mockk<Player>().also { player ->
-    every { player.hasPermission("arc.chest-preview") } returns true
-    every { player.world } returns world
-    every { world.uid } returns UUID(1L, 2L)
+private fun world(): World = mockk<World>().also { every { it.uid } returns UUID.randomUUID() }
+private fun player(world: World): Player = mockk<Player>().also {
+    every { it.hasPermission("arc.chest-preview") } returns true
+    every { it.world } returns world
+    every { it.uniqueId } returns UUID.randomUUID()
 }
-
-private fun chest(contents: Array<out ItemStack?>): Chest = mockk<Chest>().also { chest ->
+private fun chest(contents: Array<out ItemStack?>): Chest = mockk<Chest>().also {
     val inventory = mockk<Inventory>()
-    val snapshot = Array<ItemStack?>(contents.size) { contents[it] }
-    every { inventory.contents } returns snapshot
-    every { chest.blockInventory } returns inventory
-}
-
-private fun named(material: Material, name: String): ItemStack = ItemStack(material).apply {
-    editMeta { it.displayName(Component.text(name)) }
+    every { inventory.contents } returns Array<ItemStack?>(contents.size) { contents[it] }
+    every { it.blockInventory } returns inventory
 }
