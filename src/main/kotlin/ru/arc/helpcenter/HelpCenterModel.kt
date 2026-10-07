@@ -21,6 +21,7 @@ enum class HelpCenterPage(vararg val aliases: String) {
     ACTIVITIES("activities", "активности", "играть"),
     PLAYERS("players", "игроки", "друзья"),
     TECHNOLOGY("technology", "технологии", "предметы"),
+    ENCHANTMENTS("enchants", "enchantments", "зачарования", "чары"),
     SETTINGS("settings", "настройки"),
     RECOVERY("recovery", "проблема", "что случилось"),
     GOALS("goals", "заняться", "цели"),
@@ -49,7 +50,7 @@ enum class HelpCenterCategory(val configId: String) {
     SETTINGS("settings");
 
     companion object {
-        val rootHubs: List<HelpCenterCategory> = listOf(ACTIVITIES, TRADE, PROGRESS, TECHNOLOGY, SETTINGS)
+        val rootHubs: List<HelpCenterCategory> = listOf(ACTIVITIES, TRADE, TECHNOLOGY, SETTINGS)
     }
 }
 

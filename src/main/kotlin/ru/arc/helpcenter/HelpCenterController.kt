@@ -36,6 +36,8 @@ internal class HelpCenterController(
     },
     private val legacySettings: HelpCenterLegacySettings = HelpCenterLegacySettings(),
     private val closeDialog: (Player) -> Unit = ArcMenus::closeDialog,
+    private val enchantmentsGuide: HelpCenterEnchantmentsGuideSettings,
+    private val enchantmentsCatalog: () -> HelpCenterEnchantmentsCatalog = HelpCenterEnchantmentsCatalog::fromAeApi,
 ) {
     private val miniMessage = MiniMessage.miniMessage()
     private val plainText = PlainTextComponentSerializer.plainText()
@@ -107,6 +109,10 @@ internal class HelpCenterController(
         HelpCenterDungeonsController(settings, navigation, showDialog, ::executeInventory, ::execute)
     }
 
+    private val enchantments by lazy {
+        HelpCenterEnchantmentsController(settings, enchantmentsGuide, navigation, showDialog, ::executeInventory, enchantmentsCatalog)
+    }
+
     private val personalSettings by lazy {
         HelpCenterSettingsController(settings, gateway, legacySettings, navigation, showDialog,
             ::executeCatalog, ::executeInventory, ::openSettingsRoot)
@@ -140,6 +146,7 @@ internal class HelpCenterController(
             HelpCenterPage.ACTIVITIES -> openCategory(player, HelpCenterCategory.ACTIVITIES, returnToRoot = true)
             HelpCenterPage.PLAYERS -> openPlayers(player)
             HelpCenterPage.TECHNOLOGY -> openCategory(player, HelpCenterCategory.TECHNOLOGY, returnToRoot = true)
+            HelpCenterPage.ENCHANTMENTS -> enchantments.open(player) { openRoot(player) }
             HelpCenterPage.SETTINGS -> openSettings(player)
             HelpCenterPage.RECOVERY -> openRecovery(player)
             HelpCenterPage.GOALS -> hub.openGoals(player)
@@ -200,21 +207,19 @@ internal class HelpCenterController(
                     availableCatalog(player).firstOrNull { it.id == "teams" }?.let { teams ->
                         add(button("teams", text("teams-label"), commandTooltip(teams.id)) { executeCatalog(player, teams.id) })
                     }
-                    addAll(listOf(
-                    button("travel", text("travel-label"), text("travel-tooltip")) { openTravel(player) },
-                    button("privat", text("privat-label"), text("privat-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
-                    rootCategoryButton(player, HelpCenterCategory.ACTIVITIES),
-                    rootCategoryButton(player, HelpCenterCategory.PROGRESS),
-                    availableCatalog(player).firstOrNull { it.id == "quests" }?.let { quests ->
-                        button("quests", text("main-quests-label"), commandTooltip(quests.id)) {
-                            executeCatalog(player, quests.id)
+                    add(button("travel", text("travel-label"), text("travel-tooltip")) { openTravel(player) })
+                    add(button("privat", text("privat-label"), text("privat-tooltip")) { open(player, HelpCenterPage.PRIVAT) })
+                    add(rootCategoryButton(player, HelpCenterCategory.ACTIVITIES))
+                    add(rootCategoryButton(player, HelpCenterCategory.TRADE))
+                    val available = availableCatalog(player).associateBy { it.id }
+                    for (id in listOf("rank", "jobs", "skills", "quests", "enchants")) {
+                        if (id in available) {
+                            add(button(id, text("main-$id-label"), commandTooltip(id)) { executeCatalog(player, id) })
                         }
-                    },
-                    rootCategoryButton(player, HelpCenterCategory.TRADE),
-                    rootCategoryButton(player, HelpCenterCategory.TECHNOLOGY),
-                    button("search", text("commands-label"), text("commands-tooltip")) { openCommands(player) },
-                    button("settings", text("category-settings-label"), text("category-settings-tooltip")) { openSettings(player) },
-                    ).filterNotNull())
+                    }
+                    add(rootCategoryButton(player, HelpCenterCategory.TECHNOLOGY))
+                    add(button("search", text("commands-label"), text("commands-tooltip")) { openCommands(player) })
+                    add(button("settings", text("category-settings-label"), text("category-settings-tooltip")) { openSettings(player) })
                 }.map { it.copy(width = 166, label = text("main-${it.id.value.removePrefix("root_")}-label")) },
                 columns = 3,
             ),
@@ -1182,6 +1187,9 @@ internal class HelpCenterController(
         } else if (id == "dungeons") {
             val returnTo = navigation.returnTarget(player) ?: { open(player, HelpCenterPage.ACTIVITIES) }
             dungeons.open(player, returnTo)
+        } else if (id == "enchants") {
+            val returnTo = navigation.returnTarget(player) ?: { openRoot(player) }
+            enchantments.open(player, returnTo)
         } else executeCommand(player, command)
     }
 
@@ -1271,7 +1279,7 @@ internal class HelpCenterController(
 
     companion object {
         // These commands join Core's shared history while this callback is active.
-        private val NATIVE_DIALOG_COMMANDS = setOf("events", "farms", "giveaways", "jobs", "rank", "teams", "quests", "builder", "warps")
+        private val NATIVE_DIALOG_COMMANDS = setOf("events", "farms", "giveaways", "jobs", "rank", "teams", "quests", "builder", "warps", "enchants")
         private const val PUBLIC_HOMES_PAGE_SIZE = 10
         private val SEARCH_INPUT = PaperDialogInputId.of("search")
         private val HOME_INPUT = PaperDialogInputId.of("home_name")
@@ -1358,9 +1366,8 @@ internal class HelpCenterController(
             CommandDefinition(
                 "enchants",
                 HelpCenterCategory.TECHNOLOGY,
-                "enchants",
+                "arc help enchants",
                 HelpCenterFeature.ENCHANTMENTS,
-                opensInventory = true,
             ),
             CommandDefinition(
                 "enchanter",

@@ -138,7 +138,6 @@ class HelpCenterPlannerTest : StringSpec({
         HelpCenterCategory.rootHubs shouldContainExactly listOf(
             HelpCenterCategory.ACTIVITIES,
             HelpCenterCategory.TRADE,
-            HelpCenterCategory.PROGRESS,
             HelpCenterCategory.TECHNOLOGY,
             HelpCenterCategory.SETTINGS,
         )

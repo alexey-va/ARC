@@ -17,7 +17,10 @@ text:
   main-travel-label: '<#91c4ff>Телепортация'
   main-privat-label: '<#a3de92>Приваты'
   main-activities-label: '<#ffb277>Активности'
-  main-progress-label: '<#c4abff>Развитие'
+  main-rank-label: '<#c4abff>Ранги'
+  main-jobs-label: '<#c4abff>Работы'
+  main-skills-label: '<#c4abff>Навыки'
+  main-enchants-label: '<#d6a5ff>Зачарования'
   main-quests-label: '<#c4abff>Квесты'
   main-trade-label: '<#f4d87a>Торговля'
   main-technology-label: '<#85dfc4>Технологии'
@@ -797,7 +800,7 @@ commands:
   skills: { label: 'Навыки', description: 'Навыки и их развитие', keywords: 'auraskills способности развитие' }
   slimefun: { label: 'Книга технологий', description: 'Открыть справочник Slimefun', keywords: 'slimefun сф механизмы рецепты' }
   items: { label: 'Новые предметы', description: 'Каталог дополнительных предметов', keywords: 'itemsadder предметы рецепты' }
-  enchants: { label: 'Зачарования', description: 'Список особых зачарований', keywords: 'энчанты чары магия' }
+  enchants: { label: 'Зачарования', description: 'Зачарования по снаряжению, особые предметы и способы получения', keywords: 'энчанты чары магия' }
   enchanter: { label: 'Зачарователь', description: 'Магазин особых зачарований', keywords: 'купить чары энчанты' }
   builder: { label: 'Инструменты строителя', description: 'Справка по инструментам и строительным книгам', keywords: 'стройка билдер блоки' }
   mounts: { label: 'Маунты', description: 'Коллекция ездовых существ', keywords: 'маунты транспорт питомцы' }

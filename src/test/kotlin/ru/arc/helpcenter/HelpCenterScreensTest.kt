@@ -82,7 +82,7 @@ class HelpCenterScreensTest {
             executed += command
             if (command == "g") chatMode = HelpCenterChatMode.GLOBAL
             if (command == "l") chatMode = HelpCenterChatMode.LOCAL
-            if (command in setOf("sf open_guide", "cmi flightcharge recharge", "elitemobs:em")) player.openInventory(Bukkit.createInventory(null, 9))
+            if (command in setOf("sf open_guide", "cmi flightcharge recharge", "elitemobs:em", "skills")) player.openInventory(Bukkit.createInventory(null, 9))
             true
         }
         ConfigManager.clear()
@@ -103,6 +103,8 @@ class HelpCenterScreensTest {
             HelpCenterConfig.load(directory).snapshot(), gateway, {}, inventoryReturn,
             { _, _ -> }, HelpCenterNavigation(plugin, inventoryReturn::cancel), { _, value -> screen = value; screenCount++ }, legacy,
             closeDialog = { dialogCloses++ },
+            enchantmentsGuide = HelpCenterEnchantmentsGuideConfig.load(directory).snapshot(),
+            enchantmentsCatalog = { HelpCenterEnchantmentsCatalog.unavailable() },
         )
     }
 
@@ -296,7 +298,7 @@ class HelpCenterScreensTest {
         assertEquals(3, screen.columns)
         assertTrue(screen.buttons.all { it.width == 166 })
         assertEquals(listOf("now", "teams", "travel", "privat", "root_activities",
-            "root_progress", "quests", "root_trade", "root_technology", "search", "settings"), screen.buttons.map { it.id.value })
+            "root_trade", "rank", "jobs", "skills", "quests", "enchants", "root_technology", "search", "settings"), screen.buttons.map { it.id.value })
         assertTrue(body().contains("Viewer"))
         assertFalse(screen.buttons.single { it.id.value == "quests" }.closeDialogBeforeAction)
         click("quests")
@@ -328,7 +330,7 @@ class HelpCenterScreensTest {
         every { gateway.features() } returns HelpCenterFeature.entries.toSet() - HelpCenterFeature.TEAMS
         open(HelpCenterPage.ROOT)
         assertFalse(screen.buttons.any { it.id.value == "teams" })
-        assertEquals(10, screen.buttons.size)
+        assertEquals(13, screen.buttons.size)
         open(HelpCenterPage.PLAYERS)
         assertFalse(screen.buttons.any { it.id.value == "command_teams" })
     }
@@ -352,16 +354,14 @@ class HelpCenterScreensTest {
     @Test
     fun `progression hides absent plugins and daily quests open the current native provider`() {
         open(HelpCenterPage.ROOT)
-        click("root_progress")
-        assertFalse(screen.buttons.any { it.id.value == "command_rankup" })
-        assertFalse(screen.buttons.single { it.id.value == "command_quests" }.closeDialogBeforeAction)
-        click("command_quests")
+        assertFalse(screen.buttons.any { it.id.value in setOf("root_progress", "rankup") })
+        assertFalse(screen.buttons.single { it.id.value == "quests" }.closeDialogBeforeAction)
+        click("quests")
         assertEquals(listOf("quests"), executed)
         every { gateway.features() } returns HelpCenterFeature.entries.toSet() -
             setOf(HelpCenterFeature.RANKS, HelpCenterFeature.JOBS, HelpCenterFeature.SKILLS)
         open(HelpCenterPage.ROOT)
-        click("root_progress")
-        assertFalse(screen.buttons.any { it.id.value in setOf("command_rank", "command_rankup", "command_jobs", "command_quests", "command_skills") })
+        assertFalse(screen.buttons.any { it.id.value in setOf("rank", "rankup", "jobs", "quests", "skills") })
         open(HelpCenterPage.ACTIVITIES)
         assertFalse(screen.buttons.any { it.id.value == "command_battle_pass" })
         assertFalse(screen.buttons.any { it.id.value == "activity_goals" })
@@ -748,18 +748,19 @@ class HelpCenterScreensTest {
             Triple("root_activities", "events", "arcevents"),
             Triple("root_activities", "farms", "arcfarms"),
             Triple("root_activities", "giveaways", "giveaway"),
-            Triple("root_progress", "jobs", "arcjobs dialog"),
-            Triple("root_progress", "rank", "rank dialog"),
-            Triple("root_progress", "quests", "quests"),
+            Triple("", "jobs", "arcjobs dialog"),
+            Triple("", "rank", "rank dialog"),
+            Triple("", "quests", "quests"),
         )
         for ((entry, id, command) in destinations) {
             open(HelpCenterPage.ROOT)
-            click(entry)
+            if (entry.isNotEmpty()) click(entry)
+            val buttonId = if (entry.isEmpty()) id else "command_$id"
             assertFalse(
-                screen.buttons.single { it.id.value == "command_$id" }.closeDialogBeforeAction,
+                screen.buttons.single { it.id.value == buttonId }.closeDialogBeforeAction,
                 "$id must keep the parent dialog and cursor during native navigation",
             )
-            click("command_$id")
+            click(buttonId)
             assertEquals(command, executed.last())
         }
         open(HelpCenterPage.ACTIVITIES)
@@ -779,6 +780,38 @@ class HelpCenterScreensTest {
         player.closeInventory()
         paper.performTicks(2)
         assertEquals("Главное меню", plain(screen.title))
+    }
+
+    @Test
+    fun `skills are one click from root and their inventory returns to root`() {
+        repeat(3) {
+            open(HelpCenterPage.ROOT)
+            click("skills")
+            assertEquals("skills", executed.last())
+            player.closeInventory()
+            paper.performTicks(3)
+            assertEquals("help.root", screen.id)
+            assertFalse(screen.buttons.any { button -> button.id.value == "root_progress" })
+        }
+    }
+
+    @Test
+    fun `enchantments open natively and return to the actual entry screen`() {
+        repeat(3) {
+            open(HelpCenterPage.ROOT)
+            assertFalse(screen.buttons.single { button -> button.id.value == "enchants" }.closeDialogBeforeAction)
+            click("enchants")
+            assertEquals("help.enchantments", screen.id)
+            click("back")
+            assertEquals("help.root", screen.id)
+        }
+        open(HelpCenterPage.TECHNOLOGY)
+        click("command_enchants")
+        assertEquals("help.enchantments", screen.id)
+        click("back")
+        assertEquals("help.category.technology", screen.id)
+        assertTrue(executed.isEmpty())
+        assertEquals(0, dialogCloses)
     }
 
     @Test
@@ -863,7 +896,7 @@ class HelpCenterScreensTest {
         player.addAttachment(paper.createSimplePlugin("MainLabels"), "arcjustteams.use", true)
         open(HelpCenterPage.ROOT)
         assertEquals(listOf("Мой профиль", "Кланы", "Телепортация", "Приваты", "Активности",
-            "Развитие", "Квесты", "Торговля", "Технологии", "Поиск", "Настройки"), screen.buttons.map { plain(it.label) })
+            "Торговля", "Ранги", "Работы", "Навыки", "Квесты", "Зачарования", "Технологии", "Поиск", "Настройки"), screen.buttons.map { plain(it.label) })
         click("search")
         assertTrue(screen.buttons.any { plain(it.label).startsWith("⚡") })
     }

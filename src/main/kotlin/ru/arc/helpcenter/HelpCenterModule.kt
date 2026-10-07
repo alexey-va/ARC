@@ -51,6 +51,7 @@ object HelpCenterModule : PluginModule {
             openLands = LandsUiModule::open,
             inventoryReturn = HelpCenterInventoryReturnRuntime(ARC.instance),
             inviteToLand = { player, target -> LandsUiModule.openInvite(player, target.id, target.name) },
+            enchantmentsGuide = HelpCenterEnchantmentsGuideConfig.load(ARC.instance.dataPath).snapshot(),
         )
         info("Help center module initialized")
     }
