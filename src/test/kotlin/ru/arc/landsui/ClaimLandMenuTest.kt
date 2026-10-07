@@ -1,6 +1,7 @@
 package ru.arc.landsui
 
 import io.kotest.core.spec.style.FreeSpec
+import io.kotest.matchers.doubles.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
@@ -39,11 +40,12 @@ class ClaimLandMenuTest : FreeSpec({
 
         val playerId = UUID.randomUUID()
         val eye = Location(world, 0.0, 65.62, 0.0, 0f, 0f)
+        var liveEye = eye
         val body = Location(world, 0.0, 64.0, 0.0, 0f, 0f)
         val player = mockk<Player>(relaxed = true)
         every { player.uniqueId } returns playerId
         every { player.world } returns world
-        every { player.eyeLocation } returns eye
+        every { player.eyeLocation } answers { liveEye }
         every { player.location } returns body
         every { player.isChunkSent(any<Long>()) } returns true
 
@@ -57,6 +59,23 @@ class ClaimLandMenuTest : FreeSpec({
             labels = LandsUiPanelAction.entries.associateWith { Component.text(it.name) },
             displays = packetOwner,
         )
+
+        ClaimLandMenuGeometry.BUTTON_WIDTH shouldBe 1.50
+        ClaimLandMenuGeometry.BUTTON_HEIGHT shouldBe 0.23
+        ClaimLandMenuGeometry.BUTTON_SCALE shouldBe 0.80f
+        ClaimLandMenuGeometry.COLUMN_SPACING shouldBe 1.55
+        ClaimLandMenuGeometry.ROW_SPACING shouldBe 0.26
+        ClaimLandMenuGeometry.TITLE_WIDTH shouldBe 3.0
+        ClaimLandMenuGeometry.TITLE_SCALE shouldBe 0.48f
+        kotlin.math.abs(ClaimLandMenuGeometry.headingRect.centerY - 0.535) shouldBeLessThanOrEqual 1e-9
+        ClaimLandMenuGeometry.rects.getValue(LandsUiPanelAction.ADD_MEMBER).centerX shouldBe -0.775
+        ClaimLandMenuGeometry.rects.getValue(LandsUiPanelAction.OVERVIEW).centerY shouldBe -0.26
+        val nearSafeDistance = ClaimLandMenuGeometry.firstSafeCenterDistance(2.4) { it <= 0.75 }
+        (nearSafeDistance != null && nearSafeDistance in 0.65..0.75) shouldBe true
+        kotlin.math.abs(
+            ClaimLandMenuGeometry.stableDistance(2.4, 1.2) { it <= 1.5 }!! - 1.26,
+        ) shouldBeLessThanOrEqual 1e-9
+        ClaimLandMenuGeometry.stableDistance(2.4, 1.2) { it <= 1.3 } shouldBe 1.2
 
         val turnedHead = body.clone().apply { yaw = 130f }
         ClaimLandMenuGeometry.bodyMoved(body, turnedHead) shouldBe false
@@ -80,7 +99,7 @@ class ClaimLandMenuTest : FreeSpec({
         (kotlin.math.abs(labelLocation.y - (center.y + buttonRect.centerY - buttonRect.height / 2.0 + 0.025)) < 1e-9) shouldBe true
         (kotlin.math.abs(labelLocation.x - (center.x + kotlin.math.cos(Math.toRadians(90.0)) * buttonRect.centerX)) < 1e-9) shouldBe true
         (kotlin.math.abs(labelLocation.z - (center.z + kotlin.math.sin(Math.toRadians(90.0)) * buttonRect.centerX)) < 1e-9) shouldBe true
-        val buttonCenter = ClaimLandMenuGeometry.textLocation(center, fixedYaw, -0.8, 0.12)
+        val buttonCenter = ClaimLandMenuGeometry.textLocation(center, fixedYaw, -0.8, buttonRect.centerY)
         val hit = ClaimLandMenuGeometry.rayPlaneHit(
             eye,
             buttonCenter.toVector().subtract(eye.toVector()),
@@ -88,7 +107,7 @@ class ClaimLandMenuTest : FreeSpec({
             fixedYaw,
         )
         (kotlin.math.abs(hit!!.x + 0.8) < 1e-9) shouldBe true
-        (kotlin.math.abs(hit.y - 0.12) < 1e-9) shouldBe true
+        (kotlin.math.abs(hit.y - buttonRect.centerY) < 1e-9) shouldBe true
         ClaimLandMenuGeometry.actionAt(hit.x, hit.y) shouldBe LandsUiPanelAction.ADD_MEMBER
 
         val titleRect = ClaimLandMenuGeometry.headingRect
@@ -127,22 +146,40 @@ class ClaimLandMenuTest : FreeSpec({
             center.x + 0.1, centerBounds.minY + 0.05, center.z + 0.05,
         )
         ClaimLandMenuGeometry.overlapsPanel(center, fixedYaw, centerShiftObstacle) shouldBe true
-        val safeOffset = ClaimLandMenuGeometry.chooseShift(null) { shift ->
+        val safeOffset = ClaimLandMenuGeometry.chooseShift(null) { shift, clearance ->
+            clearance shouldBe 0.0
             val shiftedCenter = ClaimLandMenuGeometry.center(eye, fixedYaw, 2.4, shift)
             !ClaimLandMenuGeometry.overlapsPanel(shiftedCenter, fixedYaw, centerShiftObstacle)
         }
         safeOffset shouldBe ClaimLandMenuShift(up = 0.25)
         ClaimLandMenuGeometry.chooseShift(ClaimLandMenuShift(up = 0.5)) {
-            it == ClaimLandMenuShift(up = 0.5) || it == ClaimLandMenuShift()
+            shift, clearance -> shift == ClaimLandMenuShift(up = 0.5) && clearance == 0.0
         } shouldBe ClaimLandMenuShift(up = 0.5)
+        ClaimLandMenuGeometry.chooseShift(ClaimLandMenuShift(side = 0.5)) { shift, clearance ->
+            clearance > 0.0 || shift == ClaimLandMenuShift(side = 0.5) || shift == ClaimLandMenuShift(side = 0.44)
+        } shouldBe ClaimLandMenuShift(side = 0.44)
 
         menu.show(player, "home", "Дом")
         created shouldBe 7
         menu.contains(playerId) shouldBe true
         menu.landId(playerId) shouldBe "home"
+        menu.isLookingAt(player) shouldBe true
+        liveEye = Location(world, 0.0, eye.y, 0.0, -40f, 0f)
+        menu.show(player, "home", "Дом")
+        menu.isLookingAt(player) shouldBe true
+        liveEye = Location(world, 0.0, eye.y, 0.0, -45f, 0f)
+        menu.show(player, "home", "Дом")
+        menu.isLookingAt(player) shouldBe false
+        liveEye = Location(world, 0.0, eye.y, 0.0, -40f, 0f)
+        menu.show(player, "home", "Дом")
+        menu.isLookingAt(player) shouldBe false
+        liveEye = eye
+        menu.show(player, "home", "Дом")
+        menu.isLookingAt(player) shouldBe true
         menu.hide(playerId)
         menu.contains(playerId) shouldBe false
         menu.landId(playerId) shouldBe null
+        menu.isLookingAt(player) shouldBe false
         packetDisplays.forEach { verify(exactly = 1) { it.remove() } }
     }
 })

@@ -34,11 +34,13 @@ class LandsUiControllerTest : StringSpec({
             val land = LandsUiLand("panel-land", "Дом", playerId, 1, 64, setOf(playerId), 12, 0.0, true)
             val gateway = mockk<LandsUiGateway>(relaxed = true)
             val context = LandsUiContext(land.id, LandsUiAccess.MEMBER)
+            val currentContext = LandsUiContext(land.id, LandsUiAccess.CURRENT)
             every { gateway.currentLandId(player) } returns land.id
             every { gateway.land(player, land.id) } returns land
             every { gateway.managementView(player, context) } returns landsUiTestView(
                 context, land, permissions = setOf(LandsUiPermission.TRUST),
             )
+            every { gateway.managementView(player, currentContext) } returns landsUiTestView(currentContext, land)
             val settings = try {
                 ConfigManager.clear()
                 LandsUiConfig.load(dataPath).snapshot()
@@ -59,7 +61,7 @@ class LandsUiControllerTest : StringSpec({
                         LandsUiPanelAction.RULES to "lands.rules",
                         LandsUiPanelAction.TERRITORY to "lands.territory",
                         LandsUiPanelAction.SETTINGS to "lands.settings",
-                        LandsUiPanelAction.OVERVIEW to "lands.details",
+                        LandsUiPanelAction.OVERVIEW to "lands.inspect",
                     ).forEach { (action, expectedScreen) ->
                         controller.openPanelAction(player, land.id, action)
                         checkNotNull(screen).id shouldBe expectedScreen
@@ -74,7 +76,8 @@ class LandsUiControllerTest : StringSpec({
                     controller.openPanelAction(player, land.id, LandsUiPanelAction.MEMBERS)
                     checkNotNull(screen).id shouldBe "lands.home"
 
-                    verify(exactly = 6) { gateway.managementView(player, context) }
+                    verify(exactly = 5) { gateway.managementView(player, context) }
+                    verify(exactly = 1) { gateway.managementView(player, currentContext) }
                     verify(exactly = 0) { gateway.select(player, any()) }
                     verify(exactly = 0) { gateway.change(player, any(), any()) }
                 } finally {
@@ -110,9 +113,11 @@ class LandsUiControllerTest : StringSpec({
             val gateway = mockk<LandsUiGateway>(relaxed = true)
             every { gateway.land(player, land.id) } returns land
             val memberContext = LandsUiContext(land.id, LandsUiAccess.MEMBER)
+            val currentContext = LandsUiContext(land.id, LandsUiAccess.CURRENT)
             every { gateway.managementView(player, memberContext) } returns landsUiTestView(
                 memberContext, land, permissions = setOf(LandsUiPermission.TRUST),
             )
+            every { gateway.managementView(player, currentContext) } returns landsUiTestView(currentContext, land)
             val settings = try {
                 ConfigManager.clear()
                 LandsUiConfig.load(dataPath).snapshot()
@@ -150,9 +155,8 @@ class LandsUiControllerTest : StringSpec({
                     checkNotNull(screen).id shouldBe "lands.details"
 
                     every { gateway.currentLandId(player) } returns land.id
-                    every { gateway.select(player, land.id) } returns true
                     controller.openCurrent(player)
-                    checkNotNull(screen).id shouldBe "lands.details"
+                    checkNotNull(screen).id shouldBe "lands.inspect"
                     checkNotNull(screen).exitButton!!.onClick.handle(context)
                     checkNotNull(screen).id shouldBe "lands.home"
                     every { gateway.currentLandId(player) } returns null
@@ -169,6 +173,7 @@ class LandsUiControllerTest : StringSpec({
                     // Reopen once more through the public entry point to catch stale-screen cycles.
                     controller.openDetails(player, land.id)
                     checkNotNull(screen).id shouldBe "lands.details"
+                    verify(exactly = 0) { gateway.select(player, any()) }
                 } finally {
                     controller.close()
                 }

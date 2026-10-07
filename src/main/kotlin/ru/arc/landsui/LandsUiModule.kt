@@ -45,6 +45,8 @@ object LandsUiModule : PluginModule {
 
     internal fun hasClaimMenu(player: Player): Boolean = claimTool?.hasMenu(player) == true
 
+    internal fun isLookingAtClaimMenu(player: Player): Boolean = claimTool?.isLookingAtMenu(player) == true
+
     internal fun isClaimMenuTarget(player: Player): Boolean = claimTool?.isMenuTarget(player) == true
 
     fun createClaimBlockItem(player: Player): ItemStack? {

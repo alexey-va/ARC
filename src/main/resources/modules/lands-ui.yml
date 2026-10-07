@@ -10,7 +10,7 @@ limits:
 
 text:
   panel-title: '<#80e89b><land><newline><white>ЛКМ / ПКМ — выбрать действие'
-  panel-add-member: '<#80e89b>Добавить игрока'
+  panel-add-member: '<#80e89b>Добавить'
   panel-members: '<#92bed8>Участники'
   panel-rules: '<#c4a7e7>Права'
   panel-territory: '<#92bed8>Территория'

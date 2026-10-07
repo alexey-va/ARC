@@ -5,22 +5,30 @@ The root lists the viewer's settlements and a separate «Приват под н�
 Players can inspect foreign land without selecting it for subsequent Lands commands.
 Outside protected land the root explains why inspection is unavailable.
 
-Holding a native Lands claim block while standing inside a land you own shows a
+Holding a native Lands claim block while standing inside a land you own or belong to shows a
 personal six-button world menu: add a player, members, rules, territory, settings
 and overview. Left and right click select the actual visible control without
 Shift; clicks outside the panel keep the existing reusable claim-block behavior.
 The menu belongs to `ClaimBlockTool`/`LandsUiModule`, independently of onboarding
 and its world list. The old onboarding label is hidden while this menu is visible.
-Names are literal components. Each click re-resolves the current land and owner,
+Names are literal components. Each click re-resolves the current land and membership,
 then the existing dialog gateway rechecks membership and each native permission;
 opening a page does not change Lands' selected edit land or mutate membership.
 Text is configured under `text.panel-*` in `modules/lands-ui.yml`.
+Shift+F and the global menu’s «Приват под ногами» entry open the same current-land
+screen, also used by the panel’s overview action. Direct management shortcuts
+retain native member permissions. Neither entry selects a different Lands edit
+land. Foreign-land inspection remains read-only.
+The close panel uses Builder’s button size, spacing, title scale and hover style.
+While aiming at it, the onboarding boundary guide is hidden and restores on looking away.
 
 `ClaimLandMenu` owns only the fixed world layout and per-viewer visuals;
 `PaperPacketDisplays` owns shared transport, budget, received chunks and cleanup.
 Head turns and crouching in place leave the menu stationary for aiming. Movement
 uses short interpolation with obstacle checks, bounded upward/sideways detours
-and closer placement; controls behind blocks or beyond reach cannot be clicked.
+and closer placement down to 0.35 blocks when necessary; controls behind blocks
+or beyond reach cannot be clicked. Expected blocked placements retry on the next
+tick; unexpected renderer failures back off briefly and recover without reconnecting.
 Item removal, leaving the land, teleport, world change, death, quit, reload and
 shutdown remove the panel. Visual/native-client acceptance is separate from
 focused geometry and dialog-routing tests.

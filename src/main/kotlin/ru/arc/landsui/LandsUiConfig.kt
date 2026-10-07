@@ -49,7 +49,7 @@ class LandsUiConfig(private val config: Config) {
 
         private val DEFAULT_TEXT = linkedMapOf(
             "panel-title" to "<#80e89b><land><newline><white>ЛКМ / ПКМ — выбрать действие",
-            "panel-add-member" to "<#80e89b>Добавить игрока",
+            "panel-add-member" to "<#80e89b>Добавить",
             "panel-members" to "<#92bed8>Участники",
             "panel-rules" to "<#c4a7e7>Права",
             "panel-territory" to "<#92bed8>Территория",

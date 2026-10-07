@@ -173,7 +173,7 @@ class MenuShortcutControllerTest {
             }
             player.inventory.setItemInMainHand(claimBlock)
             mockkObject(LandsUiModule)
-            every { LandsUiModule.open(any()) } just runs
+            every { LandsUiModule.openCurrent(any()) } just runs
             try {
                 MenuShortcutController(paper.createSimplePlugin("shortcut-test")).use { shortcuts ->
                     fun swap(): PlayerSwapHandItemsEvent = PlayerSwapHandItemsEvent(
@@ -185,11 +185,11 @@ class MenuShortcutControllerTest {
                     player.isSneaking = true
                     swap().isCancelled shouldBe true
                     swap().isCancelled shouldBe true
-                    verify(exactly = 2) { LandsUiModule.open(player) }
+                    verify(exactly = 2) { LandsUiModule.openCurrent(player) }
 
                     player.isSneaking = false
                     swap().isCancelled shouldBe false
-                    verify(exactly = 2) { LandsUiModule.open(player) }
+                    verify(exactly = 2) { LandsUiModule.openCurrent(player) }
                 }
             } finally {
                 unmockkObject(LandsUiModule)

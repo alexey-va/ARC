@@ -49,7 +49,7 @@ internal class ClaimBlockTool(
     private val pending = mutableMapOf<UUID, Pending>()
     private var menu: ClaimLandMenu? = null
     private val menuClickAfter = mutableMapOf<UUID, Long>()
-    private val failedMenuViewers = mutableSetOf<UUID>()
+    private val menuRetries = mutableMapOf<UUID, Long>()
     private var tick = 0L
 
     private data class Pending(
@@ -73,15 +73,17 @@ internal class ClaimBlockTool(
         tasks.runTimer(1L, 1L) {
             tick++
             Bukkit.getOnlinePlayers().forEach { player ->
-                if (player.uniqueId in failedMenuViewers) return@forEach
+                if (tick < (menuRetries[player.uniqueId] ?: 0L)) return@forEach
                 try {
                     val land = menuLand(player)
                     if (land == null) clearMenu(player)
                     else menu?.show(player, land.ulid.toString(), land.name)
+                    menuRetries.remove(player.uniqueId)
                 } catch (failure: Exception) {
                     clearMenu(player)
-                    failedMenuViewers += player.uniqueId
-                    error("Claim land menu failed for {}; disabled until reconnect", player.name, failure)
+                    // Blocked placement is a normal result; only unexpected failures back off.
+                    menuRetries[player.uniqueId] = tick + 100L
+                    error("Claim land menu failed for {}; retrying in 5 seconds", player.name, failure)
                 }
             }
         }
@@ -94,10 +96,12 @@ internal class ClaimBlockTool(
         ) return null
         val at = player.location
         return lands.getLandByUnloadedChunk(player.world, at.blockX shr 4, at.blockZ shr 4)
-            ?.takeIf { it.exists() && it.ownerUID == player.uniqueId }
+            ?.takeIf { it.exists() && it.isTrusted(player.uniqueId) }
     }
 
     fun hasMenu(player: Player): Boolean = menu?.contains(player.uniqueId) == true
+
+    fun isLookingAtMenu(player: Player): Boolean = menu?.isLookingAt(player) == true
 
     private fun menuTarget(player: Player): Pair<String, LandsUiPanelAction>? {
         val active = menu ?: return null
@@ -237,7 +241,7 @@ internal class ClaimBlockTool(
         menu?.close()
         menu = null
         menuClickAfter.clear()
-        failedMenuViewers.clear()
+        menuRetries.clear()
         pending.values.toList().forEach { it.selection?.disable() }
         pending.clear()
         tasks.close()
@@ -268,12 +272,17 @@ internal class ClaimBlockTool(
 
     @EventHandler fun quitMenu(event: PlayerQuitEvent) {
         clearMenu(event.player)
-        failedMenuViewers.remove(event.player.uniqueId)
+        menuRetries.remove(event.player.uniqueId)
     }
+    private fun resetMenu(player: Player) {
+        clearMenu(player)
+        menuRetries.remove(player.uniqueId)
+    }
+
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    fun teleportMenu(event: PlayerTeleportEvent) = clearMenu(event.player)
-    @EventHandler fun worldMenu(event: PlayerChangedWorldEvent) = clearMenu(event.player)
-    @EventHandler fun deathMenu(event: PlayerDeathEvent) = clearMenu(event.entity)
+    fun teleportMenu(event: PlayerTeleportEvent) = resetMenu(event.player)
+    @EventHandler fun worldMenu(event: PlayerChangedWorldEvent) = resetMenu(event.player)
+    @EventHandler fun deathMenu(event: PlayerDeathEvent) = resetMenu(event.entity)
 
     private fun finish(request: Pending, player: Player, key: String?, failure: Throwable? = null) {
         if (pending[request.player] !== request) return

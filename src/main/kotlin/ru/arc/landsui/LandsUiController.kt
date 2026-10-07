@@ -42,9 +42,7 @@ class LandsUiController(
 
     fun openCurrent(player: Player) {
         val landId = gateway.currentLandId(player)
-        if (landId != null && gateway.land(player, landId) != null) selectAndOpenDetails(player, landId)
-        else if (landId != null) openInspection(player, landId)
-        else openRoot(player)
+        if (landId != null) openInspection(player, landId) else openRoot(player)
     }
 
     fun openRoot(player: Player) {
@@ -178,6 +176,10 @@ class LandsUiController(
         if (gateway.currentLandId(player) != landId || gateway.land(player, landId) == null) {
             player.sendMessage(text("land-gone"))
             openRoot(player)
+            return
+        }
+        if (action == LandsUiPanelAction.OVERVIEW) {
+            openInspection(player, landId)
             return
         }
         management.openPanelAction(player, LandsUiContext(landId, LandsUiAccess.MEMBER), action)

@@ -59,6 +59,13 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
             tick++
             Bukkit.getOnlinePlayers().forEach { player ->
                 try {
+                    // The close action panel takes visual priority while aiming at it.
+                    // Restore the existing boundary guide as soon as the player looks away.
+                    if (LandsUiModule.isLookingAtClaimMenu(player)) {
+                        particles?.holding(player.uniqueId, true)
+                        sessions[player.uniqueId]?.let(::clearVisuals)
+                        return@forEach
+                    }
                     sessions[player.uniqueId]?.let { session ->
                         session.anchor = claimGuideAnchor(session.anchor, player.eyeLocation, player.isSneaking)
                     }
@@ -145,8 +152,12 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         val footprint = if (success) session.confirmed.toSet() else claimGuideChunks(target, session.radius)
         val claims = footprint.associateWith { integration.getLandByUnloadedChunk(world, it.x, it.z) }
         val selected = integration.getLandPlayer(player.uniqueId)?.getEditLand(false)
-        val own = claims.values.all { it != null && it.ownerUID == player.uniqueId }
-        val occupied = claims.values.any { it != null && it.ownerUID != player.uniqueId }
+        val own = claims.values.all {
+            it != null && (it.ownerUID == player.uniqueId || player.uniqueId in it.trustedPlayers)
+        }
+        val occupied = claims.values.any {
+            it != null && it.ownerUID != player.uniqueId && player.uniqueId !in it.trustedPlayers
+        }
         val state = when {
             success -> "success"
             own -> "own"

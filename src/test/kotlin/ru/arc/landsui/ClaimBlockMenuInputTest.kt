@@ -63,7 +63,7 @@ class ClaimBlockMenuInputTest : StringSpec({
                     fixture.lands.getLandByUnloadedChunk(fixture.player.world, any(), any())
                 }
                 verify(exactly = 3) { fixture.land.exists() }
-                verify(exactly = 3) { fixture.land.ownerUID }
+                verify(exactly = 3) { fixture.land.isTrusted(fixture.player.uniqueId) }
                 verify(exactly = 0) { fixture.lands.getLandPlayer(fixture.player.uniqueId) }
                 verify(exactly = 0) { fixture.scheduler.runSync(any()) }
             } finally {
@@ -97,7 +97,7 @@ class ClaimBlockMenuInputTest : StringSpec({
         }
     }
 
-    "revoked ownership or a different current land rejects a stale panel target" {
+    "revoked membership or a different current land rejects a stale panel target" {
         withFixture { fixture ->
             val otherOwner = UUID.randomUUID()
             fixture.landState.ownerId = otherOwner
@@ -114,6 +114,7 @@ class ClaimBlockMenuInputTest : StringSpec({
                 val movedUlid = mockk<ULID>()
                 every { movedLand.exists() } returns true
                 every { movedLand.ownerUID } returns fixture.player.uniqueId
+                every { movedLand.isTrusted(fixture.player.uniqueId) } returns true
                 every { movedLand.ulid } returns movedUlid
                 every { movedUlid.toString() } returns "01KMOVEDLAND0000000000000000"
                 fixture.landState.ownerId = fixture.player.uniqueId
@@ -124,6 +125,37 @@ class ClaimBlockMenuInputTest : StringSpec({
                 moved.isCancelled shouldBe false
 
                 verify(exactly = 0) { LandsUiModule.openPanelAction(any(), any(), any()) }
+                verify(exactly = 0) { fixture.lands.getLandPlayer(fixture.player.uniqueId) }
+                verify(exactly = 0) { fixture.scheduler.runSync(any()) }
+            } finally {
+                unmockkObject(LandsUiModule)
+            }
+        }
+    }
+
+    "trusted member is eligible and revoking native trust blocks the next click" {
+        withFixture { fixture ->
+            fixture.landState.ownerId = UUID.randomUUID()
+            fixture.landState.trustedIds += fixture.player.uniqueId
+
+            mockkObject(LandsUiModule)
+            try {
+                every { LandsUiModule.openPanelAction(any(), any(), any()) } just runs
+
+                val memberClick = interact(fixture.player, EquipmentSlot.HAND, null)
+                fixture.tool.interact(memberClick)
+                memberClick.isCancelled shouldBe true
+                verify(exactly = 1) {
+                    LandsUiModule.openPanelAction(fixture.player, fixture.landId, LandsUiPanelAction.ADD_MEMBER)
+                }
+
+                fixture.landState.trustedIds.remove(fixture.player.uniqueId)
+                val revokedClick = interact(fixture.player, EquipmentSlot.HAND, null)
+                fixture.tool.interact(revokedClick)
+                revokedClick.isCancelled shouldBe false
+
+                verify(exactly = 1) { LandsUiModule.openPanelAction(any(), any(), any()) }
+                verify(exactly = 2) { fixture.land.isTrusted(fixture.player.uniqueId) }
                 verify(exactly = 0) { fixture.lands.getLandPlayer(fixture.player.uniqueId) }
                 verify(exactly = 0) { fixture.scheduler.runSync(any()) }
             } finally {
@@ -161,6 +193,7 @@ class ClaimBlockMenuInputTest : StringSpec({
 private data class LandLookupState(
     var land: Land,
     var ownerId: UUID,
+    val trustedIds: MutableSet<UUID> = mutableSetOf(),
 )
 
 private data class ClaimBlockMenuFixture(
@@ -193,6 +226,10 @@ private fun withFixture(
         every { ulid.toString() } returns landId
         every { land.exists() } returns true
         every { land.ownerUID } answers { landState.ownerId }
+        every { land.isTrusted(any<UUID>()) } answers {
+            val playerId = firstArg<UUID>()
+            playerId == landState.ownerId || playerId in landState.trustedIds
+        }
         every { land.ulid } returns ulid
         every { lands.getWorld(player.world) } returns mockk(relaxed = true)
         every { lands.getLandByUnloadedChunk(player.world, any(), any()) } answers { landState.land }
