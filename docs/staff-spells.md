@@ -26,7 +26,8 @@ There are no loot-table or shop changes. Anyone holding an issued sample can use
   range. Collision is checked along each movement segment, not just at endpoints.
 - **Изумрудная волна / nova:** the Celtic Staff
   (`3dfantasyweaponscit:holy_celtic_staff`) strikes visible mobs within six blocks
-  around the caster once, with expanding turquoise/green rings.
+  around the caster once, with a four-block turquoise whirlwind and an expanding
+  ground ring. The whirlwind is visual; it does not add repeated damage or pull mobs.
 
 Use the main-hand right click, including a direct click on an entity. Look near a
 mob for chain/mark; small particles over its head preview their selected target.
@@ -38,7 +39,7 @@ tamed pets are excluded. EliteMobs also applies its instance/minion eligibility.
 Marks and flying orbs cancel on caster death, quit, world change, module reload
 or shutdown. Acquired marks also cancel on an invalid/distant target. Flight has
 a fixed maximum range and at most eight orbs per caster; visual bursts are short
-and use only particles and local sounds. Each cast captures combat facts, so
+and use client-only block displays, sparse particles and local sounds. Each cast captures combat facts, so
 changing the held item cannot change a delayed hit's level or critical roll.
 
 ## Ownership and damage contract
@@ -46,7 +47,7 @@ changing the held item cannot change a delayed hit's level or critical roll.
 `src/main/kotlin/ru/arc/staffspells/` owns input, targeting, visuals and lifecycle.
 `modules/staff-spells.yml` owns tuning and Russian item text. `StaffSpellsModule`
 reloads through `/arc reload`; a reload clears pending marks, flying orbs and old scheduled
-effects before installing the new settings. No displays or temporary blocks exist.
+effects before installing the new settings. No native entities or temporary blocks are created.
 
 These are separate `BLAZE_ROD` items marked only with ARC's
 `staff_spell_prototype` PDC. The configured ItemsAdder item is copied through
@@ -77,6 +78,32 @@ are deliberately outside this prototype. Tuning is experimental, not a finished
 equipment/economy balance. When EliteMobs is absent, the same visuals and normal
 Bukkit damage remain usable without loading the optional integration classes.
 
+## Display effects and limits
+
+The six source-driven silhouettes are a branching lightning rod, an orbiting violet
+seal that bursts into crystals, a fan of ice blades, a golden spear, a magma orb
+with orbiting fragments, and a turquoise whirlwind. The mark and orb follow their
+existing combat positions; the beam, cone and nova retain their manual aiming and
+single-hit behavior. Casting into empty space also produces the display effect.
+
+`StaffSpellDisplayGeometry` is shared by the renderer and offline textured preview.
+`StaffSpellDisplayEffects` reuses core `PaperPacketDisplays` under the `staff-spells`
+visual budget source. It creates no native Bukkit entities, chunks or chunk tickets.
+Core filters received chunks, player worlds, range and connections and coalesces
+updates through the shared packet budget. Every piece has its own real world anchor
+so culling also works for beams crossing chunk boundaries.
+
+Hard bounds are 32 pieces per scene, four scenes per caster, twelve scenes globally,
+and four scenes per viewer within 32 blocks (at most 128 handles eligible for one
+viewer). A viewer's own casts are selected first, then nearby casts. The oldest
+visual scene is evicted when a pool fills; damage and projectile collision continue
+independently. Shapes update every four ticks with four-tick client interpolation.
+Moving marks/projectiles update their logical position between display frames.
+Ordinary effects last 12–28 ticks; tracked effects expire with their mark/projectile,
+with a final 160-tick safety cap. All scenes are removed on caster death, quit,
+world change, expiry or module shutdown/reload. The limits bound effect size and
+traffic sources; they are not a measured TPS/FPS guarantee.
+
 ## Verification
 
 Run the focused staff tests through the repository's Gradle `test` task with the
@@ -87,3 +114,9 @@ They do not establish in-client appearance or the feel of fighting moving mobs.
 On the selected runtime, use the issuance command and compare the six samples
 against moving mobs, an obstructed target and a group, then try switching items
 during cooldown. Review EliteMobs scaling/progression in real combat separately.
+
+For the offline preview, run `exportStaffSpellPreview` with
+`-PstaffSpellPreviewOutput=/absolute/path/scene.json`, then use the location-atelier
+textured preview builder with a vanilla palette. Inspect launch, middle and impact
+poses from player-eye, front, side and top views. This reuses runtime geometry but
+does not validate Minecraft interpolation, particles, sound or combat feel.

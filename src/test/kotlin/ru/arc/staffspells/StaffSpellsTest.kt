@@ -7,6 +7,7 @@ import io.mockk.mockkConstructor
 import io.mockk.mockk
 import io.mockk.spyk
 import io.mockk.unmockkConstructor
+import io.mockk.verify
 import net.kyori.adventure.text.Component
 import org.bukkit.FluidCollisionMode
 import org.bukkit.Location
@@ -239,6 +240,7 @@ class StaffSpellsTest : FreeSpec({
             h.scheduler.tick(1)
 
             h.hits.map { it.uniqueId } shouldBe listOf(target.uniqueId)
+            h.removedEffects.any { it != null } shouldBe true
 
             h.hits.clear()
             val wallWorld = h.paper.addSimpleWorld("staff-ember-wall")
@@ -260,6 +262,15 @@ class StaffSpellsTest : FreeSpec({
             h.scheduler.tick(10)
 
             h.hits shouldBe emptyList()
+            verify(exactly = 1) { h.effects.cancel(quitting.uniqueId) }
+
+            val flightWorld = h.paper.addSimpleWorld("staff-ember-flight")
+            val flying = h.player("staff-ember-flight", flightWorld, StaffSpell.EMBER)
+            h.controller.cast(flying)
+            h.scheduler.tick(1)
+            h.movedEffects.isNotEmpty() shouldBe true
+            h.controller.onQuit(PlayerQuitEvent(flying, Component.empty()))
+            verify(exactly = 1) { h.effects.cancel(flying.uniqueId) }
         }
     }
 
@@ -340,6 +351,8 @@ class StaffSpellsTest : FreeSpec({
             moving.teleport(Location(world, 0.5, 64.0, 6.0))
             h.scheduler.tick(6)
             h.hitLocations.single().z shouldBe 6.0
+            h.movedEffects.any { it.second.z == 6.0 } shouldBe true
+            h.removedEffects.any { it != null } shouldBe true
 
             val invalidPlayer = h.player("mark-invalid", world, StaffSpell.MARK)
             val invalidTarget = h.zombie(world, x = 0.5, z = 4.0)
@@ -374,6 +387,10 @@ class StaffSpellsTest : FreeSpec({
             changingWorld.teleport(Location(otherWorld, 0.5, 64.0, 0.5))
             h.controller.onWorldChange(PlayerChangedWorldEvent(changingWorld, world))
 
+            verify(exactly = 1) { h.effects.cancel(dyingPlayer.uniqueId) }
+            verify(exactly = 1) { h.effects.cancel(quitting.uniqueId) }
+            verify(exactly = 1) { h.effects.cancel(changingWorld.uniqueId) }
+
             val hitCountBeforeCancelledMarks = h.hits.size
             h.scheduler.tick(6)
             h.hits.size shouldBe hitCountBeforeCancelledMarks
@@ -384,6 +401,7 @@ class StaffSpellsTest : FreeSpec({
             closingPlayer.inventory.setItemInMainHand(ItemStack(Material.AIR))
             val hitCountBeforeClose = h.hits.size
             h.controller.close()
+            verify(exactly = 1) { h.effects.close() }
             h.scheduler.tick(10)
             h.hits.size shouldBe hitCountBeforeClose
         }
@@ -395,6 +413,9 @@ private data class StaffHarness(
     val scheduler: TestTaskScheduler,
     val config: StaffSpellConfig,
     val controller: StaffSpellController,
+    val effects: StaffSpellDisplayEffects,
+    val movedEffects: MutableList<Pair<UUID, Location>>,
+    val removedEffects: MutableList<UUID?>,
     val captures: MutableList<Player>,
     val hits: MutableList<LivingEntity>,
     val hitLocations: MutableList<Location>,
@@ -460,8 +481,17 @@ private fun withStaffHarness(
                         hitLocations += target.location.clone()
                         hit(player, target)
                     }
-                    val controller = StaffSpellController(config, settings, damage)
-                    val harness = StaffHarness(paper, scheduler, config, controller, captures, hits, hitLocations)
+                    val effects = mockk<StaffSpellDisplayEffects>(relaxed = true)
+                    every { effects.play(any(), any(), any(), any(), any(), any(), any()) } answers { UUID.randomUUID() }
+                    val movedEffects = mutableListOf<Pair<UUID, Location>>()
+                    val removedEffects = mutableListOf<UUID?>()
+                    every { effects.move(any(), any()) } answers {
+                        movedEffects += firstArg<UUID>() to secondArg<Location>().clone()
+                    }
+                    every { effects.remove(any()) } answers { removedEffects += firstArg<UUID?>() }
+                    val controller = StaffSpellController(config, settings, damage, effects)
+                    val harness = StaffHarness(paper, scheduler, config, controller, effects,
+                        movedEffects, removedEffects, captures, hits, hitLocations)
                     try {
                         block(harness)
                     } finally {

@@ -31,6 +31,7 @@ import ru.arc.commands.arc.tabComplete
 import ru.arc.config.ConfigManager
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.PluginModule
+import ru.arc.paper.display.PaperPacketDisplays
 import ru.arc.util.CooldownManager
 import java.util.UUID
 import org.bukkit.util.Vector
@@ -45,7 +46,8 @@ object StaffSpellsModule : PluginModule {
         val config = StaffSpellConfig(ConfigManager.of(ARC.instance.dataPath, "modules/staff-spells.yml"))
         val settings = config.settings // Validate the replacement before closing the active generation.
         shutdown()
-        controller = StaffSpellController(config, settings, StaffSpellDamage()).also {
+        controller = StaffSpellController(config, settings, StaffSpellDamage(),
+            StaffSpellDisplayEffects(PaperPacketDisplays(ARC.instance, "staff-spells"))).also {
             Bukkit.getPluginManager().registerEvents(it, ARC.instance)
             it.start()
         }
@@ -66,6 +68,7 @@ internal class StaffSpellController(
     private val config: StaffSpellConfig,
     private val settings: StaffSpellSettings,
     private val damage: StaffSpellDamage,
+    private val effects: StaffSpellDisplayEffects,
 ) : Listener, AutoCloseable {
     private val tasks = LifecycleTaskScope()
     private val visuals = StaffSpellVisuals(tasks)
@@ -147,7 +150,9 @@ internal class StaffSpellController(
             StaffSpell.MARK -> {
                 val selected = target(player)
                 val point = selected?.let(::center) ?: aimPoint(player)
-                marks[player.uniqueId] = PendingStaffMark(selected, point, player.world.uid, cast, tuning, settings.markTicks)
+                effects.remove(marks.remove(player.uniqueId)?.visualId)
+                val visualId = effects.play(player.uniqueId, spell, point, radius = 1.3, durationTicks = settings.markTicks)
+                marks[player.uniqueId] = PendingStaffMark(selected, point, player.world.uid, cast, tuning, settings.markTicks, visualId)
                 visuals.markLaunch(player.eyeLocation, point)
             }
             StaffSpell.FROST -> {
@@ -157,6 +162,9 @@ internal class StaffSpellController(
                     }
                 }
                 visuals.frost(player.eyeLocation, settings.frostRange, settings.frostDegrees)
+                effects.play(player.uniqueId, spell, player.eyeLocation,
+                    player.eyeLocation.add(player.eyeLocation.direction.multiply(settings.frostRange)),
+                    radius = kotlin.math.tan(Math.toRadians(settings.frostDegrees)) * settings.frostRange)
             }
             StaffSpell.LANCE -> {
                 val eye = player.eyeLocation
@@ -165,18 +173,26 @@ internal class StaffSpellController(
                     damage.hit(player, it, cast, tuning.power, tuning.vanillaDamage)
                 }
                 visuals.lance(eye, end)
+                effects.play(player.uniqueId, spell, eye, end, radius = 0.75, durationTicks = 12, impact = true)
             }
             StaffSpell.EMBER -> {
                 // The direction is captured once. Flight never steers towards a nearby mob.
-                if (embers.count { it.cast.casterId == player.uniqueId } >= 8)
-                    embers.removeAt(embers.indexOfFirst { it.cast.casterId == player.uniqueId })
-                embers += PendingStaffEmber(player.eyeLocation, player.eyeLocation.direction, cast, tuning, settings.range)
+                if (embers.count { it.cast.casterId == player.uniqueId } >= 8) {
+                    val removed = embers.removeAt(embers.indexOfFirst { it.cast.casterId == player.uniqueId })
+                    effects.remove(removed.visualId)
+                }
+                val visualId = effects.play(player.uniqueId, spell, player.eyeLocation,
+                    player.eyeLocation.add(player.eyeLocation.direction), radius = 0.85,
+                    durationTicks = kotlin.math.ceil(settings.range / settings.emberSpeed).toInt() + 4)
+                embers += PendingStaffEmber(player.eyeLocation, player.eyeLocation.direction, cast, tuning, settings.range, visualId)
                 visuals.emberTrail(player.eyeLocation, player.eyeLocation)
             }
             StaffSpell.NOVA -> {
                 val origin = player.location.add(0.0, 0.8, 0.0)
                 areaDamage(player, origin, settings.novaRadius, cast, tuning)
                 visuals.nova(origin, settings.novaRadius)
+                effects.play(player.uniqueId, spell, player.location, radius = settings.novaRadius,
+                    durationTicks = 28, impact = true)
             }
         }
         tasks.runLater(tuning.cooldownTicks) {
@@ -187,7 +203,9 @@ internal class StaffSpellController(
 
     private fun chain(player: Player, first: LivingEntity?, cast: StaffSpellCast, tuning: StaffSpellTuning) {
         if (first == null) {
-            visuals.lightning(player.eyeLocation, aimPoint(player))
+            val end = aimPoint(player)
+            visuals.lightning(player.eyeLocation, end)
+            effects.play(player.uniqueId, StaffSpell.CHAIN, player.eyeLocation, end, radius = 0.65, durationTicks = 12)
             return
         }
         val visited = mutableSetOf<UUID>()
@@ -199,6 +217,7 @@ internal class StaffSpellController(
             val endpoint = center(victim)
             visited += victim.uniqueId
             visuals.lightning(origin, endpoint)
+            effects.play(player.uniqueId, StaffSpell.CHAIN, origin, endpoint, radius = 0.65, durationTicks = 12, impact = true)
             if (!damage.hit(player, victim, cast, tuning.power * scale, tuning.vanillaDamage * scale)) return
             origin = endpoint
             current = nearby(player, endpoint, settings.chainRadius)
@@ -220,11 +239,14 @@ internal class StaffSpellController(
                 (mark.target != null && !damage.eligible(player, mark.target)) ||
                 player.eyeLocation.distanceSquared(origin) > (settings.range + 1) * (settings.range + 1)) {
                 iterator.remove()
+                effects.remove(mark.visualId)
                 continue
             }
+            effects.move(mark.visualId, origin)
             mark.remainingTicks -= 2
             if (mark.remainingTicks <= 0) {
                 iterator.remove()
+                effects.remove(mark.visualId)
                 due += player to mark
             } else {
                 visuals.markCharge(origin, 1.0 - mark.remainingTicks.toDouble() / settings.markTicks)
@@ -234,6 +256,7 @@ internal class StaffSpellController(
             val origin = mark.target?.let(::center) ?: mark.point
             areaDamage(player, origin, settings.markRadius, mark.cast, mark.tuning, mark.target)
             visuals.markBurst(origin, settings.markRadius)
+            effects.play(player.uniqueId, StaffSpell.MARK, origin, radius = settings.markRadius, durationTicks = 16, impact = true)
         }
     }
 
@@ -245,6 +268,7 @@ internal class StaffSpellController(
             val player = Bukkit.getPlayer(ember.cast.casterId)
             if (player == null || !ready(player) || player.world != ember.position.world) {
                 iterator.remove()
+                effects.remove(ember.visualId)
                 continue
             }
             val from = ember.position
@@ -258,15 +282,18 @@ internal class StaffSpellController(
             ember.remainingDistance -= distance
             if (victim != null || from.distanceSquared(blockEnd) < distance * distance - 0.0001 || ember.remainingDistance <= 0.001) {
                 iterator.remove()
+                effects.remove(ember.visualId)
                 impacts += Triple(player, ember, end to victim)
             } else {
                 ember.position = end
+                effects.move(ember.visualId, end)
             }
         }
         // Damage events can themselves trigger quit/teleport cleanup; no active list iterator here.
         impacts.forEach { (player, ember, impact) ->
             areaDamage(player, impact.first, settings.emberRadius, ember.cast, ember.tuning, impact.second)
             visuals.emberBurst(impact.first, settings.emberRadius)
+            effects.play(player.uniqueId, StaffSpell.EMBER, impact.first, radius = settings.emberRadius, durationTicks = 16, impact = true)
         }
     }
 
@@ -330,6 +357,7 @@ internal class StaffSpellController(
     private fun cancel(playerId: UUID) {
         marks.remove(playerId)
         embers.removeAll { it.cast.casterId == playerId }
+        effects.cancel(playerId)
     }
 
     @EventHandler fun onQuit(event: PlayerQuitEvent) = cancel(event.player.uniqueId)
@@ -340,15 +368,16 @@ internal class StaffSpellController(
         tasks.close()
         marks.clear()
         embers.clear()
+        effects.close()
     }
 
 }
 
 private data class PendingStaffMark(val target: LivingEntity?, val point: Location, val worldId: UUID,
-    val cast: StaffSpellCast, val tuning: StaffSpellTuning, var remainingTicks: Int)
+    val cast: StaffSpellCast, val tuning: StaffSpellTuning, var remainingTicks: Int, val visualId: UUID?)
 
 private data class PendingStaffEmber(var position: Location, val direction: Vector,
-    val cast: StaffSpellCast, val tuning: StaffSpellTuning, var remainingDistance: Double)
+    val cast: StaffSpellCast, val tuning: StaffSpellTuning, var remainingDistance: Double, val visualId: UUID?)
 
 internal fun center(entity: LivingEntity) = entity.location.add(0.0, entity.height * 0.5, 0.0)
 

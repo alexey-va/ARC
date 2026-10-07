@@ -14,7 +14,7 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-/** Small, particle-only spell animations. Entry points and delayed phases always run on Paper's main thread. */
+/** Sparse accents around the display silhouettes; all delayed phases run on Paper's main thread. */
 internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
     fun lightning(from: Location, to: Location) = dispatch {
         val start = from.clone()
@@ -51,7 +51,7 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         val end = to.clone()
         val distance = segmentLength(start, end) ?: return@dispatch
         val frame = frame(end.toVector().subtract(start.toVector())) ?: return@dispatch
-        val steps = (distance * 1.6).toInt().coerceIn(12, 36)
+        val steps = (distance * 0.5).toInt().coerceIn(4, 12)
         for (i in 0..steps) {
             val t = i / steps.toDouble()
             val base = interpolate(start, end, t)
@@ -67,24 +67,24 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         }
         localSound(start, Sound.ENTITY_ENDERMAN_TELEPORT, 0.35f, 1.35f)
         tasks.runLater(1) {
-            lineSamples(start, end, 18).forEachIndexed { i, point ->
+            lineSamples(start, end, 8).forEachIndexed { i, point ->
                 if (i % 2 == 0) emit(point, Particle.WITCH)
             }
         }
     }
 
-    /** Called repeatedly while a mark is charging; stays below 64 particles per call and makes no sound. */
+    /** Called every two ticks: at most fourteen accents, with no repeated sound. */
     fun markCharge(at: Location, progress: Double) = dispatch {
         val origin = at.clone()
         if (!drawable(origin)) return@dispatch
         val charge = progress.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
-        repeat(24) { i ->
-            val angle = i * PI * 2 / 24
+        repeat(8) { i ->
+            val angle = i * PI * 2 / 8
             emit(origin.clone().add(cos(angle) * 0.58, 0.0, sin(angle) * 0.58), Particle.WITCH)
-            if (i % 2 == 0) emit(origin.clone().add(cos(angle) * 0.82, 0.0, sin(angle) * 0.82), Particle.DUST, VIOLET)
+            if (i % 4 == 0) emit(origin.clone().add(cos(angle) * 0.82, 0.0, sin(angle) * 0.82), Particle.DUST, VIOLET)
         }
-        repeat(ceil(charge * 16).toInt()) { i ->
-            val angle = i * PI * 2 / 16 - PI / 2
+        repeat(ceil(charge * 4).toInt()) { i ->
+            val angle = i * PI * 2 / 4 - PI / 2
             emit(origin.clone().add(cos(angle) * 1.02, 0.08, sin(angle) * 1.02), Particle.END_ROD)
         }
     }
@@ -117,7 +117,7 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         val end = to.clone()
         val distance = segmentLength(start, end) ?: return@dispatch
         val frame = frame(end.toVector().subtract(start.toVector())) ?: return@dispatch
-        val steps = (distance * 1.5).toInt().coerceIn(12, 32)
+        val steps = (distance * 0.5).toInt().coerceIn(4, 12)
         for (i in 0..steps) {
             val t = i / steps.toDouble()
             val base = interpolate(start, end, t)
@@ -132,12 +132,12 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         }
         localSound(start, Sound.ENTITY_ARROW_SHOOT, 0.42f, 0.55f)
         tasks.runLater(1) {
-            lineSamples(start, end, 18).forEachIndexed { i, point -> if (i % 2 == 0) emit(point, Particle.ELECTRIC_SPARK) }
+            lineSamples(start, end, 8).forEachIndexed { i, point -> if (i % 2 == 0) emit(point, Particle.ELECTRIC_SPARK) }
             emit(end, Particle.FLASH)
         }
     }
 
-    /** Trail is designed for per-tick projectile callbacks: at most 34 particles, no repeated sound. */
+    /** Per-tick trail: at most eight particles, no repeated sound. */
     fun emberTrail(from: Location, to: Location) = dispatch {
         val start = from.clone()
         val end = to.clone()
@@ -148,7 +148,7 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
             return@dispatch
         }
         val distance = segmentLength(start, end) ?: return@dispatch
-        lineSamples(start, end, (distance * 1.3).toInt().coerceIn(8, 16)).forEachIndexed { i, point ->
+        lineSamples(start, end, (distance * 1.3).toInt().coerceIn(1, 3)).forEachIndexed { i, point ->
             emit(point, Particle.FLAME)
             if (i % 2 == 0) emit(point.clone().add(0.0, 0.025, 0.0), Particle.SMOKE)
         }
@@ -177,8 +177,8 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
 
     private fun burstMarkFrame(at: Location, radius: Double, phase: Int) {
         val reach = radius * (0.48 + phase * 0.26)
-        repeat(28) { i ->
-            val angle = i * PI * 2 / 28
+        repeat(12) { i ->
+            val angle = i * PI * 2 / 12
             val point = at.clone().add(cos(angle) * reach, 0.0, sin(angle) * reach)
             emit(point, Particle.DUST, VIOLET)
             if (i % 2 == 0) emit(point.clone().add(0.0, 0.22 + phase * 0.12, 0.0), Particle.WITCH)
@@ -189,8 +189,8 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
     private fun frostWaveFrame(origin: Location, forward: Vector, right: Vector,
         range: Double, halfAngle: Double, phase: Int) {
         val distance = range * (phase + 1) / 4.0
-        for (i in 0..16) {
-            val angle = Math.toRadians((i / 8.0 - 1.0) * halfAngle)
+        for (i in 0..8) {
+            val angle = Math.toRadians((i / 4.0 - 1.0) * halfAngle)
             val direction = forward.clone().multiply(cos(angle)).add(right.clone().multiply(sin(angle))).normalize()
             val point = origin.clone().add(direction.multiply(distance))
             emit(point, Particle.SNOWFLAKE)
@@ -200,8 +200,8 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
 
     private fun emberBurstFrame(at: Location, radius: Double, phase: Int) {
         val reach = radius * (0.4 + phase * 0.3)
-        repeat(36) { i ->
-            val y = 1.0 - 2.0 * (i + 0.5) / 36.0
+        repeat(12) { i ->
+            val y = 1.0 - 2.0 * (i + 0.5) / 12.0
             val ring = sqrt(1.0 - y * y)
             val angle = i * 2.399963229728653
             val point = at.clone().add(cos(angle) * ring * reach, y * reach, sin(angle) * ring * reach)
@@ -212,16 +212,16 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
     }
 
     private fun emberCore(at: Location) {
-        repeat(8) { i ->
-            val angle = i * PI / 4
+        repeat(2) { i ->
+            val angle = i * PI
             emit(at.clone().add(cos(angle) * 0.11, 0.035, sin(angle) * 0.11), Particle.FLAME)
         }
     }
 
     private fun novaFrame(at: Location, radius: Double, phase: Int) {
         val reach = radius * (phase + 1) / 4.0
-        repeat(24) { i ->
-            val angle = i * PI * 2 / 24
+        repeat(12) { i ->
+            val angle = i * PI * 2 / 12
             val point = at.clone().add(cos(angle) * reach, 0.0, sin(angle) * reach)
             emit(point, Particle.DUST_COLOR_TRANSITION, GREEN_TO_AQUA)
             if (i % 2 == 0) emit(point.clone().add(0.0, 0.32, 0.0), Particle.WITCH)
@@ -233,7 +233,7 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
     private fun boltPoints(from: Location, to: Location, distance: Double): List<Location> {
         val direction = to.toVector().subtract(from.toVector())
         val frame = frame(direction) ?: return emptyList()
-        val steps = (distance * 2.0).toInt().coerceIn(12, 48)
+        val steps = (distance * 0.6).toInt().coerceIn(4, 16)
         return (0..steps).map { i ->
             val t = i / steps.toDouble()
             val base = interpolate(from, to, t)
