@@ -474,13 +474,9 @@ menus:
         - '<italic:false><#b8b8b8>Без поставок цена постепенно растёт.'
     contract-desk-sell:
       material: LIME_DYE
-      name: '<italic:false><#2bba43><bold>Продать'
+      name: '<italic:false><bold><name>'
       lore:
-        - '<italic:false><#e6fff3>Положите товары в ячейки справа.'
-        - '<italic:false><#e6fff3>Нажмите — сдать по текущим ценам.'
-        - '<italic:false><#e6fff3>Окно останется открытым.'
-        - '<italic:false>'
-        - '<italic:false><status>'
+        - { repeat: details, text: '<italic:false><line>' }
         - '<italic:false><#b8b8b8><page>'
     contract-desk-empty:
       material: LIGHT_GRAY_STAINED_GLASS_PANE

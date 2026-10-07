@@ -2,7 +2,6 @@ package ru.arc.contracts
 
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.nulls.shouldBeNull
 
 class ContractDeskLayoutTest : StringSpec({
     "all desks fill orders from the top left including the cells between page buttons" {
@@ -27,8 +26,8 @@ class ContractDeskLayoutTest : StringSpec({
     "pagination reserves the left bottom corners and keeps deposit slots stable" {
         val single = ContractDeskLayout.calculate(22)
         single.pageCount shouldBe 1
-        single.previousPage.shouldBeNull()
-        single.nextPage.shouldBeNull()
+        single.previousPage shouldBe 45
+        single.nextPage shouldBe 48
         val first = ContractDeskLayout.calculate(23, -10)
         val last = ContractDeskLayout.calculate(23, 40)
         first.visibleOrderRange shouldBe (0..21)

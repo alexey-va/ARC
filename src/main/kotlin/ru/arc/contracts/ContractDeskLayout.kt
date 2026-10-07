@@ -15,8 +15,8 @@ internal object ContractDeskLayout {
         val orderSlots: List<Int>,
         val depositSlots: List<Int>,
         val saleSlot: Int,
-        val previousPage: Int?,
-        val nextPage: Int?,
+        val previousPage: Int,
+        val nextPage: Int,
     )
 
     fun calculate(totalOrders: Int, requestedPage: Int = 0): Geometry {
@@ -32,8 +32,8 @@ internal object ContractDeskLayout {
             ROWS, page, pageCount, first until first + count, slots,
             (0 until ROWS).flatMap { row -> (5..8).map { row * 9 + it } },
             saleSlot = 4,
-            previousPage = if (pageCount > 1) 45 else null,
-            nextPage = if (pageCount > 1) 48 else null,
+            previousPage = 45,
+            nextPage = 48,
         )
     }
 }

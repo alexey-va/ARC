@@ -211,7 +211,8 @@ object ArcMenuSchema {
     val textContracts: Map<String, PaperMenuTextContract> = mapOf(
         "contract-desk-info" to PaperMenuTextContract(values = setOf("status", "page")),
         "contract-desk-order" to PaperMenuTextContract(values = setOf("name", "accepted", "price", "base", "growth", "rank", "remaining", "state")),
-        "contract-desk-sell" to PaperMenuTextContract(values = setOf("status", "page")),
+        "contract-desk-sell" to PaperMenuTextContract(values = setOf("name", "status", "page"),
+            repeats = mapOf("details" to setOf("line"))),
         "contract-desk-empty" to PaperMenuTextContract(),
         "contract-desk-previous" to PaperMenuTextContract(),
         "contract-desk-next" to PaperMenuTextContract(),

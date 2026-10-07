@@ -4,6 +4,7 @@ import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import org.bukkit.Bukkit
+import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
@@ -38,7 +39,16 @@ object NpcContractDepositGui : Listener {
         lateinit var session: PaperCloudStorageSession
         val menu = ArcMenuSchema.CONTRACT_DESKS.getValue(rows)
         var page = 0
+        var result: SaleResult? = null
     }
+    private data class SaleResult(
+        val quantity: Long,
+        val payout: Long,
+        val items: Map<Material, Int>,
+        val remaining: List<ItemStack?>,
+        val review: Boolean,
+        val rejection: Component?,
+    )
     fun start() {
         tasks = LifecycleTaskScope()
         Bukkit.getPluginManager().registerEvents(this, ARC.instance)
@@ -66,7 +76,7 @@ object NpcContractDepositGui : Listener {
                 title = TextUtil.mm(config.string("boards.$group.desk-title", "<#20252b>Заказы")),
                 background = ArcMenus.background(desk.menu),
                 buttons = mapOf(
-                    MenuElementId.of("sell") to PaperCloudStorageButton(ArcMenus.item(desk.menu, "sell", context("status" to Component.empty(), "page" to Component.empty()))) { sell(desk) },
+                    MenuElementId.of("sell") to PaperCloudStorageButton(sellButton(desk, orders, geometry.pageCount)) { sell(desk) },
                     MenuElementId.of("previous") to PaperCloudStorageButton(ArcMenus.item(desk.menu, "previous")) { turnPage(desk, -1) },
                     MenuElementId.of("next") to PaperCloudStorageButton(ArcMenus.item(desk.menu, "next")) { turnPage(desk, 1) },
                 ),
@@ -122,15 +132,83 @@ object NpcContractDepositGui : Listener {
                     else TextUtil.mm(config.string("defaults.availability.${availability.messageKey}", availability.fallback)),
             )).withType(material))
         }
-        val status = if (desk.storage.pending) text("processing", "<#ff9f0f>Принимаем товары…")
-            else if (orders.isEmpty()) text("empty", "<#ff9f0f>Сейчас открытых заказов нет.")
-            else text("instruction", "<#e6fff3>Слева — заказы. Справа — товары для сдачи.")
-        inventory.setItem(layout.slot("sell").index, ArcMenus.item(desk.menu, "sell", context(
-            "status" to status, "page" to if (pages > 1) Component.text("Страница ${desk.page + 1} / $pages") else Component.empty())))
-        inventory.setItem(layout.slot("previous").index, if (pages > 1 && desk.page > 0) ArcMenus.item(desk.menu, "previous") else empty.clone())
-        inventory.setItem(layout.slot("next").index, if (pages > 1 && desk.page < pages - 1) ArcMenus.item(desk.menu, "next") else empty.clone())
+        inventory.setItem(layout.slot("sell").index, sellButton(desk, orders, pages))
+        inventory.setItem(layout.slot("previous").index, ArcMenus.item(desk.menu, "previous"))
+        inventory.setItem(layout.slot("next").index, ArcMenus.item(desk.menu, "next"))
         desk.session.refresh()
     }
+
+    private fun sellButton(desk: Desk, orders: List<ResourceContractPlayerView>, pages: Int): ItemStack {
+        val snapshot = desk.storage.snapshot()
+        if (!desk.storage.pending && desk.result?.remaining != snapshot) desk.result = null
+        val result = desk.result
+        val offered = snapshot.filterNotNull().groupBy { it.type }
+        val originAllowed = ContractOriginGate.canSubmit(desk.player, desk.group)
+        val states = offered.mapValues { (_, stacks) ->
+            val amount = stacks.sumOf { it.amount }
+            val candidates = matchingOrders(stacks.first(), orders)
+            candidates.map { view ->
+                val availability = ContractBookAvailability.resolve(view, amount, originAllowed)
+                if (!desk.storage.pending && availability == ContractBookAvailability.READY &&
+                    ContractsManager.quote(desk.player, view.contract.id, minOf(amount, view.maxSubmissionQuantity)) == null)
+                    ContractBookAvailability.UNAVAILABLE else availability
+            }.let { reasons ->
+                if (ContractBookAvailability.READY in reasons) ContractBookAvailability.READY
+                else reasons.firstOrNull() ?: ContractBookAvailability.CLOSED
+            }
+        }
+        val lines = mutableListOf<Component>()
+        val name = when {
+            desk.storage.pending -> text("processing", "<#ff9f0f>Принимаем товары…")
+            result?.review == true -> text("button.review", "<#c42323>Сдача на проверке")
+            result != null && result.quantity > 0 -> text(
+                if (offered.isEmpty()) "button.sold" else "button.partial",
+                if (offered.isEmpty()) "<#2bba43>Сдано <quantity> шт. · +<price> <white>💰</white>"
+                else "<#ff9f0f>Сдано частично · +<price> <white>💰</white>",
+                "quantity" to Component.text(result.quantity), "price" to Component.text(formatContractMoney(result.payout)),
+            )
+            result?.rejection != null -> text("button.rejected", "<#ff9f0f>Не удалось сдать")
+            offered.isEmpty() -> text("button.empty", "<#2bba43>Положите товары справа")
+            states.values.all { it == ContractBookAvailability.PLAYER_CAP } -> text("button.cap", "<#ff9f0f>Лимит исчерпан")
+            states.values.none { it == ContractBookAvailability.READY } -> text("button.blocked", "<#ff9f0f>Товары не принимаются")
+            states.values.any { it != ContractBookAvailability.READY } -> text("button.mixed", "<#2bba43>Продать доступные товары")
+            else -> text("button.sell", "<#2bba43>Продать")
+        }
+        if (desk.storage.pending) {
+            lines += text("processing", "<#ff9f0f>Принимаем товары…")
+        } else {
+            if (result != null && result.quantity > 0) {
+                lines += text("success", "<#2bba43>Принято <quantity> шт. · +<price> <white>💰</white>",
+                    "quantity" to Component.text(result.quantity), "price" to Component.text(formatContractMoney(result.payout)))
+                result.items.forEach { (material, amount) ->
+                    lines += itemLine("accepted", "<#e6fff3>Сдано: <item> × <quantity>", material, amount)
+                }
+            }
+            if (result?.review == true) lines += text("review", "<#c42323>Сдача остановлена для проверки. Не повторяйте её до разбора администратором.")
+            result?.rejection?.let(lines::add)
+            offered.forEach { (material, stacks) ->
+                lines += if (result == null) itemLine("offered", "<#e6fff3>К сдаче: <item> × <quantity>", material, stacks.sumOf { it.amount })
+                    else itemLine("remaining", "<#e6fff3>Осталось: <item> × <quantity>", material, stacks.sumOf { it.amount })
+                val state = states.getValue(material)
+                lines += if (state == ContractBookAvailability.UNAVAILABLE)
+                    text("button.unavailable", "<#ff9f0f>Приём сейчас недоступен. Попробуйте позже.")
+                else TextUtil.mm(config.string("defaults.availability.${state.messageKey}", state.fallback))
+            }
+            if (result == null && offered.isEmpty()) lines += if (orders.isEmpty())
+                text("empty", "<#ff9f0f>Сейчас открытых заказов нет.")
+                else text("instruction", "<#e6fff3>Слева — заказы. Справа — товары для сдачи.")
+            if (result?.review != true && ContractBookAvailability.READY in states.values)
+                lines += text("button.action", "<#2bba43>Нажмите, чтобы сдать доступные товары.")
+        }
+        return ArcMenus.item(desk.menu, "sell", PaperMenuItemRenderContext(
+            values = mapOf("name" to name, "status" to name,
+                "page" to if (pages > 1) Component.text("Страница ${desk.page + 1} / $pages") else Component.empty()),
+            repeats = mapOf("details" to lines.map { mapOf("line" to it) }),
+        ))
+    }
+
+    private fun itemLine(key: String, fallback: String, material: Material, amount: Int) = text("button.$key", fallback,
+        "item" to Component.translatable(material.translationKey()), "quantity" to Component.text(amount))
 
     internal fun matchingOrders(offered: ItemStack, orders: List<ResourceContractPlayerView>) = orders.filter { view ->
         PaperContractItems.material(view.contract.itemKey)?.let { material ->
@@ -152,16 +230,20 @@ object NpcContractDepositGui : Listener {
 
     private fun sell(desk: Desk) {
         if (desk.storage.pending || !desk.session.isOpen) return
+        if (desk.storage.snapshot().all { it == null }) { render(desk); return }
         if (!ContractOriginGate.canSubmit(desk.player, desk.group)) {
             feedback(desk.player, "unavailable", "<#ff9f0f>Снова обратитесь к NPC, чтобы сдать товары.")
             return
         }
         desk.storage.pending = true
+        desk.result = null
         processing += desk.player.uniqueId
         render(desk)
-        fun finish(accepted: Long, payout: Long, review: Boolean = false) {
+        val acceptedItems = linkedMapOf<Material, Int>()
+        fun finish(accepted: Long, payout: Long, review: Boolean = false, rejection: Component? = null) {
             desk.storage.pending = false
             processing -= desk.player.uniqueId
+            desk.result = SaleResult(accepted, payout, acceptedItems.toMap(), desk.storage.snapshot(), review, rejection)
             if (desk.player.isOnline) {
                 if (accepted > 0) desk.player.sendMessage(text("success", "<#2bba43>Принято <quantity> шт. · +<price> <white>💰</white>",
                     "quantity" to Component.text(accepted), "price" to Component.text(formatContractMoney(payout))))
@@ -185,9 +267,14 @@ object NpcContractDepositGui : Listener {
                 if (failure != null || outcome is ContractSubmissionOutcome.ManualReview || outcome is ContractSubmissionOutcome.Unavailable)
                     finish(accepted, payout, review = true)
                 else if (outcome is ContractSubmissionOutcome.Committed) {
+                    val remaining = desk.storage.snapshot().filterNotNull().groupBy { it.type }
+                    offeredItems.groupBy { it.type }.forEach { (material, stacks) ->
+                        val removed = stacks.sumOf { it.amount } - remaining[material].orEmpty().sumOf { it.amount }
+                        if (removed > 0) acceptedItems[material] = acceptedItems.getOrDefault(material, 0) + removed
+                    }
                     desk.session.refresh()
                     submitNext(accepted + outcome.receipt.quantity, payout + outcome.receipt.payoutMinor)
-                } else finish(accepted, payout)
+                } else finish(accepted, payout, rejection = outcome?.let { ContractPlayerMessages.render(it, config, desk.group) })
             }
         }
         submitNext(0L, 0L)
@@ -197,6 +284,12 @@ object NpcContractDepositGui : Listener {
         val desk = sessions[event.whoClicked.uniqueId] ?: return
         if (event.view.topInventory !== desk.session.inventory) return
         desk.storage.persistTransfer()
+        refreshAfterTransfer(desk)
+    }
+    private fun refreshAfterTransfer(desk: Desk) {
+        tasks?.runLater(1L) {
+            if (sessions[desk.player.uniqueId] === desk && desk.session.isOpen) render(desk)
+        }
     }
     @EventHandler(priority = EventPriority.MONITOR)
     fun close(event: InventoryCloseEvent) {
