@@ -3,6 +3,8 @@ package ru.arc.origin
 import com.google.gson.GsonBuilder
 import java.nio.file.Files
 import java.nio.file.Path
+import org.joml.Quaternionf
+import org.joml.Vector3f
 
 /** Offline geometry receipt; uses production models/poses without a Bukkit world or spawned entities. */
 object WorkshopPreviewExport {
@@ -302,6 +304,31 @@ object WorkshopPreviewExport {
                 piece.size.x.toDouble(), piece.size.y.toDouble(), piece.size.z.toDouble()) +
                 mapOf("rotationX" to if (flip) 180.0 else 0.0, "rotationY" to if (rotateY) 180.0 else 0.0)
         }
+        fun turnedProp(
+            key: String,
+            geometry: List<OriginWorkshopWorkpiecePiece>,
+            from: OriginWorkshopPoint,
+            to: OriginWorkshopPoint,
+            flip: Boolean,
+            lift: Double,
+            progress: Double,
+        ): List<Map<String, Any>> {
+            val pose = originWorkshopTurnPose(from, to, Quaternionf(), flip, lift, progress)
+            val euler = Vector3f().also { pose.rotation.getEulerAnglesXYZ(it) }
+            return geometry.mapIndexed { index, piece ->
+                val localCenter = Vector3f(piece.center.x.toFloat(), piece.center.y.toFloat(), piece.center.z.toFloat())
+                pose.rotation.transform(localCenter)
+                cuboid(
+                    "$key-$index", piece.material.name,
+                    pose.center.x + localCenter.x, pose.center.y + localCenter.y, pose.center.z + localCenter.z,
+                    piece.size.x.toDouble(), piece.size.y.toDouble(), piece.size.z.toDouble(),
+                ) + mapOf(
+                    "rotationX" to Math.toDegrees(euler.x.toDouble()),
+                    "rotationY" to Math.toDegrees(euler.y.toDouble()),
+                    "rotationZ" to Math.toDegrees(euler.z.toDouble()),
+                )
+            }
+        }
         fun cue(recipe: OriginWorkshopGameRecipe, stage: OriginWorkshopGameStage, hovered: Boolean = false): List<Map<String, Any>> {
             val interaction = recipe.interactions.getValue(stage)
             val targetFaceDepth = if (
@@ -340,6 +367,20 @@ object WorkshopPreviewExport {
                 cue(upholster, OriginWorkshopGameStage.UPHOLSTER_TURN_FABRIC),
             hidden = setOf("upholsterer-sewing-fabric"),
             guidance = guidanceMetadata(dimensions, upholster, OriginWorkshopGameStage.UPHOLSTER_TURN_FABRIC))
+        val seamTurnFrom = originWorkshopSewingClothPoint(dimensions, 1.0)
+        val seamTurnTo = originWorkshopSewingClothPoint(dimensions, 0.0)
+        val firstSeam = originWorkshopUpholsteryPieces(stretchedEdges = 2, seams = 1)
+        for ((suffix, progress) in listOf("start" to 0.0, "mid" to 0.5, "end" to 1.0)) {
+            state(
+                "sewing-seam1-cover-turn-$suffix",
+                "Обивщик · разворот ткани со швом №1 ${when (suffix) { "start" -> "до"; "mid" -> "90°"; else -> "после" }}",
+                OriginWorkshopTableRole.UPHOLSTERER,
+                "sewing-foot", if (progress == 1.0) 1.0 else 0.0,
+                extras = turnedProp("cloth-turn", firstSeam, seamTurnFrom, seamTurnTo,
+                    flip = false, lift = 0.025, progress = progress),
+                hidden = setOf("upholsterer-sewing-fabric"),
+            )
+        }
         state("sewing-second-pass", "Обивщик · вторая кромка после разворота", OriginWorkshopTableRole.UPHOLSTERER,
             "sewing", 0.5,
             extras = prop("sewing-cloth", originWorkshopUpholsteryPieces(stretchedEdges = 2, seams = 1), sewingMid, rotateY = true),
@@ -359,6 +400,18 @@ object WorkshopPreviewExport {
         state("joined-top", "Сборщик · соединения после двух ударов", OriginWorkshopTableRole.ASSEMBLER,
             extras = prop("top", originWorkshopJoinedTopPieces(2, 2), assembler.interactions.getValue(OriginWorkshopGameStage.ASSEMBLER_PLACE_ANVIL).target),
             guidance = guidanceMetadata(dimensions, assembler, OriginWorkshopGameStage.ASSEMBLER_PLACE_ANVIL))
+        val assemblerTurnAt = assembler.interactions.getValue(OriginWorkshopGameStage.ASSEMBLER_ROTATE_TOP).target
+        val onePlanedEdge = originWorkshopJoinedTopPieces(edges = 1)
+        for ((suffix, progress) in listOf("start" to 0.0, "mid" to 0.5, "end" to 1.0)) {
+            state(
+                "assembler-planed-edge-turn-$suffix",
+                "Сборщик · поворот столешницы, кромка ${when (suffix) { "start" -> "до"; "mid" -> "90°"; else -> "после" }}",
+                OriginWorkshopTableRole.ASSEMBLER,
+                "vise", 1.0,
+                extras = turnedProp("top-turn", onePlanedEdge, assemblerTurnAt, assemblerTurnAt,
+                    flip = false, lift = 0.18, progress = progress),
+            )
+        }
         state("table-assembly", "Сборщик · столешница и обе ножки", OriginWorkshopTableRole.ASSEMBLER,
             extras = prop("top", originWorkshopJoinedTopPieces(2, 2), assemblyAt) + assembledLegs + cue(assembler, OriginWorkshopGameStage.ASSEMBLER_TIGHTEN_RIGHT),
             guidance = guidanceMetadata(dimensions, assembler, OriginWorkshopGameStage.ASSEMBLER_TIGHTEN_RIGHT))
@@ -370,6 +423,18 @@ object WorkshopPreviewExport {
         state("rack-cue", "Отделочник · нижняя ручка сушилки", OriginWorkshopTableRole.FINISHER,
             extras = cue(finisher, OriginWorkshopGameStage.FINISHER_START_PANEL))
         val panelAt = OriginWorkshopPoint(0.0, dimensions.height + 0.04, -0.45)
+        val panelTurnAt = panelAt
+        val frontSandedPanel = originWorkshopFinishingPanelPieces(sandedFront = 3)
+        for ((suffix, progress) in listOf("start" to 0.0, "mid" to 0.5, "end" to 1.0)) {
+            state(
+                "finisher-front-back-flip-$suffix",
+                "Отделочник · переворот панели ${when (suffix) { "start" -> "до"; "mid" -> "90°"; else -> "после" }}",
+                OriginWorkshopTableRole.FINISHER,
+                extras = turnedProp("panel-turn", frontSandedPanel, panelTurnAt, panelTurnAt,
+                    flip = true, lift = 0.36, progress = progress),
+                hidden = setOf("finisher-drying-panel-center"),
+            )
+        }
         state("coated", "Отделочник · три полосы покрытия", OriginWorkshopTableRole.FINISHER, "finish", 0.25,
             extras = prop("panel", originWorkshopFinishingPanelPieces(sandedFront = 3, coatedFront = 3), panelAt),
             hidden = setOf("finisher-drying-panel-center"))

@@ -259,42 +259,16 @@ internal object OriginWorkshopGame : PluginModule, Listener {
 
     private val start = OriginWorkshopPoint(0.0, 1.28, -1.35)
 
-    private data class PropPiece(val display: PacketBlockDisplay?, val geometry: OriginWorkshopWorkpiecePiece)
-    private data class Prop(
-        val pieces: List<PropPiece>,
-        val itemDisplay: PacketItemDisplay? = null,
-        var center: Location? = null,
-        var rotation: Quaternionf = Quaternionf(),
-    ) {
-        fun remove() {
-            pieces.forEach { it.display?.remove() }
-            itemDisplay?.remove()
-        }
-
-        fun glow(color: Color?) {
-            val displays: List<PacketDisplay> = itemDisplay?.let { listOf(it) } ?: pieces.mapNotNull { it.display }
-            displays.forEach {
-                it.isGlowing = color != null
-                it.glowColorOverride = color
-            }
-        }
-
-        fun cue(hovered: Boolean) {
-            pieces.mapNotNull { it.display }.forEach {
-                it.isGlowing = true
-                it.glowColorOverride = if (hovered) Color.WHITE else Color.AQUA
-                it.brightness = Display.Brightness(15, 15)
-                it.blockData = (if (hovered) Material.WHITE_CONCRETE else Material.LIGHT_BLUE_CONCRETE).createBlockData()
-            }
-        }
-
-        fun hitboxMatrix(piece: PropPiece): Matrix4f? {
-            val atCenter = center ?: return null
-            return originWorkshopWorkpieceHitboxMatrix(
-                OriginWorkshopPoint(atCenter.x, atCenter.y, atCenter.z), rotation, piece.geometry,
-            )
-        }
-    }
+    private data class Turn(
+        val prop: OriginWorkshopProp,
+        val from: Location,
+        val to: Location,
+        val rotation: Quaternionf,
+        val flip: Boolean,
+        val lift: Double,
+        val startedAt: Long,
+        val lowerSewingFoot: Boolean = false,
+    )
 
     private data class Session(
         val id: UUID,
@@ -310,12 +284,13 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         val boardModels: Map<OriginWorkshopBoardModel, ItemStack> = emptyMap(),
         val activity: OriginWorkshopSessionActivity = OriginWorkshopSessionActivity(began),
         val parts: MutableList<PacketDisplay> = mutableListOf(),
-        var workpiece: Prop? = null,
-        var carried: Prop? = null,
-        var leftLeg: Prop? = null,
-        var rightLeg: Prop? = null,
+        var workpiece: OriginWorkshopProp? = null,
+        var turn: Turn? = null,
+        var carried: OriginWorkshopProp? = null,
+        var leftLeg: OriginWorkshopProp? = null,
+        var rightLeg: OriginWorkshopProp? = null,
         var brush: PacketItemDisplay? = null,
-        var targetMarker: Prop? = null,
+        var targetMarker: OriginWorkshopProp? = null,
         var stretchedEdges: Int = 0,
         var seams: Int = 0,
         var padded: Boolean = false,
@@ -476,6 +451,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
                 cancel(current, reason.name.lowercase(), true)
                 return true
             }
+            if (current.turn != null) return true
             advanceTimedStage(current, player, nowTick())
         }
         if (current == null) {
@@ -623,7 +599,12 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         if (!applyAction(player, active, action)) return
         active.progress = next
         active.activity.recordActivity(now)
-        showStage(active, player, "STAGE")
+        if (active.turn == null) showStage(active, player, "STAGE") else {
+            particleOwner?.invalidatePending()
+            active.targetMarker?.remove()
+            active.targetMarker = null
+            refreshGuidance(active, player, now, force = true)
+        }
         animateMachine(active, now)
         player.playSound(
             player.location,
@@ -684,6 +665,9 @@ internal object OriginWorkshopGame : PluginModule, Listener {
                     else -> active.workpiece = item
                 }
                 active.carried = null
+                if (action == OriginWorkshopGameAction.PLACE_FABRIC) {
+                    OriginWorkshopTablesModule.setCraftPartVisible(tableId, "press-cloth", false)
+                }
                 if (action == OriginWorkshopGameAction.PLACE_SEWING) {
                     OriginWorkshopTablesModule.setCraftPartVisible(tableId, "sewing-fabric", false)
                 }
@@ -705,7 +689,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
             OriginWorkshopGameAction.REPOSITION_SAW -> {
                 val item = active.workpiece ?: return false
                 val at = OriginWorkshopTablesModule.pointAt(tableId, target(active, OriginWorkshopGameStage.CARRY_RAW_TO_SAW)) ?: return false
-                moveProp(item, at, boardRotation().rotateY(Math.PI.toFloat()), carrying = false)
+                beginTurn(active, item, at, lift = 0.18)
             }
             OriginWorkshopGameAction.ALIGN_DRILL_CENTER,
             OriginWorkshopGameAction.ALIGN_DRILL_LAST -> {
@@ -715,20 +699,21 @@ internal object OriginWorkshopGame : PluginModule, Listener {
             OriginWorkshopGameAction.STRETCH_FABRIC_LEFT,
             OriginWorkshopGameAction.STRETCH_FABRIC_RIGHT -> {
                 active.stretchedEdges++
-                refreshUpholstery(active, player)
+                refreshUpholstery(active)
             }
             OriginWorkshopGameAction.TURN_FABRIC -> {
                 val item = active.workpiece ?: return false
                 val dimensions = OriginWorkshopTablesModule.dimensionsFor(tableId) ?: return false
                 val at = OriginWorkshopTablesModule.pointAt(tableId, originWorkshopSewingClothPoint(dimensions, 0.0))
                     ?: return false
-                moveProp(item, at, Quaternionf(item.rotation).rotateY(Math.PI.toFloat()), carrying = false)
+                OriginWorkshopTablesModule.animateCraftMachine(tableId, "sewing-foot", 0.0)
+                beginTurn(active, item, at, lift = 0.025, lowerSewingFoot = true)
             }
             OriginWorkshopGameAction.ROTATE_TABLETOP,
             OriginWorkshopGameAction.ALIGN_JOIN_SECOND -> {
                 val item = active.workpiece ?: return false
-                val center = item.center ?: return false
-                moveProp(item, center, Quaternionf(item.rotation).rotateY(Math.PI.toFloat()), carrying = false)
+                val center = item.center
+                beginTurn(active, item, center, lift = 0.18)
             }
             OriginWorkshopGameAction.RELEASE_VISE ->
                 OriginWorkshopTablesModule.animateCraftMachine(tableId, "vise", 1.0)
@@ -736,17 +721,17 @@ internal object OriginWorkshopGame : PluginModule, Listener {
                 active.carried?.remove() ?: return false
                 active.carried = null
                 active.padded = true
-                refreshUpholstery(active, player)
+                refreshUpholstery(active)
             }
             OriginWorkshopGameAction.TUCK_PADDING_NEAR,
             OriginWorkshopGameAction.TUCK_PADDING_FAR -> {
                 active.tuckedEdges++
-                refreshUpholstery(active, player)
+                refreshUpholstery(active)
             }
             OriginWorkshopGameAction.FASTEN_COVER_LEFT,
             OriginWorkshopGameAction.FASTEN_COVER_RIGHT -> {
                 active.coverFasteners++
-                refreshUpholstery(active, player)
+                refreshUpholstery(active)
                 if (action == OriginWorkshopGameAction.FASTEN_COVER_RIGHT) finishProduct(active)
             }
             OriginWorkshopGameAction.START_FINISH_PANEL,
@@ -766,8 +751,8 @@ internal object OriginWorkshopGame : PluginModule, Listener {
                 active.brush?.remove()
                 val material = if (action == OriginWorkshopGameAction.PICK_ABRASIVE) Material.SANDSTONE else Material.BRUSH
                 active.brush = owner?.spawnItem(at, ItemStack(material))?.apply {
-                    isVisibleByDefault = false
-                    showTo(player)
+                    isVisibleByDefault = true
+                    viewRange = 0.5f
                     itemDisplayTransform = ItemDisplay.ItemDisplayTransform.FIXED
                     teleportDuration = 0
                     interpolationDuration = 0
@@ -781,8 +766,9 @@ internal object OriginWorkshopGame : PluginModule, Listener {
                 refreshFinishingPanel(active, player)
             }
             OriginWorkshopGameAction.FLIP_PANEL -> {
+                val item = active.workpiece ?: return false
                 active.panelBackUp = !active.panelBackUp
-                refreshFinishingPanel(active, player)
+                beginTurn(active, item, item.center, flip = true, lift = 0.36)
             }
             OriginWorkshopGameAction.COAT_PANEL_NEAR,
             OriginWorkshopGameAction.COAT_PANEL_CENTER,
@@ -802,38 +788,53 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         return true
     }
 
-    private fun replaceWorkpiece(active: Session, player: Player, pieces: List<OriginWorkshopWorkpiecePiece>) {
-        val previous = active.workpiece ?: return
-        val center = previous.center ?: return
-        val rotation = Quaternionf(previous.rotation)
-        previous.remove()
-        active.workpiece = spawnProp(active, player, pieces).also { moveProp(it, center, rotation, carrying = false) }
+    private fun updateWorkpiece(active: Session, pieces: List<OriginWorkshopWorkpiecePiece>,
+                                 boardModel: OriginWorkshopBoardModel? = null) {
+        active.workpiece?.update(renderGeometry(active, pieces, boardModel), boardItem(active, boardModel))
     }
 
-    private fun fastenAssemblerLeg(active: Session, player: Player, left: Boolean) {
-        val previous = (if (left) active.leftLeg else active.rightLeg) ?: return
-        val center = previous.center ?: return
-        val rotation = Quaternionf(previous.rotation)
-        val fastened = spawnProp(active, player, originWorkshopAssemblerLegPieces(fastened = true))
-        moveProp(fastened, center, rotation, carrying = false)
-        previous.remove()
-        if (left) active.leftLeg = fastened else active.rightLeg = fastened
+    private fun fastenAssemblerLeg(active: Session, left: Boolean) {
+        val leg = (if (left) active.leftLeg else active.rightLeg) ?: return
+        leg.update(originWorkshopAssemblerLegPieces(fastened = true))
     }
 
-    private fun refreshUpholstery(active: Session, player: Player) = replaceWorkpiece(active, player,
+    private fun refreshUpholstery(active: Session) = updateWorkpiece(active,
         originWorkshopUpholsteryPieces(active.stretchedEdges, active.seams, active.padded, active.tuckedEdges, active.coverFasteners))
 
     private fun refreshFinishingPanel(active: Session, player: Player) {
-        val height = OriginWorkshopTablesModule.dimensionsFor(tableId)?.height ?: return
-        val point = OriginWorkshopPoint(0.0, height + 0.04, -0.45)
-        val center = OriginWorkshopTablesModule.pointAt(tableId, point) ?: return
-        active.workpiece?.remove()
-        active.workpiece = spawnProp(active, player, originWorkshopFinishingPanelPieces(
+        val pieces = originWorkshopFinishingPanelPieces(
             active.sandedFaces[0], active.sandedFaces[1], active.coatedFaces[0], active.coatedFaces[1],
-        )).also {
-            val rotation = boardRotation()
-            if (active.panelBackUp) rotation.rotateX(Math.PI.toFloat())
-            moveProp(it, center, rotation, carrying = false)
+        )
+        if (active.workpiece != null) {
+            updateWorkpiece(active, pieces)
+            return
+        }
+        val height = OriginWorkshopTablesModule.dimensionsFor(tableId)?.height ?: return
+        val center = OriginWorkshopTablesModule.pointAt(tableId, OriginWorkshopPoint(0.0, height + 0.04, -0.45)) ?: return
+        active.workpiece = spawnProp(active, player, pieces).also {
+            moveProp(it, center, boardRotation(), carrying = false)
+        }
+    }
+
+    private fun beginTurn(active: Session, item: OriginWorkshopProp, to: Location,
+                          flip: Boolean = false, lift: Double, lowerSewingFoot: Boolean = false) {
+        active.turn = Turn(item, item.center.clone(), to.clone(), Quaternionf(item.rotation),
+            flip, lift, nowTick(), lowerSewingFoot)
+    }
+
+    private fun animateTurn(active: Session, player: Player, now: Long) {
+        val turn = active.turn ?: return
+        val progress = ((now - turn.startedAt).toDouble() / ORIGIN_WORKSHOP_TURN_TICKS).coerceIn(0.0, 1.0)
+        val pose = originWorkshopTurnPose(
+            OriginWorkshopPoint(turn.from.x, turn.from.y, turn.from.z),
+            OriginWorkshopPoint(turn.to.x, turn.to.y, turn.to.z), turn.rotation, turn.flip, turn.lift, progress,
+        )
+        moveProp(turn.prop, turn.from.clone().apply { x = pose.center.x; y = pose.center.y; z = pose.center.z },
+            pose.rotation, carrying = false)
+        if (progress >= 1.0) {
+            active.turn = null
+            if (turn.lowerSewingFoot) OriginWorkshopTablesModule.animateCraftMachine(tableId, "sewing-foot", 1.0)
+            showStage(active, player, "TURN_FINISHED")
         }
     }
 
@@ -864,6 +865,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
             return
         }
         val onlinePlayer = player ?: return
+        animateTurn(active, onlinePlayer, nowTick())
         advanceTimedStage(active, onlinePlayer, nowTick())
         animateMachine(active, nowTick())
         updateActiveHover(active, onlinePlayer)
@@ -875,7 +877,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
 
     private fun showCueParticles(active: Session, player: Player, now: Long) {
         val marker = active.targetMarker ?: return
-        val center = marker.center ?: return
+        val center = marker.center
         if (center.world.uid != player.world.uid || center.distanceSquared(player.location) > 64.0) return
         if (active.lastCueParticleTick != Long.MIN_VALUE && now - active.lastCueParticleTick < CUE_PARTICLE_INTERVAL_TICKS) return
         active.lastCueParticleTick = now
@@ -914,6 +916,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
     }
 
     private fun updateActiveHover(active: Session, player: Player) {
+        if (active.turn != null) return
         val hovered = activeTargetDistance(active, player) != null
         if (active.hoveredControl == hovered) return
         active.hoveredControl = hovered
@@ -936,15 +939,13 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         when (before.stage) {
             OriginWorkshopGameStage.SAWING,
             OriginWorkshopGameStage.SAWING_SECOND -> {
-                active.workpiece?.remove()
                 val second = before.stage == OriginWorkshopGameStage.SAWING_SECOND
                 val boardSize = if (second) CUT_BOARD_SIZE else OriginWorkshopGamePartSize(0.87f, 0.08f, 0.22f)
                 val output = target(active, OriginWorkshopGameStage.PICK_SAWN_BOARD)
                 val pieces = if (second) originWorkshopBoardPieces(holes = 0) else listOf(OriginWorkshopWorkpiecePiece(
                     OriginWorkshopPoint(0.0, 0.0, 0.0), boardSize, Material.OAK_PLANKS))
                 val boardModel = if (second) OriginWorkshopBoardModel.CUT else OriginWorkshopBoardModel.CUT_ONCE
-                active.workpiece = spawnProp(active, player, pieces, boardModel)
-                settle(active, active.workpiece!!, output)
+                updateWorkpiece(active, pieces, boardModel)
                 val offcut = spawnProp(active, player, listOf(OriginWorkshopWorkpiecePiece(
                     OriginWorkshopPoint(0.0, 0.0, 0.0), OriginWorkshopGamePartSize(0.12f, 0.08f, 0.22f), Material.OAK_PLANKS)),
                     OriginWorkshopBoardModel.OFFCUT)
@@ -953,8 +954,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
             OriginWorkshopGameStage.DRILLING,
             OriginWorkshopGameStage.DRILLING_SECOND,
             OriginWorkshopGameStage.DRILLING_THIRD -> {
-                val drillCenter = originWorkshopDrillSettleTarget(active.recipe, before.stage) ?: return
-                active.workpiece?.remove()
+                if (originWorkshopDrillSettleTarget(active.recipe, before.stage) == null) return
                 val holes = when (before.stage) {
                     OriginWorkshopGameStage.DRILLING -> 1
                     OriginWorkshopGameStage.DRILLING_SECOND -> 2
@@ -965,29 +965,28 @@ internal object OriginWorkshopGame : PluginModule, Listener {
                     2 -> OriginWorkshopBoardModel.DRILLED_2
                     else -> OriginWorkshopBoardModel.DRILLED_3
                 }
-                active.workpiece = spawnProp(active, player, originWorkshopBoardPieces(holes), boardModel)
-                settle(active, active.workpiece!!, drillCenter)
+                updateWorkpiece(active, originWorkshopBoardPieces(holes), boardModel)
             }
             OriginWorkshopGameStage.UPHOLSTER_SEWING,
             OriginWorkshopGameStage.UPHOLSTER_SEWING_SECOND -> {
                 active.seams++
-                refreshUpholstery(active, player)
+                refreshUpholstery(active)
             }
             OriginWorkshopGameStage.ASSEMBLER_VISING,
             OriginWorkshopGameStage.ASSEMBLER_VISING_SECOND -> {
                 active.planedEdges++
-                replaceWorkpiece(active, player, originWorkshopJoinedTopPieces(active.planedEdges, active.joinedEdges))
+                updateWorkpiece(active, originWorkshopJoinedTopPieces(active.planedEdges, active.joinedEdges))
             }
             OriginWorkshopGameStage.ASSEMBLER_HAMMERING,
             OriginWorkshopGameStage.ASSEMBLER_HAMMERING_SECOND -> {
                 active.joinedEdges++
-                replaceWorkpiece(active, player, originWorkshopJoinedTopPieces(active.planedEdges, active.joinedEdges))
+                updateWorkpiece(active, originWorkshopJoinedTopPieces(active.planedEdges, active.joinedEdges))
             }
             OriginWorkshopGameStage.FINISHER_WITHDRAWING -> {
                 OriginWorkshopTablesModule.setCraftPartVisible(tableId, "panel", false)
                 refreshFinishingPanel(active, player)
             }
-            OriginWorkshopGameStage.ASSEMBLER_CLAMPING_LEFT -> fastenAssemblerLeg(active, player, left = true)
+            OriginWorkshopGameStage.ASSEMBLER_CLAMPING_LEFT -> fastenAssemblerLeg(active, left = true)
             OriginWorkshopGameStage.ASSEMBLER_CLAMPING_RIGHT -> finishProduct(active)
             OriginWorkshopGameStage.CLAMPING_RIGHT,
             OriginWorkshopGameStage.FINISHER_DRYING -> finishProduct(active)
@@ -1015,11 +1014,10 @@ internal object OriginWorkshopGame : PluginModule, Listener {
                     ARC.instance.logger.log(Level.WARNING, "Origin workshop furniture display unavailable player=" + active.playerId, it)
                 }.getOrNull()
                 if (display != null) {
-                    display.isVisibleByDefault = false
-                    display.showTo(player)
+                    display.isVisibleByDefault = true
                     display.itemDisplayTransform = ItemDisplay.ItemDisplayTransform.NONE
                     display.billboard = Display.Billboard.FIXED
-                    display.viewRange = 0.8f
+                    display.viewRange = 0.5f
                     display.displayWidth = 1.0f
                     display.displayHeight = 1.0f
                     display.shadowRadius = 0f
@@ -1049,8 +1047,6 @@ internal object OriginWorkshopGame : PluginModule, Listener {
     private fun showStage(active: Session, player: Player, phase: String) {
         val stage = active.progress.stage
         particleOwner?.invalidatePending()
-        active.targetMarker?.remove()
-        active.targetMarker = null
         val action = active.recipe.interactions[stage]?.action
         if (action != null) {
             val point = target(active, stage)
@@ -1058,10 +1054,14 @@ internal object OriginWorkshopGame : PluginModule, Listener {
                 action in setOf(OriginWorkshopGameAction.TIGHTEN_LEFT, OriginWorkshopGameAction.TIGHTEN_RIGHT)
             ) 0.035 else null
             val geometry = originWorkshopPlacementMarker(action, targetFaceDepth = fastenerDepth)
-            active.targetMarker = spawnProp(active, player, geometry).also {
-                settle(active, it, point)
-                it.cue(false)
-            }
+            val marker = active.targetMarker?.also { it.update(geometry) }
+                ?: spawnProp(active, player, geometry, privateViewer = player)
+            active.targetMarker = marker
+            settle(active, marker, point)
+            marker.cue(false)
+        } else {
+            active.targetMarker?.remove()
+            active.targetMarker = null
         }
         OriginWorkshopTablesModule.highlightCraftControl(tableId, null, viewer = player)
         active.highlightedControl = control(active, stage)
@@ -1071,7 +1071,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         log(active, phase, stage)
     }
 
-    private fun currentPickableDisplay(active: Session): Prop? = when (active.progress.stage) {
+    private fun currentPickableDisplay(active: Session): OriginWorkshopProp? = when (active.progress.stage) {
         OriginWorkshopGameStage.SAW_REPOSITION,
         OriginWorkshopGameStage.DRILL_ALIGN_CENTER,
         OriginWorkshopGameStage.DRILL_ALIGN_LAST,
@@ -1090,7 +1090,9 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         val stage = active.progress.stage
         val timed = timedProgress(active, now)
         val stepLabel = "Этап ${minOf(stage.step, active.recipe.totalSteps)}/${active.recipe.totalSteps} · ${stage.instruction}"
-        val taskLabel = if (timed == null) {
+        val taskLabel = if (active.turn != null) {
+            "Поворачиваю заготовку…"
+        } else if (timed == null) {
             "$stepLabel · ${if (active.recipe.interactions[stage] == null) "Станок работает" else "ЛКМ"}"
         } else {
             "$stepLabel · ${floor(timed * 100.0).toInt()}%"
@@ -1106,7 +1108,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         label?.takeIf(PacketTextDisplay::isValid)?.let { currentLabel ->
             val at = OriginWorkshopTablesModule.pointAt(tableId, labelAnchor(active, stage))
             if (at != null && at.world.uid == active.worldId) currentLabel.teleport(at)
-            val shortLabel = buildString {
+            val shortLabel = if (active.turn != null) "Поворачиваю заготовку…" else buildString {
                 append(minOf(stage.step, active.recipe.totalSteps)).append('/').append(active.recipe.totalSteps)
                 append("\n").append(stage.instruction)
                 if (timed != null) append(" · ").append(floor(timed * 100.0).toInt()).append('%')
@@ -1151,45 +1153,26 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         moveProp(board, center, rotation, carrying = false)
     }
 
+    private fun renderGeometry(active: Session, geometry: List<OriginWorkshopWorkpiecePiece>,
+                               boardModel: OriginWorkshopBoardModel?) =
+        if (boardModel != null && active.workpieceRenderer == OriginWorkshopWorkpieceRenderer.CUBES)
+            originWorkshopCoarseBoardPieces(boardModel) else geometry
+
+    private fun boardItem(active: Session, boardModel: OriginWorkshopBoardModel?): ItemStack? =
+        boardModel?.takeIf { active.workpieceRenderer == OriginWorkshopWorkpieceRenderer.MODEL }?.let {
+            checkNotNull(active.boardModels[it]) { "Validated workshop board model ${it.itemId} is missing from the session" }
+        }
+
     private fun spawnProp(
         active: Session,
         player: Player,
         geometry: List<OriginWorkshopWorkpiecePiece>,
         boardModel: OriginWorkshopBoardModel? = null,
-    ): Prop {
-        val displays = checkNotNull(owner)
-        val renderGeometry = if (boardModel != null && active.workpieceRenderer == OriginWorkshopWorkpieceRenderer.CUBES) {
-            originWorkshopCoarseBoardPieces(boardModel)
-        } else geometry
-        val itemDisplay = boardModel?.takeIf { active.workpieceRenderer == OriginWorkshopWorkpieceRenderer.MODEL }?.let { model ->
-            val item = active.boardModels[model] ?: error("Validated workshop board model ${model.itemId} is missing from the session")
-            displays.spawnItem(player.location, item.clone()).apply {
-                isVisibleByDefault = false
-                showTo(player)
-                itemDisplayTransform = ItemDisplay.ItemDisplayTransform.FIXED
-                billboard = Display.Billboard.FIXED
-                viewRange = 0.8f
-                displayWidth = 1.0f
-                displayHeight = 1.0f
-                shadowRadius = 0f
-                interpolationDelay = -1
-                interpolationDuration = 2
-                teleportDuration = 1
-                transformation = Transformation(Vector3f(), Quaternionf(), Vector3f(1f), Quaternionf())
-            }
-        }?.also { active.parts += it }
-        val pieces = renderGeometry.map { piece ->
-            val display = if (itemDisplay == null) spawnBlock(displays, piece.material, player.location, piece.size).apply {
-                isVisibleByDefault = false
-                showTo(player)
-            } else null
-            display?.let { active.parts += it }
-            PropPiece(display, piece)
-        }
-        return Prop(pieces, itemDisplay)
-    }
+        privateViewer: Player? = null,
+    ) = OriginWorkshopProp(checkNotNull(owner), player.location, renderGeometry(active, geometry, boardModel),
+        boardItem(active, boardModel), privateViewer, onSpawn = { active.parts += it })
 
-    private fun settle(active: Session, item: Prop, point: OriginWorkshopPoint): Location? {
+    private fun settle(active: Session, item: OriginWorkshopProp, point: OriginWorkshopPoint): Location? {
         val center = OriginWorkshopTablesModule.pointAt(tableId, point) ?: return null
         moveProp(item, center, boardRotation(), carrying = false)
         item.glow(null)
@@ -1209,33 +1192,8 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         active.brush?.teleport(hand)
     }
 
-    private fun moveProp(item: Prop, center: Location, rotation: Quaternionf, carrying: Boolean) {
-        item.center = center.clone().apply { yaw = 0f; pitch = 0f }
-        item.rotation = Quaternionf(rotation)
-        item.pieces.forEach { piece ->
-            val display = piece.display ?: return@forEach
-            val geometry = piece.geometry
-            val offset = rotation.transform(Vector3f(geometry.center.x.toFloat(), geometry.center.y.toFloat(), geometry.center.z.toFloat()))
-            val at = center.clone().add(offset.x.toDouble(), offset.y.toDouble(), offset.z.toDouble()).apply { yaw = 0f; pitch = 0f }
-            display.interpolationDuration = if (carrying) 0 else 2
-            display.teleportDuration = if (carrying) 0 else 1
-            display.transformation = Transformation(Vector3f(), rotation, Vector3f(geometry.size.x, geometry.size.y, geometry.size.z), Quaternionf())
-            moveBlockCenter(display, at, geometry.size, rotation)
-        }
-        item.itemDisplay?.apply {
-            interpolationDuration = if (carrying) 0 else 2
-            teleportDuration = if (carrying) 0 else 1
-            teleport(center.clone().apply { yaw = 0f; pitch = 0f })
-            transformation = Transformation(
-                Vector3f(), originWorkshopBoardItemDisplayRotation(rotation), Vector3f(1f), Quaternionf(),
-            )
-        }
-    }
-
-    private fun moveBlockCenter(item: PacketBlockDisplay, center: Location, size: OriginWorkshopGamePartSize, rotation: Quaternionf = boardRotation()) {
-        val half = rotation.transform(Vector3f(size.x / 2f, size.y / 2f, size.z / 2f))
-        item.teleport(center.clone().subtract(half.x.toDouble(), half.y.toDouble(), half.z.toDouble()).apply { yaw = 0f; pitch = 0f })
-    }
+    private fun moveProp(item: OriginWorkshopProp, center: Location, rotation: Quaternionf, carrying: Boolean) =
+        item.move(center, rotation, carrying)
 
     /** Named controls and pickable materials use the exact rendered cubes, not a nearby control anchor. */
     private fun activeTargetDistance(active: Session, player: Player): Double? {
@@ -1261,7 +1219,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
                     if (display.location.world.uid != player.world.uid) return@mapNotNull null
                     blockDisplayHitMatrix(display)
                 } else {
-                    if (pickable.center?.world?.uid != player.world.uid) return@mapNotNull null
+                    if (pickable.center.world?.uid != player.world.uid) return@mapNotNull null
                     pickable.hitboxMatrix(piece) ?: return@mapNotNull null
                 }
                 originWorkshopRayTransformedCube(origin, ray, matrix, REACH)
@@ -1355,27 +1313,6 @@ internal object OriginWorkshopGame : PluginModule, Listener {
             busyFeedbackNanos.entries.firstOrNull()?.let { busyFeedbackNanos.remove(it.key) } ?: break
         }
     }
-
-    private fun spawnBlock(
-        displays: PaperPacketDisplays,
-        material: Material,
-        center: Location,
-        size: OriginWorkshopGamePartSize,
-    ) = displays.spawnBlock(center, material.createBlockData()).apply {
-            isVisibleByDefault = false
-            billboard = Display.Billboard.FIXED
-            viewRange = 0.8f
-            shadowRadius = 0f
-            interpolationDelay = -1
-            interpolationDuration = 2
-            teleportDuration = 2
-            transformation = cuboidTransform(size)
-            moveBlockCenter(this, center, size)
-        }
-
-    private fun cuboidTransform(size: OriginWorkshopGamePartSize) = Transformation(
-        Vector3f(), boardRotation(), Vector3f(size.x, size.y, size.z), Quaternionf(),
-    )
 
     private fun boardRotation(): Quaternionf {
         val origin = OriginWorkshopTablesModule.pointAt(tableId, OriginWorkshopPoint(0.0, 0.0, 0.0)) ?: return Quaternionf()
