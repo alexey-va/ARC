@@ -116,6 +116,22 @@ JAR/configuration, module readiness and `ORIGIN_WORKSHOP` sleep/route events.
 Client smoothness, reachability and product appearance need actual client
 observation; a successful package or health response does not establish them.
 
+## Visual transition ownership
+
+Each stage's private click marker is a new target: retire its display and create
+the next one at its final pose. It must not fly between controls. Prop geometry
+updates preserve IDs only for spatially unchanged cuboids; removed geometry is
+retired and new geometry receives new IDs, even if the total cube count matches.
+Material-only processing keeps the existing cuboid.
+
+Manual pickup and placement snap both the world anchor and local transform.
+After mounting, normal carry pose updates remain smooth. Explicit physical
+actions keep their trajectories and IDs: board feed through the saw, sliding to
+the next drill hole, sewing feed and lifted workpiece turns. A stationary update
+must retain the chosen snap/motion mode instead of re-enabling interpolation.
+The Core owner's ordered cleanup precedes replacement spawns; hiding and showing
+the same ID in one tick is not a reliable replacement because snapshots coalesce.
+
 ## Offline visual receipt
 
 `./gradlew exportWorkshopPreview -PworkshopPreviewOutput=/absolute/path/scene.json`

@@ -17,6 +17,7 @@ import org.bukkit.inventory.ItemStack
 import org.bukkit.util.Transformation
 import org.joml.Quaternionf
 import org.joml.Vector3f
+import java.util.UUID
 import kotlin.math.roundToLong
 import ru.arc.paper.display.PacketBlockDisplay
 import ru.arc.paper.display.PacketDisplay
@@ -103,6 +104,7 @@ class OriginWorkshopPropTest : FreeSpec({
             val prop = OriginWorkshopProp(harness.owner, Location(null, 0.0, 64.0, 0.0), listOf(workshopPiece()), model)
             val display = prop.itemDisplay ?: prop.pieces.single().display!!
             val carrier = mockk<Player>(relaxed = true)
+            every { carrier.uniqueId } returns UUID.fromString("00000000-0000-0000-0000-000000000001")
             var feet = Location(null, 3.0, 64.0, 4.0)
             every { carrier.location } answers { feet.clone() }
             every { carrier.height } returns 1.8
@@ -122,6 +124,21 @@ class OriginWorkshopPropTest : FreeSpec({
             verify { display.transformation = capture(transforms) }
             val shapeCorner = if (model == null) Vector3f(-0.06f, -0.04f, -0.05f) else Vector3f()
             transforms.last().translation.distance(shapeCorner.add(-0.4f, -0.38f, -0.1f)) shouldBeLessThan 1.0e-5f
+
+            val nextCarrier = mockk<Player>(relaxed = true)
+            every { nextCarrier.uniqueId } returns UUID.fromString("00000000-0000-0000-0000-000000000002")
+            every { nextCarrier.location } returns Location(null, 1.0, 64.0, 1.0)
+            every { nextCarrier.height } returns 1.8
+            prop.carry(nextCarrier, pose)
+            verify(exactly = 2) { display.interpolationDuration = 0 }
+            verify(exactly = 1) { display.interpolationDuration = 1 }
+            verify(exactly = 3) { display.teleportDuration = 0 }
+            verifyOrder {
+                display.interpolationDuration = 0
+                display.interpolationDuration = 1
+                display.interpolationDuration = 0
+            }
+            verify(exactly = 1) { display.attachTo(nextCarrier) }
 
             val placed = Location(null, 2.0, 65.0, 6.0)
             prop.move(placed, Quaternionf())
@@ -152,23 +169,32 @@ class OriginWorkshopPropTest : FreeSpec({
         prop.remove()
     }
 
-    "saw and drill geometry keeps every spatially unchanged cube packet id" {
+    "saw and drill preserve same-cuboid ids and replace only changed cuboids" {
         val harness = PropDisplayHarness()
         val raw = originWorkshopCoarseBoardPieces(OriginWorkshopBoardModel.RAW)
         val prop = OriginWorkshopProp(harness.owner, Location(null, 0.0, 64.0, 0.0), raw)
         val initialIds = prop.pieces.associate { cuboidKey(it.geometry) to checkNotNull(it.display).entityId }
+        val rawKeys = initialIds.keys
 
         val sawn = originWorkshopCoarseBoardPieces(OriginWorkshopBoardModel.CUT)
         prop.update(sawn)
         sawn.forEach { piece ->
             val key = cuboidKey(piece)
-            prop.pieces.single { cuboidKey(it.geometry) == key }.display!!.entityId shouldBe initialIds.getValue(key)
+            val actualId = prop.pieces.single { cuboidKey(it.geometry) == key }.display!!.entityId
+            if (key in initialIds) actualId shouldBe initialIds.getValue(key)
+            else check(actualId !in initialIds.values)
         }
-        harness.blocks shouldHaveSize raw.size
         val sawnKeys = sawn.mapTo(mutableSetOf(), ::cuboidKey)
+        val addedBySaw = sawnKeys - rawKeys
+        harness.blocks shouldHaveSize raw.size + addedBySaw.size
         raw.filterNot { cuboidKey(it) in sawnKeys }.forEach { removedGeometry ->
             val removed = propDisplayFor(harness, initialIds.getValue(cuboidKey(removedGeometry)))
             verify(exactly = 1) { removed.remove() }
+            verify(exactly = 1) { removed.teleport(any()) }
+        }
+        addedBySaw.forEach { key ->
+            val replacement = prop.pieces.single { cuboidKey(it.geometry) == key }.display!!
+            check(replacement.entityId !in initialIds.values)
         }
 
         val drilled = originWorkshopCoarseBoardPieces(OriginWorkshopBoardModel.DRILLED_1)
@@ -176,13 +202,22 @@ class OriginWorkshopPropTest : FreeSpec({
         prop.update(drilled)
         drilled.forEach { piece ->
             val key = cuboidKey(piece)
-            prop.pieces.single { cuboidKey(it.geometry) == key }.display!!.entityId shouldBe sawnIds.getValue(key)
+            val actualId = prop.pieces.single { cuboidKey(it.geometry) == key }.display!!.entityId
+            if (key in sawnIds) actualId shouldBe sawnIds.getValue(key)
+            else check(actualId !in sawnIds.values)
         }
-        harness.blocks shouldHaveSize raw.size
         val drilledKeys = drilled.mapTo(mutableSetOf(), ::cuboidKey)
+        val addedByDrill = drilledKeys - sawnKeys
+        harness.blocks shouldHaveSize raw.size + addedBySaw.size + addedByDrill.size
         sawn.filterNot { cuboidKey(it) in drilledKeys }.forEach { removedGeometry ->
-            val removed = propDisplayFor(harness, sawnIds.getValue(cuboidKey(removedGeometry)))
+            val key = cuboidKey(removedGeometry)
+            val removed = propDisplayFor(harness, sawnIds.getValue(key))
             verify(exactly = 1) { removed.remove() }
+            verify(exactly = if (key in rawKeys) 2 else 1) { removed.teleport(any()) }
+        }
+        addedByDrill.forEach { key ->
+            val replacement = prop.pieces.single { cuboidKey(it.geometry) == key }.display!!
+            check(replacement.entityId !in sawnIds.values)
         }
         drilled.forEach { piece ->
             val survivor = prop.pieces.single { cuboidKey(it.geometry) == cuboidKey(piece) }.display!!
@@ -190,7 +225,7 @@ class OriginWorkshopPropTest : FreeSpec({
         }
     }
 
-    "near-equal cubes reserve their handles before changed cubes reuse leftovers" {
+    "near-equal cube keeps its id while changed cubes are removed before new ids spawn" {
         val harness = PropDisplayHarness()
         val oldGeometry = listOf(
             workshopPiece(OriginWorkshopPoint(-0.2, 0.0, 0.0), Material.OAK_PLANKS),
@@ -206,12 +241,72 @@ class OriginWorkshopPropTest : FreeSpec({
 
         prop.update(updated)
 
-        harness.blocks shouldHaveSize 2
-        prop.pieces.map { it.display } shouldBe listOf(second, first)
+        harness.blocks shouldHaveSize 3
+        prop.pieces[1].display shouldBe first
+        val replacement = prop.pieces[0].display!!
+        check(replacement !== first && replacement !== second)
+        replacement.blockData.material shouldBe Material.SPRUCE_PLANKS
         val changedData = slot<BlockData>()
         verify(exactly = 1) { first.blockData = capture(changedData) }
         changedData.captured.material shouldBe Material.BIRCH_PLANKS
+        verifyOrder { second.remove(); harness.owner.spawnBlock(any(), any()) }
+        verify(exactly = 1) { second.remove() }
+        verify(exactly = 1) { second.teleport(any()) }
+        verify(exactly = 0) { first.remove() }
         verify(exactly = 0) { second.blockData = any() }
+    }
+
+    "move animates while manual placement snaps cubes and model displays" {
+        for (model in listOf(null, ItemStack(Material.OAK_PLANKS))) {
+            val harness = PropDisplayHarness()
+            val geometry = listOf(
+                workshopPiece(OriginWorkshopPoint(-0.1, 0.0, 0.0)),
+                workshopPiece(OriginWorkshopPoint(0.1, 0.0, 0.0), Material.SPRUCE_PLANKS),
+            )
+            val prop = OriginWorkshopProp(harness.owner, Location(null, 0.0, 64.0, 0.0), geometry, model)
+            val displays = prop.itemDisplay?.let(::listOf) ?: prop.pieces.mapNotNull { it.display }
+
+            prop.move(Location(null, 5.0, 65.0, 1.0), Quaternionf().rotationY(0.5f))
+            val target = Location(null, -3.0, 68.0, 7.0)
+            prop.place(target, Quaternionf())
+
+            displays.forEach { display ->
+                verifyOrder {
+                    display.interpolationDuration = 2
+                    display.teleportDuration = 1
+                    display.interpolationDuration = 0
+                    display.teleportDuration = 0
+                }
+                val teleports = mutableListOf<Location>()
+                verify(exactly = 3) { display.teleport(capture(teleports)) }
+                teleports.last().x shouldBe target.x
+                teleports.last().y shouldBe target.y
+                teleports.last().z shouldBe target.z
+            }
+
+            if (model == null) {
+                val movedGeometry = listOf(
+                    geometry[0].copy(center = OriginWorkshopPoint(-0.3, 0.0, 0.0)),
+                    geometry[1],
+                )
+                prop.update(movedGeometry)
+                val replacement = prop.pieces.first().display!!
+                val retained = prop.pieces.last().display!!
+                check(replacement.entityId != displays.first().entityId)
+                verify(exactly = 1) { replacement.interpolationDuration = 0 }
+                verify(exactly = 1) { replacement.teleportDuration = 0 }
+                verify(exactly = 2) { retained.interpolationDuration = 0 }
+                verify(exactly = 2) { retained.teleportDuration = 0 }
+                verify(exactly = 3) { displays.first().teleport(any()) }
+            } else {
+                prop.update(geometry, ItemStack(Material.BIRCH_PLANKS))
+                val itemDisplay = displays.single()
+                verify(exactly = 1) { itemDisplay.interpolationDuration = 0 }
+                verify(exactly = 1) { itemDisplay.teleportDuration = 0 }
+                verify(exactly = 3) { itemDisplay.interpolationDuration = 2 }
+                verify(exactly = 3) { itemDisplay.teleportDuration = 1 }
+            }
+        }
     }
 
     "switching between model and cuboid rendering removes the old representation" {

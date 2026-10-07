@@ -693,7 +693,9 @@ internal object OriginWorkshopGame : PluginModule, Listener {
             OriginWorkshopGameAction.ALIGN_DRILL_CENTER,
             OriginWorkshopGameAction.ALIGN_DRILL_LAST -> {
                 val item = active.workpiece ?: return false
-                settle(active, item, interaction.target) ?: return false
+                val at = OriginWorkshopTablesModule.pointAt(tableId, interaction.target) ?: return false
+                // Deliberately slide this same board under the next drilling position.
+                moveProp(item, at, boardRotation())
             }
             OriginWorkshopGameAction.STRETCH_FABRIC_LEFT,
             OriginWorkshopGameAction.STRETCH_FABRIC_RIGHT -> {
@@ -812,7 +814,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         val height = OriginWorkshopTablesModule.dimensionsFor(tableId)?.height ?: return
         val center = OriginWorkshopTablesModule.pointAt(tableId, OriginWorkshopPoint(0.0, height + 0.04, -0.45)) ?: return
         active.workpiece = spawnProp(active, player, pieces).also {
-            moveProp(it, center, boardRotation())
+            it.place(center, boardRotation())
         }
     }
 
@@ -1047,6 +1049,9 @@ internal object OriginWorkshopGame : PluginModule, Listener {
     private fun showStage(active: Session, player: Player, phase: String) {
         val stage = active.progress.stage
         particleOwner?.invalidatePending()
+        // Each stage has a new click target, not a physical cube travelling between controls.
+        active.targetMarker?.remove()
+        active.targetMarker = null
         val action = active.recipe.interactions[stage]?.action
         if (action != null) {
             val point = target(active, stage)
@@ -1054,14 +1059,10 @@ internal object OriginWorkshopGame : PluginModule, Listener {
                 action in setOf(OriginWorkshopGameAction.TIGHTEN_LEFT, OriginWorkshopGameAction.TIGHTEN_RIGHT)
             ) 0.035 else null
             val geometry = originWorkshopPlacementMarker(action, targetFaceDepth = fastenerDepth)
-            val marker = active.targetMarker?.also { it.update(geometry) }
-                ?: spawnProp(active, player, geometry, privateViewer = player)
+            val marker = spawnProp(active, player, geometry, privateViewer = player)
             active.targetMarker = marker
             settle(active, marker, point)
             marker.cue(false)
-        } else {
-            active.targetMarker?.remove()
-            active.targetMarker = null
         }
         OriginWorkshopTablesModule.highlightCraftControl(tableId, null, viewer = player)
         active.highlightedControl = control(active, stage)
@@ -1174,7 +1175,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
 
     private fun settle(active: Session, item: OriginWorkshopProp, point: OriginWorkshopPoint): Location? {
         val center = OriginWorkshopTablesModule.pointAt(tableId, point) ?: return null
-        moveProp(item, center, boardRotation())
+        item.place(center, boardRotation())
         item.glow(null)
         return center
     }

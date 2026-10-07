@@ -39,6 +39,8 @@ internal class OriginWorkshopProp(
     private var removed = false
     private var carrier: Player? = null
     private val passengerTranslation = Vector3f()
+    private var poseInterpolationDuration = 2
+    private var poseTeleportDuration = 1
 
     val pieces: List<OriginWorkshopPropPiece>
         get() = currentPieces
@@ -58,7 +60,7 @@ internal class OriginWorkshopProp(
         update(geometry, model)
     }
 
-    /** Reuses every possible packet handle, preferring cuboids whose center and size still match. */
+    /** Reuses packet handles only when their cuboid center and size still match. */
     fun update(geometry: List<OriginWorkshopWorkpiecePiece>, model: ItemStack? = null) {
         check(!removed) { "workshop prop has been removed" }
         if (model != null) {
@@ -79,9 +81,25 @@ internal class OriginWorkshopProp(
 
     /** Moves all visible parts around the same center and rotation pivot. */
     fun move(center: Location, rotation: Quaternionf) {
+        setPose(center, rotation, interpolationDuration = 2, teleportDuration = 1)
+    }
+
+    /** Places the workpiece at a new manual target without animating across the intervening space. */
+    fun place(center: Location, rotation: Quaternionf) {
+        setPose(center, rotation, interpolationDuration = 0, teleportDuration = 0)
+    }
+
+    private fun setPose(
+        center: Location,
+        rotation: Quaternionf,
+        interpolationDuration: Int,
+        teleportDuration: Int,
+    ) {
         check(!removed) { "workshop prop has been removed" }
         carrier = null
         passengerTranslation.zero()
+        poseInterpolationDuration = interpolationDuration
+        poseTeleportDuration = teleportDuration
         currentCenter = center.clone().withoutViewRotation()
         currentRotation = Quaternionf(rotation)
         currentPieces.forEach { piece -> piece.display?.let { applyBlockPose(it, piece.geometry) } }
@@ -91,6 +109,8 @@ internal class OriginWorkshopProp(
     /** The client moves passengers with its player; only the local pose comes from server snapshots. */
     fun carry(player: Player, pose: OriginWorkshopCarryPose) {
         check(!removed) { "workshop prop has been removed" }
+        poseInterpolationDuration = if (carrier?.uniqueId == player.uniqueId) 1 else 0
+        poseTeleportDuration = 0
         carrier = player
         currentCenter = player.location.add(pose.center.x, pose.center.y, pose.center.z).withoutViewRotation()
         currentRotation = Quaternionf(pose.rotation)
@@ -143,8 +163,7 @@ internal class OriginWorkshopProp(
         val unused = previous.indices.toMutableSet()
         val result = arrayOfNulls<OriginWorkshopPropPiece>(geometry.size)
 
-        // Reserve all spatially stable handles first, so an earlier changed cube cannot steal a
-        // handle that belongs to an unchanged cube later in the new geometry list.
+        // Match all spatially stable handles before removing unmatched cuboids.
         geometry.forEachIndexed { newIndex, nextGeometry ->
             val match = unused.firstOrNull { oldIndex -> sameCuboid(previous[oldIndex].geometry, nextGeometry) }
             if (match != null) {
@@ -153,16 +172,16 @@ internal class OriginWorkshopProp(
             }
         }
 
+        // A handle at another cuboid would visually animate across unrelated geometry. Remove
+        // unmatched old parts before allocating replacements so each surviving ID stays spatially true.
+        unused.forEach { previous[it].display?.remove() }
+
         geometry.forEachIndexed { newIndex, nextGeometry ->
             val matched = result[newIndex]
-            val reused = matched ?: unused.firstOrNull()?.let { oldIndex ->
-                unused.remove(oldIndex)
-                previous[oldIndex]
-            }
-            val piece = reused ?: OriginWorkshopPropPiece(display = spawnBlockDisplay(nextGeometry), geometry = nextGeometry)
+            val piece = matched ?: OriginWorkshopPropPiece(display = spawnBlockDisplay(nextGeometry), geometry = nextGeometry)
 
             piece.geometry = nextGeometry
-            if (reused != null) piece.display?.let { display ->
+            if (matched != null) piece.display?.let { display ->
                 if (display.blockData.material != nextGeometry.material) {
                     display.blockData = nextGeometry.material.createBlockData()
                 }
@@ -171,7 +190,6 @@ internal class OriginWorkshopProp(
             result[newIndex] = piece
         }
 
-        unused.forEach { previous[it].display?.remove() }
         return result.map { checkNotNull(it) }
     }
 
@@ -249,8 +267,8 @@ internal class OriginWorkshopProp(
 
     private fun applyAnchor(display: PacketDisplay) {
         val player = carrier
-        display.interpolationDuration = if (player != null) 1 else 2
-        display.teleportDuration = if (player != null) 0 else 1
+        display.interpolationDuration = poseInterpolationDuration
+        display.teleportDuration = poseTeleportDuration
         if (player != null) display.attachTo(player)
         else {
             display.detach()
