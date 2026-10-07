@@ -152,6 +152,8 @@ class ItemsAdderHookTest :
                 val installed = BundledResourcePackSyncScript.install(dataFolder)
 
                 installed.shouldExist()
+                dataFolder.resolve("scripts/resourcepack_variants.py").shouldExist()
+                dataFolder.resolve("scripts/resourcepack_clients.json").shouldExist()
                 Files.isExecutable(installed).shouldBeTrue()
                 installed.readText().contains("ItemsAdder generated.zip").shouldBeTrue()
 
@@ -923,6 +925,7 @@ private fun testEnvironment(): Map<String, String> =
     mapOf(
         "AWS_ACCESS_KEY_ID" to "test-access-key",
         "AWS_SECRET_ACCESS_KEY" to "test-secret-key",
+        "RP_VARIANTS_ENABLED" to "0",
     )
 
 private fun fakeAwsUploaderScript(): String =

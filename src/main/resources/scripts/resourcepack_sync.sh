@@ -495,25 +495,96 @@ fi
 
 unzip -tq "${upload_path}" >/dev/null || die "Resource pack failed ZIP integrity check"
 
-local_sha="$(sha256sum "${upload_path}" | awk '{print $1}')"
-remote_sha=""
-if remote_sha="$("${AWS}" s3 cp "s3://${S3_BUCKET}/${S3_MANIFEST_KEY}" - \
-  --endpoint-url "${S3_ENDPOINT}" 2>/dev/null | awk '{print $1}')"; then
-  :
-else
-  remote_sha=""
+publish_paths=("${upload_path}")
+if [[ "${RP_VARIANTS_ENABLED:-1}" == "1" ]]; then
+  script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+  [[ "${RP_UPLOAD_NAME}" =~ ^[A-Za-z0-9_.-]+\.zip$ && "${S3_KEY}" == *.zip ]] ||
+    die "Versioned packs require a simple .zip upload name and .zip S3 key"
+  variants_dir="${staging_dir}/variants"
+  python3 "${script_dir}/resourcepack_variants.py" \
+    --input "${upload_path}" --output-dir "${variants_dir}" \
+    --catalog "${script_dir}/resourcepack_clients.json" --upload-name "${RP_UPLOAD_NAME}" ||
+    die "Resource pack optimization failed; nothing uploaded"
+  python3 - "${variants_dir}/variants.json" > "${staging_dir}/publish-files.txt" <<'PY'
+import json
+import re
+import sys
+for pack in json.load(open(sys.argv[1], encoding="utf-8"))["packs"]:
+    name = pack["file"]
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+\.zip", name):
+        raise ValueError("invalid candidate filename")
+    print(name)
+PY
+  publish_paths=()
+  while IFS= read -r name; do
+    publish_paths+=("${variants_dir}/${name}")
+  done < "${staging_dir}/publish-files.txt"
+  [[ "${#publish_paths[@]}" -gt 1 ]] || die "No versioned resource packs were built"
+  upload_path="${variants_dir}/${RP_UPLOAD_NAME}"
 fi
 
-if [[ "${local_sha}" == "${remote_sha}" && "${FORCE_UPLOAD:-0}" != "1" ]]; then
+# One manifest covers the complete set. Keep its first line compatible with
+# consumers that read the universal ZIP checksum. Commit it only after the
+# whole set is uploaded and Velocity acknowledges its hash refresh.
+manifest_path="${staging_dir}/publication.sha256"
+publish_keys=()
+for candidate in "${publish_paths[@]}"; do
+  candidate_name="$(basename "${candidate}")"
+  object_key="${S3_KEY}"
+  if [[ "${candidate_name}" != "${RP_UPLOAD_NAME}" ]]; then
+    suffix="${candidate_name#"${RP_UPLOAD_NAME%.zip}"}"
+    object_key="${S3_KEY%.zip}${suffix}"
+  fi
+  publish_keys+=("${object_key}")
+  printf '%s  %s\n' "$(sha256sum "${candidate}" | awk '{print $1}')" "$(basename "${candidate}")"
+done > "${manifest_path}"
+local_sha="$(sha256sum "${upload_path}" | awk '{print $1}')"
+remote_manifest=""
+if remote_manifest="$("${AWS}" s3 cp "s3://${S3_BUCKET}/${S3_MANIFEST_KEY}" - \
+  --endpoint-url "${S3_ENDPOINT}" 2>/dev/null)"; then
+  :
+else
+  remote_manifest=""
+fi
+
+unchanged=0
+if [[ "$(cat "${manifest_path}")" == "${remote_manifest}" && "${FORCE_UPLOAD:-0}" != "1" ]]; then
+  unchanged=1
+  if [[ "${RP_VARIANTS_ENABLED:-1}" == "1" ]]; then
+    for index in "${!publish_paths[@]}"; do
+      candidate="${publish_paths[$index]}"
+      expected_sha="$(sha256sum "${candidate}" | awk '{print $1}')"
+      expected_size="$(wc -c < "${candidate}" | tr -d '[:space:]')"
+      if ! object_info="$("${AWS}" s3api head-object --bucket "${S3_BUCKET}" \
+        --key "${publish_keys[$index]}" --endpoint-url "${S3_ENDPOINT}" \
+        --query '[ContentLength,Metadata.sha256]' --output text 2>/dev/null)"; then
+        unchanged=0
+        break
+      fi
+      read -r object_size object_sha <<< "${object_info}"
+      if [[ "${object_size}" != "${expected_size}" || "${object_sha}" != "${expected_sha}" ]]; then
+        unchanged=0
+        break
+      fi
+    done
+  fi
+fi
+if [[ "${unchanged}" == "1" ]]; then
   log "Unchanged (sha256 ${local_sha:0:12}…), skip upload"
   activate_itemsadder_mirror
   exit 0
 fi
 
-log "Uploading $(du -h "${upload_path}" | cut -f1) as ${RP_UPLOAD_NAME} → s3://${S3_BUCKET}/${S3_KEY}"
-"${AWS}" s3 cp "${upload_path}" "s3://${S3_BUCKET}/${S3_KEY}" \
-  --endpoint-url "${S3_ENDPOINT}" \
-  --content-type "application/zip"
+for index in "${!publish_paths[@]}"; do
+  candidate="${publish_paths[$index]}"
+  candidate_name="$(basename "${candidate}")"
+  object_key="${publish_keys[$index]}"
+  candidate_sha="$(sha256sum "${candidate}" | awk '{print $1}')"
+  log "Uploading $(du -h "${candidate}" | cut -f1) as ${candidate_name} → s3://${S3_BUCKET}/${object_key}"
+  "${AWS}" s3 cp "${candidate}" "s3://${S3_BUCKET}/${object_key}" \
+    --endpoint-url "${S3_ENDPOINT}" \
+    --content-type "application/zip" --metadata "sha256=${candidate_sha}"
+done
 
 if [[ "${RP_NOTIFY_ENABLED:-1}" == "1" ]]; then
   : "${REDIS_HOST:?REDIS_HOST not set}"
@@ -546,7 +617,7 @@ if [[ "${RP_NOTIFY_ENABLED:-1}" == "1" ]]; then
   log "Velocity hash refresh acknowledged (subscribers=${subscribers})"
 fi
 
-printf '%s  %s\n' "${local_sha}" "${RP_UPLOAD_NAME}" | "${AWS}" s3 cp - "s3://${S3_BUCKET}/${S3_MANIFEST_KEY}" \
+cat "${manifest_path}" | "${AWS}" s3 cp - "s3://${S3_BUCKET}/${S3_MANIFEST_KEY}" \
   --endpoint-url "${S3_ENDPOINT}" \
   --content-type "text/plain"
 

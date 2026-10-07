@@ -291,6 +291,7 @@ internal class ResourcePackSyncConfig(
 
 internal object BundledResourcePackSyncScript {
     const val RESOURCE_PATH = "scripts/resourcepack_sync.sh"
+    private val resources = listOf(RESOURCE_PATH, "scripts/resourcepack_variants.py", "scripts/resourcepack_clients.json")
 
     fun install(
         dataFolder: Path,
@@ -300,12 +301,13 @@ internal object BundledResourcePackSyncScript {
     ): Path {
         val target = dataFolder.resolve(RESOURCE_PATH)
         Files.createDirectories(target.parent)
-        val resource =
-            checkNotNull(resourceLoader(RESOURCE_PATH)) {
-                "Missing bundled resource $RESOURCE_PATH"
+        for (path in resources) {
+            val resource = checkNotNull(resourceLoader(path)) {
+                "Missing bundled resource $path"
             }
-        resource.use {
-            Files.copy(it, target, StandardCopyOption.REPLACE_EXISTING)
+            resource.use {
+                Files.copy(it, dataFolder.resolve(path), StandardCopyOption.REPLACE_EXISTING)
+            }
         }
         check(target.toFile().setExecutable(true, true) || Files.isExecutable(target)) {
             "Unable to make bundled resource pack sync script executable: $target"

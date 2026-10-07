@@ -1,8 +1,8 @@
 # ItemsAdder resource pack publication
 
 ARC listens for `ItemsAdderPackCompressedEvent`, extracts
-`scripts/resourcepack_sync.sh` from the plugin JAR to
-`plugins/ARC/scripts/resourcepack_sync.sh`, and runs it asynchronously.
+the publisher, Python optimizer and pinned vanilla texture catalogue from the
+plugin JAR to `plugins/ARC/scripts/`, and runs the publisher asynchronously.
 
 All publication settings are read from
 `plugins/ARC/modules/resourcepack-sync.yml` and passed to the script as process
@@ -13,8 +13,72 @@ credentials belong only in the private server configuration.
 
 The script uploads:
 
-- `RusCraftingResource.zip` — latest resource pack;
-- `RusCraftingResource.zip.sha256` — checksum used to skip unchanged packs.
+- `RusCraftingResource.zip` — universal pack, retaining compatibility overlays;
+- `RusCraftingResource-{1.21.11,26.1,26.2,26.3}.zip` — one current optimized
+  pack for each explicitly supported client protocol;
+- `RusCraftingResource.zip.sha256` — checksums of the entire current set, used
+  to skip unchanged publications. The first line remains the universal checksum.
+
+These are fixed current object keys, not dated archives. A changed variant
+invalidates the set even when the universal ZIP is unchanged. All variants are
+built and checked before the first upload. All ZIP uploads finish before the
+proxy hash-refresh notification; the checksum manifest is committed only after
+the acknowledgement. Interrupted publication therefore remains retryable.
+Separate S3 objects are not a cross-object atomic transaction: a later failed
+upload does not roll back objects already replaced. Retry republishes the whole
+set; do not treat the old checksum manifest as proof of object consistency.
+An unchanged set skips uploads only after every object passes a size and
+SHA-256 metadata check. Missing or replaced objects trigger a repair upload.
+
+## Content optimization and client selection
+
+`resourcepack_variants.py` resolves the active overlays in their original
+priority order into one effective resource layer for each selected format. It
+preserves the effective asset bytes and metadata, and rewrites owned atlas
+directory sources to explicit `single` texture references. Exact adjacent
+repeated source blocks are collapsed; empty directory results disappear from
+the specialized files. Unknown atlas source types are preserved. Texture
+resolution and model geometry are not reduced.
+
+`resourcepack_clients.json` records protocols 774/775/776/777 and resource
+formats 75.0/84.0/88.0/97.1. Its texture IDs come from the corresponding official
+client JARs; each entry retains the download URL and verified client SHA-1.
+Updating a client requires regenerating its inventory from that exact client,
+checking the version/protocol/format in `version.json`, and updating the proxy
+thresholds together. The publisher needs no Minecraft download at runtime.
+
+Each atlas rewrite verifies its resulting sprite-ID-to-resource mapping for
+the selected vanilla client plus the effective server pack. Lower vanilla atlas
+definitions remain active. Client-added textures that relied on our broad
+directory sources are outside this explicit inventory; packs supplying their
+own atlas declarations still use the normal resource-pack priority rules.
+Keep unknown clients on the universal fallback instead of reusing a frozen
+catalogue for a newer protocol.
+
+VelocityResourcepacks build 667 natively supports a flat ordered `variants`
+list under `packs.global`, with the shared permission gate on that parent.
+The parent must not also have `url`/`hash`. Child entries have individual URLs,
+SHA-1 hashes and stable UUIDs; numeric `version` is a minimum protocol, not a
+Minecraft version string. Selection order is:
+
+| Minimum protocol | ZIP |
+|---|---|
+| 778 | universal (future clients) |
+| 777 | 26.3 |
+| 776 | 26.2 |
+| 775 | 26.1 |
+| 774 | 1.21.11 |
+| 0 | universal (older clients) |
+
+`vrp reload` activates configuration for normal subsequent selection without
+resending to online players. `vrp reload resend` additionally forces current
+players to reconsider their pack. The existing `generatehashes` notification
+updates and persists hashes for each direct variant; do not nest variants.
+
+For an isolated publisher diagnostic, `RP_VARIANTS_ENABLED=0` retains the
+single-ZIP path. Production defaults to building the full set. Run the focused
+checks with `python3 -m unittest discover -s src/test/python -v` and the existing
+`ItemsAdderHookTest` Gradle test.
 
 On the production spawn node it also treats spawn ItemsAdder as the only
 content authority. A completed `iazip` stages and checksum-verifies exact copies
