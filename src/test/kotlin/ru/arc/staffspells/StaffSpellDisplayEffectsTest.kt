@@ -37,8 +37,8 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
 
     "nova leaves the caster eye outside every solid piece for its whole visible lifetime" {
         (0 until 28 step StaffSpellDisplayEffects.FRAME_TICKS).forEach { age ->
-            staffDisplayParts(StaffSpell.NOVA, age, 28, 4.0, 6.0, true).forEach { part ->
-                val eye = org.joml.Vector3f(0f, 1.62f, 0f).sub(part.center)
+            staffDisplayParts(StaffSpell.NOVA, age, 28, 4.0, 1.8, true).forEach { part ->
+                val eye = org.joml.Vector3f(0f, 1.62f, -3.5f).sub(part.center)
                 org.joml.Quaternionf(part.rotation).invert().transform(eye)
                 val outside = kotlin.math.abs(eye.x) > part.scale.x / 2 ||
                     kotlin.math.abs(eye.y) > part.scale.y / 2 || kotlin.math.abs(eye.z) > part.scale.z / 2

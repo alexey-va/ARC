@@ -27,7 +27,9 @@ There are no loot-table or shop changes. Anyone holding an issued sample can use
 - **Изумрудная волна / nova:** the Celtic Staff
   (`3dfantasyweaponscit:holy_celtic_staff`) strikes visible mobs within six blocks
   around the caster once, with a four-block turquoise whirlwind and an expanding
-  ground ring. The whirlwind is visual; it does not add repeated damage or pull mobs.
+  ground ring. The whirlwind forms up to 3.5 blocks ahead, inside the wave area,
+  so the caster can see it; the damage and particle ring stay centered on the caster.
+  The whirlwind is visual; it does not add repeated damage or pull mobs.
 
 Use the main-hand right click, including a direct click on an entity. Look near a
 mob for chain/mark; small particles over its head preview their selected target.
@@ -93,8 +95,8 @@ Core filters received chunks, player worlds, range and connections and coalesces
 updates through the shared packet budget. Every piece has its own real world anchor
 so culling also works for beams crossing chunk boundaries.
 
-Hard bounds are 32 pieces per scene, four scenes per caster, twelve scenes globally,
-and four scenes per viewer within 32 blocks (at most 128 handles eligible for one
+Hard bounds are 48 pieces per scene (NOVA uses 48; the other spells use at most 32), four scenes per caster, twelve scenes globally,
+and four scenes per viewer within 32 blocks (at most 192 handles eligible for one
 viewer). A viewer's own casts are selected first, then nearby casts. The oldest
 visual scene is evicted when a pool fills; damage and projectile collision continue
 independently. Shapes update every four ticks with four-tick client interpolation.

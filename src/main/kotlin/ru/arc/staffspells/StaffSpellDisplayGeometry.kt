@@ -238,15 +238,15 @@ private fun novaDisplayParts(
 ): List<StaffDisplayPart> {
     val phase = progress(ageTicks, durationTicks)
     val height = length.takeIf { it.isFinite() && it > 0.0 }?.coerceIn(2.0, 4.0) ?: 4.0
-    val reach = radius.takeIf { it.isFinite() && it > 0.0 }?.coerceIn(0.4, 3.3) ?: 2.2
+    val reach = radius.takeIf { it.isFinite() && it > 0.0 }?.coerceIn(0.4, 1.8) ?: 1.8
     val flare = if (impact) phase else 0.0
     val spin = phase * PI * 2.0
-    val parts = ArrayList<StaffDisplayPart>(32)
+    val parts = ArrayList<StaffDisplayPart>(48)
 
     // Thin glass links form two continuous, counter-twisting helices around an open centre.
-    val ribbonSegments = 10
-    val ribbonTwist = PI * 1.75
-    val outerRadius = (reach * (1.0 + flare * 0.04)).coerceAtMost(3.3)
+    val ribbonSegments = 20
+    val ribbonTwist = PI * 3.5
+    val outerRadius = (reach * (1.0 + flare * 0.04)).coerceAtMost(1.8)
     repeat(2) { strand ->
         val strandSpin = if (strand == 0) spin else -spin
         val twistSign = if (strand == 0) 1.0 else -1.0
@@ -267,25 +267,15 @@ private fun novaDisplayParts(
             val segmentLength = delta.length()
             val rotation = Quaternionf().rotationTo(Vector3f(0f, 0f, 1f), Vector3f(delta).normalize())
             val center = Vector3f(start).add(end).mul(0.5f)
-            val material = when ((index + strand) % 3) {
+            val material = if (index == 0 || index == ribbonSegments - 1) {
+                Material.SEA_LANTERN
+            } else when ((index + strand) % 3) {
                 0 -> Material.CYAN_STAINED_GLASS
                 1 -> Material.LIGHT_BLUE_STAINED_GLASS
                 else -> Material.WHITE_STAINED_GLASS
             }
             parts += StaffDisplayPart(material, center, Vector3f(0.12f, 0.18f, segmentLength), rotation)
         }
-    }
-
-    // Four small lights crown the vortex above the caster's head; the center stays clear.
-    repeat(4) { index ->
-        val angle = spin * 0.45 + index * PI / 2.0
-        val crownRadius = outerRadius * 0.58
-        parts += part(
-            if (index % 2 == 0) Material.SEA_LANTERN else Material.WHITE_STAINED_GLASS,
-            cos(angle) * crownRadius, height + 0.16, sin(angle) * crownRadius,
-            0.12, 0.16, 0.90,
-            yaw = -angle,
-        )
     }
 
     // The impact wave expands and brightens, then contracts into translucent shards.

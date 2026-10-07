@@ -152,7 +152,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         const val MAX_SCENES = 12
         const val MAX_PER_CASTER = 4
         const val MAX_PER_VIEWER = 4
-        const val MAX_PARTS = 32
+        const val MAX_PARTS = 48
         const val VIEW_RANGE = 32.0
     }
 }

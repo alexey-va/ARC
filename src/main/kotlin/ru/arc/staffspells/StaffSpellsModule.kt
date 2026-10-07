@@ -191,7 +191,14 @@ internal class StaffSpellController(
                 val origin = player.location.add(0.0, 0.8, 0.0)
                 areaDamage(player, origin, settings.novaRadius, cast, tuning)
                 visuals.nova(origin, settings.novaRadius)
-                effects.play(player.uniqueId, spell, player.location, radius = settings.novaRadius,
+                // Put the vortex inside the forward part of the wave so its silhouette is visible to the caster.
+                // The damage and particle ring keep their original caster-centered area.
+                val yaw = Math.toRadians(player.location.yaw.toDouble())
+                val forward = Vector(-kotlin.math.sin(yaw), 0.0, kotlin.math.cos(yaw))
+                val vortex = rayEnd(player.eyeLocation, forward, min(3.5, settings.novaRadius * 0.6)).apply {
+                    y = player.location.y
+                }
+                effects.play(player.uniqueId, spell, vortex, radius = min(1.8, settings.novaRadius * 0.3),
                     durationTicks = 28, impact = true)
             }
         }
