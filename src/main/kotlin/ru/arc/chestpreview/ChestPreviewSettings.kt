@@ -1,11 +1,14 @@
 package ru.arc.chestpreview
 
-/** Icon count, reach, chest-top gap and background opacity, replaced on module reload. */
+import org.bukkit.entity.ItemDisplay
+
+/** Private container preview settings, replaced on module reload. */
 internal data class ChestPreviewSettings(
     val maxItems: Int = DEFAULT_MAX_ITEMS,
     val maxDistance: Double = DEFAULT_MAX_DISTANCE,
     val verticalGap: Double = DEFAULT_VERTICAL_GAP,
     val backgroundOpacity: Int = DEFAULT_BACKGROUND_OPACITY,
+    val itemTransform: ItemDisplay.ItemDisplayTransform = DEFAULT_ITEM_TRANSFORM,
 ) {
     init {
         require(maxItems in 1..12) { "Chest preview max-items must be in 1..12" }
@@ -24,5 +27,6 @@ internal data class ChestPreviewSettings(
         const val DEFAULT_MAX_DISTANCE = 4.5
         const val DEFAULT_VERTICAL_GAP = 0.15
         const val DEFAULT_BACKGROUND_OPACITY = 40
+        val DEFAULT_ITEM_TRANSFORM = ItemDisplay.ItemDisplayTransform.GUI
     }
 }

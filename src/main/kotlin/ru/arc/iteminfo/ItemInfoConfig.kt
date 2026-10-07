@@ -4,10 +4,12 @@ import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
+import org.bukkit.entity.ItemDisplay
 import ru.arc.chestpreview.ChestPreviewSettings
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import java.nio.file.Path
+import java.util.Locale
 
 private const val ITEM_INFO_COIN_GLYPH = "💰"
 
@@ -68,8 +70,24 @@ internal class ItemInfoConfig(private val source: Config) {
                 maxDistance = source.double("chest-preview.max-distance", ChestPreviewSettings.DEFAULT_MAX_DISTANCE),
                 verticalGap = source.double("chest-preview.vertical-gap", ChestPreviewSettings.DEFAULT_VERTICAL_GAP),
                 backgroundOpacity = source.int("chest-preview.background-opacity", ChestPreviewSettings.DEFAULT_BACKGROUND_OPACITY),
+                itemTransform = itemTransform(),
             ),
         )
+    }
+
+    private fun itemTransform(): ItemDisplay.ItemDisplayTransform {
+        val configured = source.string(
+            "chest-preview.item-transform",
+            ChestPreviewSettings.DEFAULT_ITEM_TRANSFORM.name,
+        )
+        return when (configured.trim().uppercase(Locale.ROOT)) {
+            "GUI" -> ItemDisplay.ItemDisplayTransform.GUI
+            "FIXED" -> ItemDisplay.ItemDisplayTransform.FIXED
+            "NONE" -> ItemDisplay.ItemDisplayTransform.NONE
+            else -> throw IllegalArgumentException(
+                "Item info chest-preview.item-transform '$configured' must be one of GUI, FIXED, or NONE",
+            )
+        }
     }
 
     private fun required(path: String, fallback: String): String = source.string(path, fallback).also {

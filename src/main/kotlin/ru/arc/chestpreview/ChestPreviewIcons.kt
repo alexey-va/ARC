@@ -18,7 +18,6 @@ import ru.arc.paper.display.PacketTextDisplay
 import ru.arc.paper.display.PaperPacketDisplays
 import java.util.UUID
 import kotlin.math.ceil
-import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -68,8 +67,7 @@ internal class ChestPreviewIcons(
 
         try {
             val effectiveScale = ChestPreviewIconGeometry.normalizeScale(scale)
-            val previous = viewers[player.uniqueId]?.takeIf { it.sourceAnchor == target.anchor }?.anchor
-            val anchor = ChestPreviewPlacement.place(player, target, items.size, effectiveScale, previous)
+            val anchor = ChestPreviewPlacement.place(player, target, items.size, effectiveScale)
             if (anchor == null) clear(player)
             else render(player, anchor, target.anchor, items, effectiveScale)
         } catch (failure: Exception) {
@@ -169,7 +167,6 @@ internal class ChestPreviewIcons(
             }
             if (state.backdrop === backdrop && !created && layoutChanged) {
                 configureBackdropTransform(backdrop, items.size, scale)
-                configureBackdropBounds(backdrop, items.size, scale)
             }
         }
 
@@ -187,7 +184,11 @@ internal class ChestPreviewIcons(
     ) {
         display.isVisibleByDefault = false
         display.billboard = Display.Billboard.CENTER
-        display.itemDisplayTransform = ItemDisplay.ItemDisplayTransform.GUI
+        display.itemDisplayTransform = settings.itemTransform
+        // Native culling bounds stay upright while this grid pitches around its anchor.
+        // A zero width disables that inaccurate frustum box for these private, nearby icons.
+        display.displayWidth = 0f
+        display.displayHeight = 0f
         display.viewRange = DISPLAY_VIEW_RANGE
         display.shadowRadius = 0f
         display.shadowStrength = 0f
@@ -197,15 +198,13 @@ internal class ChestPreviewIcons(
     }
 
     private fun configureItemTransform(display: PacketItemDisplay, item: ItemStack, offset: ChestPreviewIconOffset, scale: Float) {
-        val itemBounds = ChestPreviewIconGeometry.itemBounds(scale)
-        // All parts share the bottom anchor; include each local offset in native culling bounds.
-        display.displayWidth = abs(offset.x) * 2f + itemBounds.width
-        display.displayHeight = offset.y + itemBounds.height / 2f
         display.transformation = Transformation(
             Vector3f(offset.x, offset.y, ICON_DEPTH),
             Quaternionf(),
             Vector3f(ChestPreviewIconGeometry.ICON_SCALE * scale),
-            ChestPreviewIconGeometry.guiFacingRotation(ChestPreviewIconGeometry.isBlockIcon(item)),
+            ChestPreviewIconGeometry.guiFacingRotation(
+                settings.itemTransform == ItemDisplay.ItemDisplayTransform.GUI && ChestPreviewIconGeometry.isBlockIcon(item),
+            ),
         )
     }
 
@@ -217,6 +216,8 @@ internal class ChestPreviewIcons(
     ) {
         display.isVisibleByDefault = false
         display.billboard = Display.Billboard.CENTER
+        display.displayWidth = 0f
+        display.displayHeight = 0f
         display.viewRange = DISPLAY_VIEW_RANGE
         display.shadowRadius = 0f
         display.shadowStrength = 0f
@@ -229,7 +230,6 @@ internal class ChestPreviewIcons(
         display.alignment = TextDisplay.TextAlignment.CENTER
         display.lineWidth = TEXT_DISPLAY_LINE_WIDTH
         configureBackdropTransform(display, itemCount, scale)
-        configureBackdropBounds(display, itemCount, scale)
         display.showTo(player)
     }
 
@@ -248,12 +248,6 @@ internal class ChestPreviewIcons(
             Vector3f(scaleX, scaleY, 1f),
             Quaternionf(),
         )
-    }
-
-    private fun configureBackdropBounds(display: PacketTextDisplay, itemCount: Int, scale: Float) {
-        val bounds = ChestPreviewIconGeometry.panelBounds(itemCount, scale)
-        display.displayWidth = bounds.width
-        display.displayHeight = bounds.height
     }
 
     private fun InspectionHologramAnchor.toLocation(player: Player): Location =
@@ -313,6 +307,8 @@ internal object ChestPreviewIconGeometry {
     const val CELL_SPACING = 0.48f
     const val ICON_SCALE = 0.40f
     const val EDGE_PADDING = 0.08f
+    // A small optical correction: authored block models read higher than flat item icons.
+    const val ICON_VERTICAL_OFFSET = -0.04f
     const val BACKGROUND_WIDTH_PIXELS = 5f
     const val BACKGROUND_HEIGHT_PIXELS = 10f
     const val BACKGROUND_CENTER_X_PIXELS = 0.5f
@@ -343,7 +339,7 @@ internal object ChestPreviewIconGeometry {
 
         val effectiveScale = normalizeScale(scale)
         val rows = ceil(itemCount / COLUMNS.toDouble()).toInt()
-        val bottomRowCenter = (EDGE_PADDING + ICON_SCALE / 2f) * effectiveScale
+        val bottomRowCenter = (EDGE_PADDING + ICON_SCALE / 2f + ICON_VERTICAL_OFFSET) * effectiveScale
         return List(itemCount) { index ->
             val row = index / COLUMNS
             val columnsInRow = min(COLUMNS, itemCount - row * COLUMNS)
@@ -360,8 +356,7 @@ internal object ChestPreviewIconGeometry {
         val columns = min(COLUMNS, itemCount)
         val rows = ceil(itemCount / COLUMNS.toDouble()).toInt()
         val width = ((columns - 1) * CELL_SPACING + ICON_SCALE + EDGE_PADDING * 2) * effectiveScale
-        // The first icon's lower edge sits EDGE_PADDING above the chest-top anchor;
-        // the last row gets the same clearance above it.
+        // Equal nominal margins, before the small optical adjustment to the icon grid.
         val height = (rows * CELL_SPACING + EDGE_PADDING) * effectiveScale
         return ChestPreviewPanelBounds(width, height)
     }

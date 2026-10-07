@@ -19,11 +19,10 @@ internal object ChestPreviewPlacement {
         frame: ChestPreviewFrame,
         itemCount: Int,
         scale: Float,
-        previous: InspectionHologramAnchor?,
     ): InspectionHologramAnchor? {
         val eye = player.eyeLocation
         val panel = ChestPreviewIconGeometry.panelBounds(itemCount, scale)
-        return choose(eye, frame.anchor, frame.containerBounds, panel, scale, previous) { anchor, bounds ->
+        return choose(eye, frame.anchor, frame.containerBounds, panel, scale) { anchor, bounds ->
             clear(player, bounds) && visible(player, eye, anchor, panel)
         }
     }
@@ -34,26 +33,39 @@ internal object ChestPreviewPlacement {
         container: BoundingBox?,
         panel: ChestPreviewPanelBounds,
         scale: Float,
-        previous: InspectionHologramAnchor?,
         available: (InspectionHologramAnchor, BoundingBox) -> Boolean,
     ): InspectionHologramAnchor? {
         fun fits(anchor: InspectionHologramAnchor) = available(anchor, bounds(eye, anchor, panel, scale))
-        // Retain a clear fallback while inspecting the same container: tiny camera changes
-        // must not alternate the panel between the chest top and its front.
-        if (previous != null && fits(previous)) return previous
-        if (fits(above)) return above
-        val box = container ?: return null
+        val box = container ?: return above.takeIf(::fits)
+        val up = up(eye)
+        val halfHeight = panel.height / 2.0
+        fun anchorAt(center: Vector): InspectionHologramAnchor {
+            val bottom = center.clone().subtract(up.clone().multiply(halfHeight))
+            return above.copy(x = bottom.x, y = bottom.y, z = bottom.z)
+        }
+        // CENTER billboards pitch with the camera. Position their center over the lid,
+        // then lift by the entire rotated volume, including icon/backdrop depth.
+        // Keeping the old bottom pivot on the lid made top-down views intersect it.
+        val centered = anchorAt(Vector(above.x, above.y, above.z))
+        val top = centered.copy(y = centered.y + above.y - bounds(eye, centered, panel, scale).minY)
+        if (fits(top)) return top
+        // A small rise can clear neighbouring leaves, slabs or the edge of a shelf.
+        for (rise in listOf(0.15, 0.30)) {
+            val raised = top.copy(y = top.y + rise)
+            val center = Vector(raised.x, raised.y, raised.z).add(up.clone().multiply(halfHeight))
+            if (center.clone().subtract(eye.toVector()).dot(eye.direction) <= 0.30) continue
+            if (fits(raised)) return raised
+        }
+        // Re-evaluate above first every time. A previous clear side position must not
+        // remain stuck there after the viewer moves above the container.
         val towardEye = eye.toVector().subtract(box.center).setY(0.0)
         if (towardEye.lengthSquared() < 0.0001) return null
         towardEye.normalize()
-        val up = up(eye)
-        val halfHeight = panel.height / 2.0
         val faceDistance = abs(towardEye.x) * box.widthX / 2.0 + abs(towardEye.z) * box.widthZ / 2.0
         // Try the viewer-facing side, then pull forward a little if adjacent blocks are tight.
         for (extra in listOf(0.0, 0.25, 0.5, 0.75, 1.0)) {
             val center = box.center.add(towardEye.clone().multiply(faceDistance + 0.30 * scale + extra))
-            val bottom = center.subtract(up.clone().multiply(halfHeight))
-            var anchor = above.copy(x = bottom.x, y = bottom.y, z = bottom.z)
+            var anchor = anchorAt(center)
             val volume = bounds(eye, anchor, panel, scale)
             // Do not sink the bottom row into the floor in front of a ground-level chest.
             if (volume.minY < box.minY + 0.05) anchor = anchor.copy(y = anchor.y + box.minY + 0.05 - volume.minY)

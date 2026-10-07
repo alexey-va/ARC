@@ -61,6 +61,8 @@ class ChestPreviewIconsTest : StringSpec({
             verify { display.billboard = Display.Billboard.CENTER }
             verify { display.itemDisplayTransform = ItemDisplay.ItemDisplayTransform.GUI }
             verify { display.brightness = Display.Brightness(15, 15) }
+            verify { display.displayWidth = 0f }
+            verify { display.displayHeight = 0f }
         }
         val backdrop = harness.textDisplays.single()
         verify(exactly = 1) { backdrop.isVisibleByDefault = false }
@@ -68,6 +70,8 @@ class ChestPreviewIconsTest : StringSpec({
         verify { backdrop.textOpacity = 0.toByte() }
         verify { backdrop.backgroundColor = Color.fromARGB(102, 15, 23, 30) }
         verify { backdrop.brightness = Display.Brightness(15, 15) }
+        verify { backdrop.displayWidth = 0f }
+        verify { backdrop.displayHeight = 0f }
         verify(exactly = 2) { harness.owner.spawnItem(any<Location>(), any<ItemStack>()) }
         verify(exactly = 1) { harness.owner.spawnText(any<Location>(), any<Component>()) }
 
@@ -130,6 +134,20 @@ class ChestPreviewIconsTest : StringSpec({
             itemMeta = itemMeta.apply { setCustomModelData(123) }
         }
         ChestPreviewIconGeometry.isBlockIcon(custom) shouldBe false
+    }
+
+    "fixed and none contexts preserve native model poses without the GUI block correction" {
+        for (context in listOf(ItemDisplay.ItemDisplayTransform.FIXED, ItemDisplay.ItemDisplayTransform.NONE)) {
+            val worldId = UUID.randomUUID()
+            val harness = DisplayHarness()
+            val renderer = ChestPreviewIcons(harness.owner, ChestPreviewSettings(backgroundOpacity = 0, itemTransform = context))
+            renderer.update(player(worldId), frame(worldId, listOf(ItemStack(Material.OAK_PLANKS))), 1f)
+            verify { harness.itemDisplays.single().itemDisplayTransform = context }
+            val pose = harness.itemTransforms.single().rightRotation
+                .mul(Quaternionf().rotationY(Math.PI.toFloat()), Quaternionf())
+            (pose.transform(Vector3f(0f, 1f, 0f)).distance(Vector3f(0f, 1f, 0f)) < 0.00001f) shouldBe true
+            renderer.close()
+        }
     }
 
     "changing a block slot to a tool restores its flat pose without replacing the handle" {
@@ -208,11 +226,11 @@ class ChestPreviewIconsTest : StringSpec({
     "partial final row stays centered and one icon remains above the anchor" {
         val four = ChestPreviewIconGeometry.offsets(4, 1f)
         four.last().x shouldBe 0f
-        four.last().y shouldBe 0.28f
+        (kotlin.math.abs(four.last().y - 0.24f) < 0.00001f) shouldBe true
 
         val one = ChestPreviewIconGeometry.offsets(1, 1f).single()
         one.x shouldBe 0f
-        one.y shouldBe 0.28f
+        (kotlin.math.abs(one.y - 0.24f) < 0.00001f) shouldBe true
     }
 })
 

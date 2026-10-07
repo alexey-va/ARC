@@ -15,3 +15,5 @@ chest-preview:
   vertical-gap: 0.15
   # 0 = transparent, 100 = opaque; applied by /arc reload.
   background-opacity: 40
+  # Native ItemDisplay model transform context: GUI, FIXED, or NONE; applied by /arc reload.
+  item-transform: GUI
