@@ -1,0 +1,44 @@
+# Administrator-issued mechanics samples. These are not native FMM/EliteMobs loot items.
+# /arc stafftest [all|chain|mark|frost] [player]; /arc reload applies tuning.
+targeting:
+  range: 24.0
+  half-angle-degrees: 12.0
+max-area-targets: 8
+chain:
+  name: '<#82dcff>Грозовая ветвь'
+  description: '<#e8dfd2>Мгновенная молния перескакивает между врагами.'
+  skin: '3dfantasyweaponscit:divine_staff'
+  power: 1.0
+  vanilla-damage: 8.0
+  cooldown-ticks: 24
+  radius: 6.0
+  targets: 4
+  decay: 0.7
+mark:
+  name: '<#efa5ff>Разрыв'
+  description: '<#e8dfd2>Метка следует за целью и взрывается рядом с ней.'
+  skin: '3dfantasyweaponscit:night_staff'
+  power: 1.6
+  vanilla-damage: 12.0
+  cooldown-ticks: 40
+  delay-ticks: 18
+  radius: 3.5
+frost:
+  name: '<#b1f2ff>Ледяной хлопок'
+  description: '<#e8dfd2>Широкий удар перед вами ненадолго замедляет врагов.'
+  skin: '3dfantasyweaponscit:northgate_guardian_staff'
+  power: 0.8
+  vanilla-damage: 6.0
+  cooldown-ticks: 32
+  range: 7.0
+  half-angle-degrees: 50.0
+  slow-ticks: 40
+messages:
+  prototype: '<#b8b8b8>Проба механики · общая перезарядка посохов'
+  use: '<#82dcff>[▶] ПКМ <#e8dfd2>— применить заклинание'
+  no-target: '<#e8dfd2>Наведитесь на видимого моба чуть точнее'
+  cooldown: '<#e8dfd2>Посох восстанавливается'
+  full-inventory: '<#e8dfd2>Освободите место для всех выбранных посохов'
+  given: '<#9bd48d>Тестовые посохи выданы. ПКМ — атака; искры отмечают выбранную цель.'
+  unavailable: '<#e8dfd2>Модуль тестовых посохов сейчас недоступен'
+  skin-unavailable: '<#e8dfd2>Модель посоха недоступна в ItemsAdder. Подробности в журнале сервера.'
