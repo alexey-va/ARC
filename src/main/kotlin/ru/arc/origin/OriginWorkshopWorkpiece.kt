@@ -174,7 +174,7 @@ private val DRILL_HOLE_X = listOf(-0.23, 0.0, 0.23)
 private val COARSE_HOLE_CENTERS = listOf(-0.24, 0.0, 0.24)
 private const val COARSE_GRID_EPSILON = 1.0e-9
 
-/** A filled private cue centered on the accepted action target, readable without a glow outline. */
+/** A solid private target; full-brightness faces complement the native glow silhouette. */
 internal fun originWorkshopPlacementMarker(action: OriginWorkshopGameAction? = null): List<OriginWorkshopWorkpiecePiece> {
     val compact = when (action) {
         OriginWorkshopGameAction.SAND_PANEL_NEAR, OriginWorkshopGameAction.SAND_PANEL_CENTER,
@@ -183,13 +183,10 @@ internal fun originWorkshopPlacementMarker(action: OriginWorkshopGameAction? = n
         OriginWorkshopGameAction.FLIP_PANEL -> true
         else -> false
     }
-    val span = if (compact) 0.075f else 0.16f
-    val thickness = if (compact) 0.025f else 0.045f
+    val span = if (compact) 0.075f else 0.14f
     val center = OriginWorkshopPoint(0.0, if (compact) 0.05 else 0.08, 0.0)
-    // Leave the narrow finishing panel visible around its filled, full-brightness cue.
-    return listOf(
-        OriginWorkshopWorkpiecePiece(center, OriginWorkshopGamePartSize(span, thickness, thickness), Material.LIGHT_BLUE_CONCRETE),
-        OriginWorkshopWorkpiecePiece(center, OriginWorkshopGamePartSize(thickness, span, thickness), Material.LIGHT_BLUE_CONCRETE),
-        OriginWorkshopWorkpiecePiece(center, OriginWorkshopGamePartSize(thickness, thickness, span), Material.LIGHT_BLUE_CONCRETE),
-    )
+    // One solid cube stays filled from both table-level and overhead views.
+    return listOf(OriginWorkshopWorkpiecePiece(
+        center, OriginWorkshopGamePartSize(span, span, span), Material.LIGHT_BLUE_CONCRETE,
+    ))
 }

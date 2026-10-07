@@ -7,12 +7,16 @@ selects `model` or `cubes` for the carpenter's progressive board models.
 
 ## Player interaction
 
-A small filled, full-brightness blue cross marks the accepted click target. It
-turns white on hover; picking the underlying workpiece or actual control also
-works. The press and drying rack have low front handles. The hint does not draw
+A small solid, full-brightness blue cube marks the accepted click target, with
+a cyan native glow silhouette. Both its filled body and glow turn white on
+hover; picking the underlying workpiece or actual control also works. The press
+and drying rack have low front handles. The hint does not draw
 an outline around a machine or the whole table. Finishing cues are smaller so
-they do not obscure the narrow panel. Sanded bands use light birch; coated bands
-use dark stripped oak to make progress distinct from raw wood and the workbench.
+they do not obscure the narrow panel. Two small cyan dust particles appear every
+12 ticks around the current clickable cue, only for its nearby session player.
+No dust is emitted while a machine is processing or after the session ends.
+Sanded bands use light birch; coated bands use dark stripped oak to make progress
+distinct from raw wood and the workbench.
 
 - Carpenter: 21 actions, two cuts, three aligned drill holes, legs and clamps.
 - Upholsterer: 15 actions, stretch cloth, sew both edges, transfer the cover,

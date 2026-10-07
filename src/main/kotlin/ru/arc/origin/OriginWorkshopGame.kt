@@ -8,6 +8,7 @@ import org.bukkit.Color
 import org.bukkit.FluidCollisionMode
 import org.bukkit.Location
 import org.bukkit.Material
+import org.bukkit.Particle
 import org.bukkit.Sound
 import org.bukkit.SoundCategory
 import org.bukkit.entity.Display
@@ -248,6 +249,8 @@ internal object OriginWorkshopGame : PluginModule, Listener {
     private const val HOVER_SOUND_NANOS = 700_000_000L
     private const val HOVER_CHECK_TICKS = 2L
     private const val GUIDANCE_REFRESH_TICKS = 20L
+    private const val CUE_PARTICLE_INTERVAL_TICKS = 12L
+    private val CUE_PARTICLE_DUST = Particle.DustOptions(Color.fromRGB(120, 220, 255), 0.4f)
     private const val BUSY_FEEDBACK_NANOS = 1_000_000_000L
     private const val MAX_RECENT_INPUTS = 64
 
@@ -277,7 +280,8 @@ internal object OriginWorkshopGame : PluginModule, Listener {
 
         fun cue(hovered: Boolean) {
             pieces.mapNotNull { it.display }.forEach {
-                it.isGlowing = false
+                it.isGlowing = true
+                it.glowColorOverride = if (hovered) Color.WHITE else Color.AQUA
                 it.brightness = Display.Brightness(15, 15)
                 it.blockData = (if (hovered) Material.WHITE_CONCRETE else Material.LIGHT_BLUE_CONCRETE).createBlockData()
             }
@@ -323,6 +327,7 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         var highlightedControl: String? = null,
         var hoveredControl: Boolean = false,
         var lastGuideTick: Long = Long.MIN_VALUE,
+        var lastCueParticleTick: Long = Long.MIN_VALUE,
         var lastFeedback: Long = 0,
         var lastHoverSound: Long = 0,
         var rewardSent: Boolean = false,
@@ -826,9 +831,21 @@ internal object OriginWorkshopGame : PluginModule, Listener {
         advanceTimedStage(active, onlinePlayer, nowTick())
         animateMachine(active, nowTick())
         updateActiveHover(active, onlinePlayer)
+        showCueParticles(active, onlinePlayer, nowTick())
         if (active.carried != null || active.brush != null) carry(active, onlinePlayer)
         refreshGuidance(active, onlinePlayer, nowTick())
         if (active.progress.stage == OriginWorkshopGameStage.REWARDING) reward(active, onlinePlayer)
+    }
+
+    private fun showCueParticles(active: Session, player: Player, now: Long) {
+        val marker = active.targetMarker ?: return
+        val center = marker.center ?: return
+        if (center.world.uid != player.world.uid || center.distanceSquared(player.location) > 64.0) return
+        if (active.lastCueParticleTick != Long.MIN_VALUE && now - active.lastCueParticleTick < CUE_PARTICLE_INTERVAL_TICKS) return
+        active.lastCueParticleTick = now
+        val at = center.clone().add(0.0, marker.pieces.first().geometry.center.y, 0.0)
+        // Private, sparse dust: two small particles per 0.6 seconds, only at the current clickable target.
+        player.spawnParticle(Particle.DUST, at, 2, 0.10, 0.06, 0.10, 0.0, CUE_PARTICLE_DUST)
     }
 
     private fun updateIdleHover() {

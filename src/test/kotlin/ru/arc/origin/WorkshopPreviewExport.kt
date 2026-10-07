@@ -92,15 +92,18 @@ object WorkshopPreviewExport {
                 piece.size.x.toDouble(), piece.size.y.toDouble(), piece.size.z.toDouble()) +
                 ("rotationX" to if (flip) 180.0 else 0.0)
         }
-        fun cue(recipe: OriginWorkshopGameRecipe, stage: OriginWorkshopGameStage) =
+        fun cue(recipe: OriginWorkshopGameRecipe, stage: OriginWorkshopGameStage, hovered: Boolean = false) =
             prop("cue", originWorkshopPlacementMarker(recipe.interactions.getValue(stage).action), recipe.interactions.getValue(stage).target)
-                .map { it + ("cue" to true) }
+                .map { it + mapOf("cue" to true, "nativeGlow" to true, "hovered" to hovered) +
+                    if (hovered) mapOf("material" to "WHITE_CONCRETE") else emptyMap() }
         fun recipeFor(role: OriginWorkshopTableRole) = originWorkshopGameRecipe(role, "preview:${role.key}",
             dimensions, tuning, OriginWorkshopPoint(-7.5, 0.405, 0.30), rules)
         val upholster = recipeFor(OriginWorkshopTableRole.UPHOLSTERER)
         val pressAt = upholster.interactions.getValue(OriginWorkshopGameStage.UPHOLSTER_PLACE_FABRIC).target
         state("press-cue", "Обивщик · нижняя ручка и первый шов", OriginWorkshopTableRole.UPHOLSTERER,
             extras = prop("cloth", originWorkshopUpholsteryPieces(2, 1), pressAt) + cue(upholster, OriginWorkshopGameStage.UPHOLSTER_START_PRESS_SECOND))
+        state("press-cue-hover", "Обивщик · наведение на ручку", OriginWorkshopTableRole.UPHOLSTERER,
+            extras = prop("cloth", originWorkshopUpholsteryPieces(2, 1), pressAt) + cue(upholster, OriginWorkshopGameStage.UPHOLSTER_START_PRESS_SECOND, hovered = true))
         val cushionAt = upholster.interactions.getValue(OriginWorkshopGameStage.UPHOLSTER_PLACE_COVER).target
         val hiddenCushion = setOf("upholsterer-cushion-cover", "upholsterer-cushion-padding")
         for (tucked in 0..2) state("cushion-$tucked", "Обивщик · набивка и края: $tucked/2", OriginWorkshopTableRole.UPHOLSTERER,
@@ -145,7 +148,7 @@ object WorkshopPreviewExport {
         val output = Path.of(args.single())
         Files.createDirectories(output.parent)
         Files.writeString(output, GsonBuilder().setPrettyPrinting().create().toJson(mapOf("states" to states,
-            "evidence" to "Production geometry, processing poses and filled cues; local yaw 0; exact vanilla and ItemsAdder face UVs. Finished furniture uses NONE, scale 0.65, native Y180 and analyzed tabletop contact. Finished anchors are checked against canonical machine assemblies; the carpenter fixture is hidden. No live world geometry is rendered. Workshop board native Y180 and compensation cancel.")))
+            "evidence" to "Production geometry, processing poses and solid full-brightness cues; native Minecraft glow silhouette is not simulated; local yaw 0; exact vanilla and ItemsAdder face UVs. Finished furniture uses NONE, scale 0.65, native Y180 and analyzed tabletop contact. Finished anchors are checked against canonical machine assemblies; the carpenter fixture is hidden. No live world geometry is rendered. Workshop board native Y180 and compensation cancel.")))
         println("WORKSHOP_PREVIEW states=${states.size} output=$output")
     }
 }
