@@ -8,7 +8,9 @@ import io.mockk.verify
 import net.kyori.adventure.text.Component
 import org.bukkit.Material
 import org.bukkit.World
+import org.bukkit.block.Barrel
 import org.bukkit.block.Chest
+import org.bukkit.block.EnderChest
 import org.bukkit.entity.Player
 import org.bukkit.inventory.Inventory
 import org.bukkit.inventory.ItemStack
@@ -49,6 +51,50 @@ class ChestPreviewProviderTest : StringSpec({
         frame.anchor shouldBe InspectionHologramAnchor(world.uid, 4.5, 70.15, -2.5)
         verify(exactly = 1) { first.blockInventory }
         verify(exactly = 1) { second.blockInventory }
+    }
+
+    "barrels are read through their live block inventory" {
+        val world = world(); val player = player(world)
+        val barrel = mockk<Barrel>()
+        val inventory = mockk<Inventory>()
+        every { inventory.contents } returns arrayOf(ItemStack(Material.COPPER_INGOT))
+        every { barrel.inventory } returns inventory
+        val provider = ChestPreviewProvider(ChestPreviewSettings()) { _, _ ->
+            ChestPreviewTarget(listOf(barrel), InspectionHologramAnchor(world.uid, 0.5, 64.0, 0.5))
+        }
+        provider.selectedFrame(player) { provider.resolve(player) }!!.items.map { it.type } shouldBe
+            listOf(Material.COPPER_INGOT)
+        verify(exactly = 1) { barrel.inventory }
+    }
+
+    "Ender Chest preview uses each viewer's own inventory without cross-viewer caching" {
+        val world = world(); val viewer = player(world); val other = player(world)
+        val enderChest = mockk<EnderChest>()
+        val viewerInventory = mockk<Inventory>()
+        val otherInventory = mockk<Inventory>()
+        every { viewerInventory.contents } returns arrayOf(ItemStack(Material.ENDER_PEARL, 3))
+        every { otherInventory.contents } returns arrayOf(ItemStack(Material.DIAMOND, 2))
+        every { viewer.enderChest } returns viewerInventory
+        every { other.enderChest } returns otherInventory
+        val provider = ChestPreviewProvider(ChestPreviewSettings()) { _, _ ->
+            ChestPreviewTarget(listOf(enderChest), InspectionHologramAnchor(world.uid, 1.5, 64.0, 0.5))
+        }
+
+        provider.selectedFrame(viewer) { provider.resolve(viewer) }!!.items.map { it.type } shouldBe
+            listOf(Material.ENDER_PEARL)
+        provider.selectedFrame(other) { provider.resolve(other) }!!.items.map { it.type } shouldBe
+            listOf(Material.DIAMOND)
+        provider.selectedFrame(viewer) { provider.resolve(viewer) }!!.items.map { it.type } shouldBe
+            listOf(Material.ENDER_PEARL)
+        verify(exactly = 2) { viewer.enderChest }
+        verify(exactly = 1) { other.enderChest }
+    }
+
+    "an unresolved Ender Chest never reads private contents" {
+        val world = world(); val viewer = player(world)
+        val provider = ChestPreviewProvider(ChestPreviewSettings()) { _, _ -> null }
+        provider.selectedFrame(viewer) { provider.resolve(viewer) } shouldBe null
+        verify(exactly = 0) { viewer.enderChest }
     }
 
     "max items caps icons and empty inventory has no empty-state label" {

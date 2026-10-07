@@ -96,7 +96,7 @@ class ChestPreviewIconsTest : StringSpec({
         renderer.close()
     }
 
-    "native item-display rotation preserves the inventory-facing block top and flat icon orientation" {
+    "block icons use a shallow top and side view while flat icons stay unmirrored" {
         val worldId = UUID.randomUUID()
         val harness = DisplayHarness()
         val renderer = ChestPreviewIcons(harness.owner, ChestPreviewSettings(backgroundOpacity = 0))
@@ -110,14 +110,42 @@ class ChestPreviewIconsTest : StringSpec({
                 // Minecraft applies this after the model's own GUI transform.
                 .rotateY(Math.PI.toFloat())
         }
-        // Vanilla block/block.json GUI rotation is [30, 225, 0]. Its top must face the viewer.
-        val blockTop = Quaternionf().rotationXYZ(
+        // Vanilla block/block.json GUI rotation is [30, 225, 0].
+        val authored = Quaternionf().rotationXYZ(
             Math.toRadians(30.0).toFloat(), Math.toRadians(225.0).toFloat(), 0f,
-        ).transform(Vector3f(0f, 1f, 0f))
-        (rendered[0].transformDirection(blockTop).z > 0f) shouldBe true
+        )
+        val blockTop = rendered[0].transformDirection(authored.transform(Vector3f(0f, 1f, 0f))).normalize()
+        (blockTop.z in 0.40f..0.42f) shouldBe true // sin(24 degrees), previously sin(30) = 0.5.
+        val blockFront = rendered[0].transformDirection(authored.transform(Vector3f(0f, 0f, -1f))).normalize()
+        (blockFront.z > 0.74f) shouldBe true // A modest reduction from the inventory angle.
         // Generated/handheld GUI models have no extra rotation: their right stays screen-right.
         val flatRight = rendered[1].transformDirection(Vector3f(1f, 0f, 0f))
         (flatRight.distance(Vector3f(ChestPreviewIconGeometry.ICON_SCALE, 0f, 0f)) < 0.00001f) shouldBe true
+        renderer.close()
+    }
+
+    "flat plants and custom block item models keep their authored GUI pose" {
+        ChestPreviewIconGeometry.isBlockIcon(ItemStack(Material.POPPY)) shouldBe false
+        val custom = ItemStack(Material.STONE).apply {
+            itemMeta = itemMeta.apply { setCustomModelData(123) }
+        }
+        ChestPreviewIconGeometry.isBlockIcon(custom) shouldBe false
+    }
+
+    "changing a block slot to a tool restores its flat pose without replacing the handle" {
+        val worldId = UUID.randomUUID()
+        val player = player(worldId)
+        val harness = DisplayHarness()
+        val renderer = ChestPreviewIcons(harness.owner, ChestPreviewSettings(backgroundOpacity = 0))
+        renderer.update(player, frame(worldId, listOf(ItemStack(Material.OAK_PLANKS))), 1f)
+        renderer.update(player, frame(worldId, listOf(ItemStack(Material.DIAMOND_PICKAXE))), 1f)
+
+        harness.itemDisplays.size shouldBe 1
+        harness.itemTransforms.size shouldBe 2
+        val flatPose = harness.itemTransforms.last().rightRotation
+            .mul(Quaternionf().rotationY(Math.PI.toFloat()), Quaternionf())
+        (flatPose.transform(Vector3f(1f, 0f, 0f)).distance(Vector3f(1f, 0f, 0f)) < 0.00001f) shouldBe true
+        verify(exactly = 0) { harness.itemDisplays.single().remove() }
         renderer.close()
     }
 
@@ -141,6 +169,20 @@ class ChestPreviewIconsTest : StringSpec({
         verify(exactly = 1) { harness.textDisplays[1].showTo(second) }
         verify(exactly = 0) { harness.textDisplays[1].showTo(first) }
 
+        renderer.close()
+    }
+
+    "switching containers replaces the scene at its destination instead of moving old icons" {
+        val worldId = UUID.randomUUID()
+        val harness = DisplayHarness()
+        val renderer = ChestPreviewIcons(harness.owner, ChestPreviewSettings(backgroundOpacity = 0))
+        val viewer = player(worldId)
+        val first = frame(worldId, listOf(ItemStack(Material.PAPER)))
+        renderer.update(viewer, first, 1f)
+        renderer.update(viewer, first.copy(anchor = first.anchor.copy(x = first.anchor.x + 1)), 1f)
+        harness.itemDisplays.size shouldBe 2
+        verify(exactly = 1) { harness.itemDisplays[0].remove() }
+        verify(exactly = 0) { harness.itemDisplays[0].teleport(any()) }
         renderer.close()
     }
 
@@ -200,11 +242,20 @@ private class DisplayHarness {
 }
 
 private fun player(worldId: UUID): Player {
-    val world = mockk<World>()
+    val world = mockk<World>(relaxed = true)
     every { world.uid } returns worldId
+    every { world.minHeight } returns -64
+    every { world.maxHeight } returns 320
+    every { world.isChunkLoaded(any<Int>(), any<Int>()) } returns true
+    every { world.getBlockAt(any<Int>(), any<Int>(), any<Int>()) } returns mockk {
+        every { isPassable } returns true
+    }
+    every { world.rayTraceBlocks(any(), any(), any(), any(), any<Boolean>()) } returns null
     return mockk<Player>(relaxed = true).also { player ->
         every { player.uniqueId } returns UUID.randomUUID()
         every { player.world } returns world
+        every { player.isChunkSent(any<Long>()) } returns true
+        every { player.eyeLocation } returns Location(world, 2.5, 70.8, -6.5)
     }
 }
 

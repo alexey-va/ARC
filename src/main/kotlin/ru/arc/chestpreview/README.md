@@ -1,7 +1,8 @@
 # Private chest inspection
 
-Looking directly at an ordinary or trapped chest produces an anchored inspection
-hologram only for a player with `arc.chest-preview`. The permission defaults to
+Looking directly at an ordinary, trapped or copper chest (including waxed and
+oxidized variants), barrel, shulker box or ender chest produces a private icon
+preview only for a player with `arc.chest-preview`. The permission defaults to
 false, including operators, and is not a child of `arc.admin`. No permissions are
 granted by the module. The existing inspection preference must be `HOLOGRAM`;
 `OFF` and `BOSSBAR` do not display container contents.
@@ -16,8 +17,10 @@ for subsequent setting changes once this plugin version is active.
 
 The preview contains **only item icons** in a compact three-column grid, without
 names, titles, counts, overflow or empty-state labels. Similar stacks share one
-icon in physical slot order. Empty chests have no visible panel. The item model
-and appearance metadata are retained, with display amount normalized to one.
+icon in physical slot order. Empty containers have no visible panel. Ender chests
+always use the looking player's own ender inventory, so two viewers can see
+different icons at one block. The item model and appearance metadata are
+retained, with display amount normalized to one.
 
 The existing inspection arbitration selects the chest provider by priority. Its
 empty frame suppresses lower text sources, while the host captures that winning
@@ -25,12 +28,22 @@ provider's icon snapshot for a private `PaperPacketDisplays` scene. OFF, BOSSBAR
 a higher-priority winner, target loss, suppression and player reset clear the
 icons. The blank-space TextDisplay is only a background rectangle; it contains
 no readable glyphs. The items use native GUI ItemDisplay transforms. All parts
-share one chest-top anchor and client billboard, retaining display handles on
-unchanged refreshes. A local half-turn cancels ItemDisplay's native Y rotation,
-preserving the item's inventory-facing GUI model (block tops and unmirrored tools).
+share one anchor and client billboard, retaining display handles on unchanged
+refreshes. The whole grid volume is checked against nearby blocks. When the top
+is obstructed or hidden, placement tries the viewer-facing side of the container.
+A clear fallback is retained for the same target; if no candidate fits, the panel
+is hidden. A different container gets new handles at its destination.
+A local half-turn cancels ItemDisplay's native Y rotation,
+preserving unmirrored tools. Block icons use a shallower pose: standard cubes
+have a 24-degree top tilt and 35-degree side turn instead of the inventory's
+30/45-degree view. Changing a slot between a block and a tool updates its pose
+without replacing the display handle. Flat plants and explicitly customized
+item models retain their authored GUI pose.
 No Bukkit entity, inventory window, synthetic open event or
-world mutation is created. The five-tick inspection refresh rechecks access
-before reading contents.
+world mutation is created. Viewers with `arc.chest-preview` are inspected every
+tick, including fresh access checks before content reads. Other viewers retain
+the five-tick inspection cadence. Packet delivery runs on the shared display
+owner's next refresh; network/client latency remains outside this polling bound.
 
 Visual reference: [Volmit Gloss container previews](https://github.com/VolmitSoftware/docs/blob/master/gloss/15-container-previews.md)
 and its slot-grid example. ARC retains its own access checks, permission and
@@ -38,16 +51,24 @@ compact text-free layout; Gloss is not installed or required.
 
 ## Access boundary
 
-`ChestPreviewAccess` resolves both halves from block metadata before inspecting
-either inventory. A denied, missing, unsent, malformed, locked, obstructed or
-loot-table half hides the entire card. The ray corridor and relevant chunks must
+`ChestPreviewAccess` resolves physical containers (both halves for double
+chests) from block metadata before inspecting any inventory. A denied, missing,
+unsent, malformed, locked, obstructed or loot-table container hides the entire
+card. The ray corridor and relevant chunks must
 already be loaded; inspection does not load chunks or generate loot.
 
-The read-only protection checks are WorldGuard's `CHEST_ACCESS` build query,
+The read-only protection checks are WorldGuard's `CHEST_ACCESS` build query
+(`INTERACT` for the ender-chest access block),
 its session bypass and separate sign-chest protection, and Lands'
 `INTERACT_CONTAINER` world role flag (`sendMessage=false`, including wilderness).
 Installed-but-disabled or incompatible providers fail closed. Access is not
 cached between viewers or refreshes.
+
+Closed shulkers check the native half-block lid sweep with Paper's
+`Entity.wouldCollideUsing`; its bounds match vanilla 1.21.11's opening check and
+are deflated by `1e-6` to avoid counting touching faces. This also checks entity
+collisions and the viewer's world border. Already-open shulkers skip that sweep.
+The query's neighbouring chunks are verified loaded and sent first.
 
 PersonalLoot, ItemsAdder, Slimefun, EliteMobs treasure chests, QuickShop shops,
 AutoSellChests and crate anchors are excluded: their raw inventories need not be
@@ -80,6 +101,6 @@ and look away. Confirm the private card disappears and never appears for a
 second player without the permission. Delivery without restart does not prove
 that this behavior is active.
 
-Platform references: [Paper Chest](https://jd.papermc.io/paper/26.1.2/org/bukkit/block/Chest.html),
+Platform references: [Paper Chest](https://jd.papermc.io/paper/1.21.11/org/bukkit/block/Chest.html),
 [WorldGuard protection queries](https://worldguard.enginehub.org/en/latest/developer/regions/protection-query/),
 [Lands API](https://wiki.incredibleplugins.com/lands/developers/api).

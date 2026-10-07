@@ -4,6 +4,7 @@ import com.sk89q.worldedit.bukkit.BukkitAdapter
 import com.sk89q.worldguard.WorldGuard
 import com.sk89q.worldguard.bukkit.WorldGuardPlugin
 import com.sk89q.worldguard.protection.flags.Flags as WorldGuardFlags
+import com.destroystokyo.paper.loottable.LootableBlockInventory
 import me.angeschossen.lands.api.LandsIntegration
 import me.angeschossen.lands.api.flags.type.Flags as LandsFlags
 import org.bukkit.Bukkit
@@ -13,11 +14,18 @@ import org.bukkit.Material
 import org.bukkit.attribute.Attribute
 import org.bukkit.block.Block
 import org.bukkit.block.BlockFace
+import org.bukkit.block.BlockState
+import org.bukkit.block.Container
 import org.bukkit.block.Chest
+import org.bukkit.block.EnderChest
+import org.bukkit.block.ShulkerBox
 import org.bukkit.block.data.type.Chest as ChestData
+import org.bukkit.block.data.Directional
 import org.bukkit.entity.Player
+import org.bukkit.util.BoundingBox
 import ru.arc.ARC
 import ru.arc.paper.api.InspectionHologramAnchor
+import kotlin.math.floor
 
 /** Authorizes the entire physical container before the provider may inspect a single slot. */
 internal class ChestPreviewAccess(
@@ -42,11 +50,10 @@ internal class ChestPreviewAccess(
 
     internal fun resolveBlock(player: Player, block: Block): ChestPreviewTarget? = safely {
         if (block.world.uid != player.world.uid || !available(player, block.x shr 4, block.z shr 4)) return@safely null
-        if (block.type != Material.CHEST && block.type != Material.TRAPPED_CHEST) return@safely null
-        val data = block.blockData as? ChestData ?: return@safely null
-        val blocks = if (data.type == ChestData.Type.SINGLE) {
-            listOf(block)
-        } else {
+        if (!isSupportedContainer(block.type)) return@safely null
+        val blocks = if (isChest(block.type)) {
+            val data = block.blockData as? ChestData ?: return@safely null
+            if (data.type == ChestData.Type.SINGLE) return@safely resolveAndAuthorize(player, listOf(block))
             val direction = chestPartnerDirection(data.facing, data.type) ?: return@safely null
             val x = block.x + direction.modX
             val z = block.z + direction.modZ
@@ -58,32 +65,73 @@ internal class ChestPreviewAccess(
                 partnerData.type == ChestData.Type.SINGLE) return@safely null
             // Stable ordering even when the player points at the other half.
             if (data.type == ChestData.Type.RIGHT) listOf(block, partner) else listOf(partner, block)
-        }
-        val halves = ArrayList<Chest>(blocks.size)
+        } else listOf(block)
+        resolveAndAuthorize(player, blocks)
+    }
+
+    private fun resolveAndAuthorize(player: Player, blocks: List<Block>): ChestPreviewTarget? {
+        val states = ArrayList<BlockState>(blocks.size)
         for (half in blocks) {
-            // Native obstruction and WG sign-lock checks may inspect the immediate neighbours.
-            // They must not make this private, read-only feature load surrounding chunks.
+            // Native obstruction and WG sign-lock checks may inspect adjacent blocks. Do not
+            // make this private, read-only feature load surrounding chunks.
             for (x in ((half.x - 1) shr 4)..((half.x + 1) shr 4)) {
                 for (z in ((half.z - 1) shr 4)..((half.z + 1) shr 4)) {
-                    if (!half.world.isChunkLoaded(x, z)) return@safely null
+                    if (!half.world.isChunkLoaded(x, z)) return null
                 }
             }
-            val state = half.getState(false) as? Chest ?: return@safely null
-            // Reading a loot-table container can generate loot. Locked chests are intentionally
-            // omitted even if a key in the player's hand could unlock them on an actual click.
-            if (state.isLocked || state.lootTable != null || state.isBlocked) return@safely null
-            halves += state
+            val state = half.getState(false)
+            when (state) {
+                is Container -> {
+                    // Reading a loot-table container can generate loot. Locked containers are
+                    // omitted even if the viewer might have a key for an actual interaction.
+                    if (state.isLocked || (state is LootableBlockInventory && state.lootTable != null)) return null
+                    if (state is Chest && state.isBlocked) return null
+                    if (state is ShulkerBox && !shulkerCanOpen(player, half, state)) return null
+                }
+                is EnderChest -> if (state.isBlocked) return null
+                else -> return null
+            }
+            states += state
         }
-        if (blocks.any { !protectedAccess(player, it) }) return@safely null
-        ChestPreviewTarget(
-            halves,
+        if (blocks.any { !protectedAccess(player, it) }) return null
+        val bounds = blocks.drop(1).fold(BoundingBox.of(blocks.first())) { current, next ->
+            current.union(BoundingBox.of(next))
+        }
+        return ChestPreviewTarget(
+            states,
             InspectionHologramAnchor(
-                block.world.uid,
+                blocks.first().world.uid,
                 blocks.map { it.x + 0.5 }.average(),
-                block.y + 1.0,
+                blocks.first().y + 1.0,
                 blocks.map { it.z + 0.5 }.average(),
             ),
+            bounds,
         )
+    }
+
+    private fun shulkerCanOpen(player: Player, block: Block, state: ShulkerBox): Boolean {
+        if (state.isOpen) return true
+        val facing = (state.blockData as? Directional)?.facing ?: return false
+        if (facing == BlockFace.SELF) return false
+        val x = block.x + facing.modX
+        val y = block.y + facing.modY
+        val z = block.z + facing.modZ
+        if (y !in block.world.minHeight until block.world.maxHeight || !available(player, x shr 4, z shr 4)) return false
+        // Vanilla checks only the half-block shell swept by the opening lid, deflated
+        // by 1e-6 so merely touching an adjacent face does not count as obstruction.
+        val center = block.location.add(0.5 + facing.modX * 0.75, 0.5 + facing.modY * 0.75, 0.5 + facing.modZ * 0.75)
+        val sweptBounds = BoundingBox.of(center,
+            if (facing.modX == 0) 0.5 else 0.25,
+            if (facing.modY == 0) 0.5 else 0.25,
+            if (facing.modZ == 0) 0.5 else 0.25,
+        ).expand(-0.000001)
+        // Native collision queries also scan neighbour shapes; preflight their whole corridor.
+        for (chunkX in (floor(sweptBounds.minX - 1).toInt() shr 4)..(floor(sweptBounds.maxX + 1).toInt() shr 4)) {
+            for (chunkZ in (floor(sweptBounds.minZ - 1).toInt() shr 4)..(floor(sweptBounds.maxZ + 1).toInt() shr 4)) {
+                if (!available(player, chunkX, chunkZ)) return false
+            }
+        }
+        return !player.wouldCollideUsing(sweptBounds)
     }
 
     private fun available(player: Player, x: Int, z: Int): Boolean =
@@ -98,6 +146,25 @@ internal class ChestPreviewAccess(
         null
     }
 }
+
+private val COPPER_CHEST_MATERIALS = setOf(
+    Material.COPPER_CHEST,
+    Material.EXPOSED_COPPER_CHEST,
+    Material.WEATHERED_COPPER_CHEST,
+    Material.OXIDIZED_COPPER_CHEST,
+    Material.WAXED_COPPER_CHEST,
+    Material.WAXED_EXPOSED_COPPER_CHEST,
+    Material.WAXED_WEATHERED_COPPER_CHEST,
+    Material.WAXED_OXIDIZED_COPPER_CHEST,
+)
+
+private fun isChest(type: Material): Boolean =
+    type == Material.CHEST || type == Material.TRAPPED_CHEST || type in COPPER_CHEST_MATERIALS
+
+private fun isSupportedContainer(type: Material): Boolean =
+    isChest(type) || type == Material.BARREL || type == Material.ENDER_CHEST ||
+        type == Material.SHULKER_BOX ||
+        (type.isBlock && type.name.endsWith("_SHULKER_BOX") && !type.name.startsWith("LEGACY_"))
 
 internal fun chestPartnerDirection(facing: BlockFace, type: ChestData.Type): BlockFace? {
     val clockwise = when (facing) {
@@ -133,7 +200,10 @@ private class ChestPreviewProtection {
             if (WorldGuardPlugin.inst().configManager.get(world).isChestProtected(location, localPlayer)) return false
             if (!wg.platform.sessionManager.hasBypass(localPlayer, world)) {
                 val regions = wg.platform.regionContainer ?: return false
-                if (!regions.createQuery().testBuild(location, localPlayer, WorldGuardFlags.CHEST_ACCESS)) return false
+                // WorldGuard treats Ender Chest block use as INTERACT: the physical block has
+                // no inventory of its own, unlike barrels, shulkers, and regular chests.
+                val flag = if (block.type == Material.ENDER_CHEST) WorldGuardFlags.INTERACT else WorldGuardFlags.CHEST_ACCESS
+                if (!regions.createQuery().testBuild(location, localPlayer, flag)) return false
             }
         }
         plugins.getPlugin("Lands")?.let { plugin ->

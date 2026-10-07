@@ -81,7 +81,12 @@ internal class ItemInfoRuntime(
                 furnitureHitboxHint?.update(player, refreshTarget = tick == 1L || tick % 2L == 0L)
                 if (player.uniqueId in failedViewers) return@forEach
                 try {
-                    if (tick == 1L || tick % 5L == 0L) controller.update(player)
+                    val chestPreviewEnabled = try {
+                        player.hasPermission("arc.chest-preview")
+                    } catch (_: Exception) {
+                        false
+                    }
+                    if (shouldUpdateItemInfo(tick, chestPreviewEnabled)) controller.update(player)
                     controller.follow(player)
                 } catch (failure: Exception) {
                     controller.reset(player)
@@ -134,6 +139,9 @@ internal class ItemInfoRuntime(
         failedViewers.clear()
     }
 }
+
+internal fun shouldUpdateItemInfo(tick: Long, chestPreviewEnabled: Boolean): Boolean =
+    chestPreviewEnabled || tick == 1L || tick % 5L == 0L
 
 internal class ItemInfoInspectionProvider(
     private val settings: ItemInfoSettings,

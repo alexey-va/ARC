@@ -34,6 +34,7 @@ internal class ChestPreviewIcons(
 
     private data class ViewerState(
         var anchor: InspectionHologramAnchor,
+        var sourceAnchor: InspectionHologramAnchor,
         var scale: Float,
         var itemCount: Int,
         val icons: MutableList<IconHandle> = mutableListOf(),
@@ -66,7 +67,11 @@ internal class ChestPreviewIcons(
         }
 
         try {
-            render(player, target.anchor, items, ChestPreviewIconGeometry.normalizeScale(scale))
+            val effectiveScale = ChestPreviewIconGeometry.normalizeScale(scale)
+            val previous = viewers[player.uniqueId]?.takeIf { it.sourceAnchor == target.anchor }?.anchor
+            val anchor = ChestPreviewPlacement.place(player, target, items.size, effectiveScale, previous)
+            if (anchor == null) clear(player)
+            else render(player, anchor, target.anchor, items, effectiveScale)
         } catch (failure: Exception) {
             try {
                 clear(player)
@@ -101,17 +106,20 @@ internal class ChestPreviewIcons(
     private fun render(
         player: Player,
         anchor: InspectionHologramAnchor,
+        sourceAnchor: InspectionHologramAnchor,
         items: List<ItemStack>,
         scale: Float,
     ) {
         val playerId = player.uniqueId
-        val oldState = viewers[playerId]
-        if (oldState != null && oldState.anchor.worldId != anchor.worldId) {
+        if (viewers[playerId]?.let { it.sourceAnchor != sourceAnchor } == true) {
+            // A different target has no authored travel path between the two containers.
             clear(playerId)
         }
-        val created = oldState == null || oldState.anchor.worldId != anchor.worldId
+        val oldState = viewers[playerId]
+        val created = oldState == null
         val state = if (created) {
-            ViewerState(anchor = anchor, scale = scale, itemCount = 0).also { viewers[playerId] = it }
+            ViewerState(anchor = anchor, sourceAnchor = sourceAnchor, scale = scale, itemCount = 0)
+                .also { viewers[playerId] = it }
         } else {
             requireNotNull(oldState)
         }
@@ -139,13 +147,14 @@ internal class ChestPreviewIcons(
                 val display = displays.spawnItem(anchor.toLocation(player), item.clone())
                 val newHandle = IconHandle(display, item.clone())
                 state.icons += newHandle
-                configureItemDisplay(display, player, offset, scale)
+                configureItemDisplay(display, player, item, offset, scale)
             } else {
-                if (!handle.item.isSimilar(item)) {
+                val itemChanged = !handle.item.isSimilar(item)
+                if (itemChanged) {
                     handle.item = item.clone()
                     handle.display.itemStack = item.clone()
                 }
-                if (layoutChanged) configureItemTransform(handle.display, offset, scale)
+                if (layoutChanged || itemChanged) configureItemTransform(handle.display, item, offset, scale)
             }
         }
 
@@ -166,11 +175,13 @@ internal class ChestPreviewIcons(
 
         state.itemCount = items.size
         state.scale = scale
+        state.sourceAnchor = sourceAnchor
     }
 
     private fun configureItemDisplay(
         display: PacketItemDisplay,
         player: Player,
+        item: ItemStack,
         offset: ChestPreviewIconOffset,
         scale: Float,
     ) {
@@ -181,11 +192,11 @@ internal class ChestPreviewIcons(
         display.shadowRadius = 0f
         display.shadowStrength = 0f
         display.brightness = Display.Brightness(15, 15)
-        configureItemTransform(display, offset, scale)
+        configureItemTransform(display, item, offset, scale)
         display.showTo(player)
     }
 
-    private fun configureItemTransform(display: PacketItemDisplay, offset: ChestPreviewIconOffset, scale: Float) {
+    private fun configureItemTransform(display: PacketItemDisplay, item: ItemStack, offset: ChestPreviewIconOffset, scale: Float) {
         val itemBounds = ChestPreviewIconGeometry.itemBounds(scale)
         // All parts share the bottom anchor; include each local offset in native culling bounds.
         display.displayWidth = abs(offset.x) * 2f + itemBounds.width
@@ -194,7 +205,7 @@ internal class ChestPreviewIcons(
             Vector3f(offset.x, offset.y, ICON_DEPTH),
             Quaternionf(),
             Vector3f(ChestPreviewIconGeometry.ICON_SCALE * scale),
-            ChestPreviewIconGeometry.guiFacingRotation(),
+            ChestPreviewIconGeometry.guiFacingRotation(ChestPreviewIconGeometry.isBlockIcon(item)),
         )
     }
 
@@ -310,9 +321,21 @@ internal object ChestPreviewIconGeometry {
     private const val MAX_SCALE = 2.00f
     private const val DEFAULT_SCALE = 0.90f
 
-    // ItemDisplay inserts a native 180-degree Y turn after the item's GUI transform.
-    // Cancel it locally so blocks show their top/front and flat icons are not mirrored.
-    fun guiFacingRotation(): Quaternionf = Quaternionf(0f, 1f, 0f, 0f)
+    // A small correction for ordinary solid block models; preserve flat and custom item poses.
+    fun isBlockIcon(item: ItemStack): Boolean = item.type.isBlock && item.type.isSolid &&
+        item.itemMeta?.let { !it.hasItemModel() && !it.hasCustomModelData() } != false
+
+    // Lower the vanilla block GUI's 30-degree pitch / 45-degree side view to 24 / 35.
+    // Non-block items retain their authored GUI pose. Both cancel ItemDisplay's native Y half-turn.
+    fun guiFacingRotation(blockIcon: Boolean): Quaternionf {
+        val nativeCorrection = Quaternionf(0f, 1f, 0f, 0f)
+        if (!blockIcon) return nativeCorrection
+        val authored = Quaternionf().rotationXYZ(radians(30f), radians(225f), 0f)
+        return Quaternionf().rotationXYZ(radians(24f), radians(215f), 0f)
+            .mul(authored.invert()).mul(nativeCorrection)
+    }
+
+    private fun radians(degrees: Float): Float = Math.toRadians(degrees.toDouble()).toFloat()
 
     fun offsets(itemCount: Int, scale: Float): List<ChestPreviewIconOffset> {
         require(itemCount >= 0) { "Chest preview icon count cannot be negative" }
