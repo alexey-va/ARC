@@ -11,6 +11,8 @@ import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.player.PlayerTeleportEvent
 import ru.arc.ARC
+import ru.arc.chestpreview.ChestPreviewProvider
+import ru.arc.chestpreview.ChestPreviewTarget
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.furniturehitbox.FurnitureHitboxHint
 import ru.arc.hooks.luckperms.LuckPermsHook
@@ -27,6 +29,7 @@ internal class ItemInfoRuntime(
     private val inspection: PaperArcInspectionService,
     galleryPurchasePrice: (Player, String) -> String?,
     galleryRuntime: FurnitureGalleryInteractionRuntime?,
+    chestPreviewResolver: (Player, Double) -> ChestPreviewTarget?,
 ) : Listener, AutoCloseable {
     private val tasks = LifecycleTaskScope()
     private val furnitureHitboxHint = FurnitureHitboxHint.create(ARC.instance, galleryRuntime)
@@ -50,6 +53,12 @@ internal class ItemInfoRuntime(
             preferences = readPreferences,
             galleryPurchasePrice = galleryPurchasePrice,
         ),
+    )
+    private val chestPreviewRegistration = inspection.register(
+        ARC.instance,
+        "chest-preview",
+        50,
+        ChestPreviewProvider(settings.chestPreview, chestPreviewResolver),
     )
     private val controller = ItemInfoController(
         preferences = readPreferences,
@@ -113,6 +122,7 @@ internal class ItemInfoRuntime(
     override fun close() {
         tasks.close()
         furnitureHitboxHint?.close()
+        chestPreviewRegistration.close()
         providerRegistration.close()
         failedViewers.clear()
     }

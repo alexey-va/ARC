@@ -4,6 +4,7 @@ import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
+import ru.arc.chestpreview.ChestPreviewSettings
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import java.nio.file.Path
@@ -17,6 +18,7 @@ internal data class ItemInfoSettings(
     val hologramTemplate: String,
     val bossbarTemplate: String,
     val excludedItemIds: Set<String> = emptySet(),
+    val chestPreview: ChestPreviewSettings = ChestPreviewSettings(),
 ) {
     private val miniMessage = MiniMessage.miniMessage()
 
@@ -61,6 +63,15 @@ internal class ItemInfoConfig(private val source: Config) {
             hologramTemplate = required("text.hologram", "<white><name><newline><gray><id>"),
             bossbarTemplate = required("text.bossbar", "<white><name> <dark_gray>· <gray><id>"),
             excludedItemIds = source.stringList("excluded-item-ids").toSet(),
+            chestPreview = ChestPreviewSettings(
+                maxItems = source.int("chest-preview.max-items", ChestPreviewSettings.DEFAULT_MAX_ITEMS),
+                maxDistance = source.double("chest-preview.max-distance", ChestPreviewSettings.DEFAULT_MAX_DISTANCE),
+                verticalGap = source.double("chest-preview.vertical-gap", ChestPreviewSettings.DEFAULT_VERTICAL_GAP),
+                titleTemplate = required("chest-preview.text.title", ChestPreviewSettings.DEFAULT_TITLE_TEMPLATE),
+                entryTemplate = required("chest-preview.text.entry", ChestPreviewSettings.DEFAULT_ENTRY_TEMPLATE),
+                emptyTemplate = required("chest-preview.text.empty", ChestPreviewSettings.DEFAULT_EMPTY_TEMPLATE),
+                overflowTemplate = required("chest-preview.text.overflow", ChestPreviewSettings.DEFAULT_OVERFLOW_TEMPLATE),
+            ),
         )
     }
 

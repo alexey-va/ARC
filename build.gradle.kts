@@ -52,13 +52,16 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.323"
+version = "1.4.324"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.19"
 val landsJar = providers.gradleProperty("landsJar").orNull?.let(::file)
 if (landsJar != null) require(landsJar.isFile) { "Lands JAR does not exist: $landsJar" }
 val landsCompileDependency: Any = landsJar?.let { files(it) } ?: libs.com.github.angeschossen.landsapi
+val crateApiJar = providers.gradleProperty("crateApiJar").orNull?.let(::file)
+if (crateApiJar != null) require(crateApiJar.isFile) { "Crate API JAR does not exist: $crateApiJar" }
+val crateApiDependency: Any = crateApiJar?.let { files(it) } ?: "ru.ruscrafting.arc:arc-crate-api:0.1.0"
 
 java { toolchain { languageVersion.set(JavaLanguageVersion.of(25)) } }
 kotlin { jvmToolchain(25) }
@@ -144,6 +147,8 @@ dependencies {
     compileOnly("com.willfp:eco:2026.33") { isTransitive = false }
 
     // server-provided
+    // ArcExcellentCrates owns this service contract at runtime; never shade it into ARC.
+    compileOnly(crateApiDependency)
     compileOnly(libs.io.papermc.paper.paper.api)
     compileOnly(libs.net.advancedplugins.advancedenchantments)
     compileOnly(libs.com.github.retrooper.packetevents.spigot) {
@@ -273,6 +278,7 @@ dependencies {
     }
     // WorldEdit dependency needed for Building class tests
     testImplementation(libs.com.sk89q.worldedit.worldedit.bukkit)
+    testImplementation(crateApiDependency)
 }
 
 val runtimeClasspathConfiguration = configurations.named("runtimeClasspath")

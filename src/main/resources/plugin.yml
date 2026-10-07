@@ -224,6 +224,9 @@ permissions:
   arc.items.catalog.use:
     description: Open the ItemsAdder item catalog
     default: true
+  arc.chest-preview:
+    description: View nearby chest contents in an inspection hologram
+    default: false
   arc.items.catalog.all:
     description: View the complete ItemsAdder registry in the ARC catalog
     default: op

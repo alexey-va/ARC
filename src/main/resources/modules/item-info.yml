@@ -8,3 +8,13 @@ text:
   name-only: '<white><name>'
   hologram: '<white><name><newline><gray><id>'
   bossbar: '<white><name> <dark_gray>· <gray><id>'
+
+chest-preview:
+  max-items: 6
+  max-distance: 4.5
+  vertical-gap: 0.15
+  text:
+    title: '<gold>Содержимое сундука'
+    entry: '<white><name> <gray>× <count>'
+    empty: '<gray>Пусто'
+    overflow: '<dark_gray>И ещё: <count>'

@@ -5,6 +5,7 @@ import org.bukkit.entity.Player
 import org.bukkit.event.HandlerList
 import org.bukkit.plugin.ServicePriority
 import ru.arc.ARC
+import ru.arc.chestpreview.ChestPreviewAccess
 import ru.arc.hooks.HookRegistry
 import ru.arc.core.PluginModule
 import ru.arc.util.Logging.info
@@ -57,6 +58,7 @@ object ItemInfoModule : PluginModule {
             service,
             galleryPurchasePrice,
             HookRegistry.furnitureGalleryInteractionRuntime,
+            ChestPreviewAccess()::resolve,
         ).also {
             Bukkit.getPluginManager().registerEvents(it, ARC.instance)
             it.start()
