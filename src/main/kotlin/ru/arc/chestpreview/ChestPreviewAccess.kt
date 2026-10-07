@@ -117,7 +117,9 @@ internal fun chestPartnerDirection(facing: BlockFace, type: ChestData.Type): Blo
 /** Calls real read-only protection APIs; synthetic interaction/open events would have side effects. */
 private class ChestPreviewProtection {
     private val managed = ManagedChestExclusions()
-    private val lands by lazy { LandsIntegration.of(ARC.instance) }
+    // Keep every Lands API reference in its own class: Lands is optional and may not be
+    // present in this plugin classloader when ChestPreviewProtection is constructed.
+    private val lands by lazy { LandsProtectionAdapter() }
 
     fun allows(player: Player, block: Block): Boolean {
         if (managed.isManaged(block)) return false
@@ -136,10 +138,25 @@ private class ChestPreviewProtection {
         }
         plugins.getPlugin("Lands")?.let { plugin ->
             if (!plugin.isEnabled) return false
-            val landWorld = lands.getWorld(block.world) ?: return@let
-            val landPlayer = lands.getLandPlayer(player.uniqueId) ?: return false
-            if (!landWorld.hasRoleFlag(landPlayer, block.location, LandsFlags.INTERACT_CONTAINER, block.type, false)) return false
+            if (!lands.allows(player, block)) return false
         }
         return true
+    }
+}
+
+/** Loaded only when an enabled Lands plugin is present. Missing/incompatible API errors fail closed. */
+private class LandsProtectionAdapter {
+    private val integration by lazy { LandsIntegration.of(ARC.instance) }
+
+    fun allows(player: Player, block: Block): Boolean {
+        val landWorld = integration.getWorld(block.world) ?: return true
+        val landPlayer = integration.getLandPlayer(player.uniqueId) ?: return false
+        return landWorld.hasRoleFlag(
+            landPlayer,
+            block.location,
+            LandsFlags.INTERACT_CONTAINER,
+            block.type,
+            false,
+        )
     }
 }

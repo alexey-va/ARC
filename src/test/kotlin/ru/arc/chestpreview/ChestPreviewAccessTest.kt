@@ -20,6 +20,16 @@ import ru.arc.paper.api.InspectionHologramAnchor
 import java.util.UUID
 
 class ChestPreviewAccessTest : StringSpec({
+    "protection construction does not resolve Lands when its API is absent" {
+        val loader = LandsApiBlockingClassLoader(ChestPreviewAccessTest::class.java.classLoader)
+        val protectionClass = Class.forName("ru.arc.chestpreview.ChestPreviewProtection", true, loader)
+        val constructor = protectionClass.getDeclaredConstructor().apply { isAccessible = true }
+
+        val protection = constructor.newInstance()
+
+        protection.javaClass.classLoader shouldBe loader
+    }
+
     "a permitted ordinary chest yields an anchor without reading inventory" {
         val f = PreviewChestFixture()
         val target = ChestPreviewAccess { _, _ -> true }.resolveBlock(f.player, f.single)
@@ -153,6 +163,35 @@ private class PreviewChestFixture {
         states.values.forEach { state ->
             verify(exactly = 0) { state.blockInventory }
             verify(exactly = 0) { state.inventory }
+        }
+    }
+}
+
+/** Child-loads the real chest-preview implementation while hiding the optional provider API. */
+private class LandsApiBlockingClassLoader(
+    private val source: ClassLoader,
+) : ClassLoader(source) {
+    override fun loadClass(
+        name: String,
+        resolve: Boolean,
+    ): Class<*> {
+        if (name.startsWith("me.angeschossen.lands.api.")) {
+            throw ClassNotFoundException("Lands API intentionally absent from this test loader")
+        }
+
+        if (!name.startsWith("ru.arc.chestpreview.")) return super.loadClass(name, resolve)
+
+        synchronized(getClassLoadingLock(name)) {
+            findLoadedClass(name)?.let { loaded ->
+                if (resolve) resolveClass(loaded)
+                return loaded
+            }
+            val resource = name.replace('.', '/') + ".class"
+            val bytes = source.getResourceAsStream(resource)?.use { it.readBytes() }
+                ?: throw ClassNotFoundException(name)
+            val loaded = defineClass(name, bytes, 0, bytes.size)
+            if (resolve) resolveClass(loaded)
+            return loaded
         }
     }
 }
