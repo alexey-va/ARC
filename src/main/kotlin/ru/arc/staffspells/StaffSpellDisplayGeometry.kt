@@ -243,51 +243,48 @@ private fun novaDisplayParts(
     val spin = phase * PI * 2.0
     val parts = ArrayList<StaffDisplayPart>(32)
 
-    // Two broad counter-rotating ribbons widen from a narrow foot into the crown.
-    // Long tangential cuboids overlap slightly so the wind reads as ribbons, not dots.
-    val ribbonSegments = 8
-    val ribbonTwist = PI * 1.25
+    // Thin glass links form two continuous, counter-twisting helices around an open centre.
+    val ribbonSegments = 10
+    val ribbonTwist = PI * 1.75
+    val outerRadius = (reach * (1.0 + flare * 0.04)).coerceAtMost(3.3)
     repeat(2) { strand ->
-        repeat(ribbonSegments) { index ->
-            val fraction = (index + 0.5) / ribbonSegments
-            val strandSpin = if (strand == 0) spin else -spin
-            val angle = strand * PI + strandSpin + fraction * ribbonTwist
-            val radial = reach * (0.07 + fraction * 0.90) * (1.0 + flare * 0.04)
-            val y = 0.18 + height * fraction
-            val material = when ((index + strand * 2) % 4) {
-                0 -> Material.SEA_LANTERN
-                1 -> Material.EMERALD_BLOCK
-                2 -> Material.CYAN_STAINED_GLASS
-                else -> Material.PRISMARINE_BRICKS
-            }
-            val tangentLength = (radial * ribbonTwist / (ribbonSegments - 1) * 1.14).coerceIn(0.70, 2.10)
-            parts += part(
-                material,
-                cos(angle) * radial, y, sin(angle) * radial,
-                0.28 + fraction * 0.09, 0.52 + fraction * 0.08, tangentLength,
-                yaw = -angle,
-                roll = 0.12 * sin(angle * 1.7),
+        val strandSpin = if (strand == 0) spin else -spin
+        val twistSign = if (strand == 0) 1.0 else -1.0
+        val points = (0..ribbonSegments).map { index ->
+            val fraction = index / ribbonSegments.toDouble()
+            val radial = 0.30 + (outerRadius - 0.30) * fraction
+            val angle = strand * PI + strandSpin + twistSign * fraction * ribbonTwist
+            Vector3f(
+                (cos(angle) * radial).toFloat(),
+                (0.18 + (height - 0.18) * fraction).toFloat(),
+                (sin(angle) * radial).toFloat(),
             )
+        }
+        repeat(ribbonSegments) { index ->
+            val start = points[index]
+            val end = points[index + 1]
+            val delta = Vector3f(end).sub(start)
+            val segmentLength = delta.length()
+            val rotation = Quaternionf().rotationTo(Vector3f(0f, 0f, 1f), Vector3f(delta).normalize())
+            val center = Vector3f(start).add(end).mul(0.5f)
+            val material = when ((index + strand) % 3) {
+                0 -> Material.CYAN_STAINED_GLASS
+                1 -> Material.LIGHT_BLUE_STAINED_GLASS
+                else -> Material.WHITE_STAINED_GLASS
+            }
+            parts += StaffDisplayPart(material, center, Vector3f(0.12f, 0.18f, segmentLength), rotation)
         }
     }
 
-    // Keep the central crystals above the caster's head so the first-person view stays open.
-    parts += part(Material.SEA_LANTERN, 0.0, height * 0.77, 0.0, 0.42, 0.72, 0.42, yaw = spin)
-    parts += part(Material.EMERALD_BLOCK, 0.0, height * 0.94, 0.0, 0.30, 0.48, 0.30, yaw = -spin * 1.2)
-    repeat(6) { index ->
-        val angle = spin * 0.55 + index * PI / 3.0
-        val crownRadius = reach * (0.88 + flare * 0.08)
-        val material = when (index % 3) {
-            0 -> Material.SEA_LANTERN
-            1 -> Material.CYAN_STAINED_GLASS
-            else -> Material.EMERALD_BLOCK
-        }
+    // Four small lights crown the vortex above the caster's head; the center stays clear.
+    repeat(4) { index ->
+        val angle = spin * 0.45 + index * PI / 2.0
+        val crownRadius = outerRadius * 0.58
         parts += part(
-            material,
-            cos(angle) * crownRadius, height * (0.86 + 0.035 * sin(angle)), sin(angle) * crownRadius,
-            0.34, 0.46, 2.12,
+            if (index % 2 == 0) Material.SEA_LANTERN else Material.WHITE_STAINED_GLASS,
+            cos(angle) * crownRadius, height + 0.16, sin(angle) * crownRadius,
+            0.12, 0.16, 0.90,
             yaw = -angle,
-            roll = 0.10 * cos(angle),
         )
     }
 
