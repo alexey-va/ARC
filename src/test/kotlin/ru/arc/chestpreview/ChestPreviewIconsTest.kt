@@ -16,6 +16,10 @@ import org.bukkit.entity.ItemDisplay
 import org.bukkit.entity.Player
 import org.bukkit.entity.TextDisplay
 import org.bukkit.inventory.ItemStack
+import org.bukkit.util.Transformation
+import org.joml.Matrix4f
+import org.joml.Quaternionf
+import org.joml.Vector3f
 import org.mockbukkit.mockbukkit.MockBukkit
 import ru.arc.paper.api.InspectionHologramAnchor
 import ru.arc.paper.display.PacketItemDisplay
@@ -92,6 +96,31 @@ class ChestPreviewIconsTest : StringSpec({
         renderer.close()
     }
 
+    "native item-display rotation preserves the inventory-facing block top and flat icon orientation" {
+        val worldId = UUID.randomUUID()
+        val harness = DisplayHarness()
+        val renderer = ChestPreviewIcons(harness.owner, ChestPreviewSettings(backgroundOpacity = 0))
+        renderer.update(player(worldId), frame(worldId, listOf(
+            ItemStack(Material.OAK_PLANKS), ItemStack(Material.DIAMOND_PICKAXE),
+        )), 1f)
+
+        val rendered = harness.itemTransforms.map { transform ->
+            Matrix4f().translation(transform.translation)
+                .rotate(transform.leftRotation).scale(transform.scale).rotate(transform.rightRotation)
+                // Minecraft applies this after the model's own GUI transform.
+                .rotateY(Math.PI.toFloat())
+        }
+        // Vanilla block/block.json GUI rotation is [30, 225, 0]. Its top must face the viewer.
+        val blockTop = Quaternionf().rotationXYZ(
+            Math.toRadians(30.0).toFloat(), Math.toRadians(225.0).toFloat(), 0f,
+        ).transform(Vector3f(0f, 1f, 0f))
+        (rendered[0].transformDirection(blockTop).z > 0f) shouldBe true
+        // Generated/handheld GUI models have no extra rotation: their right stays screen-right.
+        val flatRight = rendered[1].transformDirection(Vector3f(1f, 0f, 0f))
+        (flatRight.distance(Vector3f(ChestPreviewIconGeometry.ICON_SCALE, 0f, 0f)) < 0.00001f) shouldBe true
+        renderer.close()
+    }
+
     "per-viewer scenes have separate item and backdrop audiences" {
         val worldId = UUID.randomUUID()
         val first = player(worldId)
@@ -149,13 +178,19 @@ private class DisplayHarness {
     val owner = mockk<PaperPacketDisplays>(relaxed = true)
     val itemPayloads = mutableListOf<ItemStack>()
     val itemDisplays = mutableListOf<PacketItemDisplay>()
+    val itemTransforms = mutableListOf<Transformation>()
     val textContents = mutableListOf<Component>()
     val textDisplays = mutableListOf<PacketTextDisplay>()
 
     init {
         every { owner.spawnItem(any(), any()) } answers {
             itemPayloads += secondArg<ItemStack>().clone()
-            mockk<PacketItemDisplay>(relaxed = true).also(itemDisplays::add)
+            mockk<PacketItemDisplay>(relaxed = true).also { display ->
+                itemDisplays += display
+                every { display.transformation = any() } answers {
+                    itemTransforms += firstArg<Transformation>()
+                }
+            }
         }
         every { owner.spawnText(any(), any()) } answers {
             textContents += secondArg<Component>()

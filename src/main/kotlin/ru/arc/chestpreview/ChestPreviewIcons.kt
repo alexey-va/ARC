@@ -194,7 +194,7 @@ internal class ChestPreviewIcons(
             Vector3f(offset.x, offset.y, ICON_DEPTH),
             Quaternionf(),
             Vector3f(ChestPreviewIconGeometry.ICON_SCALE * scale),
-            Quaternionf(),
+            ChestPreviewIconGeometry.guiFacingRotation(),
         )
     }
 
@@ -309,6 +309,10 @@ internal object ChestPreviewIconGeometry {
     private const val MIN_SCALE = 0.50f
     private const val MAX_SCALE = 2.00f
     private const val DEFAULT_SCALE = 0.90f
+
+    // ItemDisplay inserts a native 180-degree Y turn after the item's GUI transform.
+    // Cancel it locally so blocks show their top/front and flat icons are not mirrored.
+    fun guiFacingRotation(): Quaternionf = Quaternionf(0f, 1f, 0f, 0f)
 
     fun offsets(itemCount: Int, scale: Float): List<ChestPreviewIconOffset> {
         require(itemCount >= 0) { "Chest preview icon count cannot be negative" }

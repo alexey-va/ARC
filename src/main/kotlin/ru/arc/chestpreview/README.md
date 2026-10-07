@@ -26,7 +26,9 @@ a higher-priority winner, target loss, suppression and player reset clear the
 icons. The blank-space TextDisplay is only a background rectangle; it contains
 no readable glyphs. The items use native GUI ItemDisplay transforms. All parts
 share one chest-top anchor and client billboard, retaining display handles on
-unchanged refreshes. No Bukkit entity, inventory window, synthetic open event or
+unchanged refreshes. A local half-turn cancels ItemDisplay's native Y rotation,
+preserving the item's inventory-facing GUI model (block tops and unmirrored tools).
+No Bukkit entity, inventory window, synthetic open event or
 world mutation is created. The five-tick inspection refresh rechecks access
 before reading contents.
 
