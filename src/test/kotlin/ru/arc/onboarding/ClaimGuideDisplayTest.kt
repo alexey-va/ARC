@@ -4,10 +4,28 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import org.bukkit.Location
 import io.mockk.mockk
+import io.mockk.every
+import io.mockk.verify
 import org.bukkit.World
+import org.bukkit.entity.BlockDisplay
 
 class ClaimGuideDisplayTest : StringSpec({
     val world = mockk<World>()
+    "aiming at the action panel changes only glow and restores it without removing contours" {
+        var glowing = true
+        val display = mockk<BlockDisplay>(relaxed = true)
+        every { display.isValid } returns true
+        every { display.isGlowing } answers { glowing }
+        every { display.isGlowing = any() } answers { glowing = firstArg() }
+        setClaimGuideGlow(listOf(display), false)
+        glowing shouldBe false
+        setClaimGuideGlow(listOf(display), false)
+        verify(exactly = 1) { display.isGlowing = false }
+        setClaimGuideGlow(listOf(display), true)
+        glowing shouldBe true
+        verify(exactly = 1) { display.isGlowing = true }
+        verify(exactly = 0) { display.remove() }
+    }
     "fixed borders discard every camera rotation without moving their world position" {
         for (yaw in listOf(-170f, 30f, 90f)) for (pitch in listOf(-80f, 15f, 80f)) {
             val eye = Location(world, -10.5, 70.62, 32.5, yaw, pitch)

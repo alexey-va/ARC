@@ -59,18 +59,13 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
             tick++
             Bukkit.getOnlinePlayers().forEach { player ->
                 try {
-                    // The close action panel takes visual priority while aiming at it.
-                    // Restore the existing boundary guide as soon as the player looks away.
-                    if (LandsUiModule.isLookingAtClaimMenu(player)) {
-                        particles?.holding(player.uniqueId, true)
-                        sessions[player.uniqueId]?.let(::clearVisuals)
-                        return@forEach
-                    }
+                    val glowing = !LandsUiModule.isLookingAtClaimMenu(player)
                     sessions[player.uniqueId]?.let { session ->
                         session.anchor = claimGuideAnchor(session.anchor, player.eyeLocation, player.isSneaking)
                     }
-                    if (tick == 1L || tick % 5L == 0L) update(player)
+                    if (tick == 1L || tick % 5L == 0L) update(player, glowing)
                     sessions[player.uniqueId]?.let { session ->
+                        setClaimGuideGlow(session.borders.values + session.posts.values + session.walls.values, glowing)
                         val eye = session.anchor ?: player.eyeLocation
                         val view = view(player)
                         followClaimGuideDisplay(session.label, claimGuideLabelLocation(eye, view.labelOffset))
@@ -98,7 +93,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         }
     }
 
-    private fun update(player: Player) {
+    private fun update(player: Player, glowing: Boolean = !LandsUiModule.isLookingAtClaimMenu(player)) {
         if (player.uniqueId in failedViewers) return
         if (RegionToolItem.matches(player.inventory.itemInMainHand)) { clear(player); return }
         if (!config.allowsWorld(player.world.name) || player.isDead || player.gameMode == GameMode.SPECTATOR ||
@@ -197,7 +192,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
             if (!view.showPosts || corner !in corners || !display.isValid) { display.remove(); postIterator.remove() }
         }
         if (view.showPosts) corners.forEach { corner ->
-            session.posts.getOrPut(corner) { drawPost(player, corner, gridY) }
+            session.posts.getOrPut(corner) { drawPost(player, corner, gridY, glowing) }
         }
         val landsById = nearby.values.filterNotNull().associateBy { it.ulid.toString() }
         for (border in plan) {
@@ -212,14 +207,14 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
                 material,
                 claimGuideBorderColor(material),
             )
-            val display = session.borders.getOrPut(border) { drawBorder(player, border, appearance, gridY) }
+            val display = session.borders.getOrPut(border) { drawBorder(player, border, appearance, gridY, glowing) }
             if (display.block.material != appearance.material || display.glowColorOverride != appearance.glow) {
                 display.block = appearance.material.createBlockData()
                 display.glowColorOverride = appearance.glow
             }
             if (config.claimGuideLandWallsEnabled && border.landId != null) {
                 val wallAppearance = claimGuideWallAppearance(material)
-                val wall = session.walls.getOrPut(border) { drawWall(player, border, wallAppearance, gridY) }
+                val wall = session.walls.getOrPut(border) { drawWall(player, border, wallAppearance, gridY, glowing) }
                 if (wall.block.material != wallAppearance.material || wall.glowColorOverride != wallAppearance.glow) {
                     wall.block = wallAppearance.material.createBlockData()
                     wall.glowColorOverride = wallAppearance.glow
@@ -274,6 +269,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         border: GuideBorder,
         appearance: ClaimGuideGridAppearance,
         y: Double,
+        glowing: Boolean,
     ): BlockDisplay {
         // Each entity lives on its world edge. Sliding the visible window never moves retained lines.
         return player.world.spawn(borderLocation(player.world, border.edge, y), BlockDisplay::class.java) {
@@ -281,7 +277,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
             it.block = appearance.material.createBlockData()
             it.teleportDuration = 0
             positionBorder(it, border, y)
-            it.isGlowing = true
+            it.isGlowing = glowing
             it.glowColorOverride = appearance.glow
         }.also { player.showEntity(ARC.instance, it) }
     }
@@ -318,12 +314,13 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         border: GuideBorder,
         appearance: ClaimGuideGridAppearance,
         y: Double,
+        glowing: Boolean,
     ): BlockDisplay = player.world.spawn(borderLocation(player.world, border.edge, y), BlockDisplay::class.java) {
         configure(it)
         it.block = appearance.material.createBlockData()
         it.teleportDuration = 0
         positionWall(it, border, y)
-        it.isGlowing = true
+        it.isGlowing = glowing
         it.glowColorOverride = appearance.glow
     }.also { player.showEntity(ARC.instance, it) }
 
@@ -339,13 +336,13 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         ).scale(if (edge.alongX) 16f else thickness, 3.0f, if (edge.alongX) thickness else 16f))
     }
 
-    private fun drawPost(player: Player, corner: GuideChunk, y: Double): BlockDisplay {
+    private fun drawPost(player: Player, corner: GuideChunk, y: Double, glowing: Boolean): BlockDisplay {
         return player.world.spawn(postLocation(player.world, corner, y), BlockDisplay::class.java) {
             configure(it)
             it.block = view(player).gridColor.appearance.material.createBlockData()
             it.teleportDuration = 0
             positionPost(it, corner, y)
-            it.isGlowing = true
+            it.isGlowing = glowing
             it.glowColorOverride = view(player).gridColor.appearance.glow
         }.also { player.showEntity(ARC.instance, it) }
     }

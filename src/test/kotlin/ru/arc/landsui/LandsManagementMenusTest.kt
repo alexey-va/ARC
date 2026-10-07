@@ -42,7 +42,10 @@ class LandsManagementMenusTest : StringSpec({
                 permissions = setOf(LandsUiPermission.NATIVE_MENU, LandsUiPermission.DELETE),
                 members = members,
                 roles = roles,
-            ).copy(naturalRules = listOf(LandsUiRule("fire_spread", true, true)))
+            ).copy(
+                naturalRules = listOf(LandsUiRule("fire_spread", true, true)),
+                effectiveRules = listOf(LandsUiRule("block_break", true, false), LandsUiRule("block_place", false, false)),
+            )
             val readonlyRuleLabels = listOf(
                 "block_break" to "Разрушение блоков",
                 "block_place" to "Установка блоков",
@@ -88,6 +91,8 @@ class LandsManagementMenusTest : StringSpec({
                 checkNotNull(screen).buttons.single { it.id.value == "role_0" }.onClick.handle(click)
                 checkNotNull(screen).id shouldBe "lands.role"
                 val roleScreen = checkNotNull(screen)
+                roleScreen.body.size shouldBe 2
+                roleScreen.body.last().width shouldBe 320
                 val roleText = roleScreen.body.joinToString("\n") { plainText(it.text) }
                 readonlyRuleLabels.forEach { (_, label) -> roleText.contains(label) shouldBe true }
                 roleScreen.buttons.map { it.id.value } shouldBe listOf("native")
@@ -100,6 +105,13 @@ class LandsManagementMenusTest : StringSpec({
 
                 checkNotNull(screen).buttons.single { it.id.value == "rules" }.onClick.handle(click)
                 checkNotNull(screen).id shouldBe "lands.rules"
+                val rulesScreen = checkNotNull(screen)
+                rulesScreen.body.size shouldBe 2
+                val rulesText = plainText(rulesScreen.body.last().text)
+                rulesText.contains("Разрушение блоков") shouldBe true
+                rulesText.contains("Установка блоков") shouldBe true
+                rulesText.contains("Разрешено") shouldBe true
+                rulesText.contains("Запрещено") shouldBe true
                 checkNotNull(screen).buttons.single { it.id.value == "environment" }.onClick.handle(click)
                 checkNotNull(screen).id shouldBe "lands.environment"
                 checkNotNull(screen).buttons.map { it.id.value } shouldBe listOf("flag_0")

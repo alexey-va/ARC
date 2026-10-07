@@ -1,8 +1,14 @@
 package ru.arc.onboarding
 
 import org.bukkit.Location
+import org.bukkit.entity.BlockDisplay
 import org.bukkit.entity.Display
 import org.bukkit.entity.TextDisplay
+
+/** Keep the contours visible while the action panel suppresses their glow. */
+internal fun setClaimGuideGlow(displays: Iterable<BlockDisplay>, glowing: Boolean) {
+    displays.forEach { if (it.isValid && it.isGlowing != glowing) it.isGlowing = glowing }
+}
 
 /** Keep the complete anchor until Shift is released; teleport/world events reset the session. */
 internal fun claimGuideAnchor(previous: Location?, eye: Location, sneaking: Boolean): Location =

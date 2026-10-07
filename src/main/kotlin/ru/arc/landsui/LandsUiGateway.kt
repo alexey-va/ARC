@@ -10,6 +10,7 @@ import ru.arc.ARC
 import ru.arc.lands.currentLands
 import ru.arc.lands.trustedPlayerIds
 import ru.arc.onboarding.ClaimBlockIdentity
+import ru.arc.xserver.playerlist.PlayerManager
 
 interface LandsUiGateway {
     fun lands(player: Player): List<LandsUiLand>
@@ -98,7 +99,15 @@ class BukkitLandsUiGateway internal constructor(
 
     override fun land(player: Player, id: String): LandsUiLand? = lands(player).firstOrNull { it.id == id }
 
-    override fun onlinePlayers(): List<LandsUiPlayer> = Bukkit.getOnlinePlayers().map { LandsUiPlayer(it.uniqueId, it.name) }
+    override fun onlinePlayers(): List<LandsUiPlayer> {
+        val players = Bukkit.getOnlinePlayers().associateTo(linkedMapOf()) { player ->
+            player.uniqueId to LandsUiPlayer(player.uniqueId, player.name)
+        }
+        PlayerManager.getPlayerUuids().mapNotNull(PlayerManager::getPlayerData).forEach { player ->
+            if (player.uuid !in players) players[player.uuid] = LandsUiPlayer(player.uuid, player.username)
+        }
+        return players.values.toList()
+    }
 
     @Suppress("DEPRECATION")
     override fun playerName(id: java.util.UUID): String? = Bukkit.getOfflinePlayer(id).name

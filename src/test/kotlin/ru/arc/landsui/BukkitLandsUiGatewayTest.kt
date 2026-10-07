@@ -16,9 +16,37 @@ import me.angeschossen.lands.api.player.Selection
 import org.bukkit.Location
 import org.bukkit.World
 import org.bukkit.entity.Player
+import ru.arc.paper.testing.MockBukkitTestRuntime
+import ru.arc.xserver.playerlist.PlayerManager
 import java.util.UUID
 
 class BukkitLandsUiGatewayTest : StringSpec({
+    afterTest { PlayerManager.readMessage("[]") }
+
+    "suggests local and proxy-wide players once by UUID and falls back to local players" {
+        MockBukkitTestRuntime.open().use { runtime ->
+            val local = runtime.server.addPlayer("LocalPlayer")
+            val remoteId = UUID.randomUUID()
+            PlayerManager.readMessage(
+                """[
+                    {"username":"RenamedOnNetwork","server":"spawn","uuid":"${local.uniqueId}","joinTime":1},
+                    {"username":"RemotePlayer","server":"survival","uuid":"$remoteId","joinTime":2}
+                ]""".trimIndent(),
+            )
+
+            val gateway = BukkitLandsUiGateway(mockk())
+            val players = gateway.onlinePlayers()
+            players.size shouldBe 2
+            players.associateBy(LandsUiPlayer::id) shouldBe mapOf(
+                local.uniqueId to LandsUiPlayer(local.uniqueId, "LocalPlayer"),
+                remoteId to LandsUiPlayer(remoteId, "RemotePlayer"),
+            )
+
+            PlayerManager.readMessage("[]")
+            gateway.onlinePlayers() shouldBe listOf(LandsUiPlayer(local.uniqueId, "LocalPlayer"))
+        }
+    }
+
     "selects the freshly resolved land before dispatching a Lands command" {
         val id = UUID.randomUUID()
         val integration = mockk<LandsIntegration>()

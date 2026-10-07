@@ -1,6 +1,7 @@
 package ru.arc.landsui
 
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
@@ -181,7 +182,7 @@ internal class LandsManagementMenus(
         show(player, PaperDialogScreen(
             id = "lands.rules", title = text("rules-title", "area" to view.areaName),
             body = listOf(PaperDialogBody(text("rules-body", "role" to view.viewerRole))) +
-                view.effectiveRules.map { PaperDialogBody(ruleText(it), width = 430) },
+                rulesTable(view.effectiveRules),
             buttons = listOf(button("roles", "roles-label") { openRoles(player, context) },
                 button("environment", "environment-label") { openEnvironment(player, context) }),
             exitButton = back { open(player, context) }, columns = 2,
@@ -206,7 +207,7 @@ internal class LandsManagementMenus(
         show(player, PaperDialogScreen(
             id = "lands.role", title = text("role-title", "role" to role.name),
             body = listOf(PaperDialogBody(text(if (LandsUiPermission.NATIVE_MENU in view.permissions) "role-body" else "role-readonly-body", "area" to view.areaName))) +
-                rules.map { PaperDialogBody(ruleText(it), width = 430) },
+                rulesTable(rules),
             buttons = if (LandsUiPermission.NATIVE_MENU in view.permissions) listOf(
                 actionButton(player, context, "native", "native-role-settings-label", LandsUiChange.NativeMenu),
             ) else emptyList(),
@@ -218,7 +219,7 @@ internal class LandsManagementMenus(
         show(player, PaperDialogScreen(
             id = "lands.environment", title = text("environment-title", "area" to view.areaName),
             body = listOf(PaperDialogBody(text("environment-body"))) +
-                view.naturalRules.filterNot { it.editable }.map { PaperDialogBody(ruleText(it), width = 430) },
+                rulesTable(view.naturalRules.filterNot { it.editable }),
             buttons = view.naturalRules.filter { it.editable }.mapIndexed { index, rule ->
                 button("flag_$index", ruleText(rule)) {
                     apply(player, context, LandsUiChange.NaturalFlag(rule.key, rule.enabled)) { openEnvironment(player, context) }
@@ -397,6 +398,18 @@ internal class LandsManagementMenus(
     private fun ruleText(rule: LandsUiRule): Component = text(
         if (rule.enabled) "rule-enabled" else "rule-disabled", "rule" to settings.text("rule-${rule.key}"),
     )
+
+    private fun rulesTable(rules: List<LandsUiRule>): List<PaperDialogBody> =
+        if (rules.isEmpty()) emptyList() else listOf(DialogTables.body(
+            rows = rules.map {
+                text("rule-${it.key}").colorIfAbsent(TextColor.color(0xe8dfd2)) to
+                    text(if (it.enabled) "rules-allowed" else "rules-denied")
+            },
+            headers = text("rules-action-heading") to text("rules-access-heading"),
+            frame = DialogTables.Frame.LEGENDARY,
+            width = 320,
+            columns = DialogTables.Columns.LABEL_WIDE,
+        ))
 
     private fun actionButton(player: Player, context: LandsUiContext, id: String, label: String, change: LandsUiChange): PaperDialogButton =
         actionButton(player, context, id, text(label), change) { open(player, context) }
