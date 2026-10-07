@@ -215,6 +215,11 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
                 }
             }
         }
+        if (LandsUiModule.hasClaimMenu(player)) {
+            session.label?.remove()
+            session.label = null
+            return
+        }
         val eye = session.anchor ?: player.eyeLocation
         val labelLocation = claimGuideLabelLocation(eye, view.labelOffset)
         val label = session.label?.takeIf { it.isValid } ?: world.spawn(labelLocation, TextDisplay::class.java) {
@@ -232,13 +237,14 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         label.text(if (LandsUiModule.isAvailable()) message.append(Component.newline()).append(text.getValue("menu")) else message)
     }
 
-    fun isMenuTarget(player: Player): Boolean = player.isSneaking &&
+    fun isMenuTarget(player: Player): Boolean = LandsUiModule.isClaimMenuTarget(player) || (player.isSneaking &&
         sessions[player.uniqueId]?.label?.takeIf { it.isValid }
-            ?.let { claimGuideButtonHit(player.eyeLocation, it.location, halfWidth = 3.8, height = 1.3) } == true
+            ?.let { claimGuideButtonHit(player.eyeLocation, it.location, halfWidth = 3.8, height = 1.3) } == true)
 
     @EventHandler(priority = EventPriority.HIGHEST)
     fun clickButton(event: PlayerInteractEvent) {
         val player = event.player
+        if (LandsUiModule.hasClaimMenu(player)) return
         // Only a Shift-click on a panel consumes placement; other right clicks still place blocks.
         if (RegionToolItem.matches(player.inventory.itemInMainHand)) return
         if (!claimGuideButtonGesture(event.action, event.hand, player.isSneaking)) return
@@ -409,7 +415,8 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         session.walls.clear()
     }
 
-    fun hasHologram(player: Player): Boolean = sessions[player.uniqueId]?.label?.isValid == true
+    fun hasHologram(player: Player): Boolean = LandsUiModule.hasClaimMenu(player) ||
+        sessions[player.uniqueId]?.label?.isValid == true
 
     private fun clear(player: Player) {
         particles?.holding(player.uniqueId, false)

@@ -9,6 +9,13 @@ limits:
   max-listed-players: 12
 
 text:
+  panel-title: '<#80e89b><land><newline><white>ЛКМ / ПКМ — выбрать действие'
+  panel-add-member: '<#80e89b>Добавить игрока'
+  panel-members: '<#92bed8>Участники'
+  panel-rules: '<#c4a7e7>Права'
+  panel-territory: '<#92bed8>Территория'
+  panel-settings: '<#c4a7e7>Настройки'
+  panel-overview: '<#92bed8>О привате'
   claim-get-cooldown: '<#e8dfd2>Новый блок можно получить раз в 30 минут. Попробуй позже.'
   claim-get-given: '<#9bd48d>Блок привата добавлен в инвентарь.'
   claim-get-already-present: '<#e8dfd2>У тебя уже есть блок привата в инвентаре.'

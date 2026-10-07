@@ -43,6 +43,10 @@ object LandsUiModule : PluginModule {
 
     fun isAvailable(): Boolean = controller != null
 
+    internal fun hasClaimMenu(player: Player): Boolean = claimTool?.hasMenu(player) == true
+
+    internal fun isClaimMenuTarget(player: Player): Boolean = claimTool?.isMenuTarget(player) == true
+
     fun createClaimBlockItem(player: Player): ItemStack? {
         if (!Bukkit.getPluginManager().isPluginEnabled("Lands")) return null
         return runCatching {
@@ -79,6 +83,12 @@ object LandsUiModule : PluginModule {
         ArcMenus.beginDialogFlow(player)
         val active = controller ?: return open(player)
         active.openDetails(player, landId)
+    }
+
+    fun openPanelAction(player: Player, landId: String, action: LandsUiPanelAction) {
+        ArcMenus.beginDialogFlow(player)
+        val active = controller ?: return open(player)
+        active.openPanelAction(player, landId, action)
     }
 
     fun giveRegionTool(player: Player, landId: String) {

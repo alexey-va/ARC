@@ -1,5 +1,7 @@
 package ru.arc.landsui
 
+import io.papermc.paper.event.player.PlayerArmSwingEvent
+import io.papermc.paper.event.player.PrePlayerAttackEntityEvent
 import me.angeschossen.lands.api.LandsIntegration
 import me.angeschossen.lands.api.land.Land
 import me.angeschossen.lands.api.land.enums.LandType
@@ -17,6 +19,12 @@ import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
 import org.bukkit.event.block.Action
 import org.bukkit.event.player.PlayerInteractEvent
+import org.bukkit.event.player.PlayerInteractEntityEvent
+import org.bukkit.event.player.PlayerInteractAtEntityEvent
+import org.bukkit.event.player.PlayerQuitEvent
+import org.bukkit.event.player.PlayerTeleportEvent
+import org.bukkit.event.player.PlayerChangedWorldEvent
+import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.inventory.EquipmentSlot
 import ru.arc.onboarding.ClaimBlockIdentity
 import ru.arc.onboarding.OnboardingModule
@@ -26,6 +34,9 @@ import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.whenCompleteSync
 import ru.arc.util.Logging.error
 import ru.arc.util.TextUtil
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.minimessage.MiniMessage
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
@@ -36,6 +47,10 @@ internal class ClaimBlockTool(
 ) : AutoCloseable, Listener {
     private val tasks = LifecycleTaskScope()
     private val pending = mutableMapOf<UUID, Pending>()
+    private var menu: ClaimLandMenu? = null
+    private val menuClickAfter = mutableMapOf<UUID, Long>()
+    private val failedMenuViewers = mutableSetOf<UUID>()
+    private var tick = 0L
 
     private data class Pending(
         val player: UUID,
@@ -44,10 +59,78 @@ internal class ClaimBlockTool(
         var selection: Selection? = null,
     )
 
-    fun start() { Bukkit.getPluginManager().registerEvents(this, ARC.instance) }
+    fun start() {
+        menu = ClaimLandMenu(
+            ARC.instance,
+            title = { name -> MiniMessage.miniMessage().deserialize(
+                settings.text("panel-title"), Placeholder.component("land", Component.text(name.take(24))),
+            ) },
+            labels = LandsUiPanelAction.entries.associateWith {
+                TextUtil.mm(settings.text("panel-${it.name.lowercase(java.util.Locale.ROOT).replace('_', '-')}"))
+            },
+        )
+        Bukkit.getPluginManager().registerEvents(this, ARC.instance)
+        tasks.runTimer(1L, 1L) {
+            tick++
+            Bukkit.getOnlinePlayers().forEach { player ->
+                if (player.uniqueId in failedMenuViewers) return@forEach
+                try {
+                    val land = menuLand(player)
+                    if (land == null) clearMenu(player)
+                    else menu?.show(player, land.ulid.toString(), land.name)
+                } catch (failure: Exception) {
+                    clearMenu(player)
+                    failedMenuViewers += player.uniqueId
+                    error("Claim land menu failed for {}; disabled until reconnect", player.name, failure)
+                }
+            }
+        }
+    }
+
+    private fun menuLand(player: Player): Land? {
+        if (!player.isOnline || player.isDead || player.gameMode == GameMode.SPECTATOR ||
+            player.gameMode == GameMode.ADVENTURE || RegionToolItem.matches(player.inventory.itemInMainHand) ||
+            ClaimBlockIdentity.heldRadius(player) == null || lands.getWorld(player.world) == null
+        ) return null
+        val at = player.location
+        return lands.getLandByUnloadedChunk(player.world, at.blockX shr 4, at.blockZ shr 4)
+            ?.takeIf { it.exists() && it.ownerUID == player.uniqueId }
+    }
+
+    fun hasMenu(player: Player): Boolean = menu?.contains(player.uniqueId) == true
+
+    private fun menuTarget(player: Player): Pair<String, LandsUiPanelAction>? {
+        val active = menu ?: return null
+        val action = active.target(player) ?: return null
+        val id = active.landId(player.uniqueId) ?: return null
+        if (menuLand(player)?.ulid?.toString() != id) return null
+        return id to action
+    }
+
+    fun isMenuTarget(player: Player): Boolean = menuTarget(player) != null
+
+    private fun clickMenu(player: Player): Boolean {
+        val (id, action) = menuTarget(player) ?: return false
+        // Consume duplicate swing/block events too; a menu click must never place or break blocks.
+        if (tick >= (menuClickAfter[player.uniqueId] ?: 0L)) {
+            menuClickAfter[player.uniqueId] = tick + 5
+            LandsUiModule.openPanelAction(player, id, action)
+        }
+        return true
+    }
+
+    private fun interceptMenu(player: Player, hand: EquipmentSlot?): Boolean = when (hand) {
+        EquipmentSlot.HAND -> clickMenu(player)
+        EquipmentSlot.OFF_HAND -> isMenuTarget(player)
+        else -> false
+    }
 
     @EventHandler(priority = EventPriority.HIGHEST)
     fun interact(event: PlayerInteractEvent) {
+        if (event.action != Action.PHYSICAL && interceptMenu(event.player, event.hand)) {
+            event.isCancelled = true
+            return
+        }
         if (event.action != Action.RIGHT_CLICK_BLOCK) return
         val player = event.player
         if (RegionToolItem.matches(player.inventory.itemInMainHand)) return
@@ -151,10 +234,46 @@ internal class ClaimBlockTool(
 
     override fun close() {
         HandlerList.unregisterAll(this)
+        menu?.close()
+        menu = null
+        menuClickAfter.clear()
+        failedMenuViewers.clear()
         pending.values.toList().forEach { it.selection?.disable() }
         pending.clear()
         tasks.close()
     }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    fun swingMenu(event: PlayerArmSwingEvent) {
+        if (interceptMenu(event.player, event.hand)) event.isCancelled = true
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    fun entityMenu(event: PlayerInteractEntityEvent) {
+        if (interceptMenu(event.player, event.hand)) event.isCancelled = true
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    fun entityAtMenu(event: PlayerInteractAtEntityEvent) = entityMenu(event)
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    fun attackMenu(event: PrePlayerAttackEntityEvent) {
+        if (clickMenu(event.player)) event.isCancelled = true
+    }
+
+    private fun clearMenu(player: Player) {
+        menu?.hide(player.uniqueId)
+        menuClickAfter.remove(player.uniqueId)
+    }
+
+    @EventHandler fun quitMenu(event: PlayerQuitEvent) {
+        clearMenu(event.player)
+        failedMenuViewers.remove(event.player.uniqueId)
+    }
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun teleportMenu(event: PlayerTeleportEvent) = clearMenu(event.player)
+    @EventHandler fun worldMenu(event: PlayerChangedWorldEvent) = clearMenu(event.player)
+    @EventHandler fun deathMenu(event: PlayerDeathEvent) = clearMenu(event.entity)
 
     private fun finish(request: Pending, player: Player, key: String?, failure: Throwable? = null) {
         if (pending[request.player] !== request) return

@@ -7,6 +7,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
+import io.mockk.verify
 import net.kyori.adventure.text.Component
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
@@ -24,6 +25,70 @@ import java.nio.file.Files
 import java.util.UUID
 
 class LandsUiControllerTest : StringSpec({
+    "panel actions resolve the current member land and open existing pages without selecting it" {
+        MockBukkitTestRuntime.open().use {
+            val dataPath = Files.createTempDirectory("lands-ui-panel")
+            val playerId = UUID.randomUUID()
+            val player = mockk<Player>(relaxed = true)
+            every { player.uniqueId } returns playerId
+            val land = LandsUiLand("panel-land", "Дом", playerId, 1, 64, setOf(playerId), 12, 0.0, true)
+            val gateway = mockk<LandsUiGateway>(relaxed = true)
+            val context = LandsUiContext(land.id, LandsUiAccess.MEMBER)
+            every { gateway.currentLandId(player) } returns land.id
+            every { gateway.land(player, land.id) } returns land
+            every { gateway.managementView(player, context) } returns landsUiTestView(
+                context, land, permissions = setOf(LandsUiPermission.TRUST),
+            )
+            val settings = try {
+                ConfigManager.clear()
+                LandsUiConfig.load(dataPath).snapshot()
+            } finally {
+                ConfigManager.clear()
+            }
+
+            Tasks.install(mockk<TaskScheduler>(relaxed = true))
+            var screen: PaperDialogScreen? = null
+            mockkObject(ArcMenus)
+            try {
+                every { ArcMenus.openDialog(player, any(), any(), any(), any()) } answers { screen = secondArg() }
+                val controller = LandsUiController(settings, gateway)
+                try {
+                    mapOf(
+                        LandsUiPanelAction.ADD_MEMBER to "lands.add",
+                        LandsUiPanelAction.MEMBERS to "lands.members",
+                        LandsUiPanelAction.RULES to "lands.rules",
+                        LandsUiPanelAction.TERRITORY to "lands.territory",
+                        LandsUiPanelAction.SETTINGS to "lands.settings",
+                        LandsUiPanelAction.OVERVIEW to "lands.details",
+                    ).forEach { (action, expectedScreen) ->
+                        controller.openPanelAction(player, land.id, action)
+                        checkNotNull(screen).id shouldBe expectedScreen
+                    }
+
+                    every { gateway.currentLandId(player) } returns "moved-land"
+                    controller.openPanelAction(player, land.id, LandsUiPanelAction.OVERVIEW)
+                    checkNotNull(screen).id shouldBe "lands.home"
+
+                    every { gateway.currentLandId(player) } returns land.id
+                    every { gateway.land(player, land.id) } returns null
+                    controller.openPanelAction(player, land.id, LandsUiPanelAction.MEMBERS)
+                    checkNotNull(screen).id shouldBe "lands.home"
+
+                    verify(exactly = 6) { gateway.managementView(player, context) }
+                    verify(exactly = 0) { gateway.select(player, any()) }
+                    verify(exactly = 0) { gateway.change(player, any(), any()) }
+                } finally {
+                    controller.close()
+                }
+            } finally {
+                Tasks.reset()
+                unmockkObject(ArcMenus)
+                dataPath.toFile().deleteRecursively()
+                ConfigManager.clear()
+            }
+        }
+    }
+
     "details add-member and back actions rebuild valid screens" {
         MockBukkitTestRuntime.open().use {
             val dataPath = Files.createTempDirectory("lands-ui-controller")

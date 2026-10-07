@@ -27,6 +27,17 @@ internal class LandsManagementMenus(
     fun execute(player: Player, context: LandsUiContext, change: LandsUiChange) =
         apply(player, context, change) { open(player, context) }
 
+    fun openPanelAction(player: Player, context: LandsUiContext, action: LandsUiPanelAction) {
+        when (action) {
+            LandsUiPanelAction.ADD_MEMBER -> openAddMember(player, context)
+            LandsUiPanelAction.MEMBERS -> openMembers(player, context)
+            LandsUiPanelAction.RULES -> openRules(player, context)
+            LandsUiPanelAction.TERRITORY -> openTerritory(player, context)
+            LandsUiPanelAction.SETTINGS -> openSettings(player, context)
+            LandsUiPanelAction.OVERVIEW -> open(player, context)
+        }
+    }
+
     fun open(player: Player, context: LandsUiContext): Unit = withView(player, context) { view ->
         val land = view.land
         val rows = listOf(

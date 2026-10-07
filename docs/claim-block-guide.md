@@ -7,6 +7,12 @@ worlds, and with Lands available. All visible text lives in
 
 Holding a native Lands claim block in either hand starts a personal guide:
 
+On owned land, the independent Lands UI tool now provides a six-action personal
+world menu and suppresses the old placement label. This menu also works when
+onboarding is disabled; its lifecycle and settings are documented in
+[Lands UI](lands-ui.md). The guide's grid and its existing onboarding/world gates
+remain unchanged. Outside owned land the placement guidance below remains active.
+
 - A short title explains placement; its subtitle and a retained chat line give
   `/unclaim` for removing protection from the chunk the player stands in.
 - The ray-traced placement block (including the clicked face and replaceable

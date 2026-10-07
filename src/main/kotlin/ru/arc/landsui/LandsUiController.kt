@@ -174,6 +174,15 @@ class LandsUiController(
     fun openDetails(player: Player, landId: String) =
         management.open(player, LandsUiContext(landId, LandsUiAccess.MEMBER))
 
+    fun openPanelAction(player: Player, landId: String, action: LandsUiPanelAction) {
+        if (gateway.currentLandId(player) != landId || gateway.land(player, landId) == null) {
+            player.sendMessage(text("land-gone"))
+            openRoot(player)
+            return
+        }
+        management.openPanelAction(player, LandsUiContext(landId, LandsUiAccess.MEMBER), action)
+    }
+
     private fun claimRadiusButton(player: Player): PaperDialogButton? =
         ClaimBlockIdentity.heldRadius(player)?.let { radius ->
             button("claim_radius", text("claim-radius-label", "size" to (radius * 2 + 1).toString()),

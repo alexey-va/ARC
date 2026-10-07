@@ -48,6 +48,13 @@ class LandsUiConfig(private val config: Config) {
         }
 
         private val DEFAULT_TEXT = linkedMapOf(
+            "panel-title" to "<#80e89b><land><newline><white>ЛКМ / ПКМ — выбрать действие",
+            "panel-add-member" to "<#80e89b>Добавить игрока",
+            "panel-members" to "<#92bed8>Участники",
+            "panel-rules" to "<#c4a7e7>Права",
+            "panel-territory" to "<#92bed8>Территория",
+            "panel-settings" to "<#c4a7e7>Настройки",
+            "panel-overview" to "<#92bed8>О привате",
             "claim-get-cooldown" to "<#e8dfd2>Новый блок можно получить раз в 30 минут. Попробуй позже.",
             "claim-get-given" to "<#9bd48d>Блок привата добавлен в инвентарь.",
             "claim-get-already-present" to "<#e8dfd2>У тебя уже есть блок привата в инвентаре.",

@@ -37,7 +37,7 @@ internal class ItemInfoRuntime(
         ItemInfoPreferences.fromStored { key -> preferencesReader?.getCachedMeta(player.uniqueId, key) }
     }
     private val suppressedViewer: (Player) -> Boolean = { player ->
-        player.isDead || player.gameMode == GameMode.SPECTATOR ||
+        player.isDead || player.gameMode == GameMode.SPECTATOR || ru.arc.landsui.LandsUiModule.hasClaimMenu(player) ||
             OnboardingModule.claimGuide?.hasHologram(player) == true
     }
     private val providerRegistration = inspection.register(
