@@ -64,6 +64,22 @@ class DungeonQuestsTest : FreeSpec({
             "Уничтожить очень… 123 / 500"
     }
 
+    "does not read quests before EliteMobs data is fully loaded" {
+        mockkStatic(PlayerData::class)
+        try {
+            val owner = UUID.randomUUID()
+            val player = mockk<org.bukkit.entity.Player>()
+            every { player.uniqueId } returns owner
+            every { PlayerData.isDataLoaded(owner) } returns false
+
+            readDungeonQuests(player) shouldBe null
+
+            verify(exactly = 0) { PlayerData.getQuests(owner) }
+        } finally {
+            unmockkStatic(PlayerData::class)
+        }
+    }
+
     "tracking action sets the requested state and stays idempotent" {
         mockkStatic(PlayerData::class, QuestTracking::class)
         try {

@@ -90,7 +90,7 @@ class DungeonBestiaryMenusTest : FreeSpec({
             listOf("b.yml", "a.yml", "z.yml", "locked.yml")
     }
 
-    "locked cards reveal no names or bestiary facts and cannot be opened" {
+    "an undiscovered roster shows only the first-victory message" {
         val hidden = mob("hidden.yml", "Безымянный страж", listOf(BestiaryFact("Секретный удар", "Смертельная волна")),
             listOf(BestiaryFact("Секретная руна", "Шанс выпадения: 17%")))
         val future = CompletableFuture<Set<String>>()
@@ -101,12 +101,14 @@ class DungeonBestiaryMenusTest : FreeSpec({
         settle(harness, future, emptySet())
 
         val screen = harness.shown.last().screen
-        val locked = screen.buttons.single { it.id.value == "mob_0" }
-        plain.serialize(locked.label) shouldBe "[Недоступно] Неизученный противник"
         val visible = (screen.body.map { plain.serialize(it.text) } + screen.buttons.map { plain.serialize(it.label) + plain.serialize(it.tooltip) })
             .joinToString("\n")
-        listOf(hidden.name, "Секретный удар", "Смертельная волна", "Секретная руна", "17%").forEach { visible.contains(it) shouldBe false }
-        locked.onClick.handle(mockk<PaperDialogClickContext>())
+        listOf(hidden.id, hidden.name, "Секретный удар", "Смертельная волна", "Секретная руна", "17%").forEach { visible.contains(it) shouldBe false }
+        screen.buttons.none { it.id.value == hidden.id } shouldBe true
+        screen.body.joinToString("\n") { plain.serialize(it.text) }.contains("первую победу") shouldBe true
+        visible.contains("0 / 1") shouldBe true
+        screen.buttons.none { it.id.value.startsWith("mob_") } shouldBe true
+        screen.buttons.none { it.id.value in setOf("previous", "next") } shouldBe true
         harness.shown.size shouldBe 2
     }
 
@@ -124,6 +126,8 @@ class DungeonBestiaryMenusTest : FreeSpec({
         settle(harness, future, setOf(opened.id))
         harness.shown.last().screen.buttons.single { it.id.value == "mob_0" }.onClick.handle(click)
         harness.shown.last().screen.id shouldBe "dungeon.bestiary.detail"
+        harness.shown.last().screen.columns shouldBe 3
+        harness.shown.last().screen.buttons.none { plain.serialize(it.label).isBlank() || it.id.value.contains("padding") } shouldBe true
         var body = harness.shown.last().screen.body.joinToString("\n") { plain.serialize(it.text) }
         body.contains("Кулак гранита") shouldBe true
         body.contains("отбрасывает цель") shouldBe true
@@ -138,6 +142,43 @@ class DungeonBestiaryMenusTest : FreeSpec({
         harness.shown.last().screen.buttons.single { it.id.value == "section_notes" }.onClick.handle(click)
         body = harness.shown.last().screen.body.joinToString("\n") { plain.serialize(it.text) }
         body.contains("Уязвим к холоду") shouldBe true
+    }
+
+    "details default to the first nonempty section and omit empty section controls" {
+        val opened = mob("loot-only.yml", "Хранитель", loot = listOf(BestiaryFact("Сердце хранителя", "Шанс выпадения: 8%.")))
+        val future = CompletableFuture<Set<String>>()
+        val harness = harness({ listOf(opened) }, { future })
+        val player = paper.addPlayer("loot-only-bestiary")
+
+        harness.menus.open(player, "crypt.yml", "Крипта") {}
+        settle(harness, future, setOf(opened.id))
+        harness.shown.last().screen.buttons.single { it.id.value == "mob_0" }.onClick.handle(mockk())
+
+        val detail = harness.shown.last().screen
+        detail.columns shouldBe 2
+        detail.body.joinToString("\n") { plain.serialize(it.text) }.contains("Добыча") shouldBe true
+        detail.body.joinToString("\n") { plain.serialize(it.text) }.contains("Сердце хранителя") shouldBe true
+        detail.buttons.none { it.id.value.startsWith("section_") } shouldBe true
+        detail.buttons.none { plain.serialize(it.label).isBlank() || it.id.value.contains("padding") } shouldBe true
+    }
+
+    "entries without facts show one concise message and no fake section tabs" {
+        val opened = mob("plain.yml", "Обычный страж")
+        val future = CompletableFuture<Set<String>>()
+        val harness = harness({ listOf(opened) }, { future })
+        val player = paper.addPlayer("plain-bestiary")
+
+        harness.menus.open(player, "crypt.yml", "Крипта") {}
+        settle(harness, future, setOf(opened.id))
+        harness.shown.last().screen.buttons.single { it.id.value == "mob_0" }.onClick.handle(mockk())
+
+        val detail = harness.shown.last().screen
+        val body = detail.body.joinToString("\n") { plain.serialize(it.text) }
+        detail.columns shouldBe 2
+        body.contains("Дополнительных сведений пока нет") shouldBe true
+        body.contains("Примечания") shouldBe false
+        detail.buttons.none { it.id.value.startsWith("section_") } shouldBe true
+        detail.buttons.none { plain.serialize(it.label).isBlank() || it.id.value.contains("padding") } shouldBe true
     }
 
     "unlocked cards and details retain the full name when labels are shortened" {
@@ -162,50 +203,81 @@ class DungeonBestiaryMenusTest : FreeSpec({
         detail.body.any { it.width == 468 && plain.serialize(it.text).contains(description) } shouldBe true
     }
 
-    "catalog and detail pagination keep control rows complete on short pages" {
-        val mobs = (0 until 13).map { index ->
-            mob("mob_$index.yml", "Противник $index", abilities = if (index == 0) {
-                (1..3).map { BestiaryFact("Приём $it", "Описание приёма $it.") }
+    "catalog paginates twelve studied entries and keeps locked records hidden" {
+        val opened = (0 until 13).map { index ->
+            mob("opened_$index.yml", "Открытый противник ${index.toString().padStart(2, '0')}", abilities = if (index == 12) {
+                (1..7).map { fact -> BestiaryFact("Печать стража $fact", "Отталкивает цель $fact и создаёт защитное поле.") }
             } else emptyList())
         }
+        val hidden = (0 until 7).map { index ->
+            mob("secret_$index.yml", "Секретный рыцарь $index",
+                abilities = listOf(BestiaryFact("Скрытый удар $index", "Не показывать это описание.")),
+                loot = listOf(BestiaryFact("Секретный трофей $index", "Шанс выпадения: 99%.")))
+        }
+        val mobs = opened + hidden
+        val unlockedIds = opened.map(BestiaryMob::id).toSet()
         val future = CompletableFuture<Set<String>>()
         val harness = harness({ mobs }, { future })
         val player = paper.addPlayer("paged-bestiary")
         val click = mockk<PaperDialogClickContext>()
 
         harness.menus.open(player, "crypt.yml", "Крипта") {}
-        settle(harness, future, mobs.map(BestiaryMob::id).toSet())
+        settle(harness, future, unlockedIds)
         var screen = harness.shown.last().screen
-        screen.buttons.count { it.id.value.startsWith("mob_") } shouldBe 6
+        screen.columns shouldBe 2
+        screen.buttons.count { it.id.value.startsWith("mob_") } shouldBe 12
+        screen.buttons.map { it.id.value }.take(12) shouldBe (0 until 12).map { "mob_$it" }
         screen.buttons.size % screen.columns shouldBe 0
+        screen.buttons.none { plain.serialize(it.label).isBlank() || it.id.value.contains("padding") } shouldBe true
         screen.buttons.indexOfFirst { it.id.value == "previous" } / screen.columns shouldBe
             screen.buttons.indexOfFirst { it.id.value == "next" } / screen.columns
+        var visible = (screen.body.map { plain.serialize(it.text) } + screen.buttons.flatMap { listOf(plain.serialize(it.label), plain.serialize(it.tooltip)) })
+            .joinToString("\n")
+        visible.contains("13 / 20") shouldBe true
+        hidden.forEach { mob ->
+            listOf(mob.id, mob.name, mob.abilities.single().name, mob.abilities.single().description,
+                mob.loot.single().name, mob.loot.single().description, "99%").forEach { visible.contains(it) shouldBe false }
+            screen.buttons.none { it.id.value == mob.id } shouldBe true
+        }
 
         screen.buttons.single { it.id.value == "next" }.onClick.handle(click)
         screen = harness.shown.last().screen
-        screen.buttons.count { it.id.value.startsWith("mob_") } shouldBe 6
-        screen.buttons.size % screen.columns shouldBe 0
-
-        screen.buttons.single { it.id.value == "next" }.onClick.handle(click)
-        screen = harness.shown.last().screen
-        screen.buttons.map { it.id.value } shouldBe listOf("mob_12", "catalog_padding", "previous", "next")
-        screen.buttons.size % screen.columns shouldBe 0
-        screen.buttons.indexOfFirst { it.id.value == "previous" } % screen.columns shouldBe 0
+        screen.buttons.count { it.id.value.startsWith("mob_") } shouldBe 1
+        screen.buttons.map { it.id.value } shouldBe listOf("mob_12", "previous", "next")
+        screen.buttons.none { plain.serialize(it.label).isBlank() || it.id.value.contains("padding") } shouldBe true
+        visible = (screen.body.map { plain.serialize(it.text) } + screen.buttons.flatMap { listOf(plain.serialize(it.label), plain.serialize(it.tooltip)) })
+            .joinToString("\n")
+        hidden.forEach { mob ->
+            listOf(mob.id, mob.name, mob.abilities.single().name, mob.abilities.single().description,
+                mob.loot.single().name, mob.loot.single().description, "99%").forEach { visible.contains(it) shouldBe false }
+            screen.buttons.none { it.id.value == mob.id } shouldBe true
+        }
 
         screen.buttons.single { it.id.value == "mob_12" }.onClick.handle(click)
-        harness.shown.last().screen.exitButton!!.onClick.handle(click)
+        var detail = harness.shown.last().screen
+        detail.columns shouldBe 2
+        detail.body.count { plain.serialize(it.text).contains("Печать стража") } shouldBe 6
+        detail.body.joinToString("\n") { plain.serialize(it.text) }.contains("Печать стража 7") shouldBe false
+        detail.buttons.map { it.id.value } shouldBe listOf("previous", "next")
+        detail.buttons.none { plain.serialize(it.label).isBlank() || it.id.value.contains("padding") } shouldBe true
+        detail.buttons.single { it.id.value == "next" }.onClick.handle(click)
+        detail = harness.shown.last().screen
+        detail.body.count { plain.serialize(it.text).contains("Печать стража") } shouldBe 1
+        detail.body.joinToString("\n") { plain.serialize(it.text) }.contains("Печать стража 7") shouldBe true
+        detail.buttons.single { it.id.value == "previous" }.onClick.handle(click)
+        detail = harness.shown.last().screen
+        detail.body.count { plain.serialize(it.text).contains("Печать стража") } shouldBe 6
+        detail.exitButton!!.onClick.handle(click)
         screen = harness.shown.last().screen
-        screen.buttons.map { it.id.value } shouldBe listOf("mob_12", "catalog_padding", "previous", "next")
+        screen.buttons.map { it.id.value } shouldBe listOf("mob_12", "previous", "next")
+
+        screen.buttons.single { it.id.value == "previous" }.onClick.handle(click)
+        screen = harness.shown.last().screen
+        screen.buttons.count { it.id.value.startsWith("mob_") } shouldBe 12
+        screen.buttons.map { it.id.value }.take(12) shouldBe (0 until 12).map { "mob_$it" }
 
         screen.buttons.single { it.id.value == "next" }.onClick.handle(click)
-        harness.shown.last().screen.buttons.count { it.id.value.startsWith("mob_") } shouldBe 6
-
-        harness.shown.last().screen.buttons.first { it.id.value == "mob_0" }.onClick.handle(click)
-        val detail = harness.shown.last().screen
-        detail.buttons.size % detail.columns shouldBe 0
-        detail.buttons.map { it.id.value }.take(3) shouldBe listOf("section_abilities", "section_loot", "section_notes")
-        detail.buttons.indexOfFirst { it.id.value == "previous" } / detail.columns shouldBe
-            detail.buttons.indexOfFirst { it.id.value == "next" } / detail.columns
+        harness.shown.last().screen.buttons.count { it.id.value.startsWith("mob_") } shouldBe 1
     }
 
     "dismissal fences a late progress reply" {

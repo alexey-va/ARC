@@ -29,8 +29,8 @@ internal enum class DungeonQuestTrackingChange { TRACKED, UNTRACKED, LOADING, MI
 internal enum class DungeonQuestAbandonChange { ABANDONED, LOADING, MISSING, FAILED }
 
 internal fun readDungeonQuests(player: Player): List<DungeonQuestInfo>? {
-    // Avoid a synchronous database lookup while the player's EliteMobs data is loading.
-    if (!PlayerData.isInMemory(player.uniqueId)) return null
+    // Avoid a synchronous database lookup or a partial snapshot while EliteMobs data loads.
+    if (!PlayerData.isDataLoaded(player.uniqueId)) return null
     val tracked = QuestTracking.getPlayerTrackingQuests()[player.uniqueId]?.quest?.questID
     return dungeonQuestInfo(PlayerData.getQuests(player.uniqueId).orEmpty(), player.uniqueId, tracked)
 }

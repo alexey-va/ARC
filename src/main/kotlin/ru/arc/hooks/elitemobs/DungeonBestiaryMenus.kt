@@ -133,10 +133,11 @@ internal class DungeonBestiaryMenus(
         back: () -> Unit,
     ) {
         val orderedMobs = orderDungeonBestiaryEntries(mobs, unlockedIds)
-        val unlocked = orderedMobs.count { it.id in unlockedIds }
-        val pages = pageCount(orderedMobs.size, CATALOG_PAGE_SIZE)
+        val unlockedMobs = orderedMobs.filter { it.id in unlockedIds }
+        val unlocked = unlockedMobs.size
+        val pages = pageCount(unlocked, CATALOG_PAGE_SIZE)
         val page = requestedPage.coerceIn(0, pages - 1)
-        val pageMobs = orderedMobs.drop(page * CATALOG_PAGE_SIZE).take(CATALOG_PAGE_SIZE)
+        val pageMobs = unlockedMobs.drop(page * CATALOG_PAGE_SIZE).take(CATALOG_PAGE_SIZE)
         val body = mutableListOf(
             PaperDialogBody(text("intro", "<#e8dfd2><name> · изучайте противников после первой победы над ними в этом данже.",
                 "name" to plain(dungeonName)), 468),
@@ -153,31 +154,27 @@ internal class DungeonBestiaryMenus(
             ),
         )
         if (orderedMobs.isEmpty()) body += PaperDialogBody(text("catalog-empty", "<#e8dfd2>В этом данже пока нет записей о противниках."), 468)
+        else if (unlockedMobs.isEmpty()) body += PaperDialogBody(
+            text("catalog-first-victory", "<#e8dfd2>Одержите первую победу над противником в этом данже, чтобы открыть его запись и увидеть способности и добычу."),
+            468,
+        )
 
         val cards = pageMobs.mapIndexed { index, mob ->
             val catalogIndex = page * CATALOG_PAGE_SIZE + index
-            if (mob.id !in unlockedIds) {
-                PaperDialogButton(
-                    PaperDialogActionId.of("mob_$catalogIndex"),
-                    text("locked-label", "<white>[Недоступно] Неизученный противник"),
-                    text("locked-tooltip", "<#e8dfd2>Откроется после первой победы над противником в этом данже."),
-                    width = 230,
-                    onClick = {},
-                )
-            } else {
-                PaperDialogButton(
-                    PaperDialogActionId.of("mob_$catalogIndex"),
-                    text("mob-label", "<white><name> <#ffb277>· <kind> ›",
-                        "name" to plain(shortLabel(mob.name)), "kind" to plain(shortLabel(mob.kind))),
-                    text("mob-label-tooltip", "<#e8dfd2>Открыть сведения о противнике: <name>",
-                        "name" to plain(mob.name)),
-                    width = 230,
-                    onClick = { detail(player, contentId, dungeonName, orderedMobs, unlockedIds, mob, Section.ABILITIES, 0, page, back) },
-                )
-            }
+            PaperDialogButton(
+                PaperDialogActionId.of("mob_$catalogIndex"),
+                text("mob-label", "<white><name> <#ffb277>· <kind> ›",
+                    "name" to plain(shortLabel(mob.name)), "kind" to plain(shortLabel(mob.kind))),
+                text("mob-label-tooltip", "<#e8dfd2>Открыть сведения о противнике: <name>",
+                    "name" to plain(mob.name)),
+                width = 230,
+                onClick = {
+                    val initialSection = availableSections(mob).firstOrNull() ?: Section.ABILITIES
+                    detail(player, contentId, dungeonName, orderedMobs, unlockedIds, mob, initialSection, 0, page, back)
+                },
+            )
         }.toMutableList()
         if (pages > 1) {
-            if (cards.size % 2 == 1) cards += spacer("catalog_padding")
             cards += button("previous", "previous-label", "<#92bed8>‹ Предыдущая страница", "Показать предыдущих противников") {
                 catalog(player, contentId, dungeonName, mobs, unlockedIds, (page - 1 + pages) % pages, back)
             }
@@ -218,11 +215,9 @@ internal class DungeonBestiaryMenus(
             return
         }
 
-        val facts = when (section) {
-            Section.ABILITIES -> mob.abilities
-            Section.LOOT -> mob.loot
-            Section.NOTES -> mob.notes.mapIndexed { index, note -> BestiaryFact("Примечание ${index + 1}", note) }
-        }
+        val sections = availableSections(mob)
+        val activeSection = section.takeIf { it in sections } ?: sections.firstOrNull() ?: Section.ABILITIES
+        val facts = factsFor(mob, activeSection)
         val pages = pageCount(facts.size, FACT_PAGE_SIZE)
         val page = requestedPage.coerceIn(0, pages - 1)
         val pageFacts = facts.drop(page * FACT_PAGE_SIZE).take(FACT_PAGE_SIZE)
@@ -236,37 +231,34 @@ internal class DungeonBestiaryMenus(
                 width = 320,
                 columns = DialogTables.Columns.BALANCED,
             ),
-            PaperDialogBody(text("section-title", "<#ffb277><section>", "section" to text("section.${section.key}-label", section.label)), 320),
         )
-        if (isShortened(mob.name, TITLE_NAME_LIMIT)) {
-            body += PaperDialogBody(plain(compactText(mob.name)), 468)
-        }
-        if (facts.isEmpty()) {
-            body += PaperDialogBody(text("facts-empty", "<#e8dfd2>Для этого противника пока нет сведений в выбранном разделе."), 320)
+        if (isShortened(mob.name, TITLE_NAME_LIMIT)) body += PaperDialogBody(plain(compactText(mob.name)), 468)
+        if (sections.isEmpty()) {
+            body += PaperDialogBody(text("facts-none", "<#e8dfd2>Дополнительных сведений пока нет."), 468)
         } else {
-            pageFacts.forEach { fact ->
-                body += DialogTables.framedBody(plain(fact.name), frame = DialogTables.Frame.EPIC, width = 468)
-                body += PaperDialogBody(plain(fact.description), 468)
-            }
+            body += PaperDialogBody(text("section-title", "<#ffb277><section>",
+                "section" to text("section.${activeSection.key}-label", activeSection.label)), 320)
+            pageFacts.forEach { fact -> body += factBody(fact) }
             if (pages > 1) body += PaperDialogBody(text("page-status", "<#e8dfd2>Страница <current> / <total>",
                 "current" to Component.text(page + 1), "total" to Component.text(pages)), 320)
         }
 
-        val tabButtons = Section.values().map { tab ->
-            val selected = tab == section
+        val detailColumns = sections.size.coerceIn(2, 3)
+        val detailButtonWidth = if (detailColumns == 2) 230 else 150
+        val tabButtons: MutableList<PaperDialogButton> = if (sections.size > 1) sections.map { tab ->
+            val selected = tab == activeSection
             val marker = if (selected) "<#9bd48d>✔" else "<white>○"
             button("section_${tab.id}", "section-${tab.key}-${if (selected) "selected" else "available"}",
-                "$marker ${tab.label}", "Показать раздел «${tab.label.lowercase()}»", width = 150) {
+                "$marker ${tab.label}", "Показать раздел «${tab.label.lowercase()}»", width = detailButtonWidth) {
                 detail(player, contentId, dungeonName, mobs, unlockedIds, mob, tab, 0, catalogPage, back)
             }
-        }.toMutableList()
+        }.toMutableList() else mutableListOf()
         if (pages > 1) {
-            tabButtons += button("previous", "previous-label", "<#92bed8>‹ Предыдущая страница", "Показать предыдущие сведения", width = 150) {
-                detail(player, contentId, dungeonName, mobs, unlockedIds, mob, section, (page - 1 + pages) % pages, catalogPage, back)
+            tabButtons += button("previous", "previous-label", "<#92bed8>‹ Предыдущая страница", "Показать предыдущие сведения", width = detailButtonWidth) {
+                detail(player, contentId, dungeonName, mobs, unlockedIds, mob, activeSection, (page - 1 + pages) % pages, catalogPage, back)
             }
-            tabButtons += spacer("details_padding", width = 150)
-            tabButtons += button("next", "next-label", "<#92bed8>Следующая страница ›", "Показать следующие сведения", width = 150) {
-                detail(player, contentId, dungeonName, mobs, unlockedIds, mob, section, (page + 1) % pages, catalogPage, back)
+            tabButtons += button("next", "next-label", "<#92bed8>Следующая страница ›", "Показать следующие сведения", width = detailButtonWidth) {
+                detail(player, contentId, dungeonName, mobs, unlockedIds, mob, activeSection, (page + 1) % pages, catalogPage, back)
             }
         }
 
@@ -278,9 +270,9 @@ internal class DungeonBestiaryMenus(
                 body = body,
                 buttons = tabButtons,
                 exitButton = exit { catalog(player, contentId, dungeonName, mobs, unlockedIds, catalogPage, back) },
-                columns = 3,
+                columns = detailColumns,
             ),
-            { detail(player, contentId, dungeonName, mobs, unlockedIds, mob, section, page, catalogPage, back) },
+            { detail(player, contentId, dungeonName, mobs, unlockedIds, mob, activeSection, page, catalogPage, back) },
             {},
         )
     }
@@ -290,6 +282,23 @@ internal class DungeonBestiaryMenus(
     }
 
     private fun pageCount(size: Int, pageSize: Int): Int = ((size + pageSize - 1) / pageSize).coerceAtLeast(1)
+
+    private fun availableSections(mob: BestiaryMob): List<Section> =
+        Section.values().filter { factsFor(mob, it).isNotEmpty() }
+
+    private fun factsFor(mob: BestiaryMob, section: Section): List<BestiaryFact> = when (section) {
+        Section.ABILITIES -> mob.abilities
+        Section.LOOT -> mob.loot
+        Section.NOTES -> mob.notes.mapIndexed { index, note -> BestiaryFact("Примечание ${index + 1}", note) }
+    }
+
+    private fun factBody(fact: BestiaryFact) = PaperDialogBody(
+        Component.text(fact.name, TextColor.color(0xffb277))
+            .decoration(TextDecoration.ITALIC, false)
+            .append(Component.newline())
+            .append(plain(fact.description)),
+        468,
+    )
 
     private fun shortLabel(value: String, limit: Int = LABEL_LIMIT): String {
         val compact = compactText(value)
@@ -332,15 +341,11 @@ internal class DungeonBestiaryMenus(
         onClick = { action() },
     )
 
-    private fun spacer(id: String, width: Int = 230) = PaperDialogButton(
-        PaperDialogActionId.of(id), Component.empty(), width = width, onClick = {},
-    )
-
     private companion object {
         const val CATALOG_SCREEN = "dungeon.bestiary.catalog"
         const val DETAIL_SCREEN = "dungeon.bestiary.detail"
-        const val CATALOG_PAGE_SIZE = 6
-        const val FACT_PAGE_SIZE = 2
+        const val CATALOG_PAGE_SIZE = 12
+        const val FACT_PAGE_SIZE = 6
         const val LABEL_LIMIT = 48
         const val TITLE_NAME_LIMIT = 72
     }

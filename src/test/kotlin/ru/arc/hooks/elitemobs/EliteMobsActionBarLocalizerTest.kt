@@ -111,6 +111,25 @@ class EliteMobsActionBarLocalizerTest : FreeSpec({
             "Неподходящее оружие » -20% урона. Мечи и Топоры наносят +10% больше урона с классом Паладин."
     }
 
+    "native off-class chat translates the complete gradient notice with one sword prefix" {
+        val localizer = EliteMobsActionBarLocalizer(mapOf("Colossus" to "Колосс", "Maces" to "Булавы"))
+        val source = "Off-class weapon".fold(Component.empty()) { result, character ->
+            result.append(Component.text(character, NamedTextColor.RED))
+        }.append(Component.text(" » This weapon does not match your class: -20% damage. Maces deal 10% more damage with Colossus."))
+        val translated = localizer.localizeChatNotice(source)
+        plain.serialize(translated) shouldBe "⚔ Неподходящее оружие: −20% урона. Колосс · Булавы: +10% урона."
+        translated.color() shouldBe NamedTextColor.WHITE
+        localizer.localizeChatNotice(translated) shouldBe translated
+        listOf(
+            "Player: " + plain.serialize(source),
+            "Off-class weapon » This weapon does not match your class: configuration error.",
+            "Maces deal 10% more damage with Colossus.",
+        ).forEach { message ->
+            val other = Component.text(message)
+            localizer.localizeChatNotice(other) shouldBe other
+        }
+    }
+
     "chat onboarding notices translate their gradient heading and complete instructions" {
         val localizer = EliteMobsActionBarLocalizer()
         val noClass = "No class active!".fold(Component.empty()) { result, character ->

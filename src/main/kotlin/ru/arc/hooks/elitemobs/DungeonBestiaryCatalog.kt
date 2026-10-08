@@ -2,7 +2,6 @@ package ru.arc.hooks.elitemobs
 
 import com.magmaguy.elitemobs.config.ClassLootSettingsConfig
 import com.magmaguy.elitemobs.config.ItemSettingsConfig
-import com.magmaguy.elitemobs.config.ProceduralItemGenerationSettingsConfig
 import com.magmaguy.elitemobs.config.SpecialItemSystemsConfig
 import com.magmaguy.elitemobs.config.custombosses.CustomBossesConfig
 import com.magmaguy.elitemobs.config.custombosses.CustomBossesConfigFields
@@ -35,6 +34,24 @@ internal data class BestiaryMob(
     val loot: List<BestiaryFact>,
     val notes: List<String>,
 )
+
+private val genericPowerLabels = setOf(
+    "защитная способность",
+    "атакующая способность",
+    "особая способность",
+    "способность elitemobs",
+    "дополнительный эффект elitemobs",
+)
+
+private fun isGenericPowerLabel(value: String): Boolean =
+    value.trim().lowercase(Locale.ROOT).removeSuffix(".") in genericPowerLabels
+
+/** Keeps an ability only when both its player-facing name and effect say something concrete. */
+internal fun bestiaryPowerFact(name: String?, description: String?): BestiaryFact? {
+    val visibleName = name?.trim()?.takeIf { it.isNotEmpty() && !isGenericPowerLabel(it) } ?: return null
+    val visibleDescription = description?.trim()?.takeIf { it.isNotEmpty() && !isGenericPowerLabel(it) } ?: return null
+    return BestiaryFact(visibleName, visibleDescription)
+}
 
 /**
  * Read-only projection of EliteMobs' already-loaded config registries.
@@ -307,8 +324,6 @@ internal object NativeDungeonBestiaryCatalog {
             if (phases.isNotEmpty()) add("Фазы: ${phases.joinToString(" → ")}.")
             if (phaseConfigs.size > 1) add("Добыча определяется фазой, в которой завершён бой; таблицы фаз не складываются.")
             fields.mountedEntity?.let { configs[normalizeBossId(it)] }?.let { add("Ездовой моб: ${displayName(it)}.") }
-            if (fields.isDropsEliteMobsLoot()) add("Глобальные награды EliteMobs требуют вклада не менее 10% максимального здоровья; строки уникальной добычи имеют собственные условия.")
-            if (fields.isDropsVanillaLoot()) add("Также включена обычная добыча Minecraft.")
             val references = configuredReferences(fields).filter { it in configs && it !in phaseRootByFile }
             references.mapNotNull(configs::get).distinctBy { it.filename }.forEach { add("Может призвать или сопровождать: ${displayName(it)}.") }
         }.distinct()
@@ -317,7 +332,7 @@ internal object NativeDungeonBestiaryCatalog {
             id = id,
             name = displayName(fields),
             kind = kindName(fields.bossType),
-            level = fields.level.takeIf { it > 0 }?.let { "Уровень $it" } ?: "Динамический уровень",
+            level = fields.level.takeIf { it > 0 }?.toString() ?: "Динамический",
             abilities = abilities,
             loot = loot,
             notes = notes,
@@ -367,17 +382,19 @@ internal object NativeDungeonBestiaryCatalog {
         configs: Map<String, CustomBossesConfigFields>,
     ): BestiaryFact? {
         val registered = PowersConfig.getPower(powerId) ?: return null
-        val title = translatedPowerName(registered) ?: categoryName(registered)
+        val key = normalizePowerId(registered.filename).removeSuffix(".yml").removeSuffix(".yaml").removeSuffix(".lua")
+        val builtIn = knownPowerFact(key)
+        val title = translatedPowerName(registered) ?: builtIn?.name
         val actions = registered.eliteScriptBlueprints.orEmpty().flatMap { it.scriptActionsBlueprint.scriptActionsBlueprintList }
         val summaries = actionFacts(actions, configs).map { it.description }.distinct()
-        val key = normalizePowerId(registered.filename).removeSuffix(".yml").removeSuffix(".yaml").removeSuffix(".lua")
         val description = when {
             summaries.isNotEmpty() -> summaries.joinToString(" ")
-            builtInDescriptions[key] != null -> builtInDescriptions.getValue(key)
-            else -> categoryDescription(registered)
+            builtIn != null -> builtIn.description
+            else -> null
         }
-        val requirement = condition?.let { " Только при настроенной сложности: ${difficultyLabel(it)}." }.orEmpty()
-        return BestiaryFact(title, description + requirement)
+        val fact = bestiaryPowerFact(title, description) ?: return null
+        val requirement = condition?.let { " Сложность: ${difficultyLabel(it)}." }.orEmpty()
+        return fact.copy(description = fact.description + requirement)
     }
 
     private fun scriptActionFacts(
@@ -490,48 +507,61 @@ internal object NativeDungeonBestiaryCatalog {
     }
 
     private fun lootFor(fields: CustomBossesConfigFields, content: ContentPackagesConfigFields): List<BestiaryFact> = buildList {
-        fields.customLootTable?.entries.orEmpty().forEach { entry ->
+        val entries = fields.customLootTable?.entries.orEmpty()
+        val inventoryDelivery = ItemSettingsConfig.isPutLootDirectlyIntoPlayerInventory()
+        entries.forEach { entry ->
+            // Native death tables skip class-loot rows; those are one shared equipment pool below.
+            if (entry is EliteCustomLootEntry && entry.isClassLoot()) return@forEach
+            if (entry !is CurrencyCustomLootEntry && entry.amount <= 0) return@forEach
+
+            val configuredChance = entry.chance
+            if (!configuredChance.isFinite() || configuredChance !in 0.0..1.0) return@forEach
+            val chance = when (entry) {
+                is CommandLootTable -> bestiaryEffectiveLootChance("command", configuredChance, false)
+                is VanillaCustomLootEntry -> bestiaryEffectiveLootChance("vanilla", configuredChance, inventoryDelivery, entry.amount)
+                else -> configuredChance
+            }
+            // Zero-probability and invalid rows are not player-facing loot.
+            if (!chance.isFinite() || chance <= 0.0) return@forEach
+
             val itemName = when (entry) {
                 is EliteCustomLootEntry -> CustomItem.getCustomItem(entry.filename)?.customItemsConfigFields?.let { item ->
                     bestiaryItemName(item.name, materialLabel(item.material), displayName(fields))
-                } ?: "Пользовательский предмет"
-                is VanillaCustomLootEntry -> materialLabel(entry.material)
+                }
+                is VanillaCustomLootEntry -> entry.material?.let(::materialLabel)
                 is CurrencyCustomLootEntry -> "${entry.currencyAmount} валюты"
                 is CommandLootTable -> "Серверная награда"
-                is ItemStackCustomLootEntry -> "Предмет из таблицы EliteMobs"
-                else -> "Добыча EliteMobs"
-            }
-            val chance = entry.chance
-            val description = buildString {
-                if (chance.isFinite() && chance in 0.0..1.0) append("Настроенный шанс записи: ${formatPercent(chance * 100)}%. ")
-                else append("Вероятность записи некорректна в конфигурации. ")
-                when {
-                    entry is CommandLootTable && chance in 0.0..1.0 -> append("С фактической проверкой команды шанс запуска после двух бросков равен ${formatPercent(bestiaryEffectiveLootChance("command", chance, false) * 100)}%.")
-                    entry is VanillaCustomLootEntry && ItemSettingsConfig.isPutLootDirectlyIntoPlayerInventory() && chance in 0.0..1.0 -> append("При выдаче в инвентарь шанс хотя бы одного из ${entry.amount} предметов с учётом отдельного броска на каждый равен ${formatPercent(bestiaryEffectiveLootChance("vanilla", chance, true, entry.amount) * 100)}%; при выдаче на землю действует шанс записи.")
-                    entry is EliteCustomLootEntry && entry.isClassLoot() -> {
-                        val rank = classLootRank(fields)
-                        val global = ClassLootSettingsConfig.dropChance(rank)
-                        if (ClassLootSettingsConfig.enabled()) {
-                            append("Это классовая экипировка: общий шанс для ранга «${classRankName(rank)}» — ${formatPercent(global * 100)}%; после выбора семейства и подходящего предмета применяется этот шанс записи. Итог для конкретного предмета зависит от доступных предметов, сложности и разрешений.")
-                        } else append("Это классовая экипировка, но общая система классовой добычи сейчас выключена.")
-                    }
-                    else -> append("Шанс применяется отдельно к этой записи; таблица не выбирает её вместо остальных записей.")
+                is ItemStackCustomLootEntry -> entry.generateItemStack()?.let { stack ->
+                    stack.itemMeta?.displayName?.let(::cleanVisibleText)?.takeIf(String::isNotBlank)
+                        ?: materialLabel(stack.type)
                 }
-                if (entry.amount > 1) append(" Количество в настроенной строке: ${entry.amount}.")
-                if (entry.wave > 0) append(" Награда этапа ${entry.wave}.")
-                if (entry.permission.isNotBlank()) append(" Нужна проверка разрешения игрока.")
+                else -> null
+            }?.takeIf { it.isNotBlank() && !it.equals("Пользовательский предмет", true) && !it.equals("Предмет", true) }
+                ?: return@forEach
+
+            val description = buildString {
+                when {
+                    entry is CommandLootTable -> append("Шанс награды: ${formatPercent(chance * 100)}%.")
+                    entry is VanillaCustomLootEntry && inventoryDelivery ->
+                        append("Шанс получить хотя бы один из ${entry.amount}: ${formatPercent(chance * 100)}%.")
+                    else -> append("Шанс выпадения: ${formatPercent(chance * 100)}%.")
+                }
+                if (entry.amount > 1 && !(entry is VanillaCustomLootEntry && inventoryDelivery))
+                    append(" Количество: ${entry.amount}.")
+                if (entry.wave > 0) append(" Волна: ${entry.wave}.")
+                if (entry.permission.isNotBlank()) append(" Требуется право доступа.")
                 if (entry is EliteCustomLootEntry) {
                     val difficulties = entry.difficultyIDs.orEmpty()
                     if (difficulties.isNotEmpty()) {
                         val names = difficulties.map { difficultyName(it, content) }.distinct()
-                        append(" Доступна на сложности: ${names.joinToString(", ")}.")
+                        append(" Сложность: ${names.joinToString(", ")}.")
                     }
                 }
             }
             add(BestiaryFact(itemName, description))
         }
         if (fields.isDropsEliteMobsLoot() && fields.isDropsRandomLoot()) {
-            add(BestiaryFact("Случайная добыча EliteMobs", randomLootDescription(fields)))
+            add(BestiaryFact("Случайная экипировка", randomLootDescription(fields)))
             if (SpecialItemSystemsConfig.isDropSpecialLoot() && SpecialItemSystemsConfig.getSpecialValues().isNotEmpty()) {
                 val ordinaryChance = SpecialItemSystemsConfig.getNonEliteChanceToDrop()
                 // LootTables retries the ordinary special roll when the boss roll fails.
@@ -539,52 +569,58 @@ internal object NativeDungeonBestiaryCatalog {
                     val bossChance = SpecialItemSystemsConfig.getBossChanceToDrop()
                     bossChance + (1.0 - bossChance) * ordinaryChance
                 } else ordinaryChance
-                add(BestiaryFact(
-                    "Особый предмет EliteMobs",
-                    "Дополнительный независимый бросок: ${formatPercent(specialChance * 100)}% на подходящего участника; предмет выбирается из глобального набора особой добычи.",
+                if (specialChance.isFinite() && specialChance > 0.0) add(BestiaryFact(
+                    "Особый предмет",
+                    "Шанс случайного особого предмета: ${formatPercent(specialChance * 100)}%. Нужен вклад от 10% здоровья босса.",
                 ))
             }
-            if (ItemSettingsConfig.isUseEliteItemScrolls()) {
+            val scrollChance = ItemSettingsConfig.getEliteItemScrollChance()
+            if (ItemSettingsConfig.isUseEliteItemScrolls() && scrollChance.isFinite() && scrollChance > 0.0) {
                 add(BestiaryFact(
-                    "Свиток предмета EliteMobs",
-                    "Дополнительный независимый бросок с шансом ${formatPercent(ItemSettingsConfig.getEliteItemScrollChance() * 100)}% на подходящего участника.",
+                    "Свиток экипировки",
+                    "Шанс: ${formatPercent(scrollChance * 100)}%. Нужен вклад от 10% здоровья босса.",
                 ))
             }
         }
-        val hasClassLoot = fields.customLootTable?.entries.orEmpty().filterIsInstance<EliteCustomLootEntry>().any { it.isClassLoot() }
-        if (fields.isClassLoot() && !fields.isReinforcement() && hasClassLoot && ClassLootSettingsConfig.enabled()) {
-            val rank = classLootRank(fields)
-            val chance = ClassLootSettingsConfig.dropChance(rank)
-            add(BestiaryFact(
-                "Классовая экипировка",
-                "Шанс классового броска для ранга «${classRankName(rank)}» — ${formatPercent(chance * 100)}% на участника с вкладом от 10%. Затем выбирается семейство по его весу и один доступный предмет; у настроенных строк остаётся свой дополнительный шанс и фильтры сложности/разрешений.",
-            ))
-        }
+        classLootFact(fields, entries)?.let(::add)
     }
 
     private fun randomLootDescription(fields: CustomBossesConfigFields): String {
         val baseChance = if (fields.isRegionalBoss()) ItemSettingsConfig.getRegionalBossNonUniqueDropRate()
             else ItemSettingsConfig.getFlatDropRate()
         val perLevel = ItemSettingsConfig.getLevelIncreaseDropRate()
-        val chance = buildString {
-            append("Базовый шанс одной случайной награды: ${formatPercent(baseChance * 100)}%")
-            if (perLevel != 0.0) append(" + ${formatPercent(perLevel * 100)}% за каждый уровень предмета")
-            append(". ")
+        return buildString {
+            append("До ${formatPercent(baseChance * 100)}% на случайную экипировку")
+            if (perLevel != 0.0) append(" + ${formatPercent(perLevel * 100)}% за уровень награды")
+            append(". Нужен вклад от 10% здоровья босса.")
         }
-        val weights = linkedMapOf<String, Double>()
-        if (ProceduralItemGenerationSettingsConfig.isDoProceduralItemDrops())
-            weights["процедурная"] = ItemSettingsConfig.getProceduralItemWeight()
-        if (ItemSettingsConfig.isDoEliteMobsLoot()) {
-            if (!CustomItem.getWeighedFixedItems().isNullOrEmpty()) weights["взвешенные предметы"] = ItemSettingsConfig.getWeighedItemWeight()
-            if (!CustomItem.getFixedItems().isNullOrEmpty()) weights["фиксированные предметы для подходящих уровней"] = ItemSettingsConfig.getFixedItemWeight()
-            if (!CustomItem.getLimitedItems().isNullOrEmpty()) weights["предметы с пределом уровня"] = ItemSettingsConfig.getLimitedItemWeight()
-            if (!CustomItem.getScalableItems().isNullOrEmpty()) weights["масштабируемые предметы"] = ItemSettingsConfig.getScalableItemWeight()
-        }
-        val distribution = if (weights.values.none { it > 0 && it.isFinite() }) "В доступных пулах нет категории с положительным весом."
-        else weights.entries.filter { it.value > 0 && it.value.isFinite() }.joinToString(", ") { (name, weight) ->
-            "$name — вес ${formatPercent(weight)}"
-        }.let { "После успешного броска выбирается одна доступная категория по относительным весам: $it. Категории могут быть недоступны для уровня награды игрока." }
-        return chance + distribution + " Персональная выдача требует не менее 10% нанесённого урона; предметный уровень зависит от награды игроку."
+    }
+
+    private fun classLootFact(fields: CustomBossesConfigFields, entries: List<CustomLootEntry>): BestiaryFact? {
+        val classItems = entries.filterIsInstance<EliteCustomLootEntry>()
+            .filter { it.isClassLoot() && it.amount > 0 && it.chance.isFinite() && it.chance > 0.0 }
+            .mapNotNull { entry ->
+                val item = CustomItem.getCustomItem(entry.filename)?.customItemsConfigFields ?: return@mapNotNull null
+                val name = bestiaryItemName(item.name, materialLabel(item.material), displayName(fields))
+                    .takeIf { it.isNotBlank() && !it.equals("Пользовательский предмет", true) && !it.equals("Предмет", true) }
+                    ?: return@mapNotNull null
+                Triple(entry, name, item.permission.isNotBlank())
+            }
+        if (!fields.isClassLoot() || fields.isReinforcement() || classItems.isEmpty() || !ClassLootSettingsConfig.enabled()) return null
+        val rank = classLootRank(fields)
+        val chance = ClassLootSettingsConfig.dropChance(rank)
+        if (!chance.isFinite() || chance !in 0.0..1.0 || chance <= 0.0) return null
+        val possibleItems = classItems.map { it.second }.distinct()
+        val hasDifficultyRestrictions = classItems.any { it.first.difficultyIDs.orEmpty().isNotEmpty() }
+        val hasPermissionRestrictions = classItems.any { it.first.permission.isNotBlank() || it.third }
+        return BestiaryFact(
+            "Классовая экипировка",
+            buildString {
+                append("До ${formatPercent(chance * 100)}%, при уроне от 10% здоровья моба. Один из: ${possibleItems.joinToString(", ")}.")
+                if (hasDifficultyRestrictions) append(" Некоторые предметы зависят от сложности.")
+                if (hasPermissionRestrictions) append(" Для части предметов нужно право доступа.")
+            },
+        )
     }
 
     private fun classLootRank(fields: CustomBossesConfigFields): ClassLootSettingsConfig.Rank = when {
@@ -596,12 +632,6 @@ internal object NativeDungeonBestiaryCatalog {
         else -> ClassLootSettingsConfig.Rank.TRASH
     }
 
-    private fun classRankName(rank: ClassLootSettingsConfig.Rank): String = when (rank) {
-        ClassLootSettingsConfig.Rank.BOSS -> "босс"
-        ClassLootSettingsConfig.Rank.MINIBOSS -> "мини-босс"
-        ClassLootSettingsConfig.Rank.TRASH -> "обычный моб"
-    }
-
     private fun difficultyName(id: String, content: ContentPackagesConfigFields): String {
         val name = content.difficulties.orEmpty().firstOrNull { it["id"]?.toString().equals(id, true) }
             ?.get("name")?.toString()?.takeIf(String::isNotBlank)
@@ -610,27 +640,14 @@ internal object NativeDungeonBestiaryCatalog {
 
     private fun translatedPowerName(fields: PowersConfigFields): String? {
         val translated = runCatching { TranslationsConfig.getTranslationsConfigFields()?.get(fields.filename, "name") as? String }.getOrNull()
-        return translated?.let(::cleanVisibleText)?.takeIf { it.isNotBlank() && !it.equals(fields.filename, true) }
+        return translated?.let(::cleanVisibleText)
+            ?.takeIf { it.isNotBlank() && !it.equals(fields.filename, true) && !isGenericPowerLabel(it) }
             ?: knownPowerNames[normalizePowerId(fields.filename).removeSuffix(".yml").removeSuffix(".yaml").removeSuffix(".lua")]
     }
 
-    private fun categoryName(fields: PowersConfigFields): String = when (fields.powerType?.name) {
-        "OFFENSIVE" -> "Атакующая способность"
-        "DEFENSIVE" -> "Защитная способность"
-        "MISCELLANEOUS" -> "Особая способность"
-        else -> "Способность EliteMobs"
-    }
-
-    private fun categoryDescription(fields: PowersConfigFields): String {
-        val category = when (fields.powerType?.name) {
-            "OFFENSIVE" -> "Атакующая способность EliteMobs"
-            "DEFENSIVE" -> "Защитная способность EliteMobs"
-            "MISCELLANEOUS" -> "Дополнительный эффект EliteMobs"
-            else -> "Способность EliteMobs"
-        }
-        // Native powers use either doCooldown (seconds) or doCooldownTicks; the
-        // config value alone cannot establish a truthful duration for an unknown power.
-        return "$category."
+    internal fun knownPowerFact(powerId: String): BestiaryFact? {
+        val key = normalizePowerId(powerId).removeSuffix(".yml").removeSuffix(".yaml").removeSuffix(".lua")
+        return bestiaryPowerFact(knownPowerNames[key], builtInDescriptions[key])
     }
 
     private fun displayName(fields: CustomBossesConfigFields): String {
@@ -792,9 +809,14 @@ internal object NativeDungeonBestiaryCatalog {
         "frost_cone" to "Поражает цели конусом ледяного дыхания.",
         "ground_pound" to "Бьёт по земле и создаёт ударную волну.",
         "invisibility" to "Временно скрывает моба от игроков.",
+        "invulnerability_arrow" to "Не получает урон от снарядов.",
+        "invulnerability_fall_damage" to "Отменяет урон от падения.",
+        "invulnerability_fire" to "Постоянно действует эффект Огнестойкости II.",
+        "invulnerability_fireworks" to "Отменяет урон от фейерверков.",
+        "invulnerability_knockback" to "Сбрасывает полученный от удара импульс отбрасывания.",
         "meteor_shower" to "Обрушивает на область серию метеоров.",
         "movement_speed" to "Увеличивает скорость передвижения моба.",
-        "shield_wall" to "Создаёт защитную стену перед мобом.",
+        "shield_wall" to "С шансом 10% поднимает щитовую стену, блокирующую атаки с трёх сторон.",
         "shockwave_2" to "Отбрасывает цели ударной волной.",
         "shockwave_3" to "Отбрасывает цели усиленной ударной волной.",
         "summon_raug" to "Призывает Рауга в помощь.",
@@ -829,9 +851,14 @@ internal object NativeDungeonBestiaryCatalog {
         "frost_cone" to "Ледяной конус",
         "ground_pound" to "Удар о землю",
         "invisibility" to "Невидимость",
+        "invulnerability_arrow" to "Защита от снарядов",
+        "invulnerability_fall_damage" to "Защита от падения",
+        "invulnerability_fire" to "Огнестойкость",
+        "invulnerability_fireworks" to "Защита от фейерверков",
+        "invulnerability_knockback" to "Защита от отбрасывания",
         "meteor_shower" to "Метеоритный дождь",
         "movement_speed" to "Повышенная скорость",
-        "shield_wall" to "Защитная стена",
+        "shield_wall" to "Щитовая стена",
         "shockwave_2" to "Ударная волна",
         "shockwave_3" to "Усиленная ударная волна",
         "summon_raug" to "Призыв Рауга",

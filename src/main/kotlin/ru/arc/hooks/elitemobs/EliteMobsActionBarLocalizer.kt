@@ -12,13 +12,15 @@ import com.magmaguy.elitemobs.advancedcombat.classes.ClassResourceType
 import com.magmaguy.elitemobs.skills.SkillType
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.TextComponent
+import net.kyori.adventure.text.format.NamedTextColor
+import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Bukkit
 import ru.arc.util.Logging
 
 /**
  * Translates EliteMobs' resource-pack-free combat UI without patching EliteMobs.
- * Packets have no plugin owner, so chat accepts only exact onboarding notices, while action bars
+ * Packets have no plugin owner, so chat accepts only exact native notice shapes, while action bars
  * accept the HUD, class-control and ability-feedback shapes EliteMobs emits.
  */
 internal class EliteMobsActionBarLocalizer(
@@ -54,8 +56,21 @@ internal class EliteMobsActionBarLocalizer(
         return plain.serialize(component) == ALPHA_PROMOTIONAL_NOTICE
     }
 
-    internal fun localizeChatNotice(component: Component): Component =
-        if (plain.serialize(component) in CHAT_NOTICE_TRANSLATIONS) localize(component) else component
+    internal fun localizeChatNotice(component: Component): Component {
+        val source = plain.serialize(component)
+        // ClassWeaponAffinity emits this separate chat shape once per session, in addition to its HUD.
+        // Match the complete native message so ordinary chat and unrelated combat errors stay intact.
+        val affinity = OFF_CLASS_CHAT.matchEntire(source)
+        if (affinity != null) {
+            val (penalty, weapons, bonus, className) = affinity.destructured
+            return Component.text("⚔ ", NamedTextColor.WHITE)
+                .append(Component.text("Неподходящее оружие: ", TextColor.color(0xe8dfd2)))
+                .append(Component.text("−$penalty% урона. ", TextColor.color(0xff6b61)))
+                .append(Component.text("${translate(className)} · ${translate(weapons)}: ", TextColor.color(0xe8dfd2)))
+                .append(Component.text("+${bonus.removePrefix("+")}% урона.", TextColor.color(0x9bd48d)))
+        }
+        return if (source in CHAT_NOTICE_TRANSLATIONS) localize(component) else component
+    }
 
     internal fun translate(source: String): String {
         var translated = source
@@ -88,6 +103,10 @@ internal class EliteMobsActionBarLocalizer(
             "[Alpha] Advanced Combat System » New: hold sneak and double-tap F " +
                 "to toggle class controls anywhere outside EliteMobs content." to
                 "Управление классом » Вне данжей его можно переключать: зажмите Shift и дважды нажмите F.",
+        )
+        val OFF_CLASS_CHAT = Regex(
+            "^Off-class weapon » This weapon does not match your class: -(\\d+)% damage\\. " +
+                "(.+) deal (\\+?\\d+)% more damage with (.+)\\.$",
         )
         val SECONDS = Regex("(\\d+(?:[.,]\\d+)?)s\\b")
         val ABILITY_RECEIPT = Regex("!.*-\\d+(?:[.,]\\d+)?\\s+(?:Fury|Mana|Resolve|Focus|Grace|Stamina)\\b")

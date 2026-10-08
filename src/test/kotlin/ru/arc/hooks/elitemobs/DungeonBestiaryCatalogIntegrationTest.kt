@@ -1,13 +1,17 @@
 package ru.arc.hooks.elitemobs
 
+import com.magmaguy.elitemobs.config.ClassLootSettingsConfig
 import com.magmaguy.elitemobs.config.ItemSettingsConfig
 import com.magmaguy.elitemobs.config.contentpackages.ContentPackagesConfig
 import com.magmaguy.elitemobs.config.contentpackages.ContentPackagesConfigFields
 import com.magmaguy.elitemobs.config.custombosses.CustomBossesConfig
 import com.magmaguy.elitemobs.config.custombosses.CustomBossesConfigFields
+import com.magmaguy.elitemobs.config.customitems.CustomItemsConfigFields
+import com.magmaguy.elitemobs.items.customitems.CustomItem
 import com.magmaguy.elitemobs.items.customloottable.CommandLootTable
 import com.magmaguy.elitemobs.items.customloottable.CustomLootEntry
 import com.magmaguy.elitemobs.items.customloottable.CustomLootTable
+import com.magmaguy.elitemobs.items.customloottable.EliteCustomLootEntry
 import com.magmaguy.elitemobs.items.customloottable.VanillaCustomLootEntry
 import com.magmaguy.elitemobs.mobconstructor.BossType
 import io.kotest.core.spec.style.FreeSpec
@@ -16,6 +20,7 @@ import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
@@ -112,6 +117,50 @@ class DungeonBestiaryCatalogIntegrationTest : FreeSpec({
             unmockkStatic(ContentPackagesConfig::class, CustomBossesConfig::class, ItemSettingsConfig::class)
         }
     }
+
+    "class equipment is represented by one truthful pool fact, not per-item 100 percent rows" {
+        mockkStatic(ContentPackagesConfig::class, CustomBossesConfig::class, ItemSettingsConfig::class, ClassLootSettingsConfig::class, CustomItem::class)
+        NativeDungeonBestiaryCatalog.invalidate()
+        try {
+            val content = contentFields("class_loot_dungeon.yml", "class_loot")
+            val dungeons = hashMapOf("class_loot_dungeon.yml" to content)
+            val challenges = hashMapOf<String, ContentPackagesConfigFields>()
+            val helmet = classItem("Железный шлем", Material.IRON_HELMET)
+            val chestplate = classItem("Железный нагрудник", Material.IRON_CHESTPLATE)
+            every { CustomItem.getCustomItem("class_helmet.yml") } returns helmet
+            every { CustomItem.getCustomItem("class_chestplate.yml") } returns chestplate
+            val boss = bossFields(
+                filename = "class_loot_boss.yml",
+                folder = "class_loot",
+                name = "Armored Keeper",
+                bossType = BossType.BOSS,
+                level = 42,
+                classLoot = true,
+                loot = lootTable(classLootEntry("class_helmet.yml"), classLootEntry("class_chestplate.yml")),
+            )
+            val bosses = hashMapOf<String, CustomBossesConfigFields>(boss.filename to boss)
+
+            every { ContentPackagesConfig.getDungeonPackages() } returns dungeons
+            every { ContentPackagesConfig.getEnchantedChallengeDungeonPackages() } returns challenges
+            every { CustomBossesConfig.getCustomBosses() } returns bosses
+            every { CustomBossesConfig.getCustomBoss(any()) } answers { checkNotNull(bosses[firstArg<String>()]) }
+            every { ClassLootSettingsConfig.enabled() } returns true
+            every { ClassLootSettingsConfig.dropChance(ClassLootSettingsConfig.Rank.BOSS) } returns .05
+
+            val mob = NativeDungeonBestiaryCatalog.entries("class_loot_dungeon").single()
+            mob.level shouldBe "42"
+            mob.loot.map { it.name } shouldBe listOf("Классовая экипировка")
+            mob.loot.single().description shouldContain "До 5%"
+            mob.loot.single().description shouldContain "10%"
+            mob.loot.single().description shouldContain "Железный шлем"
+            mob.loot.single().description shouldContain "Железный нагрудник"
+            mob.loot.single().description shouldNotContain "запис"
+            mob.loot.single().description shouldNotContain "100%"
+        } finally {
+            NativeDungeonBestiaryCatalog.invalidate()
+            unmockkStatic(ContentPackagesConfig::class, CustomBossesConfig::class, ItemSettingsConfig::class, ClassLootSettingsConfig::class, CustomItem::class)
+        }
+    }
 })
 
 private fun contentFields(filename: String, folder: String): ContentPackagesConfigFields =
@@ -128,7 +177,9 @@ private fun bossFields(
     folder: String,
     name: String,
     bossType: BossType = BossType.NORMAL,
+    level: Int = 0,
     reinforcement: Boolean = false,
+    classLoot: Boolean = false,
     phases: List<String> = emptyList(),
     powers: List<Any> = emptyList(),
     spawnLocations: List<String> = emptyList(),
@@ -137,7 +188,7 @@ private fun bossFields(
     every { fields.filename } returns filename
     every { fields.file } returns File("/plugins/EliteMobs/custombosses/$folder/$filename")
     every { fields.name } returns name
-    every { fields.level } returns 0
+    every { fields.level } returns level
     every { fields.bossType } returns bossType
     every { fields.isReinforcement } returns reinforcement
     every { fields.spawnLocations } returns spawnLocations
@@ -150,7 +201,8 @@ private fun bossFields(
     every { fields.isDropsEliteMobsLoot() } returns false
     every { fields.isDropsVanillaLoot() } returns false
     every { fields.isDropsRandomLoot() } returns false
-    every { fields.isClassLoot() } returns false
+    every { fields.isClassLoot() } returns classLoot
+    every { fields.classLootRank } returns if (classLoot) "BOSS" else "AUTO"
 }
 
 private fun lootTable(vararg entries: CustomLootEntry): CustomLootTable = mockk<CustomLootTable>().also { table ->
@@ -172,3 +224,22 @@ private fun vanillaEntry(chance: Double, amount: Int): VanillaCustomLootEntry =
         every { entry.permission } returns ""
         every { entry.material } returns Material.COOKIE
     }
+
+private fun classLootEntry(filename: String): EliteCustomLootEntry = mockk<EliteCustomLootEntry> {
+    every { isClassLoot() } returns true
+    every { this@mockk.filename } returns filename
+    every { chance } returns 1.0
+    every { amount } returns 1
+    every { permission } returns ""
+    every { difficultyIDs } returns emptyList()
+}
+
+private fun classItem(name: String, material: Material): CustomItem {
+    val fields = mockk<CustomItemsConfigFields>()
+    every { fields.name } returns name
+    every { fields.material } returns material
+    every { fields.permission } returns ""
+    return mockk<CustomItem> {
+        every { customItemsConfigFields } returns fields
+    }
+}

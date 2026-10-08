@@ -97,6 +97,7 @@ class DungeonAdventureMenusTest : FreeSpec({
         every { dungeon.panelView(player) } returns DungeonPanelView(world.uid, DungeonVisit("run", instanced = true), null)
         every { dungeon.insideInstance(player) } returns true
         every { dungeon.continuation(player) } returns null
+        every { dungeon.partiesAvailable() } returns false
         every { dungeon.text(any(), any(), *anyVararg()) } answers { MiniMessage.miniMessage().deserialize(secondArg<String>()) }
         val data = mockk<DungeonAdventureService>(relaxed = true)
         every { data.stats(player) } returns emptyList()
@@ -106,7 +107,9 @@ class DungeonAdventureMenusTest : FreeSpec({
         val panel = screens.last()
         panel.columns shouldBe 2
         panel.buttons.last().id.value shouldBe "global"
-        panel.buttons.dropLast(1).size % panel.columns shouldBe 0
+        panel.buttons.none { it.id.value == "panel_padding" } shouldBe true
+        panel.buttons.none { it.id.value in setOf("party", "saves", "entry", "resume", "scoreboard", "about") } shouldBe true
+        panel.buttons.any { it.id.value == "quit" } shouldBe true
         panel.buttons.last().closeDialogBeforeAction shouldBe false
         panel.buttons.last().onClick.handle(mockk())
         screens.last().id shouldBe "dungeon.main"

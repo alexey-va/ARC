@@ -4,6 +4,24 @@ import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 
 class DungeonBestiaryCatalogTest : FreeSpec({
+    "unknown powers do not get a category placeholder and known defenses have concrete effects" {
+        bestiaryPowerFact("Защитная способность", "Защитная способность EliteMobs.") shouldBe null
+        bestiaryPowerFact("Щитовая стена", "Способность EliteMobs.") shouldBe null
+
+        NativeDungeonBestiaryCatalog.knownPowerFact("invulnerability_arrow.yml") shouldBe
+            BestiaryFact("Защита от снарядов", "Не получает урон от снарядов.")
+        NativeDungeonBestiaryCatalog.knownPowerFact("invulnerability_fire.yml") shouldBe
+            BestiaryFact("Огнестойкость", "Постоянно действует эффект Огнестойкости II.")
+        NativeDungeonBestiaryCatalog.knownPowerFact("invulnerability_fall_damage.yml") shouldBe
+            BestiaryFact("Защита от падения", "Отменяет урон от падения.")
+        NativeDungeonBestiaryCatalog.knownPowerFact("invulnerability_knockback.yml") shouldBe
+            BestiaryFact("Защита от отбрасывания", "Сбрасывает полученный от удара импульс отбрасывания.")
+        NativeDungeonBestiaryCatalog.knownPowerFact("invulnerability_fireworks.yml") shouldBe
+            BestiaryFact("Защита от фейерверков", "Отменяет урон от фейерверков.")
+        NativeDungeonBestiaryCatalog.knownPowerFact("shield_wall.lua") shouldBe
+            BestiaryFact("Щитовая стена", "С шансом 10% поднимает щитовую стену, блокирующую атаки с трёх сторон.")
+    }
+
     "generated item names describe the material and expand encounter placeholders without rolling loot" {
         bestiaryItemName("Default name", "Булава", "Химико") shouldBe "Булава"
         bestiaryItemName("&a\$boss: \$item", "Булава", "Химико") shouldBe "Химико: Булава"

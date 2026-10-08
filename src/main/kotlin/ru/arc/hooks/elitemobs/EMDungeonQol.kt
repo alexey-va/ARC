@@ -25,6 +25,7 @@ import ru.arc.paper.playerstate.NativePaperPlayerDataPersistence
 import ru.arc.paper.playerstate.PaperPlayerDataPersistence
 import ru.arc.util.Logging
 import org.bukkit.event.player.PlayerChangedWorldEvent
+import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.player.PlayerTeleportEvent
 import org.bukkit.event.player.PlayerCommandPreprocessEvent
@@ -148,6 +149,7 @@ internal class EMDungeonQol(
             if (!enabled || !player.isOnline || player.world.uid != world.uid) return@runLater
             val visit = resolve(world) ?: return@runLater
             if (!member(player, visit)) return@runLater
+            if (visit.contentId != null) bestiary.preload(player.uniqueId)
             if (visit.waiting) show(player, "entry", "<gold>Готовы к данжу?", "<white>Shift + F <gray>— меню данжа")
             else if (continuation(player) != null) show(player, "continue-entry", "<gold>Вы в данже", "<white>Shift + F <gray>→</gray> <green>Продолжить с места выхода")
             else show(player, "open-entry", "<gold>Вы в данже", "<white>Shift + F <gray>— меню данжа")
@@ -155,10 +157,24 @@ internal class EMDungeonQol(
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
+    fun joined(event: PlayerJoinEvent) {
+        if (!enabled || closed) return
+        val player = event.player
+        val worldId = player.world.uid
+        tasks.runLater(1L) {
+            if (!enabled || closed || !player.isOnline || player.world.uid != worldId) return@runLater
+            val visit = resolve(player.world) ?: return@runLater
+            if (visit.contentId != null && member(player, visit)) bestiary.preload(player.uniqueId)
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
     fun started(event: DungeonStartEvent) {
         if (!enabled) return
-        event.dungeonInstance.players.forEach {
-            show(it, "started", "<gold>Данж начался", "<white>Shift + F <gray>— меню данжа")
+        event.dungeonInstance.players.forEach { player ->
+            val visit = resolve(player.world)
+            if (visit?.contentId != null && member(player, visit)) bestiary.preload(player.uniqueId)
+            show(player, "started", "<gold>Данж начался", "<white>Shift + F <gray>— меню данжа")
         }
     }
 

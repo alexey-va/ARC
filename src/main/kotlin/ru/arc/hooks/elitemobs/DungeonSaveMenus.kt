@@ -31,6 +31,9 @@ internal class DungeonSaveMenus(
     private val classGrants: DungeonClassGrantService = NativeDungeonClassGrantService,
     private val canGrantClasses: (Player) -> Boolean = { it.hasPermission("arc.dungeon.admin.classgrant") },
     private val adventure: DungeonAdventureService = NativeDungeonAdventureService,
+    private val bestiaryProgress: (Player, String) -> DungeonBestiaryProgress = { player, contentId ->
+        dungeon.bestiary.progress(player.uniqueId, contentId)
+    },
     private val show: (Player, PaperDialogScreen, (() -> Unit)?) -> Unit = { player, screen, reopen ->
         val close = PaperDialogButton(PaperDialogActionId.of("close"), dungeon.text("saves.dialog.close-label", "<#e8dfd2>Закрыть"), width = 200, closeDialogBeforeAction = true) { }
         // A root Close is already the footer, so never move a second Close into the grid.
@@ -62,11 +65,6 @@ internal class DungeonSaveMenus(
         val classView = classService.view(player)
         val visit = view.visit
         val continuation = dungeon.continuation(player)
-        val entryUnavailable = if (visit.instanced) {
-            text("panel.entry-unavailable", "<#e8dfd2>Безопасный переход ко входу сейчас недоступен. Для выхода используйте кнопку внизу.")
-        } else {
-            text("panel.entry-open-unavailable", "<#e8dfd2>Безопасный переход ко входу сейчас недоступен.")
-        }
         val state = when {
             visit.waiting -> text("panel.waiting", "<#d7b486>Сбор группы · готовьтесь к старту")
             visit.canResume -> text("panel.ongoing", "<#9bd48d>Прохождение идёт")
@@ -86,7 +84,25 @@ internal class DungeonSaveMenus(
             add(tableLabel("crystals", "Ваши кристаллы") to (crystals(player)?.let {
                 text("table.crystals-value", "<white>💎</white> <#c7a0e8><value>", "value" to Component.text(it))
             } ?: text("table.unavailable-value", "Сейчас недоступно")))
-            view.saves?.let { addAll(saveRows(it)) }
+            val quests = readQuests(player)
+            add(tableLabel("my-quests", "Мои задания") to when {
+                quests == null -> text("table.loading-value", "Загружается…")
+                quests.isEmpty() -> text("table.no-quests", "Нет активных")
+                else -> text("table.quests-progress", "<ready> / <total> к сдаче",
+                    "ready" to Component.text(quests.count { it.complete }), "total" to Component.text(quests.size))
+            })
+            val goals = quests.orEmpty().flatMap { it.lineStates }.filter { it != DungeonQuestGoalState.NEXT }
+            if (goals.isNotEmpty()) add(tableLabel("quest-goals", "Цели заданий") to
+                text("table.progress-value", "<done> / <total>",
+                    "done" to Component.text(goals.count { it == DungeonQuestGoalState.COMPLETE }),
+                    "total" to Component.text(goals.size)))
+            visit.contentId?.let { contentId ->
+                val progress = bestiaryProgress(player, contentId)
+                if (progress.total > 0) add(tableLabel("bestiary-progress", "Изучено врагов") to
+                    text("table.progress-value", "<done> / <total>",
+                        "done" to (progress.discovered?.let(Component::text) ?: Component.text("…")),
+                        "total" to Component.text(progress.total)))
+            }
         }
         if (stats.isNotEmpty()) body += table(stats, DialogTables.Frame.ARTIFACT)
         feedback?.let { body += PaperDialogBody(plain(it), 468) }
@@ -94,42 +110,35 @@ internal class DungeonSaveMenus(
             id = "dungeon.panel", title = text("panel.title", "<#ffb277>Панель данжа"), body = body,
             buttons = listOfNotNull(
                 action("quests", "quests.label", "<#c4a7e7>Задания ›", "quests.tooltip", "Принятые задания EliteMobs и их текущий прогресс") { quests(player) },
-                partyButton(player),
+                if (dungeon.partiesAvailable()) partyButton(player) else null,
                 action("shop", "panel.shop-label", "<#f4d87a>Припасы ›", "panel.shop-tooltip", "Припасы, кейсы и бусты опыта за кристаллы") { shop(player) },
-                action("saves", "panel.saves-label", "<#c4a7e7>Сохранения ›", "panel.saves-tooltip", "Ваши ручные точки, автосохранения и место прошлого выхода") { open(player) },
-                action("entry", "panel.entry-label", "<#92bed8>К началу данжа ›", "panel.entry-tooltip", "Обычный портал к началу данжа", close = view.saves?.entry != null) {
-                    if (view.saves?.entry != null) dungeon.travel(player, view.saves, "entry") else panel(player, entryUnavailable)
-                }.let { if (view.saves?.entry != null) it else it.copy(label = text("panel.entry-disabled", "<#e8dfd2>[Недоступно] К началу данжа")) },
+                view.saves?.let {
+                    action("saves", "panel.saves-label", "<#c4a7e7>Сохранения ›", "panel.saves-tooltip", "Ваши ручные точки, автосохранения и место прошлого выхода") { open(player) }
+                },
+                view.saves?.takeIf { it.entry != null }?.let { saves ->
+                    action("entry", "panel.entry-label", "<#92bed8>К началу данжа ›", "panel.entry-tooltip", "Обычный портал к началу данжа", close = true) {
+                        dungeon.travel(player, saves, "entry")
+                    }
+                },
                 if (visit.waiting) action("start", "panel.start-label", "<#9bd48d>Начать поход", "panel.start-tooltip", "Запустить прохождение для собранной группы", close = true) {
                     dungeon.panelAction(player, view, "start")
-                } else action("resume", "panel.resume-label", "<#92bed8>К месту выхода ›", "panel.resume-tooltip", "Открыть личный портал к месту прошлого выхода из этого данжа", close = continuation != null) {
-                    if (continuation != null) dungeon.travel(player, continuation, "exit")
-                    else panel(player, text("panel.resume-unavailable", "<#e8dfd2>В этом данже ещё нет доступного места прошлого выхода."))
-                }.let { if (continuation != null) it else it.copy(label = text("panel.resume-disabled", "<white>[Недоступно] К месту выхода")) },
-                action("scoreboard", "panel.scoreboard-${if (dungeon.scoreboardEnabled(player)) "on" else "off"}-label",
-                    if (dungeon.scoreboardEnabled(player)) "<#9bd48d>✔ Табло включено" else "<white>○ Табло выключено",
-                    "panel.scoreboard-tooltip", "Включить или выключить правое табло текущего данжа") {
-                    val changed = dungeon.setScoreboardEnabled(player, !dungeon.scoreboardEnabled(player))
-                    panel(player, changed.message)
+                } else continuation?.let { departure ->
+                    action("resume", "panel.resume-label", "<#92bed8>К месту выхода ›", "panel.resume-tooltip", "Открыть личный портал к месту прошлого выхода из этого данжа", close = true) {
+                        dungeon.travel(player, departure, "exit")
+                    }
                 },
                 action("gear", "adventure.gear-label", "<#86dcf1>Снаряжение ›", "adventure.gear-tooltip", "Проверить оружие, броню и боевые параметры") { gear(player) },
-                action("about", "panel.about-label", "<#86dcf1>О данже ›", "panel.about-tooltip", "Описание и подсказка этого данжа") { about(player) },
                 visit.contentId?.let { contentId ->
                     action("bestiary", "bestiary.label", "<#c4abff>Бестиарий ›", "bestiary.tooltip",
                         "Изученные противники, способности и шансы добычи. Победите противника, чтобы открыть запись.") {
                         bestiary(player, contentId, plainDungeonQuestText(visit.name ?: "Данж")) { panel(player) }
                     }
                 },
-                action("quit", "panel.quit-label", "<#d7b486>Выйти из данжа", "panel.quit-tooltip", "Покинуть данж штатным способом", close = true) {
+                if (visit.instanced) action("quit", "panel.quit-label", "<#d7b486>Выйти из данжа", "panel.quit-tooltip", "Покинуть данж штатным способом", close = true) {
                     dungeon.panelAction(player, view, "quit")
-                },
+                } else null,
                 action("global", "adventure.global-label", "<#e5ba73>Главное меню ›", "adventure.global-tooltip", "Каталог данжей, навыки, классы, статистика и боссы") { main(player) },
-            ).let { buttons ->
-                val content = buttons.dropLast(1)
-                content + (if (content.size % 2 == 0) emptyList() else listOf(
-                    PaperDialogButton(PaperDialogActionId.of("panel_padding"), Component.empty(), width = 230) { },
-                )) + buttons.last()
-            },
+            ),
             exitButton = if (MenuEscapeBehavior.goesBack(player)) back {} else close(), columns = 2,
         )) { panel(player) }
     }
@@ -731,20 +740,6 @@ internal class DungeonSaveMenus(
     }
 
     private fun close() = action("close", "saves.dialog.close-label", "<#e8dfd2>Закрыть", "saves.dialog.close-tooltip", "Вернуться в игру", close = true) { }.copy(width = 200)
-
-    private fun about(player: Player) {
-        val visit = dungeon.panelView(player)?.visit ?: run { unavailable(player); return }
-        show(player, PaperDialogScreen(
-            id = "dungeon.about",
-            title = text("panel.about-title", "<#86dcf1>О данже"),
-            body = listOf(
-                PaperDialogBody(dungeonDisplayName(visit), 468),
-                PaperDialogBody(dungeon.context(player), 468),
-            ),
-            buttons = listOf(guide(player) { about(player) }),
-            exitButton = back { panel(player) },
-        )) { about(player) }
-    }
 
     internal fun shop(player: Player, feedback: Component? = null) {
         val view = dungeon.panelView(player) ?: run { unavailable(player); return }
