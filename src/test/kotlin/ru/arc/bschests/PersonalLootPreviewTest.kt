@@ -40,7 +40,7 @@ class PersonalLootPreviewTest : TestBase() {
     }
 
     @Test
-    fun `cold lookup hides until repository confirms absence and never creates or mutates loot`() = runBlocking {
+    fun `cold lookup hides until repository confirms absence and never creates or mutates loot`() = runBlocking<Unit> {
         val viewer = UUID.randomUUID()
         val chestUuid = UUID.randomUUID()
         val block = markedChest(chestUuid, "")
