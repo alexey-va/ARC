@@ -47,6 +47,20 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         }
     }
 
+    "beams leave room in front of the caster camera instead of surrounding its near plane" {
+        for (spell in listOf(StaffSpell.CHAIN, StaffSpell.LANCE)) {
+            for (age in 4..12 step 2) {
+                staffDisplayParts(spell, age, 20, 24.0, 0.75, true).forEach { part ->
+                    for (x in listOf(-1f, 1f)) for (y in listOf(-1f, 1f)) for (z in listOf(-1f, 1f)) {
+                        val corner = org.joml.Vector3f(part.scale).mul(org.joml.Vector3f(x, y, z)).mul(0.5f)
+                        part.rotation.transform(corner).add(part.center)
+                        (corner.z > 0.5f) shouldBe true
+                    }
+                }
+            }
+        }
+    }
+
     "transient spells grow in and dissolve before removal with stable part identities" {
         StaffSpell.entries.forEach { spell ->
             fun parts(age: Int) = staffDisplayParts(spell, age, 30, 8.0, 3.0, true)

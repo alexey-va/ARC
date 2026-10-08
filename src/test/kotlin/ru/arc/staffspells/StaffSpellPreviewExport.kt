@@ -94,7 +94,7 @@ object StaffSpellPreviewExport {
 
     private fun state(spell: StaffSpell, event: Event, frame: Frame): ExportedState {
         val inputs = event.inputs
-        val parts = staffDisplayParts(
+        var parts = staffDisplayParts(
             spell = spell,
             ageTicks = frame.ageTicks,
             durationTicks = inputs.durationTicks,
@@ -102,6 +102,13 @@ object StaffSpellPreviewExport {
             radius = inputs.radius,
             impact = inputs.impact,
         ).take(StaffSpellDisplayEffects.MAX_PARTS)
+        if (event.id == "burst" && frame.ageTicks < 4) {
+            val tracked = events.getValue(spell).first().inputs
+            val priorAge = if (spell == StaffSpell.MARK) 16 else 18
+            val previous = staffDisplayParts(spell, priorAge, tracked.durationTicks,
+                tracked.length, tracked.radius, tracked.impact)
+            parts = blendStaffParts(parts, previous, frame.ageTicks)
+        }
         require(parts.isNotEmpty()) { "${spell.id}/${event.id}/${frame.id} produced no display parts" }
         return ExportedState(mapOf(
             "id" to "${spell.id}-${event.id}-${frame.id}",

@@ -109,16 +109,8 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
     private fun render(scene: Scene) {
         var parts = staffDisplayParts(scene.spell, scene.age, scene.duration, scene.length, scene.radius, scene.impact).take(MAX_PARTS)
         scene.transitionFrom?.let { previous ->
-            val progress = (scene.age / 4f).coerceIn(0f, 1f)
-            val blend = progress * progress * (3f - 2f * progress)
-            parts = parts.mapIndexed { index, part ->
-                previous.getOrNull(index)?.let { old -> part.copy(
-                    center = Vector3f(old.center).lerp(part.center, blend),
-                    scale = Vector3f(old.scale).lerp(part.scale, blend),
-                    rotation = Quaternionf(old.rotation).slerp(part.rotation, blend),
-                ) } ?: part
-            }
-            if (progress >= 1f) scene.transitionFrom = null
+            parts = blendStaffParts(parts, previous, scene.age)
+            if (scene.age >= 4) scene.transitionFrom = null
         }
         scene.renderedParts = parts
         while (scene.handles.size > parts.size) scene.handles.removeLast().remove()

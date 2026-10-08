@@ -16,6 +16,17 @@ internal data class StaffDisplayPart(
     val rotation: Quaternionf,
 )
 
+internal fun blendStaffParts(parts: List<StaffDisplayPart>, previous: List<StaffDisplayPart>, age: Int): List<StaffDisplayPart> {
+    val blend = smooth(age / 4.0).toFloat()
+    return parts.mapIndexed { index, part ->
+        previous.getOrNull(index)?.let { old -> part.copy(
+            center = Vector3f(old.center).lerp(part.center, blend),
+            scale = Vector3f(old.scale).lerp(part.scale, blend),
+            rotation = Quaternionf(old.rotation).slerp(part.rotation, blend),
+        ) } ?: part
+    }
+}
+
 /** Pure local cuboid geometry shared by previews and the packet-display runtime. */
 internal fun staffDisplayParts(
     spell: StaffSpell,
@@ -48,6 +59,7 @@ private fun chainDisplayParts(ageTicks: Int, durationTicks: Int, length: Double,
     val phase = progress(ageTicks, durationTicks)
     val reach = extent(length, 32.0, 8.0)
     val width = extent(radius, 2.0, 0.45)
+    val muzzle = minOf(0.85, reach * 0.5)
     val parts = ArrayList<StaffDisplayPart>(32)
     val boltWidth = (width * 0.26).coerceIn(0.13, 0.18)
     val points = (0..18).map { index ->
@@ -55,10 +67,11 @@ private fun chainDisplayParts(ageTicks: Int, durationTicks: Int, length: Double,
         val taper = if (index == 0 || index == 18) 0.0 else sin(PI * t)
         val side = if (index % 2 == 0) -1.0 else 1.0
         val phaseJitter = sin(index * 1.7) * width * 0.08 * taper
+        val muzzleOffset = (1.0 - reach * t / 3.0).coerceAtLeast(0.0)
         Vector3f(
-            (side * width * 0.45 * taper + phaseJitter).toFloat(),
-            (cos(index * 1.7) * width * 0.14 * taper).toFloat(),
-            (reach * t).toFloat(),
+            (side * width * 0.45 * taper + phaseJitter + 0.32 * muzzleOffset).toFloat(),
+            (cos(index * 1.7) * width * 0.14 * taper - 0.24 * muzzleOffset).toFloat(),
+            (muzzle + (reach - muzzle) * t).toFloat(),
         )
     }
     repeat(18) { index ->
@@ -68,10 +81,11 @@ private fun chainDisplayParts(ageTicks: Int, durationTicks: Int, length: Double,
         val segmentLength = delta.length()
         val rotation = Quaternionf().rotationTo(Vector3f(0f, 0f, 1f), Vector3f(delta).normalize())
         val center = Vector3f(start).add(end).mul(0.5f)
+        val stemWidth = when (index) { 0 -> 0.045; 1 -> 0.09; else -> boltWidth }
         parts += StaffDisplayPart(
             if (index % 3 == 0) Material.SEA_LANTERN else Material.CYAN_STAINED_GLASS,
             center,
-            Vector3f(boltWidth.toFloat(), boltWidth.toFloat(), segmentLength),
+            Vector3f(stemWidth.toFloat(), stemWidth.toFloat(), segmentLength),
             rotation,
         )
     }
@@ -171,15 +185,18 @@ private fun lanceDisplayParts(ageTicks: Int, durationTicks: Int, length: Double,
     val reach = extent(length, 32.0, 8.0)
     val launch = smooth(ageTicks / 4.0)
     val front = minOf(reach, 0.8 + (reach - 0.8).coerceAtLeast(0.0) * launch)
+    val muzzle = minOf(0.85, front * 0.5)
+    val shaftLength = front - muzzle
     val width = extent(radius, 1.0, 0.75)
     val parts = ArrayList<StaffDisplayPart>(25)
     repeat(12) { index ->
-        val t = (index + 0.5) / 12.0
-        val z = front * t
+        fun point(t: Double) = Vector3f((0.32 * (1.0 - t)).toFloat(),
+            (-0.24 * (1.0 - t)).toFloat(), (muzzle + shaftLength * t).toFloat())
         val thinning = (1.0 - progress(ageTicks, durationTicks) * 0.45)
-        parts += part(if (index % 4 == 0) Material.GOLD_BLOCK else Material.YELLOW_STAINED_GLASS,
-            0.0, 0.0, z, 0.10 * thinning, 0.10 * thinning,
-            (front / 12.0 * 0.995).coerceAtLeast(0.001), roll = PI / 4.0)
+        val thickness = (0.035 + index / 11.0 * 0.035) * thinning
+        val segment = link(if (index % 4 == 0) Material.GOLD_BLOCK else Material.YELLOW_STAINED_GLASS,
+            point(index / 12.0), point((index + 1) / 12.0), thickness, thickness)
+        parts += segment.copy(scale = Vector3f(segment.scale).apply { z *= 0.995f })
     }
     // Four swept wings build a recognisable spear head instead of a rotating rod.
     repeat(4) { index ->
