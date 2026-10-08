@@ -13,8 +13,7 @@ internal class EnchantingConfig(private val config: Config) {
     val bookText get() = EliteEnchantmentBookPresentationText(
         namePrefix = config.string("book.name-prefix", "Книга EliteMobs"),
         scopeLore = config.string("book.scope", "Только для снаряжения EliteMobs"),
-        actionLore = config.string("book.action", "Перетащите книгу на предмет в инвентаре"),
-        previewHint = config.string("book.preview-hint", "Итог, цена и шансы — перед применением"),
+        actionLore = config.string("book.action", "Перетащите на предмет — зачаровать"),
     )
 
     fun text(key: String, vararg resolvers: TagResolver): Component =

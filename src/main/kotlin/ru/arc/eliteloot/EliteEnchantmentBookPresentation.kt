@@ -1,13 +1,18 @@
 package ru.arc.eliteloot
 
+import com.magmaguy.elitemobs.config.enchantments.EnchantmentsConfig
+import com.magmaguy.elitemobs.items.EliteItemLore
 import com.magmaguy.elitemobs.items.ItemTagger
+import com.magmaguy.elitemobs.items.customenchantments.SoulbindEnchantment
 import com.magmaguy.elitemobs.items.upgradesystem.EliteEnchantmentItems
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
+import org.bukkit.inventory.ItemFlag
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
 
@@ -15,8 +20,7 @@ import org.bukkit.persistence.PersistentDataType
 internal data class EliteEnchantmentBookPresentationText(
     val namePrefix: String = "Книга EliteMobs",
     val scopeLore: String = "Только для снаряжения EliteMobs",
-    val actionLore: String = "Перетащите книгу на предмет в инвентаре",
-    val previewHint: String = "Итог, цена и шансы — перед применением",
+    val actionLore: String = "Перетащите на предмет — зачаровать",
 )
 
 private const val advancedEnchantmentsNamespace = "advancedenchantments"
@@ -44,7 +48,11 @@ private val plainBookText = PlainTextComponentSerializer.plainText()
 private val bookNameAccent = TextColor.color(0xC7A0E8)
 private val bookActionAccent = TextColor.color(0xC7A0E8)
 private val bookBodyColor = TextColor.color(0xE6FFF3)
-private val bookHintColor = TextColor.color(0xC8C0D1)
+private val bookLabelColor = TextColor.color(0xB8B8B8)
+private val bookStructureColor = TextColor.color(0x8C8C8C)
+private val bookEnchantmentColor = TextColor.color(0x68D8FF)
+private val bookLegacy = LegacyComponentSerializer.legacySection()
+private val bookAmpersand = LegacyComponentSerializer.legacyAmpersand()
 
 internal data class EliteEnchantmentBookNamePresentation(
     val name: Component?,
@@ -79,87 +87,56 @@ internal fun eliteEnchantmentBookName(
     )
 }
 
-internal data class EliteEnchantmentBookLorePresentation(
-    val lore: List<Component>,
-    val ownedRows: List<String>,
-    val ownsLeadingBlank: Boolean,
-)
-
 private val retiredEnchanterInstructions = setOf(
     "Used to enchant items at the enchanter!",
     "Used at the enchanter.",
+    "Используется для зачарования предметов у чародея!",
+    "Используется у зачарователя.",
 )
 
-private fun removePreviouslyOwnedRows(currentLore: List<Component>, ownedRows: List<String>): MutableList<Component> {
-    val remaining = currentLore.toMutableList()
-    ownedRows.forEachIndexed { ownedIndex, ownedText ->
-        // Scope is ARC-owned at row 1 (after the leading blank); action and hint are appended.
-        val preferredIndex = if (ownedIndex == 0) 1 else remaining.lastIndex
-        val index = if (preferredIndex in remaining.indices &&
-            plainBookText.serialize(remaining[preferredIndex]) == ownedText
-        ) {
-            preferredIndex
-        } else if (ownedIndex == 0) {
-            remaining.indexOfFirst { plainBookText.serialize(it) == ownedText }
-        } else {
-            remaining.indexOfLast { plainBookText.serialize(it) == ownedText }
-        }
-        if (index >= 0) remaining.removeAt(index)
-    }
-    return remaining
-}
-
-/** Re-render only ARC-owned rows so a live text-config change replaces the old copy. */
+/** Rebuild a book from canonical effects and authored prose, never the equipment lore template. */
 internal fun eliteEnchantmentBookLore(
-    currentLore: List<Component>,
+    enchantments: List<Component>,
+    authoredLore: List<Component>,
     text: EliteEnchantmentBookPresentationText,
-    previouslyOwnedRows: List<String> = emptyList(),
-    previouslyOwnedLeadingBlank: Boolean = false,
-): EliteEnchantmentBookLorePresentation {
-    val lore = removePreviouslyOwnedRows(currentLore, previouslyOwnedRows)
-    if (previouslyOwnedLeadingBlank && lore.firstOrNull()?.let { plainBookText.serialize(it).isBlank() } == true) {
-        lore.removeAt(0)
+): List<Component> = buildList {
+    fun section(lines: List<Component>) {
+        val compact = compactEliteLore(lines)
+        if (compact.isEmpty()) return
+        add(Component.empty().decoration(TextDecoration.ITALIC, false))
+        addAll(compact)
     }
-
-    // These are the two exact EM source rows retired with the old guild workflow. Keep other
-    // authored effect restrictions (for example, "Staves only") untouched.
-    lore.removeAll { plainBookText.serialize(it) in retiredEnchanterInstructions }
-
-    val ownedRows = mutableListOf<String>()
-    var ownsLeadingBlank = false
-    val scope = text.scopeLore.trim()
-    if (scope.isNotEmpty() && lore.none { plainBookText.serialize(it) == scope }) {
-        if (lore.firstOrNull()?.let { plainBookText.serialize(it).isBlank() } != true) {
-            lore.add(0, Component.empty().decoration(TextDecoration.ITALIC, TextDecoration.State.FALSE))
-            ownsLeadingBlank = true
-        }
-        lore.add(if (lore.isEmpty()) 0 else 1, bookLoreLine(scope, bookBodyColor))
-        ownedRows += scope
+    section(listOfNotNull(text.scopeLore.trim().takeIf(String::isNotEmpty)?.let {
+        bookLoreLine(it, bookLabelColor)
+    }))
+    section(enchantments)
+    section(authoredLore.filterNot { plainBookText.serialize(it).trim() in retiredEnchanterInstructions })
+    text.actionLore.trim().takeIf(String::isNotEmpty)?.let { action ->
+        // The input is dragging a book, so do not advertise a plain LMB click as the gesture.
+        section(listOf(Component.text("[", bookStructureColor)
+            .append(Component.text("▶", bookActionAccent))
+            .append(Component.text("] ", bookStructureColor))
+            .append(bookLoreLine(action.substringBefore(" — "), bookActionAccent))
+            .let { footer ->
+                if (" — " in action) footer.append(Component.text(" — ", bookLabelColor))
+                    .append(bookLoreLine(action.substringAfter(" — "), bookBodyColor)) else footer
+            }))
     }
-
-    val tailLines = listOf(
-        text.actionLore.trim() to bookActionAccent,
-        text.previewHint.trim() to bookHintColor,
-    ).filter { (value, _) -> value.isNotEmpty() }
-    tailLines.distinctBy { (value, _) -> value }.forEach { (value, color) ->
-        if (lore.none { plainBookText.serialize(it) == value } && value !in ownedRows) {
-            lore += bookLoreLine(value, color)
-            ownedRows += value
-        }
-    }
-
-    return EliteEnchantmentBookLorePresentation(lore, ownedRows, ownsLeadingBlank)
 }
 
 private fun bookLoreLine(value: String, color: TextColor): Component =
-    Component.text(value, color).decoration(TextDecoration.ITALIC, TextDecoration.State.FALSE)
+    Component.text(value, color).decoration(TextDecoration.ITALIC, false)
+
+private fun bookSourceLine(value: String): Component =
+    bookLegacy.deserialize(bookLegacy.serialize(bookAmpersand.deserialize(value)))
+        .decoration(TextDecoration.ITALIC, false)
 
 private val bookNamePrefixKey = NamespacedKey("arc", "elitemobs_enchantment_book_name_prefix")
 private val bookNameDetachedKey = NamespacedKey("arc", "elitemobs_enchantment_book_name_detached")
 private val bookLoreRowsKey = NamespacedKey("arc", "elitemobs_enchantment_book_lore_rows")
 private val bookLoreLeadingBlankKey = NamespacedKey("arc", "elitemobs_enchantment_book_lore_blank")
 
-/** Add the ARC ownership/action note without changing native effect lore or EM ownership data. */
+/** Keep native effect/ownership data intact while replacing the complete book tooltip. */
 internal fun presentEliteEnchantmentBook(
     item: ItemStack,
     text: EliteEnchantmentBookPresentationText = ru.arc.enchanting.EnchantingModule.bookText,
@@ -183,23 +160,37 @@ internal fun presentEliteEnchantmentBook(
         pdc.remove(bookNameDetachedKey)
     }
 
-    val presentation = eliteEnchantmentBookLore(
-        meta.lore().orEmpty(),
-        text,
-        pdc.get(bookLoreRowsKey, PersistentDataType.LIST.strings()).orEmpty(),
-        pdc.get(bookLoreLeadingBlankKey, PersistentDataType.BYTE)?.toInt() == 1,
-    )
-    meta.lore(presentation.lore)
-    if (presentation.ownedRows.isEmpty()) {
-        pdc.remove(bookLoreRowsKey)
-    } else {
-        pdc.set(bookLoreRowsKey, PersistentDataType.LIST.strings(), presentation.ownedRows)
+    // Native rendering owns custom enchantment names/glyphs. Run it on a clone because it also
+    // recalculates price; only its generated-lore ownership record belongs on the real book.
+    val rendered = item.clone()
+    rendered.editMeta(::reindexEliteEnchantmentLore)
+    EliteItemLore(rendered, false)
+    val renderedMeta = rendered.itemMeta
+    copyElitePresentationMetadata(renderedMeta, meta)
+    val customEnchantments = renderedMeta.persistentDataContainer
+        .get(NamespacedKey("elitemobs", "enchantment_presentation"), PersistentDataType.TAG_CONTAINER)
+        ?.get(NamespacedKey("elitemobs", "lines"), PersistentDataType.LIST.strings()).orEmpty()
+        .map(::bookSourceLine)
+    val nativeEnchantments = EliteEnchantmentItems.nativeLevels(item).entries.sortedBy { it.key.key.toString() }
+        .map { (enchantment, level) ->
+            val name = EnchantmentsConfig.getEnchantment(enchantment)?.name
+            val label = name?.let(::bookSourceLine) ?: enchantment.description()
+            Component.empty().color(if (enchantment.isCursed) TextColor.color(0xFF716C) else bookEnchantmentColor)
+                .append(label)
+                .append(Component.space())
+                // Keep the pack's native enchantment-level glyph, explicitly white.
+                .append(Component.translatable("enchantment.level.$level", level.toString()).color(TextColor.color(0xFFFFFF)))
+                .decoration(TextDecoration.ITALIC, false)
+        }
+    val authoredLore = ItemTagger.getCustomLore(renderedMeta).map(::bookSourceLine).toMutableList()
+    if (SoulbindEnchantment.isSoulboundItem(meta)) {
+        authoredLore += bookLoreLine("Привязано к душе", bookNameAccent)
     }
-    if (presentation.ownsLeadingBlank) {
-        pdc.set(bookLoreLeadingBlankKey, PersistentDataType.BYTE, 1.toByte())
-    } else {
-        pdc.remove(bookLoreLeadingBlankKey)
-    }
+    meta.lore(eliteEnchantmentBookLore(nativeEnchantments + customEnchantments, authoredLore, text))
+    meta.addItemFlags(ItemFlag.HIDE_ENCHANTS, ItemFlag.HIDE_STORED_ENCHANTS, ItemFlag.HIDE_ATTRIBUTES)
+    // Pre-redesign books used appended rows. Canonical reconstruction makes those markers obsolete.
+    pdc.remove(bookLoreRowsKey)
+    pdc.remove(bookLoreLeadingBlankKey)
 
     // Native generated-lore ownership records store a row range; filtering or replacing rows may
     // shift that range, so update it after every book render.

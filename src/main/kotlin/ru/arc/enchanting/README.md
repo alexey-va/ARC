@@ -30,8 +30,13 @@ Do not replace the acquisition calls with event replay or cancellation of
 aborts the purchase. Recheck the listener priority and public API on EM updates.
 
 Player copy lives in `modules/enchanting.yml`. The EliteLoot presentation pass
-adds an EM-only title/scope to provider-issued books, tracks ARC-owned text in
-PDC, and removes only the two known obsolete native enchanter instructions.
+rebuilds provider-issued books from native enchantment levels, generated custom
+enchantment rows and authored applicability. It omits the equipment template
+(level/prestige, unbound status, resale and source), removes the exact English
+and Russian retired enchanter instructions, and groups the scope, effects and
+drag action with single blank rows. Native stored-enchantment tooltip rows are
+hidden because the styled lore already shows them. Provider PDC, price and
+actual binding remain intact; existing books refresh on join/inventory changes.
 AE keeps its native application, combining, scrolls and dust; it has no complete
 public apply/resume API suitable for a second confirmation screen in 9.24.15.
 

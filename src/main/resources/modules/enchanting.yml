@@ -1,8 +1,7 @@
 book:
   name-prefix: 'Книга EliteMobs'
   scope: 'Только для снаряжения EliteMobs'
-  action: 'Перетащите книгу на предмет в инвентаре'
-  preview-hint: 'Итог, цена и шансы — перед применением'
+  action: 'Перетащите на предмет — зачаровать'
 messages:
   elite-only: '<red>Эта книга подходит только для снаряжения EliteMobs.</red>'
   incompatible: '<red>Эти чары не подходят предмету или превышают его предел.</red>'

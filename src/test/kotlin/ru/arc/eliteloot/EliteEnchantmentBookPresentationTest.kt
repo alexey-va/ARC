@@ -3,6 +3,7 @@ package ru.arc.eliteloot
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
@@ -48,64 +49,98 @@ class EliteEnchantmentBookPresentationTest : FreeSpec({
         renderedAgain.detached shouldBe true
     }
 
-    "lore config changes replace ARC rows and remove only the two retired EM instructions" {
-        val nativeLore = listOf(
-            Component.text("Проклятие несъёмности I"),
+    "book lore keeps canonical effects and applicability, removes exact obsolete instructions, and groups rows" {
+        val enchantment = Component.text(" ", TextColor.color(0xFFFFFF))
+            .append(Component.text("Сила I", TextColor.color(0x68D8FF)))
+            .decoration(TextDecoration.ITALIC, TextDecoration.State.FALSE)
+        val authoredRestriction = Component.text(" ", TextColor.color(0xFFFFFF))
+            .append(Component.text("Только для посохов. Увеличивает радиус взрыва.", TextColor.color(0xE6FFF3)))
+            .decoration(TextDecoration.ITALIC, TextDecoration.State.TRUE)
+        val authoredLore = listOf(
             legacy.deserialize("&2Used to enchant items at the enchanter!"),
-            Component.text("Staves only. Increases explosion radius."),
             legacy.deserialize("&2Used at the enchanter."),
-        )
-        val firstText = EliteEnchantmentBookPresentationText()
-        val first = eliteEnchantmentBookLore(nativeLore, firstText)
-        val changedText = firstText.copy(
-            scopeLore = "Только для вещей EliteMobs",
-            actionLore = "Перетащите книгу на снаряжение",
-            previewHint = "Цена и шанс будут показаны заранее",
-        )
-        val changed = eliteEnchantmentBookLore(
-            first.lore,
-            changedText,
-            previouslyOwnedRows = first.ownedRows,
-            previouslyOwnedLeadingBlank = first.ownsLeadingBlank,
-        )
-        val rerendered = eliteEnchantmentBookLore(
-            changed.lore,
-            changedText,
-            previouslyOwnedRows = changed.ownedRows,
-            previouslyOwnedLeadingBlank = changed.ownsLeadingBlank,
+            legacy.deserialize("&2Используется у зачарователя."),
+            legacy.deserialize("&2Используется для зачарования предметов у чародея!"),
+            authoredRestriction,
         )
 
-        changed.lore.map(plain::serialize) shouldBe listOf(
-            "",
-            "Только для вещей EliteMobs",
-            "Проклятие несъёмности I",
-            "Staves only. Increases explosion radius.",
-            "Перетащите книгу на снаряжение",
-            "Цена и шанс будут показаны заранее",
+        val lore = eliteEnchantmentBookLore(
+            enchantments = listOf(enchantment),
+            authoredLore = authoredLore,
+            text = EliteEnchantmentBookPresentationText(actionLore = "Перетащите на предмет — зачаровать"),
         )
-        rerendered shouldBe changed
-        changed.ownedRows shouldBe listOf(
-            "Только для вещей EliteMobs",
-            "Перетащите книгу на снаряжение",
-            "Цена и шанс будут показаны заранее",
-        )
-    }
 
-    "scope is placed under the native leading blank and source effect lore is preserved" {
-        val nativeLore = listOf(
-            Component.empty(),
-            Component.text("Blast Radius I"),
-            Component.text("Staves only. Increases explosion radius."),
-        )
-        val presentation = eliteEnchantmentBookLore(nativeLore, EliteEnchantmentBookPresentationText())
-
-        presentation.lore.map(plain::serialize).take(3) shouldBe listOf(
+        lore.map(plain::serialize) shouldBe listOf(
             "",
             "Только для снаряжения EliteMobs",
-            "Blast Radius I",
+            "",
+            " Сила I",
+            "",
+            " Только для посохов. Увеличивает радиус взрыва.",
+            "",
+            "[▶] Перетащите на предмет — зачаровать",
         )
-        presentation.ownsLeadingBlank shouldBe false
-        presentation.lore.last().let { plain.serialize(it) } shouldBe "Итог, цена и шансы — перед применением"
+        lore[3] shouldBe enchantment
+        lore[5] shouldBe authoredRestriction.decoration(TextDecoration.ITALIC, TextDecoration.State.FALSE)
+        lore.forEach { it.decoration(TextDecoration.ITALIC) shouldBe TextDecoration.State.FALSE }
+        lore.zipWithNext().none { (left, right) -> plain.serialize(left).isBlank() && plain.serialize(right).isBlank() } shouldBe true
+    }
+
+    "fresh lore input replaces old text when configuration changes" {
+        val enchantments = listOf(Component.text("Сила I").decoration(TextDecoration.ITALIC, TextDecoration.State.FALSE))
+        val authoredLore = listOf(Component.text("Только для лука").decoration(TextDecoration.ITALIC, TextDecoration.State.FALSE))
+        val first = eliteEnchantmentBookLore(
+            enchantments,
+            authoredLore,
+            EliteEnchantmentBookPresentationText(
+                scopeLore = "Только для снаряжения EliteMobs",
+                actionLore = "Перетащите книгу",
+            ),
+        )
+        val changed = eliteEnchantmentBookLore(
+            enchantments,
+            authoredLore,
+            EliteEnchantmentBookPresentationText(
+                scopeLore = "Только для вещей EliteMobs",
+                actionLore = "Перетащите на предмет — зачаровать",
+            ),
+        )
+
+        first.map(plain::serialize).contains("Только для снаряжения EliteMobs") shouldBe true
+        first.map(plain::serialize).contains("[▶] Перетащите книгу") shouldBe true
+        changed.map(plain::serialize) shouldBe listOf(
+            "",
+            "Только для вещей EliteMobs",
+            "",
+            "Сила I",
+            "",
+            "Только для лука",
+            "",
+            "[▶] Перетащите на предмет — зачаровать",
+        )
+        changed.map(plain::serialize).none {
+            it == "Только для снаряжения EliteMobs" || it == "[▶] Перетащите книгу"
+        } shouldBe true
+    }
+
+    "authored lore group and its separator are omitted when only obsolete instructions remain" {
+        val lore = eliteEnchantmentBookLore(
+            enchantments = listOf(Component.text("Сила I")),
+            authoredLore = listOf(
+                legacy.deserialize("&2Used to enchant items at the enchanter!"),
+                legacy.deserialize("&2Используется для зачарования предметов у чародея!"),
+            ),
+            text = EliteEnchantmentBookPresentationText(),
+        )
+
+        lore.map(plain::serialize) shouldBe listOf(
+            "",
+            "Только для снаряжения EliteMobs",
+            "",
+            "Сила I",
+            "",
+            "[▶] Перетащите на предмет — зачаровать",
+        )
     }
 
     "AE book PDC markers are recognized by their provider-authored key names" {
@@ -122,4 +157,5 @@ class EliteEnchantmentBookPresentationTest : FreeSpec({
             recordedPosition = 0,
         ) shouldBe 2
     }
+
 })
