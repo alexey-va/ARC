@@ -1,53 +1,66 @@
-# Private chest inspection
+# Private container inspection
 
-Looking directly at an ordinary, trapped or copper chest (including waxed and
-oxidized variants), barrel, shulker box or ender chest produces a private icon
-preview only for a player with `arc.chest-preview`. The permission defaults to
-false, including operators, and is not a child of `arc.admin`. No permissions are
-granted by the module. The existing inspection preference must be `HOLOGRAM`;
-`OFF` and `BOSSBAR` do not display container contents.
+Ordinary, trapped and copper chests, barrels, shulkers and the viewer's own
+Ender Chest contents use private ItemDisplay icons. `arc.chest-preview` remains
+required and defaults to false, including operators; the menu never grants it.
+Opening/access checks below always run before reading inventory contents.
 
-`plugins/ARC/modules/item-info.yml` owns `chest-preview.max-items` (default 6,
-range 1–12), `max-distance` (default 4.5, never beyond actual interaction reach),
-`vertical-gap` (default 0.15), and `background-opacity` (integer percentage,
-0 fully transparent, 100 opaque; default 40). `/arc reload` reloads configuration
-before replacing the ItemInfo runtime and its display owner. Existing scenes are
-removed and the next inspection tick uses the new opacity; no restart is needed
-for subsequent setting changes once this plugin version is active.
+Similar stacks share one icon in first-slot order. Optional `× N` TextDisplays
+show the total across the entire bounded 54-slot inventory, including matching
+stacks beyond the displayed unique-item limit. Icons preserve their model and
+metadata with display amount one. There are no item names, titles or overflow
+messages, and empty containers show nothing.
 
-The preview contains **only item icons** in a compact three-column grid, without
-names, titles, counts, overflow or empty-state labels. Similar stacks share one
-icon in physical slot order. Empty containers have no visible panel. Ender chests
-always use the looking player's own ender inventory, so two viewers can see
-different icons at one block. The item model and appearance metadata are
-retained, with display amount normalized to one.
+## Configuration and personal controls
 
-The existing inspection arbitration selects the chest provider by priority. Its
-empty frame suppresses lower text sources, while the host captures that winning
-provider's icon snapshot for a private `PaperPacketDisplays` scene. OFF, BOSSBAR,
-a higher-priority winner, target loss, suppression and player reset clear the
-icons. The blank-space TextDisplay is only a background rectangle; it contains
-no readable glyphs. The items use native GUI ItemDisplay transforms. All parts
-share one anchor and client billboard, retaining display handles on unchanged
-refreshes. The whole grid volume is checked against nearby blocks. When the top
-is obstructed or hidden, placement tries the viewer-facing side of the container.
-A clear fallback is retained for the same target; if no candidate fits, the panel
-is hidden. A different container gets new handles at its destination.
-A local half-turn cancels ItemDisplay's native Y rotation,
-preserving unmirrored tools. Block icons use a shallower pose: standard cubes
-have a 24-degree top tilt and 35-degree side turn instead of the inventory's
-30/45-degree view. Changing a slot between a block and a tool updates its pose
-without replacing the display handle. Flat plants and explicitly customized
-item models retain their authored GUI pose.
-No Bukkit entity, inventory window, synthetic open event or
-world mutation is created. Viewers with `arc.chest-preview` are inspected every
-tick, including fresh access checks before content reads. Other viewers retain
-the five-tick inspection cadence. Packet delivery runs on the shared display
-owner's next refresh; network/client latency remains outside this polling bound.
+All server defaults live under `chest-preview` in
+`plugins/ARC/modules/item-info.yml`. `/arc reload` replaces the ItemInfo runtime
+and display owner with the loaded settings; subsequent tuning needs no restart.
+The initial new plugin version still requires normal activation.
 
-Visual reference: [Volmit Gloss container previews](https://github.com/VolmitSoftware/docs/blob/master/gloss/15-container-previews.md)
-and its slot-grid example. ARC retains its own access checks, permission and
-compact text-free layout; Gloss is not installed or required.
+`/mm` → Settings → Interface → Container preview has an independent enable switch
+and three tuning pages. It works independently of the ordinary item-info mode.
+Sparse personal overrides persist in LuckPerms meta
+`arc-chest-preview-preferences`. Unset fields follow the current server defaults;
+page/all reset removes those overrides semantically through the `default` sentinel.
+Changes affect only the current player's private scene and apply on its next tick.
+
+| Settings | Purpose |
+| --- | --- |
+| `enabled`, `scale`, `max-items`, `columns`, `cell-spacing` | Enable, overall size and grid layout (up to 12 icons) |
+| `max-distance`, `vertical-gap` | Bounded targeting reach and height above the lid |
+| `icon-scale`, `depth-scale`, `block-pitch`, `block-yaw` | Icon size, panel-local depth and fixed shallow ordinary block pose |
+| `item-transform` | Native ItemDisplay GUI, FIXED or NONE model context |
+| `show-counts`, `count-scale`, `count-offset-y` | Numeric label visibility, size and vertical position |
+| `background-opacity`, `brightness` | Background alpha and native display light level |
+| `teleport-ticks`, `stability-threshold` | Native movement interpolation and small safe-position deadband |
+
+Defaults use GUI, 12° top tilt / 20° side turn, 15% depth, 3-tick interpolation,
+6 icons in 3 columns, and numeric labels. Explicit custom models and flat items
+keep their authored pose; depth compression still applies to the whole icon.
+The local half-turn cancels ItemDisplay's native Y rotation. No camera angles
+are added to the icon quaternion: CENTER billboards already own camera facing.
+
+## Motion and lifecycle
+
+The shared inspection service still arbitrates source priority; a winning empty
+container frame suppresses lower text sources. OFF for ordinary item info is
+resolved temporarily for arbitration and its generic view is cleared before the
+packet owner's next snapshot, so container preferences remain independent.
+A higher-priority winner, access loss, target loss, suppression or reset clears
+the private scene. No Bukkit entities or synthetic inventory events are created.
+
+All parts retain handles and share one destination and native interpolation.
+Tiny safe changes can retain the prior anchor. Clearance search refines the free
+boundary instead of jumping by the coarse candidate stride. An obstructed
+movement corridor snaps rather than animating through a solid block; a new
+container or changed personal layout gets a fresh scene at its destination.
+The oriented grid volume must fit loaded/sent free space and have line of sight.
+Top placement is retried before side placement, so a clear lid cannot remain
+latched to a distant side position. If no position fits, the panel is hidden.
+Viewers with the test permission are inspected every tick; others keep the
+ordinary five-tick cadence. Native client smoothness remains separate from these
+geometry, lifecycle and packet checks.
 
 ## Access boundary
 
@@ -91,8 +104,9 @@ Run the focused `ChestPreviewAccessTest`, `ChestPreviewProviderTest`,
 before target resolution, both-half authorization before content reads,
 unavailable chunks, lock/loot/obstruction, failed providers, stable aggregation,
 icon limits, viewer isolation and config bounds. Icon-renderer and controller checks
-cover private audience, no readable text, unchanged handle identity, mode changes,
-cleanup and opacity. The config test reloads the file with a changed opacity.
+cover private audience, optional numeric labels, unchanged handle identity, independent
+preferences, cleanup, interpolation and opacity. Configuration tests reload every
+new setting; preference and HelpCenter tests cover sparse overrides and reset.
 
 Native client acceptance after owner-controlled activation: grant only the test
 account `arc.chest-preview`, compare an allowed chest and a denied Lands/WG chest,

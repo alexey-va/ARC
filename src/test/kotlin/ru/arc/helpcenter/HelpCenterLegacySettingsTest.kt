@@ -5,6 +5,7 @@ import io.mockk.mockk
 import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
 import io.kotest.matchers.shouldBe
+import ru.arc.chestpreview.ChestPreviewPreferences
 import ru.arc.iteminfo.ItemInfoMode
 import ru.arc.iteminfo.ItemInfoPreferences
 import ru.arc.sidebar.SIDEBAR_SKILLS_META_KEY
@@ -210,6 +211,23 @@ class HelpCenterLegacySettingsTest {
         assertTrue(ItemInfoMode.META_KEY in backend.metadata)
         assertTrue(ItemInfoPreferences.SHOW_ID_META_KEY in backend.metadata)
         assertTrue(ItemInfoPreferences.LAYOUT_META_KEY in backend.metadata)
+    }
+
+    @Test
+    fun `container preview overrides persist separately and reset to inherited server defaults`() {
+        val player = mockPlayer()
+        val backend = FakeBackend()
+        val settings = HelpCenterLegacySettings(backend)
+        val preferences = ChestPreviewPreferences(enabled = false, scale = 1.25f, columns = 5, showCounts = false)
+
+        assertTrue(settings.saveContainerPreviewPreferences(player, preferences).join())
+        backend.metadata[ChestPreviewPreferences.META_KEY].shouldBe(preferences.stored())
+        HelpCenterLegacySettings(backend).containerPreviewPreferences(player).shouldBe(preferences)
+        ItemInfoMode.fromStored(backend.metadata[ItemInfoMode.META_KEY]).shouldBe(ItemInfoMode.HOLOGRAM)
+
+        assertTrue(settings.saveContainerPreviewPreferences(player, ChestPreviewPreferences()).join())
+        backend.metadata[ChestPreviewPreferences.META_KEY].shouldBe("default")
+        HelpCenterLegacySettings(backend).containerPreviewPreferences(player).shouldBe(ChestPreviewPreferences())
     }
 
     @Test

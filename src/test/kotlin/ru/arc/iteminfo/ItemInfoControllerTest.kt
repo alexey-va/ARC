@@ -12,6 +12,7 @@ import org.bukkit.entity.Player
 import ru.arc.chestpreview.ChestPreviewIcons
 import ru.arc.chestpreview.ChestPreviewProvider
 import ru.arc.chestpreview.ChestPreviewFrame
+import ru.arc.chestpreview.ChestPreviewSettings
 import ru.arc.paper.api.InspectionHologramAnchor
 import ru.arc.paper.api.InspectionViewMode
 import ru.arc.paper.api.InspectionViewPreferences
@@ -45,7 +46,7 @@ class ItemInfoControllerTest : StringSpec({
         }
     }
 
-    "chest icons honor hologram mode and clear together with suppressed inspection" {
+    "chest icons have independent preferences and clear with suppressed inspection" {
         val player = player()
         val inspection = mockk<PaperArcInspectionService>(relaxed = true)
         val provider = mockk<ChestPreviewProvider>()
@@ -57,21 +58,25 @@ class ItemInfoControllerTest : StringSpec({
         }
         var mode = ItemInfoMode.HOLOGRAM
         var suppressed = false
+        var chestOptions = ChestPreviewSettings()
         val controller = ItemInfoController(
-            { ItemInfoPreferences.DEFAULT.copy(mode = mode) }, inspection, { suppressed }, provider, icons,
+            { ItemInfoPreferences.DEFAULT.copy(mode = mode) }, inspection, { suppressed }, provider, icons, { chestOptions },
         )
         controller.update(player)
-        verify(exactly = 1) { icons.update(player, frame, ItemInfoPreferences.DEFAULT.hologramScale) }
+        verify(exactly = 1) { icons.update(player, frame, chestOptions.scale, chestOptions) }
         for (other in listOf(ItemInfoMode.OFF, ItemInfoMode.BOSSBAR)) {
             mode = other
             controller.update(player)
         }
-        verify(exactly = 2) { icons.update(player, null, ItemInfoPreferences.DEFAULT.hologramScale) }
+        verify(exactly = 3) { icons.update(player, frame, chestOptions.scale, chestOptions) }
+        chestOptions = chestOptions.copy(enabled = false, scale = 1.25f)
+        controller.update(player)
+        verify { icons.update(player, null, 1.25f, chestOptions) }
         suppressed = true
         controller.update(player)
         controller.reset(player)
         verify(exactly = 2) { icons.clear(player) }
-        verify(exactly = 2) { inspection.clear(player) }
+        verify(exactly = 3) { inspection.clear(player) }
     }
 
     "item info source preserves both formatted modes and the existing technical-id preference" {
@@ -138,6 +143,7 @@ class ItemInfoControllerTest : StringSpec({
     companion object {
         private fun player(): Player = mockk {
             every { uniqueId } returns UUID.randomUUID()
+            every { hasPermission("arc.chest-preview") } returns true
             every { world } returns mockk { every { name } returns "survival" }
         }
     }

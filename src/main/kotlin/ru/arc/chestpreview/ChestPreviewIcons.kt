@@ -29,6 +29,8 @@ internal class ChestPreviewIcons(
     private data class IconHandle(
         val display: PacketItemDisplay,
         var item: ItemStack,
+        val label: PacketTextDisplay? = null,
+        var count: Int = 0,
     )
 
     private data class ViewerState(
@@ -36,6 +38,7 @@ internal class ChestPreviewIcons(
         var sourceAnchor: InspectionHologramAnchor,
         var scale: Float,
         var itemCount: Int,
+        val options: ChestPreviewSettings,
         val icons: MutableList<IconHandle> = mutableListOf(),
         var backdrop: PacketTextDisplay? = null,
     )
@@ -44,22 +47,21 @@ internal class ChestPreviewIcons(
     private var closed = false
 
     /** Renders the selected chest frame, or removes any old frame when selection moves elsewhere. */
-    fun update(player: Player, frame: ChestPreviewFrame?, scale: Float) {
+    fun update(player: Player, frame: ChestPreviewFrame?, scale: Float, options: ChestPreviewSettings = settings) {
         if (closed) return
         val target = frame ?: run {
             clear(player)
             return
         }
-        if (target.anchor.worldId != player.world.uid) {
+        if (!options.enabled || target.anchor.worldId != player.world.uid) {
             clear(player)
             return
         }
 
-        val items = target.items.asSequence()
-            .filterNot { it.type.isAir || it.amount <= 0 }
-            .take(settings.maxItems)
-            .map(::iconStack)
-            .toList()
+        val selected = target.items.indices.filter { !target.items[it].type.isAir && target.items[it].amount > 0 }
+            .take(options.maxItems)
+        val items = selected.map { iconStack(target.items[it]) }
+        val counts = selected.map { (target.counts.getOrNull(it) ?: target.items[it].amount).coerceAtLeast(1) }
         if (items.isEmpty()) {
             clear(player)
             return
@@ -67,9 +69,12 @@ internal class ChestPreviewIcons(
 
         try {
             val effectiveScale = ChestPreviewIconGeometry.normalizeScale(scale)
-            val anchor = ChestPreviewPlacement.place(player, target, items.size, effectiveScale)
+            val previous = viewers[player.uniqueId]?.takeIf {
+                it.sourceAnchor == target.anchor && it.options == options && it.itemCount == items.size && it.scale == effectiveScale
+            }?.anchor
+            val anchor = ChestPreviewPlacement.place(player, target, items.size, effectiveScale, options, previous)
             if (anchor == null) clear(player)
-            else render(player, anchor, target.anchor, items, effectiveScale)
+            else render(player, anchor, target.anchor, items, counts, effectiveScale, options)
         } catch (failure: Exception) {
             try {
                 clear(player)
@@ -106,17 +111,19 @@ internal class ChestPreviewIcons(
         anchor: InspectionHologramAnchor,
         sourceAnchor: InspectionHologramAnchor,
         items: List<ItemStack>,
+        counts: List<Int>,
         scale: Float,
+        options: ChestPreviewSettings,
     ) {
         val playerId = player.uniqueId
-        if (viewers[playerId]?.let { it.sourceAnchor != sourceAnchor } == true) {
+        if (viewers[playerId]?.let { it.sourceAnchor != sourceAnchor || it.options != options } == true) {
             // A different target has no authored travel path between the two containers.
             clear(playerId)
         }
         val oldState = viewers[playerId]
         val created = oldState == null
         val state = if (created) {
-            ViewerState(anchor = anchor, sourceAnchor = sourceAnchor, scale = scale, itemCount = 0)
+            ViewerState(anchor = anchor, sourceAnchor = sourceAnchor, scale = scale, itemCount = 0, options = options)
                 .also { viewers[playerId] = it }
         } else {
             requireNotNull(oldState)
@@ -126,47 +133,60 @@ internal class ChestPreviewIcons(
         val layoutChanged = state.itemCount != items.size || state.scale != scale
         if (anchorChanged) {
             val location = anchor.toLocation(player)
-            state.icons.forEach { it.display.teleport(location) }
-            state.backdrop?.teleport(location)
+            // Every part receives the same destination and native interpolation duration.
+            // Unsafe paths snap rather than sweep the private panel through a solid block.
+            val ticks = if (ChestPreviewPlacement.clearPath(player, state.anchor, anchor, items.size, scale, options)) options.teleportTicks else 0
+            handles(state).forEach { it.teleportDuration = ticks; it.teleport(location) }
             state.anchor = anchor
         }
 
         while (state.icons.size > items.size) {
             val removed = mutableListOf<PacketDisplay>()
-            while (state.icons.size > items.size) removed += state.icons.removeAt(state.icons.lastIndex).display
+            while (state.icons.size > items.size) {
+                val icon = state.icons.removeAt(state.icons.lastIndex)
+                removed += icon.display
+                icon.label?.let(removed::add)
+            }
             removeAll(removed)
         }
 
-        val offsets = ChestPreviewIconGeometry.offsets(items.size, scale)
+        val offsets = ChestPreviewIconGeometry.offsets(items.size, scale, options)
         items.forEachIndexed { index, item ->
             val offset = offsets[index]
             val handle = state.icons.getOrNull(index)
             if (handle == null) {
                 val display = displays.spawnItem(anchor.toLocation(player), item.clone())
-                val newHandle = IconHandle(display, item.clone())
+                val label = if (options.showCounts) displays.spawnText(anchor.toLocation(player), countText(counts[index])) else null
+                val newHandle = IconHandle(display, item.clone(), label, counts[index])
                 state.icons += newHandle
-                configureItemDisplay(display, player, item, offset, scale)
+                configureItemDisplay(display, player, item, offset, scale, options)
+                label?.let { configureCount(it, player, offset, scale, options) }
             } else {
                 val itemChanged = !handle.item.isSimilar(item)
                 if (itemChanged) {
                     handle.item = item.clone()
                     handle.display.itemStack = item.clone()
                 }
-                if (layoutChanged || itemChanged) configureItemTransform(handle.display, item, offset, scale)
+                if (layoutChanged || itemChanged) configureItemTransform(handle.display, item, offset, scale, options)
+                if (handle.count != counts[index]) {
+                    handle.label?.text(countText(counts[index]))
+                    handle.count = counts[index]
+                }
+                if (layoutChanged) handle.label?.let { configureCountTransform(it, offset, scale, options) }
             }
         }
 
-        if (settings.backgroundOpacity > 0) {
+        if (options.backgroundOpacity > 0) {
             val backdrop = state.backdrop ?: run {
                 // A single invisible space gives the native TextDisplay a measurable quad;
                 // its transform scales that quad to the grid bounds without visible text.
                 val display = displays.spawnText(anchor.toLocation(player), Component.text(" "))
                 state.backdrop = display
-                configureBackdrop(display, player, items.size, scale)
+                configureBackdrop(display, player, items.size, scale, options)
                 display
             }
             if (state.backdrop === backdrop && !created && layoutChanged) {
-                configureBackdropTransform(backdrop, items.size, scale)
+                configureBackdropTransform(backdrop, items.size, scale, options)
             }
         }
 
@@ -181,29 +201,22 @@ internal class ChestPreviewIcons(
         item: ItemStack,
         offset: ChestPreviewIconOffset,
         scale: Float,
+        options: ChestPreviewSettings,
     ) {
-        display.isVisibleByDefault = false
-        display.billboard = Display.Billboard.CENTER
-        display.itemDisplayTransform = settings.itemTransform
-        // Native culling bounds stay upright while this grid pitches around its anchor.
-        // A zero width disables that inaccurate frustum box for these private, nearby icons.
-        display.displayWidth = 0f
-        display.displayHeight = 0f
-        display.viewRange = DISPLAY_VIEW_RANGE
-        display.shadowRadius = 0f
-        display.shadowStrength = 0f
-        display.brightness = Display.Brightness(15, 15)
-        configureItemTransform(display, item, offset, scale)
+        configureDisplay(display, options)
+        display.itemDisplayTransform = options.itemTransform
+        configureItemTransform(display, item, offset, scale, options)
         display.showTo(player)
     }
 
-    private fun configureItemTransform(display: PacketItemDisplay, item: ItemStack, offset: ChestPreviewIconOffset, scale: Float) {
+    private fun configureItemTransform(display: PacketItemDisplay, item: ItemStack, offset: ChestPreviewIconOffset, scale: Float, options: ChestPreviewSettings) {
         display.transformation = Transformation(
             Vector3f(offset.x, offset.y, ICON_DEPTH),
             Quaternionf(),
-            Vector3f(ChestPreviewIconGeometry.ICON_SCALE * scale),
+            Vector3f(options.iconScale * scale, options.iconScale * scale, options.iconScale * scale * options.depthScale),
             ChestPreviewIconGeometry.guiFacingRotation(
-                settings.itemTransform == ItemDisplay.ItemDisplayTransform.GUI && ChestPreviewIconGeometry.isBlockIcon(item),
+                options.itemTransform == ItemDisplay.ItemDisplayTransform.GUI && ChestPreviewIconGeometry.isBlockIcon(item),
+                options.blockPitch, options.blockYaw,
             ),
         )
     }
@@ -213,28 +226,22 @@ internal class ChestPreviewIcons(
         player: Player,
         itemCount: Int,
         scale: Float,
+        options: ChestPreviewSettings,
     ) {
-        display.isVisibleByDefault = false
-        display.billboard = Display.Billboard.CENTER
-        display.displayWidth = 0f
-        display.displayHeight = 0f
-        display.viewRange = DISPLAY_VIEW_RANGE
-        display.shadowRadius = 0f
-        display.shadowStrength = 0f
-        display.brightness = Display.Brightness(15, 15)
+        configureDisplay(display, options)
         display.textOpacity = 0.toByte()
         display.isShadowed = false
         display.isSeeThrough = false
         display.isDefaultBackground = false
-        display.backgroundColor = backgroundColor(settings.backgroundOpacity)
+        display.backgroundColor = backgroundColor(options.backgroundOpacity)
         display.alignment = TextDisplay.TextAlignment.CENTER
         display.lineWidth = TEXT_DISPLAY_LINE_WIDTH
-        configureBackdropTransform(display, itemCount, scale)
+        configureBackdropTransform(display, itemCount, scale, options)
         display.showTo(player)
     }
 
-    private fun configureBackdropTransform(display: PacketTextDisplay, itemCount: Int, scale: Float) {
-        val bounds = ChestPreviewIconGeometry.panelBounds(itemCount, scale)
+    private fun configureBackdropTransform(display: PacketTextDisplay, itemCount: Int, scale: Float, options: ChestPreviewSettings) {
+        val bounds = ChestPreviewIconGeometry.panelBounds(itemCount, scale, options)
         val scaleX = bounds.width / (ChestPreviewIconGeometry.BACKGROUND_WIDTH_PIXELS * ChestPreviewIconGeometry.BACKGROUND_PIXEL_SIZE)
         val scaleY = bounds.height / (ChestPreviewIconGeometry.BACKGROUND_HEIGHT_PIXELS * ChestPreviewIconGeometry.BACKGROUND_PIXEL_SIZE)
         display.transformation = Transformation(
@@ -242,7 +249,7 @@ internal class ChestPreviewIcons(
                 -ChestPreviewIconGeometry.BACKGROUND_CENTER_X_PIXELS * ChestPreviewIconGeometry.BACKGROUND_PIXEL_SIZE * scaleX,
                 // The native whitespace quad begins at the entity baseline, so y=0 makes its bottom edge align with the chest anchor.
                 0f,
-                BACKDROP_DEPTH * scale,
+                -ChestPreviewIconGeometry.depth(scale, options),
             ),
             Quaternionf(),
             Vector3f(scaleX, scaleY, 1f),
@@ -250,13 +257,49 @@ internal class ChestPreviewIcons(
         )
     }
 
+    private fun configureDisplay(display: PacketDisplay, options: ChestPreviewSettings) {
+        display.isVisibleByDefault = false
+        display.billboard = Display.Billboard.CENTER
+        // Upright culling boxes cannot enclose a camera-pitched grid.
+        display.displayWidth = 0f
+        display.displayHeight = 0f
+        display.viewRange = DISPLAY_VIEW_RANGE
+        display.shadowRadius = 0f
+        display.shadowStrength = 0f
+        display.brightness = Display.Brightness(options.brightness, options.brightness)
+        display.teleportDuration = options.teleportTicks
+    }
+
+    private fun countText(count: Int): Component = Component.text("× $count")
+
+    private fun configureCount(display: PacketTextDisplay, player: Player, offset: ChestPreviewIconOffset, scale: Float, options: ChestPreviewSettings) {
+        configureDisplay(display, options)
+        display.isSeeThrough = false
+        display.isShadowed = true
+        display.isDefaultBackground = false
+        display.backgroundColor = Color.fromARGB(0, 0, 0, 0)
+        display.alignment = TextDisplay.TextAlignment.CENTER
+        display.lineWidth = TEXT_DISPLAY_LINE_WIDTH
+        configureCountTransform(display, offset, scale, options)
+        display.showTo(player)
+    }
+
+    private fun configureCountTransform(display: PacketTextDisplay, offset: ChestPreviewIconOffset, scale: Float, options: ChestPreviewSettings) {
+        display.transformation = Transformation(
+            Vector3f(offset.x, offset.y + options.countOffsetY * scale, ChestPreviewIconGeometry.depth(scale, options) + 0.01f),
+            Quaternionf(), Vector3f(options.countScale * scale / 0.25f), Quaternionf(),
+        )
+    }
+
+    private fun handles(state: ViewerState): List<PacketDisplay> =
+        state.icons.flatMap { listOfNotNull(it.display, it.label) } + listOfNotNull(state.backdrop)
+
     private fun InspectionHologramAnchor.toLocation(player: Player): Location =
         Location(player.world, x, y, z)
 
     private fun clear(playerId: UUID) {
         val state = viewers.remove(playerId) ?: return
-        val handles = state.icons.map(IconHandle::display) + listOfNotNull(state.backdrop)
-        removeAll(handles)
+        removeAll(handles(state))
     }
 
     private fun removeAll(displays: List<PacketDisplay>) {
@@ -285,8 +328,6 @@ internal class ChestPreviewIcons(
         const val TEXT_DISPLAY_LINE_WIDTH = 16_384
         const val DISPLAY_VIEW_RANGE = 0.5f
         const val ICON_DEPTH = 0f
-        // GUI block icons have depth: keep the panel behind their rotated cube, not through it.
-        const val BACKDROP_DEPTH = -0.24f
         const val BACKGROUND_RED = 15
         const val BACKGROUND_GREEN = 23
         const val BACKGROUND_BLUE = 30
@@ -321,45 +362,55 @@ internal object ChestPreviewIconGeometry {
     fun isBlockIcon(item: ItemStack): Boolean = item.type.isBlock && item.type.isSolid &&
         item.itemMeta?.let { !it.hasItemModel() && !it.hasCustomModelData() } != false
 
-    // Lower the vanilla block GUI's 30-degree pitch / 45-degree side view to 24 / 35.
+    // Replace the vanilla block GUI pose with the chosen fixed panel-local angles.
     // Non-block items retain their authored GUI pose. Both cancel ItemDisplay's native Y half-turn.
-    fun guiFacingRotation(blockIcon: Boolean): Quaternionf {
+    fun guiFacingRotation(blockIcon: Boolean, pitch: Float = 12f, yaw: Float = 20f): Quaternionf {
         val nativeCorrection = Quaternionf(0f, 1f, 0f, 0f)
         if (!blockIcon) return nativeCorrection
         val authored = Quaternionf().rotationXYZ(radians(30f), radians(225f), 0f)
-        return Quaternionf().rotationXYZ(radians(24f), radians(215f), 0f)
+        return Quaternionf().rotationXYZ(radians(pitch), radians(180f + yaw), 0f)
             .mul(authored.invert()).mul(nativeCorrection)
     }
 
     private fun radians(degrees: Float): Float = Math.toRadians(degrees.toDouble()).toFloat()
 
-    fun offsets(itemCount: Int, scale: Float): List<ChestPreviewIconOffset> {
+    fun offsets(itemCount: Int, scale: Float, options: ChestPreviewSettings = ChestPreviewSettings()): List<ChestPreviewIconOffset> {
         require(itemCount >= 0) { "Chest preview icon count cannot be negative" }
         if (itemCount == 0) return emptyList()
 
         val effectiveScale = normalizeScale(scale)
-        val rows = ceil(itemCount / COLUMNS.toDouble()).toInt()
-        val bottomRowCenter = (EDGE_PADDING + ICON_SCALE / 2f + ICON_VERTICAL_OFFSET) * effectiveScale
+        val rows = ceil(itemCount / options.columns.toDouble()).toInt()
+        val bottomRowCenter = bottomRowCenter(options) * effectiveScale
         return List(itemCount) { index ->
-            val row = index / COLUMNS
-            val columnsInRow = min(COLUMNS, itemCount - row * COLUMNS)
-            val column = index % COLUMNS
-            val x = ((column - (columnsInRow - 1) / 2.0) * CELL_SPACING * effectiveScale).toFloat()
-            val y = bottomRowCenter + (rows - 1 - row) * CELL_SPACING * effectiveScale
+            val row = index / options.columns
+            val columnsInRow = min(options.columns, itemCount - row * options.columns)
+            val column = index % options.columns
+            val x = ((column - (columnsInRow - 1) / 2.0) * options.cellSpacing * effectiveScale).toFloat()
+            val y = bottomRowCenter + (rows - 1 - row) * options.cellSpacing * effectiveScale
             ChestPreviewIconOffset(x, y)
         }
     }
 
-    fun panelBounds(itemCount: Int, scale: Float): ChestPreviewPanelBounds {
+    fun panelBounds(itemCount: Int, scale: Float, options: ChestPreviewSettings = ChestPreviewSettings()): ChestPreviewPanelBounds {
         require(itemCount > 0) { "Chest preview panel needs at least one icon" }
         val effectiveScale = normalizeScale(scale)
-        val columns = min(COLUMNS, itemCount)
-        val rows = ceil(itemCount / COLUMNS.toDouble()).toInt()
-        val width = ((columns - 1) * CELL_SPACING + ICON_SCALE + EDGE_PADDING * 2) * effectiveScale
-        // Equal nominal margins, before the small optical adjustment to the icon grid.
-        val height = (rows * CELL_SPACING + EDGE_PADDING) * effectiveScale
+        val columns = min(options.columns, itemCount)
+        val rows = ceil(itemCount / options.columns.toDouble()).toInt()
+        val contentWidth = maxOf(options.iconScale, if (options.showCounts) options.countScale * 3.5f else 0f)
+        val width = ((columns - 1) * options.cellSpacing + contentWidth + EDGE_PADDING * 2) * effectiveScale
+        val topExtent = maxOf(options.iconScale / 2f,
+            if (options.showCounts) options.countOffsetY + options.countScale else 0f)
+        val height = (bottomRowCenter(options) + (rows - 1) * options.cellSpacing + topExtent + EDGE_PADDING) * effectiveScale
         return ChestPreviewPanelBounds(width, height)
     }
+
+    fun depth(scale: Float, options: ChestPreviewSettings): Float =
+        0.9f * options.iconScale * scale * options.depthScale
+
+    private fun bottomRowCenter(options: ChestPreviewSettings): Float = maxOf(
+        EDGE_PADDING + options.iconScale / 2f + ICON_VERTICAL_OFFSET,
+        if (options.showCounts) EDGE_PADDING - options.countOffsetY else 0f,
+    )
 
     fun itemBounds(scale: Float): ChestPreviewPanelBounds {
         val extent = (ICON_SCALE + EDGE_PADDING * 2) * normalizeScale(scale)

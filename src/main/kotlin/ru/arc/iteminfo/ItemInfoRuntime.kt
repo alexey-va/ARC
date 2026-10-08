@@ -13,6 +13,8 @@ import org.bukkit.event.player.PlayerTeleportEvent
 import ru.arc.ARC
 import ru.arc.chestpreview.ChestPreviewIcons
 import ru.arc.chestpreview.ChestPreviewProvider
+import ru.arc.chestpreview.ChestPreviewPreferences
+import ru.arc.chestpreview.ChestPreviewSettings
 import ru.arc.chestpreview.ChestPreviewTarget
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.furniturehitbox.FurnitureHitboxHint
@@ -41,6 +43,10 @@ internal class ItemInfoRuntime(
     private val readPreferences: (Player) -> ItemInfoPreferences = { player ->
         ItemInfoPreferences.fromStored { key -> preferencesReader?.getCachedMeta(player.uniqueId, key) }
     }
+    private val readChestPreferences: (Player) -> ChestPreviewSettings = { player ->
+        ChestPreviewPreferences.fromStored { key -> preferencesReader?.getCachedMeta(player.uniqueId, key) }
+            .applyTo(settings.chestPreview)
+    }
     private val suppressedViewer: (Player) -> Boolean = { player ->
         player.isDead || player.gameMode == GameMode.SPECTATOR || ru.arc.landsui.LandsUiModule.hasClaimMenu(player) ||
             OnboardingModule.claimGuide?.hasHologram(player) == true
@@ -56,7 +62,7 @@ internal class ItemInfoRuntime(
             galleryPurchasePrice = galleryPurchasePrice,
         ),
     )
-    private val chestPreview = ChestPreviewProvider(settings.chestPreview, chestPreviewResolver)
+    private val chestPreview = ChestPreviewProvider(settings.chestPreview, chestPreviewResolver, readChestPreferences)
     private val chestIcons = ChestPreviewIcons(PaperPacketDisplays(ARC.instance, "chest-preview"), settings.chestPreview)
     private val chestPreviewRegistration = inspection.register(
         ARC.instance,
@@ -70,6 +76,7 @@ internal class ItemInfoRuntime(
         suppressed = suppressedViewer,
         chestPreview = chestPreview,
         chestIcons = chestIcons,
+        chestSettings = readChestPreferences,
     )
     private var tick = 0L
 

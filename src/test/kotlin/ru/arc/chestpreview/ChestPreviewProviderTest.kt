@@ -25,7 +25,11 @@ class ChestPreviewProviderTest : StringSpec({
     "permission is checked before target resolution or inventory reads" {
         val player = mockk<Player>()
         every { player.hasPermission("arc.chest-preview") } returns false
-        val provider = ChestPreviewProvider(ChestPreviewSettings()) { _, _ -> error("must not resolve") }
+        val provider = ChestPreviewProvider(
+            settings = ChestPreviewSettings(),
+            resolveTarget = { _, _ -> error("must not resolve") },
+            settingsFor = { error("must not read settings") },
+        )
         provider.resolve(player) shouldBe null
     }
 
@@ -35,9 +39,9 @@ class ChestPreviewProviderTest : StringSpec({
         val diamond = ItemStack(Material.DIAMOND, 3).apply { editMeta { it.displayName(Component.text("Ruby")) } }
         val first = chest(arrayOf(diamond, ItemStack(Material.EMERALD, 2), diamond.clone().apply { amount = 5 }))
         val second = chest(arrayOf(ItemStack(Material.DIAMOND), ItemStack(Material.EMERALD, 4)))
-        val provider = ChestPreviewProvider(ChestPreviewSettings()) { _, _ ->
+        val provider = ChestPreviewProvider(settings = ChestPreviewSettings(), resolveTarget = { _, _ ->
             ChestPreviewTarget(listOf(first, second), InspectionHologramAnchor(world.uid, 4.5, 70.0, -2.5))
-        }
+        })
         val frame = provider.selectedFrame(player) {
             val suppression = provider.resolve(player)!!
             suppression.hologram shouldBe Component.empty()
@@ -46,6 +50,7 @@ class ChestPreviewProviderTest : StringSpec({
         }!!
         frame.items.map { it.type } shouldBe listOf(Material.DIAMOND, Material.EMERALD, Material.DIAMOND)
         frame.items.map { it.amount } shouldBe listOf(1, 1, 1)
+        frame.counts shouldBe listOf(8, 6, 1)
         frame.items.first().isSimilar(diamond) shouldBe true
         diamond.amount shouldBe 3
         frame.anchor shouldBe InspectionHologramAnchor(world.uid, 4.5, 70.15, -2.5)
@@ -59,12 +64,83 @@ class ChestPreviewProviderTest : StringSpec({
         val inventory = mockk<Inventory>()
         every { inventory.contents } returns arrayOf(ItemStack(Material.COPPER_INGOT))
         every { barrel.inventory } returns inventory
-        val provider = ChestPreviewProvider(ChestPreviewSettings()) { _, _ ->
+        val provider = ChestPreviewProvider(settings = ChestPreviewSettings(), resolveTarget = { _, _ ->
             ChestPreviewTarget(listOf(barrel), InspectionHologramAnchor(world.uid, 0.5, 64.0, 0.5))
-        }
-        provider.selectedFrame(player) { provider.resolve(player) }!!.items.map { it.type } shouldBe
-            listOf(Material.COPPER_INGOT)
+        })
+        val frame = provider.selectedFrame(player) { provider.resolve(player) }!!
+        frame.items.map { it.type } shouldBe listOf(Material.COPPER_INGOT)
+        frame.counts shouldBe listOf(1)
         verify(exactly = 1) { barrel.inventory }
+    }
+
+    "selected stack counts aggregate across halves after the unique icon limit is reached" {
+        val world = world(); val player = player(world)
+        val first = chest(arrayOf(ItemStack(Material.DIAMOND, 64), ItemStack(Material.STONE)))
+        val second = chest(arrayOf(
+            ItemStack(Material.EMERALD, 4),
+            ItemStack(Material.DIAMOND, 12),
+            ItemStack(Material.STONE, 2),
+        ))
+        val provider = ChestPreviewProvider(
+            settings = ChestPreviewSettings(maxItems = 2),
+            resolveTarget = { _, _ ->
+                ChestPreviewTarget(listOf(first, second), InspectionHologramAnchor(world.uid, 0.5, 64.0, 0.5))
+            },
+        )
+
+        val frame = provider.selectedFrame(player) { provider.resolve(player) }!!
+        frame.items.map { it.type } shouldBe listOf(Material.DIAMOND, Material.STONE)
+        frame.items.map { it.amount } shouldBe listOf(1, 1)
+        frame.counts shouldBe listOf(76, 3)
+        verify(exactly = 1) { first.blockInventory }
+        verify(exactly = 1) { second.blockInventory }
+    }
+
+    "two-container scans stop at 54 physical slots" {
+        val world = world(); val player = player(world)
+        val first = chest(Array(32) { ItemStack(Material.PAPER) })
+        val secondContents = Array(32) { ItemStack(Material.PAPER) }
+        secondContents[22] = ItemStack(Material.DIAMOND, 64)
+        val second = chest(secondContents)
+        val provider = ChestPreviewProvider(settings = ChestPreviewSettings(), resolveTarget = { _, _ ->
+            ChestPreviewTarget(listOf(first, second), InspectionHologramAnchor(world.uid, 0.5, 64.0, 0.5))
+        })
+
+        val frame = provider.selectedFrame(player) { provider.resolve(player) }!!
+        frame.items.map { it.type } shouldBe listOf(Material.PAPER)
+        frame.counts shouldBe listOf(54)
+    }
+
+    "per-viewer settings control enabled state, target distance, icon cap and gap" {
+        val world = world(); val viewer = player(world); val disabled = player(world)
+        val inventory = chest(arrayOf(
+            ItemStack(Material.DIAMOND, 2),
+            ItemStack(Material.EMERALD, 3),
+            ItemStack(Material.GOLD_INGOT, 4),
+        ))
+        val resolvedDistances = mutableListOf<Double>()
+        val provider = ChestPreviewProvider(
+            settings = ChestPreviewSettings(maxItems = 1, maxDistance = 1.0),
+            resolveTarget = { _, distance ->
+                resolvedDistances += distance
+                ChestPreviewTarget(listOf(inventory), InspectionHologramAnchor(world.uid, 0.5, 64.0, 0.5))
+            },
+            settingsFor = { player ->
+                if (player.uniqueId == disabled.uniqueId) ChestPreviewSettings(enabled = false)
+                else ChestPreviewSettings(maxItems = 2, maxDistance = 2.0, verticalGap = 0.25)
+            },
+        )
+
+        provider.resolve(disabled) shouldBe null
+        resolvedDistances shouldBe emptyList()
+        verify(exactly = 0) { inventory.blockInventory }
+
+        val frame = provider.selectedFrame(viewer) { provider.resolve(viewer) }!!
+        resolvedDistances shouldBe listOf(2.0)
+        frame.items.map { it.type } shouldBe listOf(Material.DIAMOND, Material.EMERALD)
+        frame.counts shouldBe listOf(2, 3)
+        frame.anchor shouldBe InspectionHologramAnchor(world.uid, 0.5, 64.25, 0.5)
+        verify(exactly = 1) { inventory.blockInventory }
     }
 
     "Ender Chest preview uses each viewer's own inventory without cross-viewer caching" {
@@ -76,23 +152,29 @@ class ChestPreviewProviderTest : StringSpec({
         every { otherInventory.contents } returns arrayOf(ItemStack(Material.DIAMOND, 2))
         every { viewer.enderChest } returns viewerInventory
         every { other.enderChest } returns otherInventory
-        val provider = ChestPreviewProvider(ChestPreviewSettings()) { _, _ ->
+        val provider = ChestPreviewProvider(settings = ChestPreviewSettings(), resolveTarget = { _, _ ->
             ChestPreviewTarget(listOf(enderChest), InspectionHologramAnchor(world.uid, 1.5, 64.0, 0.5))
-        }
+        })
 
-        provider.selectedFrame(viewer) { provider.resolve(viewer) }!!.items.map { it.type } shouldBe
-            listOf(Material.ENDER_PEARL)
-        provider.selectedFrame(other) { provider.resolve(other) }!!.items.map { it.type } shouldBe
-            listOf(Material.DIAMOND)
-        provider.selectedFrame(viewer) { provider.resolve(viewer) }!!.items.map { it.type } shouldBe
-            listOf(Material.ENDER_PEARL)
+        provider.selectedFrame(viewer) { provider.resolve(viewer) }!!.let { frame ->
+            frame.items.map { it.type } shouldBe listOf(Material.ENDER_PEARL)
+            frame.counts shouldBe listOf(3)
+        }
+        provider.selectedFrame(other) { provider.resolve(other) }!!.let { frame ->
+            frame.items.map { it.type } shouldBe listOf(Material.DIAMOND)
+            frame.counts shouldBe listOf(2)
+        }
+        provider.selectedFrame(viewer) { provider.resolve(viewer) }!!.let { frame ->
+            frame.items.map { it.type } shouldBe listOf(Material.ENDER_PEARL)
+            frame.counts shouldBe listOf(3)
+        }
         verify(exactly = 2) { viewer.enderChest }
         verify(exactly = 1) { other.enderChest }
     }
 
     "an unresolved Ender Chest never reads private contents" {
         val world = world(); val viewer = player(world)
-        val provider = ChestPreviewProvider(ChestPreviewSettings()) { _, _ -> null }
+        val provider = ChestPreviewProvider(settings = ChestPreviewSettings(), resolveTarget = { _, _ -> null })
         provider.selectedFrame(viewer) { provider.resolve(viewer) } shouldBe null
         verify(exactly = 0) { viewer.enderChest }
     }
@@ -100,9 +182,9 @@ class ChestPreviewProviderTest : StringSpec({
     "max items caps icons and empty inventory has no empty-state label" {
         val world = world(); val player = player(world)
         var inventory = chest(arrayOf(ItemStack(Material.DIAMOND), ItemStack(Material.EMERALD), ItemStack(Material.GOLD_INGOT)))
-        val provider = ChestPreviewProvider(ChestPreviewSettings(maxItems = 2)) { _, _ ->
+        val provider = ChestPreviewProvider(settings = ChestPreviewSettings(maxItems = 2), resolveTarget = { _, _ ->
             ChestPreviewTarget(listOf(inventory), InspectionHologramAnchor(world.uid, 0.5, 64.0, 0.5))
-        }
+        })
         provider.selectedFrame(player) { provider.resolve(player) }!!.items.size shouldBe 2
         inventory = chest(arrayOfNulls(27))
         provider.selectedFrame(player) { provider.resolve(player) }!!.items shouldBe emptyList()
@@ -111,9 +193,9 @@ class ChestPreviewProviderTest : StringSpec({
     "a higher priority winner or OFF does not retain the previous scene" {
         val world = world(); val player = player(world)
         val inventory = chest(arrayOf(ItemStack(Material.DIAMOND)))
-        val provider = ChestPreviewProvider(ChestPreviewSettings()) { _, _ ->
+        val provider = ChestPreviewProvider(settings = ChestPreviewSettings(), resolveTarget = { _, _ ->
             ChestPreviewTarget(listOf(inventory), InspectionHologramAnchor(world.uid, 0.5, 64.0, 0.5))
-        }
+        })
         provider.selectedFrame(player) { provider.resolve(player) }!!.items.size shouldBe 1
         provider.selectedFrame(player) { /* shared inspector did not select this provider */ } shouldBe null
         provider.resolve(player) // Out-of-cycle registration resolution must not cache a scene.
@@ -123,18 +205,18 @@ class ChestPreviewProviderTest : StringSpec({
     "capture never shares another viewer's inventory" {
         val world = world(); val first = player(world); val second = player(world)
         val inventory = chest(arrayOf(ItemStack(Material.PAPER)))
-        val provider = ChestPreviewProvider(ChestPreviewSettings()) { _, _ ->
+        val provider = ChestPreviewProvider(settings = ChestPreviewSettings(), resolveTarget = { _, _ ->
             ChestPreviewTarget(listOf(inventory), InspectionHologramAnchor(world.uid, 0.5, 64.0, 0.5))
-        }
+        })
         provider.selectedFrame(first) { provider.resolve(second) } shouldBe null
     }
 
     "wrong-world targets are rejected before reading contents" {
         val world = world(); val player = player(world)
         val inventory = mockk<Chest>()
-        val provider = ChestPreviewProvider(ChestPreviewSettings()) { _, _ ->
+        val provider = ChestPreviewProvider(settings = ChestPreviewSettings(), resolveTarget = { _, _ ->
             ChestPreviewTarget(listOf(inventory), InspectionHologramAnchor(UUID.randomUUID(), 0.5, 64.0, 0.5))
-        }
+        })
         provider.selectedFrame(player) { provider.resolve(player) } shouldBe null
         verify(exactly = 0) { inventory.blockInventory }
     }

@@ -26,7 +26,10 @@ import ru.arc.config.ConfigManager
 import ru.arc.hooks.HookRegistry
 import ru.arc.gui.MenuShortcutAction
 import ru.arc.gui.MenuEscapeBehavior
+import ru.arc.chestpreview.ChestPreviewPreferences
+import ru.arc.chestpreview.ChestPreviewSettings
 import ru.arc.iteminfo.ItemInfoMode
+import ru.arc.iteminfo.ItemInfoModule
 import ru.arc.iteminfo.ItemInfoPreferences
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
@@ -85,6 +88,11 @@ class HelpCenterLegacySettings(
         entry("scoreboard", "legacy-settings-scoreboard", if (scoreboardEnabled(player)) "on" else "off", "legacy-settings-scoreboard-tooltip"),
         entry("tablist", "legacy-settings-tablist", if (tablistEnabled(player)) "on" else "off", "legacy-settings-tablist-tooltip"),
         entry("item-info", "legacy-settings-item-info", ItemInfoMode.fromStored(backend.meta(player, ItemInfoMode.META_KEY)).id, "legacy-settings-item-info-tooltip"),
+        entry(
+            "container-preview", "legacy-settings-container-preview",
+            if (containerPreviewSettings(player).enabled) "on" else "off",
+            "legacy-settings-container-preview-tooltip",
+        ),
         entry("lands", "legacy-settings-lands", null, "legacy-settings-lands-tooltip"),
         entry("portal-by-other", "legacy-settings-portal-by-other", onOff(player, PORTAL_BY_OTHER), "legacy-settings-portal-by-other-tooltip"),
         entry("portal-for-other", "legacy-settings-portal-for-other", onOff(player, PORTAL_FOR_OTHER), "legacy-settings-portal-for-other-tooltip"),
@@ -103,6 +111,17 @@ class HelpCenterLegacySettings(
 
     fun itemInfoPreferences(player: Player): ItemInfoPreferences =
         ItemInfoPreferences.fromStored { key -> backend.meta(player, key) }
+
+    internal fun containerPreviewPreferences(player: Player): ChestPreviewPreferences =
+        ChestPreviewPreferences.fromStored { key -> backend.meta(player, key) }
+
+    internal fun containerPreviewSettings(player: Player): ChestPreviewSettings =
+        containerPreviewPreferences(player).applyTo(ItemInfoModule.chestPreviewSettings)
+
+    internal fun saveContainerPreviewPreferences(
+        player: Player,
+        preferences: ChestPreviewPreferences,
+    ): CompletableFuture<Boolean> = backend.setMeta(player, ChestPreviewPreferences.META_KEY, preferences.stored())
 
     fun saveItemInfoHologram(player: Player, scale: Float, vertical: Double, horizontal: Double): CompletableFuture<Boolean> {
         val current = itemInfoPreferences(player)

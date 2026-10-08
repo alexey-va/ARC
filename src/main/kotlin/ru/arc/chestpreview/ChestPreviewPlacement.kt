@@ -21,10 +21,12 @@ internal object ChestPreviewPlacement {
         frame: ChestPreviewFrame,
         itemCount: Int,
         scale: Float,
+        options: ChestPreviewSettings = ChestPreviewSettings(),
+        previous: InspectionHologramAnchor? = null,
     ): InspectionHologramAnchor? {
         val eye = player.eyeLocation
-        val panel = ChestPreviewIconGeometry.panelBounds(itemCount, scale)
-        return choose(eye, frame.anchor, frame.containerBounds, panel, scale) { anchor, volume ->
+        val panel = ChestPreviewIconGeometry.panelBounds(itemCount, scale, options)
+        return choose(eye, frame.anchor, frame.containerBounds, panel, scale, options, previous) { anchor, volume ->
             clear(player, volume) && visible(player, eye, anchor, panel)
         }
     }
@@ -35,10 +37,32 @@ internal object ChestPreviewPlacement {
         container: BoundingBox?,
         panel: ChestPreviewPanelBounds,
         scale: Float,
+        options: ChestPreviewSettings = ChestPreviewSettings(),
+        previous: InspectionHologramAnchor? = null,
         available: (InspectionHologramAnchor, ChestPreviewVolume) -> Boolean,
     ): InspectionHologramAnchor? {
-        fun fits(anchor: InspectionHologramAnchor) = available(anchor, volume(eye, anchor, panel, scale))
-        val box = container ?: return above.takeIf(::fits)
+        fun fits(anchor: InspectionHologramAnchor) = available(anchor, volume(eye, anchor, panel, scale, options))
+        fun stable(candidate: InspectionHologramAnchor): InspectionHologramAnchor {
+            // Hold only tiny safe changes; never latch a distant side position over a clear lid.
+            if (previous != null && previous.worldId == candidate.worldId &&
+                distanceSquared(previous, candidate) <= options.stabilityThreshold * options.stabilityThreshold && fits(previous)) return previous
+            return candidate
+        }
+        fun firstFit(candidates: List<InspectionHologramAnchor>): InspectionHologramAnchor? {
+            var blocked: InspectionHologramAnchor? = null
+            for (candidate in candidates) {
+                if (!fits(candidate)) { blocked = candidate; continue }
+                var free = candidate
+                var low = blocked
+                if (low != null) repeat(6) {
+                    val midpoint = between(requireNotNull(low), free, 0.5)
+                    if (fits(midpoint)) free = midpoint else low = midpoint
+                }
+                return stable(free)
+            }
+            return null
+        }
+        val box = container ?: return above.takeIf(::fits)?.let(::stable)
         val up = up(eye)
         val halfHeight = panel.height / 2.0
         fun anchorAt(center: Vector): InspectionHologramAnchor {
@@ -49,7 +73,7 @@ internal object ChestPreviewPlacement {
         // then lift by the entire rotated volume, including icon/backdrop depth.
         // Keeping the old bottom pivot on the lid made top-down views intersect it.
         val centered = anchorAt(Vector(above.x, above.y, above.z))
-        val top = centered.copy(y = centered.y + above.y - bounds(eye, centered, panel, scale).minY)
+        val top = centered.copy(y = centered.y + above.y - bounds(eye, centered, panel, scale, options).minY)
         val towardEye = eye.toVector().subtract(box.center).setY(0.0)
         if (towardEye.lengthSquared() < 0.0001) {
             val yaw = Math.toRadians(eye.yaw.toDouble())
@@ -58,29 +82,34 @@ internal object ChestPreviewPlacement {
         towardEye.normalize()
         // A diagonal panel may graze leaves beside an otherwise clear lid. Try small
         // adjustments above the lid before ever dropping to the container's side.
-        for (rise in listOf(0.0, 0.15, 0.30)) for (shift in listOf(0.0, 0.15, 0.30, 0.45)) {
-            val candidate = top.copy(x = top.x + towardEye.x * shift, y = top.y + rise, z = top.z + towardEye.z * shift)
-            val center = Vector(candidate.x, candidate.y, candidate.z).add(up.clone().multiply(halfHeight))
-            if (center.clone().subtract(eye.toVector()).dot(eye.direction) <= 0.10) continue
-            if (fits(candidate)) return candidate
+        for (rise in listOf(0.0, 0.15, 0.30)) {
+            val candidates = mutableListOf<InspectionHologramAnchor>()
+            for (shift in listOf(0.0, 0.15, 0.30, 0.45)) {
+                val candidate = top.copy(x = top.x + towardEye.x * shift, y = top.y + rise, z = top.z + towardEye.z * shift)
+                val center = Vector(candidate.x, candidate.y, candidate.z).add(up.clone().multiply(halfHeight))
+                if (center.clone().subtract(eye.toVector()).dot(eye.direction) <= 0.10) continue
+                candidates += candidate
+            }
+            firstFit(candidates)?.let { return it }
         }
         // Re-evaluate above first every time. A previous clear side position must not
         // remain stuck there after the viewer moves above the container.
         val faceDistance = abs(towardEye.x) * box.widthX / 2.0 + abs(towardEye.z) * box.widthZ / 2.0
         // Try the viewer-facing side, then pull forward a little if adjacent blocks are tight.
+        val sideCandidates = mutableListOf<InspectionHologramAnchor>()
         for (extra in listOf(0.0, 0.25, 0.5, 0.75, 1.0)) {
             val center = box.center.add(towardEye.clone().multiply(faceDistance + 0.30 * scale + extra))
             var anchor = anchorAt(center)
-            val volume = bounds(eye, anchor, panel, scale)
+            val volume = bounds(eye, anchor, panel, scale, options)
             // Do not sink the bottom row into the floor in front of a ground-level chest.
             if (volume.minY < box.minY + 0.05) anchor = anchor.copy(y = anchor.y + box.minY + 0.05 - volume.minY)
             val panelCenter = Vector(anchor.x, anchor.y, anchor.z).add(up.clone().multiply(halfHeight))
             if (panelCenter.distanceSquared(eye.toVector()) < 0.36) continue
             // A candidate must stay between the container and viewer, never behind the camera.
             if (eye.toVector().subtract(panelCenter).dot(towardEye) <= 0.30) continue
-            if (fits(anchor)) return anchor
+            sideCandidates += anchor
         }
-        return null
+        return firstFit(sideCandidates)
     }
 
     internal fun bounds(
@@ -88,13 +117,15 @@ internal object ChestPreviewPlacement {
         anchor: InspectionHologramAnchor,
         panel: ChestPreviewPanelBounds,
         scale: Float,
-    ): BoundingBox = volume(eye, anchor, panel, scale).bounds
+        options: ChestPreviewSettings = ChestPreviewSettings(),
+    ): BoundingBox = volume(eye, anchor, panel, scale, options).bounds
 
     private fun volume(
         eye: Location,
         anchor: InspectionHologramAnchor,
         panel: ChestPreviewPanelBounds,
         scale: Float,
+        options: ChestPreviewSettings,
     ): ChestPreviewVolume {
         val yaw = Math.toRadians(eye.yaw.toDouble())
         val up = up(eye)
@@ -102,9 +133,29 @@ internal object ChestPreviewPlacement {
         return ChestPreviewVolume(
             Vector3d(anchor.x + up.x * panel.height / 2, anchor.y + up.y * panel.height / 2, anchor.z + up.z * panel.height / 2),
             Vector3d(-cos(yaw), 0.0, -sin(yaw)), Vector3d(up.x, up.y, up.z), Vector3d(normal.x, normal.y, normal.z),
-            Vector3d(panel.width / 2.0 + 0.02, panel.height / 2.0 + 0.02, 0.26 * scale + 0.02),
+            Vector3d(panel.width / 2.0 + 0.02, panel.height / 2.0 + 0.02, ChestPreviewIconGeometry.depth(scale, options).toDouble() + 0.04),
         )
     }
+
+    /** Enclose every translated pose, including obstacles between native interpolation ticks. */
+    fun clearPath(player: Player, from: InspectionHologramAnchor, to: InspectionHologramAnchor,
+                  itemCount: Int, scale: Float, options: ChestPreviewSettings): Boolean {
+        if (from.worldId != to.worldId || distanceSquared(from, to) > 1.0) return false
+        val eye = player.eyeLocation
+        val panel = ChestPreviewIconGeometry.panelBounds(itemCount, scale, options)
+        val swept = volume(eye, from, panel, scale, options)
+            .swept(Vector3d(to.x - from.x, to.y - from.y, to.z - from.z))
+        return clear(player, swept) && listOf(from, between(from, to, 0.5), to).all {
+            visible(player, eye, it, panel)
+        }
+    }
+
+    private fun between(from: InspectionHologramAnchor, to: InspectionHologramAnchor, fraction: Double) =
+        to.copy(x = from.x + (to.x - from.x) * fraction,
+            y = from.y + (to.y - from.y) * fraction, z = from.z + (to.z - from.z) * fraction)
+
+    private fun distanceSquared(a: InspectionHologramAnchor, b: InspectionHologramAnchor): Double =
+        (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) + (a.z - b.z) * (a.z - b.z)
 
     private fun up(eye: Location): Vector {
         val yaw = Math.toRadians(eye.yaw.toDouble())
@@ -155,6 +206,11 @@ internal class ChestPreviewVolume(
     private val normal: Vector3d,
     private val halfSize: Vector3d,
 ) {
+    fun swept(delta: Vector3d): ChestPreviewVolume = ChestPreviewVolume(
+        Vector3d(center).add(Vector3d(delta).mul(0.5)), right, up, normal,
+        Vector3d(halfSize).add(abs(right.dot(delta)) / 2, abs(up.dot(delta)) / 2, abs(normal.dot(delta)) / 2),
+    )
+
     val bounds: BoundingBox = run {
         val x = abs(right.x) * halfSize.x + abs(up.x) * halfSize.y + abs(normal.x) * halfSize.z
         val y = abs(right.y) * halfSize.x + abs(up.y) * halfSize.y + abs(normal.y) * halfSize.z

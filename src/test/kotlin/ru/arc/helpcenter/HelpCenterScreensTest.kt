@@ -608,7 +608,7 @@ class HelpCenterScreensTest {
     fun `settings retain every legacy control in four groups and options return to their group`() {
         val expected = mapOf(
             "controls" to listOf("legacy_shortcut", "legacy_escape", "legacy_shift_sign_edit", "legacy_stairs_sit"),
-            "interface" to listOf("legacy_scoreboard", "legacy_tablist", "legacy_item_info", "setting_particles", "legacy_totem", "legacy_resource_pack"),
+            "interface" to listOf("legacy_scoreboard", "legacy_tablist", "legacy_item_info", "legacy_container_preview", "setting_particles", "legacy_totem", "legacy_resource_pack"),
             "social" to listOf("setting_chat_global", "legacy_notifications", "legacy_tpa"),
             "world" to listOf("setting_trails_on", "legacy_flight", "legacy_lands", "legacy_portal_style", "legacy_portal_by_other", "legacy_portal_for_other"),
         )
@@ -654,6 +654,36 @@ class HelpCenterScreensTest {
         assertEquals("help.settings.section.interface", screen.id)
         click("back")
         assertEquals("help.category.settings", screen.id)
+    }
+
+    @Test
+    fun `container preview has separate personal control pages and explains its permission gate`() {
+        open(HelpCenterPage.SETTINGS)
+        click("settings_interface")
+        click("legacy_container_preview")
+
+        assertEquals("help.settings.container-preview", screen.id)
+        assertTrue(body().contains("arc.chest-preview"))
+        assertEquals(
+            listOf("container_preview_enabled", "container_preview_layout", "container_preview_appearance", "container_preview_motion", "container_preview_reset_all"),
+            screen.buttons.map { it.id.value },
+        )
+
+        click("container_preview_layout")
+        assertEquals("help.settings.container-preview.layout", screen.id)
+        assertEquals(
+            listOf("cp_scale", "cp_max_items", "cp_columns", "cp_cell_spacing", "cp_max_distance", "cp_vertical_gap"),
+            screen.numberInputs.map { it.id.value },
+        )
+        click("back")
+        click("container_preview_appearance")
+        assertEquals("help.settings.container-preview.appearance", screen.id)
+        assertEquals(8, screen.numberInputs.size)
+        assertTrue(body().contains("почти плоско"))
+        click("back")
+        click("container_preview_motion")
+        assertEquals("help.settings.container-preview.motion", screen.id)
+        assertEquals(listOf("cp_teleport_ticks", "cp_stability_threshold"), screen.numberInputs.map { it.id.value })
     }
 
     @Test

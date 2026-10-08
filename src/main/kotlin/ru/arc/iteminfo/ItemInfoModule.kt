@@ -6,6 +6,7 @@ import org.bukkit.event.HandlerList
 import org.bukkit.plugin.ServicePriority
 import ru.arc.ARC
 import ru.arc.chestpreview.ChestPreviewAccess
+import ru.arc.chestpreview.ChestPreviewSettings
 import ru.arc.hooks.HookRegistry
 import ru.arc.core.PluginModule
 import ru.arc.util.Logging.info
@@ -18,6 +19,8 @@ object ItemInfoModule : PluginModule {
 
     private var runtime: ItemInfoRuntime? = null
     private var inspection: PaperArcInspectionService? = null
+    internal var chestPreviewSettings: ChestPreviewSettings = ChestPreviewSettings()
+        private set
 
     override fun init() = start(ItemInfoConfig.load(ARC.instance.dataPath).snapshot())
 
@@ -37,9 +40,11 @@ object ItemInfoModule : PluginModule {
             it.close()
         }
         inspection = null
+        chestPreviewSettings = ChestPreviewSettings()
     }
 
     private fun start(settings: ItemInfoSettings) {
+        chestPreviewSettings = settings.chestPreview
         val service = PaperArcInspectionService(ARC.instance)
         val galleryPurchasePrice: (Player, String) -> String? = HookRegistry.shopPurchaseService
             ?.let { purchaseService ->

@@ -74,6 +74,34 @@ class ChestPreviewPlacementTest : StringSpec({
         }
     }
 
+    "strafing along stacked containers has no quarter-block placement steps and holds at rest" {
+        val options = ChestPreviewSettings(stabilityThreshold = 0.02)
+        val blocks = listOf(chest, BoundingBox(0.0, 1.0, 0.0, 1.0, 2.0, 1.0))
+        val grid = ChestPreviewIconGeometry.panelBounds(6, options.scale, options)
+        var previous: InspectionHologramAnchor? = null
+        for (step in 0..80) {
+            val viewer = Location(null, -1.5 + step * 0.05, 1.3, -2.5)
+            viewer.direction = chest.center.subtract(viewer.toVector())
+            val next = requireNotNull(ChestPreviewPlacement.choose(viewer, above, chest, grid, options.scale, options, previous) { _, volume ->
+                blocks.none(volume::overlaps)
+            })
+            previous?.let { old ->
+                val distance = org.bukkit.util.Vector(next.x - old.x, next.y - old.y, next.z - old.z).length()
+                (distance < 0.12) shouldBe true
+            }
+            val still = ChestPreviewPlacement.choose(viewer, above, chest, grid, options.scale, options, next) { _, volume ->
+                blocks.none(volume::overlaps)
+            }
+            still shouldBe next
+            previous = next
+        }
+        // Removing the overhead obstruction must restore the top rather than latch the side.
+        val restored = requireNotNull(ChestPreviewPlacement.choose(eye, above, chest, grid, options.scale, options, previous) { _, volume ->
+            !volume.overlaps(chest)
+        })
+        (ChestPreviewPlacement.bounds(eye, restored, grid, options.scale, options).minY >= above.y - 0.00001) shouldBe true
+    }
+
     "empty corners of the rotated scan envelope do not count as panel collisions" {
         val diagonal = kotlin.math.sqrt(0.5)
         val volume = ChestPreviewVolume(Vector3d(), Vector3d(diagonal, 0.0, diagonal),
@@ -82,6 +110,14 @@ class ChestPreviewPlacementTest : StringSpec({
         volume.bounds.overlaps(emptyCorner) shouldBe true
         volume.overlaps(emptyCorner) shouldBe false
         volume.overlaps(BoundingBox(0.4, -0.05, 0.4, 0.6, 0.05, 0.6)) shouldBe true
+    }
+
+    "swept clearance includes a thin obstacle between the endpoint poses" {
+        val panel = ChestPreviewVolume(Vector3d(), Vector3d(1.0, 0.0, 0.0),
+            Vector3d(0.0, 1.0, 0.0), Vector3d(0.0, 0.0, 1.0), Vector3d(0.1, 0.1, 0.01))
+        val thin = BoundingBox(-0.05, -0.05, 0.055, 0.05, 0.05, 0.065)
+        panel.overlaps(thin) shouldBe false
+        panel.swept(Vector3d(0.0, 0.0, 1.0)).overlaps(thin) shouldBe true
     }
 
     "panel edge collision counts even when its center is free, and no fit hides the panel" {

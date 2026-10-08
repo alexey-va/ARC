@@ -36,7 +36,7 @@ class ChestPreviewIconsTest : StringSpec({
         val harness = DisplayHarness()
         val renderer = ChestPreviewIcons(
             harness.owner,
-            ChestPreviewSettings(maxItems = 2, backgroundOpacity = 40),
+            ChestPreviewSettings(showCounts = false, maxItems = 2, backgroundOpacity = 40),
         )
         val frame = frame(
             worldId,
@@ -85,7 +85,7 @@ class ChestPreviewIconsTest : StringSpec({
         val harness = DisplayHarness()
         val renderer = ChestPreviewIcons(
             harness.owner,
-            ChestPreviewSettings(backgroundOpacity = 0),
+            ChestPreviewSettings(showCounts = false, backgroundOpacity = 0),
         )
 
         renderer.update(player, frame(worldId, listOf(ItemStack(Material.PAPER))), 1f)
@@ -103,7 +103,7 @@ class ChestPreviewIconsTest : StringSpec({
     "block icons use a shallow top and side view while flat icons stay unmirrored" {
         val worldId = UUID.randomUUID()
         val harness = DisplayHarness()
-        val renderer = ChestPreviewIcons(harness.owner, ChestPreviewSettings(backgroundOpacity = 0))
+        val renderer = ChestPreviewIcons(harness.owner, ChestPreviewSettings(showCounts = false, backgroundOpacity = 0))
         renderer.update(player(worldId), frame(worldId, listOf(
             ItemStack(Material.OAK_PLANKS), ItemStack(Material.DIAMOND_PICKAXE),
         )), 1f)
@@ -119,9 +119,9 @@ class ChestPreviewIconsTest : StringSpec({
             Math.toRadians(30.0).toFloat(), Math.toRadians(225.0).toFloat(), 0f,
         )
         val blockTop = rendered[0].transformDirection(authored.transform(Vector3f(0f, 1f, 0f))).normalize()
-        (blockTop.z in 0.40f..0.42f) shouldBe true // sin(24 degrees), previously sin(30) = 0.5.
+        (blockTop.z in 0.031f..0.034f) shouldBe true // sin(12 degrees) after panel-local depth compression, normalized.
         val blockFront = rendered[0].transformDirection(authored.transform(Vector3f(0f, 0f, -1f))).normalize()
-        (blockFront.z > 0.74f) shouldBe true // A modest reduction from the inventory angle.
+        (blockFront.z in 0.32f..0.35f) shouldBe true // The shallow pose is compressed along panel depth.
         // Generated/handheld GUI models have no extra rotation: their right stays screen-right.
         val flatRight = rendered[1].transformDirection(Vector3f(1f, 0f, 0f))
         (flatRight.distance(Vector3f(ChestPreviewIconGeometry.ICON_SCALE, 0f, 0f)) < 0.00001f) shouldBe true
@@ -140,7 +140,7 @@ class ChestPreviewIconsTest : StringSpec({
         for (context in listOf(ItemDisplay.ItemDisplayTransform.FIXED, ItemDisplay.ItemDisplayTransform.NONE)) {
             val worldId = UUID.randomUUID()
             val harness = DisplayHarness()
-            val renderer = ChestPreviewIcons(harness.owner, ChestPreviewSettings(backgroundOpacity = 0, itemTransform = context))
+            val renderer = ChestPreviewIcons(harness.owner, ChestPreviewSettings(showCounts = false, backgroundOpacity = 0, itemTransform = context))
             renderer.update(player(worldId), frame(worldId, listOf(ItemStack(Material.OAK_PLANKS))), 1f)
             verify { harness.itemDisplays.single().itemDisplayTransform = context }
             val pose = harness.itemTransforms.single().rightRotation
@@ -154,7 +154,7 @@ class ChestPreviewIconsTest : StringSpec({
         val worldId = UUID.randomUUID()
         val player = player(worldId)
         val harness = DisplayHarness()
-        val renderer = ChestPreviewIcons(harness.owner, ChestPreviewSettings(backgroundOpacity = 0))
+        val renderer = ChestPreviewIcons(harness.owner, ChestPreviewSettings(showCounts = false, backgroundOpacity = 0))
         renderer.update(player, frame(worldId, listOf(ItemStack(Material.OAK_PLANKS))), 1f)
         renderer.update(player, frame(worldId, listOf(ItemStack(Material.DIAMOND_PICKAXE))), 1f)
 
@@ -172,7 +172,7 @@ class ChestPreviewIconsTest : StringSpec({
         val first = player(worldId)
         val second = player(worldId)
         val harness = DisplayHarness()
-        val renderer = ChestPreviewIcons(harness.owner, ChestPreviewSettings())
+        val renderer = ChestPreviewIcons(harness.owner, ChestPreviewSettings(showCounts = false, ))
 
         renderer.update(first, frame(worldId, listOf(ItemStack(Material.PAPER))), 1f)
         renderer.update(second, frame(worldId, listOf(ItemStack(Material.BOOK))), 1f)
@@ -193,7 +193,7 @@ class ChestPreviewIconsTest : StringSpec({
     "switching containers replaces the scene at its destination instead of moving old icons" {
         val worldId = UUID.randomUUID()
         val harness = DisplayHarness()
-        val renderer = ChestPreviewIcons(harness.owner, ChestPreviewSettings(backgroundOpacity = 0))
+        val renderer = ChestPreviewIcons(harness.owner, ChestPreviewSettings(showCounts = false, backgroundOpacity = 0))
         val viewer = player(worldId)
         val first = frame(worldId, listOf(ItemStack(Material.PAPER)))
         renderer.update(viewer, first, 1f)
@@ -204,10 +204,57 @@ class ChestPreviewIconsTest : StringSpec({
         renderer.close()
     }
 
+    "counts update in place and every moving part shares native interpolation" {
+        val worldId = UUID.randomUUID()
+        val viewer = player(worldId)
+        val harness = DisplayHarness()
+        val options = ChestPreviewSettings(showCounts = true, teleportTicks = 4)
+        val renderer = ChestPreviewIcons(harness.owner, options)
+        val selected = frame(worldId, listOf(ItemStack(Material.DIAMOND))).copy(
+            containerBounds = org.bukkit.util.BoundingBox(2.0, 69.0, -4.0, 3.0, 70.0, -3.0),
+            counts = listOf(76),
+        )
+        renderer.update(viewer, selected, options.scale)
+        renderer.update(viewer, selected.copy(counts = listOf(82)), options.scale)
+        harness.itemDisplays.size shouldBe 1
+        harness.textDisplays.size shouldBe 2
+        val count = harness.textDisplays.first()
+        PlainTextComponentSerializer.plainText().serialize(harness.textContents.first()) shouldBe "× 76"
+        verify { count.text(Component.text("× 82")) }
+        val all = harness.itemDisplays + harness.textDisplays
+        all.forEach { verify(exactly = 0) { it.teleport(any()) } }
+        every { viewer.eyeLocation } returns Location(viewer.world, 2.5, 72.0, -6.5, 0f, 40f)
+        renderer.update(viewer, selected.copy(counts = listOf(82)), options.scale)
+        all.forEach {
+            verify { it.teleportDuration = 4 }
+            verify(exactly = 1) { it.teleport(any()) }
+        }
+        renderer.clear(viewer)
+        all.forEach { verify(exactly = 1) { it.remove() } }
+        renderer.close()
+    }
+
+    "personal layout replaces the scene and can exceed the server icon default" {
+        val worldId = UUID.randomUUID()
+        val viewer = player(worldId)
+        val harness = DisplayHarness()
+        val renderer = ChestPreviewIcons(harness.owner, ChestPreviewSettings(maxItems = 1))
+        val selected = frame(worldId, listOf(ItemStack(Material.DIAMOND), ItemStack(Material.EMERALD)))
+        val personal = ChestPreviewSettings(maxItems = 2, columns = 2, showCounts = false, backgroundOpacity = 0)
+        renderer.update(viewer, selected, personal.scale, personal)
+        harness.itemDisplays.size shouldBe 2
+        harness.textDisplays.size shouldBe 0
+        renderer.update(viewer, selected, personal.scale, personal.copy(showCounts = true))
+        harness.itemDisplays.size shouldBe 4
+        harness.textDisplays.size shouldBe 2
+        harness.itemDisplays.take(2).forEach { verify(exactly = 1) { it.remove() } }
+        renderer.close()
+    }
+
     "bottom-anchored layout and backdrop bounds cover the twelve-icon maximum" {
         val scale = 2f
-        val offsets = ChestPreviewIconGeometry.offsets(12, scale)
-        val bounds = ChestPreviewIconGeometry.panelBounds(12, scale)
+        val offsets = ChestPreviewIconGeometry.offsets(12, scale, ChestPreviewSettings(showCounts = false))
+        val bounds = ChestPreviewIconGeometry.panelBounds(12, scale, ChestPreviewSettings(showCounts = false))
         val iconSize = ChestPreviewIconGeometry.ICON_SCALE * scale
 
         offsets.size shouldBe 12
@@ -219,16 +266,16 @@ class ChestPreviewIconsTest : StringSpec({
         (bottomEdge > 0f) shouldBe true
         (topEdge <= bounds.height) shouldBe true
         bounds.width shouldBe 3.04f
-        bounds.height shouldBe 4f
+        (kotlin.math.abs(bounds.height - 3.92f) < 0.00001f) shouldBe true
         ChestPreviewIconGeometry.itemBounds(scale).width shouldBe 1.12f
     }
 
     "partial final row stays centered and one icon remains above the anchor" {
-        val four = ChestPreviewIconGeometry.offsets(4, 1f)
+        val four = ChestPreviewIconGeometry.offsets(4, 1f, ChestPreviewSettings(showCounts = false))
         four.last().x shouldBe 0f
         (kotlin.math.abs(four.last().y - 0.24f) < 0.00001f) shouldBe true
 
-        val one = ChestPreviewIconGeometry.offsets(1, 1f).single()
+        val one = ChestPreviewIconGeometry.offsets(1, 1f, ChestPreviewSettings(showCounts = false)).single()
         one.x shouldBe 0f
         (kotlin.math.abs(one.y - 0.24f) < 0.00001f) shouldBe true
     }

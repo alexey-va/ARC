@@ -10,10 +10,27 @@ text:
   bossbar: '<white><name> <dark_gray>· <gray><id>'
 
 chest-preview:
+  # Container preview defaults; applied by /arc reload.
+  enabled: true
+  scale: 0.9
   max-items: 6
+  columns: 3
+  cell-spacing: 0.48
   max-distance: 4.5
   vertical-gap: 0.15
-  # 0 = transparent, 100 = opaque; applied by /arc reload.
+  icon-scale: 0.40
+  # Panel-local Z scale applied before item rotation; 0.05 is nearly flat, 1.0 is full 3D.
+  depth-scale: 0.15
+  block-pitch: 12
+  block-yaw: 20
+  show-counts: true
+  count-scale: 0.12
+  count-offset-y: -0.28
+  # Motion settling values; applied by /arc reload.
+  teleport-ticks: 3
+  stability-threshold: 0.04
+  brightness: 15
+  # 0 = transparent, 100 = opaque.
   background-opacity: 40
-  # Native ItemDisplay model transform context: GUI, FIXED, or NONE; applied by /arc reload.
+  # Native ItemDisplay model transform context: GUI, FIXED, or NONE.
   item-transform: GUI

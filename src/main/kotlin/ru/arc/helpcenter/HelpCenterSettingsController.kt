@@ -6,6 +6,7 @@ import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.entity.Player
+import org.bukkit.entity.ItemDisplay
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.whenCompleteSync
 import ru.arc.gui.MenuShortcutAction
@@ -18,6 +19,8 @@ import ru.arc.paper.menu.PaperDialogClickContext
 import ru.arc.paper.menu.PaperDialogInputId
 import ru.arc.paper.menu.PaperDialogNumberRangeInput
 import ru.arc.paper.menu.PaperDialogScreen
+import ru.arc.chestpreview.ChestPreviewPreferences
+import ru.arc.chestpreview.ChestPreviewSettings
 import ru.arc.iteminfo.ItemInfoPreferences
 import ru.arc.sidebar.SidebarSection
 import ru.arc.sidebar.sidebarSkillChoices
@@ -39,7 +42,7 @@ internal class HelpCenterSettingsController(
 ) : AutoCloseable {
     private enum class Section(val key: String, val entries: List<String>) {
         CONTROLS("controls", listOf("shortcut", "escape", "shift-sign-edit", "stairs-sit")),
-        INTERFACE("interface", listOf("scoreboard", "tablist", "item-info", "particles", "totem", "resource-pack")),
+        INTERFACE("interface", listOf("scoreboard", "tablist", "item-info", "container-preview", "particles", "totem", "resource-pack")),
         SOCIAL("social", listOf("chat", "notifications", "tpa")),
         WORLD("world", listOf("trails", "flight", "lands", "portal-style", "portal-by-other", "portal-for-other")),
     }
@@ -132,6 +135,7 @@ internal class HelpCenterSettingsController(
                 "scoreboard" -> openScoreboard(player, section)
                 "tablist" -> openTablist(player, section)
                 "item-info" -> openItemInfo(player, section)
+                "container-preview" -> openContainerPreview(player, section)
                 "lands" -> openOptions(player, entry.id, listOf("lands-show", "lands-hide"), section)
                 "portal-style" -> openOptions(player, entry.id, HelpCenterLegacySettings.PORTAL_STYLES.map { "portal-style-$it" }, section)
                 "flight" -> openFlight(player)
@@ -365,6 +369,253 @@ internal class HelpCenterSettingsController(
             exitButton = button("back", text("settings-interface-back-label")) { openItemInfo(player, section) },
             columns = 2,
         ))
+    }
+
+    private fun openContainerPreview(player: Player, section: Section) {
+        navigation.visit(player) { openContainerPreview(player, section) }
+        val preferences = legacy.containerPreviewPreferences(player)
+        val current = legacy.containerPreviewSettings(player)
+        val permission = if (player.hasPermission("arc.chest-preview")) {
+            text("settings-container-preview-permission-granted")
+        } else {
+            text("settings-container-preview-permission-missing")
+        }
+        showDialog(player, PaperDialogScreen(
+            id = "help.settings.container-preview",
+            title = text("settings-container-preview-title"),
+            body = listOf(PaperDialogBody(text(
+                "settings-container-preview-body",
+                "state" to booleanState(current.enabled),
+                "source" to text(if (preferences == ChestPreviewPreferences()) {
+                    "settings-container-preview-source-server"
+                } else {
+                    "settings-container-preview-source-personal"
+                }),
+            ), 468), PaperDialogBody(permission, 468)),
+            buttons = listOf(
+                button(
+                    "container_preview_enabled",
+                    text("settings-container-preview-enabled-label", "state" to booleanState(current.enabled)),
+                    text("settings-container-preview-enabled-tooltip"),
+                ) {
+                    saveContainerPreview(player, preferences.copy(enabled = !current.enabled)) {
+                        openContainerPreview(player, section)
+                    }
+                },
+                button("container_preview_layout", text("settings-container-preview-layout-label"),
+                    text("settings-container-preview-layout-tooltip")) {
+                    openContainerPreviewLayout(player, section)
+                },
+                button("container_preview_appearance", text("settings-container-preview-appearance-label"),
+                    text("settings-container-preview-appearance-tooltip")) {
+                    openContainerPreviewAppearance(player, section)
+                },
+                button("container_preview_motion", text("settings-container-preview-motion-label"),
+                    text("settings-container-preview-motion-tooltip")) {
+                    openContainerPreviewMotion(player, section)
+                },
+                button("container_preview_reset_all", text("settings-container-preview-reset-all"),
+                    text("settings-container-preview-reset-all-tooltip")) {
+                    saveContainerPreview(player, ChestPreviewPreferences()) {
+                        openContainerPreview(player, section)
+                    }
+                },
+            ),
+            exitButton = button("back", text("settings-interface-back-label")) { openSection(player, section) },
+            columns = 2,
+        ))
+    }
+
+    private fun openContainerPreviewLayout(player: Player, section: Section) {
+        navigation.visit(player) { openContainerPreviewLayout(player, section) }
+        val preferences = legacy.containerPreviewPreferences(player)
+        val current = legacy.containerPreviewSettings(player)
+        showDialog(player, PaperDialogScreen(
+            id = "help.settings.container-preview.layout",
+            title = text("settings-container-preview-layout-title"),
+            body = listOf(PaperDialogBody(text("settings-container-preview-layout-body"), 468)),
+            numberInputs = listOf(
+                previewInput("scale", "settings-container-preview-scale-label", 0.5f, 2.0f, current.scale, 0.05f),
+                previewInput("max_items", "settings-container-preview-max-items-label", 1f, 12f, current.maxItems.toFloat(), 1f),
+                previewInput("columns", "settings-container-preview-columns-label", 1f, 6f, current.columns.toFloat(), 1f),
+                previewInput("cell_spacing", "settings-container-preview-cell-spacing-label", 0.3f, 1.0f, current.cellSpacing, 0.02f),
+                previewInput("max_distance", "settings-container-preview-max-distance-label", 1.0f, 4.5f, current.maxDistance.toFloat(), 0.1f),
+                previewInput("vertical_gap", "settings-container-preview-vertical-gap-label", 0.0f, 0.5f, current.verticalGap.toFloat(), 0.01f),
+            ),
+            buttons = listOf(
+                contextButton("container_preview_layout_apply", text("settings-container-preview-apply")) { context ->
+                    saveContainerPreview(player, preferences.copy(
+                        scale = previewNumber(context, "scale", current.scale, 0.5f, 2.0f),
+                        maxItems = previewNumber(context, "max_items", current.maxItems.toFloat(), 1f, 12f).toInt(),
+                        columns = previewNumber(context, "columns", current.columns.toFloat(), 1f, 6f).toInt(),
+                        cellSpacing = previewNumber(context, "cell_spacing", current.cellSpacing, 0.3f, 1.0f),
+                        maxDistance = previewNumber(context, "max_distance", current.maxDistance.toFloat(), 1.0f, 4.5f).toDouble(),
+                        verticalGap = previewNumber(context, "vertical_gap", current.verticalGap.toFloat(), 0.0f, 0.5f).toDouble(),
+                    )) { openContainerPreviewLayout(player, section) }
+                },
+                button("container_preview_layout_reset", text("settings-container-preview-reset-page"),
+                    text("settings-container-preview-reset-page-tooltip")) {
+                    saveContainerPreview(player, preferences.copy(
+                        scale = null, maxItems = null, columns = null, cellSpacing = null,
+                        maxDistance = null, verticalGap = null,
+                    )) { openContainerPreviewLayout(player, section) }
+                },
+            ),
+            exitButton = button("back", text("settings-interface-back-label")) { openContainerPreview(player, section) },
+            columns = 2,
+        ))
+    }
+
+    private fun openContainerPreviewAppearance(player: Player, section: Section) {
+        navigation.visit(player) { openContainerPreviewAppearance(player, section) }
+        val preferences = legacy.containerPreviewPreferences(player)
+        val current = legacy.containerPreviewSettings(player)
+        showDialog(player, PaperDialogScreen(
+            id = "help.settings.container-preview.appearance",
+            title = text("settings-container-preview-appearance-title"),
+            body = listOf(PaperDialogBody(text("settings-container-preview-appearance-body"), 468)),
+            numberInputs = listOf(
+                previewInput("icon_scale", "settings-container-preview-icon-scale-label", 0.2f, 0.7f, current.iconScale, 0.025f),
+                previewInput("depth_scale", "settings-container-preview-depth-scale-label", 0.05f, 1.0f, current.depthScale, 0.05f),
+                previewInput("block_pitch", "settings-container-preview-block-pitch-label", 0f, 45f, current.blockPitch, 1f),
+                previewInput("block_yaw", "settings-container-preview-block-yaw-label", 0f, 60f, current.blockYaw, 1f),
+                previewInput("count_scale", "settings-container-preview-count-scale-label", 0.06f, 0.25f, current.countScale, 0.01f),
+                previewInput("count_offset_y", "settings-container-preview-count-offset-y-label", -0.4f, 0.1f, current.countOffsetY, 0.01f),
+                previewInput("brightness", "settings-container-preview-brightness-label", 0f, 15f, current.brightness.toFloat(), 1f),
+                previewInput("background_opacity", "settings-container-preview-background-opacity-label", 0f, 100f, current.backgroundOpacity.toFloat(), 5f),
+            ),
+            buttons = listOf(
+                contextButton("container_preview_appearance_apply", text("settings-container-preview-apply")) { context ->
+                    saveContainerPreview(player, containerAppearancePreferences(preferences, current, context)) {
+                        openContainerPreviewAppearance(player, section)
+                    }
+                },
+                contextButton(
+                    "container_preview_show_counts",
+                    text("settings-container-preview-show-counts-label", "state" to booleanState(current.showCounts)),
+                    text("settings-container-preview-show-counts-tooltip"),
+                ) { context ->
+                    saveContainerPreview(
+                        player,
+                        containerAppearancePreferences(preferences, current, context).copy(showCounts = !current.showCounts),
+                    ) {
+                        openContainerPreviewAppearance(player, section)
+                    }
+                },
+                contextButton(
+                    "container_preview_item_transform",
+                    text("settings-container-preview-item-transform-label", "state" to containerTransformState(current.itemTransform)),
+                    text("settings-container-preview-item-transform-tooltip"),
+                ) { context ->
+                    val next = when (current.itemTransform) {
+                        ItemDisplay.ItemDisplayTransform.GUI -> ItemDisplay.ItemDisplayTransform.FIXED
+                        ItemDisplay.ItemDisplayTransform.FIXED -> ItemDisplay.ItemDisplayTransform.NONE
+                        else -> ItemDisplay.ItemDisplayTransform.GUI
+                    }
+                    saveContainerPreview(player, containerAppearancePreferences(preferences, current, context).copy(itemTransform = next)) {
+                        openContainerPreviewAppearance(player, section)
+                    }
+                },
+                button("container_preview_appearance_reset", text("settings-container-preview-reset-page"),
+                    text("settings-container-preview-reset-page-tooltip")) {
+                    saveContainerPreview(player, preferences.copy(
+                        iconScale = null, depthScale = null, blockPitch = null, blockYaw = null,
+                        showCounts = null, countScale = null, countOffsetY = null,
+                        brightness = null, backgroundOpacity = null, itemTransform = null,
+                    )) { openContainerPreviewAppearance(player, section) }
+                },
+            ),
+            exitButton = button("back", text("settings-interface-back-label")) { openContainerPreview(player, section) },
+            columns = 2,
+        ))
+    }
+
+    private fun containerAppearancePreferences(
+        preferences: ChestPreviewPreferences,
+        current: ChestPreviewSettings,
+        context: PaperDialogClickContext,
+    ) = preferences.copy(
+        iconScale = previewNumber(context, "icon_scale", current.iconScale, 0.2f, 0.7f),
+        depthScale = previewNumber(context, "depth_scale", current.depthScale, 0.05f, 1.0f),
+        blockPitch = previewNumber(context, "block_pitch", current.blockPitch, 0f, 45f),
+        blockYaw = previewNumber(context, "block_yaw", current.blockYaw, 0f, 60f),
+        countScale = previewNumber(context, "count_scale", current.countScale, 0.06f, 0.25f),
+        countOffsetY = previewNumber(context, "count_offset_y", current.countOffsetY, -0.4f, 0.1f),
+        brightness = previewNumber(context, "brightness", current.brightness.toFloat(), 0f, 15f).toInt(),
+        backgroundOpacity = previewNumber(context, "background_opacity", current.backgroundOpacity.toFloat(), 0f, 100f).toInt(),
+    )
+
+    private fun openContainerPreviewMotion(player: Player, section: Section) {
+        navigation.visit(player) { openContainerPreviewMotion(player, section) }
+        val preferences = legacy.containerPreviewPreferences(player)
+        val current = legacy.containerPreviewSettings(player)
+        showDialog(player, PaperDialogScreen(
+            id = "help.settings.container-preview.motion",
+            title = text("settings-container-preview-motion-title"),
+            body = listOf(PaperDialogBody(text("settings-container-preview-motion-body"), 468)),
+            numberInputs = listOf(
+                previewInput("teleport_ticks", "settings-container-preview-teleport-ticks-label", 0f, 10f, current.teleportTicks.toFloat(), 1f),
+                previewInput("stability_threshold", "settings-container-preview-stability-threshold-label", 0f, 0.2f, current.stabilityThreshold.toFloat(), 0.01f),
+            ),
+            buttons = listOf(
+                contextButton("container_preview_motion_apply", text("settings-container-preview-apply")) { context ->
+                    saveContainerPreview(player, preferences.copy(
+                        teleportTicks = previewNumber(context, "teleport_ticks", current.teleportTicks.toFloat(), 0f, 10f).toInt(),
+                        stabilityThreshold = previewNumber(context, "stability_threshold", current.stabilityThreshold.toFloat(), 0f, 0.2f)
+                            .toDouble().coerceIn(0.0, 0.2),
+                    )) { openContainerPreviewMotion(player, section) }
+                },
+                button("container_preview_motion_reset", text("settings-container-preview-reset-page"),
+                    text("settings-container-preview-reset-page-tooltip")) {
+                    saveContainerPreview(player, preferences.copy(teleportTicks = null, stabilityThreshold = null)) {
+                        openContainerPreviewMotion(player, section)
+                    }
+                },
+            ),
+            exitButton = button("back", text("settings-interface-back-label")) { openContainerPreview(player, section) },
+            columns = 2,
+        ))
+    }
+
+    private fun previewInput(
+        id: String,
+        labelKey: String,
+        minimum: Float,
+        maximum: Float,
+        value: Float,
+        step: Float,
+    ) = PaperDialogNumberRangeInput(
+        previewInputId(id), text(labelKey), minimum, maximum, value, step, width = 420,
+    )
+
+    private fun previewInputId(id: String) = PaperDialogInputId.of("cp_$id")
+
+    private fun previewNumber(
+        context: PaperDialogClickContext,
+        id: String,
+        fallback: Float,
+        minimum: Float,
+        maximum: Float,
+    ): Float = context.number(previewInputId(id))?.takeIf { it.isFinite() }?.coerceIn(minimum, maximum) ?: fallback
+
+    private fun containerTransformState(transform: ItemDisplay.ItemDisplayTransform): Component =
+        text(when (transform) {
+            ItemDisplay.ItemDisplayTransform.GUI -> "settings-container-preview-transform-gui"
+            ItemDisplay.ItemDisplayTransform.FIXED -> "settings-container-preview-transform-fixed"
+            else -> "settings-container-preview-transform-none"
+        })
+
+    private fun saveContainerPreview(
+        player: Player,
+        preferences: ChestPreviewPreferences,
+        refresh: () -> Unit,
+    ) {
+        val token = navigation.visit(player, refresh)
+        legacy.saveContainerPreviewPreferences(player, preferences).whenCompleteSync(tasks) { accepted, failure ->
+            if (!active || !player.isOnline || !navigation.isCurrent(player, token)) return@whenCompleteSync
+            if (failure != null || accepted != true) player.sendMessage(text("action-failed"))
+            refresh()
+        }
     }
 
     private fun saveItemInfoLayout(
