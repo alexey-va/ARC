@@ -18,8 +18,11 @@ import org.bukkit.plugin.Plugin
 import org.bukkit.entity.Player
 import org.mockbukkit.mockbukkit.MockBukkit
 import ru.arc.core.TestTaskScheduler
+import ru.arc.hooks.HookRegistry
+import ru.arc.hooks.lands.LandsHook
 import ru.arc.onetime.OneTimeUseFingerprint
 import ru.arc.paper.testing.MockBukkitTestRuntime
+import ru.arc.hooks.worldguard.WGHook
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.floor
@@ -286,6 +289,63 @@ class PersonalTreasureMapControllerTest : StringSpec({
             }
         } catch (cause: Throwable) {
             throw AssertionError("Protection-unavailable map test aborted or failed", cause)
+        }
+    }
+
+    "protection checks require Lands and skip WorldGuard only when it is absent" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val plugin = paper.createSimplePlugin("PersonalMapProtectionPolicyTest")
+            val player = paper.addPlayer("map-protection-policy")
+            val location = player.location
+            val pluginManager = plugin.server.pluginManager
+            val landsPlugin = paper.createSimplePlugin("Lands")
+            val oldLandsHook = HookRegistry.landsHook
+            val oldWorldGuardHook = HookRegistry.wgHook
+            val landsHook = mockk<LandsHook>()
+            val worldGuardHook = mockk<WGHook>()
+
+            try {
+                HookRegistry.landsHook = landsHook
+                HookRegistry.wgHook = null
+                every { landsHook.isUnclaimed(any()) } returns true
+
+                pluginManager.getPlugin("Lands") shouldBe landsPlugin
+                pluginManager.getPlugin("WorldGuard") shouldBe null
+                personalTreasureMapLocationUnclaimed(plugin, location) shouldBe true
+
+                pluginManager.disablePlugin(landsPlugin)
+                personalTreasureMapLocationUnclaimed(plugin, location) shouldBe null
+                pluginManager.enablePlugin(landsPlugin)
+
+                val worldGuardPlugin = paper.createSimplePlugin("WorldGuard")
+                HookRegistry.wgHook = worldGuardHook
+                every { worldGuardHook.isUnclaimed(any()) } returns true
+                pluginManager.disablePlugin(worldGuardPlugin)
+                personalTreasureMapLocationUnclaimed(plugin, location) shouldBe null
+
+                pluginManager.enablePlugin(worldGuardPlugin)
+                HookRegistry.wgHook = null
+                personalTreasureMapLocationUnclaimed(plugin, location) shouldBe null
+
+                HookRegistry.wgHook = worldGuardHook
+                every { worldGuardHook.isUnclaimed(any()) } returns null
+                personalTreasureMapLocationUnclaimed(plugin, location) shouldBe null
+                every { worldGuardHook.isUnclaimed(any()) } throws IllegalStateException("WG query failed")
+                personalTreasureMapLocationUnclaimed(plugin, location) shouldBe null
+
+                HookRegistry.landsHook = null
+                personalTreasureMapLocationUnclaimed(plugin, location) shouldBe null
+                HookRegistry.landsHook = landsHook
+                every { landsHook.isUnclaimed(any()) } returns null
+                personalTreasureMapLocationUnclaimed(plugin, location) shouldBe null
+                every { landsHook.isUnclaimed(any()) } throws IllegalStateException("Lands query failed")
+                personalTreasureMapLocationUnclaimed(plugin, location) shouldBe null
+                every { landsHook.isUnclaimed(any()) } returns false
+                personalTreasureMapLocationUnclaimed(plugin, location) shouldBe false
+            } finally {
+                HookRegistry.landsHook = oldLandsHook
+                HookRegistry.wgHook = oldWorldGuardHook
+            }
         }
     }
 

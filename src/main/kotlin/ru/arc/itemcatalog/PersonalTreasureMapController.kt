@@ -47,6 +47,23 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 import kotlin.random.Random
 
+internal fun personalTreasureMapLocationUnclaimed(plugin: Plugin, location: Location): Boolean? {
+    return runCatching {
+        val manager = plugin.server.pluginManager
+        val landsPlugin = manager.getPlugin("Lands") ?: return@runCatching null
+        if (!manager.isPluginEnabled(landsPlugin)) return@runCatching null
+
+        val landsClear = HookRegistry.landsHook?.isUnclaimed(location) ?: return@runCatching null
+        if (!landsClear) return@runCatching false
+
+        val worldGuardPlugin = manager.getPlugin("WorldGuard") ?: return@runCatching true
+        if (!manager.isPluginEnabled(worldGuardPlugin)) return@runCatching null
+
+        val worldGuardClear = HookRegistry.wgHook?.isUnclaimed(location) ?: return@runCatching null
+        landsClear && worldGuardClear
+    }.getOrNull()
+}
+
 internal data class PersonalTreasureMapRenderState(
     val ownerId: UUID,
     val destination: PersonalTreasureMapDestination,
@@ -65,18 +82,7 @@ class PersonalTreasureMapController internal constructor(
     private val marker: PersonalTreasureMapMarker = PacketPersonalTreasureMapMarker(plugin),
     private val mapViewFactory: (org.bukkit.World) -> MapView = Bukkit::createMap,
     private val isUnclaimed: (Location) -> Boolean? = { location ->
-        val manager = plugin.server.pluginManager
-        if (!manager.isPluginEnabled("Lands") || !manager.isPluginEnabled("WorldGuard")) {
-            null
-        } else {
-            val landsClear = HookRegistry.landsHook?.isUnclaimed(location)
-            val worldGuardClear = HookRegistry.wgHook?.isUnclaimed(location)
-            when {
-                landsClear == false || worldGuardClear == false -> false
-                landsClear == true && worldGuardClear == true -> true
-                else -> null
-            }
-        }
+        personalTreasureMapLocationUnclaimed(plugin, location)
     },
 ) : Listener, AutoCloseable {
     private data class MapViewKey(val server: String, val worldId: UUID)

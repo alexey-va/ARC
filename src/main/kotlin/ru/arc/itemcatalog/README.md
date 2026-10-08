@@ -113,15 +113,18 @@ transfer and repeated opening preserve the same offers. Unknown native outcomes
 retain the ordinary journal recovery ownership.
 
 A `personal-map` source contains `reward: {category, entry}` and
-`search: {server: survival, world: world, radius: 96}`. Its icon must be
-`FILLED_MAP`. The first right-click on Survival binds the voucher to its
-activator and searches up to 64 points in already-loaded chunks; it never
+`search: {server: survival, world: survival, radius: 96}`. The search world is
+the public Survival world shown to players as «Новые биомы». Its icon must be
+`FILLED_MAP`. The first right-click there binds the voucher to its activator and
+searches up to 64 points in already-loaded chunks; it never
 claims a prize on that click. Before activation the item is transferable.
 The selected target is stored with the owner in the map PDC. Later, only that
 owner within three blocks can claim the prize. The controller checks loaded
-surface, headroom, hazards, world border, Lands and any local WorldGuard region
-before selecting and again after the durable claim. If protection changes, it
-chooses another safe point and the in-flight claim does not grant a prize.
+surface, headroom, hazards and world border, then requires an enabled Lands hook
+to confirm the point is unclaimed. If WorldGuard is installed, it must also be
+enabled and answer; any local WorldGuard region rejects the point. These checks
+run before selecting and again after the durable claim. If protection changes,
+it chooses another safe point and the in-flight claim does not grant a prize.
 
 The map uses a contextual Paper renderer and an owner-only packet chest marker.
 It does not generate chunks or place blocks. Holding a bound map restores its
