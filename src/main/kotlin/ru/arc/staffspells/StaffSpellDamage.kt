@@ -6,9 +6,11 @@ import com.magmaguy.elitemobs.api.EliteMobDamagedByPlayerEventFilter
 import com.magmaguy.elitemobs.combatsystem.CombatDamageContext
 import com.magmaguy.elitemobs.config.SkillsConfig
 import com.magmaguy.elitemobs.entitytracker.EntityTracker
+import com.magmaguy.elitemobs.mobconstructor.custombosses.CustomBossEntity
 import com.magmaguy.elitemobs.playerdata.ElitePlayerInventory
 import com.magmaguy.elitemobs.playerdata.database.PlayerData
 import com.magmaguy.elitemobs.skills.SkillType
+import com.magmaguy.elitemobs.thirdparty.custommodels.CustomModel
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.entity.ArmorStand
@@ -124,8 +126,13 @@ private object EliteMobsRuntime {
         if (!damage.isFinite() || damage <= 0.0) return
 
         val source = CombatDamageContext.PlayerDamageSource(cast.attackId, SkillType.STAVES, cast.criticalHit, cast.loudStrikesBonus)
-        CombatDamageContext.runPlayerToEliteBypass(source) {
-            target.damage(damage, player)
+        val damageCall = Runnable {
+            CombatDamageContext.runPlayerToEliteBypass(source) {
+                target.damage(damage, player)
+            }
         }
+        val customModel = (elite as? CustomBossEntity)?.customModel
+        if (customModel == null) damageCall.run()
+        else CustomModel.runProjectileDamageBypass(damageCall)
     }
 }

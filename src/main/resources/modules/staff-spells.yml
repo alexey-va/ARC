@@ -27,8 +27,8 @@ mark:
   radius: 3.5
 frost:
   name: '<#b1f2ff>Ледяной хлопок'
-  description: '<#e8dfd2>Снежный веер бьёт и замедляет врагов.'
-  aim: '<#b1f2ff>Ручной прицел · широкий ближний удар'
+  description: '<#e8dfd2>Ледяная волна идёт по земле и замедляет врагов.'
+  aim: '<#b1f2ff>Ручной прицел · волна вперёд по земле'
   skin: '3dfantasyweaponscit:northgate_guardian_staff'
   power: 0.8
   vanilla-damage: 6.0
@@ -58,13 +58,13 @@ ember:
   radius: 2.8
 nova:
   name: '<#9fffd4>Изумрудная волна'
-  description: '<#e8dfd2>Круговая волна поражает врагов вокруг вас.'
-  aim: '<#9fffd4>Без наведения · радиус шесть блоков'
+  description: '<#e8dfd2>Расширяющееся кольцо поражает врагов вокруг вас.'
+  aim: '<#9fffd4>Без наведения · радиус восемь блоков'
   skin: '3dfantasyweaponscit:holy_celtic_staff'
   power: 0.9
   vanilla-damage: 7.0
   cooldown-ticks: 40
-  radius: 6.0
+  radius: 8.0
 messages:
   prototype: '<#b8b8b8>Проба механики · общая перезарядка посохов'
   use: '<#82dcff>[▶] ПКМ <#e8dfd2>— применить заклинание'

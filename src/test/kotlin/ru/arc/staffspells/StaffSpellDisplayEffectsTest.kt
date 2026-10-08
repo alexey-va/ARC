@@ -36,14 +36,58 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
     }
 
     "nova leaves the caster eye outside every solid piece for its whole visible lifetime" {
-        (0 until 28 step StaffSpellDisplayEffects.FRAME_TICKS).forEach { age ->
-            staffDisplayParts(StaffSpell.NOVA, age, 28, 4.0, 1.8, true).forEach { part ->
-                val eye = org.joml.Vector3f(0f, 1.62f, -3.5f).sub(part.center)
+        (0 until 30 step StaffSpellDisplayEffects.FRAME_TICKS).forEach { age ->
+            staffDisplayParts(StaffSpell.NOVA, age, 30, 4.0, 8.0, true).forEach { part ->
+                val eye = org.joml.Vector3f(0f, 1.62f, 0f).sub(part.center)
                 org.joml.Quaternionf(part.rotation).invert().transform(eye)
                 val outside = kotlin.math.abs(eye.x) > part.scale.x / 2 ||
                     kotlin.math.abs(eye.y) > part.scale.y / 2 || kotlin.math.abs(eye.z) > part.scale.z / 2
                 outside shouldBe true
             }
+        }
+    }
+
+    "transient spells grow in and dissolve before removal with stable part identities" {
+        StaffSpell.entries.forEach { spell ->
+            fun parts(age: Int) = staffDisplayParts(spell, age, 30, 8.0, 3.0, true)
+            val first = parts(0)
+            val body = parts(8)
+            val last = parts(28)
+            first.size shouldBe body.size
+            last.size shouldBe body.size
+            fun volume(parts: List<StaffDisplayPart>) = parts.sumOf {
+                (it.scale.x * it.scale.y * it.scale.z).toDouble()
+            }
+            (volume(first) < volume(body) * 0.01) shouldBe true
+            (volume(last) < volume(body) * 0.01) shouldBe true
+        }
+    }
+
+    "frost advances through stable ground rows instead of exposing the whole fan" {
+        val early = staffDisplayParts(StaffSpell.FROST, 6, 24, 7.0, 8.3, false)
+        val late = staffDisplayParts(StaffSpell.FROST, 14, 24, 7.0, 8.3, false)
+        early.size shouldBe late.size
+        (early[0].scale.y > early[32].scale.y * 100) shouldBe true
+        (late[32].scale.y > early[32].scale.y * 100) shouldBe true
+        early.zip(late).forEach { (a, b) ->
+            a.center.x shouldBe b.center.x
+            a.center.z shouldBe b.center.z
+        }
+    }
+
+    "comet flight is steady and its impact shards travel outward without pulsing" {
+        val flight = staffDisplayParts(StaffSpell.EMBER, 6, 24, 1.0, 0.85, false)
+        val later = staffDisplayParts(StaffSpell.EMBER, 16, 24, 1.0, 0.85, false)
+        flight.zip(later).forEach { (a, b) ->
+            a.center shouldBe b.center
+            a.scale shouldBe b.scale
+        }
+        var previous = List(12) { 0f }
+        (0 until 20 step StaffSpellDisplayEffects.FRAME_TICKS).forEach { age ->
+            val shards = staffDisplayParts(StaffSpell.EMBER, age, 20, 0.0, 2.8, true).drop(2)
+            val radial = shards.map { it.center.x * it.center.x + it.center.z * it.center.z }
+            radial.zip(previous).all { (now, before) -> now >= before } shouldBe true
+            previous = radial
         }
     }
 
@@ -78,6 +122,13 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
             }
 
             h.scheduler.tick(4)
+            // A tracked charge survives its nominal timer until the gameplay owner releases it.
+            mark.all { it.removals == 0 } shouldBe true
+            val allocatedBeforeImpact = h.recorder.records.size
+            h.effects.impact(markId, moved, radius = 3.5, durationTicks = 8)
+            h.recorder.records.size shouldBe allocatedBeforeImpact
+            mark.all { it.removals == 0 } shouldBe true
+            h.scheduler.tick(8)
             mark.all { it.removals == 1 } shouldBe true
 
             // A scene whose wave material changes must update its stable packet handles.
@@ -88,7 +139,7 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
             nova.size shouldBe staffDisplayParts(StaffSpell.NOVA, 0, 28, 4.0, 6.0, true).size
             (nova.size <= StaffSpellDisplayEffects.MAX_PARTS) shouldBe true
             h.scheduler.tick(4)
-            nova.any { it.blockUpdates > 0 } shouldBe true
+            nova.all { it.poses.size > 1 && it.poses.all(DisplayPose::isFinite) } shouldBe true
 
             h.effects.play(caster.uniqueId, StaffSpell.MARK, start, durationTicks = 80)
             val cancelled = h.recorder.records.drop(mark.size + nova.size).toList()
@@ -141,8 +192,7 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
             h.recorder.shownTo.clear()
             h.recorder.hiddenFrom.clear()
             h.scheduler.tick(4)
-            h.recorder.shownTo.count { it == observer.uniqueId } shouldBe
-                StaffSpellDisplayEffects.MAX_PER_VIEWER * partsPerMark
+            h.recorder.shownTo.count { it == observer.uniqueId } shouldBe 0
             h.recorder.records.count { it.removals == 0 && observer.uniqueId in it.visibleViewers } shouldBe
                 StaffSpellDisplayEffects.MAX_PER_VIEWER * partsPerMark
 

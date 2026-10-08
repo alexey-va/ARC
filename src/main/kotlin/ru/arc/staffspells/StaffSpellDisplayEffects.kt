@@ -23,10 +23,12 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         var origin: Location,
         val rotation: Quaternionf,
         val length: Double,
-        val radius: Double,
-        val duration: Int,
-        val impact: Boolean,
+        var radius: Double,
+        var duration: Int,
+        var impact: Boolean,
         var age: Int = 0,
+        var transitionFrom: List<StaffDisplayPart>? = null,
+        var renderedParts: List<StaffDisplayPart> = emptyList(),
         val handles: MutableList<PacketBlockDisplay> = mutableListOf(),
         val viewers: MutableMap<UUID, Player> = mutableMapOf(),
     )
@@ -50,12 +52,14 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         while (scenes.size >= MAX_SCENES) remove(scenes.keys.first())
         val offset = to.toVector().subtract(from.toVector())
         val length = offset.length()
-        val rotation = if (length > 0.001 && spell !in setOf(StaffSpell.MARK, StaffSpell.NOVA))
+        val rotation = if (spell == StaffSpell.MARK)
+            Quaternionf().rotationY(kotlin.math.atan2(caster.location.x - from.x, caster.location.z - from.z).toFloat())
+        else if (length > 0.001 && spell != StaffSpell.NOVA)
             Quaternionf().rotationTo(Vector3f(0f, 0f, 1f), Vector3f(offset.x.toFloat(), offset.y.toFloat(), offset.z.toFloat()).normalize())
         else Quaternionf()
         val scene = Scene(UUID.randomUUID(), casterId, spell, from.clone(), rotation,
             if (spell == StaffSpell.NOVA) 4.0 else length.coerceAtLeast(0.1),
-            radius.takeIf(Double::isFinite)?.coerceIn(0.1, 8.0) ?: 1.0,
+            radius.takeIf(Double::isFinite)?.coerceIn(0.1, if (spell == StaffSpell.FROST) 96.0 else 16.0) ?: 1.0,
             durationTicks.coerceIn(1, 160), impact)
         scenes[scene.id] = scene
         render(scene)
@@ -67,6 +71,19 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         val scene = scenes[sceneId] ?: return
         if (!valid(at) || at.world != scene.origin.world) { remove(sceneId); return }
         scene.origin = at.clone()
+    }
+
+    /** Charge/flight becomes its own release; retain the physical pieces and packet IDs. */
+    fun impact(sceneId: UUID?, at: Location, radius: Double, durationTicks: Int) {
+        val scene = scenes[sceneId] ?: return
+        if (!valid(at) || at.world != scene.origin.world) { remove(sceneId); return }
+        scene.transitionFrom = scene.renderedParts
+        scene.origin = at.clone()
+        scene.radius = radius.takeIf(Double::isFinite)?.coerceIn(0.1, 16.0) ?: 1.0
+        scene.duration = durationTicks.coerceIn(8, 160)
+        scene.impact = true
+        scene.age = 0
+        render(scene)
     }
 
     fun remove(sceneId: UUID?) {
@@ -81,14 +98,29 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         scenes.values.toList().forEach { scene ->
             scene.age += FRAME_TICKS
             val caster = Bukkit.getPlayer(scene.casterId)
-            if (scene.age >= scene.duration || caster == null || !eligible(caster, scene.origin)) remove(scene.id)
+            val tracked = !scene.impact && scene.spell in setOf(StaffSpell.MARK, StaffSpell.EMBER)
+            val expired = if (tracked) scene.age >= 160 else scene.age >= scene.duration
+            if (expired || caster == null || !eligible(caster, scene.origin)) remove(scene.id)
             else render(scene)
         }
         if (scenes.isNotEmpty()) refreshAudience()
     }
 
     private fun render(scene: Scene) {
-        val parts = staffDisplayParts(scene.spell, scene.age, scene.duration, scene.length, scene.radius, scene.impact).take(MAX_PARTS)
+        var parts = staffDisplayParts(scene.spell, scene.age, scene.duration, scene.length, scene.radius, scene.impact).take(MAX_PARTS)
+        scene.transitionFrom?.let { previous ->
+            val progress = (scene.age / 4f).coerceIn(0f, 1f)
+            val blend = progress * progress * (3f - 2f * progress)
+            parts = parts.mapIndexed { index, part ->
+                previous.getOrNull(index)?.let { old -> part.copy(
+                    center = Vector3f(old.center).lerp(part.center, blend),
+                    scale = Vector3f(old.scale).lerp(part.scale, blend),
+                    rotation = Quaternionf(old.rotation).slerp(part.rotation, blend),
+                ) } ?: part
+            }
+            if (progress >= 1f) scene.transitionFrom = null
+        }
+        scene.renderedParts = parts
         while (scene.handles.size > parts.size) scene.handles.removeLast().remove()
         parts.forEachIndexed { index, part ->
             val center = scene.rotation.transform(Vector3f(part.center))
@@ -103,6 +135,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
                 it.interpolationDuration = FRAME_TICKS
                 it.teleportDuration = FRAME_TICKS
                 it.shadowStrength = 0f
+                scene.viewers.values.forEach(it::showTo)
                 scene.handles += it
             }
             if (handle.blockData.material != part.material)
@@ -129,7 +162,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
             val audience = selected[scene.id].orEmpty()
             // Clear explicit visibility even for an offline viewer; core handles its connection teardown.
             (scene.viewers.keys - audience).forEach { id -> scene.viewers[id]?.let { player -> scene.handles.forEach { it.hideFrom(player) } } }
-            audience.forEach { id -> online[id]?.let { player -> scene.handles.forEach { it.showTo(player) } } }
+            (audience - scene.viewers.keys).forEach { id -> online[id]?.let { player -> scene.handles.forEach { it.showTo(player) } } }
             scene.viewers.clear()
             audience.forEach { id -> online[id]?.let { scene.viewers[id] = it } }
         }
@@ -148,7 +181,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
     private fun valid(at: Location) = at.world != null && at.x.isFinite() && at.y.isFinite() && at.z.isFinite()
 
     internal companion object {
-        const val FRAME_TICKS = 4
+        const val FRAME_TICKS = 2
         const val MAX_SCENES = 12
         const val MAX_PER_CASTER = 4
         const val MAX_PER_VIEWER = 4

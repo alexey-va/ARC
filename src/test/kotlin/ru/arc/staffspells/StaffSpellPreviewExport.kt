@@ -22,18 +22,18 @@ object StaffSpellPreviewExport {
 
     // Mirrors StaffSpellController display calls using its current default tuning.
     private val events = mapOf(
-        StaffSpell.CHAIN to listOf(Event("segment", Inputs(24.0, 0.65, 12, impact = true))),
+        StaffSpell.CHAIN to listOf(Event("segment", Inputs(24.0, 0.65, 18, impact = true))),
         StaffSpell.MARK to listOf(
             Event("charge", Inputs(0.0, 1.3, 18, impact = false)),
-            Event("burst", Inputs(0.0, 3.5, 16, impact = true)),
+            Event("burst", Inputs(0.0, 3.5, 20, impact = true)),
         ),
-        StaffSpell.FROST to listOf(Event("fan", Inputs(7.0, 3.2, 16, impact = false))),
-        StaffSpell.LANCE to listOf(Event("impact", Inputs(24.0, 0.75, 12, impact = true))),
+        StaffSpell.FROST to listOf(Event("fan", Inputs(7.0, kotlin.math.tan(Math.toRadians(50.0)) * 7.0, 24, impact = false))),
+        StaffSpell.LANCE to listOf(Event("impact", Inputs(24.0, 0.75, 20, impact = true))),
         StaffSpell.EMBER to listOf(
             Event("flight", Inputs(1.0, 0.85, 24, impact = false)),
-            Event("burst", Inputs(0.0, 2.8, 16, impact = true)),
+            Event("burst", Inputs(0.0, 2.8, 20, impact = true)),
         ),
-        StaffSpell.NOVA to listOf(Event("impact", Inputs(4.0, 1.8, 28, impact = true))),
+        StaffSpell.NOVA to listOf(Event("impact", Inputs(4.0, 8.0, 30, impact = true))),
     )
 
     private fun frames(durationTicks: Int): List<Frame> {
@@ -41,7 +41,14 @@ object StaffSpellPreviewExport {
         val finalVisible = ((durationTicks - 1) / FRAME_TICKS) * FRAME_TICKS
         val middle = (durationTicks / 2 / FRAME_TICKS) * FRAME_TICKS
         require(middle > 0 && middle < finalVisible)
-        return listOf(Frame("start", 0), Frame("middle", middle), Frame("final-visible", finalVisible))
+        return (0..finalVisible step FRAME_TICKS).map { age ->
+            Frame(when (age) {
+                0 -> "start"
+                middle -> "middle"
+                finalVisible -> "final-visible"
+                else -> "tick-$age"
+            }, age)
+        }
     }
 
     private fun pieceMetadata(spell: StaffSpell, event: Event, partIndex: Int, part: StaffDisplayPart): Map<String, Any> {
@@ -69,10 +76,10 @@ object StaffSpellPreviewExport {
 
     private fun playerCamera(spell: StaffSpell, event: Event, frame: Frame): Map<String, Any> {
         val (position, target) = when {
-            spell == StaffSpell.NOVA -> point(0.0, 1.62, -3.5) to point(0.0, 1.62, 4.5)
+            spell in setOf(StaffSpell.NOVA, StaffSpell.FROST) -> point(0.0, 1.62, 0.0) to point(0.0, 1.62, 8.0)
             spell == StaffSpell.MARK -> point(0.0, 0.7, -6.0) to point(0.0, 0.7, 2.0)
             spell == StaffSpell.EMBER && event.id == "flight" ->
-                point(0.0, 0.0, -frame.ageTicks * 1.2) to point(0.0, 0.0, 8.0)
+                point(0.0, 0.0, -0.8 - frame.ageTicks * 1.2) to point(0.0, 0.0, 8.0)
             spell == StaffSpell.EMBER -> point(0.0, 0.0, -24.0) to point(0.0, 0.0, 0.0)
             else -> point(0.0, 0.0, 0.0) to point(0.0, 0.0, 8.0)
         }
@@ -133,8 +140,8 @@ object StaffSpellPreviewExport {
             "states" to states,
             "palette" to palette,
             "coordinates" to mapOf("space" to "spell-local", "origin" to "cast point; +Z forward", "unit" to "block"),
-            "cameraNote" to "Player views use a flat +Z cast-line approximation and do not simulate caster yaw/pitch, target repositioning, or player movement. NOVA's display vortex is previewed 3.5 blocks ahead of the caster; the damage area and particle ring remain centered on the caster.",
-            "evidence" to "Each state calls staffDisplayParts and preserves its exact centers and scales; part quaternions are converted to XYZ Euler angles for the preview renderer. Samples follow the runtime's ${FRAME_TICKS}-tick frame step at ages strictly below their removal duration and use only controller-backed events. Player cameras are state-specific: eye-origin for CHAIN/FROST/LANCE, a forward-offset feet-origin for NOVA, a representative six-block offset for MARK, and age-based flight or impact offsets for EMBER. NOVA's vortex camera is an explicit 70-degree preview approximation; its 3.5-block forward display offset is separate from the caster-centered damage/AoE ring. CHAIN impact length is set to the 24-block targeting maximum; target-to-target chain segment lengths vary in live play. The palette map can be baked from the version-matched Minecraft 1.21.11 client JAR. Native Minecraft rendering is not simulated.",
+            "cameraNote" to "Player views preserve +Z aim. FROST and NOVA originate at the caster feet; MARK is six blocks ahead at target centre; EMBER starts 0.8 blocks ahead and moves away. They do not simulate irregular terrain or a moving camera.",
+            "evidence" to "Every ${FRAME_TICKS}-tick geometry frame calls the production staffDisplayParts function. Fixed part indices describe appearance, outward movement and dissolution. These are source-driven textured previews, not native Minecraft lighting, interpolation, particles, sounds or measured client acceptance.",
         )).plus("\n"))
         println("STAFF_SPELL_PREVIEW states=${states.size} materials=${palette.size} output=$output")
     }

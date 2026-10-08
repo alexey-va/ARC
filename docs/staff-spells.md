@@ -8,28 +8,33 @@ There are no loot-table or shop changes. Anyone holding an issued sample can use
 
 - **Грозовая ветвь / chain:** the Divine Staff (`3dfantasyweaponscit:divine_staff`)
   launches instant lightning that jumps through up to four distinct targets joined
-  by visible links. Each jump has reduced damage.
+  by visible links. Each jump keeps its existing reduced damage; sonic accents and
+  staggered branches are visual only.
 - **Разрыв / mark:** the Night Staff (`3dfantasyweaponscit:night_staff`) places a
   short-lived mark that follows the acquired mob, then detonates at its current
   position and damages nearby visible mobs. With no target it forms at the aimed
-  wall/range endpoint instead.
+  wall/range endpoint instead. The impact animation reuses the mark's display pieces
+  for a continuous transition.
 - **Ледяной хлопок / frost:** the Northgate Guardian Staff
-  (`3dfantasyweaponscit:northgate_guardian_staff`) sends a wide cone that damages
-  nearby visible mobs; slowness applies only after an actual health/absorption
-  reduction. It does not steer; point the cone yourself.
+  (`3dfantasyweaponscit:northgate_guardian_staff`) sends a horizontal ice wave along
+  the ground in the direction you face. Its front travels through the cone over
+  twelve ticks after a short lead-in; mobs take damage and slowness only when the
+  front reaches them and they remain eligible and visible. It does not steer.
 - **Солнечное копьё / lance:** the Winged Staff
-  (`3dfantasyweaponscit:sagrada_winged_staff`) fires an instant narrow golden beam,
-  piercing up to three mobs directly along the reticle. There is no soft lock.
+  (`3dfantasyweaponscit:sagrada_winged_staff`) damages up to three mobs instantly
+  along a narrow line through the reticle. A golden spear forms, then its ray and
+  short tail fade over twenty ticks. There is no soft lock.
 - **Пепельная комета / ember:** the Hermit Staff
-  (`3dfantasyweaponscit:bermunde_hermit_staff`) launches a straight flying fire orb.
-  Lead moving targets manually; it bursts on the first mob/wall or at maximum
-  range. Collision is checked along each movement segment, not just at endpoints.
+  (`3dfantasyweaponscit:bermunde_hermit_staff`) launches a straight, steady fire
+  core from just ahead of the caster. Lead moving targets manually; it bursts
+  outward on the first mob/wall or at maximum range. Collision is checked along
+  each movement segment, not just at endpoints.
 - **Изумрудная волна / nova:** the Celtic Staff
-  (`3dfantasyweaponscit:holy_celtic_staff`) strikes visible mobs within six blocks
-  around the caster once, with a four-block turquoise whirlwind and an expanding
-  ground ring. The whirlwind forms up to 3.5 blocks ahead, inside the wave area,
-  so the caster can see it; the damage and particle ring stay centered on the caster.
-  The whirlwind is visual; it does not add repeated damage or pull mobs.
+  (`3dfantasyweaponscit:holy_celtic_staff`) sends one expanding ground ring from the
+  caster's feet to an eight-block radius. The front starts after two ticks and
+  reaches full range sixteen ticks later; eligible, visible mobs are hit once as
+  the front passes, up to the unchanged area-target limit. Its low annular display
+  remains centered on the caster; it does not add repeated damage or pull mobs.
 
 Use the main-hand right click, including a direct click on an entity. Look near a
 mob for chain/mark; small particles over its head preview their selected target.
@@ -38,7 +43,7 @@ empty space and consumes its cooldown on a miss. All samples share
 one caster cooldown, so swapping sample items cannot bypass it. Walls block initial
 acquisition, every chain link, and blast damage. Players, NPCs, armor stands and
 tamed pets are excluded. EliteMobs also applies its instance/minion eligibility.
-Marks and flying orbs cancel on caster death, quit, world change, module reload
+Marks, staged waves and flying orbs cancel on caster death, quit, world change, module reload
 or shutdown. Acquired marks also cancel on an invalid/distant target. Flight has
 a fixed maximum range and at most eight orbs per caster; visual bursts are short
 and use client-only block displays, sparse particles and local sounds. Each cast captures combat facts, so
@@ -65,6 +70,9 @@ For elites it calls `AdvancedDamageScaling.magicWeapon`, then
 `CombatDamageContext.runPlayerToEliteBypass(PlayerDamageSource, Runnable)` around
 the normal attributed Bukkit `damage` call. This preserves the normal protection
 event path and EliteMobs attribution without running its damage formula twice.
+For a modeled custom boss, that call also uses EliteMobs' existing
+`CustomModel.runProjectileDamageBypass` scope. FMM then accepts the already
+resolved spell hit instead of rerouting it through a physical melee hitbox.
 These callable methods are implementation-package APIs, so compatibility remains
 pinned to the project's EliteMobs API, not a promised stable upstream addon API.
 Failures on an enabled integration reject the cast/hit and emit a diagnostic.
@@ -82,11 +90,11 @@ Bukkit damage remain usable without loading the optional integration classes.
 
 ## Display effects and limits
 
-The six source-driven silhouettes are a branching lightning rod, an orbiting violet
-seal that bursts into crystals, a fan of ice blades, a golden spear, a magma orb
-with orbiting fragments, and a turquoise whirlwind. The mark and orb follow their
-existing combat positions; the beam, cone and nova retain their manual aiming and
-single-hit behavior. Casting into empty space also produces the display effect.
+The six source-driven silhouettes are branching lightning, a redesigned violet
+mark, a floor-hugging ice front, a growing golden spear and ray with a tail, a
+steady fire core with an outward burst, and a low expanding turquoise ring. The
+mark and orb follow their existing combat positions; lance damage stays immediate.
+Casting into empty space also produces the display effect.
 
 `StaffSpellDisplayGeometry` is shared by the renderer and offline textured preview.
 `StaffSpellDisplayEffects` reuses core `PaperPacketDisplays` under the `staff-spells`
@@ -95,13 +103,17 @@ Core filters received chunks, player worlds, range and connections and coalesces
 updates through the shared packet budget. Every piece has its own real world anchor
 so culling also works for beams crossing chunk boundaries.
 
-Hard bounds are 48 pieces per scene (NOVA uses 48; the other spells use at most 32), four scenes per caster, twelve scenes globally,
+Hard bounds are 48 pieces per scene (NOVA uses 48, FROST 40; the other spells use at most 32), four scenes per caster, twelve scenes globally,
 and four scenes per viewer within 32 blocks (at most 192 handles eligible for one
 viewer). A viewer's own casts are selected first, then nearby casts. The oldest
 visual scene is evicted when a pool fills; damage and projectile collision continue
-independently. Shapes update every four ticks with four-tick client interpolation.
+independently. Shapes update every two ticks with two-tick client interpolation.
 Moving marks/projectiles update their logical position between display frames.
-Ordinary effects last 12–28 ticks; tracked effects expire with their mark/projectile,
+FROST's front spans twelve ticks after a two-tick lead-in in a 24-tick scene;
+NOVA's eight-block front spans sixteen ticks after the same lead-in in a 30-tick
+scene. MARK and EMBER impacts reuse their existing display handles for 20-tick
+releases with a four-tick blend; LANCE forms and fades over twenty ticks.
+Ordinary effects last 18–30 ticks; tracked effects expire with their mark/projectile,
 with a final 160-tick safety cap. All scenes are removed on caster death, quit,
 world change, expiry or module shutdown/reload. The limits bound effect size and
 traffic sources; they are not a measured TPS/FPS guarantee.

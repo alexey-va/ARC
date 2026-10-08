@@ -138,11 +138,56 @@ class StaffSpellsTest : FreeSpec({
             val cancelled = h.zombie(world, x = 0.5, z = 4.0)
             val landed = h.zombie(world, x = 0.5, z = 5.0)
             cancelledTargets += cancelled.uniqueId
+            h.controller.start()
 
             h.controller.cast(player)
+            h.hits shouldBe emptyList()
+            h.scheduler.tick(8)
 
             cancelled.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
+            landed.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
+            h.hits.map { it.uniqueId } shouldBe listOf(cancelled.uniqueId)
+
+            h.scheduler.tick(2)
             landed.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe true
+            h.hits.map { it.uniqueId } shouldBe listOf(cancelled.uniqueId, landed.uniqueId)
+            h.scheduler.tick(12)
+            h.hits.map { it.uniqueId }.distinct().size shouldBe h.hits.size
+        }
+    }
+
+    "frost wave rechecks sight at its front and does not admit late arrivals" {
+        withStaffHarness(settings = staffSettings(frostRange = 7.0, frostDegrees = 50.0)) { h ->
+            val world = h.paper.addSimpleWorld("staff-frost-wall")
+            val player = h.player("staff-frost-wall", world, StaffSpell.FROST)
+            h.zombie(world, x = 0.5, z = 4.5)
+            h.controller.start()
+
+            h.controller.cast(player)
+            val lateArrival = h.zombie(world, x = 0.5, z = 4.0)
+            for (y in 64..66) world.getBlockAt(0, y, 2).type = Material.STONE
+            h.scheduler.tick(20)
+
+            h.hits shouldBe emptyList()
+            lateArrival.isValid shouldBe true
+        }
+    }
+
+    "frost side-angle damage arrives by radial distance rather than forward projection" {
+        withStaffHarness(settings = staffSettings(frostRange = 7.0, frostDegrees = 50.0)) { h ->
+            val world = h.paper.addSimpleWorld("staff-frost-side")
+            val player = h.player("staff-frost-side", world, StaffSpell.FROST)
+            val diagonal = h.zombie(world, x = 2.975, z = 2.975)
+            h.controller.start()
+
+            h.controller.cast(player)
+            h.scheduler.tick(6)
+            h.hits shouldBe emptyList()
+
+            h.scheduler.tick(2)
+            h.hits.map { it.uniqueId } shouldBe listOf(diagonal.uniqueId)
+            h.scheduler.tick(16)
+            h.hits.map { it.uniqueId }.distinct().size shouldBe 1
         }
     }
 
@@ -240,7 +285,7 @@ class StaffSpellsTest : FreeSpec({
             h.scheduler.tick(1)
 
             h.hits.map { it.uniqueId } shouldBe listOf(target.uniqueId)
-            h.removedEffects.any { it != null } shouldBe true
+            verify(exactly = 1) { h.effects.impact(any(), any(), any(), any()) }
 
             h.hits.clear()
             val wallWorld = h.paper.addSimpleWorld("staff-ember-wall")
@@ -291,20 +336,86 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "nova respects its radius and occluding blocks" {
-        withStaffHarness(settings = staffSettings(novaRadius = 6.0)) { h ->
+    "nova stages an eight-block ground wave, including close mobs, and respects occlusion" {
+        withStaffHarness(settings = staffSettings(novaRadius = 8.0)) { h ->
             val world = h.paper.addSimpleWorld("staff-nova")
             val player = h.player("staff-nova", world, StaffSpell.NOVA)
-            val near = h.zombie(world, x = 0.5, z = 4.5)
+            val near = h.zombie(world, x = 0.5, z = 1.0)
             val hiddenInsideRadius = h.zombie(world, x = 3.0, z = 3.0)
-            val outside = h.zombie(world, x = 0.5, z = 8.0)
-            world.getBlockAt(2, 65, 2).type = Material.STONE
+            val farInsideRadius = h.zombie(world, x = 0.5, z = 8.0)
+            val outside = h.zombie(world, x = 0.5, z = 9.5)
+            world.getBlockAt(2, 64, 2).type = Material.STONE
+            h.controller.start()
 
             h.controller.cast(player)
-
+            h.hits shouldBe emptyList()
+            h.scheduler.tick(2)
             h.hits.map { it.uniqueId } shouldBe listOf(near.uniqueId)
+
+            h.scheduler.tick(16)
+            h.hits.map { it.uniqueId } shouldBe listOf(near.uniqueId, farInsideRadius.uniqueId)
+            h.scheduler.tick(12)
+
             hiddenInsideRadius.isValid shouldBe true
             outside.isValid shouldBe true
+            h.hits.map { it.uniqueId }.distinct().size shouldBe h.hits.size
+        }
+    }
+
+    "staged nova keeps the existing per-cast target cap" {
+        withStaffHarness(settings = staffSettings(novaRadius = 8.0, maxAreaTargets = 2)) { h ->
+            val world = h.paper.addSimpleWorld("staff-nova-cap")
+            val player = h.player("staff-nova-cap", world, StaffSpell.NOVA)
+            val closest = h.zombie(world, x = 0.5, z = 1.0)
+            val middle = h.zombie(world, x = 0.5, z = 4.0)
+            h.zombie(world, x = 0.5, z = 8.0)
+            h.controller.start()
+
+            h.controller.cast(player)
+            h.scheduler.tick(30)
+
+            h.hits.map { it.uniqueId } shouldBe listOf(closest.uniqueId, middle.uniqueId)
+        }
+    }
+
+    "frost waves stop on caster quit, death, world change, and controller close" {
+        withStaffHarness(settings = staffSettings(frostRange = 7.0, frostDegrees = 50.0)) { h ->
+            h.controller.start()
+            val quitWorld = h.paper.addSimpleWorld("staff-frost-quit")
+            val quitting = h.player("staff-frost-quit", quitWorld, StaffSpell.FROST)
+            h.zombie(quitWorld, x = 0.5, z = 4.0)
+            h.controller.cast(quitting)
+            h.controller.onQuit(PlayerQuitEvent(quitting, Component.empty()))
+
+            val deathWorld = h.paper.addSimpleWorld("staff-frost-death")
+            val dying = h.player("staff-frost-death", deathWorld, StaffSpell.FROST)
+            h.zombie(deathWorld, x = 0.5, z = 4.0)
+            h.controller.cast(dying)
+            val deathEvent = mockk<PlayerDeathEvent>()
+            every { deathEvent.entity } returns dying
+            h.controller.onDeath(deathEvent)
+
+            val oldWorld = h.paper.addSimpleWorld("staff-frost-world-change")
+            val newWorld = h.paper.addSimpleWorld("staff-frost-world-change-to")
+            val changing = h.player("staff-frost-world-change", oldWorld, StaffSpell.FROST)
+            h.zombie(oldWorld, x = 0.5, z = 4.0)
+            h.controller.cast(changing)
+            changing.teleport(Location(newWorld, 0.5, 64.0, 0.5))
+            h.controller.onWorldChange(PlayerChangedWorldEvent(changing, oldWorld))
+
+            verify(exactly = 1) { h.effects.cancel(quitting.uniqueId) }
+            verify(exactly = 1) { h.effects.cancel(dying.uniqueId) }
+            verify(exactly = 1) { h.effects.cancel(changing.uniqueId) }
+            h.scheduler.tick(16)
+            h.hits shouldBe emptyList()
+
+            val closingWorld = h.paper.addSimpleWorld("staff-frost-close")
+            val closing = h.player("staff-frost-close", closingWorld, StaffSpell.FROST)
+            h.zombie(closingWorld, x = 0.5, z = 4.0)
+            h.controller.cast(closing)
+            h.controller.close()
+            h.scheduler.tick(16)
+            h.hits shouldBe emptyList()
         }
     }
 
@@ -352,7 +463,7 @@ class StaffSpellsTest : FreeSpec({
             h.scheduler.tick(6)
             h.hitLocations.single().z shouldBe 6.0
             h.movedEffects.any { it.second.z == 6.0 } shouldBe true
-            h.removedEffects.any { it != null } shouldBe true
+            verify(exactly = 1) { h.effects.impact(any(), any(), any(), any()) }
 
             val invalidPlayer = h.player("mark-invalid", world, StaffSpell.MARK)
             val invalidTarget = h.zombie(world, x = 0.5, z = 4.0)
@@ -514,11 +625,12 @@ private fun staffSettings(
     markTicks: Int = 18,
     frostRange: Double = 7.0,
     frostDegrees: Double = 50.0,
+    maxAreaTargets: Int = 8,
     lanceWidth: Double = 0.22,
     lanceTargets: Int = 3,
     emberSpeed: Double = 1.2,
     emberRadius: Double = 2.8,
-    novaRadius: Double = 6.0,
+    novaRadius: Double = 8.0,
 ) = StaffSpellSettings(
     range = range,
     aimDegrees = aimDegrees,
@@ -530,7 +642,7 @@ private fun staffSettings(
     frostRange = frostRange,
     frostDegrees = frostDegrees,
     frostSlowTicks = 40,
-    maxAreaTargets = 8,
+    maxAreaTargets = maxAreaTargets,
     lanceWidth = lanceWidth,
     lanceTargets = lanceTargets,
     emberSpeed = emberSpeed,

@@ -48,7 +48,7 @@ internal data class StaffSpellSettings(
     val lanceTargets: Int = 3,
     val emberSpeed: Double = 1.2,
     val emberRadius: Double = 2.8,
-    val novaRadius: Double = 6.0,
+    val novaRadius: Double = 8.0,
 )
 
 /** Values are read again on ARC reload; the controller owns one validated settings generation. */
@@ -82,7 +82,7 @@ internal open class StaffSpellConfig(private val config: Config) {
         config.integer("lance.targets", 3).coerceIn(1, 8),
         number("ember.speed", 1.2, 0.5..3.0),
         number("ember.radius", 2.8, 1.0..6.0),
-        number("nova.radius", 6.0, 2.0..10.0),
+        number("nova.radius", 8.0, 2.0..10.0),
     )
 
     private fun number(key: String, fallback: Double, bounds: ClosedFloatingPointRange<Double>) =
