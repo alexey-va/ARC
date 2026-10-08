@@ -87,7 +87,13 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         partial.maxOf { it.center.z } shouldBe partialRoute.last().z
         val trailLinks = partial.drop(6).take(2 * (partialRoute.size - 1))
         trailLinks.all { it.scale.x in 0.10f..0.16f } shouldBe true
-        trailLinks.all { it.scale.z in 1.15f..1.25f } shouldBe true
+        trailLinks.take(2).all { part ->
+            val launchCap = org.joml.Vector3f(0f, 0f, -part.scale.z / 2f)
+            part.rotation.transform(launchCap).add(part.center)
+            launchCap.distance(partialRoute.first()) >= 0.20f
+        } shouldBe true
+        trailLinks.take(2).all { it.scale.z in 1.0f..1.1f } shouldBe true
+        trailLinks.drop(2).all { it.scale.z in 1.15f..1.25f } shouldBe true
 
         val cappedRoute = route(24)
         capped.first().center.z shouldBe cappedRoute.last().z

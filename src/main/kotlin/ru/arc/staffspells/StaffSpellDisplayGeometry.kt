@@ -158,10 +158,11 @@ internal fun staffLightningTrailParts(points: List<Vector3f>, fade: Double = 1.0
             .add(0f, 0.045f * visibility.toFloat(), 0f)
         val secondEnd = Vector3f(traveled[index + 1]).fma(-nextZig.toFloat() * 0.55f, sides[index + 1])
             .add(0f, 0.045f * visibility.toFloat(), 0f)
-        segmentParts += shortenedLink(if (index % 3 == 0) Material.SEA_LANTERN else Material.CYAN_STAINED_GLASS,
-            start, end, width, width * 0.85, width * 0.15)
-        segmentParts += shortenedLink(if (index % 4 == 0) Material.WHITE_STAINED_GLASS else Material.LIGHT_BLUE_STAINED_GLASS,
-            secondStart, secondEnd, secondaryWidth, secondaryWidth * 0.75, secondaryWidth * 0.15)
+        val launchInset = if (index == 0 && trail.size <= 17) 0.22 else 0.0
+        segmentParts += trimmedLink(if (index % 3 == 0) Material.SEA_LANTERN else Material.CYAN_STAINED_GLASS,
+            start, end, width, width * 0.85, maxOf(launchInset, width * 0.15), width * 0.15)
+        segmentParts += trimmedLink(if (index % 4 == 0) Material.WHITE_STAINED_GLASS else Material.LIGHT_BLUE_STAINED_GLASS,
+            secondStart, secondEnd, secondaryWidth, secondaryWidth * 0.75, maxOf(launchInset, secondaryWidth * 0.15), secondaryWidth * 0.15)
     }
 
     val branchIndices = when {
@@ -549,10 +550,20 @@ private fun vectorTurn(first: Vector3f, second: Vector3f): Double {
 
 private fun shortenedLink(material: Material, start: Vector3f, end: Vector3f,
     width: Double, height: Double, inset: Double): StaffDisplayPart {
+    return trimmedLink(material, start, end, width, height, inset, inset)
+}
+
+private fun trimmedLink(material: Material, start: Vector3f, end: Vector3f,
+    width: Double, height: Double, startInset: Double, endInset: Double): StaffDisplayPart {
     val delta = Vector3f(end).sub(start)
     val length = delta.length().coerceAtLeast(0.001f)
-    val offset = Vector3f(delta).normalize().mul(minOf(inset, length * 0.2).toFloat())
-    return link(material, Vector3f(start).add(offset), Vector3f(end).sub(offset), width, height)
+    val direction = Vector3f(delta).normalize()
+    val safeStartInset = minOf(startInset, length * 0.2).toFloat()
+    val safeEndInset = minOf(endInset, length * 0.2).toFloat()
+    return link(material,
+        Vector3f(start).fma(safeStartInset, direction),
+        Vector3f(end).fma(-safeEndInset, direction),
+        width, height)
 }
 
 private fun link(material: Material, start: Vector3f, end: Vector3f, width: Double, height: Double): StaffDisplayPart {
