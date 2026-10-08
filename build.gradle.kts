@@ -52,7 +52,7 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.345"
+version = "1.4.346"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.21"
@@ -329,6 +329,10 @@ tasks {
         classpath = files(classpath.filter { it.name.startsWith("adventure-") }, classpath)
         useJUnitPlatform()
         systemProperty("arc.test.unit", "true")
+        // Forward the deploy helper's catalogue inputs into the forked test JVM.
+        providers.systemProperty("arc.rewardCatalogPaths").orNull?.let {
+            systemProperty("arc.rewardCatalogPaths", it)
+        }
         // MockK/ByteBuddy must self-attach inside the Java 25 test worker. Without
         // these test-only flags it can wait forever for an external attach helper.
         jvmArgs("-Djdk.attach.allowAttachSelf=true", "-XX:+EnableDynamicAgentLoading")

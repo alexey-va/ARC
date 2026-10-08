@@ -1,13 +1,15 @@
 # Administrator-issued mechanics samples. These are not native FMM/EliteMobs loot items.
 # /arc stafftest [all|chain|mark|frost|lance|ember|nova] [player]; /arc reload applies tuning.
 targeting:
-  range: 24.0
-  half-angle-degrees: 12.0
+  range: 48.0
+  half-angle-degrees: 20.0
 max-area-targets: 8
 chain:
+  secondary-name: 'Разрядный веер'
+  secondary: '<#82dcff>Shift + ПКМ <#e8dfd2>— три молнии ищут разные цели'
   name: '<#82dcff>Грозовая ветвь'
   description: '<#e8dfd2>Молния перескакивает между четырьмя врагами.'
-  aim: '<#82dcff>Мягкое наведение · мгновенный удар'
+  aim: '<#82dcff>Самонаведение · дальность до 48 блоков'
   skin: '3dfantasyweaponscit:divine_staff'
   power: 1.0
   vanilla-damage: 8.0
@@ -16,6 +18,8 @@ chain:
   targets: 4
   decay: 0.7
 mark:
+  secondary-name: 'Чёрная дыра'
+  secondary: '<#efa5ff>Shift + ПКМ <#e8dfd2>— стягивает врагов и схлопывается'
   name: '<#efa5ff>Разрыв'
   description: '<#e8dfd2>Разрыв следует за целью и взрывается.'
   aim: '<#efa5ff>Мягкое наведение · без цели взрыв в точке прицела'
@@ -26,6 +30,8 @@ mark:
   delay-ticks: 18
   radius: 3.5
 frost:
+  secondary-name: 'Полярный круг'
+  secondary: '<#b1f2ff>Shift + ПКМ <#e8dfd2>— морозная волна во все стороны'
   name: '<#b1f2ff>Ледяной хлопок'
   description: '<#e8dfd2>Ледяная волна идёт по земле и замедляет врагов.'
   aim: '<#b1f2ff>Ручной прицел · волна вперёд по земле'
@@ -33,10 +39,12 @@ frost:
   power: 0.8
   vanilla-damage: 6.0
   cooldown-ticks: 32
-  range: 7.0
+  range: 10.0
   half-angle-degrees: 50.0
   slow-ticks: 40
 lance:
+  secondary-name: 'Солнечный трезубец'
+  secondary: '<#fff1ae>Shift + ПКМ <#e8dfd2>— три расходящихся копья'
   name: '<#fff1ae>Солнечное копьё'
   description: '<#e8dfd2>Узкий луч пробивает до трёх врагов насквозь.'
   aim: '<#fff1ae>Ручной прицел · мгновенный точный выстрел'
@@ -47,6 +55,8 @@ lance:
   width: 0.22
   targets: 3
 ember:
+  secondary-name: 'Метеорный дождь'
+  secondary: '<#ffae70>Shift + ПКМ <#e8dfd2>— три метеора в выбранную точку'
   name: '<#ffae70>Пепельная комета'
   description: '<#e8dfd2>Огненный шар летит прямо и взрывается.'
   aim: '<#ffae70>Ручной прицел · цельтесь на опережение'
@@ -57,6 +67,8 @@ ember:
   speed: 1.2
   radius: 2.8
 nova:
+  secondary-name: 'Изумрудный прибой'
+  secondary: '<#9fffd4>Shift + ПКМ <#e8dfd2>— высокая волна вперёд'
   name: '<#9fffd4>Изумрудная волна'
   description: '<#e8dfd2>Расширяющееся кольцо поражает врагов вокруг вас.'
   aim: '<#9fffd4>Без наведения · радиус восемь блоков'
@@ -69,7 +81,9 @@ messages:
   prototype: '<#b8b8b8>Проба механики · общая перезарядка посохов'
   use: '<#82dcff>[▶] ПКМ <#e8dfd2>— применить заклинание'
   cooldown: '<#e8dfd2>Посох восстанавливается'
+  cooldown-bar: '<ability> <#82dcff><filled><#e8dfd2><empty> <white><seconds> с'
+  ready-bar: '<ability> <#9fffd4>▰▰▰▰▰▰▰▰▰▰ Готово <#e8dfd2>· <input>'
   full-inventory: '<#e8dfd2>Освободите место для всех выбранных посохов'
-  given: '<#9bd48d>Тестовые посохи выданы. ПКМ — атака. Тип прицела указан на каждом посохе.'
+  given: '<#9bd48d>Тестовые посохи выданы. ПКМ — основная атака; Shift + ПКМ — вторая способность.'
   unavailable: '<#e8dfd2>Модуль тестовых посохов сейчас недоступен'
   skin-unavailable: '<#e8dfd2>Модель посоха недоступна в ItemsAdder. Подробности в журнале сервера.'

@@ -24,6 +24,7 @@ import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
+import org.bukkit.util.BoundingBox
 import org.bukkit.util.RayTraceResult
 import org.bukkit.potion.PotionEffectType
 import org.bukkit.block.BlockFace
@@ -43,6 +44,7 @@ class StaffSpellsTest : FreeSpec({
             val world = h.paper.addSimpleWorld("staff-input")
             val player = h.player("staff-input", world, StaffSpell.CHAIN)
             val target = h.zombie(world, x = 0.5, z = 4.0)
+            h.controller.start()
 
             StaffSpell.from(h.config.item(StaffSpell.CHAIN)) shouldBe StaffSpell.CHAIN
             StaffSpell.from(ItemStack(Material.STICK)) shouldBe null
@@ -58,6 +60,8 @@ class StaffSpellsTest : FreeSpec({
             airClick.useItemInHand() shouldBe Event.Result.DEFAULT
             h.controller.onInteract(airClick)
 
+            h.hits shouldBe emptyList()
+            h.scheduler.tick(60)
             h.hits.map { it.uniqueId } shouldBe listOf(target.uniqueId)
             airClick.useItemInHand() shouldBe Event.Result.DENY
             airClick.useInteractedBlock() shouldBe Event.Result.DENY
@@ -99,17 +103,34 @@ class StaffSpellsTest : FreeSpec({
     }
 
     "auto-aim follows a moved off-axis mob and excludes mobs behind or beyond range" {
-        withStaffHarness(settings = staffSettings(range = 5.0, aimDegrees = 15.0)) { h ->
+        withStaffHarness(settings = staffSettings(range = 48.0, aimDegrees = 20.0)) { h ->
             val world = h.paper.addSimpleWorld("staff-aim")
             val player = h.player("staff-aim", world, StaffSpell.CHAIN)
-            val moving = h.zombie(world, x = 4.0, z = 4.0)
+            val moving = h.zombie(world, x = 2.0, z = 40.0)
             h.zombie(world, x = 0.5, z = -3.0)
-            h.zombie(world, x = 0.5, z = 6.0)
-            moving.teleport(Location(world, 1.1, 64.0, 4.4))
+            h.zombie(world, x = 0.5, z = 52.0)
+            val castOrigin = player.eyeLocation.clone()
+            h.controller.start()
 
             h.controller.cast(player)
+            h.hits shouldBe emptyList()
+            h.scheduler.tick(1)
+            moving.teleport(Location(world, 3.0, 64.0, 41.0))
+            h.scheduler.tick(60)
 
             h.hits.map { it.uniqueId } shouldBe listOf(moving.uniqueId)
+            h.trailMoves.any { move ->
+                move.points.size in 2..17 && move.points.last().distance(moving.location.clone().add(0.0, 1.0, 0.0)) < 1.5
+            } shouldBe true
+            h.trailMoves.all { it.points.size <= 17 } shouldBe true
+            h.trailMoves.last().points.size shouldBe 17
+            h.trailMoves.all { move ->
+                (move.points.size == 17 || move.points.first().distance(castOrigin) < 0.001) &&
+                    move.points.zipWithNext().all { (from, to) -> from.distance(to) <= 2.001 }
+            } shouldBe true
+            h.finishedTrails shouldBe listOf(h.visualPlays.single().id)
+            h.trailMoves.map { it.id }.distinct() shouldBe listOf(h.visualPlays.single().id)
+            h.removedEffects.filterNotNull() shouldBe emptyList()
         }
     }
 
@@ -117,10 +138,13 @@ class StaffSpellsTest : FreeSpec({
         withStaffHarness(settings = staffSettings(range = 8.0)) { h ->
             val world = h.paper.addSimpleWorld("staff-wall")
             val player = h.player("staff-wall", world, StaffSpell.CHAIN)
-            val target = h.zombie(world, x = 0.5, z = 5.0)
-            for (x in -1..1) for (y in 64..67) world.getBlockAt(x, y, 3).type = Material.STONE
+            val target = h.zombie(world, x = 0.5, z = 8.0)
+            h.controller.start()
 
             h.controller.cast(player)
+            h.scheduler.tick(1)
+            for (x in -2..2) for (y in 63..67) world.getBlockAt(x, y, 3).type = Material.STONE
+            h.scheduler.tick(12)
 
             h.hits.map { it.uniqueId } shouldBe emptyList()
             target.isValid shouldBe true
@@ -196,8 +220,10 @@ class StaffSpellsTest : FreeSpec({
             val world = h.paper.addSimpleWorld("staff-cooldown")
             val player = h.player("staff-cooldown", world, StaffSpell.CHAIN)
             val target = h.zombie(world, x = 0.5, z = 4.0)
+            h.controller.start()
 
             h.controller.cast(player)
+            h.scheduler.tick(60)
             player.inventory.setItemInMainHand(h.config.item(StaffSpell.FROST))
             h.controller.cast(player)
 
@@ -210,6 +236,7 @@ class StaffSpellsTest : FreeSpec({
             val world = h.paper.addSimpleWorld("staff-empty-casts")
             val player = h.player("staff-empty-casts", world, StaffSpell.CHAIN)
             val spells = StaffSpell.entries
+            h.controller.start()
 
             spells.forEachIndexed { index, spell ->
                 player.inventory.setItemInMainHand(h.config.item(spell))
@@ -378,6 +405,202 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
+    "shift right-click launches three independent homing chain bolts without a fourth jump" {
+        withStaffHarness(settings = staffSettings(range = 12.0, chainTargets = 4, aimDegrees = 20.0)) { h ->
+            val world = h.paper.addSimpleWorld("staff-chain-secondary")
+            val player = h.player("staff-chain-secondary", world, StaffSpell.CHAIN).apply { isSneaking = true }
+            val left = h.zombie(world, x = -2.3, z = 6.0)
+            val center = h.zombie(world, x = 0.5, z = 6.0)
+            val right = h.zombie(world, x = 3.3, z = 6.0)
+            val fourth = h.zombie(world, x = 4.0, z = 6.0)
+            h.controller.start()
+
+            val event = interact(player, player.inventory.itemInMainHand)
+            h.controller.onInteract(event)
+            event.useItemInHand() shouldBe Event.Result.DENY
+            h.hits shouldBe emptyList()
+            h.scheduler.tick(60)
+
+            h.hits.map { it.uniqueId }.toSet() shouldBe setOf(left.uniqueId, center.uniqueId, right.uniqueId)
+            h.hits.size shouldBe 3
+            (fourth.uniqueId in h.hits.map { it.uniqueId }) shouldBe false
+        }
+    }
+
+    "secondary frost grows radially to eight blocks, including lateral targets" {
+        withStaffHarness(settings = staffSettings(range = 12.0, novaRadius = 8.0)) { h ->
+            val world = h.paper.addSimpleWorld("staff-frost-secondary")
+            val player = h.player("staff-frost-secondary", world, StaffSpell.FROST).apply { isSneaking = true }
+            val near = h.zombie(world, x = 0.5, z = 1.5)
+            val far = h.zombie(world, x = 0.5, z = 8.0)
+            val lateral = h.zombie(world, x = 7.0, z = 0.5)
+            val outside = h.zombie(world, x = 0.5, z = 9.5)
+            h.controller.start()
+
+            h.controller.onInteract(interact(player, player.inventory.itemInMainHand))
+            h.scheduler.tick(2)
+            h.hits.map { it.uniqueId } shouldBe listOf(near.uniqueId)
+            h.scheduler.tick(16)
+
+            h.hits.map { it.uniqueId }.toSet() shouldBe setOf(near.uniqueId, far.uniqueId, lateral.uniqueId)
+            (outside.uniqueId in h.hits.map { it.uniqueId }) shouldBe false
+            h.visualPlays.any { it.spell == StaffSpell.FROST && it.secondary } shouldBe true
+        }
+    }
+
+    "secondary lance fans three reduced-power beams and de-duplicates their hits" {
+        withStaffHarness(settings = staffSettings(range = 10.0, lanceTargets = 3)) { h ->
+            val world = h.paper.addSimpleWorld("staff-lance-secondary")
+            val player = h.player("staff-lance-secondary", world, StaffSpell.LANCE).apply { isSneaking = true }
+            val left = h.zombie(world, x = -1.65, z = 8.0)
+            val center = h.zombie(world, x = 0.5, z = 8.0)
+            val right = h.zombie(world, x = 2.65, z = 8.0)
+
+            h.controller.onInteract(interact(player, player.inventory.itemInMainHand))
+
+            h.hits.map { it.uniqueId }.toSet() shouldBe setOf(left.uniqueId, center.uniqueId, right.uniqueId)
+            h.hits.size shouldBe 3
+            h.damageScales.map { it.first }.distinct() shouldBe listOf(0.65)
+            h.damageScales.all { kotlin.math.abs(it.second - 3.9) < 0.000001 } shouldBe true
+            h.visualPlays.count { it.spell == StaffSpell.LANCE && it.secondary } shouldBe 3
+        }
+    }
+
+    "secondary nova travels forward twelve blocks inside its narrow corridor" {
+        withStaffHarness(settings = staffSettings(range = 14.0)) { h ->
+            val world = h.paper.addSimpleWorld("staff-nova-secondary")
+            val player = h.player("staff-nova-secondary", world, StaffSpell.NOVA).apply { isSneaking = true }
+            val near = h.zombie(world, x = 0.5, z = 4.0)
+            val far = h.zombie(world, x = 0.5, z = 11.5)
+            val outsideWidth = h.zombie(world, x = 5.5, z = 8.0)
+            val behind = h.zombie(world, x = 0.5, z = -2.0)
+            val beyondRange = h.zombie(world, x = 0.5, z = 14.0)
+            h.controller.start()
+
+            h.controller.onInteract(interact(player, player.inventory.itemInMainHand))
+            h.scheduler.tick(8)
+            h.hits.map { it.uniqueId } shouldBe listOf(near.uniqueId)
+            h.scheduler.tick(10)
+
+            h.hits.map { it.uniqueId }.toSet() shouldBe setOf(near.uniqueId, far.uniqueId)
+            (outsideWidth.uniqueId in h.hits.map { it.uniqueId }) shouldBe false
+            (behind.uniqueId in h.hits.map { it.uniqueId }) shouldBe false
+            (beyondRange.uniqueId in h.hits.map { it.uniqueId }) shouldBe false
+            h.visualPlays.any { it.spell == StaffSpell.NOVA && it.secondary } shouldBe true
+        }
+    }
+
+    "secondary mark stays fixed, pulses four times, and only pulls after damage lands" {
+        var deniedId: UUID? = null
+        withStaffHarness(
+            settings = staffSettings(range = 12.0),
+            hit = { _, target -> target.uniqueId != deniedId },
+        ) { h ->
+            val world = h.paper.addSimpleWorld("staff-mark-secondary")
+            val player = h.player("staff-mark-secondary", world, StaffSpell.MARK).apply { isSneaking = true }
+            val original = h.zombie(world, x = 0.5, z = 5.0)
+            h.controller.start()
+
+            h.controller.onInteract(interact(player, player.inventory.itemInMainHand))
+            original.teleport(Location(world, 0.5, 64.0, 12.0))
+            val pulled = h.zombie(world, x = 1.0, z = 5.0)
+            val denied = h.zombie(world, x = 1.3, z = 5.0)
+            deniedId = denied.uniqueId
+
+            h.scheduler.tick(7)
+            h.hits shouldBe emptyList()
+            h.scheduler.tick(1)
+            h.hits.map { it.uniqueId }.toSet() shouldBe setOf(pulled.uniqueId, denied.uniqueId)
+            (pulled.velocity.lengthSquared() > 0.0) shouldBe true
+            denied.velocity.lengthSquared() shouldBe 0.0
+            h.damageScales.map { it.first }.distinct() shouldBe listOf(0.12)
+
+            h.scheduler.tick(24)
+            h.hits.count { it.uniqueId == pulled.uniqueId } shouldBe 4
+            h.hits.count { it.uniqueId == denied.uniqueId } shouldBe 4
+            h.hits.any { it.uniqueId == original.uniqueId } shouldBe false
+            h.scheduler.tick(8)
+            h.damageScales.last().first shouldBe 0.65
+            h.visualPlays.any { it.spell == StaffSpell.MARK && it.secondary } shouldBe true
+        }
+    }
+
+    "secondary ember staggers three reduced-power meteors between a floor and low ceiling" {
+        withStaffHarness(settings = staffSettings(range = 12.0, aimDegrees = 30.0, maxAreaTargets = 8),
+            rayStep = 0.1) { h ->
+            val world = h.paper.addSimpleWorld("staff-ember-secondary")
+            world.loadChunk(0, 0)
+            world.isChunkLoaded(0, 0) shouldBe true
+            val player = h.player("staff-ember-secondary", world, StaffSpell.EMBER).apply { isSneaking = true }
+            for (x in 0..10) for (z in 6..15) {
+                world.getBlockAt(x, 63, z).type = Material.STONE
+                world.getBlockAt(x, 70, z).type = Material.STONE
+            }
+            val targets = (0 until 9).map { index ->
+                world.spawn(Location(world, 4.5 + (index % 3) * 0.12, 64.0, 10.5 + (index / 3) * 0.12), Zombie::class.java)
+            }
+            h.controller.start()
+
+            h.controller.onInteract(interact(player, player.inventory.itemInMainHand))
+            h.visualPlays.count { it.spell == StaffSpell.EMBER && it.secondary } shouldBe 0
+            h.scheduler.tick(1)
+            h.visualPlays.count { it.spell == StaffSpell.EMBER && it.secondary } shouldBe 1
+            h.scheduler.tick(6)
+            h.visualPlays.count { it.spell == StaffSpell.EMBER && it.secondary } shouldBe 2
+            h.scheduler.tick(6)
+            h.visualPlays.count { it.spell == StaffSpell.EMBER && it.secondary } shouldBe 3
+            h.visualPlays.filter { it.spell == StaffSpell.EMBER && it.secondary }
+                .all { it.from.y > 64.0 && it.from.y < 70.0 } shouldBe true
+            h.scheduler.tick(18)
+
+            h.hits.size shouldBe 8
+            h.hits.map { it.uniqueId }.distinct().size shouldBe 8
+            h.hits.all { it in targets } shouldBe true
+            h.damageScales.map { it.first }.distinct() shouldBe listOf(0.65)
+        }
+    }
+
+    "secondary ember quit invalidates delayed meteor spawns" {
+        withStaffHarness(settings = staffSettings(range = 10.0)) { h ->
+            val world = h.paper.addSimpleWorld("staff-ember-secondary-quit")
+            val player = h.player("staff-ember-secondary-quit", world, StaffSpell.EMBER).apply { isSneaking = true }
+            h.controller.start()
+
+            h.controller.onInteract(interact(player, player.inventory.itemInMainHand))
+            h.controller.onQuit(PlayerQuitEvent(player, Component.empty()))
+            h.scheduler.tick(20)
+
+            h.visualPlays shouldBe emptyList()
+            h.hits shouldBe emptyList()
+            verify(exactly = 1) { h.effects.cancel(player.uniqueId) }
+        }
+    }
+
+    "secondary cooldowns use one and a half or two times the primary duration" {
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("staff-secondary-cooldown")
+            val quick = h.player("staff-secondary-quick", world, StaffSpell.FROST).apply { isSneaking = true }
+            h.controller.onInteract(interact(quick, quick.inventory.itemInMainHand))
+            quick.inventory.setItemInMainHand(h.config.item(StaffSpell.NOVA))
+            h.scheduler.tick(20)
+            h.controller.onInteract(interact(quick, quick.inventory.itemInMainHand))
+            h.captures.size shouldBe 1
+            h.scheduler.tick(10)
+            h.controller.onInteract(interact(quick, quick.inventory.itemInMainHand))
+            h.captures.size shouldBe 2
+
+            val long = h.player("staff-secondary-long", world, StaffSpell.MARK).apply { isSneaking = true }
+            h.controller.onInteract(interact(long, long.inventory.itemInMainHand))
+            long.inventory.setItemInMainHand(h.config.item(StaffSpell.CHAIN))
+            h.scheduler.tick(30)
+            h.controller.onInteract(interact(long, long.inventory.itemInMainHand))
+            h.captures.size shouldBe 3
+            h.scheduler.tick(10)
+            h.controller.onInteract(interact(long, long.inventory.itemInMainHand))
+            h.captures.size shouldBe 4
+        }
+    }
+
     "frost waves stop on caster quit, death, world change, and controller close" {
         withStaffHarness(settings = staffSettings(frostRange = 7.0, frostDegrees = 50.0)) { h ->
             h.controller.start()
@@ -430,8 +653,11 @@ class StaffSpellsTest : FreeSpec({
             val first = h.zombie(world, x = 0.5, z = 4.0)
             val second = h.zombie(world, x = 2.0, z = 5.0)
             val third = h.zombie(world, x = 4.0, z = 6.0)
+            h.controller.start()
 
             h.controller.cast(player)
+            h.hits shouldBe emptyList()
+            h.scheduler.tick(60)
 
             h.hits.map { it.uniqueId } shouldBe listOf(first.uniqueId, second.uniqueId, third.uniqueId)
             h.hits.map { it.uniqueId }.distinct().size shouldBe h.hits.size
@@ -444,6 +670,7 @@ class StaffSpellsTest : FreeSpec({
             cancelledTargets += cancelled.uniqueId
 
             h.controller.cast(cancelledPlayer)
+            h.scheduler.tick(60)
 
             h.hits.map { it.uniqueId } shouldBe listOf(cancelled.uniqueId)
         }
@@ -526,10 +753,14 @@ private data class StaffHarness(
     val controller: StaffSpellController,
     val effects: StaffSpellDisplayEffects,
     val movedEffects: MutableList<Pair<UUID, Location>>,
+    val trailMoves: MutableList<StaffTrailMove>,
+    val finishedTrails: MutableList<UUID?>,
+    val visualPlays: MutableList<StaffVisualPlay>,
     val removedEffects: MutableList<UUID?>,
     val captures: MutableList<Player>,
     val hits: MutableList<LivingEntity>,
     val hitLocations: MutableList<Location>,
+    val damageScales: MutableList<Pair<Double, Double>>,
 ) {
     fun player(name: String, world: World, spell: StaffSpell): Player = paper.addPlayer(name).apply {
         val spawn = Location(world, 0.5, 64.0, 0.5).apply { setDirection(Vector(0.0, 0.0, 1.0)) }
@@ -541,9 +772,20 @@ private data class StaffHarness(
         world.spawn(Location(world, x, 64.0, z), Zombie::class.java)
 }
 
+private data class StaffTrailMove(val id: UUID?, val points: List<Location>)
+
+private data class StaffVisualPlay(
+    val id: UUID,
+    val spell: StaffSpell,
+    val from: Location,
+    val to: Location,
+    val secondary: Boolean,
+)
+
 private fun withStaffHarness(
     settings: StaffSpellSettings = staffSettings(),
     hit: (Player, LivingEntity) -> Boolean = { _, _ -> true },
+    rayStep: Double = 0.1,
     config: StaffSpellConfig = StaffSpellConfig(TestConfig()),
     block: (StaffHarness) -> Unit,
 ) {
@@ -560,11 +802,15 @@ private fun withStaffHarness(
                 val direction = secondArg<Vector>().clone().normalize()
                 val distance = thirdArg<Double>()
                 val world = requireNotNull(start.world)
-                val steps = (distance / 0.1).toInt().coerceAtLeast(1)
+                val steps = (distance / rayStep).toInt().coerceAtLeast(1)
                 (1..steps).firstNotNullOfOrNull { step ->
                     val hitPosition = start.toVector().add(direction.clone().multiply(distance * step / steps))
                     val block = world.getBlockAt(hitPosition.blockX, hitPosition.blockY, hitPosition.blockZ)
-                    if (block.type.isAir) null else RayTraceResult(hitPosition, block, BlockFace.NORTH)
+                    if (block.type.isAir) null else BoundingBox(
+                        block.x.toDouble(), block.y.toDouble(), block.z.toDouble(),
+                        block.x + 1.0, block.y + 1.0, block.z + 1.0,
+                    ).rayTrace(start.toVector(), direction, distance)
+                        ?.let { hit -> RayTraceResult(hit.hitPosition, block, hit.hitBlockFace ?: BlockFace.NORTH) }
                 }
             }
             MockBukkitTestRuntime.open().use { paper ->
@@ -576,6 +822,7 @@ private fun withStaffHarness(
                     val captures = mutableListOf<Player>()
                     val hits = mutableListOf<LivingEntity>()
                     val hitLocations = mutableListOf<Location>()
+                    val damageScales = mutableListOf<Pair<Double, Double>>()
                     every { damage.eligible(any(), any()) } answers {
                         val target = secondArg<LivingEntity>()
                         target !is Player && target.isValid && !target.isDead && target.health > 0.0
@@ -590,19 +837,33 @@ private fun withStaffHarness(
                         val target = secondArg<LivingEntity>()
                         hits += target
                         hitLocations += target.location.clone()
+                        damageScales += arg<Double>(3) to arg<Double>(4)
                         hit(player, target)
                     }
                     val effects = mockk<StaffSpellDisplayEffects>(relaxed = true)
-                    every { effects.play(any(), any(), any(), any(), any(), any(), any()) } answers { UUID.randomUUID() }
+                    val visualPlays = mutableListOf<StaffVisualPlay>()
+                    every { effects.play(any(), any(), any(), any(), any(), any(), any(), any()) } answers {
+                        val id = UUID.randomUUID()
+                        visualPlays += StaffVisualPlay(id, arg<StaffSpell>(1), arg<Location>(2).clone(),
+                            arg<Location>(3).clone(), arg<Boolean>(7))
+                        id
+                    }
                     val movedEffects = mutableListOf<Pair<UUID, Location>>()
+                    val trailMoves = mutableListOf<StaffTrailMove>()
+                    val finishedTrails = mutableListOf<UUID?>()
                     val removedEffects = mutableListOf<UUID?>()
                     every { effects.move(any(), any()) } answers {
                         movedEffects += firstArg<UUID>() to secondArg<Location>().clone()
                     }
+                    every { effects.moveTrail(any(), any()) } answers {
+                        trailMoves += StaffTrailMove(arg<UUID?>(0), arg<List<Location>>(1).map { it.clone() })
+                    }
+                    every { effects.finishTrail(any()) } answers { finishedTrails += arg<UUID?>(0) }
                     every { effects.remove(any()) } answers { removedEffects += firstArg<UUID?>() }
                     val controller = StaffSpellController(config, settings, damage, effects)
                     val harness = StaffHarness(paper, scheduler, config, controller, effects,
-                        movedEffects, removedEffects, captures, hits, hitLocations)
+                        movedEffects, trailMoves, finishedTrails, visualPlays, removedEffects, captures, hits, hitLocations,
+                        damageScales)
                     try {
                         block(harness)
                     } finally {

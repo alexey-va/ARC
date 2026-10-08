@@ -53,6 +53,17 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         }
     }
 
+    /** Per-tick homing-bolt trail: at most eight particles and no delayed work or sound. */
+    fun lightningTrail(from: Location, to: Location) = dispatch {
+        val start = from.clone()
+        val end = to.clone()
+        val distance = segmentLength(start, end) ?: return@dispatch
+        val segments = (distance * 0.45).toInt().coerceIn(1, 7)
+        lineSamples(start, end, segments).forEachIndexed { i, point ->
+            emit(point, if (i % 3 == 1) Particle.END_ROD else Particle.ELECTRIC_SPARK)
+        }
+    }
+
     fun markLaunch(from: Location, to: Location) = dispatch {
         val start = from.clone()
         val end = to.clone()
@@ -83,13 +94,100 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         val reach = boundedRadius(radius, 0.5, 10.0) ?: return@dispatch
         localSound(origin, Sound.ENTITY_EVOKER_CAST_SPELL, 0.82f, 0.82f)
         val coreRadius = min(reach * 0.1, 0.3)
-        repeat(5) { i ->
-            val angle = i * PI * 2 / 5
-            emit(origin.clone().add(cos(angle) * coreRadius, 0.08, sin(angle) * coreRadius), Particle.DUST, VIOLET)
+        repeat(7) { i ->
+            val angle = i * PI * 2 / 7
+            emit(origin.clone().add(cos(angle) * coreRadius, 0.08, sin(angle) * coreRadius), Particle.DUST, VIOLET_BURST)
         }
-        emit(origin, Particle.REVERSE_PORTAL)
+        repeat(9) { i ->
+            val progress = i / 8.0
+            val height = -0.42 + progress * 0.9
+            val width = 0.035 + sin(progress * PI) * 0.09
+            emit(origin.clone().add(width * sin(progress * PI * 2), height, width * cos(progress * PI * 2)),
+                Particle.DUST, VIOLET_BURST)
+        }
+        emit(origin.clone().add(0.0, 0.12, 0.0), Particle.REVERSE_PORTAL)
+        tasks.runLater(1) {
+            repeat(5) { i ->
+                val angle = i * PI * 2 / 5 + 0.24
+                emit(origin.clone().add(cos(angle) * coreRadius * 1.8, 0.2, sin(angle) * coreRadius * 1.8),
+                    Particle.DUST, VIOLET_BURST)
+            }
+            emit(origin.clone().add(0.0, 0.24, 0.0), Particle.REVERSE_PORTAL)
+        }
         tasks.runLater(2) { markWispsFrame(origin, min(reach * 0.18, 1.0), 0) }
         tasks.runLater(5) { markWispsFrame(origin, min(reach * 0.3, 1.5), 1) }
+    }
+
+    /** A short floor-and-crest front, or a broad radial ring, over ticks 2 through 18. */
+    fun wave(origin: Location, end: Location, radius: Double, frost: Boolean, directional: Boolean) = dispatch {
+        val start = origin.clone()
+        val endpoint = end.clone()
+        if (!drawable(start) || endpoint.world !== start.world || !valid(endpoint)) return@dispatch
+
+        if (directional) {
+            val offset = endpoint.toVector().subtract(start.toVector()).apply { y = 0.0 }
+            val length = offset.length().takeIf { it.isFinite() && it in 0.5..96.0 } ?: return@dispatch
+            val width = boundedRadius(radius, 0.5, 5.5) ?: return@dispatch
+            val basis = frame(offset) ?: return@dispatch
+            val forward = offset.normalize()
+            val reach = min(length, 12.0)
+            repeat(9) { phase ->
+                tasks.runLater((2 + phase * 2).toLong()) {
+                    val front = start.clone().add(forward.clone().multiply(1.8 + (reach - 1.8) * phase / 8.0))
+                    val floorY = start.blockY + 0.06
+                    repeat(7) { i ->
+                        val side = (i - 3) / 3.0 * width * (1.8 + (reach - 1.8) * phase / 8.0) / reach
+                        val floor = front.clone().add(basis.first.clone().multiply(side)).apply { y = floorY }
+                        val crestHeight = if (frost) 0.34 else 1.0 + sin(PI * phase / 8.0) * 1.1
+                        val crest = floor.clone().add(0.0, crestHeight + (i % 2) * 0.08, 0.0)
+                        if (frost) {
+                            emit(floor, Particle.SNOWFLAKE)
+                            emit(crest, Particle.DUST_COLOR_TRANSITION, ICE_TO_AQUA)
+                        } else {
+                            emit(floor, Particle.DUST_COLOR_TRANSITION, GREEN_TO_AQUA)
+                            emit(crest, Particle.END_ROD)
+                        }
+                    }
+                }
+            }
+        } else {
+            val reach = boundedRadius(radius, 0.5, 8.0) ?: return@dispatch
+            repeat(9) { phase ->
+                tasks.runLater((2 + phase * 2).toLong()) {
+                    val ringRadius = 1.8 + (reach - 1.8) * phase / 8.0
+                    val floorY = start.blockY + 0.06
+                    repeat(12) { i ->
+                        val angle = i * PI * 2 / 12 + phase * 0.09
+                        val point = start.clone().add(cos(angle) * ringRadius, 0.0, sin(angle) * ringRadius)
+                            .apply { y = floorY }
+                        if (frost) emit(point, Particle.SNOWFLAKE)
+                        else emit(point, Particle.DUST_COLOR_TRANSITION, GREEN_TO_AQUA)
+                        if (i % 2 == 0) {
+                            val crest = point.clone().add(0.0, 0.34, 0.0)
+                            if (frost) emit(crest, Particle.END_ROD)
+                            else emit(crest, Particle.DUST_COLOR_TRANSITION, GREEN_TO_AQUA)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** Inward-moving dark wisps; the low cast cue is emitted only at the start of the charge. */
+    fun gravity(at: Location, radius: Double, progress: Double) = dispatch {
+        val origin = at.clone().add(0.0, 1.6, 0.0)
+        if (!drawable(origin)) return@dispatch
+        val reach = boundedRadius(radius, 0.5, 10.0) ?: return@dispatch
+        val charge = progress.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
+        if (charge <= 0.100001) localSound(origin, Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.2f, 0.55f)
+        val orbit = 0.12 + (reach - 0.12) * (1.0 - charge)
+        repeat(6) { i ->
+            val angle = i * PI / 3 + charge * PI * 2
+            val point = origin.clone().add(cos(angle) * orbit, 0.18 + (i % 3) * 0.18, sin(angle) * orbit)
+            emit(point, Particle.REVERSE_PORTAL)
+            if (i % 2 == 0) emit(point.clone().add(0.0, 0.08, 0.0), Particle.SMOKE)
+        }
+        emit(origin.clone().add(0.0, 0.16, 0.0), Particle.REVERSE_PORTAL)
     }
 
     fun frost(originFeet: Location, horizontalEnd: Location, halfAngleDegrees: Double,
@@ -158,22 +256,58 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         val origin = at.clone()
         val reach = boundedRadius(radius, 0.5, 10.0) ?: return@dispatch
         localSound(origin, Sound.ENTITY_GENERIC_EXPLODE, 0.72f, 1.05f)
-        val puffRadius = min(reach * 0.35, 1.35)
+        // Fixed phases cap the burst at 132 particle positions per impact.
+        emit(origin.clone().add(0.0, 0.6, 0.0), Particle.EXPLOSION)
         repeat(8) { i ->
             val angle = i * PI * 2 / 8
-            val height = when (i % 4) { 0 -> 0.08; 1 -> 0.32; 2 -> -0.08; else -> -0.32 }
-            emit(origin.clone().add(cos(angle) * puffRadius, height, sin(angle) * puffRadius), Particle.FLAME)
+            val point = origin.clone().add(cos(angle) * reach * 0.12, 0.08 + (i % 2) * 0.12, sin(angle) * reach * 0.12)
+            emit(point, Particle.FLAME)
+            if (i % 2 == 0) emit(point.clone().add(0.0, 0.12, 0.0), Particle.END_ROD)
         }
-        repeat(2) { i -> emit(origin.clone().add(0.0, i * 0.14, 0.0), Particle.SMOKE) }
+        emit(origin.clone().add(0.0, 0.12, 0.0), Particle.FLAME)
+        emit(origin.clone().add(0.0, 0.3, 0.0), Particle.END_ROD)
+        tasks.runLater(2) {
+            emit(origin.clone().add(0.0, 0.9, 0.0), Particle.EXPLOSION)
+            repeat(20) { i ->
+                val angle = i * PI * 2 / 20
+                val ring = reach * (0.25 + (i % 3) * 0.035)
+                emit(origin.clone().add(cos(angle) * ring, 0.06 + (i % 4) * 0.08, sin(angle) * ring), Particle.FLAME)
+            }
+        }
+        tasks.runLater(4) {
+            repeat(32) { i ->
+                val angle = i * PI * 2 / 32
+                emit(origin.clone().add(cos(angle) * reach * 0.88, 0.07, sin(angle) * reach * 0.88), Particle.DUST, GOLD)
+            }
+        }
+        tasks.runLater(7) {
+            repeat(24) { i ->
+                val angle = i * PI * 2 / 24
+                val ring = reach * (0.3 + (i % 4) * 0.15)
+                emit(origin.clone().add(cos(angle) * ring, 0.1 + (i % 4) * 0.15, sin(angle) * ring), Particle.FLAME)
+            }
+            repeat(8) { i ->
+                val angle = i * PI * 2 / 8
+                emit(origin.clone().add(cos(angle) * reach * 0.46, 0.48 + (i % 3) * 0.12, sin(angle) * reach * 0.46), Particle.SMOKE)
+            }
+        }
+        tasks.runLater(11) {
+            repeat(32) { i ->
+                val angle = i * PI * 2 / 32 + 0.08
+                val ring = reach * (0.45 + (i % 5) * 0.1)
+                val point = origin.clone().add(cos(angle) * ring, 0.24 + (i % 7) * 0.16, sin(angle) * ring)
+                if (i % 4 == 0) emit(point, Particle.DUST, GOLD_TAIL) else emit(point, Particle.FLAME)
+            }
+        }
     }
 
-    fun nova(at: Location, radius: Double) = dispatch {
+    fun nova(at: Location, radius: Double, secondary: Boolean = false) = dispatch {
         val origin = at.clone()
         val reach = boundedRadius(radius, 2.0, 10.0) ?: return@dispatch
         repeat(5) { phase ->
             tasks.runLater((2 + phase * 4).toLong()) {
                 if (phase == 0) localSound(origin, Sound.BLOCK_BEACON_ACTIVATE, 0.74f, 1.42f)
-                novaFrame(origin, reach, phase)
+                novaFrame(origin, reach, phase, secondary)
             }
         }
     }
@@ -216,8 +350,15 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
             val radial = forward.clone().multiply(cos(angle)).add(right.clone().multiply(sin(angle)))
             val point = origin.clone().add(radial.multiply(distance)).apply { y = floorY }
             emit(point, Particle.SNOWFLAKE)
-            if (i == 2) emit(point.clone().add(0.0, 0.035, 0.0), Particle.DUST_COLOR_TRANSITION, ICE_TO_AQUA)
+            if (i == 2) {
+                emit(point.clone().add(0.0, 0.035, 0.0), Particle.DUST_COLOR_TRANSITION, ICE_TO_AQUA)
+                repeat(2) { side ->
+                    val sign = if (side == 0) -1.0 else 1.0
+                    emit(point.clone().add(right.clone().multiply(sign * 0.2)).add(0.0, 0.12, 0.0), Particle.END_ROD)
+                }
+            }
             if (i == 1 || i == 3) emit(point.clone().add(0.0, 0.045, 0.0), Particle.BLOCK, ice)
+            if (i == 0 || i == 4) emit(point.clone().add(0.0, 0.1, 0.0), Particle.END_ROD)
         }
         if (phase > 1 && phase < steps && phase % 2 == 0) {
             val frost = origin.clone().add(forward.clone().multiply(distance * 0.72)).apply { y = floorY }
@@ -251,13 +392,20 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         }
     }
 
-    private fun novaFrame(at: Location, radius: Double, phase: Int) {
+    private fun novaFrame(at: Location, radius: Double, phase: Int, secondary: Boolean) {
         val reach = 1.8 + (radius - 1.8) * phase / 4.0
         val floorY = at.blockY + 0.06
         repeat(12) { i ->
             val angle = i * PI * 2 / 12
             val point = at.clone().add(cos(angle) * reach, 0.0, sin(angle) * reach).apply { y = floorY }
             emit(point, Particle.DUST_COLOR_TRANSITION, GREEN_TO_AQUA)
+            val crestAngle = angle + PI / 12
+            val crestHeight = 0.4 + sin(PI * phase / 4.0) * 0.7 + (i % 3) * 0.06
+            val crest = at.clone().add(cos(crestAngle) * reach * 0.92, 0.0,
+                sin(crestAngle) * reach * 0.92).apply { y = floorY + crestHeight }
+            emit(crest, Particle.CLOUD)
+            if (i % 2 == 0) emit(crest.clone().add(0.0, 0.14, 0.0), Particle.END_ROD)
+            if (secondary && i % 3 == 0) emit(crest, Particle.DUST_COLOR_TRANSITION, VIOLET_TO_AQUA)
         }
     }
 
@@ -310,8 +458,16 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
     private fun emit(at: Location, particle: Particle, data: Any? = null) {
         if (!drawable(at)) return
         val world = at.world ?: return
-        if (data == null) world.spawnParticle(particle, at, 1, 0.0, 0.0, 0.0, 0.0)
-        else world.spawnParticle(particle, at, 1, 0.0, 0.0, 0.0, 0.0, data)
+        val minEyeDistanceSquared = 3.2 * 3.2
+        val maxViewerDistanceSquared = 48.0 * 48.0
+        world.getNearbyPlayers(at, 48.0).forEach { player ->
+            val eye = player.eyeLocation
+            if (eye.world !== world) return@forEach
+            val distanceSquared = eye.distanceSquared(at)
+            if (distanceSquared < minEyeDistanceSquared || distanceSquared > maxViewerDistanceSquared) return@forEach
+            if (data == null) player.spawnParticle(particle, at, 1, 0.0, 0.0, 0.0, 0.0)
+            else player.spawnParticle(particle, at, 1, 0.0, 0.0, 0.0, 0.0, data)
+        }
     }
 
     private fun localSound(at: Location, sound: Sound, volume: Float, pitch: Float) {
@@ -324,6 +480,8 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
 
     private companion object {
         val VIOLET = Particle.DustOptions(Color.fromRGB(166, 74, 255), 1.15f)
+        val VIOLET_BURST = Particle.DustOptions(Color.fromRGB(207, 112, 255), 1.5f)
+        val VIOLET_TO_AQUA = Particle.DustTransition(Color.fromRGB(205, 90, 255), Color.fromRGB(70, 235, 255), 1.2f)
         val GOLD = Particle.DustOptions(Color.fromRGB(255, 193, 66), 1.3f)
         val GOLD_TAIL = Particle.DustOptions(Color.fromRGB(255, 222, 145), 0.75f)
         val ICE_TO_AQUA = Particle.DustTransition(Color.fromRGB(180, 230, 255), Color.fromRGB(90, 245, 255), 0.9f)

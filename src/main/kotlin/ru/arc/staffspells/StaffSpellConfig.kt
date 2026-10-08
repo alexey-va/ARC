@@ -3,6 +3,8 @@ package ru.arc.staffspells
 import dev.lone.itemsadder.api.CustomStack
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
+import java.util.Locale
 import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.Bukkit
 import org.bukkit.Material
@@ -54,14 +56,14 @@ internal data class StaffSpellSettings(
 /** Values are read again on ARC reload; the controller owns one validated settings generation. */
 internal open class StaffSpellConfig(private val config: Config) {
     open val settings get() = StaffSpellSettings(
-        number("targeting.range", 24.0, 2.0..32.0),
-        number("targeting.half-angle-degrees", 12.0, 1.0..30.0),
+        number("targeting.range", 48.0, 2.0..64.0),
+        number("targeting.half-angle-degrees", 20.0, 1.0..30.0),
         number("chain.radius", 6.0, 1.0..10.0),
         config.integer("chain.targets", 4).coerceIn(1, 8),
         number("chain.decay", 0.7, 0.1..1.0),
         config.integer("mark.delay-ticks", 18).coerceIn(4, 80),
         number("mark.radius", 3.5, 1.0..8.0),
-        number("frost.range", 7.0, 2.0..12.0),
+        number("frost.range", 10.0, 2.0..14.0),
         number("frost.half-angle-degrees", 50.0, 10.0..80.0),
         config.integer("frost.slow-ticks", 40).coerceIn(1, 100),
         config.integer("max-area-targets", 8).coerceIn(1, 16),
@@ -90,6 +92,18 @@ internal open class StaffSpellConfig(private val config: Config) {
 
     fun text(key: String) = config.component("messages.$key", TagResolver.empty()).decoration(TextDecoration.ITALIC, false)
 
+    fun cooldown(spell: StaffSpell, secondary: Boolean, remaining: Long, total: Long): Component {
+        val filled = staffCooldownSegments(remaining, total)
+        val resolvers = TagResolver.resolver(
+            Placeholder.component("ability", config.component("${spell.id}.${if (secondary) "secondary-name" else "name"}", TagResolver.empty())),
+            Placeholder.unparsed("filled", "▰".repeat(filled)),
+            Placeholder.unparsed("empty", "▱".repeat(10 - filled)),
+            Placeholder.unparsed("seconds", String.format(Locale.ROOT, "%.1f", remaining.coerceAtLeast(0) / 20.0)),
+            Placeholder.unparsed("input", if (secondary) "Shift + ПКМ" else "ПКМ"),
+        )
+        return config.component("messages.${if (remaining > 0) "cooldown-bar" else "ready-bar"}", resolvers)
+    }
+
     fun item(spell: StaffSpell) = ItemStack(Material.BLAZE_ROD).apply {
         val skinId = config.string("${spell.id}.skin", "").trim()
         if (skinId.isNotEmpty()) {
@@ -110,6 +124,7 @@ internal open class StaffSpellConfig(private val config: Config) {
             meta.lore(listOf(Component.empty(),
                 config.component("${spell.id}.description", TagResolver.empty()).decoration(TextDecoration.ITALIC, false),
                 config.component("${spell.id}.aim", TagResolver.empty()).decoration(TextDecoration.ITALIC, false),
+                Component.empty(), config.component("${spell.id}.secondary", TagResolver.empty()).decoration(TextDecoration.ITALIC, false),
                 text("prototype"), Component.empty(), text("use")))
             meta.persistentDataContainer.set(StaffSpell.itemKey, PersistentDataType.STRING, spell.id)
             meta.setMaxStackSize(1)
@@ -126,3 +141,6 @@ internal fun staffAimScore(dx: Double, dy: Double, dz: Double,
     val dot = (dx * lookX + dy * lookY + dz * lookZ) / kotlin.math.sqrt(distanceSquared)
     return dot.takeIf { it.isFinite() && it >= cos(Math.toRadians(halfAngle)) }
 }
+
+internal fun staffCooldownSegments(remaining: Long, total: Long): Int =
+    if (remaining <= 0) 10 else (((total.coerceAtLeast(1) - remaining).coerceAtLeast(0) * 10) / total.coerceAtLeast(1)).toInt().coerceIn(0, 9)

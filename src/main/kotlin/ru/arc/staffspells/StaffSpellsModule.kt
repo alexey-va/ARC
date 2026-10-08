@@ -1,6 +1,7 @@
 package ru.arc.staffspells
 
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
+import net.kyori.adventure.text.Component
 import org.bukkit.Bukkit
 import org.bukkit.FluidCollisionMode
 import org.bukkit.GameMode
@@ -80,16 +81,25 @@ internal class StaffSpellController(
     private val marks = mutableMapOf<UUID, PendingStaffMark>()
     private val embers = mutableListOf<PendingStaffEmber>()
     private val waves = mutableListOf<PendingStaffWave>()
+    private val bolts = mutableListOf<PendingStaffBolt>()
+    private val meteorCasts = mutableMapOf<UUID, UUID>()
+    private val cooldownLengths = mutableMapOf<UUID, Long>()
+    private val hudViewers = mutableSetOf<UUID>()
     private val cooldownId = "staff-spells"
 
     fun start() {
         tasks.runTimer(4, 4) {
             Bukkit.getOnlinePlayers().forEach { player ->
                 val spell = StaffSpell.from(player.inventory.itemInMainHand)
+                if (ready(player) && spell != null) {
+                    showCooldown(player, spell)
+                    hudViewers += player.uniqueId
+                } else if (hudViewers.remove(player.uniqueId)) player.sendActionBar(Component.empty())
                 if (ready(player) && spell in setOf(StaffSpell.CHAIN, StaffSpell.MARK)) {
                     listOfNotNull(target(player)).forEach { selected ->
-                        player.spawnParticle(Particle.END_ROD, center(selected).add(0.0, selected.height * 0.55, 0.0),
-                            2, 0.13, 0.05, 0.13, 0.0)
+                        val cue = center(selected).add(0.0, selected.height * 0.55, 0.0)
+                        if (cue.distanceSquared(player.eyeLocation) >= 3.2 * 3.2)
+                            player.spawnParticle(Particle.END_ROD, cue, 2, 0.13, 0.05, 0.13, 0.0)
                     }
                 }
             }
@@ -98,7 +108,7 @@ internal class StaffSpellController(
             tickMarks()
             tickWaves()
         }
-        tasks.runTimer(1, 1) { tickEmbers() }
+        tasks.runTimer(1, 1) { tickEmbers(); tickBolts() }
     }
 
     fun give(player: Player, spells: List<StaffSpell>): Boolean {
@@ -145,7 +155,7 @@ internal class StaffSpellController(
         val spell = StaffSpell.from(player.inventory.itemInMainHand) ?: return
         if (!ready(player)) return
         if (CooldownManager.isOnCooldown(player.uniqueId, cooldownId)) {
-            player.sendActionBar(config.text("cooldown"))
+            showCooldown(player, spell)
             return
         }
         val cast = damage.capture(player) ?: run {
@@ -153,8 +163,16 @@ internal class StaffSpellController(
             return
         }
         val tuning = settings.tuning.getValue(spell)
-        CooldownManager.addCooldown(player.uniqueId, cooldownId, tuning.cooldownTicks)
-        when (spell) {
+        val secondary = player.isSneaking
+        val cooldownTicks = when {
+            !secondary -> tuning.cooldownTicks
+            spell in setOf(StaffSpell.MARK, StaffSpell.EMBER) -> tuning.cooldownTicks * 2
+            else -> tuning.cooldownTicks * 3 / 2
+        }
+        cooldownLengths[player.uniqueId] = cooldownTicks
+        CooldownManager.addCooldown(player.uniqueId, cooldownId, cooldownTicks)
+        showCooldown(player, spell)
+        if (secondary) castSecondary(player, spell, cast, tuning) else when (spell) {
             StaffSpell.CHAIN -> chain(player, target(player), cast, tuning)
             StaffSpell.MARK -> {
                 val selected = target(player)
@@ -162,7 +180,7 @@ internal class StaffSpellController(
                 effects.remove(marks.remove(player.uniqueId)?.visualId)
                 val visualId = effects.play(player.uniqueId, spell, point, radius = 1.3, durationTicks = settings.markTicks)
                 marks[player.uniqueId] = PendingStaffMark(selected, point, player.world.uid, cast, tuning, settings.markTicks, visualId)
-                visuals.markLaunch(player.eyeLocation, point)
+                visuals.markLaunch(visualStart(player.eyeLocation, point), point)
             }
             StaffSpell.FROST -> frost(player, cast, tuning)
             StaffSpell.LANCE -> {
@@ -171,7 +189,7 @@ internal class StaffSpellController(
                 lineTargets(player, eye, end, settings.lanceWidth).take(settings.lanceTargets).forEach {
                     damage.hit(player, it, cast, tuning.power, tuning.vanillaDamage)
                 }
-                visuals.lance(eye, end)
+                visuals.lance(visualStart(eye, end), end)
                 effects.play(player.uniqueId, spell, eye, end, radius = 0.75, durationTicks = 20, impact = true)
             }
             StaffSpell.EMBER -> {
@@ -182,7 +200,7 @@ internal class StaffSpellController(
                 }
                 val eye = player.eyeLocation
                 val direction = eye.direction.normalize()
-                val muzzle = eye.clone().add(direction.clone().multiply(0.8))
+                val muzzle = eye.clone() // Camera exclusion belongs to the shared renderer; collision starts at the eye.
                 val visualId = effects.play(player.uniqueId, spell, muzzle,
                     muzzle.clone().add(direction), radius = 0.85,
                     durationTicks = kotlin.math.ceil(settings.range / settings.emberSpeed).toInt() + 4)
@@ -202,53 +220,179 @@ internal class StaffSpellController(
                     NOVA_TRAVEL_TICKS, NOVA_DURATION_TICKS, NOVA_INITIAL_FRONT_RADIUS)
             }
         }
-        tasks.runLater(tuning.cooldownTicks) {
+        tasks.runLater(cooldownTicks) {
             if (ready(player) && StaffSpell.from(player.inventory.itemInMainHand) != null)
                 player.playSound(player.location, Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.3f, 1.8f)
         }
     }
 
-    private fun chain(player: Player, first: LivingEntity?, cast: StaffSpellCast, tuning: StaffSpellTuning) {
-        if (first == null) {
-            val end = aimPoint(player)
-            chainVisual(player, player.eyeLocation, end, hop = 0, impact = false)
-            return
-        }
-        val visited = mutableSetOf<UUID>()
-        var current: LivingEntity? = first
-        var origin = player.eyeLocation
-        var scale = 1.0
-        var hop = 0
-        repeat(settings.chainTargets) {
-            val victim = current ?: return
-            val endpoint = center(victim)
-            visited += victim.uniqueId
-            chainVisual(player, origin, endpoint, hop++, impact = true)
-            if (!damage.hit(player, victim, cast, tuning.power * scale, tuning.vanillaDamage * scale)) return
-            origin = endpoint
-            current = nearby(player, endpoint, settings.chainRadius)
-                .filter { it.uniqueId !in visited }
-                .sortedBy { center(it).distanceSquared(endpoint) }
-                .firstOrNull { visible(endpoint, center(it)) && visible(player.eyeLocation, center(it)) }
-            scale *= settings.chainDecay
+    private fun showCooldown(player: Player, spell: StaffSpell) {
+        val remaining = CooldownManager.cooldown(player.uniqueId, cooldownId)
+        player.sendActionBar(config.cooldown(spell, player.isSneaking, remaining,
+            cooldownLengths[player.uniqueId] ?: settings.tuning.getValue(spell).cooldownTicks))
+    }
+
+    private fun visualStart(from: Location, to: Location): Location {
+        val delta = to.toVector().subtract(from.toVector())
+        val length = delta.length()
+        return if (length < 0.001) to.clone()
+        else from.clone().add(delta.multiply(min(3.2, length) / length))
+    }
+
+    private fun castSecondary(player: Player, spell: StaffSpell, cast: StaffSpellCast, tuning: StaffSpellTuning) {
+        when (spell) {
+            StaffSpell.CHAIN -> {
+                val targets = aimed(player, settings.range, 55.0).take(3)
+                val visited = mutableSetOf<UUID>()
+                repeat(3) { index ->
+                    val direction = player.eyeLocation.direction.rotateAroundY(Math.toRadians((index - 1) * 48.0))
+                    launchBolt(player, player.eyeLocation, direction, targets.getOrNull(index), cast,
+                        tuning, 0.75, 1, visited, settings.range * 1.6)
+                }
+            }
+            StaffSpell.MARK -> {
+                val at = target(player)?.let(::center) ?: aimPoint(player)
+                effects.remove(marks.remove(player.uniqueId)?.visualId)
+                val visualId = effects.play(player.uniqueId, spell, at, radius = 4.5,
+                    durationTicks = 40, secondary = true)
+                marks[player.uniqueId] = PendingStaffMark(null, at, player.world.uid,
+                    cast, tuning, 40, visualId, gravity = true)
+                visuals.markLaunch(visualStart(player.eyeLocation, at), at)
+            }
+            StaffSpell.FROST, StaffSpell.NOVA -> {
+                val origin = player.location.clone()
+                val forward = Vector(-sin(Math.toRadians(origin.yaw.toDouble())), 0.0,
+                    cos(Math.toRadians(origin.yaw.toDouble())))
+                val directional = spell == StaffSpell.NOVA
+                val range = if (directional) 12.0 else settings.novaRadius
+                val spread = if (directional) 5.5 / range else 0.0
+                val candidates = nearby(player, origin, range).filter {
+                    !directional || inFrostCone(origin, forward, center(it), range, spread)
+                }.sortedBy { horizontalDistance(origin, center(it)) }.take(MAX_WAVE_CANDIDATES)
+                val end = origin.clone().add(forward.clone().multiply(range))
+                val visualId = effects.play(player.uniqueId, spell, origin, end,
+                    radius = if (directional) 5.5 else range, durationTicks = NOVA_DURATION_TICKS,
+                    impact = true, secondary = true)
+                visuals.wave(origin, end, if (directional) 5.5 else range, spell == StaffSpell.FROST, directional)
+                waves += PendingStaffWave(player.uniqueId, player.world.uid, spell, origin, forward,
+                    range, candidates, cast, tuning, visualId, WAVE_START_DELAY_TICKS, NOVA_TRAVEL_TICKS,
+                    NOVA_DURATION_TICKS, NOVA_INITIAL_FRONT_RADIUS,
+                    slowTicks = if (spell == StaffSpell.FROST) settings.frostSlowTicks else null,
+                    frostSpread = spread, directional = directional)
+            }
+            StaffSpell.LANCE -> {
+                val eye = player.eyeLocation
+                val visited = mutableSetOf<UUID>()
+                for (angle in listOf(-16.0, 0.0, 16.0)) {
+                    val end = rayEnd(eye, eye.direction.rotateAroundY(Math.toRadians(angle)), settings.range)
+                    lineTargets(player, eye, end, settings.lanceWidth).forEach { victim ->
+                        if (visited.size < settings.lanceTargets && visited.add(victim.uniqueId))
+                            damage.hit(player, victim, cast, tuning.power * 0.65, tuning.vanillaDamage * 0.65)
+                    }
+                    visuals.lance(visualStart(eye, end), end)
+                    effects.play(player.uniqueId, spell, eye, end, radius = 0.9, durationTicks = 20,
+                        impact = true, secondary = true)
+                }
+            }
+            StaffSpell.EMBER -> meteorShower(player, cast, tuning)
         }
     }
 
-    private fun chainVisual(player: Player, from: Location, to: Location, hop: Int, impact: Boolean) {
-        val casterId = player.uniqueId
+    private fun meteorShower(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning) {
+        val selected = target(player)?.let(::center) ?: aimPoint(player)
+        val center = groundBelow(selected.clone().add(0.0, 0.2, 0.0), 16.0) ?: selected.clone()
         val worldId = player.world.uid
-        val start = from.clone()
-        val end = to.clone()
-        val show = {
-            val caster = Bukkit.getPlayer(casterId)
-            if (caster != null && ready(caster) && caster.world.uid == worldId) {
-                visuals.lightning(start, end)
-                effects.play(casterId, StaffSpell.CHAIN, start, end, radius = 0.65,
-                    durationTicks = CHAIN_VISUAL_DURATION_TICKS, impact = impact)
+        val hitTargets = mutableSetOf<UUID>()
+        meteorCasts[cast.casterId] = cast.attackId
+        repeat(3) { index ->
+            tasks.runLater((index * 6 + 1).toLong()) {
+                val caster = Bukkit.getPlayer(cast.casterId)
+                if (meteorCasts[cast.casterId] == cast.attackId && caster != null && ready(caster) && caster.world.uid == worldId &&
+                    visible(caster.eyeLocation, selected)) {
+                    val offset = center.clone().add((index - 1) * 2.0, 4.0, if (index == 1) 1.6 else -0.8)
+                    val impact = groundBelow(offset, 12.0) ?: offset.clone().subtract(0.0, 4.0, 0.0)
+                    // Trace upward from the destination: indoor casts start below the ceiling, never beyond it.
+                    val top = rayEnd(impact.clone().add(0.0, 0.15, 0.0), Vector(0.0, 1.0, 0.0), 12.0 + index)
+                    val travel = top.y - impact.y
+                    if (travel > 0.4 && top.world.isChunkLoaded(top.blockX shr 4, top.blockZ shr 4)) {
+                        val direction = Vector(0.0, -1.0, 0.0)
+                        val id = effects.play(cast.casterId, StaffSpell.EMBER, top, top.clone().add(direction),
+                            radius = 1.2, durationTicks = 24, secondary = true)
+                        while (embers.count { it.cast.casterId == cast.casterId } >= 8)
+                            embers.first { it.cast.casterId == cast.casterId }.let { effects.remove(it.visualId); embers.remove(it) }
+                        embers += PendingStaffEmber(top, direction, cast,
+                            tuning.copy(power = tuning.power * 0.65, vanillaDamage = tuning.vanillaDamage * 0.65),
+                            travel, id, top, speed = 1.6, radius = 3.5, hitTargets = hitTargets)
+                        visuals.emberTrail(top, top)
+                    }
+                }
+                if (index == 2 && meteorCasts[cast.casterId] == cast.attackId) meteorCasts.remove(cast.casterId)
             }
         }
-        val delay = hop * CHAIN_VISUAL_STEP_TICKS
-        if (delay == 0) show() else tasks.runLater(delay.toLong()) { show() }
+    }
+
+    private fun chain(player: Player, first: LivingEntity?, cast: StaffSpellCast, tuning: StaffSpellTuning) {
+        launchBolt(player, player.eyeLocation, player.eyeLocation.direction.clone().rotateAroundY(0.34),
+            first, cast, tuning, 1.0, settings.chainTargets, mutableSetOf(), settings.range * 1.6)
+    }
+
+    private fun launchBolt(player: Player, from: Location, direction: Vector, target: LivingEntity?,
+        cast: StaffSpellCast, tuning: StaffSpellTuning, scale: Double, jumps: Int,
+        visited: MutableSet<UUID>, distance: Double) {
+        while (bolts.count { it.cast.casterId == player.uniqueId } >= 8)
+            bolts.first { it.cast.casterId == player.uniqueId }.let { effects.remove(it.visualId); bolts.remove(it) }
+        val id = effects.play(player.uniqueId, StaffSpell.CHAIN, from, from.clone().add(direction.clone().multiply(2.5)),
+            radius = 0.8, durationTicks = 80)
+        bolts += PendingStaffBolt(from.clone(), direction.clone().normalize(), target, cast, tuning,
+            scale, jumps, visited, distance, id)
+    }
+
+    private fun tickBolts() {
+        bolts.toList().forEach { bolt ->
+            if (bolt !in bolts) return@forEach
+            val player = Bukkit.getPlayer(bolt.cast.casterId)
+            if (player == null || !ready(player) || player.world != bolt.position.world ||
+                bolt.target?.let { !damage.eligible(player, it) } == true) {
+                bolts.remove(bolt); effects.remove(bolt.visualId); return@forEach
+            }
+            val from = bolt.position
+            bolt.age++
+            val targetAt = bolt.target?.let(::center)
+            if (targetAt != null) {
+                val desired = targetAt.toVector().subtract(from.toVector())
+                steerStaffBolt(bolt.direction, desired, bolt.age)
+            }
+            val step = min(2.0, bolt.remainingDistance)
+            val blockEnd = rayEnd(from, bolt.direction, step)
+            val victim = lineTargets(player, from, blockEnd, 0.38).firstOrNull { it.uniqueId !in bolt.visited }
+            val hitPoint = victim?.boundingBox?.expand(0.38)
+                ?.rayTrace(from.toVector(), bolt.direction, from.distance(blockEnd))?.hitPosition?.toLocation(from.world)
+            val end = hitPoint ?: blockEnd
+            visuals.lightningTrail(from, end)
+            bolt.trail += end.clone()
+            if (bolt.trail.size > 17) bolt.trail.removeAt(0)
+            effects.moveTrail(bolt.visualId, bolt.trail)
+            bolt.remainingDistance -= step
+            if (victim != null || from.distanceSquared(blockEnd) < step * step - 0.0001 ||
+                bolt.remainingDistance <= 0.001 || bolt.age >= 60) {
+                bolts.remove(bolt)
+                effects.finishTrail(bolt.visualId)
+                if (victim != null && visible(player.eyeLocation, center(victim))) {
+                    bolt.visited += victim.uniqueId
+                    visuals.lightning(end, end.clone().add(0.0, 0.6, 0.0))
+                    if (damage.hit(player, victim, bolt.cast, bolt.tuning.power * bolt.scale,
+                            bolt.tuning.vanillaDamage * bolt.scale) && bolt.jumps > 1 && ready(player)) {
+                        val next = nearby(player, end, settings.chainRadius).filter { it.uniqueId !in bolt.visited }
+                            .sortedBy { center(it).distanceSquared(end) }
+                            .firstOrNull { visible(end, center(it)) && visible(player.eyeLocation, center(it)) }
+                        if (next != null) launchBolt(player, end,
+                            center(next).toVector().subtract(end.toVector()).normalize().rotateAroundY(-0.4),
+                            next, bolt.cast, bolt.tuning, bolt.scale * settings.chainDecay, bolt.jumps - 1,
+                            bolt.visited, settings.chainRadius * 2.0)
+                    }
+                }
+            } else bolt.position = end
+        }
     }
 
     private fun frost(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning) {
@@ -345,16 +489,19 @@ internal class StaffSpellController(
     }
 
     private fun intersectsFront(wave: PendingStaffWave, at: Location, previousFront: Double, front: Double): Boolean {
-        val distance = horizontalDistance(wave.origin, at)
-        if (wave.spell == StaffSpell.FROST &&
+        val distance = waveDistance(wave, at)
+        if (wave.directional &&
             !inFrostCone(wave.origin, wave.forward, at, wave.range, wave.frostSpread)) return false
         return distance + WAVE_BODY_TOLERANCE >= previousFront &&
             distance - WAVE_BODY_TOLERANCE <= front
     }
 
-    private fun waveDistance(wave: PendingStaffWave, at: Location) = horizontalDistance(wave.origin, at)
+    private fun waveDistance(wave: PendingStaffWave, at: Location) =
+        if (wave.spell == StaffSpell.NOVA && wave.directional) forwardDistance(wave.origin, wave.forward, at)
+        else horizontalDistance(wave.origin, at)
 
     private fun tickMarks() {
+        val pulses = mutableListOf<Pair<Player, PendingStaffMark>>()
         val due = mutableListOf<Pair<Player, PendingStaffMark>>()
         val iterator = marks.iterator()
         while (iterator.hasNext()) {
@@ -370,18 +517,41 @@ internal class StaffSpellController(
             }
             effects.move(mark.visualId, origin)
             mark.remainingTicks -= 2
+            if (mark.gravity && mark.remainingTicks > 0 && mark.remainingTicks % 4 == 0)
+                visuals.gravity(origin, 4.5, 1.0 - mark.remainingTicks / 40.0)
+            if (mark.gravity && mark.remainingTicks > 0 && mark.remainingTicks % 8 == 0) pulses += player to mark
             if (mark.remainingTicks <= 0) {
                 iterator.remove()
                 due += player to mark
             } else {
-                visuals.markCharge(origin, 1.0 - mark.remainingTicks.toDouble() / settings.markTicks)
+                if (!mark.gravity) visuals.markCharge(origin, 1.0 - mark.remainingTicks.toDouble() / settings.markTicks)
+            }
+        }
+        pulses.forEach { (player, mark) ->
+            val origin = mark.point
+            val candidates = nearby(player, origin, 4.5).sortedBy { center(it).distanceSquared(origin) }
+                .take(MAX_WAVE_CANDIDATES)
+            var attempts = 0
+            for (victim in candidates) {
+                if (marks[player.uniqueId] !== mark || !ready(player) || player.world.uid != mark.worldId) break
+                if (attempts >= settings.maxAreaTargets) break
+                if (!visible(origin, center(victim)) || !visible(player.eyeLocation, center(victim))) continue
+                attempts++
+                if (damage.hit(player, victim, mark.cast, mark.tuning.power * 0.12, mark.tuning.vanillaDamage * 0.12) &&
+                    marks[player.uniqueId] === mark && damage.eligible(player, victim)) {
+                    val pull = origin.toVector().subtract(center(victim).toVector())
+                    if (pull.lengthSquared() > 0.04) victim.velocity = pull.normalize().multiply(0.48).apply { y = y.coerceIn(-0.15, 0.18) }
+                }
             }
         }
         due.forEach { (player, mark) ->
             val origin = mark.target?.let(::center) ?: mark.point
-            areaDamage(player, origin, settings.markRadius, mark.cast, mark.tuning, mark.target)
-            visuals.markBurst(origin, settings.markRadius)
-            effects.impact(mark.visualId, origin, settings.markRadius, MARK_IMPACT_DURATION_TICKS)
+            val tuning = if (mark.gravity) mark.tuning.copy(power = mark.tuning.power * 0.65,
+                vanillaDamage = mark.tuning.vanillaDamage * 0.65) else mark.tuning
+            val radius = if (mark.gravity) 4.5 else settings.markRadius
+            areaDamage(player, origin, radius, mark.cast, tuning, mark.target)
+            visuals.markBurst(origin, radius)
+            effects.impact(mark.visualId, origin, radius, MARK_IMPACT_DURATION_TICKS)
         }
     }
 
@@ -397,7 +567,7 @@ internal class StaffSpellController(
                 continue
             }
             val from = ember.position
-            val distance = min(ember.remainingDistance, settings.emberSpeed)
+            val distance = min(ember.remainingDistance, ember.speed ?: settings.emberSpeed)
             val blockEnd = rayEnd(from, ember.direction, distance)
             val victim = lineTargets(player, from, blockEnd, 0.25).firstOrNull()
             val collision = victim?.boundingBox?.expand(0.25)
@@ -416,20 +586,22 @@ internal class StaffSpellController(
         }
         // Damage events can themselves trigger quit/teleport cleanup; no active list iterator here.
         impacts.forEach { (player, ember, impact) ->
-            areaDamage(player, impact.first, settings.emberRadius, ember.cast, ember.tuning, impact.second)
-            visuals.emberBurst(impact.first, settings.emberRadius)
-            effects.impact(ember.visualId, impact.first, settings.emberRadius, EMBER_IMPACT_DURATION_TICKS)
+            val radius = ember.radius ?: settings.emberRadius
+            areaDamage(player, impact.first, radius, ember.cast, ember.tuning, impact.second, ember.hitTargets)
+            visuals.emberBurst(impact.first, radius)
+            effects.impact(ember.visualId, impact.first, radius, EMBER_IMPACT_DURATION_TICKS)
         }
     }
 
     private fun areaDamage(player: Player, origin: Location, radius: Double, cast: StaffSpellCast,
-        tuning: StaffSpellTuning, primary: LivingEntity? = null) {
+        tuning: StaffSpellTuning, primary: LivingEntity? = null, hitTargets: MutableSet<UUID>? = null) {
         if (!visible(player.eyeLocation, origin)) return
         (listOfNotNull(primary) + nearby(player, origin, radius).sortedBy { center(it).distanceSquared(origin) })
             .distinctBy { it.uniqueId }
             .filter { visible(origin, center(it)) && visible(player.eyeLocation, center(it)) }
-            .take(settings.maxAreaTargets)
-            .forEach { damage.hit(player, it, cast, tuning.power, tuning.vanillaDamage) }
+            .filter { hitTargets == null || it.uniqueId !in hitTargets }
+            .take((settings.maxAreaTargets - (hitTargets?.size ?: 0)).coerceAtLeast(0))
+            .forEach { hitTargets?.add(it.uniqueId); damage.hit(player, it, cast, tuning.power, tuning.vanillaDamage) }
     }
 
     /** Exact swept collision along the cast line, never soft acquisition. */
@@ -448,6 +620,12 @@ internal class StaffSpellController(
     }
 
     private fun aimPoint(player: Player) = rayEnd(player.eyeLocation, player.eyeLocation.direction, settings.range)
+
+    private fun groundBelow(from: Location, range: Double): Location? {
+        val hit = from.world.rayTraceBlocks(from, Vector(0.0, -1.0, 0.0), range, FluidCollisionMode.NEVER, true)
+            ?: return null
+        return hit.hitPosition.toLocation(from.world).add(0.0, 0.04, 0.0)
+    }
 
     private fun rayEnd(from: Location, direction: Vector, range: Double): Location {
         val hit = from.world.rayTraceBlocks(from, direction, range, FluidCollisionMode.NEVER, true)
@@ -483,6 +661,10 @@ internal class StaffSpellController(
         marks.remove(playerId)
         embers.removeAll { it.cast.casterId == playerId }
         waves.removeAll { it.casterId == playerId }
+        bolts.removeAll { it.cast.casterId == playerId }
+        meteorCasts.remove(playerId)
+        cooldownLengths.remove(playerId)
+        hudViewers.remove(playerId)
         effects.cancel(playerId)
     }
 
@@ -495,6 +677,11 @@ internal class StaffSpellController(
         marks.clear()
         embers.clear()
         waves.clear()
+        bolts.clear()
+        meteorCasts.clear()
+        cooldownLengths.clear()
+        hudViewers.forEach { Bukkit.getPlayer(it)?.sendActionBar(Component.empty()) }
+        hudViewers.clear()
         effects.close()
     }
 
@@ -508,8 +695,6 @@ internal class StaffSpellController(
         const val NOVA_INITIAL_FRONT_RADIUS = 1.8
         const val NOVA_TRAVEL_TICKS = 16
         const val NOVA_DURATION_TICKS = 30
-        const val CHAIN_VISUAL_STEP_TICKS = 2
-        const val CHAIN_VISUAL_DURATION_TICKS = 18
         const val MARK_IMPACT_DURATION_TICKS = 20
         const val EMBER_IMPACT_DURATION_TICKS = 20
     }
@@ -517,11 +702,17 @@ internal class StaffSpellController(
 }
 
 private data class PendingStaffMark(val target: LivingEntity?, val point: Location, val worldId: UUID,
-    val cast: StaffSpellCast, val tuning: StaffSpellTuning, var remainingTicks: Int, val visualId: UUID?)
+    val cast: StaffSpellCast, val tuning: StaffSpellTuning, var remainingTicks: Int, val visualId: UUID?, val gravity: Boolean = false)
 
 private data class PendingStaffEmber(var position: Location, val direction: Vector,
     val cast: StaffSpellCast, val tuning: StaffSpellTuning, var remainingDistance: Double, val visualId: UUID?,
-    var visualPosition: Location)
+    var visualPosition: Location, val speed: Double? = null, val radius: Double? = null,
+    val hitTargets: MutableSet<UUID>? = null)
+
+private data class PendingStaffBolt(var position: Location, val direction: Vector, val target: LivingEntity?,
+    val cast: StaffSpellCast, val tuning: StaffSpellTuning, val scale: Double, val jumps: Int,
+    val visited: MutableSet<UUID>, var remainingDistance: Double, val visualId: UUID?, var age: Int = 0,
+    val trail: MutableList<Location> = mutableListOf(position.clone()))
 
 private class PendingStaffWave(
     val casterId: UUID,
@@ -540,6 +731,7 @@ private class PendingStaffWave(
     val initialFront: Double = 0.0,
     val slowTicks: Int? = null,
     val frostSpread: Double = 0.0,
+    val directional: Boolean = spell == StaffSpell.FROST,
 ) {
     val attemptedTargets = mutableSetOf<UUID>()
     var elapsedTicks = 0
@@ -548,7 +740,7 @@ private class PendingStaffWave(
     fun frontAt(ageTicks: Int): Double {
         if (ageTicks < startDelayTicks) return 0.0
         val expansion = staffWaveFront(ageTicks, range, travelTicks)
-        return if (spell == StaffSpell.NOVA) initialFront + staffWaveFront(ageTicks,
+        return if (initialFront > 0.0) initialFront + staffWaveFront(ageTicks,
             (range - initialFront).coerceAtLeast(0.0), travelTicks) else expansion
     }
 }
@@ -561,6 +753,13 @@ private data class PendingStaffWaveHit(
 )
 
 internal fun center(entity: LivingEntity) = entity.location.add(0.0, entity.height * 0.5, 0.0)
+
+/** Shared by live pursuit and the offline flight fixture; changes only the supplied heading. */
+internal fun steerStaffBolt(direction: Vector, offset: Vector, age: Int) {
+    if (offset.lengthSquared() <= 0.000001) return
+    val turn = if (offset.lengthSquared() < 36.0) 0.72 else if (age < 4) 0.10 else 0.42
+    direction.multiply(1.0 - turn).add(offset.clone().normalize().multiply(turn)).normalize()
+}
 
 internal fun visible(from: Location, to: Location): Boolean {
     if (from.world != to.world) return false

@@ -21,14 +21,18 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         val casterId: UUID,
         val spell: StaffSpell,
         var origin: Location,
-        val rotation: Quaternionf,
-        val length: Double,
+        var rotation: Quaternionf,
+        var length: Double,
         var radius: Double,
         var duration: Int,
         var impact: Boolean,
+        val secondary: Boolean,
         var age: Int = 0,
         var transitionFrom: List<StaffDisplayPart>? = null,
         var renderedParts: List<StaffDisplayPart> = emptyList(),
+        var trail: List<Vector3f>? = null,
+        var bounds: List<Pair<org.bukkit.util.Vector, Double>> = emptyList(),
+        var previousBounds: List<Pair<org.bukkit.util.Vector, Double>> = emptyList(),
         val handles: MutableList<PacketBlockDisplay> = mutableListOf(),
         val viewers: MutableMap<UUID, Player> = mutableMapOf(),
     )
@@ -38,10 +42,13 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
     private val blocks = mutableMapOf<Material, BlockData>()
     private var closed = false
 
-    init { tasks.runTimer(FRAME_TICKS.toLong(), FRAME_TICKS.toLong(), ::tick) }
+    private var visibilityTick = 0
+    init { tasks.runTimer(1, 1) {
+        if (++visibilityTick % FRAME_TICKS == 0) tick() else if (scenes.isNotEmpty()) refreshAudience()
+    } }
 
     fun play(casterId: UUID, spell: StaffSpell, from: Location, to: Location = from,
-        radius: Double = 1.0, durationTicks: Int = 16, impact: Boolean = false): UUID? {
+        radius: Double = 1.0, durationTicks: Int = 16, impact: Boolean = false, secondary: Boolean = false): UUID? {
         check(Bukkit.isPrimaryThread())
         if (closed || !valid(from) || !valid(to) || from.world != to.world) return null
         val caster = Bukkit.getPlayer(casterId) ?: return null
@@ -54,13 +61,13 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         val length = offset.length()
         val rotation = if (spell == StaffSpell.MARK)
             Quaternionf().rotationY(kotlin.math.atan2(caster.location.x - from.x, caster.location.z - from.z).toFloat())
-        else if (length > 0.001 && spell != StaffSpell.NOVA)
+        else if (length > 0.001 && (spell != StaffSpell.NOVA || secondary))
             Quaternionf().rotationTo(Vector3f(0f, 0f, 1f), Vector3f(offset.x.toFloat(), offset.y.toFloat(), offset.z.toFloat()).normalize())
         else Quaternionf()
         val scene = Scene(UUID.randomUUID(), casterId, spell, from.clone(), rotation,
-            if (spell == StaffSpell.NOVA) 4.0 else length.coerceAtLeast(0.1),
+            length.coerceAtLeast(0.1),
             radius.takeIf(Double::isFinite)?.coerceIn(0.1, if (spell == StaffSpell.FROST) 96.0 else 16.0) ?: 1.0,
-            durationTicks.coerceIn(1, 160), impact)
+            durationTicks.coerceIn(1, 160), impact, secondary)
         scenes[scene.id] = scene
         render(scene)
         refreshAudience()
@@ -73,11 +80,37 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         scene.origin = at.clone()
     }
 
+    fun moveTrail(sceneId: UUID?, points: List<Location>) {
+        val scene = scenes[sceneId] ?: return
+        if (points.size < 2 || points.any { !valid(it) || it.world != scene.origin.world }) return
+        scene.origin = points.first().clone()
+        scene.rotation = Quaternionf()
+        scene.trail = points.takeLast(17).map { at ->
+            val delta = at.toVector().subtract(scene.origin.toVector())
+            Vector3f(delta.x.toFloat(), delta.y.toFloat(), delta.z.toFloat())
+        }
+    }
+
+    fun finishTrail(sceneId: UUID?) {
+        val scene = scenes[sceneId] ?: return
+        scene.impact = true
+        scene.age = 0
+        scene.duration = 8
+    }
+
     /** Charge/flight becomes its own release; retain the physical pieces and packet IDs. */
     fun impact(sceneId: UUID?, at: Location, radius: Double, durationTicks: Int) {
         val scene = scenes[sceneId] ?: return
         if (!valid(at) || at.world != scene.origin.world) { remove(sceneId); return }
-        scene.transitionFrom = scene.renderedParts
+        scene.transitionFrom = if (scene.spell == StaffSpell.EMBER) {
+            val delta = scene.origin.toVector().subtract(at.toVector())
+            val priorRotation = Quaternionf(scene.rotation)
+            scene.rotation = Quaternionf() // Meteor and horizontal comet impacts both expand over the world ground plane.
+            scene.renderedParts.map { part -> part.copy(
+                center = priorRotation.transform(Vector3f(part.center)).add(delta.x.toFloat(), delta.y.toFloat(), delta.z.toFloat()),
+                rotation = Quaternionf(priorRotation).mul(part.rotation),
+            ) }
+        } else scene.renderedParts
         scene.origin = at.clone()
         scene.radius = radius.takeIf(Double::isFinite)?.coerceIn(0.1, 16.0) ?: 1.0
         scene.duration = durationTicks.coerceIn(8, 160)
@@ -107,12 +140,20 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
     }
 
     private fun render(scene: Scene) {
-        var parts = staffDisplayParts(scene.spell, scene.age, scene.duration, scene.length, scene.radius, scene.impact).take(MAX_PARTS)
+        var parts = (scene.trail?.let { path -> staffLightningTrailParts(path,
+            if (scene.impact) (1.0 - scene.age / 8.0).coerceAtLeast(0.0) else 1.0) }
+            ?: staffDisplayParts(scene.spell, scene.age, scene.duration, scene.length, scene.radius, scene.impact, scene.secondary)).take(MAX_PARTS)
         scene.transitionFrom?.let { previous ->
             parts = blendStaffParts(parts, previous, scene.age)
             if (scene.age >= 4) scene.transitionFrom = null
         }
         scene.renderedParts = parts
+        scene.previousBounds = scene.bounds
+        scene.bounds = parts.map { part ->
+            val point = scene.rotation.transform(Vector3f(part.center))
+            scene.origin.toVector().add(org.bukkit.util.Vector(point.x.toDouble(), point.y.toDouble(), point.z.toDouble())) to
+                part.scale.length() * 0.5
+        }
         while (scene.handles.size > parts.size) scene.handles.removeLast().remove()
         parts.forEachIndexed { index, part ->
             val center = scene.rotation.transform(Vector3f(part.center))
@@ -127,7 +168,6 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
                 it.interpolationDuration = FRAME_TICKS
                 it.teleportDuration = FRAME_TICKS
                 it.shadowStrength = 0f
-                scene.viewers.values.forEach(it::showTo)
                 scene.handles += it
             }
             if (handle.blockData.material != part.material)
@@ -146,7 +186,9 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         online.values.forEach { player ->
             val eye = player.eyeLocation
             scenes.values.asSequence().filter { it.origin.world == eye.world }
-                .map { it to it.origin.distanceSquared(eye) }.filter { it.second <= VIEW_RANGE * VIEW_RANGE }
+                .map { scene -> scene to (scene.bounds.minOfOrNull { (at, radius) ->
+                    (at.distance(eye.toVector()) - radius).coerceAtLeast(0.0)
+                } ?: scene.origin.distance(eye)) }.filter { it.second <= VIEW_RANGE }
                 .sortedWith(compareBy<Pair<Scene, Double>> { it.first.casterId != player.uniqueId }.thenBy { it.second })
                 .take(MAX_PER_VIEWER).forEach { (scene, _) -> selected.getOrPut(scene.id, ::mutableSetOf).add(player.uniqueId) }
         }
@@ -154,7 +196,18 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
             val audience = selected[scene.id].orEmpty()
             // Clear explicit visibility even for an offline viewer; core handles its connection teardown.
             (scene.viewers.keys - audience).forEach { id -> scene.viewers[id]?.let { player -> scene.handles.forEach { it.hideFrom(player) } } }
-            (audience - scene.viewers.keys).forEach { id -> online[id]?.let { player -> scene.handles.forEach { it.showTo(player) } } }
+            audience.forEach { id -> online[id]?.let { player ->
+                scene.handles.forEachIndexed { index, handle ->
+                    val bound = scene.bounds.getOrNull(index)
+                    val previous = scene.previousBounds.getOrNull(index) ?: bound
+                    val eye = player.eyeLocation.toVector()
+                    val padding = 3.2 + player.velocity.length() * FRAME_TICKS + 0.35
+                    if (bound != null && previous != null &&
+                        staffSweptDistance(eye, previous.first, bound.first) >= padding + maxOf(bound.second, previous.second))
+                        handle.showTo(player)
+                    else handle.hideFrom(player)
+                }
+            } }
             scene.viewers.clear()
             audience.forEach { id -> online[id]?.let { scene.viewers[id] = it } }
         }
@@ -178,6 +231,22 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         const val MAX_PER_CASTER = 4
         const val MAX_PER_VIEWER = 4
         const val MAX_PARTS = 48
-        const val VIEW_RANGE = 32.0
+        const val VIEW_RANGE = 64.0
     }
+}
+
+/** Conservative sphere includes the entire transformed cuboid, not only its anchor. */
+internal fun staffPartClearOfEye(part: StaffDisplayPart, origin: Location, rotation: Quaternionf, eye: Location): Boolean {
+    if (origin.world != eye.world) return false
+    val center = rotation.transform(Vector3f(part.center))
+    val distance = eye.toVector().distance(origin.toVector().add(org.bukkit.util.Vector(
+        center.x.toDouble(), center.y.toDouble(), center.z.toDouble())))
+    return distance >= 3.2 + part.scale.length() * 0.5
+}
+
+internal fun staffSweptDistance(eye: org.bukkit.util.Vector, from: org.bukkit.util.Vector, to: org.bukkit.util.Vector): Double {
+    val delta = to.clone().subtract(from)
+    val t = if (delta.lengthSquared() < 0.000001) 0.0 else
+        eye.clone().subtract(from).dot(delta).div(delta.lengthSquared()).coerceIn(0.0, 1.0)
+    return eye.distance(from.clone().add(delta.multiply(t)))
 }

@@ -7,9 +7,9 @@ The entire selected set must fit in free inventory slots before anything is give
 There are no loot-table or shop changes. Anyone holding an issued sample can use it.
 
 - **Грозовая ветвь / chain:** the Divine Staff (`3dfantasyweaponscit:divine_staff`)
-  launches instant lightning that jumps through up to four distinct targets joined
-  by visible links. Each jump keeps its existing reduced damage; sonic accents and
-  staggered branches are visual only.
+  launches a seeking lightning projectile that curves toward the moving target,
+  then jumps through up to four distinct targets. Damage occurs on contact and
+  each jump keeps its reduced damage. Every movement segment checks walls and mobs.
 - **Разрыв / mark:** the Night Staff (`3dfantasyweaponscit:night_staff`) places a
   short-lived mark that follows the acquired mob, then detonates at its current
   position and damages nearby visible mobs. With no target it forms at the aimed
@@ -33,12 +33,13 @@ There are no loot-table or shop changes. Anyone holding an issued sample can use
   (`3dfantasyweaponscit:holy_celtic_staff`) sends one expanding ground ring from the
   caster's feet to an eight-block radius. The front starts after two ticks and
   reaches full range sixteen ticks later; eligible, visible mobs are hit once as
-  the front passes, up to the unchanged area-target limit. Its low annular display
+  the front passes, up to the unchanged area-target limit. Its annular display
   remains centered on the caster; it does not add repeated damage or pull mobs.
 
 Use the main-hand right click, including a direct click on an entity. Look near a
 mob for chain/mark; small particles over its head preview their selected target.
-The other four spells do not acquire a soft-lock target. Every spell can fire into
+The other primary attacks retain manual aiming; the meteor shower can select a
+visible target as its landing point. Every spell can fire into
 empty space and consumes its cooldown on a miss. All samples share
 one caster cooldown, so swapping sample items cannot bypass it. Walls block initial
 acquisition, every chain link, and blast damage. Players, NPCs, armor stands and
@@ -48,6 +49,43 @@ or shutdown. Acquired marks also cancel on an invalid/distant target. Flight has
 a fixed maximum range and at most eight orbs per caster; visual bursts are short
 and use client-only block displays, sparse particles and local sounds. Each cast captures combat facts, so
 changing the held item cannot change a delayed hit's level or critical roll.
+
+## Shift abilities and cooldown display
+
+Hold Shift and right-click with the same existing prototype item. The input is
+captured at cast time, so releasing Shift during flight does not change an attack.
+The 48-block targeting/beam/projectile range replaces 24; Frost's primary ground
+cone reaches 10 blocks instead of 7. The ordinary Nova radius remains 8.
+
+| Staff | Shift + right-click | Shared cooldown | Damage relative to the primary |
+| --- | --- | --- | --- |
+| Chain | Three seeking bolts start in different directions and curve into separate targets within a 55-degree cone; no further jumps | 1.5× | 0.75× per bolt; shared unique victims |
+| Mark | A fixed black hole pulls attackable mobs, then collapses after 40 ticks | 2× | Four 0.12× pulses plus 0.65× collapse; each pulse uses normal damage/protection checks before velocity |
+| Frost | An expanding circular ice front around the caster | 1.5× | One hit and slow per target, same area-target cap |
+| Lance | Three piercing rays at −16°, 0°, +16° | 1.5× | 0.65×, deduplicated across rays and same total piercing-target cap |
+| Ember | Three staggered meteors descend above the aimed point | 2× | 0.65× once per unique target across the shower, same total area cap |
+| Nova | A forward emerald crest travels 12 blocks with a widening fan | 1.5× | One hit per target, same area-target cap |
+
+The action bar shows the selected ability, ten filling segments and remaining
+seconds; readiness also shows the input. It reads the same cooldown used by the
+cast gate and survives item/mode swaps without granting another attack. It clears
+when the staff is put away. Previously issued PDC-marked items immediately gain
+the new actions and HUD; their old stored lore is not rewritten automatically.
+Newly issued samples describe the secondary ability.
+
+Meteor origins trace upward from the destination and stay below an indoor
+ceiling. Each strike reads its own ground height; with no ground in the bounded
+trace, it retains the explicitly aimed height for an aerial detonation. All delayed launches, projectiles, marks and waves cancel on quit, death,
+world change and reload. No blocks, weather, fire or native projectile entities
+are created. A black-hole pull only follows a successful attributed damage event;
+players, protected mobs, pets, NPCs and ineligible elite targets are excluded by
+the existing bridge. Velocity uses Paper's [meters-per-tick API](https://jd.papermc.io/paper/26.1.2/org/bukkit/entity/Entity.html#setVelocity(org.bukkit.util.Vector)).
+
+Both display parts (including their full bounding sphere) and individual particle
+emissions are excluded within 3.2 blocks of each viewer's eye. Display visibility also
+checks the swept interpolation segment every tick, with movement padding. This rule
+also covers close impacts, crouching and spectators; collision still starts at
+the real eye, so the clearance does not let a shot skip a nearby wall or mob.
 
 ## Ownership and damage contract
 
@@ -92,7 +130,7 @@ Bukkit damage remain usable without loading the optional integration classes.
 
 The six source-driven silhouettes are branching lightning, a redesigned violet
 mark, a floor-hugging ice front, a growing golden spear and ray with a tail, a
-steady fire core with an outward burst, and a low expanding turquoise ring. The
+steady fire core with a hot three-dimensional fireburst, and an expanding emerald crest with a trailing wave. The
 mark and orb follow their existing combat positions; lance damage stays immediate.
 Casting into empty space also produces the display effect.
 
@@ -103,8 +141,8 @@ Core filters received chunks, player worlds, range and connections and coalesces
 updates through the shared packet budget. Every piece has its own real world anchor
 so culling also works for beams crossing chunk boundaries.
 
-Hard bounds are 48 pieces per scene (NOVA uses 48, FROST 40; the other spells use at most 32), four scenes per caster, twelve scenes globally,
-and four scenes per viewer within 32 blocks (at most 192 handles eligible for one
+Hard bounds are 48 pieces per scene, four scenes per caster, twelve scenes globally,
+and four scenes per viewer within 64 blocks (at most 192 handles eligible for one
 viewer). A viewer's own casts are selected first, then nearby casts. The oldest
 visual scene is evicted when a pool fills; damage and projectile collision continue
 independently. Shapes update every two ticks with two-tick client interpolation.
