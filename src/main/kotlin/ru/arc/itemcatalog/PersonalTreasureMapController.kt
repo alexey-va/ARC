@@ -4,6 +4,7 @@ import net.kyori.adventure.text.Component
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.Material
+import org.bukkit.Tag
 import org.bukkit.entity.Display
 import org.bukkit.entity.ItemDisplay
 import org.bukkit.entity.Player
@@ -28,6 +29,7 @@ import ru.arc.ARC
 import ru.arc.core.ScheduledTask
 import ru.arc.core.TaskScheduler
 import ru.arc.core.Tasks
+import ru.arc.hooks.HookRegistry
 import ru.arc.onetime.OneTimeUseFingerprint
 import ru.arc.paper.display.PacketItemDisplay
 import ru.arc.paper.display.PaperPacketDisplays
@@ -43,6 +45,7 @@ import kotlin.math.atan2
 import kotlin.math.floor
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
+import kotlin.random.Random
 
 internal data class PersonalTreasureMapRenderState(
     val ownerId: UUID,
@@ -61,20 +64,35 @@ class PersonalTreasureMapController internal constructor(
     private val scheduler: TaskScheduler = Tasks.scheduler,
     private val marker: PersonalTreasureMapMarker = PacketPersonalTreasureMapMarker(plugin),
     private val mapViewFactory: (org.bukkit.World) -> MapView = Bukkit::createMap,
+    private val isUnclaimed: (Location) -> Boolean? = { location ->
+        val manager = plugin.server.pluginManager
+        if (!manager.isPluginEnabled("Lands") || !manager.isPluginEnabled("WorldGuard")) {
+            null
+        } else {
+            val landsClear = HookRegistry.landsHook?.isUnclaimed(location)
+            val worldGuardClear = HookRegistry.wgHook?.isUnclaimed(location)
+            when {
+                landsClear == false || worldGuardClear == false -> false
+                landsClear == true && worldGuardClear == true -> true
+                else -> null
+            }
+        }
+    },
 ) : Listener, AutoCloseable {
+    private data class MapViewKey(val server: String, val worldId: UUID)
+
     private data class ResolvedMap(
         val voucher: PhysicalRewardVoucherIdentity,
         val identity: PersonalTreasureMapIdentity,
         val spec: PhysicalRewardSpec,
         val definition: PersonalTreasureMapDefinition,
-        val destination: PersonalTreasureMapDestination,
+        val destination: PersonalTreasureMapDestination?,
     )
 
     private val renderStates = ConcurrentHashMap<UUID, PersonalTreasureMapRenderState>()
     private val renderer = PersonalTreasureMapRenderer(renderStates)
     private val markerFailures = mutableSetOf<UUID>()
-    private var mapView: MapView? = null
-    private var mapViewServer: String? = null
+    private val mapViews = mutableMapOf<MapViewKey, MapView>()
     private var closed = false
     private var refreshTask: ScheduledTask? = scheduler.runTimer(20L, 20L) { refreshOnlinePlayers() }
 
@@ -104,6 +122,9 @@ class PersonalTreasureMapController internal constructor(
             destinationIndex = definition.destinationIndex(voucher.id),
             mapViewServer = null,
             mapViewId = null,
+            mapViewWorld = null,
+            searchGeneration = 0,
+            target = null,
         )
         val bound = stack.clone()
         bound.editMeta { meta -> writeIdentity(meta.persistentDataContainer, identity) }
@@ -112,16 +133,21 @@ class PersonalTreasureMapController internal constructor(
 
     /** Rebinds a bound map to this runtime's view, including after a node transfer or plugin reload. */
     fun decorateMap(player: Player, stack: ItemStack): ItemStack? {
-        if (closed || resolve(stack) == null) return null
+        if (closed) return null
+        val resolved = resolve(stack) ?: return null
         val copy = stack.clone()
         val view = ensureMapView(player, copy) ?: return null
+        val presentation = resolved.spec.preview.itemMeta
         copy.editMeta { meta ->
             val mapMeta = meta as? MapMeta ?: return@editMeta
+            presentation.displayName()?.let(mapMeta::displayName)
+            mapMeta.lore(presentation.lore())
             mapMeta.isScaling = false
             mapMeta.mapView = view
             val data = mapMeta.persistentDataContainer
             data.set(PersonalTreasureMapIdentity.mapViewServerKey, PersistentDataType.STRING, currentServer())
             data.set(PersonalTreasureMapIdentity.mapViewIdKey, PersistentDataType.INTEGER, view.id)
+            data.set(PersonalTreasureMapIdentity.mapViewWorldKey, PersistentDataType.STRING, player.world.uid.toString())
         }
         return copy
     }
@@ -140,6 +166,10 @@ class PersonalTreasureMapController internal constructor(
         val definition = spec?.let(resolveDefinition)
         val personalCandidate = hasPersonalMapMarker(stack) || definition != null
         if (!personalCandidate) return PersonalTreasureMapUseDecision.NOT_A_PERSONAL_MAP
+        val searchPolicy = definition?.searchPolicy
+        if (searchPolicy != null && !isSearchLocation(player, searchPolicy)) {
+            return PersonalTreasureMapUseDecision.OPEN_MAP
+        }
         if (!hasPersonalMapMarker(stack)) {
             val mainHand = player.inventory.itemInMainHand
             if (mainHand.type != Material.FILLED_MAP || mainHand.amount != 1 ||
@@ -153,6 +183,8 @@ class PersonalTreasureMapController internal constructor(
                 return PersonalTreasureMapUseDecision.REJECT
             }
             player.inventory.setItemInMainHand(bound)
+            val resolved = resolve(bound) ?: return PersonalTreasureMapUseDecision.REJECT
+            selectOrRefreshTarget(player, resolved, invalidateExisting = false)
             refreshHeldMap(player)
             return PersonalTreasureMapUseDecision.OPEN_MAP
         }
@@ -160,12 +192,30 @@ class PersonalTreasureMapController internal constructor(
         if (resolved.voucher != voucher || tokenFailure(player, resolved) != null) {
             return PersonalTreasureMapUseDecision.REJECT
         }
-        refreshHeldMap(player)
-        return if (locationFailure(player, resolved.destination) == null) {
-            PersonalTreasureMapUseDecision.CLAIM
-        } else {
-            PersonalTreasureMapUseDecision.OPEN_MAP
+        if (resolved.definition.searchPolicy != null && resolved.destination == null) {
+            selectOrRefreshTarget(player, resolved, invalidateExisting = false)
+            refreshHeldMap(player)
+            return PersonalTreasureMapUseDecision.OPEN_MAP
         }
+        val destination = resolved.destination ?: return PersonalTreasureMapUseDecision.REJECT
+        if (locationFailure(player, destination) != null) {
+            refreshHeldMap(player)
+            return PersonalTreasureMapUseDecision.OPEN_MAP
+        }
+        when (isSafeTarget(player, destination, resolved.definition.searchPolicy)) {
+            false -> {
+                selectOrRefreshTarget(player, resolved, invalidateExisting = true)
+                refreshHeldMap(player)
+                return PersonalTreasureMapUseDecision.OPEN_MAP
+            }
+            null -> {
+                refreshHeldMap(player)
+                return PersonalTreasureMapUseDecision.OPEN_MAP
+            }
+            true -> Unit
+        }
+        refreshHeldMap(player)
+        return PersonalTreasureMapUseDecision.CLAIM
     }
 
     /** Rechecked after the durable claim is acquired and before the reward adapter mutates anything. */
@@ -183,7 +233,18 @@ class PersonalTreasureMapController internal constructor(
         if (resolved.voucher != voucher || resolved.spec.key != spec.key || resolved.spec.fingerprint != spec.fingerprint) {
             return PersonalTreasureMapFailure.INVALID_OR_STALE
         }
-        return tokenFailure(player, resolved) ?: locationFailure(player, resolved.destination)
+        tokenFailure(player, resolved)?.let { return it }
+        val destination = resolved.destination ?: return PersonalTreasureMapFailure.NO_SAFE_TARGET
+        locationFailure(player, destination)?.let { return it }
+        return when (isSafeTarget(player, destination, resolved.definition.searchPolicy)) {
+            true -> null
+            null -> PersonalTreasureMapFailure.SAFETY_UNAVAILABLE
+            false -> {
+                val replaced = selectOrRefreshTarget(player, resolved, invalidateExisting = true)
+                refreshHeldMap(player)
+                if (replaced) PersonalTreasureMapFailure.TARGET_CHANGED else PersonalTreasureMapFailure.NO_SAFE_TARGET
+            }
+        }
     }
 
     /** Refreshes one holder's map cursor and nearby marker without loading chunks or reading blocks. */
@@ -203,6 +264,10 @@ class PersonalTreasureMapController internal constructor(
         if (rebound.itemMeta != held.itemMeta) player.inventory.setItemInMainHand(rebound)
 
         val destination = resolved.destination
+        if (destination == null) {
+            clear(player.uniqueId)
+            return
+        }
         val correctPlace = currentServer() == destination.server && player.world.name == destination.world
         val location = player.location
         renderStates[player.uniqueId] = PersonalTreasureMapRenderState(
@@ -236,24 +301,44 @@ class PersonalTreasureMapController internal constructor(
 
     /** Returns immutable guidance for the caller's localized action bar. */
     fun guidance(player: Player): PersonalTreasureMapGuidance? {
-        val resolved = resolve(player.inventory.itemInMainHand) ?: return null
-        if (tokenFailure(player, resolved) != null) return null
-        val destination = resolved.destination
-        val onServer = currentServer() == destination.server
-        val onWorld = onServer && player.world.name == destination.world
+        val held = player.inventory.itemInMainHand
+        val resolved = resolve(held)
+        val definition = resolved?.definition ?: run {
+            val voucher = PhysicalRewardVoucher.identity(held) ?: return null
+            val spec = resolveSpec(voucher.key)?.takeIf { it.fingerprint == voucher.fingerprint } ?: return null
+            resolveDefinition(spec) ?: return null
+        }
+        if (resolved != null && tokenFailure(player, resolved) != null) return null
+        val policy = definition.searchPolicy
+        val destination = resolved?.destination
+        val targetServer = destination?.server ?: policy?.server ?: return null
+        val targetWorld = destination?.world ?: policy?.world ?: return null
+        val hint = destination?.hint ?: PersonalTreasureMapSearchPolicy.TARGET_HINT
+        val onServer = currentServer() == targetServer
+        val onWorld = onServer && player.world.name == targetWorld
+        if (destination == null) {
+            return PersonalTreasureMapGuidance(
+                hint, null, null, onServer, onWorld, false, false, ownerBound = resolved != null,
+            )
+        }
         if (!onWorld) {
-            return PersonalTreasureMapGuidance(destination.hint, null, null, onServer, false, false)
+            return PersonalTreasureMapGuidance(destination.hint, null, null, onServer, false, false, true)
         }
         val location = player.location
         val dx = destination.x - location.x
         val dz = destination.z - location.z
+        val locationAvailable = locationFailure(player, destination) == null
+        val targetSafety = if (locationAvailable) isSafeTarget(player, destination, policy) else null
         return PersonalTreasureMapGuidance(
             hint = destination.hint,
             distance = sqrt(dx * dx + (destination.y - location.y) * (destination.y - location.y) + dz * dz),
             bearingDegrees = Math.toDegrees(atan2(dx, -dz)).let { (it + 360.0) % 360.0 },
             onDestinationServer = true,
             onDestinationWorld = true,
-            withinClaimRadius = locationFailure(player, destination) == null,
+            withinClaimRadius = locationAvailable && targetSafety == true,
+            targetSelected = true,
+            ownerBound = true,
+            safetyUnavailable = locationAvailable && targetSafety == null,
         )
     }
 
@@ -294,9 +379,8 @@ class PersonalTreasureMapController internal constructor(
         org.bukkit.event.HandlerList.unregisterAll(this)
         renderStates.keys.toList().forEach(::clear)
         marker.close()
-        mapView?.removeRenderer(renderer)
-        mapView = null
-        mapViewServer = null
+        mapViews.values.forEach { it.removeRenderer(renderer) }
+        mapViews.clear()
     }
 
     private fun refreshOnlinePlayers() {
@@ -309,7 +393,10 @@ class PersonalTreasureMapController internal constructor(
         val spec = resolveSpec(voucher.key)?.takeIf { it.fingerprint == voucher.fingerprint } ?: return null
         val definition = resolveDefinition(spec) ?: return null
         if (!matchesDefinition(identity, definition, voucher.id)) return null
-        return ResolvedMap(voucher, identity, spec, definition, definition.destinations[identity.destinationIndex])
+        val destination = identity.target ?: if (definition.searchPolicy == null) {
+            definition.destinations.getOrNull(identity.destinationIndex)
+        } else null
+        return ResolvedMap(voucher, identity, spec, definition, destination)
     }
 
     private fun tokenFailure(player: Player, resolved: ResolvedMap): PersonalTreasureMapFailure? {
@@ -331,32 +418,170 @@ class PersonalTreasureMapController internal constructor(
         identity: PersonalTreasureMapIdentity,
         definition: PersonalTreasureMapDefinition,
         voucherId: UUID,
-    ): Boolean = identity.voucherId == voucherId &&
-        identity.definitionId == definition.id &&
-        identity.definitionFingerprint == definition.fingerprint &&
-        identity.destinationIndex == definition.destinationIndex(voucherId)
+    ): Boolean {
+        val targetMatchesPolicy = identity.target?.let { target ->
+            val policy = definition.searchPolicy
+            policy != null && target.server == policy.server && target.world == policy.world
+        } ?: true
+        return identity.voucherId == voucherId &&
+            identity.definitionId == definition.id &&
+            identity.definitionFingerprint == definition.fingerprint &&
+            identity.destinationIndex == definition.destinationIndex(voucherId) &&
+            targetMatchesPolicy
+    }
+
+    private fun isSearchLocation(player: Player, policy: PersonalTreasureMapSearchPolicy): Boolean =
+        currentServer() == policy.server && player.world.name == policy.world
+
+    /** Searches a fixed number of points in loaded chunks only; each click is one bounded server-thread slice. */
+    private fun selectOrRefreshTarget(
+        player: Player,
+        resolved: ResolvedMap,
+        invalidateExisting: Boolean,
+    ): Boolean {
+        val policy = resolved.definition.searchPolicy ?: return false
+        if (!isSearchLocation(player, policy)) return false
+        val held = player.inventory.itemInMainHand
+        val currentVoucher = PhysicalRewardVoucher.identity(held)
+        val currentIdentity = PersonalTreasureMapIdentity.read(held)
+        if (currentVoucher != resolved.voucher || currentIdentity != resolved.identity) return false
+        if (currentIdentity.target != null && !invalidateExisting) return true
+
+        val generation = currentIdentity.searchGeneration
+        val target = findSafeTarget(player, policy, generation)
+        val updatedIdentity = currentIdentity.copy(
+            searchGeneration = if (generation == Int.MAX_VALUE) generation else generation + 1,
+            target = target,
+        )
+        val updated = held.clone().apply {
+            editMeta { meta -> writeIdentity(meta.persistentDataContainer, updatedIdentity) }
+        }
+        val decorated = decorateMap(player, updated) ?: return false
+        val stillHeld = player.inventory.itemInMainHand
+        if (PhysicalRewardVoucher.identity(stillHeld) != resolved.voucher) return false
+        val latestIdentity = PersonalTreasureMapIdentity.read(stillHeld) ?: return false
+        if (latestIdentity.ownerId != currentIdentity.ownerId ||
+            latestIdentity.definitionFingerprint != currentIdentity.definitionFingerprint ||
+            latestIdentity.searchGeneration != currentIdentity.searchGeneration
+        ) return false
+        player.inventory.setItemInMainHand(decorated)
+        if (target == null) clear(player.uniqueId)
+        return target != null
+    }
+
+    private fun findSafeTarget(
+        player: Player,
+        policy: PersonalTreasureMapSearchPolicy,
+        generation: Int,
+    ): PersonalTreasureMapDestination? {
+        val world = player.world
+        if (world.name != policy.world || currentServer() != policy.server) return null
+        val playerLocation = player.location
+        val centerX = floor(playerLocation.x).toInt()
+        val centerZ = floor(playerLocation.z).toInt()
+        val voucherId = PhysicalRewardVoucher.identity(player.inventory.itemInMainHand)?.id ?: return null
+        val candidates = personalTreasureMapCandidateOrder(
+            voucherId = voucherId,
+            generation = generation,
+            centerX = centerX,
+            centerZ = centerZ,
+            radius = policy.radius,
+        )
+        for ((x, z) in candidates) {
+            val exactDistanceSquared = (x + 0.5 - playerLocation.x) * (x + 0.5 - playerLocation.x) +
+                (z + 0.5 - playerLocation.z) * (z + 0.5 - playerLocation.z)
+            if (exactDistanceSquared < PersonalTreasureMapSearchPolicy.MIN_TARGET_DISTANCE.toDouble().let { it * it } ||
+                exactDistanceSquared > policy.radius.toDouble() * policy.radius
+            ) continue
+            if (!world.isChunkLoaded(x shr 4, z shr 4)) continue
+            val highestY = world.getHighestBlockYAt(x, z)
+            val lowestY = (highestY - SURFACE_LOOKBACK_BLOCKS).coerceAtLeast(world.minHeight)
+            for (groundY in highestY downTo lowestY) {
+                if (!isSafeGround(world.getBlockAt(x, groundY, z).type)) continue
+                val targetY = groundY + 1
+                if (targetY + 1 >= world.maxHeight) continue
+                if (!isSafeAir(world.getBlockAt(x, targetY, z)) ||
+                    !isSafeAir(world.getBlockAt(x, targetY + 1, z))
+                ) continue
+                val location = Location(world, x + 0.5, targetY.toDouble(), z + 0.5)
+                if (!world.worldBorder.isInside(location) || isUnclaimedColumn(world, x, groundY, z) != true) continue
+                return PersonalTreasureMapDestination(
+                    policy.server,
+                    policy.world,
+                    location.x,
+                    location.y,
+                    location.z,
+                    PersonalTreasureMapSearchPolicy.TARGET_HINT,
+                )
+            }
+        }
+        return null
+    }
+
+    private fun isSafeTarget(
+        player: Player,
+        destination: PersonalTreasureMapDestination,
+        policy: PersonalTreasureMapSearchPolicy?,
+    ): Boolean? {
+        if (policy != null && (destination.server != policy.server || destination.world != policy.world)) return false
+        if (policy != null && !isSearchLocation(player, policy)) return null
+        val world = player.world
+        if (currentServer() != destination.server || world.name != destination.world) return false
+        val x = floor(destination.x).toInt()
+        val y = floor(destination.y).toInt()
+        val z = floor(destination.z).toInt()
+        if (!world.isChunkLoaded(x shr 4, z shr 4)) return null
+        if (!world.worldBorder.isInside(destination.toLocation(world))) return false
+        val groundY = y - 1
+        if (groundY < world.minHeight || y + 1 >= world.maxHeight) return false
+        if (!isSafeGround(world.getBlockAt(x, groundY, z).type) ||
+            !isSafeAir(world.getBlockAt(x, y, z)) || !isSafeAir(world.getBlockAt(x, y + 1, z))
+        ) return false
+        return isUnclaimedColumn(world, x, groundY, z)
+    }
+
+    private fun isUnclaimedColumn(world: org.bukkit.World, x: Int, groundY: Int, z: Int): Boolean? {
+        // Lands areas are horizontal; WorldGuard regions can be vertical, so test the ground and both standing blocks.
+        var unknown = false
+        for (y in groundY..groundY + 2) {
+            when (isUnclaimed(Location(world, x + 0.5, y.toDouble(), z + 0.5))) {
+                false -> return false
+                null -> unknown = true
+                true -> Unit
+            }
+        }
+        return if (unknown) null else true
+    }
+
+    private fun isSafeGround(material: Material): Boolean =
+        material.isSolid && !material.isAir && !Tag.LEAVES.isTagged(material) && material !in UNSAFE_MATERIALS
+
+    private fun isSafeAir(block: org.bukkit.block.Block): Boolean =
+        block.isPassable && !block.isLiquid && block.type !in UNSAFE_MATERIALS
 
     private fun ensureMapView(player: Player, stack: ItemStack): MapView? {
         val identity = PersonalTreasureMapIdentity.read(stack) ?: return null
         val server = currentServer()
-        var view = mapView?.takeIf { mapViewServer == server }
-        if (view == null && identity.mapViewServer == server && identity.mapViewId != null) {
+        val worldId = player.world.uid
+        val worldKey = worldId.toString()
+        val viewKey = MapViewKey(server, worldId)
+        var view = mapViews[viewKey]
+        if (view == null && identity.mapViewServer == server && identity.mapViewWorld == worldKey && identity.mapViewId != null) {
             view = Bukkit.getMap(identity.mapViewId)
         }
         if (view == null) view = runCatching { mapViewFactory(player.world) }.getOrElse { failure ->
             plugin.logger.warning("Personal treasure map view creation failed: ${failure.javaClass.simpleName}")
             return null
         }
-        if (view !== mapView || mapViewServer != server || view.getRenderers().none { it === renderer }) {
+        if (view.getRenderers().none { it === renderer }) {
             view.getRenderers().toList().forEach(view::removeRenderer)
             view.setScale(MapView.Scale.CLOSEST)
             view.setTrackingPosition(false)
             view.setUnlimitedTracking(false)
             view.setLocked(true)
             view.addRenderer(renderer)
-            mapView = view
-            mapViewServer = server
         }
+        mapViews[viewKey] = view
         return view
     }
 
@@ -366,6 +591,23 @@ class PersonalTreasureMapController internal constructor(
         data.set(PersonalTreasureMapIdentity.definitionKey, PersistentDataType.STRING, identity.definitionId)
         data.set(PersonalTreasureMapIdentity.fingerprintKey, PersistentDataType.STRING, identity.definitionFingerprint.sha256)
         data.set(PersonalTreasureMapIdentity.destinationIndexKey, PersistentDataType.INTEGER, identity.destinationIndex)
+        data.set(PersonalTreasureMapIdentity.searchGenerationKey, PersistentDataType.INTEGER, identity.searchGeneration)
+        val target = identity.target
+        if (target == null) {
+            listOf(
+                PersonalTreasureMapIdentity.targetServerKey,
+                PersonalTreasureMapIdentity.targetWorldKey,
+                PersonalTreasureMapIdentity.targetXKey,
+                PersonalTreasureMapIdentity.targetYKey,
+                PersonalTreasureMapIdentity.targetZKey,
+            ).forEach(data::remove)
+        } else {
+            data.set(PersonalTreasureMapIdentity.targetServerKey, PersistentDataType.STRING, target.server)
+            data.set(PersonalTreasureMapIdentity.targetWorldKey, PersistentDataType.STRING, target.world)
+            data.set(PersonalTreasureMapIdentity.targetXKey, PersistentDataType.DOUBLE, target.x)
+            data.set(PersonalTreasureMapIdentity.targetYKey, PersistentDataType.DOUBLE, target.y)
+            data.set(PersonalTreasureMapIdentity.targetZKey, PersistentDataType.DOUBLE, target.z)
+        }
     }
 
     private fun hasPersonalMapMarker(stack: ItemStack?): Boolean {
@@ -378,6 +620,13 @@ class PersonalTreasureMapController internal constructor(
             PersonalTreasureMapIdentity.destinationIndexKey,
             PersonalTreasureMapIdentity.mapViewServerKey,
             PersonalTreasureMapIdentity.mapViewIdKey,
+            PersonalTreasureMapIdentity.mapViewWorldKey,
+            PersonalTreasureMapIdentity.searchGenerationKey,
+            PersonalTreasureMapIdentity.targetServerKey,
+            PersonalTreasureMapIdentity.targetWorldKey,
+            PersonalTreasureMapIdentity.targetXKey,
+            PersonalTreasureMapIdentity.targetYKey,
+            PersonalTreasureMapIdentity.targetZKey,
         ).any { data.has(it) }
     }
 
@@ -387,6 +636,48 @@ class PersonalTreasureMapController internal constructor(
     companion object {
         private const val CLAIM_DISTANCE_SQUARED = 9.0
         private const val MARKER_DISTANCE_SQUARED = 64.0 * 64.0
+        private const val SURFACE_LOOKBACK_BLOCKS = 4
+        private val UNSAFE_MATERIALS = setOf(
+            Material.CACTUS,
+            Material.CAMPFIRE,
+            Material.FIRE,
+            Material.LAVA,
+            Material.MAGMA_BLOCK,
+            Material.POWDER_SNOW,
+            Material.SOUL_CAMPFIRE,
+            Material.SOUL_FIRE,
+            Material.SWEET_BERRY_BUSH,
+            Material.WITHER_ROSE,
+        )
+    }
+}
+
+/** Pure, reproducible location ordering. It never reads Bukkit world state. */
+internal fun personalTreasureMapCandidateOrder(
+    voucherId: UUID,
+    generation: Int,
+    centerX: Int,
+    centerZ: Int,
+    radius: Int,
+    count: Int = PersonalTreasureMapSearchPolicy.CANDIDATE_LIMIT,
+): List<Pair<Int, Int>> {
+    require(radius in PersonalTreasureMapSearchPolicy.MIN_RADIUS..PersonalTreasureMapSearchPolicy.MAX_RADIUS)
+    require(count in 1..PersonalTreasureMapSearchPolicy.CANDIDATE_LIMIT)
+    val seed = voucherId.mostSignificantBits xor java.lang.Long.rotateLeft(voucherId.leastSignificantBits, 17) xor
+        (generation.toLong() shl 32) xor (centerX.toLong() shl 16) xor centerZ.toLong()
+    val random = Random(seed)
+    val minimumSquared = PersonalTreasureMapSearchPolicy.MIN_TARGET_DISTANCE.toDouble().let { it * it }
+    val radiusSquared = radius.toDouble() * radius
+    return buildList(count) {
+        repeat(count * 64) {
+            if (size >= count) return@repeat
+            val angle = random.nextDouble() * Math.PI * 2.0
+            val distance = sqrt(minimumSquared + random.nextDouble() * (radiusSquared - minimumSquared))
+            val dx = (kotlin.math.cos(angle) * distance).roundToInt()
+            val dz = (kotlin.math.sin(angle) * distance).roundToInt()
+            val squaredDistance = dx.toDouble() * dx + dz.toDouble() * dz
+            if (squaredDistance in minimumSquared..radiusSquared) add(centerX + dx to centerZ + dz)
+        }
     }
 }
 

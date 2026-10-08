@@ -7,6 +7,27 @@ import ru.arc.onetime.OneTimeUseFingerprint
 import java.util.Collections
 import java.util.UUID
 
+/** Bounded area used to pick a personal cache from already loaded Survival terrain. */
+data class PersonalTreasureMapSearchPolicy(
+    val server: String,
+    val world: String,
+    val radius: Int,
+) {
+    init {
+        require(server.length in 1..48 && server.matches(Regex("[A-Za-z0-9_.-]+"))) { "Invalid search server" }
+        require(world.length in 1..128 && world.matches(Regex("[A-Za-z0-9_.:-]+"))) { "Invalid search world" }
+        require(radius in MIN_RADIUS..MAX_RADIUS) { "Search radius must be in $MIN_RADIUS..$MAX_RADIUS" }
+    }
+
+    companion object {
+        const val MIN_RADIUS = 16
+        const val MAX_RADIUS = 256
+        const val CANDIDATE_LIMIT = 64
+        const val MIN_TARGET_DISTANCE = 16
+        const val TARGET_HINT = "Отметка тайника"
+    }
+}
+
 /** A fixed, source-authored cache destination. Coordinates are never discovered from live terrain. */
 data class PersonalTreasureMapDestination(
     val server: String,
@@ -34,6 +55,8 @@ class PersonalTreasureMapDefinition(
     val id: String,
     val prizeSourceRef: String,
     destinations: List<PersonalTreasureMapDestination>,
+    val searchPolicy: PersonalTreasureMapSearchPolicy? = null,
+    identityFingerprintOverride: OneTimeUseFingerprint? = null,
 ) {
     val destinations: List<PersonalTreasureMapDestination> = Collections.unmodifiableList(destinations.toList())
     val fingerprint: OneTimeUseFingerprint
@@ -41,14 +64,42 @@ class PersonalTreasureMapDefinition(
     init {
         require(id.length in 1..128 && id.matches(Regex("[A-Za-z0-9_.:-]+"))) { "Invalid map definition id" }
         require(PhysicalRewardVoucher.isValidKey(prizeSourceRef)) { "Invalid prize source reference" }
-        require(this.destinations.isNotEmpty() && this.destinations.size <= MAX_DESTINATIONS) {
-            "A treasure map must have 1..$MAX_DESTINATIONS destinations"
+        require(this.destinations.size <= MAX_DESTINATIONS && (this.destinations.isNotEmpty() || searchPolicy != null)) {
+            "A treasure map requires a search policy or 1..$MAX_DESTINATIONS legacy destinations"
         }
-        fingerprint = OneTimeUseFingerprint.sha256Fields(
+        fingerprint = identityFingerprintOverride ?: if (searchPolicy == null) {
+            legacyFingerprint(id, prizeSourceRef, this.destinations)
+        } else {
+            OneTimeUseFingerprint.sha256Fields(
+                "personal-treasure-map-v2",
+                id,
+                prizeSourceRef,
+                searchPolicy.server,
+                searchPolicy.world,
+                searchPolicy.radius.toString(),
+            )
+        }
+    }
+
+    fun destinationIndex(voucherId: UUID): Int =
+        if (destinations.isEmpty()) 0 else Math.floorMod(voucherId.hashCode(), destinations.size)
+
+    fun destinationFor(voucherId: UUID): PersonalTreasureMapDestination =
+        destinations.getOrNull(destinationIndex(voucherId))
+            ?: error("Dynamic personal maps do not have an authored destination")
+
+    companion object {
+        const val MAX_DESTINATIONS = 64
+
+        fun legacyFingerprint(
+            id: String,
+            prizeSourceRef: String,
+            destinations: List<PersonalTreasureMapDestination>,
+        ): OneTimeUseFingerprint = OneTimeUseFingerprint.sha256Fields(
             "personal-treasure-map-v1",
             id,
             prizeSourceRef,
-            this.destinations.mapIndexed { index, destination ->
+            destinations.mapIndexed { index, destination ->
                 listOf(
                     index.toString(), destination.server, destination.world,
                     java.lang.Double.toHexString(destination.x), java.lang.Double.toHexString(destination.y),
@@ -56,14 +107,6 @@ class PersonalTreasureMapDefinition(
                 ).joinToString("\u001f")
             }.joinToString("\n"),
         )
-    }
-
-    fun destinationIndex(voucherId: UUID): Int = Math.floorMod(voucherId.hashCode(), destinations.size)
-
-    fun destinationFor(voucherId: UUID): PersonalTreasureMapDestination = destinations[destinationIndex(voucherId)]
-
-    companion object {
-        const val MAX_DESTINATIONS = 64
     }
 }
 
@@ -75,22 +118,34 @@ data class PersonalTreasureMapIdentity(
     val destinationIndex: Int,
     val mapViewServer: String?,
     val mapViewId: Int?,
+    val mapViewWorld: String? = null,
+    val searchGeneration: Int = 0,
+    val target: PersonalTreasureMapDestination? = null,
 ) {
     companion object {
-        const val VERSION = "1"
+        const val VERSION = "3"
+        private val READABLE_VERSIONS = setOf("1", "2", VERSION)
         val versionKey = org.bukkit.NamespacedKey("arc", "personal_treasure_map_version")
         val ownerKey = org.bukkit.NamespacedKey("arc", "personal_treasure_map_owner")
         val definitionKey = org.bukkit.NamespacedKey("arc", "personal_treasure_map_definition")
         val fingerprintKey = org.bukkit.NamespacedKey("arc", "personal_treasure_map_fingerprint")
         val destinationIndexKey = org.bukkit.NamespacedKey("arc", "personal_treasure_map_destination")
+        val searchGenerationKey = org.bukkit.NamespacedKey("arc", "personal_treasure_map_search_generation")
+        val targetServerKey = org.bukkit.NamespacedKey("arc", "personal_treasure_map_target_server")
+        val targetWorldKey = org.bukkit.NamespacedKey("arc", "personal_treasure_map_target_world")
+        val targetXKey = org.bukkit.NamespacedKey("arc", "personal_treasure_map_target_x")
+        val targetYKey = org.bukkit.NamespacedKey("arc", "personal_treasure_map_target_y")
+        val targetZKey = org.bukkit.NamespacedKey("arc", "personal_treasure_map_target_z")
         val mapViewServerKey = org.bukkit.NamespacedKey("arc", "personal_treasure_map_view_server")
         val mapViewIdKey = org.bukkit.NamespacedKey("arc", "personal_treasure_map_view_id")
+        val mapViewWorldKey = org.bukkit.NamespacedKey("arc", "personal_treasure_map_view_world")
 
         /** Reads a complete marker from a single, plugin-issued filled map. */
         fun read(stack: ItemStack?): PersonalTreasureMapIdentity? {
             if (stack?.type != Material.FILLED_MAP || stack.amount != 1) return null
             val data = stack.itemMeta?.persistentDataContainer ?: return null
-            if (data.get(versionKey, PersistentDataType.STRING) != VERSION) return null
+            val version = data.get(versionKey, PersistentDataType.STRING)
+            if (version !in READABLE_VERSIONS) return null
             val voucherId = PhysicalRewardVoucher.identity(stack)?.id ?: return null
             val owner = data.get(ownerKey, PersistentDataType.STRING)?.let(::parseUuid) ?: return null
             val definitionId = data.get(definitionKey, PersistentDataType.STRING)
@@ -103,8 +158,34 @@ data class PersonalTreasureMapIdentity(
                 ?.takeIf { it.length in 1..48 && it.matches(Regex("[A-Za-z0-9_.-]+")) }
             val viewId = data.get(mapViewIdKey, PersistentDataType.INTEGER)?.takeIf { it >= 0 }
             if ((viewServer == null) != (viewId == null)) return null
+            val rawViewWorld = data.get(mapViewWorldKey, PersistentDataType.STRING)
+            val viewWorld = if (version == VERSION && viewServer != null) {
+                rawViewWorld?.let { raw ->
+                    runCatching { UUID.fromString(raw).takeIf { it.toString() == raw }?.toString() }.getOrNull()
+                } ?: return null
+            } else null
+            if (version == VERSION && (viewServer == null) != (rawViewWorld == null)) return null
+            val searchGeneration = if (version != "1") {
+                data.get(searchGenerationKey, PersistentDataType.INTEGER)?.takeIf { it >= 0 } ?: return null
+            } else 0
+            val targetKeys = listOf(targetServerKey, targetWorldKey, targetXKey, targetYKey, targetZKey)
+            val hasTarget = targetKeys.any(data::has)
+            val target = if (hasTarget) {
+                if (!targetKeys.all(data::has)) return null
+                runCatching {
+                    PersonalTreasureMapDestination(
+                        requireNotNull(data.get(targetServerKey, PersistentDataType.STRING)),
+                        requireNotNull(data.get(targetWorldKey, PersistentDataType.STRING)),
+                        requireNotNull(data.get(targetXKey, PersistentDataType.DOUBLE)),
+                        requireNotNull(data.get(targetYKey, PersistentDataType.DOUBLE)),
+                        requireNotNull(data.get(targetZKey, PersistentDataType.DOUBLE)),
+                        PersonalTreasureMapSearchPolicy.TARGET_HINT,
+                    )
+                }.getOrNull() ?: return null
+            } else null
             return PersonalTreasureMapIdentity(
-                voucherId, owner, definitionId, fingerprint, destinationIndex, viewServer, viewId,
+                voucherId, owner, definitionId, fingerprint, destinationIndex, viewServer, viewId, viewWorld,
+                searchGeneration, target,
             )
         }
 
@@ -119,6 +200,9 @@ enum class PersonalTreasureMapFailure {
     WRONG_SERVER,
     WRONG_WORLD,
     TOO_FAR,
+    TARGET_CHANGED,
+    NO_SAFE_TARGET,
+    SAFETY_UNAVAILABLE,
 }
 
 enum class PersonalTreasureMapUseDecision {
@@ -135,4 +219,7 @@ data class PersonalTreasureMapGuidance(
     val onDestinationServer: Boolean,
     val onDestinationWorld: Boolean,
     val withinClaimRadius: Boolean,
+    val targetSelected: Boolean,
+    val ownerBound: Boolean = false,
+    val safetyUnavailable: Boolean = false,
 )

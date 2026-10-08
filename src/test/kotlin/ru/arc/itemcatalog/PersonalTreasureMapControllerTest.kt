@@ -7,6 +7,8 @@ import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
 import io.mockk.runs
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.map.MapRenderer
@@ -14,11 +16,13 @@ import org.bukkit.map.MapView
 import org.bukkit.persistence.PersistentDataType
 import org.bukkit.plugin.Plugin
 import org.bukkit.entity.Player
+import org.mockbukkit.mockbukkit.MockBukkit
 import ru.arc.core.TestTaskScheduler
 import ru.arc.onetime.OneTimeUseFingerprint
 import ru.arc.paper.testing.MockBukkitTestRuntime
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.math.floor
 
 class PersonalTreasureMapControllerTest : StringSpec({
     "first activation after transfer binds its owner and never claims on that click" {
@@ -30,9 +34,15 @@ class PersonalTreasureMapControllerTest : StringSpec({
             val owner = paper.addPlayer("map-owner")
             val visitor = paper.addPlayer("map-visitor")
             val spec = testMapSpec()
+            val staleMapPreview = org.bukkit.inventory.ItemStack(Material.FILLED_MAP).apply {
+                editMeta { meta ->
+                    meta.displayName(Component.text("Снаряжение EliteMobs"))
+                    meta.lore(listOf(Component.text("Тайник на Спавне")))
+                }
+            }
             val definition = testMapDefinition(owner.world.name)
             val voucher = PhysicalRewardVoucher.mark(
-                spec.preview.clone(),
+                staleMapPreview,
                 PhysicalRewardVoucherIdentity(UUID.randomUUID(), spec.key, spec.fingerprint),
             )
             val controller = newController(plugin, scheduler, marker, spec, definition)
@@ -41,6 +51,7 @@ class PersonalTreasureMapControllerTest : StringSpec({
                 // The prize may move to another player before its first right-click activation.
                 val target = definition.destinationFor(PhysicalRewardVoucher.identity(voucher)!!.id)
                 visitor.world.loadChunk(0, 0)
+                prepareSafeSurface(visitor.world, target)
                 visitor.inventory.setItemInMainHand(voucher.clone())
                 visitor.teleport(Location(visitor.world, target.x + 2, target.y, target.z))
                 controller.refreshHeldMap(visitor)
@@ -54,6 +65,13 @@ class PersonalTreasureMapControllerTest : StringSpec({
                 identity.destinationIndex shouldBe definition.destinationIndex(identity.voucherId)
                 identity.mapViewServer shouldBe "spawn"
                 (identity.mapViewId != null) shouldBe true
+                identity.mapViewWorld shouldBe visitor.world.uid.toString()
+                val plain = PlainTextComponentSerializer.plainText()
+                plain.serialize(bound.itemMeta!!.displayName()!!) shouldBe "Карта тайника"
+                val boundLore = bound.itemMeta!!.lore().orEmpty().joinToString(" ") { plain.serialize(it) }
+                boundLore.contains("EliteMobs") shouldBe false
+                boundLore.contains("Спавн") shouldBe false
+                boundLore.contains("Survival") shouldBe true
                 PhysicalRewardVoucher.identity(bound)?.id shouldBe identity.voucherId
 
                 // Even at the cache, first activation only binds and opens the map.
@@ -99,6 +117,60 @@ class PersonalTreasureMapControllerTest : StringSpec({
         }
     }
 
+    "map views are reused per world and every managed renderer is removed on close" {
+        try {
+            MockBukkitTestRuntime.open().use { paper ->
+                val plugin = paper.createSimplePlugin("PersonalMapMultiworldViewTest")
+                val playerA = paper.addPlayer("map-view-a")
+                val playerB = paper.addPlayer("map-view-b")
+                val otherWorld = MockBukkit.getMock()!!.addSimpleWorld("map-view-other-world")
+                playerB.teleport(Location(otherWorld, 0.5, 64.0, 0.5))
+                val spec = testMapSpec()
+                val definition = testMapDefinition(playerA.world.name)
+                val createdViews = mutableListOf<MapView>()
+                val marker = RecordingPersonalTreasureMapMarker()
+                val controller = PersonalTreasureMapController(
+                    plugin = plugin,
+                    resolveSpec = { key -> spec.takeIf { it.key == key } },
+                    resolveDefinition = { resolved -> definition.takeIf { resolved.key == spec.key } },
+                    currentServer = { "spawn" },
+                    scheduler = TestTaskScheduler(),
+                    marker = marker,
+                    mapViewFactory = { _ -> testMapView().also { createdViews += it } },
+                    isUnclaimed = { true },
+                )
+                try {
+                    fun voucher(id: UUID) = PhysicalRewardVoucher.mark(
+                        spec.preview.clone(), PhysicalRewardVoucherIdentity(id, spec.key, spec.fingerprint),
+                    )
+
+                    val mapA = controller.bindToOwner(playerA, voucher(UUID.randomUUID())).shouldNotBeNull()
+                    val mapB = controller.bindToOwner(playerB, voucher(UUID.randomUUID())).shouldNotBeNull()
+                    controller.identity(mapA)?.mapViewWorld shouldBe playerA.world.uid.toString()
+                    controller.identity(mapB)?.mapViewWorld shouldBe playerB.world.uid.toString()
+                    createdViews.size shouldBe 2
+                    val viewA = createdViews[0]
+                    val viewB = createdViews[1]
+                    viewA.getRenderers().size shouldBe 1
+                    viewB.getRenderers().size shouldBe 1
+
+                    repeat(2) {
+                        controller.decorateMap(playerA, mapA).shouldNotBeNull()
+                        controller.decorateMap(playerB, mapB).shouldNotBeNull()
+                    }
+                    createdViews.size shouldBe 2
+                    viewA.getRenderers().size shouldBe 1
+                    viewB.getRenderers().size shouldBe 1
+                } finally {
+                    controller.close()
+                }
+                createdViews.forEach { it.getRenderers().size shouldBe 0 }
+            }
+        } catch (cause: Throwable) {
+            throw AssertionError("Multi-world map-view lifecycle test aborted or failed", cause)
+        }
+    }
+
     "claim preflight rechecks server and location after movement without changing voucher identity" {
         try {
             MockBukkitTestRuntime.open().use { paper ->
@@ -106,40 +178,56 @@ class PersonalTreasureMapControllerTest : StringSpec({
             val scheduler = TestTaskScheduler()
             val marker = RecordingPersonalTreasureMapMarker()
             val player = paper.addPlayer("map-preflight")
+            val targetWorld = player.world
             val spec = testMapSpec()
-            val definition = testMapDefinition(player.world.name)
+            val definition = testSearchDefinition(player.world.name)
             val voucher = PhysicalRewardVoucher.mark(
                 spec.preview.clone(),
                 PhysicalRewardVoucherIdentity(UUID.randomUUID(), spec.key, spec.fingerprint),
             )
             val voucherIdentity = PhysicalRewardVoucher.identity(voucher).shouldNotBeNull()
+            val firstCandidate = personalTreasureMapCandidateOrder(voucherIdentity.id, 0, 0, 0, 32).first()
+            prepareCandidateSurface(player.world, firstCandidate.first, firstCandidate.second)
             var server = "survival"
-            val controller = newController(plugin, scheduler, marker, spec, definition) { server }
-            val target = definition.destinationFor(voucherIdentity.id)
+            val controller = newController(
+                plugin, scheduler, marker, spec, definition, currentServer = { server },
+            )
             try {
-                player.world.loadChunk(0, 0)
+                player.teleport(Location(targetWorld, 0.5, 64.0, 0.5))
                 player.inventory.setItemInMainHand(voucher.clone())
-                player.teleport(Location(player.world, target.x + 2, target.y, target.z))
 
-                // First right-click only activates and binds the map, even on the wrong backend.
+                // First right-click selects a safe Survival target and never claims the reward.
                 controller.beforeUse(player, player.inventory.itemInMainHand) shouldBe
                     PersonalTreasureMapUseDecision.OPEN_MAP
                 val bound = player.inventory.itemInMainHand
-                controller.identity(bound)?.ownerId shouldBe player.uniqueId
+                val activated = controller.identity(bound).shouldNotBeNull()
+                activated.ownerId shouldBe player.uniqueId
                 PhysicalRewardVoucher.identity(bound)?.id shouldBe voucherIdentity.id
-                controller.preflight(player, voucherIdentity, spec) shouldBe PersonalTreasureMapFailure.WRONG_SERVER
+                val target = activated.target.shouldNotBeNull()
+                activated.searchGeneration shouldBe 1
 
-                // The same owner reaches the frozen destination on its configured backend.
+                player.teleport(Location(targetWorld, target.x, target.y, target.z))
+                // Backend changes do not reroute or consume the stored target.
                 server = "spawn"
+                controller.preflight(player, voucherIdentity, spec) shouldBe PersonalTreasureMapFailure.WRONG_SERVER
+                controller.identity(player.inventory.itemInMainHand)?.target shouldBe target
+                server = "survival"
                 controller.preflight(player, voucherIdentity, spec) shouldBe null
 
                 // A move during the durable-claim window is caught by the later preflight.
-                player.teleport(Location(player.world, target.x + 20, target.y, target.z))
+                player.teleport(Location(targetWorld, target.x + 20, target.y, target.z))
                 controller.preflight(player, voucherIdentity, spec) shouldBe PersonalTreasureMapFailure.TOO_FAR
+                controller.identity(player.inventory.itemInMainHand)?.target shouldBe target
                 controller.beforeUse(player, player.inventory.itemInMainHand) shouldBe
                     PersonalTreasureMapUseDecision.OPEN_MAP
 
-                player.teleport(Location(player.world, target.x + 2, target.y, target.z))
+                val otherWorld = MockBukkit.getMock()!!.addSimpleWorld("map-other-world")
+                otherWorld.loadChunk(0, 0)
+                player.teleport(Location(otherWorld, target.x, target.y, target.z))
+                controller.preflight(player, voucherIdentity, spec) shouldBe PersonalTreasureMapFailure.WRONG_WORLD
+                controller.identity(player.inventory.itemInMainHand)?.target shouldBe target
+
+                player.teleport(Location(targetWorld, target.x, target.y, target.z))
                 PhysicalRewardVoucher.identity(player.inventory.itemInMainHand)?.id shouldBe voucherIdentity.id
                 controller.preflight(player, voucherIdentity, spec) shouldBe null
                 controller.beforeUse(player, player.inventory.itemInMainHand) shouldBe
@@ -151,6 +239,209 @@ class PersonalTreasureMapControllerTest : StringSpec({
             }
         } catch (cause: Throwable) {
             throw AssertionError("Behavioral personal-map test aborted or failed", cause)
+        }
+    }
+
+    "target search fails closed when protection providers are absent" {
+        try {
+            MockBukkitTestRuntime.open().use { paper ->
+                val plugin = paper.createSimplePlugin("PersonalMapProtectionUnavailableTest")
+                val scheduler = TestTaskScheduler()
+                val marker = RecordingPersonalTreasureMapMarker()
+                val player = paper.addPlayer("map-protection-unavailable")
+                player.teleport(Location(player.world, 0.5, 64.0, 0.5))
+                val spec = testMapSpec()
+                val definition = testSearchDefinition(player.world.name)
+                val voucher = PhysicalRewardVoucher.mark(
+                    spec.preview.clone(),
+                    PhysicalRewardVoucherIdentity(UUID.randomUUID(), spec.key, spec.fingerprint),
+                )
+                val candidates = personalTreasureMapCandidateOrder(
+                    PhysicalRewardVoucher.identity(voucher)!!.id, 0, 0, 0, 32,
+                )
+                candidates.forEach { (x, z) -> prepareCandidateSurface(player.world, x, z) }
+                plugin.server.pluginManager.isPluginEnabled("Lands") shouldBe false
+                plugin.server.pluginManager.isPluginEnabled("WorldGuard") shouldBe false
+
+                val controller = PersonalTreasureMapController(
+                    plugin = plugin,
+                    resolveSpec = { key -> spec.takeIf { it.key == key } },
+                    resolveDefinition = { resolved -> definition.takeIf { resolved.key == spec.key } },
+                    currentServer = { "survival" },
+                    scheduler = scheduler,
+                    marker = marker,
+                    mapViewFactory = { testMapView() },
+                )
+                try {
+                    player.inventory.setItemInMainHand(voucher)
+                    controller.beforeUse(player, player.inventory.itemInMainHand) shouldBe
+                        PersonalTreasureMapUseDecision.OPEN_MAP
+                    val identity = controller.identity(player.inventory.itemInMainHand).shouldNotBeNull()
+                    identity.ownerId shouldBe player.uniqueId
+                    identity.searchGeneration shouldBe 1
+                    identity.target shouldBe null
+                } finally {
+                    controller.close()
+                }
+            }
+        } catch (cause: Throwable) {
+            throw AssertionError("Protection-unavailable map test aborted or failed", cause)
+        }
+    }
+
+    "legacy v2 map identity survives activation and upgrades to the current Survival target" {
+        try {
+            MockBukkitTestRuntime.open().use { paper ->
+                val plugin = paper.createSimplePlugin("PersonalMapLegacyIdentityTest")
+                val scheduler = TestTaskScheduler()
+                val marker = RecordingPersonalTreasureMapMarker()
+                val player = paper.addPlayer("legacy-map-owner")
+                player.teleport(Location(player.world, 0.5, 64.0, 0.5))
+                val spec = testMapSpec()
+                val legacyDestinations = listOf(destination("world", 10.0, 64.0, 20.0, "Старый тайник"))
+                val definitionId = "weekly_personal_cache"
+                val oldPrizeKey = "frozen:legacy-map-prize"
+                val definition = PersonalTreasureMapDefinition(
+                    id = definitionId,
+                    prizeSourceRef = "vanilla/weekly_map_cache",
+                    destinations = legacyDestinations,
+                    searchPolicy = PersonalTreasureMapSearchPolicy("survival", player.world.name, 32),
+                    identityFingerprintOverride = PersonalTreasureMapDefinition.legacyFingerprint(
+                        definitionId, oldPrizeKey, legacyDestinations,
+                    ),
+                )
+                val voucherId = UUID.randomUUID()
+                val voucher = PhysicalRewardVoucher.mark(
+                    spec.preview.clone(), PhysicalRewardVoucherIdentity(voucherId, spec.key, spec.fingerprint),
+                ).apply {
+                    editMeta { meta ->
+                        val data = meta.persistentDataContainer
+                        data.set(PersonalTreasureMapIdentity.versionKey, PersistentDataType.STRING, "2")
+                        data.set(PersonalTreasureMapIdentity.ownerKey, PersistentDataType.STRING, player.uniqueId.toString())
+                        data.set(PersonalTreasureMapIdentity.definitionKey, PersistentDataType.STRING, definitionId)
+                        data.set(
+                            PersonalTreasureMapIdentity.fingerprintKey,
+                            PersistentDataType.STRING,
+                            definition.fingerprint.sha256,
+                        )
+                        data.set(PersonalTreasureMapIdentity.destinationIndexKey, PersistentDataType.INTEGER, 0)
+                        data.set(PersonalTreasureMapIdentity.searchGenerationKey, PersistentDataType.INTEGER, 0)
+                    }
+                }
+                val firstCandidate = personalTreasureMapCandidateOrder(voucherId, 0, 0, 0, 32).first()
+                prepareCandidateSurface(player.world, firstCandidate.first, firstCandidate.second)
+                val controller = newController(
+                    plugin, scheduler, marker, spec, definition, currentServer = { "survival" },
+                )
+                try {
+                    player.inventory.setItemInMainHand(voucher)
+                    controller.beforeUse(player, player.inventory.itemInMainHand) shouldBe
+                        PersonalTreasureMapUseDecision.OPEN_MAP
+                    val activated = controller.identity(player.inventory.itemInMainHand).shouldNotBeNull()
+                    activated.voucherId shouldBe voucherId
+                    activated.ownerId shouldBe player.uniqueId
+                    activated.definitionFingerprint shouldBe definition.fingerprint
+                    activated.searchGeneration shouldBe 1
+                    activated.target.shouldNotBeNull().server shouldBe "survival"
+                    player.inventory.itemInMainHand.itemMeta!!.persistentDataContainer.get(
+                        PersonalTreasureMapIdentity.versionKey, PersistentDataType.STRING,
+                    ) shouldBe PersonalTreasureMapIdentity.VERSION
+
+                    val target = activated.target.shouldNotBeNull()
+                    player.teleport(Location(player.world, target.x, target.y, target.z))
+                    controller.beforeUse(player, player.inventory.itemInMainHand) shouldBe
+                        PersonalTreasureMapUseDecision.CLAIM
+                    controller.preflight(player, PhysicalRewardVoucher.identity(voucher)!!, spec) shouldBe null
+                    controller.identity(player.inventory.itemInMainHand)?.target shouldBe target
+                } finally {
+                    controller.close()
+                }
+            }
+        } catch (cause: Throwable) {
+            throw AssertionError("Legacy map identity test aborted or failed", cause)
+        }
+    }
+
+    "dynamic target is persisted, protected targets reroute without claiming, and later safe preflight keeps the voucher" {
+        try {
+            MockBukkitTestRuntime.open().use { paper ->
+                val plugin = paper.createSimplePlugin("PersonalMapSafeTargetTest")
+                val scheduler = TestTaskScheduler()
+                val marker = RecordingPersonalTreasureMapMarker()
+                val player = paper.addPlayer("map-safe-target")
+                player.teleport(Location(player.world, 0.5, 64.0, 0.5))
+                val spec = testMapSpec()
+                val definition = testSearchDefinition(player.world.name)
+                val voucherId = UUID.randomUUID()
+                val voucher = PhysicalRewardVoucher.mark(
+                    spec.preview.clone(),
+                    PhysicalRewardVoucherIdentity(voucherId, spec.key, spec.fingerprint),
+                )
+                val firstCandidate = personalTreasureMapCandidateOrder(voucherId, 0, 0, 0, 32).first()
+                prepareCandidateSurface(player.world, firstCandidate.first, firstCandidate.second)
+                var protectedTarget: Pair<Int, Int>? = null
+                var protectionResult: Boolean? = false
+                val controller = newController(
+                    plugin, scheduler, marker, spec, definition,
+                    isUnclaimed = { location ->
+                        val point = location.blockX to location.blockZ
+                        if (point == protectedTarget) protectionResult else true
+                    },
+                    currentServer = { "survival" },
+                )
+                try {
+                    player.inventory.setItemInMainHand(voucher.clone())
+                    controller.beforeUse(player, player.inventory.itemInMainHand) shouldBe
+                        PersonalTreasureMapUseDecision.OPEN_MAP
+                    val activated = controller.identity(player.inventory.itemInMainHand).shouldNotBeNull()
+                    activated.ownerId shouldBe player.uniqueId
+                    activated.voucherId shouldBe voucherId
+                    val firstTarget = activated.target.shouldNotBeNull()
+                    activated.searchGeneration shouldBe 1
+
+                    player.teleport(Location(player.world, firstTarget.x, firstTarget.y, firstTarget.z))
+                    protectedTarget = floor(firstTarget.x).toInt() to floor(firstTarget.z).toInt()
+                    val nextCenterX = floor(player.location.x).toInt()
+                    val nextCenterZ = floor(player.location.z).toInt()
+                    val secondCandidate = personalTreasureMapCandidateOrder(
+                        voucherId, activated.searchGeneration, nextCenterX, nextCenterZ, 32,
+                    ).first { (x, z) ->
+                        val distanceSquared = (x + 0.5 - player.location.x) * (x + 0.5 - player.location.x) +
+                            (z + 0.5 - player.location.z) * (z + 0.5 - player.location.z)
+                        distanceSquared in 16.0 * 16.0..32.0 * 32.0
+                    }
+                    prepareCandidateSurface(player.world, secondCandidate.first, secondCandidate.second)
+
+                    // This is the post-async-claim check: the old target became private, so no prize is applied.
+                    controller.preflight(player, PhysicalRewardVoucher.identity(voucher)!!, spec) shouldBe
+                        PersonalTreasureMapFailure.TARGET_CHANGED
+                    val rerouted = controller.identity(player.inventory.itemInMainHand).shouldNotBeNull()
+                    rerouted.voucherId shouldBe voucherId
+                    rerouted.ownerId shouldBe player.uniqueId
+                    rerouted.searchGeneration shouldBe 2
+                    val secondTarget = rerouted.target.shouldNotBeNull()
+                    (secondTarget != firstTarget) shouldBe true
+
+                    // An unavailable protection query preserves the target and releases the current claim.
+                    protectedTarget = floor(secondTarget.x).toInt() to floor(secondTarget.z).toInt()
+                    protectionResult = null
+                    player.teleport(Location(player.world, secondTarget.x, secondTarget.y, secondTarget.z))
+                    controller.preflight(player, PhysicalRewardVoucher.identity(voucher)!!, spec) shouldBe
+                        PersonalTreasureMapFailure.SAFETY_UNAVAILABLE
+                    val unchanged = controller.identity(player.inventory.itemInMainHand).shouldNotBeNull()
+                    unchanged.target shouldBe secondTarget
+                    unchanged.searchGeneration shouldBe 2
+
+                    // Once the claim provider can confirm the same target is unclaimed, the same voucher can proceed.
+                    protectionResult = true
+                    controller.preflight(player, PhysicalRewardVoucher.identity(voucher)!!, spec) shouldBe null
+                    PhysicalRewardVoucher.identity(player.inventory.itemInMainHand)?.id shouldBe voucherId
+                } finally {
+                    controller.close()
+                }
+            }
+        } catch (cause: Throwable) {
+            throw AssertionError("Behavioral personal-map safe-target test aborted or failed", cause)
         }
     }
 
@@ -169,6 +460,13 @@ class PersonalTreasureMapControllerTest : StringSpec({
         first.destinationFor(id) shouldBe first.destinations[first.destinationIndex(id)]
         personalTreasureMapPlayerCursorOffset(10.0, -10.0) shouldBe (20.toByte() to (-20).toByte())
         personalTreasureMapPlayerCursorOffset(10.0, 10.0) shouldBe (20.toByte() to 20.toByte())
+        val candidates = personalTreasureMapCandidateOrder(id, 0, 0, 0, 96)
+        candidates.size shouldBe PersonalTreasureMapSearchPolicy.CANDIDATE_LIMIT
+        candidates shouldBe personalTreasureMapCandidateOrder(id, 0, 0, 0, 96)
+        candidates.all { (x, z) ->
+            val distanceSquared = x.toDouble() * x + z.toDouble() * z
+            distanceSquared in 16.0 * 16.0..96.0 * 96.0
+        } shouldBe true
     }
 })
 
@@ -178,6 +476,7 @@ private fun newController(
     marker: RecordingPersonalTreasureMapMarker,
     spec: PhysicalRewardSpec,
     definition: PersonalTreasureMapDefinition,
+    isUnclaimed: (Location) -> Boolean? = { true },
     currentServer: () -> String = { "spawn" },
 ) = PersonalTreasureMapController(
     plugin = plugin,
@@ -187,6 +486,7 @@ private fun newController(
     scheduler = scheduler,
     marker = marker,
     mapViewFactory = { testMapView() },
+    isUnclaimed = isUnclaimed,
 )
 
 private val nextTestMapViewId = AtomicInteger(1_000_000)
@@ -212,7 +512,12 @@ private fun testMapView(): MapView {
 private fun testMapSpec() = PhysicalRewardSpec(
     key = "weekly/map/archive-1",
     fingerprint = OneTimeUseFingerprint.sha256Fields("weekly/map/archive-1", "source-recipe-v1"),
-    preview = org.bukkit.inventory.ItemStack(Material.FILLED_MAP),
+    preview = org.bukkit.inventory.ItemStack(Material.FILLED_MAP).apply {
+        editMeta { meta ->
+            meta.displayName(Component.text("Карта тайника"))
+            meta.lore(listOf(Component.text("Тайник на Survival")))
+        }
+    },
 )
 
 private fun testMapDefinition(world: String) = PersonalTreasureMapDefinition(
@@ -220,6 +525,22 @@ private fun testMapDefinition(world: String) = PersonalTreasureMapDefinition(
     prizeSourceRef = "weekly/dungeon-case-loot-case",
     destinations = listOf(destination(world, 2.0, 64.0, 0.0, "Тайник на спавне")),
 )
+
+private fun testSearchDefinition(world: String) = PersonalTreasureMapDefinition(
+    id = "weekly_personal_cache",
+    prizeSourceRef = "vanilla/weekly_map_cache",
+    destinations = emptyList(),
+    searchPolicy = PersonalTreasureMapSearchPolicy("survival", world, 32),
+)
+
+private fun prepareSafeSurface(world: org.bukkit.World, destination: PersonalTreasureMapDestination) {
+    prepareCandidateSurface(world, floor(destination.x).toInt(), floor(destination.z).toInt(), floor(destination.y).toInt() - 1)
+}
+
+private fun prepareCandidateSurface(world: org.bukkit.World, x: Int, z: Int, groundY: Int = 63) {
+    world.loadChunk(x shr 4, z shr 4)
+    world.getBlockAt(x, groundY, z).type = Material.STONE
+}
 
 private fun destination(world: String, x: Double, y: Double, z: Double, hint: String) =
     PersonalTreasureMapDestination("spawn", world, x, y, z, hint)

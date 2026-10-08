@@ -1,6 +1,10 @@
 package ru.arc.itemcatalog
 
+import com.magmaguy.elitemobs.items.ItemConsumables
+import com.magmaguy.elitemobs.items.customitems.CustomItem
 import dev.lone.itemsadder.api.CustomStack
+import io.papermc.paper.datacomponent.DataComponentTypes
+import net.kyori.adventure.key.Key
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.block.ShulkerBox
@@ -65,8 +69,8 @@ internal class CatalogPhysicalRewards(
         is RewardCatalogSource.ParticlePreset -> "particle-preset:${source.id}"
         is RewardCatalogSource.Choice -> "choice:${OneTimeUseFingerprint.sha256(source.options.joinToString("\n") { "${it.id}|${it.categoryId}|${it.entryId}" }.toByteArray()).sha256}"
         is RewardCatalogSource.PersonalMap -> "personal-map:${OneTimeUseFingerprint.sha256Fields(
-            "personal-map-source-v1", entry.id, source.rewardCategoryId, source.rewardEntryId,
-            source.destinations.joinToString("\n"),
+            "personal-map-source-v2", entry.id, source.rewardCategoryId, source.rewardEntryId,
+            source.searchPolicy.server, source.searchPolicy.world, source.searchPolicy.radius.toString(),
         ).sha256}"
         else -> "native:${source}"
     }
@@ -175,7 +179,9 @@ internal class CatalogPhysicalRewards(
                         mapId = entry.id,
                         mapPrizeKey = archivedChild.materialization.sourceKey,
                         mapPrizeFingerprint = archivedChild.materialization.providerFingerprint,
-                        mapDestinations = source.destinations,
+                        mapSearchServer = source.searchPolicy.server,
+                        mapSearchWorld = source.searchPolicy.world,
+                        mapSearchRadius = source.searchPolicy.radius,
                     )
                 }
                 else -> return@forEach
@@ -214,13 +220,39 @@ internal class CatalogPhysicalRewards(
             it.fingerprint == spec.fingerprint.sha256 && it.recipe.type == "personal-map"
         } ?: return null
         val recipe = archived.recipe
-        val child = frozen.find(requireNotNull(recipe.mapPrizeKey)) ?: return null
-        if (child.fingerprint != recipe.mapPrizeFingerprint) return null
+        val mapId = recipe.mapId ?: return null
+        val legacyRoute = recipe.mapSearchServer == null
+        val prize = if (legacyRoute) {
+            currentMapPrize(mapId) ?: return null
+        } else {
+            frozen.find(requireNotNull(recipe.mapPrizeKey))?.takeIf {
+                it.fingerprint == recipe.mapPrizeFingerprint
+            } ?: return null
+        }
+        val searchPolicy = if (legacyRoute) {
+            currentMapSource(mapId)?.searchPolicy ?: return null
+        } else {
+            PersonalTreasureMapSearchPolicy(
+                requireNotNull(recipe.mapSearchServer),
+                requireNotNull(recipe.mapSearchWorld),
+                requireNotNull(recipe.mapSearchRadius),
+            )
+        }
+        val legacyDestinations = recipe.mapDestinations.orEmpty()
+        val legacyFingerprint = if (legacyRoute) {
+            PersonalTreasureMapDefinition.legacyFingerprint(
+                mapId,
+                requireNotNull(recipe.mapPrizeKey),
+                legacyDestinations,
+            )
+        } else null
         return runCatching {
             PersonalTreasureMapDefinition(
-                requireNotNull(recipe.mapId),
-                requireNotNull(recipe.mapPrizeKey),
-                recipe.mapDestinations.orEmpty(),
+                id = mapId,
+                prizeSourceRef = prize.key,
+                destinations = legacyDestinations,
+                searchPolicy = searchPolicy,
+                identityFingerprintOverride = legacyFingerprint,
             )
         }.getOrNull()
     }
@@ -255,7 +287,10 @@ internal class CatalogPhysicalRewards(
 
     fun resolve(key: String): PhysicalRewardSpec? = runCatching {
         frozen?.find(key)?.let { archived ->
-            val preview = frozen.preview(archived) ?: return@runCatching null
+            val preview = if (archived.recipe.type == "personal-map") {
+                currentMapPreview(requireNotNull(archived.recipe.mapId)) ?: frozen.preview(archived)
+            } else frozen.preview(archived)
+            val resolvedPreview = preview ?: return@runCatching null
             when (archived.recipe.type) {
                 "choice" -> archived.recipe.choiceOptions.orEmpty().forEach { option ->
                     val child = frozen.find(option.childKey) ?: return@runCatching null
@@ -276,7 +311,7 @@ internal class CatalogPhysicalRewards(
             return@runCatching PhysicalRewardSpec(
                 key = archived.key,
                 fingerprint = OneTimeUseFingerprint.parse(archived.fingerprint),
-                preview = preview,
+                preview = resolvedPreview,
                 choiceOptions = choiceOptions,
             )
         }
@@ -538,9 +573,7 @@ internal class CatalogPhysicalRewards(
                 child.fingerprint == option.childFingerprint && frozenProvidersReady(child.recipe)
             } == true
         }
-        "personal-map" -> frozen?.find(requireNotNull(recipe.mapPrizeKey))?.let { child ->
-            child.fingerprint == recipe.mapPrizeFingerprint && frozenProvidersReady(child.recipe)
-        } == true
+        "personal-map" -> effectiveMapPrize(recipe)?.let { frozenProvidersReady(it.recipe) } == true
         else -> false
     }
 
@@ -551,12 +584,51 @@ internal class CatalogPhysicalRewards(
                 val option = recipe.choiceOptions?.getOrNull(index) ?: return null
                 option.childKey to option.childFingerprint
             }
-            "personal-map" -> recipe.mapPrizeKey to recipe.mapPrizeFingerprint
+            "personal-map" -> effectiveMapPrize(recipe)?.let { it.key to it.fingerprint } ?: return null
             else -> return recipe.takeIf { spec.selectedChoiceIndex == null }
         }
         val (childKey, childFingerprint) = childAddress
         val child = frozen?.find(requireNotNull(childKey)) ?: return null
         return child.recipe.takeIf { child.fingerprint == childFingerprint }
+    }
+
+    /** Old issued maps keep their voucher address but redirect prize selection through the current map entry. */
+    private fun effectiveMapPrize(recipe: FrozenPhysicalRecipe): FrozenPhysicalRewardRecord? {
+        if (recipe.type != "personal-map") return null
+        val child = if (recipe.mapSearchServer == null) {
+            currentMapPrize(requireNotNull(recipe.mapId))
+        } else {
+            frozen?.find(requireNotNull(recipe.mapPrizeKey))?.takeIf {
+                it.fingerprint == recipe.mapPrizeFingerprint
+            }
+        } ?: return null
+        return child
+    }
+
+    private fun currentMapSource(mapId: String): RewardCatalogSource.PersonalMap? =
+        entries.values.asSequence()
+            .filter { it.id == mapId && it.source is RewardCatalogSource.PersonalMap }
+            .singleOrNull()
+            ?.source as? RewardCatalogSource.PersonalMap
+
+    private fun currentMapPreview(mapId: String): ItemStack? = entries.values
+        .filter { it.id == mapId && it.source is RewardCatalogSource.PersonalMap }
+        .singleOrNull()
+        ?.let(::preview)
+
+    /** Redirects a legacy bearer through the current map recipe already captured at warmup. */
+    private fun currentMapPrize(mapId: String): FrozenPhysicalRewardRecord? {
+        val mapEntry = entries.values.singleOrNull {
+            it.id == mapId && it.source is RewardCatalogSource.PersonalMap
+        } ?: return null
+        val prepared = preparedInteractive[key(mapEntry)] ?: return null
+        val parent = frozen?.find(prepared.sourceKey)?.takeIf {
+            it.fingerprint == prepared.providerFingerprint &&
+                it.recipe.type == "personal-map" && it.recipe.mapId == mapId
+        } ?: return null
+        val recipe = parent.recipe
+        val prizeKey = recipe.mapPrizeKey ?: return null
+        return frozen.find(prizeKey)?.takeIf { it.fingerprint == recipe.mapPrizeFingerprint }
     }
 
     private fun frozenTreasureProvidersReady(node: FrozenTreasureNode): Boolean = when (node.type) {
@@ -832,6 +904,10 @@ internal class CatalogPhysicalRewards(
 
     /** Only the finite native item issuers accepted below reach dispatch. Confirm an item delta, not a command boolean. */
     private fun giveNativeCommand(player: Player, command: String): PhysicalRewardOutcome {
+        if (command == ELITE_LUCKY_TICKET_COMMAND) {
+            val ticket = eliteLuckyTicket(player) ?: return rejected()
+            return giveStacks(player, listOf(ticket))
+        }
         val before = player.inventory.storageContents.map { it?.clone() }
         val succeeded = runCatching { Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command.replace("%player%", player.name)) }
         val after = player.inventory.storageContents.toList()
@@ -842,13 +918,27 @@ internal class CatalogPhysicalRewards(
         return if (succeeded.getOrNull() == false) rejected() else uncertain()
     }
 
+    /** Uses EliteMobs' own configured item so its consumable identity and all native PDC remain intact. */
+    private fun eliteLuckyTicket(player: Player): ItemStack? {
+        if (!Bukkit.getPluginManager().isPluginEnabled("EliteMobs")) return null
+        val ticket = runCatching {
+            CustomItem.getCustomItem(ELITE_LUCKY_TICKET_ID)
+                ?.generateDefaultsItemStack(player, false, null)
+                ?.clone()
+        }.getOrNull() ?: return null
+        if (ticket.type != Material.PAPER || !ItemConsumables.`is`(ticket, ItemConsumables.Type.LUCKY_TICKET)) return null
+        ticket.setData(DataComponentTypes.ITEM_MODEL, Key.key("minecraft:totem_of_undying"))
+        return ticket
+    }
+
     private fun giveStacks(player: Player, values: List<ItemStack>): PhysicalRewardOutcome {
         val before = player.inventory.storageContents.map { it?.clone() }.toTypedArray()
         val simulation = Bukkit.createInventory(null, 36)
         simulation.contents = before.map { it?.clone() }.toTypedArray()
         if (values.any { simulation.addItem(it.clone()).isNotEmpty() }) return PhysicalRewardOutcome.Rejected("<red>В инвентаре не хватает места.")
         return try {
-            if (player.inventory.addItem(*values.map { it.clone() }.toTypedArray()).isEmpty()) PhysicalRewardOutcome.Applied
+            val deliveries = values.map { it.clone() }.toTypedArray()
+            if (player.inventory.addItem(*deliveries).isEmpty()) PhysicalRewardOutcome.Applied
             else { player.inventory.storageContents = before; rejected() }
         } catch (_: RuntimeException) {
             player.inventory.storageContents = before
@@ -966,6 +1056,8 @@ internal class CatalogPhysicalRewards(
         private const val UNAVAILABLE = "<red>Награда сейчас недоступна. Предмет сохранён."
         private const val MAX_GRAPH_NODES = 2_048
         private const val MAX_POOL_DEPTH = 8
+        private const val ELITE_LUCKY_TICKET_ID = "elite_lucky_ticket.yml"
+        private const val ELITE_LUCKY_TICKET_COMMAND = "elitemobs:elitemobs loot give %player% elite_lucky_ticket.yml"
         private val TOKEN_COMMAND = Regex("rediseconomy:balance %player% tokens give ([1-9][0-9]{0,5}) arc-lootbox-catalog")
         private val NATIVE_ITEM_COMMANDS = listOf(
             "arcbuilder" to Regex("arcbuilder:builder systembook %player% [a-z0-9_-]+\\.schem"),

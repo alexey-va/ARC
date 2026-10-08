@@ -13,9 +13,11 @@ import io.mockk.mockkStatic
 import io.mockk.unmockkObject
 import io.mockk.unmockkStatic
 import net.kyori.adventure.text.Component
+import org.bukkit.NamespacedKey
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
+import org.bukkit.persistence.PersistentDataType
 import ru.arc.mounts.MountMoneyEvidence
 import ru.arc.mounts.MountWallet
 import ru.arc.mounts.RedisEconomyMountWallet
@@ -232,6 +234,73 @@ class CatalogPhysicalRewardsTest : StringSpec({
             } finally {
                 unmockkStatic(CustomStack::class)
                 unmockkObject(Treasures)
+            }
+        }
+    }
+
+    "uses the configured furniture model for the issued voucher and keeps ItemsAdder identity out" {
+        MockBukkitTestRuntime.open().use {
+            val packageId = "catalog-furniture-icon-${UUID.randomUUID()}"
+            val itemId = "elitecreatures:jf1_bird_house"
+            val entry = RewardCatalogEntry(
+                id = "japanese_furniture",
+                name = "Пак мебели · Японский дом",
+                description = emptyList(),
+                rarity = null,
+                requires = emptyList(),
+                source = RewardCatalogSource.FurniturePackage(packageId),
+                icon = CatalogIconStyle(Material.PAPER.name, 10992),
+                previewItemsAdder = itemId,
+            )
+            val settings = RewardCatalogSettings(
+                enabled = true,
+                title = "Каталог",
+                categories = listOf(
+                    RewardCatalogCategory(
+                        id = "furniture",
+                        name = "Мебель",
+                        description = emptyList(),
+                        icon = CatalogIconStyle(Material.CHEST.name),
+                        entries = listOf(entry),
+                    ),
+                ),
+                messages = RewardCatalogMessages.DEFAULT,
+                packages = mapOf(packageId to RewardFurniturePackage("Японский дом", listOf(itemId))),
+            )
+            val furniture = ItemStack(Material.PAPER).apply {
+                editMeta { meta ->
+                    meta.setCustomModelData(10992)
+                    meta.persistentDataContainer.set(
+                        NamespacedKey("itemsadder", "id"),
+                        PersistentDataType.STRING,
+                        itemId,
+                    )
+                }
+            }
+            val handle = mockk<CustomStack>(relaxed = true)
+            every { handle.itemStack } returns furniture
+            mockkStatic(CustomStack::class)
+            every { CustomStack.getInstance(any()) } answers {
+                if (firstArg<String>() == itemId) handle else null
+            }
+            try {
+                val service = CatalogPhysicalRewards(settings)
+
+                val visualPreview = service.visualPreview(entry)
+                visualPreview.type shouldBe Material.PAPER
+                visualPreview.itemMeta?.customModelData shouldBe 10992
+                visualPreview.itemMeta?.persistentDataContainer?.keys?.any {
+                    it.namespace.equals("itemsadder", ignoreCase = true)
+                } shouldBe true
+
+                val issuedVoucherPreview = requireNotNull(service.resolve(service.key(entry))).preview
+                issuedVoucherPreview.type shouldBe Material.PAPER
+                issuedVoucherPreview.itemMeta?.customModelData shouldBe 10992
+                issuedVoucherPreview.itemMeta?.persistentDataContainer?.keys?.any {
+                    it.namespace.equals("itemsadder", ignoreCase = true)
+                } shouldBe false
+            } finally {
+                unmockkStatic(CustomStack::class)
             }
         }
     }

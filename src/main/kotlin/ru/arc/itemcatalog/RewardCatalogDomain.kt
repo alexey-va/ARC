@@ -34,11 +34,13 @@ sealed interface RewardCatalogSource {
     /** A physical bearer voucher that offers three stable choices from a frozen pool. */
     data class Choice(val options: List<RewardCatalogChoiceRef>) : RewardCatalogSource
 
-    /** An owner-bound map whose frozen prize can only be claimed at its authored destination. */
+    /** An owner-bound map whose frozen prize is claimed at a safe Survival location discovered on activation. */
     data class PersonalMap(
         val rewardCategoryId: String,
         val rewardEntryId: String,
-        val destinations: List<PersonalTreasureMapDestination>,
+        val searchPolicy: PersonalTreasureMapSearchPolicy,
+        /** Retained only while reading older authored configs; new archives store the dynamic policy. */
+        val legacyDestinations: List<PersonalTreasureMapDestination> = emptyList(),
     ) : RewardCatalogSource
 }
 

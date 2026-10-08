@@ -8,22 +8,21 @@ import ru.arc.paper.testing.MockBukkitTestRuntime
 import java.nio.file.Files
 
 class PersonalTreasureMapRecipeTest : StringSpec({
-    "map parser freezes authored destinations and rejects invalid or recursive prizes" {
+    "map parser freezes bounded Survival search and rejects invalid or recursive prizes" {
         val root = Files.createTempDirectory("arc-map-config")
         try {
-            fun load(prize: String = "loot", x: String = "10.5", extra: String = ""): RewardCatalogSettings {
+            fun load(prize: String = "loot", radius: String = "96", extra: String = ""): RewardCatalogSettings {
                 val document = """
                     enabled: true
                     categories:
                       rewards:
                         entries:
                           loot:
-                            dungeon-case: loot_case
+                            treasure: {pool: weekly_map_cache, id: rare_find}
                           map:
                             personal-map:
                               reward: {category: rewards, entry: $prize}
-                              destinations:
-                                - {server: spawn, world: rc_origin_spawn, x: $x, y: 72, z: -20.5, hint: 'Ищи отметку на карте'$extra}
+                              search: {server: survival, world: world, radius: $radius$extra}
                 """.trimIndent()
                 Files.createDirectories(root.resolve("modules"))
                 Files.writeString(root.resolve("modules/reward-catalog.yml"), document)
@@ -33,17 +32,17 @@ class PersonalTreasureMapRecipeTest : StringSpec({
             val source = load().categories.single().entries.last().source as RewardCatalogSource.PersonalMap
             source.rewardCategoryId shouldBe "rewards"
             source.rewardEntryId shouldBe "loot"
-            source.destinations.single().x shouldBe 10.5
+            source.searchPolicy shouldBe PersonalTreasureMapSearchPolicy("survival", "world", 96)
             runCatching { load(prize = "map") }.isFailure shouldBe true
             runCatching { load(prize = "missing") }.isFailure shouldBe true
-            runCatching { load(x = ".nan") }.isFailure shouldBe true
+            runCatching { load(radius = "999") }.isFailure shouldBe true
             runCatching { load(extra = ", command: op") }.isFailure shouldBe true
         } finally {
             root.toFile().deleteRecursively()
         }
     }
 
-    "archived map keeps its destination and prize after reload independently of live catalog" {
+    "archived map keeps its dynamic policy and prize after reload independently of live catalog" {
         MockBukkitTestRuntime.open().use {
             val root = Files.createTempDirectory("arc-map-archive")
             try {
@@ -58,7 +57,9 @@ class PersonalTreasureMapRecipeTest : StringSpec({
                     mapId = "weekly_personal_map",
                     mapPrizeKey = prize.sourceKey,
                     mapPrizeFingerprint = prize.providerFingerprint,
-                    mapDestinations = listOf(PersonalTreasureMapDestination("spawn", "rc_origin_spawn", 10.5, 72.0, -20.5, "Тайник")),
+                    mapSearchServer = "survival",
+                    mapSearchWorld = "world",
+                    mapSearchRadius = 96,
                 )
                 val captured = requireNotNull(archive.capture("personal-map:weekly_personal_map", recipe, ItemStack(Material.FILLED_MAP)))
                 archive.find(captured.materialization.sourceKey) shouldBe null
@@ -67,6 +68,7 @@ class PersonalTreasureMapRecipeTest : StringSpec({
                 val restored = requireNotNull(FrozenPhysicalRewards(root).find(prepared.sourceKey))
                 restored.recipe shouldBe recipe
                 restored.recipe.mapPrizeKey shouldBe prize.sourceKey
+                restored.recipe.mapSearchWorld shouldBe "world"
                 restored.fingerprint shouldBe prepared.providerFingerprint
                 runCatching { recipe.copy(mapPrizeKey = "frozen:" + "0".repeat(64)).validate() }.isFailure shouldBe true
                 runCatching { recipe.copy(type = "particle-preset", particlePresetId = "arc_rainbow").validate() }.isFailure shouldBe true

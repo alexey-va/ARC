@@ -112,23 +112,27 @@ existing one-use claim scope before granting the frozen child reward. Reload,
 transfer and repeated opening preserve the same offers. Unknown native outcomes
 retain the ordinary journal recovery ownership.
 
-A `personal-map` source contains `reward: {category, entry}` and 1–64 authored
-`destinations`, each with `server`, `world`, finite `x/y/z` and a short `hint`.
-Its icon must be `FILLED_MAP`. The map and prize recipe are frozen together.
-The first right-click binds the voucher to its activator and opens guidance;
-it never claims a prize, even when activated at the target. Before activation
-the item is transferable. Later, only its owner within three blocks of its
-fixed destination can claim the prize. Owner, destination, held identity and
-position are checked again after the durable claim and before the effect.
+A `personal-map` source contains `reward: {category, entry}` and
+`search: {server: survival, world: world, radius: 96}`. Its icon must be
+`FILLED_MAP`. The first right-click on Survival binds the voucher to its
+activator and searches up to 64 points in already-loaded chunks; it never
+claims a prize on that click. Before activation the item is transferable.
+The selected target is stored with the owner in the map PDC. Later, only that
+owner within three blocks can claim the prize. The controller checks loaded
+surface, headroom, hazards, world border, Lands and any local WorldGuard region
+before selecting and again after the durable claim. If protection changes, it
+chooses another safe point and the in-flight claim does not grant a prize.
 
 The map uses a contextual Paper renderer and an owner-only packet chest marker.
-It does not scan terrain, load target chunks or place blocks. Holding a bound
-map restores its renderer after reload or backend transfer. The two backends
-must carry the same definitions and provider content so their warmup archives
-have identical addresses; historical local archive files must be retained.
-The runtime retries unavailable startup providers for up to 60 seconds. Map
-rendering and real backend transfer require a native-client check; unit tests
-cover identity, selection, archive and claim rules only.
+It does not generate chunks or place blocks. Holding a bound map restores its
+renderer after reload or backend transfer. Current definitions and provider
+content must match across backends so warmup archives have identical
+addresses; historical archive files are retained. Legacy map vouchers keep
+their UUID, fingerprint and shared claim scope while resolving the current
+Survival policy and current configured prize. The runtime retries unavailable
+startup providers for up to 60 seconds. Map rendering and real backend transfer
+require a native-client check; unit tests cover identity, bounded selection,
+archive and claim rules only.
 
 ### Cosmetic certificates and direct AE consumables
 

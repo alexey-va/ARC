@@ -33,6 +33,13 @@ class LandsHook {
         return landWorld.getArea(location) != null
     }
 
+    /** Returns null when Lands cannot answer for this world; callers placing rewards must fail closed then. */
+    fun isUnclaimed(location: Location): Boolean? {
+        val world = location.world ?: return null
+        val landWorld = integration.getWorld(world) ?: return null
+        return landWorld.getArea(location) == null
+    }
+
     fun isLandOwner(player: Player, location: Location): Boolean =
         integration.getArea(location)?.land?.ownerUID == player.uniqueId
 

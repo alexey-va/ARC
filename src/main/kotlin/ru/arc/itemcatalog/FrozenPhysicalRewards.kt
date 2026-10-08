@@ -270,11 +270,17 @@ internal data class FrozenPhysicalRecipe(
     val mapPrizeKey: String? = null,
     val mapPrizeFingerprint: String? = null,
     val mapDestinations: List<PersonalTreasureMapDestination>? = null,
+    /** New maps search bounded already-loaded Survival terrain; null means a legacy authored route. */
+    val mapSearchServer: String? = null,
+    val mapSearchWorld: String? = null,
+    val mapSearchRadius: Int? = null,
 ) {
     /** Set false only for storage-thread checks that must not deserialize Bukkit ItemStacks. */
     fun validate(validateBukkitStacks: Boolean = true) {
         if (type != "personal-map") {
-            require(mapId == null && mapPrizeKey == null && mapPrizeFingerprint == null && mapDestinations == null) {
+            require(mapId == null && mapPrizeKey == null && mapPrizeFingerprint == null && mapDestinations == null &&
+                mapSearchServer == null && mapSearchWorld == null && mapSearchRadius == null
+            ) {
                 "Personal map fields require a personal-map recipe"
             }
         }
@@ -416,14 +422,24 @@ internal data class FrozenPhysicalRecipe(
                     "Frozen map prize fingerprint is invalid"
                 }
                 require(mapPrizeKey == "frozen:$mapPrizeFingerprint") { "Frozen map prize key is invalid" }
-                require(mapDestinations != null && mapDestinations.size in 1..PersonalTreasureMapDefinition.MAX_DESTINATIONS) {
-                    "Frozen map destinations are invalid"
+                val searchFields = listOf(mapSearchServer, mapSearchWorld, mapSearchRadius)
+                if (searchFields.all { it == null }) {
+                    require(mapDestinations != null && mapDestinations.size in 1..PersonalTreasureMapDefinition.MAX_DESTINATIONS) {
+                        "Frozen legacy map destinations are invalid"
+                    }
+                    // Gson bypasses data-class constructors, so persisted coordinates need the YAML validation too.
+                    mapDestinations.forEach { point ->
+                        PersonalTreasureMapDestination(point.server, point.world, point.x, point.y, point.z, point.hint)
+                    }
+                    require(mapDestinations.distinct().size == mapDestinations.size) { "Frozen map destinations are duplicated" }
+                } else {
+                    require(searchFields.all { it != null } && mapDestinations.isNullOrEmpty()) {
+                        "Frozen map search policy is incomplete or mixed with legacy destinations"
+                    }
+                    PersonalTreasureMapSearchPolicy(
+                        requireNotNull(mapSearchServer), requireNotNull(mapSearchWorld), requireNotNull(mapSearchRadius),
+                    )
                 }
-                // Gson bypasses data-class constructors, so persisted coordinates need the same validation as YAML.
-                mapDestinations.forEach { point ->
-                    PersonalTreasureMapDestination(point.server, point.world, point.x, point.y, point.z, point.hint)
-                }
-                require(mapDestinations.distinct().size == mapDestinations.size) { "Frozen map destinations are duplicated" }
                 require(currency == null && minAmount == null && maxAmount == null && tokenAmount == null)
                 require(commandKind == null && commandValue == null && mountId == null && furnitureBoxes == null)
                 require(sealItems == null && sealName == null && sealDescription == null && treasure == null)

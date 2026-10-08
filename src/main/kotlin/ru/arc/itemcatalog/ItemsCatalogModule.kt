@@ -262,7 +262,10 @@ object ItemsCatalogModule : PluginModule {
     private fun showMapGuidance(player: Player, maps: PersonalTreasureMapController) {
         val guidance = maps.guidance(player) ?: return
         val message = when {
-            !guidance.onDestinationServer || !guidance.onDestinationWorld -> "<#e8dfd2>Ваш тайник находится на Спавне. Возьмите карту с собой."
+            !guidance.onDestinationServer || !guidance.onDestinationWorld -> "<#e8dfd2>Тайник ищется в обычном мире на Survival. Возьмите карту туда."
+            guidance.safetyUnavailable -> "<#e9c46a>Не удалось проверить безопасность этой точки. Карта сохранена — попробуйте позже."
+            !guidance.targetSelected && guidance.ownerBound -> "<#e9c46a>Безопасная точка пока не найдена. Нажмите ПКМ позже, чтобы повторить поиск."
+            !guidance.targetSelected -> "<#e8dfd2>ПКМ в обычном мире на Survival — закрепить карту и найти безопасное место."
             guidance.withinClaimRadius -> "<#9bd48d>Тайник здесь · ПКМ — забрать находку"
             else -> "<#e8dfd2>До тайника <#e9c46a>${kotlin.math.ceil(guidance.distance ?: 0.0).toInt()} м <#e8dfd2>· ${guidance.hint}"
         }
@@ -272,8 +275,11 @@ object ItemsCatalogModule : PluginModule {
     private fun mapFailureMessage(failure: PersonalTreasureMapFailure): String = when (failure) {
         PersonalTreasureMapFailure.WRONG_OWNER -> "<#e9c46a>Эту карту уже активировал другой игрок."
         PersonalTreasureMapFailure.WRONG_SERVER,
-        PersonalTreasureMapFailure.WRONG_WORLD -> "<#e8dfd2>Ваш тайник находится на Спавне. Возьмите карту с собой."
+        PersonalTreasureMapFailure.WRONG_WORLD -> "<#e8dfd2>Ваш тайник находится в обычном мире на Survival. Возьмите карту туда."
         PersonalTreasureMapFailure.TOO_FAR -> "<#e9c46a>Подойдите к тайнику ближе и нажмите ПКМ."
+        PersonalTreasureMapFailure.TARGET_CHANGED -> "<#e9c46a>Точка тайника стала защищённой. Карта выбрала новое безопасное место."
+        PersonalTreasureMapFailure.NO_SAFE_TARGET -> "<#e9c46a>Поблизости не найдено безопасного места. Попробуйте ещё раз позже."
+        PersonalTreasureMapFailure.SAFETY_UNAVAILABLE -> "<#e9c46a>Не удалось проверить безопасность точки. Попробуйте позже; карта не потрачена."
         PersonalTreasureMapFailure.INVALID_OR_STALE -> "<#e9c46a>Эта карта сейчас недоступна."
     }
 

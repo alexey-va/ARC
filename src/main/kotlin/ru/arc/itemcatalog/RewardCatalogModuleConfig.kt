@@ -224,32 +224,45 @@ class RewardCatalogModuleConfig(private val config: Config) {
 
     private fun parsePersonalMap(raw: Any?, path: String): RewardCatalogSource.PersonalMap {
         val map = strictMap(raw, path)
-        rejectUnknown(map, setOf("reward", "destinations"), path)
+        rejectUnknown(map, setOf("reward", "search", "destinations"), path)
         val reward = strictMap(map.required("reward", path), "$path.reward")
         rejectUnknown(reward, setOf("category", "entry"), "$path.reward")
-        val locations = map.required("destinations", path) as? List<*>
-            ?: throw invalid("$path.destinations", "expected list")
-        require(locations.size in 1..PersonalTreasureMapDefinition.MAX_DESTINATIONS) {
-            "$path.destinations must contain 1..${PersonalTreasureMapDefinition.MAX_DESTINATIONS} locations"
-        }
-        val destinations = locations.mapIndexed { index, rawDestination ->
-            val locationPath = "$path.destinations[$index]"
-            val destination = strictMap(rawDestination, locationPath)
-            rejectUnknown(destination, setOf("server", "world", "x", "y", "z", "hint"), locationPath)
-            fun coordinate(key: String): Double = (destination.required(key, locationPath) as? Number)?.toDouble()
-                ?.takeIf(Double::isFinite) ?: throw invalid("$locationPath.$key", "expected finite number")
-            PersonalTreasureMapDestination(
-                requiredString(destination["server"], "$locationPath.server", 48),
-                requiredString(destination["world"], "$locationPath.world", 128),
-                coordinate("x"), coordinate("y"), coordinate("z"),
-                requiredString(destination["hint"], "$locationPath.hint", 128),
+        val searchPolicy = if ("search" in map) {
+            require("destinations" !in map) { "$path cannot contain both search and destinations" }
+            val search = strictMap(map.getValue("search"), "$path.search")
+            rejectUnknown(search, setOf("server", "world", "radius"), "$path.search")
+            PersonalTreasureMapSearchPolicy(
+                requiredString(search.required("server", "$path.search"), "$path.search.server", 48),
+                requiredString(search.required("world", "$path.search"), "$path.search.world", 128),
+                integer(search.required("radius", "$path.search"), "$path.search.radius"),
             )
+        } else {
+            // Older authored configs carried Spawn coordinates. Validate the shape, then migrate to Survival search.
+            val locations = map.required("destinations", path) as? List<*>
+                ?: throw invalid("$path.destinations", "expected list")
+            require(locations.size in 1..PersonalTreasureMapDefinition.MAX_DESTINATIONS) {
+                "$path.destinations must contain 1..${PersonalTreasureMapDefinition.MAX_DESTINATIONS} locations"
+            }
+            val destinations = locations.mapIndexed { index, rawDestination ->
+                val locationPath = "$path.destinations[$index]"
+                val destination = strictMap(rawDestination, locationPath)
+                rejectUnknown(destination, setOf("server", "world", "x", "y", "z", "hint"), locationPath)
+                fun coordinate(key: String): Double = (destination.required(key, locationPath) as? Number)?.toDouble()
+                    ?.takeIf(Double::isFinite) ?: throw invalid("$locationPath.$key", "expected finite number")
+                PersonalTreasureMapDestination(
+                    requiredString(destination["server"], "$locationPath.server", 48),
+                    requiredString(destination["world"], "$locationPath.world", 128),
+                    coordinate("x"), coordinate("y"), coordinate("z"),
+                    requiredString(destination["hint"], "$locationPath.hint", 128),
+                )
+            }
+            require(destinations.distinct().size == destinations.size) { "$path contains duplicate destinations" }
+            PersonalTreasureMapSearchPolicy("survival", "world", 96)
         }
-        require(destinations.distinct().size == destinations.size) { "$path contains duplicate destinations" }
         return RewardCatalogSource.PersonalMap(
             requiredId(reward["category"], "$path.reward.category", ID),
             requiredId(reward["entry"], "$path.reward.entry", ID),
-            destinations,
+            searchPolicy,
         )
     }
 
