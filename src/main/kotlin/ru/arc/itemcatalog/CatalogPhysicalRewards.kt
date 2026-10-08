@@ -222,14 +222,19 @@ internal class CatalogPhysicalRewards(
         val recipe = archived.recipe
         val mapId = recipe.mapId ?: return null
         val legacyRoute = recipe.mapSearchServer == null
-        val prize = if (legacyRoute) {
-            currentMapPrize(mapId) ?: return null
-        } else {
+        val migrateWeeklyRoute = isPublishedWeeklyMapWorldRoute(recipe)
+        val redirectToCurrent = legacyRoute || migrateWeeklyRoute
+        val archivedPrize = if (legacyRoute) null else {
             frozen.find(requireNotNull(recipe.mapPrizeKey))?.takeIf {
                 it.fingerprint == recipe.mapPrizeFingerprint
             } ?: return null
         }
-        val searchPolicy = if (legacyRoute) {
+        val prize = if (redirectToCurrent) {
+            currentMapPrize(mapId) ?: return null
+        } else {
+            requireNotNull(archivedPrize)
+        }
+        val searchPolicy = if (redirectToCurrent) {
             currentMapSource(mapId)?.searchPolicy ?: return null
         } else {
             PersonalTreasureMapSearchPolicy(
@@ -246,13 +251,29 @@ internal class CatalogPhysicalRewards(
                 legacyDestinations,
             )
         } else null
+        val oldSearchPolicy = if (migrateWeeklyRoute) {
+            PersonalTreasureMapSearchPolicy(
+                requireNotNull(recipe.mapSearchServer),
+                requireNotNull(recipe.mapSearchWorld),
+                requireNotNull(recipe.mapSearchRadius),
+            )
+        } else null
+        val archivedIdentityFingerprint = if (migrateWeeklyRoute) {
+            PersonalTreasureMapDefinition(
+                id = mapId,
+                prizeSourceRef = requireNotNull(archivedPrize).key,
+                destinations = emptyList(),
+                searchPolicy = requireNotNull(oldSearchPolicy),
+            ).fingerprint
+        } else null
         return runCatching {
             PersonalTreasureMapDefinition(
                 id = mapId,
                 prizeSourceRef = prize.key,
                 destinations = legacyDestinations,
                 searchPolicy = searchPolicy,
-                identityFingerprintOverride = legacyFingerprint,
+                identityFingerprintOverride = legacyFingerprint ?: archivedIdentityFingerprint,
+                legacyTargetPolicy = oldSearchPolicy,
             )
         }.getOrNull()
     }
@@ -595,7 +616,7 @@ internal class CatalogPhysicalRewards(
     /** Old issued maps keep their voucher address but redirect prize selection through the current map entry. */
     private fun effectiveMapPrize(recipe: FrozenPhysicalRecipe): FrozenPhysicalRewardRecord? {
         if (recipe.type != "personal-map") return null
-        val child = if (recipe.mapSearchServer == null) {
+        val child = if (recipe.mapSearchServer == null || isPublishedWeeklyMapWorldRoute(recipe)) {
             currentMapPrize(requireNotNull(recipe.mapId))
         } else {
             frozen?.find(requireNotNull(recipe.mapPrizeKey))?.takeIf {
@@ -604,6 +625,14 @@ internal class CatalogPhysicalRewards(
         } ?: return null
         return child
     }
+
+    private fun isPublishedWeeklyMapWorldRoute(recipe: FrozenPhysicalRecipe): Boolean =
+        recipe.type == "personal-map" &&
+            recipe.mapId == "weekly_personal_map" &&
+            recipe.mapDestinations == null &&
+            recipe.mapSearchServer == "survival" &&
+            recipe.mapSearchWorld == "world" &&
+            recipe.mapSearchRadius == 96
 
     private fun currentMapSource(mapId: String): RewardCatalogSource.PersonalMap? =
         entries.values.asSequence()

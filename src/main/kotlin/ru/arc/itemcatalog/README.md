@@ -127,6 +127,13 @@ enabled and answer; any local WorldGuard region rejects the point. These checks
 run before selecting and again after the durable claim. If protection changes,
 it chooses another safe point and the in-flight claim does not grant a prize.
 
+The issued `weekly_personal_map` route `survival/world/96` is migrated to the
+active `survival/survival/96` route and current prize. When its owner first uses
+an already-bound map, a validated target stored in the old world is cleared.
+Outside the new search world, the map gives travel guidance; in the new world,
+it selects a safe target again. The voucher address, owner, and map identity
+remain unchanged.
+
 The map uses a contextual Paper renderer and an owner-only packet chest marker.
 It does not generate chunks or place blocks. Holding a bound map restores its
 renderer after reload or backend transfer. Current definitions and provider

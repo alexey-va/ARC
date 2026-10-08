@@ -57,6 +57,8 @@ class PersonalTreasureMapDefinition(
     destinations: List<PersonalTreasureMapDestination>,
     val searchPolicy: PersonalTreasureMapSearchPolicy? = null,
     identityFingerprintOverride: OneTimeUseFingerprint? = null,
+    /** One previously issued route whose target may be discarded by an explicit route migration. */
+    val legacyTargetPolicy: PersonalTreasureMapSearchPolicy? = null,
 ) {
     val destinations: List<PersonalTreasureMapDestination> = Collections.unmodifiableList(destinations.toList())
     val fingerprint: OneTimeUseFingerprint
@@ -66,6 +68,9 @@ class PersonalTreasureMapDefinition(
         require(PhysicalRewardVoucher.isValidKey(prizeSourceRef)) { "Invalid prize source reference" }
         require(this.destinations.size <= MAX_DESTINATIONS && (this.destinations.isNotEmpty() || searchPolicy != null)) {
             "A treasure map requires a search policy or 1..$MAX_DESTINATIONS legacy destinations"
+        }
+        require(legacyTargetPolicy == null || searchPolicy != null) {
+            "A legacy target policy requires a current search policy"
         }
         fingerprint = identityFingerprintOverride ?: if (searchPolicy == null) {
             legacyFingerprint(id, prizeSourceRef, this.destinations)

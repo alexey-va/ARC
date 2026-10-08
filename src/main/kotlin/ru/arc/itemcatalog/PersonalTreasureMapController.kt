@@ -174,6 +174,19 @@ class PersonalTreasureMapController internal constructor(
         if (!personalCandidate) return PersonalTreasureMapUseDecision.NOT_A_PERSONAL_MAP
         val searchPolicy = definition?.searchPolicy
         if (searchPolicy != null && !isSearchLocation(player, searchPolicy)) {
+            // An explicitly migrated, owner-bound map may be activated outside its new search world.
+            // Validate it and discard only the exact known legacy target before returning guidance.
+            if (hasPersonalMapMarker(stack) && definition.legacyTargetPolicy != null) {
+                val resolved = resolve(stack) ?: return PersonalTreasureMapUseDecision.REJECT
+                if (resolved.voucher != voucher || tokenFailure(player, resolved) != null) {
+                    return PersonalTreasureMapUseDecision.REJECT
+                }
+                if (hasLegacyTarget(resolved)) {
+                    if (!migrateLegacyTarget(player, resolved, selectTarget = false)) {
+                        return PersonalTreasureMapUseDecision.REJECT
+                    }
+                }
+            }
             return PersonalTreasureMapUseDecision.OPEN_MAP
         }
         if (!hasPersonalMapMarker(stack)) {
@@ -197,6 +210,12 @@ class PersonalTreasureMapController internal constructor(
         val resolved = resolve(stack) ?: return PersonalTreasureMapUseDecision.REJECT
         if (resolved.voucher != voucher || tokenFailure(player, resolved) != null) {
             return PersonalTreasureMapUseDecision.REJECT
+        }
+        if (hasLegacyTarget(resolved)) {
+            if (!migrateLegacyTarget(player, resolved, selectTarget = true)) {
+                return PersonalTreasureMapUseDecision.REJECT
+            }
+            return PersonalTreasureMapUseDecision.OPEN_MAP
         }
         if (resolved.definition.searchPolicy != null && resolved.destination == null) {
             selectOrRefreshTarget(player, resolved, invalidateExisting = false)
@@ -427,13 +446,46 @@ class PersonalTreasureMapController internal constructor(
     ): Boolean {
         val targetMatchesPolicy = identity.target?.let { target ->
             val policy = definition.searchPolicy
-            policy != null && target.server == policy.server && target.world == policy.world
+            (policy != null && target.server == policy.server && target.world == policy.world) ||
+                definition.legacyTargetPolicy?.let { legacy ->
+                    target.server == legacy.server && target.world == legacy.world
+                } == true
         } ?: true
         return identity.voucherId == voucherId &&
             identity.definitionId == definition.id &&
             identity.definitionFingerprint == definition.fingerprint &&
             identity.destinationIndex == definition.destinationIndex(voucherId) &&
             targetMatchesPolicy
+    }
+
+    private fun hasLegacyTarget(resolved: ResolvedMap): Boolean {
+        val target = resolved.identity.target ?: return false
+        val legacy = resolved.definition.legacyTargetPolicy ?: return false
+        return target.server == legacy.server && target.world == legacy.world
+    }
+
+    private fun migrateLegacyTarget(
+        player: Player,
+        resolved: ResolvedMap,
+        selectTarget: Boolean,
+    ): Boolean {
+        val mainHand = player.inventory.itemInMainHand
+        if (PhysicalRewardVoucher.identity(mainHand) != resolved.voucher ||
+            PersonalTreasureMapIdentity.read(mainHand) != resolved.identity ||
+            resolved.identity.ownerId != player.uniqueId
+        ) return false
+
+        val migrated = mainHand.clone().apply {
+            editMeta { meta ->
+                writeIdentity(meta.persistentDataContainer, resolved.identity.copy(target = null))
+            }
+        }
+        player.inventory.setItemInMainHand(migrated)
+        val updated = resolve(migrated) ?: return false
+        if (updated.voucher != resolved.voucher || tokenFailure(player, updated) != null) return false
+        if (selectTarget) selectOrRefreshTarget(player, updated, invalidateExisting = false)
+        refreshHeldMap(player)
+        return true
     }
 
     private fun isSearchLocation(player: Player, policy: PersonalTreasureMapSearchPolicy): Boolean =
