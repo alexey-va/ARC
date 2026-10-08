@@ -628,8 +628,9 @@ internal object NativeDungeonBestiaryCatalog {
             "MISCELLANEOUS" -> "Дополнительный эффект EliteMobs"
             else -> "Способность EliteMobs"
         }
-        val cooldown = fields.powerCooldown.takeIf { it > 0 }?.let { " Перезарядка: ${formatPercent(it / 20.0)} сек." }.orEmpty()
-        return "$category.$cooldown"
+        // Native powers use either doCooldown (seconds) or doCooldownTicks; the
+        // config value alone cannot establish a truthful duration for an unknown power.
+        return "$category."
     }
 
     private fun displayName(fields: CustomBossesConfigFields): String {
