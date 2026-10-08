@@ -24,9 +24,9 @@ class DungeonPanelTest : FreeSpec({
         every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(secondArg<String>()) }
         val shown = mutableListOf<PaperDialogScreen>()
         val visits = listOf(
-            DungeonVisit("lobby", waiting = true, instanced = true),
-            DungeonVisit("open", instanced = false),
-            DungeonVisit("ongoing", canResume = true, instanced = true),
+            DungeonVisit("lobby", waiting = true, instanced = true, contentId = "crypt"),
+            DungeonVisit("open", instanced = false, contentId = "forest"),
+            DungeonVisit("ongoing", canResume = true, instanced = true, contentId = "crypt"),
         )
         for (visit in visits) {
             every { dungeon.panelView(player) } returns DungeonPanelView(world.uid, visit, null)
@@ -34,8 +34,11 @@ class DungeonPanelTest : FreeSpec({
             shown.last().id shouldBe "dungeon.panel"
             val ids = shown.last().buttons.map { it.id.value }
             ids shouldContain "saves"
-            ids.none { it == "scoreboard" } shouldBe true
-            ("quit" in ids) shouldBe visit.instanced
+            ids shouldContain "bestiary"
+            ids.last() shouldBe "global"
+            (ids.size - 1) % shown.last().columns shouldBe 0
+            ids shouldContain "scoreboard"
+            ids shouldContain "quit"
         }
         shown.first().buttons.single { it.id.value == "start" }.closeDialogBeforeAction shouldBe true
     }
@@ -74,7 +77,10 @@ class DungeonPanelTest : FreeSpec({
         verify(exactly = 1) { dungeon.travel(player, expected, "exit") }
         every { dungeon.continuation(player) } returns null
         menus.panel(player)
-        shown.last().buttons.none { it.id.value == "resume" } shouldBe true
+        val unavailable = shown.last().buttons.single { it.id.value == "resume" }
+        unavailable.closeDialogBeforeAction shouldBe false
+        unavailable.onClick.handle(mockk())
+        verify(exactly = 1) { dungeon.travel(player, expected, "exit") }
     }
 
     "root and child footers follow the default back preference" {

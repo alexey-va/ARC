@@ -2,6 +2,8 @@ package ru.arc.hooks.elitemobs
 
 import com.magmaguy.elitemobs.api.DungeonCompleteEvent
 import com.magmaguy.elitemobs.api.DungeonStartEvent
+import com.magmaguy.elitemobs.api.EliteMobDeathEvent
+import com.magmaguy.elitemobs.mobconstructor.custombosses.CustomBossEntity
 import net.kyori.adventure.title.Title
 import org.bukkit.Bukkit
 import org.bukkit.GameMode
@@ -92,6 +94,8 @@ internal class EMDungeonQol(
         }
     }) }
     private val menus by lazy { DungeonSaveMenus(this) }
+    private val bestiaryRuntime = lazy { DungeonBestiary(this) }
+    internal val bestiary get() = bestiaryRuntime.value
     private var closed = false
     private var autosavesStarted = false
     private val autosaveIntervalKey = NamespacedKey("arc", "dungeon_autosave_seconds")
@@ -107,6 +111,7 @@ internal class EMDungeonQol(
 
     @EventHandler(priority = EventPriority.MONITOR)
     fun rememberLogout(event: PlayerQuitEvent) {
+        if (bestiaryRuntime.isInitialized()) bestiary.forget(event.player.uniqueId)
         scoreboard.remove(event.player.uniqueId)
         if (enabled) remember(event.player, event.player.location)
         combatUntil.remove(event.player.uniqueId)
@@ -118,6 +123,16 @@ internal class EMDungeonQol(
     @EventHandler(priority = EventPriority.MONITOR)
     fun cancelTravelOnDeath(event: PlayerDeathEvent) {
         pending.remove(event.entity.uniqueId)
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    fun recordBestiaryVictory(event: EliteMobDeathEvent) {
+        if (!enabled || closed) return
+        val boss = event.eliteEntity as? CustomBossEntity ?: return
+        if (boss.damagers.isEmpty()) return
+        val world = boss.location?.world ?: return
+        val visit = resolve(world) ?: return
+        bestiary.defeated(boss, visit)
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -548,6 +563,7 @@ internal class EMDungeonQol(
 
     override fun close() {
         closed = true
+        if (bestiaryRuntime.isInitialized()) bestiary.close()
         actionBarLocalization?.close()
         questCompass?.close()
         questCompass = null
