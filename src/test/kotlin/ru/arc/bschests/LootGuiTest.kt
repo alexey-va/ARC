@@ -39,11 +39,14 @@ class LootGuiTest : TestBase() {
             fun click(slot: Int, type: ClickType, action: InventoryAction) =
                 InventoryClickEvent(player.openInventory, InventoryType.SlotType.CONTAINER, slot, type, action)
                     .also { server.pluginManager.callEvent(it) }
-            val cobweb = top.contents.indexOfFirst { it?.type == Material.COBWEB }
-            click(cobweb, ClickType.LEFT, InventoryAction.PICKUP_ALL).isCancelled shouldBe true
             click(lootSlot, ClickType.NUMBER_KEY, InventoryAction.HOTBAR_SWAP).isCancelled shouldBe true
             click(lootSlot, ClickType.DOUBLE_CLICK, InventoryAction.COLLECT_TO_CURSOR).isCancelled shouldBe true
-            loot.snapshotItems() shouldBe rewards
+            loot.snapshotItems().take(rewards.size) shouldBe rewards
+            val cobweb = top.contents.indexOfFirst { it?.type == Material.COBWEB }
+            click(cobweb, ClickType.LEFT, InventoryAction.PICKUP_ALL).isCancelled shouldBe true
+            player.openInventory.cursor shouldBe ItemStack(Material.COBWEB)
+            loot.snapshotItems().filterNotNull().none { it.type == Material.COBWEB } shouldBe true
+            player.openInventory.setCursor(null)
             click(lootSlot, ClickType.RIGHT, InventoryAction.PICKUP_HALF).isCancelled shouldBe true
             player.openInventory.cursor shouldBe expected.clone().also { it.amount = 4 }
             loot.snapshotItems()[0]?.amount shouldBe 4
@@ -55,7 +58,7 @@ class LootGuiTest : TestBase() {
             player.openInventory.setCursor(null)
             click(lootSlot, ClickType.LEFT, InventoryAction.PICKUP_ALL).isCancelled shouldBe true
             player.openInventory.cursor shouldBe expected.clone().also { it.amount = 4 }
-            loot.snapshotItems() shouldBe listOf(null) + rewards.drop(1)
+            loot.snapshotItems().take(rewards.size) shouldBe listOf(null) + rewards.drop(1)
             top.getItem(lootSlot) shouldBe null
             val remainingSlots = top.contents.mapIndexedNotNull { slot, item -> item?.let { slot to it.clone() } }
             LootGuiFactory.open(player, loot)
@@ -82,7 +85,8 @@ class LootGuiTest : TestBase() {
             loot.snapshotItems()[0]?.amount shouldBe 4
             click(ClickType.LEFT, InventoryAction.PICKUP_ALL)
             player.openInventory.cursor shouldBe ItemStack(Material.DIAMOND, 4)
-            loot.isExhausted() shouldBe true
+            loot.snapshotItems().filterNotNull().map { it.type }.toSet() shouldBe
+                setOf(Material.COBWEB, Material.COBBLESTONE, Material.DIRT, Material.STICK)
         } finally { ArcMenus.close() }
     }
 

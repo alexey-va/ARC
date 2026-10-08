@@ -8,11 +8,50 @@ import org.bukkit.Material
 import org.bukkit.inventory.ItemStack
 import ru.arc.KotestTestBase
 import ru.arc.network.repos.ItemList
+import ru.arc.util.Common
 import java.util.UUID
 
 class CustomLootDataTest :
     KotestTestBase({
         describe("CustomLootData") {
+            it("previews debris without mutation and persists its one-time claim across merge") {
+                val loot = lootWithAmounts(3)
+                val before = loot.snapshotItems()
+                val preview = loot.previewItems()
+                loot.snapshotItems() shouldBe before
+                loot.debrisAdded.shouldBeFalse()
+                preview.filterNotNull().map { it.type }.toSet() shouldBe
+                    setOf(Material.DIAMOND, Material.COBWEB, Material.COBBLESTONE, Material.DIRT, Material.STICK)
+                loot.addDebrisIfNeeded().shouldBeTrue()
+                loot.snapshotItems() shouldBe preview
+                loot.compareAndSetItems(preview, List(preview.size) { null }).shouldBeTrue()
+                val persisted = Common.gson.fromJson(Common.gson.toJson(loot), CustomLootData::class.java)
+                val restored = CustomLootData().apply { merge(persisted) }
+                restored.debrisAdded.shouldBeTrue()
+                restored.addDebrisIfNeeded().shouldBeFalse()
+                restored.previewItems().all { it == null }.shouldBeTrue()
+                restored.isExhausted().shouldBeTrue()
+            }
+
+            it("debris uses empty slots without losing rewards or expanding a full chest") {
+                val sparse = CustomLootData(items = ItemList().apply {
+                    repeat(27) { add(if (it == 7) ItemStack(Material.DIAMOND, 3) else null) }
+                }, filled = true)
+                sparse.addDebrisIfNeeded().shouldBeTrue()
+                sparse.snapshotItems().size shouldBe 27
+                sparse.snapshotItems()[7] shouldBe ItemStack(Material.DIAMOND, 3)
+                sparse.snapshotItems().filterNotNull().size shouldBe 5
+                val full = lootWithAmounts(*IntArray(54) { 1 })
+                val before = full.snapshotItems()
+                full.addDebrisIfNeeded().shouldBeTrue()
+                full.snapshotItems() shouldBe before
+                full.removeItem(ItemStack(Material.DIAMOND), 0).shouldBeTrue()
+                full.addDebrisIfNeeded().shouldBeFalse()
+                val exhausted = CustomLootData(items = ItemList().apply { add(null) }, filled = true)
+                exhausted.addDebrisIfNeeded().shouldBeFalse()
+                exhausted.isExhausted().shouldBeTrue()
+            }
+
             it("cloud edits remove from exact slots and reject stale or added loot atomically") {
                 val loot = lootWithAmounts(4, 4)
                 val before = loot.snapshotItems()

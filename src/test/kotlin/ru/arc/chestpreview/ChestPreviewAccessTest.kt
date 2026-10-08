@@ -38,7 +38,7 @@ class ChestPreviewAccessTest : StringSpec({
 
     "a permitted ordinary chest yields an anchor without reading inventory" {
         val f = PreviewChestFixture()
-        val target = ChestPreviewAccess { _, _ -> true }.resolveBlock(f.player, f.single)
+        val target = previewAccess { _, _ -> true }.resolveBlock(f.player, f.single)
         target!!.states shouldBe listOf(f.states.getValue(f.single))
         target.anchor shouldBe InspectionHologramAnchor(f.world.uid, 8.5, 65.0, 8.5)
         target.containerBounds shouldBe BoundingBox(8.0, 64.0, 8.0, 9.0, 65.0, 9.0)
@@ -49,7 +49,7 @@ class ChestPreviewAccessTest : StringSpec({
         val f = PreviewChestFixture()
         val (left, right) = f.double()
         for (denied in listOf(left, right)) {
-            val access = ChestPreviewAccess { _, block -> block !== denied }
+            val access = previewAccess { _, block -> block !== denied }
             access.resolveBlock(f.player, left) shouldBe null
             access.resolveBlock(f.player, right) shouldBe null
         }
@@ -59,7 +59,7 @@ class ChestPreviewAccessTest : StringSpec({
     "both aimed halves produce the same combined order and midpoint" {
         val f = PreviewChestFixture()
         val (left, right) = f.double()
-        val access = ChestPreviewAccess { _, _ -> true }
+        val access = previewAccess { _, _ -> true }
         val target = access.resolveBlock(f.player, left)!!
         target shouldBe access.resolveBlock(f.player, right)
         target.states shouldBe listOf(f.states.getValue(right), f.states.getValue(left))
@@ -68,11 +68,71 @@ class ChestPreviewAccessTest : StringSpec({
         f.verifyNoContents()
     }
 
+    "matching personal-loot markers are passed only after both halves pass protection" {
+        val f = PreviewChestFixture()
+        val (left, right) = f.double()
+        val chestUuid = UUID.randomUUID()
+        val markerReads = mutableListOf<Block>()
+        val access = ChestPreviewAccess(
+            protectedAccess = { _, _ -> true },
+            personalLootMarker = { block ->
+                markerReads += block
+                PersonalLootChestMarker.Marked(chestUuid)
+            },
+        )
+
+        val target = access.resolveBlock(f.player, left)!!
+
+        target.blocks shouldBe listOf(right, left)
+        target.personalLootChestUuid shouldBe chestUuid
+        markerReads shouldBe listOf(right, left)
+        f.verifyNoContents()
+    }
+
+    "mismatched or malformed personal-loot markers hide both halves before contents" {
+        val f = PreviewChestFixture()
+        val (left, right) = f.double()
+        val chestUuid = UUID.randomUUID()
+        val mismatch = ChestPreviewAccess(
+            { _, _ -> true },
+            { block ->
+                PersonalLootChestMarker.Marked(if (block === left) chestUuid else UUID.randomUUID())
+            },
+        )
+        mismatch.resolveBlock(f.player, left) shouldBe null
+
+        val malformed = ChestPreviewAccess(
+            { _, _ -> true },
+            { block ->
+                if (block === left) PersonalLootChestMarker.Marked(chestUuid) else PersonalLootChestMarker.Invalid
+            },
+        )
+        malformed.resolveBlock(f.player, right) shouldBe null
+        f.verifyNoContents()
+    }
+
+    "personal marker reads wait until every half passes protection" {
+        val f = PreviewChestFixture()
+        val (left, _) = f.double()
+        var markerReads = 0
+        val access = ChestPreviewAccess(
+            protectedAccess = { _, block -> block !== left },
+            personalLootMarker = {
+                markerReads++
+                PersonalLootChestMarker.Unmarked
+            },
+        )
+
+        access.resolveBlock(f.player, left) shouldBe null
+        markerReads shouldBe 0
+        f.verifyNoContents()
+    }
+
     "locked obstructed and ungenerated loot chests never call protection or read contents" {
         val f = PreviewChestFixture()
         val state = f.states.getValue(f.single) as Chest
         var calls = 0
-        val access = ChestPreviewAccess { _, _ -> calls++; true }
+        val access = previewAccess { _, _ -> calls++; true }
         every { state.isLocked } returns true
         access.resolveBlock(f.player, f.single) shouldBe null
         every { state.isLocked } returns false
@@ -91,7 +151,7 @@ class ChestPreviewAccessTest : StringSpec({
         every { barrelState.isLocked } returns false
         every { barrelState.lootTable } returns null
         val barrel = f.special(Material.BARREL, barrelState)
-        ChestPreviewAccess { _, _ -> true }.resolveBlock(f.player, barrel)!!.containerBounds shouldBe
+        previewAccess { _, _ -> true }.resolveBlock(f.player, barrel)!!.containerBounds shouldBe
             BoundingBox(8.0, 64.0, 8.0, 9.0, 65.0, 9.0)
 
         val chestMaterials = listOf(Material.TRAPPED_CHEST) + listOf(
@@ -102,7 +162,7 @@ class ChestPreviewAccessTest : StringSpec({
         )
         for ((index, material) in chestMaterials.withIndex()) {
             val block = f.chest(10 + index, ChestData.Type.SINGLE, material)
-            ChestPreviewAccess { _, _ -> true }.resolveBlock(f.player, block)!!.states shouldBe
+            previewAccess { _, _ -> true }.resolveBlock(f.player, block)!!.states shouldBe
                 listOf(f.states.getValue(block))
         }
         f.verifyNoContents()
@@ -122,7 +182,7 @@ class ChestPreviewAccessTest : StringSpec({
         every { f.player.wouldCollideUsing(capture(sweptBounds)) } returns true
 
         var protectionCalls = 0
-        val access = ChestPreviewAccess { _, _ -> protectionCalls++; true }
+        val access = previewAccess { _, _ -> protectionCalls++; true }
         access.resolveBlock(f.player, shulker) shouldBe null
         sweptBounds.captured shouldBe BoundingBox(8.000001, 64.000001, 7.500001, 8.999999, 64.999999, 7.999999)
         protectionCalls shouldBe 0
@@ -153,7 +213,7 @@ class ChestPreviewAccessTest : StringSpec({
             val block = f.block(material, x = index)
             every { block.getState(false) } returns state
             f.states[block] = state
-            ChestPreviewAccess { _, _ -> true }.resolveBlock(f.player, block)!!.states shouldBe listOf(state)
+            previewAccess { _, _ -> true }.resolveBlock(f.player, block)!!.states shouldBe listOf(state)
         }
         f.verifyNoContents()
     }
@@ -164,7 +224,7 @@ class ChestPreviewAccessTest : StringSpec({
         val block = f.special(Material.ENDER_CHEST, state)
         every { state.isBlocked } returns true
         var protectionCalls = 0
-        val access = ChestPreviewAccess { _, _ -> protectionCalls++; true }
+        val access = previewAccess { _, _ -> protectionCalls++; true }
         access.resolveBlock(f.player, block) shouldBe null
         protectionCalls shouldBe 0
         every { state.isBlocked } returns false
@@ -176,7 +236,7 @@ class ChestPreviewAccessTest : StringSpec({
         val f = PreviewChestFixture()
         val (left, right) = f.double(x = 15)
         every { f.world.isChunkLoaded(1, 0) } returns false
-        ChestPreviewAccess { _, _ -> true }.resolveBlock(f.player, left) shouldBe null
+        previewAccess { _, _ -> true }.resolveBlock(f.player, left) shouldBe null
         verify(exactly = 0) { f.world.getBlockAt(16, 64, 8) }
         verify(exactly = 0) { right.getState(any<Boolean>()) }
         f.verifyNoContents()
@@ -185,18 +245,18 @@ class ChestPreviewAccessTest : StringSpec({
     "unsent chunks and malformed paired metadata fail closed" {
         val f = PreviewChestFixture()
         every { f.player.isChunkSent(any<Long>()) } returns false
-        ChestPreviewAccess { _, _ -> true }.resolveBlock(f.player, f.single) shouldBe null
+        previewAccess { _, _ -> true }.resolveBlock(f.player, f.single) shouldBe null
         every { f.player.isChunkSent(any<Long>()) } returns true
         val (left, right) = f.double()
         every { (right.blockData as ChestData).facing } returns BlockFace.SOUTH
-        ChestPreviewAccess { _, _ -> true }.resolveBlock(f.player, left) shouldBe null
+        previewAccess { _, _ -> true }.resolveBlock(f.player, left) shouldBe null
         f.verifyNoContents()
     }
 
     "a protection outage or incompatible optional API never authorizes contents" {
         val f = PreviewChestFixture()
-        ChestPreviewAccess { _, _ -> error("unavailable") }.resolveBlock(f.player, f.single) shouldBe null
-        ChestPreviewAccess { _, _ -> throw NoSuchMethodError("unsupported plugin API") }
+        previewAccess { _, _ -> error("unavailable") }.resolveBlock(f.player, f.single) shouldBe null
+        previewAccess { _, _ -> throw NoSuchMethodError("unsupported plugin API") }
             .resolveBlock(f.player, f.single) shouldBe null
         f.verifyNoContents()
     }
@@ -206,7 +266,7 @@ class ChestPreviewAccessTest : StringSpec({
         every { f.player.eyeLocation } returns Location(f.world, 15.5, 65.6, 8.5, -90f, 0f)
         every { f.player.getAttribute(Attribute.BLOCK_INTERACTION_RANGE)!!.value } returns 2.0
         every { f.world.isChunkLoaded(1, 0) } returns false
-        val access = ChestPreviewAccess { _, _ -> true }
+        val access = previewAccess { _, _ -> true }
         access.resolve(f.player, 4.5) shouldBe null
         verify(exactly = 0) { f.player.rayTraceBlocks(any<Double>(), any<FluidCollisionMode>()) }
         every { f.world.isChunkLoaded(1, 0) } returns true
@@ -280,6 +340,12 @@ private class PreviewChestFixture {
         }
     }
 }
+
+private fun previewAccess(protectedAccess: (Player, Block) -> Boolean): ChestPreviewAccess =
+    ChestPreviewAccess(
+        protectedAccess = protectedAccess,
+        personalLootMarker = { PersonalLootChestMarker.Unmarked },
+    )
 
 /** Child-loads the real chest-preview implementation while hiding the optional provider API. */
 private class LandsApiBlockingClassLoader(

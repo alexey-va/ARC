@@ -30,6 +30,7 @@ import kotlin.math.floor
 /** Authorizes the entire physical container before the provider may inspect a single slot. */
 internal class ChestPreviewAccess(
     private val protectedAccess: (Player, Block) -> Boolean = ChestPreviewProtection()::allows,
+    private val personalLootMarker: (Block) -> PersonalLootChestMarker = ManagedChestExclusions()::marker,
 ) {
     fun resolve(player: Player, maxDistance: Double): ChestPreviewTarget? = safely {
         if (!maxDistance.isFinite() || maxDistance <= 0.0) return@safely null
@@ -94,18 +95,23 @@ internal class ChestPreviewAccess(
             states += state
         }
         if (blocks.any { !protectedAccess(player, it) }) return null
+        val marker = combinePersonalLootMarkers(blocks.map(personalLootMarker))
+        if (marker == PersonalLootChestMarker.Invalid) return null
+        val personalLootChestUuid = (marker as? PersonalLootChestMarker.Marked)?.chestUuid
         val bounds = blocks.drop(1).fold(BoundingBox.of(blocks.first())) { current, next ->
             current.union(BoundingBox.of(next))
         }
         return ChestPreviewTarget(
-            states,
-            InspectionHologramAnchor(
+            states = states,
+            anchor = InspectionHologramAnchor(
                 blocks.first().world.uid,
                 blocks.map { it.x + 0.5 }.average(),
                 blocks.first().y + 1.0,
                 blocks.map { it.z + 0.5 }.average(),
             ),
-            bounds,
+            containerBounds = bounds,
+            blocks = blocks,
+            personalLootChestUuid = personalLootChestUuid,
         )
     }
 

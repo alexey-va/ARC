@@ -1,5 +1,6 @@
 package ru.arc.bschests
 
+import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import ru.arc.ARC
@@ -10,19 +11,20 @@ import ru.arc.gui.ArcMenus
 import ru.arc.paper.menu.PaperCloudStorage
 import ru.arc.paper.menu.PaperCloudStorageContent
 import ru.arc.paper.menu.PaperCloudStorageFailure
+import java.util.UUID
 import kotlin.random.Random
 
-/** Read-only cloud chest; backing rewards stay separate from decorative debris. */
+/** Withdrawal-only cloud chest; every visible item belongs to the persisted loot. */
 object LootGuiFactory {
     private val config: Config
         get() = ConfigManager.ofModule(ARC.instance.dataFolder.toPath(), "personalloot.yml")
 
     fun open(player: Player, lootData: CustomLootData) {
+        if (lootData.addDebrisIfNeeded()) PersonalLootModule.save(lootData)
         val count = lootData.snapshotItems().size
         val menu = checkNotNull(ArcMenuSchema.PERSONAL_LOOT[calculateRows(count)])
         val seed = lootData.playerUuid.hashCode() xor lootData.chestUuid.hashCode()
         val order = scatteredSlots(count, seed)
-        val debris = listOf("cobweb", "cobblestone", "dirt", "stick").shuffled(Random(seed))
         ArcMenus.openStorage(
             player, menu, ArcMenuSchema.PERSONAL_LOOT_ITEMS,
             object : PaperCloudStorage {
@@ -37,9 +39,6 @@ object LootGuiFactory {
                 title = config.component("gui.title", "<dark_gray>Лут данжа"),
                 allowDeposits = false,
                 slotOrder = order,
-                decorations = debris.take((order.size - count).coerceAtLeast(0)).mapIndexed { offset, name ->
-                    count + offset to ArcMenus.item("personal-loot-$name")
-                }.toMap(),
                 onFailure = { viewer, reason ->
                     if (reason == PaperCloudStorageFailure.FULL) {
                         viewer.sendMessage(config.component("messages.inventory-full", "<red>В инвентаре нет места. Заберите предмет на курсор обычным кликом."))
@@ -55,4 +54,22 @@ object LootGuiFactory {
     }
 
     internal fun calculateRows(itemCount: Int): Int = maxOf(3, minOf(6, (itemCount + 8) / 9))
+}
+
+/** Shared by the read-only preview and the one-time persisted grant. */
+internal fun personalLootWithDebris(items: List<ItemStack?>, playerUuid: UUID, chestUuid: UUID): List<ItemStack?> {
+    require(items.size <= 54) { "Personal loot must fit in a chest inventory" }
+    val result = items.map { it?.takeUnless { item -> item.type.isAir }?.clone() }.toMutableList()
+    val capacity = LootGuiFactory.calculateRows(result.size) * 9
+    val materials = listOf(Material.COBWEB, Material.COBBLESTONE, Material.DIRT, Material.STICK)
+        .shuffled(Random(playerUuid.hashCode() xor chestUuid.hashCode()))
+    for (material in materials) {
+        val emptySlot = result.indexOfFirst { it == null }
+        when {
+            emptySlot >= 0 -> result[emptySlot] = ItemStack(material)
+            result.size < capacity -> result.add(ItemStack(material))
+            else -> break
+        }
+    }
+    return result
 }

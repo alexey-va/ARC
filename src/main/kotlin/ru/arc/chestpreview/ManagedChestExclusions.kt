@@ -9,10 +9,12 @@ import org.bukkit.Location
 import org.bukkit.NamespacedKey
 import org.bukkit.block.Block
 import org.bukkit.plugin.Plugin
+import org.bukkit.persistence.PersistentDataType
 import ru.arc.ARC
 import ru.arc.hooks.slimefun.SlimefunItemAccess
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
+import java.util.UUID
 
 /** Prevents previews from reading blocks whose physical inventories have another owner. */
 internal class ManagedChestExclusions(
@@ -28,7 +30,6 @@ internal class ManagedChestExclusions(
 
     fun isManaged(block: Block): Boolean = failClosed {
         managedCrate(block) ||
-            hasPersonalLootMarker(block) ||
             pluginManages(ITEMS_ADDER_PLUGIN, block, ::isItemsAdderBlock) ||
             pluginManages(SLIMEFUN_PLUGIN, block, ::isSlimefunBlock) ||
             pluginManages(ELITE_MOBS_PLUGIN, block, ::isEliteMobsTreasureChest) ||
@@ -36,8 +37,13 @@ internal class ManagedChestExclusions(
             pluginManages(AUTO_SELL_PLUGIN, block, ::isAutoSellChest)
     }
 
-    private fun hasPersonalLootMarker(block: Block): Boolean = failClosed {
-        CustomBlockData(block, ARC.instance).has(personalLootKey)
+    fun marker(block: Block): PersonalLootChestMarker {
+        val data = CustomBlockData(block, ARC.instance)
+        if (!data.has(personalLootKey)) return PersonalLootChestMarker.Unmarked
+        val uuid = data.get(personalLootKey, PersistentDataType.STRING)
+            ?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+            ?: return PersonalLootChestMarker.Invalid
+        return PersonalLootChestMarker.Marked(uuid)
     }
 
     private fun isItemsAdderBlock(
@@ -172,5 +178,23 @@ internal class ManagedChestExclusions(
 
         const val QUICK_SHOP_API_CLASS = "com.ghostchu.quickshop.api.QuickShopAPI"
         const val AUTO_SELL_API_CLASS = "me.gypopo.autosellchests.api.AutoSellChestsAPI"
+    }
+}
+
+internal sealed interface PersonalLootChestMarker {
+    data object Unmarked : PersonalLootChestMarker
+    data object Invalid : PersonalLootChestMarker
+    data class Marked(val chestUuid: UUID) : PersonalLootChestMarker
+}
+
+internal fun combinePersonalLootMarkers(markers: List<PersonalLootChestMarker>): PersonalLootChestMarker {
+    if (markers.isEmpty() || markers.all { it == PersonalLootChestMarker.Unmarked }) {
+        return PersonalLootChestMarker.Unmarked
+    }
+    val chestUuids = markers.mapNotNull { (it as? PersonalLootChestMarker.Marked)?.chestUuid }.distinct()
+    return if (chestUuids.size == 1 && markers.all { it is PersonalLootChestMarker.Marked }) {
+        PersonalLootChestMarker.Marked(chestUuids.first())
+    } else {
+        PersonalLootChestMarker.Invalid
     }
 }

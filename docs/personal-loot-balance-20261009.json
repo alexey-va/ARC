@@ -1,0 +1,142 @@
+{
+  "version": 1,
+  "title": "Personal dungeon filler loot: item issuance and current sale sensitivity",
+  "assumptions": [
+    "Before: COBWEB, COBBLESTONE, DIRT and STICK are GUI decorations and issue zero claimable items. After: an eligible player/chest receives at most one of each, only into up to four available slots, persisted once; exhausted old records are not backfilled. The usual template5 capacity is modeled with four available slots.",
+    "Low/base/high sensitivities use 1/3/5 participants and 0.25/1/4 eligible personal chest opens per player-day over seven days. maxPlayers=5 is a per-chest cap, not a network limit; the participant counts are a sample cohort, not telemetry or a global bound. Every modeled chest has four available slots and issues all four distinct items.",
+    "The after cash sensitivity assumes every new item that has a tracked direct EconomyShopGUI sell value is sold once: COBWEB 20.00, COBBLESTONE 0.05, DIRT 1.00 Vault per item. These values come from tracked current shops/*.yml pages and were not returned as item-specific live rates. No plain STICK sell row was found in those pages, so it is excluded from direct shop conversion. A parallel flat shops.yml contains STICK sell 0.29; the inventory identifies the split pages as working, but its live load status was not verified. If that flat row is active, the sensitivity increases by 0.5075/6.09/40.60 Vault per cohort-week.",
+    "Item issuance itself creates 0 Vault and 0 tokens. Shop conversion is a separate downstream Vault mint sensitivity, not guaranteed player income. The current EconomyShopGUI SELL route remains in the baseline; this assessment does not assume the planned SELL-to-contract transition has occurred.",
+    "The live read available to the parent reported adminShopSales income 142554.40 Vault, 7669 items and 8 transactions in its 168-hour window, but no target filler material among the 12 ranked material rows; that is not evidence of zero target sales. Classified source coverage was 0.992515 with 38 unknown/legacy records.",
+    "An active guild_cobblestone order was reported at 17 minor units (0.17 Vault) per item, minimum submission 64 per player, weekly budget 7500.00 Vault and target 50000 items. This is an alternative to selling COBBLESTONE for 0.05 Vault, never additive. The modeled loot alone gives each participant 1.75/7/28 cobblestone per week, below the minimum; other acquired cobblestone may combine with it."
+  ],
+  "participants": [1, 3, 5],
+  "currencies": {
+    "vault": {
+      "minor_per_unit": 100,
+      "flows": [
+        {
+          "id": "personal_loot_direct_vault",
+          "kind": "mint",
+          "source": "ARC/src/main/kotlin/ru/arc/bschests/LootGui.kt and task change contract",
+          "basis": "No Vault payout is part of the current or proposed loot reward; sale conversion is modeled in separate flows.",
+          "before": {
+            "enabled": true,
+            "amount_per_event": {"value": "0", "unit": "major"},
+            "events_per_player_day": ["0.25", "1", "4"]
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {"value": "0", "unit": "major"},
+            "events_per_player_day": ["0.25", "1", "4"]
+          }
+        },
+        {
+          "id": "personal_loot_shop_sell_cobweb",
+          "kind": "mint",
+          "source": "classic/plugins/EconomyShopGUI-Premium/shops/Miscellaneous.yml:169-170",
+          "basis": "Tracked configured SELL conversion of newly issued loot; assumes every item is sold once. Rate not individually confirmed live.",
+          "before": {
+            "enabled": false,
+            "amount_per_event": {"value": "20.00", "unit": "major"},
+            "events_per_player_day": ["0.25", "1", "4"]
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {"value": "20.00", "unit": "major"},
+            "events_per_player_day": ["0.25", "1", "4"]
+          }
+        },
+        {
+          "id": "personal_loot_shop_sell_cobblestone",
+          "kind": "mint",
+          "source": "classic/plugins/EconomyShopGUI-Premium/shops/Blocks.yml:103-104",
+          "basis": "Tracked configured SELL conversion of newly issued loot; assumes every item is sold once. The active contract is an alternative and is excluded here.",
+          "before": {
+            "enabled": false,
+            "amount_per_event": {"value": "0.05", "unit": "major"},
+            "events_per_player_day": ["0.25", "1", "4"]
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {"value": "0.05", "unit": "major"},
+            "events_per_player_day": ["0.25", "1", "4"]
+          }
+        },
+        {
+          "id": "personal_loot_shop_sell_dirt",
+          "kind": "mint",
+          "source": "classic/plugins/EconomyShopGUI-Premium/shops/Blocks.yml:230-231",
+          "basis": "Tracked configured SELL conversion of newly issued loot; assumes every item is sold once. Rate not individually confirmed live.",
+          "before": {
+            "enabled": false,
+            "amount_per_event": {"value": "1.00", "unit": "major"},
+            "events_per_player_day": ["0.25", "1", "4"]
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {"value": "1.00", "unit": "major"},
+            "events_per_player_day": ["0.25", "1", "4"]
+          }
+        }
+      ]
+    },
+    "tokens": {
+      "minor_per_unit": 1,
+      "flows": [
+        {
+          "id": "personal_loot_direct_tokens",
+          "kind": "mint",
+          "source": "ARC/src/main/kotlin/ru/arc/bschests/LootGui.kt and task change contract",
+          "basis": "No premium-token payout is part of the current or proposed loot reward.",
+          "before": {
+            "enabled": true,
+            "amount_per_event": {"value": "0", "unit": "major"},
+            "events_per_player_day": ["0.25", "1", "4"]
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {"value": "0", "unit": "major"},
+            "events_per_player_day": ["0.25", "1", "4"]
+          }
+        }
+      ]
+    },
+    "item_units": {
+      "minor_per_unit": 1,
+      "flows": [
+        {
+          "id": "personal_loot_cobweb",
+          "kind": "item",
+          "source": "ARC/src/main/kotlin/ru/arc/bschests/LootGui.kt and task change contract",
+          "basis": "At most one claimable COBWEB per eligible personal chest; item_units is a count, not a currency.",
+          "before": {"enabled": false, "amount_per_event": {"value": "1", "unit": "major"}, "events_per_player_day": ["0.25", "1", "4"]},
+          "after": {"enabled": true, "amount_per_event": {"value": "1", "unit": "major"}, "events_per_player_day": ["0.25", "1", "4"]}
+        },
+        {
+          "id": "personal_loot_cobblestone",
+          "kind": "item",
+          "source": "ARC/src/main/kotlin/ru/arc/bschests/LootGui.kt and task change contract",
+          "basis": "At most one claimable COBBLESTONE per eligible personal chest; item_units is a count, not a currency.",
+          "before": {"enabled": false, "amount_per_event": {"value": "1", "unit": "major"}, "events_per_player_day": ["0.25", "1", "4"]},
+          "after": {"enabled": true, "amount_per_event": {"value": "1", "unit": "major"}, "events_per_player_day": ["0.25", "1", "4"]}
+        },
+        {
+          "id": "personal_loot_dirt",
+          "kind": "item",
+          "source": "ARC/src/main/kotlin/ru/arc/bschests/LootGui.kt and task change contract",
+          "basis": "At most one claimable DIRT per eligible personal chest; item_units is a count, not a currency.",
+          "before": {"enabled": false, "amount_per_event": {"value": "1", "unit": "major"}, "events_per_player_day": ["0.25", "1", "4"]},
+          "after": {"enabled": true, "amount_per_event": {"value": "1", "unit": "major"}, "events_per_player_day": ["0.25", "1", "4"]}
+        },
+        {
+          "id": "personal_loot_stick",
+          "kind": "item",
+          "source": "ARC/src/main/kotlin/ru/arc/bschests/LootGui.kt and task change contract",
+          "basis": "At most one claimable STICK per eligible personal chest; item_units is a count, not a currency.",
+          "before": {"enabled": false, "amount_per_event": {"value": "1", "unit": "major"}, "events_per_player_day": ["0.25", "1", "4"]},
+          "after": {"enabled": true, "amount_per_event": {"value": "1", "unit": "major"}, "events_per_player_day": ["0.25", "1", "4"]}
+        }
+      ]
+    }
+  }
+}

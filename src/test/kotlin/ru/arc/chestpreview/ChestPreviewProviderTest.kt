@@ -9,12 +9,15 @@ import net.kyori.adventure.text.Component
 import org.bukkit.Material
 import org.bukkit.World
 import org.bukkit.block.Barrel
+import org.bukkit.block.Block
 import org.bukkit.block.Chest
 import org.bukkit.block.EnderChest
 import org.bukkit.entity.Player
 import org.bukkit.inventory.Inventory
 import org.bukkit.inventory.ItemStack
 import org.mockbukkit.mockbukkit.MockBukkit
+import ru.arc.bschests.PersonalLootPreview
+import ru.arc.bschests.personalLootWithDebris
 import ru.arc.paper.api.InspectionHologramAnchor
 import java.util.UUID
 
@@ -31,6 +34,103 @@ class ChestPreviewProviderTest : StringSpec({
             settingsFor = { error("must not read settings") },
         )
         provider.resolve(player) shouldBe null
+    }
+
+    "unavailable personal loot never falls back to shared physical contents" {
+        val world = world(); val viewer = player(world); val chestUuid = UUID.randomUUID()
+        val physical = chest(arrayOf(ItemStack(Material.DIAMOND, 4)))
+        val target = ChestPreviewTarget(
+            listOf(physical),
+            InspectionHologramAnchor(world.uid, 0.5, 64.0, 0.5),
+            blocks = listOf(mockk<Block>()),
+            personalLootChestUuid = chestUuid,
+        )
+        val provider = ChestPreviewProvider(
+            settings = ChestPreviewSettings(),
+            resolveTarget = { _, _ -> target },
+            personalLootPreview = { _, _, _ -> PersonalLootPreview.Unavailable },
+        )
+
+        provider.selectedFrame(viewer) { provider.resolve(viewer) } shouldBe null
+        verify(exactly = 0) { physical.blockInventory }
+    }
+
+    "warm personal snapshots are isolated by viewer and do not read the physical chest" {
+        val world = world(); val firstViewer = player(world); val secondViewer = player(world)
+        val chestUuid = UUID.randomUUID()
+        val physical = chest(arrayOf(ItemStack(Material.GOLD_INGOT, 9)))
+        val target = ChestPreviewTarget(
+            listOf(physical),
+            InspectionHologramAnchor(world.uid, 0.5, 64.0, 0.5),
+            blocks = listOf(mockk<Block>()),
+            personalLootChestUuid = chestUuid,
+        )
+        val provider = ChestPreviewProvider(
+            settings = ChestPreviewSettings(),
+            resolveTarget = { _, _ -> target },
+            personalLootPreview = { viewer, _, _ ->
+                PersonalLootPreview.Contents(
+                    listOf(ItemStack(if (viewer == firstViewer.uniqueId) Material.DIAMOND else Material.EMERALD)),
+                )
+            },
+        )
+
+        provider.selectedFrame(firstViewer) { provider.resolve(firstViewer) }!!.items.map { it.type } shouldBe
+            listOf(Material.DIAMOND)
+        provider.selectedFrame(secondViewer) { provider.resolve(secondViewer) }!!.items.map { it.type } shouldBe
+            listOf(Material.EMERALD)
+        verify(exactly = 0) { physical.blockInventory }
+    }
+
+    "confirmed missing BetterStructures data projects the same nonempty template and fillers" {
+        val world = world(); val viewer = player(world); val chestUuid = UUID.randomUUID()
+        val template = listOf(null, ItemStack(Material.DIAMOND, 3), null)
+        val physical = chest(arrayOf(template[0], template[1], template[2]))
+        val target = ChestPreviewTarget(
+            listOf(physical),
+            InspectionHologramAnchor(world.uid, 0.5, 64.0, 0.5),
+            blocks = listOf(mockk<Block>()),
+            personalLootChestUuid = chestUuid,
+        )
+        val provider = ChestPreviewProvider(
+            settings = ChestPreviewSettings(),
+            resolveTarget = { _, _ -> target },
+            personalLootPreview = { _, _, _ -> PersonalLootPreview.Contents(emptyList(), usePhysicalTemplate = true) },
+        )
+
+        val frame = provider.selectedFrame(viewer) { provider.resolve(viewer) }!!
+        frame.items.map { it.type } shouldBe
+            personalLootWithDebris(listOf(ItemStack(Material.DIAMOND, 3)), viewer.uniqueId, chestUuid)
+                .filterNotNull().map { it.type }
+        frame.counts.first() shouldBe 3
+        verify(exactly = 1) { physical.blockInventory }
+    }
+
+    "empty BetterStructures templates and exhausted personal loot stay empty" {
+        val world = world(); val viewer = player(world); val chestUuid = UUID.randomUUID()
+        val emptyPhysical = chest(arrayOfNulls(27))
+        val block = mockk<Block>()
+        val target = ChestPreviewTarget(
+            listOf(emptyPhysical),
+            InspectionHologramAnchor(world.uid, 0.5, 64.0, 0.5),
+            blocks = listOf(block),
+            personalLootChestUuid = chestUuid,
+        )
+        val templateProvider = ChestPreviewProvider(
+            settings = ChestPreviewSettings(),
+            resolveTarget = { _, _ -> target },
+            personalLootPreview = { _, _, _ -> PersonalLootPreview.Contents(emptyList(), usePhysicalTemplate = true) },
+        )
+        templateProvider.selectedFrame(viewer) { templateProvider.resolve(viewer) }!!.items shouldBe emptyList()
+        verify(exactly = 1) { emptyPhysical.blockInventory }
+
+        val exhaustedProvider = ChestPreviewProvider(
+            settings = ChestPreviewSettings(),
+            resolveTarget = { _, _ -> target },
+            personalLootPreview = { _, _, _ -> PersonalLootPreview.Contents(emptyList()) },
+        )
+        exhaustedProvider.selectedFrame(viewer) { exhaustedProvider.resolve(viewer) }!!.items shouldBe emptyList()
+        verify(exactly = 1) { emptyPhysical.blockInventory }
     }
 
     "distinct icons retain item appearance and physical slot order without any text" {

@@ -31,7 +31,9 @@ import ru.arc.util.ItemUtils.extractInventory
 import ru.arc.util.ItemUtils.extractItems
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.warn
+import java.util.LinkedHashMap
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.time.Duration.Companion.seconds
 
 private const val PERSONAL_LOOT_SEPARATOR = ":::"
@@ -45,17 +47,19 @@ class CustomLootData(
     var timestamp: Long = System.currentTimeMillis(),
     var items: ItemList = ItemList(),
     var filled: Boolean = false,
+    var debrisAdded: Boolean = false,
 ) : Entity,
     Mergeable<CustomLootData> {
     override fun id(): String = "$playerUuid$PERSONAL_LOOT_SEPARATOR$chestUuid"
 
     override fun merge(other: CustomLootData) {
-        val (otherItems, otherFilled, otherTimestamp) = other.persistedSnapshot()
+        val (otherItems, otherFilled, otherTimestamp, otherDebrisAdded) = other.persistedSnapshot()
         synchronized(this) {
             items.clear()
             items.addAll(otherItems)
             filled = otherFilled
             timestamp = otherTimestamp
+            debrisAdded = otherDebrisAdded
         }
     }
 
@@ -87,6 +91,23 @@ class CustomLootData(
         synchronized(this) {
             items.map { it?.takeUnless { item -> item.type.isAir }?.clone() }
         }
+
+    /** A preview must not grant items or change the player's persisted loot. */
+    fun previewItems(): List<ItemStack?> = synchronized(this) {
+        val snapshot = snapshotItems()
+        if (debrisAdded || isExhausted()) snapshot
+        else personalLootWithDebris(snapshot, playerUuid, chestUuid)
+    }
+
+    /** Debris is ordinary loot, recorded once so reopening cannot replenish it. */
+    fun addDebrisIfNeeded(): Boolean = synchronized(this) {
+        if (debrisAdded || isExhausted()) return@synchronized false
+        val withDebris = personalLootWithDebris(snapshotItems(), playerUuid, chestUuid)
+        items.clear()
+        items.addAll(withDebris)
+        debrisAdded = true
+        true
+    }
 
     /** Cloud loot may only remove items from their exact persisted slots. */
     fun compareAndSetItems(expected: List<ItemStack?>, replacement: List<ItemStack?>): Boolean = synchronized(this) {
@@ -147,12 +168,20 @@ class CustomLootData(
         return true
     }
 
-    private fun persistedSnapshot(): Triple<List<ItemStack?>, Boolean, Long> =
+    private data class PersistedSnapshot(
+        val items: List<ItemStack?>,
+        val filled: Boolean,
+        val timestamp: Long,
+        val debrisAdded: Boolean,
+    )
+
+    private fun persistedSnapshot(): PersistedSnapshot =
         synchronized(this) {
-            Triple(
+            PersistedSnapshot(
                 items.map { it?.clone() },
                 filled,
                 timestamp,
+                debrisAdded,
             )
         }
 
@@ -187,6 +216,20 @@ object PersonalLootModule {
     private var repo: CachedRepository<CustomLootData>? = null
     private var repositoryScope: CoroutineScope? = null
     private lateinit var chestGenerator: ChestGenerator
+    private val previewReadLock = Any()
+    private val previewGeneration = AtomicLong()
+    private val pendingPreviewReads = linkedSetOf<String>()
+    private val previewReadCache = object : LinkedHashMap<String, CachedPreviewRead>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CachedPreviewRead>?): Boolean =
+            size > MAX_PREVIEW_READS
+    }
+
+    private enum class PreviewReadState { PENDING, ABSENT, FAILED }
+
+    private data class CachedPreviewRead(
+        val state: PreviewReadState,
+        val expiresAtNanos: Long,
+    )
 
     @JvmStatic
     fun init() {
@@ -220,6 +263,7 @@ object PersonalLootModule {
                 newScope.cancel()
                 throw failure
             }
+        clearPreviewReads()
         repo = newRepository
         repositoryScope = newScope
     }
@@ -228,6 +272,7 @@ object PersonalLootModule {
     fun shutdown() {
         val currentRepository = repo
         val currentScope = repositoryScope
+        clearPreviewReads()
         repo = null
         repositoryScope = null
         try {
@@ -447,12 +492,177 @@ object PersonalLootModule {
     }
 
     /**
+     * Returns only the viewer's existing personal loot or an explicitly safe
+     * BetterStructures template projection. Called on Paper's main thread after
+     * the physical chest and every half have passed access checks. Redis reads
+     * run on this module's IO scope; misses and failures are bounded and retried.
+     */
+    internal fun preview(
+        viewer: UUID,
+        chestUuid: UUID?,
+        blocks: List<Block>,
+    ): PersonalLootPreview {
+        if (chestUuid == null) return PersonalLootPreview.NotPersonal
+        val repository = repo ?: return PersonalLootPreview.Unavailable
+        val scope = repositoryScope ?: return PersonalLootPreview.Unavailable
+        if (!::key.isInitialized || !::uuidKey.isInitialized || !::config.isInitialized) {
+            return PersonalLootPreview.Unavailable
+        }
+        if (blocks.size !in 1..2) return PersonalLootPreview.Unavailable
+
+        val expectedInventory = when (blocks.first().type) {
+            Material.BARREL -> InventoryType.BARREL
+            Material.CHEST, Material.TRAPPED_CHEST -> InventoryType.CHEST
+            else -> return PersonalLootPreview.Unavailable
+        }
+        if (expectedInventory !in inventories || blocks.any { block ->
+                block.type !in chests || when (block.type) {
+                    Material.BARREL -> InventoryType.BARREL
+                    else -> InventoryType.CHEST
+                } != expectedInventory
+            }) return PersonalLootPreview.Unavailable
+
+        val playerSets = try {
+            val resolvedPlayers = mutableListOf<Set<UUID>>()
+            for (block in blocks) {
+                val data = CustomBlockData(block, ARC.instance)
+                if (!data.has(uuidKey) ||
+                    parsePersonalLootUuid(data.get(uuidKey, PersistentDataType.STRING)) != chestUuid
+                ) return PersonalLootPreview.Unavailable
+                val playerList = data.get(key, PersistentDataType.STRING)
+                    ?: return PersonalLootPreview.Unavailable
+                resolvedPlayers += parsePersonalLootPlayers(playerList)
+            }
+            resolvedPlayers
+        } catch (_: Exception) {
+            return PersonalLootPreview.Unavailable
+        } catch (_: LinkageError) {
+            return PersonalLootPreview.Unavailable
+        }
+        if (playerSets.distinct().size != 1) return PersonalLootPreview.Unavailable
+        val openedPlayers = playerSets.first()
+        if (openedPlayers.size >= maxPlayers && viewer !in openedPlayers) {
+            return PersonalLootPreview.Unavailable
+        }
+
+        val useBetterStructuresLoot = useBsLoot
+        val id = "$viewer$PERSONAL_LOOT_SEPARATOR$chestUuid"
+        repository.getNow(id)?.let { return previewStoredLoot(it, useBetterStructuresLoot) }
+
+        val generation = previewGeneration.get()
+        var startRead = false
+        val readState = synchronized(previewReadLock) {
+            val now = System.nanoTime()
+            val cached = previewReadCache[id]
+            if (cached != null && cached.expiresAtNanos > now) {
+                cached.state
+            } else {
+                if (cached != null) previewReadCache.remove(id)
+                when {
+                    id in pendingPreviewReads -> PreviewReadState.PENDING
+                    pendingPreviewReads.size >= MAX_PREVIEW_READS -> PreviewReadState.FAILED
+                    else -> {
+                        pendingPreviewReads += id
+                        startRead = true
+                        PreviewReadState.PENDING
+                    }
+                }
+            }
+        }
+        if (startRead) startPreviewRead(id, repository, scope, generation)
+
+        return when (readState) {
+            PreviewReadState.ABSENT -> previewAbsent(useBetterStructuresLoot)
+            PreviewReadState.PENDING, PreviewReadState.FAILED -> PersonalLootPreview.Unavailable
+        }
+    }
+
+    private fun previewStoredLoot(data: CustomLootData, useBetterStructuresLoot: Boolean): PersonalLootPreview {
+        if (data.isExhausted()) return PersonalLootPreview.Contents(emptyList())
+        if (data.needsItems()) {
+            return if (useBetterStructuresLoot) {
+                PersonalLootPreview.Contents(emptyList(), usePhysicalTemplate = true)
+            } else {
+                PersonalLootPreview.Unavailable
+            }
+        }
+        return PersonalLootPreview.Contents(data.previewItems())
+    }
+
+    private fun previewAbsent(useBetterStructuresLoot: Boolean): PersonalLootPreview =
+        if (useBetterStructuresLoot) {
+            PersonalLootPreview.Contents(emptyList(), usePhysicalTemplate = true)
+        } else {
+            PersonalLootPreview.Unavailable
+        }
+
+    private fun startPreviewRead(
+        id: String,
+        repository: CachedRepository<CustomLootData>,
+        scope: CoroutineScope,
+        generation: Long,
+    ) {
+        val job = scope.launch {
+            val state = try {
+                if (repository.get(id).getOrThrow() == null) {
+                    PreviewReadState.ABSENT
+                } else {
+                    PreviewReadState.PENDING
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Throwable) {
+                error("Failed to read personal loot for chest preview {}", id, failure)
+                PreviewReadState.FAILED
+            }
+            finishPreviewRead(id, repository, generation, state)
+        }
+        job.invokeOnCompletion { failure ->
+            if (failure != null) finishPreviewRead(id, repository, generation, PreviewReadState.FAILED)
+        }
+    }
+
+    private fun finishPreviewRead(
+        id: String,
+        repository: CachedRepository<CustomLootData>,
+        generation: Long,
+        state: PreviewReadState,
+    ) = synchronized(previewReadLock) {
+        if (generation != previewGeneration.get() || repo !== repository || !pendingPreviewReads.remove(id)) {
+            return@synchronized
+        }
+        if (state == PreviewReadState.ABSENT || state == PreviewReadState.FAILED) {
+            val ttlNanos = if (state == PreviewReadState.ABSENT) MISSING_PREVIEW_TTL_NANOS else FAILED_PREVIEW_TTL_NANOS
+            previewReadCache[id] = CachedPreviewRead(state, System.nanoTime() + ttlNanos)
+        }
+    }
+
+    private fun clearPreviewReads() = synchronized(previewReadLock) {
+        previewGeneration.incrementAndGet()
+        pendingPreviewReads.clear()
+        previewReadCache.clear()
+    }
+
+    /**
      * Save a loot data entry.
      */
     @JvmStatic
     fun save(lootData: CustomLootData) {
         repo?.markDirty(lootData)
     }
+
+    private const val MAX_PREVIEW_READS = 256
+    private const val MISSING_PREVIEW_TTL_NANOS = 30_000_000_000L
+    private const val FAILED_PREVIEW_TTL_NANOS = 60_000_000_000L
+}
+
+internal sealed interface PersonalLootPreview {
+    data object NotPersonal : PersonalLootPreview
+    data object Unavailable : PersonalLootPreview
+    data class Contents(
+        val items: List<ItemStack?>,
+        val usePhysicalTemplate: Boolean = false,
+    ) : PersonalLootPreview
 }
 
 internal fun parsePersonalLootUuid(raw: String?): UUID? =

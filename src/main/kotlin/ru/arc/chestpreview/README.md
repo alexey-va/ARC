@@ -83,9 +83,16 @@ are deflated by `1e-6` to avoid counting touching faces. This also checks entity
 collisions and the viewer's world border. Already-open shulkers skip that sweep.
 The query's neighbouring chunks are verified loaded and sent first.
 
-PersonalLoot, ItemsAdder, Slimefun, EliteMobs treasure chests, QuickShop shops,
-AutoSellChests and crate anchors are excluded: their raw inventories need not be
-the inventories a player would see. ArcExcellentCrates supplies the typed
+PersonalLoot uses the viewer's persisted remaining loot rather than a shared
+physical inventory. Its UUID marker must match on both halves, and the normal
+container access checks and player admission cap still apply. A cold personal
+record stays hidden until its read completes; confirmed missing records may
+project a BetterStructures template only while `use-bs-loot` is enabled. A
+preview never generates random chest loot, saves data, or advances reset state.
+Unopened empty templates and exhausted records stay empty. ItemsAdder, Slimefun,
+EliteMobs treasure chests, QuickShop shops, AutoSellChests and crate anchors
+remain excluded: their raw inventories need not be the inventories a player
+would see. ArcExcellentCrates supplies the typed
 `CrateLocationService` through Bukkit ServicesManager; absence of that service
 while a crate plugin is installed hides previews. ARC consumes the API with
 `compileOnly`; only ArcExcellentCrates carries its runtime classes.
@@ -103,7 +110,8 @@ Run the focused `ChestPreviewAccessTest`, `ChestPreviewProviderTest`,
 `ChestPreviewSettingsTest`, and `ItemInfoConfigTest` suites. They cover permission
 before target resolution, both-half authorization before content reads,
 unavailable chunks, lock/loot/obstruction, failed providers, stable aggregation,
-icon limits, viewer isolation and config bounds. Icon-renderer and controller checks
+icon limits, ordinary and personal viewer isolation, cold personal lookup and
+admission-cap behavior. Icon-renderer and controller checks
 cover private audience, optional numeric labels, unchanged handle identity, independent
 preferences, cleanup, interpolation and opacity. Configuration tests reload every
 new setting; preference and HelpCenter tests cover sparse overrides and reset.
