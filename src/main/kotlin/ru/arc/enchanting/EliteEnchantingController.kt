@@ -47,6 +47,8 @@ internal class EliteEnchantingController(private val config: EnchantingConfig) :
         if (event.clickedInventory !== player.inventory || event.click !in setOf(ClickType.LEFT, ClickType.RIGHT)) return
         val book = event.cursor.takeUnless { it.type.isAir } ?: return
         if (!isEliteEnchantmentBook(book)) return
+        val target = event.currentItem?.takeUnless { it.type.isAir || it.type == Material.ENCHANTED_BOOK } ?: return
+        // Empty slots and other books keep normal inventory movement, stacking and splitting.
         // An EM book owns this gesture even on an ineligible target. AE books never enter here.
         event.isCancelled = true
         if (!org.bukkit.Bukkit.getPluginManager().isPluginEnabled("EliteMobs")) {
@@ -54,8 +56,7 @@ internal class EliteEnchantingController(private val config: EnchantingConfig) :
             return
         }
         if (menus.containsKey(player.uniqueId) || !opening.add(player.uniqueId)) return
-        val target = event.currentItem
-        if (target == null || !EliteItemManager.isEliteMobsItem(target) || target.type == Material.ENCHANTED_BOOK) {
+        if (!EliteItemManager.isEliteMobsItem(target)) {
             opening.remove(player.uniqueId)
             player.sendMessage(config.text("messages.elite-only"))
             return
