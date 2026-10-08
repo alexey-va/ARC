@@ -53,7 +53,10 @@ internal fun staffDisplayParts(
     val birth = smooth(ageTicks / 4.0)
     val lastFrame = (durationTicks - StaffSpellDisplayEffects.FRAME_TICKS).coerceAtLeast(1)
     val fade = if (tracked) 1.0 else smooth((lastFrame - ageTicks) / 6.0)
-    val visibility = (birth * fade).coerceAtLeast(0.001).toFloat()
+    val visibility = when (spell) {
+        StaffSpell.CHAIN, StaffSpell.LANCE -> ((0.62 + 0.38 * birth) * fade).coerceAtLeast(0.001).toFloat()
+        else -> (birth * fade).coerceAtLeast(0.001).toFloat()
+    }
     return parts.map { part -> part.copy(
         center = if (spell == StaffSpell.FROST) Vector3f(part.center).apply { y *= visibility } else part.center,
         scale = Vector3f(part.scale).mul(visibility),
@@ -63,55 +66,38 @@ internal fun staffDisplayParts(
 private fun chainDisplayParts(ageTicks: Int, durationTicks: Int, length: Double, radius: Double, impact: Boolean): List<StaffDisplayPart> {
     val phase = progress(ageTicks, durationTicks)
     val reach = extent(length, 48.0, 8.0)
-    val width = extent(radius, 2.0, 0.45)
+    val coreWidth = extent(radius, 1.6, 0.75).coerceIn(0.45, 0.80)
+    val launch = minOf(reach, 2.5)
+    val front = if (impact) reach else launch + (reach - launch).coerceAtLeast(0.0) * smooth(ageTicks / 12.0)
     val parts = ArrayList<StaffDisplayPart>(32)
-    val boltWidth = (width * 0.26).coerceIn(0.13, 0.18)
-    val points = (0..18).map { index ->
-        val t = index / 18.0
-        val taper = if (index == 0 || index == 18) 0.0 else sin(PI * t)
-        val side = if (index % 2 == 0) -1.0 else 1.0
-        val phaseJitter = sin(index * 1.7) * width * 0.08 * taper
-        Vector3f(
-            (side * width * 0.45 * taper + phaseJitter).toFloat(),
-            (cos(index * 1.7) * width * 0.14 * taper).toFloat(),
-            (reach * t).toFloat(),
-        )
+    val segmentCount = 14
+    repeat(segmentCount) { index ->
+        val t = (index + 0.5) / segmentCount
+        val step = front / segmentCount
+        val sway = sin(index * 1.8 + phase * 0.7)
+        val centerX = sway * (0.16 + 0.10 * t)
+        val centerY = cos(index * 1.35 + phase) * 0.10
+        parts += part(if (index % 3 == 0) Material.SEA_LANTERN else Material.CYAN_STAINED_GLASS,
+            centerX, centerY, front * t, coreWidth * 0.70 + 0.05 * t, coreWidth * 0.65 + 0.04 * t,
+            maxOf(0.42, step * 0.84), yaw = sin(index * 1.8) * 0.22,
+            pitch = cos(index * 1.35) * 0.18, roll = sin(index * 0.9 + phase) * 0.20)
     }
-    repeat(18) { index ->
-        val start = points[index]
-        val end = points[index + 1]
-        val delta = Vector3f(end).sub(start)
-        val segmentLength = delta.length()
-        val rotation = Quaternionf().rotationTo(Vector3f(0f, 0f, 1f), Vector3f(delta).normalize())
-        val center = Vector3f(start).add(end).mul(0.5f)
-        val stemWidth = when (index) { 0 -> 0.045; 1 -> 0.09; else -> boltWidth }
-        parts += StaffDisplayPart(
-            if (index % 3 == 0) Material.SEA_LANTERN else Material.CYAN_STAINED_GLASS,
-            center,
-            Vector3f(stemWidth.toFloat(), stemWidth.toFloat(), segmentLength),
-            rotation,
-        )
+    listOf(2, 5, 8, 11).forEachIndexed { branch, index ->
+        val t = (index + 0.7) / segmentCount
+        val side = if (branch % 2 == 0) -1.0 else 1.0
+        parts += part(Material.LIGHT_BLUE_STAINED_GLASS,
+            side * (0.32 + t * 0.20), 0.16 + sin(index * 1.7) * 0.08, front * t,
+            0.38, 0.36, 0.50, yaw = side * 0.62, pitch = side * -0.38, roll = phase * 0.15)
     }
-    for (anchor in listOf(4, 9, 14)) {
-        val point = points[anchor]
-        for (side in listOf(-1.0, 1.0)) {
-            parts += part(Material.CYAN_STAINED_GLASS,
-                point.x.toDouble() + side * width * 0.64,
-                point.y.toDouble() + side * width * 0.24,
-                point.z.toDouble() + reach * 0.035,
-                boltWidth * 0.75, boltWidth * 0.75, maxOf(0.16, reach * 0.035), yaw = side * 0.45, pitch = side * -0.32)
-        }
-    }
-    val headRadius = width * (if (impact) 0.78 + phase * 0.30 else 0.50)
-    repeat(8) { index ->
-        val angle = index * PI / 4.0 + phase * 0.18
-        parts += part(
-            if (index % 2 == 0) Material.SEA_LANTERN else Material.CYAN_STAINED_GLASS,
-            cos(angle) * headRadius, sin(angle) * headRadius, reach,
-            boltWidth, boltWidth, 0.34,
-            yaw = angle,
-            pitch = sin(angle) * 0.45,
-        )
+    val headSize = 0.68 + if (impact) phase * 0.20 else 0.0
+    parts += part(Material.SEA_LANTERN, 0.0, 0.0, front,
+        maxOf(headSize, coreWidth * 0.90), maxOf(headSize * 0.92, coreWidth * 0.82),
+        maxOf(headSize * 1.1, coreWidth * 0.92), roll = PI / 4.0)
+    repeat(4) { index ->
+        val angle = index * PI / 2.0 + phase * 0.12
+        parts += part(if (index % 2 == 0) Material.CYAN_STAINED_GLASS else Material.WHITE_STAINED_GLASS,
+            cos(angle) * 0.27, sin(angle) * 0.27, front - 0.06,
+            0.48, 0.46, 0.58, yaw = angle, pitch = sin(angle) * 0.34, roll = angle * 0.35)
     }
     return parts
 }
@@ -148,21 +134,26 @@ internal fun staffLightningTrailParts(points: List<Vector3f>, fade: Double = 1.0
     val segmentCount = (traveled.size - 1).coerceAtLeast(0)
     repeat(segmentCount) { index ->
         val age = index.toDouble() / (segmentCount - 1).coerceAtLeast(1)
-        val width = (0.10 + 0.06 * age) * visibility
-        val secondaryWidth = (0.10 + 0.04 * age) * visibility
-        val zig = (if (index % 2 == 0) 0.09 else -0.09) * visibility
+        val width = (0.42 + 0.16 * age) * visibility
+        val secondaryWidth = (0.32 + 0.12 * age) * visibility
+        val zig = (if (index % 2 == 0) 0.18 else -0.18) * visibility
         val nextZig = -zig
         val start = Vector3f(traveled[index]).fma(zig.toFloat(), sides[index])
         val end = Vector3f(traveled[index + 1]).fma(nextZig.toFloat(), sides[index + 1])
         val secondStart = Vector3f(traveled[index]).fma(-zig.toFloat() * 0.55f, sides[index])
-            .add(0f, 0.045f * visibility.toFloat(), 0f)
+            .add(0f, 0.24f * visibility.toFloat(), 0f)
         val secondEnd = Vector3f(traveled[index + 1]).fma(-nextZig.toFloat() * 0.55f, sides[index + 1])
-            .add(0f, 0.045f * visibility.toFloat(), 0f)
+            .add(0f, 0.24f * visibility.toFloat(), 0f)
         val launchInset = if (index == 0 && trail.size <= 17) 0.22 else 0.0
-        segmentParts += trimmedLink(if (index % 3 == 0) Material.SEA_LANTERN else Material.CYAN_STAINED_GLASS,
-            start, end, width, width * 0.85, maxOf(launchInset, width * 0.15), width * 0.15)
-        segmentParts += trimmedLink(if (index % 4 == 0) Material.WHITE_STAINED_GLASS else Material.LIGHT_BLUE_STAINED_GLASS,
-            secondStart, secondEnd, secondaryWidth, secondaryWidth * 0.75, maxOf(launchInset, secondaryWidth * 0.15), secondaryWidth * 0.15)
+        val coreLink = trimmedLink(if (index % 3 == 0) Material.SEA_LANTERN else Material.CYAN_STAINED_GLASS,
+            start, end, width, width * 0.85, maxOf(launchInset, width * 0.32), width * 0.25)
+        segmentParts += if (launchInset > 0.0)
+            coreLink.copy(rotation = Quaternionf(coreLink.rotation).rotateZ(0.22f)) else coreLink
+        val glintLink = trimmedLink(if (index % 4 == 0) Material.WHITE_STAINED_GLASS else Material.LIGHT_BLUE_STAINED_GLASS,
+            secondStart, secondEnd, secondaryWidth, secondaryWidth * 0.75,
+            maxOf(launchInset, secondaryWidth * 0.32), secondaryWidth * 0.25)
+        segmentParts += if (launchInset > 0.0)
+            glintLink.copy(rotation = Quaternionf(glintLink.rotation).rotateZ(-0.22f)) else glintLink
     }
 
     val branchIndices = when {
@@ -173,22 +164,23 @@ internal fun staffLightningTrailParts(points: List<Vector3f>, fade: Double = 1.0
     val branchParts = branchIndices.mapIndexed { branch, index ->
         val direction = Vector3f(sides[index]).mul(if (branch % 2 == 0) 1f else -1f)
         val end = Vector3f(traveled[index])
-            .fma(0.28f * visibility.toFloat(), direction)
-            .add(0f, 0.16f * visibility.toFloat(), 0f)
+            .fma(0.52f * visibility.toFloat(), direction)
+            .add(0f, 0.28f * visibility.toFloat(), 0f)
         link(Material.CYAN_STAINED_GLASS, traveled[index], end,
-            0.085 * visibility, 0.075 * visibility)
+            0.38 * visibility, 0.34 * visibility)
     }
 
     val head = traveled.last()
-    val headWidth = 0.20 * visibility
+    val headWidth = 0.78 * visibility
     val headParts = ArrayList<StaffDisplayPart>(3)
     headParts += part(Material.SEA_LANTERN, head.x.toDouble(), head.y.toDouble(), head.z.toDouble(),
-        headWidth, headWidth, headWidth)
+        headWidth, headWidth * 0.88, headWidth, roll = PI / 4.0)
     listOf(-1.0, 1.0).forEach { side ->
-        val point = Vector3f(head).fma((0.075 * visibility * side).toFloat(), sides.last())
-            .add(0f, (0.035 * visibility).toFloat(), 0f)
+        val point = Vector3f(head).fma((0.24 * visibility * side).toFloat(), sides.last())
+            .add(0f, (0.10 * visibility).toFloat(), 0f)
         headParts += part(Material.WHITE_STAINED_GLASS, point.x.toDouble(), point.y.toDouble(), point.z.toDouble(),
-            0.075 * visibility, 0.075 * visibility, 0.16 * visibility, yaw = side * 0.55)
+            0.40 * visibility, 0.38 * visibility, 0.58 * visibility, yaw = side * 0.55,
+            pitch = side * 0.30, roll = side * 0.25)
     }
     // Reserve branch slots and keep the moving head at indices 0–2 so packet IDs never swap roles.
     val branches = (0 until 3).map { index -> branchParts.getOrNull(index) ?: link(
@@ -198,40 +190,45 @@ internal fun staffLightningTrailParts(points: List<Vector3f>, fade: Double = 1.0
 
 private fun markDisplayParts(ageTicks: Int, durationTicks: Int, radius: Double, impact: Boolean): List<StaffDisplayPart> {
     val phase = progress(ageTicks, durationTicks)
-    val opening = if (impact) 1.0 else smooth(ageTicks / 8.0)
-    val release = if (impact) 1.0 - (1.0 - phase) * (1.0 - phase) else 0.0
+    val opening = if (impact) smooth(phase / 0.34) else smooth(ageTicks / 8.0)
+    val collapse = if (impact) smooth((phase - 0.80) / 0.20) else 0.0
     val reach = extent(radius, 8.0, 1.3)
-    val rx = if (impact) 0.48 + reach * release * 0.75 else 0.38 + opening * 0.20
-    val ry = if (impact) 0.92 + release * 0.75 else 0.68 + opening * 0.30
-    val parts = ArrayList<StaffDisplayPart>(28)
-    // A vertical tear opens around one fixed axis. No fast orbit or phase-reset spin.
-    repeat(16) { index ->
-        val angle = index * PI / 8.0
-        val next = angle + PI / 8.0
-        val start = Vector3f((cos(angle) * rx).toFloat(), (sin(angle) * ry).toFloat(), 0f)
-        val end = Vector3f((cos(next) * rx).toFloat(), (sin(next) * ry).toFloat(), 0f)
-        val material = if (index % 4 == 0) Material.AMETHYST_BLOCK else Material.PURPLE_STAINED_GLASS
-        val link = link(material, start, end, 0.075, 0.12)
-        parts += if (impact) link.copy(
-            center = Vector3f(link.center).add(0f, (-0.4 * release * release).toFloat(),
-                (sin(angle * 3) * release * 0.55).toFloat()),
-            scale = Vector3f(link.scale).mul((1.0 - phase * 0.72).toFloat()),
-        ) else link
+    val release = if (impact) smooth(phase / 0.42) * (1.0 - collapse) else opening
+    val coreSize = (0.62 + opening * 0.54) * (1.0 - collapse * 0.48)
+    val tearRadius = 0.55 + reach * (if (impact) 0.42 * release else 0.20 * opening)
+    val spin = ageTicks * 0.022
+    val parts = ArrayList<StaffDisplayPart>(20)
+
+    // A charged violet mass gives the tear a solid center before its broad shards open.
+    repeat(5) { index ->
+        val angle = index * 2.0 * PI / 5.0 + spin
+        val size = coreSize * (0.84 + (index % 3) * 0.08)
+        parts += part(when (index) {
+            0 -> Material.AMETHYST_BLOCK
+            1, 3 -> Material.PURPLE_STAINED_GLASS
+            2 -> Material.MAGENTA_STAINED_GLASS
+            else -> Material.CRYING_OBSIDIAN
+        },
+            cos(angle) * 0.10, sin(angle * 1.7) * 0.11, sin(angle) * 0.09,
+            size, size * (0.88 + index % 2 * 0.12), size * (0.82 + index % 3 * 0.10),
+            yaw = angle + PI / 5.0, pitch = 0.42 + index * 0.17, roll = angle * 0.43)
     }
     repeat(8) { index ->
-        val side = if (index % 2 == 0) -1.0 else 1.0
-        val y = (index / 2 - 1.5) * 0.34
-        val x = side * (if (impact) 0.22 + reach * release * 0.65 else 0.20 + 0.10 * opening)
-        parts += part(Material.MAGENTA_STAINED_GLASS, x,
-            y * (1.0 + release) - release * release * 0.35,
-            side * release * 0.42, 0.07, 0.24 * (1.0 - phase * if (impact) 0.6 else 0.0),
-            0.09, roll = -side * (0.30 + release * 0.4))
+        val angle = index * PI / 4.0 + spin * 0.65
+        val radiusAt = tearRadius * (0.78 + index % 2 * 0.14)
+        val size = 0.42 + 0.20 * release
+        parts += part(if (index % 3 == 0) Material.AMETHYST_BLOCK else Material.MAGENTA_STAINED_GLASS,
+            cos(angle) * radiusAt, sin(angle) * radiusAt * 0.70, sin(angle * 2.0) * 0.20,
+            size, size * 1.12, size * 1.24,
+            yaw = angle + PI / 3.0, pitch = 0.35 + sin(angle) * 0.5, roll = angle * 0.28)
     }
     repeat(4) { index ->
-        val y = (index - 1.5) * 0.24
-        parts += part(Material.CRYING_OBSIDIAN, sin(index * 1.8) * 0.04 * (1.0 + release),
-            y - release * release * 0.25, 0.025, 0.07 * (1.0 - release * 0.85),
-            0.24 * (1.0 - release * 0.8), 0.06)
+        val angle = index * PI / 2.0 + PI / 4.0 + spin
+        val radiusAt = tearRadius * (0.34 + opening * 0.10)
+        parts += part(Material.PURPLE_STAINED_GLASS,
+            cos(angle) * radiusAt, sin(angle) * radiusAt * 0.62, sin(angle + 1.2) * 0.24,
+            0.48 + release * 0.16, 0.58 + release * 0.14, 0.70 + release * 0.16,
+            yaw = angle, pitch = -0.48, roll = angle * 0.45)
     }
     return parts
 }
@@ -241,44 +238,51 @@ private fun singularityDisplayParts(ageTicks: Int, durationTicks: Int, radius: D
     val opening = if (impact) smooth((phase / 0.42).coerceAtMost(1.0)) else smooth(ageTicks / 8.0)
     val collapse = if (impact) smooth((phase - 0.56) / 0.44) else 0.0
     val reach = extent(radius, 8.0, 3.5)
-    val ringRadius = 0.32 + (reach - 0.32) * opening * (1.0 - collapse)
-    val core = 0.70 + collapse * 0.05
+    val cloudRadius = (0.55 + reach * 0.48 * opening) * (1.0 - collapse * 0.80)
+    val core = 0.82 + 0.36 * opening + 0.18 * collapse
     val swirlY = 1.6
-    val displayRingRadius = ringRadius * 0.65
-    val parts = ArrayList<StaffDisplayPart>(34)
+    val spin = ageTicks * 0.035
+    val parts = ArrayList<StaffDisplayPart>(30)
 
-    // The dark core stays pinned to the target while a flat inner ring and tilted outer ring expand and collapse.
-    parts += part(Material.OBSIDIAN, 0.0, swirlY, 0.0,
-        core * 1.15, core * 0.70, core * 1.15, roll = PI / 4)
-    parts += part(Material.CRYING_OBSIDIAN, 0.0, swirlY - 0.28, 0.0,
-        core * 1.7, 0.07, core * 1.7)
-    val outerTilt = Quaternionf().rotationX(Math.toRadians(35.0).toFloat())
-    repeat(2) { layer ->
-        val ring = displayRingRadius * (if (layer == 0) 0.64 else 1.0)
-        val y = swirlY - (1 - layer) * 0.075
-        repeat(12) { index ->
-            val angle = index * PI / 6.0 + layer * PI / 12.0
-            val material = when {
-                (index + layer) % 4 == 0 -> Material.AMETHYST_BLOCK
-                (index + layer) % 3 == 0 -> Material.CRYING_OBSIDIAN
-                else -> Material.PURPLE_STAINED_GLASS
-            }
-            val link = groundRingLink(material, ring, angle, angle + PI / 6.0, y,
-                if (layer == 0) 0.075 else 0.09)
-            if (layer == 0) parts += link else {
-                val center = Vector3f(link.center).sub(0f, swirlY.toFloat(), 0f)
-                outerTilt.transform(center).add(0f, y.toFloat(), 0f)
-                parts += link.copy(center = center, rotation = Quaternionf(outerTilt).mul(link.rotation))
-            }
-        }
+    // Heavy overlapping dark crystals make a spherical singularity instead of a wireframe orbit.
+    repeat(7) { index ->
+        val angle = index * 2.0 * PI / 7.0 + spin
+        val size = core * (0.78 + index % 3 * 0.08)
+        parts += part(when (index % 4) {
+            0 -> Material.OBSIDIAN
+            1 -> Material.CRYING_OBSIDIAN
+            2 -> Material.PURPLE_STAINED_GLASS
+            else -> Material.DARK_PRISMARINE
+        },
+            cos(angle) * 0.12, swirlY + sin(angle * 1.6) * 0.13, sin(angle) * 0.12,
+            size, size * (0.82 + index % 2 * 0.16), size * (0.90 + index % 3 * 0.08),
+            yaw = angle + 0.3, pitch = 0.45 + index * 0.16, roll = angle * 0.4)
     }
     repeat(8) { index ->
-        val angle = index * PI / 4.0 + PI / 8.0
-        val orbit = ringRadius * (0.46 + index % 2 * 0.12)
-        parts += part(if (index % 3 == 0) Material.AMETHYST_BLOCK else Material.CRYING_OBSIDIAN,
-            cos(angle) * orbit, swirlY + sin(angle * 2.0) * 0.025, sin(angle) * orbit,
-            0.11 + collapse * 0.035, 0.11 + collapse * 0.035, 0.18,
-            yaw = angle, pitch = sin(angle) * 0.25)
+        val angle = index * PI / 4.0 + spin * 0.72
+        val orbit = cloudRadius * (0.48 + index % 2 * 0.10)
+        val size = 0.48 + 0.16 * opening
+        parts += part(if (index % 3 == 0) Material.CRYING_OBSIDIAN else Material.AMETHYST_BLOCK,
+            cos(angle) * orbit, swirlY + sin(angle * 1.7) * (0.32 + opening * 0.34), sin(angle) * orbit,
+            size, size * 1.18, size * 0.86,
+            yaw = angle + PI / 3.0, pitch = 0.45 + sin(angle) * 0.45, roll = angle * 0.31)
+    }
+    repeat(8) { index ->
+        val angle = index * PI / 4.0 + PI / 8.0 - spin * 0.42
+        val orbit = cloudRadius * (0.84 + index % 2 * 0.12)
+        val size = 0.42 + 0.14 * opening
+        parts += part(if (index % 4 == 0) Material.OBSIDIAN else Material.PURPLE_STAINED_GLASS,
+            cos(angle) * orbit, swirlY + cos(angle * 2.0) * (0.42 + opening * 0.32), sin(angle) * orbit,
+            size * 1.08, size, size * 1.28,
+            yaw = angle - PI / 4.0, pitch = -0.52 + sin(angle) * 0.34, roll = angle * 0.27)
+    }
+    repeat(6) { index ->
+        val angle = index * 2.0 * PI / 6.0 + spin * 1.1
+        val orbit = cloudRadius * (0.64 + index % 2 * 0.24)
+        parts += part(if (index % 2 == 0) Material.DARK_PRISMARINE else Material.CRYING_OBSIDIAN,
+            cos(angle) * orbit, swirlY + sin(angle * 2.3) * 0.68, sin(angle) * orbit,
+            0.46 + opening * 0.12, 0.48 + opening * 0.18, 0.62 + opening * 0.14,
+            yaw = angle, pitch = 0.6, roll = angle * 0.5)
     }
     return parts
 }
@@ -343,42 +347,55 @@ private fun frostNovaDisplayParts(ageTicks: Int, durationTicks: Int, radius: Dou
     return parts
 }
 
+@Suppress("UNUSED_PARAMETER")
 private fun lanceDisplayParts(ageTicks: Int, durationTicks: Int, length: Double, radius: Double, impact: Boolean): List<StaffDisplayPart> {
     val reach = extent(length, 48.0, 8.0)
-    val launch = smooth(ageTicks / 4.0)
-    val front = minOf(reach, 0.8 + (reach - 0.8).coerceAtLeast(0.0) * launch)
-    val muzzle = minOf(0.85, front * 0.5)
-    val shaftLength = front - muzzle
+    val arrival = smooth(ageTicks / 6.0)
+    val front = minOf(reach, 2.0 + (reach - 2.0).coerceAtLeast(0.0) * arrival)
+    val tailLength = minOf(6.0 + arrival * 2.0, (front - 1.25).coerceAtLeast(0.30))
+    val shaftStart = (front - tailLength).coerceAtLeast(1.25)
+    val shaftLength = (front - shaftStart - 0.45).coerceAtLeast(0.30)
     val width = extent(radius, 1.0, 0.75)
-    val parts = ArrayList<StaffDisplayPart>(25)
-    repeat(12) { index ->
-        fun point(t: Double) = Vector3f((0.32 * (1.0 - t)).toFloat(),
-            (-0.24 * (1.0 - t)).toFloat(), (muzzle + shaftLength * t).toFloat())
-        val thinning = (1.0 - progress(ageTicks, durationTicks) * 0.45)
-        val thickness = (0.035 + index / 11.0 * 0.035) * thinning
-        val segment = link(if (index % 4 == 0) Material.GOLD_BLOCK else Material.YELLOW_STAINED_GLASS,
-            point(index / 12.0), point((index + 1) / 12.0), thickness, thickness)
-        parts += segment.copy(scale = Vector3f(segment.scale).apply { z *= 0.995f })
+    val parts = ArrayList<StaffDisplayPart>(30)
+
+    // A broad, bright plasma body stays straight on the forward axis; facets flare around the point.
+    repeat(10) { index ->
+        val t = (index + 0.5) / 10.0
+        val z = shaftStart + shaftLength * t
+        val size = 0.48 + 0.12 * sin(t * PI)
+        parts += part(if (index % 3 == 0) Material.GOLD_BLOCK else Material.YELLOW_STAINED_GLASS,
+            sin(index * 1.4) * 0.06, cos(index * 1.3) * 0.06, z,
+            size, size * 0.88, maxOf(0.42, shaftLength / 10.0 * 0.86),
+            yaw = sin(index * 1.1) * 0.12, pitch = cos(index * 1.7) * 0.13,
+            roll = index * 0.12)
     }
-    // Four swept wings build a recognisable spear head instead of a rotating rod.
-    repeat(4) { index ->
-        val angle = index * PI / 2.0 + PI / 4.0
-        val start = Vector3f(0f, 0f, front.toFloat())
-        val end = Vector3f((cos(angle) * width * 0.55).toFloat(),
-            (sin(angle) * width * 0.55).toFloat(), (front - 0.8).coerceAtLeast(0.0).toFloat())
-        parts += link(Material.GOLD_BLOCK, start, end, 0.10, 0.10)
-        parts += part(Material.WHITE_STAINED_GLASS,
-            cos(angle) * width * 0.2, sin(angle) * width * 0.2, front - 0.2,
-            0.07, 0.07, 0.50, roll = angle)
-    }
-    parts += part(Material.SEA_LANTERN, 0.0, 0.0, front, 0.14, 0.14, 0.40, roll = PI / 4.0)
-    repeat(4) { index ->
+    repeat(8) { index ->
+        val t = (index + 0.5) / 8.0
         val side = if (index % 2 == 0) -1.0 else 1.0
-        val z = front * (0.25 + index * 0.16)
-        parts += part(Material.YELLOW_STAINED_GLASS, side * width * 0.18, 0.0, z,
-            0.055, 0.055, (front * 0.11).coerceAtLeast(0.001))
+        val z = (shaftStart - 0.05).coerceAtLeast(1.20) + (front - shaftStart - 0.55).coerceAtLeast(0.0) * t
+        val flare = 0.18 + 0.16 * t
+        parts += part(if (index % 3 == 0) Material.ORANGE_STAINED_GLASS else Material.GOLD_BLOCK,
+            side * flare, sin(index * 1.3) * 0.20, z,
+            0.42 + 0.12 * t, 0.40 + 0.10 * t, 0.58 + 0.16 * t,
+            yaw = side * 0.28, pitch = side * -0.20 + sin(index * 1.7) * 0.04,
+            roll = side * (0.35 + t * 0.18))
     }
-    return parts
+    val headSize = 0.68 + width * 0.18
+    parts += part(Material.SEA_LANTERN, 0.0, 0.0, front,
+        headSize, headSize * 0.94, headSize * 1.16, roll = PI / 4.0)
+    repeat(5) { index ->
+        val angle = index * 2.0 * PI / 5.0
+        parts += part(if (index % 2 == 0) Material.WHITE_STAINED_GLASS else Material.GOLD_BLOCK,
+            cos(angle) * 0.30, sin(angle) * 0.30, front - 0.18,
+            0.52, 0.48, 0.70, yaw = angle + PI / 3.0,
+            pitch = sin(angle) * 0.34, roll = angle * 0.42)
+    }
+    // Grow after leaving the muzzle: a small nearby core and a legible distant solar mass.
+    val expansion = (0.28 + 1.90 * smooth((front - 2.0) / 22.0)).toFloat()
+    return parts.map { piece -> piece.copy(
+        center = Vector3f(piece.center.x * expansion, piece.center.y * expansion, piece.center.z),
+        scale = Vector3f(piece.scale).mul(expansion),
+    ) }
 }
 
 private fun emberDisplayParts(ageTicks: Int, durationTicks: Int, radius: Double, impact: Boolean): List<StaffDisplayPart> {
@@ -438,27 +455,26 @@ private fun novaDisplayParts(ageTicks: Int, durationTicks: Int, radius: Double):
     val travel = ((ageTicks - 2) / 16.0).coerceIn(0.0, 1.0)
     val front = 1.8 + staffWaveFront(ageTicks, reach - 1.8, 16)
     val crest = sin(PI * travel)
-    val parts = ArrayList<StaffDisplayPart>(48)
-    val lower = (front - 0.22).coerceAtLeast(1.55)
-    repeat(16) { index ->
-        val angle = index * PI / 8.0
-        parts += groundRingLink(if (index % 4 == 0) Material.EMERALD_BLOCK else Material.LIME_STAINED_GLASS,
-            lower, angle, angle + PI / 8.0, 0.08 + crest * 0.035, 0.11)
-    }
-    repeat(16) { index ->
-        val angle = index * PI / 8.0
-        parts += groundRingLink(if (index % 3 == 0) Material.EMERALD_BLOCK else Material.CYAN_STAINED_GLASS,
-            front, angle, angle + PI / 8.0, 0.24 + crest * 0.65, 0.14 + crest * 0.025)
-    }
-    repeat(16) { index ->
-        val angle = index * PI / 8.0 + PI / 16.0
-        val wake = (front - 0.12).coerceAtLeast(1.55)
-        val height = 0.25 + crest * 0.45
-        val y = 0.4 + crest * 0.7 + sin(index * 1.7) * 0.025
-        val centerY = if (wake <= 3.0) minOf(y, 0.7 - height / 2.0) else y
-        parts += part(if (index % 4 == 0) Material.SEA_LANTERN else Material.WHITE_STAINED_GLASS,
-            cos(angle) * wake, centerY, sin(angle) * wake,
-            0.08, height, 0.24, yaw = -angle, pitch = -0.18, roll = angle * 0.08)
+    val parts = ArrayList<StaffDisplayPart>(42)
+    repeat(14) { index ->
+        val angle = index * 2.0 * PI / 14.0 + travel * 0.08
+        val baseRadius = front - 0.32
+        val innerRadius = front - 0.42
+        val outerRadius = front + 0.24
+        val size = 0.66 + 0.24 * crest
+        val height = 0.76 + 0.46 * crest * (0.75 + 0.25 * cos(index * 1.7))
+        parts += part(if (index % 4 == 0) Material.EMERALD_BLOCK else Material.LIME_TERRACOTTA,
+            cos(angle) * baseRadius, height * 0.5, sin(angle) * baseRadius,
+            size, height, size * 0.86, yaw = -angle + 0.28, pitch = sin(index * 1.5) * 0.20,
+            roll = cos(index * 1.2) * 0.18)
+        parts += part(if (index % 3 == 0) Material.SEA_LANTERN else Material.CYAN_STAINED_GLASS,
+            cos(angle) * innerRadius, 0.92 + crest * 0.52, sin(angle) * innerRadius,
+            0.62 + crest * 0.18, 0.66 + crest * 0.42, 0.58 + crest * 0.16,
+            yaw = -angle + PI / 4.0, pitch = 0.48 + sin(angle) * 0.24, roll = angle * 0.16)
+        parts += part(if (index % 3 == 0) Material.EMERALD_BLOCK else Material.PRISMARINE,
+            cos(angle) * outerRadius, 0.50 + crest * 0.42, sin(angle) * outerRadius,
+            0.48 + crest * 0.12, 0.58 + crest * 0.34, 0.52 + crest * 0.12,
+            yaw = -angle - 0.30, pitch = -0.38 + cos(angle) * 0.18, roll = -angle * 0.22)
     }
     return parts
 }
@@ -470,43 +486,28 @@ private fun tidalCrestDisplayParts(ageTicks: Int, durationTicks: Int, length: Do
     val front = 1.8 + staffWaveFront(ageTicks, reach - 1.8, 16)
     val halfWidth = configuredHalfWidth * front / reach
     val lift = sin(PI * travel)
-    val parts = ArrayList<StaffDisplayPart>(48)
-
-    val lowerPoints = (0..16).map { index ->
-        val angle = -PI / 2.0 + index * PI / 16.0
-        Vector3f((sin(angle) * halfWidth).toFloat(), (0.07 + lift * 0.08 * cos(angle)).toFloat(),
-            (front + 0.58 * cos(angle)).toFloat())
-    }
-    repeat(16) { index ->
-        val width = 0.14
-        val height = 0.12
-        val inset = arcJoinInset(lowerPoints, index, maxOf(width, height))
-        parts += shortenedLink(if (index % 4 == 0) Material.EMERALD_BLOCK else Material.LIME_STAINED_GLASS,
-            lowerPoints[index], lowerPoints[index + 1], width, height, inset)
-    }
-    val upperPoints = (0..16).map { index ->
-        val angle = -PI / 2.0 + index * PI / 16.0
-        Vector3f((sin(angle) * halfWidth).toFloat(), (0.24 + lift * 0.86 * cos(angle)).toFloat(),
-            (front + 0.90 * cos(angle)).toFloat())
-    }
-    repeat(16) { index ->
-        val width = 0.17
-        val height = 0.20 + lift * 0.06
-        val inset = arcJoinInset(upperPoints, index, maxOf(width, height))
-        parts += shortenedLink(if (index % 3 == 0) Material.EMERALD_BLOCK else Material.CYAN_STAINED_GLASS,
-            upperPoints[index], upperPoints[index + 1], width, height, inset)
-    }
-    repeat(16) { index ->
-        val angle = -PI / 2.0 + (index + 0.5) * PI / 16.0
-        val arch = cos(angle)
-        val height = 0.34 + lift * 0.16 * arch
-        val x = sin(angle) * halfWidth
-        val z = front + 0.82 * arch
-        val y = 0.64 + lift * 1.36 * arch
-        val centerY = if (kotlin.math.hypot(x, z) <= 3.0) minOf(y, 0.7 - height / 2.0) else y
-        parts += part(if (index % 4 == 0) Material.SEA_LANTERN else Material.WHITE_STAINED_GLASS,
-            x, centerY, z, 0.10, height, 0.22,
-            yaw = -angle, roll = angle * 0.12)
+    val parts = ArrayList<StaffDisplayPart>(39)
+    val columns = 13
+    repeat(columns) { index ->
+        val across = index / (columns - 1.0) * 2.0 - 1.0
+        val x = across * halfWidth
+        val wave = 0.5 + 0.5 * sin(index * 1.35 + travel * PI)
+        val depth = front + cos(index * 1.1) * 0.14
+        val blockWidth = 0.66 + lift * 0.22
+        val baseHeight = 0.76 + lift * (0.38 + wave * 0.24)
+        parts += part(if (index % 4 == 0) Material.EMERALD_BLOCK else Material.LIME_TERRACOTTA,
+            x, baseHeight * 0.5, depth,
+            blockWidth, baseHeight, 0.62 + lift * 0.14,
+            yaw = across * 0.30 + sin(index * 1.8) * 0.16,
+            pitch = cos(index * 1.3) * 0.15, roll = across * -0.18)
+        parts += part(if (index % 3 == 0) Material.SEA_LANTERN else Material.CYAN_STAINED_GLASS,
+            x * 0.96, 0.94 + lift * (0.52 + wave * 0.22), depth - 0.20,
+            0.58 + lift * 0.20, 0.74 + lift * (0.38 + wave * 0.18), 0.56 + lift * 0.12,
+            yaw = across * 0.42 + PI / 4.0, pitch = 0.42 + across * 0.18, roll = across * 0.24)
+        parts += part(if (index % 4 == 0) Material.EMERALD_BLOCK else Material.PRISMARINE,
+            x + sin(index * 1.7) * 0.12, 0.48 + lift * (0.36 + wave * 0.22), depth + 0.32,
+            0.48 + lift * 0.14, 0.56 + lift * 0.30, 0.52 + lift * 0.14,
+            yaw = -across * 0.34 - 0.28, pitch = -0.40 + across * 0.16, roll = across * 0.31)
     }
     return parts
 }
@@ -526,26 +527,6 @@ private fun groundRingLink(material: Material, radius: Double, startAngle: Doubl
     val end = Vector3f((cos(endAngle) * radius).toFloat(), y.toFloat(), (sin(endAngle) * radius).toFloat())
     val cornerOverlap = thickness * 0.5 * tan(abs(endAngle - startAngle) * 0.5)
     return shortenedLink(material, start, end, thickness, thickness, cornerOverlap + 0.002)
-}
-
-private fun arcJoinInset(points: List<Vector3f>, index: Int, thickness: Double): Double {
-    val current = Vector3f(points[index + 1]).sub(points[index])
-    var turn = 0.0
-    if (index > 0) {
-        val previous = Vector3f(points[index]).sub(points[index - 1])
-        turn = maxOf(turn, vectorTurn(previous, current))
-    }
-    if (index + 1 < points.lastIndex) {
-        val next = Vector3f(points[index + 2]).sub(points[index + 1])
-        turn = maxOf(turn, vectorTurn(current, next))
-    }
-    return thickness * 0.5 * tan(turn * 0.5) + 0.002
-}
-
-private fun vectorTurn(first: Vector3f, second: Vector3f): Double {
-    val a = Vector3f(first).normalize()
-    val b = Vector3f(second).normalize()
-    return atan2(Vector3f(a).cross(b).length().toDouble(), a.dot(b).coerceIn(-1f, 1f).toDouble())
 }
 
 private fun shortenedLink(material: Material, start: Vector3f, end: Vector3f,

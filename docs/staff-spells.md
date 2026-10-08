@@ -7,7 +7,7 @@ The entire selected set must fit in free inventory slots before anything is give
 There are no loot-table or shop changes. Anyone holding an issued sample can use it.
 
 - **Грозовая ветвь / chain:** the Divine Staff (`3dfantasyweaponscit:divine_staff`)
-  launches a seeking lightning projectile that curves toward the moving target,
+  launches a centered seeking lightning projectile that turns toward the moving target,
   then jumps through up to four distinct targets. Damage occurs on contact and
   each jump keeps its reduced damage. Every movement segment checks walls and mobs.
 - **Разрыв / mark:** the Night Staff (`3dfantasyweaponscit:night_staff`) places a
@@ -22,8 +22,8 @@ There are no loot-table or shop changes. Anyone holding an issued sample can use
   front reaches them and they remain eligible and visible. It does not steer.
 - **Солнечное копьё / lance:** the Winged Staff
   (`3dfantasyweaponscit:sagrada_winged_staff`) damages up to three mobs instantly
-  along a narrow line through the reticle. A golden spear forms, then its ray and
-  short tail fade over twenty ticks. There is no soft lock.
+  along a narrow line through the reticle. A bright, faceted plasma head travels visually over six ticks with a short
+  thick wake, then fades over twenty ticks; damage remains immediate. There is no soft lock.
 - **Пепельная комета / ember:** the Hermit Staff
   (`3dfantasyweaponscit:bermunde_hermit_staff`) launches a straight, steady fire
   core from just ahead of the caster. Lead moving targets manually; it bursts
@@ -81,8 +81,10 @@ are created. A black-hole pull only follows a successful attributed damage event
 players, protected mobs, pets, NPCs and ineligible elite targets are excluded by
 the existing bridge. Velocity uses Paper's [meters-per-tick API](https://jd.papermc.io/paper/26.1.2/org/bukkit/entity/Entity.html#setVelocity(org.bukkit.util.Vector)).
 
-Both display parts (including their full bounding sphere) and individual particle
-emissions are excluded within 3.2 blocks of each viewer's eye. Display visibility also
+Compact flight uses a 1.15-block eye clearance so its centered muzzle remains
+visible nearby; large mark/comet impacts retain the 3.2-block exclusion. Display
+checks include each part's full bounding sphere, and particle checks apply to
+every emission point. Display visibility also
 checks the swept interpolation segment every tick, with movement padding. This rule
 also covers close impacts, crouching and spectators; collision still starts at
 the real eye, so the clearance does not let a shot skip a nearby wall or mob.
@@ -128,9 +130,12 @@ Bukkit damage remain usable without loading the optional integration classes.
 
 ## Display effects and limits
 
-The six source-driven silhouettes are branching lightning, a redesigned violet
-mark, a floor-hugging ice front, a growing golden spear and ray with a tail, a
-steady fire core with a hot three-dimensional fireburst, and an expanding emerald crest with a trailing wave. The
+The six source-driven silhouettes are a charged seeking core with a broad broken
+lightning trail, a rotating violet crystal mass, a floor-hugging ice front, a
+faceted solar plasma head with a short thick wake, a steady fire core with a
+three-dimensional fireburst, and expanding emerald crystal fronts. The black
+hole uses a dark overlapping block core, orbiting debris and three dense particle
+spirals. Primary lightning starts along the reticle without an artificial yaw bias. The
 mark and orb follow their existing combat positions; lance damage stays immediate.
 Casting into empty space also produces the display effect.
 

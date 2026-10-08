@@ -49,19 +49,27 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         }
     }
 
-    "chain trails start at their clipped segment origin while lance spears stay clear of the near plane" {
-        for (age in 4..12 step 2) {
-            val chain = staffDisplayParts(StaffSpell.CHAIN, age, 20, 0.65, 0.75, false)
-            (chain.first().center.z < 0.1f) shouldBe true
-            (kotlin.math.abs(chain.first().center.x) < 0.1f) shouldBe true
-            (kotlin.math.abs(chain.first().center.y) < 0.1f) shouldBe true
+    "charged cores launch through the reticle and the solar mass grows after leaving the muzzle" {
+        val chain = staffDisplayParts(StaffSpell.CHAIN, 0, 20, 48.0, 0.8, false)
+        chain.size shouldBe 23
+        (chain[18].scale.x >= 0.40f) shouldBe true
+        (chain[18].center.z >= 2.4f) shouldBe true
+        (chain.minOf { it.center.z } >= 0f) shouldBe true
 
-            staffDisplayParts(StaffSpell.LANCE, age, 20, 24.0, 0.75, true).forEach { part ->
-                for (x in listOf(-1f, 1f)) for (y in listOf(-1f, 1f)) for (z in listOf(-1f, 1f)) {
-                    val corner = org.joml.Vector3f(part.scale).mul(org.joml.Vector3f(x, y, z)).mul(0.5f)
-                    part.rotation.transform(corner).add(part.center)
-                    (corner.z > 0.5f) shouldBe true
-                }
+        val lance = staffDisplayParts(StaffSpell.LANCE, 0, 20, 24.0, 0.75, false)
+        lance.size shouldBe 24
+        (lance[18].scale.x in 0.12f..0.20f) shouldBe true
+        (lance[18].center.z >= 1.9f) shouldBe true
+        (lance[0].center.z > 1.0f) shouldBe true
+        val arrivedLance = staffDisplayParts(StaffSpell.LANCE, 6, 20, 24.0, 0.75, true)
+        arrivedLance[18].center.z shouldBe 24f
+        (arrivedLance[18].scale.x > 1.7f) shouldBe true
+        (arrivedLance[18].center.z - arrivedLance[0].center.z < 9f) shouldBe true
+        lance.forEach { part ->
+            for (x in listOf(-1f, 1f)) for (y in listOf(-1f, 1f)) for (z in listOf(-1f, 1f)) {
+                val corner = org.joml.Vector3f(part.scale).mul(org.joml.Vector3f(x, y, z)).mul(0.5f)
+                part.rotation.transform(corner).add(part.center)
+                (corner.z > 0.5f) shouldBe true
             }
         }
     }
@@ -86,14 +94,15 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         partial.first().center.z shouldBe partialRoute.last().z
         partial.maxOf { it.center.z } shouldBe partialRoute.last().z
         val trailLinks = partial.drop(6).take(2 * (partialRoute.size - 1))
-        trailLinks.all { it.scale.x in 0.10f..0.16f } shouldBe true
+        trailLinks.filterIndexed { index, _ -> index % 2 == 0 }.all { it.scale.x in 0.42f..0.58f } shouldBe true
+        trailLinks.filterIndexed { index, _ -> index % 2 == 1 }.all { it.scale.x in 0.32f..0.44f } shouldBe true
         trailLinks.take(2).all { part ->
             val launchCap = org.joml.Vector3f(0f, 0f, -part.scale.z / 2f)
             part.rotation.transform(launchCap).add(part.center)
             launchCap.distance(partialRoute.first()) >= 0.20f
         } shouldBe true
-        trailLinks.take(2).all { it.scale.z in 1.0f..1.1f } shouldBe true
-        trailLinks.drop(2).all { it.scale.z in 1.15f..1.25f } shouldBe true
+        trailLinks.take(2).all { it.scale.z in 0.85f..1.05f } shouldBe true
+        trailLinks.drop(2).all { it.scale.z in 0.95f..1.20f } shouldBe true
 
         val cappedRoute = route(24)
         capped.first().center.z shouldBe cappedRoute.last().z
@@ -101,7 +110,7 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         staffLightningTrailParts(route(4), fade = 0.0).isEmpty() shouldBe true
     }
 
-    "ground ring and lightning links leave small gaps at their joins" {
+    "remaining ice and comet ground links leave small gaps at their joins" {
         fun ringLinksAvoidCornerOverlap(parts: List<StaffDisplayPart>, angleStep: Double): Boolean {
             val center = org.joml.Vector3f()
             parts.forEach { center.add(it.center) }
@@ -113,19 +122,12 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
             }
         }
 
-        val mark = staffDisplayParts(StaffSpell.MARK, 4, 40, 0.0, 4.5, false, true)
-        ringLinksAvoidCornerOverlap(mark.subList(2, 14), kotlin.math.PI / 6.0) shouldBe true
-        ringLinksAvoidCornerOverlap(mark.subList(14, 26), kotlin.math.PI / 6.0) shouldBe true
-
         val frost = staffDisplayParts(StaffSpell.FROST, 4, 30, 0.0, 8.0, true, true)
         ringLinksAvoidCornerOverlap(frost.take(16), kotlin.math.PI / 8.0) shouldBe true
 
         val ember = staffDisplayParts(StaffSpell.EMBER, 4, 20, 0.0, 2.8, true)
         ringLinksAvoidCornerOverlap(ember.subList(34, 48), 2.0 * kotlin.math.PI / 14.0) shouldBe true
 
-        val nova = staffDisplayParts(StaffSpell.NOVA, 4, 30, 4.0, 8.0, true)
-        ringLinksAvoidCornerOverlap(nova.take(16), kotlin.math.PI / 8.0) shouldBe true
-        ringLinksAvoidCornerOverlap(nova.subList(16, 32), kotlin.math.PI / 8.0) shouldBe true
     }
 
     "transient spells grow in and dissolve before removal with stable part identities" {
@@ -141,7 +143,11 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
                 fun volume(parts: List<StaffDisplayPart>) = parts.sumOf {
                     (it.scale.x * it.scale.y * it.scale.z).toDouble()
                 }
-                (volume(first) < volume(body) * 0.01) shouldBe true
+                if (spell == StaffSpell.CHAIN || spell == StaffSpell.LANCE) {
+                    (volume(first) > volume(body) * 0.01) shouldBe true
+                } else {
+                    (volume(first) < volume(body) * 0.01) shouldBe true
+                }
                 (volume(last) < volume(body) * 0.01) shouldBe true
             }
         }
@@ -160,30 +166,40 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         }
     }
 
-    "secondary mark opens a tilted accretion ring around a dark core, then collapses" {
-        fun outerRadius(age: Int) = staffDisplayParts(StaffSpell.MARK, age, 20, 0.0, 3.5, true, true)
-            .subList(14, 26).maxOf { kotlin.math.hypot(it.center.x.toDouble(), it.center.z.toDouble()) }
-        val closed = outerRadius(0)
-        val open = outerRadius(8)
-        val collapsed = outerRadius(18)
-        (open > closed * 4) shouldBe true
-        (collapsed < open / 4) shouldBe true
-        fun chargeRadius(age: Int) = staffDisplayParts(StaffSpell.MARK, age, 40, 0.0, 4.5, false, true)
-            .subList(14, 26).maxOf { kotlin.math.hypot(it.center.x.toDouble(), it.center.z.toDouble()) }
-        (chargeRadius(8) > chargeRadius(0) * 4) shouldBe true
-        chargeRadius(38) shouldBe chargeRadius(8)
-        val singularity = staffDisplayParts(StaffSpell.MARK, 8, 20, 0.0, 3.5, true, true)
-        (singularity[0].scale.x in 0.7f..0.9f) shouldBe true
-        singularity[0].center.y shouldBe 1.6f
-        singularity.subList(2, 14).all { kotlin.math.abs(it.center.y - 1.525f) < 0.001f } shouldBe true
-        val outerRing = singularity.subList(14, 26)
-        (outerRing.maxOf { it.center.y } - outerRing.minOf { it.center.y } > 2.4f) shouldBe true
-        val normal = org.joml.Quaternionf(outerRing.first().rotation).transform(org.joml.Vector3f(0f, 1f, 0f))
-        (kotlin.math.abs(normal.y - kotlin.math.cos(Math.toRadians(35.0)).toFloat()) < 0.01f) shouldBe true
-        (kotlin.math.abs(normal.z - kotlin.math.sin(Math.toRadians(35.0)).toFloat()) < 0.01f) shouldBe true
+    "mark charges as a dense violet core before its radial crystal tear opens" {
+        fun mark(age: Int) = staffDisplayParts(StaffSpell.MARK, age, 40, 0.0, 4.5, false)
+        val closed = mark(0)
+        val open = mark(8)
+        closed.size shouldBe 17
+        open.size shouldBe 17
+        (open.take(5).minOf { it.scale.x } > 0.8f) shouldBe true
+        (open.take(5).maxOf { kotlin.math.sqrt(it.center.lengthSquared().toDouble()) } < 0.3) shouldBe true
+        fun tearRadius(parts: List<StaffDisplayPart>) = parts.drop(5).maxOf {
+            kotlin.math.sqrt(it.center.lengthSquared().toDouble())
+        }
+        (tearRadius(open) > tearRadius(closed) + 0.45) shouldBe true
+        val fragments = open.drop(5)
+        (fragments.minOf { it.scale.x } >= 0.42f) shouldBe true
+        (fragments.maxOf { it.scale.x } >= 0.60f) shouldBe true
     }
 
-    "secondary frost nova and directed emerald crest travel outward from an empty center" {
+    "secondary mark gathers a chunky three-dimensional singularity then collapses" {
+        fun parts(age: Int) = staffDisplayParts(StaffSpell.MARK, age, 20, 0.0, 3.5, true, true)
+        fun cloudRadius(shape: List<StaffDisplayPart>) = shape.drop(7).maxOf {
+            kotlin.math.hypot(it.center.x.toDouble(), it.center.z.toDouble())
+        }
+        val closed = parts(0)
+        val open = parts(8)
+        val collapsed = parts(18)
+        closed.size shouldBe 29
+        (open[0].scale.x > 0.8f) shouldBe true
+        open.take(7).all { it.center.y in 1.45f..1.75f } shouldBe true
+        (open.drop(7).maxOf { it.center.y } - open.drop(7).minOf { it.center.y } > 0.8f) shouldBe true
+        (cloudRadius(open) > cloudRadius(closed) * 3.0) shouldBe true
+        (cloudRadius(collapsed) < cloudRadius(open) * 0.30) shouldBe true
+    }
+
+    "secondary frost nova and chunky emerald tidal front preserve their different paths" {
         val frostStart = staffDisplayParts(StaffSpell.FROST, 2, 30, 0.0, 8.0, true, true)
         val frostEnd = staffDisplayParts(StaffSpell.FROST, 18, 30, 0.0, 8.0, true, true)
         val frostStartRadius = kotlin.math.hypot(frostStart[0].center.x.toDouble(), frostStart[0].center.z.toDouble())
@@ -193,41 +209,37 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
 
         val tidalStart = staffDisplayParts(StaffSpell.NOVA, 2, 30, 12.0, 5.5, true, true)
         val tidalEnd = staffDisplayParts(StaffSpell.NOVA, 18, 30, 12.0, 5.5, true, true)
-        tidalStart.forEach { part ->
-            if (kotlin.math.hypot(part.center.x.toDouble(), part.center.z.toDouble()) <= 3.0)
-                (part.center.y + part.scale.y / 2f <= 0.7f) shouldBe true
-        }
-        (tidalEnd.take(16).maxOf { it.center.z } > tidalStart.take(16).maxOf { it.center.z } + 8f) shouldBe true
-        tidalEnd.take(16).all { kotlin.math.abs(it.center.x) <= 5.6f } shouldBe true
-        (tidalEnd.take(16).maxOf { kotlin.math.abs(it.center.x) } >
-            tidalStart.take(16).maxOf { kotlin.math.abs(it.center.x) } + 4.5f) shouldBe true
-        tidalEnd.take(32).forEachIndexed { index, part ->
-            val segment = index % 16
-            val offset = if (index < 16) 0.58 else 0.90
-            val startAngle = -kotlin.math.PI / 2.0 + segment * kotlin.math.PI / 16.0
-            val endAngle = startAngle + kotlin.math.PI / 16.0
-            val dx = (kotlin.math.sin(endAngle) - kotlin.math.sin(startAngle)) * 5.5
-            val dz = offset * (kotlin.math.cos(endAngle) - kotlin.math.cos(startAngle))
-            (part.scale.z < (kotlin.math.hypot(dx, dz) - 0.001).toFloat()) shouldBe true
-        }
+        tidalStart.size shouldBe 39
+        tidalEnd.size shouldBe 39
+        (tidalEnd.maxOf { it.center.z } > tidalStart.maxOf { it.center.z } + 8f) shouldBe true
+        (tidalEnd.maxOf { kotlin.math.abs(it.center.x) } <= 5.7f) shouldBe true
+        (tidalEnd.maxOf { kotlin.math.abs(it.center.x) } >
+            tidalStart.maxOf { kotlin.math.abs(it.center.x) } + 4.5f) shouldBe true
+        (tidalEnd.minOf { it.center.y - it.scale.y / 2f } >= -0.02f) shouldBe true
+        (tidalEnd.maxOf { it.center.y + it.scale.y / 2f } > 1.25f) shouldBe true
+        (tidalEnd.minOf { it.scale.x } >= 0.48f) shouldBe true
         val peak = staffDisplayParts(StaffSpell.NOVA, 10, 30, 12.0, 5.5, true, true)
-        (kotlin.math.abs(peak[24].center.y - 1.1f) < 0.02f) shouldBe true
-        (kotlin.math.abs(peak[40].center.y - 2.0f) < 0.03f) shouldBe true
+        (peak.maxOf { it.center.y + it.scale.y / 2f } > 2.0f) shouldBe true
+        (peak[1].center.y > 1.4f) shouldBe true
+        (peak[1].scale.y >= 1.1f) shouldBe true
     }
 
-    "primary emerald nova keeps a low empty center as its two-tier crest passes" {
+    "primary emerald nova is a thick outward-moving radial crystal storm" {
         (0..6 step StaffSpellDisplayEffects.FRAME_TICKS).forEach { age ->
             val parts = staffDisplayParts(StaffSpell.NOVA, age, 30, 4.0, 8.0, true)
+            parts.size shouldBe 42
             parts.forEach { part ->
                 val radius = kotlin.math.hypot(part.center.x.toDouble(), part.center.z.toDouble())
-                if (radius <= 3.0) (part.center.y + part.scale.y / 2f <= 0.7f) shouldBe true
                 (radius >= 1.3) shouldBe true
             }
         }
+        val early = staffDisplayParts(StaffSpell.NOVA, 2, 30, 4.0, 8.0, true)
         val peak = staffDisplayParts(StaffSpell.NOVA, 10, 30, 4.0, 8.0, true)
-        (kotlin.math.abs(peak[16].center.y - 0.89f) < 0.02f) shouldBe true
-        (kotlin.math.abs(peak[32].center.y - 1.1f) < 0.03f) shouldBe true
-        (kotlin.math.abs(peak[32].scale.y - 0.7f) < 0.02f) shouldBe true
+        val late = staffDisplayParts(StaffSpell.NOVA, 18, 30, 4.0, 8.0, true)
+        (late.minOf { kotlin.math.hypot(it.center.x.toDouble(), it.center.z.toDouble()) } >
+            early.minOf { kotlin.math.hypot(it.center.x.toDouble(), it.center.z.toDouble()) } + 5.5) shouldBe true
+        (peak.minOf { it.scale.x } >= 0.48f) shouldBe true
+        (peak.maxOf { it.center.y + it.scale.y / 2f } > 1.4f) shouldBe true
     }
 
     "comet flight is steady and its impact shards travel outward without pulsing" {

@@ -236,7 +236,7 @@ internal class StaffSpellController(
         val delta = to.toVector().subtract(from.toVector())
         val length = delta.length()
         return if (length < 0.001) to.clone()
-        else from.clone().add(delta.multiply(min(3.2, length) / length))
+        else from.clone().add(delta.multiply(min(1.4, length) / length))
     }
 
     private fun castSecondary(player: Player, spell: StaffSpell, cast: StaffSpellCast, tuning: StaffSpellTuning) {
@@ -332,7 +332,7 @@ internal class StaffSpellController(
     }
 
     private fun chain(player: Player, first: LivingEntity?, cast: StaffSpellCast, tuning: StaffSpellTuning) {
-        launchBolt(player, player.eyeLocation, player.eyeLocation.direction.clone().rotateAroundY(0.34),
+        launchBolt(player, player.eyeLocation, player.eyeLocation.direction.clone(),
             first, cast, tuning, 1.0, settings.chainTargets, mutableSetOf(), settings.range * 1.6)
     }
 
@@ -550,7 +550,7 @@ internal class StaffSpellController(
                 vanillaDamage = mark.tuning.vanillaDamage * 0.65) else mark.tuning
             val radius = if (mark.gravity) 4.5 else settings.markRadius
             areaDamage(player, origin, radius, mark.cast, tuning, mark.target)
-            visuals.markBurst(origin, radius)
+            visuals.markBurst(origin, radius, blackhole = mark.gravity)
             effects.impact(mark.visualId, origin, radius, MARK_IMPACT_DURATION_TICKS)
         }
     }

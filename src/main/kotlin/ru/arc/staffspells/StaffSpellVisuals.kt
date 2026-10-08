@@ -41,6 +41,16 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         localSound(start.clone().add(direction.normalize().multiply(min(0.8, distance * 0.6))),
             Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.45f, 1.7f)
         localSound(end, Sound.ENTITY_LIGHTNING_BOLT_IMPACT, 0.95f, 1.15f)
+        // A compact charged crown makes the contact point read brighter than the travel line.
+        emit(end.clone().add(0.0, 0.12, 0.0), Particle.FLASH)
+        val impactFrame = frame(direction) ?: return@dispatch
+        repeat(6) { i ->
+            val angle = i * PI / 3.0
+            emit(end.clone()
+                .add(impactFrame.first.clone().multiply(cos(angle) * 0.22))
+                .add(impactFrame.second.clone().multiply(sin(angle) * 0.22)),
+                if (i % 2 == 0) Particle.END_ROD else Particle.ELECTRIC_SPARK)
+        }
         tasks.runLater(1) {
             lineSamples(start, end, (distance * 0.55).toInt().coerceIn(6, 16)).forEachIndexed { i, point ->
                 if (i % 3 == 0) emit(point, Particle.ELECTRIC_SPARK)
@@ -58,9 +68,27 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         val start = from.clone()
         val end = to.clone()
         val distance = segmentLength(start, end) ?: return@dispatch
-        val segments = (distance * 0.45).toInt().coerceIn(1, 7)
-        lineSamples(start, end, segments).forEachIndexed { i, point ->
-            emit(point, if (i % 3 == 1) Particle.END_ROD else Particle.ELECTRIC_SPARK)
+        val direction = end.toVector().subtract(start.toVector())
+        val basis = frame(direction) ?: return@dispatch
+        // Controller steps are at most two blocks; three shaft points plus the two side sparks and head stay <= 8.
+        val segments = 2
+        val samples = lineSamples(start, end, segments)
+        samples.forEachIndexed { i, point ->
+            emit(point, if (i == samples.lastIndex) Particle.END_ROD else Particle.ELECTRIC_SPARK,
+                minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+        }
+        repeat(2) { i ->
+            val side = if (i == 0) -1.0 else 1.0
+            emit(interpolate(start, end, 0.55).add(basis.first.clone().multiply(side * 0.11)),
+                Particle.ELECTRIC_SPARK, minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+        }
+        repeat(3) { i ->
+            val angle = i * PI * 2.0 / 3.0
+            emit(end.clone()
+                .add(basis.first.clone().multiply(cos(angle) * 0.12))
+                .add(basis.second.clone().multiply(sin(angle) * 0.12)),
+                if (i == 0) Particle.END_ROD else Particle.ELECTRIC_SPARK,
+                minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
         }
     }
 
@@ -77,22 +105,40 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         }
     }
 
-    /** Called every two ticks: three inward-moving wisps, with no rotating ring or repeated sound. */
+    /** Called every two ticks: a rotating violet vortex with one restrained cast cue. */
     fun markCharge(at: Location, progress: Double) = dispatch {
         val origin = at.clone()
         if (!drawable(origin)) return@dispatch
         val charge = progress.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
         val reach = 0.9 * (1.0 - charge) + 0.12
         repeat(3) { i ->
-            val angle = i * PI * 2 / 3 - PI / 2
-            emit(origin.clone().add(cos(angle) * reach, 0.14 + (i % 2) * 0.08, sin(angle) * reach), Particle.WITCH)
+            val angle = i * PI * 2 / 3 - PI / 2 + charge * PI * 2.0
+            val point = origin.clone().add(cos(angle) * reach, 0.14 + (i % 2) * 0.08, sin(angle) * reach)
+            emit(point, Particle.REVERSE_PORTAL, minimumEyeDistance = MARK_CAMERA_CLEARANCE)
+            emit(point.clone().add(0.0, 0.12, 0.0), Particle.WITCH, minimumEyeDistance = MARK_CAMERA_CLEARANCE)
         }
+        if (charge > 0.35) emit(origin.clone().add(0.0, 0.18, 0.0), Particle.DUST, VIOLET,
+            minimumEyeDistance = MARK_CAMERA_CLEARANCE)
     }
 
-    fun markBurst(at: Location, radius: Double) = dispatch {
-        val origin = at.clone()
+    fun markBurst(at: Location, radius: Double, blackhole: Boolean = false) = dispatch {
+        val origin = at.clone().add(0.0, if (blackhole) BLACKHOLE_CORE_HEIGHT else 0.0, 0.0)
         val reach = boundedRadius(radius, 0.5, 10.0) ?: return@dispatch
         localSound(origin, Sound.ENTITY_EVOKER_CAST_SPELL, 0.82f, 0.82f)
+        if (blackhole) {
+            // The dark mark collapses inward, then flashes at its pin-point core.
+            emit(origin, Particle.FLASH)
+            repeat(8) { i ->
+                val angle = i * PI / 4.0
+                val y = -0.42 + (i % 4) * 0.28
+                emit(origin.clone().add(cos(angle) * 0.24, y, sin(angle) * 0.24), Particle.REVERSE_PORTAL)
+            }
+            repeat(6) { i ->
+                val angle = i * PI / 3.0 + PI / 6.0
+                emit(origin.clone().add(cos(angle) * 0.18, 0.1 + (i % 3) * 0.16, sin(angle) * 0.18),
+                    Particle.DUST, VIOLET_BURST)
+            }
+        }
         val coreRadius = min(reach * 0.1, 0.3)
         repeat(7) { i ->
             val angle = i * PI * 2 / 7
@@ -145,7 +191,8 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
                             emit(crest, Particle.DUST_COLOR_TRANSITION, ICE_TO_AQUA)
                         } else {
                             emit(floor, Particle.DUST_COLOR_TRANSITION, GREEN_TO_AQUA)
-                            emit(crest, Particle.END_ROD)
+                            emit(crest, Particle.CLOUD)
+                            if (i % 3 == 0) emit(crest.clone().add(0.0, 0.22, 0.0), Particle.END_ROD)
                         }
                     }
                 }
@@ -173,21 +220,37 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         }
     }
 
-    /** Inward-moving dark wisps; the low cast cue is emitted only at the start of the charge. */
+    /** Three inward-spiraling arms and a bright core; one low cast cue, no repeated sound. */
     fun gravity(at: Location, radius: Double, progress: Double) = dispatch {
-        val origin = at.clone().add(0.0, 1.6, 0.0)
+        val origin = at.clone().add(0.0, BLACKHOLE_CORE_HEIGHT, 0.0)
         if (!drawable(origin)) return@dispatch
         val reach = boundedRadius(radius, 0.5, 10.0) ?: return@dispatch
         val charge = progress.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
         if (charge <= 0.100001) localSound(origin, Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.2f, 0.55f)
-        val orbit = 0.12 + (reach - 0.12) * (1.0 - charge)
-        repeat(6) { i ->
-            val angle = i * PI / 3 + charge * PI * 2
-            val point = origin.clone().add(cos(angle) * orbit, 0.18 + (i % 3) * 0.18, sin(angle) * orbit)
-            emit(point, Particle.REVERSE_PORTAL)
-            if (i % 2 == 0) emit(point.clone().add(0.0, 0.08, 0.0), Particle.SMOKE)
+        val orbit = 0.16 + (reach - 0.16) * (1.0 - charge)
+        // Three dense, continuously rotating arms collapse inward across the two-second charge.
+        repeat(3) { arm ->
+            repeat(9) { step ->
+                val progressAlongArm = step / 8.0
+                val angle = arm * PI * 2.0 / 3.0 + charge * PI * 5.0 + progressAlongArm * PI * 2.2
+                val radiusAt = 0.18 + (orbit - 0.18) * (1.0 - progressAlongArm)
+                val height = sin(progressAlongArm * PI * 2.0 + arm * 0.72) * 0.68 + progressAlongArm * 0.10
+                val point = origin.clone().add(cos(angle) * radiusAt, height, sin(angle) * radiusAt)
+                if ((arm + step) % 2 == 0) emit(point, Particle.DUST_COLOR_TRANSITION, ACCRETION_DUST,
+                    minimumEyeDistance = MARK_CAMERA_CLEARANCE)
+                else emit(point, Particle.REVERSE_PORTAL, minimumEyeDistance = MARK_CAMERA_CLEARANCE)
+            }
         }
-        emit(origin.clone().add(0.0, 0.16, 0.0), Particle.REVERSE_PORTAL)
+        repeat(8) { i ->
+            val angle = i * PI / 4.0 - charge * PI * 2.0
+            val coreRadius = 0.12 + (i % 3) * 0.06
+            val point = origin.clone().add(cos(angle) * coreRadius, -0.28 + (i % 4) * 0.18,
+                sin(angle) * coreRadius)
+            if (i % 2 == 0) emit(point, Particle.END_ROD, minimumEyeDistance = MARK_CAMERA_CLEARANCE)
+            else emit(point, Particle.DUST_COLOR_TRANSITION, ACCRETION_DUST,
+                minimumEyeDistance = MARK_CAMERA_CLEARANCE)
+        }
+        emit(origin, Particle.END_ROD, minimumEyeDistance = MARK_CAMERA_CLEARANCE)
     }
 
     fun frost(originFeet: Location, horizontalEnd: Location, halfAngleDegrees: Double,
@@ -221,9 +284,11 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         val forward = offset.clone().normalize()
         val charge = start.clone().add(forward.clone().multiply(min(0.85, distance * 0.65)))
         localSound(charge, Sound.ENTITY_ARROW_SHOOT, 0.78f, 0.92f)
+        emit(charge.clone().add(0.0, 0.08, 0.0), Particle.FLASH)
         repeat(3) { i ->
             val side = (i - 1) * 0.075
-            emit(charge.clone().add(basis.first.clone().multiply(side)), Particle.DUST, GOLD)
+            emit(charge.clone().add(basis.first.clone().multiply(side)), Particle.DUST, GOLD,
+                minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
         }
         for (phase in 1..3) {
             tasks.runLater(phase.toLong()) { lanceStage(start, end, basis.first, distance, phase) }
@@ -248,7 +313,7 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         val trailEnd = end.clone().subtract(direction.clone().multiply(min(0.24, distance * 0.75)))
         val samples = if (distance > 0.55) 2 else 1
         lineSamples(start, trailEnd, samples).forEach { point ->
-            emit(point, Particle.FLAME)
+            emit(point, Particle.FLAME, minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
         }
     }
 
@@ -379,19 +444,37 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         val segments = (shaftLength * 1.25).toInt().coerceIn(1, 8)
         lineSamples(shaftStart, tip, segments).forEachIndexed { i, point ->
             val shimmer = if (i % 2 == 0) right.clone().multiply(0.025) else right.clone().multiply(-0.025)
-            emit(point.add(shimmer), Particle.DUST, GOLD)
+            emit(point.clone().add(shimmer), Particle.DUST, GOLD, minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+            if (i % 2 == 0) {
+                val side = if (i % 4 == 0) 1.0 else -1.0
+                emit(point.clone().add(right.clone().multiply(side * 0.09)).add(0.0, 0.06, 0.0),
+                    Particle.FLAME, minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+            }
         }
-        emit(tip, Particle.END_ROD)
+        emit(tip, Particle.END_ROD, minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+        if (phase == 3) {
+            emit(tip.clone().add(0.0, 0.12, 0.0), Particle.FLASH)
+            repeat(6) { i ->
+                val angle = i * PI / 3.0
+                emit(tip.clone()
+                    .add(right.clone().multiply(cos(angle) * 0.34))
+                    .add(0.0, 0.08 + sin(angle) * 0.18, 0.0),
+                    if (i % 2 == 0) Particle.END_ROD else Particle.FLAME,
+                    minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+            }
+        }
     }
 
     private fun lanceTail(start: Location, end: Location, phase: Int) {
         val count = 3 - phase
         repeat(count) { i ->
             val t = 0.82 + (i + 1) * 0.16 / (count + 1)
-            emit(interpolate(start, end, t.coerceAtMost(0.995)), Particle.DUST, GOLD_TAIL)
+            emit(interpolate(start, end, t.coerceAtMost(0.995)), Particle.DUST, GOLD_TAIL,
+                minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
         }
     }
 
+    /** At most 42 filtered particle positions per frame; five frames create the full crest. */
     private fun novaFrame(at: Location, radius: Double, phase: Int, secondary: Boolean) {
         val reach = 1.8 + (radius - 1.8) * phase / 4.0
         val floorY = at.blockY + 0.06
@@ -406,6 +489,15 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
             emit(crest, Particle.CLOUD)
             if (i % 2 == 0) emit(crest.clone().add(0.0, 0.14, 0.0), Particle.END_ROD)
             if (secondary && i % 3 == 0) emit(crest, Particle.DUST_COLOR_TRANSITION, VIOLET_TO_AQUA)
+        }
+        // Inner foam and jewel sparks make the traveling ring read as a broad crest, not a wire.
+        val wake = (reach - 0.72).coerceAtLeast(1.25)
+        repeat(8) { i ->
+            val angle = i * PI / 4.0 + phase * 0.08
+            val height = floorY + 0.16 + (i % 3) * 0.09
+            val point = at.clone().add(cos(angle) * wake, height - at.y, sin(angle) * wake)
+            if (i % 2 == 0) emit(point, Particle.CLOUD)
+            else emit(point, Particle.DUST_COLOR_TRANSITION, GREEN_TO_AQUA)
         }
     }
 
@@ -455,10 +547,12 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         return valid(location) && world.isChunkLoaded(location.blockX shr 4, location.blockZ shr 4)
     }
 
-    private fun emit(at: Location, particle: Particle, data: Any? = null) {
+    private fun emit(at: Location, particle: Particle, data: Any? = null,
+        minimumEyeDistance: Double = IMPACT_CAMERA_CLEARANCE) {
         if (!drawable(at)) return
         val world = at.world ?: return
-        val minEyeDistanceSquared = 3.2 * 3.2
+        val clearance = minimumEyeDistance.takeIf { it.isFinite() && it >= 0.0 } ?: IMPACT_CAMERA_CLEARANCE
+        val minEyeDistanceSquared = clearance * clearance
         val maxViewerDistanceSquared = 48.0 * 48.0
         world.getNearbyPlayers(at, 48.0).forEach { player ->
             val eye = player.eyeLocation
@@ -479,9 +573,14 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
     }
 
     private companion object {
+        const val COMPACT_CAMERA_CLEARANCE = 1.15
+        const val MARK_CAMERA_CLEARANCE = 1.6
+        const val IMPACT_CAMERA_CLEARANCE = 3.2
+        const val BLACKHOLE_CORE_HEIGHT = 1.6
         val VIOLET = Particle.DustOptions(Color.fromRGB(166, 74, 255), 1.15f)
         val VIOLET_BURST = Particle.DustOptions(Color.fromRGB(207, 112, 255), 1.5f)
         val VIOLET_TO_AQUA = Particle.DustTransition(Color.fromRGB(205, 90, 255), Color.fromRGB(70, 235, 255), 1.2f)
+        val ACCRETION_DUST = Particle.DustTransition(Color.fromRGB(104, 30, 196), Color.fromRGB(238, 132, 255), 2.2f)
         val GOLD = Particle.DustOptions(Color.fromRGB(255, 193, 66), 1.3f)
         val GOLD_TAIL = Particle.DustOptions(Color.fromRGB(255, 222, 145), 0.75f)
         val ICE_TO_AQUA = Particle.DustTransition(Color.fromRGB(180, 230, 255), Color.fromRGB(90, 245, 255), 0.9f)

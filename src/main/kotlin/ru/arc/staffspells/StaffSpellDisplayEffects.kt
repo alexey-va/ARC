@@ -201,7 +201,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
                     val bound = scene.bounds.getOrNull(index)
                     val previous = scene.previousBounds.getOrNull(index) ?: bound
                     val eye = player.eyeLocation.toVector()
-                    val padding = 3.2 + player.velocity.length() * FRAME_TICKS + 0.35
+                    val padding = staffEyeClearance(scene.spell, scene.impact) + player.velocity.length() * FRAME_TICKS + 0.15
                     if (bound != null && previous != null &&
                         staffSweptDistance(eye, previous.first, bound.first) >= padding + maxOf(bound.second, previous.second))
                         handle.showTo(player)
@@ -235,13 +235,18 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
     }
 }
 
+/** Compact flight remains close to the reticle; large explosions retain a wider exclusion. */
+internal fun staffEyeClearance(spell: StaffSpell, impact: Boolean): Double =
+    if (impact && spell in setOf(StaffSpell.MARK, StaffSpell.EMBER)) 3.2 else 1.15
+
 /** Conservative sphere includes the entire transformed cuboid, not only its anchor. */
-internal fun staffPartClearOfEye(part: StaffDisplayPart, origin: Location, rotation: Quaternionf, eye: Location): Boolean {
+internal fun staffPartClearOfEye(part: StaffDisplayPart, origin: Location, rotation: Quaternionf, eye: Location,
+    clearance: Double = 3.2): Boolean {
     if (origin.world != eye.world) return false
     val center = rotation.transform(Vector3f(part.center))
     val distance = eye.toVector().distance(origin.toVector().add(org.bukkit.util.Vector(
         center.x.toDouble(), center.y.toDouble(), center.z.toDouble())))
-    return distance >= 3.2 + part.scale.length() * 0.5
+    return distance >= clearance + part.scale.length() * 0.5
 }
 
 internal fun staffSweptDistance(eye: org.bukkit.util.Vector, from: org.bukkit.util.Vector, to: org.bukkit.util.Vector): Double {

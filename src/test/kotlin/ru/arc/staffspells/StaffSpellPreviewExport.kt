@@ -18,15 +18,35 @@ object StaffSpellPreviewExport {
         val secondary: Boolean = false,
     )
 
-    private data class Event(val id: String, val inputs: Inputs)
+    private data class ChainRoute(
+        val yawDegrees: Double,
+        val targetX: Double,
+        val targetYOffset: Double,
+        val targetZ: Double,
+    )
+    private data class Event(val id: String, val inputs: Inputs, val chainRoute: ChainRoute? = null)
     private data class Frame(val id: String, val ageTicks: Int)
     private data class ExportedState(val metadata: Map<String, Any>, val materials: List<String>)
+    private data class ReadabilityPose(
+        val id: String,
+        val spell: StaffSpell,
+        val event: Event,
+        val frame: Frame,
+        val illustrativeDistanceBlocks: Double,
+        val cameraTargetY: Double,
+        val cameraTargetZ: Double,
+        val effectOffsetY: Double = 0.0,
+        val effectOffsetZ: Double = 0.0,
+        val trajectoryNote: String,
+    )
 
     // Mirrors StaffSpellController display calls using its current default tuning.
     private val events = mapOf(
         StaffSpell.CHAIN to listOf(
-            Event("homing-flight", Inputs(48.0, 0.8, 40, impact = false)),
-            Event("homing-impact", Inputs(48.0, 0.8, 8, impact = true)),
+            Event("offset-target-homing-flight", Inputs(48.0, 0.8, 40, impact = false),
+                ChainRoute(Math.toDegrees(0.34), -10.0, -0.7, 32.0)),
+            Event("offset-target-homing-impact", Inputs(48.0, 0.8, 8, impact = true),
+                ChainRoute(Math.toDegrees(0.34), -10.0, -0.7, 32.0)),
             Event("secondary-flight", Inputs(48.0, 0.8, 40, impact = false, secondary = true)),
             Event("secondary-impact", Inputs(48.0, 0.8, 8, impact = true, secondary = true)),
         ),
@@ -55,6 +75,90 @@ object StaffSpellPreviewExport {
             Event("directed-tidal-crest", Inputs(12.0, 5.5, 30, impact = true, secondary = true)),
         ),
     )
+
+    // First in the exported list: 12 fixed player-eye snapshots at ordinary gameplay scales.
+    private val readabilityPoses = buildList {
+        listOf(8.0, 16.0, 24.0).forEach { distance ->
+            add(ReadabilityPose(
+                id = "chain-primary-${distance.toInt()}m",
+                spell = StaffSpell.CHAIN,
+                event = Event("centerline-primary-flight", Inputs(48.0, 0.8, 40, impact = false),
+                    ChainRoute(0.0, 0.0, -0.3, distance)),
+                frame = Frame("head-at-${distance.toInt()}m", (distance / 2.0).toInt()),
+                illustrativeDistanceBlocks = distance,
+                cameraTargetY = 1.32,
+                cameraTargetZ = distance,
+                trajectoryNote = "Primary starts at the eye with yaw 0 and tracks a centered target at (0, eye - 0.3, ${distance.toInt()}).",
+            ))
+        }
+        add(ReadabilityPose(
+            id = "chain-primary-centered-launch-2p5m",
+            spell = StaffSpell.CHAIN,
+            event = Event("centered-primary-launch", Inputs(2.5, 0.8, 40, impact = false),
+                ChainRoute(0.0, 0.0, -0.3, 24.0)),
+            frame = Frame("launch", 0),
+            illustrativeDistanceBlocks = 2.5,
+            cameraTargetY = 1.62,
+            cameraTargetZ = 8.0,
+            trajectoryNote = "Centered primary launch pose at yaw 0; the runtime starts with a 2.5-block bolt before the traveled trail takes over.",
+        ))
+        listOf(8.0, 16.0, 24.0).forEach { distance ->
+            add(ReadabilityPose(
+                id = "lance-primary-${distance.toInt()}m",
+                spell = StaffSpell.LANCE,
+                event = Event("primary-impact", Inputs(distance, 0.75, 20, impact = true)),
+                frame = Frame("middle", 10),
+                illustrativeDistanceBlocks = distance,
+                cameraTargetY = 1.62,
+                cameraTargetZ = distance,
+                trajectoryNote = "Primary lance at its player-facing ${distance.toInt()}-block aim distance; camera stays at the caster eye with default FOV.",
+            ))
+        }
+        add(ReadabilityPose(
+            id = "mark-primary-16m",
+            spell = StaffSpell.MARK,
+            event = Event("burst", Inputs(0.0, 3.5, 20, impact = true)),
+            frame = Frame("middle", 10),
+            illustrativeDistanceBlocks = 16.0,
+            cameraTargetY = 0.9,
+            cameraTargetZ = 16.0,
+            effectOffsetZ = 16.0,
+            trajectoryNote = "Primary mark burst centered on a target 16 blocks ahead; no camera dolly or zoom.",
+        ))
+        listOf(8.0, 16.0).forEach { distance ->
+            add(ReadabilityPose(
+                id = "blackhole-secondary-${distance.toInt()}m",
+                spell = StaffSpell.MARK,
+                event = Event("gravity-charge", Inputs(0.0, 4.5, 40, impact = false, secondary = true)),
+                frame = Frame("charge-middle", 20),
+                illustrativeDistanceBlocks = distance,
+                cameraTargetY = 1.62,
+                cameraTargetZ = distance,
+                effectOffsetZ = distance,
+                trajectoryNote = "Secondary black hole fixed at its real target point ${distance.toInt()} blocks ahead; camera stays at the caster eye.",
+            ))
+        }
+        add(ReadabilityPose(
+            id = "nova-primary-caster-view",
+            spell = StaffSpell.NOVA,
+            event = Event("impact", Inputs(8.0, 8.0, 30, impact = true)),
+            frame = Frame("middle", 14),
+            illustrativeDistanceBlocks = 8.0,
+            cameraTargetY = 1.62,
+            cameraTargetZ = 8.0,
+            trajectoryNote = "Primary radial wave stays at the caster origin with its real 8-block radius; this is the player’s first-person cast view.",
+        ))
+        add(ReadabilityPose(
+            id = "nova-secondary-caster-view",
+            spell = StaffSpell.NOVA,
+            event = Event("directed-tidal-crest", Inputs(12.0, 5.5, 30, impact = true, secondary = true)),
+            frame = Frame("middle", 14),
+            illustrativeDistanceBlocks = 12.0,
+            cameraTargetY = 1.62,
+            cameraTargetZ = 12.0,
+            trajectoryNote = "Secondary tidal crest stays at the caster origin and advances along the real 12-block lane; no synthetic distance scaling.",
+        ))
+    }
 
     private fun frames(durationTicks: Int): List<Frame> {
         require(durationTicks > FRAME_TICKS * 2)
@@ -94,8 +198,21 @@ object StaffSpellPreviewExport {
         "z" to z,
     )
 
-    private fun playerCamera(spell: StaffSpell, event: Event, frame: Frame, eyeHeight: Double): Map<String, Any> {
+    private fun playerCamera(
+        spell: StaffSpell,
+        event: Event,
+        frame: Frame,
+        eyeHeight: Double,
+        readability: ReadabilityPose? = null,
+    ): Map<String, Any> {
         val inputs = event.inputs
+        if (readability != null) return mapOf(
+            "position" to point(0.0, eyeHeight, 0.0),
+            "target" to point(0.0, readability.cameraTargetY, readability.cameraTargetZ),
+            "fovDegrees" to 70,
+            "nearClip" to 0.05,
+            "farClip" to 150,
+        )
         val (position, target) = when {
             spell == StaffSpell.MARK && inputs.secondary -> point(0.0, eyeHeight, -6.0) to point(0.0, 0.35, 0.0)
             spell == StaffSpell.NOVA && inputs.secondary -> point(0.0, eyeHeight, 0.0) to point(0.0, eyeHeight, 12.0)
@@ -112,18 +229,25 @@ object StaffSpellPreviewExport {
         return mapOf(
             "position" to position,
             "target" to target,
-            "fovDegrees" to if (spell == StaffSpell.NOVA || (spell == StaffSpell.FROST && inputs.secondary)) 70 else 50,
+            "fovDegrees" to 70,
             "nearClip" to 0.05,
             "farClip" to 150,
         )
     }
 
     /** Same steering and two-block tick cadence as live pursuit, aimed at visible fixture targets. */
-    private fun homingFlightRoute(ticks: Int, eyeHeight: Double, yawDegrees: Double, secondary: Boolean): List<Vector3f> {
+    private fun homingFlightRoute(
+        ticks: Int,
+        eyeHeight: Double,
+        yawDegrees: Double,
+        secondary: Boolean,
+        chainRoute: ChainRoute?,
+    ): List<Vector3f> {
         val position = org.bukkit.util.Vector(0.0, eyeHeight, 0.0)
         val direction = org.bukkit.util.Vector(0.0, 0.0, 1.0).rotateAroundY(Math.toRadians(yawDegrees))
         val target = when {
-            !secondary -> org.bukkit.util.Vector(-10.0, eyeHeight - 0.7, 32.0)
+            !secondary -> chainRoute?.let { org.bukkit.util.Vector(it.targetX, eyeHeight + it.targetYOffset, it.targetZ) }
+                ?: org.bukkit.util.Vector(-10.0, eyeHeight - 0.7, 32.0)
             yawDegrees < -1 -> org.bukkit.util.Vector(0.0, eyeHeight - 0.7, 32.0)
             yawDegrees > 1 -> org.bukkit.util.Vector(10.0, eyeHeight - 0.7, 30.0)
             else -> org.bukkit.util.Vector(-10.0, eyeHeight - 0.7, 30.0)
@@ -143,13 +267,20 @@ object StaffSpellPreviewExport {
         return route.takeLast(17)
     }
 
-    private fun geometry(spell: StaffSpell, event: Event, frame: Frame, eyeHeight: Double): Pair<List<StaffDisplayPart>, Vector3f> {
+    private fun geometry(
+        spell: StaffSpell,
+        event: Event,
+        frame: Frame,
+        eyeHeight: Double,
+    ): Pair<List<StaffDisplayPart>, Vector3f> {
         if (spell == StaffSpell.CHAIN) {
             val impact = event.id.endsWith("impact")
             val lastTick = if (impact) 38 else frame.ageTicks.coerceIn(0, 38)
             val fade = if (impact) (1.0 - frame.ageTicks / 8.0).coerceIn(0.0, 1.0) else 1.0
             val origin = Vector3f(0f, eyeHeight.toFloat(), 0f)
-            val fanAngles = if (event.inputs.secondary) listOf(-48.0, 0.0, 48.0) else listOf(Math.toDegrees(0.34))
+            val chainRoute = event.chainRoute
+            val fanAngles = if (event.inputs.secondary) listOf(-48.0, 0.0, 48.0)
+                else listOf(chainRoute?.yawDegrees ?: 0.0)
             if (!impact && frame.ageTicks == 0) {
                 // Runtime starts with a generic 2.5-block bolt; moveTrail replaces it after two traveled points.
                 val launch = staffDisplayParts(StaffSpell.CHAIN, 0, event.inputs.durationTicks,
@@ -164,7 +295,7 @@ object StaffSpellPreviewExport {
                 return parts to origin
             }
             val parts = fanAngles.flatMap { angle ->
-                val route = homingFlightRoute(lastTick, eyeHeight, angle, event.inputs.secondary)
+                val route = homingFlightRoute(lastTick, eyeHeight, angle, event.inputs.secondary, chainRoute)
                 val localRoute = route.map { Vector3f(it).sub(origin) }
                 staffLightningTrailParts(localRoute, fade)
             }
@@ -213,14 +344,27 @@ object StaffSpellPreviewExport {
             (point["z"] as Number).toFloat())
     }
 
-    /** Match the runtime's conservative part sphere against one standing/crouching eye position. */
-    private fun playerVisibleParts(parts: List<StaffDisplayPart>, eye: Vector3f) = parts.filter { part ->
-        Vector3f(part.center).distance(eye) >= 3.2f + part.scale.length() * 0.5f
+    /** Static preview uses the production spell/impact clearance plus its fixed runtime padding. */
+    private fun playerVisibleParts(
+        parts: List<StaffDisplayPart>,
+        eye: Vector3f,
+        spell: StaffSpell,
+        impact: Boolean,
+    ) = parts.filter { part ->
+        Vector3f(part.center).distance(eye) >=
+            (staffEyeClearance(spell, impact) + 0.15).toFloat() + part.scale.length() * 0.5f
     }
 
-    private fun state(spell: StaffSpell, event: Event, frame: Frame): List<ExportedState> {
+    private fun state(
+        spell: StaffSpell,
+        event: Event,
+        frame: Frame,
+        readability: ReadabilityPose? = null,
+    ): List<ExportedState> {
         val inputs = event.inputs
-        return listOf(1.62 to "geometry", 1.62 to "player-standing", 1.27 to "player-sneaking").map { (eyeHeight, view) ->
+        val views = readability?.let { listOf(1.62 to "player-default") }
+            ?: listOf(1.62 to "geometry", 1.62 to "player-standing", 1.27 to "player-sneaking")
+        return views.map { (eyeHeight, view) ->
             var (parts, origin) = geometry(spell, event, frame, eyeHeight)
             if (inputs.impact && frame.ageTicks < 4 && spell != StaffSpell.CHAIN) {
                 events.getValue(spell).firstOrNull { !it.inputs.impact && it.inputs.secondary == inputs.secondary }
@@ -230,13 +374,16 @@ object StaffSpellPreviewExport {
                         parts = blendStaffParts(parts, previous, frame.ageTicks)
                     }
             }
+            readability?.let { origin.add(0f, it.effectOffsetY.toFloat(), it.effectOffsetZ.toFloat()) }
             require(parts.isNotEmpty()) { "${spell.id}/${event.id}/${frame.id} produced no display parts" }
             val worldParts = parts.map { part -> part.copy(center = Vector3f(part.center).add(origin)) }
-            val camera = playerCamera(spell, event, frame, eyeHeight)
-            val visible = if (view == "geometry") worldParts else playerVisibleParts(worldParts, eyePosition(camera))
+            val camera = playerCamera(spell, event, frame, eyeHeight, readability)
+            val visible = if (view == "geometry") worldParts
+                else playerVisibleParts(worldParts, eyePosition(camera), spell, inputs.impact)
             ExportedState(mapOf(
-                "id" to "${spell.id}-${event.id}-${frame.id}-$view",
-                "title" to "${spell.id.uppercase()} · ${event.id} · ${frame.id} · $view",
+                "id" to (readability?.let { "readability-${it.id}" } ?: "${spell.id}-${event.id}-${frame.id}-$view"),
+                "title" to (readability?.let { "PLAYER READABILITY · ${spell.id.uppercase()} · ${it.id}" }
+                    ?: "${spell.id.uppercase()} · ${event.id} · ${frame.id} · $view"),
                 "spell" to spell.id,
                 "scenario" to event.id,
                 "frame" to frame.id,
@@ -250,17 +397,24 @@ object StaffSpellPreviewExport {
                 "length" to inputs.length,
                 "radius" to inputs.radius,
                 "camera" to camera,
-                "partCull" to if (view == "geometry") "none" else "distance(center, eye) >= 3.2 + part-scale-length / 2",
+                "cameraMode" to if (readability == null) "standing-or-sneaking" else "player-eye-default-fov-no-autozoom",
+                "illustrativeDistanceBlocks" to (readability?.illustrativeDistanceBlocks ?: 0.0),
+                "partCull" to if (view == "geometry") "none" else
+                    "distance(center, eye) >= staffEyeClearance(spell, impact) + 0.15 + part-scale-length / 2",
                 "projectiles" to when {
                     spell == StaffSpell.CHAIN && inputs.secondary -> 3
                     spell == StaffSpell.LANCE && event.id == "triple-spears" -> 3
                     else -> 1
                 },
                 "partBudgetPerProjectile" to StaffSpellDisplayEffects.MAX_PARTS,
-                "trajectoryNote" to if (spell != StaffSpell.CHAIN) "Uses production staff display geometry."
+                "trajectoryNote" to (readability?.trajectoryNote ?: if (spell != StaffSpell.CHAIN) "Uses production staff display geometry."
+                    else if (event.chainRoute != null && event.chainRoute.yawDegrees == 0.0)
+                        "Centered zero-yaw route used for the curated readability samples."
+                    else if (event.id.startsWith("offset-target-homing-"))
+                        "Explicit legacy offset-target homing illustration (target x=${event.chainRoute?.targetX}, z=${event.chainRoute?.targetZ}); it is retained for route inspection, not as the primary cast framing."
                     else if (!inputs.impact && frame.ageTicks == 0)
                         "Runtime launch pose uses its generic 2.5-block bolt; later frames show only traveled points from an illustrative homing route."
-                    else "Deterministic traveled-route example; the live controller steers to its selected target.",
+                    else "Deterministic traveled-route example; the live controller steers to its selected target."),
                 "trailPointCount" to when {
                     spell != StaffSpell.CHAIN -> 0
                     inputs.impact -> 17
@@ -272,15 +426,21 @@ object StaffSpellPreviewExport {
         }
     }
 
+    private fun readabilityStates(): List<ExportedState> = readabilityPoses.map { pose ->
+        state(pose.spell, pose.event, pose.frame, pose).single()
+    }
+
     @JvmStatic
     fun main(args: Array<String>) {
         require(args.size == 1) { "Usage: StaffSpellPreviewExport <scene.json>" }
         val output = Path.of(args.single())
+        val readability = readabilityStates()
         val exported = StaffSpell.entries.associateWith { spell ->
             events.getValue(spell).flatMap { event -> frames(event.inputs.durationTicks).flatMap { frame -> state(spell, event, frame) } }
         }
-        val states = StaffSpell.entries.flatMap { exported.getValue(it).map(ExportedState::metadata) }
-        val palette = exported.values.asSequence().flatten()
+        val allExported = readability + StaffSpell.entries.flatMap { exported.getValue(it) }
+        val states = allExported.map(ExportedState::metadata)
+        val palette = allExported.asSequence()
             .flatMap { it.materials.asSequence() }
             .distinct()
             .associateWith { it }
@@ -291,8 +451,8 @@ object StaffSpellPreviewExport {
             "states" to states,
             "palette" to palette,
             "coordinates" to mapOf("space" to "spell-local", "origin" to "cast point; +Z forward", "unit" to "block"),
-            "cameraNote" to "Each state uses an actual standing (1.62) or sneaking (1.27) player eye height and preserves +Z aim. Player-filtered states apply the static eye-clearance sphere; CHAIN shows its initial 2.5-block launch shape followed by only traveled points in an illustrative route, and its secondary preview composes three homing bolts.",
-            "evidence" to "Every geometry frame calls the production staffDisplayParts or staffLightningTrailParts function. Secondary LANCE composes the three runtime spear headings; secondary EMBER rotates its meteor from local +Z to world down. Player-filtered states apply distance(center, eye) >= 3.2 + part-scale-length / 2. These are source-driven previews, not native Minecraft lighting, interpolation, particles, sounds or measured client acceptance.",
+            "cameraNote" to "The first 12 readability-prefixed states use the standing player eye at local (0, 1.62, 0), default 70-degree FOV and no autozoom. They sample centerline CHAIN travel at 8/16/24 blocks, LANCE at 8/16/24 blocks, primary MARK at 16, black holes at 8/16, and both NOVA caster views. Remaining states retain all production geometry frames and standing/sneaking filters.",
+            "evidence" to "Every geometry frame calls the production staffDisplayParts or staffLightningTrailParts function. Player-filtered states use staffEyeClearance(spell, impact) + 0.15 static padding and half the part-scale length. The legacy offset-target CHAIN route remains explicitly labeled; curated primary routes start at yaw 0 and target straight ahead. These are source-driven block-display previews, not native Minecraft lighting, interpolation, particles, sounds or measured client acceptance.",
         )).plus("\n"))
         println("STAFF_SPELL_PREVIEW states=${states.size} materials=${palette.size} output=$output")
     }

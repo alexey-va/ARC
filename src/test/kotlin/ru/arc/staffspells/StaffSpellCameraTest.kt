@@ -21,6 +21,19 @@ class StaffSpellCameraTest : FreeSpec({
         staffSweptDistance(eye, from, to) shouldBe 0.0
     }
 
+    "compact centered flight stays visible near the reticle while large impacts keep their clearance" {
+        val world = mockk<World>()
+        val eye = Location(world, 0.0, 1.62, 0.0)
+        val part = StaffDisplayPart(Material.SEA_LANTERN, Vector3f(0f, 0f, 2f),
+            Vector3f(0.55f, 0.55f, 0.55f), Quaternionf())
+        staffPartClearOfEye(part, eye, Quaternionf(), eye,
+            staffEyeClearance(StaffSpell.CHAIN, false) + 0.15) shouldBe true
+        staffPartClearOfEye(part.copy(center = Vector3f(0f, 0f, 1f)), eye, Quaternionf(), eye,
+            staffEyeClearance(StaffSpell.CHAIN, false) + 0.15) shouldBe false
+        staffPartClearOfEye(part, eye, Quaternionf(), eye,
+            staffEyeClearance(StaffSpell.EMBER, true) + 0.15) shouldBe false
+    }
+
     "standing and sneaking eye clearance includes the whole display cuboid" {
         val world = mockk<World>()
         val origin = Location(world, 0.0, 0.0, 0.0)

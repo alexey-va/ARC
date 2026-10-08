@@ -75,6 +75,26 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
+    "primary lightning launches through the reticle without an artificial sideways turn" {
+        withStaffHarness(settings = staffSettings(range = 24.0)) { h ->
+            val world = h.paper.addSimpleWorld("staff-chain-centered")
+            val player = h.player("staff-chain-centered", world, StaffSpell.CHAIN)
+            val eye = player.eyeLocation
+            val forward = eye.direction.normalize()
+            h.controller.start()
+            h.controller.cast(player)
+            h.scheduler.tick(4)
+
+            h.trailMoves.size shouldBe 4
+            h.trailMoves.forEach { move ->
+                val offset = move.points.last().toVector().subtract(eye.toVector())
+                (offset.clone().normalize().dot(forward) > 0.9999) shouldBe true
+            }
+            h.trailMoves.first().points.last().distance(eye) shouldBe 2.0
+            h.hits shouldBe emptyList()
+        }
+    }
+
     "a later missing skin leaves a multi-spell grant untouched" {
         val config = spyk(StaffSpellConfig(TestConfig()))
         every { config.item(StaffSpell.FROST) } throws
