@@ -1,0 +1,61 @@
+book:
+  name-prefix: 'Книга EliteMobs'
+  scope: 'Только для снаряжения EliteMobs'
+  action: 'Перетащите книгу на предмет в инвентаре'
+  preview-hint: 'Итог, цена и шансы — перед применением'
+messages:
+  elite-only: '<red>Эта книга подходит только для снаряжения EliteMobs.</red>'
+  incompatible: '<red>Эти чары не подходят предмету или превышают его предел.</red>'
+  unavailable: '<red>Не удалось завершить зачарование. Проверьте инвентарь; если появился номер восстановления, сообщите его администрации.</red>'
+  preview-changed: '<yellow>Предмет, книга или шансы изменились. Проверьте новый итог и подтвердите снова.</yellow>'
+  purchase-failed: '<red>Попытка не выполнена. Проверьте баланс кристаллов и предметы.</red>'
+  success: '<green>Зачарование применено!</green>'
+  failure: '<yellow>Зачарование не сработало. Предмет сохранён; книга и стоимость попытки потрачены.</yellow>'
+  destroyed: '<red>Неудачная попытка: предмет разрушен. Книга и стоимость попытки потрачены.</red>'
+menu:
+  info:
+    name: '<light_purple>Зачарование EliteMobs</light_purple>'
+    lore:
+      - ''
+      - '<white>Проверьте итоговую вещь ниже.</white>'
+      - '<white>Цена и шансы указаны справа.</white>'
+      - ''
+      - '<gray>При отмене всё вернётся.</gray>'
+  result: '<green>Итог при успехе</green>'
+  cancel:
+    name: '<white>Отмена</white>'
+    lore:
+      - ''
+      - '<white>Вернуть предмет и книгу.</white>'
+      - '<gray>Ничего не будет потрачено.</gray>'
+  book:
+    name: '<light_purple>Книга EliteMobs</light_purple>'
+    lore:
+      - ''
+      - '<white>Только для снаряжения EliteMobs.</white>'
+      - '<gray>При попытке расходуется одна книга.</gray>'
+  ticket:
+    name: '<gold>Билет удачи</gold>'
+    lore:
+      - ''
+      - '<white>Необязательно: положите билет ниже.</white>'
+      - '<white>Он повышает шанс успеха.</white>'
+      - '<gray>Итоговые шансы обновятся справа.</gray>'
+  empty:
+    name: '<white>Выберите предмет и книгу</white>'
+    lore:
+      - ''
+      - '<white>Положите их в свободные места ниже.</white>'
+  confirm:
+    name: '<green>Применить зачарование</green>'
+    lore:
+      - ''
+      - '<white>Цена: <aqua><price></aqua> 💎</white>'
+      - '<white>Успех: <green><success>%</green></white>'
+      - '<white>Без улучшения: <yellow><failure>%</yellow></white>'
+      - '<white>Потеря предмета: <red><destroy>%</red></white>'
+      - ''
+      - '<gray>Книга, оплата и добавленный билет</gray>'
+      - '<gray>расходуются при любой попытке.</gray>'
+      - ''
+      - '<green>[▶] ЛКМ — подтвердить</green>'

@@ -197,7 +197,13 @@ private fun withEliteGearRequirement(item: ItemStack, lines: List<Component>): L
 }
 
 /** Native lore is generated on a clone: recalculating its price must not rewrite the real item's PDC. */
-internal fun presentEliteItem(item: ItemStack, viewer: Player): ItemStack {
+internal fun presentEliteItem(
+    item: ItemStack,
+    viewer: Player,
+    bookText: EliteEnchantmentBookPresentationText = ru.arc.enchanting.EnchantingModule.bookText,
+): ItemStack {
+    if (isAdvancedEnchantmentsBook(item)) return item
+    if (isEliteEnchantmentBook(item)) return presentEliteEnchantmentBook(item, bookText)
     if (!EliteItemManager.isEliteMobsItem(item)) return item
     val meta = item.itemMeta
     val tooltipStyle = NamespacedKey("lzblocks", "tooltip/${eliteTooltipTier(EliteItemManager.getRoundedItemLevel(item))}")
@@ -228,10 +234,16 @@ internal fun presentEliteItem(item: ItemStack, viewer: Player): ItemStack {
 }
 
 /** Prepare the entity stack before its first client update; preserve the native generated lore and owner. */
-internal fun prepareEliteDrop(item: ItemStack, processor: EliteLootProcessor? = EliteLootManager.eliteLootProcessor): ItemStack {
-    if (!EliteItemManager.isEliteMobsItem(item)) return item
+internal fun prepareEliteDrop(
+    item: ItemStack,
+    processor: EliteLootProcessor? = EliteLootManager.eliteLootProcessor,
+    bookText: EliteEnchantmentBookPresentationText = ru.arc.enchanting.EnchantingModule.bookText,
+): ItemStack {
+    if (isAdvancedEnchantmentsBook(item)) return item
+    if (!EliteItemManager.isEliteMobsItem(item) && !isEliteEnchantmentBook(item)) return item
     val prepared = item.clone()
     processor?.processEliteLoot(prepared)
+    if (isEliteEnchantmentBook(prepared)) return presentEliteEnchantmentBook(prepared, bookText)
     prepared.editMeta { meta ->
         meta.displayName()?.let { meta.displayName(localizeLegacyEliteText(it)) }
         meta.lore(withEliteGearRequirement(prepared, meta.lore().orEmpty()))
