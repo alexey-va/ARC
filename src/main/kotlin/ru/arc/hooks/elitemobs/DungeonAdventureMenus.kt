@@ -164,7 +164,9 @@ internal class DungeonAdventureMenus(
             }.copy(label = if (permitted && difficulty.id.isBlank()) text("enter-default", "<#9bd48d>Войти в данж")
                 else if (permitted) text("enter-difficulty", "<#9bd48d><difficulty> · войти", "difficulty" to Component.text(clean(difficulty.name)))
                 else text("enter-disabled", "<white>[Недоступно] <difficulty>", "difficulty" to Component.text(clean(difficulty.name))))
-        } + if (entry.type != "OPEN_DUNGEON") listOf(button("lobbies", "lobbies-label", "<#e5ba73>Другие группы ›", "Войти в собирающуюся группу или наблюдать за походом") {
+        } + listOf(button("bestiary", "bestiary-label", "<#c4abff>Бестиарий ›", "Противники, способности и шансы добычи; записи открываются после победы") {
+            local.bestiary(player, entry.id, clean(entry.name)) { detail(player, id, query) }
+        }) + if (entry.type != "OPEN_DUNGEON") listOf(button("lobbies", "lobbies-label", "<#e5ba73>Другие группы ›", "Войти в собирающуюся группу или наблюдать за походом") {
             lobbies(player, id, query)
         }) else emptyList()
         show(player, PaperDialogScreen(id = "dungeon.catalog.detail", title = Component.text(clean(entry.name)).color(net.kyori.adventure.text.format.TextColor.color(0xffb277)).decoration(TextDecoration.ITALIC, false),

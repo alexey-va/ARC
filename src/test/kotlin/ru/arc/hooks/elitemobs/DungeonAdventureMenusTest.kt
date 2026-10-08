@@ -79,6 +79,7 @@ class DungeonAdventureMenusTest : FreeSpec({
         val beforeDetail = screens.last().buttons.filter { it.id.value.startsWith("dungeon_") }.map { it.label }
         screens.last().buttons.first { it.id.value.startsWith("dungeon_") }.onClick.handle(input)
         screens.last().id shouldBe "dungeon.catalog.detail"
+        screens.last().buttons.single { it.id.value == "bestiary" }.closeDialogBeforeAction shouldBe false
         screens.last().exitButton!!.onClick.handle(input)
         screens.last().inputs.single().initial shouldBe "Пещера"
         screens.last().buttons.filter { it.id.value.startsWith("dungeon_") }.map { it.label } shouldBe beforeDetail

@@ -43,6 +43,11 @@ internal class DungeonSaveMenus(
     private val partyPlayerInput = PaperDialogInputId.of("party_player")
     private val timeFormat = DateTimeFormatter.ofPattern("dd.MM HH:mm").withZone(ZoneId.systemDefault())
     private val global by lazy { DungeonAdventureMenus(dungeon, this, adventure, crystals, show) }
+    private val bestiaryMenus by lazy { DungeonBestiaryMenus(dungeon, dungeon.bestiary::entries,
+        dungeon.bestiary::loadProgress, dungeon.bestiary.tasks) }
+
+    internal fun bestiary(player: Player, contentId: String, name: String, back: () -> Unit) =
+        bestiaryMenus.open(player, contentId, name, back)
 
     internal fun main(player: Player, feedback: Component? = null) = global.main(player, feedback)
     internal fun catalog(player: Player) = global.catalog(player)
@@ -109,11 +114,22 @@ internal class DungeonSaveMenus(
                 },
                 action("gear", "adventure.gear-label", "<#86dcf1>Снаряжение ›", "adventure.gear-tooltip", "Проверить оружие, броню и боевые параметры") { gear(player) },
                 action("about", "panel.about-label", "<#86dcf1>О данже ›", "panel.about-tooltip", "Описание и подсказка этого данжа") { about(player) },
+                visit.contentId?.let { contentId ->
+                    action("bestiary", "bestiary.label", "<#c4abff>Бестиарий ›", "bestiary.tooltip",
+                        "Изученные противники, способности и шансы добычи. Победите противника, чтобы открыть запись.") {
+                        bestiary(player, contentId, plainDungeonQuestText(visit.name ?: "Данж")) { panel(player) }
+                    }
+                },
                 action("quit", "panel.quit-label", "<#d7b486>Выйти из данжа", "panel.quit-tooltip", "Покинуть данж штатным способом", close = true) {
                     dungeon.panelAction(player, view, "quit")
                 },
                 action("global", "adventure.global-label", "<#e5ba73>Главное меню ›", "adventure.global-tooltip", "Каталог данжей, навыки, классы, статистика и боссы") { main(player) },
-            ),
+            ).let { buttons ->
+                val content = buttons.dropLast(1)
+                content + (if (content.size % 2 == 0) emptyList() else listOf(
+                    PaperDialogButton(PaperDialogActionId.of("panel_padding"), Component.empty(), width = 230) { },
+                )) + buttons.last()
+            },
             exitButton = if (MenuEscapeBehavior.goesBack(player)) back {} else close(), columns = 2,
         )) { panel(player) }
     }
