@@ -2,9 +2,10 @@
 
 `ItemsCatalogModule` owns the interactive `/arc items` catalog on Paper nodes
 that enable `plugins/ARC/modules/items-catalog.yml` and run ItemsAdder.
-When `modules/reward-catalog.yml` is enabled, the same command exposes a
-`Награды лутбоксов` root tab and `/arc items rewards` direct shortcut. The
-reward route stays available while the ItemsAdder index is loading.
+When `modules/reward-catalog.yml` is enabled, its player-facing catalogue is
+available through the `/arc items rewards` direct shortcut, separate from the
+`/arc items` root menu. The shortcut stays available while the ItemsAdder index
+is loading; backend case reward issuance continues to use the same catalogue.
 
 ## Contract
 
@@ -37,8 +38,8 @@ reward route stays available while the ItemsAdder index is loading.
 operator entries. Missing presentation settings use bounded code defaults without
 rewriting operator-owned categories or packages. Unknown presentation
 extensions are ignored, while reward-source, probability, hierarchy and delivery
-invariants remain strict. If the reward catalogue is invalid, only its tab is
-disabled: the main ItemsAdder catalogue still starts.
+invariants remain strict. If the reward catalogue is invalid, only the direct
+reward catalogue route is disabled: the main ItemsAdder catalogue still starts.
 
 ```yaml
 enabled: false

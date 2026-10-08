@@ -60,8 +60,7 @@ object ItemsCatalogModule : PluginModule {
             activeController.openRoot(player)
             return
         }
-        rewardController?.takeIf(RewardCatalogGuiController::isAvailable)?.openRoot(player)
-            ?: player.sendMessage(TextUtil.mm(settings?.unavailableMessage ?: "<red>Каталог предметов сейчас недоступен.", true))
+        player.sendMessage(TextUtil.mm(settings?.unavailableMessage ?: "<red>Каталог предметов сейчас недоступен.", true))
     }
 
     fun openRewards(player: Player) {
@@ -199,7 +198,7 @@ object ItemsCatalogModule : PluginModule {
         val gateway = BukkitItemsAdderCatalogGateway(itemsAdder)
         val activeService = ItemsCatalogService(ARC.instance, loaded, gateway)
         service = activeService
-        controller = ItemsCatalogGuiController(loaded, activeService, rewardController)
+        controller = ItemsCatalogGuiController(loaded, activeService)
         activeService.start()
         info("Items catalog module initialized and is waiting for the ItemsAdder index")
     }

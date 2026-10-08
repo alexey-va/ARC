@@ -20,7 +20,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 class ItemsCatalogGuiController(
     private val settings: ItemsCatalogSettings,
     private val service: ItemsCatalogService,
-    private val rewardCatalog: RewardCatalogGuiController? = null,
 ) {
     private val active = AtomicBoolean(true)
 
@@ -31,10 +30,6 @@ class ItemsCatalogGuiController(
     fun openRoot(player: Player, page: Int = 0) {
         val snapshot = service.currentSnapshot()
         if (snapshot == null) {
-            if (rewardCatalog?.isAvailable() == true) {
-                rewardCatalog.openRoot(player)
-                return
-            }
             player.sendMessage(TextUtil.mm(settings.loadingMessage, true))
             return
         }
@@ -142,13 +137,11 @@ class ItemsCatalogGuiController(
             snapshot.ungroupedCategories
                 .filter { player.canSee(it.permissions) }
                 .map(RootEntry::Category)
-        val rewards =
-            RootEntry.Rewards.takeIf { rewardCatalog?.isAvailable() == true }
         val all =
             RootEntry.All.takeIf {
                 settings.showAll && player.canSee(settings.allPermission) && snapshot.registryItemIds.isNotEmpty()
             }
-        return listOfNotNull(rewards) + catalogRootOrder(groups, categories, all)
+        return catalogRootOrder(groups, categories, all)
     }
 
     private fun rootEntryItem(
@@ -158,10 +151,6 @@ class ItemsCatalogGuiController(
         rootPage: Int,
     ): PaperMenuEntry =
         when (entry) {
-            RootEntry.Rewards ->
-                checkNotNull(rewardCatalog).rootEntry(player) {
-                    rewardCatalog.openRoot(player) { openRoot(player, rootPage) }
-                }
             RootEntry.All -> {
                 val stack = ArcMenus.item(
                     "catalog-root-entry",
@@ -468,8 +457,6 @@ class ItemsCatalogGuiController(
         groups.flatMap(CatalogGroup::categories) + ungroupedCategories
 
     private sealed interface RootEntry {
-        data object Rewards : RootEntry
-
         data object All : RootEntry
 
         data class Group(val value: CatalogGroup) : RootEntry
