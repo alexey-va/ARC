@@ -6,6 +6,8 @@ import ru.arc.ARC
 import ru.arc.config.ConfigManager
 import ru.arc.core.PluginModule
 import ru.arc.eliteloot.EliteEnchantmentBookPresentationText
+import ru.arc.eliteloot.bindEliteEnchantmentCatalog
+import ru.arc.eliteloot.clearEliteEnchantmentCatalog
 
 /** Adds the book gesture and preview; EliteMobs keeps custody, payment and settlement. */
 object EnchantingModule : PluginModule {
@@ -19,7 +21,9 @@ object EnchantingModule : PluginModule {
         val config = EnchantingConfig(ConfigManager.ofModule(ARC.instance.dataPath, "enchanting.yml"))
         bookText = config.bookText
         shutdown()
-        if (!Bukkit.getPluginManager().isPluginEnabled("EliteMobs")) return
+        val eliteMobs = Bukkit.getPluginManager().getPlugin("EliteMobs")
+        if (eliteMobs == null || !eliteMobs.isEnabled) return
+        bindEliteEnchantmentCatalog(eliteMobs.javaClass.classLoader)
         controller = EliteEnchantingController(config).also {
             Bukkit.getPluginManager().registerEvents(it, ARC.instance)
         }
@@ -29,5 +33,6 @@ object EnchantingModule : PluginModule {
     override fun shutdown() {
         controller?.let { HandlerList.unregisterAll(it); it.close() }
         controller = null
+        clearEliteEnchantmentCatalog()
     }
 }

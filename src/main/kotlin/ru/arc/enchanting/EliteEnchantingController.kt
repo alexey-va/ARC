@@ -10,6 +10,7 @@ import com.magmaguy.elitemobs.menus.ItemEnchantmentMenu
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 import org.bukkit.Material
+import org.bukkit.GameMode
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
@@ -17,11 +18,13 @@ import org.bukkit.event.Listener
 import org.bukkit.event.inventory.ClickType
 import org.bukkit.event.inventory.InventoryClickEvent
 import org.bukkit.event.inventory.InventoryCloseEvent
+import org.bukkit.event.inventory.InventoryCreativeEvent
 import org.bukkit.inventory.Inventory
 import org.bukkit.inventory.InventoryView
 import org.bukkit.inventory.ItemStack
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.eliteloot.isEliteEnchantmentBook
+import ru.arc.eliteloot.isEliteBookNativeCompatible
 import ru.arc.eliteloot.presentEliteItem
 import ru.arc.util.Logging
 import java.util.UUID
@@ -44,21 +47,44 @@ internal class EliteEnchantingController(private val config: EnchantingConfig) :
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun onBookDrop(event: InventoryClickEvent) {
         val player = event.whoClicked as? Player ?: return
-        if (event.clickedInventory !== player.inventory || event.click !in setOf(ClickType.LEFT, ClickType.RIGHT)) return
+        val creative = event is InventoryCreativeEvent && player.gameMode == GameMode.CREATIVE
+        if (event.clickedInventory != player.inventory ||
+            (!creative && event.click !in setOf(ClickType.LEFT, ClickType.RIGHT))) return
         val book = event.cursor.takeUnless { it.type.isAir } ?: return
         if (!isEliteEnchantmentBook(book)) return
         val target = event.currentItem?.takeUnless { it.type.isAir || it.type == Material.ENCHANTED_BOOK } ?: return
         // Empty slots and other books keep normal inventory movement, stacking and splitting.
         // An EM book owns this gesture even on an ineligible target. AE books never enter here.
         event.isCancelled = true
+        if (menus.containsKey(player.uniqueId) || !opening.add(player.uniqueId)) return
+        // Creative sends a proposed replacement stack, not a server-owned cursor. Paper clears
+        // the client cursor after DENY. Admit that stack into inventory once, before deferring,
+        // so invalid targets, disconnects and cancelled menu opens cannot lose it.
+        val bookInventorySlot = if (creative) {
+            if (book.amount !in 1..book.maxStackSize || event.view.topInventory != player.openInventory.topInventory) {
+                opening.remove(player.uniqueId)
+                return
+            }
+            player.inventory.addItem(book.clone()).values.forEach { player.world.dropItem(player.location, it) }
+            (0 until player.inventory.storageContents.size).firstOrNull {
+                player.inventory.getItem(it)?.isSimilar(book) == true
+            }.also {
+                if (it == null) opening.remove(player.uniqueId)
+            } ?: return
+        } else null
         if (!org.bukkit.Bukkit.getPluginManager().isPluginEnabled("EliteMobs")) {
+            opening.remove(player.uniqueId)
             player.sendMessage(config.text("messages.unavailable"))
             return
         }
-        if (menus.containsKey(player.uniqueId) || !opening.add(player.uniqueId)) return
         if (!EliteItemManager.isEliteMobsItem(target)) {
             opening.remove(player.uniqueId)
             player.sendMessage(config.text("messages.elite-only"))
+            return
+        }
+        if (!isEliteBookNativeCompatible(target, book)) {
+            opening.remove(player.uniqueId)
+            player.sendMessage(config.text("messages.incompatible-target"))
             return
         }
         if (runCatching { UpgradeSystem.preview(target, book) }.isFailure) {
@@ -69,13 +95,14 @@ internal class EliteEnchantingController(private val config: EnchantingConfig) :
         val view = event.view
         val slot = event.slot
         val expectedTarget = target.clone()
-        val expectedBook = book.clone()
+        val expectedBook = (bookInventorySlot?.let(player.inventory::getItem) ?: book).clone()
         tasks.runLater(1) {
             try {
                 if (!player.isOnline || !org.bukkit.Bukkit.getPluginManager().isPluginEnabled("EliteMobs") ||
                     player.openInventory.topInventory !== view.topInventory ||
-                    !enchantmentInputsMatch(expectedTarget, expectedBook, player.inventory.getItem(slot), player.itemOnCursor)) return@runLater
-                openNativeConfirmation(player, view, slot, expectedTarget, expectedBook)
+                    !enchantmentInputsMatch(expectedTarget, expectedBook, player.inventory.getItem(slot),
+                        if (bookInventorySlot == null) player.itemOnCursor else player.inventory.getItem(bookInventorySlot))) return@runLater
+                openNativeConfirmation(player, view, slot, expectedTarget, expectedBook, bookInventorySlot)
             } finally {
                 opening.remove(player.uniqueId)
             }
@@ -115,6 +142,11 @@ internal class EliteEnchantingController(private val config: EnchantingConfig) :
             val ticketSlot = ItemEnchantmentMenuConfig.getLuckyTicketSlot()
             val item = menu.getItem(itemSlot) ?: return
             val book = menu.getItem(bookSlot) ?: return
+            if (!isEliteBookNativeCompatible(item, book)) {
+                refresh(player, menu)
+                player.sendMessage(config.text("messages.incompatible-target"))
+                return
+            }
             val ticket = menu.getItem(ticketSlot)
             val displayed = shown[menu]
             attempt = EnchantmentAcquisition(player, item, book, ticket)
@@ -150,11 +182,11 @@ internal class EliteEnchantingController(private val config: EnchantingConfig) :
     }
 
     /** The transfer is synchronous; the native menu owns both inputs only after it has opened. */
-    private fun openNativeConfirmation(player: Player, oldView: InventoryView, slot: Int, target: ItemStack, book: ItemStack) {
+    private fun openNativeConfirmation(player: Player, oldView: InventoryView, slot: Int, target: ItemStack, book: ItemStack, bookInventorySlot: Int? = null) {
         var handedOver: Inventory? = null
         try {
             val native = transferEliteBookToConfirmation(player, slot, target, book,
-                ItemEnchantmentMenuConfig.getItemSlot(), ItemEnchantmentMenuConfig.getEnchantedBookSlot()) {
+                ItemEnchantmentMenuConfig.getItemSlot(), ItemEnchantmentMenuConfig.getEnchantedBookSlot(), bookInventorySlot) {
                 ItemEnchantmentMenu(player)
                 player.openInventory.topInventory.also {
                     check(player.isOnline && it !== oldView.topInventory && it.size == 54 && it.holder === player) {
@@ -209,6 +241,12 @@ internal class EliteEnchantingController(private val config: EnchantingConfig) :
             shown.remove(menu)
             menu.setItem(ItemEnchantmentMenuConfig.getItemInfoSlot(), config.button(Material.GRAY_DYE, "menu.empty"))
             menu.setItem(ItemEnchantmentMenuConfig.getConfirmSlot(), config.button(Material.GRAY_DYE, "menu.empty"))
+            return
+        }
+        if (!isEliteBookNativeCompatible(item, book)) {
+            shown.remove(menu)
+            menu.setItem(ItemEnchantmentMenuConfig.getItemInfoSlot(), config.button(Material.BARRIER, "menu.incompatible"))
+            menu.setItem(ItemEnchantmentMenuConfig.getConfirmSlot(), config.button(Material.BARRIER, "menu.incompatible"))
             return
         }
         val preview = UpgradeSystem.upgrade(item, book)
