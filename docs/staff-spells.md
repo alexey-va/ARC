@@ -159,7 +159,11 @@ NOVA's eight-block front spans sixteen ticks after the same lead-in in a 20-tick
 scene; all layers rise together and dissolve toward the floor while still advancing. MARK and EMBER impacts reuse their existing display handles for 20-tick
 releases with a four-tick blend. MARK carries its rotation clock and charged scale
 into release. LANCE and its particle wake share a distance-dependent flight clock
-and an eight-tick finish.
+and an eight-tick finish. Its 40 fixed helix facets grow from the safe two-block
+muzzle to the advancing head, widening off-axis so the solar channel remains readable
+from the caster's view as well as from the side. At ranges above two blocks, the visual
+muzzle starts 0.75 blocks below the reticle and converges on the ray at the head; damage
+continues to use the original ray.
 Most effects last 18–30 ticks; short LANCE shots use their four-tick minimum flight plus finish; tracked effects expire with their mark/projectile,
 with a final 160-tick safety cap. All scenes are removed on caster death, quit,
 world change, expiry or module shutdown/reload. The limits bound effect size and

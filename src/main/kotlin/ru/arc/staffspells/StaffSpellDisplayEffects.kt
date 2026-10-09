@@ -62,6 +62,8 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         val length = offset.length()
         val rotation = if (spell == StaffSpell.MARK)
             Quaternionf().rotationY(kotlin.math.atan2(caster.location.x - from.x, caster.location.z - from.z).toFloat())
+        else if (spell == StaffSpell.LANCE)
+            staffLanceOrientation(Vector3f(offset.x.toFloat(), offset.y.toFloat(), offset.z.toFloat()))
         else if (length > 0.001 && (spell != StaffSpell.NOVA || secondary))
             Quaternionf().rotationTo(Vector3f(0f, 0f, 1f), Vector3f(offset.x.toFloat(), offset.y.toFloat(), offset.z.toFloat()).normalize())
         else Quaternionf()

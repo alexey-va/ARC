@@ -8,6 +8,7 @@ import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.ceil
 import kotlin.math.cos
+import kotlin.math.hypot
 import kotlin.math.sin
 import kotlin.math.tan
 
@@ -94,15 +95,15 @@ internal fun staffLightningTrailParts(points: List<Vector3f>, fade: Double = 1.0
         else route.lastOrNull()?.let { Vector3f(it) } ?: Vector3f()
     }
     val visualRoute = route.mapIndexed { index, point ->
-        if (index < 2) Vector3f(point) else {
+        if (index == 0) Vector3f(point) else {
             val tangent = Vector3f(point).sub(route[index - 1])
             if (tangent.lengthSquared() < 0.000001f) tangent.set(0f, 0f, 1f) else tangent.normalize()
             val lateral = Vector3f(tangent).cross(Vector3f(0f, 1f, 0f))
             if (lateral.lengthSquared() < 0.000001f) lateral.set(tangent).cross(Vector3f(1f, 0f, 0f))
             if (lateral.lengthSquared() < 0.000001f) lateral.set(1f, 0f, 0f) else lateral.normalize()
             val sign = if (index % 2 == 0) 1f else -1f
-            val amplitude = when (index % 3) { 0 -> 0.30f; 1 -> 0.375f; else -> 0.45f }
-            val vertical = if (index % 3 == 0) -0.20f else 0.20f
+            val amplitude = if (index == 1) 0.20f else when (index % 3) { 0 -> 0.30f; 1 -> 0.375f; else -> 0.45f }
+            val vertical = if (index == 1) 0.08f else if (index % 3 == 0) -0.20f else 0.20f
             Vector3f(point).fma(sign * amplitude, lateral).add(0f, vertical, 0f)
         }
     }
@@ -137,20 +138,23 @@ internal fun staffLightningTrailParts(points: List<Vector3f>, fade: Double = 1.0
 
             val displayStart = Vector3f(first)
             if (segment == 0 && edge == 0) {
-                val inset = minOf(1.45, length * 0.85)
-                displayStart.fma((inset / length).toFloat(), delta)
+                val muzzleAxis = Vector3f(route[1]).sub(route[0])
+                val muzzleLength = muzzleAxis.length().toDouble()
+                val inset = minOf(1.45, muzzleLength * 0.85)
+                if (muzzleLength > 0.001) displayStart.fma((inset / muzzleLength).toFloat(), muzzleAxis)
             }
             val isMuzzleLink = segment == 0 && edge == 0
+            // The persistent near link must not become a large opaque square in first person.
+            // Widen with distance; the first bend exposes the channel beyond the reticle.
             val width = when {
-                isMuzzleLink -> 0.40
+                isMuzzleLink -> 0.09
+                startIndex + edge == 1 -> 0.18
+                startIndex + edge == 2 -> 0.28
+                startIndex + edge == 3 -> 0.38
                 edge == 0 -> 0.52
                 else -> 0.44
             }
-            val height = when {
-                isMuzzleLink -> 0.38
-                edge == 0 -> 0.48
-                else -> 0.40
-            }
+            val height = width * 0.88
             val material = slotMaterials[startIndex + edge]
             val link = link(material, displayStart, second, width, height)
             val roll = if ((segment + edge) % 2 == 0) 0.18f else -0.18f
@@ -180,13 +184,13 @@ internal fun staffLightningTrailParts(points: List<Vector3f>, fade: Double = 1.0
         val tangent = if (visualRoute.size > 1) Vector3f(head).sub(visualRoute[visualRoute.lastIndex - 1]) else Vector3f(0f, 0f, 1f)
         if (tangent.lengthSquared() < 0.000001f) tangent.set(0f, 0f, 1f) else tangent.normalize()
         val facing = Quaternionf().rotationTo(Vector3f(0f, 0f, 1f), tangent)
-        activate(44, StaffDisplayPart(slotMaterials[44], Vector3f(head), Vector3f(0.32f, 0.32f, 0.32f), Quaternionf(facing)))
+        activate(44, StaffDisplayPart(slotMaterials[44], Vector3f(head), Vector3f(0.20f, 0.20f, 0.20f), Quaternionf(facing)))
         val side = Vector3f(tangent).cross(Vector3f(0f, 1f, 0f))
         if (side.lengthSquared() < 0.000001f) side.set(1f, 0f, 0f) else side.normalize()
         listOf(-1f, 1f).forEachIndexed { index, sign ->
-            val center = Vector3f(head).fma(sign * 0.15f, side)
+            val center = Vector3f(head).fma(sign * 0.10f, side)
             activate(45 + index, StaffDisplayPart(slotMaterials[45 + index], center,
-                Vector3f(0.26f, 0.24f, 0.30f), Quaternionf(facing).rotateZ(sign * 0.24f)))
+                Vector3f(0.16f, 0.14f, 0.18f), Quaternionf(facing).rotateZ(sign * 0.24f)))
         }
     }
     return parts
@@ -358,51 +362,98 @@ private fun frostNovaDisplayParts(ageTicks: Int, durationTicks: Int, radius: Dou
 private fun lanceDisplayParts(ageTicks: Int, durationTicks: Int, length: Double, radius: Double, impact: Boolean): List<StaffDisplayPart> {
     val reach = staffLanceReach(length)
     val front = staffLanceFront(ageTicks, length)
-    val shaftStart = (front - 7.0).coerceAtLeast(minOf(1.45, front))
-    val shaftLength = (front - shaftStart).coerceAtLeast(0.30)
-    val width = extent(radius, 1.0, 0.75)
-    val parts = ArrayList<StaffDisplayPart>(30)
+    val muzzle = minOf(reach, 2.0)
+    val spacing = (reach - muzzle).coerceAtLeast(0.0) / LANCE_TRAIL_SEGMENTS
+    val trail = ArrayList<StaffDisplayPart>(LANCE_TRAIL_SEGMENTS)
 
-    // A broad, bright plasma body stays straight on the forward axis; facets flare around the point.
-    repeat(10) { index ->
-        val t = (index + 0.5) / 10.0
-        val z = shaftStart + shaftLength * t
-        val size = 0.48 + 0.12 * sin(t * PI)
-        parts += part(if (index % 3 == 0) Material.GOLD_BLOCK else Material.YELLOW_STAINED_GLASS,
-            sin(index * 1.4) * 0.06, cos(index * 1.3) * 0.06, z,
-            size, size * 0.88, maxOf(0.42, shaftLength / 10.0 * 0.86),
-            yaw = sin(index * 1.1) * 0.12, pitch = cos(index * 1.7) * 0.13,
-            roll = index * 0.12)
+    // Forty fixed facets leave a full-length off-axis channel behind the advancing head.
+    // The helix flares after the safe muzzle, so first-person views see its silhouette instead
+    // of looking through a stack of coaxial blocks. Future slots keep their final pose hidden.
+    repeat(LANCE_TRAIL_SEGMENTS) { index ->
+        val startDistance = muzzle + spacing * index
+        val endDistance = minOf(startDistance + spacing, reach)
+        val material = when (index % 5) {
+            0, 3 -> Material.GOLD_BLOCK
+            1, 4 -> Material.YELLOW_STAINED_GLASS
+            else -> Material.ORANGE_STAINED_GLASS
+        }
+        val fullStart = lancePathPoint(startDistance, reach)
+        val fullEnd = lancePathPoint(endDistance, reach)
+        val midpoint = (startDistance + endDistance) * 0.5
+        val flare = smooth((midpoint - 2.0) / 7.0)
+        val width = 0.12 + flare * 0.46
+        val height = width * 0.88
+        val full = link(material, fullStart, fullEnd, width, height)
+        val activeEnd = minOf(endDistance, front)
+        if (activeEnd - startDistance < 0.04) {
+            trail += full.copy(scale = Vector3f(0.001f), visible = false)
+        } else {
+            trail += link(material, fullStart, lancePathPoint(activeEnd, reach), width, height)
+        }
     }
-    repeat(8) { index ->
-        val t = (index + 0.5) / 8.0
-        val side = if (index % 2 == 0) -1.0 else 1.0
-        val z = (shaftStart - 0.05).coerceAtLeast(1.20) + (front - shaftStart - 0.55).coerceAtLeast(0.0) * t
-        val flare = 0.18 + 0.16 * t
-        parts += part(if (index % 3 == 0) Material.ORANGE_STAINED_GLASS else Material.GOLD_BLOCK,
-            side * flare, sin(index * 1.3) * 0.20, z,
-            0.42 + 0.12 * t, 0.40 + 0.10 * t, 0.58 + 0.16 * t,
-            yaw = side * 0.28, pitch = side * -0.20 + sin(index * 1.7) * 0.04,
-            roll = side * (0.35 + t * 0.18))
-    }
-    val headSize = 0.68 + width * 0.18
-    parts += part(Material.SEA_LANTERN, 0.0, 0.0, front,
-        headSize, headSize * 0.94, headSize * 1.16, roll = PI / 4.0)
+
+    val headY = staffLanceCenterOffset(front, reach)
+    val head = part(Material.SEA_LANTERN, 0.0, headY, front,
+        0.92, 0.88, 0.96, roll = PI / 4.0)
+    // Preserve the existing head slot for interpolation and callers; all facet slots stay fixed.
+    trail.add(18, head)
+
+    val parts = ArrayList<StaffDisplayPart>(StaffSpellDisplayEffects.MAX_PARTS)
+    parts += trail
+    val muzzleY = staffLanceCenterOffset(muzzle, reach)
+    parts += part(Material.GOLD_BLOCK, 0.0, muzzleY, muzzle, 0.12, 0.12, 0.16, roll = PI / 4.0)
+    val detailZ = (muzzle + 0.18).coerceAtMost(front)
+    parts += part(Material.YELLOW_STAINED_GLASS, 0.08, staffLanceCenterOffset(detailZ, reach), detailZ,
+        0.12, 0.11, 0.16, yaw = PI / 4.0, roll = -PI / 5.0)
     repeat(5) { index ->
         val angle = index * 2.0 * PI / 5.0
         parts += part(if (index % 2 == 0) Material.WHITE_STAINED_GLASS else Material.GOLD_BLOCK,
-            cos(angle) * 0.30, sin(angle) * 0.30, front - 0.18,
-            0.52, 0.48, 0.70, yaw = angle + PI / 3.0,
+            cos(angle) * 0.46, headY + sin(angle) * 0.46, front - 0.12,
+            0.48, 0.44, 0.52, yaw = angle + PI / 3.0,
             pitch = sin(angle) * 0.34, roll = angle * 0.42)
     }
-    // Grow after leaving the muzzle: a small nearby core and a legible distant solar mass.
-    val launchFront = minOf(reach, 2.0)
-    val travel = if (reach <= launchFront) 1.0 else ((front - launchFront) / (reach - launchFront)).coerceIn(0.0, 1.0)
-    val expansion = (0.65 + 0.95 * travel).toFloat()
-    return parts.map { piece -> piece.copy(
-        center = Vector3f(piece.center.x * expansion, piece.center.y * expansion, piece.center.z),
-        scale = Vector3f(piece.scale).mul(expansion),
-    ) }
+    return parts
+}
+
+private const val LANCE_TRAIL_SEGMENTS = 40
+
+/** Shared radius-growing helix, centered back onto the ray just before the head. */
+internal fun staffLanceOrbitOffset(distance: Double, length: Double): Vector3f {
+    val reach = staffLanceReach(length)
+    val z = distance.takeIf { it.isFinite() }?.coerceIn(minOf(reach, 2.0), reach) ?: minOf(reach, 2.0)
+    val flare = smooth((z - 3.0) / 9.0)
+    val tipTaper = smooth((reach - z) / 1.6)
+    val radius = 0.78 * flare * tipTaper
+    val angle = (z - minOf(reach, 2.0)) * 0.42
+    return Vector3f((cos(angle) * radius).toFloat(), (sin(angle) * radius).toFloat(), 0f)
+}
+
+/** Visual only: lower the safe muzzle below the reticle, then join the actual ray at the head. */
+internal fun staffLanceCenterOffset(distance: Double, length: Double): Double {
+    val reach = staffLanceReach(length)
+    val muzzle = minOf(reach, 2.0)
+    val travel = reach - muzzle
+    if (travel <= 0.001) return 0.0
+    val current = distance.takeIf { it.isFinite() }?.coerceIn(muzzle, reach) ?: muzzle
+    return -0.75 * ((reach - current) / travel).coerceIn(0.0, 1.0)
+}
+
+/** One deterministic yaw/pitch frame for the LANCE display and its particle accents. */
+internal fun staffLanceOrientation(direction: Vector3f): Quaternionf {
+    val x = direction.x.toDouble()
+    val y = direction.y.toDouble()
+    val z = direction.z.toDouble()
+    if (!x.isFinite() || !y.isFinite() || !z.isFinite() || hypot(hypot(x, z), y) < 1.0e-8)
+        return Quaternionf()
+    val horizontal = hypot(x, z)
+    val yaw = if (horizontal < 1.0e-8) 0.0 else atan2(x, z)
+    val elevation = atan2(y, horizontal)
+    return Quaternionf().rotationY(yaw.toFloat()).rotateX(-elevation.toFloat())
+}
+
+private fun lancePathPoint(distance: Double, length: Double): Vector3f {
+    val offset = staffLanceOrbitOffset(distance, length)
+    return Vector3f(offset.x, staffLanceCenterOffset(distance, length).toFloat() + offset.y, distance.toFloat())
 }
 
 private fun emberDisplayParts(ageTicks: Int, durationTicks: Int, radius: Double, impact: Boolean): List<StaffDisplayPart> {

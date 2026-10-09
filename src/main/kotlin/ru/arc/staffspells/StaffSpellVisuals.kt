@@ -8,6 +8,7 @@ import org.bukkit.Particle
 import org.bukkit.Sound
 import org.bukkit.SoundCategory
 import org.bukkit.util.Vector
+import org.joml.Vector3f
 import ru.arc.core.LifecycleTaskScope
 import kotlin.math.PI
 import kotlin.math.cos
@@ -271,30 +272,37 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         val end = to.clone()
         val distance = segmentLength(start, end) ?: return@dispatch
         val offset = end.toVector().subtract(start.toVector())
-        val basis = frame(offset) ?: return@dispatch
-        val forward = offset.clone().normalize()
+        val orientation = staffLanceOrientation(Vector3f(offset.x.toFloat(), offset.y.toFloat(), offset.z.toFloat()))
+        fun axis(x: Float, y: Float, z: Float): Vector {
+            val rotated = orientation.transform(Vector3f(x, y, z))
+            return Vector(rotated.x.toDouble(), rotated.y.toDouble(), rotated.z.toDouble())
+        }
+        val forward = axis(0f, 0f, 1f)
+        val right = axis(-1f, 0f, 0f)
+        val up = axis(0f, 1f, 0f)
         val reach = distance.coerceIn(0.1, 48.0)
         val launchFront = min(2.0, reach)
         val charge = start.clone().add(forward.clone().multiply(launchFront))
+            .add(up.clone().multiply(staffLanceCenterOffset(launchFront, distance)))
         localSound(charge, Sound.ENTITY_ARROW_SHOOT, 0.78f, 0.92f)
         // The default impact-camera cutoff keeps this cue out of the caster's near eye view.
         emit(charge.clone().add(0.0, 0.08, 0.0), Particle.FLASH)
         repeat(3) { i ->
             val side = (i - 1) * 0.075
-            emit(charge.clone().add(basis.first.clone().multiply(side)), Particle.DUST, GOLD,
+            emit(charge.clone().add(right.clone().multiply(side)), Particle.DUST, GOLD,
                 minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
         }
         val flightTicks = staffLanceFlightTicks(distance)
         for (age in 1..flightTicks) {
             tasks.runLater(age.toLong()) {
-                lanceStage(start, forward, basis.first, basis.second, distance, age, flightTicks)
+                lanceStage(start, forward, right, up, distance, age, flightTicks)
             }
         }
         tasks.runLater((flightTicks + 3).toLong()) {
-            lanceAfterglow(start, forward, basis.first, basis.second, distance, 4)
+            lanceAfterglow(start, forward, right, up, distance, 4)
         }
         tasks.runLater((flightTicks + 6).toLong()) {
-            lanceAfterglow(start, forward, basis.first, basis.second, distance, 2)
+            lanceAfterglow(start, forward, right, up, distance, 2)
         }
     }
 
@@ -432,11 +440,16 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         val reach = length.coerceIn(0.1, 48.0)
         val front = staffLanceFront(age, length)
         val launchFront = min(2.0, reach)
-        val tailStartDistance = maxOf(launchFront, front - 6.5)
-        val tailStart = start.clone().add(forward.clone().multiply(tailStartDistance))
         val tip = start.clone().add(forward.clone().multiply(front))
-        // Four gold points, two short flame accents and one bright head per frame.
-        lineSamples(tailStart, tip, 3).forEachIndexed { index, point ->
+            .add(up.clone().multiply(staffLanceCenterOffset(front, length)))
+        // Four sparks span the same expanding helix as the display, not only its last few blocks.
+        repeat(4) { index ->
+            val distance = launchFront + (front - launchFront) * index / 3.0
+            val offset = staffLanceOrbitOffset(distance, length)
+            val point = start.clone()
+                .add(forward.clone().multiply(distance))
+                .add(right.clone().multiply(-offset.x.toDouble()))
+                .add(up.clone().multiply(staffLanceCenterOffset(distance, length) + offset.y.toDouble()))
             emit(point, Particle.DUST, GOLD_TAIL, minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
             if (index == 1 || index == 3) {
                 emit(point.clone().add(right.clone().multiply(if (index == 1) -0.11 else 0.11))
@@ -462,6 +475,7 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         length: Double, count: Int) {
         val front = staffLanceFront(staffLanceFlightTicks(length), length)
         val tip = start.clone().add(forward.clone().multiply(front))
+            .add(up.clone().multiply(staffLanceCenterOffset(front, length)))
         repeat(count) { index ->
             val angle = index * PI * 2.0 / count
             emit(tip.clone()

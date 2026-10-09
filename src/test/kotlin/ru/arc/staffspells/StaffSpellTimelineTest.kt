@@ -30,10 +30,15 @@ class StaffSpellTimelineTest : FreeSpec({
         val trimmedStart = Vector3f(0f, 0f, -firstStep[0].scale.z / 2f)
         firstStep[0].rotation.transform(trimmedStart).add(firstStep[0].center)
         (abs(trimmedStart.z - 1.45f) < 0.0001f) shouldBe true
+        (abs(trimmedStart.x) < 0.0001f && abs(trimmedStart.y) < 0.0001f) shouldBe true
+        (firstStep[0].scale.x / firstStep[0].center.z < 0.065f) shouldBe true
+        (abs(firstStep[44].center.x) > 0.15f) shouldBe true
         (firstStep[0].center.length() - firstStep[0].scale.length() / 2f >= 1.30f) shouldBe true
         firstStep[44].center.z shouldBe 2f
         firstStep.take(40).filter { it.visible }.all { part ->
-            part.center.z + part.scale.z / 2f <= 2.001f
+            val end = Vector3f(0f, 0f, part.scale.z / 2f)
+            part.rotation.transform(end).add(part.center)
+            end.z <= 2.001f
         } shouldBe true
 
         firstBend.take(2).zip(secondBend.take(2)).forEach { (old, grown) ->

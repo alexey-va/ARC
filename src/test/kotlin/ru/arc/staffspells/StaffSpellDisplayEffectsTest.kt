@@ -4,6 +4,7 @@ import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
+import org.joml.Vector3f
 import org.bukkit.Location
 import org.bukkit.block.data.BlockData
 import org.bukkit.entity.Player
@@ -52,20 +53,28 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
     "charged cores launch through the reticle and the solar mass grows after leaving the muzzle" {
         val chain = staffDisplayParts(StaffSpell.CHAIN, 0, 20, 48.0, 0.8, false)
         chain.size shouldBe 47
-        (chain[44].scale.x >= 0.30f) shouldBe true
+        (chain[44].scale.x >= 0.18f) shouldBe true
         (chain[44].center.z >= 2.4f) shouldBe true
         (chain.minOf { it.center.z } >= 0f) shouldBe true
 
         val lance = staffDisplayParts(StaffSpell.LANCE, 0, 20, 24.0, 0.75, false)
-        lance.size shouldBe 24
-        (lance[18].scale.x in 0.30f..0.40f) shouldBe true
+        lance.size shouldBe StaffSpellDisplayEffects.MAX_PARTS
+        (lance[18].scale.x in 0.50f..0.60f) shouldBe true
         (lance[18].center.z >= 1.9f) shouldBe true
+        lance[18].center.y shouldBe -0.75f
         (lance[0].center.z > 1.0f) shouldBe true
+        (lance[41].scale.x <= 0.08f && lance[42].scale.x <= 0.08f) shouldBe true
+        lance[41].center.x shouldBe 0f
+        lance[41].center.y shouldBe -0.75f
         val arrivedLance = staffDisplayParts(StaffSpell.LANCE, staffLanceFlightTicks(24.0),
             staffLanceDuration(24.0), 24.0, 0.75, true)
         arrivedLance[18].center.z shouldBe 24f
-        (arrivedLance[18].scale.x > 1.2f) shouldBe true
-        (arrivedLance[18].center.z - arrivedLance[0].center.z < 9f) shouldBe true
+        arrivedLance[18].center.y shouldBe 0f
+        (arrivedLance[0].center.y < -0.55f) shouldBe true
+        (arrivedLance[18].scale.x > 0.8f) shouldBe true
+        (arrivedLance[0].scale.x < 0.14f) shouldBe true
+        (arrivedLance[18].center.z - arrivedLance[0].center.z > 20f) shouldBe true
+        arrivedLance.size shouldBe StaffSpellDisplayEffects.MAX_PARTS
         lance.forEach { part ->
             for (x in listOf(-1f, 1f)) for (y in listOf(-1f, 1f)) for (z in listOf(-1f, 1f)) {
                 val corner = org.joml.Vector3f(part.scale).mul(org.joml.Vector3f(x, y, z)).mul(0.5f)
@@ -94,6 +103,74 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
                 .maxOf { it.scale.x } < 0.01f) shouldBe true
         }
         staffLanceFlightTicks(48.0) shouldBe 17
+    }
+
+    "LANCE shares one yaw-pitch frame for diagonal and vertical rays" {
+        listOf(
+            Vector3f(0f, 0f, 1f),
+            Vector3f(3f, 4f, 12f),
+            Vector3f(-6f, 2f, -5f),
+            Vector3f(0f, 1f, 0f),
+            Vector3f(0f, -1f, 0f),
+        ).forEach { direction ->
+            val orientation = staffLanceOrientation(direction)
+            val forward = orientation.transform(Vector3f(0f, 0f, 1f))
+            val right = orientation.transform(Vector3f(-1f, 0f, 0f))
+            val up = orientation.transform(Vector3f(0f, 1f, 0f))
+            val expectedForward = Vector3f(direction).normalize()
+
+            (forward.distance(expectedForward) < 1.0e-5f) shouldBe true
+            (kotlin.math.abs(right.length() - 1f) < 1.0e-5f) shouldBe true
+            (kotlin.math.abs(up.length() - 1f) < 1.0e-5f) shouldBe true
+            (kotlin.math.abs(right.dot(up)) < 1.0e-5f) shouldBe true
+            (kotlin.math.abs(right.dot(forward)) < 1.0e-5f) shouldBe true
+            (kotlin.math.abs(up.dot(forward)) < 1.0e-5f) shouldBe true
+        }
+
+        val verticalUp = staffLanceOrientation(Vector3f(0f, 1f, 0f))
+        (kotlin.math.abs(verticalUp.transform(Vector3f(-1f, 0f, 0f)).x + 1f) < 1.0e-5f) shouldBe true
+        (kotlin.math.abs(verticalUp.transform(Vector3f(0f, 1f, 0f)).z + 1f) < 1.0e-5f) shouldBe true
+        val verticalDown = staffLanceOrientation(Vector3f(0f, -1f, 0f))
+        (kotlin.math.abs(verticalDown.transform(Vector3f(0f, 1f, 0f)).z - 1f) < 1.0e-5f) shouldBe true
+        (kotlin.math.abs(staffLanceOrientation(Vector3f()).transform(Vector3f(0f, 0f, 1f)).z - 1f) < 1.0e-5f) shouldBe true
+    }
+
+    "LANCE grows a stable off-axis channel from its safe muzzle to the moving head" {
+        val distance = 48.0
+        val duration = staffLanceDuration(distance)
+        val launch = staffDisplayParts(StaffSpell.LANCE, 0, duration, distance, 0.75, true)
+        val middle = staffDisplayParts(StaffSpell.LANCE, staffLanceFlightTicks(distance) / 2,
+            duration, distance, 0.75, true)
+        val arrival = staffDisplayParts(StaffSpell.LANCE, staffLanceFlightTicks(distance),
+            duration, distance, 0.75, true)
+        fun trail(parts: List<StaffDisplayPart>) = parts.take(18) + parts.subList(19, 41)
+
+        launch.size shouldBe 48
+        launch.count { it.visible } shouldBe 8 // compact core, two muzzle facets and five head facets
+        middle.count { it.visible } shouldBe 27
+        arrival.count { it.visible } shouldBe 48
+        launch.map { it.material } shouldBe arrival.map { it.material }
+        launch[18].center.z shouldBe 2f
+        launch[18].center.x shouldBe 0f
+        launch[18].center.y shouldBe -0.75f
+        middle[18].center.z shouldBe staffLanceFront(staffLanceFlightTicks(distance) / 2, distance).toFloat()
+        arrival[18].center.z shouldBe distance.toFloat()
+        arrival[18].center.y shouldBe 0f
+        arrival[41].center.y shouldBe -0.75f
+        (arrival[18].scale.x <= 0.93f) shouldBe true
+        (trail(arrival).maxOf { kotlin.math.hypot(it.center.x.toDouble(), it.center.y.toDouble()) } > 0.8) shouldBe true
+        (staffLanceOrbitOffset(2.0, distance).length() < 0.001f) shouldBe true
+        (staffLanceOrbitOffset(15.0, distance).length() > 0.7f) shouldBe true
+        (staffLanceOrbitOffset(distance, distance).length() < 0.001f) shouldBe true
+        staffLanceCenterOffset(2.0, distance) shouldBe -0.75
+        staffLanceCenterOffset(distance, distance) shouldBe 0.0
+        staffLanceCenterOffset(1.0, 1.0) shouldBe 0.0
+
+        listOf(launch, middle, arrival).forEach { state ->
+            state.filter { it.visible }.all { part ->
+                org.joml.Vector3f(part.center).length() >= 1.15f + part.scale.length() / 2f
+            } shouldBe true
+        }
     }
 
     "lightning extends stable handles and hides unreached route slots" {
