@@ -24,7 +24,7 @@ import java.util.UUID
 internal class DungeonSaveMenus(
     private val dungeon: EMDungeonQol,
     private val crystals: (Player) -> String? = ::readDungeonCrystals,
-    private val readQuests: (Player) -> List<DungeonQuestInfo>? = ::readDungeonQuests,
+    private val readQuests: (Player) -> List<DungeonQuestInfo>? = { readDungeonQuests(it, currentDungeonOnly = true) },
     private val changeTracking: (Player, UUID, Boolean) -> DungeonQuestTrackingChange = ::changeDungeonQuestTracking,
     private val abandonQuest: (Player, UUID) -> DungeonQuestAbandonChange = ::abandonDungeonQuest,
     private val classService: DungeonClassService = NativeDungeonClassService,
@@ -110,7 +110,7 @@ internal class DungeonSaveMenus(
         show(player, PaperDialogScreen(
             id = "dungeon.panel", title = text("panel.title", "<#ffb277>Панель данжа"), body = body,
             buttons = listOfNotNull(
-                action("quests", "quests.label", "<#c4a7e7>Задания ›", "quests.tooltip", "Принятые задания EliteMobs и их текущий прогресс") { quests(player) },
+                action("quests", "quests.label", "<#c4a7e7>Задания ›", "quests.local-tooltip", "Принятые и доступные задания этого данжа") { quests(player) },
                 if (dungeon.partiesAvailable()) partyButton(player) else null,
                 action("shop", "panel.shop-label", "<#f4d87a>Припасы ›", "panel.shop-tooltip", "Припасы, кейсы и бусты опыта за кристаллы") { shop(player) },
                 view.saves?.let {
@@ -152,10 +152,10 @@ internal class DungeonSaveMenus(
             (offers.orEmpty().size + offersPerPage - 1) / offersPerPage)
         val page = requestedPage.coerceIn(0, pageCount - 1)
         val listed = entries.orEmpty().drop(page * questsPerPage).take(questsPerPage)
-        val body = mutableListOf(PaperDialogBody(text("quests.intro", "<#f2eee8>✔ — отслеживается, ○ — не отслеживается. Готовность к сдаче указана отдельно. Выберите задание для управления."), 468))
+        val body = mutableListOf(PaperDialogBody(text("quests.local-intro", "<#f2eee8>Задания текущей локации. Связанные миры одного данжа показаны вместе."), 468))
         if (entries.isNullOrEmpty()) {
             body += PaperDialogBody(if (entries == null) text("quests.unavailable", "<#d7b486>Данные заданий ещё загружаются. Попробуйте обновить страницу.")
-                else text("quests.empty", "<#f2eee8>Принятых заданий пока нет. Поговорите с персонажами, которые предлагают задания."), 468)
+                else text("quests.local-empty", "<#f2eee8>Принятых заданий для этой локации пока нет."), 468)
         } else if (listed.isNotEmpty()) {
             val summary = Component.empty().children(listed.flatMapIndexed { index, quest ->
                 val row = questName(quest)
@@ -195,7 +195,7 @@ internal class DungeonSaveMenus(
             pointButton("quest_$index", label, text("quests.open-tooltip", "Открыть прогресс и управление заданием")) { quest(player, quest.id) }
         }
         show(player, PaperDialogScreen(
-            id = "dungeon.quests", title = text("quests.title", "<#c4a7e7>Мои задания"), body = body,
+            id = "dungeon.quests", title = text("quests.local-title", "<#c4a7e7>Задания здесь"), body = body,
             buttons = questButtons + listOfNotNull(
                 if (page > 0) action("previous", "quests.previous", "<#92bed8>‹ Предыдущая страница", "quests.previous-tooltip", "Показать предыдущее задание") { quests(player, page - 1) } else null,
                 if (page + 1 < pageCount) action("next", "quests.next", "<#92bed8>Следующая страница ›", "quests.next-tooltip", "Показать следующие задания") { quests(player, page + 1) } else null,

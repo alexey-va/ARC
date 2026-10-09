@@ -114,8 +114,18 @@ creating native pending quests to inspect their contents. Known authored NPC
 coordinates remain usable when the NPC's chunk is unloaded; instance locations
 belong only to the viewer's own dungeon copy. The menu's "Можно взять сейчас"
 section lists quest names, NPCs, world labels, coordinates and same-world distance,
-with pagination and a fresh eligibility check on refresh. Cross-world offers
-remain listed in the menu; their compass marker appears in the destination world.
+with pagination and a fresh eligibility check on refresh. Both offers and accepted
+quests in the menu are scoped to the player's current dungeon. Related worlds
+in an adventure (Primis or Oasis) are grouped through native `containedPackages`:
+only a meta package with exactly one `OPEN_DUNGEON` anchor defines an adventure;
+catalogs of independent story/challenge dungeons do not merge their quest lists.
+Instance membership is resolved from the native instance's package, and only the
+current live clone is included. Unregistered worlds show only their own NPCs.
+An accepted quest belongs here when its giver, turn-in NPC, or custom quest
+filename is associated with an NPC in this group. Manual global tracking is
+preserved. Related-world offers stay in the menu; their compass marker appears
+only in the destination world. Permission, progression and lockout checks remain
+native, and distance never hides an otherwise available quest.
 The native `CustomQuest.hasPermissionForQuest(Player, CustomQuestsConfigFields)`
 gate checks quest enablement, progression metadata and lockouts (verified against
 the active EliteMobs 10.9.8 artifact on 2026-10-09). Do not replace it with a

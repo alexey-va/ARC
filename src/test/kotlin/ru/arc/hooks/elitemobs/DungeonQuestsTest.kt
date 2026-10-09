@@ -1,7 +1,14 @@
 package ru.arc.hooks.elitemobs
 
 import com.magmaguy.elitemobs.config.QuestsConfig
+import com.magmaguy.elitemobs.config.contentpackages.ContentPackagesConfig
+import com.magmaguy.elitemobs.config.customquests.CustomQuestsConfig
+import com.magmaguy.elitemobs.config.npcs.NPCsConfig
+import com.magmaguy.elitemobs.config.npcs.NPCsConfigFields
+import com.magmaguy.elitemobs.instanced.dungeons.DungeonInstance
+import com.magmaguy.elitemobs.utils.ConfigurationLocation
 import com.magmaguy.elitemobs.playerdata.database.PlayerData
+import com.magmaguy.elitemobs.quests.CustomQuest
 import com.magmaguy.elitemobs.quests.Quest
 import com.magmaguy.elitemobs.quests.QuestTracking
 import com.magmaguy.elitemobs.quests.objectives.Objective
@@ -62,6 +69,79 @@ class DungeonQuestsTest : FreeSpec({
     "long scoreboard goals keep their counter when compacted" {
         compactDungeonQuestText("Уничтожить очень длинное название монстра 123 / 500", 28) shouldBe
             "Уничтожить очень… 123 / 500"
+    }
+
+    "local menu includes giver and turn-in NPCs but excludes even tracked quests from another dungeon" {
+        mockkStatic(PlayerData::class, QuestTracking::class, NPCsConfig::class,
+            ContentPackagesConfig::class, DungeonInstance::class, ConfigurationLocation::class, CustomQuestsConfig::class)
+        try {
+            val owner = UUID.randomUUID()
+            val world = mockk<org.bukkit.World> {
+                every { name } returns "current_dungeon"
+                every { uid } returns UUID.randomUUID()
+            }
+            val player = mockk<org.bukkit.entity.Player> {
+                every { uniqueId } returns owner
+                every { this@mockk.world } returns world
+            }
+            fun npc(id: String, location: String) = mockk<NPCsConfigFields> {
+                every { filename } returns id
+                every { locations } returns listOf(location)
+                every { spawnLocation } returns null
+                every { questFilenames } returns if (id == "local.yml") listOf("local-custom.yml") else emptyList()
+            }
+            fun quest(name: String, giver: String, taker: String) = mockk<Quest> {
+                every { playerUUID } returns owner
+                every { questID } returns UUID.randomUUID()
+                every { questName } returns name
+                every { questGiver } returns giver
+                every { questTaker } returns taker
+                every { questObjectives } returns mockk {
+                    every { isTurnedIn } returns false
+                    every { isOver } returns false
+                    every { objectives } returns emptyList()
+                }
+            }
+            val local = quest("Местное", "local.yml", "local.yml")
+            val turnInHere = quest("Сдать здесь", "foreign.yml", "local.yml")
+            val foreign = quest("Чужой данж", "foreign.yml", "foreign.yml")
+            val custom = mockk<CustomQuest> {
+                every { playerUUID } returns owner
+                every { questID } returns UUID.randomUUID()
+                every { questName } returns "Местная цепочка"
+                every { questGiver } returns ""
+                every { questTaker } returns ""
+                every { configurationFilename } returns "local-custom.yml"
+                every { questObjectives } returns mockk {
+                    every { isTurnedIn } returns false
+                    every { isOver } returns false
+                    every { objectives } returns emptyList()
+                }
+            }
+            every { CustomQuestsConfig.getCustomQuests() } returns hashMapOf("local-custom.yml" to mockk {
+                every { isTrackable } returns true
+            })
+            every { PlayerData.isDataLoaded(owner) } returns true
+            every { PlayerData.getQuests(owner) } returns arrayListOf(local, turnInHere, foreign, custom)
+            every { QuestTracking.getPlayerTrackingQuests() } returns hashMapOf(owner to mockk {
+                every { this@mockk.quest } returns foreign
+            })
+            every { ContentPackagesConfig.getDungeonPackages() } returns emptyMap()
+            every { DungeonInstance.getDungeonInstances() } returns emptySet()
+            every { NPCsConfig.getNpcEntities() } returns hashMapOf(
+                "local.yml" to npc("local.yml", "current_dungeon,10,64,20"),
+                "foreign.yml" to npc("foreign.yml", "unrelated_dungeon,10,64,20"),
+            )
+            every { ConfigurationLocation.worldName(any()) } answers { firstArg<String>().substringBefore(',') }
+
+            readDungeonQuests(player, currentDungeonOnly = true)!!.map { it.name } shouldBe
+                listOf("Местное", "Сдать здесь", "Местная цепочка")
+            // The player's manually selected global tracker remains available to the scoreboard.
+            readDungeonQuests(player)!!.first().name shouldBe "Чужой данж"
+        } finally {
+            unmockkStatic(PlayerData::class, QuestTracking::class, NPCsConfig::class,
+                ContentPackagesConfig::class, DungeonInstance::class, ConfigurationLocation::class, CustomQuestsConfig::class)
+        }
     }
 
     "does not read quests before EliteMobs data is fully loaded" {

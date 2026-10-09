@@ -33,6 +33,7 @@ internal fun readAvailableDungeonQuests(player: Player): List<DungeonQuestOffer>
     if (!PlayerData.isDataLoaded(playerId)) return null
 
     val activeCustomQuests = activeCustomQuestFilenames(PlayerData.getQuests(playerId).orEmpty())
+    val questWorlds = currentDungeonQuestWorlds(player)
     val questConfigs = CustomQuestsConfig.getCustomQuests()
     val runtimeNpcsByFilename = EntityTracker.getNpcEntities().values
         .mapNotNull { npc -> npc.getNPCsConfigFields()?.let { it.filename to npc } }
@@ -55,6 +56,9 @@ internal fun readAvailableDungeonQuests(player: Player): List<DungeonQuestOffer>
         if (interaction != NPCInteractions.NPCInteractionType.CUSTOM_QUEST_GIVER &&
             interaction != NPCInteractions.NPCInteractionType.QUEST_GIVER
         ) continue
+        val locations = questNpcLocations(player, npcFields, runtimeNpcsByFilename[npcFields.filename].orEmpty())
+            .filter { it.world?.name in questWorlds }
+        if (locations.isEmpty()) continue
         val npcName = npcFields.name.takeIf(String::isNotBlank) ?: npcFields.filename
         val availableQuests = when (interaction) {
             NPCInteractions.NPCInteractionType.CUSTOM_QUEST_GIVER -> {
@@ -77,7 +81,6 @@ internal fun readAvailableDungeonQuests(player: Player): List<DungeonQuestOffer>
         }
         if (availableQuests.isEmpty()) continue
 
-        val locations = questNpcLocations(player, npcFields, runtimeNpcsByFilename[npcFields.filename].orEmpty())
         for ((id, name) in availableQuests) {
             for (location in locations) {
                 offers += questOffer(id, name, npcName, location, dungeonWorldNames, instanceWorldNames)

@@ -90,6 +90,7 @@ class DungeonSaveMenusTest : FreeSpec({
         shown.last().id shouldBe "dungeon.quests"
         shown.last().buttons.map { it.id.value } shouldBe listOf("quest_0", "quest_1", "quest_2", "quest_3", "refresh")
         val plainText = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+        plainText.serialize(shown.last().title) shouldBe "Задания здесь"
         shown.last().buttons.take(4).map { plainText.serialize(it.label) } shouldBe
             entries!!.map { "${if (it.tracked) "✔" else "○"} ${it.name} ›" }
         val bodyText = shown.last().body.flatMap { body ->
@@ -142,10 +143,10 @@ class DungeonSaveMenusTest : FreeSpec({
         plainText.serialize(shown.last().body.last().text) shouldBe "Данные заданий ещё загружаются. Попробуйте обновить страницу."
     }
 
-    "quest overview lists available offers with distant NPC locations and refreshes pagination" {
+    "quest overview lists scoped offers in related worlds with distant NPC locations and refreshes pagination" {
         val player = paper.addPlayer("available-quests")
-        val world = paper.addSimpleWorld("quest-guild")
-        val otherWorld = paper.addSimpleWorld("quest-castle")
+        val world = paper.addSimpleWorld("em_primis")
+        val otherWorld = paper.addSimpleWorld("em_primis_wormhole")
         player.teleport(Location(world, 0.0, 64.0, 0.0))
         val dungeon = mockk<EMDungeonQol>(relaxed = true)
         every { dungeon.text(any(), any(), *anyVararg()) } answers {
@@ -157,7 +158,7 @@ class DungeonSaveMenusTest : FreeSpec({
         }
         var offers = (1..3).map { index ->
             DungeonQuestOffer("offer-$index", "Поход $index", "Проводник $index",
-                Location(world, 10_000.0 + index, 64.0, 0.0), "Гильдия приключений")
+                Location(world, 10_000.0 + index, 64.0, 0.0), "Primis")
         } + DungeonQuestOffer("castle", "Тайна замка", "Стражник",
             Location(otherWorld, 25.0, 70.0, -8.0), "Дальний замок")
         val shown = mutableListOf<PaperDialogScreen>()
@@ -167,7 +168,7 @@ class DungeonSaveMenusTest : FreeSpec({
 
         menus.quests(player)
         body().contains("Можно взять сейчас: 4") shouldBe true
-        body().contains("! Поход 1\nПроводник 1 · Гильдия приключений\n10001, 64, 0 · 10001 м · ! на компасе") shouldBe true
+        body().contains("! Поход 1\nПроводник 1 · Primis\n10001, 64, 0 · 10001 м · ! на компасе") shouldBe true
         body().contains("Тайна замка") shouldBe false
         shown.last().buttons.map { it.id.value } shouldBe listOf("next", "refresh")
         shown.last().buttons.single { it.id.value == "next" }.onClick.handle(mockk())

@@ -55,6 +55,7 @@ class DungeonQuestOffersTest : FreeSpec({
             val playerId = UUID.randomUUID()
             val player = mockk<Player> {
                 every { uniqueId } returns playerId
+                every { this@mockk.world } returns world
                 every { location } returns Location(world, 0.0, 64.0, 0.0)
             }
             val active = customQuest("active.yml", accepted = true, turnedIn = false)
@@ -63,7 +64,7 @@ class DungeonQuestOffersTest : FreeSpec({
             val repeatFields = customQuestFields("Повторное")
             val lockedFields = customQuestFields("Закрыто")
             val filenames = listOf("active.yml", "repeat.yml", "locked.yml")
-            val rawLocations = listOf("guild-one", "guild-two", "invalid")
+            val rawLocations = listOf("guild-one", "guild-two", "other-dungeon", "invalid")
             val npcFields = npcFields(
                 filename = "guild_quest_giver",
                 interaction = NPCInteractions.NPCInteractionType.CUSTOM_QUEST_GIVER,
@@ -86,6 +87,11 @@ class DungeonQuestOffersTest : FreeSpec({
             every { CustomQuest.hasPermissionForQuest(player, lockedFields) } returns false
             every { ConfigurationLocation.serialize("guild-one") } returns first
             every { ConfigurationLocation.serialize("guild-two") } returns second
+            val otherWorld = mockk<World> {
+                every { uid } returns UUID.randomUUID()
+                every { name } returns "unrelated_dungeon"
+            }
+            every { ConfigurationLocation.serialize("other-dungeon") } returns Location(otherWorld, 10.0, 64.0, 0.0)
             every { ConfigurationLocation.serialize("invalid") } returns Location(null, Double.NaN, 64.0, 0.0)
 
             val offers = readAvailableDungeonQuests(player).orEmpty()
@@ -114,6 +120,7 @@ class DungeonQuestOffersTest : FreeSpec({
             var hasQuestPermission = false
             val player = mockk<Player> {
                 every { uniqueId } returns playerId
+                every { this@mockk.world } returns world
                 every { location } returns Location(world, 0.0, 64.0, 0.0)
                 every { hasPermission("elitemobs.quest.npc") } answers { hasQuestPermission }
             }
@@ -155,7 +162,11 @@ class DungeonQuestOffersTest : FreeSpec({
                 every { name } returns "dungeon-copy-42"
             }
             val instanceFields = mockk<com.magmaguy.elitemobs.config.contentpackages.ContentPackagesConfigFields> {
+                every { filename } returns "native_dungeon.yml"
+                every { contentType } returns com.magmaguy.elitemobs.config.contentpackages.ContentPackagesConfigFields.ContentType.INSTANCED_DUNGEON
                 every { worldName } returns "native_dungeon"
+                every { wormholeWorldName } returns null
+                every { containedPackages } returns emptyList()
                 every { name } returns "Native Dungeon"
             }
             val instance = mockk<DungeonInstance> {

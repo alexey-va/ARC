@@ -7,6 +7,7 @@ import com.magmaguy.elitemobs.playerdata.database.PlayerData
 import com.magmaguy.elitemobs.quests.CustomQuest
 import com.magmaguy.elitemobs.quests.Quest
 import com.magmaguy.elitemobs.quests.QuestTracking
+import com.magmaguy.elitemobs.utils.ConfigurationLocation
 import org.bukkit.entity.Player
 import ru.arc.util.TextUtil
 import java.util.UUID
@@ -28,11 +29,26 @@ internal data class DungeonQuestInfo(
 internal enum class DungeonQuestTrackingChange { TRACKED, UNTRACKED, LOADING, MISSING, UNTRACKABLE, FAILED }
 internal enum class DungeonQuestAbandonChange { ABANDONED, LOADING, MISSING, FAILED }
 
-internal fun readDungeonQuests(player: Player): List<DungeonQuestInfo>? {
+internal fun readDungeonQuests(player: Player, currentDungeonOnly: Boolean = false): List<DungeonQuestInfo>? {
     // Avoid a synchronous database lookup or a partial snapshot while EliteMobs data loads.
     if (!PlayerData.isDataLoaded(player.uniqueId)) return null
     val tracked = QuestTracking.getPlayerTrackingQuests()[player.uniqueId]?.quest?.questID
-    return dungeonQuestInfo(PlayerData.getQuests(player.uniqueId).orEmpty(), player.uniqueId, tracked)
+    val quests = PlayerData.getQuests(player.uniqueId).orEmpty()
+    val relevant = if (currentDungeonOnly) {
+        val worlds = currentDungeonQuestWorlds(player)
+        val npcs = NPCsConfig.getNpcEntities().values.filter { fields ->
+            (fields.locations.orEmpty() + listOfNotNull(fields.spawnLocation)).any {
+                it.isNotBlank() && ConfigurationLocation.worldName(it) in worlds
+            }
+        }
+        val npcIds = npcs.map { it.filename }.toSet()
+        val questFiles = npcs.flatMap { it.questFilenames.orEmpty() }.toSet()
+        quests.filter { quest ->
+            quest.questGiver in npcIds || quest.questTaker in npcIds ||
+                (quest is CustomQuest && quest.configurationFilename in questFiles)
+        }
+    } else quests
+    return dungeonQuestInfo(relevant, player.uniqueId, tracked)
 }
 
 internal fun dungeonQuestInfo(quests: List<Quest>, owner: UUID, tracked: UUID?): List<DungeonQuestInfo> =
