@@ -226,16 +226,44 @@ class RewardCatalogModuleConfig(private val config: Config) {
         val map = strictMap(raw, path)
         rejectUnknown(map, setOf("reward", "search", "destinations"), path)
         val reward = strictMap(map.required("reward", path), "$path.reward")
-        rejectUnknown(reward, setOf("category", "entry"), "$path.reward")
+        rejectUnknown(reward, setOf("category", "entry", "rolls"), "$path.reward")
+        val prizeRolls = if ("rolls" in reward) {
+            integer(reward["rolls"], "$path.reward.rolls").also {
+                require(it in 1..PersonalTreasureMapDefinition.MAX_PRIZE_ROLLS) {
+                    "$path.reward.rolls must be in 1..${PersonalTreasureMapDefinition.MAX_PRIZE_ROLLS}"
+                }
+            }
+        } else 1
         val searchPolicy = if ("search" in map) {
             require("destinations" !in map) { "$path cannot contain both search and destinations" }
             val search = strictMap(map.getValue("search"), "$path.search")
-            rejectUnknown(search, setOf("server", "world", "radius"), "$path.search")
-            PersonalTreasureMapSearchPolicy(
-                requiredString(search.required("server", "$path.search"), "$path.search.server", 48),
-                requiredString(search.required("world", "$path.search"), "$path.search.world", 128),
-                integer(search.required("radius", "$path.search"), "$path.search.radius"),
-            )
+            rejectUnknown(search, setOf("server", "world", "radius", "bounds", "min-distance"), "$path.search")
+            val server = requiredString(search.required("server", "$path.search"), "$path.search.server", 48)
+            val world = requiredString(search.required("world", "$path.search"), "$path.search.world", 128)
+            if ("bounds" in search) {
+                require("radius" !in search) { "$path.search cannot contain both bounds and radius" }
+                val boundsPath = "$path.search.bounds"
+                val bounds = strictMap(search.getValue("bounds"), boundsPath)
+                rejectUnknown(bounds, setOf("min-x", "max-x", "min-z", "max-z"), boundsPath)
+                PersonalTreasureMapSearchPolicy(
+                    server = server,
+                    world = world,
+                    bounds = PersonalTreasureMapBounds(
+                        signedInteger(bounds.required("min-x", boundsPath), "$boundsPath.min-x"),
+                        signedInteger(bounds.required("max-x", boundsPath), "$boundsPath.max-x"),
+                        signedInteger(bounds.required("min-z", boundsPath), "$boundsPath.min-z"),
+                        signedInteger(bounds.required("max-z", boundsPath), "$boundsPath.max-z"),
+                    ),
+                    minDistance = integer(search.required("min-distance", "$path.search"), "$path.search.min-distance"),
+                )
+            } else {
+                require("min-distance" !in search) { "$path.search.min-distance requires bounds" }
+                PersonalTreasureMapSearchPolicy(
+                    server,
+                    world,
+                    integer(search.required("radius", "$path.search"), "$path.search.radius"),
+                )
+            }
         } else {
             // Older authored configs carried Spawn coordinates. Validate the shape, then migrate to Survival search.
             val locations = map.required("destinations", path) as? List<*>
@@ -263,6 +291,7 @@ class RewardCatalogModuleConfig(private val config: Config) {
             requiredId(reward["category"], "$path.reward.category", ID),
             requiredId(reward["entry"], "$path.reward.entry", ID),
             searchPolicy,
+            prizeRolls = prizeRolls,
         )
     }
 
@@ -272,6 +301,9 @@ class RewardCatalogModuleConfig(private val config: Config) {
             val map = entry.source as? RewardCatalogSource.PersonalMap ?: return@forEach
             val target = entries[map.rewardCategoryId to map.rewardEntryId]
                 ?: throw invalid("personal-map.${entry.id}", "unknown prize '${map.rewardCategoryId}/${map.rewardEntryId}'")
+            require(map.prizeRolls == 1 || target.source is RewardCatalogSource.Treasure) {
+                "Personal map '${entry.id}' may roll more than once only from a treasure source"
+            }
             require(target.source is RewardCatalogSource.Treasure || target.source is RewardCatalogSource.Mount ||
                 target.source is RewardCatalogSource.FurniturePackage || target.source is RewardCatalogSource.DungeonCase ||
                 target.source is RewardCatalogSource.TravelAnchors || target.source is RewardCatalogSource.ParticlePreset) {
@@ -364,6 +396,15 @@ class RewardCatalogModuleConfig(private val config: Config) {
         val long = value.toLong()
         require(value.toDouble() == long.toDouble() && long in 0..Int.MAX_VALUE) {
             "$path must be a non-negative integer"
+        }
+        return long.toInt()
+    }
+
+    private fun signedInteger(raw: Any?, path: String): Int {
+        val value = raw as? Number ?: throw invalid(path, "expected integer")
+        val long = value.toLong()
+        require(value.toDouble() == long.toDouble() && long in Int.MIN_VALUE..Int.MAX_VALUE) {
+            "$path must be an integer"
         }
         return long.toInt()
     }

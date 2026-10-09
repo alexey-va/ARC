@@ -7,23 +7,79 @@ import ru.arc.onetime.OneTimeUseFingerprint
 import java.util.Collections
 import java.util.UUID
 
-/** Bounded area used to pick a personal cache from already loaded Survival terrain. */
+/** Continuous min-inclusive/max-exclusive rectangle sampled at block centers. */
+data class PersonalTreasureMapBounds(
+    val minX: Int,
+    val maxX: Int,
+    val minZ: Int,
+    val maxZ: Int,
+) {
+    init {
+        require(minX in -MAX_COORDINATE..MAX_COORDINATE && maxX in -MAX_COORDINATE..MAX_COORDINATE) {
+            "Search X bounds are outside supported world coordinates"
+        }
+        require(minZ in -MAX_COORDINATE..MAX_COORDINATE && maxZ in -MAX_COORDINATE..MAX_COORDINATE) {
+            "Search Z bounds are outside supported world coordinates"
+        }
+        require(minX < maxX && minZ < maxZ) { "Search bounds must have positive width and height" }
+    }
+
+    fun contains(x: Double, z: Double): Boolean =
+        x >= minX && x < maxX && z >= minZ && z < maxZ
+
+    companion object {
+        private const val MAX_COORDINATE = 30_000_000
+    }
+}
+
+/** Bounded area used to pick a personal cache from already generated Survival terrain. */
 data class PersonalTreasureMapSearchPolicy(
     val server: String,
     val world: String,
-    val radius: Int,
+    val radius: Int? = null,
+    val bounds: PersonalTreasureMapBounds? = null,
+    val minDistance: Int = if (bounds == null) LEGACY_MIN_TARGET_DISTANCE else EXPEDITION_MIN_TARGET_DISTANCE,
 ) {
     init {
         require(server.length in 1..48 && server.matches(Regex("[A-Za-z0-9_.-]+"))) { "Invalid search server" }
         require(world.length in 1..128 && world.matches(Regex("[A-Za-z0-9_.:-]+"))) { "Invalid search world" }
-        require(radius in MIN_RADIUS..MAX_RADIUS) { "Search radius must be in $MIN_RADIUS..$MAX_RADIUS" }
+        require((radius == null) xor (bounds == null)) { "Search requires exactly one of radius or bounds" }
+        if (radius != null) {
+            require(radius in MIN_RADIUS..MAX_RADIUS) { "Search radius must be in $MIN_RADIUS..$MAX_RADIUS" }
+            require(minDistance in 1..radius) { "Search minimum distance must be in 1..radius" }
+        } else {
+            val searchBounds = requireNotNull(bounds)
+            val maxDistance = kotlin.math.hypot(
+                (searchBounds.maxX.toLong() - searchBounds.minX).toDouble(),
+                (searchBounds.maxZ.toLong() - searchBounds.minZ).toDouble(),
+            )
+            require(minDistance in 1..MAX_MIN_DISTANCE && minDistance.toDouble() <= maxDistance) {
+                "Search minimum distance must fit inside configured bounds"
+            }
+        }
     }
+
+    val targetPolicyFingerprint: OneTimeUseFingerprint = OneTimeUseFingerprint.sha256Fields(
+        "personal-treasure-map-target-policy-v1",
+        server,
+        world,
+        radius?.toString() ?: "bounds",
+        bounds?.minX?.toString() ?: "",
+        bounds?.maxX?.toString() ?: "",
+        bounds?.minZ?.toString() ?: "",
+        bounds?.maxZ?.toString() ?: "",
+        minDistance.toString(),
+    )
+
+    fun containsTarget(x: Double, z: Double): Boolean = bounds?.contains(x, z) ?: true
 
     companion object {
         const val MIN_RADIUS = 16
         const val MAX_RADIUS = 256
+        const val LEGACY_MIN_TARGET_DISTANCE = 16
+        const val EXPEDITION_MIN_TARGET_DISTANCE = 3_000
+        const val MAX_MIN_DISTANCE = 30_000_000
         const val CANDIDATE_LIMIT = 64
-        const val MIN_TARGET_DISTANCE = 16
         const val TARGET_HINT = "Отметка тайника"
     }
 }
@@ -56,6 +112,7 @@ class PersonalTreasureMapDefinition(
     val prizeSourceRef: String,
     destinations: List<PersonalTreasureMapDestination>,
     val searchPolicy: PersonalTreasureMapSearchPolicy? = null,
+    val prizeRolls: Int = 1,
     identityFingerprintOverride: OneTimeUseFingerprint? = null,
     /** One previously issued route whose target may be discarded by an explicit route migration. */
     val legacyTargetPolicy: PersonalTreasureMapSearchPolicy? = null,
@@ -66,24 +123,14 @@ class PersonalTreasureMapDefinition(
     init {
         require(id.length in 1..128 && id.matches(Regex("[A-Za-z0-9_.:-]+"))) { "Invalid map definition id" }
         require(PhysicalRewardVoucher.isValidKey(prizeSourceRef)) { "Invalid prize source reference" }
+        require(prizeRolls in 1..MAX_PRIZE_ROLLS) { "Personal map prize rolls must be in 1..$MAX_PRIZE_ROLLS" }
         require(this.destinations.size <= MAX_DESTINATIONS && (this.destinations.isNotEmpty() || searchPolicy != null)) {
             "A treasure map requires a search policy or 1..$MAX_DESTINATIONS legacy destinations"
         }
         require(legacyTargetPolicy == null || searchPolicy != null) {
             "A legacy target policy requires a current search policy"
         }
-        fingerprint = identityFingerprintOverride ?: if (searchPolicy == null) {
-            legacyFingerprint(id, prizeSourceRef, this.destinations)
-        } else {
-            OneTimeUseFingerprint.sha256Fields(
-                "personal-treasure-map-v2",
-                id,
-                prizeSourceRef,
-                searchPolicy.server,
-                searchPolicy.world,
-                searchPolicy.radius.toString(),
-            )
-        }
+        fingerprint = identityFingerprintOverride ?: fingerprintFor(id, prizeSourceRef, this.destinations, searchPolicy, prizeRolls)
     }
 
     fun destinationIndex(voucherId: UUID): Int =
@@ -95,6 +142,37 @@ class PersonalTreasureMapDefinition(
 
     companion object {
         const val MAX_DESTINATIONS = 64
+        const val MAX_PRIZE_ROLLS = 8
+
+        private fun fingerprintFor(
+            id: String,
+            prizeSourceRef: String,
+            destinations: List<PersonalTreasureMapDestination>,
+            searchPolicy: PersonalTreasureMapSearchPolicy?,
+            prizeRolls: Int,
+        ): OneTimeUseFingerprint = when {
+            searchPolicy == null && prizeRolls == 1 -> legacyFingerprint(id, prizeSourceRef, destinations)
+            searchPolicy == null -> OneTimeUseFingerprint.sha256Fields(
+                "personal-treasure-map-v2",
+                legacyFingerprint(id, prizeSourceRef, destinations).sha256,
+                prizeRolls.toString(),
+            )
+            searchPolicy.bounds == null && prizeRolls == 1 -> OneTimeUseFingerprint.sha256Fields(
+                "personal-treasure-map-v2",
+                id,
+                prizeSourceRef,
+                searchPolicy.server,
+                searchPolicy.world,
+                requireNotNull(searchPolicy.radius).toString(),
+            )
+            else -> OneTimeUseFingerprint.sha256Fields(
+                "personal-treasure-map-v3",
+                id,
+                prizeSourceRef,
+                prizeRolls.toString(),
+                searchPolicy.targetPolicyFingerprint.sha256,
+            )
+        }
 
         fun legacyFingerprint(
             id: String,
@@ -126,10 +204,11 @@ data class PersonalTreasureMapIdentity(
     val mapViewWorld: String? = null,
     val searchGeneration: Int = 0,
     val target: PersonalTreasureMapDestination? = null,
+    val targetPolicyFingerprint: String? = null,
 ) {
     companion object {
-        const val VERSION = "3"
-        private val READABLE_VERSIONS = setOf("1", "2", VERSION)
+        const val VERSION = "4"
+        private val READABLE_VERSIONS = setOf("1", "2", "3", VERSION)
         val versionKey = org.bukkit.NamespacedKey("arc", "personal_treasure_map_version")
         val ownerKey = org.bukkit.NamespacedKey("arc", "personal_treasure_map_owner")
         val definitionKey = org.bukkit.NamespacedKey("arc", "personal_treasure_map_definition")
@@ -141,6 +220,7 @@ data class PersonalTreasureMapIdentity(
         val targetXKey = org.bukkit.NamespacedKey("arc", "personal_treasure_map_target_x")
         val targetYKey = org.bukkit.NamespacedKey("arc", "personal_treasure_map_target_y")
         val targetZKey = org.bukkit.NamespacedKey("arc", "personal_treasure_map_target_z")
+        val targetPolicyFingerprintKey = org.bukkit.NamespacedKey("arc", "personal_treasure_map_target_policy")
         val mapViewServerKey = org.bukkit.NamespacedKey("arc", "personal_treasure_map_view_server")
         val mapViewIdKey = org.bukkit.NamespacedKey("arc", "personal_treasure_map_view_id")
         val mapViewWorldKey = org.bukkit.NamespacedKey("arc", "personal_treasure_map_view_world")
@@ -164,15 +244,20 @@ data class PersonalTreasureMapIdentity(
             val viewId = data.get(mapViewIdKey, PersistentDataType.INTEGER)?.takeIf { it >= 0 }
             if ((viewServer == null) != (viewId == null)) return null
             val rawViewWorld = data.get(mapViewWorldKey, PersistentDataType.STRING)
-            val viewWorld = if (version == VERSION && viewServer != null) {
+            val versionHasViewWorld = version == "3" || version == VERSION
+            val viewWorld = if (versionHasViewWorld && viewServer != null) {
                 rawViewWorld?.let { raw ->
                     runCatching { UUID.fromString(raw).takeIf { it.toString() == raw }?.toString() }.getOrNull()
                 } ?: return null
             } else null
-            if (version == VERSION && (viewServer == null) != (rawViewWorld == null)) return null
+            if (versionHasViewWorld && (viewServer == null) != (rawViewWorld == null)) return null
             val searchGeneration = if (version != "1") {
                 data.get(searchGenerationKey, PersistentDataType.INTEGER)?.takeIf { it >= 0 } ?: return null
             } else 0
+            val targetPolicyFingerprint = if (data.has(targetPolicyFingerprintKey)) {
+                data.get(targetPolicyFingerprintKey, PersistentDataType.STRING)
+                    ?.let { runCatching { OneTimeUseFingerprint.parse(it).sha256 }.getOrNull() } ?: return null
+            } else null
             val targetKeys = listOf(targetServerKey, targetWorldKey, targetXKey, targetYKey, targetZKey)
             val hasTarget = targetKeys.any(data::has)
             val target = if (hasTarget) {
@@ -190,7 +275,7 @@ data class PersonalTreasureMapIdentity(
             } else null
             return PersonalTreasureMapIdentity(
                 voucherId, owner, definitionId, fingerprint, destinationIndex, viewServer, viewId, viewWorld,
-                searchGeneration, target,
+                searchGeneration, target, targetPolicyFingerprint,
             )
         }
 
@@ -227,4 +312,5 @@ data class PersonalTreasureMapGuidance(
     val targetSelected: Boolean,
     val ownerBound: Boolean = false,
     val safetyUnavailable: Boolean = false,
+    val searching: Boolean = false,
 )

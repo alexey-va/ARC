@@ -9,8 +9,10 @@ import io.mockk.mockk
 import io.mockk.runs
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+import org.bukkit.Chunk
 import org.bukkit.Location
 import org.bukkit.Material
+import org.bukkit.World
 import org.bukkit.map.MapRenderer
 import org.bukkit.map.MapView
 import org.bukkit.persistence.PersistentDataType
@@ -24,6 +26,8 @@ import ru.arc.onetime.OneTimeUseFingerprint
 import ru.arc.paper.testing.MockBukkitTestRuntime
 import ru.arc.hooks.worldguard.WGHook
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CompletionStage
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.floor
 
@@ -174,6 +178,174 @@ class PersonalTreasureMapControllerTest : StringSpec({
         }
     }
 
+    "a late completion from an old request cannot cancel the player's replacement search" {
+        try {
+            MockBukkitTestRuntime.open().use { paper ->
+                val plugin = paper.createSimplePlugin("PersonalMapStaleSearchTest")
+                val scheduler = TestTaskScheduler()
+                val player = paper.addPlayer("map-stale-search")
+                player.teleport(Location(player.world, 0.5, 64.0, 0.5))
+                val spec = testMapSpec()
+                val definition = testSearchDefinition(player.world.name)
+                val firstVoucher = PhysicalRewardVoucher.mark(
+                    spec.preview.clone(), PhysicalRewardVoucherIdentity(UUID.randomUUID(), spec.key, spec.fingerprint),
+                )
+                val replacementVoucherId = UUID.randomUUID()
+                val replacementVoucher = PhysicalRewardVoucher.mark(
+                    spec.preview.clone(), PhysicalRewardVoucherIdentity(replacementVoucherId, spec.key, spec.fingerprint),
+                )
+                val firstFuture = CompletableFuture<Chunk?>()
+                val replacementFuture = CompletableFuture<Chunk?>()
+                val requested = mutableListOf<CompletableFuture<Chunk?>>()
+                val controller = newController(
+                    plugin, scheduler, RecordingPersonalTreasureMapMarker(), spec, definition,
+                    asyncChunkLoader = { _, _, _ ->
+                        val future = if (requested.isEmpty()) firstFuture else replacementFuture
+                        requested += future
+                        future
+                    },
+                    currentServer = { "survival" },
+                )
+                try {
+                    player.inventory.setItemInMainHand(firstVoucher)
+                    controller.beforeUse(player, player.inventory.itemInMainHand) shouldBe
+                        PersonalTreasureMapUseDecision.OPEN_MAP
+                    requested.size shouldBe 1
+
+                    // Replacing the held voucher retires request A and starts request B for this player.
+                    player.inventory.setItemInMainHand(replacementVoucher)
+                    controller.beforeUse(player, player.inventory.itemInMainHand) shouldBe
+                        PersonalTreasureMapUseDecision.OPEN_MAP
+                    requested.size shouldBe 2
+                    controller.guidance(player)?.searching shouldBe true
+
+                    // A finishes after B has become current. Its stale callback must leave B registered.
+                    firstFuture.complete(null)
+                    scheduler.executeImmediate()
+                    controller.identity(player.inventory.itemInMainHand)?.target shouldBe null
+                    controller.guidance(player)?.searching shouldBe true
+
+                    val candidate = personalTreasureMapCandidateOrder(
+                        replacementVoucherId, 0, centerX = 0, centerZ = 0, radius = 32,
+                    ).first()
+                    prepareCandidateSurface(player.world, candidate.first, candidate.second)
+                    val replacementChunk = player.world.getChunkAt(candidate.first shr 4, candidate.second shr 4)
+                    replacementFuture.complete(replacementChunk)
+                    scheduler.executeImmediate()
+
+                    val completed = controller.identity(player.inventory.itemInMainHand).shouldNotBeNull()
+                    completed.voucherId shouldBe replacementVoucherId
+                    completed.ownerId shouldBe player.uniqueId
+                    completed.searchGeneration shouldBe 1
+                    completed.target.shouldNotBeNull().let { target ->
+                        target.world shouldBe player.world.name
+                        target.x shouldBe candidate.first + 0.5
+                        target.z shouldBe candidate.second + 0.5
+                    }
+                    controller.guidance(player)?.searching shouldBe false
+                } finally {
+                    controller.close()
+                }
+            }
+        } catch (cause: Throwable) {
+            throw AssertionError("Late personal-map search completion test aborted or failed", cause)
+        }
+    }
+
+    "missing pre-generated chunks are skipped within the candidate cap without changing the voucher" {
+        try {
+            MockBukkitTestRuntime.open().use { paper ->
+                val plugin = paper.createSimplePlugin("PersonalMapUngeneratedChunkTest")
+                val scheduler = TestTaskScheduler()
+                val player = paper.addPlayer("map-ungenerated")
+                player.teleport(Location(player.world, 0.5, 64.0, 0.5))
+                val spec = testMapSpec()
+                val definition = testSearchDefinition(player.world.name)
+                val voucherId = UUID.randomUUID()
+                val voucher = PhysicalRewardVoucher.mark(
+                    spec.preview.clone(), PhysicalRewardVoucherIdentity(voucherId, spec.key, spec.fingerprint),
+                )
+                val candidates = personalTreasureMapCandidateOrder(voucherId, 0, 0, 0, 32)
+                val chunksBefore = candidates.map { (x, z) ->
+                    (Pair(x shr 4, z shr 4)) to player.world.isChunkLoaded(x shr 4, z shr 4)
+                }.toMap()
+                var attempts = 0
+                val controller = newController(
+                    plugin, scheduler, RecordingPersonalTreasureMapMarker(), spec, definition,
+                    asyncChunkLoader = { _, _, _ ->
+                        attempts++
+                        CompletableFuture.completedFuture(null)
+                    },
+                    currentServer = { "survival" },
+                )
+                try {
+                    player.inventory.setItemInMainHand(voucher.clone())
+                    controller.beforeUse(player, player.inventory.itemInMainHand) shouldBe
+                        PersonalTreasureMapUseDecision.OPEN_MAP
+                    repeat(100) { scheduler.executeImmediate() }
+
+                    attempts shouldBe PersonalTreasureMapSearchPolicy.CANDIDATE_LIMIT
+                    val identity = controller.identity(player.inventory.itemInMainHand).shouldNotBeNull()
+                    identity.voucherId shouldBe voucherId
+                    identity.ownerId shouldBe player.uniqueId
+                    identity.searchGeneration shouldBe 1
+                    identity.target shouldBe null
+                    PhysicalRewardVoucher.identity(player.inventory.itemInMainHand)?.id shouldBe voucherId
+                    candidates.map { (x, z) ->
+                        (Pair(x shr 4, z shr 4)) to player.world.isChunkLoaded(x shr 4, z shr 4)
+                    }.toMap() shouldBe chunksBefore
+                } finally {
+                    controller.close()
+                }
+            }
+        } catch (cause: Throwable) {
+            throw AssertionError("Generated-only map chunk probe test aborted or failed", cause)
+        }
+    }
+
+    "an async chunk probe expires and its late result cannot rewrite the retained voucher" {
+        try {
+            MockBukkitTestRuntime.open().use { paper ->
+                val plugin = paper.createSimplePlugin("PersonalMapSearchTimeoutTest")
+                val scheduler = TestTaskScheduler()
+                val player = paper.addPlayer("map-search-timeout")
+                player.teleport(Location(player.world, 0.5, 64.0, 0.5))
+                val spec = testMapSpec()
+                val definition = testSearchDefinition(player.world.name)
+                val voucherId = UUID.randomUUID()
+                val voucher = PhysicalRewardVoucher.mark(
+                    spec.preview.clone(), PhysicalRewardVoucherIdentity(voucherId, spec.key, spec.fingerprint),
+                )
+                val chunkFuture = CompletableFuture<Chunk?>()
+                val controller = newController(
+                    plugin, scheduler, RecordingPersonalTreasureMapMarker(), spec, definition,
+                    asyncChunkLoader = { _, _, _ -> chunkFuture },
+                    currentServer = { "survival" },
+                )
+                try {
+                    player.inventory.setItemInMainHand(voucher.clone())
+                    controller.beforeUse(player, player.inventory.itemInMainHand) shouldBe
+                        PersonalTreasureMapUseDecision.OPEN_MAP
+                    scheduler.tick(20L * 30L)
+
+                    val expired = controller.identity(player.inventory.itemInMainHand).shouldNotBeNull()
+                    expired.voucherId shouldBe voucherId
+                    expired.searchGeneration shouldBe 1
+                    expired.target shouldBe null
+                    PhysicalRewardVoucher.identity(player.inventory.itemInMainHand)?.id shouldBe voucherId
+
+                    chunkFuture.complete(null)
+                    scheduler.executeImmediate()
+                    controller.identity(player.inventory.itemInMainHand) shouldBe expired
+                } finally {
+                    controller.close()
+                }
+            }
+        } catch (cause: Throwable) {
+            throw AssertionError("Personal-map search timeout test aborted or failed", cause)
+        }
+    }
+
     "claim preflight rechecks server and location after movement without changing voucher identity" {
         try {
             MockBukkitTestRuntime.open().use { paper ->
@@ -202,6 +374,7 @@ class PersonalTreasureMapControllerTest : StringSpec({
                 // First right-click selects a safe Survival target and never claims the reward.
                 controller.beforeUse(player, player.inventory.itemInMainHand) shouldBe
                     PersonalTreasureMapUseDecision.OPEN_MAP
+                flushMapSearch(scheduler)
                 val bound = player.inventory.itemInMainHand
                 val activated = controller.identity(bound).shouldNotBeNull()
                 activated.ownerId shouldBe player.uniqueId
@@ -274,11 +447,17 @@ class PersonalTreasureMapControllerTest : StringSpec({
                     scheduler = scheduler,
                     marker = marker,
                     mapViewFactory = { testMapView() },
+                    asyncChunkLoader = { world, chunkX, chunkZ ->
+                        CompletableFuture.completedFuture(
+                            if (world.isChunkLoaded(chunkX, chunkZ)) world.getChunkAt(chunkX, chunkZ) else null,
+                        )
+                    },
                 )
                 try {
                     player.inventory.setItemInMainHand(voucher)
                     controller.beforeUse(player, player.inventory.itemInMainHand) shouldBe
                         PersonalTreasureMapUseDecision.OPEN_MAP
+                    repeat(100) { scheduler.executeImmediate() }
                     val identity = controller.identity(player.inventory.itemInMainHand).shouldNotBeNull()
                     identity.ownerId shouldBe player.uniqueId
                     identity.searchGeneration shouldBe 1
@@ -390,13 +569,23 @@ class PersonalTreasureMapControllerTest : StringSpec({
                 }
                 val firstCandidate = personalTreasureMapCandidateOrder(voucherId, 0, 0, 0, 32).first()
                 prepareCandidateSurface(player.world, firstCandidate.first, firstCandidate.second)
+                var probeRequests = 0
                 val controller = newController(
-                    plugin, scheduler, marker, spec, definition, currentServer = { "survival" },
+                    plugin, scheduler, marker, spec, definition,
+                    currentServer = { "survival" },
+                    asyncChunkLoader = { world, chunkX, chunkZ ->
+                        probeRequests++
+                        CompletableFuture.completedFuture(
+                            if (world.isChunkLoaded(chunkX, chunkZ)) world.getChunkAt(chunkX, chunkZ) else null,
+                        )
+                    },
                 )
                 try {
                     player.inventory.setItemInMainHand(voucher)
                     controller.beforeUse(player, player.inventory.itemInMainHand) shouldBe
                         PersonalTreasureMapUseDecision.OPEN_MAP
+                    (probeRequests > 0) shouldBe true
+                    flushMapSearch(scheduler)
                     val activated = controller.identity(player.inventory.itemInMainHand).shouldNotBeNull()
                     activated.voucherId shouldBe voucherId
                     activated.ownerId shouldBe player.uniqueId
@@ -453,6 +642,7 @@ class PersonalTreasureMapControllerTest : StringSpec({
                     player.inventory.setItemInMainHand(voucher.clone())
                     controller.beforeUse(player, player.inventory.itemInMainHand) shouldBe
                         PersonalTreasureMapUseDecision.OPEN_MAP
+                    flushMapSearch(scheduler)
                     val activated = controller.identity(player.inventory.itemInMainHand).shouldNotBeNull()
                     activated.ownerId shouldBe player.uniqueId
                     activated.voucherId shouldBe voucherId
@@ -475,6 +665,7 @@ class PersonalTreasureMapControllerTest : StringSpec({
                     // This is the post-async-claim check: the old target became private, so no prize is applied.
                     controller.preflight(player, PhysicalRewardVoucher.identity(voucher)!!, spec) shouldBe
                         PersonalTreasureMapFailure.TARGET_CHANGED
+                    flushMapSearch(scheduler)
                     val rerouted = controller.identity(player.inventory.itemInMainHand).shouldNotBeNull()
                     rerouted.voucherId shouldBe voucherId
                     rerouted.ownerId shouldBe player.uniqueId
@@ -527,6 +718,20 @@ class PersonalTreasureMapControllerTest : StringSpec({
             val distanceSquared = x.toDouble() * x + z.toDouble() * z
             distanceSquared in 16.0 * 16.0..96.0 * 96.0
         } shouldBe true
+
+        val bounds = PersonalTreasureMapBounds(-9650, 9650, -9650, 9650)
+        bounds.contains(-9650.0, 0.0) shouldBe true
+        bounds.contains(9649.5, 0.0) shouldBe true
+        bounds.contains(9650.0, 0.0) shouldBe false
+        val expedition = personalTreasureMapCandidateOrder(
+            id, 3, bounds, minDistance = 3000, originX = 0.5, originZ = 0.5,
+        )
+        expedition.size shouldBe PersonalTreasureMapSearchPolicy.CANDIDATE_LIMIT
+        expedition.distinct().size shouldBe expedition.size
+        expedition.all { (x, z) ->
+            bounds.contains(x + 0.5, z + 0.5) &&
+                (x + 0.5 - 0.5) * (x + 0.5 - 0.5) + (z + 0.5 - 0.5) * (z + 0.5 - 0.5) >= 3000.0 * 3000.0
+        } shouldBe true
     }
 })
 
@@ -538,6 +743,11 @@ private fun newController(
     definition: PersonalTreasureMapDefinition,
     isUnclaimed: (Location) -> Boolean? = { true },
     currentServer: () -> String = { "spawn" },
+    asyncChunkLoader: (World, Int, Int) -> CompletionStage<Chunk?> = { world, chunkX, chunkZ ->
+        CompletableFuture.completedFuture(
+            if (world.isChunkLoaded(chunkX, chunkZ)) world.getChunkAt(chunkX, chunkZ) else null,
+        )
+    },
 ) = PersonalTreasureMapController(
     plugin = plugin,
     resolveSpec = { key -> spec.takeIf { it.key == key } },
@@ -546,8 +756,13 @@ private fun newController(
     scheduler = scheduler,
     marker = marker,
     mapViewFactory = { testMapView() },
+    asyncChunkLoader = asyncChunkLoader,
     isUnclaimed = isUnclaimed,
 )
+
+private fun flushMapSearch(scheduler: TestTaskScheduler) {
+    repeat(100) { scheduler.executeImmediate() }
+}
 
 private val nextTestMapViewId = AtomicInteger(1_000_000)
 

@@ -39,6 +39,7 @@ sealed interface RewardCatalogSource {
         val rewardCategoryId: String,
         val rewardEntryId: String,
         val searchPolicy: PersonalTreasureMapSearchPolicy,
+        val prizeRolls: Int = 1,
         /** Retained only while reading older authored configs; new archives store the dynamic policy. */
         val legacyDestinations: List<PersonalTreasureMapDestination> = emptyList(),
     ) : RewardCatalogSource

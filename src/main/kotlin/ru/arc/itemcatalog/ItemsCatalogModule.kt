@@ -263,6 +263,7 @@ object ItemsCatalogModule : PluginModule {
         val message = when {
             !guidance.onDestinationServer || !guidance.onDestinationWorld -> "<#e8dfd2>Тайник ищется в мире «Новые биомы» на Survival. Возьмите карту туда."
             guidance.safetyUnavailable -> "<#e9c46a>Не удалось проверить безопасность этой точки. Карта сохранена — попробуйте позже."
+            !guidance.targetSelected && guidance.searching -> "<#e8dfd2>Ищем безопасный тайник в исследованной части мира…"
             !guidance.targetSelected && guidance.ownerBound -> "<#e9c46a>Безопасная точка пока не найдена. Нажмите ПКМ позже, чтобы повторить поиск."
             !guidance.targetSelected -> "<#e8dfd2>ПКМ в мире «Новые биомы» на Survival — закрепить карту и найти безопасное место."
             guidance.withinClaimRadius -> "<#9bd48d>Тайник здесь · ПКМ — забрать находку"
@@ -276,8 +277,8 @@ object ItemsCatalogModule : PluginModule {
         PersonalTreasureMapFailure.WRONG_SERVER,
         PersonalTreasureMapFailure.WRONG_WORLD -> "<#e8dfd2>Ваш тайник находится в мире «Новые биомы» на Survival. Возьмите карту туда."
         PersonalTreasureMapFailure.TOO_FAR -> "<#e9c46a>Подойдите к тайнику ближе и нажмите ПКМ."
-        PersonalTreasureMapFailure.TARGET_CHANGED -> "<#e9c46a>Точка тайника стала защищённой. Карта выбрала новое безопасное место."
-        PersonalTreasureMapFailure.NO_SAFE_TARGET -> "<#e9c46a>Поблизости не найдено безопасного места. Попробуйте ещё раз позже."
+        PersonalTreasureMapFailure.TARGET_CHANGED -> "<#e9c46a>Точка тайника стала защищённой. Карта ищет новое безопасное место."
+        PersonalTreasureMapFailure.NO_SAFE_TARGET -> "<#e9c46a>Не удалось найти безопасное место для тайника. Попробуйте позже."
         PersonalTreasureMapFailure.SAFETY_UNAVAILABLE -> "<#e9c46a>Не удалось проверить безопасность точки. Попробуйте позже; карта не потрачена."
         PersonalTreasureMapFailure.INVALID_OR_STALE -> "<#e9c46a>Эта карта сейчас недоступна."
     }

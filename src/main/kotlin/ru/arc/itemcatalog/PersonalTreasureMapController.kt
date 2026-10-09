@@ -2,9 +2,11 @@ package ru.arc.itemcatalog
 
 import net.kyori.adventure.text.Component
 import org.bukkit.Bukkit
+import org.bukkit.Chunk
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.Tag
+import org.bukkit.World
 import org.bukkit.entity.Display
 import org.bukkit.entity.ItemDisplay
 import org.bukkit.entity.Player
@@ -26,9 +28,11 @@ import org.joml.Quaternionf
 import org.joml.Vector3f
 import org.bukkit.util.Transformation
 import ru.arc.ARC
+import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.ScheduledTask
 import ru.arc.core.TaskScheduler
 import ru.arc.core.Tasks
+import ru.arc.core.whenCompleteSync
 import ru.arc.hooks.HookRegistry
 import ru.arc.onetime.OneTimeUseFingerprint
 import ru.arc.paper.display.PacketItemDisplay
@@ -39,6 +43,7 @@ import java.awt.image.BufferedImage
 import java.util.Collections
 import java.util.UUID
 import java.util.WeakHashMap
+import java.util.concurrent.CompletionStage
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -81,6 +86,9 @@ class PersonalTreasureMapController internal constructor(
     private val scheduler: TaskScheduler = Tasks.scheduler,
     private val marker: PersonalTreasureMapMarker = PacketPersonalTreasureMapMarker(plugin),
     private val mapViewFactory: (org.bukkit.World) -> MapView = Bukkit::createMap,
+    private val asyncChunkLoader: (World, Int, Int) -> CompletionStage<Chunk?> = { world, chunkX, chunkZ ->
+        world.getChunkAtAsync(chunkX, chunkZ, false)
+    },
     private val isUnclaimed: (Location) -> Boolean? = { location ->
         personalTreasureMapLocationUnclaimed(plugin, location)
     },
@@ -95,12 +103,30 @@ class PersonalTreasureMapController internal constructor(
         val destination: PersonalTreasureMapDestination?,
     )
 
+    private data class PendingSearch(
+        val operationId: Long,
+        val playerId: UUID,
+        val voucher: PhysicalRewardVoucherIdentity,
+        val identity: PersonalTreasureMapIdentity,
+        val policy: PersonalTreasureMapSearchPolicy,
+        val worldId: UUID,
+        val originX: Double,
+        val originZ: Double,
+        val candidates: List<Pair<Int, Int>>,
+        val lifecycleToken: LifecycleTaskScope.Token,
+        var timeout: ScheduledTask? = null,
+    )
+
     private val renderStates = ConcurrentHashMap<UUID, PersonalTreasureMapRenderState>()
     private val renderer = PersonalTreasureMapRenderer(renderStates)
     private val markerFailures = mutableSetOf<UUID>()
     private val mapViews = mutableMapOf<MapViewKey, MapView>()
+    private val taskScope = LifecycleTaskScope(scheduler)
+    private val lifecycleToken = taskScope.token()
+    private val pendingSearches = mutableMapOf<UUID, PendingSearch>()
+    private var nextSearchOperationId = 0L
     private var closed = false
-    private var refreshTask: ScheduledTask? = scheduler.runTimer(20L, 20L) { refreshOnlinePlayers() }
+    private var refreshTask: ScheduledTask? = taskScope.runTimer(lifecycleToken, 20L, 20L) { refreshOnlinePlayers() }
 
     init {
         plugin.server.pluginManager.registerEvents(this, plugin)
@@ -131,6 +157,7 @@ class PersonalTreasureMapController internal constructor(
             mapViewWorld = null,
             searchGeneration = 0,
             target = null,
+            targetPolicyFingerprint = definition.searchPolicy?.targetPolicyFingerprint?.sha256,
         )
         val bound = stack.clone()
         bound.editMeta { meta -> writeIdentity(meta.persistentDataContainer, identity) }
@@ -290,7 +317,7 @@ class PersonalTreasureMapController internal constructor(
 
         val destination = resolved.destination
         if (destination == null) {
-            clear(player.uniqueId)
+            clearRenderState(player.uniqueId)
             return
         }
         val correctPlace = currentServer() == destination.server && player.world.name == destination.world
@@ -342,8 +369,15 @@ class PersonalTreasureMapController internal constructor(
         val onServer = currentServer() == targetServer
         val onWorld = onServer && player.world.name == targetWorld
         if (destination == null) {
+            val heldVoucher = PhysicalRewardVoucher.identity(held)
+            val heldIdentity = PersonalTreasureMapIdentity.read(held)
+            val searching = pendingSearches[player.uniqueId]?.let { request ->
+                request.voucher == heldVoucher && request.identity == heldIdentity && pendingStillOwnsMap(player, request)
+            } == true
             return PersonalTreasureMapGuidance(
-                hint, null, null, onServer, onWorld, false, false, ownerBound = resolved != null,
+                hint, null, null, onServer, onWorld, false, false,
+                ownerBound = resolved != null,
+                searching = searching,
             )
         }
         if (!onWorld) {
@@ -373,6 +407,11 @@ class PersonalTreasureMapController internal constructor(
     }
 
     fun clear(playerId: UUID) {
+        cancelPendingSearch(playerId)
+        clearRenderState(playerId)
+    }
+
+    private fun clearRenderState(playerId: UUID) {
         renderStates.remove(playerId)
         marker.clear(playerId)
         markerFailures.remove(playerId)
@@ -383,15 +422,16 @@ class PersonalTreasureMapController internal constructor(
 
     @EventHandler
     fun onWorldChange(event: PlayerChangedWorldEvent) {
+        cancelPendingSearch(event.player.uniqueId)
         clear(event.player.uniqueId)
-        scheduler.runLater(1L) {
+        taskScope.runLater(lifecycleToken, 1L) {
             plugin.server.getPlayer(event.player.uniqueId)?.let(::refreshHeldMap)
         }
     }
 
     @EventHandler
     fun onItemHeld(event: PlayerItemHeldEvent) {
-        scheduler.runLater(1L) {
+        taskScope.runLater(lifecycleToken, 1L) {
             plugin.server.getPlayer(event.player.uniqueId)?.let(::refreshHeldMap)
         }
     }
@@ -401,6 +441,9 @@ class PersonalTreasureMapController internal constructor(
         closed = true
         refreshTask?.cancel()
         refreshTask = null
+        taskScope.close()
+        pendingSearches.values.toList().forEach { it.timeout?.cancel() }
+        pendingSearches.clear()
         org.bukkit.event.HandlerList.unregisterAll(this)
         renderStates.keys.toList().forEach(::clear)
         marker.close()
@@ -446,22 +489,51 @@ class PersonalTreasureMapController internal constructor(
     ): Boolean {
         val targetMatchesPolicy = identity.target?.let { target ->
             val policy = definition.searchPolicy
-            (policy != null && target.server == policy.server && target.world == policy.world) ||
-                definition.legacyTargetPolicy?.let { legacy ->
-                    target.server == legacy.server && target.world == legacy.world
-                } == true
+            val currentTarget = policy != null && target.server == policy.server && target.world == policy.world &&
+                policy.containsTarget(target.x, target.z)
+            val legacy = definition.legacyTargetPolicy
+            val legacyTarget = legacy != null && target.server == legacy.server && target.world == legacy.world
+            currentTarget || legacyTarget
         } ?: true
+        val currentPolicyFingerprint = definition.searchPolicy?.targetPolicyFingerprint?.sha256
+        val legacyPolicyFingerprint = definition.legacyTargetPolicy?.targetPolicyFingerprint?.sha256
+        val targetPolicyMarkerMatches = when (identity.targetPolicyFingerprint) {
+            null -> true // v1-v3 maps predate the independent target-policy marker.
+            currentPolicyFingerprint -> identity.target == null || targetMatchesCurrentPolicy(identity, definition)
+            legacyPolicyFingerprint -> identity.target == null || targetMatchesLegacyPolicy(identity, definition)
+            else -> false
+        }
         return identity.voucherId == voucherId &&
             identity.definitionId == definition.id &&
             identity.definitionFingerprint == definition.fingerprint &&
             identity.destinationIndex == definition.destinationIndex(voucherId) &&
-            targetMatchesPolicy
+            targetMatchesPolicy && targetPolicyMarkerMatches
+    }
+
+    private fun targetMatchesCurrentPolicy(
+        identity: PersonalTreasureMapIdentity,
+        definition: PersonalTreasureMapDefinition,
+    ): Boolean {
+        val target = identity.target ?: return true
+        val policy = definition.searchPolicy ?: return false
+        return target.server == policy.server && target.world == policy.world && policy.containsTarget(target.x, target.z)
+    }
+
+    private fun targetMatchesLegacyPolicy(
+        identity: PersonalTreasureMapIdentity,
+        definition: PersonalTreasureMapDefinition,
+    ): Boolean {
+        val target = identity.target ?: return true
+        val legacy = definition.legacyTargetPolicy ?: return false
+        return target.server == legacy.server && target.world == legacy.world
     }
 
     private fun hasLegacyTarget(resolved: ResolvedMap): Boolean {
         val target = resolved.identity.target ?: return false
         val legacy = resolved.definition.legacyTargetPolicy ?: return false
-        return target.server == legacy.server && target.world == legacy.world
+        val current = resolved.definition.searchPolicy ?: return false
+        return target.server == legacy.server && target.world == legacy.world &&
+            resolved.identity.targetPolicyFingerprint != current.targetPolicyFingerprint.sha256
     }
 
     private fun migrateLegacyTarget(
@@ -477,7 +549,13 @@ class PersonalTreasureMapController internal constructor(
 
         val migrated = mainHand.clone().apply {
             editMeta { meta ->
-                writeIdentity(meta.persistentDataContainer, resolved.identity.copy(target = null))
+                writeIdentity(
+                    meta.persistentDataContainer,
+                    resolved.identity.copy(
+                        target = null,
+                        targetPolicyFingerprint = resolved.definition.searchPolicy?.targetPolicyFingerprint?.sha256,
+                    ),
+                )
             }
         }
         player.inventory.setItemInMainHand(migrated)
@@ -491,7 +569,7 @@ class PersonalTreasureMapController internal constructor(
     private fun isSearchLocation(player: Player, policy: PersonalTreasureMapSearchPolicy): Boolean =
         currentServer() == policy.server && player.world.name == policy.world
 
-    /** Searches a fixed number of points in loaded chunks only; each click is one bounded server-thread slice. */
+    /** Starts one bounded asynchronous probe; terrain and protection reads happen on the server thread. */
     private fun selectOrRefreshTarget(
         player: Player,
         resolved: ResolvedMap,
@@ -501,87 +579,289 @@ class PersonalTreasureMapController internal constructor(
         if (!isSearchLocation(player, policy)) return false
         val held = player.inventory.itemInMainHand
         val currentVoucher = PhysicalRewardVoucher.identity(held)
-        val currentIdentity = PersonalTreasureMapIdentity.read(held)
+        var currentIdentity = PersonalTreasureMapIdentity.read(held)
         if (currentVoucher != resolved.voucher || currentIdentity != resolved.identity) return false
-        if (currentIdentity.target != null && !invalidateExisting) return true
+        val currentMarker = policy.targetPolicyFingerprint.sha256
+        if (currentIdentity.target != null && !invalidateExisting && currentIdentity.targetPolicyFingerprint == currentMarker) return true
 
-        val generation = currentIdentity.searchGeneration
-        val target = findSafeTarget(player, policy, generation)
-        val updatedIdentity = currentIdentity.copy(
-            searchGeneration = if (generation == Int.MAX_VALUE) generation else generation + 1,
-            target = target,
+        pendingSearches[player.uniqueId]?.let { pending ->
+            if (pendingStillOwnsMap(player, pending)) return true
+            cancelPendingSearch(player.uniqueId)
+        }
+
+        val normalizedIdentity = currentIdentity.copy(
+            target = null,
+            targetPolicyFingerprint = currentMarker,
         )
+        if (normalizedIdentity != currentIdentity) {
+            if (!replaceHeldIdentity(player, resolved.voucher, currentIdentity, normalizedIdentity)) return false
+        }
+        // decorateMap writes the per-view server/world/id into the map identity. Capture the exact
+        // persisted identity after decoration so the asynchronous callback compares against the
+        // item that is actually in hand (especially for migrated v3 maps without a view binding).
+        val normalizedStack = player.inventory.itemInMainHand
+        if (PhysicalRewardVoucher.identity(normalizedStack) != resolved.voucher) return false
+        val normalizedHeldIdentity = PersonalTreasureMapIdentity.read(normalizedStack) ?: return false
+        if (normalizedHeldIdentity.voucherId != resolved.voucher.id ||
+            normalizedHeldIdentity.ownerId != player.uniqueId ||
+            normalizedHeldIdentity.definitionId != resolved.definition.id ||
+            normalizedHeldIdentity.definitionFingerprint != resolved.definition.fingerprint ||
+            normalizedHeldIdentity.searchGeneration != currentIdentity.searchGeneration ||
+            normalizedHeldIdentity.target != null ||
+            normalizedHeldIdentity.targetPolicyFingerprint != currentMarker
+        ) return false
+        val decoratedStack = decorateMap(player, normalizedStack) ?: return false
+        val latestStack = player.inventory.itemInMainHand
+        if (PhysicalRewardVoucher.identity(latestStack) != resolved.voucher ||
+            PersonalTreasureMapIdentity.read(latestStack) != normalizedHeldIdentity
+        ) return false
+        val decoratedIdentity = PersonalTreasureMapIdentity.read(decoratedStack) ?: return false
+        if (decoratedStack.itemMeta != latestStack.itemMeta) player.inventory.setItemInMainHand(decoratedStack)
+        currentIdentity = decoratedIdentity
+        val origin = player.location
+        val voucherId = resolved.voucher.id
+        val candidates = policy.bounds?.let { bounds ->
+            personalTreasureMapCandidateOrder(
+                voucherId = voucherId,
+                generation = currentIdentity.searchGeneration,
+                bounds = bounds,
+                minDistance = policy.minDistance,
+                originX = origin.x,
+                originZ = origin.z,
+            )
+        } ?: personalTreasureMapCandidateOrder(
+            voucherId = voucherId,
+            generation = currentIdentity.searchGeneration,
+            centerX = floor(origin.x).toInt(),
+            centerZ = floor(origin.z).toInt(),
+            radius = requireNotNull(policy.radius),
+            minDistance = policy.minDistance,
+        )
+        if (candidates.isEmpty()) {
+            completeSearch(player, null, resolved.voucher, currentIdentity, policy)
+            return false
+        }
+
+        val request = PendingSearch(
+            operationId = nextSearchOperationId(),
+            playerId = player.uniqueId,
+            voucher = resolved.voucher,
+            identity = currentIdentity,
+            policy = policy,
+            worldId = player.world.uid,
+            originX = origin.x,
+            originZ = origin.z,
+            candidates = candidates,
+            lifecycleToken = lifecycleToken,
+        )
+        pendingSearches[player.uniqueId] = request
+        request.timeout = taskScope.runLater(lifecycleToken, SEARCH_TIMEOUT_TICKS) {
+            if (pendingSearches[player.uniqueId]?.operationId == request.operationId) {
+                val online = plugin.server.getPlayer(player.uniqueId)
+                if (online != null && pendingStillOwnsMap(online, request)) {
+                    completeSearch(online, null, request.voucher, request.identity, request.policy, request)
+                } else {
+                    cancelPendingSearch(player.uniqueId, request)
+                }
+            }
+        }
+        if (request.timeout == null) {
+            cancelPendingSearch(player.uniqueId)
+            return false
+        }
+        probeCandidate(request, 0)
+        return true
+    }
+
+    private fun probeCandidate(request: PendingSearch, startIndex: Int) {
+        val player = plugin.server.getPlayer(request.playerId)
+        if (player == null || !pendingStillOwnsMap(player, request)) {
+            cancelPendingSearch(request.playerId, request)
+            return
+        }
+        val world = plugin.server.getWorld(request.worldId)
+        if (world == null || world.name != request.policy.world) {
+            completeSearch(player, null, request.voucher, request.identity, request.policy, request)
+            return
+        }
+        var index = startIndex
+        while (index < request.candidates.size) {
+            val (x, z) = request.candidates[index]
+            val candidateIndex = index
+            index++
+            if (!world.worldBorder.isInside(Location(world, x + 0.5, world.minHeight.toDouble(), z + 0.5))) continue
+            val future = runCatching { asyncChunkLoader(world, x shr 4, z shr 4) }.getOrNull() ?: continue
+            future.whenCompleteSync(taskScope, request.lifecycleToken) { chunk, failure ->
+                val online = plugin.server.getPlayer(request.playerId)
+                if (online == null || !pendingStillOwnsMap(online, request)) {
+                    cancelPendingSearch(request.playerId, request)
+                    return@whenCompleteSync
+                }
+                val activeWorld = plugin.server.getWorld(request.worldId)
+                if (activeWorld == null || activeWorld.name != request.policy.world) {
+                    cancelPendingSearch(request.playerId, request)
+                    return@whenCompleteSync
+                }
+                val chunkX = x shr 4
+                val chunkZ = z shr 4
+                if (failure != null || chunk == null || chunk.world.uid != request.worldId ||
+                    chunk.x != chunkX || chunk.z != chunkZ || !activeWorld.isChunkLoaded(chunkX, chunkZ)
+                ) {
+                    probeCandidate(request, candidateIndex + 1)
+                    return@whenCompleteSync
+                }
+                val target = findSafeTargetInLoadedChunk(activeWorld, x, z, request.policy)
+                if (target != null) completeSearch(online, target, request.voucher, request.identity, request.policy, request)
+                else probeCandidate(request, candidateIndex + 1)
+            }
+            return
+        }
+        completeSearch(player, null, request.voucher, request.identity, request.policy, request)
+    }
+
+    private fun findSafeTargetInLoadedChunk(
+        world: World,
+        x: Int,
+        z: Int,
+        policy: PersonalTreasureMapSearchPolicy,
+    ): PersonalTreasureMapDestination? {
+        val chunkX = x shr 4
+        val chunkZ = z shr 4
+        if (!world.isChunkLoaded(chunkX, chunkZ) || !policy.containsTarget(x + 0.5, z + 0.5)) return null
+        val highestY = world.getHighestBlockYAt(x, z)
+        val lowestY = (highestY - SURFACE_LOOKBACK_BLOCKS).coerceAtLeast(world.minHeight)
+        for (groundY in highestY downTo lowestY) {
+            if (!isSafeGround(world.getBlockAt(x, groundY, z).type)) continue
+            val targetY = groundY + 1
+            if (targetY + 1 >= world.maxHeight) continue
+            if (!isSafeAir(world.getBlockAt(x, targetY, z)) || !isSafeAir(world.getBlockAt(x, targetY + 1, z))) continue
+            val location = Location(world, x + 0.5, targetY.toDouble(), z + 0.5)
+            if (!world.worldBorder.isInside(location) || isUnclaimedColumn(world, x, groundY, z) != true) continue
+            return PersonalTreasureMapDestination(
+                policy.server,
+                policy.world,
+                location.x,
+                location.y,
+                location.z,
+                PersonalTreasureMapSearchPolicy.TARGET_HINT,
+            )
+        }
+        return null
+    }
+
+    private fun pendingStillOwnsMap(player: Player, request: PendingSearch): Boolean {
+        if (closed || !player.isOnline || player.uniqueId != request.playerId ||
+            pendingSearches[request.playerId]?.operationId != request.operationId ||
+            !taskScope.isCurrent(request.lifecycleToken) || currentServer() != request.policy.server ||
+            player.world.uid != request.worldId || player.world.name != request.policy.world
+        ) return false
+        val held = player.inventory.itemInMainHand
+        return PhysicalRewardVoucher.identity(held) == request.voucher &&
+            PersonalTreasureMapIdentity.read(held) == request.identity &&
+            request.identity.ownerId == player.uniqueId &&
+            request.identity.searchGeneration >= 0 &&
+            request.identity.targetPolicyFingerprint == request.policy.targetPolicyFingerprint.sha256
+    }
+
+    private fun completeSearch(
+        player: Player,
+        target: PersonalTreasureMapDestination?,
+        voucher: PhysicalRewardVoucherIdentity,
+        identity: PersonalTreasureMapIdentity,
+        policy: PersonalTreasureMapSearchPolicy,
+        request: PendingSearch? = null,
+    ) {
+        if (!player.isOnline || closed || currentServer() != policy.server ||
+            player.world.name != policy.world ||
+            (request != null && !pendingStillOwnsMap(player, request))
+        ) {
+            request?.let { cancelPendingSearch(it.playerId, it) }
+            return
+        }
+        val mainHand = player.inventory.itemInMainHand
+        if (PhysicalRewardVoucher.identity(mainHand) != voucher ||
+            PersonalTreasureMapIdentity.read(mainHand) != identity ||
+            identity.ownerId != player.uniqueId ||
+            identity.targetPolicyFingerprint != policy.targetPolicyFingerprint.sha256
+        ) {
+            request?.let { cancelPendingSearch(it.playerId, it) }
+            return
+        }
+        val updatedIdentity = identity.copy(
+            searchGeneration = nextSearchGeneration(identity.searchGeneration),
+            target = target,
+            targetPolicyFingerprint = policy.targetPolicyFingerprint.sha256,
+        )
+        val updated = mainHand.clone().apply {
+            editMeta { meta -> writeIdentity(meta.persistentDataContainer, updatedIdentity) }
+        }
+        val decorated = decorateMap(player, updated) ?: run {
+            request?.let { cancelPendingSearch(it.playerId, it) }
+            return
+        }
+        val latest = player.inventory.itemInMainHand
+        if (PhysicalRewardVoucher.identity(latest) != voucher ||
+            PersonalTreasureMapIdentity.read(latest) != identity ||
+            request?.let { pendingSearches[it.playerId]?.operationId != it.operationId } == true
+        ) {
+            request?.let { cancelPendingSearch(it.playerId, it) }
+            return
+        }
+        player.inventory.setItemInMainHand(decorated)
+        if (request != null) {
+            pendingSearches.remove(request.playerId, request)
+            request.timeout?.cancel()
+            request.timeout = null
+        }
+        if (target == null) clearRenderState(player.uniqueId) else refreshHeldMap(player)
+    }
+
+    private fun replaceHeldIdentity(
+        player: Player,
+        voucher: PhysicalRewardVoucherIdentity,
+        expected: PersonalTreasureMapIdentity,
+        updatedIdentity: PersonalTreasureMapIdentity,
+    ): Boolean {
+        val held = player.inventory.itemInMainHand
+        if (PhysicalRewardVoucher.identity(held) != voucher ||
+            PersonalTreasureMapIdentity.read(held) != expected
+        ) return false
         val updated = held.clone().apply {
             editMeta { meta -> writeIdentity(meta.persistentDataContainer, updatedIdentity) }
         }
         val decorated = decorateMap(player, updated) ?: return false
-        val stillHeld = player.inventory.itemInMainHand
-        if (PhysicalRewardVoucher.identity(stillHeld) != resolved.voucher) return false
-        val latestIdentity = PersonalTreasureMapIdentity.read(stillHeld) ?: return false
-        if (latestIdentity.ownerId != currentIdentity.ownerId ||
-            latestIdentity.definitionFingerprint != currentIdentity.definitionFingerprint ||
-            latestIdentity.searchGeneration != currentIdentity.searchGeneration
+        val latest = player.inventory.itemInMainHand
+        if (PhysicalRewardVoucher.identity(latest) != voucher ||
+            PersonalTreasureMapIdentity.read(latest) != expected
         ) return false
         player.inventory.setItemInMainHand(decorated)
-        if (target == null) clear(player.uniqueId)
-        return target != null
+        return true
     }
 
-    private fun findSafeTarget(
-        player: Player,
-        policy: PersonalTreasureMapSearchPolicy,
-        generation: Int,
-    ): PersonalTreasureMapDestination? {
-        val world = player.world
-        if (world.name != policy.world || currentServer() != policy.server) return null
-        val playerLocation = player.location
-        val centerX = floor(playerLocation.x).toInt()
-        val centerZ = floor(playerLocation.z).toInt()
-        val voucherId = PhysicalRewardVoucher.identity(player.inventory.itemInMainHand)?.id ?: return null
-        val candidates = personalTreasureMapCandidateOrder(
-            voucherId = voucherId,
-            generation = generation,
-            centerX = centerX,
-            centerZ = centerZ,
-            radius = policy.radius,
-        )
-        for ((x, z) in candidates) {
-            val exactDistanceSquared = (x + 0.5 - playerLocation.x) * (x + 0.5 - playerLocation.x) +
-                (z + 0.5 - playerLocation.z) * (z + 0.5 - playerLocation.z)
-            if (exactDistanceSquared < PersonalTreasureMapSearchPolicy.MIN_TARGET_DISTANCE.toDouble().let { it * it } ||
-                exactDistanceSquared > policy.radius.toDouble() * policy.radius
-            ) continue
-            if (!world.isChunkLoaded(x shr 4, z shr 4)) continue
-            val highestY = world.getHighestBlockYAt(x, z)
-            val lowestY = (highestY - SURFACE_LOOKBACK_BLOCKS).coerceAtLeast(world.minHeight)
-            for (groundY in highestY downTo lowestY) {
-                if (!isSafeGround(world.getBlockAt(x, groundY, z).type)) continue
-                val targetY = groundY + 1
-                if (targetY + 1 >= world.maxHeight) continue
-                if (!isSafeAir(world.getBlockAt(x, targetY, z)) ||
-                    !isSafeAir(world.getBlockAt(x, targetY + 1, z))
-                ) continue
-                val location = Location(world, x + 0.5, targetY.toDouble(), z + 0.5)
-                if (!world.worldBorder.isInside(location) || isUnclaimedColumn(world, x, groundY, z) != true) continue
-                return PersonalTreasureMapDestination(
-                    policy.server,
-                    policy.world,
-                    location.x,
-                    location.y,
-                    location.z,
-                    PersonalTreasureMapSearchPolicy.TARGET_HINT,
-                )
-            }
+    private fun cancelPendingSearch(playerId: UUID, expected: PendingSearch? = null) {
+        val request = pendingSearches[playerId] ?: return
+        if (expected != null && request.operationId != expected.operationId) return
+        if (pendingSearches.remove(playerId, request)) {
+            request.timeout?.cancel()
+            request.timeout = null
         }
-        return null
     }
+
+    private fun nextSearchOperationId(): Long {
+        nextSearchOperationId = if (nextSearchOperationId == Long.MAX_VALUE) 1L else nextSearchOperationId + 1L
+        return nextSearchOperationId
+    }
+
+    private fun nextSearchGeneration(current: Int): Int = if (current == Int.MAX_VALUE) current else current + 1
 
     private fun isSafeTarget(
         player: Player,
         destination: PersonalTreasureMapDestination,
         policy: PersonalTreasureMapSearchPolicy?,
     ): Boolean? {
-        if (policy != null && (destination.server != policy.server || destination.world != policy.world)) return false
+        if (policy != null && (destination.server != policy.server || destination.world != policy.world ||
+                !policy.containsTarget(destination.x, destination.z))
+        ) return false
         if (policy != null && !isSearchLocation(player, policy)) return null
         val world = player.world
         if (currentServer() != destination.server || world.name != destination.world) return false
@@ -650,6 +930,9 @@ class PersonalTreasureMapController internal constructor(
         data.set(PersonalTreasureMapIdentity.fingerprintKey, PersistentDataType.STRING, identity.definitionFingerprint.sha256)
         data.set(PersonalTreasureMapIdentity.destinationIndexKey, PersistentDataType.INTEGER, identity.destinationIndex)
         data.set(PersonalTreasureMapIdentity.searchGenerationKey, PersistentDataType.INTEGER, identity.searchGeneration)
+        identity.targetPolicyFingerprint?.let {
+            data.set(PersonalTreasureMapIdentity.targetPolicyFingerprintKey, PersistentDataType.STRING, it)
+        } ?: data.remove(PersonalTreasureMapIdentity.targetPolicyFingerprintKey)
         val target = identity.target
         if (target == null) {
             listOf(
@@ -680,6 +963,7 @@ class PersonalTreasureMapController internal constructor(
             PersonalTreasureMapIdentity.mapViewIdKey,
             PersonalTreasureMapIdentity.mapViewWorldKey,
             PersonalTreasureMapIdentity.searchGenerationKey,
+            PersonalTreasureMapIdentity.targetPolicyFingerprintKey,
             PersonalTreasureMapIdentity.targetServerKey,
             PersonalTreasureMapIdentity.targetWorldKey,
             PersonalTreasureMapIdentity.targetXKey,
@@ -695,6 +979,7 @@ class PersonalTreasureMapController internal constructor(
         private const val CLAIM_DISTANCE_SQUARED = 9.0
         private const val MARKER_DISTANCE_SQUARED = 64.0 * 64.0
         private const val SURFACE_LOOKBACK_BLOCKS = 4
+        private const val SEARCH_TIMEOUT_TICKS = 20L * 30L
         private val UNSAFE_MATERIALS = setOf(
             Material.CACTUS,
             Material.CAMPFIRE,
@@ -718,13 +1003,15 @@ internal fun personalTreasureMapCandidateOrder(
     centerZ: Int,
     radius: Int,
     count: Int = PersonalTreasureMapSearchPolicy.CANDIDATE_LIMIT,
+    minDistance: Int = PersonalTreasureMapSearchPolicy.LEGACY_MIN_TARGET_DISTANCE,
 ): List<Pair<Int, Int>> {
     require(radius in PersonalTreasureMapSearchPolicy.MIN_RADIUS..PersonalTreasureMapSearchPolicy.MAX_RADIUS)
     require(count in 1..PersonalTreasureMapSearchPolicy.CANDIDATE_LIMIT)
+    require(minDistance in 1..radius)
     val seed = voucherId.mostSignificantBits xor java.lang.Long.rotateLeft(voucherId.leastSignificantBits, 17) xor
         (generation.toLong() shl 32) xor (centerX.toLong() shl 16) xor centerZ.toLong()
     val random = Random(seed)
-    val minimumSquared = PersonalTreasureMapSearchPolicy.MIN_TARGET_DISTANCE.toDouble().let { it * it }
+    val minimumSquared = minDistance.toDouble().let { it * it }
     val radiusSquared = radius.toDouble() * radius
     return buildList(count) {
         repeat(count * 64) {
@@ -734,7 +1021,39 @@ internal fun personalTreasureMapCandidateOrder(
             val dx = (kotlin.math.cos(angle) * distance).roundToInt()
             val dz = (kotlin.math.sin(angle) * distance).roundToInt()
             val squaredDistance = dx.toDouble() * dx + dz.toDouble() * dz
-            if (squaredDistance in minimumSquared..radiusSquared) add(centerX + dx to centerZ + dz)
+            val point = centerX + dx to centerZ + dz
+            if (squaredDistance in minimumSquared..radiusSquared && point !in this) add(point)
+        }
+    }
+}
+
+/** Pure deterministic global search ordering; coordinates are block centers inside the configured border. */
+internal fun personalTreasureMapCandidateOrder(
+    voucherId: UUID,
+    generation: Int,
+    bounds: PersonalTreasureMapBounds,
+    minDistance: Int,
+    originX: Double,
+    originZ: Double,
+    count: Int = PersonalTreasureMapSearchPolicy.CANDIDATE_LIMIT,
+): List<Pair<Int, Int>> {
+    require(minDistance in 1..PersonalTreasureMapSearchPolicy.MAX_MIN_DISTANCE)
+    require(originX.isFinite() && originZ.isFinite())
+    require(count in 1..PersonalTreasureMapSearchPolicy.CANDIDATE_LIMIT)
+    val seed = voucherId.mostSignificantBits xor java.lang.Long.rotateLeft(voucherId.leastSignificantBits, 17) xor
+        (generation.toLong() shl 32) xor 0x6D61702D657870L
+    val random = Random(seed)
+    val minimumSquared = minDistance.toDouble() * minDistance
+    return buildList(count) {
+        val maxAttempts = count * 256
+        repeat(maxAttempts) {
+            if (size >= count) return@repeat
+            val x = random.nextInt(bounds.minX, bounds.maxX)
+            val z = random.nextInt(bounds.minZ, bounds.maxZ)
+            val distanceSquared = (x + 0.5 - originX) * (x + 0.5 - originX) +
+                (z + 0.5 - originZ) * (z + 0.5 - originZ)
+            val candidate = x to z
+            if (distanceSquared >= minimumSquared && candidate !in this) add(candidate)
         }
     }
 }

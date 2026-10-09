@@ -68,10 +68,22 @@ internal class CatalogPhysicalRewards(
         is RewardCatalogSource.TravelAnchors -> "travel-anchors:${source.amount}"
         is RewardCatalogSource.ParticlePreset -> "particle-preset:${source.id}"
         is RewardCatalogSource.Choice -> "choice:${OneTimeUseFingerprint.sha256(source.options.joinToString("\n") { "${it.id}|${it.categoryId}|${it.entryId}" }.toByteArray()).sha256}"
-        is RewardCatalogSource.PersonalMap -> "personal-map:${OneTimeUseFingerprint.sha256Fields(
-            "personal-map-source-v2", entry.id, source.rewardCategoryId, source.rewardEntryId,
-            source.searchPolicy.server, source.searchPolicy.world, source.searchPolicy.radius.toString(),
-        ).sha256}"
+        is RewardCatalogSource.PersonalMap -> {
+            val policy = source.searchPolicy
+            val fingerprint = if (policy.bounds == null && source.prizeRolls == 1) {
+                // Preserve bearer addresses for the legacy one-roll, radius-based recipe.
+                OneTimeUseFingerprint.sha256Fields(
+                    "personal-map-source-v2", entry.id, source.rewardCategoryId, source.rewardEntryId,
+                    policy.server, policy.world, requireNotNull(policy.radius).toString(),
+                )
+            } else {
+                OneTimeUseFingerprint.sha256Fields(
+                    "personal-map-source-v3", entry.id, source.rewardCategoryId, source.rewardEntryId,
+                    policy.targetPolicyFingerprint.sha256, source.prizeRolls.toString(),
+                )
+            }
+            "personal-map:${fingerprint.sha256}"
+        }
         else -> "native:${source}"
     }
 
@@ -179,9 +191,15 @@ internal class CatalogPhysicalRewards(
                         mapId = entry.id,
                         mapPrizeKey = archivedChild.materialization.sourceKey,
                         mapPrizeFingerprint = archivedChild.materialization.providerFingerprint,
+                        mapPrizeRolls = source.prizeRolls,
                         mapSearchServer = source.searchPolicy.server,
                         mapSearchWorld = source.searchPolicy.world,
                         mapSearchRadius = source.searchPolicy.radius,
+                        mapSearchMinX = source.searchPolicy.bounds?.minX,
+                        mapSearchMaxX = source.searchPolicy.bounds?.maxX,
+                        mapSearchMinZ = source.searchPolicy.bounds?.minZ,
+                        mapSearchMaxZ = source.searchPolicy.bounds?.maxZ,
+                        mapSearchMinDistance = source.searchPolicy.minDistance.takeIf { source.searchPolicy.bounds != null },
                     )
                 }
                 else -> return@forEach
@@ -222,7 +240,7 @@ internal class CatalogPhysicalRewards(
         val recipe = archived.recipe
         val mapId = recipe.mapId ?: return null
         val legacyRoute = recipe.mapSearchServer == null
-        val migrateWeeklyRoute = isPublishedWeeklyMapWorldRoute(recipe)
+        val migrateWeeklyRoute = isPublishedWeeklyMapLegacyRoute(recipe)
         val redirectToCurrent = legacyRoute || migrateWeeklyRoute
         val archivedPrize = if (legacyRoute) null else {
             frozen.find(requireNotNull(recipe.mapPrizeKey))?.takeIf {
@@ -237,11 +255,7 @@ internal class CatalogPhysicalRewards(
         val searchPolicy = if (redirectToCurrent) {
             currentMapSource(mapId)?.searchPolicy ?: return null
         } else {
-            PersonalTreasureMapSearchPolicy(
-                requireNotNull(recipe.mapSearchServer),
-                requireNotNull(recipe.mapSearchWorld),
-                requireNotNull(recipe.mapSearchRadius),
-            )
+            recipe.searchPolicy() ?: return null
         }
         val legacyDestinations = recipe.mapDestinations.orEmpty()
         val legacyFingerprint = if (legacyRoute) {
@@ -251,19 +265,16 @@ internal class CatalogPhysicalRewards(
                 legacyDestinations,
             )
         } else null
-        val oldSearchPolicy = if (migrateWeeklyRoute) {
-            PersonalTreasureMapSearchPolicy(
-                requireNotNull(recipe.mapSearchServer),
-                requireNotNull(recipe.mapSearchWorld),
-                requireNotNull(recipe.mapSearchRadius),
-            )
-        } else null
+        val oldSearchPolicy = recipe.searchPolicy().takeIf { migrateWeeklyRoute }
+        val prizeRolls = if (redirectToCurrent) currentMapSource(mapId)?.prizeRolls ?: return null
+            else recipe.mapPrizeRolls ?: 1
         val archivedIdentityFingerprint = if (migrateWeeklyRoute) {
             PersonalTreasureMapDefinition(
                 id = mapId,
                 prizeSourceRef = requireNotNull(archivedPrize).key,
                 destinations = emptyList(),
                 searchPolicy = requireNotNull(oldSearchPolicy),
+                prizeRolls = recipe.mapPrizeRolls ?: 1,
             ).fingerprint
         } else null
         return runCatching {
@@ -272,6 +283,7 @@ internal class CatalogPhysicalRewards(
                 prizeSourceRef = prize.key,
                 destinations = legacyDestinations,
                 searchPolicy = searchPolicy,
+                prizeRolls = prizeRolls,
                 identityFingerprintOverride = legacyFingerprint ?: archivedIdentityFingerprint,
                 legacyTargetPolicy = oldSearchPolicy,
             )
@@ -388,8 +400,10 @@ internal class CatalogPhysicalRewards(
             } else {
                 frozenRequiredSlots(recipe) ?: return UNAVAILABLE
             }
+            if (recipe.treasureRolls != null && requiredSlots > PLAYER_STORAGE_SLOTS) return INVENTORY_FULL
             if (player.inventory.storageContents.count { it == null || it.type.isAir } < requiredSlots) {
-                return "<red>Освободите $requiredSlots яч. инвентаря для награды."
+                return if (recipe.treasureRolls != null) INVENTORY_FULL
+                    else "<red>Освободите $requiredSlots яч. инвентаря для награды."
             }
             return null
         }
@@ -584,7 +598,8 @@ internal class CatalogPhysicalRewards(
         "seal" -> recipe.sealItems.orEmpty().all { encoded ->
             decodeStack(encoded)?.let { !requiresItemsAdder(it) || Bukkit.getPluginManager().isPluginEnabled("ItemsAdder") } == true
         }
-        "treasure" -> frozenTreasureProvidersReady(requireNotNull(recipe.treasure))
+        "treasure" -> (recipe.treasureRolls == null || frozenTreasureIsItemOnly(recipe.treasure, emptySet())) &&
+            frozenTreasureProvidersReady(requireNotNull(recipe.treasure))
         "dungeon-case" -> Bukkit.getPluginManager().isPluginEnabled("EliteMobs") &&
             DungeonCaseRewards.definition(requireNotNull(recipe.dungeonCaseId)) == recipe.dungeonCaseDefinition
         "travel-anchors" -> TravelAnchorsModule.isEnabled
@@ -594,18 +609,30 @@ internal class CatalogPhysicalRewards(
                 child.fingerprint == option.childFingerprint && frozenProvidersReady(child.recipe)
             } == true
         }
-        "personal-map" -> effectiveMapPrize(recipe)?.let { frozenProvidersReady(it.recipe) } == true
+        "personal-map" -> effectiveMapPrize(recipe)?.let { prize ->
+            val rolls = effectiveMapPrizeRolls(recipe) ?: return@let false
+            (rolls == 1 || prize.recipe.type == "treasure" &&
+                frozenTreasureIsItemOnly(prize.recipe.treasure, emptySet())) && frozenProvidersReady(prize.recipe)
+        } == true
         else -> false
     }
 
     private fun selectedRecipe(recipe: FrozenPhysicalRecipe, spec: PhysicalRewardSpec): FrozenPhysicalRecipe? {
+        if (recipe.type == "personal-map") {
+            if (spec.selectedChoiceIndex != null) return null
+            val definition = personalMapDefinition(spec) ?: return null
+            val child = frozen?.find(definition.prizeSourceRef) ?: return null
+            if (child.key != definition.prizeSourceRef) return null
+            if (definition.prizeRolls == 1) return child.recipe
+            if (child.recipe.type != "treasure") return null
+            return child.recipe.copy(treasureRolls = definition.prizeRolls)
+        }
         val childAddress = when (recipe.type) {
             "choice" -> {
                 val index = spec.selectedChoiceIndex ?: return null
                 val option = recipe.choiceOptions?.getOrNull(index) ?: return null
                 option.childKey to option.childFingerprint
             }
-            "personal-map" -> effectiveMapPrize(recipe)?.let { it.key to it.fingerprint } ?: return null
             else -> return recipe.takeIf { spec.selectedChoiceIndex == null }
         }
         val (childKey, childFingerprint) = childAddress
@@ -613,10 +640,33 @@ internal class CatalogPhysicalRewards(
         return child.recipe.takeIf { child.fingerprint == childFingerprint }
     }
 
+    private fun effectiveMapPrizeRolls(recipe: FrozenPhysicalRecipe): Int? =
+        if (recipe.mapSearchServer == null || isPublishedWeeklyMapLegacyRoute(recipe)) {
+            currentMapSource(requireNotNull(recipe.mapId))?.prizeRolls
+        } else {
+            recipe.mapPrizeRolls ?: 1
+        }
+
+    private fun frozenTreasureIsItemOnly(node: FrozenTreasureNode?, visitedPools: Set<String>): Boolean {
+        node ?: return false
+        return when (node.type) {
+            "item" -> decodeStack(node.stack ?: return false)?.let { !containsOneTimeIdentity(it) } == true
+            "sub-pool" -> {
+                val poolId = node.poolId ?: return false
+                if (poolId in visitedPools || visitedPools.size >= MAX_POOL_DEPTH) return false
+                val selectable = node.children.orEmpty().filter { it.weight > 0 }
+                selectable.isNotEmpty() && selectable.all {
+                    frozenTreasureIsItemOnly(it, visitedPools + poolId)
+                }
+            }
+            else -> false
+        }
+    }
+
     /** Old issued maps keep their voucher address but redirect prize selection through the current map entry. */
     private fun effectiveMapPrize(recipe: FrozenPhysicalRecipe): FrozenPhysicalRewardRecord? {
         if (recipe.type != "personal-map") return null
-        val child = if (recipe.mapSearchServer == null || isPublishedWeeklyMapWorldRoute(recipe)) {
+        val child = if (recipe.mapSearchServer == null || isPublishedWeeklyMapLegacyRoute(recipe)) {
             currentMapPrize(requireNotNull(recipe.mapId))
         } else {
             frozen?.find(requireNotNull(recipe.mapPrizeKey))?.takeIf {
@@ -626,13 +676,40 @@ internal class CatalogPhysicalRewards(
         return child
     }
 
-    private fun isPublishedWeeklyMapWorldRoute(recipe: FrozenPhysicalRecipe): Boolean =
+    private fun isPublishedWeeklyMapLegacyRoute(recipe: FrozenPhysicalRecipe): Boolean =
         recipe.type == "personal-map" &&
             recipe.mapId == "weekly_personal_map" &&
             recipe.mapDestinations == null &&
             recipe.mapSearchServer == "survival" &&
-            recipe.mapSearchWorld == "world" &&
-            recipe.mapSearchRadius == 96
+            recipe.mapSearchWorld in setOf("world", "survival") &&
+            recipe.mapSearchRadius == 96 &&
+            recipe.mapSearchMinX == null && recipe.mapSearchMaxX == null &&
+            recipe.mapSearchMinZ == null && recipe.mapSearchMaxZ == null &&
+            (recipe.mapSearchMinDistance == null ||
+                recipe.mapSearchMinDistance == PersonalTreasureMapSearchPolicy.LEGACY_MIN_TARGET_DISTANCE)
+
+    private fun FrozenPhysicalRecipe.searchPolicy(): PersonalTreasureMapSearchPolicy? {
+        val server = mapSearchServer ?: return null
+        val world = mapSearchWorld ?: return null
+        return if (mapSearchRadius != null) {
+            PersonalTreasureMapSearchPolicy(
+                server,
+                world,
+                mapSearchRadius,
+                minDistance = mapSearchMinDistance ?: PersonalTreasureMapSearchPolicy.LEGACY_MIN_TARGET_DISTANCE,
+            )
+        } else {
+            PersonalTreasureMapSearchPolicy(
+                server = server,
+                world = world,
+                bounds = PersonalTreasureMapBounds(
+                    requireNotNull(mapSearchMinX), requireNotNull(mapSearchMaxX),
+                    requireNotNull(mapSearchMinZ), requireNotNull(mapSearchMaxZ),
+                ),
+                minDistance = requireNotNull(mapSearchMinDistance),
+            )
+        }
+    }
 
     private fun currentMapSource(mapId: String): RewardCatalogSource.PersonalMap? =
         entries.values.asSequence()
@@ -687,7 +764,12 @@ internal class CatalogPhysicalRewards(
         "mount" -> 0
         "furniture" -> recipe.furnitureBoxes?.size
         "seal" -> null
-        "treasure" -> frozenTreasureRequiredSlots(requireNotNull(recipe.treasure), emptySet())
+        // Require room for the worst selectable result of every roll before drawing anything.
+        "treasure" -> if (recipe.treasureRolls != null) frozenTreasureRollRequiredSlots(
+            requireNotNull(recipe.treasure),
+            recipe.treasureRolls,
+        )
+            else frozenTreasureRequiredSlots(requireNotNull(recipe.treasure), emptySet())
         "dungeon-case" -> 1
         else -> null
     }
@@ -697,7 +779,8 @@ internal class CatalogPhysicalRewards(
         "command" -> if (tokenAmount(requireNotNull(node.commands).single()) != null) 0 else 1
         "item" -> {
             val stack = decodeStack(requireNotNull(node.stack)) ?: return null
-            (requireNotNull(node.maxInt) + stack.maxStackSize - 1) / stack.maxStackSize
+            val maxStack = stack.maxStackSize.coerceAtLeast(1)
+            ((requireNotNull(node.maxInt).toLong() + maxStack - 1) / maxStack).toInt()
         }
         "slimefun" -> {
             val stack = decodeStack(requireNotNull(node.stack)) ?: return null
@@ -712,6 +795,15 @@ internal class CatalogPhysicalRewards(
                 .map { frozenTreasureRequiredSlots(it, visitedPools + poolId) ?: return null }.maxOrNull()
         }
         else -> null
+    }
+
+    private fun frozenTreasureRollRequiredSlots(node: FrozenTreasureNode, rolls: Int): Int? {
+        if (rolls !in 2..PersonalTreasureMapDefinition.MAX_PRIZE_ROLLS) return null
+        val slotsPerRoll = frozenTreasureRequiredSlots(node, emptySet()) ?: return null
+        return minOf(
+            PLAYER_STORAGE_SLOTS.toLong() + 1,
+            slotsPerRoll.toLong() * rolls.toLong(),
+        ).toInt()
     }
 
     private fun redeemFrozen(recipe: FrozenPhysicalRecipe, player: Player, operationId: UUID): CompletableFuture<PhysicalRewardOutcome> = when (recipe.type) {
@@ -729,7 +821,11 @@ internal class CatalogPhysicalRewards(
             giveStacks(player, boxes)
         }
         "seal" -> PhysicalRewardOutcome.Rejected(UNAVAILABLE)
-        "treasure" -> redeemFrozenTreasure(player, requireNotNull(recipe.treasure), operationId, emptySet())
+        "treasure" -> if (recipe.treasureRolls == null) {
+            redeemFrozenTreasure(player, requireNotNull(recipe.treasure), operationId, emptySet())
+        } else {
+            redeemFrozenItemRolls(player, requireNotNull(recipe.treasure), recipe.treasureRolls)
+        }
         "dungeon-case" -> DungeonCaseRewards.create(player, requireNotNull(recipe.dungeonCaseId))
             ?.let { giveStacks(player, listOf(it)) }
             ?: PhysicalRewardOutcome.Rejected(UNAVAILABLE)
@@ -775,6 +871,61 @@ internal class CatalogPhysicalRewards(
         "ae" -> frozenAe(node)?.let { redeemTreasure(player, it, operationId, emptySet()) }
             ?: PhysicalRewardOutcome.Rejected(UNAVAILABLE)
         else -> PhysicalRewardOutcome.Rejected(UNAVAILABLE)
+    }
+
+    /** Draws the complete bounded item bundle before the single all-or-nothing inventory write. */
+    private fun redeemFrozenItemRolls(
+        player: Player,
+        root: FrozenTreasureNode,
+        rolls: Int,
+    ): PhysicalRewardOutcome {
+        if (rolls !in 2..PersonalTreasureMapDefinition.MAX_PRIZE_ROLLS ||
+            !frozenTreasureIsItemOnly(root, emptySet())
+        ) return PhysicalRewardOutcome.Rejected(UNAVAILABLE)
+
+        val quantities = mutableListOf<Pair<ItemStack, Long>>()
+        repeat(rolls) {
+            val (stack, amount) = rollFrozenItem(root, emptySet())
+                ?: return PhysicalRewardOutcome.Rejected(UNAVAILABLE)
+            val index = quantities.indexOfFirst { (existing, _) -> existing.isSimilar(stack) }
+            if (index < 0) {
+                quantities += stack to amount.toLong()
+            } else {
+                val (existing, previous) = quantities[index]
+                quantities[index] = existing to (previous + amount)
+            }
+        }
+
+        val values = mutableListOf<ItemStack>()
+        quantities.forEach { (stack, total) ->
+            val maxStack = stack.maxStackSize.coerceAtLeast(1)
+            // No 36-slot player inventory can hold more than this amount of one stack identity.
+            if (total > maxStack.toLong() * PLAYER_STORAGE_SLOTS) return PhysicalRewardOutcome.Rejected(UNAVAILABLE)
+            var remaining = total
+            while (remaining > 0) {
+                val amount = minOf(maxStack.toLong(), remaining).toInt()
+                values += stack.clone().also { it.amount = amount }
+                remaining -= amount
+            }
+        }
+        return giveStacks(player, values)
+    }
+
+    private fun rollFrozenItem(
+        node: FrozenTreasureNode,
+        visitedPools: Set<String>,
+    ): Pair<ItemStack, Int>? = when (node.type) {
+        "item" -> {
+            val stack = decodeStack(node.stack ?: return null) ?: return null
+            stack to randomInt(requireNotNull(node.minInt), requireNotNull(node.maxInt))
+        }
+        "sub-pool" -> {
+            val poolId = node.poolId ?: return null
+            if (poolId in visitedPools || visitedPools.size >= MAX_POOL_DEPTH) return null
+            val child = chooseFrozenChild(node.children.orEmpty()) ?: return null
+            rollFrozenItem(child, visitedPools + poolId)
+        }
+        else -> null
     }
 
     private fun frozenAe(node: FrozenTreasureNode): Treasure.Ae? = runCatching {
@@ -1085,6 +1236,8 @@ internal class CatalogPhysicalRewards(
         private const val UNAVAILABLE = "<red>Награда сейчас недоступна. Предмет сохранён."
         private const val MAX_GRAPH_NODES = 2_048
         private const val MAX_POOL_DEPTH = 8
+        private const val PLAYER_STORAGE_SLOTS = 36
+        private const val INVENTORY_FULL = "<red>В инвентаре не хватает места."
         private const val ELITE_LUCKY_TICKET_ID = "elite_lucky_ticket.yml"
         private const val ELITE_LUCKY_TICKET_COMMAND = "elitemobs:elitemobs loot give %player% elite_lucky_ticket.yml"
         private val TOKEN_COMMAND = Regex("rediseconomy:balance %player% tokens give ([1-9][0-9]{0,5}) arc-lootbox-catalog")

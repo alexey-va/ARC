@@ -113,26 +113,35 @@ existing one-use claim scope before granting the frozen child reward. Reload,
 transfer and repeated opening preserve the same offers. Unknown native outcomes
 retain the ordinary journal recovery ownership.
 
-A `personal-map` source contains `reward: {category, entry}` and
-`search: {server: survival, world: survival, radius: 96}`. The search world is
-the public Survival world shown to players as «Новые биомы». Its icon must be
-`FILLED_MAP`. The first right-click there binds the voucher to its activator and
-searches up to 64 points in already-loaded chunks; it never
-claims a prize on that click. Before activation the item is transferable.
-The selected target is stored with the owner in the map PDC. Later, only that
-owner within three blocks can claim the prize. The controller checks loaded
-surface, headroom, hazards and world border, then requires an enabled Lands hook
-to confirm the point is unclaimed. If WorldGuard is installed, it must also be
-enabled and answer; any local WorldGuard region rejects the point. These checks
-run before selecting and again after the durable claim. If protection changes,
-it chooses another safe point and the in-flight claim does not grant a prize.
+A `personal-map` source contains `reward: {category, entry, rolls}` and a
+bounded expedition search. The current weekly map uses
+`search: {server: survival, world: survival, bounds: {min-x: -9650, max-x: 9650,
+min-z: -9650, max-z: 9650}, min-distance: 3000}`. This is the public Survival
+world shown to players as «Новые биомы». Its icon must be `FILLED_MAP`. On the
+first right-click in that world, the voucher binds to its activator and begins
+checking at most 64 candidate chunks in sequence. Paper is explicitly asked not
+to generate chunks; only terrain already generated within these bounds and the
+current Bukkit world border can qualify. The bounded search expires after 30
+seconds and leaves the voucher usable if it cannot find a safe point. The map
+does not claim a prize on activation. Before activation it is transferable.
+The selected target, target-policy version and owner are stored in the map PDC.
+Later, only that owner within three blocks can claim the prize. The controller
+checks loaded surface, headroom and hazards, then requires Lands to confirm the
+column is unclaimed. If WorldGuard is installed, it must also be enabled and
+answer; any local WorldGuard region rejects the point. These checks run before
+selection and again after the durable claim. If protection changes, the search
+chooses another safe point and the in-flight claim does not grant a prize.
+`reward.rolls` defaults to one for older recipes; the active weekly map uses
+three rolls of its frozen treasure prize.
 
-The issued `weekly_personal_map` route `survival/world/96` is migrated to the
-active `survival/survival/96` route and current prize. When its owner first uses
-an already-bound map, a validated target stored in the old world is cleared.
-Outside the new search world, the map gives travel guidance; in the new world,
-it selects a safe target again. The voucher address, owner, and map identity
-remain unchanged.
+Issued `weekly_personal_map` recipes on `survival/world/96` and
+`survival/survival/96` migrate to the current bounded Survival expedition and
+prize. When an owner first uses one of these bound maps, its validated old
+target is cleared and the new target-policy version is stamped, even if they
+activate it outside the search world. The map then gives travel guidance; in
+the new world it chooses one new distant safe target without repeating that
+migration. Voucher address, owner and shared one-use claim identity remain
+unchanged.
 
 The map uses a contextual Paper renderer and an owner-only packet chest marker.
 It does not generate chunks or place blocks. Holding a bound map restores its

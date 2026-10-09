@@ -258,6 +258,8 @@ internal data class FrozenPhysicalRecipe(
     val sealName: String? = null,
     val sealDescription: List<String>? = null,
     val treasure: FrozenTreasureNode? = null,
+    /** Runtime-only multiplier selected from the owning map definition; never archived on a child recipe. */
+    @Transient val treasureRolls: Int? = null,
     val dungeonCaseId: String? = null,
     val dungeonCaseDefinition: String? = null,
     val travelAnchorAmount: Int? = null,
@@ -270,16 +272,27 @@ internal data class FrozenPhysicalRecipe(
     val mapPrizeKey: String? = null,
     val mapPrizeFingerprint: String? = null,
     val mapDestinations: List<PersonalTreasureMapDestination>? = null,
-    /** New maps search bounded already-loaded Survival terrain; null means a legacy authored route. */
+    /** New maps search bounded already-generated Survival terrain; null means a legacy authored route. */
     val mapSearchServer: String? = null,
     val mapSearchWorld: String? = null,
     val mapSearchRadius: Int? = null,
+    /** New global expedition bounds; nullable fields retain compatibility with radius-only archives. */
+    val mapSearchMinX: Int? = null,
+    val mapSearchMaxX: Int? = null,
+    val mapSearchMinZ: Int? = null,
+    val mapSearchMaxZ: Int? = null,
+    val mapSearchMinDistance: Int? = null,
+    /** Missing in older archives and interpreted as one roll. */
+    val mapPrizeRolls: Int? = null,
 ) {
     /** Set false only for storage-thread checks that must not deserialize Bukkit ItemStacks. */
     fun validate(validateBukkitStacks: Boolean = true) {
+        require(treasureRolls == null) { "Runtime treasure roll count must not be archived" }
         if (type != "personal-map") {
             require(mapId == null && mapPrizeKey == null && mapPrizeFingerprint == null && mapDestinations == null &&
-                mapSearchServer == null && mapSearchWorld == null && mapSearchRadius == null
+                mapSearchServer == null && mapSearchWorld == null && mapSearchRadius == null &&
+                mapSearchMinX == null && mapSearchMaxX == null && mapSearchMinZ == null && mapSearchMaxZ == null &&
+                mapSearchMinDistance == null && mapPrizeRolls == null
             ) {
                 "Personal map fields require a personal-map recipe"
             }
@@ -422,8 +435,14 @@ internal data class FrozenPhysicalRecipe(
                     "Frozen map prize fingerprint is invalid"
                 }
                 require(mapPrizeKey == "frozen:$mapPrizeFingerprint") { "Frozen map prize key is invalid" }
+                require(mapPrizeRolls == null || mapPrizeRolls in 1..PersonalTreasureMapDefinition.MAX_PRIZE_ROLLS) {
+                    "Frozen map prize roll count is invalid"
+                }
                 val searchFields = listOf(mapSearchServer, mapSearchWorld, mapSearchRadius)
                 if (searchFields.all { it == null }) {
+                    require(mapSearchMinX == null && mapSearchMaxX == null && mapSearchMinZ == null &&
+                        mapSearchMaxZ == null && mapSearchMinDistance == null
+                    ) { "Frozen legacy destinations cannot contain partial search fields" }
                     require(mapDestinations != null && mapDestinations.size in 1..PersonalTreasureMapDefinition.MAX_DESTINATIONS) {
                         "Frozen legacy map destinations are invalid"
                     }
@@ -433,12 +452,35 @@ internal data class FrozenPhysicalRecipe(
                     }
                     require(mapDestinations.distinct().size == mapDestinations.size) { "Frozen map destinations are duplicated" }
                 } else {
-                    require(searchFields.all { it != null } && mapDestinations.isNullOrEmpty()) {
+                    require(mapSearchServer != null && mapSearchWorld != null && mapDestinations.isNullOrEmpty()) {
                         "Frozen map search policy is incomplete or mixed with legacy destinations"
                     }
-                    PersonalTreasureMapSearchPolicy(
-                        requireNotNull(mapSearchServer), requireNotNull(mapSearchWorld), requireNotNull(mapSearchRadius),
-                    )
+                    val boundsFields = listOf(mapSearchMinX, mapSearchMaxX, mapSearchMinZ, mapSearchMaxZ)
+                    val searchPolicy = when {
+                        mapSearchRadius != null -> {
+                            require(boundsFields.all { it == null }) { "Frozen map search cannot mix radius and bounds" }
+                            PersonalTreasureMapSearchPolicy(
+                                mapSearchServer,
+                                mapSearchWorld,
+                                mapSearchRadius,
+                                minDistance = mapSearchMinDistance
+                                    ?: PersonalTreasureMapSearchPolicy.LEGACY_MIN_TARGET_DISTANCE,
+                            )
+                        }
+                        boundsFields.all { it != null } -> PersonalTreasureMapSearchPolicy(
+                            server = mapSearchServer,
+                            world = mapSearchWorld,
+                            bounds = PersonalTreasureMapBounds(
+                                requireNotNull(mapSearchMinX), requireNotNull(mapSearchMaxX),
+                                requireNotNull(mapSearchMinZ), requireNotNull(mapSearchMaxZ),
+                            ),
+                            minDistance = requireNotNull(mapSearchMinDistance) {
+                                "Frozen map bounds require a minimum distance"
+                            },
+                        )
+                        else -> error("Frozen map search bounds are incomplete")
+                    }
+                    searchPolicy
                 }
                 require(currency == null && minAmount == null && maxAmount == null && tokenAmount == null)
                 require(commandKind == null && commandValue == null && mountId == null && furnitureBoxes == null)

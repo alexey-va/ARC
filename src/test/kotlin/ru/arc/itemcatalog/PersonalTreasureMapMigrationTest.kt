@@ -173,14 +173,19 @@ class PersonalTreasureMapMigrationTest : StringSpec({
                     source = RewardCatalogSource.Treasure(poolId, "rare_find"),
                     icon = CatalogIconStyle(Material.DIAMOND.name),
                 )
-                val activePolicy = PersonalTreasureMapSearchPolicy("survival", "survival", 96)
+                val activePolicy = PersonalTreasureMapSearchPolicy(
+                    "survival",
+                    "survival",
+                    bounds = PersonalTreasureMapBounds(-9650, 9650, -9650, 9650),
+                    minDistance = 3000,
+                )
                 val map = RewardCatalogEntry(
                     id = "weekly_personal_map",
                     name = "Карта тайника",
                     description = listOf("<#e8dfd2>Тайник на Survival в Новых биомах."),
                     rarity = null,
                     requires = emptyList(),
-                    source = RewardCatalogSource.PersonalMap("rewards", child.id, activePolicy),
+                    source = RewardCatalogSource.PersonalMap("rewards", child.id, activePolicy, prizeRolls = 3),
                     icon = CatalogIconStyle(Material.FILLED_MAP.name),
                 )
                 val settings = RewardCatalogSettings(
@@ -200,6 +205,7 @@ class PersonalTreasureMapMigrationTest : StringSpec({
                 val oldWorld = paper.server.getWorld("world") ?: MockBukkit.getMock()!!.addSimpleWorld("world")
                 val player = paper.addPlayer("v3-map-owner")
                 val foreignPlayer = paper.addPlayer("v3-map-foreign")
+                val sameWorldPlayer = paper.addPlayer("v3-same-world-map-owner")
                 val oldTarget = PersonalTreasureMapDestination(
                     "survival", "world", 100.5, 65.0, 100.5, PersonalTreasureMapSearchPolicy.TARGET_HINT,
                 )
@@ -227,7 +233,7 @@ class PersonalTreasureMapMigrationTest : StringSpec({
                     ).shouldNotBeNull()
                     val oldPolicy = PersonalTreasureMapSearchPolicy("survival", "world", 96)
                     val oldMapKey = rewards.key(
-                        map.copy(source = RewardCatalogSource.PersonalMap("rewards", child.id, oldPolicy)),
+                        map.copy(source = RewardCatalogSource.PersonalMap("rewards", child.id, oldPolicy, prizeRolls = 1)),
                     )
                     val oldMap = archive.prepare(
                         oldMapKey,
@@ -263,7 +269,32 @@ class PersonalTreasureMapMigrationTest : StringSpec({
                     val unrelatedSpec = rewards.resolve(unrelatedMap.sourceKey).shouldNotBeNull()
                     val unrelatedDefinition = rewards.personalMapDefinition(unrelatedSpec).shouldNotBeNull()
 
+                    val sameWorldOldPolicy = PersonalTreasureMapSearchPolicy("survival", "survival", 96)
+                    val sameWorldOldKey = rewards.key(
+                        map.copy(
+                            source = RewardCatalogSource.PersonalMap(
+                                "rewards", child.id, sameWorldOldPolicy, prizeRolls = 1,
+                            ),
+                        ),
+                    )
+                    val sameWorldOldMap = archive.prepare(
+                        sameWorldOldKey,
+                        FrozenPhysicalRecipe(
+                            type = "personal-map",
+                            mapId = map.id,
+                            mapPrizeKey = oldPrize.sourceKey,
+                            mapPrizeFingerprint = oldPrize.providerFingerprint,
+                            mapSearchServer = sameWorldOldPolicy.server,
+                            mapSearchWorld = sameWorldOldPolicy.world,
+                            mapSearchRadius = sameWorldOldPolicy.radius,
+                        ),
+                        ItemStack(Material.FILLED_MAP),
+                    ).shouldNotBeNull()
+                    val sameWorldOldSpec = rewards.resolve(sameWorldOldMap.sourceKey).shouldNotBeNull()
+                    val sameWorldMigratedDefinition = rewards.personalMapDefinition(sameWorldOldSpec).shouldNotBeNull()
+
                     val ledger = SingleUseMapLedger()
+                    var mapChunkProbeRequests = 0
                     val maps = PersonalTreasureMapController(
                         plugin = plugin,
                         resolveSpec = rewards::resolve,
@@ -272,6 +303,12 @@ class PersonalTreasureMapMigrationTest : StringSpec({
                         scheduler = scheduler,
                         marker = RecordingMigrationMarker(),
                         mapViewFactory = { migrationTestMapView() },
+                        asyncChunkLoader = { world, chunkX, chunkZ ->
+                            mapChunkProbeRequests++
+                            CompletableFuture.completedFuture(
+                                if (world.isChunkLoaded(chunkX, chunkZ)) world.getChunkAt(chunkX, chunkZ) else null,
+                            )
+                        },
                         isUnclaimed = { true },
                     )
                     val physical = PhysicalRewardController(
@@ -295,8 +332,11 @@ class PersonalTreasureMapMigrationTest : StringSpec({
                     )
                     try {
                         migratedDefinition.searchPolicy shouldBe activePolicy
+                        migratedDefinition.prizeRolls shouldBe 3
                         migratedDefinition.fingerprint shouldBe originalMapFingerprint
                         unrelatedDefinition.searchPolicy shouldBe oldPolicy
+                        sameWorldMigratedDefinition.searchPolicy shouldBe activePolicy
+                        sameWorldMigratedDefinition.legacyTargetPolicy shouldBe sameWorldOldPolicy
 
                         val voucher = physical.createStack(oldMap.sourceKey).shouldNotBeNull()
                         val voucherIdentity = PhysicalRewardVoucher.identity(voucher).shouldNotBeNull()
@@ -361,11 +401,95 @@ class PersonalTreasureMapMigrationTest : StringSpec({
                         PersonalTreasureMapIdentity.read(player.inventory.itemInMainHand)?.target?.world shouldBe "otherworld"
                         player.inventory.setItemInMainHand(boundOldMap.clone())
                         player.teleport(Location(searchWorld, 0.5, 64.0, 0.5))
+                        player.teleport(Location(searchWorld, 0.5, 64.0, 0.5))
                         val (candidateX, candidateZ) = personalTreasureMapCandidateOrder(
-                            voucherIdentity.id, oldGeneration, 0, 0, activePolicy.radius,
+                            voucherIdentity.id,
+                            oldGeneration,
+                            bounds = requireNotNull(activePolicy.bounds),
+                            minDistance = activePolicy.minDistance,
+                            originX = player.location.x,
+                            originZ = player.location.z,
                         ).first()
                         searchWorld.loadChunk(candidateX shr 4, candidateZ shr 4)
                         searchWorld.getBlockAt(candidateX, 63, candidateZ).type = Material.STONE
+
+                        val sameWorldVoucher = physical.createStack(sameWorldOldMap.sourceKey).shouldNotBeNull()
+                        val sameWorldVoucherIdentity = PhysicalRewardVoucher.identity(sameWorldVoucher).shouldNotBeNull()
+                        val sameWorldOldFingerprint = PersonalTreasureMapDefinition(
+                            map.id,
+                            oldPrize.sourceKey,
+                            emptyList(),
+                            searchPolicy = sameWorldOldPolicy,
+                        ).fingerprint
+                        val sameWorldOldTarget = PersonalTreasureMapDestination(
+                            "survival", "survival", 20.5, 65.0, 20.5, PersonalTreasureMapSearchPolicy.TARGET_HINT,
+                        )
+                        val sameWorldBoundMap = sameWorldVoucher.clone().apply {
+                            editMeta { meta ->
+                                val data = meta.persistentDataContainer
+                                data.set(PersonalTreasureMapIdentity.versionKey, PersistentDataType.STRING, "3")
+                                data.set(PersonalTreasureMapIdentity.ownerKey, PersistentDataType.STRING, sameWorldPlayer.uniqueId.toString())
+                                data.set(PersonalTreasureMapIdentity.definitionKey, PersistentDataType.STRING, map.id)
+                                data.set(
+                                    PersonalTreasureMapIdentity.fingerprintKey,
+                                    PersistentDataType.STRING,
+                                    sameWorldOldFingerprint.sha256,
+                                )
+                                data.set(PersonalTreasureMapIdentity.destinationIndexKey, PersistentDataType.INTEGER, 0)
+                                data.set(PersonalTreasureMapIdentity.searchGenerationKey, PersistentDataType.INTEGER, 4)
+                                data.set(PersonalTreasureMapIdentity.targetServerKey, PersistentDataType.STRING, sameWorldOldTarget.server)
+                                data.set(PersonalTreasureMapIdentity.targetWorldKey, PersistentDataType.STRING, sameWorldOldTarget.world)
+                                data.set(PersonalTreasureMapIdentity.targetXKey, PersistentDataType.DOUBLE, sameWorldOldTarget.x)
+                                data.set(PersonalTreasureMapIdentity.targetYKey, PersistentDataType.DOUBLE, sameWorldOldTarget.y)
+                                data.set(PersonalTreasureMapIdentity.targetZKey, PersistentDataType.DOUBLE, sameWorldOldTarget.z)
+                            }
+                        }
+                        val sameWorldOriginal = PersonalTreasureMapIdentity.read(sameWorldBoundMap).shouldNotBeNull()
+                        val (sameWorldCandidateX, sameWorldCandidateZ) = personalTreasureMapCandidateOrder(
+                            sameWorldVoucherIdentity.id,
+                            4,
+                            bounds = requireNotNull(activePolicy.bounds),
+                            minDistance = activePolicy.minDistance,
+                            originX = 0.5,
+                            originZ = 0.5,
+                        ).first()
+                        searchWorld.loadChunk(sameWorldCandidateX shr 4, sameWorldCandidateZ shr 4)
+                        searchWorld.getBlockAt(sameWorldCandidateX, 63, sameWorldCandidateZ).type = Material.STONE
+                        sameWorldPlayer.teleport(Location(searchWorld, 0.5, 64.0, 0.5))
+                        sameWorldPlayer.inventory.setItemInMainHand(sameWorldBoundMap)
+                        val probesBeforeSameWorldActivation = mapChunkProbeRequests
+                        maps.beforeUse(sameWorldPlayer, sameWorldPlayer.inventory.itemInMainHand) shouldBe
+                            PersonalTreasureMapUseDecision.OPEN_MAP
+                        (mapChunkProbeRequests > probesBeforeSameWorldActivation) shouldBe true
+                        val sameWorldAfterStart = PersonalTreasureMapIdentity.read(
+                            sameWorldPlayer.inventory.itemInMainHand,
+                        ).shouldNotBeNull()
+                        sameWorldAfterStart.voucherId shouldBe sameWorldOriginal.voucherId
+                        sameWorldAfterStart.ownerId shouldBe sameWorldOriginal.ownerId
+                        sameWorldAfterStart.target shouldBe null
+                        sameWorldAfterStart.targetPolicyFingerprint shouldBe activePolicy.targetPolicyFingerprint.sha256
+                        sameWorldAfterStart.searchGeneration shouldBe 4
+                        maps.guidance(sameWorldPlayer)?.searching shouldBe true
+                        flush(scheduler)
+                        val sameWorldUpgraded = PersonalTreasureMapIdentity.read(
+                            sameWorldPlayer.inventory.itemInMainHand,
+                        ).shouldNotBeNull()
+                        sameWorldUpgraded.voucherId shouldBe sameWorldOriginal.voucherId
+                        sameWorldUpgraded.ownerId shouldBe sameWorldOriginal.ownerId
+                        sameWorldUpgraded.definitionFingerprint shouldBe sameWorldOriginal.definitionFingerprint
+                        sameWorldUpgraded.searchGeneration shouldBe 5
+                        sameWorldUpgraded.target.shouldNotBeNull().world shouldBe "survival"
+                        sameWorldUpgraded.targetPolicyFingerprint shouldBe activePolicy.targetPolicyFingerprint.sha256
+                        val stableTarget = sameWorldUpgraded.target
+                        maps.beforeUse(sameWorldPlayer, sameWorldPlayer.inventory.itemInMainHand) shouldBe
+                            PersonalTreasureMapUseDecision.OPEN_MAP
+                        val repeatedlyUsed = PersonalTreasureMapIdentity.read(
+                            sameWorldPlayer.inventory.itemInMainHand,
+                        ).shouldNotBeNull()
+                        repeatedlyUsed.target shouldBe stableTarget
+                        repeatedlyUsed.searchGeneration shouldBe sameWorldUpgraded.searchGeneration
+                        PhysicalRewardVoucher.identity(sameWorldPlayer.inventory.itemInMainHand) shouldBe sameWorldVoucherIdentity
+
                         physical.register()
                         Tasks.withScheduler(scheduler) {
                             paper.callEvent(interact(player))
@@ -390,7 +514,7 @@ class PersonalTreasureMapMigrationTest : StringSpec({
                             player.inventory.itemInMainHand.type shouldBe Material.AIR
                             player.inventory.storageContents.filterNotNull().sumOf { stack ->
                                 if (stack.type == Material.DIAMOND) stack.amount else 0
-                            } shouldBe 1
+                            } shouldBe 3
                             player.inventory.storageContents.filterNotNull().sumOf { stack ->
                                 if (stack.type == Material.GOLD_INGOT) stack.amount else 0
                             } shouldBe 0
@@ -405,7 +529,7 @@ class PersonalTreasureMapMigrationTest : StringSpec({
                             ledger.commits shouldBe 1
                             player.inventory.storageContents.filterNotNull().sumOf { stack ->
                                 if (stack.type == Material.DIAMOND) stack.amount else 0
-                            } shouldBe 1
+                            } shouldBe 3
                         }
                     } finally {
                         physical.close()

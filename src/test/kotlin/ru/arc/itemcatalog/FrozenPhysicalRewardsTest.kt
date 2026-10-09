@@ -64,6 +64,26 @@ class FrozenPhysicalRewardsTest : StringSpec({
         }.isFailure shouldBe true
     }
 
+    "map roll overrides stay transient and cannot enter the frozen archive" {
+        MockBukkitTestRuntime.open().use {
+            val recipe = FrozenPhysicalRecipe(
+                type = "treasure",
+                treasure = FrozenTreasureNode(
+                    id = "single_item",
+                    type = "item",
+                    weight = 1,
+                    minInt = 1,
+                    maxInt = 1,
+                    stack = java.util.Base64.getEncoder().encodeToString(ItemStack(Material.DIAMOND).serializeAsBytes()),
+                ),
+            )
+            Gson().toJson(recipe).contains("treasureRolls") shouldBe false
+            recipe.copy(treasureRolls = 3).let { selected ->
+                runCatching { selected.validate() }.isFailure shouldBe true
+            }
+        }
+    }
+
     "choice archive snapshots stay unpublished until asynchronous child and parent persistence" {
         MockBukkitTestRuntime.open().use {
             val root = Files.createTempDirectory("arc-frozen-choice")
