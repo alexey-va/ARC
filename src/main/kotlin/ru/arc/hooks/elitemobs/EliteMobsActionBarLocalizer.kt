@@ -51,9 +51,13 @@ internal class EliteMobsActionBarLocalizer(
         return Component.text(translated).style(component.style())
     }
 
-    internal fun shouldSuppressAlphaNotice(component: Component, isOverlay: Boolean): Boolean {
-        if (isOverlay) return false
-        return plain.serialize(component) == ALPHA_PROMOTIONAL_NOTICE
+    internal fun shouldSuppressNotice(component: Component, isOverlay: Boolean): Boolean {
+        val source = plain.serialize(component)
+        // Entry reconciliation can run before the native class profile finishes loading.
+        // Hide only its unsolicited reminders, not HUD state or ability rejection feedback.
+        return if (isOverlay) source == NO_CLASS_ENTRY_HINT || source == FIXED_TRANSLATIONS[NO_CLASS_ENTRY_HINT]
+        else source == ALPHA_PROMOTIONAL_NOTICE || source == NO_CLASS_ENTRY_NOTICE ||
+            source == CHAT_NOTICE_TRANSLATIONS[NO_CLASS_ENTRY_NOTICE]
     }
 
     internal fun localizeChatNotice(component: Component): Component {
@@ -94,11 +98,13 @@ internal class EliteMobsActionBarLocalizer(
     }
 
     private companion object {
+        const val NO_CLASS_ENTRY_NOTICE = "No class active! Open /em class and pick a free class to use abilities here."
+        const val NO_CLASS_ENTRY_HINT = "No class » pick one with /em class"
         const val ALPHA_PROMOTIONAL_NOTICE =
             "[Alpha] Advanced Combat System is active here. The combat system is still in alpha, " +
                 "but testers have found it extremely enjoyable. Please share your feedback with the developer!"
         val CHAT_NOTICE_TRANSLATIONS = mapOf(
-            "No class active! Open /em class and pick a free class to use abilities here." to
+            NO_CLASS_ENTRY_NOTICE to
                 "Класс не выбран. Выберите бесплатный класс: Shift + F → Классы.",
             "[Alpha] Advanced Combat System » New: hold sneak and double-tap F " +
                 "to toggle class controls anywhere outside EliteMobs content." to
@@ -136,7 +142,7 @@ internal class EliteMobsActionBarLocalizer(
             "Class controls are not active here." to "Управление классом здесь не действует.",
             "Select an unlocked class with /em class first." to "Сначала выберите открытый класс: Shift + F → Классы.",
             "No active class | /em class" to "Класс не выбран | Shift + F → Классы",
-            "No class » pick one with /em class" to "Класс не выбран » Shift + F → Классы",
+            NO_CLASS_ENTRY_HINT to "Класс не выбран » Shift + F → Классы",
             "Entering combat!" to "Вы вступили в бой!",
             "Not enough " to "Недостаточно ресурса: ",
             " required" to " нужно",
@@ -206,10 +212,14 @@ internal class EliteMobsActionBarPackets private constructor(
         override fun onPacketSend(event: PacketSendEvent) {
             when (event.packetType) {
                 PacketType.Play.Server.ACTION_BAR -> WrapperPlayServerActionBar(event).let {
-                    it.actionBarText = localizer.localize(it.actionBarText)
+                    if (localizer.shouldSuppressNotice(it.actionBarText, isOverlay = true)) {
+                        event.isCancelled = true
+                    } else {
+                        it.actionBarText = localizer.localize(it.actionBarText)
+                    }
                 }
                 PacketType.Play.Server.SYSTEM_CHAT_MESSAGE -> WrapperPlayServerSystemChatMessage(event).let {
-                    if (localizer.shouldSuppressAlphaNotice(it.message, it.isOverlay)) {
+                    if (localizer.shouldSuppressNotice(it.message, it.isOverlay)) {
                         event.isCancelled = true
                     } else if (it.isOverlay) {
                         it.message = localizer.localize(it.message)

@@ -84,19 +84,19 @@ class EliteMobsActionBarLocalizerTest : FreeSpec({
             .append(Component.text("Please share your feedback with ", NamedTextColor.WHITE))
             .append(Component.text("the developer!", NamedTextColor.YELLOW))
 
-        localizer.shouldSuppressAlphaNotice(notice, isOverlay = false) shouldBe true
-        localizer.shouldSuppressAlphaNotice(
+        localizer.shouldSuppressNotice(notice, isOverlay = false) shouldBe true
+        localizer.shouldSuppressNotice(
             Component.text(
                 "[Alpha] Advanced Combat System is active here. The combat system is still in alpha, " +
                     "but class data is still loading. Please share your feedback with the developer!",
             ),
             isOverlay = false,
         ) shouldBe false
-        localizer.shouldSuppressAlphaNotice(
+        localizer.shouldSuppressNotice(
             Component.text("Warning: Please share your feedback with the developer after reporting this issue."),
             isOverlay = false,
         ) shouldBe false
-        localizer.shouldSuppressAlphaNotice(notice, isOverlay = true) shouldBe false
+        localizer.shouldSuppressNotice(notice, isOverlay = true) shouldBe false
     }
 
     "off-class warning translates its class, weapons and effect" {
@@ -130,7 +130,7 @@ class EliteMobsActionBarLocalizerTest : FreeSpec({
         }
     }
 
-    "chat onboarding notices translate their gradient heading and complete instructions" {
+    "entry class reminder is hidden while class controls instructions stay visible" {
         val localizer = EliteMobsActionBarLocalizer()
         val noClass = "No class active!".fold(Component.empty()) { result, character ->
             result.append(Component.text(character, NamedTextColor.GOLD))
@@ -143,8 +143,29 @@ class EliteMobsActionBarLocalizerTest : FreeSpec({
             "Класс не выбран. Выберите бесплатный класс: Shift + F → Классы."
         plain.serialize(localizer.localizeChatNotice(controls)) shouldBe
             "Управление классом » Вне данжей его можно переключать: зажмите Shift и дважды нажмите F."
-        localizer.shouldSuppressAlphaNotice(noClass, isOverlay = false) shouldBe false
-        localizer.shouldSuppressAlphaNotice(controls, isOverlay = false) shouldBe false
+        localizer.shouldSuppressNotice(noClass, isOverlay = false) shouldBe true
+        localizer.shouldSuppressNotice(localizer.localizeChatNotice(noClass), isOverlay = false) shouldBe true
+        localizer.shouldSuppressNotice(controls, isOverlay = false) shouldBe false
+    }
+
+    "entry action bar is hidden in native and localized form without suppressing class HUD or explicit ability feedback" {
+        val localizer = EliteMobsActionBarLocalizer()
+        val hint = "No class".fold(Component.empty()) { result, character ->
+            result.append(Component.text(character, NamedTextColor.GOLD))
+        }.append(Component.text(" » pick one with /em class"))
+        localizer.shouldSuppressNotice(hint, isOverlay = true) shouldBe true
+        localizer.shouldSuppressNotice(localizer.localize(hint), isOverlay = true) shouldBe true
+        localizer.shouldSuppressNotice(hint, isOverlay = false) shouldBe false
+        listOf(
+            "No active class | /em class",
+            "Select an unlocked class with /em class first.",
+            "No class active! Class data is still loading.",
+            "Player: No class » pick one with /em class",
+        ).forEach { message ->
+            val component = Component.text(message)
+            localizer.shouldSuppressNotice(component, isOverlay = true) shouldBe false
+            localizer.shouldSuppressNotice(localizer.localize(component), isOverlay = true) shouldBe false
+        }
     }
 
     "chat localization preserves combat errors and unrelated messages sharing the heading or class names" {
@@ -158,6 +179,7 @@ class EliteMobsActionBarLocalizerTest : FreeSpec({
         ).forEach { text ->
             val notice = Component.text(text)
             localizer.localizeChatNotice(notice) shouldBe notice
+            localizer.shouldSuppressNotice(notice, isOverlay = false) shouldBe false
         }
     }
 })

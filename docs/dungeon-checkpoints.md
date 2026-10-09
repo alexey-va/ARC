@@ -13,6 +13,12 @@ missing bundled defaults without replacing operator values.
   Ordinary F remains untouched. Other worlds use the saved personal shortcut.
   `MenuShortcutController` delegates this decision to `EMDungeonQol.usesMenuShortcut`;
   the guild never becomes an active dungeon visit or gains checkpoint controls.
+- Automatic EliteMobs entry reminders to choose a class are hidden in chat and
+  the action bar: native entry reconciliation can run before class progression
+  hydration completes. `EliteMobsActionBarLocalizer` suppresses only the exact
+  native reminder shapes (including their localized forms) in their respective
+  packet channels. Class HUD state, explicit ability rejection feedback and
+  actual profile/selection data are unchanged.
 - The panel has a direct Main menu action and a Group section with party
   guidance and native `/elitemobs:em party menu` management. The latter is
   offered only when the installed EliteMobs party feature exists and is enabled
