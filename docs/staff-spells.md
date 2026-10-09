@@ -22,8 +22,8 @@ There are no loot-table or shop changes. Anyone holding an issued sample can use
   front reaches them and they remain eligible and visible. It does not steer.
 - **Солнечное копьё / lance:** the Winged Staff
   (`3dfantasyweaponscit:sagrada_winged_staff`) damages up to three mobs instantly
-  along a narrow line through the reticle. A bright, faceted plasma head travels visually over six ticks with a short
-  thick wake, then fades over twenty ticks; damage remains immediate. There is no soft lock.
+  along a narrow line through the reticle. A bright, faceted plasma head travels at about 2.8 blocks per tick with a short
+  thick wake and an eight-tick finish; damage remains immediate. There is no soft lock.
 - **Пепельная комета / ember:** the Hermit Staff
   (`3dfantasyweaponscit:bermunde_hermit_staff`) launches a straight, steady fire
   core from just ahead of the caster. Lead moving targets manually; it bursts
@@ -82,7 +82,7 @@ players, protected mobs, pets, NPCs and ineligible elite targets are excluded by
 the existing bridge. Velocity uses Paper's [meters-per-tick API](https://jd.papermc.io/paper/26.1.2/org/bukkit/entity/Entity.html#setVelocity(org.bukkit.util.Vector)).
 
 Compact flight uses a 1.15-block eye clearance so its centered muzzle remains
-visible nearby; large mark/comet impacts retain the 3.2-block exclusion. Display
+visible nearby; ground-level emerald fronts use 0.55 blocks plus full-piece bounds; large mark/comet impacts retain the 3.2-block exclusion. Display
 checks include each part's full bounding sphere, and particle checks apply to
 every emission point. Display visibility also
 checks the swept interpolation segment every tick, with movement padding. This rule
@@ -150,16 +150,25 @@ Hard bounds are 48 pieces per scene, four scenes per caster, twelve scenes globa
 and four scenes per viewer within 64 blocks (at most 192 handles eligible for one
 viewer). A viewer's own casts are selected first, then nearby casts. The oldest
 visual scene is evicted when a pool fills; damage and projectile collision continue
-independently. Shapes update every two ticks with two-tick client interpolation.
+independently. Shapes update every two ticks with two-tick client interpolation. Lightning instead
+adds fixed jagged channel segments without interpolation: its 47 stable slots keep
+the previous route in place until an eight-tick fade; unreached slots stay hidden.
 Moving marks/projectiles update their logical position between display frames.
 FROST's front spans twelve ticks after a two-tick lead-in in a 24-tick scene;
-NOVA's eight-block front spans sixteen ticks after the same lead-in in a 30-tick
-scene. MARK and EMBER impacts reuse their existing display handles for 20-tick
-releases with a four-tick blend; LANCE forms and fades over twenty ticks.
-Ordinary effects last 18–30 ticks; tracked effects expire with their mark/projectile,
+NOVA's eight-block front spans sixteen ticks after the same lead-in in a 20-tick
+scene; all layers rise together and dissolve toward the floor while still advancing. MARK and EMBER impacts reuse their existing display handles for 20-tick
+releases with a four-tick blend. MARK carries its rotation clock and charged scale
+into release. LANCE and its particle wake share a distance-dependent flight clock
+and an eight-tick finish.
+Most effects last 18–30 ticks; short LANCE shots use their four-tick minimum flight plus finish; tracked effects expire with their mark/projectile,
 with a final 160-tick safety cap. All scenes are removed on caster death, quit,
 world change, expiry or module shutdown/reload. The limits bound effect size and
-traffic sources; they are not a measured TPS/FPS guarantee.
+traffic sources; they are not a measured TPS/FPS guarantee. Particle emission is
+also finite: at most five lightning sparks per controller step, sixteen MARK
+release positions, 181 radial / 147 directional NOVA positions, and 136 LANCE
+positions per maximum-range ray (including the camera-filtered launch flash).
+The three-ray LANCE multiplies that bound by three; emissions are spread across
+its flight, not created in one tick. Large flashes retain the 3.2-block eye cutoff.
 
 ## Verification
 

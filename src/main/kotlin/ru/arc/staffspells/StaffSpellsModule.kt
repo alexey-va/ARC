@@ -189,8 +189,9 @@ internal class StaffSpellController(
                 lineTargets(player, eye, end, settings.lanceWidth).take(settings.lanceTargets).forEach {
                     damage.hit(player, it, cast, tuning.power, tuning.vanillaDamage)
                 }
-                visuals.lance(visualStart(eye, end), end)
-                effects.play(player.uniqueId, spell, eye, end, radius = 0.75, durationTicks = 20, impact = true)
+                visuals.lance(eye, end)
+                effects.play(player.uniqueId, spell, eye, end, radius = 0.75,
+                    durationTicks = staffLanceDuration(eye.distance(end)), impact = true)
             }
             StaffSpell.EMBER -> {
                 // The direction is captured once. Flight never steers towards a nearby mob.
@@ -270,13 +271,14 @@ internal class StaffSpellController(
                     !directional || inFrostCone(origin, forward, center(it), range, spread)
                 }.sortedBy { horizontalDistance(origin, center(it)) }.take(MAX_WAVE_CANDIDATES)
                 val end = origin.clone().add(forward.clone().multiply(range))
+                val duration = if (directional) NOVA_DURATION_TICKS else FROST_NOVA_DURATION_TICKS
                 val visualId = effects.play(player.uniqueId, spell, origin, end,
-                    radius = if (directional) 5.5 else range, durationTicks = NOVA_DURATION_TICKS,
+                    radius = if (directional) 5.5 else range, durationTicks = duration,
                     impact = true, secondary = true)
                 visuals.wave(origin, end, if (directional) 5.5 else range, spell == StaffSpell.FROST, directional)
                 waves += PendingStaffWave(player.uniqueId, player.world.uid, spell, origin, forward,
                     range, candidates, cast, tuning, visualId, WAVE_START_DELAY_TICKS, NOVA_TRAVEL_TICKS,
-                    NOVA_DURATION_TICKS, NOVA_INITIAL_FRONT_RADIUS,
+                    duration, NOVA_INITIAL_FRONT_RADIUS,
                     slowTicks = if (spell == StaffSpell.FROST) settings.frostSlowTicks else null,
                     frostSpread = spread, directional = directional)
             }
@@ -289,8 +291,9 @@ internal class StaffSpellController(
                         if (visited.size < settings.lanceTargets && visited.add(victim.uniqueId))
                             damage.hit(player, victim, cast, tuning.power * 0.65, tuning.vanillaDamage * 0.65)
                     }
-                    visuals.lance(visualStart(eye, end), end)
-                    effects.play(player.uniqueId, spell, eye, end, radius = 0.9, durationTicks = 20,
+                    visuals.lance(eye, end)
+                    effects.play(player.uniqueId, spell, eye, end, radius = 0.9,
+                        durationTicks = staffLanceDuration(eye.distance(end)),
                         impact = true, secondary = true)
                 }
             }
@@ -370,7 +373,6 @@ internal class StaffSpellController(
             val end = hitPoint ?: blockEnd
             visuals.lightningTrail(from, end)
             bolt.trail += end.clone()
-            if (bolt.trail.size > 17) bolt.trail.removeAt(0)
             effects.moveTrail(bolt.visualId, bolt.trail)
             bolt.remainingDistance -= step
             if (victim != null || from.distanceSquared(blockEnd) < step * step - 0.0001 ||
@@ -694,7 +696,8 @@ internal class StaffSpellController(
         const val FROST_DURATION_TICKS = 24
         const val NOVA_INITIAL_FRONT_RADIUS = 1.8
         const val NOVA_TRAVEL_TICKS = 16
-        const val NOVA_DURATION_TICKS = 30
+        const val NOVA_DURATION_TICKS = 20
+        const val FROST_NOVA_DURATION_TICKS = 30
         const val MARK_IMPACT_DURATION_TICKS = 20
         const val EMBER_IMPACT_DURATION_TICKS = 20
     }

@@ -28,6 +28,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         var impact: Boolean,
         val secondary: Boolean,
         var age: Int = 0,
+        var priorStageTicks: Int = 0,
         var transitionFrom: List<StaffDisplayPart>? = null,
         var renderedParts: List<StaffDisplayPart> = emptyList(),
         var trail: List<Vector3f>? = null,
@@ -69,6 +70,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
             radius.takeIf(Double::isFinite)?.coerceIn(0.1, if (spell == StaffSpell.FROST) 96.0 else 16.0) ?: 1.0,
             durationTicks.coerceIn(1, 160), impact, secondary)
         scenes[scene.id] = scene
+        if (spell == StaffSpell.CHAIN) scene.trail = listOf(Vector3f())
         render(scene)
         refreshAudience()
         return scene.id
@@ -82,10 +84,10 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
 
     fun moveTrail(sceneId: UUID?, points: List<Location>) {
         val scene = scenes[sceneId] ?: return
-        if (points.size < 2 || points.any { !valid(it) || it.world != scene.origin.world }) return
+        if (points.isEmpty() || points.any { !valid(it) || it.world != scene.origin.world }) return
         scene.origin = points.first().clone()
         scene.rotation = Quaternionf()
-        scene.trail = points.takeLast(17).map { at ->
+        scene.trail = points.take(41).map { at ->
             val delta = at.toVector().subtract(scene.origin.toVector())
             Vector3f(delta.x.toFloat(), delta.y.toFloat(), delta.z.toFloat())
         }
@@ -94,6 +96,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
     fun finishTrail(sceneId: UUID?) {
         val scene = scenes[sceneId] ?: return
         scene.impact = true
+        scene.priorStageTicks += scene.age
         scene.age = 0
         scene.duration = 8
     }
@@ -115,6 +118,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         scene.radius = radius.takeIf(Double::isFinite)?.coerceIn(0.1, 16.0) ?: 1.0
         scene.duration = durationTicks.coerceIn(8, 160)
         scene.impact = true
+        scene.priorStageTicks += scene.age
         scene.age = 0
         render(scene)
     }
@@ -142,7 +146,8 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
     private fun render(scene: Scene) {
         var parts = (scene.trail?.let { path -> staffLightningTrailParts(path,
             if (scene.impact) (1.0 - scene.age / 8.0).coerceAtLeast(0.0) else 1.0) }
-            ?: staffDisplayParts(scene.spell, scene.age, scene.duration, scene.length, scene.radius, scene.impact, scene.secondary)).take(MAX_PARTS)
+            ?: staffDisplayParts(scene.spell, scene.age, scene.duration, scene.length, scene.radius, scene.impact,
+                scene.secondary, animationAgeTicks = scene.priorStageTicks + scene.age)).take(MAX_PARTS)
         scene.transitionFrom?.let { previous ->
             parts = blendStaffParts(parts, previous, scene.age)
             if (scene.age >= 4) scene.transitionFrom = null
@@ -165,8 +170,8 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
                 it.isVisibleByDefault = false
                 it.brightness = Display.Brightness(15, 15)
                 it.viewRange = VIEW_RANGE.toFloat() / 64f
-                it.interpolationDuration = FRAME_TICKS
-                it.teleportDuration = FRAME_TICKS
+                it.interpolationDuration = if (scene.spell == StaffSpell.CHAIN) 0 else FRAME_TICKS
+                it.teleportDuration = if (scene.spell == StaffSpell.CHAIN) 0 else FRAME_TICKS
                 it.shadowStrength = 0f
                 scene.handles += it
             }
@@ -199,10 +204,11 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
             audience.forEach { id -> online[id]?.let { player ->
                 scene.handles.forEachIndexed { index, handle ->
                     val bound = scene.bounds.getOrNull(index)
-                    val previous = scene.previousBounds.getOrNull(index) ?: bound
+                    val previous = if (scene.spell == StaffSpell.CHAIN) bound
+                        else scene.previousBounds.getOrNull(index) ?: bound
                     val eye = player.eyeLocation.toVector()
                     val padding = staffEyeClearance(scene.spell, scene.impact) + player.velocity.length() * FRAME_TICKS + 0.15
-                    if (bound != null && previous != null &&
+                    if (scene.renderedParts.getOrNull(index)?.visible == true && bound != null && previous != null &&
                         staffSweptDistance(eye, previous.first, bound.first) >= padding + maxOf(bound.second, previous.second))
                         handle.showTo(player)
                     else handle.hideFrom(player)
@@ -237,7 +243,11 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
 
 /** Compact flight remains close to the reticle; large explosions retain a wider exclusion. */
 internal fun staffEyeClearance(spell: StaffSpell, impact: Boolean): Double =
-    if (impact && spell in setOf(StaffSpell.MARK, StaffSpell.EMBER)) 3.2 else 1.15
+    when {
+        impact && spell in setOf(StaffSpell.MARK, StaffSpell.EMBER) -> 3.2
+        spell == StaffSpell.NOVA -> 0.55
+        else -> 1.15
+    }
 
 /** Conservative sphere includes the entire transformed cuboid, not only its anchor. */
 internal fun staffPartClearOfEye(part: StaffDisplayPart, origin: Location, rotation: Quaternionf, eye: Location,

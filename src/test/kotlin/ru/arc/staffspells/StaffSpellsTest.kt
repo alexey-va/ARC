@@ -140,12 +140,12 @@ class StaffSpellsTest : FreeSpec({
 
             h.hits.map { it.uniqueId } shouldBe listOf(moving.uniqueId)
             h.trailMoves.any { move ->
-                move.points.size in 2..17 && move.points.last().distance(moving.location.clone().add(0.0, 1.0, 0.0)) < 1.5
+                move.points.size in 2..41 && move.points.last().distance(moving.location.clone().add(0.0, 1.0, 0.0)) < 1.5
             } shouldBe true
-            h.trailMoves.all { it.points.size <= 17 } shouldBe true
-            h.trailMoves.last().points.size shouldBe 17
+            h.trailMoves.all { it.points.size <= 41 } shouldBe true
+            (h.trailMoves.last().points.size > 17) shouldBe true
             h.trailMoves.all { move ->
-                (move.points.size == 17 || move.points.first().distance(castOrigin) < 0.001) &&
+                (move.points.first().distance(castOrigin) < 0.001) &&
                     move.points.zipWithNext().all { (from, to) -> from.distance(to) <= 2.001 }
             } shouldBe true
             h.finishedTrails shouldBe listOf(h.visualPlays.single().id)

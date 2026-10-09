@@ -16,6 +16,8 @@ object StaffSpellPreviewExport {
         val durationTicks: Int,
         val impact: Boolean,
         val secondary: Boolean = false,
+        val animationAgeOffsetTicks: Int = 0,
+        val transitionFromAgeTicks: Int? = null,
     )
 
     private data class ChainRoute(
@@ -43,36 +45,38 @@ object StaffSpellPreviewExport {
     // Mirrors StaffSpellController display calls using its current default tuning.
     private val events = mapOf(
         StaffSpell.CHAIN to listOf(
-            Event("offset-target-homing-flight", Inputs(48.0, 0.8, 40, impact = false),
-                ChainRoute(Math.toDegrees(0.34), -10.0, -0.7, 32.0)),
-            Event("offset-target-homing-impact", Inputs(48.0, 0.8, 8, impact = true),
-                ChainRoute(Math.toDegrees(0.34), -10.0, -0.7, 32.0)),
-            Event("secondary-flight", Inputs(48.0, 0.8, 40, impact = false, secondary = true)),
-            Event("secondary-impact", Inputs(48.0, 0.8, 8, impact = true, secondary = true)),
+            Event("centerline-empty-flight", Inputs(76.8, 0.8, 40, impact = false)),
+            Event("centerline-empty-impact", Inputs(76.8, 0.8, 8, impact = true)),
+            Event("secondary-empty-flight", Inputs(76.8, 0.8, 40, impact = false, secondary = true)),
+            Event("secondary-empty-impact", Inputs(76.8, 0.8, 8, impact = true, secondary = true)),
         ),
         StaffSpell.MARK to listOf(
             Event("charge", Inputs(0.0, 1.3, 18, impact = false)),
-            Event("burst", Inputs(0.0, 3.5, 20, impact = true)),
+            Event("burst", Inputs(0.0, 3.5, 20, impact = true, animationAgeOffsetTicks = 18,
+                transitionFromAgeTicks = 18)),
             Event("gravity-charge", Inputs(0.0, 4.5, 40, impact = false, secondary = true)),
-            Event("singularity", Inputs(0.0, 4.5, 20, impact = true, secondary = true)),
+            Event("singularity", Inputs(0.0, 4.5, 20, impact = true, secondary = true,
+                animationAgeOffsetTicks = 40, transitionFromAgeTicks = 40)),
         ),
         StaffSpell.FROST to listOf(
             Event("fan", Inputs(10.0, kotlin.math.tan(Math.toRadians(50.0)) * 10.0, 24, impact = false)),
             Event("radial-ice-nova", Inputs(8.0, 8.0, 30, impact = true, secondary = true)),
         ),
         StaffSpell.LANCE to listOf(
-            Event("impact", Inputs(48.0, 0.75, 20, impact = true)),
-            Event("triple-spears", Inputs(48.0, 0.9, 20, impact = true, secondary = true)),
+            Event("impact", Inputs(48.0, 0.75, staffLanceDuration(48.0), impact = true)),
+            Event("triple-spears", Inputs(48.0, 0.9, staffLanceDuration(48.0), impact = true, secondary = true)),
         ),
         StaffSpell.EMBER to listOf(
             Event("flight", Inputs(48.0, 0.85, 44, impact = false)),
-            Event("burst", Inputs(0.0, 2.8, 20, impact = true)),
+            Event("burst", Inputs(0.0, 2.8, 20, impact = true, animationAgeOffsetTicks = 40,
+                transitionFromAgeTicks = 40)),
             Event("secondary-flight", Inputs(12.0, 1.2, 8, impact = false, secondary = true)),
-            Event("secondary-burst", Inputs(0.0, 3.5, 20, impact = true, secondary = true)),
+            Event("secondary-burst", Inputs(0.0, 3.5, 20, impact = true, secondary = true,
+                animationAgeOffsetTicks = 6, transitionFromAgeTicks = 6)),
         ),
         StaffSpell.NOVA to listOf(
-            Event("impact", Inputs(8.0, 8.0, 30, impact = true)),
-            Event("directed-tidal-crest", Inputs(12.0, 5.5, 30, impact = true, secondary = true)),
+            Event("impact", Inputs(8.0, 8.0, 20, impact = true)),
+            Event("directed-tidal-crest", Inputs(12.0, 5.5, 20, impact = true, secondary = true)),
         ),
     )
 
@@ -100,13 +104,13 @@ object StaffSpellPreviewExport {
             illustrativeDistanceBlocks = 2.5,
             cameraTargetY = 1.62,
             cameraTargetZ = 8.0,
-            trajectoryNote = "Centered primary launch pose at yaw 0; the runtime starts with a 2.5-block bolt before the traveled trail takes over.",
+            trajectoryNote = "Centered primary launch pose at yaw 0; the first visible route arrives on the first two-tick display update.",
         ))
         listOf(8.0, 16.0, 24.0).forEach { distance ->
             add(ReadabilityPose(
                 id = "lance-primary-${distance.toInt()}m",
                 spell = StaffSpell.LANCE,
-                event = Event("primary-impact", Inputs(distance, 0.75, 20, impact = true)),
+                event = Event("primary-impact", Inputs(distance, 0.75, staffLanceDuration(distance), impact = true)),
                 frame = Frame("middle", 10),
                 illustrativeDistanceBlocks = distance,
                 cameraTargetY = 1.62,
@@ -141,7 +145,7 @@ object StaffSpellPreviewExport {
         add(ReadabilityPose(
             id = "nova-primary-caster-view",
             spell = StaffSpell.NOVA,
-            event = Event("impact", Inputs(8.0, 8.0, 30, impact = true)),
+            event = Event("impact", Inputs(8.0, 8.0, 20, impact = true)),
             frame = Frame("middle", 14),
             illustrativeDistanceBlocks = 8.0,
             cameraTargetY = 1.62,
@@ -151,7 +155,7 @@ object StaffSpellPreviewExport {
         add(ReadabilityPose(
             id = "nova-secondary-caster-view",
             spell = StaffSpell.NOVA,
-            event = Event("directed-tidal-crest", Inputs(12.0, 5.5, 30, impact = true, secondary = true)),
+            event = Event("directed-tidal-crest", Inputs(12.0, 5.5, 20, impact = true, secondary = true)),
             frame = Frame("middle", 14),
             illustrativeDistanceBlocks = 12.0,
             cameraTargetY = 1.62,
@@ -186,6 +190,8 @@ object StaffSpellPreviewExport {
             "width" to part.scale.x.toDouble(),
             "height" to part.scale.y.toDouble(),
             "depth" to part.scale.z.toDouble(),
+            "slotIndex" to partIndex,
+            "visible" to part.visible,
             "rotationX" to Math.toDegrees(euler.x.toDouble()),
             "rotationY" to Math.toDegrees(euler.y.toDouble()),
             "rotationZ" to Math.toDegrees(euler.z.toDouble()),
@@ -264,7 +270,7 @@ object StaffSpellPreviewExport {
             position.add(direction.clone().multiply(2.0))
             route += point()
         }
-        return route.takeLast(17)
+        return route.take(41)
     }
 
     private fun geometry(
@@ -275,27 +281,20 @@ object StaffSpellPreviewExport {
     ): Pair<List<StaffDisplayPart>, Vector3f> {
         if (spell == StaffSpell.CHAIN) {
             val impact = event.id.endsWith("impact")
-            val lastTick = if (impact) 38 else frame.ageTicks.coerceIn(0, 38)
+            val lastTick = if (impact) 39 else (frame.ageTicks - 1).coerceIn(0, 39)
             val fade = if (impact) (1.0 - frame.ageTicks / 8.0).coerceIn(0.0, 1.0) else 1.0
             val origin = Vector3f(0f, eyeHeight.toFloat(), 0f)
             val chainRoute = event.chainRoute
             val fanAngles = if (event.inputs.secondary) listOf(-48.0, 0.0, 48.0)
                 else listOf(chainRoute?.yawDegrees ?: 0.0)
-            if (!impact && frame.ageTicks == 0) {
-                // Runtime starts with a generic 2.5-block bolt; moveTrail replaces it after two traveled points.
-                val launch = staffDisplayParts(StaffSpell.CHAIN, 0, event.inputs.durationTicks,
-                    2.5, 0.8, impact = false)
-                val parts = fanAngles.flatMap { angle ->
-                    val yaw = Quaternionf().rotationY(Math.toRadians(angle).toFloat())
-                    launch.map { part -> part.copy(
-                        center = yaw.transform(Vector3f(part.center)),
-                        rotation = Quaternionf(yaw).mul(part.rotation),
-                    ) }
-                }
-                return parts to origin
-            }
             val parts = fanAngles.flatMap { angle ->
-                val route = homingFlightRoute(lastTick, eyeHeight, angle, event.inputs.secondary, chainRoute)
+                val route = if (event.id.contains("empty")) {
+                    val direction = org.bukkit.util.Vector(0.0, 0.0, 1.0).rotateAroundY(Math.toRadians(angle))
+                    (0..lastTick).map { tick ->
+                        val point = direction.clone().multiply(minOf(tick * 2.0, 76.8))
+                        Vector3f(point.x.toFloat(), (point.y + eyeHeight).toFloat(), point.z.toFloat())
+                    }
+                } else homingFlightRoute(lastTick, eyeHeight, angle, event.inputs.secondary, chainRoute)
                 val localRoute = route.map { Vector3f(it).sub(origin) }
                 staffLightningTrailParts(localRoute, fade)
             }
@@ -310,6 +309,7 @@ object StaffSpellPreviewExport {
             radius = event.inputs.radius,
             impact = event.inputs.impact,
             secondary = event.inputs.secondary,
+            animationAgeTicks = event.inputs.animationAgeOffsetTicks + frame.ageTicks,
         )
         val parts = if (spell == StaffSpell.LANCE && event.id == "triple-spears") {
             listOf(-16.0, 0.0, 16.0).flatMap { angle ->
@@ -351,7 +351,7 @@ object StaffSpellPreviewExport {
         spell: StaffSpell,
         impact: Boolean,
     ) = parts.filter { part ->
-        Vector3f(part.center).distance(eye) >=
+        part.visible && Vector3f(part.center).distance(eye) >=
             (staffEyeClearance(spell, impact) + 0.15).toFloat() + part.scale.length() * 0.5f
     }
 
@@ -369,7 +369,8 @@ object StaffSpellPreviewExport {
             if (inputs.impact && frame.ageTicks < 4 && spell != StaffSpell.CHAIN) {
                 events.getValue(spell).firstOrNull { !it.inputs.impact && it.inputs.secondary == inputs.secondary }
                     ?.let { tracked ->
-                        val priorAge = ((tracked.inputs.durationTicks - 1) / FRAME_TICKS) * FRAME_TICKS
+                        val priorAge = event.inputs.transitionFromAgeTicks
+                            ?: ((tracked.inputs.durationTicks - 1) / FRAME_TICKS) * FRAME_TICKS
                         val previous = geometry(spell, tracked, Frame("transition", priorAge), eyeHeight).first
                         parts = blendStaffParts(parts, previous, frame.ageTicks)
                     }
@@ -378,8 +379,13 @@ object StaffSpellPreviewExport {
             require(parts.isNotEmpty()) { "${spell.id}/${event.id}/${frame.id} produced no display parts" }
             val worldParts = parts.map { part -> part.copy(center = Vector3f(part.center).add(origin)) }
             val camera = playerCamera(spell, event, frame, eyeHeight, readability)
-            val visible = if (view == "geometry") worldParts
-                else playerVisibleParts(worldParts, eyePosition(camera), spell, inputs.impact)
+            val indexedParts = worldParts.mapIndexed { index, part -> index to part }
+            // Preserve source slot IDs before per-viewer culling. The temporal harness applies
+            // the live swept-bounds rule to these source slots for each fixed camera.
+            val exportedParts = if (view == "geometry") indexedParts
+                else indexedParts.filter { (_, part) ->
+                    part.visible && playerVisibleParts(listOf(part), eyePosition(camera), spell, inputs.impact).isNotEmpty()
+                }
             ExportedState(mapOf(
                 "id" to (readability?.let { "readability-${it.id}" } ?: "${spell.id}-${event.id}-${frame.id}-$view"),
                 "title" to (readability?.let { "PLAYER READABILITY · ${spell.id.uppercase()} · ${it.id}" }
@@ -391,6 +397,8 @@ object StaffSpellPreviewExport {
                 "ageTicks" to frame.ageTicks,
                 "frameTicks" to FRAME_TICKS,
                 "durationTicks" to inputs.durationTicks,
+                "animationAgeTicks" to (inputs.animationAgeOffsetTicks + frame.ageTicks),
+                "transitionFromAgeTicks" to (inputs.transitionFromAgeTicks ?: -1),
                 "impact" to inputs.impact,
                 "secondary" to inputs.secondary,
                 "gameplayEvent" to true,
@@ -399,7 +407,7 @@ object StaffSpellPreviewExport {
                 "camera" to camera,
                 "cameraMode" to if (readability == null) "standing-or-sneaking" else "player-eye-default-fov-no-autozoom",
                 "illustrativeDistanceBlocks" to (readability?.illustrativeDistanceBlocks ?: 0.0),
-                "partCull" to if (view == "geometry") "none" else
+                "partCull" to if (view == "geometry") "source visibility retained; temporal observer culling uses swept bounds" else
                     "distance(center, eye) >= staffEyeClearance(spell, impact) + 0.15 + part-scale-length / 2",
                 "projectiles" to when {
                     spell == StaffSpell.CHAIN && inputs.secondary -> 3
@@ -413,16 +421,16 @@ object StaffSpellPreviewExport {
                     else if (event.id.startsWith("offset-target-homing-"))
                         "Explicit legacy offset-target homing illustration (target x=${event.chainRoute?.targetX}, z=${event.chainRoute?.targetZ}); it is retained for route inspection, not as the primary cast framing."
                     else if (!inputs.impact && frame.ageTicks == 0)
-                        "Runtime launch pose uses its generic 2.5-block bolt; later frames show only traveled points from an illustrative homing route."
+                        "Runtime begins with an eye-origin head hidden by camera clearance; the first traveled edge becomes visible on the first two-tick update."
                     else "Deterministic traveled-route example; the live controller steers to its selected target."),
                 "trailPointCount" to when {
                     spell != StaffSpell.CHAIN -> 0
-                    inputs.impact -> 17
-                    frame.ageTicks == 0 -> 0
-                    else -> (frame.ageTicks.coerceIn(0, 38) + 1).coerceAtMost(17)
+                    inputs.impact -> 40
+                    frame.ageTicks == 0 -> 1
+                    else -> frame.ageTicks.coerceIn(1, 40)
                 },
-                "pieces" to visible.mapIndexed { index, part -> pieceMetadata(spell, event, index, part) },
-            ), visible.map { "minecraft:${it.material.name.lowercase()}" })
+                "pieces" to exportedParts.map { (index, part) -> pieceMetadata(spell, event, index, part) },
+            ), exportedParts.map { (_, part) -> "minecraft:${part.material.name.lowercase()}" })
         }
     }
 

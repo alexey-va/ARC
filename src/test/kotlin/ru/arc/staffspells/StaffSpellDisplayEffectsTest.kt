@@ -51,19 +51,20 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
 
     "charged cores launch through the reticle and the solar mass grows after leaving the muzzle" {
         val chain = staffDisplayParts(StaffSpell.CHAIN, 0, 20, 48.0, 0.8, false)
-        chain.size shouldBe 23
-        (chain[18].scale.x >= 0.40f) shouldBe true
-        (chain[18].center.z >= 2.4f) shouldBe true
+        chain.size shouldBe 47
+        (chain[44].scale.x >= 0.30f) shouldBe true
+        (chain[44].center.z >= 2.4f) shouldBe true
         (chain.minOf { it.center.z } >= 0f) shouldBe true
 
         val lance = staffDisplayParts(StaffSpell.LANCE, 0, 20, 24.0, 0.75, false)
         lance.size shouldBe 24
-        (lance[18].scale.x in 0.12f..0.20f) shouldBe true
+        (lance[18].scale.x in 0.30f..0.40f) shouldBe true
         (lance[18].center.z >= 1.9f) shouldBe true
         (lance[0].center.z > 1.0f) shouldBe true
-        val arrivedLance = staffDisplayParts(StaffSpell.LANCE, 6, 20, 24.0, 0.75, true)
+        val arrivedLance = staffDisplayParts(StaffSpell.LANCE, staffLanceFlightTicks(24.0),
+            staffLanceDuration(24.0), 24.0, 0.75, true)
         arrivedLance[18].center.z shouldBe 24f
-        (arrivedLance[18].scale.x > 1.7f) shouldBe true
+        (arrivedLance[18].scale.x > 1.2f) shouldBe true
         (arrivedLance[18].center.z - arrivedLance[0].center.z < 9f) shouldBe true
         lance.forEach { part ->
             for (x in listOf(-1f, 1f)) for (y in listOf(-1f, 1f)) for (z in listOf(-1f, 1f)) {
@@ -74,40 +75,50 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         }
     }
 
-    "live lightning geometry grows only along the points already traveled" {
-        fun route(count: Int) = (0 until count).map { index ->
-            org.joml.Vector3f(0f, 0f, index * 1.25f)
+    "solar flight remains visible across its actual range and shares its particle clock" {
+        listOf(8.0, 16.0, 24.0, 48.0).forEach { distance ->
+            val flight = staffLanceFlightTicks(distance)
+            val duration = staffLanceDuration(distance)
+            duration shouldBe flight + 8
+            val positions = (0..flight).map { staffLanceFront(it, distance) }
+            positions.first() shouldBe 2.0
+            positions.last() shouldBe distance
+            positions.zipWithNext().all { (before, after) -> after > before && after - before <= 2.800001 } shouldBe true
+            (0 until duration - 2 step 2).forEach { age ->
+                val parts = staffDisplayParts(StaffSpell.LANCE, age, duration, distance, 0.75, true)
+                val head = parts[18]
+                head.center.z shouldBe staffLanceFront(age, distance).toFloat()
+                (head.scale.x > 0.02f) shouldBe true
+            }
+            (staffDisplayParts(StaffSpell.LANCE, duration - 1, duration, distance, 0.75, true)
+                .maxOf { it.scale.x } < 0.01f) shouldBe true
         }
+        staffLanceFlightTicks(48.0) shouldBe 17
+    }
 
-        val onePoint = staffLightningTrailParts(route(1))
-        val early = staffLightningTrailParts(route(3))
-        val middle = staffLightningTrailParts(route(8))
-        val capped = staffLightningTrailParts(route(24))
-        onePoint.size shouldBe 6
-        (early.size > onePoint.size) shouldBe true
-        (middle.size > early.size) shouldBe true
-        (capped.size <= StaffSpellDisplayEffects.MAX_PARTS) shouldBe true
-        (capped.size <= 48) shouldBe true
-
-        val partialRoute = route(5)
-        val partial = staffLightningTrailParts(partialRoute)
-        partial.first().center.z shouldBe partialRoute.last().z
-        partial.maxOf { it.center.z } shouldBe partialRoute.last().z
-        val trailLinks = partial.drop(6).take(2 * (partialRoute.size - 1))
-        trailLinks.filterIndexed { index, _ -> index % 2 == 0 }.all { it.scale.x in 0.42f..0.58f } shouldBe true
-        trailLinks.filterIndexed { index, _ -> index % 2 == 1 }.all { it.scale.x in 0.32f..0.44f } shouldBe true
-        trailLinks.take(2).all { part ->
-            val launchCap = org.joml.Vector3f(0f, 0f, -part.scale.z / 2f)
-            part.rotation.transform(launchCap).add(part.center)
-            launchCap.distance(partialRoute.first()) >= 0.20f
-        } shouldBe true
-        trailLinks.take(2).all { it.scale.z in 0.85f..1.05f } shouldBe true
-        trailLinks.drop(2).all { it.scale.z in 0.95f..1.20f } shouldBe true
-
-        val cappedRoute = route(24)
-        capped.first().center.z shouldBe cappedRoute.last().z
-        (capped.minOf { it.center.z } >= cappedRoute[cappedRoute.size - 17].z) shouldBe true
-        staffLightningTrailParts(route(4), fade = 0.0).isEmpty() shouldBe true
+    "lightning extends stable handles and hides unreached route slots" {
+        withDisplayHarness { h ->
+            val caster = h.player("lightning-owner")
+            val eye = caster.eyeLocation
+            val id = h.effects.play(caster.uniqueId, StaffSpell.CHAIN, eye,
+                eye.clone().add(0.0, 0.0, 48.0), durationTicks = 60)!!
+            val handles = h.recorder.records.toList()
+            handles.size shouldBe 47
+            handles.all { caster.uniqueId !in it.visibleViewers } shouldBe true
+            val points = (0..4).map { eye.clone().add(0.0, 0.0, it * 2.0) }
+            h.effects.moveTrail(id, points.take(2))
+            h.scheduler.tick(2)
+            (caster.uniqueId in handles[0].visibleViewers) shouldBe true
+            handles.subList(1, 44).all { caster.uniqueId !in it.visibleViewers } shouldBe true
+            h.effects.moveTrail(id, points)
+            h.scheduler.tick(2)
+            h.recorder.records.size shouldBe 47
+            handles.all { it.removals == 0 } shouldBe true
+            handles.take(4).all { caster.uniqueId in it.visibleViewers } shouldBe true
+            h.effects.finishTrail(id)
+            h.scheduler.tick(8)
+            handles.all { it.removals == 1 } shouldBe true
+        }
     }
 
     "remaining ice and comet ground links leave small gaps at their joins" {
@@ -143,7 +154,7 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
                 fun volume(parts: List<StaffDisplayPart>) = parts.sumOf {
                     (it.scale.x * it.scale.y * it.scale.z).toDouble()
                 }
-                if (spell == StaffSpell.CHAIN || spell == StaffSpell.LANCE) {
+                if (spell in setOf(StaffSpell.CHAIN, StaffSpell.LANCE, StaffSpell.MARK)) {
                     (volume(first) > volume(body) * 0.01) shouldBe true
                 } else {
                     (volume(first) < volume(body) * 0.01) shouldBe true
@@ -195,7 +206,7 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         (open[0].scale.x > 0.8f) shouldBe true
         open.take(7).all { it.center.y in 1.45f..1.75f } shouldBe true
         (open.drop(7).maxOf { it.center.y } - open.drop(7).minOf { it.center.y } > 0.8f) shouldBe true
-        (cloudRadius(open) > cloudRadius(closed) * 3.0) shouldBe true
+        (cloudRadius(open) <= cloudRadius(closed) + 0.001) shouldBe true
         (cloudRadius(collapsed) < cloudRadius(open) * 0.30) shouldBe true
     }
 
@@ -207,8 +218,8 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         (frostStartRadius > 1.6 && frostStartRadius < 1.9) shouldBe true
         (frostEndRadius > frostStartRadius * 3.5f) shouldBe true
 
-        val tidalStart = staffDisplayParts(StaffSpell.NOVA, 2, 30, 12.0, 5.5, true, true)
-        val tidalEnd = staffDisplayParts(StaffSpell.NOVA, 18, 30, 12.0, 5.5, true, true)
+        val tidalStart = staffDisplayParts(StaffSpell.NOVA, 2, 20, 12.0, 5.5, true, true)
+        val tidalEnd = staffDisplayParts(StaffSpell.NOVA, 18, 20, 12.0, 5.5, true, true)
         tidalStart.size shouldBe 39
         tidalEnd.size shouldBe 39
         (tidalEnd.maxOf { it.center.z } > tidalStart.maxOf { it.center.z } + 8f) shouldBe true
@@ -216,8 +227,8 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         (tidalEnd.maxOf { kotlin.math.abs(it.center.x) } >
             tidalStart.maxOf { kotlin.math.abs(it.center.x) } + 4.5f) shouldBe true
         (tidalEnd.minOf { it.center.y - it.scale.y / 2f } >= -0.02f) shouldBe true
-        (tidalEnd.maxOf { it.center.y + it.scale.y / 2f } > 1.25f) shouldBe true
-        (tidalEnd.minOf { it.scale.x } >= 0.48f) shouldBe true
+        (tidalEnd.maxOf { it.center.y + it.scale.y / 2f } < 0.25f) shouldBe true
+        (tidalEnd.maxOf { it.scale.x } < 0.1f) shouldBe true
         val peak = staffDisplayParts(StaffSpell.NOVA, 10, 30, 12.0, 5.5, true, true)
         (peak.maxOf { it.center.y + it.scale.y / 2f } > 2.0f) shouldBe true
         (peak[1].center.y > 1.4f) shouldBe true
