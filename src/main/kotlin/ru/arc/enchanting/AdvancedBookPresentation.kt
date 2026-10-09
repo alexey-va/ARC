@@ -44,6 +44,8 @@ private val advancedBookEnchantmentKey = NamespacedKey("advancedenchantments", "
 private val advancedBookLevelKey = NamespacedKey("advancedenchantments", "ae_book_level")
 private val advancedBookSuccessKey = NamespacedKey("advancedenchantments", "ae_book_success")
 private val advancedBookFailureKey = NamespacedKey("advancedenchantments", "ae_book_failure")
+private val advancedMagicDustKey = NamespacedKey("advancedenchantments", "magic")
+private val advancedMagicDustGroupKey = NamespacedKey("advancedenchantments", "grouptype")
 
 @Volatile
 private var advancedBookPresentationBinding: AdvancedBookPresentationBinding? = null
@@ -124,6 +126,19 @@ internal fun bindAdvancedBookPresentation() {
 
 internal fun clearAdvancedBookPresentation() {
     advancedBookPresentationBinding = null
+}
+
+internal data class AdvancedMagicDust(val successPercent: Int, val lowerDestroy: Boolean)
+
+/** AE 9.24.15 TinkererItems' native success dust; secret/mystery dust have different markers. */
+internal fun readAdvancedMagicDust(item: ItemStack): AdvancedMagicDust? {
+    val binding = advancedBookPresentationBinding ?: return null
+    if (!binding.provider.isEnabled) return null
+    val pdc = item.itemMeta?.persistentDataContainer ?: return null
+    if (pdc.get(advancedMagicDustGroupKey, PersistentDataType.STRING).isNullOrBlank()) return null
+    val boost = pdc.get(advancedMagicDustKey, PersistentDataType.STRING)?.toIntOrNull()
+        ?.takeIf { it > 0 }?.coerceAtMost(100) ?: return null
+    return AdvancedMagicDust(boost, binding.provider.config.getBoolean("settings.lower-destroy-with-magic-dust"))
 }
 
 /** Read the effective AE application chances only after the actual apply getters are verified safe. */

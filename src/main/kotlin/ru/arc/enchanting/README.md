@@ -5,7 +5,7 @@ without a confirmation inventory. Books stay provider-owned: EM books only apply
 to compatible EM gear, and AE retains its native enchantments, dust, scrolls and
 application validation. There is no conversion between the two providers.
 
-New ordinary books have 70–100% success and 1% destruction **conditional on failure**.
+New ordinary books have 40–80% success and 1% destruction **conditional on failure**.
 EM rolls and persists these values once in INTEGER PDC keys `arc:elite_book_success`
 and `arc:elite_book_destroy`. The exact persisted chances appear on the book.
 Existing AE success chances are preserved, while destruction is capped at 1%;
@@ -20,6 +20,17 @@ the target on a destructive roll. Native admin/explicit-rate books can retain su
 outside the ordinary generation range. A separate EM application fee is removed;
 book acquisition prices are unchanged. See the ops economy assessment dated
 2026-10-09 for the non-neutral crystal-sink and book-consumption changes.
+
+Existing AE Magic Dust also boosts a single EM book directly in inventory. The
+adapter reads the native STRING PDC `advancedenchantments:magic` and `grouptype`
+markers from the verified provider. Any dust group can boost EM books, which have
+no AE rarity; native AE books retain their group restriction. One dust adds its
+positive percentage points, capped at 100, and follows AE's configured
+`settings.lower-destroy-with-magic-dust` setting. Currently it is true, so any
+positive dust also lowers the 1% conditional destruction rate to zero. Dust on a
+stack of books or a book already at 100% is preserved. The same source custody and
+deferred revalidation apply to dust in creative and survival. No dust source, drop
+rate or acquisition price is added or changed.
 
 For EM, `UpgradeSystem.preview` and `upgrade` retain native enchantment validation
 and application. ARC also checks Bukkit enchantment applicability and authored

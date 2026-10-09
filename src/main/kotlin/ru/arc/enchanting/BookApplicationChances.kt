@@ -26,12 +26,24 @@ internal fun readEliteBookChances(book: ItemStack): BookApplicationChances? {
 /** Roll once on acquisition/migration, then carry the percentages with the physical book. */
 internal fun prepareEliteBookChances(book: ItemStack): BookApplicationChances {
     val chances = readEliteBookChances(book)
-        ?: BookApplicationChances(ThreadLocalRandom.current().nextInt(70, 101), 1)
+        ?: BookApplicationChances(ThreadLocalRandom.current().nextInt(40, 81), 1)
+    writeEliteBookChances(book, chances)
+    return chances
+}
+
+internal fun writeEliteBookChances(book: ItemStack, chances: BookApplicationChances) {
     book.editMeta { meta ->
         meta.persistentDataContainer.set(successKey, PersistentDataType.INTEGER, chances.success)
         meta.persistentDataContainer.set(destroyKey, PersistentDataType.INTEGER, chances.destroyOnFailure)
     }
-    return chances
+}
+
+internal fun boostedBookChances(chances: BookApplicationChances, boost: Int, lowerDestroy: Boolean): BookApplicationChances {
+    require(boost in 1..100)
+    return BookApplicationChances(
+        (chances.success + boost).coerceAtMost(100),
+        if (lowerDestroy) (chances.destroyOnFailure - boost).coerceAtLeast(0) else chances.destroyOnFailure,
+    )
 }
 
 internal fun bookChanceLore(chances: BookApplicationChances): List<Component> = listOf(

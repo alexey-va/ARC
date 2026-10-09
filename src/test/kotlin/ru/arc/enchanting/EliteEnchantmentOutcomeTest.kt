@@ -39,7 +39,7 @@ class EliteEnchantmentOutcomeTest : StringSpec({
             val custom = NamespacedKey("elitemobs", "test-marker")
             book.editMeta { it.persistentDataContainer.set(custom, PersistentDataType.STRING, "native") }
             val chances = prepareEliteBookChances(book)
-            (chances.success in 70..100) shouldBe true
+            (chances.success in 40..80) shouldBe true
             chances.destroyOnFailure shouldBe 1
             repeat(5) { prepareEliteBookChances(book) shouldBe chances }
             readEliteBookChances(book.clone()) shouldBe chances
@@ -59,6 +59,18 @@ class EliteEnchantmentOutcomeTest : StringSpec({
             book.editMeta { it.persistentDataContainer.set(destroy, PersistentDataType.INTEGER, 99) }
             prepareEliteBookChances(book) shouldBe BookApplicationChances(35, 1)
             book.itemMeta.persistentDataContainer.get(destroy, PersistentDataType.INTEGER) shouldBe 1
+        }
+    }
+    "dust increases the persisted success with a hard cap and follows the native risk setting" {
+        boostedBookChances(BookApplicationChances(40, 1), 15, true) shouldBe BookApplicationChances(55, 0)
+        boostedBookChances(BookApplicationChances(95, 1), 15, false) shouldBe BookApplicationChances(100, 1)
+        boostedBookChances(BookApplicationChances(100, 0), 15, true) shouldBe BookApplicationChances(100, 0)
+        shouldThrow<IllegalArgumentException> { boostedBookChances(BookApplicationChances(40, 1), 0, true) }
+        MockBukkitTestRuntime.open().use {
+            val book = ItemStack(Material.ENCHANTED_BOOK)
+            writeEliteBookChances(book, BookApplicationChances(40, 1))
+            writeEliteBookChances(book, boostedBookChances(readEliteBookChances(book)!!, 15, true))
+            prepareEliteBookChances(book) shouldBe BookApplicationChances(55, 0)
         }
     }
 })

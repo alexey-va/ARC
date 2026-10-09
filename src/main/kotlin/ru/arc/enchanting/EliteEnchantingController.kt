@@ -25,6 +25,61 @@ internal class EliteEnchantingController(private val config: EnchantingConfig) :
     private val applying = mutableSetOf<UUID>()
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    fun onDustDrop(event: InventoryClickEvent) {
+        val player = event.whoClicked as? Player ?: return
+        val creative = event is InventoryCreativeEvent && player.gameMode == GameMode.CREATIVE
+        if (event.clickedInventory != player.inventory ||
+            (!creative && event.click !in setOf(ClickType.LEFT, ClickType.RIGHT))) return
+        val dust = event.cursor.takeUnless { it.type.isAir } ?: return
+        val boost = readAdvancedMagicDust(dust) ?: return
+        val book = event.currentItem?.takeIf(::isEliteEnchantmentBook) ?: return
+        event.isCancelled = true
+        val dustInventorySlot = if (creative) admitCreativeBook(player, dust) ?: return else null
+        if (event.view.topInventory !== player.openInventory.topInventory) return
+        if (book.amount != 1) {
+            player.sendMessage(config.text("messages.dust-single-book"))
+            return
+        }
+        if (!applying.add(player.uniqueId)) return
+        val view = event.view
+        val slot = event.slot
+        val expectedBook = book.clone()
+        val expectedDust = (dustInventorySlot?.let(player.inventory::getItem) ?: dust).clone()
+        tasks.runLater(1) {
+            try {
+                if (!player.isOnline || !org.bukkit.Bukkit.getPluginManager().isPluginEnabled("EliteMobs") ||
+                    !org.bukkit.Bukkit.getPluginManager().isPluginEnabled("AdvancedEnchantments") ||
+                    player.openInventory.topInventory !== view.topInventory ||
+                    !enchantmentInputsMatch(expectedBook, expectedDust, player.inventory.getItem(slot),
+                        if (dustInventorySlot == null) player.itemOnCursor else player.inventory.getItem(dustInventorySlot))) return@runLater
+                val result = expectedBook.clone()
+                val chances = readEliteBookChances(expectedBook)
+                if (chances == null) {
+                    presentEliteItem(result, player)
+                    player.inventory.setItem(slot, result)
+                    player.sendMessage(config.text("messages.book-updated"))
+                    return@runLater
+                }
+                val boosted = boostedBookChances(chances, boost.successPercent, boost.lowerDestroy)
+                if (chances.success == 100) {
+                    player.sendMessage(config.text("messages.dust-maxed"))
+                    return@runLater
+                }
+                writeEliteBookChances(result, boosted)
+                presentEliteItem(result, player)
+                applyBookInInventory(player, slot, expectedBook, expectedDust, result, dustInventorySlot)
+                player.updateInventory()
+                player.sendMessage(config.text("messages.dust-success"))
+            } catch (failure: Exception) {
+                Logging.error("EliteEnchanting dust application failed player={}", player.uniqueId, failure)
+                player.sendMessage(config.text("messages.unavailable"))
+            } finally {
+                applying.remove(player.uniqueId)
+            }
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun onBookDrop(event: InventoryClickEvent) {
         val player = event.whoClicked as? Player ?: return
         val creative = event is InventoryCreativeEvent && player.gameMode == GameMode.CREATIVE

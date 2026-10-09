@@ -5,6 +5,9 @@ book:
   compatibility-fallback: 'совместимого снаряжения EliteMobs'
   action: 'Перетащите на предмет — зачаровать'
 messages:
+  dust-single-book: '<yellow>Отделите одну книгу от стопки, затем перетащите на неё магическую пыль.</yellow>'
+  dust-maxed: '<yellow>Эта книга уже усилена до предела. Пыль сохранена.</yellow>'
+  dust-success: '<green>Книга усилена! Новые шансы указаны в её описании.</green>'
   incompatible-target: '<red>Эти чары не подходят этому типу предмета. Подходящие вещи указаны на книге.</red>'
   elite-only: '<red>Эта книга подходит только для снаряжения EliteMobs.</red>'
   incompatible: '<red>Эти чары не подходят предмету или превышают его предел.</red>'
