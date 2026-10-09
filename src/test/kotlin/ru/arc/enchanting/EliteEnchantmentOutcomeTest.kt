@@ -1,44 +1,64 @@
 package ru.arc.enchanting
 
-import com.magmaguy.elitemobs.items.upgradesystem.EnchantmentProgression
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import org.bukkit.Material
+import org.bukkit.NamespacedKey
+import org.bukkit.inventory.ItemStack
+import org.bukkit.persistence.PersistentDataType
+import ru.arc.paper.testing.MockBukkitTestRuntime
 
 class EliteEnchantmentOutcomeTest : StringSpec({
-    val quote = EnchantmentProgression.Quote(14641, .36, .01, .19, .44)
-
-    "former arena outcomes succeed while direct destruction and failure keep their intervals" {
-        eliteEnchantmentOutcome(quote, 0.0) shouldBe EliteEnchantmentOutcome.SUCCESS
-        eliteEnchantmentOutcome(quote, .359999) shouldBe EliteEnchantmentOutcome.SUCCESS
-        eliteEnchantmentOutcome(quote, .36) shouldBe EliteEnchantmentOutcome.DESTROYED
-        eliteEnchantmentOutcome(quote, .369999) shouldBe EliteEnchantmentOutcome.DESTROYED
-        eliteEnchantmentOutcome(quote, .37) shouldBe EliteEnchantmentOutcome.SUCCESS
-        eliteEnchantmentOutcome(quote, .559999) shouldBe EliteEnchantmentOutcome.SUCCESS
-        eliteEnchantmentOutcome(quote, .56) shouldBe EliteEnchantmentOutcome.FAILURE
-        eliteEnchantmentOutcome(quote, .999999) shouldBe EliteEnchantmentOutcome.FAILURE
+    "destruction is a separate one percent roll only after failure" {
+        val chances = BookApplicationChances(85, 1)
+        bookApplicationOutcome(chances, .84999, 0.0) shouldBe EliteEnchantmentOutcome.SUCCESS
+        bookApplicationOutcome(chances, .85, .00999) shouldBe EliteEnchantmentOutcome.DESTROYED
+        bookApplicationOutcome(chances, .85, .01) shouldBe EliteEnchantmentOutcome.FAILURE
+        (0 until 100).flatMap { success ->
+            (0 until 100).map { destroy -> bookApplicationOutcome(chances, (success + .5) / 100, (destroy + .5) / 100) }
+        }.groupingBy { it }.eachCount() shouldBe mapOf(
+            EliteEnchantmentOutcome.SUCCESS to 8500,
+            EliteEnchantmentOutcome.DESTROYED to 15,
+            EliteEnchantmentOutcome.FAILURE to 1485,
+        )
     }
-    "weight ten quote delivers 55 percent success one percent destruction and 44 percent failure" {
-        (0 until 10000).map { eliteEnchantmentOutcome(quote, (it + .5) / 10000) }
-            .groupingBy { it }.eachCount() shouldBe mapOf(
-                EliteEnchantmentOutcome.SUCCESS to 5500,
-                EliteEnchantmentOutcome.DESTROYED to 100,
-                EliteEnchantmentOutcome.FAILURE to 4400,
-            )
+    "guaranteed books always succeed and zero destruction remains safe" {
+        bookApplicationOutcome(BookApplicationChances(100, 1), .99999, 0.0) shouldBe EliteEnchantmentOutcome.SUCCESS
+        bookApplicationOutcome(BookApplicationChances(0, 0), 0.0, 0.0) shouldBe EliteEnchantmentOutcome.FAILURE
     }
-    "guaranteed and zero arena quotes keep their native outcomes" {
-        eliteEnchantmentOutcome(EnchantmentProgression.Quote(1, 1.0, 0.0, 0.0, 0.0), .999999) shouldBe EliteEnchantmentOutcome.SUCCESS
-        eliteEnchantmentOutcome(EnchantmentProgression.Quote(1, .36, .01, 0.0, .63), .37) shouldBe EliteEnchantmentOutcome.FAILURE
-    }
-    "invalid random samples cannot silently destroy or consume a purchase" {
+    "invalid random samples cannot silently consume a book" {
         listOf(Double.NaN, Double.POSITIVE_INFINITY, -0.001, 1.0).forEach { roll ->
-            shouldThrow<IllegalArgumentException> { eliteEnchantmentOutcome(quote, roll) }
+            shouldThrow<IllegalArgumentException> { bookApplicationOutcome(BookApplicationChances(85, 1), roll, .5) }
+            shouldThrow<IllegalArgumentException> { bookApplicationOutcome(BookApplicationChances(85, 1), .5, roll) }
         }
     }
-    "displayed percentages preserve native precision without floating point noise" {
-        enchantmentPercent(.0001) shouldBe "0.01"
-        enchantmentPercent(.5555) shouldBe "55.55"
-        enchantmentPercent(.36 + .19) shouldBe "55"
-        enchantmentPercent(1.0) shouldBe "100"
+    "book rates are assigned once and preserve unrelated metadata on refresh" {
+        MockBukkitTestRuntime.open().use {
+            val book = ItemStack(Material.ENCHANTED_BOOK)
+            val custom = NamespacedKey("elitemobs", "test-marker")
+            book.editMeta { it.persistentDataContainer.set(custom, PersistentDataType.STRING, "native") }
+            val chances = prepareEliteBookChances(book)
+            (chances.success in 70..100) shouldBe true
+            chances.destroyOnFailure shouldBe 1
+            repeat(5) { prepareEliteBookChances(book) shouldBe chances }
+            readEliteBookChances(book.clone()) shouldBe chances
+            book.itemMeta.persistentDataContainer.get(custom, PersistentDataType.STRING) shouldBe "native"
+        }
+    }
+    "existing success and zero risk survive migration while excessive risk is capped" {
+        MockBukkitTestRuntime.open().use {
+            val book = ItemStack(Material.ENCHANTED_BOOK)
+            val success = NamespacedKey("arc", "elite_book_success")
+            val destroy = NamespacedKey("arc", "elite_book_destroy")
+            book.editMeta {
+                it.persistentDataContainer.set(success, PersistentDataType.INTEGER, 35)
+                it.persistentDataContainer.set(destroy, PersistentDataType.INTEGER, 0)
+            }
+            prepareEliteBookChances(book) shouldBe BookApplicationChances(35, 0)
+            book.editMeta { it.persistentDataContainer.set(destroy, PersistentDataType.INTEGER, 99) }
+            prepareEliteBookChances(book) shouldBe BookApplicationChances(35, 1)
+            book.itemMeta.persistentDataContainer.get(destroy, PersistentDataType.INTEGER) shouldBe 1
+        }
     }
 })

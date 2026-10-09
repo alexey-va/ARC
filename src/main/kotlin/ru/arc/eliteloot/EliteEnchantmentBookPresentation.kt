@@ -14,6 +14,8 @@ import org.bukkit.NamespacedKey
 import org.bukkit.inventory.ItemFlag
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
+import ru.arc.enchanting.bookChanceLore
+import ru.arc.enchanting.prepareEliteBookChances
 
 /** Player-facing copy shared by EliteMobs book rewards and the native enchanter. */
 internal data class EliteEnchantmentBookPresentationText(
@@ -25,7 +27,7 @@ internal data class EliteEnchantmentBookPresentationText(
 )
 
 private const val advancedEnchantmentsNamespace = "advancedenchantments"
-private val aeBookMarkerKeys = setOf("ae_book", "ae_book_level", "ae_book_failure", "ae_book_success")
+private val aeBookMarkerKeys = setOf("book", "ae_book", "ae_book_level", "ae_book_failure", "ae_book_success")
 
 /** AdvancedEnchantments books carry these provider-authored PDC keys. */
 internal fun hasAdvancedEnchantmentsBookMarker(keys: Set<NamespacedKey>): Boolean =
@@ -101,6 +103,7 @@ internal fun eliteEnchantmentBookLore(
     authoredLore: List<Component>,
     text: EliteEnchantmentBookPresentationText,
     compatibilityLore: List<Component> = emptyList(),
+    chanceLore: List<Component> = emptyList(),
 ): List<Component> = buildList {
     fun section(lines: List<Component>) {
         val compact = compactEliteLore(lines)
@@ -108,11 +111,13 @@ internal fun eliteEnchantmentBookLore(
         add(Component.empty().decoration(TextDecoration.ITALIC, false))
         addAll(compact)
     }
-    section(listOfNotNull(text.scopeLore.trim().takeIf(String::isNotEmpty)?.let {
+    val scopeLore = listOfNotNull(text.scopeLore.trim().takeIf(String::isNotEmpty)?.let {
         bookLoreLine(it, bookLabelColor)
-    }))
-    section(compatibilityLore)
-    section(enchantments)
+    })
+    // Keep the effect and EliteMobs-only scope together, then put target applicability and
+    // book-owned rates in one information block.
+    section(enchantments + scopeLore)
+    section(compatibilityLore + chanceLore)
     section(authoredLore.filterNot { plainBookText.serialize(it).trim() in retiredEnchanterInstructions })
     text.actionLore.trim().takeIf(String::isNotEmpty)?.let { action ->
         // The input is dragging a book, so do not advertise a plain LMB click as the gesture.
@@ -176,7 +181,7 @@ internal fun presentEliteEnchantmentBook(
     text: EliteEnchantmentBookPresentationText = ru.arc.enchanting.EnchantingModule.bookText,
 ): ItemStack {
     if (!isEliteEnchantmentBook(item)) return item
-
+    val chances = prepareEliteBookChances(item)
     val meta = item.itemMeta ?: return item
     val pdc = meta.persistentDataContainer
     val name = eliteEnchantmentBookName(
@@ -227,7 +232,7 @@ internal fun presentEliteEnchantmentBook(
         text.compatibilityFallback,
         targetLabels,
     )
-    meta.lore(eliteEnchantmentBookLore(nativeEnchantments + customEnchantments, authoredLore, text, compatibilityLore))
+    meta.lore(eliteEnchantmentBookLore(nativeEnchantments + customEnchantments, authoredLore, text, compatibilityLore, bookChanceLore(chances)))
     meta.addItemFlags(ItemFlag.HIDE_ENCHANTS, ItemFlag.HIDE_STORED_ENCHANTS, ItemFlag.HIDE_ATTRIBUTES)
     // Pre-redesign books used appended rows. Canonical reconstruction makes those markers obsolete.
     pdc.remove(bookLoreRowsKey)

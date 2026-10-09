@@ -45,12 +45,21 @@ class PickupListener : Listener {
     private val pending = mutableSetOf<java.util.UUID>()
 
     private fun refreshLater(player: Player) {
-        if (HookRegistry.emHook == null || !pending.add(player.uniqueId)) return
+        if ((HookRegistry.emHook == null && !Bukkit.getPluginManager().isPluginEnabled("AdvancedEnchantments")) ||
+            !pending.add(player.uniqueId)) return
         Bukkit.getScheduler().runTask(ARC.instance, Runnable {
             pending.remove(player.uniqueId)
-            if (!player.isOnline || HookRegistry.emHook == null || !com.magmaguy.elitemobs.playerdata.database.PlayerData.isInMemory(player.uniqueId)) return@Runnable
+            if (!player.isOnline) return@Runnable
+            val eliteReady = HookRegistry.emHook != null &&
+                com.magmaguy.elitemobs.playerdata.database.PlayerData.isInMemory(player.uniqueId)
             for (slot in 0 until player.inventory.size) {
                 val original = player.inventory.getItem(slot) ?: continue
+                if (ru.arc.eliteloot.isAdvancedEnchantmentsBook(original)) {
+                    val updated = ru.arc.enchanting.presentAdvancedBook(original, player)
+                    if (!updated.isSimilar(original)) player.inventory.setItem(slot, updated)
+                    continue
+                }
+                if (!eliteReady) continue
                 val copy = original.clone()
                 if (copy.itemMeta?.persistentDataContainer?.has(org.bukkit.NamespacedKey("arc", "dungeon_case_reward")) == true) {
                     EliteLootManager.eliteLootProcessor?.processEliteLoot(copy, caseReward = true)

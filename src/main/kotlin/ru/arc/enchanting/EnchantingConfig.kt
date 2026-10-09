@@ -3,9 +3,6 @@ package ru.arc.enchanting
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
-import net.kyori.adventure.text.minimessage.MiniMessage
-import org.bukkit.Material
-import org.bukkit.inventory.ItemStack
 import ru.arc.config.Config
 import ru.arc.eliteloot.EliteEnchantmentBookPresentationText
 
@@ -24,14 +21,4 @@ internal class EnchantingConfig(private val config: Config) {
     fun text(key: String, vararg resolvers: TagResolver): Component =
         config.component(key, TagResolver.resolver(*resolvers)).decoration(TextDecoration.ITALIC, false)
 
-    fun lines(key: String, vararg resolvers: TagResolver): List<Component> =
-        config.stringList(key).map { MiniMessage.miniMessage().deserialize(it, TagResolver.resolver(*resolvers)) }
-            .map { it.decoration(TextDecoration.ITALIC, false) }
-
-    fun button(material: Material, key: String, vararg resolvers: TagResolver) = ItemStack(material).apply {
-        editMeta { meta ->
-            meta.displayName(text("$key.name", *resolvers))
-            meta.lore(lines("$key.lore", *resolvers))
-        }
-    }
 }

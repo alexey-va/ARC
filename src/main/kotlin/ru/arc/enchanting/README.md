@@ -1,46 +1,56 @@
-# EliteMobs book application
+# Direct enchantment books
 
-ARC adds a left/right book-on-item gesture in the player's inventory for genuine
-EliteMobs enchantment books. Vanilla and AdvancedEnchantments books are excluded.
-One item and one book move into the existing EM enchantment menu; cancel/close
-uses EM's normal input return. The menu shows the resulting item, price and
-exclusive outcome probabilities, and accepts an optional native lucky ticket.
+ARC gives EliteMobs books the same book-on-equipment gesture as AdvancedEnchantments,
+without a confirmation inventory. Books stay provider-owned: EM books only apply
+to compatible EM gear, and AE retains its native enchantments, dust, scrolls and
+application validation. There is no conversion between the two providers.
 
-ARC cancels only the confirmation click in a menu it opened. EM 10.9.8's native
-`ItemEnchantMenuEvents` listener runs at HIGHEST with `ignoreCancelled=true`, so
-it cannot also charge the cancelled click. ARC guards repeated/reentrant clicks
-and calls the public `EnchantmentAcquisition` API for payment, item custody,
-settlement and recovery. It never edits the player's balance itself. Inputs and
-the native quote must still match the displayed preview before purchase.
+New ordinary books have 70–100% success and 1% destruction **conditional on failure**.
+EM rolls and persists these values once in INTEGER PDC keys `arc:elite_book_success`
+and `arc:elite_book_destroy`. The exact persisted chances appear on the book.
+Existing AE success chances are preserved, while destruction is capped at 1%;
+zero risk stays zero. AE uses its own configured factory and apply engine. The
+ARC adapter refreshes old tooltips and normalizes risk before the native click
+handler validates the book. ARC cancels its `EnchantApplyEvent` after native
+validation and settles its own independent rolls via the shared inventory helper.
+AE 9.24.15 otherwise ignores stored success for application and reverses the
+conditional destruction comparison. Native `AEAPI.applyEnchant` still handles the
+enchantment and slot accounting; white scrolls and destruction-event vetoes protect
+the target on a destructive roll. Native admin/explicit-rate books can retain success
+outside the ordinary generation range. A separate EM application fee is removed;
+book acquisition prices are unchanged. See the ops economy assessment dated
+2026-10-09 for the non-neutral crystal-sink and book-consumption changes.
 
-The native random intervals and price are retained. In this ARC flow, an outcome
-in the native challenge interval succeeds immediately. The displayed success
-probability is therefore `quote.success + quote.challenge`; ordinary failure and
-direct destruction probabilities are unchanged. There is no arena transfer or
-challenge-defeat penalty. Existing `/em enchant` and other provider-owned entry
-points retain their native behavior; the retired guild enchanter and help links
-are configured in ruscrafting-ops.
+For EM, `UpgradeSystem.preview` and `upgrade` retain native enchantment validation
+and application. ARC also checks Bukkit enchantment applicability and authored
+material restrictions. Provider work completes on clones before any consumption.
+One target and one book are settled in place only if source inputs still match.
+Failure consumes a book and preserves the target; the separate destruction roll
+can remove the target. Repeated/stale clicks cannot settle the same inputs twice.
 
-Compatibility was inspected against active EliteMobs 10.9.8 SHA-256
+Survival uses the server cursor. Creative uses Paper's `InventoryCreativeEvent`:
+the packet proposes a replacement item, so ARC first admits the proposed book to
+inventory before deferring application. This protects the stack when Paper clears
+the denied creative cursor, including incompatible targets. A legacy book without
+persisted odds is refreshed on first contact and requires another gesture so the
+player can see the odds before it is consumed.
+
+The old native `/em enchant` command remains a provider entry point; the guild NPC
+and player guide route are retired. The direct flow does not consume lucky tickets
+or invoke the native purchase/menu/challenge API. Provider updates require a new
+compatibility check against the active artifacts.
+
+Inspected artifacts: EliteMobs 10.9.8 SHA-256
 `7c01d9fc2375d7f23d3a875f6e63f905672bbb73ab735c2672f747f4d79b2b24`
 and AdvancedEnchantments 9.24.15 SHA-256
 `110ff13c95c46fb1bbd1604f88ad7cecb19294cb658e0a5f5072b2164e6382e6`.
-Do not replace the acquisition calls with event replay or cancellation of
-`WorldInstanceEvent`: the active EM artifact throws on rejected arena launch and
-aborts the purchase. Recheck the listener priority and public API on EM updates.
+AE's public book-factory signature differs from compile-time 8.7.4, so its isolated
+reflection adapter binds the verified public methods once at module startup.
 
-Player copy lives in `modules/enchanting.yml`. The EliteLoot presentation pass
-rebuilds provider-issued books from native enchantment levels, generated custom
-enchantment rows and authored applicability. It omits the equipment template
-(level/prestige, unbound status, resale and source), removes the exact English
-and Russian retired enchanter instructions, and groups the scope, effects and
-drag action with single blank rows. Native stored-enchantment tooltip rows are
-hidden because the styled lore already shows them. Provider PDC, price and
-actual binding remain intact; existing books refresh on join/inventory changes.
-AE keeps its native application, combining, scrolls and dust; it has no complete
-public apply/resume API suitable for a second confirmation screen in 9.24.15.
-
-Focused checks: `EliteBookTransferTest`, `EliteEnchantmentOutcomeTest`, and
-`EliteEnchantmentBookPresentationTest`. These prove transfer/error cases,
-probability boundaries and presentation ownership; they do not substitute for
-observing the native client gesture.
+Both book styles use a short title, leading blank row, effects/purpose, a shared
+compatibility/chances block, and one drag-action footer with non-italic roots.
+The EM presentation rebuilds canonical book lore without equipment price, binding,
+source or retired enchanter instructions. Unrelated provider metadata is preserved.
+Focused tests cover custody, stale inputs, probability boundaries, persistent rates
+and presentation ownership. Protocol QA plus authoritative server inventory readback
+is required for the actual creative and survival gestures; tests alone do not prove it.

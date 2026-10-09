@@ -52,7 +52,7 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.358"
+version = "1.4.359"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.21"
@@ -221,6 +221,7 @@ dependencies {
     testImplementation(libs.com.thedeanda.lorem)
     testImplementation("ru.ruscrafting.arc:arc-core-paper-testing:$arcCoreVersion")
     testImplementation(landsCompileDependency)
+    testImplementation(libs.net.advancedplugins.advancedenchantments) { isTransitive = false }
     testImplementation(libs.com.github.retrooper.packetevents.spigot) { exclude(group = "io.netty") }
     testImplementation("org.mockito:mockito-core:5.14.2")
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")

@@ -17,6 +17,11 @@ class EliteEnchantmentBookPresentationTest : FreeSpec({
     val plain = PlainTextComponentSerializer.plainText()
     val legacy = LegacyComponentSerializer.legacyAmpersand()
 
+    "legacy AE book marker also belongs to AE normalization" {
+        hasAdvancedEnchantmentsBookMarker(setOf(NamespacedKey("advancedenchantments", "book"))) shouldBe true
+        hasAdvancedEnchantmentsBookMarker(setOf(NamespacedKey("another", "book"))) shouldBe false
+    }
+
     "book name is short and config changes replace its previous prefix" {
         val nativeName = Component.text("Elite Soul Speed Enchanted Book")
             .decoration(TextDecoration.ITALIC, TextDecoration.State.TRUE)
@@ -76,16 +81,15 @@ class EliteEnchantmentBookPresentationTest : FreeSpec({
 
         lore.map(plain::serialize) shouldBe listOf(
             "",
-            "Только для снаряжения EliteMobs",
-            "",
             " Сила I",
+            "Только для снаряжения EliteMobs",
             "",
             " Только для посохов. Увеличивает радиус взрыва.",
             "",
             "[▶] Перетащите на предмет — зачаровать",
         )
-        lore[3] shouldBe enchantment
-        lore[5] shouldBe authoredRestriction.decoration(TextDecoration.ITALIC, TextDecoration.State.FALSE)
+        lore[1] shouldBe enchantment
+        lore[4] shouldBe authoredRestriction.decoration(TextDecoration.ITALIC, TextDecoration.State.FALSE)
         lore.forEach { it.decoration(TextDecoration.ITALIC) shouldBe TextDecoration.State.FALSE }
         lore.zipWithNext().none { (left, right) -> plain.serialize(left).isBlank() && plain.serialize(right).isBlank() } shouldBe true
     }
@@ -114,9 +118,8 @@ class EliteEnchantmentBookPresentationTest : FreeSpec({
         first.map(plain::serialize).contains("[▶] Перетащите книгу") shouldBe true
         changed.map(plain::serialize) shouldBe listOf(
             "",
-            "Только для вещей EliteMobs",
-            "",
             "Сила I",
+            "Только для вещей EliteMobs",
             "",
             "Только для лука",
             "",
@@ -139,9 +142,8 @@ class EliteEnchantmentBookPresentationTest : FreeSpec({
 
         lore.map(plain::serialize) shouldBe listOf(
             "",
-            "Только для снаряжения EliteMobs",
-            "",
             "Сила I",
+            "Только для снаряжения EliteMobs",
             "",
             "[▶] Перетащите на предмет — зачаровать",
         )
@@ -203,14 +205,47 @@ class EliteEnchantmentBookPresentationTest : FreeSpec({
         )
         lore.map(plain::serialize) shouldBe listOf(
             "",
+            "Сила I",
             "Только для снаряжения EliteMobs",
             "",
             "Подходит для: луков, жезлов и посохов",
             "",
+            "[▶] Перетащите на предмет — зачаровать",
+        )
+    }
+
+    "chance rows stay with compatibility, preserve provider colors, and separate authored story" {
+        val successColor = TextColor.color(0x65D788)
+        val destructionColor = TextColor.color(0xFF716C)
+        val success = Component.text("Шанс успеха: 65%", successColor)
+        val destruction = Component.text("Разрушение при неудаче: 10%", destructionColor)
+        val story = Component.text("Сила растёт вместе с волей владельца.")
+
+        val lore = eliteEnchantmentBookLore(
+            enchantments = listOf(Component.text("Сила I")),
+            authoredLore = listOf(story),
+            text = EliteEnchantmentBookPresentationText(),
+            compatibilityLore = listOf(Component.text("Подходит для: луков")),
+            chanceLore = listOf(success, destruction),
+        )
+
+        lore.map(plain::serialize) shouldBe listOf(
+            "",
             "Сила I",
+            "Только для снаряжения EliteMobs",
+            "",
+            "Подходит для: луков",
+            "Шанс успеха: 65%",
+            "Разрушение при неудаче: 10%",
+            "",
+            "Сила растёт вместе с волей владельца.",
             "",
             "[▶] Перетащите на предмет — зачаровать",
         )
+        lore[5].color() shouldBe successColor
+        lore[6].color() shouldBe destructionColor
+        lore.forEach { it.decoration(TextDecoration.ITALIC) shouldBe TextDecoration.State.FALSE }
+        lore.zipWithNext().none { (left, right) -> plain.serialize(left).isBlank() && plain.serialize(right).isBlank() } shouldBe true
     }
 
     "long compatibility lists wrap across rows without adding another section gap" {

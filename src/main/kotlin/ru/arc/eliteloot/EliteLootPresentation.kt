@@ -207,7 +207,7 @@ internal fun presentEliteItem(
     viewer: Player,
     bookText: EliteEnchantmentBookPresentationText = ru.arc.enchanting.EnchantingModule.bookText,
 ): ItemStack {
-    if (isAdvancedEnchantmentsBook(item)) return item
+    if (isAdvancedEnchantmentsBook(item)) return ru.arc.enchanting.presentAdvancedBook(item, viewer)
     if (isEliteEnchantmentBook(item)) return presentEliteEnchantmentBook(item, bookText)
     if (!EliteItemManager.isEliteMobsItem(item)) return item
     val meta = item.itemMeta
