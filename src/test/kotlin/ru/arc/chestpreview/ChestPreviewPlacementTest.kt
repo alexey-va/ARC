@@ -47,6 +47,18 @@ class ChestPreviewPlacementTest : StringSpec({
         }
     }
 
+    "a below-lid viewer looking up gets the front panel even when the lid position is clear" {
+        val lookingUp = Location(null, 0.5, 0.8, -2.5, 0f, -10f)
+        val placed = requireNotNull(ChestPreviewPlacement.choose(lookingUp, above, chest, panel, 0.9f) { _, volume ->
+            !volume.overlaps(chest)
+        })
+        val volume = ChestPreviewPlacement.bounds(lookingUp, placed, panel, 0.9f)
+
+        // The top candidate is geometrically free here; a low viewer still needs the front-facing option.
+        (volume.centerZ < chest.minZ) shouldBe true
+        (volume.minY >= chest.minY + 0.05) shouldBe true
+    }
+
     "slight rise clears a neighbouring lip while keeping the panel over the container" {
         val lip = BoundingBox(1.0, 1.0, 0.0, 2.0, 1.25, 1.0)
         val placed = requireNotNull(ChestPreviewPlacement.choose(eye, above, chest, panel, 0.9f) { _, bounds ->

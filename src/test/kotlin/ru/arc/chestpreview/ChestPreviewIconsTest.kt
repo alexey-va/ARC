@@ -79,6 +79,55 @@ class ChestPreviewIconsTest : StringSpec({
         verify(exactly = 1) { harness.owner.close() }
     }
 
+    "slow strafes past a front block retain display interpolation" {
+        val worldId = UUID.randomUUID()
+        val viewer = player(worldId)
+        val world = viewer.world
+        val options = ChestPreviewSettings(teleportTicks = 4)
+        val chest = org.bukkit.util.BoundingBox(0.0, 0.0, 0.0, 1.0, 1.0, 1.0)
+        // Chest, stacked block (forces front placement), and one block directly in front.
+        val solids = setOf(Triple(0, 0, 0), Triple(0, 1, 0), Triple(0, 0, -1))
+        every { world.getBlockAt(any<Int>(), any<Int>(), any<Int>()) } answers {
+            val x = firstArg<Int>()
+            val y = secondArg<Int>()
+            val z = thirdArg<Int>()
+            val block = mockk<org.bukkit.block.Block>(relaxed = true)
+            every { block.isPassable } returns (Triple(x, y, z) !in solids)
+            every { block.boundingBox } returns org.bukkit.util.BoundingBox(
+                x.toDouble(), y.toDouble(), z.toDouble(),
+                x + 1.0, y + 1.0, z + 1.0,
+            )
+            block
+        }
+        fun eyeAt(x: Double) = Location(world, x, 1.3, -2.5).apply {
+            direction = chest.center.subtract(toVector())
+        }
+        var eye = eyeAt(0.2)
+        every { viewer.eyeLocation } answers { eye.clone() }
+
+        val harness = DisplayHarness()
+        val renderer = ChestPreviewIcons(harness.owner, options)
+        val items = listOf(Material.PAPER, Material.STONE, Material.DIRT, Material.GRAVEL, Material.IRON_INGOT, Material.DIAMOND)
+            .map { ItemStack(it) }
+        val selected = frame(worldId, items).copy(
+            anchor = InspectionHologramAnchor(worldId, 0.5, 1.15, 0.5),
+            containerBounds = chest,
+        )
+        renderer.update(viewer, selected, options.scale)
+        for (step in 1..12) {
+            eye = eyeAt(0.2 + step * 0.05)
+            renderer.update(viewer, selected, options.scale)
+        }
+
+        harness.itemDisplays.size shouldBe 6
+        (harness.itemDisplays + harness.textDisplays).forEach { display ->
+            verify(atLeast = 1) { display.teleport(any<Location>()) }
+            verify(exactly = 0) { display.teleportDuration = 0 }
+            verify(atLeast = 2) { display.teleportDuration = options.teleportTicks }
+        }
+        renderer.close()
+    }
+
     "alpha zero omits the backdrop and empty selection removes the private scene" {
         val worldId = UUID.randomUUID()
         val player = player(worldId)

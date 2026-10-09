@@ -16,6 +16,8 @@ import kotlin.math.sin
 
 /** Places the whole camera-facing grid, including its depth, in already loaded free space. */
 internal object ChestPreviewPlacement {
+    private const val MOTION_CLEARANCE = 0.08
+
     fun place(
         player: Player,
         frame: ChestPreviewFrame,
@@ -41,28 +43,29 @@ internal object ChestPreviewPlacement {
         previous: InspectionHologramAnchor? = null,
         available: (InspectionHologramAnchor, ChestPreviewVolume) -> Boolean,
     ): InspectionHologramAnchor? {
-        fun fits(anchor: InspectionHologramAnchor) = available(anchor, volume(eye, anchor, panel, scale, options))
-        fun stable(candidate: InspectionHologramAnchor): InspectionHologramAnchor {
+        fun fits(anchor: InspectionHologramAnchor, clearance: Double = 0.0) =
+            available(anchor, volume(eye, anchor, panel, scale, options, clearance))
+        fun stable(candidate: InspectionHologramAnchor, clearance: Double = 0.0): InspectionHologramAnchor {
             // Hold only tiny safe changes; never latch a distant side position over a clear lid.
             if (previous != null && previous.worldId == candidate.worldId &&
-                distanceSquared(previous, candidate) <= options.stabilityThreshold * options.stabilityThreshold && fits(previous)) return previous
+                distanceSquared(previous, candidate) <= options.stabilityThreshold * options.stabilityThreshold && fits(previous, clearance)) return previous
             return candidate
         }
-        fun firstFit(candidates: List<InspectionHologramAnchor>): InspectionHologramAnchor? {
+        fun firstFit(candidates: List<InspectionHologramAnchor>, clearance: Double = 0.0): InspectionHologramAnchor? {
             var blocked: InspectionHologramAnchor? = null
             for (candidate in candidates) {
-                if (!fits(candidate)) { blocked = candidate; continue }
+                if (!fits(candidate, clearance)) { blocked = candidate; continue }
                 var free = candidate
                 var low = blocked
                 if (low != null) repeat(6) {
                     val midpoint = between(requireNotNull(low), free, 0.5)
-                    if (fits(midpoint)) free = midpoint else low = midpoint
+                    if (fits(midpoint, clearance)) free = midpoint else low = midpoint
                 }
-                return stable(free)
+                return stable(free, clearance)
             }
             return null
         }
-        val box = container ?: return above.takeIf(::fits)?.let(::stable)
+        val box = container ?: return above.takeIf { fits(it) }?.let { stable(it) }
         val up = up(eye)
         val halfHeight = panel.height / 2.0
         fun anchorAt(center: Vector): InspectionHologramAnchor {
@@ -82,7 +85,8 @@ internal object ChestPreviewPlacement {
         towardEye.normalize()
         // A diagonal panel may graze leaves beside an otherwise clear lid. Try small
         // adjustments above the lid before ever dropping to the container's side.
-        for (rise in listOf(0.0, 0.15, 0.30)) {
+        // A free lid is not a useful preview surface when the viewer is below it.
+        if (eye.y > box.maxY) for (rise in listOf(0.0, 0.15, 0.30)) {
             val candidates = mutableListOf<InspectionHologramAnchor>()
             for (shift in listOf(0.0, 0.15, 0.30, 0.45)) {
                 val candidate = top.copy(x = top.x + towardEye.x * shift, y = top.y + rise, z = top.z + towardEye.z * shift)
@@ -97,10 +101,10 @@ internal object ChestPreviewPlacement {
         val faceDistance = abs(towardEye.x) * box.widthX / 2.0 + abs(towardEye.z) * box.widthZ / 2.0
         // Try the viewer-facing side, then pull forward a little if adjacent blocks are tight.
         val sideCandidates = mutableListOf<InspectionHologramAnchor>()
-        for (extra in listOf(0.0, 0.25, 0.5, 0.75, 1.0)) {
+        for (extra in listOf(0.0, 0.25, 0.5, 0.75, 1.0, 1.25)) {
             val center = box.center.add(towardEye.clone().multiply(faceDistance + 0.30 * scale + extra))
             var anchor = anchorAt(center)
-            val volume = bounds(eye, anchor, panel, scale, options)
+            val volume = volume(eye, anchor, panel, scale, options, MOTION_CLEARANCE).bounds
             // Do not sink the bottom row into the floor in front of a ground-level chest.
             if (volume.minY < box.minY + 0.05) anchor = anchor.copy(y = anchor.y + box.minY + 0.05 - volume.minY)
             val panelCenter = Vector(anchor.x, anchor.y, anchor.z).add(up.clone().multiply(halfHeight))
@@ -109,7 +113,9 @@ internal object ChestPreviewPlacement {
             if (eye.toVector().subtract(panelCenter).dot(towardEye) <= 0.30) continue
             sideCandidates += anchor
         }
-        return firstFit(sideCandidates)
+        // Leave room for the camera-facing grid to rotate while the client interpolates.
+        // Searching up to exact contact makes the previous pose collide on the next tick.
+        return firstFit(sideCandidates, MOTION_CLEARANCE) ?: firstFit(sideCandidates)
     }
 
     internal fun bounds(
@@ -126,6 +132,7 @@ internal object ChestPreviewPlacement {
         panel: ChestPreviewPanelBounds,
         scale: Float,
         options: ChestPreviewSettings,
+        clearance: Double = 0.0,
     ): ChestPreviewVolume {
         val yaw = Math.toRadians(eye.yaw.toDouble())
         val up = up(eye)
@@ -133,7 +140,8 @@ internal object ChestPreviewPlacement {
         return ChestPreviewVolume(
             Vector3d(anchor.x + up.x * panel.height / 2, anchor.y + up.y * panel.height / 2, anchor.z + up.z * panel.height / 2),
             Vector3d(-cos(yaw), 0.0, -sin(yaw)), Vector3d(up.x, up.y, up.z), Vector3d(normal.x, normal.y, normal.z),
-            Vector3d(panel.width / 2.0 + 0.02, panel.height / 2.0 + 0.02, ChestPreviewIconGeometry.depth(scale, options).toDouble() + 0.04),
+            Vector3d(panel.width / 2.0 + 0.02 + clearance, panel.height / 2.0 + 0.02 + clearance,
+                ChestPreviewIconGeometry.depth(scale, options).toDouble() + 0.04 + clearance),
         )
     }
 

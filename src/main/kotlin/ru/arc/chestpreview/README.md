@@ -55,9 +55,13 @@ Tiny safe changes can retain the prior anchor. Clearance search refines the free
 boundary instead of jumping by the coarse candidate stride. An obstructed
 movement corridor snaps rather than animating through a solid block; a new
 container or changed personal layout gets a fresh scene at its destination.
+Side placement reserves clearance for camera rotation during interpolation,
+so sliding along a neighbouring block does not repeatedly disable smoothing.
 The oriented grid volume must fit loaded/sent free space and have line of sight.
-Top placement is retried before side placement, so a clear lid cannot remain
-latched to a distant side position. If no position fits, the panel is hidden.
+Top placement is retried first only while the viewer's eyes are above the lid;
+lower views use the front even when the space above is free. A clear lid cannot
+remain latched to a distant side position after the viewer moves above it.
+If no position fits, the panel is hidden.
 Viewers with the test permission are inspected every tick; others keep the
 ordinary five-tick cadence. Native client smoothness remains separate from these
 geometry, lifecycle and packet checks.
