@@ -19,8 +19,11 @@ import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerCommandPreprocessEvent
 import org.bukkit.event.player.PlayerTeleportEvent
+import org.bukkit.event.player.PlayerSwapHandItemsEvent
 import ru.arc.config.Config
 import ru.arc.gui.ArcMenus
+import ru.arc.gui.MenuShortcutAction
+import ru.arc.gui.MenuShortcutController
 import ru.arc.common.ServerLocation
 import ru.arc.core.Tasks
 import ru.arc.core.TestTaskScheduler
@@ -31,6 +34,53 @@ class EMDungeonQolTest : FreeSpec({
     lateinit var paper: MockBukkitTestRuntime
     beforeEach { paper = MockBukkitTestRuntime.open() }
     afterEach { paper.close() }
+
+    "guild Shift F opens the dungeon menu without treating the hub as an active dungeon" {
+        withScheduler {
+            val guild = paper.addSimpleWorld("em_adventurers_guild")
+            val ordinary = paper.addSimpleWorld("ordinary-world")
+            val player = paper.addPlayer("guild-shortcut")
+            val settings = config()
+            every { settings.string("dungeon-qol.shops-location.world", "em_adventurers_guild") } returns guild.name
+            val qol = EMDungeonQol(settings, resolve = { null })
+            player.teleport(guild.spawnLocation)
+            qol.panelView(player) shouldBe null
+            mockkObject(ArcMenus)
+            try {
+                val shown = mutableListOf<ru.arc.paper.menu.PaperDialogScreen>()
+                every { ArcMenus.openDialog(player, any(), any(), any(), any()) } answers { shown += secondArg<ru.arc.paper.menu.PaperDialogScreen>() }
+                MenuShortcutController(
+                    paper.createSimplePlugin("guild-shortcut-test"),
+                    selection = { MenuShortcutAction.DISABLED },
+                    inDungeon = qol::usesMenuShortcut,
+                    openDungeonMenu = { qol.action(it, "menu") },
+                ).use { shortcuts ->
+                    fun swap() = PlayerSwapHandItemsEvent(
+                        player, player.inventory.itemInMainHand, player.inventory.itemInOffHand,
+                    ).also(shortcuts::onSwapHands)
+
+                    swap().isCancelled shouldBe false
+                    shown.size shouldBe 0
+                    player.isSneaking = true
+                    swap().isCancelled shouldBe true
+                    shown.single().id shouldBe "dungeon.main"
+
+                    player.teleport(ordinary.spawnLocation)
+                    swap().isCancelled shouldBe false
+                    shown.size shouldBe 1
+                    player.teleport(guild.spawnLocation)
+                    player.gameMode = org.bukkit.GameMode.SPECTATOR
+                    qol.usesMenuShortcut(player) shouldBe false
+                    player.gameMode = org.bukkit.GameMode.SURVIVAL
+                    every { settings.bool("dungeon-qol.enabled", true) } returns false
+                    qol.usesMenuShortcut(player) shouldBe false
+                }
+            } finally {
+                unmockkObject(ArcMenus)
+                qol.close()
+            }
+        }
+    }
 
     "only authorized bare EliteMobs roots are replaced and subcommands retain their owner" {
         withScheduler {

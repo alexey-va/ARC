@@ -34,6 +34,7 @@ internal class DungeonSaveMenus(
     private val bestiaryProgress: (Player, String) -> DungeonBestiaryProgress = { player, contentId ->
         dungeon.bestiary.progress(player.uniqueId, contentId)
     },
+    private val readOffers: (Player) -> List<DungeonQuestOffer>? = ::readAvailableDungeonQuests,
     private val show: (Player, PaperDialogScreen, (() -> Unit)?) -> Unit = { player, screen, reopen ->
         val close = PaperDialogButton(PaperDialogActionId.of("close"), dungeon.text("saves.dialog.close-label", "<#e8dfd2>Закрыть"), width = 200, closeDialogBeforeAction = true) { }
         // A root Close is already the footer, so never move a second Close into the grid.
@@ -145,23 +146,49 @@ internal class DungeonSaveMenus(
 
     internal fun quests(player: Player, requestedPage: Int = 0, feedback: Component? = null) {
         val entries = readQuests(player)
-        val pageCount = ((entries.orEmpty().size + questsPerPage - 1) / questsPerPage).coerceAtLeast(1)
+        val offers = readOffers(player)
+        val offersPerPage = 3
+        val pageCount = maxOf(1, (entries.orEmpty().size + questsPerPage - 1) / questsPerPage,
+            (offers.orEmpty().size + offersPerPage - 1) / offersPerPage)
         val page = requestedPage.coerceIn(0, pageCount - 1)
         val listed = entries.orEmpty().drop(page * questsPerPage).take(questsPerPage)
         val body = mutableListOf(PaperDialogBody(text("quests.intro", "<#f2eee8>✔ — отслеживается, ○ — не отслеживается. Готовность к сдаче указана отдельно. Выберите задание для управления."), 468))
-        if (listed.isEmpty()) {
+        if (entries.isNullOrEmpty()) {
             body += PaperDialogBody(if (entries == null) text("quests.unavailable", "<#d7b486>Данные заданий ещё загружаются. Попробуйте обновить страницу.")
                 else text("quests.empty", "<#f2eee8>Принятых заданий пока нет. Поговорите с персонажами, которые предлагают задания."), 468)
-        } else {
+        } else if (listed.isNotEmpty()) {
             val summary = Component.empty().children(listed.flatMapIndexed { index, quest ->
                 val row = questName(quest)
                     .append(Component.newline()).append(questStatus(quest))
                 if (index == 0) listOf(row) else listOf(Component.newline(), row)
             })
             body += PaperDialogBody(summary, 468)
-            if (pageCount > 1) body += PaperDialogBody(text("quests.page", "<#f2eee8>Страница <current> из <total>",
-                "current" to Component.text(page + 1), "total" to Component.text(pageCount)), 468)
         }
+        if (offers != null && (offers.isEmpty() || page * offersPerPage < offers.size)) {
+            body += PaperDialogBody(text("quests.available-heading", "<#c4abff>Можно взять сейчас: <count>",
+                "count" to Component.text(offers.size)), 468)
+            if (offers.isEmpty()) body += PaperDialogBody(text("quests.no-offers",
+                "<#e8dfd2>Новых доступных заданий сейчас нет."), 468)
+            offers.drop(page * offersPerPage).take(offersPerPage).forEach { offer ->
+                val location = offer.location
+                val destination = "${location.blockX}, ${location.blockY}, ${location.blockZ}"
+                val sameWorld = location.world?.uid == player.world.uid
+                val where = if (sameWorld) text("quests.offer-nearby",
+                    "<#e8dfd2><coordinates> · <distance> м · ! на компасе",
+                    "coordinates" to Component.text(destination),
+                    "distance" to Component.text(kotlin.math.ceil(location.distance(player.location)).toLong()))
+                else text("quests.offer-other-world", "<#e8dfd2><coordinates> · в другом мире",
+                    "coordinates" to Component.text(destination))
+                body += PaperDialogBody(text("quests.available-offer",
+                    "<#9bd48d>! <quest><newline><#e8dfd2><npc> · <world><newline><where>",
+                    "quest" to Component.text(plainDungeonQuestText(offer.name)),
+                    "npc" to Component.text(plainDungeonQuestText(offer.npcName)),
+                    "world" to Component.text(plainDungeonQuestText(offer.worldName)),
+                    "where" to where), 468)
+            }
+        }
+        if (pageCount > 1) body += PaperDialogBody(text("quests.page", "<#f2eee8>Страница <current> из <total>",
+            "current" to Component.text(page + 1), "total" to Component.text(pageCount)), 468)
         feedback?.let { body += PaperDialogBody(plain(it), 468) }
         val questButtons = listed.mapIndexed { index, quest ->
             val label = questName(quest, navigation = true)

@@ -279,6 +279,11 @@ internal class EMDungeonQol(
         DungeonPanelView(player.world.uid, it, view(player))
     }
 
+    internal fun usesMenuShortcut(player: Player): Boolean {
+        if (!enabled || closed || !player.isOnline || player.isDead || player.gameMode == GameMode.SPECTATOR) return false
+        return current(player) != null || player.world.name == shopsLocation().world
+    }
+
     /** Location is the travel boundary even for spectators and players outside the roster. */
     internal fun insideInstance(player: Player): Boolean = resolve(player.world)?.instanced == true
 

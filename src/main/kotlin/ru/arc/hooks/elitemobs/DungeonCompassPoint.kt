@@ -18,12 +18,11 @@ internal enum class DungeonCompassPointKind(val priority: Int) {
     ENCHANT(5),
     UNBIND(5),
     SCROLL(5),
-    QUEST_UNAVAILABLE(6),
     NPC_SERVICE(6),
     ELITE_MOB(7),
 }
 
-/** Immutable nearby destination; never retains a live world or entity across refreshes. */
+/** Immutable destination; never retains a live world or entity across refreshes. */
 internal data class DungeonCompassPoint(
     val worldId: UUID,
     val x: Double,

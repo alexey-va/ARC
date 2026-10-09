@@ -27,11 +27,17 @@ import java.lang.reflect.Modifier
 import java.util.UUID
 
 class DungeonCompassPointsTest : FreeSpec({
-    "questless player distinguishes an unavailable offer from a live nearby NPC" {
+    "available offers remain visible at any distance while unavailable quest NPCs are hidden" {
         mockkStatic(TreasureChest::class, EntityTracker::class, PlayerData::class, DynamicQuest::class)
         try {
-            val world = mockk<World> { every { uid } returns UUID.randomUUID() }
-            val otherWorld = mockk<World> { every { uid } returns UUID.randomUUID() }
+            val world = mockk<World> {
+                every { uid } returns UUID.randomUUID()
+                every { name } returns "quest-world"
+            }
+            val otherWorld = mockk<World> {
+                every { uid } returns UUID.randomUUID()
+                every { name } returns "other-quest-world"
+            }
             val player = mockk<Player> {
                 every { uniqueId } returns UUID.randomUUID()
                 every { location } returns Location(world, 0.0, 64.0, 0.0)
@@ -43,6 +49,7 @@ class DungeonCompassPointsTest : FreeSpec({
                     every { getLocation() } returns location
                 }
                 val fields = mockk<NPCsConfigFields> {
+                    every { getFilename() } returns "quest"
                     every { getInteractionType() } returns NPCInteractions.NPCInteractionType.QUEST_GIVER
                     every { isEnabled() } returns false // Do not spawn a native NPC in the fixture.
                 }
@@ -63,14 +70,18 @@ class DungeonCompassPointsTest : FreeSpec({
                 UUID.randomUUID() to npc(Location(world, 12.0, 64.0, 0.0), false),
             )
             every { EntityTracker.getNpcEntities() } returns npcs
-            val provider = DungeonCompassPoints()
-            provider.nearby(player) shouldBe listOf(
+            var offers = listOf(
+                DungeonQuestOffer("near", "Near", "NPC", Location(world, 10.0, 64.0, 0.0)),
+                DungeonQuestOffer("far", "Far", "NPC", Location(world, 6_500.0, 64.0, 0.0)),
+                DungeonQuestOffer("other", "Other", "NPC", Location(otherWorld, 10.0, 64.0, 0.0)),
+            )
+            val provider = DungeonCompassPoints { offers }
+            provider.nearby(player).toSet() shouldBe setOf(
                 DungeonCompassPoint(world.uid, 10.0, 64.0, 0.0, DungeonCompassPointKind.AVAILABLE_QUEST),
+                DungeonCompassPoint(world.uid, 6_500.0, 64.0, 0.0, DungeonCompassPointKind.AVAILABLE_QUEST),
             )
-            every { DynamicQuest.hasAvailableQuests(player) } returns false
-            provider.nearby(player) shouldBe listOf(
-                DungeonCompassPoint(world.uid, 10.0, 64.0, 0.0, DungeonCompassPointKind.QUEST_UNAVAILABLE),
-            )
+            offers = emptyList()
+            provider.nearby(player) shouldBe emptyList()
         } finally {
             unmockkStatic(TreasureChest::class, EntityTracker::class, PlayerData::class, DynamicQuest::class)
         }
@@ -165,7 +176,7 @@ class DungeonCompassPointsTest : FreeSpec({
         compassNpcPointKind("vendor", NPCInteractions.NPCInteractionType.CUSTOM_SHOP) shouldBe
             DungeonCompassPointKind.SHOP
         compassNpcPointKind("quest", NPCInteractions.NPCInteractionType.QUEST_GIVER) shouldBe
-            DungeonCompassPointKind.QUEST_UNAVAILABLE
+            null
         compassNpcPointKind("none", NPCInteractions.NPCInteractionType.NONE) shouldBe null
     }
 
@@ -206,7 +217,6 @@ class DungeonCompassPointsTest : FreeSpec({
 
             DungeonCompassPoints().nearby(player, tick = 0).map { it.kind }.toSet() shouldBe setOf(
                 DungeonCompassPointKind.CLASS_TRAINER,
-                DungeonCompassPointKind.QUEST_UNAVAILABLE,
             )
         } finally {
             unmockkStatic(TreasureChest::class, EntityTracker::class, PlayerData::class)

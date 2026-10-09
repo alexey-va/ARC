@@ -46,7 +46,7 @@ class DungeonSaveMenusTest : FreeSpec({
         }
     }
 
-    "dungeon panel keeps primary actions first and utility actions last" {
+    "dungeon panel hides unavailable actions and keeps global navigation last" {
         val player = paper.addPlayer("panel-order")
         val dungeon = mockk<EMDungeonQol>(relaxed = true)
         val world = paper.addSimpleWorld("panel-order-world")
@@ -58,7 +58,7 @@ class DungeonSaveMenusTest : FreeSpec({
         DungeonSaveMenus(dungeon) { _, screen, _ -> shown += screen }.panel(player)
 
         shown.single().buttons.map { it.id.value } shouldBe listOf(
-            "quests", "party", "shop", "saves", "entry", "resume", "scoreboard", "gear", "about", "quit", "global",
+            "quests", "shop", "gear", "quit", "global",
         )
         shown.single().buttons.none { it.id.value == "shops" || it.id.value == "skill_boosts" } shouldBe true
     }
@@ -142,6 +142,46 @@ class DungeonSaveMenusTest : FreeSpec({
         plainText.serialize(shown.last().body.last().text) shouldBe "Данные заданий ещё загружаются. Попробуйте обновить страницу."
     }
 
+    "quest overview lists available offers with distant NPC locations and refreshes pagination" {
+        val player = paper.addPlayer("available-quests")
+        val world = paper.addSimpleWorld("quest-guild")
+        val otherWorld = paper.addSimpleWorld("quest-castle")
+        player.teleport(Location(world, 0.0, 64.0, 0.0))
+        val dungeon = mockk<EMDungeonQol>(relaxed = true)
+        every { dungeon.text(any(), any(), *anyVararg()) } answers {
+            val values = thirdArg<Array<out Pair<String, Component>>>()
+            ru.arc.util.TextUtil.mm(secondArg<String>(),
+                net.kyori.adventure.text.minimessage.tag.resolver.TagResolver.resolver(values.map { (name, value) ->
+                    net.kyori.adventure.text.minimessage.tag.resolver.Placeholder.component(name, value)
+                }))
+        }
+        var offers = (1..3).map { index ->
+            DungeonQuestOffer("offer-$index", "Поход $index", "Проводник $index",
+                Location(world, 10_000.0 + index, 64.0, 0.0), "Гильдия приключений")
+        } + DungeonQuestOffer("castle", "Тайна замка", "Стражник",
+            Location(otherWorld, 25.0, 70.0, -8.0), "Дальний замок")
+        val shown = mutableListOf<PaperDialogScreen>()
+        val menus = DungeonSaveMenus(dungeon, readQuests = { emptyList() }, readOffers = { offers }) { _, screen, _ -> shown += screen }
+        val plain = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+        fun body() = shown.last().body.joinToString("\n") { plain.serialize(it.text) }
+
+        menus.quests(player)
+        body().contains("Можно взять сейчас: 4") shouldBe true
+        body().contains("! Поход 1\nПроводник 1 · Гильдия приключений\n10001, 64, 0 · 10001 м · ! на компасе") shouldBe true
+        body().contains("Тайна замка") shouldBe false
+        shown.last().buttons.map { it.id.value } shouldBe listOf("next", "refresh")
+        shown.last().buttons.single { it.id.value == "next" }.onClick.handle(mockk())
+        body().contains("! Тайна замка\nСтражник · Дальний замок\n25, 70, -8 · в другом мире") shouldBe true
+        body().contains("Поход 1") shouldBe false
+
+        offers = emptyList()
+        shown.last().buttons.single { it.id.value == "refresh" }.onClick.handle(mockk())
+        body().contains("Можно взять сейчас: 0") shouldBe true
+        body().contains("Тайна замка") shouldBe false
+        shown.last().buttons.map { it.id.value } shouldBe listOf("refresh")
+        shown.last().exitButton!!.id.value shouldBe "back"
+    }
+
     "opening outside a run shows the complete global menu" {
         val player = paper.addPlayer("outside-main")
         val dungeon = mockk<EMDungeonQol>(relaxed = true)
@@ -212,20 +252,18 @@ class DungeonSaveMenusTest : FreeSpec({
         verify { dungeon.returnToLast(player, departure) }
     }
 
-    "about page opens safely and returns to the current dungeon panel" {
+    "global menu opens from the dungeon panel and returns to the current run" {
         val player = paper.addPlayer("about")
         val dungeon = mockk<EMDungeonQol>(relaxed = true)
         val world = paper.addSimpleWorld("about-world")
         every { dungeon.panelView(player) } returns DungeonPanelView(world.uid, DungeonVisit("run", name = "Пещера"), null)
         every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(secondArg<String>()) }
-        every { dungeon.context(player) } returns Component.text("Подсказка")
         val screens = mutableListOf<PaperDialogScreen>()
         val menus = DungeonSaveMenus(dungeon) { _, screen, _ -> screens += screen }
         menus.panel(player)
-        screens.last().buttons.single { it.id.value == "about" }.onClick.handle(mockk())
-        screens.last().id shouldBe "dungeon.about"
-        screens.last().body.last().text shouldBe Component.text("Подсказка")
-        screens.last().exitButton!!.onClick.handle(mockk())
+        screens.last().buttons.single { it.id.value == "global" }.onClick.handle(mockk())
+        screens.last().id shouldBe "dungeon.main"
+        screens.last().buttons.single { it.id.value == "current" }.onClick.handle(mockk())
         screens.last().id shouldBe "dungeon.panel"
     }
 
@@ -236,6 +274,7 @@ class DungeonSaveMenusTest : FreeSpec({
         every { dungeon.panelView(player) } returns DungeonPanelView(world.uid, DungeonVisit("run"), null)
         every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(secondArg<String>()) }
         val parties = mockk<DungeonParties>()
+        every { dungeon.partiesAvailable() } returns true
         every { dungeon.parties } returns parties
         every { parties.view(player) } returns DungeonPartyView(available = true)
         every { parties.create(player) } returns com.magmaguy.elitemobs.parties.PartyOperationResult.SUCCESS

@@ -140,6 +140,21 @@ class QuestCompassRendererTest : FreeSpec({
         point.project(Location(world, 0.0, 64.0, 10.0)) shouldBe null
     }
 
+    "available quests remain visible across the same world beyond the nearby radius" {
+        val id = UUID.randomUUID()
+        val world = mockk<World> { every { uid } returns id }
+        val origin = Location(world, 0.0, 64.0, 0.0)
+        val point = DungeonCompassPoint(id, 0.0, 64.0, 10_000.0, DungeonCompassPointKind.AVAILABLE_QUEST)
+        val projected = point.project(origin)!!
+        projected.distance shouldBe 10_000.0
+        val rendered = PlainTextComponentSerializer.plainText().serialize(
+            QuestCompassRenderer.render(0f, null, listOf(projected)),
+        )
+        rendered[37] shouldBe '!'
+        point.copy(kind = DungeonCompassPointKind.CHEST).project(origin) shouldBe null
+        point.copy(worldId = UUID.randomUUID()).project(origin) shouldBe null
+    }
+
     "crowded compass draws no more than eight visible nearby points" {
         val points = (-30..30 step 3).map { CompassPoi(it.toDouble(), 10.0, DungeonCompassPointKind.ELITE_MOB) }
         val rendered = PlainTextComponentSerializer.plainText().serialize(QuestCompassRenderer.render(0f, null, points))
@@ -156,7 +171,6 @@ class QuestCompassRendererTest : FreeSpec({
 
     "elite NPC service roles use distinct visible markers" {
         val markers = mapOf(
-            DungeonCompassPointKind.QUEST_UNAVAILABLE to '?',
             DungeonCompassPointKind.REPAIR to '+',
             DungeonCompassPointKind.SCRAP to '×',
             DungeonCompassPointKind.ENCHANT to '★',

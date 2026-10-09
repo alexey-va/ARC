@@ -1,17 +1,11 @@
 package ru.arc.hooks.elitemobs
 
-import com.magmaguy.elitemobs.config.customquests.CustomQuestsConfig
-import com.magmaguy.elitemobs.config.npcs.NPCsConfigFields
 import com.magmaguy.elitemobs.entitytracker.EntityTracker
 import com.magmaguy.elitemobs.items.customitems.CustomItem
 import com.magmaguy.elitemobs.mobconstructor.BossType
 import com.magmaguy.elitemobs.mobconstructor.custombosses.CustomBossEntity
 import com.magmaguy.elitemobs.npcs.NPCInteractions
 import com.magmaguy.elitemobs.npcs.NPCEntity
-import com.magmaguy.elitemobs.playerdata.database.PlayerData
-import com.magmaguy.elitemobs.quests.CustomQuest
-import com.magmaguy.elitemobs.quests.DynamicQuest
-import com.magmaguy.elitemobs.quests.Quest
 import com.magmaguy.elitemobs.treasurechest.TreasureChest
 import org.bukkit.Location
 import org.bukkit.entity.Player
@@ -27,7 +21,9 @@ import kotlin.math.floor
  * source of truth; this class does not create quests, touch cooldown lists, or
  * load chunks.
  */
-internal class DungeonCompassPoints {
+internal class DungeonCompassPoints(
+    private val questOffers: (Player) -> List<DungeonQuestOffer>? = ::readAvailableDungeonQuests,
+) {
     private val failedFamilies = mutableSetOf<String>()
     private var nextEliteSnapshotTick = Long.MIN_VALUE
     private var elitePointsByChunk = emptyMap<CompassChunk, List<DungeonCompassPoint>>()
@@ -104,28 +100,18 @@ internal class DungeonCompassPoints {
         origin: Location,
         worldId: UUID,
     ) {
-        val questDataLoaded = PlayerData.isInMemory(player)
-        val existingQuestFilenames = if (questDataLoaded)
-            activeCustomQuestFilenames(PlayerData.getQuests(player.uniqueId).orEmpty()) else emptySet()
+        questOffers(player).orEmpty().forEach { offer ->
+            if (offer.location.world?.uid == worldId) {
+                points += offer.location.toPoint(DungeonCompassPointKind.AVAILABLE_QUEST)
+            }
+        }
 
         for (npc in EntityTracker.getNpcEntities().values) {
             val location = liveNpcLocation(npc) ?: continue
             if (!isNearbySameWorld(origin, location, worldId)) continue
             val fields = npc.getNPCsConfigFields() ?: continue
             val interaction = fields.getInteractionType()
-            val questAvailable = when (interaction) {
-                NPCInteractions.NPCInteractionType.CUSTOM_QUEST_GIVER -> questDataLoaded &&
-                    customQuestOfferAvailable(player, fields, existingQuestFilenames)
-                NPCInteractions.NPCInteractionType.QUEST_GIVER -> questDataLoaded &&
-                    player.hasPermission("elitemobs.quest.npc") && DynamicQuest.hasAvailableQuests(player)
-                else -> false
-            }
-            val kind = when (interaction) {
-                NPCInteractions.NPCInteractionType.QUEST_GIVER,
-                NPCInteractions.NPCInteractionType.CUSTOM_QUEST_GIVER -> if (questAvailable)
-                    DungeonCompassPointKind.AVAILABLE_QUEST else DungeonCompassPointKind.QUEST_UNAVAILABLE
-                else -> compassNpcPointKind(fields.getFilename(), interaction)
-            }
+            val kind = compassNpcPointKind(fields.getFilename(), interaction)
             if (kind != null) points += location.toPoint(kind)
         }
     }
@@ -170,19 +156,6 @@ internal class DungeonCompassPoints {
         }
         nextEliteSnapshotTick = tick + ELITE_SNAPSHOT_INTERVAL_TICKS
         return elitePointsByChunk
-    }
-
-    private fun customQuestOfferAvailable(
-        player: Player,
-        fields: NPCsConfigFields,
-        existingQuestFilenames: Set<String>,
-    ): Boolean = fields.getQuestFilenames().orEmpty().any { filename ->
-        val questFields = CustomQuestsConfig.getCustomQuests()[filename] ?: return@any false
-        isFreshQuestOffer(
-            filename = filename,
-            existingQuestFilenames = existingQuestFilenames,
-            nativePermission = CustomQuest.hasPermissionForQuest(player, questFields),
-        )
     }
 
     private fun liveNpcLocation(npc: NPCEntity): Location? {
@@ -232,7 +205,7 @@ internal fun compassNpcPointKind(
         NPCInteractions.NPCInteractionType.UNBINDER -> DungeonCompassPointKind.UNBIND
         NPCInteractions.NPCInteractionType.SCROLL_APPLIER -> DungeonCompassPointKind.SCROLL
         NPCInteractions.NPCInteractionType.QUEST_GIVER,
-        NPCInteractions.NPCInteractionType.CUSTOM_QUEST_GIVER -> DungeonCompassPointKind.QUEST_UNAVAILABLE
+        NPCInteractions.NPCInteractionType.CUSTOM_QUEST_GIVER -> null
         NPCInteractions.NPCInteractionType.NONE -> null
         else -> DungeonCompassPointKind.NPC_SERVICE
     }
@@ -272,18 +245,6 @@ private class ChestStateReader private constructor(
         }
     }
 }
-
-internal fun activeCustomQuestFilenames(quests: Collection<Quest>): Set<String> =
-    quests.filterIsInstance<CustomQuest>()
-        .filter { it.isAccepted() && !it.getQuestObjectives().isTurnedIn() }
-        .map { it.getConfigurationFilename() }
-        .toSet()
-
-internal fun isFreshQuestOffer(
-    filename: String,
-    existingQuestFilenames: Set<String>,
-    nativePermission: Boolean,
-): Boolean = filename.isNotBlank() && filename !in existingQuestFilenames && nativePermission
 
 internal fun isChestAvailableFor(
     playerId: UUID,

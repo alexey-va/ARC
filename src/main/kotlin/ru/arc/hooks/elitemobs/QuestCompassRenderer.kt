@@ -18,7 +18,8 @@ internal fun DungeonCompassPoint.project(origin: Location): CompassPoi? {
     val dy = y - origin.y
     val dz = z - origin.z
     val distanceSquared = dx * dx + dy * dy + dz * dz
-    if (!distanceSquared.isFinite() || distanceSquared > DUNGEON_COMPASS_RADIUS * DUNGEON_COMPASS_RADIUS ||
+    if (!distanceSquared.isFinite() ||
+        (kind != DungeonCompassPointKind.AVAILABLE_QUEST && distanceSquared > DUNGEON_COMPASS_RADIUS * DUNGEON_COMPASS_RADIUS) ||
         dx * dx + dz * dz < 0.000001) return null
     return CompassPoi((Math.toDegrees(atan2(-dx, dz)) + 360) % 360, sqrt(distanceSquared), kind)
 }
@@ -33,7 +34,6 @@ internal object QuestCompassRenderer {
     private val scale = TextColor.color(0xe8dfd2)
     private val target = TextColor.color(0x9bd48d)
     private val gold = TextColor.color(0xffcf70)
-    private val muted = TextColor.color(0x969696)
     private val font: Key = Key.key("minecraft", "default")
     private val nativeSymbols = setOf('-', '⦿', '⬯', '☠', '⚔', '↑', '↓', '↕')
 
@@ -71,7 +71,8 @@ internal object QuestCompassRenderer {
         val occupied = mutableListOf<Int>()
         for (point in points.sortedWith(compareBy<CompassPoi> { it.kind.priority }.thenBy { it.distance })) {
             if (occupied.size >= 8) break
-            if (!point.bearing.isFinite() || !point.distance.isFinite() || point.distance !in 0.0..DUNGEON_COMPASS_RADIUS) continue
+            if (!point.bearing.isFinite() || !point.distance.isFinite() || point.distance < 0.0 ||
+                (point.kind != DungeonCompassPointKind.AVAILABLE_QUEST && point.distance > DUNGEON_COMPASS_RADIUS)) continue
             val relative = wrap(point.bearing - heading)
             if (relative !in -HALF_VIEW..HALF_VIEW) continue
             val cell = (CENTER + relative / DEGREES_PER_CELL).roundToInt()
@@ -83,7 +84,6 @@ internal object QuestCompassRenderer {
                 DungeonCompassPointKind.ELITE_MOB, DungeonCompassPointKind.ARENA -> '⚔'
                 DungeonCompassPointKind.CHEST -> '□'
                 DungeonCompassPointKind.AVAILABLE_QUEST -> '!'
-                DungeonCompassPointKind.QUEST_UNAVAILABLE -> '?'
                 DungeonCompassPointKind.GUILD_NPC -> '⚑'
                 DungeonCompassPointKind.CLASS_TRAINER -> '▲'
                 DungeonCompassPointKind.TRANSPORT -> '↔'
@@ -106,7 +106,6 @@ internal object QuestCompassRenderer {
                 DungeonCompassPointKind.NPC_SERVICE -> scale
                 DungeonCompassPointKind.AVAILABLE_QUEST,
                 DungeonCompassPointKind.CLASS_TRAINER -> target
-                DungeonCompassPointKind.QUEST_UNAVAILABLE -> muted
             }
         }
 

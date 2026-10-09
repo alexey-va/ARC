@@ -38,7 +38,7 @@ class MenuShortcutController(
     private val selection: (Player) -> MenuShortcutAction = MenuShortcutAction::selected,
     private val openMenu: (Player, HelpCenterPage) -> Boolean = HelpCenterModule::open,
     private val summonMount: (Player) -> Boolean = MountModule::summonFavorite,
-    private val inDungeon: (Player) -> Boolean = { ARC.hookRegistry?.dungeonQol?.panelView(it) != null },
+    private val inDungeon: (Player) -> Boolean = { ARC.hookRegistry?.dungeonQol?.usesMenuShortcut(it) == true },
     private val openDungeonMenu: (Player) -> Unit = { ARC.hookRegistry?.dungeonQol?.action(it, "menu") },
     private val eliteMobsAbilityListener: (Listener) -> Boolean = {
         it.javaClass.name == "com.magmaguy.elitemobs.advancedcombat.input.ClassAbilityInputRouter"

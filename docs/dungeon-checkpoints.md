@@ -7,9 +7,12 @@ missing bundled defaults without replacing operator values.
 ## Player controls
 
 - Shift + F opens the dungeon panel while the player is in an active dungeon
-  or its lobby. It takes precedence over the personal shortcut only there;
-  ordinary F and an already-cancelled swap event remain untouched. Outside a
-  dungeon the saved shortcut behavior applies again.
+  or its lobby, and the global dungeon menu in the Adventure Guild world
+  (`dungeon-qol.shops-location.world`). These contextual menus take precedence
+  over the personal shortcut, including an already-cancelled swap event.
+  Ordinary F remains untouched. Other worlds use the saved personal shortcut.
+  `MenuShortcutController` delegates this decision to `EMDungeonQol.usesMenuShortcut`;
+  the guild never becomes an active dungeon visit or gains checkpoint controls.
 - The panel has a direct Main menu action and a Group section with party
   guidance and native `/elitemobs:em party menu` management. The latter is
   offered only when the installed EliteMobs party feature exists and is enabled
@@ -90,7 +93,9 @@ compass unless an NPC dialogue is suppressing it.
 Nearby points are supplied read-only by `DungeonCompassPoints.kt`, using native
 treasure-chest and NPC registries, not scans of world blocks. `▣` marks a nearby
 lootable treasure chest; `!` marks an NPC with a quest the viewer can accept.
-The same-world radius is 64 blocks. Discovery and player-specific availability
+The same-world radius is 64 blocks for ambient points; available quest offers
+have no distance cutoff. NPCs without an available offer have no quest marker,
+including previously completed or currently locked quests. Discovery and player-specific availability
 refresh once per second (immediately after a world change); projection follows
 movement and yaw every tick. At most eight visible nearby markers are drawn,
 with the nearest winning overlaps. Tracked objectives win over nearby markers.
@@ -101,6 +106,21 @@ The chest adapter caches and type-checks the native private `restockTime` and
 An adapter failure omits only that family of markers and logs the cause once;
 the compass and the other marker family keep working. Completed repeatable
 quests may reappear when the native permission/cooldown check allows them.
+
+`DungeonQuestOffers.kt` supplies the same read-only offer list to the compass and
+the quest menu. Custom offers use the native acceptance gate and omit already
+accepted, unredeemed quests. Guild request NPCs appear as a group rather than
+creating native pending quests to inspect their contents. Known authored NPC
+coordinates remain usable when the NPC's chunk is unloaded; instance locations
+belong only to the viewer's own dungeon copy. The menu's "Можно взять сейчас"
+section lists quest names, NPCs, world labels, coordinates and same-world distance,
+with pagination and a fresh eligibility check on refresh. Cross-world offers
+remain listed in the menu; their compass marker appears in the destination world.
+The native `CustomQuest.hasPermissionForQuest(Player, CustomQuestsConfigFields)`
+gate checks quest enablement, progression metadata and lockouts (verified against
+the active EliteMobs 10.9.8 artifact on 2026-10-09). Do not replace it with a
+guess at Bukkit permission nodes or instantiate `CustomQuest` to inspect offers:
+quest factories create pending native state. Unhydrated player data stays loading.
 
 Edge cases: no selected quest still shows directions and nearby points;
 unresolved coordinates show a compact status when there are no nearby points,
