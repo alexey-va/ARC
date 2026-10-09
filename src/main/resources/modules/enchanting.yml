@@ -1,8 +1,11 @@
 book:
   name-prefix: 'Книга EliteMobs'
   scope: 'Только для снаряжения EliteMobs'
+  compatibility-label: 'Подходит для:'
+  compatibility-fallback: 'совместимого снаряжения EliteMobs'
   action: 'Перетащите на предмет — зачаровать'
 messages:
+  incompatible-target: '<red>Эти чары не подходят этому типу предмета. Подходящие вещи указаны на книге.</red>'
   elite-only: '<red>Эта книга подходит только для снаряжения EliteMobs.</red>'
   incompatible: '<red>Эти чары не подходят предмету или превышают его предел.</red>'
   unavailable: '<red>Не удалось завершить зачарование. Проверьте инвентарь; если появился номер восстановления, сообщите его администрации.</red>'
@@ -45,6 +48,12 @@ menu:
     lore:
       - ''
       - '<white>Положите их в свободные места ниже.</white>'
+  incompatible:
+    name: '<red>Чары не подходят предмету</red>'
+    lore:
+      - ''
+      - '<white>Подходящие вещи указаны на книге.</white>'
+      - '<gray>Замените предмет или заберите книгу.</gray>'
   confirm:
     name: '<green>Применить зачарование</green>'
     lore:

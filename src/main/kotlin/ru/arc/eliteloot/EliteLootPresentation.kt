@@ -83,9 +83,14 @@ private fun plainEliteText(text: String): String =
         plainEliteTextSerializer.serialize(legacySectionSerializer.deserialize(text)),
     ))
 
-private val elitePresentationRootKey = NamespacedKey("elitemobs", "enchantment_presentation")
-private val elitePresentationLinesKey = NamespacedKey("elitemobs", "lines")
-private val elitePresentationPositionKey = NamespacedKey("elitemobs", "position")
+// MagmaCore owns the active record; keep the old EM namespace readable during item migration.
+private val elitePresentationNamespaces = listOf("magmacore", "elitemobs")
+
+internal fun eliteGeneratedEnchantmentLore(meta: ItemMeta): List<String> =
+    elitePresentationNamespaces.firstNotNullOfOrNull { namespace ->
+        meta.persistentDataContainer.get(NamespacedKey(namespace, "enchantment_presentation"), PersistentDataType.TAG_CONTAINER)
+            ?.get(NamespacedKey(namespace, "lines"), PersistentDataType.LIST.strings())
+    }.orEmpty()
 
 internal fun reindexedEliteEnchantmentLorePosition(
     hostLore: List<String>,
@@ -106,29 +111,29 @@ internal fun reindexedEliteEnchantmentLorePosition(
 
 /** Keep EliteMobs' stored generated-lore range aligned after ARC inserts or compacts other rows. */
 internal fun reindexEliteEnchantmentLore(meta: ItemMeta) {
-    val container = meta.persistentDataContainer
-        .get(elitePresentationRootKey, PersistentDataType.TAG_CONTAINER) ?: return
-    val generatedLore = container.get(elitePresentationLinesKey, PersistentDataType.LIST.strings()) ?: return
-    val recordedPosition = container.get(elitePresentationPositionKey, PersistentDataType.INTEGER) ?: return
-    val correctedPosition = reindexedEliteEnchantmentLorePosition(
-        meta.getLore().orEmpty(),
-        generatedLore,
-        recordedPosition,
-    ) ?: return
-    if (correctedPosition != recordedPosition) {
-        container.set(elitePresentationPositionKey, PersistentDataType.INTEGER, correctedPosition)
-        meta.persistentDataContainer.set(elitePresentationRootKey, PersistentDataType.TAG_CONTAINER, container)
+    for (namespace in elitePresentationNamespaces) {
+        val rootKey = NamespacedKey(namespace, "enchantment_presentation")
+        val positionKey = NamespacedKey(namespace, "position")
+        val container = meta.persistentDataContainer.get(rootKey, PersistentDataType.TAG_CONTAINER) ?: continue
+        val generatedLore = container.get(NamespacedKey(namespace, "lines"), PersistentDataType.LIST.strings()) ?: continue
+        val recordedPosition = container.get(positionKey, PersistentDataType.INTEGER) ?: continue
+        val correctedPosition = reindexedEliteEnchantmentLorePosition(
+            meta.getLore().orEmpty(), generatedLore, recordedPosition,
+        ) ?: continue
+        if (correctedPosition != recordedPosition) {
+            container.set(positionKey, PersistentDataType.INTEGER, correctedPosition)
+            meta.persistentDataContainer.set(rootKey, PersistentDataType.TAG_CONTAINER, container)
+        }
     }
 }
 
 /** Native rendering can change other PDC, such as price; only transfer its lore ownership record. */
 internal fun copyElitePresentationMetadata(source: ItemMeta, destination: ItemMeta) {
-    val presentation = source.persistentDataContainer
-        .get(elitePresentationRootKey, PersistentDataType.TAG_CONTAINER)
-    if (presentation == null) {
-        destination.persistentDataContainer.remove(elitePresentationRootKey)
-    } else {
-        destination.persistentDataContainer.set(elitePresentationRootKey, PersistentDataType.TAG_CONTAINER, presentation)
+    for (namespace in elitePresentationNamespaces) {
+        val key = NamespacedKey(namespace, "enchantment_presentation")
+        val presentation = source.persistentDataContainer.get(key, PersistentDataType.TAG_CONTAINER)
+        if (presentation == null) destination.persistentDataContainer.remove(key)
+        else destination.persistentDataContainer.set(key, PersistentDataType.TAG_CONTAINER, presentation)
     }
 }
 

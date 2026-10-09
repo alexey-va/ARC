@@ -4,7 +4,7 @@ import org.bukkit.entity.Player
 import org.bukkit.inventory.Inventory
 import org.bukkit.inventory.ItemStack
 
-/** Moves one book and one target into EM custody, restoring both if its menu cannot open. */
+/** Moves one book (cursor or inventory) and one target into EM custody; failed opens restore both. */
 internal fun transferEliteBookToConfirmation(
     player: Player,
     playerSlot: Int,
@@ -12,16 +12,23 @@ internal fun transferEliteBookToConfirmation(
     book: ItemStack,
     itemSlot: Int,
     bookSlot: Int,
+    bookInventorySlot: Int? = null,
     openNativeMenu: () -> Inventory,
 ): Inventory {
-    check(enchantmentInputsMatch(target, book, player.inventory.getItem(playerSlot), player.itemOnCursor)) {
+    fun currentBook() = if (bookInventorySlot == null) player.itemOnCursor else player.inventory.getItem(bookInventorySlot)
+    fun setBook(item: ItemStack?) {
+        if (bookInventorySlot == null) player.setItemOnCursor(item)
+        else player.inventory.setItem(bookInventorySlot, item)
+    }
+    check(bookInventorySlot == null || bookInventorySlot != playerSlot)
+    check(enchantmentInputsMatch(target, book, player.inventory.getItem(playerSlot), currentBook())) {
         "Enchantment inputs changed before transfer"
     }
     var receiving: Inventory? = null
     var insertedTarget = false
     var insertedBook = false
     try {
-        player.setItemOnCursor(remainder(book))
+        setBook(remainder(book))
         player.inventory.setItem(playerSlot, remainder(target))
         val menu = openNativeMenu()
         check(itemSlot in 0 until menu.size && bookSlot in 0 until menu.size && itemSlot != bookSlot)
@@ -43,9 +50,9 @@ internal fun transferEliteBookToConfirmation(
         } else if (sameStack(player.inventory.getItem(playerSlot), remainder(target))) {
             player.inventory.setItem(playerSlot, target.clone())
         } else returnItem(player, single(target))
-        if (sameStack(player.itemOnCursor, book)) {
+        if (sameStack(currentBook(), book)) {
             // No cursor refund is needed.
-        } else if (sameStack(player.itemOnCursor, remainder(book))) player.setItemOnCursor(book.clone())
+        } else if (sameStack(currentBook(), remainder(book))) setBook(book.clone())
         else returnItem(player, single(book))
         throw failure
     }

@@ -3,7 +3,6 @@ package ru.arc.eliteloot
 import com.magmaguy.elitemobs.config.enchantments.EnchantmentsConfig
 import com.magmaguy.elitemobs.items.EliteItemLore
 import com.magmaguy.elitemobs.items.ItemTagger
-import com.magmaguy.elitemobs.items.customenchantments.SoulbindEnchantment
 import com.magmaguy.elitemobs.items.upgradesystem.EliteEnchantmentItems
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextColor
@@ -20,6 +19,8 @@ import org.bukkit.persistence.PersistentDataType
 internal data class EliteEnchantmentBookPresentationText(
     val namePrefix: String = "Книга EliteMobs",
     val scopeLore: String = "Только для снаряжения EliteMobs",
+    val compatibilityLabel: String = "Подходит для:",
+    val compatibilityFallback: String = "совместимого снаряжения EliteMobs",
     val actionLore: String = "Перетащите на предмет — зачаровать",
 )
 
@@ -99,6 +100,7 @@ internal fun eliteEnchantmentBookLore(
     enchantments: List<Component>,
     authoredLore: List<Component>,
     text: EliteEnchantmentBookPresentationText,
+    compatibilityLore: List<Component> = emptyList(),
 ): List<Component> = buildList {
     fun section(lines: List<Component>) {
         val compact = compactEliteLore(lines)
@@ -109,6 +111,7 @@ internal fun eliteEnchantmentBookLore(
     section(listOfNotNull(text.scopeLore.trim().takeIf(String::isNotEmpty)?.let {
         bookLoreLine(it, bookLabelColor)
     }))
+    section(compatibilityLore)
     section(enchantments)
     section(authoredLore.filterNot { plainBookText.serialize(it).trim() in retiredEnchanterInstructions })
     text.actionLore.trim().takeIf(String::isNotEmpty)?.let { action ->
@@ -126,6 +129,37 @@ internal fun eliteEnchantmentBookLore(
 
 private fun bookLoreLine(value: String, color: TextColor): Component =
     Component.text(value, color).decoration(TextDecoration.ITALIC, false)
+
+internal fun joinEliteBookTargetLabels(targets: List<Component>): Component =
+    targets.withIndex().fold(Component.empty()) { joined, (index, target) ->
+        if (index == 0) joined.append(target.color(bookEnchantmentColor))
+        else joined
+            .append(Component.text(if (index == targets.lastIndex) " и " else ", ", bookLabelColor))
+            .append(target.color(bookEnchantmentColor))
+    }
+
+internal fun eliteBookCompatibilityLoreLines(
+    label: String,
+    fallback: String,
+    targets: List<Component>?,
+): List<Component> {
+    if (targets.isNullOrEmpty()) {
+        return listOf(
+            bookLoreLine(label.trimEnd(), bookLabelColor)
+                .append(Component.space())
+                .append(bookLoreLine(fallback, bookBodyColor)),
+        )
+    }
+    // ponytail: cap each tooltip row at three target tokens; wrap further items on continuation rows.
+    return targets.chunked(3).mapIndexed { index, group ->
+        val prefix = if (index == 0) {
+            bookLoreLine(label.trimEnd(), bookLabelColor).append(Component.space())
+        } else {
+            Component.text("  ", bookLabelColor).decoration(TextDecoration.ITALIC, false)
+        }
+        prefix.append(joinEliteBookTargetLabels(group)).decoration(TextDecoration.ITALIC, false)
+    }
+}
 
 private fun bookSourceLine(value: String): Component =
     bookLegacy.deserialize(bookLegacy.serialize(bookAmpersand.deserialize(value)))
@@ -167,12 +201,9 @@ internal fun presentEliteEnchantmentBook(
     EliteItemLore(rendered, false)
     val renderedMeta = rendered.itemMeta
     copyElitePresentationMetadata(renderedMeta, meta)
-    val customEnchantments = renderedMeta.persistentDataContainer
-        .get(NamespacedKey("elitemobs", "enchantment_presentation"), PersistentDataType.TAG_CONTAINER)
-        ?.get(NamespacedKey("elitemobs", "lines"), PersistentDataType.LIST.strings()).orEmpty()
-        .map(::bookSourceLine)
-    val nativeEnchantments = EliteEnchantmentItems.nativeLevels(item).entries.sortedBy { it.key.key.toString() }
-        .map { (enchantment, level) ->
+    val customEnchantments = eliteGeneratedEnchantmentLore(renderedMeta).map(::bookSourceLine)
+    val nativeLevels = EliteEnchantmentItems.nativeLevels(item).entries.sortedBy { it.key.key.toString() }
+    val nativeEnchantments = nativeLevels.map { (enchantment, level) ->
             val name = EnchantmentsConfig.getEnchantment(enchantment)?.name
             val label = name?.let(::bookSourceLine) ?: enchantment.description()
             Component.empty().color(if (enchantment.isCursed) TextColor.color(0xFF716C) else bookEnchantmentColor)
@@ -183,10 +214,20 @@ internal fun presentEliteEnchantmentBook(
                 .decoration(TextDecoration.ITALIC, false)
         }
     val authoredLore = ItemTagger.getCustomLore(renderedMeta).map(::bookSourceLine).toMutableList()
-    if (SoulbindEnchantment.isSoulboundItem(meta)) {
+    if (pdc.has(NamespacedKey("elitemobs", "soulbind"), PersistentDataType.STRING)) {
         authoredLore += bookLoreLine("Привязано к душе", bookNameAccent)
     }
-    meta.lore(eliteEnchantmentBookLore(nativeEnchantments + customEnchantments, authoredLore, text))
+    val customLevels = EliteEnchantmentItems.custom(item)
+    val targetLabels = eliteBookCompatibleTargetLabels(
+        nativeLevels.map { it.key },
+        customEnchantmentIds = customLevels.keys,
+    )
+    val compatibilityLore = eliteBookCompatibilityLoreLines(
+        text.compatibilityLabel,
+        text.compatibilityFallback,
+        targetLabels,
+    )
+    meta.lore(eliteEnchantmentBookLore(nativeEnchantments + customEnchantments, authoredLore, text, compatibilityLore))
     meta.addItemFlags(ItemFlag.HIDE_ENCHANTS, ItemFlag.HIDE_STORED_ENCHANTS, ItemFlag.HIDE_ATTRIBUTES)
     // Pre-redesign books used appended rows. Canonical reconstruction makes those markers obsolete.
     pdc.remove(bookLoreRowsKey)

@@ -89,4 +89,38 @@ class EliteBookTransferTest : StringSpec({
             player.itemOnCursor shouldBe book
         }
     }
+    "creative inventory source transfers one book without reading or changing the cursor" {
+        MockBukkitTestRuntime.open().use { runtime ->
+            val player = runtime.addPlayer("CreativeEnchanter")
+            val target = ItemStack(Material.DIAMOND_SWORD)
+            val book = ItemStack(Material.ENCHANTED_BOOK, 3)
+            val cursor = ItemStack(Material.EMERALD)
+            player.inventory.setItem(0, target.clone())
+            player.inventory.setItem(1, book.clone())
+            player.setItemOnCursor(cursor.clone())
+            val menu = runtime.server.createInventory(player, 54)
+            transferEliteBookToConfirmation(player, 0, target, book, 29, 31, 1) { menu }
+            player.inventory.getItem(0) shouldBe null
+            player.inventory.getItem(1)?.amount shouldBe 2
+            player.itemOnCursor shouldBe cursor
+            menu.getItem(29) shouldBe target
+            menu.getItem(31) shouldBe book.clone().apply { amount = 1 }
+        }
+    }
+    "creative failed opening restores the admitted book and target once" {
+        MockBukkitTestRuntime.open().use { runtime ->
+            val player = runtime.addPlayer("CreativeEnchanter")
+            val target = ItemStack(Material.DIAMOND_SWORD)
+            val book = ItemStack(Material.ENCHANTED_BOOK)
+            player.inventory.setItem(0, target.clone())
+            player.inventory.setItem(1, book.clone())
+            shouldThrow<IllegalStateException> {
+                transferEliteBookToConfirmation(player, 0, target, book, 29, 31, 1) { error("open cancelled") }
+            }
+            player.inventory.getItem(0) shouldBe target
+            player.inventory.getItem(1) shouldBe book
+            player.inventory.contents.filterNotNull().sumOf { it.amount } shouldBe 2
+            player.itemOnCursor.type.isAir shouldBe true
+        }
+    }
 })

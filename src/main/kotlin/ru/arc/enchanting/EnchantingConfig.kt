@@ -13,6 +13,11 @@ internal class EnchantingConfig(private val config: Config) {
     val bookText get() = EliteEnchantmentBookPresentationText(
         namePrefix = config.string("book.name-prefix", "Книга EliteMobs"),
         scopeLore = config.string("book.scope", "Только для снаряжения EliteMobs"),
+        compatibilityLabel = config.string("book.compatibility-label", "Подходит для:"),
+        compatibilityFallback = config.string(
+            "book.compatibility-fallback",
+            "совместимого снаряжения EliteMobs",
+        ),
         actionLore = config.string("book.action", "Перетащите на предмет — зачаровать"),
     )
 
