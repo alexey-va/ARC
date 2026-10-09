@@ -387,6 +387,13 @@ class RewardCatalogModuleConfigTest : StringSpec({
                   forge:
                     name: '<gold>Кузница'
                     items: ['forge:anvil', 'forge:table']
+                    min-rolls: 9
+                    max-rolls: 11
+                    weights:
+                      'forge:anvil': 4
+                  uniform:
+                    items: ['forge:chair']
+                    compatibility_only: true
                 categories:
                   furniture:
                     name: 'Мебель'
@@ -410,10 +417,21 @@ class RewardCatalogModuleConfigTest : StringSpec({
             writeConfig(root, valid)
             val loaded = RewardCatalogModuleConfig.load(root).snapshot()
             loaded.packages.getValue("forge").items shouldBe listOf("forge:anvil", "forge:table")
+            loaded.packages.getValue("forge").minRolls shouldBe 9
+            loaded.packages.getValue("forge").maxRolls shouldBe 11
+            loaded.packages.getValue("forge").weightFor("forge:anvil") shouldBe 4
+            loaded.packages.getValue("forge").weightFor("forge:table") shouldBe 1
+            loaded.packages.getValue("uniform").minRolls shouldBe 8
+            loaded.packages.getValue("uniform").maxRolls shouldBe 12
+            loaded.packages.getValue("uniform").weights shouldBe emptyMap()
             loaded.uncoveredRewards() shouldBe emptyList()
             for (invalid in listOf(
                 valid.replace("package: forge", "package: absent"),
                 valid.replace("'forge:table'", "'forge:anvil'"),
+                valid.replace("'forge:anvil': 4", "'forge:anvil': 0"),
+                valid.replace("'forge:anvil': 4", "'forge:missing': 4"),
+                valid.replace("min-rolls: 9", "min-rolls: 7"),
+                valid.replace("max-rolls: 11", "max-rolls: 13"),
                 valid.substringBefore("  case_furniture:"),
             )) {
                 writeConfig(root, invalid)

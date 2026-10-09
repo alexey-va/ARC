@@ -64,6 +64,74 @@ class FrozenPhysicalRewardsTest : StringSpec({
         }.isFailure shouldBe true
     }
 
+    "new furniture-roll archives retain weighted native leaves while legacy shulker recipes remain valid" {
+        MockBukkitTestRuntime.open().use {
+            val root = Files.createTempDirectory("arc-frozen-furniture-rolls")
+            try {
+                val itemA = ItemStack(Material.DIAMOND)
+                val itemB = ItemStack(Material.EMERALD)
+                val recipe = FrozenPhysicalRecipe(
+                    type = "furniture-rolls",
+                    furnitureMinRolls = 8,
+                    furnitureMaxRolls = 12,
+                    treasure = FrozenTreasureNode(
+                        id = "forge",
+                        type = "sub-pool",
+                        weight = 1,
+                        poolId = "furniture-package:forge",
+                        children = listOf(
+                            FrozenTreasureNode(
+                                id = "forge:chair",
+                                type = "item",
+                                weight = 4,
+                                minInt = 1,
+                                maxInt = 1,
+                                stack = java.util.Base64.getEncoder().encodeToString(itemA.serializeAsBytes()),
+                                requiresItemsAdder = true,
+                            ),
+                            FrozenTreasureNode(
+                                id = "forge:table",
+                                type = "item",
+                                weight = 1,
+                                minInt = 1,
+                                maxInt = 1,
+                                stack = java.util.Base64.getEncoder().encodeToString(itemB.serializeAsBytes()),
+                                requiresItemsAdder = true,
+                            ),
+                        ),
+                    ),
+                )
+                recipe.validate()
+                val archive = FrozenPhysicalRewards(root)
+                val prepared = checkNotNull(archive.prepare("package:forge", recipe, ItemStack(Material.PAPER)))
+                FrozenPhysicalRewards(root).find(prepared.sourceKey)?.recipe shouldBe recipe
+
+                runCatching {
+                    recipe.copy(furnitureMaxRolls = 13).validate()
+                }.isFailure shouldBe true
+                runCatching {
+                    recipe.copy(treasure = recipe.treasure!!.copy(children = listOf(
+                        FrozenTreasureNode("money", "money", 1, minDouble = 1.0, maxDouble = 1.0),
+                    ))).validate()
+                }.isFailure shouldBe true
+                runCatching {
+                    recipe.copy(treasure = recipe.treasure!!.copy(children = listOf(
+                        recipe.treasure!!.children!!.first().copy(requiresItemsAdder = false),
+                    ))).validate()
+                }.isFailure shouldBe true
+
+                FrozenPhysicalRecipe(
+                    type = "furniture",
+                    furnitureBoxes = listOf(
+                        java.util.Base64.getEncoder().encodeToString(ItemStack(Material.PURPLE_SHULKER_BOX).serializeAsBytes()),
+                    ),
+                ).validate()
+            } finally {
+                root.toFile().deleteRecursively()
+            }
+        }
+    }
+
     "map roll overrides stay transient and cannot enter the frozen archive" {
         MockBukkitTestRuntime.open().use {
             val recipe = FrozenPhysicalRecipe(

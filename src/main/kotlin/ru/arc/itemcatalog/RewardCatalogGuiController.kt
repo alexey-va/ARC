@@ -39,6 +39,7 @@ class RewardCatalogGuiController internal constructor(
     private val physicalSource: (RewardCatalogEntry) -> Boolean = { false },
     private val physicalMaterialization: (RewardCatalogEntry) -> PhysicalRewardMaterialization? = { null },
     private val physicalCreateKey: (String) -> ItemStack? = { null },
+    private val physicalCanMaterialize: (RewardCatalogEntry) -> Boolean = { true },
 ) {
     private val active = AtomicBoolean(true)
 
@@ -149,7 +150,10 @@ class RewardCatalogGuiController internal constructor(
         "categories" to settings.categories.map { category ->
             val planned = category.entries.filter { it.source is RewardCatalogSource.Planned }.map { it.id }
             val unavailable = category.entries.filter { entry ->
-                entry.source !is RewardCatalogSource.Planned && (!providersEnabled(entry) || resolve(entry) == null)
+                entry.source !is RewardCatalogSource.Planned && (
+                    !providersEnabled(entry) || resolve(entry) == null ||
+                        entry.source is RewardCatalogSource.PersonalMap && !physicalCanMaterialize(entry)
+                    )
             }.map { it.id }
             mapOf(
                 "id" to category.id,

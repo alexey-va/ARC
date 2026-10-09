@@ -87,10 +87,14 @@ are future case compositions, not automatic daily/rank acquisition. With
 `require-case-coverage: true`, every non-planned base reward (source plus
 explicit enchantments) must occur in a case or the configuration is rejected.
 
-Furniture uses root `packages: {id: {name: '...', items: ['namespace:item']}}`
-and entry `package: id`. A package contains 1–216 distinct native IDs, one copy
-of each. Redemption delivers the whole pack in numbered shulker boxes with 27
-items each. Missing native items or insufficient space preserves the voucher.
+Furniture uses root `packages: {id: {name, items, min-rolls, max-rolls, weights}}`
+and entry `package: id`. Each package lists 1–216 distinct ItemsAdder IDs;
+`min-rolls` and `max-rolls` bound the independent draws to 8–12, and optional
+positive `weights` override the default weight of 1 for listed IDs. Repeated
+items can appear. New vouchers deliver the drawn items directly and require
+space for `max-rolls` items before drawing; failed capacity preflight releases
+the claim and preserves the voucher. Missing native items also preserve it. Existing frozen furniture
+vouchers keep their archived shulker-box recipe.
 
 Browsing requires `arc.items.catalog.use`; the final click rechecks
 `clicks.give-permission` (`arc.items.catalog.give` by default). Every click

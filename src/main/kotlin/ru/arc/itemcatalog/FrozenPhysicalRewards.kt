@@ -253,6 +253,9 @@ internal data class FrozenPhysicalRecipe(
     val commandValue: String? = null,
     val mountId: String? = null,
     val furnitureBoxes: List<String>? = null,
+    /** Frozen furniture item pool and draw range for newly issued direct-delivery packs. */
+    val furnitureMinRolls: Int? = null,
+    val furnitureMaxRolls: Int? = null,
     /** Detached member snapshot used by collection seals; redemption chooses one member. */
     val sealItems: List<String>? = null,
     val sealName: String? = null,
@@ -288,6 +291,11 @@ internal data class FrozenPhysicalRecipe(
     /** Set false only for storage-thread checks that must not deserialize Bukkit ItemStacks. */
     fun validate(validateBukkitStacks: Boolean = true) {
         require(treasureRolls == null) { "Runtime treasure roll count must not be archived" }
+        if (type != "furniture-rolls") {
+            require(furnitureMinRolls == null && furnitureMaxRolls == null) {
+                "Furniture roll bounds require a furniture-rolls recipe"
+            }
+        }
         if (type != "personal-map") {
             require(mapId == null && mapPrizeKey == null && mapPrizeFingerprint == null && mapDestinations == null &&
                 mapSearchServer == null && mapSearchWorld == null && mapSearchRadius == null &&
@@ -351,6 +359,22 @@ internal data class FrozenPhysicalRecipe(
                 }
                 require(currency == null && minAmount == null && maxAmount == null && tokenAmount == null)
                 require(commandKind == null && commandValue == null && mountId == null && sealItems == null && sealName == null && sealDescription == null && treasure == null)
+            }
+            "furniture-rolls" -> {
+                val minRolls = requireNotNull(furnitureMinRolls) { "Frozen furniture minimum rolls are missing" }
+                val maxRolls = requireNotNull(furnitureMaxRolls) { "Frozen furniture maximum rolls are missing" }
+                require(minRolls in RewardFurniturePackage.MIN_ROLLS..RewardFurniturePackage.MAX_ROLLS &&
+                    maxRolls in minRolls..RewardFurniturePackage.MAX_ROLLS
+                ) { "Frozen furniture roll range is invalid" }
+                require(treasure?.type == "sub-pool") { "Frozen furniture item pool is missing" }
+                require(furnitureItemTree(requireNotNull(treasure), emptySet(), validateBukkitStacks)) {
+                    "Frozen furniture item pool must contain only positive-weight ItemsAdder items"
+                }
+                requireNotNull(treasure).validate(0, emptySet(), validateBukkitStacks)
+                require(currency == null && minAmount == null && maxAmount == null && tokenAmount == null)
+                require(commandKind == null && commandValue == null && mountId == null && furnitureBoxes == null)
+                require(sealItems == null && sealName == null && sealDescription == null)
+                require(dungeonCaseId == null && dungeonCaseDefinition == null && travelAnchorAmount == null && particlePresetId == null)
             }
             "seal" -> {
                 require(sealItems != null && sealItems.size in 1..216) { "Frozen seal snapshot is invalid" }
@@ -489,6 +513,28 @@ internal data class FrozenPhysicalRecipe(
             }
             else -> error("Unknown frozen physical recipe type: $type")
         }
+    }
+
+    private fun furnitureItemTree(
+        node: FrozenTreasureNode,
+        visitedPools: Set<String>,
+        validateBukkitStacks: Boolean,
+    ): Boolean = when (node.type) {
+        "item" -> node.weight > 0 && node.requiresItemsAdder && node.minInt == 1 && node.maxInt == 1 &&
+            (!validateBukkitStacks || runCatching {
+                val stack = ItemStack.deserializeBytes(Base64.getDecoder().decode(requireNotNull(node.stack)))
+                !stack.type.isAir && PhysicalRewardVoucher.identity(stack) == null &&
+                    CollectionSealIdentity.categoryId(stack) == null
+            }.getOrDefault(false))
+        "sub-pool" -> {
+            val poolId = node.poolId ?: return false
+            if (poolId in visitedPools) return false
+            val children = node.children.orEmpty()
+            children.isNotEmpty() && children.all { child ->
+                child.weight > 0 && furnitureItemTree(child, visitedPools + poolId, validateBukkitStacks)
+            }
+        }
+        else -> false
     }
 
     private fun validateAmount(currency: String?, min: Double?, max: Double?, expectedCurrency: String) {

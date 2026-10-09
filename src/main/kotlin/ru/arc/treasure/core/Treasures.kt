@@ -52,7 +52,9 @@ object Treasures : PluginModule {
 
     override fun shutdown() {
         info("Shutting down treasure module...")
-        _manager.saveTo(dataDir)
+        // Clean pools belong to the deployed configuration. Rewriting the entire
+        // old snapshot here would undo files delivered before this restart.
+        _manager.saveDirty(dataDir)
         info("Treasure module shutdown complete")
     }
 

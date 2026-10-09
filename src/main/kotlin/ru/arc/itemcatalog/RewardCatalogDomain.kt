@@ -59,7 +59,36 @@ internal object ParticlePresetEntitlements {
     }
 }
 
-data class RewardFurniturePackage(val name: String, val items: List<String>)
+data class RewardFurniturePackage(
+    val name: String,
+    val items: List<String>,
+    /** Missing weights give every listed ItemsAdder id the same chance. */
+    val weights: Map<String, Int> = emptyMap(),
+    val minRolls: Int = DEFAULT_MIN_ROLLS,
+    val maxRolls: Int = DEFAULT_MAX_ROLLS,
+) {
+    init {
+        require(items.size in 1..216 && items.distinct().size == items.size) {
+            "Furniture package items must be unique and contain 1..216 ids"
+        }
+        require(weights.keys.all { it in items } && weights.values.all { it in 1..MAX_ITEM_WEIGHT }) {
+            "Furniture package weights must reference listed items and be positive"
+        }
+        require(minRolls in MIN_ROLLS..MAX_ROLLS && maxRolls in minRolls..MAX_ROLLS) {
+            "Furniture package rolls must be in $MIN_ROLLS..$MAX_ROLLS"
+        }
+    }
+
+    fun weightFor(itemId: String): Int = weights[itemId] ?: 1
+
+    companion object {
+        const val MIN_ROLLS = 8
+        const val MAX_ROLLS = 12
+        const val DEFAULT_MIN_ROLLS = 8
+        const val DEFAULT_MAX_ROLLS = 12
+        const val MAX_ITEM_WEIGHT = 1_000_000
+    }
+}
 
 data class RewardCatalogEntry(
     val id: String,

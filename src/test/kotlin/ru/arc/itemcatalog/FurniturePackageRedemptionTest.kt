@@ -2,7 +2,6 @@ package ru.arc.itemcatalog
 
 import dev.lone.itemsadder.api.CustomStack
 import io.kotest.core.spec.style.StringSpec
-import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
@@ -11,91 +10,168 @@ import io.mockk.unmockkStatic
 import net.kyori.adventure.text.Component
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
+import org.bukkit.block.BlockFace
+import org.bukkit.event.block.Action
+import org.bukkit.event.player.PlayerInteractEvent
+import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
-import org.bukkit.inventory.meta.BlockStateMeta
 import org.bukkit.persistence.PersistentDataType
+import ru.arc.core.Tasks
+import ru.arc.core.TestTaskScheduler
 import ru.arc.mounts.MountWallet
-import ru.arc.onetime.OneTimeUseFingerprint
+import ru.arc.onetime.OneTimeUseAbandonResult
+import ru.arc.onetime.OneTimeUseClaim
+import ru.arc.onetime.OneTimeUseClaimRequest
+import ru.arc.onetime.OneTimeUseClaimResult
+import ru.arc.onetime.OneTimeUseCommitResult
+import ru.arc.onetime.OneTimeUseLedger
+import ru.arc.onetime.OneTimeUseReleaseResult
 import ru.arc.paper.testing.MockBukkitTestRuntime
-import java.util.UUID
+import java.nio.file.Files
+import java.util.concurrent.CompletableFuture
 
 private const val PACKAGE_ID = "medieval_furniture"
 private const val PACKAGE_ENTRY_ID = "medieval_furniture_entry"
+private const val ITEM_ID = "decor:chair"
 private val NATIVE_MARKER = NamespacedKey("test", "native_furniture_id")
 
 class FurniturePackageRedemptionTest : StringSpec({
-    "a 30 item package becomes two numbered shulkers with native item data" {
+    "new packages draw eight frozen furniture items directly and a replay has no second grant" {
         MockBukkitTestRuntime.open().use { paper ->
-            val itemIds = (1..30).map { "decor:item_$it" }
-            withMockItems(itemIds) { nativeItems ->
-                val service = CatalogPhysicalRewards(packageSettings(itemIds), mockk<MountWallet>(relaxed = true))
-                val key = "package:$PACKAGE_ID"
-                val spec = checkNotNull(service.resolve(key))
-                val player = paper.addPlayer("package-owner")
+            paper.createSimplePlugin("ItemsAdder")
+            withMockItems(listOf(ITEM_ID)) { nativeItems ->
+                val root = Files.createTempDirectory("arc-furniture-rolls")
+                try {
+                    val settings = packageSettings(
+                        itemIds = listOf(ITEM_ID),
+                        weights = mapOf(ITEM_ID to 7),
+                        minRolls = 8,
+                        maxRolls = 12,
+                    )
+                    val archive = FrozenPhysicalRewards(root)
+                    val rewards = CatalogPhysicalRewards(settings, mockk<MountWallet>(relaxed = true), archive)
+                    val entry = settings.categories.single().entries.single()
+                    val materialization = checkNotNull(rewards.materialization(entry))
+                    val recipe = checkNotNull(archive.find(materialization.sourceKey)).recipe
+                    recipe.type shouldBe "furniture-rolls"
+                    recipe.furnitureMinRolls shouldBe 8
+                    recipe.furnitureMaxRolls shouldBe 12
+                    recipe.treasure?.children?.single()?.weight shouldBe 7
 
-                service.redeem(player, spec, UUID.randomUUID()).join() shouldBe PhysicalRewardOutcome.Applied
+                    val ledger = FurnitureVoucherLedger()
+                    var nativeGrants = 0
+                    val controller = PhysicalRewardController(
+                        paper.createSimplePlugin("FurnitureRollClaim"),
+                        ledger,
+                        rewards::resolve,
+                        rewards::canRedeem,
+                        { player, spec, operationId ->
+                            nativeGrants++
+                            rewards.redeem(player, spec, operationId)
+                        },
+                        "spawn",
+                    )
+                    val scheduler = TestTaskScheduler()
+                    Tasks.withScheduler(scheduler) {
+                        controller.register()
+                        try {
+                            val player = paper.addPlayer("furniture-roll-owner")
+                            val voucher = checkNotNull(controller.createStack(materialization.sourceKey))
+                            player.inventory.setItemInMainHand(voucher)
+                            paper.callEvent(interact(player))
+                            flush(scheduler)
 
-                val boxes = player.inventory.storageContents.filterNotNull()
-                    .filter { it.type == Material.PURPLE_SHULKER_BOX }
-                boxes shouldHaveSize 2
-                boxes.forEachIndexed { boxIndex, box ->
-                    val meta = checkNotNull(box.itemMeta as? BlockStateMeta)
-                    val shulker = checkNotNull(meta.blockState as? org.bukkit.block.ShulkerBox)
-                    val stored = shulker.inventory.storageContents.filterNotNull()
-                    stored shouldHaveSize if (boxIndex == 0) 27 else 3
-                    stored.forEachIndexed { itemIndex, storedItem ->
-                        val sourceId = itemIds[boxIndex * 27 + itemIndex]
-                        storedItem.itemMeta?.persistentDataContainer?.get(NATIVE_MARKER, PersistentDataType.STRING) shouldBe sourceId
-                        storedItem.itemMeta?.displayName() shouldBe nativeItems.getValue(sourceId).itemMeta?.displayName()
+                            val delivered = player.inventory.storageContents.filterNotNull()
+                                .filter { it.itemMeta?.persistentDataContainer?.get(NATIVE_MARKER, PersistentDataType.STRING) == ITEM_ID }
+                            val deliveredCount = delivered.sumOf { it.amount }
+                            (deliveredCount in 8..12) shouldBe true
+                            player.inventory.storageContents.count { it?.type == Material.PURPLE_SHULKER_BOX } shouldBe 0
+                            delivered.single().itemMeta?.displayName() shouldBe nativeItems.getValue(ITEM_ID).itemMeta?.displayName()
+                            ledger.calls shouldBe listOf("claim", "commit")
+                            nativeGrants shouldBe 1
+
+                            player.inventory.setItemInMainHand(voucher.clone())
+                            paper.callEvent(interact(player))
+                            flush(scheduler)
+
+                            player.inventory.storageContents.filterNotNull()
+                                .filter { it.itemMeta?.persistentDataContainer?.get(NATIVE_MARKER, PersistentDataType.STRING) == ITEM_ID }
+                                .sumOf { it.amount } shouldBe deliveredCount
+                            ledger.calls shouldBe listOf("claim", "commit", "claim")
+                            nativeGrants shouldBe 1
+                        } finally {
+                            controller.close()
+                        }
                     }
+                } finally {
+                    root.toFile().deleteRecursively()
                 }
             }
         }
     }
 
-    "missing ItemsAdder item refuses a stale package without adding anything" {
+    "package preflight requires twelve free slots and releases the voucher before drawing" {
         MockBukkitTestRuntime.open().use { paper ->
-            val itemIds = (1..30).map { "decor:item_$it" }
-            withMockItems(itemIds, missing = setOf(itemIds.last())) {
-                val service = CatalogPhysicalRewards(packageSettings(itemIds), mockk<MountWallet>(relaxed = true))
-                val key = "package:$PACKAGE_ID"
-                service.resolve(key) shouldBe null
+            paper.createSimplePlugin("ItemsAdder")
+            withMockItems(listOf(ITEM_ID)) {
+                val root = Files.createTempDirectory("arc-furniture-rolls-full")
+                try {
+                    val settings = packageSettings(listOf(ITEM_ID), minRolls = 8, maxRolls = 12)
+                    val archive = FrozenPhysicalRewards(root)
+                    val rewards = CatalogPhysicalRewards(settings, mockk<MountWallet>(relaxed = true), archive)
+                    val materialization = checkNotNull(rewards.materialization(settings.categories.single().entries.single()))
+                    val spec = checkNotNull(rewards.resolve(materialization.sourceKey))
+                    val ledger = FurnitureVoucherLedger()
+                    var nativeGrants = 0
+                    val controller = PhysicalRewardController(
+                        paper.createSimplePlugin("FurnitureRollFull"),
+                        ledger,
+                        rewards::resolve,
+                        rewards::canRedeem,
+                        { player, reward, operationId ->
+                            nativeGrants++
+                            rewards.redeem(player, reward, operationId)
+                        },
+                        "spawn",
+                    )
+                    val scheduler = TestTaskScheduler()
+                    Tasks.withScheduler(scheduler) {
+                        controller.register()
+                        try {
+                            val player = paper.addPlayer("furniture-roll-full")
+                            player.inventory.storageContents = Array(36) { ItemStack(Material.STONE, 64) }
+                            val voucher = checkNotNull(controller.createStack(materialization.sourceKey))
+                            val voucherId = PhysicalRewardVoucher.identity(voucher)!!.id
+                            player.inventory.setItemInMainHand(voucher)
+                            val before = player.inventory.storageContents.map { it?.clone() }
 
-                val player = paper.addPlayer("missing-package-item")
-                val before = player.inventory.storageContents.map { it?.clone() }
-                val stale = PhysicalRewardSpec(
-                    key = key,
-                    fingerprint = OneTimeUseFingerprint.sha256(byteArrayOf(1)),
-                    preview = ItemStack(Material.PAPER),
-                )
+                            rewards.canRedeem(player, spec) shouldBe
+                                "<red>Освободите 12 ячеек инвентаря и используйте набор повторно."
+                            paper.callEvent(interact(player))
+                            flush(scheduler)
 
-                service.redeem(player, stale, UUID.randomUUID()).join() shouldBe
-                    PhysicalRewardOutcome.Rejected("<red>Награда сейчас недоступна. Предмет сохранён.")
-                player.inventory.storageContents.map { it?.clone() } shouldBe before
-            }
-        }
-    }
-
-    "a full inventory refuses the complete package without adding shulkers" {
-        MockBukkitTestRuntime.open().use { paper ->
-            val itemIds = (1..30).map { "decor:item_$it" }
-            withMockItems(itemIds) {
-                val service = CatalogPhysicalRewards(packageSettings(itemIds), mockk<MountWallet>(relaxed = true))
-                val spec = checkNotNull(service.resolve("package:$PACKAGE_ID"))
-                val player = paper.addPlayer("full-package-inventory")
-                player.inventory.storageContents = Array(36) { ItemStack(Material.STONE, 64) }
-                val before = player.inventory.storageContents.map { it?.clone() }
-
-                service.canRedeem(player, spec) shouldBe "<red>Освободите 2 яч. инвентаря для награды."
-                service.redeem(player, spec, UUID.randomUUID()).join() shouldBe
-                    PhysicalRewardOutcome.Rejected("<red>В инвентаре не хватает места.")
-                player.inventory.storageContents.map { it?.clone() } shouldBe before
+                            player.inventory.storageContents.map { it?.clone() } shouldBe before
+                            PhysicalRewardVoucher.identity(player.inventory.itemInMainHand)?.id shouldBe voucherId
+                            ledger.calls shouldBe listOf("claim", "release")
+                            nativeGrants shouldBe 0
+                        } finally {
+                            controller.close()
+                        }
+                    }
+                } finally {
+                    root.toFile().deleteRecursively()
+                }
             }
         }
     }
 })
 
-private fun packageSettings(itemIds: List<String>): RewardCatalogSettings =
+private fun packageSettings(
+    itemIds: List<String>,
+    weights: Map<String, Int> = emptyMap(),
+    minRolls: Int = 8,
+    maxRolls: Int = 12,
+): RewardCatalogSettings =
     RewardCatalogSettings(
         enabled = true,
         title = "Каталог",
@@ -109,7 +185,7 @@ private fun packageSettings(itemIds: List<String>): RewardCatalogSettings =
                     RewardCatalogEntry(
                         id = PACKAGE_ENTRY_ID,
                         name = "Средневеклый набор",
-                        description = listOf("Полный набор мебели"),
+                        description = listOf("Предметы мебели"),
                         rarity = null,
                         requires = emptyList(),
                         source = RewardCatalogSource.FurniturePackage(PACKAGE_ID),
@@ -119,16 +195,54 @@ private fun packageSettings(itemIds: List<String>): RewardCatalogSettings =
             ),
         ),
         messages = RewardCatalogMessages.DEFAULT,
-        packages = mapOf(PACKAGE_ID to RewardFurniturePackage("Средневеклый набор", itemIds)),
+        packages = mapOf(PACKAGE_ID to RewardFurniturePackage("Средневеклый набор", itemIds, weights, minRolls, maxRolls)),
     )
+
+private fun interact(player: org.bukkit.entity.Player): PlayerInteractEvent =
+    PlayerInteractEvent(player, Action.RIGHT_CLICK_AIR, null, null, BlockFace.SELF, EquipmentSlot.HAND)
+
+private fun flush(scheduler: TestTaskScheduler) {
+    repeat(12) { scheduler.executeImmediate() }
+}
+
+private class FurnitureVoucherLedger : OneTimeUseLedger {
+    val calls = mutableListOf<String>()
+    private var claims = 0
+    override val available: Boolean = true
+
+    override fun claim(request: OneTimeUseClaimRequest): CompletableFuture<OneTimeUseClaimResult> {
+        calls += "claim"
+        claims++
+        return CompletableFuture.completedFuture(
+            if (claims == 1) OneTimeUseClaimResult.Acquired(OneTimeUseClaim.acquired(request, true))
+            else OneTimeUseClaimResult.AlreadyConsumed,
+        )
+    }
+
+    override fun commit(claim: OneTimeUseClaim): CompletableFuture<OneTimeUseCommitResult> {
+        calls += "commit"
+        return CompletableFuture.completedFuture(OneTimeUseCommitResult.COMMITTED)
+    }
+
+    override fun release(claim: OneTimeUseClaim): CompletableFuture<OneTimeUseReleaseResult> {
+        calls += "release"
+        return CompletableFuture.completedFuture(OneTimeUseReleaseResult.RELEASED)
+    }
+
+    override fun abandon(claim: OneTimeUseClaim): CompletableFuture<OneTimeUseAbandonResult> {
+        calls += "abandon"
+        return CompletableFuture.completedFuture(OneTimeUseAbandonResult.RETAINED_FOR_RECOVERY)
+    }
+
+    override fun close() = Unit
+}
 
 private fun <T> withMockItems(
     itemIds: List<String>,
-    missing: Set<String> = emptySet(),
     block: (Map<String, ItemStack>) -> T,
 ): T {
     mockkStatic(CustomStack::class)
-    val nativeItems = itemIds.filterNot { it in missing }.associateWith { id ->
+    val nativeItems = itemIds.associateWith { id ->
         ItemStack(Material.DIAMOND).apply {
             editMeta { meta ->
                 meta.displayName(Component.text("Native $id"))

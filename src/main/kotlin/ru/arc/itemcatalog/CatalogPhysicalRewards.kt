@@ -7,10 +7,8 @@ import io.papermc.paper.datacomponent.DataComponentTypes
 import net.kyori.adventure.key.Key
 import org.bukkit.Bukkit
 import org.bukkit.Material
-import org.bukkit.block.ShulkerBox
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
-import org.bukkit.inventory.meta.BlockStateMeta
 import ru.arc.hooks.HookRegistry
 import ru.arc.hooks.elitemobs.DungeonCaseRewards
 import ru.arc.mounts.MountModule
@@ -363,9 +361,9 @@ internal class CatalogPhysicalRewards(
                 val pack = settings.packages[source.id] ?: return@runCatching null
                 val contents = pack.items.map { id ->
                     val native = CustomStack.getInstance(id)?.itemStack ?: return@runCatching null
-                    "$id:${OneTimeUseFingerprint.sha256(native.serializeAsBytes()).sha256}"
+                    "$id:${pack.weightFor(id)}:${OneTimeUseFingerprint.sha256(native.serializeAsBytes()).sha256}"
                 }
-                "package:${contents.joinToString("\n")}"
+                "package-rolls-v1:${pack.minRolls}:${pack.maxRolls}\n${contents.joinToString("\n")}"
             }
             is RewardCatalogSource.Treasure -> {
                 val treasure = treasure(source) ?: return@runCatching null
@@ -400,9 +398,13 @@ internal class CatalogPhysicalRewards(
             } else {
                 frozenRequiredSlots(recipe) ?: return UNAVAILABLE
             }
-            if (recipe.treasureRolls != null && requiredSlots > PLAYER_STORAGE_SLOTS) return INVENTORY_FULL
+            val furnitureRolls = recipe.type == "furniture-rolls"
+            if ((recipe.treasureRolls != null || furnitureRolls) && requiredSlots > PLAYER_STORAGE_SLOTS) {
+                return if (furnitureRolls) furnitureInventoryFull(requiredSlots) else INVENTORY_FULL
+            }
             if (player.inventory.storageContents.count { it == null || it.type.isAir } < requiredSlots) {
-                return if (recipe.treasureRolls != null) INVENTORY_FULL
+                return if (furnitureRolls) furnitureInventoryFull(requiredSlots)
+                else if (recipe.treasureRolls != null) INVENTORY_FULL
                     else "<red>Освободите $requiredSlots яч. инвентаря для награды."
             }
             return null
@@ -413,7 +415,11 @@ internal class CatalogPhysicalRewards(
             return particlePresets.canRedeem(player, entry.source.id)
         }
         val requiredSlots = when (val source = entry.source) {
-            is RewardCatalogSource.FurniturePackage -> (settings.packages[source.id]?.items?.size ?: return UNAVAILABLE).let { (it + 26) / 27 }
+            is RewardCatalogSource.FurniturePackage -> {
+                val recipe = freezeRecipe(entry) ?: return UNAVAILABLE
+                if (!frozenProvidersReady(recipe)) return UNAVAILABLE
+                frozenRequiredSlots(recipe) ?: return UNAVAILABLE
+            }
             is RewardCatalogSource.Mount -> 0
             is RewardCatalogSource.DungeonCase -> 1
             is RewardCatalogSource.TravelAnchors ->
@@ -422,7 +428,11 @@ internal class CatalogPhysicalRewards(
             else -> return UNAVAILABLE
         }
         if (player.inventory.storageContents.count { it == null || it.type.isAir } < requiredSlots) {
-            return "<red>Освободите $requiredSlots яч. инвентаря для награды."
+            return if (entry.source is RewardCatalogSource.FurniturePackage) {
+                furnitureInventoryFull(requiredSlots)
+            } else {
+                "<red>Освободите $requiredSlots яч. инвентаря для награды."
+            }
         }
         return null
     }
@@ -437,7 +447,11 @@ internal class CatalogPhysicalRewards(
         return when (val source = entry.source) {
             is RewardCatalogSource.Mount -> MountModule.grantReward(player, source.id).thenApply(::mountOutcome)
             is RewardCatalogSource.ParticlePreset -> particlePresets.redeem(player, source.id)
-            is RewardCatalogSource.FurniturePackage -> completed(giveStacks(player, furnitureBoxes(source.id) ?: return completed(rejected())))
+            is RewardCatalogSource.FurniturePackage -> {
+                val recipe = freezeRecipe(entry) ?: return completed(rejected())
+                if (!frozenProvidersReady(recipe)) completed(rejected())
+                else completed(redeemFrozenFurnitureRolls(player, recipe))
+            }
             is RewardCatalogSource.Treasure -> completed(redeemTreasure(player, treasure(source) ?: return completed(rejected()), operationId, emptySet()))
             is RewardCatalogSource.DungeonCase -> completed(
                 giveStacks(player, listOf(DungeonCaseRewards.create(player, source.id) ?: return completed(rejected()))),
@@ -457,13 +471,7 @@ internal class CatalogPhysicalRewards(
         when (val source = entry.source) {
             is RewardCatalogSource.Mount -> FrozenPhysicalRecipe("mount", mountId = source.id)
             is RewardCatalogSource.ParticlePreset -> FrozenPhysicalRecipe("particle-preset", particlePresetId = source.id)
-            is RewardCatalogSource.FurniturePackage -> {
-                val boxes = furnitureBoxes(source.id) ?: return@runCatching null
-                FrozenPhysicalRecipe(
-                    type = "furniture",
-                    furnitureBoxes = boxes.map { Base64.getEncoder().encodeToString(it.serializeAsBytes()) },
-                )
-            }
+            is RewardCatalogSource.FurniturePackage -> freezeFurniturePackage(source.id)
             is RewardCatalogSource.Treasure -> {
                 val treasure = treasure(source) ?: return@runCatching null
                 val node = freezeTreasure(treasure, emptySet(), intArrayOf(MAX_GRAPH_NODES)) ?: return@runCatching null
@@ -490,6 +498,35 @@ internal class CatalogPhysicalRewards(
             )
             else -> null
         }
+    }.getOrNull()
+
+    private fun freezeFurniturePackage(id: String): FrozenPhysicalRecipe? = runCatching {
+        val pack = settings.packages[id] ?: return@runCatching null
+        val children = pack.items.map { itemId ->
+            val stack = CustomStack.getInstance(itemId)?.itemStack?.clone() ?: return@runCatching null
+            if (stack.type.isAir || containsOneTimeIdentity(stack)) return@runCatching null
+            FrozenTreasureNode(
+                id = itemId,
+                type = "item",
+                weight = pack.weightFor(itemId),
+                minInt = 1,
+                maxInt = 1,
+                stack = Base64.getEncoder().encodeToString(stack.serializeAsBytes()),
+                requiresItemsAdder = true,
+            )
+        }
+        FrozenPhysicalRecipe(
+            type = "furniture-rolls",
+            furnitureMinRolls = pack.minRolls,
+            furnitureMaxRolls = pack.maxRolls,
+            treasure = FrozenTreasureNode(
+                id = id,
+                type = "sub-pool",
+                weight = 1,
+                poolId = "furniture-package:$id",
+                children = children,
+            ),
+        ).also { it.validate() }
     }.getOrNull()
 
     private fun freezeTreasure(
@@ -595,6 +632,8 @@ internal class CatalogPhysicalRewards(
         "ae" -> Bukkit.getPluginManager().isPluginEnabled("AdvancedEnchantments")
         "mount" -> MountModule.rewardPreview(requireNotNull(recipe.mountId)) != null
         "furniture" -> Bukkit.getPluginManager().isPluginEnabled("ItemsAdder")
+        "furniture-rolls" -> frozenTreasureIsItemOnly(recipe.treasure, emptySet()) &&
+            frozenTreasureProvidersReady(requireNotNull(recipe.treasure))
         "seal" -> recipe.sealItems.orEmpty().all { encoded ->
             decodeStack(encoded)?.let { !requiresItemsAdder(it) || Bukkit.getPluginManager().isPluginEnabled("ItemsAdder") } == true
         }
@@ -763,6 +802,10 @@ internal class CatalogPhysicalRewards(
         "ae" -> 1
         "mount" -> 0
         "furniture" -> recipe.furnitureBoxes?.size
+        "furniture-rolls" -> frozenTreasureRollRequiredSlots(
+            requireNotNull(recipe.treasure),
+            requireNotNull(recipe.furnitureMaxRolls),
+        )
         "seal" -> null
         // Require room for the worst selectable result of every roll before drawing anything.
         "treasure" -> if (recipe.treasureRolls != null) frozenTreasureRollRequiredSlots(
@@ -798,7 +841,7 @@ internal class CatalogPhysicalRewards(
     }
 
     private fun frozenTreasureRollRequiredSlots(node: FrozenTreasureNode, rolls: Int): Int? {
-        if (rolls !in 2..PersonalTreasureMapDefinition.MAX_PRIZE_ROLLS) return null
+        if (rolls !in 1..PLAYER_STORAGE_SLOTS) return null
         val slotsPerRoll = frozenTreasureRequiredSlots(node, emptySet()) ?: return null
         return minOf(
             PLAYER_STORAGE_SLOTS.toLong() + 1,
@@ -826,6 +869,7 @@ internal class CatalogPhysicalRewards(
         } else {
             redeemFrozenItemRolls(player, requireNotNull(recipe.treasure), recipe.treasureRolls)
         }
+        "furniture-rolls" -> redeemFrozenFurnitureRolls(player, recipe)
         "dungeon-case" -> DungeonCaseRewards.create(player, requireNotNull(recipe.dungeonCaseId))
             ?.let { giveStacks(player, listOf(it)) }
             ?: PhysicalRewardOutcome.Rejected(UNAVAILABLE)
@@ -879,7 +923,7 @@ internal class CatalogPhysicalRewards(
         root: FrozenTreasureNode,
         rolls: Int,
     ): PhysicalRewardOutcome {
-        if (rolls !in 2..PersonalTreasureMapDefinition.MAX_PRIZE_ROLLS ||
+        if (rolls !in 1..PLAYER_STORAGE_SLOTS ||
             !frozenTreasureIsItemOnly(root, emptySet())
         ) return PhysicalRewardOutcome.Rejected(UNAVAILABLE)
 
@@ -910,6 +954,21 @@ internal class CatalogPhysicalRewards(
         }
         return giveStacks(player, values)
     }
+
+    private fun redeemFrozenFurnitureRolls(
+        player: Player,
+        recipe: FrozenPhysicalRecipe,
+    ): PhysicalRewardOutcome {
+        val minRolls = recipe.furnitureMinRolls ?: return PhysicalRewardOutcome.Rejected(UNAVAILABLE)
+        val maxRolls = recipe.furnitureMaxRolls ?: return PhysicalRewardOutcome.Rejected(UNAVAILABLE)
+        if (minRolls !in RewardFurniturePackage.MIN_ROLLS..RewardFurniturePackage.MAX_ROLLS ||
+            maxRolls !in minRolls..RewardFurniturePackage.MAX_ROLLS
+        ) return PhysicalRewardOutcome.Rejected(UNAVAILABLE)
+        return redeemFrozenItemRolls(player, requireNotNull(recipe.treasure), randomInt(minRolls, maxRolls))
+    }
+
+    private fun furnitureInventoryFull(requiredSlots: Int): String =
+        "<red>Освободите $requiredSlots ячеек инвентаря и используйте набор повторно."
 
     private fun rollFrozenItem(
         node: FrozenTreasureNode,
@@ -1000,8 +1059,12 @@ internal class CatalogPhysicalRewards(
                 meta.displayName(TextUtil.mm(entry.name ?: "<gold>Запечатанная награда", true))
                 meta.lore((entry.description + when (val source = entry.source) {
                     is RewardCatalogSource.FurniturePackage -> {
-                        val count = settings.packages.getValue(source.id).items.size
-                        listOf("<gold>Полный набор: <yellow>$count предметов", "<gold>Упаковка: <yellow>${(count + 26) / 27} шалкер(а)")
+                        val pack = settings.packages.getValue(source.id)
+                        listOf(
+                            "<#e8dfd2>При открытии выдаёт <yellow>${pack.minRolls}–${pack.maxRolls} предметов мебели.",
+                            "<#e8dfd2>Каждый выбор независим; повторы возможны.",
+                            "<#e8dfd2>Для выдачи освободите <yellow>${pack.maxRolls} ячеек инвентаря.",
+                        )
                     }
                     is RewardCatalogSource.Mount -> listOf("<light_purple>Контракт открывает маунта I уровня.")
                     is RewardCatalogSource.DungeonCase -> listOf("<#d6c2ff>При использовании создаёт один предмет EliteMobs вашего уровня.")
@@ -1018,22 +1081,6 @@ internal class CatalogPhysicalRewards(
                 } else {
                     listOf("<green>ПКМ с предметом в руке — получить награду.", "<yellow>Можно хранить и передавать до использования.")
                 }).map { TextUtil.mm(it, true) })
-            }
-        }
-    }
-
-    private fun furnitureBoxes(id: String): List<ItemStack>? {
-        val pack = settings.packages[id] ?: return null
-        val items = pack.items.map { CustomStack.getInstance(it)?.itemStack?.clone() ?: return null }
-        return items.chunked(27).mapIndexed { index, contents ->
-            ItemStack(Material.PURPLE_SHULKER_BOX).also { box ->
-                val meta = box.itemMeta as BlockStateMeta
-                val state = meta.blockState as ShulkerBox
-                contents.forEachIndexed { slot, item -> state.inventory.setItem(slot, item.also { it.amount = 1 }) }
-                meta.blockState = state
-                meta.displayName(TextUtil.mm("${pack.name} <gold>· ${index + 1}/${(items.size + 26) / 27}", true))
-                meta.lore(listOf(TextUtil.mm("<yellow>${contents.size} предметов мебели из полного набора.", true)))
-                box.itemMeta = meta
             }
         }
     }

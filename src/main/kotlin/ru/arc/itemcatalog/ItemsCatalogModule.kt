@@ -177,6 +177,10 @@ object ItemsCatalogModule : PluginModule {
             nativeRewards::isVoucherSource,
             nativeRewards::materialization,
             createPhysical,
+            { entry ->
+                entry.source !is RewardCatalogSource.PersonalMap ||
+                    nativeRewards.materialization(entry)?.let { nativeRewards.canMaterialize(it.sourceKey) } == true
+            },
         ).takeIf { rewards.enabled }
         val warmupEpoch = interactiveWarmupEpoch.incrementAndGet()
         if (rewards.enabled) warmInteractiveArchives(nativeRewards, warmupEpoch, attempt = 1)

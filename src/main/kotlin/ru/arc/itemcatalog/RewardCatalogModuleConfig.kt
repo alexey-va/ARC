@@ -56,7 +56,22 @@ class RewardCatalogModuleConfig(private val config: Config) {
             require(rawItems.size in 1..216) { "$path must contain 1..216 furniture items" }
             val items = rawItems.map { requiredId(it, "$path.items", ITEMSADDER_ID) }
             require(items.distinct().size == items.size) { "$path contains duplicate furniture items" }
-            id to RewardFurniturePackage(name, items)
+            val weights = if ("weights" in map) {
+                strictMap(map["weights"], "$path.weights").map { (rawItemId, rawWeight) ->
+                    val itemId = requiredId(rawItemId, "$path.weights", ITEMSADDER_ID)
+                    require(itemId in items) { "$path.weights references an item outside $path.items" }
+                    val weight = integer(rawWeight, "$path.weights.$itemId")
+                    require(weight in 1..RewardFurniturePackage.MAX_ITEM_WEIGHT) {
+                        "$path.weights.$itemId must be in 1..${RewardFurniturePackage.MAX_ITEM_WEIGHT}"
+                    }
+                    itemId to weight
+                }.toMap()
+            } else emptyMap()
+            val minRolls = if ("min-rolls" in map) integer(map["min-rolls"], "$path.min-rolls")
+                else RewardFurniturePackage.DEFAULT_MIN_ROLLS
+            val maxRolls = if ("max-rolls" in map) integer(map["max-rolls"], "$path.max-rolls")
+                else RewardFurniturePackage.DEFAULT_MAX_ROLLS
+            id to RewardFurniturePackage(name, items, weights, minRolls, maxRolls)
         }.toMap()
     }
 
