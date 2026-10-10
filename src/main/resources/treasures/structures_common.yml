@@ -1,0 +1,100 @@
+id: structures_common
+treasures:
+  - type: item
+    id: structure_common_bread
+    weight: 12
+    stack:
+      type: BREAD
+      amount: 1
+    amount: 2-4
+  - type: item
+    id: structure_common_cooked_beef
+    weight: 8
+    stack:
+      type: COOKED_BEEF
+      amount: 1
+    amount: 1-3
+  - type: item
+    id: structure_common_arrow
+    weight: 12
+    stack:
+      type: ARROW
+      amount: 1
+    amount: 4-8
+  - type: item
+    id: structure_common_torch
+    weight: 10
+    stack:
+      type: TORCH
+      amount: 1
+    amount: 4-8
+  - type: item
+    id: structure_common_coal
+    weight: 12
+    stack:
+      type: COAL
+      amount: 1
+    amount: 2-4
+  - type: item
+    id: structure_common_iron_ingot
+    weight: 10
+    stack:
+      type: IRON_INGOT
+      amount: 1
+    amount: 1-3
+  - type: item
+    id: structure_common_copper_ingot
+    weight: 8
+    stack:
+      type: COPPER_INGOT
+      amount: 1
+    amount: 2-5
+  - type: item
+    id: structure_common_lapis_lazuli
+    weight: 8
+    stack:
+      type: LAPIS_LAZULI
+      amount: 1
+    amount: 2-4
+  - type: item
+    id: structure_common_redstone
+    weight: 6
+    stack:
+      type: REDSTONE
+      amount: 1
+    amount: 2-4
+  - type: item
+    id: structure_common_gold_ingot
+    weight: 4
+    stack:
+      type: GOLD_INGOT
+      amount: 1
+    amount: 1-2
+  - type: item
+    id: structure_common_string
+    weight: 4
+    stack:
+      type: STRING
+      amount: 1
+    amount: 2-4
+  - type: item
+    id: structure_common_experience_bottle
+    weight: 3
+    stack:
+      type: EXPERIENCE_BOTTLE
+      amount: 1
+    amount: 1-2
+  - type: item
+    id: structure_common_emerald
+    weight: 2
+    stack:
+      type: EMERALD
+      amount: 1
+    amount: 1
+  - type: item
+    id: structure_common_diamond
+    weight: 1
+    stack:
+      type: DIAMOND
+      amount: 1
+    amount: 1

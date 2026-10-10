@@ -31,7 +31,6 @@ import ru.arc.repository.Entity
 import ru.arc.repository.Mergeable
 import ru.arc.repository.redisRepo
 import ru.arc.chestpreview.chestPartnerDirection
-import ru.arc.util.ItemUtils.connectedChests
 import ru.arc.util.ItemUtils.extractInventory
 import ru.arc.util.ItemUtils.extractItems
 import ru.arc.util.Logging.error
@@ -394,7 +393,7 @@ object PersonalLootModule {
 
         val poolName = data.get(poolKey, PersistentDataType.STRING)
         // Preserve the existing extraction semantics: Chest#getInventory already exposes a double inventory.
-        val currentItems = connectedChests(block).flatMap { extractItems(it) }.map { it.clone() }
+        val currentItems = if (useBsLoot) extractItems(block).map { it.clone() } else emptyList()
 
         val playerUuid = player.uniqueId
         val lootId = "$playerUuid$PERSONAL_LOOT_SEPARATOR$chestUuid"
@@ -447,7 +446,7 @@ object PersonalLootModule {
         repository: CachedRepository<CustomLootData>,
         protectionAllows: (Player, Block) -> Boolean,
     ) {
-        if (!player.isOnline || block.type !in chests) return
+        if (repo !== repository || !player.isOnline || block.type !in chests) return
         val currentData = CustomBlockData(block, ARC.instance)
         val currentChestUuid = parsePersonalLootUuid(currentData.get(uuidKey, PersistentDataType.STRING))
         if (currentChestUuid != expectedChestUuid) return
@@ -467,11 +466,30 @@ object PersonalLootModule {
             return
         }
 
-        if (lootData.isExhausted()) {
+        // A surviving block marker must never turn a missing/expired player record into another roll.
+        if (lootData.isExhausted() || (player.uniqueId in players && lootData.needsItems())) {
             player.sendMessage(
                 config.component("messages.already-opened", "<red>Вы уже открывали этот сундук"),
             )
             return
+        }
+
+        if (lootData.needsItems()) {
+            val generated = try {
+                if (useBsLoot) {
+                    ItemList().apply { addAll(currentItems) }
+                } else {
+                    chestGenerator.generate(player, poolName)
+                }
+            } catch (failure: Exception) {
+                error("Failed to generate personal loot {} from pool {}", lootData.id(), poolName, failure)
+                player.sendMessage(config.component(
+                    "messages.load-error",
+                    "<red>Не удалось загрузить содержимое сундука. Попробуйте ещё раз.",
+                ))
+                return
+            }
+            if (lootData.fillIfEmpty(generated)) repository.markDirty(lootData)
         }
 
         players.add(player.uniqueId)
@@ -485,18 +503,6 @@ object PersonalLootModule {
 
         if (!useBsLoot) {
             extractInventory(block)?.clear()
-        }
-
-        if (lootData.needsItems()) {
-            val generated =
-                if (useBsLoot) {
-                    ItemList().apply { addAll(currentItems) }
-                } else {
-                    chestGenerator.generate(poolName ?: "default", 5, 27)
-                }
-            if (lootData.fillIfEmpty(generated)) {
-                repository.markDirty(lootData)
-            }
         }
 
         LootGuiFactory.open(player, lootData)
@@ -576,7 +582,13 @@ object PersonalLootModule {
     @JvmStatic
     fun processChestGen(block: Block) {
         if (repo == null) return
-        val blocks = connectedChests(block)
+        if (block.type !in chests) return
+        val chestData = block.blockData as? ChestData
+        val partner = chestData?.takeIf { it.type != ChestData.Type.SINGLE }
+            ?.let { chestPartnerDirection(it.facing, it.type) }?.let(block::getRelative)
+        val blocks = if (partner != null && partner.type == block.type) listOf(block, partner) else listOf(block)
+        // BetterStructures may refill a container. Its identity and previous claims remain authoritative.
+        if (blocks.any { CustomBlockData(it, ARC.instance).has(uuidKey) }) return
         val uuid = UUID.randomUUID().toString()
 
         for (b in blocks) {

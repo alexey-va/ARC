@@ -1182,3 +1182,8 @@ dungeon-qol:
     sold: '<#90dfc8>Предмет продан. К зачислению: '
     credit-later: '<#f2eee8>Кристаллы зачислятся автоматически на сервере с EliteMobs.'
     credited: '<#90dfc8>✦ Кристаллы зачислены: '
+
+# One shared physical reward for a real eligible BOSS death; native lockouts still apply.
+boss-enchantment-rewards:
+  enabled: true
+  preset: enchant_boss_supply

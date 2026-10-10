@@ -17,6 +17,35 @@ import java.util.Comparator
 import java.util.concurrent.CompletableFuture
 
 class FrozenPhysicalRewardsTest : StringSpec({
+    "frozen AE random-book filters survive JSON reload while legacy nodes default open" {
+        val gson = Gson()
+        val restricted = FrozenTreasureNode(
+            id = "special-book",
+            type = "ae",
+            weight = 5,
+            aeKind = "random_book",
+            amount = 1,
+            aeGroup = "UNIQUE",
+            aeMaxLevel = 1,
+        )
+        restricted.validate(0, emptySet())
+        val restored = gson.fromJson(gson.toJson(restricted), FrozenTreasureNode::class.java)
+        restored shouldBe restricted
+        restored.validate(0, emptySet())
+
+        val legacy = gson.fromJson(
+            """{"id":"legacy-book","type":"ae","weight":1,"aeKind":"random_book","amount":1}""",
+            FrozenTreasureNode::class.java,
+        )
+        legacy.aeGroup shouldBe null
+        legacy.aeMaxLevel shouldBe null
+        legacy.validate(0, emptySet())
+
+        runCatching { restricted.copy(aeGroup = "UNKNOWN").validate(0, emptySet()) }.isFailure shouldBe true
+        runCatching { restricted.copy(aeMaxLevel = 0).validate(0, emptySet()) }.isFailure shouldBe true
+        runCatching { restricted.copy(aeKind = "item", itemName = "magic").validate(0, emptySet()) }.isFailure shouldBe true
+    }
+
     "particle preset recipes are strict while legacy archives default the new field to null" {
         FrozenPhysicalRecipe(
             type = "particle-preset",

@@ -585,6 +585,9 @@ internal data class FrozenTreasureNode(
     val itemName: String? = null,
     val amount: Int? = null,
     val aeArgs: List<FrozenAeArg>? = null,
+    /** Optional restrictions for an AE random book; absent in legacy archives. */
+    val aeGroup: String? = null,
+    val aeMaxLevel: Int? = null,
 ) {
     /** Set false only for storage-thread checks that must not deserialize Bukkit ItemStacks. */
     fun validate(depth: Int, visitedPools: Set<String>, validateBukkitStacks: Boolean = true) {
@@ -600,18 +603,18 @@ internal data class FrozenTreasureNode(
                 require(bytes.size <= 512 * 1024)
                 if (validateBukkitStacks) require(!ItemStack.deserializeBytes(bytes).type.isAir)
                 require(itemId == null && exclude == null && commands == null && poolId == null && children == null)
-                require(aeKind == null && itemName == null && amount == null && aeArgs == null)
+                require(aeKind == null && itemName == null && amount == null && aeArgs == null && aeGroup == null && aeMaxLevel == null)
             }
             "money" -> {
                 validateDoubleRange()
                 require(stack == null && itemId == null && exclude == null && commands == null && poolId == null && children == null)
-                require(aeKind == null && itemName == null && amount == null && aeArgs == null)
+                require(aeKind == null && itemName == null && amount == null && aeArgs == null && aeGroup == null && aeMaxLevel == null)
             }
             "command" -> {
                 require(commands?.size == 1)
                 require(commands.single().length in 1..512 && allowedCommand(commands.single()))
                 require(stack == null && itemId == null && exclude == null && poolId == null && children == null)
-                require(aeKind == null && itemName == null && amount == null && aeArgs == null)
+                require(aeKind == null && itemName == null && amount == null && aeArgs == null && aeGroup == null && aeMaxLevel == null)
             }
             "sub-pool" -> {
                 require(poolId != null && poolId.isNotBlank() && poolId.length <= 256)
@@ -620,14 +623,14 @@ internal data class FrozenTreasureNode(
                 require(children.any { it.weight > 0 })
                 children.forEach { it.validate(depth + 1, visitedPools + poolId, validateBukkitStacks) }
                 require(stack == null && itemId == null && exclude == null && commands == null)
-                require(aeKind == null && itemName == null && amount == null && aeArgs == null)
+                require(aeKind == null && itemName == null && amount == null && aeArgs == null && aeGroup == null && aeMaxLevel == null)
             }
             "enchant", "potion" -> {
                 validateIntRange()
                 if (type == "enchant") require((exclude ?: emptyList()).size <= 256 && (exclude ?: emptyList()).all { it.length <= 128 })
                 else require(exclude == null || exclude.isEmpty())
                 require(stack == null && itemId == null && commands == null && poolId == null && children == null)
-                require(aeKind == null && itemName == null && amount == null && aeArgs == null)
+                require(aeKind == null && itemName == null && amount == null && aeArgs == null && aeGroup == null && aeMaxLevel == null)
             }
             "ae" -> {
                 require(aeKind == "item" || aeKind == "random_book")
@@ -635,6 +638,12 @@ internal data class FrozenTreasureNode(
                 require(amount in 1..64)
                 require((aeArgs ?: emptyList()).size <= 16)
                 require((aeArgs ?: emptyList()).all(FrozenAeArg::isValid))
+                if (aeKind == "random_book") {
+                    require(aeGroup == null || aeGroup in ALLOWED_AE_BOOK_GROUPS)
+                    require(aeMaxLevel == null || aeMaxLevel in 1..100)
+                } else {
+                    require(aeGroup == null && aeMaxLevel == null)
+                }
                 require(stack == null && itemId == null && exclude == null && commands == null && poolId == null && children == null)
             }
             "slimefun" -> {
@@ -644,7 +653,7 @@ internal data class FrozenTreasureNode(
                 require(bytes.size <= 512 * 1024)
                 if (validateBukkitStacks) require(!ItemStack.deserializeBytes(bytes).type.isAir)
                 require(exclude == null && commands == null && poolId == null && children == null)
-                require(aeKind == null && itemName == null && amount == null && aeArgs == null)
+                require(aeKind == null && itemName == null && amount == null && aeArgs == null && aeGroup == null && aeMaxLevel == null)
             }
             else -> error("Unknown frozen treasure type: $type")
         }
@@ -667,6 +676,7 @@ internal data class FrozenTreasureNode(
             Regex("arcecojobs:arcjobs booster give %player% [a-z0-9_-]+ 1"),
             Regex("elitemobs:elitemobs loot give %player% [a-z0-9_-]+\\.yml"),
         )
+        val ALLOWED_AE_BOOK_GROUPS = setOf("SIMPLE", "UNIQUE", "ELITE", "ULTIMATE", "LEGENDARY", "FABLED")
 
         fun allowedCommand(command: String): Boolean = NATIVE_COMMANDS.any { it.matches(command) }
     }

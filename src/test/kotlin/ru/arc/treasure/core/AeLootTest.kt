@@ -2,14 +2,18 @@ package ru.arc.treasure.core
 
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldStartWith
+import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
 import io.mockk.verify
 import org.bukkit.Bukkit
+import org.bukkit.Material
 import org.bukkit.command.ConsoleCommandSender
 import org.bukkit.entity.Player
+import org.bukkit.inventory.ItemStack
+import org.bukkit.inventory.PlayerInventory
 import ru.arc.KotestTestBase
 
 class AeLootTest :
@@ -117,6 +121,53 @@ class TreasureServiceNativeLootTest :
 
         afterEach {
             unmockkStatic(Bukkit::class)
+        }
+
+        it("materializes restricted AE books for the container give path without an unconstrained command") {
+            mockkStatic(Bukkit::class)
+            val player = mockk<Player>(relaxed = true)
+            val inventory = mockk<PlayerInventory>(relaxed = true)
+            val requested = Treasure.Ae(AeKind.RANDOM_BOOK, group = "UNIQUE", maxLevel = 1)
+            val book = ItemStack(Material.ENCHANTED_BOOK)
+            var materializedRequest: Treasure.Ae? = null
+            every { player.inventory } returns inventory
+            every { inventory.addItem(any()) } returns hashMapOf<Int, ItemStack>()
+            val service = TreasureService(
+                poolProvider = { null },
+                economyProvider = { null },
+                restrictedBookMaterializer = { treasure, _ ->
+                    materializedRequest = treasure
+                    listOf(book)
+                },
+            )
+
+            service.give(requested, player, GiveConfig.CONTAINER).shouldBeInstanceOf<GiveResult.Success>()
+
+            materializedRequest?.group shouldBe "UNIQUE"
+            materializedRequest?.maxLevel shouldBe 1
+            verify(exactly = 1) { inventory.addItem(match { it.type == Material.ENCHANTED_BOOK }) }
+            verify(exactly = 0) { Bukkit.dispatchCommand(any(), any()) }
+        }
+
+        it("fails closed when a constrained AE book cannot be materialized") {
+            mockkStatic(Bukkit::class)
+            val player = mockk<Player>(relaxed = true)
+            val inventory = mockk<PlayerInventory>(relaxed = true)
+            every { player.inventory } returns inventory
+            val service = TreasureService(
+                poolProvider = { null },
+                economyProvider = { null },
+                restrictedBookMaterializer = { _, _ -> error("book provider unavailable") },
+            )
+
+            service.give(
+                Treasure.Ae(AeKind.RANDOM_BOOK, group = "SIMPLE", maxLevel = 1),
+                player,
+                GiveConfig.CONTAINER,
+            ).shouldBeInstanceOf<GiveResult.Failure>()
+
+            verify(exactly = 0) { inventory.addItem(any()) }
+            verify(exactly = 0) { Bukkit.dispatchCommand(any(), any()) }
         }
 
         it("should dispatch ae command on give") {

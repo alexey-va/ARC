@@ -213,6 +213,12 @@ object OpsTreasurePoolHandlers {
                 Treasure.Potion(range.first, range.second, weight, messages, id)
             }
             "ae" -> parseAe(body, path, id, weight, messages)
+            "preset" -> {
+                val preset = ItemPresets.normalize(requiredString(body, "preset", path, MAX_ID_LENGTH))
+                require(preset in ItemPresets.allNames()) { "$path.preset references an unknown ItemPreset: $preset" }
+                val amount = optionalInt(body, "amount", path, 1, 1, MAX_PRESET_AMOUNT)
+                Treasure.Preset(preset, amount, weight, messages, id)
+            }
             "slimefun" -> {
                 val itemId = requiredString(body, "itemId", path, MAX_EXTERNAL_ID_LENGTH)
                 require(EXTERNAL_ID_PATTERN.matches(itemId)) { "$path.itemId has an invalid value" }
@@ -249,12 +255,18 @@ object OpsTreasurePoolHandlers {
         require((kind == AeKind.ITEM) == (name != null)) {
             "$path.name is required only for kind=item"
         }
-        val amount = optionalInt(body, "amount", path, 1, 1, MAX_ITEM_AMOUNT)
-        require(kind == AeKind.ITEM || !body.has("amount")) {
-            "$path.amount is supported only for kind=item"
+        val amountMax = if (kind == AeKind.ITEM) MAX_ITEM_AMOUNT else MAX_PRESET_AMOUNT
+        val amount = optionalInt(body, "amount", path, 1, 1, amountMax)
+        val group = optionalString(body, "group", path, 32)?.uppercase(java.util.Locale.ROOT)
+        require(group == null || group in AE_BOOK_GROUPS) { "$path.group must be a public AE group" }
+        val maxLevel = body.get("maxLevel")?.takeUnless(JsonElement::isJsonNull)?.let {
+            parseInt(it, "$path.maxLevel", 1, MAX_AE_BOOK_LEVEL)
+        }
+        require(kind == AeKind.RANDOM_BOOK || (group == null && maxLevel == null)) {
+            "$path.group and maxLevel are supported only for kind=random-book"
         }
         val args = parseAeArgs(body.get("args"), "$path.args")
-        return Treasure.Ae(kind, name, amount, args, weight, messages, id)
+        return Treasure.Ae(kind, name, amount, args, weight, messages, id, group, maxLevel)
     }
 
     private fun parseAeArgs(
@@ -469,8 +481,14 @@ object OpsTreasurePoolHandlers {
             is Treasure.Ae -> {
                 result["kind"] = if (treasure.kind == AeKind.ITEM) "item" else "random-book"
                 treasure.itemName?.let { result["name"] = it }
-                if (treasure.kind == AeKind.ITEM) result["amount"] = treasure.amount
+                if (treasure.amount != 1) result["amount"] = treasure.amount
                 result["args"] = treasure.args.map(::aeArgToMap)
+                treasure.group?.let { result["group"] = it }
+                treasure.maxLevel?.let { result["maxLevel"] = it }
+            }
+            is Treasure.Preset -> {
+                result["preset"] = treasure.preset
+                result["amount"] = treasure.amount
             }
             is Treasure.Slimefun -> {
                 result["itemId"] = treasure.itemId
@@ -753,6 +771,8 @@ object OpsTreasurePoolHandlers {
     private const val MAX_EXCLUDES = 256
     private const val MAX_AE_ARGS = 16
     private const val MAX_AE_INTEGER = 1_000_000
+    private const val MAX_AE_BOOK_LEVEL = 100
+    private const val MAX_PRESET_AMOUNT = 64
     private const val MAX_MESSAGES = 32
     private const val MAX_MESSAGE_LENGTH = 4096
 
@@ -766,9 +786,11 @@ object OpsTreasurePoolHandlers {
             "sub-pool" to setOf("poolId"),
             "enchant" to setOf("amount", "exclude"),
             "potion" to setOf("amount"),
-            "ae" to setOf("kind", "name", "amount", "args"),
+            "ae" to setOf("kind", "name", "amount", "args", "group", "maxLevel"),
+            "preset" to setOf("preset", "amount"),
             "slimefun" to setOf("itemId", "amount"),
         )
+    private val AE_BOOK_GROUPS = setOf("SIMPLE", "UNIQUE", "ELITE", "ULTIMATE", "LEGENDARY", "FABLED")
     private val MESSAGE_FIELDS =
         setOf("text", "destination", "target", "nearbyRadius", "bossBarColor", "bossBarSeconds", "subtitle")
     private val RANGE_FIELDS = setOf("min", "max")

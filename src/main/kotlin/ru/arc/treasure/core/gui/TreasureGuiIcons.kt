@@ -6,6 +6,7 @@ import org.bukkit.Material
 import org.bukkit.event.inventory.InventoryClickEvent
 import org.bukkit.inventory.ItemStack
 import ru.arc.hooks.HookRegistry
+import ru.arc.ops.ItemPresets
 import ru.arc.treasure.core.Treasure
 import ru.arc.treasure.core.TreasureConfig
 import ru.arc.treasure.core.TreasurePool
@@ -59,6 +60,10 @@ object TreasureGuiIcons {
 
             is Treasure.Ae -> {
                 aeIconStack(treasure)
+            }
+
+            is Treasure.Preset -> {
+                presetIconStack(treasure)
             }
 
             is Treasure.Slimefun -> {
@@ -148,7 +153,14 @@ object TreasureGuiIcons {
         itemStack(Material.ENCHANTED_BOOK) {
             display(TreasureConfig.GuiIcons.aeDisplay)
             lore("<white>${treasure.displayName}")
+            treasure.group?.let { lore("<gray>Группа: <white>$it") }
+            treasure.maxLevel?.let { lore("<gray>Максимальный уровень: <white>$it") }
         }
+
+    private fun presetIconStack(treasure: Treasure.Preset): ItemStack =
+        ItemPresets.resolveStacks(treasure.preset, treasure.amount).getOrNull()?.firstOrNull()
+            ?.clone()?.apply { amount = 1 }
+            ?: itemStack(Material.CHEST) { display("<gray>Набор: <white>${treasure.preset}") }
 
     private fun slimefunIconStack(treasure: Treasure.Slimefun): ItemStack {
         val resolved = resolveSlimefunStack(treasure.itemId)
@@ -255,6 +267,12 @@ object TreasureGuiIcons {
                 if (treasure.args.isNotEmpty()) {
                     appendLore("<gray>Аргументов: <white>${treasure.args.size}")
                 }
+            }
+
+            is Treasure.Preset -> {
+                appendLore("<gray>Набор: <white>${treasure.preset}")
+                appendLore("<gray>Количество: <white>${treasure.amount}")
+                appendLore("<gray>Вес: <white>${treasure.weight}")
             }
 
             is Treasure.Slimefun -> {

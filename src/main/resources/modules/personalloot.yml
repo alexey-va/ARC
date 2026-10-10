@@ -1,5 +1,5 @@
 # =============================================================================
-# personalloot.yml — персональные сундуки (BetterStructures / BS loot).
+# personalloot.yml — персональные сундуки структур с пулами ARC.
 # GUI: guis/personal-loot.yml (заголовок, слоты). Здесь — лимиты и сообщения.
 # =============================================================================
 
@@ -8,8 +8,16 @@ max-players: 5
 # Типы инвентарей Bukkit, где обрабатывается открытие (CHEST, BARREL, …)
 inventories:
   - CHEST
-# Подтягивать лут из конфигов BetterStructures
-use-bs-loot: true
+# Лут создаётся один раз для каждого нового игрока; старые записи сохраняются.
+use-bs-loot: false
+loot:
+  # Пулы редактируются в treasures/ или через /arc treasure-pool.
+  common-pool: structures_common
+  min-rolls: 3
+  max-rolls: 5
+  # Один независимый бонус на сундук, а не на каждый обычный бросок.
+  bonus-pool: structures_special
+  bonus-chance: 0.10
 # Сколько раз нужно сломать блок, чтобы уничтожить сундук и очистить данные
 max-breaks: 3
 gui:
@@ -23,3 +31,4 @@ messages:
   max-players: <red>Слишком много игроков уже открыли этот сундук!
   # Лут уже забран (пустой CustomLootData)
   already-opened: <red>Вы уже открывали этот сундук
+  load-error: '<red>Не удалось загрузить содержимое сундука. Попробуйте ещё раз.'

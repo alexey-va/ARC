@@ -3,6 +3,7 @@ package ru.arc.treasure.core
 import net.milkbowl.vault.economy.Economy
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
+import org.bukkit.inventory.ItemStack
 import ru.arc.hooks.HookRegistry
 import ru.arc.util.Logging.warn
 
@@ -42,6 +43,9 @@ sealed class GiveResult {
 class TreasureService(
     private val poolProvider: (String) -> TreasurePool?,
     private val economyProvider: () -> Economy? = { null },
+    private val restrictedBookMaterializer: (Treasure.Ae, Player) -> List<ItemStack>? = { treasure, player ->
+        TreasureStackFactory().create(treasure, player)
+    },
 ) {
     /**
      * Gives a treasure to a player.
@@ -61,6 +65,7 @@ class TreasureService(
                 is Treasure.Enchant -> giveEnchant(treasure, player)
                 is Treasure.Potion -> givePotion(treasure, player)
                 is Treasure.Ae -> giveAe(treasure, player)
+                is Treasure.Preset -> givePreset(treasure, player)
                 is Treasure.Slimefun -> giveSlimefun(treasure, player)
             }
 
@@ -95,6 +100,7 @@ class TreasureService(
                 is Treasure.Enchant -> giveEnchant(treasure, player)
                 is Treasure.Potion -> givePotion(treasure, player)
                 is Treasure.Ae -> giveAe(treasure, player)
+                is Treasure.Preset -> givePreset(treasure, player)
                 is Treasure.Slimefun -> giveSlimefun(treasure, player)
             }
 
@@ -222,6 +228,22 @@ class TreasureService(
         treasure: Treasure.Ae,
         player: Player,
     ): GiveResult {
+        if (treasure.kind == AeKind.RANDOM_BOOK && (treasure.group != null || treasure.maxLevel != null)) {
+            val stacks = runCatching { restrictedBookMaterializer(treasure, player) }
+                .getOrElse { return GiveResult.Failure("AdvancedEnchantments random book is unavailable") }
+                ?: return GiveResult.Failure("AdvancedEnchantments random book is unavailable")
+            if (stacks.isEmpty() || stacks.any { it.type.isAir || it.amount !in 1..it.maxStackSize }) {
+                return GiveResult.Failure("AdvancedEnchantments random book factory returned invalid items")
+            }
+            // Resolve every requested book before touching inventory; a missing candidate must not fall back to an unconstrained AE command.
+            stacks.forEach { stack ->
+                val overflow = player.inventory.addItem(stack.clone())
+                overflow.values.forEach { item ->
+                    player.location.world?.dropItemNaturally(player.location, item)
+                }
+            }
+            return GiveResult.Success(treasure)
+        }
         if (AeNativeItems.supports(treasure)) {
             val stacks = AeNativeItems.create(treasure)
                 ?: return GiveResult.Failure("AdvancedEnchantments item factory is unavailable")
@@ -243,6 +265,21 @@ class TreasureService(
         val amount = treasure.rolledAmount
         val command = "sf give ${player.name} ${treasure.itemId} $amount"
         return giveCommand(Treasure.Command(listOf(command)), player)
+    }
+
+    private fun givePreset(
+        treasure: Treasure.Preset,
+        player: Player,
+    ): GiveResult {
+        val stacks =
+            runCatching { ru.arc.ops.ItemPresets.resolveStacks(treasure.preset, treasure.amount).getOrThrow() }
+                .getOrElse { return GiveResult.Failure("Preset reward is unavailable: ${treasure.preset}") }
+        if (stacks.isEmpty() || stacks.any { it.type.isAir }) return GiveResult.Failure("Preset reward is empty: ${treasure.preset}")
+        stacks.forEach { stack ->
+            val overflow = player.inventory.addItem(stack.clone())
+            overflow.values.forEach { item -> player.location.world?.dropItemNaturally(player.location, item) }
+        }
+        return GiveResult.Success(treasure)
     }
 
     // ==================== Messaging ====================
@@ -281,6 +318,7 @@ class TreasureService(
             is Treasure.Item -> TreasureMessage.chat(TreasureConfig.DefaultMessages.itemReceived)
             is Treasure.Enchant -> TreasureMessage.chat(TreasureConfig.DefaultMessages.enchantReceived)
             is Treasure.Potion -> TreasureMessage.chat(TreasureConfig.DefaultMessages.potionReceived)
+            is Treasure.Preset -> TreasureMessage.chat(TreasureConfig.DefaultMessages.itemReceived)
             else -> null
         }
 
@@ -328,6 +366,15 @@ class TreasureService(
                     player = player,
                     amount = treasure.amount,
                     itemName = "Potion",
+                    poolId = poolId,
+                )
+            }
+
+            is Treasure.Preset -> {
+                MessageContext(
+                    player = player,
+                    amount = treasure.amount,
+                    itemName = treasure.preset,
                     poolId = poolId,
                 )
             }

@@ -27,6 +27,50 @@ class OpsTreasurePoolHandlersTest :
         }
 
         describe("treasure pool schema") {
+            it("round-trips provider-native preset and bounded AE book fields") {
+                val result =
+                    OpsTreasurePoolHandlers.preview(
+                        "event_rewards",
+                        JsonParser.parseString(
+                            """
+                            {"treasures":[
+                              {"id":"simple_book","type":"ae","kind":"random-book","group":"simple","maxLevel":1,"amount":2},
+                              {"id":"potion_token","type":"preset","preset":"potion-token","amount":1}
+                            ]}
+                            """.trimIndent(),
+                        ).asJsonObject,
+                    )
+
+                @Suppress("UNCHECKED_CAST")
+                val pool = result["pool"] as Map<String, Any?>
+                @Suppress("UNCHECKED_CAST")
+                val entries = pool["treasures"] as List<Map<String, Any?>>
+                entries[0]["group"] shouldBe "SIMPLE"
+                entries[0]["maxLevel"] shouldBe 1
+                entries[0]["amount"] shouldBe 2
+                entries[1]["preset"] shouldBe "potion_token"
+                entries[1]["amount"] shouldBe 1
+            }
+
+            it("preserves the larger native AE item amount limit but keeps random-book amount bounded") {
+                val itemPool = OpsTreasurePoolHandlers.parsePool(
+                    "large_ae_items",
+                    JsonParser.parseString(
+                        """{"treasures":[{"id":"large_item","type":"ae","kind":"item","name":"magic","amount":6400}]}""",
+                    ).asJsonObject,
+                )
+                (itemPool.treasures.single() as Treasure.Ae).amount shouldBe 6400
+
+                runCatching {
+                    OpsTreasurePoolHandlers.parsePool(
+                        "too_many_books",
+                        JsonParser.parseString(
+                            """{"treasures":[{"id":"too_many","type":"ae","kind":"random-book","amount":65}]}""",
+                        ).asJsonObject,
+                    )
+                }.isFailure shouldBe true
+            }
+
             it("parses every native reward type without Bukkit serialization") {
                 val pool =
                     OpsTreasurePoolHandlers.parsePool(

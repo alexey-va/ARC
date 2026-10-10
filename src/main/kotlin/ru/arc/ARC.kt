@@ -583,6 +583,8 @@ open class ARC : JavaPlugin() {
         }
 
         ConfigManager.of(dataPath, "modules/elitemobs.yml").mergeMissingFromBundled("modules/elitemobs.yml")
+        ConfigManager.of(dataPath, "modules/personalloot.yml").mergeMissingFromBundled("modules/personalloot.yml")
+        ConfigManager.of(dataPath, "modules/item-presets.yml").mergeMissingFromBundled("modules/item-presets.yml")
 
         val commandsConfig = ConfigManager.of(dataFolder.toPath().resolve("config"), "commands.yml")
         if (commandsConfig.mergeMissingFromBundled("config/commands.yml")) {
@@ -640,6 +642,10 @@ open class ARC : JavaPlugin() {
                 "modules/onboarding.yml",
                 "modules/leafdecay.yml",
                 "modules/personalloot.yml",
+                "treasures/structures_common.yml",
+                "treasures/structures_special.yml",
+                "treasures/enchant_supply.yml",
+                "treasures/enchant_boss_supply.yml",
                 "modules/item-presets.yml",
                 "modules/items-catalog.yml",
                 "modules/lands-ui.yml",

@@ -3,6 +3,7 @@ package ru.arc.hooks.elitemobs
 import com.magmaguy.elitemobs.api.DungeonCompleteEvent
 import com.magmaguy.elitemobs.api.DungeonStartEvent
 import com.magmaguy.elitemobs.api.EliteExplosionEvent
+import com.magmaguy.elitemobs.api.EliteMobDeathEvent
 import com.magmaguy.elitemobs.api.WorldInstanceEvent
 import com.magmaguy.elitemobs.instanced.dungeons.DungeonInstance
 import com.magmaguy.elitemobs.items.customitems.CustomItem
@@ -32,6 +33,7 @@ class EMListener internal constructor(
     private val customItemPermission: (String) -> String? = { filename ->
         CustomItem.getCustomItem(filename)?.permission
     },
+    private val bossEnchantmentRewards: BossEnchantmentRewards = BossEnchantmentRewards(config),
 ) : Listener {
     private val dungeonRunIds = WeakHashMap<DungeonInstance, String>()
     private val nextDungeonRunId = AtomicLong()
@@ -41,6 +43,13 @@ class EMListener internal constructor(
         val noExpWorlds = config.stringList("no-explosion-worlds")
         val name = event.explosionSourceLocation.world.name
         if (noExpWorlds.contains(name)) event.isCancelled = true
+    }
+
+    // ARC softdepends on EliteMobs and therefore registers after its HIGHEST death handler,
+    // which may clear vanilla drops. DungeonBossLockoutHandler has already populated lockouts at LOW.
+    @EventHandler(priority = EventPriority.HIGHEST)
+    fun dropBossEnchantmentSupply(event: EliteMobDeathEvent) {
+        bossEnchantmentRewards.addToNativeDeathDrops(event)
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)

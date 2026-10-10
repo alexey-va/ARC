@@ -267,6 +267,31 @@ class TreasureTest :
 
         describe("Treasure.fromMap") {
 
+            it("constructs modern minimal item stacks without the legacy version field") {
+                val treasure = Treasure.fromMap(
+                    mapOf(
+                        "type" to "item",
+                        "stack" to mapOf("type" to "COPPER_INGOT", "amount" to 1),
+                    ),
+                ).shouldBeInstanceOf<Treasure.Item>()
+
+                treasure.stack.type shouldBe Material.COPPER_INGOT
+                treasure.stack.amount shouldBe 1
+                Treasure.fromMap(mapOf("type" to "item", "stack" to mapOf("type" to "AIR", "amount" to 1))) shouldBe null
+                Treasure.fromMap(mapOf("type" to "item", "stack" to mapOf("type" to "COPPER_INGOT", "amount" to 65))) shouldBe null
+            }
+
+            it("preserves serialized item metadata through Bukkit deserialization") {
+                val stack = ItemStack(Material.DIAMOND)
+                val meta = stack.itemMeta
+                meta.setDisplayName("serialized custom name")
+                stack.itemMeta = meta
+
+                val treasure = Treasure.fromMap(mapOf("type" to "item", "stack" to stack.serialize())) as Treasure.Item
+
+                treasure.stack.itemMeta?.displayName shouldBe "serialized custom name"
+            }
+
             it("should deserialize Item treasure") {
                 val stack = ItemStack(Material.DIAMOND)
                 val map =
@@ -417,6 +442,38 @@ class TreasureTest :
 
                 treasure.shouldBeInstanceOf<Treasure.Potion>()
                 (treasure as Treasure.Potion).min shouldBe 2
+            }
+
+            it("round-trips a live ItemPresets reference with its amount") {
+                val original = Treasure.Preset(preset = "potion_token", amount = 2, weight = 7, id = "token")
+
+                val restored = Treasure.fromMap(original.toMap()) as Treasure.Preset
+
+                restored.preset shouldBe "potion_token"
+                restored.amount shouldBe 2
+                restored.weight shouldBe 7
+                restored.id shouldBe "token"
+            }
+
+            it("round-trips a bounded native AE book request without changing legacy random books") {
+                val original = Treasure.Ae(
+                    kind = AeKind.RANDOM_BOOK,
+                    id = "simple_one",
+                    group = "SIMPLE",
+                    maxLevel = 1,
+                )
+
+                val restored = Treasure.fromMap(original.toMap()) as Treasure.Ae
+
+                restored.group shouldBe "SIMPLE"
+                restored.maxLevel shouldBe 1
+                restored.args shouldBe emptyList()
+                (Treasure.fromMap(mapOf("type" to "ae", "kind" to "random_book", "args" to listOf(mapOf("tier" to "random")))) as Treasure.Ae).group shouldBe null
+            }
+
+            it("rejects invalid preset IDs and AE group settings on non-book rewards") {
+                Treasure.fromMap(mapOf("type" to "preset", "preset" to "../potion_token")) shouldBe null
+                Treasure.fromMap(mapOf("type" to "ae", "kind" to "item", "name" to "magic", "group" to "SIMPLE")) shouldBe null
             }
 
             it("should return null for unknown type") {

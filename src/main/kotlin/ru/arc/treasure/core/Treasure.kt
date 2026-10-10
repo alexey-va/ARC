@@ -8,6 +8,7 @@ import org.bukkit.inventory.meta.EnchantmentStorageMeta
 import org.bukkit.inventory.meta.PotionMeta
 import org.bukkit.potion.PotionType
 import java.util.UUID
+import java.util.Locale
 import java.util.concurrent.ThreadLocalRandom
 
 /**
@@ -296,6 +297,8 @@ sealed class Treasure {
         override val weight: Int = 1,
         override val messages: List<TreasureMessage> = emptyList(),
         override val id: String = UUID.randomUUID().toString(),
+        val group: String? = null,
+        val maxLevel: Int? = null,
     ) : Treasure() {
         override val type: String = "ae"
         override val displayName: String
@@ -312,6 +315,8 @@ sealed class Treasure {
                 itemName?.let { put("name", it) }
                 if (amount != 1) put("amount", amount)
                 if (args.isNotEmpty()) put("args", AeArg.toMapList(args))
+                group?.let { put("group", it) }
+                maxLevel?.let { put("max-level", it) }
             }
 
         override fun newId(): Ae = copy(id = UUID.randomUUID().toString())
@@ -319,6 +324,33 @@ sealed class Treasure {
         override fun withMessages(messages: List<TreasureMessage>): Ae = copy(messages = messages)
 
         override fun withWeight(weight: Int): Ae = copy(weight = weight)
+    }
+
+    /** A live reference to the canonical ItemPresets catalogue, never a frozen Bukkit stack. */
+    data class Preset(
+        val preset: String,
+        val amount: Int = 1,
+        override val weight: Int = 1,
+        override val messages: List<TreasureMessage> = emptyList(),
+        override val id: String = UUID.randomUUID().toString(),
+    ) : Treasure() {
+        override val type: String = "preset"
+        override val displayName: String get() = "Preset: $preset ($amount)"
+        override val displayMaterial: Material get() = Material.CHEST
+
+        override fun toMap(): Map<String, Any?> =
+            treasureMap {
+                put("preset", preset)
+                if (amount != 1) put("amount", amount)
+            }
+
+        override fun newId(): Preset = copy(id = UUID.randomUUID().toString())
+
+        override fun withMessages(messages: List<TreasureMessage>): Preset = copy(messages = messages)
+
+        override fun withWeight(weight: Int): Preset = copy(weight = weight)
+
+        fun withAmount(amount: Int): Preset = copy(amount = amount)
     }
 
     /**
@@ -385,7 +417,16 @@ sealed class Treasure {
             return when (type) {
                 "item" -> {
                     val stackMap = map["stack"] as? Map<String, Any> ?: return null
-                    val stack = ItemStack.deserialize(stackMap)
+                    val stack = if (stackMap.keys == setOf("type", "amount")) {
+                        val materialName = stackMap["type"] as? String ?: return null
+                        val material = Material.matchMaterial(materialName.uppercase(Locale.ROOT)) ?: return null
+                        if (material.isAir || !material.isItem) return null
+                        val rawAmount = (stackMap["amount"] as? Number)?.toDouble() ?: return null
+                        if (!rawAmount.isFinite() || rawAmount % 1.0 != 0.0 || rawAmount !in 1.0..material.maxStackSize.toDouble()) return null
+                        ItemStack(material, rawAmount.toInt())
+                    } else {
+                        ItemStack.deserialize(stackMap)
+                    }
                     val (min, max) = parseAmountInt(map["amount"])
                     Item(stack, min, max, weight, messages, id)
                 }
@@ -436,7 +477,23 @@ sealed class Treasure {
                         }
                     val amount = (map["amount"] as? Number)?.toInt() ?: 1
                     val args = AeArg.parseList(map["args"]) ?: return null
-                    Ae(kind, itemName, amount, args, weight, messages, id)
+                    val group = (map["group"] as? String)?.trim()?.uppercase(Locale.ROOT)?.takeIf(String::isNotEmpty)
+                    val maxLevel = (map["max-level"] as? Number)?.toInt()
+                    if (kind != AeKind.RANDOM_BOOK && (group != null || maxLevel != null)) return null
+                    if (group != null && group !in AE_PUBLIC_GROUPS) return null
+                    if (maxLevel != null && maxLevel !in 1..MAX_AE_BOOK_LEVEL) return null
+                    if (amount !in 1..MAX_AE_BOOK_AMOUNT) return null
+                    Ae(kind, itemName, amount, args, weight, messages, id, group, maxLevel)
+                }
+
+                "preset" -> {
+                    val preset =
+                        (map["preset"] as? String)?.trim()?.lowercase(Locale.ROOT)?.takeIf(String::isNotEmpty)
+                            ?: return null
+                    if (!ITEM_PRESET_ID.matches(preset)) return null
+                    val amount = (map["amount"] as? Number)?.toInt() ?: 1
+                    if (amount !in 1..MAX_PRESET_AMOUNT) return null
+                    Preset(preset, amount, weight, messages, id)
                 }
 
                 "slimefun" -> {
@@ -483,6 +540,12 @@ sealed class Treasure {
                     1 to 1
                 }
             }
+
+        private val ITEM_PRESET_ID = Regex("^[a-z][a-z0-9_]{0,63}$")
+        private val AE_PUBLIC_GROUPS = setOf("SIMPLE", "UNIQUE", "ELITE", "ULTIMATE", "LEGENDARY", "FABLED")
+        private const val MAX_AE_BOOK_LEVEL = 100
+        private const val MAX_AE_BOOK_AMOUNT = 64
+        private const val MAX_PRESET_AMOUNT = 64
 
         private fun formatRange(
             min: Number,

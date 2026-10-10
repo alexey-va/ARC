@@ -1,0 +1,33 @@
+id: enchant_boss_supply
+# Exactly one reward per sealed supply. Dust amount is one item; int controls success boost.
+treasures:
+  - type: ae
+    id: enchant_boss_supply_dust
+    kind: item
+    name: magic
+    amount: 1
+    weight: 90
+    args:
+      - tier: random
+      - int: 3-7
+  - type: ae
+    id: enchant_boss_supply_simple_book
+    kind: random_book
+    group: SIMPLE
+    max-level: 1
+    amount: 1
+    weight: 5
+  - type: ae
+    id: enchant_boss_supply_unique_book
+    kind: random_book
+    group: UNIQUE
+    max-level: 1
+    amount: 1
+    weight: 4
+  - type: ae
+    id: enchant_boss_supply_elite_book
+    kind: random_book
+    group: ELITE
+    max-level: 1
+    amount: 1
+    weight: 1

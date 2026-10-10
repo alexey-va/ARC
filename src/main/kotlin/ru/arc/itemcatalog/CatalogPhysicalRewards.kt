@@ -10,6 +10,7 @@ import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import ru.arc.hooks.HookRegistry
+import ru.arc.ops.ItemPresets
 import ru.arc.hooks.elitemobs.DungeonCaseRewards
 import ru.arc.mounts.MountModule
 import ru.arc.mounts.MountRewardRejection
@@ -25,6 +26,7 @@ import ru.arc.treasure.core.MessageContext
 import ru.arc.treasure.core.Treasure
 import ru.arc.treasure.core.TreasureConfig
 import ru.arc.treasure.core.TreasureMessage
+import ru.arc.treasure.core.TreasureStackFactory
 import ru.arc.treasure.core.Treasures
 import ru.arc.travelanchors.TravelAnchorsModule
 import ru.arc.util.TextUtil
@@ -48,6 +50,7 @@ internal class CatalogPhysicalRewards(
     private val sealStack: (String, CatalogIconStyle?) -> ItemStack? = { _, _ -> null },
 ) {
     private val particlePresets by lazy { ParticlePresetRewards() }
+    private val treasureStackFactory by lazy { TreasureStackFactory() }
     private val preparedInteractive = ConcurrentHashMap<String, PhysicalRewardMaterialization>()
     private val interactiveReady = AtomicBoolean(false)
     private val entries = settings.categories.filter { it.rolls == null }.flatMap { it.entries }
@@ -104,6 +107,7 @@ internal class CatalogPhysicalRewards(
             is Treasure.Slimefun,
             is Treasure.Enchant,
             is Treasure.Potion,
+            is Treasure.Preset,
             null,
             -> false
             else -> true
@@ -604,6 +608,8 @@ internal class CatalogPhysicalRewards(
                     },
                     itemName = value.itemName,
                     amount = value.amount,
+                    aeGroup = value.group,
+                    aeMaxLevel = value.maxLevel,
                     aeArgs = value.args.map { arg ->
                         when (arg) {
                             AeArg.RandomTier -> FrozenAeArg("random-tier")
@@ -623,6 +629,25 @@ internal class CatalogPhysicalRewards(
                         maxInt = value.max,
                         stack = Base64.getEncoder().encodeToString(stack.serializeAsBytes()),
                         itemId = value.itemId,
+                    )
+                }
+                is Treasure.Preset -> {
+                    val stacks = ItemPresets.resolveStacks(value.preset, value.amount).getOrNull()
+                        ?: return@runCatching null
+                    // Archived choice rewards freeze their selected contents so later config edits cannot mutate an issued voucher.
+                    if (stacks.size != 1) return@runCatching null
+                    val stack = stacks.single().clone().takeUnless(::containsOneTimeIdentity)
+                        ?: return@runCatching null
+                    val amount = stack.amount
+                    stack.amount = 1
+                    FrozenTreasureNode(
+                        id = value.id,
+                        type = "item",
+                        weight = value.weight,
+                        minInt = amount,
+                        maxInt = amount,
+                        stack = Base64.getEncoder().encodeToString(stack.serializeAsBytes()),
+                        requiresItemsAdder = requiresItemsAdder(stack),
                     )
                 }
             }
@@ -1014,6 +1039,8 @@ internal class CatalogPhysicalRewards(
                 },
                 itemName = node.itemName,
                 amount = requireNotNull(node.amount),
+                group = node.aeGroup,
+                maxLevel = node.aeMaxLevel,
                 args = node.aeArgs.orEmpty().map { arg ->
                     when (arg.type) {
                         "random-tier" -> AeArg.RandomTier
@@ -1112,14 +1139,20 @@ internal class CatalogPhysicalRewards(
             if (tokens != null) deposit(player, "tokens", tokens.toDouble(), operationId)
             else giveNativeCommand(player, value.commands.single())
         }
-        is Treasure.Ae -> if (AeNativeItems.supports(value)) {
-            AeNativeItems.create(value)?.let { giveStacks(player, it) } ?: rejected()
-        } else giveNativeCommand(player, AeLoot.buildCommand(player.name, value))
+        is Treasure.Ae -> when {
+            AeNativeItems.supports(value) -> AeNativeItems.create(value)?.let { giveStacks(player, it) } ?: rejected()
+            value.kind == AeKind.RANDOM_BOOK && (value.group != null || value.maxLevel != null) ->
+                runCatching { treasureStackFactory.create(value, player) }
+                    .getOrNull()?.let { giveStacks(player, it) } ?: rejected()
+            else -> giveNativeCommand(player, AeLoot.buildCommand(player.name, value))
+        }
         is Treasure.SubPool -> {
             if (value.poolId in visited || visited.size >= 8) rejected()
             else Treasures.getPool(value.poolId)?.random()?.let { redeemTreasure(player, it, operationId, visited + value.poolId) } ?: rejected()
         }
         is Treasure.Item -> giveStacks(player, split(value.stack, value.amount))
+        is Treasure.Preset -> ItemPresets.resolveStacks(value.preset, value.amount).getOrNull()
+            ?.let { giveStacks(player, it) } ?: rejected()
         is Treasure.Slimefun -> HookRegistry.sfHook?.getSlimefunItemStack(value.itemId)?.let { giveStacks(player, split(it, value.rolledAmount)) } ?: rejected()
         is Treasure.Enchant -> giveStacks(player, List(value.amount) { value.randomBook() })
         is Treasure.Potion -> giveStacks(player, List(value.amount) { Treasure.Potion.randomPotion() })
@@ -1202,6 +1235,9 @@ internal class CatalogPhysicalRewards(
         is Treasure.SubPool -> if (value.poolId in visited || visited.size >= 8) null else
             Treasures.getPool(value.poolId)?.treasures?.map { requiredSlots(it, visited + value.poolId) ?: return null }?.maxOrNull()
         is Treasure.Item -> (value.max + value.stack.maxStackSize - 1) / value.stack.maxStackSize
+        is Treasure.Preset -> ItemPresets.resolveStacks(value.preset, value.amount).getOrNull()
+            ?.sumOf { (it.amount + it.maxStackSize - 1) / it.maxStackSize }
+            ?: return null
         is Treasure.Slimefun -> HookRegistry.sfHook?.getSlimefunItemStack(value.itemId)?.let { (value.max + it.maxStackSize - 1) / it.maxStackSize }
         is Treasure.Enchant -> value.max
         is Treasure.Potion -> value.max

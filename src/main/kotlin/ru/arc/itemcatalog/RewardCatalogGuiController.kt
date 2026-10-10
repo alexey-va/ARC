@@ -369,6 +369,7 @@ class RewardCatalogGuiController internal constructor(
                         else List(treasure.max) { ItemStack(Material.POTION) }
                     is Treasure.Ae -> if (AeNativeItems.supports(treasure)) AeNativeItems.create(treasure, preview = !grant)
                         else physical(entry, grant)?.let(::listOf)
+                    is Treasure.Preset -> ItemPresets.resolveStacks(treasure.preset, treasure.amount).getOrNull()
                     else -> physical(entry, grant)?.let(::listOf)
                 }
             }

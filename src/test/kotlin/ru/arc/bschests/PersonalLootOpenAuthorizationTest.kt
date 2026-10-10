@@ -32,7 +32,7 @@ import org.bukkit.persistence.PersistentDataType
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import ru.arc.TestBase
-import ru.arc.config.Config
+import ru.arc.config.ConfigManager
 import ru.arc.listeners.BlockListener
 import ru.arc.repository.CachedRepository
 import ru.arc.repository.RepoResult
@@ -213,6 +213,100 @@ class PersonalLootOpenAuthorizationTest : TestBase() {
         verify(exactly = 0) { repository.markDirty(any()) }
     }
 
+    @Test
+    fun `old chest marker generates custom loot once for new viewer and discards physical template`() {
+        installHarness()
+        setModuleField("useBsLoot", false)
+        val generator = mockk<ChestGenerator>()
+        setModuleField("chestGenerator", generator)
+        val player = server.addPlayer()
+        val chestUuid = UUID.randomUUID()
+        val block = markedChest(chestUuid)
+        val stored = CustomLootData.create(player.uniqueId, chestUuid)
+        (block.state as Chest).inventory.addItem(ItemStack(Material.NETHERITE_INGOT, 32))
+        every { generator.generate(player, "default") } returns ru.arc.network.repos.ItemList().apply {
+            add(ItemStack(Material.BREAD, 2))
+        }
+        coEvery { repository.getOrCreate(any(), any()) } returns RepoResult.success(stored)
+
+        repeat(2) {
+            PersonalLootModule.processChestOpen(openEvent(player, block)) { _, _ -> true }
+            server.scheduler.performTicks(1)
+        }
+
+        verify(exactly = 1) { generator.generate(player, "default") }
+        stored.filled shouldBe true
+        stored.snapshotItems().filterNotNull().any { it.type == Material.BREAD && it.amount == 2 } shouldBe true
+        stored.snapshotItems().filterNotNull().none { it.type == Material.NETHERITE_INGOT } shouldBe true
+        (block.state as Chest).inventory.contents.filterNotNull().isEmpty() shouldBe true
+        readPlayerList(block) shouldBe player.uniqueId.toString()
+    }
+
+    @Test
+    fun `custom generator failure leaves registration and physical template unchanged`() {
+        installHarness()
+        setModuleField("useBsLoot", false)
+        val generator = mockk<ChestGenerator>()
+        setModuleField("chestGenerator", generator)
+        val player = server.addPlayer()
+        val chestUuid = UUID.randomUUID()
+        val block = markedChest(chestUuid)
+        val stored = CustomLootData.create(player.uniqueId, chestUuid)
+        (block.state as Chest).inventory.addItem(ItemStack(Material.BREAD))
+        every { generator.generate(player, "default") } throws IllegalArgumentException("pool missing")
+        coEvery { repository.getOrCreate(any(), any()) } returns RepoResult.success(stored)
+
+        PersonalLootModule.processChestOpen(openEvent(player, block)) { _, _ -> true }
+        server.scheduler.performTicks(1)
+
+        stored.needsItems() shouldBe true
+        readPlayerList(block) shouldBe ""
+        (block.state as Chest).inventory.contents.filterNotNull().single().type shouldBe Material.BREAD
+        verify(exactly = 0) { repository.markDirty(any()) }
+    }
+
+    @Test
+    fun `existing partial loot survives pool switch while exhausted or missing claimed record never rerolls`() {
+        installHarness()
+        setModuleField("useBsLoot", false)
+        val generator = mockk<ChestGenerator>()
+        setModuleField("chestGenerator", generator)
+        val player = server.addPlayer()
+        val chestUuid = UUID.randomUUID()
+        val block = markedChest(chestUuid)
+        val stored = loot(player.uniqueId, chestUuid)
+        coEvery { repository.getOrCreate(any(), any()) } returns RepoResult.success(stored)
+
+        PersonalLootModule.processChestOpen(openEvent(player, block)) { _, _ -> true }
+        server.scheduler.performTicks(1)
+        stored.snapshotItems().filterNotNull().single().type shouldBe Material.DIAMOND
+        stored.items.clear()
+        PersonalLootModule.processChestOpen(openEvent(player, block)) { _, _ -> true }
+        server.scheduler.performTicks(1)
+        stored.isExhausted() shouldBe true
+        stored.filled = false
+        PersonalLootModule.processChestOpen(openEvent(player, block)) { _, _ -> true }
+        server.scheduler.performTicks(1)
+
+        verify(exactly = 0) { generator.generate(any(), any()) }
+        verify(exactly = 0) { repository.markDirty(any()) }
+        stored.needsItems() shouldBe true
+    }
+
+    @Test
+    fun `provider refill preserves chest identity and registered viewers`() {
+        installHarness()
+        val chestUuid = UUID.randomUUID()
+        val playerUuid = UUID.randomUUID()
+        val block = markedChest(chestUuid)
+        CustomBlockData(block, plugin).set(playerListKey, PersistentDataType.STRING, playerUuid.toString())
+
+        PersonalLootModule.processChestGen(block)
+
+        CustomBlockData(block, plugin).get(uuidKey, PersistentDataType.STRING) shouldBe chestUuid.toString()
+        readPlayerList(block) shouldBe playerUuid.toString()
+    }
+
     private fun installHarness() {
         chestWorld = server.addSimpleWorld("loot-auth-${UUID.randomUUID()}")
         repository = mockk(relaxed = true)
@@ -221,7 +315,7 @@ class PersonalLootOpenAuthorizationTest : TestBase() {
         playerListKey = NamespacedKey(plugin, "ploot")
         setModuleField("repo", repository)
         setModuleField("repositoryScope", openScope)
-        setModuleField("config", mockk<Config>(relaxed = true))
+        setModuleField("config", ConfigManager.ofModule(dataPath, "personalloot.yml"))
         setModuleField("key", playerListKey)
         setModuleField("uuidKey", uuidKey)
         setModuleField("poolKey", NamespacedKey(plugin, "ploot_pool"))

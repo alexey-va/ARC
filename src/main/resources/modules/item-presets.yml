@@ -144,6 +144,47 @@ presets:
       "arc:treasure_key": ae_master
       "arc:treasure_rolls_min": 6
       "arc:treasure_rolls_max": 7
+  enchant_supply:
+    description: Припасы чародея — одна награда за ежедневное задание
+    itemsadder: arc:scifichest_4
+    display: '<italic:false><#df91ff>Припасы чародея'
+    lore:
+      - ''
+      - '<italic:false><#e8dfd2>Одна случайная награда для зачарования.'
+      - ''
+      - '<italic:false><#b8b8b8>Пыль +1–3%: <#df91ff>80%'
+      - '<italic:false><#b8b8b8>Простая книга I: <#df91ff>15%'
+      - '<italic:false><#b8b8b8>Уникальная книга I: <#df91ff>5%'
+      - ''
+      - '<italic:false><#b8b8b8>Пыль случайной группы подходит'
+      - '<italic:false><#b8b8b8>и к книгам EliteMobs.'
+      - ''
+      - '<italic:false><#b8b8b8>[<#df91ff>▶<#b8b8b8>] <#df91ff>ПКМ <#e8dfd2>— вскрыть'
+    customData:
+      "arc:treasure_key": enchant_supply
+      "arc:treasure_rolls_min": 1
+      "arc:treasure_rolls_max": 1
+  enchant_boss_supply:
+    description: Трофей чародея — одна награда с босса EliteMobs
+    itemsadder: arc:scifichest_5
+    display: '<italic:false><#e9a8ff>Трофей чародея'
+    lore:
+      - ''
+      - '<italic:false><#e8dfd2>Одна случайная награда за победу.'
+      - ''
+      - '<italic:false><#b8b8b8>Пыль +3–7%: <#e9a8ff>90%'
+      - '<italic:false><#b8b8b8>Простая книга I: <#e9a8ff>5%'
+      - '<italic:false><#b8b8b8>Уникальная книга I: <#e9a8ff>4%'
+      - '<italic:false><#b8b8b8>Сильная книга I: <#e9a8ff>1%'
+      - ''
+      - '<italic:false><#b8b8b8>Пыль случайной группы подходит'
+      - '<italic:false><#b8b8b8>и к книгам EliteMobs.'
+      - ''
+      - '<italic:false><#b8b8b8>[<#e9a8ff>▶<#b8b8b8>] <#e9a8ff>ПКМ <#e8dfd2>— вскрыть'
+    customData:
+      "arc:treasure_key": enchant_boss_supply
+      "arc:treasure_rolls_min": 1
+      "arc:treasure_rolls_max": 1
   enchant_token:
     description: Токен зачарования — 4–5 случайных ванильных книг
     material: IRON_INGOT
