@@ -1,5 +1,6 @@
 package ru.arc.staffspells
 
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
@@ -9,10 +10,13 @@ import io.mockk.spyk
 import io.mockk.unmockkConstructor
 import io.mockk.verify
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.key.Key
 import net.kyori.adventure.bossbar.BossBar
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.mockbukkit.mockbukkit.entity.PlayerMock
 import org.bukkit.FluidCollisionMode
+import io.papermc.paper.datacomponent.DataComponentTypes
+import io.papermc.paper.datacomponent.item.consumable.ItemUseAnimation
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.Sound
@@ -46,6 +50,9 @@ import java.util.UUID
 class StaffSpellsTest : FreeSpec({
     "duel staff is native, marked, keeps spell instructions, and replaces PvE prototype lore" {
         val config = StaffSpellConfig(TestConfig(mapOf(
+            "chain.skin" to "missing:appearance_should_not_be_loaded",
+            "chain.duel-appearance.item-model" to "minecraft:crossbow",
+            "chain.duel-appearance.custom-model-data" to 10009,
             "chain.description" to "Направленный разряд",
             "chain.aim" to "Прицельтесь во врага",
             "chain.secondary" to "Shift + ПКМ — цепная молния",
@@ -56,6 +63,10 @@ class StaffSpellsTest : FreeSpec({
         withStaffHarness(config = config) { h ->
             val item = h.controller.duelItem(StaffSpell.CHAIN)
             item.type shouldBe Material.BLAZE_ROD
+            item.getData(DataComponentTypes.ITEM_MODEL) shouldBe Key.key("minecraft:crossbow")
+            item.getData(DataComponentTypes.CUSTOM_MODEL_DATA)!!.floats() shouldBe listOf(10009f)
+            item.getData(DataComponentTypes.CONSUMABLE)!!.consumeSeconds() shouldBe 3_600f
+            item.getData(DataComponentTypes.CONSUMABLE)!!.animation() shouldBe ItemUseAnimation.NONE
             StaffSpell.from(item) shouldBe StaffSpell.CHAIN
             StaffSpell.isDuelOnly(item) shouldBe true
             val lore = item.itemMeta.lore()!!.joinToString(" ") { PlainTextComponentSerializer.plainText().serialize(it) }
@@ -65,6 +76,31 @@ class StaffSpellsTest : FreeSpec({
             lore.contains("Только в активной дуэли") shouldBe true
             lore.contains("ПКМ — применить") shouldBe true
             lore.contains("Только прототип") shouldBe false
+        }
+    }
+
+    "duel appearance defaults stay portable and invalid item-model/data pairs fail closed" {
+        withStaffHarness { h ->
+            val defaultItem = h.config.duelItem(StaffSpell.CHAIN)
+            defaultItem.getData(DataComponentTypes.ITEM_MODEL) shouldBe null
+            defaultItem.getData(DataComponentTypes.CUSTOM_MODEL_DATA) shouldBe null
+
+            listOf(
+                mapOf("chain.duel-appearance.item-model" to "minecraft:crossbow"),
+                mapOf("chain.duel-appearance.custom-model-data" to 10009),
+                mapOf(
+                    "chain.duel-appearance.item-model" to "bad key",
+                    "chain.duel-appearance.custom-model-data" to 10009,
+                ),
+                mapOf(
+                    "chain.duel-appearance.item-model" to "minecraft:crossbow",
+                    "chain.duel-appearance.custom-model-data" to 10009.5,
+                ),
+            ).forEach { values ->
+                shouldThrow<IllegalArgumentException> {
+                    StaffSpellConfig(TestConfig(values)).duelItem(StaffSpell.CHAIN)
+                }
+            }
         }
     }
 

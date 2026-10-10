@@ -1,5 +1,7 @@
 # Administrator-issued mechanics samples. These are not native FMM/EliteMobs loot items.
 # /arc stafftest [all|chain|mark|frost|lance|ember|nova|icicle|fault|lunar|gale|tide|requiem|prism] [player]; /arc reload applies tuning.
+# Duel appearance is optional and native: set a full item-model key and positive custom-model-data together.
+# Keep the portable defaults (empty / 0) on hosts without the matching client-pack model.
 targeting:
   range: 48.0
   half-angle-degrees: 20.0
@@ -15,6 +17,9 @@ chain:
   quick-secondary-name: 'Цепной щелчок'
   quick-secondary: '<#82dcff>Shift + ЛКМ <#e8dfd2>— разряд в точке прицела, до семи блоков'
   skin: '3dfantasyweaponscit:divine_staff'
+  duel-appearance:
+    item-model: ''
+    custom-model-data: 0
   power: 1.0
   vanilla-damage: 8.0
   cooldown-ticks: 24
@@ -32,6 +37,9 @@ mark:
   quick-secondary-name: 'Тянущая печать'
   quick-secondary: '<#efa5ff>Shift + ЛКМ <#e8dfd2>— руна у прицела притягивает поражённых врагов'
   skin: '3dfantasyweaponscit:night_staff'
+  duel-appearance:
+    item-model: ''
+    custom-model-data: 0
   power: 1.6
   vanilla-damage: 12.0
   cooldown-ticks: 40
@@ -48,6 +56,9 @@ frost:
   quick-secondary-name: 'Ледяной заслон'
   quick-secondary: '<#b1f2ff>Shift + ЛКМ <#e8dfd2>— фронтальный ледяной заслон замедляет задетых врагов'
   skin: '3dfantasyweaponscit:northgate_guardian_staff'
+  duel-appearance:
+    item-model: ''
+    custom-model-data: 0
   power: 0.8
   vanilla-damage: 6.0
   cooldown-ticks: 32
@@ -65,6 +76,9 @@ icicle:
   quick-secondary-name: 'Кристальная клетка'
   quick-secondary: '<#b1f2ff>Shift + ЛКМ <#e8dfd2>— кристаллы поднимаются вокруг цели и замедляют её'
   skin: '3dfantasyweaponscit:olwen_staff'
+  duel-appearance:
+    item-model: ''
+    custom-model-data: 0
   power: 0.9
   vanilla-damage: 7.0
   cooldown-ticks: 40
@@ -79,6 +93,9 @@ lance:
   quick-secondary-name: 'Солнечный кол'
   quick-secondary: '<#fff1ae>Shift + ЛКМ <#e8dfd2>— вертикальный удар в точке прицела, до семи блоков'
   skin: '3dfantasyweaponscit:sagrada_winged_staff'
+  duel-appearance:
+    item-model: ''
+    custom-model-data: 0
   power: 1.3
   vanilla-damage: 10.0
   cooldown-ticks: 28
@@ -95,6 +112,9 @@ ember:
   quick-secondary-name: 'Огненный знак'
   quick-secondary: '<#ffae70>Shift + ЛКМ <#e8dfd2>— вспышка в точке прицела, до семи блоков'
   skin: '3dfantasyweaponscit:bermunde_hermit_staff'
+  duel-appearance:
+    item-model: ''
+    custom-model-data: 0
   power: 1.4
   vanilla-damage: 10.0
   cooldown-ticks: 36
@@ -111,6 +131,9 @@ nova:
   quick-secondary-name: 'Корневая клетка'
   quick-secondary: '<#9fffd4>Shift + ЛКМ <#e8dfd2>— корни смыкаются вокруг точки прицела, до восьми блоков'
   skin: '3dfantasyweaponscit:holy_celtic_staff'
+  duel-appearance:
+    item-model: ''
+    custom-model-data: 0
   power: 0.9
   vanilla-damage: 7.0
   cooldown-ticks: 40
@@ -126,6 +149,9 @@ fault:
   quick-secondary-name: 'Столп разлома'
   quick-secondary: '<#ff9b83>Shift + ЛКМ <#e8dfd2>— каменные пластины поднимаются в точке прицела'
   skin: '3dfantasyweaponscit:staff_of_unholy_wisdom'
+  duel-appearance:
+    item-model: ''
+    custom-model-data: 0
   power: 1.2
   vanilla-damage: 9.0
   cooldown-ticks: 44
@@ -140,6 +166,9 @@ lunar:
   quick-secondary-name: 'Лунные ножницы'
   quick-secondary: '<#d8d6ff>Shift + ЛКМ <#e8dfd2>— два перекрещённых среза в точке прицела, до восьми блоков'
   skin: '3dfantasyweaponscit:black_snake_staff'
+  duel-appearance:
+    item-model: ''
+    custom-model-data: 0
   power: 1.0
   vanilla-damage: 8.0
   cooldown-ticks: 32
@@ -154,6 +183,9 @@ gale:
   quick-secondary-name: 'Подъёмный вихрь'
   quick-secondary: '<#d4eaff>Shift + ЛКМ <#e8dfd2>— вихрь у прицела стягивает и поднимает врагов, до восьми блоков'
   skin: '3dfantasyweaponscit:goblin_witch_staff'
+  duel-appearance:
+    item-model: ''
+    custom-model-data: 0
   power: 0.8
   vanilla-damage: 6.0
   cooldown-ticks: 40
@@ -168,6 +200,9 @@ tide:
   quick-secondary-name: 'Водяной фонтан'
   quick-secondary: '<#8ce9e4>Shift + ЛКМ <#e8dfd2>— водяной выброс поднимает врагов у прицела, до восьми блоков'
   skin: '3dfantasyweaponscit:northgate_guardian_staff'
+  duel-appearance:
+    item-model: ''
+    custom-model-data: 0
   power: 1.0
   vanilla-damage: 8.0
   cooldown-ticks: 36
@@ -182,6 +217,9 @@ requiem:
   quick-secondary-name: 'Руки могилы'
   quick-secondary: '<#d0b5eb>Shift + ЛКМ <#e8dfd2>— кольцо призрачных рук стягивает врагов у прицела'
   skin: '3dfantasyweaponscit:lich_staff'
+  duel-appearance:
+    item-model: ''
+    custom-model-data: 0
   power: 1.1
   vanilla-damage: 8.0
   cooldown-ticks: 40
@@ -196,6 +234,9 @@ prism:
   quick-secondary-name: 'Кристальное цветение'
   quick-secondary: '<#e7c5ff>Shift + ЛКМ <#e8dfd2>— кристаллы раскрываются под прицелом, до восьми блоков'
   skin: '3dfantasyweaponscit:northgate_golden_crook'
+  duel-appearance:
+    item-model: ''
+    custom-model-data: 0
   power: 1.1
   vanilla-damage: 9.0
   cooldown-ticks: 36

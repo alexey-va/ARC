@@ -1,6 +1,9 @@
 package ru.arc.staffspells
 
 import dev.lone.itemsadder.api.CustomStack
+import io.papermc.paper.datacomponent.DataComponentTypes
+import io.papermc.paper.datacomponent.item.CustomModelData
+import net.kyori.adventure.key.Key
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
@@ -173,6 +176,32 @@ internal open class StaffSpellConfig(private val config: Config) {
     /** Duel items deliberately use a stable native base, independent of optional ItemsAdder startup timing. */
     fun duelItem(spell: StaffSpell) = buildItem(spell, duelOnly = true)
 
+    private data class DuelAppearance(val itemModel: Key?, val customModelData: Int)
+
+    private fun duelAppearance(spell: StaffSpell): DuelAppearance {
+        val path = "${spell.id}.duel-appearance"
+        val itemModel = config.stringOrNull("$path.item-model")?.trim().orEmpty()
+        val rawCustomModelData = config.stringOrNull("$path.custom-model-data")
+        val customModelData = when {
+            rawCustomModelData == null -> 0
+            else -> rawCustomModelData.trim().toIntOrNull()
+                ?: throw IllegalArgumentException("$path.custom-model-data must be an integer")
+        }
+        require(customModelData >= 0) { "$path.custom-model-data must be non-negative" }
+        require((itemModel.isEmpty() && customModelData == 0) || (itemModel.isNotEmpty() && customModelData > 0)) {
+            "$path.item-model and $path.custom-model-data must be configured together"
+        }
+
+        val key = if (itemModel.isEmpty()) null else {
+            val parsed = NamespacedKey.fromString(itemModel)
+            require(parsed != null && parsed.toString() == itemModel) {
+                "$path.item-model must be a fully namespaced key"
+            }
+            Key.key(parsed.namespace, parsed.key)
+        }
+        return DuelAppearance(key, customModelData)
+    }
+
     private fun buildItem(spell: StaffSpell, duelOnly: Boolean) = ItemStack(Material.BLAZE_ROD).apply {
         if (!duelOnly) {
             val skinId = config.string("${spell.id}.skin", "").trim()
@@ -188,6 +217,13 @@ internal open class StaffSpellConfig(private val config: Config) {
                     throw StaffSpellSkinUnavailableException(skinId, failure)
                 }
                 applyEliteSkin(this, skin)
+            }
+        } else {
+            val appearance = duelAppearance(spell)
+            appearance.itemModel?.let { model ->
+                setData(DataComponentTypes.ITEM_MODEL, model)
+                setData(DataComponentTypes.CUSTOM_MODEL_DATA,
+                    CustomModelData.customModelData().addFloat(appearance.customModelData.toFloat()).build())
             }
         }
         editMeta { meta ->
