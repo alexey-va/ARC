@@ -1,5 +1,6 @@
 package ru.arc.staffspells
 
+import io.mockk.every
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import net.kyori.adventure.text.Component
@@ -8,18 +9,24 @@ import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.Particle
 import org.bukkit.World
+import org.bukkit.block.Block
+import org.bukkit.block.data.BlockData
 import org.bukkit.entity.AbstractSkeleton
 import org.bukkit.entity.Skeleton
 import org.bukkit.entity.WitherSkeleton
 import org.bukkit.event.player.PlayerQuitEvent
+import org.bukkit.util.BoundingBox
+import org.bukkit.util.VoxelShape
 import org.mockbukkit.mockbukkit.ServerMock
+import org.mockbukkit.mockbukkit.block.BlockMock
+import org.mockbukkit.mockbukkit.world.WorldMock
 import org.mockbukkit.mockbukkit.entity.SkeletonMock
 import org.mockbukkit.mockbukkit.entity.WitherSkeletonMock
 import java.util.UUID
 
 class StaffSpellSummonsTest : FreeSpec({
     "primary summons a native squad and waits through its attack windup" {
-        withStaffHarness(summonActorFactory = ::spawnPickupSafeActor) { h ->
+        withSummonHarness { h ->
             val world = h.paper.addSimpleWorld("summon-windup")
             loadSummonChunks(world)
             val owner = h.player("summon-owner", world, StaffSpell.NECROMANCER)
@@ -53,7 +60,7 @@ class StaffSpellSummonsTest : FreeSpec({
     }
 
     "full charge is globally capped and secondary replaces the squad with one commander" {
-        withStaffHarness(summonActorFactory = ::spawnPickupSafeActor) { h ->
+        withSummonHarness { h ->
             val world = h.paper.addSimpleWorld("summon-cap")
             loadSummonChunks(world)
             h.controller.start()
@@ -90,7 +97,7 @@ class StaffSpellSummonsTest : FreeSpec({
     }
 
     "ordinary player targets and stale casts never pass the damage gate; sessions expire" {
-        withStaffHarness(summonActorFactory = ::spawnPickupSafeActor) { h ->
+        withSummonHarness { h ->
             val world = h.paper.addSimpleWorld("summon-pvp")
             loadSummonChunks(world)
             val owner = h.player("summon-pvp-owner", world, StaffSpell.NECROMANCER)
@@ -108,7 +115,7 @@ class StaffSpellSummonsTest : FreeSpec({
         }
 
         var current = true
-        withStaffHarness(currentCast = { _, _ -> current }, summonActorFactory = ::spawnPickupSafeActor) { h ->
+        withSummonHarness(currentCast = { _, _ -> current }) { h ->
             val world = h.paper.addSimpleWorld("summon-stale")
             loadSummonChunks(world)
             val owner = h.player("summon-stale-owner", world, StaffSpell.NECROMANCER)
@@ -128,7 +135,7 @@ class StaffSpellSummonsTest : FreeSpec({
     }
 
     "summons require solid floor and never target an invulnerable summoned actor" {
-        withStaffHarness(summonActorFactory = ::spawnPickupSafeActor) { h ->
+        withSummonHarness { h ->
             val world = h.paper.addSimpleWorld("summon-floor")
             loadSummonChunks(world)
             val owner = h.player("summon-floor-owner", world, StaffSpell.NECROMANCER)
@@ -143,7 +150,7 @@ class StaffSpellSummonsTest : FreeSpec({
             actors.all { it.isInvulnerable && it.isValid } shouldBe true
         }
 
-        withStaffHarness(summonActorFactory = ::spawnPickupSafeActor) { h ->
+        withSummonHarness { h ->
             val world = h.paper.addSimpleWorld("summon-no-floor")
             loadSummonChunks(world)
             for (x in -4..4) for (z in -4..4) world.getBlockAt(x, 63, z).type = Material.AIR
@@ -153,6 +160,93 @@ class StaffSpellSummonsTest : FreeSpec({
             h.controller.cast(owner, StaffCastInput.PRIMARY, 0.0)
 
             world.entities.filterIsInstance<AbstractSkeleton>() shouldBe emptyList()
+        }
+    }
+
+    "summons resolve bottom slabs to their collision top" {
+        withSummonHarness { h ->
+            val world = h.paper.addSimpleWorld("summon-bottom-slab")
+            loadSummonChunks(world)
+            for (x in -4..4) for (z in -4..4) {
+                world.getBlockAt(x, 63, z).type = Material.ANDESITE_SLAB
+            }
+            val owner = h.player("summon-bottom-slab-owner", world, StaffSpell.NECROMANCER)
+            owner.teleport(Location(world, 0.5, 63.5, 0.5).setDirection(org.bukkit.util.Vector(0.0, 0.0, 1.0)))
+            h.controller.start()
+
+            h.controller.cast(owner, StaffCastInput.PRIMARY, 0.0)
+
+            val actors = world.entities.filterIsInstance<Skeleton>()
+            actors.size shouldBe 2
+            actors.all { kotlin.math.abs(it.location.y - 63.5) < 0.001 } shouldBe true
+        }
+    }
+
+    "summons resolve mixed full-block and bottom-slab terrain without clipping" {
+        withSummonHarness { h ->
+            val world = h.paper.addSimpleWorld("summon-mixed-height")
+            loadSummonChunks(world)
+            for (x in -4..4) for (z in -4..4) {
+                world.getBlockAt(x, 63, z).type = Material.ANDESITE_SLAB
+            }
+            for (z in 0..1) {
+                world.getBlockAt(1, 63, z).type = Material.AIR
+                world.getBlockAt(1, 62, z).type = Material.STONE
+            }
+            val owner = h.player("summon-mixed-height-owner", world, StaffSpell.NECROMANCER)
+            owner.teleport(Location(world, 0.5, 63.5, 0.5).setDirection(org.bukkit.util.Vector(0.0, 0.0, 1.0)))
+            h.controller.start()
+
+            h.controller.cast(owner, StaffCastInput.PRIMARY, 0.0)
+
+            val actors = world.entities.filterIsInstance<Skeleton>()
+            actors.size shouldBe 2
+            actors.map { it.location.y }.sorted() shouldBe listOf(63.0, 63.5)
+            actors.all { mob ->
+                (mob.location.y == 63.0 || mob.location.y == 63.5) && mob.isValid
+            } shouldBe true
+        }
+    }
+
+    "low headroom blocks summons instead of clipping their bodies" {
+        withSummonHarness { h ->
+            val world = h.paper.addSimpleWorld("summon-low-headroom")
+            loadSummonChunks(world)
+            for (x in -4..4) for (z in -4..4) world.getBlockAt(x, 65, z).type = Material.STONE
+            val owner = h.player("summon-low-headroom-owner", world, StaffSpell.NECROMANCER)
+            h.controller.start()
+
+            h.controller.cast(owner, StaffCastInput.PRIMARY, 0.0)
+
+            world.entities.filterIsInstance<AbstractSkeleton>() shouldBe emptyList()
+        }
+    }
+
+    "summons reject liquid body space and never load chunks to find a spawn" {
+        withSummonHarness { h ->
+            val world = h.paper.addSimpleWorld("summon-liquid")
+            loadSummonChunks(world)
+            for (x in -4..4) for (z in -4..4) world.getBlockAt(x, 64, z).type = Material.WATER
+            val owner = h.player("summon-liquid-owner", world, StaffSpell.NECROMANCER)
+            h.controller.start()
+
+            h.controller.cast(owner, StaffCastInput.PRIMARY, 0.0)
+
+            world.entities.filterIsInstance<AbstractSkeleton>() shouldBe emptyList()
+        }
+
+        withSummonHarness { h ->
+            val world = h.paper.addSimpleWorld("summon-unloaded")
+            loadSummonChunks(world)
+            val owner = h.player("summon-unloaded-owner", world, StaffSpell.NECROMANCER)
+            owner.teleport(Location(world, 32.5, 64.0, 0.5).setDirection(org.bukkit.util.Vector(0.0, 0.0, 1.0)))
+            world.isChunkLoaded(2, 0) shouldBe false
+            h.controller.start()
+
+            h.controller.cast(owner, StaffCastInput.PRIMARY, 0.0)
+
+            world.entities.filterIsInstance<AbstractSkeleton>() shouldBe emptyList()
+            world.isChunkLoaded(2, 0) shouldBe false
         }
     }
 
@@ -173,6 +267,56 @@ class StaffSpellSummonsTest : FreeSpec({
         soldierFrames[0].size shouldBe 8
     }
 })
+
+private fun withSummonHarness(
+    currentCast: (org.bukkit.entity.Player, StaffSpellCast) -> Boolean = { _, _ -> true },
+    summonActorFactory: ((World, Location, Boolean) -> AbstractSkeleton)? = ::spawnPickupSafeActor,
+    block: (StaffHarness) -> Unit,
+) {
+    withStaffHarness(currentCast = currentCast, summonActorFactory = summonActorFactory) { harness ->
+        every { anyConstructed<WorldMock>().getBlockAt(any<Int>(), any<Int>(), any<Int>()) } answers {
+            CollisionShapeBlock(callOriginal())
+        }
+        block(harness)
+    }
+}
+
+private class CollisionShapeBlock(block: Block) : BlockMock() {
+    private var backingBlock: Block? = null
+
+    init {
+        backingBlock = block
+    }
+
+    override fun getType() = backingBlock?.type ?: Material.AIR
+    override fun setType(type: Material) { backingBlock?.setType(type) ?: super.setType(type) }
+    override fun getBlockData() = backingBlock?.blockData ?: super.getBlockData()
+    override fun setBlockData(data: BlockData) { backingBlock?.setBlockData(data) ?: super.setBlockData(data) }
+    override fun setBlockData(data: BlockData, applyPhysics: Boolean) {
+        backingBlock?.setBlockData(data, applyPhysics) ?: super.setBlockData(data, applyPhysics)
+    }
+    override fun getWorld() = backingBlock?.world ?: super.getWorld()
+    override fun getX() = backingBlock?.x ?: super.getX()
+    override fun getY() = backingBlock?.y ?: super.getY()
+    override fun getZ() = backingBlock?.z ?: super.getZ()
+    override fun getLocation() = backingBlock?.location ?: super.getLocation()
+    override fun isSolid() = backingBlock?.isSolid ?: super.isSolid
+    override fun isLiquid() = backingBlock?.isLiquid ?: super.isLiquid
+    override fun getCollisionShape() = backingBlock?.let(::collisionShapeFor) ?: super.getCollisionShape()
+}
+
+private fun collisionShapeFor(block: Block): VoxelShape {
+    val boxes = when {
+        block.type.isAir || block.isLiquid -> emptyList()
+        block.type.name.endsWith("_SLAB") -> listOf(BoundingBox(0.0, 0.0, 0.0, 1.0, 0.5, 1.0))
+        !block.type.isSolid -> emptyList()
+        else -> listOf(BoundingBox(0.0, 0.0, 0.0, 1.0, 1.0, 1.0))
+    }
+    return object : VoxelShape {
+        override fun getBoundingBoxes() = boxes
+        override fun overlaps(other: BoundingBox) = boxes.any { it.overlaps(other) }
+    }
+}
 
 private fun loadSummonChunks(world: World) {
     for (x in -1..0) for (z in -1..0) world.loadChunk(x, z)

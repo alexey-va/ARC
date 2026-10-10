@@ -11,11 +11,13 @@ import org.bukkit.entity.AbstractSkeleton
 import org.bukkit.entity.Skeleton
 import org.bukkit.entity.WitherSkeleton
 import org.bukkit.inventory.ItemStack
+import org.bukkit.util.BoundingBox
 import org.bukkit.util.Vector
 import ru.arc.core.LifecycleTaskScope
 import java.util.UUID
 import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.floor
 import kotlin.math.sin
 
 /** Owns short-lived, non-AI undead actors; every hit remains inside the staff damage gate. */
@@ -69,7 +71,7 @@ internal class StaffSpellSummons(
         val requested = if (commander) 1 else (2 + (progress * 2.0).toInt()).coerceIn(2, 4)
         val world = player.world
         val spawnPoints = formation(player).asSequence()
-            .filter { safeSpawnPoint(it, commander) }
+            .mapNotNull { safeSpawnLocation(it, commander) }
             .take(requested)
             .toList()
         if (spawnPoints.size < if (commander) 1 else 2) return
@@ -242,11 +244,18 @@ internal class StaffSpellSummons(
         val vx = dx / length * WALK_SPEED
         val vz = dz / length * WALK_SPEED
         val next = current.clone().add(vx, 0.0, vz)
-        if (!clearBody(next, mob.width, mob.height)) {
+        val supportedNext = resolveSupportedLocation(
+            next,
+            width = mob.width,
+            height = mob.height,
+            maxRise = MAX_MOVEMENT_STEP,
+            maxDrop = MAX_MOVEMENT_STEP,
+        )
+        if (supportedNext == null) {
             mob.velocity = Vector(0.0, mob.velocity.y, 0.0)
             return
         }
-        mob.velocity = Vector(vx, mob.velocity.y.coerceIn(-0.35, 0.35), vz)
+        mob.velocity = Vector(vx, mob.velocity.y.coerceIn(-MAX_VERTICAL_SPEED, MAX_VERTICAL_SPEED), vz)
         mob.setRotation(Math.toDegrees(atan2(-dx, dz)).toFloat(), 0.0f)
     }
 
@@ -275,32 +284,106 @@ internal class StaffSpellSummons(
         }
     }
 
-    private fun safeSpawnPoint(at: Location, commander: Boolean) =
-        clearBody(at, width = 0.6, height = if (commander) 2.4 else 2.0)
+    private fun safeSpawnLocation(at: Location, commander: Boolean): Location? =
+        resolveSupportedLocation(
+            at,
+            width = 0.6,
+            height = if (commander) 2.4 else 2.0,
+            maxRise = MAX_SPAWN_STEP_UP,
+            maxDrop = MAX_SPAWN_STEP_DOWN,
+        )
 
-    private fun clearBody(at: Location, width: Double, height: Double): Boolean {
+    private fun resolveSupportedLocation(
+        at: Location,
+        width: Double,
+        height: Double,
+        maxRise: Double,
+        maxDrop: Double,
+    ): Location? {
+        val world = at.world ?: return null
+        if (!loaded(at)) return null
+        val radius = (width / 2.0 - BODY_EDGE_INSET).coerceAtLeast(MIN_SUPPORT_RADIUS)
+        val supportedY = supportSurfaceAt(world, at.x, at.z, at.y, maxRise, maxDrop) ?: return null
+        val resolved = at.clone().apply { y = supportedY }
+        if (!hasFootprintSupport(world, resolved, radius)) return null
+        if (!bodyClear(resolved, width, height)) return null
+        return resolved
+    }
+
+    /** Finds the nearest collision top beneath a point without loading any chunks. */
+    private fun supportSurfaceAt(
+        world: World,
+        x: Double,
+        z: Double,
+        preferredY: Double,
+        maxRise: Double,
+        maxDrop: Double,
+    ): Double? {
+        val minY = floor(preferredY - maxDrop).toInt().coerceAtLeast(world.minHeight)
+        val maxY = floor(preferredY + maxRise).toInt().coerceAtMost(world.maxHeight - 1)
+        if (minY > maxY) return null
+        val surfaces = mutableListOf<Double>()
+        for (blockY in maxY downTo minY) {
+            if (!world.isChunkLoaded(floor(x).toInt() shr 4, floor(z).toInt() shr 4)) return null
+            val block = world.getBlockAt(floor(x).toInt(), blockY, floor(z).toInt())
+            if (!block.isSolid || block.isLiquid) continue
+            for (shape in block.collisionShape.boundingBoxes) {
+                if (x < block.x + shape.minX + SUPPORT_EDGE_INSET ||
+                    x > block.x + shape.maxX - SUPPORT_EDGE_INSET ||
+                    z < block.z + shape.minZ + SUPPORT_EDGE_INSET ||
+                    z > block.z + shape.maxZ - SUPPORT_EDGE_INSET) continue
+                val top = block.y + shape.maxY
+                if (top >= preferredY - maxDrop && top <= preferredY + maxRise) surfaces += top
+            }
+        }
+        return surfaces.minWithOrNull(compareBy<Double> { kotlin.math.abs(it - preferredY) }.thenByDescending { it })
+    }
+
+    /** Rejects narrow posts and deep gaps while allowing a half-block transition under a mob. */
+    private fun hasFootprintSupport(world: World, at: Location, radius: Double): Boolean {
+        val supportedCorners = listOf(-radius to -radius, -radius to radius, radius to -radius, radius to radius)
+            .count { (x, z) ->
+                supportSurfaceAt(
+                    world, at.x + x, at.z + z, at.y,
+                    maxRise = FOOT_SUPPORT_TOLERANCE,
+                    maxDrop = FOOTPRINT_SUPPORT_DROP,
+                ) != null
+            }
+        return supportedCorners >= MIN_SUPPORTED_CORNERS
+    }
+
+    private fun bodyClear(at: Location, width: Double, height: Double): Boolean {
         val world = at.world ?: return false
         if (!loaded(at)) return false
-        val radius = (width / 2.0 - 0.03).coerceAtLeast(0.1)
-        val side = listOf(-radius, radius)
-        val vertical = generateSequence(0.08) { it + 0.45 }.takeWhile { it < height - 0.04 }.toList()
-        for (x in side) for (z in side) {
-            val support = at.clone().add(x, -SUPPORT_SAMPLE_BELOW_FEET, z)
-            if (!loaded(support)) return false
-            val floor = world.getBlockAt(support.blockX, support.blockY, support.blockZ)
-            if (!floor.isSolid || floor.isLiquid) return false
-        }
-        for (x in side) for (z in side) for (y in vertical) {
-            val sample = at.clone().add(x, y, z)
-            if (!loaded(sample)) return false
-            val block = world.getBlockAt(sample.blockX, sample.blockY, sample.blockZ)
-            if (!block.isPassable || block.isLiquid) return false
+        val radius = (width / 2.0 - BODY_EDGE_INSET).coerceAtLeast(MIN_SUPPORT_RADIUS)
+        val body = BoundingBox(
+            at.x - radius,
+            at.y + BODY_FEET_INSET,
+            at.z - radius,
+            at.x + radius,
+            at.y + height - BODY_HEAD_INSET,
+            at.z + radius,
+        )
+        val minX = floor(body.minX).toInt()
+        val maxX = floor(body.maxX - BOUNDS_EDGE_EPSILON).toInt()
+        val minY = floor(body.minY).toInt()
+        val maxY = floor(body.maxY - BOUNDS_EDGE_EPSILON).toInt()
+        val minZ = floor(body.minZ).toInt()
+        val maxZ = floor(body.maxZ - BOUNDS_EDGE_EPSILON).toInt()
+        if (minY < world.minHeight || maxY >= world.maxHeight) return false
+
+        for (x in minX..maxX) for (y in minY..maxY) for (z in minZ..maxZ) {
+            if (!world.isChunkLoaded(x shr 4, z shr 4)) return false
+            val block = world.getBlockAt(x, y, z)
+            if (block.isLiquid) return false
+            val localBody = body.clone().shift(-x.toDouble(), -y.toDouble(), -z.toDouble())
+            if (block.collisionShape.overlaps(localBody)) return false
         }
         return true
     }
 
     private fun spawnActor(world: World, at: Location, commander: Boolean): AbstractSkeleton? {
-        if (!safeSpawnPoint(at, commander)) return null
+        if (!bodyClear(at, width = 0.6, height = if (commander) 2.4 else 2.0)) return null
         val mob = actorFactory?.invoke(world, at, commander) ?: if (commander) {
             world.spawn(at, WitherSkeleton::class.java)
         } else {
@@ -427,7 +510,19 @@ internal class StaffSpellSummons(
         const val WALK_SPEED = 0.23
         const val SUMMON_CUE_TICKS = 10
         const val SUMMON_CAMERA_CLEARANCE = 1.0
-        const val SUPPORT_SAMPLE_BELOW_FEET = 0.08
+        const val BODY_EDGE_INSET = 0.03
+        const val BODY_FEET_INSET = 0.02
+        const val BODY_HEAD_INSET = 0.02
+        const val BOUNDS_EDGE_EPSILON = 0.0001
+        const val SUPPORT_EDGE_INSET = 0.015
+        const val MIN_SUPPORT_RADIUS = 0.1
+        const val MAX_SPAWN_STEP_UP = 0.55
+        const val MAX_SPAWN_STEP_DOWN = 0.75
+        const val MAX_MOVEMENT_STEP = 0.55
+        const val MAX_VERTICAL_SPEED = 0.35
+        const val FOOT_SUPPORT_TOLERANCE = 0.025
+        const val FOOTPRINT_SUPPORT_DROP = 0.55
+        const val MIN_SUPPORTED_CORNERS = 2
         const val SOLDIER_COLOR = 0x9B72C4
         const val COMMANDER_COLOR = 0xC7A6E8
         val SPAWN_SLOTS = listOf(

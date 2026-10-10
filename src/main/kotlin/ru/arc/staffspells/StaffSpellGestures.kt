@@ -129,6 +129,24 @@ private fun gestureProgress(ageTicks: Int, profile: StaffGestureProfile): Double
     gestureSmooth((ageTicks - profile.anticipationTicks).toDouble() /
         (profile.durationTicks - profile.anticipationTicks).coerceAtLeast(1))
 
+private fun gestureStageProgress(ageTicks: Int, profile: StaffGestureProfile): Double =
+    gestureSmooth((ageTicks - profile.anticipationTicks).toDouble() /
+        (profile.durationTicks - 2 - profile.anticipationTicks).coerceAtLeast(1))
+
+private fun lanceSweepPoint(ageTicks: Int, profile: StaffGestureProfile, along: Double): Vector {
+    val progress = gestureStageProgress(ageTicks, profile)
+    return Vector(-1.5 + progress * 3.0 + along,
+        -0.85 + progress * 0.25 + along * 0.28,
+        2.0 + progress * 3.0 + along * 0.42)
+}
+
+private fun lunarCrescentPoint(ageTicks: Int, profile: StaffGestureProfile, t: Double): Vector {
+    val angle = PI * (0.07 + 0.86 * t)
+    val travel = gestureStageProgress(ageTicks, profile)
+    return Vector(cos(angle) * 1.5, -1.7 + sin(angle) * 2.0,
+        2.1 + travel * 2.2 + cos(angle) * 0.18)
+}
+
 /** Contact is sampled from the same advancing front or authored field shown in staffGestureFrame. */
 internal fun staffGestureContact(
     profile: StaffGestureProfile,
@@ -195,17 +213,16 @@ internal fun staffGestureContact(
             val active = ageTicks >= profile.durationTicks - 6 && ageTicks <= profile.durationTicks - 2
             when (profile.form) {
                 StaffGestureForm.LANCE_SWEEP -> {
-                    val t = ((x + 2.4) / 4.8).coerceIn(0.0, 1.0)
-                    val centerY = -0.48 + sin(t * PI) * 0.42
-                    val centerZ = 2.7 + sin(t * PI) * 0.42
-                    active && abs(x) <= 2.85 && abs(y - centerY) <= 1.05 && abs(z - centerZ) <= 0.7
+                    val striking = ageTicks in profile.anticipationTicks..(profile.durationTicks - 2)
+                    val head = lanceSweepPoint(ageTicks, profile, 0.0)
+                    val along = (x - head.x).coerceIn(-0.85, 0.85)
+                    val visiblePoint = lanceSweepPoint(ageTicks, profile, along)
+                    striking && abs(x - head.x) <= 0.95 &&
+                        abs(y - visiblePoint.y) <= 0.72 && abs(z - visiblePoint.z) <= 0.55
                 }
                 StaffGestureForm.LUNAR_CRESCENT -> active && (0..10).any { index ->
-                    val t = index / 10.0
-                    val angle = PI * (0.12 + 0.76 * t)
-                    abs(x - cos(angle) * 2.5) <= 0.65 &&
-                        abs(y - (-0.35 + sin(angle) * 0.4)) <= 1.15 &&
-                        abs(z - (2.55 + sin(t * PI) * 0.32)) <= 0.6
+                    val point = lunarCrescentPoint(ageTicks, profile, index / 10.0)
+                    abs(x - point.x) <= 0.5 && abs(y - point.y) <= 0.7 && abs(z - point.z) <= 0.55
                 }
                 StaffGestureForm.TIDE_WHIP -> {
                     if (!active || z !in 1.35..(front + 0.3)) false else {
@@ -347,24 +364,23 @@ internal fun staffGestureFrame(
             addGesture(out, Particle.SNOWFLAKE, x, y, 3.0, 5, spread = Vector(0.04, 0.08, 0.04))
             if (column % 2 == 0) addGesture(out, Particle.DUST_COLOR_TRANSITION, x, y, 3.0, 2, data = ice)
         }
-        StaffGestureForm.LANCE_SWEEP -> {
+        StaffGestureForm.LANCE_SWEEP -> if (age >= profile.anticipationTicks) {
             repeat(2) { lane ->
                 val side = if (lane == 0) -1.0 else 1.0
-                repeat(40) { index ->
-                    val t = index / 39.0
-                    val x = (t - 0.5) * 4.8 + side * (t - 0.5) * 0.16
-                    val y = -0.48 + sin(t * PI) * 0.42 + progress * 0.08 - side * 0.075
-                    val z = 2.7 + sin(t * PI) * 0.42
-                    addGesture(out, Particle.DUST_COLOR_TRANSITION, x, y, z, 1,
+                repeat(20) { index ->
+                    val t = index / 19.0
+                    val along = (t - 0.5) * 1.7
+                    val point = lanceSweepPoint(age, profile, along)
+                    val crossing = side * (t - 0.5) * 0.16
+                    addGesture(out, Particle.DUST_COLOR_TRANSITION, point.x + crossing,
+                        point.y - side * 0.06, point.z, 1,
                         spread = Vector(0.005, 0.005, 0.005), data = solar)
                 }
             }
             repeat(4) { spark ->
-                val t = (spark + 1) / 5.0
-                val x = (t - 0.5) * 4.8
-                val y = -0.48 + sin(t * PI) * 0.42 + progress * 0.08
-                val z = 2.7 + sin(t * PI) * 0.42
-                addGesture(out, Particle.END_ROD, x, y, z, 1,
+                val along = (spark / 3.0 - 0.5) * 1.35
+                val point = lanceSweepPoint(age, profile, along)
+                addGesture(out, Particle.END_ROD, point.x, point.y, point.z, 1,
                     spread = Vector(0.005, 0.005, 0.005))
             }
         }
@@ -423,18 +439,15 @@ internal fun staffGestureFrame(
                 0.3 + layer * (1.1 + progress * 0.6), sin(angle) * radius, 3,
                 data = Material.BASALT.createBlockData()) }
         }
-        StaffGestureForm.LUNAR_CRESCENT -> {
+        StaffGestureForm.LUNAR_CRESCENT -> if (age >= profile.anticipationTicks) {
             val lunar = staffFade(0x9A9FFF, 0xEEE8FF, 1.3f)
             repeat(56) { index ->
                 val t = index / 55.0
-                val angle = PI * (0.12 + 0.76 * t)
-                val x = cos(angle) * 2.5
-                val y = -0.35 + sin(angle) * 0.4
-                val z = 2.55 + sin(t * PI) * 0.32
-                addGesture(out, Particle.DUST_COLOR_TRANSITION, x, y, z, 1,
+                val point = lunarCrescentPoint(age, profile, t)
+                addGesture(out, Particle.DUST_COLOR_TRANSITION, point.x, point.y, point.z, 1,
                     spread = Vector(0.005, 0.005, 0.005), data = lunar)
-                if (index % 7 == 0) addGesture(out, Particle.END_ROD, x + 0.035, y + 0.025,
-                    z + 0.025, 1, spread = Vector(0.005, 0.005, 0.005))
+                if (index % 7 == 0) addGesture(out, Particle.END_ROD, point.x + 0.035,
+                    point.y + 0.025, point.z + 0.025, 1, spread = Vector(0.005, 0.005, 0.005))
             }
         }
         StaffGestureForm.LUNAR_ECLIPSE -> repeat(10) { index ->

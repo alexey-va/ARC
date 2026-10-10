@@ -49,6 +49,30 @@ class StaffSpellGesturesTest : FreeSpec({
         staffGestureContact(profile, ageTicks = 8, previousAgeTicks = 6, local = point.offset, reach = 6.0) shouldBe false
     }
 
+    "lance stroke advances as a short diagonal cut and lunar crescent travels upright" {
+        MockBukkitTestRuntime.open().use {
+            val lance = StaffCastInput.QUICK
+            val lanceWindup = staffGestureFrame(StaffSpell.LANCE, lance, ageTicks = 2, reach = 6.0)
+            val lanceStart = staffGestureFrame(StaffSpell.LANCE, lance, ageTicks = 4, reach = 6.0)
+            val lanceMiddle = staffGestureFrame(StaffSpell.LANCE, lance, ageTicks = 8, reach = 6.0)
+            val lanceEnd = staffGestureFrame(StaffSpell.LANCE, lance, ageTicks = 12, reach = 6.0)
+            lanceWindup.isEmpty() shouldBe true
+            (lanceMiddle.maxOf { it.offset.x } - lanceMiddle.minOf { it.offset.x } < 2.0) shouldBe true
+            ((lanceEnd.map { it.offset.x }.average() - lanceStart.map { it.offset.x }.average()) > 2.8) shouldBe true
+            ((lanceEnd.map { it.offset.z }.average() - lanceStart.map { it.offset.z }.average()) > 2.8) shouldBe true
+
+            val lunarInput = StaffCastInput.QUICK
+            val lunarWindup = staffGestureFrame(StaffSpell.LUNAR, lunarInput, ageTicks = 4, reach = 6.0)
+            val lunarStart = staffGestureFrame(StaffSpell.LUNAR, lunarInput, ageTicks = 6, reach = 6.0)
+            val lunarMiddle = staffGestureFrame(StaffSpell.LUNAR, lunarInput, ageTicks = 10, reach = 6.0)
+            val lunarEnd = staffGestureFrame(StaffSpell.LUNAR, lunarInput, ageTicks = 14, reach = 6.0)
+            lunarWindup.isEmpty() shouldBe true
+            (lunarMiddle.maxOf { it.offset.y } - lunarMiddle.minOf { it.offset.y } > 1.4) shouldBe true
+            (lunarMiddle.maxOf { it.offset.x } - lunarMiddle.minOf { it.offset.x } < 3.1) shouldBe true
+            ((lunarEnd.map { it.offset.z }.average() - lunarStart.map { it.offset.z }.average()) > 2.0) shouldBe true
+        }
+    }
+
     "lowered forward sweeps reach standing zombies where their visible arcs pass" {
         withStaffHarness { h ->
             val settings = staffSettings()
@@ -73,7 +97,8 @@ class StaffSpellGesturesTest : FreeSpec({
             val lanceTarget = h.zombie(lanceWorld, 0.5, 3.5)
             val lunarWorld = h.paper.addSimpleWorld("gesture-lunar-torso")
             val lunarCaster = h.player("gesture-lunar-torso", lunarWorld, StaffSpell.LUNAR)
-            val lunarTarget = h.zombie(lunarWorld, 2.5, 3.3)
+            // Player starts at world (.5, .5), so this lands at local (1.3, 3.5) on the age-10 arc.
+            val lunarTarget = h.zombie(lunarWorld, 1.8, 4.0)
             val tideWorld = h.paper.addSimpleWorld("gesture-tide-torso")
             val tideCaster = h.player("gesture-tide-torso", tideWorld, StaffSpell.TIDE)
             val tideTarget = h.zombie(tideWorld, 1.0, 3.5)

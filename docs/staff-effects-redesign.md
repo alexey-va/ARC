@@ -1,4 +1,4 @@
-# Staff sequence redesign — ARC 1.4.374
+# Staff sequence redesign — ARC 1.4.375
 
 The original seven RMB abilities remain recognizable; the ember body grows over
 its first 16 ticks to avoid appearing at full size when it crosses camera clearance.
@@ -35,7 +35,7 @@ These are references for timing, silhouette and staged action, not copied assets
 
 All 28 LMB/Shift-LMB gestures use native particles and independent contact shapes.
 They do not replay a shortened RMB Display scene. Examples include frost breath,
-a solar cross-cleave, an ice shotgun, water whip, soul stream and bone volley.
+an advancing diagonal solar cut, an ice shotgun, water whip, soul stream and bone volley.
 The charge meter and cooldown remain boss bars; full charge changes RMB size,
 formation or count. Native particles retain their Minecraft lifetime and motion.
 
