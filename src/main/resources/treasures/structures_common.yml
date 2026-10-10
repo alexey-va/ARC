@@ -1,92 +1,394 @@
 id: structures_common
+# 3–5 independent draws per new personal record, not the whole list.
+# Weights are relative within this pool; the 10% special bonus is separate.
 treasures:
+  # Еда — 20% одного выбора
   - type: item
     id: structure_common_bread
-    weight: 12
+    weight: 3
     stack:
       type: BREAD
       amount: 1
     amount: 2-4
   - type: item
     id: structure_common_cooked_beef
-    weight: 8
+    weight: 3
     stack:
       type: COOKED_BEEF
       amount: 1
     amount: 1-3
   - type: item
+    id: structure_common_baked_potato
+    weight: 4
+    stack:
+      type: BAKED_POTATO
+      amount: 1
+    amount: 2-4
+  - type: item
+    id: structure_common_cooked_cod
+    weight: 2
+    stack:
+      type: COOKED_COD
+      amount: 1
+    amount: 1-3
+  - type: item
+    id: structure_common_apple
+    weight: 3
+    stack:
+      type: APPLE
+      amount: 1
+    amount: 1-3
+  - type: item
+    id: structure_common_carrot
+    weight: 2
+    stack:
+      type: CARROT
+      amount: 1
+    amount: 2-4
+  - type: item
+    id: structure_common_dried_kelp
+    weight: 2
+    stack:
+      type: DRIED_KELP
+      amount: 1
+    amount: 3-6
+  - type: item
+    id: structure_common_honey_bottle
+    weight: 1
+    stack:
+      type: HONEY_BOTTLE
+      amount: 1
+    amount: 1
+  # Припасы для похода — 16% одного выбора
+  - type: item
     id: structure_common_arrow
-    weight: 12
+    weight: 4
     stack:
       type: ARROW
       amount: 1
     amount: 4-8
   - type: item
+    id: structure_common_spectral_arrow
+    weight: 1
+    stack:
+      type: SPECTRAL_ARROW
+      amount: 1
+    amount: 2-4
+  - type: item
     id: structure_common_torch
-    weight: 10
+    weight: 5
     stack:
       type: TORCH
       amount: 1
     amount: 4-8
   - type: item
+    id: structure_common_lantern
+    weight: 1
+    stack:
+      type: LANTERN
+      amount: 1
+    amount: 1-2
+  - type: item
+    id: structure_common_campfire
+    weight: 1
+    stack:
+      type: CAMPFIRE
+      amount: 1
+    amount: 1
+  - type: item
+    id: structure_common_ladder
+    weight: 2
+    stack:
+      type: LADDER
+      amount: 1
+    amount: 3-6
+  - type: item
+    id: structure_common_scaffolding
+    weight: 2
+    stack:
+      type: SCAFFOLDING
+      amount: 1
+    amount: 3-6
+  # Руды и материалы — 26% одного выбора
+  - type: item
     id: structure_common_coal
-    weight: 12
+    weight: 4
     stack:
       type: COAL
       amount: 1
     amount: 2-4
   - type: item
+    id: structure_common_charcoal
+    weight: 2
+    stack:
+      type: CHARCOAL
+      amount: 1
+    amount: 2-4
+  - type: item
     id: structure_common_iron_ingot
-    weight: 10
+    weight: 3
     stack:
       type: IRON_INGOT
       amount: 1
     amount: 1-3
   - type: item
     id: structure_common_copper_ingot
-    weight: 8
+    weight: 3
     stack:
       type: COPPER_INGOT
       amount: 1
     amount: 2-5
   - type: item
     id: structure_common_lapis_lazuli
-    weight: 8
+    weight: 2
     stack:
       type: LAPIS_LAZULI
       amount: 1
     amount: 2-4
   - type: item
     id: structure_common_redstone
-    weight: 6
+    weight: 2
     stack:
       type: REDSTONE
       amount: 1
     amount: 2-4
   - type: item
     id: structure_common_gold_ingot
-    weight: 4
+    weight: 1
     stack:
       type: GOLD_INGOT
       amount: 1
     amount: 1-2
   - type: item
+    id: structure_common_iron_nugget
+    weight: 1
+    stack:
+      type: IRON_NUGGET
+      amount: 1
+    amount: 4-8
+  - type: item
+    id: structure_common_gold_nugget
+    weight: 1
+    stack:
+      type: GOLD_NUGGET
+      amount: 1
+    amount: 3-6
+  - type: item
+    id: structure_common_raw_iron
+    weight: 2
+    stack:
+      type: RAW_IRON
+      amount: 1
+    amount: 1-3
+  - type: item
+    id: structure_common_raw_copper
+    weight: 2
+    stack:
+      type: RAW_COPPER
+      amount: 1
+    amount: 2-4
+  - type: item
+    id: structure_common_raw_gold
+    weight: 1
+    stack:
+      type: RAW_GOLD
+      amount: 1
+    amount: 1
+  - type: item
+    id: structure_common_amethyst_shard
+    weight: 1
+    stack:
+      type: AMETHYST_SHARD
+      amount: 1
+    amount: 2-4
+  - type: item
+    id: structure_common_quartz
+    weight: 1
+    stack:
+      type: QUARTZ
+      amount: 1
+    amount: 2-4
+  # Для крафта — 17% одного выбора
+  - type: item
     id: structure_common_string
-    weight: 4
+    weight: 2
     stack:
       type: STRING
       amount: 1
     amount: 2-4
   - type: item
+    id: structure_common_leather
+    weight: 1
+    stack:
+      type: LEATHER
+      amount: 1
+    amount: 1-3
+  - type: item
+    id: structure_common_feather
+    weight: 1
+    stack:
+      type: FEATHER
+      amount: 1
+    amount: 2-4
+  - type: item
+    id: structure_common_flint
+    weight: 1
+    stack:
+      type: FLINT
+      amount: 1
+    amount: 2-4
+  - type: item
+    id: structure_common_bone
+    weight: 2
+    stack:
+      type: BONE
+      amount: 1
+    amount: 2-4
+  - type: item
+    id: structure_common_gunpowder
+    weight: 1
+    stack:
+      type: GUNPOWDER
+      amount: 1
+    amount: 1-3
+  - type: item
+    id: structure_common_slime_ball
+    weight: 1
+    stack:
+      type: SLIME_BALL
+      amount: 1
+    amount: 1-2
+  - type: item
+    id: structure_common_ink_sac
+    weight: 1
+    stack:
+      type: INK_SAC
+      amount: 1
+    amount: 1-3
+  - type: item
+    id: structure_common_glow_ink_sac
+    weight: 1
+    stack:
+      type: GLOW_INK_SAC
+      amount: 1
+    amount: 1-2
+  - type: item
+    id: structure_common_paper
+    weight: 2
+    stack:
+      type: PAPER
+      amount: 1
+    amount: 3-6
+  - type: item
+    id: structure_common_book
+    weight: 1
+    stack:
+      type: BOOK
+      amount: 1
+    amount: 1-2
+  - type: item
+    id: structure_common_clay_ball
+    weight: 1
+    stack:
+      type: CLAY_BALL
+      amount: 1
+    amount: 2-5
+  - type: item
+    id: structure_common_brick
+    weight: 1
+    stack:
+      type: BRICK
+      amount: 1
+    amount: 2-4
+  - type: item
+    id: structure_common_glass_bottle
+    weight: 1
+    stack:
+      type: GLASS_BOTTLE
+      amount: 1
+    amount: 1-3
+  # Инструменты и снаряжение — 10% одного выбора
+  - type: item
+    id: structure_common_bucket
+    weight: 1
+    stack:
+      type: BUCKET
+      amount: 1
+    amount: 1
+  - type: item
+    id: structure_common_lead
+    weight: 1
+    stack:
+      type: LEAD
+      amount: 1
+    amount: 1
+  - type: item
+    id: structure_common_compass
+    weight: 1
+    stack:
+      type: COMPASS
+      amount: 1
+    amount: 1
+  - type: item
+    id: structure_common_clock
+    weight: 1
+    stack:
+      type: CLOCK
+      amount: 1
+    amount: 1
+  - type: item
+    id: structure_common_spyglass
+    weight: 1
+    stack:
+      type: SPYGLASS
+      amount: 1
+    amount: 1
+  - type: item
+    id: structure_common_flint_and_steel
+    weight: 1
+    stack:
+      type: FLINT_AND_STEEL
+      amount: 1
+    amount: 1
+  - type: item
+    id: structure_common_shears
+    weight: 1
+    stack:
+      type: SHEARS
+      amount: 1
+    amount: 1
+  - type: item
+    id: structure_common_fishing_rod
+    weight: 1
+    stack:
+      type: FISHING_ROD
+      amount: 1
+    amount: 1
+  - type: item
+    id: structure_common_brush
+    weight: 1
+    stack:
+      type: BRUSH
+      amount: 1
+    amount: 1
+  - type: item
+    id: structure_common_bundle
+    weight: 1
+    stack:
+      type: BUNDLE
+      amount: 1
+    amount: 1
+  # Ценные мелочи — 5% одного выбора
+  - type: item
     id: structure_common_experience_bottle
-    weight: 3
+    weight: 1
     stack:
       type: EXPERIENCE_BOTTLE
       amount: 1
     amount: 1-2
   - type: item
     id: structure_common_emerald
-    weight: 2
+    weight: 1
     stack:
       type: EMERALD
       amount: 1
@@ -96,5 +398,62 @@ treasures:
     weight: 1
     stack:
       type: DIAMOND
+      amount: 1
+    amount: 1
+  - type: item
+    id: structure_common_ender_pearl
+    weight: 1
+    stack:
+      type: ENDER_PEARL
+      amount: 1
+    amount: 1-2
+  - type: item
+    id: structure_common_name_tag
+    weight: 1
+    stack:
+      type: NAME_TAG
+      amount: 1
+    amount: 1
+  # Случайные находки — 6% одного выбора
+  - type: item
+    id: structure_common_rotten_flesh
+    weight: 1
+    stack:
+      type: ROTTEN_FLESH
+      amount: 1
+    amount: 1-3
+  - type: item
+    id: structure_common_poisonous_potato
+    weight: 1
+    stack:
+      type: POISONOUS_POTATO
+      amount: 1
+    amount: 1
+  - type: item
+    id: structure_common_dead_bush
+    weight: 1
+    stack:
+      type: DEAD_BUSH
+      amount: 1
+    amount: 1
+  - type: item
+    id: structure_common_snowball
+    weight: 1
+    stack:
+      type: SNOWBALL
+      amount: 1
+    amount: 2-4
+  - type: item
+    id: structure_common_bowl
+    weight: 1
+    stack:
+      type: BOWL
+      amount: 1
+    amount: 1-2
+  - type: item
+    id: structure_common_flower_pot
+    weight: 1
+    stack:
+      type: FLOWER_POT
       amount: 1
     amount: 1
