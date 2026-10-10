@@ -252,9 +252,27 @@ class RewardCatalogModuleConfig(private val config: Config) {
         val searchPolicy = if ("search" in map) {
             require("destinations" !in map) { "$path cannot contain both search and destinations" }
             val search = strictMap(map.getValue("search"), "$path.search")
-            rejectUnknown(search, setOf("server", "world", "radius", "bounds", "min-distance"), "$path.search")
+            rejectUnknown(
+                search,
+                setOf("server", "world", "radius", "bounds", "min-distance", "additional-worlds"),
+                "$path.search",
+            )
             val server = requiredString(search.required("server", "$path.search"), "$path.search.server", 48)
             val world = requiredString(search.required("world", "$path.search"), "$path.search.world", 128)
+            val additionalWorlds = if ("additional-worlds" in search) {
+                val rawWorlds = search.getValue("additional-worlds") as? List<*>
+                    ?: throw invalid("$path.search.additional-worlds", "expected list of world names")
+                require(rawWorlds.size <= PersonalTreasureMapSearchPolicy.MAX_ADDITIONAL_WORLDS) {
+                    "$path.search.additional-worlds supports at most ${PersonalTreasureMapSearchPolicy.MAX_ADDITIONAL_WORLDS} additional worlds"
+                }
+                val parsedWorlds = rawWorlds.mapIndexed { index, rawWorld ->
+                    requiredString(rawWorld, "$path.search.additional-worlds[$index]", 128)
+                }
+                require(parsedWorlds.distinct().size == parsedWorlds.size) {
+                    "$path.search.additional-worlds contains duplicate worlds"
+                }
+                parsedWorlds.toSet()
+            } else emptySet()
             if ("bounds" in search) {
                 require("radius" !in search) { "$path.search cannot contain both bounds and radius" }
                 val boundsPath = "$path.search.bounds"
@@ -270,6 +288,7 @@ class RewardCatalogModuleConfig(private val config: Config) {
                         signedInteger(bounds.required("max-z", boundsPath), "$boundsPath.max-z"),
                     ),
                     minDistance = integer(search.required("min-distance", "$path.search"), "$path.search.min-distance"),
+                    additionalWorlds = additionalWorlds,
                 )
             } else {
                 require("min-distance" !in search) { "$path.search.min-distance requires bounds" }
@@ -277,6 +296,7 @@ class RewardCatalogModuleConfig(private val config: Config) {
                     server,
                     world,
                     integer(search.required("radius", "$path.search"), "$path.search.radius"),
+                    additionalWorlds = additionalWorlds,
                 )
             }
         } else {

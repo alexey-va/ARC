@@ -285,6 +285,8 @@ internal data class FrozenPhysicalRecipe(
     val mapSearchMinZ: Int? = null,
     val mapSearchMaxZ: Int? = null,
     val mapSearchMinDistance: Int? = null,
+    /** Absent from older archives; sorted when captured for stable serialized recipes. */
+    val mapSearchAdditionalWorlds: List<String>? = null,
     /** Missing in older archives and interpreted as one roll. */
     val mapPrizeRolls: Int? = null,
 ) {
@@ -300,7 +302,7 @@ internal data class FrozenPhysicalRecipe(
             require(mapId == null && mapPrizeKey == null && mapPrizeFingerprint == null && mapDestinations == null &&
                 mapSearchServer == null && mapSearchWorld == null && mapSearchRadius == null &&
                 mapSearchMinX == null && mapSearchMaxX == null && mapSearchMinZ == null && mapSearchMaxZ == null &&
-                mapSearchMinDistance == null && mapPrizeRolls == null
+                mapSearchMinDistance == null && mapSearchAdditionalWorlds == null && mapPrizeRolls == null
             ) {
                 "Personal map fields require a personal-map recipe"
             }
@@ -462,10 +464,14 @@ internal data class FrozenPhysicalRecipe(
                 require(mapPrizeRolls == null || mapPrizeRolls in 1..PersonalTreasureMapDefinition.MAX_PRIZE_ROLLS) {
                     "Frozen map prize roll count is invalid"
                 }
+                val additionalWorlds = mapSearchAdditionalWorlds.orEmpty()
+                require(additionalWorlds.size <= PersonalTreasureMapSearchPolicy.MAX_ADDITIONAL_WORLDS &&
+                    additionalWorlds.distinct().size == additionalWorlds.size
+                ) { "Frozen map additional worlds are duplicated or exceed the limit" }
                 val searchFields = listOf(mapSearchServer, mapSearchWorld, mapSearchRadius)
                 if (searchFields.all { it == null }) {
                     require(mapSearchMinX == null && mapSearchMaxX == null && mapSearchMinZ == null &&
-                        mapSearchMaxZ == null && mapSearchMinDistance == null
+                        mapSearchMaxZ == null && mapSearchMinDistance == null && mapSearchAdditionalWorlds.isNullOrEmpty()
                     ) { "Frozen legacy destinations cannot contain partial search fields" }
                     require(mapDestinations != null && mapDestinations.size in 1..PersonalTreasureMapDefinition.MAX_DESTINATIONS) {
                         "Frozen legacy map destinations are invalid"
@@ -489,6 +495,7 @@ internal data class FrozenPhysicalRecipe(
                                 mapSearchRadius,
                                 minDistance = mapSearchMinDistance
                                     ?: PersonalTreasureMapSearchPolicy.LEGACY_MIN_TARGET_DISTANCE,
+                                additionalWorlds = mapSearchAdditionalWorlds.orEmpty().toSet(),
                             )
                         }
                         boundsFields.all { it != null } -> PersonalTreasureMapSearchPolicy(
@@ -501,6 +508,7 @@ internal data class FrozenPhysicalRecipe(
                             minDistance = requireNotNull(mapSearchMinDistance) {
                                 "Frozen map bounds require a minimum distance"
                             },
+                            additionalWorlds = mapSearchAdditionalWorlds.orEmpty().toSet(),
                         )
                         else -> error("Frozen map search bounds are incomplete")
                     }

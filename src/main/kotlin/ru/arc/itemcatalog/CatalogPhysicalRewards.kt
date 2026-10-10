@@ -68,7 +68,7 @@ internal class CatalogPhysicalRewards(
         is RewardCatalogSource.Choice -> "choice:${OneTimeUseFingerprint.sha256(source.options.joinToString("\n") { "${it.id}|${it.categoryId}|${it.entryId}" }.toByteArray()).sha256}"
         is RewardCatalogSource.PersonalMap -> {
             val policy = source.searchPolicy
-            val fingerprint = if (policy.bounds == null && source.prizeRolls == 1) {
+            val fingerprint = if (policy.bounds == null && policy.additionalWorlds.isEmpty() && source.prizeRolls == 1) {
                 // Preserve bearer addresses for the legacy one-roll, radius-based recipe.
                 OneTimeUseFingerprint.sha256Fields(
                     "personal-map-source-v2", entry.id, source.rewardCategoryId, source.rewardEntryId,
@@ -198,6 +198,7 @@ internal class CatalogPhysicalRewards(
                         mapSearchMinZ = source.searchPolicy.bounds?.minZ,
                         mapSearchMaxZ = source.searchPolicy.bounds?.maxZ,
                         mapSearchMinDistance = source.searchPolicy.minDistance.takeIf { source.searchPolicy.bounds != null },
+                        mapSearchAdditionalWorlds = source.searchPolicy.additionalWorlds.sorted().takeIf { it.isNotEmpty() },
                     )
                 }
                 else -> return@forEach
@@ -238,8 +239,10 @@ internal class CatalogPhysicalRewards(
         val recipe = archived.recipe
         val mapId = recipe.mapId ?: return null
         val legacyRoute = recipe.mapSearchServer == null
-        val migrateWeeklyRoute = isPublishedWeeklyMapLegacyRoute(recipe)
-        val redirectToCurrent = legacyRoute || migrateWeeklyRoute
+        val migrateWeeklyRadiusRoute = isPublishedWeeklyMapLegacyRoute(recipe)
+        val migrateWeeklyBoundsRoute = isPublishedWeeklyMapLegacyBoundedRoute(recipe)
+        val migrateWeeklyRoute = migrateWeeklyRadiusRoute || migrateWeeklyBoundsRoute
+        val redirectToCurrent = legacyRoute || migrateWeeklyRadiusRoute
         val archivedPrize = if (legacyRoute) null else {
             frozen.find(requireNotNull(recipe.mapPrizeKey))?.takeIf {
                 it.fingerprint == recipe.mapPrizeFingerprint
@@ -250,7 +253,7 @@ internal class CatalogPhysicalRewards(
         } else {
             requireNotNull(archivedPrize)
         }
-        val searchPolicy = if (redirectToCurrent) {
+        val searchPolicy = if (redirectToCurrent || migrateWeeklyBoundsRoute) {
             currentMapSource(mapId)?.searchPolicy ?: return null
         } else {
             recipe.searchPolicy() ?: return null
@@ -284,6 +287,7 @@ internal class CatalogPhysicalRewards(
                 prizeRolls = prizeRolls,
                 identityFingerprintOverride = legacyFingerprint ?: archivedIdentityFingerprint,
                 legacyTargetPolicy = oldSearchPolicy,
+                preserveLegacyTarget = migrateWeeklyBoundsRoute,
             )
         }.getOrNull()
     }
@@ -727,6 +731,18 @@ internal class CatalogPhysicalRewards(
             (recipe.mapSearchMinDistance == null ||
                 recipe.mapSearchMinDistance == PersonalTreasureMapSearchPolicy.LEGACY_MIN_TARGET_DISTANCE)
 
+    private fun isPublishedWeeklyMapLegacyBoundedRoute(recipe: FrozenPhysicalRecipe): Boolean =
+        recipe.type == "personal-map" &&
+            recipe.mapId == "weekly_personal_map" &&
+            recipe.mapDestinations == null &&
+            recipe.mapSearchServer == "survival" &&
+            recipe.mapSearchWorld == "survival" &&
+            recipe.mapSearchRadius == null &&
+            recipe.mapSearchMinX == -9650 && recipe.mapSearchMaxX == 9650 &&
+            recipe.mapSearchMinZ == -9650 && recipe.mapSearchMaxZ == 9650 &&
+            recipe.mapSearchMinDistance == PersonalTreasureMapSearchPolicy.EXPEDITION_MIN_TARGET_DISTANCE &&
+            recipe.mapSearchAdditionalWorlds.isNullOrEmpty()
+
     private fun FrozenPhysicalRecipe.searchPolicy(): PersonalTreasureMapSearchPolicy? {
         val server = mapSearchServer ?: return null
         val world = mapSearchWorld ?: return null
@@ -736,6 +752,7 @@ internal class CatalogPhysicalRewards(
                 world,
                 mapSearchRadius,
                 minDistance = mapSearchMinDistance ?: PersonalTreasureMapSearchPolicy.LEGACY_MIN_TARGET_DISTANCE,
+                additionalWorlds = mapSearchAdditionalWorlds.orEmpty().toSet(),
             )
         } else {
             PersonalTreasureMapSearchPolicy(
@@ -746,6 +763,7 @@ internal class CatalogPhysicalRewards(
                     requireNotNull(mapSearchMinZ), requireNotNull(mapSearchMaxZ),
                 ),
                 minDistance = requireNotNull(mapSearchMinDistance),
+                additionalWorlds = mapSearchAdditionalWorlds.orEmpty().toSet(),
             )
         }
     }
@@ -1076,8 +1094,10 @@ internal class CatalogPhysicalRewards(
                     is RewardCatalogSource.Choice -> listOf("<#ffd166>При использовании выберите одну из трёх наград.")
                     is RewardCatalogSource.PersonalMap -> emptyList()
                     else -> emptyList()
-                } + if (entry.source is RewardCatalogSource.PersonalMap) {
-                    listOf("<#9bd48d>ПКМ — активировать личную карту.", "<#e8dfd2>После активации тайник доступен только вам.", "<#e9c46a>У тайника нажмите ПКМ ещё раз, чтобы забрать находку.")
+                } + if (entry.source is RewardCatalogSource.PersonalMap && entry.description.isEmpty()) {
+                    listOf("<#a6ffce>Активируйте карту в мире выживания.", "<#fff2df>Найдите отмеченное сокровище.")
+                } else if (entry.source is RewardCatalogSource.PersonalMap) {
+                    emptyList()
                 } else {
                     listOf("<green>ПКМ с предметом в руке — получить награду.", "<yellow>Можно хранить и передавать до использования.")
                 }).map { TextUtil.mm(it, true) })

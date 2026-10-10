@@ -13,6 +13,7 @@ import io.mockk.mockkStatic
 import io.mockk.unmockkObject
 import io.mockk.unmockkStatic
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.NamespacedKey
 import org.bukkit.Material
 import org.bukkit.entity.Player
@@ -34,6 +35,42 @@ import java.nio.file.Files
 import java.util.Comparator
 
 class CatalogPhysicalRewardsTest : StringSpec({
+    "personal map preview uses short fallback lore only when the entry has no description" {
+        MockBukkitTestRuntime.open().use {
+            fun mapEntry(description: List<String>) = RewardCatalogEntry(
+                id = "weekly_personal_map",
+                name = "Карта тайника",
+                description = description,
+                rarity = null,
+                requires = emptyList(),
+                source = RewardCatalogSource.PersonalMap(
+                    "rewards",
+                    "weekly_map_cache",
+                    PersonalTreasureMapSearchPolicy("survival", "survival", 96, additionalWorlds = setOf("vanilla")),
+                ),
+                icon = CatalogIconStyle(Material.FILLED_MAP.name),
+            )
+            val settings = RewardCatalogSettings(
+                enabled = true,
+                title = "Награды",
+                categories = listOf(
+                    RewardCatalogCategory("rewards", "Награды", emptyList(), CatalogIconStyle("CHEST"), listOf(mapEntry(emptyList()))),
+                ),
+                messages = RewardCatalogMessages.DEFAULT,
+            )
+
+            val rewards = CatalogPhysicalRewards(settings)
+            val fallbackLore = requireNotNull(rewards.visualPreview(mapEntry(emptyList())).itemMeta?.lore())
+                .map(PlainTextComponentSerializer.plainText()::serialize)
+            fallbackLore shouldBe listOf("Активируйте карту в мире выживания.", "Найдите отмеченное сокровище.")
+
+            val configuredLore = requireNotNull(
+                rewards.visualPreview(mapEntry(listOf("Активируйте карту в мире выживания.", "Найдите отмеченное сокровище."))).itemMeta?.lore(),
+            ).map(PlainTextComponentSerializer.plainText()::serialize)
+            configuredLore shouldBe listOf("Активируйте карту в мире выживания.", "Найдите отмеченное сокровище.")
+        }
+    }
+
     "particle certificates resolve on another backend without a local archive" {
         MockBukkitTestRuntime.open().use {
             mockkConstructor(ParticlePresetRewards::class)

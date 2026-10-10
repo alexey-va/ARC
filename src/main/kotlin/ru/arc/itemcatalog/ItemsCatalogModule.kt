@@ -265,11 +265,15 @@ object ItemsCatalogModule : PluginModule {
     private fun showMapGuidance(player: Player, maps: PersonalTreasureMapController) {
         val guidance = maps.guidance(player) ?: return
         val message = when {
-            !guidance.onDestinationServer || !guidance.onDestinationWorld -> "<#e8dfd2>Тайник ищется в мире «Новые биомы» на Survival. Возьмите карту туда."
+            !guidance.onDestinationServer -> "<#e8dfd2>Возьмите карту на сервер выживания."
+            !guidance.onDestinationWorld -> guidance.targetWorld?.let { world ->
+                val name = if (world == "vanilla") "Ванильный мир" else "Новые биомы"
+                "<#e8dfd2>Ваш тайник в мире «$name». Возьмите карту туда."
+            } ?: "<#e8dfd2>Активируйте карту в мире выживания."
             guidance.safetyUnavailable -> "<#e9c46a>Не удалось проверить безопасность этой точки. Карта сохранена — попробуйте позже."
             !guidance.targetSelected && guidance.searching -> "<#e8dfd2>Ищем безопасный тайник в исследованной части мира…"
             !guidance.targetSelected && guidance.ownerBound -> "<#e9c46a>Безопасная точка пока не найдена. Нажмите ПКМ позже, чтобы повторить поиск."
-            !guidance.targetSelected -> "<#e8dfd2>ПКМ в мире «Новые биомы» на Survival — закрепить карту и найти безопасное место."
+            !guidance.targetSelected -> "<#e8dfd2>ПКМ — активировать карту и найти сокровище."
             guidance.withinClaimRadius -> "<#9bd48d>Тайник здесь · ПКМ — забрать находку"
             else -> "<#e8dfd2>До тайника <#e9c46a>${kotlin.math.ceil(guidance.distance ?: 0.0).toInt()} м <#e8dfd2>· ${guidance.hint}"
         }
@@ -278,8 +282,8 @@ object ItemsCatalogModule : PluginModule {
 
     private fun mapFailureMessage(failure: PersonalTreasureMapFailure): String = when (failure) {
         PersonalTreasureMapFailure.WRONG_OWNER -> "<#e9c46a>Эту карту уже активировал другой игрок."
-        PersonalTreasureMapFailure.WRONG_SERVER,
-        PersonalTreasureMapFailure.WRONG_WORLD -> "<#e8dfd2>Ваш тайник находится в мире «Новые биомы» на Survival. Возьмите карту туда."
+        PersonalTreasureMapFailure.WRONG_SERVER -> "<#e8dfd2>Возьмите карту на сервер выживания."
+        PersonalTreasureMapFailure.WRONG_WORLD -> "<#e8dfd2>Вернитесь в мир, где вы активировали карту."
         PersonalTreasureMapFailure.TOO_FAR -> "<#e9c46a>Подойдите к тайнику ближе и нажмите ПКМ."
         PersonalTreasureMapFailure.TARGET_CHANGED -> "<#e9c46a>Точка тайника стала защищённой. Карта ищет новое безопасное место."
         PersonalTreasureMapFailure.NO_SAFE_TARGET -> "<#e9c46a>Не удалось найти безопасное место для тайника. Попробуйте позже."

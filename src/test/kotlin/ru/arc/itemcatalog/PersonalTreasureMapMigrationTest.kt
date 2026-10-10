@@ -178,6 +178,7 @@ class PersonalTreasureMapMigrationTest : StringSpec({
                     "survival",
                     bounds = PersonalTreasureMapBounds(-9650, 9650, -9650, 9650),
                     minDistance = 3000,
+                    additionalWorlds = setOf("vanilla"),
                 )
                 val map = RewardCatalogEntry(
                     id = "weekly_personal_map",
@@ -293,6 +294,43 @@ class PersonalTreasureMapMigrationTest : StringSpec({
                     val sameWorldOldSpec = rewards.resolve(sameWorldOldMap.sourceKey).shouldNotBeNull()
                     val sameWorldMigratedDefinition = rewards.personalMapDefinition(sameWorldOldSpec).shouldNotBeNull()
 
+                    val boundedOldPolicy = PersonalTreasureMapSearchPolicy(
+                        "survival",
+                        "survival",
+                        bounds = PersonalTreasureMapBounds(-9650, 9650, -9650, 9650),
+                        minDistance = 3000,
+                    )
+                    val boundedOldKey = rewards.key(
+                        map.copy(
+                            source = RewardCatalogSource.PersonalMap(
+                                "rewards", child.id, boundedOldPolicy, prizeRolls = 2,
+                            ),
+                        ),
+                    )
+                    val boundedOldMap = archive.prepare(
+                        boundedOldKey,
+                        FrozenPhysicalRecipe(
+                            type = "personal-map",
+                            mapId = map.id,
+                            mapPrizeKey = oldPrize.sourceKey,
+                            mapPrizeFingerprint = oldPrize.providerFingerprint,
+                            mapPrizeRolls = 2,
+                            mapSearchServer = boundedOldPolicy.server,
+                            mapSearchWorld = boundedOldPolicy.world,
+                            mapSearchMinX = boundedOldPolicy.bounds!!.minX,
+                            mapSearchMaxX = boundedOldPolicy.bounds.maxX,
+                            mapSearchMinZ = boundedOldPolicy.bounds.minZ,
+                            mapSearchMaxZ = boundedOldPolicy.bounds.maxZ,
+                            mapSearchMinDistance = boundedOldPolicy.minDistance,
+                        ),
+                        ItemStack(Material.FILLED_MAP),
+                    ).shouldNotBeNull()
+                    val boundedOldSpec = rewards.resolve(boundedOldMap.sourceKey).shouldNotBeNull()
+                    val boundedMigratedDefinition = rewards.personalMapDefinition(boundedOldSpec).shouldNotBeNull()
+                    val originalBoundedFingerprint = PersonalTreasureMapDefinition(
+                        map.id, oldPrize.sourceKey, emptyList(), boundedOldPolicy, prizeRolls = 2,
+                    ).fingerprint
+
                     val ledger = SingleUseMapLedger()
                     var mapChunkProbeRequests = 0
                     val maps = PersonalTreasureMapController(
@@ -337,6 +375,14 @@ class PersonalTreasureMapMigrationTest : StringSpec({
                         unrelatedDefinition.searchPolicy shouldBe oldPolicy
                         sameWorldMigratedDefinition.searchPolicy shouldBe activePolicy
                         sameWorldMigratedDefinition.legacyTargetPolicy shouldBe sameWorldOldPolicy
+                        sameWorldMigratedDefinition.preserveLegacyTarget shouldBe false
+                        archive.find(boundedOldMap.sourceKey)?.sourceKey shouldBe boundedOldKey
+                        boundedMigratedDefinition.searchPolicy shouldBe activePolicy
+                        boundedMigratedDefinition.prizeSourceRef shouldBe oldPrize.sourceKey
+                        boundedMigratedDefinition.prizeRolls shouldBe 2
+                        boundedMigratedDefinition.fingerprint shouldBe originalBoundedFingerprint
+                        boundedMigratedDefinition.legacyTargetPolicy shouldBe boundedOldPolicy
+                        boundedMigratedDefinition.preserveLegacyTarget shouldBe true
 
                         val voucher = physical.createStack(oldMap.sourceKey).shouldNotBeNull()
                         val voucherIdentity = PhysicalRewardVoucher.identity(voucher).shouldNotBeNull()

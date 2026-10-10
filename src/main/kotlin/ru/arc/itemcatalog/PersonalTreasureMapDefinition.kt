@@ -39,10 +39,18 @@ data class PersonalTreasureMapSearchPolicy(
     val radius: Int? = null,
     val bounds: PersonalTreasureMapBounds? = null,
     val minDistance: Int = if (bounds == null) LEGACY_MIN_TARGET_DISTANCE else EXPEDITION_MIN_TARGET_DISTANCE,
+    val additionalWorlds: Set<String> = emptySet(),
 ) {
     init {
         require(server.length in 1..48 && server.matches(Regex("[A-Za-z0-9_.-]+"))) { "Invalid search server" }
         require(world.length in 1..128 && world.matches(Regex("[A-Za-z0-9_.:-]+"))) { "Invalid search world" }
+        require(additionalWorlds.size <= MAX_ADDITIONAL_WORLDS) {
+            "Search supports at most $MAX_ADDITIONAL_WORLDS additional worlds"
+        }
+        require(additionalWorlds.none { it == world }) { "The primary search world cannot also be additional" }
+        require(additionalWorlds.all { it.length in 1..128 && it.matches(Regex("[A-Za-z0-9_.:-]+")) }) {
+            "Invalid additional search world"
+        }
         require((radius == null) xor (bounds == null)) { "Search requires exactly one of radius or bounds" }
         if (radius != null) {
             require(radius in MIN_RADIUS..MAX_RADIUS) { "Search radius must be in $MIN_RADIUS..$MAX_RADIUS" }
@@ -59,23 +67,41 @@ data class PersonalTreasureMapSearchPolicy(
         }
     }
 
-    val targetPolicyFingerprint: OneTimeUseFingerprint = OneTimeUseFingerprint.sha256Fields(
-        "personal-treasure-map-target-policy-v1",
-        server,
-        world,
-        radius?.toString() ?: "bounds",
-        bounds?.minX?.toString() ?: "",
-        bounds?.maxX?.toString() ?: "",
-        bounds?.minZ?.toString() ?: "",
-        bounds?.maxZ?.toString() ?: "",
-        minDistance.toString(),
-    )
+    val targetPolicyFingerprint: OneTimeUseFingerprint = if (additionalWorlds.isEmpty()) {
+        OneTimeUseFingerprint.sha256Fields(
+            "personal-treasure-map-target-policy-v1",
+            server,
+            world,
+            radius?.toString() ?: "bounds",
+            bounds?.minX?.toString() ?: "",
+            bounds?.maxX?.toString() ?: "",
+            bounds?.minZ?.toString() ?: "",
+            bounds?.maxZ?.toString() ?: "",
+            minDistance.toString(),
+        )
+    } else {
+        OneTimeUseFingerprint.sha256Fields(
+            "personal-treasure-map-target-policy-v2",
+            server,
+            world,
+            radius?.toString() ?: "bounds",
+            bounds?.minX?.toString() ?: "",
+            bounds?.maxX?.toString() ?: "",
+            bounds?.minZ?.toString() ?: "",
+            bounds?.maxZ?.toString() ?: "",
+            minDistance.toString(),
+            additionalWorlds.sorted().joinToString("\n"),
+        )
+    }
 
     fun containsTarget(x: Double, z: Double): Boolean = bounds?.contains(x, z) ?: true
+
+    fun acceptsWorld(name: String): Boolean = name == world || name in additionalWorlds
 
     companion object {
         const val MIN_RADIUS = 16
         const val MAX_RADIUS = 256
+        const val MAX_ADDITIONAL_WORLDS = 8
         const val LEGACY_MIN_TARGET_DISTANCE = 16
         const val EXPEDITION_MIN_TARGET_DISTANCE = 3_000
         const val MAX_MIN_DISTANCE = 30_000_000
@@ -114,8 +140,10 @@ class PersonalTreasureMapDefinition(
     val searchPolicy: PersonalTreasureMapSearchPolicy? = null,
     val prizeRolls: Int = 1,
     identityFingerprintOverride: OneTimeUseFingerprint? = null,
-    /** One previously issued route whose target may be discarded by an explicit route migration. */
+    /** Previously issued route metadata used to validate a target during an explicit route migration. */
     val legacyTargetPolicy: PersonalTreasureMapSearchPolicy? = null,
+    /** True only when the existing target remains valid under the expanded current policy. */
+    val preserveLegacyTarget: Boolean = false,
 ) {
     val destinations: List<PersonalTreasureMapDestination> = Collections.unmodifiableList(destinations.toList())
     val fingerprint: OneTimeUseFingerprint
@@ -129,6 +157,9 @@ class PersonalTreasureMapDefinition(
         }
         require(legacyTargetPolicy == null || searchPolicy != null) {
             "A legacy target policy requires a current search policy"
+        }
+        require(!preserveLegacyTarget || legacyTargetPolicy != null) {
+            "Preserving a legacy target requires a legacy target policy"
         }
         fingerprint = identityFingerprintOverride ?: fingerprintFor(id, prizeSourceRef, this.destinations, searchPolicy, prizeRolls)
     }
@@ -157,7 +188,7 @@ class PersonalTreasureMapDefinition(
                 legacyFingerprint(id, prizeSourceRef, destinations).sha256,
                 prizeRolls.toString(),
             )
-            searchPolicy.bounds == null && prizeRolls == 1 -> OneTimeUseFingerprint.sha256Fields(
+            searchPolicy.bounds == null && searchPolicy.additionalWorlds.isEmpty() && prizeRolls == 1 -> OneTimeUseFingerprint.sha256Fields(
                 "personal-treasure-map-v2",
                 id,
                 prizeSourceRef,
@@ -313,4 +344,5 @@ data class PersonalTreasureMapGuidance(
     val ownerBound: Boolean = false,
     val safetyUnavailable: Boolean = false,
     val searching: Boolean = false,
+    val targetWorld: String? = null,
 )

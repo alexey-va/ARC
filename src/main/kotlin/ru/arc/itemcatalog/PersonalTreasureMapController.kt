@@ -7,8 +7,6 @@ import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.Tag
 import org.bukkit.World
-import org.bukkit.entity.Display
-import org.bukkit.entity.ItemDisplay
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
@@ -24,9 +22,6 @@ import org.bukkit.map.MapRenderer
 import org.bukkit.map.MapView
 import org.bukkit.persistence.PersistentDataType
 import org.bukkit.plugin.Plugin
-import org.joml.Quaternionf
-import org.joml.Vector3f
-import org.bukkit.util.Transformation
 import ru.arc.ARC
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.ScheduledTask
@@ -35,8 +30,6 @@ import ru.arc.core.Tasks
 import ru.arc.core.whenCompleteSync
 import ru.arc.hooks.HookRegistry
 import ru.arc.onetime.OneTimeUseFingerprint
-import ru.arc.paper.display.PacketItemDisplay
-import ru.arc.paper.display.PaperPacketDisplays
 import java.awt.Color
 import java.awt.Graphics2D
 import java.awt.image.BufferedImage
@@ -299,7 +292,7 @@ class PersonalTreasureMapController internal constructor(
         }
     }
 
-    /** Refreshes one holder's map cursor and nearby marker without loading chunks or reading blocks. */
+    /** Refreshes one holder's map cursor and nearby scene without loading chunks. */
     fun refreshHeldMap(player: Player) {
         if (closed || !player.isOnline) return
         val held = player.inventory.itemInMainHand
@@ -335,14 +328,14 @@ class PersonalTreasureMapController internal constructor(
         )
         val closeEnoughToSeeMarker = destinationChunkLoaded &&
             location.distanceSquared(destination.toLocation(player.world)) <= MARKER_DISTANCE_SQUARED
-        if (closeEnoughToSeeMarker) {
+        if (closeEnoughToSeeMarker && isSafeTarget(player, destination, resolved.definition.searchPolicy) == true) {
             try {
                 marker.show(player, destination)
                 markerFailures.remove(player.uniqueId)
             } catch (failure: Throwable) {
                 marker.clear(player.uniqueId)
                 if (markerFailures.add(player.uniqueId)) {
-                    plugin.logger.warning("Personal treasure marker failed for ${player.uniqueId}: ${failure.javaClass.simpleName}")
+                    plugin.logger.log(java.util.logging.Level.WARNING, "Personal treasure marker failed for ${player.uniqueId}", failure)
                 }
             }
         } else {
@@ -364,7 +357,7 @@ class PersonalTreasureMapController internal constructor(
         val policy = definition.searchPolicy
         val destination = resolved?.destination
         val targetServer = destination?.server ?: policy?.server ?: return null
-        val targetWorld = destination?.world ?: policy?.world ?: return null
+        val targetWorld = destination?.world ?: policy?.let { if (it.acceptsWorld(player.world.name)) player.world.name else it.world } ?: return null
         val hint = destination?.hint ?: PersonalTreasureMapSearchPolicy.TARGET_HINT
         val onServer = currentServer() == targetServer
         val onWorld = onServer && player.world.name == targetWorld
@@ -378,10 +371,11 @@ class PersonalTreasureMapController internal constructor(
                 hint, null, null, onServer, onWorld, false, false,
                 ownerBound = resolved != null,
                 searching = searching,
+                targetWorld = destination?.world,
             )
         }
         if (!onWorld) {
-            return PersonalTreasureMapGuidance(destination.hint, null, null, onServer, false, false, true)
+            return PersonalTreasureMapGuidance(destination.hint, null, null, onServer, false, false, true, targetWorld = destination.world)
         }
         val location = player.location
         val dx = destination.x - location.x
@@ -398,6 +392,7 @@ class PersonalTreasureMapController internal constructor(
             targetSelected = true,
             ownerBound = true,
             safetyUnavailable = locationAvailable && targetSafety == null,
+            targetWorld = destination.world,
         )
     }
 
@@ -489,7 +484,7 @@ class PersonalTreasureMapController internal constructor(
     ): Boolean {
         val targetMatchesPolicy = identity.target?.let { target ->
             val policy = definition.searchPolicy
-            val currentTarget = policy != null && target.server == policy.server && target.world == policy.world &&
+            val currentTarget = policy != null && target.server == policy.server && policy.acceptsWorld(target.world) &&
                 policy.containsTarget(target.x, target.z)
             val legacy = definition.legacyTargetPolicy
             val legacyTarget = legacy != null && target.server == legacy.server && target.world == legacy.world
@@ -497,10 +492,14 @@ class PersonalTreasureMapController internal constructor(
         } ?: true
         val currentPolicyFingerprint = definition.searchPolicy?.targetPolicyFingerprint?.sha256
         val legacyPolicyFingerprint = definition.legacyTargetPolicy?.targetPolicyFingerprint?.sha256
+        val previousPolicy = previousSingleWorldPolicy(definition)
         val targetPolicyMarkerMatches = when (identity.targetPolicyFingerprint) {
             null -> true // v1-v3 maps predate the independent target-policy marker.
             currentPolicyFingerprint -> identity.target == null || targetMatchesCurrentPolicy(identity, definition)
             legacyPolicyFingerprint -> identity.target == null || targetMatchesLegacyPolicy(identity, definition)
+            previousPolicy?.targetPolicyFingerprint?.sha256 -> identity.target == null ||
+                (previousPolicy != null && identity.target.world == previousPolicy.world &&
+                    targetMatchesCurrentPolicy(identity, definition))
             else -> false
         }
         return identity.voucherId == voucherId &&
@@ -516,7 +515,7 @@ class PersonalTreasureMapController internal constructor(
     ): Boolean {
         val target = identity.target ?: return true
         val policy = definition.searchPolicy ?: return false
-        return target.server == policy.server && target.world == policy.world && policy.containsTarget(target.x, target.z)
+        return target.server == policy.server && policy.acceptsWorld(target.world) && policy.containsTarget(target.x, target.z)
     }
 
     private fun targetMatchesLegacyPolicy(
@@ -528,8 +527,17 @@ class PersonalTreasureMapController internal constructor(
         return target.server == legacy.server && target.world == legacy.world
     }
 
+    private fun previousSingleWorldPolicy(definition: PersonalTreasureMapDefinition): PersonalTreasureMapSearchPolicy? =
+        definition.searchPolicy?.takeIf { it.additionalWorlds.isNotEmpty() }?.copy(additionalWorlds = emptySet())
+
     private fun hasLegacyTarget(resolved: ResolvedMap): Boolean {
         val target = resolved.identity.target ?: return false
+        val previousPolicy = previousSingleWorldPolicy(resolved.definition)
+        if (previousPolicy != null && target.world == previousPolicy.world &&
+            resolved.identity.targetPolicyFingerprint == previousPolicy.targetPolicyFingerprint.sha256 &&
+            targetMatchesCurrentPolicy(resolved.identity, resolved.definition)
+        ) return false
+        if (resolved.definition.preserveLegacyTarget && targetMatchesCurrentPolicy(resolved.identity, resolved.definition)) return false
         val legacy = resolved.definition.legacyTargetPolicy ?: return false
         val current = resolved.definition.searchPolicy ?: return false
         return target.server == legacy.server && target.world == legacy.world &&
@@ -567,7 +575,7 @@ class PersonalTreasureMapController internal constructor(
     }
 
     private fun isSearchLocation(player: Player, policy: PersonalTreasureMapSearchPolicy): Boolean =
-        currentServer() == policy.server && player.world.name == policy.world
+        currentServer() == policy.server && policy.acceptsWorld(player.world.name)
 
     /** Starts one bounded asynchronous probe; terrain and protection reads happen on the server thread. */
     private fun selectOrRefreshTarget(
@@ -680,7 +688,7 @@ class PersonalTreasureMapController internal constructor(
             return
         }
         val world = plugin.server.getWorld(request.worldId)
-        if (world == null || world.name != request.policy.world) {
+        if (world == null || !request.policy.acceptsWorld(world.name)) {
             completeSearch(player, null, request.voucher, request.identity, request.policy, request)
             return
         }
@@ -698,7 +706,7 @@ class PersonalTreasureMapController internal constructor(
                     return@whenCompleteSync
                 }
                 val activeWorld = plugin.server.getWorld(request.worldId)
-                if (activeWorld == null || activeWorld.name != request.policy.world) {
+                if (activeWorld == null || !request.policy.acceptsWorld(activeWorld.name)) {
                     cancelPendingSearch(request.playerId, request)
                     return@whenCompleteSync
                 }
@@ -739,7 +747,7 @@ class PersonalTreasureMapController internal constructor(
             if (!world.worldBorder.isInside(location) || isUnclaimedColumn(world, x, groundY, z) != true) continue
             return PersonalTreasureMapDestination(
                 policy.server,
-                policy.world,
+                world.name,
                 location.x,
                 location.y,
                 location.z,
@@ -753,7 +761,7 @@ class PersonalTreasureMapController internal constructor(
         if (closed || !player.isOnline || player.uniqueId != request.playerId ||
             pendingSearches[request.playerId]?.operationId != request.operationId ||
             !taskScope.isCurrent(request.lifecycleToken) || currentServer() != request.policy.server ||
-            player.world.uid != request.worldId || player.world.name != request.policy.world
+            player.world.uid != request.worldId || !request.policy.acceptsWorld(player.world.name)
         ) return false
         val held = player.inventory.itemInMainHand
         return PhysicalRewardVoucher.identity(held) == request.voucher &&
@@ -772,7 +780,7 @@ class PersonalTreasureMapController internal constructor(
         request: PendingSearch? = null,
     ) {
         if (!player.isOnline || closed || currentServer() != policy.server ||
-            player.world.name != policy.world ||
+            !policy.acceptsWorld(player.world.name) ||
             (request != null && !pendingStillOwnsMap(player, request))
         ) {
             request?.let { cancelPendingSearch(it.playerId, it) }
@@ -859,7 +867,7 @@ class PersonalTreasureMapController internal constructor(
         destination: PersonalTreasureMapDestination,
         policy: PersonalTreasureMapSearchPolicy?,
     ): Boolean? {
-        if (policy != null && (destination.server != policy.server || destination.world != policy.world ||
+        if (policy != null && (destination.server != policy.server || !policy.acceptsWorld(destination.world) ||
                 !policy.containsTarget(destination.x, destination.z))
         ) return false
         if (policy != null && !isSearchLocation(player, policy)) return null
@@ -1061,51 +1069,6 @@ internal fun personalTreasureMapCandidateOrder(
 internal interface PersonalTreasureMapMarker : AutoCloseable {
     fun show(player: Player, destination: PersonalTreasureMapDestination)
     fun clear(playerId: UUID)
-}
-
-private class PacketPersonalTreasureMapMarker(plugin: Plugin) : PersonalTreasureMapMarker {
-    private data class MarkerKey(val worldId: UUID, val x: Double, val y: Double, val z: Double)
-
-    private val displays = PaperPacketDisplays(plugin, "personal-treasure-map")
-    private val markers = mutableMapOf<UUID, Pair<MarkerKey, PacketItemDisplay>>()
-
-    override fun show(player: Player, destination: PersonalTreasureMapDestination) {
-        val key = MarkerKey(player.world.uid, destination.x, destination.y, destination.z)
-        if (markers[player.uniqueId]?.first == key) return
-        clear(player.uniqueId)
-        var display: PacketItemDisplay? = null
-        try {
-            display = displays.spawnItem(
-                Location(player.world, destination.x, destination.y + 0.7, destination.z),
-                ItemStack(Material.CHEST),
-            ).apply {
-                isVisibleByDefault = false
-                billboard = Display.Billboard.CENTER
-                viewRange = 0.5f
-                displayWidth = 1f
-                displayHeight = 1f
-                itemDisplayTransform = ItemDisplay.ItemDisplayTransform.GROUND
-                transformation = Transformation(
-                    Vector3f(0f, 0f, 0f), Quaternionf(),
-                    Vector3f(0.8f, 0.8f, 0.8f), Quaternionf(),
-                )
-                showTo(player)
-            }
-            markers[player.uniqueId] = key to display
-        } catch (failure: Throwable) {
-            display?.remove()
-            throw failure
-        }
-    }
-
-    override fun clear(playerId: UUID) {
-        markers.remove(playerId)?.second?.remove()
-    }
-
-    override fun close() {
-        markers.keys.toList().forEach(::clear)
-        displays.close()
-    }
 }
 
 private class PersonalTreasureMapRenderer(
