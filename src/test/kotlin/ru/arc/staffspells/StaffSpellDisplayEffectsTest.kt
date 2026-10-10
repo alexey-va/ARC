@@ -21,7 +21,8 @@ import java.util.UUID
 
 class StaffSpellDisplayEffectsTest : FreeSpec({
     "all spell shapes stay finite and under the packet-part budget" {
-        StaffSpell.entries.forEach { spell ->
+        StaffSpell.entries.forEach spellLoop@{ spell ->
+            if (spell in setOf(StaffSpell.NECROMANCER, StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM)) return@spellLoop // Native actors or particles own these silhouettes.
             listOf(false, true).forEach { impact ->
                 listOf(false, true).forEach { secondary ->
                     val parts = staffDisplayParts(spell, ageTicks = 160, durationTicks = 1,
@@ -143,7 +144,7 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
     }
 
     "transient spells grow in and dissolve before removal with stable part identities" {
-        StaffSpell.entries.forEach { spell ->
+        StaffSpell.entries.filterNot { it in setOf(StaffSpell.NECROMANCER, StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM) }.forEach { spell ->
             listOf(false, true).forEach { secondary ->
                 fun parts(age: Int) = staffDisplayParts(spell, age, 30, 8.0, 3.0, true, secondary)
                 val first = parts(0)
@@ -156,9 +157,7 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
                     (it.scale.x * it.scale.y * it.scale.z).toDouble()
                 }
                 if (spell in ARSENAL_SPELLS) {
-                    if (secondary && spell in setOf(StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM, StaffSpell.NOVA))
-                        (volume(first) < volume(body) * 0.01) shouldBe true
-                    else (volume(first) >= volume(body) * 0.99) shouldBe true
+                    (volume(first) < volume(body)) shouldBe true
                 } else if (spell in setOf(StaffSpell.CHAIN, StaffSpell.LANCE, StaffSpell.MARK, StaffSpell.EMBER, StaffSpell.ICICLE)) {
                     (volume(first) > volume(body) * 0.01) shouldBe true
                 } else {
@@ -272,9 +271,9 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         parts.size shouldBe 40
     }
 
-    "comet flight is steady and its impact shards travel outward without pulsing" {
-        val flight = staffDisplayParts(StaffSpell.EMBER, 6, 24, 1.0, 0.85, false)
-        val later = staffDisplayParts(StaffSpell.EMBER, 16, 24, 1.0, 0.85, false)
+    "comet flight settles at full size and its impact shards travel outward without pulsing" {
+        val flight = staffDisplayParts(StaffSpell.EMBER, 16, 24, 1.0, 0.85, false)
+        val later = staffDisplayParts(StaffSpell.EMBER, 20, 24, 1.0, 0.85, false)
         flight.zip(later).forEach { (a, b) ->
             a.center shouldBe b.center
             a.scale shouldBe b.scale
@@ -294,6 +293,49 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         // Same radius: the meteor has a vertical plume and heavy ejecta, not a larger recolored comet.
         (meteor.maxOf { it.center.y } > primary.maxOf { it.center.y } * 1.5f) shouldBe true
         meteor.takeLast(14).all { it.material in setOf(Material.MAGMA_BLOCK, Material.BLACKSTONE) } shouldBe true
+    }
+
+    "comet first visible core is small and grows as it clears camera during acceleration" {
+        listOf(0.0, 1.0).forEach { charge ->
+            val eye = org.bukkit.util.Vector()
+            var originZ = 0.0
+            var previousAge = 0
+            var previousParts = staffDisplayParts(StaffSpell.EMBER, previousAge, 80, 48.0, 0.85,
+                impact = false, charge = charge)
+            val visibleCoreScales = mutableListOf<Float>()
+            var firstVisibleAge: Int? = null
+            var previousFrameStep = 0.0
+
+            for (age in StaffSpellDisplayEffects.FRAME_TICKS..20 step StaffSpellDisplayEffects.FRAME_TICKS) {
+                val previousZ = originZ
+                val nextZ = previousZ + (previousAge + 1..age).sumOf { staffEmberStep(it, 1.2) }
+                val frameStep = nextZ - previousZ
+                (frameStep + 1.0e-8 >= previousFrameStep) shouldBe true
+                (nextZ > previousZ) shouldBe true
+                val currentParts = staffDisplayParts(StaffSpell.EMBER, age, 80, 48.0, 0.85,
+                    impact = false, charge = charge)
+                val oldCore = previousParts.single { it.identity == "core:0" }
+                val core = currentParts.single { it.identity == "core:0" }
+                val from = org.bukkit.util.Vector(oldCore.center.x.toDouble(), oldCore.center.y.toDouble(),
+                    previousZ + oldCore.center.z)
+                val to = org.bukkit.util.Vector(core.center.x.toDouble(), core.center.y.toDouble(), nextZ + core.center.z)
+                val cameraPadding = staffEyeClearance(StaffSpell.EMBER, impact = false) + 0.15 +
+                    maxOf(oldCore.scale.length(), core.scale.length()) * 0.5
+                val visible = staffSweptDistance(eye, from, to) >= cameraPadding
+
+                if (visible && firstVisibleAge == null) firstVisibleAge = age
+                if (firstVisibleAge != null) visibleCoreScales += core.scale.length()
+                originZ = nextZ
+                previousAge = age
+                previousParts = currentParts
+                previousFrameStep = frameStep
+            }
+
+            firstVisibleAge shouldBe 6
+            val firstSizeRatio = visibleCoreScales.first() / visibleCoreScales.last()
+            (firstSizeRatio in 0.31f..0.33f) shouldBe true
+            visibleCoreScales.zipWithNext().all { (before, after) -> after >= before } shouldBe true
+        }
     }
 
     "display handles move in place, refresh materials, expire, cancel, and close" {

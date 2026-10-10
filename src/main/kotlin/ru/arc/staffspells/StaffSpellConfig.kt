@@ -24,7 +24,7 @@ import kotlin.math.cos
 internal enum class StaffSpell(val id: String) {
     CHAIN("chain"), MARK("mark"), FROST("frost"), LANCE("lance"), EMBER("ember"), NOVA("nova"),
     ICICLE("icicle"), FAULT("fault"), LUNAR("lunar"), GALE("gale"), TIDE("tide"),
-    REQUIEM("requiem"), PRISM("prism");
+    REQUIEM("requiem"), PRISM("prism"), NECROMANCER("necromancer");
 
     companion object {
         val itemKey = NamespacedKey("arc", "staff_spell_prototype")
@@ -140,6 +140,7 @@ internal open class StaffSpellConfig(private val config: Config) {
                 StaffSpell.TIDE -> Triple(1.0, 8.0, 36)
                 StaffSpell.REQUIEM -> Triple(1.1, 8.0, 40)
                 StaffSpell.PRISM -> Triple(1.1, 9.0, 36)
+                StaffSpell.NECROMANCER -> Triple(0.85, 6.0, 100)
             }
             StaffSpellTuning(number("${spell.id}.power", power, 0.1..5.0),
                 number("${spell.id}.vanilla-damage", damage, 0.1..40.0),

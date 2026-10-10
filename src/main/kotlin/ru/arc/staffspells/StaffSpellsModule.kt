@@ -83,15 +83,17 @@ internal class StaffSpellController(
     private val settings: StaffSpellSettings,
     private val damage: StaffSpellDamage,
     private val effects: StaffSpellDisplayEffects,
+    summonActorFactory: ((org.bukkit.World, Location, Boolean) -> org.bukkit.entity.AbstractSkeleton)? = null,
 ) : Listener, AutoCloseable, StaffSpellInputActions {
     private val tasks = LifecycleTaskScope()
     private val visuals = StaffSpellVisuals(tasks)
     private val targeting = StaffSpellTargeting(settings, damage)
     private val arsenal = StaffSpellArsenal(settings, damage, effects, visuals, targeting)
+    private val gestures = StaffSpellGestures(settings, damage, visuals, targeting)
+    private val summons = StaffSpellSummons(settings, damage, visuals, targeting, summonActorFactory)
     internal val input = StaffSpellInput(this)
     private val chargeScenes = mutableMapOf<UUID, UUID?>()
     private val lances = mutableListOf<PendingStaffLance>()
-    private val quickBursts = mutableListOf<PendingStaffQuickBurst>()
     private val cooldownInputs = mutableMapOf<UUID, StaffCastInput>()
     private val marks = mutableMapOf<UUID, PendingStaffMark>()
     private val embers = mutableListOf<PendingStaffEmber>()
@@ -105,6 +107,8 @@ internal class StaffSpellController(
     fun start() {
         input.start()
         arsenal.start()
+        gestures.start()
+        summons.start()
         tasks.runTimer(4, 4) {
             cooldownLengths.keys.filter { CooldownManager.cooldown(it, cooldownId) <= 0 }.forEach {
                 cooldownLengths.remove(it)
@@ -128,7 +132,6 @@ internal class StaffSpellController(
         tasks.runTimer(2, 2) {
             tickMarks()
             tickWaves()
-            tickQuickBursts()
         }
         tasks.runTimer(1, 1) { tickEmbers(); tickBolts(); tickLances() }
     }
@@ -215,10 +218,11 @@ internal class StaffSpellController(
         cooldownLengths[player.uniqueId] = cooldownTicks
         CooldownManager.addCooldown(player.uniqueId, cooldownId, cooldownTicks)
         showCooldown(player, spell)
-        if (spell !in ARSENAL_SPELLS) visuals.withOwner(cast.casterId) { visuals.release(player.eyeLocation, spell, level >= 0.75) }
-        if (spell == StaffSpell.CHAIN) visuals.withOwner(cast.casterId) { visuals.lightningLaunch(player.eyeLocation) }
-        if (spell in ARSENAL_SPELLS) arsenal.cast(player, spell, cast, tuning, input, level)
-        else if (input.quick) castQuick(player, spell, cast, tuning, secondary)
+        if (!input.quick && spell !in ARSENAL_SPELLS) visuals.withOwner(cast.casterId) { visuals.release(player.eyeLocation, spell, level >= 0.75) }
+        if (!input.quick && spell == StaffSpell.CHAIN) visuals.withOwner(cast.casterId) { visuals.lightningLaunch(player.eyeLocation) }
+        if (input.quick) gestures.cast(player, spell, cast, tuning, input)
+        else if (spell == StaffSpell.NECROMANCER) summons.cast(player, cast, tuning, input, level)
+        else if (spell in ARSENAL_SPELLS) arsenal.cast(player, spell, cast, tuning, input, level)
         else if (secondary) castSecondary(player, spell, cast, tuning, level) else when (spell) {
             StaffSpell.CHAIN -> chain(player, target(player, cast), cast, tuning)
             StaffSpell.MARK -> {
@@ -374,165 +378,6 @@ internal class StaffSpellController(
             lance.previousFront = front
             if (front >= length - 0.001 || lance.visited.size >= settings.lanceTargets) lances.remove(lance)
         }
-    }
-
-    private fun castQuick(player: Player, spell: StaffSpell, cast: StaffSpellCast, tuning: StaffSpellTuning, secondary: Boolean) {
-        beginQuickBurst(player, spell, cast, tuning, secondary)
-    }
-
-    private fun beginQuickBurst(player: Player, spell: StaffSpell, cast: StaffSpellCast,
-        tuning: StaffSpellTuning, secondary: Boolean) {
-        val profile = staffQuickProfile(spell, secondary)
-        val eye = player.eyeLocation
-        val selected = aimed(player, profile.reach, settings.aimDegrees, cast).firstOrNull()
-        val rawPoint = selected?.let(::center) ?: rayEnd(eye, eye.direction, profile.reach)
-
-        // Grounded attacks keep their authored horizontal/ground plane even when the player aims down.
-        val point = when {
-            spell == StaffSpell.FAULT && secondary -> groundBelow(rawPoint.clone().add(0.0, 0.35, 0.0), 8.0)
-                ?: run { player.sendActionBar(config.text("no-ground")); return }
-            spell == StaffSpell.FAULT -> groundBelow(rawPoint, 8.0)
-                ?: run { player.sendActionBar(config.text("no-ground")); return }
-            spell == StaffSpell.ICICLE && secondary -> groundBelow(rawPoint.clone().add(0.0, 1.0, 0.0), 8.0) ?: rawPoint
-            else -> rawPoint
-        }
-        if (!visible(eye, point)) return
-
-        val horizontal = point.toVector().subtract(eye.toVector()).apply { y = 0.0 }
-        val facing = if (profile.groundBased && horizontal.lengthSquared() > 0.0001) horizontal.normalize()
-            else eye.direction.normalize()
-        val displayFrom: Location
-        val displayTo: Location
-        val hitOrigin: Location
-        when (profile.hitShape) {
-            StaffQuickHitShape.POINT, StaffQuickHitShape.CAGE, StaffQuickHitShape.COLUMN -> {
-                hitOrigin = point.clone()
-                if (spell == StaffSpell.MARK) {
-                    displayFrom = point.clone()
-                    displayTo = point.clone()
-                } else if (spell == StaffSpell.CHAIN) {
-                    displayFrom = eye.clone()
-                    displayTo = point.clone()
-                } else {
-                    displayFrom = point.clone().subtract(facing.clone().multiply(1.8))
-                    displayTo = point.clone()
-                }
-            }
-            else -> {
-                displayFrom = eye.clone()
-                displayTo = rayEnd(eye, facing, profile.reach)
-                hitOrigin = displayFrom.clone()
-            }
-        }
-        val length = displayFrom.distance(displayTo).coerceAtLeast(0.1)
-        val id = effects.play(player.uniqueId, spell, displayFrom, displayTo,
-            radius = profile.radius, durationTicks = STAFF_QUICK_DURATION_TICKS,
-            secondary = secondary, input = StaffCastInput.of(secondary, true),
-            controllerDriven = true, charge = 0.0)
-        while (quickBursts.count { it.cast.casterId == cast.casterId } >= MAX_QUICK_BURSTS_PER_CASTER) {
-            quickBursts.firstOrNull { it.cast.casterId == cast.casterId }?.let {
-                effects.remove(it.visualId); quickBursts.remove(it)
-            } ?: break
-        }
-        quickBursts += PendingStaffQuickBurst(spell, secondary, profile, displayFrom.clone(), displayTo.clone(),
-            hitOrigin, facing.clone(), length, cast, tuning, id)
-    }
-
-    private fun tickQuickBursts() {
-        // Hit callbacks may trigger quit/world cleanup, so iterate a snapshot and recheck membership.
-        quickBursts.toList().forEach { burst ->
-            if (burst !in quickBursts) return@forEach
-            val player = Bukkit.getPlayer(burst.cast.casterId)
-            if (player == null || !ready(player) || player.world != burst.from.world ||
-                !damage.isCurrent(player, burst.cast)) {
-                effects.remove(burst.visualId)
-                quickBursts.remove(burst)
-                return@forEach
-            }
-            burst.age += STAFF_QUICK_STEP_TICKS
-            effects.synchronize(burst.visualId, burst.age)
-            val frontOffset = when (burst.profile.form) {
-                StaffQuickForm.CHAIN_FAN -> 1.85
-                StaffQuickForm.FROST_FAN -> 1.7
-                StaffQuickForm.FAULT_FISSURE -> 1.4
-                else -> 0.0
-            }
-            val front = frontOffset + staffQuickFront(burst.age, (burst.length - frontOffset).coerceAtLeast(0.0))
-            val previousFront = burst.previousFront
-            burst.previousFront = front
-            if (burst.age == burst.profile.contactTick && !burst.contactEmitted) {
-                burst.contactEmitted = true
-                val contact = when (burst.profile.hitShape) {
-                    StaffQuickHitShape.POINT, StaffQuickHitShape.CAGE, StaffQuickHitShape.COLUMN -> burst.hitOrigin.clone()
-                    StaffQuickHitShape.CLOSE_BAND -> burst.from.clone().add(burst.facing.clone().multiply(burst.profile.reach * 0.74))
-                    StaffQuickHitShape.WARD -> burst.from.clone().add(burst.facing.clone().multiply(2.55))
-                    else -> burst.from.clone().add(burst.facing.clone().multiply(maxOf(1.5, front)))
-                }
-                if (burst.profile.form == StaffQuickForm.FAULT_FISSURE) contact.subtract(0.0, 1.3, 0.0)
-                if (visible(player.eyeLocation, contact)) visuals.withOwner(burst.cast.casterId) {
-                    val contactRadius = if (burst.profile.hitShape == StaffQuickHitShape.COLUMN)
-                        burst.profile.width else burst.profile.radius
-                    visuals.arcane(contact, burst.spell, phase = 2, radius = contactRadius)
-                }
-            }
-            val pointShape = burst.profile.hitShape in setOf(
-                StaffQuickHitShape.POINT, StaffQuickHitShape.CAGE, StaffQuickHitShape.COLUMN)
-            val candidates = nearby(player, burst.hitOrigin,
-                if (pointShape) (if (burst.profile.hitShape == StaffQuickHitShape.COLUMN)
-                    burst.profile.width else burst.profile.radius) + 1.0
-                else burst.profile.reach + burst.profile.width + 2.0,
-                burst.cast).take(MAX_QUICK_CANDIDATES)
-            val rotation = quickBurstRotation(burst)
-            for (victim in candidates) {
-                if (burst !in quickBursts || !ready(player) || player.world != burst.from.world ||
-                    !damage.isCurrent(player, burst.cast)) break
-                if (burst.visited.size >= minOf(burst.profile.maxTargets ?: settings.maxAreaTargets, settings.maxAreaTargets)) break
-                if (victim.uniqueId in burst.visited || !damage.eligible(player, victim, burst.cast)) continue
-                val from = if (pointShape) burst.hitOrigin else burst.from
-                val delta = center(victim).toVector().subtract(from.toVector())
-                val local = rotation.transform(org.joml.Vector3f(delta.x.toFloat(), delta.y.toFloat(), delta.z.toFloat()))
-                val contactReach = if (burst.profile.hitShape == StaffQuickHitShape.CLOSE_BAND)
-                    burst.profile.reach else burst.length
-                if (!staffQuickContains(burst.profile, burst.age, previousFront, front, local, contactReach)) continue
-                if (!visible(player.eyeLocation, center(victim)) || !visible(burst.hitOrigin, center(victim))) continue
-                burst.visited += victim.uniqueId
-                if (damage.hit(player, victim, burst.cast, burst.tuning.power, burst.tuning.vanillaDamage) &&
-                    burst in quickBursts && damage.isCurrent(player, burst.cast) &&
-                    damage.eligible(player, victim, burst.cast)) {
-                    when (burst.profile.control) {
-                        StaffQuickControl.PULL -> {
-                            val pull = burst.hitOrigin.toVector().subtract(center(victim).toVector())
-                            if (pull.lengthSquared() > 0.04) victim.velocity = pull.normalize().multiply(0.45)
-                                .apply { y = y.coerceIn(-0.15, 0.18) }
-                        }
-                        StaffQuickControl.SLOW -> victim.addPotionEffect(PotionEffect(
-                            PotionEffectType.SLOWNESS, settings.frostSlowTicks, 1))
-                        StaffQuickControl.NONE -> Unit
-                    }
-                }
-            }
-            if (burst !in quickBursts) return@forEach
-            if (burst.age >= STAFF_QUICK_DURATION_TICKS) {
-                effects.remove(burst.visualId)
-                quickBursts.remove(burst)
-            }
-        }
-    }
-
-    private fun quickBurstRotation(burst: PendingStaffQuickBurst): org.joml.Quaternionf {
-        if (burst.spell == StaffSpell.MARK) {
-            val caster = Bukkit.getPlayer(burst.cast.casterId)
-            val from = burst.hitOrigin
-            return org.joml.Quaternionf().rotationY(kotlin.math.atan2(
-                (caster?.location?.x ?: from.x) - from.x,
-                (caster?.location?.z ?: from.z) - from.z).toFloat()).invert()
-        }
-        val direction = burst.to.toVector().subtract(burst.from.toVector())
-        if (direction.lengthSquared() < 0.0001) direction.add(burst.facing.clone())
-        val vector = org.joml.Vector3f(direction.x.toFloat(), direction.y.toFloat(), direction.z.toFloat()).normalize()
-        val orientation = if (burst.spell == StaffSpell.LANCE) staffLanceOrientation(vector)
-            else org.joml.Quaternionf().rotationTo(org.joml.Vector3f(0f, 0f, 1f), vector)
-        return orientation.invert()
     }
 
     private fun delayedPulse(player: Player, spell: StaffSpell, at: Location, radius: Double, delay: Long,
@@ -1081,8 +926,9 @@ internal class StaffSpellController(
     private fun cancel(playerId: UUID) {
         input.cancel(playerId)
         arsenal.cancel(playerId)
+        gestures.cancel(playerId)
+        summons.cancel(playerId)
         effects.remove(chargeScenes.remove(playerId))
-        quickBursts.removeAll { it.cast.casterId == playerId }
         lances.removeAll { it.cast.casterId == playerId }
         marks.remove(playerId)
         embers.removeAll { it.cast.casterId == playerId }
@@ -1102,10 +948,11 @@ internal class StaffSpellController(
         input.close()
         visuals.close()
         arsenal.close()
+        gestures.close()
+        summons.close()
         chargeScenes.values.forEach(effects::remove)
         chargeScenes.clear()
         lances.clear()
-        quickBursts.clear()
         cooldownInputs.clear()
         tasks.close()
         marks.clear()
@@ -1125,8 +972,6 @@ internal class StaffSpellController(
         const val WAVE_BODY_TOLERANCE = 0.6
         const val MAX_WAVE_CANDIDATES = 32
         const val MAX_BOLTS_PER_CASTER = 12
-        const val MAX_QUICK_BURSTS_PER_CASTER = 2
-        const val MAX_QUICK_CANDIDATES = 32
         const val FROST_ICICLE_SHATTER_TICKS = 10
         const val FROST_TRAVEL_TICKS = 12
         const val FROST_DURATION_TICKS = 24
@@ -1142,24 +987,6 @@ internal class StaffSpellController(
 private data class PendingStaffLance(val from: Location, val end: Location, val cast: StaffSpellCast,
     val tuning: StaffSpellTuning, val width: Double, val visited: MutableSet<UUID>, val visualId: UUID?,
     var age: Int = 0, var previousFront: Double = 0.0)
-
-private data class PendingStaffQuickBurst(
-    val spell: StaffSpell,
-    val secondary: Boolean,
-    val profile: StaffQuickProfile,
-    val from: Location,
-    val to: Location,
-    val hitOrigin: Location,
-    val facing: Vector,
-    val length: Double,
-    val cast: StaffSpellCast,
-    val tuning: StaffSpellTuning,
-    val visualId: UUID?,
-    val visited: MutableSet<UUID> = mutableSetOf(),
-    var age: Int = 0,
-    var previousFront: Double = 0.0,
-    var contactEmitted: Boolean = false,
-)
 
 private data class PendingStaffMark(val target: LivingEntity?, val point: Location, val worldId: UUID,
     val cast: StaffSpellCast, val tuning: StaffSpellTuning, var remainingTicks: Int, val visualId: UUID?, val gravity: Boolean = false)

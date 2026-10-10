@@ -7,154 +7,122 @@ import org.bukkit.Material
 import org.bukkit.event.player.PlayerQuitEvent
 
 class StaffSpellArsenalTest : FreeSpec({
-    "arsenal contact controls differ from projectiles and keep bounded finite geometry" {
-        val inputs = StaffCastInput.entries
-        listOf(StaffSpell.LUNAR, StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM,
-            StaffSpell.PRISM, StaffSpell.NOVA).forEach { spell ->
-            val states = inputs.map { input ->
-                val parts = staffArsenalParts(spell, 5, 20, 12.0, 3.0, false,
-                    input.secondary, input)
-                if (staffParticleOnlyQuick(spell, input)) parts.isEmpty() shouldBe true
-                else (parts.size in 1..48) shouldBe true
-                parts.all { part ->
-                    part.center.x.isFinite() && part.center.y.isFinite() && part.center.z.isFinite() &&
-                        part.scale.x.isFinite() && part.scale.y.isFinite() && part.scale.z.isFinite()
-                } shouldBe true
-                parts.filter { it.visible }.map { part ->
-                    listOf(part.material, part.center.x, part.center.y, part.center.z,
-                        part.scale.x, part.scale.y, part.scale.z)
-                }
+    "new sequences have rich native silhouettes and only physical subjects use displays" {
+        val pure = setOf(StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM)
+        StaffSpellArsenal.SPELLS.forEach { spell ->
+            listOf(false, true).forEach { secondary ->
+                val duration = staffArsenalLifetime(spell, secondary)
+                val parts = staffArsenalParts(spell, 12, duration, 20.0, 3.0, false,
+                    secondary, StaffCastInput.of(secondary, false), 1.0)
+                if (spell in pure) parts.isEmpty() shouldBe true else (parts.size in 1..40) shouldBe true
+                val samples = staffArsenalParticles(spell, 12, duration, 3.0, secondary, 1.0)
+                (samples.size in 32..192) shouldBe true
+                samples.all { listOf(it.offset.x, it.offset.y, it.offset.z).all(Double::isFinite) } shouldBe true
+                parts.all { it.scale.x > 0 && it.scale.y > 0 && it.scale.z > 0 } shouldBe true
+                staffArsenalParticles(spell, duration, duration, 3.0, secondary, 1.0).isEmpty() shouldBe true
             }
-                        (states[2] != states[0]) shouldBe true
-            (states[3] != states[0]) shouldBe true
-            (states[2] != states[3]) shouldBe true
         }
-        staffArsenalFront(5, 10, 4.0) shouldBe 2.0
-        staffArsenalFront(20, 10, 4.0) shouldBe 4.0
+        val signatures = StaffSpellArsenal.SPELLS.map { spell ->
+            staffArsenalParticles(spell, 12, 40, 3.0, false, 1.0).map { Triple(it.particle, it.offset.x, it.offset.y) }
+        }.toSet()
+        signatures.size shouldBe StaffSpellArsenal.SPELLS.size
     }
 
-    "shift contact attack selects an aimed enemy inside its maximum reach" {
+    "moon blade hits at descent contact and never twice" {
         withStaffHarness { h ->
-            val world = h.paper.addSimpleWorld("contact-near-aim")
-            val player = h.player("contact-near-aim", world, StaffSpell.PRISM)
-            val target = h.zombie(world, x = 0.5, z = 5.0)
+            val world = h.paper.addSimpleWorld("moonfall")
+            val player = h.player("moonfall", world, StaffSpell.LUNAR)
+            val target = h.zombie(world, x = .5, z = 8.0)
             h.controller.start()
-            h.controller.cast(player, StaffCastInput.QUICK_SECONDARY, 0.0)
-            h.scheduler.tick(8)
+            h.controller.cast(player, StaffCastInput.PRIMARY, 1.0)
+            h.scheduler.tick(14)
+            h.hits shouldBe emptyList()
+            h.scheduler.tick(2)
             h.hits.map { it.uniqueId } shouldBe listOf(target.uniqueId)
-            (h.visualPlays.single().from.z < 6.0) shouldBe true
+            h.scheduler.tick(40)
+            h.hits.size shouldBe 1
         }
     }
 
-    "new projectile bodies have one head and only trailing wake geometry" {
-        listOf(StaffSpell.REQUIEM, StaffSpell.PRISM, StaffSpell.NOVA).forEach { spell ->
-            val body = staffArsenalParts(spell, 6, 40, 12.0, 1.0, false, false, StaffCastInput.PRIMARY)
-            (body.count { it.center.z >= 0f } <= 2) shouldBe true
-            (body.count { it.center.z < -0.2f } >= 6) shouldBe true
-            (body.size <= 16) shouldBe true
-        }
-    }
-
-    "prism quick projectile respects configured maximum range" {
-        withStaffHarness(settings = staffSettings(range = 8.0)) { h ->
-            val world = h.paper.addSimpleWorld("arsenal-range")
-            val player = h.player("arsenal-range", world, StaffSpell.PRISM)
-            h.zombie(world, x = 0.5, z = 10.0)
+    "prism grows before beams reach targets and honors occlusion" {
+        withStaffHarness(settings = staffSettings(range = 16.0)) { h ->
+            val world = h.paper.addSimpleWorld("prism-growth")
+            val player = h.player("prism-growth", world, StaffSpell.PRISM)
+            val near = h.zombie(world, x = .5, z = 4.0)
+            val far = h.zombie(world, x = .5, z = 8.0)
             h.controller.start()
-
-            h.controller.cast(player, StaffCastInput.QUICK, 0.0)
-            h.scheduler.tick(24)
-
-            h.hits shouldBe emptyList()
-        }
-    }
-
-    "prism contact attack cannot reach a target behind a wall" {
-        withStaffHarness(settings = staffSettings(range = 12.0)) { h ->
-            val world = h.paper.addSimpleWorld("arsenal-wall")
-            val player = h.player("arsenal-wall", world, StaffSpell.PRISM)
-            val target = h.zombie(world, x = 0.5, z = 7.0)
-            for (x in -2..2) for (y in 63..67) world.getBlockAt(x, y, 3).type = Material.STONE
-            h.controller.start()
-
-            h.controller.cast(player, StaffCastInput.QUICK, 0.0)
-            h.scheduler.tick(8)
-
-            h.hits shouldBe emptyList()
-            target.isValid shouldBe true
-            h.projectileMoves.isEmpty() shouldBe true
-            h.visualPlays.isNotEmpty() shouldBe true
-        }
-    }
-
-    "piercing prism damages each encountered target once while passing through the line" {
-        withStaffHarness(settings = staffSettings(range = 16.0, maxAreaTargets = 8)) { h ->
-            val world = h.paper.addSimpleWorld("arsenal-pierce")
-            val player = h.player("arsenal-pierce", world, StaffSpell.PRISM)
-            val near = h.zombie(world, x = 0.5, z = 4.0)
-            val far = h.zombie(world, x = 0.5, z = 8.0)
-            h.controller.start()
-
             h.controller.cast(player, StaffCastInput.PRIMARY, 0.0)
-            h.scheduler.tick(18)
-
+            h.scheduler.tick(10)
+            h.hits shouldBe emptyList()
+            h.scheduler.tick(14)
             h.hits.map { it.uniqueId }.toSet() shouldBe setOf(near.uniqueId, far.uniqueId)
-            h.hits.map { it.uniqueId }.distinct().size shouldBe h.hits.size
+            h.hits.size shouldBe 2
+        }
+        withStaffHarness(settings = staffSettings(range = 12.0)) { h ->
+            val world = h.paper.addSimpleWorld("prism-wall")
+            val player = h.player("prism-wall", world, StaffSpell.PRISM)
+            h.zombie(world, x = .5, z = 7.0)
+            for (x in -2..2) for (y in 63..68) world.getBlockAt(x, y, 3).type = Material.STONE
+            h.controller.start()
+            h.controller.cast(player, StaffCastInput.PRIMARY, 1.0)
+            h.scheduler.tick(40)
+            h.hits shouldBe emptyList()
         }
     }
 
-    "quitting cancels arsenal motion and removes its effects" {
+    "moving ground waves stop at a one-block ridge while flat waves still reach targets" {
+        withStaffHarness { h ->
+            fun arena(name: String, spell: StaffSpell, ridge: Boolean): Pair<org.bukkit.entity.Player, org.bukkit.entity.Zombie> {
+                val world = h.paper.addSimpleWorld(name)
+                for (x in -1..1) for (z in 0..14) world.getBlockAt(x, 63, z).type = Material.STONE
+                if (ridge) world.getBlockAt(0, 64, 5).type = Material.STONE
+                val player = h.player("$name-caster", world, spell)
+                val target = h.zombie(world, x = .5, z = 12.0)
+                return player to target
+            }
+
+            val (ridgeGale, ridgeGaleTarget) = arena("gale-ridge", StaffSpell.GALE, ridge = true)
+            val (flatGale, flatGaleTarget) = arena("gale-flat", StaffSpell.GALE, ridge = false)
+            val (ridgeTide, ridgeTideTarget) = arena("tide-ridge", StaffSpell.TIDE, ridge = true)
+            val (flatTide, flatTideTarget) = arena("tide-flat", StaffSpell.TIDE, ridge = false)
+
+            h.controller.start()
+            h.controller.cast(ridgeGale, StaffCastInput.PRIMARY, 0.0)
+            h.controller.cast(flatGale, StaffCastInput.PRIMARY, 0.0)
+            h.controller.cast(ridgeTide, StaffCastInput.SECONDARY, 0.0)
+            h.controller.cast(flatTide, StaffCastInput.SECONDARY, 0.0)
+            h.scheduler.tick(76)
+
+            h.hits.map { it.uniqueId }.toSet() shouldBe setOf(flatGaleTarget.uniqueId, flatTideTarget.uniqueId)
+            (h.hits.none { it.uniqueId == ridgeGaleTarget.uniqueId || it.uniqueId == ridgeTideTarget.uniqueId }) shouldBe true
+        }
+    }
+
+    "quit reset and stale callbacks stop the remaining sequence" {
         withStaffHarness { h ->
             val world = h.paper.addSimpleWorld("arsenal-cancel")
-            val player = h.player("arsenal-cancel", world, StaffSpell.GALE)
+            val player = h.player("arsenal-cancel", world, StaffSpell.LUNAR)
+            h.zombie(world, x = .5, z = 8.0)
             h.controller.start()
-
             h.controller.cast(player, StaffCastInput.PRIMARY, 0.0)
-            h.scheduler.tick(2)
-            val moveCount = h.projectileMoves.size
+            h.scheduler.tick(6)
             h.controller.onQuit(PlayerQuitEvent(player, Component.empty()))
-            val removedCount = h.removedEffects.size
-            h.scheduler.tick(8)
-
-            h.projectileMoves.size shouldBe moveCount
-            h.removedEffects.size shouldBe removedCount
+            val removed = h.removedEffects.size
+            h.scheduler.tick(50)
+            h.hits shouldBe emptyList()
+            h.removedEffects.size shouldBe removed
+            (removed > 0) shouldBe true
         }
-    }
-
-    "a stale duel cast stops during impact and reset removes active arsenal motion" {
         var current = true
         withStaffHarness(currentCast = { _, _ -> current }, hit = { _, _ -> current = false; true }) { h ->
-            val world = h.paper.addSimpleWorld("arsenal-stale-duel")
-            val player = h.player("arsenal-stale-duel", world, StaffSpell.PRISM)
-            val target = h.zombie(world, x = 0.5, z = 4.0)
+            val world = h.paper.addSimpleWorld("moon-stale")
+            val player = h.player("moon-stale", world, StaffSpell.LUNAR)
+            h.zombie(world, x = .5, z = 5.0)
+            h.zombie(world, x = 1.0, z = 5.2)
             h.controller.start()
-
-            h.controller.cast(player, StaffCastInput.QUICK, 0.0)
-            h.scheduler.tick(8)
-
-            h.hits.map { it.uniqueId } shouldBe listOf(target.uniqueId)
-            h.removedEffects.isNotEmpty() shouldBe true
-            val stoppedMoves = h.projectileMoves.size
-            h.scheduler.tick(8)
-            h.hits.size shouldBe 1
-            h.projectileMoves.size shouldBe stoppedMoves
-        }
-
-        withStaffHarness { h ->
-            val world = h.paper.addSimpleWorld("arsenal-reset")
-            val player = h.player("arsenal-reset", world, StaffSpell.GALE)
-            h.controller.start()
-
             h.controller.cast(player, StaffCastInput.PRIMARY, 0.0)
-            h.scheduler.tick(2)
-            val movesBeforeReset = h.projectileMoves.size
-            movesBeforeReset shouldBe 1
-            h.controller.resetPlayer(player.uniqueId)
-            val removedAfterReset = h.removedEffects.size
-            h.scheduler.tick(8)
-
-            h.projectileMoves.size shouldBe movesBeforeReset
-            h.removedEffects.size shouldBe removedAfterReset
+            h.scheduler.tick(40)
+            h.hits.size shouldBe 1
         }
     }
 })

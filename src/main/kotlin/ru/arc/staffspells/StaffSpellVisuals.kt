@@ -20,7 +20,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-/** Sparse accents around the display silhouettes; all delayed phases run on Paper's main thread. */
+/** Native staff particles and sound; all delayed phases run on Paper's main thread. */
 internal class StaffSpellVisuals(
     private val tasks: LifecycleTaskScope,
     private val currentTick: () -> Long = { Bukkit.getCurrentTick().toLong() },
@@ -33,6 +33,9 @@ internal class StaffSpellVisuals(
     private val ownerTasks = mutableMapOf<UUID, OwnerTasks>()
     private val chargeFeedbackStates = mutableMapOf<UUID, ChargeFeedbackState>()
     private val lastCooldownFeedbackTick = mutableMapOf<UUID, Long>()
+    private var particleWindow = Long.MIN_VALUE
+    private val framePackets = mutableMapOf<UUID, Int>()
+    private val frameParticles = mutableMapOf<UUID, Int>()
 
     /** Associates visual work scheduled by a cast with its owner so a round reset can invalidate it. */
     fun withOwner(ownerId: UUID, action: () -> Unit) {
@@ -65,6 +68,8 @@ internal class StaffSpellVisuals(
         ownerTasks.clear()
         chargeFeedbackStates.clear()
         lastCooldownFeedbackTick.clear()
+        framePackets.clear()
+        frameParticles.clear()
     }
 
     private fun runLater(delay: Long, action: () -> Unit) {
@@ -1260,6 +1265,50 @@ internal class StaffSpellVisuals(
             .takeIf(::drawable)
     }
 
+    /** One audience lookup per authored frame; Minecraft owns each particle's subsequent motion. */
+    fun particles(anchor: Location, samples: List<StaffParticleSample>, clearance: Double = 1.35) = dispatch {
+        if (!drawable(anchor)) return@dispatch
+        val window = currentTick() / 2
+        if (window != particleWindow) {
+            particleWindow = window
+            framePackets.clear()
+            frameParticles.clear()
+        }
+        val world = anchor.world ?: return@dispatch
+        val frame = samples.take(192).mapNotNull { sample ->
+            if (!valid(sample.offset) || !valid(sample.spread) || !sample.speed.isFinite()) return@mapNotNull null
+            val at = anchor.clone().add(sample.offset)
+            if (!drawable(at)) null else sample to at
+        }
+        world.getNearbyPlayers(anchor, 64.0).forEach { viewer ->
+            val eye = viewer.eyeLocation
+            if (eye.world !== world) return@forEach
+            for ((sample, at) in frame) {
+                val distance = eye.distanceSquared(at)
+                if (distance < clearance * clearance || distance > 56.0 * 56.0) continue
+                val data = sample.data ?: if (sample.particle == Particle.FLASH) Color.WHITE else null
+                val spread = sample.spread
+                val count = sample.count.coerceIn(0, 96)
+                // Overlapping casts stay best-effort: discard excess, never build a delayed queue.
+                val id = viewer.uniqueId
+                val packets = framePackets.getOrDefault(id, 0)
+                val spawned = frameParticles.getOrDefault(id, 0)
+                val cost = count.coerceAtLeast(1)
+                if (packets >= 480 || spawned + cost > 4096) continue
+                framePackets[id] = packets + 1
+                frameParticles[id] = spawned + cost
+                if (data == null) viewer.spawnParticle(sample.particle, at, count,
+                    spread.x, spread.y, spread.z, sample.speed)
+                else viewer.spawnParticle(sample.particle, at, count,
+                    spread.x, spread.y, spread.z, sample.speed, data)
+            }
+        }
+    }
+
+    fun cue(at: Location, sound: Sound, volume: Float = .65f, pitch: Float = 1.0f) = dispatch {
+        localSound(at, sound, volume, pitch)
+    }
+
     private fun emitPrivate(player: Player, at: Location, particle: Particle, data: Any? = null) {
         if (!drawable(at) || player.world !== at.world) return
         val particleData = data ?: if (particle == Particle.FLASH) Color.WHITE else null
@@ -1535,6 +1584,7 @@ internal class StaffSpellVisuals(
             StaffSpell.GALE to ARCANE_GALE,
             StaffSpell.TIDE to ARCANE_TIDE,
             StaffSpell.REQUIEM to ARCANE_REQUIEM,
+            StaffSpell.NECROMANCER to ARCANE_REQUIEM,
             StaffSpell.PRISM to ARCANE_PRISM,
         )
         val LAYERED_RELEASE_SPELLS = setOf(

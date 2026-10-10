@@ -17,6 +17,39 @@ import ru.arc.paper.testing.MockBukkitTestRuntime
 import kotlin.math.abs
 
 class StaffSpellVisualsTest : FreeSpec({
+    "overlapping native frames are bounded per viewer and resume without a backlog" {
+        MockBukkitTestRuntime.open().use {
+            Tasks.withScheduler(TestTaskScheduler()) {
+                val world = mockk<World>(relaxed = true)
+                val observer = mockk<Player>(relaxed = true)
+                every { observer.uniqueId } returns java.util.UUID.randomUUID()
+                every { observer.eyeLocation } returns Location(world, 0.0, 1.62, -5.0)
+                every { world.isChunkLoaded(any<Int>(), any<Int>()) } returns true
+                every { world.getNearbyPlayers(any<Location>(), any<Double>()) } returns listOf(observer)
+                var emitted = 0
+                every { observer.spawnParticle(any<Particle>(), any<Location>(), any<Int>(),
+                    any<Double>(), any<Double>(), any<Double>(), any<Double>()) } answers { emitted++ }
+                var tick = 0L
+                val tasks = LifecycleTaskScope()
+                try {
+                    val visuals = StaffSpellVisuals(tasks) { tick }
+                    val origin = Location(world, 0.0, 1.0, 0.0)
+                    val frame = List(192) { StaffParticleSample(Particle.CLOUD, org.bukkit.util.Vector()) }
+                    repeat(20) { visuals.particles(origin, frame) }
+                    emitted shouldBe 480
+                    tick = 2
+                    visuals.particles(origin, frame)
+                    emitted shouldBe 672
+                    tick = 4
+                    visuals.particles(origin, List(100) {
+                        StaffParticleSample(Particle.CLOUD, org.bukkit.util.Vector(), count = 96)
+                    })
+                    emitted shouldBe 714 // 42 packets, 4032 particles; the rest are dropped.
+                } finally { tasks.close() }
+            }
+        }
+    }
+
     "positional impact cues reach bounded listeners and preserve their bearing" {
         val scheduler = TestTaskScheduler()
         MockBukkitTestRuntime.open().use {

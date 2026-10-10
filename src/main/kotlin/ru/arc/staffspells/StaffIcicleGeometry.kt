@@ -74,6 +74,7 @@ internal fun staffChargeParts(spell: StaffSpell, progress: Double, age: Int): Li
         StaffSpell.GALE -> Material.WHITE_STAINED_GLASS
         StaffSpell.TIDE -> Material.PRISMARINE
         StaffSpell.PRISM -> Material.AMETHYST_BLOCK
+        StaffSpell.NECROMANCER -> Material.BONE_BLOCK
     }
     return (0 until count).flatMap { index ->
         val growth = smoothCharge((charge * (count - 2) + 2.0 - index).coerceIn(0.0, 1.0))
@@ -126,6 +127,8 @@ private fun staffChargeFormationOffset(spell: StaffSpell, index: Int, count: Int
             (-2.16 - 0.34 * cos(angle)).toFloat())
         StaffSpell.REQUIEM -> Vector3f((if (index % 2 == 0) -0.62 else 0.62).toFloat(),
             (0.22 + 2.30 * t).toFloat(), (-2.26 - 0.18 * cos(angle)).toFloat())
+        StaffSpell.NECROMANCER -> Vector3f((2.25 * cos(angle)).toFloat(),
+            (-.5 + .38 * sin(angle * 2)).toFloat(), (-2.25 + .35 * sin(angle)).toFloat())
         StaffSpell.PRISM -> {
             val vertex = index % 3
             val layer = index / 3

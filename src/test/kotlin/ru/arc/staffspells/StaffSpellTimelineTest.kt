@@ -110,47 +110,29 @@ class StaffSpellTimelineTest : FreeSpec({
         (radii.last() < radii.first() * 0.30) shouldBe true
     }
 
-    "nova bloom front advances before impact-only dissolve" {
-        fun bloom(age: Int) = staffDisplayParts(
-            StaffSpell.NOVA, age, 20, 0.0, 5.5, impact = true, secondary = true,
-            input = StaffCastInput.SECONDARY,
-        )
-        fun frontRadius(parts: List<StaffDisplayPart>) = parts.take(8).maxOf {
-            hypot(it.center.x.toDouble(), it.center.z.toDouble())
-        }
-
-        val start = bloom(0)
-        val early = bloom(4)
-        val preDissolve = bloom(6)
-        val dissolveStart = bloom(16)
-        val dissolveLater = bloom(18)
-        val expired = bloom(20)
-        listOf(start, early, preDissolve, dissolveStart, dissolveLater, expired).forEach { it.size shouldBe start.size }
-
-        (frontRadius(start) < frontRadius(early)) shouldBe true
-        (frontRadius(early) < frontRadius(preDissolve)) shouldBe true
-        (early.maxOf { it.scale.x } == preDissolve.maxOf { it.scale.x }) shouldBe true
-        (dissolveStart.maxOf { it.scale.x } < preDissolve.maxOf { it.scale.x }) shouldBe true
-        (dissolveLater.maxOf { it.scale.x } < dissolveStart.maxOf { it.scale.x }) shouldBe true
-        expired.all { it.scale.x > 0f && it.scale.y > 0f && it.scale.z > 0f } shouldBe true
-        (expired.maxOf { it.scale.x } <= 0.001f) shouldBe true
+    "grove flower grows before its pollen wave expands" {
+        fun bloom(age: Int) = staffArsenalParts(StaffSpell.NOVA, age, 48, 0.0, 3.0,
+            false, true, StaffCastInput.SECONDARY, 1.0)
+        fun volume(age: Int) = bloom(age).sumOf { (it.scale.x * it.scale.y * it.scale.z).toDouble() }
+        (volume(0) < volume(8)) shouldBe true
+        (volume(8) < volume(18)) shouldBe true
+        (volume(44) < volume(18)) shouldBe true
+        fun pollen(age: Int) = staffArsenalParticles(StaffSpell.NOVA, age, 48, 3.0, true, 1.0)
+            .maxOf { hypot(it.offset.x, it.offset.z) }
+        (pollen(30) > pollen(20)) shouldBe true
     }
 
-    "all arsenal impact geometries keep their slots and dissolve before their final interpolation frame" {
-        val spells = listOf(StaffSpell.NOVA, StaffSpell.LUNAR, StaffSpell.GALE,
-            StaffSpell.TIDE, StaffSpell.REQUIEM, StaffSpell.PRISM)
-        spells.forEach { spell ->
-            fun impact(age: Int) = staffDisplayParts(spell, age, 12, 8.0, 3.0,
-                impact = true, input = StaffCastInput.PRIMARY)
-            val steady = impact(4)
-            val dissolve = impact(8)
-            val expired = impact(12)
-            (steady.size in 1..48) shouldBe true
-            dissolve.size shouldBe steady.size
-            expired.size shouldBe steady.size
-            (impact(0).maxOf { it.scale.x } == steady.maxOf { it.scale.x }) shouldBe true
+    "physical arsenal sequences retain identities and shrink before cleanup" {
+        listOf(StaffSpell.NOVA, StaffSpell.LUNAR, StaffSpell.PRISM).forEach { spell ->
+            fun frame(age: Int) = staffArsenalParts(spell, age, 40, 8.0, 3.0,
+                false, false, StaffCastInput.PRIMARY)
+            val steady = frame(20)
+            val dissolve = frame(36)
+            val expired = frame(38)
+            (steady.size in 1..40) shouldBe true
+            dissolve.map { it.identity } shouldBe steady.map { it.identity }
+            expired.map { it.identity } shouldBe steady.map { it.identity }
             (dissolve.maxOf { it.scale.x } < steady.maxOf { it.scale.x }) shouldBe true
-            expired.all { it.scale.x > 0f && it.scale.y > 0f && it.scale.z > 0f } shouldBe true
             (expired.maxOf { it.scale.x } <= 0.001f) shouldBe true
         }
     }

@@ -52,7 +52,7 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.373"
+version = "1.4.374"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.21"
@@ -746,6 +746,17 @@ tasks.register<JavaExec>("exportWorkshopPreview") {
 }
 
 // Offline textured preview uses the same cuboids as live spell displays.
+tasks.register<JavaExec>("exportStaffRedesignPreview") {
+    group = "verification"
+    description = "Export native particle and display staff sequences"
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("ru.arc.staffspells.StaffRedesignPreviewExport")
+    args(providers.gradleProperty("staffRedesignPreviewOutput").getOrElse(
+        layout.buildDirectory.file("staff-spells-preview/redesign-sequences.json").get().asFile.absolutePath,
+    ))
+}
+
 tasks.register<JavaExec>("exportStaffSpellPreview") {
     group = "verification"
     description = "Export staff display geometry and animation poses as JSON"

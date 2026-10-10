@@ -1,5 +1,5 @@
 # Administrator-issued mechanics samples. These are not native FMM/EliteMobs loot items.
-# /arc stafftest [all|chain|mark|frost|lance|ember|nova|icicle|fault|lunar|gale|tide|requiem|prism] [player]; /arc reload applies tuning.
+# /arc stafftest [all|chain|mark|frost|lance|ember|nova|icicle|fault|lunar|gale|tide|requiem|prism|necromancer] [player]; /arc reload applies tuning.
 # Duel appearance is optional and native: set a full item-model key and positive custom-model-data together.
 # Keep the portable defaults (empty / 0) on hosts without the matching client-pack model.
 targeting:
@@ -12,10 +12,10 @@ chain:
   name: '<#82dcff>Грозовая ветвь'
   description: '<#e8dfd2>Молния перескакивает между четырьмя врагами.'
   aim: '<#82dcff>Самонаведение · дальность до 48 блоков'
-  quick-name: 'Грозовой раскол'
-  quick: '<#82dcff>ЛКМ <#e8dfd2>— короткий веер молний перед вами'
+  quick-name: 'Искровой веер'
+  quick: '<#82dcff>ЛКМ <#e8dfd2>— три разветвлённых разряда перед вами'
   quick-secondary-name: 'Цепной щелчок'
-  quick-secondary: '<#82dcff>Shift + ЛКМ <#e8dfd2>— разряд в точке прицела, до семи блоков'
+  quick-secondary: '<#82dcff>Shift + ЛКМ <#e8dfd2>— разряд в точке прицела, до восьми блоков'
   skin: '3dfantasyweaponscit:divine_staff'
   duel-appearance:
     item-model: ''
@@ -32,8 +32,8 @@ mark:
   name: '<#efa5ff>Разрыв'
   description: '<#e8dfd2>Разрыв следует за целью и взрывается.'
   aim: '<#efa5ff>Мягкое наведение · без цели взрыв в точке прицела'
-  quick-name: 'Печать удара'
-  quick: '<#efa5ff>ЛКМ <#e8dfd2>— прицельная печать раскрывается коротким ударом'
+  quick-name: 'Хватка пустоты'
+  quick: '<#efa5ff>ЛКМ <#e8dfd2>— призрачные потоки смыкаются у цели'
   quick-secondary-name: 'Тянущая печать'
   quick-secondary: '<#efa5ff>Shift + ЛКМ <#e8dfd2>— руна у прицела притягивает поражённых врагов'
   skin: '3dfantasyweaponscit:night_staff'
@@ -51,8 +51,8 @@ frost:
   name: '<#b1f2ff>Ледяной хлопок'
   description: '<#e8dfd2>Ледяная волна идёт по земле и замедляет врагов.'
   aim: '<#b1f2ff>Наземная волна · до 28 блоков, общий предел 48'
-  quick-name: 'Ледяной веер'
-  quick: '<#b1f2ff>ЛКМ <#e8dfd2>— короткий веер инея перед вами'
+  quick-name: 'Морозное дыхание'
+  quick: '<#b1f2ff>ЛКМ <#e8dfd2>— плотный конус инея замедляет врагов'
   quick-secondary-name: 'Ледяной заслон'
   quick-secondary: '<#b1f2ff>Shift + ЛКМ <#e8dfd2>— фронтальный ледяной заслон замедляет задетых врагов'
   skin: '3dfantasyweaponscit:northgate_guardian_staff'
@@ -71,8 +71,8 @@ icicle:
   name: '<#b1f2ff>Ледяной венец'
   description: '<#e8dfd2>Семь сосулек из-за плеч наводятся на врагов; полная зарядка выпускает одиннадцать.'
   aim: '<#b1f2ff>Самонаведение · дальность до 48 блоков'
-  quick-name: 'Ледяные когти'
-  quick: '<#b1f2ff>ЛКМ <#e8dfd2>— три ледяных когтя рассекают врагов вблизи'
+  quick-name: 'Ледяная картечь'
+  quick: '<#b1f2ff>ЛКМ <#e8dfd2>— быстрый разлёт ледяных осколков'
   quick-secondary-name: 'Кристальная клетка'
   quick-secondary: '<#b1f2ff>Shift + ЛКМ <#e8dfd2>— кристаллы поднимаются вокруг цели и замедляют её'
   skin: '3dfantasyweaponscit:olwen_staff'
@@ -88,10 +88,10 @@ lance:
   name: '<#fff1ae>Солнечное копьё'
   description: '<#e8dfd2>Узкий луч пробивает до трёх врагов насквозь.'
   aim: '<#fff1ae>Точная линия до 48 блоков · урон приходит, когда световой фронт достигает цели'
-  quick-name: 'Солнечный крест'
-  quick: '<#fff1ae>ЛКМ <#e8dfd2>— широкий солнечный крест рассекает врагов вблизи'
+  quick-name: 'Солнечный взмах'
+  quick: '<#fff1ae>ЛКМ <#e8dfd2>— золотое лезвие прочерчивает широкую дугу'
   quick-secondary-name: 'Солнечный кол'
-  quick-secondary: '<#fff1ae>Shift + ЛКМ <#e8dfd2>— вертикальный удар в точке прицела, до семи блоков'
+  quick-secondary: '<#fff1ae>Shift + ЛКМ <#e8dfd2>— вертикальный удар в точке прицела, до восьми блоков'
   skin: '3dfantasyweaponscit:sagrada_winged_staff'
   duel-appearance:
     item-model: ''
@@ -107,10 +107,10 @@ ember:
   name: '<#ffae70>Пепельная комета'
   description: '<#e8dfd2>Огненная комета разгоняется по прямой и взрывается.'
   aim: '<#ffae70>Ручной прицел · цельтесь на опережение'
-  quick-name: 'Жаркая дуга'
-  quick: '<#ffae70>ЛКМ <#e8dfd2>— огненная дуга рассекает пространство перед вами'
+  quick-name: 'Огненное дыхание'
+  quick: '<#ffae70>ЛКМ <#e8dfd2>— короткая струя огня перед вами'
   quick-secondary-name: 'Огненный знак'
-  quick-secondary: '<#ffae70>Shift + ЛКМ <#e8dfd2>— вспышка в точке прицела, до семи блоков'
+  quick-secondary: '<#ffae70>Shift + ЛКМ <#e8dfd2>— вспышка в точке прицела, до восьми блоков'
   skin: '3dfantasyweaponscit:bermunde_hermit_staff'
   duel-appearance:
     item-model: ''
@@ -121,11 +121,11 @@ ember:
   speed: 1.2
   radius: 2.8
 nova:
-  secondary-name: 'Изумрудное цветение'
-  secondary: '<#9fffd4>Shift + ПКМ <#e8dfd2>— цветение укореняется у цели и раскрывается одним импульсом'
-  name: '<#9fffd4>Изумрудная волна'
-  description: '<#e8dfd2>Витой побег несётся к цели, обвивая путь изумрудной лозой.'
-  aim: '<#9fffd4>Ручной прицел · спиральный побег вперёд'
+  secondary-name: 'Сердце рощи'
+  secondary: '<#9fffd4>Shift + ПКМ <#e8dfd2>— огромный цветок раскрывается и выпускает волну пыльцы'
+  name: '<#9fffd4>Изумрудная роща'
+  description: '<#e8dfd2>Ветвящиеся корни прорастают к цели и замедляют врагов.'
+  aim: '<#9fffd4>Живая изгородь · до 36 блоков'
   quick-name: 'Хлыст лозы'
   quick: '<#9fffd4>ЛКМ <#e8dfd2>— лоза хлещет широкой дугой перед вами'
   quick-secondary-name: 'Корневая клетка'
@@ -144,8 +144,8 @@ fault:
   name: '<#ff9b83>Обсидиановый раскол'
   description: '<#e8dfd2>Пять разломов один за другим идут по земле вперёд.'
   aim: '<#ff9b83>Направленный удар · до 18 блоков'
-  quick-name: 'Раскол земли'
-  quick: '<#ff9b83>ЛКМ <#e8dfd2>— короткий разлом идёт по земле вперёд'
+  quick-name: 'Каменная дробь'
+  quick: '<#ff9b83>ЛКМ <#e8dfd2>— волна каменной крошки по земле'
   quick-secondary-name: 'Столп разлома'
   quick-secondary: '<#ff9b83>Shift + ЛКМ <#e8dfd2>— каменные пластины поднимаются в точке прицела'
   skin: '3dfantasyweaponscit:staff_of_unholy_wisdom'
@@ -157,14 +157,14 @@ fault:
   cooldown-ticks: 44
 lunar:
   name: '<#d8d6ff>Лунный серп'
-  description: '<#e8dfd2>Серп возвращения летит по дуге вперёд и назад.'
-  aim: '<#d8d6ff>Ручной прицел · дальность до 48 блоков'
-  secondary-name: 'Лунная орбита'
-  secondary: '<#d8d6ff>Shift + ПКМ <#e8dfd2>— серп кружит перед вами, затем проходит через врагов'
+  description: '<#e8dfd2>Огромный лунный серп падает сверху и выпускает серебряную ударную волну.'
+  aim: '<#d8d6ff>Удар в точке прицела · до 36 блоков'
+  secondary-name: 'Лунные ножницы'
+  secondary: '<#d8d6ff>Shift + ПКМ <#e8dfd2>— два лунных лезвия сходятся на цели'
   quick-name: 'Лунный взмах'
   quick: '<#d8d6ff>ЛКМ <#e8dfd2>— ближний взмах широким лунным серпом'
-  quick-secondary-name: 'Лунные ножницы'
-  quick-secondary: '<#d8d6ff>Shift + ЛКМ <#e8dfd2>— два перекрещённых среза в точке прицела, до восьми блоков'
+  quick-secondary-name: 'Затмение'
+  quick-secondary: '<#d8d6ff>Shift + ЛКМ <#e8dfd2>— лунный диск смыкается в точке прицела, до восьми блоков'
   skin: '3dfantasyweaponscit:black_snake_staff'
   duel-appearance:
     item-model: ''
@@ -174,10 +174,10 @@ lunar:
   cooldown-ticks: 32
 gale:
   name: '<#d4eaff>Посох бури'
-  description: '<#e8dfd2>Блуждающий смерч идёт вперёд и стягивает врагов.'
-  aim: '<#d4eaff>Ручной прицел · дальность до 48 блоков'
-  secondary-name: 'Воронка'
-  secondary: '<#d4eaff>Shift + ПКМ <#e8dfd2>— пульсирующая воронка стягивает врагов'
+  description: '<#e8dfd2>Плотный смерч из облаков катится к цели и подбрасывает врагов.'
+  aim: '<#d4eaff>Движущаяся буря · до 36 блоков'
+  secondary-name: 'Шквал'
+  secondary: '<#d4eaff>Shift + ПКМ <#e8dfd2>— широкий фронт ветра проходит по земле'
   quick-name: 'Воздушная ладонь'
   quick: '<#d4eaff>ЛКМ <#e8dfd2>— широкая волна давления перед вами'
   quick-secondary-name: 'Подъёмный вихрь'
@@ -191,12 +191,12 @@ gale:
   cooldown-ticks: 40
 tide:
   name: '<#8ce9e4>Сердце прилива'
-  description: '<#e8dfd2>Водяная комета летит по дуге и разбивается всплеском.'
-  aim: '<#8ce9e4>Ручной прицел · дальность до 48 блоков'
-  secondary-name: 'Гейзер'
-  secondary: '<#8ce9e4>Shift + ПКМ <#e8dfd2>— после задержки гейзер бьёт из земли'
-  quick-name: 'Прибой'
-  quick: '<#8ce9e4>ЛКМ <#e8dfd2>— ближняя ломающаяся волна с пенным гребнем'
+  description: '<#e8dfd2>Четыре гейзера последовательно бьют из земли; полный заряд создаёт шесть.'
+  aim: '<#8ce9e4>Наземный каскад · до 36 блоков'
+  secondary-name: 'Приливный вал'
+  secondary: '<#8ce9e4>Shift + ПКМ <#e8dfd2>— высокая волна перекатывается вперёд и сбивает врагов'
+  quick-name: 'Водяной хлыст'
+  quick: '<#8ce9e4>ЛКМ <#e8dfd2>— водяной хлыст с пенным следом бьёт широкой дугой'
   quick-secondary-name: 'Водяной фонтан'
   quick-secondary: '<#8ce9e4>Shift + ЛКМ <#e8dfd2>— водяной выброс поднимает врагов у прицела, до восьми блоков'
   skin: '3dfantasyweaponscit:northgate_guardian_staff'
@@ -208,14 +208,14 @@ tide:
   cooldown-ticks: 36
 requiem:
   name: '<#d0b5eb>Реквием'
-  description: '<#e8dfd2>Призрачная стая ищет разных врагов.'
-  aim: '<#d0b5eb>Самонаведение · дальность до 48 блоков'
-  secondary-name: 'Ритуал душ'
-  secondary: '<#d0b5eb>Shift + ПКМ <#e8dfd2>— заряженный знак выпускает радиальную волну'
-  quick-name: 'Призрачная хватка'
-  quick: '<#d0b5eb>ЛКМ <#e8dfd2>— спектральные когти смыкаются перед вами'
-  quick-secondary-name: 'Руки могилы'
-  quick-secondary: '<#d0b5eb>Shift + ЛКМ <#e8dfd2>— кольцо призрачных рук стягивает врагов у прицела'
+  description: '<#e8dfd2>Потоки душ сходятся вокруг цели и разрываются призрачным пламенем.'
+  aim: '<#d0b5eb>Призрачный ритуал · до 36 блоков'
+  secondary-name: 'Плач душ'
+  secondary: '<#d0b5eb>Shift + ПКМ <#e8dfd2>— души расходятся от печати и замедляют врагов'
+  quick-name: 'Поток душ'
+  quick: '<#d0b5eb>ЛКМ <#e8dfd2>— поток душ устремляется вперёд'
+  quick-secondary-name: 'Печать скорби'
+  quick-secondary: '<#d0b5eb>Shift + ЛКМ <#e8dfd2>— призрачная печать взрывается у прицела и замедляет врагов'
   skin: '3dfantasyweaponscit:lich_staff'
   duel-appearance:
     item-model: ''
@@ -225,14 +225,14 @@ requiem:
   cooldown-ticks: 40
 prism:
   name: '<#e7c5ff>Кристальная призма'
-  description: '<#e8dfd2>Три кристальных луча пробивают врагов по разным траекториям.'
-  aim: '<#e7c5ff>Ручной прицел · дальность до 48 блоков'
-  secondary-name: 'Рикошетный луч'
-  secondary: '<#e7c5ff>Shift + ПКМ <#e8dfd2>— луч переходит между разными целями'
-  quick-name: 'Кристальный срез'
-  quick: '<#e7c5ff>ЛКМ <#e8dfd2>— короткий взмах кристальными лезвиями'
-  quick-secondary-name: 'Кристальное цветение'
-  quick-secondary: '<#e7c5ff>Shift + ЛКМ <#e8dfd2>— кристаллы раскрываются под прицелом, до восьми блоков'
+  description: '<#e8dfd2>Кристалл вырастает у прицела и поражает до трёх врагов лучами.'
+  aim: '<#e7c5ff>Кристалл и преломление · до 36 блоков'
+  secondary-name: 'Сведение лучей'
+  secondary: '<#e7c5ff>Shift + ПКМ <#e8dfd2>— три луча сходятся в выбранной точке'
+  quick-name: 'Осколочный веер'
+  quick: '<#e7c5ff>ЛКМ <#e8dfd2>— веер сияющих осколков разлетается перед вами'
+  quick-secondary-name: 'Преломление'
+  quick-secondary: '<#e7c5ff>Shift + ЛКМ <#e8dfd2>— свет сходится в точке прицела и вспыхивает, до двенадцати блоков'
   skin: '3dfantasyweaponscit:northgate_golden_crook'
   duel-appearance:
     item-model: ''
@@ -240,6 +240,20 @@ prism:
   power: 1.1
   vanilla-damage: 9.0
   cooldown-ticks: 36
+necromancer:
+  name: '<#a4e6ce>Зов могилы'
+  description: '<#e8dfd2>Призывает двух скелетов на десять секунд; полный заряд — четырёх.'
+  aim: '<#a4e6ce>Слуги следуют за вами и самостоятельно атакуют видимых врагов'
+  secondary-name: 'Костяной жнец'
+  secondary: '<#a4e6ce>Shift + ПКМ <#e8dfd2>— один большой жнец с широким ударом'
+  quick-name: 'Костяной укол'
+  quick: '<#a4e6ce>ЛКМ <#e8dfd2>— быстрый костяной выпад'
+  quick-secondary-name: 'Могильная печать'
+  quick-secondary: '<#a4e6ce>Shift + ЛКМ <#e8dfd2>— призрачный удар в точке прицела'
+  skin: '3dfantasyweaponscit:lich_staff'
+  power: 0.85
+  vanilla-damage: 6.0
+  cooldown-ticks: 100
 messages:
   duel-only: '<#c4a7ff>Только в активной дуэли</#c4a7ff>'
   prototype: '<#b8b8b8>Проба механики · общая перезарядка посохов'

@@ -127,7 +127,7 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "player reset cancels a legacy quick burst before its contact frame" {
+    "player reset cancels a quick gesture before its contact frame" {
         withStaffHarness { h ->
             val world = h.paper.addSimpleWorld("staff-quick-reset")
             val player = h.player("staff-quick-reset", world, StaffSpell.ICICLE)
@@ -209,11 +209,11 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "all thirteen prototype items can be granted without optional ItemsAdder skins" {
+    "all prototype items can be granted without optional ItemsAdder skins" {
         withStaffHarness { h ->
             val player = h.paper.addPlayer("all-prototypes")
 
-            StaffSpell.entries.map { it.id } shouldBe listOf("chain", "mark", "frost", "lance", "ember", "nova", "icicle", "fault", "lunar", "gale", "tide", "requiem", "prism")
+            StaffSpell.entries.map { it.id } shouldBe listOf("chain", "mark", "frost", "lance", "ember", "nova", "icicle", "fault", "lunar", "gale", "tide", "requiem", "prism", "necromancer")
             h.controller.give(player, StaffSpell.entries) shouldBe true
 
             player.inventory.storageContents.filterNotNull().mapNotNull { StaffSpell.from(it) } shouldBe
@@ -221,7 +221,7 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "all thirteen grant refuses seven empty slots without changing existing items" {
+    "granting all prototypes refuses seven empty slots without changing existing items" {
         withStaffHarness { h ->
             val player = h.paper.addPlayer("staff-capacity")
             repeat(player.inventory.storageContents.size - 7) { player.inventory.setItem(it, ItemStack(Material.DIAMOND)) }
@@ -535,7 +535,7 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "travelling lance and delayed quick burst stop when the captured combat context expires" {
+    "travelling lance and quick gesture stop when the captured combat context expires" {
         listOf(StaffSpell.LANCE to StaffCastInput.PRIMARY, StaffSpell.MARK to StaffCastInput.QUICK).forEach { (spell, input) ->
             var current = true
             withStaffHarness(currentCast = { _, _ -> current }) { h ->
@@ -552,7 +552,7 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "all thirteen spells cast into empty space and use the shared cooldown" {
+    "all spells cast into empty space and use the shared cooldown" {
         withStaffHarness { h ->
             val world = h.paper.addSimpleWorld("staff-empty-casts")
             val player = h.player("staff-empty-casts", world, StaffSpell.CHAIN)
@@ -720,9 +720,10 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "emerald vine travels to a distant target instead of dealing radial frost damage" {
+    "grove roots reach a distant target without damaging behind the caster" {
         withStaffHarness(settings = staffSettings(range = 32.0)) { h ->
             val world = h.paper.addSimpleWorld("staff-vine")
+            for (x in -4..4) for (z in -4..20) world.getBlockAt(x, 63, z).type = Material.STONE
             val player = h.player("vine", world, StaffSpell.NOVA)
             val target = h.zombie(world, x = 0.5, z = 16.0)
             val behindCaster = h.zombie(world, x = 0.5, z = -3.0)
@@ -737,9 +738,10 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "emerald impact keeps the per-cast target cap" {
+    "grove roots keep the per-cast target cap" {
         withStaffHarness(settings = staffSettings(range = 32.0, maxAreaTargets = 2)) { h ->
             val world = h.paper.addSimpleWorld("staff-vine-cap")
+            for (x in -4..4) for (z in -4..20) world.getBlockAt(x, 63, z).type = Material.STONE
             val player = h.player("vine-cap", world, StaffSpell.NOVA)
             val targets = listOf(h.zombie(world, x = 0.5, z = 16.0),
                 h.zombie(world, x = 1.0, z = 16.0), h.zombie(world, x = -0.5, z = 16.0))
@@ -1226,6 +1228,7 @@ internal fun withStaffHarness(
     currentCast: (Player, StaffSpellCast) -> Boolean = { _, _ -> true },
     rayStep: Double = 0.1,
     config: StaffSpellConfig = StaffSpellConfig(TestConfig()),
+    summonActorFactory: ((World, Location, Boolean) -> org.bukkit.entity.AbstractSkeleton)? = null,
     block: (StaffHarness) -> Unit,
 ) {
     failOnUnsupportedMockBukkitOperation {
@@ -1305,7 +1308,7 @@ internal fun withStaffHarness(
                     }
                     every { effects.finishTrail(any()) } answers { finishedTrails += arg<UUID?>(0) }
                     every { effects.remove(any()) } answers { removedEffects += firstArg<UUID?>() }
-                    val controller = StaffSpellController(config, settings, damage, effects)
+                    val controller = StaffSpellController(config, settings, damage, effects, summonActorFactory)
                     val harness = StaffHarness(paper, scheduler, config, controller, effects,
                         movedEffects, trailMoves, projectileMoves, finishedTrails, visualPlays, removedEffects,
                         captures, hits, hitLocations, damageScales)
