@@ -10,10 +10,10 @@ chain:
   name: '<#82dcff>Грозовая ветвь'
   description: '<#e8dfd2>Молния перескакивает между четырьмя врагами.'
   aim: '<#82dcff>Самонаведение · дальность до 48 блоков'
-  quick-name: 'Короткий разряд'
-  quick: '<#82dcff>ЛКМ <#e8dfd2>— быстрый разряд по прицелу на расстоянии до 24 блоков'
-  quick-secondary-name: 'Тройной разряд'
-  quick-secondary: '<#82dcff>Shift + ЛКМ <#e8dfd2>— три коротких разряда расходятся под равными углами'
+  quick-name: 'Грозовой раскол'
+  quick: '<#82dcff>ЛКМ <#e8dfd2>— короткий веер молний перед вами'
+  quick-secondary-name: 'Цепной щелчок'
+  quick-secondary: '<#82dcff>Shift + ЛКМ <#e8dfd2>— разряд в точке прицела, до семи блоков'
   skin: '3dfantasyweaponscit:divine_staff'
   power: 1.0
   vanilla-damage: 8.0
@@ -27,10 +27,10 @@ mark:
   name: '<#efa5ff>Разрыв'
   description: '<#e8dfd2>Разрыв следует за целью и взрывается.'
   aim: '<#efa5ff>Мягкое наведение · без цели взрыв в точке прицела'
-  quick-name: 'Разрыв метки'
-  quick: '<#efa5ff>ЛКМ <#e8dfd2>— удар по цели или точке прицела через 6 тиков'
-  quick-secondary-name: 'Гравитационный всплеск'
-  quick-secondary: '<#efa5ff>Shift + ЛКМ <#e8dfd2>— близкий всплеск тяготения через 6 тиков'
+  quick-name: 'Печать удара'
+  quick: '<#efa5ff>ЛКМ <#e8dfd2>— прицельная печать раскрывается коротким ударом'
+  quick-secondary-name: 'Тянущая печать'
+  quick-secondary: '<#efa5ff>Shift + ЛКМ <#e8dfd2>— руна у прицела притягивает поражённых врагов'
   skin: '3dfantasyweaponscit:night_staff'
   power: 1.6
   vanilla-damage: 12.0
@@ -43,10 +43,10 @@ frost:
   name: '<#b1f2ff>Ледяной хлопок'
   description: '<#e8dfd2>Ледяная волна идёт по земле и замедляет врагов.'
   aim: '<#b1f2ff>Наземная волна · до 28 блоков, общий предел 48'
-  quick-name: 'Короткий ледяной веер'
-  quick: '<#b1f2ff>ЛКМ <#e8dfd2>— короткая ледяная волна перед вами'
-  quick-secondary-name: 'Полярный всплеск'
-  quick-secondary: '<#b1f2ff>Shift + ЛКМ <#e8dfd2>— ледяная волна постепенно расходится на четыре блока'
+  quick-name: 'Ледяной веер'
+  quick: '<#b1f2ff>ЛКМ <#e8dfd2>— короткий веер инея перед вами'
+  quick-secondary-name: 'Ледяной заслон'
+  quick-secondary: '<#b1f2ff>Shift + ЛКМ <#e8dfd2>— фронтальный ледяной заслон замедляет задетых врагов'
   skin: '3dfantasyweaponscit:northgate_guardian_staff'
   power: 0.8
   vanilla-damage: 6.0
@@ -60,10 +60,10 @@ icicle:
   name: '<#b1f2ff>Ледяной венец'
   description: '<#e8dfd2>Семь сосулек из-за плеч наводятся на врагов; полная зарядка выпускает одиннадцать.'
   aim: '<#b1f2ff>Самонаведение · дальность до 48 блоков'
-  quick-name: 'Быстрая сосулька'
-  quick: '<#b1f2ff>ЛКМ <#e8dfd2>— одна быстрая сосулька на ближайшую цель'
-  quick-secondary-name: 'Боковые осколки'
-  quick-secondary: '<#b1f2ff>Shift + ЛКМ <#e8dfd2>— две сосульки из-за плеч'
+  quick-name: 'Ледяные когти'
+  quick: '<#b1f2ff>ЛКМ <#e8dfd2>— три ледяных когтя рассекают врагов вблизи'
+  quick-secondary-name: 'Кристальная клетка'
+  quick-secondary: '<#b1f2ff>Shift + ЛКМ <#e8dfd2>— кристаллы поднимаются вокруг цели и замедляют её'
   skin: '3dfantasyweaponscit:olwen_staff'
   power: 0.9
   vanilla-damage: 7.0
@@ -74,10 +74,10 @@ lance:
   name: '<#fff1ae>Солнечное копьё'
   description: '<#e8dfd2>Узкий луч пробивает до трёх врагов насквозь.'
   aim: '<#fff1ae>Точная линия до 48 блоков · урон приходит, когда световой фронт достигает цели'
-  quick-name: 'Солнечный срез'
-  quick: '<#fff1ae>ЛКМ <#e8dfd2>— широкий луч вперёд, до 20 блоков'
-  quick-secondary-name: 'Солнечный столп'
-  quick-secondary: '<#fff1ae>Shift + ЛКМ <#e8dfd2>— столп сверху в точке прицела'
+  quick-name: 'Солнечный крест'
+  quick: '<#fff1ae>ЛКМ <#e8dfd2>— широкий солнечный крест рассекает врагов вблизи'
+  quick-secondary-name: 'Солнечный кол'
+  quick-secondary: '<#fff1ae>Shift + ЛКМ <#e8dfd2>— вертикальный удар в точке прицела, до семи блоков'
   skin: '3dfantasyweaponscit:sagrada_winged_staff'
   power: 1.3
   vanilla-damage: 10.0
@@ -90,10 +90,10 @@ ember:
   name: '<#ffae70>Пепельная комета'
   description: '<#e8dfd2>Огненная комета разгоняется по прямой и взрывается.'
   aim: '<#ffae70>Ручной прицел · цельтесь на опережение'
-  quick-name: 'Огненный веер'
-  quick: '<#ffae70>ЛКМ <#e8dfd2>— огненный всплеск перед вами'
-  quick-secondary-name: 'Пепельная бомба'
-  quick-secondary: '<#ffae70>Shift + ЛКМ <#e8dfd2>— взрыв в точке прицела через 10 тиков'
+  quick-name: 'Жаркая дуга'
+  quick: '<#ffae70>ЛКМ <#e8dfd2>— огненная дуга рассекает пространство перед вами'
+  quick-secondary-name: 'Огненный знак'
+  quick-secondary: '<#ffae70>Shift + ЛКМ <#e8dfd2>— вспышка в точке прицела, до семи блоков'
   skin: '3dfantasyweaponscit:bermunde_hermit_staff'
   power: 1.4
   vanilla-damage: 10.0
@@ -107,9 +107,9 @@ nova:
   description: '<#e8dfd2>Витой побег несётся к цели, обвивая путь изумрудной лозой.'
   aim: '<#9fffd4>Ручной прицел · спиральный побег вперёд'
   quick-name: 'Хлыст лозы'
-  quick: '<#9fffd4>ЛКМ <#e8dfd2>— быстрый прямой хлыст из лозы'
-  quick-secondary-name: 'Семена орбиты'
-  quick-secondary: '<#9fffd4>Shift + ЛКМ <#e8dfd2>— три семени кружат у посоха и вылетают веером'
+  quick: '<#9fffd4>ЛКМ <#e8dfd2>— лоза хлещет широкой дугой перед вами'
+  quick-secondary-name: 'Корневая клетка'
+  quick-secondary: '<#9fffd4>Shift + ЛКМ <#e8dfd2>— корни смыкаются вокруг точки прицела, до восьми блоков'
   skin: '3dfantasyweaponscit:holy_celtic_staff'
   power: 0.9
   vanilla-damage: 7.0
@@ -121,10 +121,10 @@ fault:
   name: '<#ff9b83>Обсидиановый раскол'
   description: '<#e8dfd2>Пять разломов один за другим идут по земле вперёд.'
   aim: '<#ff9b83>Направленный удар · до 18 блоков'
-  quick-name: 'Короткий разлом'
-  quick: '<#ff9b83>ЛКМ <#e8dfd2>— разлом под прицелом на расстоянии до 12 блоков'
-  quick-secondary-name: 'Обсидиановый всплеск'
-  quick-secondary: '<#ff9b83>Shift + ЛКМ <#e8dfd2>— близкий обсидиановый взрыв'
+  quick-name: 'Раскол земли'
+  quick: '<#ff9b83>ЛКМ <#e8dfd2>— короткий разлом идёт по земле вперёд'
+  quick-secondary-name: 'Столп разлома'
+  quick-secondary: '<#ff9b83>Shift + ЛКМ <#e8dfd2>— каменные пластины поднимаются в точке прицела'
   skin: '3dfantasyweaponscit:staff_of_unholy_wisdom'
   power: 1.2
   vanilla-damage: 9.0
@@ -135,10 +135,10 @@ lunar:
   aim: '<#d8d6ff>Ручной прицел · дальность до 48 блоков'
   secondary-name: 'Лунная орбита'
   secondary: '<#d8d6ff>Shift + ПКМ <#e8dfd2>— серп кружит перед вами, затем проходит через врагов'
-  quick-name: 'Лунный осколок'
-  quick: '<#d8d6ff>ЛКМ <#e8dfd2>— быстрый прямой осколок'
-  quick-secondary-name: 'Двойной серп'
-  quick-secondary: '<#d8d6ff>Shift + ЛКМ <#e8dfd2>— два расходящихся серпа'
+  quick-name: 'Лунный взмах'
+  quick: '<#d8d6ff>ЛКМ <#e8dfd2>— ближний взмах широким лунным серпом'
+  quick-secondary-name: 'Лунные ножницы'
+  quick-secondary: '<#d8d6ff>Shift + ЛКМ <#e8dfd2>— два перекрещённых среза в точке прицела, до восьми блоков'
   skin: '3dfantasyweaponscit:black_snake_staff'
   power: 1.0
   vanilla-damage: 8.0
@@ -149,10 +149,10 @@ gale:
   aim: '<#d4eaff>Ручной прицел · дальность до 48 блоков'
   secondary-name: 'Воронка'
   secondary: '<#d4eaff>Shift + ПКМ <#e8dfd2>— пульсирующая воронка стягивает врагов'
-  quick-name: 'Ветряное лезвие'
-  quick: '<#d4eaff>ЛКМ <#e8dfd2>— быстрый порыв отбрасывает цель'
+  quick-name: 'Воздушная ладонь'
+  quick: '<#d4eaff>ЛКМ <#e8dfd2>— широкая волна давления перед вами'
   quick-secondary-name: 'Подъёмный вихрь'
-  quick-secondary: '<#d4eaff>Shift + ЛКМ <#e8dfd2>— вихрь притягивает и поднимает врагов рядом'
+  quick-secondary: '<#d4eaff>Shift + ЛКМ <#e8dfd2>— вихрь у прицела стягивает и поднимает врагов, до восьми блоков'
   skin: '3dfantasyweaponscit:goblin_witch_staff'
   power: 0.8
   vanilla-damage: 6.0
@@ -163,10 +163,10 @@ tide:
   aim: '<#8ce9e4>Ручной прицел · дальность до 48 блоков'
   secondary-name: 'Гейзер'
   secondary: '<#8ce9e4>Shift + ПКМ <#e8dfd2>— после задержки гейзер бьёт из земли'
-  quick-name: 'Пузырьковый выстрел'
-  quick: '<#8ce9e4>ЛКМ <#e8dfd2>— быстрый пузырьковый снаряд'
-  quick-secondary-name: 'Три струи'
-  quick-secondary: '<#8ce9e4>Shift + ЛКМ <#e8dfd2>— веер из трёх струй'
+  quick-name: 'Прибой'
+  quick: '<#8ce9e4>ЛКМ <#e8dfd2>— ближняя ломающаяся волна с пенным гребнем'
+  quick-secondary-name: 'Водяной фонтан'
+  quick-secondary: '<#8ce9e4>Shift + ЛКМ <#e8dfd2>— водяной выброс поднимает врагов у прицела, до восьми блоков'
   skin: '3dfantasyweaponscit:northgate_guardian_staff'
   power: 1.0
   vanilla-damage: 8.0
@@ -177,24 +177,24 @@ requiem:
   aim: '<#d0b5eb>Самонаведение · дальность до 48 блоков'
   secondary-name: 'Ритуал душ'
   secondary: '<#d0b5eb>Shift + ПКМ <#e8dfd2>— заряженный знак выпускает радиальную волну'
-  quick-name: 'Призрачный выпад'
-  quick: '<#d0b5eb>ЛКМ <#e8dfd2>— быстрый призрачный выпад по прямой'
-  quick-secondary-name: 'Шёпот духов'
-  quick-secondary: '<#d0b5eb>Shift + ЛКМ <#e8dfd2>— короткий фронтальный веер духов'
+  quick-name: 'Призрачная хватка'
+  quick: '<#d0b5eb>ЛКМ <#e8dfd2>— спектральные когти смыкаются перед вами'
+  quick-secondary-name: 'Руки могилы'
+  quick-secondary: '<#d0b5eb>Shift + ЛКМ <#e8dfd2>— кольцо призрачных рук стягивает врагов у прицела'
   skin: '3dfantasyweaponscit:lich_staff'
   power: 1.1
   vanilla-damage: 8.0
   cooldown-ticks: 40
 prism:
   name: '<#e7c5ff>Кристальная призма'
-  description: '<#e8dfd2>Три раздвоенных луча идут вперёд по разным траекториям.'
+  description: '<#e8dfd2>Три кристальных луча пробивают врагов по разным траекториям.'
   aim: '<#e7c5ff>Ручной прицел · дальность до 48 блоков'
   secondary-name: 'Рикошетный луч'
   secondary: '<#e7c5ff>Shift + ПКМ <#e8dfd2>— луч переходит между разными целями'
-  quick-name: 'Призматический осколок'
-  quick: '<#e7c5ff>ЛКМ <#e8dfd2>— быстрый кристальный осколок'
-  quick-secondary-name: 'Расщепление'
-  quick-secondary: '<#e7c5ff>Shift + ЛКМ <#e8dfd2>— короткий веер кристальных осколков'
+  quick-name: 'Кристальный срез'
+  quick: '<#e7c5ff>ЛКМ <#e8dfd2>— короткий взмах кристальными лезвиями'
+  quick-secondary-name: 'Кристальное цветение'
+  quick-secondary: '<#e7c5ff>Shift + ЛКМ <#e8dfd2>— кристаллы раскрываются под прицелом, до восьми блоков'
   skin: '3dfantasyweaponscit:northgate_golden_crook'
   power: 1.1
   vanilla-damage: 9.0

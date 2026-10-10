@@ -18,16 +18,28 @@ internal data class StaffDisplayPart(
     val scale: Vector3f,
     val rotation: Quaternionf,
     val visible: Boolean = true,
+    val identity: String? = null,
 )
 
 internal fun blendStaffParts(parts: List<StaffDisplayPart>, previous: List<StaffDisplayPart>, age: Int): List<StaffDisplayPart> {
     val blend = smooth(age / 2.0).toFloat()
+    val matched = mutableSetOf<Int>()
     return parts.mapIndexed { index, part ->
-        previous.getOrNull(index)?.let { old -> part.copy(
+        val oldIndex = if (part.identity == null) {
+            index.takeIf { it !in matched && previous.getOrNull(it)?.identity == null }
+        } else {
+            previous.indices.firstOrNull { it !in matched && previous[it].identity == part.identity }
+        }
+        val old = oldIndex?.let { previous[it] }
+        if (oldIndex != null) matched += oldIndex
+        old?.let { part.copy(
             center = Vector3f(old.center).lerp(part.center, blend),
             scale = Vector3f(old.scale).lerp(part.scale, blend),
             rotation = Quaternionf(old.rotation).slerp(part.rotation, blend),
-        ) } ?: part
+        ) } ?: if (part.identity == null) part else {
+            val birth = 0.04 + 0.96 * smooth(age / 4.0)
+            part.copy(scale = Vector3f(part.scale).mul(birth.toFloat()))
+        }
     }
 }
 
@@ -42,23 +54,32 @@ internal fun staffDisplayParts(
     secondary: Boolean = false,
     animationAgeTicks: Int = ageTicks,
     input: StaffCastInput = StaffCastInput.of(secondary, false),
+    charge: Double = 0.0,
 ): List<StaffDisplayPart> {
+    val chargeLevel = charge.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
+    val arsenal = spell == StaffSpell.NOVA || spell == StaffSpell.LUNAR || spell == StaffSpell.GALE ||
+        spell == StaffSpell.TIDE || spell == StaffSpell.REQUIEM || spell == StaffSpell.PRISM
+    if (input.quick && !arsenal) {
+        return staffChargeResponsiveOldParts(spell,
+            staffQuickDisplayParts(spell, ageTicks, durationTicks, length, radius, impact, secondary),
+            chargeLevel, quick = true)
+    }
     val parts = when (spell) {
     StaffSpell.CHAIN -> chainDisplayParts(ageTicks, durationTicks, length, radius, impact)
     StaffSpell.MARK -> if (secondary) singularityDisplayParts(ageTicks, durationTicks, radius, impact, animationAgeTicks)
         else markDisplayParts(ageTicks, radius, impact, animationAgeTicks)
     StaffSpell.FROST -> if (secondary) frostNovaDisplayParts(ageTicks, durationTicks, radius)
         else staffFrostDisplayParts(ageTicks, durationTicks, length, radius, impact)
-    StaffSpell.ICICLE -> staffIcicleDisplayParts(ageTicks, impact)
+    StaffSpell.ICICLE -> staffIcicleDisplayParts(ageTicks, impact, chargeLevel)
     StaffSpell.FAULT -> staffFaultDisplayParts(ageTicks, durationTicks, radius, secondary)
     StaffSpell.LANCE -> staffSolarDisplayParts(ageTicks, durationTicks, length, impact)
     StaffSpell.EMBER -> emberDisplayParts(ageTicks, durationTicks, radius, impact, secondary)
     StaffSpell.NOVA, StaffSpell.LUNAR, StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM, StaffSpell.PRISM ->
-        staffArsenalParts(spell, ageTicks, durationTicks, length, radius, impact, secondary, input)
+        staffArsenalParts(spell, ageTicks, durationTicks, length, radius, impact, secondary, input, charge = chargeLevel)
     }
+    val chargedParts = if (!arsenal && spell != StaffSpell.ICICLE)
+        staffChargeResponsiveOldParts(spell, parts, chargeLevel) else parts
     val tracked = !impact && spell in setOf(StaffSpell.MARK, StaffSpell.EMBER)
-    val arsenal = spell in setOf(StaffSpell.NOVA, StaffSpell.LUNAR, StaffSpell.GALE,
-        StaffSpell.TIDE, StaffSpell.REQUIEM, StaffSpell.PRISM)
     val birth = if (impact && (arsenal || spell in setOf(StaffSpell.MARK, StaffSpell.EMBER, StaffSpell.ICICLE)))
         1.0 else smooth(ageTicks / 4.0)
     val lastFrame = (durationTicks - StaffSpellDisplayEffects.FRAME_TICKS).coerceAtLeast(1)
@@ -69,11 +90,57 @@ internal fun staffDisplayParts(
         StaffSpell.LANCE -> ((0.62 + 0.38 * birth) * fade).coerceAtLeast(0.001).toFloat()
         else -> (birth * fade).coerceAtLeast(0.001).toFloat()
     }
-    return parts.map { part -> part.copy(
+    return chargedParts.map { part -> part.copy(
         center = if (spell == StaffSpell.FROST || spell == StaffSpell.NOVA || spell == StaffSpell.FAULT)
             Vector3f(part.center).apply { y *= visibility } else part.center,
         scale = Vector3f(part.scale).mul(visibility),
     ) }
+}
+
+/** Grows existing decorative support in place; centers and travel/range geometry stay fixed. */
+internal fun staffChargeResponsiveOldParts(
+    spell: StaffSpell,
+    parts: List<StaffDisplayPart>,
+    charge: Double,
+    quick: Boolean = false,
+): List<StaffDisplayPart> {
+    if (spell != StaffSpell.CHAIN && spell != StaffSpell.MARK && spell != StaffSpell.FROST &&
+        spell != StaffSpell.ICICLE && spell != StaffSpell.FAULT && spell != StaffSpell.LANCE &&
+        spell != StaffSpell.EMBER) return parts
+    val bloom = smooth((charge - 0.08) / 0.84)
+    return parts.mapIndexed { index, part ->
+        if (!part.visible) return@mapIndexed part
+        // Charge stays out of the eye-origin muzzle. Effects are fully built once their pieces
+        // leave the camera clearance; the smooth distance ramp avoids a one-frame size snap.
+        val clearance = smooth((part.center.length().toDouble() - 1.38) / 0.82)
+        val detail = bloom * clearance
+        val support = when (spell) {
+            StaffSpell.CHAIN -> index >= 40 || quick && index >= parts.size * 2 / 3
+            StaffSpell.MARK -> index >= if (parts.size > 20) 7 else 5
+            StaffSpell.FROST -> index >= parts.size * 2 / 3
+            StaffSpell.ICICLE -> index >= 2
+            StaffSpell.FAULT -> index >= 8
+            StaffSpell.LANCE -> index in 16 until minOf(44, parts.size)
+            StaffSpell.EMBER -> index >= 2
+            else -> false
+        }
+        val scale = Vector3f(part.scale)
+        when {
+            spell == StaffSpell.CHAIN && index < 3 -> Unit
+            spell == StaffSpell.LANCE && index >= 44 -> Unit
+            spell == StaffSpell.MARK && support -> {
+                // Its orbit sits close to the caster. Add facet height without widening that ring.
+                scale.y *= (1.0 + 0.28 * bloom).toFloat()
+            }
+            support -> {
+                val supportScale = 1.0 + clearance * 0.60 * bloom
+                scale.x *= supportScale.toFloat()
+                scale.y *= supportScale.toFloat()
+            }
+            else -> scale.y *= (1.0 + 0.30 * detail).toFloat()
+        }
+        part.copy(scale = scale)
+    }
 }
 
 private fun frostNovaDisplayParts(ageTicks: Int, durationTicks: Int, radius: Double): List<StaffDisplayPart> {
@@ -337,9 +404,11 @@ private fun emberDisplayParts(ageTicks: Int, durationTicks: Int, radius: Double,
         val distance = 0.35 + width * expand + ageTicks * 0.045
         val plume = if (meteor) 1.0 + sin(phase * PI) * 1.1 else 1.0
         parts += part(Material.SEA_LANTERN, 0.0, 0.04, 0.0,
-            1.75 * core, (if (meteor) 2.8 else 1.75) * core, 1.75 * core, roll = PI / 4)
+            1.75 * core, (if (meteor) 2.8 else 1.75) * core, 1.75 * core, roll = PI / 4,
+            identity = "core:0")
         parts += part(Material.GOLD_BLOCK, 0.0, 0.10, 0.0,
-            1.95 * core, 1.65 * core, 1.85 * core, roll = PI / 4)
+            1.95 * core, 1.65 * core, 1.85 * core, roll = PI / 4,
+            identity = "core:1")
         repeat(32) { index ->
             val y = (index + 0.5) / 32.0
             val radial = kotlin.math.sqrt(1.0 - y * y)
@@ -354,7 +423,7 @@ private fun emberDisplayParts(ageTicks: Int, durationTicks: Int, radius: Double,
             parts += part(material,
                 cos(angle) * radial * distance, 0.18 + y * distance * plume + sin(phase * PI) * 0.45,
                 sin(angle) * radial * distance, shard, shard * 0.82, shard * 1.8,
-                yaw = angle, pitch = -y * 0.8)
+                yaw = angle, pitch = -y * 0.8, identity = "debris:$index")
         }
         repeat(14) { index ->
             val angle = index * 2.0 * PI / 14.0
@@ -366,11 +435,12 @@ private fun emberDisplayParts(ageTicks: Int, durationTicks: Int, radius: Double,
                 val size = (0.52 + (index % 3) * 0.09) * (1.0 - phase * 0.55)
                 parts += part(if (index % 3 == 0) Material.MAGMA_BLOCK else Material.BLACKSTONE,
                     cos(angle) * launch, h, sin(angle) * launch, size, size * 0.75, size * 1.35,
-                    yaw = angle + phase * 1.4, pitch = phase * 2.0, roll = angle * 0.4)
+                    yaw = angle + phase * 1.4, pitch = phase * 2.0, roll = angle * 0.4,
+                    identity = "ring:$index")
             } else {
                 parts += groundRingLink(if (index % 3 == 0) Material.YELLOW_STAINED_GLASS else Material.ORANGE_STAINED_GLASS,
                     ring, angle, angle + 2.0 * PI / 14.0, 0.07 + expand * 0.04,
-                    0.10 + (1.0 - expand) * 0.04)
+                    0.10 + (1.0 - expand) * 0.04).copy(identity = "ring:$index")
             }
         }
         return parts
@@ -384,7 +454,8 @@ private fun emberDisplayParts(ageTicks: Int, durationTicks: Int, radius: Double,
         val size = width * (if (meteor) 0.76 else 0.62)
         parts += part(material, 0.0, 0.0, -index * 0.025,
             size, size * 0.87, size * (if (meteor) 1.05 else 1.28),
-            yaw = index * 0.70, pitch = index * 0.53, roll = index * 0.79)
+            yaw = index * 0.70, pitch = index * 0.53, roll = index * 0.79,
+            identity = "core:$index")
     }
     repeat(10) { index ->
         val row = index / 2
@@ -394,7 +465,8 @@ private fun emberDisplayParts(ageTicks: Int, durationTicks: Int, radius: Double,
         parts += part(if (index < 4) Material.YELLOW_STAINED_GLASS else Material.ORANGE_STAINED_GLASS,
             cos(angle) * spread, sin(angle) * spread, -0.40 - row * (if (meteor) 0.50 else 0.44),
             0.28 * width * taper, 0.23 * width * taper, (0.74 + row * 0.12) * width * taper,
-            yaw = cos(angle) * 0.16, pitch = sin(angle) * 0.16, roll = angle)
+            yaw = cos(angle) * 0.16, pitch = sin(angle) * 0.16, roll = angle,
+            identity = "wake:$index")
     }
     return parts
 }
@@ -483,9 +555,11 @@ private fun part(
     yaw: Double = 0.0,
     pitch: Double = 0.0,
     roll: Double = 0.0,
+    identity: String? = null,
 ) = StaffDisplayPart(
     material,
     Vector3f(x.toFloat(), y.toFloat(), z.toFloat()),
     Vector3f(sx.toFloat(), sy.toFloat(), sz.toFloat()),
     Quaternionf().rotateY(yaw.toFloat()).rotateX(pitch.toFloat()).rotateZ(roll.toFloat()),
+    identity = identity,
 )

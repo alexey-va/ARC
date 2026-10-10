@@ -29,6 +29,8 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         val secondary: Boolean,
         val input: StaffCastInput,
         val charging: Boolean = false,
+        var controllerDriven: Boolean = false,
+        var controllerDirty: Boolean = false,
         var chargeProgress: Double = 0.0,
         var age: Int = 0,
         var priorStageTicks: Int = 0,
@@ -53,7 +55,8 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
 
     fun play(casterId: UUID, spell: StaffSpell, from: Location, to: Location = from,
         radius: Double = 1.0, durationTicks: Int = 16, impact: Boolean = false, secondary: Boolean = false,
-        input: StaffCastInput = StaffCastInput.of(secondary, false), charging: Boolean = false): UUID? {
+        input: StaffCastInput = StaffCastInput.of(secondary, false), charging: Boolean = false,
+        controllerDriven: Boolean = false, charge: Double = 0.0): UUID? {
         check(Bukkit.isPrimaryThread())
         if (closed || !valid(from) || !valid(to) || from.world != to.world) return null
         val caster = Bukkit.getPlayer(casterId) ?: return null
@@ -67,6 +70,8 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         val rotation = if (charging) Quaternionf().rotationY(Math.toRadians(from.yaw.toDouble()).toFloat() * -1f)
         else if (spell == StaffSpell.MARK)
             Quaternionf().rotationY(kotlin.math.atan2(caster.location.x - from.x, caster.location.z - from.z).toFloat())
+        else if (spell == StaffSpell.GALE)
+            staffYawOnlyOrientation(Vector3f(offset.x.toFloat(), offset.y.toFloat(), offset.z.toFloat()))
         else if (spell == StaffSpell.LANCE)
             staffLanceOrientation(Vector3f(offset.x.toFloat(), offset.y.toFloat(), offset.z.toFloat()))
         else if (length > 0.001)
@@ -75,7 +80,9 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         val scene = Scene(UUID.randomUUID(), casterId, spell, from.clone(), rotation,
             length.coerceAtLeast(0.1),
             radius.takeIf(Double::isFinite)?.coerceIn(0.1, if (spell == StaffSpell.FROST) 96.0 else 16.0) ?: 1.0,
-            durationTicks.coerceIn(1, 240), impact, secondary, input, charging)
+            durationTicks.coerceIn(1, 240), impact, secondary, input, charging = charging,
+            controllerDriven = controllerDriven,
+            chargeProgress = charge.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0)
         scenes[scene.id] = scene
         if (spell == StaffSpell.CHAIN) scene.trail = listOf(Vector3f())
         render(scene)
@@ -87,20 +94,36 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         val scene = scenes[sceneId] ?: return
         scene.origin = eye.clone()
         scene.rotation = Quaternionf().rotationY(-Math.toRadians(eye.yaw.toDouble()).toFloat())
-        scene.chargeProgress = progress.coerceIn(0.0, 1.0)
+        scene.chargeProgress = progress.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
+        if (scene.controllerDriven) scene.controllerDirty = true
+    }
+
+    /** Applies the controller's animation clock without letting the display timer advance it again. */
+    fun synchronize(sceneId: UUID?, ageTicks: Int) {
+        val scene = scenes[sceneId] ?: return
+        if (!scene.controllerDriven) return
+        val age = ageTicks.coerceAtLeast(0)
+        if (scene.age == age && !scene.controllerDirty) return
+        scene.age = age
+        scene.controllerDirty = false
+        render(scene)
     }
 
     fun move(sceneId: UUID?, at: Location) {
         val scene = scenes[sceneId] ?: return
         if (!valid(at) || at.world != scene.origin.world) { remove(sceneId); return }
         scene.origin = at.clone()
-        if (scene.spell == StaffSpell.EMBER && !scene.impact) render(scene)
+        if (scene.controllerDriven) scene.controllerDirty = true
+        if (scene.spell == StaffSpell.EMBER && !scene.impact && !scene.controllerDriven) render(scene)
     }
 
     fun moveProjectile(sceneId: UUID?, at: Location, direction: org.bukkit.util.Vector) {
         val scene = scenes[sceneId] ?: return
         move(sceneId, at)
-        scene.rotation = staffLanceOrientation(Vector3f(direction.x.toFloat(), direction.y.toFloat(), direction.z.toFloat()))
+        val vector = Vector3f(direction.x.toFloat(), direction.y.toFloat(), direction.z.toFloat())
+        scene.rotation = if (scene.spell == StaffSpell.GALE) staffYawOnlyOrientation(vector)
+            else staffLanceOrientation(vector)
+        if (scene.controllerDriven) scene.controllerDirty = true
     }
 
     fun moveTrail(sceneId: UUID?, points: List<Location>) {
@@ -112,10 +135,13 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
             val delta = at.toVector().subtract(scene.origin.toVector())
             Vector3f(delta.x.toFloat(), delta.y.toFloat(), delta.z.toFloat())
         }
+        if (scene.controllerDriven) scene.controllerDirty = true
     }
 
     fun finishTrail(sceneId: UUID?) {
         val scene = scenes[sceneId] ?: return
+        scene.controllerDriven = false
+        scene.controllerDirty = false
         scene.impact = true
         scene.priorStageTicks += scene.age
         scene.age = 0
@@ -127,8 +153,8 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         val scene = scenes[sceneId] ?: return
         if (!valid(at) || at.world != scene.origin.world) { remove(sceneId); return }
         scene.transitionFrom = if (scene.spell == StaffSpell.EMBER) {
-            // Flight origins are future interpolation targets. Rebase the retained pieces
-            // at the real collision, never at a predicted point beyond a newly moving mob.
+            // Flight frames are keyed at the projectile position; keep the retained core
+            // centered on the collision point. Rebase only a repeated impact-stage transition.
             val delta = if (scene.impact) scene.origin.toVector().subtract(at.toVector()) else org.bukkit.util.Vector()
             val priorRotation = Quaternionf(scene.rotation)
             scene.rotation = Quaternionf() // Meteor and horizontal comet impacts both expand over the world ground plane.
@@ -141,6 +167,8 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         scene.radius = radius.takeIf(Double::isFinite)?.coerceIn(0.1, 16.0) ?: 1.0
         scene.duration = durationTicks.coerceIn(8, 160)
         scene.impact = true
+        scene.controllerDriven = false
+        scene.controllerDirty = false
         scene.priorStageTicks += scene.age
         scene.age = 0
         render(scene)
@@ -157,52 +185,84 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
     private fun tick() {
         scenes.values.toList().forEach { scene ->
             if (scenes[scene.id] !== scene) return@forEach
-            scene.age += FRAME_TICKS
             val caster = Bukkit.getPlayer(scene.casterId)
-            val tracked = !scene.charging && !scene.impact && scene.spell in setOf(StaffSpell.MARK, StaffSpell.EMBER)
-            val expired = if (tracked) scene.age >= 160 else scene.age >= scene.duration
-            if (expired || caster == null || !eligible(caster, scene.origin)) remove(scene.id)
-            // Flying comets have one movement owner sending two-tick forward keyframes.
-            else if (scene.charging || scene.spell != StaffSpell.EMBER || scene.impact) render(scene)
+            if (caster == null || !eligible(caster, scene.origin)) {
+                remove(scene.id)
+            } else if (!scene.controllerDriven) {
+                scene.age += FRAME_TICKS
+                val tracked = !scene.charging && !scene.impact && scene.spell in setOf(StaffSpell.MARK, StaffSpell.EMBER)
+                val expired = if (tracked) scene.age >= 160 else scene.age >= scene.duration
+                if (expired) remove(scene.id)
+                // Flying comets have one movement owner sending two-tick forward keyframes.
+                else if (scene.charging || scene.spell != StaffSpell.EMBER || scene.impact) render(scene)
+            }
         }
         if (scenes.isNotEmpty()) refreshAudience()
     }
 
     private fun render(scene: Scene) {
-        var parts = (if (scene.charging) staffChargeParts(scene.spell, scene.chargeProgress, scene.age) else scene.trail?.let { path -> staffLightningTrailParts(path,
-            if (scene.impact) (1.0 - scene.age / 8.0).coerceAtLeast(0.0) else 1.0) }
+        val previousParts = scene.renderedParts
+        val previousBounds = scene.bounds
+        var parts = (if (scene.charging) staffChargeParts(scene.spell, scene.chargeProgress, scene.age) else scene.trail?.let { path ->
+            staffChargeResponsiveOldParts(scene.spell, staffLightningTrailParts(path,
+                if (scene.impact) (1.0 - scene.age / 8.0).coerceAtLeast(0.0) else 1.0), scene.chargeProgress)
+        }
             ?: staffDisplayParts(scene.spell, scene.age, scene.duration, scene.length, scene.radius, scene.impact,
-                scene.secondary, animationAgeTicks = scene.priorStageTicks + scene.age, input = scene.input)).take(MAX_PARTS)
+                scene.secondary, animationAgeTicks = scene.priorStageTicks + scene.age, input = scene.input,
+                charge = scene.chargeProgress)).take(MAX_PARTS)
         scene.transitionFrom?.let { previous ->
             parts = blendStaffParts(parts, previous, scene.age)
-            if (scene.age >= 2) scene.transitionFrom = null
+            if (scene.age >= (if (scene.spell == StaffSpell.EMBER) 4 else 2)) scene.transitionFrom = null
         }
         while (scenes.values.filter { it.id != scene.id && it.casterId == scene.casterId }.sumOf { it.handles.size } + parts.size > MAX_PARTS_PER_CASTER)
             remove(scenes.values.first { it.id != scene.id && it.casterId == scene.casterId }.id)
         while (scenes.values.filter { it.id != scene.id }.sumOf { it.handles.size } + parts.size > MAX_TOTAL_PARTS)
             remove(scenes.values.first { it.id != scene.id }.id)
-        scene.renderedParts = parts
-        scene.previousBounds = scene.bounds
-        scene.bounds = parts.map { part ->
+        val previousIndexByPart = mutableListOf<Int?>()
+        val matchedPrevious = mutableSetOf<Int>()
+        parts.forEachIndexed { index, part ->
+            val previousIndex = if (part.identity == null) {
+                index.takeIf { it !in matchedPrevious && previousParts.getOrNull(it)?.identity == null }
+            } else {
+                previousParts.indices.firstOrNull {
+                    it !in matchedPrevious && previousParts[it].identity == part.identity
+                }
+            }
+            if (previousIndex != null) matchedPrevious += previousIndex
+            previousIndexByPart += previousIndex
+        }
+        val currentBounds = parts.map { part ->
             val point = scene.rotation.transform(Vector3f(part.center))
             scene.origin.toVector().add(org.bukkit.util.Vector(point.x.toDouble(), point.y.toDouble(), point.z.toDouble())) to
                 part.scale.length() * 0.5
         }
-        while (scene.handles.size > parts.size) scene.handles.removeLast().remove()
+        scene.previousBounds = previousIndexByPart.mapIndexed { index, previousIndex ->
+            previousIndex?.let { previousBounds.getOrNull(it) } ?: currentBounds[index]
+        }
+        scene.bounds = currentBounds
+        scene.renderedParts = parts
+        val previousHandles = scene.handles.toList()
+        val reusedHandles = previousIndexByPart.map { previousIndex ->
+            previousIndex?.let { previousHandles.getOrNull(it) }?.takeIf(PacketBlockDisplay::isValid)
+        }
+        val retainedHandles = reusedHandles.filterNotNull().toSet()
+        previousHandles.filterNot(retainedHandles::contains).forEach(PacketBlockDisplay::remove)
+        scene.handles.clear()
         parts.forEachIndexed { index, part ->
             val center = scene.rotation.transform(Vector3f(part.center))
             val at = scene.origin.clone().add(center.x.toDouble(), center.y.toDouble(), center.z.toDouble()).apply {
                 yaw = 0f; pitch = 0f
             }
-            val handle = scene.handles.getOrNull(index) ?: displays.spawnBlock(at,
+            val handle = reusedHandles[index] ?: displays.spawnBlock(at,
                 blocks.getOrPut(part.material) { part.material.createBlockData() }).also {
                 it.isVisibleByDefault = false
                 it.brightness = Display.Brightness(15, 15)
                 it.viewRange = VIEW_RANGE.toFloat() / 64f
                 it.interpolationDuration = if (scene.spell == StaffSpell.CHAIN) 0 else FRAME_TICKS
                 it.shadowStrength = 0f
-                scene.handles += it
             }
+            scene.handles += handle
+            if (!handle.isValid) return@forEachIndexed
             if (handle.blockData.material != part.material)
                 handle.blockData = blocks.getOrPut(part.material) { part.material.createBlockData() }
             handle.teleportDuration = when {
@@ -305,4 +365,12 @@ internal fun staffSweptDistance(eye: org.bukkit.util.Vector, from: org.bukkit.ut
     val t = if (delta.lengthSquared() < 0.000001) 0.0 else
         eye.clone().subtract(from).dot(delta).div(delta.lengthSquared()).coerceIn(0.0, 1.0)
     return eye.distance(from.clone().add(delta.multiply(t)))
+}
+
+/** Gale visuals pitch only around the world vertical axis, even for an elevated target. */
+internal fun staffYawOnlyOrientation(direction: Vector3f): Quaternionf {
+    val x = direction.x.toDouble()
+    val z = direction.z.toDouble()
+    if (!x.isFinite() || !z.isFinite()) return Quaternionf()
+    return Quaternionf().rotationY(kotlin.math.atan2(x, z).toFloat())
 }

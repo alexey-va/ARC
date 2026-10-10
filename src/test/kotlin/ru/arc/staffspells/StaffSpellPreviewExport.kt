@@ -643,7 +643,7 @@ object StaffSpellPreviewExport {
                     }
             }
             readability?.let { origin.add(0f, it.effectOffsetY.toFloat(), it.effectOffsetZ.toFloat()) }
-            require(parts.isNotEmpty()) { "${spell.id}/${event.id}/${frame.id} produced no display parts" }
+            require(parts.isNotEmpty() || staffParticleOnlyQuick(spell, inputs.input)) { "${spell.id}/${event.id}/${frame.id} produced no display parts" }
             val worldParts = parts.map { part -> part.copy(center = Vector3f(part.center).add(origin)) }
             val camera = playerCamera(spell, event, frame, eyeHeight, readability)
             val indexedParts = worldParts.mapIndexed { index, part -> index to part }
@@ -739,6 +739,39 @@ object StaffSpellPreviewExport {
             "cameraNote" to "The first 12 readability-prefixed states use the standing player eye at local (0, 1.62, 0), default 70-degree FOV and no autozoom. They sample centerline CHAIN travel at 8/16/24 blocks, LANCE at 8/16/24 blocks, primary MARK at 16, black holes at 8/16, and the NOVA vine and aimed bloom. Remaining states retain production geometry frames, all four Arsenal inputs and standing/sneaking filters.",
             "evidence" to "Every geometry frame calls production staffDisplayParts, staffChargeParts or staffLightningTrailParts. Player-filtered states use staffEyeClearance(spell, impact) + 0.15 static padding and half the part-scale length. The legacy offset-target CHAIN route remains explicitly labeled; curated primary routes start at yaw 0 and target straight ahead. These are offline source-driven block-display previews, not native Minecraft lighting, interpolation, particles, sounds or measured client acceptance.",
         )).plus("\n"))
+        // A compact continuous shape reel, including weak/full release and every quick gesture.
+        // The anchor is fixed for fair silhouette comparisons; it is not a simulated world trajectory.
+        val clips = StaffSpell.entries.flatMap { spell ->
+            StaffCastInput.entries.flatMap { input ->
+                (if (input.quick) listOf(0.0) else listOf(0.0, 1.0)).map { charge ->
+                    val legacyQuick = input.quick && spell !in setOf(StaffSpell.NOVA, StaffSpell.LUNAR,
+                        StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM, StaffSpell.PRISM)
+                    val profile = if (legacyQuick) staffQuickProfile(spell, input.secondary) else null
+                    val duration = if (legacyQuick) STAFF_QUICK_DURATION_TICKS else if (input.quick) 14 else 20
+                    val length = if (profile == null) 12.0 else when (profile.hitShape) {
+                        StaffQuickHitShape.POINT, StaffQuickHitShape.CAGE, StaffQuickHitShape.COLUMN ->
+                            if (spell == StaffSpell.MARK) .1 else if (spell == StaffSpell.CHAIN) profile.reach else 1.8
+                        else -> profile.reach
+                    }
+                    val radius = profile?.radius ?: if (input.quick) 2.0 else 3.0
+                    val impact = !input.quick && spell in setOf(StaffSpell.LANCE, StaffSpell.FAULT)
+                    val event = Event("motion-${input.name.lowercase()}-${charge.toInt()}",
+                        Inputs(length, radius, duration, impact, input.secondary, input = input))
+                    mapOf("id" to "${spell.id}-${input.name.lowercase()}-${charge.toInt()}",
+                        "spell" to spell.id, "input" to input.name, "charge" to charge,
+                        "particleOnly" to staffParticleOnlyQuick(spell, input),
+                        "durationTicks" to duration, "frames" to (0..duration step FRAME_TICKS).map { age ->
+                            val parts = staffDisplayParts(spell, age, duration, length,
+                                radius, impact, input.secondary, input = input, charge = charge)
+                            mapOf("tick" to age, "pieces" to parts.mapIndexed { i, part -> pieceMetadata(spell, event, i, part) })
+                        })
+                }
+            }
+        }
+        Files.writeString(output.resolveSibling("motion-clips.json"), GsonBuilder().create().toJson(mapOf(
+            "evidence" to "Production geometry at 2-tick cadence. Fixed spell anchor; no live trajectories, native particles or audio.",
+            "clips" to clips,
+        )))
         println("STAFF_SPELL_PREVIEW states=${states.size} materials=${palette.size} output=$output")
     }
 }

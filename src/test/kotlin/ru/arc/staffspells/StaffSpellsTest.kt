@@ -91,6 +91,23 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
+    "player reset cancels a legacy quick burst before its contact frame" {
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("staff-quick-reset")
+            val player = h.player("staff-quick-reset", world, StaffSpell.ICICLE)
+            h.zombie(world, x = 0.5, z = 3.0)
+            h.controller.start()
+
+            h.controller.cast(player, StaffCastInput.QUICK, 0.0)
+            h.scheduler.tick(2)
+            h.controller.resetPlayer(player.uniqueId)
+            h.scheduler.tick(12)
+
+            h.hits shouldBe emptyList()
+            verify(exactly = 1) { h.effects.cancel(player.uniqueId) }
+        }
+    }
+
     "fully charged icicle volley grows to eleven without multiplying one-target hits" {
         withStaffHarness { h ->
             val world = h.paper.addSimpleWorld("charged-crown")
@@ -1229,7 +1246,7 @@ internal fun withStaffHarness(
                     }
                     val effects = mockk<StaffSpellDisplayEffects>(relaxed = true)
                     val visualPlays = mutableListOf<StaffVisualPlay>()
-                    every { effects.play(any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) } answers {
+                    every { effects.play(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) } answers {
                         val id = UUID.randomUUID()
                         visualPlays += StaffVisualPlay(id, arg<StaffSpell>(1), arg<Location>(2).clone(),
                             arg<Location>(3).clone(), arg<Boolean>(7))

@@ -136,6 +136,7 @@ internal data class StaffSpellCast(
     val eliteMobsEnabled: Boolean,
     val duelAuthorization: DuelSpellAuthorization? = null,
     val duelAccess: StaffSpellDuelAccess? = null,
+    val visualCharge: Double = 0.0,
 )
 
 /** Resolved only on the guarded branch where EliteMobs is enabled. */

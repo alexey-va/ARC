@@ -7,14 +7,15 @@ import org.bukkit.Material
 import org.bukkit.event.player.PlayerQuitEvent
 
 class StaffSpellArsenalTest : FreeSpec({
-    "each arsenal staff keeps four bounded, visibly distinct input silhouettes" {
+    "arsenal contact controls differ from projectiles and keep bounded finite geometry" {
         val inputs = StaffCastInput.entries
         listOf(StaffSpell.LUNAR, StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM,
             StaffSpell.PRISM, StaffSpell.NOVA).forEach { spell ->
             val states = inputs.map { input ->
                 val parts = staffArsenalParts(spell, 5, 20, 12.0, 3.0, false,
                     input.secondary, input)
-                parts.size shouldBe 32
+                if (staffParticleOnlyQuick(spell, input)) parts.isEmpty() shouldBe true
+                else (parts.size in 1..48) shouldBe true
                 parts.all { part ->
                     part.center.x.isFinite() && part.center.y.isFinite() && part.center.z.isFinite() &&
                         part.scale.x.isFinite() && part.scale.y.isFinite() && part.scale.z.isFinite()
@@ -24,10 +25,34 @@ class StaffSpellArsenalTest : FreeSpec({
                         part.scale.x, part.scale.y, part.scale.z)
                 }
             }
-            states.distinct().size shouldBe inputs.size
+                        (states[2] != states[0]) shouldBe true
+            (states[3] != states[0]) shouldBe true
+            (states[2] != states[3]) shouldBe true
         }
         staffArsenalFront(5, 10, 4.0) shouldBe 2.0
         staffArsenalFront(20, 10, 4.0) shouldBe 4.0
+    }
+
+    "shift contact attack selects an aimed enemy inside its maximum reach" {
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("contact-near-aim")
+            val player = h.player("contact-near-aim", world, StaffSpell.PRISM)
+            val target = h.zombie(world, x = 0.5, z = 5.0)
+            h.controller.start()
+            h.controller.cast(player, StaffCastInput.QUICK_SECONDARY, 0.0)
+            h.scheduler.tick(8)
+            h.hits.map { it.uniqueId } shouldBe listOf(target.uniqueId)
+            (h.visualPlays.single().from.z < 6.0) shouldBe true
+        }
+    }
+
+    "new projectile bodies have one head and only trailing wake geometry" {
+        listOf(StaffSpell.REQUIEM, StaffSpell.PRISM, StaffSpell.NOVA).forEach { spell ->
+            val body = staffArsenalParts(spell, 6, 40, 12.0, 1.0, false, false, StaffCastInput.PRIMARY)
+            (body.count { it.center.z >= 0f } <= 2) shouldBe true
+            (body.count { it.center.z < -0.2f } >= 6) shouldBe true
+            (body.size <= 16) shouldBe true
+        }
     }
 
     "prism quick projectile respects configured maximum range" {
@@ -44,7 +69,7 @@ class StaffSpellArsenalTest : FreeSpec({
         }
     }
 
-    "prism quick projectile stops at a wall before reaching a target" {
+    "prism contact attack cannot reach a target behind a wall" {
         withStaffHarness(settings = staffSettings(range = 12.0)) { h ->
             val world = h.paper.addSimpleWorld("arsenal-wall")
             val player = h.player("arsenal-wall", world, StaffSpell.PRISM)
@@ -57,8 +82,8 @@ class StaffSpellArsenalTest : FreeSpec({
 
             h.hits shouldBe emptyList()
             target.isValid shouldBe true
-            h.projectileMoves.isNotEmpty() shouldBe true
-            (h.projectileMoves.last().at.z <= 3.05) shouldBe true
+            h.projectileMoves.isEmpty() shouldBe true
+            h.visualPlays.isNotEmpty() shouldBe true
         }
     }
 
@@ -123,7 +148,7 @@ class StaffSpellArsenalTest : FreeSpec({
             h.controller.cast(player, StaffCastInput.PRIMARY, 0.0)
             h.scheduler.tick(2)
             val movesBeforeReset = h.projectileMoves.size
-            movesBeforeReset shouldBe 2
+            movesBeforeReset shouldBe 1
             h.controller.resetPlayer(player.uniqueId)
             val removedAfterReset = h.removedEffects.size
             h.scheduler.tick(8)

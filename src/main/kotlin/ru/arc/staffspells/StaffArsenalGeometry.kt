@@ -7,277 +7,225 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
-/** Pure shared front radius for expanding field damage and its visible wave. */
+/** Damage and expanding field geometry share the same front. */
 internal fun staffArsenalFront(ageTicks: Int, durationTicks: Int, radius: Double): Double {
-    val safeRadius = radius.takeIf(Double::isFinite)?.coerceIn(0.0, 16.0) ?: 0.0
-    return safeRadius * (ageTicks.coerceAtLeast(0).toDouble() / durationTicks.coerceAtLeast(1)).coerceIn(0.0, 1.0)
+    val r = radius.takeIf(Double::isFinite)?.coerceIn(0.0, 16.0) ?: 0.0
+    return r * (ageTicks.coerceAtLeast(0).toDouble() / durationTicks.coerceAtLeast(1)).coerceIn(0.0, 1.0)
 }
 
-/** Stable, bounded block-display slots for the distinct arsenal silhouettes and their impacts. */
+internal fun staffParticleOnlyQuick(spell: StaffSpell, input: StaffCastInput) =
+    input == StaffCastInput.QUICK && spell in setOf(StaffSpell.GALE, StaffSpell.TIDE)
+
+/** One body per projectile. Pieces retain their material and identity for the whole animation. */
 internal fun staffArsenalParts(
-    spell: StaffSpell,
-    ageTicks: Int,
-    durationTicks: Int,
-    length: Double,
-    radius: Double,
-    impact: Boolean,
-    secondary: Boolean,
-    input: StaffCastInput,
+    spell: StaffSpell, ageTicks: Int, durationTicks: Int, length: Double, radius: Double,
+    impact: Boolean, secondary: Boolean, input: StaffCastInput, charge: Double = 0.0,
 ): List<StaffDisplayPart> {
-    val duration = durationTicks.coerceAtLeast(1)
+    if (staffParticleOnlyQuick(spell, input)) return emptyList()
     val age = ageTicks.coerceAtLeast(0)
-    val progress = (age.toDouble() / duration).coerceIn(0.0, 1.0)
-    val reach = length.takeIf(Double::isFinite)?.coerceIn(0.8, 48.0)?.toFloat() ?: 8f
-    val spread = radius.takeIf(Double::isFinite)?.coerceIn(0.5, 8.0)?.toFloat() ?: 1f
-    val spin = age * 0.14
-    val parts = MutableList(32) { invisiblePart() }
-    fun put(index: Int, material: Material, x: Double, y: Double, z: Double,
+    val duration = durationTicks.coerceAtLeast(1)
+    val q = charge.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
+    val power = 0.78 + q * 0.50
+    val r = radius.takeIf(Double::isFinite)?.coerceIn(0.5, 8.0) ?: 1.0
+    val t = (age.toDouble() / duration).coerceIn(0.0, 1.0)
+    val spin = age * 0.085
+    val field = input.quick || secondary && spell in setOf(StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM, StaffSpell.NOVA)
+    val reveal = if (field) smooth(age / 4.0) else 1.0
+    val fade = if (impact || input.quick) smooth((duration - StaffSpellDisplayEffects.FRAME_TICKS - age) / 5.0) else 1.0
+    val burst = if (impact && !field) smooth(age / 6.0) else 0.0
+    val parts = mutableListOf<StaffDisplayPart>()
+    fun part(material: Material, x: Double, y: Double, z: Double,
         sx: Double, sy: Double, sz: Double, yaw: Double = 0.0, pitch: Double = 0.0, roll: Double = 0.0) {
-        if (index !in parts.indices) return
-        parts[index] = arsenalPart(material, x, y, z, sx, sy, sz, yaw, pitch, roll)
+        val scale = maxOf(0.001, reveal * fade) * if (field) .85 + q * .35 else power
+        val spread = if (field) 1.0 else power * (1.0 + burst * 1.8)
+        parts += StaffDisplayPart(material,
+            Vector3f((x * spread).toFloat(), (y * spread).toFloat(), (z * spread).toFloat()),
+            Vector3f((sx * scale).toFloat(), (sy * scale).toFloat(), (sz * scale).toFloat()),
+            Quaternionf().rotationXYZ(pitch.toFloat(), yaw.toFloat(), roll.toFloat()))
+    }
+    fun arc(material: Material, count: Int, span: Double, ring: Double, y: Double, thickness: Double,
+        start: Double = -span / 2, tilt: Double = 0.0) {
+        repeat(count) { i ->
+            val angle = start + span * i / (count - 1).coerceAtLeast(1)
+            part(material, sin(angle) * ring, y + cos(angle) * tilt, cos(angle) * ring,
+                thickness, thickness, maxOf(thickness, ring * span / count * 1.30), yaw = angle + PI / 2)
+        }
+    }
+    if (input.quick) {
+        // Short contact/control gestures, rather than reduced copies of the travelling attack.
+        val sweep = -0.95 + smooth(age / 8.0) * 1.9
+        when (spell) {
+            StaffSpell.LUNAR -> repeat(if (secondary) 2 else 1) { lane ->
+                repeat(11) { i ->
+                    val angle = -1.0 + i * 0.2 + sweep
+                    val x = sin(angle) * r * 0.85
+                    val z = cos(angle) * r * 0.70
+                    part(if (i % 3 == 0) Material.SEA_LANTERN else Material.WHITE_STAINED_GLASS,
+                        x, if (secondary) (lane - .5) * x * .55 else .1, z,
+                        .24, .18, .48, yaw = angle + PI / 2, roll = if (lane == 0) .25 else -.25)
+                }
+            }
+            StaffSpell.GALE -> if (secondary) {
+                repeat(18) { i ->
+                    val h = i / 18.0
+                    val angle = i * 2.39996 - age * .18
+                    part(if (i % 4 == 0) Material.CALCITE else Material.WHITE_STAINED_GLASS,
+                        cos(angle) * r * (.75 - h * .4), -.6 + h * 2.5 * reveal,
+                        sin(angle) * r * (.75 - h * .4), .25, .30, .55, yaw = -angle)
+                }
+            } else {
+                repeat(3) { band -> arc(Material.WHITE_STAINED_GLASS, 7, PI * .92,
+                    r * (.4 + band * .24) * (.55 + .45 * smooth(age / 7.0)),
+                    -.4 + band * .30, .23, tilt = .10) }
+            }
+            StaffSpell.TIDE -> if (secondary) {
+                repeat(7) { i ->
+                    val angle = i * PI * 2 / 7
+                    val h = (.7 + (i % 3) * .45) * reveal
+                    part(if (i % 2 == 0) Material.PRISMARINE else Material.LIGHT_BLUE_STAINED_GLASS,
+                        cos(angle) * .65, -.65 + h / 2, sin(angle) * .65,
+                        .38, h, .38, roll = cos(angle) * -.22, pitch = sin(angle) * .22)
+                }
+                arc(Material.WHITE_STAINED_GLASS, 12, PI * 2, r * smooth(age / 8.0), -.6, .24)
+            } else {
+                repeat(12) { i ->
+                    val x = (i - 5.5) * r / 6
+                    val curl = sin(i * PI / 11)
+                    part(if (i % 4 == 0) Material.PRISMARINE else Material.LIGHT_BLUE_STAINED_GLASS,
+                        x, -.7 + curl * .45, (smooth(age / 8.0) - .5) * 1.5 + curl * .4,
+                        r / 5, .62 + curl * .50, .46, pitch = -.35 - t * .65)
+                    part(Material.WHITE_STAINED_GLASS, x, -.1 + curl * .70,
+                        (smooth(age / 8.0) - .5) * 1.5 + curl * .4, r / 5, .16, .35)
+                }
+            }
+            StaffSpell.REQUIEM -> repeat(if (secondary) 5 else 4) { finger ->
+                val angle = if (secondary) finger * PI * 2 / 5 else -.9 + finger * .6
+                repeat(3) { joint ->
+                    val curl = smooth(age / 8.0)
+                    val radial = r * (.85 - joint * (.15 + curl * .1))
+                    part(if (joint == 2) Material.SOUL_LANTERN else Material.PURPLE_STAINED_GLASS,
+                        sin(angle) * radial, -.7 + joint * .60, cos(angle) * radial,
+                        .29, .66, .29, pitch = -cos(angle) * curl * .8, roll = sin(angle) * curl * .8)
+                }
+            }
+            StaffSpell.PRISM -> repeat(if (secondary) 9 else 5) { i ->
+                val angle = if (secondary) i * PI * 2 / 9 else -.8 + i * .4
+                val radial = if (secondary) r * .65 else r * .35
+                part(if (i % 3 == 0) Material.SEA_LANTERN else Material.AMETHYST_BLOCK,
+                    sin(angle) * radial, -.5 + reveal * .60, cos(angle) * radial,
+                    .32, if (secondary) 1.5 else .40, if (secondary) .32 else 1.6,
+                    yaw = angle, pitch = if (secondary) cos(angle) * -.38 else -.20,
+                    roll = if (secondary) sin(angle) * .38 else sweep * .5)
+            }
+            StaffSpell.NOVA -> if (secondary) {
+                repeat(6) { vine -> repeat(3) { joint ->
+                    val angle = vine * PI / 3 + joint * .10
+                    val radial = r * (.9 - joint * .25 * reveal)
+                    part(if (joint == 2) Material.FLOWERING_AZALEA_LEAVES else Material.MOSS_BLOCK,
+                        cos(angle) * radial, -.7 + joint * .52, sin(angle) * radial,
+                        .30, .65, .30, pitch = -sin(angle) * joint * .2, roll = cos(angle) * joint * .2)
+                } }
+            } else repeat(16) { i ->
+                val f = i / 15.0
+                val angle = sweep + f * 2.5 - 1.25
+                part(if (i % 4 == 0) Material.FLOWERING_AZALEA_LEAVES else Material.MOSS_BLOCK,
+                    sin(angle) * r * f, -.3 + sin(f * PI) * .3, cos(angle) * r * f,
+                    .32 - f * .15, .28 - f * .12, .42, yaw = angle + .7)
+            }
+            else -> Unit
+        }
+        return parts
     }
 
     when (spell) {
         StaffSpell.LUNAR -> {
-            if (impact) {
-                repeat(16) { i ->
-                    val angle = i * PI / 8.0 + spin
-                    val r = spread * (0.38 + (i % 3) * 0.08)
-                    put(i, if (i % 3 == 0) Material.AMETHYST_BLOCK else Material.WHITE_STAINED_GLASS,
-                        cos(angle) * r, sin(angle) * r, 0.0, 0.18, 0.24, 0.13, yaw = -angle)
-                }
-                put(16, Material.SEA_LANTERN, 0.0, 0.0, 0.0, 0.34, 0.34, 0.34)
-            } else if (input.quick && input.secondary) {
-                repeat(15) { i ->
-                    val lane = i / 5 - 1
-                    val step = i % 5
-                    put(i, if (step % 2 == 0) Material.AMETHYST_BLOCK else Material.WHITE_STAINED_GLASS,
-                        lane * 0.28, sin(step * 0.7 + spin) * 0.16, step * 0.25,
-                        0.15, 0.2, 0.26, yaw = lane * 0.22, roll = lane * 0.12)
-                }
-                put(15, Material.SEA_LANTERN, 0.0, 0.0, 0.0, 0.28, 0.28, 0.34)
-            } else if (input.quick) {
-                repeat(9) { i ->
-                    put(i, if (i % 3 == 0) Material.AMETHYST_BLOCK else Material.WHITE_STAINED_GLASS,
-                        0.0, 0.0, i * 0.23, 0.18, 0.18, 0.28, yaw = spin)
-                }
-                put(9, Material.SEA_LANTERN, 0.0, 0.0, 0.0, 0.30, 0.30, 0.36)
-            } else {
-                val arcRadius = if (input.secondary) 0.78f else 0.62f
-                repeat(11) { i ->
-                    val angle = -PI * 0.78 + i * PI * 1.56 / 10.0 + spin
-                    val x = cos(angle) * arcRadius
-                    val y = sin(angle) * arcRadius
-                    put(i, if (i % 3 == 0) Material.AMETHYST_BLOCK else Material.WHITE_STAINED_GLASS,
-                        x, y, 0.0, 0.22, 0.29, 0.16, yaw = -angle, roll = angle * 0.12)
-                }
-                put(11, Material.SEA_LANTERN, 0.0, 0.0, 0.04, 0.28, 0.28, 0.24)
-                if (input.secondary) repeat(6) { i ->
-                    val angle = i * PI / 3.0 - spin
-                    put(12 + i, Material.PURPLE_STAINED_GLASS, cos(angle) * 1.15, sin(angle) * 0.5,
-                        0.15, 0.12, 0.12, 0.24, yaw = -angle)
-                }
+            repeat(13) { i ->
+                val a = -PI * .78 + i * PI * 1.56 / 12 + spin
+                part(if (i % 4 == 0) Material.SEA_LANTERN else Material.WHITE_STAINED_GLASS,
+                    cos(a) * .78, sin(a) * .78, 0.0, .24, .34, .18, roll = a - PI / 2)
             }
+            part(Material.AMETHYST_BLOCK, -.12, 0.0, 0.0, .4, .4, .2, roll = spin)
         }
         StaffSpell.GALE -> {
-            if (impact || input.quick && input.secondary) {
-                repeat(16) { i ->
-                    val angle = i * PI / 8.0 + spin
-                    val r = spread * (0.25 + (i % 4) * 0.07)
-                    val y = if (input.quick && input.secondary) (i % 4) * 0.22 else 0.10 + (i % 3) * 0.12
-                    put(i, if (i % 3 == 0) Material.SEA_LANTERN else Material.LIGHT_BLUE_STAINED_GLASS,
-                        cos(angle) * r, y, sin(angle) * r, 0.17, 0.28, 0.17, yaw = -angle)
-                }
-                put(16, Material.WHITE_STAINED_GLASS, 0.0, 0.35, 0.0, 0.42, 0.42, 0.42)
-            } else if (input.quick) {
-                repeat(11) { i ->
-                    val z = i * 0.22
-                    put(i, if (i % 3 == 0) Material.SEA_LANTERN else Material.WHITE_STAINED_GLASS,
-                        sin(spin + i * 0.43) * 0.15, sin(i * 0.5) * 0.08, z,
-                        0.12, 0.12, 0.3, yaw = sin(i * 0.5) * 0.35)
-                }
-            } else {
-                repeat(24) { i ->
-                    val level = i / 6
-                    val angle = (i % 6) * PI / 3.0 + spin * (1.0 + level * 0.16)
-                    val y = level * 0.34
-                    val r = (if (input.secondary) 0.82 - level * 0.11 else 0.48 + level * 0.11)
-                    put(i, when {
-                        i % 6 == 0 -> Material.SEA_LANTERN
-                        level % 2 == 0 -> Material.LIGHT_BLUE_STAINED_GLASS
-                        else -> Material.WHITE_STAINED_GLASS
-                    }, cos(angle) * r, y, sin(angle) * r, 0.18, 0.3, 0.18, yaw = -angle)
-                }
-                put(24, Material.CYAN_STAINED_GLASS, 0.0, 0.78, 0.0, 0.28, 0.42, 0.28)
+            // The native particle ropes own the funnel silhouette. These are only tumbling debris.
+            repeat(8) { i ->
+                val f = .12 + i / 9.0
+                val a = i * 2.399963 + spin * (2.2 - f)
+                val orbit = .22 + f * f * (if (secondary) 1.65 else 1.05)
+                part(when (i % 3) { 0 -> Material.CALCITE; 1 -> Material.COBBLESTONE; else -> Material.OAK_LEAVES },
+                    cos(a) * orbit, -.8 + f * 2.8, sin(a) * orbit,
+                    .25 + f * .12, .24 + f * .09, .27 + f * .13,
+                    yaw = a, pitch = spin * 1.5 + i, roll = spin + i * .4)
             }
         }
-        StaffSpell.TIDE -> {
-            when {
-                impact || input.secondary && !input.quick -> {
-                    val front = if (impact && input.secondary && !input.quick)
-                        staffArsenalFront(age, duration, spread.toDouble()).toFloat() else spread
-                    repeat(24) { i ->
-                        val band = i / 8
-                        val angle = i % 8 * PI / 4.0 + spin * (1.0 + band * 0.2)
-                        val r = front * (0.40 + band * 0.29)
-                        val y = if (input.secondary) band * 0.32 else 0.12 + band * 0.17
-                        put(i, if (i % 4 == 0) Material.PRISMARINE else Material.LIGHT_BLUE_STAINED_GLASS,
-                            cos(angle) * r, y, sin(angle) * r, 0.15, 0.24, 0.15, yaw = -angle)
-                    }
-                    put(24, Material.SEA_LANTERN, 0.0, 0.35, 0.0, 0.34, 0.48, 0.34)
-                }
-                input.quick && input.secondary -> repeat(18) { i ->
-                    val lane = i / 6 - 1
-                    val step = i % 6
-                    put(i, if (step % 3 == 0) Material.SEA_LANTERN else Material.LIGHT_BLUE_STAINED_GLASS,
-                        lane * 0.25, step * 0.16, step * 0.24, 0.18, 0.18, 0.26, yaw = lane * 0.16)
-                }
-                input.quick -> {
-                    repeat(10) { i ->
-                        put(i, if (i % 3 == 0) Material.SEA_LANTERN else Material.LIGHT_BLUE_STAINED_GLASS,
-                            0.0, 0.0, i * 0.19, 0.14, 0.14, 0.22)
-                    }
-                }
-                else -> {
-                    repeat(24) { i ->
-                        val ring = i / 8
-                        val angle = i % 8 * PI / 4.0 + spin
-                        val r = 0.34 + ring * 0.18
-                        put(i, if (i % 4 == 0) Material.SEA_LANTERN else Material.PRISMARINE,
-                            cos(angle) * r, sin(angle) * r, 0.0, 0.18, 0.18, 0.18, yaw = -angle)
-                    }
-                    put(24, Material.LIGHT_BLUE_STAINED_GLASS, 0.0, 0.0, 0.0, 0.48, 0.48, 0.48)
-                }
+        StaffSpell.TIDE -> if (field) {
+            val front = if (impact) staffArsenalFront(age, (duration - 8).coerceAtLeast(1), r) else r * .15
+            repeat(16) { i ->
+                val a = i * PI / 8
+                part(if (i % 4 == 0) Material.PRISMARINE else Material.LIGHT_BLUE_STAINED_GLASS,
+                    cos(a) * front, -.45 + .2 * sin(a * 3 + spin), sin(a) * front,
+                    .42, .8, .42, yaw = -a, roll = .3)
+                part(Material.WHITE_STAINED_GLASS, cos(a) * front, .05, sin(a) * front,
+                    .38, .16, .38)
+            }
+        } else {
+            repeat(3) { i -> part(if (i == 0) Material.SEA_LANTERN else Material.LIGHT_BLUE_STAINED_GLASS,
+                0.0, 0.0, 0.0, .64, .64, .64, pitch = i * .6 + spin * .4, roll = i * .7) }
+            repeat(9) { i ->
+                val f = i / 8.0; val a = i * 1.9 + spin
+                part(Material.PRISMARINE, cos(a) * .20, sin(a) * .20, -.2 - f * 1.45,
+                    .25 * (1 - f * .55), .25 * (1 - f * .55), .40, roll = a)
             }
         }
-        StaffSpell.REQUIEM -> {
-            if (impact || input.secondary && !input.quick) {
-                val front = if (impact && input.secondary && !input.quick)
-                    staffArsenalFront(age, duration, spread.toDouble()).toFloat() else spread
-                repeat(20) { i ->
-                    val angle = i * PI / 10.0 + spin
-                    val r = front * (0.72 + (i % 4) * 0.09)
-                    put(i, if (i % 4 == 0) Material.SOUL_LANTERN else Material.PURPLE_STAINED_GLASS,
-                        cos(angle) * r, (i % 3) * 0.18, sin(angle) * r,
-                        0.16, 0.32, 0.16, yaw = -angle)
-                }
-                put(20, Material.CRYING_OBSIDIAN, 0.0, 0.22, 0.0, 0.38, 0.46, 0.38)
-            } else if (input.quick && input.secondary) {
-                repeat(15) { i ->
-                    val lane = i / 5 - 1
-                    val step = i % 5
-                    put(i, if (step % 2 == 0) Material.SOUL_LANTERN else Material.PURPLE_STAINED_GLASS,
-                        lane * 0.30, sin(step * 0.55 + spin) * 0.20, step * 0.23,
-                        0.14, 0.18, 0.25, yaw = lane * 0.16)
-                }
-                put(15, Material.CRYING_OBSIDIAN, 0.0, 0.0, 0.0, 0.25, 0.25, 0.3)
-            } else if (input.quick) {
-                repeat(12) { i ->
-                    val z = i * 0.19
-                    put(i, if (i % 4 == 0) Material.SOUL_LANTERN else Material.PURPLE_STAINED_GLASS,
-                        sin(i * 0.42) * 0.09, cos(i * 0.36) * 0.08, z,
-                        0.12, 0.12, 0.27, yaw = sin(i * 0.4) * 0.22)
-                }
-            } else {
-                repeat(5) { wisp ->
-                    val angle = wisp * PI * 2.0 / 5.0 + spin
-                    val x = cos(angle) * (0.45 + progress * 0.35)
-                    val y = sin(angle * 1.3) * 0.22
-                    val z = sin(angle) * (0.45 + progress * 0.35)
-                    put(wisp * 3, Material.SOUL_LANTERN, x, y, z, 0.22, 0.28, 0.22)
-                    put(wisp * 3 + 1, Material.PURPLE_STAINED_GLASS, x * 0.72, y - 0.19, z * 0.72,
-                        0.12, 0.22, 0.12, yaw = angle)
-                    put(wisp * 3 + 2, Material.CYAN_STAINED_GLASS, x * 1.18, y + 0.14, z * 1.18,
-                        0.1, 0.1, 0.1)
-                }
+        StaffSpell.REQUIEM -> if (field) {
+            val front = if (impact) staffArsenalFront(age, (duration - 8).coerceAtLeast(1), r) else r * .15
+            repeat(12) { i ->
+                val a = i * PI / 6
+                part(if (i % 3 == 0) Material.SOUL_LANTERN else Material.PURPLE_STAINED_GLASS,
+                    cos(a) * front, -.4 + .4 * sin(a * 2 + spin), sin(a) * front,
+                    .36, .8, .36, roll = .35 * sin(a))
+            }
+        } else {
+            part(Material.SOUL_LANTERN, 0.0, 0.0, 0.0, .48, .52, .48, roll = sin(spin) * .2)
+            part(Material.CYAN_STAINED_GLASS, 0.0, 0.0, -.05, .64, .38, .38, roll = .7)
+            repeat(7) { i ->
+                val f = i / 6.0
+                part(Material.PURPLE_STAINED_GLASS, sin(i * .45 + spin) * f * .16,
+                    cos(i * .45 + spin) * f * .13, -.35 - f * 1.6,
+                    .26 - f * .15, .26 - f * .15, .38, roll = spin + i * .2)
             }
         }
         StaffSpell.PRISM -> {
-            if (impact || input.secondary && !input.quick) {
-                repeat(18) { i ->
-                    val lane = i / 6 - 1
-                    val step = i % 6
-                    put(i, if (step % 2 == 0) Material.AMETHYST_BLOCK else Material.PINK_STAINED_GLASS,
-                        lane * 0.22, sin(step * 0.7 + spin) * 0.12, step * 0.2,
-                        0.16, 0.16, 0.25, yaw = lane * 0.18)
-                }
-                put(18, Material.SEA_LANTERN, 0.0, 0.0, 0.0, 0.38, 0.38, 0.38)
-            } else if (input.quick) {
-                val count = if (input.secondary) 5 else 9
-                repeat(count) { i ->
-                    val lane = if (input.secondary) i / 1 - 2 else 0
-                    put(i, if (i % 3 == 0) Material.SEA_LANTERN else Material.AMETHYST_BLOCK,
-                        lane * 0.18, 0.0, i * 0.18, 0.14, 0.14, 0.24, yaw = lane * 0.1)
-                }
-            } else {
-                repeat(21) { i ->
-                    val lane = i / 7 - 1
-                    val step = i % 7
-                    val x = lane * (0.25 + step * 0.04)
-                    put(i, if (step % 3 == 0) Material.SEA_LANTERN else Material.PURPLE_STAINED_GLASS,
-                        x, 0.0, step * 0.19, 0.12, 0.12, 0.28, yaw = lane * 0.1)
-                }
-                repeat(3) { i -> put(21 + i, Material.AMETHYST_BLOCK, (i - 1) * 0.35, 0.0, 0.9,
-                    0.18, 0.18, 0.18, yaw = spin) }
+            part(Material.AMETHYST_BLOCK, 0.0, 0.0, 0.0, .34, .34, .9, roll = PI / 4 + spin * .4)
+            part(Material.SEA_LANTERN, 0.0, 0.0, .1, .22, .22, .95, roll = PI / 4)
+            repeat(8) { i ->
+                val f = i / 7.0
+                part(Material.PINK_STAINED_GLASS, 0.0, 0.0, -.45 - f * 1.7,
+                    .22 - f * .13, .22 - f * .13, .38, roll = PI / 4)
             }
         }
-        StaffSpell.NOVA -> {
-            if (impact || input.secondary && !input.quick) {
-                val front = if (impact && input.secondary && !input.quick)
-                    staffArsenalFront(age, duration, spread.toDouble()).toFloat() else spread
-                repeat(8) { i ->
-                    val angle = i * PI / 4.0 + spin * 0.15
-                    val r = if (input.secondary) front * if (i % 2 == 0) 0.95 else 0.72 else 0.72
-                    put(i, if (i % 2 == 0) Material.FLOWERING_AZALEA_LEAVES else Material.MOSS_BLOCK,
-                        cos(angle) * r, 0.06, sin(angle) * r, 0.25, 0.18, 0.38, yaw = -angle, roll = 0.25)
-                    put(8 + i, Material.MOSS_BLOCK, cos(angle) * r * 0.66, 0.23, sin(angle) * r * 0.66,
-                        0.14, 0.28, 0.16, yaw = -angle)
-                }
-                put(16, Material.SEA_LANTERN, 0.0, 0.25, 0.0, 0.34, 0.34, 0.34)
-                put(17, Material.EMERALD_BLOCK, 0.0, 0.56, 0.0, 0.18, 0.18, 0.18)
-            } else if (input.quick && input.secondary) {
-                repeat(12) { i ->
-                    val angle = i * PI / 6.0 + spin
-                    val r = 0.7 + 0.12 * sin(age * 0.12 + i)
-                    put(i, if (i % 3 == 0) Material.FLOWERING_AZALEA_LEAVES else Material.MOSS_BLOCK,
-                        cos(angle) * r, 0.22 + sin(angle * 2.0) * 0.12, sin(angle) * r,
-                        0.18, 0.12, 0.22, yaw = -angle)
-                }
-                put(12, Material.EMERALD_BLOCK, 0.0, 0.25, 0.0, 0.18, 0.18, 0.18)
-            } else {
-                repeat(20) { i ->
-                    val t = i / 19.0
-                    val z = t * minOf(reach.toDouble(), 7.0)
-                    val angle = spin + t * PI * (if (input.quick) 1.1 else 2.1)
-                    val x = cos(angle) * (0.12 + t * 0.28)
-                    val y = 0.08 + sin(angle) * (0.12 + t * 0.18)
-                    put(i, if (i % 4 == 0) Material.FLOWERING_AZALEA_LEAVES else Material.MOSS_BLOCK,
-                        x, y, z, 0.12, 0.12, 0.26, yaw = -angle, roll = 0.12 * sin(angle))
-                }
-                put(20, Material.EMERALD_BLOCK, 0.0, 0.08, 0.0, 0.22, 0.22, 0.28)
-                if (!input.quick) repeat(6) { i ->
-                    val angle = i * PI / 3.0 + spin
-                    put(21 + i, Material.FLOWERING_AZALEA_LEAVES,
-                        cos(angle) * 0.38, 0.15 + sin(angle) * 0.18, 0.25,
-                        0.16, 0.1, 0.24, yaw = -angle)
-                }
+        StaffSpell.NOVA -> if (field) {
+            val front = if (impact) staffArsenalFront(age, (duration - 8).coerceAtLeast(1), r) else r * .15
+            repeat(8) { i ->
+                val a = i * PI / 4
+                part(Material.FLOWERING_AZALEA_LEAVES, cos(a) * front, -.25, sin(a) * front,
+                    .5, .28, .75, yaw = -a, roll = .35)
+                part(Material.MOSS_BLOCK, cos(a) * front * .80, -.4, sin(a) * front * .80,
+                    .28, .65, .28, roll = cos(a) * .4, pitch = sin(a) * .4)
+            }
+            part(Material.EMERALD_BLOCK, 0.0, -.2, 0.0, .50, .50, .50, roll = .7)
+        } else {
+            part(Material.EMERALD_BLOCK, 0.0, 0.0, 0.0, .54, .54, .62, roll = .65)
+            repeat(14) { i ->
+                val f = i / 13.0; val a = f * PI * 2 - spin
+                part(if (i % 4 == 0) Material.FLOWERING_AZALEA_LEAVES else Material.MOSS_BLOCK,
+                    sin(a) * f * .34, cos(a) * f * .24, -.2 - f * 2.8,
+                    .34 - f * .15, .32 - f * .14, .44, yaw = sin(a) * .25, roll = a * .15)
             }
         }
         else -> Unit
     }
-    // Only impact scenes dissolve; leave the silhouette steady until the final five ticks.
-    val remaining = ((duration - age).toDouble() / 5.0).coerceIn(0.0, 1.0)
-    val dissolve = if (impact) maxOf(0.001, remaining * remaining * (3.0 - 2.0 * remaining)) else 1.0
-    // Keep fixed slots and dimensions so per-viewer handles never roll between phases.
-    return if (dissolve == 1.0) parts else parts.map { part ->
-        part.copy(scale = Vector3f(part.scale).mul(dissolve.toFloat()))
-    }
+    return parts
 }
 
-private fun invisiblePart() = StaffDisplayPart(Material.GLASS, Vector3f(), Vector3f(0.001f), Quaternionf(), false)
-
-private fun arsenalPart(material: Material, x: Double, y: Double, z: Double,
-    sx: Double, sy: Double, sz: Double, yaw: Double = 0.0, pitch: Double = 0.0, roll: Double = 0.0) =
-    StaffDisplayPart(material, Vector3f(x.toFloat(), y.toFloat(), z.toFloat()),
-        Vector3f(sx.toFloat(), sy.toFloat(), sz.toFloat()),
-        Quaternionf().rotationXYZ(pitch.toFloat(), yaw.toFloat(), roll.toFloat()))
+private fun smooth(value: Double): Double = value.coerceIn(0.0, 1.0).let { it * it * (3 - 2 * it) }

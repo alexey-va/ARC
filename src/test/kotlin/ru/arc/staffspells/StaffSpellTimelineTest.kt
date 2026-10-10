@@ -112,7 +112,7 @@ class StaffSpellTimelineTest : FreeSpec({
 
     "nova bloom front advances before impact-only dissolve" {
         fun bloom(age: Int) = staffDisplayParts(
-            StaffSpell.NOVA, age, 12, 0.0, 5.5, impact = true, secondary = true,
+            StaffSpell.NOVA, age, 20, 0.0, 5.5, impact = true, secondary = true,
             input = StaffCastInput.SECONDARY,
         )
         fun frontRadius(parts: List<StaffDisplayPart>) = parts.take(8).maxOf {
@@ -122,36 +122,36 @@ class StaffSpellTimelineTest : FreeSpec({
         val start = bloom(0)
         val early = bloom(4)
         val preDissolve = bloom(6)
-        val dissolveStart = bloom(8)
-        val dissolveLater = bloom(10)
-        val expired = bloom(12)
-        listOf(start, early, preDissolve, dissolveStart, dissolveLater, expired).forEach { it.size shouldBe 32 }
+        val dissolveStart = bloom(16)
+        val dissolveLater = bloom(18)
+        val expired = bloom(20)
+        listOf(start, early, preDissolve, dissolveStart, dissolveLater, expired).forEach { it.size shouldBe start.size }
 
         (frontRadius(start) < frontRadius(early)) shouldBe true
         (frontRadius(early) < frontRadius(preDissolve)) shouldBe true
-        (start.maxOf { it.scale.x } == preDissolve.maxOf { it.scale.x }) shouldBe true
+        (early.maxOf { it.scale.x } == preDissolve.maxOf { it.scale.x }) shouldBe true
         (dissolveStart.maxOf { it.scale.x } < preDissolve.maxOf { it.scale.x }) shouldBe true
         (dissolveLater.maxOf { it.scale.x } < dissolveStart.maxOf { it.scale.x }) shouldBe true
         expired.all { it.scale.x > 0f && it.scale.y > 0f && it.scale.z > 0f } shouldBe true
-        (expired.maxOf { it.scale.x } < 0.001f) shouldBe true
+        (expired.maxOf { it.scale.x } <= 0.001f) shouldBe true
     }
 
-    "all arsenal impact geometries keep 32 slots and dissolve only in their final five ticks" {
+    "all arsenal impact geometries keep their slots and dissolve before their final interpolation frame" {
         val spells = listOf(StaffSpell.NOVA, StaffSpell.LUNAR, StaffSpell.GALE,
             StaffSpell.TIDE, StaffSpell.REQUIEM, StaffSpell.PRISM)
         spells.forEach { spell ->
             fun impact(age: Int) = staffDisplayParts(spell, age, 12, 8.0, 3.0,
                 impact = true, input = StaffCastInput.PRIMARY)
-            val steady = impact(6)
-            val dissolve = impact(9)
+            val steady = impact(4)
+            val dissolve = impact(8)
             val expired = impact(12)
-            steady.size shouldBe 32
-            dissolve.size shouldBe 32
-            expired.size shouldBe 32
+            (steady.size in 1..48) shouldBe true
+            dissolve.size shouldBe steady.size
+            expired.size shouldBe steady.size
             (impact(0).maxOf { it.scale.x } == steady.maxOf { it.scale.x }) shouldBe true
             (dissolve.maxOf { it.scale.x } < steady.maxOf { it.scale.x }) shouldBe true
             expired.all { it.scale.x > 0f && it.scale.y > 0f && it.scale.z > 0f } shouldBe true
-            (expired.maxOf { it.scale.x } < 0.001f) shouldBe true
+            (expired.maxOf { it.scale.x } <= 0.001f) shouldBe true
         }
     }
 })

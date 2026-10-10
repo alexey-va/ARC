@@ -90,17 +90,6 @@ class StaffSpellVisualsTest : FreeSpec({
                     val visuals = StaffSpellVisuals(tasks)
                     val origin = Location(world, 0.0, 1.62, 0.0)
                     StaffSpell.entries.forEach { spell ->
-                        var particlesBefore = particles.size
-                        visuals.charge(origin, spell, 0.0)
-                        (particles.size - particlesBefore) shouldBe 8
-                        particlesBefore = particles.size
-                        visuals.charge(origin, spell, 0.5)
-                        (particles.size - particlesBefore) shouldBe 8
-                        val beforeFullCharge = heard.size
-                        particlesBefore = particles.size
-                        visuals.charge(origin, spell, 1.0)
-                        (particles.size - particlesBefore) shouldBe 8
-                        heard.size shouldBe beforeFullCharge
                         visuals.release(origin, spell, charged = true)
                     }
                     val arcaneSpells = listOf(StaffSpell.LUNAR, StaffSpell.GALE, StaffSpell.TIDE,

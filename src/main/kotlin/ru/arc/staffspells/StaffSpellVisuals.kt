@@ -7,6 +7,7 @@ import org.bukkit.Material
 import org.bukkit.Particle
 import org.bukkit.Sound
 import org.bukkit.SoundCategory
+import org.bukkit.entity.Player
 import org.bukkit.util.Vector
 import org.joml.Vector3f
 import ru.arc.core.LifecycleTaskScope
@@ -15,15 +16,23 @@ import kotlin.math.abs
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 
 /** Sparse accents around the display silhouettes; all delayed phases run on Paper's main thread. */
-internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
+internal class StaffSpellVisuals(
+    private val tasks: LifecycleTaskScope,
+    private val currentTick: () -> Long = { Bukkit.getCurrentTick().toLong() },
+) {
     private data class OwnerTasks(var generation: Long = 0L, var pending: Int = 0)
+    private data class ChargeFeedbackState(val spell: StaffSpell, var progress: Double, var stages: Int)
+    private data class QuickParticle(val at: Location, val particle: Particle, val data: Any?, val velocity: Vector)
 
     private val activeOwner = ThreadLocal<UUID?>()
     private val ownerTasks = mutableMapOf<UUID, OwnerTasks>()
+    private val chargeFeedbackStates = mutableMapOf<UUID, ChargeFeedbackState>()
+    private val lastCooldownFeedbackTick = mutableMapOf<UUID, Long>()
 
     /** Associates visual work scheduled by a cast with its owner so a round reset can invalidate it. */
     fun withOwner(ownerId: UUID, action: () -> Unit) {
@@ -37,10 +46,25 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
     }
 
     fun cancel(ownerId: UUID) {
+        chargeFeedbackStates.remove(ownerId)
+        lastCooldownFeedbackTick.remove(ownerId)
         ownerTasks[ownerId]?.let { state ->
             state.generation++
             if (state.pending == 0) ownerTasks.remove(ownerId, state)
         }
+    }
+
+    /** Drops only the active charge stages; the shared cooldown click throttle remains intact. */
+    fun cancelChargeFeedback(playerId: UUID) {
+        chargeFeedbackStates.remove(playerId)
+    }
+
+    /** Clears per-player feedback and invalidates delayed visual work when the module closes. */
+    fun close() {
+        ownerTasks.values.forEach { it.generation++ }
+        ownerTasks.clear()
+        chargeFeedbackStates.clear()
+        lastCooldownFeedbackTick.clear()
     }
 
     private fun runLater(delay: Long, action: () -> Unit) {
@@ -77,26 +101,204 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         localSound(origin, Sound.ENTITY_LIGHTNING_BOLT_IMPACT, 0.62f, 1.6f, audibleDistance = 32.0)
     }
 
-    /** Sparse charge accents for the new arcane families; audio only fires at charge thresholds. */
-    fun charge(at: Location, spell: StaffSpell, progress: Double) = dispatch {
+    /** Quiet charge accents stay just in front of the caster instead of hiding behind the camera. */
+    fun chargeFeedback(player: Player, spell: StaffSpell, progress: Double) = dispatch {
         val palette = arcanePalette(spell) ?: return@dispatch
+        val anchor = handAnchor(player) ?: return@dispatch
+        val playerId = player.uniqueId
+        val charge = progress.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
+        val state = chargeFeedbackStates[playerId]
+        val activeState = if (state == null || state.spell != spell ||
+            charge + CHARGE_RESET_EPSILON < state.progress) {
+            ChargeFeedbackState(spell, charge, CHARGE_STAGE_START).also {
+                chargeFeedbackStates[playerId] = it
+                playPrivate(player, anchor, palette.chargeSound, 0.16f, palette.pitch * 0.78f)
+            }
+        } else {
+            state.progress = maxOf(state.progress, charge)
+            state
+        }
+        if (charge >= CHARGE_QUARTER && activeState.stages and CHARGE_STAGE_QUARTER == 0) {
+            activeState.stages = activeState.stages or CHARGE_STAGE_QUARTER
+            playPrivate(player, anchor, Sound.BLOCK_NOTE_BLOCK_CHIME, 0.14f, 0.95f)
+        }
+        if (charge >= CHARGE_HALF && activeState.stages and CHARGE_STAGE_HALF == 0) {
+            activeState.stages = activeState.stages or CHARGE_STAGE_HALF
+            playPrivate(player, anchor, Sound.BLOCK_NOTE_BLOCK_CHIME, 0.15f, 1.12f)
+        }
+        if (charge >= CHARGE_THREE_QUARTERS && activeState.stages and CHARGE_STAGE_THREE_QUARTERS == 0) {
+            activeState.stages = activeState.stages or CHARGE_STAGE_THREE_QUARTERS
+            playPrivate(player, anchor, Sound.BLOCK_NOTE_BLOCK_CHIME, 0.16f, 1.30f)
+        }
+        if (charge >= CHARGE_READY && activeState.stages and CHARGE_STAGE_READY == 0) {
+            activeState.stages = activeState.stages or CHARGE_STAGE_READY
+            playPrivate(player, anchor, Sound.ENTITY_PLAYER_LEVELUP, 0.12f, 1.45f)
+        }
+
+        val radius = 0.07 + charge * 0.12
+        repeat(CHARGE_PARTICLE_COUNT) { index ->
+            val angle = index * PI / (CHARGE_PARTICLE_COUNT / 2.0) + charge * PI * 2.0
+            val point = anchor.clone().add(cos(angle) * radius, sin(angle) * radius * 0.55,
+                sin(angle) * radius)
+            emitPrivate(player, point, Particle.DUST_COLOR_TRANSITION, palette.transition)
+        }
+        if (charge >= CHARGE_QUARTER) emitPrivate(player, anchor, palette.accent)
+    }
+
+    /** One subdued, caster-only cooldown click and dust pulse shared by all staff inputs. */
+    fun cooldownFeedback(player: Player, spell: StaffSpell) = dispatch {
+        val palette = arcanePalette(spell) ?: return@dispatch
+        val anchor = handAnchor(player) ?: return@dispatch
+        val playerId = player.uniqueId
+        val now = currentTick()
+        val previous = lastCooldownFeedbackTick[playerId]
+        if (previous != null && now >= previous && now - previous < COOLDOWN_FEEDBACK_TICKS) return@dispatch
+        lastCooldownFeedbackTick[playerId] = now
+        playPrivate(player, anchor, Sound.BLOCK_NOTE_BLOCK_HAT, 0.12f, 1.15f)
+        repeat(COOLDOWN_PARTICLE_COUNT) { index ->
+            val angle = index * PI / (COOLDOWN_PARTICLE_COUNT / 2)
+            val point = anchor.clone().add(cos(angle) * COOLDOWN_PARTICLE_RADIUS, 0.015,
+                sin(angle) * COOLDOWN_PARTICLE_RADIUS)
+            emitPrivate(player, point, Particle.DUST_COLOR_TRANSITION, palette.transition)
+        }
+    }
+
+    /** Compact six-strand gale funnel; callers drive frames at their existing three-tick cadence. */
+    fun galeFunnel(at: Location, ageTicks: Int, charge: Double) = dispatch {
+        val palette = arcanePalette(StaffSpell.GALE) ?: return@dispatch
         val origin = at.clone()
         if (!drawable(origin)) return@dispatch
-        val charge = progress.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
-        val radius = 0.24 + charge * 0.28
-        repeat(5) { index ->
-            val angle = index * PI * 2.0 / 5.0 + charge * PI * 0.8
-            val point = origin.clone().add(cos(angle) * radius, 0.12 + sin(angle * 2.0) * 0.08,
-                sin(angle) * radius)
-            emit(point, Particle.DUST_COLOR_TRANSITION, palette.transition,
-                minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
-            if (index % 2 == 0) emit(point.clone().add(0.0, 0.08 + charge * 0.08, 0.0), palette.accent,
-                minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+        val intensity = charge.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
+        val height = 2.6 + intensity
+        val bottomRadius = 0.4 + intensity * 0.08
+        val topRadius = 0.88 + intensity * 0.22
+        val time = ageTicks.coerceAtLeast(0) * GALE_PHASE_PER_TICK
+
+        repeat(GALE_STRANDS) { strand ->
+            repeat(GALE_ROPE_LEVELS) { level ->
+                val fraction = level / (GALE_ROPE_LEVELS - 1.0)
+                val radius = bottomRadius + (topRadius - bottomRadius) * fraction * fraction
+                val angle = strand * PI / (GALE_STRANDS / 2.0) + fraction * PI * 1.7 + time * 1.6
+                val point = origin.clone().add(cos(angle) * radius,
+                    GALE_BASE_Y + fraction * height, sin(angle) * radius)
+                emit(point, Particle.DUST_COLOR_TRANSITION, palette.transition,
+                    minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+            }
         }
-        if (charge <= 0.04) {
-            localSound(origin, palette.chargeSound, 0.30f, palette.pitch + 0.18f, audibleDistance = 18.0)
-        } else if (charge in 0.46..0.54) {
-            localSound(origin, palette.chargeSound, 0.22f, palette.pitch, audibleDistance = 18.0)
+        // The crown spins against the ropes; four small clouds orbit at different heights as debris.
+        repeat(GALE_CROWN_PARTICLES) { index ->
+            val angle = index * PI / (GALE_CROWN_PARTICLES / 2.0) - time * 1.9
+            val point = origin.clone().add(cos(angle) * topRadius * 0.84,
+                GALE_BASE_Y + height * 0.9, sin(angle) * topRadius * 0.84)
+            emit(point, palette.accent, minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+        }
+        repeat(GALE_DEBRIS_PARTICLES) { index ->
+            val fraction = 0.22 + index * 0.18
+            val radius = bottomRadius + (topRadius - bottomRadius) * fraction * fraction
+            val angle = index * PI / (GALE_DEBRIS_PARTICLES / 2.0) + time * 2.5
+            val point = origin.clone().add(cos(angle) * radius,
+                GALE_BASE_Y + height * fraction, sin(angle) * radius)
+            emit(point, palette.accent, minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+        }
+
+        // Frames arrive every three ticks, so this window catches each twenty-tick boundary.
+        if (ageTicks > 0 && ageTicks % GALE_SOUND_INTERVAL_TICKS < GALE_FRAME_TICKS) {
+            val sound = if ((ageTicks / GALE_SOUND_INTERVAL_TICKS) % 2 == 0)
+                Sound.ENTITY_BREEZE_IDLE_GROUND else Sound.ITEM_ELYTRA_FLYING
+            localSound(origin, sound, 0.14f, 1.0f, audibleDistance = GALE_SOUND_DISTANCE)
+        }
+    }
+
+    /** Native-only primary attacks: a swept air crescent or a low breaking tide wall. */
+    fun quickElement(at: Location, spell: StaffSpell, ageTicks: Int, durationTicks: Int, radius: Double) = dispatch {
+        if (spell != StaffSpell.GALE && spell != StaffSpell.TIDE) return@dispatch
+        val palette = arcanePalette(spell) ?: return@dispatch
+        if (durationTicks <= 0 || ageTicks >= durationTicks) return@dispatch
+        val origin = at.clone()
+        if (!drawable(origin)) return@dispatch
+        val effectRadius = boundedRadius(radius, 0.55, QUICK_ELEMENT_MAX_RADIUS) ?: return@dispatch
+        val age = ageTicks.coerceAtLeast(0)
+        val progress = (age.toDouble() / durationTicks).coerceIn(0.0, 1.0)
+        val remaining = durationTicks - age
+        val fade = if (remaining < QUICK_ELEMENT_FADE_TICKS) remaining.toDouble() / QUICK_ELEMENT_FADE_TICKS
+            else 1.0
+        if (fade <= 0.0) return@dispatch
+        val form = QUICK_ELEMENT_MIN_FORM + (age / QUICK_ELEMENT_FORM_TICKS).coerceIn(0.0, 1.0) *
+            (1.0 - QUICK_ELEMENT_MIN_FORM)
+        val maximumParticles = if (spell == StaffSpell.GALE) GALE_QUICK_PARTICLE_CAP else TIDE_QUICK_PARTICLE_CAP
+        val activeParticles = (maximumParticles * form * fade).roundToInt().coerceIn(1, maximumParticles)
+        val yaw = Math.toRadians(origin.yaw.toDouble())
+        val forward = Vector(-sin(yaw), 0.0, cos(yaw))
+        val right = forward.clone().crossProduct(Vector(0.0, 1.0, 0.0)).normalize()
+        val particles = ArrayList<QuickParticle>(maximumParticles)
+
+        if (spell == StaffSpell.GALE) {
+            val sweep = progress * QUICK_ELEMENT_SWEEP_DISTANCE
+            repeat(GALE_QUICK_BANDS) { band ->
+                repeat(GALE_QUICK_POINTS_PER_BAND) { pointIndex ->
+                    val across = pointIndex / (GALE_QUICK_POINTS_PER_BAND - 1.0) * 2.0 - 1.0
+                    val curve = 1.0 - across * across
+                    val width = effectRadius * (0.42 + progress * 0.10 + band * 0.12)
+                    val depth = 0.24 + band * 0.12
+                    val point = origin.clone()
+                        .add(forward.clone().multiply(0.18 + sweep + band * 0.18 + curve * depth))
+                        .add(right.clone().multiply(across * width))
+                        .add(0.0, (band - 1) * 0.22 + curve * 0.06, 0.0)
+                    val velocity = forward.clone().multiply(0.035 + band * 0.006)
+                        .add(right.clone().multiply(across * 0.006))
+                        .add(Vector(0.0, 0.006 + curve * 0.004, 0.0))
+                    particles += QuickParticle(point, Particle.CLOUD, null, velocity)
+                }
+            }
+            repeat(GALE_QUICK_DUST_POINTS) { index ->
+                val across = (index - 1) * 0.32
+                val point = origin.clone()
+                    .add(forward.clone().multiply(-0.08 + sweep * 0.35))
+                    .add(right.clone().multiply(across))
+                    .add(0.0, -0.14 + index * 0.04, 0.0)
+                particles += QuickParticle(point, Particle.DUST_COLOR_TRANSITION, palette.transition,
+                    forward.clone().multiply(0.012).add(Vector(0.0, 0.004, 0.0)))
+            }
+        } else {
+            val sweep = progress * QUICK_ELEMENT_SWEEP_DISTANCE
+            val halfWidth = effectRadius * (0.46 + progress * 0.42)
+            repeat(TIDE_QUICK_COLUMNS) { column ->
+                val across = column / (TIDE_QUICK_COLUMNS - 1.0) * 2.0 - 1.0
+                val curve = 1.0 - across * across
+                val front = 0.22 + sweep + curve * 0.34
+                val wallHeight = 0.58 + progress * 0.20 + curve * 0.16
+                repeat(TIDE_QUICK_SPLASH_ROWS) { row ->
+                    val point = origin.clone()
+                        .add(forward.clone().multiply(front + row * 0.035))
+                        .add(right.clone().multiply(across * halfWidth))
+                        .add(0.0, TIDE_QUICK_BASE_Y + wallHeight * row /
+                            (TIDE_QUICK_SPLASH_ROWS - 1.0), 0.0)
+                    val velocity = forward.clone().multiply(0.014 + progress * 0.008)
+                        .add(right.clone().multiply(across * 0.004))
+                        .add(Vector(0.0, 0.012 + row * 0.006 + curve * 0.004, 0.0))
+                    particles += QuickParticle(point, Particle.SPLASH, null, velocity)
+                }
+                if (column < TIDE_QUICK_FOAM_POINTS) {
+                    val crest = origin.clone()
+                        .add(forward.clone().multiply(front + 0.08))
+                        .add(right.clone().multiply(across * halfWidth))
+                        .add(0.0, TIDE_QUICK_BASE_Y + wallHeight + 0.08 + (column % 2) * 0.05, 0.0)
+                    particles += QuickParticle(crest, Particle.CLOUD, null,
+                        forward.clone().multiply(0.018).add(Vector(0.0, 0.018, 0.0)))
+                }
+                val base = origin.clone()
+                    .add(forward.clone().multiply(front - 0.12))
+                    .add(right.clone().multiply(across * halfWidth))
+                    .add(0.0, TIDE_QUICK_BASE_Y + 0.06, 0.0)
+                particles += QuickParticle(base, Particle.DUST_COLOR_TRANSITION, palette.transition,
+                    forward.clone().multiply(0.01).add(Vector(0.0, 0.006, 0.0)))
+            }
+        }
+
+        repeat(activeParticles) { index ->
+            val particle = particles[index * particles.size / activeParticles]
+            emitNativeVelocity(particle.at, particle.particle, particle.data, particle.velocity,
+                minimumEyeDistance = QUICK_ELEMENT_MIN_EYE_DISTANCE)
         }
     }
 
@@ -1040,9 +1242,57 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
 
     private fun valid(location: Location) = location.x.isFinite() && location.y.isFinite() && location.z.isFinite()
 
+    private fun valid(vector: Vector) = vector.x.isFinite() && vector.y.isFinite() && vector.z.isFinite()
+
     private fun drawable(location: Location): Boolean {
         val world = location.world ?: return false
         return valid(location) && world.isChunkLoaded(location.blockX shr 4, location.blockZ shr 4)
+    }
+
+    private fun handAnchor(player: Player): Location? {
+        val eye = player.eyeLocation
+        if (!drawable(eye)) return null
+        val yaw = Math.toRadians(eye.yaw.toDouble())
+        val forward = Vector(-sin(yaw), 0.0, cos(yaw))
+        val right = forward.clone().crossProduct(Vector(0.0, 1.0, 0.0))
+        return eye.clone().add(forward.multiply(HAND_FORWARD_DISTANCE))
+            .add(0.0, -HAND_BELOW_EYE, 0.0).add(right.multiply(HAND_SIDE_DISTANCE))
+            .takeIf(::drawable)
+    }
+
+    private fun emitPrivate(player: Player, at: Location, particle: Particle, data: Any? = null) {
+        if (!drawable(at) || player.world !== at.world) return
+        val particleData = data ?: if (particle == Particle.FLASH) Color.WHITE else null
+        if (particleData == null) player.spawnParticle(particle, at, 1, 0.0, 0.0, 0.0, 0.0)
+        else player.spawnParticle(particle, at, 1, 0.0, 0.0, 0.0, 0.0, particleData)
+    }
+
+    /** Sends one native-velocity particle per nearby viewer instead of a stationary point. */
+    private fun emitNativeVelocity(at: Location, particle: Particle, data: Any?, velocity: Vector,
+        minimumEyeDistance: Double) {
+        if (!drawable(at) || !valid(velocity)) return
+        val world = at.world ?: return
+        val minEyeDistanceSquared = minimumEyeDistance * minimumEyeDistance
+        val particleData = data ?: if (particle == Particle.FLASH) Color.WHITE else null
+        world.getNearbyPlayers(at, QUICK_ELEMENT_VIEW_DISTANCE).forEach { player ->
+            val eye = player.eyeLocation
+            if (eye.world !== world) return@forEach
+            val distanceSquared = eye.distanceSquared(at)
+            if (!distanceSquared.isFinite() || distanceSquared < minEyeDistanceSquared ||
+                distanceSquared > QUICK_ELEMENT_VIEW_DISTANCE * QUICK_ELEMENT_VIEW_DISTANCE) return@forEach
+            if (particleData == null) {
+                player.spawnParticle(particle, at, 0, velocity.x, velocity.y, velocity.z, 1.0)
+            } else {
+                player.spawnParticle(particle, at, 0, velocity.x, velocity.y, velocity.z, 1.0, particleData)
+            }
+        }
+    }
+
+    private fun playPrivate(player: Player, at: Location, sound: Sound, volume: Float, pitch: Float) {
+        if (!drawable(at) || player.world !== at.world) return
+        val safeVolume = volume.takeIf(Float::isFinite)?.coerceIn(0.0f, 1.0f) ?: return
+        val safePitch = pitch.takeIf(Float::isFinite)?.coerceIn(0.5f, 2.0f) ?: return
+        player.playSound(at, sound, SoundCategory.PLAYERS, safeVolume, safePitch)
     }
 
     private fun emit(at: Location, particle: Particle, data: Any? = null,
@@ -1145,6 +1395,50 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         const val SOUND_GAIN_FAR_DISTANCE = 40.0
         const val SOUND_GAIN_NEAR = 0.7
         const val SOUND_GAIN_FAR = 0.4
+        const val CHARGE_PARTICLE_COUNT = 4
+        const val CHARGE_STAGE_START = 1
+        const val CHARGE_STAGE_QUARTER = 1 shl 1
+        const val CHARGE_STAGE_HALF = 1 shl 2
+        const val CHARGE_STAGE_THREE_QUARTERS = 1 shl 3
+        const val CHARGE_STAGE_READY = 1 shl 4
+        const val CHARGE_QUARTER = 0.25
+        const val CHARGE_HALF = 0.5
+        const val CHARGE_THREE_QUARTERS = 0.75
+        const val CHARGE_READY = 0.99
+        const val CHARGE_RESET_EPSILON = 0.12
+        const val COOLDOWN_FEEDBACK_TICKS = 8L
+        const val COOLDOWN_PARTICLE_COUNT = 4
+        const val COOLDOWN_PARTICLE_RADIUS = 0.08
+        const val HAND_FORWARD_DISTANCE = 1.35
+        const val HAND_BELOW_EYE = 0.45
+        const val HAND_SIDE_DISTANCE = 0.24
+        const val GALE_STRANDS = 6
+        const val GALE_ROPE_LEVELS = 4
+        const val GALE_CROWN_PARTICLES = 4
+        const val GALE_DEBRIS_PARTICLES = 4
+        const val GALE_BASE_Y = -0.8
+        const val GALE_FRAME_TICKS = 3
+        const val GALE_SOUND_INTERVAL_TICKS = 20
+        const val GALE_SOUND_DISTANCE = 56.0
+        const val GALE_PHASE_PER_TICK = 0.045
+        const val QUICK_ELEMENT_MAX_RADIUS = 3.0
+        const val QUICK_ELEMENT_MIN_EYE_DISTANCE = 0.35
+        const val QUICK_ELEMENT_VIEW_DISTANCE = 48.0
+        const val QUICK_ELEMENT_MIN_FORM = 0.35
+        const val QUICK_ELEMENT_FORM_TICKS = 4.0
+        const val QUICK_ELEMENT_FADE_TICKS = 4
+        const val QUICK_ELEMENT_SWEEP_DISTANCE = 0.72
+        const val GALE_QUICK_BANDS = 3
+        const val GALE_QUICK_POINTS_PER_BAND = 6
+        const val GALE_QUICK_DUST_POINTS = 3
+        const val GALE_QUICK_PARTICLE_CAP =
+            GALE_QUICK_BANDS * GALE_QUICK_POINTS_PER_BAND + GALE_QUICK_DUST_POINTS
+        const val TIDE_QUICK_COLUMNS = 5
+        const val TIDE_QUICK_SPLASH_ROWS = 3
+        const val TIDE_QUICK_FOAM_POINTS = 4
+        const val TIDE_QUICK_PARTICLE_CAP =
+            TIDE_QUICK_COLUMNS * (TIDE_QUICK_SPLASH_ROWS + 1) + TIDE_QUICK_FOAM_POINTS
+        const val TIDE_QUICK_BASE_Y = -0.55
         val CHAIN_ARC = Particle.DustTransition(Color.fromRGB(80, 220, 255), Color.fromRGB(230, 255, 255), 1.1f)
         val VIOLET = Particle.DustOptions(Color.fromRGB(166, 74, 255), 1.15f)
         val VIOLET_BURST = Particle.DustOptions(Color.fromRGB(207, 112, 255), 1.5f)

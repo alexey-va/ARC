@@ -28,19 +28,19 @@ Changing items cannot bypass the shared cooldown.
 
 | ID and item | Hold/release ПКМ | Hold/release Shift + ПКМ | ЛКМ | Shift + ЛКМ | Existing ItemsAdder skin |
 | --- | --- | --- | --- | --- | --- |
-| `chain` · Грозовая ветвь | Seeking lightning jumps between up to four distinct targets | Three seeking bolts fan out to separate targets | One short lightning bolt, up to 24 blocks | Three short bolts spread 120° apart, up to 12 blocks | `3dfantasyweaponscit:divine_staff` |
-| `mark` · Разрыв | A mark follows its acquired target, then bursts; without a mob it uses the aimed point | A fixed black hole pulses, pulls eligible mobs and collapses | A six-tick delayed hit at the target or aim point | A close gravity burst after six ticks | `3dfantasyweaponscit:night_staff` |
-| `frost` · Ледяной хлопок | Ground wave advances through a 50° cone for up to 28 blocks (global cap: 48) | Radial ice front expands from the caster to eight blocks | Short ground wave in a 25° cone, capped at 16 blocks | Staged radial ice front expands to four blocks | `3dfantasyweaponscit:northgate_guardian_staff` |
-| `lance` · Солнечное копьё | A narrow solar front travels up to 48 blocks and damages targets as it reaches them | Three solar fronts travel at −16°, 0° and +16° | Wide solar cut along 20 blocks | Solar pillar travels down to the aimed point | `3dfantasyweaponscit:sagrada_winged_staff` |
-| `ember` · Пепельная комета | A straight fire core accelerates, then bursts on collision or at range | Three staggered meteors descend at the selected point | Close fire fan at five blocks | Delayed ember burst at the aimed point | `3dfantasyweaponscit:bermunde_hermit_staff` |
-| `nova` · Изумрудная волна | Витой побег — a spiraling vine travels toward the aim point | Изумрудное цветение — a rooted bloom opens at the selected point | Хлыст лозы — a fast straight vine lash | Семена орбиты — three seeds orbit briefly, then fan outward | `3dfantasyweaponscit:holy_celtic_staff` |
-| `icicle` · Ледяной венец | Seven seeking shoulder icicles; full charge releases eleven | Five falling lances around the aim point; full charge releases nine | One fast icicle | Two flank icicles from behind the shoulders | `3dfantasyweaponscit:olwen_staff` |
-| `fault` · Обсидиановый раскол | Five ground ruptures advance along the facing direction, up to 18 blocks | After a warning, an aimed ground eruption lifts nearby mobs | Short ground fracture at the aim point, up to 12 blocks | Close obsidian burst | `3dfantasyweaponscit:staff_of_unholy_wisdom` |
-| `lunar` · Лунный серп | Серп возвращения — crescent travels out, then returns | Лунная орбита — crescent orbits briefly, then sweeps through | Лунный осколок — fast straight shard | Двойной серп — two diverging crescents | `3dfantasyweaponscit:black_snake_staff` |
-| `gale` · Посох бури | Блуждающий смерч — traveling tornado pulls nearby mobs | Воронка — pulsing stationary pull field | Ветряное лезвие — fast gust knocks its target back | Подъёмный вихрь — nearby pull followed by a lift | `3dfantasyweaponscit:goblin_witch_staff` |
-| `tide` · Сердце прилива | Водяная комета — arcing projectile bursts on impact | Гейзер — delayed expanding ground eruption | Пузырьковый выстрел — fast bubble dart | Три струи — staggered fan of three arcing jets | `3dfantasyweaponscit:northgate_guardian_staff` |
-| `requiem` · Реквием | Призрачная стая — five seeking wisps select distinct targets | Ритуал душ — charged sigil releases a radial pulse | Призрачный выпад — fast piercing soul lance | Шёпот духов — short forward wraith fan | `3dfantasyweaponscit:lich_staff` |
-| `prism` · Кристальная призма | Раздвоенный луч — three traveling rays pierce their lanes | Рикошетный луч — ray steps through up to two new targets | Призматический осколок — fast shard | Расщепление — short five-shard fan | `3dfantasyweaponscit:northgate_golden_crook` |
+| `chain` · Грозовая ветвь | Seeking lightning jumps between up to four distinct targets | Three seeking bolts fan out to separate targets | Close lightning fan | Aimed lightning snap | `3dfantasyweaponscit:divine_staff` |
+| `mark` · Разрыв | A mark follows its acquired target, then bursts; without a mob it uses the aimed point | A fixed black hole pulses, pulls eligible mobs and collapses | Short aimed strike sigil | Aimed pulling glyph | `3dfantasyweaponscit:night_staff` |
+| `frost` · Ледяной хлопок | Ground wave advances through a 50° cone for up to 28 blocks (global cap: 48) | Radial ice front expands from the caster to eight blocks | Close frost fan | Frontal slowing ice ward | `3dfantasyweaponscit:northgate_guardian_staff` |
+| `lance` · Солнечное копьё | A narrow solar front travels up to 48 blocks and damages targets as it reaches them | Three solar fronts travel at −16°, 0° and +16° | Close crossed solar cleave | Downward solar pin at the aimed point | `3dfantasyweaponscit:sagrada_winged_staff` |
+| `ember` · Пепельная комета | A straight fire core accelerates, then bursts on collision or at range | Three staggered meteors descend at the selected point | Close fire crescent | Aimed contact flare | `3dfantasyweaponscit:bermunde_hermit_staff` |
+| `nova` · Изумрудная волна | Витой побег — a spiraling vine travels toward the aim point | Изумрудное цветение — a rooted bloom opens at the selected point | Хлыст лозы — a close curved vine whip | Корневая клетка — roots pull at the aimed point | `3dfantasyweaponscit:holy_celtic_staff` |
+| `icicle` · Ледяной венец | Seven seeking shoulder icicles; full charge releases eleven | Five falling lances around the aim point; full charge releases nine | Three curved ice claws | Rising crystal cage that slows targets | `3dfantasyweaponscit:olwen_staff` |
+| `fault` · Обсидиановый раскол | Five ground ruptures advance along the facing direction, up to 18 blocks | After a warning, an aimed ground eruption lifts nearby mobs | Forward ground fissure | Aimed stone pillar | `3dfantasyweaponscit:staff_of_unholy_wisdom` |
+| `lunar` · Лунный серп | Серп возвращения — crescent travels out, then returns | Лунная орбита — crescent orbits briefly, then sweeps through | Лунный взмах — broad close crescent sweep | Лунные ножницы — crossed cuts at an aimed point within eight blocks | `3dfantasyweaponscit:black_snake_staff` |
+| `gale` · Посох бури | Блуждающий смерч — traveling tornado pulls nearby mobs | Воронка — pulsing stationary pull field | Воздушная ладонь — close pressure fan | Подъёмный вихрь — aimed pull and lift within eight blocks | `3dfantasyweaponscit:goblin_witch_staff` |
+| `tide` · Сердце прилива | Водяная комета — arcing projectile bursts on impact | Гейзер — delayed expanding ground eruption | Прибой — short breaking wave | Водяной фонтан — aimed water lift within eight blocks | `3dfantasyweaponscit:northgate_guardian_staff` |
+| `requiem` · Реквием | Призрачная стая — five seeking wisps select distinct targets | Ритуал душ — charged sigil releases a radial pulse | Призрачная хватка — close spectral claws | Руки могилы — aimed grasping pull ring | `3dfantasyweaponscit:lich_staff` |
+| `prism` · Кристальная призма | Раздвоенный луч — three traveling rays pierce their lanes | Рикошетный луч — ray steps through up to two new targets | Кристальный срез — close crystal blades | Кристальное цветение — aimed crystal bloom | `3dfantasyweaponscit:northgate_golden_crook` |
 
 These skin IDs already exist in the verified ItemsAdder staff catalog; no new
 textures are added. Tide deliberately reuses the Northgate Guardian staff
@@ -75,8 +75,10 @@ protection event path; ordinary mobs continue through Bukkit damage.
 
 `StaffSpellDisplayGeometry` supplies production block-display geometry to both
 the packet renderer and the offline preview exporter. The preview includes all
-four inputs for NOVA and the five new Arsenal staves, plus empty/half/full
-ICICLE charge states. Exported snapshots are source-driven offline previews;
+four inputs for NOVA and the five new Arsenal staves, plus charge states.
+The companion `motion-clips.json` exports every staff/input at a two-tick cadence
+for continuous silhouette comparison at zero and full charge. Its fixed anchor
+is deliberate; it does not simulate live projectile trajectories. Exported snapshots are source-driven offline previews;
 they do not establish Minecraft interpolation, particles, sounds, combat feel
 or ordinary-client acceptance. Focused tests cover deterministic mechanics and
 lifecycle, but an in-client review is still needed to judge the final appearance
@@ -94,3 +96,25 @@ The build's `exportStaffSpellPreview` task accepts
 with the location-atelier textured preview builder. It reuses runtime geometry
 but does not model native Minecraft lighting, interpolation, particles, sounds
 or measured client acceptance.
+
+## Charge and motion feedback
+
+A released cast captures a normalized visual charge alongside its combat snapshot.
+Full charge thickens the released forms; each staff has its own accumulation
+formation. Caster-only hand particles and pitched cues mark start, 25%, 50%,
+75% and full charge. Holding full charge does not repeat its ready sound.
+Denied cooldown attempts share one quiet sound/particle gate every eight ticks
+across all four inputs. The bossbar remains the authoritative cooldown display.
+
+Moving Arsenal and Ember scenes use their controller clock at two-tick display
+updates. The controller hands impact cleanup back to the display owner. Ember
+keeps semantic core identities across impact while retiring its wake and growing
+new debris. Native particle wakes trail the sampled movement rather than its
+future target. Requiem and Prism draw one body per runtime projectile.
+
+Gale borrows the ArcFarms tornado's funnel, counter-rotating crown and occasional
+wind layers, with at most 32 native particles per three-tick frame. Its display
+orientation follows yaw only, keeping the funnel upright when aiming up or down.
+Only eight display debris chunks orbit inside the particle funnel. Gale’s air palm
+and Tide’s breaking surf use native particles exclusively, with at most 21 and 24
+particles per two-tick frame respectively. No farm behavior or terrain is changed.

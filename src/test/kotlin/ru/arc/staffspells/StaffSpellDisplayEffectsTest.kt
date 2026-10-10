@@ -40,13 +40,18 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         }
     }
 
-    "charged crown grows to eleven shards without entering the player eye" {
+    "charged crown keeps eleven stable shards and grows them without entering the player eye" {
         val early = staffChargeParts(StaffSpell.ICICLE, 0.0, 0)
+        val half = staffChargeParts(StaffSpell.ICICLE, 0.5, 18)
         val full = staffChargeParts(StaffSpell.ICICLE, 1.0, 36)
         full.size shouldBe 33
-        (early.count { it.visible } < full.count { it.visible }) shouldBe true
-        full.all { it.center.length() - it.scale.length() / 2 > 1.15f } shouldBe true
+        early.size shouldBe full.size
         early.map { it.material } shouldBe full.map { it.material }
+        early.map { it.visible } shouldBe full.map { it.visible }
+        early.all { it.visible } shouldBe true
+        (early.sumOf { it.scale.length().toDouble() } < half.sumOf { it.scale.length().toDouble() }) shouldBe true
+        (half.sumOf { it.scale.length().toDouble() } < full.sumOf { it.scale.length().toDouble() }) shouldBe true
+        full.all { it.center.length() - it.scale.length() / 2 > 1.15f } shouldBe true
     }
 
     "lightning launches through the reticle without a near-camera shield" {
@@ -86,6 +91,13 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         val verticalDown = staffLanceOrientation(Vector3f(0f, -1f, 0f))
         (kotlin.math.abs(verticalDown.transform(Vector3f(0f, 1f, 0f)).z - 1f) < 1.0e-5f) shouldBe true
         (kotlin.math.abs(staffLanceOrientation(Vector3f()).transform(Vector3f(0f, 0f, 1f)).z - 1f) < 1.0e-5f) shouldBe true
+    }
+
+    "GALE rotation keeps elevated vectors on a horizontal yaw plane" {
+        val forward = staffYawOnlyOrientation(Vector3f(3f, 4f, 4f)).transform(Vector3f(0f, 0f, 1f))
+        (kotlin.math.abs(forward.x - 0.6f) < 1.0e-5f) shouldBe true
+        (kotlin.math.abs(forward.y) < 1.0e-5f) shouldBe true
+        (kotlin.math.abs(forward.z - 0.8f) < 1.0e-5f) shouldBe true
     }
 
     "lightning extends stable handles and hides unreached route slots" {
@@ -144,7 +156,9 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
                     (it.scale.x * it.scale.y * it.scale.z).toDouble()
                 }
                 if (spell in ARSENAL_SPELLS) {
-                    (volume(first) >= volume(body) * 0.99) shouldBe true
+                    if (secondary && spell in setOf(StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM, StaffSpell.NOVA))
+                        (volume(first) < volume(body) * 0.01) shouldBe true
+                    else (volume(first) >= volume(body) * 0.99) shouldBe true
                 } else if (spell in setOf(StaffSpell.CHAIN, StaffSpell.LANCE, StaffSpell.MARK, StaffSpell.EMBER, StaffSpell.ICICLE)) {
                     (volume(first) > volume(body) * 0.01) shouldBe true
                 } else {
@@ -357,14 +371,15 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
             val caster = h.player("comet-frames")
             val start = Location(h.world, 0.5, 66.0, 4.0)
             val id = h.effects.play(caster.uniqueId, StaffSpell.EMBER, start,
-                start.clone().add(0.0, 0.0, 1.0), durationTicks = 80)!!
+                start.clone().add(0.0, 0.0, 1.0), durationTicks = 80, controllerDriven = true)!!
             val body = h.recorder.records.take(4)
             var distance = 0.0
             repeat(20) { index ->
                 distance += staffEmberStep(index + 1, 1.2)
-                if (index % StaffSpellDisplayEffects.FRAME_TICKS == 0)
-                    h.effects.move(id, start.clone().add(0.0, 0.0, distance +
-                        (1..StaffSpellDisplayEffects.FRAME_TICKS).sumOf { staffEmberStep(index + 1 + it, 1.2) }))
+                if ((index + 1) % StaffSpellDisplayEffects.FRAME_TICKS == 0) {
+                    h.effects.move(id, start.clone().add(0.0, 0.0, distance))
+                    h.effects.synchronize(id, index + 1)
+                }
                 val counts = body.map { it.teleports.size }
                 h.scheduler.tick(1)
                 body.map { it.teleports.size } shouldBe counts
@@ -375,11 +390,78 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
                 verify(atLeast = 1) { part.handle.teleportDuration = 2 }
             }
             h.effects.impact(id, start.clone().add(0.0, 0.0, distance), 2.8, 20)
-            body.forEach { part ->
-                // A flight keyframe can still point ahead when a mob enters the segment.
-                // Retained impact pieces are anchored at the actual hit, not that future point.
+            body.take(2).forEach { part ->
+                // Only semantic core pieces survive; the wake retires at collision.
                 (part.teleports.last().z <= start.z + distance + 1.0) shouldBe true
             }
+        }
+    }
+
+    "Ember impact retains shared core slots and births new debris across the first four ticks" {
+        withDisplayHarness { h ->
+            val caster = h.player("ember-continuity")
+            val start = Location(h.world, 0.5, 66.0, 4.0)
+            val id = h.effects.play(caster.uniqueId, StaffSpell.EMBER, start,
+                start.clone().add(0.0, 0.0, 1.0), durationTicks = 80, controllerDriven = true)!!
+            val flight = h.recorder.records.toList()
+            flight.size shouldBe 14
+            h.effects.synchronize(id, 2)
+
+            val collision = start.clone().add(0.0, 0.0, 1.5)
+            h.effects.impact(id, collision, radius = 2.8, durationTicks = 12)
+
+            val newParts = h.recorder.records.drop(flight.size).toList()
+            newParts.size shouldBe 46
+            flight.take(2).all { it.removals == 0 && it.blockUpdates == 0 } shouldBe true
+            flight.drop(2).all { it.removals == 1 } shouldBe true
+            val impactParts = staffDisplayParts(StaffSpell.EMBER, 0, 12, 1.5, 2.8, true).drop(2)
+            newParts.zip(impactParts).all { (record, part) ->
+                val scale = record.poses.last().values.drop(3).take(3).sumOf { it.toDouble() * it.toDouble() }
+                val size = part.scale.length().toDouble()
+                kotlin.math.abs(kotlin.math.sqrt(scale) / size - 0.04) < 1.0e-4
+            } shouldBe true
+
+            h.scheduler.tick(2)
+            val ageTwoParts = staffDisplayParts(StaffSpell.EMBER, 2, 12, 1.5, 2.8, true).drop(2)
+            newParts.zip(ageTwoParts).all { (record, part) ->
+                val scale = record.poses.last().values.drop(3).take(3).sumOf { it.toDouble() * it.toDouble() }
+                val size = part.scale.length().toDouble()
+                kotlin.math.abs(kotlin.math.sqrt(scale) / size - 0.52) < 1.0e-4
+            } shouldBe true
+
+            h.scheduler.tick(2)
+            val ageFourParts = staffDisplayParts(StaffSpell.EMBER, 4, 12, 1.5, 2.8, true).drop(2)
+            newParts.zip(ageFourParts).all { (record, part) ->
+                val scale = record.poses.last().values.drop(3).take(3).sumOf { it.toDouble() * it.toDouble() }
+                val size = part.scale.length().toDouble()
+                kotlin.math.abs(kotlin.math.sqrt(scale) / size - 1.0) < 1.0e-4
+            } shouldBe true
+        }
+    }
+
+    "controller-driven scenes render only at synchronized ages" {
+        withDisplayHarness { h ->
+            val caster = h.player("controller-clock")
+            val start = Location(h.world, 0.5, 66.0, 4.0)
+            val id = h.effects.play(caster.uniqueId, StaffSpell.ICICLE, start, durationTicks = 80,
+                controllerDriven = true)!!
+            val records = h.recorder.records.toList()
+
+            h.scheduler.tick(4)
+            records.all { it.poses.size == 1 } shouldBe true
+
+            val moved = start.clone().add(2.0, 0.0, 0.0)
+            h.effects.move(id, moved)
+            h.effects.synchronize(id, 0)
+            records.all { it.poses.size == 2 } shouldBe true
+            val part = staffDisplayParts(StaffSpell.ICICLE, 0, 80, 0.1, 1.0, false).first()
+            records.first().teleports.last().x shouldBe moved.x + part.center.x.toDouble()
+
+            h.effects.synchronize(id, 4)
+            records.all { it.poses.size == 3 } shouldBe true
+            h.scheduler.tick(4)
+            h.effects.synchronize(id, 4)
+            records.all { it.poses.size == 3 } shouldBe true
         }
     }
 
@@ -435,6 +517,7 @@ private class PacketDisplayRecorder {
             val at = firstArg<Location>().clone()
             val handle = mockk<PacketBlockDisplay>(relaxed = true)
             val record = RecordedDisplay(handle, at, block = secondArg<BlockData>())
+            every { handle.isValid } returns true
             every { handle.blockData } answers { record.block }
             every { handle.blockData = any() } answers {
                 record.block = firstArg<BlockData>()
