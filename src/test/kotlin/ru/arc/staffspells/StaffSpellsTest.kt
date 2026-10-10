@@ -9,9 +9,14 @@ import io.mockk.spyk
 import io.mockk.unmockkConstructor
 import io.mockk.verify
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.bossbar.BossBar
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+import org.mockbukkit.mockbukkit.entity.PlayerMock
 import org.bukkit.FluidCollisionMode
 import org.bukkit.Location
 import org.bukkit.Material
+import org.bukkit.Sound
+import org.bukkit.SoundCategory
 import org.bukkit.World
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Player
@@ -95,6 +100,29 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
+    "lightning has one launch cue even on a miss without repeating it for branches or cooldown clicks" {
+        listOf(false, true).forEach { secondary ->
+            withStaffHarness(settings = staffSettings(range = 12.0)) { h ->
+                val world = h.paper.addSimpleWorld("staff-lightning-miss")
+                every { world.isChunkLoaded(any<Int>(), any<Int>()) } returns true
+                val player = h.player("staff-lightning-miss", world, StaffSpell.CHAIN).apply { isSneaking = secondary }
+                h.controller.start()
+                h.controller.cast(player)
+                h.controller.cast(player) // A blocked cooldown click must remain silent.
+                h.scheduler.tick(80)
+                h.hits shouldBe emptyList()
+                verify(exactly = 1) {
+                    anyConstructed<WorldMock>().playSound(any<Location>(), Sound.ENTITY_LIGHTNING_BOLT_IMPACT,
+                        SoundCategory.PLAYERS, 0.58f, 1.6f)
+                }
+                verify(exactly = 1) {
+                    anyConstructed<WorldMock>().playSound(any<Location>(), Sound.BLOCK_RESPAWN_ANCHOR_CHARGE,
+                        SoundCategory.PLAYERS, 0.32f, 1.85f)
+                }
+            }
+        }
+    }
+
     "a later missing skin leaves a multi-spell grant untouched" {
         val config = spyk(StaffSpellConfig(TestConfig()))
         every { config.item(StaffSpell.FROST) } throws
@@ -111,14 +139,138 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "all six prototype items can be granted without optional ItemsAdder skins" {
+    "all eight prototype items can be granted without optional ItemsAdder skins" {
         withStaffHarness { h ->
             val player = h.paper.addPlayer("all-prototypes")
 
+            StaffSpell.entries.map { it.id } shouldBe listOf("chain", "mark", "frost", "lance", "ember", "nova", "icicle", "fault")
             h.controller.give(player, StaffSpell.entries) shouldBe true
 
             player.inventory.storageContents.filterNotNull().mapNotNull { StaffSpell.from(it) } shouldBe
                 StaffSpell.entries
+        }
+    }
+
+    "all eight grant refuses seven empty slots without changing existing items" {
+        withStaffHarness { h ->
+            val player = h.paper.addPlayer("staff-capacity")
+            repeat(player.inventory.storageContents.size - 7) { player.inventory.setItem(it, ItemStack(Material.DIAMOND)) }
+            val before = player.inventory.storageContents.map { it?.clone() }
+            h.controller.give(player, StaffSpell.entries) shouldBe false
+            player.inventory.storageContents.toList() shouldBe before
+        }
+    }
+
+    "icicle secondary rains below a ceiling and slows each area target only once" {
+        var denied: UUID? = null
+        withStaffHarness(settings = staffSettings(range = 16.0), hit = { _, mob -> mob.uniqueId != denied }) { h ->
+            val world = h.paper.addSimpleWorld("staff-hail")
+            for (x in -4..4) for (z in 7..14) {
+                world.loadChunk(x shr 4, z shr 4)
+                world.getBlockAt(x, 63, z).type = Material.STONE
+                world.getBlockAt(x, 70, z).type = Material.STONE
+            }
+            val player = h.player("staff-hail", world, StaffSpell.ICICLE).apply { isSneaking = true }
+            val victim = h.zombie(world, 0.5, 10.0)
+            val protected = h.zombie(world, 0.8, 10.3)
+            denied = protected.uniqueId
+            h.controller.start()
+            h.controller.cast(player)
+            h.visualPlays.size shouldBe 3
+            h.visualPlays.all { it.spell == StaffSpell.ICICLE && it.secondary && it.from.y in 64.5..70.0 } shouldBe true
+            h.scheduler.tick(7)
+            h.projectileMoves shouldBe emptyList()
+            h.hits shouldBe emptyList()
+            h.scheduler.tick(35)
+            h.projectileMoves.all { it.direction == Vector(0.0, -1.0, 0.0) } shouldBe true
+            h.hits.map { it.uniqueId }.toSet() shouldBe setOf(victim.uniqueId, protected.uniqueId)
+            h.hits.size shouldBe 2
+            victim.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe true
+            protected.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
+        }
+    }
+
+    "fault primary advances five ground impacts and cannot continue through a wall" {
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("staff-fault")
+            for (z in 0..21) {
+                world.loadChunk(0, z shr 4)
+                world.getBlockAt(0, 63, z).type = Material.STONE
+            }
+            val player = h.player("staff-fault", world, StaffSpell.FAULT)
+            val near = h.zombie(world, 0.5, 4.1)
+            val far = h.zombie(world, 0.5, 18.5)
+            val lateral = h.zombie(world, 5.5, 8.0)
+            h.controller.start()
+            h.controller.cast(player)
+            h.hits shouldBe emptyList()
+            h.scheduler.tick(2)
+            h.hits shouldBe listOf(near)
+            h.visualPlays.size shouldBe 1
+            h.scheduler.tick(24)
+            h.hits shouldBe listOf(near, far)
+            h.hits.contains(lateral) shouldBe false
+            h.visualPlays.size shouldBe 5
+            h.visualPlays.all { it.spell == StaffSpell.FAULT && !it.secondary && it.from.y in 64.0..64.1 } shouldBe true
+            h.visualPlays.zipWithNext().all { (a, b) -> b.from.z > a.from.z } shouldBe true
+
+            h.hits.clear(); h.visualPlays.clear()
+            for (y in 64..68) world.getBlockAt(0, y, 9).type = Material.STONE
+            val blocked = h.player("staff-fault-wall", world, StaffSpell.FAULT)
+            h.controller.cast(blocked)
+            h.scheduler.tick(30)
+            h.visualPlays.size shouldBe 2
+            h.hits shouldBe listOf(near)
+        }
+    }
+
+    "fault secondary cannot erupt in the sky without a ground surface" {
+        withStaffHarness(settings = staffSettings(range = 48.0)) { h ->
+            val world = h.paper.addSimpleWorld("staff-fault-sky")
+            world.loadChunk(0, 1)
+            val player = h.player("staff-fault-sky", world, StaffSpell.FAULT).apply {
+                isSneaking = true
+                teleport(location.apply { pitch = -60f })
+            }
+            h.controller.start()
+            h.controller.cast(player)
+            h.scheduler.tick(35)
+            h.visualPlays shouldBe emptyList()
+            h.hits shouldBe emptyList()
+        }
+    }
+
+    "fault secondary warns before lifting successful hits and delayed ruptures cancel on quit" {
+        var denied: UUID? = null
+        withStaffHarness(hit = { _, mob -> mob.uniqueId != denied }) { h ->
+            val world = h.paper.addSimpleWorld("staff-fault-secondary")
+            for (x in -2..3) for (z in 0..20) {
+                world.loadChunk(x shr 4, z shr 4)
+                world.getBlockAt(x, 63, z).type = Material.STONE
+            }
+            val player = h.player("staff-fault-secondary", world, StaffSpell.FAULT).apply { isSneaking = true }
+            val victim = h.zombie(world, 0.5, 10.0)
+            val protected = h.zombie(world, 1.0, 10.0)
+            denied = protected.uniqueId
+            h.controller.start()
+            h.controller.cast(player)
+            h.scheduler.tick(7)
+            h.hits shouldBe emptyList()
+            h.visualPlays shouldBe emptyList()
+            h.scheduler.tick(1)
+            h.visualPlays.single().secondary shouldBe true
+            h.hits.toSet() shouldBe setOf(victim, protected)
+            victim.velocity.y shouldBe 0.55
+            protected.velocity.y shouldBe 0.0
+
+            for (shift in listOf(false, true)) {
+                val quitting = h.player("fault-quit-$shift", world, StaffSpell.FAULT).apply { isSneaking = shift }
+                h.controller.cast(quitting)
+                h.controller.onQuit(PlayerQuitEvent(quitting, Component.empty()))
+                val before = h.visualPlays.size
+                h.scheduler.tick(35)
+                h.visualPlays.size shouldBe before
+            }
         }
     }
 
@@ -251,7 +403,48 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "all six spells cast into empty space and use the shared cooldown" {
+    "staff cooldown owns one bossbar and hides it on item removal quit and shutdown" {
+        val config = StaffSpellConfig(TestConfig(mapOf(
+            "icicle.name" to "Ледяной венец", "icicle.secondary-name" to "Ледяной дождь",
+            "fault.name" to "Обсидиановый раскол", "fault.secondary-name" to "Каменный выброс",
+            "messages.cooldown-bar" to "<ability> <seconds> с", "messages.ready-bar" to "<ability> Готово",
+        )))
+        withStaffHarness(config = config) { h ->
+            val world = h.paper.addSimpleWorld("staff-bossbar")
+            val player = h.player("staff-bossbar", world, StaffSpell.ICICLE) as PlayerMock
+            h.controller.start()
+            h.scheduler.tick(4)
+            val bar = player.bossBars.single()
+            bar.progress() shouldBe 1f
+            bar.color() shouldBe BossBar.Color.GREEN
+            h.controller.cast(player)
+            player.bossBars.single() shouldBe bar
+            bar.progress() shouldBe 0f
+            bar.color() shouldBe BossBar.Color.BLUE
+            h.scheduler.tick(8)
+            (bar.progress() > 0f && bar.progress() < 1f) shouldBe true
+            player.isSneaking = true
+            player.inventory.setItemInMainHand(h.config.item(StaffSpell.FAULT))
+            h.scheduler.tick(4)
+            player.bossBars.single() shouldBe bar
+            PlainTextComponentSerializer.plainText().serialize(bar.name()).startsWith("Каменный выброс") shouldBe true
+            player.nextActionBar() shouldBe null
+            player.inventory.setItemInMainHand(ItemStack(Material.AIR))
+            h.scheduler.tick(4)
+            player.bossBars.size shouldBe 0
+            player.inventory.setItemInMainHand(h.config.item(StaffSpell.ICICLE))
+            h.scheduler.tick(4)
+            player.bossBars.size shouldBe 1
+            h.controller.onQuit(PlayerQuitEvent(player, Component.empty()))
+            player.bossBars.size shouldBe 0
+            h.scheduler.tick(4)
+            player.bossBars.size shouldBe 1 // Mock quit leaves the player online; close must still hide it.
+            h.controller.close()
+            player.bossBars.size shouldBe 0
+        }
+    }
+
+    "all eight spells cast into empty space and use the shared cooldown" {
         withStaffHarness { h ->
             val world = h.paper.addSimpleWorld("staff-empty-casts")
             val player = h.player("staff-empty-casts", world, StaffSpell.CHAIN)
@@ -270,6 +463,27 @@ class StaffSpellsTest : FreeSpec({
             }
 
             h.hits shouldBe emptyList()
+        }
+    }
+
+    "comet accelerates monotonically while retaining swept collision at high speed" {
+        withStaffHarness(settings = staffSettings(range = 48.0)) { h ->
+            val world = h.paper.addSimpleWorld("staff-comet-acceleration")
+            val player = h.player("staff-comet-acceleration", world, StaffSpell.EMBER)
+            h.controller.start()
+            h.controller.cast(player)
+            h.scheduler.tick(20)
+            val distances = listOf(player.eyeLocation) + h.movedEffects.map { it.second }
+            val steps = distances.zipWithNext().map { (a, b) -> a.distance(b) }
+            steps.size shouldBe 10
+            steps.zipWithNext().all { (a, b) -> b + 0.000001 >= a } shouldBe true
+            (steps.last() > steps.first() * 3.0) shouldBe true
+            (distances.last().z > distances.first().z) shouldBe true
+
+            val actualHead = player.eyeLocation.z + (1..20).sumOf { staffEmberStep(it, 1.2) }
+            val victim = h.zombie(world, 0.5, actualHead + 1.3)
+            h.scheduler.tick(1)
+            h.hits shouldBe listOf(victim)
         }
     }
 
@@ -329,7 +543,7 @@ class StaffSpellsTest : FreeSpec({
             val target = h.zombie(hitWorld, x = 0.5, z = 3.2)
 
             h.controller.cast(player)
-            h.scheduler.tick(1)
+            h.scheduler.tick(8)
 
             h.hits.map { it.uniqueId } shouldBe listOf(target.uniqueId)
             verify(exactly = 1) { h.effects.impact(any(), any(), any(), any()) }
@@ -341,9 +555,14 @@ class StaffSpellsTest : FreeSpec({
             for (x in -1..1) for (y in 64..67) wallWorld.getBlockAt(x, y, 3).type = Material.STONE
 
             h.controller.cast(wallPlayer)
-            h.scheduler.tick(1)
+            h.scheduler.tick(8)
 
             h.hits shouldBe emptyList()
+            val wallKeys = h.movedEffects.filter { it.second.world == wallWorld }.map { it.second }
+            wallKeys.isNotEmpty() shouldBe true
+            wallKeys.all { it.z < 3.0 } shouldBe true
+            val mobKeys = h.movedEffects.filter { it.second.world == hitWorld }.map { it.second }
+            mobKeys.all { it.z <= target.boundingBox.minZ - 0.25 + 0.00001 } shouldBe true
 
             h.hits.clear()
             val cancelledWorld = h.paper.addSimpleWorld("staff-ember-quit")
@@ -359,7 +578,7 @@ class StaffSpellsTest : FreeSpec({
             val flightWorld = h.paper.addSimpleWorld("staff-ember-flight")
             val flying = h.player("staff-ember-flight", flightWorld, StaffSpell.EMBER)
             h.controller.cast(flying)
-            h.scheduler.tick(1)
+            h.scheduler.tick(8)
             h.movedEffects.isNotEmpty() shouldBe true
             h.controller.onQuit(PlayerQuitEvent(flying, Component.empty()))
             verify(exactly = 1) { h.effects.cancel(flying.uniqueId) }
@@ -432,7 +651,8 @@ class StaffSpellsTest : FreeSpec({
             val left = h.zombie(world, x = -2.3, z = 6.0)
             val center = h.zombie(world, x = 0.5, z = 6.0)
             val right = h.zombie(world, x = 3.3, z = 6.0)
-            val fourth = h.zombie(world, x = 4.0, z = 6.0)
+            // Outside initial acquisition and flight paths, but within jump range of the right target.
+            val fourth = h.zombie(world, x = 3.3, z = 1.0)
             h.controller.start()
 
             val event = interact(player, player.inventory.itemInMainHand)
@@ -447,12 +667,33 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "shift frost assembles three icicles, staggers their homing flights, and slows only successful hits" {
+    "secondary frost grows radially to eight blocks, including lateral targets" {
+        withStaffHarness(settings = staffSettings(range = 12.0, novaRadius = 8.0)) { h ->
+            val world = h.paper.addSimpleWorld("staff-frost-secondary")
+            val player = h.player("staff-frost-secondary", world, StaffSpell.FROST).apply { isSneaking = true }
+            val near = h.zombie(world, x = 0.5, z = 1.5)
+            val far = h.zombie(world, x = 0.5, z = 8.0)
+            val lateral = h.zombie(world, x = 7.0, z = 0.5)
+            val outside = h.zombie(world, x = 0.5, z = 9.5)
+            h.controller.start()
+
+            h.controller.onInteract(interact(player, player.inventory.itemInMainHand))
+            h.scheduler.tick(2)
+            h.hits.map { it.uniqueId } shouldBe listOf(near.uniqueId)
+            h.scheduler.tick(16)
+
+            h.hits.map { it.uniqueId }.toSet() shouldBe setOf(near.uniqueId, far.uniqueId, lateral.uniqueId)
+            (outside.uniqueId in h.hits.map { it.uniqueId }) shouldBe false
+            h.visualPlays.any { it.spell == StaffSpell.FROST && it.secondary } shouldBe true
+        }
+    }
+
+    "icicle primary assembles three icicles, staggers their homing flights, and slows only successful hits" {
         var deniedId: UUID? = null
         withStaffHarness(settings = staffSettings(range = 24.0, aimDegrees = 40.0),
             hit = { _, target -> target.uniqueId != deniedId }) { h ->
             val world = h.paper.addSimpleWorld("staff-frost-secondary")
-            val player = h.player("staff-frost-secondary", world, StaffSpell.FROST).apply { isSneaking = true }
+            val player = h.player("staff-frost-secondary", world, StaffSpell.ICICLE)
             val targets = listOf(
                 h.zombie(world, x = -3.5, z = 10.0),
                 h.zombie(world, x = 4.5, z = 12.0),
@@ -462,7 +703,7 @@ class StaffSpellsTest : FreeSpec({
             h.controller.start()
 
             h.controller.onInteract(interact(player, player.inventory.itemInMainHand))
-            val icicles = h.visualPlays.filter { it.spell == StaffSpell.FROST && it.secondary }
+            val icicles = h.visualPlays.filter { it.spell == StaffSpell.ICICLE && !it.secondary }
             icicles.size shouldBe 3
             val eye = player.eyeLocation
             icicles.indices.all { index ->
@@ -501,11 +742,10 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "shift frost clears the camera before turning toward a downward aim" {
+    "icicle primary clears the camera before turning toward a downward aim" {
         withStaffHarness(settings = staffSettings(range = 24.0)) { h ->
             val world = h.paper.addSimpleWorld("staff-frost-camera")
-            val player = h.player("staff-frost-camera", world, StaffSpell.FROST).apply {
-                isSneaking = true
+            val player = h.player("staff-frost-camera", world, StaffSpell.ICICLE).apply {
                 teleport(location.apply { pitch = 62.45f })
             }
             val eye = player.eyeLocation
@@ -522,10 +762,10 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "shift frost shares hit de-duplication and cancels in-flight icicles on quit" {
+    "icicle primary shares hit de-duplication and cancels in-flight icicles on quit" {
         withStaffHarness(settings = staffSettings(range = 24.0, aimDegrees = 40.0)) { h ->
             val world = h.paper.addSimpleWorld("staff-frost-secondary-cleanup")
-            val player = h.player("staff-frost-secondary-cleanup", world, StaffSpell.FROST).apply { isSneaking = true }
+            val player = h.player("staff-frost-secondary-cleanup", world, StaffSpell.ICICLE)
             val single = h.zombie(world, x = 0.5, z = 8.0)
             h.controller.start()
 
@@ -536,7 +776,7 @@ class StaffSpellsTest : FreeSpec({
             h.hits.size shouldBe 1
             verify(exactly = 3) { h.effects.impact(any(), any(), 0.9, 10) }
 
-            val other = h.player("staff-frost-secondary-quit", world, StaffSpell.FROST).apply { isSneaking = true }
+            val other = h.player("staff-frost-secondary-quit", world, StaffSpell.ICICLE)
             h.controller.onInteract(interact(other, other.inventory.itemInMainHand))
             h.scheduler.tick(10)
             val movesBeforeQuit = h.projectileMoves.size

@@ -17,7 +17,8 @@ import ru.arc.util.Logging.warn
 import kotlin.math.cos
 
 internal enum class StaffSpell(val id: String) {
-    CHAIN("chain"), MARK("mark"), FROST("frost"), LANCE("lance"), EMBER("ember"), NOVA("nova");
+    CHAIN("chain"), MARK("mark"), FROST("frost"), LANCE("lance"), EMBER("ember"), NOVA("nova"),
+    ICICLE("icicle"), FAULT("fault");
 
     companion object {
         val itemKey = NamespacedKey("arc", "staff_spell_prototype")
@@ -75,6 +76,8 @@ internal open class StaffSpellConfig(private val config: Config) {
                 StaffSpell.LANCE -> Triple(1.3, 10.0, 28)
                 StaffSpell.EMBER -> Triple(1.4, 10.0, 36)
                 StaffSpell.NOVA -> Triple(0.9, 7.0, 40)
+                StaffSpell.ICICLE -> Triple(0.9, 7.0, 40)
+                StaffSpell.FAULT -> Triple(1.2, 9.0, 44)
             }
             StaffSpellTuning(number("${spell.id}.power", power, 0.1..5.0),
                 number("${spell.id}.vanilla-damage", damage, 0.1..40.0),
@@ -93,11 +96,8 @@ internal open class StaffSpellConfig(private val config: Config) {
     fun text(key: String) = config.component("messages.$key", TagResolver.empty()).decoration(TextDecoration.ITALIC, false)
 
     fun cooldown(spell: StaffSpell, secondary: Boolean, remaining: Long, total: Long): Component {
-        val filled = staffCooldownSegments(remaining, total)
         val resolvers = TagResolver.resolver(
             Placeholder.component("ability", config.component("${spell.id}.${if (secondary) "secondary-name" else "name"}", TagResolver.empty())),
-            Placeholder.unparsed("filled", "▰".repeat(filled)),
-            Placeholder.unparsed("empty", "▱".repeat(10 - filled)),
             Placeholder.unparsed("seconds", String.format(Locale.ROOT, "%.1f", remaining.coerceAtLeast(0) / 20.0)),
             Placeholder.unparsed("input", if (secondary) "Shift + ПКМ" else "ПКМ"),
         )
@@ -142,5 +142,5 @@ internal fun staffAimScore(dx: Double, dy: Double, dz: Double,
     return dot.takeIf { it.isFinite() && it >= cos(Math.toRadians(halfAngle)) }
 }
 
-internal fun staffCooldownSegments(remaining: Long, total: Long): Int =
-    if (remaining <= 0) 10 else (((total.coerceAtLeast(1) - remaining).coerceAtLeast(0) * 10) / total.coerceAtLeast(1)).toInt().coerceIn(0, 9)
+internal fun staffCooldownProgress(remaining: Long, total: Long): Float =
+    (1.0 - remaining.coerceAtLeast(0).toDouble() / total.coerceAtLeast(1)).coerceIn(0.0, 1.0).toFloat()

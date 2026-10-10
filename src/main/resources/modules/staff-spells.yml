@@ -1,5 +1,5 @@
 # Administrator-issued mechanics samples. These are not native FMM/EliteMobs loot items.
-# /arc stafftest [all|chain|mark|frost|lance|ember|nova] [player]; /arc reload applies tuning.
+# /arc stafftest [all|chain|mark|frost|lance|ember|nova|icicle|fault] [player]; /arc reload applies tuning.
 targeting:
   range: 48.0
   half-angle-degrees: 20.0
@@ -30,8 +30,8 @@ mark:
   delay-ticks: 18
   radius: 3.5
 frost:
-  secondary-name: 'Ледяной залп'
-  secondary: '<#b1f2ff>Shift + ПКМ <#e8dfd2>— три сосульки из-за плеч летят в цель'
+  secondary-name: 'Полярный круг'
+  secondary: '<#b1f2ff>Shift + ПКМ <#e8dfd2>— ледяная волна расходится на восемь блоков'
   name: '<#b1f2ff>Ледяной хлопок'
   description: '<#e8dfd2>Ледяная волна идёт по земле и замедляет врагов.'
   aim: '<#b1f2ff>Ручной прицел · волна вперёд по земле'
@@ -42,6 +42,16 @@ frost:
   range: 10.0
   half-angle-degrees: 50.0
   slow-ticks: 40
+icicle:
+  secondary-name: 'Ледяной дождь'
+  secondary: '<#b1f2ff>Shift + ПКМ <#e8dfd2>— три копья падают у прицела и замедляют врагов'
+  name: '<#b1f2ff>Ледяной венец'
+  description: '<#e8dfd2>Три сосульки из-за плеч наводятся на врагов и замедляют при попадании.'
+  aim: '<#b1f2ff>Самонаведение · дальность до 48 блоков'
+  skin: '3dfantasyweaponscit:olwen_staff'
+  power: 0.9
+  vanilla-damage: 7.0
+  cooldown-ticks: 40
 lance:
   secondary-name: 'Солнечный трезубец'
   secondary: '<#fff1ae>Shift + ПКМ <#e8dfd2>— три расходящихся копья'
@@ -58,7 +68,7 @@ ember:
   secondary-name: 'Метеорный дождь'
   secondary: '<#ffae70>Shift + ПКМ <#e8dfd2>— три метеора в выбранную точку'
   name: '<#ffae70>Пепельная комета'
-  description: '<#e8dfd2>Огненный шар летит прямо и взрывается.'
+  description: '<#e8dfd2>Огненная комета разгоняется по прямой и взрывается.'
   aim: '<#ffae70>Ручной прицел · цельтесь на опережение'
   skin: '3dfantasyweaponscit:bermunde_hermit_staff'
   power: 1.4
@@ -77,13 +87,24 @@ nova:
   vanilla-damage: 7.0
   cooldown-ticks: 40
   radius: 8.0
+fault:
+  secondary-name: 'Каменный выброс'
+  secondary: '<#ff9b83>Shift + ПКМ <#e8dfd2>— после предупреждения взрыв у прицела подбрасывает врагов'
+  name: '<#ff9b83>Обсидиановый раскол'
+  description: '<#e8dfd2>Пять разломов один за другим идут по земле вперёд.'
+  aim: '<#ff9b83>Направленный удар · до 18 блоков'
+  skin: '3dfantasyweaponscit:staff_of_unholy_wisdom'
+  power: 1.2
+  vanilla-damage: 9.0
+  cooldown-ticks: 44
 messages:
   prototype: '<#b8b8b8>Проба механики · общая перезарядка посохов'
   use: '<#82dcff>[▶] ПКМ <#e8dfd2>— применить заклинание'
   cooldown: '<#e8dfd2>Посох восстанавливается'
-  cooldown-bar: '<ability> <#82dcff><filled><#e8dfd2><empty> <white><seconds> с'
-  ready-bar: '<ability> <#9fffd4>▰▰▰▰▰▰▰▰▰▰ Готово <#e8dfd2>· <input>'
+  cooldown-bar: '<ability> <white><seconds> с'
+  ready-bar: '<ability> <#9fffd4>Готово <#e8dfd2>· <input>'
   full-inventory: '<#e8dfd2>Освободите место для всех выбранных посохов'
   given: '<#9bd48d>Тестовые посохи выданы. ПКМ — основная атака; Shift + ПКМ — вторая способность.'
   unavailable: '<#e8dfd2>Модуль тестовых посохов сейчас недоступен'
+  no-ground: '<#e8dfd2>Направьте посох на видимую поверхность земли'
   skin-unavailable: '<#e8dfd2>Модель посоха недоступна в ItemsAdder. Подробности в журнале сервера.'

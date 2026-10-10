@@ -28,20 +28,22 @@ class StaffSpellParticleContractTest : FreeSpec({
                 every { world.isChunkLoaded(any<Int>(), any<Int>()) } returns true
                 every { world.getNearbyPlayers(any<Location>(), any<Double>()) } returns listOf(observer)
                 val received = mutableListOf<Pair<Particle, Any?>>()
-                fun accept(particle: Particle, data: Any?) {
+                val positions = mutableListOf<Pair<Particle, Location>>()
+                fun accept(particle: Particle, data: Any?, at: Location) {
                     // This is the platform predicate that stopped the real cast before display creation.
                     require(particle.dataType == Void::class.java || particle.dataType.isInstance(data)) {
                         "${particle.name} requires ${particle.dataType.name}, got ${data?.javaClass?.name}"
                     }
                     received += particle to data
+                    positions += particle to at.clone()
                 }
                 every { observer.spawnParticle(any<Particle>(), any<Location>(), any<Int>(),
                     any<Double>(), any<Double>(), any<Double>(), any<Double>()) } answers {
-                    accept(firstArg(), null)
+                    accept(firstArg(), null, secondArg())
                 }
                 every { observer.spawnParticle(any<Particle>(), any<Location>(), any<Int>(),
                     any<Double>(), any<Double>(), any<Double>(), any<Double>(), any<Any>()) } answers {
-                    accept(firstArg(), arg<Any>(7))
+                    accept(firstArg(), arg<Any>(7), secondArg())
                 }
                 val tasks = LifecycleTaskScope()
                 val visuals = StaffSpellVisuals(tasks)
@@ -70,9 +72,25 @@ class StaffSpellParticleContractTest : FreeSpec({
                     val icicleParticles = received.drop(icicleStart)
                     icicleParticles.size shouldBe 11
                     icicleParticles.count { it.first == Particle.BLOCK } shouldBe 6
+                    val faultStart = received.size
+                    visuals.faultCharge(target, 4.5)
+                    visuals.faultBurst(target, 4.5)
+                    val faultParticles = received.drop(faultStart)
+                    (faultParticles.size <= 32) shouldBe true
+                    faultParticles.count { it.first == Particle.BLOCK } shouldBe 14
+                    faultParticles.filter { it.first == Particle.BLOCK }.all { it.second is BlockData } shouldBe true
                     scheduler.tick(40)
                     (received.count { it.first == Particle.FLASH } >= 5) shouldBe true
                     received.filter { it.first == Particle.FLASH }.all { it.second is Color } shouldBe true
+
+                    val wakeStart = positions.size
+                    visuals.emberTrail(Location(world, 0.0, 1.62, 16.0), Location(world, 0.0, 1.62, 18.4))
+                    positions.drop(wakeStart).size shouldBe 3
+                    positions.drop(wakeStart).all { it.second.z < 16.0 } shouldBe true
+                    val fallingWakeStart = positions.size
+                    visuals.emberTrail(Location(world, 0.0, 16.0, 16.0), Location(world, 0.0, 13.6, 16.0), meteor = true)
+                    positions.drop(fallingWakeStart).size shouldBe 3
+                    positions.drop(fallingWakeStart).all { it.second.y > 16.0 } shouldBe true
 
                     val meteorBurstStart = received.size
                     visuals.emberBurst(target, 2.8, meteor = true)

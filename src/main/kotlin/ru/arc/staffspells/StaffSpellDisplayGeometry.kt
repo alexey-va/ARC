@@ -46,16 +46,18 @@ internal fun staffDisplayParts(
     StaffSpell.CHAIN -> chainDisplayParts(ageTicks, durationTicks, length, radius, impact)
     StaffSpell.MARK -> if (secondary) singularityDisplayParts(ageTicks, durationTicks, radius, impact, animationAgeTicks)
         else markDisplayParts(ageTicks, radius, impact, animationAgeTicks)
-    StaffSpell.FROST -> if (secondary) staffIcicleDisplayParts(ageTicks, impact)
+    StaffSpell.FROST -> if (secondary) frostNovaDisplayParts(ageTicks, durationTicks, radius)
         else staffFrostDisplayParts(ageTicks, durationTicks, length, radius, impact)
+    StaffSpell.ICICLE -> staffIcicleDisplayParts(ageTicks, impact)
+    StaffSpell.FAULT -> staffFaultDisplayParts(ageTicks, durationTicks, radius, secondary)
     StaffSpell.LANCE -> staffSolarDisplayParts(ageTicks, durationTicks, length, impact)
     StaffSpell.EMBER -> emberDisplayParts(ageTicks, durationTicks, radius, impact, secondary)
     StaffSpell.NOVA -> if (secondary) staffTidalCrestDisplayParts(ageTicks, durationTicks, length, radius)
         else staffNovaDisplayParts(ageTicks, durationTicks, radius)
     }
     val tracked = !impact && spell in setOf(StaffSpell.MARK, StaffSpell.EMBER)
-    val birth = if (impact && (spell in setOf(StaffSpell.MARK, StaffSpell.EMBER) ||
-        spell == StaffSpell.FROST && secondary)) 1.0 else smooth(ageTicks / 4.0)
+    val birth = if (impact && (spell in setOf(StaffSpell.MARK, StaffSpell.EMBER, StaffSpell.ICICLE)))
+        1.0 else smooth(ageTicks / 4.0)
     val lastFrame = (durationTicks - StaffSpellDisplayEffects.FRAME_TICKS).coerceAtLeast(1)
     val novaFade = if (spell == StaffSpell.NOVA) {
         val dissolveStart = (durationTicks - 8).coerceAtLeast(0)
@@ -72,10 +74,42 @@ internal fun staffDisplayParts(
         else -> (birth * fade).coerceAtLeast(0.001).toFloat()
     }
     return parts.map { part -> part.copy(
-        center = if (spell == StaffSpell.FROST && !secondary || spell == StaffSpell.NOVA)
+        center = if (spell == StaffSpell.FROST || spell == StaffSpell.NOVA || spell == StaffSpell.FAULT)
             Vector3f(part.center).apply { y *= visibility } else part.center,
         scale = Vector3f(part.scale).mul(visibility),
     ) }
+}
+
+private fun frostNovaDisplayParts(ageTicks: Int, durationTicks: Int, radius: Double): List<StaffDisplayPart> {
+    val reach = extent(radius, 16.0, 8.0).coerceAtLeast(1.8)
+    val travel = ((ageTicks - 2) / 16.0).coerceIn(0.0, 1.0)
+    val front = 1.8 + staffWaveFront(ageTicks, reach - 1.8, 16)
+    val lift = sin(PI * travel)
+    val parts = ArrayList<StaffDisplayPart>(48)
+
+    repeat(16) { index ->
+        val angle = index * PI / 8.0
+        parts += groundRingLink(if (index % 3 == 0) Material.PACKED_ICE else Material.BLUE_ICE,
+            front, angle, angle + PI / 8.0, 0.055, 0.12)
+    }
+    repeat(16) { index ->
+        val angle = index * PI / 8.0
+        val height = 0.70 + lift * (0.45 + 0.25 * abs(sin(index * 1.9)))
+        val x = cos(angle) * front
+        val z = sin(angle) * front
+        parts += part(if (index % 4 == 0) Material.PACKED_ICE else Material.BLUE_ICE,
+            x, height * 0.5, z, 0.22 + lift * 0.07, height, 0.24 + lift * 0.05,
+            yaw = -angle, pitch = -0.12 * lift)
+    }
+    repeat(16) { index ->
+        val angle = index * PI / 8.0 + PI / 16.0
+        val wake = (front - 0.52).coerceAtLeast(1.25)
+        val y = 0.24 + lift * 0.16 + sin(index * 1.4) * 0.035
+        parts += part(if (index % 3 == 0) Material.WHITE_STAINED_GLASS else Material.LIGHT_BLUE_STAINED_GLASS,
+            cos(angle) * wake, y, sin(angle) * wake,
+            0.075, 0.24 + lift * 0.08, 0.28, yaw = -angle, roll = angle * 0.18)
+    }
+    return parts
 }
 
 private fun chainDisplayParts(ageTicks: Int, durationTicks: Int, length: Double, radius: Double, impact: Boolean): List<StaffDisplayPart> {

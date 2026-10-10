@@ -18,6 +18,13 @@ import kotlin.math.sin
 
 /** Sparse accents around the display silhouettes; all delayed phases run on Paper's main thread. */
 internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
+    /** One local cast cue, including empty-air casts and the three-branch secondary. */
+    fun lightningLaunch(at: Location) = dispatch {
+        val origin = at.clone()
+        localSound(origin, Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.32f, 1.85f)
+        localSound(origin, Sound.ENTITY_LIGHTNING_BOLT_IMPACT, 0.58f, 1.6f)
+    }
+
     fun lightning(from: Location, to: Location) = dispatch {
         val start = from.clone()
         val end = to.clone()
@@ -113,6 +120,68 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
             minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
         emit(origin.clone().add(0.0, 0.08, 0.0), Particle.SNOWFLAKE,
             minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+    }
+
+    /** Three restrained ground pulses before the delayed targeted rupture. */
+    fun faultCharge(at: Location, radius: Double) = dispatch {
+        val origin = at.clone()
+        val reach = boundedRadius(radius, 1.8, 8.0) ?: return@dispatch
+        if (!drawable(origin)) return@dispatch
+        localSound(origin, Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.38f, 0.58f)
+        val basalt = Material.BASALT.createBlockData()
+        val amethyst = Material.AMETHYST_BLOCK.createBlockData()
+        repeat(3) { phase ->
+            val draw = {
+                repeat(4) { index ->
+                    val angle = index * PI / 2.0 + phase * 0.22
+                    val ring = reach * (0.20 + phase * 0.045 + (index % 2) * 0.035)
+                    val point = origin.clone().add(cos(angle) * ring, 0.10 + (index % 2) * 0.06,
+                        sin(angle) * ring)
+                    emit(point, Particle.BLOCK, if ((index + phase) % 4 == 0) amethyst else basalt,
+                        COMPACT_CAMERA_CLEARANCE)
+                    emit(point.clone().add(0.0, 0.12, 0.0), Particle.DUST_COLOR_TRANSITION,
+                        FAULT_TO_AMETHYST, COMPACT_CAMERA_CLEARANCE)
+                }
+            }
+            if (phase == 0) draw() else tasks.runLater((phase * 2).toLong()) { draw() }
+        }
+    }
+
+    /** A local stone impact with a tight block-chip ring and a sparse amethyst dust tail. */
+    fun faultBurst(at: Location, radius: Double) = dispatch {
+        val origin = at.clone()
+        val reach = boundedRadius(radius, 1.8, 8.0) ?: return@dispatch
+        if (!drawable(origin)) return@dispatch
+        localSound(origin, Sound.BLOCK_STONE_BREAK, 0.86f, 0.72f)
+        localSound(origin, Sound.BLOCK_DEEPSLATE_BREAK, 0.56f, 0.62f)
+        val basalt = Material.BASALT.createBlockData()
+        val obsidian = Material.OBSIDIAN.createBlockData()
+        repeat(10) { index ->
+            val angle = index * PI / 5.0
+            val ring = reach * (0.42 + (index % 3) * 0.045)
+            val point = origin.clone().add(cos(angle) * ring, 0.16 + (index % 3) * 0.10,
+                sin(angle) * ring)
+            emit(point, Particle.BLOCK, if (index % 3 == 0) obsidian else basalt,
+                COMPACT_CAMERA_CLEARANCE)
+            if (index % 2 == 0) emit(point.clone().add(0.0, 0.12, 0.0),
+                Particle.DUST_COLOR_TRANSITION, FAULT_TO_AMETHYST,
+                COMPACT_CAMERA_CLEARANCE)
+        }
+        repeat(4) { index ->
+            val angle = index * PI / 2.0 + PI / 4.0
+            emit(origin.clone().add(cos(angle) * 0.28, 0.36 + (index % 2) * 0.10,
+                sin(angle) * 0.28), Particle.END_ROD,
+                minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+        }
+        tasks.runLater(2) {
+            repeat(6) { index ->
+                val angle = index * PI / 3.0 + 0.16
+                val ring = reach * (0.56 + (index % 2) * 0.035)
+                emit(origin.clone().add(cos(angle) * ring, 0.22 + (index % 3) * 0.12,
+                    sin(angle) * ring), Particle.DUST, FAULT_DUST,
+                    COMPACT_CAMERA_CLEARANCE)
+            }
+        }
     }
 
     fun markLaunch(from: Location, to: Location) = dispatch {
@@ -411,9 +480,12 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         }
         val distance = segmentLength(start, end) ?: return@dispatch
         val direction = end.toVector().subtract(start.toVector()).normalize()
-        val trailEnd = end.clone().subtract(direction.clone().multiply(min(0.24, distance * 0.75)))
+        // Display keyframes lead the logical flight by their interpolation interval.
+        // Leave the wake behind the previous logical head, with room for packet sampling.
+        val trailHead = start.clone().subtract(direction.clone().multiply(0.75))
+        val trailEnd = trailHead.clone().subtract(direction.clone().multiply(distance.coerceAtMost(2.4)))
         val samples = if (distance > 0.55) 2 else 1
-        lineSamples(start, trailEnd, samples).forEachIndexed { index, point ->
+        lineSamples(trailEnd, trailHead, samples).forEachIndexed { index, point ->
             if (meteor && index == samples / 2)
                 emit(point, Particle.DUST, HOT_WHITE, minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
             else emit(point, Particle.FLAME, minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
@@ -839,6 +911,8 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         val HOT_WHITE = Particle.DustOptions(Color.fromRGB(255, 250, 226), 1.85f)
         val GOLD_TO_WHITE = Particle.DustTransition(Color.fromRGB(255, 176, 42), Color.fromRGB(255, 255, 240), 1.55f)
         val GOLD_CORONA = Particle.DustTransition(Color.fromRGB(255, 255, 230), Color.fromRGB(255, 179, 44), 1.7f)
+        val FAULT_DUST = Particle.DustOptions(Color.fromRGB(89, 74, 103), 1.15f)
+        val FAULT_TO_AMETHYST = Particle.DustTransition(Color.fromRGB(80, 82, 86), Color.fromRGB(184, 111, 224), 1.25f)
         val ICE_TO_AQUA = Particle.DustTransition(Color.fromRGB(180, 230, 255), Color.fromRGB(90, 245, 255), 0.9f)
         val GREEN_TO_AQUA = Particle.DustTransition(Color.fromRGB(75, 255, 128), Color.fromRGB(25, 225, 210), 1.15f)
         val GREEN_TO_WHITE = Particle.DustTransition(Color.fromRGB(196, 255, 220), Color.fromRGB(50, 255, 125), 1.6f)

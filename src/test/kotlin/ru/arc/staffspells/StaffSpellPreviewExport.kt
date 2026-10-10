@@ -29,7 +29,14 @@ object StaffSpellPreviewExport {
         val targetYOffset: Double,
         val targetZ: Double,
     )
-    private data class Event(val id: String, val inputs: Inputs, val chainRoute: ChainRoute? = null)
+    private data class Event(
+        val id: String,
+        val inputs: Inputs,
+        val chainRoute: ChainRoute? = null,
+        val firstFrameTick: Int = 0,
+        val sceneTimeline: Map<String, Any> = emptyMap(),
+        val trajectoryNote: String? = null,
+    )
     private data class Frame(val id: String, val ageTicks: Int)
     private data class ExportedState(val metadata: Map<String, Any>, val materials: List<String>)
     private data class ReadabilityPose(
@@ -43,6 +50,57 @@ object StaffSpellPreviewExport {
         val effectOffsetY: Double = 0.0,
         val effectOffsetZ: Double = 0.0,
         val trajectoryNote: String,
+    )
+
+    private const val ICICLE_SHATTER_TICKS = 10
+    private const val FAULT_PRIMARY_ERUPTION_TICKS = 22
+    private const val FAULT_SECONDARY_WARNING_TICKS = 8
+    private const val FAULT_SECONDARY_ERUPTION_TICKS = 24
+    private val faultPrimaryEruptions = listOf(
+        2 to 3.6,
+        8 to 7.2,
+        14 to 10.8,
+        20 to 14.4,
+        26 to 18.0,
+    )
+    private val icicleHailOffsets = listOf(-1.8 to -0.6, 0.0 to 1.2, 1.8 to -0.6)
+
+    private fun icicleTravelTicks(distance: Double): Int {
+        var remaining = distance
+        var age = 0
+        while (remaining > 0.001 && age < 160) {
+            age++
+            remaining -= staffIcicleStep(age)
+        }
+        require(remaining <= 0.001) { "Icicle preview distance exceeds the flight bound" }
+        return age
+    }
+
+    private fun icicleSceneDuration(distance: Double): Int =
+        staffIcicleLaunchDelay(2) + icicleTravelTicks(distance) - 1 + ICICLE_SHATTER_TICKS - 1
+
+    private fun iciclePrimaryTimeline(index: Int) = mapOf(
+        "projectile" to index + 1,
+        "anchorOffsetFromEye" to staffIcicleAnchorOffset(index).let { mapOf(
+            "x" to it.x.toDouble(), "y" to it.y.toDouble(), "z" to it.z.toDouble(),
+        ) },
+        "launchTick" to staffIcicleLaunchDelay(index),
+        "flightDistanceBlocks" to 48.0,
+        "flightTicks" to icicleTravelTicks(48.0),
+        "impactTick" to staffIcicleLaunchDelay(index) + icicleTravelTicks(48.0) - 1,
+        "initialDisplayDurationTicks" to 80,
+        "impactDurationTicks" to ICICLE_SHATTER_TICKS,
+    )
+
+    private fun icicleHailTimeline(index: Int) = mapOf(
+        "projectile" to index + 1,
+        "offsetFromGround" to mapOf("x" to icicleHailOffsets[index].first, "z" to icicleHailOffsets[index].second),
+        "spawnHeightAboveGroundBlocks" to 10.15,
+        "launchTick" to staffIcicleLaunchDelay(index),
+        "flightTicks" to icicleTravelTicks(10.15),
+        "impactTick" to staffIcicleLaunchDelay(index) + icicleTravelTicks(10.15) - 1,
+        "initialDisplayDurationTicks" to 60,
+        "impactDurationTicks" to ICICLE_SHATTER_TICKS,
     )
 
     // Mirrors StaffSpellController display calls using its current default tuning.
@@ -63,7 +121,48 @@ object StaffSpellPreviewExport {
         ),
         StaffSpell.FROST to listOf(
             Event("fan", Inputs(10.0, kotlin.math.tan(Math.toRadians(50.0)) * 10.0, 24, impact = false)),
-            Event("shoulder-barrage", Inputs(48.0, 0.8, 56, impact = false, secondary = true)),
+            Event("radial-ice-nova", Inputs(8.0, 8.0, 30, impact = true, secondary = true),
+                sceneTimeline = mapOf("effects" to listOf(mapOf(
+                    "kind" to "radial-ice-wave", "startTick" to 0, "durationTicks" to 30,
+                ))),
+                trajectoryNote = "Production secondary frost radial wave at the caster origin; one display scene, with no projectile route."),
+        ),
+        StaffSpell.ICICLE to listOf(
+            Event("shoulder-barrage", Inputs(48.0, 0.9, icicleSceneDuration(48.0), impact = false),
+                sceneTimeline = mapOf(
+                    "flightDistanceBlocks" to 48.0,
+                    "shatterDurationTicks" to ICICLE_SHATTER_TICKS,
+                    "projectiles" to (0..2).map(::iciclePrimaryTimeline),
+                ),
+                trajectoryNote = "Three production ICICLE shoulder launches; each uses staffIcicleStep, its live launch delay and the production eight-piece shatter."),
+            Event("downward-hail", Inputs(16.0, 0.9, icicleSceneDuration(10.15), impact = false, secondary = true),
+                sceneTimeline = mapOf(
+                    "groundCenter" to mapOf("x" to 0.0, "z" to 16.0),
+                    "shatterDurationTicks" to ICICLE_SHATTER_TICKS,
+                    "projectiles" to (0..2).map(::icicleHailTimeline),
+                ),
+                trajectoryNote = "Three ICICLE secondary crystals spawn 10.15 blocks above ground, descend with staffIcicleStep, then use the production eight-piece shatter for 10 ticks."),
+        ),
+        StaffSpell.FAULT to listOf(
+            Event("ground-eruption-chain", Inputs(18.0, 2.0, 48, impact = true), firstFrameTick = 2,
+                sceneTimeline = mapOf("effects" to faultPrimaryEruptions.mapIndexed { index, (startTick, z) -> mapOf(
+                    "eruption" to index + 1, "x" to 0.0, "z" to z,
+                    "startTick" to startTick, "durationTicks" to FAULT_PRIMARY_ERUPTION_TICKS,
+                    "radiusBlocks" to 2.0,
+                ) }),
+                trajectoryNote = "Five production FAULT eruptions on the forward ground lane; each scene uses staffDisplayParts for 22 ticks."),
+            Event("charged-ground-eruption", Inputs(16.0, 4.5,
+                FAULT_SECONDARY_WARNING_TICKS + FAULT_SECONDARY_ERUPTION_TICKS,
+                impact = true, secondary = true), firstFrameTick = FAULT_SECONDARY_WARNING_TICKS,
+                sceneTimeline = mapOf(
+                    "warning" to mapOf("startTick" to 0, "durationTicks" to FAULT_SECONDARY_WARNING_TICKS,
+                        "source" to "particle warning", "includedInPreviewGeometry" to false),
+                    "effect" to mapOf("x" to 0.0, "z" to 16.0,
+                        "startTick" to FAULT_SECONDARY_WARNING_TICKS,
+                        "durationTicks" to FAULT_SECONDARY_ERUPTION_TICKS,
+                        "radiusBlocks" to 4.5),
+                ),
+                trajectoryNote = "The eight-tick particle warning is recorded as timing only; the preview starts with the production 24-tick FAULT eruption at ground z=16."),
         ),
         StaffSpell.LANCE to listOf(
             Event("impact", Inputs(48.0, 0.75, staffLanceDuration(48.0), impact = true)),
@@ -167,14 +266,15 @@ object StaffSpellPreviewExport {
         ))
     }
 
-    private fun frames(durationTicks: Int): List<Frame> {
+    private fun frames(durationTicks: Int, firstFrameTick: Int = 0): List<Frame> {
         require(durationTicks > FRAME_TICKS * 2)
         val finalVisible = ((durationTicks - 1) / FRAME_TICKS) * FRAME_TICKS
-        val middle = (durationTicks / 2 / FRAME_TICKS) * FRAME_TICKS
-        require(middle > 0 && middle < finalVisible)
-        return (0..finalVisible step FRAME_TICKS).map { age ->
+        require(firstFrameTick in 0..finalVisible && firstFrameTick % FRAME_TICKS == 0)
+        val middle = (((firstFrameTick + finalVisible) / 2) / FRAME_TICKS) * FRAME_TICKS
+        require(middle > firstFrameTick && middle < finalVisible)
+        return (firstFrameTick..finalVisible step FRAME_TICKS).map { age ->
             Frame(when (age) {
-                0 -> "start"
+                firstFrameTick -> "start"
                 middle -> "middle"
                 finalVisible -> "final-visible"
                 else -> "tick-$age"
@@ -223,6 +323,11 @@ object StaffSpellPreviewExport {
             "farClip" to 150,
         )
         val (position, target) = when {
+            spell == StaffSpell.FAULT && inputs.secondary ->
+                point(0.0, eyeHeight, 0.0) to point(0.0, eyeHeight, 16.0)
+            spell == StaffSpell.ICICLE && inputs.secondary ->
+                point(0.0, eyeHeight, 0.0) to point(0.0, eyeHeight, 16.0)
+            spell == StaffSpell.FAULT -> point(0.0, eyeHeight, 0.0) to point(0.0, eyeHeight, 10.8)
             spell == StaffSpell.MARK && inputs.secondary -> point(0.0, eyeHeight, -6.0) to point(0.0, 0.35, 0.0)
             spell == StaffSpell.NOVA && inputs.secondary -> point(0.0, eyeHeight, 0.0) to point(0.0, eyeHeight, 12.0)
             spell == StaffSpell.FROST && inputs.secondary -> point(0.0, eyeHeight, 0.0) to point(0.0, eyeHeight, 8.0)
@@ -276,6 +381,96 @@ object StaffSpellPreviewExport {
         return route.take(41)
     }
 
+    private fun orientIcicleParts(
+        parts: List<StaffDisplayPart>,
+        position: org.bukkit.util.Vector,
+        direction: org.bukkit.util.Vector,
+    ): List<StaffDisplayPart> {
+        val rotation = staffLanceOrientation(Vector3f(
+            direction.x.toFloat(), direction.y.toFloat(), direction.z.toFloat(),
+        ))
+        return parts.map { part -> part.copy(
+            center = rotation.transform(Vector3f(part.center)).add(
+                position.x.toFloat(), position.y.toFloat(), position.z.toFloat(),
+            ),
+            rotation = Quaternionf(rotation).mul(part.rotation),
+        ) }
+    }
+
+    private fun icicleGeometry(
+        event: Event,
+        frame: Frame,
+        eyeHeight: Double,
+    ): List<StaffDisplayPart> = (0..2).flatMap { index ->
+        val secondary = event.inputs.secondary
+        val position: org.bukkit.util.Vector
+        val direction: org.bukkit.util.Vector
+        val remainingDistance: Double
+        val delay = staffIcicleLaunchDelay(index)
+        if (secondary) {
+            val offset = icicleHailOffsets[index]
+            position = org.bukkit.util.Vector(offset.first, 10.15, 16.0 + offset.second)
+            direction = org.bukkit.util.Vector(0.0, -1.0, 0.0)
+            remainingDistance = 10.15
+        } else {
+            val anchor = staffIcicleAnchorOffset(index)
+            position = org.bukkit.util.Vector(anchor.x.toDouble(), eyeHeight + anchor.y, anchor.z.toDouble())
+            direction = org.bukkit.util.Vector(0.0, 0.0, 1.0)
+            remainingDistance = event.inputs.length
+        }
+
+        val target = org.bukkit.util.Vector(0.0, eyeHeight, 48.0)
+        var remaining = remainingDistance
+        var impactTick = -1
+        for (tick in delay..frame.ageTicks) {
+            if (remaining <= 0.001) continue
+            val flightAge = tick - delay + 1
+            if (!secondary && flightAge > 4) steerStaffBolt(direction, target.clone().subtract(position), flightAge)
+            val step = minOf(staffIcicleStep(flightAge), remaining)
+            position.add(direction.clone().multiply(step))
+            remaining -= step
+            if (remaining <= 0.001) impactTick = tick
+        }
+        // Live impacts reset the display age, then production renders again on its two-tick cadence.
+        val impactAge = if (impactTick < 0) -1 else {
+            val elapsed = (frame.ageTicks - impactTick).coerceAtLeast(0)
+            ((elapsed + FRAME_TICKS - 1) / FRAME_TICKS) * FRAME_TICKS
+        }
+
+        val parts = if (impactAge >= 0) {
+            staffDisplayParts(
+                StaffSpell.ICICLE, impactAge, ICICLE_SHATTER_TICKS,
+                event.inputs.length, event.inputs.radius, impact = true, secondary = secondary,
+            )
+        } else staffDisplayParts(
+            StaffSpell.ICICLE, frame.ageTicks, event.inputs.durationTicks,
+            event.inputs.length, event.inputs.radius, impact = false, secondary = secondary,
+        )
+        orientIcicleParts(parts, position, direction).map { part ->
+            part.copy(visible = part.visible && impactAge < ICICLE_SHATTER_TICKS)
+        }
+    }
+
+    private fun faultGeometry(event: Event, frame: Frame): List<StaffDisplayPart> {
+        if (event.inputs.secondary) {
+            val eruptionAge = frame.ageTicks - FAULT_SECONDARY_WARNING_TICKS
+            if (eruptionAge !in 0 until FAULT_SECONDARY_ERUPTION_TICKS) return emptyList()
+            return staffDisplayParts(
+                StaffSpell.FAULT, eruptionAge, FAULT_SECONDARY_ERUPTION_TICKS,
+                event.inputs.length, event.inputs.radius, impact = true, secondary = true,
+            ).map { part -> part.copy(center = Vector3f(part.center).add(0f, 0f, 16f)) }
+        }
+
+        return faultPrimaryEruptions.flatMap { (startTick, z) ->
+            val eruptionAge = frame.ageTicks - startTick
+            if (eruptionAge !in 0 until FAULT_PRIMARY_ERUPTION_TICKS) emptyList()
+            else staffDisplayParts(
+                StaffSpell.FAULT, eruptionAge, FAULT_PRIMARY_ERUPTION_TICKS,
+                event.inputs.length, event.inputs.radius, impact = true, secondary = false,
+            ).map { part -> part.copy(center = Vector3f(part.center).add(0f, 0f, z.toFloat())) }
+        }
+    }
+
     private fun geometry(
         spell: StaffSpell,
         event: Event,
@@ -304,36 +499,8 @@ object StaffSpellPreviewExport {
             // A secondary cast owns three separate scene budgets; each trail stays below MAX_PARTS.
             return parts to origin
         }
-        if (spell == StaffSpell.FROST && event.inputs.secondary) {
-            // Deterministic empty-lane fixture: same anchors, delays, steering and speed as live bolts.
-            val pieces = (0..2).flatMap { index ->
-                val anchor = staffIcicleAnchorOffset(index)
-                val position = org.bukkit.util.Vector(anchor.x.toDouble(), eyeHeight + anchor.y, anchor.z.toDouble())
-                val direction = org.bukkit.util.Vector(0.0, 0.0, 1.0)
-                val target = org.bukkit.util.Vector(0.0, eyeHeight, 48.0)
-                var remaining = 48.0
-                var impactAge = -1
-                val delay = staffIcicleLaunchDelay(index)
-                for (tick in delay..frame.ageTicks) {
-                    if (remaining <= 0.001) { impactAge++; continue }
-                    val flightAge = tick - delay + 1
-                    if (flightAge > 4) steerStaffBolt(direction, target.clone().subtract(position), flightAge)
-                    val step = minOf(staffIcicleStep(flightAge), remaining)
-                    position.add(direction.clone().multiply(step))
-                    remaining -= step
-                    if (remaining <= 0.001) impactAge = 0
-                }
-                val rotation = staffLanceOrientation(Vector3f(direction.x.toFloat(), direction.y.toFloat(), direction.z.toFloat()))
-                val shape = if (impactAge >= 0) staffDisplayParts(StaffSpell.FROST, impactAge, 10, 0.0, 0.9, true, true)
-                    else staffDisplayParts(StaffSpell.FROST, frame.ageTicks, 80, 1.0, 0.8, false, true)
-                shape.map { part -> part.copy(
-                    center = rotation.transform(Vector3f(part.center)).add(position.x.toFloat(), position.y.toFloat(), position.z.toFloat()),
-                    rotation = Quaternionf(rotation).mul(part.rotation),
-                    visible = part.visible && impactAge < 10,
-                ) }
-            }
-            return pieces to Vector3f()
-        }
+        if (spell == StaffSpell.ICICLE) return icicleGeometry(event, frame, eyeHeight) to Vector3f()
+        if (spell == StaffSpell.FAULT) return faultGeometry(event, frame) to Vector3f()
         val baseParts = staffDisplayParts(
             spell = spell,
             ageTicks = frame.ageTicks,
@@ -434,6 +601,7 @@ object StaffSpellPreviewExport {
                 "transitionFromAgeTicks" to (inputs.transitionFromAgeTicks ?: -1),
                 "impact" to inputs.impact,
                 "secondary" to inputs.secondary,
+                "eventTimeline" to event.sceneTimeline,
                 "gameplayEvent" to true,
                 "length" to inputs.length,
                 "radius" to inputs.radius,
@@ -443,12 +611,14 @@ object StaffSpellPreviewExport {
                 "partCull" to if (view == "geometry") "source visibility retained; temporal observer culling uses swept bounds" else
                     "distance(center, eye) >= staffEyeClearance(spell, impact) + 0.15 + part-scale-length / 2",
                 "projectiles" to when {
-                    spell in setOf(StaffSpell.CHAIN, StaffSpell.FROST) && inputs.secondary -> 3
+                    spell == StaffSpell.CHAIN && inputs.secondary -> 3
+                    spell == StaffSpell.ICICLE -> 3
+                    spell == StaffSpell.FAULT && !inputs.secondary -> faultPrimaryEruptions.size
                     spell == StaffSpell.LANCE && event.id == "triple-spears" -> 3
                     else -> 1
                 },
                 "partBudgetPerProjectile" to StaffSpellDisplayEffects.MAX_PARTS,
-                "trajectoryNote" to (readability?.trajectoryNote ?: if (spell != StaffSpell.CHAIN) "Uses production staff display geometry."
+                "trajectoryNote" to (readability?.trajectoryNote ?: event.trajectoryNote ?: if (spell != StaffSpell.CHAIN) "Uses production staff display geometry."
                     else if (event.chainRoute != null && event.chainRoute.yawDegrees == 0.0)
                         "Centered zero-yaw route used for the curated readability samples."
                     else if (event.id.startsWith("offset-target-homing-"))
@@ -477,7 +647,9 @@ object StaffSpellPreviewExport {
         val output = Path.of(args.single())
         val readability = readabilityStates()
         val exported = StaffSpell.entries.associateWith { spell ->
-            events.getValue(spell).flatMap { event -> frames(event.inputs.durationTicks).flatMap { frame -> state(spell, event, frame) } }
+            events.getValue(spell).flatMap { event ->
+                frames(event.inputs.durationTicks, event.firstFrameTick).flatMap { frame -> state(spell, event, frame) }
+            }
         }
         val allExported = readability + StaffSpell.entries.flatMap { exported.getValue(it) }
         val states = allExported.map(ExportedState::metadata)

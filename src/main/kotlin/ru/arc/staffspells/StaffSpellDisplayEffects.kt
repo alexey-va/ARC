@@ -82,6 +82,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         val scene = scenes[sceneId] ?: return
         if (!valid(at) || at.world != scene.origin.world) { remove(sceneId); return }
         scene.origin = at.clone()
+        if (scene.spell == StaffSpell.EMBER && !scene.impact) render(scene)
     }
 
     fun moveProjectile(sceneId: UUID?, at: Location, direction: org.bukkit.util.Vector) {
@@ -114,7 +115,9 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         val scene = scenes[sceneId] ?: return
         if (!valid(at) || at.world != scene.origin.world) { remove(sceneId); return }
         scene.transitionFrom = if (scene.spell == StaffSpell.EMBER) {
-            val delta = scene.origin.toVector().subtract(at.toVector())
+            // Flight origins are future interpolation targets. Rebase the retained pieces
+            // at the real collision, never at a predicted point beyond a newly moving mob.
+            val delta = if (scene.impact) scene.origin.toVector().subtract(at.toVector()) else org.bukkit.util.Vector()
             val priorRotation = Quaternionf(scene.rotation)
             scene.rotation = Quaternionf() // Meteor and horizontal comet impacts both expand over the world ground plane.
             scene.renderedParts.map { part -> part.copy(
@@ -146,7 +149,8 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
             val tracked = !scene.impact && scene.spell in setOf(StaffSpell.MARK, StaffSpell.EMBER)
             val expired = if (tracked) scene.age >= 160 else scene.age >= scene.duration
             if (expired || caster == null || !eligible(caster, scene.origin)) remove(scene.id)
-            else render(scene)
+            // Flying comets have one movement owner sending two-tick forward keyframes.
+            else if (scene.spell != StaffSpell.EMBER || scene.impact) render(scene)
         }
         if (scenes.isNotEmpty()) refreshAudience()
     }
@@ -179,12 +183,15 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
                 it.brightness = Display.Brightness(15, 15)
                 it.viewRange = VIEW_RANGE.toFloat() / 64f
                 it.interpolationDuration = if (scene.spell == StaffSpell.CHAIN) 0 else FRAME_TICKS
-                it.teleportDuration = if (scene.spell == StaffSpell.CHAIN) 0 else FRAME_TICKS
                 it.shadowStrength = 0f
                 scene.handles += it
             }
             if (handle.blockData.material != part.material)
                 handle.blockData = blocks.getOrPut(part.material) { part.material.createBlockData() }
+            handle.teleportDuration = when {
+                scene.spell == StaffSpell.CHAIN -> 0
+                else -> FRAME_TICKS
+            }
             handle.teleport(at)
             val rotation = Quaternionf(scene.rotation).mul(part.rotation)
             // Block models occupy [0,1]^3. Center them at their real packet anchor for chunk visibility.

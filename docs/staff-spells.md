@@ -1,7 +1,7 @@
 # Prototype staff attacks
 
-`/arc stafftest` gives the caller six mechanics samples. The existing `arc.test`
-administrator permission controls item issuance. `/arc stafftest chain|mark|frost|lance|ember|nova`
+`/arc stafftest` gives the caller eight mechanics samples. The existing `arc.test`
+administrator permission controls item issuance. `/arc stafftest chain|mark|frost|lance|ember|nova|icicle|fault`
 gives one sample; an optional final player name allows console/operator delivery.
 The entire selected set must fit in free inventory slots before anything is given.
 There are no loot-table or shop changes. Anyone holding an issued sample can use it.
@@ -20,14 +20,22 @@ There are no loot-table or shop changes. Anyone holding an issued sample can use
   the ground in the direction you face. Its front travels through the cone over
   twelve ticks after a short lead-in; mobs take damage and slowness only when the
   front reaches them and they remain eligible and visible. It does not steer.
+- **Ледяной венец / icicle:** Olwen's Staff (`3dfantasyweaponscit:olwen_staff`)
+  launches three staggered icicles from behind your shoulders. They seek up to
+  three aimed mobs; when fewer are available, the remaining icicles follow the
+  first target. Each unique victim can be hit once and is slowed after a
+  successful hit. Without an acquired mob, they follow your aim point.
 - **Солнечное копьё / lance:** the Winged Staff
   (`3dfantasyweaponscit:sagrada_winged_staff`) damages up to three mobs instantly
   along a narrow line through the reticle. After a four-tick charge, a bright
   faceted channel opens over four to six ticks, leaving a contact corona and
   twelve-tick aftermath; damage remains immediate. There is no soft lock.
 - **Пепельная комета / ember:** the Hermit Staff
-  (`3dfantasyweaponscit:bermunde_hermit_staff`) launches a straight, steady fire
-  core from just ahead of the caster. Lead moving targets manually; it bursts
+  (`3dfantasyweaponscit:bermunde_hermit_staff`) launches a straight fire core that
+  starts slowly and accelerates. Two-tick forward keyframes use native Display
+  position interpolation; unchanged metadata is suppressed by the shared transport.
+  The prediction stops at walls, mobs and maximum range. Particles trail behind the
+  previous logical position. Lead moving targets manually; it bursts
   outward on the first mob/wall or at maximum range. Collision is checked along
   each movement segment, not just at endpoints.
 - **Изумрудная волна / nova:** the Celtic Staff
@@ -36,12 +44,18 @@ There are no loot-table or shop changes. Anyone holding an issued sample can use
   reaches full range sixteen ticks later; eligible, visible mobs are hit once as
   the front passes, up to the unchanged area-target limit. Its annular display
   remains centered on the caster; it does not add repeated damage or pull mobs.
+- **Обсидиановый раскол / fault:** the Staff of Unholy Wisdom
+  (`3dfantasyweaponscit:staff_of_unholy_wisdom`) sends five ground ruptures in
+  sequence along the direction you face, stopping at an obstruction and never
+  traveling beyond 18 blocks. A target can be damaged only once by the sequence.
 
 Use the main-hand right click, including a direct click on an entity. Look near a
 mob for chain/mark; small particles over its head preview their selected target.
-The other primary attacks retain manual aiming; the meteor shower can select a
-visible target as its landing point. Every spell can fire into
-empty space and consumes its cooldown on a miss. All samples share
+Other attacks use their stated reticle or facing direction; ICICLE seeks its
+selected mobs, while the meteor shower, ice-lance rain and fault burst can use a
+visible target as their landing point. Misses consume the shared cooldown.
+FAULT's Shift eruption requires a visible ground surface and reports when none is
+found. All samples share
 one caster cooldown, so swapping sample items cannot bypass it. Walls block initial
 acquisition, every chain link, and blast damage. Players, NPCs, armor stands and
 tamed pets are excluded. EliteMobs also applies its instance/minion eligibility.
@@ -62,15 +76,18 @@ cone reaches 10 blocks instead of 7. The ordinary Nova radius remains 8.
 | --- | --- | --- | --- |
 | Chain | Three seeking bolts start in different directions and curve into separate targets within a 55-degree cone; no further jumps | 1.5× | 0.75× per bolt; shared unique victims |
 | Mark | A fixed black hole pulls attackable mobs, then collapses after 40 ticks | 2× | Four 0.12× pulses plus 0.65× collapse; each pulse uses normal damage/protection checks before velocity |
-| Frost | An expanding circular ice front around the caster | 1.5× | One hit and slow per target, same area-target cap |
+| Frost — Полярный круг | An expanding circular ice front around the caster, out to eight blocks | 1.5× | One hit and slow per target, same area-target cap |
+| Icicle — Ледяной дождь | Three staggered ice lances fall around the selected ground point; each bursts in a 2.4-block radius | 1.5× | 1× per target; slow after a successful hit, shared unique-victim cap |
 | Lance | Three piercing rays at −16°, 0°, +16° | 1.5× | 0.65×, deduplicated across rays and same total piercing-target cap |
 | Ember | Three staggered meteors descend above the aimed point | 2× | 0.65× once per unique target across the shower, same total area cap |
 | Nova | A forward emerald crest travels 12 blocks with a widening fan | 1.5× | One hit per target, same area-target cap |
+| Fault — Каменный выброс | One eruption after an eight-tick warning at the aimed ground point, radius 4.5 blocks | 1.5× | 1× per target; lifts mobs hit by the eruption |
 
-The action bar shows the selected ability, ten filling segments and remaining
-seconds; readiness also shows the input. It reads the same cooldown used by the
-cast gate and survives item/mode swaps without granting another attack. It clears
-when the staff is put away. Previously issued PDC-marked items immediately gain
+The boss bar shows the selected ability, remaining seconds and native cooldown
+progress. When ready, it turns green and shows the input. It reads the same
+cooldown used by the cast gate and updates across item/mode swaps without
+granting another attack. It hides when the staff is put away. Previously issued
+PDC-marked items immediately gain
 the new actions and HUD; their old stored lore is not rewritten automatically.
 Newly issued samples describe the secondary ability.
 
@@ -89,6 +106,10 @@ every emission point. Display visibility also
 checks the swept interpolation segment every tick, with movement padding. This rule
 also covers close impacts, crouching and spectators; collision still starts at
 the real eye, so the clearance does not let a shot skip a nearby wall or mob.
+
+Lightning emits one local two-layer discharge cue per accepted cast, including a
+miss and the three-branch secondary. Travel ticks and blocked cooldown clicks do
+not repeat it; successful contact keeps its separate impact and thunder accent.
 
 ## Ownership and damage contract
 
@@ -145,8 +166,10 @@ snap outward. The black hole has a dark faceted core, a tilted luminous accretio
 disk and inward particles. The solar piercer charges briefly, crosses its ray
 quickly, then leaves a bright contact corona. Comets have a hot, voluminous burst
 and slower embers. Emerald waves are broad translucent crescents with a bright
-lip, replacing the stacked ground pillars. Frost retains its sequential ground
-crystals. Damage, cooldowns, target limits and the two input modes are unchanged;
+lip, replacing the stacked ground pillars. Frost keeps its sequential ground
+crystals; ICICLE uses falling lances and shattering ice, while FAULT warns with a
+ground fissure before its heavy eruption. Damage, cooldowns, target limits and
+the two input modes are unchanged;
 lightning time-to-contact follows its new stepped travel speed.
 
 `StaffSpellDisplayGeometry` is shared by the renderer and offline textured preview.
@@ -195,7 +218,7 @@ fully qualified class names, then package with `shadowJar`. Deterministic checks
 cover target geometry, occlusion, item identity and delayed-effect lifecycle.
 Tests also cover empty casts, manual aim, piercing and swept orb collision.
 They do not establish in-client appearance or the feel of fighting moving mobs.
-On the selected runtime, use the issuance command and compare the six samples
+On the selected runtime, use the issuance command and compare all eight samples
 against moving mobs, an obstructed target and a group, then try switching items
 during cooldown. Review EliteMobs scaling/progression in real combat separately.
 

@@ -4,6 +4,7 @@ import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import org.joml.Vector3f
 import org.bukkit.Location
 import org.bukkit.Material
@@ -145,8 +146,7 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
                 fun volume(parts: List<StaffDisplayPart>) = parts.sumOf {
                     (it.scale.x * it.scale.y * it.scale.z).toDouble()
                 }
-                if (spell in setOf(StaffSpell.CHAIN, StaffSpell.LANCE, StaffSpell.MARK, StaffSpell.EMBER) ||
-                    spell == StaffSpell.FROST && secondary) {
+                if (spell in setOf(StaffSpell.CHAIN, StaffSpell.LANCE, StaffSpell.MARK, StaffSpell.EMBER, StaffSpell.ICICLE)) {
                     (volume(first) > volume(body) * 0.01) shouldBe true
                 } else {
                     (volume(first) < volume(body) * 0.01) shouldBe true
@@ -199,17 +199,17 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
     }
 
     "shoulder icicle assembles as one body then fractures while the emerald front travels" {
-        val crystal = staffDisplayParts(StaffSpell.FROST, 8, 80, 1.0, 0.8, false, true)
-        val flying = staffDisplayParts(StaffSpell.FROST, 16, 80, 1.0, 0.8, false, true)
+        val crystal = staffDisplayParts(StaffSpell.ICICLE, 8, 80, 1.0, 0.8, false)
+        val flying = staffDisplayParts(StaffSpell.ICICLE, 16, 80, 1.0, 0.8, false)
         crystal.size shouldBe 8
         crystal.zip(flying).forEach { (a, b) ->
             a.center shouldBe b.center
             a.scale shouldBe b.scale
             a.material shouldBe b.material
         }
-        val shatter = staffDisplayParts(StaffSpell.FROST, 4, 10, 0.0, 0.9, true, true)
+        val shatter = staffDisplayParts(StaffSpell.ICICLE, 4, 10, 0.0, 0.9, true)
         (shatter.maxOf { it.center.length() } > crystal.maxOf { it.center.length() }) shouldBe true
-        val faded = staffDisplayParts(StaffSpell.FROST, 8, 10, 0.0, 0.9, true, true)
+        val faded = staffDisplayParts(StaffSpell.ICICLE, 8, 10, 0.0, 0.9, true)
         (faded.maxOf { it.scale.length() } < 0.002f) shouldBe true
 
         val tidalStart = staffDisplayParts(StaffSpell.NOVA, 2, 20, 12.0, 5.5, true, true)
@@ -227,6 +227,45 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         (peak.maxOf { it.center.y + it.scale.y / 2f } > 1.5f) shouldBe true
         (peak.maxOf { it.center.y } > 1.0f) shouldBe true
         (peak.maxOf { it.scale.y } >= 1.2f) shouldBe true
+    }
+
+    "restored frost nova keeps its 48-slot ring and travels outward as one radial front" {
+        val early = staffDisplayParts(StaffSpell.FROST, 2, 30, 0.0, 8.0, true, secondary = true)
+        val peak = staffDisplayParts(StaffSpell.FROST, 10, 30, 0.0, 8.0, true, secondary = true)
+        val late = staffDisplayParts(StaffSpell.FROST, 18, 30, 0.0, 8.0, true, secondary = true)
+        early.size shouldBe 48
+        late.size shouldBe 48
+        early.map { it.material } shouldBe late.map { it.material }
+        val earlyReach = early.maxOf { kotlin.math.hypot(it.center.x.toDouble(), it.center.z.toDouble()) }
+        val lateReach = late.maxOf { kotlin.math.hypot(it.center.x.toDouble(), it.center.z.toDouble()) }
+        (lateReach > earlyReach + 5.0) shouldBe true
+        (peak.maxOf { it.center.y + it.scale.y / 2f } > 1.0f) shouldBe true
+    }
+
+    "fault forms a grounded chunky rupture and carries its fragments on smooth outward arcs" {
+        fun parts(age: Int, duration: Int = 22, radius: Double = 2.0, secondary: Boolean = false) =
+            staffDisplayParts(StaffSpell.FAULT, age, duration, 0.0, radius, true, secondary)
+        val early = parts(4)
+        val middle = parts(10)
+        val late = parts(16)
+        val wide = parts(10, duration = 24, radius = 4.5, secondary = true)
+        middle.size shouldBe 36
+        early.size shouldBe 36
+        late.size shouldBe 36
+        middle.map { it.material } shouldBe early.map { it.material }
+        middle.map { it.material } shouldBe late.map { it.material }
+        middle.all { it.scale.x >= 0.30f && it.scale.y >= 0.30f && it.scale.z >= 0.30f } shouldBe true
+        (middle.minOf { it.center.y - it.scale.y / 2f } >= -0.001f) shouldBe true
+        fun firstFragmentRadius(age: Int) = parts(age).drop(24).first().center.let {
+            kotlin.math.hypot(it.x.toDouble(), it.z.toDouble())
+        }
+        (firstFragmentRadius(4) < firstFragmentRadius(10)) shouldBe true
+        (firstFragmentRadius(10) < firstFragmentRadius(12)) shouldBe true
+        (wide.maxOf { kotlin.math.hypot(it.center.x.toDouble(), it.center.z.toDouble()) } >
+            middle.maxOf { kotlin.math.hypot(it.center.x.toDouble(), it.center.z.toDouble()) }) shouldBe true
+        (wide.maxOf { it.center.y } > middle.maxOf { it.center.y }) shouldBe true
+        val dissolved = parts(20)
+        (dissolved.maxOf { it.scale.length() } < late.maxOf { it.scale.length() }) shouldBe true
     }
 
     "emerald crescent keeps a broad low silhouette and moves out continuously" {
@@ -338,6 +377,37 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
             h.scheduler.tick(20)
             h.recorder.records.size shouldBe allocated
             h.recorder.displaysCloseCount shouldBe 1
+        }
+    }
+
+    "comet keyframes halve position updates without stale timer teleports or future impact origins" {
+        withDisplayHarness { h ->
+            val caster = h.player("comet-frames")
+            val start = Location(h.world, 0.5, 66.0, 4.0)
+            val id = h.effects.play(caster.uniqueId, StaffSpell.EMBER, start,
+                start.clone().add(0.0, 0.0, 1.0), durationTicks = 80)!!
+            val body = h.recorder.records.take(4)
+            var distance = 0.0
+            repeat(20) { index ->
+                distance += staffEmberStep(index + 1, 1.2)
+                if (index % StaffSpellDisplayEffects.FRAME_TICKS == 0)
+                    h.effects.move(id, start.clone().add(0.0, 0.0, distance +
+                        (1..StaffSpellDisplayEffects.FRAME_TICKS).sumOf { staffEmberStep(index + 1 + it, 1.2) }))
+                val counts = body.map { it.teleports.size }
+                h.scheduler.tick(1)
+                body.map { it.teleports.size } shouldBe counts
+            }
+            body.forEach { part ->
+                part.teleports.size shouldBe 11 // Initial frame plus ten keyframes, not twenty tick updates.
+                part.teleports.zipWithNext().all { (a, b) -> b.z > a.z } shouldBe true
+                verify(atLeast = 1) { part.handle.teleportDuration = 2 }
+            }
+            h.effects.impact(id, start.clone().add(0.0, 0.0, distance), 2.8, 20)
+            body.forEach { part ->
+                // A flight keyframe can still point ahead when a mob enters the segment.
+                // Retained impact pieces are anchored at the actual hit, not that future point.
+                (part.teleports.last().z <= start.z + distance + 1.0) shouldBe true
+            }
         }
     }
 
