@@ -50,59 +50,13 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         }
     }
 
-    "charged cores launch through the reticle and the solar mass grows after leaving the muzzle" {
+    "lightning launches through the reticle without a near-camera shield" {
         val chain = staffDisplayParts(StaffSpell.CHAIN, 0, 20, 48.0, 0.8, false)
         chain.size shouldBe 47
         (chain[44].scale.x >= 0.18f) shouldBe true
         (chain[44].center.z >= 2.4f) shouldBe true
         (chain.minOf { it.center.z } >= 0f) shouldBe true
 
-        val lance = staffDisplayParts(StaffSpell.LANCE, 0, 20, 24.0, 0.75, false)
-        lance.size shouldBe StaffSpellDisplayEffects.MAX_PARTS
-        (lance[18].scale.x in 0.50f..0.60f) shouldBe true
-        (lance[18].center.z >= 1.9f) shouldBe true
-        lance[18].center.y shouldBe -0.75f
-        (lance[0].center.z > 1.0f) shouldBe true
-        (lance[41].scale.x <= 0.08f && lance[42].scale.x <= 0.08f) shouldBe true
-        lance[41].center.x shouldBe 0f
-        lance[41].center.y shouldBe -0.75f
-        val arrivedLance = staffDisplayParts(StaffSpell.LANCE, staffLanceFlightTicks(24.0),
-            staffLanceDuration(24.0), 24.0, 0.75, true)
-        arrivedLance[18].center.z shouldBe 24f
-        arrivedLance[18].center.y shouldBe 0f
-        (arrivedLance[0].center.y < -0.55f) shouldBe true
-        (arrivedLance[18].scale.x > 0.8f) shouldBe true
-        (arrivedLance[0].scale.x < 0.14f) shouldBe true
-        (arrivedLance[18].center.z - arrivedLance[0].center.z > 20f) shouldBe true
-        arrivedLance.size shouldBe StaffSpellDisplayEffects.MAX_PARTS
-        lance.forEach { part ->
-            for (x in listOf(-1f, 1f)) for (y in listOf(-1f, 1f)) for (z in listOf(-1f, 1f)) {
-                val corner = org.joml.Vector3f(part.scale).mul(org.joml.Vector3f(x, y, z)).mul(0.5f)
-                part.rotation.transform(corner).add(part.center)
-                (corner.z > 0.5f) shouldBe true
-            }
-        }
-    }
-
-    "solar flight remains visible across its actual range and shares its particle clock" {
-        listOf(8.0, 16.0, 24.0, 48.0).forEach { distance ->
-            val flight = staffLanceFlightTicks(distance)
-            val duration = staffLanceDuration(distance)
-            duration shouldBe flight + 8
-            val positions = (0..flight).map { staffLanceFront(it, distance) }
-            positions.first() shouldBe 2.0
-            positions.last() shouldBe distance
-            positions.zipWithNext().all { (before, after) -> after > before && after - before <= 2.800001 } shouldBe true
-            (0 until duration - 2 step 2).forEach { age ->
-                val parts = staffDisplayParts(StaffSpell.LANCE, age, duration, distance, 0.75, true)
-                val head = parts[18]
-                head.center.z shouldBe staffLanceFront(age, distance).toFloat()
-                (head.scale.x > 0.02f) shouldBe true
-            }
-            (staffDisplayParts(StaffSpell.LANCE, duration - 1, duration, distance, 0.75, true)
-                .maxOf { it.scale.x } < 0.01f) shouldBe true
-        }
-        staffLanceFlightTicks(48.0) shouldBe 17
     }
 
     "LANCE shares one yaw-pitch frame for diagonal and vertical rays" {
@@ -133,44 +87,6 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         val verticalDown = staffLanceOrientation(Vector3f(0f, -1f, 0f))
         (kotlin.math.abs(verticalDown.transform(Vector3f(0f, 1f, 0f)).z - 1f) < 1.0e-5f) shouldBe true
         (kotlin.math.abs(staffLanceOrientation(Vector3f()).transform(Vector3f(0f, 0f, 1f)).z - 1f) < 1.0e-5f) shouldBe true
-    }
-
-    "LANCE grows a stable off-axis channel from its safe muzzle to the moving head" {
-        val distance = 48.0
-        val duration = staffLanceDuration(distance)
-        val launch = staffDisplayParts(StaffSpell.LANCE, 0, duration, distance, 0.75, true)
-        val middle = staffDisplayParts(StaffSpell.LANCE, staffLanceFlightTicks(distance) / 2,
-            duration, distance, 0.75, true)
-        val arrival = staffDisplayParts(StaffSpell.LANCE, staffLanceFlightTicks(distance),
-            duration, distance, 0.75, true)
-        fun trail(parts: List<StaffDisplayPart>) = parts.take(18) + parts.subList(19, 41)
-
-        launch.size shouldBe 48
-        launch.count { it.visible } shouldBe 8 // compact core, two muzzle facets and five head facets
-        middle.count { it.visible } shouldBe 27
-        arrival.count { it.visible } shouldBe 48
-        launch.map { it.material } shouldBe arrival.map { it.material }
-        launch[18].center.z shouldBe 2f
-        launch[18].center.x shouldBe 0f
-        launch[18].center.y shouldBe -0.75f
-        middle[18].center.z shouldBe staffLanceFront(staffLanceFlightTicks(distance) / 2, distance).toFloat()
-        arrival[18].center.z shouldBe distance.toFloat()
-        arrival[18].center.y shouldBe 0f
-        arrival[41].center.y shouldBe -0.75f
-        (arrival[18].scale.x <= 0.93f) shouldBe true
-        (trail(arrival).maxOf { kotlin.math.hypot(it.center.x.toDouble(), it.center.y.toDouble()) } > 0.8) shouldBe true
-        (staffLanceOrbitOffset(2.0, distance).length() < 0.001f) shouldBe true
-        (staffLanceOrbitOffset(15.0, distance).length() > 0.7f) shouldBe true
-        (staffLanceOrbitOffset(distance, distance).length() < 0.001f) shouldBe true
-        staffLanceCenterOffset(2.0, distance) shouldBe -0.75
-        staffLanceCenterOffset(distance, distance) shouldBe 0.0
-        staffLanceCenterOffset(1.0, 1.0) shouldBe 0.0
-
-        listOf(launch, middle, arrival).forEach { state ->
-            state.filter { it.visible }.all { part ->
-                org.joml.Vector3f(part.center).length() >= 1.15f + part.scale.length() / 2f
-            } shouldBe true
-        }
     }
 
     "lightning extends stable handles and hides unreached route slots" {
@@ -231,7 +147,7 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
                 fun volume(parts: List<StaffDisplayPart>) = parts.sumOf {
                     (it.scale.x * it.scale.y * it.scale.z).toDouble()
                 }
-                if (spell in setOf(StaffSpell.CHAIN, StaffSpell.LANCE, StaffSpell.MARK)) {
+                if (spell in setOf(StaffSpell.CHAIN, StaffSpell.LANCE, StaffSpell.MARK, StaffSpell.EMBER)) {
                     (volume(first) > volume(body) * 0.01) shouldBe true
                 } else {
                     (volume(first) < volume(body) * 0.01) shouldBe true
@@ -254,21 +170,17 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         }
     }
 
-    "mark charges as a dense violet core before its radial crystal tear opens" {
-        fun mark(age: Int) = staffDisplayParts(StaffSpell.MARK, age, 40, 0.0, 4.5, false)
-        val closed = mark(0)
-        val open = mark(8)
-        closed.size shouldBe 17
-        open.size shouldBe 17
-        (open.take(5).minOf { it.scale.x } > 0.8f) shouldBe true
-        (open.take(5).maxOf { kotlin.math.sqrt(it.center.lengthSquared().toDouble()) } < 0.3) shouldBe true
-        fun tearRadius(parts: List<StaffDisplayPart>) = parts.drop(5).maxOf {
-            kotlin.math.sqrt(it.center.lengthSquared().toDouble())
+    "mark holds a vertical fracture then releases its fragments outward without rebound" {
+        val held = staffDisplayParts(StaffSpell.MARK, 18, 18, 0.0, 1.3, false)
+        (held.take(5).maxOf { it.scale.y } > 1.5f) shouldBe true
+        var previous = 0.0
+        (0..12 step 2).forEach { age ->
+            val parts = staffDisplayParts(StaffSpell.MARK, age, 20, 0.0, 3.5, true,
+                animationAgeTicks = 18 + age)
+            val radius = parts.drop(5).maxOf { it.center.length().toDouble() }
+            (radius >= previous) shouldBe true
+            previous = radius
         }
-        (tearRadius(open) > tearRadius(closed) + 0.45) shouldBe true
-        val fragments = open.drop(5)
-        (fragments.minOf { it.scale.x } >= 0.42f) shouldBe true
-        (fragments.maxOf { it.scale.x } >= 0.60f) shouldBe true
     }
 
     "secondary mark gathers a chunky three-dimensional singularity then collapses" {
@@ -280,11 +192,11 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         val open = parts(8)
         val collapsed = parts(18)
         closed.size shouldBe 29
-        (open[0].scale.x > 0.8f) shouldBe true
+        (closed[0].scale.x > 0.8f) shouldBe true
         open.take(7).all { it.center.y in 1.45f..1.75f } shouldBe true
-        (open.drop(7).maxOf { it.center.y } - open.drop(7).minOf { it.center.y } > 0.8f) shouldBe true
+        (closed.drop(7).maxOf { it.center.y } - closed.drop(7).minOf { it.center.y } > 0.8f) shouldBe true
         (cloudRadius(open) <= cloudRadius(closed) + 0.001) shouldBe true
-        (cloudRadius(collapsed) < cloudRadius(open) * 0.30) shouldBe true
+        (cloudRadius(collapsed) < cloudRadius(closed) * 0.15) shouldBe true
     }
 
     "secondary frost nova and chunky emerald tidal front preserve their different paths" {
@@ -308,11 +220,11 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         (tidalEnd.maxOf { it.scale.x } < 0.1f) shouldBe true
         val peak = staffDisplayParts(StaffSpell.NOVA, 10, 30, 12.0, 5.5, true, true)
         (peak.maxOf { it.center.y + it.scale.y / 2f } > 2.0f) shouldBe true
-        (peak[1].center.y > 1.4f) shouldBe true
-        (peak[1].scale.y >= 1.1f) shouldBe true
+        (peak[1].center.y > 1.0f) shouldBe true
+        (peak[0].scale.y >= 1.2f) shouldBe true
     }
 
-    "primary emerald nova is a thick outward-moving radial crystal storm" {
+    "emerald crescent keeps a broad low silhouette and moves out continuously" {
         (0..6 step StaffSpellDisplayEffects.FRAME_TICKS).forEach { age ->
             val parts = staffDisplayParts(StaffSpell.NOVA, age, 30, 4.0, 8.0, true)
             parts.size shouldBe 42
@@ -326,8 +238,8 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         val late = staffDisplayParts(StaffSpell.NOVA, 18, 30, 4.0, 8.0, true)
         (late.minOf { kotlin.math.hypot(it.center.x.toDouble(), it.center.z.toDouble()) } >
             early.minOf { kotlin.math.hypot(it.center.x.toDouble(), it.center.z.toDouble()) } + 5.5) shouldBe true
-        (peak.minOf { it.scale.x } >= 0.48f) shouldBe true
-        (peak.maxOf { it.center.y + it.scale.y / 2f } > 1.4f) shouldBe true
+        (peak.minOf { it.scale.x } >= 0.24f) shouldBe true
+        (peak.maxOf { it.center.y + it.scale.y / 2f } > 0.9f) shouldBe true
     }
 
     "comet flight is steady and its impact shards travel outward without pulsing" {

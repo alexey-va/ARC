@@ -9,6 +9,9 @@ import org.joml.Vector3f
 /** Offline snapshots copied from the production staff display geometry helper. */
 object StaffSpellPreviewExport {
     private const val FRAME_TICKS = StaffSpellDisplayEffects.FRAME_TICKS
+    private val chainFlightTicks = generateSequence(1) { it + 1 }.first { age ->
+        (1..age).sumOf(::staffLightningStep) >= 76.8
+    }
 
     private data class Inputs(
         val length: Double,
@@ -45,9 +48,9 @@ object StaffSpellPreviewExport {
     // Mirrors StaffSpellController display calls using its current default tuning.
     private val events = mapOf(
         StaffSpell.CHAIN to listOf(
-            Event("centerline-empty-flight", Inputs(76.8, 0.8, 40, impact = false)),
+            Event("centerline-empty-flight", Inputs(76.8, 0.8, chainFlightTicks + 1, impact = false)),
             Event("centerline-empty-impact", Inputs(76.8, 0.8, 8, impact = true)),
-            Event("secondary-empty-flight", Inputs(76.8, 0.8, 40, impact = false, secondary = true)),
+            Event("secondary-empty-flight", Inputs(76.8, 0.8, chainFlightTicks + 1, impact = false, secondary = true)),
             Event("secondary-empty-impact", Inputs(76.8, 0.8, 8, impact = true, secondary = true)),
         ),
         StaffSpell.MARK to listOf(
@@ -267,7 +270,7 @@ object StaffSpellPreviewExport {
                 break
             }
             steerStaffBolt(direction, offset, age)
-            position.add(direction.clone().multiply(2.0))
+            position.add(direction.clone().multiply(staffLightningStep(age)))
             route += point()
         }
         return route.take(41)
@@ -281,7 +284,7 @@ object StaffSpellPreviewExport {
     ): Pair<List<StaffDisplayPart>, Vector3f> {
         if (spell == StaffSpell.CHAIN) {
             val impact = event.id.endsWith("impact")
-            val lastTick = if (impact) 39 else (frame.ageTicks - 1).coerceIn(0, 39)
+            val lastTick = if (impact) chainFlightTicks else frame.ageTicks.coerceIn(0, chainFlightTicks)
             val fade = if (impact) (1.0 - frame.ageTicks / 8.0).coerceIn(0.0, 1.0) else 1.0
             val origin = Vector3f(0f, eyeHeight.toFloat(), 0f)
             val chainRoute = event.chainRoute
@@ -291,7 +294,7 @@ object StaffSpellPreviewExport {
                 val route = if (event.id.contains("empty")) {
                     val direction = org.bukkit.util.Vector(0.0, 0.0, 1.0).rotateAroundY(Math.toRadians(angle))
                     (0..lastTick).map { tick ->
-                        val point = direction.clone().multiply(minOf(tick * 2.0, 76.8))
+                        val point = direction.clone().multiply(minOf((1..tick).sumOf(::staffLightningStep), 76.8))
                         Vector3f(point.x.toFloat(), (point.y + eyeHeight).toFloat(), point.z.toFloat())
                     }
                 } else homingFlightRoute(lastTick, eyeHeight, angle, event.inputs.secondary, chainRoute)

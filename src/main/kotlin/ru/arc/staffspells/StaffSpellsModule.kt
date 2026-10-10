@@ -365,7 +365,7 @@ internal class StaffSpellController(
                 val desired = targetAt.toVector().subtract(from.toVector())
                 steerStaffBolt(bolt.direction, desired, bolt.age)
             }
-            val step = min(2.0, bolt.remainingDistance)
+            val step = min(staffLightningStep(bolt.age), bolt.remainingDistance)
             val blockEnd = rayEnd(from, bolt.direction, step)
             val victim = lineTargets(player, from, blockEnd, 0.38).firstOrNull { it.uniqueId !in bolt.visited }
             val hitPoint = victim?.boundingBox?.expand(0.38)
@@ -799,4 +799,12 @@ object StaffTestSubCommand : SubCommand {
         2 -> Bukkit.getOnlinePlayers().map { it.name }.tabComplete(args[1])
         else -> emptyList()
     }
+}
+
+/** A short probing leader followed by a fast discharge, repeated along the homing route. */
+internal fun staffLightningStep(age: Int): Double = when ((age - 1).coerceAtLeast(0) % 4) {
+    0 -> 1.5
+    1 -> 5.5
+    2 -> 0.75
+    else -> 5.5
 }

@@ -22,8 +22,9 @@ There are no loot-table or shop changes. Anyone holding an issued sample can use
   front reaches them and they remain eligible and visible. It does not steer.
 - **Солнечное копьё / lance:** the Winged Staff
   (`3dfantasyweaponscit:sagrada_winged_staff`) damages up to three mobs instantly
-  along a narrow line through the reticle. A bright, faceted plasma head travels at about 2.8 blocks per tick with a short
-  thick wake and an eight-tick finish; damage remains immediate. There is no soft lock.
+  along a narrow line through the reticle. After a four-tick charge, a bright
+  faceted channel opens over four to six ticks, leaving a contact corona and
+  twelve-tick aftermath; damage remains immediate. There is no soft lock.
 - **Пепельная комета / ember:** the Hermit Staff
   (`3dfantasyweaponscit:bermunde_hermit_staff`) launches a straight, steady fire
   core from just ahead of the caster. Lead moving targets manually; it bursts
@@ -130,14 +131,23 @@ Bukkit damage remain usable without loading the optional integration classes.
 
 ## Display effects and limits
 
-The six source-driven silhouettes are a charged seeking core with a broad broken
-lightning trail, a rotating violet crystal mass, a floor-hugging ice front, a
-faceted solar plasma head with a short thick wake, a steady fire core with a
-three-dimensional fireburst, and expanding emerald crystal fronts. The black
-hole uses a dark overlapping block core, orbiting debris and three dense particle
-spirals. Primary lightning starts along the reticle without an artificial yaw bias. The
-mark and orb follow their existing combat positions; lance damage stays immediate.
-Casting into empty space also produces the display effect.
+The visual language uses a short anticipation, a decisive strike and a slower
+particle aftermath. Reference studies were the official GGG
+[Witch walkthrough](https://www.youtube.com/watch?v=82CGiyshJ0c) (Bonestorm and
+violet/white discharges around 5:53–6:20) and
+[Ranger walkthrough](https://www.youtube.com/watch?v=iw870QM1V5k) (Lightning Arrow
+and Lightning Rods). These inform timing, bright cores and irregular edges;
+no external game assets are copied.
+
+Lightning advances in alternating short leaders and fast discharges, with older
+segments thinning into an afterimage. MARK is an upright fracture whose shards
+snap outward. The black hole has a dark faceted core, a tilted luminous accretion
+disk and inward particles. The solar piercer charges briefly, crosses its ray
+quickly, then leaves a bright contact corona. Comets have a hot, voluminous burst
+and slower embers. Emerald waves are broad translucent crescents with a bright
+lip, replacing the stacked ground pillars. Frost retains its sequential ground
+crystals. Damage, cooldowns, target limits and the two input modes are unchanged;
+lightning time-to-contact follows its new stepped travel speed.
 
 `StaffSpellDisplayGeometry` is shared by the renderer and offline textured preview.
 `StaffSpellDisplayEffects` reuses core `PaperPacketDisplays` under the `staff-spells`
@@ -156,23 +166,27 @@ the previous route in place until an eight-tick fade; unreached slots stay hidde
 Moving marks/projectiles update their logical position between display frames.
 FROST's front spans twelve ticks after a two-tick lead-in in a 24-tick scene;
 NOVA's eight-block front spans sixteen ticks after the same lead-in in a 20-tick
-scene; all layers rise together and dissolve toward the floor while still advancing. MARK and EMBER impacts reuse their existing display handles for 20-tick
-releases with a four-tick blend. MARK carries its rotation clock and charged scale
-into release. LANCE and its particle wake share a distance-dependent flight clock
-and an eight-tick finish. Its 40 fixed helix facets grow from the safe two-block
-muzzle to the advancing head, widening off-axis so the solar channel remains readable
-from the caster's view as well as from the side. At ranges above two blocks, the visual
-muzzle starts 0.75 blocks below the reticle and converges on the ray at the head; damage
-continues to use the original ray.
-Most effects last 18–30 ticks; short LANCE shots use their four-tick minimum flight plus finish; tracked effects expire with their mark/projectile,
-with a final 160-tick safety cap. All scenes are removed on caster death, quit,
-world change, expiry or module shutdown/reload. The limits bound effect size and
-traffic sources; they are not a measured TPS/FPS guarantee. Particle emission is
-also finite: at most five lightning sparks per controller step, sixteen MARK
-release positions, 181 radial / 147 directional NOVA positions, and 136 LANCE
-positions per maximum-range ray (including the camera-filtered launch flash).
-The three-ray LANCE multiplies that bound by three; emissions are spread across
-its flight, not created in one tick. Large flashes retain the 3.2-block eye cutoff.
+scene; the emerald layers dissolve together while still advancing. MARK and EMBER
+impacts retain handles through a two-tick release transition. MARK retains its
+rotation clock and charged shape. LANCE and its particles share four charge ticks,
+a four-to-six-tick traversal and twelve ticks of aftermath. The visual muzzle stays
+below the reticle; the damage ray still starts at the eye.
+
+Tracked effects expire with their controller, with a final 160-tick safety cap.
+All scenes are removed on caster death, quit, world change, expiry or module
+shutdown/reload. Particle emission uses bounded loops and retains per-viewer
+camera clearance. Approximate emission bounds per cast are 100 positions per
+solar ray (three rays for secondary), 206 for a comet impact and 225 for a radial
+emerald wave; gravity emits 35 positions per pulse. These bounds are not a
+measured TPS/FPS guarantee.
+
+Paper 1.21.11 requires `Color` data for `Particle.FLASH`. A missing payload throws
+synchronously, so the old LANCE launch could abort before its display scene was
+created whenever another viewer could receive the launch flash. MARK release
+was affected too. Every FLASH now carries a color. `StaffSpellParticleContractTest`
+exercises the emission path with an observer outside the camera cutoff and checks
+payloads against the installed Paper particle types; a solo caster whose near
+flash is hidden cannot reproduce that failure.
 
 ## Verification
 

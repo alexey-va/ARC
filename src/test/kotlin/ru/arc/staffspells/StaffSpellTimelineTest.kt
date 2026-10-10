@@ -43,7 +43,8 @@ class StaffSpellTimelineTest : FreeSpec({
 
         firstBend.take(2).zip(secondBend.take(2)).forEach { (old, grown) ->
             old.center shouldBe grown.center
-            old.scale shouldBe grown.scale
+            (grown.scale.x <= old.scale.x) shouldBe true
+            grown.scale.z shouldBe old.scale.z
             old.rotation shouldBe grown.rotation
         }
         secondBend[44].center.z shouldBe 8f
@@ -64,7 +65,7 @@ class StaffSpellTimelineTest : FreeSpec({
             animationAgeTicks = animationAge,
         )
 
-        val charged = mark(age = 8, impact = false, animationAge = 30)
+        val charged = mark(age = 12, impact = false, animationAge = 30)
         val firstImpact = mark(age = 0, impact = true, animationAge = 30)
         charged.size shouldBe 17
         firstImpact.size shouldBe charged.size
@@ -75,7 +76,7 @@ class StaffSpellTimelineTest : FreeSpec({
         }
 
         val rotated = mark(age = 0, impact = true, animationAge = 32)
-        (abs(rotated[0].rotation.y - firstImpact[0].rotation.y) > 0.001f) shouldBe true
+        (abs(rotated[0].rotation.z - firstImpact[0].rotation.z) > 0.001f) shouldBe true
         val radii = (0..12 step 2).map { age ->
             mark(age = age, impact = true, animationAge = 30).drop(5).maxOf {
                 it.center.length().toDouble()

@@ -152,7 +152,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
                 scene.secondary, animationAgeTicks = scene.priorStageTicks + scene.age)).take(MAX_PARTS)
         scene.transitionFrom?.let { previous ->
             parts = blendStaffParts(parts, previous, scene.age)
-            if (scene.age >= 4) scene.transitionFrom = null
+            if (scene.age >= 2) scene.transitionFrom = null
         }
         scene.renderedParts = parts
         scene.previousBounds = scene.bounds

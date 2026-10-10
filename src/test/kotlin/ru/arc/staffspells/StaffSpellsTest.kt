@@ -90,7 +90,7 @@ class StaffSpellsTest : FreeSpec({
                 val offset = move.points.last().toVector().subtract(eye.toVector())
                 (offset.clone().normalize().dot(forward) > 0.9999) shouldBe true
             }
-            h.trailMoves.first().points.last().distance(eye) shouldBe 2.0
+            h.trailMoves.first().points.last().distance(eye) shouldBe staffLightningStep(1)
             h.hits shouldBe emptyList()
         }
     }
@@ -143,10 +143,10 @@ class StaffSpellsTest : FreeSpec({
                 move.points.size in 2..41 && move.points.last().distance(moving.location.clone().add(0.0, 1.0, 0.0)) < 1.5
             } shouldBe true
             h.trailMoves.all { it.points.size <= 41 } shouldBe true
-            (h.trailMoves.last().points.size > 17) shouldBe true
+            (h.trailMoves.last().points.size > 8) shouldBe true
             h.trailMoves.all { move ->
                 (move.points.first().distance(castOrigin) < 0.001) &&
-                    move.points.zipWithNext().all { (from, to) -> from.distance(to) <= 2.001 }
+                    move.points.zipWithNext().all { (from, to) -> from.distance(to) <= 5.501 }
             } shouldBe true
             h.finishedTrails shouldBe listOf(h.visualPlays.single().id)
             h.trailMoves.map { it.id }.distinct() shouldBe listOf(h.visualPlays.single().id)
