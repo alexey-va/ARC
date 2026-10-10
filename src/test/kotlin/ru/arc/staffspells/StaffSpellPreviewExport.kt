@@ -21,6 +21,9 @@ object StaffSpellPreviewExport {
         val secondary: Boolean = false,
         val animationAgeOffsetTicks: Int = 0,
         val transitionFromAgeTicks: Int? = null,
+        val input: StaffCastInput = StaffCastInput.of(secondary, quick = false),
+        val chargeProgress: Double? = null,
+        val projectileCount: Int? = null,
     )
 
     private data class ChainRoute(
@@ -63,7 +66,27 @@ object StaffSpellPreviewExport {
         20 to 14.4,
         26 to 18.0,
     )
-    private val icicleHailOffsets = listOf(-1.8 to -0.6, 0.0 to 1.2, 1.8 to -0.6)
+    private fun icicleHailOffset(index: Int, count: Int): Pair<Double, Double> {
+        val angle = index * Math.PI * 2.0 / count
+        return kotlin.math.cos(angle) * 2.2 to kotlin.math.sin(angle) * 2.2
+    }
+
+    private fun arsenalModes(length: Double, radius: Double, spell: String) = listOf(
+        StaffCastInput.PRIMARY,
+        StaffCastInput.SECONDARY,
+        StaffCastInput.QUICK,
+        StaffCastInput.QUICK_SECONDARY,
+    ).map { input ->
+        val id = when (input) {
+            StaffCastInput.PRIMARY -> "primary"
+            StaffCastInput.SECONDARY -> "secondary"
+            StaffCastInput.QUICK -> "quick"
+            StaffCastInput.QUICK_SECONDARY -> "quick-secondary"
+        }
+        Event("$spell-$id", Inputs(length, radius, 24, impact = false,
+            secondary = input.secondary, input = input),
+            trajectoryNote = "Production $spell $id display geometry for ${input.name.lowercase()} input.")
+    }
 
     private fun icicleTravelTicks(distance: Double): Int {
         var remaining = distance
@@ -76,12 +99,12 @@ object StaffSpellPreviewExport {
         return age
     }
 
-    private fun icicleSceneDuration(distance: Double): Int =
-        staffIcicleLaunchDelay(2) + icicleTravelTicks(distance) - 1 + ICICLE_SHATTER_TICKS - 1
+    private fun icicleSceneDuration(distance: Double, count: Int): Int =
+        staffIcicleLaunchDelay(count - 1) + icicleTravelTicks(distance) - 1 + ICICLE_SHATTER_TICKS - 1
 
-    private fun iciclePrimaryTimeline(index: Int) = mapOf(
+    private fun iciclePrimaryTimeline(index: Int, count: Int) = mapOf(
         "projectile" to index + 1,
-        "anchorOffsetFromEye" to staffIcicleAnchorOffset(index).let { mapOf(
+        "anchorOffsetFromEye" to staffIcicleAnchorOffset(index, count).let { mapOf(
             "x" to it.x.toDouble(), "y" to it.y.toDouble(), "z" to it.z.toDouble(),
         ) },
         "launchTick" to staffIcicleLaunchDelay(index),
@@ -92,9 +115,9 @@ object StaffSpellPreviewExport {
         "impactDurationTicks" to ICICLE_SHATTER_TICKS,
     )
 
-    private fun icicleHailTimeline(index: Int) = mapOf(
+    private fun icicleHailTimeline(index: Int, count: Int) = mapOf(
         "projectile" to index + 1,
-        "offsetFromGround" to mapOf("x" to icicleHailOffsets[index].first, "z" to icicleHailOffsets[index].second),
+        "offsetFromGround" to icicleHailOffset(index, count).let { mapOf("x" to it.first, "z" to it.second) },
         "spawnHeightAboveGroundBlocks" to 10.15,
         "launchTick" to staffIcicleLaunchDelay(index),
         "flightTicks" to icicleTravelTicks(10.15),
@@ -120,7 +143,7 @@ object StaffSpellPreviewExport {
                 animationAgeOffsetTicks = 40, transitionFromAgeTicks = 40)),
         ),
         StaffSpell.FROST to listOf(
-            Event("fan", Inputs(10.0, kotlin.math.tan(Math.toRadians(50.0)) * 10.0, 24, impact = false)),
+            Event("fan", Inputs(28.0, kotlin.math.tan(Math.toRadians(50.0)) * 28.0, 24, impact = false)),
             Event("radial-ice-nova", Inputs(8.0, 8.0, 30, impact = true, secondary = true),
                 sceneTimeline = mapOf("effects" to listOf(mapOf(
                     "kind" to "radial-ice-wave", "startTick" to 0, "durationTicks" to 30,
@@ -128,20 +151,49 @@ object StaffSpellPreviewExport {
                 trajectoryNote = "Production secondary frost radial wave at the caster origin; one display scene, with no projectile route."),
         ),
         StaffSpell.ICICLE to listOf(
-            Event("shoulder-barrage", Inputs(48.0, 0.9, icicleSceneDuration(48.0), impact = false),
+            Event("charge-empty", Inputs(0.0, 0.0, 40, impact = false, chargeProgress = 0.0)),
+            Event("charge-half", Inputs(0.0, 0.0, 40, impact = false, chargeProgress = 0.5)),
+            Event("charge-full", Inputs(0.0, 0.0, 40, impact = false, chargeProgress = 1.0)),
+            Event("shoulder-barrage", Inputs(48.0, 0.9, icicleSceneDuration(48.0, 7), impact = false,
+                projectileCount = 7),
                 sceneTimeline = mapOf(
                     "flightDistanceBlocks" to 48.0,
                     "shatterDurationTicks" to ICICLE_SHATTER_TICKS,
-                    "projectiles" to (0..2).map(::iciclePrimaryTimeline),
+                    "projectilesAtZeroCharge" to 7,
+                    "projectilesAtFullCharge" to 11,
+                    "projectiles" to (0 until 7).map { iciclePrimaryTimeline(it, 7) },
                 ),
-                trajectoryNote = "Three production ICICLE shoulder launches; each uses staffIcicleStep, its live launch delay and the production eight-piece shatter."),
-            Event("downward-hail", Inputs(16.0, 0.9, icicleSceneDuration(10.15), impact = false, secondary = true),
+                trajectoryNote = "Seven production ICICLE shoulder launches; each uses staffIcicleStep, its live launch delay and the production eight-piece shatter. A fully charged release launches eleven."),
+            Event("fully-charged-shoulder-barrage", Inputs(48.0, 0.9,
+                icicleSceneDuration(48.0, 11), impact = false, projectileCount = 11),
+                sceneTimeline = mapOf(
+                    "flightDistanceBlocks" to 48.0,
+                    "shatterDurationTicks" to ICICLE_SHATTER_TICKS,
+                    "projectilesAtZeroCharge" to 7,
+                    "projectilesAtFullCharge" to 11,
+                    "projectiles" to (0 until 11).map { iciclePrimaryTimeline(it, 11) },
+                ),
+                trajectoryNote = "Fully charged production ICICLE release with eleven shoulder launches, each using its eleven-shot anchor spread and live launch delay."),
+            Event("downward-hail", Inputs(16.0, 0.9, icicleSceneDuration(10.15, 5), impact = false,
+                secondary = true, projectileCount = 5),
                 sceneTimeline = mapOf(
                     "groundCenter" to mapOf("x" to 0.0, "z" to 16.0),
                     "shatterDurationTicks" to ICICLE_SHATTER_TICKS,
-                    "projectiles" to (0..2).map(::icicleHailTimeline),
+                    "projectilesAtZeroCharge" to 5,
+                    "projectilesAtFullCharge" to 9,
+                    "projectiles" to (0 until 5).map { icicleHailTimeline(it, 5) },
                 ),
-                trajectoryNote = "Three ICICLE secondary crystals spawn 10.15 blocks above ground, descend with staffIcicleStep, then use the production eight-piece shatter for 10 ticks."),
+                trajectoryNote = "Five ICICLE secondary crystals spawn around the selected ground point, descend with staffIcicleStep, then use the production eight-piece shatter for 10 ticks. A fully charged release launches nine."),
+            Event("fully-charged-downward-hail", Inputs(16.0, 0.9,
+                icicleSceneDuration(10.15, 9), impact = false, secondary = true, projectileCount = 9),
+                sceneTimeline = mapOf(
+                    "groundCenter" to mapOf("x" to 0.0, "z" to 16.0),
+                    "shatterDurationTicks" to ICICLE_SHATTER_TICKS,
+                    "projectilesAtZeroCharge" to 5,
+                    "projectilesAtFullCharge" to 9,
+                    "projectiles" to (0 until 9).map { icicleHailTimeline(it, 9) },
+                ),
+                trajectoryNote = "Fully charged secondary ICICLE release with nine descending crystals, using the production ring spacing and launch delays."),
         ),
         StaffSpell.FAULT to listOf(
             Event("ground-eruption-chain", Inputs(18.0, 2.0, 48, impact = true), firstFrameTick = 2,
@@ -176,10 +228,12 @@ object StaffSpellPreviewExport {
             Event("secondary-burst", Inputs(0.0, 3.5, 20, impact = true, secondary = true,
                 animationAgeOffsetTicks = 6, transitionFromAgeTicks = 6)),
         ),
-        StaffSpell.NOVA to listOf(
-            Event("impact", Inputs(8.0, 8.0, 20, impact = true)),
-            Event("directed-tidal-crest", Inputs(12.0, 5.5, 20, impact = true, secondary = true)),
-        ),
+        StaffSpell.NOVA to arsenalModes(24.0, 2.4, "nova"),
+        StaffSpell.LUNAR to arsenalModes(24.0, 2.0, "lunar"),
+        StaffSpell.GALE to arsenalModes(24.0, 2.4, "gale"),
+        StaffSpell.TIDE to arsenalModes(24.0, 2.4, "tide"),
+        StaffSpell.REQUIEM to arsenalModes(24.0, 2.8, "requiem"),
+        StaffSpell.PRISM to arsenalModes(24.0, 1.8, "prism"),
     )
 
     // First in the exported list: 12 fixed player-eye snapshots at ordinary gameplay scales.
@@ -247,22 +301,24 @@ object StaffSpellPreviewExport {
         add(ReadabilityPose(
             id = "nova-primary-caster-view",
             spell = StaffSpell.NOVA,
-            event = Event("impact", Inputs(8.0, 8.0, 20, impact = true)),
+            event = Event("spiraling-vine", Inputs(24.0, 2.4, 20, impact = false,
+                input = StaffCastInput.PRIMARY)),
             frame = Frame("middle", 14),
             illustrativeDistanceBlocks = 8.0,
             cameraTargetY = 1.62,
             cameraTargetZ = 8.0,
-            trajectoryNote = "Primary radial wave stays at the caster origin with its real 8-block radius; this is the player’s first-person cast view.",
+            trajectoryNote = "Primary spiraling vine starts at the caster eye; this is the player’s first-person cast view.",
         ))
         add(ReadabilityPose(
-            id = "nova-secondary-caster-view",
+            id = "nova-secondary-bloom-target-view",
             spell = StaffSpell.NOVA,
-            event = Event("directed-tidal-crest", Inputs(12.0, 5.5, 20, impact = true, secondary = true)),
+            event = Event("rooted-bloom", Inputs(24.0, 4.4, 20, impact = true, secondary = true,
+                input = StaffCastInput.SECONDARY)),
             frame = Frame("middle", 14),
             illustrativeDistanceBlocks = 12.0,
             cameraTargetY = 1.62,
             cameraTargetZ = 12.0,
-            trajectoryNote = "Secondary tidal crest stays at the caster origin and advances along the real 12-block lane; no synthetic distance scaling.",
+            trajectoryNote = "Secondary emerald bloom is rooted at the aimed point 12 blocks ahead; no synthetic distance scaling.",
         ))
     }
 
@@ -280,6 +336,12 @@ object StaffSpellPreviewExport {
                 else -> "tick-$age"
             }, age)
         }
+    }
+
+    private fun frames(event: Event): List<Frame> {
+        val chargeProgress = event.inputs.chargeProgress ?: return frames(event.inputs.durationTicks, event.firstFrameTick)
+        val age = (36.0 * chargeProgress).toInt()
+        return listOf(Frame("charge-${(chargeProgress * 100).toInt()}", age))
     }
 
     private fun pieceMetadata(spell: StaffSpell, event: Event, partIndex: Int, part: StaffDisplayPart): Map<String, Any> {
@@ -401,19 +463,20 @@ object StaffSpellPreviewExport {
         event: Event,
         frame: Frame,
         eyeHeight: Double,
-    ): List<StaffDisplayPart> = (0..2).flatMap { index ->
+    ): List<StaffDisplayPart> = (0 until (event.inputs.projectileCount ?: 3)).flatMap { index ->
         val secondary = event.inputs.secondary
         val position: org.bukkit.util.Vector
         val direction: org.bukkit.util.Vector
         val remainingDistance: Double
+        val count = event.inputs.projectileCount ?: 3
         val delay = staffIcicleLaunchDelay(index)
         if (secondary) {
-            val offset = icicleHailOffsets[index]
+            val offset = icicleHailOffset(index, count)
             position = org.bukkit.util.Vector(offset.first, 10.15, 16.0 + offset.second)
             direction = org.bukkit.util.Vector(0.0, -1.0, 0.0)
             remainingDistance = 10.15
         } else {
-            val anchor = staffIcicleAnchorOffset(index)
+            val anchor = staffIcicleAnchorOffset(index, count)
             position = org.bukkit.util.Vector(anchor.x.toDouble(), eyeHeight + anchor.y, anchor.z.toDouble())
             direction = org.bukkit.util.Vector(0.0, 0.0, 1.0)
             remainingDistance = event.inputs.length
@@ -477,6 +540,9 @@ object StaffSpellPreviewExport {
         frame: Frame,
         eyeHeight: Double,
     ): Pair<List<StaffDisplayPart>, Vector3f> {
+        event.inputs.chargeProgress?.let { progress ->
+            return staffChargeParts(spell, progress, frame.ageTicks) to Vector3f()
+        }
         if (spell == StaffSpell.CHAIN) {
             val impact = event.id.endsWith("impact")
             val lastTick = if (impact) chainFlightTicks else frame.ageTicks.coerceIn(0, chainFlightTicks)
@@ -510,6 +576,7 @@ object StaffSpellPreviewExport {
             impact = event.inputs.impact,
             secondary = event.inputs.secondary,
             animationAgeTicks = event.inputs.animationAgeOffsetTicks + frame.ageTicks,
+            input = event.inputs.input,
         )
         val parts = if (spell == StaffSpell.LANCE && event.id == "triple-spears") {
             listOf(-16.0, 0.0, 16.0).flatMap { angle ->
@@ -567,7 +634,7 @@ object StaffSpellPreviewExport {
         return views.map { (eyeHeight, view) ->
             var (parts, origin) = geometry(spell, event, frame, eyeHeight)
             if (inputs.impact && frame.ageTicks < 4 && spell != StaffSpell.CHAIN) {
-                events.getValue(spell).firstOrNull { !it.inputs.impact && it.inputs.secondary == inputs.secondary }
+                events.getValue(spell).firstOrNull { !it.inputs.impact && it.inputs.input == inputs.input }
                     ?.let { tracked ->
                         val priorAge = event.inputs.transitionFromAgeTicks
                             ?: ((tracked.inputs.durationTicks - 1) / FRAME_TICKS) * FRAME_TICKS
@@ -601,6 +668,10 @@ object StaffSpellPreviewExport {
                 "transitionFromAgeTicks" to (inputs.transitionFromAgeTicks ?: -1),
                 "impact" to inputs.impact,
                 "secondary" to inputs.secondary,
+                "input" to inputs.input.name.lowercase(),
+                "quick" to inputs.input.quick,
+                "chargeProgress" to (inputs.chargeProgress ?: -1.0),
+                "previewMode" to "offline-production-geometry",
                 "eventTimeline" to event.sceneTimeline,
                 "gameplayEvent" to true,
                 "length" to inputs.length,
@@ -611,8 +682,9 @@ object StaffSpellPreviewExport {
                 "partCull" to if (view == "geometry") "source visibility retained; temporal observer culling uses swept bounds" else
                     "distance(center, eye) >= staffEyeClearance(spell, impact) + 0.15 + part-scale-length / 2",
                 "projectiles" to when {
+                    inputs.chargeProgress != null -> 0
                     spell == StaffSpell.CHAIN && inputs.secondary -> 3
-                    spell == StaffSpell.ICICLE -> 3
+                    spell == StaffSpell.ICICLE -> inputs.projectileCount ?: 3
                     spell == StaffSpell.FAULT && !inputs.secondary -> faultPrimaryEruptions.size
                     spell == StaffSpell.LANCE && event.id == "triple-spears" -> 3
                     else -> 1
@@ -648,7 +720,7 @@ object StaffSpellPreviewExport {
         val readability = readabilityStates()
         val exported = StaffSpell.entries.associateWith { spell ->
             events.getValue(spell).flatMap { event ->
-                frames(event.inputs.durationTicks, event.firstFrameTick).flatMap { frame -> state(spell, event, frame) }
+                frames(event).flatMap { frame -> state(spell, event, frame) }
             }
         }
         val allExported = readability + StaffSpell.entries.flatMap { exported.getValue(it) }
@@ -660,12 +732,12 @@ object StaffSpellPreviewExport {
 
         output.parent?.let { Files.createDirectories(it) }
         Files.writeString(output, GsonBuilder().setPrettyPrinting().create().toJson(mapOf(
-            "title" to "ARC staff spells",
+            "title" to "ARC staff spells · offline source preview",
             "states" to states,
             "palette" to palette,
             "coordinates" to mapOf("space" to "spell-local", "origin" to "cast point; +Z forward", "unit" to "block"),
-            "cameraNote" to "The first 12 readability-prefixed states use the standing player eye at local (0, 1.62, 0), default 70-degree FOV and no autozoom. They sample centerline CHAIN travel at 8/16/24 blocks, LANCE at 8/16/24 blocks, primary MARK at 16, black holes at 8/16, and both NOVA caster views. Remaining states retain all production geometry frames and standing/sneaking filters.",
-            "evidence" to "Every geometry frame calls the production staffDisplayParts or staffLightningTrailParts function. Player-filtered states use staffEyeClearance(spell, impact) + 0.15 static padding and half the part-scale length. The legacy offset-target CHAIN route remains explicitly labeled; curated primary routes start at yaw 0 and target straight ahead. These are source-driven block-display previews, not native Minecraft lighting, interpolation, particles, sounds or measured client acceptance.",
+            "cameraNote" to "The first 12 readability-prefixed states use the standing player eye at local (0, 1.62, 0), default 70-degree FOV and no autozoom. They sample centerline CHAIN travel at 8/16/24 blocks, LANCE at 8/16/24 blocks, primary MARK at 16, black holes at 8/16, and the NOVA vine and aimed bloom. Remaining states retain production geometry frames, all four Arsenal inputs and standing/sneaking filters.",
+            "evidence" to "Every geometry frame calls production staffDisplayParts, staffChargeParts or staffLightningTrailParts. Player-filtered states use staffEyeClearance(spell, impact) + 0.15 static padding and half the part-scale length. The legacy offset-target CHAIN route remains explicitly labeled; curated primary routes start at yaw 0 and target straight ahead. These are offline source-driven block-display previews, not native Minecraft lighting, interpolation, particles, sounds or measured client acceptance.",
         )).plus("\n"))
         println("STAFF_SPELL_PREVIEW states=${states.size} materials=${palette.size} output=$output")
     }

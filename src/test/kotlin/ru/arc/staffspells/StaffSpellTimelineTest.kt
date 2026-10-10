@@ -110,37 +110,48 @@ class StaffSpellTimelineTest : FreeSpec({
         (radii.last() < radii.first() * 0.30) shouldBe true
     }
 
-    "nova keeps moving through a shared ground-anchored dissolve" {
-        fun primary(age: Int) = staffDisplayParts(StaffSpell.NOVA, age, 20, 4.0, 8.0, impact = true)
-        fun tidal(age: Int) = staffDisplayParts(StaffSpell.NOVA, age, 20, 12.0, 5.5,
-            impact = true, secondary = true)
-        val radialStart = primary(2)
-        val radialMid = primary(12)
-        val radialNearEnd = primary(18)
-        radialStart.size shouldBe 42
-        radialMid.size shouldBe 42
-        radialNearEnd.size shouldBe 42
-        (radialMid.maxOf { hypot(it.center.x.toDouble(), it.center.z.toDouble()) } >
-            radialStart.maxOf { hypot(it.center.x.toDouble(), it.center.z.toDouble()) }) shouldBe true
-        (radialNearEnd.maxOf { hypot(it.center.x.toDouble(), it.center.z.toDouble()) } >
-            radialMid.maxOf { hypot(it.center.x.toDouble(), it.center.z.toDouble()) }) shouldBe true
+    "nova bloom front advances before impact-only dissolve" {
+        fun bloom(age: Int) = staffDisplayParts(
+            StaffSpell.NOVA, age, 12, 0.0, 5.5, impact = true, secondary = true,
+            input = StaffCastInput.SECONDARY,
+        )
+        fun frontRadius(parts: List<StaffDisplayPart>) = parts.take(8).maxOf {
+            hypot(it.center.x.toDouble(), it.center.z.toDouble())
+        }
 
-        val waveStart = tidal(2)
-        val waveMid = tidal(12)
-        val waveNearEnd = tidal(18)
-        waveStart.size shouldBe 39
-        waveMid.size shouldBe 39
-        waveNearEnd.size shouldBe 39
-        (waveNearEnd.maxOf { it.center.z } > waveMid.maxOf { it.center.z }) shouldBe true
-        (waveNearEnd.maxOf { abs(it.center.x) } > waveMid.maxOf { abs(it.center.x) }) shouldBe true
+        val start = bloom(0)
+        val early = bloom(4)
+        val preDissolve = bloom(6)
+        val dissolveStart = bloom(8)
+        val dissolveLater = bloom(10)
+        val expired = bloom(12)
+        listOf(start, early, preDissolve, dissolveStart, dissolveLater, expired).forEach { it.size shouldBe 32 }
 
-        listOf(radialStart, radialMid, radialNearEnd, waveStart, waveMid, waveNearEnd).flatten().all { part ->
-            part.center.y - part.scale.y / 2f >= -0.001f
-        } shouldBe true
-        (radialNearEnd.maxOf { it.scale.y } < radialMid.maxOf { it.scale.y } * 0.10f) shouldBe true
-        (waveNearEnd.maxOf { it.scale.y } < waveMid.maxOf { it.scale.y } * 0.10f) shouldBe true
-        (primary(20).maxOf { it.scale.x } < 0.01f) shouldBe true
-        (tidal(20).maxOf { it.scale.x } < 0.01f) shouldBe true
-        (radialNearEnd + waveNearEnd).all { abs(it.center.y) < 0.20f } shouldBe true
+        (frontRadius(start) < frontRadius(early)) shouldBe true
+        (frontRadius(early) < frontRadius(preDissolve)) shouldBe true
+        (start.maxOf { it.scale.x } == preDissolve.maxOf { it.scale.x }) shouldBe true
+        (dissolveStart.maxOf { it.scale.x } < preDissolve.maxOf { it.scale.x }) shouldBe true
+        (dissolveLater.maxOf { it.scale.x } < dissolveStart.maxOf { it.scale.x }) shouldBe true
+        expired.all { it.scale.x > 0f && it.scale.y > 0f && it.scale.z > 0f } shouldBe true
+        (expired.maxOf { it.scale.x } < 0.001f) shouldBe true
+    }
+
+    "all arsenal impact geometries keep 32 slots and dissolve only in their final five ticks" {
+        val spells = listOf(StaffSpell.NOVA, StaffSpell.LUNAR, StaffSpell.GALE,
+            StaffSpell.TIDE, StaffSpell.REQUIEM, StaffSpell.PRISM)
+        spells.forEach { spell ->
+            fun impact(age: Int) = staffDisplayParts(spell, age, 12, 8.0, 3.0,
+                impact = true, input = StaffCastInput.PRIMARY)
+            val steady = impact(6)
+            val dissolve = impact(9)
+            val expired = impact(12)
+            steady.size shouldBe 32
+            dissolve.size shouldBe 32
+            expired.size shouldBe 32
+            (impact(0).maxOf { it.scale.x } == steady.maxOf { it.scale.x }) shouldBe true
+            (dissolve.maxOf { it.scale.x } < steady.maxOf { it.scale.x }) shouldBe true
+            expired.all { it.scale.x > 0f && it.scale.y > 0f && it.scale.z > 0f } shouldBe true
+            (expired.maxOf { it.scale.x } < 0.001f) shouldBe true
+        }
     }
 })

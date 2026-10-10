@@ -62,13 +62,14 @@ object StaffSpellsModule : PluginModule {
         controller = StaffSpellController(config, settings, StaffSpellDamage(duelAccess),
             StaffSpellDisplayEffects(PaperPacketDisplays(ARC.instance, "staff-spells"))).also {
             Bukkit.getPluginManager().registerEvents(it, ARC.instance)
+            Bukkit.getPluginManager().registerEvents(it.input, ARC.instance)
             it.start()
         }
     }
 
     override fun reload() = init()
     override fun shutdown() {
-        controller?.let { HandlerList.unregisterAll(it); it.close() }
+        controller?.let { HandlerList.unregisterAll(it); HandlerList.unregisterAll(it.input); it.close() }
         controller = null
     }
 
@@ -82,9 +83,15 @@ internal class StaffSpellController(
     private val settings: StaffSpellSettings,
     private val damage: StaffSpellDamage,
     private val effects: StaffSpellDisplayEffects,
-) : Listener, AutoCloseable {
+) : Listener, AutoCloseable, StaffSpellInputActions {
     private val tasks = LifecycleTaskScope()
     private val visuals = StaffSpellVisuals(tasks)
+    private val targeting = StaffSpellTargeting(settings, damage)
+    private val arsenal = StaffSpellArsenal(settings, damage, effects, visuals, targeting)
+    internal val input = StaffSpellInput(this)
+    private val chargeScenes = mutableMapOf<UUID, UUID?>()
+    private val lances = mutableListOf<PendingStaffLance>()
+    private val cooldownInputs = mutableMapOf<UUID, StaffCastInput>()
     private val marks = mutableMapOf<UUID, PendingStaffMark>()
     private val embers = mutableListOf<PendingStaffEmber>()
     private val waves = mutableListOf<PendingStaffWave>()
@@ -95,11 +102,17 @@ internal class StaffSpellController(
     private val cooldownId = "staff-spells"
 
     fun start() {
+        input.start()
+        arsenal.start()
         tasks.runTimer(4, 4) {
+            cooldownLengths.keys.filter { CooldownManager.cooldown(it, cooldownId) <= 0 }.forEach {
+                cooldownLengths.remove(it)
+                cooldownInputs.remove(it)
+            }
             Bukkit.getOnlinePlayers().forEach { player ->
                 val spell = StaffSpell.from(player.inventory.itemInMainHand)
                 if (ready(player) && spell != null) {
-                    showCooldown(player, spell)
+                    if (player.uniqueId !in chargeScenes) showCooldown(player, spell)
                 } else hideCooldown(player.uniqueId)
                 if (ready(player) && !StaffSpell.isDuelOnly(player.inventory.itemInMainHand) &&
                     spell in setOf(StaffSpell.CHAIN, StaffSpell.MARK)) {
@@ -115,7 +128,7 @@ internal class StaffSpellController(
             tickMarks()
             tickWaves()
         }
-        tasks.runTimer(1, 1) { tickEmbers(); tickBolts() }
+        tasks.runTimer(1, 1) { tickEmbers(); tickBolts(); tickLances() }
     }
 
     fun give(player: Player, spells: List<StaffSpell>): Boolean {
@@ -134,31 +147,43 @@ internal class StaffSpellController(
         return true
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST)
-    fun onInteract(event: PlayerInteractEvent) {
-        if (event.hand != EquipmentSlot.HAND ||
-            event.action !in setOf(Action.RIGHT_CLICK_AIR, Action.RIGHT_CLICK_BLOCK) ||
-            StaffSpell.from(event.item) == null || event.useItemInHand() == Event.Result.DENY) return
-        // Right-click air may be pre-cancelled by vanilla because rods have no default use.
-        if (event.action == Action.RIGHT_CLICK_BLOCK && event.useInteractedBlock() == Event.Result.DENY) return
-        event.setUseItemInHand(Event.Result.DENY)
-        event.setUseInteractedBlock(Event.Result.DENY)
-        cast(event.player)
+    // Event ownership lives in StaffSpellInput; these wrappers preserve direct test entry points.
+    internal fun onInteract(event: PlayerInteractEvent) = input.onInteract(event)
+
+    override fun canCharge(player: Player, spell: StaffSpell): Boolean {
+        if (!ready(player)) return false
+        if (CooldownManager.isOnCooldown(player.uniqueId, cooldownId)) {
+            showCooldown(player, spell)
+            return false
+        }
+        return true
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    fun onEntityInteract(event: PlayerInteractEntityEvent) = interactEntity(event)
-
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    fun onEntityInteractAt(event: PlayerInteractAtEntityEvent) = interactEntity(event)
-
-    private fun interactEntity(event: PlayerInteractEntityEvent) {
-        if (event.hand != EquipmentSlot.HAND || StaffSpell.from(event.player.inventory.itemInMainHand) == null) return
-        event.isCancelled = true
-        cast(event.player)
+    override fun charge(player: Player, spell: StaffSpell, progress: Double) {
+        val id = chargeScenes.getOrPut(player.uniqueId) {
+            effects.play(player.uniqueId, spell, player.eyeLocation, durationTicks = 220, charging = true)
+        }
+        effects.charge(id, player.eyeLocation, progress)
+        visuals.withOwner(player.uniqueId) { visuals.charge(player.eyeLocation, spell, progress) }
+        val bar = cooldownBars.getOrPut(player.uniqueId) {
+            BossBar.bossBar(config.charge(spell, progress, player.isSneaking), progress.toFloat(), BossBar.Color.PURPLE, BossBar.Overlay.PROGRESS)
+                .also(player::showBossBar)
+        }
+        bar.name(config.charge(spell, progress, player.isSneaking))
+        bar.progress(progress.toFloat().coerceIn(0f, 1f))
+        bar.color(if (progress >= 1.0) BossBar.Color.YELLOW else BossBar.Color.PURPLE)
     }
 
-    internal fun cast(player: Player) {
+    override fun cancelCharge(player: Player) {
+        effects.remove(chargeScenes.remove(player.uniqueId))
+        StaffSpell.from(player.inventory.itemInMainHand)?.let { showCooldown(player, it) }
+    }
+
+    override fun cast(player: Player, input: StaffCastInput, charge: Double) = castSpell(player, input, charge)
+
+    internal fun cast(player: Player) = castSpell(player, StaffCastInput.of(player.isSneaking, false), 0.0)
+
+    private fun castSpell(player: Player, input: StaffCastInput, charge: Double) {
         val item = player.inventory.itemInMainHand
         val spell = StaffSpell.from(item) ?: return
         if (!ready(player)) return
@@ -170,18 +195,26 @@ internal class StaffSpellController(
             player.sendActionBar(config.text("unavailable"))
             return
         }
-        val tuning = settings.tuning.getValue(spell)
-        val secondary = player.isSneaking
+        val level = charge.coerceIn(0.0, 1.0)
+        val base = settings.tuning.getValue(spell)
+        val multiplier = (1.0 + level * 0.75) * if (input.quick) 0.55 else 1.0
+        val tuning = base.copy(power = base.power * multiplier, vanillaDamage = base.vanillaDamage * multiplier)
+        val secondary = input.secondary
         val cooldownTicks = when {
+            input.quick -> maxOf(8, tuning.cooldownTicks / 2)
             !secondary -> tuning.cooldownTicks
             spell in setOf(StaffSpell.MARK, StaffSpell.EMBER) -> tuning.cooldownTicks * 2
             else -> tuning.cooldownTicks * 3 / 2
         }
+        cooldownInputs[player.uniqueId] = input
         cooldownLengths[player.uniqueId] = cooldownTicks
         CooldownManager.addCooldown(player.uniqueId, cooldownId, cooldownTicks)
         showCooldown(player, spell)
+        if (spell !in ARSENAL_SPELLS) visuals.withOwner(cast.casterId) { visuals.release(player.eyeLocation, spell, level >= 0.75) }
         if (spell == StaffSpell.CHAIN) visuals.withOwner(cast.casterId) { visuals.lightningLaunch(player.eyeLocation) }
-        if (secondary) castSecondary(player, spell, cast, tuning) else when (spell) {
+        if (spell in ARSENAL_SPELLS) arsenal.cast(player, spell, cast, tuning, input, level)
+        else if (input.quick) castQuick(player, spell, cast, tuning, secondary)
+        else if (secondary) castSecondary(player, spell, cast, tuning, level) else when (spell) {
             StaffSpell.CHAIN -> chain(player, target(player, cast), cast, tuning)
             StaffSpell.MARK -> {
                 val selected = target(player, cast)
@@ -192,18 +225,9 @@ internal class StaffSpellController(
                 visuals.withOwner(cast.casterId) { visuals.markLaunch(visualStart(player.eyeLocation, point), point) }
             }
             StaffSpell.FROST -> frost(player, cast, tuning)
-            StaffSpell.ICICLE -> frostIcicles(player, cast, tuning)
+            StaffSpell.ICICLE -> frostIcicles(player, cast, tuning, 7 + (level * 4).toInt())
             StaffSpell.FAULT -> fault(player, cast, tuning, secondary = false)
-            StaffSpell.LANCE -> {
-                val eye = player.eyeLocation
-                val end = aimPoint(player)
-                lineTargets(player, eye, end, settings.lanceWidth, cast).take(settings.lanceTargets).forEach {
-                    damage.hit(player, it, cast, tuning.power, tuning.vanillaDamage)
-                }
-                visuals.withOwner(cast.casterId) { visuals.lance(eye, end) }
-                effects.play(player.uniqueId, spell, eye, end, radius = 0.75,
-                    durationTicks = staffLanceDuration(eye.distance(end)), impact = true)
-            }
+            StaffSpell.LANCE -> lance(player, cast, tuning, secondary = false)
             StaffSpell.EMBER -> {
                 // The direction is captured once. Flight never steers towards a nearby mob.
                 if (embers.count { it.cast.casterId == player.uniqueId } >= 8) {
@@ -219,18 +243,8 @@ internal class StaffSpellController(
                 embers += PendingStaffEmber(eye, direction, cast, tuning, settings.range, visualId, muzzle)
                 visuals.withOwner(cast.casterId) { visuals.emberTrail(muzzle, muzzle) }
             }
-            StaffSpell.NOVA -> {
-                val origin = player.location.clone()
-                val candidates = nearby(player, origin, settings.novaRadius, cast)
-                    .sortedBy { horizontalDistance(origin, center(it)) }
-                    .take(MAX_WAVE_CANDIDATES)
-                visuals.withOwner(cast.casterId) { visuals.nova(origin, settings.novaRadius) }
-                val visualId = effects.play(player.uniqueId, spell, origin, radius = settings.novaRadius,
-                    durationTicks = NOVA_DURATION_TICKS, impact = true)
-                waves += PendingStaffWave(player.uniqueId, player.world.uid, spell, origin, Vector(),
-                    settings.novaRadius, candidates, cast, tuning, visualId, WAVE_START_DELAY_TICKS,
-                    NOVA_TRAVEL_TICKS, NOVA_DURATION_TICKS, NOVA_INITIAL_FRONT_RADIUS)
-            }
+            else -> Unit // Additional staff families have their own bounded attack lifecycle.
+
         }
         tasks.runLater(cooldownTicks) {
             if (ready(player) && StaffSpell.from(player.inventory.itemInMainHand) != null && damage.isCurrent(player, cast))
@@ -245,17 +259,21 @@ internal class StaffSpellController(
     internal fun resetPlayer(playerId: UUID) {
         cancel(playerId)
         CooldownManager.clearCooldown(playerId, cooldownId)
+        cooldownInputs.remove(playerId)
+        cooldownLengths.remove(playerId)
     }
 
     private fun showCooldown(player: Player, spell: StaffSpell) {
         val remaining = CooldownManager.cooldown(player.uniqueId, cooldownId)
         val total = cooldownLengths[player.uniqueId] ?: settings.tuning.getValue(spell).cooldownTicks
         val bar = cooldownBars.getOrPut(player.uniqueId) {
-            BossBar.bossBar(config.cooldown(spell, player.isSneaking, remaining, total),
+            BossBar.bossBar(config.cooldown(spell, player.isSneaking, remaining, total,
+                if (remaining > 0) cooldownInputs[player.uniqueId] ?: StaffCastInput.PRIMARY else StaffCastInput.of(player.isSneaking, false)),
                 staffCooldownProgress(remaining, total), BossBar.Color.BLUE, BossBar.Overlay.PROGRESS)
                 .also(player::showBossBar)
         }
-        bar.name(config.cooldown(spell, player.isSneaking, remaining, total))
+        bar.name(config.cooldown(spell, player.isSneaking, remaining, total,
+                if (remaining > 0) cooldownInputs[player.uniqueId] ?: StaffCastInput.PRIMARY else StaffCastInput.of(player.isSneaking, false)))
         bar.progress(staffCooldownProgress(remaining, total))
         bar.color(if (remaining > 0) BossBar.Color.BLUE else BossBar.Color.GREEN)
     }
@@ -271,7 +289,7 @@ internal class StaffSpellController(
         else from.clone().add(delta.multiply(min(1.4, length) / length))
     }
 
-    private fun castSecondary(player: Player, spell: StaffSpell, cast: StaffSpellCast, tuning: StaffSpellTuning) {
+    private fun castSecondary(player: Player, spell: StaffSpell, cast: StaffSpellCast, tuning: StaffSpellTuning, level: Double) {
         when (spell) {
             StaffSpell.CHAIN -> {
                 val targets = aimed(player, settings.range, 55.0, cast).take(3)
@@ -291,47 +309,143 @@ internal class StaffSpellController(
                     cast, tuning, 40, visualId, gravity = true)
                 visuals.withOwner(cast.casterId) { visuals.markLaunch(visualStart(player.eyeLocation, at), at) }
             }
-            StaffSpell.ICICLE -> hail(player, cast, tuning)
+            StaffSpell.ICICLE -> hail(player, cast, tuning, 5 + (level * 4).toInt())
             StaffSpell.FAULT -> fault(player, cast, tuning, secondary = true)
-            StaffSpell.FROST, StaffSpell.NOVA -> {
-                val origin = player.location.clone()
-                val forward = Vector(-sin(Math.toRadians(origin.yaw.toDouble())), 0.0,
-                    cos(Math.toRadians(origin.yaw.toDouble())))
-                val directional = spell == StaffSpell.NOVA
-                val range = if (directional) 12.0 else settings.novaRadius
-                val spread = if (directional) 5.5 / range else 0.0
-                val candidates = nearby(player, origin, range, cast).filter {
-                    !directional || inFrostCone(origin, forward, center(it), range, spread)
-                }.sortedBy { horizontalDistance(origin, center(it)) }.take(MAX_WAVE_CANDIDATES)
-                val end = origin.clone().add(forward.clone().multiply(range))
-                val duration = if (directional) NOVA_DURATION_TICKS else 30
-                val visualId = effects.play(player.uniqueId, spell, origin, end,
-                    radius = if (directional) 5.5 else range, durationTicks = duration, impact = true, secondary = true)
-                visuals.withOwner(cast.casterId) {
-                    visuals.wave(origin, end, if (directional) 5.5 else range, frost = !directional, directional = directional)
+            StaffSpell.FROST -> frostRing(player, cast, tuning, settings.novaRadius)
+            StaffSpell.LANCE -> lance(player, cast, tuning, secondary = true)
+            StaffSpell.EMBER -> meteorShower(player, cast, tuning)
+            else -> Unit
+        }
+    }
+
+    /** Damage follows the same front as the client display, including its two-tick interpolation. */
+    private fun lance(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning, secondary: Boolean,
+        range: Double = settings.range, width: Double = settings.lanceWidth) {
+        val eye = player.eyeLocation
+        val visited = mutableSetOf<UUID>()
+        (if (secondary) listOf(-16.0, 0.0, 16.0) else listOf(0.0)).forEach { angle ->
+            val end = rayEnd(eye, eye.direction.rotateAroundY(Math.toRadians(angle)), range)
+            launchLance(player, eye, end, cast, if (secondary) tuning.copy(power = tuning.power * 0.65,
+                vanillaDamage = tuning.vanillaDamage * 0.65) else tuning, width, visited, secondary)
+        }
+    }
+
+    private fun launchLance(player: Player, from: Location, end: Location, cast: StaffSpellCast,
+        tuning: StaffSpellTuning, width: Double, visited: MutableSet<UUID>, secondary: Boolean = false) {
+        while (lances.count { it.cast.casterId == cast.casterId } >= 6) {
+            val removed = lances.first { it.cast.casterId == cast.casterId }
+            effects.remove(removed.visualId); lances.remove(removed)
+        }
+        val id = effects.play(player.uniqueId, StaffSpell.LANCE, from, end,
+            radius = 0.85, durationTicks = staffLanceDuration(from.distance(end)), impact = true, secondary = secondary)
+        visuals.withOwner(cast.casterId) { visuals.lance(from, end) }
+        lances += PendingStaffLance(from.clone(), end.clone(), cast, tuning, width, visited, id)
+    }
+
+    private fun tickLances() {
+        lances.toList().forEach { lance ->
+            if (lance !in lances) return@forEach
+            val player = Bukkit.getPlayer(lance.cast.casterId)
+            if (player == null || !ready(player) || player.world != lance.from.world || !damage.isCurrent(player, lance.cast)) {
+                lances.remove(lance); effects.remove(lance.visualId); return@forEach
+            }
+            lance.age++
+            val length = lance.from.distance(lance.end)
+            if (length < 0.001) { lances.remove(lance); return@forEach }
+            val visualAge = lance.age - StaffSpellDisplayEffects.FRAME_TICKS
+            if (visualAge < 4) return@forEach
+            val direction = lance.end.toVector().subtract(lance.from.toVector()).normalize()
+            val front = staffLanceFront(visualAge, length)
+            val from = lance.from.clone().add(direction.clone().multiply(lance.previousFront))
+            val to = rayEnd(lance.from, direction, front)
+            if (to.distance(lance.from) >= lance.previousFront) {
+                lineTargets(player, from, to, lance.width, lance.cast).forEach { victim ->
+                    if (lance !in lances || !ready(player) || player.world != lance.from.world || !damage.isCurrent(player, lance.cast)) return@forEach
+                    if (lance.visited.size < settings.lanceTargets && lance.visited.add(victim.uniqueId) &&
+                        visible(player.eyeLocation, center(victim)))
+                        damage.hit(player, victim, lance.cast, lance.tuning.power, lance.tuning.vanillaDamage)
                 }
-                waves += PendingStaffWave(player.uniqueId, player.world.uid, spell, origin, forward,
-                    range, candidates, cast, tuning, visualId, WAVE_START_DELAY_TICKS, NOVA_TRAVEL_TICKS,
-                    duration, NOVA_INITIAL_FRONT_RADIUS,
-                    slowTicks = if (directional) null else settings.frostSlowTicks,
-                    frostSpread = spread, directional = directional)
+            }
+            lance.previousFront = front
+            if (front >= length - 0.001 || lance.visited.size >= settings.lanceTargets) lances.remove(lance)
+        }
+    }
+
+    private fun castQuick(player: Player, spell: StaffSpell, cast: StaffSpellCast, tuning: StaffSpellTuning, secondary: Boolean) {
+        when (spell) {
+            StaffSpell.CHAIN -> {
+                val visited = mutableSetOf<UUID>()
+                val count = if (secondary) 3 else 1
+                repeat(count) { index ->
+                    val direction = player.eyeLocation.direction.rotateAroundY(if (secondary) index * Math.PI * 2 / 3 else 0.0)
+                    launchBolt(player, player.eyeLocation, direction, if (secondary) null else target(player, cast),
+                        cast, tuning, 1.0, if (secondary) 1 else 2, visited, if (secondary) 12.0 else 24.0)
+                }
+            }
+            StaffSpell.MARK -> {
+                val at = if (secondary) player.location.clone().add(0.0, 0.3, 0.0) else target(player, cast)?.let(::center) ?: aimPoint(player)
+                delayedPulse(player, spell, at, if (secondary) 4.5 else 2.0, 6, cast, tuning, secondary)
+            }
+            StaffSpell.FROST -> {
+                if (secondary) frostRing(player, cast, tuning, 4.0)
+                else frost(player, cast, tuning, range = min(16.0, settings.frostRange), degrees = 25.0)
             }
             StaffSpell.LANCE -> {
-                val eye = player.eyeLocation
-                val visited = mutableSetOf<UUID>()
-                for (angle in listOf(-16.0, 0.0, 16.0)) {
-                    val end = rayEnd(eye, eye.direction.rotateAroundY(Math.toRadians(angle)), settings.range)
-                    lineTargets(player, eye, end, settings.lanceWidth, cast).forEach { victim ->
-                        if (visited.size < settings.lanceTargets && visited.add(victim.uniqueId))
-                            damage.hit(player, victim, cast, tuning.power * 0.65, tuning.vanillaDamage * 0.65)
-                    }
-                    visuals.withOwner(cast.casterId) { visuals.lance(eye, end) }
-                    effects.play(player.uniqueId, spell, eye, end, radius = 0.9,
-                        durationTicks = staffLanceDuration(eye.distance(end)),
-                        impact = true, secondary = true)
+                if (!secondary) lance(player, cast, tuning, false, range = 20.0, width = 0.6)
+                else {
+                    val end = target(player, cast)?.let(::center) ?: aimPoint(player)
+                    val top = rayEnd(end, Vector(0.0, 1.0, 0.0), 8.0)
+                    if (top.distanceSquared(end) > 0.01) launchLance(player, top, end, cast, tuning, 0.6, mutableSetOf())
                 }
             }
-            StaffSpell.EMBER -> meteorShower(player, cast, tuning)
+            StaffSpell.EMBER -> {
+                val end = if (secondary) aimPoint(player) else rayEnd(player.eyeLocation, player.eyeLocation.direction, 5.0)
+                delayedPulse(player, spell, end, if (secondary) 2.8 else 3.8, if (secondary) 10 else 2, cast, tuning, secondary)
+            }
+            StaffSpell.ICICLE -> frostIcicles(player, cast, tuning, if (secondary) 2 else 1)
+            StaffSpell.FAULT -> {
+                val point = if (secondary) player.location.clone() else rayEnd(player.eyeLocation, player.eyeLocation.direction, 12.0)
+                val at = groundBelow(point.clone().add(0.0, 1.0, 0.0), 8.0)
+                if (at == null) player.sendActionBar(config.text("no-ground"))
+                else delayedPulse(player, spell, at, if (secondary) 4.0 else 2.0, 4, cast, tuning, secondary)
+            }
+            else -> Unit
+        }
+    }
+
+    private fun delayedPulse(player: Player, spell: StaffSpell, at: Location, radius: Double, delay: Long,
+        cast: StaffSpellCast, tuning: StaffSpellTuning, secondary: Boolean) {
+        delayedCasts[cast.casterId] = cast.attackId
+        val worldId = player.world.uid
+        when (spell) {
+            StaffSpell.MARK -> visuals.withOwner(cast.casterId) { visuals.markLaunch(player.eyeLocation, at) }
+            StaffSpell.FAULT -> visuals.withOwner(cast.casterId) { visuals.faultCharge(at, radius) }
+            StaffSpell.EMBER -> visuals.withOwner(cast.casterId) { visuals.emberTrail(at, at) }
+            else -> Unit
+        }
+        tasks.runLater(delay) {
+            if (delayedCasts[cast.casterId] != cast.attackId || !ready(player) || player.world.uid != worldId ||
+                !damage.isCurrent(player, cast) || !at.world.isChunkLoaded(at.blockX shr 4, at.blockZ shr 4) || !visible(player.eyeLocation, at)) return@runLater
+            delayedCasts.remove(cast.casterId)
+            val hit = areaDamage(player, at, radius, cast, tuning)
+            if (!damage.isCurrent(player, cast)) return@runLater
+            when (spell) {
+                StaffSpell.MARK -> {
+                    visuals.withOwner(cast.casterId) { visuals.markBurst(at, radius, secondary) }
+                    if (secondary) hit.filter { damage.eligible(player, it, cast) }.forEach { victim ->
+                        val pull = at.toVector().subtract(center(victim).toVector())
+                        if (pull.lengthSquared() > 0.1) victim.velocity = pull.normalize().multiply(0.55)
+                    }
+                }
+                StaffSpell.EMBER -> visuals.withOwner(cast.casterId) { visuals.emberBurst(at, radius) }
+                StaffSpell.FROST -> {
+                    visuals.withOwner(cast.casterId) { visuals.wave(at, at, radius, frost = true, directional = false) }
+                    hit.filter { damage.eligible(player, it, cast) }.forEach { it.addPotionEffect(PotionEffect(PotionEffectType.SLOWNESS, settings.frostSlowTicks, 1)) }
+                }
+                StaffSpell.FAULT -> visuals.withOwner(cast.casterId) { visuals.faultBurst(at, radius) }
+                else -> Unit
+            }
+            effects.play(player.uniqueId, spell, at, radius = radius, durationTicks = 20, impact = true, secondary = secondary)
         }
     }
 
@@ -368,19 +482,19 @@ internal class StaffSpellController(
         }
     }
 
-    private fun frostIcicles(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning) {
+    private fun frostIcicles(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning, count: Int = 7) {
         val eye = player.eyeLocation
         val yaw = Math.toRadians(player.location.yaw.toDouble())
         val forward = Vector(-sin(yaw), 0.0, cos(yaw)).normalize()
         val right = Vector(forward.z, 0.0, -forward.x).normalize()
         // Leave the shoulders horizontally before seeking: a downwards look must not shoot through the eye.
         val direction = forward.clone()
-        val targets = aimed(player, settings.range, settings.aimDegrees, cast).take(3)
+        val targets = aimed(player, settings.range, settings.aimDegrees, cast).take(count)
         val aimPoint = aimPoint(player)
         val visited = mutableSetOf<UUID>()
 
-        repeat(3) { index ->
-            val offset = staffIcicleAnchorOffset(index)
+        repeat(count) { index ->
+            val offset = staffIcicleAnchorOffset(index, count)
             val anchor = eye.clone()
                 .add(right.clone().multiply(offset.x.toDouble()))
                 .add(0.0, offset.y.toDouble(), 0.0)
@@ -398,12 +512,13 @@ internal class StaffSpellController(
         }
     }
 
-    private fun hail(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning) {
+    private fun hail(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning, count: Int = 5) {
         val selected = target(player, cast)?.let(::center) ?: aimPoint(player)
         val center = groundBelow(selected.clone().add(0.0, 0.2, 0.0), 16.0) ?: selected
         val visited = mutableSetOf<UUID>()
-        repeat(3) { index ->
-            val impact = center.clone().add((index - 1) * 1.8, 0.0, if (index == 1) 1.2 else -0.6)
+        repeat(count) { index ->
+            val angle = index * Math.PI * 2 / count
+            val impact = center.clone().add(cos(angle) * 2.2, 0.0, sin(angle) * 2.2)
             if (!visible(player.eyeLocation, impact)) return@repeat
             val top = rayEnd(impact.clone().add(0.0, 0.15, 0.0), Vector(0.0, 1.0, 0.0), 10.0)
             val distance = top.y - impact.y
@@ -494,7 +609,7 @@ internal class StaffSpellController(
             val player = Bukkit.getPlayer(bolt.cast.casterId)
             if (player == null || !ready(player) || player.world != bolt.position.world ||
                 !damage.isCurrent(player, bolt.cast) ||
-                bolt.target?.let { !damage.eligible(player, it, bolt.cast) } == true) {
+                (bolt.spell != StaffSpell.ICICLE && bolt.target?.let { !damage.eligible(player, it, bolt.cast) } == true)) {
                 bolts.remove(bolt); effects.remove(bolt.visualId); return@forEach
             }
             if (bolt.launchDelayTicks > 0) {
@@ -503,7 +618,7 @@ internal class StaffSpellController(
             }
             val from = bolt.position
             bolt.age++
-            val targetAt = bolt.target?.let(::center) ?: bolt.fixedAimPoint
+            val targetAt = bolt.target?.takeIf { damage.eligible(player, it, bolt.cast) }?.let(::center) ?: bolt.fixedAimPoint
             if (targetAt != null && bolt.age > bolt.holdForwardTicks) {
                 val desired = targetAt.toVector().subtract(from.toVector())
                 steerStaffBolt(bolt.direction, desired, bolt.age)
@@ -574,24 +689,35 @@ internal class StaffSpellController(
         }
     }
 
-    private fun frost(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning) {
+    private fun frostRing(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning, range: Double) {
+        val origin = player.location.clone()
+        val candidates = nearby(player, origin, range, cast).sortedBy { horizontalDistance(origin, center(it)) }
+            .take(MAX_WAVE_CANDIDATES)
+        val id = effects.play(player.uniqueId, StaffSpell.FROST, origin, radius = range,
+            durationTicks = 30, impact = true, secondary = true)
+        visuals.withOwner(cast.casterId) { visuals.wave(origin, origin, range, frost = true, directional = false) }
+        waves += PendingStaffWave(player.uniqueId, player.world.uid, StaffSpell.FROST, origin, Vector(),
+            range, candidates, cast, tuning, id, WAVE_START_DELAY_TICKS, 16, 30, 1.8,
+            slowTicks = settings.frostSlowTicks, directional = false)
+    }
+
+    private fun frost(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning,
+        range: Double = settings.frostRange, degrees: Double = settings.frostDegrees) {
         val origin = player.location.clone()
         val yaw = Math.toRadians(origin.yaw.toDouble())
         val forward = Vector(-sin(yaw), 0.0, cos(yaw)).normalize()
-        val end = origin.clone().add(forward.clone().multiply(settings.frostRange))
-        val spread = tan(Math.toRadians(settings.frostDegrees))
-        val candidates = nearby(player, origin, settings.frostRange, cast)
-            .filter { inFrostCone(origin, forward, center(it), settings.frostRange, spread) }
+        val end = origin.clone().add(forward.clone().multiply(range))
+        val spread = tan(Math.toRadians(degrees))
+        val candidates = nearby(player, origin, range, cast)
+            .filter { inFrostCone(origin, forward, center(it), range, spread) }
             .sortedBy { horizontalDistance(origin, center(it)) }
             .take(MAX_WAVE_CANDIDATES)
-        val radius = spread * settings.frostRange
-        visuals.withOwner(cast.casterId) {
-            visuals.frost(origin, end, settings.frostDegrees, WAVE_START_DELAY_TICKS, FROST_TRAVEL_TICKS)
-        }
+        val radius = spread * range
+        visuals.withOwner(cast.casterId) { visuals.frost(origin, end, degrees, WAVE_START_DELAY_TICKS, FROST_TRAVEL_TICKS) }
         val visualId = effects.play(player.uniqueId, StaffSpell.FROST, origin, end,
             radius = radius, durationTicks = FROST_DURATION_TICKS)
         waves += PendingStaffWave(player.uniqueId, player.world.uid, StaffSpell.FROST, origin, forward,
-            settings.frostRange, candidates, cast, tuning, visualId, WAVE_START_DELAY_TICKS,
+            range, candidates, cast, tuning, visualId, WAVE_START_DELAY_TICKS,
             FROST_TRAVEL_TICKS, FROST_DURATION_TICKS, slowTicks = settings.frostSlowTicks, frostSpread = spread)
     }
 
@@ -825,73 +951,27 @@ internal class StaffSpellController(
             }
     }
 
-    /** Exact swept collision along the cast line, never soft acquisition. */
-    private fun lineTargets(
-        player: Player,
-        from: Location,
-        to: Location,
-        width: Double,
-        cast: StaffSpellCast,
-    ): List<LivingEntity> {
-        val direction = to.toVector().subtract(from.toVector())
-        val length = direction.length()
-        if (length < 0.001) return emptyList()
-        direction.multiply(1.0 / length)
-        val midpoint = from.clone().add(direction.clone().multiply(length / 2))
-        return from.world.getNearbyLivingEntities(midpoint, length / 2 + width + 2)
-            .filter { damage.eligible(player, it, cast) }
-            .mapNotNull { entity ->
-                entity.boundingBox.expand(width).rayTrace(from.toVector(), direction, length)
-                    ?.let { entity to it.hitPosition.distanceSquared(from.toVector()) }
-            }.sortedBy { it.second }.map { it.first }.filter { visible(from, center(it)) }
-    }
-
-    private fun aimPoint(player: Player) = rayEnd(player.eyeLocation, player.eyeLocation.direction, settings.range)
-
-    private fun groundBelow(from: Location, range: Double): Location? {
-        val hit = from.world.rayTraceBlocks(from, Vector(0.0, -1.0, 0.0), range, FluidCollisionMode.NEVER, true)
-            ?: return null
-        return hit.hitPosition.toLocation(from.world).add(0.0, 0.04, 0.0)
-    }
-
-    private fun rayEnd(from: Location, direction: Vector, range: Double): Location {
-        val hit = from.world.rayTraceBlocks(from, direction, range, FluidCollisionMode.NEVER, true)
-        // Keep bursts just outside the wall, so line-of-sight starts in air.
-        val distance = hit?.hitPosition?.distance(from.toVector())?.let { (it - 0.04).coerceAtLeast(0.0) } ?: range
-        return from.clone().add(direction.clone().multiply(distance))
-    }
-
-    private fun target(player: Player, cast: StaffSpellCast? = null) =
-        aimed(player, settings.range, settings.aimDegrees, cast).firstOrNull()
-
-    private fun aimed(player: Player, range: Double, angle: Double, cast: StaffSpellCast? = null): List<LivingEntity> {
-        val eye = player.eyeLocation
-        val look = eye.direction
-        return nearby(player, eye, range, cast).mapNotNull { target ->
-            val offset = center(target).subtract(eye).toVector()
-            // A direct hit on a tall/near mob's body must not fail because its centre is off-axis.
-            val direct = target.boundingBox.expand(0.25).rayTrace(eye.toVector(), look, range) != null
-            (if (direct) 1.0 else staffAimScore(offset.x, offset.y, offset.z, look.x, look.y, look.z, range, angle))
-                ?.let { Triple(target, it, offset.lengthSquared()) }
-        }.sortedWith(compareByDescending<Triple<LivingEntity, Double, Double>> { it.second }.thenBy { it.third })
-            .take(32) // Bound expensive line-of-sight checks in dense mob farms.
-            .filter { visible(eye, center(it.first)) }.map { it.first }
-    }
-
-    private fun nearby(player: Player, origin: Location, radius: Double, cast: StaffSpellCast? = null) = origin.world
-        .getNearbyLivingEntities(origin, radius, radius, radius)
-        .filter { center(it).distanceSquared(origin) <= radius * radius && damage.eligible(player, it, cast) }
+    private fun lineTargets(player: Player, from: Location, to: Location, width: Double, cast: StaffSpellCast) = targeting.lineTargets(player, from, to, width, cast)
+    private fun aimPoint(player: Player) = targeting.aimPoint(player)
+    private fun groundBelow(from: Location, range: Double) = targeting.groundBelow(from, range)
+    private fun rayEnd(from: Location, direction: Vector, range: Double) = targeting.rayEnd(from, direction, range)
+    private fun target(player: Player, cast: StaffSpellCast? = null) = aimed(player, settings.range, settings.aimDegrees, cast).firstOrNull()
+    private fun aimed(player: Player, range: Double, angle: Double, cast: StaffSpellCast? = null) = targeting.aimed(player, range, angle, cast)
+    private fun nearby(player: Player, origin: Location, radius: Double, cast: StaffSpellCast? = null) = targeting.nearby(player, origin, radius, cast)
 
     private fun ready(player: Player) = player.isOnline && !player.isDead &&
         player.gameMode != GameMode.SPECTATOR && player.isValid
 
     private fun cancel(playerId: UUID) {
+        input.cancel(playerId)
+        arsenal.cancel(playerId)
+        effects.remove(chargeScenes.remove(playerId))
+        lances.removeAll { it.cast.casterId == playerId }
         marks.remove(playerId)
         embers.removeAll { it.cast.casterId == playerId }
         waves.removeAll { it.casterId == playerId }
         bolts.removeAll { it.cast.casterId == playerId }
         delayedCasts.remove(playerId)
-        cooldownLengths.remove(playerId)
         hideCooldown(playerId)
         visuals.cancel(playerId)
         effects.cancel(playerId)
@@ -902,6 +982,12 @@ internal class StaffSpellController(
     @EventHandler fun onDeath(event: PlayerDeathEvent) = cancel(event.entity.uniqueId)
 
     override fun close() {
+        input.close()
+        arsenal.close()
+        chargeScenes.values.forEach(effects::remove)
+        chargeScenes.clear()
+        lances.clear()
+        cooldownInputs.clear()
         tasks.close()
         marks.clear()
         embers.clear()
@@ -914,11 +1000,12 @@ internal class StaffSpellController(
     }
 
     private companion object {
+        val ARSENAL_SPELLS = setOf(StaffSpell.NOVA, StaffSpell.LUNAR, StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM, StaffSpell.PRISM)
         const val WAVE_STEP_TICKS = 2
         const val WAVE_START_DELAY_TICKS = 2
         const val WAVE_BODY_TOLERANCE = 0.6
         const val MAX_WAVE_CANDIDATES = 32
-        const val MAX_BOLTS_PER_CASTER = 8
+        const val MAX_BOLTS_PER_CASTER = 12
         const val FROST_ICICLE_SHATTER_TICKS = 10
         const val FROST_TRAVEL_TICKS = 12
         const val FROST_DURATION_TICKS = 24
@@ -930,6 +1017,10 @@ internal class StaffSpellController(
     }
 
 }
+
+private data class PendingStaffLance(val from: Location, val end: Location, val cast: StaffSpellCast,
+    val tuning: StaffSpellTuning, val width: Double, val visited: MutableSet<UUID>, val visualId: UUID?,
+    var age: Int = 0, var previousFront: Double = 0.0)
 
 private data class PendingStaffMark(val target: LivingEntity?, val point: Location, val worldId: UUID,
     val cast: StaffSpellCast, val tuning: StaffSpellTuning, var remainingTicks: Int, val visualId: UUID?, val gravity: Boolean = false)
@@ -1012,7 +1103,7 @@ object StaffTestSubCommand : SubCommand {
     override val configKey = "stafftest"
     override val defaultPermission = "arc.test"
     override val defaultDescription = "Выдать посохи для пробы новых атак"
-    override val defaultUsage = "/arc stafftest [all|chain|mark|frost|lance|ember|nova|icicle|fault] [игрок]"
+    override val defaultUsage = "/arc stafftest [all|${StaffSpell.entries.joinToString("|") { it.id }}] [игрок]"
 
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {
         if (args.size > 2) { sendUsage(sender); return true }

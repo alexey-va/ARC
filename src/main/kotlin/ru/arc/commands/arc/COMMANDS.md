@@ -26,7 +26,7 @@
 
 ## Быстрый старт
 
-Для пробы восьми атак посохов: `/arc stafftest [all|chain|mark|frost|lance|ember|nova|icicle|fault] [игрок]`.
+Для пробы тринадцати атак посохов: `/arc stafftest [all|chain|mark|frost|lance|ember|nova|icicle|fault|lunar|gale|tide|requiem|prism] [игрок]`.
 Выдача требует существующее право `arc.test`. Подробности и ограничения:
 [`docs/staff-spells.md`](../../../../../../../docs/staff-spells.md).
 

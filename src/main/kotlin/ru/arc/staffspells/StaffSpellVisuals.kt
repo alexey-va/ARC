@@ -16,6 +16,7 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 /** Sparse accents around the display silhouettes; all delayed phases run on Paper's main thread. */
 internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
@@ -72,8 +73,117 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
     /** One local cast cue, including empty-air casts and the three-branch secondary. */
     fun lightningLaunch(at: Location) = dispatch {
         val origin = at.clone()
-        localSound(origin, Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.32f, 1.85f)
-        localSound(origin, Sound.ENTITY_LIGHTNING_BOLT_IMPACT, 0.58f, 1.6f)
+        localSound(origin, Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.42f, 1.85f, audibleDistance = 24.0)
+        localSound(origin, Sound.ENTITY_LIGHTNING_BOLT_IMPACT, 0.62f, 1.6f, audibleDistance = 32.0)
+    }
+
+    /** Sparse charge accents for the new arcane families; audio only fires at charge thresholds. */
+    fun charge(at: Location, spell: StaffSpell, progress: Double) = dispatch {
+        val palette = arcanePalette(spell) ?: return@dispatch
+        val origin = at.clone()
+        if (!drawable(origin)) return@dispatch
+        val charge = progress.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
+        val radius = 0.24 + charge * 0.28
+        repeat(5) { index ->
+            val angle = index * PI * 2.0 / 5.0 + charge * PI * 0.8
+            val point = origin.clone().add(cos(angle) * radius, 0.12 + sin(angle * 2.0) * 0.08,
+                sin(angle) * radius)
+            emit(point, Particle.DUST_COLOR_TRANSITION, palette.transition,
+                minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+            if (index % 2 == 0) emit(point.clone().add(0.0, 0.08 + charge * 0.08, 0.0), palette.accent,
+                minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+        }
+        if (charge <= 0.04) {
+            localSound(origin, palette.chargeSound, 0.30f, palette.pitch + 0.18f, audibleDistance = 18.0)
+        } else if (charge in 0.46..0.54) {
+            localSound(origin, palette.chargeSound, 0.22f, palette.pitch, audibleDistance = 18.0)
+        }
+    }
+
+    /** One cast cue; arcane phase 0 adds its own positional launch accent at the effect point. */
+    fun release(at: Location, spell: StaffSpell, charged: Boolean) = dispatch {
+        val palette = arcanePalette(spell) ?: return@dispatch
+        val origin = at.clone()
+        val intensity = if (charged) 0.68f else 0.48f
+        localSound(origin, palette.launchSound, intensity, palette.pitch, audibleDistance = 36.0)
+        if (charged && spell in LAYERED_RELEASE_SPELLS) localSound(origin, palette.chargeSound, 0.24f, palette.pitch + 0.28f,
+            audibleDistance = 24.0)
+    }
+
+    /** Phase 0 launches, phase 1 leaves a compact moving wake, and phase 2 opens the impact ring. */
+    fun arcane(at: Location, spell: StaffSpell, phase: Int, radius: Double) = dispatch {
+        val palette = arcanePalette(spell) ?: return@dispatch
+        val origin = at.clone()
+        if (!drawable(origin)) return@dispatch
+        val reach = boundedRadius(radius, 0.35, 5.5) ?: return@dispatch
+        when (phase) {
+            0 -> {
+                localSound(origin, palette.launchSound, 0.48f, palette.pitch + 0.12f,
+                    audibleDistance = 32.0)
+                repeat(6) { index ->
+                    val angle = index * PI / 3.0 + if (spell.id == "prism") PI / 6.0 else 0.0
+                    val ring = reach * when (spell.id) {
+                        "gale" -> if (index % 2 == 0) 0.72 else 1.0
+                        "requiem" -> 0.58 + (index % 3) * 0.14
+                        "nova" -> 0.72 + (index % 2) * 0.20
+                        else -> 0.82
+                    }
+                    val lift = when (spell.id) {
+                        "tide" -> sin(angle * 2.0) * 0.24
+                        "gale" -> sin(angle) * 0.18
+                        "requiem" -> (index % 3) * 0.12
+                        "nova" -> 0.08 + (index % 2) * 0.13
+                        else -> 0.10
+                    }
+                    val point = origin.clone().add(cos(angle) * ring, lift, sin(angle) * ring)
+                    emit(point, Particle.DUST_COLOR_TRANSITION, palette.transition,
+                        minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+                    if (index % 2 == 0) emit(point.clone().add(0.0, 0.12, 0.0), palette.accent,
+                        minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+                }
+                emit(origin.clone().add(0.0, 0.14, 0.0), Particle.DUST, palette.highlight,
+                    minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+            }
+            1 -> {
+                // Four particles per travel call; callers may animate this at projectile tick rate.
+                repeat(4) { index ->
+                    val angle = index * PI / 2.0 + when (spell.id) {
+                        "tide" -> PI / 4.0
+                        "prism" -> PI / 8.0
+                        else -> 0.0
+                    }
+                    val radiusAt = reach * if (spell.id == "gale") 0.72 else 0.42
+                    val point = origin.clone().add(cos(angle) * radiusAt,
+                        sin(angle * 2.0 + index * 0.7) * 0.12, sin(angle) * radiusAt)
+                    if (index % 2 == 0) emit(point, palette.accent,
+                        minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+                    else emit(point, Particle.DUST_COLOR_TRANSITION, palette.transition,
+                        minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+                }
+            }
+            2 -> {
+                localSound(origin, palette.impactSound, 0.78f, palette.pitch - 0.14f,
+                    audibleDistance = 64.0)
+                repeat(10) { index ->
+                    val angle = index * PI / 5.0 + if (spell.id == "lunar") PI / 10.0 else 0.0
+                    val ring = reach * (0.72 + (index % 3) * 0.10)
+                    val lift = when (spell.id) {
+                        "tide" -> sin(angle * 2.0) * 0.26
+                        "gale" -> 0.10 + (index % 2) * 0.18
+                        "requiem" -> 0.18 + (index % 4) * 0.12
+                        "nova" -> 0.22 + (index % 3) * 0.15
+                        else -> 0.14 + (index % 2) * 0.12
+                    }
+                    val point = origin.clone().add(cos(angle) * ring, lift, sin(angle) * ring)
+                    emit(point, Particle.DUST_COLOR_TRANSITION, palette.transition,
+                        minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+                    if (index % 2 == 0) emit(point.clone().add(0.0, 0.12, 0.0), palette.accent,
+                        minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+                }
+                emit(origin.clone().add(0.0, 0.2, 0.0), palette.impactParticle,
+                    minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+            }
+        }
     }
 
     fun lightning(from: Location, to: Location) = dispatch {
@@ -85,6 +195,8 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         points.forEachIndexed { i, point ->
             emit(point, Particle.ELECTRIC_SPARK)
             if (i % 4 == 0) emit(point.clone().add(0.0, 0.035, 0.0), Particle.END_ROD)
+            if (i % 3 == 0) emit(point.clone().add(0.0, 0.055, 0.0),
+                Particle.DUST_COLOR_TRANSITION, CHAIN_ARC)
         }
         val frame = frame(direction.clone().multiply(-1.0)) ?: return@dispatch
         listOf(0.31, 0.68).forEachIndexed { branch, fraction ->
@@ -99,8 +211,8 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
             }
         }
         localSound(start.clone().add(direction.normalize().multiply(min(0.8, distance * 0.6))),
-            Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.45f, 1.7f)
-        localSound(end, Sound.ENTITY_LIGHTNING_BOLT_IMPACT, 0.95f, 1.15f)
+            Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.5f, 1.7f, audibleDistance = 24.0)
+        localSound(end, Sound.ENTITY_LIGHTNING_BOLT_IMPACT, 0.82f, 1.15f, audibleDistance = 64.0)
         // A compact charged crown makes the contact point read brighter than the travel line.
         emit(end.clone().add(0.0, 0.12, 0.0), Particle.FLASH)
         val impactFrame = frame(direction) ?: return@dispatch
@@ -119,11 +231,11 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
                 val side = if (i == 1) -1.0 else 1.0
                 emit(end.clone().add(frame.first.clone().multiply(side * (0.12 + i * 0.08))), Particle.ELECTRIC_SPARK)
             }
-            localSound(end, Sound.ENTITY_LIGHTNING_BOLT_THUNDER, 0.68f, 1.35f)
+            localSound(end, Sound.ENTITY_LIGHTNING_BOLT_THUNDER, 0.58f, 1.35f, audibleDistance = 64.0)
         }
     }
 
-    /** Stepwise homing-bolt trail: at most five small sparks and no head flash or repeated sound. */
+    /** Stepwise homing-bolt trail: five accents max and no head flash or repeated sound. */
     fun lightningTrail(from: Location, to: Location) = dispatch {
         val start = from.clone()
         val end = to.clone()
@@ -133,13 +245,16 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         // Controller steps are at most two blocks; show only the route segment just traveled.
         val segments = 2
         val samples = lineSamples(start, end, segments)
-        samples.forEach { point ->
-            emit(point, Particle.ELECTRIC_SPARK, minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+        samples.forEachIndexed { index, point ->
+            if (index == 1) emit(point, Particle.DUST_COLOR_TRANSITION, CHAIN_ARC,
+                minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+            else emit(point, Particle.ELECTRIC_SPARK, minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
         }
         repeat(2) { i ->
             val side = if (i == 0) -1.0 else 1.0
             emit(interpolate(start, end, 0.75).add(basis.first.clone().multiply(side * 0.09)),
-                Particle.ELECTRIC_SPARK, minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+                if (i == 0) Particle.END_ROD else Particle.ELECTRIC_SPARK,
+                minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
         }
     }
 
@@ -161,6 +276,8 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
     fun icicleBurst(at: Location) = dispatch {
         val origin = at.clone()
         if (!drawable(origin)) return@dispatch
+        localSound(origin, Sound.BLOCK_GLASS_BREAK, 0.72f, 0.82f, audibleDistance = 32.0)
+        localSound(origin, Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.42f, 1.18f, audibleDistance = 24.0)
         val ice = Material.PACKED_ICE.createBlockData()
         repeat(6) { index ->
             val angle = index * PI / 3.0
@@ -178,7 +295,8 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         val origin = at.clone()
         val reach = boundedRadius(radius, 1.8, 8.0) ?: return@dispatch
         if (!drawable(origin)) return@dispatch
-        localSound(origin, Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.38f, 0.58f)
+        localSound(origin, Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.42f, 0.58f, audibleDistance = 24.0)
+        localSound(origin, Sound.BLOCK_AMETHYST_CLUSTER_HIT, 0.24f, 0.72f, audibleDistance = 18.0)
         val basalt = Material.BASALT.createBlockData()
         val amethyst = Material.AMETHYST_BLOCK.createBlockData()
         repeat(3) { phase ->
@@ -203,8 +321,9 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         val origin = at.clone()
         val reach = boundedRadius(radius, 1.8, 8.0) ?: return@dispatch
         if (!drawable(origin)) return@dispatch
-        localSound(origin, Sound.BLOCK_STONE_BREAK, 0.86f, 0.72f)
-        localSound(origin, Sound.BLOCK_DEEPSLATE_BREAK, 0.56f, 0.62f)
+        localSound(origin, Sound.BLOCK_STONE_BREAK, 0.82f, 0.72f, audibleDistance = 64.0)
+        localSound(origin, Sound.BLOCK_DEEPSLATE_BREAK, 0.58f, 0.62f, audibleDistance = 32.0)
+        localSound(origin, Sound.BLOCK_AMETHYST_CLUSTER_HIT, 0.36f, 0.9f, audibleDistance = 24.0)
         val basalt = Material.BASALT.createBlockData()
         val obsidian = Material.OBSIDIAN.createBlockData()
         repeat(10) { index ->
@@ -241,7 +360,9 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         if (segmentLength(start, end) == null) return@dispatch
         val offset = end.toVector().subtract(start.toVector())
         val basis = frame(offset) ?: return@dispatch
-        localSound(start.clone().add(offset.normalize().multiply(0.75)), Sound.ENTITY_ENDERMAN_TELEPORT, 0.68f, 1.15f)
+        val castPoint = start.clone().add(offset.normalize().multiply(0.75))
+        localSound(castPoint, Sound.ENTITY_ENDERMAN_TELEPORT, 0.72f, 1.15f, audibleDistance = 40.0)
+        localSound(castPoint, Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.32f, 1.35f, audibleDistance = 24.0)
         for (phase in 0..3) {
             val draw = { markTearStage(start, end, basis.first, basis.second, phase) }
             if (phase == 0) draw() else runLater(phase.toLong()) { draw() }
@@ -273,7 +394,8 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
             blackholeCollapse(origin, reach)
             return@dispatch
         }
-        localSound(origin, Sound.ENTITY_EVOKER_CAST_SPELL, 0.92f, 1.08f)
+        localSound(origin, Sound.ENTITY_EVOKER_CAST_SPELL, 0.86f, 1.08f, audibleDistance = 64.0)
+        localSound(origin, Sound.BLOCK_BEACON_POWER_SELECT, 0.38f, 0.72f, audibleDistance = 28.0)
         emit(origin.clone().add(0.0, 0.48, 0.0), Particle.FLASH)
         emit(origin.clone().add(0.0, 0.22, 0.0), Particle.END_ROD)
         val crackRadius = min(reach * 0.72, 3.0)
@@ -395,7 +517,10 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         if (!drawable(origin)) return@dispatch
         val reach = boundedRadius(radius, 0.5, 10.0) ?: return@dispatch
         val charge = progress.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
-        if (charge <= 0.100001) localSound(origin, Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.2f, 0.55f)
+        if (charge <= 0.000001) {
+            localSound(origin, Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.32f, 0.55f, audibleDistance = 24.0)
+            localSound(origin, Sound.BLOCK_BEACON_AMBIENT, 0.18f, 0.62f, audibleDistance = 18.0)
+        }
         val orbit = 0.16 + (reach - 0.16) * (1.0 - charge)
         // Three dense, continuously rotating arms and a bright rim collapse inward across the charge.
         repeat(3) { arm ->
@@ -431,7 +556,8 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
     }
 
     private fun blackholeCollapse(origin: Location, reach: Double) {
-        localSound(origin, Sound.ENTITY_ENDERMAN_TELEPORT, 0.96f, 0.72f)
+        localSound(origin, Sound.ENTITY_ENDERMAN_TELEPORT, 0.88f, 0.72f, audibleDistance = 64.0)
+        localSound(origin, Sound.BLOCK_PORTAL_TRAVEL, 0.46f, 0.48f, audibleDistance = 64.0)
         val rimRadius = min(reach * 0.76, 3.4)
         emit(origin.clone().add(0.0, 0.34, 0.0), Particle.FLASH)
         repeat(12) { i ->
@@ -451,6 +577,7 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
             }
         }
         runLater(4) {
+            localSound(origin, Sound.BLOCK_BEACON_DEACTIVATE, 0.34f, 0.62f, audibleDistance = 32.0)
             emit(origin, Particle.FLASH)
             repeat(6) { i ->
                 val angle = i * PI / 3.0
@@ -477,7 +604,7 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         val range = offset.length().takeIf { it.isFinite() && it in 0.5..96.0 } ?: return@dispatch
         val spread = halfAngleDegrees.takeIf(Double::isFinite)?.coerceIn(5.0, 85.0) ?: return@dispatch
         val basis = frame(offset) ?: return@dispatch
-        val reach = range.coerceAtMost(14.0)
+        val reach = range.coerceAtMost(48.0)
         val delay = startDelayTicks.coerceIn(0, 8)
         val travel = travelTicks.coerceIn(1, 24)
         val steps = ((travel + 1) / 2).coerceIn(1, 12)
@@ -937,9 +1064,40 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         }
     }
 
-    private fun localSound(at: Location, sound: Sound, volume: Float, pitch: Float) {
-        if (drawable(at)) at.world?.playSound(at, sound, SoundCategory.PLAYERS, volume, pitch)
+    /**
+     * Send positional cues only to nearby listeners. Each per-listener packet keeps the source
+     * bearing while gently compressing far distances into a still-positional 4–7 block cue.
+     * Recipients are independently range-checked, so no sound is broadcast to the whole world.
+     */
+    private fun localSound(at: Location, sound: Sound, volume: Float, pitch: Float,
+        audibleDistance: Double = DEFAULT_SOUND_DISTANCE) {
+        if (!drawable(at)) return
+        val world = at.world ?: return
+        val radius = audibleDistance.takeIf { it.isFinite() && it > 0.0 }
+            ?.coerceIn(MIN_SOUND_DISTANCE, MAX_SOUND_AUDIENCE) ?: DEFAULT_SOUND_DISTANCE
+        val safeVolume = volume.takeIf(Float::isFinite)?.coerceIn(0.0f, 1.0f) ?: return
+        val safePitch = pitch.takeIf(Float::isFinite)?.coerceIn(0.5f, 2.0f) ?: return
+        world.getNearbyPlayers(at, radius + 0.01).forEach { player ->
+            val eye = player.eyeLocation
+            if (eye.world !== world) return@forEach
+            val distanceSquared = eye.distanceSquared(at)
+            if (!distanceSquared.isFinite() || distanceSquared > radius * radius) return@forEach
+            val distance = sqrt(distanceSquared)
+            val compression = ((distance - SOUND_GAIN_NEAR_DISTANCE) /
+                (SOUND_GAIN_FAR_DISTANCE - SOUND_GAIN_NEAR_DISTANCE)).coerceIn(0.0, 1.0)
+            val virtualDistance = if (distance <= SOUND_NATIVE_NEAR_DISTANCE) distance
+                else SOUND_VIRTUAL_NEAR_DISTANCE + compression *
+                    (SOUND_VIRTUAL_FAR_DISTANCE - SOUND_VIRTUAL_NEAR_DISTANCE)
+            val direction = at.toVector().subtract(eye.toVector())
+            val virtualSource = if (direction.lengthSquared() <= 1.0e-8) at.clone()
+                else eye.clone().add(direction.normalize().multiply(virtualDistance))
+            val listenerGain = SOUND_GAIN_NEAR + compression * (SOUND_GAIN_FAR - SOUND_GAIN_NEAR)
+            player.playSound(virtualSource, sound, SoundCategory.PLAYERS,
+                (safeVolume.toDouble() * listenerGain).coerceIn(0.0, 1.0).toFloat(), safePitch)
+        }
     }
+
+    private fun arcanePalette(spell: StaffSpell): ArcanePalette? = ARCANE_PALETTES[spell]
 
     private fun dispatch(action: () -> Unit) {
         val owner = activeOwner.get()
@@ -961,11 +1119,33 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         }
     }
 
+    private data class ArcanePalette(
+        val transition: Particle.DustTransition,
+        val highlight: Particle.DustOptions,
+        val accent: Particle,
+        val impactParticle: Particle,
+        val chargeSound: Sound,
+        val launchSound: Sound,
+        val impactSound: Sound,
+        val pitch: Float,
+    )
+
     private companion object {
         const val COMPACT_CAMERA_CLEARANCE = 1.15
         const val MARK_CAMERA_CLEARANCE = 1.6
         const val IMPACT_CAMERA_CLEARANCE = 3.2
         const val BLACKHOLE_CORE_HEIGHT = 1.6
+        const val MIN_SOUND_DISTANCE = 15.0
+        const val DEFAULT_SOUND_DISTANCE = 64.0
+        const val MAX_SOUND_AUDIENCE = 64.0
+        const val SOUND_NATIVE_NEAR_DISTANCE = 4.0
+        const val SOUND_VIRTUAL_NEAR_DISTANCE = 4.0
+        const val SOUND_VIRTUAL_FAR_DISTANCE = 7.0
+        const val SOUND_GAIN_NEAR_DISTANCE = 15.0
+        const val SOUND_GAIN_FAR_DISTANCE = 40.0
+        const val SOUND_GAIN_NEAR = 0.7
+        const val SOUND_GAIN_FAR = 0.4
+        val CHAIN_ARC = Particle.DustTransition(Color.fromRGB(80, 220, 255), Color.fromRGB(230, 255, 255), 1.1f)
         val VIOLET = Particle.DustOptions(Color.fromRGB(166, 74, 255), 1.15f)
         val VIOLET_BURST = Particle.DustOptions(Color.fromRGB(207, 112, 255), 1.5f)
         val VIOLET_TO_WHITE = Particle.DustTransition(Color.fromRGB(178, 78, 255), Color.fromRGB(250, 240, 255), 1.45f)
@@ -983,5 +1163,90 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         val ICE_TO_AQUA = Particle.DustTransition(Color.fromRGB(180, 230, 255), Color.fromRGB(90, 245, 255), 0.9f)
         val GREEN_TO_AQUA = Particle.DustTransition(Color.fromRGB(75, 255, 128), Color.fromRGB(25, 225, 210), 1.15f)
         val GREEN_TO_WHITE = Particle.DustTransition(Color.fromRGB(196, 255, 220), Color.fromRGB(50, 255, 125), 1.6f)
+        val ARCANE_LUNAR = ArcanePalette(
+            Particle.DustTransition(Color.fromRGB(155, 180, 255), Color.fromRGB(247, 236, 255), 1.35f),
+            Particle.DustOptions(Color.fromRGB(218, 227, 255), 1.35f), Particle.END_ROD, Particle.FLASH,
+            Sound.BLOCK_AMETHYST_BLOCK_CHIME, Sound.BLOCK_AMETHYST_BLOCK_CHIME,
+            Sound.ENTITY_PHANTOM_FLAP, 1.28f)
+        val ARCANE_GALE = ArcanePalette(
+            Particle.DustTransition(Color.fromRGB(110, 235, 224), Color.fromRGB(226, 255, 255), 1.25f),
+            Particle.DustOptions(Color.fromRGB(191, 255, 247), 1.1f), Particle.CLOUD, Particle.CLOUD,
+            Sound.ENTITY_BREEZE_WIND_BURST, Sound.ENTITY_WIND_CHARGE_WIND_BURST,
+            Sound.ENTITY_BREEZE_WIND_BURST, 1.18f)
+        val ARCANE_TIDE = ArcanePalette(
+            Particle.DustTransition(Color.fromRGB(39, 166, 209), Color.fromRGB(86, 248, 220), 1.35f),
+            Particle.DustOptions(Color.fromRGB(111, 225, 255), 1.2f), Particle.BUBBLE,
+            Particle.BUBBLE_POP, Sound.BLOCK_CONDUIT_AMBIENT_SHORT, Sound.BLOCK_CONDUIT_AMBIENT,
+            Sound.BLOCK_BUBBLE_COLUMN_UPWARDS_INSIDE, 0.92f)
+        val ARCANE_REQUIEM = ArcanePalette(
+            Particle.DustTransition(Color.fromRGB(84, 46, 146), Color.fromRGB(210, 113, 186), 1.4f),
+            Particle.DustOptions(Color.fromRGB(168, 110, 203), 1.2f), Particle.REVERSE_PORTAL,
+            Particle.SOUL, Sound.BLOCK_SCULK_SENSOR_CLICKING, Sound.ENTITY_WITHER_SKELETON_AMBIENT,
+            Sound.BLOCK_SCULK_SHRIEKER_SHRIEK, 0.72f)
+        val ARCANE_PRISM = ArcanePalette(
+            Particle.DustTransition(Color.fromRGB(255, 206, 112), Color.fromRGB(128, 236, 255), 1.35f),
+            Particle.DustOptions(Color.fromRGB(255, 244, 191), 1.25f), Particle.END_ROD, Particle.FLASH,
+            Sound.BLOCK_AMETHYST_BLOCK_CHIME, Sound.BLOCK_NOTE_BLOCK_CHIME,
+            Sound.BLOCK_GLASS_BREAK, 1.44f)
+        val ARCANE_NOVA = ArcanePalette(
+            Particle.DustTransition(Color.fromRGB(75, 255, 128), Color.fromRGB(25, 225, 210), 1.3f),
+            Particle.DustOptions(Color.fromRGB(196, 255, 220), 1.3f), Particle.HAPPY_VILLAGER,
+            Particle.END_ROD, Sound.BLOCK_BEACON_POWER_SELECT, Sound.BLOCK_BEACON_ACTIVATE,
+            Sound.BLOCK_GRASS_BREAK, 1.08f)
+        val ARCANE_CHAIN = ArcanePalette(
+            Particle.DustTransition(Color.fromRGB(79, 201, 255), Color.fromRGB(241, 254, 255), 1.2f),
+            Particle.DustOptions(Color.fromRGB(112, 226, 255), 1.1f), Particle.ELECTRIC_SPARK,
+            Particle.FLASH, Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, Sound.ENTITY_LIGHTNING_BOLT_IMPACT,
+            Sound.ENTITY_LIGHTNING_BOLT_THUNDER, 1.2f)
+        val ARCANE_MARK = ArcanePalette(
+            Particle.DustTransition(Color.fromRGB(166, 74, 255), Color.fromRGB(250, 240, 255), 1.35f),
+            Particle.DustOptions(Color.fromRGB(207, 112, 255), 1.3f), Particle.REVERSE_PORTAL,
+            Particle.FLASH, Sound.BLOCK_PORTAL_TRAVEL, Sound.ENTITY_ENDERMAN_TELEPORT,
+            Sound.ENTITY_EVOKER_CAST_SPELL, 0.9f)
+        val ARCANE_FROST = ArcanePalette(
+            Particle.DustTransition(Color.fromRGB(180, 230, 255), Color.fromRGB(90, 245, 255), 1.15f),
+            Particle.DustOptions(Color.fromRGB(220, 248, 255), 1.1f), Particle.SNOWFLAKE,
+            Particle.SNOWFLAKE, Sound.BLOCK_GLASS_BREAK, Sound.BLOCK_AMETHYST_CLUSTER_HIT,
+            Sound.BLOCK_GLASS_BREAK, 0.9f)
+        val ARCANE_LANCE = ArcanePalette(
+            Particle.DustTransition(Color.fromRGB(255, 176, 42), Color.fromRGB(255, 255, 240), 1.45f),
+            Particle.DustOptions(Color.fromRGB(255, 250, 226), 1.35f), Particle.END_ROD,
+            Particle.FLASH, Sound.BLOCK_BEACON_AMBIENT, Sound.BLOCK_BEACON_ACTIVATE,
+            Sound.ENTITY_BLAZE_SHOOT, 1.15f)
+        val ARCANE_EMBER = ArcanePalette(
+            Particle.DustTransition(Color.fromRGB(255, 106, 38), Color.fromRGB(255, 229, 125), 1.4f),
+            Particle.DustOptions(Color.fromRGB(255, 193, 66), 1.3f), Particle.FLAME,
+            Particle.EXPLOSION, Sound.BLOCK_FIRE_AMBIENT, Sound.ENTITY_BLAZE_SHOOT,
+            Sound.ENTITY_GENERIC_EXPLODE, 0.95f)
+        val ARCANE_ICICLE = ArcanePalette(
+            Particle.DustTransition(Color.fromRGB(145, 222, 255), Color.fromRGB(227, 253, 255), 1.25f),
+            Particle.DustOptions(Color.fromRGB(196, 240, 255), 1.2f), Particle.SNOWFLAKE,
+            Particle.SNOWFLAKE, Sound.BLOCK_AMETHYST_BLOCK_CHIME, Sound.BLOCK_GLASS_BREAK,
+            Sound.BLOCK_AMETHYST_CLUSTER_HIT, 1.08f)
+        val ARCANE_FAULT = ArcanePalette(
+            Particle.DustTransition(Color.fromRGB(82, 82, 91), Color.fromRGB(184, 111, 224), 1.3f),
+            Particle.DustOptions(Color.fromRGB(130, 118, 140), 1.15f), Particle.END_ROD,
+            Particle.FLASH, Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, Sound.BLOCK_STONE_BREAK,
+            Sound.BLOCK_DEEPSLATE_BREAK, 0.76f)
+        val ARCANE_PALETTES = mapOf(
+            StaffSpell.CHAIN to ARCANE_CHAIN,
+            StaffSpell.MARK to ARCANE_MARK,
+            StaffSpell.FROST to ARCANE_FROST,
+            StaffSpell.LANCE to ARCANE_LANCE,
+            StaffSpell.EMBER to ARCANE_EMBER,
+            StaffSpell.NOVA to ARCANE_NOVA,
+            StaffSpell.ICICLE to ARCANE_ICICLE,
+            StaffSpell.FAULT to ARCANE_FAULT,
+            StaffSpell.LUNAR to ARCANE_LUNAR,
+            StaffSpell.GALE to ARCANE_GALE,
+            StaffSpell.TIDE to ARCANE_TIDE,
+            StaffSpell.REQUIEM to ARCANE_REQUIEM,
+            StaffSpell.PRISM to ARCANE_PRISM,
+        )
+        val LAYERED_RELEASE_SPELLS = setOf(
+            StaffSpell.MARK, StaffSpell.ICICLE, StaffSpell.FAULT,
+            StaffSpell.LUNAR, StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM,
+            StaffSpell.PRISM, StaffSpell.NOVA,
+        )
     }
 }

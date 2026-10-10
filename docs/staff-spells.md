@@ -1,229 +1,96 @@
 # Prototype staff attacks
 
-`/arc stafftest` gives the caller eight mechanics samples. The existing `arc.test`
-administrator permission controls item issuance. `/arc stafftest chain|mark|frost|lance|ember|nova|icicle|fault`
-gives one sample; an optional final player name allows console/operator delivery.
-The entire selected set must fit in free inventory slots before anything is given.
-There are no loot-table or shop changes. Anyone holding an issued sample can use it.
+`/arc stafftest` issues thirteen mechanics samples: `chain`, `mark`, `frost`,
+`lance`, `ember`, `nova`, `icicle`, `fault`, `lunar`, `gale`, `tide`,
+`requiem` and `prism`. The command is administrator-only through the existing
+`arc.test` permission. `/arc stafftest <id> [player]` issues one sample;
+`/arc stafftest all [player]` first checks that the whole set fits in the
+recipient's inventory. These are ARC prototype items, not native FMM or
+EliteMobs loot. There are no loot-table, shop or economy changes.
 
-- **Грозовая ветвь / chain:** the Divine Staff (`3dfantasyweaponscit:divine_staff`)
-  launches a centered seeking lightning projectile that turns toward the moving target,
-  then jumps through up to four distinct targets. Damage occurs on contact and
-  each jump keeps its reduced damage. Every movement segment checks walls and mobs.
-- **Разрыв / mark:** the Night Staff (`3dfantasyweaponscit:night_staff`) places a
-  short-lived mark that follows the acquired mob, then detonates at its current
-  position and damages nearby visible mobs. With no target it forms at the aimed
-  wall/range endpoint instead. The impact animation reuses the mark's display pieces
-  for a continuous transition.
-- **Ледяной хлопок / frost:** the Northgate Guardian Staff
-  (`3dfantasyweaponscit:northgate_guardian_staff`) sends a horizontal ice wave along
-  the ground in the direction you face. Its front travels through the cone over
-  twelve ticks after a short lead-in; mobs take damage and slowness only when the
-  front reaches them and they remain eligible and visible. It does not steer.
-- **Ледяной венец / icicle:** Olwen's Staff (`3dfantasyweaponscit:olwen_staff`)
-  launches three staggered icicles from behind your shoulders. They seek up to
-  three aimed mobs; when fewer are available, the remaining icicles follow the
-  first target. Each unique victim can be hit once and is slowed after a
-  successful hit. Without an acquired mob, they follow your aim point.
-- **Солнечное копьё / lance:** the Winged Staff
-  (`3dfantasyweaponscit:sagrada_winged_staff`) damages up to three mobs instantly
-  along a narrow line through the reticle. After a four-tick charge, a bright
-  faceted channel opens over four to six ticks, leaving a contact corona and
-  twelve-tick aftermath; damage remains immediate. There is no soft lock.
-- **Пепельная комета / ember:** the Hermit Staff
-  (`3dfantasyweaponscit:bermunde_hermit_staff`) launches a straight fire core that
-  starts slowly and accelerates. Two-tick forward keyframes use native Display
-  position interpolation; unchanged metadata is suppressed by the shared transport.
-  The prediction stops at walls, mobs and maximum range. Particles trail behind the
-  previous logical position. Lead moving targets manually; it bursts
-  outward on the first mob/wall or at maximum range. Collision is checked along
-  each movement segment, not just at endpoints.
-- **Изумрудная волна / nova:** the Celtic Staff
-  (`3dfantasyweaponscit:holy_celtic_staff`) sends one expanding ground ring from the
-  caster's feet to an eight-block radius. The front starts after two ticks and
-  reaches full range sixteen ticks later; eligible, visible mobs are hit once as
-  the front passes, up to the unchanged area-target limit. Its annular display
-  remains centered on the caster; it does not add repeated damage or pull mobs.
-- **Обсидиановый раскол / fault:** the Staff of Unholy Wisdom
-  (`3dfantasyweaponscit:staff_of_unholy_wisdom`) sends five ground ruptures in
-  sequence along the direction you face, stopping at an obstruction and never
-  traveling beyond 18 blocks. A target can be damaged only once by the sequence.
+## Controls and charge
 
-Use the main-hand right click, including a direct click on an entity. Look near a
-mob for chain/mark; small particles over its head preview their selected target.
-Other attacks use their stated reticle or facing direction; ICICLE seeks its
-selected mobs, while the meteor shower, ice-lance rain and fault burst can use a
-visible target as their landing point. Misses consume the shared cooldown.
-FAULT's Shift eruption requires a visible ground surface and reports when none is
-found. All samples share
-one caster cooldown, so swapping sample items cannot bypass it. Walls block initial
-acquisition, every chain link, and blast damage. Players, NPCs, armor stands and
-tamed pets are excluded. EliteMobs also applies its instance/minion eligibility.
-Marks, staged waves and flying orbs cancel on caster death, quit, world change, module reload
-or shutdown. Acquired marks also cancel on an invalid/distant target. Flight has
-a fixed maximum range and at most eight orbs per caster; visual bursts are short
-and use client-only block displays, sparse particles and local sounds. Each cast captures combat facts, so
-changing the held item cannot change a delayed hit's level or critical roll.
+Hold right-click and release to cast. Charge rises from 0 to 100% over 36
+ticks; the charge bar shows the selected ability, percent and release prompt.
+Holding Shift when the charge starts selects the secondary right-click ability.
+Changing Shift, swapping or moving the item in inventory, dropping the
+staff, changing worlds, dying or quitting cancels the charge.
 
-## Shift abilities and cooldown display
+Staff clicks cannot break blocks, including in creative mode; entity clicks suppress vanilla melee damage.
 
-Hold Shift and right-click with the same existing prototype item. The input is
-captured at cast time, so releasing Shift during flight does not change an attack.
-The 48-block targeting/beam/projectile range replaces 24; Frost's primary ground
-cone reaches 10 blocks instead of 7. The ordinary Nova radius remains 8.
+Left-click casts the quick attack. Shift + left-click casts its quick secondary.
+Quick attacks fire without a charge and use the same per-player staff
+cooldown. The boss bar follows the active input, displays remaining cooldown
+and ready state, and updates when the player switches staves or attack modes.
+Changing items cannot bypass the shared cooldown.
 
-| Staff | Shift + right-click | Shared cooldown | Damage relative to the primary |
-| --- | --- | --- | --- |
-| Chain | Three seeking bolts start in different directions and curve into separate targets within a 55-degree cone; no further jumps | 1.5× | 0.75× per bolt; shared unique victims |
-| Mark | A fixed black hole pulls attackable mobs, then collapses after 40 ticks | 2× | Four 0.12× pulses plus 0.65× collapse; each pulse uses normal damage/protection checks before velocity |
-| Frost — Полярный круг | An expanding circular ice front around the caster, out to eight blocks | 1.5× | One hit and slow per target, same area-target cap |
-| Icicle — Ледяной дождь | Three staggered ice lances fall around the selected ground point; each bursts in a 2.4-block radius | 1.5× | 1× per target; slow after a successful hit, shared unique-victim cap |
-| Lance | Three piercing rays at −16°, 0°, +16° | 1.5× | 0.65×, deduplicated across rays and same total piercing-target cap |
-| Ember | Three staggered meteors descend above the aimed point | 2× | 0.65× once per unique target across the shower, same total area cap |
-| Nova | A forward emerald crest travels 12 blocks with a widening fan | 1.5× | One hit per target, same area-target cap |
-| Fault — Каменный выброс | One eruption after an eight-tick warning at the aimed ground point, radius 4.5 blocks | 1.5× | 1× per target; lifts mobs hit by the eruption |
+## Catalog
 
-The boss bar shows the selected ability, remaining seconds and native cooldown
-progress. When ready, it turns green and shows the input. It reads the same
-cooldown used by the cast gate and updates across item/mode swaps without
-granting another attack. It hides when the staff is put away. Previously issued
-PDC-marked items immediately gain
-the new actions and HUD; their old stored lore is not rewritten automatically.
-Newly issued samples describe the secondary ability.
+| ID and item | Hold/release ПКМ | Hold/release Shift + ПКМ | ЛКМ | Shift + ЛКМ | Existing ItemsAdder skin |
+| --- | --- | --- | --- | --- | --- |
+| `chain` · Грозовая ветвь | Seeking lightning jumps between up to four distinct targets | Three seeking bolts fan out to separate targets | One short lightning bolt, up to 24 blocks | Three short bolts spread 120° apart, up to 12 blocks | `3dfantasyweaponscit:divine_staff` |
+| `mark` · Разрыв | A mark follows its acquired target, then bursts; without a mob it uses the aimed point | A fixed black hole pulses, pulls eligible mobs and collapses | A six-tick delayed hit at the target or aim point | A close gravity burst after six ticks | `3dfantasyweaponscit:night_staff` |
+| `frost` · Ледяной хлопок | Ground wave advances through a 50° cone for up to 28 blocks (global cap: 48) | Radial ice front expands from the caster to eight blocks | Short ground wave in a 25° cone, capped at 16 blocks | Staged radial ice front expands to four blocks | `3dfantasyweaponscit:northgate_guardian_staff` |
+| `lance` · Солнечное копьё | A narrow solar front travels up to 48 blocks and damages targets as it reaches them | Three solar fronts travel at −16°, 0° and +16° | Wide solar cut along 20 blocks | Solar pillar travels down to the aimed point | `3dfantasyweaponscit:sagrada_winged_staff` |
+| `ember` · Пепельная комета | A straight fire core accelerates, then bursts on collision or at range | Three staggered meteors descend at the selected point | Close fire fan at five blocks | Delayed ember burst at the aimed point | `3dfantasyweaponscit:bermunde_hermit_staff` |
+| `nova` · Изумрудная волна | Витой побег — a spiraling vine travels toward the aim point | Изумрудное цветение — a rooted bloom opens at the selected point | Хлыст лозы — a fast straight vine lash | Семена орбиты — three seeds orbit briefly, then fan outward | `3dfantasyweaponscit:holy_celtic_staff` |
+| `icicle` · Ледяной венец | Seven seeking shoulder icicles; full charge releases eleven | Five falling lances around the aim point; full charge releases nine | One fast icicle | Two flank icicles from behind the shoulders | `3dfantasyweaponscit:olwen_staff` |
+| `fault` · Обсидиановый раскол | Five ground ruptures advance along the facing direction, up to 18 blocks | After a warning, an aimed ground eruption lifts nearby mobs | Short ground fracture at the aim point, up to 12 blocks | Close obsidian burst | `3dfantasyweaponscit:staff_of_unholy_wisdom` |
+| `lunar` · Лунный серп | Серп возвращения — crescent travels out, then returns | Лунная орбита — crescent orbits briefly, then sweeps through | Лунный осколок — fast straight shard | Двойной серп — two diverging crescents | `3dfantasyweaponscit:black_snake_staff` |
+| `gale` · Посох бури | Блуждающий смерч — traveling tornado pulls nearby mobs | Воронка — pulsing stationary pull field | Ветряное лезвие — fast gust knocks its target back | Подъёмный вихрь — nearby pull followed by a lift | `3dfantasyweaponscit:goblin_witch_staff` |
+| `tide` · Сердце прилива | Водяная комета — arcing projectile bursts on impact | Гейзер — delayed expanding ground eruption | Пузырьковый выстрел — fast bubble dart | Три струи — staggered fan of three arcing jets | `3dfantasyweaponscit:northgate_guardian_staff` |
+| `requiem` · Реквием | Призрачная стая — five seeking wisps select distinct targets | Ритуал душ — charged sigil releases a radial pulse | Призрачный выпад — fast piercing soul lance | Шёпот духов — short forward wraith fan | `3dfantasyweaponscit:lich_staff` |
+| `prism` · Кристальная призма | Раздвоенный луч — three traveling rays pierce their lanes | Рикошетный луч — ray steps through up to two new targets | Призматический осколок — fast shard | Расщепление — short five-shard fan | `3dfantasyweaponscit:northgate_golden_crook` |
 
-Meteor origins trace upward from the destination and stay below an indoor
-ceiling. Each strike reads its own ground height; with no ground in the bounded
-trace, it retains the explicitly aimed height for an aerial detonation. All delayed launches, projectiles, marks and waves cancel on quit, death,
-world change and reload. No blocks, weather, fire or native projectile entities
-are created. A black-hole pull only follows a successful attributed damage event;
-players, protected mobs, pets, NPCs and ineligible elite targets are excluded by
-the existing bridge. Velocity uses Paper's [meters-per-tick API](https://jd.papermc.io/paper/26.1.2/org/bukkit/entity/Entity.html#setVelocity(org.bukkit.util.Vector)).
+These skin IDs already exist in the verified ItemsAdder staff catalog; no new
+textures are added. Tide deliberately reuses the Northgate Guardian staff
+model. If ItemsAdder cannot resolve a configured skin, item issuance fails
+instead of silently issuing an unskinned sample.
 
-Compact flight uses a 1.15-block eye clearance so its centered muzzle remains
-visible nearby; ground-level emerald fronts use 0.55 blocks plus full-piece bounds; large mark/comet impacts retain the 3.2-block exclusion. Display
-checks include each part's full bounding sphere, and particle checks apply to
-every emission point. Display visibility also
-checks the swept interpolation segment every tick, with movement padding. This rule
-also covers close impacts, crouching and spectators; collision still starts at
-the real eye, so the clearance does not let a shot skip a nearby wall or mob.
+The per-spell `power`, `vanilla-damage` and `cooldown-ticks` defaults are
+experimental prototype tuning, not a finished equipment balance. Full charge
+raises normal attack power and damage; quick attacks are uncharged and lower
+damage. Secondary and quick inputs use their configured cooldown rules. The
+HUD reads the same cooldown gate that prevents the cast.
 
-Lightning emits one local two-layer discharge cue per accepted cast, including a
-miss and the three-branch secondary. Travel ticks and blocked cooldown clicks do
-not repeat it; successful contact keeps its separate impact and thunder accent.
+## Targeting and lifecycle
 
-## Ownership and damage contract
+Target selection and damage use the existing visibility and eligibility checks.
+Prototype targeting excludes players, NPCs, armor stands and tamed pets.
+The existing duel-only service admits only the registered opponent in the captured match and round;
+new inputs and delayed attacks preserve that authorization. EliteMobs retains its
+instance/minion eligibility rules. The configured area target limit remains
+eight. Marks, waves, projectiles and fields cancel on caster death, quit, world
+change, expiry or module reload/shutdown. Delayed hits retain the cast's
+captured combat data; switching the held item does not change it. These attacks
+create no native projectile entities, temporary blocks, fire or weather.
 
-`src/main/kotlin/ru/arc/staffspells/` owns input, targeting, visuals and lifecycle.
-`modules/staff-spells.yml` owns tuning and Russian item text. `StaffSpellsModule`
-reloads through `/arc reload`; a reload clears pending marks, flying orbs and old scheduled
-effects before installing the new settings. No native entities or temporary blocks are created.
+The samples are separate `BLAZE_ROD` items marked with ARC's
+`staff_spell_prototype` PDC and given an appearance through the existing
+ItemsAdder elite-skin helper. They do not replace or intercept native FMM
+staves. Elite damage uses ARC's existing attributed damage bridge and normal
+protection event path; ordinary mobs continue through Bukkit damage.
 
-These are separate `BLAZE_ROD` items marked only with ARC's
-`staff_spell_prototype` PDC. The configured ItemsAdder item is copied through
-ARC's appearance-only elite-skin helper; the prototype keeps its Blaze Rod
-material and spell input. A configured skin that ItemsAdder cannot resolve makes
-issuance fail instead of producing an unskinned sample. Test configurations with
-no `skin` value keep the plain Blaze Rod appearance. These prototypes do not
-modify or intercept a native FMM staff, register a replacement FMM resolver, or
-require an EliteMobs/FMM source change.
+## Visual previews and verification
 
-`StaffSpellDamage` consumes the existing compile-only EliteMobs dependency.
-For elites it calls `AdvancedDamageScaling.magicWeapon`, then
-`CombatDamageContext.runPlayerToEliteBypass(PlayerDamageSource, Runnable)` around
-the normal attributed Bukkit `damage` call. This preserves the normal protection
-event path and EliteMobs attribution without running its damage formula twice.
-For a modeled custom boss, that call also uses EliteMobs' existing
-`CustomModel.runProjectileDamageBypass` scope. FMM then accepts the already
-resolved spell hit instead of rerouting it through a physical melee hitbox.
-These callable methods are implementation-package APIs, so compatibility remains
-pinned to the project's EliteMobs API, not a promised stable upstream addon API.
-Failures on an enabled integration reject the cast/hit and emit a diagnostic.
-The called JVM signatures were also checked against the inspected Spawn
-EliteMobs 10.9.8 JAR. The bridge attributes these custom attacks to Staves; it
-does not classify them as a native `STAFF_FIREBALL` or `WAND_MISSILE` strike.
+`StaffSpellDisplayGeometry` supplies production block-display geometry to both
+the packet renderer and the offline preview exporter. The preview includes all
+four inputs for NOVA and the five new Arsenal staves, plus empty/half/full
+ICICLE charge states. Exported snapshots are source-driven offline previews;
+they do not establish Minecraft interpolation, particles, sounds, combat feel
+or ordinary-client acceptance. Focused tests cover deterministic mechanics and
+lifecycle, but an in-client review is still needed to judge the final appearance
+against moving mobs and obstructions.
 
-For this mechanics trial, the captured Staves skill level is also the **virtual
-item level**. `power` is a matched-level elite-hit multiplier. `vanilla-damage` is
-the separate base damage against ordinary mobs; chain falloff applies once to
-each value. Native item enchantments, durability, drops and real staff replacement
-are deliberately outside this prototype. Tuning is experimental, not a finished
-equipment/economy balance. When EliteMobs is absent, the same visuals and normal
-Bukkit damage remain usable without loading the optional integration classes.
+Visual scenes use bounded client-side block displays: 48 parts per scene, at
+most 12 scenes per caster, 16 per viewer and 32 globally, with hard limits of
+192 display parts per caster/viewer and 576 globally. The oldest visual is
+evicted when a limit is reached; projectile collision and damage continue
+independently. Scene geometry updates every two ticks, and cleanup follows the
+same caster and module lifecycle as the attack.
 
-## Display effects and limits
-
-The visual language uses a short anticipation, a decisive strike and a slower
-particle aftermath. Reference studies were the official GGG
-[Witch walkthrough](https://www.youtube.com/watch?v=82CGiyshJ0c) (Bonestorm and
-violet/white discharges around 5:53–6:20) and
-[Ranger walkthrough](https://www.youtube.com/watch?v=iw870QM1V5k) (Lightning Arrow
-and Lightning Rods). These inform timing, bright cores and irregular edges;
-no external game assets are copied.
-
-Lightning advances in alternating short leaders and fast discharges, with older
-segments thinning into an afterimage. MARK is an upright fracture whose shards
-snap outward. The black hole has a dark faceted core, a tilted luminous accretion
-disk and inward particles. The solar piercer charges briefly, crosses its ray
-quickly, then leaves a bright contact corona. Comets have a hot, voluminous burst
-and slower embers. Emerald waves are broad translucent crescents with a bright
-lip, replacing the stacked ground pillars. Frost keeps its sequential ground
-crystals; ICICLE uses falling lances and shattering ice, while FAULT warns with a
-ground fissure before its heavy eruption. Damage, cooldowns, target limits and
-the two input modes are unchanged;
-lightning time-to-contact follows its new stepped travel speed.
-
-`StaffSpellDisplayGeometry` is shared by the renderer and offline textured preview.
-`StaffSpellDisplayEffects` reuses core `PaperPacketDisplays` under the `staff-spells`
-visual budget source. It creates no native Bukkit entities, chunks or chunk tickets.
-Core filters received chunks, player worlds, range and connections and coalesces
-updates through the shared packet budget. Every piece has its own real world anchor
-so culling also works for beams crossing chunk boundaries.
-
-Hard bounds are 48 pieces per scene, four scenes per caster, twelve scenes globally,
-and four scenes per viewer within 64 blocks (at most 192 handles eligible for one
-viewer). A viewer's own casts are selected first, then nearby casts. The oldest
-visual scene is evicted when a pool fills; damage and projectile collision continue
-independently. Shapes update every two ticks with two-tick client interpolation. Lightning instead
-adds fixed jagged channel segments without interpolation: its 47 stable slots keep
-the previous route in place until an eight-tick fade; unreached slots stay hidden.
-Moving marks/projectiles update their logical position between display frames.
-FROST's front spans twelve ticks after a two-tick lead-in in a 24-tick scene;
-NOVA's eight-block front spans sixteen ticks after the same lead-in in a 20-tick
-scene; the emerald layers dissolve together while still advancing. MARK and EMBER
-impacts retain handles through a two-tick release transition. MARK retains its
-rotation clock and charged shape. LANCE and its particles share four charge ticks,
-a four-to-six-tick traversal and twelve ticks of aftermath. The visual muzzle stays
-below the reticle; the damage ray still starts at the eye.
-
-Tracked effects expire with their controller, with a final 160-tick safety cap.
-All scenes are removed on caster death, quit, world change, expiry or module
-shutdown/reload. Particle emission uses bounded loops and retains per-viewer
-camera clearance. Approximate emission bounds per cast are 100 positions per
-solar ray (three rays for secondary), 206 for a comet impact and 225 for a radial
-emerald wave; gravity emits 35 positions per pulse. These bounds are not a
-measured TPS/FPS guarantee.
-
-Paper 1.21.11 requires `Color` data for `Particle.FLASH`. A missing payload throws
-synchronously, so the old LANCE launch could abort before its display scene was
-created whenever another viewer could receive the launch flash. MARK release
-was affected too. Every FLASH now carries a color. `StaffSpellParticleContractTest`
-exercises the emission path with an observer outside the camera cutoff and checks
-payloads against the installed Paper particle types; a solo caster whose near
-flash is hidden cannot reproduce that failure.
-
-## Verification
-
-Run the focused staff tests through the repository's Gradle `test` task with the
-fully qualified class names, then package with `shadowJar`. Deterministic checks
-cover target geometry, occlusion, item identity and delayed-effect lifecycle.
-Tests also cover empty casts, manual aim, piercing and swept orb collision.
-They do not establish in-client appearance or the feel of fighting moving mobs.
-On the selected runtime, use the issuance command and compare all eight samples
-against moving mobs, an obstructed target and a group, then try switching items
-during cooldown. Review EliteMobs scaling/progression in real combat separately.
-
-For the offline preview, run `exportStaffSpellPreview` with
-`-PstaffSpellPreviewOutput=/absolute/path/scene.json`, then use the location-atelier
-textured preview builder with a vanilla palette. Inspect launch, middle and impact
-poses from player-eye, front, side and top views. This reuses runtime geometry but
-does not validate Minecraft interpolation, particles, sound or combat feel.
+The build's `exportStaffSpellPreview` task accepts
+`-PstaffSpellPreviewOutput=/absolute/path/scene.json`; the result can be opened
+with the location-atelier textured preview builder. It reuses runtime geometry
+but does not model native Minecraft lighting, interpolation, particles, sounds
+or measured client acceptance.

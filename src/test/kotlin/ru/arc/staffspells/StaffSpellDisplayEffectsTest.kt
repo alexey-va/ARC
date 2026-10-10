@@ -40,16 +40,13 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         }
     }
 
-    "nova leaves the caster eye outside every solid piece for its whole visible lifetime" {
-        (0 until 30 step StaffSpellDisplayEffects.FRAME_TICKS).forEach { age ->
-            staffDisplayParts(StaffSpell.NOVA, age, 30, 4.0, 8.0, true).forEach { part ->
-                val eye = org.joml.Vector3f(0f, 1.62f, 0f).sub(part.center)
-                org.joml.Quaternionf(part.rotation).invert().transform(eye)
-                val outside = kotlin.math.abs(eye.x) > part.scale.x / 2 ||
-                    kotlin.math.abs(eye.y) > part.scale.y / 2 || kotlin.math.abs(eye.z) > part.scale.z / 2
-                outside shouldBe true
-            }
-        }
+    "charged crown grows to eleven shards without entering the player eye" {
+        val early = staffChargeParts(StaffSpell.ICICLE, 0.0, 0)
+        val full = staffChargeParts(StaffSpell.ICICLE, 1.0, 36)
+        full.size shouldBe 33
+        (early.count { it.visible } < full.count { it.visible }) shouldBe true
+        full.all { it.center.length() - it.scale.length() / 2 > 1.15f } shouldBe true
+        early.map { it.material } shouldBe full.map { it.material }
     }
 
     "lightning launches through the reticle without a near-camera shield" {
@@ -139,14 +136,16 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
                 fun parts(age: Int) = staffDisplayParts(spell, age, 30, 8.0, 3.0, true, secondary)
                 val first = parts(0)
                 val body = parts(8)
-                val last = parts(28)
+                val last = parts(if (spell in ARSENAL_SPELLS) 29 else 28)
                 first.size shouldBe body.size
                 last.size shouldBe body.size
                 first.map { it.material } shouldBe body.map { it.material }
                 fun volume(parts: List<StaffDisplayPart>) = parts.sumOf {
                     (it.scale.x * it.scale.y * it.scale.z).toDouble()
                 }
-                if (spell in setOf(StaffSpell.CHAIN, StaffSpell.LANCE, StaffSpell.MARK, StaffSpell.EMBER, StaffSpell.ICICLE)) {
+                if (spell in ARSENAL_SPELLS) {
+                    (volume(first) >= volume(body) * 0.99) shouldBe true
+                } else if (spell in setOf(StaffSpell.CHAIN, StaffSpell.LANCE, StaffSpell.MARK, StaffSpell.EMBER, StaffSpell.ICICLE)) {
                     (volume(first) > volume(body) * 0.01) shouldBe true
                 } else {
                     (volume(first) < volume(body) * 0.01) shouldBe true
@@ -198,7 +197,7 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         (cloudRadius(collapsed) < cloudRadius(closed) * 0.15) shouldBe true
     }
 
-    "shoulder icicle assembles as one body then fractures while the emerald front travels" {
+    "shoulder icicle assembles as one body then fractures" {
         val crystal = staffDisplayParts(StaffSpell.ICICLE, 8, 80, 1.0, 0.8, false)
         val flying = staffDisplayParts(StaffSpell.ICICLE, 16, 80, 1.0, 0.8, false)
         crystal.size shouldBe 8
@@ -212,21 +211,6 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         val faded = staffDisplayParts(StaffSpell.ICICLE, 8, 10, 0.0, 0.9, true)
         (faded.maxOf { it.scale.length() } < 0.002f) shouldBe true
 
-        val tidalStart = staffDisplayParts(StaffSpell.NOVA, 2, 20, 12.0, 5.5, true, true)
-        val tidalEnd = staffDisplayParts(StaffSpell.NOVA, 18, 20, 12.0, 5.5, true, true)
-        tidalStart.size shouldBe 39
-        tidalEnd.size shouldBe 39
-        (tidalEnd.maxOf { it.center.z } > tidalStart.maxOf { it.center.z } + 8f) shouldBe true
-        (tidalEnd.maxOf { kotlin.math.abs(it.center.x) } <= 5.7f) shouldBe true
-        (tidalEnd.maxOf { kotlin.math.abs(it.center.x) } >
-            tidalStart.maxOf { kotlin.math.abs(it.center.x) } + 4.5f) shouldBe true
-        (tidalEnd.minOf { it.center.y - it.scale.y / 2f } >= -0.02f) shouldBe true
-        (tidalEnd.maxOf { it.center.y + it.scale.y / 2f } < 0.25f) shouldBe true
-        (tidalEnd.maxOf { it.scale.x } < 0.1f) shouldBe true
-        val peak = staffDisplayParts(StaffSpell.NOVA, 10, 30, 12.0, 5.5, true, true)
-        (peak.maxOf { it.center.y + it.scale.y / 2f } > 1.5f) shouldBe true
-        (peak.maxOf { it.center.y } > 1.0f) shouldBe true
-        (peak.maxOf { it.scale.y } >= 1.2f) shouldBe true
     }
 
     "restored frost nova keeps its 48-slot ring and travels outward as one radial front" {
@@ -268,22 +252,10 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         (dissolved.maxOf { it.scale.length() } < late.maxOf { it.scale.length() }) shouldBe true
     }
 
-    "emerald crescent keeps a broad low silhouette and moves out continuously" {
-        (0..6 step StaffSpellDisplayEffects.FRAME_TICKS).forEach { age ->
-            val parts = staffDisplayParts(StaffSpell.NOVA, age, 30, 4.0, 8.0, true)
-            parts.size shouldBe 42
-            parts.forEach { part ->
-                val radius = kotlin.math.hypot(part.center.x.toDouble(), part.center.z.toDouble())
-                (radius >= 1.3) shouldBe true
-            }
-        }
-        val early = staffDisplayParts(StaffSpell.NOVA, 2, 30, 4.0, 8.0, true)
-        val peak = staffDisplayParts(StaffSpell.NOVA, 10, 30, 4.0, 8.0, true)
-        val late = staffDisplayParts(StaffSpell.NOVA, 18, 30, 4.0, 8.0, true)
-        (late.minOf { kotlin.math.hypot(it.center.x.toDouble(), it.center.z.toDouble()) } >
-            early.minOf { kotlin.math.hypot(it.center.x.toDouble(), it.center.z.toDouble()) } + 5.5) shouldBe true
-        (peak.minOf { it.scale.x } >= 0.24f) shouldBe true
-        (peak.maxOf { it.center.y + it.scale.y / 2f } > 0.9f) shouldBe true
+    "frost geometry reaches the extended 28-block range" {
+        val parts = staffDisplayParts(StaffSpell.FROST, 14, 24, 28.0, 12.0, false)
+        (parts.maxOf { it.center.z } > 24f) shouldBe true
+        parts.size shouldBe 40
     }
 
     "comet flight is steady and its impact shards travel outward without pulsing" {
@@ -411,60 +383,28 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         }
     }
 
-    "oldest-first global and per-caster caps bound scenes and each viewer to four" {
+    "part budgets admit eleven small icicles without increasing the global display limit" {
         withDisplayHarness { h ->
-            val casters = (1..10).map { h.player("display-caster-$it") }
-            val observer = h.player("display-observer")
-            val origin = Location(h.world, 0.5, 64.0, 0.5)
-            val observerView = Location(h.world, 0.5, 64.0, 7.0)
-            observer.teleport(observerView)
-            val partsPerMark = staffDisplayParts(StaffSpell.MARK, 0, 160, 0.0, 1.0, false).size
-
-            fun cast(caster: Player): List<RecordedDisplay> {
-                val before = h.recorder.records.size
-                h.effects.play(caster.uniqueId, StaffSpell.MARK, origin, durationTicks = 160)!!
-                return h.recorder.records.drop(before)
+            val caster = h.player("shard-budget-caster")
+            val origin = Location(h.world, 0.5, 68.0, 7.5)
+            repeat(11) { h.effects.play(caster.uniqueId, StaffSpell.ICICLE, origin, durationTicks = 80) }
+            h.recorder.records.count { it.removals == 0 } shouldBe 88
+            val others = (1..4).map { h.player("budget-$it") }
+            others.forEach { player -> repeat(5) { h.effects.play(player.uniqueId, StaffSpell.FROST, origin, durationTicks = 80) } }
+            h.recorder.records.any { it.removals > 0 } shouldBe true
+            (h.recorder.records.count { it.removals == 0 } <= StaffSpellDisplayEffects.MAX_TOTAL_PARTS) shouldBe true
+            h.scheduler.tick(4)
+            others.forEach { viewer ->
+                (h.recorder.records.count { it.removals == 0 && viewer.uniqueId in it.visibleViewers } <=
+                    StaffSpellDisplayEffects.MAX_PARTS_PER_VIEWER) shouldBe true
             }
-
-            val firstPerCaster = cast(casters.first())
-            val secondPerCaster = cast(casters.first())
-            repeat(3) { cast(casters.first()) }
-            firstPerCaster.size shouldBe partsPerMark
-            firstPerCaster.all { it.removals == 1 } shouldBe true
-            secondPerCaster.all { it.removals == 0 } shouldBe true
-
-            (1..8).forEach { cast(casters[it]) }
-            val firstGlobal = secondPerCaster
-            val thirteenth = cast(casters[9])
-            thirteenth.size shouldBe partsPerMark
-            firstGlobal.all { it.removals == 1 } shouldBe true
-            h.recorder.records.count { it.removals == 0 } shouldBe
-                StaffSpellDisplayEffects.MAX_SCENES * partsPerMark
-
-            h.recorder.shownTo.clear()
-            h.recorder.hiddenFrom.clear()
-            h.scheduler.tick(4)
-            h.recorder.shownTo.count { it == observer.uniqueId } shouldBe 0
-            h.recorder.records.count { it.removals == 0 && observer.uniqueId in it.visibleViewers } shouldBe
-                StaffSpellDisplayEffects.MAX_PER_VIEWER * partsPerMark
-
-            h.recorder.hiddenFrom.clear()
-            observer.teleport(Location(h.world, 100.0, 64.0, 100.0))
-            h.scheduler.tick(4)
-            h.recorder.hiddenFrom.count { it == observer.uniqueId } shouldBe
-                StaffSpellDisplayEffects.MAX_PER_VIEWER * partsPerMark
-            h.recorder.records.count { it.removals == 0 && observer.uniqueId in it.visibleViewers } shouldBe 0
-
-            h.recorder.shownTo.clear()
-            observer.teleport(observerView)
-            h.scheduler.tick(4)
-            h.recorder.shownTo.count { it == observer.uniqueId } shouldBe
-                StaffSpellDisplayEffects.MAX_PER_VIEWER * partsPerMark
-            h.recorder.records.count { it.removals == 0 && observer.uniqueId in it.visibleViewers } shouldBe
-                StaffSpellDisplayEffects.MAX_PER_VIEWER * partsPerMark
         }
     }
+
 })
+
+private val ARSENAL_SPELLS = setOf(StaffSpell.NOVA, StaffSpell.LUNAR, StaffSpell.GALE,
+    StaffSpell.TIDE, StaffSpell.REQUIEM, StaffSpell.PRISM)
 
 private data class DisplayPose(
     val values: List<Float>,

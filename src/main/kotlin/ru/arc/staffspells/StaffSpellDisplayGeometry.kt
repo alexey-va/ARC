@@ -41,6 +41,7 @@ internal fun staffDisplayParts(
     impact: Boolean,
     secondary: Boolean = false,
     animationAgeTicks: Int = ageTicks,
+    input: StaffCastInput = StaffCastInput.of(secondary, false),
 ): List<StaffDisplayPart> {
     val parts = when (spell) {
     StaffSpell.CHAIN -> chainDisplayParts(ageTicks, durationTicks, length, radius, impact)
@@ -52,21 +53,16 @@ internal fun staffDisplayParts(
     StaffSpell.FAULT -> staffFaultDisplayParts(ageTicks, durationTicks, radius, secondary)
     StaffSpell.LANCE -> staffSolarDisplayParts(ageTicks, durationTicks, length, impact)
     StaffSpell.EMBER -> emberDisplayParts(ageTicks, durationTicks, radius, impact, secondary)
-    StaffSpell.NOVA -> if (secondary) staffTidalCrestDisplayParts(ageTicks, durationTicks, length, radius)
-        else staffNovaDisplayParts(ageTicks, durationTicks, radius)
+    StaffSpell.NOVA, StaffSpell.LUNAR, StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM, StaffSpell.PRISM ->
+        staffArsenalParts(spell, ageTicks, durationTicks, length, radius, impact, secondary, input)
     }
     val tracked = !impact && spell in setOf(StaffSpell.MARK, StaffSpell.EMBER)
-    val birth = if (impact && (spell in setOf(StaffSpell.MARK, StaffSpell.EMBER, StaffSpell.ICICLE)))
+    val arsenal = spell in setOf(StaffSpell.NOVA, StaffSpell.LUNAR, StaffSpell.GALE,
+        StaffSpell.TIDE, StaffSpell.REQUIEM, StaffSpell.PRISM)
+    val birth = if (impact && (arsenal || spell in setOf(StaffSpell.MARK, StaffSpell.EMBER, StaffSpell.ICICLE)))
         1.0 else smooth(ageTicks / 4.0)
     val lastFrame = (durationTicks - StaffSpellDisplayEffects.FRAME_TICKS).coerceAtLeast(1)
-    val novaFade = if (spell == StaffSpell.NOVA) {
-        val dissolveStart = (durationTicks - 8).coerceAtLeast(0)
-        if (ageTicks <= dissolveStart) 1.0 else {
-            val remaining = ((durationTicks - ageTicks).toDouble() / 8.0).coerceIn(0.0, 1.0)
-            remaining * remaining
-        }
-    } else 1.0
-    val fade = if (tracked) 1.0 else if (spell == StaffSpell.NOVA) novaFade
+    val fade = if (tracked || arsenal) 1.0
         else smooth((lastFrame - ageTicks) / 6.0)
     val visibility = when (spell) {
         StaffSpell.CHAIN -> fade.coerceAtLeast(0.001).toFloat()

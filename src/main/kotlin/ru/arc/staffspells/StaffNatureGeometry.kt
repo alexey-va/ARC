@@ -17,7 +17,7 @@ internal fun staffFrostDisplayParts(
     radius: Double,
     impact: Boolean,
 ): List<StaffDisplayPart> {
-    val reach = natureExtent(length, 14.0, 7.0)
+    val reach = natureExtent(length, 48.0, 28.0)
     val halfAngle = atan2(natureExtent(radius, 96.0, 8.3), reach)
     val front = staffWaveFront(ageTicks, reach, 12)
     val parts = ArrayList<StaffDisplayPart>(40)

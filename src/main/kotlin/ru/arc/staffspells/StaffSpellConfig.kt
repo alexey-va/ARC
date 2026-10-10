@@ -20,7 +20,8 @@ import kotlin.math.cos
 
 internal enum class StaffSpell(val id: String) {
     CHAIN("chain"), MARK("mark"), FROST("frost"), LANCE("lance"), EMBER("ember"), NOVA("nova"),
-    ICICLE("icicle"), FAULT("fault");
+    ICICLE("icicle"), FAULT("fault"), LUNAR("lunar"), GALE("gale"), TIDE("tide"),
+    REQUIEM("requiem"), PRISM("prism");
 
     companion object {
         val itemKey = NamespacedKey("arc", "staff_spell_prototype")
@@ -30,6 +31,13 @@ internal enum class StaffSpell(val id: String) {
 
         fun isDuelOnly(item: ItemStack?) = item?.itemMeta?.persistentDataContainer
             ?.get(duelOnlyKey, PersistentDataType.BYTE) == 1.toByte()
+    }
+}
+
+internal enum class StaffCastInput(val secondary: Boolean, val quick: Boolean) {
+    PRIMARY(false, false), SECONDARY(true, false), QUICK(false, true), QUICK_SECONDARY(true, true);
+    companion object {
+        fun of(secondary: Boolean, quick: Boolean) = entries.first { it.secondary == secondary && it.quick == quick }
     }
 }
 
@@ -110,7 +118,7 @@ internal open class StaffSpellConfig(private val config: Config) {
         number("chain.decay", 0.7, 0.1..1.0),
         config.integer("mark.delay-ticks", 18).coerceIn(4, 80),
         number("mark.radius", 3.5, 1.0..8.0),
-        number("frost.range", 10.0, 2.0..14.0),
+        number("frost.range", 28.0, 2.0..48.0),
         number("frost.half-angle-degrees", 50.0, 10.0..80.0),
         config.integer("frost.slow-ticks", 40).coerceIn(1, 100),
         config.integer("max-area-targets", 8).coerceIn(1, 16),
@@ -124,6 +132,11 @@ internal open class StaffSpellConfig(private val config: Config) {
                 StaffSpell.NOVA -> Triple(0.9, 7.0, 40)
                 StaffSpell.ICICLE -> Triple(0.9, 7.0, 40)
                 StaffSpell.FAULT -> Triple(1.2, 9.0, 44)
+                StaffSpell.LUNAR -> Triple(1.0, 8.0, 32)
+                StaffSpell.GALE -> Triple(0.8, 6.0, 40)
+                StaffSpell.TIDE -> Triple(1.0, 8.0, 36)
+                StaffSpell.REQUIEM -> Triple(1.1, 8.0, 40)
+                StaffSpell.PRISM -> Triple(1.1, 9.0, 36)
             }
             StaffSpellTuning(number("${spell.id}.power", power, 0.1..5.0),
                 number("${spell.id}.vanilla-damage", damage, 0.1..40.0),
@@ -141,14 +154,19 @@ internal open class StaffSpellConfig(private val config: Config) {
 
     fun text(key: String) = config.component("messages.$key", TagResolver.empty()).decoration(TextDecoration.ITALIC, false)
 
-    fun cooldown(spell: StaffSpell, secondary: Boolean, remaining: Long, total: Long): Component {
+    fun cooldown(spell: StaffSpell, secondary: Boolean, remaining: Long, total: Long, input: StaffCastInput = StaffCastInput.of(secondary, false)): Component {
         val resolvers = TagResolver.resolver(
-            Placeholder.component("ability", config.component("${spell.id}.${if (secondary) "secondary-name" else "name"}", TagResolver.empty())),
+            Placeholder.component("ability", config.component("${spell.id}.${when (input) { StaffCastInput.PRIMARY -> "name"; StaffCastInput.SECONDARY -> "secondary-name"; StaffCastInput.QUICK -> "quick-name"; StaffCastInput.QUICK_SECONDARY -> "quick-secondary-name" }}", TagResolver.empty())),
             Placeholder.unparsed("seconds", String.format(Locale.ROOT, "%.1f", remaining.coerceAtLeast(0) / 20.0)),
-            Placeholder.unparsed("input", if (secondary) "Shift + ПКМ" else "ПКМ"),
+            Placeholder.unparsed("input", when (input) { StaffCastInput.PRIMARY -> "ПКМ"; StaffCastInput.SECONDARY -> "Shift + ПКМ"; StaffCastInput.QUICK -> "ЛКМ"; StaffCastInput.QUICK_SECONDARY -> "Shift + ЛКМ" }),
         )
         return config.component("messages.${if (remaining > 0) "cooldown-bar" else "ready-bar"}", resolvers)
     }
+
+    fun charge(spell: StaffSpell, progress: Double, secondary: Boolean = false): Component = config.component("messages.charge-bar", TagResolver.resolver(
+        Placeholder.component("ability", config.component("${spell.id}.${if (secondary) "secondary-name" else "name"}", TagResolver.empty())),
+        Placeholder.unparsed("percent", (progress.coerceIn(0.0, 1.0) * 100).toInt().toString()),
+    ))
 
     fun item(spell: StaffSpell) = buildItem(spell, duelOnly = false)
 
@@ -178,11 +196,14 @@ internal open class StaffSpellConfig(private val config: Config) {
                 config.component("${spell.id}.description", TagResolver.empty()).decoration(TextDecoration.ITALIC, false),
                 config.component("${spell.id}.aim", TagResolver.empty()).decoration(TextDecoration.ITALIC, false),
                 Component.empty(), config.component("${spell.id}.secondary", TagResolver.empty()).decoration(TextDecoration.ITALIC, false),
+                config.component("${spell.id}.quick", TagResolver.empty()).decoration(TextDecoration.ITALIC, false),
+                config.component("${spell.id}.quick-secondary", TagResolver.empty()).decoration(TextDecoration.ITALIC, false),
                 text(if (duelOnly) "duel-only" else "prototype"), Component.empty(), text("use")))
             meta.persistentDataContainer.set(StaffSpell.itemKey, PersistentDataType.STRING, spell.id)
             if (duelOnly) meta.persistentDataContainer.set(StaffSpell.duelOnlyKey, PersistentDataType.BYTE, 1)
             meta.setMaxStackSize(1)
         }
+        configureStaffUse(this)
     }
 }
 

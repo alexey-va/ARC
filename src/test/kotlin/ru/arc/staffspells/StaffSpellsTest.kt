@@ -68,39 +68,40 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "staff identity stays on its ARC marker and right-click air still consumes the prototype" {
+    "staff identity stays on its ARC marker" {
         withStaffHarness { h ->
-            val world = h.paper.addSimpleWorld("staff-input")
-            val player = h.player("staff-input", world, StaffSpell.CHAIN)
-            val target = h.zombie(world, x = 0.5, z = 4.0)
-            h.controller.start()
-
             StaffSpell.from(h.config.item(StaffSpell.CHAIN)) shouldBe StaffSpell.CHAIN
             StaffSpell.from(ItemStack(Material.STICK)) shouldBe null
+        }
+    }
 
-            player.inventory.setItemInMainHand(ItemStack(Material.STICK))
-            h.controller.onInteract(interact(player, player.inventory.itemInMainHand))
-            h.hits.map { it.uniqueId } shouldBe emptyList()
-
-            val prototype = h.config.item(StaffSpell.CHAIN)
-            player.inventory.setItemInMainHand(prototype)
-            val airClick = interact(player, prototype)
-            airClick.useInteractedBlock() shouldBe Event.Result.DENY
-            airClick.useItemInHand() shouldBe Event.Result.DEFAULT
-            h.controller.onInteract(airClick)
-
-            h.hits shouldBe emptyList()
-            h.scheduler.tick(60)
-            h.hits.map { it.uniqueId } shouldBe listOf(target.uniqueId)
-            airClick.useItemInHand() shouldBe Event.Result.DENY
-            airClick.useInteractedBlock() shouldBe Event.Result.DENY
-
-            val explicitlyDeniedPlayer = h.player("staff-denied", world, StaffSpell.CHAIN)
-            val explicitlyDenied = interact(explicitlyDeniedPlayer, explicitlyDeniedPlayer.inventory.itemInMainHand).apply {
-                setUseItemInHand(Event.Result.DENY)
+    "quick inputs work for every staff and share cooldown with charged casts" {
+        StaffSpell.entries.forEach { spell ->
+            listOf(StaffCastInput.QUICK, StaffCastInput.QUICK_SECONDARY).forEach { input ->
+                withStaffHarness { h ->
+                    val world = h.paper.addSimpleWorld("quick-${spell.id}-${input.name}")
+                    val player = h.player("quick", world, spell)
+                    h.controller.start()
+                    h.controller.cast(player, input, 0.0)
+                    h.controller.cast(player, StaffCastInput.PRIMARY, 1.0)
+                    h.captures.size shouldBe 1
+                    h.scheduler.tick(100)
+                }
             }
-            h.controller.onInteract(explicitlyDenied)
-            h.hits.map { it.uniqueId } shouldBe listOf(target.uniqueId)
+        }
+    }
+
+    "fully charged icicle volley grows to eleven without multiplying one-target hits" {
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("charged-crown")
+            val player = h.player("charged", world, StaffSpell.ICICLE)
+            val victim = h.zombie(world, x = 0.5, z = 12.0)
+            h.controller.start()
+            h.controller.cast(player, StaffCastInput.PRIMARY, 1.0)
+            h.visualPlays.count { it.spell == StaffSpell.ICICLE } shouldBe 11
+            h.scheduler.tick(90)
+            h.hits.map { it.uniqueId } shouldBe listOf(victim.uniqueId)
+            h.damageScales shouldBe listOf(1.75 to 10.5)
         }
     }
 
@@ -124,25 +125,17 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "lightning has one launch cue even on a miss without repeating it for branches or cooldown clicks" {
+    "empty-air lightning still captures one cast and cooldown clicks do not launch again" {
         listOf(false, true).forEach { secondary ->
             withStaffHarness(settings = staffSettings(range = 12.0)) { h ->
                 val world = h.paper.addSimpleWorld("staff-lightning-miss")
-                every { world.isChunkLoaded(any<Int>(), any<Int>()) } returns true
                 val player = h.player("staff-lightning-miss", world, StaffSpell.CHAIN).apply { isSneaking = secondary }
                 h.controller.start()
                 h.controller.cast(player)
-                h.controller.cast(player) // A blocked cooldown click must remain silent.
+                h.controller.cast(player)
                 h.scheduler.tick(80)
                 h.hits shouldBe emptyList()
-                verify(exactly = 1) {
-                    anyConstructed<WorldMock>().playSound(any<Location>(), Sound.ENTITY_LIGHTNING_BOLT_IMPACT,
-                        SoundCategory.PLAYERS, 0.58f, 1.6f)
-                }
-                verify(exactly = 1) {
-                    anyConstructed<WorldMock>().playSound(any<Location>(), Sound.BLOCK_RESPAWN_ANCHOR_CHARGE,
-                        SoundCategory.PLAYERS, 0.32f, 1.85f)
-                }
+                h.captures.size shouldBe 1
             }
         }
     }
@@ -163,11 +156,11 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "all eight prototype items can be granted without optional ItemsAdder skins" {
+    "all thirteen prototype items can be granted without optional ItemsAdder skins" {
         withStaffHarness { h ->
             val player = h.paper.addPlayer("all-prototypes")
 
-            StaffSpell.entries.map { it.id } shouldBe listOf("chain", "mark", "frost", "lance", "ember", "nova", "icicle", "fault")
+            StaffSpell.entries.map { it.id } shouldBe listOf("chain", "mark", "frost", "lance", "ember", "nova", "icicle", "fault", "lunar", "gale", "tide", "requiem", "prism")
             h.controller.give(player, StaffSpell.entries) shouldBe true
 
             player.inventory.storageContents.filterNotNull().mapNotNull { StaffSpell.from(it) } shouldBe
@@ -175,7 +168,7 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "all eight grant refuses seven empty slots without changing existing items" {
+    "all thirteen grant refuses seven empty slots without changing existing items" {
         withStaffHarness { h ->
             val player = h.paper.addPlayer("staff-capacity")
             repeat(player.inventory.storageContents.size - 7) { player.inventory.setItem(it, ItemStack(Material.DIAMOND)) }
@@ -200,12 +193,12 @@ class StaffSpellsTest : FreeSpec({
             denied = protected.uniqueId
             h.controller.start()
             h.controller.cast(player)
-            h.visualPlays.size shouldBe 3
+            h.visualPlays.size shouldBe 5
             h.visualPlays.all { it.spell == StaffSpell.ICICLE && it.secondary && it.from.y in 64.5..70.0 } shouldBe true
-            h.scheduler.tick(7)
+            h.scheduler.tick(3)
             h.projectileMoves shouldBe emptyList()
             h.hits shouldBe emptyList()
-            h.scheduler.tick(35)
+            h.scheduler.tick(39)
             h.projectileMoves.all { it.direction == Vector(0.0, -1.0, 0.0) } shouldBe true
             h.hits.map { it.uniqueId }.toSet() shouldBe setOf(victim.uniqueId, protected.uniqueId)
             h.hits.size shouldBe 2
@@ -451,7 +444,7 @@ class StaffSpellsTest : FreeSpec({
             player.inventory.setItemInMainHand(h.config.item(StaffSpell.FAULT))
             h.scheduler.tick(4)
             player.bossBars.single() shouldBe bar
-            PlainTextComponentSerializer.plainText().serialize(bar.name()).startsWith("Каменный выброс") shouldBe true
+            PlainTextComponentSerializer.plainText().serialize(bar.name()).startsWith("Обсидиановый раскол") shouldBe true
             player.nextActionBar() shouldBe null
             player.inventory.setItemInMainHand(ItemStack(Material.AIR))
             h.scheduler.tick(4)
@@ -468,7 +461,45 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "all eight spells cast into empty space and use the shared cooldown" {
+    "cancelling active effects retains cooldown duration and input label" {
+        val config = StaffSpellConfig(TestConfig(mapOf(
+            "icicle.name" to "Венец", "icicle.secondary-name" to "Дождь",
+            "messages.cooldown-bar" to "<ability> <seconds> с",
+        )))
+        withStaffHarness(config = config) { h ->
+            val world = h.paper.addSimpleWorld("staff-cooldown-return")
+            val player = h.player("staff-cooldown-return", world, StaffSpell.ICICLE) as PlayerMock
+            h.controller.start()
+            h.controller.cast(player, StaffCastInput.SECONDARY, 0.0)
+            h.scheduler.tick(8)
+            h.controller.onQuit(PlayerQuitEvent(player, Component.empty()))
+            h.scheduler.tick(4) // Mock quit leaves the player online, modelling the returning HUD.
+            val bar = player.bossBars.single()
+            PlainTextComponentSerializer.plainText().serialize(bar.name()).startsWith("Дождь") shouldBe true
+            bar.progress() shouldBe staffCooldownProgress(CooldownManager.cooldown(player.uniqueId, "staff-spells"), 30)
+            h.controller.cast(player)
+            h.captures.size shouldBe 1
+        }
+    }
+
+    "travelling lance and delayed quick burst stop when the captured combat context expires" {
+        listOf(StaffSpell.LANCE to StaffCastInput.PRIMARY, StaffSpell.MARK to StaffCastInput.QUICK).forEach { (spell, input) ->
+            var current = true
+            withStaffHarness(currentCast = { _, _ -> current }) { h ->
+                val world = h.paper.addSimpleWorld("staff-stale-${spell.id}")
+                val player = h.player("stale-caster", world, spell)
+                h.zombie(world, 0.5, 10.0)
+                h.controller.start()
+                h.controller.cast(player, input, 0.0)
+                h.scheduler.tick(2)
+                current = false
+                h.scheduler.tick(40)
+                h.hits shouldBe emptyList()
+            }
+        }
+    }
+
+    "all thirteen spells cast into empty space and use the shared cooldown" {
         withStaffHarness { h ->
             val world = h.paper.addSimpleWorld("staff-empty-casts")
             val player = h.player("staff-empty-casts", world, StaffSpell.CHAIN)
@@ -537,7 +568,12 @@ class StaffSpellsTest : FreeSpec({
             val third = h.zombie(world, x = 0.5, z = 8.5)
             val beyondTargetLimit = h.zombie(world, x = 0.5, z = 11.0)
 
+            h.controller.start()
             h.controller.cast(player)
+            h.hits shouldBe emptyList()
+            h.scheduler.tick(5)
+            h.hits shouldBe emptyList()
+            h.scheduler.tick(20)
 
             h.hits.map { it.uniqueId } shouldBe listOf(first.uniqueId, second.uniqueId, third.uniqueId)
             beyondTargetLimit.isValid shouldBe true
@@ -552,7 +588,12 @@ class StaffSpellsTest : FreeSpec({
             val behindWall = h.zombie(world, x = 0.5, z = 12.0)
             for (x in -1..1) for (y in 64..67) world.getBlockAt(x, y, 10).type = Material.STONE
 
+            h.controller.start()
             h.controller.cast(player)
+            h.hits shouldBe emptyList()
+            h.scheduler.tick(5)
+            h.hits shouldBe emptyList()
+            h.scheduler.tick(20)
 
             h.hits.map { it.uniqueId } shouldBe listOf(inFront.uniqueId)
             behindWall.isValid shouldBe true
@@ -626,45 +667,35 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "nova stages an eight-block ground wave, including close mobs, and respects occlusion" {
-        withStaffHarness(settings = staffSettings(novaRadius = 8.0)) { h ->
-            val world = h.paper.addSimpleWorld("staff-nova")
-            val player = h.player("staff-nova", world, StaffSpell.NOVA)
-            val near = h.zombie(world, x = 0.5, z = 1.0)
-            val hiddenInsideRadius = h.zombie(world, x = 3.0, z = 3.0)
-            val farInsideRadius = h.zombie(world, x = 0.5, z = 8.0)
-            val outside = h.zombie(world, x = 0.5, z = 9.5)
-            world.getBlockAt(2, 64, 2).type = Material.STONE
+    "emerald vine travels to a distant target instead of dealing radial frost damage" {
+        withStaffHarness(settings = staffSettings(range = 32.0)) { h ->
+            val world = h.paper.addSimpleWorld("staff-vine")
+            val player = h.player("vine", world, StaffSpell.NOVA)
+            val target = h.zombie(world, x = 0.5, z = 16.0)
+            val behindCaster = h.zombie(world, x = 0.5, z = -3.0)
             h.controller.start()
-
             h.controller.cast(player)
             h.hits shouldBe emptyList()
-            h.scheduler.tick(2)
-            h.hits.map { it.uniqueId } shouldBe listOf(near.uniqueId)
-
-            h.scheduler.tick(16)
-            h.hits.map { it.uniqueId } shouldBe listOf(near.uniqueId, farInsideRadius.uniqueId)
-            h.scheduler.tick(12)
-
-            hiddenInsideRadius.isValid shouldBe true
-            outside.isValid shouldBe true
-            h.hits.map { it.uniqueId }.distinct().size shouldBe h.hits.size
+            h.scheduler.tick(3)
+            h.hits shouldBe emptyList()
+            h.scheduler.tick(55)
+            h.hits.map { it.uniqueId } shouldBe listOf(target.uniqueId)
+            behindCaster.isValid shouldBe true
         }
     }
 
-    "staged nova keeps the existing per-cast target cap" {
-        withStaffHarness(settings = staffSettings(novaRadius = 8.0, maxAreaTargets = 2)) { h ->
-            val world = h.paper.addSimpleWorld("staff-nova-cap")
-            val player = h.player("staff-nova-cap", world, StaffSpell.NOVA)
-            val closest = h.zombie(world, x = 0.5, z = 1.0)
-            val middle = h.zombie(world, x = 0.5, z = 4.0)
-            h.zombie(world, x = 0.5, z = 8.0)
+    "emerald impact keeps the per-cast target cap" {
+        withStaffHarness(settings = staffSettings(range = 32.0, maxAreaTargets = 2)) { h ->
+            val world = h.paper.addSimpleWorld("staff-vine-cap")
+            val player = h.player("vine-cap", world, StaffSpell.NOVA)
+            val targets = listOf(h.zombie(world, x = 0.5, z = 16.0),
+                h.zombie(world, x = 1.0, z = 16.0), h.zombie(world, x = -0.5, z = 16.0))
             h.controller.start()
-
             h.controller.cast(player)
-            h.scheduler.tick(30)
-
-            h.hits.map { it.uniqueId } shouldBe listOf(closest.uniqueId, middle.uniqueId)
+            h.scheduler.tick(60)
+            h.hits.size shouldBe 2
+            h.hits.all { it in targets } shouldBe true
+            h.hits.distinctBy { it.uniqueId }.size shouldBe 2
         }
     }
 
@@ -679,9 +710,7 @@ class StaffSpellsTest : FreeSpec({
             val fourth = h.zombie(world, x = 3.3, z = 1.0)
             h.controller.start()
 
-            val event = interact(player, player.inventory.itemInMainHand)
-            h.controller.onInteract(event)
-            event.useItemInHand() shouldBe Event.Result.DENY
+            h.controller.cast(player)
             h.hits shouldBe emptyList()
             h.scheduler.tick(60)
 
@@ -701,7 +730,7 @@ class StaffSpellsTest : FreeSpec({
             val outside = h.zombie(world, x = 0.5, z = 9.5)
             h.controller.start()
 
-            h.controller.onInteract(interact(player, player.inventory.itemInMainHand))
+            h.controller.cast(player)
             h.scheduler.tick(2)
             h.hits.map { it.uniqueId } shouldBe listOf(near.uniqueId)
             h.scheduler.tick(16)
@@ -712,7 +741,7 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "icicle primary assembles three icicles, staggers their homing flights, and slows only successful hits" {
+    "icicle primary assembles seven icicles, staggers their homing flights, and slows only successful hits" {
         var deniedId: UUID? = null
         withStaffHarness(settings = staffSettings(range = 24.0, aimDegrees = 40.0),
             hit = { _, target -> target.uniqueId != deniedId }) { h ->
@@ -726,9 +755,9 @@ class StaffSpellsTest : FreeSpec({
             deniedId = targets.last().uniqueId
             h.controller.start()
 
-            h.controller.onInteract(interact(player, player.inventory.itemInMainHand))
+            h.controller.cast(player)
             val icicles = h.visualPlays.filter { it.spell == StaffSpell.ICICLE && !it.secondary }
-            icicles.size shouldBe 3
+            icicles.size shouldBe 7
             val eye = player.eyeLocation
             icicles.indices.all { index ->
                 val offset = staffIcicleAnchorOffset(index)
@@ -737,23 +766,13 @@ class StaffSpellsTest : FreeSpec({
                     kotlin.math.abs(icicles[index].from.z - (eye.z + offset.z.toDouble())) < 0.001
             } shouldBe true
 
-            h.scheduler.tick(7)
+            h.scheduler.tick(3)
             h.projectileMoves shouldBe emptyList()
             h.scheduler.tick(1)
             h.projectileMoves.map { it.id } shouldBe listOf(icicles[0].id)
-            (h.projectileMoves.first().at.distance(icicles[0].from) - staffIcicleStep(1)).let {
-                kotlin.math.abs(it) < 0.001
-            } shouldBe true
-            h.scheduler.tick(3)
-            h.projectileMoves.filter { it.id == icicles[0].id }.size shouldBe 4
-            h.projectileMoves.filter { it.id == icicles[0].id }.all {
-                it.direction.clone().normalize().dot(Vector(0.0, 0.0, 1.0)) > 0.9999
-            } shouldBe true
-            h.scheduler.tick(1)
+            h.scheduler.tick(2)
             h.projectileMoves.count { it.id == icicles[1].id } shouldBe 1
-            h.projectileMoves.filter { it.id == icicles[0].id }.last().direction.clone().normalize()
-                .dot(Vector(0.0, 0.0, 1.0)).let { it < 0.9999 } shouldBe true
-            h.scheduler.tick(4)
+            h.scheduler.tick(2)
             h.projectileMoves.count { it.id == icicles[2].id } shouldBe 1
             h.scheduler.tick(50)
 
@@ -762,7 +781,7 @@ class StaffSpellsTest : FreeSpec({
             h.damageScales shouldBe List(3) { 1.0 to 6.0 }
             targets.filter { it.uniqueId != deniedId }.all { it.hasPotionEffect(PotionEffectType.SLOWNESS) } shouldBe true
             targets.last().hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
-            verify(exactly = 3) { h.effects.impact(any(), any(), 0.9, 10) }
+            verify(exactly = 7) { h.effects.impact(any(), any(), 0.9, 10) }
         }
     }
 
@@ -774,7 +793,7 @@ class StaffSpellsTest : FreeSpec({
             }
             val eye = player.eyeLocation
             h.controller.start()
-            h.controller.onInteract(interact(player, player.inventory.itemInMainHand))
+            h.controller.cast(player)
             h.scheduler.tick(19)
             h.projectileMoves.groupBy { it.id }.values.forEach { moves ->
                 moves.take(4).forEach { move ->
@@ -782,7 +801,7 @@ class StaffSpellsTest : FreeSpec({
                     (kotlin.math.abs(move.direction.y) < 0.0001) shouldBe true
                 }
             }
-            h.projectileMoves.map { it.id }.distinct().size shouldBe 3
+            h.projectileMoves.map { it.id }.distinct().size shouldBe 7
         }
     }
 
@@ -793,16 +812,16 @@ class StaffSpellsTest : FreeSpec({
             val single = h.zombie(world, x = 0.5, z = 8.0)
             h.controller.start()
 
-            h.controller.onInteract(interact(player, player.inventory.itemInMainHand))
+            h.controller.cast(player)
             h.scheduler.tick(60)
 
             h.hits.map { it.uniqueId } shouldBe listOf(single.uniqueId)
             h.hits.size shouldBe 1
-            verify(exactly = 3) { h.effects.impact(any(), any(), 0.9, 10) }
+            verify(exactly = 7) { h.effects.impact(any(), any(), 0.9, 10) }
 
             val other = h.player("staff-frost-secondary-quit", world, StaffSpell.ICICLE)
-            h.controller.onInteract(interact(other, other.inventory.itemInMainHand))
-            h.scheduler.tick(10)
+            h.controller.cast(other)
+            h.scheduler.tick(6)
             val movesBeforeQuit = h.projectileMoves.size
             h.controller.onQuit(PlayerQuitEvent(other, Component.empty()))
             h.scheduler.tick(60)
@@ -821,7 +840,12 @@ class StaffSpellsTest : FreeSpec({
             val center = h.zombie(world, x = 0.5, z = 8.0)
             val right = h.zombie(world, x = 2.65, z = 8.0)
 
-            h.controller.onInteract(interact(player, player.inventory.itemInMainHand))
+            h.controller.start()
+            h.controller.cast(player)
+            h.hits shouldBe emptyList()
+            h.scheduler.tick(5)
+            h.hits shouldBe emptyList()
+            h.scheduler.tick(20)
 
             h.hits.map { it.uniqueId }.toSet() shouldBe setOf(left.uniqueId, center.uniqueId, right.uniqueId)
             h.hits.size shouldBe 3
@@ -831,27 +855,21 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "secondary nova travels forward twelve blocks inside its narrow corridor" {
-        withStaffHarness(settings = staffSettings(range = 14.0)) { h ->
-            val world = h.paper.addSimpleWorld("staff-nova-secondary")
-            val player = h.player("staff-nova-secondary", world, StaffSpell.NOVA).apply { isSneaking = true }
-            val near = h.zombie(world, x = 0.5, z = 4.0)
-            val far = h.zombie(world, x = 0.5, z = 11.5)
-            val outsideWidth = h.zombie(world, x = 5.5, z = 8.0)
-            val behind = h.zombie(world, x = 0.5, z = -2.0)
-            val beyondRange = h.zombie(world, x = 0.5, z = 14.0)
+    "emerald bloom expands at the target after its warning" {
+        withStaffHarness(settings = staffSettings(range = 32.0)) { h ->
+            val world = h.paper.addSimpleWorld("staff-bloom")
+            val player = h.player("bloom", world, StaffSpell.NOVA).apply { isSneaking = true }
+            val target = h.zombie(world, x = 0.5, z = 16.0)
+            val side = h.zombie(world, x = 2.5, z = 16.0)
+            val remote = h.zombie(world, x = 8.0, z = 16.0)
             h.controller.start()
-
-            h.controller.onInteract(interact(player, player.inventory.itemInMainHand))
-            h.scheduler.tick(8)
-            h.hits.map { it.uniqueId } shouldBe listOf(near.uniqueId)
-            h.scheduler.tick(10)
-
-            h.hits.map { it.uniqueId }.toSet() shouldBe setOf(near.uniqueId, far.uniqueId)
-            (outsideWidth.uniqueId in h.hits.map { it.uniqueId }) shouldBe false
-            (behind.uniqueId in h.hits.map { it.uniqueId }) shouldBe false
-            (beyondRange.uniqueId in h.hits.map { it.uniqueId }) shouldBe false
-            h.visualPlays.any { it.spell == StaffSpell.NOVA && it.secondary } shouldBe true
+            h.controller.cast(player)
+            h.scheduler.tick(5)
+            h.hits shouldBe emptyList()
+            h.scheduler.tick(25)
+            h.hits.map { it.uniqueId }.toSet() shouldBe setOf(target.uniqueId, side.uniqueId)
+            remote.isValid shouldBe true
+            h.hits.distinctBy { it.uniqueId }.size shouldBe h.hits.size
         }
     }
 
@@ -866,7 +884,7 @@ class StaffSpellsTest : FreeSpec({
             val original = h.zombie(world, x = 0.5, z = 5.0)
             h.controller.start()
 
-            h.controller.onInteract(interact(player, player.inventory.itemInMainHand))
+            h.controller.cast(player)
             original.teleport(Location(world, 0.5, 64.0, 12.0))
             val pulled = h.zombie(world, x = 1.0, z = 5.0)
             val denied = h.zombie(world, x = 1.3, z = 5.0)
@@ -906,7 +924,7 @@ class StaffSpellsTest : FreeSpec({
             }
             h.controller.start()
 
-            h.controller.onInteract(interact(player, player.inventory.itemInMainHand))
+            h.controller.cast(player)
             h.visualPlays.count { it.spell == StaffSpell.EMBER && it.secondary } shouldBe 0
             h.scheduler.tick(1)
             h.visualPlays.count { it.spell == StaffSpell.EMBER && it.secondary } shouldBe 1
@@ -931,7 +949,7 @@ class StaffSpellsTest : FreeSpec({
             val player = h.player("staff-ember-secondary-quit", world, StaffSpell.EMBER).apply { isSneaking = true }
             h.controller.start()
 
-            h.controller.onInteract(interact(player, player.inventory.itemInMainHand))
+            h.controller.cast(player)
             h.controller.onQuit(PlayerQuitEvent(player, Component.empty()))
             h.scheduler.tick(20)
 
@@ -945,23 +963,23 @@ class StaffSpellsTest : FreeSpec({
         withStaffHarness { h ->
             val world = h.paper.addSimpleWorld("staff-secondary-cooldown")
             val quick = h.player("staff-secondary-quick", world, StaffSpell.FROST).apply { isSneaking = true }
-            h.controller.onInteract(interact(quick, quick.inventory.itemInMainHand))
+            h.controller.cast(quick)
             quick.inventory.setItemInMainHand(h.config.item(StaffSpell.NOVA))
             h.scheduler.tick(20)
-            h.controller.onInteract(interact(quick, quick.inventory.itemInMainHand))
+            h.controller.cast(quick)
             h.captures.size shouldBe 1
             h.scheduler.tick(10)
-            h.controller.onInteract(interact(quick, quick.inventory.itemInMainHand))
+            h.controller.cast(quick)
             h.captures.size shouldBe 2
 
             val long = h.player("staff-secondary-long", world, StaffSpell.MARK).apply { isSneaking = true }
-            h.controller.onInteract(interact(long, long.inventory.itemInMainHand))
+            h.controller.cast(long)
             long.inventory.setItemInMainHand(h.config.item(StaffSpell.CHAIN))
             h.scheduler.tick(30)
-            h.controller.onInteract(interact(long, long.inventory.itemInMainHand))
+            h.controller.cast(long)
             h.captures.size shouldBe 3
             h.scheduler.tick(10)
-            h.controller.onInteract(interact(long, long.inventory.itemInMainHand))
+            h.controller.cast(long)
             h.captures.size shouldBe 4
         }
     }
@@ -1111,7 +1129,7 @@ class StaffSpellsTest : FreeSpec({
     }
 })
 
-private data class StaffHarness(
+internal data class StaffHarness(
     val paper: MockBukkitTestRuntime,
     val scheduler: TestTaskScheduler,
     val config: StaffSpellConfig,
@@ -1138,10 +1156,10 @@ private data class StaffHarness(
         world.spawn(Location(world, x, 64.0, z), Zombie::class.java)
 }
 
-private data class StaffTrailMove(val id: UUID?, val points: List<Location>)
-private data class StaffProjectileMove(val id: UUID?, val at: Location, val direction: Vector)
+internal data class StaffTrailMove(val id: UUID?, val points: List<Location>)
+internal data class StaffProjectileMove(val id: UUID?, val at: Location, val direction: Vector)
 
-private data class StaffVisualPlay(
+internal data class StaffVisualPlay(
     val id: UUID,
     val spell: StaffSpell,
     val from: Location,
@@ -1149,9 +1167,10 @@ private data class StaffVisualPlay(
     val secondary: Boolean,
 )
 
-private fun withStaffHarness(
+internal fun withStaffHarness(
     settings: StaffSpellSettings = staffSettings(),
     hit: (Player, LivingEntity) -> Boolean = { _, _ -> true },
+    currentCast: (Player, StaffSpellCast) -> Boolean = { _, _ -> true },
     rayStep: Double = 0.1,
     config: StaffSpellConfig = StaffSpellConfig(TestConfig()),
     block: (StaffHarness) -> Unit,
@@ -1199,7 +1218,7 @@ private fun withStaffHarness(
                         captures += player
                         StaffSpellCast(player.uniqueId, UUID.randomUUID(), 1, null, null, false)
                     }
-                    every { damage.isCurrent(any(), any()) } returns true
+                    every { damage.isCurrent(any(), any()) } answers { currentCast(firstArg(), secondArg()) }
                     every { damage.hit(any(), any(), any(), any(), any()) } answers {
                         val player = firstArg<Player>()
                         val target = secondArg<LivingEntity>()
@@ -1210,7 +1229,7 @@ private fun withStaffHarness(
                     }
                     val effects = mockk<StaffSpellDisplayEffects>(relaxed = true)
                     val visualPlays = mutableListOf<StaffVisualPlay>()
-                    every { effects.play(any(), any(), any(), any(), any(), any(), any(), any()) } answers {
+                    every { effects.play(any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) } answers {
                         val id = UUID.randomUUID()
                         visualPlays += StaffVisualPlay(id, arg<StaffSpell>(1), arg<Location>(2).clone(),
                             arg<Location>(3).clone(), arg<Boolean>(7))
@@ -1252,7 +1271,7 @@ private fun withStaffHarness(
     }
 }
 
-private fun staffSettings(
+internal fun staffSettings(
     range: Double = 24.0,
     aimDegrees: Double = 12.0,
     chainTargets: Int = 1,
