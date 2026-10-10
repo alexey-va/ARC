@@ -11,7 +11,7 @@ inventories:
 # Лут создаётся один раз для каждого нового игрока; старые записи сохраняются.
 use-bs-loot: false
 loot:
-  # Пулы редактируются в treasures/ или через /arc treasure-pool.
+  # Пулы редактируются в treasures/ или через /arc treasures.
   common-pool: structures_common
   min-rolls: 3
   max-rolls: 5
