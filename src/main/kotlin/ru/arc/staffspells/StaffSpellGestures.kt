@@ -347,12 +347,26 @@ internal fun staffGestureFrame(
             addGesture(out, Particle.SNOWFLAKE, x, y, 3.0, 5, spread = Vector(0.04, 0.08, 0.04))
             if (column % 2 == 0) addGesture(out, Particle.DUST_COLOR_TRANSITION, x, y, 3.0, 2, data = ice)
         }
-        StaffGestureForm.LANCE_SWEEP -> repeat(12) { index ->
-            val t = index / 11.0
-            val x = (t - 0.5) * 4.8
-            val y = -0.48 + sin(t * PI) * 0.42 + progress * 0.08
-            addGesture(out, Particle.DUST_COLOR_TRANSITION, x, y, 2.7 + sin(t * PI) * 0.42, 4, data = solar)
-            if (index % 3 == 0) addGesture(out, Particle.END_ROD, x, y, 2.7 + sin(t * PI) * 0.42, 2)
+        StaffGestureForm.LANCE_SWEEP -> {
+            repeat(2) { lane ->
+                val side = if (lane == 0) -1.0 else 1.0
+                repeat(40) { index ->
+                    val t = index / 39.0
+                    val x = (t - 0.5) * 4.8 + side * (t - 0.5) * 0.16
+                    val y = -0.48 + sin(t * PI) * 0.42 + progress * 0.08 - side * 0.075
+                    val z = 2.7 + sin(t * PI) * 0.42
+                    addGesture(out, Particle.DUST_COLOR_TRANSITION, x, y, z, 1,
+                        spread = Vector(0.005, 0.005, 0.005), data = solar)
+                }
+            }
+            repeat(4) { spark ->
+                val t = (spark + 1) / 5.0
+                val x = (t - 0.5) * 4.8
+                val y = -0.48 + sin(t * PI) * 0.42 + progress * 0.08
+                val z = 2.7 + sin(t * PI) * 0.42
+                addGesture(out, Particle.END_ROD, x, y, z, 1,
+                    spread = Vector(0.005, 0.005, 0.005))
+            }
         }
         StaffGestureForm.LANCE_PIN -> repeat(8) { index ->
             val t = index / 7.0
@@ -409,12 +423,19 @@ internal fun staffGestureFrame(
                 0.3 + layer * (1.1 + progress * 0.6), sin(angle) * radius, 3,
                 data = Material.BASALT.createBlockData()) }
         }
-        StaffGestureForm.LUNAR_CRESCENT -> repeat(12) { index ->
-            val t = index / 11.0
-            val angle = PI * (0.12 + 0.76 * t)
-            val x = cos(angle) * 2.5
-            val y = -0.35 + sin(angle) * 0.4
-            addGesture(out, Particle.DUST_COLOR_TRANSITION, x, y, 2.55 + sin(t * PI) * 0.32, 4, data = soul)
+        StaffGestureForm.LUNAR_CRESCENT -> {
+            val lunar = staffFade(0x9A9FFF, 0xEEE8FF, 1.3f)
+            repeat(56) { index ->
+                val t = index / 55.0
+                val angle = PI * (0.12 + 0.76 * t)
+                val x = cos(angle) * 2.5
+                val y = -0.35 + sin(angle) * 0.4
+                val z = 2.55 + sin(t * PI) * 0.32
+                addGesture(out, Particle.DUST_COLOR_TRANSITION, x, y, z, 1,
+                    spread = Vector(0.005, 0.005, 0.005), data = lunar)
+                if (index % 7 == 0) addGesture(out, Particle.END_ROD, x + 0.035, y + 0.025,
+                    z + 0.025, 1, spread = Vector(0.005, 0.005, 0.005))
+            }
         }
         StaffGestureForm.LUNAR_ECLIPSE -> repeat(10) { index ->
             val angle = index * PI / 5.0 + progress * PI * 0.75
@@ -438,12 +459,18 @@ internal fun staffGestureFrame(
             addGesture(out, Particle.CLOUD, cos(angle) * radius, t * 1.0, sin(angle) * radius, 4,
                 spread = Vector(0.06, 0.08, 0.06))
         } }
-        StaffGestureForm.TIDE_WHIP -> repeat(12) { index ->
-            val t = index / 11.0
-            val z = 1.5 + (front - 1.5).coerceAtLeast(0.0) * t
-            val x = sin(t * PI * 1.55 + progress) * profile.width * 0.58
-            val y = -0.25 + sin(t * PI) * 0.35
-            addGesture(out, Particle.SPLASH, x, y, z, 4, spread = Vector(0.05, 0.04, 0.05))
+        StaffGestureForm.TIDE_WHIP -> {
+            val waterCore = staffFade(0x4FBFEA, 0xE2FBFF, 1.2f)
+            repeat(42) { index ->
+                val t = index / 41.0
+                val z = 1.5 + (front - 1.5).coerceAtLeast(0.0) * t
+                val x = sin(t * PI * 1.55 + progress) * profile.width * 0.58
+                val y = -0.25 + sin(t * PI) * 0.35
+                addGesture(out, Particle.DUST_COLOR_TRANSITION, x, y, z, 1,
+                    spread = Vector(0.005, 0.005, 0.005), data = waterCore)
+                if (index % 3 == 0) addGesture(out, Particle.SPLASH, x, y, z, 1,
+                    spread = Vector(0.02, 0.02, 0.02))
+            }
         }
         StaffGestureForm.TIDE_GEYSER -> repeat(8) { stream ->
             val angle = stream * PI / 4.0
