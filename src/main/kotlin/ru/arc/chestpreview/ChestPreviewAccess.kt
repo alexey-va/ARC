@@ -1,13 +1,6 @@
 package ru.arc.chestpreview
 
-import com.sk89q.worldedit.bukkit.BukkitAdapter
-import com.sk89q.worldguard.WorldGuard
-import com.sk89q.worldguard.bukkit.WorldGuardPlugin
-import com.sk89q.worldguard.protection.flags.Flags as WorldGuardFlags
 import com.destroystokyo.paper.loottable.LootableBlockInventory
-import me.angeschossen.lands.api.LandsIntegration
-import me.angeschossen.lands.api.flags.type.Flags as LandsFlags
-import org.bukkit.Bukkit
 import org.bukkit.Chunk
 import org.bukkit.FluidCollisionMode
 import org.bukkit.Material
@@ -23,8 +16,8 @@ import org.bukkit.block.data.type.Chest as ChestData
 import org.bukkit.block.data.Directional
 import org.bukkit.entity.Player
 import org.bukkit.util.BoundingBox
-import ru.arc.ARC
 import ru.arc.paper.api.InspectionHologramAnchor
+import ru.arc.protection.ContainerProtection
 import kotlin.math.floor
 
 /** Authorizes the entire physical container before the provider may inspect a single slot. */
@@ -190,49 +183,10 @@ internal fun chestPartnerDirection(facing: BlockFace, type: ChestData.Type): Blo
 /** Calls real read-only protection APIs; synthetic interaction/open events would have side effects. */
 private class ChestPreviewProtection {
     private val managed = ManagedChestExclusions()
-    // Keep every Lands API reference in its own class: Lands is optional and may not be
-    // present in this plugin classloader when ChestPreviewProtection is constructed.
-    private val lands by lazy { LandsProtectionAdapter() }
+    private val containers = ContainerProtection()
 
     fun allows(player: Player, block: Block): Boolean {
         if (managed.isManaged(block)) return false
-        val plugins = Bukkit.getPluginManager()
-        plugins.getPlugin("WorldGuard")?.let { plugin ->
-            if (!plugin.isEnabled) return false
-            val wg = WorldGuard.getInstance()
-            val world = BukkitAdapter.adapt(block.world)
-            val location = BukkitAdapter.adapt(block.location)
-            val localPlayer = WorldGuardPlugin.inst().wrapPlayer(player)
-            if (WorldGuardPlugin.inst().configManager.get(world).isChestProtected(location, localPlayer)) return false
-            if (!wg.platform.sessionManager.hasBypass(localPlayer, world)) {
-                val regions = wg.platform.regionContainer ?: return false
-                // WorldGuard treats Ender Chest block use as INTERACT: the physical block has
-                // no inventory of its own, unlike barrels, shulkers, and regular chests.
-                val flag = if (block.type == Material.ENDER_CHEST) WorldGuardFlags.INTERACT else WorldGuardFlags.CHEST_ACCESS
-                if (!regions.createQuery().testBuild(location, localPlayer, flag)) return false
-            }
-        }
-        plugins.getPlugin("Lands")?.let { plugin ->
-            if (!plugin.isEnabled) return false
-            if (!lands.allows(player, block)) return false
-        }
-        return true
-    }
-}
-
-/** Loaded only when an enabled Lands plugin is present. Missing/incompatible API errors fail closed. */
-private class LandsProtectionAdapter {
-    private val integration by lazy { LandsIntegration.of(ARC.instance) }
-
-    fun allows(player: Player, block: Block): Boolean {
-        val landWorld = integration.getWorld(block.world) ?: return true
-        val landPlayer = integration.getLandPlayer(player.uniqueId) ?: return false
-        return landWorld.hasRoleFlag(
-            landPlayer,
-            block.location,
-            LandsFlags.INTERACT_CONTAINER,
-            block.type,
-            false,
-        )
+        return containers.allows(player, block)
     }
 }

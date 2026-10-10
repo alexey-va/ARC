@@ -66,7 +66,7 @@ class BlockListener : Listener {
         CustomBlockData(event.block, ARC.instance).clear()
     }
 
-    @EventHandler(priority = EventPriority.LOW)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun onChestClick(event: InventoryOpenEvent) {
         PersonalLootModule.processChestOpen(event)
     }

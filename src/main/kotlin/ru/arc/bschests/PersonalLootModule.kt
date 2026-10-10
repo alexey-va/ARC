@@ -11,6 +11,9 @@ import kotlinx.coroutines.runBlocking
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.block.Block
+import org.bukkit.block.BlockState
+import org.bukkit.block.DoubleChest
+import org.bukkit.block.data.type.Chest as ChestData
 import org.bukkit.entity.Player
 import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.event.inventory.InventoryOpenEvent
@@ -22,10 +25,12 @@ import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import ru.arc.core.sync
 import ru.arc.network.repos.ItemList
+import ru.arc.protection.ContainerProtection
 import ru.arc.repository.CachedRepository
 import ru.arc.repository.Entity
 import ru.arc.repository.Mergeable
 import ru.arc.repository.redisRepo
+import ru.arc.chestpreview.chestPartnerDirection
 import ru.arc.util.ItemUtils.connectedChests
 import ru.arc.util.ItemUtils.extractInventory
 import ru.arc.util.ItemUtils.extractItems
@@ -333,25 +338,42 @@ object PersonalLootModule {
 
     @JvmStatic
     fun processChestOpen(event: InventoryOpenEvent) {
+        if (event.isCancelled) return
+        processChestOpen(event, ContainerProtection()::allows)
+    }
+
+    internal fun processChestOpen(
+        event: InventoryOpenEvent,
+        protectionAllows: (Player, Block) -> Boolean,
+    ) {
+        if (event.isCancelled) return
         val repository = repo ?: return
         val activeScope = repositoryScope ?: return
         if (event.inventory.type !in inventories) return
 
         val player = event.player as? Player ?: return
-        val location = event.inventory.location ?: return
-        val block = location.block
-        val blocks = connectedChests(block)
-
-        val data = CustomBlockData(block, ARC.instance)
-        if (!data.has(uuidKey)) return
+        val blocks = physicalContainerBlocks(event) ?: return
+        if (!isCurrentPhysicalContainer(player, blocks)) return
+        val block = event.inventory.location?.block ?: blocks.firstOrNull() ?: return
+        if (block !in blocks) return
+        val anchorData = CustomBlockData(block, ARC.instance)
+        if (!anchorData.has(uuidKey)) return
         event.isCancelled = true
 
-        val chestUuid =
-            parsePersonalLootUuid(data.get(uuidKey, PersistentDataType.STRING))
-                ?: run {
-                    warn("Personal loot chest has an invalid UUID at {}", block.location)
-                    return
-                }
+        val chestUuid = parsePersonalLootUuid(anchorData.get(uuidKey, PersistentDataType.STRING))
+            ?: run {
+                warn("Personal loot chest has an invalid UUID at {}", block.location)
+                return
+            }
+        val markerUuid = resolvePersonalLootMarker(blocks)
+            ?: run {
+                warn("Personal loot chest has an invalid or conflicting UUID at {}", blocks.first().location)
+                return
+            }
+        if (markerUuid != chestUuid) return
+        if (!containerAccessAllowed(player, blocks, protectionAllows)) return
+
+        val data = CustomBlockData(block, ARC.instance)
         val playerListString = data.get(key, PersistentDataType.STRING)
         if (playerListString == null) {
             warn("Player list string is null")
@@ -371,7 +393,8 @@ object PersonalLootModule {
         }
 
         val poolName = data.get(poolKey, PersistentDataType.STRING)
-        val currentItems = blocks.flatMap { extractItems(it) }.map { it.clone() }
+        // Preserve the existing extraction semantics: Chest#getInventory already exposes a double inventory.
+        val currentItems = connectedChests(block).flatMap { extractItems(it) }.map { it.clone() }
 
         val playerUuid = player.uniqueId
         val lootId = "$playerUuid$PERSONAL_LOOT_SEPARATOR$chestUuid"
@@ -386,11 +409,13 @@ object PersonalLootModule {
                     finishChestOpen(
                         player = player,
                         block = block,
+                        physicalBlocks = blocks,
                         expectedChestUuid = chestUuid,
                         poolName = poolName,
                         currentItems = currentItems,
                         lootData = lootData,
                         repository = repository,
+                        protectionAllows = protectionAllows,
                     )
                 }
             } catch (cancelled: CancellationException) {
@@ -414,18 +439,21 @@ object PersonalLootModule {
     private fun finishChestOpen(
         player: Player,
         block: Block,
+        physicalBlocks: List<Block>,
         expectedChestUuid: UUID,
         poolName: String?,
         currentItems: List<ItemStack>,
         lootData: CustomLootData,
         repository: CachedRepository<CustomLootData>,
+        protectionAllows: (Player, Block) -> Boolean,
     ) {
         if (!player.isOnline || block.type !in chests) return
-
         val currentData = CustomBlockData(block, ARC.instance)
-        val currentChestUuid =
-            parsePersonalLootUuid(currentData.get(uuidKey, PersistentDataType.STRING))
+        val currentChestUuid = parsePersonalLootUuid(currentData.get(uuidKey, PersistentDataType.STRING))
         if (currentChestUuid != expectedChestUuid) return
+        if (!isCurrentPhysicalContainer(player, physicalBlocks)) return
+        if (resolvePersonalLootMarker(physicalBlocks) != expectedChestUuid) return
+        if (!containerAccessAllowed(player, physicalBlocks, protectionAllows)) return
 
         val playerListString = currentData.get(key, PersistentDataType.STRING) ?: return
         val players = parsePersonalLootPlayers(playerListString).toMutableSet()
@@ -446,9 +474,8 @@ object PersonalLootModule {
             return
         }
 
-        val blocks = connectedChests(block)
         players.add(player.uniqueId)
-        for (connectedBlock in blocks) {
+        for (connectedBlock in physicalBlocks) {
             CustomBlockData(connectedBlock, ARC.instance).set(
                 key,
                 PersistentDataType.STRING,
@@ -473,6 +500,77 @@ object PersonalLootModule {
         }
 
         LootGuiFactory.open(player, lootData)
+    }
+
+    /** Resolves Bukkit's actual inventory holder and its physical chest halves without reading slots. */
+    private fun physicalContainerBlocks(event: InventoryOpenEvent): List<Block>? {
+        val holderBlocks = when (val holder = event.inventory.holder) {
+            is DoubleChest -> {
+                val left = (holder.leftSide as? BlockState)?.block ?: return null
+                val right = (holder.rightSide as? BlockState)?.block ?: return null
+                listOf(left, right)
+            }
+            is BlockState -> listOf(holder.block)
+            else -> null
+        }
+        val blocks = holderBlocks ?: event.inventory.location?.let { listOf(it.block) } ?: return null
+        if (blocks.size != 1) return blocks.distinct().takeIf { it.size == blocks.size }
+
+        val block = blocks.single()
+        val chestData = block.blockData as? ChestData ?: return blocks
+        if (chestData.type == ChestData.Type.SINGLE) return blocks
+        val direction = chestPartnerDirection(chestData.facing, chestData.type) ?: return null
+        return listOf(block, block.getRelative(direction))
+    }
+
+    /** Validates that the captured holder still describes the player's current physical container. */
+    private fun isCurrentPhysicalContainer(player: Player, blocks: List<Block>): Boolean {
+        return try {
+            if (blocks.isEmpty() || blocks.size > 2 || blocks.distinct().size != blocks.size) return false
+            if (blocks.any { it.world.uid != player.world.uid || !it.world.isChunkLoaded(it.x shr 4, it.z shr 4) || it.type !in chests }) return false
+            if (blocks.size == 1) {
+                val block = blocks.single()
+                if (block.type == Material.BARREL) true
+                else (block.blockData as? ChestData)?.type == ChestData.Type.SINGLE
+            } else {
+                val first = blocks[0]
+                val second = blocks[1]
+                if (first.type != second.type || first.type == Material.BARREL || first.y != second.y) return false
+                val firstData = first.blockData as? ChestData ?: return false
+                val secondData = second.blockData as? ChestData ?: return false
+                if (firstData.facing != secondData.facing || firstData.type == ChestData.Type.SINGLE ||
+                    secondData.type == ChestData.Type.SINGLE || firstData.type == secondData.type) return false
+                val direction = chestPartnerDirection(firstData.facing, firstData.type) ?: return false
+                first.getRelative(direction) == second
+            }
+        } catch (_: Exception) {
+            false
+        } catch (_: LinkageError) {
+            false
+        }
+    }
+
+    private fun resolvePersonalLootMarker(blocks: List<Block>): UUID? {
+        val markedBlocks = blocks.filter { CustomBlockData(it, ARC.instance).has(uuidKey) }
+        if (markedBlocks.isEmpty()) return null
+        val marked = markedBlocks.map { block ->
+            parsePersonalLootUuid(CustomBlockData(block, ARC.instance).get(uuidKey, PersistentDataType.STRING))
+        }
+        val chestUuid = marked.firstOrNull() ?: return null
+        if (marked.any { it != chestUuid }) return null
+        return chestUuid
+    }
+
+    private fun containerAccessAllowed(
+        player: Player,
+        blocks: List<Block>,
+        protectionAllows: (Player, Block) -> Boolean,
+    ): Boolean = try {
+        blocks.all { protectionAllows(player, it) }
+    } catch (_: Exception) {
+        false
+    } catch (_: LinkageError) {
+        false
     }
 
     @JvmStatic
