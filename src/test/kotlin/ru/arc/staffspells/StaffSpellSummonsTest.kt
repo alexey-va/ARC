@@ -1,9 +1,15 @@
 package ru.arc.staffspells
 
 import io.mockk.every
+import io.mockk.mockk
+import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
+import io.mockk.verify
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import net.kyori.adventure.text.Component
+import com.destroystokyo.paper.entity.Pathfinder
+import com.destroystokyo.paper.entity.ai.MobGoals
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.Material
@@ -26,7 +32,13 @@ import java.util.UUID
 
 class StaffSpellSummonsTest : FreeSpec({
     "primary summons a native squad and waits through its attack windup" {
-        withSummonHarness { h ->
+        var configuredActors: List<AbstractSkeleton> = emptyList()
+        withSummonHarness(verifyGoals = { goals ->
+            configuredActors.forEach { mob ->
+                verify(exactly = 1) { goals.removeAllGoals(mob) }
+                verify(exactly = 1) { mob.pathfinder.stopPathfinding() }
+            }
+        }) { h ->
             val world = h.paper.addSimpleWorld("summon-windup")
             loadSummonChunks(world)
             val owner = h.player("summon-owner", world, StaffSpell.NECROMANCER)
@@ -36,9 +48,10 @@ class StaffSpellSummonsTest : FreeSpec({
 
             h.controller.cast(owner, StaffCastInput.PRIMARY, 0.0)
             val soldiers = world.entities.filterIsInstance<Skeleton>()
+            configuredActors = soldiers
             soldiers.size shouldBe 2
             soldiers.filterIsInstance<WitherSkeleton>().size shouldBe 0
-            soldiers.all { !it.hasAI() && it.isInvulnerable && !it.isPersistent && !it.canPickupItems &&
+            soldiers.all { it.hasAI() && it.isAware && it.isInvulnerable && !it.isPersistent && !it.canPickupItems &&
                 !it.shouldBurnInDay() } shouldBe true
             soldiers.all { mob ->
                 mob.equipment?.let { gear ->
@@ -271,13 +284,28 @@ class StaffSpellSummonsTest : FreeSpec({
 private fun withSummonHarness(
     currentCast: (org.bukkit.entity.Player, StaffSpellCast) -> Boolean = { _, _ -> true },
     summonActorFactory: ((World, Location, Boolean) -> AbstractSkeleton)? = ::spawnPickupSafeActor,
+    verifyGoals: (MobGoals) -> Unit = {},
     block: (StaffHarness) -> Unit,
 ) {
     withStaffHarness(currentCast = currentCast, summonActorFactory = summonActorFactory) { harness ->
         every { anyConstructed<WorldMock>().getBlockAt(any<Int>(), any<Int>(), any<Int>()) } answers {
             CollisionShapeBlock(callOriginal())
         }
-        block(harness)
+        val goals = mockk<MobGoals>(relaxed = true)
+        mockkStatic(Bukkit::class)
+        try {
+            every { Bukkit.getMobGoals() } returns goals
+            every { Bukkit.getServer() } answers { callOriginal() }
+            every { Bukkit.getPlayer(any<UUID>()) } answers { callOriginal() }
+            every { Bukkit.getOnlinePlayers() } answers { callOriginal() }
+            every { Bukkit.getPluginManager() } answers { callOriginal() }
+            every { Bukkit.isPrimaryThread() } answers { callOriginal() }
+            every { Bukkit.getCurrentTick() } answers { callOriginal() }
+            block(harness)
+            verifyGoals(goals)
+        } finally {
+            unmockkStatic(Bukkit::class)
+        }
     }
 }
 
@@ -335,6 +363,9 @@ private fun spawnPickupSafeActor(world: World, at: Location, commander: Boolean)
 
 private class PickupSafeSkeletonMock(server: ServerMock, uuid: UUID) : SkeletonMock(server, uuid) {
     private var pickupItems = true
+    private val mockPathfinder = mockk<Pathfinder>(relaxed = true)
+
+    override fun getPathfinder() = mockPathfinder
 
     override fun setCanPickupItems(canPickup: Boolean) {
         pickupItems = canPickup
@@ -345,6 +376,9 @@ private class PickupSafeSkeletonMock(server: ServerMock, uuid: UUID) : SkeletonM
 
 private class PickupSafeWitherSkeletonMock(server: ServerMock, uuid: UUID) : WitherSkeletonMock(server, uuid) {
     private var pickupItems = true
+    private val mockPathfinder = mockk<Pathfinder>(relaxed = true)
+
+    override fun getPathfinder() = mockPathfinder
 
     override fun setCanPickupItems(canPickup: Boolean) {
         pickupItems = canPickup

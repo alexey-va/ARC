@@ -20,7 +20,7 @@ import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.sin
 
-/** Owns short-lived, non-AI undead actors; every hit remains inside the staff damage gate. */
+/** Owns short-lived script-controlled undead actors; every hit stays in the staff damage gate. */
 internal class StaffSpellSummons(
     private val settings: StaffSpellSettings,
     private val damage: StaffSpellDamage,
@@ -155,6 +155,7 @@ internal class StaffSpellSummons(
             moveToward(mob, approachPoint(mob.location, target.location))
             return
         }
+        mob.velocity = Vector(0.0, mob.velocity.y, 0.0)
         if (session.successfulHits >= MAX_SESSION_HITS ||
             actor.successfulAttacks >= (if (actor.commander) COMMANDER_SWINGS else SOLDIER_HITS) ||
             session.ageTicks < actor.nextAttackTick) {
@@ -241,8 +242,9 @@ internal class StaffSpellSummons(
             mob.velocity = Vector(0.0, mob.velocity.y, 0.0)
             return
         }
-        val vx = dx / length * WALK_SPEED
-        val vz = dz / length * WALK_SPEED
+        val step = minOf(WALK_SPEED, length)
+        val vx = dx / length * step
+        val vz = dz / length * step
         val next = current.clone().add(vx, 0.0, vz)
         val supportedNext = resolveSupportedLocation(
             next,
@@ -394,8 +396,6 @@ internal class StaffSpellSummons(
     }
 
     private fun configure(mob: AbstractSkeleton, commander: Boolean) {
-        mob.setAI(false)
-        mob.setAware(false)
         mob.isSilent = true
         mob.isPersistent = false
         mob.isInvulnerable = true
@@ -405,23 +405,32 @@ internal class StaffSpellSummons(
         mob.setNoPhysics(false)
         mob.setGravity(true)
         mob.setTarget(null)
-        val gear = mob.equipment ?: return
-        gear.clear()
-        if (commander) {
-            gear.setHelmet(ItemStack(Material.CHAINMAIL_HELMET))
-            gear.setChestplate(ItemStack(Material.CHAINMAIL_CHESTPLATE))
+        mob.equipment?.let { gear ->
+            gear.clear()
+            if (commander) {
+                gear.setHelmet(ItemStack(Material.CHAINMAIL_HELMET))
+                gear.setChestplate(ItemStack(Material.CHAINMAIL_CHESTPLATE))
+            }
+            gear.setItemInMainHandDropChance(0.0f)
+            gear.setItemInOffHandDropChance(0.0f)
+            gear.setHelmetDropChance(0.0f)
+            gear.setChestplateDropChance(0.0f)
+            gear.setLeggingsDropChance(0.0f)
+            gear.setBootsDropChance(0.0f)
         }
-        gear.setItemInMainHandDropChance(0.0f)
-        gear.setItemInOffHandDropChance(0.0f)
-        gear.setHelmetDropChance(0.0f)
-        gear.setChestplateDropChance(0.0f)
-        gear.setLeggingsDropChance(0.0f)
-        gear.setBootsDropChance(0.0f)
+
+        // Clearing equipment can cause AbstractSkeleton to reinstall weapon goals.
+        // Remove both regular and target goals after all equipment changes.
+        Bukkit.getMobGoals().removeAllGoals(mob)
+        mob.pathfinder.stopPathfinding()
+        mob.setTarget(null)
+        mob.setAI(true)
+        mob.setAware(true)
     }
 
     private fun enforceActorSafety(mob: AbstractSkeleton) {
-        if (mob.hasAI()) mob.setAI(false)
-        if (mob.isAware) mob.setAware(false)
+        if (!mob.hasAI()) mob.setAI(true)
+        if (!mob.isAware) mob.setAware(true)
         if (!mob.isInvulnerable) mob.isInvulnerable = true
         if (mob.isPersistent) mob.isPersistent = false
         if (mob.canPickupItems) mob.setCanPickupItems(false)

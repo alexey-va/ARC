@@ -42,7 +42,7 @@ Changing items cannot bypass the shared cooldown.
 | `tide` · Сердце прилива | Four sequential geysers; full charge creates six | `Приливный вал` — high wave rolls forward and knocks enemies back | `Водяной хлыст` — broad whip with a foamy trail | `Водяной фонтан` — water burst lifts enemies at the aimed point, within eight blocks | `3dfantasyweaponscit:northgate_guardian_staff` |
 | `requiem` · Реквием | Soul streams converge around the target and burst in ghost flame | `Плач душ` — souls spread out from a sigil and slow enemies | `Поток душ` — soul stream advances forward | `Печать скорби` — ghost sigil bursts at the aimed point and slows enemies | `3dfantasyweaponscit:lich_staff` |
 | `prism` · Кристальная призма | Crystal grows at the aim point and fires beams at up to three enemies | `Сведение лучей` — three rays converge | `Осколочный веер` — fan of crystal fragments | `Преломление` — seven crystal rays close around the aimed point, within 12 blocks | `3dfantasyweaponscit:northgate_golden_crook` |
-| `necromancer` · Зов могилы | Summons two skeletons for ten seconds; full charge summons four | `Костяной жнец` — one large reaper with a wide attack | `Костяной укол` — bone fragments thrust forward | `Могильная печать` — aimed spectral strike within eight blocks | `3dfantasyweaponscit:lich_staff` |
+| `necromancer` · Зов могилы | Summons two skeletons for ten seconds; full charge summons up to four where space permits | `Костяной жнец` — one large reaper with a wide attack | `Костяной укол` — bone fragments thrust forward | `Могильная печать` — aimed spectral strike within eight blocks | `3dfantasyweaponscit:lich_staff` |
 
 All skins use entries already present in the ItemsAdder staff catalog; no new
 textures are added. Tide reuses the Northgate Guardian staff model, and the
@@ -69,7 +69,8 @@ expiry or module reload/shutdown. Delayed hits retain the cast's captured
 combat data; switching the held item does not change it. Visual attacks create
 no projectile entities, temporary blocks, fire or weather.
 
-Summons have AI, pickup, persistence and drops disabled. They last ten seconds,
+Summons retain native movement with vanilla action and targeting goals removed;
+pickup, persistence and drops are disabled. They last ten seconds,
 use bounded movement on supported safe ground and do not pathfind around
 obstacles. There is one squad per caster, at most four actors per caster and
 sixteen globally; each squad can land at most six successful hits. Summoned

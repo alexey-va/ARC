@@ -1,4 +1,4 @@
-# Staff sequence redesign — ARC 1.4.375
+# Staff sequence redesign — ARC 1.4.376
 
 The original seven RMB abilities remain recognizable; the ember body grows over
 its first 16 ticks to avoid appearing at full size when it crosses camera clearance.
@@ -46,7 +46,8 @@ formation or count. Native particles retain their Minecraft lifetime and motion.
   per two ticks. Excess is discarded immediately, not queued.
 - Each target is struck once per ordinary sequence, at its contact phase; every
   hit rechecks combat context, eligibility and line of sight.
-- Summons have AI, pickup, persistence and drops disabled. They live for ten
+- Summons retain native movement with all vanilla action and targeting goals
+  removed; pickup, persistence and drops are disabled. They live for ten
   seconds, use bounded native velocity on supported ground, and deal damage only
   through the staff damage bridge after a visible windup. One squad per caster,
   four actors per caster, sixteen globally, six successful hits per squad.
