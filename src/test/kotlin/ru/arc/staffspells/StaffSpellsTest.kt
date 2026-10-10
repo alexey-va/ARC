@@ -44,6 +44,30 @@ import ru.arc.util.CooldownManager
 import java.util.UUID
 
 class StaffSpellsTest : FreeSpec({
+    "duel staff is native, marked, keeps spell instructions, and replaces PvE prototype lore" {
+        val config = StaffSpellConfig(TestConfig(mapOf(
+            "chain.description" to "Направленный разряд",
+            "chain.aim" to "Прицельтесь во врага",
+            "chain.secondary" to "Shift + ПКМ — цепная молния",
+            "messages.duel-only" to "Только в активной дуэли",
+            "messages.prototype" to "Только прототип",
+            "messages.use" to "ПКМ — применить",
+        )))
+        withStaffHarness(config = config) { h ->
+            val item = h.controller.duelItem(StaffSpell.CHAIN)
+            item.type shouldBe Material.BLAZE_ROD
+            StaffSpell.from(item) shouldBe StaffSpell.CHAIN
+            StaffSpell.isDuelOnly(item) shouldBe true
+            val lore = item.itemMeta.lore()!!.joinToString(" ") { PlainTextComponentSerializer.plainText().serialize(it) }
+            lore.contains("Направленный разряд") shouldBe true
+            lore.contains("Прицельтесь во врага") shouldBe true
+            lore.contains("Shift + ПКМ — цепная молния") shouldBe true
+            lore.contains("Только в активной дуэли") shouldBe true
+            lore.contains("ПКМ — применить") shouldBe true
+            lore.contains("Только прототип") shouldBe false
+        }
+    }
+
     "staff identity stays on its ARC marker and right-click air still consumes the prototype" {
         withStaffHarness { h ->
             val world = h.paper.addSimpleWorld("staff-input")
@@ -1166,15 +1190,16 @@ private fun withStaffHarness(
                     val hits = mutableListOf<LivingEntity>()
                     val hitLocations = mutableListOf<Location>()
                     val damageScales = mutableListOf<Pair<Double, Double>>()
-                    every { damage.eligible(any(), any()) } answers {
+                    every { damage.eligible(any(), any(), any()) } answers {
                         val target = secondArg<LivingEntity>()
                         target !is Player && target.isValid && !target.isDead && target.health > 0.0
                     }
-                    every { damage.capture(any()) } answers {
+                    every { damage.capture(any(), any()) } answers {
                         val player = firstArg<Player>()
                         captures += player
                         StaffSpellCast(player.uniqueId, UUID.randomUUID(), 1, null, null, false)
                     }
+                    every { damage.isCurrent(any(), any()) } returns true
                     every { damage.hit(any(), any(), any(), any(), any()) } answers {
                         val player = firstArg<Player>()
                         val target = secondArg<LivingEntity>()

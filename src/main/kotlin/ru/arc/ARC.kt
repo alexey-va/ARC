@@ -12,10 +12,13 @@ import ru.arc.chat.ChatModeConfig
 import ru.arc.chat.IsolatedChatGlyphModule
 import ru.arc.chat.SlimefunNetworkChatModule
 import ru.arc.itemcatalog.ArcItemMaterializerBridge
+import ru.arc.staffspells.ArcStaffSpellServiceProvider
+import ru.arc.staffspells.StaffSpellsModule
 import ru.arc.paper.api.ArcTelemetryProvider
 import ru.arc.paper.api.ArcItemMaterializer
 import ru.arc.paper.api.ArcSidebarService
 import ru.arc.sidebar.SectionedSidebarService
+import ru.arc.staffspells.api.ArcStaffSpellService
 import ru.arc.metrics.ArcTelemetryProviderBridge
 import ru.arc.audit.autosell.AutoSellAuditModule
 import ru.arc.audit.bank.BankAuditModule
@@ -143,6 +146,7 @@ open class ARC : JavaPlugin() {
         private set
 
     private var baseSidebar: ArcBaseSidebar? = null
+    private var staffSpellService: ArcStaffSpellServiceProvider? = null
     internal var tablist: ru.arc.tablist.ArcTablist? = null
         private set
     private var slimefunMenuAlias: Command? = null
@@ -191,6 +195,8 @@ open class ARC : JavaPlugin() {
         if (runtimeProfile == ArcRuntimeProfile.FULL) {
             chunkTicketRegistry = PaperChunkTicketRegistry(this)
             RtpPlayerRegistry.initialize(dataPath)
+            staffSpellService = ArcStaffSpellServiceProvider(this) { StaffSpellsModule.activeController() }
+                .also(StaffSpellsModule::installDuelAccess)
         }
         registerModules()
         PaperArcRuntime.installModuleLifecycleReporting(
@@ -198,6 +204,9 @@ open class ARC : JavaPlugin() {
             logError = { msg, t -> error(msg, t) },
         )
         ModuleRegistry.initAll()
+        staffSpellService?.let {
+            server.servicesManager.register(ArcStaffSpellService::class.java, it, this, ServicePriority.Normal)
+        }
         if (runtimeProfile == ArcRuntimeProfile.FULL) {
             server.servicesManager.register(ArcTelemetryProvider::class.java, ArcTelemetryProviderBridge, this, ServicePriority.Normal)
             server.servicesManager.register(ArcItemMaterializer::class.java, ArcItemMaterializerBridge, this, ServicePriority.Normal)
@@ -233,6 +242,9 @@ open class ARC : JavaPlugin() {
     override fun onDisable() {
         info("Stopping ARC plugin")
         server.servicesManager.unregisterAll(this)
+        staffSpellService?.close()
+        staffSpellService = null
+        StaffSpellsModule.installDuelAccess(null)
         unregisterSlimefunMenuAlias()
         unregisterNetworkSpawnAlias()
         if (runtimeProfile == ArcRuntimeProfile.FULL) Portal.removeAll()

@@ -14,6 +14,7 @@ import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.Tasks
 import ru.arc.core.TestTaskScheduler
 import ru.arc.paper.testing.MockBukkitTestRuntime
+import java.util.UUID
 
 /** Paper 1.21.11 validates particle payloads before sending a packet, unlike relaxed test players. */
 class StaffSpellParticleContractTest : FreeSpec({
@@ -99,6 +100,13 @@ class StaffSpellParticleContractTest : FreeSpec({
                     meteorBurst.size shouldBe 206
                     meteorBurst.count { it.first == Particle.BLOCK } shouldBe 14
                     meteorBurst.filter { it.first == Particle.BLOCK }.all { it.second is BlockData } shouldBe true
+
+                    val owner = UUID.randomUUID()
+                    val staleStart = received.size
+                    visuals.withOwner(owner) { visuals.nova(target, 8.0) }
+                    visuals.cancel(owner)
+                    scheduler.tick(20)
+                    received.size shouldBe staleStart
                 } finally { tasks.close() }
             }
         }

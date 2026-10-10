@@ -5,6 +5,8 @@ import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 import java.util.Locale
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.Bukkit
 import org.bukkit.Material
@@ -22,8 +24,12 @@ internal enum class StaffSpell(val id: String) {
 
     companion object {
         val itemKey = NamespacedKey("arc", "staff_spell_prototype")
+        val duelOnlyKey = NamespacedKey("arc", "staff_spell_duel_only")
         fun from(item: ItemStack?) = item?.itemMeta?.persistentDataContainer
             ?.get(itemKey, PersistentDataType.STRING)?.let { id -> entries.find { it.id == id } }
+
+        fun isDuelOnly(item: ItemStack?) = item?.itemMeta?.persistentDataContainer
+            ?.get(duelOnlyKey, PersistentDataType.BYTE) == 1.toByte()
     }
 }
 
@@ -52,7 +58,47 @@ internal data class StaffSpellSettings(
     val emberSpeed: Double = 1.2,
     val emberRadius: Double = 2.8,
     val novaRadius: Double = 8.0,
-)
+) {
+    fun fingerprint(pluginVersion: String): String {
+        val canonical = buildString {
+            append("staff-duel-damage-v1\narc=").append(pluginVersion).append('\n')
+            append("range=").append(range.hex()).append('\n')
+            append("aimDegrees=").append(aimDegrees.hex()).append('\n')
+            append("chainRadius=").append(chainRadius.hex()).append('\n')
+            append("chainTargets=").append(chainTargets).append('\n')
+            append("chainDecay=").append(chainDecay.hex()).append('\n')
+            append("markTicks=").append(markTicks).append('\n')
+            append("markRadius=").append(markRadius.hex()).append('\n')
+            append("frostRange=").append(frostRange.hex()).append('\n')
+            append("frostDegrees=").append(frostDegrees.hex()).append('\n')
+            append("frostSlowTicks=").append(frostSlowTicks).append('\n')
+            append("maxAreaTargets=").append(maxAreaTargets).append('\n')
+            append("lanceWidth=").append(lanceWidth.hex()).append('\n')
+            append("lanceTargets=").append(lanceTargets).append('\n')
+            append("emberSpeed=").append(emberSpeed.hex()).append('\n')
+            append("emberRadius=").append(emberRadius.hex()).append('\n')
+            append("novaRadius=").append(novaRadius.hex()).append('\n')
+            StaffSpell.entries.sortedBy { it.id }.forEach { spell ->
+                val spellTuning = tuning.getValue(spell)
+                append(spell.id).append(".power=").append(spellTuning.power.hex()).append('\n')
+                append(spell.id).append(".vanillaDamage=").append(spellTuning.vanillaDamage.hex()).append('\n')
+                append(spell.id).append(".cooldownTicks=").append(spellTuning.cooldownTicks).append('\n')
+            }
+        }
+        return sha256(canonical)
+    }
+
+    private fun Double.hex() = java.lang.Double.toHexString(this)
+
+    companion object {
+        fun fingerprint(pluginVersion: String, settings: StaffSpellSettings?) = settings?.fingerprint(pluginVersion)
+            ?: sha256("staff-duel-damage-v1\narc=$pluginVersion\nstaff-spells=unavailable\n")
+    }
+}
+
+private fun sha256(value: String): String = MessageDigest.getInstance("SHA-256")
+    .digest(value.toByteArray(StandardCharsets.UTF_8))
+    .joinToString("") { byte -> "%02x".format(Locale.ROOT, byte.toInt() and 0xff) }
 
 /** Values are read again on ARC reload; the controller owns one validated settings generation. */
 internal open class StaffSpellConfig(private val config: Config) {
@@ -104,20 +150,27 @@ internal open class StaffSpellConfig(private val config: Config) {
         return config.component("messages.${if (remaining > 0) "cooldown-bar" else "ready-bar"}", resolvers)
     }
 
-    fun item(spell: StaffSpell) = ItemStack(Material.BLAZE_ROD).apply {
-        val skinId = config.string("${spell.id}.skin", "").trim()
-        if (skinId.isNotEmpty()) {
-            val skin = try {
-                check(Bukkit.getPluginManager().isPluginEnabled("ItemsAdder")) { "ItemsAdder is not enabled" }
-                CustomStack.getInstance(skinId)?.itemStack?.clone()
-                    ?: error("ItemsAdder item is not registered")
-            } catch (failure: Exception) {
-                if (unavailableStaffSkins.add(skinId)) {
-                    warn("StaffSpells: configured skin {} for spell {} cannot be loaded", skinId, spell.id, failure)
+    fun item(spell: StaffSpell) = buildItem(spell, duelOnly = false)
+
+    /** Duel items deliberately use a stable native base, independent of optional ItemsAdder startup timing. */
+    fun duelItem(spell: StaffSpell) = buildItem(spell, duelOnly = true)
+
+    private fun buildItem(spell: StaffSpell, duelOnly: Boolean) = ItemStack(Material.BLAZE_ROD).apply {
+        if (!duelOnly) {
+            val skinId = config.string("${spell.id}.skin", "").trim()
+            if (skinId.isNotEmpty()) {
+                val skin = try {
+                    check(Bukkit.getPluginManager().isPluginEnabled("ItemsAdder")) { "ItemsAdder is not enabled" }
+                    CustomStack.getInstance(skinId)?.itemStack?.clone()
+                        ?: error("ItemsAdder item is not registered")
+                } catch (failure: Exception) {
+                    if (unavailableStaffSkins.add(skinId)) {
+                        warn("StaffSpells: configured skin {} for spell {} cannot be loaded", skinId, spell.id, failure)
+                    }
+                    throw StaffSpellSkinUnavailableException(skinId, failure)
                 }
-                throw StaffSpellSkinUnavailableException(skinId, failure)
+                applyEliteSkin(this, skin)
             }
-            applyEliteSkin(this, skin)
         }
         editMeta { meta ->
             meta.displayName(config.component("${spell.id}.name", TagResolver.empty()).decoration(TextDecoration.ITALIC, false))
@@ -125,8 +178,9 @@ internal open class StaffSpellConfig(private val config: Config) {
                 config.component("${spell.id}.description", TagResolver.empty()).decoration(TextDecoration.ITALIC, false),
                 config.component("${spell.id}.aim", TagResolver.empty()).decoration(TextDecoration.ITALIC, false),
                 Component.empty(), config.component("${spell.id}.secondary", TagResolver.empty()).decoration(TextDecoration.ITALIC, false),
-                text("prototype"), Component.empty(), text("use")))
+                text(if (duelOnly) "duel-only" else "prototype"), Component.empty(), text("use")))
             meta.persistentDataContainer.set(StaffSpell.itemKey, PersistentDataType.STRING, spell.id)
+            if (duelOnly) meta.persistentDataContainer.set(StaffSpell.duelOnlyKey, PersistentDataType.BYTE, 1)
             meta.setMaxStackSize(1)
         }
     }

@@ -99,6 +99,7 @@ fault:
   cooldown-ticks: 44
 messages:
   prototype: '<#b8b8b8>Проба механики · общая перезарядка посохов'
+  duel-only: '<#b8b8b8>Только в активной дуэли'
   use: '<#82dcff>[▶] ПКМ <#e8dfd2>— применить заклинание'
   cooldown: '<#e8dfd2>Посох восстанавливается'
   cooldown-bar: '<ability> <white><seconds> с'

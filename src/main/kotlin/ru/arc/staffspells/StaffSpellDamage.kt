@@ -23,28 +23,63 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /** Server-thread-only prototype damage. Captured Staves level is virtual item level; BLAZE_ROD
  * supplies boss modifier lookup. Configured power is the attack multiplier; no native EM/FMM enchantments. */
-internal class StaffSpellDamage {
+internal class StaffSpellDamage(private val duelAccess: StaffSpellDuelAccess? = null) {
     private val eliteMobsFailureLogged = AtomicBoolean()
 
-    fun eligible(player: Player, target: LivingEntity): Boolean {
+    fun eligible(player: Player, target: LivingEntity, cast: StaffSpellCast? = null): Boolean {
+        val authorization = cast?.duelAuthorization
+        if (authorization != null) {
+            return target is Player && isReadyDuelTarget(player, target) && cast.casterId == player.uniqueId &&
+                cast.duelAccess === duelAccess && duelAccess?.isCurrent(authorization, player) == true &&
+                duelAccess.canHit(authorization, player, target)
+        }
         if (!isReady(player, target)) return false
+        if (duelAccess?.context(player) != null || target is Player) return false
         if (!isEliteMobsEnabled()) return true
         return withEliteMobs(false) { EliteMobsRuntime.canTarget(player, target) }
     }
 
     /** Null means the player is invalid or the enabled optional bridge failed. */
-    fun capture(player: Player): StaffSpellCast? {
+    fun capture(player: Player, duelOnly: Boolean = false): StaffSpellCast? {
         if (!player.isOnline || !player.isValid || player.isDead) return null
+        duelAccess?.context(player)?.let { authorization ->
+            if (!duelOnly) return null
+            return StaffSpellCast(player.uniqueId, UUID.randomUUID(), 1, null, null, false,
+                authorization, duelAccess)
+        }
+        if (duelOnly) return null
         val attackId = UUID.randomUUID()
         if (!isEliteMobsEnabled()) return StaffSpellCast(player.uniqueId, attackId, 1, null, null, false)
         return withEliteMobs(null) { EliteMobsRuntime.capture(player, attackId) }
     }
 
+    /** Duel casts remain valid only for their captured match, round, owner registration and participant pair. */
+    fun isCurrent(player: Player, cast: StaffSpellCast): Boolean {
+        if (cast.casterId != player.uniqueId || !player.isOnline || !player.isValid || player.isDead) return false
+        val authorization = cast.duelAuthorization
+        return if (authorization != null) {
+            cast.duelAccess === duelAccess && duelAccess?.isCurrent(authorization, player) == true
+        } else {
+            duelAccess?.context(player) == null
+        }
+    }
+
     /** Rechecks at impact; true only if health plus absorption decreased. */
     fun hit(player: Player, target: LivingEntity, cast: StaffSpellCast, power: Double, vanillaDamage: Double): Boolean {
-        if (cast.casterId != player.uniqueId || cast.eliteMobsEnabled != isEliteMobsEnabled()) return false
+        if (cast.casterId != player.uniqueId || !isCurrent(player, cast)) return false
         if (!power.isFinite() || power <= 0.0 || !vanillaDamage.isFinite() || vanillaDamage <= 0.0) return false
-        if (!eligible(player, target)) return false
+        val authorization = cast.duelAuthorization
+        if (authorization != null) {
+            if (target !is Player || cast.eliteMobsEnabled ||
+                !eligible(player, target, cast)) return false
+            val amount = vanillaDamage * authorization.context.damageMultiplier()
+            if (!amount.isFinite() || amount <= 0.0 ||
+                !duelAccess!!.canHit(authorization, player, target)) return false
+            val before = target.health + target.absorptionAmount
+            target.damage(amount, player)
+            return before - target.health - target.absorptionAmount > HEALTH_EPSILON
+        }
+        if (cast.eliteMobsEnabled != isEliteMobsEnabled() || target is Player || !eligible(player, target, cast)) return false
 
         val before = target.health + target.absorptionAmount
         val attempted = if (cast.eliteMobsEnabled) {
@@ -64,6 +99,10 @@ internal class StaffSpellDamage {
         player.isOnline && player.isValid && !player.isDead && target.isValid && !target.isDead &&
             !target.isInvulnerable && target !is Player && target !is ArmorStand && player.world == target.world &&
             !target.hasMetadata("NPC") && (target !is Tameable || !target.isTamed)
+
+    private fun isReadyDuelTarget(caster: Player, target: Player) =
+        caster.isOnline && caster.isValid && !caster.isDead && target.isOnline && target.isValid &&
+            !target.isDead && !target.isInvulnerable && caster.uniqueId != target.uniqueId && caster.world == target.world
 
     private fun isEliteMobsEnabled() = Bukkit.getPluginManager().isPluginEnabled(ELITE_MOBS_PLUGIN)
 
@@ -88,8 +127,16 @@ internal class StaffSpellDamage {
 }
 
 /** Immutable cast snapshot; contains no mutable item reference. */
-internal data class StaffSpellCast(val casterId: UUID, val attackId: UUID, val skillLevel: Int,
-    val criticalHit: Boolean?, val loudStrikesBonus: Double?, val eliteMobsEnabled: Boolean)
+internal data class StaffSpellCast(
+    val casterId: UUID,
+    val attackId: UUID,
+    val skillLevel: Int,
+    val criticalHit: Boolean?,
+    val loudStrikesBonus: Double?,
+    val eliteMobsEnabled: Boolean,
+    val duelAuthorization: DuelSpellAuthorization? = null,
+    val duelAccess: StaffSpellDuelAccess? = null,
+)
 
 /** Resolved only on the guarded branch where EliteMobs is enabled. */
 private object EliteMobsRuntime {

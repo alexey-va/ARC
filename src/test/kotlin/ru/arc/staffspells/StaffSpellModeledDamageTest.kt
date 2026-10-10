@@ -19,7 +19,10 @@ import org.bukkit.Material
 import org.bukkit.World
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Player
+import org.bukkit.plugin.Plugin
 import org.bukkit.plugin.PluginManager
+import ru.arc.staffspells.api.StaffSpellDuelPolicy
+import ru.arc.staffspells.api.StaffSpellDuelContext
 import java.util.UUID
 
 class StaffSpellModeledDamageTest : FreeSpec({
@@ -66,6 +69,111 @@ class StaffSpellModeledDamageTest : FreeSpec({
         loudStrikesBonus = 1.2,
         eliteMobsEnabled = true,
     )
+
+    fun readyPlayers(caster: Player, target: Player, world: World) {
+        readyEntities(caster, target, world)
+        every { target.isOnline } returns true
+        every { target.uniqueId } returns UUID.fromString("00000000-0000-0000-0000-000000000003")
+    }
+
+    "duel damage uses native configured multiplier and rechecks exact round and opponent policy" {
+        val world = mockk<World>()
+        val caster = mockk<Player>()
+        val opponent = mockk<Player>()
+        val teammate = mockk<Player>()
+        readyPlayers(caster, opponent, world)
+        readyPlayers(caster, teammate, world)
+        every { teammate.uniqueId } returns UUID.fromString("00000000-0000-0000-0000-000000000004")
+        every { opponent.absorptionAmount } returns 0.0
+        var health = 20.0
+        every { opponent.health } answers { health }
+        every { opponent.damage(any<Double>(), caster) } answers {
+            health -= firstArg<Double>()
+            Unit
+        }
+
+        val context = StaffSpellDuelContext(UUID.fromString("00000000-0000-0000-0000-000000000010"), 2, 1.5)
+        var currentContext: StaffSpellDuelContext? = context
+        val registrationId = UUID.fromString("00000000-0000-0000-0000-000000000011")
+        val access = mockk<StaffSpellDuelAccess>()
+        every { access.context(caster) } answers {
+            currentContext?.let { DuelSpellAuthorization(registrationId, it) }
+        }
+        every { access.isCurrent(any(), caster) } answers { firstArg<DuelSpellAuthorization>().context == currentContext }
+        every { access.canHit(any(), caster, any()) } answers {
+            firstArg<DuelSpellAuthorization>().context == currentContext && thirdArg<Player>() === opponent
+        }
+
+        val damage = StaffSpellDamage(access)
+        val cast = requireNotNull(damage.capture(caster, duelOnly = true))
+        damage.capture(caster, duelOnly = false) shouldBe null
+        damage.eligible(caster, teammate, cast) shouldBe false
+        damage.hit(caster, opponent, cast, power = 4.0, vanillaDamage = 3.0) shouldBe true
+        health shouldBe 15.5
+        verify(exactly = 1) { opponent.damage(4.5, caster) }
+
+        currentContext = StaffSpellDuelContext(context.matchId(), 3, context.damageMultiplier())
+        damage.hit(caster, opponent, cast, power = 4.0, vanillaDamage = 3.0) shouldBe false
+        verify(exactly = 1) { opponent.damage(any<Double>(), caster) }
+        verify(exactly = 0) { Bukkit.getPluginManager().isPluginEnabled("EliteMobs") }
+    }
+
+    "duel-only spell capture is denied outside an active duel" {
+        val world = mockk<World>()
+        val caster = mockk<Player>()
+        val target = mockk<Player>()
+        readyPlayers(caster, target, world)
+        val access = mockk<StaffSpellDuelAccess>()
+        every { access.context(caster) } returns null
+
+        StaffSpellDamage(access).capture(caster, duelOnly = true) shouldBe null
+        verify(exactly = 0) { Bukkit.getPluginManager().isPluginEnabled(any<String>()) }
+    }
+
+    "registered duel policy binds player hits to its exact round and rejects unrelated targets" {
+        val world = mockk<World>()
+        val caster = mockk<Player>()
+        val opponent = mockk<Player>()
+        val unrelated = mockk<Player>()
+        readyPlayers(caster, opponent, world)
+        readyPlayers(caster, unrelated, world)
+        every { unrelated.uniqueId } returns UUID.fromString("00000000-0000-0000-0000-000000000004")
+        every { Bukkit.isPrimaryThread() } returns true
+        every { Bukkit.getPluginManager().registerEvents(any(), any()) } returns Unit
+
+        val arc = mockk<Plugin>(relaxed = true)
+        val owner = mockk<Plugin>(relaxed = true)
+        every { owner.isEnabled } returns true
+        val provider = ArcStaffSpellServiceProvider(arc) { null }
+        val initial = StaffSpellDuelContext(UUID.fromString("00000000-0000-0000-0000-000000000020"), 0, 2.0)
+        var active: StaffSpellDuelContext? = initial
+        val policy = object : StaffSpellDuelPolicy {
+            override fun context(casterPlayer: Player) = active.takeIf { casterPlayer === caster }
+            override fun canHit(casterPlayer: Player, targetPlayer: Player, context: StaffSpellDuelContext) =
+                context == active && casterPlayer === caster && targetPlayer === opponent
+        }
+        val registration = provider.registerDuelPolicy(owner, policy)
+        try {
+            provider.isAvailable() shouldBe false
+            val damage = StaffSpellDamage(provider)
+            val cast = requireNotNull(damage.capture(caster, duelOnly = true))
+            damage.eligible(caster, unrelated, cast) shouldBe false
+            damage.eligible(caster, opponent, cast) shouldBe true
+
+            active = StaffSpellDuelContext(initial.matchId(), 1, 2.0)
+            damage.eligible(caster, opponent, cast) shouldBe false
+            damage.capture(caster, duelOnly = true)?.duelAuthorization?.context shouldBe active
+
+            active = null
+            damage.capture(caster, duelOnly = true) shouldBe null
+            active = initial
+            registration.close()
+            provider.context(caster) shouldBe null
+        } finally {
+            registration.close()
+            provider.close()
+        }
+    }
 
     "modeled EliteMobs damage applies one attributed hit inside the combat context" {
         val world = mockk<World>()

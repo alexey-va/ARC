@@ -10,6 +10,7 @@ import org.bukkit.SoundCategory
 import org.bukkit.util.Vector
 import org.joml.Vector3f
 import ru.arc.core.LifecycleTaskScope
+import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.PI
 import kotlin.math.cos
@@ -18,6 +19,56 @@ import kotlin.math.sin
 
 /** Sparse accents around the display silhouettes; all delayed phases run on Paper's main thread. */
 internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
+    private data class OwnerTasks(var generation: Long = 0L, var pending: Int = 0)
+
+    private val activeOwner = ThreadLocal<UUID?>()
+    private val ownerTasks = mutableMapOf<UUID, OwnerTasks>()
+
+    /** Associates visual work scheduled by a cast with its owner so a round reset can invalidate it. */
+    fun withOwner(ownerId: UUID, action: () -> Unit) {
+        val previous = activeOwner.get()
+        activeOwner.set(ownerId)
+        try {
+            action()
+        } finally {
+            activeOwner.set(previous)
+        }
+    }
+
+    fun cancel(ownerId: UUID) {
+        ownerTasks[ownerId]?.let { state ->
+            state.generation++
+            if (state.pending == 0) ownerTasks.remove(ownerId, state)
+        }
+    }
+
+    private fun runLater(delay: Long, action: () -> Unit) {
+        val owner = activeOwner.get()
+        val state = owner?.let { ownerTasks.getOrPut(it) { OwnerTasks() } }
+        val generation = state?.generation
+        if (state != null) state.pending++
+        tasks.runLater(delay) {
+            try {
+                if (state == null || state.generation == generation) runOwned(owner, action)
+            } finally {
+                if (owner != null && state != null) release(owner, state)
+            }
+        }
+    }
+
+    private fun release(owner: UUID, state: OwnerTasks) {
+        state.pending--
+        if (state.pending <= 0 && ownerTasks[owner] === state) ownerTasks.remove(owner)
+    }
+
+    private fun runOwned(owner: UUID?, action: () -> Unit) {
+        if (owner == null) {
+            action()
+            return
+        }
+        withOwner(owner, action)
+    }
+
     /** One local cast cue, including empty-air casts and the three-branch secondary. */
     fun lightningLaunch(at: Location) = dispatch {
         val origin = at.clone()
@@ -60,7 +111,7 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
                 .add(impactFrame.second.clone().multiply(sin(angle) * 0.22)),
                 if (i % 2 == 0) Particle.END_ROD else Particle.ELECTRIC_SPARK)
         }
-        tasks.runLater(1) {
+        runLater(1) {
             lineSamples(start, end, (distance * 0.55).toInt().coerceIn(6, 16)).forEachIndexed { i, point ->
                 if (i % 3 == 0) emit(point, Particle.ELECTRIC_SPARK)
             }
@@ -143,7 +194,7 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
                         FAULT_TO_AMETHYST, COMPACT_CAMERA_CLEARANCE)
                 }
             }
-            if (phase == 0) draw() else tasks.runLater((phase * 2).toLong()) { draw() }
+            if (phase == 0) draw() else runLater((phase * 2).toLong()) { draw() }
         }
     }
 
@@ -173,7 +224,7 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
                 sin(angle) * 0.28), Particle.END_ROD,
                 minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
         }
-        tasks.runLater(2) {
+        runLater(2) {
             repeat(6) { index ->
                 val angle = index * PI / 3.0 + 0.16
                 val ring = reach * (0.56 + (index % 2) * 0.035)
@@ -193,7 +244,7 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         localSound(start.clone().add(offset.normalize().multiply(0.75)), Sound.ENTITY_ENDERMAN_TELEPORT, 0.68f, 1.15f)
         for (phase in 0..3) {
             val draw = { markTearStage(start, end, basis.first, basis.second, phase) }
-            if (phase == 0) draw() else tasks.runLater(phase.toLong()) { draw() }
+            if (phase == 0) draw() else runLater(phase.toLong()) { draw() }
         }
     }
 
@@ -234,7 +285,7 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
             if (i % 3 == 0) emit(point.clone().add(0.0, 0.12, 0.0), Particle.END_ROD)
         }
         // The tear opens over four ticks, then sheds a sparse twenty-tick dust tail.
-        tasks.runLater(2) {
+        runLater(2) {
             repeat(12) { i ->
                 val angle = i * PI * 2.0 / 12.0 + 0.12
                 val radiusAt = crackRadius * 0.72
@@ -244,7 +295,7 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
                 if (i % 2 == 0) emit(point, Particle.REVERSE_PORTAL)
             }
         }
-        tasks.runLater(4) {
+        runLater(4) {
             repeat(16) { i ->
                 val angle = i * PI * 2.0 / 16.0 + 0.18
                 val point = origin.clone().add(cos(angle) * crackRadius * 1.08,
@@ -254,7 +305,7 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
             }
         }
         listOf(8L to 10, 12L to 8, 16L to 5, 20L to 3).forEach { (delay, count) ->
-            tasks.runLater(delay) {
+            runLater(delay) {
                 repeat(count) { i ->
                     val angle = i * PI * 2.0 / count + delay * 0.045
                     val radiusAt = crackRadius * (0.88 + (i % 3) * 0.04)
@@ -280,7 +331,7 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
             val reach = min(length, 12.0)
             repeat(10) { phase ->
                 val age = 2 + phase * 2
-                tasks.runLater(age.toLong()) {
+                runLater(age.toLong()) {
                     if (phase == 0) localSound(start.clone().apply { y = start.blockY + 0.08 },
                         Sound.BLOCK_BEACON_ACTIVATE, 0.74f, 1.42f)
                     novaWaveFrame(start, forward, basis.first, reach, width, age)
@@ -294,7 +345,7 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
             val forward = offset.normalize()
             val reach = min(length, 12.0)
             repeat(9) { phase ->
-                tasks.runLater((2 + phase * 2).toLong()) {
+                runLater((2 + phase * 2).toLong()) {
                     val front = start.clone().add(forward.clone().multiply(1.8 + (reach - 1.8) * phase / 8.0))
                     val floorY = start.blockY + 0.06
                     repeat(7) { i ->
@@ -317,7 +368,7 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
             val reach = boundedRadius(radius, 0.5, 8.0) ?: return@dispatch
             val packedIce = if (frost) Material.PACKED_ICE.createBlockData() else null
             repeat(9) { phase ->
-                tasks.runLater((2 + phase * 2).toLong()) {
+                runLater((2 + phase * 2).toLong()) {
                     val ringRadius = 1.8 + (reach - 1.8) * phase / 8.0
                     val floorY = start.blockY + 0.06
                     repeat(12) { i ->
@@ -390,7 +441,7 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
             emit(point, if (i % 3 == 0) Particle.REVERSE_PORTAL else Particle.DUST_COLOR_TRANSITION,
                 if (i % 3 == 0) null else BLACKHOLE_RIM)
         }
-        tasks.runLater(2) {
+        runLater(2) {
             repeat(10) { i ->
                 val angle = i * PI * 2.0 / 10.0 + 0.2
                 val point = origin.clone().add(cos(angle) * rimRadius * 0.58,
@@ -399,7 +450,7 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
                 if (i % 2 == 0) emit(point, Particle.DUST_COLOR_TRANSITION, BLACKHOLE_CORE)
             }
         }
-        tasks.runLater(4) {
+        runLater(4) {
             emit(origin, Particle.FLASH)
             repeat(6) { i ->
                 val angle = i * PI / 3.0
@@ -408,7 +459,7 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
                 else emit(point, Particle.DUST_COLOR_TRANSITION, BLACKHOLE_CORE)
             }
         }
-        tasks.runLater(8) {
+        runLater(8) {
             repeat(3) { i ->
                 val angle = i * PI * 2.0 / 3.0 + 0.35
                 emit(origin.clone().add(cos(angle) * 0.16, 0.08 + i * 0.08, sin(angle) * 0.16),
@@ -432,7 +483,7 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         val steps = ((travel + 1) / 2).coerceIn(1, 12)
         repeat(steps + 1) { phase ->
             val atTick = delay + phase * travel / steps
-            tasks.runLater(atTick.toLong()) {
+            runLater(atTick.toLong()) {
                 if (phase == 0) localSound(origin.clone().apply { y = origin.blockY + 0.08 }, Sound.BLOCK_GLASS_BREAK, 0.76f, 0.86f)
                 frostFront(origin, offset.clone().normalize(), basis.first, reach, spread, phase, steps)
             }
@@ -456,13 +507,13 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         lanceCharge(start, forward, right, up, distance, 0)
         val flightTicks = staffLanceFlightTicks(distance)
         for (age in 1..flightTicks) {
-            tasks.runLater(age.toLong()) {
+            runLater(age.toLong()) {
                 if (age <= 4) lanceCharge(start, forward, right, up, distance, age)
                 else lanceStage(start, forward, right, up, distance, age, flightTicks)
             }
         }
         listOf(3L to 8, 6L to 5, 9L to 3).forEach { (delay, count) ->
-            tasks.runLater((flightTicks + delay).toLong()) {
+            runLater((flightTicks + delay).toLong()) {
                 lanceAfterglow(start, forward, right, up, distance, count)
             }
         }
@@ -513,7 +564,7 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
                 sin(angle) * reach * 0.2)
             if (meteor) emit(point, Particle.BLOCK, ejecta) else emit(point, Particle.FLAME)
         }
-        tasks.runLater(2) {
+        runLater(2) {
             emit(origin.clone().add(0.0, 0.9, 0.0), Particle.EXPLOSION)
             repeat(28) { i ->
                 val angle = i * PI * 2.0 / 28.0
@@ -528,7 +579,7 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
                     Particle.DUST_COLOR_TRANSITION, GOLD_TO_WHITE)
             }
         }
-        tasks.runLater(4) {
+        runLater(4) {
             repeat(36) { i ->
                 val angle = i * PI * 2.0 / 36.0
                 val ring = reach * (0.58 + (i % 3) * 0.12)
@@ -544,7 +595,7 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
                 else emit(point, Particle.FLAME)
             }
         }
-        tasks.runLater(8) {
+        runLater(8) {
             repeat(28) { i ->
                 val angle = i * PI * 2.0 / 28.0 + 0.04
                 val ring = reach * (0.52 + (i % 5) * 0.095)
@@ -560,7 +611,7 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
                     sin(angle) * reach * 0.54), Particle.SMOKE)
             }
         }
-        tasks.runLater(12) {
+        runLater(12) {
             repeat(18) { i ->
                 val angle = i * PI * 2.0 / 18.0 + 0.15
                 val ring = reach * (0.48 + (i % 4) * 0.12)
@@ -575,7 +626,7 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
                     sin(angle) * reach * 0.36), Particle.SMOKE)
             }
         }
-        tasks.runLater(16) {
+        runLater(16) {
             repeat(12) { i ->
                 val angle = i * PI * 2.0 / 12.0
                 val ring = reach * (0.54 + (i % 3) * 0.11)
@@ -583,7 +634,7 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
                     sin(angle) * ring), Particle.DUST, GOLD_TAIL)
             }
         }
-        tasks.runLater(20) {
+        runLater(20) {
             repeat(8) { i ->
                 val angle = i * PI / 4.0 + 0.3
                 val ring = reach * (0.58 + (i % 2) * 0.12)
@@ -598,7 +649,7 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         val reach = boundedRadius(radius, 2.0, 10.0) ?: return@dispatch
         repeat(10) { phase ->
             val age = 2 + phase * 2
-            tasks.runLater(age.toLong()) {
+            runLater(age.toLong()) {
                 if (phase == 0) localSound(origin, Sound.BLOCK_BEACON_ACTIVATE, 0.74f, 1.42f)
                 novaFrame(origin, reach, age, secondary)
             }
@@ -891,7 +942,23 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
     }
 
     private fun dispatch(action: () -> Unit) {
-        if (Bukkit.isPrimaryThread()) action() else tasks.runSync(action)
+        val owner = activeOwner.get()
+        if (Bukkit.isPrimaryThread()) {
+            runOwned(owner, action)
+        } else if (owner == null) {
+            tasks.runSync(action)
+        } else {
+            val state = ownerTasks.getOrPut(owner) { OwnerTasks() }
+            val generation = state.generation
+            state.pending++
+            tasks.runSync {
+                try {
+                    if (state.generation == generation) runOwned(owner, action)
+                } finally {
+                    release(owner, state)
+                }
+            }
+        }
     }
 
     private companion object {

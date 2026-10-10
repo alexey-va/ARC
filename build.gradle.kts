@@ -52,7 +52,7 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.369"
+version = "1.4.370"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.21"
@@ -131,6 +131,8 @@ dependencies {
     implementation("ru.ruscrafting.arc:arc-core-menu:$arcCoreVersion")
     implementation("ru.ruscrafting.arc:arc-core-paper-menu:$arcCoreVersion")
     implementation("ru.ruscrafting.arc:arc-core-ai:$arcCoreVersion")
+    // ARC owns this service API at runtime. Keep the unrelocated contract classes in its provider JAR.
+    implementation(project(":arc-staff-spells-api"))
 
     // snakeyaml-engine comes transitively from arc-core
 

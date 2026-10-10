@@ -1,5 +1,7 @@
 rootProject.name = "ARC"
 
+include(":arc-staff-spells-api")
+
 providers.gradleProperty("arcCoreDir").orNull?.let(::file)?.let { arcCoreDir ->
     require(arcCoreDir.resolve("settings.gradle.kts").isFile) {
         "arcCoreDir must point to an arc-core checkout"
