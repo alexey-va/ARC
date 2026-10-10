@@ -63,7 +63,7 @@ object StaffSpellPreviewExport {
         ),
         StaffSpell.FROST to listOf(
             Event("fan", Inputs(10.0, kotlin.math.tan(Math.toRadians(50.0)) * 10.0, 24, impact = false)),
-            Event("radial-ice-nova", Inputs(8.0, 8.0, 30, impact = true, secondary = true)),
+            Event("shoulder-barrage", Inputs(48.0, 0.8, 56, impact = false, secondary = true)),
         ),
         StaffSpell.LANCE to listOf(
             Event("impact", Inputs(48.0, 0.75, staffLanceDuration(48.0), impact = true)),
@@ -304,6 +304,36 @@ object StaffSpellPreviewExport {
             // A secondary cast owns three separate scene budgets; each trail stays below MAX_PARTS.
             return parts to origin
         }
+        if (spell == StaffSpell.FROST && event.inputs.secondary) {
+            // Deterministic empty-lane fixture: same anchors, delays, steering and speed as live bolts.
+            val pieces = (0..2).flatMap { index ->
+                val anchor = staffIcicleAnchorOffset(index)
+                val position = org.bukkit.util.Vector(anchor.x.toDouble(), eyeHeight + anchor.y, anchor.z.toDouble())
+                val direction = org.bukkit.util.Vector(0.0, 0.0, 1.0)
+                val target = org.bukkit.util.Vector(0.0, eyeHeight, 48.0)
+                var remaining = 48.0
+                var impactAge = -1
+                val delay = staffIcicleLaunchDelay(index)
+                for (tick in delay..frame.ageTicks) {
+                    if (remaining <= 0.001) { impactAge++; continue }
+                    val flightAge = tick - delay + 1
+                    if (flightAge > 4) steerStaffBolt(direction, target.clone().subtract(position), flightAge)
+                    val step = minOf(staffIcicleStep(flightAge), remaining)
+                    position.add(direction.clone().multiply(step))
+                    remaining -= step
+                    if (remaining <= 0.001) impactAge = 0
+                }
+                val rotation = staffLanceOrientation(Vector3f(direction.x.toFloat(), direction.y.toFloat(), direction.z.toFloat()))
+                val shape = if (impactAge >= 0) staffDisplayParts(StaffSpell.FROST, impactAge, 10, 0.0, 0.9, true, true)
+                    else staffDisplayParts(StaffSpell.FROST, frame.ageTicks, 80, 1.0, 0.8, false, true)
+                shape.map { part -> part.copy(
+                    center = rotation.transform(Vector3f(part.center)).add(position.x.toFloat(), position.y.toFloat(), position.z.toFloat()),
+                    rotation = Quaternionf(rotation).mul(part.rotation),
+                    visible = part.visible && impactAge < 10,
+                ) }
+            }
+            return pieces to Vector3f()
+        }
         val baseParts = staffDisplayParts(
             spell = spell,
             ageTicks = frame.ageTicks,
@@ -331,7 +361,7 @@ object StaffSpellPreviewExport {
             spell == StaffSpell.LANCE -> Vector3f(0f, eyeHeight.toFloat(), 0f)
             else -> Vector3f()
         }
-        if (spell == StaffSpell.EMBER && event.inputs.secondary) {
+        if (spell == StaffSpell.EMBER && event.inputs.secondary && !event.inputs.impact) {
             val down = Quaternionf().rotationTo(Vector3f(0f, 0f, 1f), Vector3f(0f, -1f, 0f))
             return parts.map { part -> part.copy(
                 center = down.transform(Vector3f(part.center)),
@@ -413,7 +443,7 @@ object StaffSpellPreviewExport {
                 "partCull" to if (view == "geometry") "source visibility retained; temporal observer culling uses swept bounds" else
                     "distance(center, eye) >= staffEyeClearance(spell, impact) + 0.15 + part-scale-length / 2",
                 "projectiles" to when {
-                    spell == StaffSpell.CHAIN && inputs.secondary -> 3
+                    spell in setOf(StaffSpell.CHAIN, StaffSpell.FROST) && inputs.secondary -> 3
                     spell == StaffSpell.LANCE && event.id == "triple-spears" -> 3
                     else -> 1
                 },

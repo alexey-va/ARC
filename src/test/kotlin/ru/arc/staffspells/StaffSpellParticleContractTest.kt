@@ -8,6 +8,7 @@ import org.bukkit.Color
 import org.bukkit.Location
 import org.bukkit.Particle
 import org.bukkit.World
+import org.bukkit.block.data.BlockData
 import org.bukkit.entity.Player
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.Tasks
@@ -62,9 +63,24 @@ class StaffSpellParticleContractTest : FreeSpec({
                     visuals.nova(target, 8.0, secondary = true)
                     visuals.emberTrail(eye, target)
                     visuals.emberBurst(target, 2.8)
+                    visuals.emberTrail(eye, target, meteor = true)
+                    val icicleStart = received.size
+                    visuals.icicleTrail(eye, target)
+                    visuals.icicleBurst(target)
+                    val icicleParticles = received.drop(icicleStart)
+                    icicleParticles.size shouldBe 11
+                    icicleParticles.count { it.first == Particle.BLOCK } shouldBe 6
                     scheduler.tick(40)
                     (received.count { it.first == Particle.FLASH } >= 5) shouldBe true
                     received.filter { it.first == Particle.FLASH }.all { it.second is Color } shouldBe true
+
+                    val meteorBurstStart = received.size
+                    visuals.emberBurst(target, 2.8, meteor = true)
+                    scheduler.tick(20)
+                    val meteorBurst = received.drop(meteorBurstStart)
+                    meteorBurst.size shouldBe 206
+                    meteorBurst.count { it.first == Particle.BLOCK } shouldBe 14
+                    meteorBurst.filter { it.first == Particle.BLOCK }.all { it.second is BlockData } shouldBe true
                 } finally { tasks.close() }
             }
         }

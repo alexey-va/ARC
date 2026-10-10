@@ -30,8 +30,8 @@ mark:
   delay-ticks: 18
   radius: 3.5
 frost:
-  secondary-name: 'Полярный круг'
-  secondary: '<#b1f2ff>Shift + ПКМ <#e8dfd2>— морозная волна во все стороны'
+  secondary-name: 'Ледяной залп'
+  secondary: '<#b1f2ff>Shift + ПКМ <#e8dfd2>— три сосульки из-за плеч летят в цель'
   name: '<#b1f2ff>Ледяной хлопок'
   description: '<#e8dfd2>Ледяная волна идёт по земле и замедляет врагов.'
   aim: '<#b1f2ff>Ручной прицел · волна вперёд по земле'

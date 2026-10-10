@@ -447,24 +447,105 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "secondary frost grows radially to eight blocks, including lateral targets" {
-        withStaffHarness(settings = staffSettings(range = 12.0, novaRadius = 8.0)) { h ->
+    "shift frost assembles three icicles, staggers their homing flights, and slows only successful hits" {
+        var deniedId: UUID? = null
+        withStaffHarness(settings = staffSettings(range = 24.0, aimDegrees = 40.0),
+            hit = { _, target -> target.uniqueId != deniedId }) { h ->
             val world = h.paper.addSimpleWorld("staff-frost-secondary")
             val player = h.player("staff-frost-secondary", world, StaffSpell.FROST).apply { isSneaking = true }
-            val near = h.zombie(world, x = 0.5, z = 1.5)
-            val far = h.zombie(world, x = 0.5, z = 8.0)
-            val lateral = h.zombie(world, x = 7.0, z = 0.5)
-            val outside = h.zombie(world, x = 0.5, z = 9.5)
+            val targets = listOf(
+                h.zombie(world, x = -3.5, z = 10.0),
+                h.zombie(world, x = 4.5, z = 12.0),
+                h.zombie(world, x = 4.5, z = 8.0),
+            )
+            deniedId = targets.last().uniqueId
             h.controller.start()
 
             h.controller.onInteract(interact(player, player.inventory.itemInMainHand))
-            h.scheduler.tick(2)
-            h.hits.map { it.uniqueId } shouldBe listOf(near.uniqueId)
-            h.scheduler.tick(16)
+            val icicles = h.visualPlays.filter { it.spell == StaffSpell.FROST && it.secondary }
+            icicles.size shouldBe 3
+            val eye = player.eyeLocation
+            icicles.indices.all { index ->
+                val offset = staffIcicleAnchorOffset(index)
+                kotlin.math.abs(icicles[index].from.x - (eye.x + offset.x.toDouble())) < 0.001 &&
+                    kotlin.math.abs(icicles[index].from.y - (eye.y + offset.y.toDouble())) < 0.001 &&
+                    kotlin.math.abs(icicles[index].from.z - (eye.z + offset.z.toDouble())) < 0.001
+            } shouldBe true
 
-            h.hits.map { it.uniqueId }.toSet() shouldBe setOf(near.uniqueId, far.uniqueId, lateral.uniqueId)
-            (outside.uniqueId in h.hits.map { it.uniqueId }) shouldBe false
-            h.visualPlays.any { it.spell == StaffSpell.FROST && it.secondary } shouldBe true
+            h.scheduler.tick(7)
+            h.projectileMoves shouldBe emptyList()
+            h.scheduler.tick(1)
+            h.projectileMoves.map { it.id } shouldBe listOf(icicles[0].id)
+            (h.projectileMoves.first().at.distance(icicles[0].from) - staffIcicleStep(1)).let {
+                kotlin.math.abs(it) < 0.001
+            } shouldBe true
+            h.scheduler.tick(3)
+            h.projectileMoves.filter { it.id == icicles[0].id }.size shouldBe 4
+            h.projectileMoves.filter { it.id == icicles[0].id }.all {
+                it.direction.clone().normalize().dot(Vector(0.0, 0.0, 1.0)) > 0.9999
+            } shouldBe true
+            h.scheduler.tick(1)
+            h.projectileMoves.count { it.id == icicles[1].id } shouldBe 1
+            h.projectileMoves.filter { it.id == icicles[0].id }.last().direction.clone().normalize()
+                .dot(Vector(0.0, 0.0, 1.0)).let { it < 0.9999 } shouldBe true
+            h.scheduler.tick(4)
+            h.projectileMoves.count { it.id == icicles[2].id } shouldBe 1
+            h.scheduler.tick(50)
+
+            h.hits.map { it.uniqueId }.toSet() shouldBe targets.map { it.uniqueId }.toSet()
+            h.hits.size shouldBe 3
+            h.damageScales shouldBe List(3) { 1.0 to 6.0 }
+            targets.filter { it.uniqueId != deniedId }.all { it.hasPotionEffect(PotionEffectType.SLOWNESS) } shouldBe true
+            targets.last().hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
+            verify(exactly = 3) { h.effects.impact(any(), any(), 0.9, 10) }
+        }
+    }
+
+    "shift frost clears the camera before turning toward a downward aim" {
+        withStaffHarness(settings = staffSettings(range = 24.0)) { h ->
+            val world = h.paper.addSimpleWorld("staff-frost-camera")
+            val player = h.player("staff-frost-camera", world, StaffSpell.FROST).apply {
+                isSneaking = true
+                teleport(location.apply { pitch = 62.45f })
+            }
+            val eye = player.eyeLocation
+            h.controller.start()
+            h.controller.onInteract(interact(player, player.inventory.itemInMainHand))
+            h.scheduler.tick(19)
+            h.projectileMoves.groupBy { it.id }.values.forEach { moves ->
+                moves.take(4).forEach { move ->
+                    (move.at.distance(eye) > 2.0) shouldBe true
+                    (kotlin.math.abs(move.direction.y) < 0.0001) shouldBe true
+                }
+            }
+            h.projectileMoves.map { it.id }.distinct().size shouldBe 3
+        }
+    }
+
+    "shift frost shares hit de-duplication and cancels in-flight icicles on quit" {
+        withStaffHarness(settings = staffSettings(range = 24.0, aimDegrees = 40.0)) { h ->
+            val world = h.paper.addSimpleWorld("staff-frost-secondary-cleanup")
+            val player = h.player("staff-frost-secondary-cleanup", world, StaffSpell.FROST).apply { isSneaking = true }
+            val single = h.zombie(world, x = 0.5, z = 8.0)
+            h.controller.start()
+
+            h.controller.onInteract(interact(player, player.inventory.itemInMainHand))
+            h.scheduler.tick(60)
+
+            h.hits.map { it.uniqueId } shouldBe listOf(single.uniqueId)
+            h.hits.size shouldBe 1
+            verify(exactly = 3) { h.effects.impact(any(), any(), 0.9, 10) }
+
+            val other = h.player("staff-frost-secondary-quit", world, StaffSpell.FROST).apply { isSneaking = true }
+            h.controller.onInteract(interact(other, other.inventory.itemInMainHand))
+            h.scheduler.tick(10)
+            val movesBeforeQuit = h.projectileMoves.size
+            h.controller.onQuit(PlayerQuitEvent(other, Component.empty()))
+            h.scheduler.tick(60)
+
+            h.projectileMoves.size shouldBe movesBeforeQuit
+            h.hits.map { it.uniqueId }.shouldBe(listOf(single.uniqueId))
+            verify(exactly = 1) { h.effects.cancel(other.uniqueId) }
         }
     }
 
@@ -774,6 +855,7 @@ private data class StaffHarness(
     val effects: StaffSpellDisplayEffects,
     val movedEffects: MutableList<Pair<UUID, Location>>,
     val trailMoves: MutableList<StaffTrailMove>,
+    val projectileMoves: MutableList<StaffProjectileMove>,
     val finishedTrails: MutableList<UUID?>,
     val visualPlays: MutableList<StaffVisualPlay>,
     val removedEffects: MutableList<UUID?>,
@@ -793,6 +875,7 @@ private data class StaffHarness(
 }
 
 private data class StaffTrailMove(val id: UUID?, val points: List<Location>)
+private data class StaffProjectileMove(val id: UUID?, val at: Location, val direction: Vector)
 
 private data class StaffVisualPlay(
     val id: UUID,
@@ -870,6 +953,7 @@ private fun withStaffHarness(
                     }
                     val movedEffects = mutableListOf<Pair<UUID, Location>>()
                     val trailMoves = mutableListOf<StaffTrailMove>()
+                    val projectileMoves = mutableListOf<StaffProjectileMove>()
                     val finishedTrails = mutableListOf<UUID?>()
                     val removedEffects = mutableListOf<UUID?>()
                     every { effects.move(any(), any()) } answers {
@@ -878,12 +962,16 @@ private fun withStaffHarness(
                     every { effects.moveTrail(any(), any()) } answers {
                         trailMoves += StaffTrailMove(arg<UUID?>(0), arg<List<Location>>(1).map { it.clone() })
                     }
+                    every { effects.moveProjectile(any(), any(), any()) } answers {
+                        projectileMoves += StaffProjectileMove(firstArg<UUID?>(), secondArg<Location>().clone(),
+                            thirdArg<Vector>().clone())
+                    }
                     every { effects.finishTrail(any()) } answers { finishedTrails += arg<UUID?>(0) }
                     every { effects.remove(any()) } answers { removedEffects += firstArg<UUID?>() }
                     val controller = StaffSpellController(config, settings, damage, effects)
                     val harness = StaffHarness(paper, scheduler, config, controller, effects,
-                        movedEffects, trailMoves, finishedTrails, visualPlays, removedEffects, captures, hits, hitLocations,
-                        damageScales)
+                        movedEffects, trailMoves, projectileMoves, finishedTrails, visualPlays, removedEffects,
+                        captures, hits, hitLocations, damageScales)
                     try {
                         block(harness)
                     } finally {

@@ -84,6 +84,12 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         scene.origin = at.clone()
     }
 
+    fun moveProjectile(sceneId: UUID?, at: Location, direction: org.bukkit.util.Vector) {
+        val scene = scenes[sceneId] ?: return
+        move(sceneId, at)
+        scene.rotation = staffLanceOrientation(Vector3f(direction.x.toFloat(), direction.y.toFloat(), direction.z.toFloat()))
+    }
+
     fun moveTrail(sceneId: UUID?, points: List<Location>) {
         val scene = scenes[sceneId] ?: return
         if (points.isEmpty() || points.any { !valid(it) || it.world != scene.origin.world }) return

@@ -85,6 +85,36 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         }
     }
 
+    /** Compact ice trail for a single guided icicle step. */
+    fun icicleTrail(from: Location, to: Location) = dispatch {
+        val start = from.clone()
+        val end = to.clone()
+        val distance = segmentLength(start, end) ?: return@dispatch
+        val direction = end.toVector().subtract(start.toVector())
+        val basis = frame(direction) ?: return@dispatch
+        val midpoint = interpolate(start, end, 0.52)
+        emit(midpoint, Particle.SNOWFLAKE, minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+        emit(interpolate(start, end, 0.78).add(basis.first.clone().multiply(0.08)),
+            Particle.DUST_COLOR_TRANSITION, ICE_TO_AQUA, minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+        if (distance > 1.0) emit(end, Particle.SNOWFLAKE, minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+    }
+
+    /** A short, camera-culled ice shard burst when the guided projectile stops. */
+    fun icicleBurst(at: Location) = dispatch {
+        val origin = at.clone()
+        if (!drawable(origin)) return@dispatch
+        val ice = Material.PACKED_ICE.createBlockData()
+        repeat(6) { index ->
+            val angle = index * PI / 3.0
+            emit(origin.clone().add(cos(angle) * 0.24, 0.12 + (index % 3) * 0.09,
+                sin(angle) * 0.24), Particle.BLOCK, ice, COMPACT_CAMERA_CLEARANCE)
+        }
+        emit(origin.clone().add(0.0, 0.28, 0.0), Particle.END_ROD,
+            minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+        emit(origin.clone().add(0.0, 0.08, 0.0), Particle.SNOWFLAKE,
+            minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+    }
+
     fun markLaunch(from: Location, to: Location) = dispatch {
         val start = from.clone()
         val end = to.clone()
@@ -216,6 +246,7 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
             }
         } else {
             val reach = boundedRadius(radius, 0.5, 8.0) ?: return@dispatch
+            val packedIce = if (frost) Material.PACKED_ICE.createBlockData() else null
             repeat(9) { phase ->
                 tasks.runLater((2 + phase * 2).toLong()) {
                     val ringRadius = 1.8 + (reach - 1.8) * phase / 8.0
@@ -228,7 +259,8 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
                         else emit(point, Particle.DUST_COLOR_TRANSITION, GREEN_TO_AQUA)
                         if (i % 2 == 0) {
                             val crest = point.clone().add(0.0, 0.34, 0.0)
-                            if (frost) emit(crest, Particle.END_ROD)
+                            if (frost && (i / 2 + phase) % 3 == 0) emit(crest, Particle.BLOCK, packedIce)
+                            else if (frost) emit(crest, Particle.END_ROD)
                             else emit(crest, Particle.DUST_COLOR_TRANSITION, GREEN_TO_AQUA)
                         }
                     }
@@ -302,8 +334,9 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
             emit(origin, Particle.FLASH)
             repeat(6) { i ->
                 val angle = i * PI / 3.0
-                emit(origin.clone().add(cos(angle) * 0.22, (i % 3) * 0.12, sin(angle) * 0.22),
-                    if (i % 2 == 0) Particle.END_ROD else Particle.REVERSE_PORTAL)
+                val point = origin.clone().add(cos(angle) * 0.22, (i % 3) * 0.12, sin(angle) * 0.22)
+                if (i % 2 == 0) emit(point, Particle.END_ROD)
+                else emit(point, Particle.DUST_COLOR_TRANSITION, BLACKHOLE_CORE)
             }
         }
         tasks.runLater(8) {
@@ -367,7 +400,7 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
     }
 
     /** Per-tick trail: at most three particles, no smoke or repeated sound. */
-    fun emberTrail(from: Location, to: Location) = dispatch {
+    fun emberTrail(from: Location, to: Location, meteor: Boolean = false) = dispatch {
         val start = from.clone()
         val end = to.clone()
         if (start.world == null || end.world !== start.world || !valid(start) || !valid(end)) return@dispatch
@@ -380,14 +413,17 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         val direction = end.toVector().subtract(start.toVector()).normalize()
         val trailEnd = end.clone().subtract(direction.clone().multiply(min(0.24, distance * 0.75)))
         val samples = if (distance > 0.55) 2 else 1
-        lineSamples(start, trailEnd, samples).forEach { point ->
-            emit(point, Particle.FLAME, minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+        lineSamples(start, trailEnd, samples).forEachIndexed { index, point ->
+            if (meteor && index == samples / 2)
+                emit(point, Particle.DUST, HOT_WHITE, minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
+            else emit(point, Particle.FLAME, minimumEyeDistance = COMPACT_CAMERA_CLEARANCE)
         }
     }
 
-    fun emberBurst(at: Location, radius: Double) = dispatch {
+    fun emberBurst(at: Location, radius: Double, meteor: Boolean = false) = dispatch {
         val origin = at.clone()
         val reach = boundedRadius(radius, 0.5, 10.0) ?: return@dispatch
+        val ejecta = Material.TUFF.createBlockData()
         localSound(origin, Sound.ENTITY_GENERIC_EXPLODE, 0.88f, 1.12f)
         // A white-hot core breaks into a broad fire crown and a measured ember tail (206 positions max).
         emit(origin.clone().add(0.0, 0.58, 0.0), Particle.FLASH)
@@ -401,16 +437,18 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
         }
         repeat(14) { i ->
             val angle = i * PI * 2.0 / 14.0
-            emit(origin.clone().add(cos(angle) * reach * 0.2, 0.08 + (i % 4) * 0.1,
-                sin(angle) * reach * 0.2), Particle.FLAME)
+            val point = origin.clone().add(cos(angle) * reach * 0.2, 0.08 + (i % 4) * 0.1,
+                sin(angle) * reach * 0.2)
+            if (meteor) emit(point, Particle.BLOCK, ejecta) else emit(point, Particle.FLAME)
         }
         tasks.runLater(2) {
             emit(origin.clone().add(0.0, 0.9, 0.0), Particle.EXPLOSION)
             repeat(28) { i ->
                 val angle = i * PI * 2.0 / 28.0
                 val ring = reach * (0.28 + (i % 4) * 0.035)
-                emit(origin.clone().add(cos(angle) * ring, 0.06 + (i % 5) * 0.1,
-                    sin(angle) * ring), Particle.FLAME)
+                val point = origin.clone().add(cos(angle) * ring, 0.06 + (i % 5) * 0.1,
+                    sin(angle) * ring)
+                emit(point, if (meteor) Particle.CLOUD else Particle.FLAME)
             }
             repeat(8) { i ->
                 val angle = i * PI / 4.0
@@ -428,16 +466,20 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
             repeat(18) { i ->
                 val angle = i * PI * 2.0 / 18.0 + 0.08
                 val ring = reach * (0.36 + (i % 3) * 0.12)
-                emit(origin.clone().add(cos(angle) * ring, 0.12 + (i % 4) * 0.12,
-                    sin(angle) * ring), Particle.FLAME)
+                val point = origin.clone().add(cos(angle) * ring, 0.12 + (i % 4) * 0.12,
+                    sin(angle) * ring)
+                if (meteor) emit(point, Particle.DUST_COLOR_TRANSITION, GOLD_TO_WHITE)
+                else emit(point, Particle.FLAME)
             }
         }
         tasks.runLater(8) {
             repeat(28) { i ->
                 val angle = i * PI * 2.0 / 28.0 + 0.04
                 val ring = reach * (0.52 + (i % 5) * 0.095)
-                emit(origin.clone().add(cos(angle) * ring, 0.16 + (i % 6) * 0.16,
-                    sin(angle) * ring), if (i % 4 == 0) Particle.DUST else Particle.FLAME,
+                val point = origin.clone().add(cos(angle) * ring, 0.16 + (i % 6) * 0.16,
+                    sin(angle) * ring)
+                if (meteor) emit(point, Particle.DUST, GOLD_TAIL)
+                else emit(point, if (i % 4 == 0) Particle.DUST else Particle.FLAME,
                     if (i % 4 == 0) GOLD_TAIL else null)
             }
             repeat(10) { i ->
@@ -452,7 +494,8 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
                 val ring = reach * (0.48 + (i % 4) * 0.12)
                 val point = origin.clone().add(cos(angle) * ring, 0.34 + (i % 5) * 0.19,
                     sin(angle) * ring)
-                if (i % 3 == 0) emit(point, Particle.DUST, GOLD_TAIL) else emit(point, Particle.FLAME)
+                if (meteor || i % 3 == 0) emit(point, Particle.DUST, GOLD_TAIL)
+                else emit(point, Particle.FLAME)
             }
             repeat(8) { i ->
                 val angle = i * PI / 4.0 + 0.2
@@ -660,7 +703,8 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
                 emit(point.clone().add(cos(angle) * -0.14, 0.14, sin(angle) * -0.14),
                     Particle.DUST_COLOR_TRANSITION, GREEN_TO_WHITE)
             }
-            if (index % 4 == 0) emit(point.clone().add(0.0, 0.22, 0.0), Particle.END_ROD)
+            if (index % 4 == 0) emit(point.clone().add(0.0, 0.22, 0.0),
+                if ((index + age / 2) % 3 == 0) Particle.HAPPY_VILLAGER else Particle.END_ROD)
             if (secondary && index % 3 == 0) emit(point.clone().add(0.0, -0.12, 0.0),
                 Particle.DUST_COLOR_TRANSITION, VIOLET_TO_AQUA)
         }
@@ -697,8 +741,11 @@ internal class StaffSpellVisuals(private val tasks: LifecycleTaskScope) {
                 .add(right.clone().multiply(0.08)).add(forward.clone().multiply(-0.12))
                 .add(0.0, 0.14, 0.0), Particle.HAPPY_VILLAGER)
             if (index % 3 == 0) emit(point.clone().add(0.0, 0.2, 0.0), Particle.END_ROD)
-            if (index % 2 == 1) emit(point.clone().add(0.0, 0.12, 0.0),
-                Particle.DUST_COLOR_TRANSITION, GREEN_TO_AQUA)
+            if (index % 2 == 1) {
+                val spore = (index + age / 2) % 3 == 0
+                if (spore) emit(point.clone().add(0.0, 0.12, 0.0), Particle.HAPPY_VILLAGER)
+                else emit(point.clone().add(0.0, 0.12, 0.0), Particle.DUST_COLOR_TRANSITION, GREEN_TO_AQUA)
+            }
         }
     }
 

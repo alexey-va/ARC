@@ -6,6 +6,7 @@ import io.mockk.every
 import io.mockk.mockk
 import org.joml.Vector3f
 import org.bukkit.Location
+import org.bukkit.Material
 import org.bukkit.block.data.BlockData
 import org.bukkit.entity.Player
 import org.bukkit.util.Transformation
@@ -114,7 +115,7 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         }
     }
 
-    "remaining ice and comet ground links leave small gaps at their joins" {
+    "comet ground links leave small gaps at their joins" {
         fun ringLinksAvoidCornerOverlap(parts: List<StaffDisplayPart>, angleStep: Double): Boolean {
             val center = org.joml.Vector3f()
             parts.forEach { center.add(it.center) }
@@ -125,9 +126,6 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
                 part.scale.z < (fullChord - 0.001).toFloat()
             }
         }
-
-        val frost = staffDisplayParts(StaffSpell.FROST, 4, 30, 0.0, 8.0, true, true)
-        ringLinksAvoidCornerOverlap(frost.take(16), kotlin.math.PI / 8.0) shouldBe true
 
         val ember = staffDisplayParts(StaffSpell.EMBER, 4, 20, 0.0, 2.8, true)
         ringLinksAvoidCornerOverlap(ember.subList(34, 48), 2.0 * kotlin.math.PI / 14.0) shouldBe true
@@ -147,7 +145,8 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
                 fun volume(parts: List<StaffDisplayPart>) = parts.sumOf {
                     (it.scale.x * it.scale.y * it.scale.z).toDouble()
                 }
-                if (spell in setOf(StaffSpell.CHAIN, StaffSpell.LANCE, StaffSpell.MARK, StaffSpell.EMBER)) {
+                if (spell in setOf(StaffSpell.CHAIN, StaffSpell.LANCE, StaffSpell.MARK, StaffSpell.EMBER) ||
+                    spell == StaffSpell.FROST && secondary) {
                     (volume(first) > volume(body) * 0.01) shouldBe true
                 } else {
                     (volume(first) < volume(body) * 0.01) shouldBe true
@@ -199,13 +198,19 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         (cloudRadius(collapsed) < cloudRadius(closed) * 0.15) shouldBe true
     }
 
-    "secondary frost nova and chunky emerald tidal front preserve their different paths" {
-        val frostStart = staffDisplayParts(StaffSpell.FROST, 2, 30, 0.0, 8.0, true, true)
-        val frostEnd = staffDisplayParts(StaffSpell.FROST, 18, 30, 0.0, 8.0, true, true)
-        val frostStartRadius = kotlin.math.hypot(frostStart[0].center.x.toDouble(), frostStart[0].center.z.toDouble())
-        val frostEndRadius = kotlin.math.hypot(frostEnd[0].center.x.toDouble(), frostEnd[0].center.z.toDouble())
-        (frostStartRadius > 1.6 && frostStartRadius < 1.9) shouldBe true
-        (frostEndRadius > frostStartRadius * 3.5f) shouldBe true
+    "shoulder icicle assembles as one body then fractures while the emerald front travels" {
+        val crystal = staffDisplayParts(StaffSpell.FROST, 8, 80, 1.0, 0.8, false, true)
+        val flying = staffDisplayParts(StaffSpell.FROST, 16, 80, 1.0, 0.8, false, true)
+        crystal.size shouldBe 8
+        crystal.zip(flying).forEach { (a, b) ->
+            a.center shouldBe b.center
+            a.scale shouldBe b.scale
+            a.material shouldBe b.material
+        }
+        val shatter = staffDisplayParts(StaffSpell.FROST, 4, 10, 0.0, 0.9, true, true)
+        (shatter.maxOf { it.center.length() } > crystal.maxOf { it.center.length() }) shouldBe true
+        val faded = staffDisplayParts(StaffSpell.FROST, 8, 10, 0.0, 0.9, true, true)
+        (faded.maxOf { it.scale.length() } < 0.002f) shouldBe true
 
         val tidalStart = staffDisplayParts(StaffSpell.NOVA, 2, 20, 12.0, 5.5, true, true)
         val tidalEnd = staffDisplayParts(StaffSpell.NOVA, 18, 20, 12.0, 5.5, true, true)
@@ -219,9 +224,9 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         (tidalEnd.maxOf { it.center.y + it.scale.y / 2f } < 0.25f) shouldBe true
         (tidalEnd.maxOf { it.scale.x } < 0.1f) shouldBe true
         val peak = staffDisplayParts(StaffSpell.NOVA, 10, 30, 12.0, 5.5, true, true)
-        (peak.maxOf { it.center.y + it.scale.y / 2f } > 2.0f) shouldBe true
-        (peak[1].center.y > 1.0f) shouldBe true
-        (peak[0].scale.y >= 1.2f) shouldBe true
+        (peak.maxOf { it.center.y + it.scale.y / 2f } > 1.5f) shouldBe true
+        (peak.maxOf { it.center.y } > 1.0f) shouldBe true
+        (peak.maxOf { it.scale.y } >= 1.2f) shouldBe true
     }
 
     "emerald crescent keeps a broad low silhouette and moves out continuously" {
@@ -260,6 +265,10 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         val secondary = staffDisplayParts(StaffSpell.EMBER, 8, 20, 0.0, 3.5, true, true)
         (secondary.drop(2).maxOf { kotlin.math.hypot(it.center.x.toDouble(), it.center.z.toDouble()) } >
             primary.drop(2).maxOf { kotlin.math.hypot(it.center.x.toDouble(), it.center.z.toDouble()) }) shouldBe true
+        val meteor = staffDisplayParts(StaffSpell.EMBER, 8, 20, 0.0, 2.8, true, true)
+        // Same radius: the meteor has a vertical plume and heavy ejecta, not a larger recolored comet.
+        (meteor.maxOf { it.center.y } > primary.maxOf { it.center.y } * 1.5f) shouldBe true
+        meteor.takeLast(14).all { it.material in setOf(Material.MAGMA_BLOCK, Material.BLACKSTONE) } shouldBe true
     }
 
     "display handles move in place, refresh materials, expire, cancel, and close" {
