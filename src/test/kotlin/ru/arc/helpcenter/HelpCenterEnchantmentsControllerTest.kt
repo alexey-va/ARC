@@ -150,19 +150,17 @@ class HelpCenterEnchantmentsControllerTest {
     }
 
     @Test
-    fun `acquisition inventory bridge returns to the acquisition screen`() {
+    fun `recycling inventory bridge returns to the enchantment overview`() {
         open()
-        click("acquisition")
-        assertEquals("help.enchantments.acquisition", screen.id)
-        click("enchanter")
-        assertEquals(listOf("enchanter"), executed)
+        click("recycle")
+        assertEquals(listOf("tinkerer"), executed)
         val beforeReturn = screenDisplays
 
         player.closeInventory()
         paper.performTicks(2)
 
         assertEquals(beforeReturn + 1, screenDisplays)
-        assertEquals("help.enchantments.acquisition", screen.id)
+        assertEquals("help.enchantments", screen.id)
     }
 
     private fun open() = controller.open(player, HelpCenterPage.ENCHANTMENTS)

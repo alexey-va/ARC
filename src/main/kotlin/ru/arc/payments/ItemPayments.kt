@@ -1,4 +1,4 @@
-package ru.arc.itemlore
+package ru.arc.payments
 
 import com.google.gson.Gson
 import net.milkbowl.vault.economy.Economy
@@ -19,8 +19,8 @@ import java.util.LinkedHashMap
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
-/** Immutable-at-submit item-lore payment intent. Arrays are copied before any task is queued. */
-data class ItemLorePaymentRequest(
+/** Immutable-at-submit item payment intent. Arrays are copied before any task is queued. */
+data class ItemPaymentRequest(
     val operationId: UUID,
     val playerId: UUID,
     val slot: Int,
@@ -30,7 +30,7 @@ data class ItemLorePaymentRequest(
     val priceMinor: Long,
 )
 
-enum class ItemLorePaymentOutcome {
+enum class ItemPaymentOutcome {
     SUCCESS,
     CANCELLED,
     INSUFFICIENT_FUNDS,
@@ -45,7 +45,7 @@ enum class ItemLorePaymentOutcome {
  * until payment and item mutation are both known complete, or a known-unpaid
  * path has been exactly acknowledged.
  */
-data class ItemLorePaymentJournalRecord(
+data class ItemPaymentJournalRecord(
     val operationId: String,
     val playerId: String,
     val slot: Int,
@@ -55,19 +55,19 @@ data class ItemLorePaymentJournalRecord(
     val balanceBeforeMajor: Double,
     val createdAtMillis: Long,
 ) {
-    fun validated(): ItemLorePaymentJournalRecord {
-        require(canonicalUuid(operationId)) { "Invalid item-lore payment operation id" }
-        require(canonicalUuid(playerId)) { "Invalid item-lore payment player id" }
-        require(slot in 0..MAX_SLOT) { "Invalid item-lore payment slot" }
-        require(priceMinor > 0L) { "Item-lore payment must have a positive price" }
-        require(balanceBeforeMajor.isFinite() && balanceBeforeMajor >= 0.0) { "Invalid item-lore balance snapshot" }
-        require(createdAtMillis > 0L) { "Invalid item-lore payment timestamp" }
+    fun validated(): ItemPaymentJournalRecord {
+        require(canonicalUuid(operationId)) { "Invalid item payment operation id" }
+        require(canonicalUuid(playerId)) { "Invalid item payment player id" }
+        require(slot in 0..MAX_SLOT) { "Invalid item payment slot" }
+        require(priceMinor > 0L) { "Item payment must have a positive price" }
+        require(balanceBeforeMajor.isFinite() && balanceBeforeMajor >= 0.0) { "Invalid payment balance snapshot" }
+        require(createdAtMillis > 0L) { "Invalid item payment timestamp" }
         require(decodeItem(originalItemBase64).size <= MAX_ITEM_BYTES) { "Original item snapshot is too large" }
         require(decodeItem(replacementItemBase64).size <= MAX_ITEM_BYTES) { "Replacement item snapshot is too large" }
         return this
     }
 
-    internal fun sameContent(other: ItemLorePaymentJournalRecord): Boolean =
+    internal fun sameContent(other: ItemPaymentJournalRecord): Boolean =
         operationId == other.operationId &&
             playerId == other.playerId &&
             slot == other.slot &&
@@ -88,38 +88,38 @@ data class ItemLorePaymentJournalRecord(
     }
 }
 
-interface ItemLorePaymentJournal {
-    fun loadAll(): List<ItemLorePaymentJournalRecord>
+interface ItemPaymentJournal {
+    fun loadAll(): List<ItemPaymentJournalRecord>
 
-    fun commit(record: ItemLorePaymentJournalRecord): ItemLorePaymentJournalRecord
+    fun commit(record: ItemPaymentJournalRecord): ItemPaymentJournalRecord
 
-    fun acknowledgeExactly(record: ItemLorePaymentJournalRecord): DurableAcknowledgementOutcome
+    fun acknowledgeExactly(record: ItemPaymentJournalRecord): DurableAcknowledgementOutcome
 }
 
 /** Production adapter using the shared bounded, atomic durable record journal. */
-class FileItemLorePaymentJournal(
+class FileItemPaymentJournal(
     root: Path,
-    relativeDirectory: Path = Path.of("data", "item-lore", "payments"),
+    relativeDirectory: Path,
     gson: Gson = Common.prettyGson,
-) : ItemLorePaymentJournal {
+) : ItemPaymentJournal {
     private val durable =
         DurableRecordJournal(
             root = root,
             relativeDirectory = relativeDirectory,
             maxRecordBytes = MAX_RECORD_BYTES,
-            encode = { record: ItemLorePaymentJournalRecord -> gson.toJson(record).toByteArray(StandardCharsets.UTF_8) },
-            decode = { bytes -> gson.fromJson(bytes.toString(StandardCharsets.UTF_8), ItemLorePaymentJournalRecord::class.java) },
-            validate = ItemLorePaymentJournalRecord::validated,
+            encode = { record: ItemPaymentJournalRecord -> gson.toJson(record).toByteArray(StandardCharsets.UTF_8) },
+            decode = { bytes -> gson.fromJson(bytes.toString(StandardCharsets.UTF_8), ItemPaymentJournalRecord::class.java) },
+            validate = ItemPaymentJournalRecord::validated,
         )
 
-    override fun loadAll(): List<ItemLorePaymentJournalRecord> = durable.loadAll().map { it.value.validated() }
+    override fun loadAll(): List<ItemPaymentJournalRecord> = durable.loadAll().map { it.value.validated() }
 
-    override fun commit(record: ItemLorePaymentJournalRecord): ItemLorePaymentJournalRecord {
+    override fun commit(record: ItemPaymentJournalRecord): ItemPaymentJournalRecord {
         val valid = record.validated()
         return durable.commit(valid.operationId, valid).validated()
     }
 
-    override fun acknowledgeExactly(record: ItemLorePaymentJournalRecord): DurableAcknowledgementOutcome =
+    override fun acknowledgeExactly(record: ItemPaymentJournalRecord): DurableAcknowledgementOutcome =
         durable.acknowledgeExactly(record.operationId, record) { expected, current -> expected.sameContent(current) }
 
     private companion object {
@@ -131,13 +131,13 @@ class FileItemLorePaymentJournal(
  * A small scheduling seam keeps disk I/O asynchronous and all Vault/Bukkit work
  * on the Paper main thread. Production always delegates through [Tasks].
  */
-interface ItemLorePaymentTasks {
+interface ItemPaymentTasks {
     fun async(task: () -> Unit)
 
     fun sync(task: () -> Unit)
 }
 
-private object PaperItemLorePaymentTasks : ItemLorePaymentTasks {
+private object PaperItemPaymentTasks : ItemPaymentTasks {
     override fun async(task: () -> Unit) {
         Tasks.scheduler.async { task() }
     }
@@ -148,22 +148,22 @@ private object PaperItemLorePaymentTasks : ItemLorePaymentTasks {
 }
 
 /**
- * Owns the one-shot Vault debit for the NPC item-lore editor.
+ * Owns one-shot Vault debits for item mutations.
  *
  * Call [start] after ARC installs `Tasks`; [isReady] remains false until the
  * durable journal has loaded. Call [close] before module shutdown/reload. The
  * supplied callbacks are invoked on the main thread: [validate] must re-check
- * the NPC/session/slot/item domain immediately before the debit, and [apply]
+ * the current operation, slot and item immediately before the debit, and [apply]
  * must perform the caller-owned native item mutation after a successful debit.
  * Neither callback may block. A thrown/ambiguous withdrawal or item mutation
  * leaves its durable record present and locks that player; this service never
  * retries, refunds, or clears such a record automatically.
  */
-class ItemLorePayments(
-    private val journalFactory: () -> ItemLorePaymentJournal,
+class ItemPayments(
+    private val journalFactory: () -> ItemPaymentJournal,
     private val economyProvider: () -> Economy? = EconomyModule::getEconomy,
     private val playerLookup: (UUID) -> Player? = Bukkit::getPlayer,
-    private val tasks: ItemLorePaymentTasks = PaperItemLorePaymentTasks,
+    private val tasks: ItemPaymentTasks = PaperItemPaymentTasks,
     private val isMainThread: () -> Boolean = Bukkit::isPrimaryThread,
     private val clockMillis: () -> Long = System::currentTimeMillis,
     private val warning: (String, Throwable?) -> Unit = { message, failure ->
@@ -172,10 +172,10 @@ class ItemLorePayments(
 ) {
     /** Test/embedded seam for a journal whose construction has no filesystem work. */
     constructor(
-        journal: ItemLorePaymentJournal,
+        journal: ItemPaymentJournal,
         economyProvider: () -> Economy? = EconomyModule::getEconomy,
         playerLookup: (UUID) -> Player? = Bukkit::getPlayer,
-        tasks: ItemLorePaymentTasks = PaperItemLorePaymentTasks,
+        tasks: ItemPaymentTasks = PaperItemPaymentTasks,
         isMainThread: () -> Boolean = Bukkit::isPrimaryThread,
         clockMillis: () -> Long = System::currentTimeMillis,
         warning: (String, Throwable?) -> Unit = { message, failure ->
@@ -188,10 +188,10 @@ class ItemLorePayments(
     private enum class Phase { PREPARE, COMMIT, REVALIDATE, WITHDRAW, APPLY, ACKNOWLEDGE, RECOVERY }
 
     private class Pending(
-        val request: ItemLorePaymentRequest,
+        val request: ItemPaymentRequest,
         val validate: () -> Boolean,
         val apply: () -> Unit,
-        val completion: (ItemLorePaymentOutcome) -> Unit,
+        val completion: (ItemPaymentOutcome) -> Unit,
         val generation: Long,
     ) {
         @Volatile var phase: Phase = Phase.PREPARE
@@ -204,7 +204,7 @@ class ItemLorePayments(
     private val activeOperationIds = mutableSetOf<UUID>()
     private val recentOperationIds = LinkedHashMap<UUID, Unit>(RECENT_OPERATION_LIMIT, 0.75f, true)
     private val unresolvedPlayers = mutableSetOf<UUID>()
-    @Volatile private var loadedJournal: ItemLorePaymentJournal? = null
+    @Volatile private var loadedJournal: ItemPaymentJournal? = null
     @Volatile private var state: State = State.NEW
 
     val isReady: Boolean get() = state == State.READY
@@ -226,9 +226,9 @@ class ItemLorePayments(
                 val load = runCatching {
                     val loaded = journalFactory()
                     val records = loaded.loadAll().also { records ->
-                        require(records.size <= MAX_UNRESOLVED_RECORDS) { "Item-lore payment journal exceeds its unresolved-record limit" }
-                        records.forEach(ItemLorePaymentJournalRecord::validated)
-                        require(records.map { it.operationId }.distinct().size == records.size) { "Duplicate item-lore payment operation id" }
+                        require(records.size <= MAX_UNRESOLVED_RECORDS) { "Item payment journal exceeds its unresolved-record limit" }
+                        records.forEach(ItemPaymentJournalRecord::validated)
+                        require(records.map { it.operationId }.distinct().size == records.size) { "Duplicate item payment operation id" }
                     }
                     loaded to records
                 }
@@ -270,10 +270,10 @@ class ItemLorePayments(
      * are rejected before a journal record or Vault call is made.
      */
     fun submit(
-        request: ItemLorePaymentRequest,
+        request: ItemPaymentRequest,
         validate: () -> Boolean,
         apply: () -> Unit,
-        completion: (ItemLorePaymentOutcome) -> Unit,
+        completion: (ItemPaymentOutcome) -> Unit,
     ) {
         val invalid = validateRequest(request)
         if (invalid != null) {
@@ -305,22 +305,22 @@ class ItemLorePayments(
     }
 
     private fun begin(
-        request: ItemLorePaymentRequest,
+        request: ItemPaymentRequest,
         validate: () -> Boolean,
         apply: () -> Unit,
-        completion: (ItemLorePaymentOutcome) -> Unit,
+        completion: (ItemPaymentOutcome) -> Unit,
     ) {
         if (!isMainThread()) {
-            completeSafely(completion, ItemLorePaymentOutcome.UNAVAILABLE)
+            completeSafely(completion, ItemPaymentOutcome.UNAVAILABLE)
             return
         }
         val immediate = synchronized(lock) {
             when {
-                state != State.READY -> ItemLorePaymentOutcome.UNAVAILABLE
-                request.operationId in activeOperationIds || request.operationId in recentOperationIds -> ItemLorePaymentOutcome.BUSY_OR_DUPLICATE
-                request.playerId in unresolvedPlayers -> ItemLorePaymentOutcome.OUTCOME_UNKNOWN
-                request.playerId in activeByPlayer -> ItemLorePaymentOutcome.BUSY_OR_DUPLICATE
-                activeByPlayer.size + unresolvedPlayers.size >= MAX_UNRESOLVED_RECORDS -> ItemLorePaymentOutcome.UNAVAILABLE
+                state != State.READY -> ItemPaymentOutcome.UNAVAILABLE
+                request.operationId in activeOperationIds || request.operationId in recentOperationIds -> ItemPaymentOutcome.BUSY_OR_DUPLICATE
+                request.playerId in unresolvedPlayers -> ItemPaymentOutcome.OUTCOME_UNKNOWN
+                request.playerId in activeByPlayer -> ItemPaymentOutcome.BUSY_OR_DUPLICATE
+                activeByPlayer.size + unresolvedPlayers.size >= MAX_UNRESOLVED_RECORDS -> ItemPaymentOutcome.UNAVAILABLE
                 else -> null
             }
         }
@@ -335,41 +335,41 @@ class ItemLorePayments(
         }
         val player = runCatching { playerLookup(request.playerId)?.takeIf(Player::isOnline) }.getOrElse { failure ->
             warnFailure(request.operationId, request.playerId, Phase.PREPARE, failure)
-            completeSafely(completion, ItemLorePaymentOutcome.UNAVAILABLE)
+            completeSafely(completion, ItemPaymentOutcome.UNAVAILABLE)
             return
         }
         if (player == null) {
-            completeSafely(completion, ItemLorePaymentOutcome.CANCELLED)
+            completeSafely(completion, ItemPaymentOutcome.CANCELLED)
             return
         }
         val economy = runCatching(economyProvider).getOrElse { failure ->
             warnFailure(request.operationId, request.playerId, Phase.PREPARE, failure)
-            completeSafely(completion, ItemLorePaymentOutcome.UNAVAILABLE)
+            completeSafely(completion, ItemPaymentOutcome.UNAVAILABLE)
             return
         } ?: run {
-            completeSafely(completion, ItemLorePaymentOutcome.UNAVAILABLE)
+            completeSafely(completion, ItemPaymentOutcome.UNAVAILABLE)
             return
         }
         val amount = minorToMajor(request.priceMinor) ?: run {
-            completeSafely(completion, ItemLorePaymentOutcome.UNAVAILABLE)
+            completeSafely(completion, ItemPaymentOutcome.UNAVAILABLE)
             return
         }
         val balanceBefore = runCatching { economy.getBalance(player) }.getOrElse { failure ->
             warnFailure(request.operationId, request.playerId, Phase.PREPARE, failure)
-            completeSafely(completion, ItemLorePaymentOutcome.UNAVAILABLE)
+            completeSafely(completion, ItemPaymentOutcome.UNAVAILABLE)
             return
         }
         if (!balanceBefore.isFinite() || balanceBefore < 0.0) {
-            completeSafely(completion, ItemLorePaymentOutcome.UNAVAILABLE)
+            completeSafely(completion, ItemPaymentOutcome.UNAVAILABLE)
             return
         }
         val canPay = runCatching { economy.has(player, amount) }.getOrElse { failure ->
             warnFailure(request.operationId, request.playerId, Phase.PREPARE, failure)
-            completeSafely(completion, ItemLorePaymentOutcome.UNAVAILABLE)
+            completeSafely(completion, ItemPaymentOutcome.UNAVAILABLE)
             return
         }
         if (!canPay) {
-            completeSafely(completion, ItemLorePaymentOutcome.INSUFFICIENT_FUNDS)
+            completeSafely(completion, ItemPaymentOutcome.INSUFFICIENT_FUNDS)
             return
         }
 
@@ -386,12 +386,12 @@ class ItemLorePayments(
             }
         }
         if (pending == null) {
-            completeSafely(completion, ItemLorePaymentOutcome.BUSY_OR_DUPLICATE)
+            completeSafely(completion, ItemPaymentOutcome.BUSY_OR_DUPLICATE)
             return
         }
 
         val record =
-            ItemLorePaymentJournalRecord(
+            ItemPaymentJournalRecord(
                 operationId = request.operationId.toString(),
                 playerId = request.playerId.toString(),
                 slot = request.slot,
@@ -406,13 +406,13 @@ class ItemLorePayments(
             tasks.async {
                 val committed =
                     runCatching {
-                        requireNotNull(loadedJournal) { "Item-lore journal is not initialized" }
+                        requireNotNull(loadedJournal) { "Item payment journal is not initialized" }
                             .commit(record)
-                            .also { require(record.sameContent(it)) { "Journal readback changed item-lore payment intent" } }
+                            .also { require(record.sameContent(it)) { "Journal readback changed item payment intent" } }
                     }
                 tasks.sync {
                     if (committed.isFailure) {
-                        acknowledge(pending, record, ItemLorePaymentOutcome.FAILED_UNCHARGED, Phase.COMMIT)
+                        acknowledge(pending, record, ItemPaymentOutcome.FAILED_UNCHARGED, Phase.COMMIT)
                     } else {
                         afterCommit(pending, record)
                     }
@@ -420,20 +420,20 @@ class ItemLorePayments(
             }
         } catch (failure: Throwable) {
             warnFailure(request.operationId, request.playerId, Phase.COMMIT, failure)
-            acknowledge(pending, record, ItemLorePaymentOutcome.FAILED_UNCHARGED, Phase.COMMIT)
+            acknowledge(pending, record, ItemPaymentOutcome.FAILED_UNCHARGED, Phase.COMMIT)
         }
     }
 
-    private fun afterCommit(pending: Pending, record: ItemLorePaymentJournalRecord) {
+    private fun afterCommit(pending: Pending, record: ItemPaymentJournalRecord) {
         val request = pending.request
         pending.phase = Phase.REVALIDATE
         if (!canContinue(pending) || !isMainThread()) {
-            acknowledge(pending, record, ItemLorePaymentOutcome.CANCELLED, Phase.REVALIDATE)
+            acknowledge(pending, record, ItemPaymentOutcome.CANCELLED, Phase.REVALIDATE)
             return
         }
         val player = runCatching { playerLookup(request.playerId)?.takeIf(Player::isOnline) }.getOrElse { failure ->
             warnFailure(request.operationId, request.playerId, Phase.REVALIDATE, failure)
-            acknowledge(pending, record, ItemLorePaymentOutcome.UNAVAILABLE, Phase.REVALIDATE)
+            acknowledge(pending, record, ItemPaymentOutcome.UNAVAILABLE, Phase.REVALIDATE)
             return
         }
         if (player == null || !runCatching(pending.validate).getOrElse { failure ->
@@ -441,29 +441,29 @@ class ItemLorePayments(
                 false
             }
         ) {
-            acknowledge(pending, record, ItemLorePaymentOutcome.CANCELLED, Phase.REVALIDATE)
+            acknowledge(pending, record, ItemPaymentOutcome.CANCELLED, Phase.REVALIDATE)
             return
         }
         val economy = runCatching(economyProvider).getOrElse { failure ->
             warnFailure(request.operationId, request.playerId, Phase.REVALIDATE, failure)
-            acknowledge(pending, record, ItemLorePaymentOutcome.UNAVAILABLE, Phase.REVALIDATE)
+            acknowledge(pending, record, ItemPaymentOutcome.UNAVAILABLE, Phase.REVALIDATE)
             return
         } ?: run {
-            acknowledge(pending, record, ItemLorePaymentOutcome.UNAVAILABLE, Phase.REVALIDATE)
+            acknowledge(pending, record, ItemPaymentOutcome.UNAVAILABLE, Phase.REVALIDATE)
             return
         }
         val amount = minorToMajor(request.priceMinor) ?: run {
-            acknowledge(pending, record, ItemLorePaymentOutcome.UNAVAILABLE, Phase.REVALIDATE)
+            acknowledge(pending, record, ItemPaymentOutcome.UNAVAILABLE, Phase.REVALIDATE)
             return
         }
         val canPay = runCatching { economy.has(player, amount) }
         if (canPay.isFailure) {
             warnFailure(request.operationId, request.playerId, Phase.REVALIDATE, canPay.exceptionOrNull()!!)
-            acknowledge(pending, record, ItemLorePaymentOutcome.UNAVAILABLE, Phase.REVALIDATE)
+            acknowledge(pending, record, ItemPaymentOutcome.UNAVAILABLE, Phase.REVALIDATE)
             return
         }
         if (!canPay.getOrThrow()) {
-            acknowledge(pending, record, ItemLorePaymentOutcome.INSUFFICIENT_FUNDS, Phase.REVALIDATE)
+            acknowledge(pending, record, ItemPaymentOutcome.INSUFFICIENT_FUNDS, Phase.REVALIDATE)
             return
         }
         if (!runCatching(pending.validate).getOrElse { failure ->
@@ -471,12 +471,12 @@ class ItemLorePayments(
                 false
             }
         ) {
-            acknowledge(pending, record, ItemLorePaymentOutcome.CANCELLED, Phase.REVALIDATE)
+            acknowledge(pending, record, ItemPaymentOutcome.CANCELLED, Phase.REVALIDATE)
             return
         }
 
         if (!enterWithdrawal(pending)) {
-            acknowledge(pending, record, ItemLorePaymentOutcome.CANCELLED, Phase.REVALIDATE)
+            acknowledge(pending, record, ItemPaymentOutcome.CANCELLED, Phase.REVALIDATE)
             return
         }
         val response = try {
@@ -489,9 +489,9 @@ class ItemLorePayments(
             val currentBalance = runCatching { economy.getBalance(player) }.getOrNull()
             val outcome =
                 if (currentBalance != null && currentBalance.isFinite() && currentBalance + BALANCE_EPSILON < amount) {
-                    ItemLorePaymentOutcome.INSUFFICIENT_FUNDS
+                    ItemPaymentOutcome.INSUFFICIENT_FUNDS
                 } else {
-                    ItemLorePaymentOutcome.FAILED_UNCHARGED
+                    ItemPaymentOutcome.FAILED_UNCHARGED
                 }
             acknowledge(pending, record, outcome, Phase.WITHDRAW)
             return
@@ -504,7 +504,7 @@ class ItemLorePayments(
             markUnknown(pending, Phase.APPLY, failure)
             return
         }
-        acknowledge(pending, record, ItemLorePaymentOutcome.SUCCESS, Phase.APPLY)
+        acknowledge(pending, record, ItemPaymentOutcome.SUCCESS, Phase.APPLY)
     }
 
     private fun canContinue(pending: Pending): Boolean =
@@ -525,8 +525,8 @@ class ItemLorePayments(
 
     private fun acknowledge(
         pending: Pending,
-        record: ItemLorePaymentJournalRecord,
-        outcome: ItemLorePaymentOutcome,
+        record: ItemPaymentJournalRecord,
+        outcome: ItemPaymentOutcome,
         precedingPhase: Phase,
     ) {
         pending.phase = Phase.ACKNOWLEDGE
@@ -534,7 +534,7 @@ class ItemLorePayments(
             tasks.async {
                 val result =
                     runCatching {
-                        requireNotNull(loadedJournal) { "Item-lore journal is not initialized" }
+                        requireNotNull(loadedJournal) { "Item payment journal is not initialized" }
                             .acknowledgeExactly(record)
                     }
                 tasks.sync {
@@ -546,24 +546,24 @@ class ItemLorePayments(
                         synchronized(lock) { unresolvedPlayers += pending.request.playerId }
                         if (failure != null) warnFailure(pending.request.operationId, pending.request.playerId, Phase.ACKNOWLEDGE, failure)
                         else warnOperation(pending.request.operationId, pending.request.playerId, Phase.ACKNOWLEDGE, "acknowledgement_${ack?.name?.lowercase() ?: "missing"}_after_${precedingPhase.name.lowercase()}")
-                        finish(pending, ItemLorePaymentOutcome.OUTCOME_UNKNOWN, lockPlayer = true)
+                        finish(pending, ItemPaymentOutcome.OUTCOME_UNKNOWN, lockPlayer = true)
                     }
                 }
             }
         } catch (failure: Throwable) {
             synchronized(lock) { unresolvedPlayers += pending.request.playerId }
             warnFailure(pending.request.operationId, pending.request.playerId, Phase.ACKNOWLEDGE, failure)
-            finish(pending, ItemLorePaymentOutcome.OUTCOME_UNKNOWN, lockPlayer = true)
+            finish(pending, ItemPaymentOutcome.OUTCOME_UNKNOWN, lockPlayer = true)
         }
     }
 
     private fun markUnknown(pending: Pending, phase: Phase, failure: Throwable) {
         synchronized(lock) { unresolvedPlayers += pending.request.playerId }
         warnFailure(pending.request.operationId, pending.request.playerId, phase, failure)
-        finish(pending, ItemLorePaymentOutcome.OUTCOME_UNKNOWN, lockPlayer = true)
+        finish(pending, ItemPaymentOutcome.OUTCOME_UNKNOWN, lockPlayer = true)
     }
 
-    private fun finish(pending: Pending, outcome: ItemLorePaymentOutcome, lockPlayer: Boolean) {
+    private fun finish(pending: Pending, outcome: ItemPaymentOutcome, lockPlayer: Boolean) {
         synchronized(lock) {
             if (lockPlayer) unresolvedPlayers += pending.request.playerId
             activeByPlayer.remove(pending.request.playerId, pending)
@@ -584,7 +584,7 @@ class ItemLorePayments(
         }
     }
 
-    private fun completeSafely(completion: (ItemLorePaymentOutcome) -> Unit, outcome: ItemLorePaymentOutcome) {
+    private fun completeSafely(completion: (ItemPaymentOutcome) -> Unit, outcome: ItemPaymentOutcome) {
         runCatching { completion(outcome) }
             .onFailure { failure -> warnFailure(null, null, Phase.APPLY, failure) }
     }
@@ -596,7 +596,7 @@ class ItemLorePayments(
     private fun warnOperation(operationId: UUID?, playerId: UUID?, phase: Phase, cause: String) {
         runCatching {
             warning(
-                "Item-lore payment unresolved op=${operationId?.toString() ?: "none"} " +
+                "Item payment unresolved op=${operationId?.toString() ?: "none"} " +
                     "player=${playerId?.toString() ?: "none"} phase=${phase.name.lowercase()} " +
                     "cause=${cause.take(MAX_CAUSE_CHARS)}",
                 null,
@@ -604,10 +604,10 @@ class ItemLorePayments(
         }
     }
 
-    private fun snapshotRequest(request: ItemLorePaymentRequest): ItemLorePaymentRequest =
+    private fun snapshotRequest(request: ItemPaymentRequest): ItemPaymentRequest =
         request.copy(originalItemBytes = request.originalItemBytes.copyOf(), replacementItemBytes = request.replacementItemBytes.copyOf())
 
-    private fun validateRequest(request: ItemLorePaymentRequest): ItemLorePaymentOutcome? =
+    private fun validateRequest(request: ItemPaymentRequest): ItemPaymentOutcome? =
         runCatching {
             require(request.slot in 0..MAX_SLOT)
             require(request.priceMinor > 0L)
@@ -616,7 +616,7 @@ class ItemLorePayments(
             require(minorToMajor(request.priceMinor) != null)
         }.fold(
             onSuccess = { null },
-            onFailure = { ItemLorePaymentOutcome.FAILED_UNCHARGED },
+            onFailure = { ItemPaymentOutcome.FAILED_UNCHARGED },
         )
 
     private fun minorToMajor(value: Long): Double? = (value.toDouble() / MINOR_PER_MAJOR).takeIf { it.isFinite() && it > 0.0 }

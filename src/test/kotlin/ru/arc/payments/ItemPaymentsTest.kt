@@ -1,4 +1,4 @@
-package ru.arc.itemlore
+package ru.arc.payments
 
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldContain
@@ -13,13 +13,13 @@ import ru.arc.persistence.DurableAcknowledgementOutcome
 import java.util.ArrayDeque
 import java.util.UUID
 
-class ItemLorePaymentsTest : FunSpec({
+class ItemPaymentsTest : FunSpec({
     test("journal construction and load both start on the async queue") {
         val tasks = QueuedTasks()
         val journal = MemoryJournal()
         var constructed = false
         val payments =
-            ItemLorePayments(
+            ItemPayments(
                 journalFactory = { constructed = true; journal },
                 economyProvider = { null },
                 playerLookup = { null },
@@ -41,7 +41,7 @@ class ItemLorePaymentsTest : FunSpec({
     test("delayed journal commit rejects duplicate delivery and charges once") {
         val fixture = Fixture(balance = 99.0)
         fixture.start()
-        val outcomes = mutableListOf<ItemLorePaymentOutcome>()
+        val outcomes = mutableListOf<ItemPaymentOutcome>()
         var applied = 0
 
         fixture.payments.submit(fixture.request(), { true }, { applied++ }, outcomes::add)
@@ -50,7 +50,7 @@ class ItemLorePaymentsTest : FunSpec({
 
         fixture.payments.submit(fixture.request(), { true }, { applied++ }, outcomes::add)
         fixture.tasks.runSync()
-        outcomes shouldContain ItemLorePaymentOutcome.BUSY_OR_DUPLICATE
+        outcomes shouldContain ItemPaymentOutcome.BUSY_OR_DUPLICATE
         fixture.economy.let { verify(exactly = 0) { it.withdrawPlayer(fixture.player, 1.25) } }
 
         fixture.tasks.runAsync() // durable pre-debit record
@@ -59,7 +59,7 @@ class ItemLorePaymentsTest : FunSpec({
         fixture.tasks.runAsync() // exact acknowledgement
         fixture.tasks.runSync()
 
-        outcomes.last() shouldBe ItemLorePaymentOutcome.SUCCESS
+        outcomes.last() shouldBe ItemPaymentOutcome.SUCCESS
         fixture.journal.records shouldBe emptyMap()
         verify(exactly = 1) { fixture.economy.withdrawPlayer(fixture.player, 1.25) }
     }
@@ -67,13 +67,13 @@ class ItemLorePaymentsTest : FunSpec({
     test("insufficient balance does not commit, debit, or mutate") {
         val fixture = Fixture(balance = 0.50)
         fixture.start()
-        val outcomes = mutableListOf<ItemLorePaymentOutcome>()
+        val outcomes = mutableListOf<ItemPaymentOutcome>()
         var applied = false
 
         fixture.payments.submit(fixture.request(priceMinor = 125), { true }, { applied = true }, outcomes::add)
         fixture.tasks.runSync()
 
-        outcomes shouldBe listOf(ItemLorePaymentOutcome.INSUFFICIENT_FUNDS)
+        outcomes shouldBe listOf(ItemPaymentOutcome.INSUFFICIENT_FUNDS)
         fixture.journal.commits shouldBe 0
         applied shouldBe false
         verify(exactly = 0) { fixture.economy.withdrawPlayer(any<Player>(), any<Double>()) }
@@ -84,17 +84,17 @@ class ItemLorePaymentsTest : FunSpec({
         fixture.start()
         var valid = true
         var applied = false
-        val outcomes = mutableListOf<ItemLorePaymentOutcome>()
+        val outcomes = mutableListOf<ItemPaymentOutcome>()
 
         fixture.payments.submit(fixture.request(), { valid }, { applied = true }, outcomes::add)
         fixture.tasks.runSync() // reserve and queue durable prepare
         fixture.tasks.runAsync() // commit the intent
-        valid = false // session/NPC/slot became stale while disk I/O was pending
+        valid = false // operation/slot became stale while disk I/O was pending
         fixture.tasks.runSync() // revalidate, then queue exact ack
         fixture.tasks.runAsync()
         fixture.tasks.runSync()
 
-        outcomes shouldBe listOf(ItemLorePaymentOutcome.CANCELLED)
+        outcomes shouldBe listOf(ItemPaymentOutcome.CANCELLED)
         fixture.journal.records shouldBe emptyMap()
         applied shouldBe false
         verify(exactly = 0) { fixture.economy.withdrawPlayer(any<Player>(), any<Double>()) }
@@ -104,7 +104,7 @@ class ItemLorePaymentsTest : FunSpec({
         val fixture = Fixture(balance = 99.0)
         fixture.start()
         var applied = false
-        val outcomes = mutableListOf<ItemLorePaymentOutcome>()
+        val outcomes = mutableListOf<ItemPaymentOutcome>()
 
         fixture.payments.submit(fixture.request(), { true }, { applied = true }, outcomes::add)
         fixture.tasks.runSync()
@@ -114,7 +114,7 @@ class ItemLorePaymentsTest : FunSpec({
         fixture.tasks.runAsync()
         fixture.tasks.runSync()
 
-        outcomes shouldBe listOf(ItemLorePaymentOutcome.CANCELLED)
+        outcomes shouldBe listOf(ItemPaymentOutcome.CANCELLED)
         fixture.journal.records shouldBe emptyMap()
         applied shouldBe false
         verify(exactly = 0) { fixture.economy.withdrawPlayer(any<Player>(), any<Double>()) }
@@ -124,14 +124,14 @@ class ItemLorePaymentsTest : FunSpec({
         val fixture = Fixture(balance = 99.0)
         fixture.start()
         every { fixture.economy.withdrawPlayer(fixture.player, 1.25) } throws IllegalStateException("provider timeout")
-        val outcomes = mutableListOf<ItemLorePaymentOutcome>()
+        val outcomes = mutableListOf<ItemPaymentOutcome>()
 
         fixture.payments.submit(fixture.request(), { true }, {}, outcomes::add)
         fixture.tasks.runSync()
         fixture.tasks.runAsync() // durable pre-debit record
         fixture.tasks.runSync() // provider call throws after the irreversible boundary
 
-        outcomes shouldBe listOf(ItemLorePaymentOutcome.OUTCOME_UNKNOWN)
+        outcomes shouldBe listOf(ItemPaymentOutcome.OUTCOME_UNKNOWN)
         fixture.journal.records.size shouldBe 1
         verify(exactly = 1) { fixture.economy.withdrawPlayer(fixture.player, 1.25) }
         fixture.logs.any {
@@ -146,11 +146,11 @@ class ItemLorePaymentsTest : FunSpec({
         fixture.tasks.runAsync()
         fixture.tasks.runSync()
         restarted.isReady shouldBe true
-        val afterRestart = mutableListOf<ItemLorePaymentOutcome>()
+        val afterRestart = mutableListOf<ItemPaymentOutcome>()
         restarted.submit(fixture.request(operationId = UUID.randomUUID()), { true }, {}, afterRestart::add)
         fixture.tasks.runSync()
 
-        afterRestart shouldBe listOf(ItemLorePaymentOutcome.OUTCOME_UNKNOWN)
+        afterRestart shouldBe listOf(ItemPaymentOutcome.OUTCOME_UNKNOWN)
         fixture.journal.records.size shouldBe 1
         verify(exactly = 1) { fixture.economy.withdrawPlayer(fixture.player, 1.25) }
         fixture.logs.any {
@@ -161,14 +161,14 @@ class ItemLorePaymentsTest : FunSpec({
     test("item mutation exception keeps the paid operation unresolved") {
         val fixture = Fixture(balance = 99.0)
         fixture.start()
-        val outcomes = mutableListOf<ItemLorePaymentOutcome>()
+        val outcomes = mutableListOf<ItemPaymentOutcome>()
 
         fixture.payments.submit(fixture.request(), { true }, { error("inventory changed") }, outcomes::add)
         fixture.tasks.runSync()
         fixture.tasks.runAsync()
         fixture.tasks.runSync()
 
-        outcomes shouldBe listOf(ItemLorePaymentOutcome.OUTCOME_UNKNOWN)
+        outcomes shouldBe listOf(ItemPaymentOutcome.OUTCOME_UNKNOWN)
         fixture.journal.records.size shouldBe 1
         verify(exactly = 1) { fixture.economy.withdrawPlayer(fixture.player, 1.25) }
         fixture.logs.any { it.contains("phase=apply") && it.contains("cause=IllegalStateException: inventory changed") } shouldBe true
@@ -178,7 +178,7 @@ class ItemLorePaymentsTest : FunSpec({
         val fixture = Fixture(balance = 99.0)
         fixture.journal.acknowledgementMismatch = true
         fixture.start()
-        val outcomes = mutableListOf<ItemLorePaymentOutcome>()
+        val outcomes = mutableListOf<ItemPaymentOutcome>()
 
         fixture.payments.submit(fixture.request(), { true }, {}, outcomes::add)
         fixture.tasks.runSync()
@@ -187,7 +187,7 @@ class ItemLorePaymentsTest : FunSpec({
         fixture.tasks.runAsync()
         fixture.tasks.runSync()
 
-        outcomes shouldBe listOf(ItemLorePaymentOutcome.OUTCOME_UNKNOWN)
+        outcomes shouldBe listOf(ItemPaymentOutcome.OUTCOME_UNKNOWN)
         fixture.journal.records.size shouldBe 1
         verify(exactly = 1) { fixture.economy.withdrawPlayer(fixture.player, 1.25) }
         fixture.logs.any { it.contains("phase=acknowledge") && it.contains("content_mismatch") } shouldBe true
@@ -213,7 +213,7 @@ class ItemLorePaymentsTest : FunSpec({
         }
 
         fun newPayments() =
-            ItemLorePayments(
+            ItemPayments(
                 journal = journal,
                 economyProvider = { economy },
                 playerLookup = { id -> player.takeIf { id == playerId } },
@@ -233,7 +233,7 @@ class ItemLorePaymentsTest : FunSpec({
         fun request(
             operationId: UUID = UUID.randomUUID(),
             priceMinor: Long = 125,
-        ) = ItemLorePaymentRequest(
+        ) = ItemPaymentRequest(
             operationId = operationId,
             playerId = playerId,
             slot = 4,
@@ -243,7 +243,7 @@ class ItemLorePaymentsTest : FunSpec({
         )
     }
 
-    private class QueuedTasks : ItemLorePaymentTasks {
+    private class QueuedTasks : ItemPaymentTasks {
         private val async = ArrayDeque<() -> Unit>()
         private val sync = ArrayDeque<() -> Unit>()
 
@@ -260,20 +260,20 @@ class ItemLorePaymentsTest : FunSpec({
         fun runSync() = sync.removeFirst().invoke()
     }
 
-    private class MemoryJournal : ItemLorePaymentJournal {
-        val records = linkedMapOf<String, ItemLorePaymentJournalRecord>()
+    private class MemoryJournal : ItemPaymentJournal {
+        val records = linkedMapOf<String, ItemPaymentJournalRecord>()
         var commits = 0
         var acknowledgementMismatch = false
 
-        override fun loadAll(): List<ItemLorePaymentJournalRecord> = records.values.toList()
+        override fun loadAll(): List<ItemPaymentJournalRecord> = records.values.toList()
 
-        override fun commit(record: ItemLorePaymentJournalRecord): ItemLorePaymentJournalRecord {
+        override fun commit(record: ItemPaymentJournalRecord): ItemPaymentJournalRecord {
             commits++
             records[record.operationId] = record
             return record
         }
 
-        override fun acknowledgeExactly(record: ItemLorePaymentJournalRecord): DurableAcknowledgementOutcome {
+        override fun acknowledgeExactly(record: ItemPaymentJournalRecord): DurableAcknowledgementOutcome {
             if (acknowledgementMismatch) return DurableAcknowledgementOutcome.CONTENT_MISMATCH
             val current = records[record.operationId] ?: return DurableAcknowledgementOutcome.ALREADY_ACKNOWLEDGED
             if (!record.sameContent(current)) return DurableAcknowledgementOutcome.CONTENT_MISMATCH

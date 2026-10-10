@@ -18,6 +18,7 @@ import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.ThreadLocalRandom
 import java.util.logging.Level
 
 private const val advancedEnchantmentsPluginName = "AdvancedEnchantments"
@@ -25,6 +26,9 @@ private const val advancedEnchantmentsPluginName = "AdvancedEnchantments"
 private data class AdvancedBookPresentationBinding(
     val provider: Plugin,
     val createBook: Method,
+    val enchantmentInstance: Method,
+    val configuredLevels: Method,
+    val availableFromEnchanter: Method,
     val failureOnBook: Method,
     val hasWhiteScroll: Method,
     val removeWhiteScroll: Method,
@@ -72,6 +76,11 @@ internal fun bindAdvancedBookPresentation() {
             Player::class.java,
         )
         val failureOnBook = api.getMethod("getFailureOnBook", ItemStack::class.java)
+        val enchantmentInstance = api.getMethod("getEnchantmentInstance", String::class.java)
+        val configuredLevels = enchantmentInstance.returnType.getMethod("getLevelList")
+        val availableFromEnchanter = enchantmentInstance.returnType.getMethod("isAvailableFromEnchanter")
+        require(List::class.java.isAssignableFrom(configuredLevels.returnType)) { "getLevelList must return a List" }
+        require(availableFromEnchanter.returnType == Boolean::class.javaPrimitiveType) { "isAvailableFromEnchanter must return boolean" }
         val hasWhiteScroll = api.getMethod("hasWhiteScroll", ItemStack::class.java)
         val removeWhiteScroll = api.getMethod("removeWhiteScroll", ItemStack::class.java)
         val applyEventClass = EnchantApplyEvent::class.java
@@ -107,6 +116,9 @@ internal fun bindAdvancedBookPresentation() {
         advancedBookPresentationBinding = AdvancedBookPresentationBinding(
             provider,
             createBook,
+            enchantmentInstance,
+            configuredLevels,
+            availableFromEnchanter,
             failureOnBook,
             hasWhiteScroll,
             removeWhiteScroll,
@@ -126,6 +138,34 @@ internal fun bindAdvancedBookPresentation() {
 
 internal fun clearAdvancedBookPresentation() {
     advancedBookPresentationBinding = null
+}
+
+/** The provider's actual level keys, including gaps; never synthesize unsupported levels. */
+internal fun configuredAdvancedBookLevels(enchantmentId: String): List<Int> {
+    val binding = requireAdvancedBookPresentationBinding("configured book levels")
+    val enchantment = binding.enchantmentInstance.invoke(null, enchantmentId) ?: return emptyList()
+    val levels = binding.configuredLevels.invoke(enchantment) as? List<*>
+        ?: error("AE configured levels are unavailable")
+    return levels.map { it as? Int ?: error("AE level is not an integer") }
+        .filter { it > 0 }.distinct().sorted()
+}
+
+/** Re-check the loaded provider definition at the final purchase boundary, including AE reloads. */
+internal fun isAdvancedBookAvailableFromEnchanter(enchantmentId: String): Boolean {
+    val binding = requireAdvancedBookPresentationBinding("book acquisition availability")
+    val enchantment = binding.enchantmentInstance.invoke(null, enchantmentId) ?: return false
+    return binding.availableFromEnchanter.invoke(enchantment) == true
+}
+
+/** One fresh acquisition roll; preserve the native provider's book identity and presentation. */
+internal fun createFreshAdvancedBook(enchantmentId: String, level: Int, viewer: Player): ItemStack {
+    val binding = requireAdvancedBookPresentationBinding("fresh book acquisition")
+    require(isAdvancedBookAvailableFromEnchanter(enchantmentId)) { "AE enchantment is not available from acquisition" }
+    require(level in configuredAdvancedBookLevels(enchantmentId)) { "Unsupported AE enchantment level" }
+    val data = AdvancedBookData(enchantmentId, level, ThreadLocalRandom.current().nextInt(40, 81), 1)
+    return createNativeBook(data, viewer, binding).also {
+        check(it.amount == 1 && isAdvancedBookRiskSafe(it)) { "AE returned an unsafe fresh book" }
+    }
 }
 
 internal data class AdvancedMagicDust(val successPercent: Int, val lowerDestroy: Boolean)

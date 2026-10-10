@@ -24,6 +24,21 @@ class HelpCenterEnchantmentsCatalogTest : StringSpec({
         enchantment.materials shouldBe setOf("DIAMOND_HOE")
     }
 
+    "base AE display name takes precedence over max-level lore and removes group placeholder" {
+        val enchantment = HelpCenterEnchantmentsCatalog.fromApiData(
+            id = "damage_all",
+            displayLore = listOf("Сила IV"),
+            description = "Повышает урон.",
+            maxLevelDescription = "Повышает урон на максимальном уровне.",
+            materials = setOf("DIAMOND_SWORD"),
+            group = "UNIQUE",
+            maxLevel = 4,
+            baseDisplayName = "&a%group-color%Сила",
+        )
+
+        enchantment.name shouldBe "Сила"
+    }
+
     "equipment filters separate weapon and tool-specific enchantments" {
         val entries = listOf(
             enchantment("sword_only", "DIAMOND_SWORD"),
@@ -45,7 +60,7 @@ class HelpCenterEnchantmentsCatalogTest : StringSpec({
         catalog.search("seed", HelpCenterEnchantmentsEquipment.HOE).map { it.id } shouldBe listOf("hoe_only")
     }
 
-    "bundled guide has special item mechanics and no unsupported crate command" {
+    "bundled guide explains special items and active enchantment routes" {
         val root = Files.createTempDirectory("arc-enchantments-guide")
         try {
             ConfigManager.clear()
@@ -55,7 +70,20 @@ class HelpCenterEnchantmentsCatalogTest : StringSpec({
             guide.text("ui.special-black-body").contains("шансом успешного применения этой книги") shouldBe true
             guide.text("ui.special-black-body").contains("ЛКМ") shouldBe true
             guide.text("ui.special-soul-gem-body").contains("/withdrawsouls число") shouldBe true
-            guide.text("ui.acquisition-body").contains("/ecia") shouldBe false
+            guide.text("ui.route-enchanter").contains("случайную книгу выбранной группы") shouldBe true
+            guide.text("ui.route-hunt").contains("0,2%") shouldBe true
+            guide.text("ui.route-hunt").contains("0,8%") shouldBe true
+            guide.text("ui.route-fishing").contains("0,5%") shouldBe true
+            guide.text("ui.route-fishing").contains("1,5%") shouldBe true
+            guide.text("ui.acquisition-services").contains("алхимик") shouldBe true
+            listOf(
+                guide.text("ui.acquisition-summary"),
+                guide.text("ui.route-enchanter"),
+                guide.text("ui.route-hunt"),
+                guide.text("ui.route-fishing"),
+                guide.text("ui.route-caches"),
+                guide.text("ui.acquisition-services"),
+            ).joinToString(" ").contains("/ecia") shouldBe false
             guide.text("ui.special-title").contains("AE") shouldBe false
         } finally {
             ConfigManager.clear()

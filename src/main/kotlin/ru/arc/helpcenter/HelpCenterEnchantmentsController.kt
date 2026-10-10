@@ -7,6 +7,8 @@ import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.entity.Player
+import ru.arc.enchanting.EnchantingModule
+import ru.arc.paper.menu.DialogTables
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogBody
 import ru.arc.paper.menu.PaperDialogButton
@@ -24,6 +26,8 @@ internal class HelpCenterEnchantmentsController(
     private val show: (Player, PaperDialogScreen) -> Unit,
     private val executeInventory: (Player, String) -> Boolean,
     private val catalog: () -> HelpCenterEnchantmentsCatalog = HelpCenterEnchantmentsCatalog::fromAeApi,
+    private val canPurchase: (Player, String) -> Boolean = EnchantingModule::canPurchase,
+    private val openPurchase: (Player, String, () -> Unit) -> Boolean = EnchantingModule::openPurchase,
 ) {
     private val miniMessage = MiniMessage.miniMessage()
     private val plainText = PlainTextComponentSerializer.plainText()
@@ -55,6 +59,12 @@ internal class HelpCenterEnchantmentsController(
             })
             add(button("acquisition", "ui.acquisition-label", "ui.acquisition-tooltip") {
                 openAcquisition(player, snapshot, returnTo)
+            })
+            add(button("recycle", "ui.recycle-label", "ui.recycle-tooltip") {
+                executeInventory(player, "tinkerer")
+            })
+            add(button("alchemy", "ui.alchemy-label", "ui.alchemy-tooltip") {
+                executeInventory(player, "alchemist")
             })
         }
         show(
@@ -181,13 +191,20 @@ internal class HelpCenterEnchantmentsController(
         backTo: () -> Unit,
     ) {
         navigation.visit(player) { openDetails(player, snapshot, returnTo, enchantment, backTo) }
+        val soldByEnchanter = isSoldByEnchanter(enchantment)
+        val purchaseAvailable = soldByEnchanter && canPurchase(player, enchantment.id)
         val body = buildList {
-            add(PaperDialogBody(text(
-                "ui.details-summary",
-                "group" to groupLabel(enchantment.group),
-                "level" to enchantment.maxLevel.toString(),
-                "materials" to materialSummary(enchantment),
-            ), 468))
+            add(DialogTables.body(
+                rows = listOf(
+                    text("ui.details-group-label") to Component.text(groupLabel(enchantment.group)),
+                    text("ui.details-level-label") to Component.text(enchantment.maxLevel.toString()),
+                    text("ui.details-compatible-label") to Component.text(materialSummary(enchantment)),
+                    text("ui.details-source-label") to text(detailsSourceKey(enchantment, soldByEnchanter)),
+                ),
+                frame = DialogTables.Frame.EPIC,
+                width = 320,
+                columns = DialogTables.Columns.VALUE_WIDE,
+            ))
             add(PaperDialogBody(text("ui.description", "description" to enchantment.description), 468))
             if (enchantment.maxLevelDescription != enchantment.description) {
                 add(PaperDialogBody(text(
@@ -196,9 +213,10 @@ internal class HelpCenterEnchantmentsController(
                     "description" to enchantment.maxLevelDescription,
                 ), 468))
             }
-            add(PaperDialogBody(text(
-                if (isSoldByEnchanter(enchantment)) "ui.details-acquisition-enchanter" else "ui.details-acquisition-unconfirmed",
-            ), 468))
+            add(PaperDialogBody(text("ui.details-application"), 468))
+            if (soldByEnchanter && !purchaseAvailable) {
+                add(PaperDialogBody(text("ui.details-purchase-spawn-only"), 468))
+            }
         }
         show(
             player,
@@ -206,7 +224,12 @@ internal class HelpCenterEnchantmentsController(
                 id = "help.enchantments.details",
                 title = text("ui.details-title", "name" to enchantment.name),
                 body = body,
-                buttons = emptyList(),
+                buttons = if (purchaseAvailable) listOf(button("purchase_book", "ui.purchase-label", "ui.purchase-tooltip") {
+                    val opened = openPurchase(player, enchantment.id) {
+                        openDetails(player, snapshot, returnTo, enchantment, backTo)
+                    }
+                    if (!opened) openDetails(player, snapshot, returnTo, enchantment, backTo)
+                }) else emptyList(),
                 exitButton = back(backTo),
                 columns = 2,
             ),
@@ -224,11 +247,26 @@ internal class HelpCenterEnchantmentsController(
             PaperDialogScreen(
                 id = "help.enchantments.acquisition",
                 title = text("ui.acquisition-title"),
-                body = listOf(PaperDialogBody(text("ui.acquisition-body"), 468)),
-                buttons = if (snapshot.available) listOf(
-                    button("enchanter", "ui.enchanter-label", "ui.enchanter-tooltip") { executeInventory(player, "enchanter") },
-                    button("tinkerer", "ui.tinkerer-label", "ui.tinkerer-tooltip") { executeInventory(player, "tinkerer") },
-                    button("alchemist", "ui.alchemist-label", "ui.alchemist-tooltip") { executeInventory(player, "alchemist") },
+                body = listOf(
+                    PaperDialogBody(text("ui.acquisition-summary"), 468),
+                    DialogTables.body(
+                        rows = listOf(
+                            text("ui.route-enchanter-label") to text("ui.route-enchanter"),
+                            text("ui.route-hunt-label") to text("ui.route-hunt"),
+                            text("ui.route-fishing-label") to text("ui.route-fishing"),
+                            text("ui.route-caches-label") to text("ui.route-caches"),
+                        ),
+                        frame = DialogTables.Frame.EPIC,
+                        width = 320,
+                        columns = DialogTables.Columns.VALUE_WIDE,
+                    ),
+                    PaperDialogBody(text("ui.acquisition-services"), 468),
+                ),
+                buttons = if (canOpenEnchanter(player, snapshot)) listOf(
+                    button("enchanter", "ui.enchanter-label", "ui.enchanter-tooltip") {
+                        if (canOpenEnchanter(player, snapshot)) executeInventory(player, "enchanter")
+                        else openAcquisition(player, snapshot, returnTo)
+                    },
                 ) else emptyList(),
                 exitButton = back { openOverview(player, returnTo, snapshot) },
                 columns = 2,
@@ -326,6 +364,15 @@ internal class HelpCenterEnchantmentsController(
     private fun isSoldByEnchanter(enchantment: HelpCenterEnchantment): Boolean =
         enchantment.availableFromEnchanter && enchantment.group.uppercase(Locale.ROOT) in ENCHANTER_GROUPS
 
+    private fun detailsSourceKey(enchantment: HelpCenterEnchantment, soldByEnchanter: Boolean): String = when {
+        !soldByEnchanter -> "ui.details-source-unavailable"
+        enchantment.group.uppercase(Locale.ROOT) in LOOT_GROUPS -> "ui.details-source-loot-and-enchanter"
+        else -> "ui.details-source-enchanter"
+    }
+
+    private fun canOpenEnchanter(player: Player, snapshot: HelpCenterEnchantmentsCatalog): Boolean =
+        snapshot.available && snapshot.entries.any { isSoldByEnchanter(it) && canPurchase(player, it.id) }
+
     private fun back(action: () -> Unit) = PaperDialogButton(
         PaperDialogActionId.of("back"), miniMessage.deserialize(settings.text("back-label")).decoration(TextDecoration.ITALIC, false), width = 200, onClick = { action() },
     )
@@ -363,5 +410,6 @@ internal class HelpCenterEnchantmentsController(
         private const val PAGE_SIZE = 8
         private const val EQUIPMENT_PAGE_SIZE = 10
         private val ENCHANTER_GROUPS = setOf("SIMPLE", "UNIQUE", "ELITE", "ULTIMATE", "LEGENDARY", "FABLED")
+        private val LOOT_GROUPS = setOf("SIMPLE", "UNIQUE", "ELITE", "ULTIMATE", "LEGENDARY")
     }
 }

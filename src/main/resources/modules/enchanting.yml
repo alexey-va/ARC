@@ -17,3 +17,71 @@ messages:
   failure: '<yellow>Зачарование не сработало. Предмет сохранён, книга потрачена.</yellow>'
   destroyed: '<red>Неудачная попытка: предмет разрушен, книга потрачена.</red>'
   protected: '<yellow>Зачарование не сработало. Белый свиток защитил предмет и был потрачен вместе с книгой.</yellow>'
+shop:
+  server: spawn
+  world: rc_origin_spawn
+  # Vault coins. Exact enchant + chosen configured level costs base × multiplier × level.
+  level-multiplier: 3
+  base-prices:
+    SIMPLE: 1000
+    UNIQUE: 2000
+    ELITE: 6250
+    ULTIMATE: 12500
+    LEGENDARY: 20000
+    FABLED: 50000
+  title: '<#d6a5ff>Книга на заказ'
+  select-body: '<#e8dfd2>Выберите уровень нужных чар. Вы получите одну книгу; она применяется перетаскиванием на совместимый предмет.'
+  confirm-body: '<#e8dfd2>Проверьте зачарование и уровень. Монеты спишутся при покупке, книга появится в свободной ячейке инвентаря.'
+  chances: '<#e8dfd2>Успех новой книги: <#70e0a0>40–80%</#70e0a0>. Разрушение предмета при неудаче: <#ff6b72>1%</#ff6b72>. Точный шанс определяется при покупке. Магическая пыль своей группы повышает успех до 100% и снимает риск разрушения.'
+  table:
+    enchantment: '<#fff0d8>Зачарование'
+    group: '<#fff0d8>Группа'
+    level: '<#fff0d8>Уровень'
+    price: '<#fff0d8>Цена'
+  groups:
+    SIMPLE: 'Простая'
+    UNIQUE: 'Уникальная'
+    ELITE: 'Сильная'
+    ULTIMATE: 'Мощная'
+    LEGENDARY: 'Легендарная'
+    FABLED: 'Лучшая'
+  level:
+    label: '<#d6a5ff>Уровень <level>'
+    tooltip: '<#e8dfd2>Цена: <price> <white>💰</white>. Посмотреть перед покупкой.'
+    previous: '<#e8dfd2>Предыдущие уровни'
+    next: '<#e8dfd2>Следующие уровни'
+  buy:
+    label: '<#70e0a0>Купить за <price> <white>💰</white>'
+    tooltip: '<#e8dfd2>Получить одну книгу выбранного зачарования и уровня.'
+  back:
+    label: '<#e8dfd2>Изменить уровень'
+  return:
+    label: '<#e8dfd2>К зачарованию'
+  processing-title: '<#d6a5ff>Покупка книги'
+  processing-body: '<#e8dfd2>Покупка обрабатывается. Повторно нажимать кнопку не нужно.'
+  result-title: '<#d6a5ff>Покупка книги'
+  result:
+    success: '<#70e0a0>Книга в инвентаре!<newline><#e8dfd2><name>, уровень <level>.<newline>Потрачено: <price> <white>💰</white>.<newline>Успех: <success>%. Разрушение при неудаче: <failure>%.<newline>Перетащите книгу на подходящий предмет, когда будете готовы.'
+    insufficient: '<#f4bd6a>Недостаточно монет. Нужно <price> <white>💰</white>. Деньги не списаны.'
+    no-space: '<#f4bd6a>Освободите одну ячейку в основном инвентаре. Деньги не списаны.'
+    stale: '<#f4bd6a>Условия покупки изменились. Снова выберите книгу на спавне. Деньги не списаны.'
+    failed: '<#f4bd6a>Магазин сейчас не может завершить покупку. Деньги за эту попытку не списаны.'
+    unknown: '<#ff6b72>Не удалось подтвердить результат покупки. Не покупайте книгу повторно; сообщите администрации время покупки.'
+  messages:
+    spawn-only: '<#f4bd6a>Книги продаются в Палате чар на спавне. Каталог доступен в любом мире.'
+loot:
+  server: survival
+  worlds: [survival, vanilla, mining, survival_nether, vanilla_nether, world, world_nether, world_the_end]
+  # One exclusive bonus roll: a book OR one dust. Creative, spawners and EliteMobs are excluded.
+  natural-kill:
+    book-percent: 0.2
+    dust-percent: 0.8
+  open-water-fishing:
+    book-percent: 0.5
+    dust-percent: 1.5
+  group-weights:
+    SIMPLE: 55
+    UNIQUE: 25
+    ELITE: 15
+    ULTIMATE: 4
+    LEGENDARY: 1

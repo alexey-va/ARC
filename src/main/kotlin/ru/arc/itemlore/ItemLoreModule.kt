@@ -29,9 +29,14 @@ import ru.arc.paper.menu.PaperDialogClickContext
 import ru.arc.paper.menu.PaperDialogInputId
 import ru.arc.paper.menu.PaperDialogScreen
 import ru.arc.paper.menu.PaperDialogTextInput
+import ru.arc.payments.FileItemPaymentJournal
+import ru.arc.payments.ItemPaymentOutcome
+import ru.arc.payments.ItemPaymentRequest
+import ru.arc.payments.ItemPayments
 import ru.arc.util.Logging.info
 import ru.arc.util.TextUtil
 import java.math.BigDecimal
+import java.nio.file.Path
 import java.util.UUID
 
 /** NPC-only native editor for ordinary, non-service item lore. */
@@ -40,12 +45,20 @@ object ItemLoreModule : PluginModule, Listener {
     override val priority = 76
 
     private var settings: ItemLoreSettings? = null
-    private var payments: ItemLorePayments? = null
+    private var payments: ItemPayments? = null
     private var editor: ItemLoreEditor? = null
 
     override fun init() {
         val loaded = ItemLoreSettings.load(ARC.instance.dataPath)
-        val paymentService = ItemLorePayments(journalFactory = { FileItemLorePaymentJournal(ARC.instance.dataPath) })
+        val paymentService =
+            ItemPayments(
+                journalFactory = {
+                    FileItemPaymentJournal(
+                        root = ARC.instance.dataPath,
+                        relativeDirectory = Path.of("data", "item-lore", "payments"),
+                    )
+                },
+            )
         settings = loaded
         payments = paymentService
         editor = ItemLoreEditor({ settings }, { payments })
@@ -89,7 +102,7 @@ object ItemLoreModule : PluginModule, Listener {
 
 internal class ItemLoreEditor(
     private val currentSettings: () -> ItemLoreSettings?,
-    private val currentPayments: () -> ItemLorePayments?,
+    private val currentPayments: () -> ItemPayments?,
     private val nowMillis: () -> Long = System::currentTimeMillis,
 ) {
     private enum class Stage { EDITING, PREVIEW, CONFIRMING, PAYMENT, COMPLETE, RETIRED }
@@ -360,7 +373,7 @@ internal class ItemLoreEditor(
         session.paymentOperationId = operationId
         openSaving(player, session)
         payment.submit(
-            ItemLorePaymentRequest(
+            ItemPaymentRequest(
                 operationId = operationId,
                 playerId = session.playerId,
                 slot = session.itemSlot,
@@ -401,10 +414,10 @@ internal class ItemLoreEditor(
         )
     }
 
-    private fun finishPayment(player: org.bukkit.entity.Player, session: Session, outcome: ItemLorePaymentOutcome, priceMinor: Long) {
+    private fun finishPayment(player: org.bukkit.entity.Player, session: Session, outcome: ItemPaymentOutcome, priceMinor: Long) {
         if (session.paymentOperationId == null) return
         when (outcome) {
-            ItemLorePaymentOutcome.SUCCESS -> {
+            ItemPaymentOutcome.SUCCESS -> {
                 val stillOwnsFlow = active && session.stage == Stage.PAYMENT && session.generation == generation &&
                     sessions[session.playerId] === session
                 if (!stillOwnsFlow) {
@@ -421,7 +434,7 @@ internal class ItemLoreEditor(
                     showTerminal(player, session, "saved-title", "saved-body", priceMinor, closeOnly = true)
                 }
             }
-            ItemLorePaymentOutcome.CANCELLED -> {
+            ItemPaymentOutcome.CANCELLED -> {
                 if (session.stage == Stage.RETIRED) return
                 val settings = currentSettings() ?: return
                 val stillValid = player.isOnline && validSource(player, session, settings) && sameOriginal(player.inventory.getItem(session.itemSlot), session)
@@ -429,24 +442,24 @@ internal class ItemLoreEditor(
                 session.stage = Stage.CONFIRMING
                 if (player.isOnline) openResult(player, session, key, allowBack = key == "cancelled") else retire(session)
             }
-            ItemLorePaymentOutcome.INSUFFICIENT_FUNDS -> {
+            ItemPaymentOutcome.INSUFFICIENT_FUNDS -> {
                 if (session.stage == Stage.RETIRED) return
                 session.stage = Stage.CONFIRMING
                 openResult(player, session, "insufficient-funds", allowBack = true)
             }
-            ItemLorePaymentOutcome.BUSY_OR_DUPLICATE -> {
+            ItemPaymentOutcome.BUSY_OR_DUPLICATE -> {
                 if (session.stage == Stage.RETIRED) return
                 session.stage = Stage.CONFIRMING
                 openResult(player, session, "busy", allowBack = false)
             }
-            ItemLorePaymentOutcome.OUTCOME_UNKNOWN -> {
+            ItemPaymentOutcome.OUTCOME_UNKNOWN -> {
                 if (session.stage == Stage.RETIRED) return
                 session.stage = Stage.RETIRED
                 sessions.remove(session.playerId, session)
                 ArcMenus.beginDialogFlow(player)
                 showTerminal(player, session, "payment-unknown", null, priceMinor, closeOnly = true)
             }
-            ItemLorePaymentOutcome.UNAVAILABLE, ItemLorePaymentOutcome.FAILED_UNCHARGED -> {
+            ItemPaymentOutcome.UNAVAILABLE, ItemPaymentOutcome.FAILED_UNCHARGED -> {
                 if (session.stage == Stage.RETIRED) return
                 session.stage = Stage.CONFIRMING
                 openResult(player, session, "payment-failed", allowBack = false)

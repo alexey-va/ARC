@@ -11,6 +11,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.logging.Level
 
 private val VERIFIED_AE_PLUGIN_VERSIONS = setOf("9.24.13", "9.24.15")
+private val PUBLIC_MAGIC_DUST_GROUPS = setOf("SIMPLE", "UNIQUE", "ELITE", "ULTIMATE", "LEGENDARY")
 
 /**
  * Materializes the small allowlist of AE rewards as AE-owned ItemStacks.
@@ -32,6 +33,13 @@ object AeNativeItems {
         treasure: Treasure.Ae,
         preview: Boolean = false,
     ): List<ItemStack>? = materializer.create(treasure, preview)
+
+    /** Creates the configured one-item wild-loot dust from AE's bound native factory. */
+    internal fun createMagicDust(group: String, successPercent: Int): ItemStack? {
+        val canonicalGroup = group.trim().uppercase(Locale.ROOT)
+        if (canonicalGroup !in PUBLIC_MAGIC_DUST_GROUPS || successPercent !in 1..15) return null
+        return materializer.createMagicDust(canonicalGroup, successPercent)
+    }
 
     internal fun supportsPluginVersion(version: String): Boolean = version in VERIFIED_AE_PLUGIN_VERSIONS
 
@@ -59,6 +67,7 @@ object AeNativeItems {
         val provider: Plugin,
         val factories: AeNativeItemFactories?,
     )
+
 }
 
 internal interface AeNativeItemFactories {
@@ -80,6 +89,13 @@ internal class AeNativeItemMaterializer(
     fun supports(treasure: Treasure.Ae): Boolean = request(treasure) != null
 
     fun available(): Boolean = factoryProvider() != null
+
+    fun createMagicDust(group: String, successPercent: Int): ItemStack? {
+        if (group !in PUBLIC_MAGIC_DUST_GROUPS || successPercent !in 1..15) return null
+        val prototype = factoryProvider()?.magicDust(group, successPercent) ?: return null
+        if (prototype.type.isAir || prototype.amount != 1) return null
+        return prototype.clone()
+    }
 
     fun create(
         treasure: Treasure.Ae,

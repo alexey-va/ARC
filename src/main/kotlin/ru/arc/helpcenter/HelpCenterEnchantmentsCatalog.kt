@@ -66,6 +66,7 @@ internal data class HelpCenterEnchantmentsCatalog(
                         group = AEAPI.getGroup(id).orEmpty().plainApiText(),
                         maxLevel = maxLevel,
                         availableFromEnchanter = description.availableFromEnchanter,
+                        baseDisplayName = description.baseDisplayName,
                     )
                 }
                 apiFailureLogged = false
@@ -85,14 +86,19 @@ internal data class HelpCenterEnchantmentsCatalog(
             group: String,
             maxLevel: Int,
             availableFromEnchanter: Boolean = true,
+            baseDisplayName: String? = null,
         ): HelpCenterEnchantment {
             val cleanDescription = description.plainApiText()
+            val cleanBaseName = baseDisplayName.plainApiText()
+                .replace(Regex("(?i)%group-color%"), "")
+                .trim()
+            val cleanLoreName = displayLore.firstOrNull().orEmpty().plainApiText()
             val cleanMaxDescription = maxLevelDescription.plainApiText()
                 .ifBlank { cleanDescription }
                 .ifBlank { "Описание для этого зачарования не задано." }
             return HelpCenterEnchantment(
                 id = id,
-                name = displayLore.firstOrNull().orEmpty().plainApiText().ifBlank { prettyId(id) },
+                name = cleanBaseName.ifBlank { cleanLoreName }.ifBlank { prettyId(id) },
                 description = cleanDescription.ifBlank { cleanMaxDescription },
                 maxLevelDescription = cleanMaxDescription,
                 materials = materials.mapNotNull(::canonicalMaterial).toSet(),
@@ -189,7 +195,7 @@ internal class HelpCenterEnchantmentsGuideConfig(private val config: Config) {
 
         private val DEFAULT_TEXT = linkedMapOf(
             "ui.title" to "<#d6a5ff>Зачарования",
-            "ui.overview" to "<#e8dfd2>Узнайте, к какому снаряжению подходят особые чары, что они делают и где искать свитки и пыль.",
+            "ui.overview" to "<#e8dfd2>Дополнительные чары AdvancedEnchantments (AE) усиливают совместимое снаряжение. Откройте каталог, чтобы увидеть эффект, максимальный уровень и точные предметы.<newline><#f4bd6a>Как применить<newline><#e8dfd2>Перетащите книгу на подходящий предмет: попытка начнётся сразу, книга расходуется. У новой книги шанс успеха 40–80%; при неудаче риск разрушения предмета — до 1%. Магическая пыль прибавляет указанное на ней значение до 100% и снимает риск разрушения. Белый свиток защищает предмет при неудаче.",
             "ui.unavailable-title" to "<#f4bd6a>Каталог временно недоступен",
             "ui.unavailable-body" to "<#e8dfd2>Каталог зачарований сейчас недоступен. Памятка по особым предметам и способам получения остаётся открыта.",
             "ui.empty-catalog" to "<#e8dfd2>Пока нет доступных зачарований.",
@@ -207,6 +213,17 @@ internal class HelpCenterEnchantmentsGuideConfig(private val config: Config) {
             "ui.details-summary" to "<#e8dfd2>Редкость: <group><newline>Максимальный уровень: <level><newline>Подходит: <materials>",
             "ui.details-acquisition-enchanter" to "<#9bd48d>Способ получения: зачарователь",
             "ui.details-acquisition-unconfirmed" to "<#f4bd6a>Эта книга не продаётся у зачарователя.",
+            "ui.details-group-label" to "<#fff0d8>Группа",
+            "ui.details-level-label" to "<#fff0d8>Максимальный уровень",
+            "ui.details-compatible-label" to "<#fff0d8>Подходит для",
+            "ui.details-source-label" to "<#fff0d8>Источник",
+            "ui.details-source-enchanter" to "<#9bd48d>Только зачарователь на спавне",
+            "ui.details-source-loot-and-enchanter" to "<#9bd48d>Зачарователь на спавне · охота · рыбалка",
+            "ui.details-source-unavailable" to "<#e8dfd2>Не входит в ассортимент зачарователя",
+            "ui.details-application" to "<#f4bd6a>Как применить<newline><#e8dfd2>Перетащите книгу на совместимый предмет: попытка начнётся сразу, книга расходуется. Новая книга имеет шанс успеха 40–80%; риск разрушения при неудаче — до 1%. Магическая пыль увеличивает шанс на указанное значение до 100% и снимает риск разрушения. Белый свиток защищает предмет при неудаче.",
+            "ui.details-purchase-spawn-only" to "<#f4bd6a>Купить книгу можно у зачарователя на спавне.",
+            "ui.purchase-label" to "<#9bd48d>Купить книгу",
+            "ui.purchase-tooltip" to "<#e8dfd2>Выберите уровень; цена и условия будут показаны до подтверждения.",
             "ui.description" to "<#f4bd6a>Описание<newline><#e8dfd2><description>",
             "ui.level-description" to "<#f4bd6a>Эффект на уровне <level><newline><#e8dfd2><description>",
             "ui.group-simple" to "Простая",
@@ -223,13 +240,17 @@ internal class HelpCenterEnchantmentsGuideConfig(private val config: Config) {
             "ui.special-label" to "<#f4bd6a>Особые предметы",
             "ui.special-tooltip" to "<#e8dfd2>Свитки, пыль и защита снаряжения.",
             "ui.acquisition-label" to "<#9bd48d>Где получить",
-            "ui.acquisition-tooltip" to "<#e8dfd2>Зачарователь, обмены, объединение и тайники.",
+            "ui.acquisition-tooltip" to "<#e8dfd2>Где взять книгу, пыль и свитки.",
             "ui.enchanter-label" to "<#f4bd6a>Открыть зачарователь",
-            "ui.enchanter-tooltip" to "<#e8dfd2>Каталог книг по группам редкости.",
+            "ui.enchanter-tooltip" to "<#e8dfd2>На спавне купить случайную книгу выбранной группы.",
             "ui.tinkerer-label" to "<#f4bd6a>Открыть тинкера",
             "ui.tinkerer-tooltip" to "<#e8dfd2>Обменять ненужные книги на награду.",
             "ui.alchemist-label" to "<#f4bd6a>Открыть алхимика",
             "ui.alchemist-tooltip" to "<#e8dfd2>Объединить совместимые книги и пыль.",
+            "ui.recycle-label" to "<#f4bd6a>Переработать книги",
+            "ui.recycle-tooltip" to "<#e8dfd2>Открыть тинкера и обменять ненужные книги.",
+            "ui.alchemy-label" to "<#d6a5ff>Объединить книги",
+            "ui.alchemy-tooltip" to "<#e8dfd2>Открыть алхимика, проверить сочетание и итог.",
             "ui.special-title" to "<#f4bd6a>Особые предметы",
             "ui.special-body" to "<#e8dfd2>Выберите предмет, чтобы узнать, для чего он нужен и где его можно получить.",
             "ui.special-white-label" to "<#ffffff>Белый свиток",
@@ -253,7 +274,16 @@ internal class HelpCenterEnchantmentsGuideConfig(private val config: Config) {
             "ui.special-trackers-label" to "<#86dcf1>Счётчики предмета",
             "ui.special-trackers-body" to "<#f4bd6a>Что делают<newline><#e8dfd2>Счётчики отмечают сломанные блоки, убийства и пойманную рыбу.<newline><newline><#f4bd6a>Как использовать<newline><#e8dfd2>Перетащите нужный счётчик на инструмент, оружие или удочку, указанные в его подсказке.<newline><newline><#f4bd6a>Где получить<newline><#e8dfd2>В ежедневном тайнике и недельной реликвии не выпадают.",
             "ui.acquisition-title" to "<#9bd48d>Где получить",
-            "ui.acquisition-body" to "<#e8dfd2><#f4bd6a>Книги<newline><#e8dfd2>/enchanter открывает книги шести групп: простая, уникальная, сильная, мощная, легендарная и лучшая. Книги читерской группы в этом меню не указаны.<newline><newline><#f4bd6a>Тинкер и алхимик<newline><#e8dfd2>/tinkerer принимает ненужные книги в обмен на награду. /alchemist объединяет поддерживаемые книги и пыль; проверьте предметы и итог в его интерфейсе.<newline><newline><#f4bd6a>Тайники<newline><#e8dfd2>Свитки и пыль указаны среди наград ежедневного тайника или недельной реликвии. У нужного ящика нажмите ЛКМ, чтобы увидеть пул и шансы; ПКМ с ключом открывает его.",
+            "ui.acquisition-summary" to "<#e8dfd2>Книги можно купить или получить в Survival; пыль и свитки встречаются в наградах тайников.",
+            "ui.route-enchanter-label" to "<#9bd48d>Зачарователь · Spawn",
+            "ui.route-enchanter" to "<#e8dfd2>Продаёт случайную книгу выбранной группы. В карточке каталога можно выбрать конкретное зачарование и уровень.",
+            "ui.route-hunt-label" to "<#f4bd6a>Охота · Survival",
+            "ui.route-hunt" to "<#e8dfd2>Естественно появившийся враждебный моб, убитый игроком: 0,2% на книгу или 0,8% на магическую пыль. Не более одного результата за убийство.",
+            "ui.route-fishing-label" to "<#86dcf1>Рыбалка · Survival",
+            "ui.route-fishing" to "<#e8dfd2>В открытой воде: 0,5% на книгу или 1,5% на магическую пыль. Не более одного результата за событие.",
+            "ui.route-caches-label" to "<#f4bd6a>Тайники",
+            "ui.route-caches" to "<#e8dfd2>В ежедневном и недельном тайниках встречаются пыль и свитки. ЛКМ по ящику покажет пул и шансы.",
+            "ui.acquisition-services" to "<#e8dfd2>Тинкер принимает ненужные книги; алхимик показывает поддерживаемые сочетания книг и пыли и проверяет итог.",
             "ui.equipment-summary" to "<#e8dfd2>Выберите точный тип предмета. Страница <page>/<pages>.",
             "ui.equipment-title" to "<#d6a5ff>Выберите снаряжение",
             "ui.equipment-all" to "<#d6a5ff>Все зачарования",
@@ -286,15 +316,22 @@ internal class HelpCenterEnchantmentsGuideConfig(private val config: Config) {
 
 private data class AeEnchantDescriptionAccess(
     val getInstance: Method,
+    val getDisplayNoColor: Method,
     val getDescription: Method,
     val getLevelDescription: Method,
     val isAvailableFromEnchanter: Method,
 ) {
-    data class Details(val general: String?, val atMaxLevel: String?, val availableFromEnchanter: Boolean)
+    data class Details(
+        val baseDisplayName: String?,
+        val general: String?,
+        val atMaxLevel: String?,
+        val availableFromEnchanter: Boolean,
+    )
 
     fun read(id: String, level: Int): Details {
         val enchantment = instance(id)
         return Details(
+            baseDisplayName = invoke(getDisplayNoColor, enchantment) as? String,
             general = invoke(getDescription, enchantment) as? String,
             atMaxLevel = invoke(getLevelDescription, enchantment, level) as? String,
             availableFromEnchanter = invoke(isAvailableFromEnchanter, enchantment) as? Boolean ?: false,
@@ -316,6 +353,7 @@ private data class AeEnchantDescriptionAccess(
             val implementation = instanceMethod.returnType
             AeEnchantDescriptionAccess(
                 getInstance = instanceMethod,
+                getDisplayNoColor = implementation.getMethod("getDisplayNoColor"),
                 getDescription = implementation.getMethod("getDescription"),
                 getLevelDescription = implementation.getMethod("getLevelDescriptionOrFallback", Int::class.javaPrimitiveType),
                 isAvailableFromEnchanter = implementation.getMethod("isAvailableFromEnchanter"),

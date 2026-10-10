@@ -17,6 +17,24 @@ import ru.arc.paper.testing.MockBukkitTestRuntime
 
 class AeNativeItemsTest {
     @Test
+    fun `wild loot dust keeps the native group and boost and rejects private or invalid rewards`() {
+        MockBukkitTestRuntime.open().use {
+            val factory = mockk<AeNativeItemFactories>()
+            val prototype = ItemStack(Material.SUGAR)
+            every { factory.magicDust("ELITE", 15) } returns prototype
+            val materializer = AeNativeItemMaterializer { factory }
+            val reward = requireNotNull(materializer.createMagicDust("ELITE", 15))
+            assertEquals(prototype, reward)
+            assertFalse(prototype === reward)
+            assertNull(materializer.createMagicDust("CHEATER", 15))
+            assertNull(materializer.createMagicDust("ELITE", 16))
+            prototype.amount = 2
+            assertNull(materializer.createMagicDust("ELITE", 15))
+            verify(exactly = 2) { factory.magicDust("ELITE", 15) }
+        }
+    }
+
+    @Test
     fun `accepts only AE versions with verified native factory signatures`() {
         assertTrue(AeNativeItems.supportsPluginVersion("9.24.13"))
         assertTrue(AeNativeItems.supportsPluginVersion("9.24.15"))
