@@ -110,9 +110,10 @@ internal fun staffChargeResponsiveOldParts(
     val bloom = smooth((charge - 0.08) / 0.84)
     return parts.mapIndexed { index, part ->
         if (!part.visible) return@mapIndexed part
-        // Charge stays out of the eye-origin muzzle. Effects are fully built once their pieces
-        // leave the camera clearance; the smooth distance ramp avoids a one-frame size snap.
-        val clearance = smooth((part.center.length().toDouble() - 1.38) / 0.82)
+        // Moving bodies and aimed marks are local to their effect, not to the player's eye.
+        // Their real camera clearance is enforced by the packet renderer's world-space bounds.
+        val localized = spell == StaffSpell.EMBER || spell == StaffSpell.MARK
+        val clearance = if (localized) 1.0 else smooth((part.center.length().toDouble() - 1.38) / 0.82)
         val detail = bloom * clearance
         val support = when (spell) {
             StaffSpell.CHAIN -> index >= 40 || quick && index >= parts.size * 2 / 3
@@ -128,15 +129,12 @@ internal fun staffChargeResponsiveOldParts(
         when {
             spell == StaffSpell.CHAIN && index < 3 -> Unit
             spell == StaffSpell.LANCE && index >= 44 -> Unit
-            spell == StaffSpell.MARK && support -> {
-                // Its orbit sits close to the caster. Add facet height without widening that ring.
-                scale.y *= (1.0 + 0.28 * bloom).toFloat()
-            }
             support -> {
                 val supportScale = 1.0 + clearance * 0.60 * bloom
                 scale.x *= supportScale.toFloat()
                 scale.y *= supportScale.toFloat()
             }
+            localized -> scale.mul((1.0 + 0.40 * bloom).toFloat())
             else -> scale.y *= (1.0 + 0.30 * detail).toFloat()
         }
         part.copy(scale = scale)

@@ -24,6 +24,18 @@ class StaffChargeGeometryTest : FreeSpec({
         silhouettes.size shouldBe StaffSpell.entries.size
     }
 
+    "full charge enlarges the localized projectile core as well as its wake" {
+        listOf(StaffSpell.EMBER, StaffSpell.MARK).forEach { spell ->
+            fun parts(charge: Double) = staffDisplayParts(spell, ageTicks = 10, durationTicks = 20,
+                length = 12.0, radius = 3.0, impact = false, charge = charge)
+            val weak = parts(0.0).first()
+            val full = parts(1.0).first()
+            full.center shouldBe weak.center
+            (full.scale.x >= weak.scale.x * 1.39f) shouldBe true
+            (full.scale.y >= weak.scale.y * 1.39f) shouldBe true
+        }
+    }
+
     "released legacy spell support grows with charge without moving attack geometry" {
         val legacy = listOf(StaffSpell.CHAIN, StaffSpell.MARK, StaffSpell.FROST,
             StaffSpell.ICICLE, StaffSpell.FAULT, StaffSpell.LANCE, StaffSpell.EMBER)
