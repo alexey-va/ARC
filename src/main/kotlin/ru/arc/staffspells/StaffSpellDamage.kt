@@ -25,14 +25,24 @@ import java.util.concurrent.atomic.AtomicBoolean
  * supplies boss modifier lookup. Configured power is the attack multiplier; no native EM/FMM enchantments. */
 internal class StaffSpellDamage(private val duelAccess: StaffSpellDuelAccess? = null) {
     private val eliteMobsFailureLogged = AtomicBoolean()
+    // The controller supplies its live actor registry; item tags never authorize a summon target.
+    internal var summonCast: (LivingEntity) -> StaffSpellCast? = { null }
 
     fun eligible(player: Player, target: LivingEntity, cast: StaffSpellCast? = null): Boolean {
         val authorization = cast?.duelAuthorization
         if (authorization != null) {
-            return target is Player && isReadyDuelTarget(player, target) && cast.casterId == player.uniqueId &&
+            val opponent = if (target is Player) target else {
+                val ownerCast = summonCast(target) ?: return false
+                val owner = Bukkit.getPlayer(ownerCast.casterId) ?: return false
+                if (!target.isValid || target.isDead || target.isInvulnerable || target.world != player.world ||
+                    ownerCast.duelAuthorization == null || !isCurrent(owner, ownerCast)) return false
+                owner
+            }
+            return isReadyDuelTarget(player, opponent) && cast.casterId == player.uniqueId &&
                 cast.duelAccess === duelAccess && duelAccess?.isCurrent(authorization, player) == true &&
-                duelAccess.canHit(authorization, player, target)
+                duelAccess.canHit(authorization, player, opponent)
         }
+        if (summonCast(target) != null) return false
         if (!isReady(player, target)) return false
         if (duelAccess?.context(player) != null || target is Player) return false
         if (!isEliteMobsEnabled()) return true
@@ -72,11 +82,11 @@ internal class StaffSpellDamage(private val duelAccess: StaffSpellDuelAccess? = 
         if (player.world != target.world || !visible(player.eyeLocation, center(target))) return false
         val authorization = cast.duelAuthorization
         if (authorization != null) {
-            if (target !is Player || cast.eliteMobsEnabled ||
+            if (cast.eliteMobsEnabled ||
                 !eligible(player, target, cast)) return false
             val amount = vanillaDamage * authorization.context.damageMultiplier()
             if (!amount.isFinite() || amount <= 0.0 ||
-                !duelAccess!!.canHit(authorization, player, target)) return false
+                !eligible(player, target, cast)) return false
             val before = target.health + target.absorptionAmount
             target.damage(amount, player)
             return before - target.health - target.absorptionAmount > HEALTH_EPSILON

@@ -67,7 +67,8 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         while (scenes.size >= MAX_SCENES) remove(scenes.keys.first())
         val offset = to.toVector().subtract(from.toVector())
         val length = offset.length()
-        val rotation = if (charging) Quaternionf().rotationY(Math.toRadians(from.yaw.toDouble()).toFloat() * -1f)
+        val rotation = if (charging) staffChargeOrientation(spell, from.yaw,
+            Vector3f(from.direction.x.toFloat(), from.direction.y.toFloat(), from.direction.z.toFloat()))
         else if (spell == StaffSpell.MARK)
             Quaternionf().rotationY(kotlin.math.atan2(caster.location.x - from.x, caster.location.z - from.z).toFloat())
         else if (spell == StaffSpell.GALE)
@@ -93,7 +94,8 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
     fun charge(sceneId: UUID?, eye: Location, progress: Double) {
         val scene = scenes[sceneId] ?: return
         scene.origin = eye.clone()
-        scene.rotation = Quaternionf().rotationY(-Math.toRadians(eye.yaw.toDouble()).toFloat())
+        scene.rotation = staffChargeOrientation(scene.spell, eye.yaw,
+            Vector3f(eye.direction.x.toFloat(), eye.direction.y.toFloat(), eye.direction.z.toFloat()))
         scene.chargeProgress = progress.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
         if (scene.controllerDriven) scene.controllerDirty = true
     }
@@ -356,6 +358,11 @@ internal fun staffEyeClearance(spell: StaffSpell, impact: Boolean): Double =
         spell == StaffSpell.NOVA -> 0.55
         else -> 1.15
     }
+
+/** The EMBER charge core sits on the reticle; legacy formations keep their yaw-only frame. */
+internal fun staffChargeOrientation(spell: StaffSpell, yaw: Float, direction: Vector3f): Quaternionf =
+    if (spell == StaffSpell.EMBER) staffLanceOrientation(Vector3f(direction))
+    else Quaternionf().rotationY(-Math.toRadians(yaw.toDouble()).toFloat())
 
 /** Conservative sphere includes the entire transformed cuboid, not only its anchor. */
 internal fun staffPartClearOfEye(part: StaffDisplayPart, origin: Location, rotation: Quaternionf, eye: Location,

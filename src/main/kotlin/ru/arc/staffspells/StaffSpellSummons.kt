@@ -6,10 +6,21 @@ import org.bukkit.Material
 import org.bukkit.Particle
 import org.bukkit.Sound
 import org.bukkit.World
+import org.bukkit.attribute.Attribute
+import org.bukkit.entity.Arrow
+import org.bukkit.entity.Entity
+import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Player
 import org.bukkit.entity.AbstractSkeleton
+import org.bukkit.entity.Projectile
 import org.bukkit.entity.Skeleton
 import org.bukkit.entity.WitherSkeleton
+import org.bukkit.event.EventHandler
+import org.bukkit.event.EventPriority
+import org.bukkit.event.HandlerList
+import org.bukkit.event.Listener
+import org.bukkit.event.entity.EntityDamageByEntityEvent
+import org.bukkit.event.entity.EntityDeathEvent
 import org.bukkit.inventory.ItemStack
 import org.bukkit.util.BoundingBox
 import org.bukkit.util.Vector
@@ -27,7 +38,7 @@ internal class StaffSpellSummons(
     private val visuals: StaffSpellVisuals,
     private val targeting: StaffSpellTargeting,
     private val actorFactory: ((World, Location, Boolean) -> AbstractSkeleton)? = null,
-) : AutoCloseable {
+) : AutoCloseable, Listener {
     private data class Actor(
         val mob: AbstractSkeleton,
         val commander: Boolean,
@@ -35,7 +46,17 @@ internal class StaffSpellSummons(
         var windupTarget: UUID? = null,
         var windupTicks: Int = 0,
         var nextAttackTick: Int = 0,
-        var successfulAttacks: Int = 0,
+        var attacksMade: Int = 0,
+    )
+
+    private data class ArrowFlight(
+        val arrow: Arrow,
+        val cast: StaffSpellCast,
+        val worldId: UUID,
+        val direction: Vector,
+        var position: Location,
+        var remaining: Double,
+        var elapsedTicks: Int = 0,
     )
 
     private data class Session(
@@ -46,6 +67,7 @@ internal class StaffSpellSummons(
         val commander: Boolean,
         val bornAtTick: Long,
         val actors: MutableList<Actor> = mutableListOf(),
+        val flights: MutableList<ArrowFlight> = mutableListOf(),
         var ageTicks: Int = 0,
         var successfulHits: Int = 0,
     )
@@ -56,6 +78,39 @@ internal class StaffSpellSummons(
     private var started = false
     private var closed = false
     private val targetSearchRadius = minOf(settings.range, MAX_TARGET_SEARCH_RADIUS)
+
+    /** Returns the live owner cast only for a summon this controller currently owns. */
+    fun castFor(target: LivingEntity): StaffSpellCast? {
+        val session = trackedSession(target) ?: return null
+        val owner = Bukkit.getPlayer(session.casterId) ?: return null
+        return session.cast.takeIf {
+            target.isValid && !target.isDead && !target.isInvulnerable && loaded(target.location) &&
+                target.world.uid == session.worldId && owner.world.uid == session.worldId && ready(owner, session.cast)
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    fun onTrackedActorDamage(event: EntityDamageByEntityEvent) {
+        val target = event.entity as? LivingEntity ?: return
+        val session = trackedSession(target) ?: return
+        val authorization = session.cast.duelAuthorization ?: return
+        val access = session.cast.duelAccess
+        val owner = Bukkit.getPlayer(session.casterId)
+        val attacker = event.damager.playerAttacker()
+        if (access == null || owner == null || !ready(owner, session.cast) ||
+            owner.world.uid != session.worldId || attacker == null ||
+            !access.isCurrent(authorization, owner) || !access.canHit(authorization, owner, attacker) ||
+            !access.isCurrent(authorization, owner)) {
+            event.isCancelled = true
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    fun onTrackedActorDeath(event: EntityDeathEvent) {
+        if (trackedSession(event.entity) == null) return
+        event.drops.clear()
+        event.droppedExp = 0
+    }
 
     fun start() {
         check(!closed) { "Summon controller is closed" }
@@ -104,6 +159,7 @@ internal class StaffSpellSummons(
             tasks.close()
         } finally {
             sessions.values.toList().forEach(::remove)
+            HandlerList.unregisterAll(this)
         }
     }
 
@@ -128,7 +184,7 @@ internal class StaffSpellSummons(
                     session.actors.remove(actor)
                     return@actorLoop
                 }
-                enforceActorSafety(actor.mob)
+                enforceActorSafety(actor.mob, actor.commander)
                 if (actor.summonTicks < SUMMON_CUE_TICKS) {
                     summonFrame(session, actor, actor.summonTicks)
                     actor.summonTicks++
@@ -136,6 +192,7 @@ internal class StaffSpellSummons(
                 }
                 updateActor(session, actor, player)
             }
+            tickFlights(session, player)
             if (session.actors.isEmpty()) remove(session)
         }
     }
@@ -150,15 +207,30 @@ internal class StaffSpellSummons(
         }
 
         val targetCenter = center(target)
-        val reach = if (actor.commander) COMMANDER_REACH else SOLDIER_REACH
-        if (center(mob).distanceSquared(targetCenter) > reach * reach) {
+        val distance = center(mob).distanceSquared(targetCenter)
+        if (actor.commander && distance > COMMANDER_REACH * COMMANDER_REACH) {
             resetWindup(actor)
             moveToward(mob, approachPoint(mob.location, target.location))
             return
         }
+        if (!actor.commander) {
+            val horizontalDistance = mob.location.toVector().subtract(target.location.toVector()).apply { y = 0.0 }.length()
+            when {
+                horizontalDistance > ARCHER_MAX_STANDOFF -> {
+                    resetWindup(actor)
+                    moveToward(mob, approachPoint(mob.location, target.location, ARCHER_PREFERRED_STANDOFF))
+                    return
+                }
+                horizontalDistance < ARCHER_MIN_STANDOFF -> {
+                    resetWindup(actor)
+                    moveToward(mob, approachPoint(mob.location, target.location, ARCHER_MIN_STANDOFF))
+                    return
+                }
+            }
+        }
         mob.velocity = Vector(0.0, mob.velocity.y, 0.0)
         if (session.successfulHits >= MAX_SESSION_HITS ||
-            actor.successfulAttacks >= (if (actor.commander) COMMANDER_SWINGS else SOLDIER_HITS) ||
+            actor.attacksMade >= (if (actor.commander) COMMANDER_SWINGS else SOLDIER_SHOTS) ||
             session.ageTicks < actor.nextAttackTick) {
             resetWindup(actor)
             return
@@ -174,16 +246,21 @@ internal class StaffSpellSummons(
         if (actor.windupTicks < WINDUP_TICKS) return
 
         mob.swingMainHand()
-        val hits = attack(session, actor, owner, target)
+        val attacked = if (actor.commander) {
+            attack(session, actor, owner, target).also { if (it > 0) actor.attacksMade++ } > 0
+        } else {
+            shootArrow(session, actor, owner, target).also { if (it) actor.attacksMade++ }
+        }
         actor.windupTarget = null
         actor.windupTicks = 0
         actor.nextAttackTick = session.ageTicks + ATTACK_COOLDOWN_TICKS
-        if (hits > 0) actor.successfulAttacks++
+        if (!attacked) resetWindup(actor)
     }
 
     private fun selectTarget(owner: Player, session: Session, actor: Actor) =
         targeting.nearby(owner, actor.mob.location, targetSearchRadius, session.cast)
             .asSequence()
+            .filterNot { isSessionActor(session, it) }
             .filter { it.world.uid == session.worldId && loaded(it.location) }
             .filter { !it.isInvulnerable }
             .filter { visible(actor.mob.eyeLocation, center(it)) }
@@ -225,11 +302,11 @@ internal class StaffSpellSummons(
     }
 
     private fun validTarget(owner: Player, mob: AbstractSkeleton, target: org.bukkit.entity.LivingEntity, session: Session): Boolean =
-        target !== mob && target.isValid && !target.isDead && !target.isInvulnerable &&
+        target !== mob && !isSessionActor(session, target) && target.isValid && !target.isDead && !target.isInvulnerable &&
             target.world.uid == session.worldId && loaded(target.location) &&
             center(target).distanceSquared(center(mob)) <=
-            (if (session.commander) COMMANDER_CLEAVE_REACH else SOLDIER_REACH) *
-            (if (session.commander) COMMANDER_CLEAVE_REACH else SOLDIER_REACH) &&
+            (if (session.commander) COMMANDER_CLEAVE_REACH else targetSearchRadius) *
+            (if (session.commander) COMMANDER_CLEAVE_REACH else targetSearchRadius) &&
             visible(mob.eyeLocation, center(target)) && damage.isCurrent(owner, session.cast) &&
             damage.eligible(owner, target, session.cast)
 
@@ -262,10 +339,10 @@ internal class StaffSpellSummons(
         mob.setRotation(Math.toDegrees(atan2(-dx, dz)).toFloat(), 0.0f)
     }
 
-    private fun approachPoint(mob: Location, target: Location): Location {
+    private fun approachPoint(mob: Location, target: Location, standOff: Double = 1.45): Location {
         val away = mob.toVector().subtract(target.toVector()).apply { y = 0.0 }
         if (away.lengthSquared() < 0.01) away.z = -1.0
-        return target.clone().add(away.normalize().multiply(1.45))
+        return target.clone().add(away.normalize().multiply(standOff))
     }
 
     private fun followPoint(owner: Player, index: Int): Location {
@@ -399,7 +476,11 @@ internal class StaffSpellSummons(
     private fun configure(mob: AbstractSkeleton, commander: Boolean) {
         mob.isSilent = true
         mob.isPersistent = false
-        mob.isInvulnerable = true
+        mob.isInvulnerable = commander
+        if (!commander) {
+            mob.getAttribute(Attribute.MAX_HEALTH)?.baseValue = SOLDIER_HEALTH
+            mob.health = SOLDIER_HEALTH
+        }
         mob.setCanPickupItems(false)
         mob.setShouldBurnInDay(false)
         mob.setCollidable(false)
@@ -411,6 +492,8 @@ internal class StaffSpellSummons(
             if (commander) {
                 gear.setHelmet(ItemStack(Material.CHAINMAIL_HELMET))
                 gear.setChestplate(ItemStack(Material.CHAINMAIL_CHESTPLATE))
+            } else {
+                gear.setItemInMainHand(ItemStack(Material.BOW))
             }
             gear.setItemInMainHandDropChance(0.0f)
             gear.setItemInOffHandDropChance(0.0f)
@@ -429,10 +512,10 @@ internal class StaffSpellSummons(
         mob.setAware(true)
     }
 
-    private fun enforceActorSafety(mob: AbstractSkeleton) {
+    private fun enforceActorSafety(mob: AbstractSkeleton, commander: Boolean) {
         if (!mob.hasAI()) mob.setAI(true)
         if (!mob.isAware) mob.setAware(true)
-        if (!mob.isInvulnerable) mob.isInvulnerable = true
+        if (mob.isInvulnerable != commander) mob.isInvulnerable = commander
         if (mob.isPersistent) mob.isPersistent = false
         if (mob.canPickupItems) mob.setCanPickupItems(false)
         if (mob.shouldBurnInDay()) mob.setShouldBurnInDay(false)
@@ -484,6 +567,144 @@ internal class StaffSpellSummons(
         actor.windupTicks = 0
     }
 
+    private fun shootArrow(session: Session, actor: Actor, owner: Player, target: LivingEntity): Boolean {
+        if (session.successfulHits >= MAX_SESSION_HITS || activeFlightCount() >= MAX_PROJECTILES ||
+            !ready(owner, session.cast) || !validTarget(owner, actor.mob, target, session)) return false
+        val origin = actor.mob.eyeLocation
+        val aim = center(target).toVector().subtract(origin.toVector())
+        val distance = aim.length()
+        if (!distance.isFinite() || distance <= MIN_ARROW_DISTANCE || distance > MAX_ARROW_RANGE) return false
+        val direction = aim.multiply(1.0 / distance)
+        val arrow = actor.mob.world.spawnArrow(origin, direction, 0.0f, 0.0f)
+        arrow.shooter = actor.mob
+        arrow.damage = 0.0
+        arrow.knockbackStrength = 0
+        arrow.isCritical = false
+        arrow.setGravity(false)
+        arrow.isPersistent = false
+        arrow.isSilent = true
+        arrow.isInvulnerable = true
+        arrow.pickupStatus = org.bukkit.entity.AbstractArrow.PickupStatus.DISALLOWED
+        arrow.velocity = Vector()
+        orientArrow(arrow, direction)
+        if (!arrow.isValid || arrow.isDead) {
+            arrow.remove()
+            return false
+        }
+        session.flights += ArrowFlight(arrow, session.cast, session.worldId, direction, origin.clone(), distance)
+        visuals.withOwner(session.casterId) {
+            visuals.cue(origin, Sound.ENTITY_SKELETON_SHOOT, 0.3f, 1.0f)
+        }
+        return true
+    }
+
+    private fun tickFlights(session: Session, owner: Player) {
+        session.flights.toList().forEach flightLoop@{ flight ->
+            if (flight !in session.flights) return@flightLoop
+            val arrow = flight.arrow
+            if (session.successfulHits >= MAX_SESSION_HITS || !arrow.isValid || arrow.isDead ||
+                arrow.world.uid != flight.worldId ||
+                flight.worldId != session.worldId || !ready(owner, flight.cast) || owner.world.uid != session.worldId) {
+                retireFlight(session, flight)
+                return@flightLoop
+            }
+            flight.elapsedTicks++
+            if (flight.elapsedTicks > MAX_ARROW_FLIGHT_TICKS || !loaded(flight.position)) {
+                retireFlight(session, flight)
+                return@flightLoop
+            }
+            val step = minOf(ARROW_STEP_DISTANCE, flight.remaining)
+            if (!step.isFinite() || step <= MIN_ARROW_DISTANCE) {
+                retireFlight(session, flight)
+                return@flightLoop
+            }
+            val from = flight.position
+            val end = targeting.rayEnd(from, flight.direction, step)
+            val travelled = from.distance(end)
+            if (!travelled.isFinite() || travelled <= MIN_ARROW_DISTANCE) {
+                arrowImpactCue(session, from, hit = false)
+                retireFlight(session, flight)
+                return@flightLoop
+            }
+
+            val victim = targeting.lineTargets(owner, from, end, ARROW_SWEEP_WIDTH, flight.cast)
+                .firstOrNull { !isSessionActor(session, it) }
+            if (victim != null) {
+                val hitPosition = victim.boundingBox.expand(ARROW_SWEEP_WIDTH)
+                    .rayTrace(from.toVector(), flight.direction, travelled)?.hitPosition
+                    ?.toLocation(from.world) ?: center(victim)
+                arrow.teleport(hitPosition)
+                val currentTarget = ready(owner, flight.cast) && victim.isValid && !victim.isDead &&
+                    !isSessionActor(session, victim) &&
+                    !victim.isInvulnerable && victim.world.uid == flight.worldId && loaded(victim.location) &&
+                    visible(from, center(victim)) && damage.eligible(owner, victim, flight.cast)
+                if (currentTarget && damage.hit(
+                        owner,
+                        victim,
+                        flight.cast,
+                        session.tuning.power * SOLDIER_POWER_SCALE,
+                        session.tuning.vanillaDamage * VANILLA_DAMAGE_SCALE,
+                    )) session.successfulHits++
+                arrowImpactCue(session, hitPosition, hit = currentTarget)
+                retireFlight(session, flight)
+                return@flightLoop
+            }
+
+            val clippedByBlock = travelled < step - BLOCK_CLIP_EPSILON
+            arrow.teleport(end)
+            if (clippedByBlock) {
+                arrowImpactCue(session, end, hit = false)
+                retireFlight(session, flight)
+                return@flightLoop
+            }
+
+            flight.position = end
+            flight.remaining = (flight.remaining - travelled).coerceAtLeast(0.0)
+            orientArrow(arrow, flight.direction)
+            if (flight.elapsedTicks % ARROW_TRAIL_INTERVAL_TICKS == 0) {
+                visuals.withOwner(session.casterId) {
+                    visuals.particles(end, listOf(StaffParticleSample(Particle.CRIT, Vector(), count = 1)), clearance = 0.0)
+                }
+            }
+            if (flight.remaining <= MIN_ARROW_DISTANCE) retireFlight(session, flight)
+        }
+    }
+
+    private fun arrowImpactCue(session: Session, at: Location, hit: Boolean) {
+        visuals.withOwner(session.casterId) {
+            visuals.particles(at, listOf(
+                StaffParticleSample(Particle.CRIT, Vector(), count = if (hit) 4 else 2, spread = Vector(.1, .1, .1), speed = .01),
+                StaffParticleSample(Particle.SOUL, Vector(0.0, 0.08, 0.0), count = 2, spread = Vector(.08, .08, .08), speed = .01),
+            ), clearance = 0.0)
+            visuals.cue(at, if (hit) Sound.ENTITY_ARROW_HIT else Sound.BLOCK_STONE_HIT,
+                0.24f, if (hit) 1.0f else 0.9f)
+        }
+    }
+
+    private fun orientArrow(arrow: Arrow, direction: Vector) {
+        val horizontal = kotlin.math.sqrt(direction.x * direction.x + direction.z * direction.z)
+        val yaw = Math.toDegrees(atan2(-direction.x, direction.z)).toFloat()
+        val pitch = Math.toDegrees(-atan2(direction.y, horizontal)).toFloat()
+        arrow.setRotation(yaw, pitch)
+    }
+
+    private fun activeFlightCount() = sessions.values.sumOf { session ->
+        session.flights.count { it.arrow.isValid }
+    }
+
+    private fun retireFlight(session: Session, flight: ArrowFlight) {
+        session.flights.remove(flight)
+        flight.arrow.remove()
+    }
+
+    private fun trackedSession(target: LivingEntity): Session? = sessions.values.firstNotNullOfOrNull { session ->
+        if (sessions[session.casterId] !== session || session.worldId != target.world.uid) return@firstNotNullOfOrNull null
+        session.takeIf { current -> current.actors.any { it.mob.uniqueId == target.uniqueId } }
+    }
+
+    private fun isSessionActor(session: Session, target: LivingEntity) =
+        session.actors.any { it.mob.uniqueId == target.uniqueId }
+
     private fun ready(player: Player, cast: StaffSpellCast) =
         player.isOnline && player.isValid && !player.isDead && damage.isCurrent(player, cast)
 
@@ -497,6 +718,7 @@ internal class StaffSpellSummons(
 
     private fun remove(session: Session) {
         if (sessions[session.casterId] === session) sessions.remove(session.casterId)
+        session.flights.toList().forEach { retireFlight(session, it) }
         session.actors.forEach { it.mob.remove() }
         session.actors.clear()
     }
@@ -506,17 +728,28 @@ internal class StaffSpellSummons(
         const val LIFETIME_TICKS = 200L
         const val WINDUP_TICKS = 10
         const val ATTACK_COOLDOWN_TICKS = 20
-        const val SOLDIER_HITS = 3
+        const val SOLDIER_SHOTS = 3
         const val COMMANDER_SWINGS = 2
         const val MAX_SESSION_HITS = 6
+        const val MAX_PROJECTILES = 16
         const val MAX_CLEAVE_TARGETS = 3
         const val MAX_TARGET_SEARCH_RADIUS = 12.0
-        const val SOLDIER_REACH = 2.25
+        const val ARCHER_MIN_STANDOFF = 2.0
+        const val ARCHER_PREFERRED_STANDOFF = 3.25
+        const val ARCHER_MAX_STANDOFF = 5.0
         const val COMMANDER_REACH = 2.8
         const val COMMANDER_CLEAVE_REACH = 2.8
+        const val SOLDIER_HEALTH = 4.0
         const val SOLDIER_POWER_SCALE = 0.5
         const val COMMANDER_POWER_SCALE = 0.75
         const val VANILLA_DAMAGE_SCALE = 0.2
+        const val ARROW_STEP_DISTANCE = 0.5
+        const val MAX_ARROW_RANGE = 8.0
+        const val MAX_ARROW_FLIGHT_TICKS = 16
+        const val ARROW_SWEEP_WIDTH = 0.2
+        const val ARROW_TRAIL_INTERVAL_TICKS = 2
+        const val MIN_ARROW_DISTANCE = 0.03
+        const val BLOCK_CLIP_EPSILON = 0.02
         const val WALK_SPEED = 0.23
         const val SUMMON_CUE_TICKS = 10
         const val SUMMON_CAMERA_CLEARANCE = 1.0
@@ -543,6 +776,12 @@ internal class StaffSpellSummons(
         )
         val FOLLOW_SLOTS = listOf(0.9 to 1.9, -0.9 to 1.9, 1.45 to 2.6, -1.45 to 2.6)
     }
+}
+
+private fun Entity.playerAttacker(): Player? = when (this) {
+    is Player -> this
+    is Projectile -> shooter as? Player
+    else -> null
 }
 
 /** Five compact native-particle stages; kept pure so bounds and commander distinction stay testable. */

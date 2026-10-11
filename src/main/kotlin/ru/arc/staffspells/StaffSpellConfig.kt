@@ -47,6 +47,17 @@ internal enum class StaffCastInput(val secondary: Boolean, val quick: Boolean) {
 
 internal data class StaffSpellTuning(val power: Double, val vanillaDamage: Double, val cooldownTicks: Long)
 
+/** Arena tuning is independent of EliteMobs/PvE. The duel kit applies its own damage multiplier. */
+internal val staffDuelDefaults = mapOf(
+    StaffSpell.CHAIN to StaffSpellTuning(1.0, 6.5, 26),
+    StaffSpell.MARK to StaffSpellTuning(1.0, 10.0, 44),
+    StaffSpell.LANCE to StaffSpellTuning(1.0, 9.0, 32),
+    StaffSpell.EMBER to StaffSpellTuning(1.0, 10.0, 40),
+    StaffSpell.ICICLE to StaffSpellTuning(1.0, 8.0, 40),
+    StaffSpell.FAULT to StaffSpellTuning(1.0, 10.0, 44),
+    StaffSpell.NECROMANCER to StaffSpellTuning(1.0, 10.0, 160),
+)
+
 internal class StaffSpellSkinUnavailableException(skinId: String, cause: Throwable) :
     IllegalStateException("Configured ItemsAdder staff skin '$skinId' is unavailable", cause)
 
@@ -70,7 +81,11 @@ internal data class StaffSpellSettings(
     val emberSpeed: Double = 1.2,
     val emberRadius: Double = 2.8,
     val novaRadius: Double = 8.0,
+    val duelTuning: Map<StaffSpell, StaffSpellTuning> = staffDuelDefaults,
 ) {
+    fun tuningFor(spell: StaffSpell, duel: Boolean): StaffSpellTuning =
+        (if (duel) duelTuning[spell] else null) ?: tuning.getValue(spell)
+
     fun fingerprint(pluginVersion: String): String {
         val canonical = buildString {
             append("staff-duel-damage-v1\narc=").append(pluginVersion).append('\n')
@@ -95,6 +110,9 @@ internal data class StaffSpellSettings(
                 append(spell.id).append(".power=").append(spellTuning.power.hex()).append('\n')
                 append(spell.id).append(".vanillaDamage=").append(spellTuning.vanillaDamage.hex()).append('\n')
                 append(spell.id).append(".cooldownTicks=").append(spellTuning.cooldownTicks).append('\n')
+                val arena = tuningFor(spell, duel = true)
+                append(spell.id).append(".duelDamage=").append(arena.vanillaDamage.hex()).append('\n')
+                append(spell.id).append(".duelCooldownTicks=").append(arena.cooldownTicks).append('\n')
             }
         }
         return sha256(canonical)
@@ -155,6 +173,11 @@ internal open class StaffSpellConfig(private val config: Config) {
         number("ember.speed", 1.2, 0.5..3.0),
         number("ember.radius", 2.8, 1.0..6.0),
         number("nova.radius", 8.0, 2.0..10.0),
+        staffDuelDefaults.mapValues { (spell, default) -> default.copy(
+            vanillaDamage = number("duel.${spell.id}.damage", default.vanillaDamage, 0.1..40.0),
+            cooldownTicks = config.integer("duel.${spell.id}.cooldown-ticks", default.cooldownTicks.toInt())
+                .coerceIn(4, 400).toLong(),
+        ) },
     )
 
     private fun number(key: String, fallback: Double, bounds: ClosedFloatingPointRange<Double>) =
@@ -180,6 +203,13 @@ internal open class StaffSpellConfig(private val config: Config) {
         "messages.${if (active) "defense-active" else "defense-cooldown"}", TagResolver.resolver(
             Placeholder.component("ability", config.component("${spell.id}.quick-name", TagResolver.empty())),
             Placeholder.unparsed("seconds", String.format(Locale.ROOT, "%.1f", seconds)),
+        ))
+
+    fun shield(spell: StaffSpell, remaining: Double, capacity: Double): Component = config.component(
+        "messages.shield-active", TagResolver.resolver(
+            Placeholder.component("ability", config.component("${spell.id}.quick-secondary-name", TagResolver.empty())),
+            Placeholder.unparsed("remaining", String.format(Locale.ROOT, "%.1f", remaining)),
+            Placeholder.unparsed("capacity", String.format(Locale.ROOT, "%.0f", capacity)),
         ))
 
     fun item(spell: StaffSpell) = buildItem(spell, duelOnly = false)

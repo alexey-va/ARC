@@ -64,13 +64,14 @@ object StaffSpellsModule : PluginModule {
             Bukkit.getPluginManager().registerEvents(it, ARC.instance)
             Bukkit.getPluginManager().registerEvents(it.input, ARC.instance)
             Bukkit.getPluginManager().registerEvents(it.defense, ARC.instance)
+            Bukkit.getPluginManager().registerEvents(it.summons, ARC.instance)
             it.start()
         }
     }
 
     override fun reload() = init()
     override fun shutdown() {
-        controller?.let { HandlerList.unregisterAll(it); HandlerList.unregisterAll(it.input); HandlerList.unregisterAll(it.defense); it.close() }
+        controller?.let { HandlerList.unregisterAll(it); HandlerList.unregisterAll(it.input); HandlerList.unregisterAll(it.defense); HandlerList.unregisterAll(it.summons); it.close() }
         controller = null
     }
 
@@ -93,7 +94,8 @@ internal class StaffSpellController(
     internal val defense = StaffSpellDefense(config, damage, visuals)
     private val channels = StaffSpellChannels(settings, damage, effects, visuals, targeting)
     private val channelInputs = mutableMapOf<UUID, Pair<StaffSpell, StaffCastInput>>()
-    private val summons = StaffSpellSummons(settings, damage, visuals, targeting, summonActorFactory)
+    internal val summons = StaffSpellSummons(settings, damage, visuals, targeting, summonActorFactory)
+    init { damage.summonCast = summons::castFor }
     internal val input = StaffSpellInput(this)
     private val chargeScenes = mutableMapOf<UUID, UUID?>()
     private val lances = mutableListOf<PendingStaffLance>()
@@ -219,6 +221,11 @@ internal class StaffSpellController(
         }
         effects.charge(id, player.eyeLocation, progress)
         visuals.withOwner(player.uniqueId) { visuals.chargeFeedback(player, spell, progress) }
+        if (spell == StaffSpell.EMBER && player.isSneaking) {
+            meteorPoints(player).forEach { at -> visuals.withOwner(player.uniqueId) {
+                visuals.particles(at, staffMeteorWarningParticles(progress, locked = false))
+            } }
+        }
         val bar = cooldownBars.getOrPut(player.uniqueId) {
             BossBar.bossBar(config.charge(spell, progress, player.isSneaking), progress.toFloat(), BossBar.Color.PURPLE, BossBar.Overlay.PROGRESS)
                 .also(player::showBossBar)
@@ -254,7 +261,7 @@ internal class StaffSpellController(
             player.sendActionBar(config.text("unavailable"))
             return
         }
-        val base = settings.tuning.getValue(spell)
+        val base = settings.tuningFor(spell, duel = cast.duelAuthorization != null)
         val multiplier = (1.0 + level * 0.75) * if (input.quick) 0.55 else 1.0
         val tuning = base.copy(power = base.power * multiplier, vanillaDamage = base.vanillaDamage * multiplier)
         val secondary = input.secondary
@@ -478,19 +485,39 @@ internal class StaffSpellController(
         }
     }
 
-    private fun meteorShower(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning) {
-        val selected = target(player, cast)?.let(::center) ?: aimPoint(player)
+    private fun meteorPoints(player: Player): List<Location> {
+        val selected = aimPoint(player)
         val center = groundBelow(selected.clone().add(0.0, 0.2, 0.0), 16.0) ?: selected.clone()
+        return List(3) { index ->
+            val offset = center.clone().add((index - 1) * 2.0, 4.0, if (index == 1) 1.6 else -0.8)
+            groundBelow(offset, 12.0) ?: offset.clone().subtract(0.0, 4.0, 0.0)
+        }
+    }
+
+    private fun meteorShower(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning) {
+        // One snapshot drives the warning and every projectile: turning after release cannot move the zone.
+        val impacts = meteorPoints(player)
         val worldId = player.world.uid
         val hitTargets = mutableSetOf<UUID>()
         delayedCasts[cast.casterId] = cast.attackId
-        repeat(3) { index ->
-            tasks.runLater((index * 6 + 1).toLong()) {
+        fun currentCaster(): Player? = Bukkit.getPlayer(cast.casterId)?.takeIf {
+            delayedCasts[cast.casterId] == cast.attackId && ready(it) && it.world.uid == worldId && damage.isCurrent(it, cast)
+        }
+        impacts.forEach { at -> visuals.withOwner(cast.casterId) {
+            visuals.particles(at, staffMeteorWarningParticles(0.0, locked = true))
+        } }
+        visuals.withOwner(cast.casterId) { visuals.cue(impacts[1], Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, .8f, 1.35f) }
+        for (age in 2 until STAFF_METEOR_WARNING_TICKS + 12 step 2) tasks.runLater(age.toLong()) {
+            if (currentCaster() != null) impacts.forEachIndexed { index, at ->
+                if (age < STAFF_METEOR_WARNING_TICKS + index * 6) visuals.withOwner(cast.casterId) {
+                    visuals.particles(at, staffMeteorWarningParticles(age.toDouble() / (STAFF_METEOR_WARNING_TICKS + index * 6), locked = true))
+                }
+            }
+        }
+        impacts.forEachIndexed { index, impact ->
+            tasks.runLater((STAFF_METEOR_WARNING_TICKS + index * 6).toLong()) {
                 val caster = Bukkit.getPlayer(cast.casterId)
-                if (delayedCasts[cast.casterId] == cast.attackId && caster != null && ready(caster) && caster.world.uid == worldId &&
-                    damage.isCurrent(caster, cast) && visible(caster.eyeLocation, selected)) {
-                    val offset = center.clone().add((index - 1) * 2.0, 4.0, if (index == 1) 1.6 else -0.8)
-                    val impact = groundBelow(offset, 12.0) ?: offset.clone().subtract(0.0, 4.0, 0.0)
+                if (caster != null && currentCaster() != null && visible(caster.eyeLocation, impact)) {
                     // Trace upward from the destination: indoor casts start below the ceiling, never beyond it.
                     val top = rayEnd(impact.clone().add(0.0, 0.15, 0.0), Vector(0.0, 1.0, 0.0), 12.0 + index)
                     val travel = top.y - impact.y
@@ -502,7 +529,7 @@ internal class StaffSpellController(
                             embers.first { it.cast.casterId == cast.casterId }.let { effects.remove(it.visualId); embers.remove(it) }
                         embers += PendingStaffEmber(top, direction, cast,
                             tuning.copy(power = tuning.power * 0.65, vanillaDamage = tuning.vanillaDamage * 0.65),
-                            travel, id, top, speed = 1.6, radius = 3.5, hitTargets = hitTargets)
+                            travel, id, top, speed = 1.6, radius = STAFF_METEOR_RADIUS, hitTargets = hitTargets)
                         visuals.withOwner(cast.casterId) { visuals.emberTrail(top, top, meteor = true) }
                     }
                 }
@@ -1019,6 +1046,7 @@ internal class StaffSpellController(
         channels.close()
         channelInputs.clear()
         summons.close()
+        damage.summonCast = { null }
         chargeScenes.values.forEach(effects::remove)
         chargeScenes.clear()
         lances.clear()

@@ -221,6 +221,9 @@ object StaffSpellPreviewExport {
             Event("triple-spears", Inputs(48.0, 0.9, staffLanceDuration(48.0), impact = true, secondary = true)),
         ),
         StaffSpell.EMBER to listOf(
+            Event("charge-empty", Inputs(0.0, 0.0, 40, impact = false, chargeProgress = 0.0)),
+            Event("charge-half", Inputs(0.0, 0.0, 40, impact = false, chargeProgress = 0.5)),
+            Event("charge-full", Inputs(0.0, 0.0, 40, impact = false, chargeProgress = 1.0)),
             Event("flight", Inputs(48.0, 0.85, 44, impact = false)),
             Event("burst", Inputs(0.0, 2.8, 20, impact = true, animationAgeOffsetTicks = 40,
                 transitionFromAgeTicks = 40)),
@@ -385,6 +388,7 @@ object StaffSpellPreviewExport {
             "farClip" to 150,
         )
         val (position, target) = when {
+            inputs.chargeProgress != null -> point(0.0, eyeHeight, 0.0) to point(0.0, eyeHeight, 10.0)
             spell == StaffSpell.FAULT && inputs.secondary ->
                 point(0.0, eyeHeight, 0.0) to point(0.0, eyeHeight, 16.0)
             spell == StaffSpell.ICICLE && inputs.secondary ->
@@ -541,7 +545,7 @@ object StaffSpellPreviewExport {
         eyeHeight: Double,
     ): Pair<List<StaffDisplayPart>, Vector3f> {
         event.inputs.chargeProgress?.let { progress ->
-            return staffChargeParts(spell, progress, frame.ageTicks) to Vector3f()
+            return staffChargeParts(spell, progress, frame.ageTicks) to Vector3f(0f, eyeHeight.toFloat(), 0f)
         }
         if (spell == StaffSpell.CHAIN) {
             val impact = event.id.endsWith("impact")
@@ -715,15 +719,20 @@ object StaffSpellPreviewExport {
 
     @JvmStatic
     fun main(args: Array<String>) {
-        require(args.size == 1) { "Usage: StaffSpellPreviewExport <scene.json>" }
-        val output = Path.of(args.single())
-        val readability = readabilityStates()
-        val exported = StaffSpell.entries.associateWith { spell ->
+        require(args.size in 1..2) { "Usage: StaffSpellPreviewExport <scene.json> [spell-id]" }
+        val output = Path.of(args.first())
+        val selected = args.getOrNull(1)?.let { id ->
+            setOf(requireNotNull(events.keys.find { it.id == id }) { "Unknown preview spell: $id" })
+        } ?: events.keys
+        val readability = readabilityPoses.filter { it.spell in selected }.flatMap { pose ->
+            state(pose.spell, pose.event, pose.frame, pose)
+        }
+        val exported = selected.associateWith { spell ->
             events.getValue(spell).flatMap { event ->
                 frames(event).flatMap { frame -> state(spell, event, frame) }
             }
         }
-        val allExported = readability + StaffSpell.entries.flatMap { exported.getValue(it) }
+        val allExported = readability + exported.values.flatten()
         val states = allExported.map(ExportedState::metadata)
         val palette = allExported.asSequence()
             .flatMap { it.materials.asSequence() }
@@ -741,7 +750,7 @@ object StaffSpellPreviewExport {
         )).plus("\n"))
         // A compact continuous shape reel, including weak/full release and every quick gesture.
         // The anchor is fixed for fair silhouette comparisons; it is not a simulated world trajectory.
-        val clips = StaffSpell.entries.flatMap { spell ->
+        val clips = selected.flatMap { spell ->
             StaffCastInput.entries.flatMap { input ->
                 (if (input.quick) listOf(0.0) else listOf(0.0, 1.0)).map { charge ->
                     val legacyQuick = input.quick && spell !in setOf(StaffSpell.NOVA, StaffSpell.LUNAR,

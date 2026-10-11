@@ -136,6 +136,42 @@ class StaffSpellModeledDamageTest : FreeSpec({
         verify(exactly = 0) { Bukkit.getPluginManager().isPluginEnabled("EliteMobs") }
     }
 
+    "duel spells can destroy only summons registered to a current opposing participant" {
+        val world = mockk<World>()
+        val attacker = mockk<Player>()
+        val owner = mockk<Player>()
+        val summon = mockk<LivingEntity>()
+        val unrelated = mockk<LivingEntity>()
+        readyPlayers(attacker, owner, world)
+        readyEntities(attacker, summon, world)
+        readyEntities(attacker, unrelated, world)
+        every { Bukkit.getPlayer(owner.uniqueId) } returns owner
+        every { summon.absorptionAmount } returns 0.0
+        var health = 8.0
+        every { summon.health } answers { health }
+        every { summon.damage(any<Double>(), attacker) } answers { health -= firstArg<Double>(); Unit }
+        val context = StaffSpellDuelContext(UUID.randomUUID(), 1, .4)
+        val authorization = DuelSpellAuthorization(UUID.randomUUID(), context)
+        val access = mockk<StaffSpellDuelAccess>()
+        var ownerCurrent = true
+        every { access.context(any()) } returns authorization
+        every { access.isCurrent(authorization, any()) } answers { secondArg<Player>() !== owner || ownerCurrent }
+        every { access.canHit(authorization, attacker, any()) } answers { thirdArg<Player>() === owner }
+        val damage = StaffSpellDamage(access)
+        val attack = requireNotNull(damage.capture(attacker, duelOnly = true))
+        val summonCast = requireNotNull(damage.capture(owner, duelOnly = true))
+        damage.summonCast = { if (it === summon) summonCast else null }
+
+        damage.eligible(attacker, summon, attack) shouldBe true
+        damage.eligible(attacker, unrelated, attack) shouldBe false
+        damage.hit(attacker, summon, attack, 1.0, 10.0) shouldBe true
+        health shouldBe 4.0
+        ownerCurrent = false
+        damage.eligible(attacker, summon, attack) shouldBe false
+        damage.hit(attacker, summon, attack, 1.0, 10.0) shouldBe false
+        health shouldBe 4.0
+    }
+
     "duel-only spell capture is denied outside an active duel" {
         val world = mockk<World>()
         val caster = mockk<Player>()

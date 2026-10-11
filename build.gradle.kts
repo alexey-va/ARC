@@ -52,7 +52,7 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.377"
+version = "1.4.378"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.21"
@@ -766,4 +766,5 @@ tasks.register<JavaExec>("exportStaffSpellPreview") {
     args(providers.gradleProperty("staffSpellPreviewOutput").getOrElse(
         layout.buildDirectory.file("staff-spells-preview/scene.json").get().asFile.absolutePath,
     ))
+    providers.gradleProperty("staffSpellPreviewSpell").orNull?.let { args(it) }
 }

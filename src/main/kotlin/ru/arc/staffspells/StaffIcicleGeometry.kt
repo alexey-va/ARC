@@ -60,9 +60,10 @@ internal fun staffIcicleDisplayParts(ageTicks: Int, impact: Boolean, charge: Dou
 /** Shoulder halo grows outside the crosshair; stable slots prevent spawn/despawn flicker. */
 internal fun staffChargeParts(spell: StaffSpell, progress: Double, age: Int): List<StaffDisplayPart> {
     if (spell == StaffSpell.INFERNO || spell == StaffSpell.GRAVITY) return emptyList()
-    val count = if (spell == StaffSpell.ICICLE) 11 else 7
     val charge = progress.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
     val bloom = smoothCharge((charge - 0.08) / 0.84)
+    if (spell == StaffSpell.EMBER) return staffEmberChargeParts(bloom)
+    val count = if (spell == StaffSpell.ICICLE) 11 else 7
     val material = when (spell) {
         StaffSpell.CHAIN -> Material.SEA_LANTERN
         StaffSpell.MARK, StaffSpell.REQUIEM -> Material.CRYING_OBSIDIAN
@@ -92,6 +93,41 @@ internal fun staffChargeParts(spell: StaffSpell, progress: Double, age: Int): Li
                 base.mul(slotScale.toFloat()),
                 Quaternionf().rotateZ((piece * PI / 3 + age.coerceAtLeast(0) * 0.015).toFloat()))
         }
+    }
+}
+
+/** A compact, stable block fireball held on the aim line while EMBER charges. */
+private fun staffEmberChargeParts(bloom: Double): List<StaffDisplayPart> {
+    val body = (0.58 + 0.47 * bloom).toFloat()
+    val origin = Vector3f(0f, -0.88f, 2.9f)
+    val directions = listOf(
+        Vector3f(),
+        Vector3f(-1f, 0f, 0f), Vector3f(1f, 0f, 0f),
+        Vector3f(0f, -1f, 0f), Vector3f(0f, 1f, 0f),
+        Vector3f(0f, 0f, -1f), Vector3f(0f, 0f, 1f),
+    )
+    return directions.flatMapIndexed { index, direction ->
+        val core = index == 0
+        val crustCenter = Vector3f(origin).add(Vector3f(direction).mul(if (core) 0f else body * 0.24f))
+        val orangeCenter = if (core) Vector3f(origin).add(0f, 0f, -body * 0.34f)
+            else Vector3f(origin).add(Vector3f(direction).mul(body * 0.38f)).add(0f, 0f, -body * 0.06f)
+        val hotCenter = if (core) Vector3f(origin).add(0f, 0f, -body * 0.51f)
+            else Vector3f(origin).add(Vector3f(direction).mul(body * 0.50f)).add(0f, 0f, -body * 0.12f)
+        val crustSize = body * if (core) 0.72f else 0.56f
+        listOf(
+            StaffDisplayPart(Material.MAGMA_BLOCK, crustCenter,
+                Vector3f(crustSize, crustSize, crustSize),
+                Quaternionf().rotateXYZ(index * 0.17f, index * 0.23f, index * 0.31f),
+                identity = "ember-charge:$index:crust"),
+            StaffDisplayPart(if (index % 2 == 0) Material.ORANGE_CONCRETE else Material.RED_CONCRETE,
+                orangeCenter, Vector3f(body * 0.38f),
+                Quaternionf().rotateXYZ(index * 0.29f, index * 0.13f, index * 0.37f),
+                identity = "ember-charge:$index:flame"),
+            StaffDisplayPart(if (index % 2 == 0) Material.GLOWSTONE else Material.YELLOW_CONCRETE,
+                hotCenter, Vector3f(body * 0.23f),
+                Quaternionf().rotateXYZ(index * 0.11f, index * 0.41f, index * 0.19f),
+                identity = "ember-charge:$index:hotspot"),
+        )
     }
 }
 

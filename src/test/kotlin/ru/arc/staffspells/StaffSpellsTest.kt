@@ -972,7 +972,7 @@ class StaffSpellsTest : FreeSpec({
             world.loadChunk(0, 0)
             world.isChunkLoaded(0, 0) shouldBe true
             val player = h.player("staff-ember-secondary", world, StaffSpell.EMBER).apply { isSneaking = true }
-            for (x in 0..10) for (z in 6..15) {
+            for (x in -5..10) for (z in 6..15) {
                 world.getBlockAt(x, 63, z).type = Material.STONE
                 world.getBlockAt(x, 70, z).type = Material.STONE
             }
@@ -983,6 +983,10 @@ class StaffSpellsTest : FreeSpec({
 
             h.controller.cast(player)
             h.visualPlays.count { it.spell == StaffSpell.EMBER && it.secondary } shouldBe 0
+            h.scheduler.tick(14)
+            h.visualPlays.count { it.spell == StaffSpell.EMBER && it.secondary } shouldBe 0
+            h.hits shouldBe emptyList()
+            player.teleport(player.location.apply { yaw = 180f }) // The warning and destination are locked on release.
             h.scheduler.tick(1)
             h.visualPlays.count { it.spell == StaffSpell.EMBER && it.secondary } shouldBe 1
             h.scheduler.tick(6)
@@ -1266,13 +1270,14 @@ internal fun withStaffHarness(
                     CooldownManager.clearAll()
                     CooldownManager.setupTask(5, scheduler)
                     val damage = mockk<StaffSpellDamage>()
+                    every { damage.summonCast = any() } returns Unit
                     val captures = mutableListOf<Player>()
                     val hits = mutableListOf<LivingEntity>()
                     val hitLocations = mutableListOf<Location>()
                     val damageScales = mutableListOf<Pair<Double, Double>>()
                     every { damage.eligible(any(), any(), any()) } answers {
                         val target = secondArg<LivingEntity>()
-                        target !is Player && target.isValid && !target.isDead && target.health > 0.0
+        target !is Player && target.isValid && !target.isDead && !target.isInvulnerable && target.health > 0.0
                     }
                     every { damage.capture(any(), any()) } answers {
                         val player = firstArg<Player>()

@@ -17,10 +17,18 @@ import org.bukkit.Particle
 import org.bukkit.World
 import org.bukkit.block.Block
 import org.bukkit.block.data.BlockData
+import org.bukkit.damage.DamageSource
+import org.bukkit.damage.DamageType
+import org.bukkit.entity.Arrow
 import org.bukkit.entity.AbstractSkeleton
+import org.bukkit.entity.Player
 import org.bukkit.entity.Skeleton
 import org.bukkit.entity.WitherSkeleton
+import org.bukkit.event.entity.EntityDamageByEntityEvent
+import org.bukkit.event.entity.EntityDamageEvent
+import org.bukkit.event.entity.EntityDeathEvent
 import org.bukkit.event.player.PlayerQuitEvent
+import org.bukkit.inventory.ItemStack
 import org.bukkit.util.BoundingBox
 import org.bukkit.util.VoxelShape
 import org.mockbukkit.mockbukkit.ServerMock
@@ -28,10 +36,11 @@ import org.mockbukkit.mockbukkit.block.BlockMock
 import org.mockbukkit.mockbukkit.world.WorldMock
 import org.mockbukkit.mockbukkit.entity.SkeletonMock
 import org.mockbukkit.mockbukkit.entity.WitherSkeletonMock
+import ru.arc.staffspells.api.StaffSpellDuelContext
 import java.util.UUID
 
 class StaffSpellSummonsTest : FreeSpec({
-    "primary summons a native squad and waits through its attack windup" {
+    "primary summons killable native bow skeletons and arrows hit only after telegraphed flight" {
         var configuredActors: List<AbstractSkeleton> = emptyList()
         withSummonHarness(verifyGoals = { goals ->
             configuredActors.forEach { mob ->
@@ -51,11 +60,12 @@ class StaffSpellSummonsTest : FreeSpec({
             configuredActors = soldiers
             soldiers.size shouldBe 2
             soldiers.filterIsInstance<WitherSkeleton>().size shouldBe 0
-            soldiers.all { it.hasAI() && it.isAware && it.isInvulnerable && !it.isPersistent && !it.canPickupItems &&
+            soldiers.all { it.hasAI() && it.isAware && !it.isInvulnerable && !it.isPersistent && !it.canPickupItems &&
                 !it.shouldBurnInDay() } shouldBe true
+            soldiers.all { it.health == 4.0 } shouldBe true
             soldiers.all { mob ->
                 mob.equipment?.let { gear ->
-                    gear.itemInMainHand.type.isAir && gear.itemInOffHand.type.isAir &&
+                    gear.itemInMainHand.type == Material.BOW && gear.itemInOffHand.type.isAir &&
                         gear.helmet.type.isAir && gear.chestplate.type.isAir &&
                         gear.itemInMainHandDropChance == 0.0f && gear.helmetDropChance == 0.0f
                 } == true
@@ -64,6 +74,13 @@ class StaffSpellSummonsTest : FreeSpec({
             h.scheduler.tick(19)
             h.hits shouldBe emptyList()
             h.scheduler.tick(1)
+            val arrows = world.entities.filterIsInstance<Arrow>()
+            (arrows.size in 1..2) shouldBe true
+            arrows.all { it.damage == 0.0 && it.knockbackStrength == 0 && !it.hasGravity() &&
+                it.isInvulnerable && it.pickupStatus == org.bukkit.entity.AbstractArrow.PickupStatus.DISALLOWED &&
+                soldiers.any { soldier -> it.shooter === soldier } } shouldBe true
+            h.hits shouldBe emptyList()
+            h.scheduler.tick(8)
             h.hits.all { it === target } shouldBe true
             (h.hits.size in 1..2) shouldBe true
 
@@ -139,7 +156,10 @@ class StaffSpellSummonsTest : FreeSpec({
             val actors = world.entities.filterIsInstance<Skeleton>()
             actors.size shouldBe 2
             actors.all { !it.canPickupItems } shouldBe true
+            h.controller.summons.castFor(actors.first())?.casterId shouldBe owner.uniqueId
+            h.controller.summons.castFor(h.zombie(world, x = 4.5, z = 5.0)) shouldBe null
             current = false
+            h.controller.summons.castFor(actors.first()) shouldBe null
             h.scheduler.tick(12)
 
             h.hits shouldBe emptyList()
@@ -147,20 +167,87 @@ class StaffSpellSummonsTest : FreeSpec({
         }
     }
 
-    "summons require solid floor and never target an invulnerable summoned actor" {
+    "owned archer actors expose only their live cast and leave no loot or experience" {
+        withSummonHarness { h ->
+            val world = h.paper.addSimpleWorld("summon-ownership")
+            loadSummonChunks(world)
+            val owner = h.player("summon-ownership-owner", world, StaffSpell.NECROMANCER)
+            h.controller.start()
+            h.controller.cast(owner, StaffCastInput.PRIMARY, 0.0)
+            val actor = world.entities.filterIsInstance<Skeleton>().first()
+            val drops = mutableListOf(ItemStack(Material.BONE))
+            val death = EntityDeathEvent(actor, DamageSource.builder(DamageType.GENERIC).build(), drops, 7)
+
+            h.controller.summons.onTrackedActorDeath(death)
+
+            drops shouldBe emptyList()
+            death.droppedExp shouldBe 0
+        }
+    }
+
+    "duel skeletons accept only current opposing player damage" {
+        withSummonHarness { h ->
+            val world = h.paper.addSimpleWorld("summon-counterplay")
+            loadSummonChunks(world)
+            val owner = h.player("summon-counterplay-owner", world, StaffSpell.NECROMANCER)
+            val opponent = h.player("summon-counterplay-opponent", world, StaffSpell.NECROMANCER)
+            val outsider = h.player("summon-counterplay-outsider", world, StaffSpell.NECROMANCER)
+            val context = StaffSpellDuelContext(UUID.randomUUID(), 1, 0.4)
+            val authorization = DuelSpellAuthorization(UUID.randomUUID(), context)
+            val access = mockk<StaffSpellDuelAccess>()
+            every { access.isCurrent(authorization, owner) } returns true
+            every { access.canHit(authorization, owner, any()) } answers { thirdArg<Player>() === opponent }
+            h.controller.start()
+            val cast = StaffSpellCast(owner.uniqueId, UUID.randomUUID(), 1, null, null, false, authorization, access)
+            h.controller.summons.cast(
+                owner, cast, staffSettings().tuning.getValue(StaffSpell.NECROMANCER), StaffCastInput.PRIMARY, 0.0,
+            ) shouldBe true
+            val actor = world.entities.filterIsInstance<Skeleton>().first()
+
+            fun damageEvent(attacker: org.bukkit.entity.Entity, target: org.bukkit.entity.Entity = actor) = EntityDamageByEntityEvent(
+                attacker, target, EntityDamageEvent.DamageCause.ENTITY_ATTACK, 1.0,
+            )
+            val friendly = damageEvent(owner)
+            h.controller.summons.onTrackedActorDamage(friendly)
+            friendly.isCancelled shouldBe true
+            val unauthorized = damageEvent(outsider)
+            h.controller.summons.onTrackedActorDamage(unauthorized)
+            unauthorized.isCancelled shouldBe true
+            val opposing = damageEvent(opponent)
+            h.controller.summons.onTrackedActorDamage(opposing)
+            opposing.isCancelled shouldBe false
+
+            val projectile = world.spawnArrow(opponent.eyeLocation, opponent.eyeLocation.direction, 1.0f, 0.0f)
+            projectile.shooter = opponent
+            val projectileHit = EntityDamageByEntityEvent(
+                projectile, actor, EntityDamageEvent.DamageCause.PROJECTILE, 1.0,
+            )
+            h.controller.summons.onTrackedActorDamage(projectileHit)
+            projectileHit.isCancelled shouldBe false
+
+            val unrelated = h.zombie(world, x = 4.5, z = 4.0)
+            val unrelatedEvent = damageEvent(opponent, unrelated)
+            h.controller.summons.onTrackedActorDamage(unrelatedEvent)
+            unrelatedEvent.isCancelled shouldBe false
+        }
+    }
+
+    "killable archers reject invulnerable targets and summons require solid floor" {
         withSummonHarness { h ->
             val world = h.paper.addSimpleWorld("summon-floor")
             loadSummonChunks(world)
             val owner = h.player("summon-floor-owner", world, StaffSpell.NECROMANCER)
+            h.zombie(world, x = 0.5, z = 3.0).isInvulnerable = true
             h.controller.start()
             h.controller.cast(owner, StaffCastInput.PRIMARY, 0.0)
             val actors = world.entities.filterIsInstance<Skeleton>()
             actors.size shouldBe 2
             actors.all { !it.canPickupItems } shouldBe true
+            actors.all { !it.isInvulnerable && it.equipment?.itemInMainHand?.type == Material.BOW } shouldBe true
 
             h.scheduler.tick(40)
             h.hits shouldBe emptyList()
-            actors.all { it.isInvulnerable && it.isValid } shouldBe true
+            actors.all { !it.isInvulnerable && it.isValid } shouldBe true
         }
 
         withSummonHarness { h ->
@@ -173,6 +260,28 @@ class StaffSpellSummonsTest : FreeSpec({
             h.controller.cast(owner, StaffCastInput.PRIMARY, 0.0)
 
             world.entities.filterIsInstance<AbstractSkeleton>() shouldBe emptyList()
+        }
+    }
+
+    "launched arrows stop at cover without dealing damage" {
+        withSummonHarness { h ->
+            val world = h.paper.addSimpleWorld("summon-arrow-cover")
+            loadSummonChunks(world)
+            val owner = h.player("summon-arrow-cover-owner", world, StaffSpell.NECROMANCER)
+            h.zombie(world, x = 0.5, z = 5.0)
+            h.controller.start()
+            h.controller.cast(owner, StaffCastInput.PRIMARY, 0.0)
+
+            h.scheduler.tick(20)
+            val arrows = world.entities.filterIsInstance<Arrow>()
+            (arrows.size in 1..2) shouldBe true
+            h.hits shouldBe emptyList()
+
+            for (x in -2..2) for (y in 64..66) world.getBlockAt(x, y, 2).type = Material.STONE
+            h.scheduler.tick(16)
+
+            h.hits shouldBe emptyList()
+            world.entities.filterIsInstance<Arrow>() shouldBe emptyList()
         }
     }
 
@@ -346,6 +455,10 @@ private fun withSummonHarness(
         every { anyConstructed<WorldMock>().isChunkLoaded(any<Int>(), any<Int>()) } answers { callOriginal() }
         every { anyConstructed<WorldMock>().getBlockAt(any<Int>(), any<Int>(), any<Int>()) } answers {
             CollisionShapeBlock(callOriginal())
+        }
+        every { anyConstructed<WorldMock>().spawnArrow(any(), any(), any(), any()) } answers {
+            val at = firstArg<Location>()
+            requireNotNull(at.world).spawn(at, Arrow::class.java)
         }
         val goals = mockk<MobGoals>(relaxed = true)
         mockkStatic(Bukkit::class)

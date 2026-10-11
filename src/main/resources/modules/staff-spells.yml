@@ -6,6 +6,16 @@ targeting:
   range: 48.0
   half-angle-degrees: 20.0
 max-area-targets: 8
+# Raw damage before the arena kit multiplier (0.4); read again on ARC reload.
+# Cooldown is shared across attack modes and staff swaps. Full charge takes 36 ticks.
+duel:
+  chain: {damage: 6.5, cooldown-ticks: 26}
+  mark: {damage: 10.0, cooldown-ticks: 44}
+  lance: {damage: 9.0, cooldown-ticks: 32}
+  ember: {damage: 10.0, cooldown-ticks: 40}
+  icicle: {damage: 8.0, cooldown-ticks: 40}
+  fault: {damage: 10.0, cooldown-ticks: 44}
+  necromancer: {damage: 10.0, cooldown-ticks: 160}
 chain:
   secondary-name: 'Разрядный веер'
   secondary: '<#82dcff>Shift + ПКМ <#e8dfd2>— три молнии ищут разные цели'
@@ -15,7 +25,7 @@ chain:
   quick-name: 'Грозовой заслон'
   quick: '<#82dcff>ЛКМ <#e8dfd2>— щит спереди: два удара за 1,2 с; перезарядка 4 с'
   quick-secondary-name: 'Круговой покров'
-  quick-secondary: '<#82dcff>Shift + ЛКМ <#e8dfd2>— один удар с любой стороны за 0,7 с; перезарядка 6 с'
+  quick-secondary: '<#82dcff>Shift + ЛКМ <#e8dfd2>— поглощает 8 урона за 3 с; перезарядка 8 с'
   skin: '3dfantasyweaponscit:divine_staff'
   duel-appearance:
     item-model: ''
@@ -35,7 +45,7 @@ mark:
   quick-name: 'Покров пустоты'
   quick: '<#efa5ff>ЛКМ <#e8dfd2>— щит спереди: два удара за 1,2 с; перезарядка 4 с'
   quick-secondary-name: 'Круговой покров'
-  quick-secondary: '<#efa5ff>Shift + ЛКМ <#e8dfd2>— один удар с любой стороны за 0,7 с; перезарядка 6 с'
+  quick-secondary: '<#efa5ff>Shift + ЛКМ <#e8dfd2>— поглощает 8 урона за 3 с; перезарядка 8 с'
   skin: '3dfantasyweaponscit:night_staff'
   duel-appearance:
     item-model: ''
@@ -54,7 +64,7 @@ frost:
   quick-name: 'Ледяной щит'
   quick: '<#b1f2ff>ЛКМ <#e8dfd2>— щит спереди: два удара за 1,2 с; перезарядка 4 с'
   quick-secondary-name: 'Круговой покров'
-  quick-secondary: '<#b1f2ff>Shift + ЛКМ <#e8dfd2>— один удар с любой стороны за 0,7 с; перезарядка 6 с'
+  quick-secondary: '<#b1f2ff>Shift + ЛКМ <#e8dfd2>— поглощает 8 урона за 3 с; перезарядка 8 с'
   skin: '3dfantasyweaponscit:northgate_guardian_staff'
   duel-appearance:
     item-model: ''
@@ -74,7 +84,7 @@ icicle:
   quick-name: 'Кристальный заслон'
   quick: '<#b1f2ff>ЛКМ <#e8dfd2>— щит спереди: два удара за 1,2 с; перезарядка 4 с'
   quick-secondary-name: 'Круговой покров'
-  quick-secondary: '<#b1f2ff>Shift + ЛКМ <#e8dfd2>— один удар с любой стороны за 0,7 с; перезарядка 6 с'
+  quick-secondary: '<#b1f2ff>Shift + ЛКМ <#e8dfd2>— поглощает 8 урона за 3 с; перезарядка 8 с'
   skin: '3dfantasyweaponscit:olwen_staff'
   duel-appearance:
     item-model: ''
@@ -91,7 +101,7 @@ lance:
   quick-name: 'Солнечный щит'
   quick: '<#fff1ae>ЛКМ <#e8dfd2>— щит спереди: два удара за 1,2 с; перезарядка 4 с'
   quick-secondary-name: 'Круговой покров'
-  quick-secondary: '<#fff1ae>Shift + ЛКМ <#e8dfd2>— один удар с любой стороны за 0,7 с; перезарядка 6 с'
+  quick-secondary: '<#fff1ae>Shift + ЛКМ <#e8dfd2>— поглощает 8 урона за 3 с; перезарядка 8 с'
   skin: '3dfantasyweaponscit:sagrada_winged_staff'
   duel-appearance:
     item-model: ''
@@ -103,14 +113,14 @@ lance:
   targets: 3
 ember:
   secondary-name: 'Метеорный дождь'
-  secondary: '<#ffae70>Shift + ПКМ <#e8dfd2>— три метеора в выбранную точку'
+  secondary: '<#ffae70>Shift + ПКМ <#e8dfd2>— зона видна при зарядке; через 0,75 с после отпускания падают метеоры'
   name: '<#ffae70>Пепельная комета'
-  description: '<#e8dfd2>Сразу после отпускания ПКМ комета вылетает вперёд, разгоняется и взрывается.'
+  description: '<#e8dfd2>При зарядке перед посохом растёт огненный шар; отпустите ПКМ, чтобы сразу запустить комету.'
   aim: '<#ffae70>Ручной прицел · цельтесь на опережение'
   quick-name: 'Огненный заслон'
   quick: '<#ffae70>ЛКМ <#e8dfd2>— щит спереди: два удара за 1,2 с; перезарядка 4 с'
   quick-secondary-name: 'Круговой покров'
-  quick-secondary: '<#ffae70>Shift + ЛКМ <#e8dfd2>— один удар с любой стороны за 0,7 с; перезарядка 6 с'
+  quick-secondary: '<#ffae70>Shift + ЛКМ <#e8dfd2>— поглощает 8 урона за 3 с; перезарядка 8 с'
   skin: '3dfantasyweaponscit:bermunde_hermit_staff'
   duel-appearance:
     item-model: ''
@@ -129,7 +139,7 @@ nova:
   quick-name: 'Терновый заслон'
   quick: '<#9fffd4>ЛКМ <#e8dfd2>— щит спереди: три удара за 1,6 с; перезарядка 4 с'
   quick-secondary-name: 'Круговой покров'
-  quick-secondary: '<#9fffd4>Shift + ЛКМ <#e8dfd2>— один удар с любой стороны за 0,7 с; перезарядка 6 с'
+  quick-secondary: '<#9fffd4>Shift + ЛКМ <#e8dfd2>— поглощает 8 урона за 3 с; перезарядка 8 с'
   skin: '3dfantasyweaponscit:holy_celtic_staff'
   duel-appearance:
     item-model: ''
@@ -147,7 +157,7 @@ fault:
   quick-name: 'Каменный бастион'
   quick: '<#ff9b83>ЛКМ <#e8dfd2>— щит спереди: три удара за 1,6 с; перезарядка 4 с'
   quick-secondary-name: 'Круговой покров'
-  quick-secondary: '<#ff9b83>Shift + ЛКМ <#e8dfd2>— один удар с любой стороны за 0,7 с; перезарядка 6 с'
+  quick-secondary: '<#ff9b83>Shift + ЛКМ <#e8dfd2>— поглощает 8 урона за 3 с; перезарядка 8 с'
   skin: '3dfantasyweaponscit:staff_of_unholy_wisdom'
   duel-appearance:
     item-model: ''
@@ -164,7 +174,7 @@ lunar:
   quick-name: 'Лунный покров'
   quick: '<#d8d6ff>ЛКМ <#e8dfd2>— щит спереди: два удара за 1,2 с; перезарядка 4 с'
   quick-secondary-name: 'Круговой покров'
-  quick-secondary: '<#d8d6ff>Shift + ЛКМ <#e8dfd2>— один удар с любой стороны за 0,7 с; перезарядка 6 с'
+  quick-secondary: '<#d8d6ff>Shift + ЛКМ <#e8dfd2>— поглощает 8 урона за 3 с; перезарядка 8 с'
   skin: '3dfantasyweaponscit:black_snake_staff'
   duel-appearance:
     item-model: ''
@@ -181,7 +191,7 @@ gale:
   quick-name: 'Ветряной щит'
   quick: '<#d4eaff>ЛКМ <#e8dfd2>— щит спереди: два удара за 1,2 с; перезарядка 4 с'
   quick-secondary-name: 'Круговой покров'
-  quick-secondary: '<#d4eaff>Shift + ЛКМ <#e8dfd2>— один удар с любой стороны за 0,7 с; перезарядка 6 с'
+  quick-secondary: '<#d4eaff>Shift + ЛКМ <#e8dfd2>— поглощает 8 урона за 3 с; перезарядка 8 с'
   skin: '3dfantasyweaponscit:goblin_witch_staff'
   duel-appearance:
     item-model: ''
@@ -198,7 +208,7 @@ tide:
   quick-name: 'Водяной заслон'
   quick: '<#8ce9e4>ЛКМ <#e8dfd2>— щит спереди: два удара за 1,2 с; перезарядка 4 с'
   quick-secondary-name: 'Круговой покров'
-  quick-secondary: '<#8ce9e4>Shift + ЛКМ <#e8dfd2>— один удар с любой стороны за 0,7 с; перезарядка 6 с'
+  quick-secondary: '<#8ce9e4>Shift + ЛКМ <#e8dfd2>— поглощает 8 урона за 3 с; перезарядка 8 с'
   skin: '3dfantasyweaponscit:northgate_guardian_staff'
   duel-appearance:
     item-model: ''
@@ -215,7 +225,7 @@ requiem:
   quick-name: 'Покров душ'
   quick: '<#d0b5eb>ЛКМ <#e8dfd2>— щит спереди: два удара за 1,2 с; перезарядка 4 с'
   quick-secondary-name: 'Круговой покров'
-  quick-secondary: '<#d0b5eb>Shift + ЛКМ <#e8dfd2>— один удар с любой стороны за 0,7 с; перезарядка 6 с'
+  quick-secondary: '<#d0b5eb>Shift + ЛКМ <#e8dfd2>— поглощает 8 урона за 3 с; перезарядка 8 с'
   skin: '3dfantasyweaponscit:lich_staff'
   duel-appearance:
     item-model: ''
@@ -232,7 +242,7 @@ prism:
   quick-name: 'Гранёный щит'
   quick: '<#e7c5ff>ЛКМ <#e8dfd2>— щит спереди: два удара за 1,2 с; перезарядка 4 с'
   quick-secondary-name: 'Круговой покров'
-  quick-secondary: '<#e7c5ff>Shift + ЛКМ <#e8dfd2>— один удар с любой стороны за 0,7 с; перезарядка 6 с'
+  quick-secondary: '<#e7c5ff>Shift + ЛКМ <#e8dfd2>— поглощает 8 урона за 3 с; перезарядка 8 с'
   skin: '3dfantasyweaponscit:northgate_golden_crook'
   duel-appearance:
     item-model: ''
@@ -242,14 +252,14 @@ prism:
   cooldown-ticks: 36
 necromancer:
   name: '<#a4e6ce>Зов могилы'
-  description: '<#e8dfd2>Призывает двух скелетов на десять секунд; полный заряд — четырёх.'
+  description: '<#e8dfd2>Призывает двух скелетов-лучников на десять секунд; полный заряд — четырёх.'
   aim: '<#a4e6ce>Слуги следуют за вами и самостоятельно атакуют видимых врагов'
   secondary-name: 'Костяной жнец'
   secondary: '<#a4e6ce>Shift + ПКМ <#e8dfd2>— один большой жнец с широким ударом'
   quick-name: 'Костяной заслон'
   quick: '<#a4e6ce>ЛКМ <#e8dfd2>— щит спереди: три удара за 1,6 с; перезарядка 4 с'
   quick-secondary-name: 'Круговой покров'
-  quick-secondary: '<#a4e6ce>Shift + ЛКМ <#e8dfd2>— один удар с любой стороны за 0,7 с; перезарядка 6 с'
+  quick-secondary: '<#a4e6ce>Shift + ЛКМ <#e8dfd2>— поглощает 8 урона за 3 с; перезарядка 8 с'
   skin: '3dfantasyweaponscit:lich_staff'
   power: 0.85
   vanilla-damage: 6.0
@@ -270,7 +280,7 @@ inferno:
   quick-name: Огненный заслон
   quick: '<#ffae52>ЛКМ <#e8dfd2>— щит спереди: два удара за 1,2 с; перезарядка 4 с'
   quick-secondary-name: Круговой покров
-  quick-secondary: <#ffae52>Shift + ЛКМ <#e8dfd2>— один удар с любой стороны за 0,7 с; перезарядка 6 с
+  quick-secondary: <#ffae52>Shift + ЛКМ <#e8dfd2>— поглощает 8 урона за 3 с; перезарядка 8 с
 gravity:
   name: <#cfb8ff>Гравитационный захват
   description: <#e8dfd2>Подхватите глыбу с видимой поверхности и ведите её прицелом.
@@ -287,7 +297,7 @@ gravity:
   quick-name: Каменный заслон
   quick: '<#cfb8ff>ЛКМ <#e8dfd2>— щит спереди: три удара за 1,6 с; перезарядка 4 с'
   quick-secondary-name: Круговой покров
-  quick-secondary: <#cfb8ff>Shift + ЛКМ <#e8dfd2>— один удар с любой стороны за 0,7 с; перезарядка 6 с
+  quick-secondary: <#cfb8ff>Shift + ЛКМ <#e8dfd2>— поглощает 8 урона за 3 с; перезарядка 8 с
 ossuary:
   name: <#f1dfb9>Костяной прокол
   description: <#e8dfd2>Костяные шипы и рёбра вырываются из земли по направлению к цели.
@@ -304,7 +314,7 @@ ossuary:
   quick-name: Щит рёбер
   quick: '<#f1dfb9>ЛКМ <#e8dfd2>— щит спереди: три удара за 1,6 с; перезарядка 4 с'
   quick-secondary-name: Круговой покров
-  quick-secondary: <#f1dfb9>Shift + ЛКМ <#e8dfd2>— один удар с любой стороны за 0,7 с; перезарядка 6 с
+  quick-secondary: <#f1dfb9>Shift + ЛКМ <#e8dfd2>— поглощает 8 урона за 3 с; перезарядка 8 с
 messages:
   duel-only: '<#c4a7ff>Только в активной дуэли</#c4a7ff>'
   prototype: '<#b8b8b8>Проба механики · атака и защита восстанавливаются отдельно'
@@ -321,6 +331,7 @@ messages:
   channel-use: '<#82dcff>Удерживайте ПКМ и ведите прицел. ЛКМ — защита; Shift + ЛКМ — круговой покров.'
   no-summon-ground: '<#e8dfd2>Для призыва нет места: встаньте на ровную площадку и освободите пространство перед собой. Перезарядка не потрачена.'
   no-grab: '<#e8dfd2>Для захвата направьте посох на твёрдую видимую поверхность в 3–12 блоках.'
+  shield-active: '<ability> <#fff1ae>Поглощение <white><remaining>/<capacity> <#e8dfd2>урона'
   defense-active: '<ability> <#fff1ae>Защита активна'
   defense-cooldown: '<ability> <white><seconds> с <#e8dfd2>· ЛКМ'
   inferno-hold: '<#ffae52>Поток пламени <#e8dfd2>· отпустите ПКМ, чтобы остановить'
