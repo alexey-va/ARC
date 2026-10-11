@@ -1,109 +1,106 @@
-# Prototype staff attacks
+# Prototype staff spells — ARC 1.4.377
 
-`/arc stafftest` issues fourteen mechanics samples: `chain`, `mark`, `frost`,
-`lance`, `ember`, `nova`, `icicle`, `fault`, `lunar`, `gale`, `tide`,
-`requiem`, `prism` and `necromancer`. The command uses the existing
-administrator-only `arc.test` permission. `/arc stafftest <id> [player]` issues
-one sample; `/arc stafftest all [player]` first checks that the whole set fits
-in the recipient's inventory. These are ARC prototype items, not native FMM or
-EliteMobs loot. There are no loot-table, shop or economy changes.
+`/arc stafftest` issues seventeen administrator-only mechanics samples: the
+fourteen established staves plus `inferno`, `gravity` and `ossuary`. Use
+`/arc stafftest <id> [player]` for one sample or `/arc stafftest all [player]`
+to issue the set after checking inventory space. The items carry ARC prototype
+metadata; they are not FMM or EliteMobs loot, and this catalog adds no shop,
+reward or economy changes.
 
-## Controls and charge
+## Controls
 
-Hold right-click and release to cast. Charge rises from 0 to 100% over 36
-ticks; the charge bar shows the selected ability, percent and release prompt.
-Holding Shift when the charge starts selects the secondary right-click ability.
-Changing Shift, swapping or moving the item in inventory, dropping the
-staff, changing worlds, dying or quitting cancels the charge.
+For ordinary casts, hold right-click and release. Charge reaches full after 36
+ticks (1.8 seconds). Holding Shift when the cast begins chooses the shifted
+right-click ability; changing Shift, the held slot or item, world, or player
+lifecycle cancels it. Attacks share one per-player attack cooldown, with the
+duration configured per spell and adjusted for the shifted cast.
 
-Staff clicks cannot break blocks, including in creative mode; entity clicks
-suppress vanilla melee damage.
+`Inferno` and `Gravity` are held channels rather than charged casts. Hold
+right-click, with or without Shift, to operate them. Inferno follows the aim
+with a continuous stream for at most three seconds and stops on release.
+Gravity selects a visible solid block within its reach, holds a visual boulder
+in front of the caster as the aim moves, and throws it when released. The
+boulder is a visual effect: Gravity does not move, break, place or replace
+world blocks. If the selected surface or safe path is unavailable, the grab is
+rejected.
 
-Left-click casts the quick attack. Shift + left-click casts its quick secondary.
-Quick attacks fire without a charge and use the same per-player staff
-cooldown. The boss bar follows the active input, displays remaining cooldown
-and ready state, and updates when the player switches staves or attack modes.
-Changing items cannot bypass the shared cooldown.
+Left-click raises the staff's frontal guard; Shift + left-click raises its
+all-around guard. Guards have their own recovery track, independent of the
+right-click attack cooldown. A frontal guard covers two hits for 1.2 seconds,
+or three hits for 1.6 seconds for Fault, Gravity, Ossuary, Nova and Necromancer.
+The all-around guard covers one hit from any direction for 0.7 seconds. Their
+recovery is four seconds for frontal and six seconds for all-around; the two
+guard modes share that recovery track. The left-click controls do not perform
+the former quick attacks. Staff interaction cannot break blocks, including in
+creative mode, and native melee damage is suppressed while a prototype staff
+is held.
 
 ## Catalog
 
-| ID and item | Hold/release ПКМ | Hold/release Shift + ПКМ | ЛКМ | Shift + ЛКМ | Existing ItemsAdder skin |
+| ID · staff | ПКМ | Shift + ПКМ | ЛКМ · frontal guard | Shift + ЛКМ · all-around guard | Existing ItemsAdder skin |
 | --- | --- | --- | --- | --- | --- |
-| `chain` · Грозовая ветвь | Lightning jumps between up to four enemies | Three bolts seek separate targets | `Искровой веер` — three branching discharges ahead | `Цепной щелчок` — aimed discharge within eight blocks | `3dfantasyweaponscit:divine_staff` |
-| `mark` · Разрыв | Mark follows its target and bursts; without a target, bursts at the aimed point | `Чёрная дыра` pulls eligible enemies, then collapses | `Хватка пустоты` — soul streams converge near the target | `Тянущая печать` — rune pulls affected enemies at the aimed point | `3dfantasyweaponscit:night_staff` |
-| `frost` · Ледяной хлопок | Ground wave slows enemies in a 50° cone, up to 28 blocks (global cap: 48) | `Полярный круг` — radial ice front expands eight blocks from the caster | `Морозное дыхание` — close frost cone | `Ледяной заслон` — frontal slowing ice wall | `3dfantasyweaponscit:northgate_guardian_staff` |
-| `lance` · Солнечное копьё | Narrow solar beam pierces up to three enemies | `Солнечный трезубец` — three diverging beams | `Солнечный взмах` — short diagonal golden cut advances across the lane | `Солнечный кол` — vertical strike at the aimed point, within eight blocks | `3dfantasyweaponscit:sagrada_winged_staff` |
-| `ember` · Пепельная комета | Straight fire comet accelerates and bursts | `Метеорный дождь` — three meteors hit the selected point | `Огненное дыхание` — short forward fire stream | `Огненный знак` — flare at the aimed point, within eight blocks | `3dfantasyweaponscit:bermunde_hermit_staff` |
-| `nova` · Изумрудная роща | Branching roots grow toward the target and slow enemies | `Сердце рощи` — large flower opens and releases a pollen wave | `Хлыст лозы` — broad vine arc | `Корневая клетка` — roots close around the aimed point, within eight blocks | `3dfantasyweaponscit:holy_celtic_staff` |
-| `icicle` · Ледяной венец | Seven homing shoulder icicles; full charge releases eleven | `Ледяной дождь` — five shards fall around the aimed point; full charge releases nine | `Ледяная картечь` — quick spread of ice shards | `Кристальная клетка` — crystals rise around and slow the target | `3dfantasyweaponscit:olwen_staff` |
-| `fault` · Обсидиановый раскол | Five ground fissures advance in sequence, up to 18 blocks | `Каменный выброс` — warning, then an aimed eruption lifts enemies | `Каменная дробь` — ground wave of stone fragments | `Столп разлома` — stone plates rise at the aimed point | `3dfantasyweaponscit:staff_of_unholy_wisdom` |
-| `lunar` · Лунный серп | Huge crescent falls and releases a silver shockwave | `Лунные ножницы` — two moon blades converge on the target | `Лунный взмах` — upright crescent travels forward | `Затмение` — moon disk closes at the aimed point, within eight blocks | `3dfantasyweaponscit:black_snake_staff` |
-| `gale` · Посох бури | Dense cloud funnel rolls toward the target and lifts enemies | `Шквал` — broad wind front rolls along the ground | `Воздушная ладонь` — broad pressure wave ahead | `Подъёмный вихрь` — vortex pulls and lifts enemies at the aimed point, within eight blocks | `3dfantasyweaponscit:goblin_witch_staff` |
-| `tide` · Сердце прилива | Four sequential geysers; full charge creates six | `Приливный вал` — high wave rolls forward and knocks enemies back | `Водяной хлыст` — broad whip with a foamy trail | `Водяной фонтан` — water burst lifts enemies at the aimed point, within eight blocks | `3dfantasyweaponscit:northgate_guardian_staff` |
-| `requiem` · Реквием | Soul streams converge around the target and burst in ghost flame | `Плач душ` — souls spread out from a sigil and slow enemies | `Поток душ` — soul stream advances forward | `Печать скорби` — ghost sigil bursts at the aimed point and slows enemies | `3dfantasyweaponscit:lich_staff` |
-| `prism` · Кристальная призма | Crystal grows at the aim point and fires beams at up to three enemies | `Сведение лучей` — three rays converge | `Осколочный веер` — fan of crystal fragments | `Преломление` — seven crystal rays close around the aimed point, within 12 blocks | `3dfantasyweaponscit:northgate_golden_crook` |
-| `necromancer` · Зов могилы | Summons two skeletons for ten seconds; full charge summons up to four where space permits | `Костяной жнец` — one large reaper with a wide attack | `Костяной укол` — bone fragments thrust forward | `Могильная печать` — aimed spectral strike within eight blocks | `3dfantasyweaponscit:lich_staff` |
+| `chain` · Грозовая ветвь | Lightning jumps between up to four enemies | Three bolts seek separate targets | Грозовой заслон | Круговой покров | `3dfantasyweaponscit:divine_staff` |
+| `mark` · Разрыв | Mark follows its target and bursts; without a target, bursts at the aimed point | Чёрная дыра pulls eligible enemies, then collapses | Покров пустоты | Круговой покров | `3dfantasyweaponscit:night_staff` |
+| `frost` · Ледяной хлопок | Ground wave slows enemies in a 50° cone, up to 28 blocks (global cap: 48) | Полярный круг expands an ice front eight blocks from the caster | Ледяной щит | Круговой покров | `3dfantasyweaponscit:northgate_guardian_staff` |
+| `lance` · Солнечное копьё | Narrow solar beam pierces up to three enemies | Three diverging solar beams | Солнечный щит | Круговой покров | `3dfantasyweaponscit:sagrada_winged_staff` |
+| `ember` · Пепельная комета | Accelerating fire comet flies forward and bursts | Three meteors strike the selected point | Огненный заслон | Круговой покров | `3dfantasyweaponscit:bermunde_hermit_staff` |
+| `nova` · Терновый хват | Ground roots travel toward the target, close and slow enemies | Терновая клетка closes around the aimed point | Терновый заслон | Круговой покров | `3dfantasyweaponscit:holy_celtic_staff` |
+| `icicle` · Ледяной венец | Seven homing shoulder icicles; full charge releases eleven | Five shards fall around the aimed point; full charge releases nine | Кристальный заслон | Круговой покров | `3dfantasyweaponscit:olwen_staff` |
+| `fault` · Обсидиановый раскол | Five ground fissures advance in sequence, up to 18 blocks | Каменный выброс warns, then erupts at the aimed point and lifts enemies | Каменный бастион | Круговой покров | `3dfantasyweaponscit:staff_of_unholy_wisdom` |
+| `lunar` · Лунный серп | Falling silver crescent releases a ground shockwave | Two moon blades converge on the target | Лунный покров | Круговой покров | `3dfantasyweaponscit:black_snake_staff` |
+| `gale` · Посох бури | Open-center wind column forms at the aimed point and lifts nearby enemies | Шквал is a compact air ram that travels forward | Ветряной щит | Круговой покров | `3dfantasyweaponscit:goblin_witch_staff` |
+| `tide` · Сердце прилива | A water core travels to the target and bursts into a broad spray | Приливный вал is a low wave with a foamy crest | Водяной заслон | Круговой покров | `3dfantasyweaponscit:northgate_guardian_staff` |
+| `requiem` · Реквием | Staggered soul missiles launch from offset lanes in front of the caster | Плач душ expands outward from a sigil | Покров душ | Круговой покров | `3dfantasyweaponscit:lich_staff` |
+| `prism` · Кристальная призма | Crystal grows at the aim point and fires at up to three visible enemies | Three rays converge on the selected point | Гранёный щит | Круговой покров | `3dfantasyweaponscit:northgate_golden_crook` |
+| `necromancer` · Зов могилы | Summons two skeletons for ten seconds; full charge summons up to four | Костяной жнец summons one larger wither-skeleton commander | Костяной заслон | Круговой покров | `3dfantasyweaponscit:lich_staff` |
+| `inferno` · Дыхание печи | Hold for a continuous, aim-following fire stream (up to three seconds and nine blocks) | Поток пламени uses the same held stream | Огненный заслон | Круговой покров | `3dfantasyweaponscit:bermunde_hermit_staff` |
+| `gravity` · Гравитационный захват | Select a visible surface and hold a stone boulder; track with aim and release to throw | Бросок глыбы uses the same grab-and-throw channel | Каменный заслон | Круговой покров | `3dfantasyweaponscit:staff_of_unholy_wisdom` |
+| `ossuary` · Костяной прокол | Staggered bone spines, ribs and a skull erupt from the ground along the path | Клетка рёбер closes around a skull at the aimed point after a warning | Щит рёбер | Круговой покров | `3dfantasyweaponscit:lich_staff` |
 
-All skins use entries already present in the ItemsAdder staff catalog; no new
-textures are added. Tide reuses the Northgate Guardian staff model, and the
-necromancer uses the Lich staff. If ItemsAdder cannot resolve a configured
-skin, item issuance fails instead of silently issuing an unskinned sample.
-
-The per-spell `power`, `vanilla-damage` and `cooldown-ticks` defaults are
-experimental prototype tuning, not a finished equipment balance. Full charge
-raises normal attack power and damage; quick attacks are uncharged and lower
-damage. Secondary and quick inputs use their configured cooldown rules. The
-HUD reads the same cooldown gate that prevents the cast.
+Each sample uses its configured ItemsAdder skin; issuance fails with a player
+message and a server warning if that configured skin is unavailable. Duel
+staff items are built separately on a stable native base. Their optional
+client-pack appearance requires both a fully namespaced `duel-appearance.item-model`
+and a positive `custom-model-data`; the bundled defaults leave both unset.
 
 ## Targeting and lifecycle
 
-Target selection and damage use the existing visibility and eligibility checks.
-Prototype targeting excludes players, NPCs, armor stands and tamed pets. The
-existing duel-only service admits only the registered opponent in the captured
-match and round; new inputs and delayed attacks preserve that authorization.
-EliteMobs retains its instance/minion eligibility rules. The configured area
-target limit remains eight. Each sequence hits a target at most once, at its
-contact phase, and rechecks combat context, eligibility and line of sight.
-Active attacks and summon sessions cancel on caster death, quit, world change,
-expiry or module reload/shutdown. Delayed hits retain the cast's captured
-combat data; switching the held item does not change it. Visual attacks create
-no projectile entities, temporary blocks, fire or weather.
+Damage attempts recheck their captured combat context and target eligibility;
+the damage path requires a visible target when the hit is applied. Moving
+attacks use their spell-specific collision and path rules. Ordinary casts
+exclude players, NPCs, armor stands and tamed pets. Duel-only casts admit only
+the registered opponent in the captured match and round; delayed phases retain
+that authorization. EliteMobs retains its instance/minion eligibility rules.
+Area attacks obey the configured target limit, and each sequence attempts a
+target at most once at its contact phase.
 
-Summons retain native movement with vanilla action and targeting goals removed;
-pickup, persistence and drops are disabled. They last ten seconds,
-use bounded movement on supported safe ground and do not pathfind around
-obstacles. There is one squad per caster, at most four actors per caster and
-sixteen globally; each squad can land at most six successful hits. Summoned
-damage uses the same staff bridge and protection path as the other attacks.
+Necromancer summons use temporary native skeleton actors with native movement
+and their normal targeting/action goals removed. They follow visible enemies
+within safe reachable ground instead of pathfinding around obstacles. Pickup,
+persistence and drops are disabled; each squad expires after ten seconds, one
+squad is allowed per caster, and caps are four actors per caster and sixteen
+globally. Each squad can land at most six successful hits. Summon attacks pass
+through the same staff damage and protection path as other casts.
 
-The samples are separate `BLAZE_ROD` items marked with ARC's
-`staff_spell_prototype` PDC and given an appearance through the existing
-ItemsAdder elite-skin helper. They do not replace or intercept native FMM
-staves. Elite damage uses ARC's existing attributed damage bridge and normal
-protection event path; ordinary mobs continue through Bukkit damage.
+Visual attacks do not edit blocks, place fire or change weather. Gravity's
+boulder is a packet display. Necromancer intentionally creates bounded native
+actors; they are the only native gameplay entities created by these prototype
+casts, and their lifecycle is owned by the staff module.
 
-## Particles, previews and verification
-
-Quick attacks use their own native-particle gesture sequences; they do not
-replay shortened right-click display scenes. New authored particle frames run
-every two ticks with one audience lookup per frame. Per viewer, those frames
-share a ceiling of 480 packets and 4096 particles per two-tick window; excess
-is discarded immediately, not queued. Minecraft owns each particle's lifetime
-and motion.
+## Preview and evidence limits
 
 The source-driven redesign is documented in
 [`staff-effects-redesign.md`](staff-effects-redesign.md). The
-`exportStaffRedesignPreview` Gradle task exports the six redesigned staves'
-primary and secondary right-click scenes at zero and full charge, plus both
-uncharged quick inputs for all fourteen staves. It samples source-authored
-particle and display frames every two ticks. Run it with
+`exportStaffRedesignPreview` Gradle task can export seven multi-stage Arsenal
+spells, both held channels at zero and full charge, and both guard shapes for
+all seventeen staves. Pass an absolute path with
 `-PstaffRedesignPreviewOutput=/absolute/path/redesign-sequences.json`; the
-export source is
+source is
 [`StaffRedesignPreviewExport.kt`](../src/test/kotlin/ru/arc/staffspells/StaffRedesignPreviewExport.kt).
-The offline viewer previews particle sprites and display geometry, but does
-not simulate damage, target selection, collision, sounds, client lighting or
-exact vanilla particle physics. Moving scenes use an illustrative fixed lane;
-the preview does not establish ordinary-client acceptance.
+The offline viewer uses source-authored frames but does not simulate damage,
+target selection, collision, sound, client lighting or exact vanilla particle
+physics. Moving scenes use an illustrative fixed lane. A preview does not
+establish ordinary-client visual or audio acceptance.
 
-Focused tests cover deterministic mechanics and lifecycle. An in-client review
-is still needed to judge appearance against moving mobs and obstructions.
+This document describes the source contract; it does not certify a build,
+artifact delivery, runtime activation or in-client review.

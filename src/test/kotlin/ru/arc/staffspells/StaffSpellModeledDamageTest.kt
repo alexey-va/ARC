@@ -53,6 +53,12 @@ class StaffSpellModeledDamageTest : FreeSpec({
         every { player.isValid } returns true
         every { player.isDead } returns false
         every { player.world } returns world
+        every { player.eyeLocation } returns org.bukkit.Location(world, .5, 65.6, .5)
+        every { target.location } returns org.bukkit.Location(world, .5, 64.0, 4.5)
+        every { target.height } returns 1.8
+        every { world.isChunkLoaded(any<Int>(), any<Int>()) } returns true
+        every { world.rayTraceBlocks(any<org.bukkit.Location>(), any<org.bukkit.util.Vector>(), any<Double>(),
+            any<org.bukkit.FluidCollisionMode>(), any<Boolean>()) } returns null
         every { target.isValid } returns true
         every { target.isDead } returns false
         every { target.isInvulnerable } returns false
@@ -74,6 +80,18 @@ class StaffSpellModeledDamageTest : FreeSpec({
         readyEntities(caster, target, world)
         every { target.isOnline } returns true
         every { target.uniqueId } returns UUID.fromString("00000000-0000-0000-0000-000000000003")
+    }
+
+    "the final damage boundary rejects a target behind cover even when authorization allows it" {
+        val world = mockk<World>()
+        val player = mockk<Player>()
+        val target = mockk<LivingEntity>()
+        readyEntities(player, target, world)
+        every { world.rayTraceBlocks(any<org.bukkit.Location>(), any<org.bukkit.util.Vector>(), any<Double>(),
+            any<org.bukkit.FluidCollisionMode>(), false) } returns
+            org.bukkit.util.RayTraceResult(org.bukkit.util.Vector(.5, 65.0, 2.0))
+        StaffSpellDamage().hit(player, target, cast(player), 1.0, 6.0) shouldBe false
+        verify(exactly = 0) { target.damage(any<Double>(), player) }
     }
 
     "duel damage uses native configured multiplier and rechecks exact round and opponent policy" {

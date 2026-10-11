@@ -1,0 +1,196 @@
+package ru.arc.staffspells
+
+import io.kotest.core.spec.style.FreeSpec
+import io.kotest.matchers.shouldBe
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
+import org.bukkit.Location
+import org.bukkit.Material
+import org.bukkit.Particle
+import org.bukkit.Sound
+import org.bukkit.entity.LivingEntity
+import org.bukkit.entity.Player
+import org.bukkit.util.Vector
+import ru.arc.paper.testing.MockBukkitTestRuntime
+import java.util.UUID
+
+class StaffSpellChannelsTest : FreeSpec({
+    "inferno has a bright bounded stream and spends at most one full-hit budget over sixty ticks" {
+        withStaffHarness(settings = staffSettings(range = 24.0)) { h ->
+            val clearWorld = h.paper.addSimpleWorld("channel-inferno-clear")
+            val blockedWorld = h.paper.addSimpleWorld("channel-inferno-wall")
+            val clearPlayer = h.player("inferno-clear", clearWorld, StaffSpell.INFERNO)
+            val blockedPlayer = h.player("inferno-wall", blockedWorld, StaffSpell.INFERNO)
+            val clearTarget = h.zombie(clearWorld, x = 0.5, z = 4.5)
+            val behindWall = h.zombie(blockedWorld, x = 0.5, z = 6.0)
+            for (y in 65..66) blockedWorld.getBlockAt(0, y, 3).type = Material.STONE
+
+            val hits = mutableListOf<Pair<UUID, Double>>()
+            val (damage, visuals) = channelDependencies(hits)
+            val settings = staffSettings(range = 24.0)
+            val channels = StaffSpellChannels(settings, damage, h.effects, visuals, StaffSpellTargeting(settings, damage))
+            channels.start()
+            val tuning = StaffSpellTuning(power = 1.2, vanillaDamage = 10.0, cooldownTicks = 60)
+            val clearCast = StaffSpellCast(clearPlayer.uniqueId, UUID.randomUUID(), 1, null, null, false)
+            val wallCast = StaffSpellCast(blockedPlayer.uniqueId, UUID.randomUUID(), 1, null, null, false)
+            channels.begin(clearPlayer, StaffSpell.INFERNO, clearCast, tuning, secondary = false) shouldBe true
+            channels.begin(blockedPlayer, StaffSpell.INFERNO, wallCast, tuning, secondary = false) shouldBe true
+            verify(exactly = 2) { visuals.particles(any(), any(), any()) }
+            for (tick in 1..8) {
+                channels.update(clearPlayer, tick) shouldBe true
+                channels.update(blockedPlayer, tick) shouldBe true
+            }
+            hits.map { it.first }.distinct() shouldBe listOf(clearTarget.uniqueId)
+            hits.any { it.first == behindWall.uniqueId } shouldBe false
+
+            for (tick in 9..60) {
+                val active = channels.update(clearPlayer, tick)
+                if (tick < 60) active shouldBe true else active shouldBe false
+                val blockedActive = channels.update(blockedPlayer, tick)
+                if (tick < 60) blockedActive shouldBe true else blockedActive shouldBe false
+            }
+            channels.release(clearPlayer)
+            (hits.filter { it.first == clearTarget.uniqueId }.sumOf { it.second } in 9.99..10.001) shouldBe true
+            (staffInfernoFrame(8, 8.0).size <= 56) shouldBe true
+            staffInfernoFrame(8, 8.0).any { it.particle == Particle.DUST_COLOR_TRANSITION } shouldBe true
+            staffInfernoFrame(8, 8.0).count { it.particle == Particle.FLAME } shouldBe 32
+            staffInfernoFrame(8, 0.7).all { it.offset.z <= 0.7 } shouldBe true
+            staffInfernoFrame(8, 0.3) shouldBe emptyList()
+            staffInfernoFrame(8, 8.0).all { sample ->
+                listOf(sample.offset.x, sample.offset.y, sample.offset.z).all(Double::isFinite)
+            } shouldBe true
+            channels.close()
+        }
+    }
+
+    "gravity selects without editing blocks, stops at cover, and hits the flat control" {
+        withStaffHarness { h ->
+            val flatWorld = h.paper.addSimpleWorld("channel-gravity-flat")
+            val wallWorld = h.paper.addSimpleWorld("channel-gravity-wall")
+            val flatPlayer = h.player("gravity-flat", flatWorld, StaffSpell.GRAVITY)
+            val wallPlayer = h.player("gravity-wall", wallWorld, StaffSpell.GRAVITY)
+            val flatTarget = h.zombie(flatWorld, x = 0.5, z = 9.2)
+            val coveredTarget = h.zombie(wallWorld, x = 0.5, z = 9.2)
+            flatWorld.getBlockAt(0, 65, 10).type = Material.STONE
+            val cover = wallWorld.getBlockAt(0, 65, 5).apply { type = Material.STONE }
+
+            val hits = mutableListOf<Pair<UUID, Double>>()
+            val (damage, visuals) = channelDependencies(hits)
+            val settings = staffSettings()
+            val channels = StaffSpellChannels(settings, damage, h.effects, visuals, StaffSpellTargeting(settings, damage))
+            channels.start()
+            val tuning = StaffSpellTuning(1.2, 10.0, 44)
+            val flatCast = StaffSpellCast(flatPlayer.uniqueId, UUID.randomUUID(), 1, null, null, false)
+            val wallCast = StaffSpellCast(wallPlayer.uniqueId, UUID.randomUUID(), 1, null, null, false)
+            channels.begin(flatPlayer, StaffSpell.GRAVITY, flatCast, tuning, secondary = false) shouldBe true
+            channels.begin(wallPlayer, StaffSpell.GRAVITY, wallCast, tuning, secondary = false) shouldBe true
+            val flatScene = h.visualPlays.first { it.from.world == flatWorld }.id
+            channels.begin(flatPlayer, StaffSpell.GRAVITY, flatCast, tuning, secondary = false) shouldBe false
+            channels.update(flatPlayer, 80) shouldBe true
+            channels.update(wallPlayer, 80) shouldBe true
+            channels.release(flatPlayer)
+            channels.release(wallPlayer)
+            h.scheduler.tick(40)
+
+            hits.any { it.first == flatTarget.uniqueId } shouldBe true
+            hits.any { it.first == coveredTarget.uniqueId } shouldBe false
+            val flatMoves = h.projectileMoves.filter { it.id == flatScene }
+            (flatMoves.last().at.z - flatMoves.first().at.z > 3.0) shouldBe true
+            cover.type shouldBe Material.STONE
+            flatWorld.getBlockAt(0, 65, 10).type shouldBe Material.STONE
+            channels.close()
+        }
+    }
+
+    "cancel and world change discard gravity holds without firing a throw" {
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("channel-gravity-cancel")
+            val otherWorld = h.paper.addSimpleWorld("channel-gravity-away")
+            val player = h.player("gravity-cancel", world, StaffSpell.GRAVITY)
+            h.zombie(world, x = 0.5, z = 6.0)
+            world.getBlockAt(0, 65, 9).type = Material.STONE
+            val hits = mutableListOf<Pair<UUID, Double>>()
+            val (damage, visuals) = channelDependencies(hits)
+            val settings = staffSettings()
+            val channels = StaffSpellChannels(settings, damage, h.effects, visuals, StaffSpellTargeting(settings, damage))
+            channels.start()
+            val cast = StaffSpellCast(player.uniqueId, UUID.randomUUID(), 1, null, null, false)
+            val tuning = StaffSpellTuning(1.0, 8.0, 44)
+            channels.begin(player, StaffSpell.GRAVITY, cast, tuning, secondary = false) shouldBe true
+            channels.cancel(player.uniqueId)
+            channels.release(player)
+            h.scheduler.tick(8)
+            h.projectileMoves shouldBe emptyList()
+
+            val second = h.player("gravity-world-change", world, StaffSpell.GRAVITY)
+            val secondCast = StaffSpellCast(second.uniqueId, UUID.randomUUID(), 1, null, null, false)
+            channels.begin(second, StaffSpell.GRAVITY, secondCast, tuning, secondary = false) shouldBe true
+            second.teleport(Location(otherWorld, 0.5, 64.0, 0.5).apply { setDirection(Vector(0.0, 0.0, 1.0)) })
+            channels.update(second, 2) shouldBe false
+            channels.release(second)
+            h.scheduler.tick(8)
+            hits shouldBe emptyList()
+            h.projectileMoves shouldBe emptyList()
+            channels.close()
+        }
+    }
+
+    "gravity remains aimable beyond the old short window and exhaustion cannot release a throw" {
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("channel-gravity-extended-hold")
+            val player = h.player("gravity-long-hold", world, StaffSpell.GRAVITY)
+            val target = h.zombie(world, x = 0.5, z = 6.2)
+            world.getBlockAt(0, 65, 10).type = Material.STONE
+            val hits = mutableListOf<Pair<UUID, Double>>()
+            val (damage, visuals) = channelDependencies(hits)
+            val settings = staffSettings()
+            val channels = StaffSpellChannels(settings, damage, h.effects, visuals, StaffSpellTargeting(settings, damage))
+            channels.start()
+            val cast = StaffSpellCast(player.uniqueId, UUID.randomUUID(), 1, null, null, false)
+            val tuning = StaffSpellTuning(1.0, 8.0, 44)
+            channels.begin(player, StaffSpell.GRAVITY, cast, tuning, secondary = false) shouldBe true
+            channels.update(player, 100) shouldBe true
+            channels.update(player, 158) shouldBe true
+            channels.update(player, 160) shouldBe false
+            channels.release(player)
+            h.scheduler.tick(40)
+
+            hits.any { it.first == target.uniqueId } shouldBe false
+            channels.close()
+        }
+    }
+
+    "gravity display fragments keep stable identities and positive scales through impact fade" {
+        MockBukkitTestRuntime.open().use {
+            val held = staffChannelParts(StaffSpell.GRAVITY, 0, 60, 1.0, 1.0, impact = false)
+            val moving = staffChannelParts(StaffSpell.GRAVITY, 20, 60, 1.0, 1.0, impact = false)
+            val impact = staffChannelParts(StaffSpell.GRAVITY, 14, 16, 1.0, 2.5, impact = true)
+
+            held.size shouldBe 9
+            held.map { it.identity } shouldBe moving.map { it.identity }
+            held.map { it.identity } shouldBe impact.map { it.identity }
+            (held + moving + impact).all { part ->
+                part.identity != null && part.scale.x > 0f && part.scale.y > 0f && part.scale.z > 0f &&
+                    part.material in setOf(Material.STONE, Material.COBBLESTONE, Material.ANDESITE)
+            } shouldBe true
+            staffChannelParts(StaffSpell.INFERNO, 0, 60, 1.0, 1.0, impact = false) shouldBe emptyList()
+        }
+    }
+})
+
+private fun channelDependencies(hits: MutableList<Pair<UUID, Double>>): Pair<StaffSpellDamage, StaffSpellVisuals> {
+    val damage = mockk<StaffSpellDamage>()
+    every { damage.isCurrent(any(), any()) } returns true
+    every { damage.eligible(any(), any(), any()) } answers {
+        val target = secondArg<LivingEntity>()
+        target !is Player && target.isValid && !target.isDead
+    }
+    every { damage.hit(any(), any(), any(), any(), any()) } answers {
+        hits += secondArg<LivingEntity>().uniqueId to arg<Double>(4)
+        true
+    }
+    val visuals = mockk<StaffSpellVisuals>(relaxed = true)
+    every { visuals.withOwner(any(), any()) } answers { secondArg<() -> Unit>().invoke() }
+    return damage to visuals
+}

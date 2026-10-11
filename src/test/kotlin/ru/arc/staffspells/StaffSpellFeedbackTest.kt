@@ -88,6 +88,14 @@ class StaffSpellFeedbackTest : FreeSpec({
                     visuals.cancel(playerId)
                     visuals.cooldownFeedback(player, StaffSpell.GALE)
                     sounds.size shouldBe 10
+                    listOf(StaffSpell.INFERNO, StaffSpell.GRAVITY, StaffSpell.OSSUARY).forEach { spell ->
+                        tick += 8
+                        val previousSounds = sounds.size
+                        val previousParticles = particles.size
+                        visuals.cooldownFeedback(player, spell)
+                        sounds.size shouldBe previousSounds + 1
+                        (particles.size > previousParticles) shouldBe true
+                    }
                     visuals.close()
                     visuals.cooldownFeedback(player, StaffSpell.CHAIN)
                     visuals.chargeFeedback(player, StaffSpell.GALE, 1.0)

@@ -4,6 +4,9 @@ import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkConstructor
+import io.mockk.unmockkConstructor
+import org.mockbukkit.mockbukkit.world.WorldMock
 import io.mockk.verify
 import org.joml.Vector3f
 import org.bukkit.Location
@@ -22,7 +25,7 @@ import java.util.UUID
 class StaffSpellDisplayEffectsTest : FreeSpec({
     "all spell shapes stay finite and under the packet-part budget" {
         StaffSpell.entries.forEach spellLoop@{ spell ->
-            if (spell in setOf(StaffSpell.NECROMANCER, StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM)) return@spellLoop // Native actors or particles own these silhouettes.
+            if (spell in setOf(StaffSpell.NECROMANCER, StaffSpell.INFERNO, StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM)) return@spellLoop // Native actors or particles own these silhouettes.
             listOf(false, true).forEach { impact ->
                 listOf(false, true).forEach { secondary ->
                     val parts = staffDisplayParts(spell, ageTicks = 160, durationTicks = 1,
@@ -144,7 +147,7 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
     }
 
     "transient spells grow in and dissolve before removal with stable part identities" {
-        StaffSpell.entries.filterNot { it in setOf(StaffSpell.NECROMANCER, StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM) }.forEach { spell ->
+        StaffSpell.entries.filterNot { it in setOf(StaffSpell.NECROMANCER, StaffSpell.INFERNO, StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM) }.forEach { spell ->
             listOf(false, true).forEach { secondary ->
                 fun parts(age: Int) = staffDisplayParts(spell, age, 30, 8.0, 3.0, true, secondary)
                 val first = parts(0)
@@ -156,7 +159,12 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
                 fun volume(parts: List<StaffDisplayPart>) = parts.sumOf {
                     (it.scale.x * it.scale.y * it.scale.z).toDouble()
                 }
-                if (spell in ARSENAL_SPELLS) {
+                if ((spell == StaffSpell.NOVA || spell == StaffSpell.OSSUARY) && secondary) {
+                    fun outerRadius(parts: List<StaffDisplayPart>) = parts.maxOf {
+                        kotlin.math.hypot(it.center.x.toDouble(), it.center.z.toDouble())
+                    }
+                    (outerRadius(parts(20)) < outerRadius(body)) shouldBe true
+                } else if (spell in ARSENAL_SPELLS) {
                     (volume(first) < volume(body)) shouldBe true
                 } else if (spell in setOf(StaffSpell.CHAIN, StaffSpell.LANCE, StaffSpell.MARK, StaffSpell.EMBER, StaffSpell.ICICLE)) {
                     (volume(first) > volume(body) * 0.01) shouldBe true
@@ -295,15 +303,19 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         meteor.takeLast(14).all { it.material in setOf(Material.MAGMA_BLOCK, Material.BLACKSTONE) } shouldBe true
     }
 
-    "comet first visible core is small and grows as it clears camera during acceleration" {
+    "comet is visible at its release muzzle and accelerates with a growing core" {
         listOf(0.0, 1.0).forEach { charge ->
             val eye = org.bukkit.util.Vector()
-            var originZ = 0.0
+            var originZ = 2.4
             var previousAge = 0
             var previousParts = staffDisplayParts(StaffSpell.EMBER, previousAge, 80, 48.0, 0.85,
                 impact = false, charge = charge)
             val visibleCoreScales = mutableListOf<Float>()
-            var firstVisibleAge: Int? = null
+            val releaseCore = previousParts.single { it.identity == "core:0" }
+            val releasePadding = staffEyeClearance(StaffSpell.EMBER, impact = false) + .15 + releaseCore.scale.length() * .5
+            (originZ + releaseCore.center.z > releasePadding) shouldBe true
+            var firstVisibleAge: Int? = 0
+            visibleCoreScales += releaseCore.scale.length()
             var previousFrameStep = 0.0
 
             for (age in StaffSpellDisplayEffects.FRAME_TICKS..20 step StaffSpellDisplayEffects.FRAME_TICKS) {
@@ -331,9 +343,9 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
                 previousFrameStep = frameStep
             }
 
-            firstVisibleAge shouldBe 6
+            firstVisibleAge shouldBe 0
             val firstSizeRatio = visibleCoreScales.first() / visibleCoreScales.last()
-            (firstSizeRatio in 0.31f..0.33f) shouldBe true
+            (firstSizeRatio in 0.67f..0.69f) shouldBe true
             visibleCoreScales.zipWithNext().all { (before, after) -> after >= before } shouldBe true
         }
     }
@@ -528,7 +540,7 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
 })
 
 private val ARSENAL_SPELLS = setOf(StaffSpell.NOVA, StaffSpell.LUNAR, StaffSpell.GALE,
-    StaffSpell.TIDE, StaffSpell.REQUIEM, StaffSpell.PRISM)
+    StaffSpell.TIDE, StaffSpell.REQUIEM, StaffSpell.PRISM, StaffSpell.OSSUARY)
 
 private data class DisplayPose(
     val values: List<Float>,
@@ -608,7 +620,13 @@ private data class DisplayHarness(
 
 private fun withDisplayHarness(block: (DisplayHarness) -> Unit) = failOnUnsupportedMockBukkitOperation {
     val scheduler = TestTaskScheduler()
-    MockBukkitTestRuntime.open().use { paper ->
+    mockkConstructor(WorldMock::class)
+    try {
+        // Empty, loaded air fixture: cover geometry is verified by the combat/ray specs.
+        every { anyConstructed<WorldMock>().isChunkLoaded(any<Int>(), any<Int>()) } returns true
+        every { anyConstructed<WorldMock>().rayTraceBlocks(any<Location>(), any<org.bukkit.util.Vector>(),
+            any<Double>(), any<org.bukkit.FluidCollisionMode>(), any<Boolean>()) } returns null
+        MockBukkitTestRuntime.open().use { paper ->
         Tasks.withScheduler(scheduler) {
             val world = paper.addSimpleWorld("staff-display-effects")
             val recorder = PacketDisplayRecorder()
@@ -620,4 +638,5 @@ private fun withDisplayHarness(block: (DisplayHarness) -> Unit) = failOnUnsuppor
             }
         }
     }
+    } finally { unmockkConstructor(WorldMock::class) }
 }

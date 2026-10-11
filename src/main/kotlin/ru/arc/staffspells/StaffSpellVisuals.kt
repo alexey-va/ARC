@@ -1586,6 +1586,9 @@ internal class StaffSpellVisuals(
             StaffSpell.REQUIEM to ARCANE_REQUIEM,
             StaffSpell.NECROMANCER to ARCANE_REQUIEM,
             StaffSpell.PRISM to ARCANE_PRISM,
+            StaffSpell.INFERNO to ARCANE_EMBER,
+            StaffSpell.GRAVITY to ARCANE_FAULT,
+            StaffSpell.OSSUARY to ARCANE_FAULT.copy(transition = staffFade(0xe4d4b2, 0x867769, 1.1f)),
         )
         val LAYERED_RELEASE_SPELLS = setOf(
             StaffSpell.MARK, StaffSpell.ICICLE, StaffSpell.FAULT,

@@ -176,6 +176,61 @@ class StaffSpellSummonsTest : FreeSpec({
         }
     }
 
+    "failed terrain replacement preserves the active squad and expiry permits recasting" {
+        withSummonHarness { h ->
+            val world = h.paper.addSimpleWorld("summon-terrain-retry")
+            loadSummonChunks(world)
+            val owner = h.player("summon-terrain-retry-owner", world, StaffSpell.NECROMANCER)
+            val settings = staffSettings()
+            val damage = mockk<StaffSpellDamage>()
+            every { damage.isCurrent(any(), any()) } returns true
+            val targeting = mockk<StaffSpellTargeting>()
+            every { targeting.nearby(any(), any(), any(), any()) } returns emptyList()
+            val summons = StaffSpellSummons(
+                settings,
+                damage,
+                mockk(relaxed = true),
+                targeting,
+                ::spawnPickupSafeActor,
+            )
+            val tuning = settings.tuning.getValue(StaffSpell.NECROMANCER)
+            var currentSquad: List<Skeleton> = emptyList()
+            fun cast() = summons.cast(
+                owner,
+                StaffSpellCast(owner.uniqueId, UUID.randomUUID(), 1, null, null, false),
+                tuning,
+                StaffCastInput.PRIMARY,
+                0.0,
+            )
+
+            summons.start()
+            try {
+                cast() shouldBe true
+                val firstSquad = world.entities.filterIsInstance<Skeleton>().filter { it.isValid }
+                firstSquad.size shouldBe 2
+
+                for (x in -4..4) for (z in -4..4) world.getBlockAt(x, 63, z).type = Material.AIR
+                cast() shouldBe false
+                firstSquad.all { it.isValid } shouldBe true
+
+                for (x in -4..4) for (z in -4..4) world.getBlockAt(x, 63, z).type = Material.STONE
+                cast() shouldBe true
+                firstSquad.all { !it.isValid } shouldBe true
+                currentSquad = world.entities.filterIsInstance<Skeleton>().filter { it.isValid }
+                currentSquad.size shouldBe 2
+
+                h.scheduler.tick(200)
+                currentSquad.all { !it.isValid } shouldBe true
+                cast() shouldBe true
+                currentSquad = world.entities.filterIsInstance<Skeleton>().filter { it.isValid }
+                currentSquad.size shouldBe 2
+            } finally {
+                summons.close()
+            }
+            currentSquad.all { !it.isValid } shouldBe true
+        }
+    }
+
     "summons resolve bottom slabs to their collision top" {
         withSummonHarness { h ->
             val world = h.paper.addSimpleWorld("summon-bottom-slab")
@@ -288,6 +343,7 @@ private fun withSummonHarness(
     block: (StaffHarness) -> Unit,
 ) {
     withStaffHarness(currentCast = currentCast, summonActorFactory = summonActorFactory) { harness ->
+        every { anyConstructed<WorldMock>().isChunkLoaded(any<Int>(), any<Int>()) } answers { callOriginal() }
         every { anyConstructed<WorldMock>().getBlockAt(any<Int>(), any<Int>(), any<Int>()) } answers {
             CollisionShapeBlock(callOriginal())
         }

@@ -7,18 +7,20 @@ import org.bukkit.Material
 import org.bukkit.event.player.PlayerQuitEvent
 
 class StaffSpellArsenalTest : FreeSpec({
-    "new sequences have rich native silhouettes and only physical subjects use displays" {
-        val pure = setOf(StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM)
+    "new arsenal frames keep native-particle shapes distinct and Display parts bounded" {
         StaffSpellArsenal.SPELLS.forEach { spell ->
             listOf(false, true).forEach { secondary ->
                 val duration = staffArsenalLifetime(spell, secondary)
                 val parts = staffArsenalParts(spell, 12, duration, 20.0, 3.0, false,
                     secondary, StaffCastInput.of(secondary, false), 1.0)
-                if (spell in pure) parts.isEmpty() shouldBe true else (parts.size in 1..40) shouldBe true
+                val particleOnly = spell == StaffSpell.GALE && !secondary || spell == StaffSpell.TIDE && secondary
+                if (particleOnly) parts.isEmpty() shouldBe true else (parts.size in 1..48) shouldBe true
                 val samples = staffArsenalParticles(spell, 12, duration, 3.0, secondary, 1.0)
                 (samples.size in 32..192) shouldBe true
                 samples.all { listOf(it.offset.x, it.offset.y, it.offset.z).all(Double::isFinite) } shouldBe true
                 parts.all { it.scale.x > 0 && it.scale.y > 0 && it.scale.z > 0 } shouldBe true
+                val identities = parts.mapNotNull { it.identity }
+                identities.distinct().size shouldBe identities.size
                 staffArsenalParticles(spell, duration, duration, 3.0, secondary, 1.0).isEmpty() shouldBe true
             }
         }
@@ -26,6 +28,29 @@ class StaffSpellArsenalTest : FreeSpec({
             staffArsenalParticles(spell, 12, 40, 3.0, false, 1.0).map { Triple(it.particle, it.offset.x, it.offset.y) }
         }.toSet()
         signatures.size shouldBe StaffSpellArsenal.SPELLS.size
+    }
+
+    "redesigned signatures have separate moving and closing silhouettes" {
+        val gale = staffArsenalParticles(StaffSpell.GALE, 12, 52, 3.0, false, 1.0)
+        val tide = staffArsenalParticles(StaffSpell.TIDE, 12, 44, 1.0, false, 1.0)
+        val soul = staffArsenalParticles(StaffSpell.REQUIEM, 12, 46, .9, false, 1.0)
+        val galeSignature = gale.map { it.particle }.toSet()
+        val tideSignature = tide.map { it.particle }.toSet()
+        val soulSignature = soul.map { it.particle }.toSet()
+        (galeSignature != tideSignature && tideSignature != soulSignature && galeSignature != soulSignature) shouldBe true
+
+        val roots = staffArsenalParts(StaffSpell.NOVA, 30, 48, 12.0, 3.0, false, false,
+            StaffCastInput.PRIMARY, 1.0).mapNotNull { it.identity }
+        roots.any { it.startsWith("root:trail:") } shouldBe true
+        roots.any { it.startsWith("root:grasp:") } shouldBe true
+
+        val bone = staffArsenalParts(StaffSpell.OSSUARY, 8, 22, 1.0, 1.0, false, false,
+            StaffCastInput.PRIMARY, 0.0)
+        bone.any { it.material == Material.BONE_BLOCK } shouldBe true
+        val cage = staffArsenalParts(StaffSpell.OSSUARY, 12, 36, 1.0, 2.0, false, true,
+            StaffCastInput.SECONDARY, 1.0)
+        cage.any { it.material == Material.BLACKSTONE } shouldBe true
+        cage.count { it.material == Material.BONE_BLOCK } shouldBe 33
     }
 
     "moon blade hits at descent contact and never twice" {
@@ -41,6 +66,64 @@ class StaffSpellArsenalTest : FreeSpec({
             h.hits.map { it.uniqueId } shouldBe listOf(target.uniqueId)
             h.scheduler.tick(40)
             h.hits.size shouldBe 1
+        }
+    }
+
+    "tide orb and soul missiles hit only after their visible flights reach contact" {
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("tide-orb-flight")
+            val player = h.player("tide-orb-flight", world, StaffSpell.TIDE)
+            val target = h.zombie(world, x = .5, z = 8.0)
+            h.controller.start()
+            h.controller.cast(player, StaffCastInput.PRIMARY, 0.0)
+            h.scheduler.tick(14)
+            h.hits shouldBe emptyList()
+            h.scheduler.tick(22)
+            h.hits.map { it.uniqueId } shouldBe listOf(target.uniqueId)
+        }
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("requiem-missile-flight")
+            val player = h.player("requiem-missile-flight", world, StaffSpell.REQUIEM)
+            val target = h.zombie(world, x = .5, z = 8.0)
+            h.controller.start()
+            h.controller.cast(player, StaffCastInput.PRIMARY, 0.0)
+            h.scheduler.tick(10)
+            h.hits shouldBe emptyList()
+            h.scheduler.tick(26)
+            h.hits.map { it.uniqueId } shouldBe listOf(target.uniqueId)
+        }
+    }
+
+    "bone spikes stagger along the visible floor and the rib cage closes at its warning point" {
+        fun stoneFloor(world: org.bukkit.World) {
+            for (x in -2..2) for (z in 0..14) world.getBlockAt(x, 63, z).type = Material.STONE
+        }
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("ossuary-spikes")
+            stoneFloor(world)
+            val player = h.player("ossuary-spikes", world, StaffSpell.OSSUARY)
+            val target = h.zombie(world, x = .5, z = 8.0)
+            h.controller.start()
+            h.controller.cast(player, StaffCastInput.PRIMARY, 0.0)
+            h.scheduler.tick(18)
+            h.hits shouldBe emptyList()
+            h.scheduler.tick(18)
+            val spikeScenes = h.visualPlays.filter { it.spell == StaffSpell.OSSUARY && !it.secondary }
+            spikeScenes.size shouldBe 4
+            (spikeScenes.maxOf { it.from.z } - spikeScenes.minOf { it.from.z } > 2.5) shouldBe true
+            h.hits.map { it.uniqueId } shouldBe listOf(target.uniqueId)
+        }
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("ossuary-cage")
+            stoneFloor(world)
+            val player = h.player("ossuary-cage", world, StaffSpell.OSSUARY)
+            val target = h.zombie(world, x = .5, z = 8.0)
+            h.controller.start()
+            h.controller.cast(player, StaffCastInput.SECONDARY, 0.0)
+            h.scheduler.tick(8)
+            h.hits shouldBe emptyList()
+            h.scheduler.tick(8)
+            h.hits.map { it.uniqueId } shouldBe listOf(target.uniqueId)
         }
     }
 
@@ -70,14 +153,14 @@ class StaffSpellArsenalTest : FreeSpec({
         }
     }
 
-    "moving ground waves stop at a one-block ridge while flat waves still reach targets" {
+    "moving gust, water, and root fronts stop at a one-block ridge while flat fronts reach targets" {
         withStaffHarness { h ->
-            fun arena(name: String, spell: StaffSpell, ridge: Boolean): Pair<org.bukkit.entity.Player, org.bukkit.entity.Zombie> {
+            fun arena(name: String, spell: StaffSpell, ridge: Boolean, targetZ: Double = 12.0): Pair<org.bukkit.entity.Player, org.bukkit.entity.Zombie> {
                 val world = h.paper.addSimpleWorld(name)
                 for (x in -1..1) for (z in 0..14) world.getBlockAt(x, 63, z).type = Material.STONE
                 if (ridge) world.getBlockAt(0, 64, 5).type = Material.STONE
                 val player = h.player("$name-caster", world, spell)
-                val target = h.zombie(world, x = .5, z = 12.0)
+                val target = h.zombie(world, x = .5, z = targetZ)
                 return player to target
             }
 
@@ -85,16 +168,21 @@ class StaffSpellArsenalTest : FreeSpec({
             val (flatGale, flatGaleTarget) = arena("gale-flat", StaffSpell.GALE, ridge = false)
             val (ridgeTide, ridgeTideTarget) = arena("tide-ridge", StaffSpell.TIDE, ridge = true)
             val (flatTide, flatTideTarget) = arena("tide-flat", StaffSpell.TIDE, ridge = false)
+            val (ridgeNova, ridgeNovaTarget) = arena("nova-ridge", StaffSpell.NOVA, ridge = true, targetZ = 6.0)
+            val (flatNova, flatNovaTarget) = arena("nova-flat", StaffSpell.NOVA, ridge = false, targetZ = 6.0)
 
             h.controller.start()
-            h.controller.cast(ridgeGale, StaffCastInput.PRIMARY, 0.0)
-            h.controller.cast(flatGale, StaffCastInput.PRIMARY, 0.0)
+            h.controller.cast(ridgeGale, StaffCastInput.SECONDARY, 0.0)
+            h.controller.cast(flatGale, StaffCastInput.SECONDARY, 0.0)
             h.controller.cast(ridgeTide, StaffCastInput.SECONDARY, 0.0)
             h.controller.cast(flatTide, StaffCastInput.SECONDARY, 0.0)
+            h.controller.cast(ridgeNova, StaffCastInput.PRIMARY, 0.0)
+            h.controller.cast(flatNova, StaffCastInput.PRIMARY, 0.0)
             h.scheduler.tick(76)
 
-            h.hits.map { it.uniqueId }.toSet() shouldBe setOf(flatGaleTarget.uniqueId, flatTideTarget.uniqueId)
-            (h.hits.none { it.uniqueId == ridgeGaleTarget.uniqueId || it.uniqueId == ridgeTideTarget.uniqueId }) shouldBe true
+            h.hits.map { it.uniqueId }.toSet() shouldBe setOf(
+                flatGaleTarget.uniqueId, flatTideTarget.uniqueId, flatNovaTarget.uniqueId)
+            (h.hits.none { it.uniqueId in setOf(ridgeGaleTarget.uniqueId, ridgeTideTarget.uniqueId, ridgeNovaTarget.uniqueId) }) shouldBe true
         }
     }
 

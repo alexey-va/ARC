@@ -16,7 +16,7 @@ object StaffRedesignPreviewExport {
 
     private val redesignArsenal = listOf(
         StaffSpell.LUNAR, StaffSpell.GALE, StaffSpell.TIDE,
-        StaffSpell.REQUIEM, StaffSpell.PRISM, StaffSpell.NOVA,
+        StaffSpell.REQUIEM, StaffSpell.PRISM, StaffSpell.NOVA, StaffSpell.OSSUARY,
     )
 
     private fun point(x: Double, y: Double, z: Double) = mapOf("x" to x, "y" to y, "z" to z)
@@ -62,9 +62,14 @@ object StaffRedesignPreviewExport {
     private fun ticks(duration: Int) = (0..duration step FRAME_STEP_TICKS).toList() +
         if (duration % FRAME_STEP_TICKS == 0) emptyList() else listOf(duration)
 
+    private fun smooth(value: Double): Double = value.coerceIn(0.0, 1.0).let { it * it * (3.0 - 2.0 * it) }
+
     private fun arsenalRadius(spell: StaffSpell, input: StaffCastInput, charge: Double) = when {
-        spell == StaffSpell.REQUIEM -> 3.2 + charge
-        spell == StaffSpell.TIDE && input.secondary -> 3.2 + charge * 1.3
+        spell == StaffSpell.REQUIEM && input.secondary -> 4.0 + charge * .75
+        spell == StaffSpell.REQUIEM -> .75 + charge * .2
+        spell == StaffSpell.TIDE && input.secondary -> 2.8 + charge * .7
+        spell == StaffSpell.TIDE -> 1.0 + charge * .3
+        spell == StaffSpell.OSSUARY -> if (input.secondary) 2.1 + charge * .4 else 1.0 + charge * .2
         else -> 2.2 + charge
     }
 
@@ -76,25 +81,28 @@ object StaffRedesignPreviewExport {
         age: Int,
     ): Map<String, Any> {
         val radius = arsenalRadius(spell, input, charge)
-        val nodeCount = if (spell in setOf(StaffSpell.NOVA, StaffSpell.TIDE) && !input.secondary)
+        val nodeCount = if (spell == StaffSpell.OSSUARY && !input.secondary)
             4 + (charge * 2.0).toInt() else 1
         val parts = mutableListOf<Map<String, Any>>()
         val emissions = mutableListOf<Map<String, Any>>()
 
-        fun addParts(localAge: Int, localDuration: Int, index: Int, anchor: Vector) {
-            if (localAge !in 0..localDuration) return
-            staffArsenalParts(spell, localAge, localDuration, PREVIEW_REACH_BLOCKS, radius,
-                impact = false, secondary = input.secondary, input = input, charge = charge)
+        fun addParts(localAge: Int, localDuration: Int, index: Int, anchor: Vector,
+            sceneLength: Double = 1.0, impact: Boolean = false) {
+            // Display scenes expire before rendering at age == duration in StaffSpellDisplayEffects.
+            if (localAge !in 0 until localDuration) return
+            staffArsenalParts(spell, localAge, localDuration, sceneLength, radius,
+                impact = impact, secondary = input.secondary, input = input, charge = charge)
                 .forEachIndexed { partIndex, display ->
                     parts += part(display, "${spell.id}:node:$index", partIndex, anchor)
                 }
         }
 
-        fun addParticles(localAge: Int, localDuration: Int, localRadius: Double, anchor: Vector) {
+        fun addParticles(localAge: Int, localDuration: Int, localRadius: Double, anchor: Vector,
+            localReach: Double = localRadius) {
             if (localAge !in 0 until localDuration) return
             val authored = staffArsenalParticles(spell, localAge, localDuration, localRadius,
-                input.secondary, charge)
-            val limit = if (!input.secondary && spell in setOf(StaffSpell.NOVA, StaffSpell.TIDE))
+                input.secondary, charge, localReach)
+            val limit = if (!input.secondary && spell == StaffSpell.OSSUARY)
                 240 / nodeCount.coerceAtLeast(1) else 160
             val admitted = if (authored.size <= limit) authored else List(limit) { index ->
                 authored[index * (authored.size - 1) / (limit - 1)]
@@ -102,35 +110,64 @@ object StaffRedesignPreviewExport {
             admitted.forEach { emissions += sample(it, anchor) }
         }
 
+        val endpoint = Vector(0.0, 0.0, PREVIEW_REACH_BLOCKS)
         when {
-            spell == StaffSpell.NOVA && !input.secondary -> repeat(nodeCount) { node ->
-                val localAge = age - node * 4
-                val sceneDuration = (duration - node * 4).coerceAtLeast(1)
-                val anchor = Vector(if (node % 2 == 1) 1.15 else 0.0, 0.0,
-                    PREVIEW_REACH_BLOCKS * (node + 1) / nodeCount)
-                addParts(localAge, sceneDuration, node, anchor)
-                addParticles(localAge, 32, radius, anchor)
+            spell == StaffSpell.TIDE && !input.secondary -> {
+                val localAge = age - 28
+                val progress = smooth((age - 4.0) / 24.0)
+                val anchor = Vector(0.0, 1.2, PREVIEW_REACH_BLOCKS * progress)
+                if (age < 28) addParts(age, duration, 0, anchor, 1.0)
+                else addParts(localAge, 10, 0, anchor, 1.0, impact = true)
+                addParticles(age, duration, radius, anchor)
             }
-            spell == StaffSpell.TIDE && !input.secondary -> repeat(nodeCount) { node ->
+            spell == StaffSpell.TIDE && input.secondary -> {
+                val anchor = Vector(0.0, 0.0, PREVIEW_REACH_BLOCKS * smooth((age - 4.0) / 30.0))
+                addParticles(age, duration, radius, anchor)
+            }
+            spell == StaffSpell.GALE && input.secondary -> {
+                val anchor = Vector(0.0, 0.0, PREVIEW_REACH_BLOCKS * smooth((age - 4.0) / 20.0))
+                addParts(age, duration, 0, anchor)
+                addParticles(age, duration, radius, anchor)
+            }
+            spell == StaffSpell.GALE -> {
+                addParticles(age, duration, radius, endpoint)
+            }
+            spell == StaffSpell.NOVA && !input.secondary -> {
+                addParts(age, duration, 0, Vector(), PREVIEW_REACH_BLOCKS)
+                addParticles(age, duration, radius, Vector(), PREVIEW_REACH_BLOCKS)
+            }
+            spell == StaffSpell.OSSUARY && !input.secondary -> repeat(nodeCount) { node ->
                 val localAge = age - 4 - node * 4
                 val anchor = Vector(0.0, 0.0, PREVIEW_REACH_BLOCKS * (node + 1) / nodeCount)
-                if (localAge in 0..22) addParticles(localAge, 24, radius, anchor)
+                addParts(localAge, 22, node, anchor)
+                addParticles(localAge, 22, radius, anchor)
             }
-            spell == StaffSpell.GALE || spell == StaffSpell.TIDE && input.secondary -> {
-                val travelTicks = when (spell) {
-                    StaffSpell.GALE -> if (input.secondary) 28.0 else 40.0
-                    else -> 30.0
+            spell == StaffSpell.REQUIEM && !input.secondary -> {
+                val missileCount = 3 + (charge * 2).toInt()
+                repeat(missileCount) { missile ->
+                    val launch = 4 + missile * 6
+                    val localAge = age - launch
+                    if (localAge >= 0) {
+                        val lateral = (missile - (missileCount - 1) / 2.0) * .62
+                        val from = Vector(lateral, 1.35, 0.0)
+                        val to = Vector(0.0, 1.65, PREVIEW_REACH_BLOCKS)
+                        val t = smooth(localAge / 14.0)
+                        val anchor = from.clone().add(to.clone().subtract(from).multiply(t))
+                        if (localAge < 14) {
+                            addParts(localAge, 22, missile, anchor)
+                            addParticles(localAge, 22, radius, anchor)
+                        } else if (localAge < 22) {
+                            addParts(localAge - 14, 8, missile,
+                                endpoint.clone().add(Vector(0.0, 1.65, 0.0)), impact = true)
+                        }
+                    }
                 }
-                val startTick = 4.0
-                val linearProgress = ((age - startTick) / travelTicks).coerceIn(0.0, 1.0)
-                val progress = linearProgress * linearProgress * (3.0 - 2.0 * linearProgress)
-                val anchor = Vector(0.0, 0.0, PREVIEW_REACH_BLOCKS * progress)
-                val localRadius = if (spell == StaffSpell.TIDE) radius else 2.2 + charge
-                addParticles(age, duration, localRadius, anchor)
             }
             else -> {
-                addParts(age, duration, 0, Vector())
-                addParticles(age, duration, radius, Vector())
+                val anchor = if (spell == StaffSpell.LUNAR || spell == StaffSpell.REQUIEM ||
+                    spell == StaffSpell.NOVA || spell == StaffSpell.OSSUARY || spell == StaffSpell.PRISM) endpoint else Vector()
+                addParts(age, duration, 0, anchor)
+                addParticles(age, duration, radius, anchor)
             }
         }
 
@@ -144,7 +181,7 @@ object StaffRedesignPreviewExport {
                 }
             } else {
                 (-1..1).map { lane ->
-                    Vector(0.0, 2.6, 0.0) to Vector(0.0, 0.0, 9.0).rotateAroundY(lane * 0.55)
+                    Vector(0.0, 2.6, PREVIEW_REACH_BLOCKS) to Vector(0.0, 0.0, 9.0).rotateAroundY(lane * 0.55)
                 }
             }
             rays.forEach { (start, delta) ->
@@ -160,13 +197,22 @@ object StaffRedesignPreviewExport {
         val frames = ticks(duration).map { age -> arsenalFrame(spell, input, charge, duration, age) }
         val notes = when {
             spell == StaffSpell.TIDE && !input.secondary ->
-                "Cascading ground nodes: source uses 4 nodes at zero charge or 6 at full charge, starting 4 ticks apart; each emits through local tick 22. Preview uses a flat 12-block lane."
+                "One native-particle water orb travels along the clipped ground lane from tick 4 to tick 28; the moving BlockDisplay core changes to a splash impact at arrival. Preview uses a flat 12-block lane."
             spell == StaffSpell.NOVA && !input.secondary ->
-                "Staggered ground blooms: source uses 4 nodes at zero charge or 6 at full charge, 4 ticks apart; odd nodes shift +1.15 blocks sideways. Preview lane is 12 blocks."
+                "Two crawling root runners grow from the caster toward the target, then six thorn fingers close around the endpoint at tick 30. Display geometry and native particles use a fixed illustrative 12-block lane."
             spell == StaffSpell.GALE ->
-                "Moving particle anchor follows source smoothstep progress from tick 4 over ${if (input.secondary) 28 else 40} ticks; the preview follows an illustrative fixed 12-block lane."
+                if (input.secondary) "A compact hollow air-ram hoop follows source smoothstep progress from tick 4 over 20 ticks; preview uses a fixed 12-block lane."
+                else "A stationary three-rope wind column winds around an open core. Sparse CLOUD accents and native GUST/DUST particles keep its volume readable."
             spell == StaffSpell.TIDE && input.secondary ->
-                "Moving water sheet follows source smoothstep progress from tick 4 over 30 ticks; the preview follows an illustrative fixed 12-block lane."
+                "A low curling water sheet and splash-foam crest follow source smoothstep progress from tick 4 over 30 ticks; preview uses a fixed 12-block lane."
+            spell == StaffSpell.REQUIEM && !input.secondary ->
+                "Three soul missiles launch from offset lanes 6 ticks apart, each taking 14 ticks to reach a clipped target line; charge adds two more. Preview shows a fixed 12-block target lane."
+            spell == StaffSpell.REQUIEM && input.secondary ->
+                "A soul shockfront expands outward from tick 8 for 20 ticks; each radial segment is clipped by the first blocking surface. Preview uses an unobstructed fixed 12-block disk."
+            spell == StaffSpell.OSSUARY && !input.secondary ->
+                "Four bone spikes at zero charge or six at full charge rise along the ground lane, 4 ticks apart; each attempts contact when its tip arrives at local tick 8. No blocks are placed."
+            spell == StaffSpell.OSSUARY && input.secondary ->
+                "Ivory ribs form a warning ring, then close around a dark skull centerpiece at tick 12. The cast uses a bounded visible target point and never places blocks."
             spell == StaffSpell.PRISM && input.secondary ->
                 "Beam uses the source staffPrismBeam frame and three source-shaped emitter lanes. Target selection is represented by a fixed 12-block endpoint."
             spell == StaffSpell.PRISM ->
@@ -181,36 +227,72 @@ object StaffRedesignPreviewExport {
             "particleOnly" to (frames.all { (it["parts"] as List<*>).isEmpty() }),
             "anchor" to "cast ground/target anchor, depending on the live spell; preview geometry uses +Z as forward",
             "previewReachBlocks" to PREVIEW_REACH_BLOCKS,
-            "timelineNote" to "$notes Base arsenal lists follow the runtime 160-sample admission cap (240 divided across NOVA/TIDE primary nodes); PRISM beam samples are authored separately.",
+            "timelineNote" to "$notes Most single-source particle frames use a 160-sample admission limit. OSSUARY divides a 240-sample cast-frame budget across its spikes; REQUIEM applies the per-source limit to each active missile, while PRISM beam lanes are sampled separately.",
             "sourceFunctions" to listOf("staffArsenalParts", "staffArsenalParticles", "staffPrismBeam"),
             "frames" to frames,
         )
     }
 
     private fun quickClip(spell: StaffSpell, input: StaffCastInput): Map<String, Any> {
-        val profile = staffGestureProfile(spell, input)
-        val frames = ticks(profile.durationTicks).map { age ->
-            // Runtime gesture tasks start their first particle frame at tick 2; tick 0 is just the cast cue.
-            val emissions = if (age == 0) emptyList() else
-                staffGestureFrame(spell, input, age, profile.reach).map(::sample)
-            mapOf("tick" to age, "parts" to emptyList<Any>(), "emissions" to emissions)
+        val heavy = spell in setOf(StaffSpell.FAULT, StaffSpell.GRAVITY, StaffSpell.OSSUARY,
+            StaffSpell.NOVA, StaffSpell.NECROMANCER)
+        val duration = if (input.secondary) 14 else if (heavy) 32 else 24
+        val frames = ticks(duration).map { age ->
+            mapOf("tick" to age, "parts" to emptyList<Any>(), "emissions" to
+                if (age < duration) staffDefenseParticles(spell, age, input.secondary).map(::sample)
+                else emptyList())
         }
         return mapOf(
             "id" to "${spell.id}-${input.name.lowercase(Locale.ROOT)}-0",
             "spell" to spell.id, "input" to input.name, "quick" to true,
-            "charge" to 0.0, "durationTicks" to profile.durationTicks,
-            "tailTicks" to 40, "frameStepTicks" to FRAME_STEP_TICKS,
-            "particleOnly" to true,
-            "anchor" to profile.anchor.name,
-            "profile" to mapOf(
-                "form" to profile.form.name, "contact" to profile.contact.name,
-                "control" to profile.control.name, "reachBlocks" to profile.reach,
-                "widthBlocks" to profile.width, "radiusBlocks" to profile.radius,
-                "anticipationTicks" to profile.anticipationTicks,
-            ),
-            "previewReachBlocks" to profile.reach,
-            "timelineNote" to "Production StaffGestureProfile and staffGestureFrame samples; runtime particle frames begin at tick 2. The point/eye anchor is fixed at local origin for geometry inspection.",
-            "sourceFunctions" to listOf("staffGestureProfile", "staffGestureFrame"),
+            "charge" to 0.0, "durationTicks" to duration, "tailTicks" to 40,
+            "frameStepTicks" to FRAME_STEP_TICKS, "particleOnly" to true,
+            "anchor" to "caster feet", "previewReachBlocks" to 2.0,
+            "timelineNote" to "Production staffDefenseParticles: LMB frontal guard, Shift LMB all-around guard. Independent recovery. Geometry inspection does not simulate a blocked hit.",
+            "sourceFunctions" to listOf("staffDefenseParticles"), "frames" to frames,
+        )
+    }
+
+    private fun channelClip(spell: StaffSpell, input: StaffCastInput, charge: Double): Map<String, Any> {
+        val duration = if (spell == StaffSpell.INFERNO) 60 else 90
+        var throwZ = 4.0
+        var speed = .55
+        var impactAge: Int? = null
+        val frames = ticks(duration).map { age ->
+            val emissions = mutableListOf<Map<String, Any>>()
+            val parts = mutableListOf<Map<String, Any>>()
+            if (spell == StaffSpell.INFERNO && age < 60) {
+                staffInfernoFrame(age, 9.0).forEach { emissions += sample(it, Vector(0.0, 1.34, .48)) }
+            } else if (spell == StaffSpell.GRAVITY) {
+                if (age > 60 && impactAge == null) {
+                    speed = (speed + .085 * 2).coerceAtMost(2.2)
+                    throwZ = (throwZ + speed).coerceAtMost(12.0)
+                    if (throwZ >= 12.0) impactAge = age
+                }
+                val impact = impactAge != null
+                val localAge = impactAge?.let { age - it } ?: age
+                if (!impact || localAge < 16) {
+                    staffChannelParts(spell, localAge, if (impact) 16 else 196, 1.0,
+                        if (impact) 2.5 else 1.0, impact, input.secondary).forEachIndexed { i, display ->
+                            parts += part(display, "gravity", i, Vector(0.0, 1.62, throwZ))
+                        }
+                }
+                if (impactAge == age) staffGravityImpactFrame().forEach {
+                    emissions += sample(it, Vector(0.0, 1.62, throwZ))
+                }
+            }
+            mapOf("tick" to age, "parts" to parts, "emissions" to emissions)
+        }
+        return mapOf(
+            "id" to "${spell.id}-${input.name.lowercase(Locale.ROOT)}-${charge.toInt()}",
+            "spell" to spell.id, "input" to input.name, "quick" to false,
+            "charge" to charge, "durationTicks" to duration, "tailTicks" to 40,
+            "frameStepTicks" to FRAME_STEP_TICKS, "particleOnly" to (spell == StaffSpell.INFERNO),
+            "anchor" to "caster feet", "previewReachBlocks" to 12.0,
+            "timelineNote" to if (spell == StaffSpell.INFERNO)
+                "Production flame frames for a steady 3-second hold along +Z. In game the stream follows the current look and is clipped by cover; charge selector does not change a channel."
+                else "Production boulder geometry: scripted 60-tick hold at four blocks, release with the controller's accelerating 2-tick movement, then impact at twelve blocks. In game hold follows the look for up to eight seconds. No real blocks are changed.",
+            "sourceFunctions" to listOf("staffInfernoFrame", "staffChannelParts", "staffGravityImpactFrame"),
             "frames" to frames,
         )
     }
@@ -224,6 +306,11 @@ object StaffRedesignPreviewExport {
                 redesignArsenal.forEach { spell ->
                     listOf(StaffCastInput.PRIMARY, StaffCastInput.SECONDARY).forEach { input ->
                         listOf(0.0, 1.0).forEach { charge -> add(arsenalClip(spell, input, charge)) }
+                    }
+                }
+                listOf(StaffSpell.INFERNO, StaffSpell.GRAVITY).forEach { spell ->
+                    listOf(StaffCastInput.PRIMARY, StaffCastInput.SECONDARY).forEach { input ->
+                        listOf(0.0, 1.0).forEach { charge -> add(channelClip(spell, input, charge)) }
                     }
                 }
                 StaffSpell.entries.forEach { spell ->
@@ -241,7 +328,7 @@ object StaffRedesignPreviewExport {
             "frameStepTicks" to FRAME_STEP_TICKS,
             "particleTailTicks" to 40,
             "previewReachBlocks" to PREVIEW_REACH_BLOCKS,
-            "evidence" to "Frames call production staffArsenalParts/staffArsenalParticles, staffPrismBeam, and staffGestureProfile/staffGestureFrame. Arsenal and gesture frames use the production two-tick cadence; base arsenal samples follow the runtime 160-list limit (240 divided across NOVA/TIDE primary nodes), while PRISM beam samples are separate. Particle sprites and persistence use the offline viewer profile; this geometry preview does not simulate damage, target selection, collision, sounds, client lighting, or exact vanilla particle physics. Moving/ground-node attacks show source call-site timing on a fixed illustrative 12-block lane.",
+            "evidence" to "Frames call production staffArsenalParts/staffArsenalParticles, staffPrismBeam, and staffDefenseParticles and held-channel geometry at the runtime two-tick cadence. Native source samples and source-timed movement are rendered in an offline geometry preview; it does not simulate damage, target selection, collision, sounds, client lighting, or exact vanilla particle physics. Moving attacks use an illustrative fixed 12-block lane. Preview shape and timing are not proof of a native-client result.",
             "clips" to clips,
         )).plus("\n"))
         println("STAFF_REDESIGN_PREVIEW clips=${clips.size} output=$output")

@@ -63,13 +63,14 @@ object StaffSpellsModule : PluginModule {
             StaffSpellDisplayEffects(PaperPacketDisplays(ARC.instance, "staff-spells"))).also {
             Bukkit.getPluginManager().registerEvents(it, ARC.instance)
             Bukkit.getPluginManager().registerEvents(it.input, ARC.instance)
+            Bukkit.getPluginManager().registerEvents(it.defense, ARC.instance)
             it.start()
         }
     }
 
     override fun reload() = init()
     override fun shutdown() {
-        controller?.let { HandlerList.unregisterAll(it); HandlerList.unregisterAll(it.input); it.close() }
+        controller?.let { HandlerList.unregisterAll(it); HandlerList.unregisterAll(it.input); HandlerList.unregisterAll(it.defense); it.close() }
         controller = null
     }
 
@@ -89,7 +90,9 @@ internal class StaffSpellController(
     private val visuals = StaffSpellVisuals(tasks)
     private val targeting = StaffSpellTargeting(settings, damage)
     private val arsenal = StaffSpellArsenal(settings, damage, effects, visuals, targeting)
-    private val gestures = StaffSpellGestures(settings, damage, visuals, targeting)
+    internal val defense = StaffSpellDefense(config, damage, visuals)
+    private val channels = StaffSpellChannels(settings, damage, effects, visuals, targeting)
+    private val channelInputs = mutableMapOf<UUID, Pair<StaffSpell, StaffCastInput>>()
     private val summons = StaffSpellSummons(settings, damage, visuals, targeting, summonActorFactory)
     internal val input = StaffSpellInput(this)
     private val chargeScenes = mutableMapOf<UUID, UUID?>()
@@ -107,7 +110,8 @@ internal class StaffSpellController(
     fun start() {
         input.start()
         arsenal.start()
-        gestures.start()
+        defense.start()
+        channels.start()
         summons.start()
         tasks.runTimer(4, 4) {
             cooldownLengths.keys.filter { CooldownManager.cooldown(it, cooldownId) <= 0 }.forEach {
@@ -117,7 +121,7 @@ internal class StaffSpellController(
             Bukkit.getOnlinePlayers().forEach { player ->
                 val spell = StaffSpell.from(player.inventory.itemInMainHand)
                 if (ready(player) && spell != null) {
-                    if (player.uniqueId !in chargeScenes) showCooldown(player, spell)
+                    if (player.uniqueId !in chargeScenes && player.uniqueId !in channelInputs) showCooldown(player, spell)
                 } else hideCooldown(player.uniqueId)
                 if (ready(player) && !StaffSpell.isDuelOnly(player.inventory.itemInMainHand) &&
                     spell in setOf(StaffSpell.CHAIN, StaffSpell.MARK)) {
@@ -165,6 +169,50 @@ internal class StaffSpellController(
         return true
     }
 
+    override fun defend(player: Player, spell: StaffSpell) {
+        if (!ready(player)) return
+        val cast = damage.capture(player, duelOnly = StaffSpell.isDuelOnly(player.inventory.itemInMainHand)) ?: return
+        defense.activate(player, spell, cast, player.isSneaking)
+    }
+
+    override fun beginChannel(player: Player, spell: StaffSpell): Boolean {
+        val cast = damage.capture(player, duelOnly = StaffSpell.isDuelOnly(player.inventory.itemInMainHand)) ?: return false
+        if (!channels.begin(player, spell, cast, settings.tuning.getValue(spell), player.isSneaking)) {
+            player.sendActionBar(config.text("no-grab"))
+            return false
+        }
+        channelInputs[player.uniqueId] = spell to StaffCastInput.of(player.isSneaking, false)
+        return true
+    }
+
+    override fun updateChannel(player: Player, ticksHeld: Int): Boolean {
+        val spell = channelInputs[player.uniqueId]?.first ?: return false
+        val active = channels.update(player, ticksHeld)
+        val progress = (ticksHeld / if (spell == StaffSpell.INFERNO) 60.0 else 160.0).coerceIn(0.0, 1.0).toFloat()
+        val bar = cooldownBars.getOrPut(player.uniqueId) {
+            BossBar.bossBar(config.text(if (spell == StaffSpell.INFERNO) "inferno-hold" else "gravity-hold"),
+                progress, BossBar.Color.PURPLE, BossBar.Overlay.PROGRESS).also(player::showBossBar)
+        }
+        bar.name(config.text(if (spell == StaffSpell.INFERNO) "inferno-hold" else "gravity-hold"))
+        bar.progress(if (spell == StaffSpell.INFERNO) 1f - progress else progress)
+        return active
+    }
+
+    override fun releaseChannel(player: Player) = finishChannel(player, release = true)
+    override fun cancelChannel(player: Player) = finishChannel(player, release = false)
+    private fun finishChannel(player: Player, release: Boolean) {
+        val (spell, input) = channelInputs.remove(player.uniqueId) ?: return
+        if (release) channels.release(player) else channels.cancel(player.uniqueId)
+        beginCooldown(player, spell, input, settings.tuning.getValue(spell).cooldownTicks)
+    }
+
+    private fun beginCooldown(player: Player, spell: StaffSpell, input: StaffCastInput, ticks: Long) {
+        cooldownInputs[player.uniqueId] = input
+        cooldownLengths[player.uniqueId] = ticks
+        CooldownManager.addCooldown(player.uniqueId, cooldownId, ticks)
+        if (ready(player)) showCooldown(player, spell)
+    }
+
     override fun charge(player: Player, spell: StaffSpell, progress: Double) {
         val id = chargeScenes.getOrPut(player.uniqueId) {
             effects.play(player.uniqueId, spell, player.eyeLocation, durationTicks = 220, charging = true)
@@ -194,6 +242,8 @@ internal class StaffSpellController(
         val item = player.inventory.itemInMainHand
         val spell = StaffSpell.from(item) ?: return
         if (!ready(player)) return
+        if (input.quick) { defend(player, spell); return }
+        if (spell == StaffSpell.INFERNO || spell == StaffSpell.GRAVITY) return
         if (CooldownManager.isOnCooldown(player.uniqueId, cooldownId)) {
             showCooldown(player, spell)
             visuals.cooldownFeedback(player, spell)
@@ -214,14 +264,14 @@ internal class StaffSpellController(
             spell in setOf(StaffSpell.MARK, StaffSpell.EMBER) -> tuning.cooldownTicks * 2
             else -> tuning.cooldownTicks * 3 / 2
         }
-        cooldownInputs[player.uniqueId] = input
-        cooldownLengths[player.uniqueId] = cooldownTicks
-        CooldownManager.addCooldown(player.uniqueId, cooldownId, cooldownTicks)
-        showCooldown(player, spell)
+        if (spell == StaffSpell.NECROMANCER && !summons.cast(player, cast, tuning, input, level)) {
+            player.sendActionBar(config.text("no-summon-ground"))
+            return
+        }
+        beginCooldown(player, spell, input, cooldownTicks)
         if (!input.quick && spell !in ARSENAL_SPELLS) visuals.withOwner(cast.casterId) { visuals.release(player.eyeLocation, spell, level >= 0.75) }
         if (!input.quick && spell == StaffSpell.CHAIN) visuals.withOwner(cast.casterId) { visuals.lightningLaunch(player.eyeLocation) }
-        if (input.quick) gestures.cast(player, spell, cast, tuning, input)
-        else if (spell == StaffSpell.NECROMANCER) summons.cast(player, cast, tuning, input, level)
+        if (spell == StaffSpell.NECROMANCER) Unit // Already admitted before consuming cooldown.
         else if (spell in ARSENAL_SPELLS) arsenal.cast(player, spell, cast, tuning, input, level)
         else if (secondary) castSecondary(player, spell, cast, tuning, level) else when (spell) {
             StaffSpell.CHAIN -> chain(player, target(player, cast), cast, tuning)
@@ -245,11 +295,22 @@ internal class StaffSpellController(
                 }
                 val eye = player.eyeLocation
                 val direction = eye.direction.normalize()
-                val muzzle = eye.clone() // Camera exclusion belongs to the shared renderer; collision starts at the eye.
+                // Release is the launch: sweep the short muzzle segment now, then render a visible core outside POV.
+                val muzzle = rayEnd(eye, direction, 2.4)
+                val near = lineTargets(player, eye, muzzle, .25, cast).firstOrNull()
+                if (near != null || eye.distanceSquared(muzzle) < 2.4 * 2.4 - .0001) {
+                    val at = near?.boundingBox?.expand(.25)?.rayTrace(eye.toVector(), direction, eye.distance(muzzle))
+                        ?.hitPosition?.toLocation(eye.world) ?: muzzle
+                    areaDamage(player, at, settings.emberRadius, cast, tuning, near)
+                    visuals.withOwner(cast.casterId) { visuals.emberBurst(at, settings.emberRadius) }
+                    effects.play(player.uniqueId, spell, at, radius = settings.emberRadius,
+                        durationTicks = EMBER_IMPACT_DURATION_TICKS, impact = true, charge = level)
+                    return
+                }
                 val visualId = effects.play(player.uniqueId, spell, muzzle,
                     muzzle.clone().add(direction), radius = 0.85,
                     durationTicks = kotlin.math.ceil(settings.range / settings.emberSpeed).toInt() + 4, controllerDriven = true, charge = cast.visualCharge)
-                embers += PendingStaffEmber(eye, direction, cast, tuning, settings.range, visualId, muzzle)
+                embers += PendingStaffEmber(muzzle, direction, cast, tuning, settings.range - eye.distance(muzzle), visualId, muzzle)
                 visuals.withOwner(cast.casterId) { visuals.emberTrail(muzzle, muzzle) }
             }
             else -> Unit // Additional staff families have their own bounded attack lifecycle.
@@ -267,6 +328,7 @@ internal class StaffSpellController(
 
     internal fun resetPlayer(playerId: UUID) {
         cancel(playerId)
+        defense.reset(playerId)
         CooldownManager.clearCooldown(playerId, cooldownId)
         cooldownInputs.remove(playerId)
         cooldownLengths.remove(playerId)
@@ -673,18 +735,21 @@ internal class StaffSpellController(
         val origin = player.location.clone()
         val yaw = Math.toRadians(origin.yaw.toDouble())
         val forward = Vector(-sin(yaw), 0.0, cos(yaw)).normalize()
-        val end = origin.clone().add(forward.clone().multiply(range))
+        val clipped = rayEnd(origin.clone().add(0.0, .5, 0.0), forward, range)
+        val reach = clipped.distance(origin.clone().add(0.0, .5, 0.0))
+        if (reach < .1) return
+        val end = origin.clone().add(forward.clone().multiply(reach))
         val spread = tan(Math.toRadians(degrees))
         val candidates = nearby(player, origin, range, cast)
             .filter { inFrostCone(origin, forward, center(it), range, spread) }
             .sortedBy { horizontalDistance(origin, center(it)) }
             .take(MAX_WAVE_CANDIDATES)
-        val radius = spread * range
+        val radius = spread * reach
         visuals.withOwner(cast.casterId) { visuals.frost(origin, end, degrees, WAVE_START_DELAY_TICKS, FROST_TRAVEL_TICKS) }
         val visualId = effects.play(player.uniqueId, StaffSpell.FROST, origin, end,
             radius = radius, durationTicks = FROST_DURATION_TICKS, charge = cast.visualCharge)
         waves += PendingStaffWave(player.uniqueId, player.world.uid, StaffSpell.FROST, origin, forward,
-            range, candidates, cast, tuning, visualId, WAVE_START_DELAY_TICKS,
+            reach, candidates, cast, tuning, visualId, WAVE_START_DELAY_TICKS,
             FROST_TRAVEL_TICKS, FROST_DURATION_TICKS, slowTicks = settings.frostSlowTicks, frostSpread = spread)
     }
 
@@ -926,7 +991,9 @@ internal class StaffSpellController(
     private fun cancel(playerId: UUID) {
         input.cancel(playerId)
         arsenal.cancel(playerId)
-        gestures.cancel(playerId)
+        defense.cancel(playerId)
+        channels.cancel(playerId)
+        channelInputs.remove(playerId)
         summons.cancel(playerId)
         effects.remove(chargeScenes.remove(playerId))
         lances.removeAll { it.cast.casterId == playerId }
@@ -948,7 +1015,9 @@ internal class StaffSpellController(
         input.close()
         visuals.close()
         arsenal.close()
-        gestures.close()
+        defense.close()
+        channels.close()
+        channelInputs.clear()
         summons.close()
         chargeScenes.values.forEach(effects::remove)
         chargeScenes.clear()
@@ -966,7 +1035,7 @@ internal class StaffSpellController(
     }
 
     private companion object {
-        val ARSENAL_SPELLS = setOf(StaffSpell.NOVA, StaffSpell.LUNAR, StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM, StaffSpell.PRISM)
+        val ARSENAL_SPELLS = setOf(StaffSpell.NOVA, StaffSpell.LUNAR, StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM, StaffSpell.PRISM, StaffSpell.OSSUARY)
         const val WAVE_STEP_TICKS = 2
         const val WAVE_START_DELAY_TICKS = 2
         const val WAVE_BODY_TOLERANCE = 0.6
@@ -1061,8 +1130,8 @@ internal fun visible(from: Location, to: Location): Boolean {
     val offset = to.toVector().subtract(from.toVector())
     val distance = offset.length()
     if (distance < 0.01) return true
-    return from.world.rayTraceBlocks(from, offset.multiply(1.0 / distance), distance,
-        FluidCollisionMode.NEVER, true) == null
+    val trace = staffBlockHit(from, offset.multiply(1.0 / distance), distance)
+    return trace.pathLoaded && trace.hit == null
 }
 
 object StaffTestSubCommand : SubCommand {

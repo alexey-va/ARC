@@ -59,6 +59,7 @@ internal fun staffIcicleDisplayParts(ageTicks: Int, impact: Boolean, charge: Dou
 
 /** Shoulder halo grows outside the crosshair; stable slots prevent spawn/despawn flicker. */
 internal fun staffChargeParts(spell: StaffSpell, progress: Double, age: Int): List<StaffDisplayPart> {
+    if (spell == StaffSpell.INFERNO || spell == StaffSpell.GRAVITY) return emptyList()
     val count = if (spell == StaffSpell.ICICLE) 11 else 7
     val charge = progress.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
     val bloom = smoothCharge((charge - 0.08) / 0.84)
@@ -67,14 +68,14 @@ internal fun staffChargeParts(spell: StaffSpell, progress: Double, age: Int): Li
         StaffSpell.MARK, StaffSpell.REQUIEM -> Material.CRYING_OBSIDIAN
         StaffSpell.FROST, StaffSpell.ICICLE -> Material.BLUE_ICE
         StaffSpell.LANCE -> Material.GOLD_BLOCK
-        StaffSpell.EMBER -> Material.MAGMA_BLOCK
+        StaffSpell.EMBER, StaffSpell.INFERNO -> Material.MAGMA_BLOCK
         StaffSpell.NOVA -> Material.EMERALD_BLOCK
-        StaffSpell.FAULT -> Material.OBSIDIAN
+        StaffSpell.FAULT, StaffSpell.GRAVITY -> Material.OBSIDIAN
         StaffSpell.LUNAR -> Material.CALCITE
         StaffSpell.GALE -> Material.WHITE_STAINED_GLASS
         StaffSpell.TIDE -> Material.PRISMARINE
         StaffSpell.PRISM -> Material.AMETHYST_BLOCK
-        StaffSpell.NECROMANCER -> Material.BONE_BLOCK
+        StaffSpell.NECROMANCER, StaffSpell.OSSUARY -> Material.BONE_BLOCK
     }
     return (0 until count).flatMap { index ->
         val growth = smoothCharge((charge * (count - 2) + 2.0 - index).coerceIn(0.0, 1.0))
@@ -127,6 +128,9 @@ private fun staffChargeFormationOffset(spell: StaffSpell, index: Int, count: Int
             (-2.16 - 0.34 * cos(angle)).toFloat())
         StaffSpell.REQUIEM -> Vector3f((if (index % 2 == 0) -0.62 else 0.62).toFloat(),
             (0.22 + 2.30 * t).toFloat(), (-2.26 - 0.18 * cos(angle)).toFloat())
+        StaffSpell.INFERNO, StaffSpell.GRAVITY -> Vector3f() // Held channels own their live geometry, never charge formations.
+        StaffSpell.OSSUARY -> Vector3f(((if (index % 2 == 0) -1 else 1) * (1.35 + .7 * sin(t * PI))).toFloat(),
+            (.2 + 1.6 * t).toFloat(), -2.45f)
         StaffSpell.NECROMANCER -> Vector3f((2.25 * cos(angle)).toFloat(),
             (-.5 + .38 * sin(angle * 2)).toFloat(), (-2.25 + .35 * sin(angle)).toFloat())
         StaffSpell.PRISM -> {

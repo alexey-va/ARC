@@ -1,57 +1,96 @@
-# Staff sequence redesign — ARC 1.4.376
+# Staff sequence and guard design — ARC 1.4.377
 
-The original seven RMB abilities remain recognizable; the ember body grows over
-its first 16 ticks to avoid appearing at full size when it crosses camera clearance.
-Six later RMB families and all LMB gestures now have separate sequence owners.
+The sample catalog now contains seventeen staves. Seven of them use staged,
+multi-frame Arsenal sequences; Inferno and Gravity use held channels; the
+remaining casts retain their spell-specific attack paths. Left-click controls
+are defenses, not the former collection of quick attacks: normal left-click
+raises a frontal guard, and Shift + left-click raises an all-around guard.
 
 ## Visual references
 
-These are references for timing, silhouette and staged action, not copied assets.
+These references inform timing, silhouette and staged action; they are not
+copied assets.
 
 - [GGG: Ball Lightning](https://www.youtube.com/watch?v=LTHoIQyrgQA), 0:02:
-  bright cores with short electrical offshoots; informs branching quick lightning.
+  bright cores with short electrical offshoots; informs branching lightning.
 - [GGG: Witch](https://www.youtube.com/watch?v=82CGiyshJ0c), 1:36–1:48:
-  temporary bone constructs; informs the finite necromancer squad.
+  temporary bone constructs; informs the finite Necromancer squad and Ossuary.
 - [GGG: Druid walkthrough](https://www.pathofexile.com/forum/view-thread/3416717/filter-account-type/staff),
-  Tornado 5:24–5:40 and Volcano 6:08–6:32: sustained volume and staged eruptions.
-  The adaptation uses a moving cloud funnel and sequential water geysers.
-- [GGG: Disciple of Varashta](https://www.youtube.com/watch?v=bLa90dXVDWE), 0:35–1:18:
-  spectral summons with distinct attacks; informs soul ribbons and a stronger commander.
+  Tornado 5:24–5:40 and Volcano 6:08–6:32: sustained volume and staged
+  eruptions; informs Gale's open-center wind column and Tide's travelling
+  water core and impact.
+- [GGG: Disciple of Varashta](https://www.youtube.com/watch?v=bLa90dXVDWE),
+  0:35–1:18: spectral summons with distinct attacks; informs soul missiles
+  and the stronger Necromancer commander.
 - [Blizzard: Season of Witchcraft](https://news.blizzard.com/en-us/article/24167111/master-the-occult-in-season-of-witchcraft):
-  the written growth/withering and converging-wave descriptions inform the grove bloom.
-  This last reference was text, not observed animation.
+  written growth and converging-wave descriptions inform the thorn growth.
+  This reference was text, not an observed animation.
 
-## Ability identities
+## Staged Arsenal spells
 
-| Staff | RMB | Shift + RMB |
-|---|---|---|
-| Lunar | Falling silver crescent, then ground shockwave | Two crossing moon blades |
-| Gale | Moving cloud funnel | Broad rolling gust |
-| Tide | Four to six staggered geysers | Curling wall of water |
-| Requiem | Converging soul ribbons | Outward soul lament |
-| Prism | Growing focus crystal, then three rays | Three rays converge at the target |
-| Grove | Sequential branching roots | Growing flower releases a pollen wave |
-| Necromancer | Two to four temporary skeletons | One armored wither-skeleton commander |
+| Staff | Right-click | Shift + right-click |
+| --- | --- | --- |
+| Lunar | A large silver crescent falls, then opens a ground shockwave | Two moon blades converge on the target |
+| Gale | An open-center wind column forms at the aimed point and lifts nearby enemies | A compact air ram sweeps forward |
+| Tide | A water core travels to the target and bursts into a broad spray | A low foamy wave rolls forward |
+| Requiem | Staggered soul missiles leave offset shoulder lanes and travel to the target | A soul wave expands outward from a sigil |
+| Prism | A crystal grows at the aim point and sends rays toward up to three visible enemies | Three rays converge on the selected point |
+| Nova | Roots travel along the ground, then close and slow enemies | A thorn cage closes around the selected point |
+| Ossuary | Bone spines, ribs and skull details erupt in sequence along the ground path | A warning precedes the closing rib cage and skull motif |
 
-All 28 LMB/Shift-LMB gestures use native particles and independent contact shapes.
-They do not replay a shortened RMB Display scene. Examples include frost breath,
-an advancing diagonal solar cut, an ice shotgun, water whip, soul stream and bone volley.
-The charge meter and cooldown remain boss bars; full charge changes RMB size,
-formation or count. Native particles retain their Minecraft lifetime and motion.
+The other eight catalog spells keep their own right-click attacks. Inferno
+is a continuous aim-following fire stream while held, capped at three seconds.
+Gravity holds a display boulder in front of the caster while tracking aim, then
+throws it on release; it never changes the selected world block. Shift selects
+the named secondary cast for ordinary attacks; for either channel it runs the
+same held operation.
 
-## Runtime bounds and validation
+## Guards and charge
 
-- New particle sequence frames run every two ticks with one audience lookup per frame.
-- New authored frames share a per-viewer ceiling of 480 packets / 4096 particles
-  per two ticks. Excess is discarded immediately, not queued.
-- Each target is struck once per ordinary sequence, at its contact phase; every
-  hit rechecks combat context, eligibility and line of sight.
-- Summons retain native movement with all vanilla action and targeting goals
-  removed; pickup, persistence and drops are disabled. They live for ten
-  seconds, use bounded native velocity on supported ground, and deal damage only
-  through the staff damage bridge after a visible windup. One squad per caster,
-  four actors per caster, sixteen globally, six successful hits per squad.
-- Summons do not pathfind around obstacles. They stop when the next footprint is unsafe.
-- Geometry previews establish shape and timing. Browser bot captures establish
-  received packets and approximate rendering, not vanilla-client visual/audio acceptance.
-- Deployment for this iteration is scoped to Spawn only.
+The frontal guard protects the direction the caster faces, lasts up to 1.2
+seconds and absorbs two hits. Fault, Gravity, Ossuary, Nova and Necromancer
+guards last up to 1.6 seconds and absorb three. Shift + left-click covers all
+directions for up to 0.7 seconds and absorbs one hit. These defenses use a
+separate recovery track from right-click attacks: four seconds after the
+frontal guard or six seconds after the all-around guard. Both guard forms share
+the same recovery track with each other.
+
+Ordinary right-click casts reach full charge in 36 ticks; charge can enlarge
+or add parts, change formation or add targets according to the spell. Held
+channels use their own timing instead: Inferno lasts at most three seconds,
+Gravity at most eight seconds before release or timeout. In particular,
+Gravity's flight is a bounded display sequence over a clipped path, not a
+placed, broken or moving block.
+
+## Runtime bounds and evidence limits
+
+- Authored animation frames are emitted on the main thread in two-tick steps.
+  Particle packets are sent only to nearby viewers; each viewer has a shared
+  ceiling of 480 packets and 4096 particles per two-tick window. Excess is
+  dropped rather than queued. Minecraft controls each native particle's own
+  motion and lifetime.
+- Damage attempts revalidate captured combat context, target eligibility and
+  visibility when the hit is applied. Moving sequences use spell-specific
+  collision paths, and each sequence attempts a target at most once. The duel
+  bridge still limits duel-only casts to the registered opponent in the
+  captured match and round.
+- Necromancer creates two temporary skeletons, or up to four at full charge;
+  Shift summons one larger wither-skeleton commander. These actors have native
+  movement with ordinary targeting and attack goals removed, then move and
+  attack through the staff controller. They require safe supported ground,
+  avoid obstacles rather than pathfind around them, expire after ten seconds,
+  and obey one squad per caster, four actors per caster, sixteen globally, and
+  six successful hits per squad. Their attacks use the same staff damage and
+  protection path.
+- Ossuary and Gravity create only visual geometry; neither edits blocks.
+  The visual redesign does not set fire or change weather.
+- `exportStaffRedesignPreview` can produce source-driven clips for the seven
+  Arsenal spells, both channels at zero and full charge, and both guard shapes
+  for all seventeen staves. Its offline geometry view does not simulate
+  damage, target selection, collision, sound, client lighting or exact vanilla
+  particle physics. Moving attacks use an illustrative fixed lane. A preview
+  is not evidence of ordinary-client appearance or audio acceptance.
+
+This document describes source design only. It does not claim that a build,
+test run, artifact delivery, runtime activation or ordinary-client review has
+passed.

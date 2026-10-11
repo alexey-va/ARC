@@ -231,6 +231,13 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
             if (previousIndex != null) matchedPrevious += previousIndex
             previousIndexByPart += previousIndex
         }
+        val casterEye = Bukkit.getPlayer(scene.casterId)?.eyeLocation
+        // The broad ice fan needs per-piece clipping; projectile owners already sweep their paths.
+        if (scene.spell == StaffSpell.FROST && !scene.charging && casterEye != null) parts = parts.map { part ->
+            val point = scene.rotation.transform(Vector3f(part.center))
+            val at = scene.origin.clone().add(point.x.toDouble(), point.y.toDouble(), point.z.toDouble())
+            part.copy(visible = part.visible && visible(casterEye, at))
+        }
         val currentBounds = parts.map { part ->
             val point = scene.rotation.transform(Vector3f(part.center))
             scene.origin.toVector().add(org.bukkit.util.Vector(point.x.toDouble(), point.y.toDouble(), point.z.toDouble())) to

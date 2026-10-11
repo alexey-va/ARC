@@ -110,16 +110,22 @@ class StaffSpellTimelineTest : FreeSpec({
         (radii.last() < radii.first() * 0.30) shouldBe true
     }
 
-    "grove flower grows before its pollen wave expands" {
-        fun bloom(age: Int) = staffArsenalParts(StaffSpell.NOVA, age, 48, 0.0, 3.0,
+    "grove root cage grows before the brambles and pollen rim close" {
+        fun cage(age: Int) = staffArsenalParts(StaffSpell.NOVA, age, 48, 0.0, 3.0,
             false, true, StaffCastInput.SECONDARY, 1.0)
-        fun volume(age: Int) = bloom(age).sumOf { (it.scale.x * it.scale.y * it.scale.z).toDouble() }
+        fun volume(age: Int) = cage(age).sumOf { (it.scale.x * it.scale.y * it.scale.z).toDouble() }
+        fun outerRadius(age: Int) = cage(age).maxOf { hypot(it.center.x.toDouble(), it.center.z.toDouble()) }
+        val start = cage(0)
+        val rise = cage(8)
+        val closed = cage(20)
+        start.map { it.identity } shouldBe rise.map { it.identity }
+        rise.map { it.identity } shouldBe closed.map { it.identity }
         (volume(0) < volume(8)) shouldBe true
-        (volume(8) < volume(18)) shouldBe true
-        (volume(44) < volume(18)) shouldBe true
-        fun pollen(age: Int) = staffArsenalParticles(StaffSpell.NOVA, age, 48, 3.0, true, 1.0)
+        (outerRadius(20) < outerRadius(8)) shouldBe true
+        (volume(44) < volume(20)) shouldBe true
+        fun pollenRadius(age: Int) = staffArsenalParticles(StaffSpell.NOVA, age, 48, 3.0, true, 1.0)
             .maxOf { hypot(it.offset.x, it.offset.z) }
-        (pollen(30) > pollen(20)) shouldBe true
+        (pollenRadius(20) < pollenRadius(8)) shouldBe true
     }
 
     "physical arsenal sequences retain identities and shrink before cleanup" {

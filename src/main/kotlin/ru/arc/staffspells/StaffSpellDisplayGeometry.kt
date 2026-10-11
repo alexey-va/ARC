@@ -60,7 +60,7 @@ internal fun staffDisplayParts(
     if (input.quick) return emptyList()
     val chargeLevel = charge.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
     val arsenal = spell == StaffSpell.NOVA || spell == StaffSpell.LUNAR || spell == StaffSpell.GALE ||
-        spell == StaffSpell.TIDE || spell == StaffSpell.REQUIEM || spell == StaffSpell.PRISM
+        spell == StaffSpell.TIDE || spell == StaffSpell.REQUIEM || spell == StaffSpell.PRISM || spell == StaffSpell.OSSUARY
     val parts = when (spell) {
     StaffSpell.CHAIN -> chainDisplayParts(ageTicks, durationTicks, length, radius, impact)
     StaffSpell.MARK -> if (secondary) singularityDisplayParts(ageTicks, durationTicks, radius, impact, animationAgeTicks)
@@ -70,8 +70,9 @@ internal fun staffDisplayParts(
     StaffSpell.ICICLE -> staffIcicleDisplayParts(ageTicks, impact, chargeLevel)
     StaffSpell.FAULT -> staffFaultDisplayParts(ageTicks, durationTicks, radius, secondary)
     StaffSpell.LANCE -> staffSolarDisplayParts(ageTicks, durationTicks, length, impact)
+    StaffSpell.GRAVITY, StaffSpell.INFERNO -> staffChannelParts(spell, ageTicks, durationTicks, length, radius, impact, secondary)
     StaffSpell.EMBER -> emberDisplayParts(ageTicks, durationTicks, radius, impact, secondary)
-    StaffSpell.NOVA, StaffSpell.LUNAR, StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM, StaffSpell.PRISM ->
+    StaffSpell.NOVA, StaffSpell.LUNAR, StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM, StaffSpell.PRISM, StaffSpell.OSSUARY ->
         staffArsenalParts(spell, ageTicks, durationTicks, length, radius, impact, secondary, input, charge = chargeLevel)
     else -> emptyList() // NECROMANCER geometry is supplied by its owning spell implementation.
     }
@@ -80,7 +81,7 @@ internal fun staffDisplayParts(
     val tracked = !impact && spell in setOf(StaffSpell.MARK, StaffSpell.EMBER)
     val birth = when {
         impact && (arsenal || spell in setOf(StaffSpell.MARK, StaffSpell.EMBER, StaffSpell.ICICLE)) -> 1.0
-        spell == StaffSpell.EMBER -> smooth(ageTicks / 16.0)
+        spell == StaffSpell.EMBER -> .68 + .32 * smooth(ageTicks / 6.0)
         else -> smooth(ageTicks / 4.0)
     }
     val lastFrame = (durationTicks - StaffSpellDisplayEffects.FRAME_TICKS).coerceAtLeast(1)

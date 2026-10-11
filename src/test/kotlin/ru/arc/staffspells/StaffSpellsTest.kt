@@ -111,7 +111,7 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "quick inputs work for every staff and share cooldown with charged casts" {
+    "every staff defense is independent from charged attack cooldown" {
         StaffSpell.entries.forEach { spell ->
             listOf(StaffCastInput.QUICK, StaffCastInput.QUICK_SECONDARY).forEach { input ->
                 withStaffHarness { h ->
@@ -119,7 +119,7 @@ class StaffSpellsTest : FreeSpec({
                     val player = h.player("quick", world, spell)
                     h.controller.start()
                     h.controller.cast(player, input, 0.0)
-                    h.controller.cast(player, StaffCastInput.PRIMARY, 1.0)
+                    h.controller.canCharge(player, spell) shouldBe true
                     h.captures.size shouldBe 1
                     h.scheduler.tick(100)
                 }
@@ -213,7 +213,7 @@ class StaffSpellsTest : FreeSpec({
         withStaffHarness { h ->
             val player = h.paper.addPlayer("all-prototypes")
 
-            StaffSpell.entries.map { it.id } shouldBe listOf("chain", "mark", "frost", "lance", "ember", "nova", "icicle", "fault", "lunar", "gale", "tide", "requiem", "prism", "necromancer")
+            StaffSpell.entries.map { it.id } shouldBe listOf("chain", "mark", "frost", "lance", "ember", "nova", "icicle", "fault", "lunar", "gale", "tide", "requiem", "prism", "necromancer", "inferno", "gravity", "ossuary")
             h.controller.give(player, StaffSpell.entries) shouldBe true
 
             player.inventory.storageContents.filterNotNull().mapNotNull { StaffSpell.from(it) } shouldBe
@@ -556,7 +556,7 @@ class StaffSpellsTest : FreeSpec({
         withStaffHarness { h ->
             val world = h.paper.addSimpleWorld("staff-empty-casts")
             val player = h.player("staff-empty-casts", world, StaffSpell.CHAIN)
-            val spells = StaffSpell.entries
+            val spells = StaffSpell.entries.filterNot { it in setOf(StaffSpell.NECROMANCER, StaffSpell.INFERNO, StaffSpell.GRAVITY) }
             h.controller.start()
 
             spells.forEachIndexed { index, spell ->
@@ -581,14 +581,16 @@ class StaffSpellsTest : FreeSpec({
             h.controller.start()
             h.controller.cast(player)
             h.scheduler.tick(20)
-            val distances = listOf(player.eyeLocation) + h.movedEffects.map { it.second }
+            val muzzle = h.visualPlays.single().from
+            (kotlin.math.abs(muzzle.distance(player.eyeLocation) - 2.4) < .0001) shouldBe true
+            val distances = listOf(muzzle) + h.movedEffects.map { it.second }
             val steps = distances.zipWithNext().map { (a, b) -> a.distance(b) }
             steps.size shouldBe 10
             steps.zipWithNext().all { (a, b) -> b + 0.000001 >= a } shouldBe true
             (steps.last() > steps.first() * 3.0) shouldBe true
             (distances.last().z > distances.first().z) shouldBe true
 
-            val actualHead = player.eyeLocation.z + (1..20).sumOf { staffEmberStep(it, 1.2) }
+            val actualHead = muzzle.z + (1..20).sumOf { staffEmberStep(it, 1.2) }
             val victim = h.zombie(world, 0.5, actualHead + 1.3)
             h.scheduler.tick(1)
             h.hits shouldBe listOf(victim)
@@ -664,7 +666,7 @@ class StaffSpellsTest : FreeSpec({
             h.scheduler.tick(8)
 
             h.hits.map { it.uniqueId } shouldBe listOf(target.uniqueId)
-            verify(exactly = 1) { h.effects.impact(any(), any(), any(), any()) }
+            h.visualPlays.single().impact shouldBe true // Target lies in the release-time muzzle sweep.
 
             h.hits.clear()
             val wallWorld = h.paper.addSimpleWorld("staff-ember-wall")
@@ -677,7 +679,7 @@ class StaffSpellsTest : FreeSpec({
 
             h.hits shouldBe emptyList()
             val wallKeys = h.movedEffects.filter { it.second.world == wallWorld }.map { it.second }
-            wallKeys.isNotEmpty() shouldBe true
+            verify(exactly = 1) { h.effects.impact(any(), match { it.world == wallWorld && it.z < 3.0 }, any(), any()) }
             wallKeys.all { it.z < 3.0 } shouldBe true
             val mobKeys = h.movedEffects.filter { it.second.world == hitWorld }.map { it.second }
             mobKeys.all { it.z <= target.boundingBox.minZ - 0.25 + 0.00001 } shouldBe true
@@ -685,7 +687,7 @@ class StaffSpellsTest : FreeSpec({
             h.hits.clear()
             val cancelledWorld = h.paper.addSimpleWorld("staff-ember-quit")
             val quitting = h.player("staff-ember-quit", cancelledWorld, StaffSpell.EMBER)
-            h.zombie(cancelledWorld, x = 0.5, z = 3.2)
+            h.zombie(cancelledWorld, x = 0.5, z = 7.2) // Beyond the synchronous release sweep.
             h.controller.cast(quitting)
             h.controller.onQuit(PlayerQuitEvent(quitting, Component.empty()))
             h.scheduler.tick(10)
@@ -1220,6 +1222,7 @@ internal data class StaffVisualPlay(
     val from: Location,
     val to: Location,
     val secondary: Boolean,
+    val impact: Boolean,
 )
 
 internal fun withStaffHarness(
@@ -1235,6 +1238,8 @@ internal fun withStaffHarness(
         val scheduler = TestTaskScheduler()
         mockkConstructor(WorldMock::class)
         try {
+            // This fixture is a fully loaded combat map; unloaded and partial-shape rays have their own contract spec.
+            every { anyConstructed<WorldMock>().isChunkLoaded(any<Int>(), any<Int>()) } returns true
             every {
                 anyConstructed<WorldMock>().rayTraceBlocks(
                     any<Location>(), any<Vector>(), any<Double>(), any<FluidCollisionMode>(), any<Boolean>(),
@@ -1288,7 +1293,7 @@ internal fun withStaffHarness(
                     every { effects.play(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) } answers {
                         val id = UUID.randomUUID()
                         visualPlays += StaffVisualPlay(id, arg<StaffSpell>(1), arg<Location>(2).clone(),
-                            arg<Location>(3).clone(), arg<Boolean>(7))
+                            arg<Location>(3).clone(), arg<Boolean>(7), arg<Boolean>(6))
                         id
                     }
                     val movedEffects = mutableListOf<Pair<UUID, Location>>()

@@ -20,7 +20,7 @@ class StaffSpellGesturesTest : FreeSpec({
         }
 
         MockBukkitTestRuntime.open().use {
-            StaffSpell.entries.forEach { spell ->
+            StaffSpell.entries.filterNot { it in setOf(StaffSpell.INFERNO, StaffSpell.GRAVITY, StaffSpell.OSSUARY) }.forEach { spell ->
                 val primary = staffGestureFrame(spell, StaffCastInput.QUICK, ageTicks = 10, reach = 6.0)
                 val secondary = staffGestureFrame(spell, StaffCastInput.QUICK_SECONDARY, ageTicks = 10, reach = 6.0)
 

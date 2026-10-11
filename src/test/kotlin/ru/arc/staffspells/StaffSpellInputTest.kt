@@ -141,23 +141,24 @@ class StaffSpellInputTest : FreeSpec({
         }
     }
 
-    "left click casts the quick input once and staff cannot break blocks or melee normally" {
+    "left click defends without charge permission and duplicate attack input is ignored" {
         withInputHarness { h ->
             val world = h.paper.addSimpleWorld("staff-quick")
             val player = h.staffPlayer("staff-quick", world, StaffSpell.FAULT).apply { isSneaking = true }
+            h.actions.usable = false
             h.input.start()
             h.input.onInteract(PlayerInteractEvent(player, Action.LEFT_CLICK_AIR,
                 player.inventory.itemInMainHand, null, BlockFace.SELF, EquipmentSlot.HAND))
 
-            h.actions.casts.size shouldBe 1
-            h.actions.casts.single().input shouldBe StaffCastInput.QUICK_SECONDARY
-            h.actions.casts.single().charge shouldBe 0.0
+            h.actions.defenses shouldBe listOf(InputDefenseCall(player.uniqueId, StaffSpell.FAULT))
+            h.actions.casts shouldBe emptyList()
 
             val target = world.spawn(Location(world, 0.5, 64.0, 3.0), org.bukkit.entity.Zombie::class.java)
             val attack = PrePlayerAttackEntityEvent(player, target, true)
             h.input.onPreAttack(attack)
             attack.isCancelled shouldBe true
-            h.actions.casts.size shouldBe 1
+            h.actions.defenses.size shouldBe 1
+            h.actions.casts shouldBe emptyList()
 
             player.gameMode = org.bukkit.GameMode.CREATIVE
             val block = world.getBlockAt(0, 64, 0).apply { type = Material.STONE }
@@ -167,7 +168,39 @@ class StaffSpellInputTest : FreeSpec({
             h.input.onBlockBreak(breakEvent)
             damage.isCancelled shouldBe true
             breakEvent.isCancelled shouldBe true
-            h.actions.casts.size shouldBe 1
+            h.actions.defenses.size shouldBe 1
+            h.actions.casts shouldBe emptyList()
+        }
+    }
+
+    "channel hold updates and release differs from slot or quit cancellation" {
+        withInputHarness { h ->
+            val world = h.paper.addSimpleWorld("staff-channel-input")
+            val releasing = h.staffPlayer("staff-channel-release", world, StaffSpell.INFERNO)
+            val slotCancel = h.staffPlayer("staff-channel-slot", world, StaffSpell.GRAVITY)
+            val quitCancel = h.staffPlayer("staff-channel-quit", world, StaffSpell.GRAVITY)
+            h.input.start()
+
+            listOf(releasing, slotCancel, quitCancel).forEach { player ->
+                h.input.onInteract(rightClick(player))
+            }
+            h.scheduler.tick(4)
+            h.actions.channelBegins shouldBe listOf(
+                InputDefenseCall(releasing.uniqueId, StaffSpell.INFERNO),
+                InputDefenseCall(slotCancel.uniqueId, StaffSpell.GRAVITY),
+                InputDefenseCall(quitCancel.uniqueId, StaffSpell.GRAVITY),
+            )
+            h.actions.channelUpdates.groupBy { it.playerId }.mapValues { (_, updates) -> updates.map { it.ticksHeld } } shouldBe
+                listOf(releasing, slotCancel, quitCancel).associate { it.uniqueId to listOf(1, 2, 3, 4) }
+
+            h.input.onStopUsing(PlayerStopUsingItemEvent(releasing,
+                releasing.inventory.itemInMainHand.clone(), 12))
+            h.input.onHeldSlot(org.bukkit.event.player.PlayerItemHeldEvent(slotCancel, 0, 1))
+            h.input.onQuit(org.bukkit.event.player.PlayerQuitEvent(quitCancel, net.kyori.adventure.text.Component.empty()))
+
+            h.actions.channelReleases shouldBe listOf(releasing.uniqueId)
+            h.actions.channelCancels shouldBe listOf(slotCancel.uniqueId, quitCancel.uniqueId)
+            h.actions.casts shouldBe emptyList()
         }
     }
 
@@ -197,14 +230,35 @@ class StaffSpellInputTest : FreeSpec({
 
 private data class InputChargeCall(val playerId: UUID, val spell: StaffSpell, val progress: Double)
 private data class InputCastCall(val playerId: UUID, val spell: StaffSpell, val input: StaffCastInput, val charge: Double)
+private data class InputDefenseCall(val playerId: UUID, val spell: StaffSpell)
+private data class InputChannelUpdate(val playerId: UUID, val ticksHeld: Int)
 
 private class RecordingStaffSpellInputActions : StaffSpellInputActions {
     val charges = mutableListOf<InputChargeCall>()
     val casts = mutableListOf<InputCastCall>()
     val cancelled = mutableListOf<UUID>()
+    val defenses = mutableListOf<InputDefenseCall>()
+    val channelBegins = mutableListOf<InputDefenseCall>()
+    val channelUpdates = mutableListOf<InputChannelUpdate>()
+    val channelReleases = mutableListOf<UUID>()
+    val channelCancels = mutableListOf<UUID>()
     var usable = true
+    var channelUsable = true
 
     override fun canCharge(player: org.bukkit.entity.Player, spell: StaffSpell) = usable
+    override fun defend(player: org.bukkit.entity.Player, spell: StaffSpell) {
+        defenses += InputDefenseCall(player.uniqueId, spell)
+    }
+    override fun beginChannel(player: org.bukkit.entity.Player, spell: StaffSpell): Boolean {
+        channelBegins += InputDefenseCall(player.uniqueId, spell)
+        return channelUsable
+    }
+    override fun updateChannel(player: org.bukkit.entity.Player, ticksHeld: Int): Boolean {
+        channelUpdates += InputChannelUpdate(player.uniqueId, ticksHeld)
+        return channelUsable
+    }
+    override fun releaseChannel(player: org.bukkit.entity.Player) { channelReleases += player.uniqueId }
+    override fun cancelChannel(player: org.bukkit.entity.Player) { channelCancels += player.uniqueId }
     override fun cast(player: org.bukkit.entity.Player, input: StaffCastInput, charge: Double) {
         casts += InputCastCall(player.uniqueId, StaffSpell.from(player.inventory.itemInMainHand)!!, input, charge)
         usable = false

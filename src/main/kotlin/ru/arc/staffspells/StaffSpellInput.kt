@@ -67,6 +67,11 @@ internal fun staffChargeProgress(ticksHeld: Int): Double =
 
 internal interface StaffSpellInputActions {
     fun canCharge(player: Player, spell: StaffSpell): Boolean
+    fun defend(player: Player, spell: StaffSpell) = cast(player, StaffCastInput.of(player.isSneaking, true), 0.0)
+    fun beginChannel(player: Player, spell: StaffSpell): Boolean = false
+    fun updateChannel(player: Player, ticksHeld: Int): Boolean = false
+    fun releaseChannel(player: Player) {}
+    fun cancelChannel(player: Player) {}
     fun cast(player: Player, input: StaffCastInput, charge: Double)
     fun charge(player: Player, spell: StaffSpell, progress: Double)
     fun cancelCharge(player: Player)
@@ -87,6 +92,7 @@ internal class StaffSpellInput(
     )
 
     private val charges = mutableMapOf<UUID, Charge>()
+    private val lastDefenseTick = mutableMapOf<UUID, Int>()
     private var started = false
     private var closed = false
 
@@ -103,6 +109,7 @@ internal class StaffSpellInput(
     fun cancel(playerId: UUID) {
         val charge = charges.remove(playerId) ?: return
         Bukkit.getPlayer(playerId)?.let { player ->
+            if (isChannel(charge.spell)) actions.cancelChannel(player)
             actions.cancelCharge(player)
             if (player.hasActiveItem() && player.activeItemHand == EquipmentSlot.HAND &&
                 StaffSpell.from(player.activeItem) == charge.spell) player.clearActiveItem()
@@ -169,13 +176,17 @@ internal class StaffSpellInput(
             event.item.isSimilar(charge.item)
 
         actions.cancelCharge(player)
+        if (isChannel(charge.spell)) {
+            if (stillCurrent) actions.releaseChannel(player) else actions.cancelChannel(player)
+            return
+        }
         if (stillCurrent && actions.canCharge(player, charge.spell)) {
             actions.cast(player, StaffCastInput.of(charge.sneaking, quick = false), staffChargeProgress(ticksHeld))
         }
     }
 
     /** Stops vanilla melee before damage is calculated; interaction and attack events own input. */
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGHEST)
     fun onPreAttack(event: PrePlayerAttackEntityEvent) {
         val player = event.player
         val spell = StaffSpell.from(player.inventory.itemInMainHand) ?: return
@@ -229,13 +240,14 @@ internal class StaffSpellInput(
     fun onDeath(event: PlayerDeathEvent) = cancel(event.player.uniqueId)
 
     @EventHandler(priority = EventPriority.HIGHEST)
-    fun onQuit(event: PlayerQuitEvent) = cancel(event.player.uniqueId)
+    fun onQuit(event: PlayerQuitEvent) { cancel(event.player.uniqueId); lastDefenseTick.remove(event.player.uniqueId) }
 
     override fun close() {
         if (closed) return
         closed = true
         HandlerList.unregisterAll(this)
         charges.keys.toList().forEach(::cancel)
+        lastDefenseTick.clear()
         tasks.close()
     }
 
@@ -253,10 +265,11 @@ internal class StaffSpellInput(
         if (player.uniqueId in charges) return true
         if (!actions.canCharge(player, spell)) return false
 
+        if (isChannel(spell) && !actions.beginChannel(player, spell)) return false
         val charge = Charge(spell, player.inventory.heldItemSlot, player.world.uid,
             player.isSneaking, item.clone())
         charges[player.uniqueId] = charge
-        actions.charge(player, spell, 0.0)
+        if (!isChannel(spell)) actions.charge(player, spell, 0.0)
         return true
     }
 
@@ -266,10 +279,10 @@ internal class StaffSpellInput(
     }
 
     private fun castQuick(player: Player, spell: StaffSpell) {
+        val tick = Bukkit.getCurrentTick()
+        if (lastDefenseTick.put(player.uniqueId, tick) == tick) return
         cancel(player.uniqueId)
-        if (actions.canCharge(player, spell)) {
-            actions.cast(player, StaffCastInput.of(player.isSneaking, quick = true), 0.0)
-        }
+        actions.defend(player, spell)
     }
 
     private fun tickCharges() {
@@ -285,7 +298,9 @@ internal class StaffSpellInput(
                 cancel(playerId)
                 return@forEach
             }
-            if (charge.ticksHeld % STAFF_CHARGE_DELAY_TICKS == 0) {
+            if (isChannel(charge.spell)) {
+                if (!actions.updateChannel(player, charge.ticksHeld)) cancel(playerId)
+            } else if (charge.ticksHeld % STAFF_CHARGE_DELAY_TICKS == 0) {
                 actions.charge(player, charge.spell, staffChargeProgress(charge.ticksHeld))
             }
         }
@@ -299,6 +314,8 @@ internal class StaffSpellInput(
             (!requireActiveUse || (player.hasActiveItem() && player.activeItemHand == EquipmentSlot.HAND &&
                 StaffSpell.from(player.activeItem) == charge.spell))
     }
+
+    private fun isChannel(spell: StaffSpell) = spell == StaffSpell.INFERNO || spell == StaffSpell.GRAVITY
 
     private fun upgradeHeldStaff(player: Player) = upgradeStaffSlot(player, player.inventory.heldItemSlot)
 

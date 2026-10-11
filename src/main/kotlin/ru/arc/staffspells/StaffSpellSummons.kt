@@ -64,8 +64,8 @@ internal class StaffSpellSummons(
         tasks.runTimer(1, 1, ::tick)
     }
 
-    fun cast(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning, input: StaffCastInput, charge: Double) {
-        if (closed || !started || input.quick || cast.casterId != player.uniqueId || !ready(player, cast)) return
+    fun cast(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning, input: StaffCastInput, charge: Double): Boolean {
+        if (closed || !started || input.quick || cast.casterId != player.uniqueId || !ready(player, cast)) return false
         val commander = input.secondary
         val progress = charge.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
         val requested = if (commander) 1 else (2 + (progress * 2.0).toInt()).coerceIn(2, 4)
@@ -74,7 +74,7 @@ internal class StaffSpellSummons(
             .mapNotNull { safeSpawnLocation(it, commander) }
             .take(requested)
             .toList()
-        if (spawnPoints.size < if (commander) 1 else 2) return
+        if (spawnPoints.size < if (commander) 1 else 2) return false
 
         cancel(player.uniqueId)
         while (activeActorCount() + spawnPoints.size > MAX_ACTORS) {
@@ -88,8 +88,9 @@ internal class StaffSpellSummons(
                 session.actors += Actor(mob, commander)
             }
         }
-        if (session.actors.isEmpty()) return
+        if (session.actors.isEmpty()) return false
         sessions[player.uniqueId] = session
+        return true
     }
 
     fun cancel(casterId: UUID) {

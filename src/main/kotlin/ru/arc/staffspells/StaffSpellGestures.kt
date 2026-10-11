@@ -115,6 +115,7 @@ internal fun staffGestureProfile(spell: StaffSpell, input: StaffCastInput): Staf
             StaffGestureControl.SLOW)
         else StaffGestureProfile(StaffGestureForm.NECROMANCER_BONE, StaffGestureContact.ADVANCE,
             StaffGestureAnchor.FORWARD, 7.0, 1.6, 0.8, 18, 5)
+        else -> error("${spell.id} has no retired quick attack; LMB uses StaffSpellDefense")
     }
 }
 
@@ -766,6 +767,7 @@ internal class StaffSpellGestures(
         StaffSpell.REQUIEM, StaffSpell.NECROMANCER -> Sound.ENTITY_PHANTOM_FLAP
         StaffSpell.PRISM -> Sound.BLOCK_BEACON_POWER_SELECT
         StaffSpell.NOVA -> Sound.BLOCK_ROOTED_DIRT_BREAK
+        else -> Sound.ITEM_SHIELD_BLOCK
     }
 
     private companion object {
