@@ -254,7 +254,7 @@ private fun withPreparedMapCatalog(
         )
         val rewards = CatalogPhysicalRewards(settings, frozen = FrozenPhysicalRewards(root))
         val snapshots = requireNotNull(rewards.captureInteractiveArchives())
-        rewards.persistInteractiveArchives(snapshots) shouldBe true
+        persistInteractiveArchivesForTest(rewards, snapshots) shouldBe true
         val materialization = requireNotNull(rewards.materialization(map))
         block(rewards, materialization.sourceKey)
     } finally {

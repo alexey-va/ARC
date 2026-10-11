@@ -81,11 +81,19 @@ test. MockBukkit 4.116.3 drops its modern component map on `ItemStack.clone()`;
 those tests prove the adapter assignment and preserved native metadata, not the
 Paper serialized-frame round trip or client rendering.
 
-`parent` forms folders up to four levels deep. A case has `rolls: 1` and positive
-entry `weight`; displayed odds come from the same normalized weights. These
+`parent` forms folders up to four levels deep. A case has `rolls: 1` and nonnegative
+entry `weight`, with at least one positive outcome. Weight zero retires an outcome
+from the displayed pool and coverage while retaining its ID for pending reward
+delivery. Displayed odds use only positive weights. These
 are future case compositions, not automatic daily/rank acquisition. With
 `require-case-coverage: true`, every non-planned base reward (source plus
 explicit enchantments) must occur in a case or the configuration is rejected.
+
+`native-crate-key: key_id` describes an existing native ExcellentCrates key
+outcome in a case. Include its actual weight so all displayed odds match the
+native pool. ARC shows the authored icon when ExcellentCrates is enabled but
+never grants, freezes or materializes this preview, even for operators; the
+native crate engine remains the sole issuer of that outcome.
 
 Furniture uses root `packages: {id: {name, items, min-rolls, max-rolls, weights}}`
 and entry `package: id`. Each package lists 1–216 distinct ItemsAdder IDs;
@@ -156,12 +164,12 @@ full-size chest and up to six terrain-checked stone, plank and lantern props.
 The scene has no drops, native entities or world-block mutations; the existing
 map right-click within three blocks still enters the shared one-use claim.
 It does not generate chunks or place blocks. Holding a bound map restores its
-renderer after reload or backend transfer. Current definitions and provider
-content must match across backends so warmup archives have identical
-addresses; historical archive files are retained. Older destination-only map
+renderer after reload or backend transfer. Historical recipes are shared by
+their exact content address; provider integrations must still be available
+where a reward is redeemed. Historical archive files are retained. Older destination-only map
 vouchers keep their UUID, fingerprint and shared claim scope when resolving the
-current policy and configured prize. The runtime retries unavailable
-startup providers for up to 60 seconds. Map rendering and real backend transfer
+current policy and configured prize. The runtime retries pending provider
+captures every 60 seconds without delaying already-published rewards. Map rendering and real backend transfer
 require a native-client check; unit tests cover identity, bounded selection,
 archive and claim rules only.
 
@@ -217,10 +225,24 @@ disabled and contains no credentials. It claims before any effect, commits prove
 only a proven refusal without a value mutation. Unknown outcomes retain the
 item and durable recovery ownership; they never automatically retry. The
 source key and immutable source fingerprint are bound to the voucher UUID.
-Changing a source definition makes old vouchers unavailable for manual
-reconciliation, rather than silently changing their reward.
+Changing a source definition does not change an existing voucher's reward. If
+its exact archived record cannot be recovered, the voucher stays unavailable
+for manual reconciliation rather than silently changing its reward.
 On reload/shutdown, the module lets started claims settle before closing their
 SQL pool. A bounded drain timeout preserves unresolved ownership for recovery.
+
+Frozen provider-backed recipes use a separate immutable archive table in that
+same database. Startup backfills the node-local journal in bounded batches,
+publishing choice and map children before their parents. A node receiving a
+voucher with a local cache miss fetches its exact fingerprint graph
+asynchronously, validates Bukkit item data on the Paper thread, and only then
+continues through the existing one-use journal. A missing fingerprint and a
+shared-storage failure are logged separately; neither can substitute the
+current catalogue reward. Shared publication retries transient failures with
+backoff capped at 60 seconds while the module is active. Later provider captures
+publish only newly confirmed fingerprints. Reward health reports archive
+readiness, backfill counts and pending provider sources separately without
+including recipe payloads.
 
 The finite command adapter accepts only native ArcBuilder books, ArcEcoJobs
 booster items, EliteMobs item issuers and the existing AE treasure type. It

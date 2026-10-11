@@ -20,6 +20,7 @@ import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
 import ru.arc.mounts.MountMoneyEvidence
+import ru.arc.mounts.MountModule
 import ru.arc.mounts.MountWallet
 import ru.arc.mounts.RedisEconomyMountWallet
 import ru.arc.hooks.RedisEcoHook
@@ -33,6 +34,7 @@ import ru.arc.hooks.HookRegistry
 import java.util.UUID
 import java.nio.file.Files
 import java.util.Comparator
+import java.util.concurrent.CompletableFuture
 
 class CatalogPhysicalRewardsTest : StringSpec({
     "personal map preview uses short fallback lore only when the entry has no description" {
@@ -376,6 +378,8 @@ class CatalogPhysicalRewardsTest : StringSpec({
                 )
                 service.isVoucherSource(seal) shouldBe true
                 service.key(seal) shouldBe "seal:set_frost"
+                service.materialization(seal) shouldBe null
+                persistPhysicalArchivesForTest(service) shouldBe true
                 val materialization = requireNotNull(service.materialization(seal))
                 val record = requireNotNull(archive.find("frozen:${materialization.providerFingerprint}"))
                 record.recipe.sealItems?.size shouldBe 2
@@ -405,14 +409,85 @@ class CatalogPhysicalRewardsTest : StringSpec({
                         "missing", null, emptyList(), null, emptyList(), RewardCatalogSource.Treasure(poolId, "missing"), null,
                     ),
                 )
-                CatalogPhysicalRewards(
+                val unavailableService = CatalogPhysicalRewards(
                     settings(unavailable),
                     frozen = FrozenPhysicalRewards(root),
                     sealStack = { categoryId, _ -> CollectionSealIdentity.mark(ItemStack(Material.PAPER), categoryId) },
-                ).materialization(seal) shouldBe null
+                )
+                persistPhysicalArchivesForTest(unavailableService) shouldBe true
+                unavailableService.materialization(seal) shouldBe null
             } finally {
                 Files.walk(root).use { paths -> paths.sorted(Comparator.reverseOrder()).forEach(Files::deleteIfExists) }
                 unmockkObject(Treasures)
+            }
+        }
+    }
+
+    "a late optional provider is captured without delaying healthy vouchers or republishing them" {
+        MockBukkitTestRuntime.open().use {
+            val root = Files.createTempDirectory("arc-catalog-provider-retry")
+            var lateProviderAvailable = false
+            mockkObject(MountModule)
+            every { MountModule.rewardPreview(any()) } answers {
+                val id = firstArg<String>()
+                if (id == "late" && !lateProviderAvailable) null else ItemStack(Material.SADDLE)
+            }
+            try {
+                fun mountEntry(id: String) = RewardCatalogEntry(
+                    id = id,
+                    name = id,
+                    description = emptyList(),
+                    rarity = null,
+                    requires = emptyList(),
+                    source = RewardCatalogSource.Mount(id),
+                    icon = CatalogIconStyle(Material.SADDLE.name),
+                )
+                val healthy = mountEntry("healthy")
+                val late = mountEntry("late")
+                val settings = RewardCatalogSettings(
+                    enabled = true,
+                    title = "Каталог",
+                    categories = listOf(
+                        RewardCatalogCategory("mounts", "Маунты", emptyList(), CatalogIconStyle("CHEST"), listOf(healthy, late)),
+                    ),
+                    messages = RewardCatalogMessages.DEFAULT,
+                )
+                val publishedFingerprints = mutableListOf<String>()
+                val shared = object : SharedPhysicalRewardArchiveRepository {
+                    override fun publishBatch(records: List<FrozenPhysicalRewardRecord>): CompletableFuture<Unit> {
+                        publishedFingerprints += records.map(FrozenPhysicalRewardRecord::fingerprint)
+                        return CompletableFuture.completedFuture(Unit)
+                    }
+
+                    override fun fetch(fingerprint: String): CompletableFuture<ByteArray?> =
+                        CompletableFuture.completedFuture(null)
+
+                    override fun status() = SharedPhysicalRewardArchiveStatus(ready = true)
+                    override fun close() = Unit
+                }
+                val rewards = CatalogPhysicalRewards(settings, frozen = FrozenPhysicalRewards(root))
+
+                val firstCapture = requireNotNull(rewards.capturePhysicalArchives())
+                firstCapture.snapshots.size shouldBe 1
+                rewards.pendingArchiveSourceCount() shouldBe 1
+                rewards.persistPhysicalArchives(firstCapture, shared).failureCause shouldBe null
+                val healthyMaterialization = requireNotNull(rewards.materialization(healthy))
+                rewards.materialization(late) shouldBe null
+                publishedFingerprints.size shouldBe 1
+
+                lateProviderAvailable = true
+                val retryCapture = requireNotNull(rewards.capturePhysicalArchives())
+                retryCapture.snapshots.size shouldBe 1
+                rewards.pendingArchiveSourceCount() shouldBe 0
+                rewards.persistPhysicalArchives(retryCapture, shared).failureCause shouldBe null
+
+                rewards.materialization(healthy) shouldBe healthyMaterialization
+                rewards.materialization(late)?.sourceKey shouldBe "frozen:${publishedFingerprints.last()}"
+                publishedFingerprints.size shouldBe 2
+                publishedFingerprints.distinct().size shouldBe 2
+            } finally {
+                unmockkObject(MountModule)
+                Files.walk(root).use { paths -> paths.sorted(Comparator.reverseOrder()).forEach(Files::deleteIfExists) }
             }
         }
     }

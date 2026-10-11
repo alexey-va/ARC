@@ -38,10 +38,24 @@ import java.util.Base64
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.ThreadLocalRandom
 
 /** Converts provider-backed sources into durable physical entitlements. Native effects run only after a durable claim. */
+internal data class PhysicalRewardArchiveCapture(
+    val snapshots: List<FrozenPhysicalPrepared>,
+    val complete: Boolean,
+)
+
+private data class InteractivePhysicalArchiveCapture(
+    val snapshots: List<FrozenPhysicalPrepared>,
+    val pendingSourceKeys: Set<String>,
+)
+
+private class SharedPhysicalRewardArchivePublishException(val causeClass: String) : RuntimeException()
+
+private fun Throwable.rootCauseName(): String =
+    generateSequence(this) { it.cause }.last().javaClass.simpleName
+
 internal class CatalogPhysicalRewards(
     private val settings: RewardCatalogSettings,
     private val wallets: MountWallet? = null,
@@ -51,8 +65,9 @@ internal class CatalogPhysicalRewards(
 ) {
     private val particlePresets by lazy { ParticlePresetRewards() }
     private val treasureStackFactory by lazy { TreasureStackFactory() }
-    private val preparedInteractive = ConcurrentHashMap<String, PhysicalRewardMaterialization>()
-    private val interactiveReady = AtomicBoolean(false)
+    private val publishedMaterializations = ConcurrentHashMap<String, PhysicalRewardMaterialization>()
+    private val sharedPublishedFingerprints = ConcurrentHashMap.newKeySet<String>()
+    @Volatile private var pendingArchiveSources: Set<String> = emptySet()
     private val entries = settings.categories.filter { it.rolls == null }.flatMap { it.entries }
         .plus(settings.categories.filter { it.rolls != null }.flatMap { it.entries })
         .distinctBy { key(it) }.associateBy { key(it) }
@@ -119,61 +134,99 @@ internal class CatalogPhysicalRewards(
     fun materialization(entry: RewardCatalogEntry): PhysicalRewardMaterialization? = runCatching {
         if (!isVoucherSource(entry)) return null
         val sourceKey = key(entry)
-        if (entry.source is RewardCatalogSource.Choice || entry.source is RewardCatalogSource.PersonalMap) {
-            if (!interactiveReady.get()) return null
-            return preparedInteractive[sourceKey]
-        }
-        val spec = resolve(sourceKey) ?: return null
         // Fixed, allowlisted entitlements must resolve on either backend without a local recipe archive.
         if (entry.source is RewardCatalogSource.ParticlePreset) {
+            val spec = resolve(sourceKey) ?: return null
             return PhysicalRewardMaterialization(sourceKey, spec.fingerprint.sha256)
         }
-        val archive = frozen ?: return null
-        val recipe = freezeRecipe(entry) ?: return null
-        if (!frozenProvidersReady(recipe)) return null
-        val archived = archive.prepare(sourceKey, recipe, RewardItemPresentation.tooltip(spec.preview, entry)) ?: return null
-        if (entry.source is RewardCatalogSource.Seal) {
-            val categoryId = archive.archivedCategoryId(archived.sourceKey) ?: return null
-            return PhysicalRewardMaterialization(categoryId, archived.providerFingerprint)
-        }
-        return archived
+        publishedMaterializations[sourceKey]
     }.getOrNull()
 
+    /** Fetches an exact shared archive graph; deserialization remains on the Paper owner thread. */
+    fun fetchSharedArchive(key: String, repository: SharedPhysicalRewardArchiveRepository): CompletableFuture<FrozenPhysicalArchiveLookup> {
+        val fingerprint = key.removePrefix("frozen:").takeIf { key.startsWith("frozen:") }
+            ?.takeIf { it.matches(FINGERPRINT) }
+            ?: return CompletableFuture.completedFuture(FrozenPhysicalArchiveLookup.Missing(key))
+        val archive = frozen ?: return CompletableFuture.failedFuture(IllegalStateException("local archive unavailable"))
+        return archive.fetchReachable(fingerprint, repository)
+    }
+
+    /** Validates and caches fetched records on the Paper owner thread, then resolves the unchanged bearer key. */
+    fun importSharedArchive(key: String, lookup: FrozenPhysicalArchiveLookup): PhysicalRewardSpec? {
+        val archive = frozen ?: return null
+        return when (lookup) {
+            is FrozenPhysicalArchiveLookup.Missing -> null
+            is FrozenPhysicalArchiveLookup.Found -> {
+                if (!archive.importShared(lookup.payloads)) return null
+                resolve(key)
+            }
+        }
+    }
+
     /** Captures all configured choice children and parent recipes on the Bukkit owner thread. */
-    fun captureInteractiveArchives(): List<FrozenPhysicalPrepared>? = runCatching {
-        val archive = frozen ?: return@runCatching emptyList()
+    fun captureInteractiveArchives(): List<FrozenPhysicalPrepared>? = captureInteractiveArchiveSet()
+        ?.takeIf { it.pendingSourceKeys.isEmpty() }
+        ?.snapshots
+
+    private fun captureInteractiveArchiveSet(): InteractivePhysicalArchiveCapture? = runCatching {
+        val archive = frozen ?: return@runCatching InteractivePhysicalArchiveCapture(emptyList(), emptySet())
         val interactiveEntries = entries.values.filter {
             it.source is RewardCatalogSource.Choice || it.source is RewardCatalogSource.PersonalMap
         }
         val prepared = linkedMapOf<String, FrozenPhysicalPrepared>()
+        val pending = linkedSetOf<String>()
         fun capture(sourceKey: String, recipe: FrozenPhysicalRecipe, preview: ItemStack): FrozenPhysicalPrepared? {
             val snapshot = archive.capture(sourceKey, recipe, preview) ?: return null
             val previous = prepared.putIfAbsent(snapshot.record.fingerprint, snapshot)
             require(previous == null || previous.record == snapshot.record) { "Choice archive fingerprint collision" }
             return previous ?: snapshot
         }
-        val interactiveSnapshots = mutableListOf<FrozenPhysicalPrepared>()
         fun captureChild(categoryId: String, entryId: String): Pair<RewardCatalogEntry, FrozenPhysicalPrepared>? {
             val (_, child) = settings.entry(categoryId, entryId) ?: return null
-            if (child.source is RewardCatalogSource.Choice || child.source is RewardCatalogSource.PersonalMap) return null
             val childSourceKey = key(child)
-            val childSpec = resolve(childSourceKey) ?: return null
-            val childRecipe = freezeRecipe(child) ?: return null
-            if (!frozenProvidersReady(childRecipe)) return null
+            if (child.source is RewardCatalogSource.Choice || child.source is RewardCatalogSource.PersonalMap) {
+                pending += childSourceKey
+                return null
+            }
+            val alreadyPublished = publishedMaterializations[childSourceKey]?.let { materialization ->
+                frozen?.find("frozen:${materialization.providerFingerprint}")?.takeIf {
+                    it.sourceKey == childSourceKey && it.fingerprint == materialization.providerFingerprint
+                }
+            }
+            if (alreadyPublished != null) {
+                val snapshot = FrozenPhysicalPrepared(alreadyPublished)
+                prepared.putIfAbsent(alreadyPublished.fingerprint, snapshot)
+                return child to snapshot
+            }
+            val childSpec = resolve(childSourceKey) ?: run {
+                pending += childSourceKey
+                return null
+            }
+            val childRecipe = freezeRecipe(child) ?: run {
+                pending += childSourceKey
+                return null
+            }
+            if (!frozenProvidersReady(childRecipe)) {
+                pending += childSourceKey
+                return null
+            }
             val snapshot = capture(
                 childSourceKey,
                 childRecipe,
                 RewardItemPresentation.tooltip(childSpec.preview, child),
-            ) ?: return null
+            ) ?: run {
+                pending += childSourceKey
+                return null
+            }
             return child to snapshot
         }
-        interactiveEntries.forEach { entry ->
+        fun captureParent(entry: RewardCatalogEntry): FrozenPhysicalPrepared? {
             val recipe = when (val source = entry.source) {
                 is RewardCatalogSource.Choice -> {
                     val childSourceKeys = mutableSetOf<String>()
                     val options = source.options.map { ref ->
-                        val (child, archivedChild) = captureChild(ref.categoryId, ref.entryId) ?: return@runCatching null
-                        if (!childSourceKeys.add(key(child))) return@runCatching null
+                        val (child, archivedChild) = captureChild(ref.categoryId, ref.entryId) ?: return null
+                        if (!childSourceKeys.add(key(child))) return null
                         FrozenChoiceOption(
                             id = ref.id,
                             name = child.name ?: ref.id,
@@ -182,12 +235,11 @@ internal class CatalogPhysicalRewards(
                             childFingerprint = archivedChild.materialization.providerFingerprint,
                         )
                     }
-                    if (options.map { it.childKey }.distinct().size != options.size) return@runCatching null
+                    if (options.map { it.childKey }.distinct().size != options.size) return null
                     FrozenPhysicalRecipe(type = "choice", choiceOptions = options)
                 }
                 is RewardCatalogSource.PersonalMap -> {
-                    val (child, archivedChild) = captureChild(source.rewardCategoryId, source.rewardEntryId)
-                        ?: return@runCatching null
+                    val (_, archivedChild) = captureChild(source.rewardCategoryId, source.rewardEntryId) ?: return null
                     FrozenPhysicalRecipe(
                         type = "personal-map",
                         mapId = entry.id,
@@ -205,35 +257,191 @@ internal class CatalogPhysicalRewards(
                         mapSearchAdditionalWorlds = source.searchPolicy.additionalWorlds.sorted().takeIf { it.isNotEmpty() },
                     )
                 }
-                else -> return@forEach
+                else -> return null
             }
-            val composite = capture(
+            return capture(
                 key(entry),
                 recipe,
                 RewardItemPresentation.tooltip(preview(entry), entry),
-            ) ?: return@runCatching null
-            interactiveSnapshots += composite
+            )
+        }
+
+        val interactiveSnapshots = mutableListOf<FrozenPhysicalPrepared>()
+        interactiveEntries.forEach { entry ->
+            if (publishedMaterializations.containsKey(key(entry))) return@forEach
+            val composite = runCatching { captureParent(entry) }.getOrNull()
+            if (composite == null) pending += key(entry) else interactiveSnapshots += composite
         }
         // Interactive parents are persisted after all frozen prize/option records.
-        prepared.values.filter { it.record.recipe.type !in INTERACTIVE_RECIPE_TYPES } +
+        val snapshots = prepared.values.filter { it.record.recipe.type !in INTERACTIVE_RECIPE_TYPES } +
             interactiveSnapshots.distinctBy { it.record.fingerprint }
+        InteractivePhysicalArchiveCapture(snapshots, pending)
     }.getOrNull()
 
-    /** Commits captured interactive children and parents in dependency order on a storage executor. */
-    fun persistInteractiveArchives(snapshots: List<FrozenPhysicalPrepared>): Boolean = runCatching {
-        val archive = frozen ?: return false
-        val materializations = linkedMapOf<String, PhysicalRewardMaterialization>()
-        snapshots.forEach { snapshot ->
-            val materialization = archive.persist(snapshot) ?: return false
-            if (snapshot.record.recipe.type in INTERACTIVE_RECIPE_TYPES) {
-                materializations[snapshot.record.sourceKey] = materialization
-            }
+    /** Captures every currently available provider-backed source, retaining child-before-parent order. */
+    fun capturePhysicalArchives(): PhysicalRewardArchiveCapture? {
+        pendingArchiveSources = emptySet()
+        return runCatching {
+        val archive = frozen ?: return@runCatching PhysicalRewardArchiveCapture(emptyList(), complete = true)
+        val interactiveCapture = captureInteractiveArchiveSet()
+        val pending = linkedSetOf<String>()
+        if (interactiveCapture == null) {
+            entries.values.filter {
+                it.source is RewardCatalogSource.Choice || it.source is RewardCatalogSource.PersonalMap
+            }.forEach { pending += key(it) }
+        } else {
+            pending += interactiveCapture.pendingSourceKeys
         }
-        preparedInteractive.clear()
-        preparedInteractive.putAll(materializations)
-        interactiveReady.set(true)
-        true
-    }.getOrDefault(false)
+        val prepared = linkedMapOf<String, FrozenPhysicalPrepared>()
+        interactiveCapture?.snapshots.orEmpty().forEach { snapshot -> prepared.putIfAbsent(snapshot.record.fingerprint, snapshot) }
+        entries.values.forEach { entry ->
+            if (!isVoucherSource(entry) || entry.source is RewardCatalogSource.Choice ||
+                entry.source is RewardCatalogSource.PersonalMap || entry.source is RewardCatalogSource.ParticlePreset
+            ) return@forEach
+            val sourceKey = key(entry)
+            if (publishedMaterializations.containsKey(sourceKey)) return@forEach
+            val spec = resolve(sourceKey) ?: run {
+                pending += sourceKey
+                return@forEach
+            }
+            val recipe = freezeRecipe(entry) ?: run {
+                pending += sourceKey
+                return@forEach
+            }
+            if (!frozenProvidersReady(recipe)) {
+                pending += sourceKey
+                return@forEach
+            }
+            val snapshot = archive.capture(
+                sourceKey,
+                recipe,
+                RewardItemPresentation.tooltip(spec.preview, entry),
+            ) ?: run {
+                pending += sourceKey
+                return@forEach
+            }
+            val previous = prepared.putIfAbsent(snapshot.record.fingerprint, snapshot)
+            require(previous == null || previous.record == snapshot.record) { "Physical reward archive fingerprint collision" }
+        }
+        val parents = prepared.values.filter { it.record.recipe.type in INTERACTIVE_RECIPE_TYPES }
+        val children = prepared.values.filter { it.record.recipe.type !in INTERACTIVE_RECIPE_TYPES }
+        pendingArchiveSources = pending.toSet()
+        PhysicalRewardArchiveCapture(children + parents, complete = interactiveCapture != null)
+        }.getOrNull()
+    }
+
+    /** Commits local snapshots, then publishes bounded shared batches before exposing materializations. */
+    fun persistPhysicalArchives(
+        capture: PhysicalRewardArchiveCapture,
+        shared: SharedPhysicalRewardArchiveRepository,
+    ): PhysicalRewardArchivePublishResult {
+        var published = 0
+        var batches = 0
+        val archive = frozen ?: return PhysicalRewardArchivePublishResult(0, 0, 0, "local_archive_unavailable")
+        return runCatching {
+        capture.snapshots.forEach { snapshot ->
+            check(archive.persist(snapshot) != null) { "local_archive_persist_failed" }
+        }
+        val records = archive.snapshot().associateBy(FrozenPhysicalRewardRecord::fingerprint)
+        val ordered = dependencyOrderedArchiveRecords(records)
+        val invalidMaterializations = capture.snapshots.mapNotNull { snapshot ->
+            runCatching { archive.reachableGraph(snapshot.record.fingerprint, records) }
+                .exceptionOrNull()
+                ?.let { snapshot.record.fingerprint }
+        }.toSet()
+        ordered.filterNot { it.fingerprint in sharedPublishedFingerprints }
+            .chunked(ARCHIVE_BATCH_SIZE).forEach { batch ->
+            try {
+                shared.publishBatch(batch).join()
+            } catch (failure: Throwable) {
+                throw SharedPhysicalRewardArchivePublishException(failure.rootCauseName())
+            }
+            published += batch.size
+            batches++
+            sharedPublishedFingerprints.addAll(batch.map(FrozenPhysicalRewardRecord::fingerprint))
+        }
+        val materializations = capture.snapshots.mapNotNull { snapshot ->
+            val record = snapshot.record
+            if (record.fingerprint in invalidMaterializations) return@mapNotNull null
+            val value = if (record.recipe.type == "seal") {
+                archive.archivedCategoryId(record.key)?.let { PhysicalRewardMaterialization(it, record.fingerprint) }
+            } else snapshot.materialization
+            value?.let { record.sourceKey to it }
+        }.toMap()
+        publishedMaterializations.putAll(materializations)
+        PhysicalRewardArchivePublishResult(
+            scanned = records.size,
+            published = published,
+            batches = batches,
+            failureCause = when {
+                invalidMaterializations.isNotEmpty() -> "archive_graph_limit"
+                !capture.complete -> "capture_incomplete"
+                else -> null
+            },
+        )
+        }.getOrElse { failure ->
+            PhysicalRewardArchivePublishResult(
+            scanned = frozen?.snapshot()?.size ?: 0,
+            published = published,
+            batches = batches,
+            failureCause = when (failure) {
+                is FrozenPhysicalRewardGraphException -> "archive_graph_${failure.reason}"
+                is SharedPhysicalRewardArchivePublishException -> "shared_publish_${failure.causeClass}"
+                else -> failure.javaClass.simpleName
+            },
+            )
+        }
+    }
+
+    /** Publishes every archived child before its parent, including nested interactive recipes. */
+    private fun dependencyOrderedArchiveRecords(
+        records: Map<String, FrozenPhysicalRewardRecord>,
+    ): List<FrozenPhysicalRewardRecord> {
+        val ordered = mutableListOf<FrozenPhysicalRewardRecord>()
+        val visiting = mutableSetOf<String>()
+        val visited = mutableSetOf<String>()
+
+        fun visit(record: FrozenPhysicalRewardRecord, depth: Int) {
+            if (record.fingerprint in visited) return
+            if (depth > FrozenPhysicalRewards.MAX_REACHABLE_DEPTH) {
+                throw FrozenPhysicalRewardGraphException("depth_limit")
+            }
+            if (!visiting.add(record.fingerprint)) throw FrozenPhysicalRewardGraphException("cycle")
+            try {
+                archivedChildFingerprints(record).forEach { childFingerprint ->
+                    val child = records[childFingerprint]
+                        ?: throw FrozenPhysicalRewardGraphException("missing_child")
+                    visit(child, depth + 1)
+                }
+            } finally {
+                visiting.remove(record.fingerprint)
+            }
+            visited += record.fingerprint
+            ordered += record
+        }
+
+        records.values.forEach { visit(it, 0) }
+        return ordered
+    }
+
+    private fun archivedChildFingerprints(record: FrozenPhysicalRewardRecord): Set<String> = buildSet {
+        record.recipe.choiceOptions.orEmpty().forEach { option ->
+            require(option.childKey == "frozen:${option.childFingerprint}") {
+                "Frozen choice child address does not match its fingerprint"
+            }
+            add(option.childFingerprint)
+        }
+        val childKey = record.recipe.mapPrizeKey
+        val childFingerprint = record.recipe.mapPrizeFingerprint
+        require((childKey == null) == (childFingerprint == null)) { "Frozen map prize address is incomplete" }
+        if (childKey != null && childFingerprint != null) {
+            require(childKey == "frozen:$childFingerprint") { "Frozen map prize address does not match its fingerprint" }
+            add(childFingerprint)
+        }
+    }
+
+    /** Number of provider-backed sources waiting for a later capture retry. */
+    fun pendingArchiveSourceCount(): Int = pendingArchiveSources.size
 
     /** Resolves the exact map definition archived with this bearer source. */
     fun personalMapDefinition(spec: PhysicalRewardSpec): PersonalTreasureMapDefinition? {
@@ -809,9 +1017,9 @@ internal class CatalogPhysicalRewards(
         val mapEntry = entries.values.singleOrNull {
             it.id == mapId && it.source is RewardCatalogSource.PersonalMap
         } ?: return null
-        val prepared = preparedInteractive[key(mapEntry)] ?: return null
-        val parent = frozen?.find(prepared.sourceKey)?.takeIf {
-            it.fingerprint == prepared.providerFingerprint &&
+        val materialization = publishedMaterializations[key(mapEntry)] ?: return null
+        val parent = frozen?.find(materialization.sourceKey)?.takeIf {
+            it.fingerprint == materialization.providerFingerprint &&
                 it.recipe.type == "personal-map" && it.recipe.mapId == mapId
         } ?: return null
         val recipe = parent.recipe
@@ -1336,6 +1544,8 @@ internal class CatalogPhysicalRewards(
 
     companion object {
         private val INTERACTIVE_RECIPE_TYPES = setOf("choice", "personal-map")
+        private val FINGERPRINT = Regex("[a-f0-9]{64}")
+        private const val ARCHIVE_BATCH_SIZE = 4
         private const val UNAVAILABLE = "<red>Награда сейчас недоступна. Предмет сохранён."
         private const val MAX_GRAPH_NODES = 2_048
         private const val MAX_POOL_DEPTH = 8

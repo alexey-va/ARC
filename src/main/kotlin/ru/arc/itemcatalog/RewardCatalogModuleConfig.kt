@@ -93,11 +93,14 @@ class RewardCatalogModuleConfig(private val config: Config) {
         val rolls = if ("rolls" in map) integer(map["rolls"], "categories.$id.rolls") else null
         if (rolls != null) {
             require(rolls == 1) { "categories.$id.rolls must be 1 for a single-outcome case" }
-            require(entries.isNotEmpty() && entries.all { it.weight != null }) {
-                "categories.$id case entries must all have a positive weight"
+            require(entries.isNotEmpty() && entries.all { it.weight != null } && entries.any { it.weight!! > 0 }) {
+                "categories.$id case entries must all have a weight and at least one must be positive"
             }
         } else {
             require(entries.none { it.weight != null }) { "categories.$id weights require rolls: 1" }
+            require(entries.none { it.source is RewardCatalogSource.NativeCrateKey }) {
+                "categories.$id native crate keys require rolls: 1"
+            }
         }
         return RewardCatalogCategory(id, name, description, icon, entries, parent, rolls)
     }
@@ -124,6 +127,7 @@ class RewardCatalogModuleConfig(private val config: Config) {
                 "seal" -> RewardCatalogSource.Seal(requiredId(map.getValue(key), "$path.seal", ID))
                 "itemsadder" -> RewardCatalogSource.ItemsAdder(requiredId(map.getValue(key), "$path.itemsadder", ITEMSADDER_ID))
                 "planned" -> RewardCatalogSource.Planned(requiredId(map.getValue(key), "$path.planned", ID))
+                "native-crate-key" -> RewardCatalogSource.NativeCrateKey(requiredId(map.getValue(key), "$path.native-crate-key", ID))
                 "mount" -> RewardCatalogSource.Mount(requiredId(map.getValue(key), "$path.mount", ID))
                 "package" -> RewardCatalogSource.FurniturePackage(requiredId(map.getValue(key), "$path.package", ID))
                 "dungeon-case" -> RewardCatalogSource.DungeonCase(requiredId(map.getValue(key), "$path.dungeon-case", ID))
@@ -141,7 +145,7 @@ class RewardCatalogModuleConfig(private val config: Config) {
             "$path.icon must use FILLED_MAP for a personal map"
         }
         val weight = if ("weight" in map) integer(map["weight"], "$path.weight") else null
-        require(weight == null || weight in 1..1_000_000) { "$path.weight must be in 1..1000000" }
+        require(weight == null || weight in 0..1_000_000) { "$path.weight must be in 0..1000000" }
         val enchantments = if ("enchantments" in map) {
             require(source is RewardCatalogSource.Treasure || source is RewardCatalogSource.ItemsAdder) {
                 "$path.enchantments requires an equipment source"
@@ -518,7 +522,7 @@ class RewardCatalogModuleConfig(private val config: Config) {
         private val PLUGIN_ID = Regex("[A-Za-z0-9._-]{1,64}")
         private val SOURCE_KEYS = setOf(
             "treasure", "preset", "particle-preset", "pouch", "seal", "itemsadder", "planned", "mount", "package", "dungeon-case",
-            "travel-anchors", "choice", "personal-map",
+            "travel-anchors", "choice", "personal-map", "native-crate-key",
         )
 
         fun load(dataPath: Path): RewardCatalogModuleConfig =

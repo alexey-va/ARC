@@ -8,6 +8,7 @@ import ru.arc.persistence.DurableRecordJournal
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Base64
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -33,6 +34,7 @@ internal class FrozenPhysicalRewards(root: Path) {
         validate = { record -> record.validate(validateBukkitStacks = false) },
     )
     private val records = ConcurrentHashMap<String, FrozenPhysicalRewardRecord>()
+    private val sharedGraphLookups = ConcurrentHashMap<String, CompletableFuture<FrozenPhysicalArchiveLookup>>()
 
     init {
         // A bad archive must not take ARC down. The affected frozen source is
@@ -127,6 +129,170 @@ internal class FrozenPhysicalRewards(root: Path) {
         return records[fingerprint]?.takeIf { it.key == key }
     }
 
+    /** Current local journal snapshot used by the bounded shared-archive backfill. */
+    fun snapshot(): List<FrozenPhysicalRewardRecord> = records.values.toList()
+
+    /**
+     * Fetches a missing content-addressed recipe graph without touching Bukkit
+     * objects. Returned bytes are validated and cached by [importShared] on
+     * the Paper owner thread.
+     */
+    fun fetchReachable(
+        fingerprint: String,
+        shared: SharedPhysicalRewardArchiveRepository,
+    ): CompletableFuture<FrozenPhysicalArchiveLookup> {
+        require(FINGERPRINT.matches(fingerprint)) { "Frozen physical reward fingerprint is invalid" }
+        sharedGraphLookups[fingerprint]?.let { return it }
+        val pending = CompletableFuture<FrozenPhysicalArchiveLookup>()
+        val existing = sharedGraphLookups.putIfAbsent(fingerprint, pending)
+        if (existing != null) return existing
+        try {
+            fetchReachableUncached(fingerprint, shared).whenComplete { value, failure ->
+                if (failure == null) pending.complete(value) else pending.completeExceptionally(failure)
+                sharedGraphLookups.remove(fingerprint, pending)
+            }
+        } catch (failure: Throwable) {
+            pending.completeExceptionally(failure)
+            sharedGraphLookups.remove(fingerprint, pending)
+        }
+        return pending
+    }
+
+    private fun fetchReachableUncached(
+        fingerprint: String,
+        shared: SharedPhysicalRewardArchiveRepository,
+    ): CompletableFuture<FrozenPhysicalArchiveLookup> {
+        val payloads = ConcurrentHashMap<String, ByteArray>()
+        val visited = ConcurrentHashMap.newKeySet<String>()
+        val byteCount = java.util.concurrent.atomic.AtomicLong()
+
+        fun visit(current: String, depth: Int): CompletableFuture<String?> {
+            if (!FINGERPRINT.matches(current)) return CompletableFuture.completedFuture(current)
+            require(depth <= MAX_REACHABLE_DEPTH) { "Frozen physical reward graph is too deep" }
+            if (!visited.add(current)) return CompletableFuture.completedFuture(null)
+            require(visited.size <= MAX_REACHABLE_RECORDS) { "Frozen physical reward graph has too many records" }
+            val local = records[current]
+            val recordFuture: CompletableFuture<Pair<FrozenPhysicalRewardRecord, ByteArray?>?> =
+                if (local != null) {
+                    CompletableFuture.completedFuture(local to null)
+                } else {
+                    shared.fetch(current).thenApply { bytes ->
+                        bytes?.let { payload ->
+                            decodeStructural(payload).also { record ->
+                                require(record.fingerprint == current) { "Shared physical reward fingerprint mismatch" }
+                                payloads.putIfAbsent(current, payload)
+                            } to payload
+                        }
+                    }
+                }
+            return recordFuture.thenCompose { found ->
+                if (found == null) return@thenCompose CompletableFuture.completedFuture(current)
+                val payloadSize = found.second?.size ?: gson.toJson(found.first).toByteArray(Charsets.UTF_8).size
+                require(byteCount.addAndGet(payloadSize.toLong()) <= MAX_REACHABLE_BYTES) {
+                    "Frozen physical reward graph is too large"
+                }
+                var chain = CompletableFuture.completedFuture<String?>(null)
+                referencedFingerprints(found.first).forEach { child ->
+                    chain = chain.thenCompose { missing ->
+                        if (missing != null) CompletableFuture.completedFuture(missing) else visit(child, depth + 1)
+                    }
+                }
+                chain
+            }
+        }
+
+        return visit(fingerprint, 0).thenApply { missing ->
+            if (missing != null) FrozenPhysicalArchiveLookup.Missing(missing)
+            else {
+                val graphRecords = records.toMutableMap()
+                val sizes = mutableMapOf<String, Int>()
+                payloads.forEach { (recordFingerprint, payload) ->
+                    graphRecords[recordFingerprint] = decodeStructural(payload)
+                    sizes[recordFingerprint] = payload.size
+                }
+                reachableGraph(fingerprint, graphRecords, sizes)
+                FrozenPhysicalArchiveLookup.Found(payloads.toSortedMap().values.toList())
+            }
+        }
+    }
+
+    /** Fully validates shared records with Bukkit on the owner thread, then publishes them to the local cache. */
+    fun importShared(payloads: List<ByteArray>): Boolean = runCatching {
+        require(payloads.size <= MAX_REACHABLE_RECORDS) { "Shared physical reward graph has too many records" }
+        require(payloads.sumOf { it.size.toLong() } <= MAX_REACHABLE_BYTES) { "Shared physical reward graph is too large" }
+        val decoded = linkedMapOf<String, FrozenPhysicalRewardRecord>()
+        payloads.forEach { bytes ->
+            require(bytes.size.toLong() <= MAX_RECORD_BYTES) { "Shared physical reward payload is too large" }
+            val record = Gson().fromJson(bytes.toString(Charsets.UTF_8), FrozenPhysicalRewardRecord::class.java)
+                .also { it.validate() }
+            val previous = decoded.putIfAbsent(record.fingerprint, record)
+            require(previous == null || previous == record) { "Shared physical reward content address collision" }
+            val local = records[record.fingerprint]
+            require(local == null || local == record) { "Shared physical reward content address collision" }
+        }
+        decoded.values.forEach { record -> records.putIfAbsent(record.fingerprint, record) }
+        true
+    }.getOrDefault(false)
+
+    private fun decodeStructural(bytes: ByteArray): FrozenPhysicalRewardRecord =
+        Gson().fromJson(bytes.toString(Charsets.UTF_8), FrozenPhysicalRewardRecord::class.java)
+            .also { it.validate(validateBukkitStacks = false) }
+
+    private fun referencedFingerprints(record: FrozenPhysicalRewardRecord): Set<String> = buildSet {
+        record.recipe.choiceOptions.orEmpty().forEach { option ->
+            require(option.childKey == "frozen:${option.childFingerprint}") {
+                "Frozen choice child address does not match its fingerprint"
+            }
+            add(option.childFingerprint)
+        }
+        val childKey = record.recipe.mapPrizeKey
+        val childFingerprint = record.recipe.mapPrizeFingerprint
+        require((childKey == null) == (childFingerprint == null)) { "Frozen map prize address is incomplete" }
+        if (childKey != null && childFingerprint != null) {
+            require(childKey == "frozen:$childFingerprint") { "Frozen map prize address does not match its fingerprint" }
+            add(childFingerprint)
+        }
+    }
+
+    /** Returns a complete local dependency graph in child-first order under the cold-reader limits. */
+    fun reachableGraph(
+        fingerprint: String,
+        candidates: Map<String, FrozenPhysicalRewardRecord> = records,
+        serializedSizes: Map<String, Int> = emptyMap(),
+    ): List<FrozenPhysicalRewardRecord> {
+        val ordered = mutableListOf<FrozenPhysicalRewardRecord>()
+        val visited = mutableSetOf<String>()
+        val visiting = mutableSetOf<String>()
+        var totalBytes = 0L
+
+        fun visit(current: String, depth: Int) {
+            if (depth > MAX_REACHABLE_DEPTH) throw FrozenPhysicalRewardGraphException("depth_limit")
+            if (current in visiting) throw FrozenPhysicalRewardGraphException("cycle")
+            if (current in visited) return
+            if (visited.size + visiting.size >= MAX_REACHABLE_RECORDS) {
+                throw FrozenPhysicalRewardGraphException("node_limit")
+            }
+            visiting.add(current)
+            val record = candidates[current] ?: throw FrozenPhysicalRewardGraphException("missing_child")
+            try {
+                record.validate(validateBukkitStacks = false)
+                val size = serializedSizes[current] ?: gson.toJson(record).toByteArray(Charsets.UTF_8).size
+                if (size.toLong() > MAX_RECORD_BYTES) throw FrozenPhysicalRewardGraphException("record_size_limit")
+                totalBytes += size.toLong()
+                if (totalBytes > MAX_REACHABLE_BYTES) throw FrozenPhysicalRewardGraphException("byte_limit")
+                referencedFingerprints(record).forEach { visit(it, depth + 1) }
+            } finally {
+                visiting.remove(current)
+            }
+            visited += current
+            ordered += record
+        }
+
+        if (!FINGERPRINT.matches(fingerprint)) throw FrozenPhysicalRewardGraphException("invalid_fingerprint")
+        visit(fingerprint, 0)
+        return ordered
+    }
+
     /** Stable, valid collection-seal marker for one archived record. */
     fun archivedCategoryId(key: String): String? {
         val fingerprint = key.removePrefix("frozen:").takeIf { key.startsWith("frozen:") } ?: return null
@@ -165,13 +331,30 @@ internal class FrozenPhysicalRewards(root: Path) {
         ItemStack.deserializeBytes(Base64.getDecoder().decode(record.preview)).takeIf { !it.type.isAir }
     }.getOrNull()
 
-    private companion object {
+    companion object {
         const val CURRENT_VERSION = 1
-        const val MAX_RECORD_BYTES = 16L * 1024L * 1024L
+        internal const val MAX_RECORD_BYTES = 16L * 1024L * 1024L
         const val MAX_STACK_BYTES = 512 * 1024
-        val FINGERPRINT = Regex("[a-f0-9]{64}")
+        const val MAX_REACHABLE_RECORDS = 64
+        const val MAX_REACHABLE_DEPTH = 16
+        const val MAX_REACHABLE_BYTES = 32L * 1024L * 1024L
+        private val FINGERPRINT = Regex("[a-f0-9]{64}")
     }
 }
+
+internal sealed interface FrozenPhysicalArchiveLookup {
+    data class Found(val payloads: List<ByteArray>) : FrozenPhysicalArchiveLookup
+    data class Missing(val fingerprint: String) : FrozenPhysicalArchiveLookup
+}
+
+internal class FrozenPhysicalRewardGraphException(val reason: String) : IllegalStateException(reason)
+
+internal data class PhysicalRewardArchivePublishResult(
+    val scanned: Int,
+    val published: Int,
+    val batches: Int,
+    val failureCause: String? = null,
+)
 
 /** Immutable menu snapshot consumed by [CollectionSealController]. */
 data class ArchivedCollectionSeal(

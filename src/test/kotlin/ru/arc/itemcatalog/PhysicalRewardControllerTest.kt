@@ -3,6 +3,7 @@ package ru.arc.itemcatalog
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import net.kyori.adventure.text.Component
 import org.bukkit.Material
 import org.bukkit.block.BlockFace
@@ -24,6 +25,159 @@ import ru.arc.paper.testing.MockBukkitTestRuntime
 import java.util.concurrent.CompletableFuture
 
 class PhysicalRewardControllerTest : StringSpec({
+    "shared archive miss is coalesced per player and uses the existing one-use claim after exact recheck" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val ledger = RecordingVoucherLedger()
+            val archiveLookup = CompletableFuture<FrozenPhysicalArchiveLookup>()
+            val fingerprint = OneTimeUseFingerprint.sha256Fields("async-archive", "exact-voucher")
+            val key = "frozen:${fingerprint.sha256}"
+            val spec = PhysicalRewardSpec(key, fingerprint, ItemStack(Material.DIAMOND))
+            var hydrated = false
+            var lookups = 0
+            var nativeCalls = 0
+            val controller = PhysicalRewardController(
+                paper.createSimplePlugin("PhysicalRewardArchive"),
+                ledger,
+                { if (hydrated) spec else null },
+                { _, _ -> null },
+                { _, _, _ ->
+                    nativeCalls++
+                    CompletableFuture.completedFuture(PhysicalRewardOutcome.Applied)
+                },
+                "arc.catalog-reward",
+                resolveArchiveAsync = {
+                    lookups++
+                    archiveLookup
+                },
+                importArchiveLookup = { _, result ->
+                    result shouldBe FrozenPhysicalArchiveLookup.Found(emptyList())
+                    hydrated = true
+                    spec
+                },
+            )
+            val scheduler = TestTaskScheduler()
+            Tasks.withScheduler(scheduler) {
+                controller.register()
+                try {
+                    val player = paper.addPlayer("archive-holder")
+                    player.inventory.setItemInMainHand(
+                        PhysicalRewardVoucher.mark(
+                            ItemStack(Material.PAPER),
+                            PhysicalRewardVoucherIdentity(java.util.UUID.randomUUID(), key, fingerprint),
+                        ),
+                    )
+
+                    paper.callEvent(interact(player, Action.RIGHT_CLICK_AIR))
+                    paper.callEvent(interact(player, Action.RIGHT_CLICK_AIR))
+                    lookups shouldBe 1
+                    ledger.calls shouldBe emptyList()
+
+                    archiveLookup.complete(FrozenPhysicalArchiveLookup.Found(emptyList()))
+                    flush(scheduler)
+
+                    ledger.calls shouldContainExactly listOf("claim", "commit")
+                    nativeCalls shouldBe 1
+                    player.inventory.itemInMainHand.type shouldBe Material.AIR
+                } finally {
+                    controller.close()
+                }
+            }
+        }
+    }
+
+    "shared archive completion after the voucher moves has no import or effect" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val ledger = RecordingVoucherLedger()
+            val archiveLookup = CompletableFuture<FrozenPhysicalArchiveLookup>()
+            val fingerprint = OneTimeUseFingerprint.sha256Fields("async-archive", "moved-voucher")
+            val key = "frozen:${fingerprint.sha256}"
+            var imported = 0
+            var nativeCalls = 0
+            val controller = PhysicalRewardController(
+                paper.createSimplePlugin("PhysicalRewardArchiveMoved"),
+                ledger,
+                { null },
+                { _, _ -> null },
+                { _, _, _ ->
+                    nativeCalls++
+                    CompletableFuture.completedFuture(PhysicalRewardOutcome.Applied)
+                },
+                "arc.catalog-reward",
+                resolveArchiveAsync = { archiveLookup },
+                importArchiveLookup = { _, _ ->
+                    imported++
+                    null
+                },
+            )
+            val scheduler = TestTaskScheduler()
+            Tasks.withScheduler(scheduler) {
+                controller.register()
+                try {
+                    val player = paper.addPlayer("archive-moved")
+                    player.inventory.setItemInMainHand(
+                        PhysicalRewardVoucher.mark(
+                            ItemStack(Material.PAPER),
+                            PhysicalRewardVoucherIdentity(java.util.UUID.randomUUID(), key, fingerprint),
+                        ),
+                    )
+                    paper.callEvent(interact(player, Action.RIGHT_CLICK_AIR))
+                    player.inventory.setItemInMainHand(ItemStack(Material.DIAMOND))
+                    archiveLookup.complete(FrozenPhysicalArchiveLookup.Found(emptyList()))
+                    flush(scheduler)
+
+                    imported shouldBe 0
+                    ledger.calls shouldBe emptyList()
+                    nativeCalls shouldBe 0
+                    player.inventory.itemInMainHand.type shouldBe Material.DIAMOND
+                } finally {
+                    controller.close()
+                }
+            }
+        }
+    }
+
+    "closing during a shared archive miss drops the late completion" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val ledger = RecordingVoucherLedger()
+            val archiveLookup = CompletableFuture<FrozenPhysicalArchiveLookup>()
+            val fingerprint = OneTimeUseFingerprint.sha256Fields("async-archive", "closed-voucher")
+            val key = "frozen:${fingerprint.sha256}"
+            var imported = 0
+            val controller = PhysicalRewardController(
+                paper.createSimplePlugin("PhysicalRewardArchiveClosed"),
+                ledger,
+                { null },
+                { _, _ -> null },
+                { _, _, _ -> error("native redemption must not start after close") },
+                "arc.catalog-reward",
+                resolveArchiveAsync = { archiveLookup },
+                importArchiveLookup = { _, _ ->
+                    imported++
+                    null
+                },
+            )
+            val scheduler = TestTaskScheduler()
+            Tasks.withScheduler(scheduler) {
+                controller.register()
+                val player = paper.addPlayer("archive-closed")
+                player.inventory.setItemInMainHand(
+                    PhysicalRewardVoucher.mark(
+                        ItemStack(Material.PAPER),
+                        PhysicalRewardVoucherIdentity(java.util.UUID.randomUUID(), key, fingerprint),
+                    ),
+                )
+                paper.callEvent(interact(player, Action.RIGHT_CLICK_AIR))
+                controller.close()
+                archiveLookup.complete(FrozenPhysicalArchiveLookup.Found(emptyList()))
+                flush(scheduler)
+
+                imported shouldBe 0
+                ledger.calls shouldBe emptyList()
+                PhysicalRewardVoucher.identity(player.inventory.itemInMainHand) shouldNotBe null
+            }
+        }
+    }
+
     "cancelled air click claims before native redemption and consumes after commit" {
         MockBukkitTestRuntime.open().use { paper ->
             val timeline = mutableListOf<String>()

@@ -145,7 +145,7 @@ private fun withPreparedCaseMap(
             )
             val nativeRewards = CatalogPhysicalRewards(settings, frozen = FrozenPhysicalRewards(root))
             val prepared = requireNotNull(nativeRewards.captureInteractiveArchives())
-            nativeRewards.persistInteractiveArchives(prepared) shouldBe true
+            persistInteractiveArchivesForTest(nativeRewards, prepared) shouldBe true
             val mapMaterialization = requireNotNull(nativeRewards.materialization(mapEntry))
             val mapKey = mapMaterialization.sourceKey
             val ledger = mockk<OneTimeUseLedger>()

@@ -86,7 +86,7 @@ class PersonalTreasureMapMigrationTest : StringSpec({
                 val archive = FrozenPhysicalRewards(root)
                 val rewards = CatalogPhysicalRewards(settings, frozen = archive)
                 val currentSnapshots = rewards.captureInteractiveArchives().shouldNotBeNull()
-                rewards.persistInteractiveArchives(currentSnapshots) shouldBe true
+                persistInteractiveArchivesForTest(rewards, currentSnapshots) shouldBe true
                 val poolLookupsAfterWarmup = poolLookups
 
                 // This is the old archived EliteMobs case recipe and old Spawn preview from already issued maps.
@@ -214,7 +214,7 @@ class PersonalTreasureMapMigrationTest : StringSpec({
                     val archive = FrozenPhysicalRewards(root)
                     val rewards = CatalogPhysicalRewards(settings, frozen = archive)
                     val snapshots = rewards.captureInteractiveArchives().shouldNotBeNull()
-                    rewards.persistInteractiveArchives(snapshots) shouldBe true
+                    persistInteractiveArchivesForTest(rewards, snapshots) shouldBe true
 
                     val oldPrizeStack = ItemStack(Material.GOLD_INGOT)
                     val oldPrize = archive.prepare(

@@ -47,7 +47,7 @@ class RewardCatalogGuiController internal constructor(
         active.set(false)
     }
 
-    fun isAvailable(): Boolean = active.get() && settings.enabled && settings.categories.any { it.entries.isNotEmpty() }
+    fun isAvailable(): Boolean = active.get() && settings.enabled && settings.visibleEntryCount > 0
 
     /**
      * Returns the current catalogue capability. The configuration fingerprint
@@ -230,7 +230,7 @@ class RewardCatalogGuiController internal constructor(
                         add(body("Предметы и сюрпризы из лутбоксов."))
                         add(Component.empty())
                         add(metadata("Разделов", settings.children(null).size.toString()))
-                        add(metadata("Наград", settings.entryCount.toString()))
+                        add(metadata("Наград", settings.visibleEntryCount.toString()))
                     },
                 action = "[▶] ЛКМ — открыть награды",
             )
@@ -248,7 +248,7 @@ class RewardCatalogGuiController internal constructor(
             addAll(category.description.map(::body))
             add(Component.empty())
             if (children.isNotEmpty()) add(metadata("Разделов", children.size.toString()))
-            else add(metadata("Наград", category.entries.size.toString()))
+            else add(metadata("Наград", category.visibleEntries.size.toString()))
             category.rolls?.let { add(metadata("За открытие", "$it награда")) }
         }
         return ArcMenus.entry(
@@ -293,7 +293,7 @@ class RewardCatalogGuiController internal constructor(
         pagedMenu(
             player = player,
             title = titleStrip(category.name),
-            entries = category.entries,
+            entries = category.visibleEntries,
             requestedPage = page,
             back = back,
             reopen = { nextPage -> openCategory(player, categoryId, nextPage, rootBack) },
@@ -307,12 +307,14 @@ class RewardCatalogGuiController internal constructor(
         val preview = previewStack(entry, resolved)
         val capacityReady = resolved?.let { hasCapacity(player, it) } == true
         val canGive =
-            active.get() && player.hasPermission(givePermission) && providerReady && resolved != null && capacityReady
+            entry.source !is RewardCatalogSource.NativeCrateKey &&
+                active.get() && player.hasPermission(givePermission) && providerReady && resolved != null && capacityReady
         val action =
             when {
                 entry.source is RewardCatalogSource.Planned -> "Награда будущих кейсов"
-                canGive -> "[▶] ЛКМ — получить"
                 !providerReady -> "Сейчас недоступно"
+                entry.source is RewardCatalogSource.NativeCrateKey -> "Ключ выдаётся при открытии кейса"
+                canGive -> "[▶] ЛКМ — получить"
                 !player.hasPermission(givePermission) -> "Получение недоступно"
                 resolved == null -> "Сейчас недоступно"
                 !capacityReady -> "Нет места в инвентаре"
@@ -387,6 +389,8 @@ class RewardCatalogGuiController internal constructor(
             is RewardCatalogSource.PersonalMap,
             -> physical(entry, grant)?.let(::listOf)
             is RewardCatalogSource.Planned -> null
+            is RewardCatalogSource.NativeCrateKey -> if (grant) null
+                else listOf(styledStack(entry.icon ?: CatalogIconStyle(Material.TRIPWIRE_HOOK.name)))
         }
         values?.takeIf { it.isNotEmpty() && it.size <= MAX_STACKS }
             ?.map { RewardItemPresentation.tooltip(it, entry) }?.let(::ResolvedReward)
@@ -473,7 +477,11 @@ class RewardCatalogGuiController internal constructor(
     private fun rewardAmount(resolved: ResolvedReward?): String? = resolved?.values?.sumOf { it.amount }?.toString()
 
     private fun providersEnabled(entry: RewardCatalogEntry): Boolean =
-        (entry.requires + if (entry.source is RewardCatalogSource.ItemsAdder) listOf("ItemsAdder") else emptyList()).all { required ->
+        (entry.requires + when (entry.source) {
+            is RewardCatalogSource.ItemsAdder -> listOf("ItemsAdder")
+            is RewardCatalogSource.NativeCrateKey -> listOf("ExcellentCrates")
+            else -> emptyList()
+        }).all { required ->
             Bukkit.getPluginManager().plugins.any { plugin -> plugin.name.equals(required, ignoreCase = true) && plugin.isEnabled }
         }
 

@@ -44,7 +44,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * and [PhysicalRewardOutcome.Uncertain] retain recovery ownership through
  * [OneTimeUseLedger.abandon].
  */
-class PhysicalRewardController(
+class PhysicalRewardController internal constructor(
     private val plugin: Plugin,
     private val ledger: OneTimeUseLedger,
     private val resolve: (String) -> PhysicalRewardSpec?,
@@ -53,12 +53,15 @@ class PhysicalRewardController(
     scope: String,
     private val openChoice: ((org.bukkit.entity.Player, PhysicalRewardVoucherIdentity, PhysicalRewardSpec, List<Int>, (Int) -> Unit) -> Unit)? = null,
     private val beforeUse: (org.bukkit.entity.Player, PhysicalRewardSpec, PhysicalRewardVoucherIdentity) -> Boolean = { _, _, _ -> true },
+    private val resolveArchiveAsync: ((String) -> CompletionStage<FrozenPhysicalArchiveLookup>)? = null,
+    private val importArchiveLookup: ((String, FrozenPhysicalArchiveLookup) -> PhysicalRewardSpec?)? = null,
 ) : AutoCloseable {
     private val operationScope = OneTimeUseScope.parse(scope)
     private val scopeValue = scope
     private val active = AtomicBoolean(true)
     private val registered = AtomicBoolean(false)
     private val pending = ConcurrentHashMap<UUID, PhysicalRewardRedemption>()
+    private val pendingArchiveLookups = ConcurrentHashMap<UUID, PhysicalRewardVoucherIdentity>()
     private val stateMonitor = Any()
     private val drainFuture = java.util.concurrent.atomic.AtomicReference<CompletableFuture<Void>?>()
     private val lifecycle = java.util.concurrent.atomic.AtomicReference<LifecycleTaskScope?>()
@@ -75,28 +78,29 @@ class PhysicalRewardController(
 
         @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
         fun onInventoryClick(event: InventoryClickEvent) {
-            if (pending.containsKey(event.whoClicked.uniqueId)) event.isCancelled = true
+            if (isBusy(event.whoClicked.uniqueId)) event.isCancelled = true
         }
 
         @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
         fun onInventoryDrag(event: InventoryDragEvent) {
-            if (pending.containsKey(event.whoClicked.uniqueId)) event.isCancelled = true
+            if (isBusy(event.whoClicked.uniqueId)) event.isCancelled = true
         }
 
         @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
         fun onPlayerDrop(event: PlayerDropItemEvent) {
             val player = event.player
-            if (!pending.containsKey(player.uniqueId)) return
+            if (!isBusy(player.uniqueId)) return
             if (PhysicalRewardVoucher.identity(event.itemDrop.itemStack) != null) event.isCancelled = true
         }
 
         @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
         fun onSwapHandItems(event: PlayerSwapHandItemsEvent) {
-            if (pending.containsKey(event.player.uniqueId)) event.isCancelled = true
+            if (isBusy(event.player.uniqueId)) event.isCancelled = true
         }
 
         @EventHandler
         fun onPlayerQuit(event: PlayerQuitEvent) {
+            pendingArchiveLookups.remove(event.player.uniqueId)
             cancel(event.player.uniqueId)
         }
     }
@@ -127,6 +131,7 @@ class PhysicalRewardController(
             redemption.cancelled = true
             recoverCancelled(redemption)
         }
+        pendingArchiveLookups.clear()
         lifecycle.getAndSet(null)?.close()
     }
 
@@ -175,7 +180,74 @@ class PhysicalRewardController(
         if (!active.get() || !ledger.available) return unavailable(player)
         if (PhysicalRewardVoucher.identity(player.inventory.itemInMainHand) != identity) return unavailable(player)
         val spec = resolveSafely(identity.key)
-        if (spec == null || spec.key != identity.key || spec.fingerprint != identity.fingerprint) return unavailable(player)
+        if (spec == null) {
+            resolveFromSharedArchive(player, identity)
+            return
+        }
+        continueWithSpec(player, identity, spec)
+    }
+
+    private fun resolveFromSharedArchive(player: org.bukkit.entity.Player, identity: PhysicalRewardVoucherIdentity) {
+        val resolver = resolveArchiveAsync ?: return unavailable(player)
+        val importer = importArchiveLookup ?: return unavailable(player)
+        val taskScope = runCatching { lifecycle() }.getOrElse {
+            warn("Physical reward archive lifecycle unavailable: fingerprint={} cause={}", identity.fingerprint.sha256, it.javaClass.simpleName)
+            return unavailable(player)
+        }
+        val token = runCatching { taskScope.token() }.getOrElse {
+            warn("Physical reward archive lifecycle unavailable: fingerprint={} cause={}", identity.fingerprint.sha256, it.javaClass.simpleName)
+            return unavailable(player)
+        }
+        if (pending.containsKey(player.uniqueId) || pendingArchiveLookups.putIfAbsent(player.uniqueId, identity) != null) {
+            player.sendMessage(TextUtil.mm(BUSY_MESSAGE, true))
+            return
+        }
+        val stage = try {
+            resolver(identity.key)
+        } catch (failure: Throwable) {
+            pendingArchiveLookups.remove(player.uniqueId, identity)
+            warn("Physical reward shared archive lookup failed: fingerprint={} cause={}", identity.fingerprint.sha256, failure.javaClass.simpleName)
+            unavailable(player)
+            return
+        }
+        stage.whenCompleteSync(taskScope, token) { lookup, failure ->
+            if (pendingArchiveLookups[player.uniqueId] != identity) return@whenCompleteSync
+            pendingArchiveLookups.remove(player.uniqueId, identity)
+            if (!active.get() || !player.isOnline || PhysicalRewardVoucher.identity(player.inventory.itemInMainHand) != identity) {
+                if (active.get() && player.isOnline) unavailable(player)
+                return@whenCompleteSync
+            }
+            if (failure != null) {
+                warn("Physical reward shared archive lookup failed: fingerprint={} cause={}", identity.fingerprint.sha256, failure.causeName())
+                unavailable(player)
+                return@whenCompleteSync
+            }
+            if (lookup is FrozenPhysicalArchiveLookup.Missing) {
+                warn("Physical reward shared archive missing: fingerprint={} reason=missing", lookup.fingerprint)
+                unavailable(player)
+                return@whenCompleteSync
+            }
+            val resolved = try {
+                importer(identity.key, requireNotNull(lookup))
+            } catch (importFailure: Throwable) {
+                warn("Physical reward shared archive invalid: fingerprint={} cause={}", identity.fingerprint.sha256, importFailure.javaClass.simpleName)
+                null
+            }
+            if (resolved == null || resolved.key != identity.key || resolved.fingerprint != identity.fingerprint) {
+                warn("Physical reward shared archive unavailable: fingerprint={} reason=invalid_or_stale", identity.fingerprint.sha256)
+                unavailable(player)
+                return@whenCompleteSync
+            }
+            continueWithSpec(player, identity, resolved)
+        }
+    }
+
+    private fun continueWithSpec(
+        player: org.bukkit.entity.Player,
+        identity: PhysicalRewardVoucherIdentity,
+        spec: PhysicalRewardSpec,
+    ) {
+        if (spec.key != identity.key || spec.fingerprint != identity.fingerprint) return unavailable(player)
         val mayContinue = try {
             beforeUse(player, spec, identity)
         } catch (failure: Throwable) {
@@ -685,6 +757,10 @@ class PhysicalRewardController(
 
     private fun lifecycle(): LifecycleTaskScope =
         lifecycle.updateAndGet { it ?: LifecycleTaskScope(Tasks.scheduler) }!!
+
+    private fun isBusy(playerId: UUID): Boolean = pending.containsKey(playerId) || pendingArchiveLookups.containsKey(playerId)
+
+    private fun Throwable.causeName(): String = generateSequence(this) { it.cause }.last().javaClass.simpleName
 
     private fun resolveSafely(key: String): PhysicalRewardSpec? =
         try {

@@ -51,6 +51,8 @@ class FurniturePackageRedemptionTest : StringSpec({
                     val archive = FrozenPhysicalRewards(root)
                     val rewards = CatalogPhysicalRewards(settings, mockk<MountWallet>(relaxed = true), archive)
                     val entry = settings.categories.single().entries.single()
+                    rewards.materialization(entry) shouldBe null
+                    persistPhysicalArchivesForTest(rewards) shouldBe true
                     val materialization = checkNotNull(rewards.materialization(entry))
                     val recipe = checkNotNull(archive.find(materialization.sourceKey)).recipe
                     recipe.type shouldBe "furniture-rolls"
@@ -119,6 +121,7 @@ class FurniturePackageRedemptionTest : StringSpec({
                     val settings = packageSettings(listOf(ITEM_ID), minRolls = 8, maxRolls = 12)
                     val archive = FrozenPhysicalRewards(root)
                     val rewards = CatalogPhysicalRewards(settings, mockk<MountWallet>(relaxed = true), archive)
+                    persistPhysicalArchivesForTest(rewards) shouldBe true
                     val materialization = checkNotNull(rewards.materialization(settings.categories.single().entries.single()))
                     val spec = checkNotNull(rewards.resolve(materialization.sourceKey))
                     val ledger = FurnitureVoucherLedger()

@@ -5,6 +5,34 @@ import io.kotest.matchers.shouldBe
 import java.nio.file.Files
 
 class RewardCatalogModuleConfigTest : StringSpec({
+    "native crate keys are explicit display outcomes restricted to cases" {
+        val root = Files.createTempDirectory("arc-native-crate-key")
+        try {
+            val document = """
+                enabled: true
+                categories:
+                  case_test:
+                    rolls: 1
+                    entries:
+                      furniture_key:
+                        native-crate-key: case_furniture
+                        weight: 200
+                      other:
+                        planned: other
+                        weight: 9800
+            """.trimIndent()
+            writeConfig(root, document)
+            val category = RewardCatalogModuleConfig.load(root).snapshot().categories.single()
+            val key = category.entries.first()
+            key.source shouldBe RewardCatalogSource.NativeCrateKey("case_furniture")
+            category.chance(key) shouldBe "2%"
+            writeConfig(root, document.replace("rolls: 1", "").replace("weight: 200", "").replace("weight: 9800", ""))
+            runCatching { RewardCatalogModuleConfig.load(root).snapshot() }.isFailure shouldBe true
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
     "tooltip frames are optional and accept namespaced paths without changing the source" {
         val root = Files.createTempDirectory("arc-reward-tooltip")
         try {
@@ -446,11 +474,25 @@ class RewardCatalogModuleConfigTest : StringSpec({
         val root = Files.createTempDirectory("arc-reward-case-invalid")
         try {
             val valid = caseConfig()
+            writeConfig(root, valid)
+            val positiveSettings = RewardCatalogModuleConfig.load(root).snapshot()
+            val positiveCase = positiveSettings.categories.single { it.id == "summer" }
+            positiveCase.selectableCaseEntries.map { it.id } shouldBe listOf("supply", "seal")
+            positiveCase.chance(positiveCase.entries.first { it.id == "supply" }) shouldBe "87,5%"
+
+            val withRetiredOutcome = valid.replace("weight: 7", "weight: 0")
+            writeConfig(root, withRetiredOutcome)
+            val retiredSettings = RewardCatalogModuleConfig.load(root).snapshot()
+            val retiredCase = retiredSettings.categories.single { it.id == "summer" }
+            retiredSettings.caseEntry("summer", "supply")?.second?.weight shouldBe 0
+            retiredCase.selectableCaseEntries.map { it.id } shouldBe listOf("seal")
+
             listOf(
                 valid.replace("parent: cases", "parent: missing"),
                 valid.replace("parent: cases", "parent: summer"),
                 valid.replace("rolls: 1", "rolls: 2"),
-                valid.replace("weight: 7", "weight: 0"),
+                valid.replace("weight: 7", "weight: -1"),
+                valid.replace("weight: 7", "weight: 0").replace("weight: 1", "weight: 0"),
                 valid.replace("weight: 7", "unused: 7"),
                 valid.replace("rolls: 1", ""),
                 valid.replace("seal: set_sun", "seal: missing"),

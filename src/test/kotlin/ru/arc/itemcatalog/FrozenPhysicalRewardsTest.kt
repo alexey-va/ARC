@@ -17,6 +17,167 @@ import java.util.Comparator
 import java.util.concurrent.CompletableFuture
 
 class FrozenPhysicalRewardsTest : StringSpec({
+    "a shared lookup fetches the exact choice root and every referenced child before owner-thread import" {
+        MockBukkitTestRuntime.open().use {
+            val root = Files.createTempDirectory("arc-shared-archive-graph")
+            try {
+                val archive = FrozenPhysicalRewards(root)
+                val children = (0..2).map { index ->
+                    archive.capture(
+                        "mount:shared_$index",
+                        FrozenPhysicalRecipe(type = "mount", mountId = "shared_$index"),
+                        ItemStack(Material.PAPER),
+                    )!!.record
+                }
+                val parent = archive.capture(
+                    "choice:shared-parent",
+                    FrozenPhysicalRecipe(
+                        type = "choice",
+                        choiceOptions = children.mapIndexed { index, child ->
+                            FrozenChoiceOption(
+                                id = "choice_$index",
+                                name = "Choice $index",
+                                description = emptyList(),
+                                childKey = child.key,
+                                childFingerprint = child.fingerprint,
+                            )
+                        },
+                    ),
+                    ItemStack(Material.PAPER),
+                )!!.record
+                val payloads = (children + parent).associate { record ->
+                    record.fingerprint to Gson().toJson(record).toByteArray(Charsets.UTF_8)
+                }
+                val shared = InMemoryPhysicalRewardArchive(payloads)
+
+                val found = archive.fetchReachable(parent.fingerprint, shared).join()
+                    .let { it as FrozenPhysicalArchiveLookup.Found }
+                found.payloads.size shouldBe 4
+                archive.find(parent.key) shouldBe null
+                archive.importShared(found.payloads) shouldBe true
+                archive.find(parent.key)?.recipe?.choiceOptions?.size shouldBe 3
+                children.forEach { archive.find(it.key)?.fingerprint shouldBe it.fingerprint }
+
+                val missingChild = children.last()
+                val missing = FrozenPhysicalRewards(root.resolve("other"))
+                    .fetchReachable(parent.fingerprint, InMemoryPhysicalRewardArchive(payloads - missingChild.fingerprint))
+                    .join()
+                missing shouldBe FrozenPhysicalArchiveLookup.Missing(missingChild.fingerprint)
+            } finally {
+                root.toFile().deleteRecursively()
+            }
+        }
+    }
+
+    "reachable recipe graphs accept exactly 64 records and reject 65 like the cold reader" {
+        MockBukkitTestRuntime.open().use {
+            val root = Files.createTempDirectory("arc-shared-archive-bounds")
+            try {
+                val archive = FrozenPhysicalRewards(root)
+                val records = linkedMapOf<String, FrozenPhysicalRewardRecord>()
+                fun mount(name: String): FrozenPhysicalRewardRecord = archive.capture(
+                    "mount:$name",
+                    FrozenPhysicalRecipe(type = "mount", mountId = name),
+                    ItemStack(Material.PAPER),
+                )!!.record.also { records[it.fingerprint] = it }
+
+                fun choice(name: String, children: List<FrozenPhysicalRewardRecord>): FrozenPhysicalRewardRecord {
+                    return archive.capture(
+                        "choice:$name",
+                        FrozenPhysicalRecipe(
+                            type = "choice",
+                            choiceOptions = children.mapIndexed { index, child ->
+                                FrozenChoiceOption(
+                                    id = "choice_$index",
+                                    name = "Choice $index",
+                                    description = emptyList(),
+                                    childKey = child.key,
+                                    childFingerprint = child.fingerprint,
+                                )
+                            },
+                        ),
+                        ItemStack(Material.PAPER),
+                    )!!.record.also { records[it.fingerprint] = it }
+                }
+
+                fun root(prefix: String, nestedLeafCount: Int): FrozenPhysicalRewardRecord {
+                    val directLeaves = (0 until 31).map { mount("$prefix-direct-$it") }
+                    val nestedLeaves = (0 until nestedLeafCount).map { mount("$prefix-nested-$it") }
+                    val nested = choice("$prefix-nested-choice", nestedLeaves)
+                    return choice("$prefix-root", directLeaves + nested)
+                }
+
+                val root64 = root("exact64", nestedLeafCount = 31)
+                archive.reachableGraph(root64.fingerprint, records).size shouldBe 64
+
+                val root65 = root("over65", nestedLeafCount = 32)
+                val failure = runCatching { archive.reachableGraph(root65.fingerprint, records) }.exceptionOrNull()
+                (failure as FrozenPhysicalRewardGraphException).reason shouldBe "node_limit"
+            } finally {
+                root.toFile().deleteRecursively()
+            }
+        }
+    }
+
+    "a previously seen child beyond the depth limit still matches cold lookup rejection" {
+        MockBukkitTestRuntime.open().use {
+            val root = Files.createTempDirectory("arc-shared-archive-depth")
+            try {
+                val archive = FrozenPhysicalRewards(root)
+                val records = linkedMapOf<String, FrozenPhysicalRewardRecord>()
+                fun mount(name: String) = archive.capture(
+                    "mount:$name",
+                    FrozenPhysicalRecipe(type = "mount", mountId = name),
+                    ItemStack(Material.PAPER),
+                )!!.record.also { records[it.fingerprint] = it }
+                fun choice(name: String, children: List<FrozenPhysicalRewardRecord>) = archive.capture(
+                    "choice:$name",
+                    FrozenPhysicalRecipe(
+                        type = "choice",
+                        choiceOptions = children.mapIndexed { index, child ->
+                            FrozenChoiceOption(
+                                id = "choice_$index",
+                                name = "Choice $index",
+                                description = emptyList(),
+                                childKey = child.key,
+                                childFingerprint = child.fingerprint,
+                            )
+                        },
+                    ),
+                    ItemStack(Material.PAPER),
+                )!!.record.also { records[it.fingerprint] = it }
+
+                val alreadySeen = mount("already-seen")
+                var descendant: FrozenPhysicalRewardRecord = choice(
+                    "depth-16",
+                    listOf(alreadySeen, mount("depth-16-a"), mount("depth-16-b")),
+                )
+                for (depth in 15 downTo 1) {
+                    descendant = choice(
+                        "depth-$depth",
+                        listOf(descendant, mount("depth-$depth-a"), mount("depth-$depth-b")),
+                    )
+                }
+                val rootRecord = choice(
+                    "depth-root",
+                    listOf(alreadySeen, descendant, mount("depth-root-side")),
+                )
+
+                val failure = runCatching { archive.reachableGraph(rootRecord.fingerprint, records) }.exceptionOrNull()
+                (failure as FrozenPhysicalRewardGraphException).reason shouldBe "depth_limit"
+                val payloads = records.mapValues { (_, record) ->
+                    Gson().toJson(record).toByteArray(Charsets.UTF_8)
+                }
+                val coldFailure = runCatching {
+                    archive.fetchReachable(rootRecord.fingerprint, InMemoryPhysicalRewardArchive(payloads)).join()
+                }.exceptionOrNull()
+                requireNotNull(coldFailure).cause?.message shouldBe "Frozen physical reward graph is too deep"
+            } finally {
+                root.toFile().deleteRecursively()
+            }
+        }
+    }
+
     "frozen AE random-book filters survive JSON reload while legacy nodes default open" {
         val gson = Gson()
         val restricted = FrozenTreasureNode(
@@ -512,4 +673,17 @@ private fun deleteTree(root: Path) {
     Files.walk(root).use { paths ->
         paths.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
     }
+}
+
+private class InMemoryPhysicalRewardArchive(
+    private val records: Map<String, ByteArray>,
+) : SharedPhysicalRewardArchiveRepository {
+    override fun publishBatch(records: List<FrozenPhysicalRewardRecord>) =
+        CompletableFuture.completedFuture(Unit)
+
+    override fun fetch(fingerprint: String): CompletableFuture<ByteArray?> =
+        CompletableFuture.completedFuture(records[fingerprint])
+
+    override fun status() = SharedPhysicalRewardArchiveStatus(ready = true)
+    override fun close() = Unit
 }

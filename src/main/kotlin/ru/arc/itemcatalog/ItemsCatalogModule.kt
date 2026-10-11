@@ -18,6 +18,7 @@ import ru.arc.util.TextUtil
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 object ItemsCatalogModule : PluginModule {
     override val name = "ItemsCatalog"
@@ -30,8 +31,13 @@ object ItemsCatalogModule : PluginModule {
     @Volatile private var collectionSeals: CollectionSealController? = null
     @Volatile private var physicalRewards: PhysicalRewardController? = null
     private var rewardLedger: OneTimeUseLedger? = null
+    @Volatile private var physicalArchiveRepository: SharedPhysicalRewardArchiveRepository? = null
+    private val archivePublishResult = AtomicReference(PhysicalRewardArchivePublishResult(0, 0, 0, "not_started"))
+    @Volatile private var pendingProviderArchiveSources = 0
     private var personalMaps: PersonalTreasureMapController? = null
     private val interactiveWarmupEpoch = AtomicInteger()
+    private val archiveWarmupMonitor = Any()
+    private var activeArchiveBackfill: CompletableFuture<Unit>? = null
 
     override fun init() {
         start(
@@ -70,9 +76,23 @@ object ItemsCatalogModule : PluginModule {
 
     internal fun currentSnapshot(): ItemsCatalogSnapshot? = service?.currentSnapshot()
 
-    fun rewardHealthSnapshot(): Map<String, Any?> =
-        (rewardController?.healthSnapshot() ?: mapOf("enabled" to false)) +
-            ("physicalRedemptionAvailable" to (physicalRewards?.available == true))
+    fun rewardHealthSnapshot(): Map<String, Any?> {
+        val repository = physicalArchiveRepository
+        val sharedStatus = repository?.status()
+        val publish = archivePublishResult.get()
+        val archiveReady = sharedStatus?.ready == true && sharedStatus.failureCause == null && publish.failureCause == null
+        return (rewardController?.healthSnapshot() ?: mapOf("enabled" to false)) + mapOf(
+            "physicalRedemptionAvailable" to (physicalRewards?.available == true && archiveReady),
+            "physicalRewardIssuanceAvailable" to (physicalRewards?.available == true && archiveReady),
+            "physicalArchiveSharedReady" to (sharedStatus?.ready == true),
+            "physicalArchiveBackfillReady" to archiveReady,
+            "physicalArchiveBackfillScanned" to publish.scanned,
+            "physicalArchiveBackfillPublished" to publish.published,
+            "physicalArchiveBackfillBatches" to publish.batches,
+            "physicalArchivePendingProviderSources" to pendingProviderArchiveSources,
+            "physicalArchiveFailureCause" to (publish.failureCause ?: sharedStatus?.failureCause),
+        )
+    }
 
     fun issueCaseReward(player: Player, categoryId: String, entryId: String): CaseRewardIssueResult =
         rewardController?.issueCaseReward(player, categoryId, entryId) ?: CaseRewardIssueResult.UNAVAILABLE
@@ -109,6 +129,15 @@ object ItemsCatalogModule : PluginModule {
             collectionSeals = seals
         }
         val storage = PhysicalRewardStorageConfig.load(ARC.instance.dataPath)
+        val archiveRepository = if (rewards.enabled && storage.enabled) runCatching {
+            MySqlSharedPhysicalRewardArchiveRepository.open(storage.sql())
+        }.getOrElse {
+            warn("Shared physical reward archive unavailable: cause={}", it.javaClass.simpleName)
+            null
+        } else null
+        physicalArchiveRepository = archiveRepository
+        archivePublishResult.set(PhysicalRewardArchivePublishResult(0, 0, 0, "not_started"))
+        pendingProviderArchiveSources = 0
         val ledger = if (rewards.enabled && storage.enabled) runCatching {
             MySqlOneTimeUseLedger.open(
                 storage.sql(),
@@ -151,6 +180,11 @@ object ItemsCatalogModule : PluginModule {
                     else -> true
                 }
             },
+            resolveArchiveAsync = { key ->
+                archiveRepository?.let { nativeRewards.fetchSharedArchive(key, it) }
+                    ?: CompletableFuture.failedFuture(IllegalStateException("shared archive unavailable"))
+            },
+            importArchiveLookup = nativeRewards::importSharedArchive,
         )
         if (rewards.enabled) {
             physical.register()
@@ -182,8 +216,8 @@ object ItemsCatalogModule : PluginModule {
                     nativeRewards.materialization(entry)?.let { nativeRewards.canMaterialize(it.sourceKey) } == true
             },
         ).takeIf { rewards.enabled }
-        val warmupEpoch = interactiveWarmupEpoch.incrementAndGet()
-        if (rewards.enabled) warmInteractiveArchives(nativeRewards, warmupEpoch, attempt = 1)
+        val warmupEpoch = synchronized(archiveWarmupMonitor) { interactiveWarmupEpoch.incrementAndGet() }
+        if (rewards.enabled) warmPhysicalArchives(nativeRewards, archiveRepository, warmupEpoch, attempt = 1)
         info(
             "Reward catalogue loaded: enabled={} categories={} entries={}",
             rewards.enabled,
@@ -208,7 +242,7 @@ object ItemsCatalogModule : PluginModule {
     }
 
     private fun shutdownRuntime() {
-        interactiveWarmupEpoch.incrementAndGet()
+        val closingBackfill = invalidateArchiveWarmup()
         controller?.shutdown()
         controller = null
         rewardController?.shutdown()
@@ -217,12 +251,19 @@ object ItemsCatalogModule : PluginModule {
         personalMaps = null
         val closingRewards = physicalRewards
         val closingLedger = rewardLedger
+        val closingArchiveRepository = physicalArchiveRepository
         physicalRewards = null
         rewardLedger = null
+        physicalArchiveRepository = null
         val drained = closingRewards?.closeAndDrain() ?: CompletableFuture.completedFuture(null)
-        drained.orTimeout(5, TimeUnit.SECONDS).whenCompleteAsync { _, failure ->
+        val drainedWithinBound = drained.orTimeout(5, TimeUnit.SECONDS).handle { _, failure ->
             if (failure != null) warn("Physical reward shutdown retained unfinished claims for recovery")
+            null
+        }
+        val backfillFinished = closingBackfill?.handle { _, _ -> null } ?: CompletableFuture.completedFuture(null)
+        CompletableFuture.allOf(drainedWithinBound, backfillFinished).whenCompleteAsync { _, _ ->
             closingLedger?.close()
+            closingArchiveRepository?.close()
         }
         collectionSeals?.close()
         collectionSeals = null
@@ -230,36 +271,145 @@ object ItemsCatalogModule : PluginModule {
         service = null
     }
 
-    /** Provider-backed choice/map sources appear only after their frozen records commit successfully. */
-    private fun warmInteractiveArchives(
+    /** Archived sources appear only after local persistence and shared publication succeed. */
+    private fun warmPhysicalArchives(
         nativeRewards: CatalogPhysicalRewards,
+        repository: SharedPhysicalRewardArchiveRepository?,
         epoch: Int,
         attempt: Int,
-        captured: List<FrozenPhysicalPrepared>? = null,
+        captured: PhysicalRewardArchiveCapture? = null,
     ) {
         if (interactiveWarmupEpoch.get() != epoch) return
-        val snapshots = captured ?: nativeRewards.captureInteractiveArchives()
-        if (snapshots == null) {
-            if (attempt >= INTERACTIVE_WARMUP_ATTEMPTS) {
-                warn("Choice/map reward archive capture stayed unavailable after {} attempts", attempt)
-                return
+        if (repository == null) {
+            if (setArchivePublishResult(epoch, PhysicalRewardArchivePublishResult(0, 0, 0, "shared_repository_unavailable"))) {
+                warn("Shared physical reward archive unavailable: cause=repository_not_configured")
             }
-            Tasks.scheduler.runLater(INTERACTIVE_WARMUP_TICKS, Runnable {
-                warmInteractiveArchives(nativeRewards, epoch, attempt + 1)
-            })
             return
         }
-        Tasks.scheduler.runAsync(Runnable {
-            if (interactiveWarmupEpoch.get() != epoch) return@Runnable
-            if (nativeRewards.persistInteractiveArchives(snapshots)) return@Runnable
+        val capture = captured ?: nativeRewards.capturePhysicalArchives()
+        pendingProviderArchiveSources = nativeRewards.pendingArchiveSourceCount()
+        if (capture == null) {
+            if (!setArchivePublishResult(epoch, PhysicalRewardArchivePublishResult(0, 0, 0, "capture_unavailable"))) return
             if (attempt >= INTERACTIVE_WARMUP_ATTEMPTS) {
-                warn("Choice/map reward archive persistence stayed unavailable after {} attempts", attempt)
-            } else {
-                Tasks.scheduler.runLater(INTERACTIVE_WARMUP_TICKS, Runnable {
-                    warmInteractiveArchives(nativeRewards, epoch, attempt + 1, snapshots)
-                })
+                warn("Physical reward archive capture unavailable after {} attempts", attempt)
+                return
             }
-        })
+            scheduleArchiveRetry(epoch, INTERACTIVE_WARMUP_TICKS) {
+                warmPhysicalArchives(nativeRewards, repository, epoch, attempt + 1)
+            }
+            return
+        }
+        val completion = CompletableFuture<Unit>()
+        synchronized(archiveWarmupMonitor) {
+            if (interactiveWarmupEpoch.get() != epoch) return
+            activeArchiveBackfill = completion
+            try {
+                Tasks.scheduler.runAsync(Runnable {
+                    try {
+                        if (interactiveWarmupEpoch.get() != epoch) return@Runnable
+                        val result = nativeRewards.persistPhysicalArchives(capture, repository)
+                        if (!setArchivePublishResult(epoch, result)) return@Runnable
+                        if (result.failureCause == null) {
+                            val pendingSources = nativeRewards.pendingArchiveSourceCount()
+                            pendingProviderArchiveSources = pendingSources
+                            info(
+                                "Physical reward archive backfill complete: scanned={} published={} batches={} pendingSources={}",
+                                result.scanned,
+                                result.published,
+                                result.batches,
+                                pendingSources,
+                            )
+                            if (pendingSources > 0) {
+                                scheduleArchiveRetry(epoch, OPTIONAL_PROVIDER_RETRY_TICKS) {
+                                    warmPhysicalArchives(nativeRewards, repository, epoch, attempt = 1)
+                                }
+                            }
+                            return@Runnable
+                        }
+                        if (result.failureCause.startsWith("shared_publish_")) {
+                            if (attempt == 1 || attempt % ARCHIVE_RETRY_LOG_INTERVAL == 0) {
+                                warn(
+                                    "Physical reward archive publish retry: attempt={} scanned={} published={} batches={} cause={}",
+                                    attempt,
+                                    result.scanned,
+                                    result.published,
+                                    result.batches,
+                                    result.failureCause,
+                                )
+                            }
+                            val nextCapture = capture.takeIf { capture.complete }
+                            scheduleArchiveRetry(epoch, archiveRetryDelay(attempt)) {
+                                warmPhysicalArchives(nativeRewards, repository, epoch, nextAttempt(attempt), nextCapture)
+                            }
+                        } else if (attempt >= INTERACTIVE_WARMUP_ATTEMPTS) {
+                            warn(
+                                "Physical reward archive backfill unavailable after {} attempts: scanned={} published={} batches={} cause={}",
+                                attempt,
+                                result.scanned,
+                                result.published,
+                                result.batches,
+                                result.failureCause,
+                            )
+                        } else {
+                            scheduleArchiveRetry(epoch, INTERACTIVE_WARMUP_TICKS) {
+                                val nextCapture = capture.takeIf { capture.complete }
+                                warmPhysicalArchives(nativeRewards, repository, epoch, nextAttempt(attempt), nextCapture)
+                            }
+                        }
+                    } finally {
+                        completion.complete(Unit)
+                        synchronized(archiveWarmupMonitor) {
+                            if (activeArchiveBackfill === completion) activeArchiveBackfill = null
+                        }
+                    }
+                })
+            } catch (failure: Throwable) {
+                completion.complete(Unit)
+                if (activeArchiveBackfill === completion) activeArchiveBackfill = null
+                if (interactiveWarmupEpoch.get() == epoch) {
+                    archivePublishResult.set(
+                        PhysicalRewardArchivePublishResult(0, 0, 0, "backfill_scheduler_${failure.javaClass.simpleName}"),
+                    )
+                    warn("Physical reward archive backfill could not be scheduled: cause={}", failure.javaClass.simpleName)
+                }
+            }
+        }
+    }
+
+    private fun setArchivePublishResult(epoch: Int, result: PhysicalRewardArchivePublishResult): Boolean =
+        synchronized(archiveWarmupMonitor) {
+            if (interactiveWarmupEpoch.get() != epoch) return@synchronized false
+            archivePublishResult.set(result)
+            true
+        }
+
+    private fun scheduleArchiveRetry(epoch: Int, delayTicks: Long, retry: () -> Unit) {
+        synchronized(archiveWarmupMonitor) {
+            if (interactiveWarmupEpoch.get() != epoch) return
+            Tasks.scheduler.runLater(delayTicks, Runnable {
+                if (interactiveWarmupEpoch.get() == epoch) retry()
+            })
+        }
+    }
+
+    private fun archiveRetryDelay(attempt: Int): Long {
+        val exponent = (attempt - 1).coerceIn(0, 6)
+        return (20L * (1 shl exponent).toLong()).coerceAtMost(MAX_ARCHIVE_RETRY_TICKS)
+    }
+
+    private fun nextAttempt(attempt: Int): Int = if (attempt == Int.MAX_VALUE) attempt else attempt + 1
+
+    private const val ARCHIVE_RETRY_LOG_INTERVAL = 60
+    private const val MAX_ARCHIVE_RETRY_TICKS = 1_200L
+    private const val OPTIONAL_PROVIDER_RETRY_TICKS = 1_200L
+
+    private fun invalidateArchiveWarmup(): CompletableFuture<Unit>? = synchronized(archiveWarmupMonitor) {
+        interactiveWarmupEpoch.incrementAndGet()
+        activeArchiveBackfill.also {
+            activeArchiveBackfill = null
+            archivePublishResult.set(PhysicalRewardArchivePublishResult(0, 0, 0, "not_started"))
+            pendingProviderArchiveSources = 0
+        }
     }
 
     private fun showMapGuidance(player: Player, maps: PersonalTreasureMapController) {

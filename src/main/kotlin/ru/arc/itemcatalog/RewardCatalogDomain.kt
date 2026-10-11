@@ -21,6 +21,9 @@ sealed interface RewardCatalogSource {
     /** Authored future entitlement; rendering must never turn this into a grantable item. */
     data class Planned(val id: String) : RewardCatalogSource
 
+    /** Display-only outcome: the native crate engine owns key issuance and persistence. */
+    data class NativeCrateKey(val id: String) : RewardCatalogSource
+
     data class Mount(val id: String) : RewardCatalogSource
 
     data class FurniturePackage(val id: String) : RewardCatalogSource
@@ -115,10 +118,18 @@ data class RewardCatalogCategory(
     val parentId: String? = null,
     val rolls: Int? = null,
 ) {
+    /** Entries with a selectable weight; raw entries remain addressable for queued case rewards. */
+    val selectableCaseEntries: List<RewardCatalogEntry>
+        get() = if (rolls == 1) entries.filter { (it.weight ?: 0) > 0 } else emptyList()
+
+    /** Entries players may see in this category; retired case outcomes stay out of the catalogue. */
+    val visibleEntries: List<RewardCatalogEntry>
+        get() = if (rolls == 1) selectableCaseEntries else entries
+
     /** One weighted outcome per opening; the same configured weights drive the displayed odds. */
     fun chance(entry: RewardCatalogEntry): String? {
-        if (rolls == null || entry.weight == null) return null
-        val total = entries.sumOf { it.weight?.toLong() ?: 0L }
+        if (rolls != 1 || entry !in selectableCaseEntries || entry.weight == null) return null
+        val total = selectableCaseEntries.sumOf { it.weight?.toLong() ?: 0L }
         if (total <= 0) return null
         return BigDecimal.valueOf(entry.weight.toLong()).multiply(BigDecimal.valueOf(100))
             .divide(BigDecimal.valueOf(total), 2, RoundingMode.HALF_UP)
@@ -154,6 +165,7 @@ data class RewardCatalogSettings(
     val requireCaseCoverage: Boolean = false,
 ) {
     val entryCount: Int = categories.sumOf { it.entries.size }
+    val visibleEntryCount: Int = categories.sumOf { it.visibleEntries.size }
 
     fun children(parentId: String?): List<RewardCatalogCategory> = categories.filter { it.parentId == parentId }
 
@@ -171,7 +183,7 @@ data class RewardCatalogSettings(
     }
 
     fun uncoveredRewards(): List<String> {
-        val included = categories.filter { it.rolls != null }.flatMap { it.entries }
+        val included = categories.filter { it.rolls != null }.flatMap { it.selectableCaseEntries }
             .map { it.source to it.enchantments }.toSet()
         return categories.filter { it.rolls == null }.flatMap { category ->
             category.entries.filter { it.source !is RewardCatalogSource.Planned && (it.source to it.enchantments) !in included }
