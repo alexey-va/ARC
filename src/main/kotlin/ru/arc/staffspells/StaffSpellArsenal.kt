@@ -191,7 +191,7 @@ internal class StaffSpellArsenal(
             }
             StaffSpell.REQUIEM -> if (a.input.secondary) requiemShock(a, player) else requiemMissiles(a, player)
             StaffSpell.PRISM -> prism(a, player)
-            StaffSpell.OSSUARY -> if (a.input.secondary) ossuaryCage(a, player) else ossuarySpikes(a, player)
+            StaffSpell.OSSUARY -> if (a.input.secondary) ossuaryStrike(a, player) else ossuarySpikes(a, player)
             else -> Unit
         }
     }
@@ -228,11 +228,11 @@ internal class StaffSpellArsenal(
         }
     }
 
-    private fun ossuaryCage(a: Attack, player: Player) {
+    private fun ossuaryStrike(a: Attack, player: Player) {
         particles(a, a.point, a.age, a.duration, secondary = true, radius = 2.1 + a.cast.visualCharge * .4)
-        if (a.age == OSSUARY_CAGE_CLOSE_TICK) sound(a, a.point, true)
-        if (a.age in OSSUARY_CAGE_CLOSE_TICK..(OSSUARY_CAGE_CLOSE_TICK + 2)) {
-            area(a, player, a.point.clone().add(0.0, .9, 0.0),
+        if (a.age == OSSUARY_SECONDARY_STRIKE_TICK) sound(a, a.point, true)
+        if (a.age in OSSUARY_SECONDARY_STRIKE_TICK..(OSSUARY_SECONDARY_STRIKE_TICK + 2)) {
+            area(a, player, a.point.clone().add(0.0, 1.2, 0.0),
                 1.9 + a.cast.visualCharge * .35)
         }
     }
@@ -432,10 +432,9 @@ internal class StaffSpellArsenal(
         private const val REQUIEM_SHOCK_TRAVEL_TICKS = 20.0
         private const val REQUIEM_SHOCK_ARRIVAL_TICK = REQUIEM_SHOCK_START_TICK + REQUIEM_SHOCK_TRAVEL_TICKS.toInt()
         private const val OSSUARY_SPIKE_START_TICK = 4
-        private const val OSSUARY_SPIKE_STAGGER_TICKS = 4
+        private const val OSSUARY_SPIKE_STAGGER_TICKS = 2
         private const val OSSUARY_SPIKE_SCENE_TICKS = 22
-        private const val OSSUARY_SPIKE_CONTACT_TICK = 8
-        private const val OSSUARY_CAGE_CLOSE_TICK = 12
+        private const val OSSUARY_SPIKE_CONTACT_TICK = 6
         private const val MIN_GROUND_PATH_LENGTH = 0.75
     }
 }

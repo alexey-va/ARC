@@ -580,17 +580,24 @@ class StaffSpellsTest : FreeSpec({
             val player = h.player("staff-comet-acceleration", world, StaffSpell.EMBER)
             h.controller.start()
             h.controller.cast(player)
-            h.scheduler.tick(20)
+            // Release itself sends a moving frame, before the scheduler advances even one tick.
+            h.movedEffects.size shouldBe 1
+            (h.movedEffects.single().second.distance(h.visualPlays.single().from) >= 0.75) shouldBe true
+            h.scheduler.tick(1)
+            h.movedEffects.size shouldBe 1 // Do not restart the initial two-tick tween halfway through.
+            h.scheduler.tick(1)
+            h.movedEffects.size shouldBe 2
+            h.scheduler.tick(18)
             val muzzle = h.visualPlays.single().from
             (kotlin.math.abs(muzzle.distance(player.eyeLocation) - 2.4) < .0001) shouldBe true
             val distances = listOf(muzzle) + h.movedEffects.map { it.second }
             val steps = distances.zipWithNext().map { (a, b) -> a.distance(b) }
-            steps.size shouldBe 10
+            steps.size shouldBe 11
             steps.zipWithNext().all { (a, b) -> b + 0.000001 >= a } shouldBe true
             (steps.last() > steps.first() * 3.0) shouldBe true
             (distances.last().z > distances.first().z) shouldBe true
 
-            val actualHead = muzzle.z + (1..20).sumOf { staffEmberStep(it, 1.2) }
+            val actualHead = muzzle.z + (1..21).sumOf { staffEmberStep(it, 1.2) }
             val victim = h.zombie(world, 0.5, actualHead + 1.3)
             h.scheduler.tick(1)
             h.hits shouldBe listOf(victim)
@@ -798,7 +805,7 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "icicle primary assembles seven icicles, staggers their homing flights, and slows only successful hits" {
+    "icicle primary aims each staggered shot at the current reticle and slows only successful hits" {
         var deniedId: UUID? = null
         withStaffHarness(settings = staffSettings(range = 24.0, aimDegrees = 40.0),
             hit = { _, target -> target.uniqueId != deniedId }) { h ->
@@ -823,12 +830,20 @@ class StaffSpellsTest : FreeSpec({
                     kotlin.math.abs(icicles[index].from.z - (eye.z + offset.z.toDouble())) < 0.001
             } shouldBe true
 
+            fun aimAt(victim: LivingEntity) {
+                player.teleport(player.location.apply {
+                    direction = center(victim).toVector().subtract(player.eyeLocation.toVector())
+                })
+            }
+            aimAt(targets[0])
             h.scheduler.tick(3)
             h.projectileMoves shouldBe emptyList()
             h.scheduler.tick(1)
             h.projectileMoves.map { it.id } shouldBe listOf(icicles[0].id)
+            aimAt(targets[1])
             h.scheduler.tick(2)
             h.projectileMoves.count { it.id == icicles[1].id } shouldBe 1
+            aimAt(targets[2])
             h.scheduler.tick(2)
             h.projectileMoves.count { it.id == icicles[2].id } shouldBe 1
             h.scheduler.tick(50)
@@ -839,6 +854,26 @@ class StaffSpellsTest : FreeSpec({
             targets.filter { it.uniqueId != deniedId }.all { it.hasPotionEffect(PotionEffectType.SLOWNESS) } shouldBe true
             targets.last().hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
             verify(exactly = 7) { h.effects.impact(any(), any(), 0.9, 10) }
+        }
+    }
+
+    "icicle volley follows reticle turns in empty space without redirecting the first airborne shot" {
+        withStaffHarness(settings = staffSettings(range = 32.0)) { h ->
+            val world = h.paper.addSimpleWorld("staff-icicle-live-reticle")
+            val player = h.player("live-reticle", world, StaffSpell.ICICLE)
+            h.controller.start()
+            h.controller.cast(player)
+            val shots = h.visualPlays.filter { it.spell == StaffSpell.ICICLE }
+            h.scheduler.tick(4)
+            player.teleport(player.location.apply { yaw = -55f })
+            h.scheduler.tick(16)
+            val first = h.projectileMoves.last { it.id == shots[0].id }
+            val second = h.projectileMoves.last { it.id == shots[1].id }
+            // The initial shot retains the original forward destination. Later shots turn right.
+            (first.at.x < player.location.x + 1.0) shouldBe true
+            (second.at.x > player.location.x + 8.0) shouldBe true
+            (second.direction.x > 0.5) shouldBe true
+            h.hits shouldBe emptyList()
         }
     }
 

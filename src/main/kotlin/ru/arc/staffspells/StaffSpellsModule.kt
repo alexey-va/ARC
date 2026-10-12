@@ -317,8 +317,12 @@ internal class StaffSpellController(
                 val visualId = effects.play(player.uniqueId, spell, muzzle,
                     muzzle.clone().add(direction), radius = 0.85,
                     durationTicks = kotlin.math.ceil(settings.range / settings.emberSpeed).toInt() + 4, controllerDriven = true, charge = cast.visualCharge)
-                embers += PendingStaffEmber(muzzle, direction, cast, tuning, settings.range - eye.distance(muzzle), visualId, muzzle)
+                val ember = PendingStaffEmber(muzzle, direction, cast, tuning,
+                    settings.range - eye.distance(muzzle), visualId, muzzle)
+                embers += ember
                 visuals.withOwner(cast.casterId) { visuals.emberTrail(muzzle, muzzle) }
+                // Seed the first forward keyframe on release instead of waiting for the two-tick frame cadence.
+                tickEmbers(ember)
             }
             else -> Unit // Additional staff families have their own bounded attack lifecycle.
 
@@ -545,8 +549,6 @@ internal class StaffSpellController(
         val right = Vector(forward.z, 0.0, -forward.x).normalize()
         // Leave the shoulders horizontally before seeking: a downwards look must not shoot through the eye.
         val direction = forward.clone()
-        val targets = aimed(player, settings.range, settings.aimDegrees, cast).take(count)
-        val aimPoint = aimPoint(player)
         val visited = mutableSetOf<UUID>()
 
         repeat(count) { index ->
@@ -558,12 +560,11 @@ internal class StaffSpellController(
             if (!visible(eye, anchor)) return@repeat
 
             reserveBolt(player.uniqueId)
-            val target = targets.getOrNull(index) ?: targets.firstOrNull()
             val visualId = effects.play(player.uniqueId, StaffSpell.ICICLE, anchor,
                 anchor.clone().add(direction), radius = 0.9, durationTicks = 80, charge = cast.visualCharge)
-            bolts += PendingStaffBolt(anchor, direction.clone(), target, cast, tuning, 1.0, 1,
+            bolts += PendingStaffBolt(anchor, direction.clone(), null, cast, tuning, 1.0, 1,
                 visited, settings.range, visualId, spell = StaffSpell.ICICLE,
-                fixedAimPoint = if (target == null) aimPoint.clone() else null,
+                aimOnLaunch = true,
                 launchDelayTicks = staffIcicleLaunchDelay(index), holdForwardTicks = 4)
         }
     }
@@ -673,6 +674,14 @@ internal class StaffSpellController(
                 if (bolt.launchDelayTicks > 0) return@forEach
             }
             val from = bolt.position
+            if (bolt.age == 0 && bolt.aimOnLaunch) {
+                // Each shot follows the current reticle, including turns made during the volley.
+                // Already airborne shots retain their own destination; the whole crown never snaps sideways.
+                val eye = player.eyeLocation
+                val aimedPoint = aimPoint(player)
+                bolt.target = lineTargets(player, eye, aimedPoint, 0.25, bolt.cast).firstOrNull()
+                bolt.fixedAimPoint = aimedPoint
+            }
             bolt.age++
             val targetAt = bolt.target?.takeIf { damage.eligible(player, it, bolt.cast) }?.let(::center) ?: bolt.fixedAimPoint
             if (targetAt != null && bolt.age > bolt.holdForwardTicks) {
@@ -931,11 +940,12 @@ internal class StaffSpellController(
         }
     }
 
-    private fun tickEmbers() {
+    private fun tickEmbers(launching: PendingStaffEmber? = null) {
         val impacts = mutableListOf<Triple<Player, PendingStaffEmber, Pair<Location, LivingEntity?>>>()
         val iterator = embers.iterator()
         while (iterator.hasNext()) {
             val ember = iterator.next()
+            if (launching != null && ember !== launching) continue
             val player = Bukkit.getPlayer(ember.cast.casterId)
             if (player == null || !ready(player) || player.world != ember.position.world ||
                 !damage.isCurrent(player, ember.cast)) {
@@ -957,7 +967,7 @@ internal class StaffSpellController(
             val end = collision?.toLocation(from.world) ?: blockEnd
             // The client reaches each two-tick display keyframe after interpolation.
             // Keep its native-particle wake behind that keyframe, never at the future collision point.
-            if (ember.age % 2 == 0) visuals.withOwner(ember.cast.casterId) {
+            if (ember.age > 1 && (ember.age - 1) % StaffSpellDisplayEffects.FRAME_TICKS == 0) visuals.withOwner(ember.cast.casterId) {
                 visuals.emberTrail(ember.visualPosition, from, meteor = ember.radius != null)
                 ember.visualPosition = end.clone()
             }
@@ -967,7 +977,7 @@ internal class StaffSpellController(
                 impacts += Triple(player, ember, end to victim)
             } else {
                 ember.position = end
-                if (ember.age % StaffSpellDisplayEffects.FRAME_TICKS == 0) {
+                if ((ember.age - 1) % StaffSpellDisplayEffects.FRAME_TICKS == 0) {
                     effects.move(ember.visualId, end)
                     effects.synchronize(ember.visualId, ember.age)
                 }
@@ -1093,11 +1103,12 @@ private data class PendingStaffEmber(var position: Location, val direction: Vect
     var visualPosition: Location, val speed: Double? = null, val radius: Double? = null,
     val hitTargets: MutableSet<UUID>? = null, var age: Int = 0)
 
-private data class PendingStaffBolt(var position: Location, val direction: Vector, val target: LivingEntity?,
+private data class PendingStaffBolt(var position: Location, val direction: Vector, var target: LivingEntity?,
     val cast: StaffSpellCast, val tuning: StaffSpellTuning, val scale: Double, val jumps: Int,
     val visited: MutableSet<UUID>, var remainingDistance: Double, val visualId: UUID?, var age: Int = 0,
     val trail: MutableList<Location> = mutableListOf(position.clone()), val spell: StaffSpell = StaffSpell.CHAIN,
-    val fixedAimPoint: Location? = null, var launchDelayTicks: Int = 0, val holdForwardTicks: Int = 0, val burstRadius: Double = 0.0)
+    var fixedAimPoint: Location? = null, var launchDelayTicks: Int = 0, val holdForwardTicks: Int = 0,
+    val burstRadius: Double = 0.0, val aimOnLaunch: Boolean = false)
 
 private class PendingStaffWave(
     val casterId: UUID,
@@ -1139,11 +1150,11 @@ private data class PendingStaffWaveHit(
 
 internal fun center(entity: LivingEntity) = entity.location.add(0.0, entity.height * 0.5, 0.0)
 
-/** A slow ignition grows into a fast discharge; collision sweeps the full variable-length step. */
+/** Immediate forward impulse grows into a fast discharge; collision sweeps the full variable-length step. */
 internal fun staffEmberStep(age: Int, speed: Double, meteor: Boolean = false): Double {
-    val t = ((age - 1).coerceAtLeast(0) / if (meteor) 8.0 else 16.0).coerceIn(0.0, 1.0)
+    val t = ((age - 1).coerceAtLeast(0) / if (meteor) 8.0 else 12.0).coerceIn(0.0, 1.0)
     val eased = t * t * (3.0 - 2.0 * t)
-    return speed * if (meteor) 0.75 + eased else 0.28 + 1.62 * eased
+    return speed * if (meteor) 0.75 + eased else 0.65 + 1.25 * eased
 }
 
 /** Shared by live pursuit and the offline flight fixture; changes only the supplied heading. */

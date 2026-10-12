@@ -16,7 +16,8 @@ class StaffSpellArsenalTest : FreeSpec({
                 val particleOnly = spell == StaffSpell.GALE && !secondary || spell == StaffSpell.TIDE && secondary
                 if (particleOnly) parts.isEmpty() shouldBe true else (parts.size in 1..48) shouldBe true
                 val samples = staffArsenalParticles(spell, 12, duration, 3.0, secondary, 1.0)
-                (samples.size in 32..192) shouldBe true
+                val particleBudget = if (spell == StaffSpell.OSSUARY) 6..14 else 32..192
+                (samples.size in particleBudget) shouldBe true
                 samples.all { listOf(it.offset.x, it.offset.y, it.offset.z).all(Double::isFinite) } shouldBe true
                 parts.all { it.scale.x > 0 && it.scale.y > 0 && it.scale.z > 0 } shouldBe true
                 val identities = parts.mapNotNull { it.identity }
@@ -39,18 +40,46 @@ class StaffSpellArsenalTest : FreeSpec({
         val soulSignature = soul.map { it.particle }.toSet()
         (galeSignature != tideSignature && tideSignature != soulSignature && galeSignature != soulSignature) shouldBe true
 
-        val roots = staffArsenalParts(StaffSpell.NOVA, 30, 48, 12.0, 3.0, false, false,
-            StaffCastInput.PRIMARY, 1.0).mapNotNull { it.identity }
+        val rootParts = staffArsenalParts(StaffSpell.NOVA, 30, 48, 12.0, 3.0, false, false,
+            StaffCastInput.PRIMARY, 1.0)
+        val roots = rootParts.mapNotNull { it.identity }
         roots.any { it.startsWith("root:trail:") } shouldBe true
         roots.any { it.startsWith("root:grasp:") } shouldBe true
+        rootParts.filter { it.identity?.startsWith("root:trail:") == true }.all {
+            it.center.y - it.scale.y / 2 in 0.02f..0.08f
+        } shouldBe true
+        rootParts.filter { it.identity?.startsWith("root:thorn:") == true }.all {
+            it.center.y - it.scale.y / 2 in 0.02f..0.08f
+        } shouldBe true
 
         val bone = staffArsenalParts(StaffSpell.OSSUARY, 8, 22, 1.0, 1.0, false, false,
             StaffCastInput.PRIMARY, 0.0)
         bone.any { it.material == Material.BONE_BLOCK } shouldBe true
-        val cage = staffArsenalParts(StaffSpell.OSSUARY, 12, 36, 1.0, 2.0, false, true,
+        val earlyBoneTip = staffArsenalParts(StaffSpell.OSSUARY, 2, 54, 1.0, 1.0, false, false,
+            StaffCastInput.PRIMARY, 1.0).single { it.identity == "bone:spike:tip" }
+        val fullBoneTip = staffArsenalParts(StaffSpell.OSSUARY, 8, 54, 1.0, 1.0, false, false,
+            StaffCastInput.PRIMARY, 1.0).single { it.identity == "bone:spike:tip" }
+        (fullBoneTip.center.y + fullBoneTip.scale.y / 2 > 3.0f) shouldBe true
+        (fullBoneTip.center.y > earlyBoneTip.center.y * 2) shouldBe true
+
+        val telegraph = staffArsenalParts(StaffSpell.OSSUARY, 2, 36, 1.0, 2.0, false, true,
             StaffCastInput.SECONDARY, 1.0)
-        cage.any { it.material == Material.BLACKSTONE } shouldBe true
-        cage.count { it.material == Material.BONE_BLOCK } shouldBe 33
+        val strike = staffArsenalParts(StaffSpell.OSSUARY, OSSUARY_SECONDARY_STRIKE_TICK, 36, 1.0, 2.0, false, true,
+            StaffCastInput.SECONDARY, 1.0)
+        telegraph.count { it.identity?.startsWith("bone:erupt:") == true } shouldBe 14
+        strike.count { it.identity?.startsWith("bone:erupt:") == true } shouldBe 14
+        strike.any { it.identity?.startsWith("cage:") == true } shouldBe false
+        strike.filter { it.identity?.endsWith(":tip") == true }.all {
+            it.center.y + it.scale.y / 2 > 2.5f
+        } shouldBe true
+
+        staffArsenalParticles(StaffSpell.OSSUARY, 8, 22, 1.0, false, 1.0).size shouldBe 6
+        staffArsenalParticles(StaffSpell.OSSUARY, 4, 36, 2.0, true, 1.0).size shouldBe 6
+        staffArsenalParticles(StaffSpell.OSSUARY, 8, 36, 2.0, true, 1.0).size shouldBe 7
+        staffArsenalParticles(StaffSpell.OSSUARY, OSSUARY_SECONDARY_STRIKE_TICK,
+            36, 2.0, true, 1.0).size shouldBe 14
+        staffArsenalParticles(StaffSpell.OSSUARY, OSSUARY_SECONDARY_STRIKE_TICK + 2,
+            36, 2.0, true, 1.0).isEmpty() shouldBe true
     }
 
     "moon blade hits at descent contact and never twice" {
@@ -94,7 +123,7 @@ class StaffSpellArsenalTest : FreeSpec({
         }
     }
 
-    "bone spikes stagger along the visible floor and the rib cage closes at its warning point" {
+    "bone spikes stay visible above the floor and the aimed eruption hits with the spike rise" {
         fun stoneFloor(world: org.bukkit.World) {
             for (x in -2..2) for (z in 0..14) world.getBlockAt(x, 63, z).type = Material.STONE
         }
@@ -105,24 +134,24 @@ class StaffSpellArsenalTest : FreeSpec({
             val target = h.zombie(world, x = .5, z = 8.0)
             h.controller.start()
             h.controller.cast(player, StaffCastInput.PRIMARY, 0.0)
-            h.scheduler.tick(18)
+            h.scheduler.tick(14)
             h.hits shouldBe emptyList()
-            h.scheduler.tick(18)
+            h.scheduler.tick(2)
             val spikeScenes = h.visualPlays.filter { it.spell == StaffSpell.OSSUARY && !it.secondary }
             spikeScenes.size shouldBe 4
             (spikeScenes.maxOf { it.from.z } - spikeScenes.minOf { it.from.z } > 2.5) shouldBe true
             h.hits.map { it.uniqueId } shouldBe listOf(target.uniqueId)
         }
         withStaffHarness { h ->
-            val world = h.paper.addSimpleWorld("ossuary-cage")
+            val world = h.paper.addSimpleWorld("ossuary-eruption")
             stoneFloor(world)
-            val player = h.player("ossuary-cage", world, StaffSpell.OSSUARY)
+            val player = h.player("ossuary-eruption", world, StaffSpell.OSSUARY)
             val target = h.zombie(world, x = .5, z = 8.0)
             h.controller.start()
             h.controller.cast(player, StaffCastInput.SECONDARY, 0.0)
-            h.scheduler.tick(8)
+            h.scheduler.tick(10)
             h.hits shouldBe emptyList()
-            h.scheduler.tick(8)
+            h.scheduler.tick(2)
             h.hits.map { it.uniqueId } shouldBe listOf(target.uniqueId)
         }
     }

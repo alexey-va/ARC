@@ -98,6 +98,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
             Vector3f(eye.direction.x.toFloat(), eye.direction.y.toFloat(), eye.direction.z.toFloat()))
         scene.chargeProgress = progress.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
         if (scene.controllerDriven) scene.controllerDirty = true
+        else if (scene.charging && scene.spell == StaffSpell.EMBER) render(scene)
     }
 
     /** Applies the controller's animation clock without letting the display timer advance it again. */
@@ -196,7 +197,9 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
                 val expired = if (tracked) scene.age >= 160 else scene.age >= scene.duration
                 if (expired) remove(scene.id)
                 // Flying comets have one movement owner sending two-tick forward keyframes.
-                else if (scene.charging || scene.spell != StaffSpell.EMBER || scene.impact) render(scene)
+                // EMBER charge geometry is progress-only; the shared timer must not restart its tween.
+                else if (!(scene.charging && scene.spell == StaffSpell.EMBER) &&
+                    (scene.charging || scene.spell != StaffSpell.EMBER || scene.impact)) render(scene)
             }
         }
         if (scenes.isNotEmpty()) refreshAudience()
@@ -257,6 +260,16 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         val retainedHandles = reusedHandles.filterNotNull().toSet()
         previousHandles.filterNot(retainedHandles::contains).forEach(PacketBlockDisplay::remove)
         scene.handles.clear()
+        val interpolationTicks = when {
+            scene.spell == StaffSpell.CHAIN -> 0
+            scene.charging && scene.spell == StaffSpell.EMBER -> CHARGE_INTERPOLATION_TICKS
+            else -> FRAME_TICKS
+        }
+        val teleportTicks = when {
+            scene.spell == StaffSpell.CHAIN -> 0
+            scene.charging && scene.spell == StaffSpell.EMBER -> CHARGE_INTERPOLATION_TICKS
+            else -> FRAME_TICKS
+        }
         parts.forEachIndexed { index, part ->
             val center = scene.rotation.transform(Vector3f(part.center))
             val at = scene.origin.clone().add(center.x.toDouble(), center.y.toDouble(), center.z.toDouble()).apply {
@@ -267,17 +280,14 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
                 it.isVisibleByDefault = false
                 it.brightness = Display.Brightness(15, 15)
                 it.viewRange = VIEW_RANGE.toFloat() / 64f
-                it.interpolationDuration = if (scene.spell == StaffSpell.CHAIN) 0 else FRAME_TICKS
                 it.shadowStrength = 0f
             }
             scene.handles += handle
             if (!handle.isValid) return@forEachIndexed
             if (handle.blockData.material != part.material)
                 handle.blockData = blocks.getOrPut(part.material) { part.material.createBlockData() }
-            handle.teleportDuration = when {
-                scene.spell == StaffSpell.CHAIN -> 0
-                else -> FRAME_TICKS
-            }
+            handle.interpolationDuration = interpolationTicks
+            handle.teleportDuration = teleportTicks
             handle.teleport(at)
             val rotation = Quaternionf(scene.rotation).mul(part.rotation)
             // Block models occupy [0,1]^3. Center them at their real packet anchor for chunk visibility.
@@ -340,6 +350,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
 
     internal companion object {
         const val FRAME_TICKS = 2
+        const val CHARGE_INTERPOLATION_TICKS = 4
         const val MAX_SCENES = 32
         const val MAX_PER_CASTER = 12
         const val MAX_PER_VIEWER = 16

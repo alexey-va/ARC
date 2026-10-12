@@ -159,7 +159,7 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
                 fun volume(parts: List<StaffDisplayPart>) = parts.sumOf {
                     (it.scale.x * it.scale.y * it.scale.z).toDouble()
                 }
-                if ((spell == StaffSpell.NOVA || spell == StaffSpell.OSSUARY) && secondary) {
+                if (spell == StaffSpell.NOVA && secondary) {
                     fun outerRadius(parts: List<StaffDisplayPart>) = parts.maxOf {
                         kotlin.math.hypot(it.center.x.toDouble(), it.center.z.toDouble())
                     }
@@ -441,12 +441,62 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
             body.forEach { part ->
                 part.teleports.size shouldBe 11 // Initial frame plus ten keyframes, not twenty tick updates.
                 part.teleports.zipWithNext().all { (a, b) -> b.z > a.z } shouldBe true
+                part.interpolationDurationTicks shouldBe StaffSpellDisplayEffects.FRAME_TICKS
+                part.teleportDurationTicks shouldBe StaffSpellDisplayEffects.FRAME_TICKS
                 verify(atLeast = 1) { part.handle.teleportDuration = 2 }
             }
             h.effects.impact(id, start.clone().add(0.0, 0.0, distance), 2.8, 20)
             body.take(2).forEach { part ->
                 // Only semantic core pieces survive; the wake retires at collision.
                 (part.teleports.last().z <= start.z + distance + 1.0) shouldBe true
+            }
+        }
+    }
+
+    "EMBER charge tweens each input update across four ticks and retains its packet handles" {
+        withDisplayHarness { h ->
+            val caster = h.player("ember-charge-interpolation")
+            val eye = caster.eyeLocation
+            val id = h.effects.play(caster.uniqueId, StaffSpell.EMBER, eye,
+                durationTicks = 220, charging = true)!!
+            val body = h.recorder.records.toList()
+            body.size shouldBe 21
+            body.forEach {
+                it.interpolationDurationTicks shouldBe StaffSpellDisplayEffects.CHARGE_INTERPOLATION_TICKS
+                it.teleportDurationTicks shouldBe StaffSpellDisplayEffects.CHARGE_INTERPOLATION_TICKS
+            }
+            val handles = body.map { it.handle }
+            val initialCoreScale = body.first().poses.last().values[3]
+
+            h.effects.charge(id, eye, 0.5)
+            body.forEach { it.poses.size shouldBe 2 }
+            val halfCoreScale = body.first().poses.last().values[3]
+            (halfCoreScale > initialCoreScale) shouldBe true
+            h.scheduler.tick(4)
+            body.forEach {
+                it.poses.size shouldBe 2
+                it.interpolationDurationTicks shouldBe StaffSpellDisplayEffects.CHARGE_INTERPOLATION_TICKS
+                it.teleportDurationTicks shouldBe StaffSpellDisplayEffects.CHARGE_INTERPOLATION_TICKS
+            }
+
+            h.effects.charge(id, eye, 1.0)
+            body.forEach { it.poses.size shouldBe 3 }
+            (body.first().poses.last().values[3] > halfCoreScale) shouldBe true
+            body.forEachIndexed { index, part ->
+                (part.handle === handles[index]) shouldBe true
+                part.interpolationDurationTicks shouldBe StaffSpellDisplayEffects.CHARGE_INTERPOLATION_TICKS
+                part.teleportDurationTicks shouldBe StaffSpellDisplayEffects.CHARGE_INTERPOLATION_TICKS
+                verify(atLeast = 1) { part.handle.teleportDuration = StaffSpellDisplayEffects.CHARGE_INTERPOLATION_TICKS }
+            }
+            body.all { it.removals == 0 } shouldBe true
+            h.recorder.records.size shouldBe body.size
+
+            val icicle = h.player("icicle-charge-interpolation")
+            h.effects.play(icicle.uniqueId, StaffSpell.ICICLE, icicle.eyeLocation,
+                durationTicks = 220, charging = true)!!
+            h.recorder.records.drop(body.size).forEach {
+                it.interpolationDurationTicks shouldBe StaffSpellDisplayEffects.FRAME_TICKS
+                it.teleportDurationTicks shouldBe StaffSpellDisplayEffects.FRAME_TICKS
             }
         }
     }
@@ -553,6 +603,8 @@ private data class RecordedDisplay(
     val spawn: Location,
     val teleports: MutableList<Location> = mutableListOf(),
     val poses: MutableList<DisplayPose> = mutableListOf(),
+    var interpolationDurationTicks: Int = -1,
+    var teleportDurationTicks: Int = -1,
     val visibleViewers: MutableSet<UUID> = mutableSetOf(),
     var block: BlockData,
     var blockUpdates: Int = 0,
@@ -576,6 +628,14 @@ private class PacketDisplayRecorder {
             every { handle.blockData = any() } answers {
                 record.block = firstArg<BlockData>()
                 record.blockUpdates++
+                Unit
+            }
+            every { handle.interpolationDuration = any() } answers {
+                record.interpolationDurationTicks = firstArg<Int>()
+                Unit
+            }
+            every { handle.teleportDuration = any() } answers {
+                record.teleportDurationTicks = firstArg<Int>()
                 Unit
             }
             every { handle.teleport(any()) } answers { record.teleports += firstArg<Location>().clone() }

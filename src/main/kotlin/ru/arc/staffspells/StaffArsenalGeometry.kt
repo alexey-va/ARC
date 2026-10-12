@@ -11,6 +11,12 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
 
+internal const val OSSUARY_PRIMARY_RISE_TICKS = 5
+internal const val OSSUARY_SECONDARY_ERUPT_TICK = 6
+internal const val OSSUARY_SECONDARY_RISE_TICKS = 4
+internal const val OSSUARY_SECONDARY_STAGGER_TICKS = 1
+internal const val OSSUARY_SECONDARY_STRIKE_TICK = 12
+
 internal fun staffArsenalFront(ageTicks: Int, durationTicks: Int, radius: Double): Double =
     (radius.takeIf(Double::isFinite)?.coerceIn(0.0, 64.0) ?: 0.0) *
         (ageTicks.coerceAtLeast(0).toDouble() / durationTicks.coerceAtLeast(1)).coerceIn(0.0, 1.0)
@@ -192,7 +198,7 @@ internal fun staffArsenalParts(spell: StaffSpell, ageTicks: Int, durationTicks: 
                     val yaw = kotlin.math.atan2((sin((f + .01) * PI * 4 + phase) - sin((f - .01) * PI * 4 + phase)) * .22,
                         reach / segments)
                     part("root:trail:$root:$joint", if (joint % 3 == 2) Material.MOSS_BLOCK else Material.DARK_OAK_WOOD,
-                        x / scale, -.24, (reach * f) / scale,
+                        x / scale, .16, (reach * f) / scale,
                         .22 * birth, .24 * birth, (reach / segments * 1.25) * birth,
                         yaw = yaw, roll = .1 * kotlin.math.cos(f * PI * 4 + phase))
                 } }
@@ -201,7 +207,7 @@ internal fun staffArsenalParts(spell: StaffSpell, ageTicks: Int, durationTicks: 
                     val x = (if (root == 0) -.22 else .22) + sin(f * PI * 4 + root * PI) * .22
                     val birth = smooth((routeTick - f * 24.0 + 2.0) / 3.0)
                     part("root:thorn:$root:$thorn", Material.FLOWERING_AZALEA_LEAVES,
-                        x / scale, .03, (reach * f) / scale,
+                        x / scale, .20, (reach * f) / scale,
                         .18 * birth, .32 * birth, .42 * birth, yaw = -kotlin.math.atan2(x, reach))
                 } }
                 // At tick 22 the ground runners reach the target; six thorn fingers close over four more ticks.
@@ -217,57 +223,28 @@ internal fun staffArsenalParts(spell: StaffSpell, ageTicks: Int, durationTicks: 
             }
         }
         StaffSpell.OSSUARY -> if (secondary) {
-            val close = smooth((age - 2.0) / 10.0)
-            val radius = 1.55 - close * .48
-            repeat(8) { rib ->
-                val a = rib * PI * 2 / 8
-                repeat(3) { joint ->
-                    val h = (joint + .5) / 3.0
-                    val r = radius * (1.0 - sin(h * PI) * .18)
-                    part("cage:rib:$rib:$joint", Material.BONE_BLOCK,
-                        cos(a) * r, .2 + h * 1.85, sin(a) * r,
-                        .22 * scale, .72 * scale, .24 * scale,
-                        yaw = -a, roll = cos(a) * .18, pitch = sin(a) * .15)
-                }
-            }
-            repeat(8) { i ->
-                val a = i * PI * 2 / 8
-                part("cage:base:$i", Material.BONE_BLOCK, cos(a) * radius, .16, sin(a) * radius,
-                    .20 * scale, .18 * scale, .48 * scale, yaw = -a)
-            }
-            part("cage:skull", Material.BONE_BLOCK, 0.0, .35, radius * .76,
-                .46 * scale, .52 * scale, .34 * scale)
-            repeat(2) { socket ->
-                val x = if (socket == 0) -.12 else .12
-                part("cage:socket:$socket", Material.BLACKSTONE, x, .40, radius * .76 + .08,
-                    .12 * scale, .14 * scale, .08 * scale)
+            // A brief ground warning resolves into seven fast, tall bone spikes.
+            repeat(7) { spike ->
+                val angle = spike * PI * 2 / 6
+                val radius = if (spike == 0) 0.0 else .78
+                val x = cos(angle) * radius
+                val z = sin(angle) * radius
+                val stagger = (spike % 3) * OSSUARY_SECONDARY_STAGGER_TICKS
+                val rise = smooth((age - OSSUARY_SECONDARY_ERUPT_TICK - stagger).toDouble() /
+                    OSSUARY_SECONDARY_RISE_TICKS)
+                val height = (2.35 + q * .35) * rise
+                part("bone:erupt:$spike:shaft", Material.BONE_BLOCK, x, -.36 + height * .43, z,
+                    .27 * rise, height * .86, .27 * rise, yaw = -angle)
+                part("bone:erupt:$spike:tip", Material.CALCITE, x, -.36 + height - .16, z,
+                    .12 * rise, .48 * rise, .12 * rise, yaw = -angle)
             }
         } else {
-            val rise = smooth(age / 9.0)
-            part("bone:spine:base", Material.BONE_BLOCK, 0.0, .22 * rise, 0.0,
-                .48 * rise, .48 * rise, .48 * rise)
-            part("bone:spine:mid", Material.BONE_BLOCK, 0.0, .68 * rise, 0.0,
-                .36 * rise, .66 * rise, .36 * rise)
-            part("bone:spine:tip", Material.CALCITE, 0.0, 1.27 * rise, 0.0,
-                .18 * rise, .64 * rise, .18 * rise)
-            repeat(2) { side ->
-                val sign = if (side == 0) -1.0 else 1.0
-                repeat(2) { joint ->
-                    val h = if (joint == 0) .36 else .72
-                    val curve = if (joint == 0) .48 else .32
-                    val ribRise = smooth((age - 1.0) / 8.0)
-                    part("bone:rib:$side:$joint", Material.BONE_BLOCK, sign * curve * ribRise, h * ribRise, 0.0,
-                        .22 * ribRise, .34 * ribRise, .34 * ribRise,
-                        roll = sign * (if (joint == 0) .5 else .82), pitch = -.18)
-                }
-            }
-            part("bone:skull", Material.BONE_BLOCK, 0.0, .12 * rise, -.33,
-                .38 * rise, .30 * rise, .25 * rise)
-            repeat(2) { socket ->
-                val x = if (socket == 0) -.10 else .10
-                part("bone:socket:$socket", Material.BLACKSTONE, x * rise, .18 * rise, -.18,
-                    .10 * rise, .10 * rise, .06 * rise)
-            }
+            val rise = smooth(age / OSSUARY_PRIMARY_RISE_TICKS.toDouble())
+            val height = (2.65 + q * .4) * rise
+            part("bone:spike:shaft", Material.BONE_BLOCK, 0.0, -.32 + height * .42, 0.0,
+                .34 * rise, height * .84, .34 * rise)
+            part("bone:spike:tip", Material.CALCITE, 0.0, -.32 + height - .18, 0.0,
+                .14 * rise, .56 * rise, .14 * rise)
         }
         else -> Unit
     }
@@ -485,36 +462,30 @@ internal fun staffArsenalParticles(spell: StaffSpell, ageTicks: Int, durationTic
             }
         }
         StaffSpell.OSSUARY -> if (secondary) {
-            val close = smooth((age - 2.0) / 10.0)
-            val r = (1.55 - close * .48) * fade
-            repeat(48) { i ->
-                val rib = i / 6
-                val part = i % 6
-                val a = rib * PI * 2 / 8 + age * .01
-                val h = part / 5.0
-                val radiusAtHeight = r * (1.0 - sin(h * PI) * .18)
-                mote(if (part % 5 == 0) Particle.SOUL else Particle.DUST_COLOR_TRANSITION,
-                    cos(a) * radiusAtHeight, .15 + h * 1.85, sin(a) * radiusAtHeight,
-                    if (part % 5 == 0) null else bone, spread = .012)
-            }
-            repeat(8) { i ->
-                val a = i * PI / 4
-                mote(Particle.DUST_COLOR_TRANSITION, cos(a) * r, .2, sin(a) * r, bone)
+            if (ageTicks < OSSUARY_SECONDARY_ERUPT_TICK) {
+                repeat(6) { i ->
+                    val a = i * PI / 3
+                    mote(Particle.DUST_COLOR_TRANSITION, cos(a) * .78, .04, sin(a) * .78, bone, spread = .008)
+                }
+            } else if (ageTicks <= OSSUARY_SECONDARY_STRIKE_TICK) {
+                repeat(7) { spike ->
+                    val angle = spike * PI * 2 / 6
+                    val radius = if (spike == 0) 0.0 else .78
+                    val stagger = (spike % 3) * OSSUARY_SECONDARY_STAGGER_TICKS
+                    val rise = smooth((age - OSSUARY_SECONDARY_ERUPT_TICK - stagger).toDouble() /
+                        OSSUARY_SECONDARY_RISE_TICKS)
+                    mote(Particle.DUST_COLOR_TRANSITION, cos(angle) * radius,
+                        rise * (2.35 + q * .35), sin(angle) * radius, bone, spread = .01)
+                    if (ageTicks == OSSUARY_SECONDARY_STRIKE_TICK)
+                        mote(Particle.SOUL, cos(angle) * radius, 2.35 + q * .35, sin(angle) * radius)
+                }
             }
         } else {
-            val rise = smooth(age / 9.0) * fade
-            repeat(36) { i ->
-                val f = i / 35.0
-                val a = i * 2.39996
-                val r = (.18 + f * .38) * rise
-                mote(if (i % 6 == 0) Particle.SOUL else Particle.DUST_COLOR_TRANSITION,
-                    cos(a) * r, f * (1.65 + q * .25) * rise, sin(a) * r,
-                    if (i % 6 == 0) null else bone, spread = .014)
-            }
-            repeat(8) { i ->
-                val a = i * PI / 4
-                mote(Particle.DUST_COLOR_TRANSITION, cos(a) * .48 * rise, .28 + .2 * (i % 2),
-                    sin(a) * .48 * rise, bone, spread = .01)
+            val rise = smooth(age / OSSUARY_PRIMARY_RISE_TICKS)
+            repeat(6) { i ->
+                val height = i / 5.0 * (2.65 + q * .4) * rise
+                mote(if (i == 5) Particle.SOUL else Particle.DUST_COLOR_TRANSITION,
+                    0.0, height, 0.0, if (i == 5) null else bone, spread = .008)
             }
         }
         else -> Unit
