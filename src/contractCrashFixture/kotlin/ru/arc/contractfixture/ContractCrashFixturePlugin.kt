@@ -95,13 +95,19 @@ class ContractCrashFixturePlugin : JavaPlugin() {
             }
             "snapshot" -> {
                 val records = persistence.journalRecords().filter { it.playerId == player.uniqueId.toString() }
-                val crash = Properties().apply { File(dataFolder, "crashed.properties").inputStream().use(::load) }
-                val record = records.singleOrNull { it.submissionId == crash.getProperty("submissionId") }
+                val crashFile = File(dataFolder, "crashed.properties")
+                val crash = Properties()
+                if (crashFile.isFile) crashFile.inputStream().use(crash::load)
+                val crashMatchesArm = armed?.let { it.playerId == player.uniqueId && it.phase == crash.getProperty("phase") } ?: true
+                val crashSubmissionId = crash.getProperty("submissionId").takeIf { crashMatchesArm }
+                val record = crashSubmissionId?.let { id -> records.singleOrNull { it.submissionId == id } }
                 val view = ContractsManager.currentViews().single { it.id == "e2e_stone" }
+                val cursor = player.openInventory.cursor.takeUnless { it.type.isAir }
                 writeProperties(args[1], mapOf(
                     "records" to records.size.toString(),
                     "items" to player.inventory.contents.filterNotNull().filter { it.type == Material.STONE }.sumOf { it.amount }.toString(),
                     "deskItems" to deskStoneCount(player).toString(),
+                    "cursorItems" to (cursor?.amount ?: 0).toString(),
                     "status" to (record?.status?.label ?: "none"),
                     "reviewReason" to (record?.reviewReason?.label ?: "none"),
                     "quantity" to (record?.acceptedQuantity ?: 0).toString(),

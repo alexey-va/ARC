@@ -28,6 +28,7 @@ import ru.arc.util.TextUtil
 import java.util.UUID
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.util.logging.Level
 
 /** Common NPC desk: native cloud-chest input, explicit sale, durable contract escrow. */
 object NpcContractDepositGui : Listener {
@@ -239,6 +240,10 @@ object NpcContractDepositGui : Listener {
             feedback(desk.player, "unavailable", "<#ff9f0f>Снова обратитесь к NPC, чтобы сдать товары.")
             return
         }
+        if (desk.player.itemOnCursor.let { !it.type.isAir && it.amount > 0 }) {
+            feedback(desk.player, "cursor-not-empty", "<#ff9f0f>Сначала положите предмет с курсора в инвентарь.")
+            return
+        }
         desk.storage.pending = true
         desk.result = null
         processing += desk.player.uniqueId
@@ -252,6 +257,7 @@ object NpcContractDepositGui : Listener {
                 if (accepted > 0) desk.player.sendMessage(text("success", "<#2bba43>Принято <quantity> шт. +<price> <white>💰</white>",
                     "quantity" to Component.text(accepted), "price" to Component.text(formatContractMoney(payout))))
                 if (review) feedback(desk.player, "review", "<#c42323>Сдача остановлена для проверки. Не повторяйте её до разбора администратором.")
+                else if (rejection != null) desk.player.sendActionBar(rejection)
                 else if (desk.storage.snapshot().any { it != null }) feedback(desk.player, "not-accepted", "<#ff9f0f>Остаток не принят: проверьте лимиты заказов.")
                 if (desk.session.isOpen) render(desk) else returnItems(desk)
             }
@@ -265,7 +271,13 @@ object NpcContractDepositGui : Listener {
             }
             if (quote == null) { finish(accepted, payout); return }
             val view = orders.first { it.contract.id == quote.contractId }
-            val prepared = desk.storage.prepare(view.contract.itemKey, quote.quantity)
+            val prepared = try {
+                desk.storage.prepare(view.contract.itemKey, quote.quantity)
+            } catch (failure: Exception) {
+                ARC.instance.logger.log(Level.WARNING, "Could not save contract desk before submission for ${desk.player.uniqueId}", failure)
+                finish(accepted, payout, rejection = text("save-failed", "<#ff9f0f>Не удалось сохранить инвентарь. Попробуйте ещё раз."))
+                return
+            }
             if (prepared == null) { finish(accepted, payout); return }
             ContractsManager.submit(desk.player, quote, offeredInventory = prepared).whenCompleteSync(requireNotNull(tasks)) { outcome, failure ->
                 if (failure != null || outcome is ContractSubmissionOutcome.ManualReview || outcome is ContractSubmissionOutcome.Unavailable)

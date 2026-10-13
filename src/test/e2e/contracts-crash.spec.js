@@ -168,6 +168,12 @@ if (enabled) test('contract items, provider payment and journal survive real pro
       await balance(player, expectedBalance, signal);
       await clickContractDesk(player, signal);
       await offerStoneBatch(player, 2, signal);
+      // Capture the settled server-side state without saving it; saving here
+      // would mask a missing persistence barrier before the crash boundary.
+      const staged = await snapshot(player, `before_${phase}`, signal);
+      assert.equal(Number(staged.items), 2, 'The native inventory remainder must reach the Paper server');
+      assert.equal(Number(staged.deskItems), 2, 'The offered batch must be stored before sale');
+      assert.equal(Number(staged.cursorItems), 0, 'The native cursor must be empty before sale');
       const phasePayoutMinor = expectedPayoutsMinor[index];
       assert.ok(Number.isSafeInteger(phasePayoutMinor), `No exact batch payout is specified for ${phase}`);
       await waitForCrashDisconnect(player.bot, signal, () =>

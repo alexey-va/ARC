@@ -68,6 +68,109 @@ class ContractDeskStorageTest : StringSpec({
             } finally { unmockkObject(ContractOriginGate) }
         } }
     }
+    "prepare checkpoints native inventory even when desk storage is already clean" {
+        MockBukkitTestRuntime.open().use { runtime ->
+            val player = runtime.server.addPlayer()
+            val saved = mutableListOf<Pair<Int, Int>>()
+            lateinit var storage: ContractDeskStorage
+            storage = ContractDeskStorage(player, "forge_orders", { true }, PaperPlayerDataPersistence {
+                saved += player.inventory.storageContents.filterNotNull().sumOf { it.amount } to
+                    storage.snapshot().filterNotNull().sumOf { it.amount }
+            })
+            player.inventory.setItem(0, ItemStack(Material.STONE, 9))
+            val offered = storage.snapshot().toMutableList().also { it[0] = ItemStack(Material.RAW_IRON, 5) }
+            storage.compareAndSet(storage.snapshot(), offered) shouldBe true
+            storage.persistTransfer()
+            saved.clear()
+            player.inventory.setItem(1, ItemStack(Material.EMERALD, 4))
+            storage.pending = true
+
+            mockkObject(ContractOriginGate)
+            try {
+                every { ContractOriginGate.canSubmit(player, "forge_orders") } returns true
+                val prepared = storage.prepare("minecraft:raw_iron", 5)!!
+                prepared.payloads.sumOf { it.quantity } shouldBe 5
+                saved shouldBe listOf(13 to 5)
+                player.inventory.storageContents.filterNotNull().sumOf { it.amount } shouldBe 13
+                storage.snapshot() shouldBe offered
+            } finally { unmockkObject(ContractOriginGate) }
+        }
+    }
+    "prepare propagates checkpoint failure before producing a removable escrow" {
+        MockBukkitTestRuntime.open().use { runtime ->
+            val player = runtime.server.addPlayer()
+            player.inventory.setItem(0, ItemStack(Material.EMERALD, 4))
+            val storage = ContractDeskStorage(player, "forge_orders", { true }, PaperPlayerDataPersistence {
+                error("checkpoint failed")
+            })
+            val offered = storage.snapshot().toMutableList().also { it[0] = ItemStack(Material.RAW_IRON, 5) }
+            storage.compareAndSet(storage.snapshot(), offered) shouldBe true
+            storage.pending = true
+
+            mockkObject(ContractOriginGate)
+            try {
+                every { ContractOriginGate.canSubmit(player, "forge_orders") } returns true
+                shouldThrowAny { storage.prepare("minecraft:raw_iron", 5) }
+                storage.snapshot() shouldBe offered
+                player.inventory.getItem(0) shouldBe ItemStack(Material.EMERALD, 4)
+            } finally { unmockkObject(ContractOriginGate) }
+        }
+    }
+    "prepare refuses a nonempty cursor before checkpointing" {
+        MockBukkitTestRuntime.open().use { runtime ->
+            val player = runtime.server.addPlayer()
+            var saves = 0
+            val storage = ContractDeskStorage(player, "forge_orders", { true }, PaperPlayerDataPersistence { saves++ })
+            val offered = storage.snapshot().toMutableList().also { it[0] = ItemStack(Material.RAW_IRON, 5) }
+            storage.compareAndSet(storage.snapshot(), offered) shouldBe true
+            storage.pending = true
+            val cursor = ItemStack(Material.STONE, 1)
+            player.openInventory.setCursor(cursor)
+
+            mockkObject(ContractOriginGate)
+            try {
+                every { ContractOriginGate.canSubmit(player, "forge_orders") } returns true
+                storage.prepare("minecraft:raw_iron", 5) shouldBe null
+                saves shouldBe 0
+                player.openInventory.cursor shouldBe cursor
+                storage.snapshot() shouldBe offered
+            } finally { unmockkObject(ContractOriginGate) }
+        }
+    }
+    "cursor changes after prepare stop removal and refund without another save" {
+        MockBukkitTestRuntime.open().use { runtime -> runTest {
+            val player = runtime.server.addPlayer()
+            var saves = 0
+            val storage = ContractDeskStorage(player, "forge_orders", { true }, PaperPlayerDataPersistence { saves++ })
+            val offered = storage.snapshot().toMutableList().also { it[0] = ItemStack(Material.RAW_IRON, 5) }
+            storage.compareAndSet(storage.snapshot(), offered) shouldBe true
+            storage.pending = true
+
+            mockkObject(ContractOriginGate)
+            try {
+                every { ContractOriginGate.canSubmit(player, "forge_orders") } returns true
+                val prepared = storage.prepare("minecraft:raw_iron", 5)!!
+                saves shouldBe 1
+
+                val cursor = ItemStack(Material.STONE, 1)
+                player.openInventory.setCursor(cursor)
+                prepared.removeExact() shouldBe ContractInventoryMutation.NotPerformed("cursor_not_empty")
+                saves shouldBe 1
+                storage.snapshot() shouldBe offered
+
+                player.openInventory.setCursor(null)
+                prepared.removeExact() shouldBe ContractInventoryMutation.Confirmed
+                saves shouldBe 2
+                val afterRemoval = storage.snapshot()
+                afterRemoval shouldBe List(24) { null }
+
+                player.openInventory.setCursor(cursor)
+                prepared.restoreExact() shouldBe ContractInventoryMutation.NotPerformed("cursor_not_empty")
+                saves shouldBe 2
+                storage.snapshot() shouldBe afterRemoval
+            } finally { unmockkObject(ContractOriginGate) }
+        } }
+    }
     "full native inventory keeps unsold input safely in the desk and a failed save cannot acknowledge escrow" {
         MockBukkitTestRuntime.open().use { runtime -> runTest {
             val player = runtime.server.addPlayer()

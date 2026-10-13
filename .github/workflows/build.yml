@@ -116,6 +116,12 @@ jobs:
           mkdir -p build
           ./gradlew --no-daemon plugwrightTest -Pe2eMinecraftVersion=${{ matrix.minecraft }} -PcleanupE2e=${{ matrix.cleanup-only }} -PparkourE2e=${{ matrix.parkour-only }} -PdialogE2e=${{ matrix.dialog-only }} -PcontractCrashE2e=${{ matrix.crash-only || 'false' }} 2>&1 | tee build/plugwright-e2e.log
           git diff --exit-code -- src/test/e2e/package-lock.json
+      - name: Record E2E artifact hashes
+        if: always()
+        run: |
+          if compgen -G 'build/libs/ARC-*.jar' > /dev/null; then
+            sha256sum build/libs/ARC-*.jar > build/e2e-jar-sha256.txt
+          fi
       - name: Upload E2E results and Paper logs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -130,4 +136,4 @@ jobs:
             build/plugwright/plugins/ARCContractCrashFixture/
             build/plugwright/plugins/Parkour/config.yml
             build/plugwright/plugins/Parkour/courses/
-            build/libs/ARC-*.jar
+            build/e2e-jar-sha256.txt

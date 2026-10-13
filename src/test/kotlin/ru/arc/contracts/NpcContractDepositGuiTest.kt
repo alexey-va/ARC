@@ -210,6 +210,107 @@ class NpcContractDepositGuiTest : TestBase() {
     }
 
     @Test
+    fun `cursor and native save failures preserve staged goods and allow one successful retry`() {
+        val player = server.addPlayer()
+        val staged = ItemStack(Material.BROWN_MUSHROOM, 8)
+        val untouchedStock = ItemStack(Material.DIAMOND, 3)
+        var failPersistence = false
+        var submitCalls = 0
+        mockkObject(ContractOriginGate, NativePaperPlayerDataPersistence)
+        every { NativePaperPlayerDataPersistence.persist(player) } answers {
+            if (failPersistence) throw IllegalStateException("injected player-data save failure")
+            Unit
+        }
+        mockkStatic(ContractsManager::class)
+        try {
+            server.scheduler.cancelTasks(plugin)
+            NpcContractDepositGui.start()
+            every { ContractOriginGate.canSubmit(player, "food_orders") } returns true
+            every { ContractsManager.currentPlayerViews(player.uniqueId, "food_orders", any(), any()) } returns
+                listOf(foodOrder(playerRemaining = 10))
+            every { ContractsManager.quote(player, any(), any()) } answers {
+                val quantity = thirdArg<Int>()
+                ContractSubmissionQuote(secondArg(), 1_000, player.uniqueId.toString(), quantity,
+                    quantity * 100L, 0, 1_500)
+            }
+            every { ContractsManager.submit(player, any(), null, any()) } answers {
+                submitCalls++
+                val quote = secondArg<ContractSubmissionQuote>()
+                val prepared = arg<PreparedContractInventory>(3)
+                runBlocking { prepared.removeExact() } shouldBe ContractInventoryMutation.Confirmed
+                CompletableFuture.completedFuture(ContractSubmissionOutcome.Committed(
+                    ContractSubmissionReceipt("retry-sale", player.uniqueId.toString(), quote.quantity.toLong(),
+                        quote.payoutMinor, 1_600),
+                ))
+            }
+
+            player.inventory.clear()
+            player.inventory.setItem(0, untouchedStock.clone())
+            NpcContractDepositGui.open(player, "food_orders")
+            val inventoryView = player.openInventory
+            val top = inventoryView.topInventory
+            val layout = ArcMenus.current().catalog.require(ArcMenuSchema.CONTRACT_DESKS.getValue(6))
+            val depositSlot = layout.region(ArcMenuSchema.CONTRACT_DEPOSIT).first().index
+            val sellSlot = layout.slot("sell").index
+
+            inventoryView.setCursor(staged.clone())
+            server.pluginManager.callEvent(InventoryClickEvent(inventoryView, InventoryType.SlotType.CONTAINER,
+                depositSlot, ClickType.LEFT, InventoryAction.PLACE_ALL))
+            server.scheduler.performTicks(1)
+            top.getItem(depositSlot) shouldBe staged
+            inventoryView.cursor.type.isAir shouldBe true
+
+            fun assertStagedAndUntouched() {
+                val snapshot = ContractDeskStorage(player, "food_orders", { false }).snapshot()
+                snapshot[0] shouldBe staged
+                snapshot.drop(1).all { it == null } shouldBe true
+                top.getItem(depositSlot) shouldBe staged
+                player.inventory.getItem(0) shouldBe untouchedStock
+            }
+
+            fun clickSell() {
+                server.pluginManager.callEvent(InventoryClickEvent(inventoryView, InventoryType.SlotType.CONTAINER,
+                    sellSlot, ClickType.LEFT, InventoryAction.PICKUP_ALL))
+                server.scheduler.performTicks(5)
+            }
+
+            inventoryView.setCursor(ItemStack(Material.STICK, 1))
+            clickSell()
+            submitCalls shouldBe 0
+            inventoryView.cursor shouldBe ItemStack(Material.STICK, 1)
+            PlainTextComponentSerializer.plainText().serialize(requireNotNull(player.nextActionBar()))
+                .contains("курсора") shouldBe true
+            assertStagedAndUntouched()
+            top.getItem(sellSlot)!!.plainDisplayName().contains("Принимаем товары") shouldBe false
+
+            inventoryView.setCursor(null)
+            failPersistence = true
+            clickSell()
+            submitCalls shouldBe 0
+            assertStagedAndUntouched()
+            PlainTextComponentSerializer.plainText().serialize(requireNotNull(player.nextActionBar()))
+                .contains("сохранить инвентарь") shouldBe true
+            top.getItem(sellSlot)!!.plainDisplayName().contains("Не удалось сдать") shouldBe true
+
+            failPersistence = false
+            clickSell()
+            submitCalls shouldBe 1
+            ContractDeskStorage(player, "food_orders", { false }).snapshot().all { it == null } shouldBe true
+            top.getItem(depositSlot) shouldBe null
+            player.inventory.getItem(0) shouldBe untouchedStock
+            (player.openInventory.topInventory === top) shouldBe true
+
+            clickSell()
+            submitCalls shouldBe 1
+        } finally {
+            NpcContractDepositGui.shutdown()
+            unmockkObject(ContractOriginGate, NativePaperPlayerDataPersistence)
+            unmockkStatic(ContractsManager::class)
+            ArcMenus.close()
+        }
+    }
+
+    @Test
     fun `mixed ready and capped goods have grouped sell lore and one final action`() {
         val player = server.addPlayer()
         val orders = listOf(

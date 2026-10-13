@@ -23,6 +23,11 @@ internal class ContractDeskStorage(
     var pending = false
     private var dirty = false
 
+    private fun hasNonEmptyCursor(): Boolean {
+        val cursor = player.openInventory.cursor
+        return cursor != null && !cursor.type.isAir && cursor.amount > 0
+    }
+
     override fun snapshot(): List<ItemStack?> = player.persistentDataContainer.get(key, PersistentDataType.BYTE_ARRAY)
         ?.let(::decodeContractDeskItems) ?: List(ContractDeskLayout.DEPOSIT_CAPACITY) { null }
 
@@ -72,6 +77,11 @@ internal class ContractDeskStorage(
             left -= take
         }
         if (quantity <= 0 || left != 0) return null
+        if (hasNonEmptyCursor()) return null
+        // Native bottom-slot moves do not dirty the desk. Persist their settled
+        // before-image before the coordinator records ITEM_REMOVAL_STARTED.
+        persistence.persist(player)
+        dirty = false
         return object : PreparedContractInventory {
             override val payloads = payloads.toList()
             private var removed = false
@@ -81,6 +91,7 @@ internal class ContractDeskStorage(
                     !player.isOnline || !pending || !ContractOriginGate.canSubmit(player, group) ->
                         ContractInventoryMutation.NotPerformed("desk_unavailable")
                     !canRemove() -> ContractInventoryMutation.NotPerformed("submission_expired")
+                    hasNonEmptyCursor() -> ContractInventoryMutation.NotPerformed("cursor_not_empty")
                     !replace(before, after) -> ContractInventoryMutation.NotPerformed("slot_changed")
                     else -> try {
                         persistTransfer()
@@ -93,6 +104,7 @@ internal class ContractDeskStorage(
                 if (!player.isOnline) return@onBukkitMain ContractInventoryMutation.NotPerformed("player_offline")
                 if (!removed) return@onBukkitMain if (snapshot() == before) ContractInventoryMutation.Confirmed
                     else ContractInventoryMutation.NotPerformed("escrow_not_removed")
+                if (hasNonEmptyCursor()) return@onBukkitMain ContractInventoryMutation.NotPerformed("cursor_not_empty")
                 if (!replace(after, before)) return@onBukkitMain ContractInventoryMutation.NotPerformed("refund_slot_changed")
                 try {
                     persistTransfer()
