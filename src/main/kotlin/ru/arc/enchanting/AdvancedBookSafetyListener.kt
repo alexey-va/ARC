@@ -12,7 +12,7 @@ import org.bukkit.event.Listener
 import org.bukkit.event.inventory.InventoryClickEvent
 import org.bukkit.event.inventory.InventoryCreativeEvent
 import ru.arc.core.LifecycleTaskScope
-import ru.arc.eliteloot.isAdvancedEnchantmentsBook
+import ru.arc.dungeons.api.ArcBookIdentity.isAdvancedEnchantmentsBook
 import ru.arc.util.Logging
 import java.util.UUID
 import java.util.concurrent.ThreadLocalRandom

@@ -21,13 +21,10 @@ object ArcMenuSchema {
     val CONTRACTS_DETAIL = MenuId.of("contracts-detail")
     val CONTRACT_DESKS = (3..6).associateWith { MenuId.of("contracts-desk-$it") }
     val SCHEDULED_LIST = MenuId.of("scheduled-list")
-    val ELITE_LOOT = MenuId.of("elite-loot")
-    val LOST_LOOT = MenuId.of("lost-elite-loot")
     val PERSONAL_LOOT = (1..6).associateWith { MenuId.of("personal-loot-$it") }
     val PARKOUR_ROOT = MenuId.of("parkour-root")
     val PARKOUR_CATEGORY = MenuId.of("parkour-category")
     val ITEM_CATALOG = MenuId.of("item-catalog")
-    val EM_SHOP = MenuId.of("elite-mobs-shop")
     val SCHEDULED_EDIT = MenuId.of("scheduled-edit")
     val BALTOP = MenuId.of("baltop")
     val JOIN_MESSAGES = MenuId.of("join-messages")
@@ -54,13 +51,10 @@ object ArcMenuSchema {
     val CONTRACT_DEPOSIT = MenuRegionId.of("contract-deposit")
     val CONTRACT_DESK_ORDERS = MenuRegionId.of("contract-orders")
     val SCHEDULED_ENTRIES = MenuRegionId.of("entries")
-    val ELITE_LOOT_ITEMS = MenuRegionId.of("items")
-    val LOST_LOOT_ITEMS = MenuRegionId.of("lost-items")
     val PERSONAL_LOOT_ITEMS = MenuRegionId.of("loot")
     val PARKOUR_CATEGORIES = MenuRegionId.of("categories")
     val PARKOUR_COURSES = MenuRegionId.of("courses")
     val CATALOG_ITEMS = MenuRegionId.of("catalog-items")
-    val EM_SHOP_ITEMS = MenuRegionId.of("shop-items")
     val BALTOP_ENTRIES = MenuRegionId.of("baltop-entries")
     val JOIN_MESSAGE_ENTRIES = MenuRegionId.of("message-entries")
     val JOB_ENTRIES = MenuRegionId.of("jobs")
@@ -111,14 +105,6 @@ object ArcMenuSchema {
             requiredElements = elements("refresh"),
             requiredRegions = setOf(SCHEDULED_ENTRIES),
         ),
-        LOST_LOOT to MenuContract(
-            requiredElements = elements("back", "info", "previous", "next"),
-            requiredRegions = setOf(LOST_LOOT_ITEMS),
-        ),
-        ELITE_LOOT to MenuContract(
-            requiredElements = elements("previous", "next", "back"),
-            requiredRegions = setOf(ELITE_LOOT_ITEMS),
-        ),
         *PERSONAL_LOOT.values.map { menu ->
             menu to MenuContract(requiredRegions = setOf(PERSONAL_LOOT_ITEMS))
         }.toTypedArray(),
@@ -130,10 +116,6 @@ object ArcMenuSchema {
         ITEM_CATALOG to MenuContract(
             requiredElements = elements("back", "previous", "page", "next"),
             requiredRegions = setOf(CATALOG_ITEMS),
-        ),
-        EM_SHOP to MenuContract(
-            requiredElements = elements("change", "update"),
-            requiredRegions = setOf(EM_SHOP_ITEMS),
         ),
         SCHEDULED_EDIT to MenuContract(
             requiredElements = elements("command", "id", "schedule-value", "schedule-type", "servers", "enabled", "back", "save"),
@@ -293,9 +275,6 @@ object ArcMenuSchema {
         "scheduled-refresh" to PaperMenuTextContract(),
         "scheduled-entry-enabled" to scheduledEntryContract(),
         "scheduled-entry-disabled" to scheduledEntryContract(),
-        "elite-loot-previous" to PaperMenuTextContract(),
-        "elite-loot-next" to PaperMenuTextContract(),
-        "elite-loot-back" to PaperMenuTextContract(),
         "parkour-category" to PaperMenuTextContract(
             values = setOf("category", "ready"),
             repeats = mapOf("description" to setOf("line")),
@@ -318,12 +297,6 @@ object ArcMenuSchema {
         "catalog-previous" to PaperMenuTextContract(),
         "catalog-page" to PaperMenuTextContract(values = setOf("page", "pages", "shown", "total")),
         "catalog-next" to PaperMenuTextContract(),
-        "em-shop-change" to PaperMenuTextContract(values = setOf("type")),
-        "em-shop-update" to PaperMenuTextContract(values = setOf("minutes", "balance", "player")),
-        "em-shop-item" to PaperMenuTextContract(
-            values = setOf("name", "price"),
-            repeats = mapOf("original" to setOf("line")),
-        ),
         "scheduled-edit-command" to PaperMenuTextContract(values = setOf("command")),
         "scheduled-edit-id" to PaperMenuTextContract(values = setOf("id")),
         "scheduled-edit-value-cron" to PaperMenuTextContract(values = setOf("value", "hint"), flags = setOf("weekly")),
@@ -406,10 +379,82 @@ object ArcMenuSchema {
 object ArcMenuConfiguration {
     const val RESOURCE = "guis/menus.yml"
 
+    private const val LAYOUT_ROOT = "menus.layouts"
+    private const val TEMPLATE_ROOT = "menus.templates"
+
+    /** Templates that host feature code renders directly rather than through a layout reference. */
+    private val requiredTemplates = setOf(
+        "investigation-witness",
+        "investigation-verdict-one",
+        "investigation-verdict-two",
+        "investigation-verdict-three",
+        "investigation-verdict-four",
+        "investigation-verdict-five",
+        "contracts-order",
+        "contracts-tab",
+        "contracts-refresh",
+        "contracts-page",
+        "contracts-quantity-preset",
+        "contracts-track",
+        "contracts-next-order",
+        "scheduled-entry-enabled",
+        "scheduled-entry-disabled",
+        "parkour-category",
+        "parkour-course",
+        "catalog-root-entry",
+        "catalog-category",
+        "catalog-preview",
+        "scheduled-edit-value-cron",
+        "scheduled-edit-value-interval",
+        "scheduled-edit-value-time",
+        "scheduled-edit-enabled-on",
+        "scheduled-edit-enabled-off",
+        "baltop-entry",
+        "join-message-entry",
+        "jobs-entry",
+        "job-base-boost",
+        "job-player-boost",
+        "boost-shop-offer",
+        "treasure-pool-entry",
+        "treasure-entry",
+        "board-contract",
+        "board-edit-field",
+    )
+
     fun load(dataRoot: Path): PaperMenuConfiguration {
         val config = Config(dataRoot, RESOURCE)
         migrateMountSettings(config)
-        return parse(config)
+        return parse(filterToArcMenus(config))
+    }
+
+    /**
+     * Keep the host's validation input bounded to its own contracts. The shared
+     * legacy YAML may also contain ArcDungeons or future foreign layouts and
+     * templates; remove those entries only from this in-memory Config and never
+     * save this filtered view.
+     */
+    private fun filterToArcMenus(config: Config): Config {
+        val hostLayouts = ArcMenuSchema.contracts.keys.mapTo(hashSetOf()) { it.value }
+        config.keys(LAYOUT_ROOT)
+            .filterNot(hostLayouts::contains)
+            .forEach { config.removeKey("$LAYOUT_ROOT.$it") }
+
+        val referenced = linkedSetOf<String>()
+        hostLayouts.forEach { layout ->
+            val path = "$LAYOUT_ROOT.$layout"
+            config.stringOrNull("$path.background.template")?.let(referenced::add)
+            config.keys("$path.elements").forEach { element ->
+                config.stringOrNull("$path.elements.$element.template")?.let(referenced::add)
+            }
+            config.keys("$path.legend").forEach { symbol ->
+                config.stringOrNull("$path.legend.$symbol.template")?.let(referenced::add)
+            }
+        }
+        val retainedTemplates = referenced + requiredTemplates
+        config.keys(TEMPLATE_ROOT)
+            .filterNot(retainedTemplates::contains)
+            .forEach { config.removeKey("$TEMPLATE_ROOT.$it") }
+        return config
     }
 
     private fun migrateMountSettings(config: Config) {
@@ -444,47 +489,10 @@ object ArcMenuConfiguration {
     private fun parse(config: Config): PaperMenuConfiguration =
         PaperMenuConfigurationParser.require(
             config,
-            "menus.layouts",
-            "menus.templates",
+            LAYOUT_ROOT,
+            TEMPLATE_ROOT,
             ArcMenuSchema.contracts,
-            requiredTemplates = setOf(
-                "investigation-witness",
-                "investigation-verdict-one",
-                "investigation-verdict-two",
-                "investigation-verdict-three",
-                "investigation-verdict-four",
-                "investigation-verdict-five",
-                "contracts-order",
-                "contracts-tab",
-                "contracts-refresh",
-                "contracts-page",
-                "contracts-quantity-preset",
-                "contracts-track",
-                "contracts-next-order",
-                "scheduled-entry-enabled",
-                "scheduled-entry-disabled",
-                "parkour-category",
-                "parkour-course",
-                "catalog-root-entry",
-                "catalog-category",
-                "catalog-preview",
-                "em-shop-item",
-                "scheduled-edit-value-cron",
-                "scheduled-edit-value-interval",
-                "scheduled-edit-value-time",
-                "scheduled-edit-enabled-on",
-                "scheduled-edit-enabled-off",
-                "baltop-entry",
-                "join-message-entry",
-                "jobs-entry",
-                "job-base-boost",
-                "job-player-boost",
-                "boost-shop-offer",
-                "treasure-pool-entry",
-                "treasure-entry",
-                "board-contract",
-                "board-edit-field",
-            ),
+            requiredTemplates = requiredTemplates,
             textContracts = ArcMenuSchema.textContracts,
         )
 }

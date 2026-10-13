@@ -157,7 +157,7 @@ object ContractsSubCommand : SubCommand {
         val player = requireSeasonPlayer(sender) ?: return
         val dungeonId = args.getOrNull(1)?.trim()?.lowercase()
         val blueprintWorld = dungeonId?.let(ContractsManager::seasonDungeonBlueprintWorld)
-        val emHook = HookRegistry.emHook
+        val emHook = ru.arc.dungeons.dungeonService()
         if (dungeonId == null || blueprintWorld == null || emHook == null || !emHook.canLaunchSeasonDungeon(player, blueprintWorld)) {
             player.sendMessage(TextUtil.mm("<yellow>Этот сезонный данж сейчас недоступен для запуска."))
             return

@@ -5,17 +5,11 @@ import org.bukkit.entity.Player
 import org.bukkit.event.HandlerList
 import ru.arc.ARC
 import ru.arc.core.PluginModule
-import ru.arc.eliteloot.EliteEnchantmentBookPresentationText
-import ru.arc.eliteloot.bindEliteEnchantmentCatalog
-import ru.arc.eliteloot.clearEliteEnchantmentCatalog
 
-/** Unified book presentation and direct EliteMobs application; enchantments remain provider-owned. */
+/** AdvancedEnchantments presentation, shop and gameplay integration. */
 object EnchantingModule : PluginModule {
     override val name = "Enchanting"
     override val priority = 79
-    internal var bookText = EliteEnchantmentBookPresentationText()
-        private set
-    private var controller: EliteEnchantingController? = null
     private var advancedSafety: AdvancedBookSafetyListener? = null
     private var bookShop: AdvancedBookShop? = null
     private var nativeShopGuard: NativeEnchanterLocationGuard? = null
@@ -23,7 +17,6 @@ object EnchantingModule : PluginModule {
 
     override fun init() {
         val config = EnchantingConfig.load(ARC.instance.dataPath)
-        bookText = config.bookText
         shutdown()
         bindAdvancedBookPresentation()
         if (Bukkit.getPluginManager().isPluginEnabled("AdvancedEnchantments")) {
@@ -42,12 +35,7 @@ object EnchantingModule : PluginModule {
                 ARC.instance.logger.warning("AE gameplay loot disabled: invalid modules/enchanting.yml loot settings: ${failure.message}")
             }
         }
-        val eliteMobs = Bukkit.getPluginManager().getPlugin("EliteMobs")
-        if (eliteMobs == null || !eliteMobs.isEnabled) return
-        bindEliteEnchantmentCatalog(eliteMobs.javaClass.classLoader)
-        controller = EliteEnchantingController(config).also {
-            Bukkit.getPluginManager().registerEvents(it, ARC.instance)
-        }
+
     }
 
     override fun reload() = init()
@@ -65,11 +53,8 @@ object EnchantingModule : PluginModule {
         nativeShopGuard = null
         advancedLoot?.let { HandlerList.unregisterAll(it); it.close() }
         advancedLoot = null
-        controller?.let { HandlerList.unregisterAll(it); it.close() }
-        controller = null
         advancedSafety?.let { HandlerList.unregisterAll(it); it.close() }
         advancedSafety = null
-        clearEliteEnchantmentCatalog()
         clearAdvancedBookPresentation()
     }
 }

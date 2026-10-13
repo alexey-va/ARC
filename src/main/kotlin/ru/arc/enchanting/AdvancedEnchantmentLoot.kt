@@ -1,6 +1,5 @@
 package ru.arc.enchanting
 
-import com.magmaguy.elitemobs.entitytracker.EntityTracker
 import org.bukkit.Bukkit
 import org.bukkit.GameMode
 import org.bukkit.entity.Enemy
@@ -160,7 +159,8 @@ internal class AdvancedEnchantmentLoot(
     private val nextDouble: () -> Double = { ThreadLocalRandom.current().nextDouble() },
     private val nextInt: (Int) -> Int = { bound -> ThreadLocalRandom.current().nextInt(bound) },
     private val isEliteMobsEntity: (Entity) -> Boolean = { entity ->
-        Bukkit.getPluginManager().isPluginEnabled("EliteMobs") && EntityTracker.isEliteMob(entity)
+        Bukkit.getPluginManager().getPlugin("EliteMobs") != null &&
+            (ru.arc.dungeons.dungeonService()?.isEliteMob(entity) ?: true)
     },
     private val tasks: LifecycleTaskScope = LifecycleTaskScope(),
     private val afterEvent: (() -> Unit) -> Unit = { task -> tasks.runLater(1) { task() }; Unit },

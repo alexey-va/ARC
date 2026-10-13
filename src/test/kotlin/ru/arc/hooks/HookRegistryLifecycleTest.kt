@@ -9,7 +9,6 @@ import io.kotest.matchers.ints.shouldBeExactly
 class HookRegistryLifecycleTest :
     FreeSpec({
         afterTest {
-            HookRegistry.emHook = null
             HookRegistry.auctionHook = null
             HookRegistry.jobsEnabled = false
         }

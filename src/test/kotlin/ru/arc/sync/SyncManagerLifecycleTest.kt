@@ -1,5 +1,6 @@
 package ru.arc.sync
 
+import org.bukkit.entity.Player
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertSame
@@ -8,8 +9,10 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import ru.arc.core.Tasks
 import ru.arc.core.TestTaskScheduler
+import ru.arc.paper.testing.MockBukkitTestRuntime
 import ru.arc.sync.base.Sync
 import java.util.UUID
+import java.util.function.Consumer
 
 class SyncManagerLifecycleTest {
     private lateinit var scheduler: TestTaskScheduler
@@ -86,6 +89,42 @@ class SyncManagerLifecycleTest {
         val syncs = List(4) { FakeSync() }
         val visited = List(8) { SyncManager.SyncRoundRobin.getNext(syncs) }
         assertEquals(syncs + syncs, visited)
+    }
+
+    @Test
+    fun `shared player snapshots use the existing round robin and stale delayed captures no-op after unregister`() {
+        MockBukkitTestRuntime.open().use { paper ->
+            val owner = paper.createSimplePlugin("ArcDungeons")
+            val player = paper.addPlayer("RoundRobinSnapshot")
+            val sync = FakeSync().also { it.playerJoin(player.uniqueId) }
+            SyncManager.registerSync(FakeSync::class.java, sync)
+            val snapshots = mutableListOf<Player>()
+            val registration = SyncManager.registerPeriodicSave(owner, Consumer { snapshots += it })
+
+            SyncManager.startSaveAllTasks()
+            scheduler.tick(60)
+            scheduler.tick(1)
+            assertEquals(listOf(player.uniqueId), sync.savedPlayers)
+            assertEquals(0, snapshots.size)
+
+            scheduler.tick(59)
+            scheduler.tick(1)
+            assertEquals(1, snapshots.size)
+            assertSame(player, snapshots.single())
+
+            scheduler.tick(59)
+            scheduler.tick(1)
+            assertEquals(listOf(player.uniqueId, player.uniqueId), sync.savedPlayers)
+
+            scheduler.tick(59)
+            registration.close()
+            scheduler.tick(1)
+            assertEquals(1, snapshots.size)
+
+            scheduler.tick(59)
+            scheduler.tick(1)
+            assertEquals(listOf(player.uniqueId, player.uniqueId, player.uniqueId), sync.savedPlayers)
+        }
     }
 
     private class FakeSync : Sync {

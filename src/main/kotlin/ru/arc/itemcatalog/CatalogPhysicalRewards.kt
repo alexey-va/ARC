@@ -1,7 +1,5 @@
 package ru.arc.itemcatalog
 
-import com.magmaguy.elitemobs.items.ItemConsumables
-import com.magmaguy.elitemobs.items.customitems.CustomItem
 import dev.lone.itemsadder.api.CustomStack
 import io.papermc.paper.datacomponent.DataComponentTypes
 import net.kyori.adventure.key.Key
@@ -11,7 +9,7 @@ import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import ru.arc.hooks.HookRegistry
 import ru.arc.ops.ItemPresets
-import ru.arc.hooks.elitemobs.DungeonCaseRewards
+import ru.arc.dungeons.dungeonService
 import ru.arc.mounts.MountModule
 import ru.arc.mounts.MountRewardRejection
 import ru.arc.mounts.MountRewardResult
@@ -587,7 +585,7 @@ internal class CatalogPhysicalRewards(
                 definition(treasure, emptySet()) ?: return@runCatching null
             }
             is RewardCatalogSource.Seal -> sealSnapshot(source.categoryId)?.definition ?: return@runCatching null
-            is RewardCatalogSource.DungeonCase -> DungeonCaseRewards.definition(source.id) ?: return@runCatching null
+            is RewardCatalogSource.DungeonCase -> dungeonService()?.caseDefinition(source.id) ?: return@runCatching null
             is RewardCatalogSource.TravelAnchors -> {
                 if (!TravelAnchorsModule.isEnabled) return@runCatching null
                 "travel-anchors-v1:${source.amount}"
@@ -670,7 +668,7 @@ internal class CatalogPhysicalRewards(
             }
             is RewardCatalogSource.Treasure -> completed(redeemTreasure(player, treasure(source) ?: return completed(rejected()), operationId, emptySet()))
             is RewardCatalogSource.DungeonCase -> completed(
-                giveStacks(player, listOf(DungeonCaseRewards.create(player, source.id) ?: return completed(rejected()))),
+                giveStacks(player, listOf(dungeonService()?.createCase(player, source.id) ?: return completed(rejected()))),
             )
             is RewardCatalogSource.TravelAnchors -> completed(
                 giveStacks(
@@ -706,7 +704,7 @@ internal class CatalogPhysicalRewards(
             is RewardCatalogSource.DungeonCase -> FrozenPhysicalRecipe(
                 type = "dungeon-case",
                 dungeonCaseId = source.id,
-                dungeonCaseDefinition = DungeonCaseRewards.definition(source.id) ?: return@runCatching null,
+                dungeonCaseDefinition = dungeonService()?.caseDefinition(source.id) ?: return@runCatching null,
             )
             is RewardCatalogSource.TravelAnchors -> FrozenPhysicalRecipe(
                 type = "travel-anchors",
@@ -877,7 +875,7 @@ internal class CatalogPhysicalRewards(
         "treasure" -> (recipe.treasureRolls == null || frozenTreasureIsItemOnly(recipe.treasure, emptySet())) &&
             frozenTreasureProvidersReady(requireNotNull(recipe.treasure))
         "dungeon-case" -> Bukkit.getPluginManager().isPluginEnabled("EliteMobs") &&
-            DungeonCaseRewards.definition(requireNotNull(recipe.dungeonCaseId)) == recipe.dungeonCaseDefinition
+            dungeonService()?.caseDefinition(requireNotNull(recipe.dungeonCaseId)) == recipe.dungeonCaseDefinition
         "travel-anchors" -> TravelAnchorsModule.isEnabled
         "particle-preset" -> particlePresets.ready(requireNotNull(recipe.particlePresetId))
         "choice" -> recipe.choiceOptions.orEmpty().all { option ->
@@ -1043,7 +1041,7 @@ internal class CatalogPhysicalRewards(
         tokenAmount(command) != null -> activeWallet()?.walletForCurrency("tokens")?.available == true
         command.startsWith("arcbuilder:") -> Bukkit.getPluginManager().isPluginEnabled("ArcBuilder")
         command.startsWith("arcecojobs:") -> Bukkit.getPluginManager().isPluginEnabled("ArcEcoJobs")
-        command.startsWith("elitemobs:") -> Bukkit.getPluginManager().isPluginEnabled("EliteMobs")
+        command.startsWith("elitemobs:") -> dungeonService()?.nativeReady() == true
         else -> false
     }
 
@@ -1121,7 +1119,7 @@ internal class CatalogPhysicalRewards(
             redeemFrozenItemRolls(player, requireNotNull(recipe.treasure), recipe.treasureRolls)
         }
         "furniture-rolls" -> redeemFrozenFurnitureRolls(player, recipe)
-        "dungeon-case" -> DungeonCaseRewards.create(player, requireNotNull(recipe.dungeonCaseId))
+        "dungeon-case" -> dungeonService()?.createCase(player, requireNotNull(recipe.dungeonCaseId))
             ?.let { giveStacks(player, listOf(it)) }
             ?: PhysicalRewardOutcome.Rejected(UNAVAILABLE)
         "travel-anchors" -> TravelAnchorsModule.createPersonalAnchorStacks(
@@ -1407,17 +1405,7 @@ internal class CatalogPhysicalRewards(
     }
 
     /** Uses EliteMobs' own configured item so its consumable identity and all native PDC remain intact. */
-    private fun eliteLuckyTicket(player: Player): ItemStack? {
-        if (!Bukkit.getPluginManager().isPluginEnabled("EliteMobs")) return null
-        val ticket = runCatching {
-            CustomItem.getCustomItem(ELITE_LUCKY_TICKET_ID)
-                ?.generateDefaultsItemStack(player, false, null)
-                ?.clone()
-        }.getOrNull() ?: return null
-        if (ticket.type != Material.PAPER || !ItemConsumables.`is`(ticket, ItemConsumables.Type.LUCKY_TICKET)) return null
-        ticket.setData(DataComponentTypes.ITEM_MODEL, Key.key("minecraft:totem_of_undying"))
-        return ticket
-    }
+    private fun eliteLuckyTicket(player: Player): ItemStack? = dungeonService()?.createLuckyTicket(player)
 
     private fun giveStacks(player: Player, values: List<ItemStack>): PhysicalRewardOutcome {
         val before = player.inventory.storageContents.map { it?.clone() }.toTypedArray()
@@ -1530,7 +1518,7 @@ internal class CatalogPhysicalRewards(
     private fun treasure(source: RewardCatalogSource.Treasure): Treasure? = Treasures.getPool(source.pool)?.findById(source.id)
     private fun providersReady(entry: RewardCatalogEntry): Boolean =
         entry.requires.all { Bukkit.getPluginManager().isPluginEnabled(it) } &&
-            (entry.source !is RewardCatalogSource.DungeonCase || Bukkit.getPluginManager().isPluginEnabled("EliteMobs")) &&
+            (entry.source !is RewardCatalogSource.DungeonCase || dungeonService()?.nativeReady() == true) &&
             (entry.source !is RewardCatalogSource.TravelAnchors || TravelAnchorsModule.isEnabled) &&
             (entry.source !is RewardCatalogSource.ParticlePreset || particlePresets.ready(entry.source.id))
     private fun split(stack: ItemStack, amount: Int): List<ItemStack> = (0 until amount step stack.maxStackSize).map { offset ->
@@ -1551,7 +1539,6 @@ internal class CatalogPhysicalRewards(
         private const val MAX_POOL_DEPTH = 8
         private const val PLAYER_STORAGE_SLOTS = 36
         private const val INVENTORY_FULL = "<red>В инвентаре не хватает места."
-        private const val ELITE_LUCKY_TICKET_ID = "elite_lucky_ticket.yml"
         private const val ELITE_LUCKY_TICKET_COMMAND = "elitemobs:elitemobs loot give %player% elite_lucky_ticket.yml"
         private val TOKEN_COMMAND = Regex("rediseconomy:balance %player% tokens give ([1-9][0-9]{0,5}) arc-lootbox-catalog")
         private val NATIVE_ITEM_COMMANDS = listOf(

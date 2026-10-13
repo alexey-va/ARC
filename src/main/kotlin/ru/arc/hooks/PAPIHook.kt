@@ -52,7 +52,7 @@ class PAPIHook internal constructor(
             params.startsWith("worldname") -> getWorldName(player)
             params.startsWith("dungeon_", ignoreCase = true) -> {
                 val key = params.substringAfter('_').lowercase()
-                ARC.hookRegistry?.dungeonQol?.scoreboard?.value(player.uniqueId, key) ?: if (key == "active") "false" else ""
+                ru.arc.dungeons.dungeonService()?.scoreboardValue(player.uniqueId, key) ?: if (key == "active") "false" else ""
             }
             params.startsWith("mount_", ignoreCase = true) -> mountPlaceholder(player, params)
             else -> null

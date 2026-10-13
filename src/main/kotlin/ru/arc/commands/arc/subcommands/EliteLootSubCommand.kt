@@ -8,8 +8,6 @@ import org.bukkit.inventory.meta.LeatherArmorMeta
 import ru.arc.commands.arc.CommandConfig
 import ru.arc.commands.arc.SubCommand
 import ru.arc.commands.arc.tabComplete
-import ru.arc.eliteloot.EliteLootGuiFactory
-import ru.arc.eliteloot.EliteLootManager
 import ru.arc.util.customModelDataOrNull
 
 /**
@@ -30,6 +28,10 @@ object EliteLootSubCommand : SubCommand {
 
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {
         val player = requirePlayer(sender) ?: return true
+        if (ru.arc.dungeons.dungeonService() == null) {
+            sender.sendMessage(CommandConfig.hookNotLoaded("ArcDungeons"))
+            return true
+        }
 
         if (args.isEmpty()) {
             openList(player)
@@ -46,7 +48,7 @@ object EliteLootSubCommand : SubCommand {
     }
 
     private fun openList(player: Player) {
-        EliteLootGuiFactory.open(player)
+        ru.arc.dungeons.dungeonService()?.openDecorLoot(player)
     }
 
     private fun addFromHand(player: Player, args: Array<String>) {
@@ -56,7 +58,7 @@ object EliteLootSubCommand : SubCommand {
             return
         }
 
-        val lootType = EliteLootManager.toLootType(hand)
+        val lootType = ru.arc.dungeons.dungeonService()?.decorType(hand)
         if (lootType == null) {
             player.sendMessage(
                 CommandConfig.get(
@@ -72,7 +74,7 @@ object EliteLootSubCommand : SubCommand {
                 "eliteloot.item-type",
                 "<gray>Тип предмета: <white>%type%",
                 "%type%",
-                lootType.name
+                lootType
             )
         )
 
@@ -100,7 +102,7 @@ object EliteLootSubCommand : SubCommand {
         }
 
         // Use helper method for Kotlin interop
-        val added = EliteLootManager.addDecorItem(lootType, hand.type, weight, modelId, color, iaNamespace, iaId)
+        val added = ru.arc.dungeons.dungeonService()?.addDecor(lootType, hand.type, weight, modelId, color, iaNamespace, iaId) == true
 
         if (!added) {
             player.sendMessage(

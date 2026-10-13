@@ -1,0 +1,27 @@
+name: ArcDungeons
+version: ${version}
+main: ru.arc.dungeons.ArcDungeonsPlugin
+api-version: '1.21'
+depend: [ARC]
+softdepend: [EliteMobs, FreeMinecraftModels, CMI, LootChest, packetevents, AdvancedEnchantments, ItemsAdder, LuckPerms]
+commands:
+  dungeon:
+    description: Dungeon control panel and saved places
+    usage: /dungeon [menu|tp|list|start|quit|entry|save|saves|help]
+    aliases: [данж]
+  dungeonstart:
+    description: Start the current dungeon
+    usage: /начать
+    aliases: [начать]
+  dungeonsave:
+    description: Save a place in the current dungeon
+    usage: /сохраниться [название]
+    aliases: [сохраниться]
+  dungeonsaves:
+    description: Open saved dungeon places
+    usage: /сохранения
+    aliases: [сохранения]
+  loot:
+    description: Open the lost loot mailbox
+    usage: /loot
+    aliases: [добыча]

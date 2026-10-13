@@ -1,0 +1,17 @@
+schema = 1
+platform = "paper"
+core_version = "2.7.22"
+
+# ArcDungeons uses the host's shared Paper runtime, Paper menus, lifecycle
+# scheduling, and the canonical real-Redis integration fixture.
+capabilities = [
+  "health",
+  "integration-testing",
+  "localized-text",
+  "logging",
+  "paper-menu",
+  "paper-testing",
+  "runtime",
+  "scheduling",
+  "sql",
+]

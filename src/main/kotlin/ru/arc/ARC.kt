@@ -12,13 +12,10 @@ import ru.arc.chat.ChatModeConfig
 import ru.arc.chat.IsolatedChatGlyphModule
 import ru.arc.chat.SlimefunNetworkChatModule
 import ru.arc.itemcatalog.ArcItemMaterializerBridge
-import ru.arc.staffspells.ArcStaffSpellServiceProvider
-import ru.arc.staffspells.StaffSpellsModule
 import ru.arc.paper.api.ArcTelemetryProvider
 import ru.arc.paper.api.ArcItemMaterializer
 import ru.arc.paper.api.ArcSidebarService
 import ru.arc.sidebar.SectionedSidebarService
-import ru.arc.staffspells.api.ArcStaffSpellService
 import ru.arc.metrics.ArcTelemetryProviderBridge
 import ru.arc.audit.autosell.AutoSellAuditModule
 import ru.arc.audit.bank.BankAuditModule
@@ -163,7 +160,6 @@ open class ARC : JavaPlugin() {
     internal fun sharedServiceSnapshot(): Map<String, Int> = sharedServiceMetrics?.snapshot().orEmpty()
 
     internal fun refreshSharedServiceMetrics() { sharedServiceMetrics?.refresh() }
-    private var staffSpellService: ArcStaffSpellServiceProvider? = null
     internal var tablist: ru.arc.tablist.ArcTablist? = null
         private set
     private var slimefunMenuAlias: Command? = null
@@ -219,8 +215,6 @@ open class ARC : JavaPlugin() {
         if (runtimeProfile == ArcRuntimeProfile.FULL) {
             chunkTicketRegistry = PaperChunkTicketRegistry(this)
             RtpPlayerRegistry.initialize(dataPath)
-            staffSpellService = ArcStaffSpellServiceProvider(this) { StaffSpellsModule.activeController() }
-                .also(StaffSpellsModule::installDuelAccess)
         }
         registerModules()
         PaperArcRuntime.installModuleLifecycleReporting(
@@ -228,10 +222,9 @@ open class ARC : JavaPlugin() {
             logError = { msg, t -> error(msg, t) },
         )
         ModuleRegistry.initAll()
+        if (runtimeProfile == ArcRuntimeProfile.FULL) ru.arc.dungeons.DungeonHostServices.register(this)
         metricsService?.rebind(MetricsModule.registry())
-        staffSpellService?.let {
-            server.servicesManager.register(ArcStaffSpellService::class.java, it, this, ServicePriority.Normal)
-        }
+
         if (runtimeProfile == ArcRuntimeProfile.FULL) {
             server.servicesManager.register(ArcTelemetryProvider::class.java, ArcTelemetryProviderBridge, this, ServicePriority.Normal)
             server.servicesManager.register(ArcItemMaterializer::class.java, ArcItemMaterializerBridge, this, ServicePriority.Normal)
@@ -267,9 +260,6 @@ open class ARC : JavaPlugin() {
     override fun onDisable() {
         info("Stopping ARC plugin")
         server.servicesManager.unregisterAll(this)
-        staffSpellService?.close()
-        staffSpellService = null
-        StaffSpellsModule.installDuelAccess(null)
         unregisterSlimefunMenuAlias()
         unregisterNetworkSpawnAlias()
         if (runtimeProfile == ArcRuntimeProfile.FULL) Portal.removeAll()
@@ -330,6 +320,7 @@ open class ARC : JavaPlugin() {
         }
         if (runtimeProfile == ArcRuntimeProfile.FULL) ArcMenus.reload()
         ModuleRegistry.reloadAll()
+        ru.arc.dungeons.dungeonService()?.reload()
         metricsService?.rebind(MetricsModule.registry())
         baseSidebar?.refresh()
         tablist?.refresh()
@@ -420,10 +411,7 @@ open class ARC : JavaPlugin() {
             ContractsModule,
             InvestigationModule,
             TreasureModule,
-            EliteLootModule,
             EnchantingModule,
-            ru.arc.eliteloot.LostLootModule,
-            ru.arc.staffspells.StaffSpellsModule,
             LeafDecayModule,
             PersonalLootModule,
             MobSpawnModule,
@@ -488,12 +476,6 @@ open class ARC : JavaPlugin() {
         ChatModeAliasCommand.register(this)
         registerCommand("menu", MainMenuCommand, null)
         registerCommand("arc-reward-issue", CaseRewardIssueCommand(), null)
-        val dungeonCommand = ru.arc.hooks.elitemobs.EMDungeonCommand(
-            ru.arc.config.ConfigManager.of(dataPath, "modules/elitemobs.yml"),
-        )
-        for (name in listOf("dungeon", "dungeonstart", "dungeonsave", "dungeonsaves")) {
-            registerCommand(name, dungeonCommand, dungeonCommand)
-        }
         registerLegacyCommands()
     }
 
@@ -628,7 +610,6 @@ open class ARC : JavaPlugin() {
             }
         }
 
-        ConfigManager.of(dataPath, "modules/elitemobs.yml").mergeMissingFromBundled("modules/elitemobs.yml")
         ConfigManager.of(dataPath, "modules/personalloot.yml").mergeMissingFromBundled("modules/personalloot.yml")
         ConfigManager.of(dataPath, "modules/item-presets.yml").mergeMissingFromBundled("modules/item-presets.yml")
 
@@ -684,7 +665,6 @@ open class ARC : JavaPlugin() {
                 "modules/mounts.yml",
                 "modules/parkour.yml",
                 "modules/location-pools.yml",
-                "modules/elite-loot.yml",
                 "modules/onboarding.yml",
                 "modules/leafdecay.yml",
                 "modules/personalloot.yml",
@@ -702,8 +682,6 @@ open class ARC : JavaPlugin() {
                 "modules/pouches.yml",
                 "modules/backpacks.yml",
                 "modules/commands.yml",
-                "modules/elitemobs.yml",
-                "modules/staff-spells.yml",
                 "modules/text.yml",
                 "modules/misc.yml",
                 "modules/scoreboard.yml",

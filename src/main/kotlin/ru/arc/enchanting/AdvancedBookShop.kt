@@ -12,7 +12,7 @@ import org.bukkit.inventory.ItemStack
 import ru.arc.ARC
 import ru.arc.contracts.formatContractMoney
 import ru.arc.core.LifecycleTaskScope
-import ru.arc.eliteloot.isAdvancedEnchantmentsBook
+import ru.arc.dungeons.api.ArcBookIdentity.isAdvancedEnchantmentsBook
 import ru.arc.gui.ArcMenus
 import ru.arc.helpcenter.HelpCenterEnchantment
 import ru.arc.helpcenter.HelpCenterEnchantmentsCatalog

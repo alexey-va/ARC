@@ -13,10 +13,6 @@ import ru.arc.hooks.auraskills.AuraSkillsHook
 import ru.arc.hooks.bank.BankHook
 import ru.arc.hooks.betterstructures.BSListener
 import ru.arc.hooks.citizens.CitizensHook
-import ru.arc.hooks.elitemobs.DungeonAdminExtractor
-import ru.arc.hooks.elitemobs.EMDungeonQol
-import ru.arc.hooks.elitemobs.EMHook
-import ru.arc.hooks.elitemobs.EMListener
 import ru.arc.hooks.economyshop.EconomyShopGuiPurchaseService
 import ru.arc.hooks.economyshop.EconomyShopGuiAuditListener
 import ru.arc.hooks.economyshop.FurnitureGalleryInteractionRuntime
@@ -24,7 +20,6 @@ import ru.arc.hooks.economyshop.FurnitureGalleryPurchaseListener
 import ru.arc.hooks.economyshop.ShopPurchaseService
 import ru.arc.hooks.economyshop.loadFurnitureGalleryTargets
 import ru.arc.hooks.lands.LandsHook
-import ru.arc.hooks.lootchest.LootChestHook
 import ru.arc.hooks.luckperms.LuckPermsHook
 import ru.arc.hooks.packetevents.PacketEventsHook
 import ru.arc.hooks.slimefun.BackpackBlockListener
@@ -65,9 +60,6 @@ class HookRegistry(
     var leafRTPListener: LeafRTPListener? = null
     var respawnListener: RespawnListener? = null
     var bsListener: BSListener? = null
-    var emListener: EMListener? = null
-    internal var dungeonQol: EMDungeonQol? = null
-        private set
     var seasonTrophyProtectionListener: SeasonTrophyProtectionListener? = null
 
     private var chatGlyphProtection: ChatGlyphProtection? = null
@@ -100,13 +92,11 @@ class HookRegistry(
 
         @JvmField var sfHook: SFHook? = null
 
-        @JvmField var emHook: EMHook? = null
 
         @JvmField var yamipaHook: YamipaHook? = null
 
         @JvmField var luckPermsHook: LuckPermsHook? = null
 
-        @JvmField var lootChestHook: LootChestHook? = null
 
         @JvmField internal var auctionHook: AuctionHook? = null
 
@@ -145,10 +135,8 @@ class HookRegistry(
             viaVersionHook = null
             wgHook = null
             sfHook = null
-            emHook = null
             yamipaHook = null
             luckPermsHook = null
-            lootChestHook = null
             auctionHook = null
             translatorHook = null
             jobsEnabled = false
@@ -217,9 +205,6 @@ class HookRegistry(
         isClosed = true
 
         val failures = mutableListOf<Throwable>()
-        cleanup(failures) { emHook?.close() }
-        cleanup(failures) { dungeonQol?.close() }
-        dungeonQol = null
         cleanup(failures) { auctionHook?.close() }
         cleanup(failures) { furnitureGalleryInteractionRuntime?.close() }
         cleanup(failures) { citizensHook?.close() }
@@ -271,7 +256,6 @@ class HookRegistry(
         leafRTPListener = null
         respawnListener = null
         bsListener = null
-        emListener = null
         seasonTrophyProtectionListener = null
     }
 
@@ -357,36 +341,6 @@ class HookRegistry(
         register("AdvancedEnchantments", true) {
             aeHook = registerListener(AEHook())
         }
-        register("EliteMobs", false) {
-            val existingHook = emHook
-            val hook = existingHook ?: EMHook()
-            try {
-                hook.reload()
-                val listener = emListener ?: registerListener(EMListener())
-                emHook = hook
-                emListener = listener
-                if (dungeonQol == null) {
-                    val sidebar = ARC.instance.sidebarService.register(
-                        ARC.instance,
-                        "dungeon",
-                        ArcSidebarPriorities.DUNGEON,
-                    )
-                    val qol = try {
-                        EMDungeonQol(sidebar = sidebar)
-                    } catch (failure: Throwable) {
-                        sidebar.close()
-                        throw failure
-                    }
-                    registerListener(qol.teleporter)
-                    registerListener(ru.arc.hooks.elitemobs.DungeonCaseRewards)
-                    dungeonQol = registerListener(qol)
-                    qol.startAutosaves()
-                }
-            } catch (failure: Throwable) {
-                if (existingHook == null) hook.close()
-                throw failure
-            }
-        }
         register("HuskHomes", true) {
             huskHomesHook = registerListener(HuskHomesHook())
         }
@@ -422,13 +376,11 @@ class HookRegistry(
         register("CMI", true) {
             val hook = CMIHook()
             registerListener(CMIListener())
-            if (emHook != null) registerListener(DungeonAdminExtractor())
             cmiHook = hook
         }
         register("ViaVersion", true) { viaVersionHook = ViaVersionHook() }
         register("packetevents", true) { packetEventsHook = PacketEventsHook() }
         register("PlayerWarps", true) { playerWarpsHook = PlayerWarpsHook() }
-        register("LootChest", true) { lootChestHook = LootChestHook() }
         register("YamipaPlugin", true) { yamipaHook = YamipaHook() }
         register("ItemsAdder", true) {
             val itemsAdder = checkNotNull(Bukkit.getPluginManager().getPlugin("ItemsAdder"))

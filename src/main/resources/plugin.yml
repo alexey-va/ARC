@@ -52,22 +52,6 @@ softdepend:
   - Vault
   - CoreProtect
 commands:
-  dungeon:
-    description: Dungeon control panel and saved places
-    usage: /dungeon [menu|tp|list|start|quit|entry|save|saves|help]
-    aliases: [данж]
-  dungeonstart:
-    description: Start the current dungeon
-    usage: /начать
-    aliases: [начать]
-  dungeonsave:
-    description: Save a place in the current dungeon
-    usage: /сохраниться [название]
-    aliases: [сохраниться]
-  dungeonsaves:
-    description: Open saved dungeon places
-    usage: /сохранения
-    aliases: [сохранения]
   arc:
     description: Main command
     usage: Main command
@@ -112,10 +96,6 @@ commands:
     description: Open the Slimefun SkyBlock island dialogue
     usage: /skyblock [guide|shop|hub|spawn]
     aliases: [sb, islandmenu]
-  loot:
-    description: Open the lost loot mailbox
-    usage: /loot
-    aliases: [добыча]
   arc-reward-issue:
     description: Materialize one exact physical ARC case reward
     usage: /arc-reward-issue <player> <case> <entry>

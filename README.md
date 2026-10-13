@@ -8,7 +8,7 @@ McFine **Paper/Purpur** plugin — treasure hunts, board, and cross-server Redis
 
 - **Java 25** (Temurin)
 - **Gradle 9.2.1**
-- Published `arc-core 2.6.0` artifacts from the public RusCrafting repository
+- Published `arc-core 2.7.22` artifacts from the public RusCrafting repository
 
 ## Build
 
@@ -18,8 +18,12 @@ export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-25.jdk/Contents/Home
 ./gradlew shadowJar
 ```
 
-Deployable output: `build/libs/ARC-1.4.12.jar` (shadowed dependencies). The
-non-deployable plain archive is written separately as `ARC-1.4.12-plain.jar`.
+Deployable outputs are `build/libs/ARC-1.4.391.jar` and
+`arc-dungeons/build/libs/ArcDungeons-0.1.0.jar`. Archives ending in `-plain.jar`
+are not deployable. GitHub Actions builds and tests both plugins and verifies
+that the shared APIs have one runtime owner.
+
+[ArcDungeons extraction and deployment contract](docs/arc-dungeons.md).
 
 The default build is standalone and does not require an `arc-core` checkout.
 For coordinated local development, opt into source substitution explicitly:

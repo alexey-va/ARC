@@ -24,7 +24,7 @@ object EmshopSubCommand : SubCommand {
     override val defaultUsage = "/arc emshop <player> [gear|trinket] | reset"
 
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {
-        val emHook = HookRegistry.emHook ?: run {
+        val emHook = ru.arc.dungeons.dungeonService()?.takeIf { it.nativeReady() } ?: run {
             sender.sendMessage(CommandConfig.hookNotLoaded("EMHook"))
             return true
         }
@@ -51,7 +51,7 @@ object EmshopSubCommand : SubCommand {
             }
 
         val isGear = args.getOrNull(1)?.lowercase() != "trinket"
-        emHook.openShopGui(player, isGear)
+        emHook.openShop(player, isGear)
 
         return true
     }

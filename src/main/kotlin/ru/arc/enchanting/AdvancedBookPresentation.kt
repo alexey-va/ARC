@@ -12,7 +12,7 @@ import org.bukkit.event.Event
 import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.Plugin
 import org.bukkit.persistence.PersistentDataType
-import ru.arc.eliteloot.isAdvancedEnchantmentsBook
+import ru.arc.dungeons.api.ArcBookIdentity.isAdvancedEnchantmentsBook
 import java.lang.reflect.Constructor
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method

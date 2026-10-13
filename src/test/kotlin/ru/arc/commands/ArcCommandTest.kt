@@ -3,6 +3,7 @@ package ru.arc.commands
 import io.mockk.every
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -20,8 +21,9 @@ import ru.arc.ARC
 import ru.arc.TestBase
 import ru.arc.commands.arc.ArcCommand
 import ru.arc.commands.arc.subcommands.RespawnOnRtpSubCommand
-import ru.arc.helpcenter.HelpCenterModule
+import ru.arc.dungeons.api.ArcDungeonsService
 import ru.arc.gui.ArcMenus
+import ru.arc.helpcenter.HelpCenterModule
 import ru.arc.paper.menu.PaperDialogScreen
 import ru.arc.rtp.RtpCompletionRequest
 import org.bukkit.command.Command as BukkitCommand
@@ -400,9 +402,10 @@ class ArcCommandTest : TestBase() {
     @DisplayName("/arc emshop")
     inner class EmshopTests {
         @Test
-        @DisplayName("Without EMHook - shows hook not loaded error")
-        fun testNoEmHook() {
+        @DisplayName("Without ArcDungeons service - reports the EM feature unavailable")
+        fun testUnavailableWithoutDungeonsService() {
             player.addAttachment(plugin, "arc.admin", true)
+            assertNull(server.servicesManager.getRegistration(ArcDungeonsService::class.java))
 
             val result =
                 arcCommand.onCommand(
@@ -413,7 +416,11 @@ class ArcCommandTest : TestBase() {
                 )
 
             assertTrue(result)
-            assertTrue(player.hasReceivedMessage(), "Should show hook not loaded message")
+            val message = requireNotNull(player.nextComponentMessage())
+            assertEquals(
+                "EMHook не загружен!",
+                PlainTextComponentSerializer.plainText().serialize(message),
+            )
         }
     }
 
@@ -935,6 +942,22 @@ class ArcCommandTest : TestBase() {
     @Nested
     @DisplayName("/arc eliteloot")
     inner class EliteLootSubCommandTests {
+        @Test
+        @DisplayName("Without ArcDungeons service - reports the feature unavailable")
+        fun testUnavailableWithoutDungeonsService() {
+            player.addAttachment(plugin, "arc.elite.loot.admin", true)
+            assertNull(server.servicesManager.getRegistration(ArcDungeonsService::class.java))
+
+            val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("eliteloot"))
+
+            assertTrue(result)
+            val message = requireNotNull(player.nextComponentMessage())
+            assertEquals(
+                "ArcDungeons не загружен!",
+                PlainTextComponentSerializer.plainText().serialize(message),
+            )
+        }
+
         @Test
         @DisplayName("Without permission - sends no permission message")
         fun testNoPermission() {

@@ -4,7 +4,6 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.shouldNotBe
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
@@ -12,12 +11,10 @@ import ru.arc.paper.menu.PaperMenuItemRenderContext
 import ru.arc.menu.MenuTemplateId
 import ru.arc.menu.MenuElementId
 import ru.arc.menu.MenuId
-import ru.arc.paper.menu.PaperMenuConfigurationParser
 import ru.arc.paper.menu.PaperMenuItemFactory
 import ru.arc.paper.testing.MockBukkitTestRuntime
 import ru.arc.config.Config
 import java.nio.file.Files
-import java.nio.file.Path
 
 class ArcMenuConfigurationTest : StringSpec({
     lateinit var paper: MockBukkitTestRuntime
@@ -32,11 +29,10 @@ class ArcMenuConfigurationTest : StringSpec({
         configuration.catalog.require(ArcMenuSchema.INVESTIGATION_HUB).slot("start").index shouldBe 13
         configuration.catalog.require(ArcMenuSchema.INVESTIGATION_CASE).region("witnesses")
             .map { it.index } shouldContainExactly listOf(18, 20, 22, 24, 26)
-        configuration.catalog.require(ArcMenuSchema.LOST_LOOT).apply {
-            rows shouldBe 6
-            region(ArcMenuSchema.LOST_LOOT_ITEMS).size shouldBe 45
-            slot("info").index shouldBe 49
-        }
+        configuration.templates.keys.containsAll(setOf("background", "menu-previous", "menu-next")) shouldBe true
+        configuration.catalog.layouts.containsKey(MenuId.of("elite-loot")) shouldBe false
+        configuration.catalog.layouts.containsKey(MenuId.of("lost-elite-loot")) shouldBe false
+        configuration.catalog.layouts.containsKey(MenuId.of("elite-mobs-shop")) shouldBe false
         ArcMenuSchema.PERSONAL_LOOT.forEach { (rows, menu) ->
             configuration.catalog.require(menu).apply {
                 this.rows shouldBe rows
@@ -112,7 +108,7 @@ class ArcMenuConfigurationTest : StringSpec({
         val config = Config(root, ArcMenuConfiguration.RESOURCE)
         config.removeKey("menus.layouts.mount-detail.elements.settings")
         config.setInt("menus.layouts.mount-detail.elements.glow.slot", 31)
-        config.setString("menus.layouts.mount-detail.elements.glow.template", "lost-loot-back")
+        config.setString("menus.layouts.mount-detail.elements.glow.template", "background")
         config.setInt("menus.layouts.mount-detail.elements.skins.slot", 40)
         config.setString("menus.layouts.mount-detail.elements.skins.template", "background")
         config.setStringList("menus.layouts.mount-detail.regions.abilities.slots", listOf("29-33"))
@@ -143,7 +139,7 @@ class ArcMenuConfigurationTest : StringSpec({
         }
 
         val saved = Config(root, ArcMenuConfiguration.RESOURCE)
-        saved.stringOrNull("menus.layouts.mount-detail.elements.settings.template") shouldBe "lost-loot-back"
+        saved.stringOrNull("menus.layouts.mount-detail.elements.settings.template") shouldBe "background"
         saved.intOrNull("menus.templates.background.custom-model-data") shouldBe 11999
         saved.intOrNull("menus.layouts.investigation-hub.elements.start.slot") shouldBe 15
         saved.intOrNull("menus.layouts.mount-detail.elements.glow.slot") shouldBe null
@@ -154,6 +150,41 @@ class ArcMenuConfigurationTest : StringSpec({
         val afterMigration = Files.readString(target)
         ArcMenuConfiguration.load(root).catalog.require(ArcMenuSchema.MOUNT_TUNING).rows shouldBe 6
         Files.readString(target) shouldBe afterMigration
+    }
+
+    "ignores future dungeon layouts and templates without rewriting the shared legacy config" {
+        val root = Files.createTempDirectory("arc-menu-foreign-dungeon-config")
+        val target = root.resolve(ArcMenuConfiguration.RESOURCE)
+        Files.createDirectories(target.parent)
+        javaClass.classLoader.getResourceAsStream(ArcMenuConfiguration.RESOURCE).use { source ->
+            Files.copy(checkNotNull(source), target)
+        }
+
+        val legacy = Config(root, ArcMenuConfiguration.RESOURCE)
+        legacy.setInt("menus.layouts.investigation-hub.elements.start.slot", 15)
+        legacy.setString("menus.layouts.elite-loot.schema-version", "future")
+        legacy.setString("menus.layouts.elite-loot.elements.back.template", "dungeons-future-template")
+        legacy.setString("menus.layouts.elite-loot-confirmation.schema-version", "future")
+        legacy.setString("menus.layouts.elite-loot-confirmation.rows", "future")
+        legacy.setString("menus.templates.em-shop-item.material", "NOT_A_REAL_MATERIAL")
+        legacy.setString("menus.templates.dungeons-future-template.material", "NOT_A_REAL_MATERIAL")
+        legacy.saveStrict()
+        val beforeLoad = Files.readString(target)
+
+        val loaded = ArcMenuConfiguration.load(root)
+
+        loaded.catalog.layouts.keys shouldContainExactly ArcMenuSchema.contracts.keys
+        loaded.catalog.require(ArcMenuSchema.INVESTIGATION_HUB).slot("start").index shouldBe 15
+        loaded.catalog.layouts.containsKey(MenuId.of("elite-loot")) shouldBe false
+        loaded.catalog.layouts.containsKey(MenuId.of("elite-loot-confirmation")) shouldBe false
+        loaded.templates.containsKey("em-shop-item") shouldBe false
+        loaded.templates.containsKey("dungeons-future-template") shouldBe false
+        Files.readString(target) shouldBe beforeLoad
+
+        val persisted = Config(root, ArcMenuConfiguration.RESOURCE)
+        persisted.exists("menus.layouts.elite-loot-confirmation") shouldBe true
+        persisted.stringOrNull("menus.layouts.elite-loot.schema-version") shouldBe "future"
+        persisted.stringOrNull("menus.templates.dungeons-future-template.material") shouldBe "NOT_A_REAL_MATERIAL"
     }
 
     "investigation menu backgrounds render the canonical filler model" {
@@ -201,13 +232,7 @@ class ArcMenuConfigurationTest : StringSpec({
         Files.writeString(target, original.replace("<action>", "<undeclared>"))
 
         shouldThrow<IllegalArgumentException> {
-            PaperMenuConfigurationParser.require(
-                Config(root, "guis/menus.yml"),
-                "menus.layouts",
-                "menus.templates",
-                ArcMenuSchema.contracts,
-                textContracts = ArcMenuSchema.textContracts,
-            )
+            ArcMenuConfiguration.load(root)
         }
     }
 

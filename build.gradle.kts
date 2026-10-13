@@ -75,7 +75,7 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.390"
+version = "1.4.391"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.22"
@@ -156,6 +156,7 @@ dependencies {
     implementation("ru.ruscrafting.arc:arc-core-ai:$arcCoreVersion")
     // ARC owns this service API at runtime. Keep the unrelocated contract classes in its provider JAR.
     implementation(project(":arc-staff-spells-api"))
+    implementation(project(":arc-dungeons-api"))
 
     // snakeyaml-engine comes transitively from arc-core
 
@@ -180,12 +181,6 @@ dependencies {
         // PacketEvents is server-provided; its legacy netty-all graph is not part of ARC compilation.
         exclude(group = "io.netty")
     }
-    // Immutable private mirrors of the exact EliteMobs API and its mutable MagmaCore snapshot.
-    // MagmaCore resolves API supertypes at compile time, but EliteMobs relocates it at runtime.
-    // ARC must not call its unrelocated classes or shade either dependency; prefer Paper APIs.
-    compileOnly(libs.ru.ruscrafting.thirdparty.elitemobs.api)
-    compileOnly("com.magmaguy:FreeMinecraftModels:2.12.1") { isTransitive = false }
-    compileOnly(libs.ru.ruscrafting.thirdparty.magmacore)
     compileOnly(libs.com.denizenscript.denizen) { isTransitive = false }
     compileOnly(libs.com.github.slimefun.slimefun4)
     // SSB is server-provided; compile against its published API without shading it into ARC.
@@ -222,7 +217,6 @@ dependencies {
     compileOnly(libs.com.viaversion.viaversion.api)
     compileOnly(libs.io.josemmo.yamipa)
     compileOnly(libs.net.luckperms.api)
-    compileOnly(libs.fr.black.eyes.lootchest)
     // Exact API extracted from the active zAuctionHouse 4.0.1.3 release; the
     // upstream project does not publish this release to Maven repositories.
     // This remains compile-only and is never shaded into ARC.
@@ -286,9 +280,6 @@ dependencies {
     testImplementation("net.william278.husksync:husksync-bukkit:3.8.7+1.21.8") { isTransitive = false }
     testImplementation(libs.net.citizensnpcs.citizens.main) { exclude(group = "*", module = "*") }
     testImplementation(libs.com.denizenscript.denizen) { isTransitive = false }
-    testImplementation(libs.ru.ruscrafting.thirdparty.elitemobs.api)
-    testImplementation("com.magmaguy:FreeMinecraftModels:2.12.1") { isTransitive = false }
-    testImplementation(libs.ru.ruscrafting.thirdparty.magmacore)
     testImplementation(libs.com.github.zrips.cmilib)
     testImplementation(libs.com.github.lonedev6.api.itemsadder)
     testImplementation("ru.ruscrafting.thirdparty:leafrtp-lite:3.2.0")
@@ -524,9 +515,25 @@ val contractCrashFixtureJar = tasks.register<Jar>("contractCrashFixtureJar") {
     archiveBaseName.set("ARCContractCrashFixture")
     from(contractCrashFixture.output)
 }
+val arcDungeonsE2eFixture = sourceSets.create("arcDungeonsE2eFixture") {
+    kotlin.srcDir("src/dungeonsE2eFixture/kotlin")
+    resources.srcDir("src/dungeonsE2eFixture/resources")
+    compileClasspath += sourceSets.main.get().output
+    runtimeClasspath += sourceSets.main.get().output
+}
+configurations[arcDungeonsE2eFixture.implementationConfigurationName].extendsFrom(configurations.implementation.get())
+configurations[arcDungeonsE2eFixture.compileOnlyConfigurationName].extendsFrom(configurations.compileOnly.get())
+kotlin.target.compilations.getByName("arcDungeonsE2eFixture")
+    .associateWith(kotlin.target.compilations.getByName("main"))
+val arcDungeonsE2eFixtureJar = tasks.register<Jar>("arcDungeonsE2eFixtureJar") {
+    archiveBaseName.set("ArcDungeonsE2eFixture")
+    archiveVersion.set("")
+    from(arcDungeonsE2eFixture.output)
+}
 val cleanupE2e = providers.gradleProperty("cleanupE2e").map(String::toBoolean).orElse(false).get()
 val dialogE2e = providers.gradleProperty("dialogE2e").map(String::toBoolean).orElse(false).get()
 val parkourE2e = providers.gradleProperty("parkourE2e").map(String::toBoolean).orElse(false).get()
+val dungeonsE2e = providers.gradleProperty("dungeonsE2e").map(String::toBoolean).orElse(false).get()
 val contractCrashE2e = providers.gradleProperty("contractCrashE2e").map(String::toBoolean).orElse(false).get()
 val e2eMinecraftVersion = providers.gradleProperty("e2eMinecraftVersion").orElse("26.1.2").get()
 
@@ -605,7 +612,11 @@ plugwright {
         file("plugins/ARC/modules/entity-cleanup.yml", projectDir.resolve("src/test/e2e/fixtures/entity-cleanup.yml"))
         file("plugins/ARC/modules/parkour.yml", projectDir.resolve("src/test/e2e/fixtures/parkour.yml"))
         file("plugins/Parkour/config.yml", projectDir.resolve("src/test/e2e/fixtures/parkour-config.yml"))
-        if (cleanupE2e || parkourE2e || dialogE2e) {
+        if (dungeonsE2e) {
+            file("plugins/ARC/modules/redis.yml", projectDir.resolve("src/test/e2e/fixtures/entity-cleanup-redis.yml"))
+            file("plugins/ArcDungeons-0.1.0.jar", projectDir.resolve("arc-dungeons/build/libs/ArcDungeons-0.1.0.jar"))
+            file("plugins/ArcDungeonsE2eFixture.jar", arcDungeonsE2eFixtureJar.get().archiveFile.get().asFile)
+        } else if (cleanupE2e || parkourE2e || dialogE2e) {
             file("plugins/ARC/modules/redis.yml", projectDir.resolve("src/test/e2e/fixtures/entity-cleanup-redis.yml"))
             if (cleanupE2e) {
                 file("plugins/Citizens-2.0.43-b4246.jar", contractCitizensJar.get().asFile)
@@ -779,6 +790,10 @@ tasks.named<me.drownek.plugwright.PlugwrightTestTask>("plugwrightTest") {
         testFiles.set("entity-cleanup")
     } else if (parkourE2e) {
         testFiles.set("parkour-real-paper")
+    } else if (dungeonsE2e) {
+        dependsOn(":arc-dungeons:shadowJar")
+        dependsOn(arcDungeonsE2eFixtureJar)
+        testFiles.set("dungeons-real-paper")
     } else {
         dependsOn(prepareContractE2e)
         dependsOn(prepareContractCitizens)
@@ -808,26 +823,6 @@ tasks.register<JavaExec>("exportWorkshopPreview") {
     ))
 }
 
-// Offline textured preview uses the same cuboids as live spell displays.
-tasks.register<JavaExec>("exportStaffRedesignPreview") {
-    group = "verification"
-    description = "Export native particle and display staff sequences"
-    dependsOn(tasks.named("testClasses"))
-    classpath = sourceSets["test"].runtimeClasspath
-    mainClass.set("ru.arc.staffspells.StaffRedesignPreviewExport")
-    args(providers.gradleProperty("staffRedesignPreviewOutput").getOrElse(
-        layout.buildDirectory.file("staff-spells-preview/redesign-sequences.json").get().asFile.absolutePath,
-    ))
-}
-
-tasks.register<JavaExec>("exportStaffSpellPreview") {
-    group = "verification"
-    description = "Export staff display geometry and animation poses as JSON"
-    dependsOn(tasks.named("testClasses"))
-    classpath = sourceSets["test"].runtimeClasspath
-    mainClass.set("ru.arc.staffspells.StaffSpellPreviewExport")
-    args(providers.gradleProperty("staffSpellPreviewOutput").getOrElse(
-        layout.buildDirectory.file("staff-spells-preview/scene.json").get().asFile.absolutePath,
-    ))
-    providers.gradleProperty("staffSpellPreviewSpell").orNull?.let { args(it) }
-}
+// Staff previews are produced by the plugin that owns their implementation.
+tasks.register("exportStaffRedesignPreview") { dependsOn(":arc-dungeons:exportStaffRedesignPreview") }
+tasks.register("exportStaffSpellPreview") { dependsOn(":arc-dungeons:exportStaffSpellPreview") }

@@ -1,0 +1,207 @@
+package ru.arc.dungeons
+
+import org.bukkit.event.HandlerList
+import org.bukkit.event.Listener
+import org.bukkit.plugin.ServicePriority
+import org.bukkit.plugin.java.JavaPlugin
+import ru.arc.config.ConfigManager
+import ru.arc.core.ModuleRegistry
+import ru.arc.core.PaperArcRuntime
+import ru.arc.dungeons.api.ArcDungeonConfiguration
+import ru.arc.dungeons.api.ArcDungeonsService
+import ru.arc.dungeons.menu.DungeonsMenus
+import ru.arc.eliteloot.EliteLootModule
+import ru.arc.eliteloot.LostLootModule
+import ru.arc.enchanting.EliteEnchantingModule
+import ru.arc.hooks.elitemobs.*
+import ru.arc.hooks.lootchest.LootChestListener
+import ru.arc.logging.ArcLogging
+import ru.arc.logging.LoggingConfigSource
+import ru.arc.logging.paper.PaperLoggingPlatform
+import ru.arc.observability.RuntimeHealthContribution
+import ru.arc.observability.RuntimeHealthState
+import ru.arc.paper.api.ArcSidebarPriorities
+import ru.arc.paper.api.ArcSidebarService
+import ru.arc.paper.api.ArcMetricsScope
+import ru.arc.paper.metrics.PaperArcMetrics
+import ru.arc.paper.redis.PaperRedisClient
+import ru.arc.paper.runtime.PaperPluginRuntime
+import ru.arc.staffspells.ArcStaffSpellServiceProvider
+import ru.arc.staffspells.StaffSpellsModule
+import ru.arc.staffspells.api.ArcStaffSpellService
+import ru.arc.sync.EmSync
+import java.nio.file.Path
+
+class ArcDungeonsPlugin : JavaPlugin() {
+    companion object { lateinit var instance: ArcDungeonsPlugin; private set }
+    lateinit var legacyDataPath: Path
+        private set
+    lateinit var serverName: String
+        private set
+    internal var emHook: EMHook? = null
+        private set
+    internal var dungeonQol: EMDungeonQol? = null
+        private set
+    internal var emSync: EmSync? = null
+        private set
+    internal var redisManager: PaperRedisClient? = null
+        private set
+    private var redisGeneration = Long.MIN_VALUE
+    private var spells: ArcStaffSpellServiceProvider? = null
+    private var runtime: PaperPluginRuntime? = null
+    internal val taskScope get() = requireNotNull(runtime).tasks
+    private var metrics: ArcMetricsScope? = null
+    @Volatile private var health = RuntimeHealthContribution(state = RuntimeHealthState.STARTING)
+    private val nativeListeners = mutableListOf<Listener>()
+
+    override fun onLoad() { instance = this }
+
+    override fun onEnable() {
+        val host = server.servicesManager.load(ArcDungeonConfiguration::class.java)
+        if (host == null) {
+            logger.warning("ArcDungeons requires the FULL ARC runtime profile; disabling before initialization")
+            server.pluginManager.disablePlugin(this)
+            return
+        }
+        legacyDataPath = host.legacyDataPath()
+        serverName = host.serverName()
+        mergeDefaults()
+        PaperArcRuntime.installScheduling(this)
+        ArcLogging.install(PaperLoggingPlatform("ArcDungeons", "ArcDungeons"), LoggingConfigSource {
+            ConfigManager.of(legacyDataPath, "modules/logging.yml")
+        })
+        val lifecycle = PaperPluginRuntime(this).also { runtime = it; it.start() }
+        lifecycle.registerHealth("modules") { health }
+        metrics = PaperArcMetrics.open(this, "arc-dungeons")
+        refreshRedis(host)
+        DungeonsMenus.initialize(this, legacyDataPath)
+        spells = ArcStaffSpellServiceProvider(this) { StaffSpellsModule.activeController() }
+            .also(StaffSpellsModule::installDuelAccess)
+        PaperArcRuntime.installModuleLifecycleReporting({ logger.info(it) }, { message, failure ->
+            logger.log(java.util.logging.Level.SEVERE, message, failure)
+        })
+        ModuleRegistry.registerAll(EliteLootModule, EliteEnchantingModule, StaffSpellsModule, LostLootModule)
+        reloadNative()
+        ModuleRegistry.initAll()
+        server.servicesManager.register(ArcStaffSpellService::class.java, requireNotNull(spells), this, ServicePriority.Normal)
+        server.servicesManager.register(ArcDungeonsService::class.java, DungeonsServiceProvider(this), this, ServicePriority.Normal)
+        val command = EMDungeonCommand(ConfigManager.of(legacyDataPath, "modules/elitemobs.yml"))
+        for (name in listOf("dungeon", "dungeonstart", "dungeonsave", "dungeonsaves")) {
+            getCommand(name)?.let { it.setExecutor(command); it.tabCompleter = command }
+        }
+        publishModuleMetrics()
+        lifecycle.ready("modules" to ModuleRegistry.getRuntimeStatuses().count { it.ready })
+        lifecycle.reportHealthEvery(1_200L)
+    }
+
+    private fun mergeDefaults() {
+        for (resource in listOf("modules/elitemobs.yml", "modules/elitemobs-wormholes.yml",
+            "modules/elite-loot.yml", "modules/staff-spells.yml", "modules/enchanting.yml",
+            "guis/eliteloot.yml", "guis/menus.yml")) {
+            ConfigManager.of(legacyDataPath, resource).mergeMissingFromBundled(resource)
+        }
+    }
+
+    internal fun reloadDungeons() {
+        ConfigManager.reloadAll()
+        mergeDefaults()
+        val host = requireNotNull(server.servicesManager.load(ArcDungeonConfiguration::class.java))
+        serverName = host.serverName()
+        refreshRedis(host)
+        DungeonsMenus.reload()
+        reloadNative()
+        ModuleRegistry.reloadAll()
+        runtime?.reload()
+        publishModuleMetrics()
+        runtime?.reportHealthEvery(1_200L)
+    }
+
+    private fun refreshRedis(host: ArcDungeonConfiguration) {
+        val generation = host.sharedRedisGeneration()
+        if (generation == redisGeneration) return
+        closeNative()
+        redisManager?.close()
+        redisManager = null
+        if (host.sharedRedisAvailable()) redisManager = PaperRedisClient.openPrimary(this)
+        redisGeneration = generation
+    }
+
+    private fun publishModuleMetrics() {
+        val statuses = ModuleRegistry.getRuntimeStatuses()
+        health = RuntimeHealthContribution(
+            state = if (statuses.all { it.ready }) RuntimeHealthState.UP else RuntimeHealthState.DEGRADED,
+            dependencies = statuses.associate { it.name.lowercase(java.util.Locale.ROOT) to it.ready },
+        )
+        metrics?.gauge("arc_dungeons_native_ready", "Native dungeon integration initialized", emptyMap())
+            ?.set(if (emHook != null && server.pluginManager.isPluginEnabled("EliteMobs")) 1.0 else 0.0)
+        for (status in statuses) {
+            metrics?.gauge("arc_dungeons_module_ready", "ArcDungeons module readiness",
+                mapOf("module" to status.name))?.set(if (status.ready) 1.0 else 0.0)
+        }
+    }
+
+    private fun reloadNative() {
+        if (!server.pluginManager.isPluginEnabled("EliteMobs")) {
+            closeNative()
+            return
+        }
+        val hook = emHook ?: EMHook()
+        try { hook.reload() } catch (failure: Throwable) {
+            if (emHook == null) hook.close()
+            throw failure
+        }
+        emHook = hook
+        if (dungeonQol == null) {
+            val sidebar = requireNotNull(server.servicesManager.load(ArcSidebarService::class.java))
+                .register(this, "dungeon", ArcSidebarPriorities.DUNGEON)
+            val qol = try { EMDungeonQol(sidebar = sidebar) } catch (failure: Throwable) { sidebar.close(); throw failure }
+            dungeonQol = qol
+            listen(EMListener())
+            listen(qol.teleporter)
+            listen(DungeonCaseRewards)
+            listen(qol)
+            listen(ElitePickupListener())
+            if (server.pluginManager.isPluginEnabled("CMI")) listen(DungeonAdminExtractor())
+            if (server.pluginManager.isPluginEnabled("LootChest")) {
+                listen(LootChestListener(ConfigManager.of(legacyDataPath.resolve("lootchests"), "bosses.yml")))
+            }
+            qol.startAutosaves()
+        }
+        val syncEnabled = redisManager != null &&
+            ConfigManager.of(legacyDataPath, "modules/misc.yml").bool("sync.em", true)
+        if (syncEnabled && emSync == null) emSync = EmSync(this, serverName).also { it.start() }
+        if (!syncEnabled) { emSync?.close(); emSync = null }
+    }
+
+    private fun listen(listener: Listener) {
+        server.pluginManager.registerEvents(listener, this)
+        nativeListeners += listener
+    }
+
+    private fun closeNative() {
+        nativeListeners.forEach(HandlerList::unregisterAll)
+        nativeListeners.clear()
+        dungeonQol?.close()
+        dungeonQol = null
+        emHook?.close()
+        emHook = null
+        emSync?.close()
+        emSync = null
+    }
+
+    override fun onDisable() {
+        server.servicesManager.unregisterAll(this)
+        spells?.close()
+        spells = null
+        StaffSpellsModule.installDuelAccess(null)
+        ModuleRegistry.shutdownAll()
+        closeNative()
+        redisManager?.close()
+        redisManager = null
+        DungeonsMenus.close()
+        metrics?.close()
+        metrics = null
+        runtime?.close()
+        runtime = null
+    }
+}

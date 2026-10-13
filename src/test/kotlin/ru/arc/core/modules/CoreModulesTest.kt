@@ -98,7 +98,6 @@ class CoreModulesTest : TestBase() {
             RestartModule,
             StoreModule,
             TreasureModule,
-            EliteLootModule,
             LeafDecayModule,
             PersonalLootModule,
             MobSpawnModule,
@@ -220,7 +219,6 @@ class CoreModulesTest : TestBase() {
             RestartModule,
             StoreModule,
             TreasureModule,
-            EliteLootModule,
             LeafDecayModule,
             PersonalLootModule,
             MobSpawnModule,
@@ -248,7 +246,7 @@ class CoreModulesTest : TestBase() {
     // ==================== Module Count Test ====================
 
     @Test
-    @DisplayName("Total module count is 24")
+    @DisplayName("Total module count is 23")
     fun testTotalModuleCount() {
         val allModules = listOf(
             RedisModule,
@@ -269,7 +267,6 @@ class CoreModulesTest : TestBase() {
             RestartModule,
             StoreModule,
             TreasureModule,
-            EliteLootModule,
             LeafDecayModule,
             PersonalLootModule,
             MobSpawnModule,
@@ -277,6 +274,6 @@ class CoreModulesTest : TestBase() {
             SyncModule
         )
 
-        assertEquals(24, allModules.size, "Should have 24 modules")
+        assertEquals(23, allModules.size, "Should have 23 modules")
     }
 }

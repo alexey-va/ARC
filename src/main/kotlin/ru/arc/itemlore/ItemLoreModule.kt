@@ -1,6 +1,5 @@
 package ru.arc.itemlore
 
-import com.magmaguy.elitemobs.api.utils.EliteItemManager
 import net.citizensnpcs.api.CitizensAPI
 import net.citizensnpcs.api.event.NPCRightClickEvent
 import net.citizensnpcs.api.npc.NPC
@@ -562,8 +561,8 @@ internal class ItemLoreEditor(
 
     private fun protected(stack: ItemStack): Boolean {
         if (HookRegistry.sfHook?.isSlimefunItem(stack) == true) return true
-        if (Bukkit.getPluginManager().isPluginEnabled("EliteMobs")) {
-            if (runCatching { EliteItemManager.isEliteMobsItem(stack) }.getOrDefault(true)) return true
+        if (Bukkit.getPluginManager().getPlugin("EliteMobs") != null) {
+            if (runCatching { ru.arc.dungeons.dungeonService()?.isEliteItem(stack) ?: true }.getOrDefault(true)) return true
         }
         val pdc: PersistentDataContainer = stack.itemMeta?.persistentDataContainer ?: return false
         return pdc.keys.isNotEmpty()

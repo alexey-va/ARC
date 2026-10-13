@@ -18,7 +18,6 @@ import ru.arc.core.ScheduledTask
 import ru.arc.core.repeating
 import ru.arc.core.ticks
 import ru.arc.chat.ChatModeService
-import ru.arc.eliteloot.EliteLootManager
 import ru.arc.hooks.HookRegistry
 import ru.arc.leafdecay.LeafDecayManager
 import ru.arc.misc.JoinMessagesManager
@@ -34,7 +33,6 @@ import ru.arc.redis.RedisModuleConfig
 import ru.arc.sync.CMISync
 import ru.arc.sync.duels.DuelStatsBridge
 import ru.arc.sync.duels.DuelsSync
-import ru.arc.sync.EmSync
 import ru.arc.sync.SkillsSync
 import ru.arc.sync.SlimefunSync
 import ru.arc.sync.SyncManager
@@ -63,12 +61,15 @@ object RedisModule : PluginModule {
     override val priority = 10
     private var activeConnection: RedisConnection? = null
     private var activeOrigin: String? = null
+    internal var bindingGeneration = 0L
+        private set
 
     override fun init() {
         RedisConfigBootstrap.ensure(ARC.instance.dataPath)
         val redis = RedisModuleConfig.load(ARC.instance.dataPath)
 
         if (!redis.enabled) {
+            if (activeConnection != null) bindingGeneration++
             ARC.redisManager?.close()
             ARC.redisManager = null
             activeConnection = null
@@ -92,12 +93,14 @@ object RedisModule : PluginModule {
         ARC.redisManager = replacement
         activeConnection = connection
         activeOrigin = origin
+        bindingGeneration++
         info("Acquired shared Redis connection")
     }
 
     override fun reload() = init()
 
     override fun shutdown() {
+        if (activeConnection != null) bindingGeneration++
         ARC.redisManager?.close()
         ARC.redisManager = null
         activeConnection = null
@@ -412,18 +415,6 @@ object TreasureModule : PluginModule {
 /**
  * Elite loot drops.
  */
-object EliteLootModule : PluginModule {
-    override val name = "EliteLoot"
-    override val priority = 78
-
-    override fun init() {
-        EliteLootManager.init()
-    }
-
-    override fun shutdown() {
-        EliteLootManager.shutdown()
-    }
-}
 
 /**
  * Leaf decay acceleration.
@@ -536,14 +527,6 @@ object SyncModule : PluginModule {
             SlimefunSync()
         }
 
-        SyncManager.configureSync(
-            EmSync::class.java,
-            HookRegistry.emHook != null && config.bool("sync.em", true),
-            onlinePlayers,
-        ) {
-            info("Starting EM sync")
-            EmSync()
-        }
 
         SyncManager.configureSync(
             CMISync::class.java,

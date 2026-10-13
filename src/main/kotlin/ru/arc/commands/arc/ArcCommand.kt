@@ -111,7 +111,7 @@ class ArcCommand(private val profile: ArcRuntimeProfile = ArcRuntimeProfile.FULL
                 WorkshopSubCommand,
                 // New subcommands
                 TestSubCommand,
-                ru.arc.staffspells.StaffTestSubCommand,
+                ru.arc.commands.arc.subcommands.StaffTestSubCommand,
                 EliteLootSubCommand,
                 StoreSubCommand,
                 ItemsCatalogSubCommand,

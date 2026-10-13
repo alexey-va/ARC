@@ -78,7 +78,6 @@ class SlimefunRuntimeProfileTest : FreeSpec({
             HelpCenterModule.isAvailable() shouldBe true
             plugin.tablist shouldNotBe null
             HookRegistry.landsHook shouldBe null
-            HookRegistry.emHook shouldBe null
             HookRegistry.jobsEnabled shouldBe false
             val interfaceHooks = checkNotNull(ARC.hookRegistry)
             interfaceHooks.chatListener shouldBe null

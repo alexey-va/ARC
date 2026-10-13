@@ -1,7 +1,6 @@
 package ru.arc.chestpreview
 
 import com.jeff_media.customblockdata.CustomBlockData
-import com.magmaguy.elitemobs.treasurechest.TreasureChest
 import dev.lone.itemsadder.api.CustomBlock
 import dev.lone.itemsadder.api.CustomFurniture
 import org.bukkit.Bukkit
@@ -64,7 +63,7 @@ internal class ManagedChestExclusions(
         _plugin: Plugin,
         block: Block,
     ): Boolean {
-        return TreasureChest.getTreasureChest(block.location) != null
+        return ru.arc.dungeons.dungeonService()?.isEliteTreasureChest(block.location) ?: true
     }
 
     private fun isQuickShopInventory(
