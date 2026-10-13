@@ -7,10 +7,9 @@ import { once } from 'node:events';
 import { test, expect, waitUntil, ServerWrapper } from '@drownek/plugwright';
 import {
   clickContractDesk,
-  contractDeskContents,
-  contractUnitPriceMinor,
   CONTRACT_DESK_SELL_SLOT,
   offerStoneBatch,
+  playerInventoryItems,
 } from './contract-desk.js';
 
 const enabled = process.env.ARC_CONTRACT_CRASH_FIXTURE === '1';
@@ -23,8 +22,13 @@ const phases = [
   ['paid_saved', true, true, 'none'],
   ['contract_saved', true, true, 'none'],
 ];
-const countStone = player => player.bot.inventory.items()
+const countStone = player => playerInventoryItems(player)
   .filter(item => item.name === 'stone').reduce((total, item) => total + item.count, 0);
+
+// Each pre-commit crash remains a durable quota reservation, so the exact
+// marginal quote steps down by 30 minor units per two-item attempt. paid_saved
+// is committed during recovery before the last phase is quoted.
+const expectedPayoutsMinor = [24992, 24962, 24932, 24902, 24872, 24842, 24812];
 
 async function properties(name) {
   const file = path.join(process.env.SERVER_DIR, 'plugins', 'ARCContractCrashFixture', `${name}.properties`);
@@ -162,12 +166,10 @@ if (enabled) test('contract items, provider payment and journal survive real pro
       await expect(player).toHaveReceivedMessage(`CONTRACT_CRASH_ARMED:${phase}`, { since: beforeArm });
       await player.deOp();
       await balance(player, expectedBalance, signal);
-      const desk = await clickContractDesk(player, signal);
-      const unitPriceMinor = contractUnitPriceMinor(desk);
-      assert.ok(unitPriceMinor !== null && unitPriceMinor > 0,
-        `The current NPC desk must display a positive per-stone payout; received GUI:\n${contractDeskContents(player)}`);
-      const quotedMinor = unitPriceMinor * 2;
+      await clickContractDesk(player, signal);
       await offerStoneBatch(player, 2, signal);
+      const phasePayoutMinor = expectedPayoutsMinor[index];
+      assert.ok(Number.isSafeInteger(phasePayoutMinor), `No exact batch payout is specified for ${phase}`);
       await waitForCrashDisconnect(player.bot, signal, () =>
         player.bot.clickWindow(CONTRACT_DESK_SELL_SLOT, 0, 0).catch(() => {}));
       const crash = await properties('crashed');
@@ -184,21 +186,22 @@ if (enabled) test('contract items, provider payment and journal survive real pro
         assert.equal(replacement.exitCode, 86, 'The deliberate JVM halt must own the exit');
       }
       replacement = await startReplacement(player, index + 1, signal);
-      expectedBalance += paid ? quotedMinor : 0;
-      expectedSpent += committed ? quotedMinor : 0;
-      expectedHeld += committed ? 0 : quotedMinor;
+      lastSnapshot = await snapshot(player, `after_${phase}`, signal);
+      assert.equal(Number(lastSnapshot.payoutMinor), phasePayoutMinor,
+        `Durable quote for ${phase} must match the independently expected two-stone amount`);
+      expectedBalance += paid ? phasePayoutMinor : 0;
+      expectedSpent += committed ? phasePayoutMinor : 0;
+      expectedHeld += committed ? 0 : phasePayoutMinor;
       expectedAccepted += committed ? 2 : 0;
       expectedReserved += committed ? 0 : 2;
       expectedManual += committed ? 0 : 1;
       await balance(player, expectedBalance, signal);
       await waitUntil(() => countStone(player) === 2, { signal, message: 'Persisted removal did not survive the crashed JVM' });
-      lastSnapshot = await snapshot(player, `after_${phase}`, signal);
       assert.equal(Number(lastSnapshot.records), index + 1);
       assert.equal(lastSnapshot.submissionId, crash.submissionId);
       assert.equal(lastSnapshot.status, committed ? 'contract_committed' : 'manual_review');
       assert.equal(lastSnapshot.reviewReason, reviewReason);
       assert.equal(Number(lastSnapshot.quantity), 2);
-      assert.equal(Number(lastSnapshot.payoutMinor), quotedMinor);
       assert.equal(Number(lastSnapshot.items), 2);
       assert.equal(Number(lastSnapshot.deskItems), phase === 'removal_started' ? 2 : 0,
         'Desk storage must retain the offered batch before removal, and be empty after durable removal');

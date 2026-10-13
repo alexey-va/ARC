@@ -3,14 +3,15 @@ import { test, expect, waitUntil } from '@drownek/plugwright';
 import {
   clickContractDesk,
   contractDeskContents,
-  contractUnitPriceMinor,
   CONTRACT_DESK_DEPOSIT_SLOT,
   CONTRACT_DESK_SELL_SLOT,
   offerStoneBatch,
+  playerInventoryItems,
+  waitForContractDeskPayout,
 } from './contract-desk.js';
 import { observeNativeDialog, plain } from './native-dialog.js';
 
-const count = (player, name) => player.bot.inventory.items()
+const count = (player, name) => playerInventoryItems(player)
   .filter(item => item.name === name)
   .reduce((total, item) => total + item.count, 0);
 
@@ -43,7 +44,7 @@ test('direct contract submission is unavailable; the board opens the real contra
   } finally { native.close(); }
 });
 
-test('the real NPC desk sells one exact batch once and shows the updated price', async ({ player, signal }) => {
+test('the real NPC desk pays exact batches once and returns unsold items when closed', async ({ player, signal }) => {
   await player.makeOp();
   await player.giveItem('stone', 4);
   await waitUntil(() => count(player, 'stone') === 4, { signal, message: 'Setup stone was not delivered' });
@@ -52,10 +53,7 @@ test('the real NPC desk sells one exact batch once and shows the updated price',
   player.chat('/balance');
   await expect(player).toHaveReceivedMessage(/You have 0(?:[.,]0{1,2})?(?: coins?)?!/i, { since: initialBalance });
 
-  const desk = await clickContractDesk(player, signal);
-  const firstUnitPrice = contractUnitPriceMinor(desk);
-  assert.equal(firstUnitPrice, 12496,
-    `The actual NPC desk must show the current per-stone payout; received GUI:\n${contractDeskContents(player)}`);
+  await clickContractDesk(player, signal);
   await offerStoneBatch(player, 2, signal);
 
   // Submit the same desk action twice while the first sale is in flight. Only
@@ -85,26 +83,46 @@ test('the real NPC desk sells one exact batch once and shows the updated price',
     'Both protocol clicks must target the same desk sell slot');
   assert.ok(clickResults.some(result => result.status === 'fulfilled'),
     `At least one sell click must be acknowledged; outcomes: ${clickResults.map(result => result.status).join(', ')}`);
-  await waitUntil(() => count(player, 'stone') === 2, {
+  const firstPayoutMinor = await waitForContractDeskPayout(player, 2, signal);
+  assert.equal(firstPayoutMinor, 24992,
+    `The actual NPC desk must show the completed two-stone payout; received GUI:\n${contractDeskContents(player)}`);
+  await waitUntil(() => player.bot.currentWindow?.id === windowId &&
+    player.bot.currentWindow?.slots[CONTRACT_DESK_DEPOSIT_SLOT] == null && count(player, 'stone') === 2, {
     signal,
-    message: 'The NPC desk did not consume exactly the offered two stones',
+    message: 'The NPC desk did not consume exactly the offered batch while preserving the untouched two stones',
   });
   const paidBalance = player.messageBuffer.length;
   player.chat('/balance');
   await expect(player).toHaveReceivedMessage(/You have 249[.,]92(?: coins?)?!/i, { since: paidBalance });
 
-  await waitUntil(() => player.bot.currentWindow?.id === windowId && desk.title !== undefined &&
+  // Stage the untouched batch, then close without selling it. The real chest
+  // must return those items and must not make another payment.
+  await offerStoneBatch(player, 2, signal);
+  const returnWindow = player.bot.currentWindow;
+  assert.ok(returnWindow, 'The NPC desk must remain open while staging the return batch');
+  await player.bot.closeWindow(returnWindow);
+  await waitUntil(() => player.bot.currentWindow === null && count(player, 'stone') === 2, {
+    signal,
+    message: 'Closing the NPC desk did not return the unsold two stones',
+  });
+  const returnedBalance = player.messageBuffer.length;
+  player.chat('/balance');
+  await expect(player).toHaveReceivedMessage(/You have 249[.,]92(?: coins?)?!/i, { since: returnedBalance });
+
+  await clickContractDesk(player, signal);
+  await offerStoneBatch(player, 2, signal);
+  await player.bot.clickWindow(CONTRACT_DESK_SELL_SLOT, 0, 0);
+  const secondPayoutMinor = await waitForContractDeskPayout(player, 2, signal);
+  assert.equal(secondPayoutMinor, 24962,
+    `The next staged batch must show its actual completed payout; received GUI:\n${contractDeskContents(player)}`);
+  await waitUntil(() => count(player, 'stone') === 0 &&
     player.bot.currentWindow?.slots[CONTRACT_DESK_DEPOSIT_SLOT] == null, {
     signal,
-    message: 'The completed sale left items in the NPC desk deposit slot',
+    message: 'The reopened NPC desk did not sell the returned two-stone batch',
   });
-
-  await waitUntil(() => {
-    const nextUnitPrice = contractUnitPriceMinor(desk);
-    return nextUnitPrice !== null && nextUnitPrice < firstUnitPrice;
-  }, { signal, message: 'The live NPC desk did not show its reduced post-sale price' });
-  assert.equal(contractUnitPriceMinor(desk), 12481, 'The NPC desk price must reflect the accepted supply');
-  assert.equal(count(player, 'stone'), 2, 'The repeated sell action consumed the untouched player batch');
+  const secondPaidBalance = player.messageBuffer.length;
+  player.chat('/balance');
+  await expect(player).toHaveReceivedMessage(/You have 499[.,]54(?: coins?)?!/i, { since: secondPaidBalance });
 });
 
 test('leaving Origin leaves the contract GUI read-only', async ({ player, signal }) => {

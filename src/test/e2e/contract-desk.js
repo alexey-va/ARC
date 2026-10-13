@@ -7,6 +7,11 @@ const CONTRACT_DESK_INVENTORY_START = 54;
 export const CONTRACT_DESK_SELL_SLOT = 4;
 export const CONTRACT_DESK_DEPOSIT_SLOT = 5;
 
+export function playerInventoryItems(player) {
+  const window = player.bot.currentWindow || player.bot.inventory;
+  return window.items();
+}
+
 export function contractDeskContents(player) {
   const gui = player.getCurrentGui();
   if (!gui) return '(no current GUI)';
@@ -72,29 +77,53 @@ export async function offerStoneBatch(player, quantity, signal) {
   assert.ok(stoneSlot >= inventoryStart, 'No real stone stack is available to offer');
   const stack = window.slots[stoneSlot];
   const initialCount = stack.count;
-  assert.ok(
-    initialCount === quantity || initialCount === quantity * 2,
-    `Expected ${quantity} stones or a ${quantity * 2}-stone stack; found ${initialCount}`,
-  );
+  assert.ok(initialCount >= quantity, `Expected at least ${quantity} stones; found ${initialCount}`);
+  assert.equal(window.slots[CONTRACT_DESK_DEPOSIT_SLOT], null,
+    'The contract desk deposit slot must be empty before staging a batch');
 
-  // Right-click splits the four-stone fixture stack in half; when the two
-  // remaining stones are reused, left-click moves that exact batch.
-  await player.bot.clickWindow(stoneSlot, initialCount === quantity ? 0 : 1, 0);
-  await player.bot.clickWindow(CONTRACT_DESK_DEPOSIT_SLOT, 0, 0);
+  // Pick up the original stack, place exactly the requested number into the
+  // desk one at a time, then return the untouched remainder to its source slot.
+  await player.bot.clickWindow(stoneSlot, 0, 0);
+  for (let placed = 0; placed < quantity; placed++) {
+    await player.bot.clickWindow(CONTRACT_DESK_DEPOSIT_SLOT, 1, 0);
+  }
+  if (window.selectedItem) await player.bot.clickWindow(stoneSlot, 0, 0);
   await waitUntil(() => {
     const current = player.bot.currentWindow;
     const offered = current?.slots[CONTRACT_DESK_DEPOSIT_SLOT];
     return offered?.name === 'stone' && offered.count === quantity &&
-      player.bot.inventory.items().filter(item => item.name === 'stone')
+      current.selectedItem == null &&
+      playerInventoryItems(player).filter(item => item.name === 'stone')
         .reduce((total, item) => total + item.count, 0) === initialCount - quantity;
   }, { signal, message: `The NPC desk did not receive exactly ${quantity} stones` });
 }
 
-export function contractUnitPriceMinor(desk, contractName = 'E2E stone order') {
-  const order = desk.locator(item => item.getDisplayName().includes(contractName));
-  const lore = order.loreText();
-  const match = lore.match(/За штуку:\s*([\d\s.,]+)/i);
-  if (!match) return null;
-  const amount = Number(match[1].replace(/\s/g, '').replace(',', '.'));
-  return Number.isFinite(amount) ? Math.round(amount * 100) : null;
+export function contractDeskPayoutMinor(player, expectedQuantity) {
+  const button = player.getCurrentGui()?.items.find(item => item.slot === CONTRACT_DESK_SELL_SLOT);
+  if (!button) return null;
+  const lore = button.getLore().join('\n');
+  const matches = [...lore.matchAll(/Принято\s+(\d+)\s+шт\.\s*\+([\d]+(?:[.,]\d{1,2})?)/gi)];
+  const payouts = new Set();
+  for (const match of matches) {
+    if (Number(match[1]) !== expectedQuantity) return null;
+    const [whole, fractional = ''] = match[2].replace(',', '.').split('.');
+    if (fractional.length > 2) return null;
+    const minor = Number(whole) * 100 + Number(fractional.padEnd(2, '0'));
+    if (!Number.isSafeInteger(minor)) return null;
+    payouts.add(minor);
+  }
+  return payouts.size === 1 ? [...payouts][0] : null;
+}
+
+export async function waitForContractDeskPayout(player, expectedQuantity, signal) {
+  let payoutMinor = null;
+  await waitUntil(() => {
+    payoutMinor = contractDeskPayoutMinor(player, expectedQuantity);
+    return payoutMinor !== null;
+  }, {
+    signal,
+    timeout: 10000,
+    message: () => `The desk did not show the completed payout for ${expectedQuantity} items.\n${contractDeskContents(player)}`,
+  });
+  return payoutMinor;
 }
