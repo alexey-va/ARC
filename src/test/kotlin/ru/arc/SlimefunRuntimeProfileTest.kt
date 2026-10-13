@@ -24,7 +24,7 @@ import ru.arc.hooks.HookRegistry
 import ru.arc.listeners.ChatListener
 import ru.arc.paper.api.ArcSidebarService
 import ru.arc.paper.testing.MockBukkitTestRuntime
-import ru.arc.redis.RedisManager
+import ru.arc.paper.redis.PaperRedisClient
 import ru.arc.redis.ChannelListener
 import ru.arc.xserver.playerlist.PlayerManager
 import ru.arc.slimefunmenu.SlimefunMenuAliasCommand
@@ -164,7 +164,7 @@ class SlimefunRuntimeProfileTest : FreeSpec({
         Logging.quietMode = true
         Logging.bootstrapForTests()
         ConfigManager.clear()
-        val redis = mockk<RedisManager>(relaxed = true) {
+        val redis = mockk<PaperRedisClient>(relaxed = true) {
             every { loadMap(any()) } returns CompletableFuture.completedFuture(emptyMap())
         }
         mockkObject(RedisModule)

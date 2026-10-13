@@ -50,6 +50,7 @@ import ru.arc.core.modules.AuditModule
 import ru.arc.core.modules.BoardModule
 import ru.arc.core.modules.ConfigModule
 import ru.arc.metrics.MetricsModule
+import ru.arc.metrics.SharedServiceMetrics
 import ru.arc.mounts.MountModule
 import ru.arc.parkour.ArcParkourModule
 import ru.arc.core.modules.CooldownModule
@@ -85,7 +86,12 @@ import ru.arc.itemlore.ItemLoreModule
 import ru.arc.itemcatalog.CaseRewardIssueCommand
 import ru.arc.landsui.LandsUiModule
 import ru.arc.network.NetworkRegistry
-import ru.arc.redis.RedisManager
+import ru.arc.paper.redis.PaperRedisClient
+import ru.arc.paper.redis.PaperRedisServiceProvider
+import ru.arc.paper.sql.PaperSqlServiceProvider
+import ru.arc.paper.sql.PaperSqlServices
+import ru.arc.paper.metrics.PaperArcMetricsProvider
+import ru.arc.paper.api.ArcMetricsService
 import ru.arc.ops.OpsHttpModule
 import ru.arc.onboarding.OnboardingModule
 import ru.arc.origin.OriginSpawnModule
@@ -146,6 +152,17 @@ open class ARC : JavaPlugin() {
         private set
 
     private var baseSidebar: ArcBaseSidebar? = null
+    internal lateinit var sqlService: PaperSqlServiceProvider
+        private set
+    internal lateinit var redisService: PaperRedisServiceProvider
+        private set
+    private var sqlConsumer: AutoCloseable? = null
+    private var metricsService: PaperArcMetricsProvider? = null
+    private var sharedServiceMetrics: SharedServiceMetrics? = null
+
+    internal fun sharedServiceSnapshot(): Map<String, Int> = sharedServiceMetrics?.snapshot().orEmpty()
+
+    internal fun refreshSharedServiceMetrics() { sharedServiceMetrics?.refresh() }
     private var staffSpellService: ArcStaffSpellServiceProvider? = null
     internal var tablist: ru.arc.tablist.ArcTablist? = null
         private set
@@ -174,6 +191,13 @@ open class ARC : JavaPlugin() {
         }
 
         PaperArcRuntime.installScheduling(this)
+        sqlService = PaperSqlServiceProvider(this)
+        sqlConsumer = PaperSqlServices.installConsumer(this)
+        redisService = PaperRedisServiceProvider(this)
+        metricsService = PaperArcMetricsProvider(null).also {
+            server.servicesManager.register(ArcMetricsService::class.java, it, this, ServicePriority.Normal)
+            sharedServiceMetrics = SharedServiceMetrics(it, sqlService, redisService)
+        }
         visualPacketRuntime = PaperVisualPacketRuntime.install(this)
         val configRoot = dataPath
         ru.arc.core.async {
@@ -204,6 +228,7 @@ open class ARC : JavaPlugin() {
             logError = { msg, t -> error(msg, t) },
         )
         ModuleRegistry.initAll()
+        metricsService?.rebind(MetricsModule.registry())
         staffSpellService?.let {
             server.servicesManager.register(ArcStaffSpellService::class.java, it, this, ServicePriority.Normal)
         }
@@ -249,6 +274,14 @@ open class ARC : JavaPlugin() {
         unregisterNetworkSpawnAlias()
         if (runtimeProfile == ArcRuntimeProfile.FULL) Portal.removeAll()
         ModuleRegistry.shutdownAll()
+        sharedServiceMetrics?.close()
+        sharedServiceMetrics = null
+        runCatching { sqlConsumer?.close() }.onFailure { error("Failed to release ARC SQL leases", it) }
+        sqlConsumer = null
+        if (::sqlService.isInitialized) runCatching(sqlService::close).onFailure { error("Failed to close shared SQL provider", it) }
+        if (::redisService.isInitialized) runCatching(redisService::close).onFailure { error("Failed to close shared Redis provider", it) }
+        metricsService?.close()
+        metricsService = null
         runCatching { visualPacketRuntime?.close() }
             .onFailure { failure -> error("Failed to close the visual packet budget", failure) }
         visualPacketRuntime = null
@@ -297,6 +330,7 @@ open class ARC : JavaPlugin() {
         }
         if (runtimeProfile == ArcRuntimeProfile.FULL) ArcMenus.reload()
         ModuleRegistry.reloadAll()
+        metricsService?.rebind(MetricsModule.registry())
         baseSidebar?.refresh()
         tablist?.refresh()
         // Modules may replace channel listeners during reload; restart the subscription once
@@ -697,7 +731,7 @@ open class ARC : JavaPlugin() {
 
         @JvmField var pluginMessenger: PluginMessenger? = null
 
-        @JvmField var redisManager: RedisManager? = null
+        @JvmField var redisManager: PaperRedisClient? = null
 
         @JvmField var hookRegistry: HookRegistry? = null
 

@@ -235,7 +235,7 @@ object MetricsModule : PluginModule {
                 dataPath = ARC.instance.dataPath,
             )
         val paper = PaperMetricsCollector(Bukkit.getServer())
-        val redisBinder = ARC.redisManager?.let { RedisMetricsBinder(it, metrics.registry) }
+        val redisBinder = RedisMetricsBinder(ARC.instance.redisService::installTelemetry, metrics.registry)
         try {
             metrics.start()
             runtime = metrics
@@ -447,6 +447,7 @@ object MetricsModule : PluginModule {
     }
 
     private fun sampleFast() {
+        ARC.instance.refreshSharedServiceMetrics()
         val metrics = runtime ?: return
         val paper = collector ?: return
         metrics.recordSnapshot("paper-fast", "platform") {

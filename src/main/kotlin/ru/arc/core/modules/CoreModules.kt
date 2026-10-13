@@ -27,8 +27,8 @@ import ru.arc.mobspawn.MobSpawnManager
 import ru.arc.network.NetworkRegistry
 import ru.arc.config.ArcRedisConfig
 import ru.arc.redis.RedisConnection
-import ru.arc.redis.RedisManager
-import ru.arc.redis.ServerIdentity
+import ru.arc.paper.redis.PaperRedisClient
+import ru.arc.paper.api.ArcRedisSettings
 import ru.arc.redis.RedisConfigBootstrap
 import ru.arc.redis.RedisModuleConfig
 import ru.arc.sync.CMISync
@@ -61,6 +61,8 @@ import ru.arc.bschests.PersonalLootModule as PersonalLoot
 object RedisModule : PluginModule {
     override val name = "Redis"
     override val priority = 10
+    private var activeConnection: RedisConnection? = null
+    private var activeOrigin: String? = null
 
     override fun init() {
         RedisConfigBootstrap.ensure(ARC.instance.dataPath)
@@ -69,23 +71,28 @@ object RedisModule : PluginModule {
         if (!redis.enabled) {
             ARC.redisManager?.close()
             ARC.redisManager = null
+            activeConnection = null
+            activeOrigin = null
+            ARC.instance.redisService.clearPrimary()
             info("Redis disabled — skipping connection (redis.enabled=false)")
             return
         }
 
         val connection = redis.connection()
 
-        if (ARC.redisManager != null) {
-            ARC.redisManager!!.connect(connection)
-            info("Reconnected to Redis")
-        } else {
-            ARC.redisManager =
-                RedisManager(
-                    connection,
-                    ServerIdentity { ARC.serverName ?: redis.serverName },
-                )
-            info("Connected to Redis")
-        }
+        // ConfigModule refreshes ARC.serverName later in the lifecycle; bind
+        // this immutable lease to the current Redis configuration directly.
+        val origin = redis.serverName
+        ARC.instance.redisService.configurePrimary(
+            ArcRedisSettings(connection.host, connection.port, connection.username, connection.password), origin,
+        )
+        if (ARC.redisManager != null && activeConnection == connection && activeOrigin == origin) return
+        val replacement = PaperRedisClient.openPrimary(ARC.instance)
+        ARC.redisManager?.close()
+        ARC.redisManager = replacement
+        activeConnection = connection
+        activeOrigin = origin
+        info("Acquired shared Redis connection")
     }
 
     override fun reload() = init()
@@ -93,6 +100,9 @@ object RedisModule : PluginModule {
     override fun shutdown() {
         ARC.redisManager?.close()
         ARC.redisManager = null
+        activeConnection = null
+        activeOrigin = null
+        ARC.instance.redisService.clearPrimary()
     }
 }
 

@@ -103,6 +103,7 @@ object OpsHttpHandlers {
                 "maxPlayers" to Bukkit.getMaxPlayers(),
                 "tps" to "%.2f".format(tps),
                 "redisConnected" to (ARC.redisManager?.isConnected() == true),
+                "sharedServices" to ARC.instance.sharedServiceSnapshot(),
                 "worlds" to Bukkit.getWorlds().map { it.name },
             )
         }
