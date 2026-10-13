@@ -105,9 +105,45 @@ class StaffSpellChannelsTest : FreeSpec({
             hits.any { it.first == flatTarget.uniqueId } shouldBe true
             hits.any { it.first == coveredTarget.uniqueId } shouldBe false
             val flatMoves = h.projectileMoves.filter { it.id == flatScene }
+            (flatMoves[2].at.distance(flatMoves[1].at) >= 3.0) shouldBe true
             (flatMoves.last().at.z - flatMoves.first().at.z > 3.0) shouldBe true
             cover.type shouldBe Material.STONE
             flatWorld.getBlockAt(0, 65, 10).type shouldBe Material.STONE
+            channels.close()
+        }
+    }
+
+    "gravity reaches its 32-block clear-air limit while cover still blocks hits" {
+        withStaffHarness { h ->
+            val clearWorld = h.paper.addSimpleWorld("channel-gravity-long-clear")
+            val coveredWorld = h.paper.addSimpleWorld("channel-gravity-long-wall")
+            val clearPlayer = h.player("gravity-long-clear", clearWorld, StaffSpell.GRAVITY)
+            val coveredPlayer = h.player("gravity-long-wall", coveredWorld, StaffSpell.GRAVITY)
+            val coveredTarget = h.zombie(coveredWorld, x = 0.5, z = 20.0)
+            val support = clearWorld.getBlockAt(0, 65, 10).apply { type = Material.STONE }
+            val cover = coveredWorld.getBlockAt(0, 65, 5).apply { type = Material.STONE }
+            val hits = mutableListOf<Pair<UUID, Double>>()
+            val (damage, visuals) = channelDependencies(hits)
+            val settings = staffSettings()
+            val channels = StaffSpellChannels(settings, damage, h.effects, visuals, StaffSpellTargeting(settings, damage))
+            channels.start()
+            val tuning = StaffSpellTuning(1.2, 10.0, 44)
+            val clearCast = StaffSpellCast(clearPlayer.uniqueId, UUID.randomUUID(), 1, null, null, false)
+            val coveredCast = StaffSpellCast(coveredPlayer.uniqueId, UUID.randomUUID(), 1, null, null, false)
+            channels.begin(clearPlayer, StaffSpell.GRAVITY, clearCast, tuning, secondary = false) shouldBe true
+            channels.begin(coveredPlayer, StaffSpell.GRAVITY, coveredCast, tuning, secondary = false) shouldBe true
+            val clearScene = h.visualPlays.first { it.from.world == clearWorld }.id
+            support.type = Material.AIR
+
+            channels.release(clearPlayer)
+            channels.release(coveredPlayer)
+            h.scheduler.tick(24)
+
+            val clearMoves = h.projectileMoves.filter { it.id == clearScene }
+            val clearDistance = clearMoves.last().at.distance(clearPlayer.eyeLocation)
+            (clearDistance in 31.9..32.01) shouldBe true
+            hits.any { it.first == coveredTarget.uniqueId } shouldBe false
+            cover.type shouldBe Material.STONE
             channels.close()
         }
     }

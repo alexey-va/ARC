@@ -41,7 +41,7 @@ internal class StaffSpellDefense(
         var remaining: Double,
         val scene: UUID?,
     )
-    private data class Recovery(val spell: StaffSpell, val ends: Int, val duration: Int)
+    private data class Recovery(val spell: StaffSpell, val ends: Int, val duration: Int, val allAround: Boolean)
     private val tasks = LifecycleTaskScope()
     private val guards = mutableMapOf<UUID, Guard>()
     private val shields = mutableMapOf<UUID, Shield>()
@@ -71,7 +71,7 @@ internal class StaffSpellDefense(
             guards[player.uniqueId] = Guard(spell, cast, player.world.uid, tick + duration,
                 hits = if (heavy) 3 else 2, capacity = if (heavy) 3 else 2, scene = scene)
         }
-        recovery[player.uniqueId] = Recovery(spell, tick + cooldown, cooldown)
+        recovery[player.uniqueId] = Recovery(spell, tick + cooldown, cooldown, allAround)
         visuals.withOwner(player.uniqueId) { visuals.cue(player.location, Sound.ITEM_SHIELD_BLOCK, .7f, 1.25f) }
         show(player)
         return true
@@ -181,7 +181,7 @@ internal class StaffSpellDefense(
         val guard = guards[player.uniqueId]?.takeIf { current(player, it) }
         val active = shield != null || guard != null
         val title = shield?.let { config.shield(it.spell, it.remaining, it.capacity) }
-            ?: config.defense(state.spell, active, remaining / 20.0)
+            ?: config.defense(state.spell, active, remaining / 20.0, state.allAround)
         val progress = when {
             shield != null -> (shield.remaining / shield.capacity).toFloat().coerceIn(0f, 1f)
             guard != null -> 1f
@@ -214,8 +214,8 @@ internal class StaffSpellDefense(
 
     private companion object {
         const val SHIELD_CAPACITY = 8.0
-        const val SHIELD_DURATION_TICKS = 60
-        const val SHIELD_COOLDOWN_TICKS = 160
+        const val SHIELD_DURATION_TICKS = 400
+        const val SHIELD_COOLDOWN_TICKS = 500
     }
 }
 

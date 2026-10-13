@@ -25,8 +25,8 @@ internal fun staffParticleOnlyQuick(spell: StaffSpell, input: StaffCastInput) = 
 
 internal fun staffArsenalLifetime(spell: StaffSpell, secondary: Boolean) = when (spell) {
     StaffSpell.GALE -> if (secondary) 40 else 52
-    StaffSpell.TIDE -> 44
-    StaffSpell.REQUIEM -> if (secondary) 40 else 46
+    StaffSpell.TIDE -> if (secondary) 44 else STAFF_TIDE_PRIMARY_ATTACK_TICKS
+    StaffSpell.REQUIEM -> if (secondary) STAFF_REQUIEM_SECONDARY_DURATION_TICKS else 36
     StaffSpell.NOVA -> if (secondary) 40 else 48
     StaffSpell.OSSUARY -> if (secondary) 36 else 54
     else -> 40
@@ -40,58 +40,20 @@ internal fun staffArsenalParts(spell: StaffSpell, ageTicks: Int, durationTicks: 
     val q = charge.coerceIn(0.0, 1.0)
     if (spell == StaffSpell.GALE || spell == StaffSpell.TIDE)
         return staffTideGaleParts(spell, age, durationTicks, radius, impact, secondary, q)
+    if (spell == StaffSpell.REQUIEM)
+        return staffRequiemBellParts(age, durationTicks, secondary, q)
     val scale = .8 + q * .45
     val fade = smooth((durationTicks - 2 - age) / 8.0)
     val parts = mutableListOf<StaffDisplayPart>()
     fun part(id: String, material: Material, x: Double, y: Double, z: Double,
-        sx: Double, sy: Double, sz: Double, yaw: Double = 0.0, pitch: Double = 0.0, roll: Double = 0.0) {
+        sx: Double, sy: Double, sz: Double, yaw: Double = 0.0, pitch: Double = 0.0, roll: Double = 0.0,
+        orientation: Quaternionf? = null) {
         parts += StaffDisplayPart(material, Vector3f((x * scale).toFloat(), (y * scale).toFloat(), (z * scale).toFloat()),
             Vector3f((sx * scale * fade).coerceAtLeast(.001).toFloat(),
                 (sy * scale * fade).coerceAtLeast(.001).toFloat(), (sz * scale * fade).coerceAtLeast(.001).toFloat()),
-            Quaternionf().rotationXYZ(pitch.toFloat(), yaw.toFloat(), roll.toFloat()), identity = id)
+            orientation ?: Quaternionf().rotationXYZ(pitch.toFloat(), yaw.toFloat(), roll.toFloat()), identity = id)
     }
     when (spell) {
-        StaffSpell.REQUIEM -> if (secondary) {
-            val grow = smooth(age / 9.0)
-            val radius = (1.5 + q * .35) * grow
-            repeat(12) { i ->
-                val a = i * PI * 2 / 12
-                part("lament:arc:$i", if (i % 3 == 0) Material.CRYING_OBSIDIAN else Material.PURPLE_STAINED_GLASS,
-                    cos(a) * radius, .85 + sin(a * 2) * .3, sin(a) * radius,
-                    .22 * grow, .48 * grow, .22 * grow, yaw = a, roll = .18 * sin(a))
-            }
-            repeat(3) { i ->
-                val a = i * PI * 2 / 3 + age * .025
-                part("lament:shard:$i", Material.AMETHYST_BLOCK, cos(a) * radius, 1.05, sin(a) * radius,
-                    .25 * grow, .42 * grow, .25 * grow, yaw = -a, pitch = .3)
-            }
-            part("lament:heart", Material.SOUL_SAND, 0.0, .9, 0.0,
-                .34 * grow, .42 * grow, .34 * grow)
-        } else if (impact) {
-            val burst = .16 + age * .09
-            repeat(5) { shard ->
-                val a = shard * PI * 2 / 5
-                part("wisp:burst:$shard", if (shard % 2 == 0) Material.PURPLE_STAINED_GLASS else Material.AMETHYST_BLOCK,
-                    cos(a) * burst, sin(a) * burst, sin(a * 2) * burst,
-                    .20, .24, .20, yaw = a, roll = sin(a) * .4)
-            }
-            part("wisp:burst:core", Material.SOUL_SAND, 0.0, 0.0, 0.0,
-                .24, .25, .24)
-        } else {
-            val birth = smooth(age / 4.0)
-            val pulse = 1.0 + sin(age * .35) * .12
-            part("wisp:core", Material.CRYING_OBSIDIAN, 0.0, 0.0, 0.0,
-                .42 * birth * pulse, .48 * birth * pulse, .42 * birth * pulse, yaw = age * .06)
-            part("wisp:spine", Material.SOUL_SAND, 0.0, 0.0, -.32,
-                .24 * birth, .32 * birth, .50 * birth, yaw = age * .06)
-            repeat(2) { side ->
-                val sign = if (side == 0) -1.0 else 1.0
-                part("wisp:eye:$side", Material.AMETHYST_BLOCK, sign * .18, .07, .25,
-                    .12 * birth, .12 * birth, .10 * birth, yaw = age * .06)
-                part("wisp:fin:$side", Material.PURPLE_STAINED_GLASS, sign * .45, .0, -.08,
-                    .46 * birth, .12 * birth, .26 * birth, yaw = sign * .4, roll = sign * .25)
-            }
-        }
         StaffSpell.LUNAR -> {
             val fall = smooth((age - 4) / 12.0)
             val birth = smooth(age / 6.0)
@@ -211,6 +173,28 @@ internal fun staffArsenalParts(spell: StaffSpell, ageTicks: Int, durationTicks: 
                 .34 * rise, height * .84, .34 * rise)
             part("bone:spike:tip", Material.CALCITE, 0.0, -.32 + height - .18, 0.0,
                 .14 * rise, .56 * rise, .14 * rise)
+            val sideHeight = (1.45 + q * .3) * rise
+            val tilt = .3
+            repeat(4) { spike ->
+                val angle = spike * PI / 2
+                val axisX = cos(angle) * sin(tilt)
+                val axisY = cos(tilt)
+                val axisZ = sin(angle) * sin(tilt)
+                val baseX = .32 * cos(angle)
+                val baseY = -.10
+                val baseZ = .32 * sin(angle)
+                val shaftOffset = sideHeight * .42
+                // Align local display Y directly with the outward axis; Euler order can tilt into another radial plane.
+                val orientation = Quaternionf().rotationTo(
+                    Vector3f(0f, 1f, 0f), Vector3f(axisX.toFloat(), axisY.toFloat(), axisZ.toFloat()))
+                part("bone:spike:side:$spike:shaft", Material.BONE_BLOCK,
+                    baseX + axisX * shaftOffset, baseY + axisY * shaftOffset, baseZ + axisZ * shaftOffset,
+                    .22 * rise, sideHeight * .84, .22 * rise, orientation = orientation)
+                val tipOffset = sideHeight - .14 * rise
+                part("bone:spike:side:$spike:tip", Material.CALCITE,
+                    baseX + axisX * tipOffset, baseY + axisY * tipOffset, baseZ + axisZ * tipOffset,
+                    .12 * rise, .42 * rise, .12 * rise, orientation = orientation)
+            }
         }
         else -> Unit
     }
@@ -220,11 +204,13 @@ internal fun staffArsenalParts(spell: StaffSpell, ageTicks: Int, durationTicks: 
 /** Pure native-particle frames: substantial silhouettes with a bright core and a softer wake. */
 internal fun staffArsenalParticles(spell: StaffSpell, ageTicks: Int, durationTicks: Int,
     radius: Double, secondary: Boolean, charge: Double, reach: Double = radius,
-    impact: Boolean = false): List<StaffParticleSample> {
+    impact: Boolean = false, rayLimits: List<Double> = emptyList()): List<StaffParticleSample> {
     val age = ageTicks.toDouble()
     val q = charge.coerceIn(0.0, 1.0)
     if (spell == StaffSpell.GALE || spell == StaffSpell.TIDE)
         return staffTideGaleParticleSamples(spell, ageTicks, durationTicks, radius, secondary, q, impact)
+    if (spell == StaffSpell.REQUIEM)
+        return staffRequiemParticles(ageTicks, durationTicks, secondary, radius, q, rayLimits)
     val out = mutableListOf<StaffParticleSample>()
     val fade = smooth((durationTicks - age) / 8.0)
     if (fade <= 0.0 || age < 0) return out
@@ -253,37 +239,6 @@ internal fun staffArsenalParticles(spell: StaffSpell, ageTicks: Int, durationTic
                 val a = i * PI / 24
                 val r = (age - 15) * .34
                 mote(Particle.END_ROD, cos(a) * r, .18, sin(a) * r)
-            }
-        }
-        StaffSpell.REQUIEM -> if (secondary) {
-            val progress = smooth((age - 8.0) / 20.0)
-            val r = (.25 + radius * progress) * fade
-            repeat(48) { i ->
-                val a = i * PI * 2 / 48 + age * .025
-                val y = .9 + sin(a * 3) * .18
-                mote(if (i % 8 == 0) Particle.SOUL else Particle.DUST_COLOR_TRANSITION,
-                    cos(a) * r, y, sin(a) * r,
-                    if (i % 8 == 0) null else soul, spread = .012)
-            }
-            repeat(8) { i ->
-                val a = i * PI / 4 + age * .04
-                mote(Particle.SOUL_FIRE_FLAME, cos(a) * r, .9, sin(a) * r, count = 1, spread = .02)
-            }
-        } else {
-            // Compact travelling wisp: a bright face, dark core, and clearly trailing soul stream.
-            repeat(20) { i ->
-                val a = i * PI * 2 / 20 + age * .12
-                val r = .34 + q * .08
-                mote(if (i % 4 == 0) Particle.SOUL else Particle.DUST_COLOR_TRANSITION,
-                    cos(a) * r, sin(a) * r, .05,
-                    if (i % 4 == 0) null else soul, spread = .012)
-            }
-            repeat(16) { i ->
-                val f = i / 15.0
-                val a = i * 2.39996 + age * .08
-                mote(if (i % 4 == 0) Particle.SOUL_FIRE_FLAME else Particle.DUST_COLOR_TRANSITION,
-                    cos(a) * (.15 + f * .22), sin(a) * (.15 + f * .22), -.2 - f * .9,
-                    if (i % 4 == 0) null else soul, spread = .015)
             }
         }
         StaffSpell.PRISM -> {

@@ -60,8 +60,11 @@ object StaffSpellsModule : PluginModule {
         val config = StaffSpellConfig(ConfigManager.of(ARC.instance.dataPath, "modules/staff-spells.yml"))
         val settings = config.settings // Validate the replacement before closing the active generation.
         shutdown()
+        val scenery = config.sceneryWorlds.takeIf { it.isNotEmpty() }?.let { worlds ->
+            StaffSceneryEffects(PaperPacketDisplays(ARC.instance, "staff-scenery"), worlds)
+        }
         controller = StaffSpellController(config, settings, StaffSpellDamage(duelAccess),
-            StaffSpellDisplayEffects(PaperPacketDisplays(ARC.instance, "staff-spells"))).also {
+            StaffSpellDisplayEffects(PaperPacketDisplays(ARC.instance, "staff-spells")), scenery = scenery).also {
             Bukkit.getPluginManager().registerEvents(it, ARC.instance)
             Bukkit.getPluginManager().registerEvents(it.input, ARC.instance)
             Bukkit.getPluginManager().registerEvents(it.defense, ARC.instance)
@@ -87,9 +90,12 @@ internal class StaffSpellController(
     private val damage: StaffSpellDamage,
     private val effects: StaffSpellDisplayEffects,
     summonActorFactory: ((org.bukkit.World, Location, Boolean) -> org.bukkit.entity.AbstractSkeleton)? = null,
+    private val scenery: StaffSceneryEffects? = null,
 ) : Listener, AutoCloseable, StaffSpellInputActions {
     private val tasks = LifecycleTaskScope()
-    private val visuals = StaffSpellVisuals(tasks)
+    private val visuals = StaffSpellVisuals(tasks, sceneryImpact = { owner, at, radius ->
+        scenery?.impact(owner, at, radius)
+    })
     private val targeting = StaffSpellTargeting(settings, damage)
     private val arsenal = StaffSpellArsenal(settings, damage, effects, visuals, targeting)
     internal val defense = StaffSpellDefense(config, damage, visuals, effects)
@@ -144,6 +150,10 @@ internal class StaffSpellController(
     }
 
     fun give(player: Player, spells: List<StaffSpell>): Boolean {
+        if (spells.any { it !in StaffSpell.available }) {
+            player.sendActionBar(config.text("retired"))
+            return false
+        }
         if (player.inventory.storageContents.count { it == null || it.type.isAir } < spells.size) {
             player.sendMessage(config.text("full-inventory"))
             return false
@@ -163,6 +173,10 @@ internal class StaffSpellController(
     internal fun onInteract(event: PlayerInteractEvent) = input.onInteract(event)
 
     override fun canCharge(player: Player, spell: StaffSpell): Boolean {
+        if (spell !in StaffSpell.available) {
+            player.sendActionBar(config.text("retired"))
+            return false
+        }
         if (!ready(player)) return false
         if (CooldownManager.isOnCooldown(player.uniqueId, cooldownId)) {
             showCooldown(player, spell)
@@ -173,12 +187,20 @@ internal class StaffSpellController(
     }
 
     override fun defend(player: Player, spell: StaffSpell) {
+        if (spell !in StaffSpell.available) {
+            player.sendActionBar(config.text("retired"))
+            return
+        }
         if (!ready(player)) return
         val cast = damage.capture(player, duelOnly = StaffSpell.isDuelOnly(player.inventory.itemInMainHand)) ?: return
         defense.activate(player, spell, cast, player.isSneaking)
     }
 
     override fun beginChannel(player: Player, spell: StaffSpell): Boolean {
+        if (spell !in StaffSpell.available) {
+            player.sendActionBar(config.text("retired"))
+            return false
+        }
         val cast = damage.capture(player, duelOnly = StaffSpell.isDuelOnly(player.inventory.itemInMainHand)) ?: return false
         if (!channels.begin(player, spell, cast, settings.tuning.getValue(spell), player.isSneaking)) {
             player.sendActionBar(config.text("no-grab"))
@@ -255,9 +277,13 @@ internal class StaffSpellController(
     private fun castSpell(player: Player, input: StaffCastInput, charge: Double) {
         val item = player.inventory.itemInMainHand
         val spell = StaffSpell.from(item) ?: return
+        if (spell !in StaffSpell.available) {
+            player.sendActionBar(config.text("retired"))
+            return
+        }
         if (!ready(player)) return
         if (input.quick) { defend(player, spell); return }
-        if (spell == StaffSpell.INFERNO || spell == StaffSpell.GRAVITY) return
+        if (spell == StaffSpell.GRAVITY) return
         if (CooldownManager.isOnCooldown(player.uniqueId, cooldownId)) {
             showCooldown(player, spell)
             visuals.cooldownFeedback(player, spell)
@@ -275,12 +301,23 @@ internal class StaffSpellController(
         val cooldownTicks = when {
             input.quick -> maxOf(8, tuning.cooldownTicks / 2)
             !secondary -> tuning.cooldownTicks
+            spell == StaffSpell.CHAIN -> maxOf(80L, tuning.cooldownTicks * 2)
+            spell == StaffSpell.REQUIEM -> maxOf(100L, tuning.cooldownTicks * 2)
             spell in setOf(StaffSpell.MARK, StaffSpell.EMBER) -> tuning.cooldownTicks * 2
             else -> tuning.cooldownTicks * 3 / 2
         }
-        if (spell == StaffSpell.NECROMANCER && !summons.cast(player, cast, tuning, input, level)) {
-            player.sendActionBar(config.text("no-summon-ground"))
-            return
+        if (spell == StaffSpell.NECROMANCER) {
+            when (summons.castResult(player, cast, tuning, input, level)) {
+                StaffSummonCastResult.CAST -> Unit
+                StaffSummonCastResult.NO_GROUND -> {
+                    player.sendActionBar(config.text("no-summon-ground"))
+                    return
+                }
+                StaffSummonCastResult.CAPACITY -> {
+                    player.sendActionBar(config.text("no-summon-cap"))
+                    return
+                }
+            }
         }
         beginCooldown(player, spell, input, cooldownTicks)
         if (staffPreparationParts(spell, secondary, 0).isNotEmpty())
@@ -398,15 +435,7 @@ internal class StaffSpellController(
 
     private fun castSecondary(player: Player, spell: StaffSpell, cast: StaffSpellCast, tuning: StaffSpellTuning, level: Double) {
         when (spell) {
-            StaffSpell.CHAIN -> {
-                val targets = aimed(player, settings.range, 55.0, cast).take(3)
-                val visited = mutableSetOf<UUID>()
-                repeat(3) { index ->
-                    val direction = player.eyeLocation.direction.rotateAroundY(Math.toRadians((index - 1) * 48.0))
-                    launchBolt(player, player.eyeLocation, direction, targets.getOrNull(index), cast,
-                        tuning, 0.75, 1, visited, settings.range * 1.6)
-                }
-            }
+            StaffSpell.CHAIN -> chainStormNova(player, cast, tuning)
             StaffSpell.MARK -> {
                 val at = target(player, cast)?.let(::center) ?: aimPoint(player)
                 effects.remove(marks.remove(player.uniqueId)?.visualId)
@@ -802,6 +831,52 @@ internal class StaffSpellController(
             slowTicks = settings.frostSlowTicks, directional = false)
     }
 
+    private fun chainStormNova(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning) {
+        val origin = player.location.clone()
+        val radius = minOf(STORM_NOVA_RADIUS, settings.range)
+        if (!radius.isFinite() || radius <= 0.0) return
+        val candidates = nearby(player, origin, radius + STORM_NOVA_VERTICAL_REACH, cast)
+            .filter { target ->
+                val at = center(target)
+                horizontalDistance(origin, at) <= radius && abs(at.y - origin.y) <= STORM_NOVA_VERTICAL_REACH
+            }
+            .sortedBy { horizontalDistance(origin, center(it)) }
+            .take(MAX_WAVE_CANDIDATES)
+        val limits = List(STAFF_STORM_NOVA_RAY_COUNT) { index ->
+            val angle = index * Math.PI * 2.0 / STAFF_STORM_NOVA_RAY_COUNT
+            val direction = Vector(kotlin.math.cos(angle), 0.0, kotlin.math.sin(angle))
+            rayEnd(origin.clone().add(0.0, STORM_NOVA_RAY_HEIGHT, 0.0), direction, radius)
+                .let { ray -> horizontalDistance(origin, ray) }
+                .coerceIn(0.0, radius)
+        }
+        val reducedTuning = tuning.copy(
+            power = tuning.power * STORM_NOVA_DAMAGE_SCALE,
+            vanillaDamage = tuning.vanillaDamage * STORM_NOVA_DAMAGE_SCALE,
+        )
+        visuals.withOwner(cast.casterId) {
+            visuals.particles(origin, staffStormNovaFrame(0, radius, limits), clearance = STORM_NOVA_PARTICLE_CLEARANCE)
+        }
+        waves += PendingStaffWave(
+            casterId = player.uniqueId,
+            worldId = player.world.uid,
+            spell = StaffSpell.CHAIN,
+            origin = origin,
+            forward = Vector(),
+            range = radius,
+            candidates = candidates,
+            cast = cast,
+            tuning = reducedTuning,
+            visualId = null,
+            startDelayTicks = STORM_NOVA_BUILDUP_TICKS,
+            travelTicks = STORM_NOVA_TRAVEL_TICKS,
+            durationTicks = STORM_NOVA_BUILDUP_TICKS + STORM_NOVA_TRAVEL_TICKS,
+            directional = false,
+            frontProgressStartTicks = STORM_NOVA_BUILDUP_TICKS,
+            visualRayLimits = limits,
+            hitStartTicks = STORM_NOVA_FIRST_HIT_TICK,
+        )
+    }
+
     private fun frost(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning,
         range: Double = settings.frostRange, degrees: Double = settings.frostDegrees) {
         val origin = player.location.clone()
@@ -841,9 +916,16 @@ internal class StaffSpellController(
             val previousAge = wave.elapsedTicks
             val age = previousAge + WAVE_STEP_TICKS
             wave.elapsedTicks = age
+            if (wave.spell == StaffSpell.CHAIN && wave.visualRayLimits != null) {
+                visuals.withOwner(wave.casterId) {
+                    visuals.particles(wave.origin,
+                        staffStormNovaFrame(age, wave.range, wave.visualRayLimits),
+                        clearance = STORM_NOVA_PARTICLE_CLEARANCE)
+                }
+            }
             val previousFront = wave.frontAt(previousAge)
             val front = wave.frontAt(age)
-            if (age >= wave.startDelayTicks && age <= wave.startDelayTicks + wave.travelTicks &&
+            if (age >= wave.hitStartTicks && age <= wave.startDelayTicks + wave.travelTicks &&
                 wave.targetAttempts < settings.maxAreaTargets) {
                 wave.candidates.asSequence()
                     .filter { it.uniqueId !in wave.attemptedTargets }
@@ -1063,6 +1145,7 @@ internal class StaffSpellController(
 
     private fun cancel(playerId: UUID) {
         input.cancel(playerId)
+        scenery?.cancel(playerId)
         arsenal.cancel(playerId)
         defense.cancel(playerId)
         channels.cancel(playerId)
@@ -1087,6 +1170,7 @@ internal class StaffSpellController(
     override fun close() {
         input.close()
         visuals.close()
+        scenery?.close()
         arsenal.close()
         defense.close()
         channels.close()
@@ -1113,6 +1197,14 @@ internal class StaffSpellController(
         const val WAVE_STEP_TICKS = 2
         const val WAVE_START_DELAY_TICKS = 2
         const val WAVE_BODY_TOLERANCE = 0.6
+        const val STORM_NOVA_RADIUS = STAFF_STORM_NOVA_RADIUS
+        const val STORM_NOVA_BUILDUP_TICKS = STAFF_STORM_NOVA_BUILDUP_TICKS
+        const val STORM_NOVA_TRAVEL_TICKS = STAFF_STORM_NOVA_TRAVEL_TICKS
+        const val STORM_NOVA_FIRST_HIT_TICK = STORM_NOVA_BUILDUP_TICKS + WAVE_STEP_TICKS
+        const val STORM_NOVA_DAMAGE_SCALE = 0.75
+        const val STORM_NOVA_RAY_HEIGHT = 0.1
+        const val STORM_NOVA_PARTICLE_CLEARANCE = 0.55
+        const val STORM_NOVA_VERTICAL_REACH = 2.0
         const val MAX_WAVE_CANDIDATES = 32
         const val MAX_BOLTS_PER_CASTER = 12
         const val FROST_ICICLE_SHATTER_TICKS = 10
@@ -1164,6 +1256,9 @@ private class PendingStaffWave(
     val slowTicks: Int? = null,
     val frostSpread: Double = 0.0,
     val directional: Boolean = spell == StaffSpell.FROST,
+    val frontProgressStartTicks: Int = 2,
+    val visualRayLimits: List<Double>? = null,
+    val hitStartTicks: Int = startDelayTicks,
 ) {
     val attemptedTargets = mutableSetOf<UUID>()
     var elapsedTicks = 0
@@ -1171,8 +1266,9 @@ private class PendingStaffWave(
 
     fun frontAt(ageTicks: Int): Double {
         if (ageTicks < startDelayTicks) return 0.0
-        val expansion = staffWaveFront(ageTicks, range, travelTicks)
-        return if (initialFront > 0.0) initialFront + staffWaveFront(ageTicks,
+        val progressAge = ageTicks - frontProgressStartTicks + 2
+        val expansion = staffWaveFront(progressAge, range, travelTicks)
+        return if (initialFront > 0.0) initialFront + staffWaveFront(progressAge,
             (range - initialFront).coerceAtLeast(0.0), travelTicks) else expansion
     }
 }
@@ -1213,12 +1309,12 @@ object StaffTestSubCommand : SubCommand {
     override val configKey = "stafftest"
     override val defaultPermission = "arc.test"
     override val defaultDescription = "Выдать посохи для пробы новых атак"
-    override val defaultUsage = "/arc stafftest [all|${StaffSpell.entries.joinToString("|") { it.id }}] [игрок]"
+    override val defaultUsage = "/arc stafftest [all|${StaffSpell.available.joinToString("|") { it.id }}] [игрок]"
 
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {
         if (args.size > 2) { sendUsage(sender); return true }
         val selection = args.firstOrNull()?.lowercase() ?: "all"
-        val spells = if (selection == "all") StaffSpell.entries else StaffSpell.entries.filter { it.id == selection }
+        val spells = if (selection == "all") StaffSpell.available else StaffSpell.available.filter { it.id == selection }
         if (spells.isEmpty()) { sendUsage(sender); return true }
         val player = args.getOrNull(1)?.let { getOnlinePlayer(sender, it) } ?: if (args.size < 2) requirePlayer(sender) else null
         if (player == null) return true
@@ -1231,7 +1327,7 @@ object StaffTestSubCommand : SubCommand {
     }
 
     override fun tabComplete(sender: CommandSender, args: Array<String>) = when (args.size) {
-        1 -> (listOf("all") + StaffSpell.entries.map { it.id }).tabComplete(args[0])
+        1 -> (listOf("all") + StaffSpell.available.map { it.id }).tabComplete(args[0])
         2 -> Bukkit.getOnlinePlayers().map { it.name }.tabComplete(args[1])
         else -> emptyList()
     }

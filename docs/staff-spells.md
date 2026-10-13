@@ -1,20 +1,17 @@
-# Prototype staff spells — ARC 1.4.385
+# Prototype staff spells — ARC 1.4.387
 
-`/arc stafftest` issues seventeen administrator-only mechanics samples: the
-fourteen established staves plus `inferno`, `gravity` and `ossuary`. Use
+`/arc stafftest` issues sixteen administrator-only mechanics samples.
+`inferno` is temporarily retired; `gravity` and `ossuary` remain available. Use
 `/arc stafftest <id> [player]` for one sample or `/arc stafftest all [player]`
 to issue the set after checking inventory space. The items carry ARC prototype
 metadata; they are not FMM or EliteMobs loot, and this catalog adds no shop,
 reward or economy changes.
 
-The 1.4.385 visual polish keeps combat timing and Display identities unchanged.
 Wind particles follow the same upward-widening ribbons as the tornado; water
-spray follows the forward curl of the wave's foam lip. The water orb retains
-its particle phase and radius when opening. Water and wind stop emitting before
-their displays fade, allowing native particles to expire without pulling their
-spawn positions inward. Smaller accents keep those silhouettes readable;
-Inferno retains all 32 flame samples per frame with 12 smaller dust accents.
-Preparation displays ease out before their final two-tick frame is removed.
+spray follows the forward curl of the wave's foam lip. The primary water orb
+travels at fixed speed above the floor and opens into a splash crown on contact.
+Native particles complement the stable display bodies. Preparation displays
+ease out before their final two-tick frame is removed.
 
 ## Controls
 
@@ -26,9 +23,11 @@ player lifecycle cancels an active charge. Attacks share one per-player attack
 cooldown, with the duration configured per spell and adjusted for the shifted
 cast.
 
-`Inferno` and `Gravity` are held channels rather than charged casts. Hold
-right-click, with or without Shift, to operate them. Inferno follows the aim
-with a continuous stream for at most three seconds and stops on release.
+`Gravity` is a held channel rather than a charged cast. Hold
+right-click, with or without Shift, to operate it. Inferno is temporarily retired from issuance and casting. Existing EliteMobs
+Inferno assignments migrate once to Ember; old prototype IDs remain recognizable
+but cannot cast.
+
 Gravity selects a visible solid block within its reach, holds a visual boulder
 in front of the caster as the aim moves, and throws it when released. The
 boulder is a visual effect: Gravity does not move, break, place or replace
@@ -39,10 +38,10 @@ Left-click raises the staff's frontal guard; Shift + left-click raises its
 all-around absorption shield. Defenses have their own recovery track, independent of the
 right-click attack cooldown. A frontal guard covers two hits for 1.2 seconds,
 or three hits for 1.6 seconds for Fault, Gravity, Ossuary, Nova and Necromancer.
-The all-around shield lasts three seconds and absorbs eight HP after armor and
+The all-around shield lasts twenty seconds and absorbs eight HP after armor and
 resistance, before native absorption hearts. Overflow continues through normal
 damage processing. Its bossbar shows remaining capacity. Recovery is four
-seconds for frontal and eight seconds for the shield; both share that track.
+seconds for frontal and twenty-five seconds from casting the shield; both share that track.
 The frontal guard is a 12-part kite-shaped packet BlockDisplay shield with a transparent face;
 Shift + left-click assembles four angled plates (40 parts) around the player. Material families
 follow the staff element. The stable displays attach to the player, interpolate their opening,
@@ -60,7 +59,7 @@ is held.
 
 | ID · staff | ПКМ | Shift + ПКМ | ЛКМ · frontal guard | Shift + ЛКМ · absorption shield | Existing ItemsAdder skin |
 | --- | --- | --- | --- | --- | --- |
-| `chain` · Грозовая ветвь | Lightning jumps between up to four enemies | Three bolts seek separate targets | Грозовой заслон | Круговой покров | `3dfantasyweaponscit:divine_staff` |
+| `chain` · Грозовая ветвь | Lightning jumps between up to four enemies | Грозовой круг expands a jagged lightning front eight blocks around the caster, blocked by cover | Грозовой заслон | Круговой покров | `3dfantasyweaponscit:divine_staff` |
 | `mark` · Разрыв | Mark follows its target and bursts; without a target, bursts at the aimed point | Чёрная дыра pulls eligible enemies, then collapses | Покров пустоты | Круговой покров | `3dfantasyweaponscit:night_staff` |
 | `frost` · Ледяной хлопок | Ground wave slows enemies in a 50° cone, up to 28 blocks (global cap: 48) | Полярный круг expands an ice front eight blocks from the caster | Ледяной щит | Круговой покров | `3dfantasyweaponscit:northgate_guardian_staff` |
 | `lance` · Солнечное копьё | Narrow solar beam pierces up to three enemies | Three diverging solar beams | Солнечный щит | Круговой покров | `3dfantasyweaponscit:sagrada_winged_staff` |
@@ -69,14 +68,13 @@ is held.
 | `icicle` · Ледяной венец | Seven shoulder icicles sample the current reticle as each launches; full charge releases eleven | Five shards fall around the aimed point immediately | Кристальный заслон | Круговой покров | `3dfantasyweaponscit:olwen_staff` |
 | `fault` · Обсидиановый раскол | Five ground fissures advance in sequence, up to 18 blocks | Каменный выброс warns, then erupts at the aimed point and lifts enemies | Каменный бастион | Круговой покров | `3dfantasyweaponscit:staff_of_unholy_wisdom` |
 | `lunar` · Лунный серп | Falling silver crescent releases a ground shockwave | Two moon blades converge on the target | Лунный покров | Круговой покров | `3dfantasyweaponscit:black_snake_staff` |
-| `gale` · Посох бури | A stationary open-center wind funnel forms at the aimed point and lifts nearby enemies | Шквал is a twisting air ram that travels forward | Ветряной щит | Круговой покров | `3dfantasyweaponscit:goblin_witch_staff` |
-| `tide` · Сердце прилива | A water sphere travels to the selected target or aimed point, then expands into a translucent water shell; it does not immobilize | Приливный вал is a broad curled wave with a foamy crest that travels forward | Водяной заслон | Круговой покров | `3dfantasyweaponscit:northgate_guardian_staff` |
-| `requiem` · Реквием | Staggered soul missiles launch from offset lanes in front of the caster | Плач душ expands outward from a sigil | Покров душ | Круговой покров | `3dfantasyweaponscit:lich_staff` |
+| `gale` · Посох бури | A stationary open-center wind funnel forms at the aimed point and lifts nearby enemies | Шквал is a twisting air ram with a fixed 36-block horizontal reach, clipped at cover | Ветряной щит | Круговой покров | `3dfantasyweaponscit:goblin_witch_staff` |
+| `tide` · Сердце прилива | A fast water orb slides up to 36 blocks above the floor and bursts at its first enemy, cover or range endpoint; the swept flight takes at most 0.6 seconds after its short launch | Приливный вал is a broad curled wave with a foamy crest that travels forward | Водяной заслон | Круговой покров | `3dfantasyweaponscit:northgate_guardian_staff` |
+| `requiem` · Реквием | A copper-and-gold bell forms above the aimed point, tolls at 0.8 seconds and releases a five-block soul wave | Погребальный перезвон suspends the bell above the caster and releases three seven-block waves, with five-second minimum recovery | Покров душ | Круговой покров | `3dfantasyweaponscit:lich_staff` |
 | `prism` · Кристальная призма | Crystal grows at the aim point and fires at up to three visible enemies | Three rays converge on the selected point | Гранёный щит | Круговой покров | `3dfantasyweaponscit:northgate_golden_crook` |
-| `necromancer` · Зов могилы | Summons two skeleton archers for ten seconds | Костяной жнец summons one larger wither-skeleton commander | Костяной заслон | Круговой покров | `3dfantasyweaponscit:lich_staff` |
-| `inferno` · Дыхание печи | Hold for a continuous, aim-following fire stream (up to three seconds and nine blocks) | Поток пламени uses the same held stream | Огненный заслон | Круговой покров | `3dfantasyweaponscit:bermunde_hermit_staff` |
-| `gravity` · Гравитационный захват | Select a visible surface and hold a stone boulder; track with aim and release to throw | Бросок глыбы uses the same grab-and-throw channel | Каменный заслон | Круговой покров | `3dfantasyweaponscit:staff_of_unholy_wisdom` |
-| `ossuary` · Костяной прокол | Long bone spikes erupt in a fast ground wave, with sparse native particles | Костяной прорыв warns at the aimed point, then seven bone spikes shoot upward and impale enemies | Щит рёбер | Круговой покров | `3dfantasyweaponscit:lich_staff` |
+| `necromancer` · Зов могилы | Adds two skeleton archers for 45 seconds; up to ten minions can coexist | Костяной жнец summons one larger wither-skeleton commander | Костяной заслон | Круговой покров | `3dfantasyweaponscit:lich_staff` |
+| `gravity` · Гравитационный захват | Grab a surface within 32 blocks, hold the same boulder, and release into a fast accelerating throw up to 32 blocks | Бросок глыбы uses the same grab-and-throw channel | Каменный заслон | Круговой покров | `3dfantasyweaponscit:staff_of_unholy_wisdom` |
+| `ossuary` · Костяной прокол | Five-spike bone clusters erupt every roughly two blocks along a fixed 24-block forward lane, with sparse native particles | Костяной прорыв warns at the aimed point, then seven bone spikes shoot upward and impale enemies | Щит рёбер | Круговой покров | `3dfantasyweaponscit:lich_staff` |
 
 Each sample uses its configured ItemsAdder skin; issuance fails with a player
 message and a server warning if that configured skin is unavailable. Duel
@@ -98,16 +96,23 @@ target at most once at its contact phase.
 Necromancer summons use temporary native skeleton actors with native movement
 and their normal targeting/action goals removed. They follow visible enemies
 within safe reachable ground instead of pathfinding around obstacles. Pickup,
-persistence and drops are disabled; each squad expires after ten seconds, one
-squad is allowed per caster, and caps are four actors per caster and sixteen
-globally. Archers fire visible, bounded native arrow actors with scripted swept collision;
+persistence and drops are disabled; each squad expires after 45 seconds. New squads preserve earlier summons;
+up to ten actors may coexist per caster, within a shared global budget of 32 actors. A full
+roster rejects the cast without consuming cooldown. Archers fire visible, bounded native arrow actors with scripted swept collision;
 these carry no independent native damage or pickup. They hit only on contact,
 stop at solid cover, and disappear with the summon session. Each archer has four HP. Opponents can
-destroy archers, while bystanders and teammates cannot interfere. Each squad
-can land at most six successful hits. Summon attacks pass
+destroy archers, while bystanders and teammates cannot interfere. Actors recover for three seconds between attacks and have a half-second windup.
+Their longer lifetime permits sustained attacks; each squad retains a bounded 48-hit ceiling. Summon attacks pass
 through the same staff damage and protection path as other casts.
 
-Visual attacks do not edit blocks, place fire or change weather. Gravity's
+Visual attacks do not edit blocks, place fire or change weather.
+`scenery.worlds` enables short-lived client-only destruction for Ember, Mark, Fault
+and Gravity impacts: exact world names allow selected worlds, `*` allows all worlds
+on that server, and an empty list disables it. Up to twelve exposed blocks per
+impact briefly appear missing with interpolated packet-display debris, then restore
+to current world state after two seconds. Tile entities and unloaded chunks are
+excluded. The effect has separate scene, viewer and fragment limits and no drops.
+ Gravity's
 boulder is a packet display. Necromancer intentionally creates bounded native
 actors and arrows; these are the only native gameplay entities created by these prototype
 casts, and their lifecycle is owned by the staff module.
@@ -124,8 +129,9 @@ Against one unarmored opponent, primary tap casts deal 2.6–4 HP at 1.3–2.2
 second recovery, giving a theoretical 1.82–2.25 HP/s before misses, cover and
 invulnerability frames. Full charge on Ember and Icicle adds 1.8 seconds and
 scales damage by 1.75, with a maximum direct hit of 7 HP. Necromancer instead
-has an eight-second recovery and a shared six-hit squad budget; each archer hit
-deals 0.8 HP. Successful summon hits can overlap later staff casts; the squad
+has an eight-second recovery; each archer hit deals 0.8 HP. Ten archers build up over
+five casts and have a theoretical combined ceiling near 2.3 HP/s before misses
+and invulnerability frames. Successful summon hits can overlap later staff casts; the squad
 budget and lifetime still apply. These are initial balancing limits, not
 evidence of equal duel win rates.
 
@@ -134,14 +140,15 @@ evidence of equal duel win rates.
 The source-driven redesign is documented in
 [`staff-effects-redesign.md`](staff-effects-redesign.md). The
 `exportStaffRedesignPreview` Gradle task can export seven multi-stage Arsenal
-spells, baseline and enlarged visual states for both held channels, and both
-guard shapes for all seventeen staves. Pass an absolute path with
+spells, baseline and enlarged visual states for the held gravity channel, and both
+guard shapes for all sixteen available staves. Pass an absolute path with
 `-PstaffRedesignPreviewOutput=/absolute/path/redesign-sequences.json`; the
 source is
 [`StaffRedesignPreviewExport.kt`](../src/test/kotlin/ru/arc/staffspells/StaffRedesignPreviewExport.kt).
 The offline viewer uses source-authored frames but does not simulate damage,
 target selection, collision, sound, client lighting or exact vanilla particle
-physics. Moving scenes use an illustrative fixed lane. A preview does not
+physics. Changed ground attacks use their full configured range on an unobstructed flat
+lane; other moving attacks use a shorter illustrative lane. A preview does not
 establish ordinary-client visual or audio acceptance.
 
 This document describes the source contract; it does not certify a build,

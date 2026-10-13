@@ -28,6 +28,8 @@ internal enum class StaffSpell(val id: String) {
     INFERNO("inferno"), GRAVITY("gravity"), OSSUARY("ossuary");
 
     companion object {
+        // Keep retired IDs recognizable so old prototypes cannot bypass staff input guards.
+        val available = entries.filterNot { it == INFERNO }
         val itemKey = NamespacedKey("arc", "staff_spell_prototype")
         val duelOnlyKey = NamespacedKey("arc", "staff_spell_duel_only")
         fun from(item: ItemStack?): StaffSpell? {
@@ -187,6 +189,8 @@ internal open class StaffSpellConfig(private val config: Config) {
     private fun number(key: String, fallback: Double, bounds: ClosedFloatingPointRange<Double>) =
         config.real(key, fallback).takeIf(Double::isFinite)?.coerceIn(bounds) ?: fallback
 
+    val sceneryWorlds: Set<String> get() = config.stringList("scenery.worlds").toSet()
+
     fun text(key: String) = config.component("messages.$key", TagResolver.empty()).decoration(TextDecoration.ITALIC, false)
 
     fun cooldown(spell: StaffSpell, secondary: Boolean, remaining: Long, total: Long, input: StaffCastInput = StaffCastInput.of(secondary, false)): Component {
@@ -203,11 +207,18 @@ internal open class StaffSpellConfig(private val config: Config) {
         Placeholder.unparsed("percent", (progress.coerceIn(0.0, 1.0) * 100).toInt().toString()),
     ))
 
-    fun defense(spell: StaffSpell, active: Boolean, seconds: Double): Component = config.component(
-        "messages.${if (active) "defense-active" else "defense-cooldown"}", TagResolver.resolver(
-            Placeholder.component("ability", config.component("${spell.id}.quick-name", TagResolver.empty())),
+    fun defense(spell: StaffSpell, active: Boolean, seconds: Double, allAround: Boolean = false): Component {
+        val message = when {
+            active -> "defense-active"
+            allAround -> "shield-cooldown"
+            else -> "defense-cooldown"
+        }
+        val ability = if (allAround) "quick-secondary-name" else "quick-name"
+        return config.component("messages.$message", TagResolver.resolver(
+            Placeholder.component("ability", config.component("${spell.id}.$ability", TagResolver.empty())),
             Placeholder.unparsed("seconds", String.format(Locale.ROOT, "%.1f", seconds)),
         ))
+    }
 
     fun shield(spell: StaffSpell, remaining: Double, capacity: Double): Component = config.component(
         "messages.shield-active", TagResolver.resolver(

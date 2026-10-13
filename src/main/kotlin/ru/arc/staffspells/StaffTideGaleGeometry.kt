@@ -13,7 +13,13 @@ import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-private const val TIDE_ORB_ARRIVAL_TICK = 28
+internal const val STAFF_TIDE_PRIMARY_LAUNCH_TICK = 2
+internal const val STAFF_TIDE_PRIMARY_TRAVEL_TICKS = 12
+internal const val STAFF_TIDE_PRIMARY_ARRIVAL_TICK =
+    STAFF_TIDE_PRIMARY_LAUNCH_TICK + STAFF_TIDE_PRIMARY_TRAVEL_TICKS
+internal const val STAFF_TIDE_PRIMARY_IMPACT_TICKS = 12
+internal const val STAFF_TIDE_PRIMARY_ATTACK_TICKS =
+    STAFF_TIDE_PRIMARY_ARRIVAL_TICK + STAFF_TIDE_PRIMARY_IMPACT_TICKS
 
 /** Local surfaces shared by the solid ribbons and their native-particle accents. */
 private fun galeFunnelPoint(t: Double, strand: Int, age: Double, q: Double, grow: Double): Vector3f {
@@ -170,21 +176,45 @@ internal fun staffTideGaleParts(
                     Quaternionf().rotateZ((-.25 + index * .16).toFloat()), identity = "tide:wave:bead:$index"))
             }
         } else if (impact) {
-            val grow = smoothTideGale(age / 7.0)
-            val startRadius = .58 + q * .12
-            val fullRadius = (radius.takeIf { it.isFinite() && it > 0.0 }?.coerceIn(1.6, 2.2) ?: 1.8) / scale
-            val prisonRadius = startRadius + (fullRadius - startRadius) * grow
-            mutableListOf<StaffDisplayPart>().also { shell ->
-                addTideSphereShell(shell, prisonRadius, TIDE_ORB_ARRIVAL_TICK * .025 + age * .012, "tide:shell")
-            }.forEach(::add)
-            repeat(6) { index ->
-                val angle = index * PI / 3 + age * .018
-                val r = prisonRadius * .94
-                val size = (.13 + (index % 2) * .04) * grow
-                add(StaffDisplayPart(Material.WHITE_STAINED_GLASS,
-                    Vector3f((cos(angle) * r).toFloat(), (prisonRadius * (.92 + index % 2 * .08)).toFloat(),
-                        (sin(angle) * r).toFloat()), Vector3f(size.toFloat(), (size * 2).toFloat(), size.toFloat()),
-                    Quaternionf().rotateY((-angle).toFloat()), identity = "tide:prison:foam:$index"))
+            val fullRadius = (radius.takeIf { it.isFinite() && it > 0.0 }?.coerceIn(1.8, 2.6) ?: 2.3) / scale
+            val radialGrow = smoothTideGale(age / 6.0)
+            val crownRadius = .42 + (fullRadius - .42) * radialGrow
+            val rise = smoothTideGale(age / 3.0) *
+                (1.0 - smoothTideGale((age - 5.0) / STAFF_TIDE_PRIMARY_IMPACT_TICKS))
+            repeat(24) { index ->
+                val a0 = index * PI * 2 / 24 + age * .035
+                val a1 = (index + 1) * PI * 2 / 24 + age * .035
+                val lobe0 = (cos(a0 * 6.0 - age * .11) + .15).coerceAtLeast(0.0).pow(2)
+                val lobe1 = (cos(a1 * 6.0 - age * .11) + .15).coerceAtLeast(0.0).pow(2)
+                val p0 = Vector3f((cos(a0) * crownRadius).toFloat(),
+                    (.22 + rise * (.35 + lobe0 * .92)).toFloat(), (sin(a0) * crownRadius).toFloat())
+                val p1 = Vector3f((cos(a1) * crownRadius).toFloat(),
+                    (.22 + rise * (.35 + lobe1 * .92)).toFloat(), (sin(a1) * crownRadius).toFloat())
+                val material = when (index % 4) {
+                    0 -> Material.SEA_LANTERN
+                    1 -> Material.LIGHT_BLUE_STAINED_GLASS
+                    2 -> Material.CYAN_STAINED_GLASS
+                    else -> Material.BLUE_STAINED_GLASS
+                }
+                add(tideGaleLink(material, p0, p1, (.18 + .08 * maxOf(lobe0, lobe1)).toFloat(), .17f,
+                    "tide:burst:crown:$index"))
+            }
+            val dropletRise = smoothTideGale(age / 6.0)
+            val fall = smoothTideGale((age - 6.0) / 6.0)
+            repeat(8) { index ->
+                val angle = index * PI / 4 + age * .065
+                val r = .38 + dropletRise * (.72 + (index % 2) * .24)
+                val y = .42 + dropletRise * (1.05 + (index % 3) * .14) - fall * .28
+                val size = .12 + (index % 3) * .025
+                add(StaffDisplayPart(
+                    when (index % 3) {
+                        0 -> Material.CYAN_STAINED_GLASS
+                        1 -> Material.LIGHT_BLUE_STAINED_GLASS
+                        else -> Material.SEA_LANTERN
+                    }, Vector3f((cos(angle) * r).toFloat(), y.toFloat(), (sin(angle) * r).toFloat()),
+                    Vector3f(size.toFloat(), (size * 1.9).toFloat(), size.toFloat()),
+                    Quaternionf().rotateZ((-.35 + index * .09).toFloat()).rotateY((-angle).toFloat()),
+                    identity = "tide:burst:drop:$index"))
             }
         } else {
             val grow = smoothTideGale(age / 5.0)
@@ -213,7 +243,9 @@ internal fun staffTideGaleParticleSamples(
     val q = charge.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
     // Native particles outlive an emission. Stop feeding them during the display's exit;
     // shrinking their spawn positions would pull the whole wake back into the center.
-    if (age < 0.0 || age == 0.0 && !impact || age >= durationTicks - 6.0) return emptyList()
+    val exitTicks = if (spell == StaffSpell.TIDE && !secondary &&
+        (impact || age >= STAFF_TIDE_PRIMARY_ARRIVAL_TICK)) 2.0 else 6.0
+    if (age < 0.0 || age == 0.0 && !impact || age >= durationTicks - exitTicks) return emptyList()
     val scale = .8 + q * .45
     val out = mutableListOf<StaffParticleSample>()
     fun mote(particle: Particle, x: Double, y: Double, z: Double, data: Any? = null,
@@ -258,7 +290,6 @@ internal fun staffTideGaleParticleSamples(
                 mote(Particle.CRIT, cos(angle) * r, t * (5.35 + q * .30) * grow, sin(angle) * r,
                     spread = .012, speed = .002)
             }
-            if (ageTicks % 6 == 0) mote(Particle.GUST, 0.0, 1.0, 0.0, spread = .16)
         }
         StaffSpell.TIDE -> if (secondary) {
             val grow = smoothTideGale(age / 6.0)
@@ -275,7 +306,7 @@ internal fun staffTideGaleParticleSamples(
                 val x = (index / 5.0 * 2 - 1) * halfWidth * grow
                 mote(Particle.BUBBLE, x, .04 * grow, -.24 * grow, spread = .015, speed = .004)
             }
-        } else if (!impact && age < 28.0) {
+        } else if (!impact && age < STAFF_TIDE_PRIMARY_ARRIVAL_TICK) {
             val grow = smoothTideGale(age / 5.0) * scale
             repeat(24) { index ->
                 val y = 1.0 - 2.0 * (index + .5) / 24
@@ -294,24 +325,26 @@ internal fun staffTideGaleParticleSamples(
                     count = 1, spread = .018, speed = .012)
             }
         } else {
-            val stageAge = if (impact) age else age - 28.0
-            val grow = smoothTideGale(stageAge / 7.0)
-            val startRadius = (.58 + q * .12) * scale
-            val fullRadius = radius.takeIf { it.isFinite() && it > 0.0 }?.coerceIn(1.6, 2.2) ?: 1.8
-            val r = startRadius + (fullRadius - startRadius) * grow
+            val stageAge = if (impact) age else age - STAFF_TIDE_PRIMARY_ARRIVAL_TICK
+            val grow = smoothTideGale(stageAge / 6.0)
+            val fullRadius = radius.takeIf { it.isFinite() && it > 0.0 }?.coerceIn(1.8, 2.6) ?: 2.3
+            val r = .42 + (fullRadius - .42) * grow
+            val rise = smoothTideGale(stageAge / 3.0) *
+                (1.0 - smoothTideGale((stageAge - 5.0) / STAFF_TIDE_PRIMARY_IMPACT_TICKS))
             repeat(24) { index ->
-                val y = 1.0 - 2.0 * (index + .5) / 24
-                val ring = sqrt(1.0 - y * y)
-                val angle = index * 2.39996 + TIDE_ORB_ARRIVAL_TICK * .025 + stageAge * .012
-                val x = cos(angle) * ring * r
-                val z = sin(angle) * ring * r
-                mote(if (index % 4 == 0) Particle.BUBBLE else Particle.DUST_COLOR_TRANSITION,
-                    x, y * r, z, if (index % 4 == 0) null else water, .009)
+                val angle = index * PI * 2 / 24 + STAFF_TIDE_PRIMARY_ARRIVAL_TICK * .025 + stageAge * .035
+                val lobe = (cos(angle * 6.0 - stageAge * .11) + .15).coerceAtLeast(0.0).pow(2)
+                val y = .22 + rise * (.35 + lobe * .92)
+                mote(Particle.SPLASH, cos(angle) * r, y, sin(angle) * r,
+                    spread = .012, speed = .012 + lobe * .012)
             }
-            repeat(6) { index ->
-                val angle = index * 2.39996 + stageAge * .025
-                mote(Particle.SPLASH, cos(angle) * r, r * (.82 + (index % 3) * .04), sin(angle) * r,
-                    count = 1, spread = .025, speed = .012)
+            repeat(8) { index ->
+                val angle = index * PI / 4 + stageAge * .065
+                val dropletRadius = .38 + grow * (.72 + (index % 2) * .24)
+                val y = .42 + grow * (1.05 + (index % 3) * .14) -
+                    smoothTideGale((stageAge - 6.0) / 6.0) * .28
+                mote(Particle.FALLING_WATER, cos(angle) * dropletRadius, y, sin(angle) * dropletRadius,
+                    spread = .008, speed = .012)
             }
         }
         else -> Unit

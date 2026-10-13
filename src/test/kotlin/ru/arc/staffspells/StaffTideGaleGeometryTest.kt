@@ -17,8 +17,8 @@ class StaffTideGaleGeometryTest : FreeSpec({
                 transform.get(FloatArray(16)).all(Float::isFinite)
         }
 
-        listOf(StaffSpell.GALE to 52, StaffSpell.GALE to 40, StaffSpell.TIDE to 44,
-            StaffSpell.TIDE to 44).forEachIndexed { index, (spell, duration) ->
+        listOf(StaffSpell.GALE to 52, StaffSpell.GALE to 40,
+            StaffSpell.TIDE to STAFF_TIDE_PRIMARY_ATTACK_TICKS, StaffSpell.TIDE to 44).forEachIndexed { index, (spell, duration) ->
             val secondary = index % 2 == 1
             val input = StaffCastInput.of(secondary, false)
             listOf(0.0, .5, 1.0).forEach { charge ->
@@ -31,15 +31,15 @@ class StaffTideGaleGeometryTest : FreeSpec({
         }
 
         listOf(0.0, .5, 1.0).forEach { charge ->
-            (0..16).forEach { age ->
-                val impact = staffDisplayParts(StaffSpell.TIDE, age, 16, 20.0, 1.8, true, false,
+            (0..STAFF_TIDE_PRIMARY_IMPACT_TICKS).forEach { age ->
+                val impact = staffDisplayParts(StaffSpell.TIDE, age, STAFF_TIDE_PRIMARY_IMPACT_TICKS, 20.0, 2.3, true, false,
                     input = StaffCastInput.PRIMARY, charge = charge)
                 isFinite(impact) shouldBe true
             }
         }
     }
 
-    "GALE primary is a tall twisting open funnel with no cloud particles" {
+    "GALE primary is a tall twisting open funnel without smoke or burst sprites" {
         val frame = staffDisplayParts(StaffSpell.GALE, 12, 52, 20.0, 3.0, false, false,
             input = StaffCastInput.PRIMARY, charge = .5)
         val next = staffDisplayParts(StaffSpell.GALE, 16, 52, 20.0, 3.0, false, false,
@@ -56,8 +56,9 @@ class StaffTideGaleGeometryTest : FreeSpec({
         (frame.map { it.center }.zip(next.map { it.center }).any { (a, b) -> a.distance(b) > .05f }) shouldBe true
 
         val motes = staffArsenalParticles(StaffSpell.GALE, 12, 52, 3.0, false, .5)
-        motes.any { it.particle == Particle.GUST } shouldBe true
-        motes.none { it.particle == Particle.CLOUD } shouldBe true
+        (0..52).flatMap { age -> staffArsenalParticles(StaffSpell.GALE, age, 52, 3.0, false, .5) }
+            .none { it.particle in setOf(Particle.GUST, Particle.GUST_EMITTER_LARGE,
+                Particle.GUST_EMITTER_SMALL, Particle.EXPLOSION, Particle.EXPLOSION_EMITTER, Particle.CLOUD) } shouldBe true
         motes.count { it.particle == Particle.CRIT } shouldBe 4
         (motes.size <= 96) shouldBe true
     }
@@ -116,34 +117,53 @@ class StaffTideGaleGeometryTest : FreeSpec({
         motes.none { it.particle == Particle.CLOUD } shouldBe true
     }
 
-    "TIDE primary keeps a hollow glass shell continuous as the orb opens into a prison" {
-        val flight = staffDisplayParts(StaffSpell.TIDE, 28, 44, 12.0, 2.7, false, false,
+    "TIDE primary reaches its clipped endpoint by tick 14 then opens into a hollow splash crown" {
+        STAFF_TIDE_PRIMARY_LAUNCH_TICK shouldBe 2
+        STAFF_TIDE_PRIMARY_TRAVEL_TICKS shouldBe 12
+        STAFF_TIDE_PRIMARY_ARRIVAL_TICK shouldBe 14
+        STAFF_TIDE_PRIMARY_IMPACT_TICKS shouldBe 12
+        STAFF_TIDE_PRIMARY_ATTACK_TICKS shouldBe 26
+        staffArsenalLifetime(StaffSpell.TIDE, secondary = false) shouldBe 26
+        staffArsenalLifetime(StaffSpell.TIDE, secondary = true) shouldBe 44
+
+        val flight = staffDisplayParts(StaffSpell.TIDE, 12, STAFF_TIDE_PRIMARY_ATTACK_TICKS, 12.0, 2.7, false, false,
             input = StaffCastInput.PRIMARY, charge = .5)
-        val arrival = staffDisplayParts(StaffSpell.TIDE, 0, 16, 12.0, 1.8, true, false,
+        val arrival = staffDisplayParts(StaffSpell.TIDE, 0, STAFF_TIDE_PRIMARY_IMPACT_TICKS, 12.0, 2.3, true, false,
             input = StaffCastInput.PRIMARY, charge = .5)
-        val prison = staffDisplayParts(StaffSpell.TIDE, 10, 16, 12.0, 1.8, true, false,
+        val crown = staffDisplayParts(StaffSpell.TIDE, 6, STAFF_TIDE_PRIMARY_IMPACT_TICKS, 12.0, 2.3, true, false,
             input = StaffCastInput.PRIMARY, charge = .5)
         flight.size shouldBe 34
-        arrival.size shouldBe 40
+        arrival.size shouldBe 32
+        crown.size shouldBe 32
         flight.count { it.identity?.contains(":panel:") == true } shouldBe 32
         flight.count { it.identity?.contains(":pole:") == true } shouldBe 2
         flight.filter { it.identity?.contains(":panel:") == true }.all {
             it.scale.x > it.scale.z * 1.8f && it.scale.y > it.scale.z * 3.0f
         } shouldBe true
-        prison.mapNotNull { it.identity }.toSet().containsAll(flight.mapNotNull { it.identity }.toSet()) shouldBe true
+        arrival.mapNotNull { it.identity }.all { it.startsWith("tide:burst:") } shouldBe true
+        crown.mapNotNull { it.identity }.distinct().size shouldBe crown.size
+        crown.count { it.identity?.startsWith("tide:burst:crown:") == true } shouldBe 24
+        crown.count { it.identity?.startsWith("tide:burst:drop:") == true } shouldBe 8
+        crown.any { it.material == Material.SEA_LANTERN } shouldBe true
+        crown.any { it.material == Material.CYAN_STAINED_GLASS } shouldBe true
+        crown.none { it.identity?.startsWith("tide:prison:") == true } shouldBe true
         flight.all { it.material in setOf(Material.LIGHT_BLUE_STAINED_GLASS, Material.CYAN_STAINED_GLASS,
             Material.BLUE_STAINED_GLASS) } shouldBe true
-        val common = flight.associateBy { it.identity }
-        arrival.filter { it.identity in common.keys }.all {
-            val previous = common[it.identity]!!
-            previous.center.distance(it.center) < .001f && previous.scale.distance(it.scale) < .001f
-        } shouldBe true
-        (prison.maxOf { it.center.length() } > flight.maxOf { it.center.length() } * 1.5f) shouldBe true
+        (crown.maxOf { it.center.x * it.center.x + it.center.z * it.center.z } > 2.5f) shouldBe true
+        (crown.maxOf { it.center.y } > 1.2f) shouldBe true
+        (arrival.maxOf { it.center.y } < crown.maxOf { it.center.y }) shouldBe true
 
-        val particles = staffArsenalParticles(StaffSpell.TIDE, 8, 16, 1.8, false, .5,
+        val particles = staffArsenalParticles(StaffSpell.TIDE, 0, STAFF_TIDE_PRIMARY_IMPACT_TICKS, 2.3, false, .5,
             impact = true)
-        particles.any { it.particle == Particle.SPLASH } shouldBe true
-        (particles.maxOf { it.offset.length() } > 1.0) shouldBe true
+        particles.size shouldBe 32
+        particles.all { it.particle in setOf(Particle.SPLASH, Particle.FALLING_WATER) } shouldBe true
+        particles.none { it.particle in setOf(Particle.EXPLOSION, Particle.EXPLOSION_EMITTER, Particle.CLOUD) } shouldBe true
+        val expandedParticles = staffArsenalParticles(StaffSpell.TIDE, 6, STAFF_TIDE_PRIMARY_IMPACT_TICKS,
+            2.3, false, .5, impact = true)
+        (expandedParticles.maxOf { it.offset.length() } > 2.0) shouldBe true
+        (expandedParticles.maxOf { it.offset.length() } > particles.maxOf { it.offset.length() } * 2) shouldBe true
+        staffArsenalParticles(StaffSpell.TIDE, 10, STAFF_TIDE_PRIMARY_IMPACT_TICKS,
+            2.3, false, .5, impact = true) shouldBe emptyList()
     }
 
     "wind accents follow the expanding display funnel instead of an inverted second cone" {
@@ -179,16 +199,19 @@ class StaffTideGaleGeometryTest : FreeSpec({
         }
     }
 
-    "water shell particles retain their phase and radius on arrival" {
+    "water orb flight changes into bounded splash and falling-water burst particles" {
         listOf(0.0, .5, 1.0).forEach { charge ->
-            val flying = staffTideGaleParticleSamples(StaffSpell.TIDE, 26, 44, 1.0, false, charge).take(24)
-            val arrived = staffTideGaleParticleSamples(StaffSpell.TIDE, 0, 16, 1.8, false, charge, impact = true).take(24)
-            flying.size shouldBe 24
-            arrived.size shouldBe 24
-            flying.zip(arrived).all { (a, b) ->
-                a.particle == b.particle && a.offset.distance(b.offset) < .05 &&
-                    abs(a.offset.length() - b.offset.length()) < .001
-            } shouldBe true
+            val flying = staffTideGaleParticleSamples(StaffSpell.TIDE, 12,
+                STAFF_TIDE_PRIMARY_ATTACK_TICKS, 1.0, false, charge)
+            val arrived = staffTideGaleParticleSamples(StaffSpell.TIDE, 6,
+                STAFF_TIDE_PRIMARY_IMPACT_TICKS, 2.3, false, charge, impact = true)
+            flying.size shouldBe 32
+            arrived.size shouldBe 32
+            flying.all { it.particle in setOf(Particle.BUBBLE, Particle.DUST_COLOR_TRANSITION, Particle.SPLASH) } shouldBe true
+            flying.any { it.particle == Particle.DUST_COLOR_TRANSITION } shouldBe true
+            flying.any { it.particle == Particle.BUBBLE } shouldBe true
+            arrived.all { it.particle in setOf(Particle.SPLASH, Particle.FALLING_WATER) } shouldBe true
+            (arrived.maxOf { it.offset.length() } > flying.maxOf { it.offset.length() } * 1.4) shouldBe true
         }
     }
 

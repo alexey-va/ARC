@@ -103,7 +103,7 @@ class StaffSpellDefenseTest : FreeSpec({
                 afterDepletion.isCancelled shouldBe false
                 afterDepletion.finalDamage shouldBe 10.0
 
-                h.scheduler.tick(158)
+                h.scheduler.tick(498)
                 defense.activate(player, StaffSpell.FAULT, cast, allAround = false) shouldBe false
                 h.scheduler.tick(2)
                 defense.activate(player, StaffSpell.FAULT, cast, allAround = false) shouldBe true
@@ -199,7 +199,7 @@ class StaffSpellDefenseTest : FreeSpec({
         }
     }
 
-    "Shift+LMB shield expires after 60 ticks and retains only impact particles" {
+    "Shift+LMB shield expires after 400 ticks and recovery blocks refresh until 500" {
         withStaffHarness { h ->
             val world = h.paper.addSimpleWorld("staff-defense-shield-expiry")
             val player = h.player("staff-defense-shield-expiry", world, StaffSpell.FROST)
@@ -216,7 +216,9 @@ class StaffSpellDefenseTest : FreeSpec({
                     .count { it.particle == Particle.ELECTRIC_SPARK }
                 (impactSparks > 0) shouldBe true
 
-                h.scheduler.tick(58)
+                h.scheduler.tick(200)
+                defense.activate(player, StaffSpell.FROST, cast, allAround = true) shouldBe false
+                h.scheduler.tick(198)
                 val activeHit = attack(front, player, rawDamage = 1.0)
                 defense.onDamage(activeHit)
                 activeHit.isCancelled shouldBe true
@@ -227,7 +229,12 @@ class StaffSpellDefenseTest : FreeSpec({
                 expiredHit.isCancelled shouldBe false
                 expiredHit.finalDamage shouldBe 4.0
                 defense.activate(player, StaffSpell.FROST, cast, allAround = true) shouldBe false
-                h.scheduler.tick(100)
+                player.inventory.setItemInMainHand(h.config.item(StaffSpell.EMBER))
+                defense.activate(player, StaffSpell.EMBER, cast, allAround = true) shouldBe false
+                player.inventory.setItemInMainHand(h.config.item(StaffSpell.FROST))
+                h.scheduler.tick(98)
+                defense.activate(player, StaffSpell.FROST, cast, allAround = true) shouldBe false
+                h.scheduler.tick(2)
                 defense.activate(player, StaffSpell.FROST, cast, allAround = true) shouldBe true
             } finally {
                 defense.close()

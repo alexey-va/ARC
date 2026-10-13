@@ -41,7 +41,6 @@ internal object StaffEliteItems {
         StaffSpell.GALE,
         StaffSpell.TIDE,
         StaffSpell.NECROMANCER,
-        StaffSpell.INFERNO,
         StaffSpell.GRAVITY,
         StaffSpell.OSSUARY,
     )
@@ -55,6 +54,7 @@ internal object StaffEliteItems {
         val id = pdc.get(itemKey, PersistentDataType.STRING) ?: return null
         val eligible = family(item) ?: return null
         return eligible.firstOrNull { it.id == id }
+            ?: StaffSpell.EMBER.takeIf { id == StaffSpell.INFERNO.id && it in eligible }
     }
 
     /** Assign one stable spell to an eligible legacy item; true means this call wrote the marker. */
@@ -64,11 +64,14 @@ internal object StaffEliteItems {
     ): Boolean {
         if (item == null || item.type.isAir) return false
         val pdc = item.itemMeta.persistentDataContainer
-        if (pdc.keys.contains(StaffSpell.itemKey) || pdc.keys.contains(itemKey)) return false
+        if (pdc.keys.contains(StaffSpell.itemKey)) return false
+        val assigned = pdc.get(itemKey, PersistentDataType.STRING)
+        if (pdc.keys.contains(itemKey) && assigned != StaffSpell.INFERNO.id) return false
         val eligible = family(item) ?: return false
+        if (assigned == StaffSpell.INFERNO.id && StaffSpell.EMBER !in eligible) return false
         val meta = item.itemMeta
 
-        val selected = choose(eligible)
+        val selected = if (assigned == StaffSpell.INFERNO.id) StaffSpell.EMBER else choose(eligible)
         if (selected !in eligible) return false
         meta.persistentDataContainer.set(itemKey, PersistentDataType.STRING, selected.id)
         item.itemMeta = meta

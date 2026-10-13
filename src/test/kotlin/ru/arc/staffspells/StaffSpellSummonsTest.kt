@@ -1,6 +1,7 @@
 package ru.arc.staffspells
 
 import io.mockk.every
+import io.mockk.clearConstructorMockk
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
@@ -12,6 +13,7 @@ import com.destroystokyo.paper.entity.Pathfinder
 import com.destroystokyo.paper.entity.ai.MobGoals
 import org.bukkit.Bukkit
 import org.bukkit.Location
+import org.bukkit.util.Vector
 import org.bukkit.Material
 import org.bukkit.Particle
 import org.bukkit.World
@@ -37,6 +39,7 @@ import org.mockbukkit.mockbukkit.world.WorldMock
 import org.mockbukkit.mockbukkit.entity.SkeletonMock
 import org.mockbukkit.mockbukkit.entity.WitherSkeletonMock
 import ru.arc.staffspells.api.StaffSpellDuelContext
+import ru.arc.core.LifecycleTaskScope
 import java.util.UUID
 
 class StaffSpellSummonsTest : FreeSpec({
@@ -89,31 +92,57 @@ class StaffSpellSummonsTest : FreeSpec({
         }
     }
 
-    "full charge is globally capped and secondary replaces the squad with one commander" {
+    "archers keep dealing damage after their old shot and session hit budgets" {
+        withSummonHarness { h ->
+            val world = h.paper.addSimpleWorld("summon-sustained-attacks")
+            loadSummonChunks(world)
+            val owner = h.player("summon-sustained-owner", world, StaffSpell.NECROMANCER)
+            h.zombie(world, x = 0.5, z = 3.0)
+            h.controller.start()
+            h.controller.cast(owner, StaffCastInput.PRIMARY, 0.0)
+            val actors = world.entities.filterIsInstance<Skeleton>().filter { it.isValid }
+            actors.size shouldBe 2
+
+            h.scheduler.tick(899)
+
+            (h.hits.size > 6) shouldBe true
+            actors.all { it.isValid } shouldBe true
+            h.scheduler.tick(1)
+            actors.all { !it.isValid } shouldBe true
+        }
+    }
+
+    "global actor cap stays bounded and secondary adds a commander without replacing archers" {
         withSummonHarness { h ->
             val world = h.paper.addSimpleWorld("summon-cap")
             loadSummonChunks(world)
             h.controller.start()
             val owners = mutableListOf<org.bukkit.entity.Player>()
             var firstSession: List<Skeleton> = emptyList()
-            repeat(5) { index ->
+            repeat(17) { index ->
                 val owner = h.player("summon-cap-$index", world, StaffSpell.NECROMANCER)
                 owners += owner
                 h.controller.cast(owner, StaffCastInput.PRIMARY, 1.0)
                 if (index == 0) firstSession = world.entities.filterIsInstance<Skeleton>()
             }
 
-            val fullSquad = world.entities.filterIsInstance<Skeleton>()
-            fullSquad.size shouldBe 16
-            fullSquad.filterIsInstance<WitherSkeleton>().size shouldBe 0
+            val fullSquad = world.entities.filterIsInstance<AbstractSkeleton>().filter { it.isValid }
+            fullSquad.size shouldBe 32
             firstSession.all { !it.isValid } shouldBe true
 
-            h.scheduler.tick(21)
             val commanderOwner = owners.last()
-            h.controller.cast(commanderOwner, StaffCastInput.SECONDARY, 1.0)
+            val tuning = staffSettings().tuning.getValue(StaffSpell.NECROMANCER)
+            h.controller.summons.castResult(
+                commanderOwner,
+                StaffSpellCast(commanderOwner.uniqueId, UUID.randomUUID(), 1, null, null, false),
+                tuning,
+                StaffCastInput.SECONDARY,
+                1.0,
+            ) shouldBe StaffSummonCastResult.CAST
             val replacement = world.entities.filterIsInstance<WitherSkeleton>().single()
             (fullSquad + replacement).all { !it.canPickupItems } shouldBe true
-            world.entities.filterIsInstance<Skeleton>().size shouldBe 12
+            world.entities.filterIsInstance<Skeleton>().count { it.isValid } shouldBe 30
+            world.entities.filterIsInstance<AbstractSkeleton>().count { it.isValid } shouldBe 31
             val gear = requireNotNull(replacement.equipment)
             gear.helmet.type.isAir shouldBe false
             gear.chestplate.type.isAir shouldBe false
@@ -123,6 +152,72 @@ class StaffSpellSummonsTest : FreeSpec({
 
             h.controller.onQuit(PlayerQuitEvent(commanderOwner, Component.empty()))
             replacement.isValid shouldBe false
+        }
+    }
+
+    "two full caster armies coexist under the global actor cap" {
+        withSummonHarness { h ->
+            val world = h.paper.addSimpleWorld("summon-two-armies")
+            loadSummonChunks(world)
+            val owners = listOf(
+                h.player("summon-army-one", world, StaffSpell.NECROMANCER),
+                h.player("summon-army-two", world, StaffSpell.NECROMANCER),
+            )
+            val tuning = staffSettings().tuning.getValue(StaffSpell.NECROMANCER)
+            val summons = h.controller.summons
+            h.controller.start()
+
+            fun cast(owner: Player, input: StaffCastInput) = summons.castResult(
+                owner,
+                StaffSpellCast(owner.uniqueId, UUID.randomUUID(), 1, null, null, false),
+                tuning,
+                input,
+                1.0,
+            )
+
+            val firstOwner = owners.first()
+            repeat(4) { cast(firstOwner, StaffCastInput.PRIMARY) shouldBe StaffSummonCastResult.CAST }
+            repeat(2) { cast(firstOwner, StaffCastInput.SECONDARY) shouldBe StaffSummonCastResult.CAST }
+            val firstArmy = world.entities.filterIsInstance<AbstractSkeleton>().filter { it.isValid }
+            firstArmy.size shouldBe 10
+
+            val secondOwner = owners.last()
+            repeat(4) { cast(secondOwner, StaffCastInput.PRIMARY) shouldBe StaffSummonCastResult.CAST }
+            repeat(2) { cast(secondOwner, StaffCastInput.SECONDARY) shouldBe StaffSummonCastResult.CAST }
+
+            val actors = world.entities.filterIsInstance<AbstractSkeleton>().filter { it.isValid }
+            actors.size shouldBe 20
+            actors.filterIsInstance<WitherSkeleton>().size shouldBe 4
+            firstArmy.all { it.isValid } shouldBe true
+        }
+    }
+
+    "stacked summon squads do not target or damage the same caster's other actors" {
+        withSummonHarness { h ->
+            val world = h.paper.addSimpleWorld("summon-friendly-squads")
+            loadSummonChunks(world)
+            val owner = h.player("summon-friendly-owner", world, StaffSpell.NECROMANCER)
+            val tuning = staffSettings().tuning.getValue(StaffSpell.NECROMANCER)
+            val summons = h.controller.summons
+            h.controller.start()
+
+            fun cast() = summons.castResult(
+                owner,
+                StaffSpellCast(owner.uniqueId, UUID.randomUUID(), 1, null, null, false),
+                tuning,
+                StaffCastInput.PRIMARY,
+                1.0,
+            )
+
+            cast() shouldBe StaffSummonCastResult.CAST
+            owner.teleport(Location(world, 3.5, 64.0, 0.5).apply { setDirection(Vector(0.0, 0.0, 1.0)) })
+            cast() shouldBe StaffSummonCastResult.CAST
+            world.entities.filterIsInstance<Skeleton>().filter { it.isValid }.size shouldBe 4
+
+            h.scheduler.tick(40)
+
+            h.hits shouldBe emptyList()
+            world.entities.filterIsInstance<Arrow>().filter { it.isValid } shouldBe emptyList()
         }
     }
 
@@ -140,7 +235,9 @@ class StaffSpellSummonsTest : FreeSpec({
             h.scheduler.tick(40)
             h.hits shouldBe emptyList()
             commander.isValid shouldBe true
-            h.scheduler.tick(160)
+            h.scheduler.tick(859)
+            commander.isValid shouldBe true
+            h.scheduler.tick(1)
             commander.isValid shouldBe false
         }
 
@@ -285,7 +382,7 @@ class StaffSpellSummonsTest : FreeSpec({
         }
     }
 
-    "failed terrain replacement preserves the active squad and expiry permits recasting" {
+    "failed terrain cast preserves prior squads and stacked sessions expire" {
         withSummonHarness { h ->
             val world = h.paper.addSimpleWorld("summon-terrain-retry")
             loadSummonChunks(world)
@@ -324,11 +421,11 @@ class StaffSpellSummonsTest : FreeSpec({
 
                 for (x in -4..4) for (z in -4..4) world.getBlockAt(x, 63, z).type = Material.STONE
                 cast() shouldBe true
-                firstSquad.all { !it.isValid } shouldBe true
+                firstSquad.all { it.isValid } shouldBe true
                 currentSquad = world.entities.filterIsInstance<Skeleton>().filter { it.isValid }
-                currentSquad.size shouldBe 2
+                currentSquad.size shouldBe 4
 
-                h.scheduler.tick(200)
+                h.scheduler.tick(900)
                 currentSquad.all { !it.isValid } shouldBe true
                 cast() shouldBe true
                 currentSquad = world.entities.filterIsInstance<Skeleton>().filter { it.isValid }
@@ -337,6 +434,69 @@ class StaffSpellSummonsTest : FreeSpec({
                 summons.close()
             }
             currentSquad.all { !it.isValid } shouldBe true
+        }
+    }
+
+    "per-caster cap rejects whole groups and does not refresh older squads" {
+        withSummonHarness { h ->
+            val world = h.paper.addSimpleWorld("summon-caster-cap")
+            loadSummonChunks(world)
+            val owner = h.player("summon-caster-cap-owner", world, StaffSpell.NECROMANCER)
+            val tuning = staffSettings().tuning.getValue(StaffSpell.NECROMANCER)
+            val summons = h.controller.summons
+            h.controller.start()
+
+            fun cast(input: StaffCastInput): StaffSummonCastResult = summons.castResult(
+                owner,
+                StaffSpellCast(owner.uniqueId, UUID.randomUUID(), 1, null, null, false),
+                tuning,
+                input,
+                1.0,
+            )
+            fun liveActors() = world.entities.filterIsInstance<AbstractSkeleton>().filter { it.isValid && !it.isDead }
+
+            cast(StaffCastInput.PRIMARY) shouldBe StaffSummonCastResult.CAST
+            val oldestSquad = liveActors()
+            oldestSquad.size shouldBe 2
+
+            h.scheduler.tick(450)
+            repeat(3) { cast(StaffCastInput.PRIMARY) shouldBe StaffSummonCastResult.CAST }
+            cast(StaffCastInput.SECONDARY) shouldBe StaffSummonCastResult.CAST
+            liveActors().size shouldBe 9
+
+            cast(StaffCastInput.PRIMARY) shouldBe StaffSummonCastResult.CAPACITY
+            liveActors().size shouldBe 9
+            cast(StaffCastInput.SECONDARY) shouldBe StaffSummonCastResult.CAST
+            liveActors().size shouldBe 10
+            cast(StaffCastInput.SECONDARY) shouldBe StaffSummonCastResult.CAPACITY
+            liveActors().size shouldBe 10
+
+            h.scheduler.tick(449)
+            oldestSquad.all { it.isValid } shouldBe true
+            h.scheduler.tick(1)
+            oldestSquad.all { !it.isValid } shouldBe true
+            liveActors().size shouldBe 8
+            h.scheduler.tick(450)
+            liveActors() shouldBe emptyList()
+        }
+    }
+
+    "quit cleanup removes every stacked summon session" {
+        withSummonHarness { h ->
+            val world = h.paper.addSimpleWorld("summon-stacked-quit")
+            loadSummonChunks(world)
+            val owner = h.player("summon-stacked-quit-owner", world, StaffSpell.NECROMANCER)
+            h.controller.start()
+
+            h.controller.cast(owner, StaffCastInput.PRIMARY, 0.0)
+            h.scheduler.tick(21)
+            h.controller.cast(owner, StaffCastInput.PRIMARY, 0.0)
+            val actors = world.entities.filterIsInstance<AbstractSkeleton>().filter { it.isValid }
+            actors.size shouldBe 4
+
+            h.controller.onQuit(PlayerQuitEvent(owner, Component.empty()))
+
+            actors.all { !it.isValid } shouldBe true
         }
     }
 
@@ -461,6 +621,12 @@ private fun withSummonHarness(
             requireNotNull(at.world).spawn(at, Arrow::class.java)
         }
         val goals = mockk<MobGoals>(relaxed = true)
+        // These tests assert world state and damage, never WorldMock call counts.
+        // Long summon lifetimes otherwise retain millions of collision-query records.
+        val recordingCleanup = LifecycleTaskScope(harness.scheduler)
+        recordingCleanup.runTimer(20, 20) {
+            clearConstructorMockk(WorldMock::class, answers = false, childMocks = false)
+        }
         mockkStatic(Bukkit::class)
         try {
             every { Bukkit.getMobGoals() } returns goals
@@ -473,6 +639,7 @@ private fun withSummonHarness(
             block(harness)
             verifyGoals(goals)
         } finally {
+            recordingCleanup.close()
             unmockkStatic(Bukkit::class)
         }
     }

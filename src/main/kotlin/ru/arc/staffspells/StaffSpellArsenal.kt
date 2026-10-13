@@ -12,6 +12,7 @@ import org.bukkit.util.Vector
 import ru.arc.core.LifecycleTaskScope
 import java.util.UUID
 import kotlin.math.PI
+import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -36,7 +37,7 @@ internal class StaffSpellArsenal(
         val forward: Vector,
         val nodes: List<Location>,
         val radius: Double,
-        val duration: Int,
+        var duration: Int,
         val scenes: MutableList<UUID?> = mutableListOf(),
         val born: MutableSet<Int> = mutableSetOf(),
         val attempted: MutableSet<UUID> = mutableSetOf(),
@@ -44,6 +45,11 @@ internal class StaffSpellArsenal(
         val projectileScenes: MutableMap<Int, UUID?> = mutableMapOf(),
         var rays: List<Pair<Location, Location>> = emptyList(),
         var age: Int = 0,
+        var requiemPulseIndex: Int = -1,
+        var requiemRayLimits: List<Double> = emptyList(),
+        var tideImpactAge: Int? = null,
+        var tideImpactPoint: Location? = null,
+        var tideBurstApplied: Boolean = false,
     )
     private val tasks = LifecycleTaskScope()
     private val attacks = mutableListOf<Attack>()
@@ -62,12 +68,19 @@ internal class StaffSpellArsenal(
         if (closed || input.quick || spell !in SPELLS || !ready(player) || !damage.isCurrent(player, cast)) return
         val eye = player.eyeLocation
         val q = charge.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
-        val range = minOf(settings.range, 36.0) * (.75 + q * .25)
-        val selected = targeting.aimed(player, range, settings.aimDegrees, cast).firstOrNull()
+        val forwardPath = spell == StaffSpell.GALE && input.secondary ||
+            spell in setOf(StaffSpell.OSSUARY, StaffSpell.TIDE) && !input.secondary
+        val range = minOf(settings.range, if (spell == StaffSpell.OSSUARY && !input.secondary) 24.0 else 36.0) *
+            if (forwardPath) 1.0 else (.75 + q * .25)
+        val casterCenteredRequiem = spell == StaffSpell.REQUIEM && input.secondary
+        val selected = if (forwardPath || casterCenteredRequiem) null
+            else targeting.aimed(player, range, settings.aimDegrees, cast).firstOrNull()
         if (!damage.isCurrent(player, cast)) return
-        val aimed = selected?.let(::center) ?: targeting.rayEnd(eye, eye.direction, range)
+        val aimDirection = if (forwardPath || casterCenteredRequiem) eye.clone().apply { pitch = 0f }.direction else eye.direction
+        val aimed = if (casterCenteredRequiem) player.location.clone()
+            else selected?.let(::center) ?: targeting.rayEnd(eye, aimDirection, range)
         val point = targeting.groundBelow(aimed.clone().add(0.0, 2.0, 0.0), 12.0) ?: aimed.clone().subtract(0.0, 1.2, 0.0)
-        if (!visible(eye, aimed)) return
+        if (!casterCenteredRequiem && !visible(eye, aimed)) return
         val forward = Vector(point.x - eye.x, 0.0, point.z - eye.z).apply {
             if (lengthSquared() < .01) { x = eye.direction.x; z = eye.direction.z }
             if (lengthSquared() < .01) z = 1.0
@@ -77,10 +90,20 @@ internal class StaffSpellArsenal(
         val groundOrigin = targeting.groundBelow(origin.clone().add(0.0, 2.0, 0.0), 5.0) ?: origin
         val distance = point.toVector().subtract(groundOrigin.toVector()).dot(forward).coerceIn(0.0, range)
         if (!visible(eye, groundOrigin.clone().add(0.0, 1.0, 0.0))) return
-        val intendedTravelEnd = groundOrigin.clone().add(forward.clone().multiply(distance)).apply { y = point.y }
+        // Ground fronts keep their reach when looking down or past a nearby mob.
+        // The shared block ray below still clips their complete path at cover.
+        val intendedTravelEnd = if (forwardPath) eye.clone().add(forward.clone().multiply(range)).apply { y = groundOrigin.y }
+            else groundOrigin.clone().add(forward.clone().multiply(distance)).apply { y = point.y }
         val pathSpell = spell == StaffSpell.TIDE || spell == StaffSpell.GALE && input.secondary ||
             spell == StaffSpell.NOVA && !input.secondary || spell == StaffSpell.OSSUARY && !input.secondary
-        val travelEnd = if (pathSpell) {
+        val travelEnd = if (spell == StaffSpell.TIDE && !input.secondary) {
+            // TIDE is a fast moving body: keep its full horizontal endpoint here and
+            // clip each swept step against the current world in tideOrb. A cast-time
+            // shortened endpoint would make a nearby wall stretch the flight out.
+            val delta = intendedTravelEnd.toVector().subtract(groundOrigin.toVector())
+            if (!delta.length().isFinite() || delta.length() < MIN_GROUND_PATH_LENGTH) return
+            intendedTravelEnd
+        } else if (pathSpell) {
             val delta = intendedTravelEnd.toVector().subtract(groundOrigin.toVector())
             val pathLength = delta.length()
             if (!pathLength.isFinite() || pathLength < MIN_GROUND_PATH_LENGTH) return
@@ -90,26 +113,31 @@ internal class StaffSpellArsenal(
             clippedEnd
         } else intendedTravelEnd
         val pathDistance = travelEnd.toVector().subtract(groundOrigin.toVector()).dot(forward).coerceIn(0.0, range)
-        val count = 4 + (q * 2).toInt()
+        val count = ceil(pathDistance / 2.0).toInt().coerceIn(1, 12)
         val nodes = if (spell == StaffSpell.OSSUARY && !input.secondary) (0 until count).mapNotNull { i ->
             val at = groundOrigin.clone().add(forward.clone().multiply(pathDistance * (i + 1) / count))
             val ground = targeting.groundBelow(at.clone().add(0.0, 2.0, 0.0), 6.0) ?: return@mapNotNull null
             ground.takeIf { visible(eye, it.clone().add(0.0, .8, 0.0)) }
         } else emptyList()
         if (spell == StaffSpell.OSSUARY && !input.secondary && nodes.isEmpty()) return
+        val attackPoint = if (casterCenteredRequiem)
+            targeting.groundBelow(player.location.clone().add(0.0, 1.0, 0.0), 4.0) ?: player.location.clone()
+        else point
+        val attackOrigin = if (casterCenteredRequiem) attackPoint.clone() else groundOrigin
         while (attacks.count { it.casterId == player.uniqueId } >= 2) remove(attacks.first { it.casterId == player.uniqueId })
         while (attacks.size >= 24) remove(attacks.first())
         val a = Attack(player.uniqueId, spell, input, cast.copy(visualCharge = q), tuning,
-            groundOrigin, point, selected?.let(::center) ?: aimed, travelEnd, forward, nodes, 2.2 + q * 1.0,
+            attackOrigin, attackPoint, selected?.let(::center) ?: aimed, travelEnd, forward, nodes, 2.2 + q * 1.0,
             staffArsenalLifetime(spell, input.secondary))
         attacks += a
+        if (spell == StaffSpell.REQUIEM) a.requiemRayLimits = requiemRayLimits(a)
         sound(a, a.origin, false)
         when (spell) {
             StaffSpell.LUNAR, StaffSpell.PRISM -> scene(a, a.point, a.duration)
             StaffSpell.GALE -> if (input.secondary) scene(a, a.origin.clone().add(0.0, 1.1, 0.0), a.duration,
                 a.travelEnd.clone().add(0.0, 1.1, 0.0), controllerDriven = true)
                 else scene(a, a.point, a.duration)
-            StaffSpell.REQUIEM -> if (input.secondary) scene(a, a.point, a.duration)
+            StaffSpell.REQUIEM -> scene(a, a.point, a.duration)
             StaffSpell.NOVA -> if (input.secondary) scene(a, a.point, a.duration)
                 else scene(a, a.origin, a.duration, a.travelEnd)
             StaffSpell.TIDE -> if (!input.secondary) {
@@ -194,7 +222,7 @@ internal class StaffSpellArsenal(
                     area(a, player, contact, 2.0 + a.cast.visualCharge * .35, slow = true)
                 }
             }
-            StaffSpell.REQUIEM -> if (a.input.secondary) requiemShock(a, player) else requiemMissiles(a, player)
+            StaffSpell.REQUIEM -> requiemWave(a, player)
             StaffSpell.PRISM -> prism(a, player)
             StaffSpell.OSSUARY -> if (a.input.secondary) ossuaryStrike(a, player) else ossuarySpikes(a, player)
             else -> Unit
@@ -202,30 +230,85 @@ internal class StaffSpellArsenal(
     }
 
     private fun tideOrb(a: Attack, player: Player) {
-        val progress = ((a.age - TIDE_ORB_LAUNCH_TICK) / TIDE_ORB_TRAVEL_TICKS).coerceIn(0.0, 1.0)
-        val previousProgress = ((a.age - 2 - TIDE_ORB_LAUNCH_TICK) / TIDE_ORB_TRAVEL_TICKS).coerceIn(0.0, 1.0)
-        val arrived = a.age >= TIDE_ORB_ARRIVAL_TICK
-        val at = if (arrived) a.travelEnd.clone().add(0.0, 1.2, 0.0)
-            else along(a, progress).add(0.0, 1.2, 0.0)
-        val stageAge = if (arrived) (a.age - TIDE_ORB_ARRIVAL_TICK).coerceAtLeast(0) else a.age
-        val stageDuration = if (arrived) TIDE_ORB_IMPACT_TICKS else a.duration
-        particles(a, at, stageAge, stageDuration,
-            radius = if (arrived) 1.6 + a.cast.visualCharge * .4 else 1.0 + a.cast.visualCharge * .3,
-            impact = arrived)
-        a.scenes.firstOrNull()?.let { id ->
-            if (a.age <= TIDE_ORB_ARRIVAL_TICK) {
-                effects.move(id, at)
-                effects.synchronize(id, a.age.coerceAtLeast(0))
-                if (a.age == TIDE_ORB_ARRIVAL_TICK)
-                    effects.impact(id, at, 1.6 + a.cast.visualCharge * .4, TIDE_ORB_IMPACT_TICKS)
+        val impactAge = a.tideImpactAge
+        if (impactAge != null) {
+            val impactPoint = a.tideImpactPoint ?: return
+            val stageAge = (a.age - impactAge).coerceAtLeast(0)
+            particles(a, impactPoint, stageAge, STAFF_TIDE_PRIMARY_IMPACT_TICKS,
+                radius = tideBurstRadius(a), impact = true)
+            return
+        }
+
+        val from = tideFlightPoint(a, a.age - 2).add(0.0, 1.2, 0.0)
+        val intendedAt = tideFlightPoint(a, a.age).add(0.0, 1.2, 0.0)
+        val path = intendedAt.toVector().subtract(from.toVector())
+        val pathLength = path.length()
+        val at = if (pathLength.isFinite() && pathLength > .001)
+            targeting.rayEnd(from, path.multiply(1.0 / pathLength), pathLength)
+        else from.clone()
+        val blocked = at.distanceSquared(intendedAt) > .0001
+
+        if (a.age >= STAFF_TIDE_PRIMARY_LAUNCH_TICK) {
+            val firstContact = targeting.lineTargets(player, from, at, TIDE_ORB_HIT_WIDTH, a.cast).firstOrNull()
+            if (firstContact != null) {
+                val contact = tideContactPoint(from, at, firstContact, a.cast)
+                hit(a, player, firstContact, from)
+                if (!current(a, player)) { remove(a); return }
+                beginTideImpact(a, player, contact)
+                return
             }
         }
-        if (a.age >= TIDE_ORB_LAUNCH_TICK && a.age <= TIDE_ORB_ARRIVAL_TICK) {
-            val from = along(a, previousProgress).add(0.0, 1.2, 0.0)
-            sweptContact(a, player, from, at, width = .68, lift = .12)
+
+        if (blocked || a.age >= STAFF_TIDE_PRIMARY_ARRIVAL_TICK) {
+            beginTideImpact(a, player, at)
+            return
         }
-        if (a.age == TIDE_ORB_ARRIVAL_TICK) sound(a, at, true)
+
+        particles(a, at, a.age, a.duration, radius = 1.0 + a.cast.visualCharge * .3)
+        a.scenes.firstOrNull()?.let { id ->
+            effects.move(id, at)
+            effects.synchronize(id, a.age.coerceAtLeast(0))
+        }
     }
+
+    private fun tideContactPoint(from: Location, to: Location, target: LivingEntity,
+        cast: StaffSpellCast): Location {
+        val delta = to.toVector().subtract(from.toVector())
+        val distance = delta.length()
+        if (!distance.isFinite() || distance < .001) return from.clone()
+        val width = TIDE_ORB_HIT_WIDTH * cast.enchantments.radiusMultiplier
+        val direction = delta.multiply(1.0 / distance)
+        val contact = target.boundingBox.expand(width).rayTrace(from.toVector(), direction, distance)?.hitPosition
+        return contact?.toLocation(from.world) ?: to.clone()
+    }
+
+    private fun tideFlightPoint(a: Attack, ageTicks: Int): Location {
+        val progress = ((ageTicks - STAFF_TIDE_PRIMARY_LAUNCH_TICK).toDouble() /
+            STAFF_TIDE_PRIMARY_TRAVEL_TICKS).coerceIn(0.0, 1.0)
+        val delta = a.travelEnd.toVector().subtract(a.origin.toVector())
+        return a.origin.clone().add(delta.multiply(progress))
+    }
+
+    private fun beginTideImpact(a: Attack, player: Player, at: Location) {
+        if (a.tideImpactAge != null) return
+        a.tideImpactAge = a.age
+        a.tideImpactPoint = at.clone()
+        a.duration = minOf(a.duration, a.age + STAFF_TIDE_PRIMARY_IMPACT_TICKS)
+        val radius = tideBurstRadius(a)
+        a.scenes.firstOrNull()?.let { id ->
+            effects.move(id, at)
+            effects.synchronize(id, a.age.coerceAtLeast(0))
+            effects.impact(id, at, radius, STAFF_TIDE_PRIMARY_IMPACT_TICKS)
+        }
+        particles(a, at, 0, STAFF_TIDE_PRIMARY_IMPACT_TICKS, radius = radius, impact = true)
+        if (!a.tideBurstApplied) {
+            a.tideBurstApplied = true
+            area(a, player, at, radius)
+            sound(a, at, true)
+        }
+    }
+
+    private fun tideBurstRadius(a: Attack) = 2.2 + a.cast.visualCharge * .25
 
     private fun ossuarySpikes(a: Attack, player: Player) {
         a.nodes.forEachIndexed { index, at ->
@@ -251,69 +334,52 @@ internal class StaffSpellArsenal(
         }
     }
 
-    private fun requiemMissiles(a: Attack, player: Player) {
-        val count = 3 + (a.cast.visualCharge * 2).toInt()
+    private fun requiemWave(a: Attack, player: Player) {
+        val secondary = a.input.secondary
+        val radius = requiemRadius(secondary)
+        particles(a, a.point, a.age, a.duration, secondary, radius)
+        val pulse = staffRequiemPulse(a.age, secondary) ?: return
+        if (pulse.index != a.requiemPulseIndex) {
+            a.requiemPulseIndex = pulse.index
+            a.attempted.clear()
+        }
+        if (a.age == pulse.startTick) sound(a, a.point, true)
+        val previousPulse = staffRequiemPulse(a.age - 2, secondary)?.takeIf { it.index == pulse.index }
+        val currentRadius = radius * pulse.progress
+        val previousRadius = radius * (previousPulse?.progress ?: 0.0)
         val right = Vector(a.forward.z, 0.0, -a.forward.x)
-        repeat(count) { index ->
-            val launchTick = REQUIEM_MISSILE_LAUNCH_TICK + index * REQUIEM_MISSILE_STAGGER_TICKS
-            val localAge = a.age - launchTick
-            if (localAge < 0 || index in a.impactedProjectiles) return@repeat
-            val start = a.origin.clone().add(right.clone().multiply((index - (count - 1) / 2.0) * .62))
-                .add(0.0, 1.35, 0.0)
-            val rawTarget = a.aimPoint.clone()
-            val delta = rawTarget.toVector().subtract(start.toVector())
-            val distance = delta.length()
-            if (!distance.isFinite() || distance < .25) return@repeat
-            val end = targeting.rayEnd(start, delta.clone().multiply(1.0 / distance), distance)
-            if (end.distanceSquared(start) < .04 || !visible(start, end)) return@repeat
-            val id = a.projectileScenes.getOrPut(index) {
-                scene(a, start, REQUIEM_MISSILE_SCENE_TICKS, end, controllerDriven = true)
-            }
-            val progress = (localAge.toDouble() / REQUIEM_MISSILE_TRAVEL_TICKS).coerceIn(0.0, 1.0)
-            val previous = ((localAge - 2).toDouble() / REQUIEM_MISSILE_TRAVEL_TICKS).coerceIn(0.0, 1.0)
-            val missileDelta = end.toVector().subtract(start.toVector())
-            val at = start.clone().add(missileDelta.clone().multiply(smooth(progress)))
-            val from = start.clone().add(missileDelta.clone().multiply(smooth(previous)))
-            val directed = at.toVector().subtract(from.toVector())
-            effects.moveProjectile(id, at, if (directed.lengthSquared() < .001) end.toVector().subtract(start.toVector()) else directed)
-            effects.synchronize(id, localAge.coerceAtMost(REQUIEM_MISSILE_SCENE_TICKS - 1))
-            particles(a, at, localAge.coerceAtMost(REQUIEM_MISSILE_TRAVEL_TICKS),
-                REQUIEM_MISSILE_SCENE_TICKS, secondary = false, radius = .75 + a.cast.visualCharge * .2)
-            if (localAge in 2..REQUIEM_MISSILE_TRAVEL_TICKS) {
-                targeting.lineTargets(player, from, at, .45, a.cast).firstOrNull()?.let { target ->
-                    if (hit(a, player, target, from)) {
-                        a.impactedProjectiles += index
-                        effects.impact(id, center(target), 1.1, 8)
-                        sound(a, center(target), true)
-                    }
-                }
-            }
-            if (localAge >= REQUIEM_MISSILE_TRAVEL_TICKS && index !in a.impactedProjectiles) {
-                a.impactedProjectiles += index
-                effects.impact(id, end, 1.1, 8)
+        val frontOrigin = a.point.clone().add(0.0, .9, 0.0)
+        repeat(STAFF_REQUIEM_COLLISION_RAY_COUNT) { ray ->
+            val angle = ray * PI * 2 / STAFF_REQUIEM_COLLISION_RAY_COUNT
+            val direction = right.clone().multiply(cos(angle)).add(a.forward.clone().multiply(sin(angle))).normalize()
+            val limit = a.requiemRayLimits.getOrElse(ray) { radius }.coerceIn(0.0, radius)
+            val clippedCurrent = minOf(currentRadius, limit)
+            val clippedPrevious = minOf(previousRadius, limit)
+            if (clippedCurrent <= clippedPrevious) return@repeat
+            val from = frontOrigin.clone().add(direction.clone().multiply(clippedPrevious))
+            val requestedEnd = frontOrigin.clone().add(direction.clone().multiply(clippedCurrent))
+            val end = targeting.rayEnd(from, requestedEnd.toVector().subtract(from.toVector()),
+                from.distance(requestedEnd))
+            targeting.lineTargets(player, from, end, .55, a.cast).forEach { target ->
+                if (visible(frontOrigin, center(target)))
+                    hit(a, player, target, from, if (secondary) REQUIEM_SECONDARY_DAMAGE_MULTIPLIER else 1.0)
             }
         }
     }
 
-    private fun requiemShock(a: Attack, player: Player) {
-        val radius = 4.0 + a.cast.visualCharge * .75
-        particles(a, a.point, a.age, a.duration, secondary = true, radius = radius)
-        val progress = ((a.age - REQUIEM_SHOCK_START_TICK) / REQUIEM_SHOCK_TRAVEL_TICKS).coerceIn(0.0, 1.0)
-        val previous = ((a.age - 2 - REQUIEM_SHOCK_START_TICK) / REQUIEM_SHOCK_TRAVEL_TICKS).coerceIn(0.0, 1.0)
-        val currentRadius = .25 + progress * radius
-        val previousRadius = .25 + previous * radius
-        if (a.age in REQUIEM_SHOCK_START_TICK..REQUIEM_SHOCK_ARRIVAL_TICK && currentRadius > previousRadius) {
-            repeat(24) { ray ->
-                val angle = ray * Math.PI * 2 / 24
-                val direction = Vector(kotlin.math.cos(angle), 0.0, kotlin.math.sin(angle))
-                val from = a.point.clone().add(direction.clone().multiply(previousRadius)).add(0.0, .9, 0.0)
-                val requestedEnd = a.point.clone().add(direction.clone().multiply(currentRadius)).add(0.0, .9, 0.0)
-                val end = targeting.rayEnd(from, requestedEnd.toVector().subtract(from.toVector()),
-                    from.distance(requestedEnd))
-                targeting.lineTargets(player, from, end, .55, a.cast).forEach { hit(a, player, it, from) }
-            }
+    private fun requiemRadius(secondary: Boolean) = minOf(
+        if (secondary) STAFF_REQUIEM_SECONDARY_RADIUS else STAFF_REQUIEM_PRIMARY_RADIUS,
+        settings.range.coerceAtLeast(0.0))
+
+    private fun requiemRayLimits(a: Attack): List<Double> {
+        val center = a.point.clone().add(0.0, .9, 0.0)
+        val radius = requiemRadius(a.input.secondary)
+        val right = Vector(a.forward.z, 0.0, -a.forward.x)
+        return List(STAFF_REQUIEM_COLLISION_RAY_COUNT) { ray ->
+            val angle = ray * PI * 2 / STAFF_REQUIEM_COLLISION_RAY_COUNT
+            val direction = right.clone().multiply(cos(angle)).add(a.forward.clone().multiply(sin(angle))).normalize()
+            center.distance(targeting.rayEnd(center, direction, radius)).coerceIn(0.0, radius)
         }
-        if (a.age == REQUIEM_SHOCK_ARRIVAL_TICK) sound(a, a.point, true)
     }
 
     private fun sweptContact(a: Attack, player: Player, from: Location, to: Location, width: Double, lift: Double = 0.0) {
@@ -379,7 +445,7 @@ internal class StaffSpellArsenal(
         val right = Vector(a.forward.z, 0.0, -a.forward.x)
         val reach = if (a.spell == StaffSpell.NOVA && !secondary) a.travelEnd.distance(a.origin) else radius
         val authored = staffArsenalParticles(a.spell, age, duration, radius, secondary, a.cast.visualCharge,
-            reach, impact)
+            reach, impact, a.requiemRayLimits)
         val limit = if (!secondary && a.spell == StaffSpell.OSSUARY)
             240 / a.nodes.size.coerceAtLeast(1) else 160
         val admitted = if (authored.size <= limit) authored else
@@ -402,22 +468,25 @@ internal class StaffSpellArsenal(
             }
     }
 
-    private fun hit(a: Attack, player: Player, target: LivingEntity, from: Location): Boolean {
+    private fun hit(a: Attack, player: Player, target: LivingEntity, from: Location,
+        damageMultiplier: Double = 1.0): Boolean {
         if (!current(a, player) || a.attempted.size >= settings.maxAreaTargets || target.uniqueId in a.attempted ||
             !damage.eligible(player, target, a.cast) || center(target).distanceSquared(player.eyeLocation) > settings.range * settings.range ||
             !visible(player.eyeLocation, center(target)) ||
             !visible(from, center(target))) return false
         a.attempted += target.uniqueId
-        return damage.hit(player, target, a.cast, a.tuning.power, a.tuning.vanillaDamage)
+        return damage.hit(player, target, a.cast, a.tuning.power * damageMultiplier,
+            a.tuning.vanillaDamage * damageMultiplier)
     }
 
     private fun sound(a: Attack, at: Location, impact: Boolean) {
         if (a !in attacks) return
         val sound = when (a.spell) {
-            StaffSpell.GALE -> if (impact) Sound.ENTITY_BREEZE_WIND_BURST else Sound.ENTITY_BREEZE_CHARGE
+            StaffSpell.GALE -> if (!impact) Sound.ENTITY_BREEZE_CHARGE
+                else if (a.input.secondary) Sound.ENTITY_BREEZE_WIND_BURST else Sound.ENTITY_BREEZE_IDLE_GROUND
             StaffSpell.TIDE -> if (impact) Sound.ENTITY_PLAYER_SPLASH_HIGH_SPEED else Sound.ITEM_TRIDENT_RIPTIDE_1
             StaffSpell.NOVA -> if (impact) Sound.BLOCK_AZALEA_LEAVES_BREAK else Sound.BLOCK_ROOTED_DIRT_BREAK
-            StaffSpell.REQUIEM -> if (impact) Sound.ENTITY_WARDEN_SONIC_BOOM else Sound.ENTITY_EVOKER_PREPARE_SUMMON
+            StaffSpell.REQUIEM -> if (impact) Sound.BLOCK_BELL_USE else Sound.ENTITY_EVOKER_PREPARE_SUMMON
             StaffSpell.OSSUARY -> if (impact) Sound.BLOCK_BONE_BLOCK_BREAK else Sound.ENTITY_WITHER_SKELETON_AMBIENT
             StaffSpell.LUNAR -> if (impact) Sound.BLOCK_AMETHYST_BLOCK_BREAK else Sound.BLOCK_BEACON_ACTIVATE
             else -> if (impact) Sound.BLOCK_AMETHYST_BLOCK_RESONATE else Sound.BLOCK_AMETHYST_BLOCK_CHIME
@@ -434,19 +503,10 @@ internal class StaffSpellArsenal(
         val SPELLS = setOf(StaffSpell.LUNAR, StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM,
             StaffSpell.PRISM, StaffSpell.NOVA, StaffSpell.OSSUARY)
         private const val GALE_RAM_TRAVEL_TICKS = 20.0
-        private const val TIDE_ORB_LAUNCH_TICK = 4
-        private const val TIDE_ORB_TRAVEL_TICKS = 24.0
-        private const val TIDE_ORB_ARRIVAL_TICK = TIDE_ORB_LAUNCH_TICK + TIDE_ORB_TRAVEL_TICKS.toInt()
-        private const val TIDE_ORB_IMPACT_TICKS = 16
+        private const val TIDE_ORB_HIT_WIDTH = .68
         private const val TIDE_WAVE_TRAVEL_TICKS = 30.0
         private const val NOVA_ROOT_TRAVEL_TICKS = 30
-        private const val REQUIEM_MISSILE_LAUNCH_TICK = 4
-        private const val REQUIEM_MISSILE_STAGGER_TICKS = 6
-        private const val REQUIEM_MISSILE_TRAVEL_TICKS = 14
-        private const val REQUIEM_MISSILE_SCENE_TICKS = 22
-        private const val REQUIEM_SHOCK_START_TICK = 8
-        private const val REQUIEM_SHOCK_TRAVEL_TICKS = 20.0
-        private const val REQUIEM_SHOCK_ARRIVAL_TICK = REQUIEM_SHOCK_START_TICK + REQUIEM_SHOCK_TRAVEL_TICKS.toInt()
+        private const val REQUIEM_SECONDARY_DAMAGE_MULTIPLIER = .45
         private const val OSSUARY_SPIKE_START_TICK = 4
         private const val OSSUARY_SPIKE_STAGGER_TICKS = 2
         private const val OSSUARY_SPIKE_SCENE_TICKS = 22

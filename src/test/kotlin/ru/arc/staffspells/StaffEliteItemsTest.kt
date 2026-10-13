@@ -29,7 +29,7 @@ import ru.arc.paper.testing.MockBukkitTestRuntime
 import org.mockbukkit.mockbukkit.MockBukkit
 
 class StaffEliteItemsTest : FreeSpec({
-    "migration offers exactly the configured 8 wand spells and 9 staff spells" {
+    "migration offers exactly the configured 8 wand spells and 8 staff spells" {
         MockBukkitTestRuntime.open().use {
             enableEliteMobs()
             mockkStatic(EliteItemManager::class, WeaponIdentityResolver::class)
@@ -51,7 +51,7 @@ class StaffEliteItemsTest : FreeSpec({
                 StaffEliteItems.migrate(staff) { options -> options.also { staffOptions = it }.last() } shouldBe true
                 staffOptions shouldBe listOf(
                     StaffSpell.EMBER, StaffSpell.ICICLE, StaffSpell.FAULT, StaffSpell.GALE,
-                    StaffSpell.TIDE, StaffSpell.NECROMANCER, StaffSpell.INFERNO,
+                    StaffSpell.TIDE, StaffSpell.NECROMANCER,
                     StaffSpell.GRAVITY, StaffSpell.OSSUARY,
                 )
                 StaffEliteItems.resolve(staff) shouldBe StaffSpell.OSSUARY
@@ -110,8 +110,30 @@ class StaffEliteItemsTest : FreeSpec({
                 pdc.get(itemValueKey, PersistentDataType.DOUBLE) shouldBe 37.5
                 pdc.get(nativeKey, PersistentDataType.STRING) shouldBe "elite-source"
                 pdc.get(arbitraryKey, PersistentDataType.STRING) shouldBe "keep-me"
-                pdc.get(StaffEliteItems.itemKey, PersistentDataType.STRING) shouldBe StaffSpell.INFERNO.id
-                StaffSpell.from(item) shouldBe StaffSpell.INFERNO
+                pdc.get(StaffEliteItems.itemKey, PersistentDataType.STRING) shouldBe StaffSpell.GRAVITY.id
+                StaffSpell.from(item) shouldBe StaffSpell.GRAVITY
+            } finally {
+                unmockkStatic(EliteItemManager::class, WeaponIdentityResolver::class)
+            }
+        }
+    }
+
+    "retired Elite inferno becomes Ember once without rerolling other assignments" {
+        MockBukkitTestRuntime.open().use {
+            enableEliteMobs()
+            mockkStatic(EliteItemManager::class, WeaponIdentityResolver::class)
+            try {
+                every { EliteItemManager.isEliteMobsItem(any()) } returns true
+                every { WeaponIdentityResolver.progressionSkill(any()) } returns SkillType.STAVES
+                val item = fmmStaff("fmm_default_arcane_staff")
+                item.editMeta {
+                    it.persistentDataContainer.set(StaffEliteItems.itemKey, PersistentDataType.STRING, "inferno")
+                }
+                StaffEliteItems.resolve(item) shouldBe StaffSpell.EMBER
+                StaffEliteItems.migrate(item) { error("Retirement must not reroll") } shouldBe true
+                item.itemMeta.persistentDataContainer.get(StaffEliteItems.itemKey, PersistentDataType.STRING) shouldBe "ember"
+                StaffEliteItems.migrate(item) { error("Existing assignments are stable") } shouldBe false
+                StaffEliteItems.resolve(item) shouldBe StaffSpell.EMBER
             } finally {
                 unmockkStatic(EliteItemManager::class, WeaponIdentityResolver::class)
             }

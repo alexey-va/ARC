@@ -30,4 +30,16 @@ class StaffSpellCooldownTest : FreeSpec({
         plain.serialize(config.cooldown(StaffSpell.CHAIN, secondary = false, remaining = 0, total = 20)) shouldBe
             "Цепь готово ПКМ"
     }
+
+    "ward cooldown names the Shift+LMB ability" {
+        val config = StaffSpellConfig(TestConfig(mapOf(
+            "frost.quick-name" to "Ледяные иглы",
+            "frost.quick-secondary-name" to "Ледяной покров",
+            "messages.shield-cooldown" to "<ability> <seconds> с · Shift + ЛКМ",
+        )))
+        val plain = PlainTextComponentSerializer.plainText()
+
+        plain.serialize(config.defense(StaffSpell.FROST, active = false, seconds = 25.0, allAround = true)) shouldBe
+            "Ледяной покров 25.0 с · Shift + ЛКМ"
+    }
 })

@@ -382,10 +382,12 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
                 records.all { it.removals == 1 } shouldBe true
             }
             val beforeShell = h.recorder.records.size
-            h.effects.defend(caster, StaffSpell.FROST, 60, allAround = true)
+            h.effects.defend(caster, StaffSpell.FROST, 400, allAround = true)
             val shell = h.recorder.records.drop(beforeShell)
             shell.size shouldBe 40
-            h.scheduler.tick(60)
+            h.scheduler.tick(398)
+            shell.all { it.removals == 0 } shouldBe true
+            h.scheduler.tick(2)
             shell.all { it.removals == 1 } shouldBe true
             val beforeCancel = h.recorder.records.size
             h.effects.defend(caster, StaffSpell.FAULT, 32, allAround = false)

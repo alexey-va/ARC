@@ -1,7 +1,7 @@
-# Staff sequence and guard design — ARC 1.4.383
+# Staff sequence and guard design — ARC 1.4.387
 
-The sample catalog now contains seventeen staves. Seven of them use staged,
-multi-frame Arsenal sequences; Inferno and Gravity use held channels; the
+The sample catalog contains sixteen available staves (Inferno is temporarily retired). Seven of them use staged,
+multi-frame Arsenal sequences; Gravity uses a held channel; the
 remaining casts retain their spell-specific attack paths. Left-click controls
 are defenses, not the former collection of quick attacks: normal left-click
 raises a frontal guard, and Shift + left-click raises an all-around guard.
@@ -31,18 +31,18 @@ copied assets.
 | Staff | Right-click | Shift + right-click |
 | --- | --- | --- |
 | Lunar | A large silver crescent falls, then opens a ground shockwave | Two moon blades converge on the target |
-| Gale | A stationary open-center funnel forms at the aimed point and lifts nearby enemies | A twisting windscrew ram sweeps forward along the existing path |
-| Tide | A water sphere travels to the selected target or aimed point, then expands into a translucent water shell without immobilizing it | A broad, curled foamy crest wave travels forward |
-| Requiem | Staggered soul missiles leave offset shoulder lanes and travel to the target | A soul wave expands outward from a sigil |
+| Gale | A stationary open-center funnel forms at the aimed point and lifts nearby enemies | A twisting windscrew ram sweeps up to 36 blocks forward, clipped by cover |
+| Tide | A fast water sphere slides above the floor for up to 36 blocks and bursts at its first enemy, cover or range endpoint | A broad, curled foamy crest wave travels forward |
+| Requiem | A copper bell assembles over the target point and releases one expanding soul wave after 0.8 seconds | A bell assembles over the caster and rings three expanding waves |
 | Prism | A crystal grows at the aim point and sends rays toward up to three visible enemies | Three rays converge on the selected point |
 | Nova | Roots travel along the ground, then close and slow enemies | A thorn cage closes around the selected point |
-| Ossuary | Bone spines, ribs and skull details erupt in sequence along the ground path | A warning precedes the closing rib cage and skull motif |
+| Ossuary | Dense clusters of five angled bone spikes erupt along a fixed 24-block path | A warning precedes a burst of bone spikes from the ground |
 
-The other eight catalog spells keep their own right-click attacks. Inferno
-is a continuous aim-following fire stream while held, capped at three seconds.
+The other nine catalog spells keep their own right-click attacks. Inferno is
+retired from issuance and casting; old Elite Inferno items migrate to Ember.
 Gravity holds a display boulder in front of the caster while tracking aim, then
 throws it on release; it never changes the selected world block. Shift selects
-the named secondary cast for ordinary attacks; for either channel it runs the
+the named secondary cast for ordinary attacks; for Gravity it runs the
 same held operation.
 
 ## Guards and charge
@@ -50,17 +50,16 @@ same held operation.
 The frontal guard protects the direction the caster faces, lasts up to 1.2
 seconds and absorbs two hits. Fault, Gravity, Ossuary, Nova and Necromancer
 guards last up to 1.6 seconds and absorb three. Shift + left-click covers all
-directions for up to three seconds and absorbs eight HP after armor and
+directions for up to twenty seconds and absorbs eight HP after armor and
 resistance, before native absorption hearts. These defenses use a
 separate recovery track from right-click attacks: four seconds after the
-frontal guard or eight seconds after the all-around guard. Both guard forms share
+frontal guard or twenty-five seconds after the all-around guard. Both guard forms share
 the same recovery track with each other.
 
 Only primary Ember and Icicle casts reach full charge in 36 ticks; their
 projectile formations grow while held. Other primary and non-channel Shift
-attacks launch on right-click. Held channels use their own timing instead:
-Inferno lasts at most three seconds, Gravity at most eight seconds before
-release or timeout. In particular,
+attacks launch on right-click. Gravity uses its own held timing, at most eight seconds before release
+or timeout. In particular,
 Gravity's flight is a bounded display sequence over a clipped path, not a
 placed, broken or moving block.
 
@@ -79,25 +78,31 @@ paths use the same animation code and geometry.
   motion and lifetime.
 - Damage attempts revalidate captured combat context, target eligibility and
   visibility when the hit is applied. Moving sequences use spell-specific
-  collision paths, and each sequence attempts a target at most once. The duel
+  collision paths, and each sequence attempts a target at most once per authored damage pulse.
+  Requiem explicitly allows one hit per bell wave, with reduced secondary damage. The duel
   bridge still limits duel-only casts to the registered opponent in the
   captured match and round.
 - Necromancer's primary cast creates two temporary skeletons; Shift summons one
   larger wither-skeleton commander. These actors have native
   movement with ordinary targeting and attack goals removed, then move and
   attack through the staff controller. They require safe supported ground,
-  avoid obstacles rather than pathfind around them, expire after ten seconds,
-  and obey one squad per caster, four actors per caster, sixteen globally, and
-  six successful hits per squad. Their attacks use the same staff damage and
+  avoid obstacles rather than pathfind around them, expire after forty-five seconds,
+  and stack up to ten actors per caster and thirty-two globally. Their attack
+  cadence is sixty ticks plus windup, with sixteen attacks per actor and a
+  forty-eight-hit ceiling per squad. Their attacks use the same staff damage and
   protection path.
 - Ossuary and Gravity create only visual geometry; neither edits blocks.
+  Explosion and gravity impacts may briefly hide up to twelve nearby blocks
+  from clients and animate packet-only debris in configured worlds. The real
+  block state stays intact and is resent after forty ticks; no drops are created.
   The visual redesign does not set fire or change weather.
 - `exportStaffRedesignPreview` can produce source-driven clips for the seven
-  Arsenal spells, baseline and enlarged visual states for both held channels,
+  Arsenal spells, baseline and enlarged visual states for the held gravity channel,
   and both guard shapes
-  for all seventeen staves. Its offline geometry view does not simulate
+  for all sixteen available staves. Its offline geometry view does not simulate
   damage, target selection, collision, sound, client lighting or exact vanilla
-  particle physics. Moving attacks use an illustrative fixed lane. A preview
+  particle physics. Changed ground attacks use their configured full range on an unobstructed flat lane;
+  other moving attacks use a shorter illustrative lane. A preview
   is not evidence of ordinary-client appearance or audio acceptance.
 
 This document describes source design only. It does not claim that a build,

@@ -112,7 +112,7 @@ class StaffSpellsTest : FreeSpec({
     }
 
     "every staff defense is independent from charged attack cooldown" {
-        StaffSpell.entries.forEach { spell ->
+        StaffSpell.available.forEach { spell ->
             listOf(StaffCastInput.QUICK, StaffCastInput.QUICK_SECONDARY).forEach { input ->
                 withStaffHarness { h ->
                     val world = h.paper.addSimpleWorld("quick-${spell.id}-${input.name}")
@@ -241,24 +241,24 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "all prototype items can be granted without optional ItemsAdder skins" {
+    "all available prototype items can be granted without optional ItemsAdder skins" {
         withStaffHarness { h ->
             val player = h.paper.addPlayer("all-prototypes")
 
-            StaffSpell.entries.map { it.id } shouldBe listOf("chain", "mark", "frost", "lance", "ember", "nova", "icicle", "fault", "lunar", "gale", "tide", "requiem", "prism", "necromancer", "inferno", "gravity", "ossuary")
-            h.controller.give(player, StaffSpell.entries) shouldBe true
+            StaffSpell.available.map { it.id } shouldBe listOf("chain", "mark", "frost", "lance", "ember", "nova", "icicle", "fault", "lunar", "gale", "tide", "requiem", "prism", "necromancer", "gravity", "ossuary")
+            h.controller.give(player, StaffSpell.available) shouldBe true
 
             player.inventory.storageContents.filterNotNull().mapNotNull { StaffSpell.from(it) } shouldBe
-                StaffSpell.entries
+                StaffSpell.available
         }
     }
 
-    "granting all prototypes refuses seven empty slots without changing existing items" {
+    "granting all available prototypes refuses fifteen empty slots without changing existing items" {
         withStaffHarness { h ->
             val player = h.paper.addPlayer("staff-capacity")
-            repeat(player.inventory.storageContents.size - 7) { player.inventory.setItem(it, ItemStack(Material.DIAMOND)) }
+            repeat(player.inventory.storageContents.size - 15) { player.inventory.setItem(it, ItemStack(Material.DIAMOND)) }
             val before = player.inventory.storageContents.map { it?.clone() }
-            h.controller.give(player, StaffSpell.entries) shouldBe false
+            h.controller.give(player, StaffSpell.available) shouldBe false
             player.inventory.storageContents.toList() shouldBe before
         }
     }
@@ -800,24 +800,21 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "shift right-click launches three independent homing chain bolts without a fourth jump" {
+    "shift right-click chain is a radial nova with the extended cooldown" {
         withStaffHarness(settings = staffSettings(range = 12.0, chainTargets = 4, aimDegrees = 20.0)) { h ->
             val world = h.paper.addSimpleWorld("staff-chain-secondary")
             val player = h.player("staff-chain-secondary", world, StaffSpell.CHAIN).apply { isSneaking = true }
-            val left = h.zombie(world, x = -2.3, z = 6.0)
-            val center = h.zombie(world, x = 0.5, z = 6.0)
-            val right = h.zombie(world, x = 3.3, z = 6.0)
-            // Outside initial acquisition and flight paths, but within jump range of the right target.
-            val fourth = h.zombie(world, x = 3.3, z = 1.0)
+            val behind = h.zombie(world, x = 0.5, z = -2.5)
             h.controller.start()
 
             h.controller.cast(player)
             h.hits shouldBe emptyList()
-            h.scheduler.tick(60)
+            h.projectileMoves shouldBe emptyList()
+            CooldownManager.cooldown(player.uniqueId, "staff-spells") shouldBe 80L
+            h.scheduler.tick(8)
 
-            h.hits.map { it.uniqueId }.toSet() shouldBe setOf(left.uniqueId, center.uniqueId, right.uniqueId)
-            h.hits.size shouldBe 3
-            (fourth.uniqueId in h.hits.map { it.uniqueId }) shouldBe false
+            h.hits shouldBe listOf(behind)
+            h.projectileMoves shouldBe emptyList()
         }
     }
 

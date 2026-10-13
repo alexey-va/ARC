@@ -337,6 +337,7 @@ internal class StaffSpellChannels(
             effects.impact(scene, at, radius, GRAVITY_IMPACT_TICKS)
         }
         visuals.withOwner(flight.casterId) {
+            visuals.sceneryBurst(at, radius)
             visuals.particles(at, staffGravityImpactFrame(), clearance = 0.0)
             visuals.cue(at, Sound.ENTITY_GENERIC_EXPLODE, volume = 0.34f, pitch = 0.72f)
         }
@@ -413,17 +414,17 @@ internal class StaffSpellChannels(
         const val INFERNO_DEFAULT_REACH = 8.0
         const val INFERNO_SWEEP_WIDTH = 0.38
         const val PARTICLE_CLEARANCE = 1.35
-        const val GRAVITY_TARGET_RANGE = 12.0
+        const val GRAVITY_TARGET_RANGE = 32.0
         const val GRAVITY_HOLD_DISTANCE = 4.0
         const val GRAVITY_MIN_EYE_DISTANCE = 2.1
         const val GRAVITY_BLOCK_GAP = 0.65
         const val GRAVITY_RADIUS = 1.0
-        const val GRAVITY_THROW_RANGE = 12.0
+        const val GRAVITY_THROW_RANGE = 32.0
         const val GRAVITY_SWEEP_WIDTH = 0.65
         const val GRAVITY_BLAST_RADIUS = 2.5
-        const val INITIAL_THROW_SPEED = 0.55
-        const val THROW_ACCELERATION = 0.085
-        const val MAX_THROW_SPEED = 2.2
+        const val INITIAL_THROW_SPEED = 3.2
+        const val THROW_ACCELERATION = 0.16
+        const val MAX_THROW_SPEED = 4.4
         const val MIN_FLIGHT_STEP = 0.03
         const val BLOCK_CLIP_EPSILON = 0.0001
     }

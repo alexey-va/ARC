@@ -3,6 +3,7 @@ package ru.arc.staffspells
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.assertions.withClue
 import io.kotest.matchers.shouldBe
+import org.bukkit.Material
 import org.joml.Quaternionf
 import org.joml.Vector3f
 import kotlin.math.abs
@@ -79,6 +80,35 @@ class StaffPreparationGeometryTest : FreeSpec({
 
         families.map { shape(it, false) }.distinct().size shouldBe families.size
         families.all { shape(it, false) != shape(it, true) } shouldBe true
+    }
+
+    "CHAIN preparation is a forked electric crown with a wider secondary fan" {
+        val palette = setOf(Material.LIGHT_BLUE_STAINED_GLASS, Material.SEA_LANTERN)
+        val primary = staffPreparationParts(StaffSpell.CHAIN, false, 4)
+        val secondary = staffPreparationParts(StaffSpell.CHAIN, true, 4)
+        fun span(parts: List<StaffDisplayPart>) = parts.maxOf { it.center.x } - parts.minOf { it.center.x }
+
+        (primary.size in 6..10) shouldBe true
+        (secondary.size in 10..16) shouldBe true
+        (secondary.size > primary.size) shouldBe true
+        primary.all { it.material in palette } shouldBe true
+        secondary.all { it.material in palette } shouldBe true
+        (span(secondary) > span(primary) + 0.2f) shouldBe true
+
+        for (secondaryPose in listOf(false, true)) {
+            val first = staffPreparationParts(StaffSpell.CHAIN, secondaryPose, 0)
+            val open = staffPreparationParts(StaffSpell.CHAIN, secondaryPose, 3)
+            val fading = staffPreparationParts(StaffSpell.CHAIN, secondaryPose, 8)
+            val last = staffPreparationParts(StaffSpell.CHAIN, secondaryPose, 9)
+            val identities = first.map { it.identity }
+
+            (identities.all { it?.startsWith("preparation-chain-crown-") == true }) shouldBe true
+            identities.distinct().size shouldBe identities.size
+            listOf(open, fading, last).forEach { parts -> parts.map { it.identity } shouldBe identities }
+            (first.maxOf { it.scale.length() } < open.maxOf { it.scale.length() }) shouldBe true
+            (fading.maxOf { it.scale.length() } > last.maxOf { it.scale.length() }) shouldBe true
+            staffPreparationParts(StaffSpell.CHAIN, secondaryPose, 10) shouldBe emptyList()
+        }
     }
 
     "a preparation cue opens after its visible first frame and fades before removal" {

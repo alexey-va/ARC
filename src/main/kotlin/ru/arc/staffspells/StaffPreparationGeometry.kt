@@ -4,6 +4,7 @@ import org.bukkit.Material
 import org.joml.Quaternionf
 import org.joml.Vector3f
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -48,20 +49,20 @@ internal fun staffPreparationParts(
 }
 
 private fun chainPreparation(age: Int, secondary: Boolean): List<StaffDisplayPart> = buildList {
-    val side = if (secondary) -1f else 1f
-    val points = (0..6).map { index ->
-        val offset = if (index % 2 == 0) -0.68f else 0.68f
-        Vector3f(side * offset, 1.42f + index % 3 * 0.30f,
-            (2.04f + (index % 2) * 0.18f + sin(age * 0.12 + index) * 0.04).toFloat())
-    }
-    for (index in 0 until points.lastIndex) add(preparationBeam(
-        "chain-conductor-$index", if (index % 2 == 0) Material.LIGHTNING_ROD else Material.COPPER_BLOCK,
-        points[index], points[index + 1], 0.12f,
-    ))
-    points.indices.filter { it % 2 == 0 }.forEach { index ->
-        val point = points[index]
-        add(preparationBox("chain-node-$index", Material.AMETHYST_BLOCK,
-            point.x, point.y, point.z, 0.19f, 0.19f, 0.19f, roll = 0.35f))
+    val spreads = if (secondary) listOf(-1f, -0.6f, -0.2f, 0.2f, 0.6f, 1f)
+        else listOf(-0.78f, -0.26f, 0.26f, 0.78f)
+    val width = if (secondary) 0.88f else 0.62f
+    spreads.forEachIndexed { index, spread ->
+        val flicker = sin(age * 0.14 + index * 1.7).toFloat() * 0.035f
+        val depth = abs(spread) * (if (secondary) 0.18f else 0.08f)
+        val root = Vector3f(spread * width * 0.08f, 1.58f + flicker * 0.2f, 2.06f)
+        val fork = Vector3f(spread * width * 0.46f + flicker, 1.94f + flicker,
+            2.01f + depth * 0.45f)
+        val tip = Vector3f(spread * width, 2.24f - abs(spread) * 0.14f + flicker * 0.3f,
+            2.10f + depth)
+        val identity = if (secondary) "chain-crown-fan-$index" else "chain-crown-fork-$index"
+        add(preparationBeam("$identity-root", Material.LIGHT_BLUE_STAINED_GLASS, root, fork, 0.21f))
+        add(preparationBeam("$identity-tip", Material.SEA_LANTERN, fork, tip, 0.17f))
     }
 }
 

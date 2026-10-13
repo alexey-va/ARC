@@ -31,6 +31,8 @@ import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.sin
 
+internal enum class StaffSummonCastResult { CAST, NO_GROUND, CAPACITY }
+
 /** Owns short-lived script-controlled undead actors; every hit stays in the staff damage gate. */
 internal class StaffSpellSummons(
     private val settings: StaffSpellSettings,
@@ -73,7 +75,7 @@ internal class StaffSpellSummons(
     )
 
     private val tasks = LifecycleTaskScope()
-    private val sessions = linkedMapOf<UUID, Session>()
+    private val sessions = mutableListOf<Session>()
     private var currentTick = 0L
     private var started = false
     private var closed = false
@@ -120,20 +122,33 @@ internal class StaffSpellSummons(
     }
 
     fun cast(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning, input: StaffCastInput, charge: Double): Boolean {
-        if (closed || !started || input.quick || cast.casterId != player.uniqueId || !ready(player, cast)) return false
+        return castResult(player, cast, tuning, input, charge) == StaffSummonCastResult.CAST
+    }
+
+    fun castResult(
+        player: Player,
+        cast: StaffSpellCast,
+        tuning: StaffSpellTuning,
+        input: StaffCastInput,
+        @Suppress("UNUSED_PARAMETER")
+        charge: Double,
+    ): StaffSummonCastResult {
+        if (closed || !started || input.quick || cast.casterId != player.uniqueId || !ready(player, cast))
+            return StaffSummonCastResult.NO_GROUND
         val commander = input.secondary
-        val progress = charge.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
-        val requested = if (commander) 1 else (2 + (progress * 2.0).toInt()).coerceIn(2, 4)
+        val requested = if (commander) 1 else 2
+        if (activeActorCount(player.uniqueId) + requested > MAX_ACTORS_PER_CASTER)
+            return StaffSummonCastResult.CAPACITY
         val world = player.world
         val spawnPoints = formation(player).asSequence()
             .mapNotNull { safeSpawnLocation(it, commander) }
             .take(requested)
             .toList()
-        if (spawnPoints.size < if (commander) 1 else 2) return false
+        if (spawnPoints.size < requested) return StaffSummonCastResult.NO_GROUND
 
-        cancel(player.uniqueId)
+        // Keep the global actor ceiling; its existing oldest-squad eviction policy remains in force.
         while (activeActorCount() + spawnPoints.size > MAX_ACTORS) {
-            val oldest = sessions.values.firstOrNull() ?: break
+            val oldest = sessions.firstOrNull() ?: break
             remove(oldest)
         }
 
@@ -143,13 +158,16 @@ internal class StaffSpellSummons(
                 session.actors += Actor(mob, commander)
             }
         }
-        if (session.actors.isEmpty()) return false
-        sessions[player.uniqueId] = session
-        return true
+        if (session.actors.size < requested) {
+            remove(session)
+            return StaffSummonCastResult.NO_GROUND
+        }
+        sessions += session
+        return StaffSummonCastResult.CAST
     }
 
     fun cancel(casterId: UUID) {
-        sessions[casterId]?.let(::remove)
+        sessions.filter { it.casterId == casterId }.forEach(::remove)
     }
 
     override fun close() {
@@ -158,14 +176,14 @@ internal class StaffSpellSummons(
         try {
             tasks.close()
         } finally {
-            sessions.values.toList().forEach(::remove)
+            sessions.toList().forEach(::remove)
             HandlerList.unregisterAll(this)
         }
     }
 
     private fun tick() {
         currentTick++
-        sessions.values.toList().forEach sessionLoop@{ session ->
+        sessions.toList().forEach sessionLoop@{ session ->
             val player = Bukkit.getPlayer(session.casterId)
             if (player == null || !ready(player, session.cast) || player.world.uid != session.worldId) {
                 remove(session)
@@ -178,7 +196,7 @@ internal class StaffSpellSummons(
             }
 
             session.actors.toList().forEach actorLoop@{ actor ->
-                if (sessions[session.casterId] !== session) return@actorLoop
+                if (sessions.none { it === session }) return@actorLoop
                 if (!actor.mob.isValid || actor.mob.isDead || !loaded(actor.mob.location)) {
                     actor.mob.remove()
                     session.actors.remove(actor)
@@ -260,12 +278,11 @@ internal class StaffSpellSummons(
     private fun selectTarget(owner: Player, session: Session, actor: Actor) =
         targeting.nearby(owner, actor.mob.location, targetSearchRadius, session.cast)
             .asSequence()
-            .filterNot { isSessionActor(session, it) }
+            .filterNot { isCasterActor(session.casterId, it) }
             .filter { it.world.uid == session.worldId && loaded(it.location) }
             .filter { !it.isInvulnerable }
-            .filter { visible(actor.mob.eyeLocation, center(it)) }
             .sortedBy { center(it).distanceSquared(center(actor.mob)) }
-            .firstOrNull()
+            .firstOrNull { visible(actor.mob.eyeLocation, center(it)) }
 
     private fun attack(session: Session, actor: Actor, owner: Player, target: org.bukkit.entity.LivingEntity): Int {
         if (!ready(owner, session.cast) || !validTarget(owner, actor.mob, target, session)) return 0
@@ -302,7 +319,7 @@ internal class StaffSpellSummons(
     }
 
     private fun validTarget(owner: Player, mob: AbstractSkeleton, target: org.bukkit.entity.LivingEntity, session: Session): Boolean =
-        target !== mob && !isSessionActor(session, target) && target.isValid && !target.isDead && !target.isInvulnerable &&
+        target !== mob && !isCasterActor(session.casterId, target) && target.isValid && !target.isDead && !target.isInvulnerable &&
             target.world.uid == session.worldId && loaded(target.location) &&
             center(target).distanceSquared(center(mob)) <=
             (if (session.commander) COMMANDER_CLEAVE_REACH else targetSearchRadius) *
@@ -628,14 +645,14 @@ internal class StaffSpellSummons(
             }
 
             val victim = targeting.lineTargets(owner, from, end, ARROW_SWEEP_WIDTH, flight.cast)
-                .firstOrNull { !isSessionActor(session, it) }
+                .firstOrNull { !isCasterActor(session.casterId, it) }
             if (victim != null) {
                 val hitPosition = victim.boundingBox.expand(ARROW_SWEEP_WIDTH)
                     .rayTrace(from.toVector(), flight.direction, travelled)?.hitPosition
                     ?.toLocation(from.world) ?: center(victim)
                 arrow.teleport(hitPosition)
                 val currentTarget = ready(owner, flight.cast) && victim.isValid && !victim.isDead &&
-                    !isSessionActor(session, victim) &&
+                    !isCasterActor(session.casterId, victim) &&
                     !victim.isInvulnerable && victim.world.uid == flight.worldId && loaded(victim.location) &&
                     visible(from, center(victim)) && damage.eligible(owner, victim, flight.cast)
                 if (currentTarget && damage.hit(
@@ -688,7 +705,7 @@ internal class StaffSpellSummons(
         arrow.setRotation(yaw, pitch)
     }
 
-    private fun activeFlightCount() = sessions.values.sumOf { session ->
+    private fun activeFlightCount() = sessions.sumOf { session ->
         session.flights.count { it.arrow.isValid }
     }
 
@@ -697,13 +714,15 @@ internal class StaffSpellSummons(
         flight.arrow.remove()
     }
 
-    private fun trackedSession(target: LivingEntity): Session? = sessions.values.firstNotNullOfOrNull { session ->
-        if (sessions[session.casterId] !== session || session.worldId != target.world.uid) return@firstNotNullOfOrNull null
+    private fun trackedSession(target: LivingEntity): Session? = sessions.firstNotNullOfOrNull { session ->
+        if (session.worldId != target.world.uid) return@firstNotNullOfOrNull null
         session.takeIf { current -> current.actors.any { it.mob.uniqueId == target.uniqueId } }
     }
 
-    private fun isSessionActor(session: Session, target: LivingEntity) =
-        session.actors.any { it.mob.uniqueId == target.uniqueId }
+    private fun isCasterActor(casterId: UUID, target: LivingEntity) =
+        sessions.any { session ->
+            session.casterId == casterId && session.actors.any { it.mob.uniqueId == target.uniqueId }
+        }
 
     private fun ready(player: Player, cast: StaffSpellCast) =
         player.isOnline && player.isValid && !player.isDead && damage.isCurrent(player, cast)
@@ -714,23 +733,26 @@ internal class StaffSpellSummons(
             world.isChunkLoaded(at.blockX shr 4, at.blockZ shr 4)
     }
 
-    private fun activeActorCount() = sessions.values.sumOf { it.actors.count { actor -> actor.mob.isValid } }
+    private fun activeActorCount(casterId: UUID? = null) = sessions.asSequence()
+        .filter { casterId == null || it.casterId == casterId }
+        .sumOf { session -> session.actors.count { it.mob.isValid && !it.mob.isDead } }
 
     private fun remove(session: Session) {
-        if (sessions[session.casterId] === session) sessions.remove(session.casterId)
+        sessions.removeAll { it === session }
         session.flights.toList().forEach { retireFlight(session, it) }
         session.actors.forEach { it.mob.remove() }
         session.actors.clear()
     }
 
     private companion object {
-        const val MAX_ACTORS = 16
-        const val LIFETIME_TICKS = 200L
+        const val MAX_ACTORS = 32
+        const val MAX_ACTORS_PER_CASTER = 10
+        const val LIFETIME_TICKS = 900L
         const val WINDUP_TICKS = 10
-        const val ATTACK_COOLDOWN_TICKS = 20
-        const val SOLDIER_SHOTS = 3
-        const val COMMANDER_SWINGS = 2
-        const val MAX_SESSION_HITS = 6
+        const val ATTACK_COOLDOWN_TICKS = 60
+        const val SOLDIER_SHOTS = 16
+        const val COMMANDER_SWINGS = 16
+        const val MAX_SESSION_HITS = 48
         const val MAX_PROJECTILES = 16
         const val MAX_CLEAVE_TARGETS = 3
         const val MAX_TARGET_SEARCH_RADIUS = 12.0

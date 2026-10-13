@@ -23,6 +23,7 @@ import kotlin.math.sqrt
 /** Native staff particles and sound; all delayed phases run on Paper's main thread. */
 internal class StaffSpellVisuals(
     private val tasks: LifecycleTaskScope,
+    private val sceneryImpact: (UUID, Location, Double) -> Unit = { _, _, _ -> },
     private val currentTick: () -> Long = { Bukkit.getCurrentTick().toLong() },
 ) {
     private data class OwnerTasks(var generation: Long = 0L, var pending: Int = 0)
@@ -589,7 +590,12 @@ internal class StaffSpellVisuals(
     }
 
     /** A local stone impact with a tight block-chip ring and a sparse amethyst dust tail. */
+    fun sceneryBurst(at: Location, radius: Double) = dispatch {
+        activeOwner.get()?.let { sceneryImpact(it, at, radius) }
+    }
+
     fun faultBurst(at: Location, radius: Double) = dispatch {
+        sceneryBurst(at, radius)
         val origin = at.clone()
         val reach = boundedRadius(radius, 1.8, 8.0) ?: return@dispatch
         if (!drawable(origin)) return@dispatch
@@ -660,6 +666,7 @@ internal class StaffSpellVisuals(
     }
 
     fun markBurst(at: Location, radius: Double, blackhole: Boolean = false) = dispatch {
+        sceneryBurst(at, radius)
         val origin = at.clone().add(0.0, if (blackhole) BLACKHOLE_CORE_HEIGHT else 0.0, 0.0)
         val reach = boundedRadius(radius, 0.5, 10.0) ?: return@dispatch
         if (blackhole) {
@@ -943,6 +950,7 @@ internal class StaffSpellVisuals(
     }
 
     fun emberBurst(at: Location, radius: Double, meteor: Boolean = false) = dispatch {
+        sceneryBurst(at, radius)
         val origin = at.clone()
         val reach = boundedRadius(radius, 0.5, 10.0) ?: return@dispatch
         val ejecta = Material.TUFF.createBlockData()

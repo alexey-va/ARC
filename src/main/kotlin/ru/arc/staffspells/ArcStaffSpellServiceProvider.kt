@@ -46,7 +46,7 @@ internal class ArcStaffSpellServiceProvider(
 
     override fun createDuelStaff(spellId: String): ItemStack {
         check(Bukkit.isPrimaryThread()) { "Duel staff items must be created on the server thread" }
-        val spell = StaffSpell.entries.firstOrNull { it.id == spellId }
+        val spell = StaffSpell.available.firstOrNull { it.id == spellId }
             ?: throw IllegalArgumentException("Unknown staff spell: $spellId")
         return requireNotNull(controller()) { "ARC staff spells are not ready" }.duelItem(spell)
     }
