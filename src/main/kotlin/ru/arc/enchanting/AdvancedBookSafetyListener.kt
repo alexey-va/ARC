@@ -12,6 +12,7 @@ import org.bukkit.event.Listener
 import org.bukkit.event.inventory.InventoryClickEvent
 import org.bukkit.event.inventory.InventoryCreativeEvent
 import ru.arc.core.LifecycleTaskScope
+import ru.arc.dungeons.api.ArcBookApplicationOutcome
 import ru.arc.dungeons.api.ArcBookIdentity.isAdvancedEnchantmentsBook
 import ru.arc.util.Logging
 import java.util.UUID
@@ -91,22 +92,27 @@ internal class AdvancedBookSafetyListener(private val config: EnchantingConfig) 
                         if (bookSlot == null) player.itemOnCursor else player.inventory.getItem(bookSlot))) return@runLater
                 val chances = advancedBookChances(expectedBook)
                 val random = ThreadLocalRandom.current()
-                var outcome = bookApplicationOutcome(chances, random.nextDouble(), random.nextDouble())
+                var outcome = ArcBookApplicationOutcome.roll(
+                    chances.success,
+                    chances.destroyOnFailure,
+                    random.nextDouble(),
+                    random.nextDouble(),
+                )
                 var protected = false
                 val result = when (outcome) {
-                    EliteEnchantmentOutcome.SUCCESS -> AEAPI.applyEnchant(
+                    ArcBookApplicationOutcome.SUCCESS -> AEAPI.applyEnchant(
                         AEAPI.getBookEnchantment(expectedBook), AEAPI.getBookEnchantmentLevel(expectedBook),
                         AEAPI.getEnchantLevel(AEAPI.getBookEnchantment(expectedBook), target) > 0, true, validatedTarget,
                     )
-                    EliteEnchantmentOutcome.FAILURE -> target
-                    EliteEnchantmentOutcome.DESTROYED -> {
+                    ArcBookApplicationOutcome.FAILURE -> target
+                    ArcBookApplicationOutcome.DESTROYED -> {
                         val saved = protectedAdvancedBookTarget(target)
                         if (saved != null) {
                             protected = true
                             saved
                         } else {
                             if (advancedDestructionCancelled(event, target.clone(), player, expectedBook.clone())) {
-                                outcome = EliteEnchantmentOutcome.FAILURE
+                                outcome = ArcBookApplicationOutcome.FAILURE
                                 target
                             } else null
                         }

@@ -13,6 +13,7 @@ repositories {
     maven("https://repo.papermc.io/repository/maven-public/")
     maven("https://repo.codemc.io/repository/maven-public/")
     maven("https://repo.magmaguy.com/releases")
+    maven("https://jitpack.io")
     mavenCentral()
 }
 dependencies {

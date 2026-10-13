@@ -6,6 +6,7 @@ import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.NamespacedKey
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
+import ru.arc.dungeons.api.ArcBookApplicationOutcome
 import java.util.concurrent.ThreadLocalRandom
 
 internal data class EliteBookApplicationChances(val success: Int, val destroyOnFailure: Int) {
@@ -56,13 +57,16 @@ private fun chanceRow(label: String, value: Int, color: Int): Component =
         .append(Component.text("$value%", TextColor.color(color)))
         .decoration(TextDecoration.ITALIC, false)
 
-internal enum class EliteEnchantmentOutcome { SUCCESS, FAILURE, DESTROYED }
+internal typealias EliteEnchantmentOutcome = ArcBookApplicationOutcome
 
 /** A separate destruction roll happens only after a failed application, matching AE's meaning. */
-internal fun bookApplicationOutcome(chances: EliteBookApplicationChances, successRoll: Double, destroyRoll: Double): EliteEnchantmentOutcome {
-    require(successRoll.isFinite() && successRoll >= 0 && successRoll < 1)
-    require(destroyRoll.isFinite() && destroyRoll >= 0 && destroyRoll < 1)
-    if (successRoll < chances.success / 100.0) return EliteEnchantmentOutcome.SUCCESS
-    return if (destroyRoll < chances.destroyOnFailure / 100.0) EliteEnchantmentOutcome.DESTROYED
-    else EliteEnchantmentOutcome.FAILURE
-}
+internal fun bookApplicationOutcome(
+    chances: EliteBookApplicationChances,
+    successRoll: Double,
+    destroyRoll: Double,
+): EliteEnchantmentOutcome = ArcBookApplicationOutcome.roll(
+    chances.success,
+    chances.destroyOnFailure,
+    successRoll,
+    destroyRoll,
+)

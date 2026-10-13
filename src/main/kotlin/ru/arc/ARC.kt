@@ -52,7 +52,6 @@ import ru.arc.mounts.MountModule
 import ru.arc.parkour.ArcParkourModule
 import ru.arc.core.modules.CooldownModule
 import ru.arc.core.modules.EconomyModule
-import ru.arc.core.modules.EliteLootModule
 import ru.arc.enchanting.EnchantingModule
 import ru.arc.core.modules.HeadCacheModule
 import ru.arc.core.modules.HooksModule

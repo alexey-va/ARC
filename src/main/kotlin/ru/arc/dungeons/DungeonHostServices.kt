@@ -53,7 +53,7 @@ object DungeonHostServices {
             override fun openMain(player: Player) = HelpCenterModule.open(player)
             override fun openGuide(player: Player, returnTo: Runnable) = HelpCenterModule.openDungeonsGuide(player, returnTo::run)
             override fun openPortal(player: Player, action: Runnable) {
-                Portal(player.uniqueId, PortalData(ownerAction = action::run))
+                Portal(player.uniqueId, PortalData(ownerAction = { action.run() }))
             }
             override fun teleport(player: Player, server: String, world: String, x: Double, y: Double, z: Double, yaw: Float, pitch: Float) =
                 HookRegistry.huskHomesHook?.teleport(player, ServerLocation(server, world, x, y, z, yaw, pitch)) == true
