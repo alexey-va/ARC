@@ -31,7 +31,10 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         var impact: Boolean,
         val secondary: Boolean,
         val input: StaffCastInput,
-        val charging: Boolean = false,
+        var charging: Boolean = false,
+        val chargeSlot: Int? = null,
+        var projectileBody: List<StaffDisplayPart>? = null,
+        val preparation: Boolean = false,
         val defense: Defense? = null,
         var controllerDriven: Boolean = false,
         var controllerDirty: Boolean = false,
@@ -60,7 +63,8 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
     fun play(casterId: UUID, spell: StaffSpell, from: Location, to: Location = from,
         radius: Double = 1.0, durationTicks: Int = 16, impact: Boolean = false, secondary: Boolean = false,
         input: StaffCastInput = StaffCastInput.of(secondary, false), charging: Boolean = false,
-        controllerDriven: Boolean = false, charge: Double = 0.0): UUID? {
+        controllerDriven: Boolean = false, charge: Double = 0.0, chargeSlot: Int? = null,
+        preparation: Boolean = false): UUID? {
         check(Bukkit.isPrimaryThread())
         if (closed || !valid(from) || !valid(to) || from.world != to.world) return null
         val caster = Bukkit.getPlayer(casterId) ?: return null
@@ -68,7 +72,8 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         reserve(casterId)
         val offset = to.toVector().subtract(from.toVector())
         val length = offset.length()
-        val rotation = if (charging) staffChargeOrientation(spell, from.yaw,
+        val rotation = if (preparation) Quaternionf().rotationY(-Math.toRadians(from.yaw.toDouble()).toFloat())
+        else if (charging) staffChargeOrientation(spell, from.yaw,
             Vector3f(from.direction.x.toFloat(), from.direction.y.toFloat(), from.direction.z.toFloat()))
         else if (spell == StaffSpell.MARK)
             Quaternionf().rotationY(kotlin.math.atan2(caster.location.x - from.x, caster.location.z - from.z).toFloat())
@@ -82,7 +87,8 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         val scene = Scene(UUID.randomUUID(), casterId, spell, from.clone(), rotation,
             length.coerceAtLeast(0.1),
             radius.takeIf(Double::isFinite)?.coerceIn(0.1, if (spell == StaffSpell.FROST) 96.0 else 16.0) ?: 1.0,
-            durationTicks.coerceIn(1, 240), impact, secondary, input, charging = charging,
+            durationTicks.coerceIn(1, 240), impact, secondary, input, charging = charging, chargeSlot = chargeSlot,
+            preparation = preparation,
             controllerDriven = controllerDriven,
             chargeProgress = charge.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0)
         scenes[scene.id] = scene
@@ -132,7 +138,31 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
             Vector3f(eye.direction.x.toFloat(), eye.direction.y.toFloat(), eye.direction.z.toFloat()))
         scene.chargeProgress = progress.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
         if (scene.controllerDriven) scene.controllerDirty = true
-        else if (scene.charging && scene.spell == StaffSpell.EMBER) render(scene)
+        else if (scene.charging) render(scene)
+    }
+
+    /** Actual held position, used by collision before transferring ownership to flight. */
+    fun chargeOrigin(sceneId: UUID?): Location? {
+        val scene = scenes[sceneId]?.takeIf { it.charging } ?: return null
+        val offset = if (scene.spell == StaffSpell.EMBER) staffEmberChargeOffset() else Vector3f()
+        scene.rotation.transform(offset)
+        return scene.origin.clone().add(offset.x.toDouble(), offset.y.toDouble(), offset.z.toDouble())
+    }
+
+    /** Release the existing physical body. No respawn, assembly reset or replacement model. */
+    fun releaseCharge(sceneId: UUID?, durationTicks: Int, controllerDriven: Boolean = false): UUID? {
+        val scene = scenes[sceneId]?.takeIf { it.charging } ?: return null
+        val origin = chargeOrigin(sceneId) ?: return null
+        val offset = if (scene.spell == StaffSpell.EMBER) staffEmberChargeOffset() else Vector3f()
+        scene.projectileBody = scene.renderedParts.map { it.copy(center = Vector3f(it.center).sub(offset)) }
+        scene.origin = origin
+        scene.charging = false
+        scene.age = 0
+        scene.duration = durationTicks.coerceIn(1, 240)
+        scene.controllerDriven = controllerDriven
+        scene.controllerDirty = false
+        render(scene)
+        return scene.id
     }
 
     /** Applies the controller's animation clock without letting the display timer advance it again. */
@@ -231,13 +261,13 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
                     scene.origin = caster.location.clone()
                     scene.rotation = Quaternionf().rotationY(-Math.toRadians(caster.location.yaw.toDouble()).toFloat())
                 }
-                val tracked = scene.defense == null && !scene.charging && !scene.impact && scene.spell in setOf(StaffSpell.MARK, StaffSpell.EMBER)
+                val tracked = scene.defense == null && !scene.preparation && !scene.charging && !scene.impact && scene.spell in setOf(StaffSpell.MARK, StaffSpell.EMBER)
                 val expired = if (tracked) scene.age >= 160 else scene.age >= scene.duration
                 if (expired) remove(scene.id)
                 // Flying comets have one movement owner sending two-tick forward keyframes.
-                // EMBER charge geometry is progress-only; the shared timer must not restart its tween.
-                else if (scene.defense != null || (!(scene.charging && scene.spell == StaffSpell.EMBER) &&
-                    (scene.charging || scene.spell != StaffSpell.EMBER || scene.impact))) render(scene)
+                // Charge geometry is progress-only; the shared timer must not restart its tween.
+                else if (scene.defense != null || scene.preparation ||
+                    (!scene.charging && (scene.spell != StaffSpell.EMBER || scene.impact))) render(scene)
             }
         }
         if (scenes.isNotEmpty()) refreshAudience()
@@ -246,9 +276,14 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
     private fun render(scene: Scene) {
         val previousParts = scene.renderedParts
         val previousBounds = scene.bounds
-        var parts = (if (scene.defense != null) staffDefenseParts(scene.spell, scene.age, scene.duration,
+        var parts = (if (scene.preparation) staffPreparationParts(scene.spell, scene.secondary, scene.age, scene.duration)
+        else if (scene.defense != null) staffDefenseParts(scene.spell, scene.age, scene.duration,
             scene.defense.allAround, scene.defense.strength, scene.age - scene.defense.impactAt,
-            scene.defense.endingAt?.let { scene.age - it }) else if (scene.charging) staffChargeParts(scene.spell, scene.chargeProgress, scene.age) else scene.trail?.let { path ->
+            scene.defense.endingAt?.let { scene.age - it }) else if (scene.charging) {
+            if (scene.spell == StaffSpell.ICICLE && scene.chargeSlot != null)
+                staffIcicleChargeParts(scene.chargeProgress, scene.chargeSlot)
+            else staffChargeParts(scene.spell, scene.chargeProgress, scene.age)
+        } else scene.projectileBody?.takeUnless { scene.impact } ?: scene.trail?.let { path ->
             staffChargeResponsiveOldParts(scene.spell, staffLightningTrailParts(path,
                 if (scene.impact) (1.0 - scene.age / 8.0).coerceAtLeast(0.0) else 1.0), scene.chargeProgress)
         }
@@ -278,7 +313,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         }
         val casterEye = Bukkit.getPlayer(scene.casterId)?.eyeLocation
         // The broad ice fan needs per-piece clipping; projectile owners already sweep their paths.
-        if (scene.defense == null && scene.spell == StaffSpell.FROST && !scene.charging && casterEye != null) parts = parts.map { part ->
+        if (scene.defense == null && !scene.preparation && scene.spell == StaffSpell.FROST && !scene.charging && casterEye != null) parts = parts.map { part ->
             val point = scene.rotation.transform(Vector3f(part.center))
             val at = scene.origin.clone().add(point.x.toDouble(), point.y.toDouble(), point.z.toDouble())
             part.copy(visible = part.visible && visible(casterEye, at))
@@ -301,14 +336,15 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         previousHandles.filterNot(retainedHandles::contains).forEach(PacketBlockDisplay::remove)
         scene.handles.clear()
         val interpolationTicks = when {
-            scene.defense != null -> FRAME_TICKS
+            scene.defense != null || scene.preparation -> FRAME_TICKS
             scene.spell == StaffSpell.CHAIN -> 0
-            scene.charging && scene.spell == StaffSpell.EMBER -> CHARGE_INTERPOLATION_TICKS
+            scene.charging -> CHARGE_INTERPOLATION_TICKS
             else -> FRAME_TICKS
         }
         val teleportTicks = when {
+            scene.preparation -> FRAME_TICKS
             scene.spell == StaffSpell.CHAIN -> 0
-            scene.charging && scene.spell == StaffSpell.EMBER -> CHARGE_INTERPOLATION_TICKS
+            scene.charging -> CHARGE_INTERPOLATION_TICKS
             else -> FRAME_TICKS
         }
         parts.forEachIndexed { index, part ->

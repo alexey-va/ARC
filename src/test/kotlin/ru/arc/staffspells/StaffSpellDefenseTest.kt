@@ -12,6 +12,8 @@ import org.bukkit.entity.TNTPrimed
 import org.bukkit.event.entity.EntityDamageByEntityEvent
 import org.bukkit.event.entity.EntityDamageEvent
 import org.bukkit.event.entity.EntityDamageEvent.DamageModifier
+import org.joml.Quaternionf
+import org.joml.Vector3f
 import ru.arc.util.CooldownManager
 import java.util.UUID
 import kotlin.math.abs
@@ -181,6 +183,22 @@ class StaffSpellDefenseTest : FreeSpec({
         }
     }
 
+    "normal guards keep every opaque part out of standing and sneak reticles for their full lifetime" {
+        StaffSpell.entries.forEach { spell ->
+            val heavy = spell in setOf(StaffSpell.FAULT, StaffSpell.GRAVITY, StaffSpell.OSSUARY,
+                StaffSpell.NOVA, StaffSpell.NECROMANCER)
+            val duration = if (heavy) 32 else 24
+            (0 until duration).forEach { age ->
+                val parts = staffDefenseParts(spell, age, duration, allAround = false,
+                    strength = if (age < 8) 1.0 else .5, impactAge = age - 8)
+                listOf(1.62f, 1.27f).forEach { eyeHeight ->
+                    parts.filterNot { it.material.name.endsWith("_STAINED_GLASS") }
+                        .none { staffPartIntersectsReticle(it, eyeHeight) } shouldBe true
+                }
+            }
+        }
+    }
+
     "Shift+LMB shield expires after 60 ticks and retains only impact particles" {
         withStaffHarness { h ->
             val world = h.paper.addSimpleWorld("staff-defense-shield-expiry")
@@ -283,6 +301,32 @@ class StaffSpellDefenseTest : FreeSpec({
         }
     }
 })
+
+private fun staffPartIntersectsReticle(part: StaffDisplayPart, eyeHeight: Float): Boolean {
+    val inverse = Quaternionf(part.rotation).invert()
+    val origin = inverse.transform(Vector3f(-part.center.x, eyeHeight - part.center.y, -part.center.z))
+    val direction = inverse.transform(Vector3f(0f, 0f, 1f))
+    val rayOrigin = floatArrayOf(origin.x, origin.y, origin.z)
+    val rayDirection = floatArrayOf(direction.x, direction.y, direction.z)
+    val halfExtent = floatArrayOf(part.scale.x / 2f, part.scale.y / 2f, part.scale.z / 2f)
+    var near = 0.0
+    var far = Double.POSITIVE_INFINITY
+    for (axis in 0..2) {
+        val component = rayDirection[axis].toDouble()
+        val offset = rayOrigin[axis].toDouble()
+        val extent = halfExtent[axis].toDouble()
+        if (abs(component) < 1e-6) {
+            if (abs(offset) > extent) return false
+        } else {
+            val first = (-extent - offset) / component
+            val second = (extent - offset) / component
+            near = maxOf(near, minOf(first, second))
+            far = minOf(far, maxOf(first, second))
+            if (near > far) return false
+        }
+    }
+    return far >= 0.0
+}
 
 @Suppress("DEPRECATION")
 private fun attack(

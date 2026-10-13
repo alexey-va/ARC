@@ -13,6 +13,9 @@ import java.util.Locale
 object StaffRedesignPreviewExport {
     private const val FRAME_STEP_TICKS = 2
     private const val PREVIEW_REACH_BLOCKS = 12.0
+    private const val CHARGE_UPDATE_TICKS = 4
+    private const val PREPARATION_DURATION_TICKS = 10
+    private const val EMBER_PREVIEW_SPEED = 1.2
 
     private val redesignArsenal = listOf(
         StaffSpell.LUNAR, StaffSpell.GALE, StaffSpell.TIDE,
@@ -64,11 +67,14 @@ object StaffRedesignPreviewExport {
 
     private fun smooth(value: Double): Double = value.coerceIn(0.0, 1.0).let { it * it * (3.0 - 2.0 * it) }
 
+    private fun chargeToken(charge: Double) = charge.toString().removeSuffix(".0")
+
     private fun arsenalRadius(spell: StaffSpell, input: StaffCastInput, charge: Double) = when {
         spell == StaffSpell.REQUIEM && input.secondary -> 4.0 + charge * .75
         spell == StaffSpell.REQUIEM -> .75 + charge * .2
         spell == StaffSpell.TIDE && input.secondary -> 2.8 + charge * .7
         spell == StaffSpell.TIDE -> 1.0 + charge * .3
+        spell == StaffSpell.GALE && input.secondary -> 2.0 + charge * .35
         spell == StaffSpell.OSSUARY -> if (input.secondary) 2.1 + charge * .4 else 1.0 + charge * .2
         else -> 2.2 + charge
     }
@@ -81,16 +87,18 @@ object StaffRedesignPreviewExport {
         age: Int,
     ): Map<String, Any> {
         val radius = arsenalRadius(spell, input, charge)
+        // Live TIDE/GALE Display scenes inherit Attack.radius; their particle calls may override it.
+        val displayRadius = if (spell == StaffSpell.TIDE || spell == StaffSpell.GALE) 2.2 + charge else radius
         val nodeCount = if (spell == StaffSpell.OSSUARY && !input.secondary)
             4 + (charge * 2.0).toInt() else 1
         val parts = mutableListOf<Map<String, Any>>()
         val emissions = mutableListOf<Map<String, Any>>()
 
         fun addParts(localAge: Int, localDuration: Int, index: Int, anchor: Vector,
-            sceneLength: Double = 1.0, impact: Boolean = false) {
+            sceneLength: Double = 1.0, impact: Boolean = false, localRadius: Double = displayRadius) {
             // Display scenes expire before rendering at age == duration in StaffSpellDisplayEffects.
             if (localAge !in 0 until localDuration) return
-            staffArsenalParts(spell, localAge, localDuration, sceneLength, radius,
+            staffArsenalParts(spell, localAge, localDuration, sceneLength, localRadius,
                 impact = impact, secondary = input.secondary, input = input, charge = charge)
                 .forEachIndexed { partIndex, display ->
                     parts += part(display, "${spell.id}:node:$index", partIndex, anchor)
@@ -98,10 +106,10 @@ object StaffRedesignPreviewExport {
         }
 
         fun addParticles(localAge: Int, localDuration: Int, localRadius: Double, anchor: Vector,
-            localReach: Double = localRadius) {
+            localReach: Double = localRadius, impact: Boolean = false) {
             if (localAge !in 0 until localDuration) return
             val authored = staffArsenalParticles(spell, localAge, localDuration, localRadius,
-                input.secondary, charge, localReach)
+                input.secondary, charge, localReach, impact)
             val limit = if (!input.secondary && spell == StaffSpell.OSSUARY)
                 240 / nodeCount.coerceAtLeast(1) else 160
             val admitted = if (authored.size <= limit) authored else List(limit) { index ->
@@ -117,19 +125,24 @@ object StaffRedesignPreviewExport {
                 val progress = smooth((age - 4.0) / 24.0)
                 val anchor = Vector(0.0, 1.2, PREVIEW_REACH_BLOCKS * progress)
                 if (age < 28) addParts(age, duration, 0, anchor, 1.0)
-                else addParts(localAge, 10, 0, anchor, 1.0, impact = true)
-                addParticles(age, duration, radius, anchor)
+                else addParts(localAge, 16, 0, anchor, 1.0, impact = true,
+                    localRadius = 1.6 + charge * .4)
+                if (age < 28) addParticles(age, duration, radius, anchor)
+                else addParticles(localAge, 16, 1.6 + charge * .4, anchor,
+                    localReach = radius, impact = true)
             }
             spell == StaffSpell.TIDE && input.secondary -> {
                 val anchor = Vector(0.0, 0.0, PREVIEW_REACH_BLOCKS * smooth((age - 4.0) / 30.0))
-                addParticles(age, duration, radius, anchor)
-            }
-            spell == StaffSpell.GALE && input.secondary -> {
-                val anchor = Vector(0.0, 0.0, PREVIEW_REACH_BLOCKS * smooth((age - 4.0) / 20.0))
                 addParts(age, duration, 0, anchor)
                 addParticles(age, duration, radius, anchor)
             }
+            spell == StaffSpell.GALE && input.secondary -> {
+                val particleAnchor = Vector(0.0, 0.0, PREVIEW_REACH_BLOCKS * smooth((age - 4.0) / 20.0))
+                addParts(age, duration, 0, particleAnchor.clone().add(Vector(0.0, 1.1, 0.0)))
+                addParticles(age, duration, radius, particleAnchor)
+            }
             spell == StaffSpell.GALE -> {
+                addParts(age, duration, 0, endpoint)
                 addParticles(age, duration, radius, endpoint)
             }
             spell == StaffSpell.NOVA && !input.secondary -> {
@@ -197,14 +210,14 @@ object StaffRedesignPreviewExport {
         val frames = ticks(duration).map { age -> arsenalFrame(spell, input, charge, duration, age) }
         val notes = when {
             spell == StaffSpell.TIDE && !input.secondary ->
-                "One native-particle water orb travels along the clipped ground lane from tick 4 to tick 28; the moving BlockDisplay core changes to a splash impact at arrival. Preview uses a flat 12-block lane."
+                "One water orb travels along the clipped lane from tick 4 to tick 28; the moving BlockDisplay core changes to its source impact geometry at arrival and fades for 16 ticks. Preview uses a flat 12-block lane."
             spell == StaffSpell.NOVA && !input.secondary ->
                 "Two crawling root runners grow from the caster toward the target, then six thorn fingers close around the endpoint at tick 30. Display geometry and native particles use a fixed illustrative 12-block lane."
             spell == StaffSpell.GALE ->
-                if (input.secondary) "A compact hollow air-ram hoop follows source smoothstep progress from tick 4 over 20 ticks; preview uses a fixed 12-block lane."
-                else "A stationary three-rope wind column winds around an open core. Sparse CLOUD accents and native GUST/DUST particles keep its volume readable."
+                if (input.secondary) "Two interwoven display bands and a hollow ram head follow the source controller from tick 4 over 20 ticks; display origin is raised 1.1 blocks while particles stay on the ground path."
+                else "Three translucent display ribbons spiral around an open tornado core at the attack point; the native particle accents use the same authored funnel frame."
             spell == StaffSpell.TIDE && input.secondary ->
-                "A low curling water sheet and splash-foam crest follow source smoothstep progress from tick 4 over 30 ticks; preview uses a fixed 12-block lane."
+                "A three-row curled water wall and foam crest follow the controller's smoothstep path from tick 4 over 30 ticks; preview uses a fixed 12-block lane."
             spell == StaffSpell.REQUIEM && !input.secondary ->
                 "Three soul missiles launch from offset lanes 6 ticks apart, each taking 14 ticks to reach a clipped target line; charge adds two more. Preview shows a fixed 12-block target lane."
             spell == StaffSpell.REQUIEM && input.secondary ->
@@ -228,7 +241,9 @@ object StaffRedesignPreviewExport {
             "anchor" to "cast ground/target anchor, depending on the live spell; preview geometry uses +Z as forward",
             "previewReachBlocks" to PREVIEW_REACH_BLOCKS,
             "timelineNote" to "$notes Most single-source particle frames use a 160-sample admission limit. OSSUARY divides a 240-sample cast-frame budget across its spikes; REQUIEM applies the per-source limit to each active missile, while PRISM beam lanes are sampled separately.",
-            "sourceFunctions" to listOf("staffArsenalParts", "staffArsenalParticles", "staffPrismBeam"),
+            "sourceFunctions" to (listOf("staffArsenalParts", "staffArsenalParticles", "staffPrismBeam") +
+                if (spell == StaffSpell.GALE || spell == StaffSpell.TIDE)
+                    listOf("staffTideGaleParts", "staffTideGaleParticleSamples") else emptyList()),
             "frames" to frames,
         )
     }
@@ -279,6 +294,103 @@ object StaffRedesignPreviewExport {
         )
     }
 
+    /** Ember's persistent body is sampled at the real charge clock, then carried without respawning. */
+    private fun emberChargeClip(holdTicks: Int): Map<String, Any> {
+        val charge = staffChargeProgress(holdTicks)
+        var totalTravel = 0.0
+        var travelTicks = 0
+        while (totalTravel < PREVIEW_REACH_BLOCKS && travelTicks < 80) {
+            travelTicks++
+            totalTravel = (totalTravel + staffEmberStep(travelTicks, EMBER_PREVIEW_SPEED))
+                .coerceAtMost(PREVIEW_REACH_BLOCKS)
+        }
+        val duration = holdTicks + travelTicks + 1
+        val eye = Vector(0.0, 1.62, 0.0)
+        val offset = staffEmberChargeOffset()
+        val bodyAtRelease = staffEmberBodyParts(charge, offset).map { display ->
+            display.copy(center = org.joml.Vector3f(display.center).sub(offset))
+        }
+        val frames = ticks(duration - 1).map { age ->
+            val flying = age >= holdTicks
+            val parts = if (!flying) {
+                val updateTick = (age / CHARGE_UPDATE_TICKS) * CHARGE_UPDATE_TICKS
+                val progress = staffChargeProgress(minOf(updateTick, holdTicks))
+                staffChargeParts(StaffSpell.EMBER, progress, age).mapIndexed { index, display ->
+                    part(display, "ember-body", index, eye)
+                }
+            } else {
+                val flightAge = age - holdTicks
+                val distance = (1..flightAge).sumOf { staffEmberStep(it, EMBER_PREVIEW_SPEED) }
+                    .coerceAtMost(PREVIEW_REACH_BLOCKS)
+                val origin = eye.clone().add(Vector(offset.x.toDouble(), offset.y.toDouble(), offset.z.toDouble()))
+                    .add(Vector(0.0, 0.0, distance))
+                bodyAtRelease.mapIndexed { index, display -> part(display, "ember-body", index, origin) }
+            }
+            mapOf("tick" to age, "parts" to parts, "emissions" to emptyList<Any>())
+        }
+        return mapOf(
+            "id" to "ember-charge-${chargeToken(charge)}", "spell" to StaffSpell.EMBER.id, "input" to "CHARGE",
+            "quick" to false, "charge" to charge, "durationTicks" to duration, "tailTicks" to 0,
+            "frameStepTicks" to FRAME_STEP_TICKS, "particleOnly" to false,
+            "anchor" to "caster eye; neutral yaw/pitch with local +Z forward",
+            "previewReachBlocks" to PREVIEW_REACH_BLOCKS,
+            "timelineNote" to "Source geometry: ${holdTicks}-tick charge, then the same 21 body parts and identities move along +Z using staffEmberStep at the default 1.2 speed. The release origin includes staffEmberChargeOffset; release age 0 preserves the charge pose. Flight is shown through the fixed 12-block preview lane.",
+            "sourceFunctions" to listOf("staffChargeProgress", "staffChargeParts", "staffEmberBodyParts", "staffEmberChargeOffset", "staffEmberStep"),
+            "frames" to frames,
+        )
+    }
+
+    /** Icicle's eleven real charge scenes are kept as separate keyed eight-part bodies. */
+    private fun icicleChargeClip(holdTicks: Int): Map<String, Any> {
+        val charge = staffChargeProgress(holdTicks)
+        val eye = Vector(0.0, 1.62, 0.0)
+        val frames = ticks(holdTicks).map { age ->
+            val updateTick = (age / CHARGE_UPDATE_TICKS) * CHARGE_UPDATE_TICKS
+            val progress = staffChargeProgress(minOf(updateTick, holdTicks))
+            val parts = (0 until 11).flatMap { slot ->
+                val offset = staffIcicleChargeAnchorOffset(slot)
+                val anchor = eye.clone().add(Vector(offset.x.toDouble(), offset.y.toDouble(), offset.z.toDouble()))
+                staffIcicleChargeParts(progress, slot).mapIndexed { index, display ->
+                    part(display, "icicle-charge:$slot", index, anchor)
+                }
+            }
+            mapOf("tick" to age, "parts" to parts, "emissions" to emptyList<Any>())
+        }
+        return mapOf(
+            "id" to "icicle-charge-${chargeToken(charge)}", "spell" to StaffSpell.ICICLE.id, "input" to "CHARGE",
+            "quick" to false, "charge" to charge, "durationTicks" to holdTicks + 1, "tailTicks" to 0,
+            "frameStepTicks" to FRAME_STEP_TICKS, "particleOnly" to false,
+            "anchor" to "caster eye and eleven source shoulder anchors; neutral yaw with local +Z forward",
+            "previewReachBlocks" to PREVIEW_REACH_BLOCKS,
+            "timelineNote" to "Source charge formation only: eleven eight-part BlockDisplay bodies update on the production four-tick charge clock. At ${holdTicks} ticks, staffIcicleCount is ${staffIcicleCount(charge)}; release/bolt flight is outside this clip.",
+            "sourceFunctions" to listOf("staffChargeProgress", "staffIcicleChargeAnchorOffset", "staffIcicleChargeParts", "staffIcicleCount"),
+            "frames" to frames,
+        )
+    }
+
+    private fun preparationClip(spell: StaffSpell, secondary: Boolean): Map<String, Any>? {
+        val duration = PREPARATION_DURATION_TICKS
+        val input = if (secondary) "PREP_SECONDARY" else "PREP_PRIMARY"
+        val eye = Vector(0.0, 1.62, 0.0)
+        val frames = ticks(duration).map { age ->
+            val parts = staffPreparationParts(spell, secondary, age, duration).mapIndexed { index, display ->
+                part(display, "preparation:${spell.id}:${if (secondary) "secondary" else "primary"}", index, eye)
+            }
+            mapOf("tick" to age, "parts" to parts, "emissions" to emptyList<Any>())
+        }
+        if (frames.none { (it["parts"] as List<*>).isNotEmpty() }) return null
+        val suffix = if (secondary) "secondary" else "primary"
+        return mapOf(
+            "id" to "${spell.id}-prep_${suffix}-0", "spell" to spell.id, "input" to input,
+            "quick" to false, "charge" to 0.0, "durationTicks" to duration, "tailTicks" to 0,
+            "frameStepTicks" to FRAME_STEP_TICKS, "particleOnly" to false,
+            "anchor" to "caster eye; yaw-only scene frame with local +Z forward",
+            "previewReachBlocks" to PREVIEW_REACH_BLOCKS,
+            "timelineNote" to "Production staffPreparationParts display cue at eye origin: 10 ticks, sampled every two ticks. Age 0 opens; ages 2–4 show the full pose; ages 6–8 show its fade. This is the authored pre-cast cue, not an attack animation.",
+            "sourceFunctions" to listOf("staffPreparationParts"), "frames" to frames,
+        )
+    }
+
     private fun channelClip(spell: StaffSpell, input: StaffCastInput, charge: Double): Map<String, Any> {
         val duration = if (spell == StaffSpell.INFERNO) 60 else 90
         var throwZ = 4.0
@@ -325,10 +437,17 @@ object StaffRedesignPreviewExport {
 
     @JvmStatic
     fun main(args: Array<String>) {
-        require(args.size == 1) { "Usage: StaffRedesignPreviewExport <redesign-motion-clips.json>" }
-        val output = Path.of(args.single())
-        val clips = MockBukkitTestRuntime.open().use {
-            buildList {
+        require(args.size in 1..2) {
+            "Usage: StaffRedesignPreviewExport <redesign-motion-clips.json> [defense-charge-preparation-clips.json]"
+        }
+        val output = Path.of(args[0])
+        val focusedOutput = args.getOrNull(1)?.let { Path.of(it) }
+            ?: output.resolveSibling("defense-charge-preparation-clips.json")
+        require(focusedOutput.toAbsolutePath().normalize() != output.toAbsolutePath().normalize()) {
+            "The focused preview must use a separate file from the full export."
+        }
+        val (clips, chargeClips, preparationClips) = MockBukkitTestRuntime.open().use {
+            val clips = buildList {
                 redesignArsenal.forEach { spell ->
                     listOf(StaffCastInput.PRIMARY, StaffCastInput.SECONDARY).forEach { input ->
                         listOf(0.0, 1.0).forEach { charge -> add(arsenalClip(spell, input, charge)) }
@@ -344,19 +463,48 @@ object StaffRedesignPreviewExport {
                     add(quickClip(spell, StaffCastInput.QUICK_SECONDARY))
                 }
             }
+            Triple(
+                clips,
+                listOf(4, 20, 36).flatMap { holdTicks ->
+                    listOf(emberChargeClip(holdTicks), icicleChargeClip(holdTicks))
+                },
+                StaffSpell.entries.flatMap { spell ->
+                    listOf(false, true).mapNotNull { secondary -> preparationClip(spell, secondary) }
+                },
+            )
         }
-        output.parent?.let { Files.createDirectories(it) }
-        Files.writeString(output, GsonBuilder().setPrettyPrinting().create().toJson(mapOf(
-            "title" to "ARC staff redesign · source-driven particle and display preview",
+        val fullExport = mapOf(
+            "title" to "ARC · Атаки и защита посохов",
             "coordinates" to mapOf(
                 "space" to "spell-local", "origin" to "fixed cast/target anchor", "forward" to "+Z", "unit" to "block",
             ),
             "frameStepTicks" to FRAME_STEP_TICKS,
             "particleTailTicks" to 40,
             "previewReachBlocks" to PREVIEW_REACH_BLOCKS,
-            "evidence" to "Frames call production staffArsenalParts/staffArsenalParticles, staffPrismBeam, staffDefenseParts/staffDefenseParticles, and held-channel geometry at the runtime two-tick cadence. BlockDisplay parts export their source material, dimensions, and transforms. Native source samples and source-timed movement are rendered in an offline geometry preview; it does not simulate damage, target selection, collision, sounds, client lighting, or exact vanilla particle physics. Moving attacks use an illustrative fixed 12-block lane. Preview shape and timing are not proof of a native-client result.",
+            "evidence" to "Кадры вызывают production-геометрию и частицы staffArsenalParts/staffArsenalParticles, staffPrismBeam, staffDefenseParts/staffDefenseParticles и held-channel geometry с фактическими материалами, размерами и преобразованиями. Движущиеся атаки показаны на иллюстративной линии 12 блоков. Офлайн-превью не моделирует урон, выбор цели, столкновения, звук, освещение клиента и точную физику ванильных частиц; это не подтверждение результата в игровом клиенте.",
             "clips" to clips,
-        )).plus("\n"))
+        )
+        output.parent?.let { Files.createDirectories(it) }
+        Files.writeString(output, GsonBuilder().setPrettyPrinting().create().toJson(fullExport).plus("\n"))
+        if (focusedOutput != null) {
+            val focusedClips = clips.filter { clip ->
+                clip["quick"] == true || ((clip["spell"] == "tide" || clip["spell"] == "gale") &&
+                    (clip["input"] == "PRIMARY" || clip["input"] == "SECONDARY"))
+            } + chargeClips + preparationClips
+            focusedOutput.parent?.let { Files.createDirectories(it) }
+            Files.writeString(focusedOutput, GsonBuilder().setPrettyPrinting().create().toJson(mapOf(
+                "title" to "ARC · Щиты, атаки и подготовка посохов",
+                "coordinates" to mapOf(
+                    "space" to "spell-local", "origin" to "caster eye or source cast anchor", "forward" to "+Z", "unit" to "block",
+                ),
+                "frameStepTicks" to FRAME_STEP_TICKS,
+                "particleTailTicks" to 40,
+                "previewReachBlocks" to PREVIEW_REACH_BLOCKS,
+                "evidence" to "Набор объединяет защиту, атаки TIDE/GALE, заряд Ember/Icicle и production-подготовки мгновенных заклинаний. Display-части несут исходные материалы, размеры, повороты и стабильные идентификаторы. Офлайн-превью не проверяет игровой клиент, урон, столкновения или точную физику частиц.",
+                "clips" to focusedClips,
+            )).plus("\n"))
+            println("STAFF_REDESIGN_FOCUSED_PREVIEW clips=${focusedClips.size} output=$focusedOutput")
+        }
         println("STAFF_REDESIGN_PREVIEW clips=${clips.size} output=$output")
     }
 }

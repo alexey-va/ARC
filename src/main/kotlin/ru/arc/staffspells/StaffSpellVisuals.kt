@@ -140,14 +140,79 @@ internal class StaffSpellVisuals(
             playPrivate(player, anchor, Sound.ENTITY_PLAYER_LEVELUP, 0.12f, 1.45f)
         }
 
-        val radius = 0.07 + charge * 0.12
-        repeat(CHARGE_PARTICLE_COUNT) { index ->
-            val angle = index * PI / (CHARGE_PARTICLE_COUNT / 2.0) + charge * PI * 2.0
-            val point = anchor.clone().add(cos(angle) * radius, sin(angle) * radius * 0.55,
-                sin(angle) * radius)
-            emitPrivate(player, point, Particle.DUST_COLOR_TRANSITION, palette.transition)
+        when (spell) {
+            StaffSpell.EMBER -> emberChargeStream(player, anchor, palette.transition, charge)
+            StaffSpell.ICICLE -> icicleChargeWisps(player, anchor, palette.transition, charge)
+            else -> {
+                val radius = 0.07 + charge * 0.12
+                repeat(CHARGE_PARTICLE_COUNT) { index ->
+                    val angle = index * PI / (CHARGE_PARTICLE_COUNT / 2.0) + charge * PI * 2.0
+                    val point = anchor.clone().add(cos(angle) * radius, sin(angle) * radius * 0.55,
+                        sin(angle) * radius)
+                    emitPrivate(player, point, Particle.DUST_COLOR_TRANSITION, palette.transition)
+                }
+                if (charge >= CHARGE_QUARTER) emitPrivate(player, anchor, palette.accent)
+            }
         }
-        if (charge >= CHARGE_QUARTER) emitPrivate(player, anchor, palette.accent)
+    }
+
+    private fun emberChargeStream(player: Player, anchor: Location, color: Particle.DustTransition, charge: Double) {
+        val eye = player.eyeLocation
+        val yaw = Math.toRadians(eye.yaw.toDouble())
+        val forward = Vector(-sin(yaw), 0.0, cos(yaw))
+        val right = forward.clone().crossProduct(Vector(0.0, 1.0, 0.0))
+        val start = anchor.clone().add(forward.clone().multiply(CHARGE_STREAM_START_FORWARD))
+        val orientation = chargeOrientation(eye, StaffSpell.EMBER)
+        val frontFacet = staffEmberBodyParts(charge, staffEmberChargeOffset())
+            .first { it.identity == "ember:5:hotspot" }
+        val targetOffset = orientation.transform(Vector3f(frontFacet.center))
+        val target = eye.clone().add(targetOffset.x.toDouble(), targetOffset.y.toDouble(), targetOffset.z.toDouble())
+        val reach = target.toVector().subtract(start.toVector())
+        val arc = 0.10 + charge * 0.08
+        for (index in 1..4) {
+            val t = index / 4.0
+            val curl = sin(t * PI)
+            val point = start.clone().add(reach.clone().multiply(t))
+                .add(right.clone().multiply(curl * arc)).add(0.0, curl * 0.07, 0.0)
+            emitChargeParticle(player, eye, point, Particle.FLAME)
+            if (index % 2 == 0) emitChargeParticle(player, eye, point, Particle.DUST_COLOR_TRANSITION, color)
+        }
+    }
+
+    private fun icicleChargeWisps(player: Player, anchor: Location, color: Particle.DustTransition, charge: Double) {
+        val eye = player.eyeLocation
+        val yaw = Math.toRadians(eye.yaw.toDouble())
+        val forward = Vector(-sin(yaw), 0.0, cos(yaw))
+        val right = forward.clone().crossProduct(Vector(0.0, 1.0, 0.0))
+        val start = anchor.clone().add(forward.clone().multiply(CHARGE_STREAM_START_FORWARD))
+        val orientation = chargeOrientation(eye, StaffSpell.ICICLE)
+        for (slot in ICICLE_FEEDBACK_SLOTS) {
+            val core = staffIcicleChargeParts(charge, slot).first()
+            val facingSurface = core.rotation.transform(Vector3f(0f, 0f, core.scale.z * 0.45f))
+            val localTarget = Vector3f(staffIcicleChargeAnchorOffset(slot))
+                .add(core.center).add(facingSurface)
+            val targetOffset = orientation.transform(localTarget)
+            val target = eye.clone().add(targetOffset.x.toDouble(), targetOffset.y.toDouble(), targetOffset.z.toDouble())
+            val drift = target.toVector().subtract(start.toVector())
+            for (sample in 0..1) {
+                val t = if (sample == 0) 0.72 else 1.0
+                val curl = sin(t * PI)
+                val point = start.clone().add(drift.clone().multiply(t))
+                    .add(right.clone().multiply(curl * (0.04 + charge * 0.04)))
+                    .add(0.0, curl * 0.04, 0.0)
+                emitChargeParticle(player, eye, point,
+                    if (sample == 0) Particle.SNOWFLAKE else Particle.DUST_COLOR_TRANSITION,
+                    if (sample == 0) null else color)
+            }
+        }
+    }
+
+    private fun chargeOrientation(eye: Location, spell: StaffSpell) = staffChargeOrientation(spell, eye.yaw,
+        Vector3f(eye.direction.x.toFloat(), eye.direction.y.toFloat(), eye.direction.z.toFloat()))
+
+    private fun emitChargeParticle(player: Player, eye: Location, at: Location, particle: Particle, data: Any? = null) {
+        if (eye.world != at.world || eye.distanceSquared(at) < CHARGE_PARTICLE_MIN_EYE_DISTANCE_SQUARED) return
+        emitPrivate(player, at, particle, data)
     }
 
     /** One subdued, caster-only cooldown click and dust pulse shared by all staff inputs. */
@@ -1455,6 +1520,9 @@ internal class StaffSpellVisuals(
         const val CHARGE_THREE_QUARTERS = 0.75
         const val CHARGE_READY = 0.99
         const val CHARGE_RESET_EPSILON = 0.12
+        const val CHARGE_STREAM_START_FORWARD = 0.22
+        const val CHARGE_PARTICLE_MIN_EYE_DISTANCE_SQUARED = 1.5 * 1.5
+        val ICICLE_FEEDBACK_SLOTS = intArrayOf(0, 5, 10)
         const val COOLDOWN_FEEDBACK_TICKS = 8L
         const val COOLDOWN_PARTICLE_COUNT = 4
         const val COOLDOWN_PARTICLE_RADIUS = 0.08

@@ -48,7 +48,7 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         val early = staffChargeParts(StaffSpell.ICICLE, 0.0, 0)
         val half = staffChargeParts(StaffSpell.ICICLE, 0.5, 18)
         val full = staffChargeParts(StaffSpell.ICICLE, 1.0, 36)
-        full.size shouldBe 33
+        full.size shouldBe 88
         early.size shouldBe full.size
         early.map { it.material } shouldBe full.map { it.material }
         early.map { it.visible } shouldBe full.map { it.visible }
@@ -303,7 +303,7 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         meteor.takeLast(14).all { it.material in setOf(Material.MAGMA_BLOCK, Material.BLACKSTONE) } shouldBe true
     }
 
-    "comet is visible at its release muzzle and accelerates with a growing core" {
+    "comet is visible at its release muzzle and accelerates without resizing its charged core" {
         listOf(0.0, 1.0).forEach { charge ->
             val eye = org.bukkit.util.Vector()
             var originZ = 2.4
@@ -345,7 +345,7 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
 
             firstVisibleAge shouldBe 0
             val firstSizeRatio = visibleCoreScales.first() / visibleCoreScales.last()
-            (firstSizeRatio in 0.67f..0.69f) shouldBe true
+            firstSizeRatio shouldBe 1f
             visibleCoreScales.zipWithNext().all { (before, after) -> after >= before } shouldBe true
         }
     }
@@ -540,8 +540,60 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
             h.effects.play(icicle.uniqueId, StaffSpell.ICICLE, icicle.eyeLocation,
                 durationTicks = 220, charging = true)!!
             h.recorder.records.drop(body.size).forEach {
-                it.interpolationDurationTicks shouldBe StaffSpellDisplayEffects.FRAME_TICKS
-                it.teleportDurationTicks shouldBe StaffSpellDisplayEffects.FRAME_TICKS
+                it.interpolationDurationTicks shouldBe StaffSpellDisplayEffects.CHARGE_INTERPOLATION_TICKS
+                it.teleportDurationTicks shouldBe StaffSpellDisplayEffects.CHARGE_INTERPOLATION_TICKS
+            }
+        }
+    }
+
+    "charged projectiles keep their exact handles world pose and body on release" {
+        withDisplayHarness { h ->
+            val caster = h.player("charge-release")
+            for (spell in listOf(StaffSpell.EMBER, StaffSpell.ICICLE)) {
+                val before = h.recorder.records.size
+                val at = caster.eyeLocation.clone().apply { yaw = 37f; pitch = -22f }
+                if (spell == StaffSpell.ICICLE) at.add(3.0, 1.0, -2.0)
+                val id = h.effects.play(caster.uniqueId, spell, at, durationTicks = 220,
+                    charging = true, chargeSlot = if (spell == StaffSpell.ICICLE) 5 else null)!!
+                h.effects.charge(id, at, .63)
+                val body = h.recorder.records.drop(before).toList()
+                val positions = body.map { it.teleports.last().clone() }
+                val poses = body.map { it.poses.last() }
+                val origin = h.effects.chargeOrigin(id)!!
+                h.effects.releaseCharge(id, 80, controllerDriven = true) shouldBe id
+                h.effects.chargeOrigin(id) shouldBe null
+                h.recorder.records.size shouldBe before + body.size
+                body.forEachIndexed { index, record ->
+                    record.removals shouldBe 0
+                    record.blockUpdates shouldBe 0
+                    (record.teleports.last().distance(positions[index]) < 1e-5) shouldBe true
+                    record.poses.last() shouldBe poses[index]
+                }
+                h.effects.moveProjectile(id, origin.clone().add(0.0, 0.0, 1.2), at.direction)
+                h.effects.synchronize(id, 1)
+                body.forEachIndexed { index, record ->
+                    record.removals shouldBe 0
+                    record.poses.last().values.subList(3, 6) shouldBe poses[index].values.subList(3, 6)
+                }
+                h.effects.remove(id)
+                body.all { it.removals == 1 } shouldBe true
+            }
+        }
+    }
+
+    "preparation scenes honor their own clock and finite lifetime for Ember and Mark" {
+        withDisplayHarness { h ->
+            val caster = h.player("preparation-owner")
+            for (spell in listOf(StaffSpell.EMBER, StaffSpell.MARK)) {
+                val before = h.recorder.records.size
+                h.effects.play(caster.uniqueId, spell, caster.eyeLocation,
+                    durationTicks = 10, secondary = true, preparation = true)
+                val parts = h.recorder.records.drop(before)
+                parts.isNotEmpty() shouldBe true
+                h.scheduler.tick(4)
+                parts.all { it.poses.size == 3 && it.removals == 0 } shouldBe true
+                h.scheduler.tick(6)
+                parts.all { it.removals == 1 } shouldBe true
             }
         }
     }
@@ -553,7 +605,7 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
             val id = h.effects.play(caster.uniqueId, StaffSpell.EMBER, start,
                 start.clone().add(0.0, 0.0, 1.0), durationTicks = 80, controllerDriven = true)!!
             val flight = h.recorder.records.toList()
-            flight.size shouldBe 14
+            flight.size shouldBe 21
             h.effects.synchronize(id, 2)
 
             val collision = start.clone().add(0.0, 0.0, 1.5)
@@ -561,7 +613,7 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
 
             val newParts = h.recorder.records.drop(flight.size).toList()
             newParts.size shouldBe 46
-            flight.take(2).all { it.removals == 0 && it.blockUpdates == 0 } shouldBe true
+            flight.take(2).all { it.removals == 0 && it.blockUpdates == 1 } shouldBe true
             flight.drop(2).all { it.removals == 1 } shouldBe true
             val impactParts = staffDisplayParts(StaffSpell.EMBER, 0, 12, 1.5, 2.8, true).drop(2)
             newParts.zip(impactParts).all { (record, part) ->

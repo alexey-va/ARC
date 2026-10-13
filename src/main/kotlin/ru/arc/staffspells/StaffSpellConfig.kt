@@ -244,6 +244,11 @@ internal open class StaffSpellConfig(private val config: Config) {
     }
 
     private fun buildItem(spell: StaffSpell, duelOnly: Boolean) = ItemStack(Material.BLAZE_ROD).apply {
+        val useMessage = when (spell) {
+            StaffSpell.INFERNO, StaffSpell.GRAVITY -> "channel-use"
+            StaffSpell.EMBER, StaffSpell.ICICLE -> "charge-use"
+            else -> "use"
+        }
         if (!duelOnly) {
             val skinId = config.string("${spell.id}.skin", "").trim()
             if (skinId.isNotEmpty()) {
@@ -276,7 +281,7 @@ internal open class StaffSpellConfig(private val config: Config) {
                 config.component("${spell.id}.quick", TagResolver.empty()).decoration(TextDecoration.ITALIC, false),
                 config.component("${spell.id}.quick-secondary", TagResolver.empty()).decoration(TextDecoration.ITALIC, false),
                 text(if (duelOnly) "duel-only" else "prototype"), Component.empty(),
-                text(if (spell in setOf(StaffSpell.INFERNO, StaffSpell.GRAVITY)) "channel-use" else "use")))
+                text(useMessage)))
             meta.persistentDataContainer.set(StaffSpell.itemKey, PersistentDataType.STRING, spell.id)
             if (duelOnly) meta.persistentDataContainer.set(StaffSpell.duelOnlyKey, PersistentDataType.BYTE, 1)
             meta.setMaxStackSize(1)

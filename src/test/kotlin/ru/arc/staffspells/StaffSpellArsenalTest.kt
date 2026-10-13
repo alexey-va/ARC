@@ -2,6 +2,7 @@ package ru.arc.staffspells
 
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
+import io.mockk.verify
 import net.kyori.adventure.text.Component
 import org.bukkit.Material
 import org.bukkit.event.player.PlayerQuitEvent
@@ -13,8 +14,7 @@ class StaffSpellArsenalTest : FreeSpec({
                 val duration = staffArsenalLifetime(spell, secondary)
                 val parts = staffArsenalParts(spell, 12, duration, 20.0, 3.0, false,
                     secondary, StaffCastInput.of(secondary, false), 1.0)
-                val particleOnly = spell == StaffSpell.GALE && !secondary || spell == StaffSpell.TIDE && secondary
-                if (particleOnly) parts.isEmpty() shouldBe true else (parts.size in 1..48) shouldBe true
+                (parts.size in 1..48) shouldBe true
                 val samples = staffArsenalParticles(spell, 12, duration, 3.0, secondary, 1.0)
                 val particleBudget = if (spell == StaffSpell.OSSUARY) 6..14 else 32..192
                 (samples.size in particleBudget) shouldBe true
@@ -120,6 +120,43 @@ class StaffSpellArsenalTest : FreeSpec({
             h.hits shouldBe emptyList()
             h.scheduler.tick(26)
             h.hits.map { it.uniqueId } shouldBe listOf(target.uniqueId)
+        }
+    }
+
+    "GALE primary and TIDE secondary own display scenes, while the TIDE prison stays at arrival" {
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("arsenal-display-scenes")
+            val gale = h.player("gale-display-scene", world, StaffSpell.GALE)
+            h.zombie(world, x = .5, z = 8.0)
+            h.controller.start()
+            h.controller.cast(gale, StaffCastInput.PRIMARY, 1.0)
+            val galeScene = h.visualPlays.single { it.spell == StaffSpell.GALE && !it.secondary }
+            (galeScene.from.distance(gale.location) > 4.0) shouldBe true
+        }
+
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("tide-wave-display-scene")
+            val tide = h.player("tide-wave-display-scene", world, StaffSpell.TIDE)
+            h.zombie(world, x = .5, z = 8.0)
+            h.controller.start()
+            h.controller.cast(tide, StaffCastInput.SECONDARY, 0.0)
+            val waveScene = h.visualPlays.single { it.spell == StaffSpell.TIDE && it.secondary }
+            h.scheduler.tick(12)
+            val moves = h.movedEffects.filter { it.first == waveScene.id }
+            (moves.last().second.distance(moves.first().second) > .3) shouldBe true
+        }
+
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("tide-prison-stage")
+            val tide = h.player("tide-prison-stage", world, StaffSpell.TIDE)
+            h.zombie(world, x = .5, z = 8.0)
+            h.controller.start()
+            h.controller.cast(tide, StaffCastInput.PRIMARY, 0.0)
+            val scene = h.visualPlays.single { it.spell == StaffSpell.TIDE && !it.secondary }
+            h.scheduler.tick(36)
+            h.movedEffects.count { it.first == scene.id } shouldBe 15
+            verify(exactly = 1) { h.effects.impact(scene.id, any(), any(), 16) }
+            verify(exactly = 15) { h.effects.synchronize(scene.id, any()) }
         }
     }
 

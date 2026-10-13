@@ -97,7 +97,7 @@ internal class StaffSpellController(
     internal val summons = StaffSpellSummons(settings, damage, visuals, targeting, summonActorFactory)
     init { damage.summonCast = summons::castFor }
     internal val input = StaffSpellInput(this)
-    private val chargeScenes = mutableMapOf<UUID, UUID?>()
+    private val chargeScenes = mutableMapOf<UUID, List<UUID?>>()
     private val lances = mutableListOf<PendingStaffLance>()
     private val cooldownInputs = mutableMapOf<UUID, StaffCastInput>()
     private val marks = mutableMapOf<UUID, PendingStaffMark>()
@@ -216,10 +216,16 @@ internal class StaffSpellController(
     }
 
     override fun charge(player: Player, spell: StaffSpell, progress: Double) {
-        val id = chargeScenes.getOrPut(player.uniqueId) {
-            effects.play(player.uniqueId, spell, player.eyeLocation, durationTicks = 220, charging = true)
+        val ids = chargeScenes.getOrPut(player.uniqueId) {
+            List(if (spell == StaffSpell.ICICLE) 11 else 1) { index ->
+                val at = if (spell == StaffSpell.ICICLE) icicleChargeAnchor(player, index) else player.eyeLocation
+                effects.play(player.uniqueId, spell, at, durationTicks = 220, charging = true,
+                    chargeSlot = index.takeIf { spell == StaffSpell.ICICLE })
+            }
         }
-        effects.charge(id, player.eyeLocation, progress)
+        ids.forEachIndexed { index, id ->
+            effects.charge(id, if (spell == StaffSpell.ICICLE) icicleChargeAnchor(player, index) else player.eyeLocation, progress)
+        }
         visuals.withOwner(player.uniqueId) { visuals.chargeFeedback(player, spell, progress) }
         if (spell == StaffSpell.EMBER && player.isSneaking) {
             meteorPoints(player).forEach { at -> visuals.withOwner(player.uniqueId) {
@@ -237,7 +243,7 @@ internal class StaffSpellController(
 
     override fun cancelCharge(player: Player) {
         visuals.cancelChargeFeedback(player.uniqueId)
-        effects.remove(chargeScenes.remove(player.uniqueId))
+        chargeScenes.remove(player.uniqueId)?.forEach(effects::remove)
         StaffSpell.from(player.inventory.itemInMainHand)?.let { showCooldown(player, it) }
     }
 
@@ -276,6 +282,9 @@ internal class StaffSpellController(
             return
         }
         beginCooldown(player, spell, input, cooldownTicks)
+        if (staffPreparationParts(spell, secondary, 0).isNotEmpty())
+            effects.play(player.uniqueId, spell, player.eyeLocation, durationTicks = 10,
+                secondary = secondary, preparation = true)
         if (!input.quick && spell !in ARSENAL_SPELLS) visuals.withOwner(cast.casterId) { visuals.release(player.eyeLocation, spell, level >= 0.75) }
         if (!input.quick && spell == StaffSpell.CHAIN) visuals.withOwner(cast.casterId) { visuals.lightningLaunch(player.eyeLocation) }
         if (spell == StaffSpell.NECROMANCER) Unit // Already admitted before consuming cooldown.
@@ -291,7 +300,8 @@ internal class StaffSpellController(
                 visuals.withOwner(cast.casterId) { visuals.markLaunch(visualStart(player.eyeLocation, point), point) }
             }
             StaffSpell.FROST -> frost(player, cast, tuning)
-            StaffSpell.ICICLE -> frostIcicles(player, cast, tuning, 7 + (level * 4).toInt())
+            StaffSpell.ICICLE -> frostIcicles(player, cast, tuning, staffIcicleCount(level),
+                chargeScenes.remove(player.uniqueId).orEmpty())
             StaffSpell.FAULT -> fault(player, cast, tuning, secondary = false)
             StaffSpell.LANCE -> lance(player, cast, tuning, secondary = false)
             StaffSpell.EMBER -> {
@@ -300,23 +310,37 @@ internal class StaffSpellController(
                     val removed = embers.removeAt(embers.indexOfFirst { it.cast.casterId == player.uniqueId })
                     effects.remove(removed.visualId)
                 }
+                val heldId = chargeScenes.remove(player.uniqueId)?.firstOrNull()
                 val eye = player.eyeLocation
-                val direction = eye.direction.normalize()
-                // Release is the launch: sweep the short muzzle segment now, then render a visible core outside POV.
-                val muzzle = rayEnd(eye, direction, 2.4)
+                val fallbackOffset = staffChargeOrientation(spell, eye.yaw,
+                    org.joml.Vector3f(eye.direction.x.toFloat(), eye.direction.y.toFloat(), eye.direction.z.toFloat()))
+                    .transform(staffEmberChargeOffset())
+                val heldOrigin = effects.chargeOrigin(heldId) ?: eye.clone().add(
+                    fallbackOffset.x.toDouble(), fallbackOffset.y.toDouble(), fallbackOffset.z.toDouble())
+                val muzzleDelta = heldOrigin.toVector().subtract(eye.toVector())
+                val muzzleDistance = muzzleDelta.length()
+                val muzzleDirection = muzzleDelta.clone().normalize()
+                // Check the held body's path out of cover before transferring its scene to flight.
+                val muzzle = rayEnd(eye, muzzleDirection, muzzleDistance)
                 val near = lineTargets(player, eye, muzzle, .25, cast).firstOrNull()
-                if (near != null || eye.distanceSquared(muzzle) < 2.4 * 2.4 - .0001) {
-                    val at = near?.boundingBox?.expand(.25)?.rayTrace(eye.toVector(), direction, eye.distance(muzzle))
+                if (near != null || eye.distanceSquared(muzzle) < muzzleDistance * muzzleDistance - .0001) {
+                    val at = near?.boundingBox?.expand(.25)?.rayTrace(eye.toVector(), muzzleDirection, eye.distance(muzzle))
                         ?.hitPosition?.toLocation(eye.world) ?: muzzle
                     areaDamage(player, at, settings.emberRadius, cast, tuning, near)
                     visuals.withOwner(cast.casterId) { visuals.emberBurst(at, settings.emberRadius) }
-                    effects.play(player.uniqueId, spell, at, radius = settings.emberRadius,
+                    if (effects.releaseCharge(heldId, EMBER_IMPACT_DURATION_TICKS) != null)
+                        effects.impact(heldId, at, settings.emberRadius, EMBER_IMPACT_DURATION_TICKS)
+                    else effects.play(player.uniqueId, spell, at, radius = settings.emberRadius,
                         durationTicks = EMBER_IMPACT_DURATION_TICKS, impact = true, charge = level)
                     return
                 }
-                val visualId = effects.play(player.uniqueId, spell, muzzle,
+                val target = aimPoint(player)
+                val direction = target.toVector().subtract(muzzle.toVector()).normalize()
+                val duration = kotlin.math.ceil(settings.range / settings.emberSpeed).toInt() + 4
+                val visualId = effects.releaseCharge(heldId, duration, controllerDriven = true)
+                    ?: effects.play(player.uniqueId, spell, muzzle,
                     muzzle.clone().add(direction), radius = 0.85,
-                    durationTicks = kotlin.math.ceil(settings.range / settings.emberSpeed).toInt() + 4, controllerDriven = true, charge = cast.visualCharge)
+                    durationTicks = duration, controllerDriven = true, charge = cast.visualCharge)
                 val ember = PendingStaffEmber(muzzle, direction, cast, tuning,
                     settings.range - eye.distance(muzzle), visualId, muzzle)
                 embers += ember
@@ -542,7 +566,15 @@ internal class StaffSpellController(
         }
     }
 
-    private fun frostIcicles(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning, count: Int = 7) {
+    private fun icicleChargeAnchor(player: Player, index: Int): Location {
+        val eye = player.eyeLocation
+        val offset = staffChargeOrientation(StaffSpell.ICICLE, eye.yaw,
+            org.joml.Vector3f()).transform(staffIcicleChargeAnchorOffset(index))
+        return eye.add(offset.x.toDouble(), offset.y.toDouble(), offset.z.toDouble())
+    }
+
+    private fun frostIcicles(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning, count: Int = 7,
+        chargedScenes: List<UUID?> = emptyList()) {
         val eye = player.eyeLocation
         val yaw = Math.toRadians(player.location.yaw.toDouble())
         val forward = Vector(-sin(yaw), 0.0, cos(yaw)).normalize()
@@ -552,21 +584,24 @@ internal class StaffSpellController(
         val visited = mutableSetOf<UUID>()
 
         repeat(count) { index ->
-            val offset = staffIcicleAnchorOffset(index, count)
-            val anchor = eye.clone()
+            val heldId = chargedScenes.getOrNull(index)
+            val offset = if (chargedScenes.isNotEmpty()) staffIcicleChargeAnchorOffset(index)
+                else staffIcicleAnchorOffset(index, count)
+            val anchor = effects.chargeOrigin(heldId) ?: eye.clone()
                 .add(right.clone().multiply(offset.x.toDouble()))
                 .add(0.0, offset.y.toDouble(), 0.0)
                 .add(forward.clone().multiply(offset.z.toDouble()))
-            if (!visible(eye, anchor)) return@repeat
+            if (!visible(eye, anchor)) { effects.remove(heldId); return@repeat }
 
             reserveBolt(player.uniqueId)
-            val visualId = effects.play(player.uniqueId, StaffSpell.ICICLE, anchor,
+            val visualId = effects.releaseCharge(heldId, 80) ?: effects.play(player.uniqueId, StaffSpell.ICICLE, anchor,
                 anchor.clone().add(direction), radius = 0.9, durationTicks = 80, charge = cast.visualCharge)
             bolts += PendingStaffBolt(anchor, direction.clone(), null, cast, tuning, 1.0, 1,
                 visited, settings.range, visualId, spell = StaffSpell.ICICLE,
                 aimOnLaunch = true,
                 launchDelayTicks = staffIcicleLaunchDelay(index), holdForwardTicks = 4)
         }
+        chargedScenes.drop(count).forEach(effects::remove)
     }
 
     private fun hail(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning, count: Int = 5) {
@@ -1032,7 +1067,7 @@ internal class StaffSpellController(
         channels.cancel(playerId)
         channelInputs.remove(playerId)
         summons.cancel(playerId)
-        effects.remove(chargeScenes.remove(playerId))
+        chargeScenes.remove(playerId)?.forEach(effects::remove)
         lances.removeAll { it.cast.casterId == playerId }
         marks.remove(playerId)
         embers.removeAll { it.cast.casterId == playerId }
@@ -1057,7 +1092,7 @@ internal class StaffSpellController(
         channelInputs.clear()
         summons.close()
         damage.summonCast = { null }
-        chargeScenes.values.forEach(effects::remove)
+        chargeScenes.values.flatten().forEach(effects::remove)
         chargeScenes.clear()
         lances.clear()
         cooldownInputs.clear()

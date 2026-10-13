@@ -32,12 +32,14 @@ internal fun staffArsenalLifetime(spell: StaffSpell, secondary: Boolean) = when 
     else -> 40
 }
 
-/** Source-authored Display silhouettes. Particle-only wind and wave forms stay native-particle-only. */
+/** Source-authored Display silhouettes for the arsenal spells. */
 internal fun staffArsenalParts(spell: StaffSpell, ageTicks: Int, durationTicks: Int, length: Double,
     radius: Double, impact: Boolean, secondary: Boolean, input: StaffCastInput, charge: Double = 0.0): List<StaffDisplayPart> {
     if (input.quick) return emptyList()
     val age = ageTicks.coerceAtLeast(0)
     val q = charge.coerceIn(0.0, 1.0)
+    if (spell == StaffSpell.GALE || spell == StaffSpell.TIDE)
+        return staffTideGaleParts(spell, age, durationTicks, radius, impact, secondary, q)
     val scale = .8 + q * .45
     val fade = smooth((durationTicks - 2 - age) / 8.0)
     val parts = mutableListOf<StaffDisplayPart>()
@@ -49,42 +51,6 @@ internal fun staffArsenalParts(spell: StaffSpell, ageTicks: Int, durationTicks: 
             Quaternionf().rotationXYZ(pitch.toFloat(), yaw.toFloat(), roll.toFloat()), identity = id)
     }
     when (spell) {
-        StaffSpell.GALE -> if (secondary) {
-            val grow = smooth(age / 4.0)
-            // A compact ram hoop with a visible hollow center and a short wake.
-            repeat(12) { i ->
-                val a = i * PI * 2 / 12
-                val r = (1.05 + q * .25) * grow
-                part("ram:ring:$i", if (i % 3 == 0) Material.SEA_LANTERN else Material.LIGHT_BLUE_STAINED_GLASS,
-                    cos(a) * r, sin(a) * r + .1, .1,
-                    .18, .24, .72, yaw = a, roll = cos(a) * .2)
-            }
-            repeat(4) { i ->
-                val z = -.35 - i * .38
-                part("ram:wake:$i", Material.WHITE_STAINED_GLASS, 0.0, .1, z,
-                    .22 * grow, .22 * grow, .34 * grow, pitch = .18 * (i % 2 * 2 - 1))
-            }
-        } else Unit
-        StaffSpell.TIDE -> if (!secondary) {
-            val birth = smooth(age / 5.0)
-            val ripple = age * .07
-            part("tide:core", Material.SEA_LANTERN, 0.0, 0.0, 0.0,
-                .46 * birth, .46 * birth, .46 * birth, yaw = ripple)
-            repeat(12) { i ->
-                val a = i * PI * 2 / 12 + ripple
-                val tilt = .72 + (i % 3) * .12
-                part("tide:shell:$i", if (i % 3 == 0) Material.PRISMARINE else Material.LIGHT_BLUE_STAINED_GLASS,
-                    cos(a) * .39, sin(a) * .39, sin(a * 2) * .20,
-                    .22 * birth, .52 * birth, .16 * birth, yaw = a, pitch = tilt * cos(a))
-            }
-            if (impact) repeat(8) { i ->
-                val a = i * PI / 4
-                val r = 1.0 + smooth(age / 8.0) * .7
-                part("tide:impact:$i", if (i % 2 == 0) Material.SEA_LANTERN else Material.PRISMARINE,
-                    cos(a) * r, .25 + sin(a * 2) * .55, sin(a) * r,
-                    .18, .32, .18, roll = .25 * cos(a))
-            }
-        }
         StaffSpell.REQUIEM -> if (secondary) {
             val grow = smooth(age / 9.0)
             val radius = (1.5 + q * .35) * grow
@@ -253,9 +219,12 @@ internal fun staffArsenalParts(spell: StaffSpell, ageTicks: Int, durationTicks: 
 
 /** Pure native-particle frames: substantial silhouettes with a bright core and a softer wake. */
 internal fun staffArsenalParticles(spell: StaffSpell, ageTicks: Int, durationTicks: Int,
-    radius: Double, secondary: Boolean, charge: Double, reach: Double = radius): List<StaffParticleSample> {
+    radius: Double, secondary: Boolean, charge: Double, reach: Double = radius,
+    impact: Boolean = false): List<StaffParticleSample> {
     val age = ageTicks.toDouble()
     val q = charge.coerceIn(0.0, 1.0)
+    if (spell == StaffSpell.GALE || spell == StaffSpell.TIDE)
+        return staffTideGaleParticleSamples(spell, ageTicks, durationTicks, radius, secondary, q, impact)
     val out = mutableListOf<StaffParticleSample>()
     val fade = smooth((durationTicks - age) / 8.0)
     if (fade <= 0.0 || age < 0) return out
@@ -271,102 +240,6 @@ internal fun staffArsenalParticles(spell: StaffSpell, ageTicks: Int, durationTic
     val root = staffFade(0xb6ee75, 0x315830, 1.25f)
     val bone = staffFade(0xfff5d9, 0x9b7d59, 1.3f)
     when (spell) {
-        StaffSpell.GALE -> if (secondary) {
-            val grow = smooth(age / 4.0) * fade
-            // Readable hollow ram hoop, aimed forward with a short compressed wake.
-            repeat(36) { i ->
-                val a = i * PI * 2 / 36
-                val r = (1.05 + q * .25) * grow
-                mote(if (i % 9 == 0) Particle.CLOUD else Particle.DUST_COLOR_TRANSITION,
-                    cos(a) * r, sin(a) * r + .1, .1,
-                    if (i % 9 == 0) null else wind, spread = if (i % 9 == 0) .025 else .008)
-            }
-            repeat(8) { i ->
-                val z = -.25 - i * .26
-                val a = i * 2.4 + age * .14
-                mote(Particle.DUST_COLOR_TRANSITION, cos(a) * .23, .1 + sin(a) * .23, z,
-                    wind, spread = .012)
-            }
-            if (ageTicks % 4 == 0) mote(Particle.GUST, 0.0, .1, 0.0, count = 1, spread = .18)
-        } else {
-            val grow = smooth(age / 8.0) * fade
-            // Three climbing ropes wind around an intentionally open eye; clouds are sparse accents.
-            repeat(60) { i ->
-                val rope = i / 20
-                val h = (i % 20) / 19.0
-                val a = rope * PI * 2 / 3 + h * PI * 3.2 - age * .22
-                val r = (.72 + h * (.55 + q * .2)) * grow
-                mote(if (i % 15 == 0) Particle.CLOUD else Particle.DUST_COLOR_TRANSITION,
-                    cos(a) * r, .1 + h * (4.1 + q * .4) * grow, sin(a) * r,
-                    if (i % 15 == 0) null else wind, spread = .012)
-            }
-            repeat(6) { i ->
-                val a = i * PI / 3 - age * .18
-                mote(Particle.DUST_COLOR_TRANSITION, cos(a) * 1.2 * grow, 4.15 * grow,
-                    sin(a) * 1.2 * grow, wind)
-            }
-            if (ageTicks % 6 == 0) mote(Particle.GUST, 0.0, 1.0, 0.0, count = 1, spread = .2)
-        }
-        StaffSpell.TIDE -> if (!secondary) {
-            val arrival = 28.0
-            if (age < arrival) {
-                val grow = smooth(age / 5.0) * fade
-                repeat(36) { i ->
-                    val y = 1.0 - 2.0 * (i + .5) / 36
-                    val ring = sqrt(1.0 - y * y)
-                    val a = i * 2.39996 + age * .12
-                    val r = .54 + q * .12
-                    mote(if (i % 3 == 0) Particle.BUBBLE else Particle.DUST_COLOR_TRANSITION,
-                        cos(a) * ring * r * grow, y * r * grow, sin(a) * ring * r * grow,
-                        if (i % 3 == 0) null else water, spread = .01)
-                }
-                repeat(10) { i ->
-                    val z = -.48 - i * .13
-                    val a = i * 2.1 + age * .09
-                    mote(if (i % 3 == 0) Particle.SPLASH else Particle.BUBBLE,
-                        cos(a) * (.22 + i * .015), sin(a) * .22, z, count = if (i % 3 == 0) 2 else 1,
-                        spread = .025, speed = .02)
-                }
-                if (ageTicks >= 4) mote(Particle.DUST_COLOR_TRANSITION, 0.0, 0.0, -.6 - q * .2, water,
-                    count = 2, spread = .08, speed = .02)
-            } else {
-                val splashAge = age - arrival
-                val spread = smooth(splashAge / 7.0) * (1.0 + q * .25)
-                repeat(36) { i ->
-                    val a = i * PI * 2 / 36
-                    val r = (.25 + (i % 4) * .12) * spread
-                    val y = .2 + sin(a * 2 + splashAge * .12) * .45 * spread
-                    mote(if (i % 3 == 0) Particle.SPLASH else Particle.DUST_COLOR_TRANSITION,
-                        cos(a) * r, y, sin(a) * r,
-                        if (i % 3 == 0) null else water, count = if (i % 3 == 0) 2 else 1, spread = .04)
-                }
-                repeat(10) { i ->
-                    val a = i * 2.39996
-                    mote(Particle.SPLASH, cos(a) * spread, .4 + (i % 4) * .22 * spread,
-                        sin(a) * spread, count = 2, spread = .08, speed = .05)
-                }
-            }
-        } else {
-            // A low sheet curls over into a bright foam lip; there is no persistent cloud fill.
-            val grow = smooth(age / 6.0) * fade
-            repeat(72) { i ->
-                val across = (i % 18) / 17.0 * 2 - 1
-                val row = i / 18
-                val curl = row / 3.0
-                val angle = curl * PI * .9
-                val x = across * radius * .82
-                val y = (.12 + (1.0 - cos(angle)) * .78 + .12 * (1.0 - abs(across))) * grow
-                val z = sin(angle) * .85 - curl * .4
-                val crest = row == 3 || across > .72
-                mote(if (crest) Particle.SPLASH else Particle.DUST_COLOR_TRANSITION,
-                    x, y, z, if (crest) null else water,
-                    count = if (crest) 2 else 1, spread = .035, speed = if (crest) .03 else 0.0)
-            }
-            repeat(8) { i ->
-                val x = (i / 7.0 * 2.0 - 1.0) * radius * .82
-                mote(Particle.BUBBLE, x, .05, -.25, count = 1, spread = .02, speed = .008)
-            }
-        }
         StaffSpell.LUNAR -> {
             val fall = smooth((age - 4) / 12.0)
             val height = if (secondary) 2.0 else 6.2 - fall * 4.1

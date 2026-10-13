@@ -42,10 +42,12 @@ internal fun staffDefenseParts(
     repeat(count) { plate ->
         val angle = if (allAround) PI / 4 + plate * PI / 2 else 0.0
         val rotation = Quaternionf().rotationY(angle.toFloat())
-        val plateScale = if (allAround) .70f else 1f
+        val plateScale = if (allAround) .70f else .80f
+        val sideOffsetX = if (allAround) 0.0 else .85
+        val centerY = if (allAround) 1.12f else .82f
         val radius = if (allAround) 1.72 else 1.85
         val recoil = impact * .12
-        val center = Vector3f((sin(angle) * (radius - recoil)).toFloat(), 1.12f,
+        val center = Vector3f((sin(angle) * (radius - recoil) + sideOffsetX).toFloat(), centerY,
             (cos(angle) * (radius - recoil)).toFloat())
         fun add(id: String, material: Material, x: Double, y: Double, z: Double,
             width: Double, height: Double, depth: Double, roll: Double = 0.0) {

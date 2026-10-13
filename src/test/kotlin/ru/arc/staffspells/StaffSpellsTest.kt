@@ -144,6 +144,38 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
+    "release transfers charged comet and crown scenes before charge cleanup" {
+        for (spell in listOf(StaffSpell.EMBER, StaffSpell.ICICLE)) withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("charge-transfer-${spell.id}")
+            val player = h.player("charge-transfer", world, spell)
+            h.controller.start()
+            h.controller.charge(player, spell, 1.0)
+            val held = h.visualPlays.toList()
+            held.size shouldBe if (spell == StaffSpell.ICICLE) 11 else 1
+            every { h.effects.chargeOrigin(any()) } answers {
+                held.firstOrNull { it.id == firstArg<UUID?>() }?.from?.clone()?.apply {
+                    if (spell == StaffSpell.EMBER) {
+                        val offset = staffEmberChargeOffset()
+                        add(offset.x.toDouble(), offset.y.toDouble(), offset.z.toDouble())
+                    }
+                }
+            }
+            every { h.effects.releaseCharge(any(), any(), any()) } answers { firstArg<UUID?>() }
+            h.controller.cast(player, StaffCastInput.PRIMARY, 1.0)
+            h.controller.cancelCharge(player)
+            h.visualPlays.size shouldBe held.size
+            held.forEach { shot ->
+                verify(exactly = 1) { h.effects.releaseCharge(shot.id, any(), any()) }
+                (shot.id in h.removedEffects) shouldBe false
+            }
+            h.scheduler.tick(12)
+            val launched = if (spell == StaffSpell.EMBER) h.movedEffects.map { it.first }
+                else h.projectileMoves.map { it.id }
+            launched.isNotEmpty() shouldBe true
+            launched.all { id -> held.any { it.id == id } } shouldBe true
+        }
+    }
+
     "fully charged icicle volley grows to eleven without multiplying one-target hits" {
         withStaffHarness { h ->
             val world = h.paper.addSimpleWorld("charged-crown")
@@ -589,7 +621,7 @@ class StaffSpellsTest : FreeSpec({
             h.movedEffects.size shouldBe 2
             h.scheduler.tick(18)
             val muzzle = h.visualPlays.single().from
-            (kotlin.math.abs(muzzle.distance(player.eyeLocation) - 2.4) < .0001) shouldBe true
+            (kotlin.math.abs(muzzle.distance(player.eyeLocation) - staffEmberChargeOffset().length()) < .0001) shouldBe true
             val distances = listOf(muzzle) + h.movedEffects.map { it.second }
             val steps = distances.zipWithNext().map { (a, b) -> a.distance(b) }
             steps.size shouldBe 11
@@ -686,7 +718,12 @@ class StaffSpellsTest : FreeSpec({
 
             h.hits shouldBe emptyList()
             val wallKeys = h.movedEffects.filter { it.second.world == wallWorld }.map { it.second }
-            verify(exactly = 1) { h.effects.impact(any(), match { it.world == wallWorld && it.z < 3.0 }, any(), any()) }
+            // The wall now lies inside the held body's release sweep, so it bursts
+            // synchronously without creating a flight scene first.
+            h.visualPlays.single { it.from.world == wallWorld }.let {
+                it.impact shouldBe true
+                (it.from.z < 3.0) shouldBe true
+            }
             wallKeys.all { it.z < 3.0 } shouldBe true
             val mobKeys = h.movedEffects.filter { it.second.world == hitWorld }.map { it.second }
             mobKeys.all { it.z <= target.boundingBox.minZ - 0.25 + 0.00001 } shouldBe true
@@ -1330,12 +1367,14 @@ internal fun withStaffHarness(
                     }
                     val effects = mockk<StaffSpellDisplayEffects>(relaxed = true)
                     val visualPlays = mutableListOf<StaffVisualPlay>()
-                    every { effects.play(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) } answers {
+                    every { effects.play(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) } answers {
                         val id = UUID.randomUUID()
-                        visualPlays += StaffVisualPlay(id, arg<StaffSpell>(1), arg<Location>(2).clone(),
+                        if (!arg<Boolean>(13)) visualPlays += StaffVisualPlay(id, arg<StaffSpell>(1), arg<Location>(2).clone(),
                             arg<Location>(3).clone(), arg<Boolean>(7), arg<Boolean>(6))
                         id
                     }
+                    every { effects.chargeOrigin(any()) } returns null
+                    every { effects.releaseCharge(any(), any(), any()) } returns null
                     val movedEffects = mutableListOf<Pair<UUID, Location>>()
                     val trailMoves = mutableListOf<StaffTrailMove>()
                     val projectileMoves = mutableListOf<StaffProjectileMove>()

@@ -1,4 +1,4 @@
-# Prototype staff spells — ARC 1.4.378
+# Prototype staff spells — ARC 1.4.382
 
 `/arc stafftest` issues seventeen administrator-only mechanics samples: the
 fourteen established staves plus `inferno`, `gravity` and `ossuary`. Use
@@ -9,11 +9,13 @@ reward or economy changes.
 
 ## Controls
 
-For ordinary casts, hold right-click and release. Charge reaches full after 36
-ticks (1.8 seconds). Holding Shift when the cast begins chooses the shifted
-right-click ability; changing Shift, the held slot or item, world, or player
-lifecycle cancels it. Attacks share one per-player attack cooldown, with the
-duration configured per spell and adjusted for the shifted cast.
+Right-click casts ordinary abilities immediately, except for the primary
+`Ember` and `Icicle` casts: hold and release right-click to charge those to full
+in 36 ticks (1.8 seconds). Shift selects a separate right-click ability, which
+casts without input charge. Changing Shift, the held slot or item, world, or
+player lifecycle cancels an active charge. Attacks share one per-player attack
+cooldown, with the duration configured per spell and adjusted for the shifted
+cast.
 
 `Inferno` and `Gravity` are held channels rather than charged casts. Hold
 right-click, with or without Shift, to operate them. Inferno follows the aim
@@ -53,16 +55,16 @@ is held.
 | `mark` · Разрыв | Mark follows its target and bursts; without a target, bursts at the aimed point | Чёрная дыра pulls eligible enemies, then collapses | Покров пустоты | Круговой покров | `3dfantasyweaponscit:night_staff` |
 | `frost` · Ледяной хлопок | Ground wave slows enemies in a 50° cone, up to 28 blocks (global cap: 48) | Полярный круг expands an ice front eight blocks from the caster | Ледяной щит | Круговой покров | `3dfantasyweaponscit:northgate_guardian_staff` |
 | `lance` · Солнечное копьё | Narrow solar beam pierces up to three enemies | Three diverging solar beams | Солнечный щит | Круговой покров | `3dfantasyweaponscit:sagrada_winged_staff` |
-| `ember` · Пепельная комета | Fireball grows below the reticle with four-tick interpolation, then launches immediately with forward speed and accelerates | Three ground circles lock on release; the first meteor launches after a 15-tick warning | Огненный заслон | Круговой покров | `3dfantasyweaponscit:bermunde_hermit_staff` |
+| `ember` · Пепельная комета | Fireball grows below the reticle with four-tick interpolation, then launches immediately with forward speed and accelerates | Three ground circles lock on cast; the first meteor launches after a 15-tick warning | Огненный заслон | Круговой покров | `3dfantasyweaponscit:bermunde_hermit_staff` |
 | `nova` · Терновый хват | Visible ground-hugging roots travel toward the target, close and slow enemies | Терновая клетка closes around the aimed point | Терновый заслон | Круговой покров | `3dfantasyweaponscit:holy_celtic_staff` |
-| `icicle` · Ледяной венец | Seven shoulder icicles sample the current reticle as each launches; full charge releases eleven | Five shards fall around the aimed point; full charge releases nine | Кристальный заслон | Круговой покров | `3dfantasyweaponscit:olwen_staff` |
+| `icicle` · Ледяной венец | Seven shoulder icicles sample the current reticle as each launches; full charge releases eleven | Five shards fall around the aimed point immediately | Кристальный заслон | Круговой покров | `3dfantasyweaponscit:olwen_staff` |
 | `fault` · Обсидиановый раскол | Five ground fissures advance in sequence, up to 18 blocks | Каменный выброс warns, then erupts at the aimed point and lifts enemies | Каменный бастион | Круговой покров | `3dfantasyweaponscit:staff_of_unholy_wisdom` |
 | `lunar` · Лунный серп | Falling silver crescent releases a ground shockwave | Two moon blades converge on the target | Лунный покров | Круговой покров | `3dfantasyweaponscit:black_snake_staff` |
-| `gale` · Посох бури | Open-center wind column forms at the aimed point and lifts nearby enemies | Шквал is a compact air ram that travels forward | Ветряной щит | Круговой покров | `3dfantasyweaponscit:goblin_witch_staff` |
-| `tide` · Сердце прилива | A water core travels to the target and bursts into a broad spray | Приливный вал is a low wave with a foamy crest | Водяной заслон | Круговой покров | `3dfantasyweaponscit:northgate_guardian_staff` |
+| `gale` · Посох бури | A stationary open-center wind funnel forms at the aimed point and lifts nearby enemies | Шквал is a twisting air ram that travels forward | Ветряной щит | Круговой покров | `3dfantasyweaponscit:goblin_witch_staff` |
+| `tide` · Сердце прилива | A water sphere travels to the selected target or aimed point, then expands into a translucent water shell; it does not immobilize | Приливный вал is a broad curled wave with a foamy crest that travels forward | Водяной заслон | Круговой покров | `3dfantasyweaponscit:northgate_guardian_staff` |
 | `requiem` · Реквием | Staggered soul missiles launch from offset lanes in front of the caster | Плач душ expands outward from a sigil | Покров душ | Круговой покров | `3dfantasyweaponscit:lich_staff` |
 | `prism` · Кристальная призма | Crystal grows at the aim point and fires at up to three visible enemies | Three rays converge on the selected point | Гранёный щит | Круговой покров | `3dfantasyweaponscit:northgate_golden_crook` |
-| `necromancer` · Зов могилы | Summons two skeleton archers for ten seconds; full charge summons up to four | Костяной жнец summons one larger wither-skeleton commander | Костяной заслон | Круговой покров | `3dfantasyweaponscit:lich_staff` |
+| `necromancer` · Зов могилы | Summons two skeleton archers for ten seconds | Костяной жнец summons one larger wither-skeleton commander | Костяной заслон | Круговой покров | `3dfantasyweaponscit:lich_staff` |
 | `inferno` · Дыхание печи | Hold for a continuous, aim-following fire stream (up to three seconds and nine blocks) | Поток пламени uses the same held stream | Огненный заслон | Круговой покров | `3dfantasyweaponscit:bermunde_hermit_staff` |
 | `gravity` · Гравитационный захват | Select a visible surface and hold a stone boulder; track with aim and release to throw | Бросок глыбы uses the same grab-and-throw channel | Каменный заслон | Круговой покров | `3dfantasyweaponscit:staff_of_unholy_wisdom` |
 | `ossuary` · Костяной прокол | Long bone spikes erupt in a fast ground wave, with sparse native particles | Костяной прорыв warns at the aimed point, then seven bone spikes shoot upward and impale enemies | Щит рёбер | Круговой покров | `3dfantasyweaponscit:lich_staff` |
@@ -111,20 +113,20 @@ Both arena values are included in the combat capability fingerprint.
 
 Against one unarmored opponent, primary tap casts deal 2.6–4 HP at 1.3–2.2
 second recovery, giving a theoretical 1.82–2.25 HP/s before misses, cover and
-invulnerability frames. Full charge adds 1.8 seconds and scales damage by 1.75,
-with a maximum direct hit of 7 HP. Necromancer instead has an eight-second
-recovery and a shared six-hit squad budget: each arrow deals 0.8 HP on a tap
-cast, or 1.4 HP on a full cast. Successful summon hits can overlap later staff
-casts; the squad budget and lifetime still apply. These are initial balancing
-limits, not evidence of equal duel win rates.
+invulnerability frames. Full charge on Ember and Icicle adds 1.8 seconds and
+scales damage by 1.75, with a maximum direct hit of 7 HP. Necromancer instead
+has an eight-second recovery and a shared six-hit squad budget; each archer hit
+deals 0.8 HP. Successful summon hits can overlap later staff casts; the squad
+budget and lifetime still apply. These are initial balancing limits, not
+evidence of equal duel win rates.
 
 ## Preview and evidence limits
 
 The source-driven redesign is documented in
 [`staff-effects-redesign.md`](staff-effects-redesign.md). The
 `exportStaffRedesignPreview` Gradle task can export seven multi-stage Arsenal
-spells, both held channels at zero and full charge, and both guard shapes for
-all seventeen staves. Pass an absolute path with
+spells, baseline and enlarged visual states for both held channels, and both
+guard shapes for all seventeen staves. Pass an absolute path with
 `-PstaffRedesignPreviewOutput=/absolute/path/redesign-sequences.json`; the
 source is
 [`StaffRedesignPreviewExport.kt`](../src/test/kotlin/ru/arc/staffspells/StaffRedesignPreviewExport.kt).

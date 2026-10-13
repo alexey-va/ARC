@@ -7,6 +7,7 @@ import io.papermc.paper.datacomponent.item.consumable.ItemUseAnimation
 import io.papermc.paper.event.player.PlayerStopUsingItemEvent
 import io.papermc.paper.event.player.PrePlayerAttackEntityEvent
 import net.kyori.adventure.key.Key
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.block.BlockFace
@@ -54,10 +55,87 @@ class StaffSpellInputTest : FreeSpec({
         }
     }
 
+    "only Ember and Icicle primary casts charge; other attacks are instant and channels stay held" {
+        withInputHarness { h ->
+            val world = h.paper.addSimpleWorld("staff-input-policy")
+            h.input.start()
+            val chargedPrimaries = setOf(StaffSpell.EMBER, StaffSpell.ICICLE)
+            val channels = setOf(StaffSpell.INFERNO, StaffSpell.GRAVITY)
+
+            StaffSpell.entries.forEach { spell ->
+                listOf(false, true).forEach { secondary ->
+                    val player = h.staffPlayer("policy-${spell.id}-$secondary", world, spell).apply {
+                        isSneaking = secondary
+                    }
+                    h.actions.usable = true
+                    h.actions.channelUsable = true
+                    val castsBefore = h.actions.casts.size
+                    val chargesBefore = h.actions.charges.size
+                    val channelsBefore = h.actions.channelBegins.size
+
+                    h.input.onInteract(rightClick(player))
+
+                    when {
+                        spell in channels -> {
+                            h.actions.channelBegins.size shouldBe channelsBefore + 1
+                            h.actions.casts.size shouldBe castsBefore
+                            h.actions.charges.size shouldBe chargesBefore
+                            player.hasActiveItem() shouldBe true
+                            h.input.cancel(player.uniqueId)
+                        }
+                        spell in chargedPrimaries && !secondary -> {
+                            h.actions.channelBegins.size shouldBe channelsBefore
+                            h.actions.casts.size shouldBe castsBefore
+                            h.actions.charges.size shouldBe chargesBefore + 1
+                            h.actions.charges.last().let {
+                                it.playerId shouldBe player.uniqueId
+                                it.spell shouldBe spell
+                                it.progress shouldBe 0.0
+                            }
+                            player.hasActiveItem() shouldBe true
+                            h.input.cancel(player.uniqueId)
+                        }
+                        else -> {
+                            h.actions.channelBegins.size shouldBe channelsBefore
+                            h.actions.casts.size shouldBe castsBefore + 1
+                            h.actions.casts.last().let {
+                                it.playerId shouldBe player.uniqueId
+                                it.spell shouldBe spell
+                                it.input shouldBe StaffCastInput.of(secondary, quick = false)
+                                it.charge shouldBe 0.0
+                            }
+                            h.actions.charges.size shouldBe chargesBefore
+                            player.hasActiveItem() shouldBe false
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    "staff lore explains instant, charged, and channel input separately" {
+        withInputHarness { _ ->
+            val config = StaffSpellConfig(TestConfig(mapOf(
+                "messages.use" to "cast-on-click",
+                "messages.charge-use" to "hold-for-charge",
+                "messages.channel-use" to "hold-channel",
+            )))
+            fun lore(spell: StaffSpell) = config.item(spell).lore()!!.joinToString(" ") {
+                PlainTextComponentSerializer.plainText().serialize(it)
+            }
+
+            lore(StaffSpell.CHAIN).contains("cast-on-click") shouldBe true
+            lore(StaffSpell.EMBER).contains("hold-for-charge") shouldBe true
+            lore(StaffSpell.ICICLE).contains("hold-for-charge") shouldBe true
+            lore(StaffSpell.GRAVITY).contains("hold-channel") shouldBe true
+            lore(StaffSpell.INFERNO).contains("hold-channel") shouldBe true
+        }
+    }
+
     "native hold updates charge every four ticks and release casts once at the measured level" {
         withInputHarness { h ->
             val world = h.paper.addSimpleWorld("staff-charge")
-            val player = h.staffPlayer("staff-charge", world, StaffSpell.CHAIN)
+            val player = h.staffPlayer("staff-charge", world, StaffSpell.EMBER)
             h.input.start()
             h.paper.server.pluginManager.registerEvents(h.input, h.paper.createSimplePlugin("staff-input-charge"))
 
@@ -79,17 +157,35 @@ class StaffSpellInputTest : FreeSpec({
             h.input.onStopUsing(PlayerStopUsingItemEvent(player,
                 player.inventory.itemInMainHand.clone(), 36))
             h.actions.casts.size shouldBe 1
-            h.actions.casts.single().spell shouldBe StaffSpell.CHAIN
+            h.actions.casts.single().spell shouldBe StaffSpell.EMBER
             h.actions.casts.single().input shouldBe StaffCastInput.PRIMARY
             h.actions.casts.single().charge shouldBe 1.0
             h.actions.cancelled shouldBe listOf(player.uniqueId)
+            h.actions.releaseOrder shouldBe listOf("cast", "cancel")
+        }
+    }
+
+    "charge is cleaned up without casting if the attack becomes unavailable before release" {
+        withInputHarness { h ->
+            val world = h.paper.addSimpleWorld("staff-charge-cooldown")
+            val player = h.staffPlayer("staff-charge-cooldown", world, StaffSpell.EMBER)
+            h.input.start()
+            h.input.onInteract(rightClick(player))
+
+            h.actions.usable = false
+            h.input.onStopUsing(PlayerStopUsingItemEvent(player,
+                player.inventory.itemInMainHand.clone(), 12))
+
+            h.actions.casts shouldBe emptyList()
+            h.actions.cancelled shouldBe listOf(player.uniqueId)
+            h.actions.releaseOrder shouldBe listOf("cancel")
         }
     }
 
     "explicitly denied item or block use does not start a charge" {
         withInputHarness { h ->
             val world = h.paper.addSimpleWorld("staff-use-denied")
-            val player = h.staffPlayer("staff-use-denied", world, StaffSpell.CHAIN)
+            val player = h.staffPlayer("staff-use-denied", world, StaffSpell.EMBER)
             h.input.start()
             h.paper.server.pluginManager.registerEvents(h.input, h.paper.createSimplePlugin("staff-input-denied"))
 
@@ -114,7 +210,7 @@ class StaffSpellInputTest : FreeSpec({
     "tap release remains uncharged, and holding past 200 ticks expires without auto-casting" {
         withInputHarness { h ->
             val world = h.paper.addSimpleWorld("staff-charge-cap")
-            val player = h.staffPlayer("staff-charge-cap", world, StaffSpell.CHAIN)
+            val player = h.staffPlayer("staff-charge-cap", world, StaffSpell.EMBER)
             h.input.start()
             h.input.onInteract(rightClick(player))
             h.input.onStopUsing(PlayerStopUsingItemEvent(player,
@@ -123,6 +219,7 @@ class StaffSpellInputTest : FreeSpec({
             h.actions.casts.single().charge shouldBe 0.0
             h.actions.casts.single().input shouldBe StaffCastInput.PRIMARY
             h.actions.cancelled shouldBe listOf(player.uniqueId)
+            h.actions.releaseOrder shouldBe listOf("cast", "cancel")
             player.clearActiveItem()
 
             h.actions.casts.clear()
@@ -207,7 +304,7 @@ class StaffSpellInputTest : FreeSpec({
     "sneak or selected-slot changes cancel a held charge before release" {
         withInputHarness { h ->
             val world = h.paper.addSimpleWorld("staff-charge-cancel")
-            val player = h.staffPlayer("staff-charge-cancel", world, StaffSpell.CHAIN)
+            val player = h.staffPlayer("staff-charge-cancel", world, StaffSpell.EMBER)
             h.input.start()
             h.input.onInteract(rightClick(player))
             h.input.onSneak(org.bukkit.event.player.PlayerToggleSneakEvent(player, true))
@@ -217,6 +314,7 @@ class StaffSpellInputTest : FreeSpec({
             h.actions.casts shouldBe emptyList()
             h.actions.cancelled shouldBe listOf(player.uniqueId)
             player.clearActiveItem()
+            player.isSneaking = false
 
             h.input.onInteract(rightClick(player))
             h.input.onHeldSlot(org.bukkit.event.player.PlayerItemHeldEvent(player, 0, 1))
@@ -242,6 +340,7 @@ private class RecordingStaffSpellInputActions : StaffSpellInputActions {
     val channelUpdates = mutableListOf<InputChannelUpdate>()
     val channelReleases = mutableListOf<UUID>()
     val channelCancels = mutableListOf<UUID>()
+    val releaseOrder = mutableListOf<String>()
     var usable = true
     var channelUsable = true
 
@@ -261,12 +360,16 @@ private class RecordingStaffSpellInputActions : StaffSpellInputActions {
     override fun cancelChannel(player: org.bukkit.entity.Player) { channelCancels += player.uniqueId }
     override fun cast(player: org.bukkit.entity.Player, input: StaffCastInput, charge: Double) {
         casts += InputCastCall(player.uniqueId, StaffSpell.from(player.inventory.itemInMainHand)!!, input, charge)
+        releaseOrder += "cast"
         usable = false
     }
     override fun charge(player: org.bukkit.entity.Player, spell: StaffSpell, progress: Double) {
         charges += InputChargeCall(player.uniqueId, spell, progress)
     }
-    override fun cancelCharge(player: org.bukkit.entity.Player) { cancelled += player.uniqueId }
+    override fun cancelCharge(player: org.bukkit.entity.Player) {
+        cancelled += player.uniqueId
+        releaseOrder += "cancel"
+    }
 }
 
 private data class InputHarness(

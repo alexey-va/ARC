@@ -108,13 +108,14 @@ internal class StaffSpellArsenal(
             StaffSpell.LUNAR, StaffSpell.PRISM -> scene(a, a.point, a.duration)
             StaffSpell.GALE -> if (input.secondary) scene(a, a.origin.clone().add(0.0, 1.1, 0.0), a.duration,
                 a.travelEnd.clone().add(0.0, 1.1, 0.0), controllerDriven = true)
+                else scene(a, a.point, a.duration)
             StaffSpell.REQUIEM -> if (input.secondary) scene(a, a.point, a.duration)
             StaffSpell.NOVA -> if (input.secondary) scene(a, a.point, a.duration)
                 else scene(a, a.origin, a.duration, a.travelEnd)
             StaffSpell.TIDE -> if (!input.secondary) {
                 scene(a, a.origin.clone().add(0.0, 1.2, 0.0), a.duration,
                     a.travelEnd.clone().add(0.0, 1.2, 0.0), controllerDriven = true)
-            }
+            } else scene(a, a.origin, a.duration, a.travelEnd, controllerDriven = true)
             StaffSpell.OSSUARY -> if (input.secondary) scene(a, a.point, a.duration)
             else -> Unit
         }
@@ -146,6 +147,10 @@ internal class StaffSpellArsenal(
             StaffSpell.TIDE -> if (a.input.secondary) {
                 val at = along(a, ((a.age - 4) / TIDE_WAVE_TRAVEL_TICKS).coerceIn(0.0, 1.0))
                 particles(a, at, a.age, a.duration, radius = 2.8 + a.cast.visualCharge * .7)
+                a.scenes.firstOrNull()?.let { id ->
+                    effects.move(id, at)
+                    effects.synchronize(id, a.age.coerceAtLeast(0))
+                }
                 if (a.age in 8..34) area(a, player, at.clone().add(0.0, 1.0, 0.0),
                     2.5 + a.cast.visualCharge * .45, lift = .25)
                 if (a.age == 34) sound(a, at, true)
@@ -199,12 +204,21 @@ internal class StaffSpellArsenal(
     private fun tideOrb(a: Attack, player: Player) {
         val progress = ((a.age - TIDE_ORB_LAUNCH_TICK) / TIDE_ORB_TRAVEL_TICKS).coerceIn(0.0, 1.0)
         val previousProgress = ((a.age - 2 - TIDE_ORB_LAUNCH_TICK) / TIDE_ORB_TRAVEL_TICKS).coerceIn(0.0, 1.0)
-        val at = along(a, progress).add(0.0, 1.2, 0.0)
-        particles(a, at, a.age, a.duration, radius = 1.0 + a.cast.visualCharge * .3)
+        val arrived = a.age >= TIDE_ORB_ARRIVAL_TICK
+        val at = if (arrived) a.travelEnd.clone().add(0.0, 1.2, 0.0)
+            else along(a, progress).add(0.0, 1.2, 0.0)
+        val stageAge = if (arrived) (a.age - TIDE_ORB_ARRIVAL_TICK).coerceAtLeast(0) else a.age
+        val stageDuration = if (arrived) TIDE_ORB_IMPACT_TICKS else a.duration
+        particles(a, at, stageAge, stageDuration,
+            radius = if (arrived) 1.6 + a.cast.visualCharge * .4 else 1.0 + a.cast.visualCharge * .3,
+            impact = arrived)
         a.scenes.firstOrNull()?.let { id ->
-            effects.move(id, at)
-            effects.synchronize(id, a.age.coerceAtLeast(0))
-            if (a.age == TIDE_ORB_ARRIVAL_TICK) effects.impact(id, at, 1.6 + a.cast.visualCharge * .4, 10)
+            if (a.age <= TIDE_ORB_ARRIVAL_TICK) {
+                effects.move(id, at)
+                effects.synchronize(id, a.age.coerceAtLeast(0))
+                if (a.age == TIDE_ORB_ARRIVAL_TICK)
+                    effects.impact(id, at, 1.6 + a.cast.visualCharge * .4, TIDE_ORB_IMPACT_TICKS)
+            }
         }
         if (a.age >= TIDE_ORB_LAUNCH_TICK && a.age <= TIDE_ORB_ARRIVAL_TICK) {
             val from = along(a, previousProgress).add(0.0, 1.2, 0.0)
@@ -360,11 +374,12 @@ internal class StaffSpellArsenal(
     }
 
     private fun particles(a: Attack, at: Location, age: Int, duration: Int,
-        secondary: Boolean = a.input.secondary, radius: Double = a.radius) {
+        secondary: Boolean = a.input.secondary, radius: Double = a.radius, impact: Boolean = false) {
         if (a !in attacks) return
         val right = Vector(a.forward.z, 0.0, -a.forward.x)
         val reach = if (a.spell == StaffSpell.NOVA && !secondary) a.travelEnd.distance(a.origin) else radius
-        val authored = staffArsenalParticles(a.spell, age, duration, radius, secondary, a.cast.visualCharge, reach)
+        val authored = staffArsenalParticles(a.spell, age, duration, radius, secondary, a.cast.visualCharge,
+            reach, impact)
         val limit = if (!secondary && a.spell == StaffSpell.OSSUARY)
             240 / a.nodes.size.coerceAtLeast(1) else 160
         val admitted = if (authored.size <= limit) authored else
@@ -422,6 +437,7 @@ internal class StaffSpellArsenal(
         private const val TIDE_ORB_LAUNCH_TICK = 4
         private const val TIDE_ORB_TRAVEL_TICKS = 24.0
         private const val TIDE_ORB_ARRIVAL_TICK = TIDE_ORB_LAUNCH_TICK + TIDE_ORB_TRAVEL_TICKS.toInt()
+        private const val TIDE_ORB_IMPACT_TICKS = 16
         private const val TIDE_WAVE_TRAVEL_TICKS = 30.0
         private const val NOVA_ROOT_TRAVEL_TICKS = 30
         private const val REQUIEM_MISSILE_LAUNCH_TICK = 4

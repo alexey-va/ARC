@@ -71,16 +71,18 @@ internal fun staffDisplayParts(
     StaffSpell.FAULT -> staffFaultDisplayParts(ageTicks, durationTicks, radius, secondary)
     StaffSpell.LANCE -> staffSolarDisplayParts(ageTicks, durationTicks, length, impact)
     StaffSpell.GRAVITY, StaffSpell.INFERNO -> staffChannelParts(spell, ageTicks, durationTicks, length, radius, impact, secondary)
-    StaffSpell.EMBER -> emberDisplayParts(ageTicks, durationTicks, radius, impact, secondary)
+    StaffSpell.EMBER -> emberDisplayParts(ageTicks, durationTicks, radius, impact, secondary, chargeLevel)
     StaffSpell.NOVA, StaffSpell.LUNAR, StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM, StaffSpell.PRISM, StaffSpell.OSSUARY ->
         staffArsenalParts(spell, ageTicks, durationTicks, length, radius, impact, secondary, input, charge = chargeLevel)
     else -> emptyList() // NECROMANCER geometry is supplied by its owning spell implementation.
     }
-    val chargedParts = if (!arsenal && spell != StaffSpell.ICICLE)
+    val sharedEmberBody = spell == StaffSpell.EMBER && !impact && !secondary
+    val chargedParts = if (!arsenal && spell != StaffSpell.ICICLE && !sharedEmberBody)
         staffChargeResponsiveOldParts(spell, parts, chargeLevel) else parts
     val tracked = !impact && spell in setOf(StaffSpell.MARK, StaffSpell.EMBER)
     val birth = when {
         impact && (arsenal || spell in setOf(StaffSpell.MARK, StaffSpell.EMBER, StaffSpell.ICICLE)) -> 1.0
+        spell == StaffSpell.EMBER && !secondary -> 1.0
         spell == StaffSpell.EMBER -> .68 + .32 * smooth(ageTicks / 6.0)
         else -> smooth(ageTicks / 4.0)
     }
@@ -394,7 +396,15 @@ internal fun staffLanceOrientation(direction: Vector3f): Quaternionf {
     return Quaternionf().rotationY(yaw.toFloat()).rotateX(-elevation.toFloat())
 }
 
-private fun emberDisplayParts(ageTicks: Int, durationTicks: Int, radius: Double, impact: Boolean, meteor: Boolean): List<StaffDisplayPart> {
+private fun emberDisplayParts(
+    ageTicks: Int,
+    durationTicks: Int,
+    radius: Double,
+    impact: Boolean,
+    meteor: Boolean,
+    charge: Double,
+): List<StaffDisplayPart> {
+    if (!impact && !meteor) return staffEmberBodyParts(charge)
     val width = extent(radius, 8.0, 0.85)
     val phase = progress(ageTicks, durationTicks)
     val parts = ArrayList<StaffDisplayPart>(if (impact) 48 else 14)
@@ -469,6 +479,42 @@ private fun emberDisplayParts(ageTicks: Int, durationTicks: Int, radius: Double,
             identity = "wake:$index")
     }
     return parts
+}
+
+/** The primary EMBER body is shared by its held charge and projectile flight. */
+internal fun staffEmberBodyParts(charge: Double, offset: Vector3f = Vector3f()): List<StaffDisplayPart> {
+    val amount = charge.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
+    val bloom = smooth((amount - 0.08) / 0.84)
+    val body = (0.58 + 0.47 * bloom).toFloat()
+    val directions = listOf(
+        Vector3f(),
+        Vector3f(-1f, 0f, 0f), Vector3f(1f, 0f, 0f),
+        Vector3f(0f, -1f, 0f), Vector3f(0f, 1f, 0f),
+        Vector3f(0f, 0f, -1f), Vector3f(0f, 0f, 1f),
+    )
+    return directions.flatMapIndexed { index, direction ->
+        val central = index == 0
+        val crustCenter = Vector3f(offset).add(Vector3f(direction).mul(if (central) 0f else body * 0.24f))
+        val orangeCenter = if (central) Vector3f(offset).add(0f, 0f, -body * 0.34f)
+            else Vector3f(offset).add(Vector3f(direction).mul(body * 0.38f)).add(0f, 0f, -body * 0.06f)
+        val hotCenter = if (central) Vector3f(offset).add(0f, 0f, -body * 0.51f)
+            else Vector3f(offset).add(Vector3f(direction).mul(body * 0.50f)).add(0f, 0f, -body * 0.12f)
+        val crustSize = body * if (central) 0.72f else 0.56f
+        listOf(
+            StaffDisplayPart(Material.MAGMA_BLOCK, crustCenter,
+                Vector3f(crustSize, crustSize, crustSize),
+                Quaternionf().rotateXYZ(index * 0.17f, index * 0.23f, index * 0.31f),
+                identity = if (central) "core:0" else "ember:$index:crust"),
+            StaffDisplayPart(if (index % 2 == 0) Material.ORANGE_CONCRETE else Material.RED_CONCRETE,
+                orangeCenter, Vector3f(body * 0.38f),
+                Quaternionf().rotateXYZ(index * 0.29f, index * 0.13f, index * 0.37f),
+                identity = if (central) "core:1" else "ember:$index:flame"),
+            StaffDisplayPart(if (index % 2 == 0) Material.GLOWSTONE else Material.YELLOW_CONCRETE,
+                hotCenter, Vector3f(body * 0.23f),
+                Quaternionf().rotateXYZ(index * 0.11f, index * 0.41f, index * 0.19f),
+                identity = "ember:$index:hotspot"),
+        )
+    }
 }
 
 /** The controller and ground geometry share this outward front; no oscillation or rebound. */

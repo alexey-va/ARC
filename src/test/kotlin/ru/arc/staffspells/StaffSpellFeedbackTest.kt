@@ -11,6 +11,7 @@ import org.bukkit.Sound
 import org.bukkit.SoundCategory
 import org.bukkit.World
 import org.bukkit.entity.Player
+import org.joml.Vector3f
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.Tasks
 import ru.arc.core.TestTaskScheduler
@@ -107,6 +108,67 @@ class StaffSpellFeedbackTest : FreeSpec({
                         Sound.BLOCK_NOTE_BLOCK_CHIME,
                         Sound.ENTITY_PLAYER_LEVELUP,
                     )
+                } finally {
+                    tasks.close()
+                }
+            }
+        }
+    }
+
+    "ember and icicle charge particles reach their transformed held shapes outside the camera" {
+        MockBukkitTestRuntime.open().use {
+            Tasks.withScheduler(TestTaskScheduler()) {
+                val world = mockk<World>(relaxed = true)
+                every { world.isChunkLoaded(any<Int>(), any<Int>()) } returns true
+                val player = mockk<Player>(relaxed = true)
+                val playerId = UUID.randomUUID()
+                val eye = Location(world, 0.0, 65.62, 0.0, 35.0f, 12.0f)
+                every { player.uniqueId } returns playerId
+                every { player.eyeLocation } returns eye
+                every { player.world } returns world
+                val particles = mutableListOf<StaffParticleEvent>()
+                every { player.spawnParticle(any<Particle>(), any<Location>(), any<Int>(),
+                    any<Double>(), any<Double>(), any<Double>(), any<Double>()) } answers {
+                    particles += StaffParticleEvent(firstArg<Particle>(), secondArg<Location>().clone(), null)
+                }
+                every { player.spawnParticle(any<Particle>(), any<Location>(), any<Int>(),
+                    any<Double>(), any<Double>(), any<Double>(), any<Double>(), any<Any>()) } answers {
+                    particles += StaffParticleEvent(firstArg<Particle>(), secondArg<Location>().clone(), arg<Any>(7))
+                }
+
+                val tasks = LifecycleTaskScope()
+                try {
+                    val visuals = StaffSpellVisuals(tasks)
+                    visuals.chargeFeedback(player, StaffSpell.EMBER, 0.5)
+                    val direction = eye.direction
+                    val emberRotation = staffChargeOrientation(StaffSpell.EMBER, eye.yaw,
+                        Vector3f(direction.x.toFloat(), direction.y.toFloat(), direction.z.toFloat()))
+                    val emberCore = staffEmberBodyParts(0.5, staffEmberChargeOffset())
+                        .first { it.identity == "ember:5:hotspot" }
+                    val emberTargetOffset = emberRotation.transform(Vector3f(emberCore.center))
+                    val emberTarget = eye.clone().add(emberTargetOffset.x.toDouble(),
+                        emberTargetOffset.y.toDouble(), emberTargetOffset.z.toDouble())
+                    particles.any { it.location.distanceSquared(emberTarget) < 0.0001 } shouldBe true
+                    particles.all { it.location.distanceSquared(eye) >= 1.5 * 1.5 } shouldBe true
+
+                    val beforeIcicle = particles.size
+                    visuals.chargeFeedback(player, StaffSpell.ICICLE, 0.5)
+                    val icicleRotation = staffChargeOrientation(StaffSpell.ICICLE, eye.yaw,
+                        Vector3f(direction.x.toFloat(), direction.y.toFloat(), direction.z.toFloat()))
+                    val icicleTargets = listOf(0, 5, 10).map { slot ->
+                        val core = staffIcicleChargeParts(0.5, slot).first()
+                        val facingSurface = core.rotation.transform(Vector3f(0f, 0f, core.scale.z * 0.45f))
+                        val localTarget = Vector3f(staffIcicleChargeAnchorOffset(slot))
+                            .add(core.center).add(facingSurface)
+                        val offset = icicleRotation.transform(localTarget)
+                        eye.clone().add(offset.x.toDouble(), offset.y.toDouble(), offset.z.toDouble())
+                    }
+                    val icicleParticles = particles.drop(beforeIcicle)
+                    icicleTargets.all { target ->
+                        icicleParticles.any { it.location.distanceSquared(target) < 0.0001 }
+                    } shouldBe true
+                    icicleParticles.all { it.location.distanceSquared(eye) >= 1.5 * 1.5 } shouldBe true
+                    visuals.close()
                 } finally {
                     tasks.close()
                 }

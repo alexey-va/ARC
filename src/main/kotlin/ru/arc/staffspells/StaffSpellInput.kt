@@ -40,6 +40,7 @@ private const val STAFF_USE_SECONDS = 3_600f
 private const val STAFF_CHARGE_DELAY_TICKS = 4
 private const val STAFF_CHARGE_RAMP_TICKS = 32
 private const val STAFF_MAX_HOLD_TICKS = 200
+private val STAFF_CHARGED_PRIMARY_SPELLS = setOf(StaffSpell.EMBER, StaffSpell.ICICLE)
 
 private val STAFF_SILENT_USE_SOUND = Key.key("minecraft:intentionally_empty")
 
@@ -175,13 +176,16 @@ internal class StaffSpellInput(
             held.isSimilar(charge.item) && StaffSpell.from(event.item) == charge.spell &&
             event.item.isSimilar(charge.item)
 
-        actions.cancelCharge(player)
-        if (isChannel(charge.spell)) {
-            if (stillCurrent) actions.releaseChannel(player) else actions.cancelChannel(player)
-            return
-        }
-        if (stillCurrent && actions.canCharge(player, charge.spell)) {
-            actions.cast(player, StaffCastInput.of(charge.sneaking, quick = false), staffChargeProgress(ticksHeld))
+        try {
+            if (isChannel(charge.spell)) {
+                if (stillCurrent) actions.releaseChannel(player) else actions.cancelChannel(player)
+                return
+            }
+            if (stillCurrent && actions.canCharge(player, charge.spell)) {
+                actions.cast(player, StaffCastInput.of(charge.sneaking, quick = false), staffChargeProgress(ticksHeld))
+            }
+        } finally {
+            actions.cancelCharge(player)
         }
     }
 
@@ -265,6 +269,10 @@ internal class StaffSpellInput(
         if (player.uniqueId in charges) return true
         if (!actions.canCharge(player, spell)) return false
 
+        if (!isChannel(spell) && !requiresCharge(spell, player.isSneaking)) {
+            actions.cast(player, StaffCastInput.of(player.isSneaking, quick = false), 0.0)
+            return false
+        }
         if (isChannel(spell) && !actions.beginChannel(player, spell)) return false
         val charge = Charge(spell, player.inventory.heldItemSlot, player.world.uid,
             player.isSneaking, item.clone())
@@ -316,6 +324,9 @@ internal class StaffSpellInput(
     }
 
     private fun isChannel(spell: StaffSpell) = spell == StaffSpell.INFERNO || spell == StaffSpell.GRAVITY
+
+    private fun requiresCharge(spell: StaffSpell, secondary: Boolean) =
+        !secondary && spell in STAFF_CHARGED_PRIMARY_SPELLS
 
     private fun upgradeHeldStaff(player: Player) = upgradeStaffSlot(player, player.inventory.heldItemSlot)
 

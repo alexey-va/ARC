@@ -6,24 +6,65 @@ import org.bukkit.Material
 import org.joml.Vector3f
 
 class StaffChargeGeometryTest : FreeSpec({
-    "all spell families assemble fixed charge slots into distinct formations" {
-        val silhouettes = mutableSetOf<List<Triple<Float, Float, Float>>>()
-        StaffSpell.entries.filterNot { it in setOf(StaffSpell.INFERNO, StaffSpell.GRAVITY) }.forEach { spell ->
-            val empty = staffChargeParts(spell, 0.0, 0)
-            val half = staffChargeParts(spell, 0.5, 18)
-            val full = staffChargeParts(spell, 1.0, 36)
-
-            full.size shouldBe (if (spell == StaffSpell.ICICLE) 33 else 21)
-            empty.size shouldBe full.size
-            empty.map { it.material } shouldBe full.map { it.material }
-            empty.map { it.visible } shouldBe full.map { it.visible }
-            empty.all { it.visible } shouldBe true
-            (empty.sumOf { it.scale.length().toDouble() } < half.sumOf { it.scale.length().toDouble() }) shouldBe true
-            (half.sumOf { it.scale.length().toDouble() } < full.sumOf { it.scale.length().toDouble() }) shouldBe true
-            full.all { it.center.length() - it.scale.length() / 2 > 1.15f } shouldBe true
-            silhouettes += full.map { Triple(it.center.x, it.center.y, it.center.z) }
+    "only ICICLE and EMBER expose charge geometry" {
+        StaffSpell.entries.filterNot { it in setOf(StaffSpell.ICICLE, StaffSpell.EMBER) }.forEach { spell ->
+            staffChargeParts(spell, 0.5, 18) shouldBe emptyList<StaffDisplayPart>()
         }
-        silhouettes.size shouldBe StaffSpell.entries.size - 2
+    }
+
+    "icicle charge keeps eleven real eight-piece bodies at stable anchors" {
+        val empty = staffChargeParts(StaffSpell.ICICLE, 0.0, 0)
+        val half = staffChargeParts(StaffSpell.ICICLE, 0.5, 18)
+        val full = staffChargeParts(StaffSpell.ICICLE, 1.0, 36)
+
+        full.size shouldBe 88
+        empty.size shouldBe full.size
+        half.size shouldBe full.size
+        empty.map { it.identity } shouldBe full.map { it.identity }
+        half.map { it.identity } shouldBe full.map { it.identity }
+        full.map { it.identity }.distinct().size shouldBe full.size
+        empty.all { it.visible } shouldBe true
+        full.all { it.visible } shouldBe true
+        (0..10).forEach { index ->
+            full.count { it.identity!!.startsWith("icicle-charge:$index:") } shouldBe 8
+        }
+        val anchorOrder = listOf(0, 2, 4, 5, 6, 8, 10, 1, 3, 7, 9)
+        anchorOrder.forEachIndexed { slot, anchorIndex ->
+            (staffIcicleChargeAnchorOffset(slot).distance(staffIcicleAnchorOffset(anchorIndex, 11)) < 1.0e-6f) shouldBe true
+        }
+        staffIcicleCount(Double.NaN) shouldBe 7
+        staffIcicleCount(Double.POSITIVE_INFINITY) shouldBe 7
+        staffIcicleCount(-1.0) shouldBe 7
+        staffIcicleCount(0.0) shouldBe 7
+        staffIcicleCount(0.2499) shouldBe 7
+        staffIcicleCount(0.25) shouldBe 8
+        staffIcicleCount(0.5) shouldBe 9
+        staffIcicleCount(0.75) shouldBe 10
+        staffIcicleCount(1.0) shouldBe 11
+        staffIcicleCount(2.0) shouldBe 11
+
+        (7..10).forEach { index ->
+            val threshold = (index - 7) / 4.0
+            val before = staffIcicleChargeParts(threshold, index)
+            val growing = staffIcicleChargeParts(threshold + 0.125, index)
+            val complete = staffIcicleChargeParts(threshold + 0.25, index)
+            before.all { it.scale.x >= 0.001f && it.scale.y >= 0.001f && it.scale.z >= 0.001f } shouldBe true
+            (growing.sumOf { it.scale.length().toDouble() } > before.sumOf { it.scale.length().toDouble() }) shouldBe true
+            (growing.sumOf { it.scale.length().toDouble() } < complete.sumOf { it.scale.length().toDouble() }) shouldBe true
+        }
+
+        val body = staffIcicleDisplayParts(ageTicks = 8, impact = false)
+        body.map { it.identity } shouldBe (0..7).map { "icicle:$it" }
+        val localSlot = staffIcicleChargeParts(0.0, 0)
+        localSlot.map { it.identity } shouldBe body.map { it.identity }
+        localSlot.zip(body).all { (charged, part) ->
+            charged.scale.distance(part.scale) < 1.0e-6f && charged.center.distance(part.center) < 1.0e-6f
+        } shouldBe true
+        val aggregatedFirst = empty.filter { it.identity!!.startsWith("icicle-charge:0:") }
+        aggregatedFirst.map { it.material } shouldBe localSlot.map { it.material }
+        aggregatedFirst.zip(localSlot).all { (preview, charged) ->
+            Vector3f(preview.center).sub(staffIcicleChargeAnchorOffset(0)).distance(charged.center) < 1.0e-6f
+        } shouldBe true
     }
 
     "full charge enlarges the localized projectile core as well as its wake" {
@@ -63,9 +104,9 @@ class StaffChargeGeometryTest : FreeSpec({
             (weak.scale.z <= middle.scale.z && middle.scale.z <= part.scale.z) shouldBe true
         }
 
-        val core = full.single { it.identity == "ember-charge:0:crust" }
+        val core = full.single { it.identity == "core:0" }
         core.material shouldBe Material.MAGMA_BLOCK
-        core.center shouldBe Vector3f(0f, -0.88f, 2.9f)
+        core.center shouldBe staffEmberChargeOffset()
         full.all { part ->
             part.center.length() - part.scale.length() * 0.5f >
                 staffEyeClearance(StaffSpell.EMBER, impact = false).toFloat() + 0.15f
@@ -88,6 +129,37 @@ class StaffChargeGeometryTest : FreeSpec({
         }
     }
 
+    "primary ember charge and flight are the same body at different local offsets" {
+        val offset = staffEmberChargeOffset()
+        for (charge in listOf(0.0, 0.37, 1.0)) {
+            val held = staffChargeParts(StaffSpell.EMBER, charge, 10)
+            val flight = staffDisplayParts(StaffSpell.EMBER, ageTicks = 0, durationTicks = 80,
+                length = 24.0, radius = 0.85, impact = false, charge = charge)
+            val laterFlight = staffDisplayParts(StaffSpell.EMBER, ageTicks = 20, durationTicks = 80,
+                length = 24.0, radius = 0.85, impact = false, charge = charge)
+
+            held.size shouldBe 21
+            flight.map { it.identity } shouldBe held.map { it.identity }
+            laterFlight shouldBe flight
+            held.zip(flight).forEach { (charged, projectile) ->
+                charged.material shouldBe projectile.material
+                charged.scale shouldBe projectile.scale
+                charged.rotation shouldBe projectile.rotation
+                (Vector3f(charged.center).sub(offset).distance(projectile.center) < 1.0e-6f) shouldBe true
+            }
+        }
+        val impact = staffDisplayParts(StaffSpell.EMBER, ageTicks = 0, durationTicks = 80,
+            length = 24.0, radius = 0.85, impact = true)
+        impact.size shouldBe 48
+        impact.take(2).map { it.identity } shouldBe listOf("core:0", "core:1")
+
+        val meteor = staffDisplayParts(StaffSpell.EMBER, ageTicks = 0, durationTicks = 80,
+            length = 24.0, radius = 0.85, impact = false, secondary = true)
+        meteor.size shouldBe 14
+        meteor.take(4).map { it.identity } shouldBe (0..3).map { "core:$it" }
+        meteor.drop(4).map { it.identity } shouldBe (0..9).map { "wake:$it" }
+    }
+
     "only ember charge follows aim pitch" {
         val direction = Vector3f(-0.27f, 0.31f, 0.91f).normalize()
         val emberForward = staffChargeOrientation(StaffSpell.EMBER, yaw = 73f, direction = direction)
@@ -102,7 +174,7 @@ class StaffChargeGeometryTest : FreeSpec({
 
     "released legacy spell support grows with charge without moving attack geometry" {
         val legacy = listOf(StaffSpell.CHAIN, StaffSpell.MARK, StaffSpell.FROST,
-            StaffSpell.ICICLE, StaffSpell.FAULT, StaffSpell.LANCE, StaffSpell.EMBER)
+            StaffSpell.ICICLE, StaffSpell.FAULT, StaffSpell.LANCE)
         legacy.forEach { spell ->
             fun parts(charge: Double) = staffDisplayParts(spell, ageTicks = 20, durationTicks = 48,
                 length = 18.0, radius = 3.5, impact = false, charge = charge)
