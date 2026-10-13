@@ -397,6 +397,8 @@ object ArcMenuConfiguration {
         "contracts-quantity-preset",
         "contracts-track",
         "contracts-next-order",
+        "contract-desk-order",
+        "contract-desk-empty",
         "scheduled-entry-enabled",
         "scheduled-entry-disabled",
         "parkour-category",
@@ -418,8 +420,11 @@ object ArcMenuConfiguration {
         "treasure-pool-entry",
         "treasure-entry",
         "board-contract",
+        "board-contract-empty",
         "board-edit-field",
     )
+
+    private val childTemplatePrefixes = setOf("elite-loot-", "lost-loot-", "em-shop-")
 
     fun load(dataRoot: Path): PaperMenuConfiguration {
         val config = Config(dataRoot, RESOURCE)
@@ -428,10 +433,9 @@ object ArcMenuConfiguration {
     }
 
     /**
-     * Keep the host's validation input bounded to its own contracts. The shared
-     * legacy YAML may also contain ArcDungeons or future foreign layouts and
-     * templates; remove those entries only from this in-memory Config and never
-     * save this filtered view.
+     * Keep host validation away from ArcDungeons layouts and its reserved
+     * template namespaces. Preserve other operator-defined templates, including
+     * those not referenced by a bundled layout. Never save this filtered view.
      */
     private fun filterToArcMenus(config: Config): Config {
         val hostLayouts = ArcMenuSchema.contracts.keys.mapTo(hashSetOf()) { it.value }
@@ -439,20 +443,8 @@ object ArcMenuConfiguration {
             .filterNot(hostLayouts::contains)
             .forEach { config.removeKey("$LAYOUT_ROOT.$it") }
 
-        val referenced = linkedSetOf<String>()
-        hostLayouts.forEach { layout ->
-            val path = "$LAYOUT_ROOT.$layout"
-            config.stringOrNull("$path.background.template")?.let(referenced::add)
-            config.keys("$path.elements").forEach { element ->
-                config.stringOrNull("$path.elements.$element.template")?.let(referenced::add)
-            }
-            config.keys("$path.legend").forEach { symbol ->
-                config.stringOrNull("$path.legend.$symbol.template")?.let(referenced::add)
-            }
-        }
-        val retainedTemplates = referenced + requiredTemplates
         config.keys(TEMPLATE_ROOT)
-            .filterNot(retainedTemplates::contains)
+            .filter { template -> childTemplatePrefixes.any { prefix -> template.startsWith(prefix) } }
             .forEach { config.removeKey("$TEMPLATE_ROOT.$it") }
         return config
     }

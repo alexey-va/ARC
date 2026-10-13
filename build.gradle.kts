@@ -536,6 +536,10 @@ val parkourE2e = providers.gradleProperty("parkourE2e").map(String::toBoolean).o
 val dungeonsE2e = providers.gradleProperty("dungeonsE2e").map(String::toBoolean).orElse(false).get()
 val contractCrashE2e = providers.gradleProperty("contractCrashE2e").map(String::toBoolean).orElse(false).get()
 val e2eMinecraftVersion = providers.gradleProperty("e2eMinecraftVersion").orElse("26.1.2").get()
+val standardE2eTestFiles = fileTree("src/test/e2e") {
+    include("**/*.spec.js")
+    exclude("**/dungeons-real-paper.spec.js", "**/node_modules/**")
+}.files.map { it.name.removeSuffix(".spec.js") }.sorted().joinToString(",")
 
 fun pinnedE2eDownload(taskName: String, destination: File, url: String, sha256: String) = tasks.register(taskName) {
     inputs.property("url", url)
@@ -616,6 +620,7 @@ plugwright {
             file("plugins/ARC/modules/redis.yml", projectDir.resolve("src/test/e2e/fixtures/entity-cleanup-redis.yml"))
             file("plugins/ArcDungeons-0.1.0.jar", projectDir.resolve("arc-dungeons/build/libs/ArcDungeons-0.1.0.jar"))
             file("plugins/ArcDungeonsE2eFixture.jar", arcDungeonsE2eFixtureJar.get().archiveFile.get().asFile)
+            file("plugins/Citizens-2.0.43-b4246.jar", contractCitizensJar.get().asFile)
         } else if (cleanupE2e || parkourE2e || dialogE2e) {
             file("plugins/ARC/modules/redis.yml", projectDir.resolve("src/test/e2e/fixtures/entity-cleanup-redis.yml"))
             if (cleanupE2e) {
@@ -791,6 +796,7 @@ tasks.named<me.drownek.plugwright.PlugwrightTestTask>("plugwrightTest") {
     } else if (parkourE2e) {
         testFiles.set("parkour-real-paper")
     } else if (dungeonsE2e) {
+        dependsOn(prepareContractCitizens)
         dependsOn(":arc-dungeons:shadowJar")
         dependsOn(arcDungeonsE2eFixtureJar)
         testFiles.set("dungeons-real-paper")
@@ -807,6 +813,8 @@ tasks.named<me.drownek.plugwright.PlugwrightTestTask>("plugwrightTest") {
                     "The crash profile requires ARC_CONTRACT_CRASH_FIXTURE=1 in its isolated CI process"
                 }
             }
+        } else {
+            testFiles.set(standardE2eTestFiles)
         }
     }
 }

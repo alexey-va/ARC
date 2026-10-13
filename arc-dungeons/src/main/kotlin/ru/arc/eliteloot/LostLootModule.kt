@@ -20,6 +20,7 @@ object LostLootModule : PluginModule {
     private var repository: SharedLostLootRepository? = null
     private var capture: LostEliteLoot? = null
     private var mailbox: SharedLostLootMailbox? = null
+    internal val isReady: Boolean get() = repository != null && capture != null && mailbox != null
     private fun nativeAvailable() = Bukkit.getPluginManager().isPluginEnabled("EliteMobs")
 
     override fun init() {

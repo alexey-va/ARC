@@ -106,6 +106,8 @@ jobs:
           if-no-files-found: ignore
 
   e2e:
+    name: >-
+      Paper ${{ matrix.minecraft }} / ${{ matrix.dungeons-only == 'true' && 'ArcDungeons' || matrix.crash-only == 'true' && 'contract crash' || matrix.dialog-only == 'true' && 'dialog designs' || matrix.cleanup-only == 'true' && 'entity cleanup' || matrix.parkour-only == 'true' && 'Parkour' || 'contracts and Parkour' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:

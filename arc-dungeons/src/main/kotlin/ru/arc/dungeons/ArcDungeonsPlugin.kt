@@ -6,6 +6,7 @@ import org.bukkit.plugin.ServicePriority
 import org.bukkit.plugin.java.JavaPlugin
 import ru.arc.config.ConfigManager
 import ru.arc.core.ModuleRegistry
+import ru.arc.core.ModuleRuntimeStatus
 import ru.arc.core.PaperArcRuntime
 import ru.arc.dungeons.api.ArcDungeonConfiguration
 import ru.arc.dungeons.api.ArcDungeonsService
@@ -90,7 +91,7 @@ class ArcDungeonsPlugin : JavaPlugin() {
             getCommand(name)?.let { it.setExecutor(command); it.tabCompleter = command }
         }
         publishModuleMetrics()
-        lifecycle.ready("modules" to ModuleRegistry.getRuntimeStatuses().count { it.ready })
+        lifecycle.ready("modules" to effectiveModuleStatuses().count { it.ready })
         lifecycle.reportHealthEvery(1_200L)
     }
 
@@ -127,7 +128,7 @@ class ArcDungeonsPlugin : JavaPlugin() {
     }
 
     private fun publishModuleMetrics() {
-        val statuses = ModuleRegistry.getRuntimeStatuses()
+        val statuses = effectiveModuleStatuses()
         health = RuntimeHealthContribution(
             state = if (statuses.all { it.ready }) RuntimeHealthState.UP else RuntimeHealthState.DEGRADED,
             dependencies = statuses.associate { it.name.lowercase(java.util.Locale.ROOT) to it.ready },
@@ -139,6 +140,10 @@ class ArcDungeonsPlugin : JavaPlugin() {
                 mapOf("module" to status.name))?.set(if (status.ready) 1.0 else 0.0)
         }
     }
+
+    private fun effectiveModuleStatuses() = moduleStatusesWithLostLootReadiness(
+        ModuleRegistry.getRuntimeStatuses(), LostLootModule.isReady,
+    )
 
     private fun reloadNative() {
         if (!server.pluginManager.isPluginEnabled("EliteMobs")) {
@@ -204,4 +209,11 @@ class ArcDungeonsPlugin : JavaPlugin() {
         runtime?.close()
         runtime = null
     }
+}
+
+internal fun moduleStatusesWithLostLootReadiness(
+    statuses: List<ModuleRuntimeStatus>,
+    lostLootReady: Boolean,
+) = statuses.map { status ->
+    if (status.name == LostLootModule.name) status.copy(ready = status.ready && lostLootReady) else status
 }

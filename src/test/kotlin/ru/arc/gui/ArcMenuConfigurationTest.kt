@@ -152,7 +152,7 @@ class ArcMenuConfigurationTest : StringSpec({
         Files.readString(target) shouldBe afterMigration
     }
 
-    "ignores future dungeon layouts and templates without rewriting the shared legacy config" {
+    "filters child dungeon layouts while preserving host templates and the shared legacy config" {
         val root = Files.createTempDirectory("arc-menu-foreign-dungeon-config")
         val target = root.resolve(ArcMenuConfiguration.RESOURCE)
         Files.createDirectories(target.parent)
@@ -163,11 +163,12 @@ class ArcMenuConfigurationTest : StringSpec({
         val legacy = Config(root, ArcMenuConfiguration.RESOURCE)
         legacy.setInt("menus.layouts.investigation-hub.elements.start.slot", 15)
         legacy.setString("menus.layouts.elite-loot.schema-version", "future")
-        legacy.setString("menus.layouts.elite-loot.elements.back.template", "dungeons-future-template")
+        legacy.setString("menus.layouts.elite-loot.elements.back.template", "lost-loot-back")
         legacy.setString("menus.layouts.elite-loot-confirmation.schema-version", "future")
         legacy.setString("menus.layouts.elite-loot-confirmation.rows", "future")
         legacy.setString("menus.templates.em-shop-item.material", "NOT_A_REAL_MATERIAL")
-        legacy.setString("menus.templates.dungeons-future-template.material", "NOT_A_REAL_MATERIAL")
+        legacy.setString("menus.templates.lost-loot-back.material", "NOT_A_REAL_MATERIAL")
+        legacy.setString("menus.templates.operator-custom.material", "STONE")
         legacy.saveStrict()
         val beforeLoad = Files.readString(target)
 
@@ -178,13 +179,16 @@ class ArcMenuConfigurationTest : StringSpec({
         loaded.catalog.layouts.containsKey(MenuId.of("elite-loot")) shouldBe false
         loaded.catalog.layouts.containsKey(MenuId.of("elite-loot-confirmation")) shouldBe false
         loaded.templates.containsKey("em-shop-item") shouldBe false
-        loaded.templates.containsKey("dungeons-future-template") shouldBe false
+        loaded.templates.containsKey("lost-loot-back") shouldBe false
+        loaded.templates.keys.containsAll(setOf(
+            "contract-desk-order", "contract-desk-empty", "board-contract-empty", "operator-custom",
+        )) shouldBe true
         Files.readString(target) shouldBe beforeLoad
 
         val persisted = Config(root, ArcMenuConfiguration.RESOURCE)
         persisted.exists("menus.layouts.elite-loot-confirmation") shouldBe true
         persisted.stringOrNull("menus.layouts.elite-loot.schema-version") shouldBe "future"
-        persisted.stringOrNull("menus.templates.dungeons-future-template.material") shouldBe "NOT_A_REAL_MATERIAL"
+        persisted.stringOrNull("menus.templates.lost-loot-back.material") shouldBe "NOT_A_REAL_MATERIAL"
     }
 
     "investigation menu backgrounds render the canonical filler model" {

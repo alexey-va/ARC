@@ -11,6 +11,7 @@ import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
+import ru.arc.dungeons.api.ArcBookIdentity
 import ru.arc.paper.testing.MockBukkitTestRuntime
 
 class EliteEnchantmentBookPresentationTest : FreeSpec({
@@ -297,10 +298,10 @@ class EliteEnchantmentBookPresentationTest : FreeSpec({
     }
 
     "AE book PDC markers are recognized by their provider-authored key names" {
-        hasAdvancedEnchantmentsBookMarker(setOf(NamespacedKey("advancedenchantments", "ae_book"))) shouldBe true
-        hasAdvancedEnchantmentsBookMarker(setOf(NamespacedKey("advancedenchantments", "ae_book_level"))) shouldBe true
-        hasAdvancedEnchantmentsBookMarker(setOf(NamespacedKey("other", "ae_book"))) shouldBe false
-        hasAdvancedEnchantmentsBookMarker(setOf(NamespacedKey("other", "ae_custom_book"))) shouldBe false
+        ArcBookIdentity.hasAdvancedEnchantmentsMarker(setOf(NamespacedKey("advancedenchantments", "ae_book"))) shouldBe true
+        ArcBookIdentity.hasAdvancedEnchantmentsMarker(setOf(NamespacedKey("advancedenchantments", "ae_book_level"))) shouldBe true
+        ArcBookIdentity.hasAdvancedEnchantmentsMarker(setOf(NamespacedKey("other", "ae_book"))) shouldBe false
+        ArcBookIdentity.hasAdvancedEnchantmentsMarker(setOf(NamespacedKey("other", "ae_custom_book"))) shouldBe false
     }
 
     "native generated lore range is reindexed after presentation rows shift it" {

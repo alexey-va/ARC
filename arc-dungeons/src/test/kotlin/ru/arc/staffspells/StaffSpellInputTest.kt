@@ -524,10 +524,7 @@ private data class InputHarness(
 
     fun staffPlayer(name: String, world: WorldMock, spell: StaffSpell): PlayerMock = paper.addPlayer(name).apply {
         teleport(Location(world, 0.5, 64.0, 0.5).apply { setDirection(Vector(0.0, 0.0, 1.0)) })
-        inventory.setItemInMainHand(StaffSpellConfig(StaffTestConfig()).item(spell).apply {
-            unsetData(DataComponentTypes.CONSUMABLE) // A pre-upgrade staff exercises runtime migration.
-        })
-        syncMockBukkitUseEquipment()
+        inventory.setItemInMainHand(StaffSpellConfig(StaffTestConfig()).item(spell))
     }
 }
 
