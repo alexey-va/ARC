@@ -62,7 +62,7 @@ class ArcDungeonsNativeIntegrationLifecycleTest {
             setField(plugin, "emSync", sync)
             @Suppress("UNCHECKED_CAST")
             val listeners = field(plugin, "nativeListeners").get(plugin) as MutableList<Listener>
-            listeners += mockk(relaxed = true)
+            listeners += mockk<Listener>(relaxed = true)
 
             // A native reload failure must be contained; closeNative must still visit every handle.
             invokeNativeReload(plugin)
