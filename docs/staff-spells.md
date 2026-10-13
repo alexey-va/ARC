@@ -1,4 +1,4 @@
-# Prototype staff spells — ARC 1.4.382
+# Prototype staff spells — ARC 1.4.383
 
 `/arc stafftest` issues seventeen administrator-only mechanics samples: the
 fourteen established staves plus `inferno`, `gravity` and `ossuary`. Use

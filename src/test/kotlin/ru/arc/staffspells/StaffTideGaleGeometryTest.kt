@@ -5,6 +5,7 @@ import io.kotest.matchers.shouldBe
 import org.bukkit.Material
 import org.bukkit.Particle
 import org.joml.Matrix4f
+import kotlin.math.abs
 
 class StaffTideGaleGeometryTest : FreeSpec({
     "GALE and TIDE geometry stays finite at every animation age and charge" {
@@ -44,8 +45,10 @@ class StaffTideGaleGeometryTest : FreeSpec({
         val next = staffDisplayParts(StaffSpell.GALE, 16, 52, 20.0, 3.0, false, false,
             input = StaffCastInput.PRIMARY, charge = .5)
         val bandIds = frame.mapNotNull { it.identity }.filter { it.startsWith("gale:tornado:band:") }
+        val bands = frame.filter { it.identity?.startsWith("gale:tornado:band:") == true }
         frame.size shouldBe 39
         bandIds.size shouldBe 33
+        bands.all { it.scale.x in .65f..0.75f && it.scale.x > it.scale.y * 4.0f } shouldBe true
         frame.mapNotNull { it.identity }.distinct().size shouldBe frame.size
         next.mapNotNull { it.identity }.toSet() shouldBe frame.mapNotNull { it.identity }.toSet()
         (frame.maxOf { it.center.y } > 5.0f) shouldBe true
@@ -86,6 +89,23 @@ class StaffTideGaleGeometryTest : FreeSpec({
         val width = frame.maxOf { it.center.x } - frame.minOf { it.center.x }
         (width in 4.0f..5.2f) shouldBe true
         (frame.maxOf { it.center.y } in 2.5f..3.3f) shouldBe true
+        frame.filter { it.identity?.startsWith("tide:wave:skin:") == true }
+            .all { it.scale.y in .65f..0.75f } shouldBe true
+        val unchargedSkin = staffDisplayParts(StaffSpell.TIDE, 12, 44, 20.0, 2.8, false, true,
+            input = StaffCastInput.SECONDARY, charge = 0.0)
+            .filter { it.identity?.startsWith("tide:wave:skin:") == true }
+        unchargedSkin.all { abs(it.scale.y - .72f) < .001f } shouldBe true
+        val rows = (0..4).map { row ->
+            unchargedSkin.filter { it.identity?.startsWith("tide:wave:skin:$row:") == true }
+        }
+        (0..3).all { row -> (0..6).all { index ->
+            abs(rows[row][index].center.y - rows[row + 1][index].center.y) <= .72f
+        } } shouldBe true
+        val lip = frame.filter { it.identity?.startsWith("tide:wave:foam:") == true }
+        (lip.minOf { it.center.z } > .8f) shouldBe true
+        val lastSkin = frame.filter { it.identity?.startsWith("tide:wave:skin:4:") == true }
+        lip.zip(lastSkin).all { (foam, skin) -> foam.center.distance(skin.center) < .1f && foam.center.z > skin.center.z }
+            .shouldBe(true)
         frame.any { it.material == Material.WHITE_STAINED_GLASS } shouldBe true
         frame.all { it.material in setOf(Material.BLUE_STAINED_GLASS, Material.CYAN_STAINED_GLASS,
             Material.LIGHT_BLUE_STAINED_GLASS, Material.WHITE_STAINED_GLASS, Material.SEA_LANTERN) } shouldBe true

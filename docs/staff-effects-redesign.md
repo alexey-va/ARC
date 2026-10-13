@@ -1,4 +1,4 @@
-# Staff sequence and guard design — ARC 1.4.382
+# Staff sequence and guard design — ARC 1.4.383
 
 The sample catalog now contains seventeen staves. Seven of them use staged,
 multi-frame Arsenal sequences; Inferno and Gravity use held channels; the

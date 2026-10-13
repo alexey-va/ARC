@@ -3,6 +3,7 @@ package ru.arc.staffspells
 import org.bukkit.Material
 import org.bukkit.Particle
 import org.bukkit.util.Vector
+import org.joml.Matrix3f
 import org.joml.Quaternionf
 import org.joml.Vector3f
 import kotlin.math.PI
@@ -79,20 +80,24 @@ internal fun staffTideGaleParts(
                     val t0 = index / nodes.toDouble()
                     val t1 = (index + 1) / nodes.toDouble()
                     fun point(t: Double): Vector3f {
-                        val angle = strand * PI * 2 / 3 + t * PI * 4.2 - age * (.055 + (1 - t) * .018)
+                        val angle = strand * PI * 2 / 3 + t * PI * 2.3 - age * (.055 + (1 - t) * .018)
                         // Keep a narrow ground stem and let the translucent funnel widen
                         // upward, as a readable tornado silhouette should.
                         val taper = (.30 + 1.32 * t.pow(.82) + q * .06) * grow
                         return Vector3f((cos(angle) * taper).toFloat(), (t * height * grow).toFloat(),
                             (sin(angle) * taper).toFloat())
                     }
-                    add(tideGaleLink(
+                    val midT = (t0 + t1) / 2.0
+                    val midAngle = strand * PI * 2 / 3 + midT * PI * 2.3 - age * (.055 + (1 - midT) * .018)
+                    val slope = 1.32 * .82 * midT.pow(-.18) / height
+                    val radialNormal = Vector3f(cos(midAngle).toFloat(), (-slope).toFloat(), sin(midAngle).toFloat())
+                    add(tideGaleRibbonLink(
                         when (strand) {
                             0 -> Material.LIGHT_GRAY_STAINED_GLASS
                             1 -> Material.GRAY_STAINED_GLASS
                             else -> Material.LIGHT_GRAY_STAINED_GLASS
                         },
-                        point(t0), point(t1), (.48 - .11 * t0).toFloat(), .20f,
+                        point(t0), point(t1), (.70 - .04 * t0).toFloat(), .14f, radialNormal,
                         "gale:tornado:band:$strand:$index"))
                 }
             }
@@ -120,40 +125,37 @@ internal fun staffTideGaleParts(
             val crestHeight = (2.75 + q * .32) / scale
             val acrossSegments = 7
             val rows = listOf(.06, .28, .52, .76, .96)
+            fun wavePoint(x: Double, t: Double): Vector3f {
+                val across = x / halfWidth
+                val shoulder = .78 + .22 * (1.0 - abs(across))
+                val curl = smoothTideGale((t - .60) / .40)
+                val heightT = if (t >= .90) t - .06 else t
+                val z = -.10 + .72 * sin(t * PI * .72) + .70 * curl * curl +
+                    .18 * (1.0 - abs(across))
+                return Vector3f((x * grow).toFloat(), (heightT * crestHeight * shoulder * grow).toFloat(),
+                    (z * grow).toFloat())
+            }
             rows.forEachIndexed { row, t ->
                 repeat(acrossSegments) { index ->
                     val x0 = -halfWidth + (index / acrossSegments.toDouble()) * halfWidth * 2
                     val x1 = -halfWidth + ((index + 1) / acrossSegments.toDouble()) * halfWidth * 2
-                    fun point(x: Double): Vector3f {
-                        val across = x / halfWidth
-                        val shoulder = .78 + .22 * (1.0 - abs(across))
-                        val curl = smoothTideGale((t - .60) / .40)
-                        val z = -.10 + .72 * sin(t * PI * .72) - .70 * curl * curl +
-                            .18 * (1.0 - abs(across))
-                        return Vector3f((x * grow).toFloat(), (t * crestHeight * shoulder * grow).toFloat(),
-                            (z * grow).toFloat())
-                    }
                     add(tideGaleLink(
                         when (row) {
                             0 -> Material.BLUE_STAINED_GLASS
                             1 -> Material.CYAN_STAINED_GLASS
                             else -> Material.LIGHT_BLUE_STAINED_GLASS
-                        }, point(x0), point(x1), (.34 + t * .12).toFloat(), (.38 + t * .06).toFloat(),
+                        }, wavePoint(x0, t), wavePoint(x1, t), (.34 + t * .12).toFloat(), (.72 / scale).toFloat(),
                         "tide:wave:skin:$row:$index"))
                 }
             }
             repeat(acrossSegments) { index ->
                 val x0 = -halfWidth + (index / acrossSegments.toDouble()) * halfWidth * 2
                 val x1 = -halfWidth + ((index + 1) / acrossSegments.toDouble()) * halfWidth * 2
-                fun foamPoint(x: Double): Vector3f {
-                    val across = x / halfWidth
-                    val y = crestHeight * (.78 + .22 * (1.0 - abs(across))) * grow
-                    val z = (-.10 + .72 * sin(PI * .72) - .70 + .18 * (1.0 - abs(across))) * grow
-                    return Vector3f((x * grow).toFloat(), y.toFloat(), z.toFloat())
-                }
+                val foamStart = wavePoint(x0, rows.last()).add(0f, (.02 * grow).toFloat(), (.05 * grow).toFloat())
+                val foamEnd = wavePoint(x1, rows.last()).add(0f, (.02 * grow).toFloat(), (.05 * grow).toFloat())
                 add(tideGaleLink(
                     if (index % 3 == 0) Material.SEA_LANTERN else Material.WHITE_STAINED_GLASS,
-                    foamPoint(x0), foamPoint(x1), .27f, .18f, "tide:wave:foam:$index"))
+                    foamStart, foamEnd, .27f, .30f, "tide:wave:foam:$index"))
             }
             // A few detached crest beads keep the lip lively without making a fog bank.
             repeat(4) { index ->
@@ -374,6 +376,31 @@ private fun tideGaleLink(
     val length = delta.length().coerceAtLeast(.001f)
     val rotation = if (delta.lengthSquared() <= 1.0e-8f) Quaternionf()
         else Quaternionf().rotationTo(Vector3f(0f, 0f, 1f), Vector3f(delta).normalize())
+    return StaffDisplayPart(material, Vector3f(start).add(end).mul(.5f),
+        Vector3f(faceWidth, thickness, length * 1.16f), rotation, identity = identity)
+}
+
+private fun tideGaleRibbonLink(
+    material: Material,
+    start: Vector3f,
+    end: Vector3f,
+    faceWidth: Float,
+    thickness: Float,
+    radialNormal: Vector3f,
+    identity: String,
+): StaffDisplayPart {
+    val delta = Vector3f(end).sub(start)
+    val lengthSquared = delta.lengthSquared()
+    val length = delta.length().coerceAtLeast(.001f)
+    val tangent = if (lengthSquared <= 1.0e-8f) Vector3f(0f, 0f, 1f) else delta.normalize()
+    var faceNormal = Vector3f(radialNormal).sub(Vector3f(tangent).mul(radialNormal.dot(tangent)))
+    if (faceNormal.lengthSquared() <= 1.0e-8f) {
+        val fallback = if (abs(tangent.y) < .9f) Vector3f(0f, 1f, 0f) else Vector3f(1f, 0f, 0f)
+        faceNormal = fallback.sub(Vector3f(tangent).mul(fallback.dot(tangent)))
+    }
+    faceNormal.normalize()
+    val widthAxis = Vector3f(faceNormal).cross(tangent).normalize()
+    val rotation = Quaternionf().setFromNormalized(Matrix3f().set(widthAxis, faceNormal, tangent))
     return StaffDisplayPart(material, Vector3f(start).add(end).mul(.5f),
         Vector3f(faceWidth, thickness, length * 1.16f), rotation, identity = identity)
 }

@@ -3,7 +3,11 @@ package ru.arc.staffspells
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.assertions.withClue
 import io.kotest.matchers.shouldBe
+import org.joml.Quaternionf
+import org.joml.Vector3f
+import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlin.math.tan
 
 class StaffPreparationGeometryTest : FreeSpec({
     "preparation parts keep stable identities, finite bounds, and caster clearance" {
@@ -38,10 +42,28 @@ class StaffPreparationGeometryTest : FreeSpec({
                     withClue("$spell secondary=$secondary age=$age part=${part.identity} center=${part.center} scale=${part.scale}") {
                         (values.all(Float::isFinite) && part.scale.x > 0f && part.scale.y > 0f &&
                         part.scale.z > 0f && part.material.isBlock &&
-                        part.center.y in 1.3f..2.4f && part.center.z in 1.8f..2.5f &&
+                        part.center.y in 0.4f..1.5f && part.center.z in 3.1f..3.8f &&
                         part.center.length() - part.scale.length() * 0.5f >= 1.5f) shouldBe true
                     }
                 }
+            }
+        }
+    }
+
+    "age four preparations appear in a normal camera view without covering the reticle" {
+        val verticalSlope = tan(Math.toRadians(24.0)).toFloat()
+        val horizontalSlope = verticalSlope * 1.53f
+        for (spell in StaffSpell.entries) for (secondary in listOf(false, true)) {
+            val parts = staffPreparationParts(spell, secondary, 4)
+            if (parts.isEmpty()) continue
+
+            withClue("$spell secondary=$secondary") {
+                parts.any { part ->
+                    val center = part.center
+                    center.z > 0f && abs(center.y) <= center.z * verticalSlope &&
+                        abs(center.x) <= center.z * horizontalSlope
+                } shouldBe true
+                parts.none(::preparationIntersectsReticle) shouldBe true
             }
         }
     }
@@ -71,3 +93,26 @@ class StaffPreparationGeometryTest : FreeSpec({
         staffPreparationParts(StaffSpell.GALE, false, 10) shouldBe emptyList()
     }
 })
+
+private fun preparationIntersectsReticle(part: StaffDisplayPart): Boolean {
+    val inverse = Quaternionf(part.rotation).invert()
+    val origin = inverse.transform(Vector3f(-part.center.x, -part.center.y, -part.center.z))
+    val direction = inverse.transform(Vector3f(0f, 0f, 1f))
+    var near = 0f
+    var far = Float.POSITIVE_INFINITY
+    for (axis in 0..2) {
+        val rayOrigin = when (axis) { 0 -> origin.x; 1 -> origin.y; else -> origin.z }
+        val rayDirection = when (axis) { 0 -> direction.x; 1 -> direction.y; else -> direction.z }
+        val extent = when (axis) { 0 -> part.scale.x; 1 -> part.scale.y; else -> part.scale.z } / 2f
+        if (abs(rayDirection) < 1e-6f) {
+            if (abs(rayOrigin) > extent) return false
+        } else {
+            val first = (-extent - rayOrigin) / rayDirection
+            val second = (extent - rayOrigin) / rayDirection
+            near = maxOf(near, minOf(first, second))
+            far = minOf(far, maxOf(first, second))
+            if (near > far) return false
+        }
+    }
+    return far >= 0f
+}

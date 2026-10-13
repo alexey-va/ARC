@@ -39,7 +39,12 @@ internal fun staffPreparationParts(
     val opening = 0.22 + 0.78 * preparationSmooth(age / 3.0)
     val fade = 0.10 + 0.90 * preparationSmooth((duration - age - 1) / 3.0)
     val envelope = (opening * fade).toFloat()
-    return pose.map { part -> part.copy(scale = Vector3f(part.scale).mul(envelope)) }
+    return pose.map { part ->
+        part.copy(
+            center = Vector3f(part.center).add(0f, PREPARATION_VIEW_Y_OFFSET, PREPARATION_VIEW_Z_OFFSET),
+            scale = Vector3f(part.scale).mul(envelope),
+        )
+    }
 }
 
 private fun chainPreparation(age: Int, secondary: Boolean): List<StaffDisplayPart> = buildList {
@@ -350,3 +355,5 @@ private fun preparationBeam(
 private fun preparationSmooth(value: Double): Double = value.coerceIn(0.0, 1.0).let { it * it * (3.0 - 2.0 * it) }
 
 private const val PREPARATION_TICKS = 10
+private const val PREPARATION_VIEW_Y_OFFSET = -0.9f
+private const val PREPARATION_VIEW_Z_OFFSET = 1.3f
