@@ -1,41 +1,86 @@
 package ru.arc.staffspells
 
+import com.magmaguy.elitemobs.MetadataHandler
 import com.magmaguy.elitemobs.advancedcombat.AdvancedCombatEnemyAuthorization
 import com.magmaguy.elitemobs.advancedcombat.damage.AdvancedDamageScaling
+import com.magmaguy.elitemobs.api.EliteMobDamagedByPlayerEventFilter
+import com.magmaguy.elitemobs.api.utils.EliteItemManager
 import com.magmaguy.elitemobs.combatsystem.CombatDamageContext
+import com.magmaguy.elitemobs.config.SkillsConfig
 import com.magmaguy.elitemobs.entitytracker.EntityTracker
+import com.magmaguy.elitemobs.items.GearRestrictionHandler
+import com.magmaguy.elitemobs.items.ItemDurability
+import com.magmaguy.elitemobs.items.customenchantments.SoulbindEnchantment
 import com.magmaguy.elitemobs.mobconstructor.custombosses.CustomBossEntity
+import com.magmaguy.elitemobs.playerdata.ElitePlayerInventory
+import com.magmaguy.elitemobs.playerdata.database.PlayerData
 import com.magmaguy.elitemobs.skills.SkillType
+import com.magmaguy.elitemobs.skills.WeaponIdentityResolver
 import com.magmaguy.elitemobs.thirdparty.custommodels.CustomModel
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkObject
 import io.mockk.mockkStatic
+import io.mockk.unmockkObject
 import io.mockk.unmockkStatic
 import io.mockk.verify
 import org.bukkit.Bukkit
 import org.bukkit.Material
+import org.bukkit.UnsafeValues
 import org.bukkit.World
+import org.bukkit.damage.DamageSource
+import org.bukkit.damage.DamageType
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Player
+import org.bukkit.inventory.ItemStack
+import org.bukkit.inventory.PlayerInventory
+import org.bukkit.inventory.meta.ItemMeta
 import org.bukkit.plugin.Plugin
 import org.bukkit.plugin.PluginManager
+import org.bukkit.plugin.java.JavaPlugin
 import ru.arc.staffspells.api.StaffSpellDuelPolicy
 import ru.arc.staffspells.api.StaffSpellDuelContext
 import java.util.UUID
 
 class StaffSpellModeledDamageTest : FreeSpec({
+    val unsafeValues = mockk<UnsafeValues>()
+    val damageSourceBuilder = mockk<DamageSource.Builder>()
+    val magicDamageSource = mockk<DamageSource>()
+    val pluginManager = mockk<PluginManager>()
+    val eliteMobsMain = mockk<JavaPlugin>(relaxed = true)
+    var originalEliteMobsMain: JavaPlugin? = null
+
     beforeTest {
+        clearMocks(unsafeValues, damageSourceBuilder, magicDamageSource, pluginManager, eliteMobsMain)
+        originalEliteMobsMain = MetadataHandler.PLUGIN
+        every { eliteMobsMain.name } returns "EliteMobs"
+        MetadataHandler.PLUGIN = eliteMobsMain
         mockkStatic(
             Bukkit::class,
             AdvancedCombatEnemyAuthorization::class,
             AdvancedDamageScaling::class,
+            EliteMobDamagedByPlayerEventFilter::class,
+            EliteItemManager::class,
             EntityTracker::class,
+            GearRestrictionHandler::class,
+            ItemDurability::class,
+            PlayerData::class,
+            SkillsConfig::class,
+            SoulbindEnchantment::class,
+            ElitePlayerInventory::class,
+            WeaponIdentityResolver::class,
         )
-        val pluginManager = mockk<PluginManager>()
         every { Bukkit.getPluginManager() } returns pluginManager
         every { pluginManager.isPluginEnabled("EliteMobs") } returns true
+        every { pluginManager.callEvent(any()) } returns Unit
+        every { Bukkit.getUnsafe() } returns unsafeValues
+        every { unsafeValues.createDamageSourceBuilder(DamageType.MAGIC) } returns damageSourceBuilder
+        every { damageSourceBuilder.withDirectEntity(any()) } returns damageSourceBuilder
+        every { damageSourceBuilder.withCausingEntity(any()) } returns damageSourceBuilder
+        every { damageSourceBuilder.build() } returns magicDamageSource
     }
 
     afterTest {
@@ -43,8 +88,18 @@ class StaffSpellModeledDamageTest : FreeSpec({
             Bukkit::class,
             AdvancedCombatEnemyAuthorization::class,
             AdvancedDamageScaling::class,
+            EliteMobDamagedByPlayerEventFilter::class,
+            EliteItemManager::class,
             EntityTracker::class,
+            GearRestrictionHandler::class,
+            ItemDurability::class,
+            PlayerData::class,
+            SkillsConfig::class,
+            SoulbindEnchantment::class,
+            ElitePlayerInventory::class,
+            WeaponIdentityResolver::class,
         )
+        MetadataHandler.PLUGIN = originalEliteMobsMain
     }
 
     fun readyEntities(player: Player, target: LivingEntity, world: World) {
@@ -229,6 +284,80 @@ class StaffSpellModeledDamageTest : FreeSpec({
         }
     }
 
+    "mapped EliteMobs casts snapshot the native weapon family, level, carrier and enchantment power" {
+        mockkObject(StaffEliteItems, StaffEliteEnchantments.Companion)
+        try {
+            val world = mockk<World>()
+            val player = mockk<Player>()
+            val target = mockk<LivingEntity>()
+            val boss = mockk<CustomBossEntity>()
+            val model = mockk<CustomModel>()
+            val weapon = mockk<ItemStack>()
+            val itemMeta = mockk<ItemMeta>()
+            val playerInventory = mockk<PlayerInventory>()
+            val eliteInventory = mockk<ElitePlayerInventory>()
+            readyEntities(player, target, world)
+            every { player.inventory } returns playerInventory
+            every { playerInventory.itemInMainHand } returns weapon
+            every { weapon.itemMeta } returns itemMeta
+            every { weapon.type } returns Material.STICK
+            every { StaffEliteItems.resolve(weapon) } returns StaffSpell.CHAIN
+            every { ItemDurability.prepareMagicWeapon(weapon) } returns Unit
+            every { EliteItemManager.isOnLastDamage(weapon) } returns false
+            every { GearRestrictionHandler.canEquip(player, weapon) } returns true
+            every { SoulbindEnchantment.isValidSoulbindUser(itemMeta, player) } returns true
+            every { WeaponIdentityResolver.progressionSkill(weapon) } returns SkillType.WANDS
+            every { SkillsConfig.isWorldExcludedFromSkills(player) } returns false
+            every { PlayerData.isDataLoaded(player.uniqueId) } returns true
+            every { PlayerData.getSkillLevel(player.uniqueId, SkillType.WANDS) } returns 6
+            every { ElitePlayerInventory.getPlayer(player) } returns eliteInventory
+            every { eliteInventory.getLoudStrikesBonusMultiplier(true) } returns 1.2
+            every { EliteItemManager.getItemLevel(weapon) } returns 12.0
+            every { EliteItemManager.getEliteDamageEnchantmentMultiplier(weapon) } returns 1.5
+            every { EliteMobDamagedByPlayerEventFilter.captureCriticalHit(player) } returns true
+            every { StaffEliteEnchantments.capture(player, weapon, SkillType.WANDS) } returns
+                StaffEliteEnchantments(damageMultiplier = 3.0, radiusMultiplier = 1.4, ignitionTicks = 40)
+
+            val damage = StaffSpellDamage()
+            val cast = requireNotNull(damage.capture(player))
+            cast.progressionSkill shouldBe StaffWeaponFamily.WANDS
+            cast.skillLevel shouldBe 6
+            cast.itemLevel shouldBe 12.0
+            cast.carrierMaterial shouldBe Material.STICK
+            cast.eliteDamageEnchantmentMultiplier shouldBe 1.5
+            cast.enchantments shouldBe StaffEliteEnchantments(3.0, 1.4, 40)
+            cast.nativeEliteWeapon shouldBe true
+
+            every { target.absorptionAmount } returns 0.0
+            every { target.fireTicks } returns 0
+            every { target.fireTicks = any() } returns Unit
+            var health = 20.0
+            every { target.health } answers { health }
+            every { EntityTracker.getEliteMobEntity(target) } returns boss
+            every { boss.customModel } returns model
+            every { AdvancedDamageScaling.magicWeapon(boss, 6, 12.0, 6.0, Material.STICK) } returns 8.0
+            var combatSource: CombatDamageContext.PlayerDamageSource? = null
+            every { target.damage(any<Double>(), any<DamageSource>()) } answers {
+                combatSource = CombatDamageContext.currentPlayerToEliteSource().orElse(null)
+                health -= firstArg<Double>()
+                Unit
+            }
+
+            damage.hit(player, target, cast, power = 2.0, vanillaDamage = 2.0) shouldBe true
+            verify(exactly = 1) {
+                AdvancedDamageScaling.magicWeapon(boss, 6, 12.0, 6.0, Material.STICK)
+            }
+            verify(exactly = 1) { target.damage(12.0, magicDamageSource) }
+            verify(exactly = 1) { damageSourceBuilder.withDirectEntity(player) }
+            verify(exactly = 1) { damageSourceBuilder.withCausingEntity(player) }
+            verify(exactly = 1) { unsafeValues.createDamageSourceBuilder(DamageType.MAGIC) }
+            verify(exactly = 1) { target.fireTicks = 40 }
+            combatSource?.progressionSkill() shouldBe SkillType.WANDS
+        } finally {
+            unmockkObject(StaffEliteItems, StaffEliteEnchantments.Companion)
+        }
+    }
+
     "modeled EliteMobs damage applies one attributed hit inside the combat context" {
         val world = mockk<World>()
         val player = mockk<Player>()
@@ -245,7 +374,7 @@ class StaffSpellModeledDamageTest : FreeSpec({
         every { boss.customModel } returns model
         every { EntityTracker.getEliteMobEntity(target) } returns boss
         every { AdvancedDamageScaling.magicWeapon(boss, 4, 4.0, 1.5, Material.BLAZE_ROD) } returns 6.25
-        every { target.damage(any<Double>(), player) } answers {
+        every { target.damage(any<Double>(), any<DamageSource>()) } answers {
             damageInsideCombatBypass = CombatDamageContext.isPlayerToEliteBypassActive()
             damageSource = CombatDamageContext.currentPlayerToEliteSource().orElse(null)
             health -= firstArg<Double>()
@@ -261,7 +390,7 @@ class StaffSpellModeledDamageTest : FreeSpec({
         damageSource?.criticalHit() shouldBe true
         damageSource?.loudStrikesBonus() shouldBe 1.2
         verify(exactly = 1) { boss.customModel }
-        verify(exactly = 1) { target.damage(6.25, player) }
+        verify(exactly = 1) { target.damage(6.25, magicDamageSource) }
         CombatDamageContext.isPlayerToEliteBypassActive() shouldBe false
         CombatDamageContext.currentPlayerToEliteSource().isEmpty shouldBe true
     }
@@ -286,14 +415,14 @@ class StaffSpellModeledDamageTest : FreeSpec({
         var ordinaryDamageSource: CombatDamageContext.PlayerDamageSource? = null
         every { unmodeledBossTarget.health } answers { unmodeledHealth }
         every { unmodeledBossTarget.absorptionAmount } returns 0.0
-        every { unmodeledBossTarget.damage(any<Double>(), player) } answers {
+        every { unmodeledBossTarget.damage(any<Double>(), any<DamageSource>()) } answers {
             unmodeledDamageInsideCombatBypass = CombatDamageContext.isPlayerToEliteBypassActive()
             unmodeledHealth -= firstArg<Double>()
             Unit
         }
         every { ordinaryTarget.health } answers { ordinaryHealth }
         every { ordinaryTarget.absorptionAmount } returns 0.0
-        every { ordinaryTarget.damage(any<Double>(), player) } answers {
+        every { ordinaryTarget.damage(any<Double>(), any<DamageSource>()) } answers {
             ordinaryDamageInsideCombatBypass = CombatDamageContext.isPlayerToEliteBypassActive()
             ordinaryDamageSource = CombatDamageContext.currentPlayerToEliteSource().orElse(null)
             ordinaryHealth -= firstArg<Double>()
@@ -310,8 +439,8 @@ class StaffSpellModeledDamageTest : FreeSpec({
         ordinaryDamageSource shouldBe null
         verify(exactly = 1) { unmodeledBoss.customModel }
         verify(exactly = 0) { ordinaryTarget.damage(5.0, player) }
-        verify(exactly = 1) { unmodeledBossTarget.damage(5.0, player) }
-        verify(exactly = 1) { ordinaryTarget.damage(2.0, player) }
+        verify(exactly = 1) { unmodeledBossTarget.damage(5.0, magicDamageSource) }
+        verify(exactly = 1) { ordinaryTarget.damage(2.0, magicDamageSource) }
         CombatDamageContext.isPlayerToEliteBypassActive() shouldBe false
         CombatDamageContext.currentPlayerToEliteSource().isEmpty shouldBe true
     }

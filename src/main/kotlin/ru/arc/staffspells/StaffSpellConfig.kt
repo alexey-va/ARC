@@ -30,8 +30,12 @@ internal enum class StaffSpell(val id: String) {
     companion object {
         val itemKey = NamespacedKey("arc", "staff_spell_prototype")
         val duelOnlyKey = NamespacedKey("arc", "staff_spell_duel_only")
-        fun from(item: ItemStack?) = item?.itemMeta?.persistentDataContainer
-            ?.get(itemKey, PersistentDataType.STRING)?.let { id -> entries.find { it.id == id } }
+        fun from(item: ItemStack?): StaffSpell? {
+            val meta = item?.itemMeta ?: return null
+            val prototype = meta.persistentDataContainer.get(itemKey, PersistentDataType.STRING)
+                ?.let { id -> entries.find { it.id == id } }
+            return prototype ?: StaffEliteItems.resolve(item)
+        }
 
         fun isDuelOnly(item: ItemStack?) = item?.itemMeta?.persistentDataContainer
             ?.get(duelOnlyKey, PersistentDataType.BYTE) == 1.toByte()
@@ -217,6 +221,40 @@ internal open class StaffSpellConfig(private val config: Config) {
     /** Duel items deliberately use a stable native base, independent of optional ItemsAdder startup timing. */
     fun duelItem(spell: StaffSpell) = buildItem(spell, duelOnly = true)
 
+    /** Elite items keep their material and native data; only ARC's configured appearance is copied. */
+    internal fun applyEliteStaffAppearance(item: ItemStack, spell: StaffSpell) {
+        val skin = try {
+            configuredSkin(spell)
+        } catch (_: StaffSpellSkinUnavailableException) {
+            null
+        }
+        if (skin != null) applyEliteSkin(item, skin)
+        item.editMeta { meta -> meta.displayName(staffName(spell)) }
+    }
+
+    /** Ability rows for migrated EliteMobs weapons deliberately omit prototype and duel-only labels. */
+    internal fun eliteStaffLore(spell: StaffSpell): List<Component> = listOf(
+        Component.empty(),
+        spellComponent(spell, "description"),
+        spellComponent(spell, "aim"),
+        Component.empty(),
+        spellComponent(spell, "secondary"),
+        spellComponent(spell, "quick"),
+        spellComponent(spell, "quick-secondary"),
+        text(useMessage(spell)),
+    )
+
+    private fun staffName(spell: StaffSpell) = spellComponent(spell, "name")
+
+    private fun spellComponent(spell: StaffSpell, suffix: String) =
+        config.component("${spell.id}.$suffix", TagResolver.empty()).decoration(TextDecoration.ITALIC, false)
+
+    private fun useMessage(spell: StaffSpell) = when (spell) {
+        StaffSpell.INFERNO, StaffSpell.GRAVITY -> "channel-use"
+        StaffSpell.EMBER, StaffSpell.ICICLE -> "charge-use"
+        else -> "use"
+    }
+
     private data class DuelAppearance(val itemModel: Key?, val customModelData: Int)
 
     private fun duelAppearance(spell: StaffSpell): DuelAppearance {
@@ -243,27 +281,25 @@ internal open class StaffSpellConfig(private val config: Config) {
         return DuelAppearance(key, customModelData)
     }
 
-    private fun buildItem(spell: StaffSpell, duelOnly: Boolean) = ItemStack(Material.BLAZE_ROD).apply {
-        val useMessage = when (spell) {
-            StaffSpell.INFERNO, StaffSpell.GRAVITY -> "channel-use"
-            StaffSpell.EMBER, StaffSpell.ICICLE -> "charge-use"
-            else -> "use"
-        }
-        if (!duelOnly) {
-            val skinId = config.string("${spell.id}.skin", "").trim()
-            if (skinId.isNotEmpty()) {
-                val skin = try {
-                    check(Bukkit.getPluginManager().isPluginEnabled("ItemsAdder")) { "ItemsAdder is not enabled" }
-                    CustomStack.getInstance(skinId)?.itemStack?.clone()
-                        ?: error("ItemsAdder item is not registered")
-                } catch (failure: Exception) {
-                    if (unavailableStaffSkins.add(skinId)) {
-                        warn("StaffSpells: configured skin {} for spell {} cannot be loaded", skinId, spell.id, failure)
-                    }
-                    throw StaffSpellSkinUnavailableException(skinId, failure)
-                }
-                applyEliteSkin(this, skin)
+    private fun configuredSkin(spell: StaffSpell): ItemStack? {
+        val skinId = config.string("${spell.id}.skin", "").trim()
+        if (skinId.isEmpty()) return null
+        return try {
+            check(Bukkit.getPluginManager().isPluginEnabled("ItemsAdder")) { "ItemsAdder is not enabled" }
+            CustomStack.getInstance(skinId)?.itemStack?.clone()
+                ?: error("ItemsAdder item is not registered")
+        } catch (failure: Exception) {
+            if (unavailableStaffSkins.add(skinId)) {
+                warn("StaffSpells: configured skin {} for spell {} cannot be loaded", skinId, spell.id, failure)
             }
+            throw StaffSpellSkinUnavailableException(skinId, failure)
+        }
+    }
+
+    private fun buildItem(spell: StaffSpell, duelOnly: Boolean) = ItemStack(Material.BLAZE_ROD).apply {
+        val useMessage = useMessage(spell)
+        if (!duelOnly) {
+            configuredSkin(spell)?.let { applyEliteSkin(this, it) }
         } else {
             val appearance = duelAppearance(spell)
             appearance.itemModel?.let { model ->
@@ -273,7 +309,7 @@ internal open class StaffSpellConfig(private val config: Config) {
             }
         }
         editMeta { meta ->
-            meta.displayName(config.component("${spell.id}.name", TagResolver.empty()).decoration(TextDecoration.ITALIC, false))
+            meta.displayName(staffName(spell))
             meta.lore(listOf(Component.empty(),
                 config.component("${spell.id}.description", TagResolver.empty()).decoration(TextDecoration.ITALIC, false),
                 config.component("${spell.id}.aim", TagResolver.empty()).decoration(TextDecoration.ITALIC, false),

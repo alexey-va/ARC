@@ -96,12 +96,18 @@ internal class StaffSpellInput(
     private val lastDefenseTick = mutableMapOf<UUID, Int>()
     private var started = false
     private var closed = false
+    private var modeledInput: StaffModeledInput? = null
 
     /** Register this listener from the owning module before calling start. */
     fun start() {
         check(!closed) { "Staff spell input is closed" }
         if (started) return
         started = true
+        if (Bukkit.getPluginManager().isPluginEnabled("FreeMinecraftModels")) {
+            modeledInput = StaffModeledInput(this).also {
+                Bukkit.getPluginManager().registerEvents(it, ru.arc.ARC.instance)
+            }
+        }
         Bukkit.getOnlinePlayers().forEach(::upgradeHeldStaff)
         tasks.runTimer(1, 1, ::tickCharges)
     }
@@ -126,16 +132,21 @@ internal class StaffSpellInput(
         upgradeStaffSlot(event.player, event.newSlot)
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST)
+    // FMM owns HIGHEST: consume the replacement input before its native projectile handler.
+    @EventHandler(priority = EventPriority.HIGH)
     fun onInteract(event: PlayerInteractEvent) {
         if (event.hand != EquipmentSlot.HAND) return
 
         val player = event.player
+        upgradeStaffSlot(player, player.inventory.heldItemSlot)
         val firstItem = player.inventory.itemInMainHand
         val spell = StaffSpell.from(firstItem) ?: return
+        if (event.useItemInHand() == Event.Result.DENY) return
+        if ((event.action == Action.RIGHT_CLICK_BLOCK || event.action == Action.LEFT_CLICK_BLOCK) &&
+            event.useInteractedBlock() == Event.Result.DENY) return
 
         if (event.action == Action.LEFT_CLICK_AIR || event.action == Action.LEFT_CLICK_BLOCK) {
-            if (event.action == Action.LEFT_CLICK_BLOCK) event.setUseInteractedBlock(Event.Result.DENY)
+            event.isCancelled = true
             castQuick(player, spell)
             return
         }
@@ -146,6 +157,9 @@ internal class StaffSpellInput(
         if (event.useItemInHand() == Event.Result.DENY) return
         if (event.action == Action.RIGHT_CLICK_BLOCK && event.useInteractedBlock() == Event.Result.DENY) return
         if (event.action == Action.RIGHT_CLICK_BLOCK) event.setUseInteractedBlock(Event.Result.DENY)
+        // Both DENY results are required by FMM's air-click protection policy.
+        // Native hold/release is explicitly started below, including canceled entity interactions.
+        if (StaffEliteItems.resolve(item) != null) event.isCancelled = true
 
         if (!beginCharge(player, spell, item)) {
             event.setUseItemInHand(Event.Result.DENY)
@@ -154,12 +168,12 @@ internal class StaffSpellInput(
         startNativeUse(player, spell)
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     fun onEntityInteract(event: PlayerInteractEntityEvent) = interactEntity(event.player, event.hand) {
         event.isCancelled = true
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     fun onEntityInteractAt(event: PlayerInteractAtEntityEvent) = interactEntity(event.player, event.hand) {
         event.isCancelled = true
     }
@@ -193,6 +207,7 @@ internal class StaffSpellInput(
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onPreAttack(event: PrePlayerAttackEntityEvent) {
         val player = event.player
+        upgradeStaffSlot(player, player.inventory.heldItemSlot)
         val spell = StaffSpell.from(player.inventory.itemInMainHand) ?: return
         if (event.willAttack()) event.isCancelled = true
         castQuick(player, spell)
@@ -250,13 +265,16 @@ internal class StaffSpellInput(
         if (closed) return
         closed = true
         HandlerList.unregisterAll(this)
+        modeledInput?.let(HandlerList::unregisterAll)
+        modeledInput = null
         charges.keys.toList().forEach(::cancel)
         lastDefenseTick.clear()
         tasks.close()
     }
 
-    private fun interactEntity(player: Player, hand: EquipmentSlot, cancelEvent: () -> Unit) {
+    internal fun interactEntity(player: Player, hand: EquipmentSlot, cancelEvent: () -> Unit) {
         if (hand != EquipmentSlot.HAND) return
+        upgradeStaffSlot(player, player.inventory.heldItemSlot)
         val firstItem = player.inventory.itemInMainHand
         val spell = StaffSpell.from(firstItem) ?: return
         cancelEvent()
@@ -291,6 +309,13 @@ internal class StaffSpellInput(
         if (lastDefenseTick.put(player.uniqueId, tick) == tick) return
         cancel(player.uniqueId)
         actions.defend(player, spell)
+    }
+
+    internal fun attackModeledEntity(player: Player, cancelEvent: () -> Unit) {
+        upgradeStaffSlot(player, player.inventory.heldItemSlot)
+        val spell = StaffSpell.from(player.inventory.itemInMainHand) ?: return
+        cancelEvent()
+        castQuick(player, spell)
     }
 
     private fun tickCharges() {
@@ -330,11 +355,12 @@ internal class StaffSpellInput(
 
     private fun upgradeHeldStaff(player: Player) = upgradeStaffSlot(player, player.inventory.heldItemSlot)
 
-    /** Replaces the hotbar slot only when a legacy staff needs the single use-component migration. */
+    /** Migrate the original stack before its first input, including items taken from old storage. */
     private fun upgradeStaffSlot(player: Player, slot: Int): Boolean {
         if (slot !in 0..8) return false
         val item = player.inventory.getItem(slot) ?: return false
-        if (!configureStaffUse(item)) return false
+        val migrated = StaffEliteItems.migrate(item)
+        if (!configureStaffUse(item) && !migrated) return false
         player.inventory.setItem(slot, item)
         return true
     }

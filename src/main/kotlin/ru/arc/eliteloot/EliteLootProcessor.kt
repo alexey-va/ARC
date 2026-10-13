@@ -11,6 +11,7 @@ import org.bukkit.persistence.PersistentDataType
 import ru.arc.ARC
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
+import ru.arc.staffspells.StaffEliteItems
 import ru.arc.util.Logging.warn
 
 class EliteLootProcessor(
@@ -21,6 +22,7 @@ class EliteLootProcessor(
     @Suppress("DEPRECATION", "UnstableApiUsage")
     fun processEliteLoot(originalStack: ItemStack?, caseReward: Boolean = false): ItemStack? {
         if (originalStack == null || !EliteItemManager.isEliteMobsItem(originalStack)) return originalStack
+        if (StaffEliteItems.migrate(originalStack) || StaffEliteItems.resolve(originalStack) != null) return originalStack
         if (!caseReward && !config.bool("replace-skins", true)) return originalStack
         val type = EliteLootManager.toLootType(originalStack) ?: return originalStack
         val meta = originalStack.itemMeta

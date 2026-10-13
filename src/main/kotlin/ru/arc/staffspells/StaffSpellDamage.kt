@@ -3,16 +3,23 @@ package ru.arc.staffspells
 import com.magmaguy.elitemobs.advancedcombat.AdvancedCombatEnemyAuthorization
 import com.magmaguy.elitemobs.advancedcombat.damage.AdvancedDamageScaling
 import com.magmaguy.elitemobs.api.EliteMobDamagedByPlayerEventFilter
+import com.magmaguy.elitemobs.api.utils.EliteItemManager
 import com.magmaguy.elitemobs.combatsystem.CombatDamageContext
 import com.magmaguy.elitemobs.config.SkillsConfig
 import com.magmaguy.elitemobs.entitytracker.EntityTracker
+import com.magmaguy.elitemobs.items.GearRestrictionHandler
+import com.magmaguy.elitemobs.items.ItemDurability
+import com.magmaguy.elitemobs.items.customenchantments.SoulbindEnchantment
 import com.magmaguy.elitemobs.mobconstructor.custombosses.CustomBossEntity
 import com.magmaguy.elitemobs.playerdata.ElitePlayerInventory
 import com.magmaguy.elitemobs.playerdata.database.PlayerData
 import com.magmaguy.elitemobs.skills.SkillType
+import com.magmaguy.elitemobs.skills.WeaponIdentityResolver
 import com.magmaguy.elitemobs.thirdparty.custommodels.CustomModel
 import org.bukkit.Bukkit
 import org.bukkit.Material
+import org.bukkit.damage.DamageSource
+import org.bukkit.damage.DamageType
 import org.bukkit.entity.ArmorStand
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Player
@@ -21,8 +28,7 @@ import ru.arc.util.Logging
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
-/** Server-thread-only prototype damage. Captured Staves level is virtual item level; BLAZE_ROD
- * supplies boss modifier lookup. Configured power is the attack multiplier; no native EM/FMM enchantments. */
+/** Server-thread-only spell damage. Mapped EliteMobs weapons carry a cast-time snapshot of native weapon stats. */
 internal class StaffSpellDamage(private val duelAccess: StaffSpellDuelAccess? = null) {
     private val eliteMobsFailureLogged = AtomicBoolean()
     // The controller supplies its live actor registry; item tags never authorize a summon target.
@@ -100,11 +106,15 @@ internal class StaffSpellDamage(private val duelAccess: StaffSpellDuelAccess? = 
                 true
             }
         } else {
-            target.damage(vanillaDamage, player)
+            target.damage(vanillaDamage, magicDamageSource(player))
             true
         }
         val after = target.health + target.absorptionAmount
-        return attempted && before - after > HEALTH_EPSILON
+        val hit = attempted && before - after > HEALTH_EPSILON
+        if (hit && cast.nativeEliteWeapon && cast.eliteMobsEnabled) {
+            withEliteMobs(Unit) { cast.enchantments.ignite(player, target) }
+        }
+        return hit
     }
 
     private fun isReady(player: Player, target: LivingEntity): Boolean =
@@ -138,6 +148,14 @@ internal class StaffSpellDamage(private val duelAccess: StaffSpellDuelAccess? = 
     }
 }
 
+private fun magicDamageSource(player: Player): DamageSource = DamageSource.builder(DamageType.MAGIC)
+    .withDirectEntity(player)
+    .withCausingEntity(player)
+    .build()
+
+/** ARC-owned identity keeps duel casts loadable when EliteMobs is absent. */
+internal enum class StaffWeaponFamily { WANDS, STAVES }
+
 /** Immutable cast snapshot; contains no mutable item reference. */
 internal data class StaffSpellCast(
     val casterId: UUID,
@@ -149,6 +167,14 @@ internal data class StaffSpellCast(
     val duelAuthorization: DuelSpellAuthorization? = null,
     val duelAccess: StaffSpellDuelAccess? = null,
     val visualCharge: Double = 0.0,
+    /** Actual FMM family for migrated EliteMobs weapons; prototype casts keep the legacy defaults. */
+    val progressionSkill: StaffWeaponFamily = StaffWeaponFamily.STAVES,
+    /** Actual EliteMobs item level and carrier for mapped weapons, virtual legacy values otherwise. */
+    val itemLevel: Double = skillLevel.toDouble(),
+    val carrierMaterial: Material = Material.BLAZE_ROD,
+    val eliteDamageEnchantmentMultiplier: Double = 1.0,
+    val enchantments: StaffEliteEnchantments = StaffEliteEnchantments.NONE,
+    val nativeEliteWeapon: Boolean = false,
 )
 
 /** Resolved only on the guarded branch where EliteMobs is enabled. */
@@ -156,12 +182,48 @@ private object EliteMobsRuntime {
     fun canTarget(player: Player, target: LivingEntity): Boolean =
         AdvancedCombatEnemyAuthorization.canTargetWithMagicWeapon(player, target)
 
-    fun capture(player: Player, attackId: UUID): StaffSpellCast {
-        val skillLevel = if (!SkillsConfig.isWorldExcludedFromSkills(player) && PlayerData.isDataLoaded(player.uniqueId)) {
-            maxOf(1, PlayerData.getSkillLevel(player.uniqueId, SkillType.STAVES))
-        } else {
-            1
+    fun capture(player: Player, attackId: UUID): StaffSpellCast? {
+        val weapon = player.inventory.itemInMainHand
+        val spell = StaffEliteItems.resolve(weapon)
+        if (spell == null) return capturePrototype(player, attackId)
+
+        // Match FMM canAttack: prepare modeled durability first, then reject its last usable point.
+        ItemDurability.prepareMagicWeapon(weapon)
+        if (EliteItemManager.isOnLastDamage(weapon) || !GearRestrictionHandler.canEquip(player, weapon) ||
+            !SoulbindEnchantment.isValidSoulbindUser(weapon.itemMeta, player)) {
+            return null
         }
+        val progressionSkill = WeaponIdentityResolver.progressionSkill(weapon)
+            ?.takeIf { it == SkillType.WANDS || it == SkillType.STAVES }
+            ?: return null
+        val skillLevel = skillLevel(player, progressionSkill)
+        val inventory = ElitePlayerInventory.getPlayer(player)
+        val itemLevel = EliteItemManager.getItemLevel(weapon).let { level ->
+            if (level.isFinite() && level >= 0.0) level else 0.0
+        }
+        val damageEnchantmentMultiplier = EliteItemManager.getEliteDamageEnchantmentMultiplier(weapon)
+        if (!damageEnchantmentMultiplier.isFinite() || damageEnchantmentMultiplier < 0.0) {
+            return null
+        }
+        return StaffSpellCast(
+            casterId = player.uniqueId,
+            attackId = attackId,
+            skillLevel = skillLevel,
+            criticalHit = EliteMobDamagedByPlayerEventFilter.captureCriticalHit(player),
+            loudStrikesBonus = inventory?.getLoudStrikesBonusMultiplier(true) ?: 0.0,
+            eliteMobsEnabled = true,
+            progressionSkill = StaffWeaponFamily.valueOf(progressionSkill.name),
+            itemLevel = itemLevel,
+            carrierMaterial = weapon.type,
+            eliteDamageEnchantmentMultiplier = damageEnchantmentMultiplier,
+            enchantments = StaffEliteEnchantments.capture(player, weapon, progressionSkill),
+            nativeEliteWeapon = true,
+        )
+    }
+
+    /** Preserves the original ARC prototype scaling for non-EliteMobs staff spell items. */
+    private fun capturePrototype(player: Player, attackId: UUID): StaffSpellCast {
+        val skillLevel = skillLevel(player, SkillType.STAVES)
         val inventory = ElitePlayerInventory.getPlayer(player)
         return StaffSpellCast(
             player.uniqueId,
@@ -173,22 +235,37 @@ private object EliteMobsRuntime {
         )
     }
 
+    private fun skillLevel(player: Player, skill: SkillType): Int =
+        if (!SkillsConfig.isWorldExcludedFromSkills(player) && PlayerData.isDataLoaded(player.uniqueId)) {
+            maxOf(1, PlayerData.getSkillLevel(player.uniqueId, skill))
+        } else {
+            1
+        }
+
     fun hit(player: Player, target: LivingEntity, cast: StaffSpellCast, power: Double, vanillaDamage: Double) {
         val elite = EntityTracker.getEliteMobEntity(target)
+        val weaponPower = power * cast.enchantments.damageMultiplier
+        val fallbackDamage = vanillaDamage * cast.eliteDamageEnchantmentMultiplier * cast.enchantments.damageMultiplier
+        if (!weaponPower.isFinite() || weaponPower <= 0.0 || !fallbackDamage.isFinite() || fallbackDamage <= 0.0) return
         if (elite == null) {
-            target.damage(vanillaDamage, player)
+            target.damage(fallbackDamage, magicDamageSource(player))
             return
         }
 
         val damage = AdvancedDamageScaling.magicWeapon(
-            elite, cast.skillLevel, cast.skillLevel.toDouble(), power, Material.BLAZE_ROD,
-        )
+            elite, cast.skillLevel,
+            if (cast.nativeEliteWeapon) cast.itemLevel else cast.skillLevel.toDouble(),
+            weaponPower,
+            if (cast.nativeEliteWeapon) cast.carrierMaterial else Material.BLAZE_ROD,
+        ) * cast.eliteDamageEnchantmentMultiplier
         if (!damage.isFinite() || damage <= 0.0) return
 
-        val source = CombatDamageContext.PlayerDamageSource(cast.attackId, SkillType.STAVES, cast.criticalHit, cast.loudStrikesBonus)
+        val source = CombatDamageContext.PlayerDamageSource(
+            cast.attackId, SkillType.valueOf(cast.progressionSkill.name), cast.criticalHit, cast.loudStrikesBonus,
+        )
         val damageCall = Runnable {
             CombatDamageContext.runPlayerToEliteBypass(source) {
-                target.damage(damage, player)
+                target.damage(damage, magicDamageSource(player))
             }
         }
         val customModel = (elite as? CustomBossEntity)?.customModel

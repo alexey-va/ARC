@@ -1,0 +1,255 @@
+{
+  "version": 1,
+  "title": "EliteMobs WANDS/STAVES spell migration, 2026-10-13",
+  "assumptions": [
+    "Migration transforms each existing stack in place: no extra item, currency payment, refund, XP grant or loot roll.",
+    "Low/base/high conversion sensitivity is 1/4/17 owned weapons per player; participants 1/10/30 are assumptions, not telemetry.",
+    "Weapon family, item level, native enchantment levels, value, soulbind and damage remain on the original stack. Cooldowns and attack shapes use the existing ARC catalog.",
+    "Native FMM numeric enchantment queries are retained: multicast total volley damage, area factor and ignition. Gameplay kill throughput may change and is not measured.",
+    "Spawn 10.9.8 read-only baseline: flatDropRateV3 0.4, proceduralItemDropWeight 90, lootLevelDifferenceLockout 10; no loot/economy config changes.",
+    "Vault/token ledger excludes EliteMobs crystals and cannot establish staff DPS or kill income. No monetary exchange rate or crystal-income forecast is assumed.",
+    "Current EconomyShopGUI SELL remains a separate existing flow; planned SELL-to-contract transition is unchanged."
+  ],
+  "participants": [
+    1,
+    10,
+    30
+  ],
+  "currencies": {
+    "vault": {
+      "minor_per_unit": 100,
+      "disposable_per_player_day": {
+        "before": [
+          "0",
+          "0",
+          "0"
+        ],
+        "after": [
+          "0",
+          "0",
+          "0"
+        ]
+      },
+      "flows": [
+        {
+          "id": "staff_conversion",
+          "kind": "mint",
+          "source": "ARC/src/main/kotlin/ru/arc/staffspells/StaffEliteItems.kt",
+          "basis": "Incremental direct issuance caused by migration, not the player's total income",
+          "before": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              1,
+              4,
+              17
+            ]
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              1,
+              4,
+              17
+            ]
+          }
+        }
+      ]
+    },
+    "tokens": {
+      "minor_per_unit": 100,
+      "disposable_per_player_day": {
+        "before": [
+          "0",
+          "0",
+          "0"
+        ],
+        "after": [
+          "0",
+          "0",
+          "0"
+        ]
+      },
+      "flows": [
+        {
+          "id": "staff_conversion",
+          "kind": "mint",
+          "source": "ARC/src/main/kotlin/ru/arc/staffspells/StaffEliteItems.kt",
+          "basis": "Incremental direct issuance caused by migration, not the player's total income",
+          "before": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              1,
+              4,
+              17
+            ]
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              1,
+              4,
+              17
+            ]
+          }
+        }
+      ]
+    },
+    "elite_crystals": {
+      "minor_per_unit": 1,
+      "disposable_per_player_day": {
+        "before": [
+          "0",
+          "0",
+          "0"
+        ],
+        "after": [
+          "0",
+          "0",
+          "0"
+        ]
+      },
+      "flows": [
+        {
+          "id": "staff_conversion",
+          "kind": "mint",
+          "source": "ARC/src/main/kotlin/ru/arc/staffspells/StaffEliteItems.kt",
+          "basis": "Incremental direct issuance caused by migration, not the player's total income",
+          "before": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              1,
+              4,
+              17
+            ]
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              1,
+              4,
+              17
+            ]
+          }
+        }
+      ]
+    },
+    "xp": {
+      "minor_per_unit": 1,
+      "disposable_per_player_day": {
+        "before": [
+          "0",
+          "0",
+          "0"
+        ],
+        "after": [
+          "0",
+          "0",
+          "0"
+        ]
+      },
+      "flows": [
+        {
+          "id": "staff_conversion",
+          "kind": "mint",
+          "source": "ARC/src/main/kotlin/ru/arc/staffspells/StaffEliteItems.kt",
+          "basis": "Incremental direct issuance caused by migration, not the player's total income",
+          "before": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              1,
+              4,
+              17
+            ]
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              1,
+              4,
+              17
+            ]
+          }
+        }
+      ]
+    },
+    "items": {
+      "minor_per_unit": 1,
+      "disposable_per_player_day": {
+        "before": [
+          "0",
+          "0",
+          "0"
+        ],
+        "after": [
+          "0",
+          "0",
+          "0"
+        ]
+      },
+      "flows": [
+        {
+          "id": "staff_conversion",
+          "kind": "item",
+          "source": "ARC/src/main/kotlin/ru/arc/staffspells/StaffEliteItems.kt",
+          "basis": "Incremental direct issuance caused by migration, not the player's total income",
+          "before": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              1,
+              4,
+              17
+            ]
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              1,
+              4,
+              17
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

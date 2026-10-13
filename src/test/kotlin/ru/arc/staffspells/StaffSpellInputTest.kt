@@ -28,6 +28,61 @@ import ru.arc.paper.testing.MockBukkitTestRuntime
 import java.util.UUID
 
 class StaffSpellInputTest : FreeSpec({
+    "consumed class ability and denied block inputs do not also activate staff defense" {
+        withInputHarness { h ->
+            val player = h.staffPlayer("staff-class-input", h.paper.addSimpleWorld("class-input"), StaffSpell.CHAIN)
+            val classInput = PlayerInteractEvent(player, Action.LEFT_CLICK_AIR,
+                player.inventory.itemInMainHand, null, BlockFace.SELF, EquipmentSlot.HAND).apply {
+                isCancelled = true
+            }
+            h.input.onInteract(classInput)
+            h.actions.defenses shouldBe emptyList()
+            h.actions.casts shouldBe emptyList()
+
+            val deniedBlock = rightClick(player).apply { setUseInteractedBlock(org.bukkit.event.Event.Result.DENY) }
+            h.input.onInteract(deniedBlock)
+            h.actions.casts shouldBe emptyList()
+        }
+    }
+
+    "owned left click denies both native use channels before FMM highest priority" {
+        withInputHarness { h ->
+            val player = h.staffPlayer("staff-native-input", h.paper.addSimpleWorld("native-input"), StaffSpell.CHAIN)
+            val input = PlayerInteractEvent(player, Action.LEFT_CLICK_AIR,
+                player.inventory.itemInMainHand, null, BlockFace.SELF, EquipmentSlot.HAND).apply {
+                setUseItemInHand(org.bukkit.event.Event.Result.DEFAULT)
+                setUseInteractedBlock(org.bukkit.event.Event.Result.DEFAULT)
+            }
+            h.input.onInteract(input)
+            h.actions.defenses.size shouldBe 1
+            input.useItemInHand() shouldBe org.bukkit.event.Event.Result.DENY
+            input.useInteractedBlock() shouldBe org.bukkit.event.Event.Result.DENY
+            StaffSpellInput::class.java.getMethod("onInteract", PlayerInteractEvent::class.java)
+                .getAnnotation(org.bukkit.event.EventHandler::class.java).priority shouldBe org.bukkit.event.EventPriority.HIGH
+        }
+    }
+
+    "EliteMobs held cast consumes old FMM attack but retains native hold and release" {
+        withInputHarness { h ->
+            val player = h.staffPlayer("elite-held", h.paper.addSimpleWorld("elite-held"), StaffSpell.EMBER)
+            io.mockk.mockkObject(StaffEliteItems)
+            try {
+                // Item preservation and native family authorization are covered by StaffEliteItemsTest.
+                io.mockk.every { StaffEliteItems.migrate(any()) } returns false
+                io.mockk.every { StaffEliteItems.resolve(any()) } returns StaffSpell.EMBER
+                h.input.start()
+                val event = rightClick(player)
+                h.input.onInteract(event)
+                event.useItemInHand() shouldBe org.bukkit.event.Event.Result.DENY
+                event.useInteractedBlock() shouldBe org.bukkit.event.Event.Result.DENY
+                player.hasActiveItem() shouldBe true
+                h.actions.casts shouldBe emptyList()
+                h.input.onStopUsing(PlayerStopUsingItemEvent(player, player.inventory.itemInMainHand.clone(), 36))
+                h.actions.casts.single().charge shouldBe 1.0
+            } finally { io.mockk.unmockkObject(StaffEliteItems) }
+        }
+    }
+
     "staff use migration changes only the consumable component and is idempotent" {
         withInputHarness { h ->
             val item = StaffSpellConfig(TestConfig()).item(StaffSpell.CHAIN).apply {

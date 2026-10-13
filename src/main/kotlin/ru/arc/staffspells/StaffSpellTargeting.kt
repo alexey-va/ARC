@@ -88,6 +88,7 @@ internal class StaffSpellTargeting(private val settings: StaffSpellSettings, pri
     /** Exact swept collision along the cast line, never soft acquisition. */
     fun lineTargets(player: Player, from: Location, to: Location, width: Double,
         cast: StaffSpellCast? = null): List<LivingEntity> {
+        val hitWidth = width * (cast?.enchantments?.radiusMultiplier ?: 1.0)
         val direction = to.toVector().subtract(from.toVector())
         var length = direction.length()
         if (!length.isFinite() || length < 0.001 || from.world != to.world) return emptyList()
@@ -95,10 +96,10 @@ internal class StaffSpellTargeting(private val settings: StaffSpellSettings, pri
         length = from.distance(rayEnd(from, direction, length))
         if (length < .001) return emptyList()
         val midpoint = from.clone().add(direction.clone().multiply(length / 2))
-        return from.world.getNearbyLivingEntities(midpoint, length / 2 + width + 2)
+        return from.world.getNearbyLivingEntities(midpoint, length / 2 + hitWidth + 2)
             .filter { damage.eligible(player, it, cast) }
             .mapNotNull { entity ->
-                entity.boundingBox.expand(width).rayTrace(from.toVector(), direction, length)
+                entity.boundingBox.expand(hitWidth).rayTrace(from.toVector(), direction, length)
                     ?.let { entity to it.hitPosition.distanceSquared(from.toVector()) }
             }.sortedBy { it.second }.map { it.first }.filter { visible(from, center(it)) }
     }
@@ -135,8 +136,10 @@ internal class StaffSpellTargeting(private val settings: StaffSpellSettings, pri
             .filter { visible(eye, center(it.first)) }.map { it.first }
     }
 
-    fun nearby(player: Player, origin: Location, radius: Double, cast: StaffSpellCast? = null) = origin.world
-        .getNearbyLivingEntities(origin, radius, radius, radius)
-        .filter { center(it).distanceSquared(origin) <= radius * radius && damage.eligible(player, it, cast) }
+    fun nearby(player: Player, origin: Location, radius: Double, cast: StaffSpellCast? = null): List<LivingEntity> {
+        val area = radius * (cast?.enchantments?.radiusMultiplier ?: 1.0)
+        return origin.world.getNearbyLivingEntities(origin, area, area, area)
+            .filter { center(it).distanceSquared(origin) <= area * area && damage.eligible(player, it, cast) }
+    }
 
 }

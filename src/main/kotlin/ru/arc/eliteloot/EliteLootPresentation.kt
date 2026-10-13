@@ -18,6 +18,8 @@ import org.bukkit.inventory.ItemFlag
 import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.meta.ItemMeta
 import org.bukkit.persistence.PersistentDataType
+import ru.arc.staffspells.StaffEliteItems
+import ru.arc.staffspells.StaffSpellsModule
 
 internal fun eliteTooltipTier(level: Int): String = when {
     level >= 100 -> "artifact"
@@ -210,11 +212,13 @@ internal fun presentEliteItem(
     if (isAdvancedEnchantmentsBook(item)) return ru.arc.enchanting.presentAdvancedBook(item, viewer)
     if (isEliteEnchantmentBook(item)) return presentEliteEnchantmentBook(item, bookText)
     if (!EliteItemManager.isEliteMobsItem(item)) return item
+    StaffEliteItems.migrate(item)
     val meta = item.itemMeta
     val tooltipStyle = NamespacedKey("lzblocks", "tooltip/${eliteTooltipTier(EliteItemManager.getRoundedItemLevel(item))}")
     val owner = meta.persistentDataContainer.get(NamespacedKey("elitemobs", "soulbind"), PersistentDataType.STRING)
     if ((owner == null || owner == viewer.uniqueId.toString()) && !EliteEnchantmentItems.isEliteEnchantmentBook(item)) {
         val rendered = item.clone()
+        StaffEliteItems.removePresentationLore(rendered)
         rendered.editMeta(::reindexEliteEnchantmentLore)
         EliteItemLore(rendered, false)
         val renderedMeta = rendered.itemMeta
@@ -235,6 +239,9 @@ internal fun presentEliteItem(
     meta.lore(sanitizeEliteLore(meta.lore().orEmpty()))
     reindexEliteEnchantmentLore(meta)
     item.itemMeta = meta
+    StaffSpellsModule.itemConfig()?.let { config ->
+        if (StaffEliteItems.present(item, config)) item.editMeta(::reindexEliteEnchantmentLore)
+    }
     return item
 }
 
@@ -247,6 +254,7 @@ internal fun prepareEliteDrop(
     if (isAdvancedEnchantmentsBook(item)) return item
     if (!EliteItemManager.isEliteMobsItem(item) && !isEliteEnchantmentBook(item)) return item
     val prepared = item.clone()
+    StaffEliteItems.migrate(prepared)
     processor?.processEliteLoot(prepared)
     if (isEliteEnchantmentBook(prepared)) return presentEliteEnchantmentBook(prepared, bookText)
     prepared.editMeta { meta ->
@@ -256,5 +264,8 @@ internal fun prepareEliteDrop(
     }
     prepared.setData(io.papermc.paper.datacomponent.DataComponentTypes.TOOLTIP_STYLE,
         net.kyori.adventure.key.Key.key("lzblocks", "tooltip/${eliteTooltipTier(EliteItemManager.getRoundedItemLevel(prepared))}"))
+    StaffSpellsModule.itemConfig()?.let { config ->
+        if (StaffEliteItems.present(prepared, config)) prepared.editMeta(::reindexEliteEnchantmentLore)
+    }
     return prepared
 }

@@ -52,7 +52,7 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.383"
+version = "1.4.384"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.21"
@@ -161,6 +161,7 @@ dependencies {
     // MagmaCore resolves API supertypes at compile time, but EliteMobs relocates it at runtime.
     // ARC must not call its unrelocated classes or shade either dependency; prefer Paper APIs.
     compileOnly(libs.ru.ruscrafting.thirdparty.elitemobs.api)
+    compileOnly("com.magmaguy:FreeMinecraftModels:2.12.1") { isTransitive = false }
     compileOnly(libs.ru.ruscrafting.thirdparty.magmacore)
     compileOnly(libs.com.denizenscript.denizen) { isTransitive = false }
     compileOnly(libs.com.github.slimefun.slimefun4)
@@ -263,6 +264,7 @@ dependencies {
     testImplementation(libs.net.citizensnpcs.citizens.main) { exclude(group = "*", module = "*") }
     testImplementation(libs.com.denizenscript.denizen) { isTransitive = false }
     testImplementation(libs.ru.ruscrafting.thirdparty.elitemobs.api)
+    testImplementation("com.magmaguy:FreeMinecraftModels:2.12.1") { isTransitive = false }
     testImplementation(libs.ru.ruscrafting.thirdparty.magmacore)
     testImplementation(libs.com.github.zrips.cmilib)
     testImplementation(libs.com.github.lonedev6.api.itemsadder)

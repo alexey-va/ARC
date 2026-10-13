@@ -54,6 +54,7 @@ object StaffSpellsModule : PluginModule {
     }
 
     internal fun activeController() = controller
+    internal fun itemConfig(): StaffSpellConfig? = controller?.config
 
     override fun init() {
         val config = StaffSpellConfig(ConfigManager.of(ARC.instance.dataPath, "modules/staff-spells.yml"))
@@ -79,9 +80,9 @@ object StaffSpellsModule : PluginModule {
     internal fun ready() = controller != null
 }
 
-/** Prototype items own their input. No FMM item, listener order or existing staff is rewritten. */
+/** Shared spell runtime for prototype, duel and migrated EliteMobs weapons. */
 internal class StaffSpellController(
-    private val config: StaffSpellConfig,
+    internal val config: StaffSpellConfig,
     private val settings: StaffSpellSettings,
     private val damage: StaffSpellDamage,
     private val effects: StaffSpellDisplayEffects,
