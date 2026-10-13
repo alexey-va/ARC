@@ -2,13 +2,21 @@ package ru.arc.commands
 
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Material
+import org.bukkit.command.CommandExecutor
 import org.bukkit.entity.Player
+import org.bukkit.event.EventHandler
+import org.bukkit.event.EventPriority
+import org.bukkit.event.Listener
+import org.bukkit.event.player.PlayerCommandPreprocessEvent
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import ru.arc.TestBase
+import ru.arc.commands.arc.ArcCommand
+import ru.arc.commands.arc.LegacySubCommandExecutor
 import ru.arc.hooks.HookRegistry
 import ru.arc.hooks.economyshop.ShopPurchaseOutcome
 import ru.arc.hooks.economyshop.ShopPurchaseService
@@ -17,31 +25,43 @@ import ru.arc.hooks.economyshop.ShopMaterialQuote
 
 class BuyCommandTest : TestBase() {
     private val purchases = mutableListOf<Pair<String, Int>>()
+    private val purchasePlayers = mutableListOf<Player>()
 
     @AfterEach
     fun clearShopService() {
         HookRegistry.shopPurchaseService = null
         purchases.clear()
+        purchasePlayers.clear()
     }
 
     @Test
     fun `top-level and arc entry points share exact purchase logic`() {
         HookRegistry.shopPurchaseService = fakeService()
         val player = server.addPlayer()
+        assertRegisteredCommand("buy", LegacySubCommandExecutor::class.java)
+        assertRegisteredCommand("arc", ArcCommand::class.java)
+        val preprocess = observeCommandPreprocess()
 
         assertTrue(server.dispatchCommand(player, "buy Blocks.12 64"))
         assertTrue(server.dispatchCommand(player, "arc buy Redstone pages.page1.items.1 128"))
+
+        assertEquals(2, preprocess.events.size, "Both commands should pass through Bukkit's preprocess event")
+        assertTrue(preprocess.events.all { it.player === player }, "Both preprocess events must belong to the invoking player")
+        assertTrue(preprocess.events.none { it.isCancelled }, "A preprocess listener cancelled a command")
 
         assertEquals(
             listOf("Blocks.12" to 64, "Redstone.pages.page1.items.1" to 128),
             purchases,
         )
+        assertEquals(2, purchasePlayers.size)
+        purchasePlayers.forEach { assertSame(player, it, "The registered executors must forward the invoking player") }
     }
 
     @Test
     fun `invalid amount never reaches the shop service`() {
         HookRegistry.shopPurchaseService = fakeService()
         val player = server.addPlayer()
+        assertRegisteredCommand("buy", LegacySubCommandExecutor::class.java)
 
         assertTrue(server.dispatchCommand(player, "buy Blocks.12 0"))
 
@@ -70,6 +90,7 @@ class BuyCommandTest : TestBase() {
                     )
             }
         val player = server.addPlayer()
+        assertRegisteredCommand("buy", LegacySubCommandExecutor::class.java)
 
         assertDoesNotThrow { server.dispatchCommand(player, "buy Blocks CALCITE 1") }
 
@@ -92,7 +113,33 @@ class BuyCommandTest : TestBase() {
 
             override fun purchase(player: Player, itemPath: String, amount: Int): ShopPurchaseOutcome {
                 purchases += itemPath to amount
+                purchasePlayers += player
                 return ShopPurchaseOutcome(ShopPurchaseStatus.SUCCESS, itemPath, amount, "$amount монет")
             }
         }
+
+    private fun assertRegisteredCommand(
+        name: String,
+        expectedExecutor: Class<out CommandExecutor>,
+    ) {
+        val declared = requireNotNull(plugin.getCommand(name)) { "plugin.yml must declare /$name" }
+        assertSame(declared, server.commandMap.getCommand(name), "/$name must resolve to ARC's declared PluginCommand")
+        assertTrue(
+            expectedExecutor.isInstance(declared.executor),
+            "/$name must use ${expectedExecutor.simpleName}, got ${declared.executor?.javaClass?.name}",
+        )
+    }
+
+    private fun observeCommandPreprocess() = CommandPreprocessProbe().also {
+        server.pluginManager.registerEvents(it, plugin)
+    }
+
+    private class CommandPreprocessProbe : Listener {
+        val events = mutableListOf<PlayerCommandPreprocessEvent>()
+
+        @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = false)
+        fun observe(event: PlayerCommandPreprocessEvent) {
+            events += event
+        }
+    }
 }

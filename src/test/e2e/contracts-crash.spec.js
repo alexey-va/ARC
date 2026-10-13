@@ -5,11 +5,16 @@ import { readFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { once } from 'node:events';
 import { test, expect, waitUntil, ServerWrapper } from '@drownek/plugwright';
-import { clickContractDesk } from './contract-desk.js';
-import { observeNativeDialog } from './native-dialog.js';
+import {
+  clickContractDesk,
+  contractUnitPriceMinor,
+  CONTRACT_DESK_SELL_SLOT,
+  offerStoneBatch,
+} from './contract-desk.js';
 
 const enabled = process.env.ARC_CONTRACT_CRASH_FIXTURE === '1';
 const phases = [
+  ['removal_started', false, false, 'interrupted_item_removal'],
   ['removal_saved', false, false, 'interrupted_item_removal'],
   ['escrow_saved', false, false, 'interrupted_escrow'],
   ['payment_failure_saved', false, false, 'interrupted_payment_failed'],
@@ -131,7 +136,6 @@ function waitForCrashDisconnect(bot, signal, submit) {
 }
 
 if (enabled) test('contract items, provider payment and journal survive real process crashes without replay', async ({ player, signal }) => {
-  const native = observeNativeDialog(player, signal);
   let replacement;
   let expectedBalance = 0;
   let expectedSpent = 0;
@@ -157,19 +161,14 @@ if (enabled) test('contract items, provider payment and journal survive real pro
       await expect(player).toHaveReceivedMessage(`CONTRACT_CRASH_ARMED:${phase}`, { since: beforeArm });
       await player.deOp();
       await balance(player, expectedBalance, signal);
-      await clickContractDesk(player, signal);
-      await native.command('/arc contracts open spawn');
-      await native.click('E2E stone order');
-      const quantity = native.inputInitial('quantity');
-      assert.equal(quantity, 2, 'Contract dialog default must select the two-item batch');
-      await native.click('Проверить сдачу', undefined, { quantity });
-      const quote = native.bodyText();
-      const quoted = quote.match(/\b\d+[.,]\d{2}\b/);
-      assert.ok(quoted, 'Confirmation dialog must expose the exact payout');
-      const quotedMinor = Math.round(Number(quoted[0].replace(',', '.')) * 100);
-      assert.ok(quotedMinor > 0, 'Quote must expose the exact positive payout');
+      const desk = await clickContractDesk(player, signal);
+      const unitPriceMinor = contractUnitPriceMinor(desk);
+      assert.ok(unitPriceMinor !== null && unitPriceMinor > 0,
+        'The current NPC desk must display a positive per-stone payout');
+      const quotedMinor = unitPriceMinor * 2;
+      await offerStoneBatch(player, 2, signal);
       await waitForCrashDisconnect(player.bot, signal, () =>
-        native.send(text => /^Сдать(?:\s|$)/.test(text)));
+        player.bot.clickWindow(CONTRACT_DESK_SELL_SLOT, 0, 0).catch(() => {}));
       const crash = await properties('crashed');
       assert.equal(crash.phase, phase, 'Paper must halt at the requested production boundary');
       const crashedPid = Number(crash.processId);
@@ -184,7 +183,6 @@ if (enabled) test('contract items, provider payment and journal survive real pro
         assert.equal(replacement.exitCode, 86, 'The deliberate JVM halt must own the exit');
       }
       replacement = await startReplacement(player, index + 1, signal);
-      native.reattach();
       expectedBalance += paid ? quotedMinor : 0;
       expectedSpent += committed ? quotedMinor : 0;
       expectedHeld += committed ? 0 : quotedMinor;
@@ -201,22 +199,34 @@ if (enabled) test('contract items, provider payment and journal survive real pro
       assert.equal(Number(lastSnapshot.quantity), 2);
       assert.equal(Number(lastSnapshot.payoutMinor), quotedMinor);
       assert.equal(Number(lastSnapshot.items), 2);
+      assert.equal(Number(lastSnapshot.deskItems), phase === 'removal_started' ? 2 : 0,
+        'Desk storage must retain the offered batch before removal, and be empty after durable removal');
       assert.equal(Number(lastSnapshot.acceptedQuantity), expectedAccepted);
       assert.equal(Number(lastSnapshot.spentMinor), expectedSpent);
       assert.equal(Number(lastSnapshot.reservedMinor), expectedHeld);
       assert.equal(Number(lastSnapshot.reservedQuantity), expectedReserved);
       assert.equal(Number(lastSnapshot.manualReviewCount), expectedManual);
+
+      if (phase === 'removal_started') {
+        // This phase halts after the durable intent but before desk storage is
+        // changed. Close the recovered real chest to return that saved batch
+        // before preparing the next independent crash case.
+        await clickContractDesk(player, signal);
+        await player.bot.closeWindow(player.bot.currentWindow);
+        await waitUntil(() => countStone(player) === 4, {
+          signal,
+          message: 'Recovered desk items were not returned when the NPC chest closed',
+        });
+      }
     }
     await stopReplacement(replacement);
     replacement = undefined;
     replacement = await startReplacement(player, phases.length + 1, signal);
-    native.reattach();
     await balance(player, expectedBalance, signal);
     await waitUntil(() => countStone(player) === 2, { signal, message: 'Inventory did not synchronize after repeated recovery' });
     assert.deepEqual(await snapshot(player, 'repeat_recovery', signal), lastSnapshot,
       'A second recovery must not change items, payout, held quota or contract progress');
   } finally {
-    native.close();
     await stopReplacement(replacement);
   }
 });

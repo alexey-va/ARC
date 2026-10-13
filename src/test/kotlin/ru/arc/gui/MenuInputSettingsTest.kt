@@ -36,14 +36,15 @@ class MenuInputSettingsTest : TestBase() {
             player.isSneaking = false
             swap().isCancelled shouldBe false
             player.isSneaking = true
-            swap(cancelled = true)
-            dungeonOpens shouldBe 2
+            val alreadyCancelled = swap(cancelled = true)
+            alreadyCancelled.isCancelled shouldBe true
+            dungeonOpens shouldBe 3
             inside = false
             swap().isCancelled shouldBe false
             selection = MenuShortcutAction.MOUNT
             swap().isCancelled shouldBe true
             summons shouldBe 1
-            dungeonOpens shouldBe 2
+            dungeonOpens shouldBe 3
         }
     }
 

@@ -1,13 +1,18 @@
 package ru.arc.contractfixture
 
 import org.bukkit.Material
+import org.bukkit.NamespacedKey
 import org.bukkit.command.Command
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
 import org.bukkit.plugin.java.JavaPlugin
+import org.bukkit.persistence.PersistentDataType
+import org.bukkit.inventory.ItemStack
 import ru.arc.contracts.*
 import java.io.File
 import java.io.FileOutputStream
+import java.io.ByteArrayInputStream
+import java.io.DataInputStream
 import java.util.Properties
 import java.util.UUID
 
@@ -32,8 +37,14 @@ class ContractCrashFixturePlugin : JavaPlugin() {
 
         val observedPersistence = object : ContractSubmissionPersistence by persistence {
             override suspend fun persistJournal(record: ContractSubmissionJournalRecord) {
+                if (record.status == ContractSubmissionJournalStatus.ITEMS_ESCROWED) {
+                    // The storage removal is already durable, but the journal
+                    // still records ITEM_REMOVAL_STARTED until this write.
+                    haltAt(record.playerId, "removal_saved", record.submissionId)
+                }
                 persistence.persistJournal(record)
                 val phase = when (record.status) {
+                    ContractSubmissionJournalStatus.ITEM_REMOVAL_STARTED -> "removal_started"
                     ContractSubmissionJournalStatus.ITEMS_ESCROWED -> "escrow_saved"
                     ContractSubmissionJournalStatus.PAYMENT_FAILED -> "payment_failure_saved"
                     ContractSubmissionJournalStatus.PAID -> "paid_saved"
@@ -50,21 +61,6 @@ class ContractCrashFixturePlugin : JavaPlugin() {
                 }
             }
         }
-        val observedInventory = object : ContractInventoryGateway {
-            override suspend fun prepare(playerId: String, itemKey: String, quantity: Int): PreparedContractInventory? {
-                val prepared = inventory.prepare(playerId, itemKey, quantity) ?: return null
-                return object : PreparedContractInventory by prepared {
-                    override suspend fun removeExact(canRemove: () -> Boolean): ContractInventoryMutation {
-                        val result = prepared.removeExact(canRemove)
-                        if (result == ContractInventoryMutation.Confirmed) {
-                            val record = persistence.journalRecords().filter { it.playerId == playerId }.maxBy { it.createdAt }
-                            haltAt(playerId, "removal_saved", record.submissionId)
-                        }
-                        return result
-                    }
-                }
-            }
-        }
         val observedPayment = object : ContractPaymentGateway by payment {
             override suspend fun deposit(playerId: String, amountMinor: Long, reason: String): ContractPaymentEvidence {
                 if (armed?.let { it.playerId.toString() == playerId && it.phase == "payment_failure_saved" } == true) {
@@ -78,7 +74,10 @@ class ContractCrashFixturePlugin : JavaPlugin() {
                 return evidence
             }
         }
-        owner.set(ContractsManager, ContractSubmissionCoordinator(observedPersistence, observedInventory, observedPayment))
+        // NPC desk sales pass a prepared storage-backed inventory directly to
+        // the coordinator, so the old player-inventory gateway hook cannot see
+        // item removal on this public path.
+        owner.set(ContractsManager, ContractSubmissionCoordinator(observedPersistence, inventory, observedPayment))
         logger.info("CONTRACT_CRASH_FIXTURE_READY")
     }
 
@@ -102,6 +101,7 @@ class ContractCrashFixturePlugin : JavaPlugin() {
                 writeProperties(args[1], mapOf(
                     "records" to records.size.toString(),
                     "items" to player.inventory.contents.filterNotNull().filter { it.type == Material.STONE }.sumOf { it.amount }.toString(),
+                    "deskItems" to deskStoneCount(player).toString(),
                     "status" to (record?.status?.label ?: "none"),
                     "reviewReason" to (record?.reviewReason?.label ?: "none"),
                     "quantity" to (record?.acceptedQuantity ?: 0).toString(),
@@ -139,11 +139,34 @@ class ContractCrashFixturePlugin : JavaPlugin() {
         }
     }
 
+    private fun deskStoneCount(player: Player): Int {
+        val bytes = player.persistentDataContainer.get(
+            NamespacedKey("arc", "contract_desk_spawn"),
+            PersistentDataType.BYTE_ARRAY,
+        ) ?: return 0
+        require(bytes.size <= 256 * 1024)
+        return DataInputStream(ByteArrayInputStream(bytes)).use { input ->
+            val first = input.readInt()
+            val expanded = first == -24
+            val size = if (expanded) 24 else 9
+            var stones = 0
+            repeat(size) { slot ->
+                val payloadSize = if (expanded || slot > 0) input.readInt() else first
+                if (payloadSize == -1) return@repeat
+                require(payloadSize in 1..65536 && payloadSize <= input.available())
+                val item = ItemStack.deserializeBytes(input.readNBytes(payloadSize))
+                if (item.type == Material.STONE) stones += item.amount
+            }
+            require(input.available() == 0)
+            stones
+        }
+    }
+
     @Suppress("UNCHECKED_CAST")
     private fun <T> port(coordinator: ContractSubmissionCoordinator, name: String): T =
         coordinator.javaClass.getDeclaredField(name).apply { isAccessible = true }.get(coordinator) as T
 
     companion object {
-        private val PHASES = setOf("removal_saved", "escrow_saved", "payment_succeeded", "payment_failure_saved", "paid_saved", "contract_saved")
+        private val PHASES = setOf("removal_started", "removal_saved", "escrow_saved", "payment_succeeded", "payment_failure_saved", "paid_saved", "contract_saved")
     }
 }

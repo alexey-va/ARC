@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import { test, expect, waitUntil } from '@drownek/plugwright';
-import { clickContractDesk } from './contract-desk.js';
+import {
+  clickContractDesk,
+  contractUnitPriceMinor,
+  CONTRACT_DESK_DEPOSIT_SLOT,
+  CONTRACT_DESK_SELL_SLOT,
+  offerStoneBatch,
+} from './contract-desk.js';
 import { observeNativeDialog, plain } from './native-dialog.js';
 
 const count = (player, name) => player.bot.inventory.items()
@@ -36,47 +42,67 @@ test('direct contract submission is unavailable; the board opens the real contra
   } finally { native.close(); }
 });
 
-test('an Origin quote consumes two real items once and a second click cannot duplicate it', async ({ player, signal }) => {
-  const native = observeNativeDialog(player, signal);
+test('the real NPC desk sells one exact batch once and shows the updated price', async ({ player, signal }) => {
+  await player.makeOp();
+  await player.giveItem('stone', 4);
+  await waitUntil(() => count(player, 'stone') === 4, { signal, message: 'Setup stone was not delivered' });
+  await player.deOp();
+  const initialBalance = player.messageBuffer.length;
+  player.chat('/balance');
+  await expect(player).toHaveReceivedMessage(/You have 0(?:[.,]0{1,2})?(?: coins?)?!/i, { since: initialBalance });
+
+  const desk = await clickContractDesk(player, signal);
+  const firstUnitPrice = contractUnitPriceMinor(desk);
+  assert.equal(firstUnitPrice, 12496, 'The actual NPC desk must show the current per-stone payout');
+  await offerStoneBatch(player, 2, signal);
+
+  // Submit the same desk action twice while the first sale is in flight. Only
+  // the two stones staged in the desk can be sold; the other two stay with the player.
+  const client = player.bot._client;
+  const originalWrite = client.write;
+  const salePackets = [];
+  const windowId = player.bot.currentWindow?.id;
+  assert.ok(windowId !== undefined, 'The sale clicks must target the open NPC desk window');
+  client.write = function (name, data, ...args) {
+    const isSaleClick = name === 'window_click' && data?.slot === CONTRACT_DESK_SELL_SLOT;
+    const result = originalWrite.call(this, name, data, ...args);
+    if (isSaleClick) salePackets.push(data);
+    return result;
+  };
+  let clickResults;
   try {
-    await player.makeOp();
-    await player.giveItem('stone', 4);
-    await waitUntil(() => count(player, 'stone') === 4, { signal, message: 'Setup stone was not delivered' });
-    await player.deOp();
-    const initialBalance = player.messageBuffer.length;
-    player.chat('/balance');
-    await expect(player).toHaveReceivedMessage(/You have 0(?:[.,]0{1,2})?(?: coins?)?!/i, { since: initialBalance });
-    await clickContractDesk(player, signal);
-    await native.command('/arc contracts open spawn');
-    await native.click('E2E stone order');
-    const quantity = native.inputInitial('quantity');
-    assert.equal(quantity, 2, 'Contract dialog default must select the two-item batch');
-    await native.click('Проверить сдачу', undefined, { quantity });
-    const firstQuote = native.bodyText();
-    assert.match(firstQuote, /249[.,]92/);
-    const confirm = native.action(text => /^Сдать(?:\s|$)/.test(text));
-    assert.ok(confirm, 'Confirmation dialog did not expose a submit action');
-    native.send(confirm);
-    native.send(confirm);
-    await waitUntil(() => count(player, 'stone') === 2, {
-      signal,
-      message: 'Contract confirmation did not escrow exactly two stones',
-    });
-    assert.equal(count(player, 'stone'), 2, 'double click consumed more than one batch');
-    const paidBalance = player.messageBuffer.length;
-    player.chat('/balance');
-    await expect(player).toHaveReceivedMessage(/You have 249[.,]92(?: coins?)?!/i, { since: paidBalance });
-    await native.command('/arc contracts open spawn');
-    await native.click('E2E stone order');
-    const nextQuantity = native.inputInitial('quantity');
-    assert.equal(nextQuantity, 2, 'Reopened contract dialog default must select the two-item batch');
-    await native.click('Проверить сдачу', undefined, { quantity: nextQuantity });
-    const nextQuote = native.bodyText();
-    const quoteValue = text => Number.parseFloat(text.match(/\b\d+[.,]\d{2}\b/)[0].replace(',', '.'));
-    assert.equal(quoteValue(firstQuote), 249.92);
-    assert.equal(quoteValue(nextQuote), 249.62);
-    assert.ok(quoteValue(nextQuote) < quoteValue(firstQuote), 'dynamic price did not decrease after accepted supply');
-  } finally { native.close(); }
+    clickResults = await Promise.allSettled([
+      player.bot.clickWindow(CONTRACT_DESK_SELL_SLOT, 0, 0),
+      player.bot.clickWindow(CONTRACT_DESK_SELL_SLOT, 0, 0),
+    ]);
+  } finally {
+    client.write = originalWrite;
+  }
+  assert.equal(salePackets.length, 2, 'Both sell clicks must be sent as protocol window-click attempts');
+  assert.ok(salePackets.every(packet => packet.windowId === windowId && packet.slot === CONTRACT_DESK_SELL_SLOT),
+    'Both protocol clicks must target the same desk sell slot');
+  assert.ok(clickResults.some(result => result.status === 'fulfilled'),
+    `At least one sell click must be acknowledged; outcomes: ${clickResults.map(result => result.status).join(', ')}`);
+  await waitUntil(() => count(player, 'stone') === 2, {
+    signal,
+    message: 'The NPC desk did not consume exactly the offered two stones',
+  });
+  const paidBalance = player.messageBuffer.length;
+  player.chat('/balance');
+  await expect(player).toHaveReceivedMessage(/You have 249[.,]92(?: coins?)?!/i, { since: paidBalance });
+
+  await waitUntil(() => player.bot.currentWindow?.id === windowId && desk.title !== undefined &&
+    player.bot.currentWindow?.slots[CONTRACT_DESK_DEPOSIT_SLOT] == null, {
+    signal,
+    message: 'The completed sale left items in the NPC desk deposit slot',
+  });
+
+  await waitUntil(() => {
+    const nextUnitPrice = contractUnitPriceMinor(desk);
+    return nextUnitPrice !== null && nextUnitPrice < firstUnitPrice;
+  }, { signal, message: 'The live NPC desk did not show its reduced post-sale price' });
+  assert.equal(contractUnitPriceMinor(desk), 12481, 'The NPC desk price must reflect the accepted supply');
+  assert.equal(count(player, 'stone'), 2, 'The repeated sell action consumed the untouched player batch');
 });
 
 test('leaving Origin leaves the contract GUI read-only', async ({ player, signal }) => {

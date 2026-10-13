@@ -7,6 +7,10 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 class ArcConfigurationConventionTest {
+    private companion object {
+        const val STATIC_PERMISSION_PATTERN = "arc\\.[a-z0-9]+(?:-[a-z0-9]+)*(?:\\.[a-z0-9]+(?:-[a-z0-9]+)*)*"
+    }
+
     @Test
     fun `feature yaml resources live below named directories`() {
         val resourceRoot = Path.of("src", "main", "resources")
@@ -24,10 +28,10 @@ class ArcConfigurationConventionTest {
     }
 
     @Test
-    fun `static ARC permissions use dotted lowercase segments`() {
+    fun `static ARC permissions use dotted lowercase segments with internal hyphens`() {
         val mainRoot = Path.of("src", "main")
         val permissionToken = Regex("arc\\.[a-z0-9_.-]+")
-        val canonicalPermission = Regex("arc\\.[a-z0-9]+(?:\\.[a-z0-9]+)*")
+        val canonicalPermission = Regex(STATIC_PERMISSION_PATTERN)
         val kotlinPermissionMarker =
             Regex(
                 "hasPermission|defaultPermission|permission\\s*[=:]|permission\\(|permissionPrefix|PERMISSION",
@@ -122,7 +126,7 @@ class ArcConfigurationConventionTest {
         val mainRoot = Path.of("src", "main")
         val pluginPath = mainRoot.resolve(Path.of("resources", "plugin.yml"))
         val pluginLines = Files.readAllLines(pluginPath)
-        val declaration = Regex("^  (arc\\.[a-z0-9]+(?:\\.[a-z0-9]+)*):$")
+        val declaration = Regex("^  ($STATIC_PERMISSION_PATTERN):$")
         val declared =
             pluginLines.mapNotNull { declaration.matchEntire(it)?.groupValues?.get(1) }.toSet()
         val missingDefaults = mutableListOf<String>()
@@ -137,8 +141,8 @@ class ArcConfigurationConventionTest {
             }
         }
 
-        val kotlinLiteral = Regex("\\\"(arc\\.[a-z0-9]+(?:\\.[a-z0-9]+)*)\\\"")
-        val yamlToken = Regex("arc\\.[a-z0-9]+(?:\\.[a-z0-9]+)*")
+        val kotlinLiteral = Regex("\\\"($STATIC_PERMISSION_PATTERN)\\\"")
+        val yamlToken = Regex(STATIC_PERMISSION_PATTERN)
         val kotlinPermissionMarker =
             Regex(
                 "hasPermission|defaultPermission|permission\\s*[=:]|permission\\(|permissionPrefix|PERMISSION",

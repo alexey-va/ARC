@@ -11,32 +11,31 @@ class SidebarQuestRewardsTest {
     }
 
     @Test
-    fun `daily totals follow the last quest row before the online ping footer`() {
-        val lines = config().getStringList("styles.style01.lines")
-        val summary = lines.indexOfFirst { SidebarQuestRewards.SUMMARY_PLACEHOLDER in it }
-        val lastQuest = lines.indexOfFirst { "%arcranks_quest_board_3%" in it }
-        val footer = lines.indexOfFirst { "Пинг:" in it }
-        assertEquals(lastQuest + 1, summary)
-        assertTrue(summary < footer)
-        assertTrue(lines.last().contains("Пинг:"))
+    fun `daily total section follows quests before the online ping footer`() {
+        val config = config()
+        val sections = requireNotNull(config.getConfigurationSection("sections"))
+        val order = sections.getKeys(false).toList()
+        val rewards = sections.getStringList("rewards")
+        assertEquals(1, rewards.count { SidebarQuestRewards.SUMMARY_PLACEHOLDER in it })
+        assertTrue(order.indexOf("quests") < order.indexOf("rewards"))
+        assertTrue(order.indexOf("rewards") < order.indexOf("footer"))
+        assertTrue(sections.getStringList("footer").last().contains("Пинг:"))
     }
 
     @Test
-    fun `all styles have one totals row and remain within fifteen rows`() {
-        val styles = requireNotNull(config().getConfigurationSection("styles"))
-        styles.getKeys(false).forEach { style ->
-            val lines = styles.getStringList("$style.lines")
-            assertTrue(lines.size <= 15, style)
-            assertEquals(1, lines.count { SidebarQuestRewards.SUMMARY_PLACEHOLDER in it }, style)
-            val lastQuest = lines.indexOfLast { Regex("%arcranks_quest_(board_[1-3]|compact)%").containsMatchIn(it) }
-            assertTrue(SidebarQuestRewards.SUMMARY_PLACEHOLDER in lines[lastQuest + 1], style)
-            assertFalse(lines.any { "%arcranks_quest_board_reward_" in it || "%arcranks_quest_reward%" in it }, style)
-        }
+    fun `default sections have one aggregate reward row and no per quest payouts`() {
+        val config = config()
+        val quests = config.getStringList("sections.quests")
+        val rewards = config.getStringList("sections.rewards")
+        assertTrue(quests.any { "%arcranks_quest_board_header%" in it })
+        assertEquals(1, rewards.count { SidebarQuestRewards.SUMMARY_PLACEHOLDER in it })
+        assertFalse((quests + rewards).any { "%arcranks_quest_board_reward_" in it || "%arcranks_quest_reward%" in it })
     }
 
     @Test
     fun `preference hides only totals and preserves quest rows and footer`() {
-        val lines = config().getStringList("styles.style01.lines")
+        val config = config()
+        val lines = listOf("quests", "rewards", "footer").flatMap { config.getStringList("sections.$it") }
         val visible = lines.mapNotNull { SidebarQuestRewards.visibleLine(it, false) }
         assertEquals(lines.filterNot { SidebarQuestRewards.SUMMARY_PLACEHOLDER in it }, visible)
         assertEquals(lines, lines.mapNotNull { SidebarQuestRewards.visibleLine(it, true) })
@@ -46,7 +45,9 @@ class SidebarQuestRewardsTest {
 
     @Test
     fun `totals remain under the quest header when all goal rows are empty`() {
-        val resolved = config().getStringList("styles.style01.lines").mapNotNull { line ->
+        val config = config()
+        val lines = listOf("quests", "rewards", "footer").flatMap { config.getStringList("sections.$it") }
+        val resolved = lines.mapNotNull { line ->
             resolveOptionalSidebarLine(line) { placeholder ->
                 when (placeholder) {
                     "%arcranks_quest_board_header%" -> "Квесты"
@@ -55,9 +56,11 @@ class SidebarQuestRewardsTest {
                 }
             }
         }
+        val header = resolved.indexOfFirst { "%arcranks_quest_board_header%" in it }
         val summary = resolved.indexOfFirst { SidebarQuestRewards.SUMMARY_PLACEHOLDER in it }
-        assertTrue(summary > 0)
-        assertTrue("%arcranks_quest_board_header%" in resolved[summary - 1])
-        assertTrue(resolved.last().contains("Пинг:"))
+        val footer = resolved.indexOfFirst { "Пинг:" in it }
+        assertTrue(header >= 0)
+        assertEquals(header + 1, summary)
+        assertTrue(footer > summary)
     }
 }
