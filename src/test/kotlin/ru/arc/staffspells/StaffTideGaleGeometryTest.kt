@@ -145,4 +145,62 @@ class StaffTideGaleGeometryTest : FreeSpec({
         particles.any { it.particle == Particle.SPLASH } shouldBe true
         (particles.maxOf { it.offset.length() } > 1.0) shouldBe true
     }
+
+    "wind accents follow the expanding display funnel instead of an inverted second cone" {
+        listOf(0.0, .5, 1.0).forEach { charge ->
+            listOf(6, 12, 24).forEach { age ->
+                val ribbons = staffTideGaleParts(StaffSpell.GALE, age, 52, 3.0, false, false, charge)
+                    .filter { it.identity?.startsWith("gale:tornado:band:") == true }
+                val motes = staffTideGaleParticleSamples(StaffSpell.GALE, age, 52, 3.0, false, charge)
+                    .filter { it.particle == Particle.DUST_COLOR_TRANSITION }
+                motes.size shouldBe ribbons.size
+                motes.zip(ribbons).all { (mote, ribbon) ->
+                    mote.offset.distance(org.bukkit.util.Vector(ribbon.center.x, ribbon.center.y, ribbon.center.z)) < .12
+                } shouldBe true
+                val bottom = motes.filter { it.offset.y < 1.0 }.maxOf { it.offset.clone().apply { y = 0.0 }.length() }
+                val top = motes.filter { it.offset.y > 4.5 }.minOf { it.offset.clone().apply { y = 0.0 }.length() }
+                (top > bottom * 1.5) shouldBe true
+            }
+        }
+    }
+
+    "water spray curls forward with the foam lip at every charge level" {
+        listOf(0.0, .5, 1.0).forEach { charge ->
+            val lip = staffTideGaleParts(StaffSpell.TIDE, 12, 44, 3.0, false, true, charge)
+                .filter { it.identity?.startsWith("tide:wave:foam:") == true }
+            val spray = staffTideGaleParticleSamples(StaffSpell.TIDE, 12, 44, 3.0, true, charge)
+                .filter { it.particle == Particle.SPLASH }
+            spray.size shouldBe 14
+            spray.all { mote ->
+                mote.offset.z > .6 && lip.minOf { foam ->
+                    mote.offset.distance(org.bukkit.util.Vector(foam.center.x, foam.center.y, foam.center.z))
+                } < .4
+            } shouldBe true
+        }
+    }
+
+    "water shell particles retain their phase and radius on arrival" {
+        listOf(0.0, .5, 1.0).forEach { charge ->
+            val flying = staffTideGaleParticleSamples(StaffSpell.TIDE, 26, 44, 1.0, false, charge).take(24)
+            val arrived = staffTideGaleParticleSamples(StaffSpell.TIDE, 0, 16, 1.8, false, charge, impact = true).take(24)
+            flying.size shouldBe 24
+            arrived.size shouldBe 24
+            flying.zip(arrived).all { (a, b) ->
+                a.particle == b.particle && a.offset.distance(b.offset) < .05 &&
+                    abs(a.offset.length() - b.offset.length()) < .001
+            } shouldBe true
+        }
+    }
+
+    "exit stops new particles without pulling their spawn positions back into the center" {
+        val steady = staffTideGaleParticleSamples(StaffSpell.GALE, 36, 52, 3.0, false, .5)
+            .filter { it.particle == Particle.DUST_COLOR_TRANSITION }
+        val last = staffTideGaleParticleSamples(StaffSpell.GALE, 44, 52, 3.0, false, .5)
+            .filter { it.particle == Particle.DUST_COLOR_TRANSITION }
+        steady.zip(last).all { (a, b) ->
+            abs(a.offset.y - b.offset.y) < .001 && b.offset.length() / a.offset.length() in .97..1.03
+        } shouldBe true
+        staffTideGaleParticleSamples(StaffSpell.GALE, 46, 52, 3.0, false, .5) shouldBe emptyList()
+        staffTideGaleParticleSamples(StaffSpell.TIDE, 38, 44, 3.0, true, .5) shouldBe emptyList()
+    }
 })

@@ -92,6 +92,18 @@ class StaffPreparationGeometryTest : FreeSpec({
         (fading.scale.x > last.scale.x) shouldBe true
         staffPreparationParts(StaffSpell.GALE, false, 10) shouldBe emptyList()
     }
+
+    "a preparation is nearly gone on the last frame of the two-tick preview cadence" {
+        val atSix = staffPreparationParts(StaffSpell.GALE, false, 6).associateBy { it.identity }
+        val atEight = staffPreparationParts(StaffSpell.GALE, false, 8).associateBy { it.identity }
+
+        atEight.keys shouldBe atSix.keys
+        atEight.forEach { (identity, part) ->
+            val previous = atSix.getValue(identity)
+            (part.scale.length() < previous.scale.length() * 0.16f) shouldBe true
+        }
+        staffPreparationParts(StaffSpell.GALE, false, 10) shouldBe emptyList()
+    }
 })
 
 private fun preparationIntersectsReticle(part: StaffDisplayPart): Boolean {

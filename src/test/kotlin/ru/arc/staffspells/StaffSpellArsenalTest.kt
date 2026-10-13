@@ -16,7 +16,12 @@ class StaffSpellArsenalTest : FreeSpec({
                     secondary, StaffCastInput.of(secondary, false), 1.0)
                 (parts.size in 1..48) shouldBe true
                 val samples = staffArsenalParticles(spell, 12, duration, 3.0, secondary, 1.0)
-                val particleBudget = if (spell == StaffSpell.OSSUARY) 6..14 else 32..192
+                val particleBudget = when (spell) {
+                    StaffSpell.OSSUARY -> 6..14
+                    // Water/wind silhouettes are displays; native particles only accent their surfaces.
+                    StaffSpell.TIDE, StaffSpell.GALE -> 1..64
+                    else -> 32..192
+                }
                 (samples.size in particleBudget) shouldBe true
                 samples.all { listOf(it.offset.x, it.offset.y, it.offset.z).all(Double::isFinite) } shouldBe true
                 parts.all { it.scale.x > 0 && it.scale.y > 0 && it.scale.z > 0 } shouldBe true

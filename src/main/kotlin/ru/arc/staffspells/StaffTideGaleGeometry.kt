@@ -15,6 +15,25 @@ import kotlin.math.sqrt
 
 private const val TIDE_ORB_ARRIVAL_TICK = 28
 
+/** Local surfaces shared by the solid ribbons and their native-particle accents. */
+private fun galeFunnelPoint(t: Double, strand: Int, age: Double, q: Double, grow: Double): Vector3f {
+    val scale = .8 + q * .45
+    val angle = strand * PI * 2 / 3 + t * PI * 2.3 - age * (.055 + (1 - t) * .018)
+    val taper = (.30 + 1.32 * t.pow(.82) + q * .06) * grow
+    return Vector3f((cos(angle) * taper).toFloat(), (t * (5.35 + q * .30) / scale * grow).toFloat(),
+        (sin(angle) * taper).toFloat())
+}
+
+private fun tideWavePoint(across: Double, t: Double, q: Double, grow: Double): Vector3f {
+    val scale = .8 + q * .45
+    val shoulder = .78 + .22 * (1.0 - abs(across))
+    val curl = smoothTideGale((t - .60) / .40)
+    val heightT = if (t >= .90) t - .06 else t
+    val z = -.10 + .72 * sin(t * PI * .72) + .70 * curl * curl + .18 * (1.0 - abs(across))
+    return Vector3f((across * (2.30 + q * .15) / scale * grow).toFloat(),
+        (heightT * (2.75 + q * .32) / scale * shoulder * grow).toFloat(), (z * grow).toFloat())
+}
+
 /** Readable local block-display silhouettes for the two water and wind arsenal spells. */
 internal fun staffTideGaleParts(
     spell: StaffSpell,
@@ -79,14 +98,7 @@ internal fun staffTideGaleParts(
                 repeat(nodes) { index ->
                     val t0 = index / nodes.toDouble()
                     val t1 = (index + 1) / nodes.toDouble()
-                    fun point(t: Double): Vector3f {
-                        val angle = strand * PI * 2 / 3 + t * PI * 2.3 - age * (.055 + (1 - t) * .018)
-                        // Keep a narrow ground stem and let the translucent funnel widen
-                        // upward, as a readable tornado silhouette should.
-                        val taper = (.30 + 1.32 * t.pow(.82) + q * .06) * grow
-                        return Vector3f((cos(angle) * taper).toFloat(), (t * height * grow).toFloat(),
-                            (sin(angle) * taper).toFloat())
-                    }
+                    fun point(t: Double) = galeFunnelPoint(t, strand, age.toDouble(), q, grow)
                     val midT = (t0 + t1) / 2.0
                     val midAngle = strand * PI * 2 / 3 + midT * PI * 2.3 - age * (.055 + (1 - midT) * .018)
                     val slope = 1.32 * .82 * midT.pow(-.18) / height
@@ -125,16 +137,7 @@ internal fun staffTideGaleParts(
             val crestHeight = (2.75 + q * .32) / scale
             val acrossSegments = 7
             val rows = listOf(.06, .28, .52, .76, .96)
-            fun wavePoint(x: Double, t: Double): Vector3f {
-                val across = x / halfWidth
-                val shoulder = .78 + .22 * (1.0 - abs(across))
-                val curl = smoothTideGale((t - .60) / .40)
-                val heightT = if (t >= .90) t - .06 else t
-                val z = -.10 + .72 * sin(t * PI * .72) + .70 * curl * curl +
-                    .18 * (1.0 - abs(across))
-                return Vector3f((x * grow).toFloat(), (heightT * crestHeight * shoulder * grow).toFloat(),
-                    (z * grow).toFloat())
-            }
+            fun wavePoint(x: Double, t: Double) = tideWavePoint(x / halfWidth, t, q, grow)
             rows.forEachIndexed { row, t ->
                 repeat(acrossSegments) { index ->
                     val x0 = -halfWidth + (index / acrossSegments.toDouble()) * halfWidth * 2
@@ -208,26 +211,28 @@ internal fun staffTideGaleParticleSamples(
     if (spell != StaffSpell.GALE && spell != StaffSpell.TIDE) return emptyList()
     val age = ageTicks.toDouble()
     val q = charge.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
-    val fade = smoothTideGale((durationTicks - age) / 8.0)
-    if (age < 0.0 || fade <= 0.0) return emptyList()
+    // Native particles outlive an emission. Stop feeding them during the display's exit;
+    // shrinking their spawn positions would pull the whole wake back into the center.
+    if (age < 0.0 || age == 0.0 && !impact || age >= durationTicks - 6.0) return emptyList()
+    val scale = .8 + q * .45
     val out = mutableListOf<StaffParticleSample>()
     fun mote(particle: Particle, x: Double, y: Double, z: Double, data: Any? = null,
         spread: Double = .01, speed: Double = 0.0, count: Int = 1) {
         out += StaffParticleSample(particle, Vector(x, y, z), count,
             Vector(spread, spread, spread), speed, data)
     }
-    val wind = staffFade(0xf4f8fa, 0x7f9299, 1.1f)
-    val water = staffFade(0x70eaff, 0x147eb0, 1.35f)
+    val wind = staffFade(0xf4f8fa, 0x7f9299, .75f)
+    val water = staffFade(0x70eaff, 0x147eb0, .9f)
 
     when (spell) {
         StaffSpell.GALE -> if (secondary) {
-            val grow = smoothTideGale(age / 4.0) * fade
-            repeat(32) { index ->
-                val strand = index / 16
-                val step = (index % 16) / 15.0
+            val grow = smoothTideGale(age / 4.0) * scale
+            repeat(20) { index ->
+                val strand = index / 10
+                val step = (index % 10) / 9.0
                 val angle = strand * PI + step * PI * 4 + age * .065
                 val r = (.27 + .18 * sin(step * PI)) * grow
-                mote(Particle.DUST_COLOR_TRANSITION, cos(angle) * r, .1 + sin(angle) * r,
+                mote(Particle.DUST_COLOR_TRANSITION, cos(angle) * r, .1 * scale + sin(angle) * r,
                     (-.9 + step * 2.05) * grow, wind, .012)
             }
             repeat(4) { index ->
@@ -237,39 +242,33 @@ internal fun staffTideGaleParticleSamples(
             }
             if (ageTicks % 4 == 0) mote(Particle.GUST, 0.0, .1, 0.0, spread = .12)
         } else {
-            val grow = smoothTideGale(age / 6.0) * fade
-            repeat(48) { index ->
-                val strand = index / 16
-                val t = (index % 16) / 15.0
-                val angle = strand * PI * 2 / 3 + t * PI * 4.2 - age * (.055 + (1 - t) * .018)
-                val r = (1.38 * (1.0 - t).pow(.70) + .38 + q * .06) * grow
-                mote(Particle.DUST_COLOR_TRANSITION, cos(angle) * r, t * (5.35 + q * .55) * grow,
-                    sin(angle) * r, wind, .009)
+            val grow = smoothTideGale(age / 6.0)
+            repeat(33) { index ->
+                val strand = index / 11
+                val t = (index % 11) / 11.0
+                val point = galeFunnelPoint(t, strand, age, q, grow)
+                    .add(galeFunnelPoint(t + 1.0 / 11, strand, age, q, grow)).mul((scale * .5).toFloat())
+                mote(Particle.DUST_COLOR_TRANSITION, point.x.toDouble(), point.y.toDouble(),
+                    point.z.toDouble(), wind, .009)
             }
             repeat(4) { index ->
                 val t = .1 + (index % 3) * .16
                 val angle = index * PI / 3 - age * .08
-                val r = (1.5 - t * .55) * grow
-                mote(Particle.CRIT, cos(angle) * r, t * (5.35 + q * .55) * grow, sin(angle) * r,
+                val r = (1.5 - t * .55) * grow * scale
+                mote(Particle.CRIT, cos(angle) * r, t * (5.35 + q * .30) * grow, sin(angle) * r,
                     spread = .012, speed = .002)
             }
             if (ageTicks % 6 == 0) mote(Particle.GUST, 0.0, 1.0, 0.0, spread = .16)
         }
         StaffSpell.TIDE -> if (secondary) {
-            val grow = smoothTideGale(age / 6.0) * fade
+            val grow = smoothTideGale(age / 6.0)
             val halfWidth = 2.30 + q * .15
-            val crestHeight = 2.75 + q * .32
-            repeat(54) { index ->
-                val row = index / 18
-                val across = (index % 18) / 17.0 * 2 - 1
-                val t = row / 2.0
-                val curl = smoothTideGale((t - .60) / .40)
-                val z = -.10 + .72 * sin(t * PI * .72) - .70 * curl * curl + .18 * (1.0 - abs(across))
-                val y = t * crestHeight * (.78 + .22 * (1.0 - abs(across)))
-                val x = across * halfWidth
-                val crest = row == 3 || abs(across) > .86
+            repeat(28) { index ->
+                val crest = index >= 14
+                val across = (index % 14) / 13.0 * 2 - 1
+                val point = tideWavePoint(across, if (crest) .96 else .28, q, grow).mul(scale.toFloat())
                 mote(if (crest) Particle.SPLASH else Particle.DUST_COLOR_TRANSITION,
-                    x * grow, y * grow, z * grow, if (crest) null else water,
+                    point.x.toDouble(), point.y.toDouble(), point.z.toDouble(), if (crest) null else water,
                     spread = if (crest) .022 else .008, speed = if (crest) .018 else 0.0)
             }
             repeat(6) { index ->
@@ -277,11 +276,11 @@ internal fun staffTideGaleParticleSamples(
                 mote(Particle.BUBBLE, x, .04 * grow, -.24 * grow, spread = .015, speed = .004)
             }
         } else if (!impact && age < 28.0) {
-            val grow = smoothTideGale(age / 5.0) * fade
-            repeat(32) { index ->
-                val y = 1.0 - 2.0 * (index + .5) / 32
+            val grow = smoothTideGale(age / 5.0) * scale
+            repeat(24) { index ->
+                val y = 1.0 - 2.0 * (index + .5) / 24
                 val ring = sqrt(1.0 - y * y)
-                val angle = index * 2.39996 + age * .12
+                val angle = index * 2.39996 + age * .025
                 val r = (.58 + q * .12) * grow
                 mote(if (index % 4 == 0) Particle.BUBBLE else Particle.DUST_COLOR_TRANSITION,
                     cos(angle) * ring * r, y * r, sin(angle) * ring * r,
@@ -297,17 +296,17 @@ internal fun staffTideGaleParticleSamples(
         } else {
             val stageAge = if (impact) age else age - 28.0
             val grow = smoothTideGale(stageAge / 7.0)
-            val startRadius = .58 + q * .12
+            val startRadius = (.58 + q * .12) * scale
             val fullRadius = radius.takeIf { it.isFinite() && it > 0.0 }?.coerceIn(1.6, 2.2) ?: 1.8
-            val r = (startRadius + (fullRadius - startRadius) * grow) * fade
+            val r = startRadius + (fullRadius - startRadius) * grow
             repeat(24) { index ->
                 val y = 1.0 - 2.0 * (index + .5) / 24
                 val ring = sqrt(1.0 - y * y)
-                val angle = index * 2.39996 + stageAge * .018
+                val angle = index * 2.39996 + TIDE_ORB_ARRIVAL_TICK * .025 + stageAge * .012
                 val x = cos(angle) * ring * r
                 val z = sin(angle) * ring * r
-                mote(Particle.DUST_COLOR_TRANSITION, x, y * r, z, water, .009)
-                if (index % 4 == 0) mote(Particle.BUBBLE, x, y * r, z, spread = .012, speed = .005)
+                mote(if (index % 4 == 0) Particle.BUBBLE else Particle.DUST_COLOR_TRANSITION,
+                    x, y * r, z, if (index % 4 == 0) null else water, .009)
             }
             repeat(6) { index ->
                 val angle = index * 2.39996 + stageAge * .025

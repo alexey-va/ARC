@@ -37,7 +37,7 @@ internal fun staffPreparationParts(
         StaffSpell.INFERNO, StaffSpell.GRAVITY -> emptyList()
     }
     val opening = 0.22 + 0.78 * preparationSmooth(age / 3.0)
-    val fade = 0.10 + 0.90 * preparationSmooth((duration - age - 1) / 3.0)
+    val fade = 0.001 + 0.999 * preparationSmooth((duration - age - 1) / 6.0)
     val envelope = (opening * fade).toFloat()
     return pose.map { part ->
         part.copy(

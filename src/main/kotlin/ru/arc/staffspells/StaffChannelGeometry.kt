@@ -14,9 +14,9 @@ internal fun staffInfernoFrame(ageTicks: Int, reach: Double): List<StaffParticle
     val length = reach.takeIf(Double::isFinite)?.coerceIn(0.0, 10.0) ?: 8.0
     if (length < INFERNO_MUZZLE_CLEARANCE) return emptyList()
     val phase = ageTicks.coerceAtLeast(0) * 0.31
-    val core = staffFade(0xFFD64A, 0xFFF6C5, 1.25f)
-    val edge = staffFade(0xFF531B, 0xFFB52D, 1.1f)
-    return buildList(48) {
+    val core = staffFade(0xFFD64A, 0xFFF6C5, 0.95f)
+    val edge = staffFade(0xFF531B, 0xFFB52D, 0.8f)
+    return buildList(44) {
         repeat(16) { i ->
             val t = (i + 1) / 16.0
             val z = INFERNO_MUZZLE_CLEARANCE + (length - INFERNO_MUZZLE_CLEARANCE) * t
@@ -24,13 +24,15 @@ internal fun staffInfernoFrame(ageTicks: Int, reach: Double): List<StaffParticle
             val angle = phase + i * 2.399963
             val x = sin(angle) * width
             val y = cos(angle * 1.13) * width * 0.72
-            add(StaffParticleSample(Particle.DUST_COLOR_TRANSITION, Vector(x * 0.35, y * 0.35, z), data = core))
+            if (i % 2 == 0)
+                add(StaffParticleSample(Particle.DUST_COLOR_TRANSITION, Vector(x * 0.35, y * 0.35, z), data = core))
             add(StaffParticleSample(Particle.FLAME, Vector(x, y, z), data = null))
             add(StaffParticleSample(Particle.FLAME,
                 Vector(sin(angle + 1.8) * width * 1.65, cos(angle * 0.91 + 0.7) * width * 1.35, z), data = null))
         }
-        repeat(8) { i ->
-            val t = (i + 1) / 9.0
+        repeat(4) { i ->
+            // Keep the original first/last edge stations and spread four accents across the full reach.
+            val t = 1.0 / 9.0 + i * (7.0 / 9.0) / 3.0
             val angle = phase * 0.7 + i * 2.399963
             add(StaffParticleSample(Particle.DUST_COLOR_TRANSITION,
                 Vector(sin(angle) * (0.18 + t * 0.24), cos(angle) * (0.12 + t * 0.2),

@@ -52,10 +52,19 @@ class StaffSpellChannelsTest : FreeSpec({
             }
             channels.release(clearPlayer)
             (hits.filter { it.first == clearTarget.uniqueId }.sumOf { it.second } in 9.99..10.001) shouldBe true
-            (staffInfernoFrame(8, 8.0).size <= 56) shouldBe true
-            staffInfernoFrame(8, 8.0).any { it.particle == Particle.DUST_COLOR_TRANSITION } shouldBe true
-            staffInfernoFrame(8, 8.0).count { it.particle == Particle.FLAME } shouldBe 32
-            staffInfernoFrame(8, 0.7).all { it.offset.z <= 0.7 } shouldBe true
+            val infernoFrame = staffInfernoFrame(8, 8.0)
+            infernoFrame.size shouldBe 44
+            infernoFrame.count { it.particle == Particle.FLAME } shouldBe 32
+            infernoFrame.count { it.particle == Particle.DUST_COLOR_TRANSITION } shouldBe 12
+            infernoFrame.filter { it.particle == Particle.DUST_COLOR_TRANSITION }
+                .count { (it.data as Particle.DustTransition).size == 0.95f } shouldBe 8
+            infernoFrame.filter { it.particle == Particle.DUST_COLOR_TRANSITION }
+                .count { (it.data as Particle.DustTransition).size == 0.8f } shouldBe 4
+            infernoFrame.filter { it.particle == Particle.FLAME }.maxOf { it.offset.z } shouldBe 8.0
+            val clippedInfernoFrame = staffInfernoFrame(8, 0.7)
+            clippedInfernoFrame.all { it.offset.z <= 0.7 } shouldBe true
+            clippedInfernoFrame.filter { it.particle == Particle.FLAME }.maxOf { it.offset.z } shouldBe 0.7
+            clippedInfernoFrame.filter { it.particle == Particle.FLAME }.minOf { it.offset.z } shouldBe 0.465625
             staffInfernoFrame(8, 0.3) shouldBe emptyList()
             staffInfernoFrame(8, 8.0).all { sample ->
                 listOf(sample.offset.x, sample.offset.y, sample.offset.z).all(Double::isFinite)

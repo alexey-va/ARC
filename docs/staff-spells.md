@@ -1,4 +1,4 @@
-# Prototype staff spells — ARC 1.4.383
+# Prototype staff spells — ARC 1.4.385
 
 `/arc stafftest` issues seventeen administrator-only mechanics samples: the
 fourteen established staves plus `inferno`, `gravity` and `ossuary`. Use
@@ -6,6 +6,15 @@ fourteen established staves plus `inferno`, `gravity` and `ossuary`. Use
 to issue the set after checking inventory space. The items carry ARC prototype
 metadata; they are not FMM or EliteMobs loot, and this catalog adds no shop,
 reward or economy changes.
+
+The 1.4.385 visual polish keeps combat timing and Display identities unchanged.
+Wind particles follow the same upward-widening ribbons as the tornado; water
+spray follows the forward curl of the wave's foam lip. The water orb retains
+its particle phase and radius when opening. Water and wind stop emitting before
+their displays fade, allowing native particles to expire without pulling their
+spawn positions inward. Smaller accents keep those silhouettes readable;
+Inferno retains all 32 flame samples per frame with 12 smaller dust accents.
+Preparation displays ease out before their final two-tick frame is removed.
 
 ## Controls
 
