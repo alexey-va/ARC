@@ -197,7 +197,7 @@ internal open class StaffSpellConfig(private val config: Config) {
         val resolvers = TagResolver.resolver(
             Placeholder.component("ability", config.component("${spell.id}.${when (input) { StaffCastInput.PRIMARY -> "name"; StaffCastInput.SECONDARY -> "secondary-name"; StaffCastInput.QUICK -> "quick-name"; StaffCastInput.QUICK_SECONDARY -> "quick-secondary-name" }}", TagResolver.empty())),
             Placeholder.unparsed("seconds", String.format(Locale.ROOT, "%.1f", remaining.coerceAtLeast(0) / 20.0)),
-            Placeholder.unparsed("input", when (input) { StaffCastInput.PRIMARY -> "ПКМ"; StaffCastInput.SECONDARY -> "Shift + ПКМ"; StaffCastInput.QUICK -> "ЛКМ"; StaffCastInput.QUICK_SECONDARY -> "Shift + ЛКМ" }),
+            Placeholder.unparsed("input", when (input) { StaffCastInput.PRIMARY -> "ЛКМ"; StaffCastInput.SECONDARY -> "Shift + ЛКМ"; StaffCastInput.QUICK -> "ПКМ"; StaffCastInput.QUICK_SECONDARY -> "Shift + ПКМ" }),
         )
         return config.component("messages.${if (remaining > 0) "cooldown-bar" else "ready-bar"}", resolvers)
     }
@@ -333,7 +333,6 @@ internal open class StaffSpellConfig(private val config: Config) {
             if (duelOnly) meta.persistentDataContainer.set(StaffSpell.duelOnlyKey, PersistentDataType.BYTE, 1)
             meta.setMaxStackSize(1)
         }
-        configureStaffUse(this)
     }
 }
 

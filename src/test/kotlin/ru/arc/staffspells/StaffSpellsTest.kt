@@ -16,7 +16,6 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.mockbukkit.mockbukkit.entity.PlayerMock
 import org.bukkit.FluidCollisionMode
 import io.papermc.paper.datacomponent.DataComponentTypes
-import io.papermc.paper.datacomponent.item.consumable.ItemUseAnimation
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.Sound
@@ -55,26 +54,25 @@ class StaffSpellsTest : FreeSpec({
             "chain.duel-appearance.custom-model-data" to 10009,
             "chain.description" to "Направленный разряд",
             "chain.aim" to "Прицельтесь во врага",
-            "chain.secondary" to "Shift + ПКМ — цепная молния",
+            "chain.secondary" to "Shift + ЛКМ — цепная молния",
             "messages.duel-only" to "Только в активной дуэли",
             "messages.prototype" to "Только прототип",
-            "messages.use" to "ПКМ — применить",
+            "messages.use" to "ЛКМ — применить",
         )))
         withStaffHarness(config = config) { h ->
             val item = h.controller.duelItem(StaffSpell.CHAIN)
             item.type shouldBe Material.BLAZE_ROD
             item.getData(DataComponentTypes.ITEM_MODEL) shouldBe Key.key("minecraft:crossbow")
             item.getData(DataComponentTypes.CUSTOM_MODEL_DATA)!!.floats() shouldBe listOf(10009f)
-            item.getData(DataComponentTypes.CONSUMABLE)!!.consumeSeconds() shouldBe 3_600f
-            item.getData(DataComponentTypes.CONSUMABLE)!!.animation() shouldBe ItemUseAnimation.NONE
+            item.getData(DataComponentTypes.CONSUMABLE) shouldBe null
             StaffSpell.from(item) shouldBe StaffSpell.CHAIN
             StaffSpell.isDuelOnly(item) shouldBe true
             val lore = item.itemMeta.lore()!!.joinToString(" ") { PlainTextComponentSerializer.plainText().serialize(it) }
             lore.contains("Направленный разряд") shouldBe true
             lore.contains("Прицельтесь во врага") shouldBe true
-            lore.contains("Shift + ПКМ — цепная молния") shouldBe true
+            lore.contains("Shift + ЛКМ — цепная молния") shouldBe true
             lore.contains("Только в активной дуэли") shouldBe true
-            lore.contains("ПКМ — применить") shouldBe true
+            lore.contains("ЛКМ — применить") shouldBe true
             lore.contains("Только прототип") shouldBe false
         }
     }
@@ -289,40 +287,6 @@ class StaffSpellsTest : FreeSpec({
             h.hits.size shouldBe 2
             victim.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe true
             protected.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
-        }
-    }
-
-    "fault primary advances five ground impacts and cannot continue through a wall" {
-        withStaffHarness { h ->
-            val world = h.paper.addSimpleWorld("staff-fault")
-            for (z in 0..21) {
-                world.loadChunk(0, z shr 4)
-                world.getBlockAt(0, 63, z).type = Material.STONE
-            }
-            val player = h.player("staff-fault", world, StaffSpell.FAULT)
-            val near = h.zombie(world, 0.5, 4.1)
-            val far = h.zombie(world, 0.5, 18.5)
-            val lateral = h.zombie(world, 5.5, 8.0)
-            h.controller.start()
-            h.controller.cast(player)
-            h.hits shouldBe emptyList()
-            h.scheduler.tick(2)
-            h.hits shouldBe listOf(near)
-            h.visualPlays.size shouldBe 1
-            h.scheduler.tick(24)
-            h.hits shouldBe listOf(near, far)
-            h.hits.contains(lateral) shouldBe false
-            h.visualPlays.size shouldBe 5
-            h.visualPlays.all { it.spell == StaffSpell.FAULT && !it.secondary && it.from.y in 64.0..64.1 } shouldBe true
-            h.visualPlays.zipWithNext().all { (a, b) -> b.from.z > a.from.z } shouldBe true
-
-            h.hits.clear(); h.visualPlays.clear()
-            for (y in 64..68) world.getBlockAt(0, y, 9).type = Material.STONE
-            val blocked = h.player("staff-fault-wall", world, StaffSpell.FAULT)
-            h.controller.cast(blocked)
-            h.scheduler.tick(30)
-            h.visualPlays.size shouldBe 2
-            h.hits shouldBe listOf(near)
         }
     }
 
@@ -568,7 +532,7 @@ class StaffSpellsTest : FreeSpec({
     }
 
     "travelling lance and quick gesture stop when the captured combat context expires" {
-        listOf(StaffSpell.LANCE to StaffCastInput.PRIMARY, StaffSpell.MARK to StaffCastInput.QUICK).forEach { (spell, input) ->
+        listOf(StaffSpell.LANCE to StaffCastInput.SECONDARY, StaffSpell.MARK to StaffCastInput.QUICK).forEach { (spell, input) ->
             var current = true
             withStaffHarness(currentCast = { _, _ -> current }) { h ->
                 val world = h.paper.addSimpleWorld("staff-stale-${spell.id}")
@@ -645,8 +609,8 @@ class StaffSpellsTest : FreeSpec({
                 // Within the 12-degree soft aim cone, but outside the manual beam/projectile path.
                 h.zombie(world, x = 1.5, z = 7.0)
 
-                h.controller.cast(player)
-                if (spell == StaffSpell.EMBER) h.scheduler.tick(12)
+                h.controller.cast(player, if (spell == StaffSpell.LANCE) StaffCastInput.SECONDARY else StaffCastInput.PRIMARY, 0.0)
+                h.scheduler.tick(12)
 
                 h.hits shouldBe emptyList()
             }
@@ -663,7 +627,7 @@ class StaffSpellsTest : FreeSpec({
             val beyondTargetLimit = h.zombie(world, x = 0.5, z = 11.0)
 
             h.controller.start()
-            h.controller.cast(player)
+            h.controller.cast(player, StaffCastInput.SECONDARY, 0.0)
             h.hits shouldBe emptyList()
             h.scheduler.tick(5)
             h.hits shouldBe emptyList()
@@ -683,7 +647,7 @@ class StaffSpellsTest : FreeSpec({
             for (x in -1..1) for (y in 64..67) world.getBlockAt(x, y, 10).type = Material.STONE
 
             h.controller.start()
-            h.controller.cast(player)
+            h.controller.cast(player, StaffCastInput.SECONDARY, 0.0)
             h.hits shouldBe emptyList()
             h.scheduler.tick(5)
             h.hits shouldBe emptyList()
@@ -1443,7 +1407,7 @@ internal fun staffSettings(
 
 private fun interact(player: Player, item: ItemStack) = PlayerInteractEvent(
     player,
-    Action.RIGHT_CLICK_AIR,
+    Action.LEFT_CLICK_AIR,
     item,
     null,
     BlockFace.SELF,

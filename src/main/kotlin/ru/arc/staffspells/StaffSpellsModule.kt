@@ -98,6 +98,7 @@ internal class StaffSpellController(
     })
     private val targeting = StaffSpellTargeting(settings, damage)
     private val arsenal = StaffSpellArsenal(settings, damage, effects, visuals, targeting)
+    private val melee = StaffSpellMelee(settings, damage, effects, visuals, targeting)
     internal val defense = StaffSpellDefense(config, damage, visuals, effects)
     private val channels = StaffSpellChannels(settings, damage, effects, visuals, targeting)
     private val channelInputs = mutableMapOf<UUID, Pair<StaffSpell, StaffCastInput>>()
@@ -320,12 +321,14 @@ internal class StaffSpellController(
             }
         }
         beginCooldown(player, spell, input, cooldownTicks)
-        if (staffPreparationParts(spell, secondary, 0).isNotEmpty())
+        val closeAttack = !secondary && spell in setOf(StaffSpell.LANCE, StaffSpell.FAULT)
+        if (!closeAttack && staffPreparationParts(spell, secondary, 0).isNotEmpty())
             effects.play(player.uniqueId, spell, player.eyeLocation, durationTicks = 10,
                 secondary = secondary, preparation = true)
-        if (!input.quick && spell !in ARSENAL_SPELLS) visuals.withOwner(cast.casterId) { visuals.release(player.eyeLocation, spell, level >= 0.75) }
+        if (!closeAttack && !input.quick && spell !in ARSENAL_SPELLS) visuals.withOwner(cast.casterId) { visuals.release(player.eyeLocation, spell, level >= 0.75) }
         if (!input.quick && spell == StaffSpell.CHAIN) visuals.withOwner(cast.casterId) { visuals.lightningLaunch(player.eyeLocation) }
-        if (spell == StaffSpell.NECROMANCER) Unit // Already admitted before consuming cooldown.
+        if (closeAttack) melee.cast(player, cast, spell, tuning)
+        else if (spell == StaffSpell.NECROMANCER) Unit // Already admitted before consuming cooldown.
         else if (spell in ARSENAL_SPELLS) arsenal.cast(player, spell, cast, tuning, input, level)
         else if (secondary) castSecondary(player, spell, cast, tuning, level) else when (spell) {
             StaffSpell.CHAIN -> chain(player, target(player, cast), cast, tuning)
@@ -1147,6 +1150,7 @@ internal class StaffSpellController(
         input.cancel(playerId)
         scenery?.cancel(playerId)
         arsenal.cancel(playerId)
+        melee.cancel(playerId)
         defense.cancel(playerId)
         channels.cancel(playerId)
         channelInputs.remove(playerId)
@@ -1172,6 +1176,7 @@ internal class StaffSpellController(
         visuals.close()
         scenery?.close()
         arsenal.close()
+        melee.close()
         defense.close()
         channels.close()
         channelInputs.clear()

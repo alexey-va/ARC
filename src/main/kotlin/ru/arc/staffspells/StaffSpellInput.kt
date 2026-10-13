@@ -1,11 +1,6 @@
 package ru.arc.staffspells
 
-import io.papermc.paper.datacomponent.DataComponentTypes
-import io.papermc.paper.datacomponent.item.Consumable
-import io.papermc.paper.datacomponent.item.consumable.ItemUseAnimation
-import io.papermc.paper.event.player.PlayerStopUsingItemEvent
 import io.papermc.paper.event.player.PrePlayerAttackEntityEvent
-import net.kyori.adventure.key.Key
 import org.bukkit.Bukkit
 import org.bukkit.event.Event
 import org.bukkit.event.EventHandler
@@ -35,32 +30,11 @@ import org.bukkit.entity.Player
 import ru.arc.core.LifecycleTaskScope
 import java.util.UUID
 
-/** The charged item is never consumed; its long native use duration only supplies hold/release input. */
-private const val STAFF_USE_SECONDS = 3_600f
+/** Click-toggle charges use one bounded tick clock for strength and channel progress. */
 private const val STAFF_CHARGE_DELAY_TICKS = 4
 private const val STAFF_CHARGE_RAMP_TICKS = 32
-private const val STAFF_MAX_HOLD_TICKS = 200
+private const val STAFF_MAX_CHARGE_TICKS = 200
 private val STAFF_CHARGED_PRIMARY_SPELLS = setOf(StaffSpell.EMBER, StaffSpell.ICICLE)
-
-private val STAFF_SILENT_USE_SOUND = Key.key("minecraft:intentionally_empty")
-
-/** Mutates only the native use component, preserving ItemsAdder and ARC item metadata. */
-internal fun configureStaffUse(item: ItemStack): Boolean {
-    if (StaffSpell.from(item) == null) return false
-    val existing = item.getData(DataComponentTypes.CONSUMABLE)
-    if (existing != null && existing.consumeSeconds() == STAFF_USE_SECONDS &&
-        existing.animation() == ItemUseAnimation.NONE && existing.sound() == STAFF_SILENT_USE_SOUND &&
-        !existing.hasConsumeParticles() && existing.consumeEffects().isEmpty()) return false
-
-    val use = Consumable.consumable()
-        .consumeSeconds(STAFF_USE_SECONDS)
-        .animation(ItemUseAnimation.NONE)
-        .sound(STAFF_SILENT_USE_SOUND)
-        .hasConsumeParticles(false)
-        .build()
-    item.setData(DataComponentTypes.CONSUMABLE, use)
-    return true
-}
 
 internal fun staffChargeProgress(ticksHeld: Int): Double =
     ((ticksHeld - STAFF_CHARGE_DELAY_TICKS).coerceAtLeast(0).toDouble() / STAFF_CHARGE_RAMP_TICKS)
@@ -94,6 +68,7 @@ internal class StaffSpellInput(
 
     private val charges = mutableMapOf<UUID, Charge>()
     private val lastDefenseTick = mutableMapOf<UUID, Int>()
+    private val lastAttackTick = mutableMapOf<UUID, Int>()
     private var started = false
     private var closed = false
     private var modeledInput: StaffModeledInput? = null
@@ -147,7 +122,9 @@ internal class StaffSpellInput(
 
         if (event.action == Action.LEFT_CLICK_AIR || event.action == Action.LEFT_CLICK_BLOCK) {
             event.isCancelled = true
-            castQuick(player, spell)
+            event.setUseItemInHand(Event.Result.DENY)
+            event.setUseInteractedBlock(Event.Result.DENY)
+            attack(player, spell)
             return
         }
         if (event.action !in setOf(Action.RIGHT_CLICK_AIR, Action.RIGHT_CLICK_BLOCK)) return
@@ -156,16 +133,11 @@ internal class StaffSpellInput(
         val item = player.inventory.itemInMainHand
         if (event.useItemInHand() == Event.Result.DENY) return
         if (event.action == Action.RIGHT_CLICK_BLOCK && event.useInteractedBlock() == Event.Result.DENY) return
-        if (event.action == Action.RIGHT_CLICK_BLOCK) event.setUseInteractedBlock(Event.Result.DENY)
+        event.setUseInteractedBlock(Event.Result.DENY)
+        event.setUseItemInHand(Event.Result.DENY)
         // Both DENY results are required by FMM's air-click protection policy.
-        // Native hold/release is explicitly started below, including canceled entity interactions.
         if (StaffEliteItems.resolve(item) != null) event.isCancelled = true
-
-        if (!beginCharge(player, spell, item)) {
-            event.setUseItemInHand(Event.Result.DENY)
-            return
-        }
-        startNativeUse(player, spell)
+        defend(player, spell)
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -178,39 +150,15 @@ internal class StaffSpellInput(
         event.isCancelled = true
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST)
-    fun onStopUsing(event: PlayerStopUsingItemEvent) {
-        val player = event.player
-        val charge = charges.remove(player.uniqueId) ?: return
-        val held = player.inventory.itemInMainHand
-        val ticksHeld = event.ticksHeldFor.coerceAtLeast(0)
-        val stillCurrent = ticksHeld <= STAFF_MAX_HOLD_TICKS &&
-            player.inventory.heldItemSlot == charge.slot && player.world.uid == charge.worldId &&
-            player.isSneaking == charge.sneaking && StaffSpell.from(held) == charge.spell &&
-            held.isSimilar(charge.item) && StaffSpell.from(event.item) == charge.spell &&
-            event.item.isSimilar(charge.item)
-
-        try {
-            if (isChannel(charge.spell)) {
-                if (stillCurrent) actions.releaseChannel(player) else actions.cancelChannel(player)
-                return
-            }
-            if (stillCurrent && actions.canCharge(player, charge.spell)) {
-                actions.cast(player, StaffCastInput.of(charge.sneaking, quick = false), staffChargeProgress(ticksHeld))
-            }
-        } finally {
-            actions.cancelCharge(player)
-        }
-    }
-
     /** Stops vanilla melee before damage is calculated; interaction and attack events own input. */
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onPreAttack(event: PrePlayerAttackEntityEvent) {
+        if (event.isCancelled) return
         val player = event.player
         upgradeStaffSlot(player, player.inventory.heldItemSlot)
         val spell = StaffSpell.from(player.inventory.itemInMainHand) ?: return
         if (event.willAttack()) event.isCancelled = true
-        castQuick(player, spell)
+        attack(player, spell)
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -223,6 +171,7 @@ internal class StaffSpellInput(
         if (StaffSpell.from(event.player.inventory.itemInMainHand) != null) event.isCancelled = true
     }
 
+    /** Legacy staff stacks must never consume when an old native-use packet is still in flight. */
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onItemConsume(event: PlayerItemConsumeEvent) {
         if (StaffSpell.from(event.item) == null) return
@@ -259,7 +208,11 @@ internal class StaffSpellInput(
     fun onDeath(event: PlayerDeathEvent) = cancel(event.player.uniqueId)
 
     @EventHandler(priority = EventPriority.HIGHEST)
-    fun onQuit(event: PlayerQuitEvent) { cancel(event.player.uniqueId); lastDefenseTick.remove(event.player.uniqueId) }
+    fun onQuit(event: PlayerQuitEvent) {
+        cancel(event.player.uniqueId)
+        lastDefenseTick.remove(event.player.uniqueId)
+        lastAttackTick.remove(event.player.uniqueId)
+    }
 
     override fun close() {
         if (closed) return
@@ -269,6 +222,7 @@ internal class StaffSpellInput(
         modeledInput = null
         charges.keys.toList().forEach(::cancel)
         lastDefenseTick.clear()
+        lastAttackTick.clear()
         tasks.close()
     }
 
@@ -278,56 +232,75 @@ internal class StaffSpellInput(
         val firstItem = player.inventory.itemInMainHand
         val spell = StaffSpell.from(firstItem) ?: return
         cancelEvent()
-        upgradeStaffSlot(player, player.inventory.heldItemSlot)
-        val item = player.inventory.itemInMainHand
-        if (beginCharge(player, spell, item)) startNativeUse(player, spell)
+        defend(player, spell)
     }
 
-    private fun beginCharge(player: Player, spell: StaffSpell, item: ItemStack): Boolean {
-        if (player.uniqueId in charges) return true
-        if (!actions.canCharge(player, spell)) return false
-
-        if (!isChannel(spell) && !requiresCharge(spell, player.isSneaking)) {
-            actions.cast(player, StaffCastInput.of(player.isSneaking, quick = false), 0.0)
-            return false
-        }
-        if (isChannel(spell) && !actions.beginChannel(player, spell)) return false
+    private fun beginCharge(player: Player, spell: StaffSpell) {
+        if (player.uniqueId in charges || !actions.canCharge(player, spell)) return
+        if (isChannel(spell) && !actions.beginChannel(player, spell)) return
         val charge = Charge(spell, player.inventory.heldItemSlot, player.world.uid,
-            player.isSneaking, item.clone())
+            player.isSneaking, player.inventory.itemInMainHand.clone())
         charges[player.uniqueId] = charge
         if (!isChannel(spell)) actions.charge(player, spell, 0.0)
-        return true
     }
 
-    private fun startNativeUse(player: Player, spell: StaffSpell) {
-        if (!player.hasActiveItem() || player.activeItemHand != EquipmentSlot.HAND ||
-            StaffSpell.from(player.activeItem) != spell) player.startUsingItem(EquipmentSlot.HAND)
-    }
-
-    private fun castQuick(player: Player, spell: StaffSpell) {
+    private fun defend(player: Player, spell: StaffSpell) {
         val tick = Bukkit.getCurrentTick()
         if (lastDefenseTick.put(player.uniqueId, tick) == tick) return
         cancel(player.uniqueId)
         actions.defend(player, spell)
     }
 
+    private fun attack(player: Player, spell: StaffSpell) {
+        val tick = Bukkit.getCurrentTick()
+        if (lastAttackTick.put(player.uniqueId, tick) == tick) return
+
+        if (player.uniqueId in charges) {
+            releaseCharge(player)
+            return
+        }
+        if (isChannel(spell) || requiresCharge(spell, player.isSneaking)) {
+            beginCharge(player, spell)
+            return
+        }
+        if (!actions.canCharge(player, spell)) return
+        actions.cast(player, StaffCastInput.of(player.isSneaking, quick = false), 0.0)
+    }
+
+    private fun releaseCharge(player: Player) {
+        val charge = charges.remove(player.uniqueId) ?: return
+        val stillCurrent = isCurrentCharge(player, charge)
+        try {
+            if (isChannel(charge.spell)) {
+                if (stillCurrent) actions.releaseChannel(player) else actions.cancelChannel(player)
+                return
+            }
+            if (stillCurrent && actions.canCharge(player, charge.spell)) {
+                actions.cast(player, StaffCastInput.of(charge.sneaking, quick = false),
+                    staffChargeProgress(charge.ticksHeld))
+            }
+        } finally {
+            actions.cancelCharge(player)
+        }
+    }
+
     internal fun attackModeledEntity(player: Player, cancelEvent: () -> Unit) {
         upgradeStaffSlot(player, player.inventory.heldItemSlot)
         val spell = StaffSpell.from(player.inventory.itemInMainHand) ?: return
         cancelEvent()
-        castQuick(player, spell)
+        attack(player, spell)
     }
 
     private fun tickCharges() {
         charges.toMap().forEach { (playerId, charge) ->
             val player = Bukkit.getPlayer(playerId)
-            if (player == null || !isCurrentCharge(player, charge, requireActiveUse = true)) {
+            if (player == null || !isCurrentCharge(player, charge)) {
                 cancel(playerId)
                 return@forEach
             }
 
             charge.ticksHeld++
-            if (charge.ticksHeld > STAFF_MAX_HOLD_TICKS) {
+            if (charge.ticksHeld > STAFF_MAX_CHARGE_TICKS) {
                 cancel(playerId)
                 return@forEach
             }
@@ -339,16 +312,14 @@ internal class StaffSpellInput(
         }
     }
 
-    private fun isCurrentCharge(player: Player, charge: Charge, requireActiveUse: Boolean): Boolean {
+    private fun isCurrentCharge(player: Player, charge: Charge): Boolean {
         val held = player.inventory.itemInMainHand
         return player.isOnline && !player.isDead && player.inventory.heldItemSlot == charge.slot &&
             player.world.uid == charge.worldId && player.isSneaking == charge.sneaking &&
-            StaffSpell.from(held) == charge.spell && held.isSimilar(charge.item) &&
-            (!requireActiveUse || (player.hasActiveItem() && player.activeItemHand == EquipmentSlot.HAND &&
-                StaffSpell.from(player.activeItem) == charge.spell))
+            StaffSpell.from(held) == charge.spell && held.isSimilar(charge.item)
     }
 
-    private fun isChannel(spell: StaffSpell) = spell == StaffSpell.INFERNO || spell == StaffSpell.GRAVITY
+    private fun isChannel(spell: StaffSpell) = spell == StaffSpell.GRAVITY
 
     private fun requiresCharge(spell: StaffSpell, secondary: Boolean) =
         !secondary && spell in STAFF_CHARGED_PRIMARY_SPELLS
@@ -360,7 +331,7 @@ internal class StaffSpellInput(
         if (slot !in 0..8) return false
         val item = player.inventory.getItem(slot) ?: return false
         val migrated = StaffEliteItems.migrate(item)
-        if (!configureStaffUse(item) && !migrated) return false
+        if (!migrated) return false
         player.inventory.setItem(slot, item)
         return true
     }

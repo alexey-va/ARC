@@ -1,4 +1,4 @@
-# Prototype staff spells — ARC 1.4.387
+# Prototype staff spells — ARC 1.4.389
 
 `/arc stafftest` issues sixteen administrator-only mechanics samples.
 `inferno` is temporarily retired; `gravity` and `ossuary` remain available. Use
@@ -15,58 +15,57 @@ ease out before their final two-tick frame is removed.
 
 ## Controls
 
-Right-click casts ordinary abilities immediately, except for the primary
-`Ember` and `Icicle` casts: hold and release right-click to charge those to full
-in 36 ticks (1.8 seconds). Shift selects a separate right-click ability, which
-casts without input charge. Changing Shift, the held slot or item, world, or
-player lifecycle cancels an active charge. Attacks share one per-player attack
-cooldown, with the duration configured per spell and adjusted for the shifted
-cast.
+Left-click casts ordinary abilities immediately. Primary `Ember` and `Icicle`
+use click-toggle charging: click once to begin, then click again to launch.
+Full charge takes 36 ticks (1.8 seconds). Shift + left-click selects the second
+ability and casts immediately. Changing Shift, the held slot or item, world,
+or player lifecycle cancels an active charge; right-click cancels it and raises
+defense. Attacks share one per-player attack cooldown, adjusted for the spell
+and its shifted variant.
 
-`Gravity` is a held channel rather than a charged cast. Hold
-right-click, with or without Shift, to operate it. Inferno is temporarily retired from issuance and casting. Existing EliteMobs
-Inferno assignments migrate once to Ember; old prototype IDs remain recognizable
-but cannot cast.
+`Gravity` also uses click-toggle: the first left-click grabs, the next throws.
+The aim can move between clicks, with or without Shift. Inferno is temporarily
+retired from issuance and casting. Existing EliteMobs Inferno assignments migrate
+once to Ember; old prototype IDs remain recognizable but cannot cast.
 
 Gravity selects a visible solid block within its reach, holds a visual boulder
-in front of the caster as the aim moves, and throws it when released. The
+in front of the caster as the aim moves, and throws it on the second left-click. The
 boulder is a visual effect: Gravity does not move, break, place or replace
 world blocks. If the selected surface or safe path is unavailable, the grab is
 rejected.
 
-Left-click raises the staff's frontal guard; Shift + left-click raises its
+Right-click raises the staff's frontal guard; Shift + right-click raises its
 all-around absorption shield. Defenses have their own recovery track, independent of the
-right-click attack cooldown. A frontal guard covers two hits for 1.2 seconds,
+left-click attack cooldown. A frontal guard covers two hits for 1.2 seconds,
 or three hits for 1.6 seconds for Fault, Gravity, Ossuary, Nova and Necromancer.
 The all-around shield lasts twenty seconds and absorbs eight HP after armor and
 resistance, before native absorption hearts. Overflow continues through normal
 damage processing. Its bossbar shows remaining capacity. Recovery is four
 seconds for frontal and twenty-five seconds from casting the shield; both share that track.
 The frontal guard is a 12-part kite-shaped packet BlockDisplay shield with a transparent face;
-Shift + left-click assembles four angled plates (40 parts) around the player. Material families
+Shift + right-click assembles four angled plates (40 parts) around the player. Material families
 follow the staff element. The stable displays attach to the player, interpolate their opening,
 recoil and collapse, and share the existing scene/part budgets. Native particles appear only
 on a blocked hit or shield break. The center stays transparent and the raised outline leaves
 the reticle readable. `StaffDefenseGeometry.kt` owns the shape used by both runtime and
 `exportStaffRedesignPreview`; offline previews do not establish native-client acceptance.
 
-Changing staff cancels the active defense without resetting recovery. The left-click controls do not perform
-the former quick attacks. Staff interaction cannot break blocks, including in
+Changing staff cancels the active defense without resetting recovery. The right-click controls only activate defense. Staff interaction cannot break blocks, including in
 creative mode, and native melee damage is suppressed while a prototype staff
 is held.
 
 ## Catalog
 
-| ID · staff | ПКМ | Shift + ПКМ | ЛКМ · frontal guard | Shift + ЛКМ · absorption shield | Existing ItemsAdder skin |
+| ID · staff | ЛКМ | Shift + ЛКМ | ПКМ · frontal guard | Shift + ПКМ · absorption shield | Existing ItemsAdder skin |
 | --- | --- | --- | --- | --- | --- |
 | `chain` · Грозовая ветвь | Lightning jumps between up to four enemies | Грозовой круг expands a jagged lightning front eight blocks around the caster, blocked by cover | Грозовой заслон | Круговой покров | `3dfantasyweaponscit:divine_staff` |
 | `mark` · Разрыв | Mark follows its target and bursts; without a target, bursts at the aimed point | Чёрная дыра pulls eligible enemies, then collapses | Покров пустоты | Круговой покров | `3dfantasyweaponscit:night_staff` |
 | `frost` · Ледяной хлопок | Ground wave slows enemies in a 50° cone, up to 28 blocks (global cap: 48) | Полярный круг expands an ice front eight blocks from the caster | Ледяной щит | Круговой покров | `3dfantasyweaponscit:northgate_guardian_staff` |
-| `lance` · Солнечное копьё | Narrow solar beam pierces up to three enemies | Three diverging solar beams | Солнечный щит | Круговой покров | `3dfantasyweaponscit:sagrada_winged_staff` |
+| `lance` · Солнечное копьё | A close solar blade sweeps up to 4.5 blocks in front | Three diverging solar beams | Солнечный щит | Круговой покров | `3dfantasyweaponscit:sagrada_winged_staff` |
 | `ember` · Пепельная комета | Fireball grows below the reticle with four-tick interpolation, then launches immediately with forward speed and accelerates | Three ground circles lock on cast; the first meteor launches after a 15-tick warning | Огненный заслон | Круговой покров | `3dfantasyweaponscit:bermunde_hermit_staff` |
 | `nova` · Терновый хват | Visible ground-hugging roots travel toward the target, close and slow enemies | Терновая клетка closes around the aimed point | Терновый заслон | Круговой покров | `3dfantasyweaponscit:holy_celtic_staff` |
 | `icicle` · Ледяной венец | Seven shoulder icicles sample the current reticle as each launches; full charge releases eleven | Five shards fall around the aimed point immediately | Кристальный заслон | Круговой покров | `3dfantasyweaponscit:olwen_staff` |
-| `fault` · Обсидиановый раскол | Five ground fissures advance in sequence, up to 18 blocks | Каменный выброс warns, then erupts at the aimed point and lifts enemies | Каменный бастион | Круговой покров | `3dfantasyweaponscit:staff_of_unholy_wisdom` |
+| `fault` · Обсидиановый раскол | A heavy close impact sends a short frontal shockwave up to 5 blocks | Каменный выброс warns, then erupts at the aimed point and lifts enemies | Каменный бастион | Круговой покров | `3dfantasyweaponscit:staff_of_unholy_wisdom` |
 | `lunar` · Лунный серп | Falling silver crescent releases a ground shockwave | Two moon blades converge on the target | Лунный покров | Круговой покров | `3dfantasyweaponscit:black_snake_staff` |
 | `gale` · Посох бури | A stationary open-center wind funnel forms at the aimed point and lifts nearby enemies | Шквал is a twisting air ram with a fixed 36-block horizontal reach, clipped at cover | Ветряной щит | Круговой покров | `3dfantasyweaponscit:goblin_witch_staff` |
 | `tide` · Сердце прилива | A fast water orb slides up to 36 blocks above the floor and bursts at its first enemy, cover or range endpoint; the swept flight takes at most 0.6 seconds after its short launch | Приливный вал is a broad curled wave with a foamy crest that travels forward | Водяной заслон | Круговой покров | `3dfantasyweaponscit:northgate_guardian_staff` |
