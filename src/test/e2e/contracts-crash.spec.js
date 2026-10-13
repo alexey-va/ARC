@@ -143,7 +143,12 @@ if (enabled) test('contract items, provider payment and journal survive real pro
   try {
     for (const [index, [phase, paid, committed, reviewReason]] of phases.entries()) {
       await makeOpFresh(player);
+      const clearBarrier = `ARC_CONTRACT_CLEAR_${index}`;
+      const clearSince = player.messageBuffer.length;
       player.chat('/clear @s');
+      player.chat(`/say ${clearBarrier}`);
+      await waitUntil(() => player.messageBuffer.slice(clearSince).some(message => message.includes(clearBarrier)),
+        { signal, message: 'Fixture clear command did not complete' });
       await waitUntil(() => countStone(player) === 0, { signal, message: 'Fixture inventory did not clear' });
       await player.giveItem('stone', 4);
       await waitUntil(() => countStone(player) === 4, { signal, message: 'Fixture inventory did not receive four stones' });

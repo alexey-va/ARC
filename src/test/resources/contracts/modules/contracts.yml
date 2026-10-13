@@ -13,6 +13,11 @@ enabled: true
 mode: observe
 leader-server: spawn
 server-weekly-budget: '95000.00'
+submission-access:
+  routes:
+    "350": forge_orders
+    "367": bank_orders
+    "390": guild_orders
 orders:
   road_stone:
     enabled: true

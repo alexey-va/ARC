@@ -11,6 +11,9 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.security.MessageDigest
 import java.time.Duration
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.TimeUnit
 
 buildscript {
     repositories {
@@ -28,6 +31,7 @@ abstract class E2eRedisService : BuildService<E2eRedisService.Parameters>, AutoC
     }
 
     private var redis: RedisTestService? = null
+    private var catalogHeartbeat: ScheduledExecutorService? = null
 
     private fun service(): RedisTestService = synchronized(this) {
         redis ?: RedisTestService.Companion.start(parameters.image.get()).also { redis = it }
@@ -35,8 +39,27 @@ abstract class E2eRedisService : BuildService<E2eRedisService.Parameters>, AutoC
 
     val endpoint get() = service().endpoint
 
+    fun startCatalogHeartbeat(refresh: Runnable) {
+        synchronized(this) {
+            if (catalogHeartbeat != null) return
+            catalogHeartbeat = Executors.newSingleThreadScheduledExecutor { task ->
+                Thread(task, "arc-e2e-glyph-catalog-refresh").apply { isDaemon = true }
+            }.also { scheduler ->
+                scheduler.scheduleAtFixedRate({
+                    try {
+                        refresh.run()
+                    } catch (failure: Exception) {
+                        System.err.println("Could not refresh disposable E2E glyph catalog: $failure")
+                    }
+                }, 45, 45, TimeUnit.SECONDS)
+            }
+        }
+    }
+
     override fun close() {
         synchronized(this) {
+            catalogHeartbeat?.shutdownNow()
+            catalogHeartbeat = null
             redis?.close()
             redis = null
         }
@@ -333,6 +356,8 @@ tasks {
         // Prefer the resolved Paper/MockBukkit modules, as the real Paper classloader does.
         classpath = files(classpath.filter { it.name.startsWith("adventure-") }, classpath)
         useJUnitPlatform()
+        // The Test worker otherwise defaults to 512 MiB, too small for the full 3,000+ case suite.
+        maxHeapSize = "2g"
         systemProperty("arc.test.unit", "true")
         // Forward the deploy helper's catalogue inputs into the forked test JVM.
         providers.systemProperty("arc.rewardCatalogPaths").orNull?.let {
@@ -607,11 +632,43 @@ val e2eRedisEconomy = configurations.detachedConfiguration(
     isTransitive = false
 }
 
+fun redisFixtureCommand(host: String, port: Int, vararg arguments: String): String {
+    Socket(host, port).use { socket ->
+        socket.soTimeout = 5_000
+        val output = socket.getOutputStream()
+        output.write("*${arguments.size}\r\n".toByteArray(Charsets.UTF_8))
+        arguments.forEach { argument ->
+            val bytes = argument.toByteArray(Charsets.UTF_8)
+            output.write("\$${bytes.size}\r\n".toByteArray(Charsets.UTF_8))
+            output.write(bytes)
+            output.write("\r\n".toByteArray(Charsets.UTF_8))
+        }
+        output.flush()
+        val response = socket.getInputStream().bufferedReader(Charsets.UTF_8).readLine()
+            ?: error("Disposable Redis closed the connection without a response")
+        check(response.startsWith(":")) { "Unexpected disposable Redis response: $response" }
+        return response
+    }
+}
+
+fun seedContractGlyphCatalog(host: String, port: Int, publishedAtMillis: Long) {
+    val catalog = """
+        {"schemaVersion":1,"serverId":"spawn","publishedAtMillis":$publishedAtMillis,
+         "definitions":[{"id":"e2e:fixture","unicode":"★","permission":null,"technical":false}]}
+    """.trimIndent().replace("\n", "")
+    redisFixtureCommand(host, port, "HSET", "arc:chat-glyphs:v1:catalog", "spawn", catalog)
+}
+
 val prepareContractE2e = tasks.register("prepareContractE2e") {
     usesService(e2eRedis)
     doLast {
         val endpoint = e2eRedis.get().endpoint
         Socket(endpoint.host, endpoint.port).use { }
+        // ARC's no-ItemsAdder guard requires a valid fresh spawn snapshot before commands are accepted.
+        seedContractGlyphCatalog(endpoint.host, endpoint.port, System.currentTimeMillis())
+        e2eRedis.get().startCatalogHeartbeat(Runnable {
+            seedContractGlyphCatalog(endpoint.host, endpoint.port, System.currentTimeMillis())
+        })
 
         val generatedDir = contractE2eFiles.get().asFile
         generatedDir.mkdirs()
