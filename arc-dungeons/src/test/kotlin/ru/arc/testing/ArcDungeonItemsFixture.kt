@@ -17,6 +17,7 @@ internal class ArcDungeonItemsFixture(
         override fun resolvePreset(preset: String, amount: Int): List<ItemStack> = emptyList()
 
         override fun readMagicDust(item: ItemStack): ArcDungeonItems.MagicDust? = magicDust(item)
+        override fun presentAdvancedBook(item: ItemStack, viewer: Player) = item
 
         override fun admitCreativeBook(player: Player, book: ItemStack): Int? {
             if (book.amount !in 1..book.maxStackSize) return null

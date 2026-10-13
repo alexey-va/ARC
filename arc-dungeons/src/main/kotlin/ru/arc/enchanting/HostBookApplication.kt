@@ -9,6 +9,7 @@ private fun items() = requireNotNull(Bukkit.getServicesManager().load(ArcDungeon
     "ARC item service is unavailable"
 }
 internal fun readAdvancedMagicDust(item: ItemStack) = items().readMagicDust(item)
+internal fun presentAdvancedBook(item: ItemStack, viewer: Player) = items().presentAdvancedBook(item, viewer)
 internal fun admitCreativeBook(player: Player, book: ItemStack): Int? = items().admitCreativeBook(player, book)
 internal fun applyBookInInventory(player: Player, targetSlot: Int, expectedTarget: ItemStack, expectedBook: ItemStack,
     result: ItemStack?, bookInventorySlot: Int? = null) =

@@ -53,7 +53,7 @@ object LostLootModule : PluginModule {
                 { player, key, fallback ->
                     val path = "dungeon-qol.lost-loot.$key"
                     val message = if (config.stringOrNull(path) == null) config.component(path, fallback)
-                    else localized.render(path, player.locale())
+                    else localized.render(path, player.locale().toLanguageTag())
                     message.decoration(TextDecoration.ITALIC, false)
                 }, gateway)
                 .also { Bukkit.getPluginManager().registerEvents(it, ArcDungeonsPlugin.instance); it.start() }

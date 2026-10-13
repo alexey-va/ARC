@@ -36,3 +36,10 @@ internal object NativeLostLootCredit : LostLootCreditGateway {
     fun resale(item: ItemStack): Double? = (ItemWorthCalculator.determineResaleWorth(item, null) * item.amount)
         .takeIf { it.isFinite() && it > 0 }
 }
+
+internal interface LostLootCreditGateway {
+    fun ready(player: Player): Boolean
+    fun hasReceipt(player: Player, token: String): Boolean
+    fun credit(player: Player, amount: Double, token: String): CompletableFuture<Unit>
+    fun persistReceipt(player: Player): CompletableFuture<Unit>
+}

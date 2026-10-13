@@ -65,6 +65,8 @@ object DungeonHostServices {
             override fun readMagicDust(item: ItemStack) = readAdvancedMagicDust(item)?.let {
                 ArcDungeonItems.MagicDust(it.successPercent, it.lowerDestroy)
             }
+            override fun presentAdvancedBook(item: ItemStack, viewer: Player) =
+                ru.arc.enchanting.presentAdvancedBook(item, viewer)
             override fun admitCreativeBook(player: Player, book: ItemStack) = ru.arc.enchanting.admitCreativeBook(player, book)
             override fun applyBook(player: Player, targetSlot: Int, expectedTarget: ItemStack, expectedBook: ItemStack,
                 result: ItemStack?, bookInventorySlot: Int?) =
