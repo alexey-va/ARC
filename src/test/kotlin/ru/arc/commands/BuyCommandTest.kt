@@ -6,15 +6,21 @@ import org.bukkit.command.CommandExecutor
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
+import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
 import org.bukkit.event.player.PlayerCommandPreprocessEvent
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import ru.arc.TestBase
+import ru.arc.chat.ChatGlyphDefinition
+import ru.arc.chat.ChatGlyphPolicy
+import ru.arc.chat.ChatModeConfig
+import ru.arc.chat.ItemsAdderChatGuard
 import ru.arc.commands.arc.ArcCommand
 import ru.arc.commands.arc.LegacySubCommandExecutor
 import ru.arc.hooks.HookRegistry
@@ -26,9 +32,23 @@ import ru.arc.hooks.economyshop.ShopMaterialQuote
 class BuyCommandTest : TestBase() {
     private val purchases = mutableListOf<Pair<String, Int>>()
     private val purchasePlayers = mutableListOf<Player>()
+    private var fixtureGlyphGuard: ItemsAdderChatGuard? = null
+
+    @BeforeEach
+    fun prepareGlyphCatalog() {
+        // TestBase has neither ItemsAdder nor Redis. Keep command validation
+        // active with a ready test catalog instead of its unavailable state.
+        HandlerList.unregisterAll(requireNotNull(HookRegistry.chatGlyphGuard))
+        val policy = ChatGlyphPolicy(listOf(ChatGlyphDefinition("test:public", "\uE123", null, false)))
+        fixtureGlyphGuard = ItemsAdderChatGuard({ policy }, ChatModeConfig.load(dataPath), runSync = { it() })
+            .also { server.pluginManager.registerEvents(it, plugin) }
+    }
 
     @AfterEach
     fun clearShopService() {
+        fixtureGlyphGuard?.close()
+        fixtureGlyphGuard?.let(HandlerList::unregisterAll)
+        fixtureGlyphGuard = null
         HookRegistry.shopPurchaseService = null
         purchases.clear()
         purchasePlayers.clear()

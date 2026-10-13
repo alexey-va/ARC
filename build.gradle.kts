@@ -607,6 +607,9 @@ plugwright {
         file("plugins/Parkour/config.yml", projectDir.resolve("src/test/e2e/fixtures/parkour-config.yml"))
         if (cleanupE2e || parkourE2e || dialogE2e) {
             file("plugins/ARC/modules/redis.yml", projectDir.resolve("src/test/e2e/fixtures/entity-cleanup-redis.yml"))
+            if (cleanupE2e) {
+                file("plugins/Citizens-2.0.43-b4246.jar", contractCitizensJar.get().asFile)
+            }
         } else {
             file("plugins/ARC/modules/redis.yml", contractE2eFiles.get().file("redis.yml").asFile)
             file("plugins/ARC/modules/contracts.yml", contractE2eFiles.get().file("contracts.yml").asFile)
@@ -772,6 +775,7 @@ tasks.named<me.drownek.plugwright.PlugwrightTestTask>("plugwrightTest") {
     if (dialogE2e) {
         testFiles.set("dialog-designs")
     } else if (cleanupE2e) {
+        dependsOn(prepareContractCitizens)
         testFiles.set("entity-cleanup")
     } else if (parkourE2e) {
         testFiles.set("parkour-real-paper")

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test, expect, waitUntil } from '@drownek/plugwright';
 import {
   clickContractDesk,
+  contractDeskContents,
   contractUnitPriceMinor,
   CONTRACT_DESK_DEPOSIT_SLOT,
   CONTRACT_DESK_SELL_SLOT,
@@ -53,7 +54,8 @@ test('the real NPC desk sells one exact batch once and shows the updated price',
 
   const desk = await clickContractDesk(player, signal);
   const firstUnitPrice = contractUnitPriceMinor(desk);
-  assert.equal(firstUnitPrice, 12496, 'The actual NPC desk must show the current per-stone payout');
+  assert.equal(firstUnitPrice, 12496,
+    `The actual NPC desk must show the current per-stone payout; received GUI:\n${contractDeskContents(player)}`);
   await offerStoneBatch(player, 2, signal);
 
   // Submit the same desk action twice while the first sale is in flight. Only

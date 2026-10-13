@@ -7,6 +7,7 @@ import { once } from 'node:events';
 import { test, expect, waitUntil, ServerWrapper } from '@drownek/plugwright';
 import {
   clickContractDesk,
+  contractDeskContents,
   contractUnitPriceMinor,
   CONTRACT_DESK_SELL_SLOT,
   offerStoneBatch,
@@ -164,7 +165,7 @@ if (enabled) test('contract items, provider payment and journal survive real pro
       const desk = await clickContractDesk(player, signal);
       const unitPriceMinor = contractUnitPriceMinor(desk);
       assert.ok(unitPriceMinor !== null && unitPriceMinor > 0,
-        'The current NPC desk must display a positive per-stone payout');
+        `The current NPC desk must display a positive per-stone payout; received GUI:\n${contractDeskContents(player)}`);
       const quotedMinor = unitPriceMinor * 2;
       await offerStoneBatch(player, 2, signal);
       await waitForCrashDisconnect(player.bot, signal, () =>

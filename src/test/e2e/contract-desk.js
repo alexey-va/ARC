@@ -1,11 +1,20 @@
 import assert from 'node:assert/strict';
-import { waitUntil } from '@drownek/plugwright';
+import { poll, waitUntil } from '@drownek/plugwright';
 
 const CONTRACT_NPC_CLICK_RADIUS = 4.5;
 const CONTRACT_DESK_INVENTORY_START = 54;
 
 export const CONTRACT_DESK_SELL_SLOT = 4;
 export const CONTRACT_DESK_DEPOSIT_SLOT = 5;
+
+export function contractDeskContents(player) {
+  const gui = player.getCurrentGui();
+  if (!gui) return '(no current GUI)';
+  const items = gui.items.map(item =>
+    `slot=${item.slot} ${item.name} x${item.count} name=${JSON.stringify(item.getDisplayName())} lore=${JSON.stringify(item.getLore())}`,
+  );
+  return `title=${JSON.stringify(gui.title)}\n${items.length ? items.join('\n') : '(no inventory items received)'}`;
+}
 
 export async function clickContractDesk(player, signal) {
   let desk;
@@ -32,8 +41,23 @@ export async function clickContractDesk(player, signal) {
   await player.bot.lookAt(desk.position.offset(0, 1, 0), true);
   player.bot.activateEntity(desk);
   // The Citizens click grants the real NPC route and opens its cloud-storage
-  // chest. Do not race a command/native dialog against that inventory packet.
-  return player.gui({ title: /Заказы/i });
+  // chest. `player.gui()` waits only for the title; it does not wait for item
+  // slots or lore, so wait for this order's live locator before reading price.
+  const gui = await player.gui({ title: /Заказы/i });
+  const order = gui.locator(item => item.getDisplayName().includes('E2E stone order'));
+  await poll(
+    () => {
+      const lore = order.loreText();
+      return lore.includes('За штуку:') ? lore : undefined;
+    },
+    {
+      signal,
+      timeout: 5000,
+      interval: 100,
+      message: () => `Contract desk title opened, but order lore was not received. order=${JSON.stringify(order.displayName())}, lore=${JSON.stringify(order.loreText())}\n${contractDeskContents(player)}`,
+    },
+  );
+  return gui;
 }
 
 export async function offerStoneBatch(player, quantity, signal) {
@@ -67,14 +91,10 @@ export async function offerStoneBatch(player, quantity, signal) {
 }
 
 export function contractUnitPriceMinor(desk, contractName = 'E2E stone order') {
-  try {
-    const order = desk.locator(item => item.getDisplayName().includes(contractName));
-    const lore = order.loreText();
-    const match = lore.match(/За штуку:\s*([\d\s.,]+)/i);
-    if (!match) return null;
-    const amount = Number(match[1].replace(/\s/g, '').replace(',', '.'));
-    return Number.isFinite(amount) ? Math.round(amount * 100) : null;
-  } catch {
-    return null;
-  }
+  const order = desk.locator(item => item.getDisplayName().includes(contractName));
+  const lore = order.loreText();
+  const match = lore.match(/За штуку:\s*([\d\s.,]+)/i);
+  if (!match) return null;
+  const amount = Number(match[1].replace(/\s/g, '').replace(',', '.'));
+  return Number.isFinite(amount) ? Math.round(amount * 100) : null;
 }
