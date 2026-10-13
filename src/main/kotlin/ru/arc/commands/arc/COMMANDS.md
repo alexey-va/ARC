@@ -26,8 +26,10 @@
 
 ## Быстрый старт
 
-Для пробы четырнадцати атак посохов: `/arc stafftest [all|chain|mark|frost|lance|ember|nova|icicle|fault|lunar|gale|tide|requiem|prism|necromancer] [игрок]`.
-Выдача требует существующее право `arc.test`. Подробности и ограничения:
+Для пробы всех 17 посохов: `/arc stafftest [all|chain|mark|frost|lance|ember|nova|icicle|fault|lunar|gale|tide|requiem|prism|necromancer|inferno|gravity|ossuary] [игрок]`.
+Без аргументов команда выдаёт весь набор, как и `/arc stafftest all`.
+Выдача требует существующее право `arc.test` и 17 свободных слотов для полного набора; при нехватке места предметы не выдаются частично.
+Подробности и ограничения:
 [`docs/staff-spells.md`](../../../../../../../docs/staff-spells.md).
 
 ```bash
