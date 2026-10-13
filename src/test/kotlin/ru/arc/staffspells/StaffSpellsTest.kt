@@ -389,66 +389,67 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "frost applies slow only when damage changes the target" {
+    "frost melee waits for contact and slows only after successful damage" {
         val cancelledTargets = mutableSetOf<UUID>()
         withStaffHarness(
-            settings = staffSettings(frostRange = 7.0, frostDegrees = 50.0),
+            settings = staffSettings(),
             hit = { _, target -> target.uniqueId !in cancelledTargets },
         ) { h ->
             val world = h.paper.addSimpleWorld("staff-frost")
             val player = h.player("staff-frost", world, StaffSpell.FROST)
-            val cancelled = h.zombie(world, x = 0.5, z = 4.0)
-            val landed = h.zombie(world, x = 0.5, z = 5.0)
+            val cancelled = h.zombie(world, x = 0.5, z = 2.0)
+            val landed = h.zombie(world, x = 0.5, z = 3.5)
             cancelledTargets += cancelled.uniqueId
             h.controller.start()
 
             h.controller.cast(player)
             h.hits shouldBe emptyList()
-            h.scheduler.tick(8)
+            h.scheduler.tick(3)
 
             cancelled.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
             landed.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
-            h.hits.map { it.uniqueId } shouldBe listOf(cancelled.uniqueId)
+            h.hits shouldBe emptyList()
 
-            h.scheduler.tick(2)
+            h.scheduler.tick(1)
             landed.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe true
             h.hits.map { it.uniqueId } shouldBe listOf(cancelled.uniqueId, landed.uniqueId)
-            h.scheduler.tick(12)
+            h.scheduler.tick(6)
             h.hits.map { it.uniqueId }.distinct().size shouldBe h.hits.size
         }
     }
 
-    "frost wave rechecks sight at its front and does not admit late arrivals" {
-        withStaffHarness(settings = staffSettings(frostRange = 7.0, frostDegrees = 50.0)) { h ->
+    "frost melee rechecks cover at contact and ignores late arrivals" {
+        withStaffHarness { h ->
             val world = h.paper.addSimpleWorld("staff-frost-wall")
             val player = h.player("staff-frost-wall", world, StaffSpell.FROST)
-            h.zombie(world, x = 0.5, z = 4.5)
+            h.zombie(world, x = 0.5, z = 3.5)
             h.controller.start()
 
             h.controller.cast(player)
-            val lateArrival = h.zombie(world, x = 0.5, z = 4.0)
+            h.scheduler.tick(1)
+            val lateArrival = h.zombie(world, x = 0.5, z = 3.0)
             for (y in 64..66) world.getBlockAt(0, y, 2).type = Material.STONE
-            h.scheduler.tick(20)
+            h.scheduler.tick(3)
 
             h.hits shouldBe emptyList()
             lateArrival.isValid shouldBe true
         }
     }
 
-    "frost side-angle damage arrives by radial distance rather than forward projection" {
-        withStaffHarness(settings = staffSettings(frostRange = 7.0, frostDegrees = 50.0)) { h ->
+    "frost melee accepts a target inside its narrow front arc and contacts it once" {
+        withStaffHarness { h ->
             val world = h.paper.addSimpleWorld("staff-frost-side")
             val player = h.player("staff-frost-side", world, StaffSpell.FROST)
-            val diagonal = h.zombie(world, x = 2.975, z = 2.975)
+            val diagonal = h.zombie(world, x = 1.5, z = 3.0)
             h.controller.start()
 
             h.controller.cast(player)
-            h.scheduler.tick(6)
+            h.scheduler.tick(3)
             h.hits shouldBe emptyList()
 
-            h.scheduler.tick(2)
+            h.scheduler.tick(1)
             h.hits.map { it.uniqueId } shouldBe listOf(diagonal.uniqueId)
-            h.scheduler.tick(16)
+            h.scheduler.tick(6)
             h.hits.map { it.uniqueId }.distinct().size shouldBe 1
         }
     }
@@ -713,54 +714,59 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "mark without an acquired target blasts its aimed point" {
-        withStaffHarness(settings = staffSettings(range = 8.0, markTicks = 4)) { h ->
+    "mark melee contacts after the swing delay and cancels pending contact on quit" {
+        withStaffHarness { h ->
             val world = h.paper.addSimpleWorld("staff-mark-point")
             val player = h.player("staff-mark-point", world, StaffSpell.MARK)
+            val target = h.zombie(world, x = 0.5, z = 3.0)
             h.controller.start()
 
             h.controller.cast(player)
             h.captures.size shouldBe 1
             h.hits shouldBe emptyList()
-            val targetNearRangePoint = h.zombie(world, x = 0.5, z = 8.0)
+            h.scheduler.tick(3)
+            h.hits shouldBe emptyList()
+            h.scheduler.tick(1)
+            h.hits.map { it.uniqueId } shouldBe listOf(target.uniqueId)
 
-            h.scheduler.tick(4)
+            val quitting = h.player("staff-mark-quit", world, StaffSpell.MARK)
+            val quitTarget = h.zombie(world, x = 0.5, z = 3.5)
+            h.controller.cast(quitting)
+            val hitsBeforeQuit = h.hits.size
+            h.scheduler.tick(3)
+            h.controller.onQuit(PlayerQuitEvent(quitting, Component.empty()))
+            h.scheduler.tick(2)
 
-            h.hits.map { it.uniqueId } shouldBe listOf(targetNearRangePoint.uniqueId)
+            h.hits.size shouldBe hitsBeforeQuit
+            (quitTarget.uniqueId in h.hits.map { it.uniqueId }) shouldBe false
         }
     }
 
-    "grove roots reach a distant target without damaging behind the caster" {
-        withStaffHarness(settings = staffSettings(range = 32.0)) { h ->
+    "nova melee waits for contact, slows only successful hits, and respects its target cap" {
+        var deniedTarget: UUID? = null
+        withStaffHarness(settings = staffSettings(maxAreaTargets = 2),
+            hit = { _, target -> target.uniqueId != deniedTarget }) { h ->
             val world = h.paper.addSimpleWorld("staff-vine")
-            for (x in -4..4) for (z in -4..20) world.getBlockAt(x, 63, z).type = Material.STONE
             val player = h.player("vine", world, StaffSpell.NOVA)
-            val target = h.zombie(world, x = 0.5, z = 16.0)
-            val behindCaster = h.zombie(world, x = 0.5, z = -3.0)
+            val denied = h.zombie(world, x = 0.5, z = 1.8)
+            val accepted = h.zombie(world, x = 0.5, z = 2.6)
+            val overCap = h.zombie(world, x = 0.5, z = 3.4)
+            deniedTarget = denied.uniqueId
             h.controller.start()
+
             h.controller.cast(player)
             h.hits shouldBe emptyList()
             h.scheduler.tick(3)
             h.hits shouldBe emptyList()
-            h.scheduler.tick(55)
-            h.hits.map { it.uniqueId } shouldBe listOf(target.uniqueId)
-            behindCaster.isValid shouldBe true
-        }
-    }
 
-    "grove roots keep the per-cast target cap" {
-        withStaffHarness(settings = staffSettings(range = 32.0, maxAreaTargets = 2)) { h ->
-            val world = h.paper.addSimpleWorld("staff-vine-cap")
-            for (x in -4..4) for (z in -4..20) world.getBlockAt(x, 63, z).type = Material.STONE
-            val player = h.player("vine-cap", world, StaffSpell.NOVA)
-            val targets = listOf(h.zombie(world, x = 0.5, z = 16.0),
-                h.zombie(world, x = 1.0, z = 16.0), h.zombie(world, x = -0.5, z = 16.0))
-            h.controller.start()
-            h.controller.cast(player)
-            h.scheduler.tick(60)
-            h.hits.size shouldBe 2
-            h.hits.all { it in targets } shouldBe true
-            h.hits.distinctBy { it.uniqueId }.size shouldBe 2
+            h.scheduler.tick(1)
+            h.hits.map { it.uniqueId } shouldBe listOf(denied.uniqueId, accepted.uniqueId)
+            denied.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
+            accepted.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe true
+            overCap.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
+
+            h.scheduler.tick(6)
+            h.hits.map { it.uniqueId } shouldBe listOf(denied.uniqueId, accepted.uniqueId)
         }
     }
 
@@ -1153,67 +1159,60 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "marks follow a moved target and cancel for invalid, dead, quit, world change, and close" {
-        withStaffHarness(settings = staffSettings(markTicks = 6)) { h ->
-            val world = h.paper.addSimpleWorld("staff-mark")
-            val otherWorld = h.paper.addSimpleWorld("staff-mark-other")
+    "mark melee rechecks contact and cancels for invalid, dead, death, quit, world change, and close" {
+        withStaffHarness { h ->
             h.controller.start()
 
-            val follower = h.player("mark-follow", world, StaffSpell.MARK)
-            val moving = h.zombie(world, x = 0.5, z = 4.0)
-            h.controller.cast(follower)
-            follower.inventory.setItemInMainHand(ItemStack(Material.AIR))
-            moving.teleport(Location(world, 0.5, 64.0, 6.0))
-            h.scheduler.tick(6)
-            h.hitLocations.single().z shouldBe 6.0
-            h.movedEffects.any { it.second.z == 6.0 } shouldBe true
-            verify(exactly = 1) { h.effects.impact(any(), any(), any(), any()) }
+            val movingWorld = h.paper.addSimpleWorld("staff-mark-moving")
+            val movingPlayer = h.player("mark-moving", movingWorld, StaffSpell.MARK)
+            val moving = h.zombie(movingWorld, x = 0.5, z = 3.5)
+            h.controller.cast(movingPlayer)
+            moving.teleport(Location(movingWorld, 0.5, 64.0, 6.0))
 
-            val invalidPlayer = h.player("mark-invalid", world, StaffSpell.MARK)
-            val invalidTarget = h.zombie(world, x = 0.5, z = 4.0)
+            val invalidWorld = h.paper.addSimpleWorld("staff-mark-invalid")
+            val invalidPlayer = h.player("mark-invalid", invalidWorld, StaffSpell.MARK)
+            val invalidTarget = h.zombie(invalidWorld, x = 0.5, z = 3.5)
             h.controller.cast(invalidPlayer)
-            invalidPlayer.inventory.setItemInMainHand(ItemStack(Material.AIR))
             invalidTarget.remove()
 
-            val deadPlayer = h.player("mark-dead", world, StaffSpell.MARK)
-            val deadTarget = h.zombie(world, x = 0.5, z = 4.0)
+            val deadWorld = h.paper.addSimpleWorld("staff-mark-dead")
+            val deadPlayer = h.player("mark-dead", deadWorld, StaffSpell.MARK)
+            val deadTarget = h.zombie(deadWorld, x = 0.5, z = 3.5)
             h.controller.cast(deadPlayer)
-            deadPlayer.inventory.setItemInMainHand(ItemStack(Material.AIR))
             deadTarget.health = 0.0
 
-            val dyingPlayer = h.player("mark-death", world, StaffSpell.MARK)
-            h.zombie(world, x = 0.5, z = 4.0)
+            val deathWorld = h.paper.addSimpleWorld("staff-mark-death")
+            val dyingPlayer = h.player("mark-death", deathWorld, StaffSpell.MARK)
+            h.zombie(deathWorld, x = 0.5, z = 3.5)
             h.controller.cast(dyingPlayer)
-            dyingPlayer.inventory.setItemInMainHand(ItemStack(Material.AIR))
             val deathEvent = mockk<PlayerDeathEvent>()
             every { deathEvent.entity } returns dyingPlayer
             h.controller.onDeath(deathEvent)
 
-            val quitting = h.player("mark-quit", world, StaffSpell.MARK)
-            h.zombie(world, x = 0.5, z = 4.0)
+            val quitWorld = h.paper.addSimpleWorld("staff-mark-quit")
+            val quitting = h.player("mark-quit", quitWorld, StaffSpell.MARK)
+            h.zombie(quitWorld, x = 0.5, z = 3.5)
             h.controller.cast(quitting)
-            quitting.inventory.setItemInMainHand(ItemStack(Material.AIR))
             h.controller.onQuit(PlayerQuitEvent(quitting, Component.empty()))
 
-            val changingWorld = h.player("mark-world", world, StaffSpell.MARK)
-            h.zombie(world, x = 0.5, z = 4.0)
+            val worldChangeOrigin = h.paper.addSimpleWorld("staff-mark-world-change")
+            val otherWorld = h.paper.addSimpleWorld("staff-mark-other")
+            val changingWorld = h.player("mark-world", worldChangeOrigin, StaffSpell.MARK)
+            h.zombie(worldChangeOrigin, x = 0.5, z = 3.5)
             h.controller.cast(changingWorld)
-            changingWorld.inventory.setItemInMainHand(ItemStack(Material.AIR))
             changingWorld.teleport(Location(otherWorld, 0.5, 64.0, 0.5))
-            h.controller.onWorldChange(PlayerChangedWorldEvent(changingWorld, world))
+            h.controller.onWorldChange(PlayerChangedWorldEvent(changingWorld, worldChangeOrigin))
 
+            h.scheduler.tick(4)
+            h.hits shouldBe emptyList()
             verify(exactly = 1) { h.effects.cancel(dyingPlayer.uniqueId) }
             verify(exactly = 1) { h.effects.cancel(quitting.uniqueId) }
             verify(exactly = 1) { h.effects.cancel(changingWorld.uniqueId) }
 
-            val hitCountBeforeCancelledMarks = h.hits.size
-            h.scheduler.tick(6)
-            h.hits.size shouldBe hitCountBeforeCancelledMarks
-
-            val closingPlayer = h.player("mark-close", world, StaffSpell.MARK)
-            h.zombie(world, x = 0.5, z = 4.0)
+            val closeWorld = h.paper.addSimpleWorld("staff-mark-close")
+            val closingPlayer = h.player("mark-close", closeWorld, StaffSpell.MARK)
+            h.zombie(closeWorld, x = 0.5, z = 3.5)
             h.controller.cast(closingPlayer)
-            closingPlayer.inventory.setItemInMainHand(ItemStack(Material.AIR))
             val hitCountBeforeClose = h.hits.size
             h.controller.close()
             verify(exactly = 1) { h.effects.close() }

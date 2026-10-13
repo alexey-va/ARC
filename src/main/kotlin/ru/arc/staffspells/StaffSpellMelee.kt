@@ -7,6 +7,8 @@ import org.bukkit.Particle
 import org.bukkit.Sound
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Player
+import org.bukkit.potion.PotionEffect
+import org.bukkit.potion.PotionEffectType
 import org.bukkit.util.Vector
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.ScheduledTask
@@ -29,7 +31,14 @@ internal fun staffMeleeSweepEndpoint(forward: Vector, progress: Double, halfAngl
     return flat.normalize().rotateAroundY(angle).multiply(range)
 }
 
-/** Short, cast-time-aimed primary contact attacks for LANCE and FAULT. */
+/** One contact owner for every close primary; alternate spells keep their own owner. */
+internal fun staffMeleeReach(spell: StaffSpell): Double? = when (spell) {
+    StaffSpell.FAULT, StaffSpell.PRISM, StaffSpell.OSSUARY -> 5.0
+    StaffSpell.LANCE, StaffSpell.MARK, StaffSpell.FROST, StaffSpell.NOVA,
+    StaffSpell.LUNAR, StaffSpell.GALE, StaffSpell.TIDE -> 4.5
+    else -> null
+}
+
 internal class StaffSpellMelee(
     private val settings: StaffSpellSettings,
     private val damage: StaffSpellDamage,
@@ -67,13 +76,13 @@ internal class StaffSpellMelee(
 
     /** True means a supported primary cast was accepted, including an empty-air swing. */
     fun cast(player: Player, cast: StaffSpellCast, spell: StaffSpell, tuning: StaffSpellTuning): Boolean {
-        if (closed || spell !in MELEE_SPELLS || !ready(player) || !damage.isCurrent(player, cast)) return false
+        val range = staffMeleeReach(spell) ?: return false
+        if (closed || !ready(player) || !damage.isCurrent(player, cast)) return false
 
         pending[player.uniqueId]?.let(::discard)
         val eye = player.eyeLocation.clone()
         val horizontal = horizontalDirection(eye.direction, eye.yaw) ?: return false
-        val range = if (spell == StaffSpell.LANCE) LANCE_RANGE else FAULT_RANGE
-        val halfAngle = LANCE_HALF_ANGLE
+        val halfAngle = if (spell == StaffSpell.LANCE) LANCE_HALF_ANGLE else 25.0
         val faultPath = if (spell == StaffSpell.FAULT)
             faultWavePath(player.location, eye, horizontal, range) else null
         val visibleRange = faultPath?.clippedRange ?: range
@@ -81,7 +90,8 @@ internal class StaffSpellMelee(
             .filter { inContactArea(eye, horizontal, it, spell, range, visibleRange, halfAngle) }
             .filter { visible(eye, center(it)) }
             .sortedBy { center(it).distanceSquared(eye) }
-            .take(settings.lanceTargets.coerceIn(1, MAX_TARGETS))
+            .take((if (spell == StaffSpell.LANCE) settings.lanceTargets else settings.maxAreaTargets)
+                .coerceIn(1, MAX_TARGETS))
 
         val right = Vector(horizontal.z, 0.0, -horizontal.x).normalize()
         val swing = Swing(player.uniqueId, player.world.uid, spell, cast, tuning, eye,
@@ -96,15 +106,29 @@ internal class StaffSpellMelee(
             }
             schedule(swing, 1) { visuals.withOwner(swing.casterId) { lanceFrame(swing, 0.5) } }
             schedule(swing, 2) { visuals.withOwner(swing.casterId) { lanceFrame(swing, 1.0) } }
-        } else {
+        } else if (spell == StaffSpell.FAULT) {
             visuals.withOwner(player.uniqueId) {
                 visuals.cue(requireNotNull(faultPath).origin, Sound.BLOCK_STONE_PLACE, 0.32f, 0.72f)
                 faultFrame(swing, 0.16)
             }
             schedule(swing, 1) { visuals.withOwner(swing.casterId) { faultFrame(swing, 0.48) } }
             schedule(swing, 2) { visuals.withOwner(swing.casterId) { faultFrame(swing, 0.78) } }
+        } else {
+            val origin = eye.clone().subtract(0.0, 0.25, 0.0)
+            trackScene(player.uniqueId, effects.melee(player.uniqueId, spell, origin,
+                origin.clone().add(horizontal.clone().multiply(range)), DURATION_TICKS))
+            visuals.withOwner(player.uniqueId) {
+                val (sound, pitch) = attackSound(spell)
+                visuals.cue(origin.clone().add(horizontal.clone().multiply(1.6)), sound, 0.48f, pitch)
+                themedFrame(swing, 0)
+            }
+            for (age in 2 until DURATION_TICKS step 2) schedule(swing, age.toLong()) {
+                visuals.withOwner(swing.casterId) { themedFrame(swing, age) }
+            }
         }
-        schedule(swing, CONTACT_TICKS) { contact(swing) }
+        val contactTick = if (spell == StaffSpell.LANCE || spell == StaffSpell.FAULT) CONTACT_TICKS else 4L
+        schedule(swing, contactTick) { contact(swing) }
+        schedule(swing, DURATION_TICKS.toLong()) { finish(swing) }
         return true
     }
 
@@ -146,10 +170,10 @@ internal class StaffSpellMelee(
             if (!hit) continue
 
             if (swing.spell == StaffSpell.LANCE) lanceContact(swing, target)
-            else {
+            else if (swing.spell == StaffSpell.FAULT) {
                 faultContact(swing, target)
                 if (damage.eligible(player, target, swing.cast)) applyFaultKnockback(swing, target)
-            }
+            } else themedContact(swing, player, target)
             if (firstHit) {
                 firstHit = false
                 if (swing.spell == StaffSpell.LANCE) visuals.withOwner(swing.casterId) {
@@ -157,7 +181,49 @@ internal class StaffSpellMelee(
                 }
             }
         }
-        finish(swing)
+    }
+
+    private fun themedFrame(swing: Swing, age: Int) {
+        val origin = swing.eye.clone().subtract(0.0, 0.25, 0.0)
+        val samples = staffMeleeParticles(swing.spell, age, DURATION_TICKS, swing.range).map { sample ->
+            sample.copy(offset = swing.right.clone().multiply(sample.offset.x)
+                .add(Vector(0.0, sample.offset.y, 0.0))
+                .add(swing.horizontal.clone().multiply(sample.offset.z)))
+        }.filter { visible(swing.eye, origin.clone().add(it.offset)) }
+        visuals.particles(origin, samples, clearance = CAMERA_CLEARANCE)
+    }
+
+    private fun themedContact(swing: Swing, player: Player, target: LivingEntity) {
+        if (!damage.eligible(player, target, swing.cast)) return
+        val slow = when (swing.spell) {
+            StaffSpell.FROST -> 16
+            StaffSpell.NOVA -> 20
+            else -> 0
+        }
+        if (slow > 0) target.addPotionEffect(PotionEffect(PotionEffectType.SLOWNESS, slow, 0, false, false))
+        val push = when (swing.spell) {
+            StaffSpell.MARK -> -0.18
+            StaffSpell.GALE -> 0.60
+            StaffSpell.TIDE -> 0.35
+            else -> 0.0
+        }
+        if (push != 0.0) target.velocity = target.velocity.clone().add(swing.horizontal.clone().multiply(push))
+        visuals.withOwner(swing.casterId) {
+            val (sound, pitch) = attackSound(swing.spell)
+            visuals.cue(center(target), sound, 0.35f, pitch * 0.85f)
+        }
+    }
+
+    private fun attackSound(spell: StaffSpell): Pair<Sound, Float> = when (spell) {
+        StaffSpell.MARK -> Sound.ENTITY_ENDERMAN_TELEPORT to 1.45f
+        StaffSpell.FROST -> Sound.BLOCK_GLASS_BREAK to 1.35f
+        StaffSpell.NOVA -> Sound.BLOCK_AZALEA_LEAVES_BREAK to 0.8f
+        StaffSpell.LUNAR -> Sound.ENTITY_PLAYER_ATTACK_SWEEP to 0.8f
+        StaffSpell.GALE -> Sound.ENTITY_BREEZE_WIND_BURST to 1.25f
+        StaffSpell.TIDE -> Sound.ENTITY_PLAYER_SPLASH to 1.15f
+        StaffSpell.PRISM -> Sound.BLOCK_AMETHYST_CLUSTER_BREAK to 1.6f
+        StaffSpell.OSSUARY -> Sound.ENTITY_SKELETON_HURT to 0.75f
+        else -> Sound.ENTITY_PLAYER_ATTACK_SWEEP to 1.0f
     }
 
     private fun lanceContact(swing: Swing, target: LivingEntity) {
@@ -295,7 +361,7 @@ internal class StaffSpellMelee(
         if (!flatLength.isFinite() || flatLength < MIN_TARGET_DISTANCE) return false
         val forward = offset.x * horizontal.x + offset.z * horizontal.z
         if (!forward.isFinite() || forward < 0.0 || forward > visibleRange) return false
-        if (spell == StaffSpell.FAULT) {
+        if (spell in setOf(StaffSpell.FAULT, StaffSpell.PRISM, StaffSpell.OSSUARY)) {
             if (visibleRange < MIN_TARGET_DISTANCE) return false
             val bounds = entity.boundingBox
             val lateralRadius = 0.5 * ((bounds.maxX - bounds.minX) * abs(horizontal.z) +
@@ -366,12 +432,10 @@ internal class StaffSpellMelee(
     }
 
     private companion object {
-        val MELEE_SPELLS = setOf(StaffSpell.LANCE, StaffSpell.FAULT)
+        const val DURATION_TICKS = 10
         const val CONTACT_TICKS = 3L
         const val SCENE_CLEANUP_TICKS = 14L
         const val MAX_TARGETS = 3
-        const val LANCE_RANGE = 4.5
-        const val FAULT_RANGE = 5.0
         const val LANCE_HALF_ANGLE = 55.0
         const val LANCE_MIN_VISUAL_DISTANCE = 1.45
         const val LANCE_BLADE_HALF_WIDTH = 0.12

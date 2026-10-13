@@ -395,6 +395,7 @@ object StaffRedesignPreviewExport {
     }
 
     private fun preparationClip(spell: StaffSpell, secondary: Boolean): Map<String, Any>? {
+        if (!secondary && staffMeleeReach(spell) != null) return null
         val duration = PREPARATION_DURATION_TICKS
         val input = if (secondary) "PREP_SECONDARY" else "PREP_PRIMARY"
         val eye = Vector(0.0, 1.62, 0.0)
@@ -414,6 +415,28 @@ object StaffRedesignPreviewExport {
             "previewReachBlocks" to PREVIEW_REACH_BLOCKS,
             "timelineNote" to "Production staffPreparationParts display cue at eye origin: 10 ticks, sampled every two ticks. Age 0 opens; ages 2–4 show the full pose; ages 6–8 show its fade. This is the authored pre-cast cue, not an attack animation.",
             "sourceFunctions" to listOf("staffPreparationParts"), "frames" to frames,
+        )
+    }
+
+    private fun meleeClip(spell: StaffSpell): Map<String, Any> {
+        val reach = requireNotNull(staffMeleeReach(spell))
+        val duration = 10
+        val origin = Vector(0.0, 1.37, 0.0)
+        return mapOf(
+            "id" to "${spell.id}-primary-0", "spell" to spell.id,
+            "input" to "PRIMARY", "quick" to false, "charge" to 0.0,
+            "durationTicks" to duration, "tailTicks" to 16, "frameStepTicks" to FRAME_STEP_TICKS,
+            "particleOnly" to false, "anchor" to "caster eye minus 0.25 blocks; horizontal +Z",
+            "previewReachBlocks" to reach,
+            "timelineNote" to "Ближняя основная атака. Контакт на четвёртом тике; Display-кадры каждые два тика с интерполяцией. Реальные столкновения, звук и клиентская физика частиц здесь не моделируются.",
+            "sourceFunctions" to listOf("staffMeleeDisplayParts", "staffMeleeParticles"),
+            "frames" to ticks(duration).map { age -> mapOf(
+                "tick" to age,
+                "parts" to staffMeleeDisplayParts(spell, age, duration, reach).mapIndexed { index, display ->
+                    part(display, "melee:${spell.id}", index, origin)
+                },
+                "emissions" to staffMeleeParticles(spell, age, duration, reach).map { sample(it, origin) },
+            ) },
         )
     }
 
@@ -564,9 +587,12 @@ object StaffRedesignPreviewExport {
             val clips = buildList {
                 redesignArsenal.forEach { spell ->
                     listOf(StaffCastInput.PRIMARY, StaffCastInput.SECONDARY).forEach { input ->
-                        listOf(0.0, 1.0).forEach { charge -> add(arsenalClip(spell, input, charge)) }
+                        if (!input.secondary && staffMeleeReach(spell) != null) add(meleeClip(spell))
+                        else listOf(0.0, 1.0).forEach { charge -> add(arsenalClip(spell, input, charge)) }
                     }
                 }
+                add(meleeClip(StaffSpell.MARK))
+                add(meleeClip(StaffSpell.FROST))
                 listOf(StaffCastInput.PRIMARY, StaffCastInput.SECONDARY).forEach { input ->
                     listOf(0.0, 1.0).forEach { charge -> add(gravityClip(input, charge)) }
                 }
@@ -598,13 +624,14 @@ object StaffRedesignPreviewExport {
             "frameStepTicks" to FRAME_STEP_TICKS,
             "particleTailTicks" to 40,
             "previewReachBlocks" to PREVIEW_REACH_BLOCKS,
-            "evidence" to "Кадры вызывают production-геометрию и частицы staffArsenalParts/staffArsenalParticles, staffRequiemPulse/staffRequiemBellParts/staffRequiemParticles, staffPrismBeam, staffDefenseParts/staffDefenseParticles, staffStormNovaFrame и held-channel geometry с исходными материалами, размерами и преобразованиями. TIDE primary и GALE secondary показывают путь 33.5 блока от запуска в 2.5 блоках впереди кастера до отметки 36 блоков; OSSUARY primary показывает путь 21.5 блока до отметки 24. GRAVITY использует параметры источника для пути от четырёхблочного удержания до отметки 32 блока от кастера. REQUIEM primary показывает bell в фиксированной точке в 12 блоках и 5-блочную волну; secondary показывает bell над кастером и три волны радиусом 7 блоков. Остальные пути с фиксированным макетом остаются иллюстративными 12-блоковыми линиями. Офлайн-превью не моделирует урон, выбор цели, столкновения, звук, освещение клиента и точную физику ванильных частиц; это не подтверждение результата в игровом клиенте.",
+            "evidence" to "Кадры вызывают production-геометрию и частицы. Новые ближние ЛКМ используют staffMeleeDisplayParts/staffMeleeParticles; Shift-атаки сохраняют свои геометрии. Интерполяция Display моделируется по экспортированным ключевым кадрам. Это офлайн-превью: урон, столкновения, звук и нативный клиент не проверяются.",
             "clips" to clips,
         )
         output.parent?.let { Files.createDirectories(it) }
         Files.writeString(output, GsonBuilder().setPrettyPrinting().create().toJson(fullExport).plus("\n"))
         if (focusedOutput != null) {
             val focusedClips = clips.filter { clip ->
+                (clip["sourceFunctions"] as? List<*>)?.contains("staffMeleeDisplayParts") == true ||
                 clip["quick"] == true || ((clip["spell"] == "tide" || clip["spell"] == "gale") &&
                     (clip["input"] == "PRIMARY" || clip["input"] == "SECONDARY")) ||
                     ((clip["spell"] == StaffSpell.CHAIN.id && clip["input"] == StaffCastInput.SECONDARY.name) ||
@@ -619,7 +646,7 @@ object StaffRedesignPreviewExport {
                 "frameStepTicks" to FRAME_STEP_TICKS,
                 "particleTailTicks" to 40,
                 "previewReachBlocks" to PREVIEW_REACH_BLOCKS,
-                "evidence" to "Набор объединяет защиту, атаки TIDE/GALE, CHAIN Storm Nova и REQUIEM bell pulses, заряд Ember/Icicle и production-подготовки доступных мгновенных заклинаний. Display-части несут исходные материалы, размеры, повороты и стабильные идентификаторы. Офлайн-превью не проверяет игровой клиент, урон, столкновения или точную физику частиц.",
+            "evidence" to "Кадры вызывают production-геометрию и частицы. Новые ближние ЛКМ используют staffMeleeDisplayParts/staffMeleeParticles; Shift-атаки сохраняют свои геометрии. Интерполяция Display моделируется по экспортированным ключевым кадрам. Это офлайн-превью: урон, столкновения, звук и нативный клиент не проверяются.",
                 "clips" to focusedClips,
             )).plus("\n"))
             println("STAFF_REDESIGN_FOCUSED_PREVIEW clips=${focusedClips.size} output=$focusedOutput")

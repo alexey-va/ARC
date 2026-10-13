@@ -9,6 +9,7 @@ import kotlin.math.abs
 import org.bukkit.Material
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Player
+import org.bukkit.potion.PotionEffectType
 import org.bukkit.util.Vector
 
 class StaffSpellMeleeTest : FreeSpec({
@@ -22,6 +23,63 @@ class StaffSpellMeleeTest : FreeSpec({
         (abs(center.x) < 1.0e-9 && abs(center.z - 4.5) < 1.0e-9) shouldBe true
         listOf(left, center, right).all { it.length() <= 4.5 + 1.0e-9 } shouldBe true
         staffMeleeSweepEndpoint(Vector(), 0.5, 55.0, 4.5) shouldBe null
+    }
+
+    "the eight themed primaries make one delayed close contact through cover and hit guards" {
+        val variants = listOf(
+            StaffSpell.MARK to 4.5,
+            StaffSpell.FROST to 4.5,
+            StaffSpell.NOVA to 4.5,
+            StaffSpell.LUNAR to 4.5,
+            StaffSpell.GALE to 4.5,
+            StaffSpell.TIDE to 4.5,
+            StaffSpell.PRISM to 5.0,
+            StaffSpell.OSSUARY to 5.0,
+        )
+        val settings = staffSettings(maxAreaTargets = 3)
+
+        withStaffHarness(settings = settings) { h ->
+            variants.forEach { (spell, range) ->
+                val world = h.paper.addSimpleWorld("staff-melee-primary-${spell.id}")
+                val player = h.player("staff-melee-primary-${spell.id}", world, spell)
+                val rejected = h.zombie(world, x = 0.5, z = 1.7)
+                val covered = h.zombie(world, x = 0.5, z = 3.0)
+                val clear = h.zombie(world, x = 1.5, z = 3.0)
+                val outside = h.zombie(world, x = 0.5, z = range + 0.75)
+                for (y in 63..67) world.getBlockAt(0, y, 2).type = Material.STONE
+
+                val attempts = mutableListOf<UUID>()
+                val damage = mockk<StaffSpellDamage>()
+                every { damage.eligible(any(), any(), any()) } returns true
+                every { damage.isCurrent(any(), any()) } returns true
+                every { damage.hit(any(), any(), any(), any(), any()) } answers {
+                    val target = secondArg<LivingEntity>()
+                    attempts += target.uniqueId
+                    target.uniqueId != rejected.uniqueId
+                }
+                val melee = StaffSpellMelee(settings, damage, h.effects,
+                    mockk(relaxed = true), StaffSpellTargeting(settings, damage))
+
+                try {
+                    melee.cast(player, meleeCast(player), spell, StaffSpellTuning(1.0, 6.0, 32)) shouldBe true
+                    h.scheduler.tick(3)
+                    attempts shouldBe emptyList()
+
+                    h.scheduler.tick(1)
+                    attempts shouldBe listOf(rejected.uniqueId, clear.uniqueId)
+                    rejected.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
+                    clear.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe
+                        (spell == StaffSpell.FROST || spell == StaffSpell.NOVA)
+                    (covered.uniqueId in attempts) shouldBe false
+                    (outside.uniqueId in attempts) shouldBe false
+
+                    h.scheduler.tick(6)
+                    attempts shouldBe listOf(rejected.uniqueId, clear.uniqueId)
+                } finally {
+                    melee.close()
+                }
+            }
+        }
     }
 
     "LANCE waits for its three-tick blade contact before applying the captured primary tuning" {

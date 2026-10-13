@@ -321,7 +321,7 @@ internal class StaffSpellController(
             }
         }
         beginCooldown(player, spell, input, cooldownTicks)
-        val closeAttack = !secondary && spell in setOf(StaffSpell.LANCE, StaffSpell.FAULT)
+        val closeAttack = !secondary && staffMeleeReach(spell) != null
         if (!closeAttack && staffPreparationParts(spell, secondary, 0).isNotEmpty())
             effects.play(player.uniqueId, spell, player.eyeLocation, durationTicks = 10,
                 secondary = secondary, preparation = true)

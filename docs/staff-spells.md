@@ -1,4 +1,4 @@
-# Prototype staff spells — ARC 1.4.389
+# Prototype staff spells — ARC 1.4.390
 
 `/arc stafftest` issues sixteen administrator-only mechanics samples.
 `inferno` is temporarily retired; `gravity` and `ossuary` remain available. Use
@@ -7,9 +7,9 @@ to issue the set after checking inventory space. The items carry ARC prototype
 metadata; they are not FMM or EliteMobs loot, and this catalog adds no shop,
 reward or economy changes.
 
-Wind particles follow the same upward-widening ribbons as the tornado; water
-spray follows the forward curl of the wave's foam lip. The primary water orb
-travels at fixed speed above the floor and opens into a splash crown on contact.
+Ten primaries now use close contact attacks; Chain, Ember, Icicle, Requiem,
+Necromancer and Gravity retain their signature primary mechanics. Shift attacks
+keep their existing behavior. Water spray follows the curled wave's foam lip.
 Native particles complement the stable display bodies. Preparation displays
 ease out before their final two-tick frame is removed.
 
@@ -59,21 +59,21 @@ is held.
 | ID · staff | ЛКМ | Shift + ЛКМ | ПКМ · frontal guard | Shift + ПКМ · absorption shield | Existing ItemsAdder skin |
 | --- | --- | --- | --- | --- | --- |
 | `chain` · Грозовая ветвь | Lightning jumps between up to four enemies | Грозовой круг expands a jagged lightning front eight blocks around the caster, blocked by cover | Грозовой заслон | Круговой покров | `3dfantasyweaponscit:divine_staff` |
-| `mark` · Разрыв | Mark follows its target and bursts; without a target, bursts at the aimed point | Чёрная дыра pulls eligible enemies, then collapses | Покров пустоты | Круговой покров | `3dfantasyweaponscit:night_staff` |
-| `frost` · Ледяной хлопок | Ground wave slows enemies in a 50° cone, up to 28 blocks (global cap: 48) | Полярный круг expands an ice front eight blocks from the caster | Ледяной щит | Круговой покров | `3dfantasyweaponscit:northgate_guardian_staff` |
+| `mark` · Разрыв | Three close void claws hit within 4.5 blocks and lightly pull enemies | Чёрная дыра pulls eligible enemies, then collapses | Покров пустоты | Круговой покров | `3dfantasyweaponscit:night_staff` |
+| `frost` · Ледяной хлопок | A close ice fan reaches 4.5 blocks and briefly slows enemies | Полярный круг expands an ice front eight blocks from the caster | Ледяной щит | Круговой покров | `3dfantasyweaponscit:northgate_guardian_staff` |
 | `lance` · Солнечное копьё | A close solar blade sweeps up to 4.5 blocks in front | Three diverging solar beams | Солнечный щит | Круговой покров | `3dfantasyweaponscit:sagrada_winged_staff` |
 | `ember` · Пепельная комета | Fireball grows below the reticle with four-tick interpolation, then launches immediately with forward speed and accelerates | Three ground circles lock on cast; the first meteor launches after a 15-tick warning | Огненный заслон | Круговой покров | `3dfantasyweaponscit:bermunde_hermit_staff` |
-| `nova` · Терновый хват | Visible ground-hugging roots travel toward the target, close and slow enemies | Терновая клетка closes around the aimed point | Терновый заслон | Круговой покров | `3dfantasyweaponscit:holy_celtic_staff` |
+| `nova` · Терновый хват | Two thorn whips cross in front within 4.5 blocks and briefly slow enemies | Терновая клетка closes around the aimed point | Терновый заслон | Круговой покров | `3dfantasyweaponscit:holy_celtic_staff` |
 | `icicle` · Ледяной венец | Seven shoulder icicles sample the current reticle as each launches; full charge releases eleven | Five shards fall around the aimed point immediately | Кристальный заслон | Круговой покров | `3dfantasyweaponscit:olwen_staff` |
 | `fault` · Обсидиановый раскол | A heavy close impact sends a short frontal shockwave up to 5 blocks | Каменный выброс warns, then erupts at the aimed point and lifts enemies | Каменный бастион | Круговой покров | `3dfantasyweaponscit:staff_of_unholy_wisdom` |
-| `lunar` · Лунный серп | Falling silver crescent releases a ground shockwave | Two moon blades converge on the target | Лунный покров | Круговой покров | `3dfantasyweaponscit:black_snake_staff` |
-| `gale` · Посох бури | A stationary open-center wind funnel forms at the aimed point and lifts nearby enemies | Шквал is a twisting air ram with a fixed 36-block horizontal reach, clipped at cover | Ветряной щит | Круговой покров | `3dfantasyweaponscit:goblin_witch_staff` |
-| `tide` · Сердце прилива | A fast water orb slides up to 36 blocks above the floor and bursts at its first enemy, cover or range endpoint; the swept flight takes at most 0.6 seconds after its short launch | Приливный вал is a broad curled wave with a foamy crest that travels forward | Водяной заслон | Круговой покров | `3dfantasyweaponscit:northgate_guardian_staff` |
+| `lunar` · Лунный серп | A close diagonal moon-scythe sweep reaches 4.5 blocks | Two moon blades converge on the target | Лунный покров | Круговой покров | `3dfantasyweaponscit:black_snake_staff` |
+| `gale` · Посох бури | Compressed wind blades hit within 4.5 blocks and push enemies back | Шквал is a twisting air ram with a fixed 36-block horizontal reach, clipped at cover | Ветряной щит | Круговой покров | `3dfantasyweaponscit:goblin_witch_staff` |
+| `tide` · Сердце прилива | A curled close water slash hits within 4.5 blocks and pushes enemies back | Приливный вал is a broad curled wave with a foamy crest that travels forward | Водяной заслон | Круговой покров | `3dfantasyweaponscit:northgate_guardian_staff` |
 | `requiem` · Реквием | A copper-and-gold bell forms above the aimed point, tolls at 0.8 seconds and releases a five-block soul wave | Погребальный перезвон suspends the bell above the caster and releases three seven-block waves, with five-second minimum recovery | Покров душ | Круговой покров | `3dfantasyweaponscit:lich_staff` |
-| `prism` · Кристальная призма | Crystal grows at the aim point and fires at up to three visible enemies | Three rays converge on the selected point | Гранёный щит | Круговой покров | `3dfantasyweaponscit:northgate_golden_crook` |
+| `prism` · Кристальная призма | A narrow crystal thrust reaches five blocks in front | Three rays converge on the selected point | Гранёный щит | Круговой покров | `3dfantasyweaponscit:northgate_golden_crook` |
 | `necromancer` · Зов могилы | Adds two skeleton archers for 45 seconds; up to ten minions can coexist | Костяной жнец summons one larger wither-skeleton commander | Костяной заслон | Круговой покров | `3dfantasyweaponscit:lich_staff` |
 | `gravity` · Гравитационный захват | Grab a surface within 32 blocks, hold the same boulder, and release into a fast accelerating throw up to 32 blocks | Бросок глыбы uses the same grab-and-throw channel | Каменный заслон | Круговой покров | `3dfantasyweaponscit:staff_of_unholy_wisdom` |
-| `ossuary` · Костяной прокол | Five-spike bone clusters erupt every roughly two blocks along a fixed 24-block forward lane, with sparse native particles | Костяной прорыв warns at the aimed point, then seven bone spikes shoot upward and impale enemies | Щит рёбер | Круговой покров | `3dfantasyweaponscit:lich_staff` |
+| `ossuary` · Костяной прокол | Three bone prongs thrust up to five blocks in front with sparse native particles | Костяной прорыв warns at the aimed point, then seven bone spikes shoot upward and impale enemies | Щит рёбер | Круговой покров | `3dfantasyweaponscit:lich_staff` |
 
 Each sample uses its configured ItemsAdder skin; issuance fails with a player
 message and a server warning if that configured skin is unavailable. Duel
@@ -82,6 +82,13 @@ client-pack appearance requires both a fully namespaced `duel-appearance.item-mo
 and a positive `custom-model-data`; the bundled defaults leave both unset.
 
 ## Targeting and lifecycle
+
+Close primaries contact once after four ticks (Solar and Fault: three ticks), cap at three targets, and use
+the existing shared attack recovery and damage tuning. Wide attacks cover a
+25-degree half-angle (Solar: 55 degrees); Fault, Prism and Ossuary use a narrow
+frontal lane. Frost slows for 16 ticks and Nova for 20; displacement and slow
+apply only after an accepted damage hit. Every contact rechecks cover and
+combat eligibility. Display geometry and particle accents share one authored pose.
 
 Damage attempts recheck their captured combat context and target eligibility;
 the damage path requires a visible target when the hit is applied. Moving

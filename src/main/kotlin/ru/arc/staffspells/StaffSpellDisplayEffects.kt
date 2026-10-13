@@ -35,6 +35,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         val chargeSlot: Int? = null,
         var projectileBody: List<StaffDisplayPart>? = null,
         val preparation: Boolean = false,
+        val melee: Boolean = false,
         val defense: Defense? = null,
         var controllerDriven: Boolean = false,
         var controllerDirty: Boolean = false,
@@ -113,6 +114,22 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
             Quaternionf().rotationY(-Math.toRadians(player.location.yaw.toDouble()).toFloat()),
             1.0, 1.0, durationTicks, false, allAround, StaffCastInput.of(allAround, true),
             defense = Defense(allAround))
+        scenes[scene.id] = scene
+        render(scene)
+        refreshAudience()
+        return scene.id
+    }
+
+    fun melee(casterId: UUID, spell: StaffSpell, from: Location, to: Location, durationTicks: Int): UUID? {
+        check(Bukkit.isPrimaryThread())
+        if (closed || !valid(from) || !valid(to) || from.world != to.world) return null
+        val caster = Bukkit.getPlayer(casterId) ?: return null
+        if (!eligible(caster, from)) return null
+        reserve(casterId)
+        val delta = to.toVector().subtract(from.toVector())
+        val scene = Scene(UUID.randomUUID(), casterId, spell, from.clone(),
+            staffYawOnlyOrientation(Vector3f(delta.x.toFloat(), 0f, delta.z.toFloat())),
+            delta.length(), 1.0, durationTicks, false, false, StaffCastInput.PRIMARY, melee = true)
         scenes[scene.id] = scene
         render(scene)
         refreshAudience()
@@ -261,7 +278,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
                     scene.origin = caster.location.clone()
                     scene.rotation = Quaternionf().rotationY(-Math.toRadians(caster.location.yaw.toDouble()).toFloat())
                 }
-                val tracked = scene.defense == null && !scene.preparation && !scene.charging && !scene.impact && scene.spell in setOf(StaffSpell.MARK, StaffSpell.EMBER)
+                val tracked = scene.defense == null && !scene.preparation && !scene.melee && !scene.charging && !scene.impact && scene.spell in setOf(StaffSpell.MARK, StaffSpell.EMBER)
                 val expired = if (tracked) scene.age >= 160 else scene.age >= scene.duration
                 if (expired) remove(scene.id)
                 // Flying comets have one movement owner sending two-tick forward keyframes.
@@ -276,7 +293,8 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
     private fun render(scene: Scene) {
         val previousParts = scene.renderedParts
         val previousBounds = scene.bounds
-        var parts = (if (scene.preparation) staffPreparationParts(scene.spell, scene.secondary, scene.age, scene.duration)
+        var parts = (if (scene.melee) staffMeleeDisplayParts(scene.spell, scene.age, scene.duration, scene.length)
+        else if (scene.preparation) staffPreparationParts(scene.spell, scene.secondary, scene.age, scene.duration)
         else if (scene.defense != null) staffDefenseParts(scene.spell, scene.age, scene.duration,
             scene.defense.allAround, scene.defense.strength, scene.age - scene.defense.impactAt,
             scene.defense.endingAt?.let { scene.age - it }) else if (scene.charging) {
@@ -313,7 +331,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         }
         val casterEye = Bukkit.getPlayer(scene.casterId)?.eyeLocation
         // The broad ice fan needs per-piece clipping; projectile owners already sweep their paths.
-        if (scene.defense == null && !scene.preparation && scene.spell == StaffSpell.FROST && !scene.charging && casterEye != null) parts = parts.map { part ->
+        if ((scene.melee || scene.defense == null && !scene.preparation && scene.spell == StaffSpell.FROST && !scene.charging) && casterEye != null) parts = parts.map { part ->
             val point = scene.rotation.transform(Vector3f(part.center))
             val at = scene.origin.clone().add(point.x.toDouble(), point.y.toDouble(), point.z.toDouble())
             part.copy(visible = part.visible && visible(casterEye, at))
