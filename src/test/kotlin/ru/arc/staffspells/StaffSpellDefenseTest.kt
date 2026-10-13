@@ -16,7 +16,6 @@ import ru.arc.util.CooldownManager
 import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.min
-import kotlin.math.sqrt
 
 @Suppress("DEPRECATION")
 class StaffSpellDefenseTest : FreeSpec({
@@ -28,7 +27,7 @@ class StaffSpellDefenseTest : FreeSpec({
             val rear = h.zombie(world, x = 0.5, z = -2.0)
             val damage = mockk<StaffSpellDamage>()
             every { damage.isCurrent(any(), any()) } returns true
-            val defense = StaffSpellDefense(h.config, damage, mockk(relaxed = true))
+            val defense = StaffSpellDefense(h.config, damage, mockk(relaxed = true), mockk(relaxed = true))
             defense.start()
             val cast = StaffSpellCast(player.uniqueId, UUID.randomUUID(), 1, null, null, false)
             var closed = false
@@ -78,7 +77,7 @@ class StaffSpellDefenseTest : FreeSpec({
             val front = h.zombie(world, x = 0.5, z = 3.0)
             val damage = mockk<StaffSpellDamage>()
             every { damage.isCurrent(any(), any()) } returns true
-            val defense = StaffSpellDefense(h.config, damage, mockk(relaxed = true))
+            val defense = StaffSpellDefense(h.config, damage, mockk(relaxed = true), mockk(relaxed = true))
             defense.start()
             val cast = StaffSpellCast(player.uniqueId, UUID.randomUUID(), 1, null, null, false)
             try {
@@ -118,7 +117,7 @@ class StaffSpellDefenseTest : FreeSpec({
             val player = h.player("staff-defense-shield-generic-damage", world, StaffSpell.FAULT)
             val damage = mockk<StaffSpellDamage>()
             every { damage.isCurrent(any(), any()) } returns true
-            val defense = StaffSpellDefense(h.config, damage, mockk(relaxed = true))
+            val defense = StaffSpellDefense(h.config, damage, mockk(relaxed = true), mockk(relaxed = true))
             defense.start()
             val cast = StaffSpellCast(player.uniqueId, UUID.randomUUID(), 1, null, null, false)
             try {
@@ -146,30 +145,58 @@ class StaffSpellDefenseTest : FreeSpec({
         }
     }
 
-    "Shift+LMB shield expires after 60 ticks and its spherical arcs leave the forward view open" {
+    "defense displays stay bounded, finite, stable, and transparent at the center" {
+        StaffSpell.entries.forEach { spell ->
+            val heavy = spell in setOf(StaffSpell.FAULT, StaffSpell.GRAVITY, StaffSpell.OSSUARY,
+                StaffSpell.NOVA, StaffSpell.NECROMANCER)
+            listOf(false, true).forEach { allAround ->
+                val duration = if (allAround) 60 else if (heavy) 32 else 24
+                val expectedParts = if (allAround) 40 else 12
+                val expectedPanes = if (allAround) 12 else 3
+                val initial = staffDefenseParts(spell, 0, duration, allAround)
+                val active = staffDefenseParts(spell, 4, duration, allAround)
+                val impact = staffDefenseParts(spell, 4, duration, allAround, impactAge = 0)
+
+                initial.size shouldBe expectedParts
+                (initial.size <= StaffSpellDisplayEffects.MAX_PARTS) shouldBe true
+                initial.all { part ->
+                    listOf(part.center.x, part.center.y, part.center.z,
+                        part.scale.x, part.scale.y, part.scale.z,
+                        part.rotation.x, part.rotation.y, part.rotation.z, part.rotation.w).all(Float::isFinite) &&
+                        part.scale.x > 0f && part.scale.y > 0f && part.scale.z > 0f
+                } shouldBe true
+
+                val identities = initial.map { it.identity }
+                identities.all { !it.isNullOrBlank() } shouldBe true
+                identities.toSet().size shouldBe expectedParts
+                active.map { it.identity } shouldBe identities
+                impact.map { it.identity } shouldBe identities
+
+                val panes = initial.filter { it.identity?.contains("-pane-") == true }
+                panes.size shouldBe expectedPanes
+                panes.all { it.material.name.endsWith("_STAINED_GLASS") } shouldBe true
+                initial.all { it.center.x * it.center.x + it.center.z * it.center.z > 1.0f } shouldBe true
+                (0 until duration).all { staffDefenseParticles(spell, it, allAround).isEmpty() } shouldBe true
+            }
+        }
+    }
+
+    "Shift+LMB shield expires after 60 ticks and retains only impact particles" {
         withStaffHarness { h ->
             val world = h.paper.addSimpleWorld("staff-defense-shield-expiry")
             val player = h.player("staff-defense-shield-expiry", world, StaffSpell.FROST)
             val front = h.zombie(world, x = 0.5, z = 3.0)
             val damage = mockk<StaffSpellDamage>()
             every { damage.isCurrent(any(), any()) } returns true
-            val defense = StaffSpellDefense(h.config, damage, mockk(relaxed = true))
+            val defense = StaffSpellDefense(h.config, damage, mockk(relaxed = true), mockk(relaxed = true))
             defense.start()
             val cast = StaffSpellCast(player.uniqueId, UUID.randomUUID(), 1, null, null, false)
             try {
                 defense.activate(player, StaffSpell.FROST, cast, allAround = true) shouldBe true
-                val shell = staffDefenseParticles(StaffSpell.FROST, age = 0, allAround = true)
-                shell.isNotEmpty() shouldBe true
-                shell.all {
-                    abs(sqrt(it.offset.x * it.offset.x + it.offset.z * it.offset.z +
-                        (it.offset.y - .95) * (it.offset.y - .95)) - 1.48) < .000001
-                } shouldBe true
-                shell.none { it.offset.z > 1.48 * .78 && abs(it.offset.y - .95) < .7 } shouldBe true
+                staffDefenseParticles(StaffSpell.FROST, age = 0, allAround = true).isEmpty() shouldBe true
                 val impactSparks = staffDefenseParticles(StaffSpell.FROST, 0, true, impact = true, depleted = true)
                     .count { it.particle == Particle.ELECTRIC_SPARK }
-                val activeSparks = staffDefenseParticles(StaffSpell.FROST, 0, true)
-                    .count { it.particle == Particle.ELECTRIC_SPARK }
-                (impactSparks > activeSparks) shouldBe true
+                (impactSparks > 0) shouldBe true
 
                 h.scheduler.tick(58)
                 val activeHit = attack(front, player, rawDamage = 1.0)
@@ -197,7 +224,7 @@ class StaffSpellDefenseTest : FreeSpec({
             val enemy = h.zombie(world, x = 0.5, z = -2.0)
             val damage = mockk<StaffSpellDamage>()
             every { damage.isCurrent(any(), any()) } returns true
-            val defense = StaffSpellDefense(h.config, damage, mockk(relaxed = true))
+            val defense = StaffSpellDefense(h.config, damage, mockk(relaxed = true), mockk(relaxed = true))
             defense.start()
             val cast = StaffSpellCast(player.uniqueId, UUID.randomUUID(), 1, null, null, false)
             try {
@@ -230,7 +257,7 @@ class StaffSpellDefenseTest : FreeSpec({
             val enemy = h.zombie(world, x = 0.5, z = -2.0)
             val damage = mockk<StaffSpellDamage>()
             every { damage.isCurrent(any(), any()) } returns true
-            val defense = StaffSpellDefense(h.config, damage, mockk(relaxed = true))
+            val defense = StaffSpellDefense(h.config, damage, mockk(relaxed = true), mockk(relaxed = true))
             defense.start()
             val cast = StaffSpellCast(player.uniqueId, UUID.randomUUID(), 1, null, null, false)
             try {

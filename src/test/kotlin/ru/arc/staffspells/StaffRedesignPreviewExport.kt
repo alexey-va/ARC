@@ -9,7 +9,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Locale
 
-/** Exports the authored new-arsenal and LMB source frames for an offline particle-sprite preview. */
+/** Exports authored spell and defense frames for an offline particle and BlockDisplay preview. */
 object StaffRedesignPreviewExport {
     private const val FRAME_STEP_TICKS = 2
     private const val PREVIEW_REACH_BLOCKS = 12.0
@@ -236,20 +236,46 @@ object StaffRedesignPreviewExport {
     private fun quickClip(spell: StaffSpell, input: StaffCastInput): Map<String, Any> {
         val heavy = spell in setOf(StaffSpell.FAULT, StaffSpell.GRAVITY, StaffSpell.OSSUARY,
             StaffSpell.NOVA, StaffSpell.NECROMANCER)
-        val duration = if (input.secondary) 14 else if (heavy) 32 else 24
+        val allAround = input.secondary
+        val duration = if (allAround) 60 else if (heavy) 32 else 24
+        val hitTick = if (allAround) 48 else 8
+        val endTick = if (allAround) hitTick + 6 else duration
+        val postHitStrength = if (heavy) 2.0 / 3.0 else .5
         val frames = ticks(duration).map { age ->
-            mapOf("tick" to age, "parts" to emptyList<Any>(), "emissions" to
-                if (age < duration) staffDefenseParticles(spell, age, input.secondary).map(::sample)
-                else emptyList())
+            val active = age < duration && age < endTick
+            val frameDuration = if (allAround && age >= hitTick) endTick else duration
+            val endingAge = if (allAround && age >= hitTick) age - hitTick else null
+            val impactAge = (age - hitTick).takeIf { it in 0..6 } ?: 100
+            val strength = when {
+                allAround && age >= hitTick -> 0.0
+                age >= hitTick -> postHitStrength
+                else -> 1.0
+            }
+            mapOf(
+                "tick" to age,
+                "parts" to if (active) staffDefenseParts(
+                    spell, age, frameDuration, allAround, strength, impactAge, endingAge,
+                )
+                    .mapIndexed { index, display ->
+                        part(display, "${spell.id}:${input.name.lowercase(Locale.ROOT)}", index, Vector())
+                    } else emptyList<Any>(),
+                "emissions" to if (age == hitTick)
+                    staffDefenseParticles(spell, age, allAround, impact = true, depleted = allAround).map(::sample)
+                    else emptyList(),
+            )
         }
         return mapOf(
             "id" to "${spell.id}-${input.name.lowercase(Locale.ROOT)}-0",
             "spell" to spell.id, "input" to input.name, "quick" to true,
             "charge" to 0.0, "durationTicks" to duration, "tailTicks" to 40,
-            "frameStepTicks" to FRAME_STEP_TICKS, "particleOnly" to true,
+            "frameStepTicks" to FRAME_STEP_TICKS,
+            "particleOnly" to frames.all { (it["parts"] as List<*>).isEmpty() },
             "anchor" to "caster feet", "previewReachBlocks" to 2.0,
-            "timelineNote" to "Production staffDefenseParticles: LMB frontal guard, Shift LMB all-around guard. Independent recovery. Geometry inspection does not simulate a blocked hit.",
-            "sourceFunctions" to listOf("staffDefenseParticles"), "frames" to frames,
+            "timelineNote" to if (allAround)
+                "Production staffDefenseParts: Shift+LMB keeps four transparent kite panels for 3.0s. Authored hit scenario: the shield depletes at tick 48 and its source break animation ends at tick 54; particles emit only at that contact."
+            else
+                "Production staffDefenseParts: LMB keeps a frontal kite guard for ${duration / 20.0}s. Authored hit scenario: the first frontal hit lands at tick 8 and does not deplete the guard; particles emit only at contact. Combat and native expiry are not simulated.",
+            "sourceFunctions" to listOf("staffDefenseParts", "staffDefenseParticles"), "frames" to frames,
         )
     }
 
@@ -321,14 +347,14 @@ object StaffRedesignPreviewExport {
         }
         output.parent?.let { Files.createDirectories(it) }
         Files.writeString(output, GsonBuilder().setPrettyPrinting().create().toJson(mapOf(
-            "title" to "ARC staff redesign · source-driven particle preview",
+            "title" to "ARC staff redesign · source-driven particle and display preview",
             "coordinates" to mapOf(
                 "space" to "spell-local", "origin" to "fixed cast/target anchor", "forward" to "+Z", "unit" to "block",
             ),
             "frameStepTicks" to FRAME_STEP_TICKS,
             "particleTailTicks" to 40,
             "previewReachBlocks" to PREVIEW_REACH_BLOCKS,
-            "evidence" to "Frames call production staffArsenalParts/staffArsenalParticles, staffPrismBeam, and staffDefenseParticles and held-channel geometry at the runtime two-tick cadence. Native source samples and source-timed movement are rendered in an offline geometry preview; it does not simulate damage, target selection, collision, sounds, client lighting, or exact vanilla particle physics. Moving attacks use an illustrative fixed 12-block lane. Preview shape and timing are not proof of a native-client result.",
+            "evidence" to "Frames call production staffArsenalParts/staffArsenalParticles, staffPrismBeam, staffDefenseParts/staffDefenseParticles, and held-channel geometry at the runtime two-tick cadence. BlockDisplay parts export their source material, dimensions, and transforms. Native source samples and source-timed movement are rendered in an offline geometry preview; it does not simulate damage, target selection, collision, sounds, client lighting, or exact vanilla particle physics. Moving attacks use an illustrative fixed 12-block lane. Preview shape and timing are not proof of a native-client result.",
             "clips" to clips,
         )).plus("\n"))
         println("STAFF_REDESIGN_PREVIEW clips=${clips.size} output=$output")

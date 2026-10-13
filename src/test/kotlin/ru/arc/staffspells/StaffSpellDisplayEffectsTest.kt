@@ -350,6 +350,51 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         }
     }
 
+    "defenses retain passenger handles through turns and impact then clean up on expiry and cancel" {
+        withDisplayHarness { h ->
+            val caster = h.player("shield-owner")
+            val observer = h.player("shield-observer").apply {
+                teleport(Location(h.world, .5, 64.0, 6.0))
+            }
+            val entitiesBefore = h.world.entities.size
+            // EMBER and CHAIN have special flight clocks/interpolation; shields must not inherit them.
+            listOf(StaffSpell.EMBER, StaffSpell.CHAIN).forEach { spell ->
+                val before = h.recorder.records.size
+                val id = h.effects.defend(caster, spell, 24, allAround = false)!!
+                val records = h.recorder.records.drop(before)
+                records.size shouldBe 12
+                h.scheduler.tick(4)
+                records.all { caster.uniqueId in it.visibleViewers && observer.uniqueId in it.visibleViewers } shouldBe true
+                caster.teleport(caster.location.clone().add(2.0, 0.0, 0.0).apply { yaw = 45f })
+                h.scheduler.tick(2)
+                records.forEach {
+                    verify(atLeast = 2) { it.handle.attachTo(caster) }
+                    it.teleports.isEmpty() shouldBe true
+                    it.interpolationDurationTicks shouldBe 2
+                    it.poses.all(DisplayPose::isFinite) shouldBe true
+                }
+                h.effects.defenseImpact(id, .5, depleted = false)
+                h.scheduler.tick(2)
+                h.recorder.records.size shouldBe before + 12
+                records.all { it.removals == 0 } shouldBe true
+                h.effects.defenseImpact(id, 0.0, depleted = true)
+                h.scheduler.tick(6)
+                records.all { it.removals == 1 } shouldBe true
+            }
+            val beforeShell = h.recorder.records.size
+            h.effects.defend(caster, StaffSpell.FROST, 60, allAround = true)
+            val shell = h.recorder.records.drop(beforeShell)
+            shell.size shouldBe 40
+            h.scheduler.tick(60)
+            shell.all { it.removals == 1 } shouldBe true
+            val beforeCancel = h.recorder.records.size
+            h.effects.defend(caster, StaffSpell.FAULT, 32, allAround = false)
+            h.effects.cancel(caster.uniqueId)
+            h.recorder.records.drop(beforeCancel).all { it.removals == 1 } shouldBe true
+            h.world.entities.size shouldBe entitiesBefore
+        }
+    }
+
     "display handles move in place, refresh materials, expire, cancel, and close" {
         withDisplayHarness { h ->
             val caster = h.player("display-owner")

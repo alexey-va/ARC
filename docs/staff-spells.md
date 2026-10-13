@@ -32,6 +32,14 @@ The all-around shield lasts three seconds and absorbs eight HP after armor and
 resistance, before native absorption hearts. Overflow continues through normal
 damage processing. Its bossbar shows remaining capacity. Recovery is four
 seconds for frontal and eight seconds for the shield; both share that track.
+The frontal guard is a 12-part kite-shaped packet BlockDisplay shield with a transparent face;
+Shift + left-click assembles four angled plates (40 parts) around the player. Material families
+follow the staff element. The stable displays attach to the player, interpolate their opening,
+recoil and collapse, and share the existing scene/part budgets. Native particles appear only
+on a blocked hit or shield break. The center stays transparent and the raised outline leaves
+the reticle readable. `StaffDefenseGeometry.kt` owns the shape used by both runtime and
+`exportStaffRedesignPreview`; offline previews do not establish native-client acceptance.
+
 Changing staff cancels the active defense without resetting recovery. The left-click controls do not perform
 the former quick attacks. Staff interaction cannot break blocks, including in
 creative mode, and native melee damage is suppressed while a prototype staff

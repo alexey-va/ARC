@@ -91,7 +91,7 @@ internal class StaffSpellController(
     private val visuals = StaffSpellVisuals(tasks)
     private val targeting = StaffSpellTargeting(settings, damage)
     private val arsenal = StaffSpellArsenal(settings, damage, effects, visuals, targeting)
-    internal val defense = StaffSpellDefense(config, damage, visuals)
+    internal val defense = StaffSpellDefense(config, damage, visuals, effects)
     private val channels = StaffSpellChannels(settings, damage, effects, visuals, targeting)
     private val channelInputs = mutableMapOf<UUID, Pair<StaffSpell, StaffCastInput>>()
     internal val summons = StaffSpellSummons(settings, damage, visuals, targeting, summonActorFactory)
