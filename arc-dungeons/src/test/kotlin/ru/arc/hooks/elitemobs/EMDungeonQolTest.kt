@@ -71,6 +71,7 @@ class EMDungeonQolTest : FreeSpec({
             mockkObject(DungeonsMenus)
             try {
                 val shown = mutableListOf<ru.arc.paper.menu.PaperDialogScreen>()
+                every { DungeonsMenus.beginDialogFlow(player) } returns Unit
                 every { DungeonsMenus.openDialog(player, any(), any(), any(), any()) } answers { shown += secondArg<ru.arc.paper.menu.PaperDialogScreen>() }
                 for (command in listOf("/em", "/ELITEMOBS", "/elitemobs:em", "/elitemobs:elitemobs")) {
                     val event = PlayerCommandPreprocessEvent(player, command)
@@ -78,6 +79,7 @@ class EMDungeonQolTest : FreeSpec({
                     event.isCancelled shouldBe true
                     shown.last().id shouldBe "dungeon.main"
                 }
+                verify(exactly = 4) { DungeonsMenus.beginDialogFlow(player) }
             } finally {
                 unmockkObject(DungeonsMenus)
             }

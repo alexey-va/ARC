@@ -87,13 +87,13 @@ class StaffSpellArsenalTest : FreeSpec({
             36, 2.0, true, 1.0).isEmpty() shouldBe true
     }
 
-    "moon blade hits at descent contact and never twice" {
+    "moon blade alternate hits at descent contact and never twice" {
         withStaffHarness { h ->
             val world = h.paper.addSimpleWorld("moonfall")
             val player = h.player("moonfall", world, StaffSpell.LUNAR)
             val target = h.zombie(world, x = .5, z = 8.0)
             h.controller.start()
-            h.controller.cast(player, StaffCastInput.PRIMARY, 1.0)
+            h.controller.cast(player, StaffCastInput.SECONDARY, 1.0)
             h.scheduler.tick(14)
             h.hits shouldBe emptyList()
             h.scheduler.tick(2)
@@ -103,68 +103,53 @@ class StaffSpellArsenalTest : FreeSpec({
         }
     }
 
-    "TIDE primary bursts on the first swept entity contact without snapping to its center or double-hitting" {
+    "TIDE alternate wave crosses both swept entity contacts once" {
         withStaffHarness(settings = staffSettings(range = 48.0)) { h ->
             val world = h.paper.addSimpleWorld("tide-orb-contact")
             val player = h.player("tide-orb-contact", world, StaffSpell.TIDE)
             val first = h.zombie(world, x = .5, z = 8.0)
             val nearby = h.zombie(world, x = .5, z = 8.9)
             h.controller.start()
-            h.controller.cast(player, StaffCastInput.PRIMARY, 0.0)
-            val scene = h.visualPlays.single { it.spell == StaffSpell.TIDE && !it.secondary }
-            h.scheduler.tick((STAFF_TIDE_PRIMARY_LAUNCH_TICK).toLong())
+            h.controller.cast(player, StaffCastInput.SECONDARY, 0.0)
+            val scene = h.visualPlays.single { it.spell == StaffSpell.TIDE && it.secondary }
+            h.scheduler.tick(8)
             h.hits shouldBe emptyList()
-            h.scheduler.tick(2)
+            h.scheduler.tick(32)
             h.hits.map { it.uniqueId }.toSet() shouldBe setOf(first.uniqueId, nearby.uniqueId)
             h.hits.count { it.uniqueId == first.uniqueId } shouldBe 1
             h.hits.count { it.uniqueId == nearby.uniqueId } shouldBe 1
-            verify(exactly = 1) { h.effects.impact(scene.id, any(), any(), STAFF_TIDE_PRIMARY_IMPACT_TICKS) }
-            val impactPoint = h.movedEffects.last { it.first == scene.id }.second
-            (first.location.z - impactPoint.z in .4..1.4) shouldBe true
             h.scheduler.tick(20)
             h.hits.size shouldBe 2
+            (h.movedEffects.filter { it.first == scene.id }.last().second.distance(scene.from) > 1.0) shouldBe true
+            verify(exactly = 0) { h.effects.impact(any(), any(), any(), any()) }
         }
     }
 
-    "TIDE primary bursts at the clipped wall or range endpoint when no entity is reached" {
+    "TIDE alternate wave is clipped by cover and ends at its charged range" {
         withStaffHarness(settings = staffSettings(range = 48.0)) { h ->
-            val world = h.paper.addSimpleWorld("tide-wall-burst")
-            val player = h.player("tide-wall-burst", world, StaffSpell.TIDE)
-            val covered = h.zombie(world, x = .5, z = 12.0)
+            val world = h.paper.addSimpleWorld("tide-wave-wall")
+            for (x in -1..1) for (z in 0..40) world.getBlockAt(x, 63, z).type = Material.STONE
+            for (x in -1..1) for (y in 64..68) world.getBlockAt(x, y, 8).type = Material.STONE
+            val player = h.player("tide-wave-wall", world, StaffSpell.TIDE)
+            h.zombie(world, x = .5, z = 12.0)
             h.controller.start()
-            h.controller.cast(player, StaffCastInput.PRIMARY, 0.0)
-            val scene = h.visualPlays.single { it.spell == StaffSpell.TIDE && !it.secondary }
-            h.scheduler.tick((STAFF_TIDE_PRIMARY_LAUNCH_TICK).toLong())
+            h.controller.cast(player, StaffCastInput.SECONDARY, 1.0)
+            val scene = h.visualPlays.single { it.spell == StaffSpell.TIDE && it.secondary }
+            (scene.to.z < 8.0 && scene.to.z > 5.0) shouldBe true
+            h.scheduler.tick(60)
             h.hits shouldBe emptyList()
             verify(exactly = 0) { h.effects.impact(any(), any(), any(), any()) }
-            // A new body-height wall must stop the live swept path even though it
-            // was not present when the cast endpoint was prepared.
-            for (x in -1..1) for (y in 64..68) world.getBlockAt(x, y, 8).type = Material.STONE
-            h.scheduler.tick(2)
-            h.hits shouldBe emptyList()
-            verify(exactly = 1) { h.effects.impact(scene.id, any(), any(), STAFF_TIDE_PRIMARY_IMPACT_TICKS) }
-            val impactPoint = h.movedEffects.last { it.first == scene.id }.second
-            (impactPoint.z < 8.0) shouldBe true
-            h.scheduler.tick(12)
-            h.hits.any { it.uniqueId == covered.uniqueId } shouldBe false
         }
 
         withStaffHarness(settings = staffSettings(range = 48.0)) { h ->
-            val world = h.paper.addSimpleWorld("tide-range-burst")
-            val player = h.player("tide-range-burst", world, StaffSpell.TIDE)
+            val world = h.paper.addSimpleWorld("tide-wave-range")
+            for (x in -1..1) for (z in 0..40) world.getBlockAt(x, 63, z).type = Material.STONE
+            val player = h.player("tide-wave-range", world, StaffSpell.TIDE)
             h.controller.start()
-            h.controller.cast(player, StaffCastInput.PRIMARY, 0.0)
-            val scene = h.visualPlays.single { it.spell == StaffSpell.TIDE && !it.secondary }
-            h.scheduler.tick(4)
-            val flightMoves = h.movedEffects.filter { it.first == scene.id }
-            flightMoves.size shouldBe 3 // cast snapshot, launch frame, then the first 2-tick flight step
-            (flightMoves[0].second.distance(flightMoves[1].second) < .001) shouldBe true
-            (flightMoves[1].second.distance(flightMoves[2].second) in 5.2..6.0) shouldBe true
-            h.scheduler.tick((STAFF_TIDE_PRIMARY_ARRIVAL_TICK - 4).toLong())
-            verify(exactly = 1) { h.effects.impact(scene.id, any(), any(), STAFF_TIDE_PRIMARY_IMPACT_TICKS) }
-            val impactPoint = h.movedEffects.last { it.first == scene.id }.second
-            (impactPoint.distance(scene.to) < .1) shouldBe true
-            h.scheduler.tick((STAFF_TIDE_PRIMARY_IMPACT_TICKS).toLong())
+            h.controller.cast(player, StaffCastInput.SECONDARY, 1.0)
+            val scene = h.visualPlays.single { it.spell == StaffSpell.TIDE && it.secondary }
+            (kotlin.math.abs(scene.to.z - player.location.z - 36.0) < 0.05) shouldBe true
+            h.scheduler.tick(60)
             h.hits shouldBe emptyList()
         }
     }
@@ -208,15 +193,15 @@ class StaffSpellArsenalTest : FreeSpec({
         }
     }
 
-    "GALE primary and TIDE secondary own display scenes, while TIDE keeps its scene through the splash" {
+    "GALE and TIDE alternate fronts own moving scenes through their travel" {
         withStaffHarness { h ->
             val world = h.paper.addSimpleWorld("arsenal-display-scenes")
             val gale = h.player("gale-display-scene", world, StaffSpell.GALE)
             h.zombie(world, x = .5, z = 8.0)
             h.controller.start()
-            h.controller.cast(gale, StaffCastInput.PRIMARY, 1.0)
-            val galeScene = h.visualPlays.single { it.spell == StaffSpell.GALE && !it.secondary }
-            (galeScene.from.distance(gale.location) > 4.0) shouldBe true
+            h.controller.cast(gale, StaffCastInput.SECONDARY, 1.0)
+            val galeScene = h.visualPlays.single { it.spell == StaffSpell.GALE && it.secondary }
+            (galeScene.to.distance(galeScene.from) > 30.0) shouldBe true
         }
 
         withStaffHarness { h ->
@@ -235,16 +220,18 @@ class StaffSpellArsenalTest : FreeSpec({
             val world = h.paper.addSimpleWorld("tide-splash-stage")
             val tide = h.player("tide-splash-stage", world, StaffSpell.TIDE)
             h.controller.start()
-            h.controller.cast(tide, StaffCastInput.PRIMARY, 0.0)
-            val scene = h.visualPlays.single { it.spell == StaffSpell.TIDE && !it.secondary }
+            h.controller.cast(tide, StaffCastInput.SECONDARY, 0.0)
+            val scene = h.visualPlays.single { it.spell == StaffSpell.TIDE && it.secondary }
             h.scheduler.tick(36)
-            h.movedEffects.count { it.first == scene.id } shouldBe 8
-            verify(exactly = 1) { h.effects.impact(scene.id, any(), any(), STAFF_TIDE_PRIMARY_IMPACT_TICKS) }
-            verify(exactly = 8) { h.effects.synchronize(scene.id, any()) }
+            h.movedEffects.count { it.first == scene.id } shouldBe 19
+            (scene.id in h.removedEffects) shouldBe false
+            verify(exactly = 19) { h.effects.synchronize(scene.id, any()) }
+            h.scheduler.tick(8)
+            (scene.id in h.removedEffects) shouldBe true
         }
     }
 
-    "bone spikes stay visible above the floor and the aimed eruption hits with the spike rise" {
+    "Ossuary primary uses delayed close contact while its alternate eruption rises from the floor" {
         fun stoneFloor(world: org.bukkit.World) {
             for (x in -2..2) for (z in 0..14) world.getBlockAt(x, 63, z).type = Material.STONE
         }
@@ -252,18 +239,16 @@ class StaffSpellArsenalTest : FreeSpec({
             val world = h.paper.addSimpleWorld("ossuary-spikes")
             stoneFloor(world)
             val player = h.player("ossuary-spikes", world, StaffSpell.OSSUARY)
-            val target = h.zombie(world, x = .5, z = 8.0)
+            val target = h.zombie(world, x = .5, z = 4.0)
             h.controller.start()
             h.controller.cast(player, StaffCastInput.PRIMARY, 0.0)
-            h.scheduler.tick(10)
+            h.scheduler.tick(3)
             h.hits shouldBe emptyList()
-            h.scheduler.tick(2)
+            h.scheduler.tick(1)
             h.hits.map { it.uniqueId } shouldBe listOf(target.uniqueId)
             h.scheduler.tick(42)
-            val spikeScenes = h.visualPlays.filter { it.spell == StaffSpell.OSSUARY && !it.secondary }
-            spikeScenes.size shouldBe 6
-            (spikeScenes.maxOf { it.from.z } - spikeScenes.minOf { it.from.z } > 2.5) shouldBe true
             h.hits.map { it.uniqueId } shouldBe listOf(target.uniqueId)
+            h.visualPlays.none { it.spell == StaffSpell.OSSUARY } shouldBe true
         }
         withStaffHarness { h ->
             val world = h.paper.addSimpleWorld("ossuary-eruption")
@@ -279,19 +264,21 @@ class StaffSpellArsenalTest : FreeSpec({
         }
     }
 
-    "prism grows before beams reach targets and honors occlusion" {
+    "Prism alternate beams grow before focus contact and honor occlusion" {
         withStaffHarness(settings = staffSettings(range = 16.0)) { h ->
             val world = h.paper.addSimpleWorld("prism-growth")
             val player = h.player("prism-growth", world, StaffSpell.PRISM)
             val near = h.zombie(world, x = .5, z = 4.0)
             val far = h.zombie(world, x = .5, z = 8.0)
             h.controller.start()
-            h.controller.cast(player, StaffCastInput.PRIMARY, 0.0)
+            h.controller.cast(player, StaffCastInput.SECONDARY, 0.0)
             h.scheduler.tick(10)
             h.hits shouldBe emptyList()
             h.scheduler.tick(14)
-            h.hits.map { it.uniqueId }.toSet() shouldBe setOf(near.uniqueId, far.uniqueId)
-            h.hits.size shouldBe 2
+            h.hits.map { it.uniqueId }.distinct() shouldBe listOf(near.uniqueId)
+            (far in h.hits) shouldBe false
+            h.scheduler.tick(30)
+            h.hits.size shouldBe 1
         }
         withStaffHarness(settings = staffSettings(range = 12.0)) { h ->
             val world = h.paper.addSimpleWorld("prism-wall")
@@ -299,13 +286,13 @@ class StaffSpellArsenalTest : FreeSpec({
             h.zombie(world, x = .5, z = 7.0)
             for (x in -2..2) for (y in 63..68) world.getBlockAt(x, y, 3).type = Material.STONE
             h.controller.start()
-            h.controller.cast(player, StaffCastInput.PRIMARY, 1.0)
+            h.controller.cast(player, StaffCastInput.SECONDARY, 1.0)
             h.scheduler.tick(40)
             h.hits shouldBe emptyList()
         }
     }
 
-    "moving gust, water, and root fronts stop at a one-block ridge while flat fronts reach targets" {
+    "moving Gale and TIDE alternate fronts stop at a one-block ridge while flat fronts reach targets" {
         withStaffHarness { h ->
             fun arena(name: String, spell: StaffSpell, ridge: Boolean, targetZ: Double = 12.0): Pair<org.bukkit.entity.Player, org.bukkit.entity.Zombie> {
                 val world = h.paper.addSimpleWorld(name)
@@ -320,25 +307,20 @@ class StaffSpellArsenalTest : FreeSpec({
             val (flatGale, flatGaleTarget) = arena("gale-flat", StaffSpell.GALE, ridge = false)
             val (ridgeTide, ridgeTideTarget) = arena("tide-ridge", StaffSpell.TIDE, ridge = true)
             val (flatTide, flatTideTarget) = arena("tide-flat", StaffSpell.TIDE, ridge = false)
-            val (ridgeNova, ridgeNovaTarget) = arena("nova-ridge", StaffSpell.NOVA, ridge = true, targetZ = 6.0)
-            val (flatNova, flatNovaTarget) = arena("nova-flat", StaffSpell.NOVA, ridge = false, targetZ = 6.0)
-
             h.controller.start()
             h.controller.cast(ridgeGale, StaffCastInput.SECONDARY, 0.0)
             h.controller.cast(flatGale, StaffCastInput.SECONDARY, 0.0)
             h.controller.cast(ridgeTide, StaffCastInput.SECONDARY, 0.0)
             h.controller.cast(flatTide, StaffCastInput.SECONDARY, 0.0)
-            h.controller.cast(ridgeNova, StaffCastInput.PRIMARY, 0.0)
-            h.controller.cast(flatNova, StaffCastInput.PRIMARY, 0.0)
             h.scheduler.tick(76)
 
             h.hits.map { it.uniqueId }.toSet() shouldBe setOf(
-                flatGaleTarget.uniqueId, flatTideTarget.uniqueId, flatNovaTarget.uniqueId)
-            (h.hits.none { it.uniqueId in setOf(ridgeGaleTarget.uniqueId, ridgeTideTarget.uniqueId, ridgeNovaTarget.uniqueId) }) shouldBe true
+                flatGaleTarget.uniqueId, flatTideTarget.uniqueId)
+            (h.hits.none { it.uniqueId in setOf(ridgeGaleTarget.uniqueId, ridgeTideTarget.uniqueId) }) shouldBe true
         }
     }
 
-    "gust bone and water fronts keep fixed reach and slide over the floor regardless of aim or charge" {
+    "Gale alternate keeps its fixed horizontal reach while close primaries ignore aim and charge" {
         withStaffHarness(settings = staffSettings(range = 48.0)) { h ->
             h.controller.start()
             listOf(StaffSpell.GALE, StaffSpell.OSSUARY, StaffSpell.TIDE).forEach { spell ->
@@ -349,25 +331,24 @@ class StaffSpellArsenalTest : FreeSpec({
                         val player = h.player("${spell.id}-$charge-$pitch", world, spell)
                         player.teleport(player.location.apply { this.pitch = pitch })
                         val near = h.zombie(world, .5, 4.0)
-                        val far = h.zombie(world, .5, if (spell == StaffSpell.OSSUARY) 23.0 else 32.0)
+                        val far = h.zombie(world, .5, if (spell == StaffSpell.GALE) 32.0 else 8.0)
                         h.controller.cast(player, if (spell == StaffSpell.GALE) StaffCastInput.SECONDARY
                             else StaffCastInput.PRIMARY, charge)
                         h.scheduler.tick(54)
-                        if (spell == StaffSpell.TIDE) {
+                        if (spell == StaffSpell.GALE) {
+                            (near in h.hits) shouldBe true
+                            (far in h.hits) shouldBe true
+                        } else {
                             (near in h.hits) shouldBe true
                             (far in h.hits) shouldBe false
-                        } else {
-                            (far in h.hits) shouldBe true
                         }
                         val scenes = h.visualPlays.filter { it.from.world == world }
-                        if (spell != StaffSpell.OSSUARY) {
+                        if (spell == StaffSpell.GALE) {
                             val gust = scenes.single()
                             (kotlin.math.abs(gust.to.z - player.location.z - 36.0) < .01) shouldBe true
                             (kotlin.math.abs(gust.to.y - gust.from.y) < .01) shouldBe true
                         } else {
-                            scenes.size shouldBe 11
-                            scenes.zipWithNext().all { (a, b) -> b.from.z - a.from.z in 1.8..2.0 } shouldBe true
-                            (kotlin.math.abs(scenes.last().from.z - player.location.z - 24.0) < .01) shouldBe true
+                            scenes shouldBe emptyList()
                         }
                     }
                 }
@@ -397,7 +378,7 @@ class StaffSpellArsenalTest : FreeSpec({
             h.zombie(world, x = .5, z = 5.0)
             h.zombie(world, x = 1.0, z = 5.2)
             h.controller.start()
-            h.controller.cast(player, StaffCastInput.PRIMARY, 0.0)
+            h.controller.cast(player, StaffCastInput.SECONDARY, 0.0)
             h.scheduler.tick(40)
             h.hits.size shouldBe 1
         }

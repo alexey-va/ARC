@@ -32,6 +32,7 @@ import ru.arc.staffspells.StaffSpellsModule
 import ru.arc.staffspells.api.ArcStaffSpellService
 import ru.arc.sync.EmSync
 import java.nio.file.Path
+import java.util.logging.Level
 
 class ArcDungeonsPlugin : JavaPlugin() {
     companion object { lateinit var instance: ArcDungeonsPlugin; private set }
@@ -150,48 +151,94 @@ class ArcDungeonsPlugin : JavaPlugin() {
             closeNative()
             return
         }
-        val hook = emHook ?: EMHook()
-        try { hook.reload() } catch (failure: Throwable) {
-            if (emHook == null) hook.close()
+
+        attemptOptionalNativeIntegration(
+            initialize = {
+                // Keep the candidate reachable before reload so rollback owns partial state.
+                val hook = emHook ?: EMHook().also { emHook = it }
+                hook.reload()
+                if (dungeonQol == null) initializeDungeonQol()
+                synchronizeEliteMobs()
+            },
+            rollback = ::closeNative,
+            onFailure = ::logNativeStartupFailure,
+        )
+    }
+
+    private fun initializeDungeonQol() {
+        val sidebar = requireNotNull(server.servicesManager.load(ArcSidebarService::class.java))
+            .register(this, "dungeon", ArcSidebarPriorities.DUNGEON)
+        val qol = try {
+            EMDungeonQol(sidebar = sidebar)
+        } catch (failure: Throwable) {
+            try {
+                sidebar.close()
+            } catch (cleanupFailure: Throwable) {
+                if (cleanupFailure !== failure) failure.addSuppressed(cleanupFailure)
+            }
             throw failure
         }
-        emHook = hook
-        if (dungeonQol == null) {
-            val sidebar = requireNotNull(server.servicesManager.load(ArcSidebarService::class.java))
-                .register(this, "dungeon", ArcSidebarPriorities.DUNGEON)
-            val qol = try { EMDungeonQol(sidebar = sidebar) } catch (failure: Throwable) { sidebar.close(); throw failure }
-            dungeonQol = qol
-            listen(EMListener())
-            listen(qol.teleporter)
-            listen(DungeonCaseRewards)
-            listen(qol)
-            listen(ElitePickupListener())
-            if (server.pluginManager.isPluginEnabled("CMI")) listen(DungeonAdminExtractor())
-            if (server.pluginManager.isPluginEnabled("LootChest")) {
-                listen(LootChestListener(ConfigManager.of(legacyDataPath.resolve("lootchests"), "bosses.yml")))
-            }
-            qol.startAutosaves()
+
+        dungeonQol = qol
+        listen(EMListener())
+        listen(qol.teleporter)
+        listen(DungeonCaseRewards)
+        listen(qol)
+        listen(ElitePickupListener())
+        if (server.pluginManager.isPluginEnabled("CMI")) listen(DungeonAdminExtractor())
+        if (server.pluginManager.isPluginEnabled("LootChest")) {
+            listen(LootChestListener(ConfigManager.of(legacyDataPath.resolve("lootchests"), "bosses.yml")))
         }
+        qol.startAutosaves()
+    }
+
+    private fun synchronizeEliteMobs() {
         val syncEnabled = redisManager != null &&
             ConfigManager.of(legacyDataPath, "modules/misc.yml").bool("sync.em", true)
-        if (syncEnabled && emSync == null) emSync = EmSync(this, serverName).also { it.start() }
+        if (syncEnabled && emSync == null) {
+            EmSync(this, serverName).also {
+                // Keep the candidate reachable so rollback can release a lease if start fails.
+                emSync = it
+                it.start()
+            }
+        }
         if (!syncEnabled) { emSync?.close(); emSync = null }
     }
 
     private fun listen(listener: Listener) {
-        server.pluginManager.registerEvents(listener, this)
         nativeListeners += listener
+        server.pluginManager.registerEvents(listener, this)
     }
 
-    private fun closeNative() {
-        nativeListeners.forEach(HandlerList::unregisterAll)
+    private fun closeNative(): Throwable? {
+        val listeners = nativeListeners.toList()
+        val qol = dungeonQol
+        val hook = emHook
+        val sync = emSync
+
+        // Clear fields before cleanup so every caller sees a consistently detached state,
+        // even if individual close operations fail.
         nativeListeners.clear()
-        dungeonQol?.close()
         dungeonQol = null
-        emHook?.close()
         emHook = null
-        emSync?.close()
         emSync = null
+
+        val actions = mutableListOf<() -> Unit>()
+        listeners.forEach { listener -> actions.add { HandlerList.unregisterAll(listener) } }
+        qol?.let { actions.add { it.close() } }
+        hook?.let { actions.add { it.close() } }
+        sync?.let { actions.add { it.close() } }
+        val failure = closeNativeResources(actions)
+        if (failure != null) logger.log(Level.SEVERE, "One or more EliteMobs resources could not be closed", failure)
+        return failure
+    }
+
+    private fun logNativeStartupFailure(failure: Throwable) {
+        logger.log(
+            Level.SEVERE,
+            "EliteMobs integration is unavailable; ArcDungeons remains enabled and /arc reload will retry",
+            failure,
+        )
     }
 
     override fun onDisable() {
@@ -216,4 +263,40 @@ internal fun moduleStatusesWithLostLootReadiness(
     lostLootReady: Boolean,
 ) = statuses.map { status ->
     if (status.name == LostLootModule.name) status.copy(ready = status.ready && lostLootReady) else status
+}
+
+/** Runs one optional native integration step without allowing it to abort plugin bootstrap/reload. */
+internal fun attemptOptionalNativeIntegration(
+    initialize: () -> Unit,
+    rollback: () -> Throwable?,
+    onFailure: (Throwable) -> Unit,
+): Boolean {
+    try {
+        initialize()
+        return true
+    } catch (failure: Throwable) {
+        val cleanupFailure = try {
+            rollback()
+        } catch (rollbackFailure: Throwable) {
+            rollbackFailure
+        }
+        if (cleanupFailure != null && cleanupFailure !== failure) failure.addSuppressed(cleanupFailure)
+        onFailure(failure)
+        return false
+    }
+}
+
+/** Attempts every native cleanup action and returns failures as one suppressed exception tree. */
+internal fun closeNativeResources(actions: List<() -> Unit>): Throwable? {
+    var firstFailure: Throwable? = null
+    actions.forEach { action ->
+        try {
+            action()
+        } catch (failure: Throwable) {
+            val first = firstFailure
+            if (first == null) firstFailure = failure
+            else if (first !== failure) first.addSuppressed(failure)
+        }
+    }
+    return firstFailure
 }

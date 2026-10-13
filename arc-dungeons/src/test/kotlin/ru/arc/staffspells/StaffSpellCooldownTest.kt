@@ -25,9 +25,9 @@ class StaffSpellCooldownTest : FreeSpec({
         val plain = PlainTextComponentSerializer.plainText()
 
         plain.serialize(config.cooldown(StaffSpell.CHAIN, secondary = true, remaining = 10, total = 20)) shouldBe
-            "Цепь веером 0.5s Shift + ПКМ"
+            "Цепь веером 0.5s Shift + ЛКМ"
         plain.serialize(config.cooldown(StaffSpell.CHAIN, secondary = false, remaining = 0, total = 20)) shouldBe
-            "Цепь готово ПКМ"
+            "Цепь готово ЛКМ"
     }
 
     "ward cooldown names the Shift+LMB ability" {

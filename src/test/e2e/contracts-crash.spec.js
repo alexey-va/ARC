@@ -56,6 +56,18 @@ async function snapshot(player, name, signal) {
   return result;
 }
 
+async function snapshotStagedInventory(player, name, signal) {
+  const deadline = Date.now() + 5000;
+  let last;
+  do {
+    last = await snapshot(player, name, signal);
+    if (Number(last.items) === 2 && Number(last.deskItems) === 2 && Number(last.cursorItems) === 0) return last;
+    if (Date.now() >= deadline) break;
+    await new Promise(resolve => setTimeout(resolve, 100));
+  } while (Date.now() < deadline);
+  throw new Error(`Paper inventory did not settle before the crash boundary; last authoritative snapshot=${JSON.stringify(last)}`);
+}
+
 async function makeOpFresh(player) {
   const since = player.messageBuffer.length;
   await player.makeOp();
@@ -161,19 +173,21 @@ if (enabled) test('contract items, provider payment and journal survive real pro
       await waitUntil(() => countStone(player) === 0, { signal, message: 'Fixture inventory did not clear' });
       await player.giveItem('stone', 4);
       await waitUntil(() => countStone(player) === 4, { signal, message: 'Fixture inventory did not receive four stones' });
-      const beforeArm = player.messageBuffer.length;
-      player.chat(`/contractcrashfixture arm ${phase}`);
-      await expect(player).toHaveReceivedMessage(`CONTRACT_CRASH_ARMED:${phase}`, { since: beforeArm });
       await player.deOp();
       await balance(player, expectedBalance, signal);
       await clickContractDesk(player, signal);
       await offerStoneBatch(player, 2, signal);
       // Capture the settled server-side state without saving it; saving here
       // would mask a missing persistence barrier before the crash boundary.
-      const staged = await snapshot(player, `before_${phase}`, signal);
+      const staged = await snapshotStagedInventory(player, `before_${phase}`, signal);
       assert.equal(Number(staged.items), 2, 'The native inventory remainder must reach the Paper server');
       assert.equal(Number(staged.deskItems), 2, 'The offered batch must be stored before sale');
       assert.equal(Number(staged.cursorItems), 0, 'The native cursor must be empty before sale');
+      await makeOpFresh(player);
+      const beforeArm = player.messageBuffer.length;
+      player.chat(`/contractcrashfixture arm ${phase}`);
+      await expect(player).toHaveReceivedMessage(`CONTRACT_CRASH_ARMED:${phase}`, { since: beforeArm });
+      await player.deOp();
       const phasePayoutMinor = expectedPayoutsMinor[index];
       assert.ok(Number.isSafeInteger(phasePayoutMinor), `No exact batch payout is specified for ${phase}`);
       await waitForCrashDisconnect(player.bot, signal, () =>

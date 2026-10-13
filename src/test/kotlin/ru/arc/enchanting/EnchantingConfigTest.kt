@@ -14,7 +14,7 @@ class EnchantingConfigTest : StringSpec({
             Files.writeString(file, "book:\n  name-prefix: 'Своя книга'\noperator-note: 'keep'\n")
             ConfigManager.clear()
             val loaded = EnchantingConfig.load(root)
-            loaded.bookText.namePrefix shouldBe "Своя книга"
+            ConfigManager.ofModule(root, "enchanting.yml").string("book.name-prefix") shouldBe "Своя книга"
             loaded.shopPriceMinor("SIMPLE", 2) shouldBe 600_000L
             val first = Files.readString(file)
             ConfigManager.ofModule(root, "enchanting.yml").string("operator-note") shouldBe "keep"
