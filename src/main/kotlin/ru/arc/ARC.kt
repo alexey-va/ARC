@@ -48,7 +48,6 @@ import ru.arc.core.modules.BoardModule
 import ru.arc.core.modules.ConfigModule
 import ru.arc.metrics.MetricsModule
 import ru.arc.metrics.SharedServiceMetrics
-import ru.arc.mounts.MountModule
 import ru.arc.parkour.ArcParkourModule
 import ru.arc.core.modules.CooldownModule
 import ru.arc.core.modules.EconomyModule
@@ -68,7 +67,6 @@ import ru.arc.core.modules.StoreModule
 import ru.arc.core.modules.SyncModule
 import ru.arc.core.modules.TreasureModule
 import ru.arc.core.modules.XActionModule
-import ru.arc.contracts.ContractsModule
 import ru.arc.investigation.InvestigationModule
 import ru.arc.hooks.HookRegistry
 import ru.arc.hooks.citizens.ArcNpcHologramModule
@@ -90,15 +88,6 @@ import ru.arc.paper.metrics.PaperArcMetricsProvider
 import ru.arc.paper.api.ArcMetricsService
 import ru.arc.ops.OpsHttpModule
 import ru.arc.onboarding.OnboardingModule
-import ru.arc.origin.OriginSpawnModule
-import ru.arc.origin.OriginPortalsModule
-import ru.arc.origin.OriginDiningModule
-import ru.arc.origin.OriginWorkshopGame
-import ru.arc.origin.OriginFurnitureWorkshopModule
-import ru.arc.origin.OriginTrainingDummyModule
-import ru.arc.origin.OriginWorkshopTablesModule
-import ru.arc.origin.scene.OriginAmbientScenesModule
-import ru.arc.origin.mountyard.OriginMountYardModule
 import ru.arc.paper.chunk.PaperChunkTicketRegistry
 import ru.arc.paper.packet.PaperVisualPacketRuntime
 import ru.arc.restart.RestartModule
@@ -221,7 +210,12 @@ open class ARC : JavaPlugin() {
             logError = { msg, t -> error(msg, t) },
         )
         ModuleRegistry.initAll()
-        if (runtimeProfile == ArcRuntimeProfile.FULL) ru.arc.dungeons.DungeonHostServices.register(this)
+        if (runtimeProfile == ArcRuntimeProfile.FULL) {
+            ru.arc.dungeons.DungeonHostServices.register(this)
+            ru.arc.integrations.mounts.MountHostServices.register(this)
+            ru.arc.integrations.contracts.ContractsHostServices.register(this)
+            ru.arc.integrations.origin.OriginHostServices.register(this)
+        }
         metricsService?.rebind(MetricsModule.registry())
 
         if (runtimeProfile == ArcRuntimeProfile.FULL) {
@@ -319,6 +313,9 @@ open class ARC : JavaPlugin() {
         }
         if (runtimeProfile == ArcRuntimeProfile.FULL) ArcMenus.reload()
         ModuleRegistry.reloadAll()
+        ru.arc.integrations.mounts.mountService()?.reload()
+        ru.arc.integrations.contracts.contractsService()?.reload()
+        ru.arc.integrations.origin.originService()?.reload()
         ru.arc.dungeons.dungeonService()?.reload()
         metricsService?.rebind(MetricsModule.registry())
         baseSidebar?.refresh()
@@ -376,17 +373,8 @@ open class ARC : JavaPlugin() {
             HooksModule,
             NpcChunkTicketModule,
             ArcNpcHologramModule,
-            OriginSpawnModule,
-            OriginPortalsModule,
-            OriginWorkshopTablesModule,
             AiModule,
             EconomyModule,
-            OriginDiningModule,
-            OriginAmbientScenesModule,
-            OriginFurnitureWorkshopModule,
-            OriginWorkshopGame,
-            OriginTrainingDummyModule,
-            OriginMountYardModule,
             // Configuration (priority 30-49)
             ConfigModule,
             MetricsModule,
@@ -407,7 +395,6 @@ open class ARC : JavaPlugin() {
             XActionModule,
             RestartModule,
             StoreModule,
-            ContractsModule,
             InvestigationModule,
             TreasureModule,
             EnchantingModule,
@@ -419,7 +406,6 @@ open class ARC : JavaPlugin() {
             JoinMessagesModule,
             ChatModeModule,
             CrossServerSpyModule,
-            MountModule,
             ArcParkourModule,
             ItemsCatalogModule,
             ItemLoreModule,
@@ -640,13 +626,6 @@ open class ARC : JavaPlugin() {
                 "modules/ops-http.yml",
                 "modules/citizens-chunk-tickets.yml",
                 "modules/npc-holograms.yml",
-                "modules/origin-spawn.yml",
-                "modules/origin-dining.yml",
-                "modules/origin-scenes.yml",
-                "modules/origin-furniture-workshop.yml",
-                "modules/origin-mount-yard.yml",
-                "modules/origin-mount-care.yml",
-                "modules/mount-care-boost.yml",
                 "modules/announce.yml",
                 "modules/scheduled-commands.yml",
                 "modules/restart.yml",
@@ -654,14 +633,12 @@ open class ARC : JavaPlugin() {
                 "modules/command-hide.yml",
                 "modules/chat-mode.yml",
                 "modules/cross-server-spy.yml",
-                "modules/contracts.yml",
                 "modules/investigations.yml",
                 "modules/investigation-cases.yml",
                 "modules/auction.yml",
                 "modules/treasure-hunt.yml",
                 "modules/mobspawn.yml",
                 "modules/teleport-anchors.yml",
-                "modules/mounts.yml",
                 "modules/parkour.yml",
                 "modules/location-pools.yml",
                 "modules/onboarding.yml",
@@ -690,7 +667,6 @@ open class ARC : JavaPlugin() {
                 "guis/defaults.yml",
                 "guis/menus.yml",
                 "guis/board.yml",
-                "guis/contracts.yml",
                 "guis/investigations.yml",
                 "guis/parkour.yml",
                 "guis/scheduled-commands.yml",

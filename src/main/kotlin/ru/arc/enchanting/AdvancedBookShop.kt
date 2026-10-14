@@ -10,7 +10,7 @@ import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import ru.arc.ARC
-import ru.arc.contracts.formatContractMoney
+import ru.arc.contracts.api.ArcContractPresentation.formatMoney as formatContractMoney
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.dungeons.api.ArcBookIdentity.isAdvancedEnchantmentsBook
 import ru.arc.gui.ArcMenus

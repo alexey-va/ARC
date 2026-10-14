@@ -37,6 +37,23 @@ class ExternalProductTelemetryBridgeTest : StringSpec({
         calls shouldBe 1
     }
 
+    "extracted mounts retain the gameplay product signal and deduplicate ride identity" {
+        ExternalProductTelemetryBridge.clearReplayState()
+        var calls = 0
+        val sink: (String, ProductFeature?, ProductOutcome?, ProductAction?) -> Boolean = { _, feature, outcome, action ->
+            calls++
+            feature shouldBe ProductFeature.MOUNTS
+            outcome shouldBe ProductOutcome.MOUNT_RIDE
+            action shouldBe null
+            true
+        }
+        repeat(2) { attempt ->
+            ExternalProductTelemetryBridge.recordForSink(player, "arcmounts", feature = "mounts",
+                outcome = "mount_ride", operationId = "ride:1", sink = sink) shouldBe (attempt == 0)
+        }
+        calls shouldBe 1
+    }
+
     "does not change result when the sink fails" {
         ExternalProductTelemetryBridge.clearReplayState()
         ExternalProductTelemetryBridge.recordForSink(player, "arcranks", outcome = "contract_complete", operationId = "contract:7", sink = { _, _, _, _ -> error("sink") }) shouldBe false

@@ -2,10 +2,10 @@ package ru.arc.commands.arc.subcommands
 
 import org.bukkit.command.CommandSender
 import ru.arc.commands.arc.SubCommand
-import ru.arc.commands.arc.tabComplete
-import ru.arc.origin.OriginSpawnModule
+import ru.arc.integrations.origin.originService
+import ru.arc.origin.api.ArcOriginCommands.CommandId
+import ru.arc.util.TextUtil
 
-/** `/arc auctionpedestal add` places a durable showcase stand on the targeted block. */
 object AuctionPedestalSubCommand : SubCommand {
     override val configKey = "auctionpedestal"
     override val defaultName = "auctionpedestal"
@@ -14,19 +14,17 @@ object AuctionPedestalSubCommand : SubCommand {
     override val defaultUsage = "/arc auctionpedestal add"
     override val defaultPlayerOnly = true
 
+    override fun isAvailable(): Boolean = originService() != null
+
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {
-        val player = requirePlayer(sender) ?: return true
-        if (args.size != 1 || !args[0].equals("add", ignoreCase = true)) {
-            sendUsage(sender)
+        val service = originService()
+        if (service == null) {
+            sender.sendMessage(TextUtil.mm("<red>Сервисы Origin сейчас недоступны."))
             return true
         }
-
-        OriginSpawnModule.addAuctionPedestal(player)?.let { key ->
-            sender.sendMessage(OriginSpawnModule.auctionPedestalMessage(key))
-        }
-        return true
+        return service.execute(CommandId.AUCTION_PEDESTAL, sender, args)
     }
 
     override fun tabComplete(sender: CommandSender, args: Array<String>): List<String>? =
-        if (args.size == 1) listOf("add").tabComplete(args[0]) else null
+        originService()?.tabComplete(CommandId.AUCTION_PEDESTAL, sender, args)
 }

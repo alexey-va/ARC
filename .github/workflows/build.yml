@@ -42,7 +42,7 @@ jobs:
           distribution: temurin
           java-version: "25"
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
-      - run: ./gradlew --no-parallel --build-cache :test :arc-dungeons:test :shadowJar :arc-dungeons:shadowJar
+      - run: ./gradlew --no-parallel --build-cache :test :arc-dungeons:test :shadowJar :arc-dungeons:shadowJar :prepareExtractedPluginArtifacts
       - name: Verify ArcDungeons core consumer contract
         run: python3 .tmp/arc-core-verifier/scripts/verify_consumer_architecture.py arc-dungeons
       - name: Verify ARC and ArcDungeons artifact split
@@ -54,6 +54,9 @@ jobs:
           test "${#arc_jars[@]}" -eq 1 || { echo "Expected exactly one ARC production JAR, got ${#arc_jars[@]}"; exit 1; }
           test "${#dungeons_jars[@]}" -eq 1 || { echo "Expected exactly one ArcDungeons production JAR, got ${#dungeons_jars[@]}"; exit 1; }
           python3 scripts/verify_arc_dungeons_artifact_split.py --arc-jar "${arc_jars[0]}" --dungeons-jar "${dungeons_jars[0]}"
+          python3 scripts/verify_arc_domain_artifact_split.py --name ArcMounts --arc-jar "${arc_jars[0]}" --child-jar build/extracted-plugins/ArcMounts-0.1.0.jar
+          python3 scripts/verify_arc_domain_artifact_split.py --name ArcOrigin --arc-jar "${arc_jars[0]}" --child-jar build/extracted-plugins/ArcOrigin-0.1.0.jar
+          python3 scripts/verify_arc_domain_artifact_split.py --name ArcContracts --arc-jar "${arc_jars[0]}" --child-jar build/extracted-plugins/ArcContracts-0.1.0.jar
       - name: Preserve tested production JARs
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -64,6 +67,9 @@ jobs:
             !build/libs/*-plain.jar
             arc-dungeons/build/libs/ArcDungeons-*.jar
             !arc-dungeons/build/libs/*-plain.jar
+            build/extracted-plugins/ArcMounts-*.jar
+            build/extracted-plugins/ArcOrigin-*.jar
+            build/extracted-plugins/ArcContracts-*.jar
           if-no-files-found: error
 
       - name: Preserve unit test reports
@@ -161,7 +167,7 @@ jobs:
         if: always()
         run: |
           jars=()
-          for jar in build/libs/ARC-*.jar arc-dungeons/build/libs/ArcDungeons-*.jar; do
+          for jar in build/libs/ARC-*.jar arc-dungeons/build/libs/ArcDungeons-*.jar build/extracted-plugins/ArcMounts-*.jar build/extracted-plugins/ArcOrigin-*.jar build/extracted-plugins/ArcContracts-*.jar; do
             if [[ -f "$jar" && "$jar" != *-plain.jar ]]; then jars+=("$jar"); fi
           done
           if ((${#jars[@]})); then

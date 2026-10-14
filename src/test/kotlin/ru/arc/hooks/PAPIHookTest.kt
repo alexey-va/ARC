@@ -4,7 +4,7 @@ import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import ru.arc.KotestTestBase
-import ru.arc.mounts.ActiveMountSnapshot
+import ru.arc.mounts.api.ArcMountService.ActiveMountSnapshot
 import java.util.UUID
 
 class PAPIHookTest :

@@ -10,7 +10,7 @@ import ru.arc.Portal
 import ru.arc.PortalData
 import ru.arc.audit.AuditConfig
 import ru.arc.common.ServerLocation
-import ru.arc.contracts.ContractsManager
+import ru.arc.integrations.contracts.contractsService
 import ru.arc.dungeons.api.*
 import ru.arc.enchanting.admitCreativeBook
 import ru.arc.enchanting.applyBookInInventory
@@ -74,17 +74,17 @@ object DungeonHostServices {
         })
         register(ArcDungeonContracts::class.java, object : ArcDungeonContracts {
             override fun authorizeInstance(blueprintWorld: String, instanceWorld: String) =
-                ArcDungeonContracts.Admission.valueOf(ContractsManager.authorizeSeasonDungeonInstance(blueprintWorld, instanceWorld).name)
-            override fun cancelInstance(instanceWorld: String) { ContractsManager.cancelAuthorizedSeasonDungeonInstance(instanceWorld) }
-            override fun playerAuthorized(instanceWorld: String, player: UUID) = ContractsManager.seasonDungeonPlayerAuthorized(instanceWorld, player)
-            override fun runId(instanceWorld: String) = ContractsManager.seasonDungeonRunAuthorization(instanceWorld)?.runId
+                ArcDungeonContracts.Admission.valueOf(contractsService()?.authorizeInstance(blueprintWorld, instanceWorld)?.name ?: "DENIED")
+            override fun cancelInstance(instanceWorld: String) { contractsService()?.cancelInstance(instanceWorld) }
+            override fun playerAuthorized(instanceWorld: String, player: UUID) = contractsService()?.playerAuthorized(instanceWorld, player)
+            override fun runId(instanceWorld: String) = contractsService()?.runId(instanceWorld)
             override fun started(runId: String, world: String, participants: Set<String>, instanceWorld: String) {
-                ContractsManager.observeDungeonStarted(runId, world, participants, instanceWorld)
+                contractsService()?.started(runId, world, participants, instanceWorld)
             }
             override fun completed(runId: String, world: String, participants: Set<String>, instanceWorld: String) {
-                ContractsManager.observeDungeonCompleted(runId, world, participants, instanceWorld)
+                contractsService()?.completed(runId, world, participants, instanceWorld)
             }
-            override fun resumeRewards(player: UUID) { ContractsManager.resumeSeasonDungeonRewards(player) }
+            override fun resumeRewards(player: UUID) { contractsService()?.resumeRewards(player) }
         })
     }
 }

@@ -3,7 +3,7 @@ package ru.arc.investigation
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import ru.arc.ARC
-import ru.arc.contracts.NpcContractsGui
+import ru.arc.integrations.contracts.contractsService
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.PluginModule
 import ru.arc.util.Logging.info
@@ -267,7 +267,7 @@ object InvestigationModule : PluginModule {
 
     fun openContracts(player: Player) {
         val currentConfig = config ?: return unavailable(player)
-        NpcContractsGui.openList(player, currentConfig.contractGroup)
+        contractsService()?.openList(player, currentConfig.contractGroup)
     }
 
     fun openCaseFile(player: Player, transactionId: String) {

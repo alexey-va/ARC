@@ -7,6 +7,14 @@ import org.bukkit.plugin.Plugin
 import org.bukkit.plugin.java.JavaPlugin
 import ru.arc.dungeons.api.ArcDungeonConfiguration
 import ru.arc.dungeons.api.ArcDungeonsService
+import ru.arc.mounts.api.ArcMountService
+import ru.arc.mounts.api.ArcMountConfiguration
+import ru.arc.mounts.api.ArcMountEconomy
+import ru.arc.origin.api.ArcOriginCommands
+import ru.arc.origin.api.ArcOriginConfiguration
+import ru.arc.contracts.api.ArcContractsService
+import ru.arc.contracts.api.ArcContractsHostConfiguration
+import ru.arc.contracts.api.ResourceContractCommittedEvent
 
 /** CI-only consumer that verifies the real Paper service and classloader boundary. */
 class ArcDungeonsE2eFixturePlugin : JavaPlugin(), CommandExecutor {
@@ -21,6 +29,28 @@ class ArcDungeonsE2eFixturePlugin : JavaPlugin(), CommandExecutor {
         val arc = requireEnabledPlugin("ARC")
         val dungeons = requireEnabledPlugin("ArcDungeons") as? JavaPlugin
             ?: error("ArcDungeons must be a JavaPlugin")
+        val mounts = requireEnabledPlugin("ArcMounts") as JavaPlugin
+        check(ArcMountService::class.java.classLoader === arc.javaClass.classLoader)
+        check(ArcMountConfiguration::class.java.classLoader === arc.javaClass.classLoader)
+        check(ArcMountEconomy::class.java.classLoader === arc.javaClass.classLoader)
+        val mountService = requireNotNull(server.servicesManager.load(ArcMountService::class.java))
+        check(mountService.javaClass.classLoader === mounts.javaClass.classLoader)
+        val mountConfig = requireNotNull(server.servicesManager.load(ArcMountConfiguration::class.java))
+        check(!mountConfig.sharedRedisAvailable())
+        check(mountService.purchaseJournalSchema() == 1)
+        check(requireNotNull(mounts.getCommand("mount")).plugin === mounts)
+        val origin = requireEnabledPlugin("ArcOrigin")
+        val contracts = requireEnabledPlugin("ArcContracts")
+        for (type in listOf(ArcOriginCommands::class.java, ArcOriginConfiguration::class.java,
+            ArcContractsService::class.java, ArcContractsHostConfiguration::class.java, ResourceContractCommittedEvent::class.java)) {
+            check(type.classLoader === arc.javaClass.classLoader) { "${type.name} must belong to ARC's API classloader" }
+        }
+        val originService = requireNotNull(server.servicesManager.load(ArcOriginCommands::class.java))
+        check(originService.javaClass.classLoader === origin.javaClass.classLoader)
+        val contractsService = requireNotNull(server.servicesManager.load(ArcContractsService::class.java))
+        check(contractsService.javaClass.classLoader === contracts.javaClass.classLoader)
+        check(!requireNotNull(server.servicesManager.load(ArcOriginConfiguration::class.java)).sharedRedisAvailable())
+        check(!requireNotNull(server.servicesManager.load(ArcContractsHostConfiguration::class.java)).sharedRedisAvailable())
         check(server.pluginManager.getPlugin("EliteMobs") == null) {
             "This E2E profile must exercise ArcDungeons without EliteMobs"
         }

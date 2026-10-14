@@ -2,11 +2,10 @@ package ru.arc.commands.arc.subcommands
 
 import org.bukkit.command.CommandSender
 import ru.arc.commands.arc.SubCommand
-import ru.arc.commands.arc.player
-import ru.arc.commands.arc.tabComplete
-import ru.arc.worldcontent.BreweryTableDialogs
+import ru.arc.integrations.origin.originService
+import ru.arc.origin.api.ArcOriginCommands.CommandId
+import ru.arc.util.TextUtil
 
-/** Public entry point for seated dining dialogs in Origin. */
 object BrewerySubCommand : SubCommand {
     override val configKey = "brewery"
     override val defaultPermission: String? = null
@@ -14,25 +13,17 @@ object BrewerySubCommand : SubCommand {
     override val defaultUsage = "/arc brewery order [food|drinks|courtyard|restaurant]"
     override val defaultPlayerOnly = true
 
+    override fun isAvailable(): Boolean = originService() != null
+
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {
-        val player = sender.player ?: return true
-        if (args.isEmpty() || args.size > 2 || !args[0].equals("order", ignoreCase = true)) {
-            sendUsage(player)
+        val service = originService()
+        if (service == null) {
+            sender.sendMessage(TextUtil.mm("<red>Сервисы Origin сейчас недоступны."))
             return true
         }
-        val menu = if (args.size == 1) BreweryTableDialogs.Menu.FOOD else BreweryTableDialogs.Menu.parse(args[1])
-        if (menu == null) {
-            sendUsage(player)
-            return true
-        }
-        BreweryTableDialogs.openOrder(player, menu)
-        return true
+        return service.execute(CommandId.BREWERY, sender, args)
     }
 
     override fun tabComplete(sender: CommandSender, args: Array<String>): List<String>? =
-        when (args.size) {
-            1 -> listOf("order").tabComplete(args[0])
-            2 -> BreweryTableDialogs.Menu.entries.map { it.id }.tabComplete(args[1])
-            else -> emptyList()
-        }
+        originService()?.tabComplete(CommandId.BREWERY, sender, args)
 }

@@ -10,8 +10,7 @@ import ru.arc.board.BoardManager
 import ru.arc.board.ContractBoardCard
 import ru.arc.board.ContractBoardCards
 import ru.arc.board.ContractBoardTelemetry
-import ru.arc.contracts.ContractOriginGate
-import ru.arc.contracts.NpcContractsGui
+import ru.arc.integrations.contracts.contractsService
 import ru.arc.board.money
 import ru.arc.config.BoardConfig
 import ru.arc.config.Config
@@ -85,11 +84,11 @@ object BoardGuiFactory {
                 "growth" to Component.text(card.priceGrowth),
                 "budget" to Component.text(money(card.remainingBudgetMinor)),
                 "ends" to Component.text(card.endsAt),
-                "action" to card.action(ContractOriginGate.canSubmit(player, view.group)),
+                "action" to card.action((contractsService()?.canSubmit(player, view.group) == true)),
             ))).withType(card.material)
             ArcMenus.entry(item) { clicker ->
                 ContractBoardTelemetry.recordInteraction(view.id, "open_gui")
-                NpcContractsGui.openDetail(clicker, view.group, view.id)
+                contractsService()?.openDetail(clicker, view.group, view.id)
             }
         }
     }

@@ -8,7 +8,7 @@ import java.util.UUID
 internal object ExternalProductTelemetryBridge {
     private const val MAX_OPERATION_ID = 80
     private const val DEDUPE_TTL_MILLIS = 24 * 60 * 60 * 1_000L
-    private val acceptedSources = setOf("arcecojobs", "arcfarms", "arcvotes", "arcranks", "arcbuilder", "arcduels", "arcevents", "arcgiveaways", "trails")
+    private val acceptedSources = setOf("arcecojobs", "arcfarms", "arcvotes", "arcranks", "arcbuilder", "arcduels", "arcevents", "arcgiveaways", "arcmounts", "arccontracts", "trails")
     private val operationPattern = Regex("[A-Za-z0-9_.:-]{1,$MAX_OPERATION_ID}")
     private val rawEventOperationPattern = Regex("[A-Za-z0-9_.:-]{1,256}")
 

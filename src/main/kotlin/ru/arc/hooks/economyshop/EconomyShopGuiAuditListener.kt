@@ -25,7 +25,7 @@ import ru.arc.audit.EconomySource
 import ru.arc.audit.Type
 import ru.arc.audit.autosell.AutoSellAuditModule
 import ru.arc.hooks.HookRegistry
-import ru.arc.contracts.PaperSeasonTrophyItems
+import ru.arc.contracts.api.ArcContractTrophyMarkers
 import java.util.UUID
 import kotlin.math.abs
 
@@ -47,7 +47,7 @@ internal class EconomyShopGuiAuditListener(
             }
         if (saleMaterials.isEmpty()) return
         if (event.player.inventory.storageContents.any { stack ->
-                stack?.type in saleMaterials && PaperSeasonTrophyItems.isBoundTrophy(stack)
+                stack?.type in saleMaterials && ArcContractTrophyMarkers.isBound(stack)
             }
         ) {
             event.isCancelled = true

@@ -3,7 +3,8 @@ package ru.arc.ops
 import ru.arc.audit.AuditManager
 import ru.arc.audit.autosell.AutoSellAuditModule
 import ru.arc.audit.bank.BankAuditModule
-import ru.arc.contracts.ContractsManager
+import ru.arc.integrations.contracts.contractsService
+import com.google.gson.JsonParser
 import ru.arc.hooks.HookRegistry
 import java.util.concurrent.TimeUnit
 
@@ -47,7 +48,8 @@ object OpsEconomyAuditHandlers {
             "source" to "Retained Redis arc.stock_players and arc.stocks; no reads or writes by ARC",
             "scope" to "Historical trading balances and positions require settlement; liability is unknown, not zero",
         )
-        result["contractsAudit"] = ContractsManager.summary()
+        result["contractsAudit"] = contractsService()?.auditSnapshotJson()?.let(JsonParser::parseString)
+            ?: linkedMapOf("status" to "unavailable", "complete" to false)
         val hook = HookRegistry.redisEcoHook
         @Suppress("UNCHECKED_CAST")
         val bankTopBalances =

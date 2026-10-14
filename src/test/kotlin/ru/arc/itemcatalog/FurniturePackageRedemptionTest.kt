@@ -18,7 +18,7 @@ import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
 import ru.arc.core.Tasks
 import ru.arc.core.TestTaskScheduler
-import ru.arc.mounts.MountWallet
+import ru.arc.economy.CurrencyWallet
 import ru.arc.onetime.OneTimeUseAbandonResult
 import ru.arc.onetime.OneTimeUseClaim
 import ru.arc.onetime.OneTimeUseClaimRequest
@@ -49,7 +49,7 @@ class FurniturePackageRedemptionTest : StringSpec({
                         maxRolls = 12,
                     )
                     val archive = FrozenPhysicalRewards(root)
-                    val rewards = CatalogPhysicalRewards(settings, mockk<MountWallet>(relaxed = true), archive)
+                    val rewards = CatalogPhysicalRewards(settings, mockk<CurrencyWallet>(relaxed = true), archive)
                     val entry = settings.categories.single().entries.single()
                     rewards.materialization(entry) shouldBe null
                     persistPhysicalArchivesForTest(rewards) shouldBe true
@@ -120,7 +120,7 @@ class FurniturePackageRedemptionTest : StringSpec({
                 try {
                     val settings = packageSettings(listOf(ITEM_ID), minRolls = 8, maxRolls = 12)
                     val archive = FrozenPhysicalRewards(root)
-                    val rewards = CatalogPhysicalRewards(settings, mockk<MountWallet>(relaxed = true), archive)
+                    val rewards = CatalogPhysicalRewards(settings, mockk<CurrencyWallet>(relaxed = true), archive)
                     persistPhysicalArchivesForTest(rewards) shouldBe true
                     val materialization = checkNotNull(rewards.materialization(settings.categories.single().entries.single()))
                     val spec = checkNotNull(rewards.resolve(materialization.sourceKey))

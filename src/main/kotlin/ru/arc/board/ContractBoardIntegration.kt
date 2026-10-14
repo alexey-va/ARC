@@ -2,12 +2,11 @@ package ru.arc.board
 
 import net.kyori.adventure.text.Component
 import org.bukkit.Material
-import ru.arc.contracts.ContractsManager
-import ru.arc.contracts.ContractsMode
-import ru.arc.contracts.ResourceContractView
-import ru.arc.contracts.formatContractDeadline
-import ru.arc.contracts.contractPriceGrowth
-import ru.arc.contracts.PaperContractItems
+import ru.arc.integrations.contracts.contractsService
+import ru.arc.contracts.api.ArcContractsService.ContractMode as ContractsMode
+import ru.arc.contracts.api.ArcContractsService.ContractView as ResourceContractView
+import ru.arc.contracts.api.ArcContractPresentation.formatDeadline as formatContractDeadline
+import ru.arc.contracts.api.ArcContractPresentation.priceGrowth as contractPriceGrowth
 import ru.arc.config.BoardConfig
 import ru.arc.config.contractAdvertiserName
 import ru.arc.metrics.MetricsModule
@@ -24,7 +23,7 @@ import java.util.concurrent.atomic.AtomicLong
  * These cards are never persisted as player board entries, so they cannot be
  * rated, reported, edited, or expired by BoardManager. Eligible NPC advertisements
  * share the existing announcement rotation without publishing paid player entries.
- * ContractsManager remains their only source of truth.
+ * ArcContracts remains their only source of truth.
  */
 internal sealed interface ContractBoardCard {
     data class Order(
@@ -108,16 +107,14 @@ internal sealed interface ContractBoardCard {
 
 internal object ContractBoardCards {
     fun current(): List<ContractBoardCard> = runCatching {
-        val mode = ContractsManager.mode()
-        val summary = ContractsManager.summary()
-        val weeklyBudgetMinor = summary["serverWeeklyBudgetMinor"] as? Long ?: 0L
+        val snapshot = contractsService()?.boardSnapshot() ?: return@runCatching emptyList()
         build(
-            views = ContractsManager.currentViews(),
-            mode = mode,
-            submissionsEnabled = ContractsManager.submissionsEnabled(),
-            weeklyBudgetMinor = weeklyBudgetMinor,
+            views = snapshot.contracts,
+            mode = snapshot.mode,
+            submissionsEnabled = snapshot.submissionsEnabled,
+            weeklyBudgetMinor = snapshot.weeklyBudgetMinor,
             minimumPremiumPercent = BoardConfig.contractMinimumPremiumPercent,
-            remainingWeeklyBudgetMinor = summary["remainingWeeklyBudgetMinor"] as? Long ?: 0L,
+            remainingWeeklyBudgetMinor = snapshot.remainingWeeklyBudgetMinor,
             advertiser = BoardConfig::contractAdvertiser,
         )
     }.getOrElse {
@@ -242,7 +239,7 @@ internal object ContractBoardTelemetry {
 }
 
 internal fun materialFor(itemKey: String): Material {
-    return PaperContractItems.material(itemKey) ?: Material.PAPER
+    return contractsService()?.itemMaterial(itemKey) ?: Material.PAPER
 }
 
 internal fun money(minor: Long): String = "${minor / 100}.${(minor % 100).toString().padStart(2, '0')}"

@@ -19,10 +19,12 @@ import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
-import ru.arc.mounts.MountMoneyEvidence
-import ru.arc.mounts.MountModule
-import ru.arc.mounts.MountWallet
-import ru.arc.mounts.RedisEconomyMountWallet
+import ru.arc.economy.CurrencyMoneyEvidence
+import ru.arc.mounts.api.ArcMountService
+import org.bukkit.plugin.ServicePriority
+import java.util.Optional
+import ru.arc.economy.CurrencyWallet
+import ru.arc.economy.RedisEconomyWallet
 import ru.arc.hooks.RedisEcoHook
 import ru.arc.treasure.core.Treasure
 import ru.arc.treasure.core.Treasures
@@ -106,12 +108,12 @@ class CatalogPhysicalRewardsTest : StringSpec({
         val playerId = UUID.randomUUID()
         val operationId = UUID.randomUUID()
         every { player.uniqueId } returns playerId
-        val wallet = mockk<MountWallet>()
+        val wallet = mockk<CurrencyWallet>()
         every { wallet.walletForCurrency("vault") } returns wallet
         every { wallet.available } returns true
         every { wallet.balanceMinor(playerId) } returns 700L
         every { wallet.deposit(playerId, 12346L, "arc-reward:$operationId", 700L) } returns
-            MountMoneyEvidence(true, true, 13046L)
+            CurrencyMoneyEvidence(true, true, 13046L)
         val service = CatalogPhysicalRewards(RewardCatalogSettings(false, "test", emptyList(), RewardCatalogMessages.DEFAULT), wallet)
         mockkObject(TreasureConfig.DefaultMessages)
         mockkStatic(TextUtil::class)
@@ -122,15 +124,15 @@ class CatalogPhysicalRewardsTest : StringSpec({
             verify(exactly = 1) { player.sendMessage(Component.text("paid ${"%.2f".format(123.46)} coins")) }
 
             every { wallet.deposit(playerId, 12346L, "arc-reward:$operationId", 700L) } returns
-                MountMoneyEvidence(true, true, 13045L)
+                CurrencyMoneyEvidence(true, true, 13045L)
             (service.deposit(player, "vault", 123.456, operationId) is PhysicalRewardOutcome.Uncertain) shouldBe true
             every { wallet.deposit(playerId, 12346L, "arc-reward:$operationId", 700L) } returns
-                MountMoneyEvidence(false, false, 700L, "provider_unavailable")
+                CurrencyMoneyEvidence(false, false, 700L, "provider_unavailable")
             (service.deposit(player, "vault", 123.456, operationId) is PhysicalRewardOutcome.Rejected) shouldBe true
             verify(exactly = 1) { player.sendMessage(any<Component>()) }
 
             every { wallet.deposit(playerId, 12346L, "arc-reward:$operationId", 700L) } returns
-                MountMoneyEvidence(true, true, 13046L)
+                CurrencyMoneyEvidence(true, true, 13046L)
             every { player.sendMessage(any<Component>()) } throws IllegalStateException("disconnected")
             service.deposit(player, "vault", 123.456, operationId) shouldBe PhysicalRewardOutcome.Applied
         } finally {
@@ -141,40 +143,40 @@ class CatalogPhysicalRewardsTest : StringSpec({
 
     "catalog does not instantiate the optional RedisEconomy adapter without its hook" {
         val previousHook = HookRegistry.redisEcoHook
-        mockkConstructor(RedisEconomyMountWallet::class)
+        mockkConstructor(RedisEconomyWallet::class)
         try {
             HookRegistry.redisEcoHook = null
-            every { anyConstructed<RedisEconomyMountWallet>().walletForCurrency("vault") } returns null
+            every { anyConstructed<RedisEconomyWallet>().walletForCurrency("vault") } returns null
 
             val service = CatalogPhysicalRewards(
                 RewardCatalogSettings(false, "test", emptyList(), RewardCatalogMessages.DEFAULT),
             )
             (service.deposit(mockk(), "vault", 1.0, UUID.randomUUID()) is PhysicalRewardOutcome.Rejected) shouldBe true
 
-            verify(exactly = 0) { anyConstructed<RedisEconomyMountWallet>().walletForCurrency("vault") }
+            verify(exactly = 0) { anyConstructed<RedisEconomyWallet>().walletForCurrency("vault") }
         } finally {
             HookRegistry.redisEcoHook = previousHook
-            unmockkConstructor(RedisEconomyMountWallet::class)
+            unmockkConstructor(RedisEconomyWallet::class)
         }
     }
 
     "catalog resolves a RedisEconomy hook that becomes available after construction" {
         val previousHook = HookRegistry.redisEcoHook
-        mockkConstructor(RedisEconomyMountWallet::class)
+        mockkConstructor(RedisEconomyWallet::class)
         try {
             HookRegistry.redisEcoHook = null
             val service = CatalogPhysicalRewards(
                 RewardCatalogSettings(false, "test", emptyList(), RewardCatalogMessages.DEFAULT),
             )
             HookRegistry.redisEcoHook = RedisEcoHook { null }
-            every { anyConstructed<RedisEconomyMountWallet>().walletForCurrency("vault") } returns null
+            every { anyConstructed<RedisEconomyWallet>().walletForCurrency("vault") } returns null
 
             (service.deposit(mockk(), "vault", 1.0, UUID.randomUUID()) is PhysicalRewardOutcome.Rejected) shouldBe true
 
-            verify(exactly = 1) { anyConstructed<RedisEconomyMountWallet>().walletForCurrency("vault") }
+            verify(exactly = 1) { anyConstructed<RedisEconomyWallet>().walletForCurrency("vault") }
         } finally {
             HookRegistry.redisEcoHook = previousHook
-            unmockkConstructor(RedisEconomyMountWallet::class)
+            unmockkConstructor(RedisEconomyWallet::class)
         }
     }
 
@@ -189,21 +191,21 @@ class CatalogPhysicalRewardsTest : StringSpec({
         val operationId = UUID.randomUUID()
         val player = mockk<Player>()
         every { player.uniqueId } returns playerId
-        val wallet = mockk<MountWallet>()
-        val tokens = mockk<MountWallet>()
+        val wallet = mockk<CurrencyWallet>()
+        val tokens = mockk<CurrencyWallet>()
         every { wallet.walletForCurrency("tokens") } returns tokens
         every { tokens.available } returns true
         every { tokens.balanceMinor(playerId) } returns 700L
-        every { tokens.deposit(playerId, 300L, "arc-reward:$operationId", 700L) } returns MountMoneyEvidence(true, true, 1000L)
+        every { tokens.deposit(playerId, 300L, "arc-reward:$operationId", 700L) } returns CurrencyMoneyEvidence(true, true, 1000L)
         val service = CatalogPhysicalRewards(RewardCatalogSettings(false, "test", emptyList(), RewardCatalogMessages.DEFAULT), wallet)
         service.deposit(player, "tokens", 3.0, operationId) shouldBe PhysicalRewardOutcome.Applied
         verify(exactly = 0) { wallet.deposit(any(), any(), any(), any()) }
         verify(exactly = 1) { tokens.deposit(playerId, 300L, "arc-reward:$operationId", 700L) }
 
-        every { tokens.deposit(playerId, 300L, "arc-reward:$operationId", 700L) } returns MountMoneyEvidence(null, true, null, "provider_threw")
+        every { tokens.deposit(playerId, 300L, "arc-reward:$operationId", 700L) } returns CurrencyMoneyEvidence(null, true, null, "provider_threw")
         (service.deposit(player, "tokens", 3.0, operationId) is PhysicalRewardOutcome.Uncertain) shouldBe true
 
-        every { tokens.deposit(playerId, 300L, "arc-reward:$operationId", 700L) } returns MountMoneyEvidence(false, false, 700L, "provider_unavailable")
+        every { tokens.deposit(playerId, 300L, "arc-reward:$operationId", 700L) } returns CurrencyMoneyEvidence(false, false, 700L, "provider_unavailable")
         (service.deposit(player, "tokens", 3.0, operationId) is PhysicalRewardOutcome.Rejected) shouldBe true
     }
 
@@ -424,13 +426,15 @@ class CatalogPhysicalRewardsTest : StringSpec({
     }
 
     "a late optional provider is captured without delaying healthy vouchers or republishing them" {
-        MockBukkitTestRuntime.open().use {
+        MockBukkitTestRuntime.open().use { paper ->
             val root = Files.createTempDirectory("arc-catalog-provider-retry")
             var lateProviderAvailable = false
-            mockkObject(MountModule)
-            every { MountModule.rewardPreview(any()) } answers {
+            val provider = mockk<ArcMountService>()
+            val plugin = paper.createSimplePlugin("ArcMounts")
+            paper.server.servicesManager.register(ArcMountService::class.java, provider, plugin, ServicePriority.Normal)
+            every { provider.rewardPreview(any()) } answers {
                 val id = firstArg<String>()
-                if (id == "late" && !lateProviderAvailable) null else ItemStack(Material.SADDLE)
+                if (id == "late" && !lateProviderAvailable) Optional.empty() else Optional.of(ItemStack(Material.SADDLE))
             }
             try {
                 fun mountEntry(id: String) = RewardCatalogEntry(
@@ -486,7 +490,7 @@ class CatalogPhysicalRewardsTest : StringSpec({
                 publishedFingerprints.size shouldBe 2
                 publishedFingerprints.distinct().size shouldBe 2
             } finally {
-                unmockkObject(MountModule)
+                paper.server.servicesManager.unregisterAll(plugin)
                 Files.walk(root).use { paths -> paths.sorted(Comparator.reverseOrder()).forEach(Files::deleteIfExists) }
             }
         }

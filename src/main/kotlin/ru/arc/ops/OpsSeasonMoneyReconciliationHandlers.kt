@@ -1,23 +1,23 @@
 package ru.arc.ops
 
 import com.google.gson.JsonObject
-import ru.arc.contracts.ContractsManager
-import ru.arc.contracts.SeasonMoneyJournalRecord
-import ru.arc.contracts.SeasonMoneyReconciliationApplyResult
-import ru.arc.contracts.SeasonMoneyReconciliationPreview
-import ru.arc.contracts.SeasonMoneyReconciliationRequest
-import ru.arc.contracts.SeasonMoneyReconciliationResolution
+import ru.arc.integrations.contracts.requireContractsService
+import ru.arc.contracts.api.ArcContractsService.SeasonMoneyReconciliationRecord as SeasonMoneyJournalRecord
+import ru.arc.contracts.api.ArcContractsService.SeasonMoneyReconciliationResult as SeasonMoneyReconciliationApplyResult
+import ru.arc.contracts.api.ArcContractsService.SeasonMoneyReconciliationPreview as SeasonMoneyReconciliationPreview
+import ru.arc.contracts.api.ArcContractsService.SeasonMoneyReconciliationRequest as SeasonMoneyReconciliationRequest
+import ru.arc.contracts.api.ArcContractsService.SeasonMoneyResolution as SeasonMoneyReconciliationResolution
 
 object OpsSeasonMoneyReconciliationHandlers {
     fun list(limit: Int): Map<String, Any?> =
         linkedMapOf(
             "ok" to true,
-            "leader" to ContractsManager.isLeader(),
-            "records" to ContractsManager.seasonMoneyReconciliationRecords(limit).map(::recordView),
+            "leader" to requireContractsService().boardSnapshot().leader,
+            "records" to requireContractsService().seasonMoneyReconciliations(limit).map(::recordView),
         )
 
     fun get(actionId: String): Map<String, Any?> {
-        val record = ContractsManager.seasonMoneyReconciliationRecord(actionId)
+        val record = requireContractsService().seasonMoneyReconciliation(actionId)
             ?: throw NoSuchElementException("Season money action not found")
         return linkedMapOf("ok" to true, "record" to recordView(record))
     }
@@ -27,7 +27,7 @@ object OpsSeasonMoneyReconciliationHandlers {
         return linkedMapOf(
             "ok" to true,
             "preview" to true,
-            "reconciliation" to previewView(ContractsManager.previewSeasonMoneyReconciliation(request)),
+            "reconciliation" to previewView(requireContractsService().previewSeasonMoneyReconciliation(request)),
         )
     }
 
@@ -35,7 +35,7 @@ object OpsSeasonMoneyReconciliationHandlers {
         val request = parseRequest(body, apply = true)
         val reviewDigest = requiredString(body, "reviewDigest")
         require(SHA256_PATTERN.matches(reviewDigest)) { "reviewDigest must be a lowercase SHA-256" }
-        return applyView(ContractsManager.applySeasonMoneyReconciliation(request, reviewDigest))
+        return applyView(requireContractsService().applySeasonMoneyReconciliation(request, reviewDigest))
     }
 
     private fun parseRequest(
@@ -44,57 +44,57 @@ object OpsSeasonMoneyReconciliationHandlers {
     ): SeasonMoneyReconciliationRequest {
         requireOnly(body, if (apply) APPLY_FIELDS else PREVIEW_FIELDS)
         val resolution =
-            SeasonMoneyReconciliationResolution.entries.firstOrNull {
-                it.label == requiredString(body, "resolution").lowercase()
+            SeasonMoneyReconciliationResolution.values().firstOrNull {
+                it.name.lowercase() == requiredString(body, "resolution").lowercase()
             } ?: throw IllegalArgumentException("Unknown season money reconciliation resolution")
         return SeasonMoneyReconciliationRequest(
-            actionId = requiredString(body, "actionId"),
-            expectedRevision = requiredLong(body, "expectedRevision"),
-            resolution = resolution,
-            operatorId = requiredString(body, "operatorId"),
-            operatorEvidence = requiredString(body, "operatorEvidence"),
-            idempotencyKey = requiredString(body, "idempotencyKey"),
-            providerHistoryCheckedAt = requiredLong(body, "providerHistoryCheckedAt"),
-            providerBalanceAfterMinor = requiredLong(body, "providerBalanceAfterMinor"),
-            providerTransactionId = optionalString(body, "providerTransactionId"),
-            providerTransactionReason = optionalString(body, "providerTransactionReason"),
-        ).validated()
+            requiredString(body, "actionId"),
+            requiredLong(body, "expectedRevision"),
+            resolution,
+            requiredString(body, "operatorId"),
+            requiredString(body, "operatorEvidence"),
+            requiredString(body, "idempotencyKey"),
+            requiredLong(body, "providerHistoryCheckedAt"),
+            requiredLong(body, "providerBalanceAfterMinor"),
+            optionalString(body, "providerTransactionId"),
+            optionalString(body, "providerTransactionReason"),
+        )
     }
 
     private fun recordView(record: SeasonMoneyJournalRecord): Map<String, Any?> =
         linkedMapOf(
             "actionId" to record.actionId,
             "seasonId" to record.seasonId,
-            "kind" to record.kind.label,
+            "kind" to record.kind,
             "targetId" to record.targetId,
             "playerId" to record.playerId,
             "amountMinor" to record.amountMinor,
             "withdrawalReason" to record.withdrawalReason,
-            "status" to record.status.label,
+            "status" to record.status,
             "revision" to record.revision,
             "updatedAt" to record.updatedAt,
-            "reviewFromStatus" to record.reviewFromStatus?.label,
-            "reviewReason" to record.reviewReason?.label,
+            "reviewFromStatus" to record.reviewFromStatus,
+            "reviewReason" to record.reviewReason,
             "reviewEvidence" to record.reviewEvidence,
             "balanceBeforeMinor" to record.balanceBeforeMinor,
             "balanceAfterMinor" to record.balanceAfterMinor,
             "providerTransactionId" to record.providerTransactionId,
-            "reconciliation" to record.reconciliation?.let {
+            "reconciliation" to record.reconciliationResolution?.let {
                 linkedMapOf(
-                    "resolution" to it.resolution.label,
-                    "evidenceKind" to it.evidenceKind.label,
-                    "operatorId" to it.operatorId,
-                    "operatorEvidence" to it.operatorEvidence,
-                    "idempotencyKey" to it.idempotencyKey,
-                    "reviewDigest" to it.reviewDigest,
-                    "reviewedRevision" to it.reviewedRevision,
-                    "reviewFromStatus" to it.reviewFromStatus.label,
-                    "reviewReason" to it.reviewReason.label,
-                    "originalReviewEvidence" to it.originalReviewEvidence,
-                    "providerHistoryCheckedAt" to it.providerHistoryCheckedAt,
-                    "providerBalanceAfterMinor" to it.providerBalanceAfterMinor,
-                    "providerTransactionId" to it.providerTransactionId,
-                    "reconciledAt" to it.reconciledAt,
+                    "resolution" to record.reconciliationResolution,
+                    "evidenceKind" to record.reconciliationEvidenceKind,
+                    "operatorId" to record.operatorId,
+                    "operatorEvidence" to record.operatorEvidence,
+                    "idempotencyKey" to record.idempotencyKey,
+                    "reviewDigest" to record.reviewDigest,
+                    "reviewedRevision" to record.reviewedRevision,
+                    "reviewFromStatus" to record.reconciliationReviewFromStatus,
+                    "reviewReason" to record.reconciliationReviewReason,
+                    "originalReviewEvidence" to record.originalReviewEvidence,
+                    "providerHistoryCheckedAt" to record.providerHistoryCheckedAt,
+                    "providerBalanceAfterMinor" to record.providerBalanceAfterMinor,
+                    "providerTransactionId" to record.reconciliationProviderTransactionId,
+                    "reconciledAt" to record.reconciledAt,
                 )
             },
         )
@@ -103,11 +103,11 @@ object OpsSeasonMoneyReconciliationHandlers {
         linkedMapOf(
             "actionId" to preview.actionId,
             "reviewedRevision" to preview.reviewedRevision,
-            "reviewFromStatus" to preview.reviewFromStatus.label,
-            "reviewReason" to preview.reviewReason.label,
-            "resolution" to preview.resolution.label,
-            "evidenceKind" to preview.evidenceKind.label,
-            "proposedStatus" to preview.proposedStatus.label,
+            "reviewFromStatus" to preview.reviewFromStatus,
+            "reviewReason" to preview.reviewReason,
+            "resolution" to preview.resolution,
+            "evidenceKind" to preview.evidenceKind,
+            "proposedStatus" to preview.proposedStatus,
             "reviewDigest" to preview.reviewDigest,
             "alreadyApplied" to preview.alreadyApplied,
             "commitsSeasonState" to preview.commitsSeasonState,
@@ -124,7 +124,7 @@ object OpsSeasonMoneyReconciliationHandlers {
             "receipt" to result.receipt?.let {
                 linkedMapOf(
                     "actionId" to it.actionId,
-                    "kind" to it.kind.label,
+                    "kind" to it.kind,
                     "targetId" to it.targetId,
                     "playerId" to it.playerId,
                     "amountMinor" to it.amountMinor,

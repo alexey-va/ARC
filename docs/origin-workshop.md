@@ -58,7 +58,7 @@ unready/disabled workshops return an explicit response.
 ## Verification and balance boundary
 
 Recipe, processing geometry, click geometry, sleep handoff, command parsing and
-model contact/clearance checks have focused tests. `exportWorkshopPreview` exports the
+model contact/clearance checks have focused tests. `exportWorkshopPreview` in the [ArcOrigin repository](https://github.com/alexey-va/ArcOrigin) exports the
 same geometry factories and machine poses used at runtime, including the actual
 finished-model transform contract. A source preview does not establish native
 Minecraft client rendering or real-player gameplay acceptance.

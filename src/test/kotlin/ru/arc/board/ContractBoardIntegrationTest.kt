@@ -5,8 +5,12 @@ import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.longs.shouldBeGreaterThanOrEqual
 import io.kotest.matchers.shouldBe
 import org.bukkit.Material
-import ru.arc.contracts.ContractsMode
-import ru.arc.contracts.ResourceContractView
+import ru.arc.contracts.api.ArcContractsService
+import ru.arc.contracts.api.ArcContractsService.ContractMode as ContractsMode
+import org.bukkit.plugin.ServicePriority
+import io.mockk.every
+import io.mockk.mockk
+import ru.arc.contracts.api.ArcContractsService.ContractView as ResourceContractView
 import ru.arc.util.TextUtil
 import ru.arc.paper.testing.MockBukkitTestRuntime
 
@@ -61,16 +65,27 @@ class ContractBoardIntegrationTest : StringSpec({
     }
 
     "shows the origin desk action outside the origin world" {
-        val card = ContractBoardCard.Order(view().copy(group = "guild_orders"), submissionsEnabled = true)
+        val card = ContractBoardCard.Order(view(group = "guild_orders"), submissionsEnabled = true)
         card.action(originAllowed = false) shouldBe TextUtil.mm("<yellow>Сдача у NPC: <white>Староста Григорий <gray>· спавн", true)
     }
 
-    "uses the requested vanilla material and fails closed for custom namespaces" {
-        MockBukkitTestRuntime.open().use {
-            materialFor("minecraft:cobblestone") shouldBe Material.COBBLESTONE
-            materialFor("arc:any_raw_fish") shouldBe Material.COD
-            materialFor("slimefun:basic_circuit_board") shouldBe Material.PAPER
-            materialFor("minecraft:not_a_material") shouldBe Material.PAPER
+    "delegates material resolution to ArcContracts and falls back when it is unavailable" {
+        MockBukkitTestRuntime.open().use { runtime ->
+            materialFor("minecraft:cobblestone") shouldBe Material.PAPER
+            val service = mockk<ArcContractsService>()
+            every { service.itemMaterial("minecraft:cobblestone") } returns Material.COBBLESTONE
+            every { service.itemMaterial("arc:any_raw_fish") } returns Material.COD
+            every { service.itemMaterial("slimefun:basic_circuit_board") } returns null
+            every { service.itemMaterial("minecraft:not_a_material") } returns null
+            runtime.server.servicesManager.register(ArcContractsService::class.java, service, runtime.createSimplePlugin("ArcContracts"), ServicePriority.Normal)
+            try {
+                materialFor("minecraft:cobblestone") shouldBe Material.COBBLESTONE
+                materialFor("arc:any_raw_fish") shouldBe Material.COD
+                materialFor("slimefun:basic_circuit_board") shouldBe Material.PAPER
+                materialFor("minecraft:not_a_material") shouldBe Material.PAPER
+            } finally {
+                runtime.server.servicesManager.unregister(ArcContractsService::class.java, service)
+            }
         }
     }
 
@@ -85,8 +100,8 @@ class ContractBoardIntegrationTest : StringSpec({
         )
         build(view(price = 219L)) shouldBe emptyList()
         build(view(remaining = 0L)) shouldBe emptyList()
-        build(view().copy(minSubmissionQuantity = 150)) shouldBe emptyList()
-        build(view().copy(minimumSubmissionPayoutMinor = 50_000L)) shouldBe emptyList()
+        build(view(minSubmissionQuantity = 150)) shouldBe emptyList()
+        build(view(minimumSubmissionPayoutMinor = 50_000L)) shouldBe emptyList()
         build(view(), budget = 249L) shouldBe emptyList()
         build(view()).filterIsInstance<ContractBoardCard.Order>().single().priceGrowth shouldBe "+25%"
     }
@@ -94,7 +109,7 @@ class ContractBoardIntegrationTest : StringSpec({
     "removes adverts when the market price falls and never advertises observe-only sales" {
         val eligible = view()
         ContractBoardCards.build(listOf(eligible), ContractsMode.ENFORCE, true, 0L).size shouldBe 1
-        ContractBoardCards.build(listOf(eligible.copy(payoutMinorPerUnit = 200L)), ContractsMode.ENFORCE, true, 0L) shouldBe emptyList()
+        ContractBoardCards.build(listOf(view(price = 200L)), ContractsMode.ENFORCE, true, 0L) shouldBe emptyList()
         ContractBoardCards.build(listOf(eligible), ContractsMode.ENFORCE, false, 0L) shouldBe emptyList()
         ContractBoardCards.build(listOf(eligible), ContractsMode.OBSERVE, false, 0L)
             .filterIsInstance<ContractBoardCard.Order>() shouldBe emptyList()
@@ -102,7 +117,7 @@ class ContractBoardIntegrationTest : StringSpec({
 
     "uses the actual NPC author for each order group" {
         val names = listOf("food_orders", "forge_orders", "bank_orders", "guild_orders").map { group ->
-            ContractBoardCard.Order(view().copy(group = group), true).advertiser
+            ContractBoardCard.Order(view(group = group), true).advertiser
         }
         names shouldContainExactly listOf("Матео", "Мила", "Делопроизводитель Артур", "Староста Григорий")
     }
@@ -117,7 +132,7 @@ class ContractBoardIntegrationTest : StringSpec({
         rotation.next(listOf(a, b), true, 400L) shouldBe null
         rotation.next(listOf(a, b), false, 500L) shouldBe a
         rotation.next(listOf(b), false, 600L) shouldBe b
-        val nextWindow = a.copy(view = a.view.copy(windowStartsAt = 3_000L))
+        val nextWindow = a.copy(view = view(id = "a", windowStartsAt = 3_000L))
         rotation.next(listOf(nextWindow, b), false, 700L) shouldBe nextWindow
         rotation.next(emptyList(), true, 800L) shouldBe null
         rotation.clear()
@@ -145,22 +160,12 @@ private fun view(
     remaining: Long = 145L,
     base: Long = 200L,
     price: Long = 250L,
+    group: String = "guild_orders",
+    minSubmissionQuantity: Int = 1,
+    minimumSubmissionPayoutMinor: Long = price,
+    windowStartsAt: Long = 1_000L,
 ) = ResourceContractView(
-    id = id,
-    displayName = "Камень для тракта",
-    itemKey = "minecraft:cobblestone",
-    funding = "server_envelope",
-    status = status,
-    windowStartsAt = 1_000L,
-    windowEndsAt = endsAt,
-    payoutMinorPerUnit = price,
-    basePayoutMinorPerUnit = base,
-    budgetMinor = 50_000L,
-    spentMinor = 12_500L,
-    reservedMinor = 1_250L,
-    targetQuantity = 200L,
-    acceptedQuantity = 50L,
-    reservedQuantity = 5L,
-    remainingQuantity = remaining,
-    contributors = 3,
+    id, "Камень для тракта", "minecraft:cobblestone", "server_envelope", status,
+    windowStartsAt, endsAt, price, 50_000L, 12_500L, 1_250L, 200L, 50L, 5L, remaining, 3,
+    group, base, minSubmissionQuantity, minimumSubmissionPayoutMinor,
 )

@@ -41,8 +41,6 @@ import ru.arc.listeners.PickupListener
 import ru.arc.listeners.RespawnListener
 import ru.arc.listeners.SpawnerListener
 import ru.arc.paper.api.ArcSidebarPriorities
-import ru.arc.contracts.ContractNpcAccessListener
-import ru.arc.contracts.SeasonTrophyProtectionListener
 import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
@@ -60,7 +58,6 @@ class HookRegistry(
     var leafRTPListener: LeafRTPListener? = null
     var respawnListener: RespawnListener? = null
     var bsListener: BSListener? = null
-    var seasonTrophyProtectionListener: SeasonTrophyProtectionListener? = null
 
     private var chatGlyphProtection: ChatGlyphProtection? = null
 
@@ -256,7 +253,6 @@ class HookRegistry(
         leafRTPListener = null
         respawnListener = null
         bsListener = null
-        seasonTrophyProtectionListener = null
     }
 
     private fun register(
@@ -391,7 +387,6 @@ class HookRegistry(
         }
         register("Citizens", true) {
             citizensHook = CitizensHook()
-            registerListener(ContractNpcAccessListener())
         }
         register("BetterRTP", true) {
             betterRTPListener = registerListener(BetterRTPListener())
@@ -462,9 +457,6 @@ class HookRegistry(
         }
         if (commandListener == null) {
             commandListener = registerListener(CommandListener())
-        }
-        if (seasonTrophyProtectionListener == null) {
-            seasonTrophyProtectionListener = registerListener(SeasonTrophyProtectionListener())
         }
     }
 }

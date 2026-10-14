@@ -85,10 +85,6 @@ commands:
   eliteloot:
     description: Elite loot admin
     usage: /eliteloot [list|add]
-  mount:
-    description: Open and administer the mount collection
-    usage: /mount [menu|help|admin]
-    permission: arc.mounts.use
   menu:
     description: Open the player navigation menu
     usage: /menu
@@ -295,11 +291,3 @@ permissions:
   arc.command.hide.admin:
     description: Manage per-player CommandHide bypass grants
     default: op
-  arc.mounts.admin:
-    description: Administer mount ownership and summon test mounts
-    default: op
-    children:
-      arc.mounts.use: true
-  arc.mounts.use:
-    description: Open and use the mount collection
-    default: false

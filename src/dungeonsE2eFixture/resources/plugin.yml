@@ -2,7 +2,7 @@ name: ArcDungeonsE2eFixture
 version: 1.0
 main: ru.arc.dungeonse2e.ArcDungeonsE2eFixturePlugin
 api-version: '1.21'
-depend: [ARC, ArcDungeons]
+depend: [ARC, ArcDungeons, ArcMounts, ArcOrigin, ArcContracts]
 commands:
   arc-dungeons-e2e-check:
     description: Report successful ArcDungeons E2E bootstrap checks

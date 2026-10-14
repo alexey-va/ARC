@@ -12,7 +12,7 @@ import ru.arc.landsui.LandsUiModule
 import ru.arc.helpcenter.HelpCenterModule
 import ru.arc.helpcenter.HelpCenterPage
 import ru.arc.hooks.HookRegistry
-import ru.arc.mounts.MountModule
+import ru.arc.integrations.mounts.mountService
 import ru.arc.ARC
 import ru.arc.config.ConfigManager
 import ru.arc.util.TextUtil
@@ -37,7 +37,7 @@ class MenuShortcutController(
     plugin: Plugin,
     private val selection: (Player) -> MenuShortcutAction = MenuShortcutAction::selected,
     private val openMenu: (Player, HelpCenterPage) -> Boolean = HelpCenterModule::open,
-    private val summonMount: (Player) -> Boolean = MountModule::summonFavorite,
+    private val summonMount: (Player) -> Boolean = { player -> mountService()?.summonFavorite(player) == true },
     private val inDungeon: (Player) -> Boolean = { ru.arc.dungeons.dungeonService()?.usesMenuShortcut(it) == true },
     private val openDungeonMenu: (Player) -> Unit = { ru.arc.dungeons.dungeonService()?.dungeonAction(it, "menu", emptyList()) },
     private val eliteMobsAbilityListener: (Listener) -> Boolean = {

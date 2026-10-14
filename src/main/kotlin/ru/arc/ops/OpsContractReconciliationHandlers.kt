@@ -1,23 +1,23 @@
 package ru.arc.ops
 
 import com.google.gson.JsonObject
-import ru.arc.contracts.ContractSubmissionJournalRecord
-import ru.arc.contracts.ContractSubmissionReconciliationApplyResult
-import ru.arc.contracts.ContractSubmissionReconciliationPreview
-import ru.arc.contracts.ContractSubmissionReconciliationRequest
-import ru.arc.contracts.ContractSubmissionReconciliationResolution
-import ru.arc.contracts.ContractsManager
+import ru.arc.contracts.api.ArcContractsService.SubmissionReconciliationRecord as ContractSubmissionJournalRecord
+import ru.arc.contracts.api.ArcContractsService.SubmissionReconciliationResult as ContractSubmissionReconciliationApplyResult
+import ru.arc.contracts.api.ArcContractsService.SubmissionReconciliationPreview as ContractSubmissionReconciliationPreview
+import ru.arc.contracts.api.ArcContractsService.SubmissionReconciliationRequest as ContractSubmissionReconciliationRequest
+import ru.arc.contracts.api.ArcContractsService.SubmissionResolution as ContractSubmissionReconciliationResolution
+import ru.arc.integrations.contracts.requireContractsService
 
 object OpsContractReconciliationHandlers {
     fun list(limit: Int): Map<String, Any?> =
         linkedMapOf(
             "ok" to true,
-            "leader" to ContractsManager.isLeader(),
-            "records" to ContractsManager.reconciliationRecords(limit).map(::recordView),
+            "leader" to requireContractsService().boardSnapshot().leader,
+            "records" to requireContractsService().submissionReconciliations(limit).map(::recordView),
         )
 
     fun get(submissionId: String): Map<String, Any?> {
-        val record = ContractsManager.reconciliationRecord(submissionId)
+        val record = requireContractsService().submissionReconciliation(submissionId)
             ?: throw NoSuchElementException("Contract submission not found")
         return linkedMapOf("ok" to true, "record" to recordView(record))
     }
@@ -27,7 +27,7 @@ object OpsContractReconciliationHandlers {
         return linkedMapOf(
             "ok" to true,
             "preview" to true,
-            "reconciliation" to previewView(ContractsManager.previewReconciliation(request)),
+            "reconciliation" to previewView(requireContractsService().previewSubmissionReconciliation(request)),
         )
     }
 
@@ -35,7 +35,7 @@ object OpsContractReconciliationHandlers {
         val request = parseRequest(body, apply = true)
         val reviewDigest = requiredString(body, "reviewDigest")
         require(SHA256_PATTERN.matches(reviewDigest)) { "reviewDigest must be a lowercase SHA-256" }
-        val result = ContractsManager.applyReconciliation(request, reviewDigest)
+        val result = requireContractsService().applySubmissionReconciliation(request, reviewDigest)
         return applyView(result)
     }
 
@@ -49,20 +49,20 @@ object OpsContractReconciliationHandlers {
             "contract reconciliation",
         )
         val resolution =
-            ContractSubmissionReconciliationResolution.entries.firstOrNull {
-                it.label == requiredString(body, "resolution").lowercase()
+            ContractSubmissionReconciliationResolution.values().firstOrNull {
+                it.name.lowercase() == requiredString(body, "resolution").lowercase()
             } ?: throw IllegalArgumentException("Unknown contract reconciliation resolution")
         return ContractSubmissionReconciliationRequest(
-            submissionId = requiredString(body, "submissionId"),
-            expectedRevision = requiredLong(body, "expectedRevision"),
-            resolution = resolution,
-            operatorId = requiredString(body, "operatorId"),
-            operatorEvidence = requiredString(body, "operatorEvidence"),
-            idempotencyKey = requiredString(body, "idempotencyKey"),
-            providerBalanceAfterMinor = optionalLong(body, "providerBalanceAfterMinor"),
-            providerTransactionId = optionalString(body, "providerTransactionId"),
-            providerTransactionReason = optionalString(body, "providerTransactionReason"),
-        ).validated()
+            requiredString(body, "submissionId"),
+            requiredLong(body, "expectedRevision"),
+            resolution,
+            requiredString(body, "operatorId"),
+            requiredString(body, "operatorEvidence"),
+            requiredString(body, "idempotencyKey"),
+            optionalLong(body, "providerBalanceAfterMinor"),
+            optionalString(body, "providerTransactionId"),
+            optionalString(body, "providerTransactionReason"),
+        )
     }
 
     private fun recordView(record: ContractSubmissionJournalRecord): Map<String, Any?> =
@@ -75,28 +75,28 @@ object OpsContractReconciliationHandlers {
             "acceptedQuantity" to record.acceptedQuantity,
             "payoutMinor" to record.payoutMinor,
             "payoutReason" to record.payoutReason,
-            "status" to record.status.label,
+            "status" to record.status,
             "revision" to record.revision,
             "updatedAt" to record.updatedAt,
-            "reviewFromStatus" to record.reviewFromStatus?.label,
-            "reviewReason" to record.reviewReason?.label,
+            "reviewFromStatus" to record.reviewFromStatus,
+            "reviewReason" to record.reviewReason,
             "reviewEvidence" to record.reviewEvidence,
             "providerBalanceBeforeMinor" to record.providerBalanceBeforeMinor,
             "providerBalanceAfterMinor" to record.providerBalanceAfterMinor,
             "providerTransactionId" to record.providerTransactionId,
-            "reconciliation" to record.reconciliation?.let {
+            "reconciliation" to record.reconciliationResolution?.let {
                 linkedMapOf(
-                    "resolution" to it.resolution.label,
-                    "evidenceKind" to it.evidenceKind.label,
-                    "operatorId" to it.operatorId,
-                    "operatorEvidence" to it.operatorEvidence,
-                    "idempotencyKey" to it.idempotencyKey,
-                    "reviewDigest" to it.reviewDigest,
-                    "reviewedRevision" to it.reviewedRevision,
-                    "reviewFromStatus" to it.reviewFromStatus.label,
-                    "reviewReason" to it.reviewReason.label,
-                    "originalReviewEvidence" to it.originalReviewEvidence,
-                    "reconciledAt" to it.reconciledAt,
+                    "resolution" to record.reconciliationResolution,
+                    "evidenceKind" to record.reconciliationEvidenceKind,
+                    "operatorId" to record.operatorId,
+                    "operatorEvidence" to record.operatorEvidence,
+                    "idempotencyKey" to record.idempotencyKey,
+                    "reviewDigest" to record.reviewDigest,
+                    "reviewedRevision" to record.reviewedRevision,
+                    "reviewFromStatus" to record.reconciliationReviewFromStatus,
+                    "reviewReason" to record.reconciliationReviewReason,
+                    "originalReviewEvidence" to record.originalReviewEvidence,
+                    "reconciledAt" to record.reconciledAt,
                 )
             },
         )
@@ -105,11 +105,11 @@ object OpsContractReconciliationHandlers {
         linkedMapOf(
             "submissionId" to preview.submissionId,
             "reviewedRevision" to preview.reviewedRevision,
-            "reviewFromStatus" to preview.reviewFromStatus.label,
-            "reviewReason" to preview.reviewReason.label,
-            "resolution" to preview.resolution.label,
-            "evidenceKind" to preview.evidenceKind.label,
-            "proposedStatus" to preview.proposedStatus.label,
+            "reviewFromStatus" to preview.reviewFromStatus,
+            "reviewReason" to preview.reviewReason,
+            "resolution" to preview.resolution,
+            "evidenceKind" to preview.evidenceKind,
+            "proposedStatus" to preview.proposedStatus,
             "reviewDigest" to preview.reviewDigest,
             "alreadyApplied" to preview.alreadyApplied,
             "commitsContractState" to preview.commitsContractState,

@@ -18,9 +18,8 @@ import ru.arc.xserver.XActionManager
 import ru.arc.xaction.XCondition
 import ru.arc.xserver.XMessage
 import ru.arc.xserver.playerlist.PlayerManager
-import ru.arc.contracts.ContractsConfig
+import ru.arc.integrations.contracts.contractsService
 import ru.arc.metrics.ProductInterestStore
-import ru.arc.mounts.MountPurchaseJournalSnapshot
 import ru.arc.observability.RuntimeHealthContribution
 import ru.arc.observability.RuntimeHealthProvider
 import ru.arc.observability.RuntimeHealthRegistry
@@ -700,9 +699,10 @@ private object ArcRuntimeHealth : RuntimeHealthProvider {
                         "onboarding" to OnboardingStore.CURRENT_VERSION,
                         "rtp_players" to RtpPlayerStore.CURRENT_VERSION,
                         "product_interest" to ProductInterestStore.VERSION,
-                        "mount_purchase" to MountPurchaseJournalSnapshot.CURRENT_SCHEMA,
-                        "season_catalog" to ContractsConfig.SEASON_CATALOG_SCHEMA_VERSION,
-                    ),
+                        "season_catalog" to contractsService()?.seasonCatalogSchema(),
+                    ) + (ru.arc.integrations.mounts.mountService()?.let {
+                        mapOf("mount_purchase" to it.purchaseJournalSchema())
+                    } ?: emptyMap()),
             dependencies = modules.dependencies +
                 if (ru.arc.config.ArcRedisConfig.get().enabled && ARC.instance.runtimeProfile == ru.arc.config.ArcRuntimeProfile.FULL) {
                     mapOf("redis" to (ARC.redisManager?.isConnected() == true))

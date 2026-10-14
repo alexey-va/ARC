@@ -25,6 +25,9 @@ that the shared APIs have one runtime owner.
 
 [ArcDungeons extraction and deployment contract](docs/arc-dungeons.md).
 
+Mounts, Origin and resource contracts now build in their own public repositories.
+See [independent domain plugins and rollout contract](docs/arc-domain-plugins.md).
+
 The default build is standalone and does not require an `arc-core` checkout.
 For coordinated local development, opt into source substitution explicitly:
 

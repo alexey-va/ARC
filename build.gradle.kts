@@ -75,7 +75,7 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.391"
+version = "1.4.392"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.22"
@@ -157,6 +157,9 @@ dependencies {
     // ARC owns this service API at runtime. Keep the unrelocated contract classes in its provider JAR.
     implementation(project(":arc-staff-spells-api"))
     implementation(project(":arc-dungeons-api"))
+    implementation("ru.ruscrafting.arc:arc-mounts-api:0.1.0")
+    implementation("ru.ruscrafting.arc:arc-origin-api:0.1.0")
+    implementation("ru.ruscrafting.arc:arc-contracts-api:0.1.0")
 
     // snakeyaml-engine comes transitively from arc-core
 
@@ -491,30 +494,6 @@ tasks {
 }
 
 val contractE2eFiles = layout.buildDirectory.dir("plugwright-e2e-generated")
-val contractTestFixture = sourceSets.create("contractTestFixture") {
-    compileClasspath += sourceSets.main.get().output
-    runtimeClasspath += sourceSets.main.get().output
-}
-configurations[contractTestFixture.implementationConfigurationName].extendsFrom(configurations.implementation.get())
-configurations[contractTestFixture.compileOnlyConfigurationName].extendsFrom(configurations.compileOnly.get())
-kotlin.target.compilations.getByName("contractTestFixture")
-    .associateWith(kotlin.target.compilations.getByName("main"))
-val contractTestFixtureJar = tasks.register<Jar>("contractTestFixtureJar") {
-    archiveBaseName.set("ARCContractTestFixture")
-    from(contractTestFixture.output)
-}
-val contractCrashFixture = sourceSets.create("contractCrashFixture") {
-    compileClasspath += sourceSets.main.get().output
-    runtimeClasspath += sourceSets.main.get().output
-}
-configurations[contractCrashFixture.implementationConfigurationName].extendsFrom(configurations.implementation.get())
-configurations[contractCrashFixture.compileOnlyConfigurationName].extendsFrom(configurations.compileOnly.get())
-kotlin.target.compilations.getByName("contractCrashFixture")
-    .associateWith(kotlin.target.compilations.getByName("main"))
-val contractCrashFixtureJar = tasks.register<Jar>("contractCrashFixtureJar") {
-    archiveBaseName.set("ARCContractCrashFixture")
-    from(contractCrashFixture.output)
-}
 val arcDungeonsE2eFixture = sourceSets.create("arcDungeonsE2eFixture") {
     kotlin.srcDir("src/dungeonsE2eFixture/kotlin")
     resources.srcDir("src/dungeonsE2eFixture/resources")
@@ -596,6 +575,19 @@ val prepareE2ePaper = e2ePaperPin?.let { (name, sha256) ->
     )
 }
 
+// These immutable artifacts were built and tested in their owning repositories.
+val extractedArtifactNames = listOf("ArcMounts", "ArcOrigin", "ArcContracts", "ArcContractsContractTestFixture", "ArcContractsContractCrashFixture")
+val extractedArtifacts = extractedArtifactNames.associateWith { name ->
+    configurations.detachedConfiguration(dependencies.create("ru.ruscrafting:$name:0.1.0")).apply { isTransitive = false }
+}
+fun extractedJar(name: String) = layout.buildDirectory.file("extracted-plugins/$name-0.1.0.jar")
+val prepareExtractedPluginArtifacts = tasks.register<Copy>("prepareExtractedPluginArtifacts") {
+    extractedArtifacts.forEach { (name, artifact) ->
+        from({ artifact.singleFile }) { rename { "$name-0.1.0.jar" } }
+    }
+    into(layout.buildDirectory.dir("extracted-plugins"))
+}
+
 // Isolated real-Paper tests run separately from the fast JVM suite.
 plugwright {
     minecraftVersion.set(e2eMinecraftVersion)
@@ -616,6 +608,9 @@ plugwright {
         file("plugins/ARC/modules/entity-cleanup.yml", projectDir.resolve("src/test/e2e/fixtures/entity-cleanup.yml"))
         file("plugins/ARC/modules/parkour.yml", projectDir.resolve("src/test/e2e/fixtures/parkour.yml"))
         file("plugins/Parkour/config.yml", projectDir.resolve("src/test/e2e/fixtures/parkour-config.yml"))
+        for (name in listOf("ArcMounts", "ArcOrigin", "ArcContracts")) {
+            file("plugins/$name-0.1.0.jar", extractedJar(name).get().asFile)
+        }
         if (dungeonsE2e) {
             file("plugins/ARC/modules/redis.yml", projectDir.resolve("src/test/e2e/fixtures/entity-cleanup-redis.yml"))
             file("plugins/ArcDungeons-0.1.0.jar", projectDir.resolve("arc-dungeons/build/libs/ArcDungeons-0.1.0.jar"))
@@ -632,9 +627,9 @@ plugwright {
             file("plugins/RedisEconomy/config.yml", contractE2eFiles.get().file("rediseconomy.yml").asFile)
             file("plugins/RedisEconomy.jar", contractE2eFiles.get().file("RedisEconomy.jar").asFile)
             file("plugins/Citizens-2.0.43-b4246.jar", contractCitizensJar.get().asFile)
-            file("plugins/ARCContractTestFixture.jar", contractTestFixtureJar.get().archiveFile.get().asFile)
+            file("plugins/ARCContractTestFixture.jar", extractedJar("ArcContractsContractTestFixture").get().asFile)
             if (contractCrashE2e) {
-                file("plugins/ARCContractCrashFixture.jar", contractCrashFixtureJar.get().archiveFile.get().asFile)
+                file("plugins/ARCContractCrashFixture.jar", extractedJar("ArcContractsContractCrashFixture").get().asFile)
             }
         }
     }
@@ -784,6 +779,7 @@ val prepareContractE2e = tasks.register("prepareContractE2e") {
 }
 
 tasks.named<me.drownek.plugwright.PlugwrightTestTask>("plugwrightTest") {
+    dependsOn(prepareExtractedPluginArtifacts)
     prepareE2ePaper?.let {
         dependsOn(it)
         serverJarPath.set(requireNotNull(e2ePaperJar).map { jar -> jar.asFile.absolutePath })
@@ -803,10 +799,8 @@ tasks.named<me.drownek.plugwright.PlugwrightTestTask>("plugwrightTest") {
     } else {
         dependsOn(prepareContractE2e)
         dependsOn(prepareContractCitizens)
-        dependsOn(contractTestFixtureJar)
         usesService(e2eRedis)
         if (contractCrashE2e) {
-            dependsOn(contractCrashFixtureJar)
             testFiles.set("contracts-crash")
             doFirst {
                 check(System.getenv("ARC_CONTRACT_CRASH_FIXTURE") == "1") {
@@ -817,18 +811,6 @@ tasks.named<me.drownek.plugwright.PlugwrightTestTask>("plugwrightTest") {
             testFiles.set(standardE2eTestFiles)
         }
     }
-}
-
-// Offline receipt for the source-driven workstation viewer; never spawns Bukkit entities.
-tasks.register<JavaExec>("exportWorkshopPreview") {
-    group = "verification"
-    description = "Export furniture workstation geometry and processing poses as JSON"
-    dependsOn(tasks.named("testClasses"))
-    classpath = sourceSets["test"].runtimeClasspath
-    mainClass.set("ru.arc.origin.WorkshopPreviewExport")
-    args(providers.gradleProperty("workshopPreviewOutput").getOrElse(
-        layout.buildDirectory.file("workshop-preview/scene.json").get().asFile.absolutePath,
-    ))
 }
 
 // Staff previews are produced by the plugin that owns their implementation.

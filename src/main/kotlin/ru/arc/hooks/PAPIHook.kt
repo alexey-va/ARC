@@ -8,8 +8,8 @@ import org.bukkit.entity.Player
 import ru.arc.ARC
 import ru.arc.config.ConfigManager
 import ru.arc.jobs.JobsModule
-import ru.arc.mounts.ActiveMountSnapshot
-import ru.arc.mounts.MountModule
+import ru.arc.mounts.api.ArcMountService.ActiveMountSnapshot
+import ru.arc.integrations.mounts.mountService
 import ru.arc.xserver.playerlist.PlayerManager
 
 class PAPIHook internal constructor(
@@ -143,7 +143,7 @@ class PAPIHook internal constructor(
         // state is only read on the primary thread; fail closed for off-thread requests.
         if (!Bukkit.isPrimaryThread()) return ""
         val player = offlinePlayer as? Player ?: return ""
-        return mountPlaceholderValue(MountModule.activeMountSnapshot(player), params) ?: ""
+        return mountPlaceholderValue(mountService()?.activeMountSnapshot(player)?.orElse(null), params) ?: ""
     }
 }
 

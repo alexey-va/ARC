@@ -10,11 +10,11 @@ import org.bukkit.inventory.ItemStack
 import ru.arc.hooks.HookRegistry
 import ru.arc.ops.ItemPresets
 import ru.arc.dungeons.dungeonService
-import ru.arc.mounts.MountModule
-import ru.arc.mounts.MountRewardRejection
-import ru.arc.mounts.MountRewardResult
-import ru.arc.mounts.MountWallet
-import ru.arc.mounts.RedisEconomyMountWallet
+import ru.arc.integrations.mounts.mountService
+import ru.arc.mounts.api.ArcMountService.MountRewardOutcome.Rejection
+import ru.arc.mounts.api.ArcMountService.MountRewardOutcome
+import ru.arc.economy.CurrencyWallet
+import ru.arc.economy.RedisEconomyWallet
 import ru.arc.onetime.OneTimeUseFingerprint
 import ru.arc.treasure.core.AeArg
 import ru.arc.treasure.core.AeLoot
@@ -56,7 +56,7 @@ private fun Throwable.rootCauseName(): String =
 
 internal class CatalogPhysicalRewards(
     private val settings: RewardCatalogSettings,
-    private val wallets: MountWallet? = null,
+    private val wallets: CurrencyWallet? = null,
     private val frozen: FrozenPhysicalRewards? = null,
     /** Creates the configured seal so its authored icon and presentation survive archiving. */
     private val sealStack: (String, CatalogIconStyle?) -> ItemStack? = { _, _ -> null },
@@ -70,8 +70,8 @@ internal class CatalogPhysicalRewards(
         .plus(settings.categories.filter { it.rolls != null }.flatMap { it.entries })
         .distinctBy { key(it) }.associateBy { key(it) }
 
-    private fun activeWallet(): MountWallet? =
-        wallets ?: HookRegistry.redisEcoHook?.let { RedisEconomyMountWallet() }
+    private fun activeWallet(): CurrencyWallet? =
+        wallets ?: HookRegistry.redisEcoHook?.let { RedisEconomyWallet() }
 
     fun key(entry: RewardCatalogEntry): String = when (val source = entry.source) {
         is RewardCatalogSource.Treasure -> "treasure:${source.pool}:${source.id}"
@@ -568,7 +568,7 @@ internal class CatalogPhysicalRewards(
         }
         val definition = when (val source = entry.source) {
             is RewardCatalogSource.Mount -> {
-                MountModule.rewardPreview(source.id) ?: return@runCatching null
+                mountService()?.rewardPreview(source.id)?.orElse(null) ?: return@runCatching null
                 "mount:${source.id}:level:1"
             }
             is RewardCatalogSource.FurniturePackage -> {
@@ -659,7 +659,7 @@ internal class CatalogPhysicalRewards(
         }
         val entry = entries[spec.key] ?: return completed(rejected())
         return when (val source = entry.source) {
-            is RewardCatalogSource.Mount -> MountModule.grantReward(player, source.id).thenApply(::mountOutcome)
+            is RewardCatalogSource.Mount -> mountService()?.grantReward(player, source.id)?.thenApply(::mountOutcome)?.toCompletableFuture() ?: completed(rejected())
             is RewardCatalogSource.ParticlePreset -> particlePresets.redeem(player, source.id)
             is RewardCatalogSource.FurniturePackage -> {
                 val recipe = freezeRecipe(entry) ?: return completed(rejected())
@@ -865,7 +865,7 @@ internal class CatalogPhysicalRewards(
         "tokens" -> activeWallet()?.walletForCurrency("tokens")?.available == true
         "command" -> commandProviderReady(requireNotNull(recipe.commandValue))
         "ae" -> Bukkit.getPluginManager().isPluginEnabled("AdvancedEnchantments")
-        "mount" -> MountModule.rewardPreview(requireNotNull(recipe.mountId)) != null
+        "mount" -> mountService()?.rewardPreview(requireNotNull(recipe.mountId))?.isPresent == true
         "furniture" -> Bukkit.getPluginManager().isPluginEnabled("ItemsAdder")
         "furniture-rolls" -> frozenTreasureIsItemOnly(recipe.treasure, emptySet()) &&
             frozenTreasureProvidersReady(requireNotNull(recipe.treasure))
@@ -1099,7 +1099,7 @@ internal class CatalogPhysicalRewards(
     }
 
     private fun redeemFrozen(recipe: FrozenPhysicalRecipe, player: Player, operationId: UUID): CompletableFuture<PhysicalRewardOutcome> = when (recipe.type) {
-        "mount" -> MountModule.grantReward(player, requireNotNull(recipe.mountId)).thenApply(::mountOutcome)
+        "mount" -> mountService()?.grantReward(player, requireNotNull(recipe.mountId))?.thenApply(::mountOutcome)?.toCompletableFuture() ?: completed(rejected())
         "particle-preset" -> particlePresets.redeem(player, requireNotNull(recipe.particlePresetId))
         else -> completed(redeemFrozenSync(recipe, player, operationId))
     }
@@ -1264,11 +1264,11 @@ internal class CatalogPhysicalRewards(
     private fun redeemFrozenCommand(player: Player, command: String, operationId: UUID): PhysicalRewardOutcome =
         tokenAmount(command)?.let { deposit(player, "tokens", it.toDouble(), operationId) } ?: giveNativeCommand(player, command)
 
-    private fun mountOutcome(result: MountRewardResult): PhysicalRewardOutcome = when (result) {
-        is MountRewardResult.Granted -> PhysicalRewardOutcome.Applied
-        is MountRewardResult.AlreadyOwned -> PhysicalRewardOutcome.Rejected("<gold>Этот маунт уже открыт. Контракт можно передать другому игроку.")
-        is MountRewardResult.Rejected -> if (result.reason == MountRewardRejection.GRANT_UNCERTAIN ||
-            result.reason == MountRewardRejection.SHUTDOWN) uncertain() else rejected()
+    private fun mountOutcome(result: MountRewardOutcome): PhysicalRewardOutcome = when (result.result()) {
+        MountRewardOutcome.Result.GRANTED -> PhysicalRewardOutcome.Applied
+        MountRewardOutcome.Result.ALREADY_OWNED -> PhysicalRewardOutcome.Rejected("<gold>Этот маунт уже открыт. Контракт можно передать другому игроку.")
+        MountRewardOutcome.Result.REJECTED -> if (result.rejection() == Rejection.GRANT_UNCERTAIN ||
+            result.rejection() == Rejection.SHUTDOWN) uncertain() else rejected()
     }
 
     private fun chooseFrozenChild(children: List<FrozenTreasureNode>): FrozenTreasureNode? {

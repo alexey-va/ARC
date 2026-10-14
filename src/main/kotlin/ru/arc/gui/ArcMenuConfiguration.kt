@@ -17,9 +17,6 @@ object ArcMenuSchema {
     val INVESTIGATION_CASE = MenuId.of("investigation-case")
     val INVESTIGATION_VERDICT = MenuId.of("investigation-verdict")
     val INVESTIGATION_TESTIMONY = MenuId.of("investigation-testimony")
-    val CONTRACTS_LIST = MenuId.of("contracts-list")
-    val CONTRACTS_DETAIL = MenuId.of("contracts-detail")
-    val CONTRACT_DESKS = (3..6).associateWith { MenuId.of("contracts-desk-$it") }
     val SCHEDULED_LIST = MenuId.of("scheduled-list")
     val PERSONAL_LOOT = (1..6).associateWith { MenuId.of("personal-loot-$it") }
     val PARKOUR_ROOT = MenuId.of("parkour-root")
@@ -37,19 +34,10 @@ object ArcMenuSchema {
     val BOARD = MenuId.of("board")
     val BOARD_RATE = MenuId.of("board-rate")
     val BOARD_EDIT = MenuId.of("board-edit")
-    val MOUNT_LIST = MenuId.of("mount-list")
-    val MOUNT_DETAIL = MenuId.of("mount-detail")
-    val MOUNT_PROGRESSION = MenuId.of("mount-progression")
-    val MOUNT_TUNING = MenuId.of("mount-tuning")
-    val MOUNT_SKINS = MenuId.of("mount-skins")
-    val MOUNT_CONFIRM = MenuId.of("mount-confirm")
     val STORE = (2..6).associateWith { MenuId.of("store-$it") }
 
     val WITNESSES = MenuRegionId.of("witnesses")
     val VERDICTS = MenuRegionId.of("verdicts")
-    val CONTRACT_ORDERS = MenuRegionId.of("orders")
-    val CONTRACT_DEPOSIT = MenuRegionId.of("contract-deposit")
-    val CONTRACT_DESK_ORDERS = MenuRegionId.of("contract-orders")
     val SCHEDULED_ENTRIES = MenuRegionId.of("entries")
     val PERSONAL_LOOT_ITEMS = MenuRegionId.of("loot")
     val PARKOUR_CATEGORIES = MenuRegionId.of("categories")
@@ -63,22 +51,11 @@ object ArcMenuSchema {
     val TREASURE_POOL_ENTRIES = MenuRegionId.of("pools")
     val TREASURE_ENTRIES = MenuRegionId.of("treasures")
     val BOARD_ENTRIES = MenuRegionId.of("board-entries")
-    val MOUNT_ENTRIES = MenuRegionId.of("mounts")
-    val MOUNT_ABILITIES = MenuRegionId.of("abilities")
-    val MOUNT_LEVELS = MenuRegionId.of("levels")
-    val MOUNT_SPEEDS = MenuRegionId.of("speeds")
-    val MOUNT_STEPS = MenuRegionId.of("steps")
-    val MOUNT_SIZES = MenuRegionId.of("sizes")
-    val MOUNT_SKIN_ENTRIES = MenuRegionId.of("skins")
     val STORE_ITEMS = MenuRegionId.of("store-items")
 
     private fun elements(vararg ids: String) = ids.mapTo(linkedSetOf(), MenuElementId::of)
 
     val contracts: Map<MenuId, MenuContract> = linkedMapOf(
-        *CONTRACT_DESKS.values.map { menu ->
-            menu to MenuContract(requiredElements = elements("sell", "previous", "next"),
-                requiredRegions = setOf(CONTRACT_DEPOSIT, CONTRACT_DESK_ORDERS))
-        }.toTypedArray(),
         INVESTIGATION_HUB to MenuContract(requiredElements = elements("start", "contracts")),
         INVESTIGATION_CASE to MenuContract(
             requiredElements = elements("next-step", "dossier", "evidence", "return"),
@@ -89,18 +66,6 @@ object ArcMenuSchema {
             requiredRegions = setOf(VERDICTS),
         ),
         INVESTIGATION_TESTIMONY to MenuContract(requiredElements = elements("statement")),
-        CONTRACTS_LIST to MenuContract(
-            requiredElements = elements("info"),
-            optionalElements = elements(
-                "empty", "tab-all", "tab-forge", "tab-bank", "tab-guild",
-                "refresh", "previous", "next",
-            ),
-            requiredRegions = setOf(CONTRACT_ORDERS),
-        ),
-        CONTRACTS_DETAIL to MenuContract(
-            requiredElements = elements("resource", "info", "payout", "quantity", "back", "confirm"),
-            optionalElements = elements("quantity-min", "quantity-stack", "quantity-max", "track", "next-order"),
-        ),
         SCHEDULED_LIST to MenuContract(
             requiredElements = elements("refresh"),
             requiredRegions = setOf(SCHEDULED_ENTRIES),
@@ -162,26 +127,6 @@ object ArcMenuSchema {
             requiredElements = elements("title", "description", "color", "icon", "type", "back", "publish"),
             optionalElements = elements("delete"),
         ),
-        MOUNT_LIST to MenuContract(
-            requiredElements = elements("previous", "filter", "next"),
-            requiredRegions = setOf(MOUNT_ENTRIES),
-        ),
-        MOUNT_DETAIL to MenuContract(
-            requiredElements = elements("icon", "favorite", "upgrade", "summon", "settings", "back", "whistle"),
-        ),
-        MOUNT_PROGRESSION to MenuContract(
-            requiredElements = elements("info", "back"),
-            requiredRegions = setOf(MOUNT_LEVELS),
-        ),
-        MOUNT_TUNING to MenuContract(
-            requiredElements = elements("info", "back", "rider-view", "skins", "glow"),
-            requiredRegions = setOf(MOUNT_SPEEDS, MOUNT_STEPS, MOUNT_SIZES, MOUNT_ABILITIES),
-        ),
-        MOUNT_SKINS to MenuContract(
-            requiredElements = elements("previous", "next", "back"),
-            requiredRegions = setOf(MOUNT_SKIN_ENTRIES),
-        ),
-        MOUNT_CONFIRM to MenuContract(requiredElements = elements("cancel", "info", "accept")),
         *STORE.values.map { menu ->
             menu to MenuContract(
                 requiredElements = elements("back"),
@@ -191,13 +136,6 @@ object ArcMenuSchema {
     )
 
     val textContracts: Map<String, PaperMenuTextContract> = mapOf(
-        "contract-desk-info" to PaperMenuTextContract(values = setOf("status", "page")),
-        "contract-desk-order" to PaperMenuTextContract(values = setOf("name", "accepted", "price", "base", "growth", "rank", "remaining", "state")),
-        "contract-desk-sell" to PaperMenuTextContract(values = setOf("name", "status", "page"),
-            repeats = mapOf("details" to setOf("line"))),
-        "contract-desk-empty" to PaperMenuTextContract(),
-        "contract-desk-previous" to PaperMenuTextContract(),
-        "contract-desk-next" to PaperMenuTextContract(),
         "background" to PaperMenuTextContract(),
         "store-back" to PaperMenuTextContract(),
         "investigation-start" to PaperMenuTextContract(
@@ -241,37 +179,6 @@ object ArcMenuSchema {
         "investigation-verdict-three" to verdictContract(),
         "investigation-verdict-four" to verdictContract(),
         "investigation-verdict-five" to verdictContract(),
-        "contracts-list-info" to PaperMenuTextContract(values = setOf("heading", "description-one", "description-two")),
-        "contracts-list-empty" to PaperMenuTextContract(values = setOf("empty")),
-        "contracts-order" to PaperMenuTextContract(
-            values = setOf(
-                "contract-name", "available", "remaining", "target", "player-remaining", "payout",
-                "cap-bonus", "payout-bonus", "ends-at", "action", "can-submit-quantity", "batch-payout",
-                "personal-accepted", "group-name",
-            ),
-        ),
-        "contracts-tab" to PaperMenuTextContract(values = setOf("label"), flags = setOf("selected")),
-        "contracts-refresh" to PaperMenuTextContract(),
-        "contracts-page" to PaperMenuTextContract(values = setOf("page", "pages", "label"), flags = setOf("available")),
-        "contracts-quantity-preset" to PaperMenuTextContract(values = setOf("quantity", "label"), flags = setOf("available")),
-        "contracts-track" to PaperMenuTextContract(
-            values = setOf("target", "status", "action"), flags = setOf("tracked"),
-        ),
-        "contracts-next-order" to PaperMenuTextContract(values = setOf("contract-name"), flags = setOf("available")),
-        "contracts-detail-resource" to PaperMenuTextContract(
-            values = setOf("contract-name", "available", "remaining", "player-remaining", "cap-bonus"),
-        ),
-        "contracts-detail-info" to PaperMenuTextContract(
-            values = setOf("heading", "accepted", "target", "contributors", "personal-accepted", "purpose", "result", "can-submit-quantity"),
-            flags = setOf("has-result"),
-        ),
-        "contracts-detail-payout" to PaperMenuTextContract(values = setOf("payout", "per-unit", "payout-bonus")),
-        "contracts-detail-quantity" to PaperMenuTextContract(values = setOf("selected", "minimum", "maximum")),
-        "contracts-detail-back" to PaperMenuTextContract(),
-        "contracts-detail-confirm" to PaperMenuTextContract(
-            values = setOf("selected", "payout", "unavailable-reason"),
-            flags = setOf("can-submit", "origin-allowed", "quote-available"),
-        ),
         "scheduled-refresh" to PaperMenuTextContract(),
         "scheduled-entry-enabled" to scheduledEntryContract(),
         "scheduled-entry-disabled" to scheduledEntryContract(),
@@ -390,15 +297,6 @@ object ArcMenuConfiguration {
         "investigation-verdict-three",
         "investigation-verdict-four",
         "investigation-verdict-five",
-        "contracts-order",
-        "contracts-tab",
-        "contracts-refresh",
-        "contracts-page",
-        "contracts-quantity-preset",
-        "contracts-track",
-        "contracts-next-order",
-        "contract-desk-order",
-        "contract-desk-empty",
         "scheduled-entry-enabled",
         "scheduled-entry-disabled",
         "parkour-category",
@@ -428,12 +326,11 @@ object ArcMenuConfiguration {
 
     fun load(dataRoot: Path): PaperMenuConfiguration {
         val config = Config(dataRoot, RESOURCE)
-        migrateMountSettings(config)
         return parse(filterToArcMenus(config))
     }
 
     /**
-     * Keep host validation away from ArcDungeons layouts and its reserved
+     * Keep host validation away from extracted plugin layouts and their reserved
      * template namespaces. Preserve other operator-defined templates, including
      * those not referenced by a bundled layout. Never save this filtered view.
      */
@@ -447,24 +344,6 @@ object ArcMenuConfiguration {
             .filter { template -> childTemplatePrefixes.any { prefix -> template.startsWith(prefix) } }
             .forEach { config.removeKey("$TEMPLATE_ROOT.$it") }
         return config
-    }
-
-    private fun migrateMountSettings(config: Config) {
-        val detail = "menus.layouts.mount-detail"
-        val oldGlowSlot = config.intOrNull("$detail.elements.glow.slot") ?: return
-        config.mergeMissingFromBundled(RESOURCE)
-        // Preserve the operator's old control position/template when it becomes Settings.
-        config.setInt("$detail.elements.settings.slot", oldGlowSlot)
-        config.setString("$detail.elements.settings.template", config.stringOrNull("$detail.elements.glow.template") ?: "background")
-        config.removeKey("$detail.elements.glow")
-        config.removeKey("$detail.elements.skins")
-        config.removeKey("$detail.regions.abilities")
-        config.removeKey("menus.layouts.mount-progression.elements.tuning")
-        val tuning = "menus.layouts.mount-tuning"
-        if (config.intOrNull("$tuning.rows") == 5) config.setInt("$tuning.rows", 6)
-        if (config.intOrNull("$tuning.elements.back.slot") == 36) config.setInt("$tuning.elements.back.slot", 45)
-        if (config.intOrNull("$tuning.elements.rider-view.slot") == 40) config.setInt("$tuning.elements.rider-view.slot", 49)
-        config.saveStrict()
     }
 
     internal fun loadResource(classLoader: ClassLoader): PaperMenuConfiguration {

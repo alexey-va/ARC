@@ -10,8 +10,9 @@ ArcDungeons owns dungeon parties, quests, checkpoints, saves, bestiary,
 scoreboard content, portals, class progression, shop and reward integration;
 EliteMobs enchantment books, decorative and lost loot; and staff spell execution.
 It owns `/dungeon`, its existing aliases, and `/loot`. Existing `/arc` adapters,
-reward catalog, contract ledger and generic AdvancedEnchantments integration
-remain in ARC.
+reward catalog and generic AdvancedEnchantments integration remain in ARC.
+The contract ledger is owned by ArcContracts through a typed host adapter; see
+[the independent domain plugins](arc-domain-plugins.md).
 
 ARC exports `arc-dungeons-api` and `arc-staff-spells-api`. ArcDungeons compiles
 against those contracts without packaging another copy. It obtains SQL, Redis
@@ -66,8 +67,7 @@ the same. Native lucky-ticket issuance retains item type/PDC validation and
 clones the item before applying its existing item model.
 
 Lost-loot SQL reservations, finalization, credit receipts and per-player gates
-remain the existing protocol. Contract authorizations continue through the host
-ledger. Changed provider availability fails before issuance. These invariants
+remain the existing protocol. Contract authorizations continue through the host adapter to ArcContracts. Changed provider availability fails before issuance. These invariants
 are covered by the moved tests plus boundary tests; operational acceptance must
 still check the activated plugin combination. EconomyShopGUI SELL and the
 planned SELL-to-contract transition are unchanged and are not counted as a new
