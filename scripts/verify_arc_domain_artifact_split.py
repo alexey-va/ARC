@@ -46,9 +46,14 @@ def verify(host: set[str], child: set[str], descriptor: str | None, name: str) -
             errors.append(f"ARC still owns moved resource {resource}")
         if resource not in child:
             errors.append(f"{name} is missing resource {resource}")
-    lines = {line.strip() for line in (descriptor or "").splitlines()}
-    if f"name: {name}" not in lines or "depend: [ARC]" not in lines:
-        errors.append(f"{name} must declare its identity and depend: [ARC]")
+    lines = (descriptor or "").splitlines()
+    # Our descriptors use either the inline form or a one-item block sequence.
+    has_arc_dependency = "depend: [ARC]" in lines or any(
+        line == "depend:" and following == "  - ARC"
+        for line, following in zip(lines, lines[1:])
+    )
+    if f"name: {name}" not in lines or not has_arc_dependency:
+        errors.append(f"{name} must declare its identity and a hard ARC dependency")
     return errors
 
 
