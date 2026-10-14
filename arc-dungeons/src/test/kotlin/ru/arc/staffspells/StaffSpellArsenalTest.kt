@@ -194,7 +194,7 @@ class StaffSpellArsenalTest : FreeSpec({
     }
 
     "GALE and TIDE alternate fronts own moving scenes through their travel" {
-        withStaffHarness { h ->
+        withStaffHarness(settings = staffSettings(range = 48.0)) { h ->
             val world = h.paper.addSimpleWorld("arsenal-display-scenes")
             val gale = h.player("gale-display-scene", world, StaffSpell.GALE)
             h.zombie(world, x = .5, z = 8.0)

@@ -34,7 +34,7 @@ import ru.arc.sync.EmSync
 import java.nio.file.Path
 import java.util.logging.Level
 
-class ArcDungeonsPlugin : JavaPlugin() {
+open class ArcDungeonsPlugin : JavaPlugin() {
     companion object { lateinit var instance: ArcDungeonsPlugin; private set }
     lateinit var legacyDataPath: Path
         private set
