@@ -49,6 +49,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 -m unittest discover -s scripts -p 'test_verify_arc_*artifact_split.py'
           mapfile -t arc_jars < <(find build/libs -maxdepth 1 -type f -name 'ARC-*.jar' ! -name '*-plain.jar' | sort)
           mapfile -t dungeons_jars < <(find arc-dungeons/build/libs -maxdepth 1 -type f -name 'ArcDungeons-*.jar' ! -name '*-plain.jar' | sort)
           test "${#arc_jars[@]}" -eq 1 || { echo "Expected exactly one ARC production JAR, got ${#arc_jars[@]}"; exit 1; }
