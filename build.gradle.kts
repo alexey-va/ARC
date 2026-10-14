@@ -580,7 +580,7 @@ val prepareE2ePaper = e2ePaperPin?.let { (name, sha256) ->
 val extractedArtifactVersions = mapOf(
     "ArcMounts" to "0.1.0",
     "ArcOrigin" to "0.1.0",
-    "ArcContracts" to "0.1.0",
+    "ArcContracts" to "0.1.1",
     "ArcContractsContractTestFixture" to "0.1.1",
     "ArcContractsContractCrashFixture" to "0.1.1",
 )
@@ -625,7 +625,7 @@ plugwright {
         file("plugins/ARC/modules/parkour.yml", projectDir.resolve("src/test/e2e/fixtures/parkour.yml"))
         file("plugins/Parkour/config.yml", projectDir.resolve("src/test/e2e/fixtures/parkour-config.yml"))
         for (name in listOf("ArcMounts", "ArcOrigin", "ArcContracts")) {
-            file("plugins/$name-0.1.0.jar", extractedJar(name).get().asFile)
+            file("plugins/$name-${extractedArtifactVersions.getValue(name)}.jar", extractedJar(name).get().asFile)
         }
         if (dungeonsE2e) {
             file("plugins/ARC/modules/redis.yml", projectDir.resolve("src/test/e2e/fixtures/entity-cleanup-redis.yml"))

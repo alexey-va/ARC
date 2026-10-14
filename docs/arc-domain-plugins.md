@@ -6,7 +6,7 @@ ARC 1.4.392 hosts the shared APIs for three independent public plugin repositori
 | --- | --- | --- |
 | ArcMounts 0.1.0 | https://github.com/alexey-va/ArcMounts | Mount ownership, riding, purchase recovery, transfers, care boosts and `/mount` |
 | ArcOrigin 0.1.0 | https://github.com/alexey-va/ArcOrigin | Origin scenes, NPC routes, dining, workshops, training, portal anchors and mount yard |
-| ArcContracts 0.1.0 | https://github.com/alexey-va/ArcContracts | Resource orders, submissions, journals, reconciliation, contract menus and existing season machinery |
+| ArcContracts 0.1.1 | https://github.com/alexey-va/ArcContracts | Resource orders, submissions, journals, reconciliation, contract menus and existing season machinery |
 
 The repositories own their Java API source modules. ARC embeds the published
 `ru.ruscrafting.arc:arc-mounts-api`, `arc-origin-api`, and `arc-contracts-api`
@@ -58,7 +58,8 @@ and must never be deployed to production. Their private fault-injection runners
 execute against ArcContracts' implementation classloader so that another
 plugin's Kotlin or core implementation cannot substitute incompatible types.
 
-For the first rollout, deliver ARC 1.4.392 and all three 0.1.0 child JARs before
+For the first rollout, deliver ARC 1.4.392, ArcMounts 0.1.0, ArcOrigin 0.1.0,
+and ArcContracts 0.1.1 before
 activation. Keep ArcDungeons and existing consumers installed. Rollback restores
 the matching previous ARC and removes these three child JARs together; mixing
 an older monolithic ARC with new children would duplicate handlers. Record
