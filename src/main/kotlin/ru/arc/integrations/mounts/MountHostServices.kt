@@ -42,19 +42,24 @@ object MountHostServices {
 }
 
 internal class MountEconomyProvider : ArcMountEconomy {
-    private val wallet = RedisEconomyWallet()
-    private fun currency(name: String) = requireNotNull(wallet.walletForCurrency(name))
+    // RedisEconomy is a soft dependency, so never link its API while ARC registers services.
+    private val redisEconomyEnabled = Bukkit.getPluginManager().isPluginEnabled("RedisEconomy")
+    private val wallet by lazy { RedisEconomyWallet() }
+    private fun currency(name: String) =
+        if (redisEconomyEnabled) wallet.walletForCurrency(name) else null
 
-    override fun available(currency: String) = currency(currency).available
-    override fun balanceMinor(currency: String, playerId: UUID) = currency(currency).balanceMinor(playerId)
+    override fun available(currency: String) = currency(currency)?.available == true
+    override fun balanceMinor(currency: String, playerId: UUID) = currency(currency)?.balanceMinor(playerId)
     override fun withdraw(currency: String, playerId: UUID, amountMinor: Long, reason: String, expectedBeforeMinor: Long) =
-        currency(currency).withdraw(playerId, amountMinor, reason, expectedBeforeMinor).toApi()
+        currency(currency)?.withdraw(playerId, amountMinor, reason, expectedBeforeMinor)?.toApi() ?: unavailableMoney()
     override fun deposit(currency: String, playerId: UUID, amountMinor: Long, reason: String, expectedBeforeMinor: Long) =
-        currency(currency).deposit(playerId, amountMinor, reason, expectedBeforeMinor).toApi()
+        currency(currency)?.deposit(playerId, amountMinor, reason, expectedBeforeMinor)?.toApi() ?: unavailableMoney()
     override fun findTransaction(currency: String, playerId: UUID, amountMinor: Long, reason: String, notBeforeMillis: Long) =
-        currency(currency).findTransaction(playerId, amountMinor, reason, notBeforeMillis).thenApply {
+        currency(currency)?.findTransaction(playerId, amountMinor, reason, notBeforeMillis)?.thenApply {
             ArcMountEconomy.TransactionEvidence(it.transactionId, it.historyAvailable)
-        }
+        } ?: java.util.concurrent.CompletableFuture.completedFuture(ArcMountEconomy.TransactionEvidence(null, false))
+
+    private fun unavailableMoney() = ArcMountEconomy.MoneyEvidence(false, false, null, "provider_unavailable")
 
     private fun CurrencyMoneyEvidence.toApi() = ArcMountEconomy.MoneyEvidence(
         providerAccepted, providerCallAttempted, balanceAfterMinor, failureCode,
