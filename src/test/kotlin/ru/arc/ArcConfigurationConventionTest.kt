@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.nio.file.Files
 import java.nio.file.Path
+import java.io.File
+import java.util.zip.ZipFile
 
 class ArcConfigurationConventionTest {
     private companion object {
@@ -125,19 +127,30 @@ class ArcConfigurationConventionTest {
     fun `explicit static ARC permissions are declared with defaults`() {
         val mainRoot = Path.of("src", "main")
         val pluginPath = mainRoot.resolve(Path.of("resources", "plugin.yml"))
-        val pluginLines = Files.readAllLines(pluginPath)
-        val declaration = Regex("^  ($STATIC_PERMISSION_PATTERN):$")
-        val declared =
-            pluginLines.mapNotNull { declaration.matchEntire(it)?.groupValues?.get(1) }.toSet()
-        val missingDefaults = mutableListOf<String>()
-        val declarationIndexes =
-            pluginLines.mapIndexedNotNull { index, line ->
-                declaration.matchEntire(line)?.groupValues?.get(1)?.let { index to it }
+        val descriptors = mutableMapOf(pluginPath.toString() to Files.readAllLines(pluginPath))
+        val domainPluginJars = requireNotNull(System.getProperty("arc.domainPluginJars")) {
+            "The test task must supply the extracted domain plugin artifacts"
+        }
+        domainPluginJars.split(File.pathSeparator).forEach { jarPath ->
+            ZipFile(jarPath).use { jar ->
+                val descriptor = requireNotNull(jar.getEntry("plugin.yml")) { "$jarPath has no plugin.yml" }
+                descriptors[jarPath] = jar.getInputStream(descriptor).bufferedReader().use { it.readLines() }
             }
-        declarationIndexes.forEachIndexed { position, (start, permission) ->
-            val end = declarationIndexes.getOrNull(position + 1)?.first ?: pluginLines.size
-            if (pluginLines.subList(start + 1, end).none { it.startsWith("    default:") }) {
-                missingDefaults += permission
+        }
+        val declaration = Regex("^  ($STATIC_PERMISSION_PATTERN):$")
+        val declared = mutableSetOf<String>()
+        val missingDefaults = mutableListOf<String>()
+        descriptors.forEach { (descriptor, pluginLines) ->
+            val declarationIndexes =
+                pluginLines.mapIndexedNotNull { index, line ->
+                    declaration.matchEntire(line)?.groupValues?.get(1)?.let { index to it }
+                }
+            declarationIndexes.forEachIndexed { position, (start, permission) ->
+                declared += permission
+                val end = declarationIndexes.getOrNull(position + 1)?.first ?: pluginLines.size
+                if (pluginLines.subList(start + 1, end).none { it.startsWith("    default:") }) {
+                    missingDefaults += "$descriptor:$permission"
+                }
             }
         }
 
@@ -170,11 +183,11 @@ class ArcConfigurationConventionTest {
 
         assertTrue(
             missingDefaults.isEmpty(),
-            "ARC plugin.yml permissions without an explicit default: ${missingDefaults.sorted()}",
+            "ARC plugin descriptors have permissions without an explicit default: ${missingDefaults.sorted()}",
         )
         assertTrue(
             declared.containsAll(referenced),
-            "ARC plugin.yml is missing static permissions: ${(referenced - declared).sorted()}",
+            "ARC and domain plugin descriptors are missing static permissions: ${(referenced - declared).sorted()}",
         )
     }
 

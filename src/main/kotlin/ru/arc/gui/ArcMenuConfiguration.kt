@@ -322,7 +322,13 @@ object ArcMenuConfiguration {
         "board-edit-field",
     )
 
-    private val childTemplatePrefixes = setOf("elite-loot-", "lost-loot-", "em-shop-")
+    private val childTemplatePrefixes = setOf(
+        "elite-loot-",
+        "lost-loot-",
+        "em-shop-",
+        "contract-desk-",
+        "contracts-",
+    )
 
     fun load(dataRoot: Path): PaperMenuConfiguration {
         val config = Config(dataRoot, RESOURCE)

@@ -50,43 +50,48 @@ class ArcMenuConfigurationTest : StringSpec({
         }
     }
 
-    "filters child dungeon layouts while preserving host templates and the shared legacy config" {
-        val root = Files.createTempDirectory("arc-menu-foreign-dungeon-config")
+    "loads the full legacy menu file repeatedly without validating child templates or rewriting host config" {
+        val root = Files.createTempDirectory("arc-menu-legacy-config")
         val target = root.resolve(ArcMenuConfiguration.RESOURCE)
         Files.createDirectories(target.parent)
-        javaClass.classLoader.getResourceAsStream(ArcMenuConfiguration.RESOURCE).use { source ->
+        javaClass.classLoader.getResourceAsStream("guis/menus-legacy.yml").use { source ->
             Files.copy(checkNotNull(source), target)
         }
 
-        val legacy = Config(root, ArcMenuConfiguration.RESOURCE)
-        legacy.setInt("menus.layouts.investigation-hub.elements.start.slot", 15)
-        legacy.setString("menus.layouts.elite-loot.schema-version", "future")
-        legacy.setString("menus.layouts.elite-loot.elements.back.template", "lost-loot-back")
-        legacy.setString("menus.layouts.elite-loot-confirmation.schema-version", "future")
-        legacy.setString("menus.layouts.elite-loot-confirmation.rows", "future")
-        legacy.setString("menus.templates.em-shop-item.material", "NOT_A_REAL_MATERIAL")
-        legacy.setString("menus.templates.lost-loot-back.material", "NOT_A_REAL_MATERIAL")
-        legacy.setString("menus.templates.operator-custom.material", "STONE")
-        legacy.saveStrict()
+        val hostConfig = Config(root, ArcMenuConfiguration.RESOURCE)
+        hostConfig.setInt("menus.layouts.investigation-hub.elements.start.slot", 15)
+        hostConfig.setString("menus.templates.operator-custom.material", "STONE")
+        hostConfig.saveStrict()
         val beforeLoad = Files.readString(target)
+        val legacy = Config(root, ArcMenuConfiguration.RESOURCE)
+        legacy.exists("menus.templates.contract-desk-order") shouldBe true
+        legacy.exists("menus.templates.contracts-order") shouldBe true
+        legacy.exists("menus.templates.elite-loot-previous") shouldBe true
+        legacy.exists("menus.layouts.mount-list") shouldBe true
 
         val loaded = ArcMenuConfiguration.load(root)
 
         loaded.catalog.layouts.keys shouldContainExactly ArcMenuSchema.contracts.keys
         loaded.catalog.require(ArcMenuSchema.INVESTIGATION_HUB).slot("start").index shouldBe 15
-        loaded.catalog.layouts.containsKey(MenuId.of("elite-loot")) shouldBe false
-        loaded.catalog.layouts.containsKey(MenuId.of("elite-loot-confirmation")) shouldBe false
+        loaded.catalog.layouts.containsKey(MenuId.of("mount-list")) shouldBe false
+        loaded.catalog.layouts.containsKey(MenuId.of("contracts-desk-3")) shouldBe false
+        loaded.templates.containsKey("contract-desk-order") shouldBe false
+        loaded.templates.containsKey("contracts-order") shouldBe false
+        loaded.templates.containsKey("elite-loot-previous") shouldBe false
         loaded.templates.containsKey("em-shop-item") shouldBe false
-        loaded.templates.containsKey("lost-loot-back") shouldBe false
-        loaded.templates.keys.containsAll(setOf(
-            "contract-desk-order", "contract-desk-empty", "board-contract-empty", "operator-custom",
-        )) shouldBe true
+        loaded.templates.keys.containsAll(setOf("board-contract-empty", "operator-custom")) shouldBe true
+        Files.readString(target) shouldBe beforeLoad
+
+        val reloaded = ArcMenuConfiguration.load(root)
+        reloaded.templates.containsKey("contracts-detail-confirm") shouldBe false
+        reloaded.templates.containsKey("operator-custom") shouldBe true
         Files.readString(target) shouldBe beforeLoad
 
         val persisted = Config(root, ArcMenuConfiguration.RESOURCE)
-        persisted.exists("menus.layouts.elite-loot-confirmation") shouldBe true
-        persisted.stringOrNull("menus.layouts.elite-loot.schema-version") shouldBe "future"
-        persisted.stringOrNull("menus.templates.lost-loot-back.material") shouldBe "NOT_A_REAL_MATERIAL"
+        persisted.exists("menus.layouts.mount-list") shouldBe true
+        persisted.exists("menus.templates.contract-desk-order") shouldBe true
+        persisted.exists("menus.templates.contracts-detail-confirm") shouldBe true
+        persisted.stringOrNull("menus.templates.operator-custom.material") shouldBe "STONE"
     }
 
     "investigation menu backgrounds render the canonical filler model" {

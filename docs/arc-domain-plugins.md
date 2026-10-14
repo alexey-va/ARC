@@ -53,7 +53,10 @@ provider and domain implementation classes, and runs the production combination
 on real Paper. ArcContracts additionally publishes separate **test-only**
 `ArcContractsContractTestFixture` and `ArcContractsContractCrashFixture` JARs for
 the existing integration and seven crash-recovery scenarios. These fixtures
-must never be deployed to production.
+have their own immutable release version, independent of the runtime and API,
+and must never be deployed to production. Their private fault-injection runners
+execute against ArcContracts' implementation classloader so that another
+plugin's Kotlin or core implementation cannot substitute incompatible types.
 
 For the first rollout, deliver ARC 1.4.392 and all three 0.1.0 child JARs before
 activation. Keep ArcDungeons and existing consumers installed. Rollback restores

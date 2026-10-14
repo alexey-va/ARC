@@ -6,18 +6,21 @@ import io.mockk.every
 import io.mockk.mockk
 import io.papermc.paper.plugin.configuration.PluginMeta
 import org.bukkit.plugin.Plugin
+import ru.arc.paper.testing.MockBukkitTestRuntime
 
 class OpsHttpHandlersTest :
     FreeSpec({
         "runtime health exposes the bounded agent-readable contract" {
-            val snapshot = OpsHttpHandlers.runtimeHealthSnapshot()
+            MockBukkitTestRuntime.open().use {
+                val snapshot = OpsHttpHandlers.runtimeHealthSnapshot()
 
-            snapshot.component shouldBe "arc"
-            snapshot.recoveryBacklog shouldBe 0
-            snapshot.activeLeases shouldBe 0
-            snapshot.schemas.containsKey("runtime.module_runtime") shouldBe true
-            snapshot.dependencies.containsKey("runtime.redis") shouldBe false
-            snapshot.probes.map { it.id }.contains("builder_tools") shouldBe false
+                snapshot.component shouldBe "arc"
+                snapshot.recoveryBacklog shouldBe 0
+                snapshot.activeLeases shouldBe 0
+                snapshot.schemas.containsKey("runtime.module_runtime") shouldBe true
+                snapshot.dependencies.containsKey("runtime.redis") shouldBe false
+                snapshot.probes.map { it.id }.contains("builder_tools") shouldBe false
+            }
         }
 
         "plugin summary reports metadata through the current Paper API" {

@@ -3,6 +3,7 @@ import org.gradle.api.services.BuildService
 import org.gradle.api.services.BuildServiceParameters
 import org.gradle.internal.os.OperatingSystem
 import ru.arc.testing.containers.RedisTestService
+import java.io.File
 import java.net.URI
 import java.util.Properties
 import java.net.Socket
@@ -576,16 +577,31 @@ val prepareE2ePaper = e2ePaperPin?.let { (name, sha256) ->
 }
 
 // These immutable artifacts were built and tested in their owning repositories.
-val extractedArtifactNames = listOf("ArcMounts", "ArcOrigin", "ArcContracts", "ArcContractsContractTestFixture", "ArcContractsContractCrashFixture")
-val extractedArtifacts = extractedArtifactNames.associateWith { name ->
-    configurations.detachedConfiguration(dependencies.create("ru.ruscrafting:$name:0.1.0")).apply { isTransitive = false }
+val extractedArtifactVersions = mapOf(
+    "ArcMounts" to "0.1.0",
+    "ArcOrigin" to "0.1.0",
+    "ArcContracts" to "0.1.0",
+    "ArcContractsContractTestFixture" to "0.1.1",
+    "ArcContractsContractCrashFixture" to "0.1.1",
+)
+val extractedArtifacts = extractedArtifactVersions.mapValues { (name, version) ->
+    configurations.detachedConfiguration(dependencies.create("ru.ruscrafting:$name:$version")).apply { isTransitive = false }
 }
-fun extractedJar(name: String) = layout.buildDirectory.file("extracted-plugins/$name-0.1.0.jar")
+fun extractedJar(name: String) = layout.buildDirectory.file("extracted-plugins/$name-${extractedArtifactVersions.getValue(name)}.jar")
 val prepareExtractedPluginArtifacts = tasks.register<Copy>("prepareExtractedPluginArtifacts") {
     extractedArtifacts.forEach { (name, artifact) ->
-        from({ artifact.singleFile }) { rename { "$name-0.1.0.jar" } }
+        from({ artifact.singleFile }) { rename { "$name-${extractedArtifactVersions.getValue(name)}.jar" } }
     }
     into(layout.buildDirectory.dir("extracted-plugins"))
+}
+
+tasks.named<Test>("test") {
+    dependsOn(prepareExtractedPluginArtifacts)
+    systemProperty(
+        "arc.domainPluginJars",
+        listOf("ArcMounts", "ArcOrigin", "ArcContracts")
+            .joinToString(File.pathSeparator) { extractedJar(it).get().asFile.absolutePath },
+    )
 }
 
 // Isolated real-Paper tests run separately from the fast JVM suite.
