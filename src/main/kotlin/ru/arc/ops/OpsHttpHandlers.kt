@@ -699,8 +699,9 @@ private object ArcRuntimeHealth : RuntimeHealthProvider {
                         "onboarding" to OnboardingStore.CURRENT_VERSION,
                         "rtp_players" to RtpPlayerStore.CURRENT_VERSION,
                         "product_interest" to ProductInterestStore.VERSION,
-                        "season_catalog" to contractsService()?.seasonCatalogSchema(),
-                    ) + (ru.arc.integrations.mounts.mountService()?.let {
+                    ) + (contractsService()?.let {
+                        mapOf("season_catalog" to it.seasonCatalogSchema())
+                    } ?: emptyMap()) + (ru.arc.integrations.mounts.mountService()?.let {
                         mapOf("mount_purchase" to it.purchaseJournalSchema())
                     } ?: emptyMap()),
             dependencies = modules.dependencies +
