@@ -108,7 +108,8 @@ internal class DungeonScoreboard(
                 put("title", title)
                 rows.forEachIndexed { index, row -> put("line_${index + 1}", row) }
             }
-            sidebar?.show(player, ArcSidebarFrame(legacy.deserialize(title), rows.map(legacy::deserialize)))
+            // The shared API lives in ARC's loader; avoid Kotlin's synthetic default-argument constructor.
+            sidebar?.show(player, ArcSidebarFrame(legacy.deserialize(title), rows.map(legacy::deserialize), emptySet()))
         }
         (snapshots.keys - present).forEach { sidebar?.hide(it) }
         snapshots.keys.retainAll(present)

@@ -1,12 +1,12 @@
 # Independent ARC domain plugins
 
-ARC 1.4.392 hosts the shared APIs for three independent public plugin repositories:
+ARC 1.4.393 hosts the shared APIs for three independent public plugin repositories:
 
 | Plugin | Repository | Responsibilities |
 | --- | --- | --- |
-| ArcMounts 0.1.0 | https://github.com/alexey-va/ArcMounts | Mount ownership, riding, purchase recovery, transfers, care boosts and `/mount` |
-| ArcOrigin 0.1.0 | https://github.com/alexey-va/ArcOrigin | Origin scenes, NPC routes, dining, workshops, training, portal anchors and mount yard |
-| ArcContracts 0.1.1 | https://github.com/alexey-va/ArcContracts | Resource orders, submissions, journals, reconciliation, contract menus and existing season machinery |
+| ArcMounts 0.1.1 | https://github.com/alexey-va/ArcMounts | Mount ownership, riding, purchase recovery, transfers, care boosts and `/mount` |
+| ArcOrigin 0.1.1 | https://github.com/alexey-va/ArcOrigin | Origin scenes, NPC routes, dining, workshops, training, portal anchors and mount yard |
+| ArcContracts 0.1.2 | https://github.com/alexey-va/ArcContracts | Resource orders, submissions, journals, reconciliation, contract menus and existing season machinery |
 
 The repositories own their Java API source modules. ARC embeds the published
 `ru.ruscrafting.arc:arc-mounts-api`, `arc-origin-api`, and `arc-contracts-api`
@@ -17,7 +17,7 @@ Changing an API requires a new immutable API version and a compatible host.
 
 Each child owns its shaded core implementation modules and lifecycle. The
 shared API classes are the deliberate exception. SQL and Redis clients borrow
-ARC's arc-core 2.7.22 providers; metrics use owner-scoped meters in ARC's registry.
+ARC's arc-core 2.7.23 providers; metrics use owner-scoped meters in ARC's registry.
 Origin's chunk leases share ARC's existing ticket registry, and its NPC
 holograms, auction operations, furniture inspection and payments call typed host
 ports. This change makes no measured claim about heap or throughput savings.
@@ -78,3 +78,10 @@ readiness flag. The existing EconomyShopGUI SELL-to-contract transition is
 unchanged. Source tests and production acceptance must verify provider failure,
 payment evidence and recovery behavior rather than treating a successful build
 as an economy check.
+
+ArcContracts 0.1.2 requires the arc-core 2.7.23 API/provider bundled in ARC
+1.4.393. Deploy them in the same restart batch. Contract gauges use one bounded
+2048-series scope and replace that scope when snapshot keys change, so removed
+contracts and previous status labels do not remain registered. ArcDungeons
+0.1.1 publishes sidebar frames through the full Java-shaped constructor; its
+packaged bytecode is checked to avoid a cross-loader Kotlin default marker.

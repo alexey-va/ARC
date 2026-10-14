@@ -8,7 +8,7 @@ repositories {
 }
 dependencies {
     compileOnlyApi("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
-    compileOnlyApi("ru.ruscrafting.arc:arc-core-paper-api:2.7.22")
+    compileOnlyApi("ru.ruscrafting.arc:arc-core-paper-api:2.7.23")
 }
 java { toolchain { languageVersion.set(JavaLanguageVersion.of(25)) } }
 tasks.withType<JavaCompile>().configureEach { options.encoding = "UTF-8"; options.release.set(25) }

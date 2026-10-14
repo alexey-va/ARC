@@ -5,8 +5,12 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
+import io.mockk.verify
 import com.magmaguy.elitemobs.advancedcombat.classes.ClassResourceType
 import org.bukkit.entity.Player
+import ru.arc.paper.api.ArcSidebarFrame
+import ru.arc.paper.api.ArcSidebarHandle
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
@@ -26,12 +30,19 @@ class DungeonScoreboardTest : FreeSpec({
             }
             net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize(body)
         }
+        val sidebar = mockk<ArcSidebarHandle>(relaxed = true)
+        val frame = slot<ArcSidebarFrame>()
         val board = DungeonScoreboard(
             qol,
+            sidebar = sidebar,
             party = { null },
             resource = { DungeonCombatResource(ClassResourceType.FURY, 37, 100) },
         ) { "42" }
         board.refresh(listOf(player))
+        verify(exactly = 1) { sidebar.show(player, capture(frame)) }
+        frame.captured.hiddenNameEntries shouldBe emptySet()
+        frame.captured.rows.map(net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()::serialize) shouldBe
+            scoreboardLines(board, id)
         CompletableFuture.supplyAsync { board.value(id, "line_1") }.get() shouldBe "Крипта"
         board.value(id, "active") shouldBe "true"
         val lines = scoreboardLines(board, id)

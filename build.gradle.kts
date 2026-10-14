@@ -22,7 +22,7 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath("ru.ruscrafting.arc:arc-core-integration-testing:2.7.22")
+        classpath("ru.ruscrafting.arc:arc-core-integration-testing:2.7.23")
     }
 }
 
@@ -76,10 +76,10 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.392"
+version = "1.4.393"
 description = "ARC"
 val pluginVersion = version.toString()
-val arcCoreVersion = "2.7.22"
+val arcCoreVersion = "2.7.23"
 val landsJar = providers.gradleProperty("landsJar").orNull?.let(::file)
 if (landsJar != null) require(landsJar.isFile) { "Lands JAR does not exist: $landsJar" }
 val landsCompileDependency: Any = landsJar?.let { files(it) } ?: libs.com.github.angeschossen.landsapi
@@ -578,11 +578,11 @@ val prepareE2ePaper = e2ePaperPin?.let { (name, sha256) ->
 
 // These immutable artifacts were built and tested in their owning repositories.
 val extractedArtifactVersions = mapOf(
-    "ArcMounts" to "0.1.0",
-    "ArcOrigin" to "0.1.0",
-    "ArcContracts" to "0.1.1",
-    "ArcContractsContractTestFixture" to "0.1.1",
-    "ArcContractsContractCrashFixture" to "0.1.1",
+    "ArcMounts" to "0.1.1",
+    "ArcOrigin" to "0.1.1",
+    "ArcContracts" to "0.1.2",
+    "ArcContractsContractTestFixture" to "0.1.2",
+    "ArcContractsContractCrashFixture" to "0.1.2",
 )
 val extractedArtifacts = extractedArtifactVersions.mapValues { (name, version) ->
     configurations.detachedConfiguration(dependencies.create("ru.ruscrafting:$name:$version")).apply { isTransitive = false }
@@ -629,7 +629,7 @@ plugwright {
         }
         if (dungeonsE2e) {
             file("plugins/ARC/modules/redis.yml", projectDir.resolve("src/test/e2e/fixtures/entity-cleanup-redis.yml"))
-            file("plugins/ArcDungeons-0.1.0.jar", projectDir.resolve("arc-dungeons/build/libs/ArcDungeons-0.1.0.jar"))
+            file("plugins/ArcDungeons-0.1.1.jar", projectDir.resolve("arc-dungeons/build/libs/ArcDungeons-0.1.1.jar"))
             file("plugins/ArcDungeonsE2eFixture.jar", arcDungeonsE2eFixtureJar.get().archiveFile.get().asFile)
             file("plugins/Citizens-2.0.43-b4246.jar", contractCitizensJar.get().asFile)
         } else if (cleanupE2e || parkourE2e || dialogE2e) {

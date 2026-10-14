@@ -55,9 +55,13 @@ jobs:
           test "${#arc_jars[@]}" -eq 1 || { echo "Expected exactly one ARC production JAR, got ${#arc_jars[@]}"; exit 1; }
           test "${#dungeons_jars[@]}" -eq 1 || { echo "Expected exactly one ArcDungeons production JAR, got ${#dungeons_jars[@]}"; exit 1; }
           python3 scripts/verify_arc_dungeons_artifact_split.py --arc-jar "${arc_jars[0]}" --dungeons-jar "${dungeons_jars[0]}"
-          python3 scripts/verify_arc_domain_artifact_split.py --name ArcMounts --arc-jar "${arc_jars[0]}" --child-jar build/extracted-plugins/ArcMounts-0.1.0.jar
-          python3 scripts/verify_arc_domain_artifact_split.py --name ArcOrigin --arc-jar "${arc_jars[0]}" --child-jar build/extracted-plugins/ArcOrigin-0.1.0.jar
-          python3 scripts/verify_arc_domain_artifact_split.py --name ArcContracts --arc-jar "${arc_jars[0]}" --child-jar build/extracted-plugins/ArcContracts-0.1.1.jar
+          # Kotlin default constructor markers cannot cross ARC/ArcDungeons classloaders.
+          javap -c -p -classpath "${dungeons_jars[0]}" ru.arc.hooks.elitemobs.DungeonScoreboard > build/dungeons-scoreboard-bytecode.txt
+          grep -F 'ArcSidebarFrame."<init>":(Lnet/kyori/adventure/text/Component;Ljava/util/List;Ljava/util/Set;)V' build/dungeons-scoreboard-bytecode.txt
+          if grep -E 'ArcSidebarFrame\."<init>".*DefaultConstructorMarker' build/dungeons-scoreboard-bytecode.txt; then exit 1; fi
+          python3 scripts/verify_arc_domain_artifact_split.py --name ArcMounts --arc-jar "${arc_jars[0]}" --child-jar build/extracted-plugins/ArcMounts-0.1.1.jar
+          python3 scripts/verify_arc_domain_artifact_split.py --name ArcOrigin --arc-jar "${arc_jars[0]}" --child-jar build/extracted-plugins/ArcOrigin-0.1.1.jar
+          python3 scripts/verify_arc_domain_artifact_split.py --name ArcContracts --arc-jar "${arc_jars[0]}" --child-jar build/extracted-plugins/ArcContracts-0.1.2.jar
       - name: Preserve tested production JARs
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -198,7 +202,7 @@ jobs:
           retention-days: 7
           path: |
             arc-dungeons/build/libs/ArcDungeons-*.jar
-            build/plugwright/plugins/ArcDungeons-0.1.0.jar
+            build/plugwright/plugins/ArcDungeons-0.1.1.jar
             build/plugwright/plugins/ArcDungeonsE2eFixture.jar
             build/plugwright/logs/
             build/e2e-jar-sha256.txt
