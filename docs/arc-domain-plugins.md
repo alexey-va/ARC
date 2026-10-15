@@ -24,12 +24,14 @@ ports. This change makes no measured claim about heap or throughput savings.
 
 ## Shared provider host
 
-Starting with ARC 1.4.395, `ArcCore 0.1.0` owns the SQL/Redis providers, the
+Starting with ARC 1.4.395, `ArcCore 0.1.1` owns the SQL/Redis providers, the
 consumer-metrics service and their `ArcSql*`, `ArcRedis*`, `ArcMetric*` API types.
-Other Paper APIs, including visual effects and sidebars, stay in ARC. It is a small
-subproject in this repository, with its own version and JAR. ARC depends on
-ArcCore and borrows the existing providers through `ArcCoreServices`; shutdown
-of ARC releases its resources without closing the other plugins' providers.
+Other Paper APIs, including visual effects and sidebars, stay in ARC. ArcCore
+is built and published independently in the
+[ArcCorePlugin repository](https://github.com/alexey-va/ArcCorePlugin). ARC
+depends on its self-contained JAR and borrows the existing providers through
+`ArcCoreServices`; shutdown of ARC releases its resources without closing the
+other plugins' providers.
 
 ARC retains Redis settings under `plugins/ARC/modules/redis.yml`, its Prometheus
 registry/exporter and gameplay telemetry. ArcCore adds no configuration, ports,
@@ -42,8 +44,9 @@ ArcCore itself requires a normal server restart; hot-swapping its classloader
 while borrowers retain service handles is unsupported. A rollback to older ARC
 must also remove ArcCore from the active plugin root to avoid duplicate owners.
 
-CI extends the existing archive ownership checks and real-Paper scenarios. It
-does not add a separate release platform. ArcCore is a provider host, so the
+CI downloads the pinned ArcCore JAR for the existing archive ownership checks
+and real-Paper scenarios. It does not build ArcCore or add a separate release
+platform. ArcCore is a provider host, so the
 generic feature-consumer manifest baseline (menus, locale and feature runtime)
 does not apply; its manifest declares no unused consumer capabilities.
 

@@ -9,23 +9,24 @@ McFine **Paper/Purpur** plugin — treasure hunts, board, and cross-server Redis
 - **Java 25** (Temurin)
 - **Gradle 9.2.1**
 - Published `arc-core 2.7.23` artifacts from the public RusCrafting repository
-- `ArcCore 0.1.0` installed alongside ARC (shared SQL, Redis and metrics host)
+- `ArcCore 0.1.1` installed alongside ARC (shared SQL, Redis and metrics host;
+  published by [ArcCorePlugin](https://github.com/alexey-va/ArcCorePlugin))
 
 ## Build
 
 ```bash
 export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-25.jdk/Contents/Home
-./gradlew test :arc-core-plugin:test
-./gradlew shadowJar :arc-core-plugin:shadowJar
+./gradlew test shadowJar
 ```
 
-Deployable outputs include `build/libs/ARC-1.4.395.jar`,
-`arc-core-plugin/build/libs/ArcCore-0.1.0.jar` and the independently versioned
-`arc-dungeons/build/libs/ArcDungeons-*.jar`. Archives ending in `-plain.jar`
-are not deployable. GitHub Actions builds and tests the plugins and verifies
-that the shared APIs have one runtime owner.
-ArcCore and ArcDungeons versions live in `gradle.properties`; the build and
-Paper test fixtures read those same values.
+This repository builds ARC and ArcDungeons. ArcCore is an independently
+published runtime dependency from the [ArcCorePlugin repository](https://github.com/alexey-va/ArcCorePlugin);
+the build downloads its pinned JAR for ownership checks and Paper fixtures.
+Deployable outputs built here include `build/libs/ARC-1.4.395.jar` and the
+independently versioned `arc-dungeons/build/libs/ArcDungeons-*.jar`. Archives
+ending in `-plain.jar` are not deployable. GitHub Actions verifies that shared
+APIs have one runtime owner. ArcCore and ArcDungeons versions live in
+`gradle.properties`; the build and Paper test fixtures read those same values.
 
 [ArcCore ownership and independent updates](docs/arc-domain-plugins.md#shared-provider-host).
 

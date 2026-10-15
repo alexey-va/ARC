@@ -2,7 +2,6 @@ rootProject.name = "ARC"
 
 include(":arc-staff-spells-api")
 include(":arc-dungeons-api", ":arc-dungeons")
-include(":arc-core-plugin")
 
 providers.gradleProperty("arcCoreDir").orNull?.let(::file)?.let { arcCoreDir ->
     require(arcCoreDir.resolve("settings.gradle.kts").isFile) {

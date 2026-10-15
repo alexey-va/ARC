@@ -42,7 +42,7 @@ jobs:
           distribution: temurin
           java-version: "25"
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
-      - run: ./gradlew --no-parallel --build-cache :test :arc-dungeons:test :arc-core-plugin:test :shadowJar :arc-dungeons:shadowJar :arc-core-plugin:shadowJar :prepareExtractedPluginArtifacts
+      - run: ./gradlew --no-parallel --build-cache :test :arc-dungeons:test :shadowJar :arc-dungeons:shadowJar :prepareExtractedPluginArtifacts
       - name: Verify ArcDungeons core consumer contract
         run: python3 .tmp/arc-core-verifier/scripts/verify_consumer_architecture.py arc-dungeons
       - name: Verify ARC and ArcDungeons artifact split
@@ -51,7 +51,7 @@ jobs:
           set -euo pipefail
           python3 -m unittest discover -s scripts -p 'test_verify_arc_*artifact_split.py'
           mapfile -t arc_jars < <(find build/libs -maxdepth 1 -type f -name 'ARC-*.jar' ! -name '*-plain.jar' | sort)
-          mapfile -t arc_core_jars < <(find arc-core-plugin/build/libs -maxdepth 1 -type f -name 'ArcCore-*.jar' ! -name '*-plain.jar' | sort)
+          mapfile -t arc_core_jars < <(find build/extracted-plugins -maxdepth 1 -type f -name 'ArcCore-*.jar' ! -name '*-plain.jar' | sort)
           mapfile -t dungeons_jars < <(find arc-dungeons/build/libs -maxdepth 1 -type f -name 'ArcDungeons-*.jar' ! -name '*-plain.jar' | sort)
           test "${#arc_jars[@]}" -eq 1 || { echo "Expected exactly one ARC production JAR, got ${#arc_jars[@]}"; exit 1; }
           test "${#arc_core_jars[@]}" -eq 1 || { echo "Expected exactly one ArcCore production JAR, got ${#arc_core_jars[@]}"; exit 1; }
@@ -67,15 +67,14 @@ jobs:
       - name: Preserve tested production JARs
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: ARC-ArcCore-and-ArcDungeons-${{ github.sha }}
+          name: ARC-ArcDungeons-tested-with-ArcCore-dependency-${{ github.sha }}
           retention-days: 7
           path: |
             build/libs/ARC-*.jar
             !build/libs/*-plain.jar
-            arc-core-plugin/build/libs/ArcCore-*.jar
-            !arc-core-plugin/build/libs/*-plain.jar
             arc-dungeons/build/libs/ArcDungeons-*.jar
             !arc-dungeons/build/libs/*-plain.jar
+            build/extracted-plugins/ArcCore-*.jar
             build/extracted-plugins/ArcMounts-*.jar
             build/extracted-plugins/ArcOrigin-*.jar
             build/extracted-plugins/ArcContracts-*.jar
@@ -92,8 +91,6 @@ jobs:
             build/reports/tests/test/**
             arc-dungeons/build/test-results/test/**
             arc-dungeons/build/reports/tests/test/**
-            arc-core-plugin/build/test-results/test/**
-            arc-core-plugin/build/reports/tests/test/**
           if-no-files-found: ignore
 
   integration:
@@ -193,7 +190,7 @@ jobs:
         if: always()
         run: |
           jars=()
-          for jar in build/libs/ARC-*.jar arc-core-plugin/build/libs/ArcCore-*.jar arc-dungeons/build/libs/ArcDungeons-*.jar build/extracted-plugins/ArcMounts-*.jar build/extracted-plugins/ArcOrigin-*.jar build/extracted-plugins/ArcContracts-*.jar; do
+          for jar in build/libs/ARC-*.jar build/extracted-plugins/ArcCore-*.jar arc-dungeons/build/libs/ArcDungeons-*.jar build/extracted-plugins/ArcMounts-*.jar build/extracted-plugins/ArcOrigin-*.jar build/extracted-plugins/ArcContracts-*.jar; do
             if [[ -f "$jar" && "$jar" != *-plain.jar ]]; then jars+=("$jar"); fi
           done
           if ((${#jars[@]})); then
@@ -222,8 +219,7 @@ jobs:
           name: arc-dungeons-paper-e2e-${{ github.sha }}
           retention-days: 7
           path: |
-            arc-core-plugin/build/libs/ArcCore-*.jar
-            !arc-core-plugin/build/libs/*-plain.jar
+            build/extracted-plugins/ArcCore-*.jar
             build/plugwright/plugins/ArcCore-*.jar
             arc-dungeons/build/libs/ArcDungeons-*.jar
             build/plugwright/plugins/ArcDungeons-*.jar

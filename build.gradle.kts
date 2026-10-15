@@ -154,8 +154,8 @@ dependencies {
     implementation("ru.ruscrafting.arc:arc-core-telemetry:$arcCoreVersion")
     implementation("ru.ruscrafting.arc:arc-core-paper:$arcCoreVersion")
     implementation("ru.ruscrafting.arc:arc-core-paper-api:$arcCoreVersion")
-    compileOnly(project(":arc-core-plugin"))
-    testImplementation(project(":arc-core-plugin"))
+    compileOnly("ru.ruscrafting:ArcCore:$arcCorePluginVersion") { isTransitive = false }
+    testImplementation("ru.ruscrafting:ArcCore:$arcCorePluginVersion") { isTransitive = false }
     implementation("ru.ruscrafting.arc:arc-core-menu:$arcCoreVersion")
     implementation("ru.ruscrafting.arc:arc-core-paper-menu:$arcCoreVersion")
     implementation("ru.ruscrafting.arc:arc-core-ai:$arcCoreVersion")
@@ -593,6 +593,7 @@ val prepareE2ePaper = e2ePaperPin?.let { (name, sha256) ->
 
 // These immutable artifacts were built and tested in their owning repositories.
 val extractedArtifactVersions = mapOf(
+    "ArcCore" to arcCorePluginVersion,
     "ArcMounts" to "0.1.1",
     "ArcOrigin" to "0.1.1",
     "ArcContracts" to "0.1.2",
@@ -634,7 +635,7 @@ plugwright {
     acceptEula.set(true)
     jvmArgs.set(listOf("-Xms512M", "-Xmx2G", "-XX:ActiveProcessorCount=2"))
     writeFiles {
-        file("plugins/ArcCore-$arcCorePluginVersion.jar", projectDir.resolve("arc-core-plugin/build/libs/ArcCore-$arcCorePluginVersion.jar"))
+        file("plugins/ArcCore-$arcCorePluginVersion.jar", extractedJar("ArcCore").get().asFile)
         file("server.properties", projectDir.resolve("src/test/e2e/fixtures/server.properties"))
         file("permissions.yml", projectDir.resolve("src/test/e2e/fixtures/permissions.yml"))
         file("plugins/ARC/modules/entity-cleanup.yml", projectDir.resolve("src/test/e2e/fixtures/entity-cleanup.yml"))
@@ -812,7 +813,6 @@ val prepareContractE2e = tasks.register("prepareContractE2e") {
 
 tasks.named<me.drownek.plugwright.PlugwrightTestTask>("plugwrightTest") {
     dependsOn(prepareExtractedPluginArtifacts)
-    dependsOn(":arc-core-plugin:shadowJar")
     prepareE2ePaper?.let {
         dependsOn(it)
         serverJarPath.set(requireNotNull(e2ePaperJar).map { jar -> jar.asFile.absolutePath })

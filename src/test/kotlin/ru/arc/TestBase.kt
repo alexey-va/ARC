@@ -145,6 +145,6 @@ abstract class TestBase {
 
 /** Loads the real provider host with an explicit descriptor to avoid the shared test-classpath plugin.yml. */
 internal fun loadArcCoreHostForTest(): ArcCorePlugin {
-    val descriptor = PluginDescriptionFile("ArcCore", "0.1.0", ArcCorePlugin::class.java.name)
+    val descriptor = PluginDescriptionFile("ArcCore", "0.1.1", ArcCorePlugin::class.java.name)
     return MockBukkit.loadWith(ArcCorePlugin::class.java, descriptor)
 }
