@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "ru.ruscrafting.arc"
-version = "0.1.0"
+version = "0.1.1"
 base.archivesName.set("arc-staff-spells-api")
 
 repositories {
