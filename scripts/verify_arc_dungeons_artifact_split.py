@@ -10,7 +10,8 @@ from pathlib import Path
 
 
 PAPER_API_PACKAGE = "ru/arc/paper/api/"
-PAPER_API_CLASS = "ru/arc/paper/api/ArcRedisService.class"
+ARC_CORE_API_PREFIXES = ("ArcSql", "ArcRedis", "ArcMetric")
+PAPER_API_VISUAL_CLASS = "ru/arc/paper/api/VisualPacketAdmission.class"
 DOMAIN_API_PACKAGES = (
     "ru/arc/dungeons/api/",
     "ru/arc/staffspells/api/",
@@ -99,15 +100,28 @@ def verify_arc_core_ownership(
     arc_core_descriptor: str | None,
 ) -> list[str]:
     violations = []
-    if not class_entries(arc_core, PAPER_API_PACKAGE):
-        violations.append("ArcCore JAR is missing the shared Paper API package")
-    if PAPER_API_CLASS not in arc_core:
-        violations.append(f"ArcCore JAR is missing shared API class {PAPER_API_CLASS}")
-    if class_entries(arc, PAPER_API_PACKAGE):
-        violations.append("ARC JAR embeds the ArcCore-owned Paper API package")
+    arc_core_api = class_entries(arc_core, PAPER_API_PACKAGE)
+    arc_api = class_entries(arc, PAPER_API_PACKAGE)
+    arc_core_owned_api = {
+        entry
+        for entry in arc_core_api
+        if entry.rsplit("/", 1)[-1].startswith(ARC_CORE_API_PREFIXES)
+    }
+    for prefix in ARC_CORE_API_PREFIXES:
+        if not any(entry.rsplit("/", 1)[-1].startswith(prefix) for entry in arc_core_api):
+            violations.append(f"ArcCore JAR is missing shared Paper API family {prefix}*")
+    for entry in arc_core_api - arc_core_owned_api:
+        violations.append(f"ArcCore JAR embeds ARC-owned Paper API class {entry}")
+    for entry in arc_api:
+        if entry.rsplit("/", 1)[-1].startswith(ARC_CORE_API_PREFIXES):
+            violations.append(f"ARC JAR embeds ArcCore-owned Paper API class {entry}")
+    if PAPER_API_VISUAL_CLASS not in arc_api:
+        violations.append(f"ARC JAR is missing ARC-owned Paper API class {PAPER_API_VISUAL_CLASS}")
+    if PAPER_API_VISUAL_CLASS in arc_core_api:
+        violations.append(f"ArcCore JAR embeds ARC-owned Paper API class {PAPER_API_VISUAL_CLASS}")
     for name, child in children:
-        if class_entries(child, PAPER_API_PACKAGE):
-            violations.append(f"{name} JAR embeds the ArcCore-owned Paper API package")
+        for entry in class_entries(child, PAPER_API_PACKAGE):
+            violations.append(f"{name} JAR embeds shared Paper API class {entry}")
 
     for class_name in PROVIDER_CLASSES:
         if not class_exists(arc_core, class_name):

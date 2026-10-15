@@ -1,5 +1,6 @@
 import unittest
 from verify_arc_dungeons_artifact_split import (
+    PAPER_API_VISUAL_CLASS,
     ARC_CORE_RUNTIME_CLASS_PREFIXES,
     ARC_CORE_RUNTIME_PACKAGES,
     PROVIDER_CLASSES,
@@ -11,6 +12,11 @@ from verify_arc_domain_artifact_split import (
 
 ARC_CORE_ENTRIES = {
     "ru/arc/paper/api/ArcRedisService.class",
+    "ru/arc/paper/api/ArcRedisSettings.class",
+    "ru/arc/paper/api/ArcSqlService.class",
+    "ru/arc/paper/api/ArcSqlSettings.class",
+    "ru/arc/paper/api/ArcMetricsService.class",
+    "ru/arc/paper/api/ArcMetricCounter.class",
     *(f"{provider}.class" for provider in PROVIDER_CLASSES),
     *(f"{prefix}.class" for prefix in ARC_CORE_RUNTIME_CLASS_PREFIXES),
     *(f"{package}CoreType.class" for package in ARC_CORE_RUNTIME_PACKAGES),
@@ -24,7 +30,7 @@ class ArtifactOwnershipTest(unittest.TestCase):
         for name, (domain, entry, service, resources) in DOMAINS.items():
             with self.subTest(plugin=name):
                 api = f"ru/arc/{domain}/api/{service}.class"
-                host = {"ru/arc/ARC.class", api}
+                host = {"ru/arc/ARC.class", api, PAPER_API_VISUAL_CLASS, "ru/arc/paper/api/ArcSidebarService.class"}
                 child = {f"ru/arc/{domain}/{entry}.class", *resources}
                 descriptor = f"name: {name}\ndepend: [ARC]"
                 self.assertEqual([], verify(host, ARC_CORE_ENTRIES, child, ARC_DESCRIPTOR, ARC_CORE_DESCRIPTOR, descriptor, name))

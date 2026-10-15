@@ -231,7 +231,7 @@ class StaffSpellArsenalTest : FreeSpec({
         }
     }
 
-    "Ossuary primary uses delayed close contact while its alternate eruption rises from the floor" {
+    "Ossuary primary delays spike contact while its alternate eruption rises from the floor" {
         fun stoneFloor(world: org.bukkit.World) {
             for (x in -2..2) for (z in 0..14) world.getBlockAt(x, 63, z).type = Material.STONE
         }
@@ -242,13 +242,18 @@ class StaffSpellArsenalTest : FreeSpec({
             val target = h.zombie(world, x = .5, z = 4.0)
             h.controller.start()
             h.controller.cast(player, StaffCastInput.PRIMARY, 0.0)
-            h.scheduler.tick(3)
+            h.scheduler.tick(9)
             h.hits shouldBe emptyList()
             h.scheduler.tick(1)
             h.hits.map { it.uniqueId } shouldBe listOf(target.uniqueId)
             h.scheduler.tick(42)
             h.hits.map { it.uniqueId } shouldBe listOf(target.uniqueId)
-            h.visualPlays.none { it.spell == StaffSpell.OSSUARY } shouldBe true
+            val spikeScenes = h.visualPlays.filter {
+                it.spell == StaffSpell.OSSUARY && !it.secondary && it.from.world == world
+            }
+            spikeScenes.size shouldBe 6
+            spikeScenes.zipWithNext().all { (a, b) -> b.from.z - a.from.z in 1.8..2.0 } shouldBe true
+            (spikeScenes.last().from.z - player.location.z in 13.5..14.5) shouldBe true
         }
         withStaffHarness { h ->
             val world = h.paper.addSimpleWorld("ossuary-eruption")
@@ -320,7 +325,7 @@ class StaffSpellArsenalTest : FreeSpec({
         }
     }
 
-    "Gale alternate keeps its fixed horizontal reach while close primaries ignore aim and charge" {
+    "Gale and OSSUARY forward attacks keep fixed horizontal reach while TIDE primary stays close across aim and charge" {
         withStaffHarness(settings = staffSettings(range = 48.0)) { h ->
             h.controller.start()
             listOf(StaffSpell.GALE, StaffSpell.OSSUARY, StaffSpell.TIDE).forEach { spell ->
@@ -335,20 +340,22 @@ class StaffSpellArsenalTest : FreeSpec({
                         h.controller.cast(player, if (spell == StaffSpell.GALE) StaffCastInput.SECONDARY
                             else StaffCastInput.PRIMARY, charge)
                         h.scheduler.tick(54)
-                        if (spell == StaffSpell.GALE) {
-                            (near in h.hits) shouldBe true
-                            (far in h.hits) shouldBe true
-                        } else {
-                            (near in h.hits) shouldBe true
-                            (far in h.hits) shouldBe false
-                        }
+                        (near in h.hits) shouldBe true
+                        (far in h.hits) shouldBe (spell != StaffSpell.TIDE)
                         val scenes = h.visualPlays.filter { it.from.world == world }
-                        if (spell == StaffSpell.GALE) {
-                            val gust = scenes.single()
-                            (kotlin.math.abs(gust.to.z - player.location.z - 36.0) < .01) shouldBe true
-                            (kotlin.math.abs(gust.to.y - gust.from.y) < .01) shouldBe true
-                        } else {
-                            scenes shouldBe emptyList()
+                        when (spell) {
+                            StaffSpell.GALE -> {
+                                val gust = scenes.single()
+                                (kotlin.math.abs(gust.to.z - player.location.z - 36.0) < .01) shouldBe true
+                                (kotlin.math.abs(gust.to.y - gust.from.y) < .01) shouldBe true
+                            }
+                            StaffSpell.OSSUARY -> {
+                                scenes.size shouldBe 11
+                                scenes.zipWithNext().all { (a, b) -> b.from.z - a.from.z in 1.8..2.0 } shouldBe true
+                                (kotlin.math.abs(scenes.last().from.z - player.location.z - 24.0) < .01) shouldBe true
+                            }
+                            StaffSpell.TIDE -> scenes shouldBe emptyList()
+                            else -> error("Unexpected spell in fixed reach test: $spell")
                         }
                     }
                 }

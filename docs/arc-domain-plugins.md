@@ -25,7 +25,8 @@ ports. This change makes no measured claim about heap or throughput savings.
 ## Shared provider host
 
 Starting with ARC 1.4.395, `ArcCore 0.1.0` owns the SQL/Redis providers, the
-consumer-metrics service and `ru.arc.paper.api` class identity. It is a small
+consumer-metrics service and their `ArcSql*`, `ArcRedis*`, `ArcMetric*` API types.
+Other Paper APIs, including visual effects and sidebars, stay in ARC. It is a small
 subproject in this repository, with its own version and JAR. ARC depends on
 ArcCore and borrows the existing providers through `ArcCoreServices`; shutdown
 of ARC releases its resources without closing the other plugins' providers.

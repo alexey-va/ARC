@@ -153,7 +153,7 @@ dependencies {
     implementation("ru.ruscrafting.arc:arc-core-sql:$arcCoreVersion")
     implementation("ru.ruscrafting.arc:arc-core-telemetry:$arcCoreVersion")
     implementation("ru.ruscrafting.arc:arc-core-paper:$arcCoreVersion")
-    compileOnly("ru.ruscrafting.arc:arc-core-paper-api:$arcCoreVersion")
+    implementation("ru.ruscrafting.arc:arc-core-paper-api:$arcCoreVersion")
     compileOnly(project(":arc-core-plugin"))
     testImplementation(project(":arc-core-plugin"))
     implementation("ru.ruscrafting.arc:arc-core-menu:$arcCoreVersion")
@@ -410,7 +410,7 @@ tasks {
         exclude("META-INF/DEPENDENCIES", "META-INF/LICENSE", "META-INF/NOTICE")
 
         // ArcCore owns these runtime types. Keep consumer factories and domain APIs local.
-        exclude("ru/arc/paper/api/**")
+        exclude("ru/arc/paper/api/ArcSql*", "ru/arc/paper/api/ArcRedis*", "ru/arc/paper/api/ArcMetric*")
         exclude("ru/arc/paper/sql/PaperSqlServiceProvider*", "ru/arc/paper/sql/SharedPaperSqlService*")
         exclude("ru/arc/paper/redis/PaperRedisServiceProvider*", "ru/arc/paper/redis/SharedPaperRedisService*")
         exclude("ru/arc/paper/metrics/PaperArcMetricsProvider*")

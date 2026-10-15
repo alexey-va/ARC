@@ -58,6 +58,11 @@ tasks.jar { archiveClassifier.set("plain") }
 tasks.shadowJar {
     archiveClassifier.set("")
     mergeServiceFiles()
+    // Only resource-service contracts move here; visual/gameplay APIs stay in ARC.
+    exclude {
+        it.path.startsWith("ru/arc/paper/api/") && !it.isDirectory &&
+            listOf("ArcSql", "ArcRedis", "ArcMetric").none { prefix -> it.name.startsWith(prefix) }
+    }
     exclude("META-INF/DEPENDENCIES", "META-INF/LICENSE", "META-INF/NOTICE")
 }
 

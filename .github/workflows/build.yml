@@ -170,10 +170,25 @@ jobs:
       - name: Test ARC on real Paper
         shell: bash
         run: |
-          set -o pipefail
+          set -euo pipefail
           mkdir -p build
           ./gradlew --no-daemon plugwrightTest -Pe2eMinecraftVersion=${{ matrix.minecraft }} -PcleanupE2e=${{ matrix.cleanup-only }} -PparkourE2e=${{ matrix.parkour-only }} -PdialogE2e=${{ matrix.dialog-only }} -PdungeonsE2e=${{ matrix.dungeons-only || 'false' }} -PcontractCrashE2e=${{ matrix.crash-only || 'false' }} 2>&1 | tee build/plugwright-e2e.log
           git diff --exit-code -- src/test/e2e/package-lock.json
+      - name: Reject LinkageError in Paper log
+        if: always()
+        shell: bash
+        run: |
+          paper_logs=(build/plugwright/logs/latest.log build/plugwright-e2e.log)
+          for paper_log in "${paper_logs[@]}"; do
+            if [[ ! -f "$paper_log" ]]; then
+              echo "Expected Paper log not found: $paper_log" >&2
+              exit 1
+            fi
+          done
+          if grep -nF 'LinkageError' "${paper_logs[@]}"; then
+            echo "Paper logs contain LinkageError" >&2
+            exit 1
+          fi
       - name: Record E2E artifact hashes
         if: always()
         run: |

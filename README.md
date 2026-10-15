@@ -24,6 +24,8 @@ Deployable outputs include `build/libs/ARC-1.4.395.jar`,
 `arc-dungeons/build/libs/ArcDungeons-*.jar`. Archives ending in `-plain.jar`
 are not deployable. GitHub Actions builds and tests the plugins and verifies
 that the shared APIs have one runtime owner.
+ArcCore and ArcDungeons versions live in `gradle.properties`; the build and
+Paper test fixtures read those same values.
 
 [ArcCore ownership and independent updates](docs/arc-domain-plugins.md#shared-provider-host).
 
