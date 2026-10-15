@@ -26,12 +26,12 @@ shop:
     level: '<#fff0d8>Уровень'
     price: '<#fff0d8>Цена'
   groups:
-    SIMPLE: 'Простая'
-    UNIQUE: 'Уникальная'
-    ELITE: 'Сильная'
-    ULTIMATE: 'Мощная'
+    SIMPLE: 'Обычная'
+    UNIQUE: 'Необычная'
+    ELITE: 'Редкая'
+    ULTIMATE: 'Эпическая'
     LEGENDARY: 'Легендарная'
-    FABLED: 'Лучшая'
+    FABLED: 'Мифическая'
   level:
     label: '<#d6a5ff>Уровень <level>'
     tooltip: '<#e8dfd2>Цена: <price> <white>💰</white>. Посмотреть перед покупкой.'
