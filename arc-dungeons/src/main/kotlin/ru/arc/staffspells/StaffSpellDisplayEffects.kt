@@ -37,6 +37,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         val preparation: Boolean = false,
         val melee: Boolean = false,
         var customGeometry: ((Int) -> List<StaffDisplayPart>)? = null,
+        val ownerAttachedMotion: Boolean = false,
         val defense: Defense? = null,
         var controllerDriven: Boolean = false,
         var controllerDirty: Boolean = false,
@@ -48,6 +49,8 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         var trail: List<Vector3f>? = null,
         var bounds: List<Pair<org.bukkit.util.Vector, Double>> = emptyList(),
         var previousBounds: List<Pair<org.bukkit.util.Vector, Double>> = emptyList(),
+        var relativeBounds: List<Pair<org.bukkit.util.Vector, Double>> = emptyList(),
+        var previousRelativeBounds: List<Pair<org.bukkit.util.Vector, Double>> = emptyList(),
         val handles: MutableList<PacketBlockDisplay> = mutableListOf(),
         val viewers: MutableMap<UUID, Player> = mutableMapOf(),
     )
@@ -109,6 +112,11 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
 
     /** Ability-owned geometry shares the same bounded scenes, interpolation and viewer transport. */
     fun custom(casterId: UUID, spell: StaffSpell, origin: Location, durationTicks: Int,
+        parts: (Int) -> List<StaffDisplayPart>): UUID? =
+        custom(casterId, spell, origin, durationTicks, ownerAttachedMotion = false, parts = parts)
+
+    /** Only rigs anchored to the moving owner's feet use an owner-relative camera sweep. */
+    fun custom(casterId: UUID, spell: StaffSpell, origin: Location, durationTicks: Int, ownerAttachedMotion: Boolean,
         parts: (Int) -> List<StaffDisplayPart>): UUID? {
         check(Bukkit.isPrimaryThread())
         val caster = Bukkit.getPlayer(casterId) ?: return null
@@ -116,7 +124,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         reserve(casterId)
         val scene = Scene(UUID.randomUUID(), casterId, spell, origin.clone(), Quaternionf(),
             1.0, 1.0, durationTicks.coerceIn(1, 240), false, false, StaffCastInput.PRIMARY,
-            customGeometry = parts)
+            customGeometry = parts, ownerAttachedMotion = ownerAttachedMotion)
         scenes[scene.id] = scene
         render(scene)
         refreshAudience()
@@ -376,6 +384,13 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         scene.previousBounds = previousIndexByPart.mapIndexed { index, previousIndex ->
             previousIndex?.let { previousBounds.getOrNull(it) } ?: currentBounds[index]
         }
+        if (scene.ownerAttachedMotion) {
+            val relative = currentBounds.map { (at, radius) -> at.clone().subtract(scene.origin.toVector()) to radius }
+            scene.previousRelativeBounds = previousIndexByPart.mapIndexed { index, previousIndex ->
+                previousIndex?.let { scene.relativeBounds.getOrNull(it) } ?: relative[index]
+            }
+            scene.relativeBounds = relative
+        }
         scene.bounds = currentBounds
         scene.renderedParts = parts
         val previousHandles = scene.handles.toList()
@@ -459,11 +474,16 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
             (scene.viewers.keys - audience).forEach { id -> scene.viewers[id]?.let { player -> scene.handles.forEach { it.hideFrom(player) } } }
             audience.forEach { id -> online[id]?.let { player ->
                 scene.handles.forEachIndexed { index, handle ->
-                    val bound = scene.bounds.getOrNull(index)
-                    val previous = if (scene.defense != null || scene.spell == StaffSpell.CHAIN) bound
+                    val ownerRelative = scene.ownerAttachedMotion && player.uniqueId == scene.casterId
+                    val bound = (if (ownerRelative) scene.relativeBounds else scene.bounds).getOrNull(index)
+                    val previous = if (ownerRelative) scene.previousRelativeBounds.getOrNull(index) ?: bound
+                        else if (scene.defense != null || scene.spell == StaffSpell.CHAIN) bound
                         else scene.previousBounds.getOrNull(index) ?: bound
-                    val eye = player.eyeLocation.toVector()
-                    val padding = if (scene.defense != null) .25
+                    val eye = player.eyeLocation.toVector().apply {
+                        if (ownerRelative) subtract(player.location.toVector())
+                    }
+                    val padding = if (ownerRelative) .35
+                        else if (scene.defense != null) .25
                         else staffEyeClearance(scene.spell, scene.impact) + player.velocity.length() * FRAME_TICKS + 0.15
                     if (scene.renderedParts.getOrNull(index)?.visible == true && bound != null && previous != null &&
                         staffSweptDistance(eye, previous.first, bound.first) >= padding + maxOf(bound.second, previous.second))

@@ -100,6 +100,8 @@ internal class StaffSpellController(
     private val tasks = LifecycleTaskScope()
     private val visuals = StaffSpellVisuals(tasks, sceneryImpact = { owner, at, radius ->
         scenery?.impact(owner, at, radius)
+    }, sceneryDepression = { owner, at, radius ->
+        scenery?.depress(owner, at, radius)
     })
     private val targeting = StaffSpellTargeting(settings, damage)
     private val arsenal = StaffSpellArsenal(settings, damage, effects, visuals, targeting)
@@ -982,6 +984,22 @@ internal class StaffSpellController(
                     visuals.particles(wave.origin,
                         staffStormNovaFrame(age, wave.range, wave.visualRayLimits),
                         clearance = STORM_NOVA_PARTICLE_CLEARANCE)
+                    val strikes = staffStormNovaStrikes(age, wave.range, wave.visualRayLimits)
+                    strikes.forEach { offset ->
+                        val at = wave.origin.clone().add(offset)
+                        val world = at.world ?: return@forEach
+                        if (!world.isChunkLoaded(at.blockX shr 4, at.blockZ shr 4)) return@forEach
+                        val floor = targeting.groundBelow(at.clone().add(0.0, 2.0, 0.0), 6.0) ?: at
+                        // Native sky geometry only: no vanilla lightning damage, fire, or repeat flashes.
+                        world.strikeLightningEffect(floor).apply {
+                            isSilent = true
+                            flashes = 0
+                        }
+                    }
+                    if (strikes.isNotEmpty()) {
+                        visuals.cue(wave.origin, Sound.ENTITY_LIGHTNING_BOLT_IMPACT, .60f, 1.25f)
+                        if (age == 6) visuals.cue(wave.origin, Sound.ENTITY_LIGHTNING_BOLT_THUNDER, .45f, 1.55f)
+                    }
                 }
             }
             val previousFront = wave.frontAt(previousAge)

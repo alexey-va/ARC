@@ -31,13 +31,13 @@ internal fun staffTideWaveHalfWidth(charge: Double): Double {
 /** Local surfaces shared by the solid ribbons and their native-particle accents. */
 private fun galeFunnelPoint(t: Double, strand: Int, age: Double, q: Double, grow: Double): Vector3f {
     val scale = .8 + q * .45
-    val phase = strand * PI * 2 / 3 + t * PI * 2.3 - age * (.055 + (1 - t) * .018)
-    val turbulence = sin(age * .17 + t * 13.0 + strand * 2.1) * .11 +
-        sin(age * .31 - t * 7.4 + strand * 1.3) * .045
+    val phase = strand * PI * 2 / 3 + t * PI * 2.3 - age * (.22 + (1 - t) * .065)
+    val turbulence = sin(age * .38 + t * 13.0 + strand * 2.1) * .18 +
+        sin(age * .53 - t * 7.4 + strand * 1.3) * .07
     val angle = phase + turbulence
     val gust = 1.0 + .09 * sin(age * .23 + t * 10.5 + strand * 2.7) +
         .04 * sin(age * .37 - t * 17.0 + strand * .8)
-    val taper = (.30 + 1.32 * t.pow(.82) + q * .06) * grow * gust
+    val taper = (.34 + 2.05 * t.pow(.82) + q * .06) * grow * gust
     val height = t * (5.35 + q * .30) / scale * grow +
         sin(age * .15 + t * 14.0 + strand * 1.7) * .07 * grow
     return Vector3f((cos(angle) * taper).toFloat(), height.toFloat(), (sin(angle) * taper).toFloat())
@@ -139,7 +139,7 @@ internal fun staffTideGaleParts(
         } else {
             val grow = smoothTideGale(age / 6.0)
             val height = (5.35 + q * .30) / scale
-            // Three broad translucent ribbons counter-rotate and widen into the crown.
+            // Three fast helical ribbons shear around an open core and flare into the crown.
             repeat(3) { strand ->
                 val nodes = 11
                 repeat(nodes) { index ->
@@ -147,25 +147,25 @@ internal fun staffTideGaleParts(
                     val t1 = (index + 1) / nodes.toDouble()
                     fun point(t: Double) = galeFunnelPoint(t, strand, age.toDouble(), q, grow)
                     val midT = (t0 + t1) / 2.0
-                    val midAngle = strand * PI * 2 / 3 + midT * PI * 2.3 - age * (.055 + (1 - midT) * .018)
-                    val slope = 1.32 * .82 * midT.pow(-.18) / height
+                    val midAngle = strand * PI * 2 / 3 + midT * PI * 2.3 - age * (.22 + (1 - midT) * .065)
+                    val slope = 2.05 * .82 * midT.pow(-.18) / height
                     val radialNormal = Vector3f(cos(midAngle).toFloat(), (-slope).toFloat(), sin(midAngle).toFloat())
                     add(tideGaleRibbonLink(
                         when (strand) {
-                            0 -> Material.LIGHT_GRAY_STAINED_GLASS
+                            0 -> Material.WHITE_STAINED_GLASS
                             1 -> Material.GRAY_STAINED_GLASS
                             else -> Material.LIGHT_GRAY_STAINED_GLASS
                         },
-                        point(t0), point(t1), (.70 - .04 * t0).toFloat(), .14f, radialNormal,
+                        point(t0), point(t1), (.84 - .06 * t0).toFloat(), .14f, radialNormal,
                         "gale:tornado:band:$strand:$index"))
                 }
             }
             // Small separated facets suggest lifted grit without filling the open funnel.
             repeat(6) { index ->
-                val t = .10 + (index % 3) * .16
-                val angle = index * PI / 3 - age * .08
-                val r = (1.50 - t * .55) * grow
-                val size = (.15 + (index % 2) * .045) * grow
+                val t = .12 + .68 * (.5 + .5 * sin(age * .24 + index * PI / 3))
+                val angle = index * PI / 3 - age * .30
+                val r = (.45 + t * 2.10) * grow
+                val size = (.22 + (index % 2) * .06) * grow
                 add(StaffDisplayPart(
                     when (index % 3) {
                         0 -> Material.BIRCH_LEAVES
@@ -341,9 +341,9 @@ internal fun staffTideGaleParticleSamples(
                     point.z.toDouble(), wind, .009)
             }
             repeat(4) { index ->
-                val t = .1 + (index % 3) * .16
-                val angle = index * PI / 3 - age * .08
-                val r = (1.5 - t * .55) * grow * scale
+                val t = .12 + .68 * (.5 + .5 * sin(age * .24 + index * PI / 3))
+                val angle = index * PI / 3 - age * .30
+                val r = (.45 + t * 2.10) * grow * scale
                 mote(Particle.CRIT, cos(angle) * r, t * (5.35 + q * .30) * grow, sin(angle) * r,
                     spread = .012, speed = .002)
             }

@@ -493,9 +493,9 @@ class StaffSpellsTest : FreeSpec({
         val config = StaffSpellConfig(StaffTestConfig(mapOf(
             "icicle.name" to "Ледяной венец", "icicle.secondary-name" to "Ледяной дождь",
             "fault.name" to "Обсидиановый раскол", "fault.secondary-name" to "Каменный выброс",
-            "messages.staff-hud.ready-charge" to "<ability><newline>Удерживайте <input> для зарядки<newline>Отпустите, чтобы выпустить",
-            "messages.staff-hud.ready-instant" to "<ability><newline><input> — применить",
-            "messages.staff-hud.cooldown" to "<ability> · <input><newline>Восстановление <seconds> с<newline><bar>",
+            "messages.staff-hud.ready-charge" to "<input> · <ability>",
+            "messages.staff-hud.ready-instant" to "<input> · <ability>",
+            "messages.staff-hud.cooldown" to "<input> · <ability><newline><seconds> с <bar>",
         )))
         val displays = StaffHudDisplayRecorder()
         withStaffHarness(config = config, hudFactory = { StaffSpellHud(displays.displays, config) }) { h ->
@@ -504,14 +504,14 @@ class StaffSpellsTest : FreeSpec({
             h.controller.start()
             h.scheduler.tick(4)
             displays.records.size shouldBe 1
-            displays.text() shouldBe "Ледяной венец\nУдерживайте ПКМ для зарядки\nОтпустите, чтобы выпустить\nQ · готово    F · готово"
+            displays.text() shouldBe "ПКМ · Ледяной венец\nQ готово   F готово"
 
             h.controller.cast(player)
             h.cooldowns.remainingTicks(player.uniqueId) shouldBe 20L
-            displays.text().startsWith("Ледяной венец · ПКМ\nВосстановление 1.0 с\n") shouldBe true
+            displays.text().startsWith("ПКМ · Ледяной венец\n1.0 с ") shouldBe true
             h.scheduler.tick(8)
             h.cooldowns.remainingTicks(player.uniqueId) shouldBe 10L
-            displays.text().startsWith("Ледяной венец · ПКМ\nВосстановление 0.5 с\n") shouldBe true
+            displays.text().startsWith("ПКМ · Ледяной венец\n0.5 с ") shouldBe true
 
             player.isSneaking = true
             player.inventory.setItemInMainHand(h.config.item(StaffSpell.FAULT))
@@ -519,7 +519,7 @@ class StaffSpellsTest : FreeSpec({
             displays.records.size shouldBe 1
             h.captures.size shouldBe 1
             h.cooldowns.remainingTicks(player.uniqueId) shouldBe 5L
-            displays.text().startsWith("Каменный выброс · Shift + ПКМ\nВосстановление 0.3 с\n") shouldBe true
+            displays.text().startsWith("Shift + ПКМ · Каменный выброс\n0.3 с ") shouldBe true
 
             player.inventory.setItemInMainHand(ItemStack(Material.AIR))
             h.scheduler.tick(4)
@@ -528,7 +528,7 @@ class StaffSpellsTest : FreeSpec({
             player.inventory.setItemInMainHand(h.config.item(StaffSpell.ICICLE))
             h.scheduler.tick(4)
             displays.records.size shouldBe 2
-            displays.text().startsWith("Ледяной дождь\nShift + ПКМ — применить") shouldBe true
+            displays.text().startsWith("Shift + ПКМ · Ледяной дождь") shouldBe true
 
             h.controller.onQuit(PlayerQuitEvent(player, Component.empty()))
             displays.records.last().removals shouldBe 1
@@ -558,7 +558,7 @@ class StaffSpellsTest : FreeSpec({
             val remaining = h.cooldowns.remainingTicks(player.uniqueId)
             remaining shouldBe 20L
             displays.text().startsWith("Дождь · Shift + ПКМ\nВосстановление 1.0 с\n") shouldBe true
-            displays.text().substringBefore("\nQ ·").endsWith(staffSpellHudBar(staffCooldownProgress(remaining, 30).toDouble())) shouldBe true
+            displays.text().substringBefore("\nQ ").endsWith(staffSpellHudBar(staffCooldownProgress(remaining, 30).toDouble())) shouldBe true
             h.controller.cast(player)
             h.captures.size shouldBe 1
             h.cooldowns.remainingTicks(player.uniqueId) shouldBe remaining
@@ -1444,6 +1444,11 @@ internal fun withStaffHarness(
         try {
             // This fixture is a fully loaded combat map; unloaded and partial-shape rays have their own contract spec.
             every { anyConstructed<WorldMock>().isChunkLoaded(any<Int>(), any<Int>()) } returns true
+            every { anyConstructed<WorldMock>().strikeLightningEffect(any()) } answers {
+                mockk<org.bukkit.entity.LightningStrike>(relaxed = true) {
+                    every { isEffect } returns true
+                }
+            }
             every {
                 anyConstructed<WorldMock>().rayTraceBlocks(
                     any<Location>(), any<Vector>(), any<Double>(), any<FluidCollisionMode>(), any<Boolean>(),

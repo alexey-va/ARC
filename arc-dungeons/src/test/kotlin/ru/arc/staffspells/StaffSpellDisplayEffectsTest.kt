@@ -23,22 +23,67 @@ import ru.arc.paper.testing.failOnUnsupportedMockBukkitOperation
 import java.util.UUID
 
 class StaffSpellDisplayEffectsTest : FreeSpec({
+    "moving mobility rig sweeps relative to its owner while stationary effects and observers keep world clearance" {
+        withDisplayHarness { h ->
+            val caster = h.player("mobility-owner")
+            val observer = h.player("mobility-observer")
+            caster.velocity = org.bukkit.util.Vector(0.0, 0.0, 1.6)
+            observer.velocity = caster.velocity.clone()
+            val eyeHeight = caster.eyeLocation.y - caster.location.y
+            val safe = StaffDisplayPart(Material.BONE_BLOCK, Vector3f(0f, eyeHeight.toFloat(), 2.2f),
+                Vector3f(.2f), org.joml.Quaternionf(), identity = "safe-tip")
+            val unsafe = safe.copy(center = Vector3f(0f, eyeHeight.toFloat(), 0f), identity = "eye")
+            val attached = h.effects.custom(caster.uniqueId, StaffSpell.OSSUARY, caster.location, 30,
+                ownerAttachedMotion = true) { listOf(safe, unsafe) }!!
+            val attachedRecords = h.recorder.records.toList()
+            h.effects.custom(caster.uniqueId, StaffSpell.OSSUARY, caster.location, 30) { listOf(safe) }
+            val stationary = h.recorder.records.last()
+
+            (caster.uniqueId in attachedRecords[0].visibleViewers) shouldBe true
+            (caster.uniqueId in attachedRecords[1].visibleViewers) shouldBe false
+            (observer.uniqueId in attachedRecords[0].visibleViewers) shouldBe false
+            (caster.uniqueId in stationary.visibleViewers) shouldBe false
+
+            // A world-space sweep from old +2.2 to new +2.2 would cross the translated eye.
+            caster.teleport(caster.location.clone().add(0.0, 0.0, 4.0))
+            observer.teleport(caster.location)
+            caster.velocity = org.bukkit.util.Vector(0.0, 0.0, 1.6)
+            observer.velocity = caster.velocity.clone()
+            h.effects.updateCustom(attached, caster.location, listOf(safe, unsafe))
+            h.scheduler.tick(2)
+
+            (caster.uniqueId in attachedRecords[0].visibleViewers) shouldBe true
+            (caster.uniqueId in attachedRecords[1].visibleViewers) shouldBe false
+            (observer.uniqueId in attachedRecords[0].visibleViewers) shouldBe false
+            (caster.uniqueId in stationary.visibleViewers) shouldBe false
+
+            // Authored motion through the eye is still rejected in the relative frame.
+            h.effects.updateCustom(attached, caster.location,
+                listOf(safe.copy(center = Vector3f(0f, eyeHeight.toFloat(), -2.2f)), unsafe))
+            h.scheduler.tick(2)
+            (caster.uniqueId in attachedRecords[0].visibleViewers) shouldBe false
+        }
+    }
+
     "all spell shapes stay finite and under the packet-part budget" {
         StaffSpell.entries.forEach spellLoop@{ spell ->
             if (spell in setOf(StaffSpell.NECROMANCER, StaffSpell.INFERNO, StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM)) return@spellLoop // Native actors or particles own these silhouettes.
             listOf(false, true).forEach { impact ->
                 listOf(false, true).forEach { secondary ->
-                    val parts = staffDisplayParts(spell, ageTicks = 160, durationTicks = 1,
-                        length = 32.0, radius = 8.0, impact = impact, secondary = secondary)
+                    listOf(8 to 40, 160 to 1).forEach { (age, duration) ->
+                        val parts = staffDisplayParts(spell, ageTicks = age, durationTicks = duration,
+                            length = 32.0, radius = 8.0, impact = impact, secondary = secondary)
 
-                    (parts.size <= StaffSpellDisplayEffects.MAX_PARTS) shouldBe true
-                    parts.isNotEmpty() shouldBe true
-                    parts.all { part ->
-                        listOf(part.center.x, part.center.y, part.center.z,
-                            part.scale.x, part.scale.y, part.scale.z,
-                            part.rotation.x, part.rotation.y, part.rotation.z, part.rotation.w).all(Float::isFinite) &&
-                            part.scale.x > 0f && part.scale.y > 0f && part.scale.z > 0f
-                    } shouldBe true
+                        (parts.size <= StaffSpellDisplayEffects.MAX_PARTS) shouldBe true
+                        // Expired geometry may be empty; an active pose must remain visible.
+                        if (age < duration) parts.isNotEmpty() shouldBe true
+                        parts.all { part ->
+                            listOf(part.center.x, part.center.y, part.center.z,
+                                part.scale.x, part.scale.y, part.scale.z,
+                                part.rotation.x, part.rotation.y, part.rotation.z, part.rotation.w).all(Float::isFinite) &&
+                                part.scale.x > 0f && part.scale.y > 0f && part.scale.z > 0f
+                        } shouldBe true
+                    }
                 }
             }
         }

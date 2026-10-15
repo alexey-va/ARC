@@ -68,8 +68,8 @@ internal fun staffGravityPulseFrame(ageTicks: Int, radius: Double): List<StaffPa
     val violet = staffFade(0x7354BF, 0xE5D8FF, 0.9f)
     return if (safeAge <= GRAVITY_PULSE_LIFT_TICKS) {
         val progress = safeAge.toDouble() / GRAVITY_PULSE_LIFT_TICKS
-        val ring = reach * (1.0 - GRAVITY_PULSE_INWARD_FRACTION * progress)
-        val height = 0.12 + GRAVITY_PULSE_LIFT_HEIGHT * progress
+        val ring = reach * (1.0 - .50 * progress)
+        val height = 0.12 + 1.35 * (1.0 - progress)
         buildList(GRAVITY_PULSE_PARTICLE_COUNT * 2) {
             repeat(GRAVITY_PULSE_PARTICLE_COUNT) { index ->
                 val angle = index * 2.0 * PI / GRAVITY_PULSE_PARTICLE_COUNT + safeAge * 0.12
@@ -160,48 +160,24 @@ internal fun staffChannelParts(
     }
 }
 
-/** Distinct secondary shape: fragments converge high, then descend and spread along the floor. */
+/** A low pressure collar converges around the terrain depression; the center remains clear. */
 internal fun staffGravityPulseParts(ageTicks: Int, durationTicks: Int, radius: Double): List<StaffDisplayPart> {
-    val safeAge = ageTicks.coerceAtLeast(0)
-    val safeDuration = durationTicks.coerceAtLeast(GRAVITY_PULSE_SHOCK_END_TICKS + 2)
+    if (ageTicks < 0 || ageTicks >= durationTicks) return emptyList()
     val reach = radius.takeIf(Double::isFinite)?.coerceIn(3.0, 7.0) ?: 6.5
-    val settled = safeAge >= GRAVITY_PULSE_SHOCK_END_TICKS
-    val settleProgress = if (settled) ((safeAge - GRAVITY_PULSE_SHOCK_END_TICKS).toDouble() /
-        (safeDuration - GRAVITY_PULSE_SHOCK_END_TICKS)).coerceIn(0.0, 1.0) else 0.0
-    val fade = (1.0 - settleProgress).coerceAtLeast(0.001)
-    return buildList(GRAVITY_PULSE_PARTICLE_COUNT) {
-        repeat(GRAVITY_PULSE_PARTICLE_COUNT) { index ->
-            val angle = index * 2.0 * PI / GRAVITY_PULSE_PARTICLE_COUNT + safeAge * 0.035
-            val (radial, height) = when {
-                safeAge <= GRAVITY_PULSE_LIFT_TICKS -> {
-                    val progress = safeAge.toDouble() / GRAVITY_PULSE_LIFT_TICKS
-                    reach * (1.0 - GRAVITY_PULSE_INWARD_FRACTION * progress) to
-                        (0.12 + GRAVITY_PULSE_LIFT_HEIGHT * progress)
-                }
-                safeAge <= GRAVITY_PULSE_SHOCK_END_TICKS -> {
-                    val progress = ((safeAge - GRAVITY_PULSE_LIFT_TICKS).toDouble() /
-                        (GRAVITY_PULSE_SHOCK_END_TICKS - GRAVITY_PULSE_LIFT_TICKS)).coerceIn(0.0, 1.0)
-                    reach * (GRAVITY_PULSE_SHOCK_START_FRACTION +
-                        (1.0 - GRAVITY_PULSE_SHOCK_START_FRACTION) * progress) to
-                        (0.12 + GRAVITY_PULSE_LIFT_HEIGHT * (1.0 - progress))
-                }
-                else -> reach to 0.12
-            }
-            val wobble = sin(safeAge * 0.11 + index * 1.3) * 0.10
-            val size = (0.22 + (index % 3) * 0.06) * fade
-            val material = when (index % 4) {
-                0 -> Material.AMETHYST_BLOCK
-                1 -> Material.COBBLESTONE
-                2 -> Material.ANDESITE
-                else -> Material.STONE
-            }
-            add(StaffDisplayPart(material,
-                Vector3f((cos(angle) * (radial + wobble)).toFloat(), (height + wobble).toFloat(),
-                    (sin(angle) * (radial + wobble)).toFloat()),
-                Vector3f(size.toFloat(), (size * (0.7 + (index % 2) * 0.12)).toFloat(), size.toFloat()),
-                Quaternionf().rotationXYZ((angle * 0.45).toFloat(), angle.toFloat(), (angle * 0.3).toFloat()),
-                identity = "gravity-pulse-stone-$index"))
-        }
+    val progress = (ageTicks / 8.0).coerceIn(0.0, 1.0)
+    val ring = reach * (1.0 - progress) + 3.85 * progress
+    val fade = ((durationTicks - 2 - ageTicks) / 8.0).coerceIn(.001, 1.0)
+    return List(16) { index ->
+        val a0 = index * 2.0 * PI / 16
+        val a1 = (index + 1) * 2.0 * PI / 16
+        val from = Vector3f((cos(a0) * ring).toFloat(), .07f, (sin(a0) * ring).toFloat())
+        val to = Vector3f((cos(a1) * ring).toFloat(), .07f, (sin(a1) * ring).toFloat())
+        val delta = Vector3f(to).sub(from)
+        StaffDisplayPart(if (index % 4 == 0) Material.AMETHYST_BLOCK else Material.PURPLE_STAINED_GLASS,
+            Vector3f(from).add(to).mul(.5f),
+            Vector3f((.14 * fade).toFloat(), (.10 * fade).toFloat(), (delta.length() * .94 * fade).toFloat()),
+            Quaternionf().rotationTo(Vector3f(0f, 0f, 1f), delta.normalize()),
+            identity = "gravity-pulse-pressure-$index")
     }
 }
 

@@ -183,7 +183,8 @@ internal class StaffSpellHud(
 
     private fun showBossBar(player: Player, state: StaffSpellHudState) {
         val name = config.staffHudBossbar(state).append(state.hotkeys?.let {
-            Component.text("  |  ").append(config.hotkeyHud(it))
+            Component.text("  ·  ", net.kyori.adventure.text.format.TextColor.color(0x687D8F))
+                .append(config.hotkeyHud(it))
         } ?: Component.empty())
         val progress = when (state.phase) {
             StaffSpellHudPhase.CHARGING, StaffSpellHudPhase.COOLDOWN ->

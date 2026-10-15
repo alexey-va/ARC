@@ -7,6 +7,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import org.bukkit.configuration.file.YamlConfiguration
 
 /** Exports the production HUD text, source-owned layout settings, and two camera poses as offline JSON. */
@@ -20,6 +21,7 @@ object StaffHudPreviewExport {
         val miniMessageTemplate: String,
         val plainText: String,
         val lines: List<String>,
+        val coloredLines: List<String>,
     )
 
     @JvmStatic
@@ -29,8 +31,8 @@ object StaffHudPreviewExport {
         val defaults = loadDefaults()
         val config = StaffSpellConfig(StaffTestConfig(configValues(defaults)))
         val states = listOf(
-            state("instant-ready", "ready", StaffSpell.LANCE, false,
-                config.staffHudReady(StaffSpell.LANCE, secondary = false), config, defaults, "ready-instant"),
+            state("secondary-ready", "ready", StaffSpell.GRAVITY, true,
+                config.staffHudReady(StaffSpell.GRAVITY, secondary = true), config, defaults, "ready-instant"),
             state("charge-ready", "ready", StaffSpell.EMBER, false,
                 config.staffHudReady(StaffSpell.EMBER, secondary = false), config, defaults, "ready-charge"),
             state("charging", "charging", StaffSpell.EMBER, false,
@@ -90,16 +92,20 @@ object StaffHudPreviewExport {
         defaults: YamlConfiguration,
         templateKey: String,
     ): State {
-        val plain = PlainTextComponentSerializer.plainText().serialize(component)
+        val full = component.append(Component.newline()).append(config.hotkeyHud(
+            if (phase == "cooldown") StaffHotkeyHudState(48, 20) else StaffHotkeyHudState(0, 0)))
+        val plain = PlainTextComponentSerializer.plainText().serialize(full)
         return State(
             id = id,
             phase = phase,
             spellId = spell.id,
-            ability = plain.lineSequence().firstOrNull().orEmpty(),
+            ability = plain.lineSequence().firstOrNull().orEmpty().substringAfter(" · "),
             input = config.inputLabel(spell, StaffCastInput.of(secondary, quick = false)),
             miniMessageTemplate = requireNotNull(defaults.getString("messages.staff-hud.$templateKey")),
             plainText = plain,
             lines = plain.lines(),
+            coloredLines = LegacyComponentSerializer.builder().character('&').hexColors().build()
+                .serialize(full).lines(),
         )
     }
 
@@ -120,7 +126,7 @@ object StaffHudPreviewExport {
             "frost.name", "frost.secondary-name",
             "gravity.name", "gravity.secondary-name",
         ).forEach { key -> put(key, requireNotNull(defaults.getString(key)) { "Missing staff name: $key" }) }
-        listOf("ready-instant", "ready-charge", "ready-channel", "charging", "cooldown", "channel")
+        listOf("ready-instant", "ready-charge", "charging", "cooldown", "channel")
             .forEach { key ->
                 val sourceKey = "messages.staff-hud.$key"
                 put(sourceKey, requireNotNull(defaults.getString(sourceKey)) { "Missing HUD text: $sourceKey" })

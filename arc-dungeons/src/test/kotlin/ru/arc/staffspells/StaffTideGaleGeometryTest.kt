@@ -48,12 +48,12 @@ class StaffTideGaleGeometryTest : FreeSpec({
         val bands = frame.filter { it.identity?.startsWith("gale:tornado:band:") == true }
         frame.size shouldBe 39
         bandIds.size shouldBe 33
-        bands.all { it.scale.x in .65f..0.75f && it.scale.x > it.scale.y * 4.0f } shouldBe true
+        bands.all { it.scale.x in .77f..0.88f && it.scale.x > it.scale.y * 4.0f } shouldBe true
         frame.mapNotNull { it.identity }.distinct().size shouldBe frame.size
         next.mapNotNull { it.identity }.toSet() shouldBe frame.mapNotNull { it.identity }.toSet()
         (frame.maxOf { it.center.y } > 5.0f) shouldBe true
         (frame.map { it.center.x to it.center.z }.toSet().size > 20) shouldBe true
-        (frame.map { it.center }.zip(next.map { it.center }).any { (a, b) -> a.distance(b) > .05f }) shouldBe true
+        (frame.map { it.center }.zip(next.map { it.center }).any { (a, b) -> a.distance(b) > .8f }) shouldBe true
 
         val motes = staffArsenalParticles(StaffSpell.GALE, 12, 52, 3.0, false, .5)
         (0..52).flatMap { age -> staffArsenalParticles(StaffSpell.GALE, age, 52, 3.0, false, .5) }

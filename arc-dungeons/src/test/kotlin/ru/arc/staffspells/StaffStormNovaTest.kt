@@ -3,6 +3,11 @@ package ru.arc.staffspells
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.verify
+import io.mockk.every
+import io.mockk.mockk
+import org.mockbukkit.mockbukkit.world.WorldMock
+import org.bukkit.Location
+import org.bukkit.entity.LightningStrike
 import net.kyori.adventure.text.Component
 import org.bukkit.Material
 import org.bukkit.Particle
@@ -43,6 +48,40 @@ class StaffStormNovaTest : FreeSpec({
             h.hits.size shouldBe 3
             world.getBlockAt(0, 64, 3).type shouldBe Material.STONE
         }
+    }
+
+    "sky strikes follow the contact front and use only silent effect lightning before cancellation" {
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("staff-chain-native-sky")
+            val player = h.player("staff-chain-native-sky", world, StaffSpell.CHAIN).apply { isSneaking = true }
+            val strikes = mutableListOf<Pair<Location, LightningStrike>>()
+            every { anyConstructed<WorldMock>().strikeLightningEffect(any()) } answers {
+                mockk<LightningStrike>(relaxed = true).also { strikes += firstArg<Location>().clone() to it }
+            }
+            h.controller.start()
+            h.controller.cast(player)
+            h.scheduler.tick(4)
+            strikes.size shouldBe 0
+            h.scheduler.tick(2)
+            strikes.size shouldBe 3
+            strikes.forEach { (_, lightning) ->
+                verify(exactly = 1) { lightning.isSilent = true }
+                verify(exactly = 1) { lightning.flashes = 0 }
+            }
+            verify(exactly = 0) { anyConstructed<WorldMock>().strikeLightning(any()) }
+            h.controller.onQuit(PlayerQuitEvent(player, Component.empty()))
+            h.scheduler.tick(20)
+            strikes.size shouldBe 3
+        }
+        val limits = MutableList(STAFF_STORM_NOVA_RAY_COUNT) { 8.0 }
+        val early = staffStormNovaStrikes(6, 8.0, limits)
+        val late = staffStormNovaStrikes(14, 8.0, limits)
+        early.size shouldBe 3
+        late.size shouldBe 3
+        (early.maxOf { it.length() } < late.minOf { it.length() }) shouldBe true
+        limits[0] = .5
+        staffStormNovaStrikes(6, 8.0, limits).size shouldBe 2
+        staffStormNovaStrikes(8, 8.0, limits) shouldBe emptyList()
     }
 
     "CHAIN nova clips its bounded native-particle branches to neighboring cover rays" {

@@ -13,6 +13,7 @@ import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.event.block.BlockDamageEvent
 import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.event.inventory.InventoryClickEvent
+import org.bukkit.event.inventory.InventoryCreativeEvent
 import org.bukkit.event.inventory.InventoryDragEvent
 import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerDropItemEvent
@@ -33,20 +34,19 @@ import ru.arc.core.LifecycleTaskScope
 import ru.arc.dungeons.ArcDungeonsPlugin
 import java.util.UUID
 
-/** Held-release charges use a bounded tick clock for strength; Gravity keeps its click-toggle channel. */
+/** Native held-release input shares one bounded clock for charged shots and carried Gravity blocks. */
 private const val STAFF_CHARGE_DELAY_TICKS = 4
 private const val STAFF_CHARGE_RAMP_TICKS = 32
 private const val STAFF_MAX_CHARGE_TICKS = 200
-internal val STAFF_CHARGED_PRIMARY_SPELLS = setOf(StaffSpell.EMBER, StaffSpell.ICICLE)
+internal val STAFF_CHARGED_PRIMARY_SPELLS = setOf(StaffSpell.EMBER, StaffSpell.ICICLE, StaffSpell.GRAVITY)
 
 internal enum class StaffSpellInputButton(val configKey: String) { LEFT("left-click"), RIGHT("right-click") }
 
 /** Activation type is shared by input routing and player-facing instructions. */
-internal enum class StaffAttackInputMode { INSTANT, HOLD_RELEASE, CHANNEL_CLICK_TOGGLE }
+internal enum class StaffAttackInputMode { INSTANT, HOLD_RELEASE }
 
 /** Shared by input and HUD so instructions describe the same attack path the controller executes. */
 internal fun staffAttackInputMode(spell: StaffSpell, secondary: Boolean): StaffAttackInputMode = when {
-    spell == StaffSpell.GRAVITY && !secondary -> StaffAttackInputMode.CHANNEL_CLICK_TOGGLE
     !secondary && spell in STAFF_CHARGED_PRIMARY_SPELLS -> StaffAttackInputMode.HOLD_RELEASE
     else -> StaffAttackInputMode.INSTANT
 }
@@ -255,10 +255,10 @@ internal class StaffSpellInput(
         val player = event.player
         val playerId = player.uniqueId
         val tick = Bukkit.getCurrentTick()
-        // Inventory Q is a normal drop. The player inventory view is CRAFTING, so pair its
-        // ClickType marker with a top-inventory guard for containers and crafting screens.
+        // Paper reports the player inventory as CREATIVE in creative mode, even without a screen.
+        // Inventory-origin drops have their own preceding click marker; containers remain native.
         if (inventoryDropTick[playerId] == tick) return
-        if (player.openInventory.type != InventoryType.CRAFTING) return
+        if (player.openInventory.type !in setOf(InventoryType.CRAFTING, InventoryType.CREATIVE)) return
 
         event.isCancelled = true
 
@@ -333,7 +333,8 @@ internal class StaffSpellInput(
     /** Inventory Q is a ClickType.DROP, not the staff hotkey; guard its paired drop event. */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun onInventoryDropClick(event: InventoryClickEvent) {
-        if (event.click != org.bukkit.event.inventory.ClickType.DROP &&
+        val creativeDrop = event is InventoryCreativeEvent && event.slotType == InventoryType.SlotType.OUTSIDE
+        if (!creativeDrop && event.click != org.bukkit.event.inventory.ClickType.DROP &&
             event.click != org.bukkit.event.inventory.ClickType.CONTROL_DROP) return
         (event.whoClicked as? Player)?.let { inventoryDropTick[it.uniqueId] = Bukkit.getCurrentTick() }
     }
@@ -431,16 +432,13 @@ internal class StaffSpellInput(
         val tick = Bukkit.getCurrentTick()
         if (lastAttackTick.put(player.uniqueId, tick) == tick) return false
         if (activeCharge != null) {
-            if (mode == StaffAttackInputMode.CHANNEL_CLICK_TOGGLE && activeCharge.spell == spell &&
-                !activeCharge.releaseOnItemStop) releaseCharge(player)
-            else cancel(player.uniqueId)
+            cancel(player.uniqueId)
             return true
         }
 
         return when (mode) {
             StaffAttackInputMode.HOLD_RELEASE -> beginCharge(player, spell,
                 releaseOnItemStop = true, startNativeUse = startNativeUse)
-            StaffAttackInputMode.CHANNEL_CLICK_TOGGLE -> beginCharge(player, spell)
             StaffAttackInputMode.INSTANT -> {
                 if (!actions.canCharge(player, spell)) return false
                 actions.cast(player, StaffCastInput.of(player.isSneaking, quick = false), 0.0)

@@ -51,6 +51,7 @@ internal class StaffSceneryEffects(
         val blocks: List<SceneryBlock>,
         val debris: MutableList<Debris>,
         val displayViewers: MutableSet<UUID>,
+        val depression: Boolean = false,
         var age: Int = 0,
         var restoring: Boolean = false,
         var restoreRetries: Int = 0,
@@ -66,7 +67,12 @@ internal class StaffSceneryEffects(
         if (allowed.isNotEmpty()) tasks.runTimer(1L, 1L, ::tick)
     }
 
-    fun impact(casterId: UUID, at: Location, radius: Double) {
+    fun impact(casterId: UUID, at: Location, radius: Double) = start(casterId, at, radius, depression = false)
+
+    /** A packet-only annular floor depression; collision and the caster's center block stay real. */
+    fun depress(casterId: UUID, at: Location, radius: Double) = start(casterId, at, radius, depression = true)
+
+    private fun start(casterId: UUID, at: Location, radius: Double, depression: Boolean) {
         check(Bukkit.isPrimaryThread())
         if (closed || allowed.isEmpty()) return
         val world = at.world ?: return
@@ -79,8 +85,8 @@ internal class StaffSceneryEffects(
             .filter { it.isOnline && it.world.uid == world.uid && it.location.distanceSquared(center) <= VIEW_RANGE * VIEW_RANGE }
             .sortedWith(compareBy<Player>({ it.location.distanceSquared(center) }, { it.uniqueId.toString() }))
             .toList()
-        val blocks = selectBlocks(world, center, safeRadius)
-        if (blocks.isEmpty()) return
+        val blocks = if (depression) selectDepressionBlocks(world, center, radius) else selectBlocks(world, center, safeRadius)
+        if (blocks.isEmpty() || scenes.sumOf { it.blocks.size } + blocks.size > MAX_SCENERY_BLOCKS) return
         val receivedChunks = blocks.asSequence()
             .map { ChunkKey(it.key.x shr 4, it.key.z shr 4) }
             .distinct()
@@ -100,7 +106,7 @@ internal class StaffSceneryEffects(
                 val display = displays.spawnBlock(origin, block.data.clone()).apply {
                     isVisibleByDefault = false
                     viewRange = (VIEW_RANGE / 64.0).toFloat()
-                    teleportDuration = DEBRIS_FRAME_TICKS
+                    teleportDuration = if (depression) 2 else DEBRIS_FRAME_TICKS
                     viewers.forEach(::showTo)
                 }
                 val dx = block.key.x + .5 - center.x
@@ -114,7 +120,8 @@ internal class StaffSceneryEffects(
             return
         }
 
-        val scene = Scene(casterId, world, world.uid, center, viewers, blocks, debris, viewers.mapTo(mutableSetOf()) { it.uniqueId })
+        val scene = Scene(casterId, world, world.uid, center, viewers, blocks, debris,
+            viewers.mapTo(mutableSetOf()) { it.uniqueId }, depression = depression)
         scenes += scene
         maskedBlocks += blocks.map { it.key }
         try {
@@ -140,9 +147,12 @@ internal class StaffSceneryEffects(
             }
             pruneDisplayAudience(scene)
             scene.age++
-            if (scene.age < DEBRIS_LIFETIME && scene.age % DEBRIS_FRAME_TICKS == 0) {
+            val lifetime = if (scene.depression) STAFF_SCENERY_DEPRESSION_TICKS else DEBRIS_LIFETIME
+            val frameTicks = if (scene.depression) 2 else DEBRIS_FRAME_TICKS
+            if (scene.age < lifetime && scene.age % frameTicks == 0) {
                 scene.debris.forEach { debris ->
-                    val offset = staffSceneryBallisticOffset(scene.age, debris.angle, debris.speed, debris.lift)
+                    val offset = if (scene.depression) Vector(0.0, staffSceneryDepressionY(scene.age), 0.0)
+                        else staffSceneryBallisticOffset(scene.age, debris.angle, debris.speed, debris.lift)
                     try {
                         debris.display.teleport(debris.origin.clone().add(offset))
                     } catch (failure: RuntimeException) {
@@ -151,8 +161,8 @@ internal class StaffSceneryEffects(
                     }
                 }
             }
-            if (scene.age >= DEBRIS_LIFETIME) removeDebris(scene)
-            if (scene.age >= BLOCK_MASK_LIFETIME) finish(scene)
+            if (scene.age >= lifetime) removeDebris(scene)
+            if (scene.age >= if (scene.depression) lifetime else BLOCK_MASK_LIFETIME) finish(scene)
         }
     }
 
@@ -197,6 +207,23 @@ internal class StaffSceneryEffects(
             { distanceSquared(center, it.key) }, { it.key.x }, { it.key.y }, { it.key.z },
         )).take(MAX_BLOCKS_PER_SCENE)
     }
+
+    private fun selectDepressionBlocks(world: World, center: Location, radius: Double): List<SceneryBlock> =
+        staffSceneryDepressionFootprint(radius).mapNotNull { (dx, dz) ->
+            val x = center.blockX + dx
+            val z = center.blockZ + dz
+            if (!world.isChunkLoaded(x shr 4, z shr 4)) return@mapNotNull null
+            val top = minOf(world.maxHeight - 2, floor(center.y + .5).toInt())
+            val bottom = maxOf(world.minHeight, top - 3)
+            (top downTo bottom).firstNotNullOfOrNull { y ->
+                val block = world.getBlockAt(x, y, z)
+                val above = world.getBlockAt(x, y + 1, z)
+                val key = BlockKey(world.uid, x, y, z)
+                if (!block.type.isSolid || block.isPassable || block.isLiquid || block.state is TileState ||
+                    !above.type.isAir || key in maskedBlocks) null
+                else SceneryBlock(key, block.blockData.clone())
+            }
+        }
 
     private fun exposed(world: World, x: Int, y: Int, z: Int): Boolean = NEIGHBORS.any { (dx, dy, dz) ->
         val nx = x + dx
@@ -322,6 +349,7 @@ internal class StaffSceneryEffects(
         private const val MAX_VIEWERS = 16
         private const val MAX_SCENES_PER_CASTER = 2
         private const val MAX_SCENES = 8
+        private const val MAX_SCENERY_BLOCKS = MAX_SCENES * MAX_BLOCKS_PER_SCENE
         private const val VIEW_RANGE = 32.0
         private const val DEBRIS_FRAME_TICKS = 4
         private const val DEBRIS_LIFETIME = 20
@@ -348,4 +376,23 @@ internal fun staffSceneryBallisticOffset(
         initialVelocity * seconds - .5 * STAFF_SCENERY_GRAVITY_PER_TICK * seconds * seconds,
         sin(angle) * horizontalSpeed * seconds,
     )
+}
+
+/** Shared flat-ground footprint for live terrain sampling and the labeled synthetic preview. */
+internal fun staffSceneryDepressionFootprint(radius: Double): List<Pair<Int, Int>> {
+    val ring = ((radius.takeIf(Double::isFinite) ?: return emptyList()) * .45).coerceIn(2.0, 3.0)
+    return (-4..4).flatMap { x -> (-4..4).map { z -> x to z } }
+        .filter { (x, z) -> kotlin.math.hypot(x.toDouble(), z.toDouble()) in (ring - .90)..(ring + .90) }
+        .sortedWith(compareBy<Pair<Int, Int>>(
+            { kotlin.math.abs(kotlin.math.hypot(it.first.toDouble(), it.second.toDouble()) - ring) },
+            { it.first }, { it.second }))
+        .take(32)
+}
+
+internal const val STAFF_SCENERY_DEPRESSION_TICKS = 28
+
+/** Sink sharply with the slam, hold the pressed floor, then return smoothly before packet restore. */
+internal fun staffSceneryDepressionY(ageTicks: Int): Double {
+    fun smooth(value: Double): Double = value.coerceIn(0.0, 1.0).let { it * it * (3 - 2 * it) }
+    return -.80 * smooth(ageTicks / 4.0) * (1.0 - smooth((ageTicks - 16) / 10.0))
 }

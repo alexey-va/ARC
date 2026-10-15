@@ -7,6 +7,7 @@ import org.joml.Quaternionf
 import org.joml.Vector3f
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.sin
 
 internal const val STAFF_MELEE_PEAK_TICK = 4
@@ -33,7 +34,7 @@ internal fun staffMeleeDisplayParts(
     reach: Double,
 ): List<StaffDisplayPart> {
     if (spell !in STAFF_MELEE_SPELLS) return emptyList()
-    val endTick = minOf(durationTicks, STAFF_MELEE_EFFECT_TICKS)
+    val endTick = minOf(durationTicks, staffMeleeDuration(spell))
     val targetReach = reach.takeIf(Double::isFinite)?.coerceAtMost(MELEE_MAX_REACH) ?: return emptyList()
     if (ageTicks < 0 || durationTicks <= 0 || ageTicks >= endTick ||
         targetReach <= MELEE_START_DISTANCE + 0.1) return emptyList()
@@ -278,14 +279,14 @@ private fun meleeShape(spell: StaffSpell, progress: Double, followThrough: Doubl
             // A heavy leading fracture hammers forward; branching seams open sideways in sequence.
             repeat(4) { row ->
                 val beat = smoothMelee((p - row * 0.13) / (1.0 - row * 0.13))
-                val height = 0.46 + (row % 2) * 0.12
+                val height = 0.74 + (row % 2) * 0.12
                 val settle = follow * (0.14 + row * 0.025)
                 piece("fault:hammer:$row",
                     when (row % 3) { 0 -> Material.OBSIDIAN; 1 -> Material.BASALT; else -> Material.BLACKSTONE },
                     (if (row % 2 == 0) -0.08 else 0.12) * p,
-                    FLOOR_Y + height * 0.5 + 0.56 * beat - settle,
+                    FLOOR_Y + height * 0.5 + 0.50 * beat - settle,
                     1.82 + row * 1.38,
-                    1.26 + (row % 2) * 0.18, height, 1.06 + (row % 3) * 0.12,
+                    1.54 + (row % 2) * 0.18, height, 1.18 + (row % 3) * 0.12,
                     yaw = (if (row % 2 == 0) -1 else 1) * (0.12 + beat * 0.12),
                     roll = (if (row % 2 == 0) -1 else 1) * 0.08,
                     growth = beat,
@@ -298,7 +299,7 @@ private fun meleeShape(spell: StaffSpell, progress: Double, followThrough: Doubl
                     val baseZ = 2.02 + branch * 2.12 + if (sideIndex == 0) 0.0 else 0.16
                     fun riftPoint(t: Double): Vector3f {
                         val x = side * (0.28 + 4.02 * t * p)
-                        val y = FLOOR_Y + 0.18 + (0.26 + branch * 0.12) * t * p
+                        val y = FLOOR_Y + 0.26 + (0.62 + branch * 0.16) * t * p - follow * .30
                         val z = baseZ + 1.08 * t + sin(t * PI * 2 + branch) * 0.16 * p
                         return Vector3f(x.toFloat(), y.toFloat(), z.toFloat())
                     }
@@ -312,8 +313,8 @@ private fun meleeShape(spell: StaffSpell, progress: Double, followThrough: Doubl
                         segment("fault:rift:$sideIndex:$branch:$segmentIndex",
                             if ((branch + segmentIndex) % 2 == 0) Material.POLISHED_BASALT else Material.BLACKSTONE,
                             start, end,
-                            width = 0.50 + (segmentIndex % 2) * 0.10,
-                            height = 0.34 + branch * 0.04,
+                            width = 0.64 + (segmentIndex % 2) * 0.10,
+                            height = 0.52 + branch * 0.12,
                             growth = birth,
                         )
                     }
@@ -328,26 +329,29 @@ private fun meleeShape(spell: StaffSpell, progress: Double, followThrough: Doubl
                 piece("fault:spall:$index",
                     when (index % 3) { 0 -> Material.OBSIDIAN; 1 -> Material.BLACKSTONE; else -> Material.BASALT },
                     side * (2.30 + slot * 0.48 + follow * 0.28),
-                    FLOOR_Y + 0.34 + branch * 0.10 + birth * 0.18 + follow * 0.28,
+                    FLOOR_Y + 0.62 + branch * 0.18 + birth * 0.32 + follow * 0.34,
                     3.10 + branch * 2.10 + slot * 0.22 - follow * 0.12,
-                    0.56 + (slot % 2) * 0.18, 0.38 + (index % 3) * 0.08, 0.58,
+                    0.82 + (slot % 2) * 0.20, 1.18 + (index % 3) * 0.18, 0.74,
                     yaw = side * (0.20 + slot * 0.10),
                     pitch = side * (0.10 + follow * 0.10),
                     roll = side * (0.16 + slot * 0.03),
-                    growth = birth * (0.35 + follow * 0.65),
+                    growth = birth * (0.78 + follow * 0.22),
                 )
             }
         }
 
         StaffSpell.LUNAR -> {
-            // A swept crescent travels left-to-right and forward. Its horn segments stay tapered;
-            // a smaller offset echo appears after impact as the blade breaks into light.
+            // A face-on, open crescent is recognizable from the caster, with tapered horns.
+            // Its tilted blade sweeps across the contact area; the hollow center stays readable.
             fun point(t: Double, echo: Boolean): Vector3f {
-                val sweep = (p - 0.5) * 0.90
+                val angle = Math.toRadians(52.0 + 256.0 * t)
+                val roll = -.48 + p * .64
                 val after = if (echo) follow else 0.0
-                val x = -3.70 + 7.40 * t + sweep + (t - 0.5) * after * 0.32
-                val y = FLOOR_Y + 0.18 + 0.55 * sin(t * PI) + 0.22 * t + after * (0.18 + 0.14 * sin(t * PI))
-                val z = 1.82 + 4.82 * sin(t * PI) - after * 0.28
+                val rawX = cos(angle) * 2.90
+                val rawY = sin(angle) * 1.24
+                val x = rawX * cos(roll) - rawY * sin(roll) + (p - .5) * 1.45 + after * .25
+                val y = rawX * sin(roll) + rawY * cos(roll) - .12 - after * .20
+                val z = 3.20 + 1.25 * sin(t * PI) + rawY * .18 - after * .40
                 return Vector3f(x.toFloat(), y.toFloat(), z.toFloat())
             }
             repeat(12) { index ->
@@ -365,11 +369,11 @@ private fun meleeShape(spell: StaffSpell, progress: Double, followThrough: Doubl
                 }
                 val birth = smoothMelee((p - t0 * 0.50) / (1.0 - t0 * 0.50))
                 segment("lunar:arc:$index", material, point(t0, false), point(t1, false),
-                    width = (0.92 + (index % 3) * 0.08) * taper * (1.0 - 0.45 * follow),
-                    height = 0.66 * taper * (1.0 - 0.38 * follow),
+                    width = (0.62 + (index % 3) * 0.045) * taper * (1.0 - 0.45 * follow),
+                    height = 0.34 * taper * (1.0 - 0.38 * follow),
                     growth = birth)
                 val echoBirth = 0.001 + follow * 0.42
-                segment("lunar:echo:$index", Material.WHITE_STAINED_GLASS,
+                segment("lunar:echo:$index", Material.LIGHT_BLUE_STAINED_GLASS,
                     point(t0, true), point(t1, true),
                     width = 0.52 * taper, height = 0.30 * taper, growth = echoBirth)
             }

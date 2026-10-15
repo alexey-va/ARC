@@ -36,7 +36,7 @@ class StaffSpellMeleeTest : FreeSpec({
                     sounds.size shouldBe 1
                     h.scheduler.tick(1)
                     sounds.size shouldBe 3
-                    h.scheduler.tick((STAFF_FRONTAL_DURATION_TICKS - 2) - STAFF_FRONTAL_CONTACT_TICK)
+                    h.scheduler.tick((staffMeleeDuration(spell) - 2) - STAFF_FRONTAL_CONTACT_TICK)
                     sounds.size shouldBe 4
                     h.scheduler.tick(30)
                     sounds.size shouldBe 4

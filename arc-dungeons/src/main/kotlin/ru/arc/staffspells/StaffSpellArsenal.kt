@@ -203,6 +203,10 @@ internal class StaffSpellArsenal(
             } else tideOrb(a, player)
             StaffSpell.GALE -> if (a.input.secondary) galeRam(a, player) else {
                 particles(a, a.point, a.age, a.duration, radius = a.radius)
+                if (a.age in 6..42 && (a.age - 6) % 8 == 0) visuals.withOwner(a.casterId) {
+                    visuals.cue(a.point.clone().add(0.0, 1.2, 0.0), Sound.ITEM_ELYTRA_FLYING,
+                        .72f, .72f + (a.age % 16) * .018f)
+                }
                 if (a.age == 20) sound(a, a.point, true)
                 if (a.age in 20..28) area(a, player, a.point.clone().add(0.0, 1.1, 0.0),
                     2.5 + a.cast.visualCharge * .45, lift = .2)
@@ -596,9 +600,16 @@ internal class StaffSpellArsenal(
         }
         visuals.withOwner(a.casterId) {
             // bell.use has a native sample gain of twelve; its pulse must not drown every other staff.
-            val volume = if (a.spell == StaffSpell.REQUIEM && impact) .085f else if (impact) .65f else .5f
+            val volume = when {
+                a.spell == StaffSpell.REQUIEM && impact -> .085f
+                a.spell in setOf(StaffSpell.GALE, StaffSpell.OSSUARY) -> if (impact) .95f else .80f
+                impact -> .65f
+                else -> .5f
+            }
             visuals.cue(at, sound, volume, if (impact) .85f else 1.15f)
             if (impact) when (a.spell) {
+                StaffSpell.GALE -> visuals.cue(at, Sound.ENTITY_BREEZE_SHOOT, .72f, .60f)
+                StaffSpell.OSSUARY -> visuals.cue(at, Sound.ENTITY_SKELETON_HURT, .72f, .58f)
                 StaffSpell.TIDE -> visuals.cue(at, Sound.BLOCK_BUBBLE_COLUMN_UPWARDS_AMBIENT, .32f, 1.3f)
                 StaffSpell.NOVA -> visuals.cue(at, Sound.BLOCK_ROOTED_DIRT_BREAK, .3f, .7f)
                 StaffSpell.LUNAR -> visuals.cue(at, Sound.ENTITY_PLAYER_ATTACK_SWEEP, .38f, .72f)

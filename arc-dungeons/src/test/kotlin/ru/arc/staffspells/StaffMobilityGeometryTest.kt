@@ -8,6 +8,20 @@ import org.joml.Vector3f
 import kotlin.math.PI
 
 class StaffMobilityGeometryTest : FreeSpec({
+    "departure and braking afterimages stay low, keep stable parts, and fully expire" {
+        StaffSpell.available.forEach { spell ->
+            val frames = listOf(0, 2, 4, 6).map { age ->
+                staffMobilityAfterimageParts(spell, age, Vector(0.0, 0.0, 1.0))
+            }
+            frames.map { parts -> parts.map { it.identity } }.distinct().size shouldBe 1
+            frames.forEach { parts ->
+                (parts.size in 1..16) shouldBe true
+                parts.all { it.center.y in 0f..0.5f && it.scale.x > 0f && it.scale.y > 0f && it.scale.z > 0f } shouldBe true
+            }
+            staffMobilityAfterimageParts(spell, STAFF_MOBILITY_AFTERIMAGE_TICKS, Vector(0.0, 0.0, 1.0)) shouldBe emptyList()
+        }
+    }
+
     "mobility assemblies and elongated cube models follow the same travel heading" {
         val quarterTurn = Quaternionf().rotationY((PI / 2.0).toFloat())
         StaffSpell.available.forEach { spell ->

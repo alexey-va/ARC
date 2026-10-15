@@ -84,12 +84,14 @@ class StaffSpellVisualsTest : FreeSpec({
                     val listener = listeners.getValue(actualDistance)
                     val sound = heard.single { it.listener === listener }
                     val compression = ((actualDistance - 15.0) / (40.0 - 15.0)).coerceIn(0.0, 1.0)
-                    val expectedVirtualDistance = 4.0 + compression * 3.0
+                    val expectedVirtualDistance = 2.5 + compression * 1.5
                     val observedVirtualDistance = sound.position.distance(listener.eyeLocation)
                     (abs(observedVirtualDistance - expectedVirtualDistance) < 1.0e-8) shouldBe true
                     (sound.position.z > listener.eyeLocation.z) shouldBe true
-                    val expectedGain = 0.7 + compression * (0.4 - 0.7)
+                    val expectedGain = 1.0 + compression * (0.78 - 1.0)
                     (abs(sound.volume - (0.78 * expectedGain).toFloat()) < 1.0e-6f) shouldBe true
+                    // Native linear attenuation must still leave a strong cue at gameplay distance.
+                    (sound.volume * (1.0 - observedVirtualDistance / 16.0) >= 0.45) shouldBe true
                 }
                 heard.map { it.sound }.toSet() shouldBe setOf(Sound.BLOCK_GLASS_BREAK)
             }

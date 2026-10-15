@@ -2,6 +2,9 @@ package ru.arc.staffspells
 
 import com.google.gson.GsonBuilder
 import org.bukkit.Particle
+import org.bukkit.Material
+import org.joml.Vector3f
+import org.joml.Quaternionf
 import org.bukkit.block.data.BlockData
 import org.bukkit.util.Vector
 import ru.arc.paper.testing.MockBukkitTestRuntime
@@ -522,7 +525,7 @@ object StaffRedesignPreviewExport {
 
     private fun meleeClip(spell: StaffSpell): Map<String, Any> {
         val reach = requireNotNull(staffMeleeReach(spell))
-        val duration = STAFF_FRONTAL_DURATION_TICKS
+        val duration = staffMeleeDuration(spell)
         val origin = Vector(0.0, 1.37, 0.0)
         return mapOf(
             "id" to "${spell.id}-primary-0", "spell" to spell.id,
@@ -557,12 +560,14 @@ object StaffRedesignPreviewExport {
     }
 
     private fun chainStormNovaClip(): Map<String, Any> {
-        val duration = STAFF_STORM_NOVA_BUILDUP_TICKS + STAFF_STORM_NOVA_TRAVEL_TICKS
+        val duration = STAFF_STORM_NOVA_BUILDUP_TICKS + STAFF_STORM_NOVA_TRAVEL_TICKS + 2
         val unobstructedRayLimits = List(STAFF_STORM_NOVA_RAY_COUNT) { STAFF_STORM_NOVA_RADIUS }
         val frames = ticks(duration).map { age ->
             val emissions = staffStormNovaFrame(age, STAFF_STORM_NOVA_RADIUS, unobstructedRayLimits)
                 .map { sample(it) }
-            mapOf("tick" to age, "parts" to emptyList<Any>(), "emissions" to emissions)
+            mapOf("tick" to age, "parts" to stormStrikePreviewParts(age, unobstructedRayLimits)
+                .mapIndexed { index, display -> part(display, "native-lightning-proxy", index, Vector()) },
+                "emissions" to emissions)
         }
         return mapOf(
             "id" to "chain-secondary-storm-nova",
@@ -573,15 +578,32 @@ object StaffRedesignPreviewExport {
             "durationTicks" to duration,
             "tailTicks" to 40,
             "frameStepTicks" to FRAME_STEP_TICKS,
-            "particleOnly" to true,
+            "particleOnly" to false,
             "anchor" to "caster feet; 24 horizontal radial limits, local X/Z in the world plane",
             "previewReachBlocks" to STAFF_STORM_NOVA_RADIUS,
             "previewPathLengthBlocks" to STAFF_STORM_NOVA_RADIUS,
-            "timelineNote" to "Source CHAIN Shift+ПКМ nova: a 360-degree front with 24 horizontal rays at the unobstructed 8-block source radius. Cast age 0 starts the buildup, ages 2–4 finish its core, then the front expands from age 4 to 14. The preview supplies full-length ray limits; runtime cover can shorten individual sectors. Combat, native particle lifetime, and client rendering are not simulated.",
-            "sourceFunctions" to listOf("staffStormNovaFrame"),
+            "timelineNote" to "Source CHAIN Shift+ПКМ nova: a 360-degree front with 24 horizontal rays at the unobstructed 8-block source radius. Cast age 0 starts the buildup, ages 2–4 finish its core, then the front expands from age 4 to 14. Three native effect-only sky bolts strike at ages 6, 10 and 14 along that front. White zigzags here are labeled illustrative proxies for the native lightning renderer, not production BlockDisplays; their positions and timing use the production strike schedule. Runtime cover clips sectors. Native lightning appearance and audio require the Minecraft client.",
+            "sourceFunctions" to listOf("staffStormNovaFrame", "staffStormNovaStrikes"),
             "frames" to frames,
         )
     }
+
+    /** Illustrative native-lightning proxy only; production uses strikeLightningEffect, not these displays. */
+    private fun stormStrikePreviewParts(age: Int, limits: List<Double>): List<StaffDisplayPart> =
+        staffStormNovaStrikes(age, STAFF_STORM_NOVA_RADIUS, limits).flatMapIndexed { strike, at ->
+            (0 until 5).map { segment ->
+                fun point(step: Int) = Vector3f((at.x + if (step == 0) 0.0 else
+                    (if ((step + strike) % 2 == 0) .38 else -.38)).toFloat(),
+                    (step * 2.0).toFloat(), (at.z + if (step % 2 == 0) 0.0 else .22).toFloat())
+                val from = point(segment)
+                val to = point(segment + 1)
+                val delta = Vector3f(to).sub(from)
+                StaffDisplayPart(Material.WHITE_CONCRETE, Vector3f(from).add(to).mul(.5f),
+                    Vector3f(.11f, .11f, delta.length()),
+                    Quaternionf().rotationTo(Vector3f(0f, 0f, 1f), delta.normalize()),
+                    identity = "illustrative-lightning:$age:$strike:$segment")
+            }
+        }
 
     private fun requiemBellClip(input: StaffCastInput, charge: Double): Map<String, Any> {
         val secondary = input.secondary
@@ -635,14 +657,21 @@ object StaffRedesignPreviewExport {
                 "id" to "gravity-secondary-${charge.toInt()}", "spell" to spell.id,
                 "input" to input.name, "quick" to false, "charge" to charge,
                 "durationTicks" to duration, "tailTicks" to 16, "frameStepTicks" to FRAME_STEP_TICKS,
-                "particleOnly" to false, "anchor" to "caster feet; radial gravity lift and slam",
+                "particleOnly" to false, "anchor" to "caster feet; annular floor compression at the slam",
                 "previewReachBlocks" to radius,
-                "timelineNote" to "Runtime-authored radial gravity field: fragments and sparks lift inward, then drop into a ground shock. The runtime lifts eligible visible enemies with velocity and applies one hit on their actual landing. This preview exports scenery and particle geometry, not entity physics.",
-                "sourceFunctions" to listOf("staffGravityPulseParts", "staffGravityPulseFrame"),
+                "timelineNote" to "A low pressure collar converges; at tick 8 up to 32 native-textured floor cells in a donut sink 0.8 block, hold, then return. The world and collision blocks never change. This preview uses a labeled synthetic flat grass floor with a hole cut only beneath the animated ring; live source blocks are terrain-sampled in allowed worlds. Existing target lift/slam and accepted landing damage are unchanged.",
+                "syntheticTerrain" to (-5..5).flatMap { x -> (-5..5).map { z -> x to z } }
+                    .filterNot { it in staffSceneryDepressionFootprint(radius) }
+                    .map { (x, z) -> mapOf("x" to x, "z" to z) },
+                "sourceFunctions" to listOf("staffGravityPulseParts", "staffGravityPulseFrame", "staffSceneryDepressionFootprint", "staffSceneryDepressionY"),
                 "frames" to ticks(duration).map { age -> mapOf<String, Any>(
                     "tick" to age,
-                    "parts" to if (age < duration) staffGravityPulseParts(age, duration, radius)
-                        .mapIndexed { index, display -> part(display, "gravity-pulse", index, Vector()) } else emptyList(),
+                    "parts" to (staffGravityPulseParts(age, duration, radius) +
+                        staffSceneryDepressionFootprint(radius).map { (x, z) ->
+                            StaffDisplayPart(Material.GRASS_BLOCK,
+                                Vector3f(x.toFloat(), (-.5 + staffSceneryDepressionY((age - 8).coerceAtLeast(0))).toFloat(), z.toFloat()),
+                                Vector3f(1f, 1f, 1f), Quaternionf(), identity = "synthetic-terrain:$x:$z")
+                        }).mapIndexed { index, display -> part(display, "gravity-pulse", index, Vector()) },
                     "emissions" to staffGravityPulseFrame(age, radius).map { sample(it) },
                 ) },
             )

@@ -452,6 +452,11 @@ internal class StaffSpellChannels(
             effects.synchronize(pulse.sceneId, pulse.ageTicks)
             visuals.withOwner(pulse.casterId) {
                 visuals.particles(pulse.origin, staffGravityPulseFrame(pulse.ageTicks, GRAVITY_PULSE_RADIUS))
+                if (pulse.ageTicks == GRAVITY_PULSE_LIFT_TICKS) {
+                    visuals.groundDepression(pulse.origin, GRAVITY_PULSE_RADIUS)
+                    visuals.cue(pulse.origin, Sound.ENTITY_GENERIC_EXPLODE, volume = 0.85f, pitch = 0.55f)
+                    visuals.cue(pulse.origin, Sound.BLOCK_DEEPSLATE_BREAK, volume = 0.9f, pitch = 0.65f)
+                }
             }
 
             pulse.targets.toList().forEach { candidate ->

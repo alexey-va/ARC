@@ -13,6 +13,7 @@ import java.util.Locale
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import net.kyori.adventure.text.format.TextDecoration
+import net.kyori.adventure.text.format.TextColor
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
@@ -55,6 +56,8 @@ internal enum class StaffCastInput(val secondary: Boolean, val quick: Boolean) {
 
 private const val STAFF_NATIVE_USE_SECONDS = 3_600f
 private const val STAFF_PROTOTYPE_LORE_LINES = 10
+private val STAFF_INPUT_COLOR = TextColor.color(0x73D9FF)
+private val STAFF_STATUS_COLOR = TextColor.color(0xBDCADA)
 
 /** Long native use opens the vanilla stop-using packet; consumption itself is always suppressed. */
 internal fun ensureStaffChargeUseComponent(item: ItemStack, spell: StaffSpell): Boolean {
@@ -257,24 +260,23 @@ internal open class StaffSpellConfig(private val config: Config) {
 
     fun cooldown(spell: StaffSpell, secondary: Boolean, remaining: Long, total: Long, input: StaffCastInput = StaffCastInput.of(secondary, false)): Component {
         val resolvers = TagResolver.resolver(
-            Placeholder.component("ability", config.component("${spell.id}.${when (input) { StaffCastInput.PRIMARY -> "name"; StaffCastInput.SECONDARY -> "secondary-name"; StaffCastInput.QUICK -> "quick-name"; StaffCastInput.QUICK_SECONDARY -> "quick-secondary-name" }}", TagResolver.empty())),
+            Placeholder.component("ability", abilityName(spell, when (input) { StaffCastInput.PRIMARY -> "name"; StaffCastInput.SECONDARY -> "secondary-name"; StaffCastInput.QUICK -> "quick-name"; StaffCastInput.QUICK_SECONDARY -> "quick-secondary-name" })),
             Placeholder.unparsed("seconds", String.format(Locale.ROOT, "%.1f", remaining.coerceAtLeast(0) / 20.0)),
-            Placeholder.unparsed("input", inputLabel(spell, input)),
+            Placeholder.component("input", inputComponent(spell, input)),
         )
         return config.component("messages.${if (remaining > 0) "cooldown-bar" else "ready-bar"}", resolvers)
     }
 
     fun charge(spell: StaffSpell, progress: Double, secondary: Boolean = false): Component = config.component("messages.charge-bar", TagResolver.resolver(
-        Placeholder.component("ability", config.component("${spell.id}.${if (secondary) "secondary-name" else "name"}", TagResolver.empty())),
+        Placeholder.component("ability", abilityName(spell, if (secondary) "secondary-name" else "name")),
         Placeholder.unparsed("percent", (progress.coerceIn(0.0, 1.0) * 100).toInt().toString()),
-        Placeholder.unparsed("input", inputLabel(spell, StaffCastInput.of(secondary, quick = false))),
+        Placeholder.component("input", inputComponent(spell, StaffCastInput.of(secondary, quick = false))),
     ))
 
     fun staffHudReady(spell: StaffSpell, secondary: Boolean): Component {
         val message = when (staffAttackInputMode(spell, secondary)) {
             StaffAttackInputMode.INSTANT -> "ready-instant"
             StaffAttackInputMode.HOLD_RELEASE -> "ready-charge"
-            StaffAttackInputMode.CHANNEL_CLICK_TOGGLE -> "ready-channel"
         }
         return staffHud(message, spell, secondary)
     }
@@ -321,8 +323,10 @@ internal open class StaffSpellConfig(private val config: Config) {
     fun hotkeyHud(state: StaffHotkeyHudState): Component {
         fun status(ticks: Long) = if (ticks <= 0) config.string("messages.hotkey-ready", "готово")
             else String.format(Locale.ROOT, "%.1fс", ticks / 20.0)
-        return Component.text("Q · ${state.continuation ?: status(state.qTicks)}    F · ${status(state.fTicks)}",
-            net.kyori.adventure.text.format.NamedTextColor.AQUA)
+        return Component.text("Q", STAFF_INPUT_COLOR)
+            .append(Component.text(" ${state.continuation ?: status(state.qTicks)}   ", STAFF_STATUS_COLOR))
+            .append(Component.text("F", STAFF_INPUT_COLOR))
+            .append(Component.text(" ${status(state.fTicks)}", STAFF_STATUS_COLOR))
     }
 
     fun staffHudBossbar(state: StaffSpellHudState): Component {
@@ -330,7 +334,6 @@ internal open class StaffSpellConfig(private val config: Config) {
             StaffSpellHudPhase.READY -> when (staffAttackInputMode(state.spell, state.secondary)) {
                 StaffAttackInputMode.INSTANT -> "bossbar-ready-instant"
                 StaffAttackInputMode.HOLD_RELEASE -> "bossbar-ready-charge"
-                StaffAttackInputMode.CHANNEL_CLICK_TOGGLE -> "bossbar-ready-channel"
             }
             StaffSpellHudPhase.CHARGING -> "bossbar-charging"
             StaffSpellHudPhase.CHANNEL -> "bossbar-channel"
@@ -353,8 +356,8 @@ internal open class StaffSpellConfig(private val config: Config) {
         vararg extra: TagResolver): Component {
         val ability = if (secondary) "secondary-name" else "name"
         return config.component("messages.staff-hud.$message", TagResolver.resolver(
-            Placeholder.component("ability", config.component("${spell.id}.$ability", TagResolver.empty())),
-            Placeholder.unparsed("input", inputLabel(spell, StaffCastInput.of(secondary, quick = false))),
+            Placeholder.component("ability", abilityName(spell, ability)),
+            Placeholder.component("input", inputComponent(spell, StaffCastInput.of(secondary, quick = false))),
             *extra,
         )).decoration(TextDecoration.ITALIC, false)
     }
@@ -367,6 +370,19 @@ internal open class StaffSpellConfig(private val config: Config) {
             StaffSpellInputButton.RIGHT -> if (input.secondary) "Shift + ПКМ" else "ПКМ"
         }
         return config.string(key, fallback).trim().ifEmpty { fallback }
+    }
+
+    private fun inputComponent(spell: StaffSpell, input: StaffCastInput): Component =
+        Component.text(inputLabel(spell, input), STAFF_INPUT_COLOR)
+
+    /** Unstyled secondary/defense names inherit the staff's configured element color. */
+    private fun abilityName(spell: StaffSpell, key: String): Component {
+        fun firstColor(component: Component): TextColor? = component.color()
+            ?: component.children().firstNotNullOfOrNull(::firstColor)
+        val primary = config.component("${spell.id}.name", TagResolver.empty())
+        val color = firstColor(primary) ?: STAFF_INPUT_COLOR
+        return (if (key == "name") primary else config.component("${spell.id}.$key", TagResolver.empty()))
+            .colorIfAbsent(color)
     }
 
     private fun controlPlaceholders(spell: StaffSpell) = TagResolver.resolver(
@@ -387,16 +403,16 @@ internal open class StaffSpellConfig(private val config: Config) {
         }
         val ability = if (allAround) "quick-secondary-name" else "quick-name"
         return config.component("messages.$message", TagResolver.resolver(
-            Placeholder.component("ability", config.component("${spell.id}.$ability", TagResolver.empty())),
+            Placeholder.component("ability", abilityName(spell, ability)),
             Placeholder.unparsed("seconds", String.format(Locale.ROOT, "%.1f", seconds)),
-            Placeholder.unparsed("input", inputLabel(spell,
+            Placeholder.component("input", inputComponent(spell,
                 StaffCastInput.of(secondary = allAround, quick = true))),
         ))
     }
 
     fun shield(spell: StaffSpell, remaining: Double, capacity: Double): Component = config.component(
         "messages.shield-active", TagResolver.resolver(
-            Placeholder.component("ability", config.component("${spell.id}.quick-secondary-name", TagResolver.empty())),
+            Placeholder.component("ability", abilityName(spell, "quick-secondary-name")),
             Placeholder.unparsed("remaining", String.format(Locale.ROOT, "%.1f", remaining)),
             Placeholder.unparsed("capacity", String.format(Locale.ROOT, "%.0f", capacity)),
         ))

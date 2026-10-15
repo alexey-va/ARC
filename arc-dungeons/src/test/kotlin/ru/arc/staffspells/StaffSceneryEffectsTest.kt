@@ -248,6 +248,57 @@ class StaffSceneryEffectsTest : FreeSpec({
         }
     }
 
+    "gravity depression sinks an annulus and restores live terrain on cancel without block mutation" {
+        MockBukkitTestRuntime.open().use {
+            val world = mockk<World>(relaxed = true)
+            val center = Location(world, .5, 65.0, .5)
+            val viewer = sceneryViewer(world, UUID.randomUUID(), center)
+            val solids = (-5..5).flatMap { x -> (-5..5).map { z -> GridPos(x, 64, z) } }.toSet()
+            val fixture = sceneryWorld("arena", solids, listOf(viewer), listOf(viewer)) { _, read ->
+                Bukkit.createBlockData(if (read == 0) Material.GRASS_BLOCK else Material.GOLD_BLOCK)
+            }
+            val recorder = SceneryDisplayRecorder()
+            val scheduler = TestTaskScheduler()
+            val effects = StaffSceneryEffects(recorder.displays, setOf("arena"), LifecycleTaskScope(scheduler))
+            val owner = UUID.randomUUID()
+            effects.depress(owner, center, 6.5)
+            (recorder.records.size in 24..32) shouldBe true
+            recorder.records.all { it.teleportDuration == 2 } shouldBe true
+            recorder.records.none { it.origin.blockX == 0 && it.origin.blockZ == 0 } shouldBe true
+            scheduler.tick(4)
+            recorder.records.all { abs(it.teleports.last().y - (it.origin.y - .8)) < 1e-6 } shouldBe true
+            recorder.records.all { it.teleports.last().x == it.origin.x && it.teleports.last().z == it.origin.z } shouldBe true
+            effects.cancel(owner)
+            verify { viewer.sendMultiBlockChange(match { it.values.all { data -> data.material == Material.GOLD_BLOCK } }) }
+            recorder.records.all { it.removals == 1 } shouldBe true
+            fixture.solidBlocks.values.forEach { verify(exactly = 0) { it.setType(any<Material>()) } }
+            effects.close()
+        }
+        (abs(staffSceneryDepressionY(0)) < 1e-9) shouldBe true
+        staffSceneryDepressionY(16) shouldBe -.8
+        (abs(staffSceneryDepressionY(26)) < 1e-9) shouldBe true
+        staffSceneryDepressionFootprint(6.5).size shouldBe 32
+    }
+
+    "complete depression rings share the original ninety-six scenery-block ceiling" {
+        MockBukkitTestRuntime.open().use {
+            val world = mockk<World>(relaxed = true)
+            val center = Location(world, .5, 65.0, .5)
+            val viewer = sceneryViewer(world, UUID.randomUUID(), center)
+            val solids = (-5..29).flatMap { x -> (-5..5).map { z -> GridPos(x, 64, z) } }.toSet()
+            sceneryWorld("arena", solids, listOf(viewer), listOf(viewer)) { _, _ -> Bukkit.createBlockData(Material.STONE) }
+            val recorder = SceneryDisplayRecorder()
+            val effects = StaffSceneryEffects(recorder.displays, setOf("arena"), LifecycleTaskScope(TestTaskScheduler()))
+            val owners = List(4) { UUID.randomUUID() }
+            owners.forEachIndexed { index, owner -> effects.depress(owner, center.clone().add(index * 8.0, 0.0, 0.0), 6.5) }
+            recorder.records.size shouldBe 96
+            effects.cancel(owners.first())
+            effects.depress(owners.last(), center.clone().add(24.0, 0.0, 0.0), 6.5)
+            recorder.records.size shouldBe 128
+            effects.close()
+        }
+    }
+
     "ballistic debris uses a deterministic four-tick trajectory" {
         val start = staffSceneryBallisticOffset(0, 0.0, .1, .16)
         start.x shouldBe 0.0
@@ -319,6 +370,7 @@ private fun sceneryWorld(
 
 private data class SceneryDisplayRecord(
     val handle: PacketBlockDisplay,
+    val origin: Location,
     val shownTo: MutableSet<UUID> = mutableSetOf(),
     val hiddenFrom: MutableSet<UUID> = mutableSetOf(),
     val teleports: MutableList<Location> = mutableListOf(),
@@ -333,7 +385,7 @@ private class SceneryDisplayRecorder {
 
     val displays = mockk<PaperPacketDisplays>(relaxed = true).also { owner ->
         every { owner.spawnBlock(any(), any()) } answers {
-            val record = SceneryDisplayRecord(mockk(relaxed = true))
+            val record = SceneryDisplayRecord(mockk(relaxed = true), firstArg<Location>().clone())
             every { record.handle.teleportDuration = any() } answers {
                 record.teleportDuration = firstArg()
             }

@@ -354,7 +354,7 @@ class StaffSpellChannelsTest : FreeSpec({
         }
     }
 
-    "gravity pulse particles and display fragments trace a distinct inward lift and ground shock" {
+    "gravity pressure collar converges at floor level around the depressed annulus" {
         MockBukkitTestRuntime.open().use {
             val lift = staffChannelParts(StaffSpell.GRAVITY, 6, 36, 0.1, 6.5, impact = false, secondary = true)
             val shock = staffChannelParts(StaffSpell.GRAVITY, 16, 36, 0.1, 6.5, impact = false, secondary = true)
@@ -362,11 +362,11 @@ class StaffSpellChannelsTest : FreeSpec({
             val liftFrame = staffGravityPulseFrame(4, 6.5)
             val shockFrame = staffGravityPulseFrame(16, 6.5)
 
-            lift.size shouldBe 12
+            lift.size shouldBe 16
             lift.map { it.identity } shouldBe shock.map { it.identity }
             lift.map { it.identity }.toSet().intersect(held.mapNotNull { it.identity }.toSet()).isEmpty() shouldBe true
-            (lift.maxOf { it.center.y } in 1.5f..1.9f) shouldBe true
-            (shock.maxOf { it.center.x * it.center.x + it.center.z * it.center.z } >
+            (lift.maxOf { it.center.y } < .15f) shouldBe true
+            (shock.maxOf { it.center.x * it.center.x + it.center.z * it.center.z } <
                 lift.maxOf { it.center.x * it.center.x + it.center.z * it.center.z }) shouldBe true
             liftFrame.size shouldBe 24
             shockFrame.isNotEmpty() shouldBe true

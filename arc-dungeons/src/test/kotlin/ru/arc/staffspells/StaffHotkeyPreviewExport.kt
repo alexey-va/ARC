@@ -200,8 +200,7 @@ object StaffHotkeyPreviewExport {
 
     private fun mobilityClip(spell: StaffSpell): Map<String, Any> {
         val profile = requireNotNull(staffMobilityProfile(spell))
-        val movementDistance = if (profile.motion == StaffMobilityMotion.BLINK) profile.range
-            else min(profile.range, profile.forwardImpulse * profile.durationTicks * .3)
+        val movementDistance = profile.range
         fun offset(age: Int): Vector {
             if (profile.motion == StaffMobilityMotion.BLINK) return Vector(0.0, 0.0, movementDistance)
             val progress = (age.toDouble() / profile.durationTicks).coerceIn(0.0, 1.0)
@@ -210,13 +209,14 @@ object StaffHotkeyPreviewExport {
             val sign = if (spell == StaffSpell.LANCE || spell == StaffSpell.EMBER) -1.0 else 1.0
             return Vector(0.0, lift, sign * movementDistance * eased)
         }
-        val note = "${profile.motion}: production mobility profile (range=${profile.range}, forwardImpulse=${profile.forwardImpulse}, verticalImpulse=${profile.verticalImpulse}, steering=${profile.steering}, duration=${profile.durationTicks}t). Синтетическая камера следует за игроком: blink сразу переносит в конечную точку, остальные пути приблизительно показывают ${"%.2f".format(Locale.ROOT, movementDistance)} блока с учётом направления отскока. Safe landing, collisions and server velocity are not simulated. Production silhouette and release particles are shared."
-        return clip(spell, "F", profile.durationTicks, note,
-            listOf("staffMobilityProfile", "staffMobilityDisplayParts", "staffMobilityParticleBurst"),
+        val note = "${profile.motion}: production mobility profile (range=${profile.range}, forwardImpulse=${profile.forwardImpulse}, verticalImpulse=${profile.verticalImpulse}, steering=${profile.steering}, duration=${profile.durationTicks}t). Синтетическая камера следует за игроком: blink сразу переносит в конечную точку, остальные пути показывают синтетический сценарий до предела дальности ${"%.2f".format(Locale.ROOT, movementDistance)} блока с учётом направления отскока. Safe landing, collisions and server velocity are not simulated. Production silhouette and release particles are shared."
+        return clip(spell, "F", profile.durationTicks + STAFF_MOBILITY_AFTERIMAGE_TICKS, note,
+            listOf("staffMobilityProfile", "staffMobilityDisplayParts", "staffMobilityAfterimageParts", "staffMobilityParticleBurst"),
             "кастер; local +Z по синтетическому направлению движения", geometry = { age ->
                 val position = offset(age)
-                val emissions = if (age == 0 || age % 4 == 0 || age == profile.durationTicks) {
-                    val burst = staffMobilityParticleBurst(spell)
+                val emissions = if (age <= profile.durationTicks &&
+                    (age == 0 || age % 4 == 0 || age == profile.durationTicks)) {
+                    val burst = staffMobilityParticleBurst(spell, impulse = age == 0 || age == profile.durationTicks)
                     buildList {
                         if (age == 0) {
                             if (profile.motion == StaffMobilityMotion.BLINK) {
@@ -231,8 +231,15 @@ object StaffHotkeyPreviewExport {
                             Vector(0.0, 0.0, movementDistance) else position.clone()))
                     }
                 } else emptyList()
-                Frame(staffMobilityDisplayParts(spell, age, profile.durationTicks, Vector(0.0, 0.0, 1.0)),
-                    position, emissions, motion = position)
+                val direction = Vector(0.0, 0.0, 1.0)
+                val parts = if (age < profile.durationTicks) {
+                    staffMobilityDisplayParts(spell, age, profile.durationTicks, direction) +
+                        staffMobilityAfterimageParts(spell, age, direction).map { part ->
+                            part.copy(center = Vector3f(part.center).sub(position.x.toFloat(),
+                                position.y.toFloat(), position.z.toFloat()))
+                        }
+                } else staffMobilityAfterimageParts(spell, age - profile.durationTicks, direction)
+                Frame(parts, position, emissions, motion = position)
             })
     }
 

@@ -24,6 +24,7 @@ import kotlin.math.sqrt
 internal class StaffSpellVisuals(
     private val tasks: LifecycleTaskScope,
     private val sceneryImpact: (UUID, Location, Double) -> Unit = { _, _, _ -> },
+    private val sceneryDepression: (UUID, Location, Double) -> Unit = { _, _, _ -> },
     private val currentTick: () -> Long = { Bukkit.getCurrentTick().toLong() },
 ) {
     private data class OwnerTasks(var generation: Long = 0L, var pending: Int = 0)
@@ -1401,6 +1402,10 @@ internal class StaffSpellVisuals(
         }
     }
 
+    fun groundDepression(at: Location, radius: Double) = dispatch {
+        activeOwner.get()?.let { sceneryDepression(it, at, radius) }
+    }
+
     fun cue(at: Location, sound: Sound, volume: Float = .65f, pitch: Float = 1.0f) = dispatch {
         localSound(at, sound, volume, pitch)
     }
@@ -1461,7 +1466,7 @@ internal class StaffSpellVisuals(
 
     /**
      * Send positional cues only to nearby listeners. Each per-listener packet keeps the source
-     * bearing while gently compressing far distances into a still-positional 4–7 block cue.
+     * bearing while gently compressing far distances into a still-positional 2.5–4 block cue.
      * Recipients are independently range-checked, so no sound is broadcast to the whole world.
      */
     private fun localSound(at: Location, sound: Sound, volume: Float, pitch: Float,
@@ -1533,13 +1538,13 @@ internal class StaffSpellVisuals(
         const val MIN_SOUND_DISTANCE = 15.0
         const val DEFAULT_SOUND_DISTANCE = 64.0
         const val MAX_SOUND_AUDIENCE = 64.0
-        const val SOUND_NATIVE_NEAR_DISTANCE = 4.0
-        const val SOUND_VIRTUAL_NEAR_DISTANCE = 4.0
-        const val SOUND_VIRTUAL_FAR_DISTANCE = 7.0
+        const val SOUND_NATIVE_NEAR_DISTANCE = 2.5
+        const val SOUND_VIRTUAL_NEAR_DISTANCE = 2.5
+        const val SOUND_VIRTUAL_FAR_DISTANCE = 4.0
         const val SOUND_GAIN_NEAR_DISTANCE = 15.0
         const val SOUND_GAIN_FAR_DISTANCE = 40.0
-        const val SOUND_GAIN_NEAR = 0.7
-        const val SOUND_GAIN_FAR = 0.4
+        const val SOUND_GAIN_NEAR = 1.0
+        const val SOUND_GAIN_FAR = 0.78
         const val CHARGE_PARTICLE_COUNT = 4
         const val CHARGE_STAGE_START = 1
         const val CHARGE_STAGE_QUARTER = 1 shl 1

@@ -81,7 +81,7 @@ class StaffMeleeGeometryTest : FreeSpec({
                 val bounds = meleeTestBounds(parts)
                 withClue("$spell age=${keyframeAges[frameIndex]} bounds=$bounds") {
                     (bounds.minX >= -5.1f && bounds.maxX <= 5.1f) shouldBe true
-                    (bounds.minY >= -1.6f && bounds.maxY <= 1.35f) shouldBe true
+                    (bounds.minY >= -1.8f && bounds.maxY <= 1.8f) shouldBe true
                     (bounds.minZ >= 1.39f && bounds.maxZ <= 7.002f) shouldBe true
                 }
             }
@@ -153,10 +153,8 @@ class StaffMeleeGeometryTest : FreeSpec({
         lunar.all { it.material in setOf(Material.CALCITE, Material.QUARTZ_BLOCK, Material.SMOOTH_QUARTZ) } shouldBe true
         echoes.size shouldBe lunar.size
         (lunar.first().scale.x < lunar[lunar.size / 2].scale.x) shouldBe true
-        (staffMeleeDisplayParts(StaffSpell.LUNAR, 4, 16, 7.0)
-            .single { it.identity == "lunar:arc:9" }.center.x >
-            staffMeleeDisplayParts(StaffSpell.LUNAR, 2, 16, 7.0)
-                .single { it.identity == "lunar:arc:9" }.center.x) shouldBe true
+        val earlyLunar = staffMeleeDisplayParts(StaffSpell.LUNAR, 2, 16, 7.0)
+        (lunar.any { part -> part.center.distance(earlyLunar.single { it.identity == part.identity }.center) > .6f }) shouldBe true
         staffMeleeDisplayParts(StaffSpell.LUNAR, 8, 16, 7.0)
             .filter { it.identity?.startsWith("lunar:echo:") == true }
             .all { it.scale.x > staffMeleeDisplayParts(StaffSpell.LUNAR, 6, 16, 7.0)
@@ -166,7 +164,9 @@ class StaffMeleeGeometryTest : FreeSpec({
         val crown = orderedArc[orderedArc.size / 2].center
         val right = orderedArc.last().center
         (crown.z > maxOf(left.z, right.z) + 0.7f) shouldBe true
-        (right.y > left.y + 0.15f) shouldBe true
+        (left.y > right.y + 1.3f) shouldBe true
+        (crown.x < minOf(left.x, right.x) - 2.0f) shouldBe true
+        (meleeTestBounds(lunar).maxY - meleeTestBounds(lunar).minY > 2.4f) shouldBe true
 
         val tide = staffMeleeDisplayParts(StaffSpell.TIDE, 4, 16, 7.0)
         val water = tide.filter { it.identity?.startsWith("tide:water:") == true }
@@ -182,19 +182,39 @@ class StaffMeleeGeometryTest : FreeSpec({
             .let { abs(it) < 0.999f } shouldBe true
     }
 
-    "the central reticle corridor stays below eye height while outer shapes carry the silhouette" {
+    "the central reticle remains clear while the lunar crescent has an upright hollow center" {
         meleeSpells.forEach { spell ->
             val parts = staffMeleeDisplayParts(spell, 4, 16, 7.0)
             val centerCorridor = parts.filter { abs(it.center.x) < 0.9f }
             centerCorridor.isNotEmpty() shouldBe true
-            val centerTop = centerCorridor.maxOf { meleeTestBounds(listOf(it)).maxY }
-            (centerTop < 0.30f) shouldBe true
+            if (spell == StaffSpell.LUNAR) {
+                parts.filter { it.identity?.startsWith("lunar:arc:") == true }.none { part ->
+                    val bounds = meleeTestBounds(listOf(part))
+                    bounds.minX < .2f && bounds.maxX > -.2f && bounds.minY < .40f && bounds.maxY > .10f
+                } shouldBe true
+            } else {
+                val centerTop = centerCorridor.maxOf { meleeTestBounds(listOf(it)).maxY }
+                (centerTop < 0.30f) shouldBe true
+            }
         }
 
         StaffSpell.values().filterNot(meleeSpells::contains).forEach { spell ->
             staffMeleeDisplayParts(spell, 4, 16, 7.0) shouldBe emptyList()
             staffMeleeParticles(spell, 4, 16, 7.0) shouldBe emptyList()
         }
+    }
+
+    "obsidian and lunar follow-through persists and collapses before their own removal" {
+        listOf(StaffSpell.FAULT, StaffSpell.LUNAR).forEach { spell ->
+            val duration = staffMeleeDuration(spell)
+            val after = staffMeleeDisplayParts(spell, 14, duration, 7.0)
+            (after.maxOf { it.scale.length() } > .35f) shouldBe true
+            (staffMeleeDisplayParts(spell, duration - 2, duration, 7.0).maxOf { it.scale.length() } < .01f) shouldBe true
+            staffMeleeDisplayParts(spell, duration, duration, 7.0) shouldBe emptyList()
+        }
+        val fault = staffMeleeDisplayParts(StaffSpell.FAULT, 6, 24, 7.0)
+            .filter { it.identity?.startsWith("fault:spall:") == true }
+        (fault.maxOf { it.scale.y } > 1.0f) shouldBe true
     }
 
     "native accents form a bounded contact burst and never use generic smoke clutter" {
@@ -212,7 +232,7 @@ class StaffMeleeGeometryTest : FreeSpec({
                             listOf(sample.offset.x, sample.offset.y, sample.offset.z,
                                 sample.spread.x, sample.spread.y, sample.spread.z, sample.speed).all(Double::isFinite) &&
                             sample.spread.length() <= 0.2 &&
-                            sample.offset.x in -5.2..5.2 && sample.offset.y in -1.7..1.5 && sample.offset.z in 1.3..7.1 &&
+                            sample.offset.x in -5.2..5.2 && sample.offset.y in -1.8..1.8 && sample.offset.z in 1.3..7.1 &&
                             (sample.particle != Particle.BLOCK || sample.data is BlockData)
                     } shouldBe true
                 }

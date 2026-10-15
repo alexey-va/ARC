@@ -25,6 +25,7 @@ import org.bukkit.event.block.BlockDamageEvent
 import org.bukkit.event.inventory.ClickType
 import org.bukkit.event.inventory.InventoryAction
 import org.bukkit.event.inventory.InventoryClickEvent
+import org.bukkit.event.inventory.InventoryCreativeEvent
 import org.bukkit.event.inventory.InventoryType
 import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerDropItemEvent
@@ -166,19 +167,19 @@ class StaffSpellInputTest : FreeSpec({
                 attack.useInteractedBlock() shouldBe org.bukkit.event.Event.Result.DENY
 
                 when (staffAttackInputMode(spell, secondary = false)) {
-                    StaffAttackInputMode.CHANNEL_CLICK_TOGGLE -> {
-                        h.actions.channelBegins.size shouldBe channelsBefore + 1
-                        h.actions.casts.size shouldBe castsBefore
-                        h.actions.charges.size shouldBe chargesBefore
-                    }
                     StaffAttackInputMode.HOLD_RELEASE -> {
-                        h.actions.channelBegins.size shouldBe channelsBefore
                         h.actions.casts.size shouldBe castsBefore
-                        h.actions.charges.size shouldBe chargesBefore + 1
-                        h.actions.charges.last().let {
-                            it.playerId shouldBe primary.uniqueId
-                            it.spell shouldBe spell
-                            it.progress shouldBe 0.0
+                        if (spell == StaffSpell.GRAVITY) {
+                            h.actions.channelBegins.size shouldBe channelsBefore + 1
+                            h.actions.charges.size shouldBe chargesBefore
+                        } else {
+                            h.actions.channelBegins.size shouldBe channelsBefore
+                            h.actions.charges.size shouldBe chargesBefore + 1
+                            h.actions.charges.last().let {
+                                it.playerId shouldBe primary.uniqueId
+                                it.spell shouldBe spell
+                                it.progress shouldBe 0.0
+                            }
                         }
                     }
                     StaffAttackInputMode.INSTANT -> {
@@ -281,6 +282,41 @@ class StaffSpellInputTest : FreeSpec({
             h.actions.cancelled shouldBe listOf(player.uniqueId)
             h.actions.hotkeyOrder shouldBe listOf("check:Q", "cancel", "hotkey:Q")
             player.inventory.itemInMainHand.isSimilar(staff) shouldBe true
+        }
+    }
+
+    "Creative world Q keeps the staff and casts while creative inventory drops stay native" {
+        withInputHarness { h ->
+            val player = h.staffPlayer("creative-q", h.paper.addSimpleWorld("creative-q"), StaffSpell.CHAIN)
+            player.gameMode = org.bukkit.GameMode.CREATIVE
+            // Paper CraftInventoryView.getType returns CREATIVE for the player's default crafting view.
+            // MockBukkit does not implement this gamemode conversion, so supply that exact view contract.
+            val view = mockk<InventoryView>(relaxed = true)
+            every { view.player } returns player
+            every { view.type } returns InventoryType.CREATIVE
+            every { view.topInventory } returns player.openInventory.topInventory
+            every { view.bottomInventory } returns player.inventory
+            every { view.convertSlot(any()) } answers { firstArg() }
+            player.openInventory(view)
+            h.input.start()
+            h.paper.server.pluginManager.registerEvents(h.input, h.paper.createSimplePlugin("creative-q-listener"))
+            val staff = player.inventory.itemInMainHand.clone()
+            player.inventory.setItemInMainHand(org.bukkit.inventory.ItemStack(Material.AIR))
+            val worldDrop = PlayerDropItemEvent(player, player.world.dropItem(player.location, staff.clone()))
+            h.paper.server.pluginManager.callEvent(worldDrop)
+            worldDrop.isCancelled shouldBe true
+            player.inventory.setItemInMainHand(staff.clone())
+            h.advanceInputTicks(1)
+            h.actions.hotkeys shouldBe listOf(InputHotkeyCall(player.uniqueId, StaffSpell.CHAIN, StaffHotkey.Q))
+            player.inventory.itemInMainHand.isSimilar(staff) shouldBe true
+
+            val creativeDrop = InventoryCreativeEvent(view, InventoryType.SlotType.OUTSIDE, -999, staff.clone())
+            h.paper.server.pluginManager.callEvent(creativeDrop)
+            val inventoryDrop = PlayerDropItemEvent(player, player.world.dropItem(player.location, staff.clone()))
+            h.paper.server.pluginManager.callEvent(inventoryDrop)
+            inventoryDrop.isCancelled shouldBe false
+            h.advanceInputTicks(1)
+            h.actions.hotkeys.size shouldBe 1
         }
     }
 
@@ -451,10 +487,10 @@ class StaffSpellInputTest : FreeSpec({
         }
     }
 
-    "only Ember and Icicle items carry a silent long-use component and legacy stacks are upgraded once" {
+    "Ember, Icicle and Gravity items carry a silent long-use component and legacy stacks are upgraded once" {
         withInputHarness { _ ->
             val config = StaffSpellConfig(StaffTestConfig())
-            listOf(StaffSpell.EMBER, StaffSpell.ICICLE).forEach { spell ->
+            listOf(StaffSpell.EMBER, StaffSpell.ICICLE, StaffSpell.GRAVITY).forEach { spell ->
                 val item = config.item(spell)
                 val consumable = item.getData(DataComponentTypes.CONSUMABLE)!!
                 consumable.consumeSeconds() shouldBe 3_600f
@@ -709,20 +745,27 @@ class StaffSpellInputTest : FreeSpec({
         }
     }
 
-    "gravity channel begins on one right click and releases on the next" {
+    "gravity holds the same channel through repeated use and releases once on native stop" {
         withInputHarness { h ->
             val world = h.paper.addSimpleWorld("staff-channel-toggle")
             val player = h.staffPlayer("staff-gravity-toggle", world, StaffSpell.GRAVITY)
+            player.syncMockActiveUseEquipment()
             h.input.start()
             h.input.onInteract(rightClick(player))
 
             h.actions.channelBegins shouldBe listOf(InputSpellCall(player.uniqueId, StaffSpell.GRAVITY))
-            player.hasActiveItem() shouldBe false
+            player.hasActiveItem() shouldBe true
             h.actions.casts shouldBe emptyList()
             h.advanceInputTicks(4)
             h.actions.channelUpdates.map { it.ticksHeld } shouldBe listOf(1, 2, 3, 4)
 
             h.input.onInteract(rightClick(player))
+            h.actions.channelBegins.size shouldBe 1
+            h.actions.channelReleases shouldBe emptyList()
+            val stop = PlayerStopUsingItemEvent(player, player.inventory.itemInMainHand.clone(), 4)
+            h.input.onStopUsingItem(stop)
+            h.input.onStopUsingItem(stop)
+            player.hasActiveItem() shouldBe false
             h.actions.channelReleases shouldBe listOf(player.uniqueId)
             h.actions.channelCancels shouldBe emptyList()
             h.actions.casts shouldBe emptyList()
@@ -789,7 +832,7 @@ class StaffSpellInputTest : FreeSpec({
         }
     }
 
-    "gravity channel cancellation on slot change or quit remains distinct from click release" {
+    "gravity channel cancellation on slot change or quit remains distinct from native release" {
         withInputHarness { h ->
             val world = h.paper.addSimpleWorld("staff-channel-input")
             val releasing = h.staffPlayer("staff-channel-release", world, StaffSpell.GRAVITY)
@@ -809,7 +852,7 @@ class StaffSpellInputTest : FreeSpec({
             h.actions.channelUpdates.groupBy { it.playerId }.mapValues { (_, updates) -> updates.map { it.ticksHeld } } shouldBe
                 listOf(releasing, slotCancel, quitCancel).associate { it.uniqueId to listOf(1, 2, 3, 4) }
 
-            h.input.onInteract(rightClick(releasing))
+            h.input.onStopUsingItem(PlayerStopUsingItemEvent(releasing, releasing.inventory.itemInMainHand.clone(), 4))
             h.input.onHeldSlot(org.bukkit.event.player.PlayerItemHeldEvent(slotCancel, 0, 1))
             h.input.onQuit(org.bukkit.event.player.PlayerQuitEvent(quitCancel, net.kyori.adventure.text.Component.empty()))
 

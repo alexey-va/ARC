@@ -43,8 +43,8 @@ chain:
       cooldown-ticks: 160
     f:
       name: 'Искровой скачок'
-      description: 'Короткий блинк вперёд'
-      cooldown-ticks: 140
+      description: 'Искровой блинк вперёд'
+      cooldown-ticks: 80
   secondary-name: 'Грозовой круг'
   secondary: '<#82dcff><attack-secondary> <#e8dfd2>— молнии расходятся вокруг вас на восемь блоков'
   name: '<#82dcff>Грозовая ветвь'
@@ -73,7 +73,7 @@ mark:
     f:
       name: 'Шаг в разлом'
       description: 'Блинк через пространство'
-      cooldown-ticks: 180
+      cooldown-ticks: 100
   secondary-name: 'Чёрная дыра'
   secondary: '<#efa5ff><attack-secondary> <#e8dfd2>— стягивает врагов и схлопывается'
   name: '<#efa5ff>Разрыв'
@@ -101,7 +101,7 @@ frost:
     f:
       name: 'Ледяное скольжение'
       description: 'Скользите вперёд по земле'
-      cooldown-ticks: 140
+      cooldown-ticks: 80
   secondary-name: 'Полярный круг'
   secondary: '<#b1f2ff><attack-secondary> <#e8dfd2>— ледяной фронт расходится от вас на восемь блоков'
   name: '<#b1f2ff>Ледяной хлопок'
@@ -129,8 +129,8 @@ icicle:
       cooldown-ticks: 160
     f:
       name: 'Ледяная ступень'
-      description: 'Двойной толчок по ледяным ступеням'
-      cooldown-ticks: 160
+      description: 'Прыжок по ледяным ступеням'
+      cooldown-ticks: 90
   secondary-name: 'Ледяной дождь'
   secondary: '<#b1f2ff><attack-secondary> <#e8dfd2>— пять осколков падают вокруг точки прицела'
   name: '<#b1f2ff>Ледяной венец'
@@ -156,7 +156,7 @@ lance:
     f:
       name: 'Солнечный отскок'
       description: 'Отскок назад с упором копьём'
-      cooldown-ticks: 160
+      cooldown-ticks: 90
   secondary-name: 'Солнечный трезубец'
   secondary: '<#fff1ae><attack-secondary> <#e8dfd2>— три расходящихся копья'
   name: '<#fff1ae>Солнечное копьё'
@@ -184,7 +184,7 @@ ember:
     f:
       name: 'Реактивный взлёт'
       description: 'Огненный отскок назад и вверх'
-      cooldown-ticks: 180
+      cooldown-ticks: 100
   secondary-name: 'Метеорный дождь'
   secondary: '<#ffae70><attack-secondary> <#e8dfd2>— зоны метеоров видны сразу; первые падают через 0,75 с после запуска'
   name: '<#ffae70>Пепельная комета'
@@ -212,7 +212,7 @@ nova:
     f:
       name: 'Терновая плеть'
       description: 'Притянитесь к видимой опоре'
-      cooldown-ticks: 140
+      cooldown-ticks: 90
   secondary-name: 'Терновая клетка'
   secondary: '<#9fffd4><attack-secondary> <#e8dfd2>— терновые ветви закрываются вокруг выбранной точки'
   name: '<#9fffd4>Терновый хват'
@@ -238,8 +238,8 @@ fault:
       cooldown-ticks: 200
     f:
       name: 'Каменный таран'
-      description: 'Короткий мощный рывок вперёд'
-      cooldown-ticks: 160
+      description: 'Мощный каменный рывок вперёд'
+      cooldown-ticks: 100
   secondary-name: 'Каменный выброс'
   secondary: '<#ff9b83><attack-secondary> <#e8dfd2>— после предупреждения взрыв у прицела подбрасывает врагов'
   name: '<#ff9b83>Обсидиановый раскол'
@@ -264,8 +264,8 @@ lunar:
       cooldown-ticks: 160
     f:
       name: 'Лунная поступь'
-      description: 'Мгновенный короткий фазовый шаг'
-      cooldown-ticks: 120
+      description: 'Мгновенный фазовый шаг'
+      cooldown-ticks: 80
   name: '<#d8d6ff>Лунный серп'
   description: '<#e8dfd2>Огромный лунный серп рассекает широкую область перед вами.'
   aim: '<#d8dcff><attack> · широкий лунный удар до 7 блоков · без зарядки'
@@ -290,8 +290,8 @@ gale:
       cooldown-ticks: 180
     f:
       name: 'Попутный ветер'
-      description: 'Направляйте короткое парение взглядом'
-      cooldown-ticks: 160
+      description: 'Направляйте парение взглядом'
+      cooldown-ticks: 100
   name: '<#d4eaff>Посох бури'
   description: '<#e8dfd2>На точке прицела закручивается открытая воронка, поднимающая ближайших врагов.'
   aim: '<#d4eaff>Воронка на точке прицела · до 36 блоков'
@@ -317,7 +317,7 @@ tide:
     f:
       name: 'Прибой'
       description: 'Прокатитесь вперёд на волне'
-      cooldown-ticks: 160
+      cooldown-ticks: 100
   name: '<#8ce9e4>Сердце прилива'
   description: '<#e8dfd2>Высокий водяной гребень накрывает область перед вами и сметает врагов.'
   aim: '<#8be9ff><attack> · фронтальная волна до 7 блоков · без зарядки'
@@ -343,7 +343,7 @@ requiem:
     f:
       name: 'Шаг за грань'
       description: 'Блинк под глухой звон'
-      cooldown-ticks: 160
+      cooldown-ticks: 100
   name: '<#d0b5eb>Реквием'
   description: '<#e8dfd2>Над выбранной точкой собирается медный колокол; удар выпускает волну душ радиусом пять блоков.'
   aim: '<#d0b5eb>Колокол у прицела · звон через 0,8 с · укрытия останавливают волну'
@@ -368,8 +368,8 @@ prism:
       cooldown-ticks: 180
     f:
       name: 'Преломление'
-      description: 'Короткий управляемый разгон'
-      cooldown-ticks: 140
+      description: 'Управляемый разгон'
+      cooldown-ticks: 80
   name: '<#e7c5ff>Кристальная призма'
   description: '<#e8dfd2>Кристалл вырастает у прицела и поражает до трёх врагов лучами.'
   aim: '<#e7c5ff>Кристалл и преломление · до 36 блоков'
@@ -395,7 +395,7 @@ necromancer:
     f:
       name: 'Призрачный переход'
       description: 'Блинк сквозь завесу душ'
-      cooldown-ticks: 180
+      cooldown-ticks: 120
   name: '<#a4e6ce>Зов могилы'
   description: '<#e8dfd2>Добавляет двух скелетов-лучников на 45 секунд; можно держать до десяти миньонов.'
   aim: '<#a4e6ce>Слуги следуют за вами и самостоятельно атакуют видимых врагов'
@@ -435,10 +435,10 @@ gravity:
     f:
       name: 'Невесомый прыжок'
       description: 'Баллистический прыжок с мягкой дугой'
-      cooldown-ticks: 180
+      cooldown-ticks: 110
   name: <#cfb8ff>Гравитационный захват
   description: <#e8dfd2>Подхватите глыбу с видимой поверхности и ведите её прицелом.
-  aim: <#cfb8ff><attack> — захватить · переместите прицел · повторный <attack> — бросить до 32 блоков
+  aim: <#cfb8ff>Удерживайте <attack> — захват · ведите прицел · отпустите — бросок до 32 блоков
   secondary-name: Гравитационный обвал
   secondary: <#cfb8ff><attack-secondary> <#e8dfd2>— поднимает врагов вокруг и обрушивает на землю в радиусе 6,5 блока
   skin: 3dfantasyweaponscit:staff_of_unholy_wisdom
@@ -461,7 +461,7 @@ ossuary:
     f:
       name: 'Костяной прорыв'
       description: 'Рывок на костяном гребне'
-      cooldown-ticks: 160
+      cooldown-ticks: 100
   name: <#f1dfb9>Костяной прокол
   description: <#e8dfd2>Плотные пучки костяных шипов выстреливают из земли вперёд; стены останавливают волну.
   aim: <#f1dfb9>Волна костей · 24 блока вперёд · стены останавливают атаку
@@ -480,18 +480,16 @@ ossuary:
   quick-secondary: <#f1dfb9><defense-secondary> <#e8dfd2>— поглощает 8 урона в течение 20 с; перезарядка 25 с
 messages:
   staff-hud:
-    ready-instant: '<ability><newline><#b1edba>Готово · без зарядки<newline><white><input> — применить'
-    ready-charge: '<ability><newline><white>Удерживайте <input> для зарядки<newline><#e8dfd2>Отпустите, чтобы выпустить'
-    ready-channel: '<ability><newline><white><input> — захватить<newline><#e8dfd2>Ведите прицел · нажмите ещё раз, чтобы бросить'
-    charging: '<ability><newline><#ffe7a3>Сила <percent>% <bar><newline><white>Отпустите <input> — выпустить'
-    cooldown: '<ability> · <input><newline><#e8dfd2>Восстановление <seconds> с<newline><bar>'
-    channel: '<ability><newline><#cfb8ff>Глыба в захвате<newline><white><input> — бросить'
-    bossbar-ready-instant: '<ability> · <input> — применить'
-    bossbar-ready-charge: '<ability> · удерживайте <input> · отпустите для выпуска'
-    bossbar-ready-channel: '<ability> · <input> — захватить · ведите прицел · нажмите ещё раз для броска'
-    bossbar-charging: '<ability> · сила <percent>% <bar> · отпустите <input>'
-    bossbar-cooldown: '<ability> · <input> · <seconds> с <bar>'
-    bossbar-channel: '<ability> · глыба в захвате · <input> — бросить'
+    ready-instant: '<input> <#687d8f>· <ability>'
+    ready-charge: '<input> <#687d8f>· <ability>'
+    charging: '<input> <#687d8f>· <ability><newline><#ffe7a3><percent>% <bar>'
+    cooldown: '<input> <#687d8f>· <ability><newline><#c7d2df><seconds> с <bar>'
+    channel: '<input> <#687d8f>· <ability><newline><#cfb8ff>Глыба готова'
+    bossbar-ready-instant: '<input> <#687d8f>· <ability>'
+    bossbar-ready-charge: '<input> <#687d8f>· <ability>'
+    bossbar-charging: '<input> <#687d8f>· <ability> <#ffe7a3><percent>% <bar>'
+    bossbar-cooldown: '<input> <#687d8f>· <ability> <#c7d2df><seconds> с'
+    bossbar-channel: '<input> <#687d8f>· <ability> <#cfb8ff>· Глыба готова'
   controls:
     left-click: 'ЛКМ'
     right-click: 'ПКМ'
@@ -501,10 +499,10 @@ messages:
   prototype: '<#b8b8b8>Проба механики · атака и защита восстанавливаются отдельно'
   use: '<#82dcff><attack> — атака; <attack-secondary> — вторая способность. <defense> — защита; <defense-secondary> — круговой покров.'
   charge-use: '<#82dcff>Удерживайте <attack> для зарядки и отпустите для выпуска. <attack-secondary> — вторая способность сразу. <defense> — защита; <defense-secondary> — круговой покров.'
-  charge-bar: '<ability> <percent>% · отпустите <input> для выпуска'
+  charge-bar: '<input> <#687d8f>· <ability> <#ffe7a3><percent>%'
   cooldown: '<#e8dfd2>Посох восстанавливается'
-  cooldown-bar: '<ability> <white><seconds> с'
-  ready-bar: '<ability> <#9fffd4>Готово <#e8dfd2>· <input>'
+  cooldown-bar: '<input> <#687d8f>· <ability> <#c7d2df><seconds> с'
+  ready-bar: '<input> <#687d8f>· <ability>'
   full-inventory: '<#e8dfd2>Освободите место для всех выбранных посохов'
   given: '<#9bd48d>Посохи выданы. Управление указано в описании каждого посоха.'
   retired: '<#e8dfd2>Этот посох временно убран из набора. Возьмите другой посох.'
@@ -512,7 +510,7 @@ messages:
   unavailable: '<#e8dfd2>Модуль тестовых посохов сейчас недоступен'
   no-ground: '<#e8dfd2>Направьте посох на видимую поверхность земли'
   skin-unavailable: '<#e8dfd2>Модель посоха недоступна в ItemsAdder. Подробности в журнале сервера.'
-  channel-use: '<#82dcff><attack> — захватить глыбу; ведите прицел и нажмите ещё раз, чтобы бросить. <attack-secondary> — гравитационный обвал. <defense> — защита; <defense-secondary> — круговой покров.'
+  channel-use: '<#82dcff>Удерживайте <attack> — захват; отпустите — бросок. <attack-secondary> — гравитационный обвал. <defense> — защита; <defense-secondary> — круговой покров.'
   no-summon-ground: '<#e8dfd2>Для призыва нет места: встаньте на ровную площадку и освободите пространство перед собой. Перезарядка не потрачена.'
   no-grab: '<#e8dfd2>Для захвата направьте посох на твёрдую видимую поверхность в 3–32 блоках.'
   shield-active: '<ability> <#fff1ae>Поглощение <white><remaining>/<capacity> <#e8dfd2>урона'
@@ -520,4 +518,4 @@ messages:
   defense-cooldown: '<ability> <white><seconds> с <#e8dfd2>· <input>'
   shield-cooldown: '<ability> <white><seconds> с <#e8dfd2>· <input>'
   inferno-hold: '<#ffae52>Поток пламени <#e8dfd2>· ПКМ — остановить'
-  gravity-hold: '<#cfb8ff>Глыба в захвате <#e8dfd2>· ведите прицел; ПКМ — бросить'
+  gravity-hold: '<#cfb8ff>Глыба готова'

@@ -29,22 +29,22 @@ internal data class StaffMobilityProfile(
 )
 
 internal fun staffMobilityProfile(spell: StaffSpell): StaffMobilityProfile? = when (spell) {
-    StaffSpell.MARK -> StaffMobilityProfile(StaffMobilityMotion.BLINK, 14, 7.0, 0.0, 0.0, 0.0, 0.0)
-    StaffSpell.CHAIN -> StaffMobilityProfile(StaffMobilityMotion.BLINK, 12, 5.5, 0.0, 0.0, 0.0, 0.0)
-    StaffSpell.REQUIEM -> StaffMobilityProfile(StaffMobilityMotion.BLINK, 14, 5.0, 0.0, 0.0, 0.0, 0.0)
-    StaffSpell.NECROMANCER -> StaffMobilityProfile(StaffMobilityMotion.BLINK, 16, 6.0, 0.0, 0.0, 0.0, 0.0)
-    StaffSpell.LUNAR -> StaffMobilityProfile(StaffMobilityMotion.BLINK, 10, 4.5, 0.0, 0.0, 0.0, 0.0)
-    StaffSpell.FROST -> StaffMobilityProfile(StaffMobilityMotion.SLIDE, 12, 7.0, 0.92, 0.0, 0.035, 1.08)
-    StaffSpell.TIDE -> StaffMobilityProfile(StaffMobilityMotion.SURF, 16, 8.0, 0.72, 0.24, 0.025, 0.92)
-    StaffSpell.FAULT -> StaffMobilityProfile(StaffMobilityMotion.RUSH, 8, 6.0, 1.05, 0.02, 0.0, 1.16)
-    StaffSpell.OSSUARY -> StaffMobilityProfile(StaffMobilityMotion.RUSH, 12, 6.0, 0.78, 0.16, 0.0, 0.96)
-    StaffSpell.LANCE -> StaffMobilityProfile(StaffMobilityMotion.VAULT, 14, 6.0, 0.58, 0.82, 0.0, 0.92)
-    StaffSpell.EMBER -> StaffMobilityProfile(StaffMobilityMotion.RECOIL, 12, 6.0, 0.76, 0.56, 0.0, 1.00)
-    StaffSpell.GRAVITY -> StaffMobilityProfile(StaffMobilityMotion.BALLISTIC, 18, 7.5, 0.66, 0.82, 0.0, 0.94)
-    StaffSpell.GALE -> StaffMobilityProfile(StaffMobilityMotion.GLIDE, 22, 8.0, 0.42, 0.34, 0.035, 0.82)
-    StaffSpell.NOVA -> StaffMobilityProfile(StaffMobilityMotion.TETHER, 14, 8.0, 0.66, 0.0, 0.035, 0.9)
-    StaffSpell.PRISM -> StaffMobilityProfile(StaffMobilityMotion.BURST, 12, 7.0, 0.56, 0.08, 0.025, 0.84)
-    StaffSpell.ICICLE -> StaffMobilityProfile(StaffMobilityMotion.HOP, 18, 7.0, 0.28, 0.64, 0.0, 0.76)
+    StaffSpell.MARK -> StaffMobilityProfile(StaffMobilityMotion.BLINK, 14, 12.0, 0.0, 0.0, 0.0, 0.0)
+    StaffSpell.CHAIN -> StaffMobilityProfile(StaffMobilityMotion.BLINK, 12, 10.0, 0.0, 0.0, 0.0, 0.0)
+    StaffSpell.REQUIEM -> StaffMobilityProfile(StaffMobilityMotion.BLINK, 14, 9.0, 0.0, 0.0, 0.0, 0.0)
+    StaffSpell.NECROMANCER -> StaffMobilityProfile(StaffMobilityMotion.BLINK, 16, 11.0, 0.0, 0.0, 0.0, 0.0)
+    StaffSpell.LUNAR -> StaffMobilityProfile(StaffMobilityMotion.BLINK, 10, 8.0, 0.0, 0.0, 0.0, 0.0)
+    StaffSpell.FROST -> StaffMobilityProfile(StaffMobilityMotion.SLIDE, 20, 12.0, 1.35, 0.0, 0.32, 1.5)
+    StaffSpell.TIDE -> StaffMobilityProfile(StaffMobilityMotion.SURF, 24, 14.0, 1.2, 0.3, 0.24, 1.4)
+    StaffSpell.FAULT -> StaffMobilityProfile(StaffMobilityMotion.RUSH, 14, 10.0, 1.6, 0.16, 0.38, 1.65)
+    StaffSpell.OSSUARY -> StaffMobilityProfile(StaffMobilityMotion.RUSH, 18, 10.0, 1.35, 0.22, 0.3, 1.45)
+    StaffSpell.LANCE -> StaffMobilityProfile(StaffMobilityMotion.VAULT, 22, 10.0, 1.0, 0.82, 0.0, 1.2)
+    StaffSpell.EMBER -> StaffMobilityProfile(StaffMobilityMotion.RECOIL, 20, 11.0, 1.3, 0.68, 0.0, 1.45)
+    StaffSpell.GRAVITY -> StaffMobilityProfile(StaffMobilityMotion.BALLISTIC, 24, 13.0, 1.12, 0.94, 0.0, 1.35)
+    StaffSpell.GALE -> StaffMobilityProfile(StaffMobilityMotion.GLIDE, 26, 14.0, 0.82, 0.58, 0.1, 1.25)
+    StaffSpell.NOVA -> StaffMobilityProfile(StaffMobilityMotion.TETHER, 22, 14.0, 1.1, 0.0, 0.3, 1.35)
+    StaffSpell.PRISM -> StaffMobilityProfile(StaffMobilityMotion.BURST, 18, 12.0, 1.15, 0.28, 0.3, 1.4)
+    StaffSpell.ICICLE -> StaffMobilityProfile(StaffMobilityMotion.HOP, 24, 12.0, 1.0, 0.86, 0.0, 1.15)
     StaffSpell.INFERNO -> null
 }
 
@@ -89,6 +89,7 @@ internal class StaffSpellMobility(
         val direction: Vector,
         val carryDirection: Vector?,
         val sceneId: UUID?,
+        val departureSceneId: UUID? = null,
         var ageTicks: Int = 0,
     )
 
@@ -152,8 +153,13 @@ internal class StaffSpellMobility(
             releaseCue(player.uniqueId, spell, origin)
         }
 
-        val motion = Motion(spell, cast, profile, player.world.uid, anchor, direction.clone(), carryDirection, null)
-        val scene = effects.custom(player.uniqueId, spell, anchor, profile.durationTicks) { age ->
+        val departure = effects.custom(player.uniqueId, spell, origin, STAFF_MOBILITY_AFTERIMAGE_TICKS) { age ->
+            staffMobilityAfterimageParts(spell, age, direction)
+        }
+        val motion = Motion(spell, cast, profile, player.world.uid, anchor, direction.clone(), carryDirection, null,
+            departureSceneId = departure)
+        val scene = effects.custom(player.uniqueId, spell, anchor, profile.durationTicks,
+            ownerAttachedMotion = profile.motion != StaffMobilityMotion.BLINK) { age ->
             staffMobilityDisplayParts(spell, age, profile.durationTicks, direction)
         }
         active[player.uniqueId] = motion.copy(sceneId = scene)
@@ -161,7 +167,10 @@ internal class StaffSpellMobility(
     }
 
     fun cancel(playerId: UUID) {
-        active.remove(playerId)?.let { effects.remove(it.sceneId) }
+        active.remove(playerId)?.let {
+            effects.remove(it.sceneId)
+            effects.remove(it.departureSceneId)
+        }
     }
 
     override fun close() {
@@ -245,7 +254,7 @@ internal class StaffSpellMobility(
                     else -> null
                 }
                 if (travelSound != null) visuals.withOwner(playerId) {
-                    visuals.cue(anchor, travelSound, 0.26f, 1.15f)
+                    visuals.cue(anchor, travelSound, 0.34f, 1.15f)
                 }
             }
             if (motion.ageTicks >= motion.profile.durationTicks) finish(player, motion)
@@ -259,11 +268,15 @@ internal class StaffSpellMobility(
             stopOwnedHorizontalCarry(player, motion)
         }
         effects.remove(motion.sceneId)
+        effects.remove(motion.departureSceneId)
         val at = player.location.takeIf { player.world.uid == motion.worldId } ?: motion.anchor
         visuals.withOwner(player.uniqueId) {
-            releaseParticles(motion.spell, at)
+            releaseParticles(motion.spell, at, impulse = true)
             if (motion.profile.motion != StaffMobilityMotion.BLINK)
-                visuals.cue(at, endSound(motion.spell), 0.38f, endPitch(motion.spell))
+                visuals.cue(at, endSound(motion.spell), 0.58f, endPitch(motion.spell))
+        }
+        effects.custom(player.uniqueId, motion.spell, at, STAFF_MOBILITY_AFTERIMAGE_TICKS) { age ->
+            staffMobilityAfterimageParts(motion.spell, age, motion.direction)
         }
     }
 
@@ -394,7 +407,7 @@ internal class StaffSpellMobility(
         return horizontalImpulse.setY(vertical)
     }
 
-    /** Steering adds a small capped acceleration; it never restores or overwrites foreign effects. */
+    /** Capped acceleration sustains ground travel against friction without replacing foreign velocity. */
     private fun steeringVelocity(player: Player, motion: Motion): Vector? {
         val acceleration = motion.profile.steering
         if (acceleration <= 0.0) return null
@@ -404,7 +417,7 @@ internal class StaffSpellMobility(
         if (!speed.isFinite() || speed >= motion.profile.horizontalSpeedLimit) return null
         val heading = if (motion.spell == StaffSpell.GALE) {
             horizontal(player.eyeLocation.direction, player.location.yaw) ?: return null
-        } else motion.direction.clone()
+        } else horizontal(motion.direction, player.location.yaw) ?: return null
         val adjusted = existing.clone().add(heading.multiply(min(acceleration,
             motion.profile.horizontalSpeedLimit - speed)))
         val adjustedHorizontal = adjusted.clone().setY(0.0)
@@ -442,9 +455,9 @@ internal class StaffSpellMobility(
 
     private fun releaseCue(owner: UUID, spell: StaffSpell, at: Location, arrival: Boolean = false) {
         visuals.withOwner(owner) {
-            if (arrival) visuals.cue(at, endSound(spell), 0.44f, endPitch(spell))
+            if (arrival) visuals.cue(at, endSound(spell), 0.62f, endPitch(spell))
             else {
-                visuals.cue(at, releaseSound(spell), 0.62f, releasePitch(spell))
+                visuals.cue(at, releaseSound(spell), 0.78f, releasePitch(spell))
                 when (spell) {
                     StaffSpell.FAULT -> visuals.cue(at, Sound.ENTITY_IRON_GOLEM_ATTACK, 0.24f, 0.7f)
                     StaffSpell.OSSUARY -> visuals.cue(at, Sound.BLOCK_BONE_BLOCK_BREAK, 0.28f, 1.22f)
@@ -454,12 +467,12 @@ internal class StaffSpellMobility(
                     else -> Unit
                 }
             }
-            releaseParticles(spell, at)
+            releaseParticles(spell, at, impulse = true)
         }
     }
 
-    private fun releaseParticles(spell: StaffSpell, at: Location) {
-        visuals.particles(at, staffMobilityParticleBurst(spell), clearance = 1.1)
+    private fun releaseParticles(spell: StaffSpell, at: Location, impulse: Boolean = false) {
+        visuals.particles(at, staffMobilityParticleBurst(spell, impulse), clearance = 1.1)
     }
 
     private fun ready(player: Player): Boolean = player.isOnline && player.isValid && !player.isDead &&
@@ -523,7 +536,7 @@ internal class StaffSpellMobility(
         const val PLAYER_HALF_WIDTH = 0.3
         const val PLAYER_HEIGHT = 1.8
         const val MIN_BLINK_DISTANCE = 2.0
-        const val MAX_BLINK_RANGE = 8.0
+        const val MAX_BLINK_RANGE = 12.0
         const val BLINK_CANDIDATE_STEP = 0.5
         const val MOBILITY_CARRY_EPSILON = 1.0e-6
         const val MAX_FINISH_CARRY_SPEED_FACTOR = 1.5

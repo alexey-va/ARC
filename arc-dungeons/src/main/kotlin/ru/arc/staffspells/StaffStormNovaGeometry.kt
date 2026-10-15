@@ -97,3 +97,19 @@ private fun safeLimit(value: Double, radius: Double) =
     value.takeIf(Double::isFinite)?.coerceIn(0.0, radius) ?: 0.0
 
 private const val STAFF_STORM_NOVA_MAX_SAMPLES = 192
+
+/** Three sky strikes accompany each expanding contact front, clipped by the same adjacent cover rays. */
+internal fun staffStormNovaStrikes(ageTicks: Int, radius: Double, rayLimits: List<Double>): List<Vector> {
+    if (ageTicks !in listOf(6, 10, 14) || !radius.isFinite() || radius <= 0.0 ||
+        rayLimits.size != STAFF_STORM_NOVA_RAY_COUNT) return emptyList()
+    val beat = (ageTicks - 6) / 4
+    val front = radius * (ageTicks - STAFF_STORM_NOVA_BUILDUP_TICKS) / STAFF_STORM_NOVA_TRAVEL_TICKS
+    return (0..2).mapNotNull { branch ->
+        val sector = (beat * 5 + branch * 8) % STAFF_STORM_NOVA_RAY_COUNT
+        val clip = (-1..1).minOf { neighbor -> safeLimit(rayLimits[(sector + neighbor).mod(STAFF_STORM_NOVA_RAY_COUNT)], radius) }
+        val distance = minOf(front, clip - .18)
+        if (distance < 1.25) return@mapNotNull null
+        val angle = sector * PI * 2 / STAFF_STORM_NOVA_RAY_COUNT
+        Vector(cos(angle) * distance, 0.0, sin(angle) * distance)
+    }
+}

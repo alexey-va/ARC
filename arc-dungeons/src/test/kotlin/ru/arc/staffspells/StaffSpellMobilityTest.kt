@@ -31,12 +31,12 @@ class StaffSpellMobilityTest : FreeSpec({
             val profile = staffMobilityProfile(spell)
             (profile != null) shouldBe true
             requireNotNull(profile).let {
-                (it.durationTicks in 8..22) shouldBe true
-                (it.range in 4.0..8.0) shouldBe true
-                (it.forwardImpulse in 0.0..1.1) shouldBe true
-                (it.verticalImpulse in 0.0..0.9) shouldBe true
-                (it.steering in 0.0..0.04) shouldBe true
-                (it.horizontalSpeedLimit in 0.0..1.2) shouldBe true
+                (it.durationTicks in 10..26) shouldBe true
+                (it.range in 8.0..14.0) shouldBe true
+                (it.forwardImpulse in 0.0..1.6) shouldBe true
+                (it.verticalImpulse in 0.0..0.94) shouldBe true
+                (it.steering in 0.0..0.38) shouldBe true
+                (it.horizontalSpeedLimit in 0.0..1.65) shouldBe true
             }
 
             val direction = Vector(0.6, 0.0, 0.8)
@@ -114,7 +114,8 @@ class StaffSpellMobilityTest : FreeSpec({
             every { access.mobilityAllowed(player, authorization, any()) } answers { allowedSteps-- > 0 }
             val scene = UUID.randomUUID()
             val effects = mockk<StaffSpellDisplayEffects>(relaxed = true)
-            every { effects.custom(any(), any(), any(), any(), any()) } returns scene
+            every { effects.custom(any(), any(), any(), any(), any(), any()) } returns scene
+            every { effects.custom(any(), any(), any(), any(), any()) } answers { UUID.randomUUID() }
             val visuals = mockk<StaffSpellVisuals>(relaxed = true)
             val mobility = StaffSpellMobility(settings, damage, effects, visuals, StaffSpellTargeting(settings, damage))
             val cast = StaffSpellCast(player.uniqueId, UUID.randomUUID(), 1, null, null, false,
@@ -148,7 +149,8 @@ class StaffSpellMobilityTest : FreeSpec({
             every { access.mobilityAllowed(player, authorization, any()) } returns true
             val effects = mockk<StaffSpellDisplayEffects>(relaxed = true)
             val scene = UUID.randomUUID()
-            every { effects.custom(any(), any(), any(), any(), any()) } returns scene
+            every { effects.custom(any(), any(), any(), any(), any(), any()) } returns scene
+            every { effects.custom(any(), any(), any(), any(), any()) } answers { UUID.randomUUID() }
             val visuals = mockk<StaffSpellVisuals>(relaxed = true)
             val mobility = StaffSpellMobility(settings, damage, effects, visuals, StaffSpellTargeting(settings, damage))
             val cast = StaffSpellCast(player.uniqueId, UUID.randomUUID(), 1, null, null, false,
@@ -177,7 +179,8 @@ class StaffSpellMobilityTest : FreeSpec({
             every { damage.isCurrent(any(), any()) } returns true
             val scene = UUID.randomUUID()
             val effects = mockk<StaffSpellDisplayEffects>(relaxed = true)
-            every { effects.custom(any(), any(), any(), any(), any()) } returns scene
+            every { effects.custom(any(), any(), any(), any(), any(), any()) } returns scene
+            every { effects.custom(any(), any(), any(), any(), any()) } answers { UUID.randomUUID() }
             val visuals = mockk<StaffSpellVisuals>(relaxed = true)
             val mobility = StaffSpellMobility(settings, damage, effects, visuals, StaffSpellTargeting(settings, damage))
             val cast = StaffSpellCast(player.uniqueId, UUID.randomUUID(), 1, null, null, false)
@@ -207,15 +210,16 @@ class StaffSpellMobilityTest : FreeSpec({
             val player = h.player("staff-mobility-blink-landing", world, StaffSpell.MARK)
             // Keep the center ray in block x=0 while the player's right edge reaches x=1.
             player.teleport(Location(world, 0.75, 64.0, 0.5, player.location.yaw, player.location.pitch))
-            for (x in -1..1) for (z in 0..8) world.getBlockAt(x, 63, z).type = Material.STONE
+            for (x in -1..1) for (z in 0..13) world.getBlockAt(x, 63, z).type = Material.STONE
             // The side overhang is outside the downward center ray but intersects a player's width at range.
-            val ceiling = world.getBlockAt(1, 65, 7)
+            val ceiling = world.getBlockAt(1, 65, 12)
             ceiling.type = Material.STONE
             val damage = mockk<StaffSpellDamage>()
             every { damage.isCurrent(any(), any()) } returns true
             val scene = UUID.randomUUID()
             val effects = mockk<StaffSpellDisplayEffects>(relaxed = true)
-            every { effects.custom(any(), any(), any(), any(), any()) } returns scene
+            every { effects.custom(any(), any(), any(), any(), any(), any()) } returns scene
+            every { effects.custom(any(), any(), any(), any(), any()) } answers { UUID.randomUUID() }
             val visuals = mockk<StaffSpellVisuals>(relaxed = true)
             val mobility = StaffSpellMobility(settings, damage, effects, visuals, StaffSpellTargeting(settings, damage))
             val cast = StaffSpellCast(player.uniqueId, UUID.randomUUID(), 1, null, null, false)
@@ -223,17 +227,17 @@ class StaffSpellMobilityTest : FreeSpec({
 
             val origin = player.location.clone()
             mobility.cast(player, StaffSpell.MARK, cast, StaffSpellTuning(1.0, 1.0, 160)) shouldBe true
-            (player.location.z in 6.4..6.6) shouldBe true
+            (player.location.z in 11.4..11.6) shouldBe true
             (player.location.distance(origin) <= requireNotNull(staffMobilityProfile(StaffSpell.MARK)).range) shouldBe true
 
             val blockedPlayer = h.player("staff-mobility-blink-ceiling", world, StaffSpell.MARK)
             blockedPlayer.teleport(Location(world, 0.75, 64.0, 0.5))
-            for (z in 2..8) world.getBlockAt(1, 65, z).type = Material.STONE
+            for (z in 2..13) world.getBlockAt(1, 65, z).type = Material.STONE
             mobility.cast(blockedPlayer, StaffSpell.MARK,
                 StaffSpellCast(blockedPlayer.uniqueId, UUID.randomUUID(), 1, null, null, false),
                 StaffSpellTuning(1.0, 1.0, 160)) shouldBe false
             blockedPlayer.location.z shouldBe 0.5
-            (2..8).all { world.getBlockAt(1, 65, it).type == Material.STONE } shouldBe true
+            (2..13).all { world.getBlockAt(1, 65, it).type == Material.STONE } shouldBe true
             mobility.cancel(player.uniqueId)
             mobility.close()
             verifyRemove(effects, scene)

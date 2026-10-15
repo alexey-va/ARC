@@ -19,7 +19,7 @@ internal fun staffMobilityDisplayParts(
 ): List<StaffDisplayPart> {
     val progress = (ageTicks.toDouble() / durationTicks.coerceAtLeast(1)).coerceIn(0.0, 1.0)
     val phase = progress * PI
-    val frame = MobilityParts(spell, direction)
+    val frame = MobilityParts(spell, direction, horizontalScale = 1.3 + 0.12 * sin(phase))
     when (spell) {
         StaffSpell.MARK -> {
             val radius = 0.55 + 0.18 * sin(phase)
@@ -218,9 +218,26 @@ internal fun staffMobilityDisplayParts(
     return frame.parts
 }
 
-/** Small, material-specific native accents; the displays carry the complete shape. */
-internal fun staffMobilityParticleBurst(spell: StaffSpell): List<StaffParticleSample> {
-    val offsets = listOf(Vector(0.0, 0.14, -0.2), Vector(-0.32, 0.18, 0.0), Vector(0.32, 0.18, 0.0))
+internal const val STAFF_MOBILITY_AFTERIMAGE_TICKS = 8
+
+/** The staff's own silhouette breaks outward near the feet at departure and braking. */
+internal fun staffMobilityAfterimageParts(spell: StaffSpell, ageTicks: Int, direction: Vector): List<StaffDisplayPart> {
+    if (ageTicks >= STAFF_MOBILITY_AFTERIMAGE_TICKS) return emptyList()
+    val progress = (ageTicks.toDouble() / STAFF_MOBILITY_AFTERIMAGE_TICKS).coerceIn(0.0, 1.0)
+    val spread = (0.8 + progress * 0.9).toFloat()
+    val size = (0.8 - progress * 0.65).toFloat()
+    return staffMobilityDisplayParts(spell, 0, STAFF_MOBILITY_AFTERIMAGE_TICKS, direction).map { part ->
+        part.copy(center = Vector3f(part.center.x * spread, 0.06f + part.center.y * 0.2f, part.center.z * spread),
+            scale = Vector3f(part.scale).mul(size), identity = "afterimage:${part.identity}")
+    }
+}
+
+/** Quiet travel accents, with a wider material burst only at departure and arrival. */
+internal fun staffMobilityParticleBurst(spell: StaffSpell, impulse: Boolean = false): List<StaffParticleSample> {
+    val offsets = if (impulse) listOf(Vector(0.0, 0.18, -0.9), Vector(-0.85, 0.22, -0.3),
+        Vector(0.85, 0.22, -0.3), Vector(-0.72, 0.2, 0.64), Vector(0.72, 0.2, 0.64),
+        Vector(0.0, 0.26, 1.0))
+    else listOf(Vector(0.0, 0.14, -0.2), Vector(-0.32, 0.18, 0.0), Vector(0.32, 0.18, 0.0))
     val particles = when (spell) {
         StaffSpell.MARK -> listOf(Particle.REVERSE_PORTAL, Particle.END_ROD, Particle.REVERSE_PORTAL)
         StaffSpell.CHAIN -> listOf(Particle.ELECTRIC_SPARK, Particle.END_ROD, Particle.ELECTRIC_SPARK)
@@ -238,7 +255,8 @@ internal fun staffMobilityParticleBurst(spell: StaffSpell): List<StaffParticleSa
         StaffSpell.LUNAR -> listOf(Particle.END_ROD, Particle.REVERSE_PORTAL, Particle.END_ROD)
         StaffSpell.INFERNO -> return emptyList()
     }
-    return particles.mapIndexed { index, particle ->
+    return offsets.mapIndexed { index, offset ->
+        val particle = particles[index % particles.size]
         val data = when (particle) {
             Particle.DUST -> staffDust(when (spell) {
                 StaffSpell.NOVA -> 0x8FD59A
@@ -249,11 +267,12 @@ internal fun staffMobilityParticleBurst(spell: StaffSpell): List<StaffParticleSa
             Particle.BLOCK -> (if (spell == StaffSpell.OSSUARY) Material.BONE_BLOCK else Material.DEEPSLATE).createBlockData()
             else -> null
         }
-        StaffParticleSample(particle, offsets[index], count = 3, spread = Vector(0.16, 0.12, 0.16), data = data)
+        StaffParticleSample(particle, offset, count = if (impulse) 4 else 3,
+            spread = if (impulse) Vector(0.25, 0.18, 0.25) else Vector(0.16, 0.12, 0.16), data = data)
     }
 }
 
-private class MobilityParts(private val spell: StaffSpell, direction: Vector) {
+private class MobilityParts(private val spell: StaffSpell, direction: Vector, private val horizontalScale: Double) {
     val parts = mutableListOf<StaffDisplayPart>()
     private val forward = direction.clone().setY(0.0).let {
         if (!it.lengthSquared().isFinite() || it.lengthSquared() < 1.0e-9) Vector(0.0, 0.0, 1.0)
@@ -265,7 +284,8 @@ private class MobilityParts(private val spell: StaffSpell, direction: Vector) {
     fun cube(id: String, x: Double, y: Double, z: Double,
         sx: Double, sy: Double, sz: Double, material: Material) {
         val center = world(x, y, z)
-        parts += StaffDisplayPart(material, vector(center), Vector3f(sx.toFloat(), sy.toFloat(), sz.toFloat()),
+        parts += StaffDisplayPart(material, vector(center),
+            Vector3f((sx * horizontalScale).toFloat(), (sy * .82).toFloat(), (sz * horizontalScale).toFloat()),
             Quaternionf(facing), identity = "mobility:${spell.id}:$id")
     }
 
@@ -278,15 +298,15 @@ private class MobilityParts(private val spell: StaffSpell, direction: Vector) {
         val midpoint = start.clone().add(end).multiply(0.5)
         val axis = Vector3f(delta.x.toFloat(), delta.y.toFloat(), delta.z.toFloat()).normalize()
         parts += StaffDisplayPart(material, vector(midpoint),
-            Vector3f(width.toFloat(), length.toFloat(), width.toFloat()),
+            Vector3f((width * 1.1).toFloat(), length.toFloat(), (width * 1.1).toFloat()),
             Quaternionf().rotationTo(Vector3f(0f, 1f, 0f), axis),
             identity = "mobility:${spell.id}:$id")
     }
 
     private fun world(x: Double, y: Double, z: Double) = Vector(
-        right.x * x + forward.x * z,
-        y,
-        right.z * x + forward.z * z,
+        (right.x * x + forward.x * z) * horizontalScale,
+        y * .82,
+        (right.z * x + forward.z * z) * horizontalScale,
     )
 
     private fun vector(point: Vector) = Vector3f(point.x.toFloat(), point.y.toFloat(), point.z.toFloat())
