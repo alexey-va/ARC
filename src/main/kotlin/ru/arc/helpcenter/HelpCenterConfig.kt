@@ -88,6 +88,8 @@ class HelpCenterConfig(private val config: Config) {
         }
 
         private val DEFAULT_TEXT = linkedMapOf(
+            "main-graves-label" to "<#c4a7e7>Могилы: <#ffffff><count> <#c4a7e7>›",
+            "graves-tooltip" to "<#e8dfd2>Открыть список активных могил и вернуть вещи.",
             "main-now-label" to "<#86dcf1>Мой профиль",
             "main-teams-label" to "<#f3a2c9>Кланы",
             "main-travel-label" to "<#91c4ff>Телепортация",

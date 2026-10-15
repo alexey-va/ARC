@@ -12,6 +12,8 @@ actions:
 
 # All player-visible copy is configurable. ARC merges new defaults on reload.
 text:
+  main-graves-label: '<#c4a7e7>Могилы: <#ffffff><count> <#c4a7e7>›'
+  graves-tooltip: '<#e8dfd2>Открыть список активных могил и вернуть вещи.'
   main-now-label: '<#86dcf1>Мой профиль'
   main-teams-label: '<#f3a2c9>Кланы'
   main-travel-label: '<#91c4ff>Телепортация'

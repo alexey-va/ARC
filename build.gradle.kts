@@ -76,7 +76,7 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.393"
+version = "1.4.394"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.23"
@@ -180,6 +180,8 @@ dependencies {
     // ArcExcellentCrates owns this service contract at runtime; never shade it into ARC.
     compileOnly(crateApiDependency)
     compileOnly(libs.io.papermc.paper.paper.api)
+    // Exact GravesX 2026.4.9.2 release API. Runtime is server-provided; never shade this GPL-3.0 JAR.
+    compileOnly(files("libs/gravesx-api-2026.4.9.2.jar"))
     compileOnly(libs.net.advancedplugins.advancedenchantments)
     compileOnly(libs.com.github.retrooper.packetevents.spigot) {
         // PacketEvents is server-provided; its legacy netty-all graph is not part of ARC compilation.

@@ -37,6 +37,9 @@ class HelpCenterScreensTest {
     private lateinit var legacy: HelpCenterLegacySettings
     private val directory = Files.createTempDirectory("help-screens")
     private var chatMode = HelpCenterChatMode.LOCAL
+    private var gravesCount = 0
+    private var gravesUnavailable = false
+    private var gravesOpenCalls = 0
     private val executed = mutableListOf<String>()
 
     @BeforeEach
@@ -105,6 +108,8 @@ class HelpCenterScreensTest {
             closeDialog = { dialogCloses++ },
             enchantmentsGuide = HelpCenterEnchantmentsGuideConfig.load(directory).snapshot(),
             enchantmentsCatalog = { HelpCenterEnchantmentsCatalog.unavailable() },
+            activeGraveCount = { if (gravesUnavailable) error("Graves unavailable") else gravesCount },
+            openGraves = { gravesOpenCalls++; true },
         )
     }
 
@@ -274,6 +279,34 @@ class HelpCenterScreensTest {
         assertEquals(1, screenCount)
         assertEquals("help.root", screen.id)
         assertTrue(body().contains("Viewer"))
+    }
+
+    @Test
+    fun `active graves are the first root action and keep their count when clicked`() {
+        gravesCount = 2
+        open(HelpCenterPage.ROOT)
+
+        val graves = screen.buttons.first()
+        assertEquals("graves", graves.id.value)
+        assertEquals("Могилы: 2 ›", plain(graves.label))
+        assertFalse(graves.closeDialogBeforeAction)
+        val root = screen
+
+        click("graves")
+
+        assertEquals(1, gravesOpenCalls)
+        assertSame(root, screen)
+    }
+
+    @Test
+    fun `root hides graves when there are none or their count is unavailable`() {
+        open(HelpCenterPage.ROOT)
+        assertFalse(screen.buttons.any { it.id.value == "graves" })
+
+        gravesUnavailable = true
+        open(HelpCenterPage.ROOT)
+
+        assertFalse(screen.buttons.any { it.id.value == "graves" })
     }
 
     @Test

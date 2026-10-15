@@ -4,7 +4,7 @@ plugins {
     id("com.gradleup.shadow")
 }
 group = "ru.ruscrafting"
-version = "0.1.2"
+version = "0.1.3"
 base.archivesName.set("ArcDungeons")
 java { toolchain { languageVersion.set(JavaLanguageVersion.of(25)) } }
 kotlin { jvmToolchain(25) }

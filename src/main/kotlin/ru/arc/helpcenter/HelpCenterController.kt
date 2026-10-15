@@ -10,6 +10,7 @@ import ru.arc.ARC
 import ru.arc.config.ArcRuntimeProfile
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.whenCompleteSync
+import ru.arc.graves.GravesModule
 import ru.arc.gui.ArcMenus
 import ru.arc.paper.menu.DialogTables
 import ru.arc.paper.menu.PaperDialogActionId
@@ -38,6 +39,8 @@ internal class HelpCenterController(
     private val closeDialog: (Player) -> Unit = ArcMenus::closeDialog,
     private val enchantmentsGuide: HelpCenterEnchantmentsGuideSettings,
     private val enchantmentsCatalog: () -> HelpCenterEnchantmentsCatalog = HelpCenterEnchantmentsCatalog::fromAeApi,
+    private val activeGraveCount: (Player) -> Int = { player -> GravesModule.activeCount(player) },
+    private val openGraves: (Player) -> Boolean = { player -> GravesModule.open(player) },
 ) {
     private val miniMessage = MiniMessage.miniMessage()
     private val plainText = PlainTextComponentSerializer.plainText()
@@ -165,6 +168,7 @@ internal class HelpCenterController(
     }
 
     private fun showRoot(player: Player, profile: HelpCenterProfile? = null) {
+        val activeGraves = runCatching { activeGraveCount(player) }.getOrDefault(0).coerceAtLeast(0)
         val body = mutableListOf(PaperDialogBody(text("root-body"), width = 506))
         if (profile == null) {
             body += PaperDialogBody(text("my-error"), width = 506)
@@ -203,6 +207,11 @@ internal class HelpCenterController(
                 title = text("root-title"),
                 body = body,
                 buttons = buildList {
+                    if (activeGraves > 0) {
+                        add(button("graves", text("main-graves-label", "count" to activeGraves.toString()), text("graves-tooltip")) {
+                            openGraves(player)
+                        })
+                    }
                     add(button("now", text("now-label"), text("now-tooltip")) { openNow(player) })
                     availableCatalog(player).firstOrNull { it.id == "teams" }?.let { teams ->
                         add(button("teams", text("teams-label"), commandTooltip(teams.id)) { executeCatalog(player, teams.id) })
@@ -220,7 +229,13 @@ internal class HelpCenterController(
                     add(rootCategoryButton(player, HelpCenterCategory.TECHNOLOGY))
                     add(button("search", text("commands-label"), text("commands-tooltip")) { openCommands(player) })
                     add(button("settings", text("category-settings-label"), text("category-settings-tooltip")) { openSettings(player) })
-                }.map { it.copy(width = 166, label = text("main-${it.id.value.removePrefix("root_")}-label")) },
+                }.map {
+                    it.copy(
+                        width = 166,
+                        label = if (it.id.value == "graves") it.label
+                        else text("main-${it.id.value.removePrefix("root_")}-label"),
+                    )
+                },
                 columns = 3,
             ),
         )
