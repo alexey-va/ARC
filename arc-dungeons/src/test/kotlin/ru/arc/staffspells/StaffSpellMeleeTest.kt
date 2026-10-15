@@ -9,12 +9,43 @@ import java.util.UUID
 import kotlin.math.abs
 import org.bukkit.Location
 import org.bukkit.Material
+import org.bukkit.Sound
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Player
 import org.bukkit.potion.PotionEffectType
 import org.bukkit.util.Vector
 
 class StaffSpellMeleeTest : FreeSpec({
+    "empty-air frontal casts have one launch two contact layers and one tail with no per-frame sound" {
+        withStaffHarness { h ->
+            listOf(StaffSpell.FROST, StaffSpell.FAULT, StaffSpell.LUNAR, StaffSpell.TIDE).forEach { spell ->
+                val world = h.paper.addSimpleWorld("staff-frontal-audio-${spell.id}")
+                val player = h.player("staff-frontal-audio-${spell.id}", world, spell)
+                val hits = mutableListOf<Pair<LivingEntity, Pair<Double, Double>>>()
+                val damage = meleeDamage(hits)
+                val sounds = mutableListOf<Sound>()
+                val visuals = mockk<StaffSpellVisuals>(relaxed = true)
+                every { visuals.withOwner(any(), any()) } answers { secondArg<() -> Unit>().invoke() }
+                every { visuals.cue(any(), any(), any(), any()) } answers { sounds += secondArg<Sound>() }
+                val melee = StaffSpellMelee(staffSettings(), damage, h.effects, visuals,
+                    StaffSpellTargeting(staffSettings(), damage))
+                try {
+                    melee.cast(player, meleeCast(player), spell, StaffSpellTuning(1.0, 6.0, 32)) shouldBe true
+                    sounds.size shouldBe 1
+                    h.scheduler.tick(STAFF_FRONTAL_CONTACT_TICK - 1)
+                    sounds.size shouldBe 1
+                    h.scheduler.tick(1)
+                    sounds.size shouldBe 3
+                    h.scheduler.tick((STAFF_FRONTAL_DURATION_TICKS - 2) - STAFF_FRONTAL_CONTACT_TICK)
+                    sounds.size shouldBe 4
+                    h.scheduler.tick(30)
+                    sounds.size shouldBe 4
+                    hits shouldBe emptyList()
+                } finally { melee.close() }
+            }
+        }
+    }
+
     "only FROST, FAULT, LUNAR, and TIDE own the broad primary contact" {
         val frontal = setOf(StaffSpell.FROST, StaffSpell.FAULT, StaffSpell.LUNAR, StaffSpell.TIDE)
 

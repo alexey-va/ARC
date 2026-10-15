@@ -88,6 +88,21 @@ class StaffSpellHudTest : FreeSpec({
         }
     }
 
+    "Q continuation and independent F cooldown update the existing chosen HUD without creating extra cards" {
+        withHudHarness { harness ->
+            val player = harness.player("staff-hotkeys", StaffSpell.EMBER)
+            var state = StaffHotkeyHudState(80, 20, "Поджечь")
+            harness.hud.hotkeyState = { _, _ -> state }
+            harness.hud.ready(player, StaffSpell.EMBER, secondary = false)
+            val record = harness.recorder.records.single()
+            text(record.text).endsWith("Q · Поджечь    F · 1.0с") shouldBe true
+            state = StaffHotkeyHudState(76, 0)
+            harness.scheduler.tick(2)
+            harness.recorder.records.size shouldBe 1
+            text(record.text).endsWith("Q · 3.8с    F · готово") shouldBe true
+        }
+    }
+
     "nearby solid blocks move the HUD forward and keep its apparent scale" {
         withHudHarness { harness ->
             val player = harness.player("staff-hud-wall", StaffSpell.EMBER)
@@ -112,7 +127,7 @@ class StaffSpellHudTest : FreeSpec({
             harness.scheduler.tick(2)
             harness.recorder.records.size shouldBe 1
             record.removals shouldBe 0
-            text(record.text) shouldBe "Тяготение\nЛКМ — захватить\nВедите прицел · нажмите ещё раз, чтобы бросить"
+            text(record.text) shouldBe "Тяготение\nПКМ — захватить\nВедите прицел · нажмите ещё раз, чтобы бросить"
 
             harness.hud.cooldown(player, StaffSpell.GRAVITY, secondary = false, remainingTicks = 18, totalTicks = 44)
             player.inventory.setItemInMainHand(staffItem(StaffSpell.EMBER))
@@ -129,21 +144,21 @@ class StaffSpellHudTest : FreeSpec({
             player.isSneaking = true
             harness.hud.ready(player, StaffSpell.GRAVITY, secondary = true)
             text(harness.recorder.records.single().text) shouldBe
-                "Тяготение\nГотово · без зарядки\nShift + ЛКМ — применить"
+                "Тяготение\nГотово · без зарядки\nShift + ПКМ — применить"
 
             player.isSneaking = false
             harness.scheduler.tick(2)
             harness.hud.channel(player, StaffSpell.GRAVITY, secondary = false)
             text(harness.recorder.records.single().text) shouldBe
-                "Тяготение\nГлыба в захвате\nЛКМ — бросить"
+                "Тяготение\nГлыба в захвате\nПКМ — бросить"
 
             harness.hud.cooldown(player, StaffSpell.GRAVITY, secondary = false, remainingTicks = 9, totalTicks = 44)
             text(harness.recorder.records.single().text) shouldBe
-                "Тяготение · ЛКМ\nВосстановление 0.5 с\n■■■■■■■□□□"
+                "Тяготение · ПКМ\nВосстановление 0.5 с\n■■■■■■■□□□"
             player.isSneaking = true
             harness.scheduler.tick(2)
             text(harness.recorder.records.single().text) shouldBe
-                "Тяготение · Shift + ЛКМ\nВосстановление 0.5 с\n■■■■■■■□□□"
+                "Тяготение · Shift + ПКМ\nВосстановление 0.5 с\n■■■■■■■□□□"
         }
     }
 

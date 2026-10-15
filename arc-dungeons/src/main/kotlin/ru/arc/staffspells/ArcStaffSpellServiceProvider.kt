@@ -1,6 +1,7 @@
 package ru.arc.staffspells
 
 import org.bukkit.Bukkit
+import org.bukkit.Location
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
@@ -23,6 +24,9 @@ internal interface StaffSpellDuelAccess {
     fun context(caster: Player): DuelSpellAuthorization?
     fun isCurrent(authorization: DuelSpellAuthorization, caster: Player): Boolean
     fun canHit(authorization: DuelSpellAuthorization, caster: Player, target: Player): Boolean
+    fun inputAllowed(player: Player): Boolean
+    fun mobilityAllowed(player: Player, authorization: DuelSpellAuthorization, destination: Location): Boolean
+    fun teleportMobility(player: Player, authorization: DuelSpellAuthorization, destination: Location): Boolean
 }
 
 /** Stable across StaffSpells module reloads so consumers keep their exact policy registrations. */
@@ -113,6 +117,63 @@ internal class ArcStaffSpellServiceProvider(
         }
     }
 
+    /** A registered duel can veto ordinary staff input even when it has no active spell context. */
+    override fun inputAllowed(player: Player): Boolean {
+        if (closed || !Bukkit.isPrimaryThread() || !player.isOnline || !player.isValid || player.isDead) return false
+        for (registration in registrations.values.toList()) {
+            if (!registration.owner.isEnabled) continue
+            val permitted = try {
+                registration.policy.permitsInput(player)
+            } catch (failure: RuntimeException) {
+                logPolicyFailure("input authorization", registration, failure)
+                return false
+            } catch (failure: LinkageError) {
+                logPolicyFailure("input authorization", registration, failure)
+                return false
+            }
+            if (!permitted) return false
+        }
+        return true
+    }
+
+    override fun mobilityAllowed(
+        player: Player,
+        authorization: DuelSpellAuthorization,
+        destination: Location,
+    ): Boolean {
+        if (!validMobilityRequest(player, authorization, destination)) return false
+        val registration = registrations[authorization.registrationId] ?: return false
+        return try {
+            registration.policy.permitsMobility(player, destination) &&
+                isCurrent(authorization, player)
+        } catch (failure: RuntimeException) {
+            logPolicyFailure("mobility authorization", registration, failure)
+            false
+        } catch (failure: LinkageError) {
+            logPolicyFailure("mobility authorization", registration, failure)
+            false
+        }
+    }
+
+    override fun teleportMobility(
+        player: Player,
+        authorization: DuelSpellAuthorization,
+        destination: Location,
+    ): Boolean {
+        if (!mobilityAllowed(player, authorization, destination)) return false
+        val registration = registrations[authorization.registrationId] ?: return false
+        return try {
+            if (!isCurrent(authorization, player)) return false
+            registration.policy.teleportMobility(player, destination) && isCurrent(authorization, player)
+        } catch (failure: RuntimeException) {
+            logPolicyFailure("mobility teleport", registration, failure)
+            false
+        } catch (failure: LinkageError) {
+            logPolicyFailure("mobility teleport", registration, failure)
+            false
+        }
+    }
+
     override fun isCurrent(authorization: DuelSpellAuthorization, caster: Player): Boolean {
         if (closed || !Bukkit.isPrimaryThread() || !caster.isOnline || !caster.isValid || caster.isDead) return false
         val registration = registrations[authorization.registrationId] ?: return false
@@ -129,6 +190,15 @@ internal class ArcStaffSpellServiceProvider(
         return current == authorization.context && current.isValid()
     }
 
+    private fun validMobilityRequest(
+        player: Player,
+        authorization: DuelSpellAuthorization,
+        destination: Location,
+    ): Boolean = !closed && Bukkit.isPrimaryThread() && player.isOnline && player.isValid && !player.isDead &&
+        destination.world != null && destination.world == player.world &&
+        registrations[authorization.registrationId]?.owner?.isEnabled == true &&
+        isCurrent(authorization, player)
+
     @EventHandler
     fun onPluginDisable(event: PluginDisableEvent) {
         registrations.values.filter { it.owner === event.plugin }.forEach(::remove)
@@ -140,7 +210,7 @@ internal class ArcStaffSpellServiceProvider(
 
     private fun logPolicyFailure(operation: String, registration: Registration, failure: Throwable) {
         ArcLogging.warn(
-            "Duel staff policy from {} failed during {}; rejecting spell hit",
+            "Duel staff policy from {} failed during {}; rejecting the staff action",
             registration.owner.name,
             operation,
             failure,

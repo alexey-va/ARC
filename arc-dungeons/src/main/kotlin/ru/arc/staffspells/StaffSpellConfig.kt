@@ -118,6 +118,7 @@ internal data class StaffSpellSettings(
     val novaRadius: Double = 8.0,
     val duelTuning: Map<StaffSpell, StaffSpellTuning> = staffDuelDefaults,
     val aimAssist: StaffAimAssistSettings = StaffAimAssistSettings(),
+    val hotkeyCooldowns: Map<StaffSpell, Pair<Long, Long>> = emptyMap(),
 ) {
     fun tuningFor(spell: StaffSpell, duel: Boolean): StaffSpellTuning =
         (if (duel) duelTuning[spell] else null) ?: tuning.getValue(spell)
@@ -150,6 +151,8 @@ internal data class StaffSpellSettings(
                 append(spell.id).append(".power=").append(spellTuning.power.hex()).append('\n')
                 append(spell.id).append(".vanillaDamage=").append(spellTuning.vanillaDamage.hex()).append('\n')
                 append(spell.id).append(".cooldownTicks=").append(spellTuning.cooldownTicks).append('\n')
+                val hotkeys = hotkeyCooldowns[spell]
+                append(spell.id).append(".hotkeys=").append(hotkeys).append('\n')
                 val arena = tuningFor(spell, duel = true)
                 append(spell.id).append(".duelDamage=").append(arena.vanillaDamage.hex()).append('\n')
                 append(spell.id).append(".duelCooldownTicks=").append(arena.cooldownTicks).append('\n')
@@ -233,6 +236,9 @@ internal open class StaffSpellConfig(private val config: Config) {
             cooldownTicks = config.integer("duel.${spell.id}.cooldown-ticks", default.cooldownTicks.toInt())
                 .coerceIn(4, 400).toLong(),
         ) },
+        hotkeyCooldowns = StaffSpell.available.associateWith {
+            hotkeyCooldown(it, StaffHotkey.Q) to hotkeyCooldown(it, StaffHotkey.F)
+        },
         aimAssist = StaffAimAssistSettings(
             enabled = config.bool("targeting.aim-assist.enabled", true),
             halfAngleDegrees = number("targeting.aim-assist.half-angle-degrees", 6.0, 0.0..12.0),
@@ -287,6 +293,38 @@ internal open class StaffSpellConfig(private val config: Config) {
 
     fun staffHudChannel(spell: StaffSpell, secondary: Boolean): Component = staffHud("channel", spell, secondary)
 
+    fun hotkeyCooldown(spell: StaffSpell, key: StaffHotkey): Long {
+        val defaults = staffHotkeyDescriptions[spell] ?: return 160
+        val ticks = if (key == StaffHotkey.Q) defaults.qCooldown else defaults.fCooldown
+        return config.integer("${spell.id}.hotkeys.${key.name.lowercase(Locale.ROOT)}.cooldown-ticks", ticks)
+            .coerceIn(20, 1200).toLong()
+    }
+
+    private fun hotkeyName(spell: StaffSpell, key: StaffHotkey): String {
+        val defaults = staffHotkeyDescriptions[spell] ?: return key.name
+        return config.string("${spell.id}.hotkeys.${key.name.lowercase(Locale.ROOT)}.name",
+            if (key == StaffHotkey.Q) defaults.qName else defaults.fName)
+    }
+
+    internal fun hotkeyLore(spell: StaffSpell, key: StaffHotkey): Component =
+        Component.text("${key.name} · ${hotkeyName(spell, key)}", net.kyori.adventure.text.format.NamedTextColor.AQUA)
+            .decoration(TextDecoration.ITALIC, false)
+
+    fun hotkeyUnavailable(spell: StaffSpell, key: StaffHotkey): Component {
+        val defaults = staffHotkeyDescriptions[spell] ?: return Component.empty()
+        val description = config.string("${spell.id}.hotkeys.${key.name.lowercase(Locale.ROOT)}.description",
+            if (key == StaffHotkey.Q) defaults.qDescription else defaults.fDescription)
+        return Component.text("${key.name} · ${hotkeyName(spell, key)}: $description",
+            net.kyori.adventure.text.format.NamedTextColor.GRAY)
+    }
+
+    fun hotkeyHud(state: StaffHotkeyHudState): Component {
+        fun status(ticks: Long) = if (ticks <= 0) config.string("messages.hotkey-ready", "готово")
+            else String.format(Locale.ROOT, "%.1fс", ticks / 20.0)
+        return Component.text("Q · ${state.continuation ?: status(state.qTicks)}    F · ${status(state.fTicks)}",
+            net.kyori.adventure.text.format.NamedTextColor.AQUA)
+    }
+
     fun staffHudBossbar(state: StaffSpellHudState): Component {
         val message = when (state.phase) {
             StaffSpellHudPhase.READY -> when (staffAttackInputMode(state.spell, state.secondary)) {
@@ -331,14 +369,15 @@ internal open class StaffSpellConfig(private val config: Config) {
         return config.string(key, fallback).trim().ifEmpty { fallback }
     }
 
-    private fun useInstructions(message: String, spell: StaffSpell) = config.component(
-        "messages.$message", TagResolver.resolver(
-            Placeholder.unparsed("attack", inputLabel(spell, StaffCastInput.PRIMARY)),
-            Placeholder.unparsed("attack-secondary", inputLabel(spell, StaffCastInput.SECONDARY)),
-            Placeholder.unparsed("defense", inputLabel(spell, StaffCastInput.QUICK)),
-            Placeholder.unparsed("defense-secondary", inputLabel(spell, StaffCastInput.QUICK_SECONDARY)),
-        ),
-    ).decoration(TextDecoration.ITALIC, false)
+    private fun controlPlaceholders(spell: StaffSpell) = TagResolver.resolver(
+        Placeholder.unparsed("attack", inputLabel(spell, StaffCastInput.PRIMARY)),
+        Placeholder.unparsed("attack-secondary", inputLabel(spell, StaffCastInput.SECONDARY)),
+        Placeholder.unparsed("defense", inputLabel(spell, StaffCastInput.QUICK)),
+        Placeholder.unparsed("defense-secondary", inputLabel(spell, StaffCastInput.QUICK_SECONDARY)),
+    )
+
+    private fun useInstructions(message: String, spell: StaffSpell) =
+        config.component("messages.$message", controlPlaceholders(spell)).decoration(TextDecoration.ITALIC, false)
 
     fun defense(spell: StaffSpell, active: Boolean, seconds: Double, allAround: Boolean = false): Component {
         val message = when {
@@ -401,6 +440,8 @@ internal open class StaffSpellConfig(private val config: Config) {
         spellComponent(spell, "secondary"),
         spellComponent(spell, "quick"),
         spellComponent(spell, "quick-secondary"),
+        hotkeyLore(spell, StaffHotkey.Q),
+        hotkeyLore(spell, StaffHotkey.F),
         useInstructions(useMessage(spell), spell),
     )
 
@@ -410,17 +451,17 @@ internal open class StaffSpellConfig(private val config: Config) {
         Component.empty(),
         spellComponent(spell, "description"),
         spellComponent(spell, "aim"),
-        Component.empty(),
+        hotkeyLore(spell, StaffHotkey.Q),
         spellComponent(spell, "secondary"),
         spellComponent(spell, "quick"),
         spellComponent(spell, "quick-secondary"),
         text(if (duelOnly) "duel-only" else "prototype"),
-        Component.empty(),
+        hotkeyLore(spell, StaffHotkey.F),
         useInstructions(useMessage(spell), spell),
     )
 
     private fun spellComponent(spell: StaffSpell, suffix: String) =
-        config.component("${spell.id}.$suffix", TagResolver.empty()).decoration(TextDecoration.ITALIC, false)
+        config.component("${spell.id}.$suffix", controlPlaceholders(spell)).decoration(TextDecoration.ITALIC, false)
 
     private fun useMessage(spell: StaffSpell) = when (spell) {
         StaffSpell.INFERNO, StaffSpell.GRAVITY -> "channel-use"

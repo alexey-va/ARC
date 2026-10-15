@@ -70,6 +70,8 @@ internal class StaffSpellSummons(
         val bornAtTick: Long,
         val actors: MutableList<Actor> = mutableListOf(),
         val flights: MutableList<ArrowFlight> = mutableListOf(),
+        var focusTargetId: UUID? = null,
+        var rallyPoint: Location? = null,
         var ageTicks: Int = 0,
         var successfulHits: Int = 0,
     )
@@ -166,6 +168,36 @@ internal class StaffSpellSummons(
         return StaffSummonCastResult.CAST
     }
 
+    /** Retargets the caster's already active squad without changing any actor timers or creating projectiles. */
+    fun commandFocus(player: Player, target: LivingEntity, cast: StaffSpellCast): Boolean {
+        if (closed || !started || cast.casterId != player.uniqueId || !ready(player, cast) ||
+            target.uniqueId == player.uniqueId || target.world.uid != player.world.uid ||
+            !target.isValid || target.isDead || target.isInvulnerable || !loaded(target.location) ||
+            !damage.eligible(player, target, cast) || !visible(player.eyeLocation, center(target))) return false
+        val session = activeCommandSession(player) ?: return false
+        session.focusTargetId = target.uniqueId
+        session.rallyPoint = null
+        return true
+    }
+
+    /** Rallying only changes the squad's idle destination; attack windups and cooldown ticks remain intact. */
+    fun commandRally(player: Player, point: Location, cast: StaffSpellCast): Boolean {
+        if (closed || !started || cast.casterId != player.uniqueId || !ready(player, cast) ||
+            point.world !== player.world || !loaded(point) || player.location.distanceSquared(point) >
+            RALLY_COMMAND_RANGE * RALLY_COMMAND_RANGE || !visible(player.eyeLocation, point.clone().add(0.0, .8, 0.0))) return false
+        val safePoint = resolveSupportedLocation(point, width = .6, height = 2.0,
+            maxRise = MAX_SPAWN_STEP_UP, maxDrop = MAX_SPAWN_STEP_DOWN) ?: return false
+        val session = activeCommandSession(player) ?: return false
+        session.focusTargetId = null
+        session.rallyPoint = safePoint
+        return true
+    }
+
+    private fun activeCommandSession(player: Player): Session? = sessions.asReversed().firstOrNull { session ->
+        session.casterId == player.uniqueId && session.worldId == player.world.uid &&
+            session.actors.any { it.mob.isValid && !it.mob.isDead }
+    }
+
     fun cancel(casterId: UUID) {
         sessions.filter { it.casterId == casterId }.forEach(::remove)
     }
@@ -219,8 +251,9 @@ internal class StaffSpellSummons(
         val mob = actor.mob
         val target = selectTarget(owner, session, actor)
         if (target == null) {
-            resetWindup(actor)
-            moveToward(mob, followPoint(owner, session.actors.indexOf(actor)))
+            val rally = session.rallyPoint
+            if (rally == null) resetWindup(actor)
+            moveToward(mob, rally ?: followPoint(owner, session.actors.indexOf(actor)))
             return
         }
 
@@ -275,14 +308,28 @@ internal class StaffSpellSummons(
         if (!attacked) resetWindup(actor)
     }
 
-    private fun selectTarget(owner: Player, session: Session, actor: Actor) =
-        targeting.nearby(owner, actor.mob.location, targetSearchRadius, session.cast)
+    private fun selectTarget(owner: Player, session: Session, actor: Actor): LivingEntity? {
+        val commanded = session.focusTargetId?.let { Bukkit.getEntity(it) as? LivingEntity }
+        if (commanded != null && validFocusTarget(owner, actor.mob, commanded, session)) return commanded
+        return targeting.nearby(owner, actor.mob.location, targetSearchRadius, session.cast)
             .asSequence()
             .filterNot { isCasterActor(session.casterId, it) }
             .filter { it.world.uid == session.worldId && loaded(it.location) }
             .filter { !it.isInvulnerable }
             .sortedBy { center(it).distanceSquared(center(actor.mob)) }
             .firstOrNull { visible(actor.mob.eyeLocation, center(it)) }
+    }
+
+    private fun validFocusTarget(
+        owner: Player,
+        mob: AbstractSkeleton,
+        target: LivingEntity,
+        session: Session,
+    ): Boolean = target !== mob && !isCasterActor(session.casterId, target) && target.isValid && !target.isDead &&
+        !target.isInvulnerable && target.world.uid == session.worldId && loaded(target.location) &&
+        center(target).distanceSquared(center(mob)) <= FOCUS_COMMAND_RANGE * FOCUS_COMMAND_RANGE &&
+        visible(mob.eyeLocation, center(target)) && damage.isCurrent(owner, session.cast) &&
+        damage.eligible(owner, target, session.cast)
 
     private fun attack(session: Session, actor: Actor, owner: Player, target: org.bukkit.entity.LivingEntity): Int {
         if (!ready(owner, session.cast) || !validTarget(owner, actor.mob, target, session)) return 0
@@ -745,6 +792,8 @@ internal class StaffSpellSummons(
     }
 
     private companion object {
+        const val RALLY_COMMAND_RANGE = 32.0
+        const val FOCUS_COMMAND_RANGE = 32.0
         const val MAX_ACTORS = 32
         const val MAX_ACTORS_PER_CASTER = 10
         const val LIFETIME_TICKS = 900L

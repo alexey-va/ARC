@@ -1,4 +1,4 @@
-# Staff spells — ArcDungeons 0.1.6
+# Staff spells — ArcDungeons 0.1.7
 
 `/arc stafftest` issues sixteen administrator-only mechanics samples.
 `inferno` is temporarily retired; `gravity` and `ossuary` remain available. Use
@@ -15,11 +15,12 @@ display bodies; the last sent pose collapses before cleanup.
 
 ## Controls
 
-Left-click casts ordinary abilities immediately; Shift + left-click selects the
-second ability. Ember and Icicle are the explicit exception: hold right-click
-to charge their primary, then release to launch. Full charge takes 36 ticks
-(1.8 seconds); Shift + right-click casts their secondary immediately. Their
-frontal defense and absorption shield use left-click and Shift + left-click.
+Every staff uses right-click for its primary attack and Shift + right-click for
+its secondary attack. Ordinary attacks cast immediately. Ember and Icicle use
+hold-and-release right-click for their primary: hold to charge, then release to
+launch. Full charge takes 36 ticks (1.8 seconds); their secondary casts immediately.
+Every staff uses left-click for frontal defense and Shift + left-click for its
+absorption shield.
 The vanilla client sends the native stop-using packet for these held attacks;
 there is no click-toggle substitute or inferred left-button release timeout.
 
@@ -41,37 +42,88 @@ settings: forward, horizontal and vertical displacement and scale. Top/bottom
 uses the same vertical magnitude above/below the sightline. These settings
 are read on module reload.
 
-Gravity's primary uses click-toggle: the first left-click grabs, the next
-throws. Shift + left-click instead creates a caster-centered gravity pulse.
+Gravity's primary uses click-toggle: the first right-click grabs, the next
+throws. Shift + right-click instead creates a caster-centered gravity pulse.
 Inferno is temporarily retired from issuance and casting. Existing EliteMobs
 Inferno assignments migrate once to Ember; old prototype IDs remain recognizable
 but cannot cast.
 
 Gravity selects a visible solid block within its reach, holds a visual boulder
-in front of the caster as the aim moves, and throws it on the second left-click. The
+in front of the caster as the aim moves, and throws it on the second right-click. The
 boulder is a visual effect: Gravity does not move, break, place or replace
 world blocks. If the selected surface or safe path is unavailable, the grab is
 rejected.
 
-For ordinary staves, right-click raises the frontal guard; Shift + right-click raises its
+For every staff, left-click raises the frontal guard; Shift + left-click raises its
 all-around absorption shield. Defenses have their own recovery track, independent of the
-left-click attack cooldown. A frontal guard covers two hits for 1.2 seconds,
+right-click attack cooldown. A frontal guard covers two hits for 1.2 seconds,
 or three hits for 1.6 seconds for Fault, Gravity, Ossuary, Nova and Necromancer.
 The all-around shield lasts twenty seconds and absorbs eight HP after armor and
 resistance, before native absorption hearts. Overflow continues through normal
 damage processing. Its bossbar shows remaining capacity. Recovery is four
 seconds for frontal and twenty-five seconds from casting the shield; both share that track.
 The frontal guard is a 12-part kite-shaped packet BlockDisplay shield with a transparent face;
-Shift + right-click assembles four angled plates (40 parts) around the player. Material families
+Shift + left-click assembles four angled plates (40 parts) around the player. Material families
 follow the staff element. The stable displays attach to the player, interpolate their opening,
 recoil and collapse, and share the existing scene/part budgets. Native particles appear only
 on a blocked hit or shield break. The center stays transparent and the raised outline leaves
 the reticle readable. `StaffDefenseGeometry.kt` owns the shape used by both runtime and
 `exportStaffRedesignPreview`; offline previews do not establish native-client acceptance.
 
-Changing staff cancels the active defense without resetting recovery. Ember and Icicle use left-click for these defenses because right-click owns their held attacks. Staff interaction cannot break blocks, including in
+Changing staff cancels the active defense without resetting recovery. The same
+attack and defense buttons apply to instant, charged and click-toggle staves.
+Staff interaction cannot break blocks, including in
 creative mode, and native melee damage is suppressed while a prototype staff
 is held.
+
+## Q techniques and F mobility
+
+Q is a staff technique; F is themed mobility in both ordinary worlds and magic
+arenas. ArcDuels no longer registers its former Q Echo or standalone F Blink.
+Shift + F remains the main-menu shortcut. A staff consumes world Q/F without
+vanilla item drop or hand swap; inventory drop controls remain native. Controls
+are denied during duel preparation, countdown, spectator and locked states.
+
+| Staff | Q | F |
+| --- | --- | --- |
+| Chain | Steerable lightning orb; Q again detonates | Spark blink |
+| Mark | Tether punishes leaving its anchor | Rift blink |
+| Frost | Shatter the caster's existing slows | Ground ice slide |
+| Lance | Pin an enemy near the wall behind it | Backward vault |
+| Ember | Record a short trail; Q ignites it | Backward fire recoil |
+| Nova | Rooting seed trap | Pull toward a visible solid anchor |
+| Icicle | Recall up to six spent primary shards | Ice-step double impulse |
+| Fault | Magic-cover wall; Q shatters it forward | Ground rush |
+| Lunar | Wide outbound and returning crescent | Short phase blink |
+| Gale | Sideways gust corridor | Brief steerable glide |
+| Tide | Water capsule breaks on accepted damage | Forward surf |
+| Requiem | Timed bell; Q strikes during its active window | Bell blink |
+| Prism | Triangle damages enemies crossing its edges | Steerable speed burst |
+| Necromancer | Focus existing archers or rally them | Soul blink |
+| Gravity | Hold one enemy; Q throws it | Ballistic leap |
+| Ossuary | Closing bone-jaw trap | Bone-ridge rush |
+
+Q and F have separate per-player cooldowns, retained when changing staves or
+reconnecting. A four-tick admission interval prevents same-tick bursts; round
+reset clears the round's cooldowns. Per-staff defaults live at
+`<staff>.hotkeys.q.cooldown-ticks` and `f.cooldown-ticks` in `staff-spells.yml`.
+The existing HUD and item lore expose Q/F availability and continuation state.
+
+`StaffSpellConjurations` and `StaffSpellTechniques` own Q lifecycles;
+`StaffSpellMobility` owns F. All reuse the existing cast authorization and
+bounded `StaffSpellDisplayEffects` pool. Physical movement checks headroom,
+loaded chunks, safe landing and arena bounds; blinks may cross intervening
+cover but cannot land outside the allowed arena. Virtual Fault cover blocks
+staff rays, not ordinary projectiles or player movement. World blocks remain
+unchanged. Cancelled or expired casts release their own control effects.
+
+Focused checks: `:arc-dungeons:test --tests ru.arc.staffspells.StaffSpellInputTest`,
+`StaffSpellMobilityTest`, `StaffSpellConjurationsTest`,
+`StaffSpellTechniquesRuntimeTest`, `StaffMagicBarriersTest` and
+`StaffHotkeyCooldownsTest`; ArcDuels' `KitRegistryMagicTest` covers the policy
+adapter. `:arc-dungeons:exportStaffHotkeyPreview` exports 32 Q/F geometry clips
+from production helpers with explicitly synthetic sample paths. It does not
+prove native movement, collisions, sound, damage or client appearance.
 
 ## Catalog
 

@@ -33,6 +33,7 @@ internal class StaffSpellMelee(
     private val visuals: StaffSpellVisuals,
     private val targeting: StaffSpellTargeting,
     private val tasks: LifecycleTaskScope = LifecycleTaskScope(),
+    internal var onFrostSlow: (Player, LivingEntity, Int) -> Unit = { _, _, _ -> },
 ) : AutoCloseable {
     private data class Swing(
         val cast: StaffSpellCast,
@@ -63,7 +64,7 @@ internal class StaffSpellMelee(
         pending[player.uniqueId] = swing
         visuals.withOwner(player.uniqueId) {
             visuals.cue(origin.clone().add(forward.clone().multiply(2.0)),
-                attackSound(spell), 0.55f, 0.85f)
+                launchSound(spell), 0.55f, 1.08f)
             frame(swing, 0)
         }
         for (age in 2 until STAFF_FRONTAL_DURATION_TICKS step 2) schedule(swing, age.toLong()) {
@@ -96,8 +97,15 @@ internal class StaffSpellMelee(
             .sortedBy { center(it).distanceSquared(swing.eye) }
             .take(settings.maxAreaTargets.coerceIn(1, 3))
         visuals.withOwner(player.uniqueId) {
-            visuals.cue(swing.eye.clone().add(swing.horizontal.clone().multiply(4.0)),
-                attackSound(swing.spell), 0.8f, 0.65f)
+            val at = swing.eye.clone().add(swing.horizontal.clone().multiply(4.0))
+            visuals.cue(at, attackSound(swing.spell), 0.8f, 0.72f)
+            val accent = when (swing.spell) {
+                StaffSpell.FROST -> Sound.BLOCK_AMETHYST_BLOCK_RESONATE
+                StaffSpell.FAULT -> Sound.BLOCK_DEEPSLATE_BREAK
+                StaffSpell.LUNAR -> Sound.BLOCK_AMETHYST_BLOCK_CHIME
+                else -> Sound.BLOCK_BUBBLE_COLUMN_UPWARDS_AMBIENT
+            }
+            visuals.cue(at, accent, 0.32f, if (swing.spell == StaffSpell.FAULT) 0.62f else 1.28f)
         }
         for (target in targets) {
             if (pending[player.uniqueId] !== swing || !current(player, swing)) break
@@ -107,8 +115,12 @@ internal class StaffSpellMelee(
             if (!damage.hit(player, target, swing.cast, swing.tuning.power, swing.tuning.vanillaDamage)) continue
             if (pending[player.uniqueId] !== swing || !current(player, swing)) break
             if (!damage.eligible(player, target, swing.cast)) continue
-            if (swing.spell == StaffSpell.FROST)
-                target.addPotionEffect(PotionEffect(PotionEffectType.SLOWNESS, 16, 0, false, false))
+            if (swing.spell == StaffSpell.FROST &&
+                target.addPotionEffect(PotionEffect(PotionEffectType.SLOWNESS, 16, 0, false, false)) &&
+                pending[player.uniqueId] === swing && current(player, swing) &&
+                damage.eligible(player, target, swing.cast) && visible(player.eyeLocation, center(target))) {
+                onFrostSlow(player, target, 16)
+            }
             val push = when (swing.spell) { StaffSpell.FAULT -> 0.42; StaffSpell.TIDE -> 0.35; else -> 0.0 }
             if (push > 0.0) target.velocity = target.velocity.clone().add(swing.horizontal.clone().multiply(push))
         }
@@ -123,6 +135,15 @@ internal class StaffSpellMelee(
                 .add(swing.horizontal.clone().multiply(sample.offset.z)))
         }.filter { visible(swing.eye, origin.clone().add(it.offset)) }
         visuals.particles(origin, samples, clearance = 1.15)
+        if (age == STAFF_FRONTAL_DURATION_TICKS - 2) {
+            val tail = when (swing.spell) {
+                StaffSpell.FROST -> Sound.BLOCK_POWDER_SNOW_BREAK
+                StaffSpell.FAULT -> Sound.BLOCK_GRAVEL_BREAK
+                StaffSpell.LUNAR -> Sound.BLOCK_AMETHYST_CLUSTER_HIT
+                else -> Sound.ENTITY_PLAYER_SWIM
+            }
+            visuals.cue(origin.clone().add(swing.horizontal.clone().multiply(4.5)), tail, 0.26f, 1.38f)
+        }
     }
 
     private fun inArea(swing: Swing, entity: LivingEntity): Boolean {
@@ -167,6 +188,13 @@ internal class StaffSpellMelee(
         StaffSpell.FROST -> Sound.BLOCK_GLASS_BREAK
         StaffSpell.FAULT -> Sound.ENTITY_IRON_GOLEM_ATTACK
         StaffSpell.LUNAR -> Sound.ENTITY_PLAYER_ATTACK_SWEEP
+        StaffSpell.TIDE -> Sound.ENTITY_PLAYER_SPLASH_HIGH_SPEED
+        else -> Sound.ENTITY_PLAYER_ATTACK_SWEEP
+    }
+
+    private fun launchSound(spell: StaffSpell) = when (spell) {
+        StaffSpell.FROST -> Sound.BLOCK_AMETHYST_CLUSTER_HIT
+        StaffSpell.FAULT -> Sound.BLOCK_DEEPSLATE_PLACE
         StaffSpell.TIDE -> Sound.ENTITY_PLAYER_SPLASH
         else -> Sound.ENTITY_PLAYER_ATTACK_SWEEP
     }

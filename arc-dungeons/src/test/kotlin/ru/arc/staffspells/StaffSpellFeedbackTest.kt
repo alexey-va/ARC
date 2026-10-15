@@ -60,10 +60,10 @@ class StaffSpellFeedbackTest : FreeSpec({
                     visuals.chargeFeedback(player, StaffSpell.GALE, 1.0)
                     sounds.map { it.first } shouldBe listOf(
                         Sound.ENTITY_BREEZE_WIND_BURST,
-                        Sound.BLOCK_NOTE_BLOCK_CHIME,
-                        Sound.BLOCK_NOTE_BLOCK_CHIME,
-                        Sound.BLOCK_NOTE_BLOCK_CHIME,
-                        Sound.ENTITY_PLAYER_LEVELUP,
+                        Sound.ENTITY_BREEZE_WIND_BURST,
+                        Sound.ENTITY_BREEZE_WIND_BURST,
+                        Sound.ENTITY_BREEZE_WIND_BURST,
+                        Sound.ENTITY_BREEZE_SLIDE,
                     )
                     (sounds.slice(1..3).map { it.second }.zipWithNext().all { it.first < it.second }) shouldBe true
                     val firstParticle = particles.first().location
@@ -83,7 +83,7 @@ class StaffSpellFeedbackTest : FreeSpec({
                     visuals.chargeFeedback(player, StaffSpell.GALE, 0.25)
                     sounds.takeLast(2).map { it.first } shouldBe listOf(
                         Sound.ENTITY_BREEZE_WIND_BURST,
-                        Sound.BLOCK_NOTE_BLOCK_CHIME,
+                        Sound.ENTITY_BREEZE_WIND_BURST,
                     )
 
                     visuals.cancel(playerId)
@@ -101,13 +101,27 @@ class StaffSpellFeedbackTest : FreeSpec({
                     visuals.cooldownFeedback(player, StaffSpell.CHAIN)
                     visuals.chargeFeedback(player, StaffSpell.GALE, 1.0)
                     sounds.takeLast(6).map { it.first } shouldBe listOf(
-                        Sound.BLOCK_NOTE_BLOCK_HAT,
+                        Sound.BLOCK_AMETHYST_CLUSTER_HIT,
                         Sound.ENTITY_BREEZE_WIND_BURST,
-                        Sound.BLOCK_NOTE_BLOCK_CHIME,
-                        Sound.BLOCK_NOTE_BLOCK_CHIME,
-                        Sound.BLOCK_NOTE_BLOCK_CHIME,
-                        Sound.ENTITY_PLAYER_LEVELUP,
+                        Sound.ENTITY_BREEZE_WIND_BURST,
+                        Sound.ENTITY_BREEZE_WIND_BURST,
+                        Sound.ENTITY_BREEZE_WIND_BURST,
+                        Sound.ENTITY_BREEZE_SLIDE,
                     )
+                    listOf(
+                        StaffSpell.EMBER to listOf(Sound.BLOCK_FIRE_AMBIENT, Sound.ITEM_FIRECHARGE_USE,
+                            Sound.ITEM_FIRECHARGE_USE, Sound.ITEM_FIRECHARGE_USE, Sound.ENTITY_BLAZE_SHOOT),
+                        StaffSpell.ICICLE to listOf(Sound.BLOCK_AMETHYST_BLOCK_CHIME, Sound.BLOCK_AMETHYST_CLUSTER_HIT,
+                            Sound.BLOCK_AMETHYST_CLUSTER_HIT, Sound.BLOCK_AMETHYST_CLUSTER_HIT,
+                            Sound.BLOCK_AMETHYST_BLOCK_RESONATE),
+                    ).forEach { (spell, expected) ->
+                        visuals.cancelChargeFeedback(playerId)
+                        val before = sounds.size
+                        listOf(0.0, 0.25, 0.5, 0.75, 1.0).forEach { progress ->
+                            repeat(3) { visuals.chargeFeedback(player, spell, progress) }
+                        }
+                        sounds.drop(before).map { it.first } shouldBe expected
+                    }
                 } finally {
                     tasks.close()
                 }

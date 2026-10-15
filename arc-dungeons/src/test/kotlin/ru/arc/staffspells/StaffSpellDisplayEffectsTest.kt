@@ -500,6 +500,31 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         }
     }
 
+    "Q and F custom scenes reuse handles and coalesce tick poses with interpolation" {
+        for (spell in listOf(StaffSpell.CHAIN, StaffSpell.EMBER)) withDisplayHarness { h ->
+            val caster = h.player("hotkey-frame-owner")
+            val start = Location(h.world, 0.5, 66.0, 4.0)
+            val parts = listOf(StaffDisplayPart(Material.QUARTZ_BLOCK, Vector3f(), Vector3f(.4f),
+                org.joml.Quaternionf(), identity = "hotkey-body"))
+            val id = h.effects.custom(caster.uniqueId, spell, start, 24) { parts }!!
+            val record = h.recorder.records.single()
+            repeat(20) { index ->
+                h.effects.updateCustom(id, start.clone().add(0.0, 0.0, (index + 1) * .2), parts)
+                h.scheduler.tick(1)
+                record.teleports.size shouldBe 1 + (index + 1) / 2
+            }
+
+            h.recorder.records.size shouldBe 1
+            record.removals shouldBe 0
+            record.interpolationDurationTicks shouldBe 2
+            record.teleportDurationTicks shouldBe 2
+            record.teleports.zipWithNext().all { (a, b) -> b.z > a.z } shouldBe true
+            h.scheduler.tick(4)
+            record.removals shouldBe 1
+            h.effects.isActive(id) shouldBe false
+        }
+    }
+
     "EMBER charge tweens each input update across four ticks and retains its packet handles" {
         withDisplayHarness { h ->
             val caster = h.player("ember-charge-interpolation")

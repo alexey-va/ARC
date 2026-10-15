@@ -26,6 +26,7 @@ import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.player.PlayerSwapHandItemsEvent
 import org.bukkit.event.player.PlayerToggleSneakEvent
 import org.bukkit.inventory.EquipmentSlot
+import org.bukkit.event.inventory.InventoryType
 import org.bukkit.inventory.ItemStack
 import org.bukkit.entity.Player
 import ru.arc.core.LifecycleTaskScope
@@ -50,11 +51,11 @@ internal fun staffAttackInputMode(spell: StaffSpell, secondary: Boolean): StaffA
     else -> StaffAttackInputMode.INSTANT
 }
 
-internal fun staffAttackInputButton(spell: StaffSpell) =
-    if (spell in STAFF_CHARGED_PRIMARY_SPELLS) StaffSpellInputButton.RIGHT else StaffSpellInputButton.LEFT
+internal fun staffAttackInputButton(@Suppress("UNUSED_PARAMETER") spell: StaffSpell) =
+    StaffSpellInputButton.RIGHT
 
-internal fun staffDefenseInputButton(spell: StaffSpell) =
-    if (spell in STAFF_CHARGED_PRIMARY_SPELLS) StaffSpellInputButton.LEFT else StaffSpellInputButton.RIGHT
+internal fun staffDefenseInputButton(@Suppress("UNUSED_PARAMETER") spell: StaffSpell) =
+    StaffSpellInputButton.LEFT
 
 internal fun staffChargeProgress(ticksHeld: Int): Double =
     ((ticksHeld - STAFF_CHARGE_DELAY_TICKS).coerceAtLeast(0).toDouble() / STAFF_CHARGE_RAMP_TICKS)
@@ -62,6 +63,8 @@ internal fun staffChargeProgress(ticksHeld: Int): Double =
 
 internal interface StaffSpellInputActions {
     fun canCharge(player: Player, spell: StaffSpell): Boolean
+    fun canHotkey(player: Player, spell: StaffSpell, key: StaffHotkey): Boolean = false
+    fun hotkey(player: Player, spell: StaffSpell, key: StaffHotkey) = Unit
     /** Refresh only ARC-owned text on prototype stacks; implementations without config keep old stacks. */
     fun refreshPrototypeLore(item: ItemStack, spell: StaffSpell): Boolean = false
     fun defend(player: Player, spell: StaffSpell) = cast(player, StaffCastInput.of(player.isSneaking, true), 0.0)
@@ -89,9 +92,19 @@ internal class StaffSpellInput(
         var ticksHeld: Int = 0,
     )
 
+    private data class PendingHotkey(
+        val spell: StaffSpell,
+        val slot: Int,
+        val worldId: UUID,
+        val item: ItemStack,
+    )
+
     private val charges = mutableMapOf<UUID, Charge>()
     private val lastDefenseTick = mutableMapOf<UUID, Int>()
     private val lastAttackTick = mutableMapOf<UUID, Int>()
+    private val pendingHotkeys = mutableMapOf<UUID, PendingHotkey>()
+    private val lastHotkeyTick = mutableMapOf<UUID, Int>()
+    private val inventoryDropTick = mutableMapOf<UUID, Int>()
     private var started = false
     private var closed = false
     private var modeledInput: StaffModeledInput? = null
@@ -126,7 +139,10 @@ internal class StaffSpellInput(
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun onHeldSlot(event: PlayerItemHeldEvent) {
-        if (event.previousSlot != event.newSlot) cancel(event.player.uniqueId)
+        if (event.previousSlot != event.newSlot) {
+            clearPendingHotkey(event.player.uniqueId)
+            cancel(event.player.uniqueId)
+        }
         upgradeStaffSlot(event.player, event.newSlot)
     }
 
@@ -136,6 +152,7 @@ internal class StaffSpellInput(
         if (event.hand != EquipmentSlot.HAND) return
 
         val player = event.player
+        clearPendingHotkey(player.uniqueId)
         upgradeStaffSlot(player, player.inventory.heldItemSlot)
         val firstItem = player.inventory.itemInMainHand
         val spell = StaffSpell.from(firstItem) ?: return
@@ -157,9 +174,9 @@ internal class StaffSpellInput(
         if (event.useItemInHand() == Event.Result.DENY) return
         if (event.action == Action.RIGHT_CLICK_BLOCK && event.useInteractedBlock() == Event.Result.DENY) return
         event.setUseInteractedBlock(Event.Result.DENY)
-        if (staffAttackInputButton(spell) == StaffSpellInputButton.RIGHT && !player.isSneaking) {
-            // Start use directly, then deny both channels before FMM's HIGHEST-priority handler.
-            // Paper still delivers PlayerStopUsingItemEvent for this server-owned active item.
+        if (!player.isSneaking) {
+            // Primary right-click is the attack path; held charges start native use here.
+            // Deny both channels before FMM's HIGHEST-priority handler.
             attack(player, spell, startNativeUse = true)
             event.setUseItemInHand(Event.Result.DENY)
             event.setUseInteractedBlock(Event.Result.DENY)
@@ -170,8 +187,7 @@ internal class StaffSpellInput(
         event.setUseItemInHand(Event.Result.DENY)
         // Both DENY results are required by FMM's air-click protection policy.
         if (StaffEliteItems.resolve(item) != null) event.isCancelled = true
-        if (staffAttackInputButton(spell) == StaffSpellInputButton.RIGHT) attack(player, spell)
-        else defend(player, spell)
+        attack(player, spell)
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -189,6 +205,7 @@ internal class StaffSpellInput(
     fun onPreAttack(event: PrePlayerAttackEntityEvent) {
         if (event.isCancelled) return
         val player = event.player
+        clearPendingHotkey(player.uniqueId)
         upgradeStaffSlot(player, player.inventory.heldItemSlot)
         val spell = StaffSpell.from(player.inventory.itemInMainHand) ?: return
         if (event.willAttack()) event.isCancelled = true
@@ -225,37 +242,132 @@ internal class StaffSpellInput(
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun onSneak(event: PlayerToggleSneakEvent) {
+        clearPendingHotkey(event.player.uniqueId)
         charges[event.player.uniqueId]?.takeIf { it.sneaking != event.isSneaking }
             ?.let { cancel(event.player.uniqueId) }
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    fun onDrop(event: PlayerDropItemEvent) = cancel(event.player.uniqueId)
+    /** Q drops the selected stack before this event, so restore is checked on the next server tick. */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    fun onHotkeyDrop(event: PlayerDropItemEvent) {
+        val dropped = event.itemDrop.itemStack
+        val spell = StaffSpell.from(dropped) ?: return
+        val player = event.player
+        val playerId = player.uniqueId
+        val tick = Bukkit.getCurrentTick()
+        // Inventory Q is a normal drop. The player inventory view is CRAFTING, so pair its
+        // ClickType marker with a top-inventory guard for containers and crafting screens.
+        if (inventoryDropTick[playerId] == tick) return
+        if (player.openInventory.type != InventoryType.CRAFTING) return
+
+        event.isCancelled = true
+
+        // Multi-item drops identify many Ctrl+Q cases, but max-stack-one Ctrl+Q looks like Q.
+        if (dropped.amount != 1) return
+        if (pendingHotkeys.containsKey(playerId) || lastHotkeyTick[playerId] == tick) return
+
+        val pending = PendingHotkey(spell, player.inventory.heldItemSlot,
+            player.world.uid, dropped.clone())
+        pendingHotkeys[playerId] = pending
+        lastHotkeyTick[playerId] = tick
+
+        if (tasks.runLater(1) {
+                if (pendingHotkeys[playerId] !== pending) return@runLater
+                pendingHotkeys.remove(playerId)
+                val restored = Bukkit.getPlayer(playerId) ?: return@runLater
+                if (!isCurrentHotkeyItem(restored, pending) || !actions.canHotkey(restored, spell, StaffHotkey.Q)) {
+                    return@runLater
+                }
+                cancel(playerId)
+                actions.hotkey(restored, spell, StaffHotkey.Q)
+            } == null) {
+            pendingHotkeys.remove(playerId)
+            if (lastHotkeyTick[playerId] == tick) lastHotkeyTick.remove(playerId)
+        }
+    }
+
+    /** F is staff-owned unless Shift is held, which remains the existing menu shortcut. */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    fun onHotkeySwap(event: PlayerSwapHandItemsEvent) {
+        val player = event.player
+        val playerId = player.uniqueId
+        if (player.isSneaking) {
+            clearPendingHotkey(playerId)
+            return
+        }
+
+        val spell = StaffSpell.from(player.inventory.itemInMainHand)
+        if (spell == null) {
+            clearPendingHotkey(playerId)
+            return
+        }
+        event.isCancelled = true
+        if (pendingHotkeys.containsKey(playerId) || lastHotkeyTick[playerId] == Bukkit.getCurrentTick()) return
+        if (!actions.canHotkey(player, spell, StaffHotkey.F)) return
+
+        lastHotkeyTick[playerId] = Bukkit.getCurrentTick()
+        cancel(playerId)
+        actions.hotkey(player, spell, StaffHotkey.F)
+    }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    fun onSwap(event: PlayerSwapHandItemsEvent) = cancel(event.player.uniqueId)
+    fun onDrop(event: PlayerDropItemEvent) {
+        clearPendingHotkey(event.player.uniqueId)
+        cancel(event.player.uniqueId)
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    fun onSwap(event: PlayerSwapHandItemsEvent) {
+        clearPendingHotkey(event.player.uniqueId)
+        cancel(event.player.uniqueId)
+    }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun onInventoryClick(event: InventoryClickEvent) {
-        (event.whoClicked as? Player)?.let { cancel(it.uniqueId) }
+        (event.whoClicked as? Player)?.let {
+            clearPendingHotkey(it.uniqueId)
+            cancel(it.uniqueId)
+        }
+    }
+
+    /** Inventory Q is a ClickType.DROP, not the staff hotkey; guard its paired drop event. */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun onInventoryDropClick(event: InventoryClickEvent) {
+        if (event.click != org.bukkit.event.inventory.ClickType.DROP &&
+            event.click != org.bukkit.event.inventory.ClickType.CONTROL_DROP) return
+        (event.whoClicked as? Player)?.let { inventoryDropTick[it.uniqueId] = Bukkit.getCurrentTick() }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun onInventoryDrag(event: InventoryDragEvent) {
-        (event.whoClicked as? Player)?.let { cancel(it.uniqueId) }
+        (event.whoClicked as? Player)?.let {
+            clearPendingHotkey(it.uniqueId)
+            cancel(it.uniqueId)
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
-    fun onWorldChange(event: PlayerChangedWorldEvent) = cancel(event.player.uniqueId)
+    fun onWorldChange(event: PlayerChangedWorldEvent) {
+        clearPendingHotkey(event.player.uniqueId)
+        inventoryDropTick.remove(event.player.uniqueId)
+        cancel(event.player.uniqueId)
+    }
 
     @EventHandler(priority = EventPriority.HIGHEST)
-    fun onDeath(event: PlayerDeathEvent) = cancel(event.player.uniqueId)
+    fun onDeath(event: PlayerDeathEvent) {
+        clearPendingHotkey(event.player.uniqueId)
+        inventoryDropTick.remove(event.player.uniqueId)
+        cancel(event.player.uniqueId)
+    }
 
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onQuit(event: PlayerQuitEvent) {
+        clearPendingHotkey(event.player.uniqueId)
         cancel(event.player.uniqueId)
         lastDefenseTick.remove(event.player.uniqueId)
         lastAttackTick.remove(event.player.uniqueId)
+        lastHotkeyTick.remove(event.player.uniqueId)
+        inventoryDropTick.remove(event.player.uniqueId)
     }
 
     override fun close() {
@@ -267,11 +379,15 @@ internal class StaffSpellInput(
         charges.keys.toList().forEach(::cancel)
         lastDefenseTick.clear()
         lastAttackTick.clear()
+        pendingHotkeys.clear()
+        lastHotkeyTick.clear()
+        inventoryDropTick.clear()
         tasks.close()
     }
 
     internal fun interactEntity(player: Player, hand: EquipmentSlot, cancelEvent: () -> Unit) {
         if (hand != EquipmentSlot.HAND) return
+        clearPendingHotkey(player.uniqueId)
         upgradeStaffSlot(player, player.inventory.heldItemSlot)
         val firstItem = player.inventory.itemInMainHand
         val spell = StaffSpell.from(firstItem) ?: return
@@ -334,13 +450,11 @@ internal class StaffSpellInput(
     }
 
     private fun routeLeftClick(player: Player, spell: StaffSpell) {
-        if (staffAttackInputButton(spell) == StaffSpellInputButton.LEFT) attack(player, spell)
-        else defend(player, spell)
+        defend(player, spell)
     }
 
     private fun routeRightClick(player: Player, spell: StaffSpell, startNativeUse: Boolean = false) {
-        if (staffAttackInputButton(spell) == StaffSpellInputButton.RIGHT) attack(player, spell, startNativeUse)
-        else defend(player, spell)
+        attack(player, spell, startNativeUse)
     }
 
     private fun releaseCharge(player: Player, itemUseTicks: Int? = null) {
@@ -396,6 +510,15 @@ internal class StaffSpellInput(
         return player.isOnline && !player.isDead && player.inventory.heldItemSlot == charge.slot &&
             player.world.uid == charge.worldId && player.isSneaking == charge.sneaking &&
             StaffSpell.from(held) == charge.spell && held.isSimilar(charge.item)
+    }
+
+    private fun clearPendingHotkey(playerId: UUID) { pendingHotkeys.remove(playerId) }
+
+    private fun isCurrentHotkeyItem(player: Player, pending: PendingHotkey): Boolean {
+        val held = player.inventory.itemInMainHand
+        return player.isOnline && player.isValid && !player.isDead &&
+            player.inventory.heldItemSlot == pending.slot && player.world.uid == pending.worldId &&
+            StaffSpell.from(held) == pending.spell && held.isSimilar(pending.item)
     }
 
     private fun isChannel(spell: StaffSpell) = spell == StaffSpell.GRAVITY

@@ -2,6 +2,8 @@ package ru.arc.staffspells
 
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
+import io.mockk.every
+import io.mockk.mockk
 import io.papermc.paper.datacomponent.DataComponentTypes
 import io.papermc.paper.datacomponent.item.Consumable
 import io.papermc.paper.datacomponent.item.consumable.ItemUseAnimation
@@ -20,10 +22,23 @@ import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
 import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.event.block.BlockDamageEvent
+import org.bukkit.event.inventory.ClickType
+import org.bukkit.event.inventory.InventoryAction
+import org.bukkit.event.inventory.InventoryClickEvent
+import org.bukkit.event.inventory.InventoryType
+import org.bukkit.event.player.PlayerChangedWorldEvent
+import org.bukkit.event.player.PlayerDropItemEvent
+import org.bukkit.event.player.PlayerItemHeldEvent
+import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.player.PlayerInteractEvent
+import org.bukkit.event.player.PlayerSwapHandItemsEvent
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.EntityEquipment
+import org.bukkit.inventory.InventoryView
 import org.bukkit.inventory.meta.Damageable
+import org.bukkit.damage.DamageSource
+import org.bukkit.damage.DamageType
+import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.persistence.PersistentDataType
 import org.bukkit.util.Vector
 import org.mockbukkit.mockbukkit.entity.PlayerMock
@@ -32,6 +47,7 @@ import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.Tasks
 import ru.arc.core.TestTaskScheduler
 import ru.arc.paper.testing.MockBukkitTestRuntime
+import ru.arc.paper.testing.failOnUnsupportedMockBukkitOperation
 import java.util.UUID
 
 class StaffSpellInputTest : FreeSpec({
@@ -53,13 +69,13 @@ class StaffSpellInputTest : FreeSpec({
         }
     }
 
-    "owned left click denies both native use channels before FMM highest priority" {
+    "owned left-click defense denies both native use channels before FMM highest priority" {
         withInputHarness { h ->
             val player = h.staffPlayer("staff-native-input", h.paper.addSimpleWorld("native-input"), StaffSpell.CHAIN)
             val input = leftClick(player)
             h.input.onInteract(input)
-            h.actions.casts.single().input shouldBe StaffCastInput.PRIMARY
-            h.actions.defenses shouldBe emptyList()
+            h.actions.casts shouldBe emptyList()
+            h.actions.defenses shouldBe listOf(InputDefenseCall(player.uniqueId, StaffSpell.CHAIN, sneaking = false))
             input.useItemInHand() shouldBe org.bukkit.event.Event.Result.DENY
             input.useInteractedBlock() shouldBe org.bukkit.event.Event.Result.DENY
             input.isCancelled shouldBe true
@@ -68,7 +84,7 @@ class StaffSpellInputTest : FreeSpec({
         }
     }
 
-    "legacy consumable staff still defends on right click without starting native use" {
+    "legacy consumable staff attacks on right click without starting native use" {
         withInputHarness { h ->
             val player = h.staffPlayer("legacy-use", h.paper.addSimpleWorld("legacy-use"), StaffSpell.CHAIN)
             val legacyStaff = player.inventory.itemInMainHand.apply {
@@ -84,14 +100,14 @@ class StaffSpellInputTest : FreeSpec({
             event.useItemInHand() shouldBe org.bukkit.event.Event.Result.DENY
             event.useInteractedBlock() shouldBe org.bukkit.event.Event.Result.DENY
             player.hasActiveItem() shouldBe false
-            h.actions.defenses shouldBe listOf(InputDefenseCall(player.uniqueId, StaffSpell.CHAIN, sneaking = false))
-            h.actions.casts shouldBe emptyList()
+            h.actions.defenses shouldBe emptyList()
+            h.actions.casts shouldBe listOf(InputCastCall(player.uniqueId, StaffSpell.CHAIN, StaffCastInput.PRIMARY, 0.0))
             h.actions.charges shouldBe emptyList()
 
             h.paper.server.pluginManager.callEvent(PlayerStopUsingItemEvent(
                 player, player.inventory.itemInMainHand.clone(), 36))
-            h.actions.defenses.size shouldBe 1
-            h.actions.casts shouldBe emptyList()
+            h.actions.casts.size shouldBe 1
+            h.actions.defenses shouldBe emptyList()
             h.actions.charges shouldBe emptyList()
         }
     }
@@ -102,10 +118,10 @@ class StaffSpellInputTest : FreeSpec({
                 h.paper.addSimpleWorld("retired-inferno-input"), StaffSpell.INFERNO)
 
             StaffSpell.from(player.inventory.itemInMainHand) shouldBe StaffSpell.INFERNO
-            val attack = leftClick(player)
-            h.input.onInteract(attack)
-            val defense = rightClick(player)
+            val defense = leftClick(player)
             h.input.onInteract(defense)
+            val attack = rightClick(player)
+            h.input.onInteract(attack)
 
             attack.isCancelled shouldBe true
             attack.useItemInHand() shouldBe org.bukkit.event.Event.Result.DENY
@@ -119,61 +135,93 @@ class StaffSpellInputTest : FreeSpec({
         }
     }
 
-    "Ember and Icicle attacks use right click while every other staff attacks with left click" {
+    "all available staves attack with right click and defend with left click, including Shift variants" {
         withInputHarness { h ->
             val world = h.paper.addSimpleWorld("staff-input-policy")
-            val chargedPrimaries = setOf(StaffSpell.EMBER, StaffSpell.ICICLE)
             StaffSpell.entries.forEach { spell ->
                 if (spell !in StaffSpell.available) return@forEach
-                listOf(false, true).forEach { secondary ->
-                    val player = h.staffPlayer("policy-${spell.id}-$secondary", world, spell).apply {
-                        isSneaking = secondary
-                    }
-                    h.actions.usable = true
-                    h.actions.channelUsable = true
-                    val castsBefore = h.actions.casts.size
-                    val chargesBefore = h.actions.charges.size
-                    val channelsBefore = h.actions.channelBegins.size
+                staffAttackInputButton(spell) shouldBe StaffSpellInputButton.RIGHT
+                staffDefenseInputButton(spell) shouldBe StaffSpellInputButton.LEFT
 
-                    val use = if (chargedPrimaries.contains(spell)) rightClick(player) else leftClick(player)
-                    h.input.onInteract(use)
+                val primary = h.staffPlayer("policy-${spell.id}-primary", world, spell)
+                val defense = leftClick(primary)
+                h.input.onInteract(defense)
+                h.actions.defenses.last() shouldBe InputDefenseCall(primary.uniqueId, spell, sneaking = false)
+                defense.isCancelled shouldBe true
+                defense.useItemInHand() shouldBe org.bukkit.event.Event.Result.DENY
+                defense.useInteractedBlock() shouldBe org.bukkit.event.Event.Result.DENY
+                h.actions.casts.none { it.playerId == primary.uniqueId } shouldBe true
+                h.actions.charges.none { it.playerId == primary.uniqueId } shouldBe true
+                h.actions.channelBegins.none { it.playerId == primary.uniqueId } shouldBe true
 
-                    if (spell == StaffSpell.GRAVITY && !secondary) {
+                h.advanceInputTicks(1)
+                val attack = rightClick(primary)
+                h.actions.usable = true
+                h.actions.channelUsable = true
+                val castsBefore = h.actions.casts.size
+                val chargesBefore = h.actions.charges.size
+                val channelsBefore = h.actions.channelBegins.size
+                h.input.onInteract(attack)
+                attack.useItemInHand() shouldBe org.bukkit.event.Event.Result.DENY
+                attack.useInteractedBlock() shouldBe org.bukkit.event.Event.Result.DENY
+
+                when (staffAttackInputMode(spell, secondary = false)) {
+                    StaffAttackInputMode.CHANNEL_CLICK_TOGGLE -> {
                         h.actions.channelBegins.size shouldBe channelsBefore + 1
                         h.actions.casts.size shouldBe castsBefore
                         h.actions.charges.size shouldBe chargesBefore
-                    } else if (chargedPrimaries.contains(spell) && !secondary) {
+                    }
+                    StaffAttackInputMode.HOLD_RELEASE -> {
                         h.actions.channelBegins.size shouldBe channelsBefore
                         h.actions.casts.size shouldBe castsBefore
                         h.actions.charges.size shouldBe chargesBefore + 1
-                        use.useItemInHand() shouldBe org.bukkit.event.Event.Result.DENY
                         h.actions.charges.last().let {
-                            it.playerId shouldBe player.uniqueId
+                            it.playerId shouldBe primary.uniqueId
                             it.spell shouldBe spell
                             it.progress shouldBe 0.0
                         }
-                        h.input.cancel(player.uniqueId)
-                    } else {
+                    }
+                    StaffAttackInputMode.INSTANT -> {
                         h.actions.channelBegins.size shouldBe channelsBefore
                         h.actions.casts.size shouldBe castsBefore + 1
                         h.actions.casts.last().let {
-                            it.playerId shouldBe player.uniqueId
+                            it.playerId shouldBe primary.uniqueId
                             it.spell shouldBe spell
-                            it.input shouldBe StaffCastInput.of(secondary, quick = false)
+                            it.input shouldBe StaffCastInput.PRIMARY
                             it.charge shouldBe 0.0
                         }
                         h.actions.charges.size shouldBe chargesBefore
-                        player.hasActiveItem() shouldBe false
                     }
                 }
-            }
+                h.input.cancel(primary.uniqueId)
 
-            staffAttackInputButton(StaffSpell.EMBER) shouldBe StaffSpellInputButton.RIGHT
-            staffDefenseInputButton(StaffSpell.EMBER) shouldBe StaffSpellInputButton.LEFT
-            staffAttackInputButton(StaffSpell.ICICLE) shouldBe StaffSpellInputButton.RIGHT
-            staffDefenseInputButton(StaffSpell.ICICLE) shouldBe StaffSpellInputButton.LEFT
-            staffAttackInputButton(StaffSpell.FAULT) shouldBe StaffSpellInputButton.LEFT
-            staffDefenseInputButton(StaffSpell.FAULT) shouldBe StaffSpellInputButton.RIGHT
+                val shifted = h.staffPlayer("policy-${spell.id}-shift", world, spell).apply { isSneaking = true }
+                h.advanceInputTicks(1)
+                val shiftedCastsBeforeDefense = h.actions.casts.size
+                val shiftedChargesBeforeDefense = h.actions.charges.size
+                val shiftedChannelsBeforeDefense = h.actions.channelBegins.size
+                h.input.onInteract(leftClick(shifted))
+                h.actions.defenses.last() shouldBe InputDefenseCall(shifted.uniqueId, spell, sneaking = true)
+                h.actions.casts.size shouldBe shiftedCastsBeforeDefense
+                h.actions.charges.size shouldBe shiftedChargesBeforeDefense
+                h.actions.channelBegins.size shouldBe shiftedChannelsBeforeDefense
+                h.advanceInputTicks(1)
+                val shiftedAttack = rightClick(shifted)
+                h.actions.usable = true
+                val shiftedCastsBefore = h.actions.casts.size
+                val shiftedChargesBefore = h.actions.charges.size
+                val shiftedChannelsBefore = h.actions.channelBegins.size
+                h.input.onInteract(shiftedAttack)
+                h.actions.casts.size shouldBe shiftedCastsBefore + 1
+                h.actions.casts.last().let {
+                    it.playerId shouldBe shifted.uniqueId
+                    it.spell shouldBe spell
+                    it.input shouldBe StaffCastInput.SECONDARY
+                    it.charge shouldBe 0.0
+                }
+                h.actions.charges.size shouldBe shiftedChargesBefore
+                h.actions.channelBegins.size shouldBe shiftedChannelsBefore
+            }
         }
     }
 
@@ -188,11 +236,218 @@ class StaffSpellInputTest : FreeSpec({
                 PlainTextComponentSerializer.plainText().serialize(it)
             }
 
-            lore(StaffSpell.CHAIN).contains("ЛКМ Shift + ЛКМ ПКМ Shift + ПКМ") shouldBe true
+            lore(StaffSpell.CHAIN).contains("ПКМ Shift + ПКМ ЛКМ Shift + ЛКМ") shouldBe true
             lore(StaffSpell.EMBER).contains("hold-for-charge ПКМ Shift + ПКМ ЛКМ Shift + ЛКМ") shouldBe true
             lore(StaffSpell.ICICLE).contains("hold-for-charge ПКМ Shift + ПКМ ЛКМ Shift + ЛКМ") shouldBe true
             lore(StaffSpell.GRAVITY).contains("hold-channel") shouldBe true
             lore(StaffSpell.INFERNO).contains("hold-channel") shouldBe true
+        }
+    }
+
+    "Q waits for the restored main-hand staff and routes once after charge eligibility" {
+        withInputHarness { h ->
+            val player = h.staffPlayer("staff-q-restore", h.paper.addSimpleWorld("staff-q-restore"), StaffSpell.EMBER)
+            player.syncMockActiveUseEquipment()
+            h.input.start()
+            h.paper.server.pluginManager.registerEvents(h.input, h.paper.createSimplePlugin("staff-q-restore-listener"))
+            h.input.onInteract(rightClick(player))
+            val staff = player.inventory.itemInMainHand.clone()
+
+            player.inventory.setItemInMainHand(org.bukkit.inventory.ItemStack(Material.AIR))
+            val firstDrop = player.world.dropItem(player.location, staff.clone())
+            val firstEvent = PlayerDropItemEvent(player, firstDrop)
+            h.paper.server.pluginManager.callEvent(firstEvent)
+            firstEvent.isCancelled shouldBe true
+            player.inventory.itemInMainHand.type shouldBe Material.AIR
+            h.actions.hotkeyChecks shouldBe emptyList()
+            h.actions.hotkeys shouldBe emptyList()
+
+            val duplicateDrop = player.world.dropItem(player.location, staff.clone())
+            val duplicateEvent = PlayerDropItemEvent(player, duplicateDrop)
+            h.paper.server.pluginManager.callEvent(duplicateEvent)
+            duplicateEvent.isCancelled shouldBe true
+
+            // Paper restores a cancelled Q drop after the event; the handler never writes the stack itself.
+            player.inventory.setItemInMainHand(staff.clone())
+            val sameTickF = PlayerSwapHandItemsEvent(player, staff.clone(),
+                org.bukkit.inventory.ItemStack(Material.AIR))
+            h.paper.server.pluginManager.callEvent(sameTickF)
+            sameTickF.isCancelled shouldBe true
+            h.advanceInputTicks(1)
+
+            val expected = InputHotkeyCall(player.uniqueId, StaffSpell.EMBER, StaffHotkey.Q)
+            h.actions.hotkeyChecks shouldBe listOf(expected)
+            h.actions.hotkeys shouldBe listOf(expected)
+            h.actions.cancelled shouldBe listOf(player.uniqueId)
+            h.actions.hotkeyOrder shouldBe listOf("check:Q", "cancel", "hotkey:Q")
+            player.inventory.itemInMainHand.isSimilar(staff) shouldBe true
+        }
+    }
+
+    "F routes an eligible main-hand staff but leaves Shift+F and cancelled swaps alone" {
+        withInputHarness { h ->
+            val player = h.staffPlayer("staff-f-hotkey", h.paper.addSimpleWorld("staff-f-hotkey"), StaffSpell.CHAIN)
+            h.input.start()
+            h.paper.server.pluginManager.registerEvents(h.input, h.paper.createSimplePlugin("staff-f-hotkey-listener"))
+
+            val swap = PlayerSwapHandItemsEvent(player, player.inventory.itemInMainHand.clone(),
+                org.bukkit.inventory.ItemStack(Material.AIR))
+            h.paper.server.pluginManager.callEvent(swap)
+            swap.isCancelled shouldBe true
+            val expected = InputHotkeyCall(player.uniqueId, StaffSpell.CHAIN, StaffHotkey.F)
+            h.actions.hotkeyChecks shouldBe listOf(expected)
+            h.actions.hotkeys shouldBe listOf(expected)
+
+            val duplicateSwap = PlayerSwapHandItemsEvent(player, player.inventory.itemInMainHand.clone(),
+                org.bukkit.inventory.ItemStack(Material.AIR))
+            h.paper.server.pluginManager.callEvent(duplicateSwap)
+            duplicateSwap.isCancelled shouldBe true
+            h.actions.hotkeyChecks.size shouldBe 1
+            h.actions.hotkeys.size shouldBe 1
+
+            val charging = h.staffPlayer("staff-f-blocked", h.paper.addSimpleWorld("staff-f-blocked"), StaffSpell.EMBER)
+            charging.syncMockActiveUseEquipment()
+            h.input.onInteract(rightClick(charging))
+            h.actions.hotkeyUsable = false
+            val unavailableSwap = PlayerSwapHandItemsEvent(charging,
+                charging.inventory.itemInMainHand.clone(), org.bukkit.inventory.ItemStack(Material.AIR))
+            h.paper.server.pluginManager.callEvent(unavailableSwap)
+            unavailableSwap.isCancelled shouldBe true
+            h.actions.hotkeyChecks.last() shouldBe InputHotkeyCall(charging.uniqueId, StaffSpell.EMBER, StaffHotkey.F)
+            h.actions.hotkeys.size shouldBe 1
+            h.actions.cancelled shouldBe emptyList()
+            charging.hasActiveItem() shouldBe true
+
+            h.advanceInputTicks(1)
+            player.isSneaking = true
+            val shiftSwap = PlayerSwapHandItemsEvent(player, player.inventory.itemInMainHand.clone(),
+                org.bukkit.inventory.ItemStack(Material.AIR))
+            h.paper.server.pluginManager.callEvent(shiftSwap)
+            shiftSwap.isCancelled shouldBe false
+            h.actions.hotkeys.size shouldBe 1
+
+            val checksBeforeBlockedSwap = h.actions.hotkeyChecks.size
+            val blockedSwap = PlayerSwapHandItemsEvent(player, player.inventory.itemInMainHand.clone(),
+                org.bukkit.inventory.ItemStack(Material.AIR)).apply { isCancelled = true }
+            h.paper.server.pluginManager.callEvent(blockedSwap)
+            blockedSwap.isCancelled shouldBe true
+            h.actions.hotkeyChecks.size shouldBe checksBeforeBlockedSwap
+            h.actions.hotkeys.size shouldBe 1
+        }
+    }
+
+    "inventory drops stay native and already-cancelled world drops cannot activate a staff hotkey" {
+        withInputHarness { h ->
+            val player = h.staffPlayer("staff-inventory-q", h.paper.addSimpleWorld("staff-inventory-q"), StaffSpell.CHAIN)
+            h.input.start()
+            h.paper.server.pluginManager.registerEvents(h.input, h.paper.createSimplePlugin("staff-inventory-q-listener"))
+
+            val inventoryDrop = inventoryClick(player, ClickType.DROP, InventoryAction.DROP_ONE_SLOT)
+            h.paper.server.pluginManager.callEvent(inventoryDrop)
+            val pairedDrop = PlayerDropItemEvent(player,
+                player.world.dropItem(player.location, player.inventory.itemInMainHand.clone()))
+            h.paper.server.pluginManager.callEvent(pairedDrop)
+            pairedDrop.isCancelled shouldBe false
+            h.actions.hotkeys shouldBe emptyList()
+
+            val controlInventoryDrop = inventoryClick(player, ClickType.CONTROL_DROP, InventoryAction.DROP_ALL_SLOT)
+            h.paper.server.pluginManager.callEvent(controlInventoryDrop)
+            val controlPairedDrop = PlayerDropItemEvent(player,
+                player.world.dropItem(player.location, player.inventory.itemInMainHand.clone()))
+            h.paper.server.pluginManager.callEvent(controlPairedDrop)
+            controlPairedDrop.isCancelled shouldBe false
+            h.actions.hotkeys shouldBe emptyList()
+
+            player.openInventory(h.paper.server.createInventory(player, InventoryType.CHEST))
+            val containerDrop = PlayerDropItemEvent(player,
+                player.world.dropItem(player.location, player.inventory.itemInMainHand.clone()))
+            h.paper.server.pluginManager.callEvent(containerDrop)
+            containerDrop.isCancelled shouldBe false
+            player.closeInventory()
+
+            h.advanceInputTicks(1)
+            val preCancelled = PlayerDropItemEvent(player,
+                player.world.dropItem(player.location, player.inventory.itemInMainHand.clone())).apply { isCancelled = true }
+            h.paper.server.pluginManager.callEvent(preCancelled)
+            preCancelled.isCancelled shouldBe true
+            h.advanceInputTicks(1)
+
+            val stackedStaff = player.inventory.itemInMainHand.clone().apply { amount = 2 }
+            player.inventory.setItemInMainHand(stackedStaff.clone())
+            val multiItemDrop = PlayerDropItemEvent(player,
+                player.world.dropItem(player.location, stackedStaff.clone()))
+            h.paper.server.pluginManager.callEvent(multiItemDrop)
+            multiItemDrop.isCancelled shouldBe true
+            h.advanceInputTicks(1)
+            h.actions.hotkeyChecks shouldBe emptyList()
+            h.actions.hotkeys shouldBe emptyList()
+        }
+    }
+
+    "pending Q is discarded on inventory, slot, world, and quit transitions" {
+        withInputHarness { h ->
+            val originalWorld = h.paper.addSimpleWorld("staff-q-stale")
+            val inventoryPlayer = h.staffPlayer("staff-q-inventory-stale", originalWorld, StaffSpell.CHAIN)
+            val slotPlayer = h.staffPlayer("staff-q-slot-stale", originalWorld, StaffSpell.CHAIN)
+            val worldPlayer = h.staffPlayer("staff-q-world-stale", originalWorld, StaffSpell.CHAIN)
+            val quitPlayer = h.staffPlayer("staff-q-quit-stale", originalWorld, StaffSpell.CHAIN)
+            val deathPlayer = h.staffPlayer("staff-q-death-stale", originalWorld, StaffSpell.CHAIN)
+            val changedItemPlayer = h.staffPlayer("staff-q-item-stale", originalWorld, StaffSpell.CHAIN)
+            h.input.start()
+            h.paper.server.pluginManager.registerEvents(h.input, h.paper.createSimplePlugin("staff-q-stale-listener"))
+
+            fun queueRestoredQ(player: PlayerMock) {
+                val staff = player.inventory.itemInMainHand.clone()
+                player.inventory.setItemInMainHand(org.bukkit.inventory.ItemStack(Material.AIR))
+                h.paper.server.pluginManager.callEvent(PlayerDropItemEvent(player,
+                    player.world.dropItem(player.location, staff.clone())))
+                player.inventory.setItemInMainHand(staff)
+            }
+            queueRestoredQ(inventoryPlayer)
+            queueRestoredQ(slotPlayer)
+            queueRestoredQ(worldPlayer)
+            queueRestoredQ(quitPlayer)
+            queueRestoredQ(deathPlayer)
+            queueRestoredQ(changedItemPlayer)
+
+            h.paper.server.pluginManager.callEvent(
+                inventoryClick(inventoryPlayer, ClickType.LEFT, InventoryAction.PICKUP_ALL))
+
+            slotPlayer.inventory.setItem(1, slotPlayer.inventory.itemInMainHand.clone())
+            slotPlayer.inventory.heldItemSlot = 1
+            h.paper.server.pluginManager.callEvent(PlayerItemHeldEvent(slotPlayer, 0, 1))
+
+            val destination = h.paper.addSimpleWorld("staff-q-destination")
+            worldPlayer.teleport(Location(destination, 0.5, 64.0, 0.5))
+            h.paper.server.pluginManager.callEvent(PlayerChangedWorldEvent(worldPlayer, originalWorld))
+
+            h.paper.server.pluginManager.callEvent(PlayerQuitEvent(quitPlayer, Component.empty()))
+            h.paper.server.pluginManager.callEvent(PlayerDeathEvent(deathPlayer,
+                DamageSource.builder(DamageType.GENERIC).build(), emptyList(), 0, "died"))
+            changedItemPlayer.inventory.setItemInMainHand(
+                StaffSpellConfig(StaffTestConfig()).item(StaffSpell.FAULT))
+            h.advanceInputTicks(1)
+
+            h.actions.hotkeyChecks shouldBe emptyList()
+            h.actions.hotkeys shouldBe emptyList()
+        }
+    }
+
+    "close discards pending Q work" {
+        withInputHarness { h ->
+            val player = h.staffPlayer("staff-q-close", h.paper.addSimpleWorld("staff-q-close"), StaffSpell.CHAIN)
+            h.input.start()
+            h.paper.server.pluginManager.registerEvents(h.input, h.paper.createSimplePlugin("staff-q-close-listener"))
+            val staff = player.inventory.itemInMainHand.clone()
+            player.inventory.setItemInMainHand(org.bukkit.inventory.ItemStack(Material.AIR))
+            h.paper.server.pluginManager.callEvent(PlayerDropItemEvent(player,
+                player.world.dropItem(player.location, staff.clone())))
+            player.inventory.setItemInMainHand(staff)
+
+            h.input.close()
+            h.advanceInputTicks(1)
+            h.actions.hotkeyChecks shouldBe emptyList()
+            h.actions.hotkeys shouldBe emptyList()
         }
     }
 
@@ -374,36 +629,33 @@ class StaffSpellInputTest : FreeSpec({
         }
     }
 
-    "right click defends without charge permission and Shift selects the ward" {
+    "left click defends without charge permission and Shift selects absorption" {
         withInputHarness { h ->
             val world = h.paper.addSimpleWorld("staff-defense")
             val player = h.staffPlayer("staff-defense", world, StaffSpell.FAULT)
             h.actions.usable = false
             h.input.start()
-            val normal = rightClick(player)
+            val normal = leftClick(player)
             h.input.onInteract(normal)
 
             h.actions.defenses shouldBe listOf(InputDefenseCall(player.uniqueId, StaffSpell.FAULT, sneaking = false))
             h.actions.casts shouldBe emptyList()
             normal.useItemInHand() shouldBe org.bukkit.event.Event.Result.DENY
 
-            h.input.interactEntity(player, EquipmentSlot.HAND) {}
-            h.actions.defenses.size shouldBe 1
-
             h.advanceInputTicks(1)
             player.isSneaking = true
-            h.input.onInteract(rightClick(player))
+            h.input.onInteract(leftClick(player))
             h.actions.defenses.last() shouldBe InputDefenseCall(player.uniqueId, StaffSpell.FAULT, sneaking = true)
             h.actions.casts shouldBe emptyList()
         }
     }
 
-    "sprinting uses normal spell input, and an active charge still releases on left click" {
+    "sprinting does not change right-click attacks or native charge release" {
         withInputHarness { h ->
             val world = h.paper.addSimpleWorld("staff-sprint-input")
             val sprinting = h.staffPlayer("staff-sprinting", world, StaffSpell.CHAIN).apply { isSprinting = true }
             h.input.start()
-            h.input.onInteract(leftClick(sprinting))
+            h.input.onInteract(rightClick(sprinting))
             h.actions.casts.single().let {
                 it.playerId shouldBe sprinting.uniqueId
                 it.input shouldBe StaffCastInput.PRIMARY
@@ -424,7 +676,7 @@ class StaffSpellInputTest : FreeSpec({
         }
     }
 
-    "modeled and native attacks share deduplication in either event order" {
+    "modeled and native left-click defenses share deduplication in either event order" {
         withInputHarness { h ->
             val world = h.paper.addSimpleWorld("staff-modeled-input")
             val modeledFirst = h.staffPlayer("staff-modeled-first", world, StaffSpell.CHAIN)
@@ -438,7 +690,8 @@ class StaffSpellInputTest : FreeSpec({
             h.input.onPreAttack(modeledFirstNative)
             modeledFirstNative.isCancelled shouldBe true
             modeledFirstCanceled shouldBe 1
-            h.actions.casts.size shouldBe 1
+            h.actions.casts shouldBe emptyList()
+            h.actions.defenses shouldBe listOf(InputDefenseCall(modeledFirst.uniqueId, StaffSpell.CHAIN, sneaking = false))
 
             h.advanceInputTicks(1)
             h.actions.usable = true
@@ -448,18 +701,20 @@ class StaffSpellInputTest : FreeSpec({
             var nativeFirstCanceled = 0
             h.input.leftClickModeledEntity(nativeFirst) { nativeFirstCanceled++ }
             nativeFirstCanceled shouldBe 1
-            h.actions.casts.size shouldBe 2
-            h.actions.casts.map { it.playerId } shouldBe listOf(modeledFirst.uniqueId, nativeFirst.uniqueId)
-            h.actions.defenses shouldBe emptyList()
+            h.actions.casts shouldBe emptyList()
+            h.actions.defenses shouldBe listOf(
+                InputDefenseCall(modeledFirst.uniqueId, StaffSpell.CHAIN, sneaking = false),
+                InputDefenseCall(nativeFirst.uniqueId, StaffSpell.CHAIN, sneaking = false),
+            )
         }
     }
 
-    "gravity channel begins on one left click and releases on the next" {
+    "gravity channel begins on one right click and releases on the next" {
         withInputHarness { h ->
             val world = h.paper.addSimpleWorld("staff-channel-toggle")
             val player = h.staffPlayer("staff-gravity-toggle", world, StaffSpell.GRAVITY)
             h.input.start()
-            h.input.onInteract(leftClick(player))
+            h.input.onInteract(rightClick(player))
 
             h.actions.channelBegins shouldBe listOf(InputSpellCall(player.uniqueId, StaffSpell.GRAVITY))
             player.hasActiveItem() shouldBe false
@@ -467,7 +722,7 @@ class StaffSpellInputTest : FreeSpec({
             h.advanceInputTicks(4)
             h.actions.channelUpdates.map { it.ticksHeld } shouldBe listOf(1, 2, 3, 4)
 
-            h.input.onInteract(leftClick(player))
+            h.input.onInteract(rightClick(player))
             h.actions.channelReleases shouldBe listOf(player.uniqueId)
             h.actions.channelCancels shouldBe emptyList()
             h.actions.casts shouldBe emptyList()
@@ -475,7 +730,7 @@ class StaffSpellInputTest : FreeSpec({
         }
     }
 
-    "right click cancels charge and gravity channel before defending" {
+    "left click cancels charge and gravity channel before defending" {
         withInputHarness { h ->
             val world = h.paper.addSimpleWorld("staff-defense-cancel")
             val charging = h.staffPlayer("staff-defense-charge", world, StaffSpell.EMBER)
@@ -488,9 +743,9 @@ class StaffSpellInputTest : FreeSpec({
             h.actions.defenses shouldBe listOf(InputDefenseCall(charging.uniqueId, StaffSpell.EMBER, sneaking = false))
 
             h.advanceInputTicks(1)
-            h.input.onInteract(leftClick(channeling))
-            h.advanceInputTicks(1)
             h.input.onInteract(rightClick(channeling))
+            h.advanceInputTicks(1)
+            h.input.onInteract(leftClick(channeling))
             h.actions.channelCancels shouldBe listOf(channeling.uniqueId)
             h.actions.defenses.last() shouldBe InputDefenseCall(channeling.uniqueId, StaffSpell.GRAVITY, sneaking = false)
         }
@@ -514,7 +769,8 @@ class StaffSpellInputTest : FreeSpec({
             val attack = PrePlayerAttackEntityEvent(player, target, true)
             h.input.onPreAttack(attack)
             attack.isCancelled shouldBe true
-            h.actions.casts.single().input shouldBe StaffCastInput.PRIMARY
+            h.actions.casts shouldBe emptyList()
+            h.actions.defenses shouldBe listOf(InputDefenseCall(player.uniqueId, StaffSpell.CHAIN, sneaking = false))
         }
     }
 
@@ -542,7 +798,7 @@ class StaffSpellInputTest : FreeSpec({
             h.input.start()
 
             listOf(releasing, slotCancel, quitCancel).forEach { player ->
-                h.input.onInteract(leftClick(player))
+                h.input.onInteract(rightClick(player))
             }
             h.advanceInputTicks(4)
             h.actions.channelBegins shouldBe listOf(
@@ -553,7 +809,7 @@ class StaffSpellInputTest : FreeSpec({
             h.actions.channelUpdates.groupBy { it.playerId }.mapValues { (_, updates) -> updates.map { it.ticksHeld } } shouldBe
                 listOf(releasing, slotCancel, quitCancel).associate { it.uniqueId to listOf(1, 2, 3, 4) }
 
-            h.input.onInteract(leftClick(releasing))
+            h.input.onInteract(rightClick(releasing))
             h.input.onHeldSlot(org.bukkit.event.player.PlayerItemHeldEvent(slotCancel, 0, 1))
             h.input.onQuit(org.bukkit.event.player.PlayerQuitEvent(quitCancel, net.kyori.adventure.text.Component.empty()))
 
@@ -594,6 +850,7 @@ private data class InputCastCall(val playerId: UUID, val spell: StaffSpell, val 
 private data class InputDefenseCall(val playerId: UUID, val spell: StaffSpell, val sneaking: Boolean)
 private data class InputSpellCall(val playerId: UUID, val spell: StaffSpell)
 private data class InputChannelUpdate(val playerId: UUID, val ticksHeld: Int)
+private data class InputHotkeyCall(val playerId: UUID, val spell: StaffSpell, val key: StaffHotkey)
 
 private class RecordingStaffSpellInputActions : StaffSpellInputActions {
     val charges = mutableListOf<InputChargeCall>()
@@ -606,7 +863,11 @@ private class RecordingStaffSpellInputActions : StaffSpellInputActions {
     val channelCancels = mutableListOf<UUID>()
     val nativeUseWhenCharged = mutableListOf<Boolean>()
     val releaseOrder = mutableListOf<String>()
+    val hotkeyChecks = mutableListOf<InputHotkeyCall>()
+    val hotkeys = mutableListOf<InputHotkeyCall>()
+    val hotkeyOrder = mutableListOf<String>()
     var usable = true
+    var hotkeyUsable = true
     var channelUsable = true
     var config: StaffSpellConfig? = null
     var prototypeLoreRefreshAttempts = 0
@@ -621,6 +882,15 @@ private class RecordingStaffSpellInputActions : StaffSpellInputActions {
 
     override fun canCharge(player: org.bukkit.entity.Player, spell: StaffSpell) =
         usable && spell in StaffSpell.available
+    override fun canHotkey(player: org.bukkit.entity.Player, spell: StaffSpell, key: StaffHotkey): Boolean {
+        hotkeyChecks += InputHotkeyCall(player.uniqueId, spell, key)
+        hotkeyOrder += "check:${key.name}"
+        return hotkeyUsable && spell in StaffSpell.available
+    }
+    override fun hotkey(player: org.bukkit.entity.Player, spell: StaffSpell, key: StaffHotkey) {
+        hotkeys += InputHotkeyCall(player.uniqueId, spell, key)
+        hotkeyOrder += "hotkey:${key.name}"
+    }
     override fun defend(player: org.bukkit.entity.Player, spell: StaffSpell) {
         if (spell in StaffSpell.available) defenses += InputDefenseCall(player.uniqueId, spell, player.isSneaking)
     }
@@ -646,6 +916,7 @@ private class RecordingStaffSpellInputActions : StaffSpellInputActions {
     override fun cancelCharge(player: org.bukkit.entity.Player) {
         cancelled += player.uniqueId
         releaseOrder += "cancel"
+        hotkeyOrder += "cancel"
     }
 }
 
@@ -666,7 +937,7 @@ private data class InputHarness(
     }
 }
 
-private fun withInputHarness(block: (InputHarness) -> Unit) {
+private fun withInputHarness(block: (InputHarness) -> Unit) = failOnUnsupportedMockBukkitOperation {
     val scheduler = TestTaskScheduler()
     MockBukkitTestRuntime.open().use { paper ->
         Tasks.withScheduler(scheduler) {
@@ -697,6 +968,14 @@ private fun PlayerMock.syncMockActiveUseEquipment() {
     equipmentField.isAccessible = true
     val backingEquipment = equipmentField.get(this) as EntityEquipment
     backingEquipment.setItemInMainHand(inventory.itemInMainHand.clone())
+}
+
+private fun inventoryClick(player: PlayerMock, click: ClickType, action: InventoryAction): InventoryClickEvent {
+    val view = mockk<InventoryView>()
+    every { view.convertSlot(any()) } answers { firstArg() }
+    every { view.player } returns player
+    every { view.type } returns InventoryType.CRAFTING
+    return InventoryClickEvent(view, InventoryType.SlotType.CONTAINER, 0, click, action)
 }
 
 private fun leftClick(player: PlayerMock) = PlayerInteractEvent(

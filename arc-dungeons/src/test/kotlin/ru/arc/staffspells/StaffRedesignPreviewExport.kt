@@ -85,7 +85,7 @@ object StaffRedesignPreviewExport {
         particleData(sample.data)?.let { put("data", it) }
     }
 
-    private fun part(part: StaffDisplayPart, keyPrefix: String, index: Int, origin: Vector): Map<String, Any> {
+    internal fun part(part: StaffDisplayPart, keyPrefix: String, index: Int, origin: Vector): Map<String, Any> {
         val euler = part.rotation.getEulerAnglesXYZ(org.joml.Vector3f())
         return mapOf(
             "key" to "$keyPrefix:${part.identity ?: index}",
@@ -169,13 +169,15 @@ object StaffRedesignPreviewExport {
             spell == StaffSpell.OSSUARY && !input.secondary -> OSSUARY_PATH_BLOCKS
             else -> PREVIEW_REACH_BLOCKS
         }
-        val endpoint = Vector(0.0, 0.0, pathLength)
+        val launchOffset = if (spell == StaffSpell.TIDE || spell == StaffSpell.GALE && input.secondary ||
+            spell == StaffSpell.OSSUARY && !input.secondary) FIXED_LAUNCH_OFFSET_BLOCKS else 0.0
+        val endpoint = Vector(0.0, 0.0, launchOffset + pathLength)
         when {
             spell == StaffSpell.TIDE && !input.secondary -> {
                 val localAge = age - STAFF_TIDE_PRIMARY_ARRIVAL_TICK
                 val progress = ((age - STAFF_TIDE_PRIMARY_LAUNCH_TICK).toDouble() / STAFF_TIDE_PRIMARY_TRAVEL_TICKS)
                     .coerceIn(0.0, 1.0)
-                val anchor = Vector(0.0, 1.2, GALE_TIDE_PATH_BLOCKS * progress)
+                val anchor = Vector(0.0, 1.2, FIXED_LAUNCH_OFFSET_BLOCKS + GALE_TIDE_PATH_BLOCKS * progress)
                 if (age < STAFF_TIDE_PRIMARY_ARRIVAL_TICK) addParts(age, duration, 0, anchor, GALE_TIDE_PATH_BLOCKS)
                 else {
                     val impactRadius = 2.2 + charge * .25
@@ -189,13 +191,14 @@ object StaffRedesignPreviewExport {
             spell == StaffSpell.TIDE && input.secondary -> {
                 val progress = ((age - TIDE_WAVE_LAUNCH_TICK).toDouble() / TIDE_WAVE_TRAVEL_TICKS)
                     .coerceIn(0.0, 1.0)
-                val anchor = Vector(0.0, 0.0, GALE_TIDE_PATH_BLOCKS * smooth(progress))
+                val anchor = Vector(0.0, 0.0, FIXED_LAUNCH_OFFSET_BLOCKS + GALE_TIDE_PATH_BLOCKS * smooth(progress))
                 addParts(age, duration, 0, anchor, GALE_TIDE_PATH_BLOCKS, localRadius = displayRadius)
                 addParticles(age, duration, radius, anchor, localReach = GALE_TIDE_PATH_BLOCKS)
             }
             spell == StaffSpell.GALE && input.secondary -> {
                 val particleAnchor = Vector(0.0, 0.0,
-                    GALE_TIDE_PATH_BLOCKS * smooth((age - GALE_RAM_LAUNCH_TICK).toDouble() / GALE_RAM_TRAVEL_TICKS))
+                    FIXED_LAUNCH_OFFSET_BLOCKS +
+                        GALE_TIDE_PATH_BLOCKS * smooth((age - GALE_RAM_LAUNCH_TICK).toDouble() / GALE_RAM_TRAVEL_TICKS))
                 if (age < GALE_RAM_RELEASE_TICK) {
                     addParts(age, duration, 0, particleAnchor.clone().add(Vector(0.0, 1.1, 0.0)),
                         GALE_TIDE_PATH_BLOCKS, localRadius = 2.2 + charge)
@@ -214,14 +217,27 @@ object StaffRedesignPreviewExport {
                 addParticles(age, duration, radius, endpoint)
             }
             spell == StaffSpell.NOVA && !input.secondary -> {
-                addParts(age, duration, 0, Vector(), PREVIEW_REACH_BLOCKS)
-                addParticles(age, duration, radius, Vector(), PREVIEW_REACH_BLOCKS)
+                val anchor = Vector(0.0, 0.0, FIXED_LAUNCH_OFFSET_BLOCKS)
+                val rootLength = PREVIEW_REACH_BLOCKS - FIXED_LAUNCH_OFFSET_BLOCKS
+                addParts(age, duration, 0, anchor, rootLength)
+                addParticles(age, duration, radius, anchor, rootLength)
             }
-            spell == StaffSpell.OSSUARY && !input.secondary -> repeat(nodeCount) { node ->
-                val localAge = age - 4 - node * 2
-                val anchor = Vector(0.0, 0.0, OSSUARY_PATH_BLOCKS * (node + 1) / nodeCount)
-                addParts(localAge, 22, node, anchor)
-                addParticles(localAge, 22, radius, anchor)
+            spell == StaffSpell.OSSUARY && !input.secondary -> {
+                val nodeParts = staffArsenalParts(spell, 0, 22, 1.0, displayRadius,
+                    impact = false, secondary = false, input = input, charge = charge).size
+                    .coerceIn(1, StaffSpellDisplayEffects.MAX_PARTS)
+                val nodeLimit = minOf(StaffSpellDisplayEffects.MAX_PER_CASTER,
+                    StaffSpellDisplayEffects.MAX_PARTS_PER_CASTER / nodeParts)
+                // Live admission evicts oldest complete scenes, even while their particles continue.
+                val visibleNodes = (0 until nodeCount).filter { age - 4 - it * 2 in 0 until 22 }
+                    .takeLast(nodeLimit).toSet()
+                repeat(nodeCount) { node ->
+                    val localAge = age - 4 - node * 2
+                    val anchor = Vector(0.0, 0.0,
+                        FIXED_LAUNCH_OFFSET_BLOCKS + OSSUARY_PATH_BLOCKS * (node + 1) / nodeCount)
+                    if (node in visibleNodes) addParts(localAge, 22, node, anchor)
+                    addParticles(localAge, 22, radius, anchor)
+                }
             }
             else -> {
                 val anchor = if (spell == StaffSpell.LUNAR ||
@@ -235,8 +251,8 @@ object StaffRedesignPreviewExport {
             val front = ((age - 10) / 6.0).coerceIn(0.0, 1.0)
             val rays = if (input.secondary) {
                 (-1..1).map { lane ->
-                    val start = Vector(lane * 1.7, 2.2, -PREVIEW_REACH_BLOCKS)
-                    val delta = Vector(-lane * 1.7, 0.4, PREVIEW_REACH_BLOCKS)
+                    val start = Vector(lane * 1.7, 2.2, FIXED_LAUNCH_OFFSET_BLOCKS)
+                    val delta = Vector(-lane * 1.7, 0.4, PREVIEW_REACH_BLOCKS - FIXED_LAUNCH_OFFSET_BLOCKS)
                     start to delta
                 }
             } else {
@@ -265,26 +281,27 @@ object StaffRedesignPreviewExport {
             spell == StaffSpell.TIDE || spell == StaffSpell.GALE && input.secondary ->
                 GALE_TIDE_PATH_BLOCKS
             spell == StaffSpell.OSSUARY && !input.secondary -> OSSUARY_PATH_BLOCKS
+            spell == StaffSpell.NOVA && !input.secondary -> PREVIEW_REACH_BLOCKS - FIXED_LAUNCH_OFFSET_BLOCKS
             else -> PREVIEW_REACH_BLOCKS
         }
         val notes = when {
             spell == StaffSpell.TIDE && !input.secondary ->
                 "One water orb launches at tick $STAFF_TIDE_PRIMARY_LAUNCH_TICK and flies for $STAFF_TIDE_PRIMARY_TRAVEL_TICKS ticks from a point 2.5 blocks ahead of the caster to the fixed 36-block caster reach (33.5 blocks of scene travel). In this flat, unobstructed preview it reaches the endpoint and starts the source water-splash burst at tick $STAFF_TIDE_PRIMARY_ARRIVAL_TICK; the $STAFF_TIDE_PRIMARY_IMPACT_TICKS-tick impact stage gives a ${STAFF_TIDE_PRIMARY_ATTACK_TICKS}-tick total clip. Its display uses the source 24-link crown and 8 droplets; particles emit 24 SPLASH and 8 FALLING_WATER samples over the burst. Runtime radius is 2.2–2.45 blocks and contact with a victim or wall can start the burst earlier."
             spell == StaffSpell.NOVA && !input.secondary ->
-                "Two crawling root runners grow from the caster toward the target, then six thorn fingers close around the endpoint at tick 30. Display geometry and native particles use a fixed illustrative 12-block lane."
+                "Two crawling root runners grow from a launch point 2.5 blocks ahead toward the target, then six thorn fingers close around the endpoint at tick 30. Display geometry and native particles use an illustrative 9.5-block path ending 12 blocks from the caster."
             spell == StaffSpell.LUNAR && input.secondary ->
-                "The paired crescent descends to the selected ground point, then collapses into a bounded shard field at tick $LUNAR_SECONDARY_DAMAGE_START_TICK. Its visible ${String.format(Locale.ROOT, "%.1f", arsenalRadius(spell, input, charge) + LUNAR_SECONDARY_RADIUS_BONUS)}-block damage radius remains active through tick $LUNAR_SECONDARY_DAMAGE_END_TICK, with line-of-sight checks preserving cover and one hit per target."
+                "The paired crescents converge at the selected ground point, strike at tick $LUNAR_SECONDARY_DAMAGE_START_TICK, then crumble downward over six ticks into the existing bounded shard field. Its visible ${String.format(Locale.ROOT, "%.1f", arsenalRadius(spell, input, charge) + LUNAR_SECONDARY_RADIUS_BONUS)}-block damage radius remains active through tick $LUNAR_SECONDARY_DAMAGE_END_TICK, with line-of-sight checks preserving cover and one hit per target."
             spell == StaffSpell.GALE ->
                 if (input.secondary) "Two interwoven display bands and a hollow ram head follow the source smoothstep controller from a launch point 2.5 blocks ahead to a fixed 36-block caster reach (33.5 blocks of scene travel), from tick $GALE_RAM_LAUNCH_TICK over $GALE_RAM_TRAVEL_TICKS ticks. In this unobstructed flat preview, the ram releases an expanding wind ring and six shards at the endpoint at tick $GALE_RAM_RELEASE_TICK; its $GALE_RAM_RELEASE_TICKS-tick terminal stage matches the runtime ${GALE_RAM_BASE_BURST_RADIUS}–${GALE_RAM_BASE_BURST_RADIUS + GALE_RAM_CHARGE_BURST_RADIUS}-block damage radius. Runtime floor-samples each step and releases early at a wall, eligible victim, or endpoint."
                 else "Three translucent display ribbons spiral around an open tornado core at the attack point; the native particle accents use the same authored funnel frame."
             spell == StaffSpell.TIDE && input.secondary ->
                 "A five-row curled water wall and foam crest follow a yaw-only, floor-sampled path from a launch point 2.5 blocks ahead to a fixed 36-block caster reach (33.5 blocks of scene travel), starting at tick $TIDE_WAVE_LAUNCH_TICK and travelling for $TIDE_WAVE_TRAVEL_TICKS ticks. Its ${staffTideWaveHalfWidth(0.0) * 2}–${staffTideWaveHalfWidth(1.0) * 2}-block width matches the runtime damage radius from tick $TIDE_WAVE_DAMAGE_START_TICK through tick $TIDE_WAVE_DAMAGE_END_TICK; walls and raised ground stop the wave. The offline preview shows the flat, unobstructed path."
             spell == StaffSpell.OSSUARY && !input.secondary ->
-                "Eleven branching bone clusters rise along a 21.5-block ground path from the launch point 2.5 blocks ahead to a fixed 24-block caster reach. Their spacing follows ceil(path/2), they start 2 ticks apart, and each uses a matching 2.75–3.0-block visual and damage radius at local tick 6. This unobstructed preview places no blocks."
+                "Eleven branching bone clusters rise along a 21.5-block ground path from the launch point 2.5 blocks ahead to a fixed 24-block caster reach. Their spacing follows ceil(path/2), they start 2 ticks apart, and each uses a matching 2.75–3.0-block visual and damage radius at local tick 6. The production 192-part caster budget keeps at most six 30-part clusters together and evicts the oldest display scenes; the preview applies that same limit while their particles continue. This unobstructed preview places no blocks."
             spell == StaffSpell.OSSUARY && input.secondary ->
                 "Branching bone clusters erupt at varied angles, with tall main spikes and smaller side forks. The broad 5.5–6.0-block display footprint matches its runtime damage radius around the selected ground point; visibility checks preserve cover and the cast never places blocks."
             spell == StaffSpell.PRISM && input.secondary ->
-                "Beam uses the source staffPrismBeam frame and three source-shaped emitter lanes. Target selection is represented by a fixed 12-block endpoint."
+                "Beam uses the source staffPrismBeam frame and three converging emitter lanes, starting 2.5 blocks ahead of the caster and ending at the prism 12 blocks ahead. Target selection is represented by that fixed endpoint."
             spell == StaffSpell.PRISM ->
                 "Beam uses the source staffPrismBeam frame and the runtime empty-target three-ray fallback. Target-selected rays are not simulated."
             else -> "Source-authored local particle and display geometry at a fixed anchor."
@@ -728,7 +745,7 @@ object StaffRedesignPreviewExport {
             "frameStepTicks" to FRAME_STEP_TICKS,
             "particleTailTicks" to 40,
             "previewReachBlocks" to PREVIEW_REACH_BLOCKS,
-            "evidence" to "Кадры вызывают production-геометрию и частицы. Четыре фронтальные ЛКМ используют staffMeleeDisplayParts/staffMeleeParticles; Shift-атаки сохраняют свои геометрии. Интерполяция Display моделируется по экспортированным ключевым кадрам. Это офлайн-превью: урон, столкновения, звук и нативный клиент не проверяются.",
+            "evidence" to "Кадры вызывают production-геометрию и частицы. Четыре фронтальные ПКМ используют staffMeleeDisplayParts/staffMeleeParticles; Shift-атаки сохраняют свои геометрии. Интерполяция Display моделируется по экспортированным ключевым кадрам. Это офлайн-превью: урон, столкновения, звук и нативный клиент не проверяются.",
             "clips" to clips,
         )
         output.parent?.let { Files.createDirectories(it) }
@@ -751,7 +768,7 @@ object StaffRedesignPreviewExport {
                 "frameStepTicks" to FRAME_STEP_TICKS,
                 "particleTailTicks" to 40,
                 "previewReachBlocks" to PREVIEW_REACH_BLOCKS,
-            "evidence" to "Кадры вызывают production-геометрию и частицы. Четыре фронтальные ЛКМ используют staffMeleeDisplayParts/staffMeleeParticles; Shift-атаки сохраняют свои геометрии. Интерполяция Display моделируется по экспортированным ключевым кадрам. Это офлайн-превью: урон, столкновения, звук и нативный клиент не проверяются.",
+            "evidence" to "Кадры вызывают production-геометрию и частицы. Четыре фронтальные ПКМ используют staffMeleeDisplayParts/staffMeleeParticles; Shift-атаки сохраняют свои геометрии. Интерполяция Display моделируется по экспортированным ключевым кадрам. Это офлайн-превью: урон, столкновения, звук и нативный клиент не проверяются.",
                 "clips" to focusedClips,
             )).plus("\n"))
             println("STAFF_REDESIGN_FOCUSED_PREVIEW clips=${focusedClips.size} output=$focusedOutput")

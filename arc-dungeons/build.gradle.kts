@@ -123,3 +123,13 @@ tasks.register<JavaExec>("exportStaffSpellPreview") {
     ))
     providers.gradleProperty("staffSpellPreviewSpell").orNull?.let { args(it) }
 }
+
+// Short authored Q/F sequences share live geometry; collision and damage remain runtime tests.
+tasks.register<JavaExec>("exportStaffHotkeyPreview") {
+    group = "verification"
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("ru.arc.staffspells.StaffHotkeyPreviewExport")
+    args(providers.gradleProperty("staffHotkeyPreviewOutput").getOrElse(
+        layout.buildDirectory.file("staff-spells-preview/hotkeys.json").get().asFile.absolutePath))
+}

@@ -33,6 +33,7 @@ internal data class StaffSpellHudState(
     val progress: Double = 0.0,
     val remainingTicks: Long = 0,
     val totalTicks: Long = 0,
+    val hotkeys: StaffHotkeyHudState? = null,
 )
 
 internal data class StaffSpellHudPreferences(
@@ -73,6 +74,8 @@ internal class StaffSpellHud(
         var scale: Float,
     )
     private data class TrackedBossBar(val bar: BossBar, var name: Component, var progress: Float)
+
+    var hotkeyState: ((Player, StaffSpell) -> StaffHotkeyHudState)? = null
 
     private val cards = mutableMapOf<UUID, Card>()
     private val bossBars = mutableMapOf<UUID, TrackedBossBar>()
@@ -118,9 +121,10 @@ internal class StaffSpellHud(
             clear(player.uniqueId)
             return
         }
-        states[player.uniqueId] = state
+        val current = state.copy(hotkeys = hotkeyState?.invoke(player, state.spell))
+        states[player.uniqueId] = current
         worldIds[player.uniqueId] = player.world.uid
-        renderSurface(player, state, preferences.read(player))
+        renderSurface(player, current, preferences.read(player))
     }
 
     private fun renderSurface(player: Player, state: StaffSpellHudState, choice: StaffSpellHudPreferences) {
@@ -178,7 +182,9 @@ internal class StaffSpellHud(
     }
 
     private fun showBossBar(player: Player, state: StaffSpellHudState) {
-        val name = config.staffHudBossbar(state)
+        val name = config.staffHudBossbar(state).append(state.hotkeys?.let {
+            Component.text("  |  ").append(config.hotkeyHud(it))
+        } ?: Component.empty())
         val progress = when (state.phase) {
             StaffSpellHudPhase.CHARGING, StaffSpellHudPhase.COOLDOWN ->
                 state.progress.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0)?.toFloat() ?: 0f
@@ -219,14 +225,14 @@ internal class StaffSpellHud(
         bossBars.remove(playerId)?.let { tracked -> Bukkit.getPlayer(playerId)?.hideBossBar(tracked.bar) }
     }
 
-    private fun render(state: StaffSpellHudState): Component = when (state.phase) {
+    private fun render(state: StaffSpellHudState): Component = (when (state.phase) {
         StaffSpellHudPhase.READY -> config.staffHudReady(state.spell, state.secondary)
         StaffSpellHudPhase.CHARGING -> config.staffHudCharging(state.spell, state.secondary,
             state.progress, staffSpellHudBar(state.progress))
         StaffSpellHudPhase.CHANNEL -> config.staffHudChannel(state.spell, state.secondary)
         StaffSpellHudPhase.COOLDOWN -> config.staffHudCooldown(state.spell, state.secondary,
             state.remainingTicks, staffSpellHudBar(state.progress))
-    }
+    }).append(state.hotkeys?.let { Component.newline().append(config.hotkeyHud(it)) } ?: Component.empty())
 
     private fun follow() {
         if (closed) return
@@ -259,6 +265,7 @@ internal class StaffSpellHud(
                     else -> Unit
                 }
             }
+            state = state.copy(hotkeys = hotkeyState?.invoke(player, state.spell))
             states[playerId] = state
             renderSurface(player, state, preferences.read(player))
         }

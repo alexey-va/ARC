@@ -92,6 +92,37 @@ class StaffSpellSummonsTest : FreeSpec({
         }
     }
 
+    "focus and rally commands reuse the active squad without adding actors or resetting an attack windup" {
+        withSummonHarness { h ->
+            val world = h.paper.addSimpleWorld("summon-q-commands")
+            loadSummonChunks(world)
+            val owner = h.player("summon-q-commands-owner", world, StaffSpell.NECROMANCER)
+            h.zombie(world, x = 0.5, z = 2.35).isInvulnerable = true
+            val target = h.zombie(world, x = 0.5, z = 3.0)
+            val cast = StaffSpellCast(owner.uniqueId, UUID.randomUUID(), 1, null, null, false)
+            val summons = h.controller.summons
+            h.controller.start()
+            summons.castResult(owner, cast, staffSettings().tuning.getValue(StaffSpell.NECROMANCER),
+                StaffCastInput.PRIMARY, 1.0) shouldBe StaffSummonCastResult.CAST
+
+            val actorsBefore = world.entities.filterIsInstance<AbstractSkeleton>().filter { it.isValid }.toSet()
+            actorsBefore.size shouldBe 2
+            h.scheduler.tick(19)
+            world.entities.filterIsInstance<Arrow>().count { it.isValid } shouldBe 0
+
+            summons.commandFocus(owner, target, cast) shouldBe true
+            summons.commandRally(owner, Location(world, 0.5, 64.0, 1.5), cast) shouldBe true
+            world.entities.filterIsInstance<AbstractSkeleton>().filter { it.isValid }.toSet() shouldBe actorsBefore
+            world.entities.filterIsInstance<Arrow>().count { it.isValid } shouldBe 0
+
+            // The command did not reset either actor's ten-tick windup or produce another squad.
+            h.scheduler.tick(1)
+            world.entities.filterIsInstance<AbstractSkeleton>().filter { it.isValid }.toSet() shouldBe actorsBefore
+            (world.entities.filterIsInstance<Arrow>().count { it.isValid } in 1..2) shouldBe true
+            h.hits shouldBe emptyList()
+        }
+    }
+
     "archers keep dealing damage after their old shot and session hit budgets" {
         withSummonHarness { h ->
             val world = h.paper.addSimpleWorld("summon-sustained-attacks")

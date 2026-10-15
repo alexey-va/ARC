@@ -59,6 +59,8 @@ internal fun staffArsenalParts(spell: StaffSpell, ageTicks: Int, durationTicks: 
             val birth = smooth(age / 6.0)
             val converge = smooth(age / 16.0)
             val copies = if (secondary) 2 else 1
+            // The paired blades break on contact; the existing shards carry the lingering field.
+            val bladeLife = if (secondary) 1.0 - smooth((age - 16.0) / 6.0) else 1.0
             repeat(copies) { side ->
                 val sideSign = side * 2 - 1
                 val turn = if (secondary) sideSign * (.88 - converge * 1.34) else -.82 + converge * 1.64
@@ -66,7 +68,7 @@ internal fun staffArsenalParts(spell: StaffSpell, ageTicks: Int, durationTicks: 
                     val t = i / 16.0
                     val a = -2.15 + t * 4.3
                     val taper = sin(t * PI).coerceAtLeast(0.0)
-                    val width = (.08 + taper * .52) * birth
+                    val width = (.08 + taper * .52) * birth * bladeLife
                     val x = cos(a) * 1.85
                     val y = sin(a) * 1.85
                     val drop = if (secondary) 1.85 else 5.6 - fall * 3.35
@@ -74,8 +76,9 @@ internal fun staffArsenalParts(spell: StaffSpell, ageTicks: Int, durationTicks: 
                     val localX = x * cos(turn) - y * sin(turn)
                     val localY = drop + x * sin(turn) + y * cos(turn)
                     part("moon:$side:$i", if (i % 4 == 0) Material.SEA_LANTERN else Material.WHITE_STAINED_GLASS,
-                        localX, localY, centerZ,
-                        width, .62 * birth, .30 * birth, roll = a + turn)
+                        localX * (.80 + bladeLife * .20), .28 + (localY - .28) * bladeLife, centerZ,
+                        width, .62 * birth * bladeLife, .30 * birth * bladeLife,
+                        roll = a + turn + sideSign * (1.0 - bladeLife) * .25)
                     if (!secondary) {
                         val echo = smooth((age - 4.0) / 5.0) * (1.0 - smooth((age - 17.0) / 5.0))
                         part("moon:echo:$i", if (i % 5 == 0) Material.SEA_LANTERN else Material.QUARTZ_BLOCK,
@@ -310,7 +313,8 @@ internal fun staffArsenalParticles(spell: StaffSpell, ageTicks: Int, durationTic
             val fall = smooth((age - 4) / 12.0)
             val converge = smooth(age / 16.0)
             val impactRadius = (radius + .7).coerceIn(.8, 16.0)
-            repeat(if (secondary) 28 else 16) { i ->
+            // Stop replenishing the intact outline when the blades strike and start to crumble.
+            repeat(if (secondary && age >= 16.0) 0 else if (secondary) 28 else 16) { i ->
                 val side = if (secondary) i / 14 else 0
                 val slot = if (secondary) i % 14 else i
                 val t = slot / (if (secondary) 13.0 else 15.0)

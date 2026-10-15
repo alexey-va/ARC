@@ -326,7 +326,8 @@ internal class StaffSpellArsenal(
             if (localAge >= 0 && a.born.add(index)) scene(a, at, OSSUARY_SPIKE_SCENE_TICKS, radius = radius)
             if (localAge in 0 until OSSUARY_SPIKE_SCENE_TICKS) particles(a, at, localAge,
                 OSSUARY_SPIKE_SCENE_TICKS, secondary = false, radius = radius)
-            if (localAge == OSSUARY_SPIKE_CONTACT_TICK) sound(a, at, true)
+            if (localAge == OSSUARY_SPIKE_CONTACT_TICK && (index % 3 == 0 || index == a.nodes.lastIndex))
+                sound(a, at, true)
             if (localAge in OSSUARY_SPIKE_CONTACT_TICK..(OSSUARY_SPIKE_CONTACT_TICK + 2)) {
                 // Center the query over the target's body, but keep it low enough that
                 // World#getNearbyLivingEntities includes entities whose location is at their feet.
@@ -585,15 +586,26 @@ internal class StaffSpellArsenal(
         if (a !in attacks) return
         val sound = when (a.spell) {
             StaffSpell.GALE -> if (!impact) Sound.ENTITY_BREEZE_CHARGE
-                else if (a.input.secondary) Sound.ENTITY_BREEZE_WIND_BURST else Sound.ENTITY_BREEZE_IDLE_GROUND
+                else Sound.ENTITY_BREEZE_WIND_BURST
             StaffSpell.TIDE -> if (impact) Sound.ENTITY_PLAYER_SPLASH_HIGH_SPEED else Sound.ITEM_TRIDENT_RIPTIDE_1
             StaffSpell.NOVA -> if (impact) Sound.BLOCK_AZALEA_LEAVES_BREAK else Sound.BLOCK_ROOTED_DIRT_BREAK
-            StaffSpell.REQUIEM -> if (impact) Sound.BLOCK_BELL_USE else Sound.ENTITY_EVOKER_PREPARE_SUMMON
+            StaffSpell.REQUIEM -> if (impact) Sound.BLOCK_BELL_USE else Sound.BLOCK_BELL_RESONATE
             StaffSpell.OSSUARY -> if (impact) Sound.BLOCK_BONE_BLOCK_BREAK else Sound.ENTITY_WITHER_SKELETON_AMBIENT
-            StaffSpell.LUNAR -> if (impact) Sound.BLOCK_AMETHYST_BLOCK_BREAK else Sound.BLOCK_BEACON_ACTIVATE
+            StaffSpell.LUNAR -> if (impact) Sound.BLOCK_AMETHYST_BLOCK_BREAK else Sound.BLOCK_AMETHYST_BLOCK_RESONATE
             else -> if (impact) Sound.BLOCK_AMETHYST_BLOCK_RESONATE else Sound.BLOCK_AMETHYST_BLOCK_CHIME
         }
-        visuals.withOwner(a.casterId) { visuals.cue(at, sound, if (impact) .65f else .5f, if (impact) .85f else 1.15f) }
+        visuals.withOwner(a.casterId) {
+            // bell.use has a native sample gain of twelve; its pulse must not drown every other staff.
+            val volume = if (a.spell == StaffSpell.REQUIEM && impact) .085f else if (impact) .65f else .5f
+            visuals.cue(at, sound, volume, if (impact) .85f else 1.15f)
+            if (impact) when (a.spell) {
+                StaffSpell.TIDE -> visuals.cue(at, Sound.BLOCK_BUBBLE_COLUMN_UPWARDS_AMBIENT, .32f, 1.3f)
+                StaffSpell.NOVA -> visuals.cue(at, Sound.BLOCK_ROOTED_DIRT_BREAK, .3f, .7f)
+                StaffSpell.LUNAR -> visuals.cue(at, Sound.ENTITY_PLAYER_ATTACK_SWEEP, .38f, .72f)
+                StaffSpell.PRISM -> visuals.cue(at, Sound.BLOCK_GLASS_BREAK, .26f, 1.65f)
+                else -> Unit
+            }
+        }
     }
 
     private fun current(a: Attack, player: Player) = a in attacks && ready(player) &&

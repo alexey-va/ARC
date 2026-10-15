@@ -169,6 +169,7 @@ class StaffSpellModeledDamageTest : FreeSpec({
         var currentContext: StaffSpellDuelContext? = context
         val registrationId = UUID.fromString("00000000-0000-0000-0000-000000000011")
         val access = mockk<StaffSpellDuelAccess>()
+        every { access.inputAllowed(any()) } returns true
         every { access.context(caster) } answers {
             currentContext?.let { DuelSpellAuthorization(registrationId, it) }
         }
@@ -208,6 +209,7 @@ class StaffSpellModeledDamageTest : FreeSpec({
         val context = StaffSpellDuelContext(UUID.randomUUID(), 1, .4)
         val authorization = DuelSpellAuthorization(UUID.randomUUID(), context)
         val access = mockk<StaffSpellDuelAccess>()
+        every { access.inputAllowed(any()) } returns true
         var ownerCurrent = true
         every { access.context(any()) } returns authorization
         every { access.isCurrent(authorization, any()) } answers { secondArg<Player>() !== owner || ownerCurrent }
@@ -233,6 +235,7 @@ class StaffSpellModeledDamageTest : FreeSpec({
         val target = mockk<Player>()
         readyPlayers(caster, target, world)
         val access = mockk<StaffSpellDuelAccess>()
+        every { access.inputAllowed(any()) } returns true
         every { access.context(caster) } returns null
 
         StaffSpellDamage(access).capture(caster, duelOnly = true) shouldBe null
@@ -256,20 +259,47 @@ class StaffSpellModeledDamageTest : FreeSpec({
         val provider = ArcStaffSpellServiceProvider(arc) { null }
         val initial = StaffSpellDuelContext(UUID.fromString("00000000-0000-0000-0000-000000000020"), 0, 2.0)
         var active: StaffSpellDuelContext? = initial
+        var allowsInput = true
+        var allowsMobility = true
+        var teleports = 0
+        val destination = org.bukkit.Location(world, .5, 64.0, 4.5)
         val policy = object : StaffSpellDuelPolicy {
             override fun context(casterPlayer: Player) = active.takeIf { casterPlayer === caster }
             override fun canHit(casterPlayer: Player, targetPlayer: Player, context: StaffSpellDuelContext) =
                 context == active && casterPlayer === caster && targetPlayer === opponent
+            override fun permitsInput(player: Player) = allowsInput && player === caster
+            override fun permitsMobility(player: Player, target: org.bukkit.Location) =
+                allowsMobility && player === caster && target == destination
+            override fun teleportMobility(player: Player, target: org.bukkit.Location): Boolean {
+                teleports++
+                return player === caster && target == destination
+            }
         }
         val registration = provider.registerDuelPolicy(owner, policy)
         try {
             provider.isAvailable() shouldBe false
+            provider.inputAllowed(caster) shouldBe true
+            allowsInput = false
+            provider.inputAllowed(caster) shouldBe false
+            allowsInput = true
             val damage = StaffSpellDamage(provider)
             val cast = requireNotNull(damage.capture(caster, duelOnly = true))
+            val authorization = requireNotNull(cast.duelAuthorization)
+            provider.mobilityAllowed(caster, authorization, destination) shouldBe true
+            provider.teleportMobility(caster, authorization, destination) shouldBe true
+            teleports shouldBe 1
+            allowsMobility = false
+            provider.mobilityAllowed(caster, authorization, destination) shouldBe false
+            provider.teleportMobility(caster, authorization, destination) shouldBe false
+            teleports shouldBe 1
+            allowsMobility = true
             damage.eligible(caster, unrelated, cast) shouldBe false
             damage.eligible(caster, opponent, cast) shouldBe true
 
             active = StaffSpellDuelContext(initial.matchId(), 1, 2.0)
+            provider.mobilityAllowed(caster, authorization, destination) shouldBe false
+            provider.teleportMobility(caster, authorization, destination) shouldBe false
+            teleports shouldBe 1
             damage.eligible(caster, opponent, cast) shouldBe false
             damage.capture(caster, duelOnly = true)?.duelAuthorization?.context shouldBe active
 
@@ -278,6 +308,38 @@ class StaffSpellModeledDamageTest : FreeSpec({
             active = initial
             registration.close()
             provider.context(caster) shouldBe null
+        } finally {
+            registration.close()
+            provider.close()
+        }
+    }
+
+    "older duel policies keep input enabled but cannot authorize staff mobility by default" {
+        val world = mockk<World>()
+        val caster = mockk<Player>()
+        val target = mockk<Player>()
+        readyPlayers(caster, target, world)
+        every { Bukkit.isPrimaryThread() } returns true
+        every { Bukkit.getPluginManager().registerEvents(any(), any()) } returns Unit
+
+        val arc = mockk<Plugin>(relaxed = true)
+        val owner = mockk<Plugin>(relaxed = true)
+        every { owner.isEnabled } returns true
+        val provider = ArcStaffSpellServiceProvider(arc) { null }
+        val context = StaffSpellDuelContext(UUID.fromString("00000000-0000-0000-0000-000000000030"), 1, 1.0)
+        val policy = object : StaffSpellDuelPolicy {
+            override fun context(casterPlayer: Player) = context.takeIf { casterPlayer === caster }
+            override fun canHit(casterPlayer: Player, targetPlayer: Player, duel: StaffSpellDuelContext) = false
+        }
+        val registration = provider.registerDuelPolicy(owner, policy)
+        val destination = org.bukkit.Location(world, .5, 64.0, 4.5)
+        try {
+            val authorization = requireNotNull(provider.context(caster))
+            provider.inputAllowed(caster) shouldBe true
+            policy.permitsMobility(caster, destination) shouldBe false
+            policy.teleportMobility(caster, destination) shouldBe false
+            provider.mobilityAllowed(caster, authorization, destination) shouldBe false
+            provider.teleportMobility(caster, authorization, destination) shouldBe false
         } finally {
             registration.close()
             provider.close()

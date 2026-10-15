@@ -70,13 +70,14 @@ object StaffSpellsModule : PluginModule {
             Bukkit.getPluginManager().registerEvents(it.input, plugin)
             Bukkit.getPluginManager().registerEvents(it.defense, plugin)
             Bukkit.getPluginManager().registerEvents(it.summons, plugin)
+            Bukkit.getPluginManager().registerEvents(it.conjurations, plugin)
             it.start()
         }
     }
 
     override fun reload() = init()
     override fun shutdown() {
-        controller?.let { HandlerList.unregisterAll(it); HandlerList.unregisterAll(it.input); HandlerList.unregisterAll(it.defense); HandlerList.unregisterAll(it.summons); it.close() }
+        controller?.let { HandlerList.unregisterAll(it); HandlerList.unregisterAll(it.input); HandlerList.unregisterAll(it.defense); HandlerList.unregisterAll(it.summons); HandlerList.unregisterAll(it.conjurations); it.close() }
         controller = null
     }
 
@@ -94,6 +95,7 @@ internal class StaffSpellController(
     summonActorFactory: ((org.bukkit.World, Location, Boolean) -> org.bukkit.entity.AbstractSkeleton)? = null,
     private val scenery: StaffSceneryEffects? = null,
     private val hud: StaffSpellHud? = null,
+    private val hotkeys: StaffHotkeyCooldowns = StaffHotkeyCooldowns(),
 ) : Listener, AutoCloseable, StaffSpellInputActions {
     private val tasks = LifecycleTaskScope()
     private val visuals = StaffSpellVisuals(tasks, sceneryImpact = { owner, at, radius ->
@@ -101,12 +103,23 @@ internal class StaffSpellController(
     })
     private val targeting = StaffSpellTargeting(settings, damage)
     private val arsenal = StaffSpellArsenal(settings, damage, effects, visuals, targeting)
-    private val melee = StaffSpellMelee(settings, damage, effects, visuals, targeting)
+    internal val conjurations = StaffSpellConjurations(settings, damage, effects, visuals, targeting)
+    private val melee = StaffSpellMelee(settings, damage, effects, visuals, targeting,
+        onFrostSlow = conjurations::rememberFrostSlow)
     internal val defense = StaffSpellDefense(config, damage, visuals, effects)
     private val channels = StaffSpellChannels(settings, damage, effects, visuals, targeting)
     private val channelInputs = mutableMapOf<UUID, StaffSpell>()
     internal val summons = StaffSpellSummons(settings, damage, visuals, targeting, summonActorFactory)
-    init { damage.summonCast = summons::castFor }
+    private val techniques = StaffSpellTechniques(settings, damage, effects, visuals, targeting, summons)
+    private val mobility = StaffSpellMobility(settings, damage, effects, visuals, targeting)
+    init {
+        damage.summonCast = summons::castFor
+        hud?.hotkeyState = { player, spell -> StaffHotkeyHudState(
+            hotkeys.remaining(player.uniqueId, StaffHotkey.Q),
+            hotkeys.remaining(player.uniqueId, StaffHotkey.F),
+            techniques.continuationLabel(player.uniqueId, spell) ?: conjurations.continuationLabel(player.uniqueId, spell),
+        ) }
+    }
     internal val input = StaffSpellInput(this)
     private val chargeScenes = mutableMapOf<UUID, List<UUID?>>()
     private val lances = mutableListOf<PendingStaffLance>()
@@ -129,7 +142,11 @@ internal class StaffSpellController(
         defense.start()
         channels.start()
         summons.start()
+        conjurations.start()
+        techniques.start()
+        mobility.start()
         tasks.runTimer(4, 4) {
+            hotkeys.prune()
             cooldownLengths.keys.filter { cooldowns.remainingTicks(it) <= 0 }.forEach {
                 cooldownLengths.remove(it)
             }
@@ -186,7 +203,7 @@ internal class StaffSpellController(
             player.sendActionBar(config.text("retired"))
             return false
         }
-        if (!ready(player)) return false
+        if (!ready(player) || !hotkeys.actionReady(player.uniqueId)) return false
         if (cooldowns.remainingTicks(player.uniqueId) > 0) {
             showCooldown(player, spell)
             visuals.cooldownFeedback(player, spell)
@@ -194,6 +211,38 @@ internal class StaffSpellController(
         }
         return true
     }
+
+    override fun canHotkey(player: Player, spell: StaffSpell, key: StaffHotkey): Boolean {
+        if (!ready(player) || spell !in StaffSpell.available || !hotkeys.actionReady(player.uniqueId)) return false
+        if (key == StaffHotkey.Q && canRecast(player.uniqueId, spell)) return true
+        if (hotkeys.remaining(player.uniqueId, key) > 0) {
+            visuals.cooldownFeedback(player, spell)
+            showCooldown(player, spell)
+            return false
+        }
+        return true
+    }
+
+    override fun hotkey(player: Player, spell: StaffSpell, key: StaffHotkey) {
+        if (!ready(player) || spell !in StaffSpell.available || StaffSpell.from(player.inventory.itemInMainHand) != spell) return
+        val recast = key == StaffHotkey.Q && canRecast(player.uniqueId, spell)
+        if (!recast && hotkeys.remaining(player.uniqueId, key) > 0) return
+        val cast = damage.capture(player, duelOnly = StaffSpell.isDuelOnly(player.inventory.itemInMainHand)) ?: return
+        val tuning = settings.tuningFor(spell, duel = cast.duelAuthorization != null)
+        val accepted = if (key == StaffHotkey.F) mobility.cast(player, spell, cast, tuning)
+            else if (spell in CONJURATION_SPELLS) conjurations.cast(player, spell, cast, tuning)
+            else techniques.cast(player, spell, cast, tuning)
+        if (accepted) {
+            if (!recast) hotkeys.start(player.uniqueId, key, config.hotkeyCooldown(spell, key))
+            else hotkeys.action(player.uniqueId)
+        } else {
+            visuals.cooldownFeedback(player, spell)
+            player.sendMessage(config.hotkeyUnavailable(spell, key))
+        }
+        showCooldown(player, spell)
+    }
+
+    private fun canRecast(playerId: UUID, spell: StaffSpell) = techniques.canRecast(playerId, spell) || conjurations.canRecast(playerId, spell)
 
     override fun defend(player: Player, spell: StaffSpell) {
         if (spell !in StaffSpell.available) {
@@ -236,6 +285,7 @@ internal class StaffSpellController(
     private fun beginCooldown(player: Player, spell: StaffSpell, ticks: Long) {
         cooldownLengths[player.uniqueId] = ticks
         cooldowns.start(player.uniqueId, ticks)
+        hotkeys.action(player.uniqueId)
         if (ready(player)) showCooldown(player, spell)
     }
 
@@ -276,7 +326,7 @@ internal class StaffSpellController(
             player.sendActionBar(config.text("retired"))
             return
         }
-        if (!ready(player)) return
+        if (!ready(player) || !hotkeys.actionReady(player.uniqueId)) return
         if (input.quick) { defend(player, spell); return }
         if (spell == StaffSpell.GRAVITY && !input.secondary) return
         if (cooldowns.remainingTicks(player.uniqueId) > 0) {
@@ -404,6 +454,7 @@ internal class StaffSpellController(
         defense.reset(playerId)
         cooldowns.clear(playerId)
         cooldownLengths.remove(playerId)
+        hotkeys.clear(playerId)
     }
 
     private fun showCooldown(player: Player, spell: StaffSpell) {
@@ -523,7 +574,10 @@ internal class StaffSpellController(
                 StaffSpell.EMBER -> visuals.withOwner(cast.casterId) { visuals.emberBurst(at, radius) }
                 StaffSpell.FROST -> {
                     visuals.withOwner(cast.casterId) { visuals.wave(at, at, radius, frost = true, directional = false) }
-                    hit.filter { damage.eligible(player, it, cast) }.forEach { it.addPotionEffect(PotionEffect(PotionEffectType.SLOWNESS, settings.frostSlowTicks, 1)) }
+                    hit.filter { damage.eligible(player, it, cast) }.forEach {
+                        if (it.addPotionEffect(PotionEffect(PotionEffectType.SLOWNESS, settings.frostSlowTicks, 1)))
+                            conjurations.rememberFrostSlow(player, it, settings.frostSlowTicks)
+                    }
                 }
                 StaffSpell.FAULT -> visuals.withOwner(cast.casterId) { visuals.faultBurst(at, radius) }
                 else -> Unit
@@ -782,6 +836,7 @@ internal class StaffSpellController(
                 bolt.remainingDistance <= 0.001 || bolt.age >= 60) {
                 bolts.remove(bolt)
                 if (frostIcicle) {
+                    if (bolt.aimOnLaunch) techniques.rememberIcicle(player, bolt.cast, end)
                     effects.impact(bolt.visualId, end, 0.9, FROST_ICICLE_SHATTER_TICKS)
                     visuals.withOwner(bolt.cast.casterId) { visuals.icicleBurst(end) }
                     if (bolt.burstRadius > 0.0) {
@@ -965,7 +1020,8 @@ internal class StaffSpellController(
             val damaged = damage.hit(player, target, wave.cast, wave.tuning.power, wave.tuning.vanillaDamage)
             if (damaged && wave.slowTicks != null && damage.isCurrent(player, wave.cast) &&
                 damage.eligible(player, target, wave.cast))
-                target.addPotionEffect(PotionEffect(PotionEffectType.SLOWNESS, wave.slowTicks, 1, false, true))
+                if (target.addPotionEffect(PotionEffect(PotionEffectType.SLOWNESS, wave.slowTicks, 1, false, true)) &&
+                    wave.spell == StaffSpell.FROST) conjurations.rememberFrostSlow(player, target, wave.slowTicks)
         }
         finished.forEach { waves.remove(it) }
     }
@@ -1147,7 +1203,7 @@ internal class StaffSpellController(
     private fun nearby(player: Player, origin: Location, radius: Double, cast: StaffSpellCast? = null) = targeting.nearby(player, origin, radius, cast)
 
     private fun ready(player: Player) = player.isOnline && !player.isDead &&
-        player.gameMode != GameMode.SPECTATOR && player.isValid
+        player.gameMode != GameMode.SPECTATOR && player.isValid && damage.inputAllowed(player)
 
     private fun cancel(playerId: UUID) {
         input.cancel(playerId)
@@ -1158,6 +1214,10 @@ internal class StaffSpellController(
         channels.cancel(playerId)
         channelInputs.remove(playerId)
         summons.cancel(playerId)
+        conjurations.cancel(playerId)
+        techniques.cancel(playerId)
+        mobility.cancel(playerId)
+        StaffMagicBarriers.cancel(playerId)
         chargeScenes.remove(playerId)?.forEach(effects::remove)
         lances.removeAll { it.cast.casterId == playerId }
         marks.remove(playerId)
@@ -1170,7 +1230,9 @@ internal class StaffSpellController(
         effects.cancel(playerId)
     }
 
-    @EventHandler fun onQuit(event: PlayerQuitEvent) = cancel(event.player.uniqueId)
+    @EventHandler fun onQuit(event: PlayerQuitEvent) {
+        cancel(event.player.uniqueId)
+    }
     @EventHandler fun onWorldChange(event: PlayerChangedWorldEvent) = cancel(event.player.uniqueId)
     @EventHandler fun onDeath(event: PlayerDeathEvent) = cancel(event.entity.uniqueId)
 
@@ -1185,6 +1247,11 @@ internal class StaffSpellController(
         channels.close()
         channelInputs.clear()
         summons.close()
+        conjurations.close()
+        techniques.close()
+        mobility.close()
+        hotkeys.clear()
+        StaffMagicBarriers.clear()
         damage.summonCast = { null }
         chargeScenes.values.flatten().forEach(effects::remove)
         chargeScenes.clear()
@@ -1200,6 +1267,8 @@ internal class StaffSpellController(
     }
 
     private companion object {
+        val CONJURATION_SPELLS = setOf(StaffSpell.MARK, StaffSpell.FROST, StaffSpell.NOVA, StaffSpell.FAULT,
+            StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM, StaffSpell.OSSUARY)
         val ARSENAL_SPELLS = setOf(StaffSpell.NOVA, StaffSpell.LUNAR, StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM, StaffSpell.PRISM, StaffSpell.OSSUARY)
         const val WAVE_STEP_TICKS = 2
         const val WAVE_START_DELAY_TICKS = 2

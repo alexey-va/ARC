@@ -113,6 +113,18 @@ internal class StaffSpellVisuals(
         val anchor = handAnchor(player) ?: return@dispatch
         val playerId = player.uniqueId
         val charge = progress.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
+        val stepSound = when (spell) {
+            StaffSpell.EMBER, StaffSpell.INFERNO -> Sound.ITEM_FIRECHARGE_USE
+            StaffSpell.ICICLE, StaffSpell.FROST -> Sound.BLOCK_AMETHYST_CLUSTER_HIT
+            StaffSpell.GRAVITY -> Sound.BLOCK_AMETHYST_BLOCK_RESONATE
+            else -> palette.chargeSound
+        }
+        val readySound = when (spell) {
+            StaffSpell.EMBER, StaffSpell.INFERNO -> Sound.ENTITY_BLAZE_SHOOT
+            StaffSpell.ICICLE, StaffSpell.FROST -> Sound.BLOCK_AMETHYST_BLOCK_RESONATE
+            StaffSpell.GRAVITY -> Sound.BLOCK_RESPAWN_ANCHOR_CHARGE
+            else -> palette.launchSound
+        }
         val state = chargeFeedbackStates[playerId]
         val activeState = if (state == null || state.spell != spell ||
             charge + CHARGE_RESET_EPSILON < state.progress) {
@@ -126,19 +138,19 @@ internal class StaffSpellVisuals(
         }
         if (charge >= CHARGE_QUARTER && activeState.stages and CHARGE_STAGE_QUARTER == 0) {
             activeState.stages = activeState.stages or CHARGE_STAGE_QUARTER
-            playPrivate(player, anchor, Sound.BLOCK_NOTE_BLOCK_CHIME, 0.14f, 0.95f)
+            playPrivate(player, anchor, stepSound, 0.14f, 0.95f)
         }
         if (charge >= CHARGE_HALF && activeState.stages and CHARGE_STAGE_HALF == 0) {
             activeState.stages = activeState.stages or CHARGE_STAGE_HALF
-            playPrivate(player, anchor, Sound.BLOCK_NOTE_BLOCK_CHIME, 0.15f, 1.12f)
+            playPrivate(player, anchor, stepSound, 0.15f, 1.12f)
         }
         if (charge >= CHARGE_THREE_QUARTERS && activeState.stages and CHARGE_STAGE_THREE_QUARTERS == 0) {
             activeState.stages = activeState.stages or CHARGE_STAGE_THREE_QUARTERS
-            playPrivate(player, anchor, Sound.BLOCK_NOTE_BLOCK_CHIME, 0.16f, 1.30f)
+            playPrivate(player, anchor, stepSound, 0.16f, 1.30f)
         }
         if (charge >= CHARGE_READY && activeState.stages and CHARGE_STAGE_READY == 0) {
             activeState.stages = activeState.stages or CHARGE_STAGE_READY
-            playPrivate(player, anchor, Sound.ENTITY_PLAYER_LEVELUP, 0.12f, 1.45f)
+            playPrivate(player, anchor, readySound, 0.22f, 1.45f)
         }
 
         when (spell) {
@@ -225,7 +237,17 @@ internal class StaffSpellVisuals(
         val previous = lastCooldownFeedbackTick[playerId]
         if (previous != null && now >= previous && now - previous < COOLDOWN_FEEDBACK_TICKS) return@dispatch
         lastCooldownFeedbackTick[playerId] = now
-        playPrivate(player, anchor, Sound.BLOCK_NOTE_BLOCK_HAT, 0.12f, 1.15f)
+        val sound = when (spell) {
+            StaffSpell.EMBER, StaffSpell.INFERNO -> Sound.BLOCK_FIRE_EXTINGUISH
+            StaffSpell.TIDE -> Sound.ENTITY_PLAYER_SWIM
+            StaffSpell.GALE -> Sound.ENTITY_BREEZE_SLIDE
+            StaffSpell.FAULT -> Sound.BLOCK_DEEPSLATE_HIT
+            StaffSpell.NOVA -> Sound.BLOCK_ROOTED_DIRT_HIT
+            StaffSpell.OSSUARY, StaffSpell.NECROMANCER -> Sound.BLOCK_BONE_BLOCK_HIT
+            StaffSpell.REQUIEM -> Sound.BLOCK_SOUL_SAND_HIT
+            else -> Sound.BLOCK_AMETHYST_CLUSTER_HIT
+        }
+        playPrivate(player, anchor, sound, 0.12f, 0.68f)
         repeat(COOLDOWN_PARTICLE_COUNT) { index ->
             val angle = index * PI / (COOLDOWN_PARTICLE_COUNT / 2)
             val point = anchor.clone().add(cos(angle) * COOLDOWN_PARTICLE_RADIUS, 0.015,
@@ -734,7 +756,7 @@ internal class StaffSpellVisuals(
                 val age = 2 + phase * 2
                 runLater(age.toLong()) {
                     if (phase == 0) localSound(start.clone().apply { y = start.blockY + 0.08 },
-                        Sound.BLOCK_BEACON_ACTIVATE, 0.74f, 1.42f)
+                        Sound.BLOCK_ROOTED_DIRT_BREAK, 0.74f, 1.12f)
                     novaWaveFrame(start, forward, basis.first, reach, width, age)
                 }
             }
@@ -1057,7 +1079,8 @@ internal class StaffSpellVisuals(
         repeat(10) { phase ->
             val age = 2 + phase * 2
             runLater(age.toLong()) {
-                if (phase == 0) localSound(origin, Sound.BLOCK_BEACON_ACTIVATE, 0.74f, 1.42f)
+                if (phase == 0) localSound(origin, Sound.BLOCK_ROOTED_DIRT_BREAK, 0.74f, 1.12f)
+                if (phase == 8) localSound(origin, Sound.BLOCK_AZALEA_LEAVES_BREAK, 0.48f, 0.86f)
                 novaFrame(origin, reach, age, secondary)
             }
         }
@@ -1590,13 +1613,13 @@ internal class StaffSpellVisuals(
         val ARCANE_GALE = ArcanePalette(
             Particle.DustTransition(Color.fromRGB(110, 235, 224), Color.fromRGB(226, 255, 255), 1.25f),
             Particle.DustOptions(Color.fromRGB(191, 255, 247), 1.1f), Particle.CLOUD, Particle.CLOUD,
-            Sound.ENTITY_BREEZE_WIND_BURST, Sound.ENTITY_WIND_CHARGE_WIND_BURST,
+            Sound.ENTITY_BREEZE_WIND_BURST, Sound.ENTITY_BREEZE_SLIDE,
             Sound.ENTITY_BREEZE_WIND_BURST, 1.18f)
         val ARCANE_TIDE = ArcanePalette(
             Particle.DustTransition(Color.fromRGB(39, 166, 209), Color.fromRGB(86, 248, 220), 1.35f),
             Particle.DustOptions(Color.fromRGB(111, 225, 255), 1.2f), Particle.BUBBLE,
-            Particle.BUBBLE_POP, Sound.BLOCK_CONDUIT_AMBIENT_SHORT, Sound.BLOCK_CONDUIT_AMBIENT,
-            Sound.BLOCK_BUBBLE_COLUMN_UPWARDS_INSIDE, 0.92f)
+            Particle.BUBBLE_POP, Sound.BLOCK_CONDUIT_AMBIENT_SHORT, Sound.ENTITY_PLAYER_SPLASH,
+            Sound.ENTITY_PLAYER_SPLASH_HIGH_SPEED, 0.92f)
         val ARCANE_REQUIEM = ArcanePalette(
             Particle.DustTransition(Color.fromRGB(84, 46, 146), Color.fromRGB(210, 113, 186), 1.4f),
             Particle.DustOptions(Color.fromRGB(168, 110, 203), 1.2f), Particle.REVERSE_PORTAL,
@@ -1610,8 +1633,8 @@ internal class StaffSpellVisuals(
         val ARCANE_NOVA = ArcanePalette(
             Particle.DustTransition(Color.fromRGB(75, 255, 128), Color.fromRGB(25, 225, 210), 1.3f),
             Particle.DustOptions(Color.fromRGB(196, 255, 220), 1.3f), Particle.HAPPY_VILLAGER,
-            Particle.END_ROD, Sound.BLOCK_BEACON_POWER_SELECT, Sound.BLOCK_BEACON_ACTIVATE,
-            Sound.BLOCK_GRASS_BREAK, 1.08f)
+            Particle.END_ROD, Sound.BLOCK_ROOTED_DIRT_HIT, Sound.BLOCK_ROOTED_DIRT_BREAK,
+            Sound.BLOCK_AZALEA_LEAVES_BREAK, 1.08f)
         val ARCANE_CHAIN = ArcanePalette(
             Particle.DustTransition(Color.fromRGB(79, 201, 255), Color.fromRGB(241, 254, 255), 1.2f),
             Particle.DustOptions(Color.fromRGB(112, 226, 255), 1.1f), Particle.ELECTRIC_SPARK,

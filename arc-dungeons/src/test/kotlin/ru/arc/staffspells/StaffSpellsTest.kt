@@ -52,10 +52,12 @@ class StaffSpellsTest : FreeSpec({
             "chain.duel-appearance.custom-model-data" to 10009,
             "chain.description" to "Направленный разряд",
             "chain.aim" to "Прицельтесь во врага",
-            "chain.secondary" to "Shift + ЛКМ — цепная молния",
+            "chain.secondary" to "<attack-secondary> — цепная молния",
+            "chain.quick" to "<defense> — фронтальный щит",
+            "chain.quick-secondary" to "<defense-secondary> — поглощение",
             "messages.duel-only" to "Только в активной дуэли",
             "messages.prototype" to "Только прототип",
-            "messages.use" to "ЛКМ — применить",
+            "messages.use" to "<attack> — применить",
         )))
         withStaffHarness(config = config) { h ->
             val item = h.controller.duelItem(StaffSpell.CHAIN)
@@ -68,9 +70,11 @@ class StaffSpellsTest : FreeSpec({
             val lore = item.itemMeta.lore()!!.joinToString(" ") { PlainTextComponentSerializer.plainText().serialize(it) }
             lore.contains("Направленный разряд") shouldBe true
             lore.contains("Прицельтесь во врага") shouldBe true
-            lore.contains("Shift + ЛКМ — цепная молния") shouldBe true
+            lore.contains("Shift + ПКМ — цепная молния") shouldBe true
+            lore.contains("ЛКМ — фронтальный щит") shouldBe true
+            lore.contains("Shift + ЛКМ — поглощение") shouldBe true
             lore.contains("Только в активной дуэли") shouldBe true
-            lore.contains("ЛКМ — применить") shouldBe true
+            lore.contains("ПКМ — применить") shouldBe true
             lore.contains("Только прототип") shouldBe false
         }
     }
@@ -500,7 +504,7 @@ class StaffSpellsTest : FreeSpec({
             h.controller.start()
             h.scheduler.tick(4)
             displays.records.size shouldBe 1
-            displays.text() shouldBe "Ледяной венец\nУдерживайте ПКМ для зарядки\nОтпустите, чтобы выпустить"
+            displays.text() shouldBe "Ледяной венец\nУдерживайте ПКМ для зарядки\nОтпустите, чтобы выпустить\nQ · готово    F · готово"
 
             h.controller.cast(player)
             h.cooldowns.remainingTicks(player.uniqueId) shouldBe 20L
@@ -515,7 +519,7 @@ class StaffSpellsTest : FreeSpec({
             displays.records.size shouldBe 1
             h.captures.size shouldBe 1
             h.cooldowns.remainingTicks(player.uniqueId) shouldBe 5L
-            displays.text().startsWith("Каменный выброс · Shift + ЛКМ\nВосстановление 0.3 с\n") shouldBe true
+            displays.text().startsWith("Каменный выброс · Shift + ПКМ\nВосстановление 0.3 с\n") shouldBe true
 
             player.inventory.setItemInMainHand(ItemStack(Material.AIR))
             h.scheduler.tick(4)
@@ -554,7 +558,7 @@ class StaffSpellsTest : FreeSpec({
             val remaining = h.cooldowns.remainingTicks(player.uniqueId)
             remaining shouldBe 20L
             displays.text().startsWith("Дождь · Shift + ПКМ\nВосстановление 1.0 с\n") shouldBe true
-            displays.text().endsWith(staffSpellHudBar(staffCooldownProgress(remaining, 30).toDouble())) shouldBe true
+            displays.text().substringBefore("\nQ ·").endsWith(staffSpellHudBar(staffCooldownProgress(remaining, 30).toDouble())) shouldBe true
             h.controller.cast(player)
             h.captures.size shouldBe 1
             h.cooldowns.remainingTicks(player.uniqueId) shouldBe remaining
@@ -1465,6 +1469,7 @@ internal fun withStaffHarness(
                     val cooldowns = StaffTestCooldowns(scheduler)
                     val damage = mockk<StaffSpellDamage>()
                     every { damage.summonCast = any() } returns Unit
+                    every { damage.inputAllowed(any()) } returns true
                     val captures = mutableListOf<Player>()
                     val hits = mutableListOf<LivingEntity>()
                     val hitLocations = mutableListOf<Location>()
@@ -1514,8 +1519,10 @@ internal fun withStaffHarness(
                     }
                     every { effects.finishTrail(any()) } answers { finishedTrails += arg<UUID?>(0) }
                     every { effects.remove(any()) } answers { removedEffects += firstArg<UUID?>() }
+                    var hotkeyTick = 0L
+                    val hotkeyClock = scheduler.runTimer(1, 1) { hotkeyTick++ }
                     val controller = StaffSpellController(config, settings, damage, effects, cooldowns,
-                        summonActorFactory, hud = hudFactory?.invoke())
+                        summonActorFactory, hud = hudFactory?.invoke(), hotkeys = StaffHotkeyCooldowns { hotkeyTick })
                     val harness = StaffHarness(paper, scheduler, config, controller, cooldowns, effects,
                         movedEffects, trailMoves, projectileMoves, finishedTrails, visualPlays, removedEffects,
                         captures, hits, hitLocations, damageScales)
@@ -1523,6 +1530,7 @@ internal fun withStaffHarness(
                         block(harness)
                     } finally {
                         controller.close()
+                        hotkeyClock.cancel()
                         cooldowns.close()
                     }
                 }

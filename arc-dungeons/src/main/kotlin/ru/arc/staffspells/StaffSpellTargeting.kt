@@ -14,7 +14,8 @@ import kotlin.math.sqrt
 internal data class StaffBlockRayResult(val pathLoaded: Boolean, val hit: RayTraceResult?)
 
 /** A native block ray guarded against invalid inputs and unloaded chunks; never requests a chunk. */
-internal fun staffBlockHit(from: Location, direction: Vector, range: Double): StaffBlockRayResult {
+internal fun staffBlockHit(from: Location, direction: Vector, range: Double,
+    includeMagicBarriers: Boolean = true): StaffBlockRayResult {
     val world = from.world ?: return StaffBlockRayResult(pathLoaded = false, hit = null)
     if (!from.x.isFinite() || !from.y.isFinite() || !from.z.isFinite() ||
         abs(from.x) > MAX_COORDINATE || abs(from.z) > MAX_COORDINATE ||
@@ -31,7 +32,10 @@ internal fun staffBlockHit(from: Location, direction: Vector, range: Double): St
         return StaffBlockRayResult(pathLoaded = false, hit = null)
     }
     val hit = world.rayTraceBlocks(from, unitDirection, range, FluidCollisionMode.NEVER, false)
-    return StaffBlockRayResult(pathLoaded = true, hit = hit)
+    val barrier = if (includeMagicBarriers) StaffMagicBarriers.firstHit(from, unitDirection, range) else null
+    val nearest = if (barrier != null && (hit == null ||
+        barrier.hitPosition.distanceSquared(from.toVector()) < hit.hitPosition.distanceSquared(from.toVector()))) barrier else hit
+    return StaffBlockRayResult(pathLoaded = true, hit = nearest)
 }
 
 /** Traverses chunk boundaries exactly, including corner crossings, without querying block data. */

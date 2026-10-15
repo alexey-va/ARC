@@ -36,6 +36,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         var projectileBody: List<StaffDisplayPart>? = null,
         val preparation: Boolean = false,
         val melee: Boolean = false,
+        var customGeometry: ((Int) -> List<StaffDisplayPart>)? = null,
         val defense: Defense? = null,
         var controllerDriven: Boolean = false,
         var controllerDirty: Boolean = false,
@@ -104,6 +105,33 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         while (scenes.values.count { it.casterId == casterId } >= MAX_PER_CASTER)
             remove(scenes.values.first { it.casterId == casterId }.id)
         while (scenes.size >= MAX_SCENES) remove(scenes.keys.first())
+    }
+
+    /** Ability-owned geometry shares the same bounded scenes, interpolation and viewer transport. */
+    fun custom(casterId: UUID, spell: StaffSpell, origin: Location, durationTicks: Int,
+        parts: (Int) -> List<StaffDisplayPart>): UUID? {
+        check(Bukkit.isPrimaryThread())
+        val caster = Bukkit.getPlayer(casterId) ?: return null
+        if (closed || !valid(origin) || !eligible(caster, origin)) return null
+        reserve(casterId)
+        val scene = Scene(UUID.randomUUID(), casterId, spell, origin.clone(), Quaternionf(),
+            1.0, 1.0, durationTicks.coerceIn(1, 240), false, false, StaffCastInput.PRIMARY,
+            customGeometry = parts)
+        scenes[scene.id] = scene
+        render(scene)
+        refreshAudience()
+        return scene.id
+    }
+
+    fun isActive(sceneId: UUID?): Boolean = sceneId != null && sceneId in scenes
+
+    /** Snapshot a controller pose; the common two-tick render clock sends it once. */
+    fun updateCustom(sceneId: UUID?, origin: Location, parts: List<StaffDisplayPart>) {
+        val scene = scenes[sceneId] ?: return
+        if (scene.customGeometry == null || !valid(origin) || origin.world != scene.origin.world) return
+        val snapshot = parts.toList()
+        scene.origin = origin.clone()
+        scene.customGeometry = { snapshot }
     }
 
     fun defend(player: Player, spell: StaffSpell, durationTicks: Int, allAround: Boolean): UUID? {
@@ -282,12 +310,12 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
                     scene.origin = caster.location.clone()
                     scene.rotation = Quaternionf().rotationY(-Math.toRadians(caster.location.yaw.toDouble()).toFloat())
                 }
-                val tracked = scene.defense == null && !scene.preparation && !scene.melee && !scene.charging && !scene.impact && scene.spell in setOf(StaffSpell.MARK, StaffSpell.EMBER)
+                val tracked = scene.customGeometry == null && scene.defense == null && !scene.preparation && !scene.melee && !scene.charging && !scene.impact && scene.spell in setOf(StaffSpell.MARK, StaffSpell.EMBER)
                 val expired = if (tracked) scene.age >= 160 else scene.age >= scene.duration
                 if (expired) remove(scene.id)
                 // Flying comets have one movement owner sending two-tick forward keyframes.
                 // Charge geometry is progress-only; the shared timer must not restart its tween.
-                else if (scene.defense != null || scene.preparation ||
+                else if (scene.customGeometry != null || scene.defense != null || scene.preparation ||
                     (!scene.charging && (scene.spell != StaffSpell.EMBER || scene.impact))) render(scene)
             }
         }
@@ -297,7 +325,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
     private fun render(scene: Scene) {
         val previousParts = scene.renderedParts
         val previousBounds = scene.bounds
-        var parts = (if (scene.melee) staffMeleeDisplayParts(scene.spell, scene.age, scene.duration, scene.length)
+        var parts = (scene.customGeometry?.invoke(scene.age) ?: if (scene.melee) staffMeleeDisplayParts(scene.spell, scene.age, scene.duration, scene.length)
         else if (scene.preparation) staffPreparationParts(scene.spell, scene.secondary, scene.age, scene.duration)
         else if (scene.defense != null) staffDefenseParts(scene.spell, scene.age, scene.duration,
             scene.defense.allAround, scene.defense.strength, scene.age - scene.defense.impactAt,
@@ -358,12 +386,14 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         previousHandles.filterNot(retainedHandles::contains).forEach(PacketBlockDisplay::remove)
         scene.handles.clear()
         val interpolationTicks = when {
+            scene.customGeometry != null -> FRAME_TICKS
             scene.defense != null || scene.preparation -> FRAME_TICKS
             scene.spell == StaffSpell.CHAIN -> 0
             scene.charging -> CHARGE_INTERPOLATION_TICKS
             else -> FRAME_TICKS
         }
         val teleportTicks = when {
+            scene.customGeometry != null -> FRAME_TICKS
             scene.preparation -> FRAME_TICKS
             scene.spell == StaffSpell.CHAIN -> 0
             scene.charging -> CHARGE_INTERPOLATION_TICKS

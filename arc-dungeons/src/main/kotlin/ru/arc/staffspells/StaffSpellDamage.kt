@@ -34,6 +34,8 @@ internal class StaffSpellDamage(private val duelAccess: StaffSpellDuelAccess? = 
     // The controller supplies its live actor registry; item tags never authorize a summon target.
     internal var summonCast: (LivingEntity) -> StaffSpellCast? = { null }
 
+    fun inputAllowed(player: Player): Boolean = duelAccess?.inputAllowed(player) ?: true
+
     fun eligible(player: Player, target: LivingEntity, cast: StaffSpellCast? = null): Boolean {
         val authorization = cast?.duelAuthorization
         if (authorization != null) {
@@ -57,7 +59,7 @@ internal class StaffSpellDamage(private val duelAccess: StaffSpellDuelAccess? = 
 
     /** Null means the player is invalid or the enabled optional bridge failed. */
     fun capture(player: Player, duelOnly: Boolean = false): StaffSpellCast? {
-        if (!player.isOnline || !player.isValid || player.isDead) return null
+        if (!player.isOnline || !player.isValid || player.isDead || !inputAllowed(player)) return null
         duelAccess?.context(player)?.let { authorization ->
             if (!duelOnly) return null
             return StaffSpellCast(player.uniqueId, UUID.randomUUID(), 1, null, null, false,
@@ -71,7 +73,7 @@ internal class StaffSpellDamage(private val duelAccess: StaffSpellDuelAccess? = 
 
     /** Duel casts remain valid only for their captured match, round, owner registration and participant pair. */
     fun isCurrent(player: Player, cast: StaffSpellCast): Boolean {
-        if (cast.casterId != player.uniqueId || !player.isOnline || !player.isValid || player.isDead) return false
+        if (cast.casterId != player.uniqueId || !player.isOnline || !player.isValid || player.isDead || !inputAllowed(player)) return false
         val authorization = cast.duelAuthorization
         return if (authorization != null) {
             cast.duelAccess === duelAccess && duelAccess?.isCurrent(authorization, player) == true

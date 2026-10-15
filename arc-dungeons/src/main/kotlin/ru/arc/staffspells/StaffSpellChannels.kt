@@ -126,6 +126,7 @@ internal class StaffSpellChannels(
             emitSelection(channel, selection)
             visuals.withOwner(player.uniqueId) {
                 visuals.cue(position, Sound.BLOCK_STONE_PLACE, volume = 0.32f, pitch = 0.72f)
+                visuals.cue(position, Sound.BLOCK_AMETHYST_BLOCK_RESONATE, volume = 0.24f, pitch = 0.58f)
             }
             trackScene(player.uniqueId, scene)
         } else {
@@ -199,6 +200,7 @@ internal class StaffSpellChannels(
             from.clone(), direction, remaining, INITIAL_THROW_SPEED, channel.ageTicks)
         visuals.withOwner(player.uniqueId) {
             visuals.cue(from, Sound.BLOCK_STONE_HIT, volume = 0.42f, pitch = 0.68f)
+            visuals.cue(from, Sound.ENTITY_BREEZE_SHOOT, volume = 0.32f, pitch = 0.72f)
         }
     }
 
@@ -240,6 +242,7 @@ internal class StaffSpellChannels(
         visuals.withOwner(player.uniqueId) {
             visuals.particles(origin, staffGravityPulseFrame(0, GRAVITY_PULSE_RADIUS))
             visuals.cue(origin, Sound.BLOCK_STONE_PLACE, volume = 0.38f, pitch = 0.58f)
+            visuals.cue(origin, Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, volume = 0.36f, pitch = 0.62f)
         }
         return true
     }
@@ -359,7 +362,7 @@ internal class StaffSpellChannels(
             }
             if (ticksHeld > 0 && ticksHeld % (SOUND_INTERVAL_TICKS * 2) == 0) {
                 visuals.withOwner(player.uniqueId) {
-                    visuals.cue(moved, Sound.BLOCK_STONE_PLACE, volume = 0.18f, pitch = 0.92f)
+                    visuals.cue(moved, Sound.BLOCK_AMETHYST_BLOCK_RESONATE, volume = 0.18f, pitch = 0.68f)
                 }
             }
         }
@@ -513,7 +516,8 @@ internal class StaffSpellChannels(
         visuals.withOwner(flight.casterId) {
             visuals.sceneryBurst(at, radius)
             visuals.particles(at, staffGravityImpactFrame(), clearance = 0.0)
-            visuals.cue(at, Sound.ENTITY_GENERIC_EXPLODE, volume = 0.34f, pitch = 0.72f)
+            visuals.cue(at, Sound.BLOCK_DEEPSLATE_BREAK, volume = 0.72f, pitch = 0.64f)
+            visuals.cue(at, Sound.BLOCK_AMETHYST_BLOCK_RESONATE, volume = 0.34f, pitch = 0.58f)
         }
         val targets = targeting.nearby(player, at, radius, flight.cast)
             .filter { center(it).distanceSquared(at) <= radius * radius }
