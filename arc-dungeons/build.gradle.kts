@@ -95,6 +95,7 @@ tasks.shadowJar {
     exclude("ru/arc/paper/api/**", "ru/arc/dungeons/api/**", "ru/arc/staffspells/api/**")
     exclude("ru/arc/paper/redis/PaperRedisServiceProvider*", "ru/arc/paper/sql/PaperSqlServiceProvider*",
         "ru/arc/paper/metrics/PaperArcMetricsProvider*")
+    exclude("ru/arc/paper/redis/SharedPaperRedisService*", "ru/arc/paper/sql/SharedPaperSqlService*")
     relocate("de.tr7zw.changeme.nbtapi", "ru.arc.dungeons.libs.nbtapi")
 }
 tasks.build { dependsOn(tasks.shadowJar) }
