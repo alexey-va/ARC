@@ -551,9 +551,9 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
     "charged projectiles keep their exact handles world pose and body on release" {
         withDisplayHarness { h ->
             val caster = h.player("charge-release")
-            for (spell in listOf(StaffSpell.EMBER, StaffSpell.ICICLE)) {
+            for (spell in listOf(StaffSpell.EMBER, StaffSpell.ICICLE)) for (pitch in listOf(-22f, -90f, 90f)) {
                 val before = h.recorder.records.size
-                val at = caster.eyeLocation.clone().apply { yaw = 37f; pitch = -22f }
+                val at = caster.eyeLocation.clone().apply { yaw = 37f; this.pitch = pitch }
                 if (spell == StaffSpell.ICICLE) at.add(3.0, 1.0, -2.0)
                 val id = h.effects.play(caster.uniqueId, spell, at, durationTicks = 220,
                     charging = true, chargeSlot = if (spell == StaffSpell.ICICLE) 5 else null)!!
@@ -571,11 +571,15 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
                     (record.teleports.last().distance(positions[index]) < 1e-5) shouldBe true
                     record.poses.last() shouldBe poses[index]
                 }
-                h.effects.moveProjectile(id, origin.clone().add(0.0, 0.0, 1.2), at.direction)
+                val displacement = at.direction.multiply(1.2)
+                h.effects.moveProjectile(id, origin.clone().add(displacement), at.direction)
                 h.effects.synchronize(id, 1)
                 body.forEachIndexed { index, record ->
                     record.removals shouldBe 0
-                    record.poses.last().values.subList(3, 6) shouldBe poses[index].values.subList(3, 6)
+                    record.poses.last().values.zip(poses[index].values).forEach { (moved, held) ->
+                        (kotlin.math.abs(moved - held) < 1e-5f) shouldBe true
+                    }
+                    (record.teleports.last().distance(positions[index].clone().add(displacement)) < 1e-5) shouldBe true
                 }
                 h.effects.remove(id)
                 body.all { it.removals == 1 } shouldBe true

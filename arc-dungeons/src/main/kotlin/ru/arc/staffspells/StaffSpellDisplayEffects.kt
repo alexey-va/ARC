@@ -205,8 +205,12 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         val scene = scenes[sceneId] ?: return
         move(sceneId, at)
         val vector = Vector3f(direction.x.toFloat(), direction.y.toFloat(), direction.z.toFloat())
-        scene.rotation = if (scene.spell == StaffSpell.GALE) staffYawOnlyOrientation(vector)
-            else staffLanceOrientation(vector)
+        scene.rotation = when (scene.spell) {
+            StaffSpell.GALE -> staffYawOnlyOrientation(vector)
+            // Carry the held camera frame into flight, including an exactly vertical aim.
+            StaffSpell.ICICLE -> staffIcicleFlightOrientation(scene.rotation, vector)
+            else -> staffLanceOrientation(vector)
+        }
         if (scene.controllerDriven) scene.controllerDirty = true
     }
 
@@ -484,6 +488,9 @@ internal fun staffChargeOrientation(spell: StaffSpell, yaw: Float, direction: Ve
             .rotateX(kotlin.math.atan2(-direction.y, kotlin.math.hypot(direction.x, direction.z)))
         else -> Quaternionf().rotationY(-Math.toRadians(yaw.toDouble()).toFloat())
     }
+
+internal fun staffIcicleFlightOrientation(previous: Quaternionf, direction: Vector3f): Quaternionf =
+    Quaternionf().rotationTo(previous.transform(Vector3f(0f, 0f, 1f)), direction).mul(previous)
 
 /** Conservative sphere includes the entire transformed cuboid, not only its anchor. */
 internal fun staffPartClearOfEye(part: StaffDisplayPart, origin: Location, rotation: Quaternionf, eye: Location,

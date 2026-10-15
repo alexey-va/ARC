@@ -29,10 +29,14 @@ class StaffChargeGeometryTest : FreeSpec({
         (0..10).forEach { index ->
             full.count { it.identity!!.startsWith("icicle-charge:$index:") } shouldBe 8
         }
-        val anchorOrder = listOf(0, 2, 4, 5, 6, 8, 10, 1, 3, 7, 9)
-        anchorOrder.forEachIndexed { slot, anchorIndex ->
-            (staffIcicleChargeAnchorOffset(slot).distance(staffIcicleAnchorOffset(anchorIndex, 11)) < 1.0e-6f) shouldBe true
+        (0..6).forEach { slot ->
+            staffIcicleChargeAnchorOffset(slot) shouldBe staffIcicleAnchorOffset(slot, 7)
         }
+        val anchors = (0..10).map(::staffIcicleChargeAnchorOffset)
+        (anchors.map { it.z }.distinct().size >= 7) shouldBe true
+        (anchors.maxOf { it.y } - anchors.minOf { it.y } > 2f) shouldBe true
+        // Layout is stable over time, even though it is deliberately irregular.
+        staffChargeParts(StaffSpell.ICICLE, 1.0, 80) shouldBe full
         staffIcicleCount(Double.NaN) shouldBe 7
         staffIcicleCount(Double.POSITIVE_INFINITY) shouldBe 7
         staffIcicleCount(-1.0) shouldBe 7
@@ -58,9 +62,8 @@ class StaffChargeGeometryTest : FreeSpec({
         body.map { it.identity } shouldBe (0..7).map { "icicle:$it" }
         val localSlot = staffIcicleChargeParts(0.0, 0)
         localSlot.map { it.identity } shouldBe body.map { it.identity }
-        localSlot.zip(body).all { (charged, part) ->
-            charged.scale.distance(part.scale) < 1.0e-6f && charged.center.distance(part.center) < 1.0e-6f
-        } shouldBe true
+        localSlot.map { it.material } shouldBe body.map { it.material }
+        (0..6).map { staffIcicleChargeParts(0.0, it).first().rotation }.distinct().size shouldBe 7
         val aggregatedFirst = empty.filter { it.identity!!.startsWith("icicle-charge:0:") }
         aggregatedFirst.map { it.material } shouldBe localSlot.map { it.material }
         aggregatedFirst.zip(localSlot).all { (preview, charged) ->
@@ -161,7 +164,7 @@ class StaffChargeGeometryTest : FreeSpec({
         meteor.drop(4).map { it.identity } shouldBe (0..9).map { "wake:$it" }
     }
 
-    "the crown is visible above the reticle throughout charge and camera pitch" {
+    "the scattered crown stays in view and leaves the reticle clear throughout charge and camera pitch" {
         for (yaw in listOf(0f, 73f, -135f)) for (pitch in listOf(-75f, 0f, 60f)) {
             val camera = Quaternionf().rotationY(-Math.toRadians(yaw.toDouble()).toFloat())
                 .rotateX(Math.toRadians(pitch.toDouble()).toFloat())
@@ -176,8 +179,8 @@ class StaffChargeGeometryTest : FreeSpec({
                         // Default 70-degree vertical FOV at 16:9, with a clear central aiming corridor.
                         (vertex.z > 1.5f) shouldBe true
                         (kotlin.math.abs(vertex.x / vertex.z) < 1.20f) shouldBe true
-                        (vertex.y / vertex.z in 0.08f..0.68f) shouldBe true
-                        (kotlin.math.abs(vertex.x / vertex.z) > 0.16f || vertex.y / vertex.z > 0.16f) shouldBe true
+                        (vertex.y / vertex.z in -0.62f..0.68f) shouldBe true
+                        (kotlin.math.abs(vertex.x / vertex.z) > 0.16f || kotlin.math.abs(vertex.y / vertex.z) > 0.16f) shouldBe true
                     }
                 }
             }

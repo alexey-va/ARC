@@ -9,10 +9,28 @@ import kotlin.math.floor
 import kotlin.math.sin
 
 internal fun staffIcicleStep(age: Int): Double = minOf(2.4, 0.55 + age.coerceAtLeast(0) * 0.18)
-/** A visible upper arc in camera space; its open middle leaves the target unobstructed. */
+
+private data class IcicleSlot(val anchor: Vector3f, val rotation: Quaternionf, val size: Float)
+
+// Hand-spaced layers, not a ring: the first seven already surround an open aiming corridor.
+// Stable poses keep charging, release and the offline preview on the same physical bodies.
+private val icicleSlots = listOf(
+    IcicleSlot(Vector3f(-2.30f, 0.15f, 3.50f), Quaternionf().rotateXYZ(-0.06f, 0.10f, 0.18f), 0.93f),
+    IcicleSlot(Vector3f(2.00f, 1.03f, 4.05f), Quaternionf().rotateXYZ(0.12f, -0.09f, -0.32f), 0.84f),
+    IcicleSlot(Vector3f(-1.12f, 1.70f, 4.30f), Quaternionf().rotateXYZ(0.04f, 0.13f, 0.12f), 1.02f),
+    IcicleSlot(Vector3f(3.00f, -0.55f, 4.15f), Quaternionf().rotateXYZ(-0.10f, -0.12f, 0.35f), 0.88f),
+    IcicleSlot(Vector3f(0.43f, 1.15f, 3.65f), Quaternionf().rotateXYZ(0.09f, 0.05f, -0.18f), 0.90f),
+    IcicleSlot(Vector3f(-1.60f, -0.65f, 3.70f), Quaternionf().rotateXYZ(-0.13f, 0.07f, -0.26f), 0.80f),
+    IcicleSlot(Vector3f(1.35f, -0.08f, 3.45f), Quaternionf().rotateXYZ(0.02f, -0.10f, 0.08f), 0.97f),
+    IcicleSlot(Vector3f(-2.90f, 1.25f, 4.65f), Quaternionf().rotateXYZ(0.14f, 0.09f, 0.28f), 0.88f),
+    IcicleSlot(Vector3f(1.52f, 2.00f, 4.90f), Quaternionf().rotateXYZ(-0.04f, -0.14f, -0.13f), 0.82f),
+    IcicleSlot(Vector3f(-1.45f, 0.50f, 4.25f), Quaternionf().rotateXYZ(0.08f, 0.12f, -0.38f), 1.00f),
+    IcicleSlot(Vector3f(-3.20f, -0.85f, 4.25f), Quaternionf().rotateXYZ(-0.12f, -0.04f, 0.22f), 0.86f),
+)
+
 internal fun staffIcicleAnchorOffset(index: Int, count: Int = 7): Vector3f {
-    val angle = if (count <= 1) PI / 2 else PI * (0.12 + 0.76 * index.coerceIn(0, count - 1) / (count - 1))
-    return Vector3f((cos(angle) * 2.15).toFloat(), (0.20 + sin(angle)).toFloat(), 3.25f)
+    require(count in 1..icicleSlots.size && index in 0 until count)
+    return Vector3f(icicleSlots[index].anchor)
 }
 internal fun staffIcicleLaunchDelay(index: Int): Int = 4 + index * 2
 
@@ -70,13 +88,8 @@ internal fun staffIcicleCount(charge: Double): Int {
     return 7 + floor(4.0 * amount).toInt()
 }
 
-private val staffIcicleChargeAnchorOrder = intArrayOf(0, 2, 4, 5, 6, 8, 10, 1, 3, 7, 9)
-
-/** Seven symmetric starter positions, then the four positions that fill their gaps. */
-internal fun staffIcicleChargeAnchorOffset(index: Int): Vector3f {
-    require(index in 0 until 11)
-    return staffIcicleAnchorOffset(staffIcicleChargeAnchorOrder[index], 11)
-}
+/** Additional charge grows four separate satellites without moving the starter cloud. */
+internal fun staffIcicleChargeAnchorOffset(index: Int): Vector3f = staffIcicleAnchorOffset(index, 11)
 
 /** One local eight-piece Icicle body, progressively scaled into its charge slot. */
 internal fun staffIcicleChargeParts(progress: Double, index: Int): List<StaffDisplayPart> {
@@ -84,15 +97,17 @@ internal fun staffIcicleChargeParts(progress: Double, index: Int): List<StaffDis
     val charge = progress.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
     val growth = if (index < 7) 1.0 else
         smoothCharge((charge - (index - 7) / 4.0) / 0.25)
-    val scaleFactor = growth.toFloat()
+    val slot = icicleSlots[index]
+    val scaleFactor = (growth * slot.size).toFloat()
     return staffIcicleDisplayParts(ageTicks = 8, impact = false, charge = charge).mapIndexed { piece, part ->
         part.copy(
-            center = Vector3f(part.center).mul(scaleFactor),
+            center = slot.rotation.transform(Vector3f(part.center).mul(scaleFactor)),
             scale = Vector3f(
                 maxOf(part.scale.x * scaleFactor, 0.001f),
                 maxOf(part.scale.y * scaleFactor, 0.001f),
                 maxOf(part.scale.z * scaleFactor, 0.001f),
             ),
+            rotation = Quaternionf(slot.rotation).mul(part.rotation),
             identity = "icicle:$piece",
         )
     }

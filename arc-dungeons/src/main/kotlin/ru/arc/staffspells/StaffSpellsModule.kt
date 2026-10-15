@@ -599,8 +599,12 @@ internal class StaffSpellController(
             if (!visible(eye, anchor)) { effects.remove(heldId); return@repeat }
 
             reserveBolt(player.uniqueId)
-            val visualId = effects.releaseCharge(heldId, 80) ?: effects.play(player.uniqueId, StaffSpell.ICICLE, anchor,
-                anchor.clone().add(direction), radius = 0.9, durationTicks = 80, charge = cast.visualCharge)
+            val visualId = effects.releaseCharge(heldId, 80) ?: run {
+                val fallback = effects.play(player.uniqueId, StaffSpell.ICICLE, anchor,
+                    anchor.clone().add(direction), radius = 0.9, durationTicks = 80,
+                    charging = true, charge = cast.visualCharge, chargeSlot = index)
+                effects.releaseCharge(fallback, 80) ?: fallback
+            }
             bolts += PendingStaffBolt(anchor, direction.clone(), null, cast, tuning, 1.0, 1,
                 visited, settings.range, visualId, spell = StaffSpell.ICICLE,
                 aimOnLaunch = true,
@@ -719,11 +723,20 @@ internal class StaffSpellController(
                 // Already airborne shots retain their own destination; the whole crown never snaps sideways.
                 val eye = player.eyeLocation
                 val aimedPoint = aimPoint(player)
-                bolt.target = lineTargets(player, eye, aimedPoint, 0.25, bolt.cast).firstOrNull()
+                bolt.target = acquireIcicleTarget(player, eye, aimedPoint, from, bolt.cast)
                 bolt.fixedAimPoint = aimedPoint
             }
             bolt.age++
-            val targetAt = bolt.target?.takeIf { damage.eligible(player, it, bolt.cast) }?.let(::center) ?: bolt.fixedAimPoint
+            val targetAt = if (bolt.aimOnLaunch) {
+                val target = bolt.target?.takeIf {
+                    damage.eligible(player, it, bolt.cast) && visible(player.eyeLocation, center(it)) &&
+                        visible(from, center(it))
+                }
+                if (bolt.target != null && target == null) bolt.target = null
+                target?.let(::center) ?: bolt.fixedAimPoint
+            } else {
+                bolt.target?.takeIf { damage.eligible(player, it, bolt.cast) }?.let(::center) ?: bolt.fixedAimPoint
+            }
             if (targetAt != null && bolt.age > bolt.holdForwardTicks) {
                 val desired = targetAt.toVector().subtract(from.toVector())
                 steerStaffBolt(bolt.direction, desired, bolt.age)
@@ -1108,6 +1121,33 @@ internal class StaffSpellController(
     }
 
     private fun lineTargets(player: Player, from: Location, to: Location, width: Double, cast: StaffSpellCast) = targeting.lineTargets(player, from, to, width, cast)
+    private fun acquireIcicleTarget(player: Player, eye: Location, aimedPoint: Location, release: Location,
+        cast: StaffSpellCast): LivingEntity? {
+        val direct = lineTargets(player, eye, aimedPoint, 0.25, cast).firstOrNull { victim ->
+            val target = center(victim)
+            eye.distanceSquared(target) <= settings.range * settings.range && visible(release, target)
+        }
+        if (direct != null) return direct
+
+        val look = eye.direction.normalize()
+        return aimed(player, settings.range, ICICLE_ASSIST_HALF_ANGLE, cast).asSequence()
+            .mapNotNull { victim ->
+                if (!damage.eligible(player, victim, cast)) return@mapNotNull null
+                val target = center(victim)
+                if (eye.distanceSquared(target) > settings.range * settings.range ||
+                    !visible(eye, target) || !visible(release, target)) return@mapNotNull null
+                val offset = target.toVector().subtract(eye.toVector())
+                val distance = offset.length()
+                val along = offset.dot(look)
+                if (along <= 0.0) return@mapNotNull null
+                val miss = offset.subtract(look.clone().multiply(along)).length()
+                if (miss > ICICLE_ASSIST_MAX_MISS || miss > along * ICICLE_ASSIST_CONE_SLOPE) return@mapNotNull null
+                IcicleAimCandidate(victim, miss / along, distance)
+            }
+            .minWithOrNull(compareBy<IcicleAimCandidate> { it.angularMiss }.thenBy { it.distance })
+            ?.target
+    }
+
     private fun aimPoint(player: Player) = targeting.aimPoint(player)
     private fun groundBelow(from: Location, range: Double) = targeting.groundBelow(from, range)
     private fun rayEnd(from: Location, direction: Vector, range: Double) = targeting.rayEnd(from, direction, range)
@@ -1183,6 +1223,9 @@ internal class StaffSpellController(
         const val STORM_NOVA_VERTICAL_REACH = 2.0
         const val MAX_WAVE_CANDIDATES = 32
         const val MAX_BOLTS_PER_CASTER = 12
+        const val ICICLE_ASSIST_HALF_ANGLE = 6.0
+        const val ICICLE_ASSIST_MAX_MISS = 2.0
+        val ICICLE_ASSIST_CONE_SLOPE = tan(Math.toRadians(ICICLE_ASSIST_HALF_ANGLE))
         const val FROST_ICICLE_SHATTER_TICKS = 10
         const val FROST_TRAVEL_TICKS = 12
         const val FROST_DURATION_TICKS = 24
@@ -1194,6 +1237,8 @@ internal class StaffSpellController(
     }
 
 }
+
+private data class IcicleAimCandidate(val target: LivingEntity, val angularMiss: Double, val distance: Double)
 
 private data class PendingStaffLance(val from: Location, val end: Location, val cast: StaffSpellCast,
     val tuning: StaffSpellTuning, val width: Double, val visited: MutableSet<UUID>, val visualId: UUID?,
