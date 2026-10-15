@@ -366,30 +366,75 @@ object StaffRedesignPreviewExport {
         )
     }
 
-    /** Icicle's eleven real charge scenes are kept as separate keyed eight-part bodies. */
+    /** Icicle's eleven charge scenes release their active keyed eight-part bodies. */
     private fun icicleChargeClip(holdTicks: Int): Map<String, Any> {
         val charge = staffChargeProgress(holdTicks)
+        val activeCount = staffIcicleCount(charge)
         val eye = Vector(0.0, 1.62, 0.0)
-        val frames = ticks(holdTicks).map { age ->
+        val target = Vector(0.0, eye.y, staffIcicleChargeAnchorOffset(0).z + PREVIEW_REACH_BLOCKS)
+        var flightTicks = 0
+        var flightDistance = 0.0
+        while (flightDistance < PREVIEW_REACH_BLOCKS) {
+            flightTicks++
+            flightDistance += staffIcicleStep(flightTicks)
+        }
+        val lastLaunchDelay = staffIcicleLaunchDelay(activeCount - 1)
+        val duration = holdTicks + lastLaunchDelay + flightTicks
+        val frames = ticks(duration - 1).map { age ->
+            val charging = age <= holdTicks
             val updateTick = (age / CHARGE_UPDATE_TICKS) * CHARGE_UPDATE_TICKS
             val progress = staffChargeProgress(minOf(updateTick, holdTicks))
-            val parts = (0 until 11).flatMap { slot ->
-                val offset = staffIcicleChargeAnchorOffset(slot)
-                val anchor = eye.clone().add(Vector(offset.x.toDouble(), offset.y.toDouble(), offset.z.toDouble()))
-                staffIcicleChargeParts(progress, slot).mapIndexed { index, display ->
-                    part(display, "icicle-charge:$slot", index, anchor)
+            val parts = if (charging) {
+                (0 until 11).flatMap { slot ->
+                    val offset = staffIcicleChargeAnchorOffset(slot)
+                    val anchor = eye.clone().add(Vector(offset.x.toDouble(), offset.y.toDouble(), offset.z.toDouble()))
+                    staffIcicleChargeParts(progress, slot).mapIndexed { index, display ->
+                        part(display, "icicle-charge:$slot", index, anchor)
+                    }
+                }
+            } else {
+                val releaseAge = age - holdTicks
+                (0 until activeCount).flatMap { slot ->
+                    val offset = staffIcicleChargeAnchorOffset(slot)
+                    val anchor = eye.clone().add(Vector(offset.x.toDouble(), offset.y.toDouble(), offset.z.toDouble()))
+                    val position = anchor.clone()
+                    val direction = Vector(0.0, 0.0, 1.0)
+                    var remaining = PREVIEW_REACH_BLOCKS
+                    val launchDelay = staffIcicleLaunchDelay(slot)
+                    for (tick in 1..releaseAge) {
+                        if (tick < launchDelay) continue
+                        if (remaining <= 0.001) break
+                        val flightAge = tick - launchDelay + 1
+                        if (flightAge > 4)
+                            steerStaffBolt(direction, target.clone().subtract(position), flightAge)
+                        val step = minOf(staffIcicleStep(flightAge), remaining)
+                        position.add(direction.clone().multiply(step))
+                        remaining -= step
+                    }
+                    val rotation = staffLanceOrientation(org.joml.Vector3f(
+                        direction.x.toFloat(), direction.y.toFloat(), direction.z.toFloat(),
+                    ))
+                    staffIcicleChargeParts(charge, slot).mapIndexed { index, display ->
+                        val oriented = display.copy(
+                            center = rotation.transform(org.joml.Vector3f(display.center)),
+                            rotation = org.joml.Quaternionf(rotation).mul(display.rotation),
+                        )
+                        part(oriented, "icicle-charge:$slot", index, position)
+                    }
                 }
             }
             mapOf("tick" to age, "parts" to parts, "emissions" to emptyList<Any>())
         }
         return mapOf(
             "id" to "icicle-charge-${chargeToken(charge)}", "spell" to StaffSpell.ICICLE.id, "input" to "CHARGE",
-            "quick" to false, "charge" to charge, "durationTicks" to holdTicks + 1, "tailTicks" to 0,
+            "quick" to false, "charge" to charge, "durationTicks" to duration, "tailTicks" to 0,
             "frameStepTicks" to FRAME_STEP_TICKS, "particleOnly" to false,
-            "anchor" to "caster eye and eleven source shoulder anchors; neutral yaw with local +Z forward",
+            "anchor" to "neutral caster eye; eleven camera-space crown anchors; local +Z forward",
             "previewReachBlocks" to PREVIEW_REACH_BLOCKS,
-            "timelineNote" to "Source charge formation only: eleven eight-part BlockDisplay bodies update on the production four-tick charge clock. At ${holdTicks} ticks, staffIcicleCount is ${staffIcicleCount(charge)}; release/bolt flight is outside this clip.",
-            "sourceFunctions" to listOf("staffChargeProgress", "staffIcicleChargeAnchorOffset", "staffIcicleChargeParts", "staffIcicleCount"),
+            "illustrativeTarget" to point(target.x, target.y, target.z),
+            "previewFlightDistanceBlocks" to PREVIEW_REACH_BLOCKS,
+            "timelineNote" to "Source ${holdTicks}-tick charge updates every four ticks, then releases ${activeCount} of the same eight-part bodies with stable keys; inactive slots are removed. Per-shot launch delays use staffIcicleLaunchDelay from release, flight steps use staffIcicleStep, and steering follows the illustrative target after four flight ticks. This is a visual-only lane capped at ${PREVIEW_REACH_BLOCKS} travel blocks, with no collision or damage simulation.",
+            "sourceFunctions" to listOf("staffChargeProgress", "staffIcicleChargeAnchorOffset", "staffIcicleChargeParts", "staffIcicleCount", "staffIcicleLaunchDelay", "staffIcicleStep", "steerStaffBolt"),
             "frames" to frames,
         )
     }

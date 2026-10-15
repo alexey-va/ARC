@@ -1,4 +1,4 @@
-# Staff spells — ArcDungeons 0.1.2
+# Staff spells — ArcDungeons 0.1.4
 
 `/arc stafftest` issues sixteen administrator-only mechanics samples.
 `inferno` is temporarily retired; `gravity` and `ossuary` remain available. Use
@@ -70,7 +70,7 @@ is held.
 | `lance` · Солнечное копьё | A ranged solar spear pierces up to three enemies, applying damage when its light front arrives | Three diverging solar beams | Солнечный щит | Круговой покров | `3dfantasyweaponscit:sagrada_winged_staff` |
 | `ember` · Пепельная комета | Fireball grows below the reticle with four-tick interpolation, then launches immediately with forward speed and accelerates | Three ground circles lock on cast; the first meteor launches after a 15-tick warning | Огненный заслон | Круговой покров | `3dfantasyweaponscit:bermunde_hermit_staff` |
 | `nova` · Терновый хват | Roots travel along the ground toward the target, close around it and slow enemies | Терновая клетка closes around the aimed point | Терновый заслон | Круговой покров | `3dfantasyweaponscit:holy_celtic_staff` |
-| `icicle` · Ледяной венец | Seven shoulder icicles sample the current reticle as each launches; full charge releases eleven | Five shards fall around the aimed point immediately | Кристальный заслон | Круговой покров | `3dfantasyweaponscit:olwen_staff` |
+| `icicle` · Ледяной венец | Seven icicles form a visible upper arc in front of the caster and sample the current reticle as each launches; full charge releases eleven. The charge follows camera yaw and pitch and retains the same bodies on release | Five shards fall around the aimed point immediately | Кристальный заслон | Круговой покров | `3dfantasyweaponscit:olwen_staff` |
 | `fault` · Обсидиановый раскол | A broad basalt and obsidian rupture rises in front up to seven blocks and pushes enemies back | Каменный выброс warns, then erupts at the aimed point and lifts enemies | Каменный бастион | Круговой покров | `3dfantasyweaponscit:staff_of_unholy_wisdom` |
 | `lunar` · Лунный серп | One large moon crescent cuts across a seven-block frontal area | Two moon blades converge on the target | Лунный покров | Круговой покров | `3dfantasyweaponscit:black_snake_staff` |
 | `gale` · Посох бури | An open tornado forms at the aimed point and lifts nearby enemies | Шквал is a twisting air ram with a fixed 36-block horizontal reach, clipped at cover | Ветряной щит | Круговой покров | `3dfantasyweaponscit:goblin_witch_staff` |

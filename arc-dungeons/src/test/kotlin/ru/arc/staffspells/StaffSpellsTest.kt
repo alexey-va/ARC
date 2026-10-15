@@ -144,10 +144,23 @@ class StaffSpellsTest : FreeSpec({
         for (spell in listOf(StaffSpell.EMBER, StaffSpell.ICICLE)) withStaffHarness { h ->
             val world = h.paper.addSimpleWorld("charge-transfer-${spell.id}")
             val player = h.player("charge-transfer", world, spell)
+            if (spell == StaffSpell.ICICLE) player.teleport(player.location.apply { yaw = 73f; pitch = -31f })
             h.controller.start()
             h.controller.charge(player, spell, 1.0)
             val held = h.visualPlays.toList()
             held.size shouldBe if (spell == StaffSpell.ICICLE) 11 else 1
+            if (spell == StaffSpell.ICICLE) {
+                val eye = player.eyeLocation
+                held.forEachIndexed { index, scene ->
+                    val direction = eye.direction
+                    val rotation = staffChargeOrientation(spell, eye.yaw,
+                        org.joml.Vector3f(direction.x.toFloat(), direction.y.toFloat(), direction.z.toFloat()))
+                    val offset = rotation.transform(staffIcicleChargeAnchorOffset(index))
+                    val expected = eye.clone().add(offset.x.toDouble(), offset.y.toDouble(), offset.z.toDouble())
+                    (scene.from.distance(expected) < 1e-5) shouldBe true
+                    (scene.from.toVector().subtract(eye.toVector()).dot(direction) > 3.2) shouldBe true
+                }
+            }
             every { h.effects.chargeOrigin(any()) } answers {
                 held.firstOrNull { it.id == firstArg<UUID?>() }?.from?.clone()?.apply {
                     if (spell == StaffSpell.EMBER) {
@@ -841,7 +854,7 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "icicle primary clears the camera before turning toward a downward aim" {
+    "icicle primary departs away from the camera along a downward aim" {
         withStaffHarness(settings = staffSettings(range = 24.0)) { h ->
             val world = h.paper.addSimpleWorld("staff-frost-camera")
             val player = h.player("staff-frost-camera", world, StaffSpell.ICICLE).apply {
@@ -854,7 +867,7 @@ class StaffSpellsTest : FreeSpec({
             h.projectileMoves.groupBy { it.id }.values.forEach { moves ->
                 moves.take(4).forEach { move ->
                     (move.at.distance(eye) > 2.0) shouldBe true
-                    (kotlin.math.abs(move.direction.y) < 0.0001) shouldBe true
+                    (move.direction.dot(eye.direction) > 0.999) shouldBe true
                 }
             }
             h.projectileMoves.map { it.id }.distinct().size shouldBe 7

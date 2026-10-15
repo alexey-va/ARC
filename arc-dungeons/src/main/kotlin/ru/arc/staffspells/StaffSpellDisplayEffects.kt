@@ -476,10 +476,14 @@ internal fun staffEyeClearance(spell: StaffSpell, impact: Boolean): Double =
         else -> 1.15
     }
 
-/** The EMBER charge core sits on the reticle; legacy formations keep their yaw-only frame. */
+/** Charged bodies follow the aim; the crown also preserves the camera's horizontal axis. */
 internal fun staffChargeOrientation(spell: StaffSpell, yaw: Float, direction: Vector3f): Quaternionf =
-    if (spell == StaffSpell.EMBER) staffLanceOrientation(Vector3f(direction))
-    else Quaternionf().rotationY(-Math.toRadians(yaw.toDouble()).toFloat())
+    when (spell) {
+        StaffSpell.EMBER -> staffLanceOrientation(Vector3f(direction))
+        StaffSpell.ICICLE -> Quaternionf().rotationY(-Math.toRadians(yaw.toDouble()).toFloat())
+            .rotateX(kotlin.math.atan2(-direction.y, kotlin.math.hypot(direction.x, direction.z)))
+        else -> Quaternionf().rotationY(-Math.toRadians(yaw.toDouble()).toFloat())
+    }
 
 /** Conservative sphere includes the entire transformed cuboid, not only its anchor. */
 internal fun staffPartClearOfEye(part: StaffDisplayPart, origin: Location, rotation: Quaternionf, eye: Location,

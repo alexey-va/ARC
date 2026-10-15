@@ -574,29 +574,28 @@ internal class StaffSpellController(
 
     private fun icicleChargeAnchor(player: Player, index: Int): Location {
         val eye = player.eyeLocation
+        val direction = eye.direction
         val offset = staffChargeOrientation(StaffSpell.ICICLE, eye.yaw,
-            org.joml.Vector3f()).transform(staffIcicleChargeAnchorOffset(index))
+            org.joml.Vector3f(direction.x.toFloat(), direction.y.toFloat(), direction.z.toFloat()))
+            .transform(staffIcicleChargeAnchorOffset(index))
         return eye.add(offset.x.toDouble(), offset.y.toDouble(), offset.z.toDouble())
     }
 
     private fun frostIcicles(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning, count: Int = 7,
         chargedScenes: List<UUID?> = emptyList()) {
         val eye = player.eyeLocation
-        val yaw = Math.toRadians(player.location.yaw.toDouble())
-        val forward = Vector(-sin(yaw), 0.0, cos(yaw)).normalize()
-        val right = Vector(forward.z, 0.0, -forward.x).normalize()
-        // Leave the shoulders horizontally before seeking: a downwards look must not shoot through the eye.
-        val direction = forward.clone()
+        val direction = eye.direction.normalize()
+        val rotation = staffChargeOrientation(StaffSpell.ICICLE, eye.yaw,
+            org.joml.Vector3f(direction.x.toFloat(), direction.y.toFloat(), direction.z.toFloat()))
+        // Depart away from the camera in the same frame as the visible charged crown.
         val visited = mutableSetOf<UUID>()
 
         repeat(count) { index ->
             val heldId = chargedScenes.getOrNull(index)
-            val offset = if (chargedScenes.isNotEmpty()) staffIcicleChargeAnchorOffset(index)
-                else staffIcicleAnchorOffset(index, count)
+            val offset = rotation.transform(if (chargedScenes.isNotEmpty()) staffIcicleChargeAnchorOffset(index)
+                else staffIcicleAnchorOffset(index, count))
             val anchor = effects.chargeOrigin(heldId) ?: eye.clone()
-                .add(right.clone().multiply(offset.x.toDouble()))
-                .add(0.0, offset.y.toDouble(), 0.0)
-                .add(forward.clone().multiply(offset.z.toDouble()))
+                .add(offset.x.toDouble(), offset.y.toDouble(), offset.z.toDouble())
             if (!visible(eye, anchor)) { effects.remove(heldId); return@repeat }
 
             reserveBolt(player.uniqueId)

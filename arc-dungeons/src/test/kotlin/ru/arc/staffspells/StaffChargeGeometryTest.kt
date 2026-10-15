@@ -3,6 +3,7 @@ package ru.arc.staffspells
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import org.bukkit.Material
+import org.joml.Quaternionf
 import org.joml.Vector3f
 
 class StaffChargeGeometryTest : FreeSpec({
@@ -160,7 +161,30 @@ class StaffChargeGeometryTest : FreeSpec({
         meteor.drop(4).map { it.identity } shouldBe (0..9).map { "wake:$it" }
     }
 
-    "only ember charge follows aim pitch" {
+    "the crown is visible above the reticle throughout charge and camera pitch" {
+        for (yaw in listOf(0f, 73f, -135f)) for (pitch in listOf(-75f, 0f, 60f)) {
+            val camera = Quaternionf().rotationY(-Math.toRadians(yaw.toDouble()).toFloat())
+                .rotateX(Math.toRadians(pitch.toDouble()).toFloat())
+            val direction = camera.transform(Vector3f(0f, 0f, 1f))
+            val orientation = staffChargeOrientation(StaffSpell.ICICLE, yaw, direction)
+            val toCamera = Quaternionf(camera).conjugate().mul(orientation)
+            for (charge in listOf(0.0, 0.5, 1.0)) {
+                staffChargeParts(StaffSpell.ICICLE, charge, 36).forEach { part ->
+                    for (x in listOf(-0.5f, 0.5f)) for (y in listOf(-0.5f, 0.5f)) for (z in listOf(-0.5f, 0.5f)) {
+                        val vertex = toCamera.transform(part.rotation.transform(Vector3f(x, y, z).mul(part.scale))
+                            .add(part.center))
+                        // Default 70-degree vertical FOV at 16:9, with a clear central aiming corridor.
+                        (vertex.z > 1.5f) shouldBe true
+                        (kotlin.math.abs(vertex.x / vertex.z) < 1.20f) shouldBe true
+                        (vertex.y / vertex.z in 0.08f..0.68f) shouldBe true
+                        (kotlin.math.abs(vertex.x / vertex.z) > 0.16f || vertex.y / vertex.z > 0.16f) shouldBe true
+                    }
+                }
+            }
+        }
+    }
+
+    "charged crown follows pitch without rolling while legacy cues stay horizontal" {
         val direction = Vector3f(-0.27f, 0.31f, 0.91f).normalize()
         val emberForward = staffChargeOrientation(StaffSpell.EMBER, yaw = 73f, direction = direction)
             .transform(Vector3f(0f, 0f, 1f))

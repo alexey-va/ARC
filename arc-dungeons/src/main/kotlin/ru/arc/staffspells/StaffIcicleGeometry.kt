@@ -9,13 +9,14 @@ import kotlin.math.floor
 import kotlin.math.sin
 
 internal fun staffIcicleStep(age: Int): Double = minOf(2.4, 0.55 + age.coerceAtLeast(0) * 0.18)
+/** A visible upper arc in camera space; its open middle leaves the target unobstructed. */
 internal fun staffIcicleAnchorOffset(index: Int, count: Int = 7): Vector3f {
     val angle = if (count <= 1) PI / 2 else PI * (0.12 + 0.76 * index.coerceIn(0, count - 1) / (count - 1))
-    return Vector3f((cos(angle) * 2.65).toFloat(), (0.35 + sin(angle) * 2.3).toFloat(), -1.65f)
+    return Vector3f((cos(angle) * 2.15).toFloat(), (0.20 + sin(angle)).toFloat(), 3.25f)
 }
 internal fun staffIcicleLaunchDelay(index: Int): Int = 4 + index * 2
 
-/** One shoulder crystal: its eight stable pieces assemble, fly together, then fracture. */
+/** One crown crystal: its eight stable pieces assemble, fly together, then fracture. */
 internal fun staffIcicleDisplayParts(ageTicks: Int, impact: Boolean, charge: Double = 0.0): List<StaffDisplayPart> {
     val assembly = (ageTicks / 8.0).coerceIn(0.0, 1.0)
     val chargeAmount = charge.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
