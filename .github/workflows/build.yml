@@ -211,7 +211,7 @@ jobs:
             !arc-core-plugin/build/libs/*-plain.jar
             build/plugwright/plugins/ArcCore-*.jar
             arc-dungeons/build/libs/ArcDungeons-*.jar
-            build/plugwright/plugins/ArcDungeons-0.1.1.jar
+            build/plugwright/plugins/ArcDungeons-*.jar
             build/plugwright/plugins/ArcDungeonsE2eFixture.jar
             build/plugwright/logs/
             build/e2e-jar-sha256.txt

@@ -13,6 +13,8 @@ from verify_arc_dungeons_artifact_split import (
 
 ARC_ENTRIES = {
     "ru/arc/ARC.class",
+    "ru/arc/redis/RedisOperations.class",
+    "ru/arc/redis/ChannelListener.class",
     "ru/arc/dungeons/DungeonHostServices.class",
     "ru/arc/dungeons/api/ArcDungeonsService.class",
     "ru/arc/staffspells/api/ArcStaffSpellService.class",

@@ -80,6 +80,8 @@ version = "1.4.395"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.23"
+val arcCorePluginVersion: String by project
+val arcDungeonsPluginVersion: String by project
 val landsJar = providers.gradleProperty("landsJar").orNull?.let(::file)
 if (landsJar != null) require(landsJar.isFile) { "Lands JAR does not exist: $landsJar" }
 val landsCompileDependency: Any = landsJar?.let { files(it) } ?: libs.com.github.angeschossen.landsapi
@@ -413,8 +415,8 @@ tasks {
         exclude("ru/arc/paper/redis/PaperRedisServiceProvider*", "ru/arc/paper/redis/SharedPaperRedisService*")
         exclude("ru/arc/paper/metrics/PaperArcMetricsProvider*")
         exclude("ru/arc/redis/RedisTelemetrySink*", "ru/arc/redis/NoOpRedisTelemetrySink*")
-        exclude("ru/arc/redis/RedisOperation*", "ru/arc/redis/RedisReconnect*")
-        exclude("io/micrometer/core/**", "io/micrometer/commons/**", "io/micrometer/observation/**")
+        exclude("ru/arc/redis/RedisOperation.class", "ru/arc/redis/RedisOperationResult*", "ru/arc/redis/RedisReconnect*")
+        exclude("io/micrometer/core/**", "io/micrometer/common/**", "io/micrometer/observation/**")
 
         // Canonical logging.yml / redis.yml live in arc-core-* (not duplicated in this repo).
         from(loggingModuleResources) {
@@ -632,7 +634,7 @@ plugwright {
     acceptEula.set(true)
     jvmArgs.set(listOf("-Xms512M", "-Xmx2G", "-XX:ActiveProcessorCount=2"))
     writeFiles {
-        file("plugins/ArcCore-0.1.0.jar", projectDir.resolve("arc-core-plugin/build/libs/ArcCore-0.1.0.jar"))
+        file("plugins/ArcCore-$arcCorePluginVersion.jar", projectDir.resolve("arc-core-plugin/build/libs/ArcCore-$arcCorePluginVersion.jar"))
         file("server.properties", projectDir.resolve("src/test/e2e/fixtures/server.properties"))
         file("permissions.yml", projectDir.resolve("src/test/e2e/fixtures/permissions.yml"))
         file("plugins/ARC/modules/entity-cleanup.yml", projectDir.resolve("src/test/e2e/fixtures/entity-cleanup.yml"))
@@ -643,7 +645,7 @@ plugwright {
         }
         if (dungeonsE2e) {
             file("plugins/ARC/modules/redis.yml", projectDir.resolve("src/test/e2e/fixtures/entity-cleanup-redis.yml"))
-            file("plugins/ArcDungeons-0.1.1.jar", projectDir.resolve("arc-dungeons/build/libs/ArcDungeons-0.1.1.jar"))
+            file("plugins/ArcDungeons-$arcDungeonsPluginVersion.jar", projectDir.resolve("arc-dungeons/build/libs/ArcDungeons-$arcDungeonsPluginVersion.jar"))
             file("plugins/ArcDungeonsE2eFixture.jar", arcDungeonsE2eFixtureJar.get().archiveFile.get().asFile)
             file("plugins/Citizens-2.0.43-b4246.jar", contractCitizensJar.get().asFile)
         } else if (cleanupE2e || parkourE2e || dialogE2e) {

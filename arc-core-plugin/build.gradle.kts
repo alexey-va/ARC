@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "ru.ruscrafting"
-version = "0.1.0"
+version = providers.gradleProperty("arcCorePluginVersion").get()
 base.archivesName.set("ArcCore")
 
 java { toolchain { languageVersion.set(JavaLanguageVersion.of(25)) } }

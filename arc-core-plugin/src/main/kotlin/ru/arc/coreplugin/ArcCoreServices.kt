@@ -46,6 +46,9 @@ class ArcCoreServices private constructor(
             var holder: ArcCoreServices? = null
 
             try {
+                check(manager.load(ArcMetricsService::class.java) == null) {
+                    "An ArcMetricsService provider is already registered"
+                }
                 val sql = PaperSqlServiceProvider(owner).also(providers::add)
                 val redis = PaperRedisServiceProvider(owner).also(providers::add)
                 val createdMetrics = PaperArcMetricsProvider(null).also(providers::add)

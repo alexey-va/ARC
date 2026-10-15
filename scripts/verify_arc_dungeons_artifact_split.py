@@ -30,11 +30,13 @@ ARC_CORE_RUNTIME_CLASS_PREFIXES = (
     "ru/arc/redis/RedisTelemetrySink",
     "ru/arc/redis/NoOpRedisTelemetrySink",
     "ru/arc/redis/RedisOperation",
-    "ru/arc/redis/RedisReconnect",
+    "ru/arc/redis/RedisOperationResult",
+    "ru/arc/redis/RedisReconnectPath",
+    "ru/arc/redis/RedisReconnectResult",
 )
 ARC_CORE_RUNTIME_PACKAGES = (
     "io/micrometer/core/",
-    "io/micrometer/commons/",
+    "io/micrometer/common/",
     "io/micrometer/observation/",
 )
 MOVED_PACKAGE = "ru/arc/hooks/elitemobs/"
@@ -117,9 +119,9 @@ def verify_arc_core_ownership(
                 violations.append(f"{name} JAR embeds ArcCore provider implementation {class_name}")
 
     for prefix in ARC_CORE_RUNTIME_CLASS_PREFIXES:
-        if not class_entries(arc_core, prefix):
+        if not class_exists(arc_core, prefix):
             violations.append(f"ArcCore JAR is missing shared runtime class {prefix}*")
-        if class_entries(arc, prefix):
+        if class_exists(arc, prefix):
             violations.append(f"ARC JAR embeds ArcCore runtime class {prefix}*")
     for package in ARC_CORE_RUNTIME_PACKAGES:
         if not class_entries(arc_core, package):
