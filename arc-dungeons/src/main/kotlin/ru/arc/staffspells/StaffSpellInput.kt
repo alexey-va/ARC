@@ -37,6 +37,16 @@ private const val STAFF_CHARGE_RAMP_TICKS = 32
 private const val STAFF_MAX_CHARGE_TICKS = 200
 private val STAFF_CHARGED_PRIMARY_SPELLS = setOf(StaffSpell.EMBER, StaffSpell.ICICLE)
 
+/** Attack mode is click-toggle for channels/charges; it never means holding the mouse button. */
+internal enum class StaffAttackInputMode { INSTANT, CHARGE_CLICK_TOGGLE, CHANNEL_CLICK_TOGGLE }
+
+/** Shared by input and HUD so instructions describe the same attack path the controller executes. */
+internal fun staffAttackInputMode(spell: StaffSpell, secondary: Boolean): StaffAttackInputMode = when {
+    spell == StaffSpell.GRAVITY -> StaffAttackInputMode.CHANNEL_CLICK_TOGGLE
+    !secondary && spell in STAFF_CHARGED_PRIMARY_SPELLS -> StaffAttackInputMode.CHARGE_CLICK_TOGGLE
+    else -> StaffAttackInputMode.INSTANT
+}
+
 internal fun staffChargeProgress(ticksHeld: Int): Double =
     ((ticksHeld - STAFF_CHARGE_DELAY_TICKS).coerceAtLeast(0).toDouble() / STAFF_CHARGE_RAMP_TICKS)
         .coerceIn(0.0, 1.0)
@@ -260,7 +270,7 @@ internal class StaffSpellInput(
             releaseCharge(player)
             return
         }
-        if (isChannel(spell) || requiresCharge(spell, player.isSneaking)) {
+        if (staffAttackInputMode(spell, player.isSneaking) != StaffAttackInputMode.INSTANT) {
             beginCharge(player, spell)
             return
         }
@@ -321,9 +331,6 @@ internal class StaffSpellInput(
     }
 
     private fun isChannel(spell: StaffSpell) = spell == StaffSpell.GRAVITY
-
-    private fun requiresCharge(spell: StaffSpell, secondary: Boolean) =
-        !secondary && spell in STAFF_CHARGED_PRIMARY_SPELLS
 
     private fun upgradeHeldStaff(player: Player) = upgradeStaffSlot(player, player.inventory.heldItemSlot)
 

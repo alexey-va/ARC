@@ -5,7 +5,7 @@ import io.kotest.matchers.shouldBe
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 
 class StaffSpellCooldownTest : FreeSpec({
-    "bossbar progress fills monotonically and stays in the native range" {
+    "cooldown progress fills monotonically and stays in the native range" {
         staffCooldownProgress(30, 30) shouldBe 0f
         staffCooldownProgress(15, 30) shouldBe 0.5f
         staffCooldownProgress(3, 30) shouldBe 0.9f

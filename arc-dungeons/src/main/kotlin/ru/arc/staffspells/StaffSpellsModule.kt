@@ -1,6 +1,5 @@
 package ru.arc.staffspells
 
-import net.kyori.adventure.bossbar.BossBar
 import org.bukkit.Bukkit
 import org.bukkit.FluidCollisionMode
 import org.bukkit.GameMode
@@ -64,7 +63,8 @@ object StaffSpellsModule : PluginModule {
             StaffSceneryEffects(PaperPacketDisplays(plugin, "staff-scenery"), worlds)
         }
         controller = StaffSpellController(config, settings, StaffSpellDamage(duelAccess),
-            StaffSpellDisplayEffects(PaperPacketDisplays(plugin, "staff-spells")), cooldowns, scenery = scenery).also {
+            StaffSpellDisplayEffects(PaperPacketDisplays(plugin, "staff-spells")), cooldowns,
+            scenery = scenery, hud = StaffSpellHud(PaperPacketDisplays(plugin, "staff-hud"), config)).also {
             Bukkit.getPluginManager().registerEvents(it, plugin)
             Bukkit.getPluginManager().registerEvents(it.input, plugin)
             Bukkit.getPluginManager().registerEvents(it.defense, plugin)
@@ -92,6 +92,7 @@ internal class StaffSpellController(
     private val cooldowns: ArcStaffCooldowns,
     summonActorFactory: ((org.bukkit.World, Location, Boolean) -> org.bukkit.entity.AbstractSkeleton)? = null,
     private val scenery: StaffSceneryEffects? = null,
+    private val hud: StaffSpellHud? = null,
 ) : Listener, AutoCloseable, StaffSpellInputActions {
     private val tasks = LifecycleTaskScope()
     private val visuals = StaffSpellVisuals(tasks, sceneryImpact = { owner, at, radius ->
@@ -102,23 +103,22 @@ internal class StaffSpellController(
     private val melee = StaffSpellMelee(settings, damage, effects, visuals, targeting)
     internal val defense = StaffSpellDefense(config, damage, visuals, effects)
     private val channels = StaffSpellChannels(settings, damage, effects, visuals, targeting)
-    private val channelInputs = mutableMapOf<UUID, Pair<StaffSpell, StaffCastInput>>()
+    private val channelInputs = mutableMapOf<UUID, StaffSpell>()
     internal val summons = StaffSpellSummons(settings, damage, visuals, targeting, summonActorFactory)
     init { damage.summonCast = summons::castFor }
     internal val input = StaffSpellInput(this)
     private val chargeScenes = mutableMapOf<UUID, List<UUID?>>()
     private val lances = mutableListOf<PendingStaffLance>()
-    private val cooldownInputs = mutableMapOf<UUID, StaffCastInput>()
     private val marks = mutableMapOf<UUID, PendingStaffMark>()
     private val embers = mutableListOf<PendingStaffEmber>()
     private val waves = mutableListOf<PendingStaffWave>()
     private val bolts = mutableListOf<PendingStaffBolt>()
     private val delayedCasts = mutableMapOf<UUID, UUID>()
     private val cooldownLengths = mutableMapOf<UUID, Long>()
-    private val cooldownBars = mutableMapOf<UUID, BossBar>()
 
     fun start() {
         input.start()
+        hud?.start()
         arsenal.start()
         defense.start()
         channels.start()
@@ -126,13 +126,12 @@ internal class StaffSpellController(
         tasks.runTimer(4, 4) {
             cooldownLengths.keys.filter { cooldowns.remainingTicks(it) <= 0 }.forEach {
                 cooldownLengths.remove(it)
-                cooldownInputs.remove(it)
             }
             Bukkit.getOnlinePlayers().forEach { player ->
                 val spell = StaffSpell.from(player.inventory.itemInMainHand)
                 if (ready(player) && spell != null) {
                     if (player.uniqueId !in chargeScenes && player.uniqueId !in channelInputs) showCooldown(player, spell)
-                } else hideCooldown(player.uniqueId)
+                } else hideHud(player.uniqueId)
                 if (ready(player) && !StaffSpell.isDuelOnly(player.inventory.itemInMainHand) &&
                     spell in setOf(StaffSpell.CHAIN, StaffSpell.MARK)) {
                     listOfNotNull(target(player)).forEach { selected ->
@@ -207,33 +206,25 @@ internal class StaffSpellController(
             player.sendActionBar(config.text("no-grab"))
             return false
         }
-        channelInputs[player.uniqueId] = spell to StaffCastInput.of(player.isSneaking, false)
+        channelInputs[player.uniqueId] = spell
+        hud?.channel(player, spell, player.isSneaking)
         return true
     }
 
     override fun updateChannel(player: Player, ticksHeld: Int): Boolean {
-        val spell = channelInputs[player.uniqueId]?.first ?: return false
-        val active = channels.update(player, ticksHeld)
-        val progress = (ticksHeld / if (spell == StaffSpell.INFERNO) 60.0 else 160.0).coerceIn(0.0, 1.0).toFloat()
-        val bar = cooldownBars.getOrPut(player.uniqueId) {
-            BossBar.bossBar(config.text(if (spell == StaffSpell.INFERNO) "inferno-hold" else "gravity-hold"),
-                progress, BossBar.Color.PURPLE, BossBar.Overlay.PROGRESS).also(player::showBossBar)
-        }
-        bar.name(config.text(if (spell == StaffSpell.INFERNO) "inferno-hold" else "gravity-hold"))
-        bar.progress(if (spell == StaffSpell.INFERNO) 1f - progress else progress)
-        return active
+        if (channelInputs[player.uniqueId] == null) return false
+        return channels.update(player, ticksHeld)
     }
 
     override fun releaseChannel(player: Player) = finishChannel(player, release = true)
     override fun cancelChannel(player: Player) = finishChannel(player, release = false)
     private fun finishChannel(player: Player, release: Boolean) {
-        val (spell, input) = channelInputs.remove(player.uniqueId) ?: return
+        val spell = channelInputs.remove(player.uniqueId) ?: return
         if (release) channels.release(player) else channels.cancel(player.uniqueId)
-        beginCooldown(player, spell, input, settings.tuning.getValue(spell).cooldownTicks)
+        beginCooldown(player, spell, settings.tuning.getValue(spell).cooldownTicks)
     }
 
-    private fun beginCooldown(player: Player, spell: StaffSpell, input: StaffCastInput, ticks: Long) {
-        cooldownInputs[player.uniqueId] = input
+    private fun beginCooldown(player: Player, spell: StaffSpell, ticks: Long) {
         cooldownLengths[player.uniqueId] = ticks
         cooldowns.start(player.uniqueId, ticks)
         if (ready(player)) showCooldown(player, spell)
@@ -256,13 +247,7 @@ internal class StaffSpellController(
                 visuals.particles(at, staffMeteorWarningParticles(progress, locked = false))
             } }
         }
-        val bar = cooldownBars.getOrPut(player.uniqueId) {
-            BossBar.bossBar(config.charge(spell, progress, player.isSneaking), progress.toFloat(), BossBar.Color.PURPLE, BossBar.Overlay.PROGRESS)
-                .also(player::showBossBar)
-        }
-        bar.name(config.charge(spell, progress, player.isSneaking))
-        bar.progress(progress.toFloat().coerceIn(0f, 1f))
-        bar.color(if (progress >= 1.0) BossBar.Color.YELLOW else BossBar.Color.PURPLE)
+        hud?.charging(player, spell, player.isSneaking, progress)
     }
 
     override fun cancelCharge(player: Player) {
@@ -320,7 +305,7 @@ internal class StaffSpellController(
                 }
             }
         }
-        beginCooldown(player, spell, input, cooldownTicks)
+        beginCooldown(player, spell, cooldownTicks)
         val closeAttack = !secondary && staffMeleeReach(spell) != null
         if (!closeAttack && staffPreparationParts(spell, secondary, 0).isNotEmpty())
             effects.play(player.uniqueId, spell, player.eyeLocation, durationTicks = 10,
@@ -406,28 +391,16 @@ internal class StaffSpellController(
         cancel(playerId)
         defense.reset(playerId)
         cooldowns.clear(playerId)
-        cooldownInputs.remove(playerId)
         cooldownLengths.remove(playerId)
     }
 
     private fun showCooldown(player: Player, spell: StaffSpell) {
         val remaining = cooldowns.remainingTicks(player.uniqueId)
         val total = cooldownLengths[player.uniqueId] ?: settings.tuning.getValue(spell).cooldownTicks
-        val bar = cooldownBars.getOrPut(player.uniqueId) {
-            BossBar.bossBar(config.cooldown(spell, player.isSneaking, remaining, total,
-                if (remaining > 0) cooldownInputs[player.uniqueId] ?: StaffCastInput.PRIMARY else StaffCastInput.of(player.isSneaking, false)),
-                staffCooldownProgress(remaining, total), BossBar.Color.BLUE, BossBar.Overlay.PROGRESS)
-                .also(player::showBossBar)
-        }
-        bar.name(config.cooldown(spell, player.isSneaking, remaining, total,
-                if (remaining > 0) cooldownInputs[player.uniqueId] ?: StaffCastInput.PRIMARY else StaffCastInput.of(player.isSneaking, false)))
-        bar.progress(staffCooldownProgress(remaining, total))
-        bar.color(if (remaining > 0) BossBar.Color.BLUE else BossBar.Color.GREEN)
+        hud?.cooldown(player, spell, player.isSneaking, remaining, total)
     }
 
-    private fun hideCooldown(playerId: UUID) {
-        cooldownBars.remove(playerId)?.let { Bukkit.getPlayer(playerId)?.hideBossBar(it) }
-    }
+    private fun hideHud(playerId: UUID) = hud?.clear(playerId)
 
     private fun visualStart(from: Location, to: Location): Location {
         val delta = to.toVector().subtract(from.toVector())
@@ -1162,7 +1135,7 @@ internal class StaffSpellController(
         waves.removeAll { it.casterId == playerId }
         bolts.removeAll { it.cast.casterId == playerId }
         delayedCasts.remove(playerId)
-        hideCooldown(playerId)
+        hideHud(playerId)
         visuals.cancel(playerId)
         effects.cancel(playerId)
     }
@@ -1173,6 +1146,7 @@ internal class StaffSpellController(
 
     override fun close() {
         input.close()
+        hud?.close()
         visuals.close()
         scenery?.close()
         arsenal.close()
@@ -1185,7 +1159,6 @@ internal class StaffSpellController(
         chargeScenes.values.flatten().forEach(effects::remove)
         chargeScenes.clear()
         lances.clear()
-        cooldownInputs.clear()
         tasks.close()
         marks.clear()
         embers.clear()
@@ -1193,7 +1166,6 @@ internal class StaffSpellController(
         bolts.clear()
         delayedCasts.clear()
         cooldownLengths.clear()
-        cooldownBars.keys.toList().forEach(::hideCooldown)
         effects.close()
     }
 

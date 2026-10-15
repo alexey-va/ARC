@@ -11,9 +11,7 @@ import io.mockk.unmockkConstructor
 import io.mockk.verify
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.key.Key
-import net.kyori.adventure.bossbar.BossBar
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
-import org.mockbukkit.mockbukkit.entity.PlayerMock
 import org.bukkit.FluidCollisionMode
 import io.papermc.paper.datacomponent.DataComponentTypes
 import org.bukkit.Location
@@ -40,6 +38,8 @@ import org.bukkit.util.Vector
 import org.mockbukkit.mockbukkit.world.WorldMock
 import ru.arc.core.Tasks
 import ru.arc.core.TestTaskScheduler
+import ru.arc.paper.display.PacketTextDisplay
+import ru.arc.paper.display.PaperPacketDisplays
 import ru.arc.paper.testing.MockBukkitTestRuntime
 import ru.arc.paper.testing.failOnUnsupportedMockBukkitOperation
 import java.util.UUID
@@ -387,7 +387,7 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "frost melee waits for contact and slows only after successful damage" {
+    "frost frontal primary waits for contact and slows only after successful damage" {
         val cancelledTargets = mutableSetOf<UUID>()
         withStaffHarness(
             settings = staffSettings(),
@@ -396,13 +396,13 @@ class StaffSpellsTest : FreeSpec({
             val world = h.paper.addSimpleWorld("staff-frost")
             val player = h.player("staff-frost", world, StaffSpell.FROST)
             val cancelled = h.zombie(world, x = 0.5, z = 2.0)
-            val landed = h.zombie(world, x = 0.5, z = 3.5)
+            val landed = h.zombie(world, x = 4.5, z = 5.0)
             cancelledTargets += cancelled.uniqueId
             h.controller.start()
 
             h.controller.cast(player)
             h.hits shouldBe emptyList()
-            h.scheduler.tick(3)
+            h.scheduler.tick(5)
 
             cancelled.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
             landed.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
@@ -411,43 +411,47 @@ class StaffSpellsTest : FreeSpec({
             h.scheduler.tick(1)
             landed.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe true
             h.hits.map { it.uniqueId } shouldBe listOf(cancelled.uniqueId, landed.uniqueId)
-            h.scheduler.tick(6)
+            h.scheduler.tick(STAFF_FRONTAL_DURATION_TICKS.toLong())
             h.hits.map { it.uniqueId }.distinct().size shouldBe h.hits.size
         }
     }
 
-    "frost melee rechecks cover at contact and ignores late arrivals" {
+    "frost frontal contact uses captured direction, late arrivals, and current-player cover" {
         withStaffHarness { h ->
             val world = h.paper.addSimpleWorld("staff-frost-wall")
             val player = h.player("staff-frost-wall", world, StaffSpell.FROST)
-            h.zombie(world, x = 0.5, z = 3.5)
+            val hiddenByCurrentCover = h.zombie(world, x = 0.5, z = 6.0)
             h.controller.start()
 
             h.controller.cast(player)
+            h.scheduler.tick(5)
+            player.teleport(Location(world, 12.5, 64.0, 0.5).apply {
+                setDirection(Vector(0.0, 0.0, -1.0))
+            })
+            val lateArrival = h.zombie(world, x = 4.0, z = 6.0)
+            for (y in 64..66) world.getBlockAt(5, y, 3).type = Material.STONE
             h.scheduler.tick(1)
-            val lateArrival = h.zombie(world, x = 0.5, z = 3.0)
-            for (y in 64..66) world.getBlockAt(0, y, 2).type = Material.STONE
-            h.scheduler.tick(3)
 
-            h.hits shouldBe emptyList()
+            h.hits.map { it.uniqueId } shouldBe listOf(lateArrival.uniqueId)
+            (hiddenByCurrentCover.uniqueId in h.hits.map { it.uniqueId }) shouldBe false
             lateArrival.isValid shouldBe true
         }
     }
 
-    "frost melee accepts a target inside its narrow front arc and contacts it once" {
+    "frost frontal primary accepts a target inside its broad front arc and contacts it once" {
         withStaffHarness { h ->
             val world = h.paper.addSimpleWorld("staff-frost-side")
             val player = h.player("staff-frost-side", world, StaffSpell.FROST)
-            val diagonal = h.zombie(world, x = 1.5, z = 3.0)
+            val diagonal = h.zombie(world, x = 4.5, z = 5.0)
             h.controller.start()
 
             h.controller.cast(player)
-            h.scheduler.tick(3)
+            h.scheduler.tick(5)
             h.hits shouldBe emptyList()
 
             h.scheduler.tick(1)
             h.hits.map { it.uniqueId } shouldBe listOf(diagonal.uniqueId)
-            h.scheduler.tick(6)
+            h.scheduler.tick(STAFF_FRONTAL_DURATION_TICKS.toLong())
             h.hits.map { it.uniqueId }.distinct().size shouldBe 1
         }
     }
@@ -468,70 +472,84 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "staff cooldown owns one bossbar and hides it on item removal quit and shutdown" {
+    "staff cooldown HUD tracks selection and clears on item removal quit and shutdown" {
         val config = StaffSpellConfig(StaffTestConfig(mapOf(
             "icicle.name" to "Ледяной венец", "icicle.secondary-name" to "Ледяной дождь",
             "fault.name" to "Обсидиановый раскол", "fault.secondary-name" to "Каменный выброс",
-            "messages.cooldown-bar" to "<ability> <seconds> с", "messages.ready-bar" to "<ability> Готово",
+            "messages.staff-hud.ready-charge" to "<ability><newline><input> — начать заряд<newline>Ещё один клик — выпустить",
+            "messages.staff-hud.ready-instant" to "<ability><newline><input> — применить",
+            "messages.staff-hud.cooldown" to "<ability> · <input><newline>Восстановление <seconds> с<newline><bar>",
         )))
-        withStaffHarness(config = config) { h ->
-            val world = h.paper.addSimpleWorld("staff-bossbar")
-            val player = h.player("staff-bossbar", world, StaffSpell.ICICLE) as PlayerMock
+        val displays = StaffHudDisplayRecorder()
+        withStaffHarness(config = config, hudFactory = { StaffSpellHud(displays.displays, config) }) { h ->
+            val world = h.paper.addSimpleWorld("staff-hud-lifecycle")
+            val player = h.player("staff-hud-lifecycle", world, StaffSpell.ICICLE)
             h.controller.start()
             h.scheduler.tick(4)
-            val bar = player.bossBars.single()
-            bar.progress() shouldBe 1f
-            bar.color() shouldBe BossBar.Color.GREEN
+            displays.records.size shouldBe 1
+            displays.text() shouldBe "Ледяной венец\nЛКМ — начать заряд\nЕщё один клик — выпустить"
+
             h.controller.cast(player)
-            player.bossBars.single() shouldBe bar
-            bar.progress() shouldBe 0f
-            bar.color() shouldBe BossBar.Color.BLUE
+            h.cooldowns.remainingTicks(player.uniqueId) shouldBe 20L
+            displays.text().startsWith("Ледяной венец · ЛКМ\nВосстановление 1.0 с\n") shouldBe true
             h.scheduler.tick(8)
-            (bar.progress() > 0f && bar.progress() < 1f) shouldBe true
+            h.cooldowns.remainingTicks(player.uniqueId) shouldBe 10L
+            displays.text().startsWith("Ледяной венец · ЛКМ\nВосстановление 0.5 с\n") shouldBe true
+
             player.isSneaking = true
             player.inventory.setItemInMainHand(h.config.item(StaffSpell.FAULT))
             h.scheduler.tick(4)
-            player.bossBars.single() shouldBe bar
-            PlainTextComponentSerializer.plainText().serialize(bar.name()).startsWith("Обсидиановый раскол") shouldBe true
-            player.nextActionBar() shouldBe null
+            displays.records.size shouldBe 1
+            h.captures.size shouldBe 1
+            h.cooldowns.remainingTicks(player.uniqueId) shouldBe 5L
+            displays.text().startsWith("Каменный выброс · Shift + ЛКМ\nВосстановление 0.3 с\n") shouldBe true
+
             player.inventory.setItemInMainHand(ItemStack(Material.AIR))
             h.scheduler.tick(4)
-            player.bossBars.size shouldBe 0
+            displays.records.last().removals shouldBe 1
+
             player.inventory.setItemInMainHand(h.config.item(StaffSpell.ICICLE))
             h.scheduler.tick(4)
-            player.bossBars.size shouldBe 1
+            displays.records.size shouldBe 2
+            displays.text().startsWith("Ледяной дождь\nShift + ЛКМ — применить") shouldBe true
+
             h.controller.onQuit(PlayerQuitEvent(player, Component.empty()))
-            player.bossBars.size shouldBe 0
+            displays.records.last().removals shouldBe 1
             h.scheduler.tick(4)
-            player.bossBars.size shouldBe 1 // Mock quit leaves the player online; close must still hide it.
+            displays.records.size shouldBe 3 // Mock quit leaves the player online, so its timer may recreate the card.
             h.controller.close()
-            player.bossBars.size shouldBe 0
+            displays.records.last().removals shouldBe 1
         }
     }
 
-    "cancelling active effects retains cooldown duration and input label" {
+    "quitting retains cooldown duration and selected HUD input label" {
         val config = StaffSpellConfig(StaffTestConfig(mapOf(
             "icicle.name" to "Венец", "icicle.secondary-name" to "Дождь",
-            "messages.cooldown-bar" to "<ability> <seconds> с",
+            "messages.staff-hud.cooldown" to "<ability> · <input><newline>Восстановление <seconds> с<newline><bar>",
         )))
-        withStaffHarness(config = config) { h ->
+        val displays = StaffHudDisplayRecorder()
+        withStaffHarness(config = config, hudFactory = { StaffSpellHud(displays.displays, config) }) { h ->
             val world = h.paper.addSimpleWorld("staff-cooldown-return")
-            val player = h.player("staff-cooldown-return", world, StaffSpell.ICICLE) as PlayerMock
+            val player = h.player("staff-cooldown-return", world, StaffSpell.ICICLE)
+            player.isSneaking = true
             h.controller.start()
             h.controller.cast(player, StaffCastInput.SECONDARY, 0.0)
+            h.cooldowns.remainingTicks(player.uniqueId) shouldBe 30L
             h.scheduler.tick(8)
             h.controller.onQuit(PlayerQuitEvent(player, Component.empty()))
             h.scheduler.tick(4) // Mock quit leaves the player online, modelling the returning HUD.
-            val bar = player.bossBars.single()
-            PlainTextComponentSerializer.plainText().serialize(bar.name()).startsWith("Дождь") shouldBe true
-            bar.progress() shouldBe staffCooldownProgress(h.cooldowns.remainingTicks(player.uniqueId), 30)
+            val remaining = h.cooldowns.remainingTicks(player.uniqueId)
+            remaining shouldBe 20L
+            displays.text().startsWith("Дождь · Shift + ЛКМ\nВосстановление 1.0 с\n") shouldBe true
+            displays.text().endsWith(staffSpellHudBar(staffCooldownProgress(remaining, 30).toDouble())) shouldBe true
             h.controller.cast(player)
             h.captures.size shouldBe 1
+            h.cooldowns.remainingTicks(player.uniqueId) shouldBe remaining
         }
     }
 
     "travelling lance and quick gesture stop when the captured combat context expires" {
-        listOf(StaffSpell.LANCE to StaffCastInput.SECONDARY, StaffSpell.MARK to StaffCastInput.QUICK).forEach { (spell, input) ->
+        listOf(StaffSpell.LANCE to StaffCastInput.PRIMARY, StaffSpell.MARK to StaffCastInput.QUICK).forEach { (spell, input) ->
             var current = true
             withStaffHarness(currentCast = { _, _ -> current }) { h ->
                 val world = h.paper.addSimpleWorld("staff-stale-${spell.id}")
@@ -599,7 +617,7 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "manual lance and ember do not acquire an off-axis mob" {
+    "manual lance primary and ember do not acquire an off-axis mob" {
         withStaffHarness(settings = staffSettings(range = 10.0)) { h ->
             h.controller.start()
             for (spell in listOf(StaffSpell.LANCE, StaffSpell.EMBER)) {
@@ -608,15 +626,15 @@ class StaffSpellsTest : FreeSpec({
                 // Within the 12-degree soft aim cone, but outside the manual beam/projectile path.
                 h.zombie(world, x = 1.5, z = 7.0)
 
-                h.controller.cast(player, if (spell == StaffSpell.LANCE) StaffCastInput.SECONDARY else StaffCastInput.PRIMARY, 0.0)
-                h.scheduler.tick(12)
+                h.controller.cast(player)
+                if (spell == StaffSpell.EMBER) h.scheduler.tick(12)
 
                 h.hits shouldBe emptyList()
             }
         }
     }
 
-    "lance pierces up to its target limit" {
+    "lance primary pierces up to its target limit" {
         withStaffHarness(settings = staffSettings(lanceTargets = 3)) { h ->
             val world = h.paper.addSimpleWorld("staff-lance-pierce")
             val player = h.player("staff-lance-pierce", world, StaffSpell.LANCE)
@@ -626,7 +644,7 @@ class StaffSpellsTest : FreeSpec({
             val beyondTargetLimit = h.zombie(world, x = 0.5, z = 11.0)
 
             h.controller.start()
-            h.controller.cast(player, StaffCastInput.SECONDARY, 0.0)
+            h.controller.cast(player)
             h.hits shouldBe emptyList()
             h.scheduler.tick(5)
             h.hits shouldBe emptyList()
@@ -637,7 +655,7 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "lance wall collision stops the beam while target budget remains" {
+    "lance primary wall collision stops the beam while target budget remains" {
         withStaffHarness(settings = staffSettings(lanceTargets = 8)) { h ->
             val world = h.paper.addSimpleWorld("staff-lance-wall")
             val player = h.player("staff-lance-wall", world, StaffSpell.LANCE)
@@ -646,7 +664,7 @@ class StaffSpellsTest : FreeSpec({
             for (x in -1..1) for (y in 64..67) world.getBlockAt(x, y, 10).type = Material.STONE
 
             h.controller.start()
-            h.controller.cast(player, StaffCastInput.SECONDARY, 0.0)
+            h.controller.cast(player)
             h.hits shouldBe emptyList()
             h.scheduler.tick(5)
             h.hits shouldBe emptyList()
@@ -709,62 +727,6 @@ class StaffSpellsTest : FreeSpec({
             h.movedEffects.isNotEmpty() shouldBe true
             h.controller.onQuit(PlayerQuitEvent(flying, Component.empty()))
             verify(exactly = 1) { h.effects.cancel(flying.uniqueId) }
-        }
-    }
-
-    "mark melee contacts after the swing delay and cancels pending contact on quit" {
-        withStaffHarness { h ->
-            val world = h.paper.addSimpleWorld("staff-mark-point")
-            val player = h.player("staff-mark-point", world, StaffSpell.MARK)
-            val target = h.zombie(world, x = 0.5, z = 3.0)
-            h.controller.start()
-
-            h.controller.cast(player)
-            h.captures.size shouldBe 1
-            h.hits shouldBe emptyList()
-            h.scheduler.tick(3)
-            h.hits shouldBe emptyList()
-            h.scheduler.tick(1)
-            h.hits.map { it.uniqueId } shouldBe listOf(target.uniqueId)
-
-            val quitting = h.player("staff-mark-quit", world, StaffSpell.MARK)
-            val quitTarget = h.zombie(world, x = 0.5, z = 3.5)
-            h.controller.cast(quitting)
-            val hitsBeforeQuit = h.hits.size
-            h.scheduler.tick(3)
-            h.controller.onQuit(PlayerQuitEvent(quitting, Component.empty()))
-            h.scheduler.tick(2)
-
-            h.hits.size shouldBe hitsBeforeQuit
-            (quitTarget.uniqueId in h.hits.map { it.uniqueId }) shouldBe false
-        }
-    }
-
-    "nova melee waits for contact, slows only successful hits, and respects its target cap" {
-        var deniedTarget: UUID? = null
-        withStaffHarness(settings = staffSettings(maxAreaTargets = 2),
-            hit = { _, target -> target.uniqueId != deniedTarget }) { h ->
-            val world = h.paper.addSimpleWorld("staff-vine")
-            val player = h.player("vine", world, StaffSpell.NOVA)
-            val denied = h.zombie(world, x = 0.5, z = 1.8)
-            val accepted = h.zombie(world, x = 0.5, z = 2.6)
-            val overCap = h.zombie(world, x = 0.5, z = 3.4)
-            deniedTarget = denied.uniqueId
-            h.controller.start()
-
-            h.controller.cast(player)
-            h.hits shouldBe emptyList()
-            h.scheduler.tick(3)
-            h.hits shouldBe emptyList()
-
-            h.scheduler.tick(1)
-            h.hits.map { it.uniqueId } shouldBe listOf(denied.uniqueId, accepted.uniqueId)
-            denied.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
-            accepted.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe true
-            overCap.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
-
-            h.scheduler.tick(6)
-            h.hits.map { it.uniqueId } shouldBe listOf(denied.uniqueId, accepted.uniqueId)
         }
     }
 
@@ -1157,60 +1119,67 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "mark melee rechecks contact and cancels for invalid, dead, death, quit, world change, and close" {
-        withStaffHarness { h ->
+    "marks follow a moved target and cancel for invalid, dead, quit, world change, and close" {
+        withStaffHarness(settings = staffSettings(markTicks = 6)) { h ->
+            val world = h.paper.addSimpleWorld("staff-mark")
+            val otherWorld = h.paper.addSimpleWorld("staff-mark-other")
             h.controller.start()
 
-            val movingWorld = h.paper.addSimpleWorld("staff-mark-moving")
-            val movingPlayer = h.player("mark-moving", movingWorld, StaffSpell.MARK)
-            val moving = h.zombie(movingWorld, x = 0.5, z = 3.5)
-            h.controller.cast(movingPlayer)
-            moving.teleport(Location(movingWorld, 0.5, 64.0, 6.0))
+            val follower = h.player("mark-follow", world, StaffSpell.MARK)
+            val moving = h.zombie(world, x = 0.5, z = 4.0)
+            h.controller.cast(follower)
+            follower.inventory.setItemInMainHand(ItemStack(Material.AIR))
+            moving.teleport(Location(world, 0.5, 64.0, 6.0))
+            h.scheduler.tick(6)
+            h.hitLocations.single().z shouldBe 6.0
+            h.movedEffects.any { it.second.z == 6.0 } shouldBe true
+            verify(exactly = 1) { h.effects.impact(any(), any(), any(), any()) }
 
-            val invalidWorld = h.paper.addSimpleWorld("staff-mark-invalid")
-            val invalidPlayer = h.player("mark-invalid", invalidWorld, StaffSpell.MARK)
-            val invalidTarget = h.zombie(invalidWorld, x = 0.5, z = 3.5)
+            val invalidPlayer = h.player("mark-invalid", world, StaffSpell.MARK)
+            val invalidTarget = h.zombie(world, x = 0.5, z = 4.0)
             h.controller.cast(invalidPlayer)
+            invalidPlayer.inventory.setItemInMainHand(ItemStack(Material.AIR))
             invalidTarget.remove()
 
-            val deadWorld = h.paper.addSimpleWorld("staff-mark-dead")
-            val deadPlayer = h.player("mark-dead", deadWorld, StaffSpell.MARK)
-            val deadTarget = h.zombie(deadWorld, x = 0.5, z = 3.5)
+            val deadPlayer = h.player("mark-dead", world, StaffSpell.MARK)
+            val deadTarget = h.zombie(world, x = 0.5, z = 4.0)
             h.controller.cast(deadPlayer)
+            deadPlayer.inventory.setItemInMainHand(ItemStack(Material.AIR))
             deadTarget.health = 0.0
 
-            val deathWorld = h.paper.addSimpleWorld("staff-mark-death")
-            val dyingPlayer = h.player("mark-death", deathWorld, StaffSpell.MARK)
-            h.zombie(deathWorld, x = 0.5, z = 3.5)
+            val dyingPlayer = h.player("mark-death", world, StaffSpell.MARK)
+            h.zombie(world, x = 0.5, z = 4.0)
             h.controller.cast(dyingPlayer)
+            dyingPlayer.inventory.setItemInMainHand(ItemStack(Material.AIR))
             val deathEvent = mockk<PlayerDeathEvent>()
             every { deathEvent.entity } returns dyingPlayer
             h.controller.onDeath(deathEvent)
 
-            val quitWorld = h.paper.addSimpleWorld("staff-mark-quit")
-            val quitting = h.player("mark-quit", quitWorld, StaffSpell.MARK)
-            h.zombie(quitWorld, x = 0.5, z = 3.5)
+            val quitting = h.player("mark-quit", world, StaffSpell.MARK)
+            h.zombie(world, x = 0.5, z = 4.0)
             h.controller.cast(quitting)
+            quitting.inventory.setItemInMainHand(ItemStack(Material.AIR))
             h.controller.onQuit(PlayerQuitEvent(quitting, Component.empty()))
 
-            val worldChangeOrigin = h.paper.addSimpleWorld("staff-mark-world-change")
-            val otherWorld = h.paper.addSimpleWorld("staff-mark-other")
-            val changingWorld = h.player("mark-world", worldChangeOrigin, StaffSpell.MARK)
-            h.zombie(worldChangeOrigin, x = 0.5, z = 3.5)
+            val changingWorld = h.player("mark-world", world, StaffSpell.MARK)
+            h.zombie(world, x = 0.5, z = 4.0)
             h.controller.cast(changingWorld)
+            changingWorld.inventory.setItemInMainHand(ItemStack(Material.AIR))
             changingWorld.teleport(Location(otherWorld, 0.5, 64.0, 0.5))
-            h.controller.onWorldChange(PlayerChangedWorldEvent(changingWorld, worldChangeOrigin))
+            h.controller.onWorldChange(PlayerChangedWorldEvent(changingWorld, world))
 
-            h.scheduler.tick(4)
-            h.hits shouldBe emptyList()
             verify(exactly = 1) { h.effects.cancel(dyingPlayer.uniqueId) }
             verify(exactly = 1) { h.effects.cancel(quitting.uniqueId) }
             verify(exactly = 1) { h.effects.cancel(changingWorld.uniqueId) }
 
-            val closeWorld = h.paper.addSimpleWorld("staff-mark-close")
-            val closingPlayer = h.player("mark-close", closeWorld, StaffSpell.MARK)
-            h.zombie(closeWorld, x = 0.5, z = 3.5)
+            val hitCountBeforeCancelledMarks = h.hits.size
+            h.scheduler.tick(6)
+            h.hits.size shouldBe hitCountBeforeCancelledMarks
+
+            val closingPlayer = h.player("mark-close", world, StaffSpell.MARK)
+            h.zombie(world, x = 0.5, z = 4.0)
             h.controller.cast(closingPlayer)
+            closingPlayer.inventory.setItemInMainHand(ItemStack(Material.AIR))
             val hitCountBeforeClose = h.hits.size
             h.controller.close()
             verify(exactly = 1) { h.effects.close() }
@@ -1218,6 +1187,7 @@ class StaffSpellsTest : FreeSpec({
             h.hits.size shouldBe hitCountBeforeClose
         }
     }
+
 })
 
 internal data class StaffHarness(
@@ -1260,6 +1230,38 @@ internal data class StaffVisualPlay(
     val impact: Boolean,
 )
 
+private data class StaffHudDisplayRecord(
+    val handle: PacketTextDisplay,
+    var text: Component,
+    var removals: Int = 0,
+)
+
+private class StaffHudDisplayRecorder {
+    val records = mutableListOf<StaffHudDisplayRecord>()
+
+    val displays = mockk<PaperPacketDisplays>(relaxed = true).also { owner ->
+        every { owner.spawnText(any(), any()) } answers {
+            val record = StaffHudDisplayRecord(
+                mockk<PacketTextDisplay>(relaxed = true), secondArg<Component>(),
+            )
+            every { record.handle.isValid } returns true
+            every { record.handle.text() } answers { record.text }
+            every { record.handle.text(any()) } answers {
+                record.text = firstArg()
+                Unit
+            }
+            every { record.handle.remove() } answers {
+                record.removals++
+                Unit
+            }
+            records += record
+            record.handle
+        }
+    }
+
+    fun text(): String = PlainTextComponentSerializer.plainText().serialize(records.last().text)
+}
+
 internal fun withStaffHarness(
     settings: StaffSpellSettings = staffSettings(),
     hit: (Player, LivingEntity) -> Boolean = { _, _ -> true },
@@ -1267,6 +1269,7 @@ internal fun withStaffHarness(
     rayStep: Double = 0.1,
     config: StaffSpellConfig = StaffSpellConfig(StaffTestConfig()),
     summonActorFactory: ((World, Location, Boolean) -> org.bukkit.entity.AbstractSkeleton)? = null,
+    hudFactory: (() -> StaffSpellHud)? = null,
     block: (StaffHarness) -> Unit,
 ) {
     failOnUnsupportedMockBukkitOperation {
@@ -1349,7 +1352,8 @@ internal fun withStaffHarness(
                     }
                     every { effects.finishTrail(any()) } answers { finishedTrails += arg<UUID?>(0) }
                     every { effects.remove(any()) } answers { removedEffects += firstArg<UUID?>() }
-                    val controller = StaffSpellController(config, settings, damage, effects, cooldowns, summonActorFactory)
+                    val controller = StaffSpellController(config, settings, damage, effects, cooldowns,
+                        summonActorFactory, hud = hudFactory?.invoke())
                     val harness = StaffHarness(paper, scheduler, config, controller, cooldowns, effects,
                         movedEffects, trailMoves, projectileMoves, finishedTrails, visualPlays, removedEffects,
                         captures, hits, hitLocations, damageScales)

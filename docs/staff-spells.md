@@ -1,4 +1,4 @@
-# Prototype staff spells — ARC 1.4.390
+# Staff spells — ArcDungeons 0.1.2
 
 `/arc stafftest` issues sixteen administrator-only mechanics samples.
 `inferno` is temporarily retired; `gravity` and `ossuary` remain available. Use
@@ -7,11 +7,11 @@ to issue the set after checking inventory space. The items carry ARC prototype
 metadata; they are not FMM or EliteMobs loot, and this catalog adds no shop,
 reward or economy changes.
 
-Ten primaries now use close contact attacks; Chain, Ember, Icicle, Requiem,
-Necromancer and Gravity retain their signature primary mechanics. Shift attacks
-keep their existing behavior. Water spray follows the curled wave's foam lip.
-Native particles complement the stable display bodies. Preparation displays
-ease out before their final two-tick frame is removed.
+Four primaries — Frost, Fault, Lunar and Tide — use substantial frontal area
+attacks with a seven-block reach. The other twelve keep their ranged, targeted,
+summoned or charged primary mechanics; Solar is a piercing ranged spear again.
+Shift attacks keep their existing behavior. Native particles accent stable
+display bodies; the last sent pose collapses before cleanup.
 
 ## Controls
 
@@ -22,6 +22,12 @@ ability and casts immediately. Changing Shift, the held slot or item, world,
 or player lifecycle cancels an active charge; right-click cancels it and raises
 defense. Attacks share one per-player attack cooldown, adjusted for the spell
 and its shifted variant.
+
+A private three-row hologram below the reticle shows the selected ability and
+its actual control mode: instant cast, click to charge and click again to
+release, or Gravity grab/throw. Charging shows accumulated strength; recovery
+shows the remaining attack cooldown. Physical button holding is not required.
+The HUD replaces the attack bossbar; the independent defense bar is retained.
 
 `Gravity` also uses click-toggle: the first left-click grabs, the next throws.
 The aim can move between clicks, with or without Shift. Inferno is temporarily
@@ -59,21 +65,21 @@ is held.
 | ID · staff | ЛКМ | Shift + ЛКМ | ПКМ · frontal guard | Shift + ПКМ · absorption shield | Existing ItemsAdder skin |
 | --- | --- | --- | --- | --- | --- |
 | `chain` · Грозовая ветвь | Lightning jumps between up to four enemies | Грозовой круг expands a jagged lightning front eight blocks around the caster, blocked by cover | Грозовой заслон | Круговой покров | `3dfantasyweaponscit:divine_staff` |
-| `mark` · Разрыв | Three close void claws hit within 4.5 blocks and lightly pull enemies | Чёрная дыра pulls eligible enemies, then collapses | Покров пустоты | Круговой покров | `3dfantasyweaponscit:night_staff` |
-| `frost` · Ледяной хлопок | A close ice fan reaches 4.5 blocks and briefly slows enemies | Полярный круг expands an ice front eight blocks from the caster | Ледяной щит | Круговой покров | `3dfantasyweaponscit:northgate_guardian_staff` |
-| `lance` · Солнечное копьё | A close solar blade sweeps up to 4.5 blocks in front | Three diverging solar beams | Солнечный щит | Круговой покров | `3dfantasyweaponscit:sagrada_winged_staff` |
+| `mark` · Разрыв | A targeted void rupture follows the enemy, then explodes | Чёрная дыра pulls eligible enemies, then collapses | Покров пустоты | Круговой покров | `3dfantasyweaponscit:night_staff` |
+| `frost` · Ледяной хлопок | A broad field of clustered ice teeth rises in front, reaches seven blocks and briefly slows enemies | Полярный круг expands an ice front eight blocks from the caster | Ледяной щит | Круговой покров | `3dfantasyweaponscit:northgate_guardian_staff` |
+| `lance` · Солнечное копьё | A ranged solar spear pierces up to three enemies, applying damage when its light front arrives | Three diverging solar beams | Солнечный щит | Круговой покров | `3dfantasyweaponscit:sagrada_winged_staff` |
 | `ember` · Пепельная комета | Fireball grows below the reticle with four-tick interpolation, then launches immediately with forward speed and accelerates | Three ground circles lock on cast; the first meteor launches after a 15-tick warning | Огненный заслон | Круговой покров | `3dfantasyweaponscit:bermunde_hermit_staff` |
-| `nova` · Терновый хват | Two thorn whips cross in front within 4.5 blocks and briefly slow enemies | Терновая клетка closes around the aimed point | Терновый заслон | Круговой покров | `3dfantasyweaponscit:holy_celtic_staff` |
+| `nova` · Терновый хват | Roots travel along the ground toward the target, close around it and slow enemies | Терновая клетка closes around the aimed point | Терновый заслон | Круговой покров | `3dfantasyweaponscit:holy_celtic_staff` |
 | `icicle` · Ледяной венец | Seven shoulder icicles sample the current reticle as each launches; full charge releases eleven | Five shards fall around the aimed point immediately | Кристальный заслон | Круговой покров | `3dfantasyweaponscit:olwen_staff` |
-| `fault` · Обсидиановый раскол | A heavy close impact sends a short frontal shockwave up to 5 blocks | Каменный выброс warns, then erupts at the aimed point and lifts enemies | Каменный бастион | Круговой покров | `3dfantasyweaponscit:staff_of_unholy_wisdom` |
-| `lunar` · Лунный серп | A close diagonal moon-scythe sweep reaches 4.5 blocks | Two moon blades converge on the target | Лунный покров | Круговой покров | `3dfantasyweaponscit:black_snake_staff` |
-| `gale` · Посох бури | Compressed wind blades hit within 4.5 blocks and push enemies back | Шквал is a twisting air ram with a fixed 36-block horizontal reach, clipped at cover | Ветряной щит | Круговой покров | `3dfantasyweaponscit:goblin_witch_staff` |
-| `tide` · Сердце прилива | A curled close water slash hits within 4.5 blocks and pushes enemies back | Приливный вал is a broad curled wave with a foamy crest that travels forward | Водяной заслон | Круговой покров | `3dfantasyweaponscit:northgate_guardian_staff` |
+| `fault` · Обсидиановый раскол | A broad basalt and obsidian rupture rises in front up to seven blocks and pushes enemies back | Каменный выброс warns, then erupts at the aimed point and lifts enemies | Каменный бастион | Круговой покров | `3dfantasyweaponscit:staff_of_unholy_wisdom` |
+| `lunar` · Лунный серп | One large moon crescent cuts across a seven-block frontal area | Two moon blades converge on the target | Лунный покров | Круговой покров | `3dfantasyweaponscit:black_snake_staff` |
+| `gale` · Посох бури | An open tornado forms at the aimed point and lifts nearby enemies | Шквал is a twisting air ram with a fixed 36-block horizontal reach, clipped at cover | Ветряной щит | Круговой покров | `3dfantasyweaponscit:goblin_witch_staff` |
+| `tide` · Сердце прилива | A thick curling breaker covers a seven-block frontal area and pushes enemies back | Приливный вал is a broad curled wave with a foamy crest that travels forward | Водяной заслон | Круговой покров | `3dfantasyweaponscit:northgate_guardian_staff` |
 | `requiem` · Реквием | A copper-and-gold bell forms above the aimed point, tolls at 0.8 seconds and releases a five-block soul wave | Погребальный перезвон suspends the bell above the caster and releases three seven-block waves, with five-second minimum recovery | Покров душ | Круговой покров | `3dfantasyweaponscit:lich_staff` |
-| `prism` · Кристальная призма | A narrow crystal thrust reaches five blocks in front | Three rays converge on the selected point | Гранёный щит | Круговой покров | `3dfantasyweaponscit:northgate_golden_crook` |
+| `prism` · Кристальная призма | A crystal grows at the aimed point and refracts beams into up to three enemies | Three rays converge on the selected point | Гранёный щит | Круговой покров | `3dfantasyweaponscit:northgate_golden_crook` |
 | `necromancer` · Зов могилы | Adds two skeleton archers for 45 seconds; up to ten minions can coexist | Костяной жнец summons one larger wither-skeleton commander | Костяной заслон | Круговой покров | `3dfantasyweaponscit:lich_staff` |
 | `gravity` · Гравитационный захват | Grab a surface within 32 blocks, hold the same boulder, and release into a fast accelerating throw up to 32 blocks | Бросок глыбы uses the same grab-and-throw channel | Каменный заслон | Круговой покров | `3dfantasyweaponscit:staff_of_unholy_wisdom` |
-| `ossuary` · Костяной прокол | Three bone prongs thrust up to five blocks in front with sparse native particles | Костяной прорыв warns at the aimed point, then seven bone spikes shoot upward and impale enemies | Щит рёбер | Круговой покров | `3dfantasyweaponscit:lich_staff` |
+| `ossuary` · Костяной прокол | Dense bone-spike clusters erupt in sequence along a fixed 24-block forward path, blocked by walls | Костяной прорыв warns at the aimed point, then seven bone spikes shoot upward and impale enemies | Щит рёбер | Круговой покров | `3dfantasyweaponscit:lich_staff` |
 
 Each sample uses its configured ItemsAdder skin; issuance fails with a player
 message and a server warning if that configured skin is unavailable. Duel
@@ -83,12 +89,11 @@ and a positive `custom-model-data`; the bundled defaults leave both unset.
 
 ## Targeting and lifecycle
 
-Close primaries contact once after four ticks (Solar and Fault: three ticks), cap at three targets, and use
-the existing shared attack recovery and damage tuning. Wide attacks cover a
-25-degree half-angle (Solar: 55 degrees); Fault, Prism and Ossuary use a narrow
-frontal lane. Frost slows for 16 ticks and Nova for 20; displacement and slow
-apply only after an accepted damage hit. Every contact rechecks cover and
-combat eligibility. Display geometry and particle accents share one authored pose.
+Frontal primaries contact once after six ticks, matching the interpolated full-size
+pose. They select up to three eligible targets at contact within seven blocks,
+a 110-degree front sector and 2.5 blocks vertically. Cover is rechecked from
+both the cast origin and current player eye. Frost slows for 16 ticks; Fault
+and Tide push only after accepted damage. Cancelled or stale casts cannot hit.
 
 Damage attempts recheck their captured combat context and target eligibility;
 the damage path requires a visible target when the hit is applied. Moving
@@ -145,12 +150,12 @@ evidence of equal duel win rates.
 
 The source-driven redesign is documented in
 [`staff-effects-redesign.md`](staff-effects-redesign.md). The
-`exportStaffRedesignPreview` Gradle task can export seven multi-stage Arsenal
+`:arc-dungeons:exportStaffRedesignPreview` Gradle task can export seven multi-stage Arsenal
 spells, baseline and enlarged visual states for the held gravity channel, and both
 guard shapes for all sixteen available staves. Pass an absolute path with
 `-PstaffRedesignPreviewOutput=/absolute/path/redesign-sequences.json`; the
 source is
-[`StaffRedesignPreviewExport.kt`](../src/test/kotlin/ru/arc/staffspells/StaffRedesignPreviewExport.kt).
+[`StaffRedesignPreviewExport.kt`](../arc-dungeons/src/test/kotlin/ru/arc/staffspells/StaffRedesignPreviewExport.kt).
 The offline viewer uses source-authored frames but does not simulate damage,
 target selection, collision, sound, client lighting or exact vanilla particle
 physics. Changed ground attacks use their full configured range on an unobstructed flat

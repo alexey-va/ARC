@@ -6,6 +6,7 @@ import io.mockk.every
 import io.mockk.mockk
 import java.util.UUID
 import kotlin.math.abs
+import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Player
@@ -13,68 +14,49 @@ import org.bukkit.potion.PotionEffectType
 import org.bukkit.util.Vector
 
 class StaffSpellMeleeTest : FreeSpec({
-    "LANCE sweep endpoints are symmetric and remain within its fixed close-range reach" {
-        val forward = Vector(0.0, 0.0, 1.0)
-        val left = requireNotNull(staffMeleeSweepEndpoint(forward, 0.0, 55.0, 4.5))
-        val center = requireNotNull(staffMeleeSweepEndpoint(forward, 0.5, 55.0, 4.5))
-        val right = requireNotNull(staffMeleeSweepEndpoint(forward, 1.0, 55.0, 4.5))
+    "only FROST, FAULT, LUNAR, and TIDE own the broad primary contact" {
+        val frontal = setOf(StaffSpell.FROST, StaffSpell.FAULT, StaffSpell.LUNAR, StaffSpell.TIDE)
 
-        (abs(left.x + right.x) < 1.0e-9 && abs(left.z - right.z) < 1.0e-9) shouldBe true
-        (abs(center.x) < 1.0e-9 && abs(center.z - 4.5) < 1.0e-9) shouldBe true
-        listOf(left, center, right).all { it.length() <= 4.5 + 1.0e-9 } shouldBe true
-        staffMeleeSweepEndpoint(Vector(), 0.5, 55.0, 4.5) shouldBe null
+        frontal.forEach { staffMeleeReach(it) shouldBe 7.0 }
+        StaffSpell.entries.filterNot { it in frontal }.forEach { staffMeleeReach(it) shouldBe null }
+        STAFF_FRONTAL_CONTACT_TICK shouldBe 6L
     }
 
-    "the eight themed primaries make one delayed close contact through cover and hit guards" {
-        val variants = listOf(
-            StaffSpell.MARK to 4.5,
-            StaffSpell.FROST to 4.5,
-            StaffSpell.NOVA to 4.5,
-            StaffSpell.LUNAR to 4.5,
-            StaffSpell.GALE to 4.5,
-            StaffSpell.TIDE to 4.5,
-            StaffSpell.PRISM to 5.0,
-            StaffSpell.OSSUARY to 5.0,
-        )
-        val settings = staffSettings(maxAreaTargets = 3)
+    "the four frontal primaries reach seven blocks and a wide arc, contact at tick six, and hit once" {
+        val spells = listOf(StaffSpell.FROST, StaffSpell.FAULT, StaffSpell.LUNAR, StaffSpell.TIDE)
+        val settings = staffSettings(maxAreaTargets = 8)
 
         withStaffHarness(settings = settings) { h ->
-            variants.forEach { (spell, range) ->
-                val world = h.paper.addSimpleWorld("staff-melee-primary-${spell.id}")
-                val player = h.player("staff-melee-primary-${spell.id}", world, spell)
-                val rejected = h.zombie(world, x = 0.5, z = 1.7)
-                val covered = h.zombie(world, x = 0.5, z = 3.0)
-                val clear = h.zombie(world, x = 1.5, z = 3.0)
-                val outside = h.zombie(world, x = 0.5, z = range + 0.75)
-                for (y in 63..67) world.getBlockAt(0, y, 2).type = Material.STONE
-
-                val attempts = mutableListOf<UUID>()
-                val damage = mockk<StaffSpellDamage>()
-                every { damage.eligible(any(), any(), any()) } returns true
-                every { damage.isCurrent(any(), any()) } returns true
-                every { damage.hit(any(), any(), any(), any(), any()) } answers {
-                    val target = secondArg<LivingEntity>()
-                    attempts += target.uniqueId
-                    target.uniqueId != rejected.uniqueId
+            spells.forEach { spell ->
+                val world = h.paper.addSimpleWorld("staff-frontal-area-${spell.id}")
+                val player = h.player("staff-frontal-area-${spell.id}", world, spell)
+                val nearReachLimit = h.zombie(world, x = 0.5, z = 7.0)
+                val wideArc = h.zombie(world, x = 4.5, z = 5.0)
+                val outsideArc = h.zombie(world, x = 6.5, z = 4.0)
+                val outsideRange = h.zombie(world, x = 0.5, z = 7.8)
+                val verticalEdge = h.zombie(world, x = 0.5, z = 4.0).apply {
+                    teleport(Location(world, 0.5, 67.0, 4.0))
                 }
+                val outsideVertical = h.zombie(world, x = 0.5, z = 4.0).apply {
+                    teleport(Location(world, 0.5, 68.0, 4.0))
+                }
+                val hits = mutableListOf<Pair<LivingEntity, Pair<Double, Double>>>()
+                val damage = meleeDamage(hits)
                 val melee = StaffSpellMelee(settings, damage, h.effects,
                     mockk(relaxed = true), StaffSpellTargeting(settings, damage))
 
                 try {
                     melee.cast(player, meleeCast(player), spell, StaffSpellTuning(1.0, 6.0, 32)) shouldBe true
-                    h.scheduler.tick(3)
-                    attempts shouldBe emptyList()
+                    h.scheduler.tick(5)
+                    hits shouldBe emptyList()
 
                     h.scheduler.tick(1)
-                    attempts shouldBe listOf(rejected.uniqueId, clear.uniqueId)
-                    rejected.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
-                    clear.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe
-                        (spell == StaffSpell.FROST || spell == StaffSpell.NOVA)
-                    (covered.uniqueId in attempts) shouldBe false
-                    (outside.uniqueId in attempts) shouldBe false
+                    hits.map { it.first.uniqueId }.toSet() shouldBe
+                        setOf(nearReachLimit.uniqueId, wideArc.uniqueId, verticalEdge.uniqueId)
+                    hits.any { it.first.uniqueId in setOf(outsideArc.uniqueId, outsideRange.uniqueId, outsideVertical.uniqueId) } shouldBe false
 
-                    h.scheduler.tick(6)
-                    attempts shouldBe listOf(rejected.uniqueId, clear.uniqueId)
+                    h.scheduler.tick(STAFF_FRONTAL_DURATION_TICKS.toLong())
+                    hits.map { it.first.uniqueId }.distinct().size shouldBe 3
                 } finally {
                     melee.close()
                 }
@@ -82,71 +64,51 @@ class StaffSpellMeleeTest : FreeSpec({
         }
     }
 
-    "LANCE waits for its three-tick blade contact before applying the captured primary tuning" {
+    "contact uses the captured origin and yaw, live arrivals, and current-player cover" {
         val settings = staffSettings()
         withStaffHarness(settings = settings) { h ->
-            val world = h.paper.addSimpleWorld("staff-melee-lance-delay")
-            val player = h.player("staff-melee-lance-delay", world, StaffSpell.LANCE)
-            val target = h.zombie(world, x = 0.5, z = 3.0)
+            val world = h.paper.addSimpleWorld("staff-frontal-live-contact")
+            val player = h.player("staff-frontal-live-contact", world, StaffSpell.FROST)
+            val coveredFromCurrentPosition = h.zombie(world, x = 0.5, z = 6.0)
             val hits = mutableListOf<Pair<LivingEntity, Pair<Double, Double>>>()
             val damage = meleeDamage(hits)
             val melee = StaffSpellMelee(settings, damage, h.effects,
                 mockk(relaxed = true), StaffSpellTargeting(settings, damage))
-            val cast = meleeCast(player)
-            try {
-                melee.cast(player, cast, StaffSpell.LANCE, StaffSpellTuning(1.2, 7.0, 32)) shouldBe true
-                h.scheduler.tick(2)
-                hits shouldBe emptyList()
 
+            try {
+                melee.cast(player, meleeCast(player), StaffSpell.FROST, StaffSpellTuning(1.0, 6.0, 32)) shouldBe true
+                h.scheduler.tick(5)
+
+                player.teleport(Location(world, 12.5, 64.0, 0.5).apply {
+                    setDirection(Vector(0.0, 0.0, -1.0))
+                })
+                val lateArrival = h.zombie(world, x = 4.0, z = 6.0)
+                for (y in 64..66) world.getBlockAt(5, y, 3).type = Material.STONE
                 h.scheduler.tick(1)
-                hits.map { it.first.uniqueId } shouldBe listOf(target.uniqueId)
-                hits.single().second shouldBe (1.2 to 7.0)
+
+                hits.map { it.first.uniqueId } shouldBe listOf(lateArrival.uniqueId)
+                (coveredFromCurrentPosition.uniqueId in hits.map { it.first.uniqueId }) shouldBe false
             } finally {
                 melee.close()
             }
         }
     }
 
-    "LANCE excludes targets beyond range, behind the swing, outside its front arc, or behind cover" {
-        val settings = staffSettings()
+    "a frontal cast attempts at most three nearest targets even when its setting is higher" {
+        val settings = staffSettings(maxAreaTargets = 8)
         withStaffHarness(settings = settings) { h ->
-            val world = h.paper.addSimpleWorld("staff-melee-lance-bounds")
-            val player = h.player("staff-melee-lance-bounds", world, StaffSpell.LANCE)
-            val covered = h.zombie(world, x = 0.5, z = 3.0)
-            val clear = h.zombie(world, x = 2.5, z = 3.0)
-            val side = h.zombie(world, x = 4.0, z = 2.5)
-            val rear = h.zombie(world, x = 0.5, z = -2.0)
-            val outOfRange = h.zombie(world, x = 0.5, z = 6.0)
-            for (y in 64..66) world.getBlockAt(0, y, 2).type = Material.STONE
-
+            val world = h.paper.addSimpleWorld("staff-frontal-target-cap")
+            val player = h.player("staff-frontal-target-cap", world, StaffSpell.FAULT)
+            val targets = listOf(2.0, 3.0, 4.0, 5.0).map { h.zombie(world, x = 0.5, z = it) }
             val hits = mutableListOf<Pair<LivingEntity, Pair<Double, Double>>>()
             val damage = meleeDamage(hits)
             val melee = StaffSpellMelee(settings, damage, h.effects,
                 mockk(relaxed = true), StaffSpellTargeting(settings, damage))
-            try {
-                melee.cast(player, meleeCast(player), StaffSpell.LANCE, StaffSpellTuning(1.0, 6.0, 32)) shouldBe true
-                h.scheduler.tick(3)
-                hits.map { it.first.uniqueId } shouldBe listOf(clear.uniqueId)
-                hits.any { it.first.uniqueId in setOf(covered.uniqueId, side.uniqueId, rear.uniqueId, outOfRange.uniqueId) } shouldBe false
-            } finally {
-                melee.close()
-            }
-        }
-    }
 
-    "one cast contacts at most three targets" {
-        val settings = staffSettings(lanceTargets = 8)
-        withStaffHarness(settings = settings) { h ->
-            val world = h.paper.addSimpleWorld("staff-melee-target-cap")
-            val player = h.player("staff-melee-target-cap", world, StaffSpell.FAULT)
-            val targets = listOf(2.0, 2.6, 3.2, 3.8).map { h.zombie(world, x = 0.5, z = it) }
-            val hits = mutableListOf<Pair<LivingEntity, Pair<Double, Double>>>()
-            val damage = meleeDamage(hits)
-            val melee = StaffSpellMelee(settings, damage, h.effects,
-                mockk(relaxed = true), StaffSpellTargeting(settings, damage))
             try {
-                melee.cast(player, meleeCast(player), StaffSpell.FAULT, StaffSpellTuning(1.0, 6.0, 44)) shouldBe true
-                h.scheduler.tick(3)
+                melee.cast(player, meleeCast(player), StaffSpell.FAULT, StaffSpellTuning(1.0, 6.0, 32)) shouldBe true
+                h.scheduler.tick(STAFF_FRONTAL_CONTACT_TICK)
+
                 hits.map { it.first.uniqueId } shouldBe targets.take(3).map { it.uniqueId }
             } finally {
                 melee.close()
@@ -154,19 +116,72 @@ class StaffSpellMeleeTest : FreeSpec({
         }
     }
 
-    "cancel prevents a delayed FAULT contact" {
+    "FROST, FAULT, and TIDE apply crowd control only after accepted damage; LUNAR has none" {
+        val expectedPush = mapOf(StaffSpell.FAULT to 0.42, StaffSpell.TIDE to 0.35)
+        listOf(StaffSpell.FROST, StaffSpell.FAULT, StaffSpell.LUNAR, StaffSpell.TIDE).forEach { spell ->
+            val settings = staffSettings()
+            withStaffHarness(settings = settings) { h ->
+                val world = h.paper.addSimpleWorld("staff-frontal-hit-effects-${spell.id}")
+                val player = h.player("staff-frontal-hit-effects-${spell.id}", world, spell)
+                val denied = h.zombie(world, x = 0.5, z = 2.0)
+                val accepted = h.zombie(world, x = 0.5, z = 3.0)
+                val attempts = mutableListOf<UUID>()
+                val damage = mockk<StaffSpellDamage>()
+                every { damage.eligible(any(), any(), any()) } returns true
+                every { damage.isCurrent(any(), any()) } returns true
+                every { damage.hit(any(), any(), any(), any(), any()) } answers {
+                    val target = secondArg<LivingEntity>()
+                    attempts += target.uniqueId
+                    target.uniqueId == accepted.uniqueId
+                }
+                val melee = StaffSpellMelee(settings, damage, h.effects,
+                    mockk(relaxed = true), StaffSpellTargeting(settings, damage))
+
+                try {
+                    melee.cast(player, meleeCast(player), spell, StaffSpellTuning(1.0, 6.0, 32)) shouldBe true
+                    h.scheduler.tick(STAFF_FRONTAL_CONTACT_TICK)
+
+                    attempts shouldBe listOf(denied.uniqueId, accepted.uniqueId)
+                    when (spell) {
+                        StaffSpell.FROST -> {
+                            denied.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
+                            val slow = requireNotNull(accepted.getPotionEffect(PotionEffectType.SLOWNESS))
+                            slow.duration shouldBe 16
+                            slow.amplifier shouldBe 0
+                        }
+                        StaffSpell.FAULT, StaffSpell.TIDE -> {
+                            abs(denied.velocity.z) shouldBe 0.0
+                            (abs(accepted.velocity.z - requireNotNull(expectedPush[spell])) < 1.0e-9) shouldBe true
+                        }
+                        StaffSpell.LUNAR -> {
+                            denied.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
+                            accepted.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
+                            abs(denied.velocity.z) shouldBe 0.0
+                            abs(accepted.velocity.z) shouldBe 0.0
+                        }
+                        else -> error("Unexpected frontal spell: $spell")
+                    }
+                } finally {
+                    melee.close()
+                }
+            }
+        }
+    }
+
+    "cancel prevents delayed frontal contact" {
         val settings = staffSettings()
         withStaffHarness(settings = settings) { h ->
-            val world = h.paper.addSimpleWorld("staff-melee-cancel")
-            val player = h.player("staff-melee-cancel", world, StaffSpell.FAULT)
+            val world = h.paper.addSimpleWorld("staff-frontal-cancel")
+            val player = h.player("staff-frontal-cancel", world, StaffSpell.FAULT)
             h.zombie(world, x = 0.5, z = 3.0)
             val hits = mutableListOf<Pair<LivingEntity, Pair<Double, Double>>>()
             val damage = meleeDamage(hits)
             val melee = StaffSpellMelee(settings, damage, h.effects,
                 mockk(relaxed = true), StaffSpellTargeting(settings, damage))
+
             try {
-                melee.cast(player, meleeCast(player), StaffSpell.FAULT, StaffSpellTuning(1.0, 6.0, 44)) shouldBe true
-                h.scheduler.tick(2)
+                melee.cast(player, meleeCast(player), StaffSpell.FAULT, StaffSpellTuning(1.0, 6.0, 32)) shouldBe true
+                h.scheduler.tick(STAFF_FRONTAL_CONTACT_TICK - 1)
                 melee.cancel(player.uniqueId)
                 h.scheduler.tick(2)
                 hits shouldBe emptyList()
@@ -176,30 +191,30 @@ class StaffSpellMeleeTest : FreeSpec({
         }
     }
 
-    "FAULT applies its forward impulse only after damage reports a successful hit" {
+    "an expired captured combat context suppresses frontal contact" {
+        var current = true
         val settings = staffSettings()
         withStaffHarness(settings = settings) { h ->
-            val world = h.paper.addSimpleWorld("staff-melee-fault-knockback")
-            val player = h.player("staff-melee-fault-knockback", world, StaffSpell.FAULT)
-            val denied = h.zombie(world, x = 0.5, z = 2.0)
-            val accepted = h.zombie(world, x = 0.5, z = 3.0)
-            val hits = mutableListOf<LivingEntity>()
+            val world = h.paper.addSimpleWorld("staff-frontal-stale-context")
+            val player = h.player("staff-frontal-stale-context", world, StaffSpell.LUNAR)
+            h.zombie(world, x = 0.5, z = 3.0)
+            val hits = mutableListOf<Pair<LivingEntity, Pair<Double, Double>>>()
             val damage = mockk<StaffSpellDamage>()
             every { damage.eligible(any(), any(), any()) } returns true
-            every { damage.isCurrent(any(), any()) } returns true
+            every { damage.isCurrent(any(), any()) } answers { current }
             every { damage.hit(any(), any(), any(), any(), any()) } answers {
-                val target = secondArg<LivingEntity>()
-                hits += target
-                target.uniqueId == accepted.uniqueId
+                hits += secondArg<LivingEntity>() to (arg<Double>(3) to arg<Double>(4))
+                true
             }
             val melee = StaffSpellMelee(settings, damage, h.effects,
                 mockk(relaxed = true), StaffSpellTargeting(settings, damage))
+
             try {
-                melee.cast(player, meleeCast(player), StaffSpell.FAULT, StaffSpellTuning(1.0, 6.0, 44)) shouldBe true
-                h.scheduler.tick(3)
-                hits.map { it.uniqueId } shouldBe listOf(denied.uniqueId, accepted.uniqueId)
-                abs(denied.velocity.z) shouldBe 0.0
-                (abs(accepted.velocity.z - 0.45) < 1.0e-9) shouldBe true
+                melee.cast(player, meleeCast(player), StaffSpell.LUNAR, StaffSpellTuning(1.0, 6.0, 32)) shouldBe true
+                h.scheduler.tick(STAFF_FRONTAL_CONTACT_TICK - 1)
+                current = false
+                h.scheduler.tick(1)
+                hits shouldBe emptyList()
             } finally {
                 melee.close()
             }

@@ -315,7 +315,7 @@ object StaffRedesignPreviewExport {
             "timelineNote" to if (allAround)
                 "Production staffDefenseParts: Shift+LMB keeps four transparent kite panels for ${duration / 20.0}s. Authored hit scenario: the shield depletes at tick $hitTick and its source break animation ends at tick $endTick; particles emit only at that contact."
             else
-                "Production staffDefenseParts: LMB keeps a frontal kite guard for ${duration / 20.0}s. Authored hit scenario: the first frontal hit lands at tick 8 and does not deplete the guard; particles emit only at contact. Combat and native expiry are not simulated.",
+                "Production staffDefenseParts: RMB keeps a frontal kite guard for ${duration / 20.0}s. Authored hit scenario: the first frontal hit lands at tick 8 and does not deplete the guard; particles emit only at contact. Combat and native expiry are not simulated.",
             "sourceFunctions" to listOf("staffDefenseParts", "staffDefenseParticles"), "frames" to frames,
         )
     }
@@ -420,7 +420,7 @@ object StaffRedesignPreviewExport {
 
     private fun meleeClip(spell: StaffSpell): Map<String, Any> {
         val reach = requireNotNull(staffMeleeReach(spell))
-        val duration = 10
+        val duration = STAFF_FRONTAL_DURATION_TICKS
         val origin = Vector(0.0, 1.37, 0.0)
         return mapOf(
             "id" to "${spell.id}-primary-0", "spell" to spell.id,
@@ -428,7 +428,7 @@ object StaffRedesignPreviewExport {
             "durationTicks" to duration, "tailTicks" to 16, "frameStepTicks" to FRAME_STEP_TICKS,
             "particleOnly" to false, "anchor" to "caster eye minus 0.25 blocks; horizontal +Z",
             "previewReachBlocks" to reach,
-            "timelineNote" to "Ближняя основная атака. Контакт на четвёртом тике; Display-кадры каждые два тика с интерполяцией. Реальные столкновения, звук и клиентская физика частиц здесь не моделируются.",
+            "timelineNote" to "Большая фронтальная атака. Контакт на шестом тике; Display-кадры каждые два тика с интерполяцией. Реальные столкновения, звук и клиентская физика частиц здесь не моделируются.",
             "sourceFunctions" to listOf("staffMeleeDisplayParts", "staffMeleeParticles"),
             "frames" to ticks(duration).map { age -> mapOf(
                 "tick" to age,
@@ -591,8 +591,8 @@ object StaffRedesignPreviewExport {
                         else listOf(0.0, 1.0).forEach { charge -> add(arsenalClip(spell, input, charge)) }
                     }
                 }
-                add(meleeClip(StaffSpell.MARK))
                 add(meleeClip(StaffSpell.FROST))
+                add(meleeClip(StaffSpell.FAULT))
                 listOf(StaffCastInput.PRIMARY, StaffCastInput.SECONDARY).forEach { input ->
                     listOf(0.0, 1.0).forEach { charge -> add(gravityClip(input, charge)) }
                 }
@@ -624,11 +624,12 @@ object StaffRedesignPreviewExport {
             "frameStepTicks" to FRAME_STEP_TICKS,
             "particleTailTicks" to 40,
             "previewReachBlocks" to PREVIEW_REACH_BLOCKS,
-            "evidence" to "Кадры вызывают production-геометрию и частицы. Новые ближние ЛКМ используют staffMeleeDisplayParts/staffMeleeParticles; Shift-атаки сохраняют свои геометрии. Интерполяция Display моделируется по экспортированным ключевым кадрам. Это офлайн-превью: урон, столкновения, звук и нативный клиент не проверяются.",
+            "evidence" to "Кадры вызывают production-геометрию и частицы. Четыре фронтальные ЛКМ используют staffMeleeDisplayParts/staffMeleeParticles; Shift-атаки сохраняют свои геометрии. Интерполяция Display моделируется по экспортированным ключевым кадрам. Это офлайн-превью: урон, столкновения, звук и нативный клиент не проверяются.",
             "clips" to clips,
         )
         output.parent?.let { Files.createDirectories(it) }
         Files.writeString(output, GsonBuilder().setPrettyPrinting().create().toJson(fullExport).plus("\n"))
+        StaffHudPreviewExport.main(arrayOf(output.resolveSibling("hud.json").toString()))
         if (focusedOutput != null) {
             val focusedClips = clips.filter { clip ->
                 (clip["sourceFunctions"] as? List<*>)?.contains("staffMeleeDisplayParts") == true ||
@@ -646,7 +647,7 @@ object StaffRedesignPreviewExport {
                 "frameStepTicks" to FRAME_STEP_TICKS,
                 "particleTailTicks" to 40,
                 "previewReachBlocks" to PREVIEW_REACH_BLOCKS,
-            "evidence" to "Кадры вызывают production-геометрию и частицы. Новые ближние ЛКМ используют staffMeleeDisplayParts/staffMeleeParticles; Shift-атаки сохраняют свои геометрии. Интерполяция Display моделируется по экспортированным ключевым кадрам. Это офлайн-превью: урон, столкновения, звук и нативный клиент не проверяются.",
+            "evidence" to "Кадры вызывают production-геометрию и частицы. Четыре фронтальные ЛКМ используют staffMeleeDisplayParts/staffMeleeParticles; Shift-атаки сохраняют свои геометрии. Интерполяция Display моделируется по экспортированным ключевым кадрам. Это офлайн-превью: урон, столкновения, звук и нативный клиент не проверяются.",
                 "clips" to focusedClips,
             )).plus("\n"))
             println("STAFF_REDESIGN_FOCUSED_PREVIEW clips=${focusedClips.size} output=$focusedOutput")

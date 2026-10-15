@@ -207,6 +207,39 @@ internal open class StaffSpellConfig(private val config: Config) {
         Placeholder.unparsed("percent", (progress.coerceIn(0.0, 1.0) * 100).toInt().toString()),
     ))
 
+    fun staffHudReady(spell: StaffSpell, secondary: Boolean): Component {
+        val message = when (staffAttackInputMode(spell, secondary)) {
+            StaffAttackInputMode.INSTANT -> "ready-instant"
+            StaffAttackInputMode.CHARGE_CLICK_TOGGLE -> "ready-charge"
+            StaffAttackInputMode.CHANNEL_CLICK_TOGGLE -> "ready-channel"
+        }
+        return staffHud(message, spell, secondary)
+    }
+
+    fun staffHudCharging(spell: StaffSpell, secondary: Boolean, progress: Double, bar: String): Component {
+        val percent = (progress.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0) * 100.0
+        return staffHud("charging", spell, secondary,
+            Placeholder.unparsed("percent", percent.toInt().toString()),
+            Placeholder.unparsed("bar", bar))
+    }
+
+    fun staffHudCooldown(spell: StaffSpell, secondary: Boolean, remainingTicks: Long, bar: String): Component =
+        staffHud("cooldown", spell, secondary,
+            Placeholder.unparsed("seconds", String.format(Locale.ROOT, "%.1f", remainingTicks.coerceAtLeast(0) / 20.0)),
+            Placeholder.unparsed("bar", bar))
+
+    fun staffHudChannel(spell: StaffSpell, secondary: Boolean): Component = staffHud("channel", spell, secondary)
+
+    private fun staffHud(message: String, spell: StaffSpell, secondary: Boolean,
+        vararg extra: TagResolver): Component {
+        val ability = if (secondary) "secondary-name" else "name"
+        return config.component("messages.staff-hud.$message", TagResolver.resolver(
+            Placeholder.component("ability", config.component("${spell.id}.$ability", TagResolver.empty())),
+            Placeholder.unparsed("input", if (secondary) "Shift + ЛКМ" else "ЛКМ"),
+            *extra,
+        )).decoration(TextDecoration.ITALIC, false)
+    }
+
     fun defense(spell: StaffSpell, active: Boolean, seconds: Double, allAround: Boolean = false): Component {
         val message = when {
             active -> "defense-active"
