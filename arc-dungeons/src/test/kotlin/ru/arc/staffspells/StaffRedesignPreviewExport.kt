@@ -282,7 +282,7 @@ object StaffRedesignPreviewExport {
             spell == StaffSpell.OSSUARY && !input.secondary ->
                 "Eleven branching bone clusters rise along a 21.5-block ground path from the launch point 2.5 blocks ahead to a fixed 24-block caster reach. Their spacing follows ceil(path/2), they start 2 ticks apart, and each uses a matching 2.75–3.0-block visual and damage radius at local tick 6. This unobstructed preview places no blocks."
             spell == StaffSpell.OSSUARY && input.secondary ->
-                "Branching ivory ribs form a warning ring, then close around a dark skull centerpiece at tick 12. The broad 5.5–6.0-block display footprint matches its runtime damage radius around the selected ground point; visibility checks preserve cover and the cast never places blocks."
+                "Branching bone clusters erupt at varied angles, with tall main spikes and smaller side forks. The broad 5.5–6.0-block display footprint matches its runtime damage radius around the selected ground point; visibility checks preserve cover and the cast never places blocks."
             spell == StaffSpell.PRISM && input.secondary ->
                 "Beam uses the source staffPrismBeam frame and three source-shaped emitter lanes. Target selection is represented by a fixed 12-block endpoint."
             spell == StaffSpell.PRISM ->
