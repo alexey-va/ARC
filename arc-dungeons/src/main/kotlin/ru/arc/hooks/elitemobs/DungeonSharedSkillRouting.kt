@@ -50,9 +50,13 @@ internal object DungeonSharedSkillRouting {
             .filter { it.third.isNotEmpty() }
             .minWithOrNull(compareBy<Triple<ClassFormDefinition, Long, List<SkillType>>> {
                 (_, maxXp, missing) -> missing.sumOf { maxXp - xp(it) }
-            }.thenBy { it.first.id() }) ?: return null
+            }.thenBy { it.first.id() })
 
-        return recipient(next.third, source, next.second, xp)
+        if (next != null) return recipient(next.third, source, next.second, xp)
+        // Keep the current pair together while class XP or the normal class choice catches up.
+        val pair = active.foundationSkills().asList().filter { it.isWeaponSkill }
+        return if (supported && pair.size == 2 && source in pair) recipient(pair, source, Long.MAX_VALUE, xp)
+            else null
     }
 
     private fun deficientWeapons(form: ClassFormDefinition, maxXp: Long, xp: (SkillType) -> Long) =

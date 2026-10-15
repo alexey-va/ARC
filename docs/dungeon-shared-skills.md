@@ -23,7 +23,9 @@ Compatibility was checked against the installed EliteMobs 10.9.8 JAR
   skips a challenge or traverses the whole connected weapon graph.
 - An award has at most one companion recipient. It stops at the prerequisite
   threshold; any remaining XP stays with the original weapon. The next award
-  reevaluates the path. Terminal classes keep sharing their pair continuously.
+  reevaluates the path. Once all matching immediate children are prepared, the
+  current pair keeps sharing without a level ceiling, including while waiting
+  for class XP or the normal class choice. Terminal classes share continuously.
 - An unsupported weapon, missing class profile or absent prerequisite recipient
   keeps the native award. Administrative skill setters and future XP books do
   not pass through this combat hook.

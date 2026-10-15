@@ -62,6 +62,7 @@ class DungeonSharedSkillRoutingTest : FreeSpec({
         route("adventurer", WANDS, SWORDS to 10, WANDS to 4) shouldBe capped(STAVES, 10)
         route("adventurer", AXES, SWORDS to 10, AXES to 4) shouldBe capped(MACES, 10)
         route("adventurer", HOES, SWORDS to 10) shouldBe null
+        route("adventurer", WANDS, SWORDS to 10, WANDS to 10, STAVES to 10) shouldBe null
     }
 
     "paladin alternate mace affinity repairs its sword prerequisite" {
@@ -69,11 +70,12 @@ class DungeonSharedSkillRoutingTest : FreeSpec({
         route("paladin", BOWS, SWORDS to 12) shouldBe null
     }
 
-    "spellcaster shares only its current band until native selection advances" {
+    "spellcaster shares its current pair even after the class band is ready" {
         route("spellcaster", STAVES, SWORDS to 10, STAVES to 20, WANDS to 15) shouldBe capped(WANDS, 30)
         route("mage", WANDS, SWORDS to 10, STAVES to 43, WANDS to 43) shouldBe capped(STAVES, 60)
         route("spellcaster", STAVES, SWORDS to 10, STAVES to 5, WANDS to 30) shouldBe null
-        route("spellcaster", STAVES, SWORDS to 10, STAVES to 30, WANDS to 30) shouldBe null
+        route("spellcaster", STAVES, SWORDS to 10, STAVES to 30, WANDS to 30) shouldBe SharedSkillTarget(WANDS)
+        route("spellcaster", WANDS, SWORDS to 10, STAVES to 30, WANDS to 43) shouldBe SharedSkillTarget(STAVES)
     }
 
     "sniper prepares bowmaster spear requirement before class XP or selection catches up" {
@@ -101,7 +103,7 @@ class DungeonSharedSkillRoutingTest : FreeSpec({
     }
 
     "routing never reaches grandchildren or changes armor" {
-        route("ranger", BOWS, SWORDS to 10, BOWS to 30, CROSSBOWS to 30) shouldBe null
+        route("ranger", BOWS, SWORDS to 10, BOWS to 30, CROSSBOWS to 30) shouldBe SharedSkillTarget(CROSSBOWS)
         route("paladin", SWORDS, SWORDS to 30) shouldBe capped(SPEARS, 30)
         route("paladin", ARMOR, SWORDS to 12) shouldBe null
         route("bulwark", MACES, SWORDS to 90, SPEARS to 60, MACES to 90) shouldBe null
