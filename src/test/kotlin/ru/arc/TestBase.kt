@@ -2,10 +2,12 @@ package ru.arc
 
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
+import org.bukkit.plugin.PluginDescriptionFile
 import org.mockbukkit.mockbukkit.MockBukkit
 import org.mockbukkit.mockbukkit.ServerMock
 import org.mockbukkit.mockbukkit.inventory.ItemStackMock
 import ru.arc.config.ConfigManager
+import ru.arc.coreplugin.ArcCorePlugin
 import ru.arc.gui.GuiItems
 import ru.arc.gui.MockGuiItemFactory
 import ru.arc.util.GuiUtils
@@ -46,6 +48,7 @@ abstract class TestBase {
         ConfigManager.clear()
 
         server = MockBukkit.mock()
+        loadArcCoreHostForTest()
 
         // Set server name first
         ARC.serverName = "test-server"
@@ -138,4 +141,10 @@ abstract class TestBase {
         // Clear mock GUI factory state
         mockGuiItemFactory.clear()
     }
+}
+
+/** Loads the real provider host with an explicit descriptor to avoid the shared test-classpath plugin.yml. */
+internal fun loadArcCoreHostForTest(): ArcCorePlugin {
+    val descriptor = PluginDescriptionFile("ArcCore", "0.1.0", ArcCorePlugin::class.java.name)
+    return MockBukkit.loadWith(ArcCorePlugin::class.java, descriptor)
 }

@@ -1,5 +1,22 @@
 import unittest
-from verify_arc_domain_artifact_split import DOMAINS, verify
+from verify_arc_dungeons_artifact_split import (
+    ARC_CORE_RUNTIME_CLASS_PREFIXES,
+    ARC_CORE_RUNTIME_PACKAGES,
+    PROVIDER_CLASSES,
+)
+from verify_arc_domain_artifact_split import (
+    DOMAINS,
+    verify,
+)
+
+ARC_CORE_ENTRIES = {
+    "ru/arc/paper/api/ArcRedisService.class",
+    *(f"{provider}.class" for provider in PROVIDER_CLASSES),
+    *(f"{prefix}.class" for prefix in ARC_CORE_RUNTIME_CLASS_PREFIXES),
+    *(f"{package}CoreType.class" for package in ARC_CORE_RUNTIME_PACKAGES),
+}
+ARC_DESCRIPTOR = "name: ARC\ndepend:\n  - ArcCore\n  - packetevents"
+ARC_CORE_DESCRIPTOR = "name: ArcCore\nmain: ru.arc.coreplugin.ArcCorePlugin"
 
 
 class ArtifactOwnershipTest(unittest.TestCase):
@@ -10,13 +27,34 @@ class ArtifactOwnershipTest(unittest.TestCase):
                 host = {"ru/arc/ARC.class", api}
                 child = {f"ru/arc/{domain}/{entry}.class", *resources}
                 descriptor = f"name: {name}\ndepend: [ARC]"
-                self.assertEqual([], verify(host, child, descriptor, name))
-                self.assertEqual([], verify(host, child, f"name: {name}\ndepend:\n  - ARC", name))
-                self.assertTrue(verify(host, child, f"name: {name}\nsoftdepend:\n  - ARC", name))
-                self.assertTrue(verify(host | {f"ru/arc/{domain}/State.class"}, child, descriptor, name))
-                self.assertTrue(verify(host, child | {api}, descriptor, name))
-                self.assertTrue(verify(host, child | {"ru/arc/paper/sql/PaperSqlServiceProvider.class"}, descriptor, name))
-                self.assertTrue(verify(host, child, f"name: {name}", name))
+                self.assertEqual([], verify(host, ARC_CORE_ENTRIES, child, ARC_DESCRIPTOR, ARC_CORE_DESCRIPTOR, descriptor, name))
+                self.assertEqual(
+                    [],
+                    verify(
+                        host,
+                        ARC_CORE_ENTRIES,
+                        child,
+                        ARC_DESCRIPTOR,
+                        ARC_CORE_DESCRIPTOR,
+                        f"name: {name}\ndepend:\n  - ARC",
+                        name,
+                    ),
+                )
+                self.assertTrue(verify(host, ARC_CORE_ENTRIES, child, ARC_DESCRIPTOR, ARC_CORE_DESCRIPTOR,
+                                       f"name: {name}\nsoftdepend: [ARC]", name))
+                self.assertTrue(verify(host | {f"ru/arc/{domain}/State.class"}, ARC_CORE_ENTRIES, child,
+                                       ARC_DESCRIPTOR, ARC_CORE_DESCRIPTOR, descriptor, name))
+                self.assertTrue(verify(host, ARC_CORE_ENTRIES, child | {api}, ARC_DESCRIPTOR,
+                                       ARC_CORE_DESCRIPTOR, descriptor, name))
+                self.assertTrue(verify(host, ARC_CORE_ENTRIES,
+                                       child | {"ru/arc/paper/sql/PaperSqlServiceProvider.class"},
+                                       ARC_DESCRIPTOR, ARC_CORE_DESCRIPTOR, descriptor, name))
+                self.assertTrue(verify(host, ARC_CORE_ENTRIES, child, ARC_DESCRIPTOR, ARC_CORE_DESCRIPTOR,
+                                       f"name: {name}", name))
+                self.assertTrue(verify(host, ARC_CORE_ENTRIES | {api}, child, ARC_DESCRIPTOR,
+                                       ARC_CORE_DESCRIPTOR, descriptor, name))
+                self.assertTrue(verify(host, ARC_CORE_ENTRIES, child, ARC_DESCRIPTOR,
+                                       "name: ArcCore\ndepend: [ARC]", descriptor, name))
 
 
 if __name__ == "__main__":

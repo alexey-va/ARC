@@ -85,7 +85,7 @@ import ru.arc.paper.redis.PaperRedisServiceProvider
 import ru.arc.paper.sql.PaperSqlServiceProvider
 import ru.arc.paper.sql.PaperSqlServices
 import ru.arc.paper.metrics.PaperArcMetricsProvider
-import ru.arc.paper.api.ArcMetricsService
+import ru.arc.coreplugin.ArcCoreServices
 import ru.arc.ops.OpsHttpModule
 import ru.arc.onboarding.OnboardingModule
 import ru.arc.paper.chunk.PaperChunkTicketRegistry
@@ -175,11 +175,13 @@ open class ARC : JavaPlugin() {
         }
 
         PaperArcRuntime.installScheduling(this)
-        sqlService = PaperSqlServiceProvider(this)
+        val sharedServices = checkNotNull(server.servicesManager.load(ArcCoreServices::class.java)) {
+            "ArcCore services are unavailable; install and enable ArcCore before ARC"
+        }
+        sqlService = sharedServices.sql
         sqlConsumer = PaperSqlServices.installConsumer(this)
-        redisService = PaperRedisServiceProvider(this)
-        metricsService = PaperArcMetricsProvider(null).also {
-            server.servicesManager.register(ArcMetricsService::class.java, it, this, ServicePriority.Normal)
+        redisService = sharedServices.redis
+        metricsService = sharedServices.metrics.also {
             sharedServiceMetrics = SharedServiceMetrics(it, sqlService, redisService)
         }
         visualPacketRuntime = PaperVisualPacketRuntime.install(this)
@@ -261,9 +263,8 @@ open class ARC : JavaPlugin() {
         sharedServiceMetrics = null
         runCatching { sqlConsumer?.close() }.onFailure { error("Failed to release ARC SQL leases", it) }
         sqlConsumer = null
-        if (::sqlService.isInitialized) runCatching(sqlService::close).onFailure { error("Failed to close shared SQL provider", it) }
-        if (::redisService.isInitialized) runCatching(redisService::close).onFailure { error("Failed to close shared Redis provider", it) }
-        metricsService?.close()
+        // ArcCore owns the providers; ARC only releases its own resources and exporter.
+        metricsService?.rebind(null)
         metricsService = null
         runCatching { visualPacketRuntime?.close() }
             .onFailure { failure -> error("Failed to close the visual packet budget", failure) }

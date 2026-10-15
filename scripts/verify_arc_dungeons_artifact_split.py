@@ -9,20 +9,33 @@ import zipfile
 from pathlib import Path
 
 
-API_PACKAGES = (
-    "ru/arc/paper/api/",
+PAPER_API_PACKAGE = "ru/arc/paper/api/"
+PAPER_API_CLASS = "ru/arc/paper/api/ArcRedisService.class"
+DOMAIN_API_PACKAGES = (
     "ru/arc/dungeons/api/",
     "ru/arc/staffspells/api/",
 )
-API_CLASSES = (
-    "ru/arc/paper/api/ArcRedisService.class",
+DOMAIN_API_CLASSES = (
     "ru/arc/dungeons/api/ArcDungeonsService.class",
     "ru/arc/staffspells/api/ArcStaffSpellService.class",
 )
 PROVIDER_CLASSES = (
     "ru/arc/paper/redis/PaperRedisServiceProvider",
+    "ru/arc/paper/redis/SharedPaperRedisService",
     "ru/arc/paper/sql/PaperSqlServiceProvider",
+    "ru/arc/paper/sql/SharedPaperSqlService",
     "ru/arc/paper/metrics/PaperArcMetricsProvider",
+)
+ARC_CORE_RUNTIME_CLASS_PREFIXES = (
+    "ru/arc/redis/RedisTelemetrySink",
+    "ru/arc/redis/NoOpRedisTelemetrySink",
+    "ru/arc/redis/RedisOperation",
+    "ru/arc/redis/RedisReconnect",
+)
+ARC_CORE_RUNTIME_PACKAGES = (
+    "io/micrometer/core/",
+    "io/micrometer/commons/",
+    "io/micrometer/observation/",
 )
 MOVED_PACKAGE = "ru/arc/hooks/elitemobs/"
 MOVED_CLASS = "ru/arc/hooks/elitemobs/EMHook.class"
@@ -50,6 +63,81 @@ def class_exists(entries: set[str], class_name: str) -> bool:
     )
 
 
+def class_entries(entries: set[str], prefix: str) -> set[str]:
+    return {entry for entry in entries if entry.startswith(prefix) and entry.endswith(".class")}
+
+
+def dependency_names(descriptor: str | None, key: str) -> set[str]:
+    lines = (descriptor or "").splitlines()
+    for index, line in enumerate(lines):
+        name, separator, value = line.strip().partition(":")
+        if not separator or name != key:
+            continue
+        value = value.strip()
+        if value.startswith("[") and value.endswith("]"):
+            return {item.strip().strip("'\"") for item in value[1:-1].split(",") if item.strip()}
+        dependencies = set()
+        for following in lines[index + 1:]:
+            if not following.startswith((" ", "\t")):
+                break
+            item = following.strip()
+            if item.startswith("-"):
+                dependencies.add(item[1:].strip().strip("'\""))
+            elif item:
+                break
+        return dependencies
+    return set()
+
+
+def verify_arc_core_ownership(
+    arc: set[str],
+    arc_core: set[str],
+    children: tuple[tuple[str, set[str]], ...],
+    arc_descriptor: str | None,
+    arc_core_descriptor: str | None,
+) -> list[str]:
+    violations = []
+    if not class_entries(arc_core, PAPER_API_PACKAGE):
+        violations.append("ArcCore JAR is missing the shared Paper API package")
+    if PAPER_API_CLASS not in arc_core:
+        violations.append(f"ArcCore JAR is missing shared API class {PAPER_API_CLASS}")
+    if class_entries(arc, PAPER_API_PACKAGE):
+        violations.append("ARC JAR embeds the ArcCore-owned Paper API package")
+    for name, child in children:
+        if class_entries(child, PAPER_API_PACKAGE):
+            violations.append(f"{name} JAR embeds the ArcCore-owned Paper API package")
+
+    for class_name in PROVIDER_CLASSES:
+        if not class_exists(arc_core, class_name):
+            violations.append(f"ArcCore JAR is missing shared provider implementation {class_name}")
+        if class_exists(arc, class_name):
+            violations.append(f"ARC JAR embeds ArcCore provider implementation {class_name}")
+        for name, child in children:
+            if class_exists(child, class_name):
+                violations.append(f"{name} JAR embeds ArcCore provider implementation {class_name}")
+
+    for prefix in ARC_CORE_RUNTIME_CLASS_PREFIXES:
+        if not class_entries(arc_core, prefix):
+            violations.append(f"ArcCore JAR is missing shared runtime class {prefix}*")
+        if class_entries(arc, prefix):
+            violations.append(f"ARC JAR embeds ArcCore runtime class {prefix}*")
+    for package in ARC_CORE_RUNTIME_PACKAGES:
+        if not class_entries(arc_core, package):
+            violations.append(f"ArcCore JAR is missing shared runtime package {package}")
+        if class_entries(arc, package):
+            violations.append(f"ARC JAR embeds ArcCore runtime package {package}")
+
+    if "name: ArcCore" not in (arc_core_descriptor or "").splitlines():
+        violations.append("ArcCore plugin descriptor must declare exactly name ArcCore")
+    if "ArcCore" not in dependency_names(arc_descriptor, "depend"):
+        violations.append("ARC must declare a hard dependency on ArcCore")
+    arc_core_dependencies = dependency_names(arc_core_descriptor, "depend")
+    arc_core_dependencies.update(dependency_names(arc_core_descriptor, "softdepend"))
+    if "ARC" in arc_core_dependencies:
+        violations.append("ArcCore must not depend on ARC")
+    return violations
+
+
 def load_archive(path: Path) -> tuple[set[str], str | None]:
     if not path.is_file():
         raise ValueError(f"artifact does not exist: {path}")
@@ -62,8 +150,21 @@ def load_archive(path: Path) -> tuple[set[str], str | None]:
         raise ValueError(f"cannot read JAR {path}: {failure}") from failure
 
 
-def verify(arc: set[str], dungeons: set[str], dungeons_descriptor: str | None) -> list[str]:
-    violations: list[str] = []
+def verify(
+    arc: set[str],
+    arc_core: set[str],
+    dungeons: set[str],
+    arc_descriptor: str | None,
+    arc_core_descriptor: str | None,
+    dungeons_descriptor: str | None,
+) -> list[str]:
+    violations = verify_arc_core_ownership(
+        arc,
+        arc_core,
+        (("ArcDungeons", dungeons),),
+        arc_descriptor,
+        arc_core_descriptor,
+    )
 
     if not class_exists(arc, ARC_ENTRYPOINT):
         violations.append("ARC JAR is missing ru/arc/ARC.class")
@@ -89,21 +190,17 @@ def verify(arc: set[str], dungeons: set[str], dungeons_descriptor: str | None) -
         if "depend: [ARC]" not in descriptor_lines:
             violations.append("ArcDungeons plugin.yml must declare the hard dependency `depend: [ARC]`")
 
-    for package in API_PACKAGES:
+    for package in DOMAIN_API_PACKAGES:
         if not any(entry.startswith(package) and entry.endswith(".class") for entry in arc):
             violations.append(f"ARC JAR is missing shared API package {package}")
         if any(entry.startswith(package) and entry.endswith(".class") for entry in dungeons):
             violations.append(f"ArcDungeons JAR embeds shared API package {package}")
+        if any(entry.startswith(package) and entry.endswith(".class") for entry in arc_core):
+            violations.append(f"ArcCore JAR embeds ARC-owned domain API package {package}")
 
-    for class_name in API_CLASSES:
+    for class_name in DOMAIN_API_CLASSES:
         if class_name not in arc:
             violations.append(f"ARC JAR is missing shared API class {class_name}")
-
-    for class_name in PROVIDER_CLASSES:
-        if not class_exists(arc, class_name):
-            violations.append(f"ARC JAR is missing provider implementation {class_name}")
-        if class_exists(dungeons, class_name):
-            violations.append(f"ArcDungeons JAR embeds provider implementation {class_name}")
 
     if any(entry.startswith(MOVED_PACKAGE) and entry.endswith(".class") for entry in arc):
         violations.append(f"ARC JAR still contains moved package {MOVED_PACKAGE}")
@@ -148,13 +245,22 @@ def verify(arc: set[str], dungeons: set[str], dungeons_descriptor: str | None) -
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--arc-jar", required=True, type=Path, help="built ARC plugin JAR")
+    parser.add_argument("--arc-core-jar", required=True, type=Path, help="built ArcCore plugin JAR")
     parser.add_argument("--dungeons-jar", required=True, type=Path, help="built ArcDungeons plugin JAR")
     args = parser.parse_args(argv)
 
     try:
-        arc_entries, _ = load_archive(args.arc_jar)
+        arc_entries, arc_descriptor = load_archive(args.arc_jar)
+        arc_core_entries, arc_core_descriptor = load_archive(args.arc_core_jar)
         dungeons_entries, dungeons_descriptor = load_archive(args.dungeons_jar)
-        violations = verify(arc_entries, dungeons_entries, dungeons_descriptor)
+        violations = verify(
+            arc_entries,
+            arc_core_entries,
+            dungeons_entries,
+            arc_descriptor,
+            arc_core_descriptor,
+            dungeons_descriptor,
+        )
     except ValueError as failure:
         print(f"ARC_DUNGEONS_ARTIFACT_SPLIT_ERROR {failure}", file=sys.stderr)
         return 2

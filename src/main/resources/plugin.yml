@@ -6,6 +6,7 @@ libraries:
   - com.google.code.gson:gson:2.10.1
   - redis.clients:jedis:5.2.0-beta4
 depend:
+  - ArcCore
   - packetevents
 softdepend:
   - Parties

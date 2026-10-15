@@ -75,6 +75,7 @@ abstract class KotestTestBase(
         ConfigManager.clear()
 
         server = MockBukkit.mock()
+        loadArcCoreHostForTest()
 
         // Set server name first
         ARC.serverName = "test-server"

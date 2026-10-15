@@ -36,6 +36,7 @@ class IsolatedRuntimeProfileTest : FreeSpec({
         every { RedisModule.reload() } answers { ARC.redisManager = redis }
         try {
             MockBukkitTestRuntime.open().use { runtime ->
+                loadArcCoreHostForTest()
                 val plugin = runtime.loadPlugin(IsolatedGlyphProfilePlugin::class.java)
                 plugin.runtimeProfile shouldBe ArcRuntimeProfile.ISOLATED
                 ModuleRegistry.getRuntimeStatuses().map { it.name }.toSet() shouldBe
@@ -63,6 +64,7 @@ class IsolatedRuntimeProfileTest : FreeSpec({
         Logging.bootstrapForTests()
         ConfigManager.clear()
         MockBukkitTestRuntime.open().use { runtime ->
+            loadArcCoreHostForTest()
             val otherBuy = object : Command("buy") {
                 override fun execute(sender: CommandSender, label: String, args: Array<String>) = true
             }

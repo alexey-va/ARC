@@ -46,6 +46,7 @@ class SlimefunRuntimeProfileTest : FreeSpec({
         ConfigManager.clear()
 
         MockBukkitTestRuntime.open().use { runtime ->
+            loadArcCoreHostForTest()
             val otherBuy = object : Command("buy") {
                 override fun execute(sender: CommandSender, label: String, args: Array<String>) = true
             }
@@ -171,6 +172,7 @@ class SlimefunRuntimeProfileTest : FreeSpec({
         every { RedisModule.reload() } answers { ARC.redisManager = redis }
         try {
             MockBukkitTestRuntime.open().use { runtime ->
+                loadArcCoreHostForTest()
                 val plugin = loadSlimefunProfilePlugin(SlimefunGlyphProfilePlugin::class.java)
                 plugin.runtimeProfile shouldBe ArcRuntimeProfile.SLIMEFUN
                 ModuleRegistry.getRuntimeStatuses().map { it.name }.toSet() shouldBe

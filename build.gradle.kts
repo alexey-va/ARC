@@ -76,7 +76,7 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.394"
+version = "1.4.395"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.23"
@@ -151,7 +151,9 @@ dependencies {
     implementation("ru.ruscrafting.arc:arc-core-sql:$arcCoreVersion")
     implementation("ru.ruscrafting.arc:arc-core-telemetry:$arcCoreVersion")
     implementation("ru.ruscrafting.arc:arc-core-paper:$arcCoreVersion")
-    implementation("ru.ruscrafting.arc:arc-core-paper-api:$arcCoreVersion")
+    compileOnly("ru.ruscrafting.arc:arc-core-paper-api:$arcCoreVersion")
+    compileOnly(project(":arc-core-plugin"))
+    testImplementation(project(":arc-core-plugin"))
     implementation("ru.ruscrafting.arc:arc-core-menu:$arcCoreVersion")
     implementation("ru.ruscrafting.arc:arc-core-paper-menu:$arcCoreVersion")
     implementation("ru.ruscrafting.arc:arc-core-ai:$arcCoreVersion")
@@ -405,6 +407,15 @@ tasks {
 
         exclude("META-INF/DEPENDENCIES", "META-INF/LICENSE", "META-INF/NOTICE")
 
+        // ArcCore owns these runtime types. Keep consumer factories and domain APIs local.
+        exclude("ru/arc/paper/api/**")
+        exclude("ru/arc/paper/sql/PaperSqlServiceProvider*", "ru/arc/paper/sql/SharedPaperSqlService*")
+        exclude("ru/arc/paper/redis/PaperRedisServiceProvider*", "ru/arc/paper/redis/SharedPaperRedisService*")
+        exclude("ru/arc/paper/metrics/PaperArcMetricsProvider*")
+        exclude("ru/arc/redis/RedisTelemetrySink*", "ru/arc/redis/NoOpRedisTelemetrySink*")
+        exclude("ru/arc/redis/RedisOperation*", "ru/arc/redis/RedisReconnect*")
+        exclude("io/micrometer/core/**", "io/micrometer/commons/**", "io/micrometer/observation/**")
+
         // Canonical logging.yml / redis.yml live in arc-core-* (not duplicated in this repo).
         from(loggingModuleResources) {
             include("modules/logging.yml")
@@ -621,6 +632,7 @@ plugwright {
     acceptEula.set(true)
     jvmArgs.set(listOf("-Xms512M", "-Xmx2G", "-XX:ActiveProcessorCount=2"))
     writeFiles {
+        file("plugins/ArcCore-0.1.0.jar", projectDir.resolve("arc-core-plugin/build/libs/ArcCore-0.1.0.jar"))
         file("server.properties", projectDir.resolve("src/test/e2e/fixtures/server.properties"))
         file("permissions.yml", projectDir.resolve("src/test/e2e/fixtures/permissions.yml"))
         file("plugins/ARC/modules/entity-cleanup.yml", projectDir.resolve("src/test/e2e/fixtures/entity-cleanup.yml"))
@@ -798,6 +810,7 @@ val prepareContractE2e = tasks.register("prepareContractE2e") {
 
 tasks.named<me.drownek.plugwright.PlugwrightTestTask>("plugwrightTest") {
     dependsOn(prepareExtractedPluginArtifacts)
+    dependsOn(":arc-core-plugin:shadowJar")
     prepareE2ePaper?.let {
         dependsOn(it)
         serverJarPath.set(requireNotNull(e2ePaperJar).map { jar -> jar.asFile.absolutePath })

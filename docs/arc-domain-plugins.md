@@ -1,6 +1,6 @@
 # Independent ARC domain plugins
 
-ARC 1.4.393 hosts the shared APIs for three independent public plugin repositories:
+ARC hosts the domain APIs for three independent public plugin repositories:
 
 | Plugin | Repository | Responsibilities |
 | --- | --- | --- |
@@ -17,10 +17,34 @@ Changing an API requires a new immutable API version and a compatible host.
 
 Each child owns its shaded core implementation modules and lifecycle. The
 shared API classes are the deliberate exception. SQL and Redis clients borrow
-ARC's arc-core 2.7.23 providers; metrics use owner-scoped meters in ARC's registry.
+ArcCore's arc-core 2.7.23 providers; metrics use owner-scoped meters in ARC's registry.
 Origin's chunk leases share ARC's existing ticket registry, and its NPC
 holograms, auction operations, furniture inspection and payments call typed host
 ports. This change makes no measured claim about heap or throughput savings.
+
+## Shared provider host
+
+Starting with ARC 1.4.395, `ArcCore 0.1.0` owns the SQL/Redis providers, the
+consumer-metrics service and `ru.arc.paper.api` class identity. It is a small
+subproject in this repository, with its own version and JAR. ARC depends on
+ArcCore and borrows the existing providers through `ArcCoreServices`; shutdown
+of ARC releases its resources without closing the other plugins' providers.
+
+ARC retains Redis settings under `plugins/ARC/modules/redis.yml`, its Prometheus
+registry/exporter and gameplay telemetry. ArcCore adds no configuration, ports,
+commands or gameplay. Local framework lifecycle objects remain local. This
+split requires no core-library API release or rebuild of existing consumers.
+
+The first rollout installs ArcCore together with ARC 1.4.395 before restarting.
+Subsequent compatible changes deploy only the changed plugin's JAR. Updating
+ArcCore itself requires a normal server restart; hot-swapping its classloader
+while borrowers retain service handles is unsupported. A rollback to older ARC
+must also remove ArcCore from the active plugin root to avoid duplicate owners.
+
+CI extends the existing archive ownership checks and real-Paper scenarios. It
+does not add a separate release platform. ArcCore is a provider host, so the
+generic feature-consumer manifest baseline (menus, locale and feature runtime)
+does not apply; its manifest declares no unused consumer capabilities.
 
 ## Configuration and compatibility
 

@@ -4,6 +4,7 @@ import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import org.mockbukkit.mockbukkit.MockBukkit
 import ru.arc.ARC
+import ru.arc.loadArcCoreHostForTest
 import ru.arc.config.ConfigManager
 import ru.arc.core.Tasks
 import ru.arc.core.TestTaskScheduler
@@ -23,6 +24,7 @@ class AnnounceManagerReloadTest : FreeSpec({
             ConfigManager.clear()
 
             val server = MockBukkit.mock()
+            loadArcCoreHostForTest()
             ARC.serverName = "test-server"
             val plugin = MockBukkit.load(ARC::class.java)
             ARC.plugin = plugin
@@ -84,6 +86,7 @@ class AnnounceManagerReloadTest : FreeSpec({
             ConfigManager.clear()
 
             val server = MockBukkit.mock()
+            loadArcCoreHostForTest()
             ARC.serverName = "parkour"
             val plugin = MockBukkit.load(ARC::class.java)
             ARC.plugin = plugin

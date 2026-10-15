@@ -6,7 +6,12 @@ import argparse
 import sys
 from pathlib import Path
 
-from verify_arc_dungeons_artifact_split import PROVIDER_CLASSES, class_exists, load_archive
+from verify_arc_dungeons_artifact_split import (
+    class_entries,
+    dependency_names,
+    load_archive,
+    verify_arc_core_ownership,
+)
 
 DOMAINS = {
     "ArcMounts": ("mounts", "ArcMountsPlugin", "ArcMountService", (
@@ -22,15 +27,31 @@ DOMAINS = {
 }
 
 
-def verify(host: set[str], child: set[str], descriptor: str | None, name: str) -> list[str]:
+def verify(
+    host: set[str],
+    arc_core: set[str],
+    child: set[str],
+    host_descriptor: str | None,
+    arc_core_descriptor: str | None,
+    child_descriptor: str | None,
+    name: str,
+) -> list[str]:
     domain, entrypoint, service, resources = DOMAINS[name]
     package = f"ru/arc/{domain}/"
     api = f"{package}api/"
-    errors = []
+    errors = verify_arc_core_ownership(
+        host,
+        arc_core,
+        ((name, child),),
+        host_descriptor,
+        arc_core_descriptor,
+    )
     if f"{api}{service}.class" not in host:
         errors.append(f"ARC must own {api}{service}.class")
     if any(p.startswith(package) and not p.startswith(api) and p.endswith(".class") for p in host):
         errors.append(f"ARC still contains {domain} implementation")
+    if class_entries(arc_core, package):
+        errors.append(f"ArcCore embeds ARC-owned {domain} API or implementation")
     if f"{package}{entrypoint}.class" not in child:
         errors.append(f"{name} entrypoint is missing")
     if "ru/arc/ARC.class" in child:
@@ -38,21 +59,13 @@ def verify(host: set[str], child: set[str], descriptor: str | None, name: str) -
     for entry in child:
         if entry.endswith(".class") and entry.startswith("ru/arc/") and "/api/" in entry:
             errors.append(f"{name} embeds shared contract {entry}")
-    for provider in PROVIDER_CLASSES:
-        if class_exists(child, provider):
-            errors.append(f"{name} embeds host provider {provider}")
     for resource in resources:
         if resource in host:
             errors.append(f"ARC still owns moved resource {resource}")
         if resource not in child:
             errors.append(f"{name} is missing resource {resource}")
-    lines = (descriptor or "").splitlines()
-    # Our descriptors use either the inline form or a one-item block sequence.
-    has_arc_dependency = "depend: [ARC]" in lines or any(
-        line == "depend:" and following == "  - ARC"
-        for line, following in zip(lines, lines[1:])
-    )
-    if f"name: {name}" not in lines or not has_arc_dependency:
+    lines = (child_descriptor or "").splitlines()
+    if f"name: {name}" not in lines or "ARC" not in dependency_names(child_descriptor, "depend"):
         errors.append(f"{name} must declare its identity and a hard ARC dependency")
     return errors
 
@@ -61,12 +74,22 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--name", required=True, choices=DOMAINS)
     parser.add_argument("--arc-jar", required=True, type=Path)
+    parser.add_argument("--arc-core-jar", required=True, type=Path)
     parser.add_argument("--child-jar", required=True, type=Path)
     args = parser.parse_args()
     try:
-        host, _ = load_archive(args.arc_jar)
+        host, host_descriptor = load_archive(args.arc_jar)
+        arc_core, arc_core_descriptor = load_archive(args.arc_core_jar)
         child, descriptor = load_archive(args.child_jar)
-        errors = verify(host, child, descriptor, args.name)
+        errors = verify(
+            host,
+            arc_core,
+            child,
+            host_descriptor,
+            arc_core_descriptor,
+            descriptor,
+            args.name,
+        )
     except ValueError as failure:
         errors = [str(failure)]
     for error in errors:

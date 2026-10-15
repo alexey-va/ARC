@@ -1,0 +1,6 @@
+schema = 1
+platform = "paper"
+core_version = "2.7.23"
+
+# This is the Paper provider host for ARC shared services, not a feature consumer.
+capabilities = []
