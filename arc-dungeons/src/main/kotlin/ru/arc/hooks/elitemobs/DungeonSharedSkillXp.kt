@@ -56,6 +56,7 @@ internal fun planSharedSkillXp(
 internal class DungeonSharedSkillXp(
     private val recipient: (Player, SkillType) -> SharedSkillTarget?,
     private val ready: (Player) -> Boolean = { true },
+    private val awarded: (EliteSkillXpGainEvent, SkillType, Long) -> Unit = { _, _, _ -> },
 ) : Listener, AutoCloseable {
     private data class PendingShare(val target: SharedSkillTarget, val split: SharedSkillSplit)
 
@@ -96,6 +97,7 @@ internal class DungeonSharedSkillXp(
         val newXp = PlayerData.addSkillXP(id, plan.target.skill, plan.split.targetGain)
         val applied = newXp - targetXp
         if (applied <= 0) return
+        awarded(event, plan.target.skill, applied)
         SkillXPBar.showXPGain(player, plan.target.skill, targetXp, newXp, applied)
         if (SkillXPCalculator.levelFromTotalXP(newXp) > SkillXPCalculator.levelFromTotalXP(targetXp)) {
             CombatLevelDisplay.updateDisplay(player)

@@ -35,29 +35,30 @@ internal class StaffTestConfig(
     override fun save() = Unit
 }
 
-/** Mirrors ARC's five-tick cooldown clock without depending on ARC implementation classes. */
+/** Mirrors exact server-tick deadlines without depending on ARC implementation classes. */
 internal class StaffTestCooldowns(
-    private val scheduler: TestTaskScheduler,
+    scheduler: TestTaskScheduler,
 ) : ArcStaffCooldowns, AutoCloseable {
-    private val remaining = mutableMapOf<UUID, Long>()
-    private val countdown = scheduler.runTimer(5, 5) {
-        remaining.toMap().forEach { (playerId, ticks) ->
-            if (ticks <= 5) remaining.remove(playerId) else remaining[playerId] = ticks - 5
-        }
+    private val deadlines = mutableMapOf<UUID, Long>()
+    private var tick = 0L
+    private val clock = scheduler.runTimer(1, 1) { tick++ }
+
+    override fun remainingTicks(player: UUID): Long {
+        val remaining = ((deadlines[player] ?: return 0L) - tick).coerceAtLeast(0L)
+        if (remaining == 0L) deadlines.remove(player)
+        return remaining
     }
 
-    override fun remainingTicks(player: UUID): Long = remaining[player]?.takeIf { it > 0 } ?: 0L
-
     override fun start(player: UUID, ticks: Long) {
-        if (ticks <= 0) remaining.remove(player) else remaining[player] = ticks
+        if (ticks <= 0) clear(player) else deadlines[player] = tick + ticks
     }
 
     override fun clear(player: UUID) {
-        remaining.remove(player)
+        deadlines.remove(player)
     }
 
     override fun close() {
-        countdown.cancel()
-        remaining.clear()
+        clock.cancel()
+        deadlines.clear()
     }
 }

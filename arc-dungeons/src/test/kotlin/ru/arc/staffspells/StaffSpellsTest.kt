@@ -538,16 +538,16 @@ class StaffSpellsTest : FreeSpec({
             h.cooldowns.remainingTicks(player.uniqueId) shouldBe 20L
             displays.text().startsWith("ПКМ · Ледяной венец\n1.0 с ") shouldBe true
             h.scheduler.tick(8)
-            h.cooldowns.remainingTicks(player.uniqueId) shouldBe 10L
-            displays.text().startsWith("ПКМ · Ледяной венец\n0.5 с ") shouldBe true
+            h.cooldowns.remainingTicks(player.uniqueId) shouldBe 12L
+            displays.text().startsWith("ПКМ · Ледяной венец\n0.6 с ") shouldBe true
 
             player.isSneaking = true
             player.inventory.setItemInMainHand(h.config.item(StaffSpell.FAULT))
             h.scheduler.tick(4)
             displays.records.size shouldBe 1
             h.captures.size shouldBe 1
-            h.cooldowns.remainingTicks(player.uniqueId) shouldBe 5L
-            displays.text().startsWith("Shift + ПКМ · Каменный выброс\n0.3 с ") shouldBe true
+            h.cooldowns.remainingTicks(player.uniqueId) shouldBe 8L
+            displays.text().startsWith("Shift + ПКМ · Каменный выброс\n0.4 с ") shouldBe true
 
             player.inventory.setItemInMainHand(ItemStack(Material.AIR))
             h.scheduler.tick(4)
@@ -584,8 +584,8 @@ class StaffSpellsTest : FreeSpec({
             h.controller.onQuit(PlayerQuitEvent(player, Component.empty()))
             h.scheduler.tick(4) // Mock quit leaves the player online, modelling the returning HUD.
             val remaining = h.cooldowns.remainingTicks(player.uniqueId)
-            remaining shouldBe 20L
-            displays.text().startsWith("Дождь · Shift + ПКМ\nВосстановление 1.0 с\n") shouldBe true
+            remaining shouldBe 18L
+            displays.text().startsWith("Дождь · Shift + ПКМ\nВосстановление 0.9 с\n") shouldBe true
             displays.text().substringBefore("\nQ ").endsWith(staffSpellHudBar(staffCooldownProgress(remaining, 30).toDouble())) shouldBe true
             h.controller.cast(player)
             h.captures.size shouldBe 1

@@ -21,7 +21,6 @@ import ru.arc.hooks.HookRegistry
 import ru.arc.ops.ItemPresets
 import ru.arc.paper.api.ArcSqlSettings
 import ru.arc.paper.api.ArcSqlSslMode
-import ru.arc.util.CooldownManager
 import ru.arc.util.ParticleManager
 import java.util.UUID
 
@@ -43,11 +42,7 @@ object DungeonHostServices {
             }
         })
         register(ArcPlayerSaveService::class.java, ArcPlayerSaveService(ru.arc.sync.SyncManager::registerPeriodicSave))
-        register(ArcStaffCooldowns::class.java, object : ArcStaffCooldowns {
-            override fun remainingTicks(player: UUID) = CooldownManager.cooldown(player, "staff-spells")
-            override fun start(player: UUID, ticks: Long) = CooldownManager.addCooldown(player, "staff-spells", ticks)
-            override fun clear(player: UUID) = CooldownManager.clearCooldown(player, "staff-spells")
-        })
+        register(ArcStaffCooldowns::class.java, StaffCooldownClock(Bukkit::getCurrentTick))
         register(ArcParticleQueue::class.java, ArcParticleQueue(ParticleManager::queue))
         register(ArcDungeonNavigation::class.java, object : ArcDungeonNavigation {
             override fun openMain(player: Player) = HelpCenterModule.open(player)

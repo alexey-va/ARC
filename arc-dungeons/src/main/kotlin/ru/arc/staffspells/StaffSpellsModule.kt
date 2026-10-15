@@ -44,10 +44,18 @@ object StaffSpellsModule : PluginModule {
     override val priority = 85
     private var controller: StaffSpellController? = null
     private var duelAccess: StaffSpellDuelAccess? = null
+    private var masteryCooldown: ((Player, StaffSpellCast, Long) -> Long)? = null
 
     internal fun installDuelAccess(access: StaffSpellDuelAccess?) {
         duelAccess = access
     }
+
+    internal fun installMasteryCooldown(adjust: ((Player, StaffSpellCast, Long) -> Long)?) {
+        masteryCooldown = adjust
+    }
+
+    internal fun masteryCooldownTicks(player: Player, cast: StaffSpellCast, ticks: Long): Long =
+        masteryCooldown?.invoke(player, cast, ticks) ?: ticks
 
     internal fun activeController() = controller
     internal fun itemConfig(): StaffSpellConfig? = controller?.config
@@ -110,7 +118,8 @@ internal class StaffSpellController(
         onFrostSlow = conjurations::rememberFrostSlow)
     internal val defense = StaffSpellDefense(config, damage, visuals, effects)
     private val channels = StaffSpellChannels(settings, damage, effects, visuals, targeting)
-    private val channelInputs = mutableMapOf<UUID, StaffSpell>()
+    private data class ChannelInput(val spell: StaffSpell, val cast: StaffSpellCast)
+    private val channelInputs = mutableMapOf<UUID, ChannelInput>()
     internal val summons = StaffSpellSummons(settings, damage, visuals, targeting, summonActorFactory)
     private val techniques = StaffSpellTechniques(settings, damage, effects, visuals, targeting, summons)
     private val mobility = StaffSpellMobility(settings, damage, effects, visuals, targeting)
@@ -266,7 +275,7 @@ internal class StaffSpellController(
             player.sendActionBar(config.text("no-grab"))
             return false
         }
-        channelInputs[player.uniqueId] = spell
+        channelInputs[player.uniqueId] = ChannelInput(spell, cast)
         hud?.channel(player, spell, player.isSneaking)
         return true
     }
@@ -279,16 +288,18 @@ internal class StaffSpellController(
     override fun releaseChannel(player: Player) = finishChannel(player, release = true)
     override fun cancelChannel(player: Player) = finishChannel(player, release = false)
     private fun finishChannel(player: Player, release: Boolean) {
-        val spell = channelInputs.remove(player.uniqueId) ?: return
+        val (spell, cast) = channelInputs.remove(player.uniqueId) ?: return
         if (release) channels.release(player) else channels.cancel(player.uniqueId)
-        beginCooldown(player, spell, settings.tuning.getValue(spell).cooldownTicks)
+        beginCooldown(player, spell, settings.tuning.getValue(spell).cooldownTicks, cast)
     }
 
-    private fun beginCooldown(player: Player, spell: StaffSpell, ticks: Long) {
-        cooldownLengths[player.uniqueId] = ticks
-        cooldowns.start(player.uniqueId, ticks)
+    private fun beginCooldown(player: Player, spell: StaffSpell, ticks: Long, cast: StaffSpellCast): Long {
+        val adjusted = StaffSpellsModule.masteryCooldownTicks(player, cast, ticks)
+        cooldownLengths[player.uniqueId] = adjusted
+        cooldowns.start(player.uniqueId, adjusted)
         hotkeys.action(player.uniqueId)
         if (ready(player)) showCooldown(player, spell)
+        return adjusted
     }
 
     override fun charge(player: Player, spell: StaffSpell, progress: Double) {
@@ -367,7 +378,7 @@ internal class StaffSpellController(
             }
         }
         if (spell == StaffSpell.GRAVITY && !channels.gravityPulse(player, cast, tuning)) return
-        beginCooldown(player, spell, cooldownTicks)
+        val adjustedCooldownTicks = beginCooldown(player, spell, cooldownTicks, cast)
         val closeAttack = !secondary && staffMeleeReach(spell) != null
         if (!closeAttack && staffPreparationParts(spell, secondary, 0).isNotEmpty())
             effects.play(player.uniqueId, spell, player.eyeLocation, durationTicks = 10,
@@ -441,7 +452,7 @@ internal class StaffSpellController(
             else -> Unit // Additional staff families have their own bounded attack lifecycle.
 
         }
-        tasks.runLater(cooldownTicks) {
+        tasks.runLater(adjustedCooldownTicks) {
             if (ready(player) && StaffSpell.from(player.inventory.itemInMainHand) != null && damage.isCurrent(player, cast))
                 player.playSound(player.location, Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.3f, 1.8f)
         }
@@ -1282,6 +1293,7 @@ internal class StaffSpellController(
         waves.clear()
         bolts.clear()
         delayedCasts.clear()
+        cooldownLengths.keys.forEach(cooldowns::clear)
         cooldownLengths.clear()
         effects.close()
     }

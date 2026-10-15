@@ -33,6 +33,7 @@ import ru.arc.staffspells.api.ArcStaffSpellService
 import ru.arc.sync.EmSync
 import java.nio.file.Path
 import java.util.logging.Level
+import java.util.concurrent.CompletableFuture
 
 open class ArcDungeonsPlugin : JavaPlugin() {
     companion object { lateinit var instance: ArcDungeonsPlugin; private set }
@@ -51,6 +52,11 @@ open class ArcDungeonsPlugin : JavaPlugin() {
     private var redisGeneration = Long.MIN_VALUE
     private var spells: ArcStaffSpellServiceProvider? = null
     private var sharedSkillXp: DungeonSharedSkillXp? = null
+    internal var progression: DungeonProgression? = null
+        private set
+    private var mastery: DungeonMasteryEffects? = null
+    private var retiredSync: CompletableFuture<Void> = CompletableFuture.completedFuture(null)
+    private var awaitingSync: Any? = null
     private var runtime: PaperPluginRuntime? = null
     internal val taskScope get() = requireNotNull(runtime).tasks
     private var metrics: ArcMetricsScope? = null
@@ -106,6 +112,8 @@ open class ArcDungeonsPlugin : JavaPlugin() {
     }
 
     internal fun reloadDungeons() {
+        runtime?.reload()
+        awaitingSync = null
         ConfigManager.reloadAll()
         mergeDefaults()
         val host = requireNotNull(server.servicesManager.load(ArcDungeonConfiguration::class.java))
@@ -114,7 +122,6 @@ open class ArcDungeonsPlugin : JavaPlugin() {
         DungeonsMenus.reload()
         reloadNative()
         ModuleRegistry.reloadAll()
-        runtime?.reload()
         publishModuleMetrics()
         runtime?.reportHealthEvery(1_200L)
     }
@@ -182,10 +189,23 @@ open class ArcDungeonsPlugin : JavaPlugin() {
 
         dungeonQol = qol
         listen(EMListener())
+        val progressionOwner = DungeonProgression(sync = { emSync },
+            text = { key, fallback -> qol.text("progression.$key", fallback) },
+        ).also { progression = it }
         sharedSkillXp = DungeonSharedSkillXp(
             recipient = DungeonSharedSkillRouting::target,
-            ready = { player -> emSync?.isReady(player.uniqueId) != false },
+            ready = { player -> emSync?.isReady(player.uniqueId) ?: !eliteSyncEnabled() },
+            awarded = progressionOwner::record,
         ).also(::listen)
+        listen(progressionOwner)
+        mastery = DungeonMasteryEffects(
+            inDungeon = qol::masteryArea,
+            ready = { player -> emSync?.isReady(player.uniqueId) == true },
+        ).also {
+            listen(it)
+            it.start()
+            StaffSpellsModule.installMasteryCooldown(it::staffCooldownTicks)
+        }
         listen(qol.teleporter)
         listen(DungeonCaseRewards)
         listen(qol)
@@ -198,16 +218,45 @@ open class ArcDungeonsPlugin : JavaPlugin() {
     }
 
     private fun synchronizeEliteMobs() {
-        val syncEnabled = redisManager != null &&
-            ConfigManager.of(legacyDataPath, "modules/misc.yml").bool("sync.em", true)
+        val syncEnabled = eliteSyncEnabled()
         if (syncEnabled && emSync == null) {
+            // A reload must not read Redis ahead of the retired owner's final accepted snapshot.
+            val retiring = retiredSync
+            if (!retiring.isDone) {
+                val request = Any()
+                awaitingSync = request
+                val generation = redisGeneration
+                val scope = taskScope
+                retiring.whenComplete { _, failure ->
+                    scope.runSync {
+                        if (awaitingSync !== request) return@runSync
+                        awaitingSync = null
+                        if (failure != null) logger.log(Level.WARNING, "Previous EliteMobs snapshot failed before reload", failure)
+                        // Deferred startup needs the same partial-owner rollback as initial startup.
+                        if (isEnabled && redisGeneration == generation && emHook != null) reloadNative()
+                    }
+                }
+                return
+            }
+            awaitingSync = null
             EmSync(this, serverName).also {
                 // Keep the candidate reachable so rollback can release a lease if start fails.
                 emSync = it
                 it.start()
             }
         }
-        if (!syncEnabled) { emSync?.close(); emSync = null }
+        if (!syncEnabled) {
+            emSync?.let(::retireSync)
+            emSync = null
+        }
+    }
+
+    private fun eliteSyncEnabled(): Boolean = redisManager != null &&
+        ConfigManager.of(legacyDataPath, "modules/misc.yml").bool("sync.em", true)
+
+    private fun retireSync(sync: EmSync) {
+        sync.close()
+        retiredSync = CompletableFuture.allOf(retiredSync, sync.closeCompletion())
     }
 
     private fun listen(listener: Listener) {
@@ -221,6 +270,13 @@ open class ArcDungeonsPlugin : JavaPlugin() {
         val hook = emHook
         val sync = emSync
         val sharedXp = sharedSkillXp
+        val progressionOwner = progression
+        val masteryOwner = mastery
+
+        // Completion rights must be captured while the old synchronized native state is reachable.
+        runCatching { progressionOwner?.flushCompletions() }.onFailure {
+            logger.log(Level.SEVERE, "Could not capture pending dungeon completion books before shutdown", it)
+        }
 
         // Clear fields before cleanup so every caller sees a consistently detached state,
         // even if individual close operations fail.
@@ -229,13 +285,19 @@ open class ArcDungeonsPlugin : JavaPlugin() {
         emHook = null
         emSync = null
         sharedSkillXp = null
+        progression = null
+        mastery = null
+        awaitingSync = null
+        StaffSpellsModule.installMasteryCooldown(null)
 
         val actions = mutableListOf<() -> Unit>()
         listeners.forEach { listener -> actions.add { HandlerList.unregisterAll(listener) } }
         sharedXp?.let { actions.add { it.close() } }
+        progressionOwner?.let { actions.add { it.close() } }
+        masteryOwner?.let { actions.add { it.close() } }
         qol?.let { actions.add { it.close() } }
         hook?.let { actions.add { it.close() } }
-        sync?.let { actions.add { it.close() } }
+        sync?.let { actions.add { retireSync(it) } }
         val failure = closeNativeResources(actions)
         if (failure != null) logger.log(Level.SEVERE, "One or more EliteMobs resources could not be closed", failure)
         return failure

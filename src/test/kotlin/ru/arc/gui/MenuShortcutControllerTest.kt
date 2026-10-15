@@ -81,7 +81,7 @@ class MenuShortcutControllerTest {
     }
 
     @Test
-    fun `early dungeon shortcut cancellation prevents EliteMobs ability handling`() {
+    fun `dungeon shortcut wins with empty hands staffs and weapons while plain F reaches EliteMobs`() {
         MockBukkitTestRuntime.open().use { paper ->
             val player = paper.addPlayer("dungeon-priority")
             var opened = 0
@@ -102,17 +102,22 @@ class MenuShortcutControllerTest {
                 openDungeonMenu = { opened++ },
                 eliteMobsAbilityListener = { it === eliteMobs },
             ).use {
-                player.isSneaking = true
-                val event = PlayerSwapHandItemsEvent(
-                    player,
-                    player.inventory.itemInMainHand,
-                    player.inventory.itemInOffHand,
-                )
-                paper.server.pluginManager.callEvent(event)
+                for ((index, material) in listOf(Material.AIR, Material.BLAZE_ROD, Material.DIAMOND_SWORD).withIndex()) {
+                    player.inventory.setItemInMainHand(ItemStack(material))
+                    fun swap() = PlayerSwapHandItemsEvent(
+                        player, player.inventory.itemInMainHand, player.inventory.itemInOffHand,
+                    ).also(paper.server.pluginManager::callEvent)
 
-                event.isCancelled shouldBe true
-                opened shouldBe 1
-                abilityInputs shouldBe 0
+                    player.isSneaking = true
+                    repeat(2) { swap().isCancelled shouldBe true }
+                    opened shouldBe (index + 1) * 2
+                    abilityInputs shouldBe index
+
+                    player.isSneaking = false
+                    swap().isCancelled shouldBe false
+                    opened shouldBe (index + 1) * 2
+                    abilityInputs shouldBe index + 1
+                }
             }
         }
     }

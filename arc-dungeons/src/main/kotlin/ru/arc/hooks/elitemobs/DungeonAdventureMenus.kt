@@ -36,6 +36,18 @@ internal class DungeonAdventureMenus(
     private val searchInput = PaperDialogInputId.of("dungeon_search")
     private val levelInput = PaperDialogInputId.of("dungeon_level")
     private val pageSize = 10
+    private val progression by lazy {
+        DungeonSkillProgressionMenus(
+            dungeon = dungeon,
+            read = { player -> dungeon.progression?.view(player) ?: DungeonProgressionView(DungeonProgressionAvailability.LOADING) },
+            preview = { player, book -> dungeon.progression?.preview(player, book) },
+            consume = { player, book, complete -> dungeon.progression?.consume(player, book, complete)
+                ?: complete(DungeonProgressionBookResult.LOADING) },
+            openPerks = { player, skill, page -> skillPerks(player, skill, page) },
+            returnTo = { player -> main(player) },
+            show = show,
+        )
+    }
 
     fun main(player: Player, feedback: Component? = null) {
         val stats = data.stats(player).orEmpty().associate { it.key to it.value }
@@ -58,7 +70,7 @@ internal class DungeonAdventureMenus(
             button("quests", "quests-label", "<#c4abff>Задания ›", "Прогресс, отслеживание и управление заданиями") { local.quests(player) },
             button("party", "party-label", "<#e5ba73>Группа ›", "Собрать группу и пригласить друзей") { local.party(player) },
             button("classes", "classes-label", "<#c4abff>Классы ›", "Выбор класса, способности и ветки развития") { local.classes(player) },
-            button("skills", "skills-label", "<#c4abff>Навыки ›", "Уровни оружия и брони, опыт до следующего уровня") { skills(player) },
+            button("skills", "progression-label", "<#c4abff>Развитие навыков ›", "Опыт, пассивные бонусы, ближайшие способности и книги прохождений") { skills(player) },
             button("gear", "gear-label", "<#86dcf1>Снаряжение ›", "Вещи, боевые параметры и выбранные перки") { gear(player) },
             button("stats", "stats-label", "<#86dcf1>Статистика ›", "Рейтинг, пройденные данжи и достижения") { statistics(player) },
             button("bosses", "bosses-label", "<#ffb277>Боссы ›", "Найти живого босса и включить отслеживание") { bosses(player) },
@@ -215,34 +227,10 @@ internal class DungeonAdventureMenus(
             }, DialogTables.Frame.LEGENDARY)), buttons = listOf(refresh { statistics(player) }), exitButton = back { main(player) })) { statistics(player) }
     }
 
-    fun skills(player: Player, requestedPage: Int = 0) {
-        val entries = data.skills(player)
-        val pageSize = 6
-        val pages = ((entries.orEmpty().size + pageSize - 1) / pageSize).coerceAtLeast(1)
-        val page = requestedPage.coerceIn(0, pages - 1)
-        val listed = entries.orEmpty().drop(page * pageSize).take(pageSize)
-        val body = listOf(if (entries == null) PaperDialogBody(loading(), 320) else table(listed.map {
-            Component.text(clean(it.name)) to text("skill-progress", "<#c4abff>Уровень <level><newline><#e8dfd2><xp> / <next> опыта",
-                "level" to Component.text(it.level), "xp" to Component.text(it.xp), "next" to Component.text(it.nextXp))
-        }, DialogTables.Frame.EPIC, separators = true))
-        val contentButtons = listed.mapIndexed { index, skill ->
-            PaperDialogButton(PaperDialogActionId.of("skill_$index"),
-                text("skill-label", "<#c4abff><name> · перки ›", "name" to Component.text(clean(skill.name))),
-                text("skill-tooltip", "<#e8dfd2>Выбрать или выключить перки этого навыка"), width = 230,
-                onClick = { skillPerks(player, skill.id, page) })
-        }
-        val buttons = if (pages > 1) paginatedButtons(
-            contentButtons,
-            refresh { skills(player, page) },
-            button("previous", "previous-label", "<#92bed8>‹ Предыдущая страница", "Предыдущие навыки") { skills(player, (page - 1 + pages) % pages) },
-            button("next", "next-label", "<#92bed8>Следующая страница ›", "Следующие навыки") { skills(player, (page + 1) % pages) },
-        ) else contentButtons + refresh { skills(player, page) }
-        show(player, PaperDialogScreen(id = "dungeon.skills", title = text("skills-title", "<#c4abff>Боевые навыки"),
-            body = body, buttons = buttons, exitButton = back { main(player) }, columns = 2)) { skills(player, page) }
-    }
+    fun skills(player: Player, requestedPage: Int = 0) = progression.open(player, requestedPage)
 
     private fun skillPerks(player: Player, skillId: String, skillPage: Int, requestedPage: Int = 0, feedback: Component? = null) {
-        val view = data.perks(player, skillId) ?: run { skills(player, skillPage); return }
+        val view = data.perks(player, skillId) ?: run { progression.detail(player, skillId, skillPage); return }
         val pages = ((view.perks.size + pageSize - 1) / pageSize).coerceAtLeast(1)
         val page = requestedPage.coerceIn(0, pages - 1)
         val body = mutableListOf(table(listOf(
@@ -269,7 +257,7 @@ internal class DungeonAdventureMenus(
         ) else contentButtons
         show(player, PaperDialogScreen(id = "dungeon.skill.perks", title = text("skill-perks-title", "<#c4abff><name> · перки",
             "name" to Component.text(clean(view.skill.name))), body = body, buttons = buttons,
-            exitButton = back { skills(player, skillPage) }, columns = 2)) { skillPerks(player, skillId, skillPage, page) }
+            exitButton = back { progression.detail(player, skillId, skillPage) }, columns = 2)) { skillPerks(player, skillId, skillPage, page) }
     }
 
     fun gear(player: Player) {

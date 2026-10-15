@@ -103,6 +103,7 @@ internal class EMDungeonQol(
         }
     }) }
     private val menus by lazy { DungeonSaveMenus(this) }
+    internal val progression get() = ru.arc.dungeons.ArcDungeonsPlugin.instance.progression
     private val bestiaryRuntime = lazy { DungeonBestiary(this) }
     internal val bestiary get() = bestiaryRuntime.value
     private var closed = false
@@ -285,6 +286,11 @@ internal class EMDungeonQol(
 
     internal fun panelView(player: Player): DungeonPanelView? = current(player)?.let {
         DungeonPanelView(player.world.uid, it, view(player))
+    }
+
+    internal fun masteryArea(player: Player): Boolean {
+        if (!enabled || closed) return false
+        return nativeDungeonSkillArea(player)
     }
 
     internal fun usesMenuShortcut(player: Player): Boolean {

@@ -26,6 +26,14 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.function.Consumer
 import java.util.logging.Level
 
+/** Personal virtual entitlement; XP keys are the native SkillType names, without conversion. */
+internal data class DungeonXpBookRecord(
+    val id: String,
+    val title: String,
+    val earnedAt: Long,
+    val xp: Map<String, Long>,
+)
+
 /** EliteMobs state synchronization owned by ArcDungeons, independent of ARC's SyncManager. */
 class EmSync private constructor(
     private val plugin: Plugin,
@@ -73,12 +81,14 @@ class EmSync private constructor(
         /** 60 × 5 ticks ≈ 15 s — EliteMobs may load its player record asynchronously on join. */
         const val MAX_PLAYER_DATA_WAIT_CYCLES = 60
         val gson = Gson()
+        val skillNames = SkillType.values().map { it.name }.toSet()
     }
 
     private val tasks = LifecycleTaskScope(scheduler)
     private val saveMonitor = Any()
     private val saveTails = mutableMapOf<UUID, CompletableFuture<Void>>()
     private val lootCreditReceipts = ConcurrentHashMap<UUID, String>()
+    private val skillBookLibraries = mutableMapOf<UUID, List<DungeonXpBookRecord>>()
     private val loaded = ConcurrentHashMap<UUID, Boolean>()
     private val joinGenerations = ConcurrentHashMap<UUID, Long>()
     private val joinTasks = ConcurrentHashMap<UUID, ru.arc.core.ScheduledTask>()
@@ -125,6 +135,35 @@ class EmSync private constructor(
         lootCreditReceipts[uuid] = token
     }
 
+    /** A detached library, or null while this session is not ready. Primary thread only. */
+    internal fun skillBooks(uuid: UUID): List<DungeonXpBookRecord>? =
+        if (isReady(uuid)) skillBookLibraries[uuid].orEmpty().map(::copySkillBook) else null
+
+    /**
+     * Adds a new live entitlement once. The completion owner must not re-award a consumed run ID.
+     * This only changes memory: acknowledge the grant after [persist] completes successfully.
+     */
+    internal fun addSkillBook(uuid: UUID, book: DungeonXpBookRecord): Boolean {
+        if (!isReady(uuid)) return false
+        val library = skillBookLibraries[uuid].orEmpty()
+        if (library.any { it.id == book.id }) return false
+        skillBookLibraries[uuid] = library + copySkillBook(book)
+        return true
+    }
+
+    /**
+     * Remove and apply native XP on the same primary-thread turn, then [persist] both together.
+     * An unknown save outcome is not permission to restore the book or replay its XP grant.
+     */
+    internal fun removeSkillBook(uuid: UUID, id: String): DungeonXpBookRecord? {
+        if (!isReady(uuid)) return null
+        val library = skillBookLibraries[uuid] ?: return null
+        val book = library.firstOrNull { it.id == id } ?: return null
+        // Keep [] as an authoritative marker after the final entitlement is consumed.
+        skillBookLibraries[uuid] = library.filterNot { it.id == id }
+        return copySkillBook(book)
+    }
+
     /** Snapshot on the caller thread, then save behind this player's earlier accepted writes. */
     fun persist(player: Player): CompletableFuture<Void> {
         requirePrimaryThread()
@@ -162,6 +201,7 @@ class EmSync private constructor(
 
         loaded.clear()
         lootCreditReceipts.clear()
+        skillBookLibraries.clear()
         joinGenerations.clear()
         joinTasks.clear()
 
@@ -217,12 +257,28 @@ class EmSync private constructor(
 
     private fun loadAndApply(uuid: UUID, generation: Long) {
         val token = runCatching { tasks.token() }.getOrNull() ?: return
-        val loadedFuture = try {
-            lease.loadMapEntries(REDIS_HASH, uuid.toString())
-        } catch (failure: Throwable) {
-            CompletableFuture.failedFuture(failure)
-        }
-        loadedFuture.whenComplete { entries, failure ->
+        // A reconnect must observe the previous session's final accepted snapshot, even if its
+        // acknowledgement failed. Never let a load overtake that outstanding write.
+        val previous = synchronized(saveMonitor) { saveTails[uuid] }
+        val loadedFuture = (previous ?: CompletableFuture.completedFuture(null))
+            .handle { _, _ -> null }
+            .thenCompose { load(uuid) }
+            .thenApplyAsync { entries ->
+                entries?.firstOrNull()?.let { json ->
+                    gson.fromJson(json, EmDataDTO::class.java)?.let { data ->
+                        val books = data.skillBooks
+                        if (books != null) {
+                            require(data.id == uuid && data.skillXP != null) { "Incomplete dungeon book snapshot" }
+                            val detached = books.map(::copySkillBook)
+                            require(detached.map { it.id }.toSet().size == detached.size) {
+                                "Duplicate dungeon book identities"
+                            }
+                            data.copy(skillBooks = detached)
+                        } else data
+                    }
+                }
+            }
+        loadedFuture.whenComplete { data, failure ->
             tasks.runSync(token) {
                 if (!isCurrentJoin(uuid, generation)) return@runSync
                 if (failure != null) {
@@ -231,14 +287,15 @@ class EmSync private constructor(
                     return@runSync
                 }
                 try {
-                    val json = entries?.firstOrNull()
-                    val data = json?.let { gson.fromJson(it, EmDataDTO::class.java) }
-                    if (data != null && !(data.srv == serverName && data.lostLootCreditReceipt == null)) {
+                    if (data != null && !(data.srv == serverName && data.lostLootCreditReceipt == null && data.skillBooks == null)) {
                         val dataId = data.id
                         if (dataId != null) {
+                            require(dataId == uuid) { "EliteMobs snapshot belongs to another player" }
                             playerData.apply(data)
                             if (data.lostLootCreditReceipt == null) lootCreditReceipts.remove(dataId)
                             else lootCreditReceipts[dataId] = data.lostLootCreditReceipt
+                            if (data.skillBooks == null) skillBookLibraries.remove(dataId)
+                            else skillBookLibraries[dataId] = data.skillBooks
                         }
                     }
                     // Missing data and intentionally skipped same-server data still establish readiness.
@@ -260,6 +317,7 @@ class EmSync private constructor(
                 .onFailure { plugin.logger.log(Level.WARNING, "Could not snapshot EliteMobs data for $uuid", it) }
         }
         lootCreditReceipts.remove(uuid)
+        skillBookLibraries.remove(uuid)
         loaded.remove(uuid)
         cancelJoinTask(uuid)
     }
@@ -268,9 +326,12 @@ class EmSync private constructor(
         if (closing && !allowClosing) {
             return CompletableFuture.failedFuture(IllegalStateException("EmSync is closing"))
         }
-        val snapshot = playerData.snapshot(uuid, serverName, lootCreditReceipts[uuid])
+        val native = playerData.snapshot(uuid, serverName, lootCreditReceipts[uuid])
             ?: return CompletableFuture.failedFuture(IllegalStateException("EliteMobs PlayerData is absent for $uuid"))
-        val payload = gson.toJson(snapshot)
+        val snapshot = native.copy(
+            skillXP = native.skillXP?.copyOf(),
+            skillBooks = skillBookLibraries[uuid]?.map(::copySkillBook),
+        )
         synchronized(saveMonitor) {
             if (closing && !allowClosing) {
                 return CompletableFuture.failedFuture(IllegalStateException("EmSync is closing"))
@@ -278,7 +339,11 @@ class EmSync private constructor(
             val previous = saveTails[uuid]
             val accepted = CompletableFuture<Void>()
             saveTails[uuid] = accepted
-            val write = previous?.handle { _, _ -> null }?.thenCompose { save(uuid, payload) } ?: save(uuid, payload)
+            // Only immutable snapshots cross this boundary. JSON work also stays off Paper's
+            // thread as a personal library grows; accepted writes outlive plugin task shutdown.
+            val write = (previous ?: CompletableFuture.completedFuture(null))
+                .handleAsync { _, _ -> gson.toJson(snapshot) }
+                .thenCompose { payload -> save(uuid, payload) }
             write.whenComplete { _, failure ->
                 if (failure == null) accepted.complete(null)
                 else accepted.completeExceptionally(unwrap(failure))
@@ -301,6 +366,20 @@ class EmSync private constructor(
         CompletableFuture.failedFuture(failure)
     }
 
+    private fun load(uuid: UUID): CompletableFuture<List<String?>> = try {
+        lease.loadMapEntries(REDIS_HASH, uuid.toString())
+    } catch (failure: Throwable) {
+        CompletableFuture.failedFuture(failure)
+    }
+
+    private fun copySkillBook(book: DungeonXpBookRecord): DungeonXpBookRecord {
+        require(book.id.isNotBlank() && book.title.isNotBlank() && book.earnedAt >= 0L) { "Invalid dungeon book identity" }
+        require(book.xp.isNotEmpty() && book.xp.all { (skill, xp) -> skill in skillNames && xp > 0L }) {
+            "Dungeon book XP must use positive native skill amounts"
+        }
+        return book.copy(xp = book.xp.toMap())
+    }
+
     private fun cancelJoinTask(uuid: UUID) {
         joinTasks.remove(uuid)?.cancel()
     }
@@ -319,7 +398,7 @@ class EmSync private constructor(
             failure
         }
 
-    data class EmDataDTO(
+    internal data class EmDataDTO(
         @SerializedName("t") val ts: Long = 0L,
         @SerializedName("s") val srv: String = "",
         @SerializedName("u") val id: UUID? = null,
@@ -336,6 +415,8 @@ class EmSync private constructor(
         @SerializedName("gd") val gamblingDebt: Double = 0.0,
         @SerializedName("qc") val questsCompleted: Int = 0,
         @SerializedName("lr") val lostLootCreditReceipt: String? = null,
+        /** null is a legacy snapshot; [] remains authoritative after the final book is consumed. */
+        @SerializedName("xb") val skillBooks: List<DungeonXpBookRecord>? = null,
     )
 }
 

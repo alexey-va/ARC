@@ -35,6 +35,15 @@ internal data class DungeonVisitStats(
 
 internal data class NativeWormholeVolume(val location: Location, val radiusSquared: Double)
 
+/** Combat membership only: periodic mastery refresh must not probe checkpoint geometry. */
+internal fun nativeDungeonSkillArea(player: Player): Boolean {
+    val instance = DungeonInstance.getDungeonInstances().firstOrNull { it.world == player.world }
+    if (instance != null) return !instance.isCancelled && instance.state.name == "ONGOING" && player in instance.players
+    return ContentPackagesConfig.getDungeonPackages().values.any {
+        it.worldName == player.world.name && it.contentType.name == "OPEN_DUNGEON"
+    }
+}
+
 private val ENTRY_OFFSETS = buildList {
     for (x in -8..8) for (z in -8..8) for (y in -4..4) add(Triple(x, y, z))
 }.sortedWith(compareBy({ it.first * it.first * 0.25 + it.second * it.second + it.third * it.third * 0.25 }, { it.first }, { it.second }, { it.third }))

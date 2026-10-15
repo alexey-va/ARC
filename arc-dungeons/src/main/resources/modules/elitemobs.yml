@@ -388,6 +388,8 @@ dungeon-qol:
     classes-label-tooltip: <#e8dfd2>Выбор класса, способности и ветки развития
     skills-label: <#c4abff>Навыки ›
     skills-label-tooltip: <#e8dfd2>Уровни оружия и брони, опыт до следующего уровня
+    progression-label: <#c4abff>Развитие навыков ›
+    progression-label-tooltip: <#e8dfd2>Опыт, пассивные бонусы, ближайшие способности и книги прохождений
     gear-label: <#86dcf1>Снаряжение ›
     gear-label-tooltip: <#e8dfd2>Вещи, боевые параметры и выбранные перки
     stats-label: <#86dcf1>Статистика ›
@@ -504,6 +506,79 @@ dungeon-qol:
       slot-boots: <#e8dfd2>Ботинки
       slot-mainhand: <#e8dfd2>Основная рука
       slot-offhand: <#e8dfd2>Вторая рука
+  progression:
+    all-books: "<#e5ba73>Все книги прохождений ›"
+    all-books-tooltip: "<#e8dfd2>Показать книги для всех навыков"
+    applied: "<#9bd48d>Конспект применён: +<xp> опыта. Прогресс навыков обновлён."
+    applied-short: "<#9bd48d>Конспект применён. Прогресс навыков обновлён."
+    apply-book: "<#9bd48d>Применить конспект"
+    apply-book-tooltip: "<#e8dfd2>Начислить опыт по всем навыкам книги и израсходовать конспект"
+    applying: "<#e8dfd2>Применяем книгу. Дождитесь подтверждения начисления."
+    back: "<white>‹ Назад"
+    book-failed: "<#e8dfd2>Сохранение ещё не подтверждено. Повторно книга не списывается; обновите окно позже."
+    book-gain: "<#c4abff>+<xp> опыта<newline><#e8dfd2>Уровень <before> → <after>"
+    book-gain-page: "<#e8dfd2>Начисления: <from>–<to> из <total> навыков. Применится вся книга."
+    book-gain-summary: "<#e8dfd2><name>: <#c4abff>+<xp> опыта"
+    book-label: "<#c4a7e7><name> ›"
+    book-loading: "<#e8dfd2>Данные героя ещё загружаются. Обновите библиотеку через несколько секунд."
+    book-missing: "<#e8dfd2>Этой книги больше нет в библиотеке. Список обновлён."
+    book-pending: "<#e8dfd2>Книга уже применяется. Дождитесь завершения операции."
+    book-summary: "<#c4abff>+<xp> опыта<newline><#e8dfd2>Навыков: <count> · <date>"
+    book-tooltip: "<newline><#e8dfd2>Опыт за завершённый поход.<newline><newline><gains><newline><newline><#c4abff>Проверить начисление перед применением<newline>"
+    books: "<#c4a7e7>Применить книгу ›"
+    books-available: "<#e8dfd2>Книг для этого навыка: <count>. В каждой — опыт всех освоенных в походе веток."
+    books-tooltip: "<#e8dfd2>Посмотреть книги прохождений, содержащие опыт этого навыка"
+    capped: "<#e8dfd2>Максимальный уровень достигнут. Книги опыта для этого навыка не расходуются."
+    changed: "<#e8dfd2>Данные навыка изменились. Обзор обновлён."
+    close: "<white>Закрыть"
+    confirm-intro: "<#e8dfd2><name><newline>Вся книга будет применена один раз. Опыт получат все перечисленные навыки."
+    confirm-title: "<#c4abff>Применение конспекта"
+    detail-title: "<#c4abff><name> · развитие"
+    disabled: "<#e8dfd2>Боевые навыки на этом сервере недоступны."
+    empty: "<#e8dfd2>Список навыков пока недоступен. Попробуйте обновить страницу."
+    goal-complete: "<#9bd48d>Максимальный уровень"
+    goal-none: "<#e8dfd2>Все ступени открыты"
+    goal-passive: "<#e8dfd2>Ур. <level> · <name> +<percent>%"
+    goal-unlock: "<#e8dfd2>Ур. <level> · <name>"
+    intro: "<#e8dfd2>Пассивные бонусы навыков действуют только в данжах."
+    level-open: "<#c4abff><level>"
+    level-value: "<#c4abff><level> / <max>"
+    library: "<#c4a7e7>Книги прохождений · <count> ›"
+    library-empty: "<#e8dfd2>Книг пока нет. Завершите инстанс с боевым опытом, чтобы получить конспект с 10% заработанного опыта."
+    library-filtered-title: "<#c4abff>Книги прохождений · <name>"
+    library-intro: "<#e8dfd2>Конспект даёт 10% опыта, заработанного каждым навыком за завершённый инстанс. Книги хранятся здесь, вне инвентаря."
+    library-page: "<#e8dfd2>Страница <page> из <pages>"
+    library-title: "<#c4abff>Книги прохождений"
+    library-tooltip: "<#e8dfd2>Личная библиотека: опыт за завершённые инстансы"
+    loading: "<#e8dfd2>Данные навыков загружаются. Обновите страницу через несколько секунд."
+    next: "<#92bed8>Следующая страница ›"
+    next-passive-value: "<#e8dfd2>Ур. <level> · <#c4abff>+<percent>%"
+    next-tooltip: "<#e8dfd2>Открыть следующую страницу"
+    next-unlock-value: "<#e8dfd2><name><newline><#c4abff>На уровне <level>"
+    no-books: "<#e8dfd2>Для этого навыка пока нет книг прохождений. Книги сохраняют опыт навыков, которые развивались в инстансе."
+    overview-name: "<white><name><newline><#c4abff>Уровень <level>"
+    passive-value: "<#c4abff>+<percent>% <#e8dfd2>только в данжах"
+    perks: "<#c4abff>Способности и перки ›"
+    perks-tooltip: "<#e8dfd2>Посмотреть, выбрать или выключить способности этого навыка"
+    preview-changed: "<#e8dfd2>Прогресс навыков изменился. Проверьте обновлённое начисление и подтвердите ещё раз."
+    previous: "<#92bed8>‹ Предыдущая страница"
+    previous-tooltip: "<#e8dfd2>Открыть предыдущую страницу"
+    refresh: "<white>Обновить"
+    refresh-tooltip: "<#e8dfd2>Получить текущие уровни и книги прохождений"
+    skill-label: "<#c4abff><name> · ур. <level> ›"
+    title: "<#c4abff>Развитие навыков"
+    title-page: "<#c4abff>Развитие навыков · <page> / <pages>"
+    tooltip-open: "<#c4abff>Открыть прогресс, способности и книги прохождений"
+    tooltip-passive: "<#e8dfd2>Только в данжах: <name> <#c4abff>+<percent>%"
+    tooltip-progress: "<#e8dfd2>Уровень <level><newline><xp>"
+    unlock-explanation: "<#e8dfd2><name>: <description>"
+    xp-complete: "<#9bd48d>Навык полностью развит"
+    xp-progress: "<#e8dfd2><current> / <required> опыта"
+    fields:
+      level: "<#e8dfd2>Уровень"
+      next-passive: "<#e8dfd2>Следующее усиление"
+      next-unlock: "<#e8dfd2>Откроется способность"
+      xp: "<#e8dfd2>Опыт уровня"
   party:
     title: '<#e5ba73>Группа'
     body: '<#e8dfd2>Соберите группу до входа в данж. Приглашённый игрок принимает приглашение здесь же.'

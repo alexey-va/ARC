@@ -1,0 +1,253 @@
+{
+  "version": 1,
+  "title": "Dungeon completion books and bounded native skill mastery",
+  "participants": [
+    5,
+    20,
+    50
+  ],
+  "assumptions": [
+    "See dungeon-progression-balance-20261016.md for preimplementation decision, eligibility and effects.",
+    "Sensitivity only: 1/3/6 runs daily and 1000/10000/100000 accepted native skill XP per run.",
+    "At most 10 percent added branch XP from completion; no direct currency payout or price change.",
+    "Eligible attack throughput ceiling 1.10; combined books plus speed 1.21 before other constraints.",
+    "Current SELL and future contracts unchanged."
+  ],
+  "currencies": {
+    "vault": {
+      "minor_per_unit": 100,
+      "disposable_per_player_day": {
+        "before": [
+          "0",
+          "0",
+          "0"
+        ],
+        "after": [
+          "0",
+          "0",
+          "0"
+        ]
+      },
+      "flows": [
+        {
+          "id": "completion_reward",
+          "kind": "mint",
+          "source": "ArcDungeons native completed instance and accepted combat XP",
+          "basis": "Hypothetical completed-run sensitivity; not observed rates",
+          "before": {
+            "enabled": false,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              1,
+              3,
+              6
+            ]
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              1,
+              3,
+              6
+            ]
+          }
+        }
+      ]
+    },
+    "tokens": {
+      "minor_per_unit": 100,
+      "disposable_per_player_day": {
+        "before": [
+          "0",
+          "0",
+          "0"
+        ],
+        "after": [
+          "0",
+          "0",
+          "0"
+        ]
+      },
+      "flows": [
+        {
+          "id": "completion_reward",
+          "kind": "mint",
+          "source": "ArcDungeons native completed instance and accepted combat XP",
+          "basis": "Hypothetical completed-run sensitivity; not observed rates",
+          "before": {
+            "enabled": false,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              1,
+              3,
+              6
+            ]
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              1,
+              3,
+              6
+            ]
+          }
+        }
+      ]
+    },
+    "elitemobs_crystals": {
+      "minor_per_unit": 100,
+      "disposable_per_player_day": {
+        "before": [
+          "0",
+          "0",
+          "0"
+        ],
+        "after": [
+          "0",
+          "0",
+          "0"
+        ]
+      },
+      "flows": [
+        {
+          "id": "completion_reward",
+          "kind": "mint",
+          "source": "ArcDungeons native completed instance and accepted combat XP",
+          "basis": "Hypothetical completed-run sensitivity; not observed rates",
+          "before": {
+            "enabled": false,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              1,
+              3,
+              6
+            ]
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              1,
+              3,
+              6
+            ]
+          }
+        }
+      ]
+    },
+    "personal_xp_books": {
+      "minor_per_unit": 1,
+      "disposable_per_player_day": {
+        "before": [
+          "0",
+          "0",
+          "0"
+        ],
+        "after": [
+          "0",
+          "0",
+          "0"
+        ]
+      },
+      "flows": [
+        {
+          "id": "completion_reward",
+          "kind": "item",
+          "source": "ArcDungeons native completed instance and accepted combat XP",
+          "basis": "Hypothetical completed-run sensitivity; not observed rates",
+          "before": {
+            "enabled": false,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              1,
+              3,
+              6
+            ]
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "1",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              1,
+              3,
+              6
+            ]
+          }
+        }
+      ]
+    },
+    "native_skill_xp": {
+      "minor_per_unit": 1,
+      "disposable_per_player_day": {
+        "before": [
+          "0",
+          "0",
+          "0"
+        ],
+        "after": [
+          "0",
+          "0",
+          "0"
+        ]
+      },
+      "flows": [
+        {
+          "id": "completion_xp",
+          "kind": "mint",
+          "source": "10% of actually accepted branch XP, rounded down",
+          "basis": "100 XP units: 1000/30000/600000 hypothetical native XP daily",
+          "before": {
+            "enabled": false,
+            "amount_per_event": {
+              "value": "100",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              1,
+              30,
+              600
+            ]
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "100",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              1,
+              30,
+              600
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

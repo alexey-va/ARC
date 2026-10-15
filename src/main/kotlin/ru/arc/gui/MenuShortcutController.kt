@@ -65,7 +65,6 @@ class MenuShortcutController(
         }
         if (inDungeon(event.player)) {
             event.isCancelled = true
-            ArcMenus.beginDialogFlow(event.player)
             openDungeonMenu(event.player)
             return
         }

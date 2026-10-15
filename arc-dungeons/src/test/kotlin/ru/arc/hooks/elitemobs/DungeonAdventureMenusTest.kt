@@ -48,6 +48,10 @@ class DungeonAdventureMenusTest : FreeSpec({
         every { data.stats(player) } returns listOf(DungeonAdventureValue("combatLevel", "40"), DungeonAdventureValue("score", "1234"), DungeonAdventureValue("activeQuests", "2"))
         every { data.skills(player) } returns listOf("Мечи", "Топоры", "Луки", "Арбалеты", "Трезубцы", "Мотыги", "Броня", "Булавы", "Копья", "Посохи", "Жезлы")
             .mapIndexed { index, name -> DungeonSkillInfo("SKILL_$index", name, 40, 1250, 4000, 0.3125) }
+        val progression = mockk<DungeonProgression>(relaxed = true)
+        every { dungeon.progression } returns progression
+        every { progression.view(player) } answers { DungeonProgressionView(DungeonProgressionAvailability.READY,
+            data.skills(player).orEmpty().map { DungeonProgressionSkill(it, null, "Опыт за бой с элитными мобами.") }) }
         val screens = mutableListOf<PaperDialogScreen>()
         val menus = DungeonSaveMenus(dungeon, crystals = { "27" }, adventure = data) { _, screen, _ -> screens += screen }
         return Triple(menus, data, screens)
@@ -150,24 +154,28 @@ class DungeonAdventureMenusTest : FreeSpec({
         every { data.perks(player, skill.id) } returns DungeonSkillPerkView(skill, 3, listOf(perk))
         every { data.togglePerk(player, skill.id, perk.id) } returns DungeonAdventureActionResult.PERK_ACTIVATED
         menus.skills(player)
-        screens.last().buttons.count { it.id.value.startsWith("skill_") } shouldBe 6
+        screens.last().buttons.count { it.id.value.startsWith("progression_") } shouldBe 4
         screens.last().buttons.single { it.id.value == "next" }.onClick.handle(mockk())
         val lastSkillsPage = screens.last()
-        lastSkillsPage.buttons.count { it.id.value.startsWith("skill_") } shouldBe 5
+        lastSkillsPage.buttons.count { it.id.value.startsWith("progression_") } shouldBe 4
         lastSkillsPage.buttons.map { it.id.value }.takeLast(3) shouldBe listOf("refresh", "previous", "next")
         lastSkillsPage.buttons.size % lastSkillsPage.columns shouldBe 0
         lastSkillsPage.buttons.indexOfFirst { it.id.value == "previous" } % lastSkillsPage.columns shouldBe 0
         lastSkillsPage.buttons.single { it.id.value == "refresh" }.onClick.handle(mockk())
-        screens.last().buttons.count { it.id.value.startsWith("skill_") } shouldBe 5
+        screens.last().buttons.count { it.id.value.startsWith("progression_") } shouldBe 4
         screens.last().buttons.map { it.id.value }.takeLast(2) shouldBe listOf("previous", "next")
-        screens.last().buttons.single { it.id.value == "skill_0" }.onClick.handle(mockk())
+        screens.last().buttons.single { it.id.value == "progression_skill_6" }.onClick.handle(mockk())
+        screens.last().id shouldBe "dungeon.progression.skill_6"
+        screens.last().buttons.single { it.id.value == "perks" }.onClick.handle(mockk())
         screens.last().id shouldBe "dungeon.skill.perks"
         every { data.perks(player, skill.id) } returns DungeonSkillPerkView(skill, 3, listOf(perk.copy(active = true)))
         screens.last().buttons.single { it.id.value == "perk_0" }.onClick.handle(mockk())
         verify(exactly = 1) { data.togglePerk(player, skill.id, perk.id) }
         PlainTextComponentSerializer.plainText().serialize(screens.last().buttons.single().label).contains("✔") shouldBe true
         screens.last().exitButton!!.onClick.handle(mockk())
-        screens.last().buttons.count { it.id.value.startsWith("skill_") } shouldBe 5
+        screens.last().id shouldBe "dungeon.progression.skill_6"
+        screens.last().exitButton!!.onClick.handle(mockk())
+        screens.last().buttons.count { it.id.value.startsWith("progression_") } shouldBe 4
     }
 
     "dynamic entry forwards the selected native level and stable difficulty id" {

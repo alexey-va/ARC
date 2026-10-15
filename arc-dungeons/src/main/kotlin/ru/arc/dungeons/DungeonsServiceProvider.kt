@@ -14,6 +14,7 @@ import org.bukkit.entity.Entity
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import ru.arc.dungeons.api.ArcDungeonsService
+import ru.arc.dungeons.menu.DungeonsMenus
 import ru.arc.eliteloot.EliteLootGuiFactory
 import ru.arc.eliteloot.EliteLootManager
 import ru.arc.eliteloot.LootType
@@ -64,6 +65,8 @@ internal class DungeonsServiceProvider(private val plugin: ArcDungeonsPlugin) : 
         requireNotNull(plugin.emHook).launchSeasonDungeon(player, world)
     }
     override fun dungeonAction(player: Player, action: String, arguments: List<String>) {
+        // The runtime that opens the panel must own a fresh hotkey entry.
+        DungeonsMenus.beginDialogFlow(player)
         plugin.dungeonQol?.action(player, action, arguments)
     }
     override fun usesMenuShortcut(player: Player) = plugin.dungeonQol?.usesMenuShortcut(player) == true
