@@ -18,7 +18,7 @@ class StaffAimAssistTest : FreeSpec({
         val fixture = AimFixture()
         val settings = staffSettings()
         val corrected = fixture.targeting(settings).assistedDirection(fixture.player, StaffSpell.EMBER, null)
-        (corrected.x > .01 && corrected.x < .04) shouldBe true
+        (corrected.x > .04 && corrected.x < .06) shouldBe true
         (corrected.z > .99) shouldBe true
         val direct = Vector(0.0, 0.0, 1.0)
         fixture.targeting(settings.copy(aimAssist = settings.aimAssist.copy(enabled = false)))
@@ -39,6 +39,27 @@ class StaffAimAssistTest : FreeSpec({
         targeting.assistedDirection(fixture.player, StaffSpell.EMBER, null) shouldBe Vector(0.0, 0.0, 1.0)
     }
 
+    "the new launch profile rescues a moderate ranged miss without snapping or widening the hitbox" {
+        val fixture = AimFixture()
+        val settings = staffSettings(range = 56.0)
+        every { fixture.victim.location } returns Location(fixture.world, 1.5, .6, 40.0)
+        every { fixture.victim.boundingBox } returns BoundingBox(1.2, .6, 39.7, 1.8, 2.6, 40.3)
+        val from = fixture.player.eyeLocation.toVector()
+        val hitbox = fixture.victim.boundingBox.expand(settings.lanceWidth)
+        val legacy = fixture.targeting(settings.copy(aimAssist = settings.aimAssist.copy(strength = .35)))
+            .assistedDirection(fixture.player, StaffSpell.LANCE, null)
+        val corrected = fixture.targeting(settings).assistedDirection(fixture.player, StaffSpell.LANCE, null)
+        hitbox.rayTrace(from, legacy, 56.0) shouldBe null
+        (hitbox.rayTrace(from, corrected, 56.0) != null) shouldBe true
+        (corrected.x / corrected.z < 1.5 / 40.0) shouldBe true
+
+        // A far-away target still has to be within two blocks of the original ray.
+        every { fixture.victim.location } returns Location(fixture.world, 3.0, .6, 40.0)
+        every { fixture.victim.boundingBox } returns BoundingBox(2.7, .6, 39.7, 3.3, 2.6, 40.3)
+        fixture.targeting(settings).assistedDirection(fixture.player, StaffSpell.LANCE, null)
+            .shouldBe(Vector(0.0, 0.0, 1.0))
+    }
+
     "exact hits keep their original direction and ground attacks never acquire pitch" {
         val fixture = AimFixture()
         every { fixture.victim.boundingBox } returns BoundingBox(-.3, .6, 14.7, .3, 2.6, 15.3)
@@ -54,6 +75,11 @@ class StaffAimAssistTest : FreeSpec({
         val raw = StaffTestConfig()
         val config = StaffSpellConfig(raw)
         val first = config.settings
+        first.range shouldBe 56.0
+        first.aimDegrees shouldBe 8.0
+        first.aimAssist.halfAngleDegrees shouldBe 8.0
+        first.aimAssist.maxMiss shouldBe 2.0
+        first.aimAssist.strength shouldBe .70
         raw["targeting.aim-assist.enabled"] = false
         raw["targeting.aim-assist.strength"] = 5.0
         raw["targeting.aim-assist.excluded-spells"] = listOf("ember")

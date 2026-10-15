@@ -155,11 +155,15 @@ and a positive `custom-model-data`; the bundled defaults leave both unset.
 ## Targeting and lifecycle
 
 Launch aim assist is controlled by `targeting.aim-assist`: enabled, half-angle
-(default 6 degrees), maximum miss (2 blocks), strength (0.35) and excluded spell
+(default 8 degrees), maximum miss (2 blocks), strength (0.70) and excluded spell
 IDs. It nudges eligible forward projectiles toward a nearby visible target;
 it preserves exact reticle hits, never grants a hit, and retains swept collision
 and cover checks. Ground-travelling effects preserve their horizontal direction.
-Radial pulses, selected ground zones and summons keep their own targeting.
+Primary ranged casts reach up to 56 blocks. Lightning uses this same launch
+correction for its first projectile, with no persistent target lock; only a real
+impact starts the existing homing chain jumps. Radial pulses, selected ground
+zones and summons keep their own targeting; soft target selection uses an
+eight-degree cone. Close attacks retain their seven-block reach.
 
 Each Icicle samples the current reticle when it launches. A direct reticle hit
 may track that target while it remains visible; a near miss receives only the

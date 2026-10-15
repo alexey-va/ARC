@@ -3,15 +3,15 @@
 # Duel appearance is optional and native: set a full item-model key and positive custom-model-data together.
 # Keep the portable defaults (empty / 0) on hosts without the matching client-pack model.
 targeting:
-  range: 48.0
-  half-angle-degrees: 20.0
+  range: 56.0
+  half-angle-degrees: 8.0
   # A small launch-direction correction, never an automatic hit or steering through cover.
   # Radial attacks and manually placed ground areas keep their own placement rules.
   aim-assist:
     enabled: true
-    half-angle-degrees: 6.0
+    half-angle-degrees: 8.0
     max-miss-blocks: 2.0
-    strength: 0.35
+    strength: 0.70
     excluded-spells: []
 max-area-targets: 8
 # Visual-only missing blocks and flying debris; [] disables, ['*'] allows every world on this server.
@@ -49,7 +49,7 @@ chain:
   secondary: '<#82dcff><attack-secondary> <#e8dfd2>— молнии расходятся вокруг вас на восемь блоков'
   name: '<#82dcff>Грозовая ветвь'
   description: '<#e8dfd2>Молния перескакивает между четырьмя врагами.'
-  aim: '<#82dcff>Самонаведение · дальность до 48 блоков'
+  aim: '<#82dcff>Мягкий прицел · до 56 блоков · перескоки после попадания'
   quick-name: 'Грозовой заслон'
   quick: '<#82dcff><defense> <#e8dfd2>— щит спереди: два удара за 1,2 с; перезарядка 4 с'
   quick-secondary-name: 'Круговой покров'
@@ -135,7 +135,7 @@ icicle:
   secondary: '<#b1f2ff><attack-secondary> <#e8dfd2>— пять осколков падают вокруг точки прицела'
   name: '<#b1f2ff>Ледяной венец'
   description: '<#e8dfd2>Зажмите <attack> и ведите прицел: сосульки летят из-за плеч; полная зарядка выпускает одиннадцать.'
-  aim: '<#b1f2ff>Прицел можно вести во время залпа · до 48 блоков'
+  aim: '<#b1f2ff>Прицел можно вести во время залпа · до 56 блоков'
   quick-name: 'Кристальный заслон'
   quick: '<#b1f2ff><defense> <#e8dfd2>— щит спереди: два удара за 1,2 с; перезарядка 4 с'
   quick-secondary-name: 'Круговой покров'
@@ -161,7 +161,7 @@ lance:
   secondary: '<#fff1ae><attack-secondary> <#e8dfd2>— три расходящихся копья'
   name: '<#fff1ae>Солнечное копьё'
   description: '<#e8dfd2>Узкий луч пробивает до трёх врагов насквозь.'
-  aim: '<#fff1ae>Точная линия до 48 блоков · урон приходит, когда световой фронт достигает цели'
+  aim: '<#fff1ae>Точная линия до 56 блоков · урон приходит, когда световой фронт достигает цели'
   quick-name: 'Солнечный щит'
   quick: '<#fff1ae><defense> <#e8dfd2>— щит спереди: два удара за 1,2 с; перезарядка 4 с'
   quick-secondary-name: 'Круговой покров'
@@ -189,7 +189,7 @@ ember:
   secondary: '<#ffae70><attack-secondary> <#e8dfd2>— зоны метеоров видны сразу; первые падают через 0,75 с после запуска'
   name: '<#ffae70>Пепельная комета'
   description: '<#e8dfd2>Зажмите <attack>, чтобы нарастить огненный шар, и отпустите для запуска кометы.'
-  aim: '<#ffae70>Ручной прицел · цельтесь на опережение'
+  aim: '<#ffae70>Мягкий прицел · до 56 блоков · цельтесь на опережение'
   quick-name: 'Огненный заслон'
   quick: '<#ffae70><defense> <#e8dfd2>— щит спереди: два удара за 1,2 с; перезарядка 4 с'
   quick-secondary-name: 'Круговой покров'

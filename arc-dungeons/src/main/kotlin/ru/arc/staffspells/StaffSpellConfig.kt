@@ -79,9 +79,9 @@ internal data class StaffSpellTuning(val power: Double, val vanillaDamage: Doubl
 
 internal data class StaffAimAssistSettings(
     val enabled: Boolean = true,
-    val halfAngleDegrees: Double = 6.0,
+    val halfAngleDegrees: Double = 8.0,
     val maxMiss: Double = 2.0,
-    val strength: Double = 0.35,
+    val strength: Double = 0.70,
     val excludedSpells: Set<String> = emptySet(),
 )
 
@@ -194,8 +194,8 @@ internal open class StaffSpellConfig(private val config: Config) {
     )
 
     open val settings get() = StaffSpellSettings(
-        number("targeting.range", 48.0, 2.0..64.0),
-        number("targeting.half-angle-degrees", 20.0, 1.0..30.0),
+        number("targeting.range", 56.0, 2.0..64.0),
+        number("targeting.half-angle-degrees", 8.0, 1.0..30.0),
         number("chain.radius", 6.0, 1.0..10.0),
         config.integer("chain.targets", 4).coerceIn(1, 8),
         number("chain.decay", 0.7, 0.1..1.0),
@@ -244,9 +244,9 @@ internal open class StaffSpellConfig(private val config: Config) {
         },
         aimAssist = StaffAimAssistSettings(
             enabled = config.bool("targeting.aim-assist.enabled", true),
-            halfAngleDegrees = number("targeting.aim-assist.half-angle-degrees", 6.0, 0.0..12.0),
+            halfAngleDegrees = number("targeting.aim-assist.half-angle-degrees", 8.0, 0.0..12.0),
             maxMiss = number("targeting.aim-assist.max-miss-blocks", 2.0, 0.0..4.0),
-            strength = number("targeting.aim-assist.strength", 0.35, 0.0..0.8),
+            strength = number("targeting.aim-assist.strength", 0.70, 0.0..0.8),
             excludedSpells = config.stringList("targeting.aim-assist.excluded-spells").toSet(),
         ),
     )

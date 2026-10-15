@@ -147,7 +147,7 @@ private fun solarMaterial(index: Int) = when (index) {
 }
 
 private fun solarReach(length: Double): Double =
-    length.takeIf { it.isFinite() && it > 0.0 }?.coerceIn(0.1, 48.0) ?: 0.1
+    length.takeIf { it.isFinite() && it > 0.0 }?.coerceIn(0.1, 64.0) ?: 0.1
 
 private fun solarLink(material: Material, start: Vector3f, end: Vector3f,
     width: Double, height: Double): StaffDisplayPart {

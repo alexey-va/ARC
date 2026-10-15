@@ -58,5 +58,13 @@ class StaffSolarGeometryTest : FreeSpec({
         staffLanceFront(staffLanceFlightTicks(24.0), 24.0) shouldBe 24.0
         staffLanceFlightTicks(0.1) shouldBe 8
         staffLanceFront(staffLanceFlightTicks(0.1), 0.1) shouldBe 0.1
+
+        for ((range, arrivalTick) in listOf(56.0 to 11, 64.0 to 12)) {
+            staffLanceFlightTicks(range) shouldBe arrivalTick
+            staffLanceFront(arrivalTick, range) shouldBe range
+            val arrival = staffSolarDisplayParts(arrivalTick, staffLanceDuration(range), range, impact = true)
+            arrival[40].center.z shouldBe range.toFloat()
+            arrival.take(40).all { it.visible } shouldBe true
+        }
     }
 })

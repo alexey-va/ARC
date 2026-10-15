@@ -355,14 +355,40 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "auto-aim follows a moved off-axis mob and excludes mobs behind or beyond range" {
-        withStaffHarness(settings = staffSettings(range = 48.0, aimDegrees = 20.0)) { h ->
-            val world = h.paper.addSimpleWorld("staff-aim")
-            val player = h.player("staff-aim", world, StaffSpell.CHAIN)
-            val moving = h.zombie(world, x = 2.0, z = 40.0)
+    "primary lightning corrects a near miss without acquiring broad or out-of-range targets" {
+        for (nearMiss in listOf(true, false)) {
+            val settings = staffSettings(range = 56.0, aimDegrees = 20.0).copy(
+                aimAssist = StaffAimAssistSettings(halfAngleDegrees = 8.0, maxMiss = 2.0, strength = 0.70),
+            )
+            withStaffHarness(settings = settings) { h ->
+                val world = h.paper.addSimpleWorld("staff-chain-assist-$nearMiss")
+                val player = h.player("staff-chain-assist-$nearMiss", world, StaffSpell.CHAIN)
+                val target = h.zombie(world, x = if (nearMiss) 2.0 else 8.0, z = 40.0)
+                h.zombie(world, x = 0.5, z = -3.0)
+                h.zombie(world, x = 0.5, z = 60.0)
+                val origin = player.eyeLocation.clone()
+                h.controller.start()
+
+                h.controller.cast(player)
+                h.scheduler.tick(60)
+
+                h.hits.map { it.uniqueId } shouldBe if (nearMiss) listOf(target.uniqueId) else emptyList()
+                val firstStep = h.trailMoves.first().points.last().toVector().subtract(origin.toVector())
+                (firstStep.x > 0.0) shouldBe nearMiss
+                if (!nearMiss) (h.trailMoves.last().points.last().distance(origin) <= 56.001) shouldBe true
+            }
+        }
+    }
+
+    "primary lightning keeps its launch heading when a directly aimed target dodges" {
+        withStaffHarness(settings = staffSettings(range = 56.0, aimDegrees = 20.0)) { h ->
+            val world = h.paper.addSimpleWorld("staff-chain-dodge")
+            val player = h.player("staff-chain-dodge", world, StaffSpell.CHAIN)
+            val moving = h.zombie(world, x = 0.5, z = 40.0)
             h.zombie(world, x = 0.5, z = -3.0)
-            h.zombie(world, x = 0.5, z = 52.0)
+            h.zombie(world, x = 0.5, z = 60.0)
             val castOrigin = player.eyeLocation.clone()
+            val forward = castOrigin.direction.normalize()
             h.controller.start()
 
             h.controller.cast(player)
@@ -371,12 +397,14 @@ class StaffSpellsTest : FreeSpec({
             moving.teleport(Location(world, 3.0, 64.0, 41.0))
             h.scheduler.tick(60)
 
-            h.hits.map { it.uniqueId } shouldBe listOf(moving.uniqueId)
-            h.trailMoves.any { move ->
-                move.points.size in 2..41 && move.points.last().distance(moving.location.clone().add(0.0, 1.0, 0.0)) < 1.5
+            h.hits shouldBe emptyList()
+            h.trailMoves.all { move ->
+                val heading = move.points.last().toVector().subtract(castOrigin.toVector()).normalize()
+                heading.dot(forward) > 0.9999
             } shouldBe true
             h.trailMoves.all { it.points.size <= 41 } shouldBe true
             (h.trailMoves.last().points.size > 8) shouldBe true
+            (h.trailMoves.last().points.last().distance(castOrigin) <= 56.001) shouldBe true
             h.trailMoves.all { move ->
                 (move.points.first().distance(castOrigin) < 0.001) &&
                     move.points.zipWithNext().all { (from, to) -> from.distance(to) <= 5.501 }
@@ -864,7 +892,7 @@ class StaffSpellsTest : FreeSpec({
             val eye = player.eyeLocation
             val look = eye.direction.normalize()
             val offset = center(target).toVector().subtract(eye.toVector())
-            (staffAimScore(offset.x, offset.y, offset.z, look.x, look.y, look.z, 24.0, 6.0) != null) shouldBe true
+            (staffAimScore(offset.x, offset.y, offset.z, look.x, look.y, look.z, 24.0, 8.0) != null) shouldBe true
             target.boundingBox.expand(0.25).rayTrace(eye.toVector(), look, 24.0) shouldBe null
             h.controller.start()
 
@@ -874,9 +902,9 @@ class StaffSpellsTest : FreeSpec({
             val firstShot = h.visualPlays.first { it.spell == StaffSpell.ICICLE && it.charging }.id
             val assisted = h.projectileMoves.filter { it.id == firstShot }.getOrNull(4)?.direction
             val heading = requireNotNull(assisted)
-            // The default 35% correction is smaller than the former full homing turn.
+            // The default 70% correction still leaves the initial miss partially uncorrected.
             (heading.x > baseline.x) shouldBe true
-            (heading.angle(baseline) < Math.toRadians(6.0 * 0.35)) shouldBe true
+            (heading.angle(baseline) < Math.toRadians(8.0 * 0.70)) shouldBe true
         }
     }
 
@@ -885,11 +913,11 @@ class StaffSpellsTest : FreeSpec({
         withStaffHarness(settings = staffSettings(range = 24.0)) { h ->
             val world = h.paper.addSimpleWorld("staff-icicle-outside-cone")
             val player = h.player("staff-icicle-outside-cone", world, StaffSpell.ICICLE)
-            val target = h.zombie(world, x = 2.0, z = 12.0)
+            val target = h.zombie(world, x = 3.0, z = 12.0)
             val eye = player.eyeLocation
             val look = eye.direction.normalize()
             val offset = center(target).toVector().subtract(eye.toVector())
-            (staffAimScore(offset.x, offset.y, offset.z, look.x, look.y, look.z, 24.0, 6.0) == null) shouldBe true
+            (staffAimScore(offset.x, offset.y, offset.z, look.x, look.y, look.z, 24.0, 8.0) == null) shouldBe true
             target.boundingBox.expand(0.25).rayTrace(eye.toVector(), look, 24.0) shouldBe null
             h.controller.start()
 
@@ -1233,7 +1261,7 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "chain reaches each mob once and stops when an impact is cancelled" {
+    "chain bounces after a real hit with decay while cover and cancelled impacts stop the chain" {
         val cancelledTargets = mutableSetOf<UUID>()
         withStaffHarness(
             settings = staffSettings(chainTargets = 4),
@@ -1244,6 +1272,9 @@ class StaffSpellsTest : FreeSpec({
             val first = h.zombie(world, x = 0.5, z = 4.0)
             val second = h.zombie(world, x = 2.0, z = 5.0)
             val third = h.zombie(world, x = 4.0, z = 6.0)
+            val covered = h.zombie(world, x = 0.5, z = 9.0)
+            for (x in -1..1) for (y in 63..67) world.getBlockAt(x, y, 7).type = Material.STONE
+            visible(player.eyeLocation, center(covered)) shouldBe false
             h.controller.start()
 
             h.controller.cast(player)
@@ -1252,6 +1283,7 @@ class StaffSpellsTest : FreeSpec({
 
             h.hits.map { it.uniqueId } shouldBe listOf(first.uniqueId, second.uniqueId, third.uniqueId)
             h.hits.map { it.uniqueId }.distinct().size shouldBe h.hits.size
+            h.damageScales shouldBe listOf(1.0, 0.7, 0.7 * 0.7).map { it to 6.0 * it }
 
             h.hits.clear()
             val blockedWorld = h.paper.addSimpleWorld("staff-chain-cancelled")

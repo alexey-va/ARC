@@ -522,7 +522,7 @@ internal fun staffWaveFront(ageTicks: Int, range: Double, travelTicks: Int) =
     range.coerceAtLeast(0.0) * ((ageTicks - 2).toDouble() / travelTicks.coerceAtLeast(1)).coerceIn(0.0, 1.0)
 
 private fun staffLanceReach(length: Double): Double =
-    length.takeIf { it.isFinite() && it > 0.0 }?.coerceIn(0.1, 48.0) ?: 0.1
+    length.takeIf { it.isFinite() && it > 0.0 }?.coerceIn(0.1, 64.0) ?: 0.1
 
 /** Shared flight pacing for the display geometry and the particle trail. */
 internal fun staffLanceFlightTicks(length: Double): Int {
@@ -533,7 +533,7 @@ internal fun staffLanceFlightTicks(length: Double): Int {
 
 internal fun staffLanceDuration(length: Double): Int = staffLanceFlightTicks(length) + 12
 
-/** Lance holds at its safe muzzle for four ticks, then advances through the ray over 4–6 ticks. */
+/** Lance holds at its safe muzzle for four ticks, then advances through the ray over 4–8 ticks. */
 internal fun staffLanceFront(ageTicks: Int, length: Double): Double {
     val reach = staffLanceReach(length)
     val muzzle = minOf(reach, 2.0)

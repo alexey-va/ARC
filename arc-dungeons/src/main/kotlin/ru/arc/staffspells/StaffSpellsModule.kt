@@ -379,7 +379,7 @@ internal class StaffSpellController(
         else if (spell == StaffSpell.NECROMANCER) Unit // Already admitted before consuming cooldown.
         else if (spell in ARSENAL_SPELLS) arsenal.cast(player, spell, cast, tuning, input, level)
         else if (secondary) castSecondary(player, spell, cast, tuning, level) else when (spell) {
-            StaffSpell.CHAIN -> chain(player, target(player, cast), cast, tuning)
+            StaffSpell.CHAIN -> chain(player, cast, tuning)
             StaffSpell.MARK -> {
                 val selected = target(player, cast)
                 val point = selected?.let(::center) ?: aimPoint(player)
@@ -753,9 +753,11 @@ internal class StaffSpellController(
         }
     }
 
-    private fun chain(player: Player, first: LivingEntity?, cast: StaffSpellCast, tuning: StaffSpellTuning) {
-        launchBolt(player, player.eyeLocation, player.eyeLocation.direction.clone(),
-            first, cast, tuning, 1.0, settings.chainTargets, mutableSetOf(), settings.range * 1.6)
+    private fun chain(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning) {
+        val direction = targeting.assistedDirection(player, StaffSpell.CHAIN, cast)
+        // The first shot commits to its launch direction; homing begins only after a real hit.
+        launchBolt(player, player.eyeLocation, direction,
+            null, cast, tuning, 1.0, settings.chainTargets, mutableSetOf(), settings.range)
     }
 
     private fun reserveBolt(casterId: UUID) {
