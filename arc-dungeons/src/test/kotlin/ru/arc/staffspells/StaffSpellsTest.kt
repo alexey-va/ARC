@@ -834,6 +834,136 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
+    "icicle fallback release retains each scattered charge slot" {
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("staff-icicle-fallback-slots")
+            val player = h.player("staff-icicle-fallback-slots", world, StaffSpell.ICICLE)
+            h.controller.start()
+
+            h.controller.cast(player)
+
+            val fallbackCharges = h.visualPlays.filter { it.spell == StaffSpell.ICICLE && it.charging }
+            fallbackCharges.size shouldBe 7
+            fallbackCharges.map { it.chargeSlot } shouldBe (0..6).toList()
+            fallbackCharges.forEach { scene ->
+                verify(exactly = 1) { h.effects.releaseCharge(scene.id, 80, any()) }
+            }
+        }
+    }
+
+    "icicle aim assist steers a visible near miss inside the narrow cone" {
+        val baseline = firstIcicleHeadingAtAgeFive()
+        withStaffHarness(settings = staffSettings(range = 24.0)) { h ->
+            val world = h.paper.addSimpleWorld("staff-icicle-near-miss")
+            val player = h.player("staff-icicle-near-miss", world, StaffSpell.ICICLE)
+            val target = h.zombie(world, x = 1.3, z = 12.0)
+            val eye = player.eyeLocation
+            val look = eye.direction.normalize()
+            val offset = center(target).toVector().subtract(eye.toVector())
+            (staffAimScore(offset.x, offset.y, offset.z, look.x, look.y, look.z, 24.0, 6.0) != null) shouldBe true
+            target.boundingBox.expand(0.25).rayTrace(eye.toVector(), look, 24.0) shouldBe null
+            h.controller.start()
+
+            h.controller.cast(player)
+            h.scheduler.tick(8)
+
+            val firstShot = h.visualPlays.first { it.spell == StaffSpell.ICICLE && it.charging }.id
+            val assisted = h.projectileMoves.filter { it.id == firstShot }.getOrNull(4)?.direction
+            (requireNotNull(assisted).distanceSquared(baseline) > 0.001) shouldBe true
+            h.scheduler.tick(30)
+            (target in h.hits) shouldBe true
+        }
+    }
+
+    "icicle aim assist does not steer to targets outside its narrow cone" {
+        val baseline = firstIcicleHeadingAtAgeFive()
+        withStaffHarness(settings = staffSettings(range = 24.0)) { h ->
+            val world = h.paper.addSimpleWorld("staff-icicle-outside-cone")
+            val player = h.player("staff-icicle-outside-cone", world, StaffSpell.ICICLE)
+            val target = h.zombie(world, x = 2.0, z = 12.0)
+            val eye = player.eyeLocation
+            val look = eye.direction.normalize()
+            val offset = center(target).toVector().subtract(eye.toVector())
+            (staffAimScore(offset.x, offset.y, offset.z, look.x, look.y, look.z, 24.0, 6.0) == null) shouldBe true
+            target.boundingBox.expand(0.25).rayTrace(eye.toVector(), look, 24.0) shouldBe null
+            h.controller.start()
+
+            h.controller.cast(player)
+            h.scheduler.tick(8)
+
+            val firstShot = h.visualPlays.first { it.spell == StaffSpell.ICICLE && it.charging }.id
+            val unassisted = h.projectileMoves.filter { it.id == firstShot }.getOrNull(4)?.direction
+            (requireNotNull(unassisted).distanceSquared(baseline) < 1e-8) shouldBe true
+        }
+    }
+
+    "icicle aim assist does not acquire a near miss behind cover" {
+        val baseline = firstIcicleHeadingAtAgeFive(cover = true)
+        withStaffHarness(settings = staffSettings(range = 24.0)) { h ->
+            val world = h.paper.addSimpleWorld("staff-icicle-aim-cover")
+            val player = h.player("staff-icicle-aim-cover", world, StaffSpell.ICICLE)
+            val target = h.zombie(world, x = 1.3, z = 12.0)
+            for (x in -3..3) for (y in 64..66) world.getBlockAt(x, y, 11).type = Material.STONE
+            visible(player.eyeLocation, center(target)) shouldBe false
+            h.controller.start()
+
+            h.controller.cast(player)
+            h.scheduler.tick(12)
+
+            val firstShot = h.visualPlays.first { it.spell == StaffSpell.ICICLE && it.charging }.id
+            val unassisted = h.projectileMoves.filter { it.id == firstShot }.getOrNull(4)?.direction
+            (requireNotNull(unassisted).distanceSquared(baseline) < 1e-8) shouldBe true
+            h.hits shouldBe emptyList()
+        }
+    }
+
+    "icicle aim assist requires line of sight from each release point" {
+        val baseline = firstIcicleHeadingAtAgeFive()
+        withStaffHarness(settings = staffSettings(range = 24.0)) { h ->
+            val world = h.paper.addSimpleWorld("staff-icicle-release-cover")
+            val player = h.player("staff-icicle-release-cover", world, StaffSpell.ICICLE)
+            val target = h.zombie(world, x = 1.3, z = 12.0)
+            world.getBlockAt(-1, 65, 7).type = Material.STONE
+            val eye = player.eyeLocation
+            visible(eye, center(target)) shouldBe true
+            val rotation = staffChargeOrientation(StaffSpell.ICICLE, eye.yaw,
+                org.joml.Vector3f(eye.direction.x.toFloat(), eye.direction.y.toFloat(), eye.direction.z.toFloat()))
+            val offset = rotation.transform(staffIcicleChargeAnchorOffset(0))
+            val release = eye.clone().add(offset.x.toDouble(), offset.y.toDouble(), offset.z.toDouble())
+            visible(release, center(target)) shouldBe false
+            h.controller.start()
+
+            h.controller.cast(player)
+            val firstShot = h.visualPlays.first { it.spell == StaffSpell.ICICLE && it.charging }.id
+            h.scheduler.tick(8)
+
+            val unassisted = h.projectileMoves.filter { it.id == firstShot }.getOrNull(4)?.direction
+            (requireNotNull(unassisted).distanceSquared(baseline) < 1e-8) shouldBe true
+        }
+    }
+
+    "icicle stops steering when a selected target becomes occluded" {
+        val baseline = firstIcicleHeadingAtAgeFive()
+        withStaffHarness(settings = staffSettings(range = 24.0)) { h ->
+            val world = h.paper.addSimpleWorld("staff-icicle-lost-cover")
+            val player = h.player("staff-icicle-lost-cover", world, StaffSpell.ICICLE)
+            val target = h.zombie(world, x = 1.3, z = 12.0)
+            visible(player.eyeLocation, center(target)) shouldBe true
+            h.controller.start()
+
+            h.controller.cast(player)
+            val firstShot = h.visualPlays.first { it.spell == StaffSpell.ICICLE && it.charging }.id
+            h.scheduler.tick(4) // The first bolt acquires the visible near miss.
+            for (x in -3..3) for (y in 64..66) world.getBlockAt(x, y, 11).type = Material.STONE
+            visible(player.eyeLocation, center(target)) shouldBe false
+            h.scheduler.tick(4)
+
+            val firstShotMoves = h.projectileMoves.filter { it.id == firstShot }
+            firstShotMoves.size shouldBe 5
+            (firstShotMoves[4].direction.distanceSquared(baseline) < 1e-8) shouldBe true
+        }
+    }
+
     "icicle volley follows reticle turns in empty space without redirecting the first airborne shot" {
         withStaffHarness(settings = staffSettings(range = 32.0)) { h ->
             val world = h.paper.addSimpleWorld("staff-icicle-live-reticle")
@@ -1203,6 +1333,22 @@ class StaffSpellsTest : FreeSpec({
 
 })
 
+private fun firstIcicleHeadingAtAgeFive(cover: Boolean = false): Vector {
+    var heading: Vector? = null
+    withStaffHarness(settings = staffSettings(range = 24.0)) { h ->
+        val world = h.paper.addSimpleWorld("staff-icicle-heading-probe")
+        val player = h.player("staff-icicle-heading-probe", world, StaffSpell.ICICLE)
+        if (cover) for (x in -3..3) for (y in 64..66) world.getBlockAt(x, y, 11).type = Material.STONE
+        h.controller.start()
+
+        h.controller.cast(player)
+        val firstShot = h.visualPlays.first { it.spell == StaffSpell.ICICLE && it.charging }.id
+        h.scheduler.tick(8)
+        heading = h.projectileMoves.filter { it.id == firstShot }.getOrNull(4)?.direction
+    }
+    return requireNotNull(heading) { "The first icicle did not reach its age-five keyframe" }
+}
+
 internal data class StaffHarness(
     val paper: MockBukkitTestRuntime,
     val scheduler: TestTaskScheduler,
@@ -1241,6 +1387,8 @@ internal data class StaffVisualPlay(
     val to: Location,
     val secondary: Boolean,
     val impact: Boolean,
+    val charging: Boolean,
+    val chargeSlot: Int?,
 )
 
 private data class StaffHudDisplayRecord(
@@ -1343,7 +1491,7 @@ internal fun withStaffHarness(
                     every { effects.play(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) } answers {
                         val id = UUID.randomUUID()
                         if (!arg<Boolean>(13)) visualPlays += StaffVisualPlay(id, arg<StaffSpell>(1), arg<Location>(2).clone(),
-                            arg<Location>(3).clone(), arg<Boolean>(7), arg<Boolean>(6))
+                            arg<Location>(3).clone(), arg<Boolean>(7), arg<Boolean>(6), arg<Boolean>(9), arg<Int?>(12))
                         id
                     }
                     every { effects.chargeOrigin(any()) } returns null

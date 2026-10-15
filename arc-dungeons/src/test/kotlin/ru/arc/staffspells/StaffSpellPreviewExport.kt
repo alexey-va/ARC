@@ -450,11 +450,8 @@ object StaffSpellPreviewExport {
     private fun orientIcicleParts(
         parts: List<StaffDisplayPart>,
         position: org.bukkit.util.Vector,
-        direction: org.bukkit.util.Vector,
+        rotation: Quaternionf,
     ): List<StaffDisplayPart> {
-        val rotation = staffLanceOrientation(Vector3f(
-            direction.x.toFloat(), direction.y.toFloat(), direction.z.toFloat(),
-        ))
         return parts.map { part -> part.copy(
             center = rotation.transform(Vector3f(part.center)).add(
                 position.x.toFloat(), position.y.toFloat(), position.z.toFloat(),
@@ -487,6 +484,9 @@ object StaffSpellPreviewExport {
         }
 
         val target = org.bukkit.util.Vector(0.0, eyeHeight, 48.0)
+        var rotation = staffLanceOrientation(Vector3f(
+            direction.x.toFloat(), direction.y.toFloat(), direction.z.toFloat(),
+        ))
         var remaining = remainingDistance
         var impactTick = -1
         for (tick in delay..frame.ageTicks) {
@@ -495,6 +495,9 @@ object StaffSpellPreviewExport {
             if (!secondary && flightAge > 4) steerStaffBolt(direction, target.clone().subtract(position), flightAge)
             val step = minOf(staffIcicleStep(flightAge), remaining)
             position.add(direction.clone().multiply(step))
+            rotation = staffIcicleFlightOrientation(rotation, Vector3f(
+                direction.x.toFloat(), direction.y.toFloat(), direction.z.toFloat(),
+            ))
             remaining -= step
             if (remaining <= 0.001) impactTick = tick
         }
@@ -509,11 +512,12 @@ object StaffSpellPreviewExport {
                 StaffSpell.ICICLE, impactAge, ICICLE_SHATTER_TICKS,
                 event.inputs.length, event.inputs.radius, impact = true, secondary = secondary,
             )
-        } else staffDisplayParts(
+        } else if (!secondary) staffIcicleChargeParts(((count - 7) / 4.0).coerceIn(0.0, 1.0), index)
+        else staffDisplayParts(
             StaffSpell.ICICLE, frame.ageTicks, event.inputs.durationTicks,
             event.inputs.length, event.inputs.radius, impact = false, secondary = secondary,
         )
-        orientIcicleParts(parts, position, direction).map { part ->
+        orientIcicleParts(parts, position, rotation).map { part ->
             part.copy(visible = part.visible && impactAge < ICICLE_SHATTER_TICKS)
         }
     }

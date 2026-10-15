@@ -399,6 +399,7 @@ object StaffRedesignPreviewExport {
                     val anchor = eye.clone().add(Vector(offset.x.toDouble(), offset.y.toDouble(), offset.z.toDouble()))
                     val position = anchor.clone()
                     val direction = Vector(0.0, 0.0, 1.0)
+                    var rotation = org.joml.Quaternionf()
                     var remaining = PREVIEW_REACH_BLOCKS
                     val launchDelay = staffIcicleLaunchDelay(slot)
                     for (tick in 1..releaseAge) {
@@ -409,11 +410,11 @@ object StaffRedesignPreviewExport {
                             steerStaffBolt(direction, target.clone().subtract(position), flightAge)
                         val step = minOf(staffIcicleStep(flightAge), remaining)
                         position.add(direction.clone().multiply(step))
+                        rotation = staffIcicleFlightOrientation(rotation, org.joml.Vector3f(
+                            direction.x.toFloat(), direction.y.toFloat(), direction.z.toFloat(),
+                        ))
                         remaining -= step
                     }
-                    val rotation = staffLanceOrientation(org.joml.Vector3f(
-                        direction.x.toFloat(), direction.y.toFloat(), direction.z.toFloat(),
-                    ))
                     staffIcicleChargeParts(charge, slot).mapIndexed { index, display ->
                         val oriented = display.copy(
                             center = rotation.transform(org.joml.Vector3f(display.center)),
