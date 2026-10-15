@@ -1,0 +1,211 @@
+{
+  "version": 1,
+  "title": "EliteMobs automatic shared weapon prerequisite XP, addon-only",
+  "assumptions": [
+    "Before: one native eligible weapon award E goes to its attributed skill. After: source+one eligible prerequisite recipient receive exactly E total; no multiplication and no deduction of pre-existing XP.",
+    "Low/base/high sensitivity only: 50/200/1000 eligible combat awards per active player-day at a hypothetical 100 XP each, equivalent to 0.5/2/5 hours at 100/100/200 awards per hour. These are not measured rates.",
+    "5/20/50 participating players are scenario assumptions. Native contribution, level eligibility, reinforcement, natural-kill cap and dungeon lockout checks remain before the addon hook.",
+    "ARMOR skill XP and Advanced Combat class XP keep separate unchanged native award paths. Existing skill perks apply once before redistribution; books/admin writes are not shared combat awards.",
+    "At equal prior XP, paired progression ordinarily divides the award equally; existing differences are caught up using only newly earned XP. At least one source XP may remain native to preserve zero-veto compatibility.",
+    "Vault, tokens, EliteMobs crystals and item issuance have zero direct delta. No currency exchange or item resale is assumed. Current SELL and planned contract transition are not modified.",
+    "Real time to a level cannot be guaranteed by XP conservation alone: equipment access, combat level and kill throughput can change. Existing 168h audit covers only vault/tokens, not skill XP.",
+    "Sum budget across all overlapping classes is one award E, never one award per pair. No transitive redistribution; no player-selected extra training target and no class/ability unlock bypass.",
+    "Persist both skill totals through the existing native PlayerData queue and cross-server EmSync snapshot. No new storage or blocking gameplay-thread I/O. Final cancellation and a late changed/zero award must not grant companion XP."
+  ],
+  "participants": [
+    5,
+    20,
+    50
+  ],
+  "currencies": {
+    "vault": {
+      "minor_per_unit": 100,
+      "disposable_per_player_day": {
+        "before": [
+          "0",
+          "0",
+          "0"
+        ],
+        "after": [
+          "0",
+          "0",
+          "0"
+        ]
+      },
+      "flows": [
+        {
+          "id": "direct_delta",
+          "kind": "mint",
+          "source": "EliteSkillXpGainEvent after native eligibility/perks; ArcDungeons routing",
+          "basis": "Scenario sensitivity, not observed gameplay",
+          "before": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              50,
+              200,
+              1000
+            ]
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              50,
+              200,
+              1000
+            ]
+          }
+        }
+      ]
+    },
+    "tokens": {
+      "minor_per_unit": 100,
+      "disposable_per_player_day": {
+        "before": [
+          "0",
+          "0",
+          "0"
+        ],
+        "after": [
+          "0",
+          "0",
+          "0"
+        ]
+      },
+      "flows": [
+        {
+          "id": "direct_delta",
+          "kind": "mint",
+          "source": "EliteSkillXpGainEvent after native eligibility/perks; ArcDungeons routing",
+          "basis": "Scenario sensitivity, not observed gameplay",
+          "before": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              50,
+              200,
+              1000
+            ]
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              50,
+              200,
+              1000
+            ]
+          }
+        }
+      ]
+    },
+    "elitemobs_crystals": {
+      "minor_per_unit": 100,
+      "disposable_per_player_day": {
+        "before": [
+          "0",
+          "0",
+          "0"
+        ],
+        "after": [
+          "0",
+          "0",
+          "0"
+        ]
+      },
+      "flows": [
+        {
+          "id": "direct_delta",
+          "kind": "mint",
+          "source": "EliteSkillXpGainEvent after native eligibility/perks; ArcDungeons routing",
+          "basis": "Scenario sensitivity, not observed gameplay",
+          "before": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              50,
+              200,
+              1000
+            ]
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              50,
+              200,
+              1000
+            ]
+          }
+        }
+      ]
+    },
+    "elitemobs_weapon_xp": {
+      "minor_per_unit": 1,
+      "disposable_per_player_day": {
+        "before": [
+          "0",
+          "0",
+          "0"
+        ],
+        "after": [
+          "0",
+          "0",
+          "0"
+        ]
+      },
+      "flows": [
+        {
+          "id": "native_combat_award",
+          "kind": "mint",
+          "source": "EliteSkillXpGainEvent after native eligibility/perks; ArcDungeons routing",
+          "basis": "Scenario sensitivity, not observed gameplay",
+          "before": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "100",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              50,
+              200,
+              1000
+            ]
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "100",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              50,
+              200,
+              1000
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "prices": []
+}

@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import ru.arc.hooks.elitemobs.EMDungeonQol
 import ru.arc.hooks.elitemobs.EMHook
+import ru.arc.hooks.elitemobs.DungeonSharedSkillXp
 import ru.arc.paper.testing.MockBukkitTestRuntime
 import ru.arc.sync.EmSync
 import java.util.logging.Handler
@@ -52,6 +53,7 @@ class ArcDungeonsNativeIntegrationLifecycleTest {
             val hook = mockk<EMHook>(relaxed = true)
             val qol = mockk<EMDungeonQol>(relaxed = true)
             val sync = mockk<EmSync>(relaxed = true)
+            val sharedXp = mockk<DungeonSharedSkillXp>(relaxed = true)
             every { hook.reload() } throws IllegalStateException("injected hook reload failure")
             every { qol.close() } throws IllegalStateException("injected QOL cleanup failure")
             every { hook.close() } throws IllegalStateException("injected hook cleanup failure")
@@ -60,6 +62,7 @@ class ArcDungeonsNativeIntegrationLifecycleTest {
             setField(plugin, "emHook", hook)
             setField(plugin, "dungeonQol", qol)
             setField(plugin, "emSync", sync)
+            setField(plugin, "sharedSkillXp", sharedXp)
             @Suppress("UNCHECKED_CAST")
             val listeners = field(plugin, "nativeListeners").get(plugin) as MutableList<Listener>
             listeners += mockk<Listener>(relaxed = true)
@@ -70,11 +73,13 @@ class ArcDungeonsNativeIntegrationLifecycleTest {
             assertNull(plugin.emHook)
             assertNull(plugin.dungeonQol)
             assertNull(plugin.emSync)
+            assertNull(field(plugin, "sharedSkillXp").get(plugin))
             assertTrue(listeners.isEmpty())
             verify(exactly = 1) { hook.reload() }
             verify(exactly = 1) { qol.close() }
             verify(exactly = 1) { hook.close() }
             verify(exactly = 1) { sync.close() }
+            verify(exactly = 1) { sharedXp.close() }
         }
     }
 

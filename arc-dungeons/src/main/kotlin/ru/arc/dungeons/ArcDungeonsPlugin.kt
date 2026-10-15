@@ -50,6 +50,7 @@ open class ArcDungeonsPlugin : JavaPlugin() {
         private set
     private var redisGeneration = Long.MIN_VALUE
     private var spells: ArcStaffSpellServiceProvider? = null
+    private var sharedSkillXp: DungeonSharedSkillXp? = null
     private var runtime: PaperPluginRuntime? = null
     internal val taskScope get() = requireNotNull(runtime).tasks
     private var metrics: ArcMetricsScope? = null
@@ -181,6 +182,10 @@ open class ArcDungeonsPlugin : JavaPlugin() {
 
         dungeonQol = qol
         listen(EMListener())
+        sharedSkillXp = DungeonSharedSkillXp(
+            recipient = DungeonSharedSkillRouting::target,
+            ready = { player -> emSync?.isReady(player.uniqueId) != false },
+        ).also(::listen)
         listen(qol.teleporter)
         listen(DungeonCaseRewards)
         listen(qol)
@@ -215,6 +220,7 @@ open class ArcDungeonsPlugin : JavaPlugin() {
         val qol = dungeonQol
         val hook = emHook
         val sync = emSync
+        val sharedXp = sharedSkillXp
 
         // Clear fields before cleanup so every caller sees a consistently detached state,
         // even if individual close operations fail.
@@ -222,9 +228,11 @@ open class ArcDungeonsPlugin : JavaPlugin() {
         dungeonQol = null
         emHook = null
         emSync = null
+        sharedSkillXp = null
 
         val actions = mutableListOf<() -> Unit>()
         listeners.forEach { listener -> actions.add { HandlerList.unregisterAll(listener) } }
+        sharedXp?.let { actions.add { it.close() } }
         qol?.let { actions.add { it.close() } }
         hook?.let { actions.add { it.close() } }
         sync?.let { actions.add { it.close() } }
