@@ -58,55 +58,74 @@ internal fun staffFrostDisplayParts(
     return parts
 }
 
-/** Petal facets roll around an expanding radial edge, leaving a low jade spore wake. */
-internal fun staffNovaDisplayParts(ageTicks: Int, durationTicks: Int, radius: Double): List<StaffDisplayPart> {
-    val reach = natureExtent(radius, 16.0, 8.0).coerceAtLeast(1.8)
-    val front = 1.8 + staffWaveFront(ageTicks, reach - 1.8, 16)
-    val travel = ((front - 1.8) / (reach - 1.8).coerceAtLeast(0.001)).coerceIn(0.0, 1.0)
-    val parts = ArrayList<StaffDisplayPart>(42)
+/** Interlocking thorn cage: roots climb, bend inward, and grip around the target. */
+internal fun staffNovaDisplayParts(
+    ageTicks: Int,
+    durationTicks: Int,
+    radius: Double,
+    charge: Double = 0.0,
+): List<StaffDisplayPart> {
+    val extent = natureExtent(radius, 16.0, 3.0).coerceAtLeast(1.0)
+    val age = ageTicks.coerceAtLeast(0)
+    val grow = natureSmooth(age / 8.0).coerceAtLeast(0.025)
+    val grip = natureSmooth((age - 12.0) / 8.0)
+    val fade = natureSmooth((durationTicks - 2.0 - age) / 8.0).coerceAtLeast(0.015)
+    val size = (0.8 + charge.coerceIn(0.0, 1.0) * 0.45) * grow * fade
+    val outer = (extent - 0.45).coerceAtLeast(0.35) * (1.0 - grip * 0.34)
+    val angles = doubleArrayOf(-2.88, -1.45, -0.20, 1.14, 2.50)
+    val parts = ArrayList<StaffDisplayPart>(36)
 
-    repeat(14) { index ->
-        val angle = index * 2.0 * PI / 14.0
-        val petalAngle = angle + PI / 14.0
-        val yaw = PI / 2.0 - petalAngle
-        val curl = 0.18 + 0.11 * abs(sin(index * 1.7)) + travel * 0.10
-        val petalRadius = front - 0.10 + sin(index * 1.7) * 0.06
-        val petalSize = 0.90 + 0.13 * cos(index * 1.3)
-        parts += naturePart(
-            Material.LIME_STAINED_GLASS,
-            cos(petalAngle) * petalRadius,
-            0.65 + travel * 0.14,
-            sin(petalAngle) * petalRadius,
-            0.72 * petalSize,
-            0.78,
-            1.12 * petalSize,
-            yaw = yaw,
-            pitch = -curl,
-            roll = sin(index * 1.7) * 0.10,
-        )
-        parts += naturePart(
-            if (index % 4 == 0) Material.SEA_LANTERN else Material.EMERALD_BLOCK,
-            cos(petalAngle) * (front + 0.04),
-            0.78 + travel * 0.14,
-            sin(petalAngle) * (front + 0.04),
-            0.27,
-            0.26,
-            0.74,
-            yaw = yaw,
-            pitch = -curl * 0.7,
-        )
-        val wakeRadius = (front - 0.48 - (index % 3) * 0.06).coerceAtLeast(1.35)
-        parts += naturePart(
-            Material.MOSS_BLOCK,
-            cos(petalAngle) * wakeRadius,
-            0.17 + travel * 0.06,
-            sin(petalAngle) * wakeRadius,
-            0.25,
-            0.16,
-            0.40,
-            yaw = yaw,
-        )
+    fun add(id: String, material: Material, x: Double, y: Double, z: Double,
+        sx: Double, sy: Double, sz: Double, yaw: Double = 0.0, pitch: Double = 0.0, roll: Double = 0.0) {
+        parts += naturePart(material, x, y, z, sx * size, sy * size, sz * size,
+            yaw = yaw, pitch = pitch, roll = roll).copy(identity = id)
     }
+
+    angles.forEachIndexed { root, angle ->
+        val sway = sin(root * 1.71 + 0.4)
+        repeat(4) { segment ->
+            val f = (segment + 0.5) / 4.0
+            val radial = outer * (1.0 - f * 0.22 * grip) + sin(f * PI + root) * 0.07
+            val y = 0.12 + f * (1.42 + abs(sway) * 0.18) + grip * f * 0.12
+            add("garden:root:$root:$segment",
+                if (segment == 3) Material.FLOWERING_AZALEA_LEAVES else Material.MOSS_BLOCK,
+                cos(angle) * radial, y, sin(angle) * radial,
+                0.34, 0.54, 0.40,
+                yaw = -angle + sway * 0.08,
+                pitch = 0.12 * sway + grip * 0.08,
+                roll = 0.22 * cos(angle + segment * 0.3))
+        }
+
+        // Each root throws an inward hook. Neighboring hooks cross instead of forming petals.
+        val hookRadius = outer * (0.70 - grip * 0.12)
+        val hookY = 0.92 + (root % 2) * 0.18 + grip * 0.12
+        add("garden:hook:$root", Material.DARK_OAK_WOOD,
+            cos(angle) * hookRadius, hookY, sin(angle) * hookRadius,
+            0.28, 0.42, 0.92,
+            yaw = -angle + 0.42 + sway * 0.13,
+            pitch = -0.30 + sway * 0.08,
+            roll = cos(angle) * 0.22)
+        add("garden:thorn:$root", Material.FLOWERING_AZALEA_LEAVES,
+            cos(angle + 0.08) * (hookRadius - 0.16), hookY + 0.12,
+            sin(angle + 0.08) * (hookRadius - 0.16),
+            0.20, 0.46, 0.28,
+            yaw = -angle + 0.82, pitch = -0.42, roll = sway * 0.18)
+
+        // Low cross-ties make the five unequal stems read as a gripping cage, not a flower.
+        val next = angles[(root + 1) % angles.size]
+        val delta = if (root == angles.lastIndex) next + 2.0 * PI - angle else next - angle
+        val mid = angle + delta * 0.5
+        val tieRadius = outer * (0.70 - grip * 0.18)
+        add("garden:tie:$root", Material.MOSS_BLOCK,
+            cos(mid) * tieRadius, 0.66 + (root % 3) * 0.09 + grip * 0.16,
+            sin(mid) * tieRadius,
+            0.24, 0.34, outer * delta * 0.78,
+            yaw = -mid,
+            pitch = 0.18 * sway,
+            roll = sin(mid) * 0.16)
+    }
+    add("garden:heart", Material.EMERALD_BLOCK, 0.0, 0.58 + grip * 0.16, 0.0,
+        0.36, 0.52, 0.36, yaw = age * 0.018, roll = 0.16)
     return parts
 }
 

@@ -1,6 +1,7 @@
 package ru.arc.staffspells
 
 import io.kotest.core.spec.style.FreeSpec
+import io.kotest.assertions.withClue
 import io.kotest.matchers.shouldBe
 import org.bukkit.Material
 import org.bukkit.Particle
@@ -71,16 +72,18 @@ class StaffMeleeGeometryTest : FreeSpec({
             }
             val identities = frames.first().map { it.identity }
 
-            frames.forEach { parts ->
+            frames.forEachIndexed { frameIndex, parts ->
                 (parts.isNotEmpty() && parts.size <= 48) shouldBe true
                 meleePartsAreFinite(parts) shouldBe true
                 parts.all { it.identity != null } shouldBe true
                 parts.map { it.identity }.distinct().size shouldBe parts.size
                 parts.map { it.identity } shouldBe identities
                 val bounds = meleeTestBounds(parts)
-                (bounds.minX >= -5.1f && bounds.maxX <= 5.1f) shouldBe true
-                (bounds.minY >= -1.6f && bounds.maxY <= 1.35f) shouldBe true
-                (bounds.minZ >= 1.39f && bounds.maxZ <= 7.002f) shouldBe true
+                withClue("$spell age=${keyframeAges[frameIndex]} bounds=$bounds") {
+                    (bounds.minX >= -5.1f && bounds.maxX <= 5.1f) shouldBe true
+                    (bounds.minY >= -1.6f && bounds.maxY <= 1.35f) shouldBe true
+                    (bounds.minZ >= 1.39f && bounds.maxZ <= 7.002f) shouldBe true
+                }
             }
 
             val contact = frames[STAFF_MELEE_PEAK_TICK / StaffSpellDisplayEffects.FRAME_TICKS]
@@ -109,27 +112,55 @@ class StaffMeleeGeometryTest : FreeSpec({
 
     "four primary attacks keep clearly different large topologies" {
         val frost = staffMeleeDisplayParts(StaffSpell.FROST, 4, 16, 7.0)
-        val shelves = frost.filter { it.identity?.startsWith("frost:shelf:") == true }
-        val shards = frost.filter { it.identity?.startsWith("frost:shard:") == true }
-        shelves.size shouldBe 5
-        shards.size shouldBe 12
-        shards.all { it.material == Material.BLUE_ICE || it.material == Material.PACKED_ICE } shouldBe true
+        val jaws = frost.filter { it.identity?.startsWith("frost:jaw:") == true }
+        val teeth = frost.filter { it.identity?.startsWith("frost:tooth:") == true }
+        val frostSpalls = frost.filter { it.identity?.startsWith("frost:spall:") == true }
+        jaws.size shouldBe 8
+        teeth.size shouldBe 6
+        frostSpalls.size shouldBe 6
+        (jaws + teeth + frostSpalls).all { it.material == Material.BLUE_ICE || it.material == Material.PACKED_ICE } shouldBe true
         frost.none { it.material == Material.CYAN_STAINED_GLASS } shouldBe true
         (meleeTestBounds(frost).maxX - meleeTestBounds(frost).minX > 7.0f) shouldBe true
+        val closingAtTwo = staffMeleeDisplayParts(StaffSpell.FROST, 2, 16, 7.0)
+            .filter { it.identity?.startsWith("frost:jaw:") == true }
+        val leftRootAtTwo = closingAtTwo.single { it.identity == "frost:jaw:0:0" }
+        val leftRootAtContact = jaws.single { it.identity == "frost:jaw:0:0" }
+        (abs(leftRootAtContact.center.x) < abs(leftRootAtTwo.center.x)) shouldBe true
+        val frostAfterImpact = staffMeleeDisplayParts(StaffSpell.FROST, 8, 16, 7.0).associateBy { it.identity }
+        (frostAfterImpact.getValue("frost:spall:0").center.x <
+            staffMeleeDisplayParts(StaffSpell.FROST, 6, 16, 7.0).single { it.identity == "frost:spall:0" }.center.x) shouldBe true
 
         val fault = staffMeleeDisplayParts(StaffSpell.FAULT, 4, 16, 7.0)
-        val faultRows = fault.mapNotNull { part -> part.identity?.substringAfter("fault:row:")?.substringBefore(':') }.toSet()
-        faultRows shouldBe setOf("0", "1", "2", "3")
+        val hammers = fault.filter { it.identity?.startsWith("fault:hammer:") == true }
+        val rifts = fault.filter { it.identity?.startsWith("fault:rift:") == true }
+        val faultSpalls = fault.filter { it.identity?.startsWith("fault:spall:") == true }
+        hammers.size shouldBe 4
+        rifts.size shouldBe 12
+        faultSpalls.size shouldBe 8
         fault.all { it.material in setOf(Material.BASALT, Material.POLISHED_BASALT, Material.BLACKSTONE, Material.OBSIDIAN) } shouldBe true
-        val risingRows = staffMeleeDisplayParts(StaffSpell.FAULT, 2, 16, 7.0).associateBy { it.identity }
-        val frontRow = risingRows.getValue("fault:row:0:rock:0")
-        val rearRow = risingRows.getValue("fault:row:3:rock:0")
-        (frontRow.center.y > rearRow.center.y + 0.10f) shouldBe true
+        val splitAtTwo = staffMeleeDisplayParts(StaffSpell.FAULT, 2, 16, 7.0)
+            .single { it.identity == "fault:rift:0:0:2" }
+        val splitAtContact = rifts.single { it.identity == "fault:rift:0:0:2" }
+        (abs(splitAtContact.center.x) > abs(splitAtTwo.center.x) + 0.5f) shouldBe true
+        val faultAfterImpact = staffMeleeDisplayParts(StaffSpell.FAULT, 8, 16, 7.0).associateBy { it.identity }
+        (faultAfterImpact.getValue("fault:spall:0").center.y >
+            staffMeleeDisplayParts(StaffSpell.FAULT, 6, 16, 7.0).single { it.identity == "fault:spall:0" }.center.y) shouldBe true
 
-        val lunar = staffMeleeDisplayParts(StaffSpell.LUNAR, 4, 16, 7.0)
-            .filter { it.identity?.startsWith("lunar:arc:") == true }
+        val lunarParts = staffMeleeDisplayParts(StaffSpell.LUNAR, 4, 16, 7.0)
+        val lunar = lunarParts.filter { it.identity?.startsWith("lunar:arc:") == true }
+        val echoes = lunarParts.filter { it.identity?.startsWith("lunar:echo:") == true }
         (lunar.size >= 10) shouldBe true
         lunar.all { it.material in setOf(Material.CALCITE, Material.QUARTZ_BLOCK, Material.SMOOTH_QUARTZ) } shouldBe true
+        echoes.size shouldBe lunar.size
+        (lunar.first().scale.x < lunar[lunar.size / 2].scale.x) shouldBe true
+        (staffMeleeDisplayParts(StaffSpell.LUNAR, 4, 16, 7.0)
+            .single { it.identity == "lunar:arc:9" }.center.x >
+            staffMeleeDisplayParts(StaffSpell.LUNAR, 2, 16, 7.0)
+                .single { it.identity == "lunar:arc:9" }.center.x) shouldBe true
+        staffMeleeDisplayParts(StaffSpell.LUNAR, 8, 16, 7.0)
+            .filter { it.identity?.startsWith("lunar:echo:") == true }
+            .all { it.scale.x > staffMeleeDisplayParts(StaffSpell.LUNAR, 6, 16, 7.0)
+                .single { previous -> previous.identity == it.identity }.scale.x } shouldBe true
         val orderedArc = lunar.sortedBy { it.identity!!.substringAfterLast(':').toInt() }
         val left = orderedArc.first().center
         val crown = orderedArc[orderedArc.size / 2].center
@@ -141,9 +172,14 @@ class StaffMeleeGeometryTest : FreeSpec({
         val water = tide.filter { it.identity?.startsWith("tide:water:") == true }
         val foam = tide.filter { it.identity?.startsWith("tide:foam:") == true }
         val curl = tide.filter { it.identity?.startsWith("tide:curl:") == true }
-        (water.size >= 8 && foam.size >= 6 && curl.size >= 2) shouldBe true
+        (water.size == 8 && foam.size == 8 && curl.size == 8) shouldBe true
         (water.maxOf { it.scale.y } > foam.maxOf { it.scale.y } * 2.0f) shouldBe true
         (meleeTestBounds(tide).maxX - meleeTestBounds(tide).minX > 7.0f) shouldBe true
+        val tideAfterImpact = staffMeleeDisplayParts(StaffSpell.TIDE, 8, 16, 7.0).associateBy { it.identity }
+        (tideAfterImpact.getValue("tide:water:0").scale.y <
+            tide.single { it.identity == "tide:water:0" }.scale.y) shouldBe true
+        tideAfterImpact.getValue("tide:curl:7").rotation.dot(tide.single { it.identity == "tide:curl:7" }.rotation)
+            .let { abs(it) < 0.999f } shouldBe true
     }
 
     "the central reticle corridor stays below eye height while outer shapes carry the silhouette" {

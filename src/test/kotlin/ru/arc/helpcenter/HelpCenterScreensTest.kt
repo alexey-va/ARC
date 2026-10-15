@@ -22,6 +22,8 @@ import ru.arc.core.Tasks
 import ru.arc.paper.menu.PaperDialogClickContext
 import ru.arc.paper.menu.PaperDialogScreen
 import ru.arc.paper.testing.MockBukkitTestRuntime
+import ru.arc.staffspells.api.StaffHudMode
+import ru.arc.staffspells.api.StaffHudPlacement
 import java.nio.file.Files
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
@@ -641,7 +643,7 @@ class HelpCenterScreensTest {
     fun `settings retain every legacy control in four groups and options return to their group`() {
         val expected = mapOf(
             "controls" to listOf("legacy_shortcut", "legacy_escape", "legacy_shift_sign_edit", "legacy_stairs_sit"),
-            "interface" to listOf("legacy_scoreboard", "legacy_tablist", "legacy_item_info", "legacy_container_preview", "setting_particles", "legacy_totem", "legacy_resource_pack"),
+            "interface" to listOf("legacy_scoreboard", "legacy_tablist", "legacy_item_info", "legacy_staff_hud", "legacy_container_preview", "setting_particles", "legacy_totem", "legacy_resource_pack"),
             "social" to listOf("setting_chat_global", "legacy_notifications", "legacy_tpa"),
             "world" to listOf("setting_trails_on", "legacy_flight", "legacy_lands", "legacy_portal_style", "legacy_portal_by_other", "legacy_portal_for_other"),
         )
@@ -717,6 +719,65 @@ class HelpCenterScreensTest {
         click("container_preview_motion")
         assertEquals("help.settings.container-preview.motion", screen.id)
         assertEquals(listOf("cp_teleport_ticks", "cp_stability_threshold"), screen.numberInputs.map { it.id.value })
+    }
+
+    @Test
+    fun `staff HUD settings show personal mode and placement and refresh after each metadata save`() {
+        var mode = StaffHudMode.HOLOGRAM
+        var placement = StaffHudPlacement.BOTTOM
+        every { legacy.staffHudMode(player) } answers { mode }
+        every { legacy.staffHudPlacement(player) } answers { placement }
+        every { legacy.execute(player, any()) } answers {
+            when (val action = secondArg<String>()) {
+                "staff-hud-mode-hologram" -> mode = StaffHudMode.HOLOGRAM
+                "staff-hud-mode-bossbar" -> mode = StaffHudMode.BOSSBAR
+                "staff-hud-mode-off" -> mode = StaffHudMode.OFF
+                "staff-hud-placement-top" -> placement = StaffHudPlacement.TOP
+                "staff-hud-placement-bottom" -> placement = StaffHudPlacement.BOTTOM
+                else -> fail("Unexpected setting action: $action")
+            }
+            CompletableFuture.completedFuture(true)
+        }
+
+        open(HelpCenterPage.SETTINGS)
+        click("settings_interface")
+        click("legacy_staff_hud")
+        assertEquals("help.settings.staff-hud", screen.id)
+        assertEquals(listOf(
+            "staff_hud_mode_hologram", "staff_hud_mode_bossbar", "staff_hud_mode_off",
+            "staff_hud_placement_top", "staff_hud_placement_bottom",
+        ), screen.buttons.map { it.id.value })
+        assertTrue(plain(screen.buttons[0].label).startsWith("✔"))
+        assertTrue(plain(screen.buttons[1].label).startsWith("○"))
+        assertTrue(plain(screen.buttons[4].label).startsWith("✔"))
+
+        click("staff_hud_mode_bossbar")
+        assertTrue(plain(screen.buttons[1].label).startsWith("✔"))
+        assertTrue(plain(screen.buttons[0].label).startsWith("○"))
+        click("staff_hud_placement_top")
+        assertTrue(plain(screen.buttons[3].label).startsWith("✔"))
+        assertTrue(plain(screen.buttons[4].label).startsWith("○"))
+        click("back")
+        assertEquals("help.settings.section.interface", screen.id)
+    }
+
+    @Test
+    fun `staff HUD settings do not reclaim navigation after a delayed metadata save`() {
+        val pending = CompletableFuture<Boolean>()
+        every { legacy.staffHudMode(player) } returns StaffHudMode.HOLOGRAM
+        every { legacy.staffHudPlacement(player) } returns StaffHudPlacement.BOTTOM
+        every { legacy.execute(player, "staff-hud-mode-bossbar") } returns pending
+
+        open(HelpCenterPage.SETTINGS)
+        click("settings_interface")
+        click("legacy_staff_hud")
+        click("staff_hud_mode_bossbar")
+        assertEquals("help.settings.staff-hud", screen.id)
+
+        open(HelpCenterPage.ROOT)
+        pending.complete(true)
+        paper.performTicks(2)
+        assertEquals("help.root", screen.id)
     }
 
     @Test

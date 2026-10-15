@@ -6,6 +6,7 @@ import org.bukkit.block.data.BlockData
 import org.joml.Quaternionf
 import org.joml.Vector3f
 import org.bukkit.util.Vector
+import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -59,6 +60,60 @@ internal fun staffGravityImpactFrame() = listOf(
         spread = Vector(0.20, 0.22, 0.20), speed = 0.04),
 )
 
+/** A bounded radial lift that folds inward, then descends into an expanding ground shock. */
+internal fun staffGravityPulseFrame(ageTicks: Int, radius: Double): List<StaffParticleSample> {
+    val safeAge = ageTicks.coerceAtLeast(0)
+    if (safeAge > GRAVITY_PULSE_SHOCK_END_TICKS) return emptyList()
+    val reach = radius.takeIf(Double::isFinite)?.coerceIn(3.0, 7.0) ?: 6.5
+    val violet = staffFade(0x7354BF, 0xE5D8FF, 0.9f)
+    return if (safeAge <= GRAVITY_PULSE_LIFT_TICKS) {
+        val progress = safeAge.toDouble() / GRAVITY_PULSE_LIFT_TICKS
+        val ring = reach * (1.0 - GRAVITY_PULSE_INWARD_FRACTION * progress)
+        val height = 0.12 + GRAVITY_PULSE_LIFT_HEIGHT * progress
+        buildList(GRAVITY_PULSE_PARTICLE_COUNT * 2) {
+            repeat(GRAVITY_PULSE_PARTICLE_COUNT) { index ->
+                val angle = index * 2.0 * PI / GRAVITY_PULSE_PARTICLE_COUNT + safeAge * 0.12
+                val wobble = sin(safeAge * 0.28 + index * 1.7) * 0.12
+                val x = cos(angle) * (ring + wobble)
+                val z = sin(angle) * (ring + wobble)
+                add(StaffParticleSample(Particle.BLOCK, Vector(x, height, z), count = 1,
+                    spread = Vector(0.035, 0.035, 0.035), speed = 0.018,
+                    data = Material.ANDESITE.createBlockData()))
+                add(StaffParticleSample(Particle.DUST_COLOR_TRANSITION,
+                    Vector(x * 0.78, height + 0.08, z * 0.78), data = violet))
+            }
+        }
+    } else {
+        val progress = ((safeAge - GRAVITY_PULSE_LIFT_TICKS).toDouble() /
+            (GRAVITY_PULSE_SHOCK_END_TICKS - GRAVITY_PULSE_LIFT_TICKS)).coerceIn(0.0, 1.0)
+        val ring = reach * (GRAVITY_PULSE_SHOCK_START_FRACTION +
+            (1.0 - GRAVITY_PULSE_SHOCK_START_FRACTION) * progress)
+        buildList(GRAVITY_PULSE_PARTICLE_COUNT * 2) {
+            repeat(GRAVITY_PULSE_PARTICLE_COUNT) { index ->
+                val angle = index * 2.0 * PI / GRAVITY_PULSE_PARTICLE_COUNT + safeAge * 0.05
+                val x = cos(angle) * ring
+                val z = sin(angle) * ring
+                add(StaffParticleSample(Particle.DUST_COLOR_TRANSITION,
+                    Vector(x, 0.08 + (index % 2) * 0.045, z), data = violet))
+                if (index % 2 == 0) add(StaffParticleSample(Particle.BLOCK,
+                    Vector(x * 0.92, 0.18 + (1.0 - progress) * 1.2, z * 0.92), count = 1,
+                    spread = Vector(0.03, 0.03, 0.03), speed = 0.035,
+                    data = Material.COBBLESTONE.createBlockData()))
+            }
+        }
+    }
+}
+
+/** Target-contact accent: a small, readable chip-and-dust pop used only after an accepted slam hit. */
+internal fun staffGravityPulseContactFrame() = listOf(
+    StaffParticleSample(Particle.BLOCK, Vector(), count = 8, spread = Vector(0.16, 0.10, 0.16),
+        speed = 0.045, data = Material.COBBLESTONE.createBlockData()),
+    StaffParticleSample(Particle.CLOUD, Vector(0.0, 0.10, 0.0), count = 5,
+        spread = Vector(0.16, 0.08, 0.16), speed = 0.018),
+    StaffParticleSample(Particle.CRIT, Vector(0.0, 0.16, 0.0), count = 5,
+        spread = Vector(0.12, 0.16, 0.12), speed = 0.03),
+)
+
 /**
  * Stable-identity stone chunks for the held boulder, its flight, and the one impact transition.
  * The packet displays are decorative; this geometry never writes to a world block.
@@ -73,6 +128,7 @@ internal fun staffChannelParts(
     secondary: Boolean = false,
 ): List<StaffDisplayPart> {
     if (spell != StaffSpell.GRAVITY) return emptyList()
+    if (secondary) return staffGravityPulseParts(ageTicks, durationTicks, radius)
     val pieces = listOf(
         Triple(Material.STONE, Vector3f(0f, 0f, 0f), 0.88f),
         Triple(Material.COBBLESTONE, Vector3f(-0.30f, 0.10f, -0.22f), 0.42f),
@@ -103,3 +159,55 @@ internal fun staffChannelParts(
             visible = true, identity = "gravity-stone-$index")
     }
 }
+
+/** Distinct secondary shape: fragments converge high, then descend and spread along the floor. */
+internal fun staffGravityPulseParts(ageTicks: Int, durationTicks: Int, radius: Double): List<StaffDisplayPart> {
+    val safeAge = ageTicks.coerceAtLeast(0)
+    val safeDuration = durationTicks.coerceAtLeast(GRAVITY_PULSE_SHOCK_END_TICKS + 2)
+    val reach = radius.takeIf(Double::isFinite)?.coerceIn(3.0, 7.0) ?: 6.5
+    val settled = safeAge >= GRAVITY_PULSE_SHOCK_END_TICKS
+    val settleProgress = if (settled) ((safeAge - GRAVITY_PULSE_SHOCK_END_TICKS).toDouble() /
+        (safeDuration - GRAVITY_PULSE_SHOCK_END_TICKS)).coerceIn(0.0, 1.0) else 0.0
+    val fade = (1.0 - settleProgress).coerceAtLeast(0.001)
+    return buildList(GRAVITY_PULSE_PARTICLE_COUNT) {
+        repeat(GRAVITY_PULSE_PARTICLE_COUNT) { index ->
+            val angle = index * 2.0 * PI / GRAVITY_PULSE_PARTICLE_COUNT + safeAge * 0.035
+            val (radial, height) = when {
+                safeAge <= GRAVITY_PULSE_LIFT_TICKS -> {
+                    val progress = safeAge.toDouble() / GRAVITY_PULSE_LIFT_TICKS
+                    reach * (1.0 - GRAVITY_PULSE_INWARD_FRACTION * progress) to
+                        (0.12 + GRAVITY_PULSE_LIFT_HEIGHT * progress)
+                }
+                safeAge <= GRAVITY_PULSE_SHOCK_END_TICKS -> {
+                    val progress = ((safeAge - GRAVITY_PULSE_LIFT_TICKS).toDouble() /
+                        (GRAVITY_PULSE_SHOCK_END_TICKS - GRAVITY_PULSE_LIFT_TICKS)).coerceIn(0.0, 1.0)
+                    reach * (GRAVITY_PULSE_SHOCK_START_FRACTION +
+                        (1.0 - GRAVITY_PULSE_SHOCK_START_FRACTION) * progress) to
+                        (0.12 + GRAVITY_PULSE_LIFT_HEIGHT * (1.0 - progress))
+                }
+                else -> reach to 0.12
+            }
+            val wobble = sin(safeAge * 0.11 + index * 1.3) * 0.10
+            val size = (0.22 + (index % 3) * 0.06) * fade
+            val material = when (index % 4) {
+                0 -> Material.AMETHYST_BLOCK
+                1 -> Material.COBBLESTONE
+                2 -> Material.ANDESITE
+                else -> Material.STONE
+            }
+            add(StaffDisplayPart(material,
+                Vector3f((cos(angle) * (radial + wobble)).toFloat(), (height + wobble).toFloat(),
+                    (sin(angle) * (radial + wobble)).toFloat()),
+                Vector3f(size.toFloat(), (size * (0.7 + (index % 2) * 0.12)).toFloat(), size.toFloat()),
+                Quaternionf().rotationXYZ((angle * 0.45).toFloat(), angle.toFloat(), (angle * 0.3).toFloat()),
+                identity = "gravity-pulse-stone-$index"))
+        }
+    }
+}
+
+private const val GRAVITY_PULSE_PARTICLE_COUNT = 12
+private const val GRAVITY_PULSE_LIFT_TICKS = 8
+private const val GRAVITY_PULSE_SHOCK_END_TICKS = 20
+private const val GRAVITY_PULSE_INWARD_FRACTION = 0.82
+private const val GRAVITY_PULSE_LIFT_HEIGHT = 2.1
+private const val GRAVITY_PULSE_SHOCK_START_FRACTION = 0.18

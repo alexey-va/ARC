@@ -31,6 +31,8 @@ import ru.arc.chestpreview.ChestPreviewSettings
 import ru.arc.iteminfo.ItemInfoMode
 import ru.arc.iteminfo.ItemInfoModule
 import ru.arc.iteminfo.ItemInfoPreferences
+import ru.arc.staffspells.api.StaffHudMode
+import ru.arc.staffspells.api.StaffHudPlacement
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
@@ -88,6 +90,7 @@ class HelpCenterLegacySettings(
         entry("scoreboard", "legacy-settings-scoreboard", if (scoreboardEnabled(player)) "on" else "off", "legacy-settings-scoreboard-tooltip"),
         entry("tablist", "legacy-settings-tablist", if (tablistEnabled(player)) "on" else "off", "legacy-settings-tablist-tooltip"),
         entry("item-info", "legacy-settings-item-info", ItemInfoMode.fromStored(backend.meta(player, ItemInfoMode.META_KEY)).id, "legacy-settings-item-info-tooltip"),
+        entry("staff-hud", "legacy-settings-staff-hud", staffHudMode(player).id(), "legacy-settings-staff-hud-tooltip"),
         entry(
             "container-preview", "legacy-settings-container-preview",
             if (containerPreviewSettings(player).enabled) "on" else "off",
@@ -111,6 +114,11 @@ class HelpCenterLegacySettings(
 
     fun itemInfoPreferences(player: Player): ItemInfoPreferences =
         ItemInfoPreferences.fromStored { key -> backend.meta(player, key) }
+
+    fun staffHudMode(player: Player): StaffHudMode = StaffHudMode.fromStored(backend.meta(player, StaffHudMode.META_KEY))
+
+    fun staffHudPlacement(player: Player): StaffHudPlacement =
+        StaffHudPlacement.fromStored(backend.meta(player, StaffHudPlacement.META_KEY))
 
     internal fun containerPreviewPreferences(player: Player): ChestPreviewPreferences =
         ChestPreviewPreferences.fromStored { key -> backend.meta(player, key) }
@@ -168,6 +176,11 @@ class HelpCenterLegacySettings(
         "item-info-hologram" -> backend.setMeta(player, ItemInfoMode.META_KEY, ItemInfoMode.HOLOGRAM.id)
         "item-info-bossbar" -> backend.setMeta(player, ItemInfoMode.META_KEY, ItemInfoMode.BOSSBAR.id)
         "item-info-off" -> backend.setMeta(player, ItemInfoMode.META_KEY, ItemInfoMode.OFF.id)
+        "staff-hud-mode-hologram" -> backend.setMeta(player, StaffHudMode.META_KEY, StaffHudMode.HOLOGRAM.id())
+        "staff-hud-mode-bossbar" -> backend.setMeta(player, StaffHudMode.META_KEY, StaffHudMode.BOSSBAR.id())
+        "staff-hud-mode-off" -> backend.setMeta(player, StaffHudMode.META_KEY, StaffHudMode.OFF.id())
+        "staff-hud-placement-top" -> backend.setMeta(player, StaffHudPlacement.META_KEY, StaffHudPlacement.TOP.id())
+        "staff-hud-placement-bottom" -> backend.setMeta(player, StaffHudPlacement.META_KEY, StaffHudPlacement.BOTTOM.id())
         "item-info-id-toggle" -> backend.setMeta(
             player,
             ItemInfoPreferences.SHOW_ID_META_KEY,

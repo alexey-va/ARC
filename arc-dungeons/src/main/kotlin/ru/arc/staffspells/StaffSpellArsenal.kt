@@ -50,6 +50,9 @@ internal class StaffSpellArsenal(
         var tideImpactAge: Int? = null,
         var tideImpactPoint: Location? = null,
         var tideBurstApplied: Boolean = false,
+        var travelPoint: Location? = null,
+        var galeImpactAge: Int? = null,
+        var galeImpactPoint: Location? = null,
     )
     private val tasks = LifecycleTaskScope()
     private val attacks = mutableListOf<Attack>()
@@ -69,14 +72,17 @@ internal class StaffSpellArsenal(
         val eye = player.eyeLocation
         val q = charge.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
         val forwardPath = spell == StaffSpell.GALE && input.secondary ||
-            spell in setOf(StaffSpell.OSSUARY, StaffSpell.TIDE) && !input.secondary
+            spell == StaffSpell.TIDE || spell == StaffSpell.OSSUARY && !input.secondary
         val range = minOf(settings.range, if (spell == StaffSpell.OSSUARY && !input.secondary) 24.0 else 36.0) *
             if (forwardPath) 1.0 else (.75 + q * .25)
         val casterCenteredRequiem = spell == StaffSpell.REQUIEM && input.secondary
         val selected = if (forwardPath || casterCenteredRequiem) null
             else targeting.aimed(player, range, settings.aimDegrees, cast).firstOrNull()
         if (!damage.isCurrent(player, cast)) return
-        val aimDirection = if (forwardPath || casterCenteredRequiem) eye.clone().apply { pitch = 0f }.direction else eye.direction
+        val initialDirection = if (forwardPath || casterCenteredRequiem)
+            eye.clone().apply { pitch = 0f }.direction else eye.direction
+        val aimDirection = if (forwardPath) targeting.assistedDirection(player, spell, cast,
+            direction = initialDirection, from = eye, range = range) else initialDirection
         val aimed = if (casterCenteredRequiem) player.location.clone()
             else selected?.let(::center) ?: targeting.rayEnd(eye, aimDirection, range)
         val point = targeting.groundBelow(aimed.clone().add(0.0, 2.0, 0.0), 12.0) ?: aimed.clone().subtract(0.0, 1.2, 0.0)
@@ -126,9 +132,18 @@ internal class StaffSpellArsenal(
         val attackOrigin = if (casterCenteredRequiem) attackPoint.clone() else groundOrigin
         while (attacks.count { it.casterId == player.uniqueId } >= 2) remove(attacks.first { it.casterId == player.uniqueId })
         while (attacks.size >= 24) remove(attacks.first())
+        val radius = when {
+            spell == StaffSpell.OSSUARY && input.secondary -> ossuarySecondaryRadius(q)
+            spell == StaffSpell.OSSUARY -> ossuaryPrimaryRadius(q)
+            spell == StaffSpell.TIDE && input.secondary -> staffTideWaveHalfWidth(q)
+            else -> 2.2 + q
+        }
         val a = Attack(player.uniqueId, spell, input, cast.copy(visualCharge = q), tuning,
-            attackOrigin, attackPoint, selected?.let(::center) ?: aimed, travelEnd, forward, nodes, 2.2 + q * 1.0,
-            staffArsenalLifetime(spell, input.secondary))
+            attackOrigin, attackPoint, selected?.let(::center) ?: aimed, travelEnd, forward, nodes, radius,
+            staffArsenalLifetime(spell, input.secondary)).apply {
+            if (spell == StaffSpell.GALE && input.secondary || spell == StaffSpell.TIDE && input.secondary)
+                travelPoint = groundOrigin.clone()
+        }
         attacks += a
         if (spell == StaffSpell.REQUIEM) a.requiemRayLimits = requiemRayLimits(a)
         sound(a, a.origin, false)
@@ -173,29 +188,20 @@ internal class StaffSpellArsenal(
         if (!current(a, player)) { remove(a); return }
         when (a.spell) {
             StaffSpell.TIDE -> if (a.input.secondary) {
-                val at = along(a, ((a.age - 4) / TIDE_WAVE_TRAVEL_TICKS).coerceIn(0.0, 1.0))
-                particles(a, at, a.age, a.duration, radius = 2.8 + a.cast.visualCharge * .7)
+                val step = groundStep(a, ((a.age - 4) / TIDE_WAVE_TRAVEL_TICKS).coerceIn(0.0, 1.0))
+                val at = step.to
+                a.travelPoint = at.clone()
+                val radius = staffTideWaveHalfWidth(a.cast.visualCharge)
+                particles(a, at, a.age, a.duration, radius = radius)
                 a.scenes.firstOrNull()?.let { id ->
                     effects.move(id, at)
                     effects.synchronize(id, a.age.coerceAtLeast(0))
                 }
                 if (a.age in 8..34) area(a, player, at.clone().add(0.0, 1.0, 0.0),
-                    2.5 + a.cast.visualCharge * .45, lift = .25)
+                    radius, lift = .25)
                 if (a.age == 34) sound(a, at, true)
             } else tideOrb(a, player)
-            StaffSpell.GALE -> if (a.input.secondary) {
-                val at = along(a, ((a.age - 4) / GALE_RAM_TRAVEL_TICKS).coerceIn(0.0, 1.0))
-                particles(a, at, a.age, a.duration, radius = 2.0 + a.cast.visualCharge * .35)
-                a.scenes.firstOrNull()?.let { id ->
-                    val sceneAt = at.clone().add(0.0, 1.1, 0.0)
-                    effects.move(id, sceneAt)
-                    effects.synchronize(id, a.age.coerceAtLeast(0))
-                }
-                if (a.age >= 6 && a.age <= 24) sweptContact(a, player,
-                    along(a, ((a.age - 2 - 4) / GALE_RAM_TRAVEL_TICKS).coerceIn(0.0, 1.0)).add(0.0, 1.1, 0.0),
-                    at.clone().add(0.0, 1.1, 0.0), width = 1.0, lift = .38)
-                if (a.age == 24) sound(a, at, true)
-            } else {
+            StaffSpell.GALE -> if (a.input.secondary) galeRam(a, player) else {
                 particles(a, a.point, a.age, a.duration, radius = a.radius)
                 if (a.age == 20) sound(a, a.point, true)
                 if (a.age in 20..28) area(a, player, a.point.clone().add(0.0, 1.1, 0.0),
@@ -203,8 +209,11 @@ internal class StaffSpellArsenal(
             }
             StaffSpell.LUNAR -> {
                 particles(a, a.point, a.age, a.duration, radius = a.radius)
-                if (a.age == 16) sound(a, a.point, true)
-                if (a.age in 16..24) area(a, player, a.point.clone().add(0.0, 1.3, 0.0), a.radius + .7)
+                if (a.age == LUNAR_SECONDARY_STRIKE_TICK) sound(a, a.point, true)
+                if (a.input.secondary && a.age in LUNAR_SECONDARY_STRIKE_TICK..LUNAR_SECONDARY_DAMAGE_END_TICK)
+                    area(a, player, a.point.clone().add(0.0, 1.3, 0.0), lunarSecondaryDamageRadius(a))
+                else if (!a.input.secondary && a.age in 16..24)
+                    area(a, player, a.point.clone().add(0.0, 1.3, 0.0), a.radius + .7)
             }
             StaffSpell.NOVA -> if (a.input.secondary) {
                 particles(a, a.point, a.age, a.duration, secondary = true, radius = a.radius)
@@ -313,24 +322,25 @@ internal class StaffSpellArsenal(
     private fun ossuarySpikes(a: Attack, player: Player) {
         a.nodes.forEachIndexed { index, at ->
             val localAge = a.age - OSSUARY_SPIKE_START_TICK - index * OSSUARY_SPIKE_STAGGER_TICKS
-            if (localAge >= 0 && a.born.add(index)) scene(a, at, OSSUARY_SPIKE_SCENE_TICKS)
+            val radius = ossuaryPrimaryRadius(a.cast.visualCharge)
+            if (localAge >= 0 && a.born.add(index)) scene(a, at, OSSUARY_SPIKE_SCENE_TICKS, radius = radius)
             if (localAge in 0 until OSSUARY_SPIKE_SCENE_TICKS) particles(a, at, localAge,
-                OSSUARY_SPIKE_SCENE_TICKS, secondary = false, radius = 1.0 + a.cast.visualCharge * .2)
+                OSSUARY_SPIKE_SCENE_TICKS, secondary = false, radius = radius)
             if (localAge == OSSUARY_SPIKE_CONTACT_TICK) sound(a, at, true)
             if (localAge in OSSUARY_SPIKE_CONTACT_TICK..(OSSUARY_SPIKE_CONTACT_TICK + 2)) {
                 // Center the query over the target's body, but keep it low enough that
                 // World#getNearbyLivingEntities includes entities whose location is at their feet.
-                area(a, player, at.clone().add(0.0, .8, 0.0), 1.2 + a.cast.visualCharge * .2)
+                area(a, player, at.clone().add(0.0, .8, 0.0), radius)
             }
         }
     }
 
     private fun ossuaryStrike(a: Attack, player: Player) {
-        particles(a, a.point, a.age, a.duration, secondary = true, radius = 2.1 + a.cast.visualCharge * .4)
+        val radius = ossuarySecondaryRadius(a.cast.visualCharge)
+        particles(a, a.point, a.age, a.duration, secondary = true, radius = radius)
         if (a.age == OSSUARY_SECONDARY_STRIKE_TICK) sound(a, a.point, true)
         if (a.age in OSSUARY_SECONDARY_STRIKE_TICK..(OSSUARY_SECONDARY_STRIKE_TICK + 2)) {
-            area(a, player, a.point.clone().add(0.0, 1.2, 0.0),
-                1.9 + a.cast.visualCharge * .35)
+            area(a, player, a.point.clone().add(0.0, 1.2, 0.0), radius)
         }
     }
 
@@ -430,10 +440,102 @@ internal class StaffSpellArsenal(
         return a.origin.clone().add(delta.multiply(eased))
     }
 
+    private data class GroundPathStep(val from: Location, val to: Location, val blocked: Boolean)
+
+    /** Samples the floor at each moved frame and clips the current step before intervening blocks. */
+    private fun groundStep(a: Attack, progress: Double): GroundPathStep {
+        val from = a.travelPoint?.clone() ?: a.origin.clone()
+        val requested = along(a, progress)
+        val floor = targeting.groundBelow(requested.clone().add(0.0, 2.0, 0.0), 12.0)
+            ?: return GroundPathStep(from, from, blocked = true)
+        val rayFrom = from.clone().add(0.0, .12, 0.0)
+        val rayTo = floor.clone().add(0.0, .12, 0.0)
+        val delta = rayTo.toVector().subtract(rayFrom.toVector())
+        val distance = delta.length()
+        if (!distance.isFinite()) return GroundPathStep(from, from, blocked = true)
+        if (distance < .001) return GroundPathStep(from, floor, blocked = false)
+        val ray = staffBlockHit(rayFrom, delta, distance)
+        if (!ray.pathLoaded) return GroundPathStep(from, from, blocked = true)
+        val hit = ray.hit ?: return GroundPathStep(from, floor, blocked = false)
+        val safeDistance = (hit.hitPosition.distance(rayFrom.toVector()) - .04).coerceAtLeast(0.0)
+        val fraction = (safeDistance / distance).coerceIn(0.0, 1.0)
+        val clipped = from.clone().add(floor.toVector().subtract(from.toVector()).multiply(fraction))
+        val clippedFloor = targeting.groundBelow(clipped.clone().add(0.0, 2.0, 0.0), 12.0) ?: clipped
+        return GroundPathStep(from, clippedFloor, blocked = true)
+    }
+
+    private fun galeRam(a: Attack, player: Player) {
+        val impactAge = a.galeImpactAge
+        if (impactAge != null) {
+            galeRamRelease(a, player, a.galeImpactPoint ?: a.travelPoint ?: a.origin,
+                a.age - impactAge)
+            return
+        }
+
+        val progress = ((a.age - 4) / GALE_RAM_TRAVEL_TICKS).coerceIn(0.0, 1.0)
+        val step = groundStep(a, progress)
+        val at = step.to
+        a.travelPoint = at.clone()
+        val burstRadius = galeRamBurstRadius(a)
+        particles(a, at, a.age, a.duration, radius = burstRadius)
+        a.scenes.firstOrNull()?.let { id ->
+            val sceneAt = at.clone().add(0.0, 1.1, 0.0)
+            effects.move(id, sceneAt)
+            effects.synchronize(id, a.age.coerceAtLeast(0))
+        }
+
+        if (a.age >= 6 && progress > 0.0) {
+            val fromBody = step.from.clone().add(0.0, 1.1, 0.0)
+            val toBody = at.clone().add(0.0, 1.1, 0.0)
+            val target = targeting.lineTargets(player, fromBody, toBody, GALE_RAM_HIT_WIDTH, a.cast).firstOrNull()
+            if (target != null) {
+                val contact = groundContact(fromBody, toBody, target, GALE_RAM_HIT_WIDTH, a.cast) ?: at
+                if (hit(a, player, target, fromBody))
+                    target.velocity = target.velocity.apply { y = maxOf(y, .38) }
+                if (!current(a, player)) { remove(a); return }
+                beginGaleRamRelease(a, player, contact)
+                return
+            }
+        }
+        if (step.blocked || progress >= 1.0) beginGaleRamRelease(a, player, at)
+    }
+
+    private fun groundContact(from: Location, to: Location, target: LivingEntity,
+        width: Double, cast: StaffSpellCast): Location? {
+        val delta = to.toVector().subtract(from.toVector())
+        val distance = delta.length()
+        if (!distance.isFinite() || distance < .001) return null
+        val direction = delta.multiply(1.0 / distance)
+        val hit = target.boundingBox.expand(width * cast.enchantments.radiusMultiplier)
+            .rayTrace(from.toVector(), direction, distance)?.hitPosition ?: return null
+        return targeting.groundBelow(hit.toLocation(from.world).add(0.0, 2.0, 0.0), 12.0)
+    }
+
+    private fun beginGaleRamRelease(a: Attack, player: Player, at: Location) {
+        if (a.galeImpactAge != null) return
+        a.galeImpactAge = a.age
+        a.galeImpactPoint = at.clone()
+        a.duration = minOf(a.duration, a.age + GALE_RAM_RELEASE_TICKS)
+        a.scenes.firstOrNull()?.let { id ->
+            effects.impact(id, at, galeRamBurstRadius(a), GALE_RAM_RELEASE_TICKS)
+        }
+        sound(a, at, true)
+        galeRamRelease(a, player, at, stageAge = 0)
+    }
+
+    private fun galeRamRelease(a: Attack, player: Player, at: Location, stageAge: Int) {
+        particles(a, at, stageAge.coerceAtLeast(0), GALE_RAM_RELEASE_TICKS,
+            secondary = true, radius = galeRamBurstRadius(a), impact = true)
+        if (stageAge in 0..GALE_RAM_DAMAGE_TICKS) {
+            val impactRadius = galeRamBurstRadius(a) * smooth(stageAge / 3.0)
+            if (impactRadius > .05) area(a, player, at.clone().add(0.0, .8, 0.0), impactRadius)
+        }
+    }
+
     private fun scene(a: Attack, at: Location, duration: Int, to: Location = at.clone().add(a.forward),
-        controllerDriven: Boolean = false): UUID? {
+        controllerDriven: Boolean = false, radius: Double = a.radius): UUID? {
         val id = effects.play(a.casterId, a.spell, at, to,
-            radius = a.radius, durationTicks = duration, secondary = a.input.secondary,
+            radius = radius, durationTicks = duration, secondary = a.input.secondary,
             input = a.input, controllerDriven = controllerDriven, charge = a.cast.visualCharge)
         a.scenes += id
         return id
@@ -503,6 +605,10 @@ internal class StaffSpellArsenal(
         val SPELLS = setOf(StaffSpell.LUNAR, StaffSpell.GALE, StaffSpell.TIDE, StaffSpell.REQUIEM,
             StaffSpell.PRISM, StaffSpell.NOVA, StaffSpell.OSSUARY)
         private const val GALE_RAM_TRAVEL_TICKS = 20.0
+        private const val GALE_RAM_RELEASE_TICKS = 12
+        private const val GALE_RAM_DAMAGE_TICKS = 4
+        private const val GALE_RAM_HIT_WIDTH = 1.0
+        private const val GALE_RAM_BURST_RADIUS = 2.3
         private const val TIDE_ORB_HIT_WIDTH = .68
         private const val TIDE_WAVE_TRAVEL_TICKS = 30.0
         private const val NOVA_ROOT_TRAVEL_TICKS = 30
@@ -511,7 +617,15 @@ internal class StaffSpellArsenal(
         private const val OSSUARY_SPIKE_STAGGER_TICKS = 2
         private const val OSSUARY_SPIKE_SCENE_TICKS = 22
         private const val OSSUARY_SPIKE_CONTACT_TICK = 6
+        private const val LUNAR_SECONDARY_STRIKE_TICK = 16
+        private const val LUNAR_SECONDARY_DAMAGE_END_TICK = 24
+        private const val LUNAR_SECONDARY_RADIUS_BONUS = .7
         private const val MIN_GROUND_PATH_LENGTH = 0.75
+
+        private fun ossuaryPrimaryRadius(charge: Double) = 2.75 + charge.coerceIn(0.0, 1.0) * .25
+        private fun ossuarySecondaryRadius(charge: Double) = 5.5 + charge.coerceIn(0.0, 1.0) * .5
+        private fun galeRamBurstRadius(a: Attack) = GALE_RAM_BURST_RADIUS + a.cast.visualCharge * .45
+        private fun lunarSecondaryDamageRadius(a: Attack) = a.radius + LUNAR_SECONDARY_RADIUS_BONUS
     }
 }
 

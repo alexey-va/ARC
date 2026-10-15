@@ -10,10 +10,13 @@ import ru.arc.iteminfo.ItemInfoMode
 import ru.arc.iteminfo.ItemInfoPreferences
 import ru.arc.sidebar.SIDEBAR_SKILLS_META_KEY
 import ru.arc.sidebar.SidebarSection
+import ru.arc.staffspells.api.StaffHudMode
+import ru.arc.staffspells.api.StaffHudPlacement
 import ru.arc.tablist.TABLIST_SKILLS_META_KEY
 import ru.arc.tablist.TablistCapacity
 import ru.arc.tablist.TablistSection
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.bukkit.entity.Player
@@ -211,6 +214,33 @@ class HelpCenterLegacySettingsTest {
         assertTrue(ItemInfoMode.META_KEY in backend.metadata)
         assertTrue(ItemInfoPreferences.SHOW_ID_META_KEY in backend.metadata)
         assertTrue(ItemInfoPreferences.LAYOUT_META_KEY in backend.metadata)
+    }
+
+    @Test
+    fun `staff HUD mode and hologram placement default safely and persist in player metadata`() {
+        val player = mockPlayer()
+        val backend = FakeBackend()
+        val settings = HelpCenterLegacySettings(backend)
+
+        assertEquals(StaffHudMode.HOLOGRAM, settings.staffHudMode(player))
+        assertEquals(StaffHudPlacement.BOTTOM, settings.staffHudPlacement(player))
+        assertEquals("hologram", settings.entries(player).first { it.id == "staff-hud" }.state)
+
+        assertTrue(settings.execute(player, "staff-hud-mode-bossbar").join())
+        assertTrue(settings.execute(player, "staff-hud-placement-top").join())
+        val reopened = HelpCenterLegacySettings(backend)
+        assertEquals(StaffHudMode.BOSSBAR, reopened.staffHudMode(player))
+        assertEquals(StaffHudPlacement.TOP, reopened.staffHudPlacement(player))
+        assertEquals("bossbar", reopened.entries(player).first { it.id == "staff-hud" }.state)
+        assertEquals("bossbar", backend.metadata[StaffHudMode.META_KEY])
+        assertEquals("top", backend.metadata[StaffHudPlacement.META_KEY])
+
+        backend.metadata[StaffHudMode.META_KEY] = "invalid"
+        backend.metadata[StaffHudPlacement.META_KEY] = "invalid"
+        assertEquals(StaffHudMode.HOLOGRAM, reopened.staffHudMode(player))
+        assertEquals(StaffHudPlacement.BOTTOM, reopened.staffHudPlacement(player))
+        assertFalse(reopened.execute(player, "staff-hud-mode-unknown").join())
+        assertFalse(reopened.execute(player, "staff-hud-placement-middle").join())
     }
 
     @Test

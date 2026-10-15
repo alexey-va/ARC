@@ -53,7 +53,9 @@ internal class StaffSpellMelee(
         if (closed || !ready(player) || !damage.isCurrent(player, cast)) return false
         cancel(player.uniqueId)
         val eye = player.eyeLocation.clone()
-        val forward = horizontalDirection(eye.direction, eye.yaw) ?: return false
+        val assistedAim = targeting.assistedDirection(player, spell, cast,
+            direction = eye.direction, from = eye, range = range)
+        val forward = horizontalDirection(assistedAim, eye.yaw) ?: return false
         val origin = eye.clone().subtract(0.0, 0.25, 0.0)
         val scene = effects.melee(player.uniqueId, spell, origin,
             origin.clone().add(forward.clone().multiply(range)), STAFF_FRONTAL_DURATION_TICKS)

@@ -11,6 +11,7 @@ import org.bukkit.Particle
 import org.bukkit.Sound
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Player
+import org.bukkit.event.entity.EntityDamageEvent
 import org.bukkit.util.Vector
 import ru.arc.paper.testing.MockBukkitTestRuntime
 import java.util.UUID
@@ -220,6 +221,161 @@ class StaffSpellChannelsTest : FreeSpec({
                     part.material in setOf(Material.STONE, Material.COBBLESTONE, Material.ANDESITE)
             } shouldBe true
             staffChannelParts(StaffSpell.INFERNO, 0, 60, 1.0, 1.0, impact = false) shouldBe emptyList()
+        }
+    }
+
+    "gravity secondary lifts then slams eligible targets only on ground contact" {
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("channel-gravity-pulse-contact")
+            val player = h.player("gravity-pulse", world, StaffSpell.GRAVITY)
+            val target = h.zombie(world, x = 0.5, z = 4.5)
+            for (x in -1..1) for (z in -1..8) world.getBlockAt(x, 63, z).type = Material.STONE
+
+            val hits = mutableListOf<Pair<UUID, Double>>()
+            val (damage, visuals) = channelDependencies(hits)
+            val settings = staffSettings(maxAreaTargets = 3)
+            val channels = StaffSpellChannels(settings, damage, h.effects, visuals, StaffSpellTargeting(settings, damage))
+            channels.start()
+            val cast = StaffSpellCast(player.uniqueId, UUID.randomUUID(), 1, null, null, false)
+            val tuning = StaffSpellTuning(1.2, 10.0, 44)
+
+            channels.gravityPulse(player, cast, tuning) shouldBe true
+            h.visualPlays.single().let { scene ->
+                scene.spell shouldBe StaffSpell.GRAVITY
+                scene.secondary shouldBe true
+                scene.impact shouldBe false
+            }
+            target.velocity.y shouldBe 0.9
+            hits shouldBe emptyList()
+
+            // The fixture leaves entity physics to the server; move the target through the observed lift/contact states.
+            target.teleport(target.location.clone().add(0.0, 1.0, 0.0))
+            h.scheduler.tick(8)
+            target.velocity.y shouldBe -0.9
+            hits shouldBe emptyList()
+
+            target.teleport(Location(world, target.location.x, 64.0, target.location.z))
+            target.velocity = Vector(0.0, -0.9, 0.0)
+            h.scheduler.tick(2)
+            hits.map { it.first } shouldBe listOf(target.uniqueId)
+            verify(exactly = 1) { damage.hit(player, target, cast, tuning.power, tuning.vanillaDamage) }
+            target.fallDistance shouldBe 0.0f
+            h.scheduler.tick(6)
+            hits.count { it.first == target.uniqueId } shouldBe 1
+            channels.close()
+        }
+    }
+
+    "gravity pulse respects cover and radius and cancellation removes its scene" {
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("channel-gravity-pulse-bounds")
+            val player = h.player("gravity-pulse-bounds", world, StaffSpell.GRAVITY)
+            val covered = h.zombie(world, x = 0.5, z = 5.5)
+            val outside = h.zombie(world, x = 0.5, z = 7.5)
+            for (x in -1..1) for (z in -1..8) world.getBlockAt(x, 63, z).type = Material.STONE
+            for (y in 64..66) world.getBlockAt(0, y, 3).type = Material.STONE
+
+            val hits = mutableListOf<Pair<UUID, Double>>()
+            val (damage, visuals) = channelDependencies(hits)
+            val settings = staffSettings(maxAreaTargets = 4)
+            val channels = StaffSpellChannels(settings, damage, h.effects, visuals, StaffSpellTargeting(settings, damage))
+            channels.start()
+            val cast = StaffSpellCast(player.uniqueId, UUID.randomUUID(), 1, null, null, false)
+            val scene = h.visualPlays
+            channels.gravityPulse(player, cast, StaffSpellTuning(1.0, 8.0, 44)) shouldBe true
+
+            covered.velocity.lengthSquared() shouldBe 0.0
+            outside.velocity.lengthSquared() shouldBe 0.0
+            scene.single().secondary shouldBe true
+            channels.cancel(player.uniqueId)
+            h.scheduler.tick(8)
+            hits shouldBe emptyList()
+            h.removedEffects shouldBe listOf(scene.single().id)
+            channels.close()
+        }
+    }
+
+    "gravity pulse suppresses only its target's first fall event across cancellation between timer ticks" {
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("channel-gravity-pulse-fall-guard")
+            val player = h.player("gravity-pulse-fall-guard", world, StaffSpell.GRAVITY)
+            val target = h.zombie(world, x = 0.5, z = 4.5)
+            for (x in -1..1) for (z in -1..8) world.getBlockAt(x, 63, z).type = Material.STONE
+
+            val hits = mutableListOf<Pair<UUID, Double>>()
+            val (damage, visuals) = channelDependencies(hits)
+            val settings = staffSettings(maxAreaTargets = 2)
+            val channels = StaffSpellChannels(settings, damage, h.effects, visuals, StaffSpellTargeting(settings, damage))
+            channels.start()
+            val cast = StaffSpellCast(player.uniqueId, UUID.randomUUID(), 1, null, null, false)
+            channels.gravityPulse(player, cast, StaffSpellTuning(1.0, 8.0, 44)) shouldBe true
+
+            // The timer runs every two ticks, so this event lands between channel updates.
+            h.scheduler.tick(1)
+            channels.cancel(player.uniqueId)
+            h.removedEffects.size shouldBe 1
+
+            val unrelatedDamage = EntityDamageEvent(target, EntityDamageEvent.DamageCause.ENTITY_ATTACK, 4.0)
+            channels.suppressPulseFallDamage(unrelatedDamage) shouldBe false
+            unrelatedDamage.isCancelled shouldBe false
+
+            val pulseLanding = EntityDamageEvent(target, EntityDamageEvent.DamageCause.FALL, 6.0)
+            channels.suppressPulseFallDamage(pulseLanding) shouldBe true
+            pulseLanding.isCancelled shouldBe true
+            target.fallDistance shouldBe 0.0f
+
+            val laterFall = EntityDamageEvent(target, EntityDamageEvent.DamageCause.FALL, 6.0)
+            channels.suppressPulseFallDamage(laterFall) shouldBe false
+            laterFall.isCancelled shouldBe false
+            channels.close()
+        }
+    }
+
+    "gravity pulse fall protection expires after sixty ticks without a landing event" {
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("channel-gravity-pulse-fall-expiry")
+            val player = h.player("gravity-pulse-fall-expiry", world, StaffSpell.GRAVITY)
+            val target = h.zombie(world, x = 0.5, z = 4.5)
+            for (x in -1..1) for (z in -1..8) world.getBlockAt(x, 63, z).type = Material.STONE
+
+            val hits = mutableListOf<Pair<UUID, Double>>()
+            val (damage, visuals) = channelDependencies(hits)
+            val settings = staffSettings(maxAreaTargets = 2)
+            val channels = StaffSpellChannels(settings, damage, h.effects, visuals, StaffSpellTargeting(settings, damage))
+            channels.start()
+            val cast = StaffSpellCast(player.uniqueId, UUID.randomUUID(), 1, null, null, false)
+            channels.gravityPulse(player, cast, StaffSpellTuning(1.0, 8.0, 44)) shouldBe true
+
+            h.scheduler.tick(60)
+            val lateFall = EntityDamageEvent(target, EntityDamageEvent.DamageCause.FALL, 6.0)
+            channels.suppressPulseFallDamage(lateFall) shouldBe false
+            lateFall.isCancelled shouldBe false
+            channels.close()
+        }
+    }
+
+    "gravity pulse particles and display fragments trace a distinct inward lift and ground shock" {
+        MockBukkitTestRuntime.open().use {
+            val lift = staffChannelParts(StaffSpell.GRAVITY, 6, 36, 0.1, 6.5, impact = false, secondary = true)
+            val shock = staffChannelParts(StaffSpell.GRAVITY, 16, 36, 0.1, 6.5, impact = false, secondary = true)
+            val held = staffChannelParts(StaffSpell.GRAVITY, 6, 60, 1.0, 1.0, impact = false)
+            val liftFrame = staffGravityPulseFrame(4, 6.5)
+            val shockFrame = staffGravityPulseFrame(16, 6.5)
+
+            lift.size shouldBe 12
+            lift.map { it.identity } shouldBe shock.map { it.identity }
+            lift.map { it.identity }.toSet().intersect(held.mapNotNull { it.identity }.toSet()).isEmpty() shouldBe true
+            (lift.maxOf { it.center.y } in 1.5f..1.9f) shouldBe true
+            (shock.maxOf { it.center.x * it.center.x + it.center.z * it.center.z } >
+                lift.maxOf { it.center.x * it.center.x + it.center.z * it.center.z }) shouldBe true
+            liftFrame.size shouldBe 24
+            shockFrame.isNotEmpty() shouldBe true
+            staffGravityPulseFrame(22, 6.5) shouldBe emptyList()
+            staffGravityPulseContactFrame().sumOf { it.count } shouldBe 18
+            (lift + shock).all { part ->
+                part.identity != null && part.scale.x > 0f && part.scale.y > 0f && part.scale.z > 0f &&
+                listOf(part.center.x, part.center.y, part.center.z).all { it.isFinite() }
+            } shouldBe true
         }
     }
 })

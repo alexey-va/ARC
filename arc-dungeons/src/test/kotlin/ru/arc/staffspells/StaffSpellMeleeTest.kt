@@ -1,6 +1,7 @@
 package ru.arc.staffspells
 
 import io.kotest.core.spec.style.FreeSpec
+import io.kotest.assertions.withClue
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
@@ -185,6 +186,53 @@ class StaffSpellMeleeTest : FreeSpec({
                 melee.cancel(player.uniqueId)
                 h.scheduler.tick(2)
                 hits shouldBe emptyList()
+            } finally {
+                melee.close()
+            }
+        }
+    }
+
+    "a melee frontal scene takes the bounded horizontal launch nudge" {
+        val settings = staffSettings().copy(aimAssist = StaffAimAssistSettings(
+            enabled = true, halfAngleDegrees = 6.0, maxMiss = 2.0, strength = .35))
+        withStaffHarness(settings = settings) { h ->
+            val world = h.paper.addSimpleWorld("staff-frontal-aim-assist")
+            val player = h.player("staff-frontal-aim-assist", world, StaffSpell.FAULT)
+            // Keep the target outside the direct .05-block line width, but inside six degrees
+            // after accounting for the vertical difference between eye and mob centers.
+            player.teleport(player.location.apply { pitch = 4f })
+            val target = h.zombie(world, x = 0.98, z = 6.5)
+            var sceneEnd: Location? = null
+            every { h.effects.melee(any(), any(), any(), any(), any()) } answers {
+                sceneEnd = arg<Location>(3).clone()
+                UUID.randomUUID()
+            }
+            val damage = meleeDamage(mutableListOf())
+            // Production eligibility excludes the caster; this fixture's broad mock must do so too,
+            // or the ray starts inside the player's own bounding box and its self-hit masks the nudge.
+            every { damage.eligible(player, player, any()) } returns false
+            val targeting = StaffSpellTargeting(settings, damage)
+            val melee = StaffSpellMelee(settings, damage, h.effects,
+                mockk(relaxed = true), targeting)
+            try {
+                val cast = meleeCast(player)
+                melee.cast(player, cast, StaffSpell.FAULT,
+                    StaffSpellTuning(1.0, 6.0, 32)) shouldBe true
+                val eye = player.eyeLocation.clone()
+                val look = eye.direction
+                val directTargets = targeting.lineTargets(player, eye,
+                    eye.clone().add(look.clone().multiply(7.0)), 0.05, cast)
+                val assistedDirection = targeting.assistedDirection(player, StaffSpell.FAULT, cast,
+                    direction = look, from = eye, range = 7.0)
+                val origin = player.eyeLocation.clone().subtract(0.0, .25, 0.0)
+                val endpoint = requireNotNull(sceneEnd)
+                withClue("target=${target.location} center=${center(target)} direct=${target in directTargets} " +
+                    "look=$look assisted=$assistedDirection origin=$origin endpoint=$endpoint " +
+                    "horizontalDelta=${endpoint.x - origin.x}") {
+                    (endpoint.x - origin.x > .05) shouldBe true
+                }
+                (endpoint.z - origin.z > 6.9) shouldBe true
+                (kotlin.math.abs(endpoint.y - origin.y) < .001) shouldBe true
             } finally {
                 melee.close()
             }

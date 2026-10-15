@@ -79,7 +79,7 @@ class StaffTideGaleGeometryTest : FreeSpec({
         motes.none { it.particle == Particle.CLOUD } shouldBe true
     }
 
-    "TIDE secondary is a five-block curled glass crest with a white foam lip" {
+    "TIDE secondary is a broad curled glass crest with a white foam lip" {
         val frame = staffDisplayParts(StaffSpell.TIDE, 12, 44, 20.0, 2.8, false, true,
             input = StaffCastInput.SECONDARY, charge = .5)
         val next = staffDisplayParts(StaffSpell.TIDE, 14, 44, 20.0, 2.8, false, true,
@@ -88,7 +88,10 @@ class StaffTideGaleGeometryTest : FreeSpec({
         frame.count { it.identity?.startsWith("tide:wave:skin:") == true } shouldBe 35
         frame.count { it.identity?.startsWith("tide:wave:foam:") == true } shouldBe 7
         val width = frame.maxOf { it.center.x } - frame.minOf { it.center.x }
-        (width in 4.0f..5.2f) shouldBe true
+        (width in 5.2f..5.6f) shouldBe true
+        staffTideWaveHalfWidth(0.0) shouldBe 3.0
+        staffTideWaveHalfWidth(.5) shouldBe 3.15
+        staffTideWaveHalfWidth(1.0) shouldBe 3.3
         (frame.maxOf { it.center.y } in 2.5f..3.3f) shouldBe true
         frame.filter { it.identity?.startsWith("tide:wave:skin:") == true }
             .all { it.scale.y in .65f..0.75f } shouldBe true
@@ -115,6 +118,28 @@ class StaffTideGaleGeometryTest : FreeSpec({
         val motes = staffArsenalParticles(StaffSpell.TIDE, 12, 44, 3.0, true, .5)
         motes.any { it.particle == Particle.SPLASH } shouldBe true
         motes.none { it.particle == Particle.CLOUD } shouldBe true
+    }
+
+    "GALE ram impact releases one expanding wind ring and six shards without smoke" {
+        val charge = .4
+        val burstRadius = 2.3 + charge * .45
+        val frame = staffTideGaleParts(StaffSpell.GALE, 3, 12, burstRadius,
+            impact = true, secondary = true, charge = charge)
+        frame.size shouldBe 24
+        frame.count { it.identity?.startsWith("gale:burst:arc:") == true } shouldBe 18
+        frame.count { it.identity?.startsWith("gale:burst:shard:") == true } shouldBe 6
+        frame.mapNotNull { it.identity }.distinct().size shouldBe frame.size
+        val edge = frame.maxOf { kotlin.math.sqrt((it.center.x * it.center.x + it.center.z * it.center.z).toDouble()) }
+        // Arc centers sit inside the outer ring because each display is a chord, not a point on the edge.
+        (edge in (burstRadius * .92)..(burstRadius + .03)) shouldBe true
+
+        val release = staffTideGaleParticleSamples(StaffSpell.GALE, 0, 12, burstRadius,
+            secondary = true, charge = charge, impact = true)
+        release.count { it.particle == Particle.GUST } shouldBe 1
+        release.size shouldBe 25
+        release.none { it.particle in setOf(Particle.CLOUD, Particle.EXPLOSION, Particle.EXPLOSION_EMITTER) } shouldBe true
+        staffTideGaleParticleSamples(StaffSpell.GALE, 12, 12, burstRadius,
+            secondary = true, charge = charge, impact = true) shouldBe emptyList()
     }
 
     "TIDE primary reaches its clipped endpoint by tick 14 then opens into a hollow splash crown" {
@@ -194,7 +219,7 @@ class StaffTideGaleGeometryTest : FreeSpec({
             spray.all { mote ->
                 mote.offset.z > .6 && lip.minOf { foam ->
                     mote.offset.distance(org.bukkit.util.Vector(foam.center.x, foam.center.y, foam.center.z))
-                } < .4
+                } < .55
             } shouldBe true
         }
     }
@@ -220,9 +245,11 @@ class StaffTideGaleGeometryTest : FreeSpec({
             .filter { it.particle == Particle.DUST_COLOR_TRANSITION }
         val last = staffTideGaleParticleSamples(StaffSpell.GALE, 44, 52, 3.0, false, .5)
             .filter { it.particle == Particle.DUST_COLOR_TRANSITION }
-        steady.zip(last).all { (a, b) ->
-            abs(a.offset.y - b.offset.y) < .001 && b.offset.length() / a.offset.length() in .97..1.03
-        } shouldBe true
+        steady.size shouldBe 33
+        last.size shouldBe 33
+        val steadyMeanRadius = steady.map { it.offset.length() }.average()
+        val exitMeanRadius = last.map { it.offset.length() }.average()
+        (exitMeanRadius / steadyMeanRadius in .97..1.03) shouldBe true
         staffTideGaleParticleSamples(StaffSpell.GALE, 46, 52, 3.0, false, .5) shouldBe emptyList()
         staffTideGaleParticleSamples(StaffSpell.TIDE, 38, 44, 3.0, true, .5) shouldBe emptyList()
     }

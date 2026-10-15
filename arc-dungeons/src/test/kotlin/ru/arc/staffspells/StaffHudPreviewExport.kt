@@ -30,22 +30,22 @@ object StaffHudPreviewExport {
         val config = StaffSpellConfig(StaffTestConfig(configValues(defaults)))
         val states = listOf(
             state("instant-ready", "ready", StaffSpell.LANCE, false,
-                config.staffHudReady(StaffSpell.LANCE, secondary = false), defaults, "ready-instant"),
+                config.staffHudReady(StaffSpell.LANCE, secondary = false), config, defaults, "ready-instant"),
             state("charge-ready", "ready", StaffSpell.EMBER, false,
-                config.staffHudReady(StaffSpell.EMBER, secondary = false), defaults, "ready-charge"),
+                config.staffHudReady(StaffSpell.EMBER, secondary = false), config, defaults, "ready-charge"),
             state("charging", "charging", StaffSpell.EMBER, false,
                 config.staffHudCharging(StaffSpell.EMBER, secondary = false, 0.55,
-                    staffSpellHudBar(0.55)), defaults, "charging"),
-            state("gravity-channel", "channel", StaffSpell.GRAVITY, true,
-                config.staffHudChannel(StaffSpell.GRAVITY, secondary = true), defaults, "channel"),
+                    staffSpellHudBar(0.55)), config, defaults, "charging"),
+            state("gravity-channel", "channel", StaffSpell.GRAVITY, false,
+                config.staffHudChannel(StaffSpell.GRAVITY, secondary = false), config, defaults, "channel"),
             state("cooldown", "cooldown", StaffSpell.FROST, true,
                 config.staffHudCooldown(StaffSpell.FROST, secondary = true, remainingTicks = 18,
-                    bar = staffSpellHudBar(staffCooldownProgress(18, 40).toDouble())), defaults, "cooldown"),
+                    bar = staffSpellHudBar(staffCooldownProgress(18, 40).toDouble())), config, defaults, "cooldown"),
         )
         val visual = staffSpellHudVisualSpec()
-        val basePose = staffSpellHudPose()
+        val basePose = staffSpellHudPose(config.hudPosition)
         val nearWallDistance = staffHudSafeDistance(basePose.distance, obstructionDistance = 1.6)
-        val nearWallPose = staffSpellHudPose(nearWallDistance)
+        val nearWallPose = staffSpellHudPose(nearWallDistance, config.hudPosition)
         val document = mapOf(
             "schema" to 1,
             "source" to mapOf(
@@ -86,6 +86,7 @@ object StaffHudPreviewExport {
         spell: StaffSpell,
         secondary: Boolean,
         component: Component,
+        config: StaffSpellConfig,
         defaults: YamlConfiguration,
         templateKey: String,
     ): State {
@@ -95,7 +96,7 @@ object StaffHudPreviewExport {
             phase = phase,
             spellId = spell.id,
             ability = plain.lineSequence().firstOrNull().orEmpty(),
-            input = if (secondary) "Shift + ЛКМ" else "ЛКМ",
+            input = config.inputLabel(spell, StaffCastInput.of(secondary, quick = false)),
             miniMessageTemplate = requireNotNull(defaults.getString("messages.staff-hud.$templateKey")),
             plainText = plain,
             lines = plain.lines(),
@@ -112,7 +113,7 @@ object StaffHudPreviewExport {
         )),
     )
 
-    private fun configValues(defaults: YamlConfiguration): Map<String, String> = buildMap {
+    private fun configValues(defaults: YamlConfiguration): Map<String, Any> = buildMap {
         listOf(
             "lance.name",
             "ember.name", "ember.secondary-name",
@@ -124,6 +125,17 @@ object StaffHudPreviewExport {
                 val sourceKey = "messages.staff-hud.$key"
                 put(sourceKey, requireNotNull(defaults.getString(sourceKey)) { "Missing HUD text: $sourceKey" })
             }
+        listOf("left-click", "right-click", "shift-left-click", "shift-right-click").forEach { key ->
+            val sourceKey = "messages.controls.$key"
+            put(sourceKey, requireNotNull(defaults.getString(sourceKey)) { "Missing control label: $sourceKey" })
+        }
+        listOf(
+            "hud.position.forward-blocks", "hud.position.vertical-blocks",
+            "hud.position.horizontal-blocks", "hud.position.scale",
+        ).forEach { key ->
+            require(defaults.contains(key)) { "Missing HUD position setting: $key" }
+            put(key, defaults.getDouble(key))
+        }
     }
 
     private fun loadDefaults(): YamlConfiguration {

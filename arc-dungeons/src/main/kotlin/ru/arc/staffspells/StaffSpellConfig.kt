@@ -2,7 +2,9 @@ package ru.arc.staffspells
 
 import dev.lone.itemsadder.api.CustomStack
 import io.papermc.paper.datacomponent.DataComponentTypes
+import io.papermc.paper.datacomponent.item.Consumable
 import io.papermc.paper.datacomponent.item.CustomModelData
+import io.papermc.paper.datacomponent.item.consumable.ItemUseAnimation
 import net.kyori.adventure.key.Key
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import net.kyori.adventure.text.Component
@@ -51,7 +53,34 @@ internal enum class StaffCastInput(val secondary: Boolean, val quick: Boolean) {
     }
 }
 
+private const val STAFF_NATIVE_USE_SECONDS = 3_600f
+private const val STAFF_PROTOTYPE_LORE_LINES = 10
+
+/** Long native use opens the vanilla stop-using packet; consumption itself is always suppressed. */
+internal fun ensureStaffChargeUseComponent(item: ItemStack, spell: StaffSpell): Boolean {
+    if (spell !in STAFF_CHARGED_PRIMARY_SPELLS) return false
+    val current = item.getData(DataComponentTypes.CONSUMABLE)
+    if (current != null && current.consumeSeconds() >= STAFF_NATIVE_USE_SECONDS &&
+        current.animation() == ItemUseAnimation.NONE && !current.hasConsumeParticles() &&
+        current.consumeEffects().isEmpty()) return false
+    item.setData(DataComponentTypes.CONSUMABLE, Consumable.consumable()
+        .consumeSeconds(STAFF_NATIVE_USE_SECONDS)
+        .animation(ItemUseAnimation.NONE)
+        .hasConsumeParticles(false)
+        .effects(emptyList())
+        .build())
+    return true
+}
+
 internal data class StaffSpellTuning(val power: Double, val vanillaDamage: Double, val cooldownTicks: Long)
+
+internal data class StaffAimAssistSettings(
+    val enabled: Boolean = true,
+    val halfAngleDegrees: Double = 6.0,
+    val maxMiss: Double = 2.0,
+    val strength: Double = 0.35,
+    val excludedSpells: Set<String> = emptySet(),
+)
 
 /** Arena tuning is independent of EliteMobs/PvE. The duel kit applies its own damage multiplier. */
 internal val staffDuelDefaults = mapOf(
@@ -88,6 +117,7 @@ internal data class StaffSpellSettings(
     val emberRadius: Double = 2.8,
     val novaRadius: Double = 8.0,
     val duelTuning: Map<StaffSpell, StaffSpellTuning> = staffDuelDefaults,
+    val aimAssist: StaffAimAssistSettings = StaffAimAssistSettings(),
 ) {
     fun tuningFor(spell: StaffSpell, duel: Boolean): StaffSpellTuning =
         (if (duel) duelTuning[spell] else null) ?: tuning.getValue(spell)
@@ -97,6 +127,10 @@ internal data class StaffSpellSettings(
             append("staff-duel-damage-v1\narc=").append(pluginVersion).append('\n')
             append("range=").append(range.hex()).append('\n')
             append("aimDegrees=").append(aimDegrees.hex()).append('\n')
+            append("aimAssist=").append(aimAssist.enabled).append(',')
+                .append(aimAssist.halfAngleDegrees.hex()).append(',').append(aimAssist.maxMiss.hex())
+                .append(',').append(aimAssist.strength.hex()).append(',')
+                .append(aimAssist.excludedSpells.sorted().joinToString(",")).append('\n')
             append("chainRadius=").append(chainRadius.hex()).append('\n')
             append("chainTargets=").append(chainTargets).append('\n')
             append("chainDecay=").append(chainDecay.hex()).append('\n')
@@ -136,8 +170,23 @@ private fun sha256(value: String): String = MessageDigest.getInstance("SHA-256")
     .digest(value.toByteArray(StandardCharsets.UTF_8))
     .joinToString("") { byte -> "%02x".format(Locale.ROOT, byte.toInt() and 0xff) }
 
-/** Values are read again on ARC reload; the controller owns one validated settings generation. */
+/** Player HUD placement values are read again on ARC reload. */
+internal data class StaffSpellHudPositionSettings(
+    val forwardBlocks: Double = 2.5,
+    val verticalBlocks: Double = 0.85,
+    val horizontalBlocks: Double = 0.0,
+    val scale: Double = 0.66,
+)
+
 internal open class StaffSpellConfig(private val config: Config) {
+    /** Camera-plane placement is read from this config generation and validated before use. */
+    val hudPosition get() = StaffSpellHudPositionSettings(
+        forwardBlocks = number("hud.position.forward-blocks", 2.5, 0.8..4.0),
+        verticalBlocks = number("hud.position.vertical-blocks", 0.85, 0.1..2.0),
+        horizontalBlocks = number("hud.position.horizontal-blocks", 0.0, -1.5..1.5),
+        scale = number("hud.position.scale", 0.66, 0.35..1.0),
+    )
+
     open val settings get() = StaffSpellSettings(
         number("targeting.range", 48.0, 2.0..64.0),
         number("targeting.half-angle-degrees", 20.0, 1.0..30.0),
@@ -184,6 +233,13 @@ internal open class StaffSpellConfig(private val config: Config) {
             cooldownTicks = config.integer("duel.${spell.id}.cooldown-ticks", default.cooldownTicks.toInt())
                 .coerceIn(4, 400).toLong(),
         ) },
+        aimAssist = StaffAimAssistSettings(
+            enabled = config.bool("targeting.aim-assist.enabled", true),
+            halfAngleDegrees = number("targeting.aim-assist.half-angle-degrees", 6.0, 0.0..12.0),
+            maxMiss = number("targeting.aim-assist.max-miss-blocks", 2.0, 0.0..4.0),
+            strength = number("targeting.aim-assist.strength", 0.35, 0.0..0.8),
+            excludedSpells = config.stringList("targeting.aim-assist.excluded-spells").toSet(),
+        ),
     )
 
     private fun number(key: String, fallback: Double, bounds: ClosedFloatingPointRange<Double>) =
@@ -197,7 +253,7 @@ internal open class StaffSpellConfig(private val config: Config) {
         val resolvers = TagResolver.resolver(
             Placeholder.component("ability", config.component("${spell.id}.${when (input) { StaffCastInput.PRIMARY -> "name"; StaffCastInput.SECONDARY -> "secondary-name"; StaffCastInput.QUICK -> "quick-name"; StaffCastInput.QUICK_SECONDARY -> "quick-secondary-name" }}", TagResolver.empty())),
             Placeholder.unparsed("seconds", String.format(Locale.ROOT, "%.1f", remaining.coerceAtLeast(0) / 20.0)),
-            Placeholder.unparsed("input", when (input) { StaffCastInput.PRIMARY -> "ЛКМ"; StaffCastInput.SECONDARY -> "Shift + ЛКМ"; StaffCastInput.QUICK -> "ПКМ"; StaffCastInput.QUICK_SECONDARY -> "Shift + ПКМ" }),
+            Placeholder.unparsed("input", inputLabel(spell, input)),
         )
         return config.component("messages.${if (remaining > 0) "cooldown-bar" else "ready-bar"}", resolvers)
     }
@@ -205,12 +261,13 @@ internal open class StaffSpellConfig(private val config: Config) {
     fun charge(spell: StaffSpell, progress: Double, secondary: Boolean = false): Component = config.component("messages.charge-bar", TagResolver.resolver(
         Placeholder.component("ability", config.component("${spell.id}.${if (secondary) "secondary-name" else "name"}", TagResolver.empty())),
         Placeholder.unparsed("percent", (progress.coerceIn(0.0, 1.0) * 100).toInt().toString()),
+        Placeholder.unparsed("input", inputLabel(spell, StaffCastInput.of(secondary, quick = false))),
     ))
 
     fun staffHudReady(spell: StaffSpell, secondary: Boolean): Component {
         val message = when (staffAttackInputMode(spell, secondary)) {
             StaffAttackInputMode.INSTANT -> "ready-instant"
-            StaffAttackInputMode.CHARGE_CLICK_TOGGLE -> "ready-charge"
+            StaffAttackInputMode.HOLD_RELEASE -> "ready-charge"
             StaffAttackInputMode.CHANNEL_CLICK_TOGGLE -> "ready-channel"
         }
         return staffHud(message, spell, secondary)
@@ -230,15 +287,58 @@ internal open class StaffSpellConfig(private val config: Config) {
 
     fun staffHudChannel(spell: StaffSpell, secondary: Boolean): Component = staffHud("channel", spell, secondary)
 
+    fun staffHudBossbar(state: StaffSpellHudState): Component {
+        val message = when (state.phase) {
+            StaffSpellHudPhase.READY -> when (staffAttackInputMode(state.spell, state.secondary)) {
+                StaffAttackInputMode.INSTANT -> "bossbar-ready-instant"
+                StaffAttackInputMode.HOLD_RELEASE -> "bossbar-ready-charge"
+                StaffAttackInputMode.CHANNEL_CLICK_TOGGLE -> "bossbar-ready-channel"
+            }
+            StaffSpellHudPhase.CHARGING -> "bossbar-charging"
+            StaffSpellHudPhase.CHANNEL -> "bossbar-channel"
+            StaffSpellHudPhase.COOLDOWN -> "bossbar-cooldown"
+        }
+        val extra = mutableListOf<TagResolver>()
+        if (state.phase == StaffSpellHudPhase.CHARGING) {
+            extra += Placeholder.unparsed("percent", (state.progress.coerceIn(0.0, 1.0) * 100).toInt().toString())
+            extra += Placeholder.unparsed("bar", staffSpellHudBar(state.progress))
+        }
+        if (state.phase == StaffSpellHudPhase.COOLDOWN) {
+            extra += Placeholder.unparsed("seconds", String.format(Locale.ROOT,
+                "%.1f", state.remainingTicks.coerceAtLeast(0) / 20.0))
+            extra += Placeholder.unparsed("bar", staffSpellHudBar(state.progress))
+        }
+        return staffHud(message, state.spell, state.secondary, *extra.toTypedArray())
+    }
+
     private fun staffHud(message: String, spell: StaffSpell, secondary: Boolean,
         vararg extra: TagResolver): Component {
         val ability = if (secondary) "secondary-name" else "name"
         return config.component("messages.staff-hud.$message", TagResolver.resolver(
             Placeholder.component("ability", config.component("${spell.id}.$ability", TagResolver.empty())),
-            Placeholder.unparsed("input", if (secondary) "Shift + ЛКМ" else "ЛКМ"),
+            Placeholder.unparsed("input", inputLabel(spell, StaffCastInput.of(secondary, quick = false))),
             *extra,
         )).decoration(TextDecoration.ITALIC, false)
     }
+
+    internal fun inputLabel(spell: StaffSpell, input: StaffCastInput): String {
+        val button = if (input.quick) staffDefenseInputButton(spell) else staffAttackInputButton(spell)
+        val key = "messages.controls.${if (input.secondary) "shift-" else ""}${button.configKey}"
+        val fallback = when (button) {
+            StaffSpellInputButton.LEFT -> if (input.secondary) "Shift + ЛКМ" else "ЛКМ"
+            StaffSpellInputButton.RIGHT -> if (input.secondary) "Shift + ПКМ" else "ПКМ"
+        }
+        return config.string(key, fallback).trim().ifEmpty { fallback }
+    }
+
+    private fun useInstructions(message: String, spell: StaffSpell) = config.component(
+        "messages.$message", TagResolver.resolver(
+            Placeholder.unparsed("attack", inputLabel(spell, StaffCastInput.PRIMARY)),
+            Placeholder.unparsed("attack-secondary", inputLabel(spell, StaffCastInput.SECONDARY)),
+            Placeholder.unparsed("defense", inputLabel(spell, StaffCastInput.QUICK)),
+            Placeholder.unparsed("defense-secondary", inputLabel(spell, StaffCastInput.QUICK_SECONDARY)),
+        ),
+    ).decoration(TextDecoration.ITALIC, false)
 
     fun defense(spell: StaffSpell, active: Boolean, seconds: Double, allAround: Boolean = false): Component {
         val message = when {
@@ -250,6 +350,8 @@ internal open class StaffSpellConfig(private val config: Config) {
         return config.component("messages.$message", TagResolver.resolver(
             Placeholder.component("ability", config.component("${spell.id}.$ability", TagResolver.empty())),
             Placeholder.unparsed("seconds", String.format(Locale.ROOT, "%.1f", seconds)),
+            Placeholder.unparsed("input", inputLabel(spell,
+                StaffCastInput.of(secondary = allAround, quick = true))),
         ))
     }
 
@@ -265,6 +367,19 @@ internal open class StaffSpellConfig(private val config: Config) {
     /** Duel items deliberately use a stable native base, independent of optional ItemsAdder startup timing. */
     fun duelItem(spell: StaffSpell) = buildItem(spell, duelOnly = true)
 
+    /** Refresh only ARC's known prototype lore block, preserving item model, enchantments, and extra lore. */
+    internal fun refreshPrototypeLore(item: ItemStack, spell: StaffSpell): Boolean {
+        if (item.type.isAir) return false
+        val meta = item.itemMeta ?: return false
+        if (meta.persistentDataContainer.get(StaffSpell.itemKey, PersistentDataType.STRING) != spell.id) return false
+        val currentLore = meta.lore().orEmpty()
+        val refreshedLore = prototypeLore(spell, StaffSpell.isDuelOnly(item)) + currentLore.drop(STAFF_PROTOTYPE_LORE_LINES)
+        if (currentLore == refreshedLore) return false
+        meta.lore(refreshedLore)
+        item.itemMeta = meta
+        return true
+    }
+
     /** Elite items keep their material and native data; only ARC's configured appearance is copied. */
     internal fun applyEliteStaffAppearance(item: ItemStack, spell: StaffSpell) {
         val skin = try {
@@ -274,6 +389,7 @@ internal open class StaffSpellConfig(private val config: Config) {
         }
         if (skin != null) applyEliteSkin(item, skin)
         item.editMeta { meta -> meta.displayName(staffName(spell)) }
+        ensureStaffChargeUseComponent(item, spell)
     }
 
     /** Ability rows for migrated EliteMobs weapons deliberately omit prototype and duel-only labels. */
@@ -285,10 +401,23 @@ internal open class StaffSpellConfig(private val config: Config) {
         spellComponent(spell, "secondary"),
         spellComponent(spell, "quick"),
         spellComponent(spell, "quick-secondary"),
-        text(useMessage(spell)),
+        useInstructions(useMessage(spell), spell),
     )
 
     private fun staffName(spell: StaffSpell) = spellComponent(spell, "name")
+
+    private fun prototypeLore(spell: StaffSpell, duelOnly: Boolean): List<Component> = listOf(
+        Component.empty(),
+        spellComponent(spell, "description"),
+        spellComponent(spell, "aim"),
+        Component.empty(),
+        spellComponent(spell, "secondary"),
+        spellComponent(spell, "quick"),
+        spellComponent(spell, "quick-secondary"),
+        text(if (duelOnly) "duel-only" else "prototype"),
+        Component.empty(),
+        useInstructions(useMessage(spell), spell),
+    )
 
     private fun spellComponent(spell: StaffSpell, suffix: String) =
         config.component("${spell.id}.$suffix", TagResolver.empty()).decoration(TextDecoration.ITALIC, false)
@@ -341,7 +470,6 @@ internal open class StaffSpellConfig(private val config: Config) {
     }
 
     private fun buildItem(spell: StaffSpell, duelOnly: Boolean) = ItemStack(Material.BLAZE_ROD).apply {
-        val useMessage = useMessage(spell)
         if (!duelOnly) {
             configuredSkin(spell)?.let { applyEliteSkin(this, it) }
         } else {
@@ -354,18 +482,12 @@ internal open class StaffSpellConfig(private val config: Config) {
         }
         editMeta { meta ->
             meta.displayName(staffName(spell))
-            meta.lore(listOf(Component.empty(),
-                config.component("${spell.id}.description", TagResolver.empty()).decoration(TextDecoration.ITALIC, false),
-                config.component("${spell.id}.aim", TagResolver.empty()).decoration(TextDecoration.ITALIC, false),
-                Component.empty(), config.component("${spell.id}.secondary", TagResolver.empty()).decoration(TextDecoration.ITALIC, false),
-                config.component("${spell.id}.quick", TagResolver.empty()).decoration(TextDecoration.ITALIC, false),
-                config.component("${spell.id}.quick-secondary", TagResolver.empty()).decoration(TextDecoration.ITALIC, false),
-                text(if (duelOnly) "duel-only" else "prototype"), Component.empty(),
-                text(useMessage)))
+            meta.lore(prototypeLore(spell, duelOnly))
             meta.persistentDataContainer.set(StaffSpell.itemKey, PersistentDataType.STRING, spell.id)
             if (duelOnly) meta.persistentDataContainer.set(StaffSpell.duelOnlyKey, PersistentDataType.BYTE, 1)
             meta.setMaxStackSize(1)
         }
+        ensureStaffChargeUseComponent(this, spell)
     }
 }
 

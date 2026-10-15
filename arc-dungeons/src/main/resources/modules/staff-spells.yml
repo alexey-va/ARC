@@ -5,10 +5,26 @@
 targeting:
   range: 48.0
   half-angle-degrees: 20.0
+  # A small launch-direction correction, never an automatic hit or steering through cover.
+  # Radial attacks and manually placed ground areas keep their own placement rules.
+  aim-assist:
+    enabled: true
+    half-angle-degrees: 6.0
+    max-miss-blocks: 2.0
+    strength: 0.35
+    excluded-spells: []
 max-area-targets: 8
 # Visual-only missing blocks and flying debris; [] disables, ['*'] allows every world on this server.
 scenery:
   worlds: []
+# Player-only packet HUD placement, in camera-plane blocks. Positive vertical is below the reticle.
+# /arc reload reads these values; ranges are clamped to keep the card visible and readable.
+hud:
+  position:
+    forward-blocks: 2.5
+    vertical-blocks: 0.85
+    horizontal-blocks: 0.0
+    scale: 0.66
 # Raw damage before the arena kit multiplier (0.4); read again on ARC reload.
 # Cooldown is shared across attack modes and staff swaps. Ember and Icicle primary casts charge for 36 ticks.
 duel:
@@ -62,7 +78,7 @@ frost:
   secondary-name: 'Полярный круг'
   secondary: '<#b1f2ff>Shift + ЛКМ <#e8dfd2>— ледяной фронт расходится от вас на восемь блоков'
   name: '<#b1f2ff>Ледяной хлопок'
-  description: '<#e8dfd2>Перед вами вырастает широкий ледяной гребень: кристаллы бьют по площади и замедляют врагов.'
+  description: '<#e8dfd2>Ледяные челюсти сходятся перед вами, с хлопком разбиваются и замедляют врагов.'
   aim: '<#b1f2ff>ЛКМ · область перед собой до 7 блоков · без зарядки'
   quick-name: 'Ледяной щит'
   quick: '<#b1f2ff>ПКМ <#e8dfd2>— щит спереди: два удара за 1,2 с; перезарядка 4 с'
@@ -80,14 +96,14 @@ frost:
   slow-ticks: 40
 icicle:
   secondary-name: 'Ледяной дождь'
-  secondary: '<#b1f2ff>Shift + ЛКМ <#e8dfd2>— пять осколков падают вокруг точки прицела'
+  secondary: '<#b1f2ff>Shift + ПКМ <#e8dfd2>— пять осколков падают вокруг точки прицела'
   name: '<#b1f2ff>Ледяной венец'
-  description: '<#e8dfd2>Сосульки из-за плеч летят к текущему прицелу; полная зарядка выпускает одиннадцать.'
+  description: '<#e8dfd2>Зажмите ПКМ и ведите прицел: сосульки летят из-за плеч; полная зарядка выпускает одиннадцать.'
   aim: '<#b1f2ff>Прицел можно вести во время залпа · до 48 блоков'
   quick-name: 'Кристальный заслон'
-  quick: '<#b1f2ff>ПКМ <#e8dfd2>— щит спереди: два удара за 1,2 с; перезарядка 4 с'
+  quick: '<#b1f2ff>ЛКМ <#e8dfd2>— щит спереди: два удара за 1,2 с; перезарядка 4 с'
   quick-secondary-name: 'Круговой покров'
-  quick-secondary: '<#b1f2ff>Shift + ПКМ <#e8dfd2>— поглощает 8 урона в течение 20 с; перезарядка 25 с'
+  quick-secondary: '<#b1f2ff>Shift + ЛКМ <#e8dfd2>— поглощает 8 урона в течение 20 с; перезарядка 25 с'
   skin: '3dfantasyweaponscit:olwen_staff'
   duel-appearance:
     item-model: ''
@@ -116,14 +132,14 @@ lance:
   targets: 3
 ember:
   secondary-name: 'Метеорный дождь'
-  secondary: '<#ffae70>Shift + ЛКМ <#e8dfd2>— зоны метеоров видны сразу; первые падают через 0,75 с после запуска'
+  secondary: '<#ffae70>Shift + ПКМ <#e8dfd2>— зоны метеоров видны сразу; первые падают через 0,75 с после запуска'
   name: '<#ffae70>Пепельная комета'
-  description: '<#e8dfd2>При зарядке перед посохом растёт огненный шар; нажмите ЛКМ повторно, чтобы сразу запустить комету.'
+  description: '<#e8dfd2>Зажмите ПКМ, чтобы нарастить огненный шар, и отпустите для запуска кометы.'
   aim: '<#ffae70>Ручной прицел · цельтесь на опережение'
   quick-name: 'Огненный заслон'
-  quick: '<#ffae70>ПКМ <#e8dfd2>— щит спереди: два удара за 1,2 с; перезарядка 4 с'
+  quick: '<#ffae70>ЛКМ <#e8dfd2>— щит спереди: два удара за 1,2 с; перезарядка 4 с'
   quick-secondary-name: 'Круговой покров'
-  quick-secondary: '<#ffae70>Shift + ПКМ <#e8dfd2>— поглощает 8 урона в течение 20 с; перезарядка 25 с'
+  quick-secondary: '<#ffae70>Shift + ЛКМ <#e8dfd2>— поглощает 8 урона в течение 20 с; перезарядка 25 с'
   skin: '3dfantasyweaponscit:bermunde_hermit_staff'
   duel-appearance:
     item-model: ''
@@ -155,7 +171,7 @@ fault:
   secondary-name: 'Каменный выброс'
   secondary: '<#ff9b83>Shift + ЛКМ <#e8dfd2>— после предупреждения взрыв у прицела подбрасывает врагов'
   name: '<#ff9b83>Обсидиановый раскол'
-  description: '<#e8dfd2>Обсидиановые глыбы поднимаются широким разломом перед вами и отбрасывают врагов.'
+  description: '<#e8dfd2>Обсидиановый разлом раскалывается вперёд, выбрасывая обломки и отбрасывая врагов.'
   aim: '<#ff9b83>ЛКМ · фронтальный разлом до 7 блоков · без зарядки'
   quick-name: 'Каменный бастион'
   quick: '<#ff9b83>ПКМ <#e8dfd2>— щит спереди: три удара за 1,6 с; перезарядка 4 с'
@@ -173,7 +189,7 @@ lunar:
   description: '<#e8dfd2>Огромный лунный серп рассекает широкую область перед вами.'
   aim: '<#d8dcff>ЛКМ · широкий лунный удар до 7 блоков · без зарядки'
   secondary-name: 'Лунные ножницы'
-  secondary: '<#d8d6ff>Shift + ЛКМ <#e8dfd2>— два лунных лезвия сходятся на цели'
+  secondary: '<#d8d6ff>Shift + ЛКМ <#e8dfd2>— лезвия сходятся и раскрывают режущую лунную область'
   quick-name: 'Лунный покров'
   quick: '<#d8d6ff>ПКМ <#e8dfd2>— щит спереди: два удара за 1,2 с; перезарядка 4 с'
   quick-secondary-name: 'Круговой покров'
@@ -190,7 +206,7 @@ gale:
   description: '<#e8dfd2>На точке прицела закручивается открытая воронка, поднимающая ближайших врагов.'
   aim: '<#d4eaff>Воронка на точке прицела · до 36 блоков'
   secondary-name: 'Шквал'
-  secondary: '<#d4eaff>Shift + ЛКМ <#e8dfd2>— закрученный воздушный таран проходит 36 блоков вперёд до препятствия'
+  secondary: '<#d4eaff>Shift + ЛКМ <#e8dfd2>— шквал скользит до 36 блоков и разрывается при столкновении'
   quick-name: 'Ветряной щит'
   quick: '<#d4eaff>ПКМ <#e8dfd2>— щит спереди: два удара за 1,2 с; перезарядка 4 с'
   quick-secondary-name: 'Круговой покров'
@@ -207,7 +223,7 @@ tide:
   description: '<#e8dfd2>Высокий водяной гребень накрывает область перед вами и сметает врагов.'
   aim: '<#8be9ff>ЛКМ · фронтальная волна до 7 блоков · без зарядки'
   secondary-name: 'Приливный вал'
-  secondary: '<#8ce9e4>Shift + ЛКМ <#e8dfd2>— низкая волна с пенным гребнем катится вперёд'
+  secondary: '<#8ce9e4>Shift + ЛКМ <#e8dfd2>— широкий приливной вал скользит по земле до 36 блоков'
   quick-name: 'Водяной заслон'
   quick: '<#8ce9e4>ПКМ <#e8dfd2>— щит спереди: два удара за 1,2 с; перезарядка 4 с'
   quick-secondary-name: 'Круговой покров'
@@ -288,8 +304,8 @@ gravity:
   name: <#cfb8ff>Гравитационный захват
   description: <#e8dfd2>Подхватите глыбу с видимой поверхности и ведите её прицелом.
   aim: <#cfb8ff>ЛКМ — захватить · переместите прицел · повторный ЛКМ — бросить до 32 блоков
-  secondary-name: Бросок глыбы
-  secondary: <#cfb8ff>Shift + ЛКМ <#e8dfd2>— тот же захват и бросок; поверхность мира сохраняется
+  secondary-name: Гравитационный обвал
+  secondary: <#cfb8ff>Shift + ЛКМ <#e8dfd2>— поднимает врагов вокруг и обрушивает на землю в радиусе 6,5 блока
   skin: 3dfantasyweaponscit:staff_of_unholy_wisdom
   duel-appearance:
     item-model: ''
@@ -321,32 +337,43 @@ ossuary:
 messages:
   staff-hud:
     ready-instant: '<ability><newline><#b1edba>Готово · без зарядки<newline><white><input> — применить'
-    ready-charge: '<ability><newline><white><input> — начать заряд<newline><#e8dfd2>Ещё один клик — выпустить'
-    ready-channel: '<ability><newline><white><input> — захватить<newline><#e8dfd2>Ведите прицел · ещё клик — бросить'
-    charging: '<ability><newline><#ffe7a3>Сила <percent>% <bar><newline><white><input> — выпустить'
+    ready-charge: '<ability><newline><white>Удерживайте <input> для зарядки<newline><#e8dfd2>Отпустите, чтобы выпустить'
+    ready-channel: '<ability><newline><white><input> — захватить<newline><#e8dfd2>Ведите прицел · нажмите ещё раз, чтобы бросить'
+    charging: '<ability><newline><#ffe7a3>Сила <percent>% <bar><newline><white>Отпустите <input> — выпустить'
     cooldown: '<ability> · <input><newline><#e8dfd2>Восстановление <seconds> с<newline><bar>'
     channel: '<ability><newline><#cfb8ff>Глыба в захвате<newline><white><input> — бросить'
+    bossbar-ready-instant: '<ability> · <input> — применить'
+    bossbar-ready-charge: '<ability> · удерживайте <input> · отпустите для выпуска'
+    bossbar-ready-channel: '<ability> · <input> — захватить · ведите прицел · нажмите ещё раз для броска'
+    bossbar-charging: '<ability> · сила <percent>% <bar> · отпустите <input>'
+    bossbar-cooldown: '<ability> · <input> · <seconds> с <bar>'
+    bossbar-channel: '<ability> · глыба в захвате · <input> — бросить'
+  controls:
+    left-click: 'ЛКМ'
+    right-click: 'ПКМ'
+    shift-left-click: 'Shift + ЛКМ'
+    shift-right-click: 'Shift + ПКМ'
   duel-only: '<#c4a7ff>Только в активной дуэли</#c4a7ff>'
   prototype: '<#b8b8b8>Проба механики · атака и защита восстанавливаются отдельно'
-  use: '<#82dcff>ЛКМ — атака; Shift + ЛКМ — вторая способность. ПКМ — защита; Shift + ПКМ — круговой покров.'
-  charge-use: '<#82dcff>ЛКМ — начать заряд; повторный ЛКМ — выпустить. Shift + ЛКМ — вторая способность сразу. ПКМ — защита; Shift + ПКМ — круговой покров.'
-  charge-bar: '<ability> <percent>% · ЛКМ — выпустить'
+  use: '<#82dcff><attack> — атака; <attack-secondary> — вторая способность. <defense> — защита; <defense-secondary> — круговой покров.'
+  charge-use: '<#82dcff>Удерживайте <attack> для зарядки и отпустите для выпуска. <attack-secondary> — вторая способность сразу. <defense> — защита; <defense-secondary> — круговой покров.'
+  charge-bar: '<ability> <percent>% · отпустите <input> для выпуска'
   cooldown: '<#e8dfd2>Посох восстанавливается'
   cooldown-bar: '<ability> <white><seconds> с'
   ready-bar: '<ability> <#9fffd4>Готово <#e8dfd2>· <input>'
   full-inventory: '<#e8dfd2>Освободите место для всех выбранных посохов'
-  given: '<#9bd48d>Посохи выданы. ЛКМ — атака, Shift + ЛКМ — вторая способность; ПКМ — защита. Комета и венец: клик для зарядки, повторный — для запуска. Гравитация: клик для захвата, повторный — для броска.'
+  given: '<#9bd48d>Посохи выданы. Управление указано в описании каждого посоха.'
   retired: '<#e8dfd2>Этот посох временно убран из набора. Возьмите другой посох.'
   no-summon-cap: '<#e8dfd2>Можно держать не больше десяти миньонов. Дождитесь свободного места; перезарядка не потрачена.'
   unavailable: '<#e8dfd2>Модуль тестовых посохов сейчас недоступен'
   no-ground: '<#e8dfd2>Направьте посох на видимую поверхность земли'
   skin-unavailable: '<#e8dfd2>Модель посоха недоступна в ItemsAdder. Подробности в журнале сервера.'
-  channel-use: '<#82dcff>ЛКМ — захватить; ведите прицел; повторный ЛКМ — бросить. ПКМ — защита; Shift + ПКМ — круговой покров.'
+  channel-use: '<#82dcff><attack> — захватить глыбу; ведите прицел и нажмите ещё раз, чтобы бросить. <attack-secondary> — гравитационный обвал. <defense> — защита; <defense-secondary> — круговой покров.'
   no-summon-ground: '<#e8dfd2>Для призыва нет места: встаньте на ровную площадку и освободите пространство перед собой. Перезарядка не потрачена.'
   no-grab: '<#e8dfd2>Для захвата направьте посох на твёрдую видимую поверхность в 3–32 блоках.'
   shield-active: '<ability> <#fff1ae>Поглощение <white><remaining>/<capacity> <#e8dfd2>урона'
   defense-active: '<ability> <#fff1ae>Защита активна'
-  defense-cooldown: '<ability> <white><seconds> с <#e8dfd2>· ПКМ'
-  shield-cooldown: '<ability> <white><seconds> с <#e8dfd2>· Shift + ПКМ'
+  defense-cooldown: '<ability> <white><seconds> с <#e8dfd2>· <input>'
+  shield-cooldown: '<ability> <white><seconds> с <#e8dfd2>· <input>'
   inferno-hold: '<#ffae52>Поток пламени <#e8dfd2>· ЛКМ — остановить'
   gravity-hold: '<#cfb8ff>Глыба в захвате <#e8dfd2>· ведите прицел; ЛКМ — бросить'

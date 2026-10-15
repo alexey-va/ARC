@@ -23,6 +23,8 @@ import ru.arc.paper.display.PacketTextDisplay
 import ru.arc.paper.display.PaperPacketDisplays
 import ru.arc.paper.testing.MockBukkitTestRuntime
 import ru.arc.paper.testing.failOnUnsupportedMockBukkitOperation
+import ru.arc.staffspells.api.StaffHudMode
+import ru.arc.staffspells.api.StaffHudPlacement
 import java.util.UUID
 
 class StaffSpellHudTest : FreeSpec({
@@ -30,14 +32,17 @@ class StaffSpellHudTest : FreeSpec({
         staffHudSafeDistance(staffHudBaseDistance(), 0.30) shouldBe 0.12
     }
 
-    "attack mode helper describes two-click charges without changing the instant routes" {
-        staffAttackInputMode(StaffSpell.EMBER, secondary = false) shouldBe StaffAttackInputMode.CHARGE_CLICK_TOGGLE
-        staffAttackInputMode(StaffSpell.ICICLE, secondary = false) shouldBe StaffAttackInputMode.CHARGE_CLICK_TOGGLE
+    "attack mode helper matches native hold-release and Gravity's primary-only channel" {
+        staffAttackInputMode(StaffSpell.EMBER, secondary = false) shouldBe StaffAttackInputMode.HOLD_RELEASE
+        staffAttackInputMode(StaffSpell.ICICLE, secondary = false) shouldBe StaffAttackInputMode.HOLD_RELEASE
         staffAttackInputMode(StaffSpell.EMBER, secondary = true) shouldBe StaffAttackInputMode.INSTANT
         staffAttackInputMode(StaffSpell.ICICLE, secondary = true) shouldBe StaffAttackInputMode.INSTANT
         staffAttackInputMode(StaffSpell.GRAVITY, secondary = false) shouldBe StaffAttackInputMode.CHANNEL_CLICK_TOGGLE
-        staffAttackInputMode(StaffSpell.GRAVITY, secondary = true) shouldBe StaffAttackInputMode.CHANNEL_CLICK_TOGGLE
+        staffAttackInputMode(StaffSpell.GRAVITY, secondary = true) shouldBe StaffAttackInputMode.INSTANT
         staffAttackInputMode(StaffSpell.LANCE, secondary = false) shouldBe StaffAttackInputMode.INSTANT
+        staffSpellHudPreferencesFromStored("bossbar", "top") shouldBe
+            StaffSpellHudPreferences(StaffHudMode.BOSSBAR, StaffHudPlacement.TOP)
+        staffSpellHudPreferencesFromStored("unknown", "unknown") shouldBe StaffSpellHudPreferences()
     }
 
     "private hologram reuses one card, sends only state text deltas, follows camera, and clears after unequip" {
@@ -48,20 +53,20 @@ class StaffSpellHudTest : FreeSpec({
             val record = harness.recorder.records.single()
             record.visibleViewers shouldBe setOf(player.uniqueId)
             record.visibleByDefault shouldBe false
-            text(record.text) shouldBe "Комета\nЛКМ — начать заряд\nЕщё один клик — выпустить"
+            text(record.text) shouldBe "Комета\nУдерживайте ПКМ для зарядки\nОтпустите, чтобы выпустить"
 
             player.isSneaking = true
             harness.scheduler.tick(2)
-            text(record.text) shouldBe "Метеоры\nГотово · без зарядки\nShift + ЛКМ — применить"
+            text(record.text) shouldBe "Метеоры\nГотово · без зарядки\nShift + ПКМ — применить"
             player.isSneaking = false
             harness.scheduler.tick(2)
-            text(record.text) shouldBe "Комета\nЛКМ — начать заряд\nЕщё один клик — выпустить"
+            text(record.text) shouldBe "Комета\nУдерживайте ПКМ для зарядки\nОтпустите, чтобы выпустить"
 
             harness.hud.charging(player, StaffSpell.EMBER, secondary = false, progress = 0.55)
             harness.hud.charging(player, StaffSpell.EMBER, secondary = false, progress = 0.55)
             harness.recorder.records.size shouldBe 1
             record.textWrites.size shouldBe 3
-            text(record.text) shouldBe "Комета\nСила 55% ■■■■■□□□□□\nЛКМ — выпустить"
+            text(record.text) shouldBe "Комета\nСила 55% ■■■■■□□□□□\nОтпустите ПКМ — выпустить"
 
             harness.scheduler.tick(2)
             // Sneaking changes the eye height, so both camera-follow updates above are real.
@@ -107,14 +112,14 @@ class StaffSpellHudTest : FreeSpec({
             harness.scheduler.tick(2)
             harness.recorder.records.size shouldBe 1
             record.removals shouldBe 0
-            text(record.text) shouldBe "Тяготение\nЛКМ — захватить\nВедите прицел · ещё клик — бросить"
+            text(record.text) shouldBe "Тяготение\nЛКМ — захватить\nВедите прицел · нажмите ещё раз, чтобы бросить"
 
             harness.hud.cooldown(player, StaffSpell.GRAVITY, secondary = false, remainingTicks = 18, totalTicks = 44)
             player.inventory.setItemInMainHand(staffItem(StaffSpell.EMBER))
             harness.scheduler.tick(2)
             harness.recorder.records.size shouldBe 1
             record.removals shouldBe 0
-            text(record.text) shouldBe "Комета · ЛКМ\nВосстановление 0.9 с\n■■■■■□□□□□"
+            text(record.text) shouldBe "Комета · ПКМ\nВосстановление 0.9 с\n■■■■■□□□□□"
         }
     }
 
@@ -124,19 +129,52 @@ class StaffSpellHudTest : FreeSpec({
             player.isSneaking = true
             harness.hud.ready(player, StaffSpell.GRAVITY, secondary = true)
             text(harness.recorder.records.single().text) shouldBe
-                "Тяготение\nShift + ЛКМ — захватить\nВедите прицел · ещё клик — бросить"
+                "Тяготение\nГотово · без зарядки\nShift + ЛКМ — применить"
 
-            harness.hud.channel(player, StaffSpell.GRAVITY, secondary = true)
-            text(harness.recorder.records.single().text) shouldBe
-                "Тяготение\nГлыба в захвате\nShift + ЛКМ — бросить"
-
-            harness.hud.cooldown(player, StaffSpell.GRAVITY, secondary = true, remainingTicks = 9, totalTicks = 44)
-            text(harness.recorder.records.single().text) shouldBe
-                "Тяготение · Shift + ЛКМ\nВосстановление 0.5 с\n■■■■■■■□□□"
             player.isSneaking = false
             harness.scheduler.tick(2)
+            harness.hud.channel(player, StaffSpell.GRAVITY, secondary = false)
+            text(harness.recorder.records.single().text) shouldBe
+                "Тяготение\nГлыба в захвате\nЛКМ — бросить"
+
+            harness.hud.cooldown(player, StaffSpell.GRAVITY, secondary = false, remainingTicks = 9, totalTicks = 44)
             text(harness.recorder.records.single().text) shouldBe
                 "Тяготение · ЛКМ\nВосстановление 0.5 с\n■■■■■■■□□□"
+            player.isSneaking = true
+            harness.scheduler.tick(2)
+            text(harness.recorder.records.single().text) shouldBe
+                "Тяготение · Shift + ЛКМ\nВосстановление 0.5 с\n■■■■■■■□□□"
+        }
+    }
+
+    "stored mode switches remove the old surface and top placement flips the camera-plane offset" {
+        withHudHarness { harness ->
+            val player = harness.player("staff-hud-mode", StaffSpell.EMBER)
+            harness.hud.ready(player, StaffSpell.EMBER, secondary = false)
+            val bottom = harness.recorder.records.single()
+            val bottomY = bottom.spawn.y
+
+            harness.preferences.value = StaffSpellHudPreferences(StaffHudMode.BOSSBAR, StaffHudPlacement.TOP)
+            harness.scheduler.tick(2)
+            bottom.removals shouldBe 1
+            player.activeBossBars().count() shouldBe 1
+            val bar = player.activeBossBars().single()
+            text(bar.name()) shouldBe "Комета · удерживайте ПКМ · отпустите для выпуска"
+            text(bar.name()).contains('\n') shouldBe false
+
+            harness.hud.charging(player, StaffSpell.EMBER, secondary = false, progress = 0.4)
+            text(bar.name()) shouldBe "Комета · сила 40% ■■■■□□□□□□ · отпустите ПКМ"
+            bar.progress() shouldBe 0.4f
+
+            harness.preferences.value = StaffSpellHudPreferences(StaffHudMode.OFF, StaffHudPlacement.TOP)
+            harness.scheduler.tick(2)
+            player.activeBossBars().count() shouldBe 0
+            harness.recorder.records.size shouldBe 1
+
+            harness.preferences.value = StaffSpellHudPreferences(StaffHudMode.HOLOGRAM, StaffHudPlacement.TOP)
+            harness.scheduler.tick(2)
+            harness.recorder.records.size shouldBe 2
+            (kotlin.math.abs(harness.recorder.records.last().spawn.y - bottomY - 1.7) < 1.0e-8) shouldBe true
         }
     }
 
@@ -220,6 +258,7 @@ private data class HudHarness(
     val hud: StaffSpellHud,
     val paper: MockBukkitTestRuntime,
     val rayHitDistance: MutableList<Double?>,
+    val preferences: HudPreferenceBox,
 ) {
     fun player(name: String, spell: StaffSpell): Player = paper.addPlayer(name).apply {
         teleport(Location(world, 0.5, 64.0, 0.5))
@@ -228,6 +267,8 @@ private data class HudHarness(
         inventory.setItemInMainHand(item)
     }
 }
+
+private data class HudPreferenceBox(var value: StaffSpellHudPreferences = StaffSpellHudPreferences())
 
 private fun withHudHarness(block: (HudHarness) -> Unit) = failOnUnsupportedMockBukkitOperation {
     val scheduler = TestTaskScheduler()
@@ -251,21 +292,29 @@ private fun withHudHarness(block: (HudHarness) -> Unit) = failOnUnsupportedMockB
             Tasks.withScheduler(scheduler) {
                 val world = paper.addSimpleWorld("staff-spell-hud")
                 val recorder = HudDisplayRecorder()
+                val preferences = HudPreferenceBox()
                 val config = StaffSpellConfig(StaffTestConfig(mapOf(
                     "ember.name" to "Комета",
                     "ember.secondary-name" to "Метеоры",
                     "gravity.name" to "Тяготение",
                     "gravity.secondary-name" to "Тяготение",
                     "messages.staff-hud.ready-instant" to "<ability><newline>Готово · без зарядки<newline><input> — применить",
-                    "messages.staff-hud.ready-charge" to "<ability><newline><input> — начать заряд<newline>Ещё один клик — выпустить",
-                    "messages.staff-hud.ready-channel" to "<ability><newline><input> — захватить<newline>Ведите прицел · ещё клик — бросить",
-                    "messages.staff-hud.charging" to "<ability><newline>Сила <percent>% <bar><newline><input> — выпустить",
+                    "messages.staff-hud.ready-charge" to "<ability><newline>Удерживайте <input> для зарядки<newline>Отпустите, чтобы выпустить",
+                    "messages.staff-hud.ready-channel" to "<ability><newline><input> — захватить<newline>Ведите прицел · нажмите ещё раз, чтобы бросить",
+                    "messages.staff-hud.charging" to "<ability><newline>Сила <percent>% <bar><newline>Отпустите <input> — выпустить",
                     "messages.staff-hud.cooldown" to "<ability> · <input><newline>Восстановление <seconds> с<newline><bar>",
                     "messages.staff-hud.channel" to "<ability><newline>Глыба в захвате<newline><input> — бросить",
+                    "messages.staff-hud.bossbar-ready-instant" to "<ability> · <input> — применить",
+                    "messages.staff-hud.bossbar-ready-charge" to "<ability> · удерживайте <input> · отпустите для выпуска",
+                    "messages.staff-hud.bossbar-ready-channel" to "<ability> · <input> — захватить · ведите прицел · нажмите ещё раз для броска",
+                    "messages.staff-hud.bossbar-charging" to "<ability> · сила <percent>% <bar> · отпустите <input>",
+                    "messages.staff-hud.bossbar-cooldown" to "<ability> · <input> · <seconds> с <bar>",
+                    "messages.staff-hud.bossbar-channel" to "<ability> · глыба в захвате · <input> — бросить",
                 )))
-                val hud = StaffSpellHud(recorder.displays, config).also(StaffSpellHud::start)
+                val hud = StaffSpellHud(recorder.displays, config,
+                    preferences = StaffSpellHudPreferencesReader { preferences.value }).also(StaffSpellHud::start)
                 try {
-                    block(HudHarness(scheduler, world, recorder, hud, paper, rayHitDistance))
+                    block(HudHarness(scheduler, world, recorder, hud, paper, rayHitDistance, preferences))
                 } finally {
                     hud.close()
                     recorder.closes shouldBe 1

@@ -489,7 +489,7 @@ class StaffSpellsTest : FreeSpec({
         val config = StaffSpellConfig(StaffTestConfig(mapOf(
             "icicle.name" to "Ледяной венец", "icicle.secondary-name" to "Ледяной дождь",
             "fault.name" to "Обсидиановый раскол", "fault.secondary-name" to "Каменный выброс",
-            "messages.staff-hud.ready-charge" to "<ability><newline><input> — начать заряд<newline>Ещё один клик — выпустить",
+            "messages.staff-hud.ready-charge" to "<ability><newline>Удерживайте <input> для зарядки<newline>Отпустите, чтобы выпустить",
             "messages.staff-hud.ready-instant" to "<ability><newline><input> — применить",
             "messages.staff-hud.cooldown" to "<ability> · <input><newline>Восстановление <seconds> с<newline><bar>",
         )))
@@ -500,14 +500,14 @@ class StaffSpellsTest : FreeSpec({
             h.controller.start()
             h.scheduler.tick(4)
             displays.records.size shouldBe 1
-            displays.text() shouldBe "Ледяной венец\nЛКМ — начать заряд\nЕщё один клик — выпустить"
+            displays.text() shouldBe "Ледяной венец\nУдерживайте ПКМ для зарядки\nОтпустите, чтобы выпустить"
 
             h.controller.cast(player)
             h.cooldowns.remainingTicks(player.uniqueId) shouldBe 20L
-            displays.text().startsWith("Ледяной венец · ЛКМ\nВосстановление 1.0 с\n") shouldBe true
+            displays.text().startsWith("Ледяной венец · ПКМ\nВосстановление 1.0 с\n") shouldBe true
             h.scheduler.tick(8)
             h.cooldowns.remainingTicks(player.uniqueId) shouldBe 10L
-            displays.text().startsWith("Ледяной венец · ЛКМ\nВосстановление 0.5 с\n") shouldBe true
+            displays.text().startsWith("Ледяной венец · ПКМ\nВосстановление 0.5 с\n") shouldBe true
 
             player.isSneaking = true
             player.inventory.setItemInMainHand(h.config.item(StaffSpell.FAULT))
@@ -524,7 +524,7 @@ class StaffSpellsTest : FreeSpec({
             player.inventory.setItemInMainHand(h.config.item(StaffSpell.ICICLE))
             h.scheduler.tick(4)
             displays.records.size shouldBe 2
-            displays.text().startsWith("Ледяной дождь\nShift + ЛКМ — применить") shouldBe true
+            displays.text().startsWith("Ледяной дождь\nShift + ПКМ — применить") shouldBe true
 
             h.controller.onQuit(PlayerQuitEvent(player, Component.empty()))
             displays.records.last().removals shouldBe 1
@@ -553,7 +553,7 @@ class StaffSpellsTest : FreeSpec({
             h.scheduler.tick(4) // Mock quit leaves the player online, modelling the returning HUD.
             val remaining = h.cooldowns.remainingTicks(player.uniqueId)
             remaining shouldBe 20L
-            displays.text().startsWith("Дождь · Shift + ЛКМ\nВосстановление 1.0 с\n") shouldBe true
+            displays.text().startsWith("Дождь · Shift + ПКМ\nВосстановление 1.0 с\n") shouldBe true
             displays.text().endsWith(staffSpellHudBar(staffCooldownProgress(remaining, 30).toDouble())) shouldBe true
             h.controller.cast(player)
             h.captures.size shouldBe 1
@@ -851,7 +851,7 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "icicle aim assist steers a visible near miss inside the narrow cone" {
+    "icicle aim assist nudges a near miss without granting a perfect target lock" {
         val baseline = firstIcicleHeadingAtAgeFive()
         withStaffHarness(settings = staffSettings(range = 24.0)) { h ->
             val world = h.paper.addSimpleWorld("staff-icicle-near-miss")
@@ -869,9 +869,10 @@ class StaffSpellsTest : FreeSpec({
 
             val firstShot = h.visualPlays.first { it.spell == StaffSpell.ICICLE && it.charging }.id
             val assisted = h.projectileMoves.filter { it.id == firstShot }.getOrNull(4)?.direction
-            (requireNotNull(assisted).distanceSquared(baseline) > 0.001) shouldBe true
-            h.scheduler.tick(30)
-            (target in h.hits) shouldBe true
+            val heading = requireNotNull(assisted)
+            // The default 35% correction is smaller than the former full homing turn.
+            (heading.x > baseline.x) shouldBe true
+            (heading.angle(baseline) < Math.toRadians(6.0 * 0.35)) shouldBe true
         }
     }
 
@@ -947,13 +948,13 @@ class StaffSpellsTest : FreeSpec({
         withStaffHarness(settings = staffSettings(range = 24.0)) { h ->
             val world = h.paper.addSimpleWorld("staff-icicle-lost-cover")
             val player = h.player("staff-icicle-lost-cover", world, StaffSpell.ICICLE)
-            val target = h.zombie(world, x = 1.3, z = 12.0)
+            val target = h.zombie(world, x = 0.5, z = 12.0)
             visible(player.eyeLocation, center(target)) shouldBe true
             h.controller.start()
 
             h.controller.cast(player)
             val firstShot = h.visualPlays.first { it.spell == StaffSpell.ICICLE && it.charging }.id
-            h.scheduler.tick(4) // The first bolt acquires the visible near miss.
+            h.scheduler.tick(4) // The first bolt acquires the directly aimed target.
             for (x in -3..3) for (y in 64..66) world.getBlockAt(x, y, 11).type = Material.STONE
             visible(player.eyeLocation, center(target)) shouldBe false
             h.scheduler.tick(4)

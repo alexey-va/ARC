@@ -10,7 +10,7 @@ import org.bukkit.inventory.EquipmentSlot
 /** Loaded only with FMM; modeled hitboxes emit their own events instead of Paper interactions. */
 internal class StaffModeledInput(private val input: StaffSpellInput) : Listener {
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    fun onLeftClick(event: ModeledEntityLeftClickEvent) = input.attackModeledEntity(event.player) {
+    fun onLeftClick(event: ModeledEntityLeftClickEvent) = input.leftClickModeledEntity(event.player) {
         event.isCancelled = true
     }
 

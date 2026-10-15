@@ -38,18 +38,20 @@ internal fun staffMeleeDisplayParts(
     if (ageTicks < 0 || durationTicks <= 0 || ageTicks >= endTick ||
         targetReach <= MELEE_START_DISTANCE + 0.1) return emptyList()
 
-    val growth = smoothMelee(ageTicks.toDouble() / STAFF_MELEE_PEAK_TICK)
-    val shape = meleeShape(spell, growth)
+    val progress = smoothMelee(ageTicks.toDouble() / STAFF_MELEE_PEAK_TICK)
+    val followThrough = smoothMelee((ageTicks - STAFF_MELEE_CONTACT_TICK).toDouble() / 2.0)
+    val shape = meleeShape(spell, progress, followThrough)
     if (shape.isEmpty() || shape.size > MAX_PARTS) return emptyList()
 
-    val bounds = meleeBounds(shape)
+    // Fit against the full contact footprint so every spell reaches the same authored range at age 4.
+    val bounds = meleeBounds(meleeShape(spell, 1.0, 0.0))
     val depth = (bounds.maxZ - bounds.minZ).coerceAtLeast(0.001f)
     val availableDepth = targetReach - MELEE_START_DISTANCE
     // Retain a short compressed approach pose, then let the age-4 keyframe occupy full reach.
     val fit = minOf(1.0, ((availableDepth - 0.55) / depth).coerceAtLeast(0.001)).toFloat()
     if (!fit.isFinite() || fit <= 0f) return emptyList()
     val fittedDepth = depth * fit
-    val contactAdvance = (availableDepth - fittedDepth).coerceAtLeast(0.0) * growth
+    val contactAdvance = (availableDepth - fittedDepth).coerceAtLeast(0.0) * progress
 
     // With two-tick keyframes, age 14 is sent before removal at 16. Collapse that pose first.
     val lastKeyframe = (endTick - StaffSpellDisplayEffects.FRAME_TICKS).coerceAtLeast(0)
@@ -63,12 +65,12 @@ internal fun staffMeleeDisplayParts(
     }
 
     return shape.map { part ->
-        val scaleFactor = (fit * growth * fade).toFloat().coerceAtLeast(0.001f)
+        val scaleFactor = (fit * fade).toFloat().coerceAtLeast(0.001f)
         part.copy(
             center = Vector3f(
-                part.center.x * fit * growth.toFloat(),
-                FLOOR_Y.toFloat() + (part.center.y - FLOOR_Y.toFloat()) * growth.toFloat(),
-                (part.center.z - bounds.minZ) * fit * growth.toFloat() +
+                part.center.x * fit,
+                part.center.y,
+                (part.center.z - bounds.minZ) * fit +
                     MELEE_START_DISTANCE.toFloat() + contactAdvance.toFloat(),
             ),
             scale = Vector3f(part.scale).mul(scaleFactor),
@@ -89,22 +91,22 @@ internal fun staffMeleeParticles(
     if (parts.isEmpty()) return emptyList()
     val samples = when (spell) {
         StaffSpell.FROST -> listOf(
-            surfaceSample(parts, "frost:shelf:0", Particle.BLOCK, 2, Material.PACKED_ICE.createBlockData(), Vector(0.08, 0.02, 0.07), 0.025),
-            surfaceSample(parts, "frost:shelf:1", Particle.SNOWFLAKE, 1, spread = Vector(0.06, 0.04, 0.06)),
-            surfaceSample(parts, "frost:shelf:3", Particle.BLOCK, 2, Material.BLUE_ICE.createBlockData(), Vector(0.08, 0.02, 0.07), 0.025),
-            surfaceSample(parts, "frost:shard:0:1", Particle.SNOWFLAKE, 1, spread = Vector(0.05, 0.05, 0.05)),
-            surfaceSample(parts, "frost:shard:1:1", Particle.BLOCK, 1, Material.BLUE_ICE.createBlockData(), Vector(0.04, 0.02, 0.04), 0.02),
-            surfaceSample(parts, "frost:shard:2:1", Particle.SNOWFLAKE, 1, spread = Vector(0.05, 0.05, 0.05)),
-            surfaceSample(parts, "frost:shard:3:1", Particle.BLOCK, 1, Material.PACKED_ICE.createBlockData(), Vector(0.04, 0.02, 0.04), 0.02),
+            surfaceSample(parts, "frost:jaw:0:0", Particle.BLOCK, 2, Material.PACKED_ICE.createBlockData(), Vector(0.08, 0.02, 0.07), 0.025),
+            surfaceSample(parts, "frost:jaw:0:3", Particle.SNOWFLAKE, 1, spread = Vector(0.06, 0.04, 0.06)),
+            surfaceSample(parts, "frost:jaw:1:3", Particle.BLOCK, 2, Material.BLUE_ICE.createBlockData(), Vector(0.08, 0.02, 0.07), 0.025),
+            surfaceSample(parts, "frost:tooth:0:1", Particle.SNOWFLAKE, 1, spread = Vector(0.05, 0.05, 0.05)),
+            surfaceSample(parts, "frost:tooth:1:1", Particle.BLOCK, 1, Material.BLUE_ICE.createBlockData(), Vector(0.04, 0.02, 0.04), 0.02),
+            surfaceSample(parts, "frost:spall:0", Particle.SNOWFLAKE, 1, spread = Vector(0.05, 0.05, 0.05)),
+            surfaceSample(parts, "frost:spall:3", Particle.BLOCK, 1, Material.PACKED_ICE.createBlockData(), Vector(0.04, 0.02, 0.04), 0.02),
         )
 
         StaffSpell.FAULT -> listOf(
-            surfaceSample(parts, "fault:row:0:rock:0", Particle.BLOCK, 2, Material.BASALT.createBlockData(), Vector(0.07, 0.025, 0.06), 0.02),
-            surfaceSample(parts, "fault:row:1:rock:1", Particle.CRIT, 1, spread = Vector(0.06, 0.06, 0.06), speed = 0.025),
-            surfaceSample(parts, "fault:row:1:rock:4", Particle.BLOCK, 2, Material.POLISHED_BASALT.createBlockData(), Vector(0.07, 0.025, 0.06), 0.02),
-            surfaceSample(parts, "fault:row:2:rock:2", Particle.CRIT, 1, spread = Vector(0.06, 0.06, 0.06), speed = 0.025),
-            surfaceSample(parts, "fault:row:2:rock:3", Particle.BLOCK, 2, Material.OBSIDIAN.createBlockData(), Vector(0.07, 0.025, 0.06), 0.02),
-            surfaceSample(parts, "fault:row:3:rock:5", Particle.CRIT, 1, spread = Vector(0.06, 0.06, 0.06), speed = 0.025),
+            surfaceSample(parts, "fault:hammer:0", Particle.BLOCK, 2, Material.BASALT.createBlockData(), Vector(0.07, 0.025, 0.06), 0.02),
+            surfaceSample(parts, "fault:hammer:2", Particle.CRIT, 1, spread = Vector(0.06, 0.06, 0.06), speed = 0.025),
+            surfaceSample(parts, "fault:rift:0:0:0", Particle.BLOCK, 2, Material.POLISHED_BASALT.createBlockData(), Vector(0.07, 0.025, 0.06), 0.02),
+            surfaceSample(parts, "fault:rift:1:0:2", Particle.CRIT, 1, spread = Vector(0.06, 0.06, 0.06), speed = 0.025),
+            surfaceSample(parts, "fault:spall:2", Particle.BLOCK, 2, Material.OBSIDIAN.createBlockData(), Vector(0.07, 0.025, 0.06), 0.02),
+            surfaceSample(parts, "fault:spall:7", Particle.CRIT, 1, spread = Vector(0.06, 0.06, 0.06), speed = 0.025),
         )
 
         StaffSpell.LUNAR -> listOf(
@@ -158,7 +160,10 @@ private fun surfaceSample(
     )
 }
 
-private fun meleeShape(spell: StaffSpell, progress: Double): List<StaffDisplayPart> = buildList {
+private fun meleeShape(spell: StaffSpell, progress: Double, followThrough: Double): List<StaffDisplayPart> = buildList {
+    val p = progress.coerceIn(0.0, 1.0)
+    val follow = followThrough.coerceIn(0.0, 1.0)
+
     fun piece(
         identity: String,
         material: Material,
@@ -171,10 +176,13 @@ private fun meleeShape(spell: StaffSpell, progress: Double): List<StaffDisplayPa
         yaw: Double = 0.0,
         pitch: Double = 0.0,
         roll: Double = 0.0,
+        growth: Double = p,
     ) = add(StaffDisplayPart(
         material,
         Vector3f(x.toFloat(), y.toFloat(), z.toFloat()),
-        Vector3f(width.toFloat(), height.toFloat(), depth.toFloat()),
+        Vector3f((width * growth).coerceAtLeast(0.001).toFloat(),
+            (height * growth).coerceAtLeast(0.001).toFloat(),
+            (depth * growth).coerceAtLeast(0.001).toFloat()),
         Quaternionf().rotationY(yaw.toFloat()).rotateZ(roll.toFloat()).rotateX(pitch.toFloat()),
         identity = identity,
     ))
@@ -186,6 +194,7 @@ private fun meleeShape(spell: StaffSpell, progress: Double): List<StaffDisplayPa
         to: Vector3f,
         width: Double,
         height: Double,
+        growth: Double = p,
     ) {
         val direction = Vector3f(to).sub(from)
         val length = direction.length()
@@ -197,7 +206,9 @@ private fun meleeShape(spell: StaffSpell, progress: Double): List<StaffDisplayPa
         add(StaffDisplayPart(
             material,
             Vector3f(start).add(end).mul(0.5f),
-            Vector3f(width.toFloat(), height.toFloat(), extendedLength),
+            Vector3f((width * growth).coerceAtLeast(0.001).toFloat(),
+                (height * growth).coerceAtLeast(0.001).toFloat(),
+                (extendedLength * growth).coerceAtLeast(0.001).toFloat()),
             Quaternionf().rotationTo(Vector3f(0f, 0f, 1f), direction),
             identity = identity,
         ))
@@ -205,105 +216,168 @@ private fun meleeShape(spell: StaffSpell, progress: Double): List<StaffDisplayPa
 
     when (spell) {
         StaffSpell.FROST -> {
-            // Broken low shelves bind four separated, solid crystal clusters without filling the reticle.
-            val shelves = listOf(
-                doubleArrayOf(-3.05, 2.12, 1.42, 0.24, 1.04, -0.14),
-                doubleArrayOf(-1.94, 3.84, 1.20, 0.20, 1.10, 0.11),
-                doubleArrayOf(0.00, 4.82, 1.02, 0.17, 1.05, 0.03),
-                doubleArrayOf(1.92, 5.56, 1.23, 0.22, 1.08, -0.09),
-                doubleArrayOf(3.02, 6.12, 1.40, 0.24, 1.04, 0.15),
-            )
-            shelves.forEachIndexed { index, shelf ->
-                piece(
-                    "frost:shelf:$index",
-                    if (index % 2 == 0) Material.PACKED_ICE else Material.BLUE_ICE,
-                    shelf[0], FLOOR_Y + shelf[3] * 0.5, shelf[1], shelf[2], shelf[3], shelf[4], yaw = shelf[5],
-                )
+            // Two solid jaws surge along the ground, then close around the reticle at impact.
+            repeat(2) { jaw ->
+                val side = if (jaw == 0) -1.0 else 1.0
+                fun point(t: Double): Vector3f {
+                    val x = side * (4.35 - 3.25 * t - p * 1.10 * (1.0 - t))
+                    val y = FLOOR_Y + 0.34 + 0.20 * sin(t * PI) + (jaw * 0.035)
+                    val z = 1.72 + 4.58 * t
+                    return Vector3f(x.toFloat(), y.toFloat(), z.toFloat())
+                }
+                repeat(4) { joint ->
+                    val t0 = joint / 4.0
+                    val t1 = (joint + 1) / 4.0
+                    val start = point(t0)
+                    val end = point(t1)
+                    segment("frost:jaw:$jaw:$joint",
+                        if ((joint + jaw) % 2 == 0) Material.PACKED_ICE else Material.BLUE_ICE,
+                        start, end, width = 0.96, height = 0.82, growth = p)
+                }
             }
 
-            val clusters = listOf(-3.15 to 3.18, -1.80 to 4.58, 1.82 to 5.12, 3.18 to 4.02)
-            val heights = listOf(
-                listOf(1.25, 1.56, 1.02),
-                listOf(1.44, 1.82, 1.30),
-                listOf(1.37, 1.67, 1.17),
-                listOf(1.18, 1.53, 1.36),
-            )
-            clusters.forEachIndexed { cluster, (centerX, centerZ) ->
+            // Tilted teeth fold inward; unequal height and overlap keep the clap from becoming a fence.
+            repeat(2) { sideIndex ->
+                val side = if (sideIndex == 0) -1.0 else 1.0
                 repeat(3) { tooth ->
-                    val fan = tooth - 1
                     val root = Vector3f(
-                        (centerX + fan * 0.17).toFloat(), -1.04f,
-                        (centerZ + abs(fan) * 0.10).toFloat(),
+                        (side * (3.30 - tooth * 0.65 - p * (0.75 + tooth * 0.12))).toFloat(),
+                        (FLOOR_Y + 0.12).toFloat(),
+                        (3.14 + tooth * 0.88 + if (sideIndex == 0) 0.08 else -0.04).toFloat(),
                     )
                     val tip = Vector3f(
-                        (root.x + fan * 0.30 + if (cluster % 2 == 0) -0.09 else 0.09).toFloat(),
-                        (root.y + heights[cluster][tooth]).toFloat(),
-                        (root.z + if (tooth == 1) 0.12 else -0.04 + fan * 0.08).toFloat(),
+                        (side * (2.08 - tooth * 0.68 - p * (0.78 + tooth * 0.05))).toFloat(),
+                        (root.y + (0.62 + ((tooth + sideIndex) % 3) * 0.12)).toFloat(),
+                        (root.z + 0.48 + (tooth % 2) * 0.18).toFloat(),
                     )
-                    val material = if ((cluster + tooth) % 2 == 0) Material.BLUE_ICE else Material.PACKED_ICE
-                    segment("frost:shard:$cluster:$tooth", material, root, tip,
-                        width = 0.76 + (tooth % 2) * 0.08, height = 0.70)
+                    segment("frost:tooth:$sideIndex:$tooth",
+                        if ((tooth + sideIndex) % 2 == 0) Material.BLUE_ICE else Material.PACKED_ICE,
+                        root, tip, width = 0.72 + (tooth % 2) * 0.10, height = 0.66, growth = p)
                 }
+            }
+
+            // Small spalls break outward only after the jaws meet; they share stable slots with the jaws.
+            repeat(6) { index ->
+                val side = if (index % 2 == 0) -1.0 else 1.0
+                val scatter = follow * (0.38 + (index % 3) * 0.12)
+                piece("frost:spall:$index",
+                    if (index % 2 == 0) Material.PACKED_ICE else Material.BLUE_ICE,
+                    side * (0.82 + index / 2 * 0.58 + scatter),
+                    FLOOR_Y + 0.54 + follow * (0.18 + (index % 3) * 0.08),
+                    4.92 + index % 3 * 0.42 - follow * 0.18,
+                    0.62, 0.48, 0.54,
+                    yaw = side * (0.18 + index * 0.025),
+                    pitch = side * (0.08 + follow * 0.12),
+                    roll = side * (0.13 + follow * 0.10),
+                    growth = p * (0.05 + follow * 0.55),
+                )
             }
         }
 
         StaffSpell.FAULT -> {
-            val columns = listOf(-3.38, -2.04, -0.70, 0.70, 2.04, 3.38)
-            val rows = listOf(1.85, 3.27, 4.69, 6.11)
-            rows.forEachIndexed { row, z ->
-                val rowProgress = smoothMelee((progress - row * 0.12) / (1.0 - row * 0.12))
-                val rise = 0.68 * rowProgress
-                columns.forEachIndexed { rock, x ->
-                    val height = if (abs(x) < 0.8) 0.48 + (row % 2) * 0.05 else 0.84 + (rock % 2) * 0.12
-                    val width = if (abs(x) < 0.8) 1.02 else 1.18 + (row + rock) % 2 * 0.20
-                    val material = when ((row + rock) % 4) {
-                        0 -> Material.BASALT
-                        1 -> Material.POLISHED_BASALT
-                        2 -> Material.BLACKSTONE
-                        else -> Material.OBSIDIAN
+            // A heavy leading fracture hammers forward; branching seams open sideways in sequence.
+            repeat(4) { row ->
+                val beat = smoothMelee((p - row * 0.13) / (1.0 - row * 0.13))
+                val height = 0.46 + (row % 2) * 0.12
+                val settle = follow * (0.14 + row * 0.025)
+                piece("fault:hammer:$row",
+                    when (row % 3) { 0 -> Material.OBSIDIAN; 1 -> Material.BASALT; else -> Material.BLACKSTONE },
+                    (if (row % 2 == 0) -0.08 else 0.12) * p,
+                    FLOOR_Y + height * 0.5 + 0.56 * beat - settle,
+                    1.82 + row * 1.38,
+                    1.26 + (row % 2) * 0.18, height, 1.06 + (row % 3) * 0.12,
+                    yaw = (if (row % 2 == 0) -1 else 1) * (0.12 + beat * 0.12),
+                    roll = (if (row % 2 == 0) -1 else 1) * 0.08,
+                    growth = beat,
+                )
+            }
+
+            repeat(2) { sideIndex ->
+                val side = if (sideIndex == 0) -1.0 else 1.0
+                repeat(2) { branch ->
+                    val baseZ = 2.02 + branch * 2.12 + if (sideIndex == 0) 0.0 else 0.16
+                    fun riftPoint(t: Double): Vector3f {
+                        val x = side * (0.28 + 4.02 * t * p)
+                        val y = FLOOR_Y + 0.18 + (0.26 + branch * 0.12) * t * p
+                        val z = baseZ + 1.08 * t + sin(t * PI * 2 + branch) * 0.16 * p
+                        return Vector3f(x.toFloat(), y.toFloat(), z.toFloat())
                     }
-                    piece(
-                        "fault:row:$row:rock:$rock", material,
-                        x + if (row % 2 == 0) (rock - 2.5) * 0.045 else (2.5 - rock) * 0.045,
-                        FLOOR_Y + height * 0.5 + rise,
-                        z + if (rock % 2 == 0) -0.08 else 0.08,
-                        width, height, 0.88 + (rock % 3) * 0.09,
-                        yaw = (if (rock % 2 == 0) -1 else 1) * 0.12,
-                        pitch = (if ((row + rock) % 2 == 0) -1 else 1) * 0.10,
-                        roll = (if (rock % 2 == 0) -1 else 1) * 0.07,
-                    )
+                    repeat(3) { segmentIndex ->
+                        val t0 = segmentIndex / 3.0
+                        val t1 = (segmentIndex + 1) / 3.0
+                        val start = riftPoint(t0)
+                        val end = riftPoint(t1)
+                        val birthAt = (t0 * 0.18 + branch * 0.06).coerceAtMost(0.42)
+                        val birth = smoothMelee((p - birthAt) / (1.0 - birthAt))
+                        segment("fault:rift:$sideIndex:$branch:$segmentIndex",
+                            if ((branch + segmentIndex) % 2 == 0) Material.POLISHED_BASALT else Material.BLACKSTONE,
+                            start, end,
+                            width = 0.50 + (segmentIndex % 2) * 0.10,
+                            height = 0.34 + branch * 0.04,
+                            growth = birth,
+                        )
+                    }
                 }
+            }
+
+            repeat(8) { index ->
+                val side = if (index % 2 == 0) -1.0 else 1.0
+                val branch = index / 4
+                val slot = index % 4
+                val birth = smoothMelee((p - 0.30 - slot * 0.04) / 0.62)
+                piece("fault:spall:$index",
+                    when (index % 3) { 0 -> Material.OBSIDIAN; 1 -> Material.BLACKSTONE; else -> Material.BASALT },
+                    side * (2.30 + slot * 0.48 + follow * 0.28),
+                    FLOOR_Y + 0.34 + branch * 0.10 + birth * 0.18 + follow * 0.28,
+                    3.10 + branch * 2.10 + slot * 0.22 - follow * 0.12,
+                    0.56 + (slot % 2) * 0.18, 0.38 + (index % 3) * 0.08, 0.58,
+                    yaw = side * (0.20 + slot * 0.10),
+                    pitch = side * (0.10 + follow * 0.10),
+                    roll = side * (0.16 + slot * 0.03),
+                    growth = birth * (0.35 + follow * 0.65),
+                )
             }
         }
 
         StaffSpell.LUNAR -> {
-            // One heavy C-shaped sweep, its far center arched forward and its two horns deliberately tilted.
-            val points = (0..12).map { index ->
-                val t = index / 12.0
-                val x = -4.02 + 8.04 * t
-                val z = 1.96 + 4.42 * (1.0 - (x / 4.02) * (x / 4.02))
-                val y = -0.98 + 0.35 * t + 0.06 * sin(t * PI)
-                Vector3f(x.toFloat(), y.toFloat(), z.toFloat())
+            // A swept crescent travels left-to-right and forward. Its horn segments stay tapered;
+            // a smaller offset echo appears after impact as the blade breaks into light.
+            fun point(t: Double, echo: Boolean): Vector3f {
+                val sweep = (p - 0.5) * 0.90
+                val after = if (echo) follow else 0.0
+                val x = -3.70 + 7.40 * t + sweep + (t - 0.5) * after * 0.32
+                val y = FLOOR_Y + 0.18 + 0.55 * sin(t * PI) + 0.22 * t + after * (0.18 + 0.14 * sin(t * PI))
+                val z = 1.82 + 4.82 * sin(t * PI) - after * 0.28
+                return Vector3f(x.toFloat(), y.toFloat(), z.toFloat())
             }
             repeat(12) { index ->
+                val t0 = index / 12.0
+                val t1 = (index + 1) / 12.0
                 val material = when (index % 3) {
                     0 -> Material.CALCITE
                     1 -> Material.QUARTZ_BLOCK
                     else -> Material.SMOOTH_QUARTZ
                 }
                 val taper = when (index) {
-                    0, 11 -> 0.34
-                    1, 10 -> 0.72
+                    0, 11 -> 0.18
+                    1, 10 -> 0.55
                     else -> 1.0
                 }
-                segment("lunar:arc:$index", material, points[index], points[index + 1],
-                    width = 0.90 * taper, height = 0.66 * taper)
+                val birth = smoothMelee((p - t0 * 0.50) / (1.0 - t0 * 0.50))
+                segment("lunar:arc:$index", material, point(t0, false), point(t1, false),
+                    width = (0.92 + (index % 3) * 0.08) * taper * (1.0 - 0.45 * follow),
+                    height = 0.66 * taper * (1.0 - 0.38 * follow),
+                    growth = birth)
+                val echoBirth = 0.001 + follow * 0.42
+                segment("lunar:echo:$index", Material.WHITE_STAINED_GLASS,
+                    point(t0, true), point(t1, true),
+                    width = 0.52 * taper, height = 0.30 * taper, growth = echoBirth)
             }
         }
 
         StaffSpell.TIDE -> {
-            // Five overlapping layers form a thick C-shaped breaker rather than isolated masonry.
-            // The center stays below eye height while both shoulders rise into one continuous crest.
+            // The body advances as one overlapping water wall, rises into a curled crest, then
+            // folds down across its own footprint after contact instead of moving past the target.
             val xs = listOf(-3.80, -2.715, -1.63, -0.545, 0.545, 1.63, 2.715, 3.80)
             val heights = listOf(1.50, 1.38, 1.08, 0.82, 0.82, 1.08, 1.38, 1.50)
             val depths = listOf(4.00, 4.45, 4.80, 5.00, 5.00, 4.80, 4.45, 4.00)
@@ -312,26 +386,28 @@ private fun meleeShape(spell: StaffSpell, progress: Double): List<StaffDisplayPa
                 val height = heights[index]
                 val z = depths[index]
                 val yaw = yaws[index]
+                val foldedHeight = height * (1.0 - 0.42 * follow)
                 val coreHeight = (height * 0.72).coerceAtLeast(0.58)
                 val coreY = FLOOR_Y + coreHeight * 0.5
-                val faceY = FLOOR_Y + height * 0.53
-                val crestY = FLOOR_Y + height - 0.21
+                val faceY = FLOOR_Y + foldedHeight * 0.53 - follow * 0.12
+                val crestY = FLOOR_Y + foldedHeight - 0.21 - follow * 0.34
 
                 piece("tide:core:$index", Material.BLUE_CONCRETE, x, coreY, z,
                     width = 1.54, height = coreHeight, depth = 1.32, yaw = yaw * 0.72,
-                    roll = (if (index < 4) -1 else 1) * 0.035)
-                piece("tide:backwash:$index", Material.BLUE_STAINED_GLASS, x, faceY, z + 0.31,
-                    width = 2.40, height = height * 0.94, depth = 0.72, yaw = yaw,
-                    pitch = 0.08)
+                    roll = (if (index < 4) -1 else 1) * 0.035,
+                    growth = p)
+                piece("tide:backwash:$index", Material.BLUE_STAINED_GLASS, x, faceY, z + 0.31 - follow * 0.01,
+                    width = 2.40, height = foldedHeight * 0.94, depth = 0.72, yaw = yaw,
+                    pitch = 0.08 + follow * 0.12, growth = p)
                 piece("tide:water:$index", if (index % 2 == 0) Material.CYAN_STAINED_GLASS else Material.LIGHT_BLUE_STAINED_GLASS,
-                    x, faceY, z - 0.20, width = 2.40, height = height, depth = 0.72, yaw = yaw,
-                    pitch = -0.12)
+                    x, faceY, z - 0.20, width = 2.40, height = foldedHeight, depth = 0.72, yaw = yaw,
+                    pitch = -0.12 - follow * 0.26, growth = p)
                 piece("tide:foam:$index", Material.WHITE_CONCRETE, x, crestY, z + 0.12,
                     width = 2.40, height = 0.42, depth = 0.78, yaw = yaw * 0.82,
-                    pitch = -0.08)
+                    pitch = -0.08 - follow * 0.22, growth = p)
                 piece("tide:curl:$index", if (index % 2 == 0) Material.CYAN_STAINED_GLASS else Material.BLUE_STAINED_GLASS,
-                    x, crestY - 0.07, z - 0.36, width = 2.40, height = 0.54, depth = 0.62,
-                    yaw = yaw * 0.94, pitch = -0.40)
+                    x, crestY - 0.07 + follow * 0.18, z - 0.36, width = 2.40, height = 0.54, depth = 0.62,
+                    yaw = yaw * 0.94, pitch = -0.40 - follow * 0.34, growth = p)
             }
         }
 

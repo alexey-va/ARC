@@ -20,14 +20,27 @@ internal const val STAFF_TIDE_PRIMARY_ARRIVAL_TICK =
 internal const val STAFF_TIDE_PRIMARY_IMPACT_TICKS = 12
 internal const val STAFF_TIDE_PRIMARY_ATTACK_TICKS =
     STAFF_TIDE_PRIMARY_ARRIVAL_TICK + STAFF_TIDE_PRIMARY_IMPACT_TICKS
+internal const val STAFF_TIDE_SECONDARY_BASE_HALF_WIDTH = 3.0
+internal const val STAFF_TIDE_SECONDARY_CHARGE_HALF_WIDTH = .30
+
+internal fun staffTideWaveHalfWidth(charge: Double): Double {
+    val q = charge.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
+    return STAFF_TIDE_SECONDARY_BASE_HALF_WIDTH + q * STAFF_TIDE_SECONDARY_CHARGE_HALF_WIDTH
+}
 
 /** Local surfaces shared by the solid ribbons and their native-particle accents. */
 private fun galeFunnelPoint(t: Double, strand: Int, age: Double, q: Double, grow: Double): Vector3f {
     val scale = .8 + q * .45
-    val angle = strand * PI * 2 / 3 + t * PI * 2.3 - age * (.055 + (1 - t) * .018)
-    val taper = (.30 + 1.32 * t.pow(.82) + q * .06) * grow
-    return Vector3f((cos(angle) * taper).toFloat(), (t * (5.35 + q * .30) / scale * grow).toFloat(),
-        (sin(angle) * taper).toFloat())
+    val phase = strand * PI * 2 / 3 + t * PI * 2.3 - age * (.055 + (1 - t) * .018)
+    val turbulence = sin(age * .17 + t * 13.0 + strand * 2.1) * .11 +
+        sin(age * .31 - t * 7.4 + strand * 1.3) * .045
+    val angle = phase + turbulence
+    val gust = 1.0 + .09 * sin(age * .23 + t * 10.5 + strand * 2.7) +
+        .04 * sin(age * .37 - t * 17.0 + strand * .8)
+    val taper = (.30 + 1.32 * t.pow(.82) + q * .06) * grow * gust
+    val height = t * (5.35 + q * .30) / scale * grow +
+        sin(age * .15 + t * 14.0 + strand * 1.7) * .07 * grow
+    return Vector3f((cos(angle) * taper).toFloat(), height.toFloat(), (sin(angle) * taper).toFloat())
 }
 
 private fun tideWavePoint(across: Double, t: Double, q: Double, grow: Double): Vector3f {
@@ -36,7 +49,7 @@ private fun tideWavePoint(across: Double, t: Double, q: Double, grow: Double): V
     val curl = smoothTideGale((t - .60) / .40)
     val heightT = if (t >= .90) t - .06 else t
     val z = -.10 + .72 * sin(t * PI * .72) + .70 * curl * curl + .18 * (1.0 - abs(across))
-    return Vector3f((across * (2.30 + q * .15) / scale * grow).toFloat(),
+    return Vector3f((across * staffTideWaveHalfWidth(q) / scale * grow).toFloat(),
         (heightT * (2.75 + q * .32) / scale * shoulder * grow).toFloat(), (z * grow).toFloat())
 }
 
@@ -65,7 +78,35 @@ internal fun staffTideGaleParts(
     }
 
     when (spell) {
-        StaffSpell.GALE -> if (secondary) {
+        StaffSpell.GALE -> if (secondary && impact) {
+            val grow = smoothTideGale(age / 3.0)
+            val blastRadius = radius.takeIf { it.isFinite() && it > 0.0 }?.coerceIn(1.6, 3.2) ?: 2.3
+            val radiusInScene = blastRadius / scale * grow
+            // A single expanding, uneven wind ring carries the contact release without a smoke cloud.
+            repeat(18) { index ->
+                val a0 = index * PI * 2 / 18 + age * .08
+                val a1 = (index + 1) * PI * 2 / 18 + age * .08
+                val r0 = radiusInScene * (.82 + .18 * sin(a0 * 3 + age * .24))
+                val r1 = radiusInScene * (.82 + .18 * sin(a1 * 3 + age * .24))
+                val p0 = Vector3f((cos(a0) * r0).toFloat(), (.20 + .18 * sin(a0 * 2 + age * .22)).toFloat(),
+                    (sin(a0) * r0).toFloat())
+                val p1 = Vector3f((cos(a1) * r1).toFloat(), (.20 + .18 * sin(a1 * 2 + age * .22)).toFloat(),
+                    (sin(a1) * r1).toFloat())
+                add(tideGaleLink(if (index % 4 == 0) Material.WHITE_STAINED_GLASS else Material.GRAY_STAINED_GLASS,
+                    p0, p1, .20f, .22f, "gale:burst:arc:$index"))
+            }
+            repeat(6) { index ->
+                val angle = index * PI / 3 - age * .11
+                val r = radiusInScene * (.54 + (index % 2) * .12)
+                val size = (.18 + (index % 3) * .035) * grow
+                add(StaffDisplayPart(
+                    if (index % 2 == 0) Material.WHITE_STAINED_GLASS else Material.LIGHT_GRAY_STAINED_GLASS,
+                    Vector3f((cos(angle) * r).toFloat(), (.32 + (index % 3) * .10).toFloat(), (sin(angle) * r).toFloat()),
+                    Vector3f((size * .7).toFloat(), (size * 1.5).toFloat(), (size * 2.8).toFloat()),
+                    Quaternionf().rotateY((-angle).toFloat()).rotateZ((-.22 + index * .07).toFloat()),
+                    identity = "gale:burst:shard:$index"))
+            }
+        } else if (secondary) {
             val grow = smoothTideGale(age / 4.0)
             // Two interwoven bands run through a hollow, forward-facing ram head.
             repeat(2) { strand ->
@@ -139,7 +180,7 @@ internal fun staffTideGaleParts(
         }
         StaffSpell.TIDE -> if (secondary) {
             val grow = smoothTideGale(age / 6.0)
-            val halfWidth = (2.30 + q * .15) / scale
+            val halfWidth = staffTideWaveHalfWidth(q) / scale
             val crestHeight = (2.75 + q * .32) / scale
             val acrossSegments = 7
             val rows = listOf(.06, .28, .52, .76, .96)
@@ -257,7 +298,23 @@ internal fun staffTideGaleParticleSamples(
     val water = staffFade(0x70eaff, 0x147eb0, .9f)
 
     when (spell) {
-        StaffSpell.GALE -> if (secondary) {
+        StaffSpell.GALE -> if (secondary && impact) {
+            val grow = smoothTideGale(age / 3.0)
+            val blastRadius = radius.takeIf { it.isFinite() && it > 0.0 }?.coerceIn(1.6, 3.2) ?: 2.3
+            if (ageTicks == 0) mote(Particle.GUST, 0.0, .16, 0.0, spread = .08)
+            repeat(18) { index ->
+                val angle = index * PI * 2 / 18 + age * .08
+                val r = blastRadius * (.82 + .18 * sin(angle * 3 + age * .24)) * grow
+                mote(Particle.DUST_COLOR_TRANSITION, cos(angle) * r,
+                    .20 + .18 * sin(angle * 2 + age * .22), sin(angle) * r, wind, .008)
+            }
+            repeat(6) { index ->
+                val angle = index * PI / 3 - age * .11
+                val r = blastRadius * (.54 + (index % 2) * .12) * grow
+                mote(Particle.CRIT, cos(angle) * r, .32 + (index % 3) * .10, sin(angle) * r,
+                    spread = .012, speed = .004)
+            }
+        } else if (secondary) {
             val grow = smoothTideGale(age / 4.0) * scale
             repeat(20) { index ->
                 val strand = index / 10
@@ -293,7 +350,7 @@ internal fun staffTideGaleParticleSamples(
         }
         StaffSpell.TIDE -> if (secondary) {
             val grow = smoothTideGale(age / 6.0)
-            val halfWidth = 2.30 + q * .15
+            val halfWidth = staffTideWaveHalfWidth(q)
             repeat(28) { index ->
                 val crest = index >= 14
                 val across = (index % 14) / 13.0 * 2 - 1

@@ -2,6 +2,7 @@ package ru.arc.staffspells
 
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
+import io.mockk.slot
 import io.mockk.verify
 import net.kyori.adventure.text.Component
 import org.bukkit.Material
@@ -17,7 +18,8 @@ class StaffSpellArsenalTest : FreeSpec({
                 (parts.size in 1..48) shouldBe true
                 val samples = staffArsenalParticles(spell, 12, duration, 3.0, secondary, 1.0)
                 val particleBudget = when (spell) {
-                    StaffSpell.OSSUARY -> 6..14
+                    StaffSpell.OSSUARY -> 0..32
+                    StaffSpell.LUNAR -> 16..32
                     // Water/wind silhouettes are displays; native particles only accent their surfaces.
                     StaffSpell.TIDE, StaffSpell.GALE -> 1..64
                     else -> 32..192
@@ -60,31 +62,33 @@ class StaffSpellArsenalTest : FreeSpec({
         val bone = staffArsenalParts(StaffSpell.OSSUARY, 8, 22, 1.0, 1.0, false, false,
             StaffCastInput.PRIMARY, 0.0)
         bone.any { it.material == Material.BONE_BLOCK } shouldBe true
-        val earlyBoneTip = staffArsenalParts(StaffSpell.OSSUARY, 2, 54, 1.0, 1.0, false, false,
-            StaffCastInput.PRIMARY, 1.0).single { it.identity == "bone:spike:tip" }
-        val fullBoneTip = staffArsenalParts(StaffSpell.OSSUARY, 8, 54, 1.0, 1.0, false, false,
-            StaffCastInput.PRIMARY, 1.0).single { it.identity == "bone:spike:tip" }
-        (fullBoneTip.center.y + fullBoneTip.scale.y / 2 > 3.0f) shouldBe true
+        val earlyBoneTip = staffArsenalParts(StaffSpell.OSSUARY, 2, 54, 1.0, 2.75, false, false,
+            StaffCastInput.PRIMARY, 1.0).single { it.identity == "bone:cluster:0:cap" }
+        val fullBoneTip = staffArsenalParts(StaffSpell.OSSUARY, 8, 54, 1.0, 2.75, false, false,
+            StaffCastInput.PRIMARY, 1.0).single { it.identity == "bone:cluster:0:cap" }
+        (fullBoneTip.center.y + fullBoneTip.scale.y / 2 > 2.0f) shouldBe true
         (fullBoneTip.center.y > earlyBoneTip.center.y * 2) shouldBe true
 
-        val telegraph = staffArsenalParts(StaffSpell.OSSUARY, 2, 36, 1.0, 2.0, false, true,
+        val telegraph = staffArsenalParts(StaffSpell.OSSUARY, 2, 36, 1.0, 5.5, false, true,
             StaffCastInput.SECONDARY, 1.0)
-        val strike = staffArsenalParts(StaffSpell.OSSUARY, OSSUARY_SECONDARY_STRIKE_TICK, 36, 1.0, 2.0, false, true,
+        val strike = staffArsenalParts(StaffSpell.OSSUARY, OSSUARY_SECONDARY_STRIKE_TICK, 36, 1.0, 5.5, false, true,
             StaffCastInput.SECONDARY, 1.0)
-        telegraph.count { it.identity?.startsWith("bone:erupt:") == true } shouldBe 14
-        strike.count { it.identity?.startsWith("bone:erupt:") == true } shouldBe 14
+        telegraph.count { it.identity?.startsWith("bone:erupt:") == true } shouldBe 30
+        strike.count { it.identity?.startsWith("bone:erupt:") == true } shouldBe 30
         strike.any { it.identity?.startsWith("cage:") == true } shouldBe false
-        strike.filter { it.identity?.endsWith(":tip") == true }.all {
-            it.center.y + it.scale.y / 2 > 2.5f
+        strike.filter { it.identity?.endsWith(":cap") == true }.all {
+            it.center.y + it.scale.y / 2 > 1.9f
         } shouldBe true
 
-        staffArsenalParticles(StaffSpell.OSSUARY, 8, 22, 1.0, false, 1.0).size shouldBe 6
-        staffArsenalParticles(StaffSpell.OSSUARY, 4, 36, 2.0, true, 1.0).size shouldBe 6
-        staffArsenalParticles(StaffSpell.OSSUARY, 8, 36, 2.0, true, 1.0).size shouldBe 7
+        staffArsenalParticles(StaffSpell.OSSUARY, 8, 22, 2.75, false, 1.0).size shouldBe 20
+        staffArsenalParticles(StaffSpell.OSSUARY, 4, 36, 5.5, true, 1.0).size shouldBe 10
+        staffArsenalParticles(StaffSpell.OSSUARY, 8, 36, 5.5, true, 1.0).size shouldBe 15
         staffArsenalParticles(StaffSpell.OSSUARY, OSSUARY_SECONDARY_STRIKE_TICK,
-            36, 2.0, true, 1.0).size shouldBe 14
+            36, 5.5, true, 1.0).size shouldBe 20
         staffArsenalParticles(StaffSpell.OSSUARY, OSSUARY_SECONDARY_STRIKE_TICK + 2,
-            36, 2.0, true, 1.0).isEmpty() shouldBe true
+            36, 5.5, true, 1.0).size shouldBe 20
+        staffArsenalParticles(StaffSpell.OSSUARY, OSSUARY_SECONDARY_STRIKE_TICK + 4,
+            36, 5.5, true, 1.0).isEmpty() shouldBe true
     }
 
     "moon blade alternate hits at descent contact and never twice" {
@@ -103,9 +107,41 @@ class StaffSpellArsenalTest : FreeSpec({
         }
     }
 
+    "LUNAR alternate damage follows the terminal crescent window and respects cover" {
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("moon-collapse-area")
+            val player = h.player("moon-collapse-area", world, StaffSpell.LUNAR)
+            val target = h.zombie(world, x = .5, z = 8.0)
+            val nearby = h.zombie(world, x = 3.0, z = 8.0)
+            h.controller.start()
+            h.controller.cast(player, StaffCastInput.SECONDARY, 0.0)
+            h.scheduler.tick(14)
+            h.hits shouldBe emptyList()
+            h.scheduler.tick(2)
+            h.hits.map { it.uniqueId }.toSet() shouldBe setOf(target.uniqueId, nearby.uniqueId)
+            h.scheduler.tick(24)
+            h.hits.count { it.uniqueId == target.uniqueId } shouldBe 1
+            h.hits.count { it.uniqueId == nearby.uniqueId } shouldBe 1
+        }
+
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("moon-collapse-cover")
+            val player = h.player("moon-collapse-cover", world, StaffSpell.LUNAR)
+            val target = h.zombie(world, x = .5, z = 8.0)
+            val covered = h.zombie(world, x = 3.0, z = 8.0)
+            for (y in 64..68) world.getBlockAt(1, y, 8).type = Material.STONE
+            h.controller.start()
+            h.controller.cast(player, StaffCastInput.SECONDARY, 0.0)
+            h.scheduler.tick(40)
+            h.hits.count { it.uniqueId == target.uniqueId } shouldBe 1
+            h.hits.none { it.uniqueId == covered.uniqueId } shouldBe true
+        }
+    }
+
     "TIDE alternate wave crosses both swept entity contacts once" {
         withStaffHarness(settings = staffSettings(range = 48.0)) { h ->
             val world = h.paper.addSimpleWorld("tide-orb-contact")
+            for (x in -1..1) for (z in 0..40) world.getBlockAt(x, 63, z).type = Material.STONE
             val player = h.player("tide-orb-contact", world, StaffSpell.TIDE)
             val first = h.zombie(world, x = .5, z = 8.0)
             val nearby = h.zombie(world, x = .5, z = 8.9)
@@ -151,6 +187,40 @@ class StaffSpellArsenalTest : FreeSpec({
             (kotlin.math.abs(scene.to.z - player.location.z - 36.0) < 0.05) shouldBe true
             h.scheduler.tick(60)
             h.hits shouldBe emptyList()
+        }
+    }
+
+    "TIDE alternate keeps full yaw range when aimed down and floor-slides into damage" {
+        withStaffHarness(settings = staffSettings(range = 48.0)) { h ->
+            val world = h.paper.addSimpleWorld("tide-wave-downward")
+            for (x in -1..1) for (z in 0..40) world.getBlockAt(x, 63, z).type = Material.STONE
+            val player = h.player("tide-wave-downward", world, StaffSpell.TIDE)
+            player.teleport(player.location.apply { pitch = 80f })
+            val target = h.zombie(world, x = .5, z = 31.0)
+            h.controller.start()
+            h.controller.cast(player, StaffCastInput.SECONDARY, 0.0)
+            val scene = h.visualPlays.single { it.spell == StaffSpell.TIDE && it.secondary }
+            (kotlin.math.abs(scene.to.z - player.location.z - 36.0) < .05) shouldBe true
+            (kotlin.math.abs(scene.to.y - scene.from.y) < .05) shouldBe true
+            h.scheduler.tick(80)
+            h.hits.count { it.uniqueId == target.uniqueId } shouldBe 1
+        }
+
+        withStaffHarness(settings = staffSettings(range = 48.0)) { h ->
+            val world = h.paper.addSimpleWorld("tide-wave-downward-wall")
+            for (x in -1..1) for (z in 0..40) world.getBlockAt(x, 63, z).type = Material.STONE
+            val player = h.player("tide-wave-downward-wall", world, StaffSpell.TIDE)
+            player.teleport(player.location.apply { pitch = 80f })
+            val target = h.zombie(world, x = .5, z = 12.0)
+            h.controller.start()
+            h.controller.cast(player, StaffCastInput.SECONDARY, 0.0)
+            val scene = h.visualPlays.single { it.spell == StaffSpell.TIDE && it.secondary }
+            // Add cover after casting so the per-frame floor ray, not the planned endpoint, must stop it.
+            for (x in -1..1) for (y in 64..68) world.getBlockAt(x, y, 8).type = Material.STONE
+            (kotlin.math.abs(scene.to.z - player.location.z - 36.0) < .05) shouldBe true
+            h.scheduler.tick(80)
+            h.hits.none { it.uniqueId == target.uniqueId } shouldBe true
+            (h.movedEffects.filter { it.first == scene.id }.last().second.z < 8.0) shouldBe true
         }
     }
 
@@ -206,6 +276,7 @@ class StaffSpellArsenalTest : FreeSpec({
 
         withStaffHarness { h ->
             val world = h.paper.addSimpleWorld("tide-wave-display-scene")
+            for (x in -1..1) for (z in 0..40) world.getBlockAt(x, 63, z).type = Material.STONE
             val tide = h.player("tide-wave-display-scene", world, StaffSpell.TIDE)
             h.zombie(world, x = .5, z = 8.0)
             h.controller.start()
@@ -228,6 +299,58 @@ class StaffSpellArsenalTest : FreeSpec({
             verify(exactly = 19) { h.effects.synchronize(scene.id, any()) }
             h.scheduler.tick(8)
             (scene.id in h.removedEffects) shouldBe true
+        }
+    }
+
+    "GALE alternate releases at first contact, actual cover, and the unobstructed endpoint" {
+        withStaffHarness(settings = staffSettings(range = 48.0)) { h ->
+            val world = h.paper.addSimpleWorld("gale-ram-contact")
+            for (x in -1..1) for (z in 0..40) world.getBlockAt(x, 63, z).type = Material.STONE
+            val player = h.player("gale-ram-contact", world, StaffSpell.GALE)
+            val target = h.zombie(world, x = .5, z = 8.0)
+            val nearby = h.zombie(world, x = 2.0, z = 8.0)
+            h.controller.start()
+            h.controller.cast(player, StaffCastInput.SECONDARY, .5)
+            val scene = h.visualPlays.single { it.spell == StaffSpell.GALE && it.secondary }
+            val impactAt = slot<org.bukkit.Location>()
+            val radius = slot<Double>()
+            val duration = slot<Int>()
+            h.scheduler.tick(80)
+            h.hits.count { it.uniqueId == target.uniqueId } shouldBe 1
+            h.hits.count { it.uniqueId == nearby.uniqueId } shouldBe 1
+            verify(exactly = 1) { h.effects.impact(scene.id, capture(impactAt), capture(radius), capture(duration)) }
+            (impactAt.captured.z in 6.0..8.0) shouldBe true
+            (kotlin.math.abs(radius.captured - 2.525) < .001) shouldBe true
+            duration.captured shouldBe 12
+        }
+
+        withStaffHarness(settings = staffSettings(range = 48.0)) { h ->
+            val world = h.paper.addSimpleWorld("gale-ram-cover")
+            for (x in -1..1) for (z in 0..40) world.getBlockAt(x, 63, z).type = Material.STONE
+            val player = h.player("gale-ram-cover", world, StaffSpell.GALE)
+            val target = h.zombie(world, x = .5, z = 12.0)
+            h.controller.start()
+            h.controller.cast(player, StaffCastInput.SECONDARY, 0.0)
+            val scene = h.visualPlays.single { it.spell == StaffSpell.GALE && it.secondary }
+            for (x in -1..1) for (y in 64..68) world.getBlockAt(x, y, 8).type = Material.STONE
+            val impactAt = slot<org.bukkit.Location>()
+            h.scheduler.tick(80)
+            h.hits.none { it.uniqueId == target.uniqueId } shouldBe true
+            verify(exactly = 1) { h.effects.impact(scene.id, capture(impactAt), any(), any()) }
+            (impactAt.captured.z < 8.0) shouldBe true
+        }
+
+        withStaffHarness(settings = staffSettings(range = 48.0)) { h ->
+            val world = h.paper.addSimpleWorld("gale-ram-endpoint")
+            for (x in -1..1) for (z in 0..40) world.getBlockAt(x, 63, z).type = Material.STONE
+            val player = h.player("gale-ram-endpoint", world, StaffSpell.GALE)
+            h.controller.start()
+            h.controller.cast(player, StaffCastInput.SECONDARY, 0.0)
+            val scene = h.visualPlays.single { it.spell == StaffSpell.GALE && it.secondary }
+            val impactAt = slot<org.bukkit.Location>()
+            h.scheduler.tick(80)
+            verify(exactly = 1) { h.effects.impact(scene.id, capture(impactAt), any(), any()) }
+            (kotlin.math.abs(impactAt.captured.z - player.location.z - 36.0) < .1) shouldBe true
         }
     }
 
@@ -266,6 +389,45 @@ class StaffSpellArsenalTest : FreeSpec({
             h.hits shouldBe emptyList()
             h.scheduler.tick(2)
             h.hits.map { it.uniqueId } shouldBe listOf(target.uniqueId)
+        }
+    }
+
+    "OSSUARY broad visual strikes use matching primary and secondary damage radii" {
+        val primaryRadii = mutableListOf<Double>()
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("ossuary-wide-primary")
+            for (x in -2..6) for (z in 0..25) world.getBlockAt(x, 63, z).type = Material.STONE
+            val player = h.player("ossuary-wide-primary", world, StaffSpell.OSSUARY)
+            // Near the edge of the configured 2.75-block strike, well beyond the old 1.2-block radius.
+            val outer = h.zombie(world, x = 3.0, z = 6.0)
+            h.controller.start()
+            h.controller.cast(player, StaffCastInput.PRIMARY, 0.0)
+            h.scheduler.tick(24)
+            h.hits.count { it.uniqueId == outer.uniqueId } shouldBe 1
+            verify(atLeast = 1) {
+                h.effects.play(any(), StaffSpell.OSSUARY, any(), any(), capture(primaryRadii), any(), any(),
+                    false, any(), any(), any(), any(), any(), false)
+            }
+            primaryRadii.isNotEmpty() shouldBe true
+            primaryRadii.all { kotlin.math.abs(it - 2.75) < .001 } shouldBe true
+        }
+
+        val secondaryRadius = slot<Double>()
+        withStaffHarness(settings = staffSettings(range = 48.0)) { h ->
+            val world = h.paper.addSimpleWorld("ossuary-wide-secondary")
+            val player = h.player("ossuary-wide-secondary", world, StaffSpell.OSSUARY)
+            val target = h.zombie(world, x = .5, z = 8.0)
+            val outer = h.zombie(world, x = 5.0, z = 8.0)
+            h.controller.start()
+            h.controller.cast(player, StaffCastInput.SECONDARY, 0.0)
+            h.scheduler.tick(32)
+            h.hits.count { it.uniqueId == target.uniqueId } shouldBe 1
+            h.hits.count { it.uniqueId == outer.uniqueId } shouldBe 1
+            verify(exactly = 1) {
+                h.effects.play(any(), StaffSpell.OSSUARY, any(), any(), capture(secondaryRadius), any(), any(),
+                    true, any(), any(), any(), any(), any(), false)
+            }
+            secondaryRadius.captured shouldBe 5.5
         }
     }
 
@@ -341,7 +503,7 @@ class StaffSpellArsenalTest : FreeSpec({
                             else StaffCastInput.PRIMARY, charge)
                         h.scheduler.tick(54)
                         (near in h.hits) shouldBe true
-                        (far in h.hits) shouldBe (spell != StaffSpell.TIDE)
+                        (far in h.hits) shouldBe (spell == StaffSpell.OSSUARY)
                         val scenes = h.visualPlays.filter { it.from.world == world }
                         when (spell) {
                             StaffSpell.GALE -> {

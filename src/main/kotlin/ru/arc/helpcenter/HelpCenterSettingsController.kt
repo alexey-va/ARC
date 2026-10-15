@@ -22,6 +22,8 @@ import ru.arc.paper.menu.PaperDialogScreen
 import ru.arc.chestpreview.ChestPreviewPreferences
 import ru.arc.chestpreview.ChestPreviewSettings
 import ru.arc.iteminfo.ItemInfoPreferences
+import ru.arc.staffspells.api.StaffHudMode
+import ru.arc.staffspells.api.StaffHudPlacement
 import ru.arc.sidebar.SidebarSection
 import ru.arc.sidebar.sidebarSkillChoices
 import ru.arc.tablist.TablistCapacity
@@ -42,7 +44,7 @@ internal class HelpCenterSettingsController(
 ) : AutoCloseable {
     private enum class Section(val key: String, val entries: List<String>) {
         CONTROLS("controls", listOf("shortcut", "escape", "shift-sign-edit", "stairs-sit")),
-        INTERFACE("interface", listOf("scoreboard", "tablist", "item-info", "container-preview", "particles", "totem", "resource-pack")),
+        INTERFACE("interface", listOf("scoreboard", "tablist", "item-info", "staff-hud", "container-preview", "particles", "totem", "resource-pack")),
         SOCIAL("social", listOf("chat", "notifications", "tpa")),
         WORLD("world", listOf("trails", "flight", "lands", "portal-style", "portal-by-other", "portal-for-other")),
     }
@@ -135,6 +137,7 @@ internal class HelpCenterSettingsController(
                 "scoreboard" -> openScoreboard(player, section)
                 "tablist" -> openTablist(player, section)
                 "item-info" -> openItemInfo(player, section)
+                "staff-hud" -> openStaffHud(player, section)
                 "container-preview" -> openContainerPreview(player, section)
                 "lands" -> openOptions(player, entry.id, listOf("lands-show", "lands-hide"), section)
                 "portal-style" -> openOptions(player, entry.id, HelpCenterLegacySettings.PORTAL_STYLES.map { "portal-style-$it" }, section)
@@ -332,6 +335,42 @@ internal class HelpCenterSettingsController(
             ),
             buttons = buttons,
             exitButton = button("back", text("settings-${section.key}-back-label")) { openSection(player, section) },
+            columns = 2,
+        ))
+    }
+
+    private fun openStaffHud(player: Player, section: Section) {
+        navigation.visit(player) { openStaffHud(player, section) }
+        val mode = legacy.staffHudMode(player)
+        val placement = legacy.staffHudPlacement(player)
+        val modeButtons = StaffHudMode.values().map { choice ->
+            val label = text(
+                if (choice == mode) "settings-scoreboard-selected" else "settings-scoreboard-unselected",
+                "label" to text("settings-staff-hud-mode-${choice.id()}"),
+            )
+            button("staff_hud_mode_${choice.id()}", label,
+                text("settings-staff-hud-mode-${choice.id()}-tooltip")) {
+                apply(player, "staff-hud-mode-${choice.id()}") { openStaffHud(player, section) }
+            }
+        }
+        val placementButtons = StaffHudPlacement.values().map { choice ->
+            val label = text(
+                if (choice == placement) "settings-scoreboard-selected" else "settings-scoreboard-unselected",
+                "label" to text("settings-staff-hud-placement-${choice.id()}"),
+            )
+            button("staff_hud_placement_${choice.id()}", label,
+                text("settings-staff-hud-placement-${choice.id()}-tooltip")) {
+                apply(player, "staff-hud-placement-${choice.id()}") { openStaffHud(player, section) }
+            }
+        }
+        showDialog(player, PaperDialogScreen(
+            id = "help.settings.staff-hud",
+            title = text("settings-staff-hud-title"),
+            body = listOf(PaperDialogBody(text("settings-staff-hud-body",
+                "mode" to text("settings-staff-hud-mode-${mode.id()}"),
+                "placement" to text("settings-staff-hud-placement-${placement.id()}")), 468)),
+            buttons = modeButtons + placementButtons,
+            exitButton = button("back", text("settings-interface-back-label")) { openSection(player, section) },
             columns = 2,
         ))
     }
@@ -723,6 +762,7 @@ internal class HelpCenterSettingsController(
 
     private fun state(entry: HelpCenterLegacySettingEntry): Component = when {
         entry.id in setOf("shortcut", "escape") -> text("${entry.id}-state-${entry.state}")
+        entry.id == "staff-hud" -> text("settings-staff-hud-mode-${entry.state}")
         entry.state?.toIntOrNull() != null && entry.id in setOf("scoreboard", "tablist") -> text("legacy-settings-${entry.id}-mode-${entry.state}")
         else -> text("legacy-state-${entry.state ?: "unknown"}")
     }

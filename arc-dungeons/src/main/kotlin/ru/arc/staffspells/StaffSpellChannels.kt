@@ -7,6 +7,7 @@ import org.bukkit.Sound
 import org.bukkit.block.data.BlockData
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Player
+import org.bukkit.event.entity.EntityDamageEvent
 import org.bukkit.util.Vector
 import ru.arc.core.LifecycleTaskScope
 import java.util.UUID
@@ -58,10 +59,37 @@ internal class StaffSpellChannels(
         var cancelled: Boolean = false,
     )
 
+    private data class PulseTarget(
+        val entity: LivingEntity,
+        val startY: Double,
+        var lifted: Boolean = false,
+        var slammed: Boolean = false,
+    )
+
+    private data class PulseFallProtection(
+        val entity: LivingEntity,
+        val worldId: UUID,
+        val expiresAtTick: Long,
+    )
+
+    private data class GravityPulse(
+        val casterId: UUID,
+        val cast: StaffSpellCast,
+        val tuning: StaffSpellTuning,
+        val worldId: UUID,
+        val origin: Location,
+        val sceneId: UUID,
+        val targets: MutableList<PulseTarget>,
+        var ageTicks: Int = 0,
+    )
+
     private val tasks = LifecycleTaskScope()
     private val channels = linkedMapOf<UUID, Channel>()
     private val flights = mutableListOf<Flight>()
+    private val gravityPulses = mutableListOf<GravityPulse>()
+    private val pulseFallProtections = linkedMapOf<UUID, PulseFallProtection>()
     private val scenesByCaster = mutableMapOf<UUID, MutableSet<UUID>>()
+    private var pulseProtectionTick = 0L
     private var started = false
     private var closed = false
 
@@ -151,7 +179,11 @@ internal class StaffSpellChannels(
         }
         val from = channel.position ?: run { removeScene(player.uniqueId, channel.sceneId); return }
         val eye = player.eyeLocation
-        val look = safeDirection(eye.direction) ?: run { removeScene(player.uniqueId, channel.sceneId); return }
+        val aimDirection = safeDirection(eye.direction)
+            ?: run { removeScene(player.uniqueId, channel.sceneId); return }
+        val look = safeDirection(targeting.assistedDirection(player, StaffSpell.GRAVITY, channel.cast,
+            direction = aimDirection, from = from, range = GRAVITY_TARGET_RANGE))
+            ?: run { removeScene(player.uniqueId, channel.sceneId); return }
         val aim = targeting.rayEnd(eye, look, GRAVITY_TARGET_RANGE)
         val toward = aim.toVector().subtract(from.toVector())
         val aimDistance = toward.length().takeIf(Double::isFinite) ?: 0.0
@@ -170,11 +202,71 @@ internal class StaffSpellChannels(
         }
     }
 
+    /** Starts the distinct caster-centered Gravity secondary attack; the primary hold remains untouched. */
+    fun gravityPulse(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning): Boolean {
+        if (closed || !started || !ready(player, cast) || player.uniqueId in channels ||
+            gravityPulses.any { it.casterId == player.uniqueId } || gravityPulses.size >= MAX_GRAVITY_PULSES) return false
+
+        val origin = player.location.clone()
+        val targets = targeting.nearby(player, origin, GRAVITY_PULSE_RADIUS, cast)
+            .filter { center(it).distanceSquared(origin) <= GRAVITY_PULSE_RADIUS * GRAVITY_PULSE_RADIUS }
+            .filter { visible(player.eyeLocation, center(it)) }
+            .sortedBy { center(it).distanceSquared(origin) }
+            .take(settings.maxAreaTargets.coerceIn(1, MAX_PULSE_TARGETS))
+            .map { PulseTarget(it, it.location.y) }
+            .toMutableList()
+        tickPulseFallProtections()
+        val newProtections = targets.map { it.entity.uniqueId }.distinct().count { it !in pulseFallProtections }
+        if (pulseFallProtections.size + newProtections > MAX_PULSE_FALL_PROTECTIONS) return false
+        val scene = effects.play(player.uniqueId, StaffSpell.GRAVITY, origin, origin,
+            radius = GRAVITY_PULSE_RADIUS, durationTicks = GRAVITY_PULSE_TICKS,
+            secondary = true, input = StaffCastInput.of(true, false), controllerDriven = true)
+            ?: return false
+        val pulse = GravityPulse(player.uniqueId, cast, tuning, player.world.uid, origin, scene, targets)
+        gravityPulses += pulse
+        trackScene(player.uniqueId, scene)
+
+        for (target in targets) {
+            target.entity.fallDistance = 0f
+            target.entity.velocity = target.entity.velocity.clone().apply {
+                y = maxOf(y, GRAVITY_PULSE_LIFT_VELOCITY)
+            }
+            pulseFallProtections[target.entity.uniqueId] = PulseFallProtection(
+                target.entity,
+                target.entity.world.uid,
+                pulseProtectionTick + MAX_PULSE_FALL_PROTECTION_TICKS,
+            )
+        }
+        visuals.withOwner(player.uniqueId) {
+            visuals.particles(origin, staffGravityPulseFrame(0, GRAVITY_PULSE_RADIUS))
+            visuals.cue(origin, Sound.BLOCK_STONE_PLACE, volume = 0.38f, pitch = 0.58f)
+        }
+        return true
+    }
+
+    /** Cancels only the first FALL event for a pulse-launched target, including after its pulse is cancelled. */
+    fun suppressPulseFallDamage(event: EntityDamageEvent): Boolean {
+        if (closed || event.cause != EntityDamageEvent.DamageCause.FALL) return false
+        val entity = event.entity as? LivingEntity ?: return false
+        val protection = pulseFallProtections[entity.uniqueId] ?: return false
+        if (protection.expiresAtTick <= pulseProtectionTick || !entity.isValid || entity.isDead ||
+            entity.world.uid != protection.worldId) {
+            pulseFallProtections.remove(entity.uniqueId)
+            return false
+        }
+
+        event.isCancelled = true
+        entity.fallDistance = 0f
+        pulseFallProtections.remove(entity.uniqueId)
+        return true
+    }
+
     /** Cancellation discards active casts and in-flight throws; it never creates a release shot. */
     fun cancel(casterId: UUID) {
         channels.remove(casterId)
         flights.filter { it.casterId == casterId }.forEach { it.cancelled = true }
         flights.removeAll { it.casterId == casterId }
+        gravityPulses.removeAll { it.casterId == casterId }
         scenesByCaster.remove(casterId)?.toList()?.forEach { scene ->
             effects.remove(scene)
         }
@@ -187,6 +279,8 @@ internal class StaffSpellChannels(
         channels.clear()
         flights.forEach { it.cancelled = true }
         flights.clear()
+        gravityPulses.clear()
+        pulseFallProtections.clear()
         scenesByCaster.values.flatten().distinct().forEach(effects::remove)
         scenesByCaster.clear()
     }
@@ -291,6 +385,8 @@ internal class StaffSpellChannels(
     }
 
     private fun tickFlights() {
+        pulseProtectionTick += CHANNEL_STEP_TICKS
+        tickPulseFallProtections()
         flights.toList().forEach { flight ->
             if (flight !in flights || flight.cancelled || flight.impacted) return@forEach
             val player = org.bukkit.Bukkit.getPlayer(flight.casterId)
@@ -325,6 +421,84 @@ internal class StaffSpellChannels(
                 impact(flight, player, actualEnd)
             }
         }
+        tickGravityPulses()
+    }
+
+    private fun tickPulseFallProtections() {
+        pulseFallProtections.entries.toList().forEach { (entityId, protection) ->
+            val entity = protection.entity
+            if (protection.expiresAtTick <= pulseProtectionTick || !entity.isValid || entity.isDead ||
+                entity.world.uid != protection.worldId) {
+                pulseFallProtections.remove(entityId)
+                return@forEach
+            }
+            if (entity.isOnGround) pulseFallProtections.remove(entityId)
+        }
+    }
+
+    private fun tickGravityPulses() {
+        gravityPulses.toList().forEach { pulse ->
+            if (pulse !in gravityPulses) return@forEach
+            val player = org.bukkit.Bukkit.getPlayer(pulse.casterId)
+            if (player == null || !current(player, pulse.cast, pulse.worldId)) {
+                cancel(pulse.casterId)
+                return@forEach
+            }
+
+            pulse.ageTicks += CHANNEL_STEP_TICKS
+            effects.synchronize(pulse.sceneId, pulse.ageTicks)
+            visuals.withOwner(pulse.casterId) {
+                visuals.particles(pulse.origin, staffGravityPulseFrame(pulse.ageTicks, GRAVITY_PULSE_RADIUS))
+            }
+
+            pulse.targets.toList().forEach { candidate ->
+                val target = candidate.entity
+                if (!target.isValid || target.isDead || target.world.uid != pulse.worldId ||
+                    !damage.eligible(player, target, pulse.cast)) {
+                    pulse.targets.remove(candidate)
+                    return@forEach
+                }
+                // The spell owns the fall; keep vanilla fall damage from stacking on the landing hit.
+                target.fallDistance = 0f
+                if (!candidate.lifted && target.location.y - candidate.startY >= GRAVITY_PULSE_MIN_LIFT)
+                    candidate.lifted = true
+                if (candidate.lifted && !candidate.slammed && pulse.ageTicks >= GRAVITY_PULSE_LIFT_TICKS) {
+                    candidate.slammed = true
+                    target.velocity = target.velocity.clone().apply { y = minOf(y, -GRAVITY_PULSE_SLAM_VELOCITY) }
+                }
+                if (candidate.slammed) {
+                    val contact = pulseGroundContact(target) ?: return@forEach
+                    val withinRadius = center(target).distanceSquared(pulse.origin) <=
+                        (GRAVITY_PULSE_RADIUS + 0.35) * (GRAVITY_PULSE_RADIUS + 0.35)
+                    if (withinRadius && current(player, pulse.cast, pulse.worldId) &&
+                        damage.eligible(player, target, pulse.cast) &&
+                        visible(player.eyeLocation, center(target)) && visible(contact, center(target))) {
+                        val hit = damage.hit(player, target, pulse.cast,
+                            pulse.tuning.power, pulse.tuning.vanillaDamage)
+                        target.fallDistance = 0f
+                        if (hit) visuals.withOwner(pulse.casterId) {
+                            visuals.particles(contact, staffGravityPulseContactFrame(), clearance = 0.0)
+                            visuals.cue(contact, Sound.BLOCK_STONE_BREAK, volume = 0.48f, pitch = 0.62f)
+                        }
+                    }
+                    pulse.targets.remove(candidate)
+                }
+            }
+
+            if (pulse.ageTicks >= GRAVITY_PULSE_TICKS) {
+                pulse.targets.forEach { it.entity.fallDistance = 0f }
+                gravityPulses.remove(pulse)
+                removeScene(pulse.casterId, pulse.sceneId)
+            }
+        }
+    }
+
+    private fun pulseGroundContact(target: LivingEntity): Location? {
+        if (target.velocity.y > GRAVITY_PULSE_CONTACT_MAX_UPWARD_SPEED) return null
+        val feet = target.location
+        val ground = targeting.groundBelow(feet.clone().add(0.0, GRAVITY_PULSE_GROUND_PROBE_OFFSET, 0.0),
+            GRAVITY_PULSE_GROUND_PROBE_RANGE) ?: return null
+        return ground.takeIf { (feet.y - it.y) in -GRAVITY_PULSE_GROUND_CONTACT_EPSILON..GRAVITY_PULSE_GROUND_CONTACT_EPSILON }
     }
 
     private fun impact(flight: Flight, player: Player, at: Location) {
@@ -403,7 +577,11 @@ internal class StaffSpellChannels(
         val CHANNEL_SPELLS = setOf(StaffSpell.INFERNO, StaffSpell.GRAVITY)
         const val MAX_CHANNELS = 16
         const val MAX_FLIGHTS = 16
+        const val MAX_GRAVITY_PULSES = 16
+        const val MAX_PULSE_TARGETS = 16
+        const val MAX_PULSE_FALL_PROTECTIONS = MAX_GRAVITY_PULSES * MAX_PULSE_TARGETS * 2
         const val CHANNEL_STEP_TICKS = 2
+        const val MAX_PULSE_FALL_PROTECTION_TICKS = 60L
         const val INFERNO_MAX_HOLD_TICKS = 60
         const val GRAVITY_MAX_HOLD_TICKS = 160
         const val GRAVITY_FLIGHT_TICKS = 36
@@ -422,6 +600,16 @@ internal class StaffSpellChannels(
         const val GRAVITY_THROW_RANGE = 32.0
         const val GRAVITY_SWEEP_WIDTH = 0.65
         const val GRAVITY_BLAST_RADIUS = 2.5
+        const val GRAVITY_PULSE_RADIUS = 6.5
+        const val GRAVITY_PULSE_TICKS = 36
+        const val GRAVITY_PULSE_LIFT_TICKS = 8
+        const val GRAVITY_PULSE_LIFT_VELOCITY = 0.9
+        const val GRAVITY_PULSE_SLAM_VELOCITY = 0.9
+        const val GRAVITY_PULSE_MIN_LIFT = 0.6
+        const val GRAVITY_PULSE_CONTACT_MAX_UPWARD_SPEED = 0.05
+        const val GRAVITY_PULSE_GROUND_PROBE_OFFSET = 0.06
+        const val GRAVITY_PULSE_GROUND_PROBE_RANGE = 1.6
+        const val GRAVITY_PULSE_GROUND_CONTACT_EPSILON = 0.16
         const val INITIAL_THROW_SPEED = 3.2
         const val THROW_ACCELERATION = 0.16
         const val MAX_THROW_SPEED = 4.4

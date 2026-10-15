@@ -115,17 +115,87 @@ class StaffSpellTimelineTest : FreeSpec({
             false, true, StaffCastInput.SECONDARY, 1.0)
         fun volume(age: Int) = cage(age).sumOf { (it.scale.x * it.scale.y * it.scale.z).toDouble() }
         fun outerRadius(age: Int) = cage(age).maxOf { hypot(it.center.x.toDouble(), it.center.z.toDouble()) }
+        fun transformedRadius(age: Int) = cage(age).maxOf { part ->
+            listOf(-0.5f, 0.5f).maxOf { x -> listOf(-0.5f, 0.5f).maxOf { y ->
+                listOf(-0.5f, 0.5f).maxOf { z ->
+                    val corner = part.rotation.transform(Vector3f(x * part.scale.x, y * part.scale.y, z * part.scale.z))
+                        .add(part.center)
+                    hypot(corner.x.toDouble(), corner.z.toDouble())
+                }
+            } }
+        }
         val start = cage(0)
         val rise = cage(8)
         val closed = cage(20)
         start.map { it.identity } shouldBe rise.map { it.identity }
         rise.map { it.identity } shouldBe closed.map { it.identity }
+        rise.size shouldBe 36
+        rise.mapNotNull { it.identity }.distinct().size shouldBe 36
+        rise.count { it.identity?.startsWith("garden:root:") == true } shouldBe 20
+        rise.count { it.identity?.startsWith("garden:hook:") == true } shouldBe 5
+        rise.count { it.identity?.startsWith("garden:tie:") == true } shouldBe 5
         (volume(0) < volume(8)) shouldBe true
         (outerRadius(20) < outerRadius(8)) shouldBe true
+        (transformedRadius(8) <= 3.0) shouldBe true
         (volume(44) < volume(20)) shouldBe true
         fun pollenRadius(age: Int) = staffArsenalParticles(StaffSpell.NOVA, age, 48, 3.0, true, 1.0)
             .maxOf { hypot(it.offset.x, it.offset.z) }
         (pollenRadius(20) < pollenRadius(8)) shouldBe true
+        (staffArsenalParticles(StaffSpell.NOVA, 20, 48, 3.0, true, 1.0).size in 32..48) shouldBe true
+    }
+
+    "lunar crescents leave a stable afterimage and shatter inside the tick sixteen damage footprint" {
+        fun frame(age: Int, secondary: Boolean, charge: Double): List<StaffDisplayPart> {
+            val radius = 2.2 + charge
+            return staffArsenalParts(StaffSpell.LUNAR, age, 40, 0.0, radius,
+                false, secondary, StaffCastInput.of(secondary, false), charge)
+        }
+        fun radialBounds(parts: List<StaffDisplayPart>) = parts.maxOf { part ->
+            listOf(-0.5f, 0.5f).maxOf { x -> listOf(-0.5f, 0.5f).maxOf { y ->
+                listOf(-0.5f, 0.5f).maxOf { z ->
+                    val corner = part.rotation.transform(Vector3f(x * part.scale.x, y * part.scale.y, z * part.scale.z))
+                        .add(part.center)
+                    hypot(corner.x.toDouble(), corner.z.toDouble())
+                }
+            } }
+        }
+
+        listOf(0.0, 1.0).forEach { charge ->
+            listOf(false, true).forEach { secondary ->
+                val start = frame(0, secondary, charge)
+                val sweep = frame(8, secondary, charge)
+                val contact = frame(16, secondary, charge)
+                val settle = frame(24, secondary, charge)
+                val ids = contact.map { it.identity }
+                contact.size shouldBe 48
+                start.map { it.identity } shouldBe ids
+                sweep.map { it.identity } shouldBe ids
+                settle.map { it.identity } shouldBe ids
+                contact.mapNotNull { it.identity }.distinct().size shouldBe 48
+                contact.count { it.identity?.startsWith("moon:shard:") == true } shouldBe 14
+                (radialBounds(contact) <= 2.2 + charge + .7 + .04) shouldBe true
+
+                if (secondary) {
+                    val oldSweepDepth = maxOf(
+                        kotlin.math.abs(sweep.single { it.identity == "moon:0:8" }.center.z),
+                        kotlin.math.abs(sweep.single { it.identity == "moon:1:8" }.center.z),
+                    )
+                    val contactDepth = maxOf(
+                        kotlin.math.abs(contact.single { it.identity == "moon:0:8" }.center.z),
+                        kotlin.math.abs(contact.single { it.identity == "moon:1:8" }.center.z),
+                    )
+                    (oldSweepDepth > 0.5f && contactDepth < .01f) shouldBe true
+                } else {
+                    val echoesAtContact = contact.filter { it.identity?.startsWith("moon:echo:") == true }
+                    val echoesAfterSettle = settle.filter { it.identity?.startsWith("moon:echo:") == true }
+                    (echoesAtContact.maxOf { it.scale.x } > echoesAfterSettle.maxOf { it.scale.x }) shouldBe true
+                }
+                val shards = staffArsenalParticles(StaffSpell.LUNAR, 16, 40,
+                    2.2 + charge, secondary, charge)
+                (shards.size in 30..48) shouldBe true
+                (shards.maxOf { hypot(it.offset.x, it.offset.z) } <= 2.9 + charge + .04) shouldBe true
+            }
+        }
     }
 
     "physical arsenal sequences retain identities and shrink before cleanup" {
@@ -135,7 +205,7 @@ class StaffSpellTimelineTest : FreeSpec({
             val steady = frame(20)
             val dissolve = frame(36)
             val expired = frame(38)
-            (steady.size in 1..40) shouldBe true
+            (steady.size in 1..48) shouldBe true
             dissolve.map { it.identity } shouldBe steady.map { it.identity }
             expired.map { it.identity } shouldBe steady.map { it.identity }
             (dissolve.maxOf { it.scale.x } < steady.maxOf { it.scale.x }) shouldBe true

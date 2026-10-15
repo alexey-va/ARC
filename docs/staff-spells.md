@@ -1,4 +1,4 @@
-# Staff spells — ArcDungeons 0.1.5
+# Staff spells — ArcDungeons 0.1.6
 
 `/arc stafftest` issues sixteen administrator-only mechanics samples.
 `inferno` is temporarily retired; `gravity` and `ossuary` remain available. Use
@@ -10,29 +10,42 @@ reward or economy changes.
 Four primaries — Frost, Fault, Lunar and Tide — use substantial frontal area
 attacks with a seven-block reach. The other twelve keep their ranged, targeted,
 summoned or charged primary mechanics; Solar is a piercing ranged spear again.
-Shift attacks keep their existing behavior. Native particles accent stable
+Secondary attacks retain distinct ranged, targeted or radial roles. Native particles accent stable
 display bodies; the last sent pose collapses before cleanup.
 
 ## Controls
 
-Left-click casts ordinary abilities immediately. Primary `Ember` and `Icicle`
-use click-toggle charging: click once to begin, then click again to launch.
-Full charge takes 36 ticks (1.8 seconds). Shift + left-click selects the second
-ability and casts immediately. Changing Shift, the held slot or item, world,
-or player lifecycle cancels an active charge; right-click cancels it and raises
-defense. Attacks share one per-player attack cooldown, adjusted for the spell
-and its shifted variant.
+Left-click casts ordinary abilities immediately; Shift + left-click selects the
+second ability. Ember and Icicle are the explicit exception: hold right-click
+to charge their primary, then release to launch. Full charge takes 36 ticks
+(1.8 seconds); Shift + right-click casts their secondary immediately. Their
+frontal defense and absorption shield use left-click and Shift + left-click.
+The vanilla client sends the native stop-using packet for these held attacks;
+there is no click-toggle substitute or inferred left-button release timeout.
 
-A private three-row hologram below the reticle shows the selected ability and
-its actual control mode: instant cast, click to charge and click again to
-release, or Gravity grab/throw. Charging shows accumulated strength; recovery
-shows the remaining attack cooldown. Physical button holding is not required.
-The HUD replaces the attack bossbar; the independent defense bar is retained.
+Changing Shift, held slot/item, world or player lifecycle cancels an active
+charge. Attacks share one per-player attack cooldown, adjusted for the spell
+and its shifted variant. Item lore and the HUD name the actual controls of
+the held staff, including existing prototype and EliteMobs items.
 
-`Gravity` also uses click-toggle: the first left-click grabs, the next throws.
-The aim can move between clicks, with or without Shift. Inferno is temporarily
-retired from issuance and casting. Existing EliteMobs Inferno assignments migrate
-once to Ember; old prototype IDs remain recognizable but cannot cast.
+The personal setting is available at `/menu` → «Настройки» → «Интерфейс» →
+«Посохи»: hologram, top-screen bossbar, or off. Hologram placement has a separate
+«Сверху» / «Снизу» choice and defaults to bottom. Both preferences persist in
+LuckPerms metadata (`arc-staff-hud-mode`, `arc-staff-hud-placement`). A mode
+change removes the prior surface on the next HUD update. The display shows
+the selected ability, controls, charge and remaining attack cooldown; the
+independent defense capacity bar retains its own lifecycle.
+
+The server controls the base hologram pose through `hud.position`
+settings: forward, horizontal and vertical displacement and scale. Top/bottom
+uses the same vertical magnitude above/below the sightline. These settings
+are read on module reload.
+
+Gravity's primary uses click-toggle: the first left-click grabs, the next
+throws. Shift + left-click instead creates a caster-centered gravity pulse.
+Inferno is temporarily retired from issuance and casting. Existing EliteMobs
+Inferno assignments migrate once to Ember; old prototype IDs remain recognizable
+but cannot cast.
 
 Gravity selects a visible solid block within its reach, holds a visual boulder
 in front of the caster as the aim moves, and throws it on the second left-click. The
@@ -40,7 +53,7 @@ boulder is a visual effect: Gravity does not move, break, place or replace
 world blocks. If the selected surface or safe path is unavailable, the grab is
 rejected.
 
-Right-click raises the staff's frontal guard; Shift + right-click raises its
+For ordinary staves, right-click raises the frontal guard; Shift + right-click raises its
 all-around absorption shield. Defenses have their own recovery track, independent of the
 left-click attack cooldown. A frontal guard covers two hits for 1.2 seconds,
 or three hits for 1.6 seconds for Fault, Gravity, Ossuary, Nova and Necromancer.
@@ -56,13 +69,13 @@ on a blocked hit or shield break. The center stays transparent and the raised ou
 the reticle readable. `StaffDefenseGeometry.kt` owns the shape used by both runtime and
 `exportStaffRedesignPreview`; offline previews do not establish native-client acceptance.
 
-Changing staff cancels the active defense without resetting recovery. The right-click controls only activate defense. Staff interaction cannot break blocks, including in
+Changing staff cancels the active defense without resetting recovery. Ember and Icicle use left-click for these defenses because right-click owns their held attacks. Staff interaction cannot break blocks, including in
 creative mode, and native melee damage is suppressed while a prototype staff
 is held.
 
 ## Catalog
 
-| ID · staff | ЛКМ | Shift + ЛКМ | ПКМ · frontal guard | Shift + ПКМ · absorption shield | Existing ItemsAdder skin |
+| ID · staff | Primary attack | Shift attack | Frontal guard | Absorption shield | Existing ItemsAdder skin |
 | --- | --- | --- | --- | --- | --- |
 | `chain` · Грозовая ветвь | Lightning jumps between up to four enemies | Грозовой круг expands a jagged lightning front eight blocks around the caster, blocked by cover | Грозовой заслон | Круговой покров | `3dfantasyweaponscit:divine_staff` |
 | `mark` · Разрыв | A targeted void rupture follows the enemy, then explodes | Чёрная дыра pulls eligible enemies, then collapses | Покров пустоты | Круговой покров | `3dfantasyweaponscit:night_staff` |
@@ -78,8 +91,8 @@ is held.
 | `requiem` · Реквием | A copper-and-gold bell forms above the aimed point, tolls at 0.8 seconds and releases a five-block soul wave | Погребальный перезвон suspends the bell above the caster and releases three seven-block waves, with five-second minimum recovery | Покров душ | Круговой покров | `3dfantasyweaponscit:lich_staff` |
 | `prism` · Кристальная призма | A crystal grows at the aimed point and refracts beams into up to three enemies | Three rays converge on the selected point | Гранёный щит | Круговой покров | `3dfantasyweaponscit:northgate_golden_crook` |
 | `necromancer` · Зов могилы | Adds two skeleton archers for 45 seconds; up to ten minions can coexist | Костяной жнец summons one larger wither-skeleton commander | Костяной заслон | Круговой покров | `3dfantasyweaponscit:lich_staff` |
-| `gravity` · Гравитационный захват | Grab a surface within 32 blocks, hold the same boulder, and release into a fast accelerating throw up to 32 blocks | Бросок глыбы uses the same grab-and-throw channel | Каменный заслон | Круговой покров | `3dfantasyweaponscit:staff_of_unholy_wisdom` |
-| `ossuary` · Костяной прокол | Dense bone-spike clusters erupt in sequence along a fixed 24-block forward path, blocked by walls | Костяной прорыв warns at the aimed point, then seven bone spikes shoot upward and impale enemies | Щит рёбер | Круговой покров | `3dfantasyweaponscit:lich_staff` |
+| `gravity` · Гравитационный захват | Grab a surface within 32 blocks, hold the same boulder, and release into a fast accelerating throw up to 32 blocks | Гравитационный обвал lifts visible enemies within 6.5 blocks, then slams those that actually rose; contact damage occurs once on landing | Каменный заслон | Круговой покров | `3dfantasyweaponscit:staff_of_unholy_wisdom` |
+| `ossuary` · Костяной прокол | Dense bone-spike clusters erupt in sequence along a fixed 24-block forward path, blocked by walls | Костяной прорыв warns at the aimed point, then irregular branching bone clusters erupt across a 5.5–6 block radius | Щит рёбер | Круговой покров | `3dfantasyweaponscit:lich_staff` |
 
 Each sample uses its configured ItemsAdder skin; issuance fails with a player
 message and a server warning if that configured skin is unavailable. Duel
@@ -89,11 +102,17 @@ and a positive `custom-model-data`; the bundled defaults leave both unset.
 
 ## Targeting and lifecycle
 
-Icicle primaries prefer a direct reticle hit, then assist toward the closest
-eligible target to the reticle within a six-degree half-angle and two-block
-lateral miss. Each icicle samples the current reticle at launch. Acquisition
-requires visibility from both the eye and release point; losing visibility
-drops tracking. The existing swept collision still stops flight at cover.
+Launch aim assist is controlled by `targeting.aim-assist`: enabled, half-angle
+(default 6 degrees), maximum miss (2 blocks), strength (0.35) and excluded spell
+IDs. It nudges eligible forward projectiles toward a nearby visible target;
+it preserves exact reticle hits, never grants a hit, and retains swept collision
+and cover checks. Ground-travelling effects preserve their horizontal direction.
+Radial pulses, selected ground zones and summons keep their own targeting.
+
+Each Icicle samples the current reticle when it launches. A direct reticle hit
+may track that target while it remains visible; a near miss receives only the
+configured fractional launch correction, not a guaranteed lock. Acquisition
+requires visibility from both the eye and release point.
 
 Frontal primaries contact once after six ticks, matching the interpolated full-size
 pose. They select up to three eligible targets at contact within seven blocks,

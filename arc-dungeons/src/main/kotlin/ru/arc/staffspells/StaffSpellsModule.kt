@@ -15,6 +15,7 @@ import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
 import org.bukkit.event.block.Action
 import org.bukkit.event.entity.PlayerDeathEvent
+import org.bukkit.event.entity.EntityDamageEvent
 import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerInteractAtEntityEvent
 import org.bukkit.event.player.PlayerInteractEntityEvent
@@ -116,6 +117,11 @@ internal class StaffSpellController(
     private val delayedCasts = mutableMapOf<UUID, UUID>()
     private val cooldownLengths = mutableMapOf<UUID, Long>()
 
+    @EventHandler(priority = EventPriority.HIGHEST)
+    fun onPulseFallDamage(event: EntityDamageEvent) {
+        channels.suppressPulseFallDamage(event)
+    }
+
     fun start() {
         input.start()
         hud?.start()
@@ -171,6 +177,9 @@ internal class StaffSpellController(
 
     // Event ownership lives in StaffSpellInput; these wrappers preserve direct test entry points.
     internal fun onInteract(event: PlayerInteractEvent) = input.onInteract(event)
+
+    override fun refreshPrototypeLore(item: org.bukkit.inventory.ItemStack, spell: StaffSpell): Boolean =
+        config.refreshPrototypeLore(item, spell)
 
     override fun canCharge(player: Player, spell: StaffSpell): Boolean {
         if (spell !in StaffSpell.available) {
@@ -269,7 +278,7 @@ internal class StaffSpellController(
         }
         if (!ready(player)) return
         if (input.quick) { defend(player, spell); return }
-        if (spell == StaffSpell.GRAVITY) return
+        if (spell == StaffSpell.GRAVITY && !input.secondary) return
         if (cooldowns.remainingTicks(player.uniqueId) > 0) {
             showCooldown(player, spell)
             visuals.cooldownFeedback(player, spell)
@@ -305,6 +314,7 @@ internal class StaffSpellController(
                 }
             }
         }
+        if (spell == StaffSpell.GRAVITY && !channels.gravityPulse(player, cast, tuning)) return
         beginCooldown(player, spell, cooldownTicks)
         val closeAttack = !secondary && staffMeleeReach(spell) != null
         if (!closeAttack && staffPreparationParts(spell, secondary, 0).isNotEmpty())
@@ -313,6 +323,7 @@ internal class StaffSpellController(
         if (!closeAttack && !input.quick && spell !in ARSENAL_SPELLS) visuals.withOwner(cast.casterId) { visuals.release(player.eyeLocation, spell, level >= 0.75) }
         if (!input.quick && spell == StaffSpell.CHAIN) visuals.withOwner(cast.casterId) { visuals.lightningLaunch(player.eyeLocation) }
         if (closeAttack) melee.cast(player, cast, spell, tuning)
+        else if (spell == StaffSpell.GRAVITY) Unit // Already admitted before consuming cooldown.
         else if (spell == StaffSpell.NECROMANCER) Unit // Already admitted before consuming cooldown.
         else if (spell in ARSENAL_SPELLS) arsenal.cast(player, spell, cast, tuning, input, level)
         else if (secondary) castSecondary(player, spell, cast, tuning, level) else when (spell) {
@@ -331,7 +342,7 @@ internal class StaffSpellController(
             StaffSpell.FAULT -> fault(player, cast, tuning, secondary = false)
             StaffSpell.LANCE -> lance(player, cast, tuning, secondary = false)
             StaffSpell.EMBER -> {
-                // The direction is captured once. Flight never steers towards a nearby mob.
+                // Optional launch assistance is captured once; the comet never homes during flight.
                 if (embers.count { it.cast.casterId == player.uniqueId } >= 8) {
                     val removed = embers.removeAt(embers.indexOfFirst { it.cast.casterId == player.uniqueId })
                     effects.remove(removed.visualId)
@@ -360,7 +371,8 @@ internal class StaffSpellController(
                         durationTicks = EMBER_IMPACT_DURATION_TICKS, impact = true, charge = level)
                     return
                 }
-                val target = aimPoint(player)
+                val assisted = targeting.assistedDirection(player, spell, cast, from = muzzle)
+                val target = rayEnd(eye, assisted, settings.range)
                 val direction = target.toVector().subtract(muzzle.toVector()).normalize()
                 val duration = kotlin.math.ceil(settings.range / settings.emberSpeed).toInt() + 4
                 val visualId = effects.releaseCharge(heldId, duration, controllerDriven = true)
@@ -436,7 +448,8 @@ internal class StaffSpellController(
         val eye = player.eyeLocation
         val visited = mutableSetOf<UUID>()
         (if (secondary) listOf(-16.0, 0.0, 16.0) else listOf(0.0)).forEach { angle ->
-            val end = rayEnd(eye, eye.direction.rotateAroundY(Math.toRadians(angle)), range)
+            val assisted = targeting.assistedDirection(player, StaffSpell.LANCE, cast, range = range)
+            val end = rayEnd(eye, assisted.rotateAroundY(Math.toRadians(angle)), range)
             launchLance(player, eye, end, cast, if (secondary) tuning.copy(power = tuning.power * 0.65,
                 vanillaDamage = tuning.vanillaDamage * 0.65) else tuning, width, visited, secondary)
         }
@@ -723,8 +736,13 @@ internal class StaffSpellController(
                 // Already airborne shots retain their own destination; the whole crown never snaps sideways.
                 val eye = player.eyeLocation
                 val aimedPoint = aimPoint(player)
-                bolt.target = acquireIcicleTarget(player, eye, aimedPoint, from, bolt.cast)
-                bolt.fixedAimPoint = aimedPoint
+                // Direct reticle hits retain the crown's inherent tracking. A near miss gets
+                // only a fractional, launch-time correction, never a perfect target lock.
+                bolt.target = lineTargets(player, eye, aimedPoint, .25, bolt.cast).firstOrNull {
+                    visible(from, center(it))
+                }
+                val assisted = targeting.assistedDirection(player, StaffSpell.ICICLE, bolt.cast, from = from)
+                bolt.fixedAimPoint = rayEnd(eye, assisted, settings.range)
             }
             bolt.age++
             val targetAt = if (bolt.aimOnLaunch) {
@@ -1121,33 +1139,6 @@ internal class StaffSpellController(
     }
 
     private fun lineTargets(player: Player, from: Location, to: Location, width: Double, cast: StaffSpellCast) = targeting.lineTargets(player, from, to, width, cast)
-    private fun acquireIcicleTarget(player: Player, eye: Location, aimedPoint: Location, release: Location,
-        cast: StaffSpellCast): LivingEntity? {
-        val direct = lineTargets(player, eye, aimedPoint, 0.25, cast).firstOrNull { victim ->
-            val target = center(victim)
-            eye.distanceSquared(target) <= settings.range * settings.range && visible(release, target)
-        }
-        if (direct != null) return direct
-
-        val look = eye.direction.normalize()
-        return aimed(player, settings.range, ICICLE_ASSIST_HALF_ANGLE, cast).asSequence()
-            .mapNotNull { victim ->
-                if (!damage.eligible(player, victim, cast)) return@mapNotNull null
-                val target = center(victim)
-                if (eye.distanceSquared(target) > settings.range * settings.range ||
-                    !visible(eye, target) || !visible(release, target)) return@mapNotNull null
-                val offset = target.toVector().subtract(eye.toVector())
-                val distance = offset.length()
-                val along = offset.dot(look)
-                if (along <= 0.0) return@mapNotNull null
-                val miss = offset.subtract(look.clone().multiply(along)).length()
-                if (miss > ICICLE_ASSIST_MAX_MISS || miss > along * ICICLE_ASSIST_CONE_SLOPE) return@mapNotNull null
-                IcicleAimCandidate(victim, miss / along, distance)
-            }
-            .minWithOrNull(compareBy<IcicleAimCandidate> { it.angularMiss }.thenBy { it.distance })
-            ?.target
-    }
-
     private fun aimPoint(player: Player) = targeting.aimPoint(player)
     private fun groundBelow(from: Location, range: Double) = targeting.groundBelow(from, range)
     private fun rayEnd(from: Location, direction: Vector, range: Double) = targeting.rayEnd(from, direction, range)
@@ -1223,9 +1214,6 @@ internal class StaffSpellController(
         const val STORM_NOVA_VERTICAL_REACH = 2.0
         const val MAX_WAVE_CANDIDATES = 32
         const val MAX_BOLTS_PER_CASTER = 12
-        const val ICICLE_ASSIST_HALF_ANGLE = 6.0
-        const val ICICLE_ASSIST_MAX_MISS = 2.0
-        val ICICLE_ASSIST_CONE_SLOPE = tan(Math.toRadians(ICICLE_ASSIST_HALF_ANGLE))
         const val FROST_ICICLE_SHATTER_TICKS = 10
         const val FROST_TRAVEL_TICKS = 12
         const val FROST_DURATION_TICKS = 24
@@ -1237,8 +1225,6 @@ internal class StaffSpellController(
     }
 
 }
-
-private data class IcicleAimCandidate(val target: LivingEntity, val angularMiss: Double, val distance: Double)
 
 private data class PendingStaffLance(val from: Location, val end: Location, val cast: StaffSpellCast,
     val tuning: StaffSpellTuning, val width: Double, val visited: MutableSet<UUID>, val visualId: UUID?,

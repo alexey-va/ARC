@@ -1,6 +1,7 @@
 package ru.arc.staffspells
 
 import io.papermc.paper.event.player.PrePlayerAttackEntityEvent
+import io.papermc.paper.event.player.PlayerStopUsingItemEvent
 import org.bukkit.Bukkit
 import org.bukkit.event.Event
 import org.bukkit.event.EventHandler
@@ -31,21 +32,29 @@ import ru.arc.core.LifecycleTaskScope
 import ru.arc.dungeons.ArcDungeonsPlugin
 import java.util.UUID
 
-/** Click-toggle charges use one bounded tick clock for strength and channel progress. */
+/** Held-release charges use a bounded tick clock for strength; Gravity keeps its click-toggle channel. */
 private const val STAFF_CHARGE_DELAY_TICKS = 4
 private const val STAFF_CHARGE_RAMP_TICKS = 32
 private const val STAFF_MAX_CHARGE_TICKS = 200
-private val STAFF_CHARGED_PRIMARY_SPELLS = setOf(StaffSpell.EMBER, StaffSpell.ICICLE)
+internal val STAFF_CHARGED_PRIMARY_SPELLS = setOf(StaffSpell.EMBER, StaffSpell.ICICLE)
 
-/** Attack mode is click-toggle for channels/charges; it never means holding the mouse button. */
-internal enum class StaffAttackInputMode { INSTANT, CHARGE_CLICK_TOGGLE, CHANNEL_CLICK_TOGGLE }
+internal enum class StaffSpellInputButton(val configKey: String) { LEFT("left-click"), RIGHT("right-click") }
+
+/** Activation type is shared by input routing and player-facing instructions. */
+internal enum class StaffAttackInputMode { INSTANT, HOLD_RELEASE, CHANNEL_CLICK_TOGGLE }
 
 /** Shared by input and HUD so instructions describe the same attack path the controller executes. */
 internal fun staffAttackInputMode(spell: StaffSpell, secondary: Boolean): StaffAttackInputMode = when {
-    spell == StaffSpell.GRAVITY -> StaffAttackInputMode.CHANNEL_CLICK_TOGGLE
-    !secondary && spell in STAFF_CHARGED_PRIMARY_SPELLS -> StaffAttackInputMode.CHARGE_CLICK_TOGGLE
+    spell == StaffSpell.GRAVITY && !secondary -> StaffAttackInputMode.CHANNEL_CLICK_TOGGLE
+    !secondary && spell in STAFF_CHARGED_PRIMARY_SPELLS -> StaffAttackInputMode.HOLD_RELEASE
     else -> StaffAttackInputMode.INSTANT
 }
+
+internal fun staffAttackInputButton(spell: StaffSpell) =
+    if (spell in STAFF_CHARGED_PRIMARY_SPELLS) StaffSpellInputButton.RIGHT else StaffSpellInputButton.LEFT
+
+internal fun staffDefenseInputButton(spell: StaffSpell) =
+    if (spell in STAFF_CHARGED_PRIMARY_SPELLS) StaffSpellInputButton.LEFT else StaffSpellInputButton.RIGHT
 
 internal fun staffChargeProgress(ticksHeld: Int): Double =
     ((ticksHeld - STAFF_CHARGE_DELAY_TICKS).coerceAtLeast(0).toDouble() / STAFF_CHARGE_RAMP_TICKS)
@@ -53,6 +62,8 @@ internal fun staffChargeProgress(ticksHeld: Int): Double =
 
 internal interface StaffSpellInputActions {
     fun canCharge(player: Player, spell: StaffSpell): Boolean
+    /** Refresh only ARC-owned text on prototype stacks; implementations without config keep old stacks. */
+    fun refreshPrototypeLore(item: ItemStack, spell: StaffSpell): Boolean = false
     fun defend(player: Player, spell: StaffSpell) = cast(player, StaffCastInput.of(player.isSneaking, true), 0.0)
     fun beginChannel(player: Player, spell: StaffSpell): Boolean = false
     fun updateChannel(player: Player, ticksHeld: Int): Boolean = false
@@ -74,6 +85,7 @@ internal class StaffSpellInput(
         val worldId: UUID,
         val sneaking: Boolean,
         val item: ItemStack,
+        val releaseOnItemStop: Boolean,
         var ticksHeld: Int = 0,
     )
 
@@ -135,7 +147,7 @@ internal class StaffSpellInput(
             event.isCancelled = true
             event.setUseItemInHand(Event.Result.DENY)
             event.setUseInteractedBlock(Event.Result.DENY)
-            attack(player, spell)
+            routeLeftClick(player, spell)
             return
         }
         if (event.action !in setOf(Action.RIGHT_CLICK_AIR, Action.RIGHT_CLICK_BLOCK)) return
@@ -145,10 +157,21 @@ internal class StaffSpellInput(
         if (event.useItemInHand() == Event.Result.DENY) return
         if (event.action == Action.RIGHT_CLICK_BLOCK && event.useInteractedBlock() == Event.Result.DENY) return
         event.setUseInteractedBlock(Event.Result.DENY)
+        if (staffAttackInputButton(spell) == StaffSpellInputButton.RIGHT && !player.isSneaking) {
+            // Start use directly, then deny both channels before FMM's HIGHEST-priority handler.
+            // Paper still delivers PlayerStopUsingItemEvent for this server-owned active item.
+            attack(player, spell, startNativeUse = true)
+            event.setUseItemInHand(Event.Result.DENY)
+            event.setUseInteractedBlock(Event.Result.DENY)
+            if (StaffEliteItems.resolve(item) != null) event.isCancelled = true
+            return
+        }
+
         event.setUseItemInHand(Event.Result.DENY)
         // Both DENY results are required by FMM's air-click protection policy.
         if (StaffEliteItems.resolve(item) != null) event.isCancelled = true
-        defend(player, spell)
+        if (staffAttackInputButton(spell) == StaffSpellInputButton.RIGHT) attack(player, spell)
+        else defend(player, spell)
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -169,7 +192,7 @@ internal class StaffSpellInput(
         upgradeStaffSlot(player, player.inventory.heldItemSlot)
         val spell = StaffSpell.from(player.inventory.itemInMainHand) ?: return
         if (event.willAttack()) event.isCancelled = true
-        attack(player, spell)
+        routeLeftClick(player, spell)
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -188,6 +211,16 @@ internal class StaffSpellInput(
         if (StaffSpell.from(event.item) == null) return
         event.isCancelled = true
         cancel(event.player.uniqueId)
+    }
+
+    /** The Paper event carries the native item-use duration and is the authoritative release signal. */
+    @EventHandler(priority = EventPriority.HIGHEST)
+    fun onStopUsingItem(event: PlayerStopUsingItemEvent) {
+        val player = event.player
+        val charge = charges[player.uniqueId] ?: return
+        if (!charge.releaseOnItemStop || StaffSpell.from(event.item) != charge.spell ||
+            !event.item.isSimilar(charge.item)) return
+        releaseCharge(player, event.ticksHeldFor)
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -243,16 +276,25 @@ internal class StaffSpellInput(
         val firstItem = player.inventory.itemInMainHand
         val spell = StaffSpell.from(firstItem) ?: return
         cancelEvent()
-        defend(player, spell)
+        routeRightClick(player, spell, startNativeUse = true)
     }
 
-    private fun beginCharge(player: Player, spell: StaffSpell) {
-        if (player.uniqueId in charges || !actions.canCharge(player, spell)) return
-        if (isChannel(spell) && !actions.beginChannel(player, spell)) return
+    private fun beginCharge(
+        player: Player,
+        spell: StaffSpell,
+        releaseOnItemStop: Boolean = false,
+        startNativeUse: Boolean = false,
+    ): Boolean {
+        if (player.uniqueId in charges || !actions.canCharge(player, spell)) return false
+        if (isChannel(spell) && !actions.beginChannel(player, spell)) return false
         val charge = Charge(spell, player.inventory.heldItemSlot, player.world.uid,
-            player.isSneaking, player.inventory.itemInMainHand.clone())
+            player.isSneaking, player.inventory.itemInMainHand.clone(), releaseOnItemStop)
         charges[player.uniqueId] = charge
+        if (releaseOnItemStop && startNativeUse && !player.hasActiveItem()) {
+            player.startUsingItem(EquipmentSlot.HAND)
+        }
         if (!isChannel(spell)) actions.charge(player, spell, 0.0)
+        return true
     }
 
     private fun defend(player: Player, spell: StaffSpell) {
@@ -262,25 +304,49 @@ internal class StaffSpellInput(
         actions.defend(player, spell)
     }
 
-    private fun attack(player: Player, spell: StaffSpell) {
-        val tick = Bukkit.getCurrentTick()
-        if (lastAttackTick.put(player.uniqueId, tick) == tick) return
+    private fun attack(player: Player, spell: StaffSpell, startNativeUse: Boolean = false): Boolean {
+        val mode = staffAttackInputMode(spell, player.isSneaking)
+        val activeCharge = charges[player.uniqueId]
+        if (mode == StaffAttackInputMode.HOLD_RELEASE && activeCharge?.releaseOnItemStop == true) {
+            if (startNativeUse && !player.hasActiveItem()) player.startUsingItem(EquipmentSlot.HAND)
+            return true
+        }
 
-        if (player.uniqueId in charges) {
-            releaseCharge(player)
-            return
+        val tick = Bukkit.getCurrentTick()
+        if (lastAttackTick.put(player.uniqueId, tick) == tick) return false
+        if (activeCharge != null) {
+            if (mode == StaffAttackInputMode.CHANNEL_CLICK_TOGGLE && activeCharge.spell == spell &&
+                !activeCharge.releaseOnItemStop) releaseCharge(player)
+            else cancel(player.uniqueId)
+            return true
         }
-        if (staffAttackInputMode(spell, player.isSneaking) != StaffAttackInputMode.INSTANT) {
-            beginCharge(player, spell)
-            return
+
+        return when (mode) {
+            StaffAttackInputMode.HOLD_RELEASE -> beginCharge(player, spell,
+                releaseOnItemStop = true, startNativeUse = startNativeUse)
+            StaffAttackInputMode.CHANNEL_CLICK_TOGGLE -> beginCharge(player, spell)
+            StaffAttackInputMode.INSTANT -> {
+                if (!actions.canCharge(player, spell)) return false
+                actions.cast(player, StaffCastInput.of(player.isSneaking, quick = false), 0.0)
+                true
+            }
         }
-        if (!actions.canCharge(player, spell)) return
-        actions.cast(player, StaffCastInput.of(player.isSneaking, quick = false), 0.0)
     }
 
-    private fun releaseCharge(player: Player) {
+    private fun routeLeftClick(player: Player, spell: StaffSpell) {
+        if (staffAttackInputButton(spell) == StaffSpellInputButton.LEFT) attack(player, spell)
+        else defend(player, spell)
+    }
+
+    private fun routeRightClick(player: Player, spell: StaffSpell, startNativeUse: Boolean = false) {
+        if (staffAttackInputButton(spell) == StaffSpellInputButton.RIGHT) attack(player, spell, startNativeUse)
+        else defend(player, spell)
+    }
+
+    private fun releaseCharge(player: Player, itemUseTicks: Int? = null) {
         val charge = charges.remove(player.uniqueId) ?: return
         val stillCurrent = isCurrentCharge(player, charge)
+        val releasedTicks = itemUseTicks?.coerceAtLeast(0) ?: charge.ticksHeld
         try {
             if (isChannel(charge.spell)) {
                 if (stillCurrent) actions.releaseChannel(player) else actions.cancelChannel(player)
@@ -288,18 +354,20 @@ internal class StaffSpellInput(
             }
             if (stillCurrent && actions.canCharge(player, charge.spell)) {
                 actions.cast(player, StaffCastInput.of(charge.sneaking, quick = false),
-                    staffChargeProgress(charge.ticksHeld))
+                    staffChargeProgress(maxOf(charge.ticksHeld, releasedTicks)))
             }
         } finally {
             actions.cancelCharge(player)
+            if (player.hasActiveItem() && player.activeItemHand == EquipmentSlot.HAND &&
+                StaffSpell.from(player.activeItem) == charge.spell) player.clearActiveItem()
         }
     }
 
-    internal fun attackModeledEntity(player: Player, cancelEvent: () -> Unit) {
+    internal fun leftClickModeledEntity(player: Player, cancelEvent: () -> Unit) {
         upgradeStaffSlot(player, player.inventory.heldItemSlot)
         val spell = StaffSpell.from(player.inventory.itemInMainHand) ?: return
         cancelEvent()
-        attack(player, spell)
+        routeLeftClick(player, spell)
     }
 
     private fun tickCharges() {
@@ -339,7 +407,10 @@ internal class StaffSpellInput(
         if (slot !in 0..8) return false
         val item = player.inventory.getItem(slot) ?: return false
         val migrated = StaffEliteItems.migrate(item)
-        if (!migrated) return false
+        val spell = StaffSpell.from(item)
+        val useComponentUpdated = spell != null && ensureStaffChargeUseComponent(item, spell)
+        val loreUpdated = spell != null && actions.refreshPrototypeLore(item, spell)
+        if (!migrated && !useComponentUpdated && !loreUpdated) return false
         player.inventory.setItem(slot, item)
         return true
     }

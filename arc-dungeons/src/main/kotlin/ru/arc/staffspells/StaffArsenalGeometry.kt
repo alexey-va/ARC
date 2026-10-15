@@ -57,20 +57,57 @@ internal fun staffArsenalParts(spell: StaffSpell, ageTicks: Int, durationTicks: 
         StaffSpell.LUNAR -> {
             val fall = smooth((age - 4) / 12.0)
             val birth = smooth(age / 6.0)
+            val converge = smooth(age / 16.0)
             val copies = if (secondary) 2 else 1
             repeat(copies) { side ->
-                val turn = if (secondary) (side * 2 - 1) * (.9 - fall * 1.8) else -.7 + fall * 1.2
+                val sideSign = side * 2 - 1
+                val turn = if (secondary) sideSign * (.88 - converge * 1.34) else -.82 + converge * 1.64
                 repeat(17) { i ->
-                    val a = -2.15 + i * 4.3 / 16
-                    val width = (.12 + sin(i * PI / 16) * .52) * birth
+                    val t = i / 16.0
+                    val a = -2.15 + t * 4.3
+                    val taper = sin(t * PI).coerceAtLeast(0.0)
+                    val width = (.08 + taper * .52) * birth
                     val x = cos(a) * 1.85
                     val y = sin(a) * 1.85
-                    val drop = if (secondary) 2.0 else 6.2 - fall * 4.1
+                    val drop = if (secondary) 1.85 else 5.6 - fall * 3.35
+                    val centerZ = if (secondary) sideSign * (2.35 - converge * 2.35) else -1.35 + converge * 1.35
+                    val localX = x * cos(turn) - y * sin(turn)
+                    val localY = drop + x * sin(turn) + y * cos(turn)
                     part("moon:$side:$i", if (i % 4 == 0) Material.SEA_LANTERN else Material.WHITE_STAINED_GLASS,
-                        x * cos(turn) - y * sin(turn), drop + x * sin(turn) + y * cos(turn),
-                        if (secondary) (side * 2 - 1) * (1.6 - fall * 1.6) else 0.0,
-                        width, .62 * birth, .28 * birth, roll = a + turn)
+                        localX, localY, centerZ,
+                        width, .62 * birth, .30 * birth, roll = a + turn)
+                    if (!secondary) {
+                        val echo = smooth((age - 4.0) / 5.0) * (1.0 - smooth((age - 17.0) / 5.0))
+                        part("moon:echo:$i", if (i % 5 == 0) Material.SEA_LANTERN else Material.QUARTZ_BLOCK,
+                            localX * .94, localY - .16, centerZ - .42,
+                            width * echo * .62, .38 * echo, .20 * echo, roll = a + turn - .08)
+                    }
                 }
+            }
+            val impactRadius = (radius + .7).coerceIn(.8, 16.0)
+            val release = smooth((age - 12.0) / 4.0)
+            val drift = smooth((age - 14.0) / 2.0)
+            val shardLife = 1.0 - smooth((age - 24.0) / 6.0)
+            repeat(14) { shard ->
+                // A deterministic irregular scatter avoids a circular, evenly-spaced halo.
+                val angle = shard * 2.399963229728653 + sin(shard * 1.91) * .17
+                val radialFraction = .53 + (shard * 7 % 13) / 13.0 * .22 + sin(shard * 2.3) * .025
+                val radial = impactRadius * radialFraction * drift
+                val x = cos(angle) * radial
+                val z = sin(angle) * radial
+                val lift = .18 + (shard % 4) * .12 + drift * (.18 + abs(sin(shard * 1.7)) * .24)
+                val sizeBirth = release * shardLife
+                part("moon:shard:$shard", when (shard % 4) {
+                    0 -> Material.AMETHYST_BLOCK
+                    1 -> Material.CALCITE
+                    2 -> Material.SMOOTH_QUARTZ
+                    else -> Material.QUARTZ_BLOCK
+                }, x / scale, lift, z / scale,
+                    (.34 + (shard % 3) * .08) * sizeBirth,
+                    (.48 + (shard % 4) * .08) * sizeBirth,
+                    (.30 + (shard % 2) * .08) * sizeBirth,
+                    yaw = angle + .28, pitch = -.2 + sin(shard * 2.0) * .12,
+                    roll = .22 + cos(shard * 1.4) * .16)
             }
         }
         StaffSpell.PRISM -> {
@@ -91,29 +128,10 @@ internal fun staffArsenalParts(spell: StaffSpell, ageTicks: Int, durationTicks: 
             }
         }
         StaffSpell.NOVA -> {
-            val grow = smooth(age / if (secondary) 16.0 else 10.0)
             if (secondary) {
-                // Five leafy brambles rise from a warning ring and weave inward around a green heart.
-                repeat(5) { vine ->
-                    val a = vine * PI * 2 / 5
-                    repeat(3) { segment ->
-                        val f = (segment + 1) / 3.0
-                        val close = smooth((age - 2.0) / 15.0)
-                        val r = (1.65 - close * .55) * f
-                        part("garden:vine:$vine:$segment", if (segment == 2) Material.FLOWERING_AZALEA_LEAVES else Material.MOSS_BLOCK,
-                            cos(a) * r, .15 + f * (1.55 + sin(f * PI) * .45), sin(a) * r,
-                            .28 * grow, .54 * grow, .28 * grow, yaw = -a, roll = cos(a) * .28)
-                    }
-                }
-                repeat(5) { leaf ->
-                    val a = leaf * PI * 2 / 5 + age * .02
-                    part("garden:petal:$leaf", Material.FLOWERING_AZALEA_LEAVES,
-                        cos(a) * .48 * grow, 1.2 * grow, sin(a) * .48 * grow,
-                        .22 * grow, .48 * grow, .22 * grow, yaw = -a, roll = .35 * sin(a))
-                }
-                part("garden:heart", Material.EMERALD_BLOCK, 0.0, .75 * grow, 0.0,
-                    .38 * grow, .5 * grow, .38 * grow, roll = .3, yaw = age * .025)
+                parts += staffNovaDisplayParts(ageTicks, durationTicks, radius, q)
             } else {
+                val grow = smooth(age / 10.0)
                 val reach = length.coerceIn(.75, 48.0)
                 val segments = (reach / 1.5).toInt().coerceIn(8, 16)
                 val routeTick = age.coerceAtMost(30)
@@ -151,49 +169,111 @@ internal fun staffArsenalParts(spell: StaffSpell, ageTicks: Int, durationTicks: 
             }
         }
         StaffSpell.OSSUARY -> if (secondary) {
-            // A brief ground warning resolves into seven fast, tall bone spikes.
-            repeat(7) { spike ->
-                val angle = spike * PI * 2 / 6
-                val radius = if (spike == 0) 0.0 else .78
-                val x = cos(angle) * radius
-                val z = sin(angle) * radius
-                val stagger = (spike % 3) * OSSUARY_SECONDARY_STAGGER_TICKS
+            val extent = radius.takeIf { it.isFinite() && it > 0.0 }?.coerceIn(0.5, 16.0) ?: 5.5
+            val spread = smooth(age / (OSSUARY_SECONDARY_STRIKE_TICK - 2.0))
+            val angles = doubleArrayOf(-2.90, -1.63, -0.28, 1.02, 2.43)
+            fun bone(id: String, material: Material, cx: Double, cy: Double, cz: Double,
+                axis: Vector3f, boneLength: Double, width: Double) {
+                val orientation = Quaternionf().rotationTo(Vector3f(0f, 1f, 0f), Vector3f(axis).normalize())
+                part(id, material, cx / scale, cy, cz / scale,
+                    width, boneLength, width, orientation = orientation)
+            }
+            angles.forEachIndexed { cluster, angle ->
+                val radialX = cos(angle)
+                val radialZ = sin(angle)
+                val tangentX = -radialZ
+                val tangentZ = radialX
+                val stagger = (cluster % 3) * OSSUARY_SECONDARY_STAGGER_TICKS
                 val rise = smooth((age - OSSUARY_SECONDARY_ERUPT_TICK - stagger).toDouble() /
                     OSSUARY_SECONDARY_RISE_TICKS)
-                val height = (2.35 + q * .35) * rise
-                part("bone:erupt:$spike:shaft", Material.BONE_BLOCK, x, -.36 + height * .43, z,
-                    .27 * rise, height * .86, .27 * rise, yaw = -angle)
-                part("bone:erupt:$spike:tip", Material.CALCITE, x, -.36 + height - .16, z,
-                    .12 * rise, .48 * rise, .12 * rise, yaw = -angle)
+                val radial = extent * (0.27 + spread * .07 + sin(cluster * 1.7) * .035)
+                val baseX = radialX * radial
+                val baseZ = radialZ * radial
+                val height = (2.90 + q * .35 + (cluster % 3) * .16) * rise
+                val lean = .12 + (cluster % 2) * .08
+                val trunkAxis = Vector3f((radialX * lean).toFloat(), 1f,
+                    (radialZ * lean).toFloat()).normalize()
+                bone("bone:erupt:$cluster:spine", Material.BONE_BLOCK,
+                    baseX + radialX * height * lean * .35, -.32 + height * .39,
+                    baseZ + radialZ * height * lean * .35,
+                    trunkAxis, height * .78, .26 * rise)
+                bone("bone:erupt:$cluster:cap", Material.CALCITE,
+                    baseX + radialX * height * lean * .72, -.32 + height * .82,
+                    baseZ + radialZ * height * lean * .72,
+                    trunkAxis, .45 * rise, .15 * rise)
+                repeat(2) { branch ->
+                    val sign = if (branch == 0) -1.0 else 1.0
+                    val axis = Vector3f((radialX * .84 + tangentX * sign * .28).toFloat(),
+                        (.36 + (cluster % 2) * .05).toFloat(),
+                        (radialZ * .84 + tangentZ * sign * .28).toFloat()).normalize()
+                    val branchLength = extent * (.47 + (cluster % 3) * .018) * rise
+                    val anchorX = baseX + radialX * extent * .08 + radialX * height * lean * .44
+                    val anchorY = -.12 + height * .48 + (cluster % 2) * .11
+                    val anchorZ = baseZ + radialZ * extent * .08 + radialZ * height * lean * .44
+                    val bx = anchorX + axis.x * branchLength * .38
+                    val by = anchorY + axis.y * branchLength * .38
+                    val bz = anchorZ + axis.z * branchLength * .38
+                    bone("bone:erupt:$cluster:branch:$branch", Material.BONE_BLOCK,
+                        bx, by, bz, axis, branchLength * .76, .19 * rise)
+                    bone("bone:erupt:$cluster:tine:$branch", Material.CALCITE,
+                        anchorX + axis.x * branchLength * .86,
+                        anchorY + axis.y * branchLength * .86,
+                        anchorZ + axis.z * branchLength * .86,
+                        axis, .40 * rise, .12 * rise)
+                }
             }
         } else {
+            val extent = radius.takeIf { it.isFinite() && it > 0.0 }?.coerceIn(0.5, 16.0) ?: 2.75
             val rise = smooth(age / OSSUARY_PRIMARY_RISE_TICKS.toDouble())
-            val height = (2.65 + q * .4) * rise
-            part("bone:spike:shaft", Material.BONE_BLOCK, 0.0, -.32 + height * .42, 0.0,
-                .34 * rise, height * .84, .34 * rise)
-            part("bone:spike:tip", Material.CALCITE, 0.0, -.32 + height - .18, 0.0,
-                .14 * rise, .56 * rise, .14 * rise)
-            val sideHeight = (1.45 + q * .3) * rise
-            val tilt = .3
-            repeat(4) { spike ->
-                val angle = spike * PI / 2
-                val axisX = cos(angle) * sin(tilt)
-                val axisY = cos(tilt)
-                val axisZ = sin(angle) * sin(tilt)
-                val baseX = .32 * cos(angle)
-                val baseY = -.10
-                val baseZ = .32 * sin(angle)
-                val shaftOffset = sideHeight * .42
-                // Align local display Y directly with the outward axis; Euler order can tilt into another radial plane.
-                val orientation = Quaternionf().rotationTo(
-                    Vector3f(0f, 1f, 0f), Vector3f(axisX.toFloat(), axisY.toFloat(), axisZ.toFloat()))
-                part("bone:spike:side:$spike:shaft", Material.BONE_BLOCK,
-                    baseX + axisX * shaftOffset, baseY + axisY * shaftOffset, baseZ + axisZ * shaftOffset,
-                    .22 * rise, sideHeight * .84, .22 * rise, orientation = orientation)
-                val tipOffset = sideHeight - .14 * rise
-                part("bone:spike:side:$spike:tip", Material.CALCITE,
-                    baseX + axisX * tipOffset, baseY + axisY * tipOffset, baseZ + axisZ * tipOffset,
-                    .12 * rise, .42 * rise, .12 * rise, orientation = orientation)
+            val split = smooth((age - 6.0) / 3.0)
+            val angles = doubleArrayOf(-2.78, -1.48, -0.16, 1.13, 2.48)
+            fun bone(id: String, material: Material, cx: Double, cy: Double, cz: Double,
+                axis: Vector3f, boneLength: Double, width: Double) {
+                val orientation = Quaternionf().rotationTo(Vector3f(0f, 1f, 0f), Vector3f(axis).normalize())
+                part(id, material, cx / scale, cy, cz / scale,
+                    width, boneLength, width, orientation = orientation)
+            }
+            angles.forEachIndexed { cluster, angle ->
+                val radialX = cos(angle)
+                val radialZ = sin(angle)
+                val tangentX = -radialZ
+                val tangentZ = radialX
+                val sway = sin(cluster * 1.63 + .5)
+                val baseRadius = extent * (.22 + rise * .09 + split * .025 + abs(sway) * .018)
+                val baseX = radialX * baseRadius
+                val baseZ = radialZ * baseRadius
+                val height = (2.0 + q * .35 + (cluster % 3) * .19) * rise
+                val lean = .15 + (cluster % 2) * .07
+                val spineAxis = Vector3f((radialX * lean).toFloat(), 1f,
+                    (radialZ * lean).toFloat()).normalize()
+                bone("bone:cluster:$cluster:spine", Material.BONE_BLOCK,
+                    baseX + radialX * height * lean * .35, -.22 + height * .39,
+                    baseZ + radialZ * height * lean * .35,
+                    spineAxis, height * .78, .25 * rise)
+                bone("bone:cluster:$cluster:cap", Material.CALCITE,
+                    baseX + radialX * height * lean * .72, -.22 + height * .82,
+                    baseZ + radialZ * height * lean * .72,
+                    spineAxis, .44 * rise, .14 * rise)
+                repeat(2) { branch ->
+                    val sign = if (branch == 0) -1.0 else 1.0
+                    val axis = Vector3f((radialX * .72 + tangentX * sign * .40).toFloat(),
+                        (.34 + abs(sway) * .08).toFloat(),
+                        (radialZ * .72 + tangentZ * sign * .40).toFloat()).normalize()
+                    val branchLength = extent * (.51 + split * .015 + (cluster % 2) * .012) * rise
+                    val anchorX = baseX + radialX * extent * .06 + radialX * height * lean * .42
+                    val anchorY = -.08 + height * (.42 + (cluster % 2) * .025)
+                    val anchorZ = baseZ + radialZ * extent * .06 + radialZ * height * lean * .42
+                    bone("bone:cluster:$cluster:branch:$branch", Material.BONE_BLOCK,
+                        anchorX + axis.x * branchLength * .38,
+                        anchorY + axis.y * branchLength * .38,
+                        anchorZ + axis.z * branchLength * .38,
+                        axis, branchLength * .76, .18 * rise)
+                    bone("bone:cluster:$cluster:tine:$branch", Material.CALCITE,
+                        anchorX + axis.x * branchLength * .84,
+                        anchorY + axis.y * branchLength * .84,
+                        anchorZ + axis.z * branchLength * .84,
+                        axis, .38 * rise, .12 * rise)
+                }
             }
         }
         else -> Unit
@@ -228,17 +308,30 @@ internal fun staffArsenalParticles(spell: StaffSpell, ageTicks: Int, durationTic
     when (spell) {
         StaffSpell.LUNAR -> {
             val fall = smooth((age - 4) / 12.0)
-            val height = if (secondary) 2.0 else 6.2 - fall * 4.1
-            repeat(40) { i ->
-                val a = -2.3 + i * 4.6 / 39
+            val converge = smooth(age / 16.0)
+            val impactRadius = (radius + .7).coerceIn(.8, 16.0)
+            repeat(if (secondary) 28 else 16) { i ->
+                val side = if (secondary) i / 14 else 0
+                val slot = if (secondary) i % 14 else i
+                val t = slot / (if (secondary) 13.0 else 15.0)
+                val a = -2.15 + t * 4.3
+                val sign = side * 2 - 1
+                val turn = if (secondary) sign * (.88 - converge * 1.34) else -.82 + converge * 1.64
+                val x = cos(a) * 1.72
+                val y = sin(a) * 1.72
+                val baseY = if (secondary) 1.75 else 5.4 - fall * 3.3
+                val z = if (secondary) sign * (2.25 - converge * 2.25) else -1.25 + converge * 1.25
                 mote(if (i % 5 == 0) Particle.END_ROD else Particle.DUST_COLOR_TRANSITION,
-                    cos(a) * (2.0 + q * .6), height + sin(a) * (2.0 + q * .6), .12,
-                    if (i % 5 == 0) null else silver)
+                    x * cos(turn) - y * sin(turn), baseY + x * sin(turn) + y * cos(turn), z,
+                    if (i % 5 == 0) null else silver, spread = .012)
             }
-            if (ageTicks in 16..28) repeat(48) { i ->
-                val a = i * PI / 24
-                val r = (age - 15) * .34
-                mote(Particle.END_ROD, cos(a) * r, .18, sin(a) * r)
+            if (ageTicks in 14..28) repeat(14) { shard ->
+                val angle = shard * 2.399963229728653 + sin(shard * 1.91) * .17
+                val fraction = .53 + (shard * 7 % 13) / 13.0 * .22 + sin(shard * 2.3) * .025
+                val r = impactRadius * fraction * smooth((age - 12.0) / 4.0)
+                mote(if (shard % 3 == 0) Particle.END_ROD else Particle.DUST_COLOR_TRANSITION,
+                    cos(angle) * r, .22 + (shard % 4) * .12 + smooth((age - 14.0) / 2.0) * .3,
+                    sin(angle) * r, if (shard % 3 == 0) null else silver, spread = .018)
             }
         }
         StaffSpell.PRISM -> {
@@ -250,22 +343,38 @@ internal fun staffArsenalParticles(spell: StaffSpell, ageTicks: Int, durationTic
             }
         }
         StaffSpell.NOVA -> if (secondary) {
-            val close = smooth((age - 2.0) / 18.0)
-            val r = (1.75 - close * .45) * fade
-            repeat(45) { i ->
-                val vine = i / 9
-                val step = i % 9
-                val a = vine * PI * 2 / 5 + age * .015
-                val h = step / 8.0
-                val radiusAtHeight = r * (1.0 - .3 * sin(h * PI))
-                mote(if (step % 4 == 0) Particle.HAPPY_VILLAGER else Particle.DUST_COLOR_TRANSITION,
-                    cos(a) * radiusAtHeight, .15 + h * 2.0, sin(a) * radiusAtHeight,
-                    if (step % 4 == 0) null else root, spread = .018)
+            val extent = radius.takeIf { it.isFinite() && it > 0.0 }?.coerceIn(0.5, 16.0) ?: 3.0
+            val close = smooth((age - 12.0) / 8.0)
+            val outer = (extent - .45).coerceAtLeast(.25) * (1.0 - close * .34) * fade
+            val angles = doubleArrayOf(-2.88, -1.45, -0.20, 1.14, 2.50)
+            repeat(25) { i ->
+                val vine = i / 5
+                val step = i % 5
+                val f = (step + .5) / 5.0
+                val angle = angles[vine]
+                val r = outer * (1.0 - f * .22 * close) + sin(f * PI + vine) * .05
+                mote(if (step == 4) Particle.HAPPY_VILLAGER else Particle.DUST_COLOR_TRANSITION,
+                    cos(angle) * r, .12 + f * 1.5 + close * f * .12, sin(angle) * r,
+                    if (step == 4) null else root, spread = .018)
             }
-            repeat(24) { i ->
-                val a = i * PI * 2 / 24
-                mote(Particle.DUST_COLOR_TRANSITION, cos(a) * r, .15, sin(a) * r,
-                    staffFade(0xffe69a, 0x61bb42, 1.2f), spread = .015)
+            repeat(5) { i ->
+                val mid = (angles[i] + if (i == angles.lastIndex) angles[0] + 2.0 * PI else angles[i + 1]) * .5
+                val r = outer * (.70 - close * .18)
+                mote(Particle.DUST_COLOR_TRANSITION, cos(mid) * r, .72 + (i % 3) * .09 + close * .16,
+                    sin(mid) * r, staffFade(0xffe69a, 0x61bb42, 1.2f), spread = .018)
+            }
+            repeat(5) { i ->
+                val angle = angles[i]
+                val r = outer * (.70 - close * .12)
+                mote(Particle.DUST_COLOR_TRANSITION, cos(angle) * r, 1.04 + (i % 2) * .16,
+                    sin(angle) * r, root, spread = .018)
+            }
+            if (ageTicks in 20..28) repeat(8) { i ->
+                val angle = i * 2.399963229728653
+                val r = .38 + smooth((age - 20.0) / 4.0) * .24
+                mote(if (i % 2 == 0) Particle.HAPPY_VILLAGER else Particle.DUST_COLOR_TRANSITION,
+                    cos(angle) * r, .62 + sin(angle * 2) * .42, sin(angle) * r,
+                    if (i % 2 == 0) null else root, spread = .015)
             }
         } else {
             val path = reach.coerceIn(.75, 48.0)
@@ -290,30 +399,54 @@ internal fun staffArsenalParticles(spell: StaffSpell, ageTicks: Int, durationTic
             }
         }
         StaffSpell.OSSUARY -> if (secondary) {
+            val extent = radius.takeIf { it.isFinite() && it > 0.0 }?.coerceIn(0.5, 16.0) ?: 5.5
+            val angles = doubleArrayOf(-2.90, -1.63, -0.28, 1.02, 2.43)
             if (ageTicks < OSSUARY_SECONDARY_ERUPT_TICK) {
-                repeat(6) { i ->
-                    val a = i * PI / 3
-                    mote(Particle.DUST_COLOR_TRANSITION, cos(a) * .78, .04, sin(a) * .78, bone, spread = .008)
+                repeat(10) { i ->
+                    val angle = angles[i % angles.size] + (i / angles.size) * .14
+                    val r = extent * (.28 + (i % 3) * .035)
+                    mote(Particle.DUST_COLOR_TRANSITION, cos(angle) * r, .04 + (i % 2) * .03,
+                        sin(angle) * r, bone, spread = .012)
                 }
-            } else if (ageTicks <= OSSUARY_SECONDARY_STRIKE_TICK) {
-                repeat(7) { spike ->
-                    val angle = spike * PI * 2 / 6
-                    val radius = if (spike == 0) 0.0 else .78
-                    val stagger = (spike % 3) * OSSUARY_SECONDARY_STAGGER_TICKS
+            } else if (ageTicks <= OSSUARY_SECONDARY_STRIKE_TICK + 2) {
+                val spread = smooth(age / (OSSUARY_SECONDARY_STRIKE_TICK - 2.0))
+                angles.forEachIndexed { cluster, angle ->
+                    val stagger = (cluster % 3) * OSSUARY_SECONDARY_STAGGER_TICKS
                     val rise = smooth((age - OSSUARY_SECONDARY_ERUPT_TICK - stagger).toDouble() /
                         OSSUARY_SECONDARY_RISE_TICKS)
-                    mote(Particle.DUST_COLOR_TRANSITION, cos(angle) * radius,
-                        rise * (2.35 + q * .35), sin(angle) * radius, bone, spread = .01)
-                    if (ageTicks == OSSUARY_SECONDARY_STRIKE_TICK)
-                        mote(Particle.SOUL, cos(angle) * radius, 2.35 + q * .35, sin(angle) * radius)
+                    val r = extent * (.27 + spread * .07 + sin(cluster * 1.7) * .035)
+                    val h = (2.15 + q * .35 + (cluster % 3) * .14) * rise
+                    mote(Particle.DUST_COLOR_TRANSITION, cos(angle) * r, -.25 + h * .83,
+                        sin(angle) * r, bone, spread = .014)
+                    repeat(2) { branch ->
+                        val branchAngle = angle + if (branch == 0) -.31 else .31
+                        val tipR = r + extent * (.35 + rise * .10)
+                        mote(Particle.DUST_COLOR_TRANSITION, cos(branchAngle) * tipR,
+                            -.08 + h * .5 + rise * .48, sin(branchAngle) * tipR, bone, spread = .012)
+                    }
+                    if (ageTicks in OSSUARY_SECONDARY_STRIKE_TICK..(OSSUARY_SECONDARY_STRIKE_TICK + 2))
+                        mote(Particle.SOUL, cos(angle) * r, -.25 + h * .85, sin(angle) * r)
                 }
             }
         } else {
-            val rise = smooth(age / OSSUARY_PRIMARY_RISE_TICKS)
-            repeat(6) { i ->
-                val height = i / 5.0 * (2.65 + q * .4) * rise
-                mote(if (i == 5) Particle.SOUL else Particle.DUST_COLOR_TRANSITION,
-                    0.0, height, 0.0, if (i == 5) null else bone, spread = .008)
+            if (ageTicks <= OSSUARY_PRIMARY_RISE_TICKS + 4) {
+                val extent = radius.takeIf { it.isFinite() && it > 0.0 }?.coerceIn(0.5, 16.0) ?: 2.75
+                val rise = smooth(age / OSSUARY_PRIMARY_RISE_TICKS.toDouble())
+                val angles = doubleArrayOf(-2.78, -1.48, -0.16, 1.13, 2.48)
+                angles.forEachIndexed { cluster, angle ->
+                    val r = extent * (.22 + rise * .09 + abs(sin(cluster * 1.63 + .5)) * .018)
+                    val h = (2.0 + q * .35 + (cluster % 3) * .19) * rise
+                    mote(Particle.DUST_COLOR_TRANSITION, cos(angle) * r, -.2 + h * .84,
+                        sin(angle) * r, bone, spread = .012)
+                    repeat(2) { branch ->
+                        val branchAngle = angle + if (branch == 0) -.42 else .42
+                        val tipR = r + extent * (.34 + rise * .07)
+                        mote(Particle.DUST_COLOR_TRANSITION, cos(branchAngle) * tipR,
+                            .15 + h * .48 + rise * .42, sin(branchAngle) * tipR, bone, spread = .012)
+                    }
+                    if (ageTicks in 6..8) mote(Particle.SOUL, cos(angle) * (r + extent * .28),
+                        .45 + h * .55, sin(angle) * (r + extent * .28))
+                }
             }
         }
         else -> Unit

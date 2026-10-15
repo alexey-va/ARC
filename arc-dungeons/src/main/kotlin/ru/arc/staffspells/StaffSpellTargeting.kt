@@ -85,6 +85,37 @@ private const val MAX_COORDINATE = (Int.MAX_VALUE - 8).toDouble() * 16.0
 
 /** Shared, bounded staff targeting; eligibility remains owned by the damage bridge. */
 internal class StaffSpellTargeting(private val settings: StaffSpellSettings, private val damage: StaffSpellDamage) {
+    /** A launch nudge only: keeps exact hits, never locks or changes collision/damage eligibility. */
+    fun assistedDirection(player: Player, spell: StaffSpell, cast: StaffSpellCast?,
+        direction: Vector = player.eyeLocation.direction, from: Location = player.eyeLocation,
+        range: Double = settings.range): Vector {
+        val look = direction.clone()
+        if (!look.lengthSquared().isFinite() || look.lengthSquared() < 1e-9) return look
+        look.normalize()
+        val assist = settings.aimAssist
+        if (!assist.enabled || assist.strength <= 0.0 || spell.id in assist.excludedSpells) return look
+        val horizontal = abs(look.y) < 1e-9
+        val eye = player.eyeLocation
+        val candidates = nearby(player, eye, range, cast).asSequence().mapNotNull { entity ->
+            val at = center(entity)
+            val offset = at.toVector().subtract(eye.toVector())
+            if (horizontal) offset.y = 0.0
+            val along = offset.dot(look)
+            if (along <= .1 || along > range) return@mapNotNull null
+            val miss = offset.clone().subtract(look.clone().multiply(along)).length()
+            if (miss > assist.maxMiss || miss > along * kotlin.math.tan(Math.toRadians(assist.halfAngleDegrees)))
+                return@mapNotNull null
+            Triple(entity, miss / along, at)
+        }.sortedBy { it.second }.take(32).toList()
+        // Do not pull an already accurate ray off a nearer, directly aimed target.
+        val endpoint = rayEnd(eye, look, range)
+        if (lineTargets(player, eye, endpoint, .05, cast).isNotEmpty()) return look
+        val target = candidates.firstOrNull { visible(eye, it.third) && visible(from, it.third) } ?: return look
+        val offset = target.third.toVector().subtract(eye.toVector())
+        if (horizontal) offset.y = 0.0
+        return staffNudgeDirection(look, offset, assist.strength)
+    }
+
     /** Exact swept collision along the cast line, never soft acquisition. */
     fun lineTargets(player: Player, from: Location, to: Location, width: Double,
         cast: StaffSpellCast? = null): List<LivingEntity> {
@@ -142,4 +173,12 @@ internal class StaffSpellTargeting(private val settings: StaffSpellSettings, pri
             .filter { center(it).distanceSquared(origin) <= area * area && damage.eligible(player, it, cast) }
     }
 
+}
+
+/** Fractional correction preserves a deliberate miss; no perfect-target snap. */
+internal fun staffNudgeDirection(direction: Vector, offset: Vector, strength: Double): Vector {
+    val look = direction.clone().normalize()
+    if (!offset.lengthSquared().isFinite() || offset.lengthSquared() < 1e-9) return look
+    val amount = strength.takeIf(Double::isFinite)?.coerceIn(0.0, .8) ?: 0.0
+    return look.multiply(1.0 - amount).add(offset.clone().normalize().multiply(amount)).normalize()
 }

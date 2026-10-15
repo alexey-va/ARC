@@ -1,6 +1,7 @@
 package ru.arc.staffspells
 
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.bossbar.BossBar
 import org.bukkit.Bukkit
 import org.bukkit.Color
 import org.bukkit.GameMode
@@ -15,6 +16,9 @@ import org.joml.Vector3f
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.paper.display.PacketTextDisplay
 import ru.arc.paper.display.PaperPacketDisplays
+import net.luckperms.api.LuckPermsProvider
+import ru.arc.staffspells.api.StaffHudMode
+import ru.arc.staffspells.api.StaffHudPlacement
 import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.cos
@@ -31,11 +35,36 @@ internal data class StaffSpellHudState(
     val totalTicks: Long = 0,
 )
 
+internal data class StaffSpellHudPreferences(
+    val mode: StaffHudMode = StaffHudMode.DEFAULT,
+    val placement: StaffHudPlacement = StaffHudPlacement.DEFAULT,
+)
+
+internal fun staffSpellHudPreferencesFromStored(mode: String?, placement: String?) =
+    StaffSpellHudPreferences(StaffHudMode.fromStored(mode), StaffHudPlacement.fromStored(placement))
+
+internal fun interface StaffSpellHudPreferencesReader {
+    fun read(player: Player): StaffSpellHudPreferences
+}
+
+/** Reads only LP's loaded user/cache; this never loads a user or performs storage IO on the tick. */
+private object CachedStaffSpellHudPreferences : StaffSpellHudPreferencesReader {
+    override fun read(player: Player): StaffSpellHudPreferences = runCatching {
+        val user = LuckPermsProvider.get().userManager.getUser(player.uniqueId)
+        val meta = user?.cachedData?.metaData
+        staffSpellHudPreferencesFromStored(
+            meta?.getMetaValue(StaffHudMode.META_KEY),
+            meta?.getMetaValue(StaffHudPlacement.META_KEY),
+        )
+    }.getOrDefault(StaffSpellHudPreferences())
+}
+
 /** Private, camera-follow packet text for the currently selected staff ability. */
 internal class StaffSpellHud(
     private val displays: PaperPacketDisplays,
     private val config: StaffSpellConfig,
     private val tasks: LifecycleTaskScope = LifecycleTaskScope(),
+    private val preferences: StaffSpellHudPreferencesReader = CachedStaffSpellHudPreferences,
 ) : AutoCloseable {
     private data class Card(
         val display: PacketTextDisplay,
@@ -43,8 +72,12 @@ internal class StaffSpellHud(
         var location: Location,
         var scale: Float,
     )
+    private data class TrackedBossBar(val bar: BossBar, var name: Component, var progress: Float)
 
     private val cards = mutableMapOf<UUID, Card>()
+    private val bossBars = mutableMapOf<UUID, TrackedBossBar>()
+    private val states = mutableMapOf<UUID, StaffSpellHudState>()
+    private val worldIds = mutableMapOf<UUID, UUID>()
     private val visual = staffSpellHudVisualSpec()
     private var started = false
     private var closed = false
@@ -74,7 +107,10 @@ internal class StaffSpellHud(
     }
 
     fun clear(playerId: UUID) {
-        cards.remove(playerId)?.display?.remove()
+        states.remove(playerId)
+        worldIds.remove(playerId)
+        removeCard(playerId)
+        removeBossBar(playerId)
     }
 
     private fun update(player: Player, state: StaffSpellHudState) {
@@ -82,18 +118,42 @@ internal class StaffSpellHud(
             clear(player.uniqueId)
             return
         }
+        states[player.uniqueId] = state
+        worldIds[player.uniqueId] = player.world.uid
+        renderSurface(player, state, preferences.read(player))
+    }
+
+    private fun renderSurface(player: Player, state: StaffSpellHudState, choice: StaffSpellHudPreferences) {
+        when (choice.mode) {
+            StaffHudMode.HOLOGRAM -> {
+                removeBossBar(player.uniqueId)
+                showHologram(player, state, choice.placement)
+            }
+            StaffHudMode.BOSSBAR -> {
+                removeCard(player.uniqueId)
+                showBossBar(player, state)
+            }
+            StaffHudMode.OFF -> {
+                removeCard(player.uniqueId)
+                removeBossBar(player.uniqueId)
+            }
+        }
+    }
+
+    private fun showHologram(player: Player, state: StaffSpellHudState, placementChoice: StaffHudPlacement) {
         val text = render(state)
         val card = cards[player.uniqueId]
         if (card != null && card.display.isValid) {
             if (card.state != state) card.display.text(text)
             card.state = state
+            syncCard(player, card, placementChoice)
             return
         }
         card?.display?.remove()
-        val placement = placement(player)
+        val placement = placement(player, placementChoice)
         val at = placement.location
         if (at.world?.isChunkLoaded(at.blockX shr 4, at.blockZ shr 4) == false) {
-            clear(player.uniqueId)
+            removeCard(player.uniqueId)
             return
         }
         val display = displays.spawnText(at, text).apply {
@@ -117,6 +177,48 @@ internal class StaffSpellHud(
         cards[player.uniqueId] = Card(display, state, at, placement.scale)
     }
 
+    private fun showBossBar(player: Player, state: StaffSpellHudState) {
+        val name = config.staffHudBossbar(state)
+        val progress = when (state.phase) {
+            StaffSpellHudPhase.CHARGING, StaffSpellHudPhase.COOLDOWN ->
+                state.progress.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0)?.toFloat() ?: 0f
+            StaffSpellHudPhase.READY, StaffSpellHudPhase.CHANNEL -> 1f
+        }
+        val tracked = bossBars.getOrPut(player.uniqueId) {
+            val created = BossBar.bossBar(name, progress, BossBar.Color.YELLOW, BossBar.Overlay.PROGRESS)
+            player.showBossBar(created)
+            TrackedBossBar(created, name, progress)
+        }
+        if (tracked.name != name) {
+            tracked.bar.name(name)
+            tracked.name = name
+        }
+        if (abs(tracked.progress - progress) >= BAR_PROGRESS_EPSILON) {
+            tracked.bar.progress(progress)
+            tracked.progress = progress
+        }
+    }
+
+    private fun syncCard(player: Player, card: Card, placementChoice: StaffHudPlacement) {
+        val placement = placement(player, placementChoice)
+        val at = placement.location
+        if (at.world?.isChunkLoaded(at.blockX shr 4, at.blockZ shr 4) == false) return
+        if (card.location.world != at.world || card.location.distanceSquared(at) >= POSITION_EPSILON_SQUARED) {
+            card.display.teleport(at)
+            card.location = at
+        }
+        if (abs(card.scale - placement.scale) >= SCALE_EPSILON) {
+            card.display.transformation = transformation(placement.scale)
+            card.scale = placement.scale
+        }
+    }
+
+    private fun removeCard(playerId: UUID) { cards.remove(playerId)?.display?.remove() }
+
+    private fun removeBossBar(playerId: UUID) {
+        bossBars.remove(playerId)?.let { tracked -> Bukkit.getPlayer(playerId)?.hideBossBar(tracked.bar) }
+    }
+
     private fun render(state: StaffSpellHudState): Component = when (state.phase) {
         StaffSpellHudPhase.READY -> config.staffHudReady(state.spell, state.secondary)
         StaffSpellHudPhase.CHARGING -> config.staffHudCharging(state.spell, state.secondary,
@@ -128,20 +230,20 @@ internal class StaffSpellHud(
 
     private fun follow() {
         if (closed) return
-        cards.toMap().forEach { (playerId, card) ->
+        states.toMap().forEach { (playerId, previousState) ->
             val player = Bukkit.getPlayer(playerId)
             val heldSpell = player?.let { StaffSpell.from(it.inventory.itemInMainHand) }
             if (player == null || !eligible(player) || heldSpell == null ||
-                card.location.world?.uid != player.world.uid || !card.display.isValid) {
+                worldIds[playerId] != player.world.uid) {
                 clear(playerId)
                 return@forEach
             }
 
-            if (heldSpell != card.state.spell) {
-                when (card.state.phase) {
-                    StaffSpellHudPhase.READY -> ready(player, heldSpell, player.isSneaking)
-                    StaffSpellHudPhase.COOLDOWN -> cooldown(player, heldSpell, player.isSneaking,
-                        card.state.remainingTicks, card.state.totalTicks)
+            var state = previousState
+            if (heldSpell != state.spell) {
+                state = when (state.phase) {
+                    StaffSpellHudPhase.READY -> StaffSpellHudState(heldSpell, player.isSneaking, StaffSpellHudPhase.READY)
+                    StaffSpellHudPhase.COOLDOWN -> state.copy(spell = heldSpell, secondary = player.isSneaking)
                     StaffSpellHudPhase.CHARGING, StaffSpellHudPhase.CHANNEL -> {
                         clear(playerId)
                         return@forEach
@@ -150,25 +252,15 @@ internal class StaffSpellHud(
             }
 
             // Sneak changes the selected attack. Charge input itself cancels on this transition.
-            if (card.state.secondary != player.isSneaking) {
-                when (card.state.phase) {
-                    StaffSpellHudPhase.READY -> ready(player, card.state.spell, player.isSneaking)
-                    StaffSpellHudPhase.COOLDOWN -> cooldown(player, card.state.spell, player.isSneaking,
-                        card.state.remainingTicks, card.state.totalTicks)
+            if (state.secondary != player.isSneaking) {
+                when (state.phase) {
+                    StaffSpellHudPhase.READY -> state = state.copy(secondary = player.isSneaking)
+                    StaffSpellHudPhase.COOLDOWN -> state = state.copy(secondary = player.isSneaking)
                     else -> Unit
                 }
             }
-            val placement = placement(player)
-            val at = placement.location
-            if (at.world?.isChunkLoaded(at.blockX shr 4, at.blockZ shr 4) == false) return@forEach
-            if (card.location.world != at.world || card.location.distanceSquared(at) >= POSITION_EPSILON_SQUARED) {
-                card.display.teleport(at)
-                card.location = at
-            }
-            if (abs(card.scale - placement.scale) >= SCALE_EPSILON) {
-                card.display.transformation = transformation(placement.scale)
-                card.scale = placement.scale
-            }
+            states[playerId] = state
+            renderSurface(player, state, preferences.read(player))
         }
     }
 
@@ -176,42 +268,52 @@ internal class StaffSpellHud(
         player.gameMode != GameMode.SPECTATOR
 
     /** Below the reticle in the camera plane; pull toward the eye if a solid block occludes the card. */
-    private fun placement(player: Player): StaffHudPlacement {
+    private fun placement(player: Player, preference: StaffHudPlacement): StaffSpellHudPlacement {
         val eye = player.eyeLocation
         val direction = eye.direction.normalize()
         val yaw = Math.toRadians(eye.yaw.toDouble())
         val cameraRight = Vector(cos(yaw), 0.0, sin(yaw))
-        val cameraDown = cameraRight.crossProduct(direction).normalize()
-        val baseOffset = direction.multiply(STAFF_HUD_FORWARD_DISTANCE)
-            .add(cameraDown.multiply(STAFF_HUD_LOWER_OFFSET))
-        val baseDistance = baseOffset.length()
+        val cameraDown = cameraRight.clone().crossProduct(direction).normalize()
+        val configured = config.hudPosition
+        val position = configured.copy(verticalBlocks = if (preference == StaffHudPlacement.BOTTOM)
+            configured.verticalBlocks else -configured.verticalBlocks)
+        val basePose = staffSpellHudPose(position)
+        val baseOffset = direction.clone().multiply(basePose.forwardOffset)
+            .add(cameraDown.clone().multiply(basePose.cameraDownOffset))
+            .add(cameraRight.clone().multiply(basePose.horizontalOffset))
         val ray = baseOffset.clone().normalize()
-        val blockRay = staffBlockHit(eye, ray, baseDistance)
+        val blockRay = staffBlockHit(eye, ray, basePose.distance)
         val hitDistance = blockRay.hit?.hitPosition?.distance(eye.toVector())
-        val safeDistance = staffHudSafeDistance(baseDistance, hitDistance.takeIf { blockRay.pathLoaded })
-        val pose = staffSpellHudPose(safeDistance)
-        return StaffHudPlacement(eye.add(ray.multiply(safeDistance)), pose.textScale)
+        val safeDistance = staffHudSafeDistance(basePose.distance, hitDistance.takeIf { blockRay.pathLoaded })
+        val pose = staffSpellHudPose(safeDistance, position)
+        val at = eye.clone()
+            .add(direction.clone().multiply(pose.forwardOffset))
+            .add(cameraDown.clone().multiply(pose.cameraDownOffset))
+            .add(cameraRight.clone().multiply(pose.horizontalOffset))
+        return StaffSpellHudPlacement(at, pose.textScale)
     }
 
     override fun close() {
         if (closed) return
         closed = true
         tasks.close()
-        cards.keys.toList().forEach(::clear)
+        (states.keys + cards.keys + bossBars.keys).toSet().forEach(::clear)
         displays.close()
     }
 
     private companion object {
         const val POSITION_EPSILON_SQUARED = 0.0004
         const val SCALE_EPSILON = 0.0005f
+        const val BAR_PROGRESS_EPSILON = 0.0005f
     }
 }
 
-private data class StaffHudPlacement(val location: Location, val scale: Float)
+private data class StaffSpellHudPlacement(val location: Location, val scale: Float)
 
 internal data class StaffSpellHudPose(
     val forwardOffset: Double,
     val cameraDownOffset: Double,
+    val horizontalOffset: Double,
     val distance: Double,
     val textScale: Float,
 )
@@ -242,13 +344,12 @@ internal fun staffSpellHudVisualSpec() = StaffSpellHudVisualSpec(
     backgroundColor = Color.fromARGB(148, 11, 17, 26),
 )
 
-internal const val STAFF_HUD_FORWARD_DISTANCE = 2.8
-internal const val STAFF_HUD_LOWER_OFFSET = 0.62
-internal const val STAFF_HUD_TEXT_SCALE = 0.72
 internal const val STAFF_HUD_BLOCK_CLEARANCE = 0.18
 internal const val STAFF_HUD_MIN_VISIBLE_DISTANCE = 0.12
 
-internal fun staffHudBaseDistance() = kotlin.math.hypot(STAFF_HUD_FORWARD_DISTANCE, STAFF_HUD_LOWER_OFFSET)
+internal fun staffHudBaseDistance(position: StaffSpellHudPositionSettings = StaffSpellHudPositionSettings()): Double =
+    kotlin.math.sqrt(position.forwardBlocks * position.forwardBlocks +
+        position.verticalBlocks * position.verticalBlocks + position.horizontalBlocks * position.horizontalBlocks)
 
 internal fun staffHudSafeDistance(desiredDistance: Double, obstructionDistance: Double?): Double {
     val desired = desiredDistance.takeIf { it.isFinite() && it > 0.0 } ?: staffHudBaseDistance()
@@ -257,16 +358,26 @@ internal fun staffHudSafeDistance(desiredDistance: Double, obstructionDistance: 
 }
 
 /** Source-owned camera-plane offsets and scale for the unclipped or nearer occlusion pose. */
-internal fun staffSpellHudPose(distance: Double = staffHudBaseDistance()): StaffSpellHudPose {
-    val baseDistance = staffHudBaseDistance()
+internal fun staffSpellHudPose(position: StaffSpellHudPositionSettings): StaffSpellHudPose =
+    staffSpellHudPose(staffHudBaseDistance(position), position)
+
+internal fun staffSpellHudPose(distance: Double = staffHudBaseDistance()): StaffSpellHudPose =
+    staffSpellHudPose(distance, StaffSpellHudPositionSettings())
+
+internal fun staffSpellHudPose(
+    distance: Double,
+    position: StaffSpellHudPositionSettings,
+): StaffSpellHudPose {
+    val baseDistance = staffHudBaseDistance(position)
     val safeDistance = distance.takeIf { it.isFinite() && it > 0.0 }
         ?.coerceIn(STAFF_HUD_MIN_VISIBLE_DISTANCE, baseDistance) ?: baseDistance
     val ratio = safeDistance / baseDistance
     return StaffSpellHudPose(
-        forwardOffset = STAFF_HUD_FORWARD_DISTANCE * ratio,
-        cameraDownOffset = STAFF_HUD_LOWER_OFFSET * ratio,
+        forwardOffset = position.forwardBlocks * ratio,
+        cameraDownOffset = position.verticalBlocks * ratio,
+        horizontalOffset = position.horizontalBlocks * ratio,
         distance = safeDistance,
-        textScale = (STAFF_HUD_TEXT_SCALE * ratio).toFloat(),
+        textScale = (position.scale * ratio).toFloat(),
     )
 }
 
