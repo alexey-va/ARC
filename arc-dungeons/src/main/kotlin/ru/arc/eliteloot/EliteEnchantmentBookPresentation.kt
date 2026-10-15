@@ -24,6 +24,7 @@ internal data class EliteEnchantmentBookPresentationText(
     val compatibilityLabel: String = "Подходит для:",
     val compatibilityFallback: String = "совместимого снаряжения EliteMobs",
     val actionLore: String = "Перетащите на предмет — зачаровать",
+    val effectDescriptions: Map<String, List<String>> = emptyMap(),
 )
 
 internal fun isAdvancedEnchantmentsBook(item: ItemStack): Boolean =
@@ -95,6 +96,7 @@ internal fun eliteEnchantmentBookLore(
     text: EliteEnchantmentBookPresentationText,
     compatibilityLore: List<Component> = emptyList(),
     chanceLore: List<Component> = emptyList(),
+    effectLore: List<Component> = emptyList(),
 ): List<Component> = buildList {
     fun section(lines: List<Component>) {
         val compact = compactEliteLore(lines)
@@ -107,7 +109,7 @@ internal fun eliteEnchantmentBookLore(
     })
     // Keep the effect and EliteMobs-only scope together, then put target applicability and
     // book-owned rates in one information block.
-    section(enchantments + scopeLore)
+    section(enchantments + effectLore + scopeLore)
     section(compatibilityLore + chanceLore)
     section(authoredLore.filterNot { plainBookText.serialize(it).trim() in retiredEnchanterInstructions })
     text.actionLore.trim().takeIf(String::isNotEmpty)?.let { action ->
@@ -125,6 +127,22 @@ internal fun eliteEnchantmentBookLore(
 
 private fun bookLoreLine(value: String, color: TextColor): Component =
     Component.text(value, color).decoration(TextDecoration.ITALIC, false)
+
+/** Keep provider-owned name rows contiguous; multi-effect books label each description below them. */
+internal fun eliteBookEffectLore(
+    enchantments: List<Pair<String, Component>>,
+    descriptions: Map<String, List<String>>,
+): List<Component> = buildList {
+    for ((id, name) in enchantments) {
+        val lines = descriptions[id].orEmpty().flatMap(String::lines).map(String::trim).filter(String::isNotEmpty)
+        if (lines.isEmpty()) continue
+        if (enchantments.size > 1) {
+            add(Component.empty().decoration(TextDecoration.ITALIC, false))
+            add(name.append(Component.text(":", bookStructureColor)).decoration(TextDecoration.ITALIC, false))
+        }
+        addAll(lines.map { bookLoreLine(it, bookBodyColor) })
+    }
+}
 
 internal fun joinEliteBookTargetLabels(targets: List<Component>): Component =
     targets.withIndex().fold(Component.empty()) { joined, (index, target) ->
@@ -214,6 +232,12 @@ internal fun presentEliteEnchantmentBook(
         authoredLore += bookLoreLine("Привязано к душе", bookNameAccent)
     }
     val customLevels = EliteEnchantmentItems.custom(item)
+    // EM 10.9.8 EnchantmentPresentation emits one name row per entry in a TreeMap of custom IDs.
+    val effectLore = eliteBookEffectLore(
+        nativeLevels.mapIndexed { index, entry -> entry.key.key.toString() to nativeEnchantments[index] } +
+            customLevels.keys.sorted().zip(customEnchantments),
+        text.effectDescriptions,
+    )
     val targetLabels = eliteBookCompatibleTargetLabels(
         nativeLevels.map { it.key },
         customEnchantmentIds = customLevels.keys,
@@ -223,7 +247,9 @@ internal fun presentEliteEnchantmentBook(
         text.compatibilityFallback,
         targetLabels,
     )
-    meta.lore(eliteEnchantmentBookLore(nativeEnchantments + customEnchantments, authoredLore, text, compatibilityLore, bookChanceLore(chances)))
+    meta.lore(eliteEnchantmentBookLore(
+        nativeEnchantments + customEnchantments, authoredLore, text, compatibilityLore, bookChanceLore(chances), effectLore,
+    ))
     meta.addItemFlags(ItemFlag.HIDE_ENCHANTS, ItemFlag.HIDE_STORED_ENCHANTS, ItemFlag.HIDE_ATTRIBUTES)
     // Pre-redesign books used appended rows. Canonical reconstruction makes those markers obsolete.
     pdc.remove(bookLoreRowsKey)

@@ -42,6 +42,31 @@ unavailable. ArcDuels 0.11.9 soft-depends on ArcDungeons so its staff service is
 registered before duel integration starts. Load order is ARC, ArcDungeons,
 ArcDuels; ARC has no dependency on ArcDungeons.
 
+## Enchantment book descriptions
+
+Verified 2026-10-16: `eliteloot/EliteEnchantmentBookPresentation.kt` owns the
+EliteMobs book tooltip. Effect descriptions come from
+`book.effect-descriptions` in `modules/enchanting.yml`, loaded by
+`EliteEnchantingConfig`. Runtime overrides remain in
+`plugins/ARC/modules/enchanting.yml` on Spawn and Survival. Keep MagmaCore's
+generated enchantment-name block contiguous: its native refresh identifies
+that block using the recorded line count and position.
+
+AdvancedEnchantments books use AE 9.24.15's native `BookMaker` through ARC's
+`enchanting/AdvancedBookPresentation.kt`. Their effect text belongs to
+`plugins/AdvancedEnchantments/enchantments.yml`; the native book layout belongs
+to `enchantment-book.lore` in AE's `config.yml`. Do not add a second AE effect
+catalog to ArcDungeons.
+
+`dungeons/ElitePickupListener.kt` refreshes existing personal-inventory books
+after joining, opening an inventory or changing a slot, with coalesced delayed
+work. Books stored in chests refresh after entering the player's inventory;
+no offline inventory or world-wide container scan is needed.
+
+Focused presentation coverage is in `EliteEnchantmentBookPresentationTest`
+and `AdvancedBookPresentationTest`. Component/render checks establish tooltip
+composition; they do not establish native-client appearance or live activation.
+
 ## Delivery and verification
 
 The first extraction requires ARC 1.4.391 and ArcDungeons 0.1.0 to be delivered

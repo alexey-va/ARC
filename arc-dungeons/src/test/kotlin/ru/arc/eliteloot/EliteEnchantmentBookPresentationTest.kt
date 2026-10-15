@@ -9,10 +9,12 @@ import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
+import org.bukkit.configuration.file.YamlConfiguration
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
 import ru.arc.dungeons.api.ArcBookIdentity
 import ru.arc.paper.testing.MockBukkitTestRuntime
+import java.io.InputStreamReader
 
 class EliteEnchantmentBookPresentationTest : FreeSpec({
     val plain = PlainTextComponentSerializer.plainText()
@@ -125,6 +127,65 @@ class EliteEnchantmentBookPresentationTest : FreeSpec({
         changed.map(plain::serialize).none {
             it == "Только для снаряжения EliteMobs" || it == "[▶] Перетащите книгу"
         } shouldBe true
+    }
+
+    "a single effect uses the configured description below its name without a repeated heading" {
+        val config = InputStreamReader(requireNotNull(
+            EliteEnchantmentBookPresentationTest::class.java.getResourceAsStream("/modules/enchanting.yml"),
+        )).use(YamlConfiguration::loadConfiguration)
+        val enchantment = Component.text("Сила I", TextColor.color(0x68D8FF))
+        val effect = eliteBookEffectLore(
+            listOf("minecraft:power" to enchantment),
+            mapOf("minecraft:power" to config.getStringList("book.effect-descriptions.minecraft:power")),
+        )
+        val lore = eliteEnchantmentBookLore(
+            enchantments = listOf(enchantment),
+            authoredLore = emptyList(),
+            text = EliteEnchantmentBookPresentationText(),
+            effectLore = effect,
+        )
+
+        lore.map(plain::serialize) shouldBe listOf(
+            "", "Сила I",
+            "Увеличивает урон стрел,",
+            "а также посохов и волшебных палочек.",
+            "Только для снаряжения EliteMobs", "",
+            "[▶] Перетащите на предмет — зачаровать",
+        )
+        effect.forEach {
+            it.color() shouldBe TextColor.color(0xE6FFF3)
+            it.decoration(TextDecoration.ITALIC) shouldBe TextDecoration.State.FALSE
+        }
+    }
+
+    "multiple descriptions retain canonical name order and the contiguous provider-owned block" {
+        val names = listOf(Component.text("Ярость II"), Component.text("Аура I"))
+        val effect = eliteBookEffectLore(
+            listOf("elitemobs:alpha" to names[0], "elitemobs:zeta" to names[1]),
+            linkedMapOf(
+                "elitemobs:zeta" to listOf("Второй эффект."),
+                "elitemobs:alpha" to listOf("Первый эффект.", "", "Продолжение."),
+            ),
+        )
+        val lore = eliteEnchantmentBookLore(
+            enchantments = names,
+            authoredLore = emptyList(),
+            text = EliteEnchantmentBookPresentationText(),
+            effectLore = effect,
+        ).map(plain::serialize)
+
+        lore shouldBe listOf(
+            "", "Ярость II", "Аура I", "",
+            "Ярость II:", "Первый эффект.", "Продолжение.", "",
+            "Аура I:", "Второй эффект.",
+            "Только для снаряжения EliteMobs", "",
+            "[▶] Перетащите на предмет — зачаровать",
+        )
+        reindexedEliteEnchantmentLorePosition(lore, names.map(plain::serialize), 0) shouldBe 1
+        eliteBookEffectLore(listOf("elitemobs:unknown" to names[0]), emptyMap()) shouldBe emptyList()
+        eliteBookEffectLore(listOf("elitemobs:alpha" to names[0]),
+            mapOf("elitemobs:alpha" to listOf("Новое описание.")))
+            .map(plain::serialize) shouldBe listOf("Новое описание.")
     }
 
     "authored lore group and its separator are omitted when only obsolete instructions remain" {

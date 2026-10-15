@@ -15,6 +15,9 @@ internal class EliteEnchantingConfig(private val config: Config) {
         compatibilityLabel = config.string("book.compatibility-label", "Подходит для:"),
         compatibilityFallback = config.string("book.compatibility-fallback", "совместимого снаряжения EliteMobs"),
         actionLore = config.string("book.action", "Перетащите на предмет — зачаровать"),
+        effectDescriptions = config.keys("book.effect-descriptions").associateWith { id ->
+            config.stringList("book.effect-descriptions.$id")
+        },
     )
     fun text(key: String, vararg resolvers: TagResolver): Component =
         config.component(key, TagResolver.resolver(*resolvers)).decoration(TextDecoration.ITALIC, false)
