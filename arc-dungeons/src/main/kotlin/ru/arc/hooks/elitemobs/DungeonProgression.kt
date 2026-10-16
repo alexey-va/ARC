@@ -58,7 +58,7 @@ internal class DungeonProgression(
     private val adventure: DungeonAdventureService = NativeDungeonAdventureService,
     private val tasks: LifecycleTaskScope = LifecycleTaskScope(),
     private val text: (String, String) -> Component = { _, fallback ->
-        net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize(fallback)
+        ru.arc.util.TextUtils.mm(fallback)
     },
 ) : Listener, AutoCloseable {
     private data class Completion(val players: List<Player>, val title: String) {

@@ -20,6 +20,8 @@ import org.bukkit.Location
 import org.bukkit.GameMode
 import org.bukkit.event.player.PlayerQuitEvent
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.event.ClickEvent
+import net.kyori.adventure.text.format.TextColor
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.TestTaskScheduler
 import ru.arc.sync.DungeonXpBookRecord
@@ -42,6 +44,13 @@ class DungeonBookConsumptionTest : FreeSpec({
             f.scheduler.tick()
             f.library.size shouldBe 1
             verify(exactly = 1) { f.sync.addSkillBook(f.id, any()) }
+            val message = slot<Component>()
+            every { f.player.sendMessage(capture(message)) } just Runs
+            f.saved.complete(null)
+            f.scheduler.executeImmediate()
+            message.captured shouldBe Component.text(
+                "Книга прохождения получена · Развитие навыков ›", TextColor.color(0xC4ABFF),
+            ).clickEvent(ClickEvent.runCommand("/dungeon skills"))
         }
     }
 

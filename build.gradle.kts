@@ -22,7 +22,7 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath("ru.ruscrafting.arc:arc-core-integration-testing:2.7.23")
+        classpath("ru.ruscrafting.arc:arc-core-integration-testing:2.7.26")
     }
 }
 
@@ -76,10 +76,10 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.399"
+version = "1.4.400"
 description = "ARC"
 val pluginVersion = version.toString()
-val arcCoreVersion = "2.7.23"
+val arcCoreVersion = "2.7.26"
 val arcCorePluginVersion: String by project
 val arcDungeonsPluginVersion: String by project
 val landsJar = providers.gradleProperty("landsJar").orNull?.let(::file)
@@ -410,7 +410,7 @@ tasks {
         exclude("META-INF/DEPENDENCIES", "META-INF/LICENSE", "META-INF/NOTICE")
 
         // ArcCore owns these runtime types. Keep consumer factories and domain APIs local.
-        exclude("ru/arc/paper/api/ArcSql*", "ru/arc/paper/api/ArcRedis*", "ru/arc/paper/api/ArcMetric*")
+        exclude("ru/arc/paper/api/ArcSql*", "ru/arc/paper/api/ArcRedis*", "ru/arc/paper/api/ArcMetric*", "ru/arc/paper/api/ArcSchematic*")
         exclude("ru/arc/paper/sql/PaperSqlServiceProvider*", "ru/arc/paper/sql/SharedPaperSqlService*")
         exclude("ru/arc/paper/redis/PaperRedisServiceProvider*", "ru/arc/paper/redis/SharedPaperRedisService*")
         exclude("ru/arc/paper/metrics/PaperArcMetricsProvider*")
