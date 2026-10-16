@@ -3,6 +3,7 @@ package ru.arc.staffspells
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockkConstructor
 import io.mockk.mockk
@@ -1630,6 +1631,8 @@ internal fun withStaffHarness(
                             controller.close()
                             hotkeyClock.cancel()
                             cooldowns.close()
+                            // MockK retains call stacks and captured fixture graphs until these owned mocks are cleared.
+                            clearMocks(damage, effects)
                         }
                     }
                 } finally {

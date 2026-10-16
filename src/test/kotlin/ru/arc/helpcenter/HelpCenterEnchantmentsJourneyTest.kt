@@ -90,7 +90,7 @@ class HelpCenterEnchantmentsJourneyTest {
         openDetail()
 
         assertEquals("help.enchantments.details", screen.id)
-        assertTrue(body().contains("Уникальная"))
+        assertTrue(body().contains("Необычная"), body())
         assertTrue(body().contains("4"))
         assertTrue(body().contains("Мечи, Трезубцы"))
         // DialogTables wraps long values across rows at the configured pixel width.
