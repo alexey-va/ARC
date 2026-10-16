@@ -5,7 +5,7 @@ import org.joml.Quaternionf
 import org.joml.Vector3f
 import kotlin.math.PI
 import kotlin.math.cos
-import kotlin.math.floor
+import kotlin.math.ceil
 import kotlin.math.sin
 
 internal fun staffIcicleStep(age: Int): Double = minOf(2.4, 0.55 + age.coerceAtLeast(0) * 0.18)
@@ -82,21 +82,21 @@ internal fun staffIcicleDisplayParts(ageTicks: Int, impact: Boolean, charge: Dou
 /** Charge places the shared Ember body on the aim line; flight uses the same body at the origin. */
 internal fun staffEmberChargeOffset(): Vector3f = Vector3f(0f, -0.88f, 2.9f)
 
-/** The count stays seven until each of the four progressive slots is earned. */
+/** A growing crystal is also a released crystal; an untouched charge owns no visible bodies. */
 internal fun staffIcicleCount(charge: Double): Int {
     val amount = charge.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
-    return 7 + floor(4.0 * amount).toInt()
+    return ceil(icicleSlots.size * amount).toInt()
 }
 
-/** Additional charge grows four separate satellites without moving the starter cloud. */
+/** Every slot grows in place, without rearranging previously formed crystals. */
 internal fun staffIcicleChargeAnchorOffset(index: Int): Vector3f = staffIcicleAnchorOffset(index, 11)
 
 /** One local eight-piece Icicle body, progressively scaled into its charge slot. */
 internal fun staffIcicleChargeParts(progress: Double, index: Int): List<StaffDisplayPart> {
     require(index in 0 until 11)
     val charge = progress.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
-    val growth = if (index < 7) 1.0 else
-        smoothCharge((charge - (index - 7) / 4.0) / 0.25)
+    val growth = smoothCharge(charge * icicleSlots.size - index)
+    if (growth <= 0.0) return emptyList()
     val slot = icicleSlots[index]
     val scaleFactor = (growth * slot.size).toFloat()
     return staffIcicleDisplayParts(ageTicks = 8, impact = false, charge = charge).mapIndexed { piece, part ->

@@ -62,7 +62,7 @@ internal fun staffChargeProgress(ticksHeld: Int): Double =
         .coerceIn(0.0, 1.0)
 
 internal interface StaffSpellInputActions {
-    fun canCharge(player: Player, spell: StaffSpell): Boolean
+    fun canCharge(player: Player, spell: StaffSpell, secondary: Boolean = player.isSneaking): Boolean
     fun canHotkey(player: Player, spell: StaffSpell, key: StaffHotkey): Boolean = false
     fun hotkey(player: Player, spell: StaffSpell, key: StaffHotkey) = Unit
     /** Refresh only ARC-owned text on prototype stacks; implementations without config keep old stacks. */
@@ -464,7 +464,7 @@ internal class StaffSpellInput(
                 if (stillCurrent) actions.releaseChannel(player) else actions.cancelChannel(player)
                 return
             }
-            if (stillCurrent && actions.canCharge(player, charge.spell)) {
+            if (stillCurrent && actions.canCharge(player, charge.spell, charge.sneaking)) {
                 actions.cast(player, StaffCastInput.of(charge.sneaking, quick = false),
                     staffChargeProgress(maxOf(charge.ticksHeld, releasedTicks)))
             }

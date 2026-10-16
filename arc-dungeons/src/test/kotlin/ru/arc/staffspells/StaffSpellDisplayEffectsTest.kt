@@ -89,15 +89,14 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         }
     }
 
-    "charged crown keeps eleven stable shards and grows them without entering the player eye" {
+    "charged crown grows from zero to eleven stable shards without entering the player eye" {
         val early = staffChargeParts(StaffSpell.ICICLE, 0.0, 0)
         val half = staffChargeParts(StaffSpell.ICICLE, 0.5, 18)
         val full = staffChargeParts(StaffSpell.ICICLE, 1.0, 36)
         full.size shouldBe 88
-        early.size shouldBe full.size
-        early.map { it.material } shouldBe full.map { it.material }
-        early.map { it.visible } shouldBe full.map { it.visible }
-        early.all { it.visible } shouldBe true
+        early shouldBe emptyList()
+        half.size shouldBe 48
+        half.map { it.identity } shouldBe full.take(48).map { it.identity }
         (early.sumOf { it.scale.length().toDouble() } < half.sumOf { it.scale.length().toDouble() }) shouldBe true
         (half.sumOf { it.scale.length().toDouble() } < full.sumOf { it.scale.length().toDouble() }) shouldBe true
         full.all { it.center.length() - it.scale.length() / 2 > 1.15f } shouldBe true
@@ -618,6 +617,62 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
         }
     }
 
+    "new crown shards send a zero pose before visibility and then grow on their existing handles" {
+        withDisplayHarness { h ->
+            val caster = h.player("icicle-birth-tween")
+            val offset = staffIcicleChargeAnchorOffset(0)
+            val at = caster.eyeLocation.clone().add(offset.x.toDouble(), offset.y.toDouble(), offset.z.toDouble())
+            val id = h.effects.play(caster.uniqueId, StaffSpell.ICICLE, at,
+                durationTicks = 220, charging = true, chargeSlot = 0)!!
+            h.recorder.records shouldBe emptyList()
+            h.effects.isActive(id) shouldBe true
+
+            h.effects.charge(id, at, .08)
+            val body = h.recorder.records.toList()
+            body.size shouldBe 8
+            body.forEach { record ->
+                record.poses.single().values.subList(3, 6) shouldBe listOf(0f, 0f, 0f)
+                record.posesAtShow.single().values.subList(3, 6) shouldBe listOf(0f, 0f, 0f)
+                record.interpolationDurationTicks shouldBe StaffSpellDisplayEffects.CHARGE_INTERPOLATION_TICKS
+            }
+            // A newer progress update cannot skip the zero birth or replay an obsolete smaller pose.
+            h.effects.charge(id, at, .125)
+            body.forEach { it.poses.last().values.subList(3, 6) shouldBe listOf(0f, 0f, 0f) }
+            h.scheduler.tick(1)
+            val expected = staffIcicleChargeParts(.125, 0)
+            body.forEachIndexed { index, record ->
+                record.poses.last().values.subList(3, 6) shouldBe listOf(
+                    expected[index].scale.x, expected[index].scale.y, expected[index].scale.z)
+                record.removals shouldBe 0
+            }
+            h.recorder.records.map { it.handle } shouldBe body.map { it.handle }
+            val posesAfterBirth = body.map { it.poses.size }
+            h.scheduler.tick(4)
+            body.map { it.poses.size } shouldBe posesAfterBirth
+        }
+    }
+
+    "a pending crown birth cannot update a released cancelled or closed display" {
+        for (ending in listOf("release", "cancel", "close")) withDisplayHarness { h ->
+            val caster = h.player("icicle-birth-$ending")
+            val at = caster.eyeLocation.clone().add(0.0, 1.0, 4.0)
+            val id = h.effects.play(caster.uniqueId, StaffSpell.ICICLE, at,
+                durationTicks = 220, charging = true, chargeSlot = 0)!!
+            h.effects.charge(id, at, .125)
+            val body = h.recorder.records.toList()
+            when (ending) {
+                "release" -> h.effects.releaseCharge(id, 80, controllerDriven = true)
+                "cancel" -> h.effects.cancel(caster.uniqueId)
+                else -> h.effects.close()
+            }
+            val posesAtEnd = body.map { it.poses.size }
+            h.scheduler.tick(4)
+            body.map { it.poses.size } shouldBe posesAtEnd
+            body.forEach { it.removals shouldBe if (ending == "release") 0 else 1 }
+            h.recorder.records.size shouldBe body.size
+        }
+    }
+
     "charged projectiles keep their exact handles world pose and body on release" {
         withDisplayHarness { h ->
             val caster = h.player("charge-release")
@@ -628,6 +683,7 @@ class StaffSpellDisplayEffectsTest : FreeSpec({
                 val id = h.effects.play(caster.uniqueId, spell, at, durationTicks = 220,
                     charging = true, chargeSlot = if (spell == StaffSpell.ICICLE) 5 else null)!!
                 h.effects.charge(id, at, .63)
+                h.scheduler.tick(1) // Newly born crown handles receive their first growth target.
                 val body = h.recorder.records.drop(before).toList()
                 val positions = body.map { it.teleports.last().clone() }
                 val poses = body.map { it.poses.last() }
@@ -776,6 +832,7 @@ private data class RecordedDisplay(
     val spawn: Location,
     val teleports: MutableList<Location> = mutableListOf(),
     val poses: MutableList<DisplayPose> = mutableListOf(),
+    val posesAtShow: MutableList<DisplayPose> = mutableListOf(),
     var interpolationDurationTicks: Int = -1,
     var teleportDurationTicks: Int = -1,
     val visibleViewers: MutableSet<UUID> = mutableSetOf(),
@@ -823,7 +880,10 @@ private class PacketDisplayRecorder {
             }
             every { handle.showTo(any()) } answers {
                 val viewer = firstArg<Player>().uniqueId
-                if (record.visibleViewers.add(viewer)) shownTo += viewer
+                if (record.visibleViewers.add(viewer)) {
+                    shownTo += viewer
+                    record.poses.lastOrNull()?.let(record.posesAtShow::add)
+                }
                 Unit
             }
             every { handle.hideFrom(any()) } answers {

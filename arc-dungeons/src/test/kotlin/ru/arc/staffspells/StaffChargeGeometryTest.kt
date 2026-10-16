@@ -13,18 +13,16 @@ class StaffChargeGeometryTest : FreeSpec({
         }
     }
 
-    "icicle charge keeps eleven real eight-piece bodies at stable anchors" {
+    "icicle charge grows from no geometry to eleven real bodies at stable anchors" {
         val empty = staffChargeParts(StaffSpell.ICICLE, 0.0, 0)
         val half = staffChargeParts(StaffSpell.ICICLE, 0.5, 18)
         val full = staffChargeParts(StaffSpell.ICICLE, 1.0, 36)
 
         full.size shouldBe 88
-        empty.size shouldBe full.size
-        half.size shouldBe full.size
-        empty.map { it.identity } shouldBe full.map { it.identity }
-        half.map { it.identity } shouldBe full.map { it.identity }
+        empty shouldBe emptyList()
+        half.size shouldBe 48
+        half.map { it.identity } shouldBe full.take(48).map { it.identity }
         full.map { it.identity }.distinct().size shouldBe full.size
-        empty.all { it.visible } shouldBe true
         full.all { it.visible } shouldBe true
         (0..10).forEach { index ->
             full.count { it.identity!!.startsWith("icicle-charge:$index:") } shouldBe 8
@@ -37,38 +35,43 @@ class StaffChargeGeometryTest : FreeSpec({
         (anchors.maxOf { it.y } - anchors.minOf { it.y } > 2f) shouldBe true
         // Layout is stable over time, even though it is deliberately irregular.
         staffChargeParts(StaffSpell.ICICLE, 1.0, 80) shouldBe full
-        staffIcicleCount(Double.NaN) shouldBe 7
-        staffIcicleCount(Double.POSITIVE_INFINITY) shouldBe 7
-        staffIcicleCount(-1.0) shouldBe 7
-        staffIcicleCount(0.0) shouldBe 7
-        staffIcicleCount(0.2499) shouldBe 7
-        staffIcicleCount(0.25) shouldBe 8
-        staffIcicleCount(0.5) shouldBe 9
-        staffIcicleCount(0.75) shouldBe 10
+        staffIcicleCount(Double.NaN) shouldBe 0
+        staffIcicleCount(Double.POSITIVE_INFINITY) shouldBe 0
+        staffIcicleCount(-1.0) shouldBe 0
+        staffIcicleCount(0.0) shouldBe 0
+        staffIcicleCount(0.001) shouldBe 1
+        staffIcicleCount(0.25) shouldBe 3
+        staffIcicleCount(0.5) shouldBe 6
+        staffIcicleCount(0.75) shouldBe 9
         staffIcicleCount(1.0) shouldBe 11
         staffIcicleCount(2.0) shouldBe 11
 
-        (7..10).forEach { index ->
-            val threshold = (index - 7) / 4.0
+        (0..10).forEach { index ->
+            val threshold = index / 11.0
             val before = staffIcicleChargeParts(threshold, index)
-            val growing = staffIcicleChargeParts(threshold + 0.125, index)
-            val complete = staffIcicleChargeParts(threshold + 0.25, index)
-            before.all { it.scale.x >= 0.001f && it.scale.y >= 0.001f && it.scale.z >= 0.001f } shouldBe true
+            val growing = staffIcicleChargeParts(threshold + 0.5 / 11.0, index)
+            val complete = staffIcicleChargeParts(threshold + 1.0 / 11.0, index)
+            before shouldBe emptyList()
             (growing.sumOf { it.scale.length().toDouble() } > before.sumOf { it.scale.length().toDouble() }) shouldBe true
             (growing.sumOf { it.scale.length().toDouble() } < complete.sumOf { it.scale.length().toDouble() }) shouldBe true
         }
 
         val body = staffIcicleDisplayParts(ageTicks = 8, impact = false)
         body.map { it.identity } shouldBe (0..7).map { "icicle:$it" }
-        val localSlot = staffIcicleChargeParts(0.0, 0)
+        val localSlot = staffIcicleChargeParts(1.0, 0)
         localSlot.map { it.identity } shouldBe body.map { it.identity }
         localSlot.map { it.material } shouldBe body.map { it.material }
-        (0..6).map { staffIcicleChargeParts(0.0, it).first().rotation }.distinct().size shouldBe 7
-        val aggregatedFirst = empty.filter { it.identity!!.startsWith("icicle-charge:0:") }
+        (0..10).map { staffIcicleChargeParts(1.0, it).first().rotation }.distinct().size shouldBe 11
+        val aggregatedFirst = full.filter { it.identity!!.startsWith("icicle-charge:0:") }
         aggregatedFirst.map { it.material } shouldBe localSlot.map { it.material }
         aggregatedFirst.zip(localSlot).all { (preview, charged) ->
             Vector3f(preview.center).sub(staffIcicleChargeAnchorOffset(0)).distance(charged.center) < 1.0e-6f
         } shouldBe true
+        for (step in 0..100) {
+            val charge = step / 100.0
+            val visibleSlots = (0..10).count { staffIcicleChargeParts(charge, it).isNotEmpty() }
+            visibleSlots shouldBe staffIcicleCount(charge)
+        }
     }
 
     "full charge enlarges the localized projectile core as well as its wake" {

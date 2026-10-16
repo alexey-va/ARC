@@ -46,12 +46,12 @@ class StaffTideGaleGeometryTest : FreeSpec({
             input = StaffCastInput.PRIMARY, charge = .5)
         val bandIds = frame.mapNotNull { it.identity }.filter { it.startsWith("gale:tornado:band:") }
         val bands = frame.filter { it.identity?.startsWith("gale:tornado:band:") == true }
-        frame.size shouldBe 39
-        bandIds.size shouldBe 33
-        bands.all { it.scale.x in .77f..0.88f && it.scale.x > it.scale.y * 4.0f } shouldBe true
+        frame.size shouldBe 45
+        bandIds.size shouldBe 39
+        bands.all { it.scale.x in 1.00f..1.12f && it.scale.x > it.scale.y * 4.0f } shouldBe true
         frame.mapNotNull { it.identity }.distinct().size shouldBe frame.size
         next.mapNotNull { it.identity }.toSet() shouldBe frame.mapNotNull { it.identity }.toSet()
-        (frame.maxOf { it.center.y } > 5.0f) shouldBe true
+        (frame.maxOf { it.center.y } > 7.5f) shouldBe true
         (frame.map { it.center.x to it.center.z }.toSet().size > 20) shouldBe true
         (frame.map { it.center }.zip(next.map { it.center }).any { (a, b) -> a.distance(b) > .8f }) shouldBe true
 
@@ -94,11 +94,11 @@ class StaffTideGaleGeometryTest : FreeSpec({
         staffTideWaveHalfWidth(1.0) shouldBe 3.3
         (frame.maxOf { it.center.y } in 2.5f..3.3f) shouldBe true
         frame.filter { it.identity?.startsWith("tide:wave:skin:") == true }
-            .all { it.scale.y in .65f..0.75f } shouldBe true
+            .all { it.scale.y in .85f..0.87f } shouldBe true
         val unchargedSkin = staffDisplayParts(StaffSpell.TIDE, 12, 44, 20.0, 2.8, false, true,
             input = StaffCastInput.SECONDARY, charge = 0.0)
             .filter { it.identity?.startsWith("tide:wave:skin:") == true }
-        unchargedSkin.all { abs(it.scale.y - .72f) < .001f } shouldBe true
+        unchargedSkin.all { abs(it.scale.y - .86f) < .001f } shouldBe true
         val rows = (0..4).map { row ->
             unchargedSkin.filter { it.identity?.startsWith("tide:wave:skin:$row:") == true }
         }
@@ -111,7 +111,7 @@ class StaffTideGaleGeometryTest : FreeSpec({
         lip.zip(lastSkin).all { (foam, skin) -> foam.center.distance(skin.center) < .1f && foam.center.z > skin.center.z }
             .shouldBe(true)
         frame.any { it.material == Material.WHITE_STAINED_GLASS } shouldBe true
-        frame.all { it.material in setOf(Material.BLUE_STAINED_GLASS, Material.CYAN_STAINED_GLASS,
+        frame.all { it.material in setOf(Material.BLUE_CONCRETE, Material.BLUE_STAINED_GLASS, Material.CYAN_STAINED_GLASS,
             Material.LIGHT_BLUE_STAINED_GLASS, Material.WHITE_STAINED_GLASS, Material.SEA_LANTERN) } shouldBe true
         next.mapNotNull { it.identity }.toSet() shouldBe frame.mapNotNull { it.identity }.toSet()
 
@@ -120,23 +120,23 @@ class StaffTideGaleGeometryTest : FreeSpec({
         motes.none { it.particle == Particle.CLOUD } shouldBe true
     }
 
-    "GALE ram impact releases one expanding wind ring and six shards without smoke" {
+    "GALE ram impact fans twelve arcing sheets outward without smoke" {
         val charge = .4
         val burstRadius = 2.3 + charge * .45
         val frame = staffTideGaleParts(StaffSpell.GALE, 3, 12, burstRadius,
             impact = true, secondary = true, charge = charge)
-        frame.size shouldBe 24
-        frame.count { it.identity?.startsWith("gale:burst:arc:") == true } shouldBe 18
-        frame.count { it.identity?.startsWith("gale:burst:shard:") == true } shouldBe 6
+        frame.size shouldBe 36
+        frame.count { it.identity?.startsWith("gale:burst:petal:") == true } shouldBe 36
+        (frame.maxOf { it.center.y } > .8f) shouldBe true
         frame.mapNotNull { it.identity }.distinct().size shouldBe frame.size
         val edge = frame.maxOf { kotlin.math.sqrt((it.center.x * it.center.x + it.center.z * it.center.z).toDouble()) }
         // Arc centers sit inside the outer ring because each display is a chord, not a point on the edge.
-        (edge in (burstRadius * .92)..(burstRadius + .03)) shouldBe true
+        (edge in (burstRadius * .80)..(burstRadius + .03)) shouldBe true
 
         val release = staffTideGaleParticleSamples(StaffSpell.GALE, 0, 12, burstRadius,
             secondary = true, charge = charge, impact = true)
         release.count { it.particle == Particle.GUST } shouldBe 1
-        release.size shouldBe 25
+        release.size shouldBe 37
         release.none { it.particle in setOf(Particle.CLOUD, Particle.EXPLOSION, Particle.EXPLOSION_EMITTER) } shouldBe true
         staffTideGaleParticleSamples(StaffSpell.GALE, 12, 12, burstRadius,
             secondary = true, charge = charge, impact = true) shouldBe emptyList()
@@ -245,8 +245,8 @@ class StaffTideGaleGeometryTest : FreeSpec({
             .filter { it.particle == Particle.DUST_COLOR_TRANSITION }
         val last = staffTideGaleParticleSamples(StaffSpell.GALE, 44, 52, 3.0, false, .5)
             .filter { it.particle == Particle.DUST_COLOR_TRANSITION }
-        steady.size shouldBe 33
-        last.size shouldBe 33
+        steady.size shouldBe 39
+        last.size shouldBe 39
         val steadyMeanRadius = steady.map { it.offset.length() }.average()
         val exitMeanRadius = last.map { it.offset.length() }.average()
         (exitMeanRadius / steadyMeanRadius in .97..1.03) shouldBe true

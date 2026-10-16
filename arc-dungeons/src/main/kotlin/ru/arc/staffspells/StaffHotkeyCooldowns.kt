@@ -3,34 +3,48 @@ package ru.arc.staffspells
 import org.bukkit.Bukkit
 import java.util.UUID
 
-/** One Q and one F budget per player, shared by every staff and never reset by changing slots. */
-internal class StaffHotkeyCooldowns(private val clock: () -> Long = { Bukkit.getCurrentTick().toLong() }) {
-    private val deadlines = mutableMapOf<Pair<UUID, StaffHotkey>, Long>()
-    private val actionDeadlines = mutableMapOf<UUID, Long>()
+internal enum class StaffAbility { PRIMARY, SECONDARY, Q, F;
+    companion object {
+        fun attack(secondary: Boolean) = if (secondary) SECONDARY else PRIMARY
+        fun hotkey(key: StaffHotkey) = if (key == StaffHotkey.Q) Q else F
+    }
+}
 
-    fun remaining(playerId: UUID, key: StaffHotkey): Long {
-        val pair = playerId to key
-        val remaining = ((deadlines[pair] ?: 0) - clock()).coerceAtLeast(0)
-        if (remaining == 0L) deadlines.remove(pair)
+/** A budget belongs to the spell and ability, never to an inventory slot or item instance. */
+internal class StaffHotkeyCooldowns(private val clock: () -> Long = { Bukkit.getCurrentTick().toLong() }) {
+    private data class Key(val player: UUID, val spell: StaffSpell, val ability: StaffAbility)
+    private data class Deadline(val end: Long, val duration: Long)
+    private val deadlines = mutableMapOf<Key, Deadline>()
+    private var previousTick = clock()
+    private var elapsedTicks = 0L
+
+    private fun now(): Long {
+        val tick = clock()
+        elapsedTicks += (tick - previousTick) and 0xffffffffL
+        previousTick = tick
+        return elapsedTicks
+    }
+
+    fun remaining(playerId: UUID, spell: StaffSpell, ability: StaffAbility): Long {
+        val key = Key(playerId, spell, ability)
+        val remaining = ((deadlines[key]?.end ?: 0) - now()).coerceAtLeast(0)
+        if (remaining == 0L) deadlines.remove(key)
         return remaining
     }
 
-    fun actionReady(playerId: UUID) = (actionDeadlines[playerId] ?: 0) <= clock()
-    fun action(playerId: UUID) { actionDeadlines[playerId] = clock() + 4 }
-    fun start(playerId: UUID, key: StaffHotkey, ticks: Long) {
-        deadlines[playerId to key] = clock() + ticks.coerceAtLeast(1)
-        action(playerId)
+    fun total(playerId: UUID, spell: StaffSpell, ability: StaffAbility): Long =
+        deadlines[Key(playerId, spell, ability)]?.duration ?: 0L
+
+    fun start(playerId: UUID, spell: StaffSpell, ability: StaffAbility, ticks: Long) {
+        val duration = ticks.coerceAtLeast(1)
+        deadlines[Key(playerId, spell, ability)] = Deadline(now() + duration, duration)
     }
-    fun clear(playerId: UUID) {
-        StaffHotkey.entries.forEach { deadlines.remove(playerId to it) }
-        actionDeadlines.remove(playerId)
-    }
+    fun clear(playerId: UUID) { deadlines.keys.removeIf { it.player == playerId } }
     fun prune() {
-        val now = clock()
-        deadlines.entries.removeIf { it.value <= now }
-        actionDeadlines.entries.removeIf { it.value <= now }
+        val now = now()
+        deadlines.entries.removeIf { it.value.end <= now }
     }
-    fun clear() { deadlines.clear(); actionDeadlines.clear() }
+    fun clear() { deadlines.clear() }
 }
 
 internal data class StaffHotkeyHudState(

@@ -201,7 +201,7 @@ internal class StaffSpellVisuals(
         val start = anchor.clone().add(forward.clone().multiply(CHARGE_STREAM_START_FORWARD))
         val orientation = chargeOrientation(eye, StaffSpell.ICICLE)
         for (slot in ICICLE_FEEDBACK_SLOTS) {
-            val core = staffIcicleChargeParts(charge, slot).first()
+            val core = staffIcicleChargeParts(charge, slot).firstOrNull() ?: continue
             val facingSurface = core.rotation.transform(Vector3f(0f, 0f, core.scale.z * 0.45f))
             val localTarget = Vector3f(staffIcicleChargeAnchorOffset(slot))
                 .add(core.center).add(facingSurface)
@@ -791,18 +791,27 @@ internal class StaffSpellVisuals(
         } else {
             val reach = boundedRadius(radius, 0.5, 8.0) ?: return@dispatch
             val packedIce = if (frost) Material.PACKED_ICE.createBlockData() else null
+            if (frost) {
+                localSound(start, Sound.BLOCK_GLASS_PLACE, .76f, .62f)
+                localSound(start, Sound.BLOCK_POWDER_SNOW_BREAK, .40f, .75f)
+            }
             repeat(9) { phase ->
                 runLater((2 + phase * 2).toLong()) {
                     val ringRadius = 1.8 + (reach - 1.8) * phase / 8.0
                     val floorY = start.blockY + 0.06
-                    repeat(12) { i ->
-                        val angle = i * PI * 2 / 12 + phase * 0.09
+                    val samples = if (frost) 16 else 12
+                    if (frost && phase == 8) {
+                        localSound(start, Sound.BLOCK_GLASS_BREAK, .90f, .85f)
+                        localSound(start, Sound.BLOCK_AMETHYST_BLOCK_CHIME, .32f, 1.3f)
+                    }
+                    repeat(samples) { i ->
+                        val angle = i * PI * 2 / samples + if (frost) 0.0 else phase * 0.09
                         val point = start.clone().add(cos(angle) * ringRadius, 0.0, sin(angle) * ringRadius)
                             .apply { y = floorY }
                         if (frost) emit(point, Particle.SNOWFLAKE)
                         else emit(point, Particle.DUST_COLOR_TRANSITION, GREEN_TO_AQUA)
                         if (i % 2 == 0) {
-                            val crest = point.clone().add(0.0, 0.34, 0.0)
+                            val crest = point.clone().add(0.0, if (frost) .36 + sin(phase * PI / 8.0) * .65 else .34, 0.0)
                             if (frost && (i / 2 + phase) % 3 == 0) emit(crest, Particle.BLOCK, packedIce)
                             else if (frost) emit(crest, Particle.END_ROD)
                             else emit(crest, Particle.DUST_COLOR_TRANSITION, GREEN_TO_AQUA)

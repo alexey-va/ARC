@@ -166,10 +166,12 @@ class StaffSpellFeedbackTest : FreeSpec({
                     particles.all { it.location.distanceSquared(eye) >= 1.5 * 1.5 } shouldBe true
 
                     val beforeIcicle = particles.size
+                    visuals.chargeFeedback(player, StaffSpell.ICICLE, 0.0)
+                    particles.size shouldBe beforeIcicle
                     visuals.chargeFeedback(player, StaffSpell.ICICLE, 0.5)
                     val icicleRotation = staffChargeOrientation(StaffSpell.ICICLE, eye.yaw,
                         Vector3f(direction.x.toFloat(), direction.y.toFloat(), direction.z.toFloat()))
-                    val icicleTargets = listOf(0, 5, 10).map { slot ->
+                    val icicleTargets = listOf(0, 5).map { slot ->
                         val core = staffIcicleChargeParts(0.5, slot).first()
                         val facingSurface = core.rotation.transform(Vector3f(0f, 0f, core.scale.z * 0.45f))
                         val localTarget = Vector3f(staffIcicleChargeAnchorOffset(slot))

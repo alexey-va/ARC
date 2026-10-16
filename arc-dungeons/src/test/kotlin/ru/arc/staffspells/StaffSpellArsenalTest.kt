@@ -9,6 +9,33 @@ import org.bukkit.Material
 import org.bukkit.event.player.PlayerQuitEvent
 
 class StaffSpellArsenalTest : FreeSpec({
+    "NOVA roots every exposed area target for seventy ticks across staff swaps and two followups" {
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("nova-network-hold")
+            for (x in -6..6) for (z in 0..15) world.getBlockAt(x, 63, z).type = Material.STONE
+            val player = h.player("nova-network", world, StaffSpell.NOVA)
+            val targets = listOf(h.zombie(world, .5, 8.0), h.zombie(world, -1.5, 8.0), h.zombie(world, 2.5, 8.0))
+            val covered = h.zombie(world, .5, 11.0)
+            for (x in -1..1) for (y in 64..67) world.getBlockAt(x, y, 10).type = Material.STONE
+            fun tick(count: Int) = repeat(count) { h.paper.performTicks(1); h.scheduler.tick(1) }
+            h.controller.start()
+            h.controller.cast(player, StaffCastInput.SECONDARY, 0.0)
+            tick(20)
+            h.hits.map { it.uniqueId }.toSet() shouldBe targets.map { it.uniqueId }.toSet()
+            (covered in h.hits) shouldBe false
+            targets.all { it.getPotionEffect(org.bukkit.potion.PotionEffectType.SLOWNESS)?.amplifier == 7 } shouldBe true
+            player.inventory.setItemInMainHand(h.config.item(StaffSpell.GALE))
+            h.controller.cast(player, StaffCastInput.PRIMARY, 0.0)
+            tick(10)
+            player.inventory.setItemInMainHand(h.config.item(StaffSpell.PRISM))
+            h.controller.cast(player, StaffCastInput.PRIMARY, 0.0)
+            tick(52)
+            targets.all { it.getPotionEffect(org.bukkit.potion.PotionEffectType.SLOWNESS)?.amplifier == 7 } shouldBe true
+            tick(10)
+            targets.none { it.hasPotionEffect(org.bukkit.potion.PotionEffectType.SLOWNESS) } shouldBe true
+        }
+    }
+
     "new arsenal frames keep native-particle shapes distinct and Display parts bounded" {
         StaffSpellArsenal.SPELLS.forEach { spell ->
             listOf(false, true).forEach { secondary ->
@@ -62,23 +89,11 @@ class StaffSpellArsenalTest : FreeSpec({
         val bone = staffArsenalParts(StaffSpell.OSSUARY, 8, 22, 1.0, 1.0, false, false,
             StaffCastInput.PRIMARY, 0.0)
         bone.any { it.material == Material.BONE_BLOCK } shouldBe true
-        val earlyBoneTip = staffArsenalParts(StaffSpell.OSSUARY, 2, 54, 1.0, 2.75, false, false,
-            StaffCastInput.PRIMARY, 1.0).single { it.identity == "bone:cluster:0:cap" }
-        val fullBoneTip = staffArsenalParts(StaffSpell.OSSUARY, 8, 54, 1.0, 2.75, false, false,
-            StaffCastInput.PRIMARY, 1.0).single { it.identity == "bone:cluster:0:cap" }
-        (fullBoneTip.center.y + fullBoneTip.scale.y / 2 > 2.0f) shouldBe true
-        (fullBoneTip.center.y > earlyBoneTip.center.y * 2) shouldBe true
-
-        val telegraph = staffArsenalParts(StaffSpell.OSSUARY, 2, 36, 1.0, 5.5, false, true,
-            StaffCastInput.SECONDARY, 1.0)
-        val strike = staffArsenalParts(StaffSpell.OSSUARY, OSSUARY_SECONDARY_STRIKE_TICK, 36, 1.0, 5.5, false, true,
-            StaffCastInput.SECONDARY, 1.0)
-        telegraph.count { it.identity?.startsWith("bone:erupt:") == true } shouldBe 30
-        strike.count { it.identity?.startsWith("bone:erupt:") == true } shouldBe 30
-        strike.any { it.identity?.startsWith("cage:") == true } shouldBe false
-        strike.filter { it.identity?.endsWith(":cap") == true }.all {
-            it.center.y + it.scale.y / 2 > 1.9f
-        } shouldBe true
+        val earlyBone = staffOssuaryRibParts(2, 22, 3.4, false)
+        val risenBone = staffOssuaryRibParts(8, 22, 3.4, false)
+        (risenBone.maxOf { it.center.y } > earlyBone.maxOf { it.center.y }) shouldBe true
+        risenBone.count { it.identity?.contains(":curve:") == true } shouldBe 20
+        risenBone.count { it.identity?.endsWith(":fork") == true } shouldBe 5
 
         staffArsenalParticles(StaffSpell.OSSUARY, 8, 22, 2.75, false, 1.0).size shouldBe 20
         staffArsenalParticles(StaffSpell.OSSUARY, 4, 36, 5.5, true, 1.0).size shouldBe 10
@@ -148,8 +163,10 @@ class StaffSpellArsenalTest : FreeSpec({
             h.controller.start()
             h.controller.cast(player, StaffCastInput.SECONDARY, 0.0)
             val scene = h.visualPlays.single { it.spell == StaffSpell.TIDE && it.secondary }
-            h.scheduler.tick(8)
+            h.scheduler.tick(6)
             h.hits shouldBe emptyList()
+            h.scheduler.tick(2)
+            h.hits.map { it.uniqueId } shouldBe listOf(first.uniqueId)
             h.scheduler.tick(32)
             h.hits.map { it.uniqueId }.toSet() shouldBe setOf(first.uniqueId, nearby.uniqueId)
             h.hits.count { it.uniqueId == first.uniqueId } shouldBe 1
@@ -184,7 +201,7 @@ class StaffSpellArsenalTest : FreeSpec({
             h.controller.start()
             h.controller.cast(player, StaffCastInput.SECONDARY, 1.0)
             val scene = h.visualPlays.single { it.spell == StaffSpell.TIDE && it.secondary }
-            (kotlin.math.abs(scene.to.z - player.location.z - 36.0) < 0.05) shouldBe true
+            (kotlin.math.abs(scene.to.z - player.location.z - 48.0) < 0.05) shouldBe true
             h.scheduler.tick(60)
             h.hits shouldBe emptyList()
         }
@@ -200,7 +217,7 @@ class StaffSpellArsenalTest : FreeSpec({
             h.controller.start()
             h.controller.cast(player, StaffCastInput.SECONDARY, 0.0)
             val scene = h.visualPlays.single { it.spell == StaffSpell.TIDE && it.secondary }
-            (kotlin.math.abs(scene.to.z - player.location.z - 36.0) < .05) shouldBe true
+            (kotlin.math.abs(scene.to.z - player.location.z - 48.0) < .05) shouldBe true
             (kotlin.math.abs(scene.to.y - scene.from.y) < .05) shouldBe true
             h.scheduler.tick(80)
             h.hits.count { it.uniqueId == target.uniqueId } shouldBe 1
@@ -217,7 +234,7 @@ class StaffSpellArsenalTest : FreeSpec({
             val scene = h.visualPlays.single { it.spell == StaffSpell.TIDE && it.secondary }
             // Add cover after casting so the per-frame floor ray, not the planned endpoint, must stop it.
             for (x in -1..1) for (y in 64..68) world.getBlockAt(x, y, 8).type = Material.STONE
-            (kotlin.math.abs(scene.to.z - player.location.z - 36.0) < .05) shouldBe true
+            (kotlin.math.abs(scene.to.z - player.location.z - 48.0) < .05) shouldBe true
             h.scheduler.tick(80)
             h.hits.none { it.uniqueId == target.uniqueId } shouldBe true
             (h.movedEffects.filter { it.first == scene.id }.last().second.z < 8.0) shouldBe true
@@ -253,13 +270,13 @@ class StaffSpellArsenalTest : FreeSpec({
             (scene.from.distance(player.location) < .1) shouldBe true
             h.scheduler.tick(20)
             h.hits shouldBe emptyList()
-            h.scheduler.tick(46)
-            h.hits.count { it.uniqueId == side.uniqueId } shouldBe 3
-            h.hits.count { it.uniqueId == rear.uniqueId } shouldBe 3
+            h.scheduler.tick(110)
+            h.hits.count { it.uniqueId == side.uniqueId } shouldBe 5
+            h.hits.count { it.uniqueId == rear.uniqueId } shouldBe 5
             h.hits.any { it.uniqueId == covered.uniqueId } shouldBe false
-            h.damageScales.size shouldBe 6
-            h.damageScales.all { (power, vanilla) -> kotlin.math.abs(power - .45) < .001 &&
-                kotlin.math.abs(vanilla - 2.7) < .001 } shouldBe true
+            h.damageScales.size shouldBe 10
+            h.damageScales.all { (power, vanilla) -> kotlin.math.abs(power - .27) < .001 &&
+                kotlin.math.abs(vanilla - 1.62) < .001 } shouldBe true
         }
     }
 
@@ -342,7 +359,7 @@ class StaffSpellArsenalTest : FreeSpec({
 
         withStaffHarness(settings = staffSettings(range = 48.0)) { h ->
             val world = h.paper.addSimpleWorld("gale-ram-endpoint")
-            for (x in -1..1) for (z in 0..40) world.getBlockAt(x, 63, z).type = Material.STONE
+            for (x in -1..1) for (z in 0..55) world.getBlockAt(x, 63, z).type = Material.STONE
             val player = h.player("gale-ram-endpoint", world, StaffSpell.GALE)
             h.controller.start()
             h.controller.cast(player, StaffCastInput.SECONDARY, 0.0)
@@ -350,7 +367,7 @@ class StaffSpellArsenalTest : FreeSpec({
             val impactAt = slot<org.bukkit.Location>()
             h.scheduler.tick(80)
             verify(exactly = 1) { h.effects.impact(scene.id, capture(impactAt), any(), any()) }
-            (kotlin.math.abs(impactAt.captured.z - player.location.z - 36.0) < .1) shouldBe true
+            (kotlin.math.abs(impactAt.captured.z - player.location.z - 48.0) < .1) shouldBe true
         }
     }
 
@@ -398,7 +415,7 @@ class StaffSpellArsenalTest : FreeSpec({
             val world = h.paper.addSimpleWorld("ossuary-wide-primary")
             for (x in -2..6) for (z in 0..25) world.getBlockAt(x, 63, z).type = Material.STONE
             val player = h.player("ossuary-wide-primary", world, StaffSpell.OSSUARY)
-            // Near the edge of the configured 2.75-block strike, well beyond the old 1.2-block radius.
+            // Near the edge of the configured 3.4-block strike, beyond the previous 2.75-block radius.
             val outer = h.zombie(world, x = 3.0, z = 6.0)
             h.controller.start()
             h.controller.cast(player, StaffCastInput.PRIMARY, 0.0)
@@ -409,7 +426,7 @@ class StaffSpellArsenalTest : FreeSpec({
                     false, any(), any(), any(), any(), any(), false)
             }
             primaryRadii.isNotEmpty() shouldBe true
-            primaryRadii.all { kotlin.math.abs(it - 2.75) < .001 } shouldBe true
+            primaryRadii.all { kotlin.math.abs(it - 3.4) < .001 } shouldBe true
         }
 
         val secondaryRadius = slot<Double>()
@@ -442,10 +459,10 @@ class StaffSpellArsenalTest : FreeSpec({
             h.scheduler.tick(10)
             h.hits shouldBe emptyList()
             h.scheduler.tick(14)
-            h.hits.map { it.uniqueId }.distinct() shouldBe listOf(near.uniqueId)
-            (far in h.hits) shouldBe false
+            h.hits.map { it.uniqueId }.toSet() shouldBe setOf(near.uniqueId, far.uniqueId)
+            h.hits.count { it.uniqueId == near.uniqueId } shouldBe 1
             h.scheduler.tick(30)
-            h.hits.size shouldBe 1
+            h.hits.size shouldBe 2
         }
         withStaffHarness(settings = staffSettings(range = 12.0)) { h ->
             val world = h.paper.addSimpleWorld("prism-wall")
@@ -508,7 +525,7 @@ class StaffSpellArsenalTest : FreeSpec({
                         when (spell) {
                             StaffSpell.GALE -> {
                                 val gust = scenes.single()
-                                (kotlin.math.abs(gust.to.z - player.location.z - 36.0) < .01) shouldBe true
+                                (kotlin.math.abs(gust.to.z - player.location.z - 48.0) < .01) shouldBe true
                                 (kotlin.math.abs(gust.to.y - gust.from.y) < .01) shouldBe true
                             }
                             StaffSpell.OSSUARY -> {

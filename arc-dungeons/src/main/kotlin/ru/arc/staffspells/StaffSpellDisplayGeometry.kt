@@ -150,29 +150,28 @@ private fun frostNovaDisplayParts(ageTicks: Int, durationTicks: Int, radius: Dou
     val travel = ((ageTicks - 2) / 16.0).coerceIn(0.0, 1.0)
     val front = 1.8 + staffWaveFront(ageTicks, reach - 1.8, 16)
     val lift = sin(PI * travel)
+    val fracture = smooth((ageTicks - 18) / 6.0)
     val parts = ArrayList<StaffDisplayPart>(48)
-
+    // A broad joined ice shelf carries faceted teeth. The inner launch stays low around the caster.
     repeat(16) { index ->
         val angle = index * PI / 8.0
-        parts += groundRingLink(if (index % 3 == 0) Material.PACKED_ICE else Material.BLUE_ICE,
-            front, angle, angle + PI / 8.0, 0.055, 0.12)
-    }
-    repeat(16) { index ->
-        val angle = index * PI / 8.0
-        val height = 0.70 + lift * (0.45 + 0.25 * abs(sin(index * 1.9)))
-        val x = cos(angle) * front
-        val z = sin(angle) * front
+        val yaw = PI / 2.0 - angle
+        val shelfRadius = (front - .38).coerceAtLeast(1.35)
+        val tangentWidth = 2.0 * shelfRadius * sin(PI / 16.0) * 1.04
+        parts += part(if (index % 3 == 0) Material.PACKED_ICE else Material.BLUE_ICE,
+            cos(angle) * shelfRadius, .16, sin(angle) * shelfRadius,
+            tangentWidth, .24, .82, yaw = yaw, identity = "frost:nova:shelf:$index")
+        val height = (.68 + lift * (.50 + .18 * abs(sin(index * 1.9)))) *
+            ((front - 1.1) / 2.2).coerceIn(.30, 1.0)
+        val toothRadius = shelfRadius + fracture * .22
         parts += part(if (index % 4 == 0) Material.PACKED_ICE else Material.BLUE_ICE,
-            x, height * 0.5, z, 0.22 + lift * 0.07, height, 0.24 + lift * 0.05,
-            yaw = -angle, pitch = -0.12 * lift)
-    }
-    repeat(16) { index ->
-        val angle = index * PI / 8.0 + PI / 16.0
-        val wake = (front - 0.52).coerceAtLeast(1.25)
-        val y = 0.24 + lift * 0.16 + sin(index * 1.4) * 0.035
+            cos(angle) * toothRadius, .20 + height * .48 + fracture * .24, sin(angle) * toothRadius,
+            .56 + index % 3 * .08, height, .54, yaw = yaw, pitch = .28 + index % 2 * .13,
+            roll = if (index % 2 == 0) .16 else -.13, identity = "frost:nova:tooth:$index")
         parts += part(if (index % 3 == 0) Material.WHITE_STAINED_GLASS else Material.LIGHT_BLUE_STAINED_GLASS,
-            cos(angle) * wake, y, sin(angle) * wake,
-            0.075, 0.24 + lift * 0.08, 0.28, yaw = -angle, roll = angle * 0.18)
+            cos(angle) * (toothRadius + .18), .24 + height * .55 + fracture * .34, sin(angle) * (toothRadius + .18),
+            .20, height * .84, .25, yaw = yaw, pitch = .36,
+            roll = if (index % 2 == 0) -.18 else .18, identity = "frost:nova:facet:$index")
     }
     return parts
 }

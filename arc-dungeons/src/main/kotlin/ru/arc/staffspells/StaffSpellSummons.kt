@@ -33,6 +33,8 @@ import kotlin.math.sin
 
 internal enum class StaffSummonCastResult { CAST, NO_GROUND, CAPACITY }
 
+internal const val STAFF_SUMMON_ARMY_LIMIT = 10
+
 /** Owns short-lived script-controlled undead actors; every hit stays in the staff damage gate. */
 internal class StaffSpellSummons(
     private val settings: StaffSpellSettings,
@@ -82,6 +84,8 @@ internal class StaffSpellSummons(
     private var started = false
     private var closed = false
     private val targetSearchRadius = minOf(settings.range, MAX_TARGET_SEARCH_RADIUS)
+
+    fun countFor(casterId: UUID): Int = activeActorCount(casterId)
 
     /** Returns the live owner cast only for a summon this controller currently owns. */
     fun castFor(target: LivingEntity): StaffSpellCast? {
@@ -139,7 +143,7 @@ internal class StaffSpellSummons(
             return StaffSummonCastResult.NO_GROUND
         val commander = input.secondary
         val requested = if (commander) 1 else 2
-        if (activeActorCount(player.uniqueId) + requested > MAX_ACTORS_PER_CASTER)
+        if (activeActorCount(player.uniqueId) + requested > STAFF_SUMMON_ARMY_LIMIT)
             return StaffSummonCastResult.CAPACITY
         val world = player.world
         val spawnPoints = formation(player).asSequence()
@@ -434,7 +438,7 @@ internal class StaffSpellSummons(
             width = 0.6,
             height = if (commander) 2.4 else 2.0,
             maxRise = MAX_SPAWN_STEP_UP,
-            maxDrop = MAX_SPAWN_STEP_DOWN,
+            maxDrop = MAX_SPAWN_GROUND_DROP,
         )
 
     private fun resolveSupportedLocation(
@@ -463,7 +467,8 @@ internal class StaffSpellSummons(
         maxRise: Double,
         maxDrop: Double,
     ): Double? {
-        val minY = floor(preferredY - maxDrop).toInt().coerceAtLeast(world.minHeight)
+        // Include a block whose top is exactly at the lowest allowed foot plane.
+        val minY = (floor(preferredY - maxDrop).toInt() - 1).coerceAtLeast(world.minHeight)
         val maxY = floor(preferredY + maxRise).toInt().coerceAtMost(world.maxHeight - 1)
         if (minY > maxY) return null
         val surfaces = mutableListOf<Double>()
@@ -795,7 +800,6 @@ internal class StaffSpellSummons(
         const val RALLY_COMMAND_RANGE = 32.0
         const val FOCUS_COMMAND_RANGE = 32.0
         const val MAX_ACTORS = 32
-        const val MAX_ACTORS_PER_CASTER = 10
         const val LIFETIME_TICKS = 900L
         const val WINDUP_TICKS = 10
         const val ATTACK_COOLDOWN_TICKS = 60
@@ -832,6 +836,7 @@ internal class StaffSpellSummons(
         const val MIN_SUPPORT_RADIUS = 0.1
         const val MAX_SPAWN_STEP_UP = 0.55
         const val MAX_SPAWN_STEP_DOWN = 0.75
+        const val MAX_SPAWN_GROUND_DROP = 64.0
         const val MAX_MOVEMENT_STEP = 0.55
         const val MAX_VERTICAL_SPEED = 0.35
         const val FOOT_SUPPORT_TOLERANCE = 0.025

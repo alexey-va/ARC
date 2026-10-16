@@ -16,7 +16,7 @@ import org.bukkit.potion.PotionEffectType
 import org.bukkit.util.Vector
 
 class StaffSpellMeleeTest : FreeSpec({
-    "empty-air frontal casts have one launch two contact layers and one tail with no per-frame sound" {
+    "empty-air frontal casts have bounded launch contact and tail cues with no per-frame sound" {
         withStaffHarness { h ->
             listOf(StaffSpell.FROST, StaffSpell.FAULT, StaffSpell.LUNAR, StaffSpell.TIDE).forEach { spell ->
                 val world = h.paper.addSimpleWorld("staff-frontal-audio-${spell.id}")
@@ -24,6 +24,7 @@ class StaffSpellMeleeTest : FreeSpec({
                 val hits = mutableListOf<Pair<LivingEntity, Pair<Double, Double>>>()
                 val damage = meleeDamage(hits)
                 val sounds = mutableListOf<Sound>()
+                val contactLayers = if (spell == StaffSpell.TIDE) 3 else 2
                 val visuals = mockk<StaffSpellVisuals>(relaxed = true)
                 every { visuals.withOwner(any(), any()) } answers { secondArg<() -> Unit>().invoke() }
                 every { visuals.cue(any(), any(), any(), any()) } answers { sounds += secondArg<Sound>() }
@@ -35,11 +36,12 @@ class StaffSpellMeleeTest : FreeSpec({
                     h.scheduler.tick(STAFF_FRONTAL_CONTACT_TICK - 1)
                     sounds.size shouldBe 1
                     h.scheduler.tick(1)
-                    sounds.size shouldBe 3
+                    sounds.size shouldBe 1 + contactLayers
+                    if (spell == StaffSpell.TIDE) sounds.last() shouldBe Sound.ITEM_TRIDENT_RIPTIDE_1
                     h.scheduler.tick((staffMeleeDuration(spell) - 2) - STAFF_FRONTAL_CONTACT_TICK)
-                    sounds.size shouldBe 4
+                    sounds.size shouldBe 2 + contactLayers
                     h.scheduler.tick(30)
-                    sounds.size shouldBe 4
+                    sounds.size shouldBe 2 + contactLayers
                     hits shouldBe emptyList()
                 } finally { melee.close() }
             }

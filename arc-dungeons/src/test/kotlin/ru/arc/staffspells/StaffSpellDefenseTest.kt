@@ -84,7 +84,7 @@ class StaffSpellDefenseTest : FreeSpec({
             try {
                 player.absorptionAmount = 3.0
                 defense.activate(player, StaffSpell.FAULT, cast, allAround = true) shouldBe true
-                defense.activate(player, StaffSpell.EMBER, cast, allAround = false) shouldBe false
+                defense.activate(player, StaffSpell.EMBER, cast, allAround = true) shouldBe false
 
                 val cancelled = attack(rear, player, rawDamage = 20.0, armorReduction = .5)
                 cancelled.isCancelled = true
@@ -103,9 +103,9 @@ class StaffSpellDefenseTest : FreeSpec({
                 afterDepletion.finalDamage shouldBe 10.0
 
                 h.scheduler.tick(498)
-                defense.activate(player, StaffSpell.FAULT, cast, allAround = false) shouldBe false
+                defense.activate(player, StaffSpell.FAULT, cast, allAround = true) shouldBe false
                 h.scheduler.tick(2)
-                defense.activate(player, StaffSpell.FAULT, cast, allAround = false) shouldBe true
+                defense.activate(player, StaffSpell.FAULT, cast, allAround = true) shouldBe true
             } finally {
                 defense.close()
             }

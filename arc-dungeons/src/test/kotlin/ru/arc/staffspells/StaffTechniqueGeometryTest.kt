@@ -75,11 +75,13 @@ class StaffTechniqueGeometryTest : FreeSpec({
             assertFiniteParts(frame, 9)
         }
 
-        val primaryIcicle = staffIcicleDisplayParts(8, impact = false, charge = .6)
-        val recall = staffIcicleRecallParts(5, .6, .7f, -.25f)
-        recall.size shouldBe 8
-        recall.map { it.identity } shouldBe primaryIcicle.map { it.identity }
-        assertFiniteParts(recall, 8)
+        val burst = staffIcicleRadialParts(4)
+        burst.size shouldBe 36
+        assertFiniteParts(burst, 36)
+        staffIcicleRadialParts(8).map { it.identity } shouldBe burst.map { it.identity }
+        burst.all { kotlin.math.hypot(it.center.x.toDouble(), it.center.z.toDouble()) + it.scale.z / 2 <= 4.51 } shouldBe true
+        burst.all { it.center.y + it.scale.length() * .5 < 1.5f } shouldBe true
+        staffIcicleRadialParts(STAFF_ICICLE_RADIAL_TICKS) shouldBe emptyList()
 
         val prism = staffPrismTripwireParts(.35f, 3)
         assertFiniteParts(prism, 9)

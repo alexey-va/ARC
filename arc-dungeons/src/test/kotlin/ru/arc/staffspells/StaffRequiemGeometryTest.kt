@@ -7,8 +7,9 @@ import org.bukkit.Particle
 import kotlin.math.sqrt
 
 class StaffRequiemGeometryTest : FreeSpec({
-    "primary bell and pulse geometry share the tick-16 to tick-30 radius-5 front" {
-        staffArsenalLifetime(StaffSpell.REQUIEM, false) shouldBe 36
+    "primary bell repeats three bounded radius-five fronts over its extended lifetime" {
+        staffArsenalLifetime(StaffSpell.REQUIEM, false) shouldBe STAFF_REQUIEM_PRIMARY_DURATION_TICKS
+        STAFF_REQUIEM_PRIMARY_CLANG_TICKS shouldBe listOf(16, 40, 64)
         staffRequiemPulse(15, secondary = false) shouldBe null
         staffRequiemPulse(16, secondary = false)?.progress shouldBe 0.0
         staffRequiemPulse(30, secondary = false)?.progress shouldBe 1.0
@@ -36,27 +37,27 @@ class StaffRequiemGeometryTest : FreeSpec({
         staffRequiemParticles(36, 36, secondary = false, radius = 5.0).isEmpty() shouldBe true
     }
 
-    "secondary bell schedules three bounded radius-7 soul fronts with no smoke sprites" {
+    "secondary bell schedules five bounded radius-7 soul fronts with no smoke sprites" {
         staffArsenalLifetime(StaffSpell.REQUIEM, true) shouldBe STAFF_REQUIEM_SECONDARY_DURATION_TICKS
-        STAFF_REQUIEM_SECONDARY_CLANG_TICKS shouldBe listOf(16, 36, 56)
-        listOf(16, 36, 56).forEachIndexed { index, tick ->
+        STAFF_REQUIEM_SECONDARY_CLANG_TICKS shouldBe listOf(16, 40, 64, 88, 112)
+        listOf(16, 40, 64, 88, 112).forEachIndexed { index, tick ->
             staffRequiemPulse(tick, secondary = true)?.index shouldBe index
             staffRequiemPulse(tick + STAFF_REQUIEM_SECONDARY_FRONT_TICKS, secondary = true)?.progress shouldBe 1.0
             staffRequiemPulse(tick + STAFF_REQUIEM_SECONDARY_FRONT_TICKS + 2, secondary = true) shouldBe null
         }
         STAFF_REQUIEM_COLLISION_RAY_COUNT shouldBe 24
 
-        val idle = staffRequiemParticles(8, 72, secondary = true, radius = 7.0)
-        val front = staffRequiemParticles(26, 72, secondary = true, radius = STAFF_REQUIEM_SECONDARY_RADIUS)
+        val idle = staffRequiemParticles(8, 134, secondary = true, radius = 7.0)
+        val front = staffRequiemParticles(30, 134, secondary = true, radius = STAFF_REQUIEM_SECONDARY_RADIUS)
         idle.size shouldBe 40
         front.size shouldBe 56
         val maxRadius = front.maxOf { sqrt(it.offset.x * it.offset.x + it.offset.z * it.offset.z) }
         (maxRadius in 6.5..7.001) shouldBe true
         val allowed = setOf(Particle.SOUL, Particle.SOUL_FIRE_FLAME, Particle.DUST_COLOR_TRANSITION)
         (idle + front).all { it.particle in allowed } shouldBe true
-        val clipped = staffRequiemParticles(26, 72, secondary = true, radius = 7.0,
+        val clipped = staffRequiemParticles(30, 134, secondary = true, radius = 7.0,
             rayLimits = List(STAFF_REQUIEM_COLLISION_RAY_COUNT) { if (it == 0) 2.0 else 7.0 })
         clipped.take(2).all { sqrt(it.offset.x * it.offset.x + it.offset.z * it.offset.z) <= 2.001 } shouldBe true
-        staffRequiemBellParts(72, 72, secondary = true).isEmpty() shouldBe true
+        staffRequiemBellParts(134, 134, secondary = true).isEmpty() shouldBe true
     }
 })

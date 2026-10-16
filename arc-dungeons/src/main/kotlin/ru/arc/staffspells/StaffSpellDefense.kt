@@ -45,7 +45,7 @@ internal class StaffSpellDefense(
     private val tasks = LifecycleTaskScope()
     private val guards = mutableMapOf<UUID, Guard>()
     private val shields = mutableMapOf<UUID, Shield>()
-    private val recovery = mutableMapOf<UUID, Recovery>()
+    private val recovery = mutableMapOf<Pair<UUID, Boolean>, Recovery>()
     private val bars = mutableMapOf<UUID, BossBar>()
     private var tick = 0
 
@@ -53,7 +53,7 @@ internal class StaffSpellDefense(
 
     fun activate(player: Player, spell: StaffSpell, cast: StaffSpellCast, allAround: Boolean): Boolean {
         if (!damage.isCurrent(player, cast)) return false
-        if ((recovery[player.uniqueId]?.ends ?: 0) > tick) {
+        if ((recovery[player.uniqueId to allAround]?.ends ?: 0) > tick) {
             visuals.cooldownFeedback(player, spell)
             return false
         }
@@ -71,7 +71,7 @@ internal class StaffSpellDefense(
             guards[player.uniqueId] = Guard(spell, cast, player.world.uid, tick + duration,
                 hits = if (heavy) 3 else 2, capacity = if (heavy) 3 else 2, scene = scene)
         }
-        recovery[player.uniqueId] = Recovery(spell, tick + cooldown, cooldown, allAround)
+        recovery[player.uniqueId to allAround] = Recovery(spell, tick + cooldown, cooldown, allAround)
         visuals.withOwner(player.uniqueId) { visuals.cue(player.location, Sound.ITEM_SHIELD_BLOCK, .7f, 1.25f) }
         show(player)
         return true
@@ -155,12 +155,12 @@ internal class StaffSpellDefense(
                 effects.remove(shield.scene)
             }
         }
-        recovery.keys.toList().forEach { id ->
+        recovery.entries.removeIf { it.value.ends <= tick }
+        (recovery.keys.map { it.first } + bars.keys).toSet().forEach { id ->
             val player = Bukkit.getPlayer(id)
             if (player == null || !player.isOnline || player.isDead ||
                 StaffSpell.from(player.inventory.itemInMainHand) == null) hide(id)
             else show(player)
-            if ((recovery[id]?.ends ?: 0) <= tick) { recovery.remove(id); hide(id) }
         }
     }
 
@@ -175,10 +175,11 @@ internal class StaffSpellDefense(
     }
 
     private fun show(player: Player) {
-        val state = recovery[player.uniqueId] ?: return
-        val remaining = (state.ends - tick).coerceAtLeast(0)
         val shield = shields[player.uniqueId]?.takeIf { current(player, it) }
         val guard = guards[player.uniqueId]?.takeIf { current(player, it) }
+        val mode = if (shield != null) true else if (guard != null) false else player.isSneaking
+        val state = recovery[player.uniqueId to mode] ?: run { hide(player.uniqueId); return }
+        val remaining = (state.ends - tick).coerceAtLeast(0)
         val active = shield != null || guard != null
         val title = shield?.let { config.shield(it.spell, it.remaining, it.capacity) }
             ?: config.defense(state.spell, active, remaining / 20.0, state.allAround)
@@ -204,7 +205,7 @@ internal class StaffSpellDefense(
         shields.remove(id)?.let { effects.remove(it.scene) }
         hide(id)
     }
-    fun reset(id: UUID) { cancel(id); recovery.remove(id) }
+    fun reset(id: UUID) { cancel(id); recovery.keys.removeIf { it.first == id } }
     override fun close() {
         tasks.close()
         (guards.keys + shields.keys).toSet().forEach(::cancel)

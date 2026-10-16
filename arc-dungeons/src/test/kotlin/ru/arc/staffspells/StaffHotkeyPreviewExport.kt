@@ -29,7 +29,7 @@ object StaffHotkeyPreviewExport {
         Files.writeString(output, GsonBuilder().setPrettyPrinting().create().toJson(mapOf(
             "title" to "ARC · Q и F · 16 посохов",
             "frameStepTicks" to 2, "particleTailTicks" to 0, "previewReachBlocks" to 18.0,
-            "evidence" to "Геометрические кадры вызывают production helpers; Q NECROMANCER отмечен без native skeleton/display preview, поскольку действие выбирает динамическую цель или точку сбора. Доступные shared particle helpers включены. Траектории — синтетические сценарии в пределах указанных профилей, не запись серверного движения. Столкновения, урон, звук и нативный клиент не проверяются.",
+            "evidence" to "Геометрические кадры вызывают production helpers; Q NECROMANCER показывает production-маркер приказа на синтетической точке сбора; сами скелеты здесь не симулируются. Доступные shared particle helpers включены. Траектории — синтетические сценарии в пределах указанных профилей, не запись серверного движения. Столкновения, урон, звук и нативный клиент не проверяются.",
             "clips" to clips,
         )).plus("\n"))
         println("STAFF_HOTKEY_PREVIEW clips=${clips.size} output=$output")
@@ -75,12 +75,12 @@ object StaffHotkeyPreviewExport {
             StaffSpell.LANCE -> 14
             StaffSpell.EMBER -> 66
             StaffSpell.NOVA -> 72
-            StaffSpell.ICICLE -> 8
+            StaffSpell.ICICLE -> STAFF_ICICLE_RADIAL_TICKS
             StaffSpell.GALE -> 22
             StaffSpell.TIDE -> 25
             StaffSpell.REQUIEM -> 56
             StaffSpell.PRISM -> 60
-            StaffSpell.NECROMANCER -> 1
+            StaffSpell.NECROMANCER -> 24
             StaffSpell.GRAVITY -> 28
             StaffSpell.OSSUARY -> 38
             StaffSpell.LUNAR -> STAFF_LUNAR_TOTAL_TICKS
@@ -139,12 +139,10 @@ object StaffHotkeyPreviewExport {
                 frame = { age -> Frame(staffNovaSeedParts(age), Vector(0.0, 0.0, 4.0)) }
             }
             StaffSpell.ICICLE -> {
-                note = "Обратный залп: production recalled-icicle geometry; один осколок синтетически возвращается с 8 блоков со скоростью 2.4 блока/тик и исчезает при прибытии в t4. Остаток клипа показывает очистку, а не зависший у глаза снаряд."
-                sources = listOf("staffIcicleRecallParts", "staffIcicleDisplayParts")
-                anchor = "стартовая позиция осколка впереди на +Z; возврат к кастеру"
-                frame = { age -> Frame(if (age >= 4) emptyList()
-                    else staffIcicleRecallParts(age, .65, Math.PI.toFloat(), 0f),
-                    Vector(0.0, 1.4, 8.0 - min(8.0, age * 2.4))) }
+                note = "Кристальный всплеск: production clusters grow around caster in4.5blocks. Contact tick6; collapse through18ticks. No enemy needed. Native collision/damage are not simulated."
+                sources = listOf("staffIcicleRadialParts")
+                anchor = "caster feet +0.04Y"
+                frame = { age -> Frame(staffIcicleRadialParts(age), Vector(0.0, .04, 0.0)) }
             }
             StaffSpell.GALE -> {
                 note = "Боковой шквал: production geometry проходит поперёк фиксированного коридора +Z по локальной оси +X, вслед за направлением реального бокового толчка в t7. После t10 ветер рассеивается; цели и урон здесь не симулируются."
@@ -173,10 +171,10 @@ object StaffHotkeyPreviewExport {
                 frame = { age -> Frame(staffPrismTripwireParts(0f, age / 2), Vector(0.0, 0.0, 5.0)) }
             }
             StaffSpell.NECROMANCER -> {
-                note = "Нет native skeleton/display preview: Q выбирает цель или точку сбора и выдаёт target-anchored particles. В этой геометрической выгрузке нет поддельного скелета или синтетического маркера."
-                sources = listOf("StaffSpellTechniques.commandNecromancer")
-                anchor = "цель или точка сбора выбирается в игре; без фиксированного preview anchor"
-                frame = { _ -> Frame(emptyList()) }
+                note = "Приказ войску: production-маркер на синтетической точке сбора. Работает без врага; движение скелетов и звук в preview не симулируются."
+                sources = listOf("staffNecromancerCommandParts")
+                anchor = "земля у точки сбора впереди на +Z"
+                frame = { age -> Frame(staffNecromancerCommandParts(age), Vector(0.0, 0.0, 5.0)) }
             }
             StaffSpell.GRAVITY -> {
                 note = "Подвешивание: production gravity-pin geometry вокруг синтетической цели. Цель и последующий бросок не моделируются."
@@ -195,7 +193,7 @@ object StaffHotkeyPreviewExport {
             StaffSpell.LUNAR, StaffSpell.FAULT, StaffSpell.INFERNO -> error("Handled separately")
         }
         return clip(spell, "Q", duration, note, sources, anchor, frame,
-            particleOnly = spell == StaffSpell.NECROMANCER)
+            particleOnly = false)
     }
 
     private fun mobilityClip(spell: StaffSpell): Map<String, Any> {

@@ -119,6 +119,8 @@ class StaffSpellsTest : FreeSpec({
                     val player = h.player("quick", world, spell)
                     h.controller.start()
                     h.controller.cast(player, input, 0.0)
+                    h.controller.canCharge(player, spell) shouldBe false
+                    h.scheduler.tick(4)
                     h.controller.canCharge(player, spell) shouldBe true
                     h.captures.size shouldBe 1
                     h.scheduler.tick(100)
@@ -501,7 +503,7 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "all staff spells share cooldown across an item swap" {
+    "changing to Frost still waits for its own visible contact before damage" {
         withStaffHarness { h ->
             val world = h.paper.addSimpleWorld("staff-cooldown")
             val player = h.player("staff-cooldown", world, StaffSpell.CHAIN)
@@ -534,11 +536,12 @@ class StaffSpellsTest : FreeSpec({
             displays.records.size shouldBe 1
             displays.text() shouldBe "ПКМ · Ледяной венец\nQ готово   F готово"
 
-            h.controller.cast(player)
-            h.cooldowns.remainingTicks(player.uniqueId) shouldBe 20L
+            h.controller.cast(player, StaffCastInput.PRIMARY, 0.5)
+            h.cooldowns.remainingTicks(player.uniqueId) shouldBe 4L
+            h.controller.skillRemaining(player.uniqueId, StaffSpell.ICICLE) shouldBe 20L
             displays.text().startsWith("ПКМ · Ледяной венец\n1.0 с ") shouldBe true
             h.scheduler.tick(8)
-            h.cooldowns.remainingTicks(player.uniqueId) shouldBe 12L
+            h.controller.skillRemaining(player.uniqueId, StaffSpell.ICICLE) shouldBe 12L
             displays.text().startsWith("ПКМ · Ледяной венец\n0.6 с ") shouldBe true
 
             player.isSneaking = true
@@ -546,8 +549,9 @@ class StaffSpellsTest : FreeSpec({
             h.scheduler.tick(4)
             displays.records.size shouldBe 1
             h.captures.size shouldBe 1
-            h.cooldowns.remainingTicks(player.uniqueId) shouldBe 8L
-            displays.text().startsWith("Shift + ПКМ · Каменный выброс\n0.4 с ") shouldBe true
+            h.controller.skillRemaining(player.uniqueId, StaffSpell.ICICLE) shouldBe 8L
+            h.controller.skillRemaining(player.uniqueId, StaffSpell.FAULT, secondary = true) shouldBe 0L
+            displays.text().startsWith("Shift + ПКМ · Каменный выброс\nQ готово") shouldBe true
 
             player.inventory.setItemInMainHand(ItemStack(Material.AIR))
             h.scheduler.tick(4)
@@ -579,17 +583,17 @@ class StaffSpellsTest : FreeSpec({
             player.isSneaking = true
             h.controller.start()
             h.controller.cast(player, StaffCastInput.SECONDARY, 0.0)
-            h.cooldowns.remainingTicks(player.uniqueId) shouldBe 30L
+            h.controller.skillRemaining(player.uniqueId, StaffSpell.ICICLE, secondary = true) shouldBe 30L
             h.scheduler.tick(8)
             h.controller.onQuit(PlayerQuitEvent(player, Component.empty()))
             h.scheduler.tick(4) // Mock quit leaves the player online, modelling the returning HUD.
-            val remaining = h.cooldowns.remainingTicks(player.uniqueId)
+            val remaining = h.controller.skillRemaining(player.uniqueId, StaffSpell.ICICLE, secondary = true)
             remaining shouldBe 18L
             displays.text().startsWith("Дождь · Shift + ПКМ\nВосстановление 0.9 с\n") shouldBe true
             displays.text().substringBefore("\nQ ").endsWith(staffSpellHudBar(staffCooldownProgress(remaining, 30).toDouble())) shouldBe true
             h.controller.cast(player)
             h.captures.size shouldBe 1
-            h.cooldowns.remainingTicks(player.uniqueId) shouldBe remaining
+            h.controller.skillRemaining(player.uniqueId, StaffSpell.ICICLE, secondary = true) shouldBe remaining
         }
     }
 
@@ -610,7 +614,7 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "all spells cast into empty space and use the shared cooldown" {
+    "all spells cast into empty space and respect the short global cooldown" {
         withStaffHarness { h ->
             val world = h.paper.addSimpleWorld("staff-empty-casts")
             val player = h.player("staff-empty-casts", world, StaffSpell.CHAIN)
@@ -619,11 +623,11 @@ class StaffSpellsTest : FreeSpec({
 
             spells.forEachIndexed { index, spell ->
                 player.inventory.setItemInMainHand(h.config.item(spell))
-                h.controller.cast(player)
+                h.controller.cast(player, StaffCastInput.PRIMARY, if (StaffSpell.from(player.inventory.itemInMainHand) == StaffSpell.ICICLE) 0.5 else 0.0)
                 h.captures.size shouldBe index + 1
 
                 player.inventory.setItemInMainHand(h.config.item(spells[(index + 1) % spells.size]))
-                h.controller.cast(player)
+                h.controller.cast(player, StaffCastInput.PRIMARY, if (StaffSpell.from(player.inventory.itemInMainHand) == StaffSpell.ICICLE) 0.5 else 0.0)
                 h.captures.size shouldBe index + 1
                 h.scheduler.tick(20)
             }
@@ -785,7 +789,7 @@ class StaffSpellsTest : FreeSpec({
             h.controller.cast(player)
             h.hits shouldBe emptyList()
             h.projectileMoves shouldBe emptyList()
-            h.cooldowns.remainingTicks(player.uniqueId) shouldBe 80L
+            h.controller.skillRemaining(player.uniqueId, StaffSpell.CHAIN, secondary = true) shouldBe 80L
             h.scheduler.tick(8)
 
             h.hits shouldBe listOf(behind)
@@ -828,7 +832,7 @@ class StaffSpellsTest : FreeSpec({
             deniedId = targets.last().uniqueId
             h.controller.start()
 
-            h.controller.cast(player)
+            h.controller.cast(player, StaffCastInput.PRIMARY, 0.6)
             val icicles = h.visualPlays.filter { it.spell == StaffSpell.ICICLE && !it.secondary }
             icicles.size shouldBe 7
             val eye = player.eyeLocation
@@ -859,7 +863,7 @@ class StaffSpellsTest : FreeSpec({
 
             h.hits.map { it.uniqueId }.toSet() shouldBe targets.map { it.uniqueId }.toSet()
             h.hits.size shouldBe 3
-            h.damageScales shouldBe List(3) { 1.0 to 6.0 }
+            h.damageScales shouldBe List(3) { 1.45 to 8.7 }
             targets.filter { it.uniqueId != deniedId }.all { it.hasPotionEffect(PotionEffectType.SLOWNESS) } shouldBe true
             targets.last().hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
             verify(exactly = 7) { h.effects.impact(any(), any(), 0.9, 10) }
@@ -872,7 +876,7 @@ class StaffSpellsTest : FreeSpec({
             val player = h.player("staff-icicle-fallback-slots", world, StaffSpell.ICICLE)
             h.controller.start()
 
-            h.controller.cast(player)
+            h.controller.cast(player, StaffCastInput.PRIMARY, 0.6)
 
             val fallbackCharges = h.visualPlays.filter { it.spell == StaffSpell.ICICLE && it.charging }
             fallbackCharges.size shouldBe 7
@@ -896,7 +900,7 @@ class StaffSpellsTest : FreeSpec({
             target.boundingBox.expand(0.25).rayTrace(eye.toVector(), look, 24.0) shouldBe null
             h.controller.start()
 
-            h.controller.cast(player)
+            h.controller.cast(player, StaffCastInput.PRIMARY, 0.6)
             h.scheduler.tick(8)
 
             val firstShot = h.visualPlays.first { it.spell == StaffSpell.ICICLE && it.charging }.id
@@ -921,7 +925,7 @@ class StaffSpellsTest : FreeSpec({
             target.boundingBox.expand(0.25).rayTrace(eye.toVector(), look, 24.0) shouldBe null
             h.controller.start()
 
-            h.controller.cast(player)
+            h.controller.cast(player, StaffCastInput.PRIMARY, 0.6)
             h.scheduler.tick(8)
 
             val firstShot = h.visualPlays.first { it.spell == StaffSpell.ICICLE && it.charging }.id
@@ -940,7 +944,7 @@ class StaffSpellsTest : FreeSpec({
             visible(player.eyeLocation, center(target)) shouldBe false
             h.controller.start()
 
-            h.controller.cast(player)
+            h.controller.cast(player, StaffCastInput.PRIMARY, 0.6)
             h.scheduler.tick(12)
 
             val firstShot = h.visualPlays.first { it.spell == StaffSpell.ICICLE && it.charging }.id
@@ -966,7 +970,7 @@ class StaffSpellsTest : FreeSpec({
             visible(release, center(target)) shouldBe false
             h.controller.start()
 
-            h.controller.cast(player)
+            h.controller.cast(player, StaffCastInput.PRIMARY, 0.6)
             val firstShot = h.visualPlays.first { it.spell == StaffSpell.ICICLE && it.charging }.id
             h.scheduler.tick(8)
 
@@ -984,7 +988,7 @@ class StaffSpellsTest : FreeSpec({
             visible(player.eyeLocation, center(target)) shouldBe true
             h.controller.start()
 
-            h.controller.cast(player)
+            h.controller.cast(player, StaffCastInput.PRIMARY, 0.6)
             val firstShot = h.visualPlays.first { it.spell == StaffSpell.ICICLE && it.charging }.id
             h.scheduler.tick(4) // The first bolt acquires the directly aimed target.
             for (x in -3..3) for (y in 64..66) world.getBlockAt(x, y, 11).type = Material.STONE
@@ -1002,7 +1006,7 @@ class StaffSpellsTest : FreeSpec({
             val world = h.paper.addSimpleWorld("staff-icicle-live-reticle")
             val player = h.player("live-reticle", world, StaffSpell.ICICLE)
             h.controller.start()
-            h.controller.cast(player)
+            h.controller.cast(player, StaffCastInput.PRIMARY, 0.6)
             val shots = h.visualPlays.filter { it.spell == StaffSpell.ICICLE }
             h.scheduler.tick(4)
             player.teleport(player.location.apply { yaw = -55f })
@@ -1025,7 +1029,7 @@ class StaffSpellsTest : FreeSpec({
             }
             val eye = player.eyeLocation
             h.controller.start()
-            h.controller.cast(player)
+            h.controller.cast(player, StaffCastInput.PRIMARY, 0.6)
             h.scheduler.tick(19)
             h.projectileMoves.groupBy { it.id }.values.forEach { moves ->
                 moves.take(4).forEach { move ->
@@ -1044,7 +1048,7 @@ class StaffSpellsTest : FreeSpec({
             val single = h.zombie(world, x = 0.5, z = 8.0)
             h.controller.start()
 
-            h.controller.cast(player)
+            h.controller.cast(player, StaffCastInput.PRIMARY, 0.6)
             h.scheduler.tick(60)
 
             h.hits.map { it.uniqueId } shouldBe listOf(single.uniqueId)
@@ -1052,7 +1056,7 @@ class StaffSpellsTest : FreeSpec({
             verify(exactly = 7) { h.effects.impact(any(), any(), 0.9, 10) }
 
             val other = h.player("staff-frost-secondary-quit", world, StaffSpell.ICICLE)
-            h.controller.cast(other)
+            h.controller.cast(other, StaffCastInput.PRIMARY, 0.6)
             h.scheduler.tick(6)
             val movesBeforeQuit = h.projectileMoves.size
             h.controller.onQuit(PlayerQuitEvent(other, Component.empty()))
@@ -1195,28 +1199,33 @@ class StaffSpellsTest : FreeSpec({
         }
     }
 
-    "secondary cooldowns use one and a half or two times the primary duration" {
+    "short GCD separates per-spell primary secondary Q and F cooldowns" {
         withStaffHarness { h ->
-            val world = h.paper.addSimpleWorld("staff-secondary-cooldown")
-            val quick = h.player("staff-secondary-quick", world, StaffSpell.FROST).apply { isSneaking = true }
-            h.controller.cast(quick)
-            quick.inventory.setItemInMainHand(h.config.item(StaffSpell.NOVA))
-            h.scheduler.tick(20)
-            h.controller.cast(quick)
-            h.captures.size shouldBe 1
-            h.scheduler.tick(10)
-            h.controller.cast(quick)
-            h.captures.size shouldBe 2
-
-            val long = h.player("staff-secondary-long", world, StaffSpell.MARK).apply { isSneaking = true }
-            h.controller.cast(long)
-            long.inventory.setItemInMainHand(h.config.item(StaffSpell.CHAIN))
-            h.scheduler.tick(30)
-            h.controller.cast(long)
-            h.captures.size shouldBe 3
-            h.scheduler.tick(10)
-            h.controller.cast(long)
-            h.captures.size shouldBe 4
+            val world = h.paper.addSimpleWorld("staff-specific-cooldown")
+            val player = h.player("staff-specific-cooldown", world, StaffSpell.CHAIN)
+            h.controller.start()
+            h.controller.cast(player, StaffCastInput.SECONDARY, 0.0)
+            h.controller.skillRemaining(player.uniqueId, StaffSpell.CHAIN, secondary = true) shouldBe 80L
+            h.controller.canCharge(player, StaffSpell.CHAIN) shouldBe false
+            h.controller.canHotkey(player, StaffSpell.CHAIN, StaffHotkey.Q) shouldBe false
+            h.scheduler.tick(4)
+            h.controller.canCharge(player, StaffSpell.CHAIN) shouldBe true
+            h.controller.canCharge(player, StaffSpell.CHAIN, secondary = true) shouldBe false
+            h.controller.canHotkey(player, StaffSpell.CHAIN, StaffHotkey.Q) shouldBe true
+            h.controller.hotkey(player, StaffSpell.CHAIN, StaffHotkey.Q)
+            h.scheduler.tick(4)
+            // The second press detonates the existing orb; it is not a fresh Q cast.
+            h.controller.canHotkey(player, StaffSpell.CHAIN, StaffHotkey.Q) shouldBe true
+            h.controller.hotkey(player, StaffSpell.CHAIN, StaffHotkey.Q)
+            h.scheduler.tick(4)
+            h.controller.canHotkey(player, StaffSpell.CHAIN, StaffHotkey.Q) shouldBe false
+            h.controller.canHotkey(player, StaffSpell.CHAIN, StaffHotkey.F) shouldBe true
+            player.inventory.setItemInMainHand(h.config.item(StaffSpell.FROST))
+            h.controller.canCharge(player, StaffSpell.FROST, secondary = true) shouldBe true
+            h.controller.canHotkey(player, StaffSpell.FROST, StaffHotkey.Q) shouldBe true
+            player.inventory.setItemInMainHand(h.config.item(StaffSpell.CHAIN))
+            h.controller.canHotkey(player, StaffSpell.CHAIN, StaffHotkey.Q) shouldBe false
+            h.controller.canCharge(player, StaffSpell.CHAIN, secondary = true) shouldBe false
         }
     }
 
@@ -1378,7 +1387,7 @@ private fun firstIcicleHeadingAtAgeFive(cover: Boolean = false): Vector {
         if (cover) for (x in -3..3) for (y in 64..66) world.getBlockAt(x, y, 11).type = Material.STONE
         h.controller.start()
 
-        h.controller.cast(player)
+        h.controller.cast(player, StaffCastInput.PRIMARY, 0.6)
         val firstShot = h.visualPlays.first { it.spell == StaffSpell.ICICLE && it.charging }.id
         h.scheduler.tick(8)
         heading = h.projectileMoves.filter { it.id == firstShot }.getOrNull(4)?.direction

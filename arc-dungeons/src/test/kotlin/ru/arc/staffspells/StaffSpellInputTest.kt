@@ -923,7 +923,7 @@ private class RecordingStaffSpellInputActions : StaffSpellInputActions {
         return updated
     }
 
-    override fun canCharge(player: org.bukkit.entity.Player, spell: StaffSpell) =
+    override fun canCharge(player: org.bukkit.entity.Player, spell: StaffSpell, secondary: Boolean) =
         usable && spell in StaffSpell.available
     override fun canHotkey(player: org.bukkit.entity.Player, spell: StaffSpell, key: StaffHotkey): Boolean {
         hotkeyChecks += InputHotkeyCall(player.uniqueId, spell, key)

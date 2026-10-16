@@ -124,11 +124,48 @@ internal fun staffChainTechniqueParts(yaw: Float, pulse: Int): List<StaffDisplay
     }
 }
 
-internal fun staffIcicleRecallParts(ageTicks: Int, charge: Double, yaw: Float, pitch: Float): List<StaffDisplayPart> {
-    val facing = Quaternionf().rotateY(yaw).rotateX(pitch)
-    return staffIcicleDisplayParts(ageTicks, impact = false, charge = charge).map { part ->
-        part.copy(center = facing.transform(Vector3f(part.center)),
-            rotation = Quaternionf(facing).mul(part.rotation))
+internal const val STAFF_ICICLE_RADIAL_RADIUS = 4.5
+internal const val STAFF_ICICLE_RADIAL_CONTACT_TICK = 6
+internal const val STAFF_ICICLE_RADIAL_TICKS = 18
+
+/** Twelve low crystal clusters burst away from a clear caster center, then break upward. */
+internal fun staffIcicleRadialParts(ageTicks: Int): List<StaffDisplayPart> {
+    if (ageTicks !in 0 until STAFF_ICICLE_RADIAL_TICKS) return emptyList()
+    val expansion = smoothTechnique((ageTicks / 4f).coerceIn(0f, 1f))
+    val fracture = smoothTechnique(((ageTicks - STAFF_ICICLE_RADIAL_CONTACT_TICK) / 6f).coerceIn(0f, 1f))
+    val fade = 1f - smoothTechnique(((ageTicks - 8) / 8f).coerceIn(0f, 1f))
+    if (fade <= 0f) return emptyList()
+    return List(36) { index ->
+        val cluster = index / 3
+        val facet = index % 3
+        val angle = cluster * PI / 6.0 + (facet - 1) * .11
+        val direction = Vector3f(cos(angle).toFloat(), 0f, sin(angle).toFloat())
+        val length = (if (facet == 0) 1.25f else .78f) * (.35f + .65f * expansion)
+        val front = 1.4f + (STAFF_ICICLE_RADIAL_RADIUS.toFloat() - 1.4f) * expansion
+        val center = Vector3f(direction).mul(front - length * .5f - facet * .14f)
+            .add(0f, .22f + facet * .24f + fracture * (.2f + facet * .08f), 0f)
+        StaffDisplayPart(
+            when (facet) { 0 -> Material.PACKED_ICE; 1 -> Material.BLUE_ICE; else -> Material.LIGHT_BLUE_STAINED_GLASS },
+            center, Vector3f(if (facet == 0) .32f else .22f, .25f, length).mul(fade),
+            Quaternionf().rotationTo(Vector3f(0f, 0f, 1f), direction)
+                .rotateZ((facet - 1) * .38f).rotateX(fracture * (if (cluster % 2 == 0) .34f else -.28f)),
+            identity = "icicle:q:burst:$cluster:$facet",
+        )
+    }
+}
+
+/** A short bone-chevron command marker; it depicts an order, never a substitute summoned actor. */
+internal fun staffNecromancerCommandParts(ageTicks: Int): List<StaffDisplayPart> {
+    val fade = (1f - smoothTechnique(((ageTicks - 10) / 12f).coerceIn(0f, 1f)))
+    if (ageTicks < 0 || fade <= 0f) return emptyList()
+    return List(8) { index ->
+        val arm = index / 2
+        val angle = arm * PI / 2.0
+        val bend = if (index % 2 == 0) -.45 else .45
+        StaffDisplayPart(if (index % 2 == 0) Material.BONE_BLOCK else Material.CYAN_STAINED_GLASS,
+            Vector3f((cos(angle) * .7).toFloat(), .10f, (sin(angle) * .7).toFloat()),
+            Vector3f(.14f, .14f, .68f).mul(fade),
+            Quaternionf().rotateY((-angle + bend).toFloat()), identity = "necromancer:q:order:$index")
     }
 }
 

@@ -22,6 +22,7 @@ internal const val STAFF_FRONTAL_CONTACT_TICK = 6L
 internal fun staffMeleeDuration(spell: StaffSpell): Int = when (spell) {
     StaffSpell.FAULT -> 24
     StaffSpell.LUNAR -> 20
+    StaffSpell.TIDE -> 20
     else -> STAFF_FRONTAL_DURATION_TICKS
 }
 
@@ -117,6 +118,8 @@ internal class StaffSpellMelee(
             }
             visuals.cue(at, accent, if (swing.spell == StaffSpell.FAULT) 0.90f else 0.54f,
                 if (swing.spell == StaffSpell.FAULT) 0.58f else 1.28f)
+            if (swing.spell == StaffSpell.TIDE)
+                visuals.cue(at, Sound.ITEM_TRIDENT_RIPTIDE_1, .62f, .68f)
         }
         for (target in targets) {
             if (pending[player.uniqueId] !== swing || !current(player, swing)) break

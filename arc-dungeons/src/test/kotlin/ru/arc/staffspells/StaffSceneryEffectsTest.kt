@@ -13,6 +13,8 @@ import org.bukkit.block.Block
 import org.bukkit.block.BlockState
 import org.bukkit.block.data.BlockData
 import org.bukkit.entity.Player
+import org.bukkit.event.player.PlayerMoveEvent
+import org.bukkit.util.BoundingBox
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.TestTaskScheduler
 import ru.arc.paper.display.PacketBlockDisplay
@@ -26,7 +28,7 @@ class StaffSceneryEffectsTest : FreeSpec({
         MockBukkitTestRuntime.open().use {
             val center = Location(mockk(relaxed = true), 15.5, 64.5, 8.5)
             val viewers = (1L..20L).map { index ->
-                sceneryViewer(center.world, UUID(0, index), Location(center.world, 15.5 + index, 64.5, 8.5))
+                sceneryViewer(center.world, UUID(0, index), Location(center.world, 23.5 + index, 64.5, 8.5))
             }
             val visibleTo = viewers
             val solids = (12..18).flatMap { x -> (5..11).map { z -> GridPos(x, 64, z) } }.toSet()
@@ -80,8 +82,8 @@ class StaffSceneryEffectsTest : FreeSpec({
         MockBukkitTestRuntime.open().use {
             val world = mockk<World>(relaxed = true)
             val center = Location(world, .5, 64.5, .5)
-            val received = sceneryViewer(world, UUID.randomUUID(), center)
-            val notReceived = sceneryViewer(world, UUID.randomUUID(), center)
+            val received = sceneryViewer(world, UUID.randomUUID(), center.clone().add(0.0, 0.0, 5.0))
+            val notReceived = sceneryViewer(world, UUID.randomUUID(), center.clone().add(0.0, 0.0, 5.0))
             val fixture = sceneryWorld("arena", setOf(GridPos(0, 64, 0)), listOf(received, notReceived), listOf(received)) { _, _ ->
                 Bukkit.createBlockData(Material.STONE)
             }
@@ -108,7 +110,7 @@ class StaffSceneryEffectsTest : FreeSpec({
         MockBukkitTestRuntime.open().use {
             val world = mockk<World>(relaxed = true)
             val center = Location(world, .5, 64.5, .5)
-            val viewer = sceneryViewer(world, UUID.randomUUID(), center)
+            val viewer = sceneryViewer(world, UUID.randomUUID(), center.clone().add(0.0, 0.0, 5.0))
             sceneryWorld("arena", setOf(GridPos(0, 64, 0)), listOf(viewer), listOf(viewer)) { _, _ ->
                 Bukkit.createBlockData(Material.STONE)
             }
@@ -133,7 +135,7 @@ class StaffSceneryEffectsTest : FreeSpec({
         MockBukkitTestRuntime.open().use {
             val world = mockk<World>(relaxed = true)
             val center = Location(world, .5, 64.5, .5)
-            val viewer = sceneryViewer(world, UUID.randomUUID(), center)
+            val viewer = sceneryViewer(world, UUID.randomUUID(), center.clone().add(0.0, 0.0, 5.0))
             val fixture = sceneryWorld("arena", setOf(GridPos(0, 64, 0)), listOf(viewer), listOf(viewer)) { _, read ->
                 Bukkit.createBlockData(when (read) {
                     0 -> Material.STONE
@@ -170,7 +172,7 @@ class StaffSceneryEffectsTest : FreeSpec({
         MockBukkitTestRuntime.open().use {
             val world = mockk<World>(relaxed = true)
             val center = Location(world, .5, 64.5, .5)
-            val viewer = sceneryViewer(world, UUID.randomUUID(), center)
+            val viewer = sceneryViewer(world, UUID.randomUUID(), center.clone().add(0.0, 0.0, 5.0))
             sceneryWorld("arena", setOf(GridPos(0, 64, 0)), listOf(viewer), listOf(viewer)) { _, read ->
                 Bukkit.createBlockData(if (read == 0) Material.STONE else Material.GOLD_BLOCK)
             }
@@ -248,6 +250,82 @@ class StaffSceneryEffectsTest : FreeSpec({
         }
     }
 
+    "scenery never hides collision blocks already near a viewer" {
+        MockBukkitTestRuntime.open().use {
+            val world = mockk<World>(relaxed = true)
+            val center = Location(world, .5, 64.5, .5)
+            val close = sceneryViewer(world, UUID.randomUUID(), Location(world, .5, 65.0, .5))
+            val distant = sceneryViewer(world, UUID.randomUUID(), Location(world, .5, 65.0, 8.5))
+            val viewers = listOf(close, distant)
+            val fixture = sceneryWorld("arena", setOf(GridPos(0, 64, 0)), viewers, viewers) { _, _ ->
+                Bukkit.createBlockData(Material.STONE)
+            }
+            val recorder = SceneryDisplayRecorder()
+            val effects = StaffSceneryEffects(recorder.displays, setOf("arena"), LifecycleTaskScope(TestTaskScheduler()))
+
+            effects.impact(UUID.randomUUID(), center, .1)
+
+            recorder.records.single().shownTo shouldBe setOf(distant.uniqueId)
+            verify(exactly = 0) { close.sendMultiBlockChange(any()) }
+            verify(exactly = 1) { distant.sendMultiBlockChange(match { it.values.single().material == Material.AIR }) }
+            fixture.solidBlocks.values.forEach { verify(exactly = 0) { it.setType(any<Material>()) } }
+            effects.close()
+            verify(exactly = 0) { close.sendMultiBlockChange(any()) }
+        }
+    }
+
+    "approach restores live blocks for one viewer across owners before contact without remasking them" {
+        for (moveEvent in listOf(true, false)) MockBukkitTestRuntime.open().use {
+            val world = mockk<World>(relaxed = true)
+            val from = Location(world, 2.5, 65.0, 6.5)
+            val approaching = sceneryViewer(world, UUID.randomUUID(), from)
+            val distant = sceneryViewer(world, UUID.randomUUID(), Location(world, 2.5, 65.0, 10.5))
+            val viewers = listOf(approaching, distant)
+            var material = Material.STONE
+            sceneryWorld("arena", setOf(GridPos(0, 64, 0), GridPos(4, 64, 0)), viewers, viewers) { _, _ ->
+                Bukkit.createBlockData(material)
+            }
+            val recorder = SceneryDisplayRecorder()
+            val scheduler = TestTaskScheduler()
+            val effects = StaffSceneryEffects(recorder.displays, setOf("arena"), LifecycleTaskScope(scheduler))
+            val firstOwner = UUID.randomUUID()
+            val secondOwner = UUID.randomUUID()
+            val first = Location(world, .5, 64.5, .5)
+            effects.impact(firstOwner, first, .1)
+            effects.impact(secondOwner, Location(world, 4.5, 64.5, .5), .1)
+            material = Material.GOLD_BLOCK
+
+            // The body is still .7 blocks from the nearest obstacle when restoration is sent.
+            val to = Location(world, 2.5, 65.0, 2.0)
+            if (moveEvent) effects.onMove(PlayerMoveEvent(approaching, from, to))
+            else {
+                every { approaching.location } returns to
+                scheduler.tick(1)
+            }
+
+            verify(exactly = 2) {
+                approaching.sendMultiBlockChange(match { it.values.single().material == Material.GOLD_BLOCK })
+            }
+            verify(exactly = 0) {
+                distant.sendMultiBlockChange(match { it.values.any { data -> data.material != Material.AIR } })
+            }
+            recorder.records.forEach { it.hiddenFrom shouldBe setOf(approaching.uniqueId) }
+            effects.impact(UUID.randomUUID(), first, .1)
+            recorder.records.size shouldBe 2 // The distant viewer's original owner still holds this block.
+            effects.cancel(firstOwner)
+            verify(exactly = 1) {
+                distant.sendMultiBlockChange(match { it.values.single().material == Material.GOLD_BLOCK })
+            }
+            effects.close()
+            verify(exactly = 2) {
+                approaching.sendMultiBlockChange(match { it.values.single().material == Material.GOLD_BLOCK })
+            }
+            verify(exactly = 2) {
+                distant.sendMultiBlockChange(match { it.values.single().material == Material.GOLD_BLOCK })
+            }
+        }
+    }
+
     "gravity depression sinks an annulus and restores live terrain on cancel without block mutation" {
         MockBukkitTestRuntime.open().use {
             val world = mockk<World>(relaxed = true)
@@ -322,6 +400,10 @@ private fun sceneryViewer(world: World, id: UUID, at: Location): Player = mockk<
     every { player.uniqueId } returns id
     every { player.world } returns world
     every { player.location } returns at.clone()
+    every { player.boundingBox } answers {
+        val location = player.location
+        BoundingBox(location.x - .3, location.y, location.z - .3, location.x + .3, location.y + 1.8, location.z + .3)
+    }
     every { player.isOnline } returns true
 }
 

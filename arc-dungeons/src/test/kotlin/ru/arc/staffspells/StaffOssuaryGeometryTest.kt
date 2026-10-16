@@ -26,8 +26,8 @@ private fun ossuaryMaxRadius(parts: List<StaffDisplayPart>): Double = parts.maxO
 } ?: 0.0
 
 class StaffOssuaryGeometryTest : FreeSpec({
-    "primary ossuary nodes rise as five irregular forked bone clusters inside the strike radius" {
-        val radiusByCharge = mapOf(0.0 to 2.75, 1.0 to 3.0)
+    "primary ossuary nodes rise as five unequal curved ribs with crooked forks inside the strike radius" {
+        val radiusByCharge = mapOf(0.0 to 3.4, 1.0 to 3.75)
         radiusByCharge.forEach { (charge, radius) ->
             val frames = listOf(0, 2, OSSUARY_PRIMARY_RISE_TICKS, 6, 8).map { age ->
                 staffArsenalParts(StaffSpell.OSSUARY, age, 22, 24.0, radius,
@@ -40,14 +40,14 @@ class StaffOssuaryGeometryTest : FreeSpec({
                 parts.mapNotNull { it.identity }.distinct().size shouldBe 30
                 ossuaryPartsFinite(parts) shouldBe true
                 (ossuaryMaxRadius(parts) <= radius + 0.04) shouldBe true
-                parts.count { it.material == Material.BONE_BLOCK } shouldBe 15
-                parts.count { it.material == Material.CALCITE } shouldBe 15
+                parts.count { it.material == Material.BONE_BLOCK } shouldBe 20
+                parts.count { it.material == Material.CALCITE } shouldBe 10
             }
 
             val risen = frames[2]
-            risen.count { it.identity!!.endsWith(":spine") } shouldBe 5
-            risen.count { it.identity!!.contains(":branch:") } shouldBe 10
-            risen.count { it.identity!!.contains(":tine:") } shouldBe 10
+            risen.count { it.identity!!.contains(":curve:") } shouldBe 20
+            risen.count { it.identity!!.endsWith(":fork") } shouldBe 5
+            risen.count { it.identity!!.endsWith(":tine") } shouldBe 5
             (ossuaryMaxRadius(risen) > radius * .72) shouldBe true
             (frames[0].sumOf { (it.scale.x * it.scale.y * it.scale.z).toDouble() } <
                 risen.sumOf { (it.scale.x * it.scale.y * it.scale.z).toDouble() }) shouldBe true
@@ -74,10 +74,10 @@ class StaffOssuaryGeometryTest : FreeSpec({
             }
             val strike = frames[3]
             (ossuaryMaxRadius(strike) > radius * .72) shouldBe true
-            strike.count { it.identity!!.endsWith(":spine") } shouldBe 5
-            strike.count { it.identity!!.contains(":branch:") } shouldBe 10
-            strike.count { it.identity!!.contains(":tine:") } shouldBe 10
-            (strike.filter { it.identity!!.endsWith(":cap") }.maxOf { it.center.y + it.scale.y / 2 } > 2.0f) shouldBe true
+            strike.count { it.identity!!.contains(":curve:") } shouldBe 20
+            strike.count { it.identity!!.endsWith(":fork") } shouldBe 5
+            strike.count { it.identity!!.endsWith(":tine") } shouldBe 5
+            (strike.filter { it.identity!!.endsWith(":curve:3") }.maxOf { it.center.y + it.scale.y / 2 } > 2.0f) shouldBe true
         }
     }
 

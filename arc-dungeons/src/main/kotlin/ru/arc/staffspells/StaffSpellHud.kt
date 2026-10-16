@@ -34,6 +34,7 @@ internal data class StaffSpellHudState(
     val remainingTicks: Long = 0,
     val totalTicks: Long = 0,
     val hotkeys: StaffHotkeyHudState? = null,
+    val armyCount: Int = 0,
 )
 
 internal data class StaffSpellHudPreferences(
@@ -76,6 +77,7 @@ internal class StaffSpellHud(
     private data class TrackedBossBar(val bar: BossBar, var name: Component, var progress: Float)
 
     var hotkeyState: ((Player, StaffSpell) -> StaffHotkeyHudState)? = null
+    var armyCount: (Player) -> Int = { 0 }
 
     private val cards = mutableMapOf<UUID, Card>()
     private val bossBars = mutableMapOf<UUID, TrackedBossBar>()
@@ -121,7 +123,7 @@ internal class StaffSpellHud(
             clear(player.uniqueId)
             return
         }
-        val current = state.copy(hotkeys = hotkeyState?.invoke(player, state.spell))
+        val current = liveState(player, state)
         states[player.uniqueId] = current
         worldIds[player.uniqueId] = player.world.uid
         renderSurface(player, current, preferences.read(player))
@@ -182,7 +184,9 @@ internal class StaffSpellHud(
     }
 
     private fun showBossBar(player: Player, state: StaffSpellHudState) {
-        val name = config.staffHudBossbar(state).append(state.hotkeys?.let {
+        val name = config.staffHudBossbar(state).append(armyText(state)?.let {
+            Component.text("  ·  ", net.kyori.adventure.text.format.TextColor.color(0x687D8F)).append(it)
+        } ?: Component.empty()).append(state.hotkeys?.let {
             Component.text("  ·  ", net.kyori.adventure.text.format.TextColor.color(0x687D8F))
                 .append(config.hotkeyHud(it))
         } ?: Component.empty())
@@ -233,7 +237,16 @@ internal class StaffSpellHud(
         StaffSpellHudPhase.CHANNEL -> config.staffHudChannel(state.spell, state.secondary)
         StaffSpellHudPhase.COOLDOWN -> config.staffHudCooldown(state.spell, state.secondary,
             state.remainingTicks, staffSpellHudBar(state.progress))
-    }).append(state.hotkeys?.let { Component.newline().append(config.hotkeyHud(it)) } ?: Component.empty())
+    }).append(armyText(state)?.let { Component.newline().append(it) } ?: Component.empty())
+        .append(state.hotkeys?.let { Component.newline().append(config.hotkeyHud(it)) } ?: Component.empty())
+
+    private fun armyText(state: StaffSpellHudState): Component? =
+        if (state.spell == StaffSpell.NECROMANCER) config.staffHudArmy(state.armyCount, STAFF_SUMMON_ARMY_LIMIT) else null
+
+    private fun liveState(player: Player, state: StaffSpellHudState) = state.copy(
+        hotkeys = hotkeyState?.invoke(player, state.spell),
+        armyCount = if (state.spell == StaffSpell.NECROMANCER) armyCount(player).coerceIn(0, STAFF_SUMMON_ARMY_LIMIT) else 0,
+    )
 
     private fun follow() {
         if (closed) return
@@ -266,7 +279,7 @@ internal class StaffSpellHud(
                     else -> Unit
                 }
             }
-            state = state.copy(hotkeys = hotkeyState?.invoke(player, state.spell))
+            state = liveState(player, state)
             states[playerId] = state
             renderSurface(player, state, preferences.read(player))
         }

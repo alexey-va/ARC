@@ -26,8 +26,8 @@ internal fun staffParticleOnlyQuick(spell: StaffSpell, input: StaffCastInput) = 
 internal fun staffArsenalLifetime(spell: StaffSpell, secondary: Boolean) = when (spell) {
     StaffSpell.GALE -> if (secondary) 40 else 52
     StaffSpell.TIDE -> if (secondary) 44 else STAFF_TIDE_PRIMARY_ATTACK_TICKS
-    StaffSpell.REQUIEM -> if (secondary) STAFF_REQUIEM_SECONDARY_DURATION_TICKS else 36
-    StaffSpell.NOVA -> if (secondary) 40 else 48
+    StaffSpell.REQUIEM -> if (secondary) STAFF_REQUIEM_SECONDARY_DURATION_TICKS else STAFF_REQUIEM_PRIMARY_DURATION_TICKS
+    StaffSpell.NOVA -> if (secondary) 96 else 106
     StaffSpell.OSSUARY -> if (secondary) 36 else 54
     else -> 40
 }
@@ -42,6 +42,8 @@ internal fun staffArsenalParts(spell: StaffSpell, ageTicks: Int, durationTicks: 
         return staffTideGaleParts(spell, age, durationTicks, radius, impact, secondary, q)
     if (spell == StaffSpell.REQUIEM)
         return staffRequiemBellParts(age, durationTicks, secondary, q)
+    if (spell == StaffSpell.OSSUARY)
+        return staffOssuaryRibParts(age, durationTicks, radius, secondary, q)
     val scale = .8 + q * .45
     val fade = smooth((durationTicks - 2 - age) / 8.0)
     val parts = mutableListOf<StaffDisplayPart>()
@@ -169,114 +171,6 @@ internal fun staffArsenalParts(spell: StaffSpell, ageTicks: Int, durationTicks: 
                         cos(a) * r, .16 + h * 1.15, (reach + sin(a) * r) / scale,
                         .2 * grasp, .48 * grasp, .22 * grasp, yaw = -a, roll = cos(a) * .28)
                 } }
-            }
-        }
-        StaffSpell.OSSUARY -> if (secondary) {
-            val extent = radius.takeIf { it.isFinite() && it > 0.0 }?.coerceIn(0.5, 16.0) ?: 5.5
-            val spread = smooth(age / (OSSUARY_SECONDARY_STRIKE_TICK - 2.0))
-            val angles = doubleArrayOf(-2.90, -1.63, -0.28, 1.02, 2.43)
-            fun bone(id: String, material: Material, cx: Double, cy: Double, cz: Double,
-                axis: Vector3f, boneLength: Double, width: Double) {
-                val orientation = Quaternionf().rotationTo(Vector3f(0f, 1f, 0f), Vector3f(axis).normalize())
-                part(id, material, cx / scale, cy, cz / scale,
-                    width, boneLength, width, orientation = orientation)
-            }
-            angles.forEachIndexed { cluster, angle ->
-                val radialX = cos(angle)
-                val radialZ = sin(angle)
-                val tangentX = -radialZ
-                val tangentZ = radialX
-                val stagger = (cluster % 3) * OSSUARY_SECONDARY_STAGGER_TICKS
-                val rise = smooth((age - OSSUARY_SECONDARY_ERUPT_TICK - stagger).toDouble() /
-                    OSSUARY_SECONDARY_RISE_TICKS)
-                val radial = extent * (0.27 + spread * .07 + sin(cluster * 1.7) * .035)
-                val baseX = radialX * radial
-                val baseZ = radialZ * radial
-                val height = (2.90 + q * .35 + (cluster % 3) * .16) * rise
-                val lean = .12 + (cluster % 2) * .08
-                val trunkAxis = Vector3f((radialX * lean).toFloat(), 1f,
-                    (radialZ * lean).toFloat()).normalize()
-                bone("bone:erupt:$cluster:spine", Material.BONE_BLOCK,
-                    baseX + radialX * height * lean * .35, -.32 + height * .39,
-                    baseZ + radialZ * height * lean * .35,
-                    trunkAxis, height * .78, .26 * rise)
-                bone("bone:erupt:$cluster:cap", Material.CALCITE,
-                    baseX + radialX * height * lean * .72, -.32 + height * .82,
-                    baseZ + radialZ * height * lean * .72,
-                    trunkAxis, .45 * rise, .15 * rise)
-                repeat(2) { branch ->
-                    val sign = if (branch == 0) -1.0 else 1.0
-                    val axis = Vector3f((radialX * .84 + tangentX * sign * .28).toFloat(),
-                        (.36 + (cluster % 2) * .05).toFloat(),
-                        (radialZ * .84 + tangentZ * sign * .28).toFloat()).normalize()
-                    val branchLength = extent * (.47 + (cluster % 3) * .018) * rise
-                    val anchorX = baseX + radialX * extent * .08 + radialX * height * lean * .44
-                    val anchorY = -.12 + height * .48 + (cluster % 2) * .11
-                    val anchorZ = baseZ + radialZ * extent * .08 + radialZ * height * lean * .44
-                    val bx = anchorX + axis.x * branchLength * .38
-                    val by = anchorY + axis.y * branchLength * .38
-                    val bz = anchorZ + axis.z * branchLength * .38
-                    bone("bone:erupt:$cluster:branch:$branch", Material.BONE_BLOCK,
-                        bx, by, bz, axis, branchLength * .76, .19 * rise)
-                    bone("bone:erupt:$cluster:tine:$branch", Material.CALCITE,
-                        anchorX + axis.x * branchLength * .86,
-                        anchorY + axis.y * branchLength * .86,
-                        anchorZ + axis.z * branchLength * .86,
-                        axis, .40 * rise, .12 * rise)
-                }
-            }
-        } else {
-            val extent = radius.takeIf { it.isFinite() && it > 0.0 }?.coerceIn(0.5, 16.0) ?: 2.75
-            val rise = smooth(age / OSSUARY_PRIMARY_RISE_TICKS.toDouble())
-            val split = smooth((age - 6.0) / 3.0)
-            val angles = doubleArrayOf(-2.78, -1.48, -0.16, 1.13, 2.48)
-            fun bone(id: String, material: Material, cx: Double, cy: Double, cz: Double,
-                axis: Vector3f, boneLength: Double, width: Double) {
-                val orientation = Quaternionf().rotationTo(Vector3f(0f, 1f, 0f), Vector3f(axis).normalize())
-                part(id, material, cx / scale, cy, cz / scale,
-                    width, boneLength, width, orientation = orientation)
-            }
-            angles.forEachIndexed { cluster, angle ->
-                val radialX = cos(angle)
-                val radialZ = sin(angle)
-                val tangentX = -radialZ
-                val tangentZ = radialX
-                val sway = sin(cluster * 1.63 + .5)
-                val baseRadius = extent * (.22 + rise * .09 + split * .025 + abs(sway) * .018)
-                val baseX = radialX * baseRadius
-                val baseZ = radialZ * baseRadius
-                val height = (2.0 + q * .35 + (cluster % 3) * .19) * rise
-                val lean = .15 + (cluster % 2) * .07
-                val spineAxis = Vector3f((radialX * lean).toFloat(), 1f,
-                    (radialZ * lean).toFloat()).normalize()
-                bone("bone:cluster:$cluster:spine", Material.BONE_BLOCK,
-                    baseX + radialX * height * lean * .35, -.22 + height * .39,
-                    baseZ + radialZ * height * lean * .35,
-                    spineAxis, height * .78, .25 * rise)
-                bone("bone:cluster:$cluster:cap", Material.CALCITE,
-                    baseX + radialX * height * lean * .72, -.22 + height * .82,
-                    baseZ + radialZ * height * lean * .72,
-                    spineAxis, .44 * rise, .14 * rise)
-                repeat(2) { branch ->
-                    val sign = if (branch == 0) -1.0 else 1.0
-                    val axis = Vector3f((radialX * .72 + tangentX * sign * .40).toFloat(),
-                        (.34 + abs(sway) * .08).toFloat(),
-                        (radialZ * .72 + tangentZ * sign * .40).toFloat()).normalize()
-                    val branchLength = extent * (.51 + split * .015 + (cluster % 2) * .012) * rise
-                    val anchorX = baseX + radialX * extent * .06 + radialX * height * lean * .42
-                    val anchorY = -.08 + height * (.42 + (cluster % 2) * .025)
-                    val anchorZ = baseZ + radialZ * extent * .06 + radialZ * height * lean * .42
-                    bone("bone:cluster:$cluster:branch:$branch", Material.BONE_BLOCK,
-                        anchorX + axis.x * branchLength * .38,
-                        anchorY + axis.y * branchLength * .38,
-                        anchorZ + axis.z * branchLength * .38,
-                        axis, branchLength * .76, .18 * rise)
-                    bone("bone:cluster:$cluster:tine:$branch", Material.CALCITE,
-                        anchorX + axis.x * branchLength * .84,
-                        anchorY + axis.y * branchLength * .84,
-                        anchorZ + axis.z * branchLength * .84,
-                        axis, .38 * rise, .12 * rise)
-                }
             }
         }
         else -> Unit

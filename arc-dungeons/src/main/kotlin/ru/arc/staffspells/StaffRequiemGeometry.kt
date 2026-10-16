@@ -12,10 +12,12 @@ import kotlin.math.sin
 
 internal const val STAFF_REQUIEM_PRIMARY_CLANG_TICK = 16
 internal const val STAFF_REQUIEM_PRIMARY_END_TICK = 30
+internal val STAFF_REQUIEM_PRIMARY_CLANG_TICKS = listOf(16, 40, 64)
+internal const val STAFF_REQUIEM_PRIMARY_DURATION_TICKS = 86
 internal const val STAFF_REQUIEM_PRIMARY_RADIUS = 5.0
-internal val STAFF_REQUIEM_SECONDARY_CLANG_TICKS = listOf(16, 36, 56)
-internal const val STAFF_REQUIEM_SECONDARY_FRONT_TICKS = 10
-internal const val STAFF_REQUIEM_SECONDARY_DURATION_TICKS = 72
+internal val STAFF_REQUIEM_SECONDARY_CLANG_TICKS = listOf(16, 40, 64, 88, 112)
+internal const val STAFF_REQUIEM_SECONDARY_FRONT_TICKS = 14
+internal const val STAFF_REQUIEM_SECONDARY_DURATION_TICKS = 134
 internal const val STAFF_REQUIEM_SECONDARY_RADIUS = 7.0
 internal const val STAFF_REQUIEM_COLLISION_RAY_COUNT = 24
 
@@ -29,7 +31,7 @@ internal data class StaffRequiemPulse(
 /** Shared timing for the preview and the collision front. */
 internal fun staffRequiemPulse(ageTicks: Int, secondary: Boolean): StaffRequiemPulse? {
     val age = ageTicks.coerceAtLeast(0)
-    val starts = if (secondary) STAFF_REQUIEM_SECONDARY_CLANG_TICKS else listOf(STAFF_REQUIEM_PRIMARY_CLANG_TICK)
+    val starts = if (secondary) STAFF_REQUIEM_SECONDARY_CLANG_TICKS else STAFF_REQUIEM_PRIMARY_CLANG_TICKS
     val travelTicks = if (secondary) STAFF_REQUIEM_SECONDARY_FRONT_TICKS
         else STAFF_REQUIEM_PRIMARY_END_TICK - STAFF_REQUIEM_PRIMARY_CLANG_TICK
     val index = starts.indexOfLast { age >= it }
@@ -49,14 +51,15 @@ internal fun staffRequiemBellParts(ageTicks: Int, durationTicks: Int, secondary:
     if (age >= duration) return emptyList()
     val q = charge.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
     val clang = (if (secondary) STAFF_REQUIEM_SECONDARY_CLANG_TICKS
-        else listOf(STAFF_REQUIEM_PRIMARY_CLANG_TICK)).lastOrNull { age >= it }
+        else STAFF_REQUIEM_PRIMARY_CLANG_TICKS).lastOrNull { age >= it }
     val swingAge = clang?.let { (age - it).toDouble() } ?: -1.0
     val swing = if (swingAge in 0.0..8.0) sin(swingAge * .8) * exp(-swingAge * .3) else 0.0
     val assembly = requiemSmooth(age / 8.0)
     val fade = requiemSmooth((duration - age) / 6.0)
     val opening = .55 + .45 * assembly
-    val scale = (.9 + q * .15) * fade
-    val bodyTilt = swing * .13
+    val bodyScale = if (secondary) 1.70 else 1.42
+    val scale = (bodyScale + q * .15) * fade
+    val bodyTilt = swing * .21
     val hingeY = 5.18
     val parts = ArrayList<StaffDisplayPart>(34)
     fun part(id: String, material: Material, x: Double, y: Double, z: Double,
@@ -68,7 +71,7 @@ internal fun staffRequiemBellParts(ageTicks: Int, durationTicks: Int, secondary:
         val turnedX = expandedX * cos(bodyTilt) - pivotY * sin(bodyTilt)
         val turnedY = hingeY + expandedX * sin(bodyTilt) + pivotY * cos(bodyTilt)
         parts += StaffDisplayPart(material,
-            Vector3f((turnedX * scale).toFloat(), turnedY.toFloat(), (expandedZ * scale).toFloat()),
+            Vector3f((turnedX * scale).toFloat(), (4.0 + (turnedY - 4.0) * bodyScale).toFloat(), (expandedZ * scale).toFloat()),
             Vector3f((sx * scale * opening).coerceAtLeast(.001).toFloat(),
                 (sy * scale).coerceAtLeast(.001).toFloat(), (sz * scale * opening).coerceAtLeast(.001).toFloat()),
             Quaternionf().rotationZ(bodyTilt.toFloat()).rotateY(yaw.toFloat()), identity = id)
@@ -111,7 +114,9 @@ internal fun staffRequiemParticles(ageTicks: Int, durationTicks: Int, secondary:
         out += StaffParticleSample(particle, Vector(x, y, z), data = data)
     }
     val pulse = staffRequiemPulse(age, secondary)
-    val primaryTail = !secondary && age > STAFF_REQUIEM_PRIMARY_END_TICK && age < durationTicks
+    val finalFront = if (secondary) STAFF_REQUIEM_SECONDARY_CLANG_TICKS.last() + STAFF_REQUIEM_SECONDARY_FRONT_TICKS
+        else STAFF_REQUIEM_PRIMARY_CLANG_TICKS.last() + STAFF_REQUIEM_PRIMARY_END_TICK - STAFF_REQUIEM_PRIMARY_CLANG_TICK
+    val primaryTail = age > finalFront && age < durationTicks
     if (pulse == null && !primaryTail) {
         repeat(32) { index ->
             val angle = index * PI * 2 / 32 + age * .025
@@ -130,7 +135,7 @@ internal fun staffRequiemParticles(ageTicks: Int, durationTicks: Int, secondary:
     val safeRadius = radius.takeIf(Double::isFinite)?.coerceIn(0.0, 64.0) ?: 0.0
     val progress = pulse?.progress ?: 1.0
     val fade = if (primaryTail) ((durationTicks - age).toDouble() /
-        (durationTicks - STAFF_REQUIEM_PRIMARY_END_TICK)).coerceIn(0.0, 1.0) else 1.0
+        (durationTicks - finalFront).coerceAtLeast(1)).coerceIn(0.0, 1.0) else 1.0
     val moteCount = (STAFF_REQUIEM_COLLISION_RAY_COUNT * 2 * fade).toInt().coerceAtLeast(1)
     repeat(moteCount) { index ->
         val ray = index / 2

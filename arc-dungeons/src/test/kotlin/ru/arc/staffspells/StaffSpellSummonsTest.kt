@@ -381,7 +381,8 @@ class StaffSpellSummonsTest : FreeSpec({
         withSummonHarness { h ->
             val world = h.paper.addSimpleWorld("summon-no-floor")
             loadSummonChunks(world)
-            for (x in -4..4) for (z in -4..4) world.getBlockAt(x, 63, z).type = Material.AIR
+            // Clear the full supported 64-block aerial search, including its lowest support block.
+            for (x in -4..4) for (z in -4..4) for (y in maxOf(world.minHeight, -1)..63) world.getBlockAt(x, y, z).type = Material.AIR
             val owner = h.player("summon-no-floor-owner", world, StaffSpell.NECROMANCER)
             h.controller.start()
 
@@ -446,7 +447,8 @@ class StaffSpellSummonsTest : FreeSpec({
                 val firstSquad = world.entities.filterIsInstance<Skeleton>().filter { it.isValid }
                 firstSquad.size shouldBe 2
 
-                for (x in -4..4) for (z in -4..4) world.getBlockAt(x, 63, z).type = Material.AIR
+                // Clear the full supported 64-block aerial search, including its lowest support block.
+                for (x in -4..4) for (z in -4..4) for (y in maxOf(world.minHeight, -1)..63) world.getBlockAt(x, y, z).type = Material.AIR
                 cast() shouldBe false
                 firstSquad.all { it.isValid } shouldBe true
 
@@ -499,6 +501,7 @@ class StaffSpellSummonsTest : FreeSpec({
             liveActors().size shouldBe 9
             cast(StaffCastInput.SECONDARY) shouldBe StaffSummonCastResult.CAST
             liveActors().size shouldBe 10
+            summons.countFor(owner.uniqueId) shouldBe 10
             cast(StaffCastInput.SECONDARY) shouldBe StaffSummonCastResult.CAPACITY
             liveActors().size shouldBe 10
 
@@ -507,8 +510,10 @@ class StaffSpellSummonsTest : FreeSpec({
             h.scheduler.tick(1)
             oldestSquad.all { !it.isValid } shouldBe true
             liveActors().size shouldBe 8
+            summons.countFor(owner.uniqueId) shouldBe 8
             h.scheduler.tick(450)
             liveActors() shouldBe emptyList()
+            summons.countFor(owner.uniqueId) shouldBe 0
         }
     }
 
@@ -547,6 +552,33 @@ class StaffSpellSummonsTest : FreeSpec({
             val actors = world.entities.filterIsInstance<Skeleton>()
             actors.size shouldBe 2
             actors.all { kotlin.math.abs(it.location.y - 63.5) < 0.001 } shouldBe true
+        }
+    }
+
+    "airborne summons project to loaded ground within sixty-four blocks and count only live owned actors" {
+        for (height in listOf(80.0, 128.0, 129.0)) withSummonHarness { h ->
+            val world = h.paper.addSimpleWorld("summon-airborne-$height")
+            loadSummonChunks(world)
+            val owner = h.player("summon-airborne-owner", world, StaffSpell.NECROMANCER)
+            owner.teleport(Location(world, .5, height, .5).setDirection(Vector(0.0, 0.0, 1.0)))
+            owner.allowFlight = true
+            owner.isFlying = true
+            h.controller.start()
+
+            h.controller.cast(owner, StaffCastInput.PRIMARY, 0.0)
+
+            val actors = world.entities.filterIsInstance<AbstractSkeleton>()
+            val expected = if (height <= 128.0) 2 else 0
+            actors.size shouldBe expected
+            actors.all { it.location.y == 64.0 } shouldBe true
+            h.controller.summons.countFor(owner.uniqueId) shouldBe expected
+            h.controller.summons.countFor(UUID.randomUUID()) shouldBe 0
+            if (actors.isNotEmpty()) {
+                actors.first().remove()
+                h.controller.summons.countFor(owner.uniqueId) shouldBe 1
+            }
+            h.controller.onQuit(PlayerQuitEvent(owner, Component.empty()))
+            h.controller.summons.countFor(owner.uniqueId) shouldBe 0
         }
     }
 

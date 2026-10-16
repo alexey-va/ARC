@@ -192,7 +192,8 @@ class StaffSpellTimelineTest : FreeSpec({
                 }
                 val shards = staffArsenalParticles(StaffSpell.LUNAR, 16, 40,
                     2.2 + charge, secondary, charge)
-                (shards.size in 30..48) shouldBe true
+                // The secondary stops replenishing its intact crescents on contact; only the 14 shards remain.
+                shards.size shouldBe if (secondary) 14 else 30
                 (shards.maxOf { hypot(it.offset.x, it.offset.z) } <= 2.9 + charge + .04) shouldBe true
             }
         }

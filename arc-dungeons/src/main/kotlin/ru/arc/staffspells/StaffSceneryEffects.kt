@@ -8,6 +8,12 @@ import org.bukkit.block.Block
 import org.bukkit.block.TileState
 import org.bukkit.block.data.BlockData
 import org.bukkit.entity.Player
+import org.bukkit.event.EventHandler
+import org.bukkit.event.EventPriority
+import org.bukkit.event.HandlerList
+import org.bukkit.event.Listener
+import org.bukkit.event.player.PlayerMoveEvent
+import org.bukkit.util.BoundingBox
 import org.bukkit.util.Vector
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.paper.display.PaperPacketDisplays
@@ -31,11 +37,12 @@ internal class StaffSceneryEffects(
     private val displays: PaperPacketDisplays,
     allowedWorlds: Set<String>,
     private val tasks: LifecycleTaskScope = LifecycleTaskScope(),
-) : AutoCloseable {
+) : AutoCloseable, Listener {
     private data class BlockKey(val worldId: UUID, val x: Int, val y: Int, val z: Int)
     private data class ChunkKey(val x: Int, val z: Int)
     private data class SceneryBlock(val key: BlockKey, val data: BlockData)
     private data class Debris(
+        val key: BlockKey,
         val display: PacketBlockDisplay,
         val origin: Location,
         val angle: Double,
@@ -49,6 +56,7 @@ internal class StaffSceneryEffects(
         val center: Location,
         val viewers: List<Player>,
         val blocks: List<SceneryBlock>,
+        val maskedFor: Map<UUID, MutableSet<BlockKey>>,
         val debris: MutableList<Debris>,
         val displayViewers: MutableSet<UUID>,
         val depression: Boolean = false,
@@ -98,6 +106,11 @@ internal class StaffSceneryEffects(
             .take(MAX_VIEWERS)
             .toList()
         if (viewers.isEmpty()) return
+        val maskedFor = viewers.associate { viewer ->
+            val nearbyBody = approachBounds(viewer, viewer.location, viewer.location)
+            viewer.uniqueId to blocks.asSequence().filterNot { intersects(nearbyBody, it.key) }
+                .mapTo(mutableSetOf()) { it.key }
+        }
 
         val debris = mutableListOf<Debris>()
         try {
@@ -107,12 +120,12 @@ internal class StaffSceneryEffects(
                     isVisibleByDefault = false
                     viewRange = (VIEW_RANGE / 64.0).toFloat()
                     teleportDuration = if (depression) 2 else DEBRIS_FRAME_TICKS
-                    viewers.forEach(::showTo)
+                    viewers.filter { block.key in maskedFor.getValue(it.uniqueId) }.forEach(::showTo)
                 }
                 val dx = block.key.x + .5 - center.x
                 val dz = block.key.z + .5 - center.z
                 val angle = if (dx * dx + dz * dz < .01) index * GOLDEN_ANGLE else atan2(dz, dx)
-                debris += Debris(display, origin, angle, .10 + index % 4 * .02, .16 + index % 3 * .025)
+                debris += Debris(block.key, display, origin, angle, .10 + index % 4 * .02, .16 + index % 3 * .025)
             }
         } catch (failure: RuntimeException) {
             debris.forEach { it.display.remove() }
@@ -120,7 +133,7 @@ internal class StaffSceneryEffects(
             return
         }
 
-        val scene = Scene(casterId, world, world.uid, center, viewers, blocks, debris,
+        val scene = Scene(casterId, world, world.uid, center, viewers, blocks, maskedFor, debris,
             viewers.mapTo(mutableSetOf()) { it.uniqueId }, depression = depression)
         scenes += scene
         maskedBlocks += blocks.map { it.key }
@@ -138,6 +151,14 @@ internal class StaffSceneryEffects(
         scenes.filter { it.casterId == casterId }.toList().forEach(::finish)
     }
 
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun onMove(event: PlayerMoveEvent) {
+        if (closed || event.from.world != event.to.world ||
+            event.from.toVector() == event.to.toVector()) return
+        val bounds = approachBounds(event.player, event.from, event.to)
+        scenes.toList().forEach { restoreNear(it, event.player, bounds) }
+    }
+
     private fun tick() {
         if (closed) return
         scenes.toList().forEach { scene ->
@@ -146,6 +167,10 @@ internal class StaffSceneryEffects(
                 return@forEach
             }
             pruneDisplayAudience(scene)
+            scene.viewers.filter { it.isOnline && it.world.uid == scene.worldId }.forEach { viewer ->
+                val at = viewer.location
+                restoreNear(scene, viewer, approachBounds(viewer, at, at))
+            }
             scene.age++
             val lifetime = if (scene.depression) STAFF_SCENERY_DEPRESSION_TICKS else DEBRIS_LIFETIME
             val frameTicks = if (scene.depression) 2 else DEBRIS_FRAME_TICKS
@@ -165,6 +190,41 @@ internal class StaffSceneryEffects(
             if (scene.age >= if (scene.depression) lifetime else BLOCK_MASK_LIFETIME) finish(scene)
         }
     }
+
+    /** Restore before contact, including movement packets that cross the whole safety margin. */
+    private fun approachBounds(player: Player, from: Location, to: Location): BoundingBox {
+        val current = player.location
+        val body = player.boundingBox
+        return body.clone().shift(from.x - current.x, from.y - current.y, from.z - current.z)
+            .union(body.clone().shift(to.x - current.x, to.y - current.y, to.z - current.z))
+            .expand(APPROACH_MARGIN)
+    }
+
+    private fun intersects(bounds: BoundingBox, key: BlockKey) = bounds.overlaps(
+        BoundingBox(key.x.toDouble(), key.y.toDouble(), key.z.toDouble(), key.x + 1.0, key.y + 1.0, key.z + 1.0))
+
+    private fun restoreNear(scene: Scene, viewer: Player, bounds: BoundingBox) {
+        if (scene.restoring || !viewer.isOnline || viewer.world.uid != scene.worldId) return
+        val masked = scene.maskedFor[viewer.uniqueId] ?: return
+        val nearby = scene.blocks.filter { it.key in masked && intersects(bounds, it.key) }
+        if (nearby.isEmpty()) return
+        try {
+            val current = currentStates(scene, nearby)
+            if (!sendBlocks(scene, current, listOf(viewer))) return
+            val restored = current.keys.mapTo(hashSetOf()) { it.key }
+            masked.removeAll(restored)
+            scene.debris.filter { it.key in restored }.forEach { it.display.hideFrom(viewer) }
+        } catch (failure: RuntimeException) {
+            warn(scene, "nearby block restore", failure)
+        }
+    }
+
+    private fun currentStates(scene: Scene, blocks: List<SceneryBlock>): Map<SceneryBlock, BlockData> =
+        blocks.mapNotNull { block ->
+            val key = block.key
+            if (!scene.world.isChunkLoaded(key.x shr 4, key.z shr 4)) null
+            else block to scene.world.getBlockAt(key.x, key.y, key.z).blockData.clone()
+        }.toMap()
 
     private fun pruneDisplayAudience(scene: Scene) {
         scene.viewers.asSequence()
@@ -235,17 +295,19 @@ internal class StaffSceneryEffects(
     }
 
     @Suppress("DEPRECATION")
-    private fun sendBlocks(scene: Scene, states: Map<SceneryBlock, BlockData>): Boolean {
+    private fun sendBlocks(scene: Scene, states: Map<SceneryBlock, BlockData>, viewers: List<Player> = scene.viewers): Boolean {
         var sent = true
         states.entries.groupBy { ChunkKey(it.key.key.x shr 4, it.key.key.z shr 4) }.forEach { (chunk, entries) ->
             if (!scene.world.isChunkLoaded(chunk.x, chunk.z)) return@forEach
             val sentTo = scene.world.getPlayersSeeingChunk(chunk.x, chunk.z).mapTo(hashSetOf()) { it.uniqueId }
             if (sentTo.isEmpty()) return@forEach
-            val changes = entries.associate { (block, data) ->
-                Location(scene.world, block.key.x.toDouble(), block.key.y.toDouble(), block.key.z.toDouble()) to data.clone()
-            }
-            scene.viewers.filter { it.uniqueId in sentTo && it.isOnline && it.world.uid == scene.worldId }
+            viewers.filter { it.uniqueId in sentTo && it.isOnline && it.world.uid == scene.worldId }
                 .forEach { player ->
+                    val masked = scene.maskedFor[player.uniqueId].orEmpty()
+                    val changes = entries.filter { it.key.key in masked }.associate { (block, data) ->
+                        Location(scene.world, block.key.x.toDouble(), block.key.y.toDouble(), block.key.z.toDouble()) to data.clone()
+                    }
+                    if (changes.isEmpty()) return@forEach
                     try {
                         player.sendMultiBlockChange(changes)
                     } catch (failure: RuntimeException) {
@@ -277,12 +339,7 @@ internal class StaffSceneryEffects(
             .flatMap { it.blocks.asSequence() }
             .mapTo(hashSetOf()) { it.key }
         val restored = try {
-            val current = scene.blocks.mapNotNull { block ->
-                val key = block.key
-                if (key in otherMasks || !scene.world.isChunkLoaded(key.x shr 4, key.z shr 4)) return@mapNotNull null
-                val live = scene.world.getBlockAt(key.x, key.y, key.z)
-                block to live.blockData.clone()
-            }.toMap()
+            val current = currentStates(scene, scene.blocks.filter { it.key !in otherMasks })
             current.isEmpty() || sendBlocks(scene, current)
         } catch (failure: RuntimeException) {
             warn(scene, "block restore", failure)
@@ -311,6 +368,7 @@ internal class StaffSceneryEffects(
         closed = true
         try {
             tasks.close()
+            HandlerList.unregisterAll(this)
         } finally {
             try {
                 scenes.toList().forEach { scene ->
@@ -351,6 +409,7 @@ internal class StaffSceneryEffects(
         private const val MAX_SCENES = 8
         private const val MAX_SCENERY_BLOCKS = MAX_SCENES * MAX_BLOCKS_PER_SCENE
         private const val VIEW_RANGE = 32.0
+        private const val APPROACH_MARGIN = 1.5
         private const val DEBRIS_FRAME_TICKS = 4
         private const val DEBRIS_LIFETIME = 20
         private const val BLOCK_MASK_LIFETIME = 40

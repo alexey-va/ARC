@@ -12,6 +12,71 @@ import org.bukkit.util.Vector
 import java.util.UUID
 
 class StaffSpellConjurationsTest : FreeSpec({
+    "empty MARK FROST and TIDE Q casts keep a visible bounded scene without damage or roots" {
+        for (spell in listOf(StaffSpell.MARK, StaffSpell.FROST, StaffSpell.TIDE)) withStaffHarness { h ->
+            val scenes = mutableListOf<CustomConjurationScene>()
+            val removed = mutableListOf<UUID?>()
+            recordConjurationScenes(h, scenes, removed)
+            val world = h.paper.addSimpleWorld("staff-empty-conjuration-${spell.id}")
+            val player = h.player("staff-empty-conjuration-${spell.id}", world, spell)
+
+            h.controller.conjurations.cast(player, spell, conjurationCast(player),
+                staffSettings().tuning.getValue(spell)) shouldBe true
+
+            scenes.size shouldBe 1
+            scenes.single().geometry(8).isNotEmpty() shouldBe true
+            h.hits shouldBe emptyList()
+            h.scheduler.tick(200)
+            h.hits shouldBe emptyList()
+            (scenes.single().id in removed) shouldBe true
+        }
+    }
+
+    "an empty conjuration consumes cooldown only after its scene is accepted" {
+        for (spell in listOf(StaffSpell.MARK, StaffSpell.FROST, StaffSpell.TIDE)) withStaffHarness { h ->
+            every { h.effects.custom(any(), any(), any(), any(), any()) } returns null
+            val world = h.paper.addSimpleWorld("staff-empty-conjuration-budget-${spell.id}")
+            val player = h.player("staff-empty-conjuration-budget-${spell.id}", world, spell)
+            h.controller.start()
+            h.controller.hotkey(player, spell, StaffHotkey.Q)
+            h.cooldowns.remainingTicks(player.uniqueId) shouldBe 0L
+            val scenes = mutableListOf<CustomConjurationScene>()
+            recordConjurationScenes(h, scenes, mutableListOf())
+
+            h.controller.hotkey(player, spell, StaffHotkey.Q)
+
+            scenes.size shouldBe 1
+            h.cooldowns.remainingTicks(player.uniqueId) shouldBe 4L
+            h.hits shouldBe emptyList()
+        }
+    }
+
+    "attack roots survive item swaps and damage and clear only their captured attack identity" {
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("staff-attack-root-identity")
+            val player = h.player("staff-attack-root-identity", world, StaffSpell.NOVA)
+            val target = h.zombie(world, .5, 4.5)
+            val cast = conjurationCast(player)
+            val otherAttack = UUID.randomUUID()
+            val roots = h.controller.conjurations
+
+            roots.rootTarget(player, target, cast, 70) shouldBe true
+            roots.rootActive(target.uniqueId, cast.attackId) shouldBe true
+            roots.rootActive(target.uniqueId, otherAttack) shouldBe false
+            roots.clearRoots(otherAttack)
+            player.inventory.setItemInMainHand(h.config.item(StaffSpell.EMBER))
+            roots.onConjurationTargetDamage(EntityDamageEvent(target, EntityDamageEvent.DamageCause.ENTITY_ATTACK, 2.0))
+            target.health -= 2.0
+            h.paper.performTicks(1)
+            h.scheduler.tick(1)
+            roots.rootActive(target.uniqueId, cast.attackId) shouldBe true
+
+            roots.clearRoots(cast.attackId)
+            roots.rootActive(target.uniqueId, cast.attackId) shouldBe false
+            target.hasPotionEffect(PotionEffectType.SLOWNESS) shouldBe false
+        }
+    }
+
     "REQUIEM impact scene survives cleanup and recast belongs to the held staff" {
         StaffMagicBarriers.clear()
         try {

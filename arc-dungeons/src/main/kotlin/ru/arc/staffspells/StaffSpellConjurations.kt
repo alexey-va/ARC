@@ -30,7 +30,7 @@ internal class StaffSpellConjurations(
 ) : Listener, AutoCloseable {
     private sealed interface Payload
     private data class FaultPayload(val barrierId: UUID) : Payload
-    private data class MarkPayload(val targetId: UUID, var targetOffset: Vector) : Payload
+    private data class MarkPayload(val targetId: UUID?, var targetOffset: Vector) : Payload
     private enum class TrapKind { NOVA, OSSUARY }
     private data class TrapPayload(
         val kind: TrapKind,
@@ -41,7 +41,7 @@ internal class StaffSpellConjurations(
         var triggered: Boolean = false,
     ) : Payload
     private data class GalePayload(val sideways: Vector, var hit: Boolean = false) : Payload
-    private data class TidePayload(val targetId: UUID) : Payload
+    private data class TidePayload(val targetId: UUID?) : Payload
     private data class RequiemPayload(var struck: Boolean = false) : Payload
     private data class FrostPulsePayload(val targets: List<UUID>) : Payload
 
@@ -149,6 +149,24 @@ internal class StaffSpellConjurations(
         frostSlows[key] = FrostSlow(key, cast, clock, duration, active.amplifier)
     }
 
+    fun rootTarget(player: Player, target: LivingEntity, cast: StaffSpellCast, durationTicks: Int): Boolean {
+        if (closed) return false
+        start()
+        return applyRoot(player, target, cast, durationTicks, breakOnDamage = false)
+    }
+
+    fun rootActive(targetId: UUID, attackId: UUID): Boolean = roots[targetId]?.let { root ->
+        val player = Bukkit.getPlayer(root.ownerId)
+        val target = Bukkit.getEntity(targetId) as? LivingEntity
+        root.cast.attackId == attackId && player != null && target != null && target.isValid && !target.isDead &&
+            current(player, root.cast) && damage.eligible(player, target, root.cast) &&
+            visible(player.eyeLocation, center(target)) && rootElapsed(root) < root.durationTicks && rootStillInstalled(target, root)
+    } == true
+
+    fun clearRoots(attackId: UUID) {
+        roots.values.filter { it.cast.attackId == attackId }.toList().forEach(::clearRoot)
+    }
+
     fun cancel(owner: UUID) {
         sessions.remove(owner)?.let(::remove)
         frostSlows.keys.filter { it.ownerId == owner }.forEach(frostSlows::remove)
@@ -209,13 +227,13 @@ internal class StaffSpellConjurations(
     }
 
     private fun placeMark(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning): Boolean {
-        val target = targeting.aimed(player, settings.range, settings.aimDegrees, cast).firstOrNull() ?: return false
-        if (!damage.eligible(player, target, cast) || !visible(player.eyeLocation, center(target))) return false
+        val target = targeting.aimed(player, settings.range, settings.aimDegrees, cast).firstOrNull()
+        if (target != null && (!damage.eligible(player, target, cast) || !visible(player.eyeLocation, center(target)))) return false
         val eye = player.eyeLocation
         val forward = horizontal(eye.direction, eye.yaw) ?: return false
-        val anchor = center(target)
-        val payload = MarkPayload(target.uniqueId, Vector())
-        val duration = settings.markTicks.coerceIn(MARK_MIN_DURATION, MARK_MAX_DURATION)
+        val anchor = target?.let(::center) ?: emptyAimPoint(player) ?: return false
+        val payload = MarkPayload(target?.uniqueId, if (target == null) Vector(0.0, 1.1, 0.0) else Vector())
+        val duration = if (target == null) 36 else settings.markTicks.coerceIn(MARK_MIN_DURATION, MARK_MAX_DURATION)
         val session = newSession(player, StaffSpell.MARK, cast, tuning, anchor, forward, forward,
             atan2(forward.x, forward.z), duration, payload) { age -> staffMarkTetherParts(age, payload.targetOffset) }
             ?: return false
@@ -238,8 +256,8 @@ internal class StaffSpellConjurations(
             .sortedBy { (_, target) -> center(target).distanceSquared(player.location) }
             .take(settings.maxAreaTargets.coerceIn(1, CONJURATION_TARGET_LIMIT))
             .toList()
-        if (candidates.isEmpty()) return false
-        val focus = center(candidates.first().second)
+        val focus = candidates.firstOrNull()?.second?.let(::center)
+            ?: emptyAimPoint(player, 4.5)?.subtract(0.0, .6, 0.0) ?: return false
         val forward = horizontal(player.eyeLocation.direction, player.eyeLocation.yaw) ?: return false
         val scene = effects.custom(player.uniqueId, StaffSpell.FROST, focus, FROST_THAW_TICKS, ::staffFrostThawParts)
             ?: return false
@@ -255,9 +273,9 @@ internal class StaffSpellConjurations(
             frostSlows.remove(mark.key)
             consumed += target.uniqueId
         }
-        if (consumed.isEmpty()) {
+        if (!damage.isCurrent(player, cast)) {
             effects.remove(scene)
-            return false
+            return consumed.isNotEmpty()
         }
         sessions[player.uniqueId] = Session(player.uniqueId, StaffSpell.FROST, cast, tuning, focus,
             forward, forward, atan2(forward.x, forward.z), FROST_THAW_TICKS,
@@ -321,33 +339,34 @@ internal class StaffSpellConjurations(
     }
 
     private fun castTideCapsule(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning): Boolean {
-        val target = targeting.aimed(player, settings.range, settings.aimDegrees, cast).firstOrNull() ?: return false
-        if (!damage.eligible(player, target, cast) || !visible(player.eyeLocation, center(target))) return false
-        val anchor = target.location.clone()
+        val target = targeting.aimed(player, settings.range, settings.aimDegrees, cast).firstOrNull()
+        if (target != null && (!damage.eligible(player, target, cast) || !visible(player.eyeLocation, center(target)))) return false
+        val anchor = target?.location?.clone() ?: emptyAimPoint(player)?.subtract(0.0, .8, 0.0) ?: return false
         val forward = horizontal(player.eyeLocation.direction, player.eyeLocation.yaw) ?: return false
-        val payload = TidePayload(target.uniqueId)
+        val payload = TidePayload(target?.uniqueId)
         val session = newSession(player, StaffSpell.TIDE, cast, tuning, anchor, forward, forward,
             atan2(forward.x, forward.z), TIDE_CAPSULE_DURATION, payload, ::staffTideCapsuleParts) ?: return false
-        if (!damage.hit(player, target, cast, tuning.power * TIDE_OPENING_DAMAGE_MULTIPLIER,
+        if (target != null && !damage.hit(player, target, cast, tuning.power * TIDE_OPENING_DAMAGE_MULTIPLIER,
                 tuning.vanillaDamage * TIDE_OPENING_DAMAGE_MULTIPLIER)) {
             effects.remove(session.sceneId)
             return false
         }
-        if (!damage.isCurrent(player, cast) || !damage.eligible(player, target, cast) ||
-            !visible(player.eyeLocation, center(target))) {
+        if (!damage.isCurrent(player, cast) || target != null && (!damage.eligible(player, target, cast) ||
+            !visible(player.eyeLocation, center(target)))) {
             effects.remove(session.sceneId)
             return true
         }
-        val rooted = applyRoot(player, target, cast, TIDE_CAPSULE_DURATION, breakOnDamage = true)
+        val rooted = target == null || applyRoot(player, target, cast, TIDE_CAPSULE_DURATION, breakOnDamage = true)
         if (!rooted) {
             effects.remove(session.sceneId)
             return true // The accepted opening hit remains an admitted cast if another root already owns the target.
         }
         sessions[player.uniqueId] = session
         visuals.withOwner(player.uniqueId) {
-            visuals.cue(center(target), Sound.ENTITY_PLAYER_SPLASH, 0.82f, 0.75f)
-            visuals.cue(center(target), Sound.BLOCK_BUBBLE_COLUMN_UPWARDS_AMBIENT, 0.42f, 0.72f)
-            visuals.particles(center(target), listOf(
+            val at = target?.let(::center) ?: anchor.clone().add(0.0, .9, 0.0)
+            visuals.cue(at, Sound.ENTITY_PLAYER_SPLASH, 0.82f, 0.75f)
+            visuals.cue(at, Sound.BLOCK_BUBBLE_COLUMN_UPWARDS_AMBIENT, 0.42f, 0.72f)
+            visuals.particles(at, listOf(
                 StaffParticleSample(Particle.SPLASH, Vector(), 16, Vector(0.35, 0.5, 0.35), 0.04),
                 StaffParticleSample(Particle.BUBBLE, Vector(0.0, 0.45, 0.0), 7, Vector(0.22, 0.4, 0.22), 0.015),
             ))
@@ -404,6 +423,14 @@ internal class StaffSpellConjurations(
         if (ground.world != player.world || ground.distance(eye) < minDistance ||
             !visible(eye, ground.clone().add(0.0, 0.85, 0.0))) return null
         return ground
+    }
+
+    private fun emptyAimPoint(player: Player, range: Double = 6.0): Location? {
+        val eye = player.eyeLocation
+        val at = targeting.rayEnd(eye, eye.direction, minOf(settings.range, range))
+        if (at.world != player.world || eye.distanceSquared(at) < 1.2 * 1.2) return null
+        at.subtract(eye.direction.clone().multiply(.08))
+        return at.takeIf { player.world.isChunkLoaded(it.blockX shr 4, it.blockZ shr 4) && visible(eye, it) }
     }
 
     private fun trapParticles(kind: TrapKind) = if (kind == TrapKind.NOVA) listOf(
@@ -521,7 +548,7 @@ internal class StaffSpellConjurations(
             if (sessions[session.ownerId] === session && session.age >= session.durationTicks) {
                 visuals.withOwner(session.ownerId) {
                     when (val payload = session.payload) {
-                        is TidePayload -> visuals.cue((Bukkit.getEntity(payload.targetId) as? LivingEntity)
+                        is TidePayload -> visuals.cue((payload.targetId?.let(Bukkit::getEntity) as? LivingEntity)
                             ?.let(::center) ?: session.anchor, Sound.ENTITY_PLAYER_SWIM, 0.46f, 1.3f)
                         is TrapPayload -> if (!payload.triggered) visuals.cue(session.anchor,
                             if (payload.kind == TrapKind.NOVA) Sound.BLOCK_AZALEA_LEAVES_BREAK else Sound.BLOCK_BONE_BLOCK_FALL,
@@ -538,7 +565,8 @@ internal class StaffSpellConjurations(
     }
 
     private fun tickMark(player: Player, session: Session, payload: MarkPayload) {
-        val target = Bukkit.getEntity(payload.targetId) as? LivingEntity
+        val targetId = payload.targetId ?: return
+        val target = Bukkit.getEntity(targetId) as? LivingEntity
         if (target == null || !target.isValid || target.isDead || target.world != session.anchor.world ||
             !damage.eligible(player, target, session.cast)) {
             endSession(session)
@@ -644,8 +672,9 @@ internal class StaffSpellConjurations(
     }
 
     private fun tickTideCapsule(player: Player, session: Session, payload: TidePayload) {
-        val target = Bukkit.getEntity(payload.targetId) as? LivingEntity
-        val root = roots[payload.targetId]
+        val targetId = payload.targetId ?: return
+        val target = Bukkit.getEntity(targetId) as? LivingEntity
+        val root = roots[targetId]
         if (target == null || root == null || !target.isValid || target.isDead ||
             !damage.eligible(player, target, session.cast) || !visible(player.eyeLocation, center(target))) {
             cancel(session.ownerId)
@@ -733,7 +762,7 @@ internal class StaffSpellConjurations(
         if (sessions[session.ownerId] === session) sessions.remove(session.ownerId)
         remove(session)
         (session.payload as? TidePayload)?.let { payload ->
-            roots[payload.targetId]?.takeIf { it.ownerId == session.ownerId }?.let(::clearRoot)
+            payload.targetId?.let(roots::get)?.takeIf { it.ownerId == session.ownerId }?.let(::clearRoot)
         }
     }
 

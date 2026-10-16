@@ -228,7 +228,7 @@ class StaffMeleeGeometryTest : FreeSpec({
                         samples shouldBe emptyList()
                     }
                     samples.all { sample ->
-                        sample.particle !in forbiddenParticles && sample.count in 1..2 &&
+                        sample.particle !in forbiddenParticles && sample.count in 1..(if (spell == StaffSpell.FROST) 3 else 2) &&
                             listOf(sample.offset.x, sample.offset.y, sample.offset.z,
                                 sample.spread.x, sample.spread.y, sample.spread.z, sample.speed).all(Double::isFinite) &&
                             sample.spread.length() <= 0.2 &&

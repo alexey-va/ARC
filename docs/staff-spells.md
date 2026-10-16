@@ -1,4 +1,4 @@
-# Staff spells — ArcDungeons 0.1.7
+# Staff spells — ArcDungeons
 
 `/arc stafftest` issues sixteen administrator-only mechanics samples.
 `inferno` is temporarily retired; `gravity` and `ossuary` remain available. Use
@@ -25,8 +25,11 @@ The vanilla client sends the native stop-using packet for these held attacks;
 there is no click-toggle substitute or inferred left-button release timeout.
 
 Changing Shift, held slot/item, world or player lifecycle cancels an active
-charge. Attacks share one per-player attack cooldown, adjusted for the spell
-and its shifted variant. Item lore and the HUD name the actual controls of
+charge. An accepted action starts a four-tick (0.2-second) global cooldown.
+Primary, secondary, Q and F each keep a separate deadline per player and staff
+family, so another ability is available after that short interval. Duplicate
+items or slot swaps do not bypass the same ability's deadline. Mastery adjusts
+primary/secondary/channel recovery once using the captured cast. Item lore and the HUD name the actual controls of
 the held staff, including existing prototype and EliteMobs items.
 
 The personal setting is available at `/menu` → «Настройки» → «Интерфейс» →
@@ -42,14 +45,13 @@ settings: forward, horizontal and vertical displacement and scale. Top/bottom
 uses the same vertical magnitude above/below the sightline. These settings
 are read on module reload.
 
-Gravity's primary uses click-toggle: the first right-click grabs, the next
-throws. Shift + right-click instead creates a caster-centered gravity pulse.
+Gravity's primary uses held right-click: press to grab, release to throw. Shift + right-click instead creates a caster-centered gravity pulse.
 Inferno is temporarily retired from issuance and casting. Existing EliteMobs
 Inferno assignments migrate once to Ember; old prototype IDs remain recognizable
 but cannot cast.
 
 Gravity selects a visible solid block within its reach, holds a visual boulder
-in front of the caster as the aim moves, and throws it on the second right-click. The
+in front of the caster as the aim moves, and throws it when right-click is released. The
 boulder is a visual effect: Gravity does not move, break, place or replace
 world blocks. If the selected surface or safe path is unavailable, the grab is
 rejected.
@@ -61,7 +63,9 @@ or three hits for 1.6 seconds for Fault, Gravity, Ossuary, Nova and Necromancer.
 The all-around shield lasts twenty seconds and absorbs eight HP after armor and
 resistance, before native absorption hearts. Overflow continues through normal
 damage processing. Its bossbar shows remaining capacity. Recovery is four
-seconds for frontal and twenty-five seconds from casting the shield; both share that track.
+seconds for frontal and twenty-five seconds from casting the shield. These two
+abilities have separate recovery tracks, each shared across staff families to
+prevent refreshing the same protection by changing weapons.
 The frontal guard is a 12-part kite-shaped packet BlockDisplay shield with a transparent face;
 Shift + left-click assembles four angled plates (40 parts) around the player. Material families
 follow the staff element. The stable displays attach to the player, interpolate their opening,
@@ -71,7 +75,7 @@ the reticle readable. `StaffDefenseGeometry.kt` owns the shape used by both runt
 `exportStaffRedesignPreview`; offline previews do not establish native-client acceptance.
 
 Changing staff cancels the active defense without resetting recovery. The same
-attack and defense buttons apply to instant, charged and click-toggle staves.
+attack and defense buttons apply to instant and held staves.
 Staff interaction cannot break blocks, including in
 creative mode, and native melee damage is suppressed while a prototype staff
 is held.
@@ -92,7 +96,7 @@ are denied during duel preparation, countdown, spectator and locked states.
 | Lance | Pin an enemy near the wall behind it | Backward vault |
 | Ember | Record a short trail; Q ignites it | Backward fire recoil |
 | Nova | Rooting seed trap | Pull toward a visible solid anchor |
-| Icicle | Recall up to six spent primary shards | Ice-step double impulse |
+| Icicle | Compact 4.5-block radial crystal burst | Ice-step double impulse |
 | Fault | Magic-cover wall; Q shatters it forward | Ground rush |
 | Lunar | Wide outbound and returning crescent | Short phase blink |
 | Gale | Sideways gust corridor | Brief steerable glide |
@@ -103,11 +107,15 @@ are denied during duel preparation, countdown, spectator and locked states.
 | Gravity | Hold one enemy; Q throws it | Ballistic leap |
 | Ossuary | Closing bone-jaw trap | Bone-ridge rush |
 
-Q and F have separate per-player cooldowns, retained when changing staves or
-reconnecting. A four-tick admission interval prevents same-tick bursts; round
+Q and F have separate per-player, per-staff-family cooldowns, retained when
+changing staves or reconnecting. A four-tick GCD prevents same-tick bursts; round
 reset clears the round's cooldowns. Per-staff defaults live at
 `<staff>.hotkeys.q.cooldown-ticks` and `f.cooldown-ticks` in `staff-spells.yml`.
 The existing HUD and item lore expose Q/F availability and continuation state.
+Target-dependent Q techniques also play their authored visual in a bounded aim
+point when no eligible enemy is present; combat still requires real eligible
+targets. Icicle charge starts with no visible shards and grows up to eleven;
+an exactly zero-charge release cancels without spending its primary cooldown.
 
 `StaffSpellConjurations` and `StaffSpellTechniques` own Q lifecycles;
 `StaffSpellMobility` owns F. All reuse the existing cast authorization and
@@ -182,15 +190,22 @@ attacks use their spell-specific collision and path rules. Ordinary casts
 exclude players, NPCs, armor stands and tamed pets. Duel-only casts admit only
 registered opponents and their live registered summon actors in the captured match and round; delayed phases retain
 that authorization. EliteMobs retains its instance/minion eligibility rules.
-Area attacks obey the configured target limit, and each sequence attempts a
-target at most once at its contact phase.
+Area attacks obey the configured target limit. Each ordinary sequence attempts
+a target at most once at contact; Requiem has explicit repeated pulses and
+divides its original cast damage across three primary or five secondary strikes.
+NOVA grows a terrain-sampled root network, damages accepted targets and holds
+them for70ticks (3.5seconds); changing staves preserves that hold. World changes,
+death, expired combat authorization and cover still end invalid control.
 
 Necromancer summons use temporary native skeleton actors with native movement
 and their normal targeting/action goals removed. They follow visible enemies
 within safe reachable ground instead of pathfinding around obstacles. Pickup,
 persistence and drops are disabled; each squad expires after 45 seconds. New squads preserve earlier summons;
 up to ten actors may coexist per caster, within a shared global budget of 32 actors. A full
-roster rejects the cast without consuming cooldown. Archers fire visible, bounded native arrow actors with scripted swept collision;
+roster rejects the cast without consuming cooldown. Summoning while flying
+searches up to64loaded blocks downward for a safe support/body footprint;
+void or unloaded columns reject safely. The Necromancer HUD shows the live army
+count out of10 in both hologram and bossbar modes. Archers fire visible, bounded native arrow actors with scripted swept collision;
 these carry no independent native damage or pickup. They hit only on contact,
 stop at solid cover, and disappear with the summon session. Each archer has four HP. Opponents can
 destroy archers, while bystanders and teammates cannot interfere. Actors recover for three seconds between attacks and have a half-second windup.
@@ -245,3 +260,11 @@ establish ordinary-client visual or audio acceptance.
 
 This document describes the source contract; it does not certify a build,
 artifact delivery, runtime activation or in-client review.
+
+## Collision-safe scenery
+
+Scenery remains packet-only. A viewer whose swept body approaches a masked
+block receives its current real block state immediately, with a one-tick
+fallback and a1.5-block margin. That viewer's matching debris is hidden; other
+viewers keep the effect until their own approach or scene expiry. The server
+world, collision, drops and containers are never modified.

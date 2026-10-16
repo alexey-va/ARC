@@ -52,6 +52,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         var relativeBounds: List<Pair<org.bukkit.util.Vector, Double>> = emptyList(),
         var previousRelativeBounds: List<Pair<org.bukkit.util.Vector, Double>> = emptyList(),
         val handles: MutableList<PacketBlockDisplay> = mutableListOf(),
+        val pendingChargeBirths: MutableSet<PacketBlockDisplay> = mutableSetOf(),
         val viewers: MutableMap<UUID, Player> = mutableMapOf(),
     )
 
@@ -210,6 +211,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         scene.projectileBody = scene.renderedParts.map { it.copy(center = Vector3f(it.center).sub(offset)) }
         scene.origin = origin
         scene.charging = false
+        scene.pendingChargeBirths.clear()
         scene.age = 0
         scene.duration = durationTicks.coerceIn(1, 240)
         scene.controllerDriven = controllerDriven
@@ -399,6 +401,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
         }
         val retainedHandles = reusedHandles.filterNotNull().toSet()
         previousHandles.filterNot(retainedHandles::contains).forEach(PacketBlockDisplay::remove)
+        scene.pendingChargeBirths.retainAll(retainedHandles)
         scene.handles.clear()
         val interpolationTicks = when {
             scene.customGeometry != null -> FRAME_TICKS
@@ -414,6 +417,7 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
             scene.charging -> CHARGE_INTERPOLATION_TICKS
             else -> FRAME_TICKS
         }
+        val newbornCharges = mutableListOf<PacketBlockDisplay>()
         parts.forEachIndexed { index, part ->
             val center = scene.rotation.transform(Vector3f(part.center))
             val at = scene.origin.clone().add(center.x.toDouble(), center.y.toDouble(), center.z.toDouble()).apply {
@@ -428,6 +432,10 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
             }
             scene.handles += handle
             if (!handle.isValid) return@forEachIndexed
+            if (reusedHandles[index] == null && scene.charging && scene.spell == StaffSpell.ICICLE) {
+                scene.pendingChargeBirths += handle
+                newbornCharges += handle
+            }
             if (handle.blockData.material != part.material)
                 handle.blockData = blocks.getOrPut(part.material) { part.material.createBlockData() }
             handle.interpolationDuration = interpolationTicks
@@ -445,8 +453,24 @@ internal class StaffSpellDisplayEffects(private val displays: PaperPacketDisplay
             handle.teleport(at)
             val rotation = Quaternionf(scene.rotation).mul(part.rotation)
             // Block models occupy [0,1]^3. Center them at their real packet anchor for chunk visibility.
-            handle.transformation = Transformation(rotation.transform(Vector3f(part.scale).mul(-0.5f)),
+            handle.transformation = if (handle in scene.pendingChargeBirths)
+                Transformation(Vector3f(), rotation, Vector3f(), Quaternionf())
+            else Transformation(rotation.transform(Vector3f(part.scale).mul(-0.5f)),
                 rotation, Vector3f(part.scale), Quaternionf())
+        }
+        if (newbornCharges.isNotEmpty()) {
+            // A new native display needs a zero pose in its spawn metadata before its first growth tween.
+            refreshAudience()
+            tasks.runLater(1) {
+                if (closed || scenes[scene.id] !== scene || !scene.charging) return@runLater
+                newbornCharges.forEach { handle ->
+                    if (!scene.pendingChargeBirths.remove(handle) || !handle.isValid) return@forEach
+                    val part = scene.renderedParts.getOrNull(scene.handles.indexOf(handle)) ?: return@forEach
+                    val rotation = Quaternionf(scene.rotation).mul(part.rotation)
+                    handle.transformation = Transformation(rotation.transform(Vector3f(part.scale).mul(-0.5f)),
+                        rotation, Vector3f(part.scale), Quaternionf())
+                }
+            }
         }
     }
 

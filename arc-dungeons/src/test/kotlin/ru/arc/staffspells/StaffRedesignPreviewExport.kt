@@ -18,7 +18,7 @@ object StaffRedesignPreviewExport {
     private const val FRAME_STEP_TICKS = 2
     private const val PREVIEW_REACH_BLOCKS = 12.0
     private const val FIXED_LAUNCH_OFFSET_BLOCKS = 2.5
-    private const val FIXED_GALE_TIDE_REACH_BLOCKS = 36.0
+    private const val FIXED_GALE_TIDE_REACH_BLOCKS = 56.0
     private const val FIXED_OSSUARY_REACH_BLOCKS = 24.0
     private const val GALE_TIDE_PATH_BLOCKS = FIXED_GALE_TIDE_REACH_BLOCKS - FIXED_LAUNCH_OFFSET_BLOCKS
     private const val OSSUARY_PATH_BLOCKS = FIXED_OSSUARY_REACH_BLOCKS - FIXED_LAUNCH_OFFSET_BLOCKS
@@ -36,8 +36,8 @@ object StaffRedesignPreviewExport {
     private const val LUNAR_SECONDARY_DAMAGE_START_TICK = 16
     private const val LUNAR_SECONDARY_DAMAGE_END_TICK = 24
     private const val LUNAR_SECONDARY_RADIUS_BONUS = .7
-    private const val OSSUARY_PRIMARY_BASE_RADIUS = 2.75
-    private const val OSSUARY_PRIMARY_CHARGE_RADIUS = .25
+    private const val OSSUARY_PRIMARY_BASE_RADIUS = 3.4
+    private const val OSSUARY_PRIMARY_CHARGE_RADIUS = .35
     private const val OSSUARY_SECONDARY_BASE_RADIUS = 5.5
     private const val OSSUARY_SECONDARY_CHARGE_RADIUS = .5
     private val OSSUARY_PREVIEW_NODE_COUNT = ceil(OSSUARY_PATH_BLOCKS / OSSUARY_NODE_SPACING_BLOCKS)
@@ -427,6 +427,17 @@ object StaffRedesignPreviewExport {
 
     /** Icicle's eleven charge scenes release their active keyed eight-part bodies. */
     private fun icicleChargeClip(holdTicks: Int): Map<String, Any> {
+        data class ChargeTween(val from: StaffDisplayPart, val target: StaffDisplayPart, val startedAt: Int)
+        fun pose(tween: ChargeTween, tick: Int, duration: Int = StaffSpellDisplayEffects.CHARGE_INTERPOLATION_TICKS): StaffDisplayPart {
+            val fraction = ((tick - tween.startedAt).toFloat() / duration).coerceIn(0f, 1f)
+            val size = Vector3f(tween.from.scale).lerp(tween.target.scale, fraction)
+            return tween.target.copy(
+                center = Vector3f(tween.from.center).lerp(tween.target.center, fraction),
+                scale = size,
+                rotation = Quaternionf(tween.from.rotation).slerp(tween.target.rotation, fraction),
+                visible = tween.target.visible && size.lengthSquared() > 0f,
+            )
+        }
         val charge = staffChargeProgress(holdTicks)
         val activeCount = staffIcicleCount(charge)
         val eye = Vector(0.0, 1.62, 0.0)
@@ -437,17 +448,31 @@ object StaffRedesignPreviewExport {
             flightTicks++
             flightDistance += staffIcicleStep(flightTicks)
         }
-        val lastLaunchDelay = staffIcicleLaunchDelay(activeCount - 1)
+        val lastLaunchDelay = if (activeCount == 0) 0 else staffIcicleLaunchDelay(activeCount - 1)
         val duration = holdTicks + lastLaunchDelay + flightTicks
-        val frames = ticks(duration - 1).map { age ->
+        val chargeTweens = Array(11) { linkedMapOf<String, ChargeTween>() }
+        var releasedBodies: List<List<StaffDisplayPart>> = List(11) { emptyList() }
+        val frames = (0 until duration).map { age ->
             val charging = age <= holdTicks
-            val updateTick = (age / CHARGE_UPDATE_TICKS) * CHARGE_UPDATE_TICKS
-            val progress = staffChargeProgress(minOf(updateTick, holdTicks))
             val parts = if (charging) {
+                if (age % CHARGE_UPDATE_TICKS == 0) {
+                    val progress = staffChargeProgress(age)
+                    (0 until 11).forEach { slot ->
+                        staffIcicleChargeParts(progress, slot).forEach { display ->
+                            val key = requireNotNull(display.identity)
+                            val previous = chargeTweens[slot][key]
+                            val from = previous?.let { pose(it, age) } ?: display.copy(scale = Vector3f())
+                            chargeTweens[slot][key] = ChargeTween(from, display,
+                                if (previous == null) age + 1 else age)
+                        }
+                    }
+                }
+                val bodies = chargeTweens.map { slot -> slot.values.map { pose(it, age) } }
+                if (age == holdTicks) releasedBodies = bodies
                 (0 until 11).flatMap { slot ->
                     val offset = staffIcicleChargeAnchorOffset(slot)
                     val anchor = eye.clone().add(Vector(offset.x.toDouble(), offset.y.toDouble(), offset.z.toDouble()))
-                    staffIcicleChargeParts(progress, slot).mapIndexed { index, display ->
+                    bodies[slot].mapIndexed { index, display ->
                         part(display, "icicle-charge:$slot", index, anchor)
                     }
                 }
@@ -474,7 +499,10 @@ object StaffRedesignPreviewExport {
                         ))
                         remaining -= step
                     }
-                    staffIcicleChargeParts(charge, slot).mapIndexed { index, display ->
+                    val targetBodies = chargeTweens[slot].values.map { it.target }
+                    releasedBodies[slot].mapIndexed { index, held ->
+                        val display = pose(ChargeTween(held, targetBodies[index], holdTicks), age,
+                            StaffSpellDisplayEffects.FRAME_TICKS)
                         val oriented = display.copy(
                             center = rotation.transform(org.joml.Vector3f(display.center)),
                             rotation = org.joml.Quaternionf(rotation).mul(display.rotation),
@@ -488,15 +516,93 @@ object StaffRedesignPreviewExport {
         return mapOf(
             "id" to "icicle-charge-${chargeToken(charge)}", "spell" to StaffSpell.ICICLE.id, "input" to "CHARGE",
             "quick" to false, "charge" to charge, "durationTicks" to duration, "tailTicks" to 0,
-            "frameStepTicks" to FRAME_STEP_TICKS, "particleOnly" to false,
+            "frameStepTicks" to 1, "particleOnly" to false,
             "anchor" to "neutral caster eye; eleven camera-space crown anchors; local +Z forward",
             "previewReachBlocks" to PREVIEW_REACH_BLOCKS,
             "illustrativeTarget" to point(target.x, target.y, target.z),
             "previewFlightDistanceBlocks" to PREVIEW_REACH_BLOCKS,
-            "timelineNote" to "Source ${holdTicks}-tick charge updates every four ticks, then releases ${activeCount} of the same eight-part bodies with stable keys; inactive slots are removed. Per-shot launch delays use staffIcicleLaunchDelay from release, flight steps use staffIcicleStep, and steering follows the illustrative target after four flight ticks. This is a visual-only lane capped at ${PREVIEW_REACH_BLOCKS} travel blocks, with no collision or damage simulation.",
-            "sourceFunctions" to listOf("staffChargeProgress", "staffIcicleChargeAnchorOffset", "staffIcicleChargeParts", "staffIcicleCount", "staffIcicleLaunchDelay", "staffIcicleStep", "steerStaffBolt"),
+            "timelineNote" to "Production geometry sampled every tick: ${holdTicks}-tick charge updates every four ticks. Newly born keyed parts begin at zero scale, receive their first growth target one tick later, and interpolate over four ticks; existing parts interpolate from their current pose. Release keeps the same ${activeCount} eight-part bodies and completes their current growth over the normal two-tick flight transform, without a visual reset. Launch delays use staffIcicleLaunchDelay, flight uses staffIcicleStep and the illustrative target. This models the interpolation contract, not the native packet engine, collision or damage; travel is capped at ${PREVIEW_REACH_BLOCKS} blocks.",
+            "sourceFunctions" to listOf("staffChargeProgress", "staffIcicleChargeAnchorOffset", "staffIcicleChargeParts", "staffIcicleCount", "StaffSpellDisplayEffects.CHARGE_INTERPOLATION_TICKS", "StaffSpellDisplayEffects.FRAME_TICKS", "staffIcicleLaunchDelay", "staffIcicleStep", "steerStaffBolt"),
             "frames" to frames,
         )
+    }
+
+    private fun rootNetworkClip(input: StaffCastInput, charge: Double): Map<String, Any> {
+        val contact = if (input.secondary) 20 else 30
+        val duration = staffArsenalLifetime(StaffSpell.NOVA, input.secondary)
+        val trunk = (0..12).map { Vector3f(.18f * kotlin.math.sin(it.toFloat()), .06f, it.toFloat()) }
+        val feet = listOf(Vector3f(-2.5f, 0f, 11f), Vector3f(2.8f, 0f, 12f),
+            Vector3f(.3f, 0f, 14.5f), Vector3f(-2.8f, 0f, 13.6f))
+        val branches = feet.mapIndexed { i, target -> StaffRootBranch("target-$i", listOf(
+            Vector3f(trunk.last()), Vector3f(target).lerp(trunk.last(), .5f).add(.35f, .03f, -.2f), Vector3f(target))) }
+        val wraps = feet.mapIndexed { i, target -> StaffRootWrap("target-$i", target, .48, 1.8) }
+        return mapOf("id" to "nova-${input.name.lowercase(Locale.ROOT)}-${charge.toInt()}",
+            "spell" to "nova", "input" to input.name, "charge" to charge,
+            "quick" to false, "durationTicks" to duration, "tailTicks" to 0,
+            "frameStepTicks" to FRAME_STEP_TICKS, "particleOnly" to false,
+            "previewReachBlocks" to 16.0,
+            "timelineNote" to "Production root network/wrap helpers with four illustrative target feet on flat ground. Roots contact at tick $contact, wrap for70ticks and wither. Target selection, damage and actual immobilization are not simulated.",
+            "sourceFunctions" to listOf("staffNovaNetworkParts", "staffNovaWrapParts"),
+            "frames" to ticks(duration).map { age -> mapOf("tick" to age,
+                "parts" to (staffNovaNetworkParts(age, duration, contact, if (input.secondary) emptyList() else trunk, branches) +
+                    if (age >= contact && age < contact + STAFF_NOVA_HOLD_TICKS) staffNovaWrapParts(age - contact, 76, wraps) else emptyList())
+                    .mapIndexed { index, display -> part(display, "nova", index, Vector()) },
+                "emissions" to emptyList<Any>()) })
+    }
+
+    private fun prismRefractionClip(charge: Double): Map<String, Any> {
+        val duration = staffArsenalLifetime(StaffSpell.PRISM, true)
+        val aimAnchor = Vector(0.0, 0.0, 12.2)
+        val radius = arsenalRadius(StaffSpell.PRISM, StaffCastInput.SECONDARY, charge)
+        val points = listOf(Vector3f(0f, 1.65f, 2.5f), Vector3f(1.8f, 1.5f, 10f),
+            Vector3f(-2.0f, 1.1f, 13f), Vector3f(3.6f, 1.4f, 15f), Vector3f(-3f, 1.2f, 17f))
+        val frames = ticks(duration).map { age ->
+            val parts = mutableListOf<Map<String, Any>>()
+            val emissions = mutableListOf<Map<String, Any>>()
+            if (age < duration) staffArsenalParts(StaffSpell.PRISM, age, duration, 1.0, radius,
+                impact = false, secondary = true, input = StaffCastInput.SECONDARY, charge = charge)
+                .forEachIndexed { index, display -> parts += part(display, "prism:assembly", index, aimAnchor) }
+            if (age in 10 until duration) staffPrismRefractionParts(age - 10, duration - 10, points)
+                .forEachIndexed { index, display -> parts += part(display, "prism:route", index, Vector()) }
+            if (age < 10) {
+                staffArsenalParticles(StaffSpell.PRISM, age, duration, radius, true, charge)
+                    .forEach { emissions += sample(it, aimAnchor) }
+            } else if (age <= 32) {
+                val travel = staffPrismTravelDistance(age - 10, points)
+                var passed = 0.0
+                points.zipWithNext().forEach { (from, to) ->
+                    val ray = Vector((to.x - from.x).toDouble(), (to.y - from.y).toDouble(), (to.z - from.z).toDouble())
+                    val length = ray.length()
+                    val front = ((travel - passed) / length).coerceIn(0.0, 1.0)
+                    passed += length
+                    if (front > 0.0) staffPrismBeam(ray, front, charge, age)
+                        .filterIndexed { index, _ -> index % 4 == 0 }
+                        .forEach { emissions += sample(it, Vector(from.x.toDouble(), from.y.toDouble(), from.z.toDouble())) }
+                }
+            }
+            mapOf("tick" to age, "parts" to parts, "emissions" to emissions)
+        }
+        return mapOf("id" to "prism-secondary-${charge.toInt()}", "spell" to "prism",
+            "input" to "SECONDARY", "charge" to charge, "quick" to false,
+            "durationTicks" to duration, "tailTicks" to 0, "frameStepTicks" to FRAME_STEP_TICKS,
+            "particleOnly" to false, "previewReachBlocks" to 18.0,
+            "timelineNote" to "Both production scenes are shown: the aimed core/satellites rise from tick0 and remain for40ticks; placed mirrors appear at tick10 and the beam advances through the route over14ticks. Native anticipation and bounded beam particles follow runtime emission timing. The flat-ground aim and target route are illustrative; actual target selection, cover and damage are not simulated.",
+            "sourceFunctions" to listOf("staffArsenalParts", "staffArsenalParticles", "staffPrismRefractionParts", "staffPrismTravelDistance", "staffPrismBeam"),
+            "frames" to frames)
+    }
+
+    private fun frostRingClip(): Map<String, Any> {
+        val duration = 30
+        return mapOf("id" to "frost-secondary-0", "spell" to "frost", "input" to "SECONDARY",
+            "charge" to 0.0, "quick" to false, "durationTicks" to duration, "tailTicks" to 0,
+            "frameStepTicks" to FRAME_STEP_TICKS, "particleOnly" to false, "previewReachBlocks" to 8.0,
+            "timelineNote" to "Production radial ice shelf and teeth at8blocks, matching30-tick scene. Native wave particles/audio and collision are not represented in this clip.",
+            "sourceFunctions" to listOf("staffDisplayParts"),
+            "frames" to ticks(duration).map { age -> mapOf("tick" to age,
+                "parts" to (if (age < duration) staffDisplayParts(StaffSpell.FROST, age, duration,
+                    1.0, 8.0, impact = true, secondary = true) else emptyList())
+                    .mapIndexed { index, display -> part(display, "frost-nova", index, Vector()) },
+                "emissions" to emptyList<Any>()) })
     }
 
     private fun preparationClip(spell: StaffSpell, secondary: Boolean): Map<String, Any>? {
@@ -621,12 +727,8 @@ object StaffRedesignPreviewExport {
             mapOf("tick" to age, "parts" to parts, "emissions" to emissions)
         }
         val clangTicks = if (secondary) STAFF_REQUIEM_SECONDARY_CLANG_TICKS
-            else listOf(STAFF_REQUIEM_PRIMARY_CLANG_TICK)
-        val note = if (secondary) {
-            "One copper-and-gold bell hangs 4 blocks above the caster. It clangs at ticks 16, 36, and 56; each clang expands a ground-level soul ring from radius 0 to 7 over 10 ticks (16–26, 36–46, 56–66). The bell remains through the 72-tick clip, with its source aura between pulses."
-        } else {
-            "One copper-and-gold bell hangs 4 blocks above the aimed point on an illustrative 12-block lane. It clangs at tick 16; a ground-level soul ring expands from radius 0 to 5 by tick 30, then fades through the 36-tick clip. The target and lane are fixed for preview."
-        }
+            else STAFF_REQUIEM_PRIMARY_CLANG_TICKS
+        val note = "Production bell and pulses: clangs at $clangTicks, 14-tick expanding fronts, ${duration}-tick lifetime. Primary uses a fixed aimed point; secondary is centered on the caster."
         return mapOf(
             "id" to "${StaffSpell.REQUIEM.id}-${input.name.lowercase(Locale.ROOT)}-${charge.toInt()}",
             "spell" to StaffSpell.REQUIEM.id,
@@ -738,10 +840,15 @@ object StaffRedesignPreviewExport {
                 redesignArsenal.forEach { spell ->
                     listOf(StaffCastInput.PRIMARY, StaffCastInput.SECONDARY).forEach { input ->
                         if (!input.secondary && staffMeleeReach(spell) != null) add(meleeClip(spell))
-                        else listOf(0.0, 1.0).forEach { charge -> add(arsenalClip(spell, input, charge)) }
+                        else listOf(0.0, 1.0).forEach { charge -> add(when {
+                            spell == StaffSpell.NOVA -> rootNetworkClip(input, charge)
+                            spell == StaffSpell.PRISM && input.secondary -> prismRefractionClip(charge)
+                            else -> arsenalClip(spell, input, charge)
+                        }) }
                     }
                 }
                 add(meleeClip(StaffSpell.FROST))
+                add(frostRingClip())
                 add(meleeClip(StaffSpell.FAULT))
                 listOf(StaffCastInput.PRIMARY, StaffCastInput.SECONDARY).forEach { input ->
                     listOf(0.0, 1.0).forEach { charge -> add(gravityClip(input, charge)) }

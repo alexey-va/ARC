@@ -103,6 +103,37 @@ class StaffSpellHudTest : FreeSpec({
         }
     }
 
+    "necromancer army count follows live changes on both HUD surfaces and disappears on another staff" {
+        withHudHarness { h ->
+            val player = h.player("staff-army-hud", StaffSpell.NECROMANCER)
+            h.hud.ready(player, StaffSpell.NECROMANCER, secondary = false)
+            val card = h.recorder.records.single()
+            text(card.text).endsWith("Войско 0/10") shouldBe true
+
+            var count = 4
+            h.hud.armyCount = { count }
+            h.scheduler.tick(2)
+            text(card.text).endsWith("Войско 4/10") shouldBe true
+            count = 3
+            h.scheduler.tick(2)
+            text(card.text).endsWith("Войско 3/10") shouldBe true
+            h.recorder.records.size shouldBe 1
+
+            h.preferences.value = StaffSpellHudPreferences(StaffHudMode.BOSSBAR, StaffHudPlacement.BOTTOM)
+            h.scheduler.tick(2)
+            val bar = player.activeBossBars().single()
+            text(bar.name()).endsWith("Войско 3/10") shouldBe true
+            text(bar.name()).contains('\n') shouldBe false
+            count = 2
+            h.scheduler.tick(2)
+            text(bar.name()).endsWith("Войско 2/10") shouldBe true
+
+            player.inventory.setItemInMainHand(staffItem(StaffSpell.EMBER))
+            h.scheduler.tick(2)
+            text(bar.name()).contains("Войско") shouldBe false
+        }
+    }
+
     "nearby solid blocks move the HUD forward and keep its apparent scale" {
         withHudHarness { harness ->
             val player = harness.player("staff-hud-wall", StaffSpell.EMBER)
@@ -318,6 +349,7 @@ private fun withHudHarness(block: (HudHarness) -> Unit) = failOnUnsupportedMockB
                     "messages.staff-hud.charging" to "<input> · <ability><newline><percent>% <bar>",
                     "messages.staff-hud.cooldown" to "<input> · <ability><newline><seconds> с <bar>",
                     "messages.staff-hud.channel" to "<input> · <ability><newline>Глыба готова",
+                    "messages.staff-hud.army" to "Войско <count>/<limit>",
                     "messages.staff-hud.bossbar-ready-instant" to "<input> · <ability>",
                     "messages.staff-hud.bossbar-ready-charge" to "<input> · <ability>",
                     "messages.staff-hud.bossbar-charging" to "<input> · <ability> <percent>% <bar>",

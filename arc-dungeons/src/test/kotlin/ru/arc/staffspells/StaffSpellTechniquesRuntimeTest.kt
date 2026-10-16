@@ -9,27 +9,86 @@ import org.bukkit.entity.LivingEntity
 import java.util.UUID
 
 class StaffSpellTechniquesRuntimeTest : FreeSpec({
-    "Icicle recall disappears on arrival without rendering its final step in the caster camera" {
+    "Icicle Q casts without a previous volley and hits only visible targets within its radial boundary at contact" {
         withTechniqueScenes(staffSettings(range = 12.0)) { h, activeScenes ->
-            val world = h.paper.addSimpleWorld("staff-icicle-q-arrival")
-            val player = h.player("staff-icicle-q-arrival", world, StaffSpell.ICICLE)
-            val updates = mutableListOf<Location>()
-            every { h.effects.updateCustom(any(), any(), any()) } answers {
-                updates += secondArg<Location>().clone()
-                Unit
-            }
+            val world = h.paper.addSimpleWorld("staff-icicle-q-radial")
+            val player = h.player("staff-icicle-q-radial", world, StaffSpell.ICICLE)
+            val inside = h.zombie(world, .5, 4.5)
+            h.zombie(world, .5, 5.1) // Beyond the 4.5-block horizontal radius.
+            h.zombie(world, 3.5, .5)
+            for (y in 64..66) world.getBlockAt(2, y, 0).type = Material.STONE
             h.controller.start()
-            h.controller.cast(player, StaffCastInput.PRIMARY, 1.0)
-            h.scheduler.tick(45)
 
             h.controller.hotkey(player, StaffSpell.ICICLE, StaffHotkey.Q)
-            activeScenes.isNotEmpty() shouldBe true
-            h.scheduler.tick(24)
+            activeScenes.size shouldBe 1
+            h.hits shouldBe emptyList<LivingEntity>()
+            h.scheduler.tick((STAFF_ICICLE_RADIAL_CONTACT_TICK - 1).toLong())
+            h.hits shouldBe emptyList<LivingEntity>()
+            h.scheduler.tick(1)
+            h.hits shouldBe listOf(inside)
+            h.scheduler.tick(STAFF_ICICLE_RADIAL_TICKS.toLong())
 
-            updates.isNotEmpty() shouldBe true
-            val arrival = player.eyeLocation.clone().subtract(0.0, .22, 0.0)
-            updates.all { it.distance(arrival) > .42 } shouldBe true
+            h.hits shouldBe listOf(inside)
             activeScenes shouldBe emptySet<UUID>()
+        }
+    }
+
+    "empty ICICLE LANCE GRAVITY and NECROMANCER Q casts create visible scenes without synthetic damage" {
+        for (spell in listOf(StaffSpell.ICICLE, StaffSpell.LANCE, StaffSpell.GRAVITY, StaffSpell.NECROMANCER)) {
+            withTechniqueScenes { h, activeScenes ->
+                val world = h.paper.addSimpleWorld("staff-empty-q-${spell.id}")
+                val player = h.player("staff-empty-q-${spell.id}", world, spell)
+                h.controller.start()
+
+                h.controller.hotkey(player, spell, StaffHotkey.Q)
+
+                activeScenes.size shouldBe 1
+                h.cooldowns.remainingTicks(player.uniqueId) shouldBe 4L
+                h.hits shouldBe emptyList<LivingEntity>()
+                if (spell == StaffSpell.GRAVITY) {
+                    val heldScene = activeScenes.single()
+                    h.scheduler.tick(4)
+                    h.controller.hotkey(player, spell, StaffHotkey.Q)
+                    (heldScene in activeScenes) shouldBe false
+                    activeScenes.size shouldBe 1 // The same continuation now throws the empty brackets.
+                }
+                h.scheduler.tick(30)
+                h.hits shouldBe emptyList<LivingEntity>()
+            }
+        }
+    }
+
+    "an empty Q cast without a display allocation does not consume its admission budget" {
+        for (spell in listOf(StaffSpell.ICICLE, StaffSpell.LANCE, StaffSpell.GRAVITY, StaffSpell.NECROMANCER)) {
+            withTechniqueScenes { h, activeScenes ->
+                every { h.effects.custom(any(), any(), any(), any(), any()) } returns null
+                val world = h.paper.addSimpleWorld("staff-empty-q-budget-${spell.id}")
+                val player = h.player("staff-empty-q-budget-${spell.id}", world, spell)
+                h.controller.start()
+                h.controller.hotkey(player, spell, StaffHotkey.Q)
+                h.cooldowns.remainingTicks(player.uniqueId) shouldBe 0L
+                every { h.effects.custom(any(), any(), any(), any(), any()) } answers {
+                    UUID.randomUUID().also(activeScenes::add)
+                }
+
+                h.controller.hotkey(player, spell, StaffHotkey.Q)
+
+                activeScenes.size shouldBe 1
+                h.cooldowns.remainingTicks(player.uniqueId) shouldBe 4L
+                h.hits shouldBe emptyList<LivingEntity>()
+            }
+        }
+    }
+
+    "a zero-charge crown release has no projectile capture or cooldown" {
+        withStaffHarness { h ->
+            val world = h.paper.addSimpleWorld("staff-icicle-zero-release")
+            val player = h.player("staff-icicle-zero-release", world, StaffSpell.ICICLE)
+            h.controller.start()
+            h.controller.cast(player, StaffCastInput.PRIMARY, 0.0)
+            h.visualPlays shouldBe emptyList<StaffVisualPlay>()
+            h.captures shouldBe emptyList<org.bukkit.entity.Player>()
+            h.cooldowns.remainingTicks(player.uniqueId) shouldBe 0L
         }
     }
 
@@ -42,15 +101,19 @@ class StaffSpellTechniquesRuntimeTest : FreeSpec({
             h.controller.start()
 
             h.controller.hotkey(player, StaffSpell.CHAIN, StaffHotkey.Q)
+            val orb = activeScenes.single()
             h.scheduler.tick(5)
             player.inventory.setItemInMainHand(h.config.item(StaffSpell.GRAVITY))
             h.controller.hotkey(player, StaffSpell.GRAVITY, StaffHotkey.Q)
-            activeScenes.size shouldBe 1
+            activeScenes.size shouldBe 2
+            (orb in activeScenes) shouldBe true
+            h.scheduler.tick(4)
             player.inventory.setItemInMainHand(h.config.item(StaffSpell.CHAIN))
             h.controller.hotkey(player, StaffSpell.CHAIN, StaffHotkey.Q)
 
             h.hits shouldBe emptyList<LivingEntity>()
-            activeScenes shouldBe emptySet<UUID>()
+            (orb in activeScenes) shouldBe false
+            activeScenes.size shouldBe 1
             target.isValid shouldBe true
         }
     }
@@ -66,12 +129,11 @@ class StaffSpellTechniquesRuntimeTest : FreeSpec({
             h.controller.hotkey(player, StaffSpell.GRAVITY, StaffHotkey.Q)
             target.hasGravity() shouldBe false
             activeScenes.clear()
-            h.controller.hotkey(player, StaffSpell.GRAVITY, StaffHotkey.Q)
-            target.hasGravity() shouldBe true
-            target.velocity.lengthSquared() shouldBe 0.0
+            // Scene eviction restores control on the next owner tick, without a new input through the GCD.
             h.scheduler.tick(1)
 
             target.hasGravity() shouldBe true
+            target.velocity.lengthSquared() shouldBe 0.0
             h.hits shouldBe listOf(target)
         }
     }

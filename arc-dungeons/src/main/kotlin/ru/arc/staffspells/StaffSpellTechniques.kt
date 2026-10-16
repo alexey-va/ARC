@@ -57,21 +57,14 @@ internal class StaffSpellTechniques(
         val attemptedTargets: MutableSet<UUID> = mutableSetOf(),
     )
 
-    private data class IcicleMemory(val at: Location, val cast: StaffSpellCast, val expiresAt: Long)
-    private data class RecallBolt(
-        var position: Location,
-        var sceneId: UUID?,
-        var done: Boolean = false,
-    )
-    private data class IcicleRecall(
+    private data class IcicleBurst(
         val casterId: UUID,
         val cast: StaffSpellCast,
         val tuning: StaffSpellTuning,
         val worldId: UUID,
         val origin: Location,
-        val bolts: MutableList<RecallBolt>,
+        val sceneId: UUID,
         var ageTicks: Int = 0,
-        val attemptedTargets: MutableSet<UUID> = mutableSetOf(),
     )
 
     private data class PrismWard(
@@ -92,7 +85,8 @@ internal class StaffSpellTechniques(
         val cast: StaffSpellCast,
         val tuning: StaffSpellTuning,
         val worldId: UUID,
-        val target: LivingEntity,
+        val target: LivingEntity?,
+        val anchor: Location,
         val originalGravity: Boolean,
         var sceneId: UUID?,
         var ageTicks: Int = 0,
@@ -102,7 +96,7 @@ internal class StaffSpellTechniques(
         val casterId: UUID,
         val cast: StaffSpellCast,
         val worldId: UUID,
-        val target: LivingEntity,
+        val target: LivingEntity?,
         val pin: Boolean,
         var sceneId: UUID?,
         var ageTicks: Int = 0,
@@ -127,8 +121,7 @@ internal class StaffSpellTechniques(
     private val tasks = LifecycleTaskScope()
     private val lunarFlights = linkedMapOf<UUID, LunarFlight>()
     private val chainOrbs = linkedMapOf<UUID, ChainOrb>()
-    private val icicleMemories = linkedMapOf<UUID, MutableList<IcicleMemory>>()
-    private val icicleRecalls = linkedMapOf<UUID, IcicleRecall>()
+    private val icicleBursts = linkedMapOf<UUID, IcicleBurst>()
     private val prismWards = linkedMapOf<UUID, PrismWard>()
     private val gravityHolds = linkedMapOf<UUID, GravityHold>()
     /** Holds in-flight reservations too, so a synchronous damage callback cannot start a second hold. */
@@ -151,7 +144,7 @@ internal class StaffSpellTechniques(
         if (closed || !started || !ready(player, cast)) return false
         return when (spell) {
             StaffSpell.CHAIN -> castChain(player, cast, tuning)
-            StaffSpell.ICICLE -> castIcicleRecall(player, cast, tuning)
+            StaffSpell.ICICLE -> castIcicleBurst(player, cast, tuning)
             StaffSpell.LUNAR -> castLunar(player, cast, tuning)
             StaffSpell.PRISM -> castPrismWard(player, cast, tuning)
             StaffSpell.NECROMANCER -> commandNecromancer(player, cast)
@@ -311,131 +304,65 @@ internal class StaffSpellTechniques(
             spread = Vector(.75, .65, .75), speed = .035, data = staffFade(0xD3FAFF, 0x9257FF, 1.35f)),
     )
 
-    private fun castIcicleRecall(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning): Boolean {
-        if (player.uniqueId in icicleRecalls) return false
-        val memories = icicleMemories[player.uniqueId].orEmpty()
-            .filter { it.expiresAt > tick && it.at.world === player.world && isLoaded(it.at) &&
-                it.at.distance(player.eyeLocation) <= ICICLE_RECALL_RANGE }
-            .takeLast(MAX_RECALL_ICICLES)
-        if (memories.isEmpty()) return false
-        if (!admitNewScenes(memories.size)) return false
-
-        val bolts = memories.mapNotNull { memory ->
-            val home = player.eyeLocation.toVector().subtract(memory.at.toVector())
-            val yaw = atan2(-home.x, home.z).toFloat()
-            val pitch = -atan2(home.y, kotlin.math.sqrt(home.x * home.x + home.z * home.z)).toFloat()
-            val scene = effects.custom(player.uniqueId, StaffSpell.ICICLE, memory.at, ICICLE_RECALL_TICKS) { age ->
-                staffIcicleRecallParts(age, cast.visualCharge, yaw, pitch)
-            } ?: return@mapNotNull null
-            RecallBolt(memory.at.clone(), scene)
-        }.toMutableList()
-        if (bolts.isEmpty()) return false
-        icicleMemories.remove(player.uniqueId)
-        val recall = IcicleRecall(player.uniqueId, cast, tuning, player.world.uid,
-            player.eyeLocation.clone(), bolts)
-        icicleRecalls[player.uniqueId] = recall
+    private fun castIcicleBurst(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning): Boolean {
+        if (player.uniqueId in icicleBursts || !admitNewScenes(1)) return false
+        val origin = player.location.clone().add(0.0, .04, 0.0)
+        if (!isLoaded(origin)) return false
+        val scene = effects.custom(player.uniqueId, StaffSpell.ICICLE, origin,
+            STAFF_ICICLE_RADIAL_TICKS, ::staffIcicleRadialParts) ?: return false
+        icicleBursts[player.uniqueId] = IcicleBurst(player.uniqueId, cast, tuning, player.world.uid, origin, scene)
         visuals.withOwner(player.uniqueId) {
-            bolts.forEachIndexed { index, bolt ->
-                // Six returning shards share at most three simultaneous release voices.
-                if (index < 3) visuals.cue(bolt.position, Sound.BLOCK_GLASS_BREAK, .24f, 1.45f + index * .12f)
-                visuals.particles(bolt.position, icicleRecallSamples(), clearance = 0.0)
-            }
+            visuals.cue(origin, Sound.BLOCK_GLASS_PLACE, .68f, .75f)
+            visuals.particles(origin, icicleBurstSamples(1.4), clearance = .6)
         }
         return true
     }
 
-    private fun tickIcicleRecalls() {
-        icicleRecalls.values.toList().forEach { recall ->
-            if (icicleRecalls[recall.casterId] !== recall) return@forEach
-            val player = Bukkit.getPlayer(recall.casterId)
-            if (player == null || !ready(player, recall.cast) || player.world.uid != recall.worldId) {
-                removeRecall(recall)
+    private fun tickIcicleBursts() {
+        icicleBursts.values.toList().forEach { burst ->
+            val player = Bukkit.getPlayer(burst.casterId)
+            if (player == null || !ready(player, burst.cast) || player.world.uid != burst.worldId ||
+                !isLoaded(burst.origin) || !effects.isActive(burst.sceneId)) {
+                removeIcicleBurst(burst)
                 return@forEach
             }
-            recall.ageTicks++
-            val destination = player.eyeLocation.clone().subtract(0.0, .22, 0.0)
-            recall.bolts.toList().forEach boltLoop@{ bolt ->
-                if (bolt.done) return@boltLoop
-                if (!isLoaded(bolt.position)) { finishRecallBolt(bolt); return@boltLoop }
-                val delta = destination.toVector().subtract(bolt.position.toVector())
-                val distance = delta.length()
-                if (!distance.isFinite() || distance <= RECALL_ARRIVAL_DISTANCE || recall.ageTicks >= ICICLE_RECALL_TICKS) {
-                    finishRecallBolt(bolt)
-                    return@boltLoop
+            burst.ageTicks++
+            if (burst.ageTicks == STAFF_ICICLE_RADIAL_CONTACT_TICK) {
+                visuals.withOwner(burst.casterId) {
+                    visuals.cue(burst.origin, Sound.BLOCK_GLASS_BREAK, .86f, 1.12f)
+                    visuals.cue(burst.origin, Sound.BLOCK_AMETHYST_BLOCK_CHIME, .34f, 1.65f)
+                    visuals.particles(burst.origin, icicleBurstSamples(STAFF_ICICLE_RADIAL_RADIUS), clearance = .6)
                 }
-                val step = min(ICICLE_RECALL_SPEED, distance)
-                val direction = delta.multiply(1.0 / distance)
-                val clipped = targeting.rayEnd(bolt.position, direction, step)
-                val moved = bolt.position.distance(clipped)
-                if (!moved.isFinite() || moved < MIN_MOVE_DISTANCE) {
-                    finishRecallBolt(bolt)
-                    return@boltLoop
-                }
-                sweepRecall(recall, player, bolt.position, clipped)
-                if (icicleRecalls[recall.casterId] !== recall) return@boltLoop
-                bolt.position = clipped
-                if (clipped.distanceSquared(destination) <= RECALL_ARRIVAL_DISTANCE * RECALL_ARRIVAL_DISTANCE ||
-                    moved + BLOCK_CLIP_EPSILON < step) {
-                    finishRecallBolt(bolt)
-                    return@boltLoop
-                }
-                val yaw = atan2(-direction.x, direction.z).toFloat()
-                val pitch = -atan2(direction.y, kotlin.math.sqrt(direction.x * direction.x + direction.z * direction.z)).toFloat()
-                effects.updateCustom(bolt.sceneId, bolt.position,
-                    staffIcicleRecallParts(recall.ageTicks, recall.cast.visualCharge, yaw, pitch))
-                if (recall.ageTicks % 2 == 0) visuals.withOwner(recall.casterId) {
-                    visuals.particles(bolt.position, icicleRecallSamples(), clearance = 0.0)
+                val targets = targeting.nearby(player, burst.origin, STAFF_ICICLE_RADIAL_RADIUS + 2.0, burst.cast)
+                    .filter { target ->
+                        val offset = center(target).subtract(burst.origin)
+                        offset.x * offset.x + offset.z * offset.z <= STAFF_ICICLE_RADIAL_RADIUS * STAFF_ICICLE_RADIAL_RADIUS &&
+                            kotlin.math.abs(offset.y) <= 2.5 &&
+                            visible(burst.origin.clone().add(0.0, .65, 0.0), center(target))
+                    }.sortedBy { center(it).distanceSquared(burst.origin) }
+                    .take(settings.maxAreaTargets.coerceIn(1, 8))
+                for (target in targets) {
+                    if (icicleBursts[burst.casterId] !== burst || !ready(player, burst.cast)) break
+                    if (!validTechniqueTarget(player, target, burst.cast, burst.worldId) ||
+                        !visible(burst.origin.clone().add(0.0, .65, 0.0), center(target))) continue
+                    damage.hit(player, target, burst.cast, burst.tuning.power * .72, burst.tuning.vanillaDamage * .72)
                 }
             }
-            if (recall.bolts.all { it.done } || recall.ageTicks >= ICICLE_RECALL_TICKS) {
-                visuals.withOwner(recall.casterId) {
-                    visuals.cue(destination, Sound.BLOCK_AMETHYST_BLOCK_CHIME, .36f, 1.55f)
-                }
-                removeRecall(recall)
-            }
+            if (burst.ageTicks >= STAFF_ICICLE_RADIAL_TICKS) removeIcicleBurst(burst)
         }
     }
 
-    private fun sweepRecall(recall: IcicleRecall, player: Player, from: Location, to: Location) {
-        for (target in targeting.lineTargets(player, from, to, ICICLE_RECALL_SWEEP, recall.cast)) {
-            if (icicleRecalls[recall.casterId] !== recall || !damage.isCurrent(player, recall.cast)) return
-            if (target.uniqueId in recall.attemptedTargets || !target.isValid || target.isDead || target.isInvulnerable ||
-                target.world.uid != recall.worldId || !visible(player.eyeLocation, center(target)) ||
-                !visible(from, center(target)) || !damage.eligible(player, target, recall.cast)) continue
-            recall.attemptedTargets += target.uniqueId
-            if (damage.hit(player, target, recall.cast,
-                    recall.tuning.power * ICICLE_RECALL_DAMAGE_SCALE,
-                    recall.tuning.vanillaDamage * ICICLE_RECALL_DAMAGE_SCALE)) {
-                visuals.withOwner(recall.casterId) {
-                    visuals.cue(center(target), Sound.BLOCK_GLASS_BREAK, .38f, 1.55f)
-                    visuals.particles(center(target), icicleRecallHitSamples(), clearance = 0.0)
-                }
-            }
-        }
+    private fun removeIcicleBurst(burst: IcicleBurst) {
+        icicleBursts.remove(burst.casterId, burst)
+        effects.remove(burst.sceneId)
     }
 
-    private fun finishRecallBolt(bolt: RecallBolt) {
-        bolt.done = true
-        effects.remove(bolt.sceneId)
-        bolt.sceneId = null
+    private fun icicleBurstSamples(radius: Double) = List(24) { index ->
+        val angle = (index / 2) * Math.PI / 6.0
+        StaffParticleSample(if (index % 2 == 0) Particle.SNOWFLAKE else Particle.END_ROD,
+            Vector(cos(angle) * radius, .28 + index % 2 * .26, sin(angle) * radius),
+            count = if (index % 2 == 0) 2 else 1, spread = Vector(.1, .09, .1), speed = .035)
     }
-
-    private fun removeRecall(recall: IcicleRecall) {
-        icicleRecalls.remove(recall.casterId, recall)
-        recall.bolts.forEach(::finishRecallBolt)
-    }
-
-    private fun icicleRecallSamples() = listOf(
-        StaffParticleSample(Particle.SNOWFLAKE, Vector(), count = 5, spread = Vector(.15, .15, .15), speed = .025),
-        StaffParticleSample(Particle.END_ROD, Vector(), count = 3, spread = Vector(.11, .11, .11), speed = .02),
-        StaffParticleSample(Particle.DUST_COLOR_TRANSITION, Vector(), count = 5, spread = Vector(.22, .22, .22),
-            speed = .006, data = staffFade(0xE0FAFF, 0x62C9FF, 1.2f)),
-    )
-
-    private fun icicleRecallHitSamples() = listOf(
-        StaffParticleSample(Particle.SNOWFLAKE, Vector(), count = 8, spread = Vector(.28, .28, .28), speed = .035),
-        StaffParticleSample(Particle.END_ROD, Vector(), count = 4, spread = Vector(.2, .2, .2), speed = .04),
-    )
 
     private fun castPrismWard(player: Player, cast: StaffSpellCast, tuning: StaffSpellTuning): Boolean {
         if (player.uniqueId in prismWards || !admitNewScenes(1)) return false
@@ -541,7 +468,10 @@ internal class StaffSpellTechniques(
             .firstOrNull()
         if (target != null) {
             if (!visible(eye, center(target)) || !damage.isCurrent(player, cast) ||
-                !damage.eligible(player, target, cast) || !summons.commandFocus(player, target, cast)) return false
+                !damage.eligible(player, target, cast)) return false
+            effects.custom(player.uniqueId, StaffSpell.NECROMANCER, target.location, 24,
+                ::staffNecromancerCommandParts) ?: return false
+            summons.commandFocus(player, target, cast)
             visuals.withOwner(player.uniqueId) {
                 visuals.cue(center(target), Sound.ENTITY_WITHER_SKELETON_AMBIENT, .42f, 1.55f)
                 visuals.particles(center(target), necromancerFocusSamples(), clearance = 0.0)
@@ -551,9 +481,11 @@ internal class StaffSpellTechniques(
 
         val aim = targeting.rayEnd(eye, eye.direction, min(settings.range, NECROMANCER_COMMAND_RANGE))
         val rally = targeting.groundBelow(aim.clone().add(0.0, 2.0, 0.0), NECROMANCER_RALLY_GROUND_RANGE)
-            ?: return false
+            ?: emptyAimPoint(player)?.subtract(0.0, .8, 0.0) ?: return false
         if (rally.world !== player.world || !visible(eye, rally.clone().add(0.0, .8, 0.0)) ||
-            !damage.isCurrent(player, cast) || !summons.commandRally(player, rally, cast)) return false
+            !damage.isCurrent(player, cast)) return false
+        effects.custom(player.uniqueId, StaffSpell.NECROMANCER, rally, 24, ::staffNecromancerCommandParts) ?: return false
+        summons.commandRally(player, rally, cast)
         visuals.withOwner(player.uniqueId) {
             visuals.cue(rally, Sound.BLOCK_SOUL_SAND_STEP, .46f, 1.28f)
             visuals.particles(rally, necromancerRallySamples(), clearance = .45)
@@ -584,7 +516,17 @@ internal class StaffSpellTechniques(
         }
         if (!admitNewScenes(1)) return false
         val target = targeting.aimed(player, min(settings.range, GRAVITY_Q_RANGE), settings.aimDegrees, cast)
-            .firstOrNull() ?: return false
+            .firstOrNull()
+        if (target == null) {
+            val at = emptyAimPoint(player) ?: return false
+            val sceneId = effects.custom(player.uniqueId, StaffSpell.GRAVITY, at, GRAVITY_HOLD_TICKS) { age ->
+                staffGravityPinParts(age, thrown = false, yaw = 0f)
+            } ?: return false
+            gravityHolds[player.uniqueId] = GravityHold(player.uniqueId, cast, tuning, player.world.uid,
+                null, at, true, sceneId)
+            gravityHoldFeedback(player.uniqueId, at)
+            return true
+        }
         if (!validTechniqueTarget(player, target, cast, player.world.uid) || !reserveGravityTarget(player, target))
             return false
         var admittedHold = false
@@ -603,16 +545,12 @@ internal class StaffSpellTechniques(
                 effects.remove(sceneId)
                 return true
             }
-            val hold = GravityHold(player.uniqueId, cast, tuning, player.world.uid, target, gravity, sceneId)
+            val hold = GravityHold(player.uniqueId, cast, tuning, player.world.uid, target, at.clone(), gravity, sceneId)
             target.setGravity(false)
             target.velocity = Vector()
             gravityHolds[player.uniqueId] = hold
             admittedHold = true
-            visuals.withOwner(player.uniqueId) {
-                visuals.cue(at, Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, .56f, .74f)
-                visuals.cue(at, Sound.BLOCK_AMETHYST_BLOCK_RESONATE, .24f, .58f)
-                visuals.particles(at, gravityHoldSamples(), clearance = 0.0)
-            }
+            gravityHoldFeedback(player.uniqueId, at)
             return true
         } finally {
             if (!admittedHold) gravityTargetOwners.remove(target.uniqueId, player.uniqueId)
@@ -647,9 +585,8 @@ internal class StaffSpellTechniques(
                 return@forEach
             }
             hold.ageTicks++
-            hold.target.setGravity(false)
-            hold.target.velocity = Vector()
-            val at = center(hold.target)
+            hold.target?.let { target -> target.setGravity(false); target.velocity = Vector() }
+            val at = hold.target?.let(::center) ?: hold.anchor
             effects.updateCustom(hold.sceneId, at, staffGravityPinParts(hold.ageTicks, thrown = false, yaw = 0f))
             if (hold.ageTicks % 3 == 0) visuals.withOwner(hold.casterId) {
                 visuals.particles(at, gravityHoldSamples(), clearance = 0.0)
@@ -663,18 +600,19 @@ internal class StaffSpellTechniques(
         }
     }
 
-    private fun validGravityHold(player: Player, hold: GravityHold) =
-        gravityHolds[hold.casterId] === hold && effects.isActive(hold.sceneId) && ready(player, hold.cast) &&
-            player.world.uid == hold.worldId &&
-            hold.target.isValid && !hold.target.isDead && !hold.target.isInvulnerable &&
-            hold.target.world.uid == hold.worldId && damage.eligible(player, hold.target, hold.cast) &&
-            visible(player.eyeLocation, center(hold.target))
+    private fun validGravityHold(player: Player, hold: GravityHold): Boolean {
+        val target = hold.target
+        return gravityHolds[hold.casterId] === hold && effects.isActive(hold.sceneId) && ready(player, hold.cast) &&
+            player.world.uid == hold.worldId && (if (target == null)
+                isLoaded(hold.anchor) && visible(player.eyeLocation, hold.anchor)
+            else validTechniqueTarget(player, target, hold.cast, hold.worldId))
+    }
 
     private fun throwGravity(player: Player, hold: GravityHold) {
         val eye = player.eyeLocation
         val look = eye.direction
         val aim = targeting.rayEnd(eye, look, min(settings.range, GRAVITY_THROW_RANGE))
-        val from = center(hold.target)
+        val from = hold.target?.let(::center) ?: hold.anchor
         var direction = aim.toVector().subtract(from.toVector())
         if (!safeDirection(direction)) {
             releaseGravity(hold)
@@ -688,7 +626,20 @@ internal class StaffSpellTechniques(
         }
         direction.normalize()
         releaseGravity(hold)
-        hold.target.velocity = direction.multiply(GRAVITY_THROW_SPEED).add(Vector(0.0, GRAVITY_THROW_LIFT, 0.0))
+        if (hold.target != null) {
+            hold.target.velocity = direction.multiply(GRAVITY_THROW_SPEED).add(Vector(0.0, GRAVITY_THROW_LIFT, 0.0))
+        } else {
+            val motion = direction.clone().multiply(min(5.0, from.distance(clipped)))
+            val yaw = atan2(-direction.x, direction.z).toFloat()
+            effects.custom(player.uniqueId, StaffSpell.GRAVITY, from, 12) { age ->
+                val progress = (age / 8f).coerceIn(0f, 1f)
+                staffGravityPinParts(age, thrown = true, yaw = yaw).map { part ->
+                    part.copy(center = Vector3f(part.center).add((motion.x * progress).toFloat(),
+                        (motion.y * progress).toFloat(), (motion.z * progress).toFloat()),
+                        scale = Vector3f(part.scale).mul((1f - age / 12f).coerceAtLeast(.01f)))
+                }
+            }
+        }
         visuals.withOwner(hold.casterId) {
             visuals.cue(from, Sound.ENTITY_WARDEN_SONIC_BOOM, .48f, 1.25f)
             visuals.particles(from, gravityThrowSamples(), clearance = 0.0)
@@ -697,10 +648,15 @@ internal class StaffSpellTechniques(
 
     private fun releaseGravity(hold: GravityHold) {
         gravityHolds.remove(hold.casterId, hold)
-        gravityTargetOwners.remove(hold.target.uniqueId, hold.casterId)
+        hold.target?.let { gravityTargetOwners.remove(it.uniqueId, hold.casterId) }
         effects.remove(hold.sceneId)
-        if (hold.target.isValid && !hold.target.isDead)
-            hold.target.setGravity(hold.originalGravity)
+        hold.target?.takeIf { it.isValid && !it.isDead }?.setGravity(hold.originalGravity)
+    }
+
+    private fun gravityHoldFeedback(ownerId: UUID, at: Location) = visuals.withOwner(ownerId) {
+        visuals.cue(at, Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, .56f, .74f)
+        visuals.cue(at, Sound.BLOCK_AMETHYST_BLOCK_RESONATE, .24f, .58f)
+        visuals.particles(at, gravityHoldSamples(), clearance = 0.0)
     }
 
     private fun gravityHoldSamples() = listOf(
@@ -721,7 +677,23 @@ internal class StaffSpellTechniques(
         val eye = player.eyeLocation
         val range = min(settings.range, LANCE_Q_RANGE)
         val end = targeting.rayEnd(eye, eye.direction, range)
-        val target = targeting.lineTargets(player, eye, end, LANCE_Q_WIDTH, cast).firstOrNull() ?: return false
+        val target = targeting.lineTargets(player, eye, end, LANCE_Q_WIDTH, cast).firstOrNull()
+        if (target == null) {
+            val at = emptyAimPoint(player, 8.0) ?: return false
+            val direction = at.toVector().subtract(eye.toVector()).normalize()
+            val yaw = atan2(-direction.x, direction.z).toFloat()
+            val scene = effects.custom(player.uniqueId, StaffSpell.LANCE, at, LANCE_OPEN_TICKS) { age ->
+                staffLancePinParts(1.8, yaw, held = false).map { part ->
+                    part.copy(scale = Vector3f(part.scale).mul((1f - age.toFloat() / LANCE_OPEN_TICKS).coerceAtLeast(.02f)))
+                }
+            } ?: return false
+            lancePins[player.uniqueId] = LancePin(player.uniqueId, cast, player.world.uid, null, false, scene)
+            visuals.withOwner(player.uniqueId) {
+                visuals.cue(at, Sound.ITEM_TRIDENT_THROW, .7f, 1.35f)
+                visuals.particles(at, lanceImpactSamples(false), clearance = .2)
+            }
+            return true
+        }
         if (!validTechniqueTarget(player, target, cast, player.world.uid)) return false
         val at = center(target)
         val direction = at.toVector().subtract(eye.toVector())
@@ -775,17 +747,17 @@ internal class StaffSpellTechniques(
         lancePins.values.toList().forEach { pin ->
             if (lancePins[pin.casterId] !== pin) return@forEach
             val player = Bukkit.getPlayer(pin.casterId)
+            val target = pin.target
             if (player == null || !ready(player, pin.cast) || player.world.uid != pin.worldId ||
-                !pin.target.isValid || pin.target.isDead || pin.target.world.uid != pin.worldId ||
-                !damage.eligible(player, pin.target, pin.cast) ||
-                pin.pin && !visible(player.eyeLocation, center(pin.target))) {
+                target != null && (!target.isValid || target.isDead || target.world.uid != pin.worldId ||
+                !damage.eligible(player, target, pin.cast) || pin.pin && !visible(player.eyeLocation, center(target)))) {
                 removeLancePin(pin)
                 return@forEach
             }
             pin.ageTicks++
             if (pin.ageTicks >= if (pin.pin) LANCE_PIN_TICKS else LANCE_OPEN_TICKS) {
-                if (pin.pin) visuals.withOwner(pin.casterId) {
-                    visuals.cue(center(pin.target), Sound.BLOCK_AMETHYST_CLUSTER_BREAK, .26f, 1.5f)
+                if (pin.pin && target != null) visuals.withOwner(pin.casterId) {
+                    visuals.cue(center(target), Sound.BLOCK_AMETHYST_CLUSTER_BREAK, .26f, 1.5f)
                 }
                 removeLancePin(pin)
             }
@@ -992,21 +964,10 @@ internal class StaffSpellTechniques(
         else -> null
     }
 
-    /** The primary-flight owner calls this when a real ICICLE reaches an endpoint. */
-    fun rememberIcicle(player: Player, cast: StaffSpellCast, at: Location) {
-        if (closed || cast.casterId != player.uniqueId || !ready(player, cast) ||
-            at.world !== player.world || !isLoaded(at) || player.location.distanceSquared(at) > ICICLE_RECALL_RANGE * ICICLE_RECALL_RANGE) return
-        val memory = icicleMemories.getOrPut(player.uniqueId) { mutableListOf() }
-        memory.removeAll { it.expiresAt <= tick || it.at.world !== player.world }
-        memory += IcicleMemory(at.clone(), cast, tick + ICICLE_MEMORY_TICKS)
-        while (memory.size > MAX_RECALL_ICICLES) memory.removeAt(0)
-    }
-
     fun cancel(casterId: UUID) {
         lunarFlights.remove(casterId)?.let(::removeLunar)
         chainOrbs.remove(casterId)?.let(::removeChain)
-        icicleMemories.remove(casterId)
-        icicleRecalls.remove(casterId)?.let(::removeRecall)
+        icicleBursts.remove(casterId)?.let(::removeIcicleBurst)
         prismWards.remove(casterId)?.let(::removePrism)
         gravityHolds.remove(casterId)?.let(::releaseGravity)
         lancePins.remove(casterId)?.let(::removeLancePin)
@@ -1019,15 +980,14 @@ internal class StaffSpellTechniques(
         tasks.close()
         chainOrbs.values.toList().forEach(::removeChain)
         lunarFlights.values.toList().forEach(::removeLunar)
-        icicleMemories.clear()
-        icicleRecalls.values.toList().forEach(::removeRecall)
+        icicleBursts.values.toList().forEach(::removeIcicleBurst)
         prismWards.values.toList().forEach(::removePrism)
         gravityHolds.values.toList().forEach(::releaseGravity)
         lancePins.values.toList().forEach(::removeLancePin)
         emberTrails.values.toList().forEach(::removeEmber)
         lunarFlights.clear()
         chainOrbs.clear()
-        icicleRecalls.clear()
+        icicleBursts.clear()
         prismWards.clear()
         gravityHolds.clear()
         gravityTargetOwners.clear()
@@ -1037,9 +997,8 @@ internal class StaffSpellTechniques(
 
     private fun tickAll() {
         tick++
-        pruneIcicleMemories()
         tickChainOrbs()
-        tickIcicleRecalls()
+        tickIcicleBursts()
         tickPrismWards()
         tickGravityHolds()
         tickLancePins()
@@ -1188,30 +1147,29 @@ internal class StaffSpellTechniques(
         player.isOnline && player.isValid && !player.isDead && player.gameMode != org.bukkit.GameMode.SPECTATOR &&
             damage.isCurrent(player, cast)
 
-    private fun activeSessionCount(): Int = lunarFlights.size + chainOrbs.size + icicleRecalls.size +
+    private fun activeSessionCount(): Int = lunarFlights.size + chainOrbs.size + icicleBursts.size +
         prismWards.size + gravityHolds.size + lancePins.size + emberTrails.size
 
-    private fun activeDisplaySceneCount(): Int = lunarFlights.size + chainOrbs.size +
-        icicleRecalls.values.sumOf { recall -> recall.bolts.count { !it.done } } + prismWards.size +
+    private fun activeDisplaySceneCount(): Int = lunarFlights.size + chainOrbs.size + icicleBursts.size + prismWards.size +
         gravityHolds.size + lancePins.size + emberTrails.size
 
     private fun admitNewScenes(requested: Int): Boolean = requested > 0 &&
         activeSessionCount() < MAX_TECHNIQUE_SESSIONS && activeDisplaySceneCount() + requested <= MAX_TECHNIQUE_SCENES
-
-    private fun pruneIcicleMemories() {
-        icicleMemories.entries.toList().forEach { (casterId, memories) ->
-            val player = Bukkit.getPlayer(casterId)
-            memories.removeAll { memory -> memory.expiresAt <= tick || player == null ||
-                memory.at.world !== player.world || !isLoaded(memory.at) }
-            if (memories.isEmpty()) icicleMemories.remove(casterId)
-        }
-    }
 
     private fun isLoaded(at: Location): Boolean {
         val world = at.world ?: return false
         if (!at.x.isFinite() || !at.y.isFinite() || !at.z.isFinite() ||
             kotlin.math.abs(at.x) > MAX_WORLD_COORDINATE || kotlin.math.abs(at.z) > MAX_WORLD_COORDINATE) return false
         return world.isChunkLoaded(at.blockX shr 4, at.blockZ shr 4)
+    }
+
+    private fun emptyAimPoint(player: Player, range: Double = 6.0): Location? {
+        val eye = player.eyeLocation
+        if (!safeDirection(eye.direction)) return null
+        val at = targeting.rayEnd(eye, eye.direction, min(settings.range, range))
+        if (at.world != player.world || eye.distanceSquared(at) < 1.2 * 1.2) return null
+        at.subtract(eye.direction.clone().multiply(.08))
+        return at.takeIf { isLoaded(it) && visible(eye, it) }
     }
 
     private fun safeDirection(direction: Vector): Boolean = direction.x.isFinite() && direction.y.isFinite() &&
@@ -1283,15 +1241,6 @@ internal class StaffSpellTechniques(
         const val CHAIN_SWEEP_WIDTH = .48
         const val CHAIN_DIRECT_SCALE = .55
         const val MAX_CHAIN_TARGETS = 8
-
-        const val MAX_RECALL_ICICLES = 6
-        const val ICICLE_MEMORY_TICKS = 80L
-        const val ICICLE_RECALL_RANGE = 48.0
-        const val ICICLE_RECALL_TICKS = 24
-        const val ICICLE_RECALL_SPEED = 2.4
-        const val RECALL_ARRIVAL_DISTANCE = .42
-        const val ICICLE_RECALL_SWEEP = .42
-        const val ICICLE_RECALL_DAMAGE_SCALE = .62
 
         const val PRISM_WARD_RANGE = 14.0
         const val PRISM_GROUND_RAY_HEIGHT = 2.5
